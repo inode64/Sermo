@@ -124,34 +124,41 @@ func TestListIfacesFromSysfs(t *testing.T) {
 	}
 }
 
-func TestRunWizardVolumeMergesConfig(t *testing.T) {
-	tmp := t.TempDir()
+// runWizard writes a minimal config, drives `wizard <subcommand>` with env and the
+// given stdin script, asserts success, and returns the temp dir and wizard stdout.
+func runWizard(t *testing.T, subcommand string, env func(*config.Config) assist.Env, script string) (tmp, out string) {
+	t.Helper()
+	tmp = t.TempDir()
 	cfgPath := filepath.Join(tmp, "sermo.yml")
 	if err := os.WriteFile(cfgPath, []byte("engine:\n  interval: 30s\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	var stdout bytes.Buffer
+	app := App{
+		Stdin:         strings.NewReader(script),
+		Stdout:        &stdout,
+		Stderr:        &bytes.Buffer{},
+		LoadConfig:    config.Load,
+		wizardEnvFunc: env,
+	}
+	code := app.Run(context.Background(), []string{"--config", cfgPath, "wizard", subcommand})
+	if code != exitSuccess {
+		t.Fatalf("exit = %d, want success; out=%s", code, stdout.String())
+	}
+	return tmp, stdout.String()
+}
 
+func TestRunWizardVolumeMergesConfig(t *testing.T) {
 	// volume assistant: select vol 1; monitor enabled; inherit interval; free<10;
 	// for 3; notifier ops-email; no expand; no dry-run. then runWizard:
 	// confirm merge with "y".
 	script := strings.Join([]string{"1", "1", "", "1", "10", "3", "1", "n", "n", "y"}, "\n") + "\n"
-
-	var out bytes.Buffer
-	app := App{
-		Stdin:         strings.NewReader(script),
-		Stdout:        &out,
-		Stderr:        &bytes.Buffer{},
-		LoadConfig:    config.Load,
-		wizardEnvFunc: fakeWizardEnv,
-	}
-	code := app.Run(context.Background(), []string{"--config", cfgPath, "wizard", "volume"})
-	if code != exitSuccess {
-		t.Fatalf("exit = %d, want success; out=%s", code, out.String())
-	}
+	tmp, out := runWizard(t, "volume", fakeWizardEnv, script)
+	cfgPath := filepath.Join(tmp, "sermo.yml")
 
 	// The generated block was printed.
-	if !strings.Contains(out.String(), "storage-mnt-backup") || !strings.Contains(out.String(), "free_pct") {
-		t.Fatalf("generated YAML not shown: %s", out.String())
+	if !strings.Contains(out, "storage-mnt-backup") || !strings.Contains(out, "free_pct") {
+		t.Fatalf("generated YAML not shown: %s", out)
 	}
 	// The global config points paths.watches at the classified storage directory;
 	// the generated target itself is written as a separate watch document.
@@ -196,46 +203,28 @@ func TestRunWizardVolumeMergesConfig(t *testing.T) {
 	}
 }
 
-func TestRunWizardDockerWritesService(t *testing.T) {
-	tmp := t.TempDir()
-	cfgPath := filepath.Join(tmp, "sermo.yml")
-	if err := os.WriteFile(cfgPath, []byte("engine:\n  interval: 30s\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
+// assertWizardWritesService runs `wizard <subcommand>` with env as the host-facts
+// seam, feeding the default "monitor + write service file" script. It asserts the
+// generated serviceFile contains every substring in wants (and never a kind:) and
+// that the merged config includes serviceName.
+func assertWizardWritesService(t *testing.T, subcommand string, env func(*config.Config) assist.Env, serviceFile, serviceName string, wants []string) {
+	t.Helper()
 	script := strings.Join([]string{
-		"1", // select docker-web
+		"1", // select target
 		"1", // monitor enabled
 		"",  // interval inherit
 		"n", // no dry-run
 		"y", // write service file
 	}, "\n") + "\n"
-
-	var out bytes.Buffer
-	app := App{
-		Stdin:         strings.NewReader(script),
-		Stdout:        &out,
-		Stderr:        &bytes.Buffer{},
-		LoadConfig:    config.Load,
-		wizardEnvFunc: dockerWizardEnv,
-	}
-	code := app.Run(context.Background(), []string{"--config", cfgPath, "wizard", "docker"})
-	if code != exitSuccess {
-		t.Fatalf("exit = %d, want success; out=%s", code, out.String())
-	}
-	servicePath := filepath.Join(tmp, servicesIncludeDir, "docker-web.yml")
+	tmp, _ := runWizard(t, subcommand, env, script)
+	cfgPath := filepath.Join(tmp, "sermo.yml")
+	servicePath := filepath.Join(tmp, servicesIncludeDir, serviceFile)
 	data, err := os.ReadFile(servicePath)
 	if err != nil {
 		t.Fatalf("service file not written: %v", err)
 	}
 	text := string(data)
-	for _, want := range []string{
-		"name: docker-web",
-		"type: docker",
-		"container: web",
-		"socket: /run/docker.sock",
-		"container.status",
-	} {
+	for _, want := range wants {
 		if !strings.Contains(text, want) {
 			t.Fatalf("service file missing %q:\n%s", want, text)
 		}
@@ -248,94 +237,40 @@ func TestRunWizardDockerWritesService(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load merged config: %v", err)
 	}
-	if _, ok := loaded.Services["docker-web"]; !ok {
-		t.Fatalf("loaded config did not include docker-web: %v", loaded.ServiceNames)
+	if _, ok := loaded.Services[serviceName]; !ok {
+		t.Fatalf("loaded config did not include %s: %v", serviceName, loaded.ServiceNames)
 	}
 }
 
+func TestRunWizardDockerWritesService(t *testing.T) {
+	assertWizardWritesService(t, "docker", dockerWizardEnv, "docker-web.yml", "docker-web", []string{
+		"name: docker-web",
+		"type: docker",
+		"container: web",
+		"socket: /run/docker.sock",
+		"container.status",
+	})
+}
+
 func TestRunWizardVMWritesService(t *testing.T) {
-	tmp := t.TempDir()
-	cfgPath := filepath.Join(tmp, "sermo.yml")
-	if err := os.WriteFile(cfgPath, []byte("engine:\n  interval: 30s\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	script := strings.Join([]string{
-		"1", // select vm-web01
-		"1", // monitor enabled
-		"",  // interval inherit
-		"n", // no dry-run
-		"y", // write service file
-	}, "\n") + "\n"
-
-	var out bytes.Buffer
-	app := App{
-		Stdin:         strings.NewReader(script),
-		Stdout:        &out,
-		Stderr:        &bytes.Buffer{},
-		LoadConfig:    config.Load,
-		wizardEnvFunc: vmWizardEnv,
-	}
-	code := app.Run(context.Background(), []string{"--config", cfgPath, "wizard", "vm"})
-	if code != exitSuccess {
-		t.Fatalf("exit = %d, want success; out=%s", code, out.String())
-	}
-	servicePath := filepath.Join(tmp, servicesIncludeDir, "vm-web01.yml")
-	data, err := os.ReadFile(servicePath)
-	if err != nil {
-		t.Fatalf("service file not written: %v", err)
-	}
-	text := string(data)
-	for _, want := range []string{
+	assertWizardWritesService(t, "vm", vmWizardEnv, "vm-web01.yml", "vm-web01", []string{
 		"name: vm-web01",
 		"type: libvirt",
 		"domain: web01",
 		"uri: qemu:///system",
 		"socket: /run/libvirt/libvirt-sock",
 		"domain.state",
-	} {
-		if !strings.Contains(text, want) {
-			t.Fatalf("service file missing %q:\n%s", want, text)
-		}
-	}
-	// kind is derived from the services directory, so it is no longer written.
-	if strings.Contains(text, "kind:") {
-		t.Fatalf("service file should not write a kind:\n%s", text)
-	}
-	loaded, err := config.Load(cfgPath)
-	if err != nil {
-		t.Fatalf("load merged config: %v", err)
-	}
-	if _, ok := loaded.Services["vm-web01"]; !ok {
-		t.Fatalf("loaded config did not include vm-web01: %v", loaded.ServiceNames)
-	}
+	})
 }
 
 func TestRunWizardMountWritesStorageMountUnit(t *testing.T) {
-	tmp := t.TempDir()
-	cfgPath := filepath.Join(tmp, "sermo.yml")
-	if err := os.WriteFile(cfgPath, []byte("engine:\n  interval: 30s\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
 	script := strings.Join([]string{
 		"1", // select /mnt/backup
 		"y", // use refcounting
 		"y", // write mount watch file
 	}, "\n") + "\n"
-
-	var out bytes.Buffer
-	app := App{
-		Stdin:         strings.NewReader(script),
-		Stdout:        &out,
-		Stderr:        &bytes.Buffer{},
-		LoadConfig:    config.Load,
-		wizardEnvFunc: mountWizardEnv,
-	}
-	code := app.Run(context.Background(), []string{"--config", cfgPath, "wizard", "mount"})
-	if code != exitSuccess {
-		t.Fatalf("exit = %d, want success; out=%s", code, out.String())
-	}
+	tmp, _ := runWizard(t, "mount", mountWizardEnv, script)
+	cfgPath := filepath.Join(tmp, "sermo.yml")
 	mountPath := filepath.Join(tmp, mountsConfigDir, "mount-mnt-backup.yml")
 	data, err := os.ReadFile(mountPath)
 	if err != nil {
@@ -386,41 +321,15 @@ func TestRunWizardMountWritesStorageMountUnit(t *testing.T) {
 }
 
 func TestWriteMountFilesRejectsExistingFileBeforeUpdatingConfig(t *testing.T) {
-	tmp := t.TempDir()
-	cfgPath := filepath.Join(tmp, "sermo.yml")
-	original := []byte("engine:\n  interval: 30s\n")
-	if err := os.WriteFile(cfgPath, original, 0o644); err != nil {
-		t.Fatal(err)
-	}
-	mountDir := filepath.Join(tmp, mountsConfigDir)
-	if err := os.Mkdir(mountDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	existing := filepath.Join(mountDir, "mount-mnt-backup.yml")
-	if err := os.WriteFile(existing, []byte("name: old\ncheck: { type: storage, path: /old, mounted: true }\nmount: {}\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	_, _, err := writeMountFiles(cfgPath, map[string]map[string]any{
-		"mount-mnt-backup": {
-			config.EntryKeyName:    "mount-mnt-backup",
-			config.WatchKeyCheck:   map[string]any{checks.CheckKeyType: checks.CheckTypeStorage, checks.CheckKeyPath: "/mnt/backup", checks.CheckKeyMounted: true},
-			config.StorageKeyMount: map[string]any{},
-		},
-	})
-	if err == nil || !strings.Contains(err.Error(), "already exists") {
-		t.Fatalf("writeMountFiles error = %v, want existing-file error", err)
-	}
-	after, err := os.ReadFile(cfgPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !bytes.Equal(after, original) {
-		t.Fatalf("global config changed after rejected mount write:\n%s", after)
-	}
-	if _, err := os.Stat(cfgPath + ".bak"); !os.IsNotExist(err) {
-		t.Fatalf("backup should not be written when mount watch file preflight fails, stat err=%v", err)
-	}
+	assertWriteFilesRejectsExisting(t, mountsConfigDir, "mount-mnt-backup.yml",
+		"name: old\ncheck: { type: storage, path: /old, mounted: true }\nmount: {}\n",
+		writeMountFiles, map[string]map[string]any{
+			"mount-mnt-backup": {
+				config.EntryKeyName:    "mount-mnt-backup",
+				config.WatchKeyCheck:   map[string]any{checks.CheckKeyType: checks.CheckTypeStorage, checks.CheckKeyPath: "/mnt/backup", checks.CheckKeyMounted: true},
+				config.StorageKeyMount: map[string]any{},
+			},
+		})
 }
 
 func TestPlanConfigFilesRejectsBatchFilenameCollision(t *testing.T) {

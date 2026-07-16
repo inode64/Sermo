@@ -5,6 +5,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -49,33 +50,30 @@ func TestParseProcSocketTableUDP(t *testing.T) {
 	}
 }
 
+// assertParseHosts parses table with parseProcSocketTableHosts (port 9104, state
+// 0A) and asserts the extracted hosts equal want.
+func assertParseHosts(t *testing.T, table string, ipv6 bool, want ...string) {
+	t.Helper()
+	got, err := parseProcSocketTableHosts(strings.NewReader(table), 9104, map[string]bool{"0A": true}, ipv6)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertStringsEqual(t, got, want)
+}
+
 func TestParseProcSocketTableHostsIPv4(t *testing.T) {
 	const table = `  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode
    0: 160200C0:2390 00000000:0000 0A 00000000:00000000 00:00000000 00000000     0        0 12345 1 0000000000000000 100 0 0 10 0
    1: 0100007F:2390 00000000:0000 01 00000000:00000000 00:00000000 00000000     0        0 12346 1 0000000000000000 100 0 0 10 0
 `
-	got, err := parseProcSocketTableHosts(strings.NewReader(table), 9104, map[string]bool{"0A": true}, false)
-	if err != nil {
-		t.Fatal(err)
-	}
-	want := []string{"192.0.2.22"}
-	if strings.Join(got, ",") != strings.Join(want, ",") {
-		t.Fatalf("parseProcSocketTableHosts() = %v, want %v", got, want)
-	}
+	assertParseHosts(t, table, false, "192.0.2.22")
 }
 
 func TestParseProcSocketTableHostsIPv6(t *testing.T) {
 	const table = `  sl  local_address                         rem_address                         st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode
    0: 00000000000000000000000001000000:2390 00000000000000000000000000000000:0000 0A 00000000:00000000 00:00000000 00000000     0        0 12345 1 0000000000000000 100 0 0 10 0
 `
-	got, err := parseProcSocketTableHosts(strings.NewReader(table), 9104, map[string]bool{"0A": true}, true)
-	if err != nil {
-		t.Fatal(err)
-	}
-	want := []string{"::1"}
-	if strings.Join(got, ",") != strings.Join(want, ",") {
-		t.Fatalf("parseProcSocketTableHosts() = %v, want %v", got, want)
-	}
+	assertParseHosts(t, table, true, "::1")
 }
 
 func TestSpecificListenerHostRequiresOneNonLoopbackAddress(t *testing.T) {
@@ -145,9 +143,7 @@ dbus.socket loaded active running D-Bus System Message Bus Socket
 `
 	got := servicemgr.ParseSystemdActiveUnits(stdout)
 	want := []string{"nginx.service", "sshd.service"}
-	if strings.Join(got, ",") != strings.Join(want, ",") {
-		t.Fatalf("ParseSystemdActiveUnits() = %v, want %v", got, want)
-	}
+	assertStringsEqual(t, got, want)
 }
 
 func TestParseOpenRCActiveUnits(t *testing.T) {
@@ -166,9 +162,7 @@ Dynamic Runlevel: manual
 `
 	got := servicemgr.ParseOpenRCActiveUnits(stdout)
 	want := []string{"bluetooth", "rpcbind", "zigbee2mqtt"}
-	if strings.Join(got, ",") != strings.Join(want, ",") {
-		t.Fatalf("ParseOpenRCActiveUnits() = %v, want %v", got, want)
-	}
+	assertStringsEqual(t, got, want)
 }
 
 // A service started in two matched runlevels, interleaved with other services,
@@ -182,9 +176,7 @@ Dynamic Runlevel: manual
 `
 	got := servicemgr.ParseOpenRCActiveUnits(stdout)
 	want := []string{"sshd", "cron"}
-	if strings.Join(got, ",") != strings.Join(want, ",") {
-		t.Fatalf("ParseOpenRCActiveUnits() = %v, want %v (duplicates not collapsed)", got, want)
-	}
+	assertStringsEqual(t, got, want)
 }
 
 func TestDedupeWizardCatalogCandidatesByUnit(t *testing.T) {
@@ -200,9 +192,7 @@ func TestDedupeWizardCatalogCandidatesByUnit(t *testing.T) {
 		names = append(names, c.Name)
 	}
 	want := []string{"mariadb", "sshd", "customd"}
-	if strings.Join(names, ",") != strings.Join(want, ",") {
-		t.Fatalf("dedupeWizardCatalogCandidates() = %v, want %v", names, want)
-	}
+	assertStringsEqual(t, names, want)
 }
 
 func TestParseCephMonAddrsPrefersV2(t *testing.T) {
@@ -325,23 +315,42 @@ func TestServiceFileTargetControlledServices(t *testing.T) {
 	}
 }
 
-func TestWriteServiceFilesRejectsExistingFileBeforeUpdatingConfig(t *testing.T) {
+// assertWriteFilesRejectsExisting seeds subdir with an existing file, then asserts
+// write refuses the collision ("already exists") without mutating the global
+// config or leaving a .bak behind.
+func assertWriteFilesRejectsExisting(t *testing.T, subdir, existingName, existingBody string, write func(string, map[string]map[string]any) (string, int, error), docs map[string]map[string]any) {
+	t.Helper()
 	tmp := t.TempDir()
 	cfgPath := filepath.Join(tmp, "sermo.yml")
 	original := []byte("engine:\n  interval: 30s\n")
 	if err := os.WriteFile(cfgPath, original, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	serviceDir := filepath.Join(tmp, servicesIncludeDir)
-	if err := os.Mkdir(serviceDir, 0o755); err != nil {
+	dir := filepath.Join(tmp, subdir)
+	if err := os.Mkdir(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	existing := filepath.Join(serviceDir, "docker-web.yml")
-	if err := os.WriteFile(existing, []byte("name: old\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, existingName), []byte(existingBody), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
-	_, _, err := writeServiceFiles(cfgPath, map[string]map[string]any{
+	if _, _, err := write(cfgPath, docs); err == nil || !strings.Contains(err.Error(), "already exists") {
+		t.Fatalf("write error = %v, want existing-file error", err)
+	}
+	after, err := os.ReadFile(cfgPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(after, original) {
+		t.Fatalf("global config changed after rejected write:\n%s", after)
+	}
+	if _, err := os.Stat(cfgPath + ".bak"); !os.IsNotExist(err) {
+		t.Fatalf("backup should not be written when file preflight fails, stat err=%v", err)
+	}
+}
+
+func TestWriteServiceFilesRejectsExistingFileBeforeUpdatingConfig(t *testing.T) {
+	assertWriteFilesRejectsExisting(t, servicesIncludeDir, "docker-web.yml", "name: old\n", writeServiceFiles, map[string]map[string]any{
 		"docker-web": {
 			config.EntryKeyName: "docker-web",
 			config.SectionControl: map[string]any{
@@ -350,24 +359,20 @@ func TestWriteServiceFilesRejectsExistingFileBeforeUpdatingConfig(t *testing.T) 
 			},
 		},
 	})
-	if err == nil || !strings.Contains(err.Error(), "already exists") {
-		t.Fatalf("writeServiceFiles error = %v, want existing-file error", err)
-	}
-	after, err := os.ReadFile(cfgPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !bytes.Equal(after, original) {
-		t.Fatalf("global config changed after rejected service write:\n%s", after)
-	}
-	if _, err := os.Stat(cfgPath + ".bak"); !os.IsNotExist(err) {
-		t.Fatalf("backup should not be written when service file preflight fails, stat err=%v", err)
-	}
 }
 
 func TestWizardManagedServiceName(t *testing.T) {
 	if got := wizardManagedServiceName("docker", "/stack/web.1"); got != "docker-stack-web.1" {
 		t.Fatalf("wizardManagedServiceName() = %q, want docker-stack-web.1", got)
+	}
+}
+
+// assertStringsEqual fails the test unless got and want hold the same strings in
+// the same order.
+func assertStringsEqual(t *testing.T, got, want []string) {
+	t.Helper()
+	if !slices.Equal(got, want) {
+		t.Fatalf("got %v, want %v", got, want)
 	}
 }
 

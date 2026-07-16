@@ -8,17 +8,7 @@ import (
 
 func TestIMAPHandshakeAnonymous(t *testing.T) {
 	// Anonymous: only the greeting is read; no LOGIN is sent.
-	conn := rw{in: strings.NewReader("* OK [CAPABILITY IMAP4rev1] Dovecot ready.\r\n"), out: &bytes.Buffer{}}
-	res, err := imapHandshake(conn, Config{})
-	if err != nil {
-		t.Fatalf("handshake: %v", err)
-	}
-	if strings.Contains(conn.out.String(), "LOGIN") {
-		t.Fatalf("anonymous check must not LOGIN: %q", conn.out.String())
-	}
-	if !strings.Contains(res.Extra["greeting"], "Dovecot ready") {
-		t.Fatalf("greeting not captured: %v", res.Extra)
-	}
+	assertHandshakeAnonymous(t, imapHandshake, "* OK [CAPABILITY IMAP4rev1] Dovecot ready.\r\n", "LOGIN", "Dovecot ready")
 }
 
 func TestIMAPHandshakeLogin(t *testing.T) {
@@ -39,17 +29,11 @@ func TestIMAPHandshakeLogin(t *testing.T) {
 
 func TestIMAPHandshakeLoginFails(t *testing.T) {
 	replies := "* OK ready\r\n" + "a1 NO [AUTHENTICATIONFAILED] Invalid credentials\r\n"
-	conn := rw{in: strings.NewReader(replies), out: &bytes.Buffer{}}
-	if _, err := imapHandshake(conn, Config{User: "u", Password: "bad"}); err == nil {
-		t.Fatal("a NO login response must fail")
-	}
+	assertHandshakeFails(t, imapHandshake, replies, Config{User: "u", Password: "bad"})
 }
 
 func TestIMAPHandshakeBadGreeting(t *testing.T) {
-	conn := rw{in: strings.NewReader("* BYE Too many connections\r\n"), out: &bytes.Buffer{}}
-	if _, err := imapHandshake(conn, Config{}); err == nil {
-		t.Fatal("a non-OK greeting must fail")
-	}
+	assertHandshakeFails(t, imapHandshake, "* BYE Too many connections\r\n", Config{})
 }
 
 func TestIMAPHandshakePreauth(t *testing.T) {

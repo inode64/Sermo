@@ -1,20 +1,13 @@
 package conn
 
 import (
-	"context"
 	"encoding/binary"
 	"testing"
 )
 
 func TestStatdProbeAgainstFakeServer(t *testing.T) {
-	port := rpcAcceptedTCPTestPort(t, 0)
-	res, err := statdProtocol{}.Probe(context.Background(), Config{Host: "127.0.0.1", Port: port})
-	if err != nil {
-		t.Fatalf("probe: %v", err)
-	}
-	if res.Extra["rpc_status"] != "success" || res.Extra["program"] != "100024" {
-		t.Fatalf("extra = %v", res.Extra)
-	}
+	assertProbeExtras(t, statdProtocol{}, rpcAcceptedTCPTestPort(t, 0),
+		map[string]string{"rpc_status": "success", "program": "100024"})
 }
 
 func TestStatdProbeDenied(t *testing.T) {
@@ -26,11 +19,5 @@ func TestStatdProbeDenied(t *testing.T) {
 		binary.BigEndian.PutUint32(reply[8:], 1) // MSG_DENIED
 		return reply
 	})
-	res, err := statdProtocol{}.Probe(context.Background(), Config{Host: "127.0.0.1", Port: port})
-	if err != nil {
-		t.Fatalf("probe: %v", err)
-	}
-	if res.Extra["rpc_status"] != "denied" {
-		t.Fatalf("rpc_status = %q, want denied", res.Extra["rpc_status"])
-	}
+	assertProbeExtra(t, statdProtocol{}, port, "rpc_status", "denied")
 }

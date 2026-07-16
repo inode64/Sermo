@@ -76,35 +76,46 @@ type Snapshot map[string]Reading
 // the percentage form, a bare number against the absolute form; using a form the
 // metric does not expose is an error.
 func Compare(r Reading, op, threshold string) (bool, error) {
-	if !r.Ready {
+	value, actual, _, ready, err := evalThreshold(r, threshold)
+	if err != nil {
+		return false, err
+	}
+	if !ready {
 		return false, nil
 	}
-	value, isPercent, err := parseThreshold(threshold)
-	if err != nil {
-		return false, err
-	}
-
-	actual, err := metricValue(r, isPercent, threshold)
-	if err != nil {
-		return false, err
-	}
 	return applyOp(actual, op, value)
+}
+
+// evalThreshold parses threshold and reads the reading in the matching form
+// (Percent for a "%" threshold, Absolute otherwise), the shared prologue of
+// Compare and ReadingValueForThreshold. ready is false for a not-ready reading
+// (value/actual zero, err nil); err is set only when the threshold is malformed
+// or the metric does not expose the requested form.
+func evalThreshold(r Reading, threshold string) (value, actual float64, isPercent, ready bool, err error) {
+	if !r.Ready {
+		return 0, 0, false, false, nil
+	}
+	value, isPercent, err = parseThreshold(threshold)
+	if err != nil {
+		return 0, 0, false, false, err
+	}
+	actual, err = metricValue(r, isPercent, threshold)
+	if err != nil {
+		return 0, 0, isPercent, false, err
+	}
+	return value, actual, isPercent, true, nil
 }
 
 // ReadingValueForThreshold returns the same numeric form Compare uses for a
 // threshold: percentage thresholds read Percent, bare thresholds read Absolute.
 // The bool is false only when the reading is not ready yet.
 func ReadingValueForThreshold(r Reading, threshold string) (float64, string, bool, error) {
-	if !r.Ready {
+	_, actual, isPercent, ready, err := evalThreshold(r, threshold)
+	if err != nil {
+		return 0, MetricUnitNone, false, err
+	}
+	if !ready {
 		return 0, MetricUnitNone, false, nil
-	}
-	_, isPercent, err := parseThreshold(threshold)
-	if err != nil {
-		return 0, MetricUnitNone, false, err
-	}
-	actual, err := metricValue(r, isPercent, threshold)
-	if err != nil {
-		return 0, MetricUnitNone, false, err
 	}
 	if isPercent {
 		return actual, MetricUnitPercent, true, nil

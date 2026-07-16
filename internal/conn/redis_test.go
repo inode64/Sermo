@@ -110,15 +110,9 @@ func TestRedisHandshakePasswordOnly(t *testing.T) {
 }
 
 func TestRedisHandshakeAuthError(t *testing.T) {
-	conn := rw{in: strings.NewReader("-WRONGPASS invalid password\r\n"), out: &bytes.Buffer{}}
-	if _, err := redisHandshake(conn, Config{Password: "bad"}); err == nil {
-		t.Fatal("an auth error reply must fail the handshake")
-	}
+	assertHandshakeFails(t, redisHandshake, "-WRONGPASS invalid password\r\n", Config{Password: "bad"})
 }
 
 func TestRedisHandshakePingError(t *testing.T) {
-	conn := rw{in: strings.NewReader("-LOADING server is loading\r\n"), out: &bytes.Buffer{}}
-	if _, err := redisHandshake(conn, Config{}); err == nil {
-		t.Fatal("a non-PONG ping reply must fail")
-	}
+	assertHandshakeFails(t, redisHandshake, "-LOADING server is loading\r\n", Config{})
 }

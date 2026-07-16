@@ -242,6 +242,19 @@ func buildOneCheck(t *testing.T, name, typ string, entry map[string]any, deps De
 	return built[0].Check
 }
 
+// assertBuildThresholdFires builds a typ check with the given predicate entry and
+// deps, asserts it builds cleanly and fires, then asserts a predicate-less entry
+// warns.
+func assertBuildThresholdFires(t *testing.T, typ string, entry map[string]any, deps Deps) {
+	t.Helper()
+	if !buildOneCheck(t, "c", typ, entry, deps).Run(context.Background()).OK {
+		t.Fatalf("%s should build and fire", typ)
+	}
+	if _, warns := Build(map[string]any{"c": map[string]any{"type": typ}}, Deps{}); len(warns) == 0 {
+		t.Fatalf("%s check without a predicate should warn", typ)
+	}
+}
+
 // assertRequiredStringField asserts build carries the present entry's field
 // onto the check without warning, and warns when the entry is empty.
 func assertRequiredStringField(t *testing.T, build func(map[string]any) (Check, string), present map[string]any, field func(Check) string, want string) {

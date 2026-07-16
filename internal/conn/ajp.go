@@ -45,20 +45,11 @@ func (ajpProtocol) DefaultPort() int   { return defaultPortAJP }
 func (ajpProtocol) RequiresUser() bool { return false }
 
 func (ajpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	host := cfg.Host
-	if host == "" {
-		host = DefaultHost
-	}
-	port := cfg.Port
-	if port == 0 {
-		port = defaultPortAJP
-	}
-	c, err := BindDialer(cfg.Interface).DialContext(ctx, networkTCP, hostPort(host, port))
+	c, err := dialTCPDeadline(ctx, cfg, defaultPortAJP)
 	if err != nil {
 		return Result{}, err
 	}
 	defer func() { _ = c.Close() }()
-	applyDeadline(ctx, c)
 
 	if _, err := c.Write(buildAJPCPing()); err != nil {
 		return Result{}, err

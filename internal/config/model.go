@@ -567,17 +567,25 @@ func documentCanonicalName(doc *Document, fallback string) string {
 	return fallback
 }
 
-func (c *Config) catalogNames(category string) []string {
+// catalogSet returns a category's name list and definition registry (apps,
+// libraries, patterns, else the catalog services) — the single source of
+// truth for the category → catalog field mapping.
+func (c *Config) catalogSet(category string) ([]string, map[string]*Document) {
 	switch category {
 	case CategoryApp:
-		return c.AppNames
+		return c.AppNames, c.Apps
 	case CategoryLibrary:
-		return c.LibraryNames
+		return c.LibraryNames, c.Libraries
 	case CategoryPatterns:
-		return c.PatternNames
+		return c.PatternNames, c.Patterns
 	default:
-		return c.CatalogServiceNames
+		return c.CatalogServiceNames, c.CatalogServices
 	}
+}
+
+func (c *Config) catalogNames(category string) []string {
+	names, _ := c.catalogSet(category)
+	return names
 }
 
 // DefaultRuntime is the runtime root used when paths.runtime is unset.

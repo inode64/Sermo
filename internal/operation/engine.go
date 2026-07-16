@@ -238,19 +238,26 @@ func (e Engine) run(ctx context.Context, p plan) (result Result) {
 	return result
 }
 
+// failPhase marks result failed with the phase's timeout message when the
+// context expired, else errPrefix plus the backend error. It always returns
+// false so callers can `return failPhase(...)` from a bool-shaped step.
+func failPhase(ctx context.Context, result *Result, timeoutMsg, errPrefix string, err error) bool {
+	result.Status = ResultFailed
+	if timedOut(ctx) {
+		result.Message = timeoutMsg
+	} else {
+		result.Message = errPrefix + err.Error()
+	}
+	return false
+}
+
 func (e Engine) resumeService(ctx context.Context, result *Result) bool {
 	if e.ResumeFunc == nil {
 		result.Status, result.Message = ResultFailed, "resume: operation unsupported by backend"
 		return false
 	}
 	if err := e.ResumeFunc(ctx); err != nil {
-		result.Status = ResultFailed
-		if timedOut(ctx) {
-			result.Message = "operation timed out during resume"
-		} else {
-			result.Message = "resume: " + err.Error()
-		}
-		return false
+		return failPhase(ctx, result, "operation timed out during resume", "resume: ", err)
 	}
 	return e.ensureServiceHealthy(ctx, result, "resume")
 }
@@ -261,13 +268,7 @@ func (e Engine) reloadService(ctx context.Context, result *Result) bool {
 		reload = func(ctx context.Context) error { return e.Manager.Reload(ctx, e.Unit) }
 	}
 	if err := reload(ctx); err != nil {
-		result.Status = ResultFailed
-		if timedOut(ctx) {
-			result.Message = "operation timed out during reload"
-		} else {
-			result.Message = "reload: " + err.Error()
-		}
-		return false
+		return failPhase(ctx, result, "operation timed out during reload", "reload: ", err)
 	}
 	return e.ensureServiceHealthy(ctx, result, "reload")
 }
@@ -296,23 +297,11 @@ func (e Engine) runPostflight(ctx context.Context, p plan, result *Result) bool 
 func (e Engine) startService(ctx context.Context, result *Result) bool {
 	for _, unit := range e.AlsoUnits {
 		if err := e.Manager.Start(ctx, unit); err != nil {
-			result.Status = ResultFailed
-			if timedOut(ctx) {
-				result.Message = "operation timed out starting also_service " + unit
-			} else {
-				result.Message = "start " + unit + ": " + err.Error()
-			}
-			return false
+			return failPhase(ctx, result, "operation timed out starting also_service "+unit, "start "+unit+": ", err)
 		}
 	}
 	if err := e.Manager.Start(ctx, e.Unit); err != nil {
-		result.Status = ResultFailed
-		if timedOut(ctx) {
-			result.Message = "operation timed out during start"
-		} else {
-			result.Message = "start: " + err.Error()
-		}
-		return false
+		return failPhase(ctx, result, "operation timed out during start", "start: ", err)
 	}
 	if status, err := e.Manager.Status(ctx, e.Unit); err == nil && status.Status == servicemgr.StatusFailed {
 		result.Status, result.Message = ResultFailed, "service failed after start"
@@ -323,12 +312,7 @@ func (e Engine) startService(ctx context.Context, result *Result) bool {
 
 func (e Engine) stopService(ctx context.Context, result *Result) (alsoStopErrs, staleWarn []string, stopped bool) {
 	if err := e.Manager.Stop(ctx, e.Unit); err != nil {
-		result.Status = ResultFailed
-		if timedOut(ctx) {
-			result.Message = "operation timed out during stop"
-		} else {
-			result.Message = "stop: " + err.Error()
-		}
+		_ = failPhase(ctx, result, "operation timed out during stop", "stop: ", err)
 		return nil, nil, false
 	}
 	for _, unit := range slices.Backward(e.AlsoUnits) {

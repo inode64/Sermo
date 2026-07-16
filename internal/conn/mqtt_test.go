@@ -5,7 +5,6 @@ import (
 	"context"
 	"io"
 	"net"
-	"strconv"
 	"testing"
 )
 
@@ -47,24 +46,11 @@ func TestParseMQTTConnack(t *testing.T) {
 // CONNACK carrying returnCode.
 func serveMQTT(t *testing.T, returnCode byte) int {
 	t.Helper()
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = ln.Close() })
-	go func() {
-		c, err := ln.Accept()
-		if err != nil {
-			return
-		}
-		defer func() { _ = c.Close() }()
+	return serveOnce(t, func(c net.Conn) {
 		buf := make([]byte, 256)
 		_, _ = io.ReadAtLeast(c, buf, 1)
 		_, _ = c.Write([]byte{0x20, 0x02, 0x00, returnCode})
-	}()
-	_, portStr, _ := net.SplitHostPort(ln.Addr().String())
-	port, _ := strconv.Atoi(portStr)
-	return port
+	})
 }
 
 func TestMQTTProbeAccepted(t *testing.T) {

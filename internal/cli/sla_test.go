@@ -15,50 +15,13 @@ import (
 )
 
 func TestSLACommandReportsWindows(t *testing.T) {
-	root := t.TempDir()
+	root, global := writeCatalogServiceConfig(t)
 	catalogDir := filepath.Join(root, "catalog")
-	catalogServicesDir := filepath.Join(catalogDir, "services")
-	servicesDir := filepath.Join(root, "services")
-	runDir := filepath.Join(root, "run")
-	stateDir := filepath.Join(root, "state")
-	for _, d := range []string{catalogServicesDir, servicesDir, runDir, stateDir} {
-		if err := os.MkdirAll(d, 0o755); err != nil {
-			t.Fatal(err)
-		}
-	}
-	write := func(path, body string) {
-		if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
-	write(filepath.Join(catalogServicesDir, "nginx.yml"), "name: nginx\nservice: nginx\n")
-	write(filepath.Join(servicesDir, "web.yml"), "name: web\nuses: nginx\n")
-	write(filepath.Join(root, "sermo.yml"), fmt.Sprintf(`
-engine: { backend: auto }
-paths: { services: [ %s ], runtime: %s, state: %s }
-defaults: { policy: { cooldown: 5m } }
-`, servicesDir, runDir, stateDir))
-	global := filepath.Join(root, "sermo.yml")
-
 	// Seed three recent samples: two up, one down -> ~66.67% across every window.
-	store, err := state.Open(filepath.Join(stateDir, state.Filename))
-	if err != nil {
-		t.Fatal(err)
-	}
-	now := time.Now()
-	for i, up := range []bool{true, false, true} {
-		if err := store.RecordSLA("web", up, now.Add(-time.Duration(i)*time.Minute)); err != nil {
-			t.Fatal(err)
-		}
-	}
-	store.Close()
+	seedSLA(t, filepath.Join(root, "state"), "web",
+		slaSample{true, 0}, slaSample{false, time.Minute}, slaSample{true, 2 * time.Minute})
 
-	run := func(args ...string) (string, int) {
-		var out bytes.Buffer
-		app := App{Env: func(string) string { return "" }, Stdout: &out, Stderr: &bytes.Buffer{}, LoadConfig: testLoadConfigWithCatalog(catalogDir)}
-		code := app.Run(context.Background(), append([]string{"--config", global}, args...))
-		return out.String(), code
-	}
+	run := slaRunner(t, global, catalogDir)
 
 	// Text table for one service.
 	out, code := run("sla", "web")
@@ -100,49 +63,12 @@ defaults: { policy: { cooldown: 5m } }
 }
 
 func TestSLASeriesCommand(t *testing.T) {
-	root := t.TempDir()
+	root, global := writeCatalogServiceConfig(t)
 	catalogDir := filepath.Join(root, "catalog")
-	catalogServicesDir := filepath.Join(catalogDir, "services")
-	servicesDir := filepath.Join(root, "services")
-	stateDir := filepath.Join(root, "state")
-	for _, d := range []string{catalogServicesDir, servicesDir, stateDir} {
-		if err := os.MkdirAll(d, 0o755); err != nil {
-			t.Fatal(err)
-		}
-	}
-	write := func(path, body string) {
-		if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
-	write(filepath.Join(catalogServicesDir, "nginx.yml"), "name: nginx\nservice: nginx\n")
-	write(filepath.Join(servicesDir, "web.yml"), "name: web\nuses: nginx\n")
-	write(filepath.Join(root, "sermo.yml"), fmt.Sprintf(`
-engine: { backend: auto }
-paths: { services: [ %s ], state: %s }
-defaults: { policy: { cooldown: 5m } }
-`, servicesDir, stateDir))
-	global := filepath.Join(root, "sermo.yml")
+	seedSLA(t, filepath.Join(root, "state"), "web",
+		slaSample{true, 3 * time.Minute}, slaSample{false, 2 * time.Minute})
 
-	store, err := state.Open(filepath.Join(stateDir, state.Filename))
-	if err != nil {
-		t.Fatal(err)
-	}
-	now := time.Now()
-	if err := store.RecordSLA("web", true, now.Add(-3*time.Minute)); err != nil {
-		t.Fatal(err)
-	}
-	if err := store.RecordSLA("web", false, now.Add(-2*time.Minute)); err != nil {
-		t.Fatal(err)
-	}
-	store.Close()
-
-	run := func(args ...string) (string, int) {
-		var out bytes.Buffer
-		app := App{Env: func(string) string { return "" }, Stdout: &out, Stderr: &bytes.Buffer{}, LoadConfig: testLoadConfigWithCatalog(catalogDir)}
-		code := app.Run(context.Background(), append([]string{"--config", global}, args...))
-		return out.String(), code
-	}
+	run := slaRunner(t, global, catalogDir)
 
 	jsonOut, code := run("--json", "sla", "--series", "web", "--since", "1h")
 	if code != exitSuccess {
@@ -174,6 +100,41 @@ defaults: { policy: { cooldown: 5m } }
 	// --series with no service is a usage error.
 	if _, code := run("sla", "--series"); code != exitUsage {
 		t.Fatalf("sla --series without service exit = %d, want %d", code, exitUsage)
+	}
+}
+
+// slaSample is one SLA data point: up/down and how long before now it occurred.
+type slaSample struct {
+	up  bool
+	ago time.Duration
+}
+
+// seedSLA records samples for service into the state store at stateDir, each at
+// its ago offset before now, then closes the store.
+func seedSLA(t *testing.T, stateDir, service string, samples ...slaSample) {
+	t.Helper()
+	store, err := state.Open(filepath.Join(stateDir, state.Filename))
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now()
+	for _, s := range samples {
+		if err := store.RecordSLA(service, s.up, now.Add(-s.ago)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	store.Close()
+}
+
+// slaRunner returns a helper that runs sla-family commands against global with a
+// catalog-aware config loader, reporting combined stdout and the exit code.
+func slaRunner(t *testing.T, global, catalogDir string) func(args ...string) (string, int) {
+	t.Helper()
+	return func(args ...string) (string, int) {
+		var out bytes.Buffer
+		app := App{Env: func(string) string { return "" }, Stdout: &out, Stderr: &bytes.Buffer{}, LoadConfig: testLoadConfigWithCatalog(catalogDir)}
+		code := app.Run(context.Background(), append([]string{"--config", global}, args...))
+		return out.String(), code
 	}
 }
 

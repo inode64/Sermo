@@ -132,6 +132,22 @@ func chooseCandidates[T any](p *Prompt, question string, cands []T, label func(T
 	return candidatesByIndexes(cands, sel)
 }
 
+// chooseSharedSettings runs the prologue shared by the mount and volume
+// assistants: pick candidates, then — when more than one is selected — offer to
+// gather one settings answer for all of them. It returns the selection and the
+// shared settings (nil when the user declined or picked a single candidate, in
+// which case the caller asks per candidate). scope is the label passed to ask for
+// the shared answer.
+func chooseSharedSettings[C, S any](p *Prompt, question string, cands []C, label func(C) string, confirmPrompt, scope string, ask func(string) S) ([]C, *S) {
+	selected := chooseCandidates(p, question, cands, label)
+	var shared *S
+	if len(selected) > 1 && p.Confirm(confirmPrompt, true) {
+		s := ask(scope)
+		shared = &s
+	}
+	return selected, shared
+}
+
 func candidatesByIndexes[T any](cands []T, indexes []int) []T {
 	out := make([]T, 0, len(indexes))
 	for _, idx := range indexes {

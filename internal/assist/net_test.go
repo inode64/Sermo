@@ -73,7 +73,7 @@ func TestNetAssistantActiveKeyword(t *testing.T) {
 			{Name: "lo", Up: true, Loopback: true},
 		}, nil
 	}
-	script := strings.Join([]string{
+	res, _ := runAssistant(t, netAssistant{}, env,
 		netKeywordActive, // only eth0 and wg0
 		"y",              // shared settings
 		"1",              // monitor enabled
@@ -82,12 +82,7 @@ func TestNetAssistantActiveKeyword(t *testing.T) {
 		"1",              // on any change
 		"1",              // ops-email
 		"y",              // dry-run
-	}, "\n") + "\n"
-	p := NewPrompt(strings.NewReader(script), &strings.Builder{})
-	res, err := netAssistant{}.Run(p, env)
-	if err != nil {
-		t.Fatalf("Run: %v", err)
-	}
+	)
 	if _, ok := res.Watches[netWatchPrefix+"eth0"]; !ok {
 		t.Fatalf("net-eth0 missing from %v", res.Watches)
 	}
@@ -121,12 +116,7 @@ func TestNetAssistantStateDownOnly(t *testing.T) {
 func TestNetAssistantInheritsGlobalNotify(t *testing.T) {
 	// Select eth0; monitor enabled, inherit interval; only state; any change;
 	// inherit global notify.
-	script := strings.Join([]string{"1", "1", "", "1", "1", config.NotifyKeywordDefault, "n"}, "\n") + "\n"
-	p := NewPrompt(strings.NewReader(script), &strings.Builder{})
-	res, err := netAssistant{}.Run(p, testEnvWithDefaultNotify())
-	if err != nil {
-		t.Fatalf("Run: %v", err)
-	}
+	res, _ := runAssistant(t, netAssistant{}, testEnvWithDefaultNotify(), "1", "1", "", "1", "1", config.NotifyKeywordDefault, "n")
 	state := res.Watches[netWatchPrefix+"eth0"].(map[string]any)[config.SectionMetrics].(map[string]any)[checks.NetMetricState].(map[string]any)
 	then := state[config.WatchKeyThen].(map[string]any)
 	if _, hasNotify := then[rules.RuleFieldNotify]; hasNotify {
@@ -199,12 +189,7 @@ func TestNetAssistantNotifyByName(t *testing.T) {
 func TestNetAssistantNotifyNoneMonitorOnly(t *testing.T) {
 	// Select eth0; monitor enabled, inherit interval; only state; any change;
 	// explicit none: the reserved opt-out generates a monitor-only watch.
-	script := strings.Join([]string{"1", "1", "", "1", "1", config.NotifyNone}, "\n") + "\n"
-	p := NewPrompt(strings.NewReader(script), &strings.Builder{})
-	res, err := netAssistant{}.Run(p, testEnv())
-	if err != nil {
-		t.Fatalf("Run: %v", err)
-	}
+	res, _ := runAssistant(t, netAssistant{}, testEnv(), "1", "1", "", "1", "1", config.NotifyNone)
 	then := res.Watches[netWatchPrefix+"eth0"].(map[string]any)[config.SectionMetrics].(map[string]any)[checks.NetMetricState].(map[string]any)[config.WatchKeyThen].(map[string]any)
 	notify := then[rules.RuleFieldNotify].([]string)
 	if len(notify) != 1 || notify[0] != config.NotifyNone {

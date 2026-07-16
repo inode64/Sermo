@@ -6,6 +6,17 @@ import (
 	"time"
 )
 
+// parseRulesByName parses tree's rules and returns them indexed by rule name.
+func parseRulesByName(t *testing.T, tree map[string]any) map[string]Rule {
+	t.Helper()
+	ruleSet, _ := ParseRules(tree)
+	byName := map[string]Rule{}
+	for _, r := range ruleSet {
+		byName[r.Name] = r
+	}
+	return byName
+}
+
 // feed runs a sequence of condition values through a fresh window and returns the
 // cycle indexes (1-based) where the rule fired.
 func feed(r Rule, values []bool) []int {
@@ -283,11 +294,7 @@ func TestParseRulesAppliesWindowFallback(t *testing.T) {
 			},
 		},
 	}
-	ruleSet, _ := ParseRules(tree)
-	byName := map[string]Rule{}
-	for _, r := range ruleSet {
-		byName[r.Name] = r
-	}
+	byName := parseRulesByName(t, tree)
 	if r := byName["inherit"]; r.For == nil || r.For.Cycles != 3 || r.Within != nil {
 		t.Errorf("inherit: For=%+v Within=%+v, want For cycles 3", r.For, r.Within)
 	}
@@ -333,11 +340,7 @@ func TestParseWindows(t *testing.T) {
 			"then":   map[string]any{"action": "restart"},
 		},
 	}}
-	ruleSet, _ := ParseRules(tree)
-	byName := map[string]Rule{}
-	for _, r := range ruleSet {
-		byName[r.Name] = r
-	}
+	byName := parseRulesByName(t, tree)
 	if byName["a"].For == nil || byName["a"].For.Cycles != 3 {
 		t.Errorf("rule a For = %+v", byName["a"].For)
 	}
@@ -361,11 +364,7 @@ func TestParseDurationWindows(t *testing.T) {
 			"then":   map[string]any{"action": "alert", "message": "http down"},
 		},
 	}}
-	ruleSet, _ := ParseRules(tree)
-	byName := map[string]Rule{}
-	for _, r := range ruleSet {
-		byName[r.Name] = r
-	}
+	byName := parseRulesByName(t, tree)
 	if byName["a"].For == nil || byName["a"].For.Duration != 6*time.Minute {
 		t.Fatalf("rule a For = %+v", byName["a"].For)
 	}

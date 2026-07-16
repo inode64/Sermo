@@ -47,290 +47,216 @@ func (h *WebBackendHolder) backend() *WebBackend {
 	return h.b
 }
 
+// webCall runs fn against the active backend, returning zero when no backend
+// is installed; the nil-guard shared by every delegate below.
+//
+//nolint:ireturn // T is the caller's concrete result type, not an interface.
+func webCall[T any](h *WebBackendHolder, zero T, fn func(b *WebBackend) T) T {
+	if b := h.backend(); b != nil {
+		return fn(b)
+	}
+	return zero
+}
+
+// webCallOK is webCall for the (value, ok) lookups; a missing backend reports
+// zero, false.
+//
+//nolint:ireturn // T is the caller's concrete result type, not an interface.
+func webCallOK[T any](h *WebBackendHolder, zero T, fn func(b *WebBackend) (T, bool)) (T, bool) {
+	if b := h.backend(); b != nil {
+		return fn(b)
+	}
+	return zero, false
+}
+
+// unavailableAction is the shared failure result when no backend is installed.
+func unavailableAction() web.ActionResult {
+	return web.ActionResult{OK: false, Message: webBackendUnavailableMessage}
+}
+
 // Services returns the service list from the active backend (nil if unset).
 func (h *WebBackendHolder) Services(ctx context.Context) []web.Service {
-	if b := h.backend(); b != nil {
-		return b.Services(ctx)
-	}
-	return nil
+	return webCall(h, nil, func(b *WebBackend) []web.Service { return b.Services(ctx) })
 }
 
 // Watches returns the host watches from the active backend.
 func (h *WebBackendHolder) Watches(ctx context.Context) []web.Watch {
-	if b := h.backend(); b != nil {
-		return b.Watches(ctx)
-	}
-	return nil
+	return webCall(h, nil, func(b *WebBackend) []web.Watch { return b.Watches(ctx) })
 }
 
 // Notifiers returns the configured notifiers from the active backend.
 func (h *WebBackendHolder) Notifiers(ctx context.Context) []web.Notifier {
-	if b := h.backend(); b != nil {
-		return b.Notifiers(ctx)
-	}
-	return nil
+	return webCall(h, nil, func(b *WebBackend) []web.Notifier { return b.Notifiers(ctx) })
 }
 
 // TestNotifier sends an explicit test message through a configured notifier.
 func (h *WebBackendHolder) TestNotifier(ctx context.Context, name string) web.ActionResult {
-	if b := h.backend(); b != nil {
-		return b.TestNotifier(ctx, name)
-	}
-	return web.ActionResult{OK: false, Message: webBackendUnavailableMessage}
+	return webCall(h, unavailableAction(), func(b *WebBackend) web.ActionResult { return b.TestNotifier(ctx, name) })
 }
 
 // Applications returns the installed applications from the active backend.
 func (h *WebBackendHolder) Applications(ctx context.Context) []web.Application {
-	if b := h.backend(); b != nil {
-		return b.Applications(ctx)
-	}
-	return nil
+	return webCall(h, nil, func(b *WebBackend) []web.Application { return b.Applications(ctx) })
 }
 
 // Libraries returns the installed catalog libraries from the active backend.
 func (h *WebBackendHolder) Libraries(ctx context.Context) []web.Library {
-	if b := h.backend(); b != nil {
-		return b.Libraries(ctx)
-	}
-	return nil
+	return webCall(h, nil, func(b *WebBackend) []web.Library { return b.Libraries(ctx) })
 }
 
 // Mounts returns configured mount units from the active backend.
 func (h *WebBackendHolder) Mounts(ctx context.Context) []web.Mount {
-	if b := h.backend(); b != nil {
-		return b.Mounts(ctx)
-	}
-	return nil
+	return webCall(h, nil, func(b *WebBackend) []web.Mount { return b.Mounts(ctx) })
 }
 
 // MountAction runs mount or umount through the active backend.
 func (h *WebBackendHolder) MountAction(ctx context.Context, name, action string, opts web.MountActionOptions) web.MountActionResult {
-	if b := h.backend(); b != nil {
-		return b.MountAction(ctx, name, action, opts)
-	}
-	return web.MountActionResult{OK: false, Name: name, Action: action, Message: webBackendUnavailableMessage}
+	return webCall(h, web.MountActionResult{OK: false, Name: name, Action: action, Message: webBackendUnavailableMessage},
+		func(b *WebBackend) web.MountActionResult { return b.MountAction(ctx, name, action, opts) })
 }
 
 // MountBlockers reports current mount blockers through the active backend.
 func (h *WebBackendHolder) MountBlockers(ctx context.Context, name string) web.MountBlockersResult {
-	if b := h.backend(); b != nil {
-		return b.MountBlockers(ctx, name)
-	}
-	return web.MountBlockersResult{OK: false, Name: name, Message: webBackendUnavailableMessage}
+	return webCall(h, web.MountBlockersResult{OK: false, Name: name, Message: webBackendUnavailableMessage},
+		func(b *WebBackend) web.MountBlockersResult { return b.MountBlockers(ctx, name) })
 }
 
 // AlertMountUsers sends a console alert through the active backend.
 func (h *WebBackendHolder) AlertMountUsers(ctx context.Context, name string) web.MountAlertResult {
-	if b := h.backend(); b != nil {
-		return b.AlertMountUsers(ctx, name)
-	}
-	return web.MountAlertResult{OK: false, Name: name, Message: webBackendUnavailableMessage}
+	return webCall(h, web.MountAlertResult{OK: false, Name: name, Message: webBackendUnavailableMessage},
+		func(b *WebBackend) web.MountAlertResult { return b.AlertMountUsers(ctx, name) })
 }
 
 // DaemonInfo returns daemon and engine info from the active backend.
 func (h *WebBackendHolder) DaemonInfo(ctx context.Context) web.DaemonInfo {
-	if b := h.backend(); b != nil {
-		return b.DaemonInfo(ctx)
-	}
-	return web.DaemonInfo{}
+	return webCall(h, web.DaemonInfo{}, func(b *WebBackend) web.DaemonInfo { return b.DaemonInfo(ctx) })
 }
 
 // DaemonMetrics returns sermod process metrics from the active backend.
 func (h *WebBackendHolder) DaemonMetrics(ctx context.Context, since time.Duration) web.DaemonMetrics {
-	if b := h.backend(); b != nil {
-		return b.DaemonMetrics(ctx, since)
-	}
-	return web.DaemonMetrics{Since: since.String()}
+	return webCall(h, web.DaemonMetrics{Since: since.String()},
+		func(b *WebBackend) web.DaemonMetrics { return b.DaemonMetrics(ctx, since) })
 }
 
 // HostMetrics returns current host metrics from the active backend.
 func (h *WebBackendHolder) HostMetrics(ctx context.Context) []web.HostMetric {
-	if b := h.backend(); b != nil {
-		return b.HostMetrics(ctx)
-	}
-	return nil
+	return webCall(h, nil, func(b *WebBackend) []web.HostMetric { return b.HostMetrics(ctx) })
 }
 
 // Locks returns runtime locks from the active backend.
 func (h *WebBackendHolder) Locks(ctx context.Context) []web.Lock {
-	if b := h.backend(); b != nil {
-		return b.Locks(ctx)
-	}
-	return nil
+	return webCall(h, nil, func(b *WebBackend) []web.Lock { return b.Locks(ctx) })
 }
 
 // ReleaseLock removes an inactive named runtime lock from the active backend.
 func (h *WebBackendHolder) ReleaseLock(ctx context.Context, service, name string) web.ActionResult {
-	if b := h.backend(); b != nil {
-		return b.ReleaseLock(ctx, service, name)
-	}
-	return web.ActionResult{OK: false, Message: webBackendUnavailableMessage}
+	return webCall(h, unavailableAction(), func(b *WebBackend) web.ActionResult { return b.ReleaseLock(ctx, service, name) })
 }
 
 // ActivitySummary returns the recent-activity rollup from the active backend.
 func (h *WebBackendHolder) ActivitySummary(ctx context.Context) web.ActivitySummary {
-	if b := h.backend(); b != nil {
-		return b.ActivitySummary(ctx)
-	}
-	return web.ActivitySummary{}
+	return webCall(h, web.ActivitySummary{}, func(b *WebBackend) web.ActivitySummary { return b.ActivitySummary(ctx) })
 }
 
 // MonitoringStatus returns the monitored/paused summary from the active backend.
 func (h *WebBackendHolder) MonitoringStatus(ctx context.Context) web.MonitoringStatus {
-	if b := h.backend(); b != nil {
-		return b.MonitoringStatus(ctx)
-	}
-	return web.MonitoringStatus{}
+	return webCall(h, web.MonitoringStatus{}, func(b *WebBackend) web.MonitoringStatus { return b.MonitoringStatus(ctx) })
 }
 
 // Detail returns a service's detail from the active backend.
 func (h *WebBackendHolder) Detail(ctx context.Context, name string) (web.Detail, bool) {
-	if b := h.backend(); b != nil {
-		return b.Detail(ctx, name)
-	}
-	return web.Detail{}, false
+	return webCallOK(h, web.Detail{}, func(b *WebBackend) (web.Detail, bool) { return b.Detail(ctx, name) })
 }
 
 // Series returns a service's SLA series from the active backend.
 func (h *WebBackendHolder) Series(ctx context.Context, name string, since time.Duration) ([]web.SeriesPoint, bool) {
-	if b := h.backend(); b != nil {
-		return b.Series(ctx, name, since)
-	}
-	return nil, false
+	return webCallOK(h, nil, func(b *WebBackend) ([]web.SeriesPoint, bool) { return b.Series(ctx, name, since) })
 }
 
 // Metrics returns a check's metric series from the active backend.
 func (h *WebBackendHolder) Metrics(ctx context.Context, name, check, metric string, since time.Duration) (web.MetricSeries, bool) {
-	if b := h.backend(); b != nil {
-		return b.Metrics(ctx, name, check, metric, since)
-	}
-	return web.MetricSeries{}, false
+	return webCallOK(h, web.MetricSeries{},
+		func(b *WebBackend) (web.MetricSeries, bool) { return b.Metrics(ctx, name, check, metric, since) })
 }
 
 // ServiceRuntime returns process-tree runtime series from the active backend.
 func (h *WebBackendHolder) ServiceRuntime(ctx context.Context, name string, since time.Duration) (web.ServiceRuntimeMetrics, bool) {
-	if b := h.backend(); b != nil {
-		return b.ServiceRuntime(ctx, name, since)
-	}
-	return web.ServiceRuntimeMetrics{Since: since.String()}, false
+	return webCallOK(h, web.ServiceRuntimeMetrics{Since: since.String()},
+		func(b *WebBackend) (web.ServiceRuntimeMetrics, bool) { return b.ServiceRuntime(ctx, name, since) })
 }
 
 // Events returns recent events from the active backend.
 func (h *WebBackendHolder) Events(ctx context.Context, limit int) []web.Event {
-	if b := h.backend(); b != nil {
-		return b.Events(ctx, limit)
-	}
-	return nil
+	return webCall(h, nil, func(b *WebBackend) []web.Event { return b.Events(ctx, limit) })
 }
 
 // EventPage returns a filtered cursor page from the active backend.
 func (h *WebBackendHolder) EventPage(ctx context.Context, query web.EventQuery) web.EventPage {
-	if b := h.backend(); b != nil {
-		return b.EventPage(ctx, query)
-	}
-	return web.EventPage{}
+	return webCall(h, web.EventPage{}, func(b *WebBackend) web.EventPage { return b.EventPage(ctx, query) })
 }
 
 // Operations returns operation-slot usage from the active backend.
 func (h *WebBackendHolder) Operations(ctx context.Context) web.OperationSlots {
-	if b := h.backend(); b != nil {
-		return b.Operations(ctx)
-	}
-	return web.OperationSlots{}
+	return webCall(h, web.OperationSlots{}, func(b *WebBackend) web.OperationSlots { return b.Operations(ctx) })
 }
 
 // ServiceEvents returns a service's recent events from the active backend.
 func (h *WebBackendHolder) ServiceEvents(ctx context.Context, name string, limit int) ([]web.Event, bool) {
-	if b := h.backend(); b != nil {
-		return b.ServiceEvents(ctx, name, limit)
-	}
-	return nil, false
+	return webCallOK(h, nil, func(b *WebBackend) ([]web.Event, bool) { return b.ServiceEvents(ctx, name, limit) })
 }
 
 // ApplicationEvents returns one application's recent events through the active backend.
 func (h *WebBackendHolder) ApplicationEvents(ctx context.Context, name string, limit int) ([]web.Event, bool) {
-	if b := h.backend(); b != nil {
-		return b.ApplicationEvents(ctx, name, limit)
-	}
-	return nil, false
+	return webCallOK(h, nil, func(b *WebBackend) ([]web.Event, bool) { return b.ApplicationEvents(ctx, name, limit) })
 }
 
 // PruneEvents removes old events from the active event feed (if the backend is available).
 func (h *WebBackendHolder) PruneEvents(ctx context.Context, before time.Time) int {
-	if b := h.backend(); b != nil {
-		return b.PruneEvents(ctx, before)
-	}
-	return 0
+	return webCall(h, 0, func(b *WebBackend) int { return b.PruneEvents(ctx, before) })
 }
 
 // Operate runs a start/stop/restart/reload/resume action through the active backend.
 func (h *WebBackendHolder) Operate(ctx context.Context, name, action string, opts web.OperateOpts) web.ActionResult {
-	if b := h.backend(); b != nil {
-		return b.Operate(ctx, name, action, opts)
-	}
-	return web.ActionResult{OK: false, Message: webBackendUnavailableMessage}
+	return webCall(h, unavailableAction(), func(b *WebBackend) web.ActionResult { return b.Operate(ctx, name, action, opts) })
 }
 
 // CompactState prunes old persisted history through the active backend.
 func (h *WebBackendHolder) CompactState(ctx context.Context, before time.Time) web.StateCompactResult {
-	if b := h.backend(); b != nil {
-		return b.CompactState(ctx, before)
-	}
-	return web.StateCompactResult{OK: false, Message: webBackendUnavailableMessage}
+	return webCall(h, web.StateCompactResult{OK: false, Message: webBackendUnavailableMessage},
+		func(b *WebBackend) web.StateCompactResult { return b.CompactState(ctx, before) })
 }
 
 // Preflight runs a service's preflight checks through the active backend.
 func (h *WebBackendHolder) Preflight(ctx context.Context, name string) (web.PreflightResult, bool) {
-	if b := h.backend(); b != nil {
-		return b.Preflight(ctx, name)
-	}
-	return web.PreflightResult{}, false
+	return webCallOK(h, web.PreflightResult{}, func(b *WebBackend) (web.PreflightResult, bool) { return b.Preflight(ctx, name) })
 }
 
 // SetMonitored toggles a service's monitoring through the active backend.
 func (h *WebBackendHolder) SetMonitored(ctx context.Context, name string, monitored bool) error {
-	if b := h.backend(); b != nil {
-		return b.SetMonitored(ctx, name, monitored)
-	}
-	return nil
+	return webCall(h, nil, func(b *WebBackend) error { return b.SetMonitored(ctx, name, monitored) })
 }
 
 // SetPanic toggles the daemon-wide panic mode through the active backend.
 func (h *WebBackendHolder) SetPanic(ctx context.Context, on bool) web.ActionResult {
-	if b := h.backend(); b != nil {
-		return b.SetPanic(ctx, on)
-	}
-	return web.ActionResult{OK: false, Message: webBackendUnavailableMessage}
+	return webCall(h, unavailableAction(), func(b *WebBackend) web.ActionResult { return b.SetPanic(ctx, on) })
 }
 
 // SetWatchMonitored toggles a host watch's monitoring through the active backend.
 func (h *WebBackendHolder) SetWatchMonitored(ctx context.Context, name string, monitored bool) error {
-	if b := h.backend(); b != nil {
-		return b.SetWatchMonitored(ctx, name, monitored)
-	}
-	return nil
+	return webCall(h, nil, func(b *WebBackend) error { return b.SetWatchMonitored(ctx, name, monitored) })
 }
 
 // ExpandWatch runs a configured storage-watch expansion through the active backend.
 func (h *WebBackendHolder) ExpandWatch(ctx context.Context, name string) web.ActionResult {
-	if b := h.backend(); b != nil {
-		return b.ExpandWatch(ctx, name)
-	}
-	return web.ActionResult{OK: false, Message: webBackendUnavailableMessage}
+	return webCall(h, unavailableAction(), func(b *WebBackend) web.ActionResult { return b.ExpandWatch(ctx, name) })
 }
 
 // ProbeWatch runs an isolated manual watch sample through the active backend.
 func (h *WebBackendHolder) ProbeWatch(ctx context.Context, name string) web.ActionResult {
-	if b := h.backend(); b != nil {
-		return b.ProbeWatch(ctx, name)
-	}
-	return web.ActionResult{OK: false, Message: webBackendUnavailableMessage}
+	return webCall(h, unavailableAction(), func(b *WebBackend) web.ActionResult { return b.ProbeWatch(ctx, name) })
 }
 
 // ControlRAID pauses or resumes a configured RAID reconstruction through the active backend.
 func (h *WebBackendHolder) ControlRAID(ctx context.Context, name, action, confirmation string) web.ActionResult {
-	if b := h.backend(); b != nil {
-		return b.ControlRAID(ctx, name, action, confirmation)
-	}
-	return web.ActionResult{OK: false, Message: webBackendUnavailableMessage}
+	return webCall(h, unavailableAction(), func(b *WebBackend) web.ActionResult { return b.ControlRAID(ctx, name, action, confirmation) })
 }

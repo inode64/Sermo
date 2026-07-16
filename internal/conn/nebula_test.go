@@ -3,8 +3,6 @@ package conn
 import (
 	"context"
 	"encoding/binary"
-	"net"
-	"strconv"
 	"testing"
 )
 
@@ -46,26 +44,16 @@ func TestParseNebulaRecvError(t *testing.T) {
 // A node that has no tunnel for the probed index replies with a recv_error
 // header echoing that index — the default ("always") behaviour.
 func TestNebulaProbeAgainstFakeNode(t *testing.T) {
-	pc, err := net.ListenPacket("udp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = pc.Close() }()
-	go func() {
-		buf := make([]byte, 64)
-		n, addr, err := pc.ReadFrom(buf)
-		if err != nil || n < 16 {
-			return
+	port := serveUDPOnce(t, func(req []byte) []byte {
+		if len(req) < 16 {
+			return nil
 		}
 		// Echo a recv_error: type 2, same index as the incoming Message.
 		reply := make([]byte, 16)
 		reply[0] = 0x12
-		copy(reply[4:8], buf[4:8])
-		_, _ = pc.WriteTo(reply, addr)
-	}()
-
-	_, portStr, _ := net.SplitHostPort(pc.LocalAddr().String())
-	port, _ := strconv.Atoi(portStr)
+		copy(reply[4:8], req[4:8])
+		return reply
+	})
 	res, err := nebulaProtocol{}.Probe(context.Background(), Config{Host: "127.0.0.1", Port: port})
 	if err != nil {
 		t.Fatalf("probe: %v", err)

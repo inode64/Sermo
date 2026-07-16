@@ -43,21 +43,9 @@ func serveOVSDB(c net.Conn, dbs []string, version string) {
 }
 
 func TestOpenvswitchProbeTCP(t *testing.T) {
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = ln.Close() }()
-	go func() {
-		c, err := ln.Accept()
-		if err != nil {
-			return
-		}
+	port := serveOnce(t, func(c net.Conn) {
 		serveOVSDB(c, []string{"Open_vSwitch", "_Server"}, "3.1.0")
-	}()
-
-	_, portStr, _ := net.SplitHostPort(ln.Addr().String())
-	port, _ := strconv.Atoi(portStr)
+	})
 	res, err := openvswitchProtocol{}.Probe(context.Background(), Config{Host: "127.0.0.1", Port: port})
 	if err != nil {
 		t.Fatalf("probe: %v", err)

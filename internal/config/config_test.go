@@ -49,31 +49,80 @@ func loadConfig(t *testing.T, global string, opts ...Option) (*Config, error) {
 	return Load(global, opts...)
 }
 
-// assertValidateIssue loads a config from files and asserts Validate reports
-// an issue containing want.
-func assertValidateIssue(t *testing.T, files map[string]string, want string) {
+// loadCatalog loads a config from files, failing on any load error.
+func loadCatalog(t *testing.T, files map[string]string) *Config {
 	t.Helper()
 	cfg, err := loadConfig(t, writeConfig(t, files))
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	if !hasIssue(Validate(cfg), want) {
+	return cfg
+}
+
+// assertValidateIssue loads a config from files and asserts Validate reports
+// an issue containing want.
+func assertValidateIssue(t *testing.T, files map[string]string, want string) {
+	t.Helper()
+	if !hasIssue(Validate(loadCatalog(t, files)), want) {
 		t.Fatalf("Validate() did not report %q", want)
 	}
+}
+
+// assertCatalogValidation loads a config from files and asserts Validate reports
+// no issue scoped to goodScope, then asserts every want appears in some issue.
+func assertCatalogValidation(t *testing.T, files map[string]string, goodScope string, want ...string) {
+	t.Helper()
+	issues := Validate(loadCatalog(t, files))
+	for _, issue := range issues {
+		if issue.Scope == goodScope {
+			t.Fatalf("valid %s flagged: %v", goodScope, issues)
+		}
+	}
+	for _, w := range want {
+		mustHave(t, issues, w)
+	}
+}
+
+// assertLoadError writes the given files and asserts Load fails with an error
+// containing want.
+func assertLoadError(t *testing.T, files map[string]string, want string) {
+	t.Helper()
+	if _, err := loadConfig(t, writeConfig(t, files)); err == nil || !strings.Contains(err.Error(), want) {
+		t.Fatalf("Load() error = %v, want %q", err, want)
+	}
+}
+
+// resolveInstance loads a config from files and resolves instance, failing on
+// any load or resolve error.
+func resolveInstance(t *testing.T, files map[string]string, instance string) Resolved {
+	t.Helper()
+	resolved, errs := loadCatalog(t, files).Resolve(instance)
+	if len(errs) != 0 {
+		t.Fatalf("Resolve() errors = %v", errs)
+	}
+	return resolved
+}
+
+// resolveValidInstance loads a config from files, asserts it reports no
+// validation issues, then resolves instance (failing on resolve errors).
+func resolveValidInstance(t *testing.T, files map[string]string, instance string) Resolved {
+	t.Helper()
+	cfg := loadCatalog(t, files)
+	if issues := Validate(cfg); len(issues) != 0 {
+		t.Fatalf("Validate() issues = %v, want none", issues)
+	}
+	resolved, errs := cfg.Resolve(instance)
+	if len(errs) != 0 {
+		t.Fatalf("Resolve() errors = %v", errs)
+	}
+	return resolved
 }
 
 // assertResolvedCheckField loads a config from files, resolves instance, and
 // asserts the given field of the named check resolved to want.
 func assertResolvedCheckField(t *testing.T, files map[string]string, instance, check, field, want string) {
 	t.Helper()
-	cfg, err := loadConfig(t, writeConfig(t, files))
-	if err != nil {
-		t.Fatalf("Load() error = %v", err)
-	}
-	resolved, errs := cfg.Resolve(instance)
-	if len(errs) != 0 {
-		t.Fatalf("Resolve() errors = %v", errs)
-	}
+	resolved := resolveInstance(t, files, instance)
 	if got := cfgval.String(nested(t, resolved.Tree, "checks", check)[field]); got != want {
 		t.Errorf("%s.%s = %q, want %q", check, field, got, want)
 	}
@@ -94,6 +143,48 @@ defaults:
 	})
 	if _, err := loadConfig(t, global); err == nil || !strings.Contains(err.Error(), want) {
 		t.Fatalf("Load() error = %v, want %q", err, want)
+	}
+}
+
+// writeFile writes content to dir/file, creating dir if needed.
+func writeFile(t *testing.T, dir, file, content string) {
+	t.Helper()
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, file), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// makeBinDir creates a fresh <tmp>/bin directory holding each named executable
+// (content "x", mode 0o755) and returns its path.
+func makeBinDir(t *testing.T, names ...string) string {
+	t.Helper()
+	bin := filepath.Join(t.TempDir(), "bin")
+	if err := os.MkdirAll(bin, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range names {
+		if err := os.WriteFile(filepath.Join(bin, name), []byte("x"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return bin
+}
+
+// makeVersionedBinaries creates, for each version, a root/<prefix><version>/bin
+// directory holding an executable named binary (content "x", mode 0o755).
+func makeVersionedBinaries(t *testing.T, root, prefix, binary string, versions ...string) {
+	t.Helper()
+	for _, v := range versions {
+		dir := filepath.Join(root, prefix+v, "bin")
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, binary), []byte("x"), 0o755); err != nil {
+			t.Fatal(err)
+		}
 	}
 }
 
@@ -492,7 +583,7 @@ variables:
 }
 
 func TestAppsLinkInjectsAppPreflight(t *testing.T) {
-	global := writeConfig(t, map[string]string{
+	resolved := resolveInstance(t, map[string]string{
 		"sermo.yml": baseGlobal,
 		"catalog/apps/java.yml": `
 name: java
@@ -518,15 +609,7 @@ checks:
 name: tomcat-main
 uses: tomcat
 `,
-	})
-	cfg, err := loadConfig(t, global)
-	if err != nil {
-		t.Fatalf("Load() error = %v", err)
-	}
-	resolved, errs := cfg.Resolve("tomcat-main")
-	if len(errs) != 0 {
-		t.Fatalf("Resolve() errors = %v", errs)
-	}
+	}, "tomcat-main")
 	pf := nested(t, resolved.Tree, "preflight")
 	// The linked app's checks are injected namespaced; the service's own stay.
 	if _, ok := pf["binary"]; !ok {
@@ -597,7 +680,7 @@ uses: dbus
 }
 
 func TestAppsExposeNamespacedVariables(t *testing.T) {
-	global := writeConfig(t, map[string]string{
+	resolved := resolveInstance(t, map[string]string{
 		"sermo.yml": baseGlobal,
 		"catalog/apps/cupsd.yml": `
 name: cupsd
@@ -624,15 +707,7 @@ checks:
 name: cups
 uses: cups
 `,
-	})
-	cfg, err := loadConfig(t, global)
-	if err != nil {
-		t.Fatalf("Load() error = %v", err)
-	}
-	resolved, errs := cfg.Resolve("cups")
-	if len(errs) != 0 {
-		t.Fatalf("Resolve() errors = %v", errs)
-	}
+	}, "cups")
 	preflight := nested(t, resolved.Tree, "preflight")
 	configCmd, _ := nested(t, preflight, "config")["command"].([]any)
 	if got := fmt.Sprint(configCmd...); got != "/usr/sbin/cupsd-t" {
@@ -650,7 +725,7 @@ uses: cups
 }
 
 func TestSingleAppExposesDefaultVariables(t *testing.T) {
-	global := writeConfig(t, map[string]string{
+	resolved := resolveInstance(t, map[string]string{
 		"sermo.yml": baseGlobal,
 		"catalog/apps/php-fpm.yml": `
 name: php-fpm
@@ -674,15 +749,7 @@ checks:
 name: php-fpm
 uses: php-fpm
 `,
-	})
-	cfg, err := loadConfig(t, global)
-	if err != nil {
-		t.Fatalf("Load() error = %v", err)
-	}
-	resolved, errs := cfg.Resolve("php-fpm")
-	if len(errs) != 0 {
-		t.Fatalf("Resolve() errors = %v", errs)
-	}
+	}, "php-fpm")
 	preflight := nested(t, resolved.Tree, "preflight")
 	configCmd, _ := nested(t, preflight, "config")["command"].([]any)
 	if got := fmt.Sprint(configCmd...); got != "/usr/bin/php-fpm--test--fpm-config/etc/php-fpm.conf" {
@@ -698,7 +765,7 @@ uses: php-fpm
 }
 
 func TestServiceVariablesOverrideAppVariables(t *testing.T) {
-	global := writeConfig(t, map[string]string{
+	resolved := resolveInstance(t, map[string]string{
 		"sermo.yml": baseGlobal,
 		"catalog/apps/cupsd.yml": `
 name: cupsd
@@ -720,15 +787,7 @@ checks:
 name: cups
 uses: cups
 `,
-	})
-	cfg, err := loadConfig(t, global)
-	if err != nil {
-		t.Fatalf("Load() error = %v", err)
-	}
-	resolved, errs := cfg.Resolve("cups")
-	if len(errs) != 0 {
-		t.Fatalf("Resolve() errors = %v", errs)
-	}
+	}, "cups")
 	configCmd, _ := nested(t, nested(t, resolved.Tree, "preflight"), "config")["command"].([]any)
 	if got := fmt.Sprint(configCmd...); got != "/opt/cups/sbin/cupsd-t" {
 		t.Fatalf("config command = %v, want service variable override", configCmd)
@@ -736,7 +795,7 @@ uses: cups
 }
 
 func TestServiceVariablesOverrideSingleAppDefaults(t *testing.T) {
-	global := writeConfig(t, map[string]string{
+	resolved := resolveInstance(t, map[string]string{
 		"sermo.yml": baseGlobal,
 		"catalog/apps/php-fpm.yml": `
 name: php-fpm
@@ -759,15 +818,7 @@ checks:
 name: php-fpm
 uses: php-fpm
 `,
-	})
-	cfg, err := loadConfig(t, global)
-	if err != nil {
-		t.Fatalf("Load() error = %v", err)
-	}
-	resolved, errs := cfg.Resolve("php-fpm")
-	if len(errs) != 0 {
-		t.Fatalf("Resolve() errors = %v", errs)
-	}
+	}, "php-fpm")
 	configCmd, _ := nested(t, nested(t, resolved.Tree, "preflight"), "config")["command"].([]any)
 	if got := fmt.Sprint(configCmd...); got != "/opt/php/sbin/php-fpm--test" {
 		t.Fatalf("config command = %v, want local binary override", configCmd)
@@ -807,39 +858,25 @@ uses: web
 }
 
 func TestValidateServiceAppsLinkUnknownApp(t *testing.T) {
-	global := writeConfig(t, map[string]string{
+	assertValidateIssue(t, map[string]string{
 		"sermo.yml": baseGlobal,
 		"services/web-main.yml": `
 name: web-main
 apps: [no-such-app]
 service: web
 `,
-	})
-	cfg, err := loadConfig(t, global)
-	if err != nil {
-		t.Fatalf("Load() error = %v", err)
-	}
-	if !hasIssue(Validate(cfg), `apps references unknown app "no-such-app"`) {
-		t.Fatalf("Validate() did not report unknown service app link")
-	}
+	}, `apps references unknown app "no-such-app"`)
 }
 
 func TestValidateServiceAppsLinkInvalidShape(t *testing.T) {
-	global := writeConfig(t, map[string]string{
+	assertValidateIssue(t, map[string]string{
 		"sermo.yml": baseGlobal,
 		"services/web-main.yml": `
 name: web-main
 apps: [app, 7]
 service: web
 `,
-	})
-	cfg, err := loadConfig(t, global)
-	if err != nil {
-		t.Fatalf("Load() error = %v", err)
-	}
-	if !hasIssue(Validate(cfg), "apps must be a string or list of strings") {
-		t.Fatalf("Validate() did not report invalid apps shape")
-	}
+	}, "apps must be a string or list of strings")
 }
 
 func TestAppsLinkPreflightKeyCollisionErrors(t *testing.T) {
@@ -1362,7 +1399,7 @@ service: web
 }
 
 func TestIncludedStorageWatchRejectsDuplicate(t *testing.T) {
-	global := writeConfig(t, map[string]string{
+	assertLoadError(t, map[string]string{
 		"sermo.yml": `
 paths:
   watches: [ @ROOT@/storages ]
@@ -1381,15 +1418,11 @@ check:
 then:
   hook: { command: [/bin/true] }
 `,
-	})
-
-	if _, err := loadConfig(t, global); err == nil || !strings.Contains(err.Error(), `watch "storage-root" is already defined`) {
-		t.Fatalf("Load() error = %v, want duplicate storage watch", err)
-	}
+	}, `watch "storage-root" is already defined`)
 }
 
 func TestLoadIncludedWatchDocumentRejectsDuplicate(t *testing.T) {
-	global := writeConfig(t, map[string]string{
+	assertLoadError(t, map[string]string{
 		"sermo.yml": `
 paths:
   watches: [ @ROOT@/watches ]
@@ -1403,15 +1436,11 @@ watches:
 name: load
 check: { type: load, load5: { op: ">", value: 3 } }
 `,
-	})
-
-	if _, err := loadConfig(t, global); err == nil || !strings.Contains(err.Error(), `watch "load" is already defined`) {
-		t.Fatalf("Load() error = %v, want duplicate watch", err)
-	}
+	}, `watch "load" is already defined`)
 }
 
 func TestLoadIncludedWatchDocumentRejectsDuplicateAcrossWatchDirs(t *testing.T) {
-	global := writeConfig(t, map[string]string{
+	assertLoadError(t, map[string]string{
 		"sermo.yml": `
 paths:
   watches: [ @ROOT@/networks, @ROOT@/watches ]
@@ -1428,15 +1457,11 @@ name: ping-gw
 category: host
 check: { type: load, load5: { op: ">", value: 3 } }
 `,
-	})
-
-	if _, err := loadConfig(t, global); err == nil || !strings.Contains(err.Error(), `watch "ping-gw" is already defined`) {
-		t.Fatalf("Load() error = %v, want duplicate watch across watch dirs", err)
-	}
+	}, `watch "ping-gw" is already defined`)
 }
 
 func TestLoadIncludedWatchDocumentRequiresName(t *testing.T) {
-	global := writeConfig(t, map[string]string{
+	assertLoadError(t, map[string]string{
 		"sermo.yml": `
 paths:
   watches: [ @ROOT@/watches ]
@@ -1446,11 +1471,7 @@ defaults:
 		"watches/load.yml": `
 check: { type: load, load5: { op: ">", value: 3 } }
 `,
-	})
-
-	if _, err := loadConfig(t, global); err == nil || !strings.Contains(err.Error(), "watch documents must define name") {
-		t.Fatalf("Load() error = %v, want missing watch name", err)
-	}
+	}, "watch documents must define name")
 }
 
 func TestLoadIncludedWatchDocumentRejectsGroupedWatchesMap(t *testing.T) {
@@ -1651,7 +1672,7 @@ then:
 }
 
 func TestLoadIncludedNotifierFragmentRejectsDuplicate(t *testing.T) {
-	global := writeConfig(t, map[string]string{
+	assertLoadError(t, map[string]string{
 		"sermo.yml": `
 paths:
   notifiers: [ @ROOT@/notifiers ]
@@ -1668,15 +1689,11 @@ notifiers:
     enabled: false
     type: email
 `,
-	})
-
-	if _, err := loadConfig(t, global); err == nil || !strings.Contains(err.Error(), `notifier "ops" is already defined`) {
-		t.Fatalf("Load() error = %v, want duplicate notifier", err)
-	}
+	}, `notifier "ops" is already defined`)
 }
 
 func TestLoadIncludedNotifierFragmentRequiresSingleEntry(t *testing.T) {
-	global := writeConfig(t, map[string]string{
+	assertLoadError(t, map[string]string{
 		"sermo.yml": `
 paths:
   notifiers: [ @ROOT@/notifiers ]
@@ -1692,11 +1709,7 @@ notifiers:
     enabled: false
     type: email
 `,
-	})
-
-	if _, err := loadConfig(t, global); err == nil || !strings.Contains(err.Error(), "notifiers fragments must contain exactly one entry") {
-		t.Fatalf("Load() error = %v, want one-notifier-per-file error", err)
-	}
+	}, "notifiers fragments must contain exactly one entry")
 }
 
 func TestLoadIncludedNotifierFragmentRejectsInvalidShape(t *testing.T) {
@@ -1863,31 +1876,17 @@ security:
 }
 
 func TestValidateWebBlock(t *testing.T) {
-	goodGlobal := writeConfig(t, map[string]string{"sermo.yml": `
+	mustNotHave(t, validateGlobalDoc(t, `
 web: { address: 127.0.0.1, port: 9797 }
 paths: { services: [ @ROOT@/services ] }
 defaults: { policy: { cooldown: 5m } }
-`})
-	cfg, err := loadConfig(t, goodGlobal)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, i := range Validate(cfg) {
-		if strings.Contains(i.Msg, "web.") {
-			t.Fatalf("valid web block flagged: %v", i)
-		}
-	}
+`), "web.")
 
-	badGlobal := writeConfig(t, map[string]string{"sermo.yml": `
+	issues := validateGlobalDoc(t, `
 web: { port: 70000, address: 5 }
 paths: { services: [ @ROOT@/services ] }
 defaults: { policy: { cooldown: 5m } }
-`})
-	cfg, err = loadConfig(t, badGlobal)
-	if err != nil {
-		t.Fatal(err)
-	}
-	issues := Validate(cfg)
+`)
 	if !hasIssue(issues, "web.port must be an integer in 1..65535") {
 		t.Fatalf("missing web.port issue in %v", issues)
 	}
@@ -1895,20 +1894,11 @@ defaults: { policy: { cooldown: 5m } }
 		t.Fatalf("missing web.address issue in %v", issues)
 	}
 
-	disabledGlobal := writeConfig(t, map[string]string{"sermo.yml": `
+	mustNotHave(t, validateGlobalDoc(t, `
 web: { address: 127.0.0.1 }
 paths: { services: [ @ROOT@/services ] }
 defaults: { policy: { cooldown: 5m } }
-`})
-	cfg, err = loadConfig(t, disabledGlobal)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, i := range Validate(cfg) {
-		if strings.Contains(i.Msg, "web.") {
-			t.Fatalf("web block without port should validate: %v", i)
-		}
-	}
+`), "web.")
 }
 
 func TestValidateMissingVariableAndPort(t *testing.T) {
@@ -1934,7 +1924,7 @@ checks:
 }
 
 func TestValidateCloneCycle(t *testing.T) {
-	global := writeConfig(t, map[string]string{
+	assertValidateIssue(t, map[string]string{
 		"sermo.yml": baseGlobal,
 		"services/a.yml": `
 name: a
@@ -1944,18 +1934,11 @@ clone: b
 name: b
 clone: a
 `,
-	})
-	cfg, err := loadConfig(t, global)
-	if err != nil {
-		t.Fatalf("Load() error = %v", err)
-	}
-	if !hasIssue(Validate(cfg), "clone cycle detected") {
-		t.Errorf("expected clone-cycle issue")
-	}
+	}, "clone cycle detected")
 }
 
 func TestValidateNestedVariableRejected(t *testing.T) {
-	global := writeConfig(t, map[string]string{
+	assertValidateIssue(t, map[string]string{
 		"sermo.yml": baseGlobal,
 		"services/nested.yml": `
 name: nested
@@ -1963,14 +1946,7 @@ variables:
   a: "${b}"
   b: "x"
 `,
-	})
-	cfg, err := loadConfig(t, global)
-	if err != nil {
-		t.Fatalf("Load() error = %v", err)
-	}
-	if !hasIssue(Validate(cfg), "references another variable") {
-		t.Errorf("expected nested-variable issue")
-	}
+	}, "references another variable")
 }
 
 func TestCollectVariablesFirstExistingPath(t *testing.T) {
@@ -2072,7 +2048,7 @@ checks:
 }
 
 func TestLibraryBinaryVariableIsPlainVariable(t *testing.T) {
-	global := writeConfig(t, map[string]string{
+	cfg := loadCatalog(t, map[string]string{
 		"sermo.yml": baseGlobal,
 		"catalog/libs/libdemo.yml": `
 name: libdemo
@@ -2082,10 +2058,6 @@ preflight:
   version: { type: command, command: ["/usr/bin/strings", "${binary}"], timeout: 10s, optional: true }
 `,
 	})
-	cfg, err := loadConfig(t, global)
-	if err != nil {
-		t.Fatalf("Load() error = %v", err)
-	}
 	resolved, errs := cfg.ResolveCatalog(CategoryLibrary, "libdemo")
 	if len(errs) != 0 {
 		t.Fatalf("ResolveCatalog() errors = %v", errs)
@@ -2264,7 +2236,7 @@ service: plain
 }
 
 func TestValidateDuplicateServiceName(t *testing.T) {
-	global := writeConfig(t, map[string]string{
+	assertValidateIssue(t, map[string]string{
 		"sermo.yml": baseGlobal,
 		"services/one.yml": `
 name: dup
@@ -2272,14 +2244,7 @@ name: dup
 		"services/two.yml": `
 name: dup
 `,
-	})
-	cfg, err := loadConfig(t, global)
-	if err != nil {
-		t.Fatalf("Load() error = %v", err)
-	}
-	if !hasIssue(Validate(cfg), "duplicate service name") {
-		t.Errorf("expected duplicate-name issue")
-	}
+	}, "duplicate service name")
 }
 
 func TestValidateRejectsPathLikeDocumentName(t *testing.T) {
@@ -2394,7 +2359,7 @@ func TestBuiltinHostServiceAndRuntimeVars(t *testing.T) {
 	detectedHost = "myhost"
 	defer func() { detectedHost = old }()
 
-	global := writeConfig(t, map[string]string{
+	resolved := resolveInstance(t, map[string]string{
 		"sermo.yml": baseGlobal,
 		"services/web.yml": `
 name: web
@@ -2412,15 +2377,7 @@ rules:
       action: alert
       message: "${service} on ${host}: ${event}/${action} at ${date}; ${rule.duration}/${rule.window}; ${check.name}/${check.type}/${check.metric}/${check.scope}/${check.op}/${check.threshold}/${check.value}"
 `,
-	})
-	cfg, err := loadConfig(t, global)
-	if err != nil {
-		t.Fatalf("Load() error = %v", err)
-	}
-	resolved, errs := cfg.Resolve("web")
-	if len(errs) != 0 {
-		t.Fatalf("Resolve() errors = %v (runtime vars must not error)", errs)
-	}
+	}, "web")
 	// ${host} falls back to the hostname (no user-defined host variable).
 	if got := cfgval.String(nested(t, resolved.Tree, "checks", "ping")["host"]); got != "myhost" {
 		t.Errorf("ping host = %q, want myhost", got)
@@ -2827,7 +2784,7 @@ func TestAddChangedRemediationRule(t *testing.T) {
 }
 
 func TestRestartOnChangeDesugarsToChangedRule(t *testing.T) {
-	global := writeConfig(t, map[string]string{
+	resolved := resolveInstance(t, map[string]string{
 		"sermo.yml": baseGlobal,
 		"catalog/libs/glibc.yml": `
 name: glibc
@@ -2841,15 +2798,7 @@ service: web
 restart_on_change:
   libraries: [glibc]
 `,
-	})
-	cfg, err := loadConfig(t, global)
-	if err != nil {
-		t.Fatalf("Load() error = %v", err)
-	}
-	resolved, errs := cfg.Resolve("web")
-	if len(errs) != 0 {
-		t.Fatalf("Resolve() errors = %v", errs)
-	}
+	}, "web")
 	if _, present := resolved.Tree["restart_on_change"]; present {
 		t.Errorf("restart_on_change should be desugared away")
 	}
@@ -2943,7 +2892,7 @@ apps: [containerd]
 }
 
 func TestRestartOnChangePathsDesugarToRestartRule(t *testing.T) {
-	global := writeConfig(t, map[string]string{
+	resolved := resolveValidInstance(t, map[string]string{
 		"sermo.yml": baseGlobal,
 		"services/web.yml": `
 name: web
@@ -2954,18 +2903,7 @@ restart_on_change:
   paths:
     - ${config}
 `,
-	})
-	cfg, err := loadConfig(t, global)
-	if err != nil {
-		t.Fatalf("Load() error = %v", err)
-	}
-	if issues := Validate(cfg); len(issues) != 0 {
-		t.Fatalf("Validate() issues = %v, want none", issues)
-	}
-	resolved, errs := cfg.Resolve("web")
-	if len(errs) != 0 {
-		t.Fatalf("Resolve() errors = %v", errs)
-	}
+	}, "web")
 	if _, present := resolved.Tree["restart_on_change"]; present {
 		t.Errorf("restart_on_change should be desugared away")
 	}
@@ -3462,7 +3400,7 @@ restart_on_change:
 }
 
 func TestChangedAppVersionRuleValidatesResolvedVersionCommand(t *testing.T) {
-	global := writeConfig(t, map[string]string{
+	resolved := resolveValidInstance(t, map[string]string{
 		"sermo.yml": baseGlobal,
 		"catalog/apps/containerd.yml": `
 name: containerd
@@ -3486,18 +3424,7 @@ rules:
     then:
       action: restart
 `,
-	})
-	cfg, err := loadConfig(t, global)
-	if err != nil {
-		t.Fatalf("Load() error = %v", err)
-	}
-	if issues := Validate(cfg); len(issues) != 0 {
-		t.Fatalf("Validate() issues = %v, want none", issues)
-	}
-	resolved, errs := cfg.Resolve("containerd")
-	if len(errs) != 0 {
-		t.Fatalf("Resolve() errors = %v", errs)
-	}
+	}, "containerd")
 	changed := nested(t, resolved.Tree, "rules", "restart-if-containerd-version-changed", "if", "changed")
 	if got := cfgval.String(changed["app"]); got != "containerd" {
 		t.Fatalf("changed.app = %q, want containerd", got)
@@ -3508,7 +3435,7 @@ rules:
 }
 
 func TestChangedAppVersionRuleRequiresVersionCommand(t *testing.T) {
-	global := writeConfig(t, map[string]string{
+	assertValidateIssue(t, map[string]string{
 		"sermo.yml": baseGlobal,
 		"catalog/apps/containerd.yml": `
 name: containerd
@@ -3528,14 +3455,7 @@ rules:
     if: { changed: { app: containerd, level: patch } }
     then: { action: restart }
 `,
-	})
-	cfg, err := loadConfig(t, global)
-	if err != nil {
-		t.Fatalf("Load() error = %v", err)
-	}
-	if !hasIssue(Validate(cfg), `changed app "containerd" has no app version command`) {
-		t.Fatalf("Validate() did not reject changed.app without a version command")
-	}
+	}, `changed app "containerd" has no app version command`)
 }
 
 func TestDiscoverVersions(t *testing.T) {
@@ -3543,15 +3463,7 @@ func TestDiscoverVersions(t *testing.T) {
 	ntok := *tokenFor("x%n")
 	itok := *tokenFor("x%i")
 	root := t.TempDir()
-	for _, v := range []string{"7.4", "8.3", "12.0.2"} {
-		dir := filepath.Join(root, "pkg-"+v, "bin")
-		if err := os.MkdirAll(dir, 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(filepath.Join(dir, "app"), []byte("x"), 0o755); err != nil {
-			t.Fatal(err)
-		}
-	}
+	makeVersionedBinaries(t, root, "pkg-", "app", "7.4", "8.3", "12.0.2")
 	// A decoy that does not match the template's surrounding literals.
 	if err := os.MkdirAll(filepath.Join(root, "other", "bin"), 0o755); err != nil {
 		t.Fatal(err)
@@ -3638,15 +3550,7 @@ func TestMaterializedTemplateMatchesUsesAllBinaryCandidates(t *testing.T) {
 	root := t.TempDir()
 	first := filepath.Join(root, "first")
 	second := filepath.Join(root, "second")
-	for _, v := range []string{"8.2", "8.3"} {
-		dir := filepath.Join(second, "php"+v, "bin")
-		if err := os.MkdirAll(dir, 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(filepath.Join(dir, "php-fpm"), []byte("x"), 0o755); err != nil {
-			t.Fatal(err)
-		}
-	}
+	makeVersionedBinaries(t, second, "php", "php-fpm", "8.2", "8.3")
 
 	tok := tokenFor("php-fpm%v")
 	if tok == nil {
@@ -3818,15 +3722,7 @@ func templateMatchValues(matches []templateMatch, variable string) []string {
 func TestCatalogServiceVersionTemplateDiscoversFromLinkedApp(t *testing.T) {
 	root := t.TempDir()
 	slots := filepath.Join(root, "lib")
-	for _, v := range []string{"7.4", "8.3"} {
-		dir := filepath.Join(slots, "php"+v, "bin")
-		if err := os.MkdirAll(dir, 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(filepath.Join(dir, "php-fpm"), []byte("x"), 0o755); err != nil {
-			t.Fatal(err)
-		}
-	}
+	makeVersionedBinaries(t, slots, "php", "php-fpm", "7.4", "8.3")
 
 	catalogDir := filepath.Join(root, "catalog")
 	servicesDir := filepath.Join(root, "services")
@@ -3929,35 +3825,19 @@ checks: { service: { type: service, expect: active } }
 func TestTomcatVersionTemplateLinksMaterializedApp(t *testing.T) {
 	root := t.TempDir()
 	tomcatRoot := filepath.Join(root, "usr", "share")
-	for _, v := range []string{"9", "10"} {
-		dir := filepath.Join(tomcatRoot, "tomcat-"+v, "bin")
-		if err := os.MkdirAll(dir, 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(filepath.Join(dir, "catalina.sh"), []byte("x"), 0o755); err != nil {
-			t.Fatal(err)
-		}
-	}
+	makeVersionedBinaries(t, tomcatRoot, "tomcat-", "catalina.sh", "9", "10")
 
 	catalogDir := filepath.Join(root, "catalog")
 	servicesDir := filepath.Join(root, "services")
-	write := func(dir, file, content string) {
-		if err := os.MkdirAll(dir, 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(filepath.Join(dir, file), []byte(content), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
 	catalina := filepath.Join(tomcatRoot, "tomcat-${version}", "bin", "catalina.sh")
-	write(filepath.Join(catalogDir, "apps"), "java.yml", `
+	writeFile(t, filepath.Join(catalogDir, "apps"), "java.yml", `
 name: java
 variables:
   binary: /usr/bin/java
 preflight:
   binary: { type: binary, path: "${binary}" }
 `)
-	write(filepath.Join(catalogDir, "apps"), "tomcat.yml", fmt.Sprintf(`
+	writeFile(t, filepath.Join(catalogDir, "apps"), "tomcat.yml", fmt.Sprintf(`
 name: tomcat-%%v
 display_name: "Apache Tomcat ${version}"
 variables:
@@ -3966,7 +3846,7 @@ preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}", "version"], timeout: 10s }
 `, catalina))
-	write(filepath.Join(catalogDir, "services"), "tomcat.yml", `
+	writeFile(t, filepath.Join(catalogDir, "services"), "tomcat.yml", `
 name: tomcat-%v
 display_name: "Apache Tomcat ${version}"
 service: tomcat
@@ -3974,7 +3854,7 @@ apps: [java, "tomcat-${version}"]
 variables: { port: 8080 }
 checks: { service: { type: service, expect: active } }
 `)
-	write(servicesDir, "site.yml", "name: site\nuses: tomcat-10\n")
+	writeFile(t, servicesDir, "site.yml", "name: site\nuses: tomcat-10\n")
 
 	global := filepath.Join(root, "sermo.yml")
 	if err := os.WriteFile(global, fmt.Appendf(nil, `
@@ -4026,28 +3906,12 @@ defaults:
 func TestVersionTemplateServiceLinksMaterializedApp(t *testing.T) {
 	root := t.TempDir()
 	pgRoot := filepath.Join(root, "usr", "lib64")
-	for _, v := range []string{"15", "16"} {
-		dir := filepath.Join(pgRoot, "postgresql-"+v, "bin")
-		if err := os.MkdirAll(dir, 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(filepath.Join(dir, "postgres"), []byte("x"), 0o755); err != nil {
-			t.Fatal(err)
-		}
-	}
+	makeVersionedBinaries(t, pgRoot, "postgresql-", "postgres", "15", "16")
 
 	catalogDir := filepath.Join(root, "catalog")
 	servicesDir := filepath.Join(root, "services")
-	write := func(dir, file, content string) {
-		if err := os.MkdirAll(dir, 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(filepath.Join(dir, file), []byte(content), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
 	binary := filepath.Join(pgRoot, "postgresql-${version}", "bin", "postgres")
-	write(filepath.Join(catalogDir, "apps"), "postgres.yml", fmt.Sprintf(`
+	writeFile(t, filepath.Join(catalogDir, "apps"), "postgres.yml", fmt.Sprintf(`
 name: postgres-%%v
 display_name: "PostgreSQL ${version}"
 variables:
@@ -4056,7 +3920,7 @@ preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}", "--version"], timeout: 10s }
 `, binary))
-	write(filepath.Join(catalogDir, "services"), "postgres.yml", `
+	writeFile(t, filepath.Join(catalogDir, "services"), "postgres.yml", `
 name: postgres-%v
 display_name: "PostgreSQL ${version}"
 service: "postgresql-${version}"
@@ -4067,7 +3931,7 @@ variables:
 pidfile: "${data_dir}/postmaster.pid"
 checks: { service: { type: service, expect: active } }
 `)
-	write(servicesDir, "pg.yml", "name: pg\nuses: postgres-16\n")
+	writeFile(t, servicesDir, "pg.yml", "name: pg\nuses: postgres-16\n")
 
 	global := filepath.Join(root, "sermo.yml")
 	if err := os.WriteFile(global, fmt.Appendf(nil, `
@@ -4587,16 +4451,8 @@ preflight:
 }
 
 func TestVersionTemplateUnversionedRequiresBinary(t *testing.T) {
-	root := t.TempDir()
-	bin := filepath.Join(root, "bin")
-	if err := os.MkdirAll(bin, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(bin, "python3"), []byte("x"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-
-	cfg, err := loadConfig(t, writeConfig(t, map[string]string{
+	bin := makeBinDir(t, "python3")
+	cfg := loadCatalog(t, map[string]string{
 		"sermo.yml": baseGlobal,
 		"catalog/apps/python%n.yml": fmt.Sprintf(`
 name: python%%n
@@ -4604,10 +4460,7 @@ display_name: "Python ${n}"
 variables:
   binary: "%s/python${n}"
 `, bin),
-	}))
-	if err != nil {
-		t.Fatalf("Load() error = %v", err)
-	}
+	})
 	if _, ok := cfg.Apps["python"]; ok {
 		t.Fatalf("python should not materialize without %s", filepath.Join(bin, "python"))
 	}
@@ -4617,18 +4470,8 @@ variables:
 }
 
 func TestVersionTemplateUnversionedCanBeDisabled(t *testing.T) {
-	root := t.TempDir()
-	bin := filepath.Join(root, "bin")
-	if err := os.MkdirAll(bin, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	for _, name := range []string{"php", "php8.4"} {
-		if err := os.WriteFile(filepath.Join(bin, name), []byte("x"), 0o755); err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	cfg, err := loadConfig(t, writeConfig(t, map[string]string{
+	bin := makeBinDir(t, "php", "php8.4")
+	cfg := loadCatalog(t, map[string]string{
 		"sermo.yml": baseGlobal,
 		"catalog/apps/php.yml": fmt.Sprintf(`
 name: php%%v
@@ -4638,10 +4481,7 @@ versions:
 variables:
   binary: "%s/php${version}"
 `, bin),
-	}))
-	if err != nil {
-		t.Fatalf("Load() error = %v", err)
-	}
+	})
 	if _, ok := cfg.Apps["php"]; ok {
 		t.Fatalf("php should not materialize when versions.unversioned is false")
 	}
@@ -4651,16 +4491,8 @@ variables:
 }
 
 func TestVersionTemplateUnversionedCanOverrideMetadata(t *testing.T) {
-	root := t.TempDir()
-	bin := filepath.Join(root, "bin")
-	if err := os.MkdirAll(bin, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(bin, "php"), []byte("x"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-
-	cfg, err := loadConfig(t, writeConfig(t, map[string]string{
+	bin := makeBinDir(t, "php")
+	cfg := loadCatalog(t, map[string]string{
 		"sermo.yml": baseGlobal,
 		"catalog/apps/php.yml": fmt.Sprintf(`
 name: php%%v
@@ -4673,10 +4505,7 @@ versions:
 variables:
   binary: "%s/php${version}"
 `, bin),
-	}))
-	if err != nil {
-		t.Fatalf("Load() error = %v", err)
-	}
+	})
 	doc, ok := cfg.Apps["php"]
 	if !ok {
 		t.Fatalf("php should materialize")
@@ -4690,16 +4519,8 @@ variables:
 }
 
 func TestVersionTemplateSkipsExistingCanonicalName(t *testing.T) {
-	root := t.TempDir()
-	bin := filepath.Join(root, "bin")
-	if err := os.MkdirAll(bin, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(bin, "python3"), []byte("x"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-
-	cfg, err := loadConfig(t, writeConfig(t, map[string]string{
+	bin := makeBinDir(t, "python3")
+	cfg := loadCatalog(t, map[string]string{
 		"sermo.yml": baseGlobal,
 		"catalog/apps/python%n.yml": fmt.Sprintf(`
 name: python%%n
@@ -4713,10 +4534,7 @@ display_name: "Python Three"
 variables:
   binary: "%s/python3"
 `, bin),
-	}))
-	if err != nil {
-		t.Fatalf("Load() error = %v", err)
-	}
+	})
 	if got := strings.Join(cfg.CatalogNamesInCategory(CategoryApp), ","); got != "python3" {
 		t.Fatalf("app names = %s, want python3", got)
 	}
@@ -4732,15 +4550,7 @@ func TestInstanceTemplateMaterialization(t *testing.T) {
 	if err := os.MkdirAll(servicesDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	write := func(dir, file, content string) {
-		if err := os.MkdirAll(dir, 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(filepath.Join(dir, file), []byte(content), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
-	write(filepath.Join(catalogDir, "services"), "openvpn-base.yml", `
+	writeFile(t, filepath.Join(catalogDir, "services"), "openvpn-base.yml", `
 name: openvpn
 display_name: OpenVPN
 service: openvpn
@@ -4748,7 +4558,7 @@ variables: { port: 1194 }
 checks:
   port: { type: openvpn, port: "${port}" }
 `)
-	write(filepath.Join(catalogDir, "apps"), "openvpn.yml", `
+	writeFile(t, filepath.Join(catalogDir, "apps"), "openvpn.yml", `
 name: openvpn
 display_name: OpenVPN
 variables:
@@ -4765,7 +4575,7 @@ apps: [openvpn]
 variables:
   config: "/etc/openvpn/${instance}.conf"
 `
-	write(filepath.Join(catalogDir, "services"), "openvpn.yml", tmpl)
+	writeFile(t, filepath.Join(catalogDir, "services"), "openvpn.yml", tmpl)
 	global := filepath.Join(root, "sermo.yml")
 	if err := os.WriteFile(global, fmt.Appendf(nil, `
 engine: { backend: openrc }
@@ -4930,15 +4740,7 @@ defaults: { policy: { cooldown: 5m } }
 func TestVersionTemplateMaterialization(t *testing.T) {
 	root := t.TempDir()
 	binRoot := filepath.Join(root, "opt")
-	for _, v := range []string{"7.4", "8.3"} {
-		dir := filepath.Join(binRoot, "php"+v, "bin")
-		if err := os.MkdirAll(dir, 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(filepath.Join(dir, "php-fpm"), []byte("x"), 0o755); err != nil {
-			t.Fatal(err)
-		}
-	}
+	makeVersionedBinaries(t, binRoot, "php", "php-fpm", "7.4", "8.3")
 
 	catalogDir := filepath.Join(root, "catalog")
 	catalogServicesDir := filepath.Join(catalogDir, "services")
@@ -4946,17 +4748,9 @@ func TestVersionTemplateMaterialization(t *testing.T) {
 	if err := os.MkdirAll(servicesDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	write := func(dir, file, content string) {
-		if err := os.MkdirAll(dir, 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(filepath.Join(dir, file), []byte(content), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
 
 	// Rich base with a marker rule and an extra variable, to prove inheritance.
-	write(catalogServicesDir, "php-fpm-base.yml", `
+	writeFile(t, catalogServicesDir, "php-fpm-base.yml", `
 name: php-fpm
 display_name: "PHP-FPM"
 service: php-fpm
@@ -4974,7 +4768,7 @@ rules:
       action: block
       message: "${display_name} configuration is invalid"
 `)
-	write(filepath.Join(catalogDir, "apps"), "php-fpm.yml", fmt.Sprintf(`
+	writeFile(t, filepath.Join(catalogDir, "apps"), "php-fpm.yml", fmt.Sprintf(`
 name: php-fpm-%%v
 display_name: "PHP-FPM ${version}"
 variables:
@@ -4984,7 +4778,7 @@ preflight:
   version: { type: command, command: ["${binary}", "-v"] }
 `, binRoot))
 	// Version template inheriting the base; installed versions come from the app.
-	write(catalogServicesDir, "php-fpm-template.yml", `
+	writeFile(t, catalogServicesDir, "php-fpm-template.yml", `
 name: php-fpm-%v
 uses: php-fpm
 display_name: "PHP-FPM ${version}"
@@ -5041,7 +4835,7 @@ defaults:
 
 	// A service using a materialized version resolves end to end, including the
 	// inherited rule message expanding through the baked display_name.
-	write(servicesDir, "site.yml", `
+	writeFile(t, servicesDir, "site.yml", `
 name: site
 uses: php-fpm-8.3
 service: php-fpm
@@ -5139,15 +4933,7 @@ func TestVersionTemplateCephOSD(t *testing.T) {
 	// apps/ → app), so the template and its app must live in the right dirs.
 	catalogDir := filepath.Join(root, "catalog")
 	servicesDir := filepath.Join(root, "services")
-	write := func(dir, file, content string) {
-		if err := os.MkdirAll(dir, 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(filepath.Join(dir, file), []byte(content), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
-	write(filepath.Join(catalogDir, "apps"), "ceph-osd.yml", `
+	writeFile(t, filepath.Join(catalogDir, "apps"), "ceph-osd.yml", `
 name: ceph-osd
 display_name: "Ceph OSD"
 variables:
@@ -5155,7 +4941,7 @@ variables:
 preflight:
   binary: { type: binary, path: "${binary}" }
 `)
-	write(filepath.Join(catalogDir, "services"), "ceph-osd-%n.yml", `
+	writeFile(t, filepath.Join(catalogDir, "services"), "ceph-osd-%n.yml", `
 name: ceph-osd%n
 display_name: "Ceph OSD ${n}"
 service: "ceph-osd@${n}"
@@ -5164,7 +4950,7 @@ variables: { user: ceph }
 checks: { service: { type: service, expect: active } }
 `)
 	// One enabled service per OSD that uses the materialized service.
-	write(servicesDir, "osd0.yml", "name: osd0\nuses: ceph-osd0\n")
+	writeFile(t, servicesDir, "osd0.yml", "name: osd0\nuses: ceph-osd0\n")
 
 	global := filepath.Join(root, "sermo.yml")
 	if err := os.WriteFile(global, fmt.Appendf(nil, `
@@ -5270,7 +5056,7 @@ defaults:
 }
 
 func TestExpandAnalyzeResolvesUseSilenceRules(t *testing.T) {
-	global := writeConfig(t, map[string]string{
+	resolved := resolveInstance(t, map[string]string{
 		"sermo.yml": baseGlobal,
 		"catalog/patterns/common.yml": `
 name: common
@@ -5294,15 +5080,7 @@ watches:
           - { id: local, match: "(?i)ok", severity: ok }
 `,
 		"services/svc-main.yml": "name: svc-main\nuses: svc\n",
-	})
-	cfg, err := loadConfig(t, global)
-	if err != nil {
-		t.Fatalf("Load() error = %v", err)
-	}
-	resolved, errs := cfg.Resolve("svc-main")
-	if len(errs) != 0 {
-		t.Fatalf("Resolve() errors = %v", errs)
-	}
+	}, "svc-main")
 	checkEntries := resolved.Tree["checks"].(map[string]any)
 	analyze := checkEntries["config-files"].(map[string]any)["analyze"].(map[string]any)
 	ruleEntries := analyze["rules"].([]any)
@@ -5425,7 +5203,7 @@ checks:
 }
 
 func TestExpandPidfileOptionalMapDesugars(t *testing.T) {
-	global := writeConfig(t, map[string]string{
+	resolved := resolveInstance(t, map[string]string{
 		"sermo.yml": baseGlobal,
 		"catalog/services/svc.yml": `
 name: svc
@@ -5436,15 +5214,7 @@ checks:
   service: { type: service, expect: active }
 `,
 		"services/svc-main.yml": "name: svc-main\nuses: svc\n",
-	})
-	cfg, err := loadConfig(t, global)
-	if err != nil {
-		t.Fatalf("Load() error = %v", err)
-	}
-	resolved, errs := cfg.Resolve("svc-main")
-	if len(errs) != 0 {
-		t.Fatalf("Resolve() errors = %v", errs)
-	}
+	}, "svc-main")
 	if got := cfgval.String(resolved.Tree["pidfile"]); got != "/run/svc.pid" {
 		t.Fatalf("pidfile = %q, want /run/svc.pid", got)
 	}
@@ -5455,7 +5225,7 @@ checks:
 }
 
 func TestExpandPidfilesDesugarsByRole(t *testing.T) {
-	global := writeConfig(t, map[string]string{
+	resolved := resolveInstance(t, map[string]string{
 		"sermo.yml": baseGlobal,
 		"catalog/services/svc.yml": `
 name: svc
@@ -5475,15 +5245,7 @@ checks:
   service: { type: service, expect: active }
 `,
 		"services/svc-main.yml": "name: svc-main\nuses: svc\n",
-	})
-	cfg, err := loadConfig(t, global)
-	if err != nil {
-		t.Fatalf("Load() error = %v", err)
-	}
-	resolved, errs := cfg.Resolve("svc-main")
-	if len(errs) != 0 {
-		t.Fatalf("Resolve() errors = %v", errs)
-	}
+	}, "svc-main")
 	pidfiles := resolved.Tree["pidfiles"].(map[string]any)
 	if got, want := cfgval.StringList(pidfiles["main"]), []string{"/run/svc-main.pid", "/run/svc.pid"}; !slices.Equal(got, want) {
 		t.Fatalf("pidfiles.main = %v, want %v", got, want)
@@ -5756,7 +5518,7 @@ func TestChangedLibraryConditionResolvesPath(t *testing.T) {
 	// The documented shorthand `changed: {library: X}` resolves the library to
 	// its watched file anywhere in a rule's condition tree, exactly like the
 	// restart_on_change desugar.
-	global := writeConfig(t, map[string]string{
+	resolved := resolveInstance(t, map[string]string{
 		"sermo.yml": baseGlobal,
 		"catalog/libs/glibc.yml": `
 name: glibc
@@ -5775,15 +5537,7 @@ rules:
         - changed: { path: /etc/web.conf }
     then: { action: alert, message: "glibc changed" }
 `,
-	})
-	cfg, err := loadConfig(t, global)
-	if err != nil {
-		t.Fatalf("Load() error = %v", err)
-	}
-	resolved, errs := cfg.Resolve("web")
-	if len(errs) != 0 {
-		t.Fatalf("Resolve() errors = %v", errs)
-	}
+	}, "web")
 	or, ok := nested(t, resolved.Tree, "rules", "glibc-changed", "if")["or"].([]any)
 	if !ok || len(or) != 2 {
 		t.Fatalf("if.or = %v", or)
@@ -5837,15 +5591,7 @@ func TestCatalogServiceOwnsDiscovery(t *testing.T) {
 	if err := os.MkdirAll(servicesDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	write := func(dir, file, content string) {
-		if err := os.MkdirAll(dir, 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(filepath.Join(dir, file), []byte(content), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
-	write(filepath.Join(catalogDir, "services"), "myd-%i.yml", fmt.Sprintf(`
+	writeFile(t, filepath.Join(catalogDir, "services"), "myd-%i.yml", fmt.Sprintf(`
 name: myd-%%i
 display_name: "Myd ${instance}"
 service: "myd.${instance}"

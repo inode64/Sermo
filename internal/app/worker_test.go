@@ -221,20 +221,32 @@ func TestCycleAlertCarriesFailingCheckOutput(t *testing.T) {
 	}
 }
 
-func TestCycleAlertNotifiesGlobalDefault(t *testing.T) {
-	h := &workerHarness{cache: failedCache("http")}
-	w := h.worker(alertRuleTree(nil), rules.Policy{}, nil) // rule declares no notify
-	n := &fakeNotifier{name: "ops"}
-	w.Notifiers = map[string]notify.Notifier{"ops": n}
-	w.GlobalNotify = []string{"ops"} // inherited
+func TestCycleAlertNotifyScope(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		notify    any
+		wantMsgs  int
+		wantEvent string
+	}{
+		{"global default inherited", nil, 1, eventKindNotify},
+		{"notify none suppresses", "none", 0, eventKindAlert},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			h := &workerHarness{cache: failedCache("http")}
+			w := h.worker(alertRuleTree(tc.notify), rules.Policy{}, nil)
+			n := &fakeNotifier{name: "ops"}
+			w.Notifiers = map[string]notify.Notifier{"ops": n}
+			w.GlobalNotify = []string{"ops"}
 
-	w.RunCycle(context.Background())
+			w.RunCycle(context.Background())
 
-	if len(n.msgs) != 1 {
-		t.Fatalf("alert should notify the inherited global default, got %d messages", len(n.msgs))
-	}
-	if _, ok := h.eventOf(eventKindNotify); !ok {
-		t.Errorf("expected a notify event: %+v", h.events)
+			if len(n.msgs) != tc.wantMsgs {
+				t.Fatalf("messages = %d, want %d", len(n.msgs), tc.wantMsgs)
+			}
+			if _, ok := h.eventOf(tc.wantEvent); !ok {
+				t.Fatalf("expected %s event: %+v", tc.wantEvent, h.events)
+			}
+		})
 	}
 }
 
@@ -285,23 +297,6 @@ func TestCycleAlertEmissionEveryCycleRepeats(t *testing.T) {
 	}
 	if len(n.msgs) != 2 {
 		t.Fatalf("every-cycle alert rule must notify every cycle, got %d messages", len(n.msgs))
-	}
-}
-
-func TestCycleAlertNotifyNoneSuppresses(t *testing.T) {
-	h := &workerHarness{cache: failedCache("http")}
-	w := h.worker(alertRuleTree("none"), rules.Policy{}, nil) // notify: none
-	n := &fakeNotifier{name: "ops"}
-	w.Notifiers = map[string]notify.Notifier{"ops": n}
-	w.GlobalNotify = []string{"ops"}
-
-	w.RunCycle(context.Background())
-
-	if len(n.msgs) != 0 {
-		t.Fatalf("notify: none must suppress delivery, got %d messages", len(n.msgs))
-	}
-	if _, ok := h.eventOf(eventKindAlert); !ok {
-		t.Errorf("alert event should still be emitted: %+v", h.events)
 	}
 }
 
@@ -358,6 +353,29 @@ func failedCache(check string) map[string]checks.Result {
 	return map[string]checks.Result{check: {Check: check, OK: false}}
 }
 
+// metricCheckCache wraps a single passing metric check named name, carrying data
+// as its result Data, into a check cache.
+func metricCheckCache(name string, data map[string]any) map[string]checks.Result {
+	return map[string]checks.Result{name: {Check: name, OK: true, Data: data}}
+}
+
+// inlineMetricRule builds an alert rule firing on an inline service memory metric
+// exceeding value, echoing the threshold and reading in its message.
+func inlineMetricRule(value string) map[string]any {
+	return map[string]any{"rules": map[string]any{
+		"memory-high": map[string]any{
+			"type": "alert",
+			"if": map[string]any{"metric": map[string]any{
+				"scope": checks.MetricScopeService,
+				"name":  "memory",
+				"op":    ">",
+				"value": value,
+			}},
+			"then": map[string]any{"action": "alert", "message": "${check.type}/${check.metric} ${check.op} ${check.threshold}: ${check.value}"},
+		},
+	}}
+}
+
 func remediationTree(name, check, action string) map[string]any {
 	return map[string]any{"rules": map[string]any{
 		name: map[string]any{
@@ -366,6 +384,14 @@ func remediationTree(name, check, action string) map[string]any {
 			"then": map[string]any{"action": action},
 		},
 	}}
+}
+
+// remediationTreeFor returns remediationTree(name, "http", "restart") extended
+// with a "for" window of {forKey: forVal}, the shape used by rule-window tests.
+func remediationTreeFor(name, forKey string, forVal any) map[string]any {
+	tree := remediationTree(name, "http", "restart")
+	tree["rules"].(map[string]any)[name].(map[string]any)["for"] = map[string]any{forKey: forVal}
+	return tree
 }
 
 func TestCycleFiresRemediation(t *testing.T) {
@@ -701,37 +727,33 @@ func TestCycleAppVersionCommandFailureDoesNotRestartOrAcknowledge(t *testing.T) 
 	}
 }
 
-func TestFailedOperationEmitsErrorEvent(t *testing.T) {
-	h := &workerHarness{
-		cache:    failedCache("http"),
-		opResult: operation.Result{Status: operation.ResultFailed, Message: "systemctl failed"},
-	}
-	w := h.worker(remediationTree("restart-if-down", "http", "restart"), rules.Policy{Cooldown: time.Minute}, nil)
+func TestNonOKOperationEmitsEvent(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		status     operation.ResultStatus
+		message    string
+		wantKind   string
+		wantStatus string
+	}{
+		{"failed", operation.ResultFailed, "systemctl failed", eventKindError, eventStatusFailed},
+		{"blocked", operation.ResultBlocked, "lock held", eventKindSuppressed, eventStatusBlocked},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			h := &workerHarness{
+				cache:    failedCache("http"),
+				opResult: operation.Result{Status: tc.status, Message: tc.message},
+			}
+			w := h.worker(remediationTree("restart-if-down", "http", "restart"), rules.Policy{Cooldown: time.Minute}, nil)
 
-	w.RunCycle(context.Background())
+			w.RunCycle(context.Background())
 
-	if e, ok := h.eventOf(eventKindError); !ok || e.Action != string(rules.ActionRestart) || e.Status != eventStatusFailed {
-		t.Fatalf("failed remediation event = %+v, want kind=error status=failed", h.events)
-	}
-	if _, ok := h.eventOf(eventKindAction); ok {
-		t.Fatalf("failed operation must not emit kind=action: %+v", h.events)
-	}
-}
-
-func TestBlockedOperationEmitsSuppressedEvent(t *testing.T) {
-	h := &workerHarness{
-		cache:    failedCache("http"),
-		opResult: operation.Result{Status: operation.ResultBlocked, Message: "lock held"},
-	}
-	w := h.worker(remediationTree("restart-if-down", "http", "restart"), rules.Policy{Cooldown: time.Minute}, nil)
-
-	w.RunCycle(context.Background())
-
-	if e, ok := h.eventOf(eventKindSuppressed); !ok || e.Action != string(rules.ActionRestart) || e.Status != eventStatusBlocked {
-		t.Fatalf("blocked remediation event = %+v, want kind=suppressed status=blocked", h.events)
-	}
-	if _, ok := h.eventOf(eventKindAction); ok {
-		t.Fatalf("blocked operation must not emit kind=action: %+v", h.events)
+			if e, ok := h.eventOf(tc.wantKind); !ok || e.Action != string(rules.ActionRestart) || e.Status != tc.wantStatus {
+				t.Fatalf("remediation event = %+v, want kind=%s status=%s", h.events, tc.wantKind, tc.wantStatus)
+			}
+			if _, ok := h.eventOf(eventKindAction); ok {
+				t.Fatalf("%s operation must not emit kind=action: %+v", tc.name, h.events)
+			}
+		})
 	}
 }
 
@@ -752,31 +774,33 @@ func TestBlockedOperationDoesNotRecordCooldown(t *testing.T) {
 	}
 }
 
-func TestPreflightFailedOperationDoesNotRecordCooldown(t *testing.T) {
-	h := &workerHarness{
-		cache:    failedCache("http"),
-		opResult: operation.Result{Status: operation.ResultPreflightFailed, Message: "storage check failed"},
-	}
-	w := h.worker(remediationTree("restart-if-down", "http", "restart"), rules.Policy{Cooldown: time.Minute}, nil)
+func TestOperationCooldownRecording(t *testing.T) {
+	for _, tc := range []struct {
+		name         string
+		status       operation.ResultStatus
+		message      string
+		wantRecorded bool
+	}{
+		{"preflight failure does not record", operation.ResultPreflightFailed, "storage check failed", false},
+		{"executed failure records", operation.ResultFailed, "systemctl failed", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			h := &workerHarness{
+				cache:    failedCache("http"),
+				opResult: operation.Result{Status: tc.status, Message: tc.message},
+			}
+			w := h.worker(remediationTree("restart-if-down", "http", "restart"), rules.Policy{Cooldown: time.Minute}, nil)
 
-	w.RunCycle(context.Background())
+			w.RunCycle(context.Background())
 
-	if !w.State.LastActionAt.IsZero() {
-		t.Fatalf("preflight failure must not record cooldown, LastActionAt=%v", w.State.LastActionAt)
-	}
-}
-
-func TestFailedOperationRecordsCooldown(t *testing.T) {
-	h := &workerHarness{
-		cache:    failedCache("http"),
-		opResult: operation.Result{Status: operation.ResultFailed, Message: "systemctl failed"},
-	}
-	w := h.worker(remediationTree("restart-if-down", "http", "restart"), rules.Policy{Cooldown: time.Minute}, nil)
-
-	w.RunCycle(context.Background())
-
-	if !w.State.LastActionAt.Equal(t0) {
-		t.Fatalf("executed-but-failed remediation should record cooldown, LastActionAt=%v", w.State.LastActionAt)
+			if tc.wantRecorded {
+				if !w.State.LastActionAt.Equal(t0) {
+					t.Fatalf("executed-but-failed remediation should record cooldown, LastActionAt=%v", w.State.LastActionAt)
+				}
+			} else if !w.State.LastActionAt.IsZero() {
+				t.Fatalf("preflight failure must not record cooldown, LastActionAt=%v", w.State.LastActionAt)
+			}
+		})
 	}
 }
 
@@ -942,21 +966,15 @@ func TestRuleMessageRuntimeContextForChangedAppVersion(t *testing.T) {
 }
 
 func TestRuleMessageRuntimeContextForMetricCheck(t *testing.T) {
-	h := &workerHarness{cache: map[string]checks.Result{
-		"mem": {
-			Check: "mem",
-			OK:    true,
-			Data: map[string]any{
-				checks.DataKeyType:      checks.CheckTypeMetric,
-				checks.DataKeyScope:     checks.MetricScopeService,
-				checks.DataKeyMetric:    "memory",
-				checks.DataKeyOp:        ">",
-				checks.DataKeyThreshold: "60%",
-				checks.DataKeyValue:     73.5,
-				checks.DataKeyUnit:      metrics.MetricUnitPercent,
-			},
-		},
-	}}
+	h := &workerHarness{cache: metricCheckCache("mem", map[string]any{
+		checks.DataKeyType:      checks.CheckTypeMetric,
+		checks.DataKeyScope:     checks.MetricScopeService,
+		checks.DataKeyMetric:    "memory",
+		checks.DataKeyOp:        ">",
+		checks.DataKeyThreshold: "60%",
+		checks.DataKeyValue:     73.5,
+		checks.DataKeyUnit:      metrics.MetricUnitPercent,
+	})}
 	tree := map[string]any{"rules": map[string]any{
 		"memory-high": map[string]any{
 			"type": "alert",
@@ -1002,88 +1020,49 @@ func TestRuleMessageRuntimeContextForMetricCheck(t *testing.T) {
 	}
 }
 
-func TestRuleMessageRuntimeContextForInlineMetric(t *testing.T) {
-	h := &workerHarness{cache: map[string]checks.Result{}}
-	tree := map[string]any{"rules": map[string]any{
-		"memory-high": map[string]any{
-			"type": "alert",
-			"if": map[string]any{"metric": map[string]any{
-				"scope": checks.MetricScopeService,
-				"name":  "memory",
-				"op":    ">",
-				"value": "60%",
-			}},
-			"then": map[string]any{"action": "alert", "message": "${check.type}/${check.metric} ${check.op} ${check.threshold}: ${check.value}"},
-		},
-	}}
-	w := h.worker(tree, rules.Policy{Cooldown: time.Minute}, nil)
-	w.CheckDeps.Metrics = func(scope, name string) (metrics.Reading, bool) {
-		if scope != checks.MetricScopeService || name != "memory" {
-			return metrics.Reading{}, false
-		}
-		return metrics.Reading{Percent: 66.25, HasPercent: true, Ready: true}, true
-	}
+func TestRuleMessageRuntimeContextInlineMetric(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		threshold string
+		reading   metrics.Reading
+		want      string
+	}{
+		{"percent", "60%", metrics.Reading{Percent: 66.25, HasPercent: true, Ready: true}, "metric/memory > 60%: 66,25%"},
+		{"bytes", "1741594", metrics.Reading{Absolute: 2555904, Unit: metrics.MetricUnitBytes, HasAbsolute: true, Ready: true}, "metric/memory > 1,66 MiB: 2,44 MiB"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			h := &workerHarness{cache: map[string]checks.Result{}}
+			w := h.worker(inlineMetricRule(tc.threshold), rules.Policy{Cooldown: time.Minute}, nil)
+			w.CheckDeps.Metrics = func(scope, name string) (metrics.Reading, bool) {
+				if scope != checks.MetricScopeService || name != "memory" {
+					return metrics.Reading{}, false
+				}
+				return tc.reading, true
+			}
 
-	w.RunCycle(context.Background())
+			w.RunCycle(context.Background())
 
-	e, ok := h.eventOf(eventKindAlert)
-	if !ok {
-		t.Fatalf("no alert emitted: %+v", h.events)
-	}
-	if want := "metric/memory > 60%: 66,25%"; e.Message != want {
-		t.Fatalf("message = %q, want %q", e.Message, want)
-	}
-}
-
-func TestRuleMessageRuntimeContextFormatsInlineByteMetric(t *testing.T) {
-	h := &workerHarness{cache: map[string]checks.Result{}}
-	tree := map[string]any{"rules": map[string]any{
-		"memory-high": map[string]any{
-			"type": "alert",
-			"if": map[string]any{"metric": map[string]any{
-				"scope": checks.MetricScopeService,
-				"name":  "memory",
-				"op":    ">",
-				"value": "1741594",
-			}},
-			"then": map[string]any{"action": "alert", "message": "${check.type}/${check.metric} ${check.op} ${check.threshold}: ${check.value}"},
-		},
-	}}
-	w := h.worker(tree, rules.Policy{Cooldown: time.Minute}, nil)
-	w.CheckDeps.Metrics = func(scope, name string) (metrics.Reading, bool) {
-		if scope != checks.MetricScopeService || name != "memory" {
-			return metrics.Reading{}, false
-		}
-		return metrics.Reading{Absolute: 2555904, Unit: metrics.MetricUnitBytes, HasAbsolute: true, Ready: true}, true
-	}
-
-	w.RunCycle(context.Background())
-
-	e, ok := h.eventOf(eventKindAlert)
-	if !ok {
-		t.Fatalf("no alert emitted: %+v", h.events)
-	}
-	if want := "metric/memory > 1,66 MiB: 2,44 MiB"; e.Message != want {
-		t.Fatalf("message = %q, want %q", e.Message, want)
+			e, ok := h.eventOf(eventKindAlert)
+			if !ok {
+				t.Fatalf("no alert emitted: %+v", h.events)
+			}
+			if e.Message != tc.want {
+				t.Fatalf("message = %q, want %q", e.Message, tc.want)
+			}
+		})
 	}
 }
 
 func TestRuleMessageRuntimeContextFormatsByteMetric(t *testing.T) {
-	h := &workerHarness{cache: map[string]checks.Result{
-		"memory-high": {
-			Check: "memory-high",
-			OK:    true,
-			Data: map[string]any{
-				checks.DataKeyType:      checks.CheckTypeMetric,
-				checks.DataKeyScope:     checks.MetricScopeService,
-				checks.DataKeyMetric:    "memory",
-				checks.DataKeyOp:        ">",
-				checks.DataKeyThreshold: "174159463",
-				checks.DataKeyValue:     2555904,
-				checks.DataKeyUnit:      metrics.MetricUnitBytes,
-			},
-		},
-	}}
+	h := &workerHarness{cache: metricCheckCache("memory-high", map[string]any{
+		checks.DataKeyType:      checks.CheckTypeMetric,
+		checks.DataKeyScope:     checks.MetricScopeService,
+		checks.DataKeyMetric:    "memory",
+		checks.DataKeyOp:        ">",
+		checks.DataKeyThreshold: "174159463",
+		checks.DataKeyValue:     2555904,
+		checks.DataKeyUnit:      metrics.MetricUnitBytes,
+	})}
 	tree := map[string]any{"rules": map[string]any{
 		"memory-high": map[string]any{
 			"type": "alert",
@@ -1255,14 +1234,7 @@ func TestCycleAlertFires(t *testing.T) {
 }
 
 func TestCycleForWindowDelaysAction(t *testing.T) {
-	tree := map[string]any{"rules": map[string]any{
-		"down": map[string]any{
-			"type": "remediation",
-			"if":   map[string]any{"failed": map[string]any{"check": "http"}},
-			"for":  map[string]any{"cycles": 3},
-			"then": map[string]any{"action": "restart"},
-		},
-	}}
+	tree := remediationTreeFor("down", "cycles", 3)
 	h := &workerHarness{cache: failedCache("http"), opResult: operation.Result{Status: operation.ResultOK}}
 	// No cooldown so the only gate is the for-window.
 	w := h.worker(tree, rules.Policy{}, nil)
@@ -1280,14 +1252,7 @@ func TestCycleForWindowDelaysAction(t *testing.T) {
 }
 
 func TestCycleForDurationWindowDelaysAction(t *testing.T) {
-	tree := map[string]any{"rules": map[string]any{
-		"down": map[string]any{
-			"type": "remediation",
-			"if":   map[string]any{"failed": map[string]any{"check": "http"}},
-			"for":  map[string]any{"duration": "6m"},
-			"then": map[string]any{"action": "restart"},
-		},
-	}}
+	tree := remediationTreeFor("down", "duration", "6m")
 	h := &workerHarness{cache: failedCache("http"), opResult: operation.Result{Status: operation.ResultOK}}
 	w := h.worker(tree, rules.Policy{}, nil)
 	now := t0
@@ -1307,14 +1272,7 @@ func TestCycleForDurationWindowDelaysAction(t *testing.T) {
 }
 
 func TestCycleForWindowResetsOnRecovery(t *testing.T) {
-	tree := map[string]any{"rules": map[string]any{
-		"down": map[string]any{
-			"type": "remediation",
-			"if":   map[string]any{"failed": map[string]any{"check": "http"}},
-			"for":  map[string]any{"cycles": 2},
-			"then": map[string]any{"action": "restart"},
-		},
-	}}
+	tree := remediationTreeFor("down", "cycles", 2)
 	h := &workerHarness{opResult: operation.Result{Status: operation.ResultOK}}
 	w := h.worker(tree, rules.Policy{}, nil)
 

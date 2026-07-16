@@ -91,15 +91,7 @@ func (s Scanner) ScanServices(services []string) (map[string]Report, error) {
 }
 
 func (s Scanner) dependencies() (ProcessProber, func() time.Time) {
-	proc := s.Proc
-	if proc == nil {
-		proc = OSProcessProber{}
-	}
-	now := time.Now
-	if s.Now != nil {
-		now = s.Now
-	}
-	return proc, now
+	return procNowDefaults(s.Proc, s.Now)
 }
 
 func reportsForServices(services []string) map[string]Report {

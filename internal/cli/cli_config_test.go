@@ -42,6 +42,31 @@ func mustWrite(t *testing.T, path, content string) {
 	}
 }
 
+// writeServiceConfig writes a sermo.yml holding globalBody plus one file per
+// entry in services (map of root-relative slash path to YAML body). Every
+// "@ROOT@" in globalBody is replaced with the temp root so callers can embed
+// absolute paths. It returns the sermo.yml path.
+func writeServiceConfig(t *testing.T, globalBody string, services map[string]string) string {
+	t.Helper()
+	root := t.TempDir()
+	global := filepath.Join(root, "sermo.yml")
+	mustWrite(t, global, strings.ReplaceAll(globalBody, "@ROOT@", root))
+	for rel, body := range services {
+		mustWrite(t, filepath.Join(root, filepath.FromSlash(rel)), body)
+	}
+	return global
+}
+
+// servicesDirGlobal is the minimal global body wiring a single services dir under
+// the temp root plus the default cooldown policy, shared by the writers below.
+const servicesDirGlobal = `
+paths:
+  services: [ @ROOT@/services ]
+defaults:
+  policy:
+    cooldown: 5m
+`
+
 func TestConfigValidateOK(t *testing.T) {
 	global := writeTempConfig(t)
 	var stdout bytes.Buffer

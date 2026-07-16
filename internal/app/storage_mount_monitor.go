@@ -1,8 +1,6 @@
 package app
 
 import (
-	"fmt"
-
 	"sermo/internal/config"
 	"sermo/internal/mountctl"
 	"sermo/internal/state"
@@ -16,41 +14,13 @@ func SyncStorageMountMonitoring(store MonitorStore, storage, action string, resu
 		return ManualMonitorChange{}, nil
 	}
 	key := watchMonitorKey(storage)
+	subject := "watch " + storage
 	switch action {
 	case mountctl.ActionUmount:
-		active, found, err := store.Active(key)
-		if err != nil {
-			return ManualMonitorChange{}, fmt.Errorf("read monitoring state for watch %s: %w", storage, err)
-		}
-		if found && !active {
-			return ManualMonitorChange{}, nil
-		}
-		if err := store.SetActive(key, false, pauseSource); err != nil {
-			return ManualMonitorChange{}, fmt.Errorf("pause monitoring for watch %s: %w", storage, err)
-		}
-		return ManualMonitorChange{
-			Changed:   true,
-			Monitored: false,
-			Action:    eventActionUnmonitor,
-			Message:   eventMessageMonitoringPausedAfterStorageUmount,
-		}, nil
+		return syncMonitorPause(store, key, subject, pauseSource, eventMessageMonitoringPausedAfterStorageUmount)
 	case mountctl.ActionMount:
-		rec, found, err := store.MonitorState(key)
-		if err != nil {
-			return ManualMonitorChange{}, fmt.Errorf("read monitoring state for watch %s: %w", storage, err)
-		}
-		if !found || rec.Active || !state.IsMountUmountSource(rec.Source) {
-			return ManualMonitorChange{}, nil
-		}
-		if err := store.SetActive(key, true, restoreSource); err != nil {
-			return ManualMonitorChange{}, fmt.Errorf("resume monitoring for watch %s: %w", storage, err)
-		}
-		return ManualMonitorChange{
-			Changed:   true,
-			Monitored: true,
-			Action:    eventActionMonitor,
-			Message:   eventMessageMonitoringResumedAfterStorageMount,
-		}, nil
+		return syncMonitorRestore(store, key, subject, restoreSource,
+			eventMessageMonitoringResumedAfterStorageMount, state.IsMountUmountSource)
 	default:
 		return ManualMonitorChange{}, nil
 	}

@@ -2,8 +2,6 @@ package conn
 
 import (
 	"context"
-	"fmt"
-	"io"
 	"strings"
 )
 
@@ -27,24 +25,10 @@ const (
 )
 
 func (clamdProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	c, err := dialDeadline(ctx, cfg, defaultPortClamd)
-	if err != nil {
-		return Result{}, err
-	}
-	defer func() { _ = c.Close() }()
-
-	if _, err := io.WriteString(c, clamdCommandVersion); err != nil {
-		return Result{}, err
-	}
-	line, err := readGreetingLine(c)
-	if err != nil {
-		return Result{}, err
-	}
-	version, ok := clamdVersion(line)
-	if !ok {
-		return Result{}, fmt.Errorf("not a clamd VERSION reply: %q", line)
-	}
-	return Result{Version: version, Extra: map[string]string{ExtraKeyVersionString: line}}, nil
+	return probeLineCommand(ctx, cfg, defaultPortClamd, clamdCommandVersion, func(line string) (Result, bool) {
+		version, ok := clamdVersion(line)
+		return Result{Version: version, Extra: map[string]string{ExtraKeyVersionString: line}}, ok
+	}, "not a clamd VERSION reply: %q")
 }
 
 // clamdVersion extracts the engine version from a clamd VERSION reply

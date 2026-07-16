@@ -45,14 +45,7 @@ func TestWebBackendDetailRuleWindows(t *testing.T) {
 func TestWorkerPublishesRuleWindows(t *testing.T) {
 	reg := NewRuleWindowRegistry()
 	h := &workerHarness{cache: failedCache("http")}
-	tree := map[string]any{"rules": map[string]any{
-		"restart-if-down": map[string]any{
-			"type": "remediation",
-			"if":   map[string]any{"failed": map[string]any{"check": "http"}},
-			"for":  map[string]any{"cycles": 3},
-			"then": map[string]any{"action": "restart"},
-		},
-	}}
+	tree := remediationTreeFor("restart-if-down", "cycles", 3)
 	w := h.worker(tree, rules.Policy{Cooldown: time.Minute}, nil)
 	w.RuleWindows = reg
 	w.RunCycle(context.Background())

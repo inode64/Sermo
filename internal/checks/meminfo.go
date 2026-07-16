@@ -3,14 +3,6 @@ package checks
 import (
 	"os"
 	"sermo/internal/metrics"
-	"strings"
-)
-
-const (
-	meminfoMemTotalPrefix     = "MemTotal:"
-	meminfoMemAvailablePrefix = "MemAvailable:"
-	meminfoSwapTotalPrefix    = "SwapTotal:"
-	meminfoSwapFreePrefix     = "SwapFree:"
 )
 
 type meminfoSample struct {
@@ -28,19 +20,15 @@ func readMeminfo() (meminfoSample, error) {
 	return parseMeminfo(string(data)), nil
 }
 
+// parseMeminfo adapts the shared metrics scanner to the raw sample the checks
+// package needs (MemTotal/MemAvailable/SwapTotal/SwapFree in bytes); a missing
+// field stays zero.
 func parseMeminfo(data string) meminfoSample {
-	var sample meminfoSample
-	for line := range strings.SplitSeq(data, checkLineSeparator) {
-		switch {
-		case strings.HasPrefix(line, meminfoMemTotalPrefix):
-			sample.memoryTotalBytes, _ = metrics.MeminfoKB(strings.TrimPrefix(line, meminfoMemTotalPrefix))
-		case strings.HasPrefix(line, meminfoMemAvailablePrefix):
-			sample.memoryAvailableBytes, _ = metrics.MeminfoKB(strings.TrimPrefix(line, meminfoMemAvailablePrefix))
-		case strings.HasPrefix(line, meminfoSwapTotalPrefix):
-			sample.swapTotalBytes, _ = metrics.MeminfoKB(strings.TrimPrefix(line, meminfoSwapTotalPrefix))
-		case strings.HasPrefix(line, meminfoSwapFreePrefix):
-			sample.swapFreeBytes, _ = metrics.MeminfoKB(strings.TrimPrefix(line, meminfoSwapFreePrefix))
-		}
+	memTotal, memAvailable, swapTotal, swapFree, _, _, _, _ := metrics.ParseMeminfo([]byte(data))
+	return meminfoSample{
+		memoryTotalBytes:     memTotal,
+		memoryAvailableBytes: memAvailable,
+		swapTotalBytes:       swapTotal,
+		swapFreeBytes:        swapFree,
 	}
-	return sample
 }

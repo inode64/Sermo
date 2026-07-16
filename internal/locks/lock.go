@@ -110,6 +110,21 @@ func toLock(lf lockFile, path string, state State, staleReason string) Lock {
 	}
 }
 
+// procNowDefaults fills an unset process prober and clock with the real host
+// prober and the wall clock. It is the single source of the nil-guard that every
+// locker applies to its optional Proc/Now dependencies.
+//
+//nolint:ireturn // returns the caller-supplied ProcessProber or the default prober.
+func procNowDefaults(proc ProcessProber, now func() time.Time) (ProcessProber, func() time.Time) {
+	if proc == nil {
+		proc = OSProcessProber{}
+	}
+	if now == nil {
+		now = time.Now
+	}
+	return proc, now
+}
+
 // classify computes a lock's state from its payload, the current time and a
 // process prober.
 func classify(lf lockFile, now time.Time, proc ProcessProber) (State, string) {

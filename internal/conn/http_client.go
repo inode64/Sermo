@@ -39,7 +39,7 @@ func httpProbeBase(cfg Config, defaultPort int) (*http.Client, string) {
 	}
 	scheme := schemeHTTP
 	client := httpProbeClient(cfg.Interface, nil)
-	mode := normalizeTLS(cfg.TLS)
+	mode := NormalizeTLS(cfg.TLS)
 	if mode != "" {
 		scheme = schemeHTTPS
 		tlsConfig := tlsClientConfig(host)

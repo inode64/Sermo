@@ -54,50 +54,55 @@ func writeLockFixture(t *testing.T, dir, fileName string, payload map[string]any
 	}
 }
 
-func TestLocksReportsActiveLock(t *testing.T) {
-	root := t.TempDir()
-	global, locksDir := writeLocksConfig(t, root)
-	writeLockFixture(t, locksDir, "mysql\\backup.lock", map[string]any{
-		"service":           "mysql",
-		"name":              "backup",
-		"reason":            "backup mysql",
-		"owner_pid":         os.Getpid(),
-		"owner_start_ticks": selfStartTicks(t),
-		"expires_at":        time.Now().Add(time.Hour).UTC().Format(time.RFC3339),
-	})
+func TestLocksReports(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		lockFile string
+		fixture  map[string]any
+		want     []string
+	}{
+		{
+			name:     "active",
+			lockFile: "mysql\\backup.lock",
+			fixture: map[string]any{
+				"service":           "mysql",
+				"name":              "backup",
+				"reason":            "backup mysql",
+				"owner_pid":         os.Getpid(),
+				"owner_start_ticks": selfStartTicks(t),
+				"expires_at":        time.Now().Add(time.Hour).UTC().Format(time.RFC3339),
+			},
+			want: []string{"mysql.backup active", `reason="backup mysql"`},
+		},
+		{
+			name:     "expired",
+			lockFile: "mysql.lock",
+			fixture: map[string]any{
+				"service":    "mysql",
+				"owner_pid":  os.Getpid(),
+				"expires_at": time.Now().Add(-time.Hour).UTC().Format(time.RFC3339),
+			},
+			want: []string{"mysql expired"},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			root := t.TempDir()
+			global, locksDir := writeLocksConfig(t, root)
+			writeLockFixture(t, locksDir, tc.lockFile, tc.fixture)
 
-	var stdout bytes.Buffer
-	app := App{Env: func(string) string { return "" }, Stdout: &stdout, Stderr: &bytes.Buffer{}}
-	code := app.Run(context.Background(), []string{"--config", global, "locks", "mysql"})
-	if code != exitSuccess {
-		t.Fatalf("Run() exit = %d, want %d", code, exitSuccess)
-	}
-	out := stdout.String()
-	if !strings.Contains(out, "mysql.backup active") {
-		t.Fatalf("stdout = %q, want active backup lock", out)
-	}
-	if !strings.Contains(out, `reason="backup mysql"`) {
-		t.Fatalf("stdout = %q, want reason", out)
-	}
-}
-
-func TestLocksReportsExpiredLock(t *testing.T) {
-	root := t.TempDir()
-	global, locksDir := writeLocksConfig(t, root)
-	writeLockFixture(t, locksDir, "mysql.lock", map[string]any{
-		"service":    "mysql",
-		"owner_pid":  os.Getpid(),
-		"expires_at": time.Now().Add(-time.Hour).UTC().Format(time.RFC3339),
-	})
-
-	var stdout bytes.Buffer
-	app := App{Env: func(string) string { return "" }, Stdout: &stdout, Stderr: &bytes.Buffer{}}
-	code := app.Run(context.Background(), []string{"--config", global, "locks", "mysql"})
-	if code != exitSuccess {
-		t.Fatalf("Run() exit = %d, want %d", code, exitSuccess)
-	}
-	if !strings.Contains(stdout.String(), "mysql expired") {
-		t.Fatalf("stdout = %q, want expired lock", stdout.String())
+			var stdout bytes.Buffer
+			app := App{Env: func(string) string { return "" }, Stdout: &stdout, Stderr: &bytes.Buffer{}}
+			code := app.Run(context.Background(), []string{"--config", global, "locks", "mysql"})
+			if code != exitSuccess {
+				t.Fatalf("Run() exit = %d, want %d", code, exitSuccess)
+			}
+			out := stdout.String()
+			for _, want := range tc.want {
+				if !strings.Contains(out, want) {
+					t.Fatalf("stdout = %q, want %q", out, want)
+				}
+			}
+		})
 	}
 }
 

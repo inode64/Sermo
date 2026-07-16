@@ -1,10 +1,7 @@
 package conn
 
 import (
-	"bufio"
 	"context"
-	"net"
-	"strconv"
 	"strings"
 	"testing"
 )
@@ -22,25 +19,8 @@ func TestParseSpamdPong(t *testing.T) {
 }
 
 func TestSpamdProbeAgainstFakeServer(t *testing.T) {
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = ln.Close() }()
 	var gotPing string
-	go func() {
-		c, err := ln.Accept()
-		if err != nil {
-			return
-		}
-		defer func() { _ = c.Close() }()
-		line, _ := bufio.NewReader(c).ReadString('\n')
-		gotPing = line
-		_, _ = c.Write([]byte("SPAMD/1.5 0 PONG\r\n"))
-	}()
-
-	_, portStr, _ := net.SplitHostPort(ln.Addr().String())
-	port, _ := strconv.Atoi(portStr)
+	port := serveBanner(t, "SPAMD/1.5 0 PONG\r\n", &gotPing)
 	res, err := spamdProtocol{}.Probe(context.Background(), Config{Host: "127.0.0.1", Port: port})
 	if err != nil {
 		t.Fatalf("probe: %v", err)

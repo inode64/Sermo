@@ -130,41 +130,26 @@ func TestBuildSQLCheckWiring(t *testing.T) {
 		t.Fatalf("driver = %q dsn = %q, want postgres driver and postgres:// DSN", cc.driver, cc.dsn)
 	}
 
-	// Missing user (mysql) warns.
-	if _, warns := Build(map[string]any{
-		"q": map[string]any{"type": "sql", "engine": "mysql", "query": "SELECT 1", "op": "==", "value": "1"},
-	}, Deps{DefaultTimeout: time.Second}); len(warns) == 0 {
-		t.Fatal("mysql sql check without user should warn")
+	// assertSQLBuildWarns builds one sql check entry and asserts it warns.
+	assertSQLBuildWarns := func(q map[string]any, msg string) {
+		t.Helper()
+		q["type"] = "sql"
+		if _, warns := Build(map[string]any{"q": q}, Deps{DefaultTimeout: time.Second}); len(warns) == 0 {
+			t.Fatal(msg)
+		}
 	}
-
-	// Unknown engine warns.
-	if _, warns := Build(map[string]any{
-		"q": map[string]any{"type": "sql", "engine": "oracle", "query": "SELECT 1", "op": "==", "value": "1"},
-	}, Deps{DefaultTimeout: time.Second}); len(warns) == 0 {
-		t.Fatal("unknown engine should warn")
-	}
-
-	// Bad op warns.
-	if _, warns := Build(map[string]any{
-		"q": map[string]any{"type": "sql", "engine": "sqlite", "path": "/x.db", "query": "SELECT 1", "op": "~~", "value": "1"},
-	}, Deps{DefaultTimeout: time.Second}); len(warns) == 0 {
-		t.Fatal("bad op should warn")
-	}
-	if _, warns := Build(map[string]any{
-		"q": map[string]any{"type": "sql", "engine": "sqlite", "path": "/x.db", "query": "SELECT 1", "op": ">"},
-	}, Deps{DefaultTimeout: time.Second}); len(warns) == 0 {
-		t.Fatal("missing value should warn")
-	}
-	if _, warns := Build(map[string]any{
-		"q": map[string]any{"type": "sql", "engine": "sqlite", "path": "/x.db", "query": "SELECT 1", "op": ">", "value": "many"},
-	}, Deps{DefaultTimeout: time.Second}); len(warns) == 0 {
-		t.Fatal("non-numeric ordering value should warn")
-	}
-	if _, warns := Build(map[string]any{
-		"q": map[string]any{"type": "sql", "engine": "sqlite", "path": "/x.db", "query": "SELECT 1", "op": "=~", "value": "["},
-	}, Deps{DefaultTimeout: time.Second}); len(warns) == 0 {
-		t.Fatal("bad regex value should warn")
-	}
+	assertSQLBuildWarns(map[string]any{"engine": "mysql", "query": "SELECT 1", "op": "==", "value": "1"},
+		"mysql sql check without user should warn")
+	assertSQLBuildWarns(map[string]any{"engine": "oracle", "query": "SELECT 1", "op": "==", "value": "1"},
+		"unknown engine should warn")
+	assertSQLBuildWarns(map[string]any{"engine": "sqlite", "path": "/x.db", "query": "SELECT 1", "op": "~~", "value": "1"},
+		"bad op should warn")
+	assertSQLBuildWarns(map[string]any{"engine": "sqlite", "path": "/x.db", "query": "SELECT 1", "op": ">"},
+		"missing value should warn")
+	assertSQLBuildWarns(map[string]any{"engine": "sqlite", "path": "/x.db", "query": "SELECT 1", "op": ">", "value": "many"},
+		"non-numeric ordering value should warn")
+	assertSQLBuildWarns(map[string]any{"engine": "sqlite", "path": "/x.db", "query": "SELECT 1", "op": "=~", "value": "["},
+		"bad regex value should warn")
 }
 
 func TestSQLConnConfigHostDefault(t *testing.T) {

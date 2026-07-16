@@ -53,18 +53,26 @@ func (a App) writeWizardMounts(p *assist.Prompt, opts options, globalPath string
 	if err != nil {
 		return a.fail(opts, err.Error())
 	}
+	return a.finishWizardWrite(opts, globalPath, "mount watch", deletes, docs, writeMountFiles)
+}
+
+// finishWizardWrite runs the tail shared by writeWizardMounts and
+// writeWizardServices: delete any stale files, write the generated docs, then
+// report both counts. noun labels the files in the user-facing messages
+// ("mount watch", "service").
+func (a App) finishWizardWrite(opts options, globalPath, noun string, deletes []string, docs map[string]map[string]any, writeFiles func(string, map[string]map[string]any) (string, int, error)) int {
 	if err := deleteWizardConfigFiles(deletes); err != nil {
 		return a.fail(opts, err.Error())
 	}
 
-	dir, written, err := writeMountFiles(globalPath, docs)
+	dir, written, err := writeFiles(globalPath, docs)
 	if err != nil {
 		return a.fail(opts, err.Error())
 	}
 	if len(deletes) > 0 {
-		fmt.Fprintf(a.Stdout, "Deleted %d stale mount watch file(s).\n", len(deletes))
+		fmt.Fprintf(a.Stdout, "Deleted %d stale %s file(s).\n", len(deletes), noun)
 	}
-	fmt.Fprintf(a.Stdout, "Wrote %d mount watch file(s) under %s. Run `sermoctl daemon reload` to apply.\n", written, dir)
+	fmt.Fprintf(a.Stdout, "Wrote %d %s file(s) under %s. Run `sermoctl daemon reload` to apply.\n", written, noun, dir)
 	return exitSuccess
 }
 

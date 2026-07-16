@@ -43,22 +43,12 @@ func (nfsProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 // and verifies its reply. It binds egress through cfg.Interface and applies the
 // context deadline, matching the behavior required by NFS-family RPC probes.
 func probeRPCNull(ctx context.Context, cfg Config, defaultPort int, program, version uint32, programName string) (Result, error) {
-	host := cfg.Host
-	if host == "" {
-		host = DefaultHost
-	}
-	port := cfg.Port
-	if port == 0 {
-		port = defaultPort
-	}
-
 	xid := randXID32()
-	c, err := BindDialer(cfg.Interface).DialContext(ctx, networkTCP, hostPort(host, port))
+	c, err := dialTCPDeadline(ctx, cfg, defaultPort)
 	if err != nil {
 		return Result{}, err
 	}
 	defer func() { _ = c.Close() }()
-	applyDeadline(ctx, c)
 
 	reply, err := rpcCallTCP(c, buildRPCNull(xid, program, version))
 	if err != nil {

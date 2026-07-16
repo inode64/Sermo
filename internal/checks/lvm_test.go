@@ -43,28 +43,14 @@ func TestLVMCheckHealthTransition(t *testing.T) {
 }
 
 func TestLVMDeviceState(t *testing.T) {
-	tests := []struct {
-		name       string
-		row        lvmRow
-		wantState  string
-		wantPct    float64
-		wantActive bool
-	}{
-		{name: "idle", row: lvmRow{LVAttr: "-wi-a-----"}},
-		{name: "raid check", row: lvmRow{RaidSyncAction: "check", SyncPercent: "12.5"}, wantState: DeviceStateTesting, wantPct: 12.5, wantActive: true},
-		{name: "raid recovery", row: lvmRow{RaidSyncAction: "recover", SyncPercent: "50"}, wantState: DeviceStateRecovering, wantPct: 50, wantActive: true},
-		{name: "pvmove", row: lvmRow{LVAttr: "pwi-a-----", CopyPercent: "24"}, wantState: DeviceStateMoving, wantPct: 24, wantActive: true},
-		{name: "snapshot merge", row: lvmRow{LVAttr: "Swi-a-----"}, wantState: DeviceStateMerging},
-		{name: "raid reshape", row: lvmRow{LVAttr: "rwi-a---s-"}, wantState: DeviceStateRebuilding},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			state, pct, active := lvmDeviceState(tt.row)
-			if state != tt.wantState || pct != tt.wantPct || active != tt.wantActive {
-				t.Fatalf("lvmDeviceState(%+v) = %q, %v, %v; want %q, %v, %v", tt.row, state, pct, active, tt.wantState, tt.wantPct, tt.wantActive)
-			}
-		})
-	}
+	runDeviceStateCases(t, lvmDeviceState, []deviceStateCase[lvmRow]{
+		{name: "idle", in: lvmRow{LVAttr: "-wi-a-----"}},
+		{name: "raid check", in: lvmRow{RaidSyncAction: "check", SyncPercent: "12.5"}, wantState: DeviceStateTesting, wantPct: 12.5, wantActive: true},
+		{name: "raid recovery", in: lvmRow{RaidSyncAction: "recover", SyncPercent: "50"}, wantState: DeviceStateRecovering, wantPct: 50, wantActive: true},
+		{name: "pvmove", in: lvmRow{LVAttr: "pwi-a-----", CopyPercent: "24"}, wantState: DeviceStateMoving, wantPct: 24, wantActive: true},
+		{name: "snapshot merge", in: lvmRow{LVAttr: "Swi-a-----"}, wantState: DeviceStateMerging},
+		{name: "raid reshape", in: lvmRow{LVAttr: "rwi-a---s-"}, wantState: DeviceStateRebuilding},
+	})
 }
 
 func TestLVMCheckCapacityPredicate(t *testing.T) {

@@ -19,18 +19,26 @@ func sampler(samples ...NetSample) NetSamplerFunc {
 	}
 }
 
+// assertStateExpect runs a state-expect check that must fire on a matching sample
+// (reporting wantValue under valueKey and wantLabel under labelKey) and one that
+// must stay quiet on a non-matching sample.
+func assertStateExpect(t *testing.T, match, nonMatch Check, valueKey, wantValue, labelKey, wantLabel string) {
+	t.Helper()
+	res := match.Run(context.Background())
+	if !res.OK || res.Data[valueKey] != wantValue || res.Data[labelKey] != wantLabel {
+		t.Fatalf("expect should fire on a matching sample: %+v", res)
+	}
+	if nonMatch.Run(context.Background()).OK {
+		t.Fatal("expect must not fire on a non-matching sample")
+	}
+}
+
 func TestNetStateExpect(t *testing.T) {
-	c := &netCheck{base: base{name: "n"}, iface: "eth0", metric: NetMetricState, expect: NetStateDown,
-		sampler: sampler(NetSample{State: NetStateDown})}
-	res := c.Run(context.Background())
-	if !res.OK || res.Data[DataKeyValue] != NetStateDown || res.Data[DataKeyInterface] != "eth0" {
-		t.Fatalf("expect-down should fire: %+v", res)
+	mk := func(state string) Check {
+		return &netCheck{base: base{name: "n"}, iface: "eth0", metric: NetMetricState, expect: NetStateDown,
+			sampler: sampler(NetSample{State: state})}
 	}
-	c2 := &netCheck{base: base{name: "n"}, iface: "eth0", metric: NetMetricState, expect: NetStateDown,
-		sampler: sampler(NetSample{State: NetStateUp})}
-	if c2.Run(context.Background()).OK {
-		t.Fatal("expect-down must not fire when up")
-	}
+	assertStateExpect(t, mk(NetStateDown), mk(NetStateUp), DataKeyValue, NetStateDown, DataKeyInterface, "eth0")
 }
 
 func TestNetStateOnChange(t *testing.T) {

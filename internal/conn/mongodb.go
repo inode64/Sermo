@@ -121,7 +121,7 @@ func MongoConnect(cfg Config) (*mongo.Client, error) {
 		}
 		opts.SetAuth(options.Credential{Username: cfg.User, Password: cfg.Password, AuthSource: authSource})
 	}
-	if mode := normalizeTLS(cfg.TLS); mode != "" {
+	if mode := NormalizeTLS(cfg.TLS); mode != "" {
 		tc := tlsClientConfig(host)
 		if mode == tlsSkipVerify {
 			tc.InsecureSkipVerify = true // operator chose tls: skip-verify

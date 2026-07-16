@@ -87,25 +87,24 @@ type checkFunc func(context.Context) checks.Result
 func (f checkFunc) Name() string                          { return "fn" }
 func (f checkFunc) Run(ctx context.Context) checks.Result { return f(ctx) }
 
-func TestSchedulerRunsCyclesAndShutsDown(t *testing.T) {
-	var a, b int32
-	counter := func(n *int32) func(context.Context, checks.Deps) map[string]checks.Result {
-		return func(context.Context, checks.Deps) map[string]checks.Result {
-			atomic.AddInt32(n, 1)
-			return nil
-		}
+// countingChecks returns a worker check function that increments n on each run.
+func countingChecks(n *int32) func(context.Context, checks.Deps) map[string]checks.Result {
+	return func(context.Context, checks.Deps) map[string]checks.Result {
+		atomic.AddInt32(n, 1)
+		return nil
 	}
-	workers := []*Worker{
-		{Service: "a", Checks: counter(&a)},
-		{Service: "b", Checks: counter(&b)},
-	}
+}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 80*time.Millisecond)
+// runSchedulerUntilDone runs sched over workers until ctxTimeout cancels it,
+// failing if it does not return within a generous grace period.
+func runSchedulerUntilDone(t *testing.T, sched Scheduler, workers []*Worker, ctxTimeout time.Duration) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), ctxTimeout)
 	defer cancel()
 
 	done := make(chan struct{})
 	go func() {
-		Scheduler{Interval: 15 * time.Millisecond}.Run(ctx, workers, nil, nil, nil, true, false)
+		sched.Run(ctx, workers, nil, nil, nil, true, false)
 		close(done)
 	}()
 
@@ -114,6 +113,15 @@ func TestSchedulerRunsCyclesAndShutsDown(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("scheduler did not return after context cancellation")
 	}
+}
+
+func TestSchedulerRunsCyclesAndShutsDown(t *testing.T) {
+	var a, b int32
+	workers := []*Worker{
+		{Service: "a", Checks: countingChecks(&a)},
+		{Service: "b", Checks: countingChecks(&b)},
+	}
+	runSchedulerUntilDone(t, Scheduler{Interval: 15 * time.Millisecond}, workers, 80*time.Millisecond)
 
 	if atomic.LoadInt32(&a) < 2 || atomic.LoadInt32(&b) < 2 {
 		t.Fatalf("workers did not cycle repeatedly: a=%d b=%d", a, b)
@@ -122,31 +130,11 @@ func TestSchedulerRunsCyclesAndShutsDown(t *testing.T) {
 
 func TestSchedulerHonorsPerWorkerInterval(t *testing.T) {
 	var fast, slow int32
-	counter := func(n *int32) func(context.Context, checks.Deps) map[string]checks.Result {
-		return func(context.Context, checks.Deps) map[string]checks.Result {
-			atomic.AddInt32(n, 1)
-			return nil
-		}
-	}
 	workers := []*Worker{
-		{Service: "fast", Interval: 10 * time.Millisecond, Checks: counter(&fast)},
-		{Service: "slow", Checks: counter(&slow)}, // no override: uses the global interval
+		{Service: "fast", Interval: 10 * time.Millisecond, Checks: countingChecks(&fast)},
+		{Service: "slow", Checks: countingChecks(&slow)}, // no override: uses the global interval
 	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
-	defer cancel()
-
-	done := make(chan struct{})
-	go func() {
-		Scheduler{Interval: 100 * time.Millisecond}.Run(ctx, workers, nil, nil, nil, true, false)
-		close(done)
-	}()
-
-	select {
-	case <-done:
-	case <-time.After(2 * time.Second):
-		t.Fatal("scheduler did not return after context cancellation")
-	}
+	runSchedulerUntilDone(t, Scheduler{Interval: 100 * time.Millisecond}, workers, 200*time.Millisecond)
 
 	// The fast worker (10ms) must cycle several times more than the slow one,
 	// which falls back to the 100ms global interval.
@@ -256,18 +244,8 @@ func TestGateOperateSerializesAcrossWorkers(t *testing.T) {
 
 	var mu sync.Mutex
 	var inFlight, maxInFlight int
-	body := func(ctx context.Context, _ string) operation.Result {
-		mu.Lock()
-		inFlight++
-		if inFlight > maxInFlight {
-			maxInFlight = inFlight
-		}
-		mu.Unlock()
-		time.Sleep(10 * time.Millisecond)
-		mu.Lock()
-		inFlight--
-		mu.Unlock()
-		return operation.Result{Status: operation.ResultOK}
+	body := func(context.Context, string) operation.Result {
+		return trackPeakConcurrency(&mu, &inFlight, &maxInFlight)
 	}
 
 	workers := make([]*Worker, 4)

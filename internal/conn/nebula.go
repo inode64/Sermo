@@ -46,35 +46,14 @@ func (nebulaProtocol) DefaultPort() int   { return defaultPortNebula }
 func (nebulaProtocol) RequiresUser() bool { return false }
 
 func (nebulaProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	host := cfg.Host
-	if host == "" {
-		host = DefaultHost
-	}
-	port := cfg.Port
-	if port == 0 {
-		port = defaultPortNebula
-	}
-
 	// A random 32-bit tunnel index the node won't have (reuses the shared random
 	// uint32 helper); the recv_error echoes it back so we can match the reply.
 	index := randXID32()
-
-	c, err := BindDialer(cfg.Interface).DialContext(ctx, networkUDP, hostPort(host, port))
+	reply, err := exchangeUDP(ctx, cfg, defaultPortNebula, nebulaMessage(index), nebulaReplyBufferBytes)
 	if err != nil {
 		return Result{}, err
 	}
-	defer func() { _ = c.Close() }()
-	applyDeadline(ctx, c)
-
-	if _, err := c.Write(nebulaMessage(index)); err != nil {
-		return Result{}, err
-	}
-	buf := make([]byte, nebulaReplyBufferBytes)
-	n, err := c.Read(buf)
-	if err != nil {
-		return Result{}, err
-	}
-	if err := parseNebulaRecvError(buf[:n], index); err != nil {
+	if err := parseNebulaRecvError(reply, index); err != nil {
 		return Result{}, err
 	}
 	return Result{Extra: map[string]string{extraReply: nebulaReplyRecvErr}}, nil

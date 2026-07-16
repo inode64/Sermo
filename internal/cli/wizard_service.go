@@ -388,36 +388,11 @@ func procPortListenerHosts(path string, port int, states map[string]bool, ipv6 b
 	return hosts
 }
 
-func parseProcSocketTable(r io.Reader, port int, states map[string]bool) (bool, error) {
-	sc := bufio.NewScanner(r)
-	for sc.Scan() {
-		fields := strings.Fields(sc.Text())
-		if len(fields) < procnet.MinFields || fields[procnet.HeaderIndex] == procnet.HeaderField {
-			continue
-		}
-		if !states[strings.ToUpper(fields[procnet.StateIndex])] {
-			continue
-		}
-		_, portHex, ok := strings.Cut(fields[procnet.LocalAddressIndex], procnet.AddressSeparator)
-		if !ok {
-			continue
-		}
-		got, err := strconv.ParseUint(portHex, procnet.HexBase, procnet.PortBits)
-		if err != nil {
-			continue
-		}
-		if int(got) == port {
-			return true, nil
-		}
-	}
-	if err := sc.Err(); err != nil {
-		return false, fmt.Errorf("read proc socket table: %w", err)
-	}
-	return false, nil
-}
-
-func parseProcSocketTableHosts(r io.Reader, port int, states map[string]bool, ipv6 bool) ([]string, error) {
-	var hosts []string
+// scanProcSocketRows walks a /proc/net socket table and calls found with the
+// local-address hex of every row in one of states listening on port; found
+// returning false stops the scan. The row matching shared by the boolean and
+// host-collecting parsers.
+func scanProcSocketRows(r io.Reader, port int, states map[string]bool, found func(hostHex string) bool) error {
 	sc := bufio.NewScanner(r)
 	for sc.Scan() {
 		fields := strings.Fields(sc.Text())
@@ -435,12 +410,37 @@ func parseProcSocketTableHosts(r io.Reader, port int, states map[string]bool, ip
 		if err != nil || int(got) != port {
 			continue
 		}
-		host, ok := procSocketHost(hostHex, ipv6)
-		if ok {
-			hosts = append(hosts, host)
+		if !found(hostHex) {
+			return nil
 		}
 	}
-	return appendUniqueStrings(nil, hosts...), sc.Err()
+	if err := sc.Err(); err != nil {
+		return fmt.Errorf("read proc socket table: %w", err)
+	}
+	return nil
+}
+
+func parseProcSocketTable(r io.Reader, port int, states map[string]bool) (bool, error) {
+	matched := false
+	err := scanProcSocketRows(r, port, states, func(string) bool {
+		matched = true
+		return false
+	})
+	if err != nil {
+		return false, err
+	}
+	return matched, nil
+}
+
+func parseProcSocketTableHosts(r io.Reader, port int, states map[string]bool, ipv6 bool) ([]string, error) {
+	var hosts []string
+	err := scanProcSocketRows(r, port, states, func(hostHex string) bool {
+		if host, ok := procSocketHost(hostHex, ipv6); ok {
+			hosts = append(hosts, host)
+		}
+		return true
+	})
+	return appendUniqueStrings(nil, hosts...), err
 }
 
 func procSocketHost(hexAddr string, ipv6 bool) (string, bool) {
@@ -541,19 +541,7 @@ func (a App) writeWizardServices(p *assist.Prompt, opts options, globalPath stri
 		}
 		deletes = append(deletes, more...)
 	}
-	if err := deleteWizardConfigFiles(deletes); err != nil {
-		return a.fail(opts, err.Error())
-	}
-
-	dir, written, err := writeServiceFiles(globalPath, docs)
-	if err != nil {
-		return a.fail(opts, err.Error())
-	}
-	if len(deletes) > 0 {
-		fmt.Fprintf(a.Stdout, "Deleted %d stale service file(s).\n", len(deletes))
-	}
-	fmt.Fprintf(a.Stdout, "Wrote %d service file(s) under %s. Run `sermoctl daemon reload` to apply.\n", written, dir)
-	return exitSuccess
+	return a.finishWizardWrite(opts, globalPath, "service", deletes, docs, writeServiceFiles)
 }
 
 func serviceCleanupDirs(globalPath string, _ *config.Config) []string {

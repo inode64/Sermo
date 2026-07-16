@@ -222,12 +222,7 @@ func assertIndexShellTable(t *testing.T, headers map[string]bool, dialogs int) {
 }
 
 func TestSourceProvidesGlobalTargetSearch(t *testing.T) {
-	src, err := os.ReadFile("src/app.js")
-	if err != nil {
-		t.Fatalf("read src/app.js: %v", err)
-	}
-	text := string(src)
-	for _, marker := range []string{
+	appJSMustContain(t, "global target search",
 		`function globalTargetRecords()`,
 		`function clearGlobalTargetFilters(target)`,
 		`function openGlobalTarget(target)`,
@@ -236,11 +231,7 @@ func TestSourceProvidesGlobalTargetSearch(t *testing.T) {
 		`record.value.toLowerCase().includes(query)`,
 		`e.key.toLowerCase() === "k"`,
 		`id="mount-row-${detailDomKey(m.name || m.path || "mount")}"`,
-	} {
-		if !strings.Contains(text, marker) {
-			t.Errorf("source missing global target search marker %q", marker)
-		}
-	}
+	)
 }
 
 func TestEventFiltersUseGuidedSelects(t *testing.T) {
@@ -359,34 +350,59 @@ func hasDescendantAttr(root *html.Node, atomName atom.Atom, key, value string) b
 	return found
 }
 
-func bundledScript(t *testing.T) string {
+// bundledNode returns the text of the last matching inline element (script or
+// style) in the built index document, failing when none is present.
+func bundledNode(t *testing.T, a atom.Atom, what string) string {
 	t.Helper()
 	doc, _ := parsedIndex(t)
-	var script string
+	var text string
 	walk(doc, func(n *html.Node) {
-		if n.Type == html.ElementNode && n.DataAtom == atom.Script && n.FirstChild != nil {
-			script = n.FirstChild.Data
+		if n.Type == html.ElementNode && n.DataAtom == a && n.FirstChild != nil {
+			text = n.FirstChild.Data
 		}
 	})
-	if script == "" {
-		t.Fatal("bundled script missing")
+	if text == "" {
+		t.Fatalf("bundled %s missing", what)
 	}
-	return script
+	return text
+}
+
+func bundledScript(t *testing.T) string {
+	t.Helper()
+	return bundledNode(t, atom.Script, "script")
 }
 
 func bundledCSS(t *testing.T) string {
 	t.Helper()
-	doc, _ := parsedIndex(t)
-	var css string
-	walk(doc, func(n *html.Node) {
-		if n.Type == html.ElementNode && n.DataAtom == atom.Style && n.FirstChild != nil {
-			css = n.FirstChild.Data
-		}
-	})
-	if css == "" {
-		t.Fatal("bundled style missing")
+	return bundledNode(t, atom.Style, "style")
+}
+
+// appJSMustContain reads src/app.js once and asserts every marker is present,
+// labelling failures with what.
+func appJSMustContain(t *testing.T, what string, markers ...string) {
+	t.Helper()
+	src, err := os.ReadFile("src/app.js")
+	if err != nil {
+		t.Fatalf("read src/app.js: %v", err)
 	}
-	return css
+	text := string(src)
+	for _, marker := range markers {
+		if !strings.Contains(text, marker) {
+			t.Errorf("source missing %s marker %q", what, marker)
+		}
+	}
+}
+
+// cssBundleMustContain asserts every needle appears in the space-stripped CSS
+// bundle, labelling failures with what.
+func cssBundleMustContain(t *testing.T, what string, needles ...string) {
+	t.Helper()
+	css := strings.ReplaceAll(bundledCSS(t), " ", "")
+	for _, needle := range needles {
+		if !strings.Contains(css, needle) {
+			t.Errorf("bundled CSS missing %s marker %q", what, needle)
+		}
+	}
 }
 
 func TestSourceLoadDefersWatchesWithoutStaleFastPathReference(t *testing.T) {
@@ -432,22 +448,13 @@ func TestSourceLoadReportsPartialRefreshBeforeAdvancingFreshness(t *testing.T) {
 }
 
 func TestSourceRendersBackendCacheObservationTimes(t *testing.T) {
-	src, err := os.ReadFile("src/app.js")
-	if err != nil {
-		t.Fatalf("read src/app.js: %v", err)
-	}
-	text := string(src)
-	for _, needle := range []string{
+	appJSMustContain(t, "cache-observation",
 		"s.status_observed_at",
 		"a.observed_at",
 		"w.observed_at",
 		"renderSLATimeline(w.segments, w.window, w.observed_at)",
 		"const sampledMs = Date.parse(observedAt)",
-	} {
-		if !strings.Contains(text, needle) {
-			t.Errorf("source missing cache-observation marker %q", needle)
-		}
-	}
+	)
 }
 
 func TestSourceFullyRefreshesExpandedServicesEveryDashboardPoll(t *testing.T) {
@@ -511,21 +518,11 @@ func TestSourceSerializesDashboardRefreshes(t *testing.T) {
 }
 
 func TestSourceUsesDashboardSnapshotWithGranularFallback(t *testing.T) {
-	src, err := os.ReadFile("src/app.js")
-	if err != nil {
-		t.Fatalf("read src/app.js: %v", err)
-	}
-	text := string(src)
-	for _, marker := range []string{
+	appJSMustContain(t, "aggregate-dashboard",
 		"getJSONResult(dashboardAPI(daemonMetricWindow), null)",
 		"if (aggregate.ok)",
 		`getJSONResult(apiServicesPath, null)`,
-		`snapshotResult(snapshot, "host_metrics", [])`,
-	} {
-		if !strings.Contains(text, marker) {
-			t.Errorf("source missing aggregate-dashboard marker %q", marker)
-		}
-	}
+		`snapshotResult(snapshot, "host_metrics", [])`)
 }
 
 func TestSourceMetricChartRendersZeroValuedSeries(t *testing.T) {
@@ -578,18 +575,13 @@ func TestSourceKeepsMetricSelectionPerService(t *testing.T) {
 // TestIndexAccessibilityTargetSize pins WCAG 2.5.8 minimum hit targets in the
 // committed CSS bundle (row toggles, table action buttons, event more/less).
 func TestIndexAccessibilityTargetSize(t *testing.T) {
-	css := strings.ReplaceAll(bundledCSS(t), " ", "")
-	for _, needle := range []string{
+	cssBundleMustContain(t, "target-size",
 		".row-toggle{",
 		"min-height:24px",
 		"min-width:24px",
 		".event-msgbutton{",
 		".actionsbutton{",
-	} {
-		if !strings.Contains(css, needle) {
-			t.Errorf("bundled CSS missing target-size marker %q", needle)
-		}
-	}
+	)
 }
 
 // TestIndexAccessibilityForcedColors pins the Windows High Contrast Mode
@@ -597,16 +589,11 @@ func TestIndexAccessibilityTargetSize(t *testing.T) {
 // width/segments must opt out of color flattening and keep a visible track
 // border so they stay perceivable when author backgrounds collapse.
 func TestIndexAccessibilityForcedColors(t *testing.T) {
-	css := strings.ReplaceAll(bundledCSS(t), " ", "")
-	for _, needle := range []string{
+	cssBundleMustContain(t, "forced-colors",
 		"@media(forced-colors:active)",
 		"forced-color-adjust:none",
 		"1pxsolidCanvasText",
-	} {
-		if !strings.Contains(css, needle) {
-			t.Errorf("bundled CSS missing forced-colors marker %q", needle)
-		}
-	}
+	)
 }
 
 func TestIndexWatchReadingLongValuesWrap(t *testing.T) {
@@ -682,21 +669,11 @@ func TestIndexServiceActionsUseSinglePowerButton(t *testing.T) {
 }
 
 func TestSourceCompactsRowActionsWithoutChangingDispatch(t *testing.T) {
-	src, err := os.ReadFile("src/app.js")
-	if err != nil {
-		t.Fatalf("read src/app.js: %v", err)
-	}
-	text := string(src)
-	for _, marker := range []string{
+	appJSMustContain(t, "compact action",
 		`data-service-action="${action}"`,
 		`data-watch-action="${action}"`,
 		`data-mount-action="${actionUmount}"`,
-		`act(serviceAction.dataset.service || "", serviceAction.dataset.serviceAction || "")`,
-	} {
-		if !strings.Contains(text, marker) {
-			t.Errorf("source missing compact action marker %q", marker)
-		}
-	}
+		`act(serviceAction.dataset.service || "", serviceAction.dataset.serviceAction || "")`)
 }
 
 // TestIndexAccessibilitySectionHeadings pins the per-section <h2> headings that

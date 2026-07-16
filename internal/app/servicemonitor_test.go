@@ -90,25 +90,31 @@ func TestVersionMonitor(t *testing.T) {
 	}
 }
 
-func TestVersionMonitorPreservesCommandUser(t *testing.T) {
+// assertMonitorPreservesCommandUser builds a change monitor from tree via build
+// and asserts the underlying command check ran as user postgres with wantArg.
+func assertMonitorPreservesCommandUser(t *testing.T, tree map[string]any, build func(string, map[string]any, Deps, time.Duration) (*Watch, string), wantArg string) {
+	t.Helper()
 	runner := &monitorUserRunner{}
-	tree := map[string]any{
-		"commands": map[string]any{"version": map[string]any{"command": []any{"postgres", "--version"}, "user": "postgres"}},
-		"version":  map[string]any{"on_change": map[string]any{"notify": []any{"ops"}}},
-	}
 	deps := monitorTestDeps()
 	deps.ExecxRunner = runner
 
-	w, warn := versionMonitor("postgres", tree, deps, time.Minute)
+	w, warn := build("postgres", tree, deps, time.Minute)
 	if warn != "" || w == nil {
 		t.Fatalf("warn=%q w=%v", warn, w)
 	}
 	if res := w.Check.Run(context.Background()); !res.OK {
-		t.Fatalf("version monitor check should pass: %s", res.Message)
+		t.Fatalf("monitor check should pass: %s", res.Message)
 	}
-	if runner.user != "postgres" || runner.name != "postgres" || len(runner.args) != 1 || runner.args[0] != "--version" {
+	if runner.user != "postgres" || runner.name != "postgres" || len(runner.args) != 1 || runner.args[0] != wantArg {
 		t.Fatalf("RunUser call = user=%q name=%q args=%v", runner.user, runner.name, runner.args)
 	}
+}
+
+func TestVersionMonitorPreservesCommandUser(t *testing.T) {
+	assertMonitorPreservesCommandUser(t, map[string]any{
+		"commands": map[string]any{"version": map[string]any{"command": []any{"postgres", "--version"}, "user": "postgres"}},
+		"version":  map[string]any{"on_change": map[string]any{"notify": []any{"ops"}}},
+	}, versionMonitor, "--version")
 }
 
 func TestVersionMonitorLevel(t *testing.T) {
@@ -188,24 +194,10 @@ func TestConfigMonitor(t *testing.T) {
 }
 
 func TestConfigMonitorPreservesCommandUser(t *testing.T) {
-	runner := &monitorUserRunner{}
-	tree := map[string]any{
+	assertMonitorPreservesCommandUser(t, map[string]any{
 		"preflight": map[string]any{"config": map[string]any{"type": "command", "command": []any{"postgres", "--check"}, "user": "postgres"}},
 		"config":    map[string]any{"on_change": map[string]any{"notify": []any{"ops"}}},
-	}
-	deps := monitorTestDeps()
-	deps.ExecxRunner = runner
-
-	w, warn := configMonitor("postgres", tree, deps, time.Minute)
-	if warn != "" || w == nil {
-		t.Fatalf("warn=%q w=%v", warn, w)
-	}
-	if res := w.Check.Run(context.Background()); !res.OK {
-		t.Fatalf("config monitor check should pass: %s", res.Message)
-	}
-	if runner.user != "postgres" || runner.name != "postgres" || len(runner.args) != 1 || runner.args[0] != "--check" {
-		t.Fatalf("RunUser call = user=%q name=%q args=%v", runner.user, runner.name, runner.args)
-	}
+	}, configMonitor, "--check")
 }
 
 func TestServiceChangeMonitorsInheritDryRun(t *testing.T) {

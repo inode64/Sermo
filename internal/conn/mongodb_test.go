@@ -2,10 +2,7 @@ package conn
 
 import (
 	"context"
-	"net"
-	"strconv"
 	"testing"
-	"time"
 )
 
 func TestMongoRole(t *testing.T) {
@@ -40,18 +37,5 @@ func TestMongoConnectBuilds(t *testing.T) {
 }
 
 func TestMongoProbeUnreachable(t *testing.T) {
-	// Grab a port then close it so the address is guaranteed refused.
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, portStr, _ := net.SplitHostPort(ln.Addr().String())
-	_ = ln.Close()
-	port, _ := strconv.Atoi(portStr)
-
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer cancel()
-	if _, err := (mongodbProtocol{}).Probe(ctx, Config{Host: "127.0.0.1", Port: port}); err == nil {
-		t.Fatal("probing an unreachable MongoDB must error")
-	}
+	assertProbeRefused(t, mongodbProtocol{}, deadPort(t))
 }

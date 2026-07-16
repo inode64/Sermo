@@ -34,15 +34,24 @@ func testEnvWithDefaultNotify() Env {
 	return env
 }
 
+// runAssistant drives assistant a with the newline-joined script steps against
+// env and returns the result plus captured output.
+func runAssistant(t *testing.T, a Assistant, env Env, steps ...string) (Result, string) {
+	t.Helper()
+	var out strings.Builder
+	p := NewPrompt(strings.NewReader(strings.Join(steps, "\n")+"\n"), &out)
+	res, err := a.Run(p, env)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	return res, out.String()
+}
+
 // runVolumeAssistant drives the volume wizard with the newline-joined script
 // steps against env and returns the produced watch entry.
 func runVolumeAssistant(t *testing.T, env Env, watch string, steps ...string) map[string]any {
 	t.Helper()
-	p := NewPrompt(strings.NewReader(strings.Join(steps, "\n")+"\n"), &strings.Builder{})
-	res, err := volumeAssistant{}.Run(p, env)
-	if err != nil {
-		t.Fatalf("Run: %v", err)
-	}
+	res, _ := runAssistant(t, volumeAssistant{}, env, steps...)
 	entry, ok := res.Watches[watch].(map[string]any)
 	if !ok {
 		t.Fatalf("expected watch %s, got %v", watch, res.Watches)

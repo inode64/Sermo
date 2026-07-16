@@ -1,10 +1,8 @@
 package conn
 
 import (
-	"context"
 	"fmt"
 	"net"
-	"strconv"
 	"testing"
 )
 
@@ -29,45 +27,17 @@ func TestVarnishVersion(t *testing.T) {
 // serveVarnish writes a single CLI response (status + body) and closes.
 func serveVarnish(t *testing.T, status int, body string) int {
 	t.Helper()
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = ln.Close() })
-	go func() {
-		c, err := ln.Accept()
-		if err != nil {
-			return
-		}
-		defer func() { _ = c.Close() }()
+	return serveOnce(t, func(c net.Conn) {
 		_, _ = fmt.Fprintf(c, "%-3d %-8d\n%s\n", status, len(body), body)
-	}()
-	_, portStr, _ := net.SplitHostPort(ln.Addr().String())
-	port, _ := strconv.Atoi(portStr)
-	return port
+	})
 }
 
 func TestVarnishProbeBanner(t *testing.T) {
 	port := serveVarnish(t, 200, "Varnish Cache CLI 1.0\nvarnish-7.4.1 revision abcdef\n\nType 'help' for command list.")
-	res, err := varnishProtocol{}.Probe(context.Background(), Config{Host: "127.0.0.1", Port: port})
-	if err != nil {
-		t.Fatalf("probe: %v", err)
-	}
-	if res.Version != "7.4.1" {
-		t.Fatalf("version = %q, want 7.4.1", res.Version)
-	}
-	if res.Extra["cli_status"] != "200" {
-		t.Fatalf("cli_status = %q", res.Extra["cli_status"])
-	}
+	assertProbeVersion(t, varnishProtocol{}, port, "7.4.1", "cli_status", "200")
 }
 
 func TestVarnishProbeAuthChallenge(t *testing.T) {
 	port := serveVarnish(t, 107, "ixslvvxrgkjptxmcgnnsdxsvdmvfympg\n\nAuthentication required.")
-	res, err := varnishProtocol{}.Probe(context.Background(), Config{Host: "127.0.0.1", Port: port})
-	if err != nil {
-		t.Fatalf("probe: %v", err)
-	}
-	if res.Extra["cli_status"] != "107" || res.Extra["auth_required"] != "true" {
-		t.Fatalf("extra = %v", res.Extra)
-	}
+	assertProbeExtras(t, varnishProtocol{}, port, map[string]string{"cli_status": "107", "auth_required": "true"})
 }

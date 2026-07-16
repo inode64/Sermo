@@ -1,7 +1,6 @@
 package conn
 
 import (
-	"context"
 	"encoding/binary"
 	"io"
 	"net"
@@ -107,28 +106,11 @@ func TestParseRPCReply(t *testing.T) {
 }
 
 func TestRpcbindProbeAgainstFakeServer(t *testing.T) {
-	pc, err := net.ListenPacket("udp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = pc.Close() }()
-	go func() {
-		buf := make([]byte, 1500)
-		n, addr, err := pc.ReadFrom(buf)
-		if err != nil || n < 4 {
-			return
+	port := serveUDPOnce(t, func(req []byte) []byte {
+		if len(req) < 4 {
+			return nil
 		}
-		xid := binary.BigEndian.Uint32(buf[0:4])
-		_, _ = pc.WriteTo(rpcAcceptedReply(xid, 0), addr)
-	}()
-
-	_, portStr, _ := net.SplitHostPort(pc.LocalAddr().String())
-	port, _ := strconv.Atoi(portStr)
-	res, err := rpcbindProtocol{}.Probe(context.Background(), Config{Host: "127.0.0.1", Port: port})
-	if err != nil {
-		t.Fatalf("probe: %v", err)
-	}
-	if res.Extra["rpc_status"] != "success" {
-		t.Fatalf("rpc_status = %q", res.Extra["rpc_status"])
-	}
+		return rpcAcceptedReply(binary.BigEndian.Uint32(req[0:4]), 0)
+	})
+	assertProbeExtra(t, rpcbindProtocol{}, port, "rpc_status", "success")
 }

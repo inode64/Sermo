@@ -3,7 +3,6 @@ package conn
 import (
 	"context"
 	"net"
-	"strconv"
 	"strings"
 	"testing"
 )
@@ -22,27 +21,14 @@ func TestClamdVersion(t *testing.T) {
 }
 
 func TestClamdProbeAgainstFakeServer(t *testing.T) {
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = ln.Close() }()
-	go func() {
-		c, err := ln.Accept()
-		if err != nil {
-			return
-		}
-		defer func() { _ = c.Close() }()
+	port := serveOnce(t, func(c net.Conn) {
 		buf := make([]byte, 64)
 		n, _ := c.Read(buf)
 		if !strings.Contains(string(buf[:n]), "VERSION") {
 			return
 		}
 		_, _ = c.Write([]byte("ClamAV 0.103.8/26900/Wed Mar 15 10:30:00 2023\n"))
-	}()
-
-	_, portStr, _ := net.SplitHostPort(ln.Addr().String())
-	port, _ := strconv.Atoi(portStr)
+	})
 	res, err := clamdProtocol{}.Probe(context.Background(), Config{Host: "127.0.0.1", Port: port})
 	if err != nil {
 		t.Fatalf("probe: %v", err)

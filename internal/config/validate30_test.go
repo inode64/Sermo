@@ -20,6 +20,17 @@ func validateService(t *testing.T, serviceYAML string) []Issue {
 	return Validate(cfg)
 }
 
+// validateGlobalDoc loads a config from a single sermo.yml document and returns
+// its validation issues.
+func validateGlobalDoc(t *testing.T, sermoYAML string) []Issue {
+	t.Helper()
+	cfg, err := loadConfig(t, writeConfig(t, map[string]string{"sermo.yml": sermoYAML}))
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	return Validate(cfg)
+}
+
 func mustHave(t *testing.T, issues []Issue, substr string) {
 	t.Helper()
 	if !hasIssue(issues, substr) {
@@ -27,8 +38,41 @@ func mustHave(t *testing.T, issues []Issue, substr string) {
 	}
 }
 
+// mustNotHave fails if any issue message contains substr.
+func mustNotHave(t *testing.T, issues []Issue, substr string) {
+	t.Helper()
+	for _, is := range issues {
+		if strings.Contains(is.Msg, substr) {
+			t.Fatalf("unexpected issue %q in %v", substr, issues)
+		}
+	}
+}
+
+// assertServiceValidationTokens validates goodYAML and asserts none of its
+// issues mention any goodToken, then validates badYAML and asserts every want
+// appears in some issue.
+func assertServiceValidationTokens(t *testing.T, goodYAML string, goodTokens []string, badYAML string, want ...string) {
+	t.Helper()
+	good := validateService(t, goodYAML)
+	for _, tok := range goodTokens {
+		mustNotHave(t, good, tok)
+	}
+	bad := validateService(t, badYAML)
+	for _, w := range want {
+		mustHave(t, bad, w)
+	}
+}
+
+// assertServiceValidation validates goodYAML and asserts none of its issues
+// mention goodToken, then validates badYAML and asserts every want appears in
+// some issue.
+func assertServiceValidation(t *testing.T, goodYAML, goodToken, badYAML string, want ...string) {
+	t.Helper()
+	assertServiceValidationTokens(t, goodYAML, []string{goodToken}, badYAML, want...)
+}
+
 func TestValidateEngineDurations(t *testing.T) {
-	global := writeConfig(t, map[string]string{"sermo.yml": `
+	issues := validateGlobalDoc(t, `
 engine:
   interval: notaduration
   default_timeout: 0s
@@ -41,12 +85,7 @@ paths:
   services: [ @ROOT@/services ]
 defaults:
   policy: { cooldown: 5m }
-`})
-	cfg, err := loadConfig(t, global)
-	if err != nil {
-		t.Fatal(err)
-	}
-	issues := Validate(cfg)
+`)
 	for _, want := range []string{
 		"engine.interval",
 		"engine.default_timeout",
@@ -101,33 +140,22 @@ policy:
   cooldown: 5m
   backoff: { initial: 5s, max: 1m }
 `)
-	if hasIssue(ok, "backoff") {
-		t.Fatalf("valid backoff flagged: %v", ok)
-	}
+	mustNotHave(t, ok, "backoff")
 }
 
 func TestValidateEngineOperationTimeoutAcceptsPositive(t *testing.T) {
-	global := writeConfig(t, map[string]string{"sermo.yml": `
+	mustNotHave(t, validateGlobalDoc(t, `
 engine:
   operation_timeout: 90s
 paths:
   services: [ @ROOT@/services ]
 defaults:
   policy: { cooldown: 5m }
-`})
-	cfg, err := loadConfig(t, global)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, is := range Validate(cfg) {
-		if strings.Contains(is.Msg, "operation_timeout") {
-			t.Fatalf("unexpected issue: %v", is)
-		}
-	}
+`), "operation_timeout")
 }
 
 func TestValidateEngineLogPaths(t *testing.T) {
-	global := writeConfig(t, map[string]string{"sermo.yml": `
+	issues := validateGlobalDoc(t, `
 engine:
   access: relative.log
   events: /var/log/sermo/event.log
@@ -136,18 +164,13 @@ paths:
   services: [ @ROOT@/services ]
 defaults:
   policy: { cooldown: 5m }
-`})
-	cfg, err := loadConfig(t, global)
-	if err != nil {
-		t.Fatal(err)
-	}
-	issues := Validate(cfg)
+`)
 	mustHave(t, issues, "engine.access")
 	mustHave(t, issues, "engine.diagnostics_interval")
 }
 
 func TestValidateEngineUserLookup(t *testing.T) {
-	global := writeConfig(t, map[string]string{"sermo.yml": `
+	issues := validateGlobalDoc(t, `
 engine:
   user_lookup: ldap
   user_lookup_timeout: 0s
@@ -155,12 +178,7 @@ paths:
   services: [ @ROOT@/services ]
 defaults:
   policy: { cooldown: 5m }
-`})
-	cfg, err := loadConfig(t, global)
-	if err != nil {
-		t.Fatal(err)
-	}
-	issues := Validate(cfg)
+`)
 	mustHave(t, issues, "engine.user_lookup")
 	mustHave(t, issues, "engine.user_lookup_timeout")
 }
@@ -168,24 +186,15 @@ defaults:
 func TestValidateEngineUserLookupAcceptsDocumentedModes(t *testing.T) {
 	for _, mode := range []string{"auto", "native", "getent", "numeric"} {
 		t.Run(mode, func(t *testing.T) {
-			global := writeConfig(t, map[string]string{"sermo.yml": `
+			mustNotHave(t, validateGlobalDoc(t, `
 engine:
-  user_lookup: ` + mode + `
+  user_lookup: `+mode+`
   user_lookup_timeout: 250ms
 paths:
   services: [ @ROOT@/services ]
 defaults:
   policy: { cooldown: 5m }
-`})
-			cfg, err := loadConfig(t, global)
-			if err != nil {
-				t.Fatal(err)
-			}
-			for _, is := range Validate(cfg) {
-				if strings.Contains(is.Msg, "user_lookup") {
-					t.Fatalf("unexpected issue for %s: %v", mode, is)
-				}
-			}
+`), "user_lookup")
 		})
 	}
 }
@@ -199,9 +208,7 @@ control:
   uuid: 2b3f3d26-bb45-4b25-b65a-1e3ef86fc1a4
   socket: /run/libvirt/libvirt-sock
 `)
-	if hasIssue(valid, "control") {
-		t.Fatalf("valid libvirt control got issues: %v", valid)
-	}
+	mustNotHave(t, valid, "control")
 
 	mustHave(t, validateService(t, `
 name: svc
@@ -233,9 +240,7 @@ control:
   container: web
   socket: /run/docker.sock
 `)
-	if hasIssue(valid, "control") {
-		t.Fatalf("valid docker control got issues: %v", valid)
-	}
+	mustNotHave(t, valid, "control")
 
 	validTCP := validateService(t, `
 name: svc
@@ -246,9 +251,7 @@ control:
   port: 2376
   tls: skip-verify
 `)
-	if hasIssue(validTCP, "control") {
-		t.Fatalf("valid docker TCP control got issues: %v", validTCP)
-	}
+	mustNotHave(t, validTCP, "control")
 
 	mustHave(t, validateService(t, `
 name: svc
@@ -354,11 +357,7 @@ rules:
         - { type: explode }
 `)
 	// The valid multi-action rule must not be flagged.
-	for _, is := range issues {
-		if strings.Contains(is.Msg, "ok-multi") {
-			t.Fatalf("valid multi-action rule wrongly flagged: %v", is)
-		}
-	}
+	mustNotHave(t, issues, "ok-multi")
 	mustHave(t, issues, "action alert requires a non-empty message")
 	mustHave(t, issues, `then.action "explode" is not one of`)
 }
@@ -424,9 +423,9 @@ rules:
     within: { duration: 30m, min_matches: 3 }
     then: { action: alert, message: "http down" }
 `)
-	if hasIssue(issues, "duration") || hasIssue(issues, "rules.restart-after-duration") || hasIssue(issues, "rules.alert-within-duration") {
-		t.Fatalf("valid duration windows flagged: %v", issues)
-	}
+	mustNotHave(t, issues, "duration")
+	mustNotHave(t, issues, "rules.restart-after-duration")
+	mustNotHave(t, issues, "rules.alert-within-duration")
 }
 
 func TestValidateUnknownCheckReference(t *testing.T) {
@@ -513,11 +512,7 @@ rules:
 `)
 	mustHave(t, issues, "rules.bad-http.if.failed.http.url is required for an http check")
 	mustHave(t, issues, "rules.bad-shape.if.active.tcp must be a mapping")
-	for _, is := range issues {
-		if strings.Contains(is.Msg, "ok-http") {
-			t.Fatalf("valid inline http probe wrongly flagged: %v", is)
-		}
-	}
+	mustNotHave(t, issues, "ok-http")
 }
 
 // TestValidateExpectStatusShapes documents that scalar and list expect_status
@@ -536,9 +531,7 @@ checks:
 	}
 	// Valid shapes produce no expect_status issue.
 	for _, ok := range []string{`200`, `"2xx"`, `[200, "3xx"]`, `{op: "<", value: 500}`} {
-		if hasIssue(check(ok), "expect_status") {
-			t.Fatalf("valid expect_status %q wrongly flagged", ok)
-		}
+		mustNotHave(t, check(ok), "expect_status")
 	}
 	// Invalid scalar and invalid list element are caught via the scalar walk.
 	mustHave(t, check(`999nope`), "expect_status")
@@ -560,11 +553,7 @@ rules:
     then: { action: alert, message: m }
 `)
 	mustHave(t, issues, `rules.bad-mysql.if.failed.mysql.port "70000" must be an integer in 1..65535`)
-	for _, is := range issues {
-		if strings.Contains(is.Msg, "ok-mysql") {
-			t.Fatalf("valid inline mysql probe wrongly flagged: %v", is)
-		}
-	}
+	mustNotHave(t, issues, "ok-mysql")
 }
 
 func TestValidateSystemMetricOnlyInAlert(t *testing.T) {
@@ -856,9 +845,7 @@ checks:
     delta: { op: ">", value: 20 }
     within: 2m
 `)
-	if hasIssue(good, "count") {
-		t.Fatalf("valid count check flagged: %v", good)
-	}
+	mustNotHave(t, good, "count")
 }
 
 func TestValidateResourceChecksAsServiceChecks(t *testing.T) {
@@ -894,9 +881,8 @@ checks:
   data: { type: storage, path: /data, used_pct: { op: ">=", value: 90 }, mounted: true }
   mountonly: { type: storage, path: /srv, mounted: true }
 `)
-	if hasIssue(good, "checks.data") || hasIssue(good, "checks.mountonly") {
-		t.Fatalf("valid storage+mount checks flagged: %v", good)
-	}
+	mustNotHave(t, good, "checks.data")
+	mustNotHave(t, good, "checks.mountonly")
 
 	bad := validateService(t, `
 name: svc
@@ -928,40 +914,30 @@ checks:
 }
 
 func TestValidateCheckInterval(t *testing.T) {
-	good := validateService(t, `
+	assertServiceValidation(t, `
 name: svc
 service: x
 policy: { cooldown: 5m }
 checks:
   http: { type: http, url: "http://x/health", interval: 30m }
-`)
-	if hasIssue(good, "interval") {
-		t.Fatalf("a valid per-check interval was flagged: %v", good)
-	}
-
-	bad := validateService(t, `
+`, "interval", `
 name: svc
 service: x
 policy: { cooldown: 5m }
 checks:
   http: { type: http, url: "http://x/health", interval: soon }
-`)
-	mustHave(t, bad, `checks.http.interval "soon" must be a valid positive duration`)
+`,
+		`checks.http.interval "soon" must be a valid positive duration`)
 }
 
 func TestValidateCertCheck(t *testing.T) {
-	good := validateService(t, `
+	assertServiceValidation(t, `
 name: svc
 service: x
 policy: { cooldown: 5m }
 checks:
   api: { type: cert, host: api.example.com, port: 443, expires_in_days: 14, on_algorithm_change: true, cert_verify: true }
-`)
-	if hasIssue(good, "checks.api") {
-		t.Fatalf("a valid cert check was flagged: %v", good)
-	}
-
-	bad := validateService(t, `
+`, "checks.api", `
 name: svc
 service: x
 policy: { cooldown: 5m }
@@ -970,40 +946,35 @@ checks:
   bad-days: { type: cert, host: x, expires_in_days: 0 }
   bad-port: { type: cert, host: x, port: 70000 }
   bad-bool: { type: cert, host: x, cert_verify: "yes" }
-`)
-	mustHave(t, bad, "checks.no-host requires a host or a path")
-	mustHave(t, bad, "checks.bad-days.expires_in_days must be a positive integer")
-	mustHave(t, bad, "checks.bad-port.port must be an integer in 1..65535")
-	mustHave(t, bad, "checks.bad-bool.cert_verify must be a boolean")
+`,
+		"checks.no-host requires a host or a path",
+		"checks.bad-days.expires_in_days must be a positive integer",
+		"checks.bad-port.port must be an integer in 1..65535",
+		"checks.bad-bool.cert_verify must be a boolean")
 }
 
 func TestValidateVerifyFlag(t *testing.T) {
 	// verify: true on a health check (http) is valid.
-	good := validateService(t, `
+	assertServiceValidation(t, `
 name: svc
 service: x
 policy: { cooldown: 5m }
 checks:
   http: { type: http, url: "http://x/", verify: true }
-`)
-	if hasIssue(good, "checks.http") {
-		t.Fatalf("verify:true on a health check was flagged: %v", good)
-	}
-
-	bad := validateService(t, `
+`, "checks.http", `
 name: svc
 service: x
 policy: { cooldown: 5m }
 checks:
   cond: { type: memory, used_pct: { op: ">", value: 90 }, verify: true }
   notbool: { type: http, url: "http://x/", verify: "yes" }
-`)
-	mustHave(t, bad, "checks.cond.verify is only valid on a health check")
-	mustHave(t, bad, "checks.notbool.verify must be a boolean")
+`,
+		"checks.cond.verify is only valid on a health check",
+		"checks.notbool.verify must be a boolean")
 }
 
 func TestValidateHTTPFields(t *testing.T) {
-	good := validateService(t, `
+	assertServiceValidation(t, `
 name: svc
 service: x
 policy: { cooldown: 5m }
@@ -1017,12 +988,7 @@ checks:
     expect_status: 200
     expect_json: { status: ok }
     expect_body: { op: contains, value: ok }
-`)
-	if hasIssue(good, "checks.api") {
-		t.Fatalf("a valid http check was flagged: %v", good)
-	}
-
-	bad := validateService(t, `
+`, "checks.api", `
 name: svc
 service: x
 policy: { cooldown: 5m }
@@ -1031,26 +997,21 @@ checks:
   bad-headers: { type: http, url: "http://x", headers: "nope" }
   bad-json: { type: http, url: "http://x", expect_json: "nope" }
   bad-op: { type: http, url: "http://x", expect_json: { n: { op: "=>", value: 1 } } }
-`)
-	mustHave(t, bad, "checks.no-url.url is required for an http check")
-	mustHave(t, bad, "checks.bad-headers.headers must be a mapping")
-	mustHave(t, bad, "checks.bad-json.expect_json must be a mapping")
-	mustHave(t, bad, "checks.bad-op.expect_json.n op \"=>\" is not one of")
+`,
+		"checks.no-url.url is required for an http check",
+		"checks.bad-headers.headers must be a mapping",
+		"checks.bad-json.expect_json must be a mapping",
+		"checks.bad-op.expect_json.n op \"=>\" is not one of")
 }
 
 func TestValidatePortsCheck(t *testing.T) {
-	good := validateService(t, `
+	assertServiceValidation(t, `
 name: svc
 service: x
 policy: { cooldown: 5m }
 checks:
   scan: { type: ports, host: 127.0.0.1, ports: "80,443,1024-4000", expect: open, match: any, on_change: true, connect_timeout: 500ms }
-`)
-	if hasIssue(good, "checks.scan") {
-		t.Fatalf("a valid ports check was flagged: %v", good)
-	}
-
-	bad := validateService(t, `
+`, "checks.scan", `
 name: svc
 service: x
 policy: { cooldown: 5m }
@@ -1062,30 +1023,25 @@ checks:
   bad-expect: { type: ports, ports: "80", expect: weird }
   bad-match:  { type: ports, ports: "80", match: most }
   bad-timeout: { type: ports, ports: "80", connect_timeout: fast }
-`)
-	mustHave(t, bad, "checks.no-ports.ports is required")
-	mustHave(t, bad, `checks.bad-range.ports range "100-50" is out of 1..65535`)
-	mustHave(t, bad, `checks.bad-port.ports range "70000" is out of 1..65535`)
-	mustHave(t, bad, "checks.too-many.ports too many ports")
-	mustHave(t, bad, "checks.bad-expect.expect must be open, closed or any")
-	mustHave(t, bad, "checks.bad-match.match must be all, any or none")
-	mustHave(t, bad, "checks.bad-timeout.connect_timeout must be a valid positive duration")
+`,
+		"checks.no-ports.ports is required",
+		`checks.bad-range.ports range "100-50" is out of 1..65535`,
+		`checks.bad-port.ports range "70000" is out of 1..65535`,
+		"checks.too-many.ports too many ports",
+		"checks.bad-expect.expect must be open, closed or any",
+		"checks.bad-match.match must be all, any or none",
+		"checks.bad-timeout.connect_timeout must be a valid positive duration")
 }
 
 func TestValidateCheckGate(t *testing.T) {
-	good := validateService(t, `
+	assertServiceValidation(t, `
 name: svc
 service: x
 policy: { cooldown: 5m }
 checks:
   tcp:   { type: tcp, host: 127.0.0.1, port: 3306 }
   query: { type: command, command: ["/bin/true"], requires: [tcp], skip_when_changed: ["/etc/my.cnf"] }
-`)
-	if hasIssue(good, "checks.query") {
-		t.Fatalf("a valid gated check was flagged: %v", good)
-	}
-
-	bad := validateService(t, `
+`, "checks.query", `
 name: svc
 service: x
 policy: { cooldown: 5m }
@@ -1096,12 +1052,12 @@ checks:
   badsk: { type: tcp, host: 127.0.0.1, port: 80, skip_when_changed: 5 }
   badreqlist: { type: tcp, host: 127.0.0.1, port: 80, requires: [123] }
   badsklist: { type: tcp, host: 127.0.0.1, port: 80, skip_when_changed: [123] }
-`)
-	mustHave(t, bad, "checks.self.requires cannot reference itself")
-	mustHave(t, bad, `checks.ghost.requires references unknown check "missing"`)
-	mustHave(t, bad, "checks.badsk.skip_when_changed must be a file path or a list")
-	mustHave(t, bad, "checks.badreqlist.requires must be a check name or a list of check names")
-	mustHave(t, bad, "checks.badsklist.skip_when_changed must be a file path or a list")
+`,
+		"checks.self.requires cannot reference itself",
+		`checks.ghost.requires references unknown check "missing"`,
+		"checks.badsk.skip_when_changed must be a file path or a list",
+		"checks.badreqlist.requires must be a check name or a list of check names",
+		"checks.badsklist.skip_when_changed must be a file path or a list")
 }
 
 func TestValidatePolicyMaxActions(t *testing.T) {
@@ -1130,11 +1086,7 @@ name: svc
 description: "A friendly label"
 service: x
 `)
-	for _, is := range issues {
-		if strings.Contains(is.Msg, "description") {
-			t.Fatalf("valid description wrongly flagged: %v", is)
-		}
-	}
+	mustNotHave(t, issues, "description")
 }
 
 func TestValidateCategoryMustBeString(t *testing.T) {
@@ -1152,15 +1104,11 @@ name: svc
 category: database
 service: x
 `)
-	for _, is := range issues {
-		if strings.Contains(is.Msg, "category") {
-			t.Fatalf("valid category wrongly flagged: %v", is)
-		}
-	}
+	mustNotHave(t, issues, "category")
 }
 
 func TestValidateAppVersionFrom(t *testing.T) {
-	global := writeConfig(t, map[string]string{
+	assertCatalogValidation(t, map[string]string{
 		"sermo.yml": baseGlobal,
 		"catalog/apps/consumer.yml": `
 name: consumer
@@ -1216,27 +1164,17 @@ name: not-app
 version_from: provider
 service: not-app
 `,
-	})
-	cfg, err := loadConfig(t, global)
-	if err != nil {
-		t.Fatalf("Load() error = %v", err)
-	}
-	issues := Validate(cfg)
-	for _, issue := range issues {
-		if issue.Scope == "app consumer" {
-			t.Fatalf("valid version_from flagged: %v", issues)
-		}
-	}
-	mustHave(t, issues, `version_from references unknown app "ghost"`)
-	mustHave(t, issues, "version_from must not reference itself")
-	mustHave(t, issues, "version_from cycle detected")
-	mustHave(t, issues, `version_from "../provider" must be a simple name`)
-	mustHave(t, issues, "version_from must be a non-empty app name")
-	mustHave(t, issues, "version_from is only supported on app catalog documents")
+	}, "app consumer",
+		`version_from references unknown app "ghost"`,
+		"version_from must not reference itself",
+		"version_from cycle detected",
+		`version_from "../provider" must be a simple name`,
+		"version_from must be a non-empty app name",
+		"version_from is only supported on app catalog documents")
 }
 
 func TestValidateAppVersionMatch(t *testing.T) {
-	global := writeConfig(t, map[string]string{
+	assertCatalogValidation(t, map[string]string{
 		"sermo.yml": baseGlobal,
 		"catalog/apps/mysql.yml": `
 name: mysql
@@ -1281,22 +1219,12 @@ name: not-app
 version_match: { contains: Demo }
 service: not-app
 `,
-	})
-	cfg, err := loadConfig(t, global)
-	if err != nil {
-		t.Fatalf("Load() error = %v", err)
-	}
-	issues := Validate(cfg)
-	for _, issue := range issues {
-		if issue.Scope == "app mysql" {
-			t.Fatalf("valid version_match flagged: %v", issues)
-		}
-	}
-	mustHave(t, issues, "version_match must be a mapping")
-	mustHave(t, issues, `version_match unknown key "rejects"`)
-	mustHave(t, issues, "version_match regex")
-	mustHave(t, issues, "version_match requires a version command")
-	mustHave(t, issues, "version_match is only supported on app catalog documents")
+	}, "app mysql",
+		"version_match must be a mapping",
+		`version_match unknown key "rejects"`,
+		"version_match regex",
+		"version_match requires a version command",
+		"version_match is only supported on app catalog documents")
 }
 
 func TestValidateCommandExpectExit(t *testing.T) {
@@ -1310,11 +1238,8 @@ preflight:
   bad-list: { type: command, command: ["check"], expect_exit: [0, nope] }
 `)
 	mustHave(t, issues, "expect_exit must be an integer")
-	for _, is := range issues {
-		if strings.Contains(is.Msg, "preflight.ok ") || strings.Contains(is.Msg, "preflight.ok-list") {
-			t.Fatalf("valid expect_exit wrongly flagged: %v", is)
-		}
-	}
+	mustNotHave(t, issues, "preflight.ok ")
+	mustNotHave(t, issues, "preflight.ok-list")
 }
 
 func TestValidateCommands(t *testing.T) {
@@ -1328,11 +1253,7 @@ commands:
 `)
 	mustHave(t, issues, "commands.version command must be an array, not a shell string")
 	mustHave(t, issues, "commands.slow timeout")
-	for _, is := range issues {
-		if strings.Contains(is.Msg, "commands.ok") {
-			t.Fatalf("valid command wrongly flagged: %v", is)
-		}
-	}
+	mustNotHave(t, issues, "commands.ok")
 }
 
 func TestValidateServiceField(t *testing.T) {
@@ -1351,29 +1272,23 @@ service:
 }
 
 func TestValidateProcessSelectorsRequireExeOrCmd(t *testing.T) {
-	issues := validateService(t, `
-name: svc
-service: x
-processes:
-  main: { user: mysql }
-  badcmd: { cmd: "(" }
-`)
-	mustHave(t, issues, "processes.main requires exe or cmd")
-	mustHave(t, issues, "processes.badcmd.cmd is not a valid regex")
-
-	// exe-only and cmd-only selectors are now valid (user/group optional).
-	ok := validateService(t, `
+	// exe-only and cmd-only selectors are valid (user/group optional); a selector
+	// with neither exe nor cmd, or an invalid cmd regex, is rejected.
+	assertServiceValidationTokens(t, `
 name: svc
 service: x
 processes:
   worker: { exe: /usr/sbin/mysqld }
   unifi: { cmd: "java .*unifi", group: unifi }
-`)
-	for _, is := range ok {
-		if hasIssue([]Issue{is}, "processes.worker") || hasIssue([]Issue{is}, "processes.unifi") {
-			t.Fatalf("exe-only / cmd-only selectors must be valid: %v", ok)
-		}
-	}
+`, []string{"processes.worker", "processes.unifi"}, `
+name: svc
+service: x
+processes:
+  main: { user: mysql }
+  badcmd: { cmd: "(" }
+`,
+		"processes.main requires exe or cmd",
+		"processes.badcmd.cmd is not a valid regex")
 }
 
 func TestValidateProcessSelectorsRejectUnknownKeys(t *testing.T) {
@@ -1575,85 +1490,65 @@ rules:
 }
 
 func TestValidateServiceInterval(t *testing.T) {
-	bad := validateService(t, `
-name: svc
-service: x
-interval: notaduration
-policy: { cooldown: 5m }
-`)
-	mustHave(t, bad, "interval")
-
-	good := validateService(t, `
+	assertServiceValidation(t, `
 name: svc
 service: x
 interval: 10s
 policy: { cooldown: 5m }
-`)
-	if hasIssue(good, "interval") {
-		t.Fatalf("valid service interval flagged: %v", good)
-	}
+`, "interval", `
+name: svc
+service: x
+interval: notaduration
+policy: { cooldown: 5m }
+`,
+		"interval")
 }
 
 func TestValidateCountCheckNestedThreshold(t *testing.T) {
-	good := validateService(t, `
+	assertServiceValidation(t, `
 name: svc
 service: x
 policy: { cooldown: 5m }
 checks:
   backlog: { type: count, path: /var/spool, count: { op: ">", value: 1000 } }
-`)
-	if hasIssue(good, "count") {
-		t.Fatalf("nested count threshold flagged: %v", good)
-	}
-
-	mixed := validateService(t, `
+`, "count", `
 name: svc
 service: x
 policy: { cooldown: 5m }
 checks:
   backlog: { type: count, path: /var/spool, op: ">", value: 5, count: { op: ">", value: 1000 } }
-`)
-	mustHave(t, mixed, "count check must not mix a nested count {op, value} with top-level op/value")
+`,
+		"count check must not mix a nested count {op, value} with top-level op/value")
+}
+
+// assertCheckRequiresPath asserts that a check of the given type reports
+// "path is required for a <type> check" both when path is omitted and when path
+// is a list containing a non-string element.
+func assertCheckRequiresPath(t *testing.T, checkType string) {
+	t.Helper()
+	want := "path is required for a " + checkType + " check"
+	mustHave(t, validateService(t, `
+name: svc
+service: x
+policy: { cooldown: 5m }
+checks:
+  c: { type: `+checkType+` }
+`), want)
+	mustHave(t, validateService(t, `
+name: svc
+service: x
+policy: { cooldown: 5m }
+checks:
+  c: { type: `+checkType+`, path: [/run/svc, 7] }
+`), want)
 }
 
 func TestValidatePidfileCheckRequiresPath(t *testing.T) {
-	issues := validateService(t, `
-name: svc
-service: x
-policy: { cooldown: 5m }
-checks:
-  pid: { type: pidfile }
-`)
-	mustHave(t, issues, "path is required for a pidfile check")
-
-	invalidList := validateService(t, `
-name: svc
-service: x
-policy: { cooldown: 5m }
-checks:
-  pid: { type: pidfile, path: [/run/svc.pid, 7] }
-`)
-	mustHave(t, invalidList, "path is required for a pidfile check")
+	assertCheckRequiresPath(t, "pidfile")
 }
 
 func TestValidateSocketCheckRequiresPath(t *testing.T) {
-	issues := validateService(t, `
-name: svc
-service: x
-policy: { cooldown: 5m }
-checks:
-  sock: { type: socket }
-`)
-	mustHave(t, issues, "path is required for a socket check")
-
-	invalidList := validateService(t, `
-name: svc
-service: x
-policy: { cooldown: 5m }
-checks:
-  sock: { type: socket, path: [/run/svc.sock, 7] }
-`)
-	mustHave(t, invalidList, "path is required for a socket check")
+	assertCheckRequiresPath(t, "socket")
 }
 
 func TestValidateRequiredScalarCheckFields(t *testing.T) {
@@ -1708,23 +1603,7 @@ checks:
 }
 
 func TestValidateLockfileCheckRequiresPath(t *testing.T) {
-	issues := validateService(t, `
-name: svc
-service: x
-policy: { cooldown: 5m }
-checks:
-  lock: { type: lockfile }
-`)
-	mustHave(t, issues, "path is required for a lockfile check")
-
-	invalidList := validateService(t, `
-name: svc
-service: x
-policy: { cooldown: 5m }
-checks:
-  lock: { type: lockfile, path: [/run/svc.lock, 7] }
-`)
-	mustHave(t, invalidList, "path is required for a lockfile check")
+	assertCheckRequiresPath(t, "lockfile")
 }
 
 func TestValidatePercentBound(t *testing.T) {
@@ -1739,51 +1618,41 @@ checks:
 }
 
 func TestValidateRuleWindowMinMatchesOptional(t *testing.T) {
-	issues := validateService(t, `
+	assertServiceValidation(t, `
 name: svc
 service: x
 policy: { cooldown: 5m }
 rule_window: { cycles: 5, mode: within }
 checks:
   http: { type: http, url: "http://127.0.0.1/" }
-`)
-	if hasIssue(issues, "rule_window") {
-		t.Fatalf("rule_window within without min_matches should default to 1, got %v", issues)
-	}
-
-	bad := validateService(t, `
+`, "rule_window", `
 name: svc
 service: x
 policy: { cooldown: 5m }
 rule_window: { cycles: 5, mode: within, min_matches: 0 }
 checks:
   http: { type: http, url: "http://127.0.0.1/" }
-`)
-	mustHave(t, bad, "rule_window.min_matches must be > 0")
+`,
+		"rule_window.min_matches must be > 0")
 }
 
 func TestValidateRuleWindowDuration(t *testing.T) {
-	issues := validateService(t, `
+	assertServiceValidation(t, `
 name: svc
 service: x
 policy: { cooldown: 5m }
 rule_window: { duration: 6m, mode: consecutive }
 checks:
   http: { type: http, url: "http://127.0.0.1/" }
-`)
-	if hasIssue(issues, "rule_window") {
-		t.Fatalf("valid duration rule_window flagged: %v", issues)
-	}
-
-	bad := validateService(t, `
+`, "rule_window", `
 name: svc
 service: x
 policy: { cooldown: 5m }
 rule_window: { cycles: 3, duration: 6m }
 checks:
   http: { type: http, url: "http://127.0.0.1/" }
-`)
-	mustHave(t, bad, "rule_window cannot define both cycles and duration")
+`,
+		"rule_window cannot define both cycles and duration")
 }
 
 func TestValidateCertServerNameAndFileScope(t *testing.T) {
@@ -1807,9 +1676,8 @@ checks:
   api: { type: cert, host: 10.0.0.5, port: 8443, server_name: api.example.com, expires_in_days: 14 }
   pem: { type: cert, path: /etc/ssl/api.pem, expires_in_days: 14 }
 `)
-	if hasIssue(good, "cert") || hasIssue(good, "server_name") {
-		t.Fatalf("valid cert checks flagged: %v", good)
-	}
+	mustNotHave(t, good, "cert")
+	mustNotHave(t, good, "server_name")
 }
 
 func TestValidateContainsOp(t *testing.T) {
@@ -1821,9 +1689,7 @@ checks:
   q: { type: sql, engine: sqlite, path: /var/db/x.db, query: "select status from t", op: contains, value: ok }
   redis: { type: redis, expect: { role: { op: contains, value: master } } }
 `)
-	if hasIssue(issues, "op") {
-		t.Fatalf("contains should be a valid op, got %v", issues)
-	}
+	mustNotHave(t, issues, "op")
 }
 
 func TestValidateScalarWindowRejected(t *testing.T) {
@@ -1844,19 +1710,7 @@ rules:
 }
 
 func TestValidateFileConditionExistsBoolean(t *testing.T) {
-	issues := validateService(t, `
-name: svc
-service: x
-policy: { cooldown: 5m }
-rules:
-  marker:
-    type: alert
-    if: { file: { path: /run/x.flag, exists: "false" } }
-    then: { action: alert, message: "flag" }
-`)
-	mustHave(t, issues, "file.exists must be a boolean")
-
-	good := validateService(t, `
+	assertServiceValidation(t, `
 name: svc
 service: x
 policy: { cooldown: 5m }
@@ -1865,96 +1719,83 @@ rules:
     type: alert
     if: { file: { path: /run/x.flag, exists: false } }
     then: { action: alert, message: "flag" }
-`)
-	if hasIssue(good, "file.exists") {
-		t.Fatalf("boolean exists flagged: %v", good)
-	}
+`, "file.exists", `
+name: svc
+service: x
+policy: { cooldown: 5m }
+rules:
+  marker:
+    type: alert
+    if: { file: { path: /run/x.flag, exists: "false" } }
+    then: { action: alert, message: "flag" }
+`,
+		"file.exists must be a boolean")
 }
 
 func TestValidateMemoryCheckBothSurfaces(t *testing.T) {
 	// In a service's checks: (unified check types — same validator as watches).
-	good := validateService(t, `
+	assertServiceValidationTokens(t, `
 name: svc
 service: x
 policy: { cooldown: 5m }
 checks:
   ram: { type: memory, used_pct: { op: ">=", value: "90%" } }
-`)
-	if hasIssue(good, "memory") || hasIssue(good, "ram") {
-		t.Fatalf("valid memory check flagged: %v", good)
-	}
-
-	bad := validateService(t, `
+`, []string{"memory", "ram"}, `
 name: svc
 service: x
 policy: { cooldown: 5m }
 checks:
   no-pred:  { type: memory }
   bad-size: { type: memory, available_bytes: { op: "<", value: 1024 } }
-`)
-	mustHave(t, bad, "checks.no-pred requires at least one of used_pct/available_pct/available_bytes")
-	mustHave(t, bad, `available_bytes value "1024" must include a size suffix`)
+`,
+		"checks.no-pred requires at least one of used_pct/available_pct/available_bytes",
+		`available_bytes value "1024" must include a size suffix`)
 }
 
 func TestValidatePressureCheck(t *testing.T) {
-	good := validateService(t, `
+	assertServiceValidationTokens(t, `
 name: svc
 service: x
 policy: { cooldown: 5m }
 checks:
   mem-stall: { type: pressure, resource: memory, some_avg10: { op: ">", value: 10 } }
-`)
-	if hasIssue(good, "pressure") || hasIssue(good, "mem-stall") {
-		t.Fatalf("valid pressure check flagged: %v", good)
-	}
-
-	bad := validateService(t, `
+`, []string{"pressure", "mem-stall"}, `
 name: svc
 service: x
 policy: { cooldown: 5m }
 checks:
   bad-res: { type: pressure, resource: disk, some_avg10: { op: ">", value: 10 } }
   no-pred: { type: pressure, resource: cpu }
-`)
-	mustHave(t, bad, "checks.bad-res.resource must be cpu, memory or io")
-	mustHave(t, bad, "checks.no-pred requires at least one of some_avg10/some_avg60/some_avg300/full_avg10/full_avg60/full_avg300")
+`,
+		"checks.bad-res.resource must be cpu, memory or io",
+		"checks.no-pred requires at least one of some_avg10/some_avg60/some_avg300/full_avg10/full_avg60/full_avg300")
 }
 
 func TestValidatePidsCheck(t *testing.T) {
-	good := validateService(t, `
+	assertServiceValidation(t, `
 name: svc
 service: x
 policy: { cooldown: 5m }
 checks:
   pid-table: { type: pids, used_pct: { op: ">=", value: "90%" } }
-`)
-	if hasIssue(good, "pid-table") {
-		t.Fatalf("valid pids check flagged: %v", good)
-	}
-
-	bad := validateService(t, `
+`, "pid-table", `
 name: svc
 service: x
 policy: { cooldown: 5m }
 checks:
   no-pred: { type: pids }
-`)
-	mustHave(t, bad, "checks.no-pred requires at least one of used_pct/free/count")
+`,
+		"checks.no-pred requires at least one of used_pct/free/count")
 }
 
 func TestValidateDiskIOCheck(t *testing.T) {
-	good := validateService(t, `
+	assertServiceValidation(t, `
 name: svc
 service: x
 policy: { cooldown: 5m }
 checks:
   db-disk: { type: diskio, device: nvme0n1, util_pct: { op: ">=", value: "90%" }, write_bytes: { op: ">", value: 50M } }
-`)
-	if hasIssue(good, "db-disk") {
-		t.Fatalf("valid diskio check flagged: %v", good)
-	}
-
-	bad := validateService(t, `
+`, "db-disk", `
 name: svc
 service: x
 policy: { cooldown: 5m }
@@ -1962,10 +1803,10 @@ checks:
   no-dev:  { type: diskio, util_pct: { op: ">=", value: 90 } }
   no-pred: { type: diskio, device: sda }
   raw-bps: { type: diskio, device: sda, read_bytes: { op: ">", value: 1048576 } }
-`)
-	mustHave(t, bad, "checks.no-dev.device is required for a diskio check")
-	mustHave(t, bad, "checks.no-pred requires at least one of util_pct/read_bytes/write_bytes/await_ms")
-	mustHave(t, bad, `read_bytes value "1048576" must include a size suffix`)
+`,
+		"checks.no-dev.device is required for a diskio check",
+		"checks.no-pred requires at least one of util_pct/read_bytes/write_bytes/await_ms",
+		`read_bytes value "1048576" must include a size suffix`)
 }
 
 func TestValidateCleanOnStopDotDotEscape(t *testing.T) {

@@ -343,27 +343,24 @@ func TestActionErrorPrefersRunErrorOnLaunchFailure(t *testing.T) {
 	}
 }
 
-func TestSystemdManagerStatusEmptyZeroExitNotError(t *testing.T) {
-	// Empty stdout with a zero exit is not a launch failure (only ExitCode < 0 is),
-	// so Status must not return a query error.
-	m := systemdManager{runner: stubRunner{result: execx.Result{Stdout: "", ExitCode: 0}}}
-	if _, err := m.Status(context.Background(), "nginx"); err != nil {
-		t.Fatalf("Status with empty output and exit 0 must not error: %v", err)
+// Empty stdout with a zero exit is not a launch failure (only ExitCode < 0 is),
+// so Status/SupportsReload must not return a query error across managers.
+func TestManagerEmptyZeroExitNotError(t *testing.T) {
+	systemd := systemdManager{runner: stubRunner{result: execx.Result{Stdout: "", ExitCode: 0}}}
+	openrc := openrcManager{runner: stubRunner{result: execx.Result{Stdout: "", ExitCode: 0}}}
+	cases := []struct {
+		name string
+		call func() error
+	}{
+		{"systemd Status", func() error { _, err := systemd.Status(context.Background(), "nginx"); return err }},
+		{"systemd SupportsReload", func() error { _, err := systemd.SupportsReload(context.Background(), "nginx"); return err }},
+		{"openrc Status", func() error { _, err := openrc.Status(context.Background(), "nginx"); return err }},
 	}
-}
-
-func TestSystemdSupportsReloadZeroExitNotError(t *testing.T) {
-	// Empty output with a zero exit is not a query failure.
-	m := systemdManager{runner: stubRunner{result: execx.Result{Stdout: "", ExitCode: 0}}}
-	if _, err := m.SupportsReload(context.Background(), "nginx"); err != nil {
-		t.Fatalf("SupportsReload with empty output exit 0 must not error: %v", err)
-	}
-}
-
-func TestOpenRCManagerStatusZeroExitNotError(t *testing.T) {
-	// Empty output with a zero exit is not a query failure for OpenRC either.
-	m := openrcManager{runner: stubRunner{result: execx.Result{Stdout: "", ExitCode: 0}}}
-	if _, err := m.Status(context.Background(), "nginx"); err != nil {
-		t.Fatalf("OpenRC Status with empty output exit 0 must not error: %v", err)
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if err := c.call(); err != nil {
+				t.Fatalf("empty output with exit 0 must not error: %v", err)
+			}
+		})
 	}
 }

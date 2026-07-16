@@ -51,17 +51,11 @@ func TestSMTPHandshakeAuthPlain(t *testing.T) {
 
 func TestSMTPHandshakeAuthFails(t *testing.T) {
 	replies := "220 ready\r\n250 mail\r\n535 5.7.8 authentication failed\r\n"
-	conn := rw{in: strings.NewReader(replies), out: &bytes.Buffer{}}
-	if _, err := smtpHandshake(conn, Config{User: "joe", Password: "bad"}); err == nil {
-		t.Fatal("a 535 reply must fail")
-	}
+	assertHandshakeFails(t, smtpHandshake, replies, Config{User: "joe", Password: "bad"})
 }
 
 func TestSMTPHandshakeBadGreeting(t *testing.T) {
-	conn := rw{in: strings.NewReader("421 service not available\r\n"), out: &bytes.Buffer{}}
-	if _, err := smtpHandshake(conn, Config{}); err == nil {
-		t.Fatal("a non-220 greeting must fail")
-	}
+	assertHandshakeFails(t, smtpHandshake, "421 service not available\r\n", Config{})
 }
 
 func TestSMTPHandshakeHELOFallback(t *testing.T) {
@@ -79,8 +73,5 @@ func TestSMTPHandshakeHELOFallback(t *testing.T) {
 func TestSMTPHandshakeRejectsMalformedMultilineGreeting(t *testing.T) {
 	// A multi-line greeting whose continuation never terminates with the opening
 	// code is malformed; the probe must fail rather than misread it.
-	conn := rw{in: strings.NewReader("220-Welcome\r\n421 service closing\r\n"), out: &bytes.Buffer{}}
-	if _, err := smtpHandshake(conn, Config{}); err == nil {
-		t.Fatal("a malformed multi-line greeting must fail")
-	}
+	assertHandshakeFails(t, smtpHandshake, "220-Welcome\r\n421 service closing\r\n", Config{})
 }

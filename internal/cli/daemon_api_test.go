@@ -66,13 +66,7 @@ service: mysql.service
 }
 
 func TestFetchDaemonWatchStateHTTP(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/watches" {
-			http.NotFound(w, r)
-			return
-		}
-		writeDaemonAPITestJSON(w, []map[string]string{{"name": "storage-root", "state": "starting"}})
-	}))
+	srv := daemonAPIStub("/api/watches", []map[string]string{{"name": "storage-root", "state": "starting"}})
 	defer srv.Close()
 
 	_, global, cfg := daemonAPITestConfig(t, srv.URL, `
@@ -125,13 +119,7 @@ paths:
 }
 
 func TestFetchDaemonApplicationStatesHTTP(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/applications" {
-			http.NotFound(w, r)
-			return
-		}
-		writeDaemonAPITestJSON(w, []map[string]string{{"name": "git", "state": "starting"}})
-	}))
+	srv := daemonAPIStub("/api/applications", []map[string]string{{"name": "git", "state": "starting"}})
 	defer srv.Close()
 
 	_, global, cfg := daemonAPITestConfig(t, srv.URL, `
@@ -172,6 +160,17 @@ func daemonAPITestConfig(t *testing.T, serverURL, template string) (root, global
 		t.Fatal(err)
 	}
 	return root, global, cfg
+}
+
+// daemonAPIStub serves payload as JSON at path and 404s every other request.
+func daemonAPIStub(path string, payload any) *httptest.Server {
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != path {
+			http.NotFound(w, r)
+			return
+		}
+		writeDaemonAPITestJSON(w, payload)
+	}))
 }
 
 func writeDaemonAPITestJSON(w http.ResponseWriter, v any) {

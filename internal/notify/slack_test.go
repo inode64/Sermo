@@ -8,21 +8,8 @@ import (
 )
 
 func TestBuildSlackRequiresWebhook(t *testing.T) {
-	good, err := buildSlack("team", map[string]any{"type": "slack", "webhook": "https://hooks.slack.com/services/x"})
-	if err != nil {
-		t.Fatalf("valid slack: %v", err)
-	}
-	if s := good.(*Slack); s.Type() != "slack" || s.Name() != "team" {
-		t.Fatalf("unexpected slack: %+v", s)
-	}
-	for _, entry := range []map[string]any{
-		{"type": "slack"}, // no webhook
-		{"type": "slack", "webhook": "slack.com/x"}, // not an http(s) URL
-	} {
-		if _, err := buildSlack("n", entry); err == nil {
-			t.Fatalf("expected error for %v", entry)
-		}
-	}
+	assertBuildWebhookNotifier(t, buildSlack, "slack", "team",
+		"https://hooks.slack.com/services/x", "slack.com/x")
 }
 
 func TestSlackSendPostsPayload(t *testing.T) {
@@ -31,13 +18,7 @@ func TestSlackSendPostsPayload(t *testing.T) {
 	s := &Slack{
 		name:    "team",
 		webhook: "https://hooks.slack.com/services/x",
-		post: func(_ context.Context, label, url string, payload []byte) error {
-			if label != TypeSlack {
-				t.Fatalf("label = %q, want slack", label)
-			}
-			gotURL, gotPayload = url, payload
-			return nil
-		},
+		post:    capturingPost(t, TypeSlack, &gotURL, &gotPayload),
 	}
 	if err := s.Send(context.Background(), Message{Subject: "[sermo] storage-root: 95% used", Body: "SERMO_PATH=/"}); err != nil {
 		t.Fatal(err)

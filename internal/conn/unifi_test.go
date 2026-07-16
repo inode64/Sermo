@@ -3,23 +3,10 @@ package conn
 import (
 	"context"
 	"io"
-	"net"
 	"net/http"
 	"net/http/httptest"
-	"strconv"
-	"strings"
 	"testing"
 )
-
-func unifiTestHostPort(t *testing.T, srv *httptest.Server) (string, int) {
-	t.Helper()
-	host, portStr, err := net.SplitHostPort(strings.TrimPrefix(srv.URL, "https://"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	port, _ := strconv.Atoi(portStr)
-	return host, port
-}
 
 func TestUnifiProbeStatus(t *testing.T) {
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -31,7 +18,7 @@ func TestUnifiProbeStatus(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	host, port := unifiTestHostPort(t, srv)
+	host, port := serverHostPort(t, srv)
 	res, err := unifiProtocol{}.Probe(context.Background(), Config{Host: host, Port: port})
 	if err != nil {
 		t.Fatalf("probe: %v", err)
@@ -50,7 +37,7 @@ func TestUnifiProbeNotOK(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	host, port := unifiTestHostPort(t, srv)
+	host, port := serverHostPort(t, srv)
 	if _, err := (unifiProtocol{}).Probe(context.Background(), Config{Host: host, Port: port}); err == nil {
 		t.Fatal("a non-ok rc must error")
 	}
@@ -62,7 +49,7 @@ func TestUnifiProbeVerifyRejectsSelfSigned(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	host, port := unifiTestHostPort(t, srv)
+	host, port := serverHostPort(t, srv)
 	// tls: true requires a valid certificate; the test server's is self-signed.
 	if _, err := (unifiProtocol{}).Probe(context.Background(), Config{Host: host, Port: port, TLS: "true"}); err == nil {
 		t.Fatal("tls: true must reject the self-signed certificate")
