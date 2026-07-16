@@ -428,30 +428,14 @@ func (c *Config) loadDir(dir string, recursive bool) error {
 }
 
 func (c *Config) loadServiceDir(dir string, recursive bool) error {
-	return c.loadServiceDirEntries(dir, recursive)
-}
-
-func (c *Config) loadAppDir(dir string, recursive bool) error {
-	return c.loadAppDirEntries(dir, recursive)
-}
-
-func (c *Config) loadNotifierDir(dir string, recursive bool) error {
-	return c.loadNotifierDirEntries(dir, recursive)
-}
-
-func (c *Config) loadWatchDir(dir string, recursive bool) error {
-	return c.loadWatchDirEntries(dir, recursive)
-}
-
-func (c *Config) loadServiceDirEntries(dir string, recursive bool) error {
 	return c.loadKindDirEntries(dir, kindService, kindService, recursive)
 }
 
-func (c *Config) loadAppDirEntries(dir string, recursive bool) error {
+func (c *Config) loadAppDir(dir string, recursive bool) error {
 	return c.loadKindDirEntries(dir, kindApp, kindApp, recursive)
 }
 
-func (c *Config) loadNotifierDirEntries(dir string, recursive bool) error {
+func (c *Config) loadNotifierDir(dir string, recursive bool) error {
 	return loadDocumentTree(dir, pathKeyNotifiers, recursive, func(doc *Document) error {
 		handled, err := c.mergeNotifierFragment(doc)
 		if err != nil {
@@ -464,7 +448,7 @@ func (c *Config) loadNotifierDirEntries(dir string, recursive bool) error {
 	})
 }
 
-func (c *Config) loadWatchDirEntries(dir string, recursive bool) error {
+func (c *Config) loadWatchDir(dir string, recursive bool) error {
 	return loadDocumentTree(dir, pathKeyWatches, recursive, c.mergeWatchDocument)
 }
 
