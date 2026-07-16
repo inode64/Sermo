@@ -179,12 +179,6 @@ func raidArrayState(detail RaidArrayStatus) string {
 	return "good"
 }
 
-// RaidResultData is the persisted reading data for a whole-controller RAID
-// sample, shared by the check cycle and the live watch view.
-func RaidResultData(st RaidStatus) map[string]any {
-	return raidResultData(st, "", RaidArrayStatus{}, true)
-}
-
 func raidResultData(st RaidStatus, array string, detail RaidArrayStatus, present bool) map[string]any {
 	data := map[string]any{
 		DataKeyArrays: st.Arrays, DataKeyDegraded: st.Degraded, DataKeyRecovering: st.Recovering,
