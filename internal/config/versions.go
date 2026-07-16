@@ -148,7 +148,7 @@ func (c *Config) materializeRegistry(ctx context.Context, names []string, reg ma
 			tok := toks[0]
 			source := c.versionDiscoverySource(ctx, body, tok, kind)
 			matches := source.templateMatches(toks)
-			matches = append(matches, c.configuredServiceTemplateMatches(tmpl.Name, toks, kind)...)
+			matches = append(matches, c.configuredServiceTemplateMatches(tmpl.Name, body, toks, kind)...)
 			matches = dedupeTemplateMatches(matches, toks)
 			sortTemplateMatches(matches)
 			matches = c.withCurrentMatches(matches, tmpl.Name, toks, kind)
@@ -191,7 +191,7 @@ func (c *Config) recordMaterializedNameCollision(kind string, tmpl, inst, existi
 // a concrete document with every token bound in the name and body at once.
 func (c *Config) materializeMultiToken(ctx context.Context, tmpl *Document, body map[string]any, toks []tmplToken, kind string) []*Document {
 	source := c.multiTokenDiscoverySource(ctx, body, toks, kind)
-	demanded := c.configuredServiceTemplateMatches(tmpl.Name, toks, kind)
+	demanded := c.configuredServiceTemplateMatches(tmpl.Name, body, toks, kind)
 	if len(source.paths) == 0 && len(source.matches) == 0 && len(demanded) == 0 && len(versionsCurrentFromCandidates(body)) == 0 {
 		return nil
 	}
@@ -399,9 +399,16 @@ func materializedServiceUnitMatches(patterns, units []string, toks []tmplToken) 
 // instance resolvable after its init unit stops or fails, so the daemon can
 // report that state instead of rejecting its whole configuration. Active-unit
 // discovery remains responsible for finding new catalog instances.
-func (c *Config) configuredServiceTemplateMatches(templateName string, toks []tmplToken, kind string) []templateMatch {
+func (c *Config) configuredServiceTemplateMatches(templateName string, body map[string]any, toks []tmplToken, kind string) []templateMatch {
 	if c == nil || kind != kindService || len(toks) == 0 {
 		return nil
+	}
+	backend := effectiveBackend(c)
+	if service, backendSpecific := body[ServiceKeyService].(map[string]any); backendSpecific &&
+		backend != "" && backend != string(servicemgr.BackendAuto) {
+		if _, supported := service[backend]; !supported {
+			return nil
+		}
 	}
 	pattern := templateName
 	for _, tok := range toks {

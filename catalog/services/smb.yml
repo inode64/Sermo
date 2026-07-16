@@ -13,7 +13,6 @@ service:
 apps:
   - smbd
   - nmbd
-  - winbindd
 restart_on_change:
   apps:
     - smbd
@@ -25,6 +24,7 @@ variables:
   port: 445
   netbios_port: 139
   user: root
+  winbindd_binary: ${bindir}/winbindd
 pidfiles:
   smbd: /run/samba/smbd.pid
   nmbd: /run/samba/nmbd.pid

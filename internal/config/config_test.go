@@ -4838,6 +4838,43 @@ func TestInstanceTemplateMaterializesConfiguredFailedService(t *testing.T) {
 	}
 }
 
+func TestConfiguredServiceTemplateSkipsInactiveBackend(t *testing.T) {
+	global := writeConfig(t, map[string]string{
+		"sermo.yml": `
+engine: { backend: systemd }
+paths: { services: [@ROOT@/services], runtime: /run/sermo }
+defaults: { policy: { cooldown: 5m } }
+`,
+		"catalog/services/openvpn.yml": `
+name: openvpn%s%i
+service:
+  openrc: ["openvpn.${instance}"]
+`,
+		"catalog/services/openvpn-client.yml": `
+name: openvpn-client-%i
+service:
+  systemd: ["openvpn-client@${instance}"]
+`,
+		"services/openvpn-client-tun1.yml": `
+name: openvpn-client-tun1
+uses: openvpn-client-tun1
+`,
+	})
+	cfg, err := loadConfig(t, global, WithServiceUnits("systemd", []string{"openvpn-client@tun1.service"}))
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if issues := Validate(cfg); len(issues) != 0 {
+		t.Fatalf("Validate() issues = %v", issues)
+	}
+	if _, ok := cfg.CatalogServices["openvpn-client-tun1"]; !ok {
+		t.Fatal("systemd OpenVPN client instance must materialize")
+	}
+	if _, errs := cfg.Resolve("openvpn-client-tun1"); len(errs) > 0 {
+		t.Fatalf("Resolve(openvpn-client-tun1) errors = %v", errs)
+	}
+}
+
 func assertInstanceTemplateMaterializesConfiguredFailedService(t *testing.T, backend, serviceUnit, activeUnit string) {
 	t.Helper()
 	root := t.TempDir()

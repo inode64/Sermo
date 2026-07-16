@@ -378,9 +378,8 @@ func TestCatalogServicesRestartOnLinkedAppVersionChanges(t *testing.T) {
 					continue
 				}
 				// Restarting on an app's version change is per-service opt-in
-				// (restart_on_change.apps): a linked app may be optional on the
-				// host (enable_if-gated, like smb's winbindd) or simply not
-				// restart-worthy, so a version preflight without a generated
+				// (restart_on_change.apps): a required linked app can simply be
+				// non-restart-worthy, so a version preflight without a generated
 				// rule is valid. When the rule exists it must be well-formed.
 				ruleName := "restart-on-change-" + app + "-version"
 				rule, ok := rulesMap[ruleName].(map[string]any)
@@ -1456,16 +1455,6 @@ func TestCatalogServiceProcessChecksUseLinkedAppBinaries(t *testing.T) {
 			},
 			resolvedPath: []any{"checks", "process", "exe"},
 		},
-		{
-			name:      "smb",
-			app:       "winbindd",
-			preflight: "winbindd-binary",
-			raw:       "${winbindd_binary}",
-			rawPaths: [][]any{
-				{"processes", "winbindd", "exe"},
-				{"watches", "winbindd", "check", "exe"},
-			},
-		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -1493,6 +1482,25 @@ func TestCatalogServiceProcessChecksUseLinkedAppBinaries(t *testing.T) {
 				if got := cfgval.String(valueAt(t, resolved.Tree, tt.resolvedPath...)); got != tt.resolved {
 					t.Fatalf("%s resolved %v = %q, want %q", tt.name, tt.resolvedPath, got, tt.resolved)
 				}
+			}
+		})
+	}
+}
+
+func TestCatalogOptionalOperationDependenciesAreNotLinkedApps(t *testing.T) {
+	root := repoRoot(t)
+	tests := []struct {
+		service string
+		app     string
+	}{
+		{service: "backrest", app: "restic"},
+		{service: "smb", app: "winbindd"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.service, func(t *testing.T) {
+			body := catalogDocByName(t, root, "services", tt.service)
+			if slices.Contains(cfgval.StringList(body["apps"]), tt.app) {
+				t.Fatalf("%s must not link optional app %q", tt.service, tt.app)
 			}
 		})
 	}
