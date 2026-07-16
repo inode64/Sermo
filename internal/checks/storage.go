@@ -181,8 +181,3 @@ func statfsUsage(path string) (StorageStats, error) {
 		InodesFree: inodesFree, InodesTotal: inodesTotal,
 	}, nil
 }
-
-// DefaultStorageUsage reports filesystem usage using the host statfs implementation.
-func DefaultStorageUsage(path string) (StorageStats, error) {
-	return statfsUsage(path)
-}

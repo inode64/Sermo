@@ -297,7 +297,6 @@ var migrations = []string{
 		service      TEXT NOT NULL,
 		started_at   INTEGER NOT NULL,
 		confirmed_at INTEGER NOT NULL,
-		source       TEXT NOT NULL,
 		PRIMARY KEY (service, started_at)
 	);`,
 	`CREATE INDEX process_uptime_span_service_confirmed_idx ON process_uptime_span (service, confirmed_at);`,
@@ -1472,13 +1471,12 @@ func (s *Store) CheckSLASeries(service, check string, from, to time.Time) ([]SLA
 type ProcessUptimeSpan struct {
 	StartedAt   time.Time
 	ConfirmedAt time.Time
-	Source      string
 }
 
 // RecordProcessUptime records or extends the continuity evidence for a trusted
 // process instance. Repeated daemon cycles for the same process start extend
 // ConfirmedAt without creating unbounded per-minute history.
-func (s *Store) RecordProcessUptime(service string, startedAt, confirmedAt time.Time, source string) error {
+func (s *Store) RecordProcessUptime(service string, startedAt, confirmedAt time.Time) error {
 	if service == "" {
 		return errors.New("record process uptime: service is empty")
 	}
@@ -1491,15 +1489,11 @@ func (s *Store) RecordProcessUptime(service string, startedAt, confirmedAt time.
 	if startedAt.After(confirmedAt) {
 		return fmt.Errorf("record process uptime for %s: process start time is after confirmation", service)
 	}
-	if source == "" {
-		return fmt.Errorf("record process uptime for %s: source is empty", service)
-	}
-	if _, err := s.db.ExecContext(s.sqlCtx(), `INSERT INTO process_uptime_span (service, started_at, confirmed_at, source)
-		VALUES (?, ?, ?, ?)
+	if _, err := s.db.ExecContext(s.sqlCtx(), `INSERT INTO process_uptime_span (service, started_at, confirmed_at)
+		VALUES (?, ?, ?)
 		ON CONFLICT(service, started_at) DO UPDATE SET
-		  confirmed_at = max(confirmed_at, excluded.confirmed_at),
-		  source = excluded.source;`,
-		service, startedAt.UTC().Unix(), confirmedAt.UTC().Unix(), source); err != nil {
+		  confirmed_at = max(confirmed_at, excluded.confirmed_at);`,
+		service, startedAt.UTC().Unix(), confirmedAt.UTC().Unix()); err != nil {
 		return fmt.Errorf("record process uptime for %s: %w", service, err)
 	}
 	return nil
@@ -1514,7 +1508,7 @@ func (s *Store) ProcessUptimeSpans(service string, from, to time.Time) ([]Proces
 	if !to.After(from) {
 		return nil, fmt.Errorf("load process uptime spans for %s: invalid time range", service)
 	}
-	rows, err := s.db.QueryContext(s.sqlCtx(), `SELECT started_at, confirmed_at, source
+	rows, err := s.db.QueryContext(s.sqlCtx(), `SELECT started_at, confirmed_at
 		FROM process_uptime_span
 		WHERE service = ? AND confirmed_at >= ? AND started_at < ?
 		ORDER BY started_at;`, service, from.UTC().Unix(), to.UTC().Unix())
@@ -1526,14 +1520,12 @@ func (s *Store) ProcessUptimeSpans(service string, from, to time.Time) ([]Proces
 	var spans []ProcessUptimeSpan
 	for rows.Next() {
 		var startedAt, confirmedAt int64
-		var source string
-		if err := rows.Scan(&startedAt, &confirmedAt, &source); err != nil {
+		if err := rows.Scan(&startedAt, &confirmedAt); err != nil {
 			return nil, fmt.Errorf("scan process uptime span for %s: %w", service, err)
 		}
 		spans = append(spans, ProcessUptimeSpan{
 			StartedAt:   time.Unix(startedAt, 0).UTC(),
 			ConfirmedAt: time.Unix(confirmedAt, 0).UTC(),
-			Source:      source,
 		})
 	}
 	if err := rows.Err(); err != nil {
