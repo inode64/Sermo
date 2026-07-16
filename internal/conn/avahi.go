@@ -40,24 +40,11 @@ func (avahiProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 		addr = DBusAddress("", cfg.Query)
 	}
 
-	// godbus' connect/call are context-aware; the goroutine+select is an outer
-	// backstop so a stuck handshake cannot outlive the deadline. The buffered
-	// channel keeps the goroutine from leaking if ctx fires first.
-	type probeOut struct {
-		res Result
-		err error
-	}
-	ch := make(chan probeOut, 1)
-	go func() {
-		res, err := avahiProbe(ctx, addr)
-		ch <- probeOut{res, err}
-	}()
-	select {
-	case <-ctx.Done():
-		return Result{}, ctx.Err()
-	case out := <-ch:
-		return out.res, out.err
-	}
+	// godbus' connect/call are context-aware; keep an outer backstop for a
+	// stuck handshake.
+	return probeWithDeadline(ctx, func(ctx context.Context) (Result, error) {
+		return avahiProbe(ctx, addr)
+	})
 }
 
 // avahiProbe connects to the bus and queries the Avahi server object.
