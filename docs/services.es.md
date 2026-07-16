@@ -335,13 +335,15 @@ apps: [java, "tomcat-${version}"]
 
 En la resolución, los checks de preflight de cada app enlazada se inyectan en el
 preflight del servicio bajo claves con namespace por el nombre de la app (`<app>-<check>`), llevando
-el path `variables.binary` propio de la app, la sonda de health y el comando de versión. Cuando un
-servicio enlaza
-varias apps, los checks de cada una se mantienen distintos — p. ej. `apps: [backrest, restic]`
-de `backrest`
-produce `backrest-binary`, `backrest-health`, `backrest-version`,
-`restic-binary`, `restic-health`, `restic-version`, de modo que un `restic` ausente o no sano
-levanta su propia alerta separada de `backrest`:
+el path `variables.binary` propio de la app, la sonda de health y el comando de versión. Enlace una
+app solo cuando la propia operación del servicio la necesite. Por ejemplo,
+Backrest se puede monitorizar y reiniciar sin `restic`; `restic` se necesita en
+una operación de backup, que informa de su propio error si falta el binario.
+Del mismo modo, el `winbindd` de Samba debe estar en un proceso/watch protegido
+por `enable_if`, no en `apps`, porque depende de la configuración del host.
+
+Cuando un servicio enlaza varias apps obligatorias, los checks de cada una se
+mantienen distintos:
 
 ```yaml
 preflight:
@@ -1140,9 +1142,10 @@ opcional porque algunas unidades systemd publican `MainPID` incluso cuando el
 Una entrada bajo `processes`, `watches` o `preflight` puede llevar un
 guard `enable_if` que la mantiene solo cuando una clave en un fichero de config de distro satisface
 un predicado; de lo contrario la entrada se descarta durante la resolución del servicio. Esto
-modela componentes que son opcionales por host — p. ej. un perfil de Samba que enlaza un
-app `winbindd` puede monitorizar `winbindd` solo cuando el
-`daemon_list` de `/etc/conf.d/samba` lo nombra:
+modela componentes que son opcionales por host — p. ej. un perfil de Samba
+monitoriza `winbindd` solo cuando el `daemon_list` de `/etc/conf.d/samba` lo
+nombra. No enlace ese componente bajo `apps`, porque las apps enlazadas son
+dependencias obligatorias de preflight para las operaciones del servicio:
 
 ```yaml
 processes:

@@ -9,7 +9,6 @@ service:
     - backrest
 apps:
   - backrest
-  - restic
 restart_on_change:
   apps:
     - backrest
