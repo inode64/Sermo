@@ -299,7 +299,7 @@ func (l *UserLookup) getentUserID(name string) (uint32, bool) {
 	if !ok {
 		return 0, false
 	}
-	_, uid, ok := parsePasswdLine(line)
+	_, uid, ok := parseUnixDatabaseLine(line)
 	return uid, ok
 }
 
@@ -308,7 +308,7 @@ func (l *UserLookup) getentGroupID(name string) (uint32, bool) {
 	if !ok {
 		return 0, false
 	}
-	_, gid, ok := parseGroupLine(line)
+	_, gid, ok := parseUnixDatabaseLine(line)
 	return gid, ok
 }
 
@@ -317,7 +317,7 @@ func (l *UserLookup) getentUserName(uid uint32) (string, bool) {
 	if !ok {
 		return "", false
 	}
-	name, _, ok := parsePasswdLine(line)
+	name, _, ok := parseUnixDatabaseLine(line)
 	return name, ok
 }
 
@@ -326,7 +326,7 @@ func (l *UserLookup) getentGroupName(gid uint32) (string, bool) {
 	if !ok {
 		return "", false
 	}
-	name, _, ok := parseGroupLine(line)
+	name, _, ok := parseUnixDatabaseLine(line)
 	return name, ok
 }
 
@@ -376,22 +376,15 @@ func nativeGroupName(gid uint32) (string, bool) {
 	return g.Name, true
 }
 
-func parsePasswdLine(line string) (string, uint32, bool) {
+// parseUnixDatabaseLine extracts the name and numeric ID from the shared
+// colon-separated passwd/group record layout.
+func parseUnixDatabaseLine(line string) (string, uint32, bool) {
 	fields := strings.Split(line, passwdGroupFieldSeparator)
 	if len(fields) < passwdGroupMinFields || fields[passwdGroupNameIndex] == "" {
 		return "", 0, false
 	}
-	uid, ok := parseUint32(fields[passwdGroupIDIndex])
-	return fields[passwdGroupNameIndex], uid, ok
-}
-
-func parseGroupLine(line string) (string, uint32, bool) {
-	fields := strings.Split(line, passwdGroupFieldSeparator)
-	if len(fields) < passwdGroupMinFields || fields[passwdGroupNameIndex] == "" {
-		return "", 0, false
-	}
-	gid, ok := parseUint32(fields[passwdGroupIDIndex])
-	return fields[passwdGroupNameIndex], gid, ok
+	id, ok := parseUint32(fields[passwdGroupIDIndex])
+	return fields[passwdGroupNameIndex], id, ok
 }
 
 func parseUint32(s string) (uint32, bool) {
