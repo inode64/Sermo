@@ -41,9 +41,9 @@ func beginOperationSettling(store OperationSettlingStore, service, action, sourc
 	return nil
 }
 
-// BeginOperationSettlingForCLI marks a CLI service operation as running.
-func BeginOperationSettlingForCLI(store OperationSettlingStore, service, action string) error {
-	return beginOperationSettling(store, service, action, state.SourceCLI)
+// BeginOperationSettling marks a service operation as running for its caller.
+func BeginOperationSettling(store OperationSettlingStore, service, action, source string) error {
+	return beginOperationSettling(store, service, action, source)
 }
 
 func finishOperationSettling(store OperationSettlingStore, service, action, source string, result operation.Result, opErr error) error {
