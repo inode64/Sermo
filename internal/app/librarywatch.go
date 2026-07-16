@@ -205,8 +205,38 @@ func BuildArtifactWatches(ctx context.Context, cfg *config.Config, deps Deps) []
 	}
 	out := BuildLibraryWatches(ctx, cfg, deps)
 	out = append(out, BuildAppWatches(ctx, cfg, deps)...)
-	out = append(out, buildArtifactAppWatches(cfg, deps, samples)...)
-	return append(out, buildArtifactPathWatches(cfg, deps, samples)...)
+	dependencies := collectArtifactDependencies(cfg)
+	out = append(out, buildArtifactAppWatches(cfg, deps, samples, dependencies.apps)...)
+	return append(out, buildArtifactPathWatches(deps, samples, dependencies.paths)...)
+}
+
+type artifactDependencies struct {
+	apps  []string
+	paths map[string]time.Duration
+}
+
+// collectArtifactDependencies resolves each service once to find the app and
+// file artifacts its changed conditions need. A path used by several services
+// runs at the shortest configured service interval.
+func collectArtifactDependencies(cfg *config.Config) artifactDependencies {
+	appSet := map[string]struct{}{}
+	pathIntervals := map[string]time.Duration{}
+	for _, name := range cfg.SortedServiceNames() {
+		resolved, errs := cfg.Resolve(name)
+		if len(errs) > 0 || resolved.Tree == nil {
+			continue
+		}
+		for _, app := range changedRuleApps(resolved.Tree) {
+			appSet[app] = struct{}{}
+		}
+		interval := serviceArtifactInterval(cfg, resolved.Tree)
+		for _, path := range changedRulePaths(resolved.Tree) {
+			if prior, found := pathIntervals[path]; !found || interval < prior {
+				pathIntervals[path] = interval
+			}
+		}
+	}
+	return artifactDependencies{apps: slices.Sorted(maps.Keys(appSet)), paths: pathIntervals}
 }
 
 // buildArtifactAppWatches samples changed-app dependencies which do not have a
@@ -214,24 +244,14 @@ func BuildArtifactWatches(ctx context.Context, cfg *config.Config, deps Deps) []
 // intentionally silent: its only purpose is to refresh the shared sample, so a
 // failed app probe is cached at the artifact cadence rather than retried by each
 // service rule.
-func buildArtifactAppWatches(cfg *config.Config, deps Deps, samples *ArtifactSamples) []*Watch {
-	apps := map[string]struct{}{}
-	for _, name := range cfg.SortedServiceNames() {
-		resolved, errs := cfg.Resolve(name)
-		if len(errs) > 0 || resolved.Tree == nil {
-			continue
-		}
-		for _, app := range changedRuleApps(resolved.Tree) {
-			apps[app] = struct{}{}
-		}
-	}
+func buildArtifactAppWatches(cfg *config.Config, deps Deps, samples *ArtifactSamples, apps []string) []*Watch {
 	if len(apps) == 0 {
 		return nil
 	}
 
 	runner := deps.ExecxRunner
 	out := make([]*Watch, 0, len(apps))
-	for _, name := range slices.Sorted(maps.Keys(apps)) {
+	for _, name := range apps {
 		if !samples.RegisterApp(name) {
 			continue // The regular installed-app watch already samples it.
 		}
@@ -254,20 +274,7 @@ func buildArtifactAppWatches(cfg *config.Config, deps Deps, samples *ArtifactSam
 	return out
 }
 
-func buildArtifactPathWatches(cfg *config.Config, deps Deps, samples *ArtifactSamples) []*Watch {
-	paths := map[string]time.Duration{}
-	for _, name := range cfg.SortedServiceNames() {
-		resolved, errs := cfg.Resolve(name)
-		if len(errs) > 0 || resolved.Tree == nil {
-			continue
-		}
-		interval := serviceArtifactInterval(cfg, resolved.Tree)
-		for _, path := range changedRulePaths(resolved.Tree) {
-			if prior, found := paths[path]; !found || interval < prior {
-				paths[path] = interval
-			}
-		}
-	}
+func buildArtifactPathWatches(deps Deps, samples *ArtifactSamples, paths map[string]time.Duration) []*Watch {
 	if len(paths) == 0 {
 		return nil
 	}
