@@ -201,10 +201,7 @@ defaults:
 }
 
 func TestReloadConfigCompatibilityRejectsProcessLifetimeChanges(t *testing.T) {
-	current := &config.Config{Global: config.Global{
-		Runtime: "/run/sermo", State: "/var/lib/sermo",
-		Raw: map[string]any{config.SectionWeb: map[string]any{config.WebKeyPort: 9797, config.WebKeyPassword: "current"}},
-	}}
+	current := reloadCompatibilityConfig("/run/sermo", "/var/lib/sermo", "current", 2)
 	tests := []struct {
 		name string
 		next *config.Config
@@ -212,34 +209,27 @@ func TestReloadConfigCompatibilityRejectsProcessLifetimeChanges(t *testing.T) {
 	}{
 		{
 			name: "unchanged paths",
-			next: &config.Config{Global: config.Global{
-				Runtime: "/run/sermo", State: "/var/lib/sermo",
-				Raw: map[string]any{config.SectionWeb: map[string]any{config.WebKeyPort: 9797, config.WebKeyPassword: "current"}},
-			}},
+			next: reloadCompatibilityConfig("/run/sermo", "/var/lib/sermo", "current", 2),
 		},
 		{
 			name: "runtime changed",
-			next: &config.Config{Global: config.Global{
-				Runtime: "/run/sermo-next", State: "/var/lib/sermo",
-				Raw: map[string]any{config.SectionWeb: map[string]any{config.WebKeyPort: 9797, config.WebKeyPassword: "current"}},
-			}},
+			next: reloadCompatibilityConfig("/run/sermo-next", "/var/lib/sermo", "current", 2),
 			want: "paths.runtime changed; restart sermod",
 		},
 		{
 			name: "state changed",
-			next: &config.Config{Global: config.Global{
-				Runtime: "/run/sermo", State: "/var/lib/sermo-next",
-				Raw: map[string]any{config.SectionWeb: map[string]any{config.WebKeyPort: 9797, config.WebKeyPassword: "current"}},
-			}},
+			next: reloadCompatibilityConfig("/run/sermo", "/var/lib/sermo-next", "current", 2),
 			want: "paths.state changed; restart sermod",
 		},
 		{
 			name: "web auth changed",
-			next: &config.Config{Global: config.Global{
-				Runtime: "/run/sermo", State: "/var/lib/sermo",
-				Raw: map[string]any{config.SectionWeb: map[string]any{config.WebKeyPort: 9797, config.WebKeyPassword: "next"}},
-			}},
+			next: reloadCompatibilityConfig("/run/sermo", "/var/lib/sermo", "next", 2),
 			want: "web configuration changed; restart sermod",
+		},
+		{
+			name: "operation slots changed",
+			next: reloadCompatibilityConfig("/run/sermo", "/var/lib/sermo", "current", 4),
+			want: "engine.max_parallel_operations changed; restart sermod",
 		},
 	}
 
@@ -249,6 +239,144 @@ func TestReloadConfigCompatibilityRejectsProcessLifetimeChanges(t *testing.T) {
 				t.Fatalf("reloadConfigCompatibilityError() = %q, want %q", got, tt.want)
 			}
 		})
+	}
+}
+
+func reloadCompatibilityConfig(runtime, stateDir, password string, operationSlots int) *config.Config {
+	return &config.Config{Global: config.Global{
+		Runtime: runtime, State: stateDir,
+		Raw: map[string]any{
+			config.SectionEngine: map[string]any{config.EngineKeyMaxParallelOperations: operationSlots},
+			config.SectionWeb:    map[string]any{config.WebKeyPort: 9797, config.WebKeyPassword: password},
+		},
+	}}
+}
+
+func TestMonitorApplyConfigUpdatesSchedulerInterval(t *testing.T) {
+	current := reloadCompatibilityConfig("/run/sermo", "/var/lib/sermo", "current", 2)
+	next := reloadCompatibilityConfig("/run/sermo", "/var/lib/sermo", "current", 2)
+	next.Global.Raw[config.SectionEngine] = map[string]any{
+		config.EntryKeyInterval:               "10s",
+		config.EngineKeyMaxParallelOperations: 2,
+	}
+	mon := NewMonitor(current, Deps{Interval: time.Minute}, Scheduler{Interval: time.Minute, OpSlots: 2}, nil, nil, nil)
+	mon.Logger = slog.Default()
+
+	mon.applyConfig(next)
+
+	if mon.scheduler.Interval != 10*time.Second {
+		t.Fatalf("scheduler interval = %s, want 10s", mon.scheduler.Interval)
+	}
+}
+
+func TestMonitorGenerationRunsDaemonMetricSampler(t *testing.T) {
+	reader := &signalingDaemonMetricReader{
+		fakeDaemonMetricReader: &fakeDaemonMetricReader{rss: 1024, memTotal: 4096, numCPU: 1, clockTick: 100},
+		sampled:                make(chan struct{}),
+	}
+	sampler := &DaemonMetricSampler{reader: reader, now: time.Now, pid: 42}
+	mon := NewMonitor(&config.Config{}, Deps{DaemonMetricSampler: sampler, Interval: time.Hour}, Scheduler{Interval: time.Hour}, nil, nil, nil)
+	mon.Init(nil, nil)
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		mon.Run(ctx)
+		close(done)
+	}()
+
+	select {
+	case <-reader.sampled:
+	case <-time.After(time.Second):
+		t.Fatal("monitor did not start the daemon metric sampler")
+	}
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("monitor did not stop the daemon metric sampler")
+	}
+}
+
+func TestMonitorReloadEmptyFleetRestoresSchedulerAndCollector(t *testing.T) {
+	dir := t.TempDir()
+	servicesDir := filepath.Join(dir, "services")
+	emptyServicesDir := filepath.Join(dir, "empty-services")
+	if err := os.MkdirAll(servicesDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(emptyServicesDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	global := filepath.Join(dir, "sermo.yml")
+	runtimeDir := filepath.Join(dir, "run")
+	initial := fmt.Sprintf(`engine:
+  interval: 100ms
+paths:
+  services: [%q]
+  runtime: %q
+defaults:
+  policy: { cooldown: 1m }
+`, servicesDir, runtimeDir)
+	if err := os.WriteFile(global, []byte(initial), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(servicesDir, "web.yml"), []byte(`
+name: web
+checks:
+  ping:
+    type: command
+    command: ["/bin/true"]
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.Load(global)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ready := NewReadiness(string(servicemgr.BackendSystemd), 1, 0)
+	deps := Deps{Interval: 100 * time.Millisecond, SystemFreshness: 50 * time.Millisecond, Now: time.Now, Emit: func(Event) {}, ExecxRunner: execx.CommandRunner{}, Settling: NewSettling(ready)}
+	collector := metrics.New(metrics.OSReader{})
+	collector.SystemFreshness = deps.SystemFreshness
+	workers, _, _ := BuildWorkers(t.Context(), cfg, deps, collector)
+	forceWorkerBackendActive(workers)
+	mon := NewMonitor(cfg, deps, Scheduler{Interval: deps.Interval}, ready, collector, nil)
+	mon.ConfigPath = global
+	mon.Logger = slog.Default()
+	mon.Init(workers, nil)
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		mon.Run(ctx)
+		close(done)
+	}()
+	t.Cleanup(func() {
+		cancel()
+		<-done
+	})
+	waitReady(t, ready)
+
+	empty := fmt.Sprintf(`engine:
+  interval: 10s
+paths:
+  services: [%q]
+  runtime: %q
+defaults:
+  policy: { cooldown: 1m }
+`, emptyServicesDir, runtimeDir)
+	if err := os.WriteFile(global, []byte(empty), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	mon.Reload(ctx)
+
+	mon.mu.Lock()
+	gotInterval := mon.scheduler.Interval
+	gotFreshness := mon.deps.SystemFreshness
+	mon.mu.Unlock()
+	if gotInterval != 100*time.Millisecond || gotFreshness != 50*time.Millisecond {
+		t.Fatalf("rollback scheduler/freshness = %s/%s, want 100ms/50ms", gotInterval, gotFreshness)
+	}
+	if collector.SystemFreshness != 50*time.Millisecond {
+		t.Fatalf("collector freshness = %s, want 50ms", collector.SystemFreshness)
 	}
 }
 

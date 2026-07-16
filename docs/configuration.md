@@ -447,6 +447,11 @@ The `web` block is also startup-only: its listener address/port, authentication
 and guest policy are installed on the HTTP server when `sermod` starts. Change
 those settings with a full restart; a configuration reload rejects them rather
 than leaving the old web access policy active.
+`engine.max_parallel_operations` sets the cross-process operation-slot pool.
+Changing its capacity also requires a full restart, so a reload rejects it
+rather than briefly exceeding a reduced safety limit while old operations hold
+the previous slots. `engine.interval` remains reloadable and immediately
+reschedules services that inherit the global cadence.
 Per-service CPU rate baselines are reset only when a service is removed from the
 running config; persisted metric and event history remains in `paths.state`
 until normal retention or an explicit `sermoctl state compact`.

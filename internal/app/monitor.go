@@ -117,12 +117,17 @@ func (m *Monitor) Reload(ctx context.Context) {
 	savedWatches := captureWatchState(oldWatches)
 	prevCfg := m.cfg
 	prevDeps := m.deps
+	prevScheduler := m.scheduler
 
 	workers, watches, hostWatches, warnings := m.buildGenerationLocked(ctx, newCfg)
 	if len(workers) == 0 && hostWatches == 0 && !HasConfiguredTargets(newCfg) {
 		// Rollback: restore previous generation and restart it (we stopped above).
 		m.cfg = prevCfg
 		m.deps = prevDeps
+		m.scheduler = prevScheduler
+		if m.collector != nil && prevDeps.SystemFreshness > 0 {
+			m.collector.SystemFreshness = prevDeps.SystemFreshness
+		}
 		m.workers = oldWorkers
 		m.watches = oldWatches
 		m.emitReloadError("no services or watches configured")
@@ -184,6 +189,10 @@ func (m *Monitor) installGenerationLocked(ctx context.Context, newCfg *config.Co
 			m.Logger.Warn("reload web backend", monitorLogFieldWarning, w)
 		}
 	}
+	if m.deps.DiagnosticLog != nil {
+		m.deps.DiagnosticLog.UpdateConfig(newCfg)
+		go m.deps.DiagnosticLog.Export()
+	}
 	for _, w := range warnings {
 		m.Logger.Warn("reload build", monitorLogFieldWarning, w)
 	}
@@ -206,6 +215,8 @@ func (m *Monitor) applyConfig(cfg *config.Config) {
 	m.deps.DefaultTimeout = EngineDuration(cfg, config.EngineKeyDefaultTimeout, DefaultEngineCheckTimeout)
 	m.deps.OperationTimeout = EngineDuration(cfg, config.EngineKeyOperationTimeout, DefaultEngineOperationTimeout)
 	m.deps.MaxParallel = EngineInt(cfg, config.EngineKeyMaxParallelChecks, DefaultEngineMaxParallelChecks)
+	m.scheduler.Interval = m.deps.Interval
+	m.scheduler.OpSlots = EngineInt(cfg, config.EngineKeyMaxParallelOperations, DefaultEngineMaxParallelOperations)
 	m.deps.UserLookup = EngineUserLookup(cfg, m.deps.ExecxRunner)
 	m.deps.SystemFreshness = m.deps.Interval / SystemFreshnessIntervalDivisor
 	if m.collector != nil && m.deps.SystemFreshness > 0 {
@@ -220,10 +231,6 @@ func (m *Monitor) applyConfig(cfg *config.Config) {
 	m.deps.GlobalEmission = emission.Merge(cfg.Global.Raw[emission.Section], emission.Default())
 	for _, w := range warns {
 		m.Logger.Warn("reload notifiers", monitorLogFieldWarning, w)
-	}
-	if m.deps.DiagnosticLog != nil {
-		m.deps.DiagnosticLog.UpdateConfig(cfg)
-		go m.deps.DiagnosticLog.Export()
 	}
 }
 
@@ -263,6 +270,12 @@ func (m *Monitor) startGenerationLocked(ctx context.Context, firstBoot bool) {
 	m.genWG.Go(func() {
 		sched.Run(genCtx, m.workers, m.watches, m.deps.OpGate, m.readiness, false, firstGen)
 	})
+	if sampler := m.deps.DaemonMetricSampler; sampler != nil {
+		interval := m.deps.Interval
+		m.genWG.Go(func() {
+			sampler.Run(genCtx, interval)
+		})
+	}
 }
 
 func (m *Monitor) stopGenerationLocked(final bool) {
@@ -299,6 +312,10 @@ func reloadConfigCompatibilityError(current, next *config.Config) string {
 	}
 	if !reflect.DeepEqual(current.Global.Raw[config.SectionWeb], next.Global.Raw[config.SectionWeb]) {
 		return "web configuration changed; restart sermod"
+	}
+	if EngineInt(current, config.EngineKeyMaxParallelOperations, DefaultEngineMaxParallelOperations) !=
+		EngineInt(next, config.EngineKeyMaxParallelOperations, DefaultEngineMaxParallelOperations) {
+		return "engine.max_parallel_operations changed; restart sermod"
 	}
 	return ""
 }
