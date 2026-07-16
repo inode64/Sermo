@@ -149,6 +149,8 @@ test.beforeEach(async ({ page }) => {
   await mockAPI(page);
   await page.goto("/");
   await expect(page.locator("#svc-row-web")).toBeVisible();
+  await expect(page.locator("#app-row-postgres")).toBeVisible();
+  await expect(page.locator("#library-row-openssl")).toBeVisible();
 });
 
 test("dashboard passes axe and fits the viewport", async ({ page }) => {
@@ -279,8 +281,11 @@ test("application and library inventories filter, group, sort, and expand", asyn
   await expect(page.locator("#app-row-postgres")).toBeVisible();
   await page.locator('[data-app-sort="version"]').click();
   await expect(page.locator('[data-app-sort="version"]')).toHaveAttribute("aria-sort", "ascending");
-  await page.locator("#app-row-postgres .row-toggle").click();
-  await expect(page.locator("#exp-app\\:postgres")).toContainText("16.3");
+  const postgresToggle = page.locator("#app-row-postgres .row-toggle");
+  await postgresToggle.click();
+  await expect(postgresToggle).toHaveAttribute("aria-expanded", "true");
+  await expect(postgresToggle).toHaveAttribute("aria-controls", "exp-app:postgres");
+  await expect(page.locator('[id="exp-app:postgres"]')).toContainText("16.3");
 
   await page.locator('[data-lf="warning"]').click();
   await expect(page.locator("#library-row-zlib")).toBeVisible();
