@@ -35,16 +35,10 @@ const (
 	getentDatabasePasswd = "passwd"
 )
 
-type idLookupResult struct {
-	id uint32
-	ok bool
-	at time.Time // when resolved; negative results expire after negativeCacheTTL
-}
-
-type nameLookupResult struct {
-	name string
-	ok   bool
-	at   time.Time
+type lookupCacheResult[T any] struct {
+	value T
+	ok    bool
+	at    time.Time // when resolved; negative results expire after negativeCacheTTL
 }
 
 type nameResolver func(uint32) (string, bool)
@@ -80,10 +74,10 @@ type UserLookup struct {
 	negTTL time.Duration    // negative-result TTL (defaults to negativeCacheTTL)
 
 	mu         sync.Mutex
-	users      map[string]idLookupResult
-	groups     map[string]idLookupResult
-	userNames  map[uint32]nameLookupResult
-	groupNames map[uint32]nameLookupResult
+	users      map[string]lookupCacheResult[uint32]
+	groups     map[string]lookupCacheResult[uint32]
+	userNames  map[uint32]lookupCacheResult[string]
+	groupNames map[uint32]lookupCacheResult[string]
 }
 
 // ValidUserLookupMode reports whether mode is accepted by NewUserLookup.
@@ -125,10 +119,10 @@ func NewUserLookup(cfg UserLookupConfig) *UserLookup {
 		runner:     runner,
 		now:        time.Now,
 		negTTL:     negativeCacheTTL,
-		users:      map[string]idLookupResult{},
-		groups:     map[string]idLookupResult{},
-		userNames:  map[uint32]nameLookupResult{},
-		groupNames: map[uint32]nameLookupResult{},
+		users:      map[string]lookupCacheResult[uint32]{},
+		groups:     map[string]lookupCacheResult[uint32]{},
+		userNames:  map[uint32]lookupCacheResult[string]{},
+		groupNames: map[uint32]lookupCacheResult[string]{},
 	}
 }
 
@@ -171,27 +165,27 @@ func (l *UserLookup) GroupName(gid uint32) string {
 	return l.resolveName(gid, l.groupNames, nativeGroupName, l.getentGroupName)
 }
 
-func (l *UserLookup) resolveID(name string, cache map[string]idLookupResult, native, getent UserResolver) (uint32, bool) {
+func (l *UserLookup) resolveID(name string, cache map[string]lookupCacheResult[uint32], native, getent UserResolver) (uint32, bool) {
 	if id, ok := parseUint32(name); ok {
 		return id, true
 	}
-	if got, cached := cachedID(l, cache, name); cached {
-		return got.id, got.ok
+	if got, cached := cachedLookup(l, cache, name); cached {
+		return got.value, got.ok
 	}
 	id, ok := l.lookupID(name, native, getent)
-	storeID(l, cache, name, idLookupResult{id: id, ok: ok})
+	storeLookup(l, cache, name, lookupCacheResult[uint32]{value: id, ok: ok})
 	return id, ok
 }
 
-func (l *UserLookup) resolveName(id uint32, cache map[uint32]nameLookupResult, native, getent nameResolver) string {
-	if got, cached := cachedName(l, cache, id); cached {
+func (l *UserLookup) resolveName(id uint32, cache map[uint32]lookupCacheResult[string], native, getent nameResolver) string {
+	if got, cached := cachedLookup(l, cache, id); cached {
 		if got.ok {
-			return got.name
+			return got.value
 		}
 		return ""
 	}
 	name, ok := l.lookupName(id, native, getent)
-	storeName(l, cache, id, nameLookupResult{name: name, ok: ok})
+	storeLookup(l, cache, id, lookupCacheResult[string]{value: name, ok: ok})
 	return name
 }
 
@@ -226,34 +220,17 @@ func lookupWithMode[query, result any](mode string, value query, native, getent 
 	}
 }
 
-func cachedID(l *UserLookup, cache map[string]idLookupResult, key string) (idLookupResult, bool) {
+func cachedLookup[K comparable, T any](l *UserLookup, cache map[K]lookupCacheResult[T], key K) (lookupCacheResult[T], bool) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	got, ok := cache[key]
 	if !ok || l.negativeExpired(got.ok, got.at) {
-		return idLookupResult{}, false
+		return lookupCacheResult[T]{}, false
 	}
 	return got, true
 }
 
-func storeID(l *UserLookup, cache map[string]idLookupResult, key string, value idLookupResult) {
-	l.mu.Lock()
-	value.at = l.clock()
-	cache[key] = value
-	l.mu.Unlock()
-}
-
-func cachedName(l *UserLookup, cache map[uint32]nameLookupResult, key uint32) (nameLookupResult, bool) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	got, ok := cache[key]
-	if !ok || l.negativeExpired(got.ok, got.at) {
-		return nameLookupResult{}, false
-	}
-	return got, true
-}
-
-func storeName(l *UserLookup, cache map[uint32]nameLookupResult, key uint32, value nameLookupResult) {
+func storeLookup[K comparable, T any](l *UserLookup, cache map[K]lookupCacheResult[T], key K, value lookupCacheResult[T]) {
 	l.mu.Lock()
 	value.at = l.clock()
 	cache[key] = value
