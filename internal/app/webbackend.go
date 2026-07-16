@@ -197,6 +197,30 @@ type WebBackend struct {
 	mountOperations   map[string]web.MountOperation
 }
 
+// DashboardSnapshot collects every reload-sensitive dashboard section from one
+// backend generation. The holder calls it after taking one pointer, so a reload
+// cannot combine services from one configuration with daemon data from another.
+func (b *WebBackend) DashboardSnapshot(ctx context.Context, since time.Duration) web.DashboardSnapshot {
+	var snapshot web.DashboardSnapshot
+	var wg sync.WaitGroup
+	run := func(fn func()) {
+		wg.Go(fn)
+	}
+
+	run(func() { snapshot.Services = b.Services(ctx) })
+	run(func() { snapshot.Mounts = b.Mounts(ctx) })
+	run(func() { snapshot.Notifiers = b.Notifiers(ctx) })
+	run(func() { snapshot.Daemon = b.DaemonInfo(ctx) })
+	run(func() { snapshot.DaemonMetrics = b.DaemonMetrics(ctx, since) })
+	run(func() { snapshot.Locks = b.Locks(ctx) })
+	run(func() { snapshot.Activity = b.ActivitySummary(ctx) })
+	run(func() { snapshot.Monitoring = b.MonitoringStatus(ctx) })
+	run(func() { snapshot.Operations = b.Operations(ctx) })
+	run(func() { snapshot.HostMetrics = b.HostMetrics(ctx) })
+	wg.Wait()
+	return snapshot
+}
+
 func (b *WebBackend) maxOperationTimeout() time.Duration {
 	if b == nil {
 		return 0
