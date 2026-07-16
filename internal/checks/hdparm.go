@@ -57,7 +57,7 @@ func (c hdparmCheck) Run(ctx context.Context) Result {
 }
 
 // HdparmResultData is the persisted reading data for one hdparm throughput
-// probe, shared by the check cycle and the live watch view.
+// probe, shared by the check cycle and the snapshot-backed watch view.
 func HdparmResultData(device string, values map[string]float64) map[string]any {
 	data := map[string]any{DataKeyDevice: device}
 	for k, v := range values {
