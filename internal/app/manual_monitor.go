@@ -23,12 +23,12 @@ type ManualMonitorChange struct {
 	Message   string
 }
 
-// SyncManualActionMonitoringWithActive pauses monitoring after a successful
+// SyncManualActionMonitoring pauses monitoring after a successful
 // manual stop and restores it after a successful manual start when the stop
 // created the pause. Existing manual unmonitor state is preserved.
 // activeAfterPostflightFailure restores monitoring for starts that reached the backend but
 // failed postflight when the service is still active.
-func SyncManualActionMonitoringWithActive(store MonitorStore, service, action string, result operation.Result, stopSource, restoreSource string, activeAfterPostflightFailure bool) (ManualMonitorChange, error) {
+func SyncManualActionMonitoring(store MonitorStore, service, action string, result operation.Result, stopSource, restoreSource string, activeAfterPostflightFailure bool) (ManualMonitorChange, error) {
 	if store == nil {
 		return ManualMonitorChange{}, nil
 	}
@@ -56,9 +56,9 @@ func CompleteManualOperation(monitor MonitorStore, settling OperationSettlingSto
 	var change ManualMonitorChange
 	var monitorErr error
 	if opErr == nil {
-		change, monitorErr = SyncManualActionMonitoringWithActive(monitor, service, action, result, sources.Stop, sources.Restore, activeAfterPostflightFailure)
+		change, monitorErr = SyncManualActionMonitoring(monitor, service, action, result, sources.Stop, sources.Restore, activeAfterPostflightFailure)
 	}
-	settlingErr := finishOperationSettlingWithActive(settling, service, action, sources.Settling, result, opErr, activeAfterPostflightFailure)
+	settlingErr := finishOperationSettling(settling, service, action, sources.Settling, result, opErr, activeAfterPostflightFailure)
 	return change, errors.Join(monitorErr, settlingErr)
 }
 

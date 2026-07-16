@@ -609,7 +609,7 @@ func (w *Worker) operateForRemediation(ctx context.Context, action string) opera
 		w.emit(Event{Kind: eventKindError, Action: action, Message: err.Error()})
 	}
 	result := w.Operate(ctx, action)
-	if err := finishOperationSettling(w.OperationSettling, w.Service, action, state.SourceDaemon, result, nil); err != nil {
+	if err := finishOperationSettling(w.OperationSettling, w.Service, action, state.SourceDaemon, result, nil, false); err != nil {
 		w.emit(Event{Kind: eventKindError, Action: action, Message: err.Error()})
 	}
 	return result
