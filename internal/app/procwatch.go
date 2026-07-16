@@ -356,12 +356,7 @@ func (w *procWatcher) summaryMessage(info ProcInfo, message string, env map[stri
 		checks.DataKeyTrigger:    env[sermoEnvChange],
 		watchReadingFieldProcess: w.match.Name,
 	}
-	if ageSeconds, ok := env[sermoEnvAgeSeconds]; ok {
-		if seconds, err := strconv.ParseInt(ageSeconds, envFormatBase, envFloatBits); err == nil {
-			data[checks.DataKeyAge] = time.Duration(seconds) * time.Second
-			data[checks.DataKeyValue] = data[checks.DataKeyAge]
-		}
-	}
+	addSummaryAge(data, env)
 	for _, field := range []struct {
 		envKey  string
 		dataKey string
