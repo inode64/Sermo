@@ -82,3 +82,70 @@ func TestUserLookupNumericMode(t *testing.T) {
 		t.Fatalf("numeric mode ran commands: %v", runner.calls)
 	}
 }
+
+func TestUserLookupLookupPolicies(t *testing.T) {
+	autoID, autoName := uint32(0), ""
+	autoOK := false
+	if !cgoEnabled {
+		autoID, autoName, autoOK = 22, "getent", true
+	}
+	tests := []struct {
+		name                   string
+		mode                   string
+		nativeOK, getentOK     bool
+		wantID                 uint32
+		wantName               string
+		wantOK                 bool
+		wantNative, wantGetent int
+	}{
+		{name: "numeric fails closed", mode: UserLookupNumeric},
+		{name: "native", mode: UserLookupNative, nativeOK: true, wantID: 11, wantName: "native", wantOK: true, wantNative: 1},
+		{name: "getent preferred", mode: UserLookupGetent, nativeOK: true, getentOK: true, wantID: 22, wantName: "getent", wantOK: true, wantGetent: 1},
+		{name: "getent falls back to native", mode: UserLookupGetent, nativeOK: true, wantID: 11, wantName: "native", wantOK: true, wantNative: 1, wantGetent: 1},
+		{name: "auto uses native", mode: UserLookupAuto, nativeOK: true, getentOK: true, wantID: 11, wantName: "native", wantOK: true, wantNative: 1},
+		{name: "auto fallback depends on cgo", mode: UserLookupAuto, getentOK: true, wantID: autoID, wantName: autoName, wantOK: autoOK, wantNative: 1, wantGetent: boolToInt(!cgoEnabled)},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			lookup := NewUserLookup(UserLookupConfig{Mode: tc.mode})
+			var nativeIDCalls, getentIDCalls, nativeNameCalls, getentNameCalls int
+			nativeID := func(string) (uint32, bool) {
+				nativeIDCalls++
+				return 11, tc.nativeOK
+			}
+			getentID := func(string) (uint32, bool) {
+				getentIDCalls++
+				return 22, tc.getentOK
+			}
+			if id, ok := lookup.lookupID("target", nativeID, getentID); id != tc.wantID || ok != tc.wantOK {
+				t.Fatalf("lookupID = %d/%v, want %d/%v", id, ok, tc.wantID, tc.wantOK)
+			}
+			if nativeIDCalls != tc.wantNative || getentIDCalls != tc.wantGetent {
+				t.Fatalf("lookupID calls = native:%d getent:%d, want native:%d getent:%d", nativeIDCalls, getentIDCalls, tc.wantNative, tc.wantGetent)
+			}
+
+			nativeName := func(uint32) (string, bool) {
+				nativeNameCalls++
+				return "native", tc.nativeOK
+			}
+			getentName := func(uint32) (string, bool) {
+				getentNameCalls++
+				return "getent", tc.getentOK
+			}
+			if name, ok := lookup.lookupName(11, nativeName, getentName); name != tc.wantName || ok != tc.wantOK {
+				t.Fatalf("lookupName = %q/%v, want %q/%v", name, ok, tc.wantName, tc.wantOK)
+			}
+			if nativeNameCalls != tc.wantNative || getentNameCalls != tc.wantGetent {
+				t.Fatalf("lookupName calls = native:%d getent:%d, want native:%d getent:%d", nativeNameCalls, getentNameCalls, tc.wantNative, tc.wantGetent)
+			}
+		})
+	}
+}
+
+func boolToInt(v bool) int {
+	if v {
+		return 1
+	}
+	return 0
+}
