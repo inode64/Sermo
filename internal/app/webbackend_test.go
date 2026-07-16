@@ -2634,7 +2634,7 @@ func TestWatchSnapshotsFeedHeavyProbeView(t *testing.T) {
 	}
 }
 
-func TestWatchSnapshotsSuppressColdWebProbe(t *testing.T) {
+func TestWatchDashboardViewNeverRunsLiveFallback(t *testing.T) {
 	now := time.Unix(1_700_000_000, 0)
 	var samplerCalls int
 	snapshots := NewWatchSnapshots()
@@ -2652,7 +2652,6 @@ func TestWatchSnapshotsSuppressColdWebProbe(t *testing.T) {
 				},
 			},
 		},
-		watchSnapshots: snapshots,
 		firewallSampler: func(context.Context, string, execx.Runner) (checks.FirewallRulesSample, error) {
 			samplerCalls++
 			return checks.FirewallRulesSample{Backend: checks.FirewallBackendNftables, Rules: 3}, nil
@@ -2665,9 +2664,10 @@ func TestWatchSnapshotsSuppressColdWebProbe(t *testing.T) {
 		t.Fatalf("cold Watches() = %+v, want no live firewall summary", ws)
 	}
 	if samplerCalls != 0 {
-		t.Fatalf("cold web probe sampled firewall %d times, want 0", samplerCalls)
+		t.Fatalf("web watch view sampled firewall %d times without snapshots, want 0", samplerCalls)
 	}
 
+	b.watchSnapshots = snapshots
 	snapshots.Publish("fw", checks.CheckTypeFirewallRules, checks.Result{
 		Check:     "fw",
 		OK:        true,

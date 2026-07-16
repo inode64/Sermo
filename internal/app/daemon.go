@@ -267,7 +267,8 @@ type Deps struct {
 	// view. Optional: nil disables publishing.
 	Snapshots *Snapshots
 	// WatchSnapshots collects each host watch's latest daemon-cycle check result
-	// for the web watch list. Optional: nil keeps the legacy web live probes.
+	// for the web watch list. The daemon and web backend share this registry so
+	// HTTP reads never run watches themselves.
 	WatchSnapshots *WatchSnapshots
 	// Remediation collects each service's remediation policy view for the web
 	// detail. Optional: nil disables publishing.
