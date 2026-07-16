@@ -295,39 +295,31 @@ func (l *UserLookup) negativeExpired(ok bool, at time.Time) bool {
 }
 
 func (l *UserLookup) getentUserID(name string) (uint32, bool) {
-	line, ok := l.getent(getentDatabasePasswd, name)
-	if !ok {
-		return 0, false
-	}
-	_, uid, ok := parseUnixDatabaseLine(line)
+	_, uid, ok := l.getentRecord(getentDatabasePasswd, name)
 	return uid, ok
 }
 
 func (l *UserLookup) getentGroupID(name string) (uint32, bool) {
-	line, ok := l.getent(getentDatabaseGroup, name)
-	if !ok {
-		return 0, false
-	}
-	_, gid, ok := parseUnixDatabaseLine(line)
+	_, gid, ok := l.getentRecord(getentDatabaseGroup, name)
 	return gid, ok
 }
 
 func (l *UserLookup) getentUserName(uid uint32) (string, bool) {
-	line, ok := l.getent(getentDatabasePasswd, strconv.FormatUint(uint64(uid), numericIDBase))
-	if !ok {
-		return "", false
-	}
-	name, _, ok := parseUnixDatabaseLine(line)
+	name, _, ok := l.getentRecord(getentDatabasePasswd, strconv.FormatUint(uint64(uid), numericIDBase))
 	return name, ok
 }
 
 func (l *UserLookup) getentGroupName(gid uint32) (string, bool) {
-	line, ok := l.getent(getentDatabaseGroup, strconv.FormatUint(uint64(gid), numericIDBase))
-	if !ok {
-		return "", false
-	}
-	name, _, ok := parseUnixDatabaseLine(line)
+	name, _, ok := l.getentRecord(getentDatabaseGroup, strconv.FormatUint(uint64(gid), numericIDBase))
 	return name, ok
+}
+
+func (l *UserLookup) getentRecord(database, query string) (string, uint32, bool) {
+	line, ok := l.getent(database, query)
+	if !ok {
+		return "", 0, false
+	}
+	return parseUnixDatabaseLine(line)
 }
 
 func (l *UserLookup) getent(database, query string) (string, bool) {
