@@ -4,8 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"strconv"
-	"strings"
 	"time"
 
 	"sermo/internal/cfgval"
@@ -38,24 +36,10 @@ func (c sqlCheck) Run(ctx context.Context) Result {
 		return c.result(false, fmt.Sprintf("sql %s: query returned NULL", c.engine), start)
 	}
 
-	ok, err := compareValue(result, c.op, c.value)
-	if err != nil {
-		return c.result(false, fmt.Sprintf("sql %s: %v", c.engine, err), start)
-	}
-
-	res := c.result(ok, fmt.Sprintf("sql %s: %q %s %q = %t", c.engine, result, c.op, c.value, ok), start)
-	data := map[string]any{
-		DataKeyEngine:    c.engine,
-		DataKeyQuery:     c.query,
-		DataKeyOp:        c.op,
-		DataKeyThreshold: c.value,
-		DataKeyResult:    result,
-	}
-	if f, perr := strconv.ParseFloat(strings.TrimSpace(result), numericBits64); perr == nil {
-		data[DataKeyValue] = f
-	}
-	res.Data = data
-	return res
+	return finishScalarCompare(c.base, "sql "+c.engine, result, c.op, c.value, start, map[string]any{
+		DataKeyEngine: c.engine,
+		DataKeyQuery:  c.query,
+	})
 }
 
 // sqlScalar opens the database, runs query and returns the first column of the

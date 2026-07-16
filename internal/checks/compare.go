@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // compareValue evaluates "result op value" and is shared by the sql, http and
@@ -50,6 +51,25 @@ func compareValue(result, op, value string) (bool, error) {
 	default:
 		return false, fmt.Errorf("unsupported op %q", op)
 	}
+}
+
+// finishScalarCompare applies the common condition-check comparison and emits
+// the standard scalar reading data. Each database check keeps its own I/O and
+// supplies only its label and protocol-specific readings.
+func finishScalarCompare(b base, label, result, op, threshold string, start time.Time, data map[string]any) Result {
+	ok, err := compareValue(result, op, threshold)
+	if err != nil {
+		return b.result(false, fmt.Sprintf("%s: %v", label, err), start)
+	}
+	data[DataKeyOp] = op
+	data[DataKeyThreshold] = threshold
+	data[DataKeyResult] = result
+	if value, err := strconv.ParseFloat(strings.TrimSpace(result), numericBits64); err == nil {
+		data[DataKeyValue] = value
+	}
+	res := b.result(ok, fmt.Sprintf("%s: %q %s %q = %t", label, result, op, threshold, ok), start)
+	res.Data = data
+	return res
 }
 
 func parseNumericString(label, value string) (float64, error) {
