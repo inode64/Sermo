@@ -2,7 +2,6 @@ package checks
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io/fs"
 	"math"
@@ -94,17 +93,6 @@ func HumanizeSignedBytes(n int64) string {
 		return "-" + humanize.IBytes(uint64(-n))
 	}
 	return humanize.IBytes(uint64(n))
-}
-
-// SamplePathSize returns the size of a regular file, or the recursive sum of
-// regular-file sizes under a directory. Used by size checks and the web UI.
-// timeout bounds the probe context and is used for operator-facing timeout messages.
-func SamplePathSize(ctx context.Context, path string, includeHidden bool, timeout time.Duration) (int64, error) {
-	size, err := dirOrFileSize(ctx, path, includeHidden)
-	if err != nil {
-		return 0, errors.New(execx.ContextFailure(err, timeout))
-	}
-	return size, nil
 }
 
 // dirOrFileSize returns the size of a regular file, or the recursive sum of
