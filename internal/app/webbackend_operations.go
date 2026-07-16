@@ -130,7 +130,7 @@ func (b *WebBackend) operationResultWithMonitor(ctx context.Context, name, actio
 		b.emitMonitorEvent(name, action, eventKindError, "", err.Error())
 	}
 	r := b.operationResult(ctx, name, action)
-	activeAfterPostflightFailure := b.manualActionActiveAfterStart(ctx, name, action, r)
+	activeAfterPostflightFailure := b.activeAfterPostflightFailure(ctx, name, action, r)
 	change, err := CompleteManualOperation(b.store, b.operationSettling, name, action, r, nil, ManualOperationSources{Stop: state.SourceWebManualStop, Restore: state.SourceWeb, Settling: state.SourceWeb}, activeAfterPostflightFailure)
 	if err != nil {
 		b.emitMonitorEvent(name, action, eventKindError, "", err.Error())
@@ -140,8 +140,8 @@ func (b *WebBackend) operationResultWithMonitor(ctx context.Context, name, actio
 	return r
 }
 
-func (b *WebBackend) manualActionActiveAfterStart(ctx context.Context, name, action string, result operation.Result) bool {
-	if result.Status != operation.ResultPostflightFailed || !manualStartLikeAction(action) {
+func (b *WebBackend) activeAfterPostflightFailure(ctx context.Context, name, action string, result operation.Result) bool {
+	if result.Status != operation.ResultPostflightFailed || !ManualActionCanRemainActiveAfterPostflightFailure(action) {
 		return false
 	}
 	e := b.entries[name]
