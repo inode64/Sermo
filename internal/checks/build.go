@@ -445,9 +445,9 @@ func buildCertCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 
 // buildSqliteCheck builds a SQLite integrity check.
 func buildSqliteCheck(b base, entry map[string]any) (Check, string) {
-	path := cfgval.AsString(entry[CheckKeyPath])
-	if path == "" {
-		return nil, "sqlite check requires a path"
+	path, errs := requireCheckPath(entry, CheckTypeSQLite)
+	if errs != "" {
+		return nil, errs
 	}
 	return sqliteCheck{base: b, path: path, quick: cfgval.Bool(entry[CheckKeyQuick])}, ""
 }
