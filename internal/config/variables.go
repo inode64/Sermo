@@ -203,30 +203,25 @@ func resolveFromFileSpecVars(name string, spec map[string]any, vars map[string]s
 // references are errors because from_file paths are evaluated during config
 // resolution, not at runtime.
 func substituteVars(s string, vars map[string]string, path string) (string, []string) {
-	var errs []string
-	out := varRef.ReplaceAllStringFunc(s, func(ref string) string {
-		name := varRefName(ref)
-		if rest, ok := strings.CutPrefix(name, varEnvPrefix); ok {
-			return resolveEnvRef(rest)
-		}
-		if val, ok := vars[name]; ok {
-			return val
-		}
-		errs = append(errs, fmt.Sprintf("variable ${%s} used in %s but not defined", name, path))
-		return ref
-	})
-	return out, errs
+	return substituteVarsWith(s, vars, path, func(value string) string { return value })
 }
 
 func substitutePatternVars(s string, vars map[string]string, path string) (string, []string) {
+	return substituteVarsWith(s, vars, path, regexp.QuoteMeta)
+}
+
+// substituteVarsWith resolves variable references and transforms each resolved
+// value before insertion. Patterns quote values while file paths retain them
+// literally; unresolved references always report the same config-path error.
+func substituteVarsWith(s string, vars map[string]string, path string, transform func(string) string) (string, []string) {
 	var errs []string
 	out := varRef.ReplaceAllStringFunc(s, func(ref string) string {
 		name := varRefName(ref)
 		if rest, ok := strings.CutPrefix(name, varEnvPrefix); ok {
-			return regexp.QuoteMeta(resolveEnvRef(rest))
+			return transform(resolveEnvRef(rest))
 		}
 		if val, ok := vars[name]; ok {
-			return regexp.QuoteMeta(val)
+			return transform(val)
 		}
 		errs = append(errs, fmt.Sprintf("variable ${%s} used in %s but not defined", name, path))
 		return ref
