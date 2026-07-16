@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"path/filepath"
 	"testing"
 	"time"
@@ -10,7 +11,7 @@ import (
 )
 
 func TestServiceMetricSamplerReadsPersistedHistory(t *testing.T) {
-	store, err := state.Open(filepath.Join(t.TempDir(), state.Filename))
+	store, err := state.OpenContext(context.Background(), filepath.Join(t.TempDir(), state.Filename))
 	if err != nil {
 		t.Fatalf("open state: %v", err)
 	}

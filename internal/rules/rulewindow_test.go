@@ -3,6 +3,7 @@ package rules
 import (
 	"context"
 	"testing"
+	"time"
 )
 
 func TestFormatCondition(t *testing.T) {
@@ -62,15 +63,15 @@ func TestBuildRuleWindowReports(t *testing.T) {
 	windows := map[string]*WindowState{
 		"restart-if-down": func() *WindowState {
 			s := &WindowState{}
-			s.Fires(ruleSet[0], true)
-			s.Fires(ruleSet[0], true)
+			s.FiresAt(ruleSet[0], true, time.Now())
+			s.FiresAt(ruleSet[0], true, time.Now())
 			return s
 		}(),
 	}
 	eval := func(_ context.Context, r Rule) (bool, error) {
 		return r.Name == "restart-if-down", nil
 	}
-	reports := BuildRuleWindowReports(context.Background(), ruleSet, windows, eval)
+	reports := BuildRuleWindowReportsAt(context.Background(), ruleSet, windows, time.Now(), eval)
 	if len(reports) != 2 {
 		t.Fatalf("reports = %d, want 2 (no guard)", len(reports))
 	}

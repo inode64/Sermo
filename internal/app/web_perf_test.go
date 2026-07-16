@@ -20,8 +20,8 @@ func TestServiceMetricSamplerLatestWithAt(t *testing.T) {
 		At:            t0.UTC().Format(time.RFC3339),
 		ProcessTotals: web.ProcessTotals{Count: 2, RSS: 4096},
 	})
-	if _, ok := s.Latest("missing"); ok {
-		t.Fatal("Latest on missing service should be false")
+	if _, _, ok := s.LatestWithAt("missing"); ok {
+		t.Fatal("LatestWithAt on missing service should be false")
 	}
 	cur, at, ok := s.LatestWithAt("web")
 	if !ok || at != t0 || cur.Count != 2 || cur.RSS != 4096 {

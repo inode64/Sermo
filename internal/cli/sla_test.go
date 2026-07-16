@@ -113,7 +113,7 @@ type slaSample struct {
 // its ago offset before now, then closes the store.
 func seedSLA(t *testing.T, stateDir, service string, samples ...slaSample) {
 	t.Helper()
-	store, err := state.Open(filepath.Join(stateDir, state.Filename))
+	store, err := state.OpenContext(context.Background(), filepath.Join(stateDir, state.Filename))
 	if err != nil {
 		t.Fatal(err)
 	}

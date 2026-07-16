@@ -161,10 +161,10 @@ func TestReleaseUnmountsOnlyWhenRefcountReachesZero(t *testing.T) {
 	if _, err := c.Acquire(context.Background(), spec); err != nil {
 		t.Fatal(err)
 	}
-	if res, err := c.Release(context.Background(), spec); err != nil || res.Refcount != 1 || !mounted {
+	if res, err := c.ReleaseWithOptions(context.Background(), spec, ReleaseOptions{}); err != nil || res.Refcount != 1 || !mounted {
 		t.Fatalf("first Release = %+v/%v mounted=%t, want refcount=1 mounted", res, err, mounted)
 	}
-	if res, err := c.Release(context.Background(), spec); err != nil || res.Refcount != 0 || mounted {
+	if res, err := c.ReleaseWithOptions(context.Background(), spec, ReleaseOptions{}); err != nil || res.Refcount != 0 || mounted {
 		t.Fatalf("second Release = %+v/%v mounted=%t, want refcount=0 unmounted", res, err, mounted)
 	}
 	if got := strings.Join(runner.calls, "|"); got != "mount /mnt/backup|umount /mnt/backup" {
@@ -183,7 +183,7 @@ func TestReleaseRefusesRootMount(t *testing.T) {
 	}
 	spec := EphemeralSpec("/")
 
-	res, err := c.Release(context.Background(), spec)
+	res, err := c.ReleaseWithOptions(context.Background(), spec, ReleaseOptions{})
 	if err == nil {
 		t.Fatal("Release / succeeded")
 	}
@@ -227,7 +227,7 @@ func TestReleaseBusyWithoutLazyReportsBlockers(t *testing.T) {
 		return []process.Process{{PID: 123, Exe: "/usr/bin/rsync", ExeOK: true, UID: 1000}}, nil
 	}
 
-	res, err := c.Release(context.Background(), EphemeralSpec("/mnt/backup"))
+	res, err := c.ReleaseWithOptions(context.Background(), EphemeralSpec("/mnt/backup"), ReleaseOptions{})
 	if err == nil {
 		t.Fatal("Release busy mount succeeded")
 	}
@@ -274,7 +274,7 @@ func assertReleaseBusyDiscoveryError(t *testing.T, discErr error, wantMsg string
 	c := testController(t, &mounted, runner)
 	c.DiscoverUsers = func(string) ([]process.Process, error) { return nil, discErr }
 
-	res, err := c.Release(context.Background(), EphemeralSpec("/mnt/backup"))
+	res, err := c.ReleaseWithOptions(context.Background(), EphemeralSpec("/mnt/backup"), ReleaseOptions{})
 	if err == nil {
 		t.Fatal("Release busy mount succeeded")
 	}

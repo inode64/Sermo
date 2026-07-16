@@ -110,7 +110,7 @@ func openTestStateStore(t *testing.T, global string) *state.Store {
 	if err != nil {
 		t.Fatalf("load config: %v", err)
 	}
-	store, err := state.Open(filepath.Join(cfg.Global.StateDir(), state.Filename))
+	store, err := state.OpenContext(context.Background(), filepath.Join(cfg.Global.StateDir(), state.Filename))
 	if err != nil {
 		t.Fatalf("open state: %v", err)
 	}

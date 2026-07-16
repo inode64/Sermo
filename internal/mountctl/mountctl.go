@@ -297,13 +297,9 @@ func (c Controller) Acquire(ctx context.Context, spec Spec) (Result, error) {
 	})
 }
 
-// Release decrements the mount refcount and unmounts the path when it reaches 0.
-func (c Controller) Release(ctx context.Context, spec Spec) (Result, error) {
-	return c.ReleaseWithOptions(ctx, spec, ReleaseOptions{})
-}
-
-// ReleaseWithOptions decrements the mount refcount and applies explicit unmount
-// escalation options when the real unmount is attempted.
+// ReleaseWithOptions decrements the mount refcount and unmounts the path when
+// it reaches 0. opts applies explicit unmount escalation when the real unmount
+// is attempted.
 func (c Controller) ReleaseWithOptions(ctx context.Context, spec Spec, opts ReleaseOptions) (Result, error) {
 	if reason := UmountDisabledReason(spec.Path); reason != "" {
 		return disabledUmountResult(spec, reason), errors.New(reason)

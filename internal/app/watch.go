@@ -50,7 +50,7 @@ type Watch struct {
 	App       string
 	CheckType string // e.g. "storage"; for sermoEnvCheckType (Result.Check is the watch name)
 	Check     checks.Check
-	Window    rules.Rule // carries only For/Within; used by rules.WindowState.Fires
+	Window    rules.Rule // carries only For/Within; used by rules.WindowState.FiresAt
 	Hook      HookSpec
 	Runner    HookRunner
 	// Notifiers receive a notification when the watch fires (the resolved

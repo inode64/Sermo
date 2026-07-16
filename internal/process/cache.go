@@ -36,14 +36,6 @@ func NewCachingReader(inner Reader, freshness time.Duration) *CachingReader {
 	return &CachingReader{inner: inner, freshness: freshness, now: time.Now}
 }
 
-// SetFreshness updates the reuse window (e.g. after a config reload changes the
-// scheduler interval). Safe to call concurrently.
-func (c *CachingReader) SetFreshness(d time.Duration) {
-	c.mu.Lock()
-	c.freshness = d
-	c.mu.Unlock()
-}
-
 // Invalidate drops the cached snapshot so the next Snapshot rebuilds from live
 // /proc. Safety-critical callers that must never act on a stale process table —
 // notably residual discovery and the kill-escalation reaper, which would
