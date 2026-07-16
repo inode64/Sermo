@@ -310,10 +310,22 @@ func TestWebBackendListsAndControlsServiceWatches(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
+	now := time.Date(2026, 7, 16, 18, 0, 0, 0, time.UTC)
+	snapshots := NewWatchSnapshots()
+	snapshots.now = func() time.Time { return now }
+	snapshots.Publish("svc:backlog", checks.CheckTypeCount, checks.Result{
+		Check: "svc:backlog", OK: true, Condition: true, Message: "4 files",
+		Data: map[string]any{
+			checks.DataKeyPath:  "/tmp",
+			checks.DataKeyOf:    "file",
+			checks.DataKeyCount: 4,
+		},
+	})
 	store := newFakeStore()
 	b, warns := NewWebBackend(t.Context(), cfg, Deps{
 		Backend: servicemgr.BackendSystemd, Manager: fakeManager{}, ExecxRunner: execx.CommandRunner{},
-		DefaultTimeout: time.Second, Now: time.Now, Emit: func(Event) {}, Monitor: store,
+		DefaultTimeout: time.Second, Now: func() time.Time { return now }, Emit: func(Event) {}, Monitor: store,
+		WatchSnapshots: snapshots,
 	})
 	if len(warns) != 0 {
 		t.Fatalf("unexpected warnings: %v", warns)
@@ -332,10 +344,15 @@ func TestWebBackendListsAndControlsServiceWatches(t *testing.T) {
 	if found.CheckType != "count" || !found.HasHook {
 		t.Errorf("listed watch = %+v", found)
 	}
-	// Service watches omit the host-scoped live view (their checks are PID-tree
-	// scoped, which that path does not model).
-	if found.Meter != nil || len(found.Readings) != 0 {
-		t.Errorf("service watch should have no live meter/readings, got meter=%v readings=%v", found.Meter, found.Readings)
+	hasPathReading := false
+	for _, reading := range found.Readings {
+		if reading.Field == checks.DataKeyPath && reading.Value == "/tmp" {
+			hasPathReading = true
+			break
+		}
+	}
+	if !hasPathReading {
+		t.Errorf("service watch readings = %+v, want published count readings", found.Readings)
 	}
 
 	// It is controllable: unmonitor it via the same web path host watches use.
@@ -345,6 +362,37 @@ func TestWebBackendListsAndControlsServiceWatches(t *testing.T) {
 	active, found2, err := store.Active(watchMonitorKey("svc:backlog"))
 	if err != nil || !found2 || active {
 		t.Fatalf("after unmonitor: active=%v found=%v err=%v; want active=false", active, found2, err)
+	}
+}
+
+func TestWebBackendServiceWatchShowsSnapshotMeterAndReadings(t *testing.T) {
+	now := time.Date(2026, 7, 16, 18, 0, 0, 0, time.UTC)
+	snapshots := NewWatchSnapshots()
+	snapshots.now = func() time.Time { return now }
+	snapshots.Publish("svc:memory", checks.CheckTypeMemory, checks.Result{
+		Check: "svc:memory", OK: true,
+		Data: map[string]any{
+			checks.DataKeyTotalBytes:     uint64(100),
+			checks.DataKeyAvailableBytes: uint64(25),
+			checks.DataKeyUsedPct:        75.0,
+		},
+	})
+	b := &WebBackend{
+		watchOrder:     []string{"svc:memory"},
+		watches:        map[string]*webWatch{"svc:memory": {name: "svc:memory", checkType: checks.CheckTypeMemory, interval: time.Minute, serviceScoped: true}},
+		watchSnapshots: snapshots,
+		now:            func() time.Time { return now },
+	}
+
+	watches := b.Watches(context.Background())
+	if len(watches) != 1 {
+		t.Fatalf("Watches() returned %d watches, want 1", len(watches))
+	}
+	if watches[0].Meter == nil || watches[0].Meter.UsedPct != 75 {
+		t.Errorf("service watch meter = %+v, want 75%% used", watches[0].Meter)
+	}
+	if len(watches[0].Readings) == 0 {
+		t.Errorf("service watch readings = %+v, want published readings", watches[0].Readings)
 	}
 }
 
