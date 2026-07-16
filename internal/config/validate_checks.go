@@ -1143,17 +1143,7 @@ func validateSizeFields(prefix string, fields map[string]any, add addFunc) {
 // collection+pipeline / command), JSON-parseable filter/pipeline/command, and a
 // result path where one is needed.
 func validateMongoFields(prefix string, fields map[string]any, add addFunc) {
-	op := cfgval.String(fields[checks.CheckKeyOp])
-	if !cfgval.IsAssertOp(op) {
-		add("%s.op %q is not one of %s", prefix, op, cfgval.AssertOpSummary)
-	}
-	if cfgval.String(fields[checks.CheckKeyValue]) == "" {
-		add("%s.value is required for a mongodb-query check", prefix)
-	} else if cfgval.IsAssertOp(op) {
-		if err := checks.ValidateAssertionValue(prefix, op, cfgval.String(fields[checks.CheckKeyValue])); err != nil {
-			add("%s", err)
-		}
-	}
+	validateAssertionFields(prefix, fields, "mongodb-query", add)
 
 	collection := cfgval.String(fields[checks.CheckKeyCollection])
 	command := cfgval.String(fields[checks.CheckKeyCommand])
@@ -1220,17 +1210,7 @@ func validateInfluxFields(prefix string, fields map[string]any, add addFunc) {
 	if cfgval.String(fields[checks.CheckKeyQuery]) == "" {
 		add("%s.query is required for an influxdb-query check", prefix)
 	}
-	op := cfgval.String(fields[checks.CheckKeyOp])
-	if !cfgval.IsAssertOp(op) {
-		add("%s.op %q is not one of %s", prefix, op, cfgval.AssertOpSummary)
-	}
-	if cfgval.String(fields[checks.CheckKeyValue]) == "" {
-		add("%s.value is required for an influxdb-query check", prefix)
-	} else if cfgval.IsAssertOp(op) {
-		if err := checks.ValidateAssertionValue(prefix, op, cfgval.String(fields[checks.CheckKeyValue])); err != nil {
-			add("%s", err)
-		}
-	}
+	validateAssertionFields(prefix, fields, "influxdb-query", add)
 	language := cfgval.String(fields[checks.CheckKeyLanguage])
 	if language == "" {
 		language = checks.InfluxLanguageInfluxQL
@@ -1274,18 +1254,7 @@ func validateSQLFields(prefix string, fields map[string]any, add addFunc) {
 	if cfgval.String(fields[checks.CheckKeyQuery]) == "" {
 		add("%s.query is required for a sql check", prefix)
 	}
-	op := cfgval.String(fields[checks.CheckKeyOp])
-	if !cfgval.IsAssertOp(op) {
-		add("%s.op %q is not one of %s", prefix, op, cfgval.AssertOpSummary)
-	}
-	value := cfgval.String(fields[checks.CheckKeyValue])
-	if value == "" {
-		add("%s.value is required for a sql check", prefix)
-	} else if cfgval.IsAssertOp(op) {
-		if err := checks.ValidateAssertionValue(prefix, op, value); err != nil {
-			add("%s", err)
-		}
-	}
+	validateAssertionFields(prefix, fields, "sql", add)
 	switch engine {
 	case checks.SQLEngineSQLite, checks.SQLEngineSQLite3:
 		if cfgval.String(fields[checks.CheckKeyPath]) == "" {
@@ -1294,6 +1263,21 @@ func validateSQLFields(prefix string, fields map[string]any, add addFunc) {
 	case checks.SQLEngineMySQL, checks.SQLEngineMariaDB, checks.SQLEnginePostgres, checks.SQLEnginePostgreSQL:
 		if cfgval.String(fields[checks.CheckKeyUser]) == "" {
 			add("%s.user is required for a %s sql check", prefix, engine)
+		}
+	}
+}
+
+func validateAssertionFields(prefix string, fields map[string]any, checkType string, add addFunc) {
+	op := cfgval.String(fields[checks.CheckKeyOp])
+	if !cfgval.IsAssertOp(op) {
+		add("%s.op %q is not one of %s", prefix, op, cfgval.AssertOpSummary)
+	}
+	value := cfgval.String(fields[checks.CheckKeyValue])
+	if value == "" {
+		add("%s.value is required for a %s check", prefix, checkType)
+	} else if cfgval.IsAssertOp(op) {
+		if err := checks.ValidateAssertionValue(prefix, op, value); err != nil {
+			add("%s", err)
 		}
 	}
 }
