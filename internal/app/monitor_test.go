@@ -200,6 +200,38 @@ defaults:
 	}
 }
 
+func TestReloadConfigCompatibilityRejectsRuntimeAndStateChanges(t *testing.T) {
+	current := &config.Config{Global: config.Global{Runtime: "/run/sermo", State: "/var/lib/sermo"}}
+	tests := []struct {
+		name string
+		next *config.Config
+		want string
+	}{
+		{
+			name: "unchanged paths",
+			next: &config.Config{Global: config.Global{Runtime: "/run/sermo", State: "/var/lib/sermo"}},
+		},
+		{
+			name: "runtime changed",
+			next: &config.Config{Global: config.Global{Runtime: "/run/sermo-next", State: "/var/lib/sermo"}},
+			want: "paths.runtime changed; restart sermod",
+		},
+		{
+			name: "state changed",
+			next: &config.Config{Global: config.Global{Runtime: "/run/sermo", State: "/var/lib/sermo-next"}},
+			want: "paths.state changed; restart sermod",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := reloadConfigCompatibilityError(current, tt.next); got != tt.want {
+				t.Fatalf("reloadConfigCompatibilityError() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 func forceWorkerBackendActive(workers []*Worker) {
 	for _, w := range workers {
 		if w == nil {

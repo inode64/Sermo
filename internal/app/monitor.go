@@ -99,6 +99,10 @@ func (m *Monitor) Reload(ctx context.Context) {
 	if newCfg == nil {
 		return
 	}
+	if msg := reloadConfigCompatibilityError(m.cfg, newCfg); msg != "" {
+		m.emitReloadError(msg)
+		return
+	}
 
 	oldWorkers := m.workers
 	oldWatches := m.watches
@@ -277,6 +281,22 @@ func (m *Monitor) emitReloadError(msg string) {
 	if m.deps.Emit != nil {
 		m.deps.Emit(Event{Kind: eventKindError, Action: eventActionReload, Message: msg})
 	}
+}
+
+// reloadConfigCompatibilityError reports a configuration change that cannot be
+// applied while this daemon retains process-lifetime resources. Runtime holds
+// the singleton and operation locks; state is the open persistent store.
+func reloadConfigCompatibilityError(current, next *config.Config) string {
+	if current == nil || next == nil {
+		return ""
+	}
+	if current.Global.RuntimeDir() != next.Global.RuntimeDir() {
+		return "paths.runtime changed; restart sermod"
+	}
+	if current.Global.StateDir() != next.Global.StateDir() {
+		return "paths.state changed; restart sermod"
+	}
+	return ""
 }
 
 // formatValidationIssues joins the first few validation findings for reload errors.
