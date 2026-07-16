@@ -585,49 +585,11 @@ func (s *Store) ClearOperationSettling(service string) error {
 // ServiceCheckSnapshots returns every persisted service check snapshot, grouped
 // by service name and keyed by check name.
 func (s *Store) ServiceCheckSnapshots() (map[string]map[string]CheckSnapshotRecord, error) {
-	rows, err := s.db.QueryContext(s.sqlCtx(),
+	return s.groupedCheckSnapshots(
 		`SELECT service, check_name, ok, condition, optional, skipped, message, data, ran, at
 		   FROM service_check_snapshot ORDER BY service, check_name;`,
+		"service check snapshots", scanServiceCheckSnapshot,
 	)
-	if err != nil {
-		return nil, fmt.Errorf("load service check snapshots: %w", err)
-	}
-	defer rows.Close()
-
-	out := map[string]map[string]CheckSnapshotRecord{}
-	for rows.Next() {
-		var (
-			service  string
-			name     string
-			ok       int
-			cond     int
-			optional int
-			skipped  int
-			message  string
-			rawData  string
-			ran      int
-			at       int64
-		)
-		if err := rows.Scan(&service, &name, &ok, &cond, &optional, &skipped, &message, &rawData, &ran, &at); err != nil {
-			return nil, fmt.Errorf("scan service check snapshot: %w", err)
-		}
-		data, err := decodeSnapshotData(rawData)
-		if err != nil {
-			return nil, err
-		}
-		rec := CheckSnapshotRecord{
-			Name: name, OK: intBool(ok), Condition: intBool(cond), Optional: intBool(optional),
-			Skipped: intBool(skipped), Message: message, Data: data, Ran: intBool(ran), At: unixNanoTime(at),
-		}
-		if out[service] == nil {
-			out[service] = map[string]CheckSnapshotRecord{}
-		}
-		out[service][name] = rec
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate service check snapshots: %w", err)
-	}
-	return out, nil
 }
 
 // SetServiceCheckSnapshots replaces one service's latest check snapshots.
@@ -671,50 +633,89 @@ func (s *Store) SetServiceCheckSnapshots(service string, records map[string]Chec
 // WatchCheckSnapshots returns every persisted host-watch snapshot, grouped by
 // watch name and keyed by the stable result slot.
 func (s *Store) WatchCheckSnapshots() (map[string]map[string]CheckSnapshotRecord, error) {
-	rows, err := s.db.QueryContext(s.sqlCtx(),
+	return s.groupedCheckSnapshots(
 		`SELECT watch, slot, check_type, ok, condition, optional, skipped, message, data, ran, at
 		   FROM watch_check_snapshot ORDER BY watch, slot;`,
+		"watch check snapshots", scanWatchCheckSnapshot,
 	)
+}
+
+type checkSnapshotScanner func(*sql.Rows) (group, slot string, record CheckSnapshotRecord, err error)
+
+func (s *Store) groupedCheckSnapshots(query, label string, scan checkSnapshotScanner) (map[string]map[string]CheckSnapshotRecord, error) {
+	rows, err := s.db.QueryContext(s.sqlCtx(), query)
 	if err != nil {
-		return nil, fmt.Errorf("load watch check snapshots: %w", err)
+		return nil, fmt.Errorf("load %s: %w", label, err)
 	}
 	defer rows.Close()
 
 	out := map[string]map[string]CheckSnapshotRecord{}
 	for rows.Next() {
-		var (
-			watch     string
-			slot      string
-			checkType string
-			ok        int
-			cond      int
-			optional  int
-			skipped   int
-			message   string
-			rawData   string
-			ran       int
-			at        int64
-		)
-		if err := rows.Scan(&watch, &slot, &checkType, &ok, &cond, &optional, &skipped, &message, &rawData, &ran, &at); err != nil {
-			return nil, fmt.Errorf("scan watch check snapshot: %w", err)
-		}
-		data, err := decodeSnapshotData(rawData)
+		group, slot, record, err := scan(rows)
 		if err != nil {
 			return nil, err
 		}
-		rec := CheckSnapshotRecord{
-			Name: slot, CheckType: checkType, OK: intBool(ok), Condition: intBool(cond), Optional: intBool(optional),
-			Skipped: intBool(skipped), Message: message, Data: data, Ran: intBool(ran), At: unixNanoTime(at),
+		if out[group] == nil {
+			out[group] = map[string]CheckSnapshotRecord{}
 		}
-		if out[watch] == nil {
-			out[watch] = map[string]CheckSnapshotRecord{}
-		}
-		out[watch][slot] = rec
+		out[group][slot] = record
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate watch check snapshots: %w", err)
+		return nil, fmt.Errorf("iterate %s: %w", label, err)
 	}
 	return out, nil
+}
+
+func scanServiceCheckSnapshot(rows *sql.Rows) (string, string, CheckSnapshotRecord, error) {
+	var (
+		service  string
+		name     string
+		ok       int
+		cond     int
+		optional int
+		skipped  int
+		message  string
+		rawData  string
+		ran      int
+		at       int64
+	)
+	if err := rows.Scan(&service, &name, &ok, &cond, &optional, &skipped, &message, &rawData, &ran, &at); err != nil {
+		return "", "", CheckSnapshotRecord{}, fmt.Errorf("scan service check snapshot: %w", err)
+	}
+	record, err := newCheckSnapshotRecord(name, "", ok, cond, optional, skipped, message, rawData, ran, at)
+	return service, name, record, err
+}
+
+func scanWatchCheckSnapshot(rows *sql.Rows) (string, string, CheckSnapshotRecord, error) {
+	var (
+		watch     string
+		slot      string
+		checkType string
+		ok        int
+		cond      int
+		optional  int
+		skipped   int
+		message   string
+		rawData   string
+		ran       int
+		at        int64
+	)
+	if err := rows.Scan(&watch, &slot, &checkType, &ok, &cond, &optional, &skipped, &message, &rawData, &ran, &at); err != nil {
+		return "", "", CheckSnapshotRecord{}, fmt.Errorf("scan watch check snapshot: %w", err)
+	}
+	record, err := newCheckSnapshotRecord(slot, checkType, ok, cond, optional, skipped, message, rawData, ran, at)
+	return watch, slot, record, err
+}
+
+func newCheckSnapshotRecord(name, checkType string, ok, condition, optional, skipped int, message, rawData string, ran int, at int64) (CheckSnapshotRecord, error) {
+	data, err := decodeSnapshotData(rawData)
+	if err != nil {
+		return CheckSnapshotRecord{}, err
+	}
+	return CheckSnapshotRecord{
+		Name: name, CheckType: checkType, OK: intBool(ok), Condition: intBool(condition), Optional: intBool(optional),
+		Skipped: intBool(skipped), Message: message, Data: data, Ran: intBool(ran), At: unixNanoTime(at),
+	}, nil
 }
 
 // SetWatchCheckSnapshot upserts one host-watch snapshot slot.
