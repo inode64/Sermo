@@ -47,6 +47,7 @@ const (
 	stateTableMeasurementMetric = "measurement_metric"
 	stateTableDaemonMetric      = "daemon_metric"
 	stateTableServiceMetric     = "service_metric"
+	stateTableProcessUptime     = "process_uptime_span"
 )
 
 // Sources record who last changed a monitoring state row, for inspection.
@@ -289,6 +290,17 @@ var migrations = []string{
 	// too: a reload may retain a name while changing its check implementation.
 	// The web layer must then wait for a result from the new implementation.
 	`ALTER TABLE service_check_snapshot ADD COLUMN check_type TEXT NOT NULL DEFAULT '';`,
+	// process_uptime_span records the bounded evidence that one trusted service
+	// process instance was still alive at a daemon-cycle timestamp. It is a
+	// compact continuity interval, not a synthetic check or metric sample.
+	`CREATE TABLE process_uptime_span (
+		service      TEXT NOT NULL,
+		started_at   INTEGER NOT NULL,
+		confirmed_at INTEGER NOT NULL,
+		source       TEXT NOT NULL,
+		PRIMARY KEY (service, started_at)
+	);`,
+	`CREATE INDEX process_uptime_span_service_confirmed_idx ON process_uptime_span (service, confirmed_at);`,
 }
 
 // Store is a handle to the persistent state database. It is safe for concurrent
@@ -330,6 +342,7 @@ type PruneHistoryResult struct {
 	Metrics        int64
 	DaemonMetrics  int64
 	ServiceMetrics int64
+	ProcessUptime  int64
 	Events         int64
 	Rows           int64
 }
@@ -1453,6 +1466,82 @@ func (s *Store) CheckSLASeries(service, check string, from, to time.Time) ([]SLA
 	return s.loadSLASeries(checkSLAQueries.series, []any{service, check}, from, to, "check SLA", service+"/"+check)
 }
 
+// ProcessUptimeSpan is evidence that one trusted process instance belonging to
+// a service was continuously alive from StartedAt through ConfirmedAt. It does
+// not represent check health, latency, or any other daemon-observed metric.
+type ProcessUptimeSpan struct {
+	StartedAt   time.Time
+	ConfirmedAt time.Time
+	Source      string
+}
+
+// RecordProcessUptime records or extends the continuity evidence for a trusted
+// process instance. Repeated daemon cycles for the same process start extend
+// ConfirmedAt without creating unbounded per-minute history.
+func (s *Store) RecordProcessUptime(service string, startedAt, confirmedAt time.Time, source string) error {
+	if service == "" {
+		return errors.New("record process uptime: service is empty")
+	}
+	if startedAt.IsZero() {
+		return fmt.Errorf("record process uptime for %s: process start time is zero", service)
+	}
+	if confirmedAt.IsZero() {
+		return fmt.Errorf("record process uptime for %s: confirmation time is zero", service)
+	}
+	if startedAt.After(confirmedAt) {
+		return fmt.Errorf("record process uptime for %s: process start time is after confirmation", service)
+	}
+	if source == "" {
+		return fmt.Errorf("record process uptime for %s: source is empty", service)
+	}
+	if _, err := s.db.ExecContext(s.sqlCtx(), `INSERT INTO process_uptime_span (service, started_at, confirmed_at, source)
+		VALUES (?, ?, ?, ?)
+		ON CONFLICT(service, started_at) DO UPDATE SET
+		  confirmed_at = max(confirmed_at, excluded.confirmed_at),
+		  source = excluded.source;`,
+		service, startedAt.UTC().Unix(), confirmedAt.UTC().Unix(), source); err != nil {
+		return fmt.Errorf("record process uptime for %s: %w", service, err)
+	}
+	return nil
+}
+
+// ProcessUptimeSpans returns continuity evidence whose closed intervals overlap
+// [from, to), ordered by their process start timestamp.
+func (s *Store) ProcessUptimeSpans(service string, from, to time.Time) ([]ProcessUptimeSpan, error) {
+	if service == "" {
+		return nil, errors.New("load process uptime spans: service is empty")
+	}
+	if !to.After(from) {
+		return nil, fmt.Errorf("load process uptime spans for %s: invalid time range", service)
+	}
+	rows, err := s.db.QueryContext(s.sqlCtx(), `SELECT started_at, confirmed_at, source
+		FROM process_uptime_span
+		WHERE service = ? AND confirmed_at >= ? AND started_at < ?
+		ORDER BY started_at;`, service, from.UTC().Unix(), to.UTC().Unix())
+	if err != nil {
+		return nil, fmt.Errorf("load process uptime spans for %s: %w", service, err)
+	}
+	defer rows.Close()
+
+	var spans []ProcessUptimeSpan
+	for rows.Next() {
+		var startedAt, confirmedAt int64
+		var source string
+		if err := rows.Scan(&startedAt, &confirmedAt, &source); err != nil {
+			return nil, fmt.Errorf("scan process uptime span for %s: %w", service, err)
+		}
+		spans = append(spans, ProcessUptimeSpan{
+			StartedAt:   time.Unix(startedAt, 0).UTC(),
+			ConfirmedAt: time.Unix(confirmedAt, 0).UTC(),
+			Source:      source,
+		})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate process uptime spans for %s: %w", service, err)
+	}
+	return spans, nil
+}
+
 func (s *Store) recordSLABucket(query string, keys []any, up bool, at time.Time, kind, target string) error {
 	upCount := 0
 	if up {
@@ -1940,8 +2029,23 @@ func (s *Store) PruneSLA(before time.Time) (int64, error) {
 	return total + rows, nil
 }
 
+// PruneProcessUptime deletes continuity intervals whose last confirmation is
+// older than before. A long-running process remains retained because its most
+// recent confirmation still overlaps the retention window.
+func (s *Store) PruneProcessUptime(before time.Time) (int64, error) {
+	res, err := s.db.ExecContext(s.sqlCtx(), `DELETE FROM process_uptime_span WHERE confirmed_at < ?`, before.UTC().Unix())
+	if err != nil {
+		return 0, fmt.Errorf("prune process uptime: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("count pruned process uptime: %w", err)
+	}
+	return n, nil
+}
+
 // PruneHistory deletes old history from SLA, measurement, daemon runtime,
-// service runtime metric and event tables.
+// service runtime metric, process-uptime, and event tables.
 func (s *Store) PruneHistory(before time.Time) (PruneHistoryResult, error) {
 	var out PruneHistoryResult
 	var err error
@@ -1960,10 +2064,13 @@ func (s *Store) PruneHistory(before time.Time) (PruneHistoryResult, error) {
 	if out.ServiceMetrics, err = s.PruneServiceMetrics(before); err != nil {
 		return PruneHistoryResult{}, err
 	}
+	if out.ProcessUptime, err = s.PruneProcessUptime(before); err != nil {
+		return PruneHistoryResult{}, err
+	}
 	if out.Events, err = s.PruneEvents(before); err != nil {
 		return PruneHistoryResult{}, err
 	}
-	out.Rows = out.SLA + out.Measurements + out.Metrics + out.DaemonMetrics + out.ServiceMetrics + out.Events
+	out.Rows = out.SLA + out.Measurements + out.Metrics + out.DaemonMetrics + out.ServiceMetrics + out.ProcessUptime + out.Events
 	return out, nil
 }
 
