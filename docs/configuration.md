@@ -439,6 +439,10 @@ restart. Invalid config, or
 a config with no included services or watches, is rejected and the current
 generation keeps running; a `reload` or `error` event is recorded. Reload does
 not repeat `startup_delay` and does not mark `/readyz` as shutting down.
+`paths.runtime` and `paths.state` are process-lifetime resources: they contain
+the daemon singleton/operation locks and its open persistent store. Changing
+either requires a full `sermod` restart; a configuration reload rejects that
+change and leaves the current generation running.
 Per-service CPU rate baselines are reset only when a service is removed from the
 running config; persisted metric and event history remains in `paths.state`
 until normal retention or an explicit `sermoctl state compact`.
