@@ -2,6 +2,7 @@ package servicemgr
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -50,6 +51,29 @@ type Manager interface {
 	// actual processes (systemd `reset-failed`, OpenRC `zap`). It is idempotent
 	// and a no-op when there is nothing to clear.
 	ResetState(ctx context.Context, service string) error
+}
+
+// ComposedRestart provides the Manager surface shared by live external
+// backends (Docker containers, libvirt domains): restart is composed as
+// Stop+Start by the operation engine, reload capability is absent, and there
+// is no recorded init state to reset. Embed it and implement Reload with a
+// backend-specific message.
+type ComposedRestart struct{}
+
+// Restart is not used by the safe operation engine; it composes restart as
+// Stop+Start so residual-process handling stays between the phases.
+func (ComposedRestart) Restart(context.Context, string) error {
+	return errors.New("restart is composed by the operation engine")
+}
+
+// SupportsReload reports false; these backends cannot reload in place.
+func (ComposedRestart) SupportsReload(context.Context, string) (bool, error) {
+	return false, nil
+}
+
+// ResetState is a no-op; the backend state is live, with no failed marker.
+func (ComposedRestart) ResetState(context.Context, string) error {
+	return nil
 }
 
 // NewManager returns a Manager for backend using the real host commands.

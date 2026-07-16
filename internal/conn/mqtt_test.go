@@ -68,13 +68,7 @@ func serveMQTT(t *testing.T, returnCode byte) int {
 }
 
 func TestMQTTProbeAccepted(t *testing.T) {
-	res, err := mqttProtocol{}.Probe(context.Background(), Config{Host: "127.0.0.1", Port: serveMQTT(t, 0)})
-	if err != nil {
-		t.Fatalf("probe: %v", err)
-	}
-	if res.Extra["connack"] != "accepted" {
-		t.Fatalf("connack = %q", res.Extra["connack"])
-	}
+	assertProbeExtra(t, mqttProtocol{}, serveMQTT(t, 0), "connack", "accepted")
 }
 
 func TestMQTTProbeRefused(t *testing.T) {

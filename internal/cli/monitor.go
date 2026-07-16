@@ -3,7 +3,6 @@ package cli
 import (
 	"context"
 	"fmt"
-	"path/filepath"
 	"time"
 
 	"sermo/internal/state"
@@ -37,7 +36,7 @@ func (a App) runMonitor(ctx context.Context, opts options, pause bool) int {
 		return code
 	}
 
-	store, err := state.OpenContext(ctx, filepath.Join(cfg.Global.StateDir(), state.Filename))
+	store, err := openStateStore(ctx, cfg)
 	if err != nil {
 		return a.fail(opts, fmt.Sprintf("%s failed: %v", verb, err))
 	}
@@ -59,17 +58,17 @@ func (a App) runMonitor(ctx context.Context, opts options, pause bool) int {
 func updateMonitorState(store *state.Store, key string, pause bool) (string, error) {
 	if pause {
 		if err := store.SetActive(key, false, state.SourceCLI); err != nil {
-			return "", err
+			return "", fmt.Errorf("pause monitoring: %w", err)
 		}
 		return monitorStatusPaused, nil
 	}
 
 	active, found, err := store.Active(key)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("read monitoring state: %w", err)
 	}
 	if err := store.SetActive(key, true, state.SourceCLI); err != nil {
-		return "", err
+		return "", fmt.Errorf("resume monitoring: %w", err)
 	}
 	if !found || active {
 		return monitorStatusNotPaused, nil
@@ -92,13 +91,19 @@ func (a App) reportMonitor(opts options, store *state.Store, service, status str
 		writeJSON(a.Stdout, payload)
 		return
 	}
+	a.printMonitorStatus(service, status, monitorMetaSuffix(rec, found))
+}
+
+// printMonitorStatus prints the human-readable monitor transition for subject
+// ("web" or "watch storage-root"); suffix carries optional source/changed meta.
+func (a App) printMonitorStatus(subject, status, suffix string) {
 	switch status {
 	case monitorStatusPaused:
-		fmt.Fprintf(a.Stdout, "monitoring paused for %s%s\n", service, monitorMetaSuffix(rec, found))
+		fmt.Fprintf(a.Stdout, "monitoring paused for %s%s\n", subject, suffix)
 	case monitorStatusResumed:
-		fmt.Fprintf(a.Stdout, "monitoring resumed for %s%s\n", service, monitorMetaSuffix(rec, found))
+		fmt.Fprintf(a.Stdout, "monitoring resumed for %s%s\n", subject, suffix)
 	default:
-		fmt.Fprintf(a.Stdout, "%s was not paused\n", service)
+		fmt.Fprintf(a.Stdout, "%s was not paused\n", subject)
 	}
 }
 

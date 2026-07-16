@@ -1013,34 +1013,34 @@ func TestStateCompact(t *testing.T) {
 	}
 }
 
+// assertMonitorToggle POSTs unmonitor then monitor to path(action) and asserts
+// the backend state map (fetched via state, which may be lazily created) flips.
+func assertMonitorToggle(t *testing.T, h http.Handler, path func(action string) string, state func() map[string]bool, key string) {
+	t.Helper()
+	for _, tc := range []struct {
+		action string
+		want   bool
+	}{{apiActionUnmonitor, false}, {apiActionMonitor, true}} {
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, postReq(path(tc.action)))
+		if rec.Code != http.StatusOK || state()[key] != tc.want {
+			t.Fatalf("%s: code=%d monitored=%v", tc.action, rec.Code, state())
+		}
+	}
+}
+
 func TestMonitorActions(t *testing.T) {
 	b := &fakeBackend{}
-	h := newServer(b)
-	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, postReq(testServicePath("web", apiActionUnmonitor)))
-	if rec.Code != http.StatusOK || b.monitored["web"] != false {
-		t.Fatalf("unmonitor: code=%d monitored=%v", rec.Code, b.monitored)
-	}
-	rec = httptest.NewRecorder()
-	h.ServeHTTP(rec, postReq(testServicePath("web", apiActionMonitor)))
-	if rec.Code != http.StatusOK || b.monitored["web"] != true {
-		t.Fatalf("monitor: code=%d monitored=%v", rec.Code, b.monitored)
-	}
+	assertMonitorToggle(t, newServer(b),
+		func(action string) string { return testServicePath("web", action) },
+		func() map[string]bool { return b.monitored }, "web")
 }
 
 func TestWatchMonitorActions(t *testing.T) {
 	b := &fakeBackend{}
-	h := newServer(b)
-	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, postReq(testWatchPath("storage-root", apiActionUnmonitor)))
-	if rec.Code != http.StatusOK || b.watchMonitored["storage-root"] != false {
-		t.Fatalf("watch unmonitor: code=%d monitored=%v", rec.Code, b.watchMonitored)
-	}
-	rec = httptest.NewRecorder()
-	h.ServeHTTP(rec, postReq(testWatchPath("storage-root", apiActionMonitor)))
-	if rec.Code != http.StatusOK || b.watchMonitored["storage-root"] != true {
-		t.Fatalf("watch monitor: code=%d monitored=%v", rec.Code, b.watchMonitored)
-	}
+	assertMonitorToggle(t, newServer(b),
+		func(action string) string { return testWatchPath("storage-root", action) },
+		func() map[string]bool { return b.watchMonitored }, "storage-root")
 }
 
 func TestWatchExpandAction(t *testing.T) {

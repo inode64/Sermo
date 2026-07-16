@@ -10,12 +10,7 @@ import (
 
 func buildPressure(t *testing.T, entry map[string]any, sampler PressureSamplerFunc) pressureCheck {
 	t.Helper()
-	entry["type"] = "pressure"
-	built, warns := Build(map[string]any{"psi": entry}, Deps{DefaultTimeout: time.Second, PressureSampler: sampler})
-	if len(warns) != 0 || len(built) != 1 {
-		t.Fatalf("pressure check should build: warns=%v", warns)
-	}
-	return built[0].Check.(pressureCheck)
+	return buildOneCheck(t, "psi", "pressure", entry, Deps{DefaultTimeout: time.Second, PressureSampler: sampler}).(pressureCheck)
 }
 
 func TestParsePressureFormat(t *testing.T) {

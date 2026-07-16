@@ -3,7 +3,6 @@ package cli
 import (
 	"context"
 	"fmt"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -41,7 +40,7 @@ func (a App) runPanic(ctx context.Context, opts options) int {
 		return code
 	}
 
-	store, err := state.OpenContext(ctx, filepath.Join(cfg.Global.StateDir(), state.Filename))
+	store, err := openStateStore(ctx, cfg)
 	if err != nil {
 		return a.fail(opts, fmt.Sprintf("panic failed: %v", err))
 	}

@@ -17,15 +17,10 @@ func TestFormatLibvirtVersion(t *testing.T) {
 }
 
 func TestLibvirtDomainState(t *testing.T) {
-	cases := map[int32]string{
+	runMapCases(t, "libvirtDomainState", libvirtDomainState, map[int32]string{
 		1: "running", 2: "blocked", 3: "paused", 4: "shutdown",
 		5: "shutoff", 6: "crashed", 7: "pmsuspended", 0: "nostate", 99: "nostate",
-	}
-	for code, want := range cases {
-		if got := libvirtDomainState(code); got != want {
-			t.Errorf("libvirtDomainState(%d) = %q, want %q", code, got, want)
-		}
-	}
+	})
 }
 
 func TestLibvirtTransport(t *testing.T) {

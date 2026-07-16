@@ -117,6 +117,8 @@ func SpecFromTree(tree map[string]any) (Spec, bool, error) {
 
 // Manager implements service management over libvirt domains.
 type Manager struct {
+	servicemgr.ComposedRestart
+
 	Spec      Spec
 	NewClient func(Spec, time.Duration) (Client, error)
 }
@@ -204,25 +206,10 @@ func (m Manager) Stop(ctx context.Context, _ string) error {
 	})
 }
 
-// Restart is not used by the safe operation engine; it composes restart as
-// Stop+Start so residual-process handling stays between the phases.
-func (m Manager) Restart(context.Context, string) error {
-	return errors.New("restart is composed by the operation engine")
-}
-
-// Reload is not meaningful for a VM domain.
+// Reload is not meaningful for a VM domain. Restart, SupportsReload and
+// ResetState come from the embedded servicemgr.ComposedRestart.
 func (m Manager) Reload(context.Context, string) error {
 	return errors.New("reload is not supported for libvirt domains")
-}
-
-// SupportsReload reports false for VM domains.
-func (m Manager) SupportsReload(context.Context, string) (bool, error) {
-	return false, nil
-}
-
-// ResetState has no libvirt equivalent; the domain state is live.
-func (m Manager) ResetState(context.Context, string) error {
-	return nil
 }
 
 // Resume unpauses a paused libvirt domain.

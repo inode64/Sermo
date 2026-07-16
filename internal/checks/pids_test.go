@@ -9,12 +9,7 @@ import (
 
 func buildPids(t *testing.T, entry map[string]any, sampler PidsSamplerFunc) pidsCheck {
 	t.Helper()
-	entry["type"] = "pids"
-	built, warns := Build(map[string]any{"pids": entry}, Deps{DefaultTimeout: time.Second, PidsSampler: sampler})
-	if len(warns) != 0 || len(built) != 1 {
-		t.Fatalf("pids check should build: warns=%v", warns)
-	}
-	return built[0].Check.(pidsCheck)
+	return buildOneCheck(t, "pids", "pids", entry, Deps{DefaultTimeout: time.Second, PidsSampler: sampler}).(pidsCheck)
 }
 
 func pidsSampler(threads, maxPids uint64) PidsSamplerFunc {

@@ -307,13 +307,7 @@ func (s *DaemonMetricSampler) trimLocked(cutoff time.Time) {
 }
 
 func samplesSince(samples []daemonMetricSample, cutoff time.Time) []daemonMetricSample {
-	out := make([]daemonMetricSample, 0, len(samples))
-	for i := range samples {
-		if !samples[i].at.Before(cutoff) {
-			out = append(out, samples[i])
-		}
-	}
-	return out
+	return filterSince(samples, cutoff, func(s daemonMetricSample) time.Time { return s.at })
 }
 
 func daemonRuntime(sample daemonMetricSample) web.DaemonRuntime {

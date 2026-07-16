@@ -192,7 +192,7 @@ func (a App) syncStorageMountMonitoring(ctx context.Context, _ options, cfg *con
 	if !ok {
 		return
 	}
-	store, err := state.OpenContext(ctx, filepath.Join(cfg.Global.StateDir(), state.Filename))
+	store, err := openStateStore(ctx, cfg)
 	if err != nil {
 		msg := fmt.Sprintf("storage mount monitoring unavailable: %v", err)
 		fmt.Fprintf(a.Stderr, cliWarningFormat, msg)

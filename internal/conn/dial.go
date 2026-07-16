@@ -3,6 +3,7 @@ package conn
 import (
 	"context"
 	"crypto/tls"
+	"fmt"
 	"io"
 	"net"
 	"time"
@@ -136,6 +137,32 @@ func probeUnixSocket(ctx context.Context, cfg Config, defaultSocket string) (Res
 	}
 	_ = c.Close()
 	return Result{Extra: map[string]string{extraSocket: socket}}, nil
+}
+
+// socketOnlyProtocol is a Unix-socket-only liveness protocol whose probe is
+// the connect itself. Daemons with no safe request/reply exchange (acpid,
+// fail2ban) register instances with their well-known socket; the per-daemon
+// rationale lives at each registration site.
+type socketOnlyProtocol struct {
+	name   string
+	socket string
+}
+
+func (p socketOnlyProtocol) Name() string     { return p.name }
+func (socketOnlyProtocol) DefaultPort() int   { return defaultPortNone }
+func (socketOnlyProtocol) RequiresUser() bool { return false }
+
+func (p socketOnlyProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
+	return probeUnixSocket(ctx, cfg, p.socket)
+}
+
+// codeName returns the protocol-specific name for code from names, falling
+// back to fmt.Sprintf(fallbackFormat, code) for unknown codes.
+func codeName[C comparable](code C, names map[C]string, fallbackFormat string) string {
+	if name, ok := names[code]; ok {
+		return name
+	}
+	return fmt.Sprintf(fallbackFormat, code)
 }
 
 // probeDialer returns a dialer for driver-backed protocol probes. When iface is

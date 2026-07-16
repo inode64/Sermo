@@ -92,7 +92,10 @@ func TestValidateRAIDControl(t *testing.T) {
 	}
 }
 
-func TestValidateWatchesNotifyIntervalBadDuration(t *testing.T) {
+// assertWatchNotifyIntervalIssue validates a hook-only storage watch with the
+// given notify_interval and asserts a watch issue containing wantSubstr.
+func assertWatchNotifyIntervalIssue(t *testing.T, interval, wantSubstr string) {
+	t.Helper()
 	issues := validateRawGlobal(t, map[string]any{
 		"watches": map[string]any{
 			"storage-root": map[string]any{
@@ -100,32 +103,22 @@ func TestValidateWatchesNotifyIntervalBadDuration(t *testing.T) {
 				"check":   map[string]any{"type": "storage", "path": "/", "used_pct": map[string]any{"op": ">=", "value": 90}},
 				"then": map[string]any{
 					"hook":            map[string]any{"command": []any{"/usr/local/bin/alert.sh"}},
-					"notify_interval": "soon",
+					"notify_interval": interval,
 				},
 			},
 		},
 	})
-	if !hasIssueContaining(watchIssues(issues), "notify_interval") {
-		t.Fatalf("expected a notify_interval duration issue, got %v", watchIssues(issues))
+	if !hasIssueContaining(watchIssues(issues), wantSubstr) {
+		t.Fatalf("expected an issue containing %q, got %v", wantSubstr, watchIssues(issues))
 	}
 }
 
+func TestValidateWatchesNotifyIntervalBadDuration(t *testing.T) {
+	assertWatchNotifyIntervalIssue(t, "soon", "notify_interval")
+}
+
 func TestValidateWatchesNotifyIntervalWithoutTargets(t *testing.T) {
-	issues := validateRawGlobal(t, map[string]any{
-		"watches": map[string]any{
-			"storage-root": map[string]any{
-				"monitor": "previous",
-				"check":   map[string]any{"type": "storage", "path": "/", "used_pct": map[string]any{"op": ">=", "value": 90}},
-				"then": map[string]any{
-					"hook":            map[string]any{"command": []any{"/usr/local/bin/alert.sh"}},
-					"notify_interval": "30m",
-				},
-			},
-		},
-	})
-	if !hasIssueContaining(watchIssues(issues), "no effect without notify targets") {
-		t.Fatalf("expected a 'no notify targets' issue, got %v", watchIssues(issues))
-	}
+	assertWatchNotifyIntervalIssue(t, "30m", "no effect without notify targets")
 }
 
 func hasIssueContaining(issues []Issue, substr string) bool {

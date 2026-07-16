@@ -3,7 +3,6 @@ package cli
 import (
 	"context"
 	"fmt"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -50,7 +49,7 @@ func (a App) runSLA(ctx context.Context, opts options) int {
 		services = sortedUnique(cfg.Services)
 	}
 
-	store, err := state.OpenContext(ctx, filepath.Join(cfg.Global.StateDir(), state.Filename))
+	store, err := openStateStore(ctx, cfg)
 	if err != nil {
 		return a.fail(opts, fmt.Sprintf("sla failed: %v", err))
 	}
@@ -92,7 +91,7 @@ func (a App) runSLASeries(ctx context.Context, opts options, cfg *config.Config)
 		window = defaultSLASeriesWindow
 	}
 
-	store, err := state.OpenContext(ctx, filepath.Join(cfg.Global.StateDir(), state.Filename))
+	store, err := openStateStore(ctx, cfg)
 	if err != nil {
 		return a.fail(opts, fmt.Sprintf("sla failed: %v", err))
 	}
