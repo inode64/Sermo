@@ -230,6 +230,23 @@ func TestBuildFileExistsCheckPathRequired(t *testing.T) {
 	}
 }
 
+func TestRequireCheckPaths(t *testing.T) {
+	path, errs := requireCheckPath(map[string]any{CheckKeyPath: "/run/example"}, CheckTypeFile)
+	if path != "/run/example" || errs != "" {
+		t.Fatalf("requireCheckPath = %q, %q", path, errs)
+	}
+	if _, errs := requireCheckPath(map[string]any{}, CheckTypeBinary); errs != "binary check requires a path" {
+		t.Fatalf("missing scalar path warning = %q", errs)
+	}
+	paths, errs := requireCheckPaths(map[string]any{CheckKeyPath: []any{"/run/a", "/run/b"}}, CheckTypeSocket)
+	if len(paths) != 2 || paths[0] != "/run/a" || paths[1] != "/run/b" || errs != "" {
+		t.Fatalf("requireCheckPaths = %v, %q", paths, errs)
+	}
+	if _, errs := requireCheckPaths(map[string]any{}, CheckTypePidfile); errs != "pidfile check requires a path" {
+		t.Fatalf("missing path list warning = %q", errs)
+	}
+}
+
 func TestBuildLibrariesCheckBinaryRequired(t *testing.T) {
 	c, w := buildLibrariesCheck(base{}, map[string]any{"binary": "/usr/bin/ssh"})
 	if w != "" {
