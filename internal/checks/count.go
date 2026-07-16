@@ -2,7 +2,6 @@ package checks
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -10,7 +9,6 @@ import (
 	"strconv"
 	"time"
 
-	"sermo/internal/cfgval"
 	"sermo/internal/execx"
 )
 
@@ -184,22 +182,6 @@ func (c countCheck) matches(typ fs.FileMode) bool {
 	default:
 		return false
 	}
-}
-
-// TallyEntries counts path entries matching kind (any, file, dir, symlink). The
-// root path itself is never included. Used by the web UI for live count-watch
-// readings without re-running the full check. timeout bounds the probe context
-// and is used for operator-facing timeout messages.
-func TallyEntries(ctx context.Context, path, kind string, recursive, includeHidden bool, timeout time.Duration) (int, error) {
-	if kind == "" {
-		kind = CountKindAny
-	}
-	c := countCheck{base: base{timeout: timeout}, path: path, kind: kind, recursive: recursive, includeHidden: includeHidden, op: cfgval.CompareOpGreaterEqual, value: 0}
-	n, err := c.tally(ctx)
-	if err != nil {
-		return 0, errors.New(execx.ContextFailure(err, timeout))
-	}
-	return n, nil
 }
 
 // validCountKind reports whether s is a supported `of` value.
