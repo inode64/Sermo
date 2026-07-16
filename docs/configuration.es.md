@@ -455,6 +455,10 @@ remediación y las ventanas `for`/`within` de reglas también se persisten en
 inválida, o una config sin services ni watches incluidos, se rechaza y la generación
 actual sigue ejecutándose; se registra un evento `reload` o `error`. La recarga no
 repite `startup_delay` ni marca `/readyz` como apagándose.
+`paths.runtime` y `paths.state` son recursos de toda la vida del proceso:
+contienen los locks de instancia/operación y el almacén persistente abierto del
+daemon. Cambiar cualquiera requiere reiniciar completamente `sermod`; la
+recarga rechaza el cambio y mantiene la generación actual.
 Las líneas base de tasa de CPU por service solo se restablecen cuando un service se
 elimina de la config en ejecución; el historial de métricas y eventos persistido
 permanece en `paths.state` hasta la retención normal o un `sermoctl state compact`
