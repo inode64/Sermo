@@ -110,9 +110,7 @@ func NewUserLookup(cfg UserLookupConfig) *UserLookup {
 		timeout = DefaultUserLookupTimeout
 	}
 	runner := cfg.Runner
-	if runner == nil {
-		runner = execx.CommandRunner{}
-	}
+	runner = execx.RunnerOrDefault(runner)
 	return &UserLookup{
 		mode:       mode,
 		timeout:    timeout,

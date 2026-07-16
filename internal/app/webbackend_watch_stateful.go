@@ -126,9 +126,7 @@ func (b *WebBackend) firewallRulesWatchView(ctx context.Context, w *webWatch) (*
 		sampler = checks.DefaultFirewallRulesSampler
 	}
 	runner := b.execRunner
-	if runner == nil {
-		runner = execx.CommandRunner{}
-	}
+	runner = execx.RunnerOrDefault(runner)
 	probeCtx, cancel := b.probeContext(ctx)
 	defer cancel()
 	sample, err := sampler(probeCtx, backend, runner)

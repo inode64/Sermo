@@ -466,9 +466,7 @@ func BuildInline(name string, entry map[string]any, deps Deps) (Check, error) {
 
 func buildDependencies(deps Deps) (execx.Runner, *http.Client) {
 	runner := deps.Runner
-	if runner == nil {
-		runner = execx.CommandRunner{}
-	}
+	runner = execx.RunnerOrDefault(runner)
 	client := deps.HTTPClient
 	if client == nil {
 		client = &http.Client{}

@@ -537,9 +537,7 @@ func stateID(spec Spec) string {
 
 func (c Controller) run(ctx context.Context, name string, args ...string) error {
 	runner := c.Runner
-	if runner == nil {
-		runner = execx.CommandRunner{}
-	}
+	runner = execx.RunnerOrDefault(runner)
 	timeout := c.CommandTimeout
 	if timeout <= 0 {
 		timeout = DefaultCommandTimeout

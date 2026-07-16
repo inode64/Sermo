@@ -100,9 +100,7 @@ func buildLVMCheck(b base, entry map[string]any, runner execx.Runner) (Check, st
 	if lv != "" && vg == "" {
 		return nil, "lvm check logical_volume requires volume_group"
 	}
-	if runner == nil {
-		runner = execx.CommandRunner{}
-	}
+	runner = execx.RunnerOrDefault(runner)
 	return &lvmCheck{base: b, runner: runner, volumeGroup: vg, logicalVolume: lv, preds: preds}, ""
 }
 

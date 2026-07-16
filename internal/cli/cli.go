@@ -325,9 +325,7 @@ func (a App) withDefaults() App {
 	if a.PruneEvents == nil {
 		a.PruneEvents = a.pruneDaemonEvents
 	}
-	if a.Runner == nil {
-		a.Runner = execx.CommandRunner{}
-	}
+	a.Runner = execx.RunnerOrDefault(a.Runner)
 	if a.BuildNotifiers == nil {
 		a.BuildNotifiers = buildConfiguredNotifiers
 	}

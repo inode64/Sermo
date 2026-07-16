@@ -73,9 +73,7 @@ func HdparmResultData(device string, values map[string]float64) map[string]any {
 // timeout is used for operator-facing timeout messages when the probe context
 // expires before the command finishes.
 func SampleHdparm(ctx context.Context, runner execx.Runner, device string, wantCached, wantRead bool, timeout time.Duration) (map[string]float64, error) {
-	if runner == nil {
-		runner = execx.CommandRunner{}
-	}
+	runner = execx.RunnerOrDefault(runner)
 	if !wantCached && !wantRead {
 		wantCached, wantRead = true, true
 	}

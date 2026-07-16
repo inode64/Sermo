@@ -56,6 +56,14 @@ type Runner interface {
 	Run(ctx context.Context, name string, args ...string) (Result, error)
 }
 
+// RunnerOrDefault returns runner, or the native command runner when runner is nil.
+func RunnerOrDefault(runner Runner) Runner {
+	if runner == nil {
+		return CommandRunner{}
+	}
+	return runner
+}
+
 // UserRunner is implemented by runners that can execute a command as a specific
 // OS user. The user value is a username or numeric UID resolved on the host.
 type UserRunner interface {

@@ -35,9 +35,7 @@ import (
 // config-file hints; generic candidates write self-contained check-only service
 // watches.
 func listInstalledCatalogServices(ctx context.Context, cfg *config.Config, backend servicemgr.Backend, runner execx.Runner, timeout time.Duration) ([]assist.ServiceCandidate, error) {
-	if runner == nil {
-		runner = execx.CommandRunner{}
-	}
+	runner = execx.RunnerOrDefault(runner)
 	resolver := servicemgr.NewUnitResolver()
 	resolver.Runner = runner
 	resolver.Timeout = timeout
