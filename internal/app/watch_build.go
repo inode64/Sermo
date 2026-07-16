@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"maps"
@@ -357,18 +358,7 @@ func buildFileWatch(name string, entry, checkEntry map[string]any, deps Deps, in
 		publish:       publishWatchSnapshots(deps.WatchSnapshots),
 		now:           deps.Now,
 	}
-	return &Watch{
-		Name:      name,
-		CheckType: checks.CheckTypeFile,
-		Interval:  interval,
-		IsPaused:  monitorPaused(deps.Monitor, watchMonitorKey(name)),
-		InPanic:   deps.Panic.Active,
-		Settling:  deps.Settling,
-		DryRun:    config.DryRun(entry),
-		Now:       deps.Now,
-		Emit:      deps.Emit,
-		Cycle:     fw.runCycle,
-	}, ""
+	return newStatefulWatch(name, checks.CheckTypeFile, entry, deps, interval, fw.runCycle), ""
 }
 
 // buildProcWatch builds a stateful process watch: a procWatcher (its own per-PID
@@ -421,9 +411,15 @@ func buildProcWatch(name string, entry, checkEntry map[string]any, deps Deps, in
 		sampler:   procSamplerFromDeps(deps),
 		publish:   publishWatchSnapshots(deps.WatchSnapshots),
 	}
+	return newStatefulWatch(name, checks.CheckTypeProcess, entry, deps, interval, pw.runCycle), ""
+}
+
+// newStatefulWatch wires a stateful watcher's cycle into the shared Watch
+// runtime fields used by file and process watches.
+func newStatefulWatch(name, checkType string, entry map[string]any, deps Deps, interval time.Duration, cycle func(context.Context)) *Watch {
 	return &Watch{
 		Name:      name,
-		CheckType: checks.CheckTypeProcess,
+		CheckType: checkType,
 		Interval:  interval,
 		IsPaused:  monitorPaused(deps.Monitor, watchMonitorKey(name)),
 		InPanic:   deps.Panic.Active,
@@ -431,8 +427,8 @@ func buildProcWatch(name string, entry, checkEntry map[string]any, deps Deps, in
 		DryRun:    config.DryRun(entry),
 		Now:       deps.Now,
 		Emit:      deps.Emit,
-		Cycle:     pw.runCycle,
-	}, ""
+		Cycle:     cycle,
+	}
 }
 
 func processWatchKillSelector(match ProcMatch) (process.KillSelector, error) {

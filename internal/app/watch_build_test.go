@@ -464,6 +464,23 @@ func TestBuildWatchesBuildsProcess(t *testing.T) {
 	}
 }
 
+func TestNewStatefulWatch(t *testing.T) {
+	now := func() time.Time { return time.Unix(0, 0) }
+	emit := func(Event) {}
+	cycle := func(context.Context) {}
+
+	watch := newStatefulWatch("stateful", "file", map[string]any{}, Deps{Now: now, Emit: emit}, time.Minute, cycle)
+	if watch.Name != "stateful" || watch.CheckType != "file" || watch.Interval != time.Minute {
+		t.Fatalf("unexpected stateful watch: %+v", watch)
+	}
+	if watch.IsPaused == nil || watch.IsPaused() {
+		t.Fatal("stateful watch must default to active monitoring")
+	}
+	if watch.Now == nil || watch.Emit == nil || watch.Cycle == nil {
+		t.Fatalf("stateful watch must preserve runtime callbacks: %+v", watch)
+	}
+}
+
 func TestBuildWatchesProcessWarnsOnNoCondition(t *testing.T) {
 	cfg := cfgWithWatches(map[string]any{
 		"bad": map[string]any{
