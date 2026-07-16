@@ -71,7 +71,7 @@ func (c smartCheck) Run(ctx context.Context) Result {
 }
 
 // SmartResultData is the persisted reading data for one SMART sample, shared
-// by the check cycle and the live watch view.
+// by the check cycle and the snapshot-backed watch view.
 func SmartResultData(device, health string, selfTestRunning bool, values map[string]float64) map[string]any {
 	data := map[string]any{DataKeyDevice: device, DataKeyHealth: health}
 	if selfTestRunning {
@@ -83,7 +83,7 @@ func SmartResultData(device, health string, selfTestRunning bool, values map[str
 	return data
 }
 
-// SmartSample is one smartctl observation for the web UI and tests.
+// SmartSample is one smartctl observation.
 type SmartSample struct {
 	Health          string
 	HealthKnown     bool

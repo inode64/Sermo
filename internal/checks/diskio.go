@@ -115,7 +115,7 @@ func (c *diskIOCheck) Run(_ context.Context) Result {
 }
 
 // DiskIOResultData is the persisted reading data for one disk I/O rate window,
-// shared by the check cycle and the live watch view.
+// shared by the check cycle and the snapshot-backed watch view.
 func DiskIOResultData(device string, rates DiskIORates) map[string]any {
 	return map[string]any{
 		DataKeyDevice:   device,
