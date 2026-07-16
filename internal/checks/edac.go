@@ -56,7 +56,7 @@ func (c edacCheck) Run(_ context.Context) Result {
 }
 
 // EdacResultData is the persisted reading data for one EDAC counter sample,
-// shared by the check cycle and the live watch view.
+// shared by the check cycle and the snapshot-backed watch view.
 func EdacResultData(st EdacCounts) map[string]any {
 	return map[string]any{fieldCE: float64(st.CE), fieldUE: float64(st.UE)}
 }

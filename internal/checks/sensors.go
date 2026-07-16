@@ -103,7 +103,7 @@ func (c sensorsCheck) Run(_ context.Context) Result {
 }
 
 // SensorsResultData is the persisted reading data for one aggregated sensors
-// sample, shared by the check cycle and the live watch view: the matching-input
+// sample, shared by the check cycle and the snapshot-backed watch view: the matching-input
 // count, the configured chip/label filters when set, and the aggregate values.
 func SensorsResultData(summary SensorValues, chip, label string) map[string]any {
 	data := map[string]any{DataKeyInputs: summary.Count}

@@ -85,7 +85,7 @@ func (c pressureCheck) Run(_ context.Context) Result {
 }
 
 // PressureResultData is the persisted reading data for one PSI observation,
-// shared by the check cycle and the live watch view.
+// shared by the check cycle and the snapshot-backed watch view.
 func PressureResultData(resource string, s PressureSample) map[string]any {
 	return map[string]any{
 		DataKeyResource: resource,
