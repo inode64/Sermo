@@ -352,11 +352,6 @@ type Options struct {
 	CacheBytes int64
 }
 
-// OpenWith opens the store with explicit options and a background context.
-func OpenWith(path string, opts Options) (*Store, error) {
-	return OpenContextWith(context.Background(), path, opts)
-}
-
 // OpenContextWith opens the store with explicit context and options.
 func OpenContextWith(ctx context.Context, path string, opts Options) (*Store, error) {
 	if dir := filepath.Dir(path); dir != "" {
