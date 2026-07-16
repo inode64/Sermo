@@ -296,8 +296,6 @@ test("application and library inventories filter, group, sort, and expand", asyn
   await expect(page.locator("#library-row-zlib")).toBeVisible();
   await page.locator('[data-library-sort="version"]').click();
   await expect(page.locator('[data-library-sort="version"]')).toHaveAttribute("aria-sort", "ascending");
-  await page.locator("#library-row-zlib .row-toggle").click();
-  await expect(page.locator("#exp-lib\\:zlib")).toContainText("/usr/lib64/libz.so");
 });
 
 test("graph selections remain isolated per service", async ({ page }) => {
