@@ -74,12 +74,20 @@ const applications = [{
   name: "nginx", display_name: "Nginx", category: "web", state: "ok",
   status: "ok", version: "1.28.0", version_short: "1.28.0",
   observed_at: "2026-07-10T12:00:00Z",
+}, {
+  name: "postgres", display_name: "PostgreSQL", category: "data", state: "failed",
+  status: "error: exit 1", version: "16.3", version_short: "16.3",
+  observed_at: "2026-07-10T12:00:00Z",
 }];
 
 const libraries = [{
   name: "openssl", display_name: "OpenSSL", category: "crypto", state: "ok",
   status: "ok", version: "OpenSSL 3.5.1", version_short: "3.5.1",
   binary: "/usr/lib64/libssl.so", observed_at: "2026-07-10T12:00:00Z",
+}, {
+  name: "zlib", display_name: "zlib", category: "compression", state: "warning",
+  status: "version unavailable", version: "1.3.1", version_short: "1.3.1",
+  binary: "/usr/lib64/libz.so", observed_at: "2026-07-10T12:00:00Z",
 }];
 
 function serviceDetail(name) {
@@ -177,9 +185,9 @@ test("section navigation uses two scrollable rows on compact screens", async ({ 
 });
 
 test("single-choice filters stay hidden", async ({ page }) => {
-  for (const selector of ["#svc-category", "#app-category", "#library-category"]) {
-    await expect(page.locator(selector)).toBeHidden();
-  }
+  await expect(page.locator("#svc-category")).toBeHidden();
+  await expect(page.locator("#app-category")).toBeVisible();
+  await expect(page.locator("#library-category")).toBeVisible();
   await expect(page.locator("#watch-type")).toBeVisible();
 });
 
@@ -254,6 +262,42 @@ test("libraries inventory is visible and searchable", async ({ page }) => {
   await page.locator("#library-row-openssl .row-toggle").click();
   await expect(page.locator("#library-row-openssl")).toContainText("OpenSSL");
   await expect(page.locator("#exp-lib\\:openssl")).toContainText("/usr/lib64/libssl.so");
+});
+
+test("application and library inventories filter, group, sort, and expand", async ({ page }) => {
+  await page.locator("#app-category").selectOption("data");
+  await expect(page.locator("#app-row-postgres")).toBeVisible();
+  await expect(page.locator("#app-row-nginx")).toBeHidden();
+  await page.locator("#app-category").selectOption("all");
+  await page.locator("#app-group-toggle").click();
+  await expect(page.locator("#app-rows .group-row")).toHaveCount(2);
+  await page.locator('[data-group-panel="app"][data-group-name="data"]').click();
+  await expect(page.locator("#app-row-postgres")).toBeHidden();
+  await page.locator("#app-groups-toggle").click();
+  await expect(page.locator("#app-row-nginx")).toBeHidden();
+  await page.locator("#app-groups-toggle").click();
+  await expect(page.locator("#app-row-postgres")).toBeVisible();
+  await page.locator('[data-app-sort="version"]').click();
+  await expect(page.locator('[data-app-sort="version"]')).toHaveAttribute("aria-sort", "ascending");
+  await page.locator("#app-row-postgres .row-toggle").click();
+  await expect(page.locator("#exp-app\\:postgres")).toContainText("16.3");
+
+  await page.locator('[data-lf="warning"]').click();
+  await expect(page.locator("#library-row-zlib")).toBeVisible();
+  await expect(page.locator("#library-row-openssl")).toBeHidden();
+  await page.locator('[data-lf="all"]').click();
+  await page.locator("#library-group-toggle").click();
+  await expect(page.locator("#library-rows .group-row")).toHaveCount(2);
+  await page.locator('[data-group-panel="library"][data-group-name="compression"]').click();
+  await expect(page.locator("#library-row-zlib")).toBeHidden();
+  await page.locator("#library-groups-toggle").click();
+  await expect(page.locator("#library-row-openssl")).toBeHidden();
+  await page.locator("#library-groups-toggle").click();
+  await expect(page.locator("#library-row-zlib")).toBeVisible();
+  await page.locator('[data-library-sort="version"]').click();
+  await expect(page.locator('[data-library-sort="version"]')).toHaveAttribute("aria-sort", "ascending");
+  await page.locator("#library-row-zlib .row-toggle").click();
+  await expect(page.locator("#exp-lib\\:zlib")).toContainText("/usr/lib64/libz.so");
 });
 
 test("graph selections remain isolated per service", async ({ page }) => {
