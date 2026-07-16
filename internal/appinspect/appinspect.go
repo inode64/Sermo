@@ -469,10 +469,8 @@ func runProbeCommand(ctx context.Context, runner execx.Runner, cmd probeCommand)
 func catalogPath(tree map[string]any, category string) string {
 	if category == config.CategoryLibrary {
 		if pf, ok := tree[config.SectionPreflight].(map[string]any); ok {
-			if file, ok := pf[checks.CheckTypeFile].(map[string]any); ok {
-				if p := cfgval.AsString(file[checks.CheckKeyPath]); p != "" {
-					return p
-				}
+			if p := preflightCheckPath(pf, checks.CheckTypeFile); p != "" {
+				return p
 			}
 		}
 	}
@@ -483,10 +481,8 @@ func catalogPath(tree map[string]any, category string) string {
 // `binary` check path when present, otherwise the `binary` variable.
 func binaryPath(tree map[string]any) string {
 	if pf, ok := tree[config.SectionPreflight].(map[string]any); ok {
-		if bin, ok := pf[checks.CheckTypeBinary].(map[string]any); ok {
-			if p := cfgval.AsString(bin[checks.CheckKeyPath]); p != "" {
-				return p
-			}
+		if p := preflightCheckPath(pf, checks.CheckTypeBinary); p != "" {
+			return p
 		}
 		if p := firstNamespacedBinaryPath(pf); p != "" {
 			return p
@@ -502,13 +498,20 @@ func binaryPath(tree map[string]any) string {
 
 func firstNamespacedBinaryPath(preflight map[string]any) string {
 	for _, prefix := range namespacedBinaryPrefixes(preflight) {
-		if bin, ok := preflight[prefix+"-"+checks.CheckTypeBinary].(map[string]any); ok {
-			if p := cfgval.AsString(bin[checks.CheckKeyPath]); p != "" {
-				return p
-			}
+		if p := preflightCheckPath(preflight, prefix+"-"+checks.CheckTypeBinary); p != "" {
+			return p
 		}
 	}
 	return ""
+}
+
+// preflightCheckPath returns the resolved path for a named preflight check.
+func preflightCheckPath(preflight map[string]any, name string) string {
+	entry, ok := preflight[name].(map[string]any)
+	if !ok {
+		return ""
+	}
+	return cfgval.AsString(entry[checks.CheckKeyPath])
 }
 
 func namespacedBinaryPrefixes(preflight map[string]any) []string {
