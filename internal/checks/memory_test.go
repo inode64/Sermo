@@ -85,3 +85,16 @@ func TestMemoryCheckRequiresPredicate(t *testing.T) {
 		t.Fatalf("warns = %v", warns)
 	}
 }
+
+func TestParseMeminfo(t *testing.T) {
+	got := parseMeminfo("MemTotal: 1024 kB\nMemAvailable: 512 kB\nSwapTotal: 256 kB\nSwapFree: 128 kB\n")
+	want := meminfoSample{
+		memoryTotalBytes:     1024 * 1024,
+		memoryAvailableBytes: 512 * 1024,
+		swapTotalBytes:       256 * 1024,
+		swapFreeBytes:        128 * 1024,
+	}
+	if got != want {
+		t.Fatalf("parseMeminfo = %+v, want %+v", got, want)
+	}
+}

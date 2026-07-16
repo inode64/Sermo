@@ -4,15 +4,12 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"sermo/internal/metrics"
 	"strconv"
 	"strings"
 	"time"
 )
 
 const (
-	swapMeminfoTotalPrefix   = "SwapTotal:"
-	swapMeminfoFreePrefix    = "SwapFree:"
 	swapVMStatPagesIn        = "pswpin"
 	swapVMStatPagesOut       = "pswpout"
 	swapVMStatPagesInPrefix  = swapVMStatPagesIn + " "
@@ -121,18 +118,11 @@ func (c *swapCheck) Run(_ context.Context) Result {
 // defaultSwapSampler reads SwapTotal/SwapFree from meminfo and the pswpin/pswpout
 // counters from vmstat.
 func defaultSwapSampler() (SwapSample, error) {
-	var s SwapSample
-	mem, err := os.ReadFile(procMeminfoPath)
+	info, err := readMeminfo()
 	if err != nil {
-		return s, err
+		return SwapSample{}, err
 	}
-	for line := range strings.SplitSeq(string(mem), checkLineSeparator) {
-		if v, ok := strings.CutPrefix(line, swapMeminfoTotalPrefix); ok {
-			s.TotalBytes, _ = metrics.MeminfoKB(v)
-		} else if v, ok := strings.CutPrefix(line, swapMeminfoFreePrefix); ok {
-			s.FreeBytes, _ = metrics.MeminfoKB(v)
-		}
-	}
+	s := SwapSample{TotalBytes: info.swapTotalBytes, FreeBytes: info.swapFreeBytes}
 	if vm, err := os.ReadFile(procVMStatPath); err == nil {
 		pagesIn, pagesOut, err := parseSwapVMStat(string(vm))
 		if err != nil {
