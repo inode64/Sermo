@@ -463,6 +463,12 @@ El bloque `web` también se aplica solo al arrancar: la dirección/puerto del
 listener, autenticación y política guest se instalan en el servidor HTTP al
 iniciar `sermod`. Cambia esos ajustes con un reinicio completo; la recarga los
 rechaza en vez de dejar activa la política de acceso web anterior.
+`engine.max_parallel_operations` define el pool de slots de operación entre
+procesos. Cambiar su capacidad también requiere un reinicio completo, por lo
+que la recarga lo rechaza en vez de exceder brevemente un límite de seguridad
+reducido mientras operaciones antiguas conservan sus slots. `engine.interval`
+sigue siendo recargable y replanifica inmediatamente los services que heredan
+la cadencia global.
 Las líneas base de tasa de CPU por service solo se restablecen cuando un service se
 elimina de la config en ejecución; el historial de métricas y eventos persistido
 permanece en `paths.state` hasta la retención normal o un `sermoctl state compact`

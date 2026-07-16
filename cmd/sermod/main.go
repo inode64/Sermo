@@ -282,7 +282,6 @@ func run(args []string) int {
 	}
 	deps.Collector = collector
 	deps.DaemonMetricSampler = app.NewDaemonMetricSampler(collector, time.Now, store)
-	go deps.DaemonMetricSampler.Run(ctx, interval)
 
 	// One shared /proc snapshot for service discovery: concurrent workers and web
 	// runtime queries within a cycle reuse a single walk instead of each scanning
