@@ -130,10 +130,10 @@ func TestWebBackendEventPageStopsAtBoundedScan(t *testing.T) {
 
 func TestWebBackendDetailRanFlag(t *testing.T) {
 	snaps := NewSnapshots()
-	snaps.Publish("web", map[string]checks.Result{
+	snaps.PublishWithCheckTypes("web", map[string]checks.Result{
 		"fast": {Check: "fast", OK: true, Message: "ok"},
 		"slow": {Check: "slow", OK: true, Message: "cached"},
-	}, map[string]bool{"fast": true})
+	}, map[string]bool{"fast": true}, map[string]string{"fast": "tcp", "slow": "http"})
 
 	b := webBackendWithEntry(snaps, []string{"fast", "slow"}, map[string]string{"fast": "tcp", "slow": "http"})
 
@@ -155,7 +155,7 @@ func TestWebBackendDetailRanFlag(t *testing.T) {
 
 func TestWebBackendDetailCheckReadings(t *testing.T) {
 	snap := NewSnapshots()
-	snap.Publish("web", map[string]checks.Result{
+	snap.PublishWithCheckTypes("web", map[string]checks.Result{
 		"tls": {
 			Check: "tls", OK: true, Message: "valid",
 			Data: map[string]any{
@@ -167,7 +167,7 @@ func TestWebBackendDetailCheckReadings(t *testing.T) {
 			Check: "fw", OK: true, Message: "ok",
 			Data: map[string]any{"backend": "nftables", "rules": uint64(10), "min_rules": 1},
 		},
-	}, map[string]bool{"tls": true, "fw": true})
+	}, map[string]bool{"tls": true, "fw": true}, map[string]string{"tls": "cert", "fw": "firewall_rules"})
 	b := webBackendWithEntry(snap, []string{"tls", "fw"}, map[string]string{"tls": "cert", "fw": "firewall_rules"})
 	detail, ok := b.Detail(context.Background(), "web")
 	if !ok {
@@ -2195,16 +2195,16 @@ func TestWebBackendDetailAtTimestamp(t *testing.T) {
 	t1 := t0.Add(time.Minute)
 	snaps := NewSnapshots()
 	snaps.now = func() time.Time { return t0 }
-	snaps.Publish("web", map[string]checks.Result{
+	snaps.PublishWithCheckTypes("web", map[string]checks.Result{
 		"fast": {Check: "fast", OK: true},
 		"slow": {Check: "slow", OK: true},
-	}, map[string]bool{"fast": true, "slow": true})
+	}, map[string]bool{"fast": true, "slow": true}, map[string]string{"fast": "tcp", "slow": "http"})
 
 	snaps.now = func() time.Time { return t1 }
-	snaps.Publish("web", map[string]checks.Result{
+	snaps.PublishWithCheckTypes("web", map[string]checks.Result{
 		"fast": {Check: "fast", OK: true},
 		"slow": {Check: "slow", OK: true, Message: "cached"},
-	}, map[string]bool{"fast": true})
+	}, map[string]bool{"fast": true}, map[string]string{"fast": "tcp", "slow": "http"})
 
 	b := &WebBackend{
 		order: []string{"web"},
@@ -2215,6 +2215,7 @@ func TestWebBackendDetailAtTimestamp(t *testing.T) {
 			},
 		},
 		snapshots: snaps,
+		now:       func() time.Time { return t1 },
 	}
 
 	detail, ok := b.Detail(context.Background(), "web")
@@ -2563,6 +2564,35 @@ func TestWebBackendWatchSampleState(t *testing.T) {
 				t.Fatalf("last checked = %q, want %q", got.LastCheckedAt, now.Add(-tt.age).Format(time.RFC3339))
 			}
 		})
+	}
+}
+
+func TestWebBackendWatchIgnoresRemovedMetricSnapshot(t *testing.T) {
+	now := time.Unix(1_700_000_000, 0)
+	snapshots := NewWatchSnapshots()
+	snapshots.now = func() time.Time { return now }
+	snapshots.Publish("uplink", checks.CheckTypeICMP, checks.Result{
+		Check: "uplink",
+		Data: map[string]any{
+			checks.DataKeyMetric: checks.NetMetricState,
+			checks.DataKeyValue:  checks.NetStateUp,
+		},
+	})
+	b := &WebBackend{
+		watchOrder: []string{"uplink"},
+		watches: map[string]*webWatch{
+			"uplink": {
+				name: "uplink", checkType: checks.CheckTypeICMP, interval: time.Minute,
+				metrics: map[string]any{checks.IcmpMetricLatency: map[string]any{}},
+			},
+		},
+		watchSnapshots: snapshots,
+		now:            func() time.Time { return now },
+	}
+
+	watch := b.Watches(context.Background())[0]
+	if watch.LastCheckedAt != "" || watch.SampleState != web.WatchSampleStateCollecting || watch.State != TargetStateCollecting {
+		t.Fatalf("watch with only a removed metric snapshot = %+v, want collecting without last check", watch)
 	}
 }
 

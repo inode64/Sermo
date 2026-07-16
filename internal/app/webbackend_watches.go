@@ -80,7 +80,7 @@ func (b *WebBackend) applyWatchRuntimeView(view *web.Watch, w *webWatch, activit
 			view.Monitored, view.MonitorSource, view.MonitorChangedAt = active, source, changed
 		}
 	}
-	checkedAt := b.watchLastCheckedAt(w.name, w.checkType)
+	checkedAt := b.watchLastCheckedAt(w)
 	if !checkedAt.IsZero() {
 		view.LastCheckedAt = checkedAt.Format(time.RFC3339)
 	}

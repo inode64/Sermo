@@ -865,7 +865,11 @@ Los resultados de comprobación del detalle son los **últimos observados** por 
 (publicados cada ciclo), por lo que no cuesta nada verlos y reflejan la cadencia propia
 de cada comprobación (ver [intervalo por comprobación](#intervalo-por-comprobación)); se
 rehidratan desde `paths.state` tras un reinicio del daemon, y una comprobación aún no
-ejecutada muestra "not run yet". Las lecturas de watches de host usan la misma ruta de
+ejecutada muestra "not run yet". Un resultado de service solo se usa durante su ventana
+normal de frescura (dos intervalos efectivos de esa comprobación, con un mínimo de 30
+segundos) y mientras coincida con el tipo configurado; de otro modo el detalle lo marca
+como obsoleto y espera un ciclo nuevo en vez de mostrar valores antiguos. Las lecturas
+de watches de host usan la misma ruta de
 último valor persistido, con las muestras obsoletas ocultas tras su ventana normal de
 frescura. La sección de gráficos usa un selector de ventana para las mediciones de SLA y
 runtime. Su línea de tiempo de SLA

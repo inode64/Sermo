@@ -43,6 +43,17 @@ func TestSnapshotsPublishRanFlag(t *testing.T) {
 	}
 }
 
+func TestSnapshotsPublishWithCheckTypes(t *testing.T) {
+	s := NewSnapshots()
+	s.PublishWithCheckTypes("web", map[string]checks.Result{
+		"http": {Check: "http", OK: true},
+	}, map[string]bool{"http": true}, map[string]string{"http": checks.CheckTypeHTTP})
+
+	if got := s.Get("web")["http"].CheckType; got != checks.CheckTypeHTTP {
+		t.Fatalf("snapshot CheckType = %q, want %q", got, checks.CheckTypeHTTP)
+	}
+}
+
 func TestSnapshotsPublishAtOnlyWhenRan(t *testing.T) {
 	t0 := time.Date(2026, 6, 7, 10, 0, 0, 0, time.UTC)
 	t1 := t0.Add(30 * time.Second)
@@ -77,7 +88,7 @@ func TestPersistentSnapshotsHydrateAndStore(t *testing.T) {
 	store := &snapshotStoreFake{
 		service: map[string]map[string]state.CheckSnapshotRecord{
 			"web": {
-				"http": {OK: true, Message: "status 200", Data: map[string]any{"status": float64(200)}, Ran: true, At: t0},
+				"http": {CheckType: checks.CheckTypeHTTP, OK: true, Message: "status 200", Data: map[string]any{"status": float64(200)}, Ran: true, At: t0},
 			},
 		},
 	}
@@ -85,7 +96,7 @@ func TestPersistentSnapshotsHydrateAndStore(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewPersistentSnapshots: %v", err)
 	}
-	if got := s.Get("web")["http"]; !got.OK || got.Message != "status 200" || got.Data["status"] != float64(200) || !got.At.Equal(t0) {
+	if got := s.Get("web")["http"]; got.CheckType != checks.CheckTypeHTTP || !got.OK || got.Message != "status 200" || got.Data["status"] != float64(200) || !got.At.Equal(t0) {
 		t.Fatalf("hydrated snapshot = %+v", got)
 	}
 

@@ -14,6 +14,7 @@ import (
 
 // CheckSnapshot is the last observed result of one check, for the web detail view.
 type CheckSnapshot struct {
+	CheckType string
 	OK        bool
 	Condition bool
 	Optional  bool
@@ -75,6 +76,13 @@ func NewPersistentSnapshots(store serviceSnapshotStore, reportError func(error))
 // lists the checks that actually executed this cycle (from the worker's cycleRan
 // map); interval-deferred checks keep their cached result with Ran false.
 func (s *Snapshots) Publish(service string, cache map[string]checks.Result, ran map[string]bool) {
+	s.PublishWithCheckTypes(service, cache, ran, nil)
+}
+
+// PublishWithCheckTypes replaces a service snapshot with the given cycle's
+// cache and check types. Type metadata prevents a same-named check from an old
+// configuration from being decoded under a newly configured check type.
+func (s *Snapshots) PublishWithCheckTypes(service string, cache map[string]checks.Result, ran map[string]bool, checkTypes map[string]string) {
 	if s == nil {
 		return
 	}
@@ -88,7 +96,8 @@ func (s *Snapshots) Publish(service string, cache map[string]checks.Result, ran 
 	m := make(map[string]CheckSnapshot, len(cache))
 	for name, r := range cache {
 		cs := CheckSnapshot{
-			OK: r.OK, Condition: r.Condition, Optional: r.Optional, Skipped: r.Skipped, Message: r.Message,
+			CheckType: checkTypes[name],
+			OK:        r.OK, Condition: r.Condition, Optional: r.Optional, Skipped: r.Skipped, Message: r.Message,
 			Data: maps.Clone(r.Data), Ran: ran[name],
 		}
 		if ran[name] {
@@ -256,14 +265,14 @@ func serviceSnapshotRecords(snaps map[string]CheckSnapshot) map[string]state.Che
 
 func snapshotFromRecord(rec state.CheckSnapshotRecord) CheckSnapshot {
 	return CheckSnapshot{
-		OK: rec.OK, Condition: rec.Condition, Optional: rec.Optional, Skipped: rec.Skipped,
+		CheckType: rec.CheckType, OK: rec.OK, Condition: rec.Condition, Optional: rec.Optional, Skipped: rec.Skipped,
 		Message: rec.Message, Data: maps.Clone(rec.Data), Ran: rec.Ran, At: rec.At,
 	}
 }
 
 func snapshotRecord(snap CheckSnapshot) state.CheckSnapshotRecord {
 	return state.CheckSnapshotRecord{
-		OK: snap.OK, Condition: snap.Condition, Optional: snap.Optional, Skipped: snap.Skipped,
+		CheckType: snap.CheckType, OK: snap.OK, Condition: snap.Condition, Optional: snap.Optional, Skipped: snap.Skipped,
 		Message: snap.Message, Data: maps.Clone(snap.Data), Ran: snap.Ran, At: snap.At,
 	}
 }

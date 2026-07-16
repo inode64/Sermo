@@ -81,7 +81,7 @@ func TestStoreCheckSnapshotsPersistAcrossReopen(t *testing.T) {
 	}
 	if err := first.SetServiceCheckSnapshots("web", map[string]CheckSnapshotRecord{
 		"http": {
-			OK: true, Message: "status 200", Data: map[string]any{"status": float64(200)}, Ran: true, At: at,
+			CheckType: "http", OK: true, Message: "status 200", Data: map[string]any{"status": float64(200)}, Ran: true, At: at,
 		},
 		"stale": {
 			OK: false, Message: "old", Ran: true, At: at.Add(-time.Minute),
@@ -91,7 +91,7 @@ func TestStoreCheckSnapshotsPersistAcrossReopen(t *testing.T) {
 	}
 	if err := first.SetServiceCheckSnapshots("web", map[string]CheckSnapshotRecord{
 		"http": {
-			OK: true, Message: "status 200", Data: map[string]any{"status": float64(200)}, Ran: true, At: at,
+			CheckType: "http", OK: true, Message: "status 200", Data: map[string]any{"status": float64(200)}, Ran: true, At: at,
 		},
 	}); err != nil {
 		t.Fatalf("SetServiceCheckSnapshots replace: %v", err)
@@ -120,7 +120,7 @@ func TestStoreCheckSnapshotsPersistAcrossReopen(t *testing.T) {
 	if len(service) != 1 {
 		t.Fatalf("service snapshots = %+v, want only current row", service)
 	}
-	if got := service["http"]; !got.OK || got.Message != "status 200" || got.Data["status"] != float64(200) || !got.Ran || !got.At.Equal(at) {
+	if got := service["http"]; got.CheckType != "http" || !got.OK || got.Message != "status 200" || got.Data["status"] != float64(200) || !got.Ran || !got.At.Equal(at) {
 		t.Fatalf("service snapshot did not round-trip: %+v", got)
 	}
 
