@@ -384,10 +384,7 @@ func (c commandCheck) Run(ctx context.Context) Result {
 		return r
 	}
 	if res.ExitCode == execx.ExitCodeRunFailure {
-		msg := execx.OperatorFailure(err, res, c.timeout)
-		if msg == "" {
-			msg = execx.CommandDidNotStart
-		}
+		msg := execx.OperatorFailureOr(err, res, c.timeout, execx.CommandDidNotStart)
 		return fail(msg)
 	}
 	if !ExitCodeExpected(res.ExitCode, c.expectExit) {

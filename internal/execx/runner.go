@@ -360,3 +360,12 @@ func OperatorFailure(err error, res Result, timeout time.Duration) string {
 	}
 	return msg
 }
+
+// OperatorFailureOr returns the operator-facing failure message, or fallback
+// when the runner did not provide one.
+func OperatorFailureOr(err error, res Result, timeout time.Duration, fallback string) string {
+	if msg := OperatorFailure(err, res, timeout); msg != "" {
+		return msg
+	}
+	return fallback
+}

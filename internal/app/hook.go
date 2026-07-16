@@ -44,10 +44,7 @@ func (h HookSpec) Run(ctx context.Context, runner HookRunner, env map[string]str
 	res, err := runner.RunHook(ctx, h.Command, env, h.Timeout)
 	if err != nil {
 		if res.ExitCode == execx.ExitCodeRunFailure {
-			msg := execx.OperatorFailure(err, res, h.Timeout)
-			if msg == "" {
-				msg = execx.CommandDidNotStart
-			}
+			msg := execx.OperatorFailureOr(err, res, h.Timeout, execx.CommandDidNotStart)
 			return errors.New(msg)
 		}
 		return fmt.Errorf("run hook: %w", err)

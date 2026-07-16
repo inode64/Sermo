@@ -61,10 +61,7 @@ func (c *lvmCheck) Run(ctx context.Context) Result {
 	defer cancel()
 	res, runErr := c.runner.Run(ctx, lvsCommand, "--reportformat", "json", "--units", "b", "--nosuffix", "-a", "-o", "vg_name,lv_name,lv_attr,lv_health_status,vg_free,vg_size,data_percent,metadata_percent,raid_sync_action,sync_percent,copy_percent")
 	if res.ExitCode == execx.ExitCodeRunFailure {
-		msg := execx.OperatorFailure(runErr, res, c.timeout)
-		if msg == "" {
-			msg = execx.CommandDidNotStart
-		}
+		msg := execx.OperatorFailureOr(runErr, res, c.timeout, execx.CommandDidNotStart)
 		return c.result(false, "lvm: "+msg, start)
 	}
 	var report lvmReport
