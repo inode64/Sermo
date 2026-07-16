@@ -1126,8 +1126,8 @@ const minWriteTimeout = 30 * time.Second
 
 // Server is the HTTP dashboard. Addr is a host:port; Backend is required. Auth is
 // optional (zero value = open). OperationTimeout bounds how long start/stop/restart/reload/resume
-// may run and sizes the HTTP write deadline; it should be the maximum per-service
-// deadline (app.MaxOperationTimeout).
+// may run and sizes the initial HTTP write deadline; it should be the maximum
+// per-service deadline (app.MaxOperationTimeout).
 type Server struct {
 	Addr    string
 	Backend Backend
@@ -1135,6 +1135,9 @@ type Server struct {
 	Logger  *slog.Logger
 
 	OperationTimeout time.Duration
+	// OperationTimeoutSource supplies the active maximum timeout after a daemon
+	// reload. It is optional; OperationTimeout remains the fallback.
+	OperationTimeoutSource func() time.Duration
 	// Readiness is optional; nil makes /readyz report ready (tests).
 	Readiness ReadinessChecker
 
@@ -1360,6 +1363,26 @@ func serverWriteTimeout(maxOp time.Duration) time.Duration {
 	return wt
 }
 
+func (s *Server) actionWriteTimeout() time.Duration {
+	timeout := s.OperationTimeout
+	if s.OperationTimeoutSource != nil {
+		if current := s.OperationTimeoutSource(); current > 0 {
+			timeout = current
+		}
+	}
+	return serverWriteTimeout(timeout)
+}
+
+// extendActionWriteDeadline lets a reloaded operation timeout exceed the
+// server's startup write deadline without aborting the browser response after
+// the safe operation has completed.
+func (s *Server) extendActionWriteDeadline(w http.ResponseWriter) {
+	deadline := time.Now().Add(s.actionWriteTimeout())
+	if err := http.NewResponseController(w).SetWriteDeadline(deadline); err != nil && s.Logger != nil {
+		s.Logger.Debug("set action response write deadline", "error", err)
+	}
+}
+
 // operateContext returns a context for start/stop/restart/reload/resume that is not tied to the
 // HTTP request. Client disconnect and the generic write deadline must not abort
 // an in-flight safe operation; the operation engine applies its own timeout.
@@ -1379,7 +1402,7 @@ func (s *Server) Run(ctx context.Context) error {
 		Handler:           s.Handler(),
 		ReadHeaderTimeout: serverReadHeaderTimeout,
 		ReadTimeout:       serverReadTimeout,
-		WriteTimeout:      serverWriteTimeout(s.OperationTimeout),
+		WriteTimeout:      s.actionWriteTimeout(),
 		IdleTimeout:       serverIdleTimeout,
 	}
 	go func() { //nolint:gosec // G118: the shutdown deadline must NOT derive from ctx — it is already cancelled here
@@ -1475,6 +1498,7 @@ func (s *Server) handleNotifiers(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleNotifierTest(w http.ResponseWriter, r *http.Request) {
+	s.extendActionWriteDeadline(w)
 	res := s.Backend.TestNotifier(s.operateContext(r), r.PathValue(apiParamName)) //nolint:contextcheck // see operateContext
 	writeActionResult(w, res.OK, res)
 }
@@ -1496,6 +1520,7 @@ func (s *Server) handleMountAction(w http.ResponseWriter, r *http.Request) {
 	action := r.PathValue(apiParamAction)
 	switch action {
 	case mountctl.ActionMount, mountctl.ActionUmount:
+		s.extendActionWriteDeadline(w)
 		res := s.Backend.MountAction(s.operateContext(r), name, action, MountActionOptions{ //nolint:contextcheck // see operateContext
 			AllowForce:   queryBool(r, apiQueryForce),
 			AllowLazy:    queryBool(r, apiQueryLazy),
@@ -1506,6 +1531,7 @@ func (s *Server) handleMountAction(w http.ResponseWriter, r *http.Request) {
 		res := s.Backend.MountBlockers(r.Context(), name)
 		writeActionResult(w, res.OK, res)
 	case apiActionAlert:
+		s.extendActionWriteDeadline(w)
 		res := s.Backend.AlertMountUsers(s.operateContext(r), name) //nolint:contextcheck // see operateContext
 		writeActionResult(w, res.OK, res)
 	default:
@@ -1696,6 +1722,7 @@ func (s *Server) handleStateCompact(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, StateCompactResult{OK: false, Message: err.Error()})
 		return
 	}
+	s.extendActionWriteDeadline(w)
 	res := s.Backend.CompactState(s.operateContext(r), before) //nolint:contextcheck // see operateContext
 	writeActionResult(w, res.OK, res)
 }
@@ -1796,6 +1823,7 @@ func (s *Server) handleAction(w http.ResponseWriter, r *http.Request) {
 	action := r.PathValue(apiParamAction)
 	switch {
 	case operateActions[action]:
+		s.extendActionWriteDeadline(w)
 		opts := OperateOpts{NoCascade: queryBool(r, apiQueryNoCascade)}
 		res := s.Backend.Operate(s.operateContext(r), name, action, opts) //nolint:contextcheck // see operateContext
 		writeActionResult(w, res.OK, res)
@@ -1815,6 +1843,7 @@ func (s *Server) handleWatchAction(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue(apiParamName)
 	action := r.PathValue(apiParamAction)
 	if watchOperateActions[action] {
+		s.extendActionWriteDeadline(w)
 		var res ActionResult
 		switch action {
 		case apiActionExpand:

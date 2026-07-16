@@ -47,6 +47,14 @@ func (h *WebBackendHolder) backend() *WebBackend {
 	return h.b
 }
 
+// MaxOperationTimeout reports the longest current operation timeout, including
+// per-service stop policies, from the active reloadable backend.
+func (h *WebBackendHolder) MaxOperationTimeout() time.Duration {
+	return webCall(h, time.Duration(0), func(b *WebBackend) time.Duration {
+		return b.maxOperationTimeout()
+	})
+}
+
 // webCall runs fn against the active backend, returning zero when no backend
 // is installed; the nil-guard shared by every delegate below.
 //
