@@ -84,6 +84,42 @@ func TestArtifactSamplesShareAppVersion(t *testing.T) {
 	}
 }
 
+func TestArtifactCheckStoresSamples(t *testing.T) {
+	appSamples := NewArtifactSamples()
+	appCheck := artifactCheck{
+		name:    "demo",
+		samples: appSamples,
+		store:   storeAppSample,
+		inspect: func(context.Context) appinspect.Report {
+			return appinspect.Report{Version: "1.2.3", Status: appinspect.StatusOK}
+		},
+	}
+	appCheck.Run(t.Context())
+	version, status, sampled := appSamples.AppVersion("demo")
+	if !sampled || version != "1.2.3" || status != appinspect.StatusOK {
+		t.Fatalf("app sample = version:%q status:%q sampled:%t", version, status, sampled)
+	}
+
+	path := filepath.Join(t.TempDir(), "demo.so")
+	if err := os.WriteFile(path, []byte("library"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	librarySamples := NewArtifactSamples()
+	libraryCheck := artifactCheck{
+		name:    "demo-library",
+		samples: librarySamples,
+		store:   storeLibrarySample,
+		inspect: func(context.Context) appinspect.Report {
+			return appinspect.Report{Binary: path, Status: appinspect.StatusOK}
+		},
+	}
+	libraryCheck.Run(t.Context())
+	_, tracked, sampled := librarySamples.FileFingerprint(path)
+	if !tracked || !sampled {
+		t.Fatalf("library sample = tracked:%t sampled:%t", tracked, sampled)
+	}
+}
+
 func TestChangedRulePaths(t *testing.T) {
 	tree := map[string]any{rules.SectionRules: map[string]any{
 		"one": map[string]any{rules.RuleFieldIf: map[string]any{rules.ConditionChanged: map[string]any{rules.FieldPath: "/etc/demo.conf"}}},

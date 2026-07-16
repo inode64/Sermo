@@ -9,8 +9,8 @@ import (
 	"sermo/internal/notify"
 )
 
-func TestAppCheckMapsStatus(t *testing.T) {
-	errc := appCheck{name: "x", inspect: func(context.Context) appinspect.Report {
+func TestArtifactCheckMapsStatus(t *testing.T) {
+	errc := artifactCheck{name: "x", inspect: func(context.Context) appinspect.Report {
 		return appinspect.Report{Status: "error: exit 1 (want 0): boom", Output: "stderr:\nboom"}
 	}}
 	r := errc.Run(context.Background())
@@ -20,7 +20,7 @@ func TestAppCheckMapsStatus(t *testing.T) {
 	if resultOutput(r) != "stderr:\nboom" {
 		t.Fatalf("error result must carry the probe output, got %q", resultOutput(r))
 	}
-	okc := appCheck{name: "x", inspect: func(context.Context) appinspect.Report {
+	okc := artifactCheck{name: "x", inspect: func(context.Context) appinspect.Report {
 		return appinspect.Report{Status: appinspect.StatusOK}
 	}}
 	if r := okc.Run(context.Background()); !r.OK {

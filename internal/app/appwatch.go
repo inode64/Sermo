@@ -4,34 +4,8 @@ import (
 	"context"
 
 	"sermo/internal/appinspect"
-	"sermo/internal/checks"
 	"sermo/internal/config"
 )
-
-// appCheck adapts a single application's inspection to a checks.Check: OK when
-// the app reports appinspect.StatusOK, otherwise the Result message carries the
-// error detail appinspect captured (e.g. "error: exit 1 (want 0): <stderr>").
-type appCheck struct {
-	name    string
-	inspect func(context.Context) appinspect.Report
-	samples *ArtifactSamples
-}
-
-func (c appCheck) Name() string { return c.name }
-
-func (c appCheck) Run(ctx context.Context) checks.Result {
-	rep := c.inspect(ctx)
-	storeAppSample(c.samples, c.name, rep)
-	res := checks.Result{
-		Check:   c.name,
-		OK:      rep.Status == appinspect.StatusOK,
-		Message: rep.Status,
-	}
-	if !res.OK && rep.Output != "" {
-		res.Data = map[string]any{checks.DataKeyOutput: rep.Output}
-	}
-	return res
-}
 
 func storeAppSample(samples *ArtifactSamples, name string, report appinspect.Report) {
 	if samples == nil {
@@ -67,9 +41,10 @@ func BuildAppWatches(ctx context.Context, cfg *config.Config, deps Deps) []*Watc
 	for i := range reports {
 		name := reports[i].Name
 		samples.RegisterApp(name)
-		check := appCheck{
+		check := artifactCheck{
 			name:    name,
 			samples: samples,
+			store:   storeAppSample,
 			inspect: func(ctx context.Context) appinspect.Report {
 				return appinspect.InspectOne(ctx, runner, cfg, name,
 					appinspect.WithUserLookup(deps.UserLookup))
