@@ -487,14 +487,11 @@ func expandReloadOnChange(tree map[string]any) []string {
 			continue
 		}
 		key := fmt.Sprintf("reload-on-change-%d", i+1)
-		if _, exists := ruleMap[key]; exists {
-			errs = append(errs, fmt.Sprintf("reload_on_change would overwrite existing rule %q; rename that rule", key))
+		changed := map[string]any{rules.FieldPath: p}
+		then := map[string]any{rules.RuleFieldAction: string(rules.ActionReload)}
+		if err := addChangedRemediationRule(ruleMap, keyReloadOnChange, key, changed, then); err != nil {
+			errs = append(errs, err.Error())
 			continue
-		}
-		ruleMap[key] = map[string]any{
-			rules.RuleFieldType: string(rules.RuleRemediation),
-			rules.RuleFieldIf:   map[string]any{rules.ConditionChanged: map[string]any{rules.FieldPath: p}},
-			rules.RuleFieldThen: map[string]any{rules.RuleFieldAction: string(rules.ActionReload)},
 		}
 	}
 	if len(ruleMap) > 0 {
@@ -933,14 +930,10 @@ func addRestartOnChangePathRules(rulesMap map[string]any, paths []string, messag
 	var errs []string
 	for i, path := range paths {
 		key := fmt.Sprintf("restart-on-change-config-%d", i+1)
-		if _, exists := rulesMap[key]; exists {
-			errs = append(errs, fmt.Sprintf("restart_on_change would overwrite existing rule %q; rename that rule", key))
+		changed := map[string]any{rules.FieldPath: path}
+		if err := addChangedRemediationRule(rulesMap, keyRestartOnChange, key, changed, restartOnChangeThen(message)); err != nil {
+			errs = append(errs, err.Error())
 			continue
-		}
-		rulesMap[key] = map[string]any{
-			rules.RuleFieldType: string(rules.RuleRemediation),
-			rules.RuleFieldIf:   map[string]any{rules.ConditionChanged: map[string]any{rules.FieldPath: path}},
-			rules.RuleFieldThen: restartOnChangeThen(message),
 		}
 	}
 	return errs
@@ -969,14 +962,10 @@ func (c *Config) addRestartOnChangeLibraryRules(tree, rulesMap map[string]any, l
 		}
 		preflight[preflightKey] = map[string]any{checks.CheckKeyType: checks.CheckTypeFile, checks.CheckKeyPath: path, checks.CheckKeyNonEmpty: true}
 		key := "restart-on-change-" + library
-		if _, exists := rulesMap[key]; exists {
-			errs = append(errs, fmt.Sprintf("restart_on_change would overwrite existing rule %q; rename that rule", key))
+		changed := map[string]any{rules.FieldLibrary: library, rules.FieldPath: path}
+		if err := addChangedRemediationRule(rulesMap, keyRestartOnChange, key, changed, restartOnChangeThen(message)); err != nil {
+			errs = append(errs, err.Error())
 			continue
-		}
-		rulesMap[key] = map[string]any{
-			rules.RuleFieldType: string(rules.RuleRemediation),
-			rules.RuleFieldIf:   map[string]any{rules.ConditionChanged: map[string]any{rules.FieldLibrary: library, rules.FieldPath: path}},
-			rules.RuleFieldThen: restartOnChangeThen(message),
 		}
 	}
 	if len(preflight) > 0 {
@@ -994,17 +983,28 @@ func addRestartOnChangeAppRules(tree, rulesMap map[string]any, apps []restartOnC
 			continue
 		}
 		key := "restart-on-change-" + app.name + "-version"
-		if _, exists := rulesMap[key]; exists {
-			errs = append(errs, fmt.Sprintf("restart_on_change would overwrite existing rule %q; rename that rule", key))
+		changed := map[string]any{rules.FieldApp: app.name, rules.FieldLevel: app.level}
+		if err := addChangedRemediationRule(rulesMap, keyRestartOnChange, key, changed, restartOnChangeThen(message)); err != nil {
+			errs = append(errs, err.Error())
 			continue
-		}
-		rulesMap[key] = map[string]any{
-			rules.RuleFieldType: string(rules.RuleRemediation),
-			rules.RuleFieldIf:   map[string]any{rules.ConditionChanged: map[string]any{rules.FieldApp: app.name, rules.FieldLevel: app.level}},
-			rules.RuleFieldThen: restartOnChangeThen(message),
 		}
 	}
 	return errs
+}
+
+// addChangedRemediationRule adds one generated remediation rule whose condition
+// is a changed: operand. The reload_on_change and restart_on_change sugars use
+// different actions but share collision handling and the canonical rule shape.
+func addChangedRemediationRule(rulesMap map[string]any, source, key string, changed, then map[string]any) error {
+	if _, exists := rulesMap[key]; exists {
+		return fmt.Errorf("%s would overwrite existing rule %q; rename that rule", source, key)
+	}
+	rulesMap[key] = map[string]any{
+		rules.RuleFieldType: string(rules.RuleRemediation),
+		rules.RuleFieldIf:   map[string]any{rules.ConditionChanged: changed},
+		rules.RuleFieldThen: then,
+	}
+	return nil
 }
 
 var restartOnChangeKeys = set(

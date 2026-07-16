@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 
@@ -2807,6 +2808,25 @@ reload_on_change:
 		if cfgval.String(changed["path"]) != wantPath {
 			t.Errorf("%s changed.path = %v, want %q", rule, changed["path"], wantPath)
 		}
+	}
+}
+
+func TestAddChangedRemediationRule(t *testing.T) {
+	rulesMap := map[string]any{}
+	changed := map[string]any{rules.FieldPath: "/etc/service.conf"}
+	then := map[string]any{rules.RuleFieldAction: string(rules.ActionReload)}
+	if err := addChangedRemediationRule(rulesMap, keyReloadOnChange, "reload-on-change-1", changed, then); err != nil {
+		t.Fatal(err)
+	}
+	rule := nested(t, rulesMap, "reload-on-change-1")
+	if got := nested(t, rule, rules.RuleFieldIf, rules.ConditionChanged); !maps.Equal(got, changed) {
+		t.Errorf("changed condition = %#v, want %#v", got, changed)
+	}
+	if got := nested(t, rule, rules.RuleFieldThen); !maps.Equal(got, then) {
+		t.Errorf("then = %#v, want %#v", got, then)
+	}
+	if err := addChangedRemediationRule(rulesMap, keyReloadOnChange, "reload-on-change-1", changed, then); err == nil || !strings.Contains(err.Error(), `reload_on_change would overwrite existing rule "reload-on-change-1"`) {
+		t.Errorf("duplicate error = %v", err)
 	}
 }
 
