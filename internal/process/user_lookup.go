@@ -196,46 +196,33 @@ func (l *UserLookup) resolveName(id uint32, cache map[uint32]nameLookupResult, n
 }
 
 func (l *UserLookup) lookupID(name string, native, getent UserResolver) (uint32, bool) {
-	switch l.mode {
-	case UserLookupNumeric:
-		return 0, false
-	case UserLookupNative:
-		return native(name)
-	case UserLookupGetent:
-		if id, ok := getent(name); ok {
-			return id, true
-		}
-		return native(name)
-	default: // auto
-		if id, ok := native(name); ok {
-			return id, true
-		}
-		if !cgoEnabled {
-			return getent(name)
-		}
-		return 0, false
-	}
+	return lookupWithMode(l.mode, name, native, getent)
 }
 
 func (l *UserLookup) lookupName(id uint32, native, getent nameResolver) (string, bool) {
-	switch l.mode {
+	return lookupWithMode(l.mode, id, native, getent)
+}
+
+func lookupWithMode[query, result any](mode string, value query, native, getent func(query) (result, bool)) (result, bool) {
+	var zero result
+	switch mode {
 	case UserLookupNumeric:
-		return "", false
+		return zero, false
 	case UserLookupNative:
-		return native(id)
+		return native(value)
 	case UserLookupGetent:
-		if name, ok := getent(id); ok {
-			return name, true
+		if resolved, ok := getent(value); ok {
+			return resolved, true
 		}
-		return native(id)
+		return native(value)
 	default: // auto
-		if name, ok := native(id); ok {
-			return name, true
+		if resolved, ok := native(value); ok {
+			return resolved, true
 		}
 		if !cgoEnabled {
-			return getent(id)
+			return getent(value)
 		}
-		return "", false
+		return zero, false
 	}
 }
 
