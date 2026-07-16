@@ -20,7 +20,9 @@ func operationActionSettlesAfter(action string) bool {
 	}
 }
 
-func manualStartLikeAction(action string) bool {
+// ManualActionCanRemainActiveAfterPostflightFailure reports whether a failed
+// postflight can still leave the service running and needing observation.
+func ManualActionCanRemainActiveAfterPostflightFailure(action string) bool {
 	switch rules.ActionType(action) {
 	case rules.ActionStart, rules.ActionRestart, rules.ActionResume:
 		return true
@@ -52,7 +54,7 @@ func finishOperationSettlingWithActive(store OperationSettlingStore, service, ac
 	if store == nil || !isServiceOperationAction(action) {
 		return nil
 	}
-	settleAfter := result.OK() || (activeAfterStart && result.Status == operation.ResultPostflightFailed && manualStartLikeAction(action))
+	settleAfter := result.OK() || (activeAfterStart && result.Status == operation.ResultPostflightFailed && ManualActionCanRemainActiveAfterPostflightFailure(action))
 	if opErr == nil && settleAfter && operationActionSettlesAfter(action) {
 		if err := store.SetOperationSettling(service, action, state.OperationSettlingSettling, source); err != nil {
 			return fmt.Errorf("mark post-operation settling for %s: %w", service, err)
