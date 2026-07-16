@@ -481,6 +481,29 @@ func TestNewStatefulWatch(t *testing.T) {
 	}
 }
 
+func TestNewCheckWatch(t *testing.T) {
+	now := func() time.Time { return time.Unix(0, 0) }
+	emit := func(Event) {}
+	watch := newCheckWatch(checkWatchSpec{
+		name:      "api",
+		checkType: "http",
+		actions:   watchActions{hook: HookSpec{Command: []string{"/bin/alert"}}, notifyInterval: time.Minute},
+		dryRun:    true,
+		interval:  30 * time.Second,
+		stateSlot: "metric:latency",
+	}, Deps{Now: now, Emit: emit})
+
+	if watch.Name != "api" || watch.CheckType != "http" || watch.Interval != 30*time.Second || !watch.DryRun {
+		t.Fatalf("unexpected check watch: %+v", watch)
+	}
+	if !watch.FireOnFail || watch.StateSlot != "metric:latency" || len(watch.Hook.Command) != 1 {
+		t.Fatalf("check watch lost check-specific fields: %+v", watch)
+	}
+	if watch.IsPaused == nil || watch.IsPaused() || watch.Now == nil || watch.Emit == nil {
+		t.Fatalf("check watch must wire shared runtime callbacks: %+v", watch)
+	}
+}
+
 func TestBuildWatchesProcessWarnsOnNoCondition(t *testing.T) {
 	cfg := cfgWithWatches(map[string]any{
 		"bad": map[string]any{
