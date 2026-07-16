@@ -66,29 +66,6 @@ func HdparmResultData(device string, values map[string]float64) map[string]any {
 	return data
 }
 
-// SampleHdparm runs hdparm -t and/or -T on device and returns MB/s rates.
-// timeout is used for operator-facing timeout messages when the probe context
-// expires before the command finishes.
-func SampleHdparm(ctx context.Context, runner execx.Runner, device string, wantCached, wantRead bool, timeout time.Duration) (map[string]float64, error) {
-	runner = execx.RunnerOrDefault(runner)
-	if !wantCached && !wantRead {
-		wantCached, wantRead = true, true
-	}
-	res, runErr := runner.Run(ctx, hdparmCommand, hdparmArgs(device, wantCached, wantRead)...)
-	if res.ExitCode == execx.ExitCodeRunFailure {
-		msg := execx.OperatorFailureOr(runErr, res, timeout, execx.CommandDidNotStart)
-		return nil, errors.New(msg)
-	}
-	values, err := parseHdparm(res.Stdout)
-	if err != nil {
-		if s := output.FirstNonEmptyLine(res.Stderr); s != "" {
-			return nil, fmt.Errorf("%s", s)
-		}
-		return nil, err
-	}
-	return values, nil
-}
-
 func hdparmArgs(device string, wantCached, wantRead bool) []string {
 	const hdparmArgumentCapacity = 3
 

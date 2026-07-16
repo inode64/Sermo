@@ -91,31 +91,6 @@ type SmartSample struct {
 	Values          map[string]float64
 }
 
-// SampleSmart runs smartctl -H -A -j on device. timeout is used for
-// operator-facing timeout messages when the probe context expires before the
-// command finishes.
-func SampleSmart(ctx context.Context, runner execx.Runner, device string, timeout time.Duration) (SmartSample, error) {
-	runner = execx.RunnerOrDefault(runner)
-	res, runErr := runner.Run(ctx, smartctlCommand, smartctlArgs(device)...)
-	if res.ExitCode == execx.ExitCodeRunFailure {
-		msg := execx.OperatorFailureOr(runErr, res, timeout, execx.CommandDidNotStart)
-		return SmartSample{}, fmt.Errorf("%s", msg)
-	}
-	data, err := parseSmart(res.Stdout)
-	if err != nil {
-		if s := output.FirstNonEmptyLine(res.Stderr); s != "" {
-			return SmartSample{}, fmt.Errorf("%s", s)
-		}
-		return SmartSample{}, err
-	}
-	return SmartSample{
-		Health:          smartHealthLabel(data),
-		HealthKnown:     data.healthKnown,
-		SelfTestRunning: data.selfTestRunning,
-		Values:          data.values,
-	}, nil
-}
-
 func smartctlArgs(device string) []string {
 	// -c exposes ATA self-test progress; health and attribute readings stay the
 	// same. This makes a manually requested test observable on later cycles.
@@ -145,16 +120,6 @@ func StartSmartShortTest(ctx context.Context, runner execx.Runner, device string
 
 func smartctlShortTestArgs(device string) []string {
 	return []string{smartctlShortTest, device}
-}
-
-func smartHealthLabel(data smartData) string {
-	if !data.healthKnown {
-		return smartHealthUnknown
-	}
-	if data.passed {
-		return smartHealthPassed
-	}
-	return smartHealthFailed
 }
 
 // smartData is the parsed subset of `smartctl -j` output.
