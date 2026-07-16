@@ -19,6 +19,7 @@ const (
 	TargetStateMonitored  = "monitored"
 	TargetStateFailed     = "failed"
 	TargetStateWarning    = "warning"
+	TargetStateStale      = "stale"
 )
 
 const (

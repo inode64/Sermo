@@ -90,6 +90,7 @@ var watchPanelTemplate = template.Must(template.New("watch-panel").Parse(`<h2 cl
       <button data-wf="disabled" aria-pressed="false">disabled</button>
       <button data-wf="ok" aria-pressed="false">ok</button>
       <button data-wf="starting" aria-pressed="false">starting</button>
+      <button data-wf="stale" aria-pressed="false">stale</button>
       <button data-wf="failed" aria-pressed="false">failed</button>
     </span>
     <span id="{{.FilterCountID}}" class="muted"></span>
