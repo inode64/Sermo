@@ -536,30 +536,25 @@ type WatchMeter struct {
 	NumCPU int     `json:"num_cpu,omitempty"`
 }
 
-// StorageWatchInfo is live filesystem data for a storage host watch.
+// StorageWatchInfo is the latest daemon-cycle filesystem data for a storage host watch.
 type StorageWatchInfo struct {
-	Path          string   `json:"path"`
-	Mounted       bool     `json:"mounted"`
-	MountPoint    string   `json:"mount_point,omitempty"`
-	Device        string   `json:"device,omitempty"`
-	FileSystem    string   `json:"filesystem,omitempty"`
-	Options       []string `json:"options,omitempty"`
-	TotalBytes    uint64   `json:"total_bytes,omitempty"`
-	UsedBytes     uint64   `json:"used_bytes,omitempty"`
-	FreeBytes     uint64   `json:"free_bytes,omitempty"`
-	UsedPct       float64  `json:"used_pct,omitempty"`
-	FreePct       float64  `json:"free_pct,omitempty"`
-	InodesTotal   uint64   `json:"inodes_total,omitempty"`
-	InodesFree    uint64   `json:"inodes_free,omitempty"`
-	InodesUsedPct float64  `json:"inodes_used_pct,omitempty"`
-	InodesFreePct float64  `json:"inodes_free_pct,omitempty"`
-	// OpenFiles is the number of open file descriptors on this mount's
-	// filesystem (fds whose target resolves to an absolute path under the mount).
-	// Display only; computed by a cached host-wide /proc scan, so 0 may mean
-	// "none" or "not yet sampled".
-	OpenFiles        int64  `json:"open_files,omitempty"`
-	SampleError      string `json:"sample_error,omitempty"`
-	MountSampleError string `json:"mount_sample_error,omitempty"`
+	Path             string   `json:"path"`
+	Mounted          bool     `json:"mounted"`
+	MountPoint       string   `json:"mount_point,omitempty"`
+	Device           string   `json:"device,omitempty"`
+	FileSystem       string   `json:"filesystem,omitempty"`
+	Options          []string `json:"options,omitempty"`
+	TotalBytes       uint64   `json:"total_bytes,omitempty"`
+	UsedBytes        uint64   `json:"used_bytes,omitempty"`
+	FreeBytes        uint64   `json:"free_bytes,omitempty"`
+	UsedPct          float64  `json:"used_pct,omitempty"`
+	FreePct          float64  `json:"free_pct,omitempty"`
+	InodesTotal      uint64   `json:"inodes_total,omitempty"`
+	InodesFree       uint64   `json:"inodes_free,omitempty"`
+	InodesUsedPct    float64  `json:"inodes_used_pct,omitempty"`
+	InodesFreePct    float64  `json:"inodes_free_pct,omitempty"`
+	SampleError      string   `json:"sample_error,omitempty"`
+	MountSampleError string   `json:"mount_sample_error,omitempty"`
 }
 
 // Notifier is a configured notification target referenced by watches.

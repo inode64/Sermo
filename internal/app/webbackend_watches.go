@@ -61,7 +61,7 @@ func (b *WebBackend) watchPresentation(w *webWatch, system metrics.Snapshot) (*w
 	}
 	var storage *web.StorageWatchInfo
 	if isStorageCheckType(w.checkType) {
-		storage = storageWatchInfo(w, b)
+		storage = b.storageWatchInfo(w)
 	}
 	var swap *web.SwapWatchInfo
 	if w.checkType == checks.CheckTypeSwap {

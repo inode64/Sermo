@@ -7,7 +7,6 @@ import (
 	"sermo/internal/checks"
 	"sermo/internal/metrics"
 	"sermo/internal/web"
-	"slices"
 	"strconv"
 	"strings"
 )
@@ -110,64 +109,73 @@ func watchMeter(checkType string, system metrics.Snapshot) *web.WatchMeter {
 	return nil
 }
 
-func storageWatchInfo(w *webWatch, b *WebBackend) *web.StorageWatchInfo {
-	if w == nil || w.check == nil {
+// storageWatchInfo returns the latest storage result published by the daemon.
+// It deliberately never samples mounts or filesystems in the web request.
+func (b *WebBackend) storageWatchInfo(w *webWatch) *web.StorageWatchInfo {
+	if w == nil || w.check == nil || b.watchSnapshots == nil {
+		return nil
+	}
+	var latest CheckSnapshot
+	found := false
+	for _, snap := range b.watchSnapshots.Get(w.name, w.checkType) {
+		if !b.watchSnapshotCurrent(w, snap) || (found && !snap.At.After(latest.At)) {
+			continue
+		}
+		latest, found = snap, true
+	}
+	if !found {
 		return nil
 	}
 	path := cfgval.String(w.check[checks.CheckKeyPath])
 	if path == "" {
 		return nil
 	}
-	info := &web.StorageWatchInfo{Path: path}
+	return storageWatchInfoFromSnapshot(path, latest)
+}
 
-	mountSampler := b.mountSampler
-	if mountSampler == nil {
-		mountSampler = checks.DefaultMounts
+func storageWatchInfoFromSnapshot(path string, snap CheckSnapshot) *web.StorageWatchInfo {
+	data := snap.Data
+	if snapshotPath := cfgval.String(data[checks.DataKeyPath]); snapshotPath != "" {
+		path = snapshotPath
 	}
-	mounts, err := mountSampler()
-	if err != nil {
-		info.MountSampleError = err.Error()
-	} else {
-		mount := checks.MountForPath(mounts, path)
-		if _, ok := storageMountExpectation(w.check); ok {
-			mount = checks.MountAtPath(mounts, path)
-		}
-		if mount != nil {
-			info.Mounted = true
-			info.MountPoint = mount.MountPoint
-			info.Device = mount.Device
-			info.FileSystem = mount.FSType
-			info.Options = slices.Clone(mount.Options)
-			if storageUsagePredicatesConfigured(w.check) {
-				info.OpenFiles = b.openFilesByMountCached(mounts)[mount.MountPoint]
-			}
-		}
-		if _, ok := storageMountExpectation(w.check); ok && (!info.Mounted || !storageUsagePredicatesConfigured(w.check)) {
-			return info
-		}
+	info := &web.StorageWatchInfo{
+		Path:             path,
+		Mounted:          cfgval.Bool(data[checks.DataKeyMounted]),
+		MountPoint:       cfgval.String(data[checks.DataKeyMountPoint]),
+		Device:           cfgval.String(data[checks.DataKeyDevice]),
+		FileSystem:       cfgval.String(data[checks.DataKeyFSType]),
+		TotalBytes:       snapshotUint(data, checks.DataKeyTotalBytes),
+		UsedBytes:        snapshotUint(data, checks.DataKeyUsedBytes),
+		FreeBytes:        snapshotUint(data, checks.DataKeyFreeBytes),
+		UsedPct:          snapshotFloat(data, checks.DataKeyUsedPct),
+		FreePct:          snapshotFloat(data, checks.DataKeyFreePct),
+		InodesTotal:      snapshotUint(data, checks.DataKeyInodesTotal),
+		InodesFree:       snapshotUint(data, checks.DataKeyInodesFree),
+		InodesUsedPct:    snapshotFloat(data, checks.DataKeyInodesUsedPct),
+		InodesFreePct:    snapshotFloat(data, checks.DataKeyInodesFreePct),
+		SampleError:      cfgval.String(data[checks.DataKeySampleError]),
+		MountSampleError: cfgval.String(data[checks.DataKeyMountSampleError]),
 	}
-
-	usage := b.storageUsage
-	if usage == nil {
-		usage = checks.DefaultStorageUsage
+	if options := cfgval.String(data[checks.DataKeyOptions]); options != "" {
+		info.Options = strings.Split(options, ",")
 	}
-	if st, err := usage(path); err != nil {
-		info.SampleError = err.Error()
-	} else {
-		info.TotalBytes = st.TotalBytes
-		info.FreeBytes = st.FreeBytes
-		info.UsedBytes = st.UsedBytes
-		if info.UsedBytes == 0 && st.TotalBytes >= st.FreeBytes {
-			info.UsedBytes = st.TotalBytes - st.FreeBytes
-		}
-		info.UsedPct = st.UsedPct
-		info.FreePct = st.FreePct
-		info.InodesTotal = st.InodesTotal
-		info.InodesFree = st.InodesFree
-		info.InodesUsedPct = st.InodesUsedPct
-		info.InodesFreePct = st.InodesFreePct
+	if info.UsedBytes == 0 && info.TotalBytes >= info.FreeBytes {
+		info.UsedBytes = info.TotalBytes - info.FreeBytes
+	}
+	if info.Mounted && info.MountPoint == "" {
+		info.MountPoint = path
 	}
 	return info
+}
+
+func snapshotUint(data map[string]any, key string) uint64 {
+	v, _ := uintField(data[key])
+	return v
+}
+
+func snapshotFloat(data map[string]any, key string) float64 {
+	v, _ := cfgval.Float(data[key])
+	return v
 }
 
 func storageMountExpectation(check map[string]any) (bool, bool) {

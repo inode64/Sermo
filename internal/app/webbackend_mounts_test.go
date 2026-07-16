@@ -421,7 +421,7 @@ func TestWebBackendMountActionSyncsStorageWatchMonitoring(t *testing.T) {
 		t.Fatalf("watch after umount active=%v source=%q", store.active[watchMonitorKey("mount-backup")], store.source[watchMonitorKey("mount-backup")])
 	}
 	watches := b.Watches(context.Background())
-	if len(watches) != 1 || watches[0].State != TargetStateDisabled || watches[0].Storage == nil || watches[0].Storage.Mounted {
+	if len(watches) != 1 || watches[0].State != TargetStateDisabled || watches[0].Storage != nil {
 		t.Fatalf("watch view after umount = %+v", watches)
 	}
 

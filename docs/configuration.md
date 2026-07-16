@@ -1734,8 +1734,8 @@ condition (mount-only is fine). The mount is checked first from `/proc/mounts`: 
 it is missing when `mounted: true` (or present when `mounted: false`), the check
 alerts on that and the space predicates are skipped (their numbers would be
 meaningless). `fstype`, `device` and `options` are not configurable predicates;
-they are reported as result data and shown in the Web UI as live filesystem
-information. This is the safe filesystem check for ext2/3/4, XFS, btrfs, vfat
+they are reported as result data and, while fresh, shown in the Web UI from the
+daemon-cycle snapshot. This is the safe filesystem check for ext2/3/4, XFS, btrfs, vfat
 and other mounted filesystems: it checks the mounted path, capacity and inode
 data where the filesystem exposes it, and never runs a repair/`fsck` command on
 a live filesystem.
