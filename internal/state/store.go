@@ -1730,20 +1730,13 @@ func summaryFromRow(row *sql.Row) (MeasurementStat, error) {
 // MeasurementSeries returns a check's per-minute points in [from, to), oldest
 // first. Minutes with no observation are absent (gaps), as in SLASeries.
 func (s *Store) MeasurementSeries(service, check string, from, to time.Time) ([]MeasurementPoint, error) {
-	rows, err := s.db.QueryContext(s.sqlCtx(),
+	return s.aggregateSeries(
 		`SELECT bucket, n, sum_ms, min_ms, max_ms
 		   FROM measurement
 		  WHERE service = ? AND check_name = ? AND bucket >= ? AND bucket < ?
 		  ORDER BY bucket;`,
+		"measurement", service+"/"+check,
 		service, check, minuteBucket(from), minuteBucket(to),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("load measurement series for %s/%s: %w", service, check, err)
-	}
-	return measurementPointsFromRows(
-		rows,
-		"measurement series row for "+service+"/"+check,
-		"measurement series for "+service+"/"+check,
 	)
 }
 
@@ -1799,20 +1792,13 @@ func (s *Store) MetricSummary(service, check, metric string, span time.Duration,
 // MetricSeries returns a named metric's per-minute points in [from, to), oldest
 // first (minutes with no observation are absent).
 func (s *Store) MetricSeries(service, check, metric string, from, to time.Time) ([]MeasurementPoint, error) {
-	rows, err := s.db.QueryContext(s.sqlCtx(),
+	return s.aggregateSeries(
 		`SELECT bucket, n, sum_v, min_v, max_v
 		   FROM measurement_metric
 		  WHERE service = ? AND check_name = ? AND metric = ? AND bucket >= ? AND bucket < ?
 		  ORDER BY bucket;`,
+		"metric", service+"/"+check+"/"+metric,
 		service, check, metric, minuteBucket(from), minuteBucket(to),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("load metric series for %s/%s/%s: %w", service, check, metric, err)
-	}
-	return measurementPointsFromRows(
-		rows,
-		"metric series row for "+service+"/"+check+"/"+metric,
-		"metric series for "+service+"/"+check+"/"+metric,
 	)
 }
 
@@ -1852,20 +1838,13 @@ func (s *Store) DaemonMetricSummary(metric string, span time.Duration, now time.
 // DaemonMetricSeries returns a daemon metric's per-minute points in [from, to),
 // oldest first.
 func (s *Store) DaemonMetricSeries(metric string, from, to time.Time) ([]MeasurementPoint, error) {
-	rows, err := s.db.QueryContext(s.sqlCtx(),
+	return s.aggregateSeries(
 		`SELECT bucket, n, sum_v, min_v, max_v
 		   FROM daemon_metric
 		  WHERE metric = ? AND bucket >= ? AND bucket < ?
 		  ORDER BY bucket;`,
+		"daemon metric", metric,
 		metric, minuteBucket(from), minuteBucket(to),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("load daemon metric series for %s: %w", metric, err)
-	}
-	return measurementPointsFromRows(
-		rows,
-		"daemon metric series row for "+metric,
-		"daemon metric series for "+metric,
 	)
 }
 
@@ -1905,20 +1884,31 @@ func (s *Store) ServiceMetricSummary(service, metric string, span time.Duration,
 // ServiceMetricSeries returns a service runtime metric's per-minute points in
 // [from, to), oldest first.
 func (s *Store) ServiceMetricSeries(service, metric string, from, to time.Time) ([]MeasurementPoint, error) {
-	rows, err := s.db.QueryContext(s.sqlCtx(),
+	return s.aggregateSeries(
 		`SELECT bucket, n, sum_v, min_v, max_v
 		   FROM service_metric
 		  WHERE service = ? AND metric = ? AND bucket >= ? AND bucket < ?
 		  ORDER BY bucket;`,
+		"service metric", service+"/"+metric,
 		service, metric, minuteBucket(from), minuteBucket(to),
 	)
+
+}
+
+// aggregateSeries executes a static aggregate-series query and converts its
+// minute buckets. query is always a package literal; values remain bound query
+// parameters. kind and target preserve the callers' load, scan and iteration
+// context.
+func (s *Store) aggregateSeries(query, kind, target string, args ...any) ([]MeasurementPoint, error) {
+	description := kind + " series for " + target
+	rows, err := s.db.QueryContext(s.sqlCtx(), query, args...)
 	if err != nil {
-		return nil, fmt.Errorf("load service metric series for %s/%s: %w", service, metric, err)
+		return nil, fmt.Errorf("load %s: %w", description, err)
 	}
 	return measurementPointsFromRows(
 		rows,
-		"service metric series row for "+service+"/"+metric,
-		"service metric series for "+service+"/"+metric,
+		kind+" series row for "+target,
+		description,
 	)
 }
 
