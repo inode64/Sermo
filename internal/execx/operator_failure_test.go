@@ -77,6 +77,26 @@ func TestOperatorFailureEmptyErrorUsesCallerFallback(t *testing.T) {
 	}
 }
 
+func TestOperatorFailureOr(t *testing.T) {
+	tests := []struct {
+		name     string
+		err      error
+		fallback string
+		want     string
+	}{
+		{name: "uses failure", err: errors.New("run smartctl: unavailable"), fallback: CommandDidNotStart, want: "unavailable"},
+		{name: "uses fallback", fallback: CommandDidNotStart, want: CommandDidNotStart},
+		{name: "preserves timeout", err: context.DeadlineExceeded, fallback: CommandDidNotStart, want: "timeout after 1s"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := OperatorFailureOr(tt.err, Result{}, time.Second, tt.fallback); got != tt.want {
+				t.Fatalf("OperatorFailureOr() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestFormatContextOrError(t *testing.T) {
 	if got := FormatContextOrError(context.DeadlineExceeded, 500*time.Millisecond); got != "timeout after 500ms" {
 		t.Fatalf("FormatContextOrError(deadline) = %q", got)

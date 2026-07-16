@@ -41,10 +41,7 @@ func (c smartCheck) Run(ctx context.Context) Result {
 	prefix := CheckTypeSmart + " " + c.device
 	res, runErr := c.runner.Run(ctx, smartctlCommand, smartctlArgs(c.device)...)
 	if res.ExitCode == execx.ExitCodeRunFailure {
-		msg := execx.OperatorFailure(runErr, res, c.timeout)
-		if msg == "" {
-			msg = execx.CommandDidNotStart
-		}
+		msg := execx.OperatorFailureOr(runErr, res, c.timeout, execx.CommandDidNotStart)
 		return c.result(false, prefix+": "+msg, start)
 	}
 	data, err := parseSmart(res.Stdout)
@@ -101,10 +98,7 @@ func SampleSmart(ctx context.Context, runner execx.Runner, device string, timeou
 	runner = execx.RunnerOrDefault(runner)
 	res, runErr := runner.Run(ctx, smartctlCommand, smartctlArgs(device)...)
 	if res.ExitCode == execx.ExitCodeRunFailure {
-		msg := execx.OperatorFailure(runErr, res, timeout)
-		if msg == "" {
-			msg = execx.CommandDidNotStart
-		}
+		msg := execx.OperatorFailureOr(runErr, res, timeout, execx.CommandDidNotStart)
 		return SmartSample{}, fmt.Errorf("%s", msg)
 	}
 	data, err := parseSmart(res.Stdout)

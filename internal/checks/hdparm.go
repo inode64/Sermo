@@ -38,10 +38,7 @@ func (c hdparmCheck) Run(ctx context.Context) Result {
 	prefix := hdparmCommand + " " + c.device
 	res, runErr := c.runner.Run(ctx, hdparmCommand, hdparmArgs(c.device, want[fieldCached], want[fieldRead])...)
 	if res.ExitCode == execx.ExitCodeRunFailure {
-		msg := execx.OperatorFailure(runErr, res, c.timeout)
-		if msg == "" {
-			msg = execx.CommandDidNotStart
-		}
+		msg := execx.OperatorFailureOr(runErr, res, c.timeout, execx.CommandDidNotStart)
 		return c.result(false, prefix+": "+msg, start)
 	}
 	values, err := parseHdparm(res.Stdout)
@@ -79,10 +76,7 @@ func SampleHdparm(ctx context.Context, runner execx.Runner, device string, wantC
 	}
 	res, runErr := runner.Run(ctx, hdparmCommand, hdparmArgs(device, wantCached, wantRead)...)
 	if res.ExitCode == execx.ExitCodeRunFailure {
-		msg := execx.OperatorFailure(runErr, res, timeout)
-		if msg == "" {
-			msg = execx.CommandDidNotStart
-		}
+		msg := execx.OperatorFailureOr(runErr, res, timeout, execx.CommandDidNotStart)
 		return nil, errors.New(msg)
 	}
 	values, err := parseHdparm(res.Stdout)

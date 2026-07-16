@@ -359,10 +359,7 @@ func nativeCommandReloadFunc(argv []string, runner execx.Runner) func(context.Co
 func reloadCommandError(res execx.Result, err error) error {
 	if err != nil {
 		if res.ExitCode == execx.ExitCodeRunFailure {
-			msg := execx.OperatorFailure(err, res, execx.NoTimeout)
-			if msg == "" {
-				msg = execx.CommandDidNotStart
-			}
+			msg := execx.OperatorFailureOr(err, res, execx.NoTimeout, execx.CommandDidNotStart)
 			return errors.New(msg)
 		}
 		return fmt.Errorf("%s: %w", reloadCommandLabel, err)
