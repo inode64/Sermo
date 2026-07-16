@@ -50,11 +50,11 @@ func finishOperationSettling(store OperationSettlingStore, service, action, sour
 	return finishOperationSettlingWithActive(store, service, action, source, result, opErr, false)
 }
 
-func finishOperationSettlingWithActive(store OperationSettlingStore, service, action, source string, result operation.Result, opErr error, activeAfterStart bool) error {
+func finishOperationSettlingWithActive(store OperationSettlingStore, service, action, source string, result operation.Result, opErr error, activeAfterPostflightFailure bool) error {
 	if store == nil || !isServiceOperationAction(action) {
 		return nil
 	}
-	settleAfter := result.OK() || (activeAfterStart && result.Status == operation.ResultPostflightFailed && ManualActionCanRemainActiveAfterPostflightFailure(action))
+	settleAfter := result.OK() || (activeAfterPostflightFailure && result.Status == operation.ResultPostflightFailed && ManualActionCanRemainActiveAfterPostflightFailure(action))
 	if opErr == nil && settleAfter && operationActionSettlesAfter(action) {
 		if err := store.SetOperationSettling(service, action, state.OperationSettlingSettling, source); err != nil {
 			return fmt.Errorf("mark post-operation settling for %s: %w", service, err)
