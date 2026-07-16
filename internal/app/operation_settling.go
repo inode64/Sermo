@@ -46,11 +46,7 @@ func BeginOperationSettling(store OperationSettlingStore, service, action, sourc
 	return beginOperationSettling(store, service, action, source)
 }
 
-func finishOperationSettling(store OperationSettlingStore, service, action, source string, result operation.Result, opErr error) error {
-	return finishOperationSettlingWithActive(store, service, action, source, result, opErr, false)
-}
-
-func finishOperationSettlingWithActive(store OperationSettlingStore, service, action, source string, result operation.Result, opErr error, activeAfterPostflightFailure bool) error {
+func finishOperationSettling(store OperationSettlingStore, service, action, source string, result operation.Result, opErr error, activeAfterPostflightFailure bool) error {
 	if store == nil || !isServiceOperationAction(action) {
 		return nil
 	}
