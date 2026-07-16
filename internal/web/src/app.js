@@ -4431,35 +4431,36 @@ function renderApps(apps) {
   renderArtifactPanel(appArtifactPanel, apps);
 }
 
-// renderAppExpansion shows one application's full version, binary location and
-// permissions, reusing the watch-grid layout.
-function renderAppExpansion(a) {
-  const bin = a.binary ? tpl`<code>${a.binary}</code>` : tpl`<span class="muted">unknown</span>`;
-  const perm = a.permissions ? tpl`<code>${a.permissions}</code>` : tpl`<span class="muted">—</span>`;
-  const usr = a.user ? a.user : tpl`<span class="muted">—</span>`;
-  const grp = a.group ? a.group : tpl`<span class="muted">—</span>`;
-  const source = a.version_source
-    ? tpl`<code>${a.version_source}</code>`
-    : (a.version ? tpl`<span class="muted">local</span>` : tpl`<span class="muted">—</span>`);
-  const category = categoryOf(a, "app");
-  const sla = renderSLAWindows(a.sla, true);
-  const st = appStateText(a);
-  const statusCls = st === targetStateFailed ? "lvl-error" : (st === targetStateWarning ? "lvl-warning" : "");
-  const statusHTML = a.status
-    ? tpl`<span class="${statusCls}">${a.status}</span>`
-    : "—";
-  const eventsId = detailDomId(a.name, "app-events");
+function renderArtifactExpansionDetails(artifact, surface, extra = nothing) {
+  const bin = artifact.binary ? tpl`<code>${artifact.binary}</code>` : tpl`<span class="muted">unknown</span>`;
+  const perm = artifact.permissions ? tpl`<code>${artifact.permissions}</code>` : tpl`<span class="muted">—</span>`;
+  const usr = artifact.user || tpl`<span class="muted">—</span>`;
+  const grp = artifact.group || tpl`<span class="muted">—</span>`;
+  const source = artifact.version_source
+    ? tpl`<code>${artifact.version_source}</code>`
+    : (artifact.version ? tpl`<span class="muted">local</span>` : tpl`<span class="muted">—</span>`);
+  const state = appStateText(artifact);
+  const statusClass = state === targetStateFailed ? "lvl-error" : (state === targetStateWarning ? "lvl-warning" : "");
+  const status = artifact.status ? tpl`<span class="${statusClass}">${artifact.status}</span>` : "—";
   return tpl`<div class="watch-grid">
-    <div><span class="muted">Version</span><br>${a.version || "—"}</div>
+    <div><span class="muted">Version</span><br>${artifact.version || "—"}</div>
     <div><span class="muted">Version source</span><br>${source}</div>
-    <div><span class="muted">Category</span><br>${category}</div>
+    <div><span class="muted">Category</span><br>${categoryOf(artifact, surface)}</div>
     <div><span class="muted">Location</span><br>${bin}</div>
     <div><span class="muted">Permissions</span><br>${perm}</div>
     <div><span class="muted">User</span><br>${usr}</div>
     <div><span class="muted">Group</span><br>${grp}</div>
-    <div><span class="muted">Status</span><br>${statusHTML}</div>
-    <div class="app-sla"><span class="muted">SLA</span><br>${sla}</div>
-  </div>
+    <div><span class="muted">Status</span><br>${status}</div>
+    ${extra}
+  </div>`;
+}
+
+// renderAppExpansion shows one application's full version, binary location and
+// permissions, reusing the watch-grid layout.
+function renderAppExpansion(a) {
+  const eventsId = detailDomId(a.name, "app-events");
+  const sla = tpl`<div class="app-sla"><span class="muted">SLA</span><br>${renderSLAWindows(a.sla, true)}</div>`;
+  return tpl`${renderArtifactExpansionDetails(a, "app", sla)}
   <h3 class="expansion-heading">Recent events</h3>
   <table class="events">
     <caption class="visually-hidden">Recent application events</caption>
@@ -4542,26 +4543,7 @@ function renderLibraries(libraries) {
 }
 
 function renderLibraryExpansion(library) {
-  const bin = library.binary ? tpl`<code>${library.binary}</code>` : tpl`<span class="muted">unknown</span>`;
-  const perm = library.permissions ? tpl`<code>${library.permissions}</code>` : tpl`<span class="muted">—</span>`;
-  const usr = library.user || tpl`<span class="muted">—</span>`;
-  const grp = library.group || tpl`<span class="muted">—</span>`;
-  const source = library.version_source
-    ? tpl`<code>${library.version_source}</code>`
-    : (library.version ? tpl`<span class="muted">local</span>` : tpl`<span class="muted">—</span>`);
-  const state = appStateText(library);
-  const statusClass = state === targetStateFailed ? "lvl-error" : (state === targetStateWarning ? "lvl-warning" : "");
-  const status = library.status ? tpl`<span class="${statusClass}">${library.status}</span>` : "—";
-  return tpl`<div class="watch-grid">
-    <div><span class="muted">Version</span><br>${library.version || "—"}</div>
-    <div><span class="muted">Version source</span><br>${source}</div>
-    <div><span class="muted">Category</span><br>${categoryOf(library, "library")}</div>
-    <div><span class="muted">Location</span><br>${bin}</div>
-    <div><span class="muted">Permissions</span><br>${perm}</div>
-    <div><span class="muted">User</span><br>${usr}</div>
-    <div><span class="muted">Group</span><br>${grp}</div>
-    <div><span class="muted">Status</span><br>${status}</div>
-  </div>`;
+  return renderArtifactExpansionDetails(library, "library");
 }
 
 const appArtifactPanel = {
