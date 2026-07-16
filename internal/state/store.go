@@ -1380,78 +1380,64 @@ func minuteBucket(t time.Time) int64 {
 	return t.UTC().Truncate(time.Minute).Unix()
 }
 
-// RecordSLA accumulates one observed monitoring cycle into a service's current
-// UTC-minute bucket: total_count +1, and up_count +1 when up. Paused or
-// unobserved cycles are simply never recorded, so they do not count as downtime.
-func (s *Store) RecordSLA(service string, up bool, at time.Time) error {
-	u := 0
-	if up {
-		u = 1
-	}
-	_, err := s.db.ExecContext(s.sqlCtx(),
-		`INSERT INTO sla_sample (service, bucket, up_count, total_count)
+type slaQueries struct {
+	record string
+	sum    string
+	series string
+}
+
+var serviceSLAQueries = slaQueries{
+	record: `INSERT INTO sla_sample (service, bucket, up_count, total_count)
 		 VALUES (?, ?, ?, 1)
 		 ON CONFLICT(service, bucket) DO UPDATE SET
 		   up_count    = up_count + excluded.up_count,
 		   total_count = total_count + excluded.total_count;`,
-		service, minuteBucket(at), u,
-	)
-	if err != nil {
-		return fmt.Errorf("record SLA for %s: %w", service, err)
-	}
-	return nil
+	sum: `SELECT COALESCE(SUM(up_count), 0), COALESCE(SUM(total_count), 0)
+		  FROM sla_sample WHERE service = ? AND bucket >= ?;`,
+	series: `SELECT bucket, up_count, total_count
+		   FROM sla_sample
+		  WHERE service = ? AND bucket >= ? AND bucket < ?
+		  ORDER BY bucket;`,
+}
+
+var checkSLAQueries = slaQueries{
+	record: `INSERT INTO check_sla_sample (service, check_name, bucket, up_count, total_count)
+		 VALUES (?, ?, ?, ?, 1)
+		 ON CONFLICT(service, check_name, bucket) DO UPDATE SET
+		   up_count    = up_count + excluded.up_count,
+		   total_count = total_count + excluded.total_count;`,
+	sum: `SELECT COALESCE(SUM(up_count), 0), COALESCE(SUM(total_count), 0)
+		  FROM check_sla_sample WHERE service = ? AND check_name = ? AND bucket >= ?;`,
+	series: `SELECT bucket, up_count, total_count
+		   FROM check_sla_sample
+		  WHERE service = ? AND check_name = ? AND bucket >= ? AND bucket < ?
+		  ORDER BY bucket;`,
+}
+
+// RecordSLA accumulates one observed monitoring cycle into a service's current
+// UTC-minute bucket: total_count +1, and up_count +1 when up. Paused or
+// unobserved cycles are simply never recorded, so they do not count as downtime.
+func (s *Store) RecordSLA(service string, up bool, at time.Time) error {
+	return s.recordSLABucket(serviceSLAQueries.record, []any{service}, up, at, "SLA", service)
 }
 
 // RecordCheckSLA accumulates one observed check execution into its current
 // UTC-minute bucket. Interval-deferred checks are not recorded by callers, so
 // the per-check SLA reflects only real check runs.
 func (s *Store) RecordCheckSLA(service, check string, up bool, at time.Time) error {
-	u := 0
-	if up {
-		u = 1
-	}
-	_, err := s.db.ExecContext(s.sqlCtx(),
-		`INSERT INTO check_sla_sample (service, check_name, bucket, up_count, total_count)
-		 VALUES (?, ?, ?, ?, 1)
-		 ON CONFLICT(service, check_name, bucket) DO UPDATE SET
-		   up_count    = up_count + excluded.up_count,
-		   total_count = total_count + excluded.total_count;`,
-		service, check, minuteBucket(at), u,
-	)
-	if err != nil {
-		return fmt.Errorf("record check SLA for %s/%s: %w", service, check, err)
-	}
-	return nil
+	return s.recordSLABucket(checkSLAQueries.record, []any{service, check}, up, at, "check SLA", service+"/"+check)
 }
 
 // SLA sums a service's up and total observed cycles over the rolling window
 // ending at now (buckets with start >= now-span). total==0 means no data.
 func (s *Store) SLA(service string, span time.Duration, now time.Time) (up, total int64, err error) {
-	from := minuteBucket(now.Add(-span))
-	err = s.db.QueryRowContext(s.sqlCtx(),
-		`SELECT COALESCE(SUM(up_count), 0), COALESCE(SUM(total_count), 0)
-		 FROM sla_sample WHERE service = ? AND bucket >= ?;`,
-		service, from,
-	).Scan(&up, &total)
-	if err != nil {
-		return 0, 0, fmt.Errorf("sum SLA for %s: %w", service, err)
-	}
-	return up, total, nil
+	return s.sumSLA(serviceSLAQueries.sum, []any{service}, span, now, "SLA", service)
 }
 
 // CheckSLA sums one check's up and total observed executions over the rolling
 // window ending at now. total==0 means no data.
 func (s *Store) CheckSLA(service, check string, span time.Duration, now time.Time) (up, total int64, err error) {
-	from := minuteBucket(now.Add(-span))
-	err = s.db.QueryRowContext(s.sqlCtx(),
-		`SELECT COALESCE(SUM(up_count), 0), COALESCE(SUM(total_count), 0)
-		 FROM check_sla_sample WHERE service = ? AND check_name = ? AND bucket >= ?;`,
-		service, check, from,
-	).Scan(&up, &total)
-	if err != nil {
-		return 0, 0, fmt.Errorf("sum check SLA for %s/%s: %w", service, check, err)
-	}
-	return up, total, nil
+	return s.sumSLA(checkSLAQueries.sum, []any{service, check}, span, now, "check SLA", service+"/"+check)
 }
 
 // SLAPoint is one time bucket of a service's availability series: the up and
@@ -1469,44 +1455,41 @@ type SLAPoint struct {
 // caller can render excluded periods distinctly from downtime. This is the stored
 // "control" a graph is built from later.
 func (s *Store) SLASeries(service string, from, to time.Time) ([]SLAPoint, error) {
-	rows, err := s.db.QueryContext(s.sqlCtx(),
-		`SELECT bucket, up_count, total_count
-		   FROM sla_sample
-		  WHERE service = ? AND bucket >= ? AND bucket < ?
-		  ORDER BY bucket;`,
-		service, minuteBucket(from), minuteBucket(to),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("load SLA series for %s: %w", service, err)
-	}
-	defer rows.Close()
-
-	var out []SLAPoint
-	for rows.Next() {
-		var bucket, up, total int64
-		if err := rows.Scan(&bucket, &up, &total); err != nil {
-			return nil, fmt.Errorf("scan SLA series row for %s: %w", service, err)
-		}
-		out = append(out, SLAPoint{Start: time.Unix(bucket, 0).UTC(), Up: up, Total: total})
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate SLA series for %s: %w", service, err)
-	}
-	return out, nil
+	return s.loadSLASeries(serviceSLAQueries.series, []any{service}, from, to, "SLA", service)
 }
 
 // CheckSLASeries returns one check's per-minute availability points in [from,
 // to), oldest first. Unobserved minutes are absent.
 func (s *Store) CheckSLASeries(service, check string, from, to time.Time) ([]SLAPoint, error) {
-	rows, err := s.db.QueryContext(s.sqlCtx(),
-		`SELECT bucket, up_count, total_count
-		   FROM check_sla_sample
-		  WHERE service = ? AND check_name = ? AND bucket >= ? AND bucket < ?
-		  ORDER BY bucket;`,
-		service, check, minuteBucket(from), minuteBucket(to),
-	)
+	return s.loadSLASeries(checkSLAQueries.series, []any{service, check}, from, to, "check SLA", service+"/"+check)
+}
+
+func (s *Store) recordSLABucket(query string, keys []any, up bool, at time.Time, kind, target string) error {
+	upCount := 0
+	if up {
+		upCount = 1
+	}
+	args := append(append([]any{}, keys...), minuteBucket(at), upCount)
+	if _, err := s.db.ExecContext(s.sqlCtx(), query, args...); err != nil {
+		return fmt.Errorf("record %s for %s: %w", kind, target, err)
+	}
+	return nil
+}
+
+func (s *Store) sumSLA(query string, keys []any, span time.Duration, now time.Time, kind, target string) (up, total int64, err error) {
+	args := append(append([]any{}, keys...), minuteBucket(now.Add(-span)))
+	err = s.db.QueryRowContext(s.sqlCtx(), query, args...).Scan(&up, &total)
 	if err != nil {
-		return nil, fmt.Errorf("load check SLA series for %s/%s: %w", service, check, err)
+		return 0, 0, fmt.Errorf("sum %s for %s: %w", kind, target, err)
+	}
+	return up, total, nil
+}
+
+func (s *Store) loadSLASeries(query string, keys []any, from, to time.Time, kind, target string) ([]SLAPoint, error) {
+	args := append(append([]any{}, keys...), minuteBucket(from), minuteBucket(to))
+	rows, err := s.db.QueryContext(s.sqlCtx(), query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("load %s series for %s: %w", kind, target, err)
 	}
 	defer rows.Close()
 
@@ -1514,12 +1497,12 @@ func (s *Store) CheckSLASeries(service, check string, from, to time.Time) ([]SLA
 	for rows.Next() {
 		var bucket, up, total int64
 		if err := rows.Scan(&bucket, &up, &total); err != nil {
-			return nil, fmt.Errorf("scan check SLA series row for %s/%s: %w", service, check, err)
+			return nil, fmt.Errorf("scan %s series row for %s: %w", kind, target, err)
 		}
 		out = append(out, SLAPoint{Start: time.Unix(bucket, 0).UTC(), Up: up, Total: total})
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate check SLA series for %s/%s: %w", service, check, err)
+		return nil, fmt.Errorf("iterate %s series for %s: %w", kind, target, err)
 	}
 	return out, nil
 }
