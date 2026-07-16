@@ -247,6 +247,16 @@ func requireLevelPreds(entry map[string]any, fields []string, label string) ([]l
 	return preds, ""
 }
 
+// requireSingleLevelPred returns the only predicate of a check whose allowed
+// field list contains exactly one entry.
+func requireSingleLevelPred(entry map[string]any, fields []string, label string) (levelPred, string) {
+	preds, errs := requireLevelPreds(entry, fields, label)
+	if errs != "" {
+		return levelPred{}, errs
+	}
+	return preds[0], ""
+}
+
 // parseDeltaThreshold parses a `delta` {op, value} mapping — the per-cycle
 // counter threshold shared by net errors, swap io and oom. It returns a
 // builder-style error string when the shape, op or value is invalid.
