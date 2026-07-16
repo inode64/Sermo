@@ -11,6 +11,7 @@ import (
 	"sermo/internal/checks"
 	"sermo/internal/emission"
 	"sermo/internal/process"
+	"sermo/internal/rules"
 )
 
 // Issue is a single validation finding, scoped to a document or "global".
@@ -243,7 +244,7 @@ func validateGlobalDefaults(cfg *Config, raw map[string]any, add addFunc) {
 	if _, present := raw[sectionNotify]; present {
 		validateNotifySelection(sectionNotify, raw[sectionNotify], notifierNames(notifiers), add)
 	}
-	cooldown, present := defaultsCooldown(cfg.Global.Defaults)
+	cooldown, present := policyCooldown(cfg.Global.Defaults)
 	switch {
 	case !present:
 		add("%s is required and must be a positive duration", defaultsPathPolicyCooldown)
@@ -565,28 +566,19 @@ func versionFromCycle(cfg *Config, start string) []string {
 }
 
 func validateVersionsCurrentFrom(doc *Document, scope string) []Issue {
-	versions, ok := doc.Body[keyVersions].(map[string]any)
-	if !ok {
-		return nil
-	}
-	raw, present := versions[keyVersionsCurrentFrom]
-	if !present {
-		return nil
-	}
-	var issues []Issue
-	add := func(format string, args ...any) {
-		issues = append(issues, Issue{Scope: scope, Msg: fmt.Sprintf(format, args...)})
-	}
-	validateVersionsCurrentFromValue(versionsPathCurrentFrom, raw, add)
-	return issues
+	return validateVersionsValue(doc, scope, keyVersionsCurrentFrom, versionsPathCurrentFrom, validateVersionsCurrentFromValue)
 }
 
 func validateVersionsFrom(doc *Document, scope string) []Issue {
+	return validateVersionsValue(doc, scope, keyVersionsFrom, versionsPathFrom, validateVersionsFromValue)
+}
+
+func validateVersionsValue(doc *Document, scope, key, path string, validate func(string, any, addFunc)) []Issue {
 	versions, ok := doc.Body[keyVersions].(map[string]any)
 	if !ok {
 		return nil
 	}
-	raw, present := versions[keyVersionsFrom]
+	raw, present := versions[key]
 	if !present {
 		return nil
 	}
@@ -594,8 +586,20 @@ func validateVersionsFrom(doc *Document, scope string) []Issue {
 	add := func(format string, args ...any) {
 		issues = append(issues, Issue{Scope: scope, Msg: fmt.Sprintf(format, args...)})
 	}
-	validateVersionsFromValue(versionsPathFrom, raw, add)
+	validate(path, raw, add)
 	return issues
+}
+
+func policyCooldown(tree map[string]any) (string, bool) {
+	policy, ok := tree[sectionPolicy].(map[string]any)
+	if !ok {
+		return "", false
+	}
+	v, present := policy[rules.PolicyKeyCooldown]
+	if !present {
+		return "", false
+	}
+	return cfgval.String(v), true
 }
 
 func validateVersionsFromValue(path string, raw any, add addFunc) {

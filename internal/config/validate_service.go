@@ -593,15 +593,3 @@ func validateCascade(name string, tree map[string]any, services map[string]struc
 		}
 	}
 }
-
-func policyCooldown(tree map[string]any) (string, bool) {
-	policy, ok := tree[sectionPolicy].(map[string]any)
-	if !ok {
-		return "", false
-	}
-	v, present := policy[rules.PolicyKeyCooldown]
-	if !present {
-		return "", false
-	}
-	return cfgval.String(v), true
-}

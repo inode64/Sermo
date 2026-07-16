@@ -250,18 +250,6 @@ func validateDefaultsVariables(defaults map[string]any, add addFunc) {
 	}
 }
 
-func defaultsCooldown(defaults map[string]any) (string, bool) {
-	policy, ok := defaults[sectionPolicy].(map[string]any)
-	if !ok {
-		return "", false
-	}
-	v, present := policy[rules.PolicyKeyCooldown]
-	if !present {
-		return "", false
-	}
-	return cfgval.String(v), true
-}
-
 func isValidBackend(b string) bool {
 	_, ok := validBackends[b]
 	return ok
