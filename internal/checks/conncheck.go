@@ -248,26 +248,13 @@ func buildConnCheck(b base, proto conn.Protocol, entry map[string]any) (Check, s
 	if user == "" && proto.RequiresUser() {
 		return nil, protoName + " check requires a user"
 	}
-	host := cfgval.AsString(entry[CheckKeyHost])
-	if host == "" {
-		host = conn.DefaultHost
-	}
-	port := proto.DefaultPort()
-	if p, ok := cfgval.Int(entry[CheckKeyPort]); ok {
-		port = p
-	}
-	cfg := conn.Config{
-		Host:     host,
-		Port:     port,
-		Socket:   cfgval.AsString(entry[CheckKeySocket]),
-		User:     user,
-		Password: cfgval.AsString(entry[CheckKeyPassword]),
-		Database: cfgval.AsString(entry[CheckKeyDatabase]),
-		Query:    cfgval.AsString(entry[CheckKeyQuery]),
-		TLS:      tlsString(entry[CheckKeyTLS]),
-		// cfg.Interface is set per-attempt by connCheck.Run from the interface set;
-		// it pins the probe's egress (SO_BINDTODEVICE) on multi-homed hosts.
-	}
+	cfg := databaseConnectionConfig(entry)
+	cfg.Port = connectionPort(entry, proto.DefaultPort())
+	cfg.Socket = cfgval.AsString(entry[CheckKeySocket])
+	cfg.User = user
+	cfg.Query = cfgval.AsString(entry[CheckKeyQuery])
+	// cfg.Interface is set per-attempt by connCheck.Run from the interface set;
+	// it pins the probe's egress (SO_BINDTODEVICE) on multi-homed hosts.
 	if err := configureConnProtocol(&cfg, protoName, entry); err != nil {
 		return nil, err.Error()
 	}
@@ -296,6 +283,32 @@ func buildConnCheck(b base, proto conn.Protocol, entry map[string]any) (Check, s
 	}
 	c.ifaceAll = all
 	return c, ""
+}
+
+func baseConnectionConfig(entry map[string]any) conn.Config {
+	cfg := conn.Config{
+		Host:     cfgval.AsString(entry[CheckKeyHost]),
+		User:     cfgval.AsString(entry[CheckKeyUser]),
+		Password: cfgval.AsString(entry[CheckKeyPassword]),
+		TLS:      tlsString(entry[CheckKeyTLS]),
+	}
+	if cfg.Host == "" {
+		cfg.Host = conn.DefaultHost
+	}
+	return cfg
+}
+
+func databaseConnectionConfig(entry map[string]any) conn.Config {
+	cfg := baseConnectionConfig(entry)
+	cfg.Database = cfgval.AsString(entry[CheckKeyDatabase])
+	return cfg
+}
+
+func connectionPort(entry map[string]any, defaultPort int) int {
+	if port, ok := cfgval.Int(entry[CheckKeyPort]); ok {
+		return port
+	}
+	return defaultPort
 }
 
 func configureConnProtocol(cfg *conn.Config, protoName string, entry map[string]any) error {

@@ -292,18 +292,7 @@ func buildInfluxCheck(b base, entry map[string]any) (Check, string) {
 // influxConnConfig builds a conn.Config for an influxdb-query check, defaulting
 // the port to InfluxDB's standard port (via the conn registry).
 func influxConnConfig(entry map[string]any) conn.Config {
-	cfg := conn.Config{
-		Host:     cfgval.AsString(entry[CheckKeyHost]),
-		User:     cfgval.AsString(entry[CheckKeyUser]),
-		Password: cfgval.AsString(entry[CheckKeyPassword]),
-		TLS:      tlsString(entry[CheckKeyTLS]),
-	}
-	if cfg.Host == "" {
-		cfg.Host = conn.DefaultHost
-	}
-	cfg.Port = conn.DefaultPort(conn.ProtocolNameInfluxDB)
-	if p, ok := cfgval.Int(entry[CheckKeyPort]); ok {
-		cfg.Port = p
-	}
+	cfg := baseConnectionConfig(entry)
+	cfg.Port = connectionPort(entry, conn.DefaultPort(conn.ProtocolNameInfluxDB))
 	return cfg
 }
