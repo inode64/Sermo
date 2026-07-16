@@ -22,14 +22,5 @@ func (fail2banProtocol) DefaultPort() int   { return defaultPortNone }
 func (fail2banProtocol) RequiresUser() bool { return false }
 
 func (fail2banProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	socket := cfg.Socket
-	if socket == "" {
-		socket = DefaultFail2banSocket
-	}
-	c, err := dialUnix(ctx, socket)
-	if err != nil {
-		return Result{}, err
-	}
-	_ = c.Close()
-	return Result{Extra: map[string]string{extraSocket: socket}}, nil
+	return probeUnixSocket(ctx, cfg, DefaultFail2banSocket)
 }
