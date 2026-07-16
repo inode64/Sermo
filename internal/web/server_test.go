@@ -1163,6 +1163,18 @@ func TestServerWriteTimeoutCoversOperationTimeout(t *testing.T) {
 	}
 }
 
+func TestActionWriteTimeoutUsesReloadedSource(t *testing.T) {
+	server := &Server{
+		OperationTimeout: 10 * time.Second,
+		OperationTimeoutSource: func() time.Duration {
+			return 90 * time.Second
+		},
+	}
+	if got, want := server.actionWriteTimeout(), serverWriteTimeout(90*time.Second); got != want {
+		t.Fatalf("action write timeout = %s, want %s from current source", got, want)
+	}
+}
+
 type ctxCapturingBackend struct {
 	fakeBackend
 	delay   time.Duration

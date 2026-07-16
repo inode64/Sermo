@@ -357,13 +357,14 @@ func run(args []string) int {
 		}
 		auth := webAuth(cfg)
 		server := &web.Server{
-			Addr:             addr,
-			Backend:          webHolder,
-			Auth:             auth,
-			Logger:           logger,
-			AccessLog:        accessLog,
-			OperationTimeout: app.MaxOperationTimeout(cfg, deps.OperationTimeout),
-			Readiness:        readiness,
+			Addr:                   addr,
+			Backend:                webHolder,
+			Auth:                   auth,
+			Logger:                 logger,
+			AccessLog:              accessLog,
+			OperationTimeout:       app.MaxOperationTimeout(cfg, deps.OperationTimeout),
+			OperationTimeoutSource: webHolder.MaxOperationTimeout,
+			Readiness:              readiness,
 			// Trigger reload by signalling ourself with SIGHUP. This re-uses the
 			// exact same Monitor.Reload path as sermoctl daemon reload.
 			Reload: func() error {
