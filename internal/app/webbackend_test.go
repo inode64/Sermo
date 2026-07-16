@@ -1062,6 +1062,43 @@ func TestWebBackendOomNetICMPAndPidsReadings(t *testing.T) {
 	}
 }
 
+func TestScalarWatchView(t *testing.T) {
+	tests := []struct {
+		name        string
+		sampler     func() (uint64, bool)
+		wantValue   string
+		wantSummary string
+		wantError   string
+	}{
+		{name: "uses fallback", wantValue: "7", wantSummary: "7 total"},
+		{name: "uses injected sampler", sampler: func() (uint64, bool) { return 3, true }, wantValue: "3", wantSummary: "3 total"},
+		{name: "unavailable", sampler: func() (uint64, bool) { return 0, false }, wantError: "counter unavailable"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, readings, summary := scalarWatchView(scalarWatchViewSpec{
+				resource:      "counter",
+				unavailable:   "counter unavailable",
+				field:         "count",
+				label:         "Count",
+				sampler:       tt.sampler,
+				fallback:      func() (uint64, bool) { return 7, true },
+				formatReading: formatCountReading,
+				summaryFormat: "%d total",
+			})
+			if tt.wantError != "" {
+				if summary != "counter: "+tt.wantError || len(readings) != 1 || readings[0].Error != tt.wantError {
+					t.Fatalf("result = readings=%+v summary=%q", readings, summary)
+				}
+				return
+			}
+			if summary != tt.wantSummary || len(readings) != 1 || readings[0].Value != tt.wantValue {
+				t.Fatalf("result = readings=%+v summary=%q", readings, summary)
+			}
+		})
+	}
+}
+
 func TestWebBackendProcessWatchReadings(t *testing.T) {
 	cfg := &config.Config{Global: config.Global{Raw: map[string]any{
 		"watches": map[string]any{
