@@ -47,6 +47,9 @@ defaults: { policy: { cooldown: 5m } }
 		if err := store.RecordServiceMetric("web", "cpu", 10, at); err != nil {
 			t.Fatalf("RecordServiceMetric(%s): %v", at, err)
 		}
+		if err := store.RecordProcessUptime("web", at, at, "backend-main"); err != nil {
+			t.Fatalf("RecordProcessUptime(%s): %v", at, err)
+		}
 		if _, err := store.RecordEvent(state.EventRecord{At: at, Service: "web", Kind: "action", Message: "restart"}); err != nil {
 			t.Fatalf("RecordEvent(%s): %v", at, err)
 		}
@@ -61,7 +64,7 @@ defaults: { policy: { cooldown: 5m } }
 	if code != exitSuccess {
 		t.Fatalf("state compact exit=%d stderr=%s", code, stderr.String())
 	}
-	if got := stdout.String(); !strings.Contains(got, "pruned 7 row(s)") || !strings.Contains(got, "service_metrics=1") || !strings.Contains(got, "events=1") {
+	if got := stdout.String(); !strings.Contains(got, "pruned 8 row(s)") || !strings.Contains(got, "service_metrics=1") || !strings.Contains(got, "process_uptime=1") || !strings.Contains(got, "events=1") {
 		t.Fatalf("state compact output = %q, want pruned history summary", got)
 	}
 

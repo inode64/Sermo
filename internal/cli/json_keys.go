@@ -24,6 +24,7 @@ const (
 	cliJSONKeyPanicSource    = "panic_source"
 	cliJSONKeyPatterns       = "patterns"
 	cliJSONKeyPID            = "pid"
+	cliJSONKeyProcessUptime  = "process_uptime"
 	cliJSONKeyProcesses      = "processes"
 	cliJSONKeyPruned         = "pruned"
 	cliJSONKeyRatio          = "ratio"
