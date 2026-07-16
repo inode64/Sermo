@@ -2,6 +2,7 @@ package checks
 
 import (
 	"context"
+	"net/http"
 	"regexp"
 	"strings"
 	"testing"
@@ -10,6 +11,19 @@ import (
 	"sermo/internal/metrics"
 	"sermo/internal/servicemgr"
 )
+
+func TestBuildDependencies(t *testing.T) {
+	runner, client := buildDependencies(Deps{})
+	if runner == nil || client == nil {
+		t.Fatalf("default dependencies = %T, %v; want runner and client", runner, client)
+	}
+
+	customClient := &http.Client{}
+	runner, client = buildDependencies(Deps{Runner: fakeRunner{}, HTTPClient: customClient})
+	if _, ok := runner.(fakeRunner); !ok || client != customClient {
+		t.Fatalf("custom dependencies = %T, %v; want fake runner and supplied client", runner, client)
+	}
+}
 
 func TestBuildSkipsDisabledAndUnknown(t *testing.T) {
 	section := map[string]any{
