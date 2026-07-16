@@ -24,7 +24,7 @@ func (a App) serviceDisplayState(ctx context.Context, opts options, status servi
 			return serviceState
 		}
 	}
-	return app.ServiceState(mon.Enabled, mon.Monitored(), string(status.Status), "", true, false)
+	return app.ServiceState(mon.Enabled, mon.Monitored(), string(status.Status), "", true, false, false)
 }
 
 // monitorView is the persisted monitoring metadata shown by status and monitor.

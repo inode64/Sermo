@@ -56,6 +56,13 @@ type SLARecorder interface {
 	RecordCheckSLA(service, check string, up bool, at time.Time) error
 }
 
+// ProcessUptimeRecorder persists trusted process-continuity evidence. It is
+// deliberately separate from SLARecorder because a running process does not
+// prove check health or produce a synthetic check result.
+type ProcessUptimeRecorder interface {
+	RecordProcessUptime(service string, startedAt, confirmedAt time.Time, source string) error
+}
+
 // SLAReader reports a service's availability for the web detail view: the rolling
 // windows and the per-minute history series. Implemented by internal/state.Store.
 type SLAReader interface {
@@ -175,6 +182,10 @@ type Deps struct {
 	// SLA persists per-cycle availability samples for SLA reporting. Optional: nil
 	// disables SLA tracking.
 	SLA SLARecorder
+	// ProcessUptime persists continuity evidence for a trusted running service
+	// process. Optional: nil disables inference across daemon restarts without
+	// changing observed SLA accounting.
+	ProcessUptime ProcessUptimeRecorder
 	// DaemonMetrics persists sermod's own process metric history for the web UI.
 	// Optional: nil keeps only in-memory history for this process lifetime.
 	DaemonMetrics DaemonMetricStore
@@ -456,21 +467,25 @@ func buildWorker(ctx context.Context, name, unit string, tree map[string]any, de
 	selectors, _ := serviceProcessSelectors(ctx, tree, deps, unit)
 	noResident := serviceNoResidentProcess(tree, selectors, serviceBackendPIDs(ctx, deps, unit))
 	var worker *Worker
-	pidsForCycle := cyclePIDSource(func() []int {
+	processesForCycle := cycleProcessSource(func() []process.Process {
 		if noResident {
 			return nil
 		}
-		return discoverPIDs(discoverer, selectors)
+		procs, _ := discoverer.Discover(selectors)
+		return procs
 	}, func() int {
 		if worker == nil {
 			return 0
 		}
 		return worker.cycle
 	})
+	pidsForCycle := func() []int { return processPIDs(processesForCycle()) }
 	sampleMetrics := metricSampler(name, tree, collector, pidsForCycle)
 	liveSample := liveSampler(name, deps.LiveCollector, deps.Live, deps.ServiceMetrics, pidsForCycle, deps.Now)
+	recordProcessUptime := processUptimeRecorder(deps, name, selectors, processesForCycle, processUptimeReader(collector, deps.LiveCollector))
 	if noResident {
 		liveSample = nil
+		recordProcessUptime = nil
 	}
 
 	// A per-check `interval` runs that check every N cycles (N rounded from
@@ -498,38 +513,39 @@ func buildWorker(ctx context.Context, name, unit string, tree map[string]any, de
 	warnings = append(warnings, stateWarnings...)
 
 	worker = &Worker{
-		Service:           name,
-		Rules:             ruleSet,
-		MetricChecks:      rules.ReferencedChecks(tree),
-		Policy:            rules.ParsePolicy(tree),
-		State:             remediationState,
-		Notifiers:         deps.Notifiers,
-		GlobalNotify:      deps.GlobalNotify,
-		GlobalEmission:    deps.GlobalEmission,
-		Remediation:       deps.Remediation,
-		RuleWindows:       deps.RuleWindows,
-		CheckDeps:         checkDeps,
-		Interval:          cfgval.Duration(tree[config.EntryKeyInterval]),
-		Gates:             parseCheckGates(tree),
-		Sample:            sampleMetrics,
-		LiveSample:        liveSample,
-		Operate:           engine.Do,
-		IsPaused:          monitorPaused(deps.Monitor, name),
-		InPanic:           deps.Panic.Active,
-		Settling:          deps.Settling,
-		OperationSettling: deps.OperationSettling,
-		Observability:     deps.Observability,
-		DryRun:            config.DryRun(tree),
-		ResolveRefs:       func() rules.RefResolver { return rules.NewCheckResolver(preflightBuilt, maxParallel) },
-		RecordHealth:      healthRecorder(deps, name),
-		RecordChecks:      checkSLARecorder(deps, name),
-		Publish:           publishSnapshots(deps.Snapshots, name, checkTypes),
-		PersistState:      ruleStatePersister(deps.RuleState, deps.Emit, name, ruleSet),
-		Now:               deps.Now,
-		Emit:              deps.Emit,
-		windows:           windowStates,
-		libBaseline:       libBaseline,
-		artifactSamples:   deps.ArtifactSamples,
+		Service:             name,
+		Rules:               ruleSet,
+		MetricChecks:        rules.ReferencedChecks(tree),
+		Policy:              rules.ParsePolicy(tree),
+		State:               remediationState,
+		Notifiers:           deps.Notifiers,
+		GlobalNotify:        deps.GlobalNotify,
+		GlobalEmission:      deps.GlobalEmission,
+		Remediation:         deps.Remediation,
+		RuleWindows:         deps.RuleWindows,
+		CheckDeps:           checkDeps,
+		Interval:            cfgval.Duration(tree[config.EntryKeyInterval]),
+		Gates:               parseCheckGates(tree),
+		Sample:              sampleMetrics,
+		LiveSample:          liveSample,
+		RecordProcessUptime: recordProcessUptime,
+		Operate:             engine.Do,
+		IsPaused:            monitorPaused(deps.Monitor, name),
+		InPanic:             deps.Panic.Active,
+		Settling:            deps.Settling,
+		OperationSettling:   deps.OperationSettling,
+		Observability:       deps.Observability,
+		DryRun:              config.DryRun(tree),
+		ResolveRefs:         func() rules.RefResolver { return rules.NewCheckResolver(preflightBuilt, maxParallel) },
+		RecordHealth:        healthRecorder(deps, name),
+		RecordChecks:        checkSLARecorder(deps, name),
+		Publish:             publishSnapshots(deps.Snapshots, name, checkTypes),
+		PersistState:        ruleStatePersister(deps.RuleState, deps.Emit, name, ruleSet),
+		Now:                 deps.Now,
+		Emit:                deps.Emit,
+		windows:             windowStates,
+		libBaseline:         libBaseline,
+		artifactSamples:     deps.ArtifactSamples,
 
 		appVersionCmd:   appVersionCmds(tree),
 		appVersions:     map[string]string{},
@@ -784,6 +800,85 @@ func checkSLARecorder(deps Deps, name string) func(map[string]checks.Result, map
 	}
 }
 
+// processUptimeRecorder returns the worker hook that persists one compact
+// continuity interval for the current trusted process instance. It is separate
+// from SLA recording: this evidence is only used to explain an otherwise
+// unobserved daemon-restart gap.
+func processUptimeRecorder(deps Deps, name string, selectors []process.Selector, processes func() []process.Process, reader metrics.Reader) func(context.Context) {
+	if deps.ProcessUptime == nil || processes == nil || reader == nil {
+		return nil
+	}
+	now := deps.Now
+	if now == nil {
+		now = time.Now
+	}
+	return func(_ context.Context) {
+		confirmedAt := now()
+		startedAt, source, ok := trustedProcessUptimeStart(processes(), selectors, reader, confirmedAt)
+		if !ok {
+			return
+		}
+		if err := deps.ProcessUptime.RecordProcessUptime(name, startedAt, confirmedAt, source); err != nil && deps.Emit != nil {
+			deps.Emit(Event{Service: name, Kind: eventKindError, Message: "record process uptime: " + err.Error()})
+		}
+	}
+}
+
+// trustedProcessUptimeStart returns the oldest start time among process roots
+// whose membership is strong enough to infer process continuity. Backend roots
+// are reported by the selected service manager. Command-match roots require an
+// exact executable and real-user selector. Descendants and pidfile-only roots
+// are intentionally excluded: they are useful runtime data but not reliable
+// enough to backfill a daemon outage.
+func trustedProcessUptimeStart(procs []process.Process, selectors []process.Selector, reader metrics.Reader, confirmedAt time.Time) (time.Time, string, bool) {
+	startReader, ok := reader.(processStartReader)
+	if !ok || confirmedAt.IsZero() {
+		return time.Time{}, "", false
+	}
+	strictRoles := strictProcessRoles(selectors)
+	var startedAt time.Time
+	var source string
+	for _, proc := range procs {
+		candidateSource, trusted := trustedProcessSource(proc, strictRoles)
+		if !trusted {
+			continue
+		}
+		processStart, found := startReader.ProcessStartTime(proc.PID)
+		if !found || processStart.IsZero() || processStart.After(confirmedAt) {
+			continue
+		}
+		if startedAt.IsZero() || processStart.Before(startedAt) {
+			startedAt = processStart
+			source = candidateSource
+		}
+	}
+	if startedAt.IsZero() {
+		return time.Time{}, "", false
+	}
+	return startedAt, source, true
+}
+
+func strictProcessRoles(selectors []process.Selector) map[string]bool {
+	roles := make(map[string]bool, len(selectors))
+	for _, selector := range selectors {
+		if selector.Type == process.SelectorCommandMatch && selector.Name != "" && selector.Exe != "" && selector.User != "" {
+			roles[selector.Name] = true
+		}
+	}
+	return roles
+}
+
+func trustedProcessSource(proc process.Process, strictRoles map[string]bool) (string, bool) {
+	switch proc.Source {
+	case process.SourceBackend:
+		return process.SourceBackend, true
+	case process.SelectorCommandMatch:
+		return process.SelectorCommandMatch, strictRoles[proc.Role]
+	default:
+		return "", false
+	}
+}
+
 // graphableCheckMetrics maps each configured check name to the named metrics its
 // type publishes (checks.GraphMetrics), for the recorder to persist from
 // Result.Data. Empty when no configured check declares graphable metrics.
@@ -999,17 +1094,56 @@ func cyclePIDSource(discover func() []int, cycle func() int) func() []int {
 	}
 }
 
+// cycleProcessSource reuses one full process discovery for every sampler in a
+// worker cycle. Consumers that need only PIDs derive them from this shared
+// result, while continuity inference retains the source/role evidence needed to
+// decide whether a process can safely explain an unobserved interval.
+func cycleProcessSource(discover func() []process.Process, cycle func() int) func() []process.Process {
+	if discover == nil {
+		discover = func() []process.Process { return nil }
+	}
+	var cached []process.Process
+	var cachedCycle int
+	var ok bool
+	return func() []process.Process {
+		current := 0
+		if cycle != nil {
+			current = cycle()
+		}
+		if ok && cachedCycle == current {
+			return cached
+		}
+		cached = discover()
+		cachedCycle = current
+		ok = true
+		return cached
+	}
+}
+
 // discoverPIDs returns the PIDs of the processes matching selectors — the input
 // the collector samples. Discovery warnings are dropped: the metric and live
 // samplers only need the PID set, and surfacing those warnings is the process
 // checks' job, not the sampler's.
 func discoverPIDs(discoverer process.Discoverer, selectors []process.Selector) []int {
 	procs, _ := discoverer.Discover(selectors)
+	return processPIDs(procs)
+}
+
+func processPIDs(procs []process.Process) []int {
 	pids := make([]int, 0, len(procs))
 	for _, p := range procs {
 		pids = append(pids, p.PID)
 	}
 	return pids
+}
+
+func processUptimeReader(collectors ...*metrics.Collector) metrics.Reader {
+	for _, collector := range collectors {
+		if collector != nil && collector.Reader != nil {
+			return collector.Reader
+		}
+	}
+	return metrics.OSReader{}
 }
 
 // liveSampler returns a per-cycle closure that discovers the service's process
