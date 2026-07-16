@@ -38,15 +38,14 @@ type processUptimeRecord struct {
 	service     string
 	startedAt   time.Time
 	confirmedAt time.Time
-	source      string
 }
 
 type processUptimeCapture struct {
 	records []processUptimeRecord
 }
 
-func (c *processUptimeCapture) RecordProcessUptime(service string, startedAt, confirmedAt time.Time, source string) error {
-	c.records = append(c.records, processUptimeRecord{service: service, startedAt: startedAt, confirmedAt: confirmedAt, source: source})
+func (c *processUptimeCapture) RecordProcessUptime(service string, startedAt, confirmedAt time.Time) error {
+	c.records = append(c.records, processUptimeRecord{service: service, startedAt: startedAt, confirmedAt: confirmedAt})
 	return nil
 }
 
@@ -70,8 +69,8 @@ func TestProcessUptimeRecorderUsesTrustedOldestProcess(t *testing.T) {
 		t.Fatalf("records = %+v, want one trusted process record", capture.records)
 	}
 	got := capture.records[0]
-	if got.service != "web" || !got.startedAt.Equal(backendStart) || !got.confirmedAt.Equal(now) || got.source != process.SourceBackend {
-		t.Fatalf("record = %+v, want web backend process from %s", got, backendStart)
+	if got.service != "web" || !got.startedAt.Equal(backendStart) || !got.confirmedAt.Equal(now) {
+		t.Fatalf("record = %+v, want web process interval from %s", got, backendStart)
 	}
 }
 

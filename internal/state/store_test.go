@@ -415,7 +415,7 @@ func TestPruneHistory(t *testing.T) {
 		if err := s.RecordServiceMetric("web", "cpu", 10, at); err != nil {
 			t.Fatalf("RecordServiceMetric(%s): %v", at, err)
 		}
-		if err := s.RecordProcessUptime("web", at, at, "backend-main"); err != nil {
+		if err := s.RecordProcessUptime("web", at, at); err != nil {
 			t.Fatalf("RecordProcessUptime(%s): %v", at, err)
 		}
 		if _, err := s.RecordEvent(EventRecord{At: at, Service: "web", Kind: "action", Message: "restart"}); err != nil {

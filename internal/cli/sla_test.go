@@ -112,7 +112,7 @@ func TestSLACommandReportsProcessUptimeSeparately(t *testing.T) {
 		t.Fatal(err)
 	}
 	now := time.Now()
-	if err := store.RecordProcessUptime("web", now.Add(-30*time.Minute), now, "backend"); err != nil {
+	if err := store.RecordProcessUptime("web", now.Add(-30*time.Minute), now); err != nil {
 		t.Fatal(err)
 	}
 	if err := store.Close(); err != nil {
