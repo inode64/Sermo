@@ -11,6 +11,7 @@ import (
 	"sermo/internal/cfgval"
 	"sermo/internal/checks"
 	"sermo/internal/config"
+	"sermo/internal/execx"
 	"sermo/internal/rules"
 )
 
@@ -157,10 +158,16 @@ func artifactWatchInterval(cfg *config.Config, category, name string) time.Durat
 	return interval
 }
 
-// BuildLibraryWatches builds one monitor for every installed catalog library.
-// Library events are regular watches named "library:<name>" so they remain
-// distinct from application events without expanding the persisted event schema.
-func BuildLibraryWatches(ctx context.Context, cfg *config.Config, deps Deps) []*Watch {
+type catalogArtifactWatchSpec struct {
+	category  string
+	watchName func(string) string
+	appName   func(string) string
+	register  func(*ArtifactSamples, appinspect.Report)
+	store     func(*ArtifactSamples, string, appinspect.Report)
+	inspect   func(context.Context, execx.Runner, *config.Config, string, appinspect.Option) appinspect.Report
+}
+
+func buildCatalogArtifactWatches(ctx context.Context, cfg *config.Config, deps Deps, spec catalogArtifactWatchSpec) []*Watch {
 	if cfg == nil {
 		return nil
 	}
@@ -169,30 +176,29 @@ func BuildLibraryWatches(ctx context.Context, cfg *config.Config, deps Deps) []*
 		samples = NewArtifactSamples()
 	}
 	runner := deps.ExecxRunner
-	reports := appinspect.List(ctx, runner, cfg, config.CategoryLibrary, false,
-		appinspect.WithUserLookup(deps.UserLookup))
+	lookup := appinspect.WithUserLookup(deps.UserLookup)
+	reports := appinspect.List(ctx, runner, cfg, spec.category, false, lookup)
 	if len(reports) == 0 {
 		return nil
 	}
 	notifiers := resolveNotifiers(deps.GlobalNotify, deps.Notifiers)
 	out := make([]*Watch, 0, len(reports))
 	for i := range reports {
-		name := reports[i].Name
-		samples.RegisterFile(reports[i].Binary)
+		report := reports[i]
+		name := report.Name
+		spec.register(samples, report)
 		out = append(out, &Watch{
-			Name:      libraryWatchNamePrefix + name,
-			CheckType: config.CategoryLibrary,
+			Name:      spec.watchName(name),
+			App:       spec.appName(name),
+			CheckType: spec.category,
 			Check: artifactCheck{
-				name:    name,
-				samples: samples,
-				store:   storeLibrarySample,
+				name: name, samples: samples, store: spec.store,
 				inspect: func(ctx context.Context) appinspect.Report {
-					return appinspect.InspectCategoryOne(ctx, runner, cfg, config.CategoryLibrary, name,
-						appinspect.WithUserLookup(deps.UserLookup))
+					return spec.inspect(ctx, runner, cfg, name, lookup)
 				},
 			},
 			FireOnFail: true,
-			Interval:   artifactWatchInterval(cfg, config.CategoryLibrary, name),
+			Interval:   artifactWatchInterval(cfg, spec.category, name),
 			Notifiers:  notifiers,
 			Settling:   deps.Settling,
 			Now:        deps.Now,
@@ -201,6 +207,24 @@ func BuildLibraryWatches(ctx context.Context, cfg *config.Config, deps Deps) []*
 		})
 	}
 	return out
+}
+
+// BuildLibraryWatches builds one monitor for every installed catalog library.
+// Library events are regular watches named "library:<name>" so they remain
+// distinct from application events without expanding the persisted event schema.
+func BuildLibraryWatches(ctx context.Context, cfg *config.Config, deps Deps) []*Watch {
+	return buildCatalogArtifactWatches(ctx, cfg, deps, catalogArtifactWatchSpec{
+		category:  config.CategoryLibrary,
+		watchName: func(name string) string { return libraryWatchNamePrefix + name },
+		appName:   func(string) string { return "" },
+		register: func(samples *ArtifactSamples, report appinspect.Report) {
+			samples.RegisterFile(report.Binary)
+		},
+		store: storeLibrarySample,
+		inspect: func(ctx context.Context, runner execx.Runner, cfg *config.Config, name string, lookup appinspect.Option) appinspect.Report {
+			return appinspect.InspectCategoryOne(ctx, runner, cfg, config.CategoryLibrary, name, lookup)
+		},
+	})
 }
 
 // BuildArtifactWatches builds all cadence-limited catalog and service artifact
