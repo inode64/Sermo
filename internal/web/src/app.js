@@ -4346,21 +4346,26 @@ function appStatusCell(a) {
   const detail = (a && a.status && a.status !== targetStateOK) ? a.status : appStatusLabel(a);
   return tpl`<td class="status-cell status-${state}" title="${detail}">${stateBadgeLabel(state, appStatusLabel(a))}${sampledAge(a && a.observed_at)}</td>`;
 }
+
+function artifactMatches(item, surface, categoryFilter, statusFilter, statusFilterStates, query) {
+  const category = categoryOf(item, surface);
+  if (categoryFilter !== filterAll && category !== categoryFilter) return false;
+  if (statusFilterStates.includes(statusFilter) && appStateText(item) !== statusFilter) return false;
+  if (!query) return true;
+  const needle = query.toLowerCase();
+  return displayName(item).toLowerCase().includes(needle)
+    || (item.name || "").toLowerCase().includes(needle)
+    || (item.display_name || "").toLowerCase().includes(needle)
+    || category.toLowerCase().includes(needle)
+    || appStateText(item).includes(needle)
+    || (item.status || "").toLowerCase().includes(needle)
+    || (item.version || "").toLowerCase().includes(needle)
+    || (item.user || "").toLowerCase().includes(needle)
+    || (item.group || "").toLowerCase().includes(needle);
+}
+
 function appMatches(a) {
-  const category = categoryOf(a, "app");
-  if (appCategory !== filterAll && category !== appCategory) return false;
-  if (appStatusFilterStates.includes(appStatus) && appStateText(a) !== appStatus) return false;
-  if (!appQuery) return true;
-  const q = appQuery.toLowerCase();
-  return displayName(a).toLowerCase().includes(q)
-    || (a.name || "").toLowerCase().includes(q)
-    || (a.display_name || "").toLowerCase().includes(q)
-    || category.toLowerCase().includes(q)
-    || appStateText(a).includes(q)
-    || (a.status || "").toLowerCase().includes(q)
-    || (a.version || "").toLowerCase().includes(q)
-    || (a.user || "").toLowerCase().includes(q)
-    || (a.group || "").toLowerCase().includes(q);
+  return artifactMatches(a, "app", appCategory, appStatus, appStatusFilterStates, appQuery);
 }
 
 function setAppGrouped(v) {
@@ -4370,16 +4375,19 @@ function setAppGrouped(v) {
 }
 
 function toggleAllAppGroups() {
-  const list = (allApps || []).filter(appMatches);
-  const categories = sortedCategories(list, "app");
-  const allCollapsed = categories.length > 0 && categories.every((category) => appCollapsedGroups.has(category));
-  if (allCollapsed) {
-    categories.forEach((category) => appCollapsedGroups.delete(category));
-  } else {
-    categories.forEach((category) => appCollapsedGroups.add(category));
-  }
+  toggleAllArtifactGroups(allApps, appMatches, "app", appCollapsedGroups);
   renderApps();
   saveUIState();
+}
+
+function toggleAllArtifactGroups(items, matches, surface, collapsedGroups) {
+  const categories = sortedCategories((items || []).filter(matches), surface);
+  const allCollapsed = categories.length > 0 && categories.every((category) => collapsedGroups.has(category));
+  if (allCollapsed) {
+    categories.forEach((category) => collapsedGroups.delete(category));
+  } else {
+    categories.forEach((category) => collapsedGroups.add(category));
+  }
 }
 
 function toggleGroup(panel, group) {
@@ -4576,20 +4584,7 @@ function updateLibrarySortIndicators() {
   updateSortIndicatorsFor("li", librarySort, ".libraries-table th.sortable[data-library-sort]", "librarySort");
 }
 function libraryMatches(library) {
-  const category = categoryOf(library, "library");
-  if (libraryCategory !== filterAll && category !== libraryCategory) return false;
-  if (libraryStatusFilterStates.includes(libraryStatus) && appStateText(library) !== libraryStatus) return false;
-  if (!libraryQuery) return true;
-  const q = libraryQuery.toLowerCase();
-  return displayName(library).toLowerCase().includes(q)
-    || (library.name || "").toLowerCase().includes(q)
-    || (library.display_name || "").toLowerCase().includes(q)
-    || category.toLowerCase().includes(q)
-    || appStateText(library).includes(q)
-    || (library.status || "").toLowerCase().includes(q)
-    || (library.version || "").toLowerCase().includes(q)
-    || (library.user || "").toLowerCase().includes(q)
-    || (library.group || "").toLowerCase().includes(q);
+  return artifactMatches(library, "library", libraryCategory, libraryStatus, libraryStatusFilterStates, libraryQuery);
 }
 function setLibraryGrouped(v) {
   libraryGrouped = !!v;
@@ -4597,10 +4592,7 @@ function setLibraryGrouped(v) {
   saveUIState();
 }
 function toggleAllLibraryGroups() {
-  const categories = sortedCategories((allLibraries || []).filter(libraryMatches), "library");
-  const allCollapsed = categories.length > 0 && categories.every((category) => libraryCollapsedGroups.has(category));
-  if (allCollapsed) categories.forEach((category) => libraryCollapsedGroups.delete(category));
-  else categories.forEach((category) => libraryCollapsedGroups.add(category));
+  toggleAllArtifactGroups(allLibraries, libraryMatches, "library", libraryCollapsedGroups);
   renderLibraries();
   saveUIState();
 }
