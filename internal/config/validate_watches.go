@@ -589,22 +589,26 @@ func validateNetCheck(name string, check, entry map[string]any, defaultNotify []
 	if cfgval.String(check[checks.CheckKeyInterface]) == "" {
 		add("%s is required for a net check", watchCheckFieldPath(name, checks.CheckKeyInterface))
 	}
+	validateMetricWatchEntries(name, "net", entry, defaultNotify, validateNetMetricCondition, add)
+}
+
+func validateMetricWatchEntries(name, typ string, entry map[string]any, defaultNotify []string, validateCondition func(string, string, map[string]any, addFunc), add addFunc) {
 	watchMetrics, ok := entry[sectionMetrics].(map[string]any)
 	if !ok || len(watchMetrics) == 0 {
-		add("%s is required and must be non-empty for a net check", watchMetricsPath(name))
+		add("%s is required and must be non-empty for a %s check", watchMetricsPath(name), typ)
 		return
 	}
 	for _, key := range slices.Sorted(maps.Keys(watchMetrics)) {
 		prefix := watchMetricPath(name, key)
-		m, ok := watchMetrics[key].(map[string]any)
+		metric, ok := watchMetrics[key].(map[string]any)
 		if !ok {
 			add(validationMappingFormat, prefix)
 			continue
 		}
-		validateNetMetricCondition(prefix, key, m, add)
-		validateEmission(m, prefix+"."+emission.Section, add)
-		validateHookBlock(prefix, m, false, false, defaultNotify, add)
-		validateWindow(prefix, m, add)
+		validateCondition(prefix, key, metric, add)
+		validateEmission(metric, prefix+"."+emission.Section, add)
+		validateHookBlock(prefix, metric, false, false, defaultNotify, add)
+		validateWindow(prefix, metric, add)
 	}
 }
 
@@ -661,23 +665,7 @@ func validateWatchableCheck(prefix, typ string, fields map[string]any, locksDir 
 // with its own hook (mirrors validateNetCheck).
 func validateSwapCheck(name string, entry map[string]any, defaultNotify []string, add func(string, ...any)) {
 	validateMetricWatchEntry(name, entry, add)
-	watchMetrics, ok := entry[sectionMetrics].(map[string]any)
-	if !ok || len(watchMetrics) == 0 {
-		add("%s is required and must be non-empty for a swap check", watchMetricsPath(name))
-		return
-	}
-	for _, key := range slices.Sorted(maps.Keys(watchMetrics)) {
-		prefix := watchMetricPath(name, key)
-		m, ok := watchMetrics[key].(map[string]any)
-		if !ok {
-			add(validationMappingFormat, prefix)
-			continue
-		}
-		validateSwapMetricCondition(prefix, key, m, add)
-		validateEmission(m, prefix+"."+emission.Section, add)
-		validateHookBlock(prefix, m, false, false, defaultNotify, add)
-		validateWindow(prefix, m, add)
-	}
+	validateMetricWatchEntries(name, "swap", entry, defaultNotify, validateSwapMetricCondition, add)
 }
 
 // validateSwapMetricCondition validates one swap metric's condition fields:
@@ -725,23 +713,7 @@ func validateICMPCheck(name string, check, entry map[string]any, defaultNotify [
 			add("%s must be a positive integer", watchCheckFieldPath(name, checks.CheckKeyCount))
 		}
 	}
-	watchMetrics, ok := entry[sectionMetrics].(map[string]any)
-	if !ok || len(watchMetrics) == 0 {
-		add("%s is required and must be non-empty for an icmp check", watchMetricsPath(name))
-		return
-	}
-	for _, key := range slices.Sorted(maps.Keys(watchMetrics)) {
-		prefix := watchMetricPath(name, key)
-		m, ok := watchMetrics[key].(map[string]any)
-		if !ok {
-			add(validationMappingFormat, prefix)
-			continue
-		}
-		validateICMPMetricCondition(prefix, key, m, add)
-		validateEmission(m, prefix+"."+emission.Section, add)
-		validateHookBlock(prefix, m, false, false, defaultNotify, add)
-		validateWindow(prefix, m, add)
-	}
+	validateMetricWatchEntries(name, "icmp", entry, defaultNotify, validateICMPMetricCondition, add)
 }
 
 // validateICMPMetricCondition validates one icmp metric's condition fields:
