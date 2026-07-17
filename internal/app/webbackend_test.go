@@ -475,15 +475,21 @@ func TestWebBackendLastWatchActivityIncludesRecovered(t *testing.T) {
 	}
 	add(t0, Event{Watch: "uplink-dns", Kind: eventKindFiring, Message: "dns timeout"})
 	add(t0.Add(time.Minute), Event{Watch: "uplink-dns", Kind: eventKindRecovered, Message: "dns ok"})
+	add(t0.Add(2*time.Minute), Event{Watch: "runaway", Kind: eventKindKill, Message: "sent TERM to pid 42"})
 
 	b := &WebBackend{
 		events:     events,
-		watchOrder: []string{"uplink-dns"},
+		watchOrder: []string{"uplink-dns", "runaway"},
 	}
 	activities := b.lastWatchActivities()
 	wantAt := t0.Add(time.Minute).Format(time.RFC3339)
 	if got := activities["uplink-dns"]; got.Kind != eventKindRecovered || got.At != wantAt {
 		t.Fatalf("uplink-dns activity = %+v, want recovered at %s", got, wantAt)
+	}
+	// A process-watch kill is watch activity too; it used to leave the watch's
+	// last activity stale.
+	if got := activities["runaway"]; got.Kind != eventKindKill {
+		t.Fatalf("runaway activity = %+v, want the kill event", got)
 	}
 }
 
