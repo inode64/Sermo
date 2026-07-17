@@ -80,8 +80,9 @@ export function notifierTestAPI(name) { return apiEntityPath(apiNotifiersPath, n
 export function panicAPI(enable) { return `${apiPanicPath}/${enable ? "on" : "off"}`; }
 export function serviceAPI(name, suffix = "") { return apiEntityPath(apiServicesPath, name, suffix); }
 export function serviceEventsAPI(name, limit) { return serviceAPI(name, apiLimitSuffix(apiSuffixEvents, limit)); }
-export function serviceMetricsAPI(name, check, since) {
-  return serviceAPI(name, `${apiSuffixMetrics}?${apiQueryCheck}=${encodeURIComponent(check)}&${apiQuerySince}=${since}`);
+export function serviceMetricsAPI(name, check, since, metric = "") {
+  const metricQuery = metric ? `&metric=${encodeURIComponent(metric)}` : "";
+  return serviceAPI(name, `${apiSuffixMetrics}?${apiQueryCheck}=${encodeURIComponent(check)}&${apiQuerySince}=${since}${metricQuery}`);
 }
 export function servicePreflightAPI(name) { return serviceAPI(name, apiSuffixPreflight); }
 export function serviceRuntimeAPI(name, since) { return serviceAPI(name, apiSinceSuffix(apiSuffixRuntime, since)); }
