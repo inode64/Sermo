@@ -179,7 +179,8 @@
      so the bar stays perceivable even when its surface collapses to Canvas. */
   @media (forced-colors: active) {
     .usagebar, .sla-bar, .sla-timeline { border: 1px solid CanvasText; }
-    .usagebar-fill, .sla-fill, .sla-seg { forced-color-adjust: none; }
+    .usagebar-fill, .sla-fill, .sla-seg, .sla-bar-seg { forced-color-adjust: none; }
+    .sla-bar-seg { border: 1px solid CanvasText; }
   }
   .pill { display: inline-block; padding: .05rem .5rem; border-radius: 1rem; font-size: .8rem; border: 1px solid var(--line-2); }
 
@@ -381,6 +382,11 @@
   .sla-panel { width: 100%; margin: .2rem 0 .85rem; }
   .sla-chart-panel { min-width: 0; width: 100%; }
   .sla-chart-head { display: flex; justify-content: space-between; align-items: baseline; gap: .65rem; flex-wrap: wrap; margin: 0 0 .18rem; }
+  .sla-bars { display: flex; gap: 2px; height: 2.4rem; align-items: stretch; }
+  .sla-bar-seg { flex: 1 1 0; min-width: 0; border-radius: 2px; background: var(--sla-color, var(--line-2)); }
+  .sla-bar-seg:hover { opacity: .72; }
+  .sla-bar-seg.sla-gap { background: repeating-linear-gradient(45deg, var(--line-2) 0 2px, transparent 2px 4px); }
+  .sla-bars-axis { display: flex; justify-content: space-between; color: var(--text-2); font-size: .72rem; margin-top: .18rem; font-variant-numeric: tabular-nums; }
   .sla-incident-list { display: flex; flex-wrap: wrap; gap: .28rem .35rem; align-items: center; margin-top: .28rem; font-size: .82rem; font-variant-numeric: tabular-nums; }
   .sla-incident { color: var(--crit); border: 1px solid color-mix(in srgb, var(--crit) 35%, var(--line)); background: color-mix(in srgb, var(--crit) 8%, transparent); border-radius: 999px; padding: .05rem .42rem; }
   .sla-windows { display: grid; gap: .26rem; max-width: 42rem; }
