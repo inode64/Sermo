@@ -1,6 +1,10 @@
 package app
 
-import "testing"
+import (
+	"testing"
+
+	"sermo/internal/process"
+)
 
 func TestUsesMetrics(t *testing.T) {
 	cases := []struct {
@@ -62,12 +66,12 @@ func TestUsesMetrics(t *testing.T) {
 	}
 }
 
-func TestCyclePIDSourceCachesWithinCycle(t *testing.T) {
+func TestCycleProcessSourceCachesWithinCycle(t *testing.T) {
 	cycle := 1
 	calls := 0
-	source := cyclePIDSource(func() []int {
+	source := cycleProcessSource(func() []process.Process {
 		calls++
-		return []int{calls}
+		return []process.Process{{PID: calls}}
 	}, func() int {
 		return cycle
 	})
@@ -77,8 +81,8 @@ func TestCyclePIDSourceCachesWithinCycle(t *testing.T) {
 	if calls != 1 {
 		t.Fatalf("same cycle discoveries = %d, want 1", calls)
 	}
-	if first[0] != 1 || second[0] != 1 {
-		t.Fatalf("same cycle PIDs = %v then %v, want cached [1]", first, second)
+	if first[0].PID != 1 || second[0].PID != 1 {
+		t.Fatalf("same cycle processes = %v then %v, want cached PID 1", first, second)
 	}
 
 	cycle = 2
@@ -86,7 +90,7 @@ func TestCyclePIDSourceCachesWithinCycle(t *testing.T) {
 	if calls != 2 {
 		t.Fatalf("next cycle discoveries = %d, want 2", calls)
 	}
-	if third[0] != 2 {
-		t.Fatalf("next cycle PIDs = %v, want [2]", third)
+	if third[0].PID != 2 {
+		t.Fatalf("next cycle processes = %v, want PID 2", third)
 	}
 }
