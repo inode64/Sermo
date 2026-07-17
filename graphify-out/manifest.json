@@ -80,14 +80,14 @@
     "semantic_hash": "583e168e3d62f8e846e1dacb09abdcce"
   },
   "internal/app/event.go": {
-    "mtime": 1784213354.5678277,
-    "ast_hash": "e41e93f5deaf2e7039d0dc254afa40fa",
+    "mtime": 1784284775.2638671,
+    "ast_hash": "0311248418c34ff27335d1be65e25ffd",
     "semantic_hash": ""
   },
   "internal/app/event_test.go": {
-    "mtime": 1783511346.2806072,
-    "ast_hash": "9b6d4acd49d33dcc4d1ecd590a10754d",
-    "semantic_hash": "9b6d4acd49d33dcc4d1ecd590a10754d"
+    "mtime": 1784284819.3083355,
+    "ast_hash": "e0318457e25bdb45154eac61d9436f6e",
+    "semantic_hash": ""
   },
   "internal/app/eventlog.go": {
     "mtime": 1784186696.939871,
@@ -425,8 +425,8 @@
     "semantic_hash": "ad009d4b6ba9c818a68a23ec46eeacab"
   },
   "internal/app/webbackend_test.go": {
-    "mtime": 1784275572.2560008,
-    "ast_hash": "efb1dd5c46434711733c4714840669a6",
+    "mtime": 1784285271.6891599,
+    "ast_hash": "83b85cbc571034606fccd7dac2d53f4f",
     "semantic_hash": ""
   },
   "internal/app/webholder.go": {
@@ -2615,8 +2615,8 @@
     "semantic_hash": ""
   },
   "internal/web/server.go": {
-    "mtime": 1784273420.857813,
-    "ast_hash": "3f26da4e5110bf93618017cf235eac55",
+    "mtime": 1784285265.2290907,
+    "ast_hash": "df54d58784257836337dce4823f5a9f3",
     "semantic_hash": ""
   },
   "internal/web/server_test.go": {
@@ -4360,8 +4360,8 @@
     "semantic_hash": "c7792eff3d9c9d20cc3992aa50de1f2a"
   },
   "internal/web/index.html": {
-    "mtime": 1784275769.8856075,
-    "ast_hash": "b7715ec53ff130763ff8c15d591f347f",
+    "mtime": 1784285326.309744,
+    "ast_hash": "a627d79ddaca9733d07de13a4a974def",
     "semantic_hash": ""
   },
   "templates/default-alert.yml": {
@@ -5515,8 +5515,8 @@
     "semantic_hash": ""
   },
   "internal/app/webbackend_events.go": {
-    "mtime": 1784275624.144069,
-    "ast_hash": "a2f7ddbf24acd121a284dd1f02ef33c0",
+    "mtime": 1784285258.8130221,
+    "ast_hash": "4d530a5ee5170b5d1e25b70a964cda5b",
     "semantic_hash": ""
   },
   "internal/app/webbackend_metrics.go": {
@@ -5840,8 +5840,8 @@
     "semantic_hash": ""
   },
   "internal/app/webbackend_watches.go": {
-    "mtime": 1784275345.489027,
-    "ast_hash": "1a168393af9acb053fa55b4b89f2f28e",
+    "mtime": 1784285138.3797357,
+    "ast_hash": "b6ca9931be75d858ef1dd1e3fc1efb90",
     "semantic_hash": ""
   },
   "internal/units/units_test.go": {
@@ -5920,8 +5920,8 @@
     "semantic_hash": ""
   },
   ".claude/settings.local.json": {
-    "mtime": 1784280147.1262622,
-    "ast_hash": "730a8409f6394f64912bb0827df5021e",
+    "mtime": 1784285326.2897437,
+    "ast_hash": "3c3468d7dc62c77fff32a75a81230b1b",
     "semantic_hash": ""
   },
   "graphify-out/memory/query_20260716_093015_puedes_encontrar_mas_funciones_o_codigo_a_reducir.md": {
