@@ -16,12 +16,12 @@ func TestCheckHealthSummary(t *testing.T) {
 		"warn": {OK: false, Optional: true},
 		"gate": {OK: true, Skipped: true},
 	}
-	failing, health := checkHealthSummary(snap, []string{"http", "tcp", "warn", "gate"}, true)
+	failing, health := checkHealthSummaryCurrent(snap, []string{"http", "tcp", "warn", "gate"}, true, nil)
 	if failing != 1 || health != "failing" {
 		t.Fatalf("got failing=%d health=%q, want 1 failing", failing, health)
 	}
 
-	failing, health = checkHealthSummary(snap, []string{"http", "warn", "gate"}, true)
+	failing, health = checkHealthSummaryCurrent(snap, []string{"http", "warn", "gate"}, true, nil)
 	if failing != 0 || health != "ok" {
 		t.Fatalf("without tcp: failing=%d health=%q, want ok", failing, health)
 	}
@@ -29,27 +29,27 @@ func TestCheckHealthSummary(t *testing.T) {
 	snap = map[string]CheckSnapshot{
 		"cert": {OK: false, Condition: true},
 	}
-	failing, health = checkHealthSummary(snap, []string{"cert"}, true)
+	failing, health = checkHealthSummaryCurrent(snap, []string{"cert"}, true, nil)
 	if failing != 0 || health != "ok" {
 		t.Fatalf("healthy condition: failing=%d health=%q, want ok", failing, health)
 	}
 	snap["cert"] = CheckSnapshot{OK: true, Condition: true}
-	failing, health = checkHealthSummary(snap, []string{"cert"}, true)
+	failing, health = checkHealthSummaryCurrent(snap, []string{"cert"}, true, nil)
 	if failing != 1 || health != "failing" {
 		t.Fatalf("firing condition: failing=%d health=%q, want failing", failing, health)
 	}
 
-	failing, health = checkHealthSummary(nil, []string{"http"}, true)
+	failing, health = checkHealthSummaryCurrent(nil, []string{"http"}, true, nil)
 	if failing != 0 || health != "unknown" {
 		t.Fatalf("no snapshot: failing=%d health=%q, want unknown", failing, health)
 	}
 
-	failing, health = checkHealthSummary(nil, []string{"http"}, false)
+	failing, health = checkHealthSummaryCurrent(nil, []string{"http"}, false, nil)
 	if failing != 0 || health != "paused" {
 		t.Fatalf("paused: failing=%d health=%q, want paused", failing, health)
 	}
 
-	failing, health = checkHealthSummary(map[string]CheckSnapshot{}, []string{"http"}, true)
+	failing, health = checkHealthSummaryCurrent(map[string]CheckSnapshot{}, []string{"http"}, true, nil)
 	if failing != 0 || health != "unknown" {
 		t.Fatalf("no observed checks: failing=%d health=%q, want unknown", failing, health)
 	}
