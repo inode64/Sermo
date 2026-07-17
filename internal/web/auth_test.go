@@ -234,6 +234,22 @@ func TestWhoami(t *testing.T) {
 	check("", "", "guest", false)
 }
 
+func TestWhoamiWithoutResolvedRoleFailsClosed(t *testing.T) {
+	s := &Server{}
+	rec := httptest.NewRecorder()
+	s.handleWhoami(rec, httptest.NewRequest(http.MethodGet, apiPathWhoami, nil))
+	var got struct {
+		Role   string `json:"role"`
+		CanAct bool   `json:"can_act"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Role != roleGuest || got.CanAct {
+		t.Fatalf("whoami without role = %+v, want read-only guest (never default to admin)", got)
+	}
+}
+
 func TestLoginChallengesThenRedirects(t *testing.T) {
 	h := authServer(Auth{AdminPassword: "secret", AnonymousGuest: true})
 	// a guest hitting /login gets a Basic challenge (to escalate)
