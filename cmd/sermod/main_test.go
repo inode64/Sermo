@@ -264,6 +264,24 @@ func TestStartOldHistoryPruneStopsAtShutdownAndReportsDone(t *testing.T) {
 	}
 }
 
+func TestDrainOrTimeout(t *testing.T) {
+	closed := make(chan struct{})
+	close(closed)
+	if !drainOrTimeout(closed, time.Second) {
+		t.Fatal("drainOrTimeout(closed) = false, want true")
+	}
+
+	stuck := make(chan struct{})
+	defer close(stuck)
+	start := time.Now()
+	if drainOrTimeout(stuck, 20*time.Millisecond) {
+		t.Fatal("drainOrTimeout(stuck) = true, want false after the timeout")
+	}
+	if elapsed := time.Since(start); elapsed > 5*time.Second {
+		t.Fatalf("drainOrTimeout blocked for %v, want a bounded wait", elapsed)
+	}
+}
+
 type blockingOldHistoryPruner struct {
 	once    sync.Once
 	started chan struct{}

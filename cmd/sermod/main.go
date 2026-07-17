@@ -62,7 +62,21 @@ const (
 	daemonEventLogLimit  = 1000
 	daemonPIDFileMode    = 0o644
 	daemonRuntimeDirMode = 0o700
+	// shutdownPruneDrainTimeout bounds how long shutdown waits for an in-flight
+	// history-prune statement; it must stay well under init-system stop
+	// timeouts (systemd defaults to 90s) so a long DELETE cannot force SIGKILL.
+	shutdownPruneDrainTimeout = 5 * time.Second
 )
+
+// drainOrTimeout waits for done or the timeout, reporting whether done arrived.
+func drainOrTimeout(done <-chan struct{}, timeout time.Duration) bool {
+	select {
+	case <-done:
+		return true
+	case <-time.After(timeout):
+		return false
+	}
+}
 
 const (
 	logFieldAddress               = "address"
@@ -429,10 +443,16 @@ func run(args []string) int {
 	// Drain background store users before the deferred store.Close() runs: the
 	// web server finishes its bounded graceful shutdown (in-flight requests may
 	// query the store) and the startup prune stops at its next step boundary.
+	// The prune wait is bounded too: a single DELETE over years of history is
+	// not cancellable mid-statement, and shutdown must not outwait an init
+	// system's stop timeout — after the deadline the deferred close proceeds
+	// and the straggling statement fails with a closed-database error at worst.
 	if webDone != nil {
 		<-webDone
 	}
-	<-pruneDone
+	if !drainOrTimeout(pruneDone, shutdownPruneDrainTimeout) {
+		logger.Warn("history prune still running at shutdown; closing the store without it")
+	}
 	// Since Go 1.26 NotifyContext records the received signal as the
 	// cancellation cause; name it so operators can tell SIGTERM from SIGINT.
 	if cause := context.Cause(ctx); cause != nil && !errors.Is(cause, context.Canceled) {
