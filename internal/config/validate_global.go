@@ -43,6 +43,11 @@ func validateWeb(webCfg map[string]any, add func(string, ...any)) {
 			add("%s must be a boolean (allow anonymous read-only access)", webPathGuest)
 		}
 	}
+	if v, present := webCfg[WebKeyAllowedHosts]; present {
+		if _, err := cfgval.StrictStringList(v); err != nil {
+			add("%s must be a hostname or list of hostnames", webPathAllowedHosts)
+		}
+	}
 }
 
 // Selection keywords shared by wizard/config selection flows.

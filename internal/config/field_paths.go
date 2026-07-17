@@ -25,6 +25,7 @@ const (
 	pathsPathTemplates = SectionPaths + "." + pathKeyTemplates
 
 	webPathAddress       = SectionWeb + "." + WebKeyAddress
+	webPathAllowedHosts  = SectionWeb + "." + WebKeyAllowedHosts
 	webPathGuest         = SectionWeb + "." + WebKeyGuest
 	webPathGuestPassword = SectionWeb + "." + WebKeyGuestPassword
 	webPathPassword      = SectionWeb + "." + WebKeyPassword
