@@ -5846,12 +5846,14 @@ async function act(name, action) {
   if (toggleKey) {
     if (pendingMonitorToggles.has(toggleKey)) return;
     pendingMonitorToggles.add(toggleKey);
-    renderServices();
   }
-  setStatus("");
   const tracked = isTrackedOperation(action);
-  if (tracked) beginOperation(name, action);
   try {
+    // Everything after the guard-add runs inside the try so a throw (even from
+    // a render) cannot strand the key and leave the button disabled for good.
+    if (toggleKey) renderServices();
+    setStatus("");
+    if (tracked) beginOperation(name, action);
     const q = noCascade ? `?${apiQueryNoCascade}=${queryBoolOne}` : "";
     const res = await fetch(serviceAPI(name, apiActionSuffix(action, q)), csrfPostOptions());
     const body = await jsonOrThrow(res);
@@ -5878,11 +5880,13 @@ async function actWatch(name, action) {
   if (toggleKey) {
     if (pendingMonitorToggles.has(toggleKey)) return;
     pendingMonitorToggles.add(toggleKey);
-    renderWatches();
   }
-  setStatus("");
-  if (action === actionProbe) beginWatchProbe(name);
   try {
+    // Guard-add render inside the try, as in act(): a throw must not strand
+    // the pending key.
+    if (toggleKey) renderWatches();
+    setStatus("");
+    if (action === actionProbe) beginWatchProbe(name);
     const res = await fetch(watchAPI(name, apiActionSuffix(action)), csrfPostOptions(headers));
     const body = await res.json().catch(() => ({}));
     const failed = !res.ok || body.ok === false;
