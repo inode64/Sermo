@@ -453,8 +453,12 @@ func TestWebBackendActivitySummaryCountsAllServiceOperations(t *testing.T) {
 		events.Add(Event{Service: "web", Kind: eventKindAction, Action: action, Status: eventStatusOK})
 	}
 	// Cascade targets run the same service operation as the primary, so they
-	// count in the service-actions bucket too.
+	// count in the service-actions bucket too — but mirroring the primary's
+	// kind mapping: only a successful cascade is an action, a blocked one is
+	// suppressed (uncounted), and any failure counts as an error.
 	events.Add(Event{Service: "db", Kind: eventKindCascade, Action: string(rules.ActionRestart), Status: eventStatusOK, Message: "cascade from web"})
+	events.Add(Event{Service: "cache", Kind: eventKindCascade, Action: string(rules.ActionRestart), Status: eventStatusBlocked, Message: "cascade from web"})
+	events.Add(Event{Service: "queue", Kind: eventKindCascade, Action: string(rules.ActionRestart), Status: eventStatusFailed, Message: "cascade from web"})
 	events.Add(Event{Watch: "storage-root", Kind: eventKindHook, Status: eventStatusOK})
 	events.Add(Event{Watch: "storage-root", Kind: eventKindExpand, Message: "grew vg0/data"})
 	events.Add(Event{Watch: "runaway", Kind: eventKindKillFailed, Message: "pid 42 survived"})
@@ -464,11 +468,12 @@ func TestWebBackendActivitySummaryCountsAllServiceOperations(t *testing.T) {
 	b := &WebBackend{events: events}
 	got := b.ActivitySummary(context.Background())
 	if got.ServiceActions != 6 {
-		t.Fatalf("ServiceActions = %d, want 6 for start/stop/restart/reload/resume plus one cascade", got.ServiceActions)
+		t.Fatalf("ServiceActions = %d, want 6 for start/stop/restart/reload/resume plus one successful cascade", got.ServiceActions)
 	}
-	// Expand and kill events count in the watch-actions bucket like hooks.
-	if got.WatchHooks != 3 || got.WatchNotifies != 1 || got.Errors != 1 {
-		t.Fatalf("ActivitySummary = %+v, want hook+expand+kill/notify/error counted", got)
+	// Expand and kill events count in the watch-actions bucket like hooks; the
+	// failed cascade counts as an error and the blocked one is not counted.
+	if got.WatchHooks != 3 || got.WatchNotifies != 1 || got.Errors != 2 {
+		t.Fatalf("ActivitySummary = %+v, want hook+expand+kill/notify counted and errors=2 (error event + failed cascade)", got)
 	}
 }
 
