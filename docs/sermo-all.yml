@@ -145,6 +145,7 @@ watches:
       expect_status: 2xx
       expect_latency: { op: "<", value: 250 }
     for: { cycles: 3 }
+    clear: { cycles: 3 }  # recovery hysteresis: stay firing until 3 clear cycles
     then: { notify: [ops-email] }
 
   http3-health:
@@ -934,6 +935,7 @@ rules:
     type: alert  # system metrics may only alert
     notify: [team-slack]
     if: { metric: { scope: system, name: total_memory, op: ">", value: 90% } }
+    clear: { duration: 4m }  # recovery hysteresis: one episode per sustained incident
     then: { action: alert, message: "host memory high" }
   alert-file-missing:
     type: alert

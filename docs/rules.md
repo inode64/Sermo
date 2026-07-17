@@ -1838,6 +1838,7 @@ rules:
     # for: { duration: 6m }        # or consecutive wall-clock time
     within: { cycles: 15, min_matches: 5 }  # sliding window (optional)
     # within: { duration: 30m, min_matches: 3 } # or a time window
+    clear: { duration: 6m }       # recovery hysteresis, alert rules only (optional)
     notify: [ops-email]           # who gets this rule's alert messages (optional)
     emission: { events: on_change, notify: on_change } # or every_cycle
     then: { action: alert, message: "http is down" }
@@ -1921,11 +1922,25 @@ inside the last 30 minutes. `min_matches` is optional and defaults to `1`
 (true at least once within the window). A rule cannot use both `for` and
 `within`; a single window must choose either `cycles` or `duration`, not both.
 
+`clear` is the recovery-side window (anti-flapping hysteresis): once the rule is
+in a firing episode, `clear: {cycles: N}` or `clear: {duration: 4m}` keeps the
+episode open until the condition has stayed false for the whole window, so a
+metric oscillating around its threshold produces one episode (one alert, one
+`recovered`) instead of one per crossing. A cycle where the condition is true
+again resets the clear progress and continues the same episode without a second
+alert. A clear window only extends an episode — it never cuts the entry window
+short. Without `clear`, the episode ends the first cycle the entry window stops
+firing. `clear` is only valid on `type: alert` rules and on watches: a
+remediation or guard rule held firing on a false condition would keep acting on
+it, so validation rejects it there.
+
 Service rule-window progress is persisted in `paths.state`. If `sermod`
 restarts while a `for` window is at 2/3 consecutive matches, the next observed
 matching cycle continues from 2/3 instead of starting from zero. Duration-based
 windows persist their timestamps too, so a restart does not restart a pending
-`for: {duration: ...}` window.
+`for: {duration: ...}` window. The firing episode and clear progress persist the
+same way, so a restart neither re-alerts an open episode nor drops a pending
+clear window.
 
 ### Guards
 

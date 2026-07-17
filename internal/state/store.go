@@ -300,6 +300,14 @@ var migrations = []string{
 		PRIMARY KEY (service, started_at)
 	);`,
 	`CREATE INDEX process_uptime_span_service_confirmed_idx ON process_uptime_span (service, confirmed_at);`,
+	// Rule windows gained an explicit firing episode (so the rising edge of
+	// duration windows survives restarts) and clear-window progress; the watch
+	// table already had firing and only needs the clear columns.
+	`ALTER TABLE rule_window_state ADD COLUMN firing INTEGER NOT NULL DEFAULT 0;`,
+	`ALTER TABLE rule_window_state ADD COLUMN clear_since INTEGER NOT NULL DEFAULT 0;`,
+	`ALTER TABLE rule_window_state ADD COLUMN clear_consecutive INTEGER NOT NULL DEFAULT 0;`,
+	`ALTER TABLE watch_runtime_state ADD COLUMN clear_since INTEGER NOT NULL DEFAULT 0;`,
+	`ALTER TABLE watch_runtime_state ADD COLUMN clear_consecutive INTEGER NOT NULL DEFAULT 0;`,
 }
 
 // Store is a handle to the persistent state database. It is safe for concurrent
@@ -857,12 +865,16 @@ type RemediationRecord struct {
 	CurrentBackoff time.Duration
 }
 
-// RuleWindowRecord is the persisted for/within progress for one rule.
+// RuleWindowRecord is the persisted for/within progress for one rule, plus its
+// firing episode and clear-window progress.
 type RuleWindowRecord struct {
-	Consecutive  int
-	History      []bool
-	TrueSince    time.Time
-	TimedHistory []RuleWindowSample
+	Consecutive      int
+	History          []bool
+	TrueSince        time.Time
+	TimedHistory     []RuleWindowSample
+	Firing           bool
+	ClearConsecutive int
+	ClearSince       time.Time
 }
 
 // RuleWindowSample is one persisted sample for a duration-based within window.
@@ -891,15 +903,19 @@ func (s *Store) WatchRuntimeState(watch, slot string) (WatchRuntimeRecord, bool,
 		lastActionAt       int64
 		rawRecentActions   string
 		currentBackoffNano int64
+		clearSince         int64
+		clearConsecutive   int
 	)
 	err := s.db.QueryRowContext(s.sqlCtx(),
 		`SELECT firing, last_notify_at, consecutive, history, true_since,
-		        timed_history, last_action_at, recent_actions, current_backoff_ns
+		        timed_history, last_action_at, recent_actions, current_backoff_ns,
+		        clear_since, clear_consecutive
 		   FROM watch_runtime_state WHERE watch = ? AND slot = ?;`,
 		watch, slot,
 	).Scan(
 		&firing, &lastNotifyAt, &consecutive, &rawHistory, &trueSince,
 		&rawTimed, &lastActionAt, &rawRecentActions, &currentBackoffNano,
+		&clearSince, &clearConsecutive,
 	)
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
@@ -928,6 +944,11 @@ func (s *Store) WatchRuntimeState(watch, slot string) (WatchRuntimeRecord, bool,
 			History:      history,
 			TrueSince:    unixNanoTime(trueSince),
 			TimedHistory: timed,
+			// The watch's episode column doubles as the window's: both track the
+			// same firing episode, kept in sync by Watch.evaluateFiring.
+			Firing:           firing != 0,
+			ClearSince:       unixNanoTime(clearSince),
+			ClearConsecutive: clearConsecutive,
 		},
 		Policy: RemediationRecord{
 			LastActionAt:   unixNanoTime(lastActionAt),
@@ -966,8 +987,9 @@ func (s *Store) SetWatchRuntimeState(watch, slot string, rec WatchRuntimeRecord)
 	_, err = s.db.ExecContext(s.sqlCtx(),
 		`INSERT INTO watch_runtime_state (
 		   watch, slot, firing, last_notify_at, consecutive, history, true_since,
-		   timed_history, last_action_at, recent_actions, current_backoff_ns
-		 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		   timed_history, last_action_at, recent_actions, current_backoff_ns,
+		   clear_since, clear_consecutive
+		 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		 ON CONFLICT(watch, slot) DO UPDATE SET
 		   firing             = excluded.firing,
 		   last_notify_at      = excluded.last_notify_at,
@@ -977,10 +999,13 @@ func (s *Store) SetWatchRuntimeState(watch, slot string, rec WatchRuntimeRecord)
 		   timed_history       = excluded.timed_history,
 		   last_action_at      = excluded.last_action_at,
 		   recent_actions      = excluded.recent_actions,
-		   current_backoff_ns  = excluded.current_backoff_ns;`,
+		   current_backoff_ns  = excluded.current_backoff_ns,
+		   clear_since         = excluded.clear_since,
+		   clear_consecutive   = excluded.clear_consecutive;`,
 		watch, slot, firing, timeUnixNano(rec.LastNotifyAt), rec.Window.Consecutive,
 		string(history), timeUnixNano(rec.Window.TrueSince), timed,
 		timeUnixNano(rec.Policy.LastActionAt), recent, int64(rec.Policy.CurrentBackoff),
+		timeUnixNano(rec.Window.ClearSince), rec.Window.ClearConsecutive,
 	)
 	if err != nil {
 		return fmt.Errorf("set watch runtime state for %s/%s: %w", watch, slot, err)
@@ -992,6 +1017,7 @@ func watchRuntimeRecordEmpty(rec WatchRuntimeRecord) bool {
 	return !rec.Firing && rec.LastNotifyAt.IsZero() &&
 		rec.Window.Consecutive == 0 && len(rec.Window.History) == 0 &&
 		rec.Window.TrueSince.IsZero() && len(rec.Window.TimedHistory) == 0 &&
+		!rec.Window.Firing && rec.Window.ClearSince.IsZero() && rec.Window.ClearConsecutive == 0 &&
 		rec.Policy.LastActionAt.IsZero() && len(rec.Policy.RecentActions) == 0 &&
 		rec.Policy.CurrentBackoff == 0
 }
@@ -1060,7 +1086,8 @@ func (s *Store) SetRemediationState(service string, rec RemediationRecord) error
 // rules, keyed by rule name.
 func (s *Store) RuleWindowStates(service string) (map[string]RuleWindowRecord, error) {
 	rows, err := s.db.QueryContext(s.sqlCtx(),
-		`SELECT rule_name, consecutive, history, true_since, timed_history
+		`SELECT rule_name, consecutive, history, true_since, timed_history,
+		        firing, clear_since, clear_consecutive
 		   FROM rule_window_state WHERE service = ? ORDER BY rule_name;`,
 		service,
 	)
@@ -1072,13 +1099,16 @@ func (s *Store) RuleWindowStates(service string) (map[string]RuleWindowRecord, e
 	out := map[string]RuleWindowRecord{}
 	for rows.Next() {
 		var (
-			name        string
-			consecutive int
-			rawHistory  string
-			trueSince   int64
-			rawTimed    string
+			name             string
+			consecutive      int
+			rawHistory       string
+			trueSince        int64
+			rawTimed         string
+			firing           int
+			clearSince       int64
+			clearConsecutive int
 		)
-		if err := rows.Scan(&name, &consecutive, &rawHistory, &trueSince, &rawTimed); err != nil {
+		if err := rows.Scan(&name, &consecutive, &rawHistory, &trueSince, &rawTimed, &firing, &clearSince, &clearConsecutive); err != nil {
 			return nil, fmt.Errorf("scan rule window state for %s: %w", service, err)
 		}
 		var history []bool
@@ -1090,10 +1120,13 @@ func (s *Store) RuleWindowStates(service string) (map[string]RuleWindowRecord, e
 			return nil, err
 		}
 		out[name] = RuleWindowRecord{
-			Consecutive:  consecutive,
-			History:      history,
-			TrueSince:    unixNanoTime(trueSince),
-			TimedHistory: timed,
+			Consecutive:      consecutive,
+			History:          history,
+			TrueSince:        unixNanoTime(trueSince),
+			TimedHistory:     timed,
+			Firing:           firing != 0,
+			ClearSince:       unixNanoTime(clearSince),
+			ClearConsecutive: clearConsecutive,
 		}
 	}
 	if err := rows.Err(); err != nil {
@@ -1115,10 +1148,16 @@ func (s *Store) SetRuleWindowStates(service string, records map[string]RuleWindo
 			if err != nil {
 				return err
 			}
+			firing := 0
+			if rec.Firing {
+				firing = 1
+			}
 			if _, err := tx.ExecContext(s.sqlCtx(),
-				`INSERT INTO rule_window_state (service, rule_name, consecutive, history, true_since, timed_history)
-				 VALUES (?, ?, ?, ?, ?, ?);`,
+				`INSERT INTO rule_window_state (service, rule_name, consecutive, history, true_since, timed_history,
+				                                firing, clear_since, clear_consecutive)
+				 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);`,
 				service, name, rec.Consecutive, string(history), timeUnixNano(rec.TrueSince), timed,
+				firing, timeUnixNano(rec.ClearSince), rec.ClearConsecutive,
 			); err != nil {
 				return fmt.Errorf("insert rule window state for %s/%s: %w", service, name, err)
 			}

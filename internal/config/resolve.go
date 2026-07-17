@@ -629,6 +629,9 @@ func buildServiceWatchRule(entry, then map[string]any, action string, target ser
 	if w, has := entry[rules.RuleFieldWithin]; has {
 		rule[rules.RuleFieldWithin] = w
 	}
+	if w, has := entry[rules.RuleFieldClear]; has {
+		rule[rules.RuleFieldClear] = w
+	}
 
 	thenOut := map[string]any{rules.RuleFieldAction: action}
 	if msg := cfgval.String(then[rules.RuleFieldMessage]); msg != "" {

@@ -405,6 +405,47 @@ rules:
 	mustHave(t, issues, "rules.bad-duration.within.duration must be a valid positive duration")
 }
 
+func TestValidateRuleClearWindows(t *testing.T) {
+	issues := validateService(t, `
+name: svc
+service: x
+checks:
+  http: { type: http, url: "http://127.0.0.1/" }
+rules:
+  ok-clear:
+    type: alert
+    if: { failed: { check: http } }
+    for: { cycles: 3 }
+    clear: { duration: 4m }
+    then: { action: alert, message: "http down" }
+  bad-clear-scalar:
+    type: alert
+    if: { failed: { check: http } }
+    clear: 3
+    then: { action: alert, message: "http down" }
+  bad-clear-key:
+    type: alert
+    if: { failed: { check: http } }
+    clear: { cycles: 3, min_matches: 2 }
+    then: { action: alert, message: "http down" }
+  bad-clear-lengths:
+    type: alert
+    if: { failed: { check: http } }
+    clear: { cycles: 3, duration: 4m }
+    then: { action: alert, message: "http down" }
+  clear-on-remediation:
+    type: remediation
+    if: { failed: { check: http } }
+    clear: { cycles: 3 }
+    then: { action: restart }
+`)
+	mustNotHave(t, issues, "ok-clear")
+	mustHave(t, issues, "rules.bad-clear-scalar.clear must be a mapping")
+	mustHave(t, issues, "rules.bad-clear-key.clear.min_matches is not supported")
+	mustHave(t, issues, "rules.bad-clear-lengths.clear cannot define both cycles and duration")
+	mustHave(t, issues, "rules.clear-on-remediation.clear is only supported on alert rules")
+}
+
 func TestValidateRuleDurationWindows(t *testing.T) {
 	issues := validateService(t, `
 name: svc

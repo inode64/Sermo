@@ -1717,6 +1717,7 @@ check:
   path: /
   used_pct: { op: ">=", value: "90%" } # check fires when crossed
 for: { cycles: 3 }     # optional window; reuses the rules engine
+clear: { cycles: 3 }   # optional recovery hysteresis; see Rules → Windows
 then:
   hook:
     command: [/usr/local/bin/alert-storage.sh, "/"]

@@ -2,6 +2,7 @@ package rules
 
 import (
 	"slices"
+	"strings"
 	"testing"
 	"time"
 )
@@ -134,6 +135,120 @@ func TestWindowProgressAndIsFiring(t *testing.T) {
 	s2.FiresAt(withinRule, true, time.Now())
 	if !s2.IsFiringAt(withinRule, time.Now()) || s2.ProgressAt(withinRule, time.Now()) != "2/2 in 4 cycles" {
 		t.Fatalf("within fire: firing=%v progress=%q", s2.IsFiringAt(withinRule, time.Now()), s2.ProgressAt(withinRule, time.Now()))
+	}
+}
+
+func TestForDurationEpisodeRisingEdge(t *testing.T) {
+	at := time.Date(2026, 6, 22, 10, 0, 0, 0, time.UTC)
+	r := Rule{For: &ForWindow{Duration: 6 * time.Minute}}
+	s := &WindowState{}
+	if s.Firing() {
+		t.Fatal("a fresh window must not report a firing episode")
+	}
+	s.FiresAt(r, true, at)
+	if s.Firing() {
+		t.Fatal("must not be in a firing episode before the duration elapses")
+	}
+	wasFiring := s.Firing()
+	if !s.FiresAt(r, true, at.Add(6*time.Minute)) || wasFiring {
+		t.Fatal("the rising edge of a duration window must be observable: Firing() false before FiresAt matures")
+	}
+	if !s.Firing() {
+		t.Fatal("Firing() must report the episode after the duration window matures")
+	}
+	s.FiresAt(r, false, at.Add(7*time.Minute))
+	if s.Firing() {
+		t.Fatal("without a clear window the episode must end on the first false cycle")
+	}
+}
+
+func TestClearWindowCycles(t *testing.T) {
+	r := Rule{Clear: &ForWindow{Cycles: 2}}
+	// c1 fires; c2 false is held (1/2); c3 true continues the same episode and
+	// resets the clear streak; c4 false held (1/2); c5 false clears (2/2).
+	got := feed(r, []bool{true, false, true, false, false, false})
+	if !slices.Equal(got, []int{1, 2, 3, 4}) {
+		t.Fatalf("clear-2 fired at %v, want [1 2 3 4]", got)
+	}
+}
+
+func TestClearWindowDuration(t *testing.T) {
+	at := time.Date(2026, 6, 22, 10, 0, 0, 0, time.UTC)
+	r := Rule{Clear: &ForWindow{Duration: 4 * time.Minute}}
+	s := &WindowState{}
+	if !s.FiresAt(r, true, at) {
+		t.Fatal("immediate rule must fire on the first true cycle")
+	}
+	if !s.FiresAt(r, false, at.Add(1*time.Minute)) {
+		t.Fatal("clear duration must hold the episode on the first false cycle")
+	}
+	if !s.FiresAt(r, false, at.Add(3*time.Minute)) {
+		t.Fatal("clear duration must hold the episode before it elapses")
+	}
+	if s.FiresAt(r, false, at.Add(5*time.Minute)) {
+		t.Fatal("episode must end once the condition stayed false for the clear duration")
+	}
+	if s.Firing() {
+		t.Fatal("Firing() must be false after the clear window ends the episode")
+	}
+}
+
+func TestClearWindowNeverTruncatesEntryWindow(t *testing.T) {
+	// A within window may keep matching after the condition drops; a clear window
+	// only extends an episode, it never cuts one short.
+	r := Rule{Within: &WithinWindow{Cycles: 4, MinMatches: 2}, Clear: &ForWindow{Cycles: 1}}
+	got := feed(r, []bool{true, true, false, false, false})
+	if !slices.Equal(got, []int{2, 3, 4}) {
+		t.Fatalf("within+clear fired at %v, want [2 3 4]", got)
+	}
+}
+
+func TestParseRulesClearWindow(t *testing.T) {
+	tree := map[string]any{"rules": map[string]any{
+		"alert-high": map[string]any{
+			"type":  "alert",
+			"if":    map[string]any{"failed": map[string]any{"check": "http"}},
+			"then":  map[string]any{"action": "alert", "message": "high"},
+			"clear": map[string]any{"cycles": 2},
+		},
+		"restart-down": map[string]any{
+			"type":  "remediation",
+			"if":    map[string]any{"failed": map[string]any{"check": "http"}},
+			"then":  map[string]any{"action": "restart"},
+			"clear": map[string]any{"cycles": 2},
+		},
+	}}
+	ruleSet, warnings := ParseRules(tree)
+	byName := map[string]Rule{}
+	for _, r := range ruleSet {
+		byName[r.Name] = r
+	}
+	if a := byName["alert-high"]; a.Clear == nil || a.Clear.Cycles != 2 {
+		t.Fatalf("alert rule clear = %+v, want cycles 2", a.Clear)
+	}
+	if r := byName["restart-down"]; r.Clear != nil {
+		t.Fatalf("remediation rule must drop its clear window, got %+v", r.Clear)
+	}
+	if len(warnings) != 1 || !strings.Contains(warnings[0], "clear") {
+		t.Fatalf("expected one clear warning, got %v", warnings)
+	}
+}
+
+func TestWindowStateSnapshotKeepsEpisode(t *testing.T) {
+	at := time.Date(2026, 6, 22, 10, 0, 0, 0, time.UTC)
+	r := Rule{Clear: &ForWindow{Cycles: 3}}
+	s := &WindowState{}
+	s.FiresAt(r, true, at)
+	s.FiresAt(r, false, at.Add(time.Minute)) // held 1/3
+	restored := WindowStateFromSnapshot(s.Snapshot())
+	if !restored.Firing() {
+		t.Fatal("snapshot restore must keep the firing episode")
+	}
+	if !restored.FiresAt(r, false, at.Add(2*time.Minute)) {
+		t.Fatal("restored clear progress must keep holding the episode (2/3)")
+	}
+	if restored.FiresAt(r, false, at.Add(3*time.Minute)) {
+		t.Fatal("restored episode must clear after the remaining false cycles (3/3)")
 	}
 }
 

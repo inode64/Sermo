@@ -185,6 +185,11 @@ func (w *Watch) evaluateFiring(res checks.Result) (wasFiring, emitFiring, firing
 	}
 	wasFiring = w.firing
 	w.firing = true
+	if !fired {
+		// A clear window is holding the episode open: the condition is not met
+		// this cycle, so hooks/notify/expand must not run on it.
+		return wasFiring, false, false
+	}
 	return wasFiring, w.shouldEmitFiring(wasFiring), true
 }
 

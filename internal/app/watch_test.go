@@ -161,6 +161,36 @@ func TestWatchEmitsRecoveredAfterFiringClears(t *testing.T) {
 	}
 }
 
+func TestWatchClearWindowHoldsEpisode(t *testing.T) {
+	check := &scriptedCheck{results: []checks.Result{
+		{Check: "dns", OK: false, Message: "dns timeout"}, // fires
+		{Check: "dns", OK: true, Message: "dns ok"},       // dip 1/2: held, no actions
+		{Check: "dns", OK: false, Message: "dns timeout"}, // condition returns: same episode
+		{Check: "dns", OK: true, Message: "dns ok"},       // clear 1/2
+		{Check: "dns", OK: true, Message: "dns ok"},       // clear 2/2: recovered
+	}}
+	var events []Event
+	w := &Watch{
+		Name:       "uplink-dns",
+		CheckType:  "dns",
+		Check:      check,
+		FireOnFail: true,
+		Window:     rules.Rule{Clear: &rules.ForWindow{Cycles: 2}},
+		Emit:       func(e Event) { events = append(events, e) },
+	}
+
+	for range 5 {
+		w.RunCycle(context.Background())
+	}
+
+	if got := eventKinds(events); strings.Join(got, ",") != "firing,recovered" {
+		t.Fatalf("event kinds = %v, want firing,recovered (one episode across the dip)", got)
+	}
+	if events[len(events)-1].Message != "dns ok" {
+		t.Fatalf("recovered message = %q, want dns ok", events[len(events)-1].Message)
+	}
+}
+
 // fakeExpander records expansion calls and returns a canned result.
 type fakeExpander struct {
 	calls []string

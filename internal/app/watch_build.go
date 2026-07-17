@@ -264,7 +264,7 @@ func buildMetricWatches(name string, entry, checkEntry map[string]any, deps Deps
 		ce := map[string]any{}
 		for k, v := range mEntry { // condition keys
 			switch k {
-			case rules.RuleFieldThen, rules.RuleFieldFor, rules.RuleFieldWithin:
+			case rules.RuleFieldThen, rules.RuleFieldFor, rules.RuleFieldWithin, rules.RuleFieldClear:
 			default:
 				ce[k] = v
 			}
