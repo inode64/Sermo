@@ -443,6 +443,29 @@ test("monitor toggles send one request even on a double click", async ({ page })
   expect(watchPosts).toBe(1);
 });
 
+test("monitor toggle stays guarded until the follow-up refresh lands", async ({ page }) => {
+  let posts = 0;
+  await page.route("**/api/services/web/unmonitor", async (route) => {
+    posts += 1;
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true, message: "unmonitored" }) });
+  });
+  await page.route("**/api/dashboard**", async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 800));
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(dashboard) });
+  });
+
+  const button = page.locator('#svc-row-web [data-service-action="unmonitor"]');
+  await button.click();
+  // Response has landed but the follow-up dashboard reload is still in flight;
+  // an unrelated re-render must not re-enable the button early.
+  await page.waitForTimeout(400);
+  await page.locator("#svc-search").fill("web");
+  await button.click({ force: true }).catch(() => {});
+  await page.waitForTimeout(1200);
+  expect(posts).toBe(1);
+});
+
 test("a reload event paints the activity cell as info like the events table", async ({ page }) => {
   await expect(page.locator("#svc-row-db .activity-time")).toHaveClass(/activity-info/);
 });
