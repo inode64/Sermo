@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"sermo/internal/logfile"
 	"sermo/internal/mountctl"
@@ -35,6 +36,39 @@ func TestParseAPIAccessTarget(t *testing.T) {
 		if target != tc.wantTarget || action != tc.wantAction {
 			t.Fatalf("parseAPIAccessTarget(%q) = (%q,%q), want (%q,%q)", tc.path, target, action, tc.wantTarget, tc.wantAction)
 		}
+	}
+}
+
+type deadlineResponseRecorder struct {
+	*httptest.ResponseRecorder
+	deadline time.Time
+}
+
+func (r *deadlineResponseRecorder) SetWriteDeadline(deadline time.Time) error {
+	r.deadline = deadline
+	return nil
+}
+
+func TestAccessLogPreservesActionWriteDeadline(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "access.log")
+	log, err := logfile.Open(path)
+	if err != nil {
+		t.Fatalf("logfile.Open: %v", err)
+	}
+	defer log.Close()
+
+	s := &Server{
+		Backend:          &fakeBackend{},
+		AccessLog:        log,
+		OperationTimeout: time.Minute,
+	}
+	rec := &deadlineResponseRecorder{ResponseRecorder: httptest.NewRecorder()}
+	s.Handler().ServeHTTP(rec, postReq(testServicePath("web", apiActionRestart)))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("operate status = %d", rec.Code)
+	}
+	if rec.deadline.IsZero() {
+		t.Fatal("access-log middleware hid the action write deadline")
 	}
 }
 

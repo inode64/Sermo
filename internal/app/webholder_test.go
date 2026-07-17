@@ -19,12 +19,13 @@ func TestWebBackendHolderDashboardSnapshotKeepsOneGeneration(t *testing.T) {
 		return servicemgr.StatusActive, nil
 	}
 	next := dashboardSnapshotBackend("new", "new-notifier")
-	holder := &WebBackendHolder{b: old}
+	holder := &WebBackendHolder{b: old, generation: initialWebBackendGeneration}
 
 	done := make(chan struct{})
 	var snapshot struct {
-		service  string
-		notifier string
+		service    string
+		notifier   string
+		generation uint64
 	}
 	go func() {
 		got := holder.DashboardSnapshot(context.Background(), time.Hour)
@@ -34,6 +35,7 @@ func TestWebBackendHolderDashboardSnapshotKeepsOneGeneration(t *testing.T) {
 		if len(got.Notifiers) > 0 {
 			snapshot.notifier = got.Notifiers[0].Name
 		}
+		snapshot.generation = got.Generation
 		close(done)
 	}()
 
@@ -44,6 +46,7 @@ func TestWebBackendHolderDashboardSnapshotKeepsOneGeneration(t *testing.T) {
 	}
 	holder.mu.Lock()
 	holder.b = next
+	holder.generation++
 	holder.mu.Unlock()
 	close(release)
 	select {
@@ -53,6 +56,9 @@ func TestWebBackendHolderDashboardSnapshotKeepsOneGeneration(t *testing.T) {
 	}
 	if snapshot.service != "old" || snapshot.notifier != "old-notifier" {
 		t.Fatalf("dashboard snapshot = %+v, want one old generation", snapshot)
+	}
+	if snapshot.generation != initialWebBackendGeneration {
+		t.Fatalf("dashboard generation = %d, want %d", snapshot.generation, initialWebBackendGeneration)
 	}
 }
 
