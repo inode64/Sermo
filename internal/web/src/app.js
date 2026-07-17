@@ -5853,7 +5853,7 @@ async function act(name, action) {
     const q = noCascade ? `?${apiQueryNoCascade}=${queryBoolOne}` : "";
     const res = await fetch(serviceAPI(name, apiActionSuffix(action, q)), csrfPostOptions());
     const body = await jsonOrThrow(res);
-    if (tracked) finishOperation(name, true, body.message || body.status || "operation completed");
+    if (tracked) finishOperation(name, true, body.message || "operation completed");
   } catch (e) {
     if (tracked) finishOperation(name, false, e.message);
     setStatus(`${action} ${name}: ${e.message}`, feedbackStatusErr);
