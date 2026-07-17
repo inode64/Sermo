@@ -208,28 +208,16 @@ func processUptimeValueJSON(v state.ProcessUptimeWindow) map[string]any {
 }
 
 func (a App) writeSLATable(reports []serviceSLA) {
-	if len(reports) == 0 {
-		fmt.Fprintln(a.Stdout, "no services")
-		return
-	}
-	cols := make([]string, 0, len(state.SLAWindows)+1)
-	cols = append(cols, "SERVICE")
-	for _, w := range state.SLAWindows {
-		cols = append(cols, strings.ToUpper(w.Name))
-	}
-	fmt.Fprintln(a.Stdout, strings.Join(cols, "\t"))
-
-	for _, r := range reports {
-		row := make([]string, 0, len(r.Windows)+1)
-		row = append(row, r.Service)
-		for _, v := range r.Windows {
-			row = append(row, formatSLA(v))
-		}
-		fmt.Fprintln(a.Stdout, strings.Join(row, "\t"))
-	}
+	writeSLAWindowTable(a, reports, func(r serviceSLA) (string, []state.SLAValue) { return r.Service, r.Windows }, formatSLA)
 }
 
 func (a App) writeProcessUptimeTable(reports []serviceProcessUptime) {
+	writeSLAWindowTable(a, reports, func(r serviceProcessUptime) (string, []state.ProcessUptimeWindow) { return r.Service, r.Windows }, formatProcessUptime)
+}
+
+// writeSLAWindowTable renders one SERVICE + per-SLA-window table, shared by the
+// availability and process-uptime reports so their layout cannot drift.
+func writeSLAWindowTable[R, V any](a App, reports []R, fields func(R) (string, []V), format func(V) string) {
 	if len(reports) == 0 {
 		fmt.Fprintln(a.Stdout, "no services")
 		return
@@ -241,10 +229,11 @@ func (a App) writeProcessUptimeTable(reports []serviceProcessUptime) {
 	}
 	fmt.Fprintln(a.Stdout, strings.Join(cols, "\t"))
 	for _, report := range reports {
-		row := make([]string, 0, len(report.Windows)+1)
-		row = append(row, report.Service)
-		for _, window := range report.Windows {
-			row = append(row, formatProcessUptime(window))
+		service, windows := fields(report)
+		row := make([]string, 0, len(windows)+1)
+		row = append(row, service)
+		for _, window := range windows {
+			row = append(row, format(window))
 		}
 		fmt.Fprintln(a.Stdout, strings.Join(row, "\t"))
 	}
