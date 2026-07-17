@@ -615,7 +615,7 @@ func (s *Store) ServiceCheckSnapshots() (map[string]map[string]CheckSnapshotReco
 	return s.groupedCheckSnapshots(
 		`SELECT service, check_name, check_type, ok, condition, optional, skipped, message, data, ran, at
 		   FROM service_check_snapshot ORDER BY service, check_name;`,
-		"service check snapshots", scanServiceCheckSnapshot,
+		"service check snapshots",
 	)
 }
 
@@ -677,13 +677,11 @@ func (s *Store) WatchCheckSnapshots() (map[string]map[string]CheckSnapshotRecord
 	return s.groupedCheckSnapshots(
 		`SELECT watch, slot, check_type, ok, condition, optional, skipped, message, data, ran, at
 		   FROM watch_check_snapshot ORDER BY watch, slot;`,
-		"watch check snapshots", scanWatchCheckSnapshot,
+		"watch check snapshots",
 	)
 }
 
-type checkSnapshotScanner func(*sql.Rows) (group, slot string, record CheckSnapshotRecord, err error)
-
-func (s *Store) groupedCheckSnapshots(query, label string, scan checkSnapshotScanner) (map[string]map[string]CheckSnapshotRecord, error) {
+func (s *Store) groupedCheckSnapshots(query, label string) (map[string]map[string]CheckSnapshotRecord, error) {
 	rows, err := s.db.QueryContext(s.sqlCtx(), query)
 	if err != nil {
 		return nil, fmt.Errorf("load %s: %w", label, err)
@@ -692,7 +690,7 @@ func (s *Store) groupedCheckSnapshots(query, label string, scan checkSnapshotSca
 
 	out := map[string]map[string]CheckSnapshotRecord{}
 	for rows.Next() {
-		group, slot, record, err := scan(rows)
+		group, slot, record, err := scanCheckSnapshotRow(rows, label)
 		if err != nil {
 			return nil, err
 		}
@@ -707,30 +705,13 @@ func (s *Store) groupedCheckSnapshots(query, label string, scan checkSnapshotSca
 	return out, nil
 }
 
-func scanServiceCheckSnapshot(rows *sql.Rows) (string, string, CheckSnapshotRecord, error) {
+// scanCheckSnapshotRow scans one (group, slot) check-snapshot row. The service
+// and watch snapshot tables deliberately keep separate compile-time SQL, but
+// their column shape is identical, so one scanner serves both; label names the
+// table in scan errors.
+func scanCheckSnapshotRow(rows *sql.Rows, label string) (string, string, CheckSnapshotRecord, error) {
 	var (
-		service   string
-		name      string
-		checkType string
-		ok        int
-		cond      int
-		optional  int
-		skipped   int
-		message   string
-		rawData   string
-		ran       int
-		at        int64
-	)
-	if err := rows.Scan(&service, &name, &checkType, &ok, &cond, &optional, &skipped, &message, &rawData, &ran, &at); err != nil {
-		return "", "", CheckSnapshotRecord{}, fmt.Errorf("scan service check snapshot: %w", err)
-	}
-	record, err := newCheckSnapshotRecord(name, checkType, ok, cond, optional, skipped, message, rawData, ran, at)
-	return service, name, record, err
-}
-
-func scanWatchCheckSnapshot(rows *sql.Rows) (string, string, CheckSnapshotRecord, error) {
-	var (
-		watch     string
+		group     string
 		slot      string
 		checkType string
 		ok        int
@@ -742,11 +723,11 @@ func scanWatchCheckSnapshot(rows *sql.Rows) (string, string, CheckSnapshotRecord
 		ran       int
 		at        int64
 	)
-	if err := rows.Scan(&watch, &slot, &checkType, &ok, &cond, &optional, &skipped, &message, &rawData, &ran, &at); err != nil {
-		return "", "", CheckSnapshotRecord{}, fmt.Errorf("scan watch check snapshot: %w", err)
+	if err := rows.Scan(&group, &slot, &checkType, &ok, &cond, &optional, &skipped, &message, &rawData, &ran, &at); err != nil {
+		return "", "", CheckSnapshotRecord{}, fmt.Errorf("scan %s: %w", label, err)
 	}
 	record, err := newCheckSnapshotRecord(slot, checkType, ok, cond, optional, skipped, message, rawData, ran, at)
-	return watch, slot, record, err
+	return group, slot, record, err
 }
 
 func newCheckSnapshotRecord(name, checkType string, ok, condition, optional, skipped int, message, rawData string, ran int, at int64) (CheckSnapshotRecord, error) {
