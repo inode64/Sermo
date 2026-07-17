@@ -652,7 +652,7 @@ type ServiceRuntimeMetrics struct {
 type ActivitySummary struct {
 	TotalEvents      int    `json:"total_events"`
 	ServiceActions   int    `json:"service_actions"` // start/stop/restart/reload/resume
-	WatchHooks       int    `json:"watch_hooks"`
+	WatchHooks       int    `json:"watch_hooks"`     // watch-driven actions: hooks, volume expands, process kills
 	WatchNotifies    int    `json:"watch_notifies"`
 	Errors           int    `json:"errors"`
 	LastEventTime    string `json:"last_event_time,omitempty"` // RFC3339
