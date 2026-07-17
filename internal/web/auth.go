@@ -123,9 +123,11 @@ func (s *Server) challenge(w http.ResponseWriter) {
 }
 
 func (s *Server) handleWhoami(w http.ResponseWriter, r *http.Request) {
+	// withAuth resolves the role before any handler runs; an empty role can only
+	// mean the middleware was bypassed, so fail closed to read-only, not admin.
 	role := roleFrom(r.Context())
 	if role == "" {
-		role = roleAdmin
+		role = roleGuest
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		whoamiFieldRole:   role,
