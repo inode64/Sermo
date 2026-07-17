@@ -353,6 +353,7 @@ func run(args []string) int {
 	}
 
 	var webHolder *app.WebBackendHolder
+	var webDone chan struct{}
 	addr, webDisabledReason := webListenAddr(cfg)
 	if addr != "" {
 		var webWarnings []string
@@ -375,7 +376,9 @@ func run(args []string) int {
 			},
 		}
 		logger.Debug("starting web ui server", logFieldAddress, addr, logFieldAuth, auth.Enabled())
+		webDone = make(chan struct{})
 		go func() {
+			defer close(webDone)
 			if err := server.Run(ctx); err != nil {
 				logger.Error("web server", logFieldError, err)
 			}
@@ -389,7 +392,7 @@ func run(args []string) int {
 		logger.Warn("web ui disabled; no port will be opened", logFieldReason, webDisabledReason)
 	}
 
-	startOldHistoryPrune(ctx, logger, store, time.Now().Add(-state.DefaultHistoryRetention))
+	pruneDone := startOldHistoryPrune(ctx, logger, store, time.Now().Add(-state.DefaultHistoryRetention))
 
 	logger.Info("sermod starting", logFieldBackend, detection.Backend, logFieldServices, len(workers), logFieldWatches, len(watches))
 
@@ -423,6 +426,13 @@ func run(args []string) int {
 
 	monitor.Run(ctx)
 	signal.Stop(hup) // stop SIGHUP delivery; the goroutine exits via ctx.Done()
+	// Drain background store users before the deferred store.Close() runs: the
+	// web server finishes its bounded graceful shutdown (in-flight requests may
+	// query the store) and the startup prune stops at its next step boundary.
+	if webDone != nil {
+		<-webDone
+	}
+	<-pruneDone
 	// Since Go 1.26 NotifyContext records the received signal as the
 	// cancellation cause; name it so operators can tell SIGTERM from SIGINT.
 	if cause := context.Cause(ctx); cause != nil && !errors.Is(cause, context.Canceled) {
@@ -591,21 +601,21 @@ type oldHistoryPruner interface {
 	PruneEvents(before time.Time) (int64, error)
 }
 
-func startOldHistoryPrune(ctx context.Context, logger *slog.Logger, store oldHistoryPruner, cutoff time.Time) {
+func startOldHistoryPrune(ctx context.Context, logger *slog.Logger, store oldHistoryPruner, cutoff time.Time) <-chan struct{} {
+	done := make(chan struct{})
 	go func() {
-		select {
-		case <-ctx.Done():
-			return
-		default:
-		}
-		pruneOldHistory(logger, store, cutoff)
+		defer close(done)
+		pruneOldHistory(ctx, logger, store, cutoff)
 	}()
+	return done
 }
 
-func pruneOldHistory(logger *slog.Logger, store oldHistoryPruner, cutoff time.Time) {
+func pruneOldHistory(ctx context.Context, logger *slog.Logger, store oldHistoryPruner, cutoff time.Time) {
 	// Retention can scan large history tables on long-lived installations. Keep it
 	// out of the startup critical path so health endpoints and the Web UI bind
-	// before old samples are removed.
+	// before old samples are removed. Stop between steps on shutdown: main waits
+	// for this goroutine before the deferred store.Close(), so remaining steps
+	// would only delay exit.
 	for _, p := range []struct {
 		what  string
 		prune func(time.Time) (int64, error)
@@ -617,6 +627,9 @@ func pruneOldHistory(logger *slog.Logger, store oldHistoryPruner, cutoff time.Ti
 		{"service metrics", store.PruneServiceMetrics},
 		{"events", store.PruneEvents},
 	} {
+		if ctx.Err() != nil {
+			return
+		}
 		if n, err := p.prune(cutoff); err != nil {
 			logger.Warn("prune "+p.what, logFieldError, err)
 		} else if n > 0 {
