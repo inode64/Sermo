@@ -423,6 +423,7 @@ async function loadPrimaryDashboard() {
       hostMetricsResult: snapshotResult(snapshot, "host_metrics", []),
       generation,
       generationMismatch: !!(generation && aggregate.generation && generation !== aggregate.generation),
+      daemonReachable: true,
     };
   }
 
@@ -446,7 +447,10 @@ async function loadPrimaryDashboard() {
   const { generation, mismatch: generationMismatch } = sharedBackendGeneration(results);
   return { servicesResult, mountsResult, notifiersResult, daemonResult, daemonMetricsResult,
     locksResult, activityResult, readyResult, liveResult, monResult, opsResult,
-    hostMetricsResult, generation, generationMismatch };
+    hostMetricsResult, generation, generationMismatch,
+    // Derived from the same collection the endpoints live in, so adding a new
+    // endpoint to the Promise.all above keeps reachability in sync for free.
+    daemonReachable: results.some((r) => r && r.ok) };
 }
 
 async function performLoad() {
@@ -456,7 +460,8 @@ async function performLoad() {
   const sameLoad = () => seq === loadSeq;
   const { servicesResult, mountsResult, notifiersResult, daemonResult,
     daemonMetricsResult, locksResult, activityResult, readyResult, liveResult,
-    monResult, opsResult, hostMetricsResult, generation, generationMismatch } = await loadPrimaryDashboard();
+    monResult, opsResult, hostMetricsResult, generation, generationMismatch,
+    daemonReachable } = await loadPrimaryDashboard();
   if (!sameLoad()) return;
   if (generationMismatch) {
     load();
@@ -475,12 +480,6 @@ async function performLoad() {
   const mon = monResult.data;
   const ops = opsResult.data;
   const hostMetrics = hostMetricsResult.data;
-  // Disconnected means the daemon is unreachable, not that one endpoint
-  // failed: on the fallback path a services-only error must not dim a
-  // dashboard whose other sections still answer.
-  const reachable = servicesResult.ok || [mountsResult, notifiersResult, daemonResult,
-    daemonMetricsResult, locksResult, activityResult, readyResult, liveResult,
-    monResult, opsResult, hostMetricsResult].some((r) => r && r.ok);
   if (servicesResult.ok) {
     render(services);
     connOK = true;
@@ -490,7 +489,10 @@ async function performLoad() {
     // Open expansions fetch fresh detail once per poll here; re-renders in
     // between (filter keystrokes, ops ticker) only re-assert cached content.
     expandedServicesPromise = refreshExpandedServices({ generation });
-  } else if (reachable) {
+  } else if (daemonReachable) {
+    // Disconnected means the daemon is unreachable, not that one endpoint
+    // failed: a services-only error must not dim a dashboard whose other
+    // sections still answer.
     connOK = true;
     document.body.classList.remove("disconnected");
     // Only claim to keep a list when one was actually rendered before.
