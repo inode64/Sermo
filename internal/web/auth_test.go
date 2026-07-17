@@ -234,6 +234,48 @@ func TestWhoami(t *testing.T) {
 	check("", "", "guest", false)
 }
 
+func TestGuestSeesRedactedCmdlines(t *testing.T) {
+	b := &fakeBackend{
+		services: []Service{{Name: "web"}},
+		mounts:   []Mount{{Name: "data", Blockers: []MountBlocker{{PID: 9, Cmdline: []string{"rsync", "--password=hunter2", "/data"}}}}},
+	}
+	h := (&Server{Backend: b, Auth: Auth{AdminPassword: "secret", GuestPassword: "guest"}}).Handler()
+
+	fetch := func(path, pass string, into any) {
+		t.Helper()
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req(http.MethodGet, path, "u", pass))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("GET %s = %d, want 200", path, rec.Code)
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), into); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	var guestDetail Detail
+	fetch(testServicePath("web"), "guest", &guestDetail)
+	if got := guestDetail.Processes[0].Cmdline; len(got) != 1 || got[0] != "python3" {
+		t.Fatalf("guest detail cmdline = %q, want just the executable", got)
+	}
+	var guestMounts []Mount
+	fetch(apiPathMounts, "guest", &guestMounts)
+	if got := guestMounts[0].Blockers[0].Cmdline; len(got) != 1 || got[0] != "rsync" {
+		t.Fatalf("guest mount blocker cmdline = %q, want just the executable", got)
+	}
+
+	var adminDetail Detail
+	fetch(testServicePath("web"), "secret", &adminDetail)
+	if got := adminDetail.Processes[0].Cmdline; len(got) != 2 {
+		t.Fatalf("admin detail cmdline = %q, want the full command line", got)
+	}
+	var adminMounts []Mount
+	fetch(apiPathMounts, "secret", &adminMounts)
+	if got := adminMounts[0].Blockers[0].Cmdline; len(got) != 3 {
+		t.Fatalf("admin mount blocker cmdline = %q, want the full command line", got)
+	}
+}
+
 func TestWhoamiWithoutResolvedRoleFailsClosed(t *testing.T) {
 	s := &Server{}
 	rec := httptest.NewRecorder()

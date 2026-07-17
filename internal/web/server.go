@@ -25,6 +25,7 @@ import (
 	"log/slog"
 	"net/http"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -1483,6 +1484,9 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 	backend, generation, release := s.backendRead()
 	defer release()
 	snapshot := s.dashboardSnapshot(r.Context(), backend, seriesSince(r))
+	if roleFrom(r.Context()) == roleGuest {
+		snapshot.Mounts = redactMountCmdlines(snapshot.Mounts)
+	}
 	if generation > 0 {
 		snapshot.Generation = generation
 	}
@@ -1582,7 +1586,13 @@ func (s *Server) handleLibraries(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleMounts(w http.ResponseWriter, r *http.Request) {
-	s.readJSON(w, r, func(ctx context.Context, backend Backend) any { return backend.Mounts(ctx) })
+	s.readJSON(w, r, func(ctx context.Context, backend Backend) any {
+		mounts := backend.Mounts(ctx)
+		if roleFrom(ctx) == roleGuest {
+			mounts = redactMountCmdlines(mounts)
+		}
+		return mounts
+	})
 }
 
 func (s *Server) handleMountAction(w http.ResponseWriter, r *http.Request) {
@@ -1654,8 +1664,44 @@ func handleNamed[T any](s *Server, w http.ResponseWriter, r *http.Request, notFo
 
 func (s *Server) handleDetail(w http.ResponseWriter, r *http.Request) {
 	handleNamed(s, w, r, apiErrorUnknownService, func(backend Backend, ctx context.Context, name string) (Detail, bool) {
-		return backend.Detail(ctx, name)
+		d, ok := backend.Detail(ctx, name)
+		if ok && roleFrom(ctx) == roleGuest {
+			d.Processes = redactProcessCmdlines(d.Processes)
+		}
+		return d, ok
 	})
+}
+
+// Command-line arguments can carry secrets (tokens, passwords); read-only
+// viewers get only the executable. The redactors clone before trimming so the
+// backend's own slices are never mutated.
+
+func redactProcessCmdlines(procs []Process) []Process {
+	out := slices.Clone(procs)
+	for i := range out {
+		if len(out[i].Cmdline) > 1 {
+			out[i].Cmdline = out[i].Cmdline[:1]
+		}
+	}
+	return out
+}
+
+func redactMountCmdlines(mounts []Mount) []Mount {
+	out := slices.Clone(mounts)
+	for i := range out {
+		out[i].Blockers = redactBlockerCmdlines(out[i].Blockers)
+	}
+	return out
+}
+
+func redactBlockerCmdlines(blockers []MountBlocker) []MountBlocker {
+	out := slices.Clone(blockers)
+	for i := range out {
+		if len(out[i].Cmdline) > 1 {
+			out[i].Cmdline = out[i].Cmdline[:1]
+		}
+	}
+	return out
 }
 
 // seriesSince reads the `since` query param, defaulting and capping it.
