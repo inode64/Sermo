@@ -1322,6 +1322,10 @@ let expCache = {};         // last rendered expansion HTML per key (avoids flick
 let expDetailCache = {};   // last /api/services/{name} JSON per svc expansion key
 let eventExpanded = new Set();
 const liveOps = new Map(); // operations started from this browser session, keyed by service
+// Monitor/unmonitor requests in flight, keyed by "svc:"/"wat:" + name. These
+// actions are not tracked in liveOps, so this guards their buttons against a
+// double click until the reply (and the follow-up load) lands.
+const pendingMonitorToggles = new Set();
 const liveMountOps = new Map(); // mount operations started from this browser session, keyed by mount name
 let liveOpsTimer = null;
 let liveOpsSlots = null;
@@ -1838,6 +1842,7 @@ function renderAttention() {
   setHTMLIfChanged(box, html);
 }
 function isTrackedOperation(action) { return serviceTrackedActions.includes(action); }
+function isMonitorToggle(action) { return action === actionMonitor || action === actionUnmonitor; }
 function serviceBusy(name) {
   const op = liveOps.get(name);
   return !!op && !op.finished;
@@ -2177,7 +2182,7 @@ function serviceActionDisabled(s, action, busy) {
     case actionResume: return !!(busy || !paused);
     case actionReload: return !!(busy || st !== backendStatusActive || !s.can_reload);
     case actionMonitor:
-    case actionUnmonitor: return !!busy;
+    case actionUnmonitor: return !!(busy || pendingMonitorToggles.has("svc:" + s.name));
     default: return false;
   }
 }
@@ -3985,8 +3990,8 @@ function watchActionDisabled(w, action) {
   if (!w || !w.enabled) return true;
   if (watchStateText(w) === targetStateStarting) return true;
   switch (action) {
-    case actionMonitor: return !!w.monitored;
-    case actionUnmonitor: return !w.monitored;
+    case actionMonitor: return !!w.monitored || pendingMonitorToggles.has("wat:" + w.name);
+    case actionUnmonitor: return !w.monitored || pendingMonitorToggles.has("wat:" + w.name);
     case actionExpand: return !watchHasExpand(w);
     case actionProbe: return !w.can_probe || watchProbeRunning(w);
     case actionPause: return !w.can_control_raid;
@@ -5823,6 +5828,12 @@ async function act(name, action) {
     noCascade = confirmNoCascade;
     confirmNoCascade = false;
   }
+  const toggleKey = isMonitorToggle(action) ? "svc:" + name : "";
+  if (toggleKey) {
+    if (pendingMonitorToggles.has(toggleKey)) return;
+    pendingMonitorToggles.add(toggleKey);
+    renderServices();
+  }
   setStatus("");
   const tracked = isTrackedOperation(action);
   if (tracked) beginOperation(name, action);
@@ -5834,6 +5845,8 @@ async function act(name, action) {
   } catch (e) {
     if (tracked) finishOperation(name, false, e.message);
     setStatus(`${action} ${name}: ${e.message}`, feedbackStatusErr);
+  } finally {
+    if (toggleKey) pendingMonitorToggles.delete(toggleKey);
   }
   load();
 }
@@ -5847,6 +5860,12 @@ async function actWatch(name, action) {
     headers = { "X-Sermo-Confirm": w.raid_array || "" };
   }
   if (action === actionResume && !(await confirmWatchRAIDResume(name))) return;
+  const toggleKey = isMonitorToggle(action) ? "wat:" + name : "";
+  if (toggleKey) {
+    if (pendingMonitorToggles.has(toggleKey)) return;
+    pendingMonitorToggles.add(toggleKey);
+    renderWatches();
+  }
   setStatus("");
   if (action === actionProbe) beginWatchProbe(name);
   try {
@@ -5866,6 +5885,8 @@ async function actWatch(name, action) {
   } catch (e) {
     if (action === actionProbe) finishWatchProbe(name);
     setStatus(`${action} watch ${name}: ${e.message}`, feedbackStatusErr);
+  } finally {
+    if (toggleKey) pendingMonitorToggles.delete(toggleKey);
   }
   load();
 }
