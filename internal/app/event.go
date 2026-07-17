@@ -192,9 +192,10 @@ func SlogEmitter(logger *slog.Logger) func(Event) {
 			attrs = append(attrs, eventFieldMessage, e.Message)
 		}
 		switch e.Kind {
-		case eventKindError, eventKindHookFail, eventKindNotifyFail:
+		case eventKindError, eventKindHookFail, eventKindNotifyFail, eventKindExpandFailed, eventKindKillFailed:
 			logger.Error("sermod", attrs...)
-		case eventKindAction, eventKindAlert, eventKindSuppressed, eventKindFiring, eventKindRecovered, eventKindDryRun, eventKindHook, eventKindNotify, eventKindCascade:
+		case eventKindAction, eventKindAlert, eventKindSuppressed, eventKindFiring, eventKindRecovered, eventKindDryRun, eventKindHook, eventKindNotify, eventKindCascade,
+			eventKindExpand, eventKindExpandSkipped, eventKindKill, eventKindReload, eventKindPanicSuppressed, eventKindNotifySuppressed:
 			logger.Info("sermod", attrs...)
 		default:
 			logger.Debug("sermod", attrs...)
