@@ -115,9 +115,10 @@ func (f *fakeBackend) Detail(_ context.Context, name string) (Detail, bool) {
 		if s.Name == name {
 			ratio := 0.99
 			return Detail{
-				Service: s,
-				Checks:  []Check{{Name: "http", Type: "http", OK: true, Ran: true, Message: "status 200"}},
-				SLA:     []SLAWindow{{Window: "day", Ratio: &ratio, Up: 99, Total: 100}},
+				Service:   s,
+				Checks:    []Check{{Name: "http", Type: "http", OK: true, Ran: true, Message: "status 200"}},
+				SLA:       []SLAWindow{{Window: "day", Ratio: &ratio, Up: 99, Total: 100}},
+				Processes: []Process{{PID: 101, Exe: "/usr/bin/python3", Cmdline: []string{"python3", "--token=hunter2"}}},
 			}, true
 		}
 	}
