@@ -1110,31 +1110,6 @@ func metricSampler(service string, tree map[string]any, collector *metrics.Colle
 	}
 }
 
-// cyclePIDSource reuses one discovered PID set for every sampler in a worker
-// cycle. The cycle key changes once per RunCycle, so service metrics and live CPU
-// can share process discovery without reusing stale PIDs in the next cycle.
-func cyclePIDSource(discover func() []int, cycle func() int) func() []int {
-	if discover == nil {
-		discover = func() []int { return nil }
-	}
-	var cached []int
-	var cachedCycle int
-	var ok bool
-	return func() []int {
-		current := 0
-		if cycle != nil {
-			current = cycle()
-		}
-		if ok && cachedCycle == current {
-			return cached
-		}
-		cached = discover()
-		cachedCycle = current
-		ok = true
-		return cached
-	}
-}
-
 // cycleProcessSource reuses one full process discovery for every sampler in a
 // worker cycle. Consumers that need only PIDs derive them from this shared
 // result, while continuity inference retains the source/role evidence needed to
