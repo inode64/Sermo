@@ -57,10 +57,22 @@ func (b *WebBackend) ActivitySummary(_ context.Context) web.ActivitySummary {
 	}
 	for i := range events {
 		switch {
-		case (events[i].Kind == eventKindAction || events[i].Kind == eventKindCascade) && isServiceOperationAction(events[i].Action):
+		case events[i].Kind == eventKindAction && isServiceOperationAction(events[i].Action):
+			summary.ServiceActions++
+		case events[i].Kind == eventKindCascade && isServiceOperationAction(events[i].Action):
 			// Cascade targets run the same service operation as the primary, so
 			// an also_apply restart of three services counts as three actions.
-			summary.ServiceActions++
+			// Unlike action events, cascade keeps one kind for every outcome
+			// (the primary encodes failures via eventKindForResult), so gate on
+			// status here: success counts as an action, blocked stays uncounted
+			// like suppressed primaries, and any failure is an error.
+			switch events[i].Status {
+			case eventStatusOK:
+				summary.ServiceActions++
+			case eventStatusBlocked:
+			default:
+				summary.Errors++
+			}
 		case events[i].Kind == eventKindHook || events[i].Kind == eventKindHookFail,
 			events[i].Kind == eventKindExpand || events[i].Kind == eventKindExpandFailed || events[i].Kind == eventKindExpandSkipped,
 			events[i].Kind == eventKindKill || events[i].Kind == eventKindKillFailed:
