@@ -996,7 +996,6 @@ const (
 	eventKindHook           = "hook"
 	eventKindFailedFragment = string(operation.ResultFailed)
 	eventKindHookFailed     = eventKindHook + "-" + eventKindFailedFragment
-	eventKindRecovery       = "recovery"
 	eventStatusOK           = apiStatusOK
 	eventStatusError        = "error"
 	eventStatusFailed       = string(operation.ResultFailed)
