@@ -3,11 +3,9 @@ package app
 import (
 	"context"
 	"slices"
-	"strings"
 	"time"
 
 	"sermo/internal/config"
-	"sermo/internal/operation"
 	"sermo/internal/rules"
 	"sermo/internal/web"
 )
@@ -18,7 +16,6 @@ const (
 	activitySummaryEventScanLimit = 500
 	webEventPageScanSize          = 500
 	webEventPageMaxScan           = 5000
-	webEventStatusError           = "error"
 )
 
 func isServiceOperationAction(action string) bool {
@@ -181,20 +178,7 @@ func webEventMatchesQuery(event web.Event, query web.EventQuery) bool {
 		query.Status != "" && event.Status != query.Status {
 		return false
 	}
-	if !query.OnlyErrors {
-		return true
-	}
-	if event.Kind == eventKindError || strings.Contains(event.Kind, string(operation.ResultFailed)) {
-		return true
-	}
-	switch event.Status {
-	case eventStatusFailed, webEventStatusError, string(operation.ResultBlocked),
-		string(operation.ResultOrphanProcesses), string(operation.ResultPreflightFailed),
-		string(operation.ResultPostflightFailed):
-		return true
-	default:
-		return false
-	}
+	return !query.OnlyErrors || web.IsErrorEvent(event)
 }
 
 // ServiceEvents returns one service's recent events.

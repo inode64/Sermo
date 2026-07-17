@@ -1382,6 +1382,36 @@ func TestSeriesSinceParsing(t *testing.T) {
 	check("100000h", maxSeriesWindow)
 }
 
+func TestIsErrorEventClassification(t *testing.T) {
+	errorEvents := []Event{
+		{Kind: eventKindError},
+		{Kind: eventKindHookFailed},
+		{Kind: "notify-failed"},
+		{Kind: eventKindAction, Status: eventStatusFailed},
+		{Kind: eventKindAction, Status: eventStatusError},
+		{Kind: eventKindAction, Status: "blocked"},
+		{Kind: eventKindAction, Status: "orphan_processes"},
+		{Kind: eventKindAction, Status: "preflight_failed"},
+		{Kind: eventKindAction, Status: "postflight_failed"},
+	}
+	for _, e := range errorEvents {
+		if !IsErrorEvent(e) {
+			t.Fatalf("IsErrorEvent(%+v) = false, want true", e)
+		}
+	}
+	okEvents := []Event{
+		{Kind: eventKindAction, Status: "ok"},
+		{Kind: eventKindAlert},
+		{Kind: "recovered"},
+		{Kind: "reload"},
+	}
+	for _, e := range okEvents {
+		if IsErrorEvent(e) {
+			t.Fatalf("IsErrorEvent(%+v) = true, want false", e)
+		}
+	}
+}
+
 func TestFilterEventsByKind(t *testing.T) {
 	events := []Event{{Kind: eventKindAlert}, {Kind: eventKindRecovery}, {Kind: eventKindAlert}}
 	got := filterEvents(events, eventFilter{Kind: eventKindAlert}, 100)

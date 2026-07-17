@@ -1349,7 +1349,7 @@ func filterEvents(events []Event, f eventFilter, limit int) []Event {
 		if f.Status != "" && e.Status != f.Status {
 			continue
 		}
-		if f.OnlyErrors && !isErrorEvent(e) {
+		if f.OnlyErrors && !IsErrorEvent(e) {
 			continue
 		}
 		out = append(out, e)
@@ -1360,7 +1360,10 @@ func filterEvents(events []Event, f eventFilter, limit int) []Event {
 	return out
 }
 
-func isErrorEvent(e Event) bool {
+// IsErrorEvent reports whether an event counts as an error for the
+// errors-only feed filter. It is the single classification shared by the
+// in-memory filter here and the store-backed pagination in the daemon backend.
+func IsErrorEvent(e Event) bool {
 	if e.Kind == eventKindError || strings.Contains(e.Kind, eventKindFailedFragment) {
 		return true
 	}
