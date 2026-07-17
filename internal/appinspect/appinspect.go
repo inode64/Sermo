@@ -274,11 +274,7 @@ func inspectResolved(
 		}
 		if r.OK && len(version.argv) > 0 {
 			vres := runVersionProbe(ctx, runner, resolved.Tree, version)
-			if !vres.ok && (vres.identityMismatch || version.identityRequired()) {
-				r.Installed = false
-				r.OK = false
-				r.Status = versionIdentityStatus(vres.status)
-				r.Output = vres.output
+			if applyVersionIdentityFailure(&r, version, vres) {
 				return r
 			}
 			if vres.ok {
@@ -296,11 +292,7 @@ func inspectResolved(
 	}
 
 	vres := runVersionProbe(ctx, runner, resolved.Tree, version)
-	if !vres.ok && (vres.identityMismatch || version.identityRequired()) {
-		r.Installed = false
-		r.OK = false
-		r.Status = versionIdentityStatus(vres.status)
-		r.Output = vres.output
+	if applyVersionIdentityFailure(&r, version, vres) {
 		return r
 	}
 	if !vres.ok && (version.optional || options.versionOptional) {
@@ -314,6 +306,20 @@ func inspectResolved(
 	r.Version = vres.raw
 	r.VersionShort = vres.short
 	return r
+}
+
+// applyVersionIdentityFailure marks the report not-installed when the version
+// probe failed an identity requirement (wrong binary answering, or an identity
+// match the probe requires). Reports true when the caller must return early.
+func applyVersionIdentityFailure(r *Report, version probeCommand, vres versionProbeResult) bool {
+	if vres.ok || (!vres.identityMismatch && !version.identityRequired()) {
+		return false
+	}
+	r.Installed = false
+	r.OK = false
+	r.Status = versionIdentityStatus(vres.status)
+	r.Output = vres.output
+	return true
 }
 
 func versionIdentityStatus(status string) string {
