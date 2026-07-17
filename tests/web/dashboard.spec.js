@@ -104,11 +104,12 @@ const libraries = [{
 
 function serviceDetail(name) {
   const service = services.find((item) => item.name === name);
+  const namedMetrics = [{ name: "users", type: "users", ran: true, ok: true, message: "2 users", metrics: [{ name: "count", unit: "users" }], sla: [] }];
   return {
     ...service,
     unit: `${name}.service`,
     interval: "30s",
-    checks: [{ name: "latency", type: "http", ran: true, ok: true, message: "status 200", sla: [] }],
+    checks: [{ name: "latency", type: "http", ran: true, ok: true, message: "status 200", sla: [] }, ...namedMetrics],
     processes: [{ pid: name === "web" ? 101 : 202, cmdline: [name], user: "root", role: "main", rss: 1048576 }],
     process_totals: { count: 1, rss: 1048576, io_read: 0, io_write: 0, fds: 5, threads: 1 },
     locks: [], rules: [], sla: [],
@@ -156,7 +157,19 @@ async function mockAPI(page) {
         if (detailMatch) body = serviceDetail(decodeURIComponent(detailMatch[1]));
         else if (eventsMatch) body = [];
         else if (path.endsWith("/sla")) body = { since: url.searchParams.get("since"), points: [] };
-        else if (path.endsWith("/metrics")) body = { summary: {}, points: [], unit: "ms" };
+        else if (path.endsWith("/metrics")) {
+          if (url.searchParams.get("metric") === "count") {
+            if (path.startsWith("/api/services/db/")) {
+              await route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ message: "metric store unavailable" }) });
+              return;
+            }
+            body = {
+              check: url.searchParams.get("check"), metric: "count", unit: "users",
+              summary: { count: 1, avg: 2, min: 2, max: 2 },
+              points: [{ start: new Date().toISOString(), n: 1, avg: 2, min: 2, max: 2 }],
+            };
+          } else body = { summary: {}, points: [], unit: "ms" };
+        }
         else if (path.endsWith("/runtime")) body = { cpu: { points: [], unit: "%" }, memory: { points: [], unit: "bytes" }, io: { points: [], unit: "B/s" } };
         else body = {};
       }
@@ -307,6 +320,32 @@ test("process continuity stays separate from observed SLA", async ({ page }) => 
   await expect(detail).toContainText("30m / 1h");
   await expect(detail).toContainText("Confirmed process continuity, not observed check health.");
   await expect(detail.locator(".sla-gap")).toBeVisible();
+});
+
+test("service detail graphs named check metrics and reports fetch failures", async ({ page }) => {
+  const namedMetricRequest = page.waitForRequest((request) => {
+    const url = new URL(request.url());
+    return url.pathname === "/api/services/web/metrics"
+      && url.searchParams.get("check") === "users"
+      && url.searchParams.get("metric") === "count";
+  });
+  await page.locator("#svc-row-web .row-toggle").click();
+  await namedMetricRequest;
+  const webMetric = page.locator('[data-service-metric-check="users"][data-service-metric-name="count"]').first();
+  await expect(webMetric).toContainText("users · count");
+  await expect(webMetric).toContainText("avg 2 users");
+  await expect(webMetric.locator("svg")).toBeVisible();
+
+  const failedMetricRequest = page.waitForRequest((request) => {
+    const url = new URL(request.url());
+    return url.pathname === "/api/services/db/metrics"
+      && url.searchParams.get("check") === "users"
+      && url.searchParams.get("metric") === "count";
+  });
+  await page.locator("#svc-row-db .row-toggle").click();
+  await failedMetricRequest;
+  const dbMetric = page.locator('[data-service-detail="db"] [data-service-metric-check="users"][data-service-metric-name="count"]');
+  await expect(dbMetric).toContainText("Failed to load users · count: HTTP 500");
 });
 
 test("notifier test asks for confirmation and posts one named notifier", async ({ page }) => {
