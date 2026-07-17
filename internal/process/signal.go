@@ -3,6 +3,8 @@ package process
 import (
 	"context"
 	"fmt"
+	"maps"
+	"slices"
 	"sort"
 	"strings"
 	"syscall"
@@ -104,20 +106,20 @@ func (r Reaper) Reap(ctx context.Context, residuals []Process, policy KillPolicy
 
 	round(residuals, syscall.SIGTERM)
 	if err := Wait(ctx, sleep, policy.TermTimeout); err != nil {
-		return ReapResult{Remaining: r.Rediscover(), Signalled: sortedInts(signalled), Failed: failed}
+		return ReapResult{Remaining: r.Rediscover(), Signalled: slices.Sorted(maps.Keys(signalled)), Failed: failed}
 	}
 	residuals = r.Rediscover()
 	if len(residuals) == 0 {
-		return ReapResult{Signalled: sortedInts(signalled), Failed: failed}
+		return ReapResult{Signalled: slices.Sorted(maps.Keys(signalled)), Failed: failed}
 	}
 
 	round(residuals, syscall.SIGKILL)
 	if err := Wait(ctx, sleep, policy.KillTimeout); err != nil {
-		return ReapResult{Remaining: r.Rediscover(), Signalled: sortedInts(signalled), Failed: failed}
+		return ReapResult{Remaining: r.Rediscover(), Signalled: slices.Sorted(maps.Keys(signalled)), Failed: failed}
 	}
 	residuals = r.Rediscover()
 
-	return ReapResult{Remaining: residuals, Signalled: sortedInts(signalled), Failed: failed}
+	return ReapResult{Remaining: residuals, Signalled: slices.Sorted(maps.Keys(signalled)), Failed: failed}
 }
 
 // Signal sends one signal to the processes allowed by selector. It shares the
@@ -143,7 +145,7 @@ func (r Reaper) Signal(ctx context.Context, procs []Process, selector KillSelect
 	if r.Rediscover != nil {
 		remaining = r.Rediscover()
 	}
-	return ReapResult{Remaining: remaining, Signalled: sortedInts(signalled), Failed: failed}
+	return ReapResult{Remaining: remaining, Signalled: slices.Sorted(maps.Keys(signalled)), Failed: failed}
 }
 
 // waitCancelledFormat wraps the context error when a cancellable Wait is aborted.
@@ -193,15 +195,6 @@ func Wait(ctx context.Context, sleep func(time.Duration), d time.Duration) error
 		}
 		return nil
 	}
-}
-
-func sortedInts(set map[int]bool) []int {
-	out := make([]int, 0, len(set))
-	for pid := range set {
-		out = append(out, pid)
-	}
-	sort.Ints(out)
-	return out
 }
 
 func signalRound(set []Process, selector KillSelector, resolve UserResolver, signaler Signaler, sig syscall.Signal, signalled map[int]bool) []SignalFailure {
