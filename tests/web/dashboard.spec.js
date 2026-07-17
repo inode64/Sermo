@@ -416,6 +416,32 @@ test("application deep links expand after its inventory renders", async ({ page 
   expect(pageErrors).toEqual([]);
 });
 
+test("monitor toggles send one request even on a double click", async ({ page }) => {
+  let servicePosts = 0;
+  await page.route("**/api/services/web/unmonitor", async (route) => {
+    servicePosts += 1;
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true, message: "unmonitored" }) });
+  });
+  let watchPosts = 0;
+  await page.route("**/api/watches/process-queue/unmonitor", async (route) => {
+    watchPosts += 1;
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true, message: "unmonitored" }) });
+  });
+
+  const serviceButton = page.locator('#svc-row-web [data-service-action="unmonitor"]');
+  await serviceButton.click();
+  await serviceButton.click({ force: true }).catch(() => {});
+  const watchButton = page.locator('#wat-row-process-queue [data-watch-action="unmonitor"]');
+  await watchButton.click();
+  await watchButton.click({ force: true }).catch(() => {});
+
+  await page.waitForTimeout(600);
+  expect(servicePosts).toBe(1);
+  expect(watchPosts).toBe(1);
+});
+
 test("graph selections remain isolated per service", async ({ page }) => {
   for (const name of ["web", "db"]) {
     await page.locator("#target-search").fill(`service: ${name}`);
