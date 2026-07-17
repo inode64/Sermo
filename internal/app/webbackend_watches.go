@@ -156,7 +156,9 @@ func (b *WebBackend) lastWatchActivities() map[string]watchActivity {
 			continue
 		}
 		out[name] = watchActivity{
-			At:   ev.Time.Format(time.RFC3339),
+			// UTC like every event timestamp, so persisted and in-memory events
+			// keep one wire convention across daemon restarts.
+			At:   ev.Time.UTC().Format(time.RFC3339),
 			Kind: ev.Kind,
 		}
 	}
