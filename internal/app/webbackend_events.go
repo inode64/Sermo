@@ -51,7 +51,9 @@ func (b *WebBackend) ActivitySummary(_ context.Context) web.ActivitySummary {
 	summary.TotalEvents = len(events)
 	if len(events) > 0 {
 		latest := events[0]
-		summary.LastEventTime = latest.Time.Format(time.RFC3339)
+		// UTC like every event timestamp, so persisted and in-memory events keep
+		// one wire convention across daemon restarts.
+		summary.LastEventTime = latest.Time.UTC().Format(time.RFC3339)
 		summary.LastEventKind = latest.Kind
 		summary.LastEventService = latest.Service
 		summary.LastEventWatch = latest.Watch
