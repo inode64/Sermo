@@ -456,6 +456,12 @@ test("a failing services list alone does not dim the dashboard as disconnected",
   await expect(page.locator("#daemon-backend")).toHaveText("systemd");
   await expect(page.locator("body")).not.toHaveClass(/disconnected/);
   await expect(page.locator("#svc-row-web")).toBeVisible();
+  await expect(page.locator("#err")).toContainText("keeping the last known list");
+
+  // A cold load (no list ever rendered) must not claim it is keeping one.
+  await page.goto("/");
+  await expect(page.locator("#err")).toContainText("services unavailable");
+  await expect(page.locator("#err")).not.toContainText("keeping the last known list");
 });
 
 test("the dashboard dims as disconnected when every endpoint fails", async ({ page }) => {
