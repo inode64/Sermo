@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"testing"
 	"time"
@@ -233,23 +234,74 @@ func TestStartOldHistoryPruneDoesNotBlockStartup(t *testing.T) {
 	}
 }
 
+func TestStartOldHistoryPruneStopsAtShutdownAndReportsDone(t *testing.T) {
+	store := &blockingOldHistoryPruner{
+		started: make(chan struct{}),
+		release: make(chan struct{}),
+	}
+	logger := slog.New(slog.DiscardHandler)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	done := startOldHistoryPrune(ctx, logger, store, time.Now())
+	select {
+	case <-store.started:
+	case <-time.After(time.Second):
+		t.Fatal("history pruning goroutine did not start")
+	}
+
+	// Shutdown while the first prune step is still running: the goroutine must
+	// skip the remaining steps and report done so main can close the store.
+	cancel()
+	close(store.release)
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("prune goroutine did not report done after shutdown")
+	}
+	if n := store.calls.Load(); n != 1 {
+		t.Fatalf("prune steps after shutdown = %d, want 1 (remaining steps skipped)", n)
+	}
+}
+
 type blockingOldHistoryPruner struct {
 	once    sync.Once
 	started chan struct{}
 	release chan struct{}
+	calls   atomic.Int64
 }
 
 func (p *blockingOldHistoryPruner) PruneSLA(time.Time) (int64, error) {
+	p.calls.Add(1)
 	p.once.Do(func() { close(p.started) })
 	<-p.release
 	return 0, nil
 }
 
-func (p *blockingOldHistoryPruner) PruneMeasurements(time.Time) (int64, error)   { return 0, nil }
-func (p *blockingOldHistoryPruner) PruneMetrics(time.Time) (int64, error)        { return 0, nil }
-func (p *blockingOldHistoryPruner) PruneDaemonMetrics(time.Time) (int64, error)  { return 0, nil }
-func (p *blockingOldHistoryPruner) PruneServiceMetrics(time.Time) (int64, error) { return 0, nil }
-func (p *blockingOldHistoryPruner) PruneEvents(time.Time) (int64, error)         { return 0, nil }
+func (p *blockingOldHistoryPruner) PruneMeasurements(time.Time) (int64, error) {
+	p.calls.Add(1)
+	return 0, nil
+}
+
+func (p *blockingOldHistoryPruner) PruneMetrics(time.Time) (int64, error) {
+	p.calls.Add(1)
+	return 0, nil
+}
+
+func (p *blockingOldHistoryPruner) PruneDaemonMetrics(time.Time) (int64, error) {
+	p.calls.Add(1)
+	return 0, nil
+}
+
+func (p *blockingOldHistoryPruner) PruneServiceMetrics(time.Time) (int64, error) {
+	p.calls.Add(1)
+	return 0, nil
+}
+
+func (p *blockingOldHistoryPruner) PruneEvents(time.Time) (int64, error) {
+	p.calls.Add(1)
+	return 0, nil
+}
 
 func TestEngineAndNotifierAccessors(t *testing.T) {
 	cfg := &config.Config{Global: config.Global{Raw: map[string]any{
