@@ -289,6 +289,12 @@ type blockingOldHistoryPruner struct {
 	calls   atomic.Int64
 }
 
+// count records one prune step; the shared body of every non-blocking method.
+func (p *blockingOldHistoryPruner) count() (int64, error) {
+	p.calls.Add(1)
+	return 0, nil
+}
+
 func (p *blockingOldHistoryPruner) PruneSLA(time.Time) (int64, error) {
 	p.calls.Add(1)
 	p.once.Do(func() { close(p.started) })
@@ -296,30 +302,11 @@ func (p *blockingOldHistoryPruner) PruneSLA(time.Time) (int64, error) {
 	return 0, nil
 }
 
-func (p *blockingOldHistoryPruner) PruneMeasurements(time.Time) (int64, error) {
-	p.calls.Add(1)
-	return 0, nil
-}
-
-func (p *blockingOldHistoryPruner) PruneMetrics(time.Time) (int64, error) {
-	p.calls.Add(1)
-	return 0, nil
-}
-
-func (p *blockingOldHistoryPruner) PruneDaemonMetrics(time.Time) (int64, error) {
-	p.calls.Add(1)
-	return 0, nil
-}
-
-func (p *blockingOldHistoryPruner) PruneServiceMetrics(time.Time) (int64, error) {
-	p.calls.Add(1)
-	return 0, nil
-}
-
-func (p *blockingOldHistoryPruner) PruneEvents(time.Time) (int64, error) {
-	p.calls.Add(1)
-	return 0, nil
-}
+func (p *blockingOldHistoryPruner) PruneMeasurements(time.Time) (int64, error)   { return p.count() }
+func (p *blockingOldHistoryPruner) PruneMetrics(time.Time) (int64, error)        { return p.count() }
+func (p *blockingOldHistoryPruner) PruneDaemonMetrics(time.Time) (int64, error)  { return p.count() }
+func (p *blockingOldHistoryPruner) PruneServiceMetrics(time.Time) (int64, error) { return p.count() }
+func (p *blockingOldHistoryPruner) PruneEvents(time.Time) (int64, error)         { return p.count() }
 
 func TestEngineAndNotifierAccessors(t *testing.T) {
 	cfg := &config.Config{Global: config.Global{Raw: map[string]any{
