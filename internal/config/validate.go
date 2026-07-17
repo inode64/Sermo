@@ -77,6 +77,7 @@ var validGlobalPathKeys = set(
 var validDefaultsKeys = set(
 	keyDryRun,
 	keyRestartOnChange,
+	sectionClearWindow,
 	sectionPolicy,
 	sectionRuleWindow,
 	sectionStopPolicy,
@@ -866,6 +867,7 @@ func validateResolved(name string, tree map[string]any, runtime string, notifier
 	validateCommands(tree, add)
 	validateReload(tree, backend, add)
 	validateRuleWindow(tree, add)
+	validateClearWindowSection(tree, add)
 	validateServiceMonitors(tree, notifiers, add)
 	validateServiceWatches(tree, locksDir, notifiers, NotifyDefault(tree), add)
 	validateRules(tree, notifiers, add)

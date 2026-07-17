@@ -125,8 +125,6 @@ watches:
     within:
       cycles: 10
       min_matches: 3
-    clear:
-      cycles: 10
     then:
       action: alert
       message: >-
@@ -140,8 +138,6 @@ watches:
       value: 1367710925
       optional: true
     for:
-      duration: 4m
-    clear:
       duration: 4m
     then:
       action: alert
@@ -157,8 +153,6 @@ watches:
       optional: true
     for:
       duration: 5m
-    clear:
-      duration: 5m
     then:
       action: alert
       message: >-
@@ -172,8 +166,6 @@ watches:
       value: 435429
       optional: true
     for:
-      duration: 5m
-    clear:
       duration: 5m
     then:
       action: alert

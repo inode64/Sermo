@@ -35,6 +35,14 @@ func TestCheckReadingsForAllTypes(t *testing.T) {
 			want: map[string]string{"count": "12"},
 		},
 		{
+			// Byte counts and rates render through the canonical byte formatter
+			// (IEC units, comma thousands, dot decimal) on every surface.
+			name: "diskio canonical byte rates",
+			typ:  "diskio",
+			data: map[string]any{"device": "sda", "util_pct": 50.0, "read_bytes": 1024.0, "write_bytes": 2555904.0, "await_ms": 1.5},
+			want: map[string]string{"read_bytes": "1 KiB/s", "write_bytes": "2.44 MiB/s", "util_pct": "50.00%"},
+		},
+		{
 			name: "clock",
 			typ:  "clock",
 			data: map[string]any{

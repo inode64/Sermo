@@ -93,7 +93,7 @@ func TestProcWatchSummaryUsesObservedThresholdValue(t *testing.T) {
 
 	h.tick(w, 0)
 
-	const want = "worker memory 2.000, limit 1.000"
+	const want = "worker memory 2,000, limit 1,000"
 	if len(h.fired) != 1 || h.fired[0][sermoEnvMessage] != want {
 		t.Fatalf("hook env = %v, want summary %q", h.fired, want)
 	}

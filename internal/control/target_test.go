@@ -86,6 +86,103 @@ func TestResolveWithFallbackDoesNotFallbackWhenBackendHasNoCandidates(t *testing
 	}
 }
 
+func TestTargetCacheResolvesOnceAndWarnsOnce(t *testing.T) {
+	probe := &countingProbe{}
+	tree := map[string]any{
+		config.ServiceKeyService: map[string]any{
+			string(servicemgr.BackendOpenRC): []any{"svc.main"},
+		},
+	}
+	cache := NewTargetCache()
+	resolver := servicemgr.UnitResolver{Probe: probe}
+
+	target, warning := cache.ResolveWithFallback(context.Background(), "svc", tree, servicemgr.BackendOpenRC, nil, resolver)
+	if target.Unit != "svc.main" || warning == "" {
+		t.Fatalf("first resolve = %+v warning=%q, want svc.main with a warning", target, warning)
+	}
+	probes := probe.calls
+	if probes == 0 {
+		t.Fatal("first resolve must probe the backend")
+	}
+
+	// The second caller (the web backend build) reuses the cached target: no
+	// new probes, and the warning is reported only once per generation.
+	target, warning = cache.ResolveWithFallback(context.Background(), "svc", tree, servicemgr.BackendOpenRC, nil, resolver)
+	if target.Unit != "svc.main" {
+		t.Fatalf("cached resolve target = %+v, want svc.main", target)
+	}
+	if warning != "" {
+		t.Fatalf("cached resolve warning = %q, want empty (already reported)", warning)
+	}
+	if probe.calls != probes {
+		t.Fatalf("cached resolve probed the backend again: %d -> %d calls", probes, probe.calls)
+	}
+
+	// A different service resolves independently.
+	if target, _ = cache.ResolveWithFallback(context.Background(), "other", tree, servicemgr.BackendOpenRC, nil, resolver); target.Unit != "svc.main" {
+		t.Fatalf("second service target = %+v", target)
+	}
+	if probe.calls == probes {
+		t.Fatal("a different service must resolve on its own")
+	}
+}
+
+func TestUnsupportedOnBackend(t *testing.T) {
+	cases := []struct {
+		name    string
+		tree    map[string]any
+		backend servicemgr.Backend
+		want    bool
+	}{
+		{
+			name: "explicit map without this backend",
+			tree: map[string]any{config.ServiceKeyService: map[string]any{
+				string(servicemgr.BackendSystemd): []any{"only-systemd"},
+			}},
+			backend: servicemgr.BackendOpenRC,
+			want:    true,
+		},
+		{
+			name: "explicit map with this backend",
+			tree: map[string]any{config.ServiceKeyService: map[string]any{
+				string(servicemgr.BackendOpenRC): []any{"svc"},
+			}},
+			backend: servicemgr.BackendOpenRC,
+			want:    false,
+		},
+		{
+			name:    "scalar service trusts the backend",
+			tree:    map[string]any{config.ServiceKeyService: "svc"},
+			backend: servicemgr.BackendOpenRC,
+			want:    false,
+		},
+		{
+			name:    "controlled service is never backend-unsupported",
+			tree:    map[string]any{config.SectionControl: map[string]any{"type": "docker"}},
+			backend: servicemgr.BackendOpenRC,
+			want:    false,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := UnsupportedOnBackend(tc.tree, tc.backend, "svc"); got != tc.want {
+				t.Fatalf("UnsupportedOnBackend() = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+type countingProbe struct{ calls int }
+
+func (*countingProbe) CommandExists(string) bool { return false }
+
+func (p *countingProbe) PathExists(string) bool {
+	p.calls++
+	return false
+}
+
+func (*countingProbe) ReadFile(string) ([]byte, error) { return nil, errors.New("not found") }
+
 type noKnownUnitsRunner struct{}
 
 func (noKnownUnitsRunner) Run(context.Context, string, ...string) (execx.Result, error) {

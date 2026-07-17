@@ -19,12 +19,17 @@ export const millisecondsPerHour = millisecondsPerMinute * minutesPerHour;
 export const millisecondsPerDay = millisecondsPerHour * hoursPerDay;
 
 // fmtNum is the base formatter for every user-visible number. It keeps at most
-// decimals places and strips trailing zeros; fixed precision remains reserved
-// for chart geometry and CSS dimensions.
+// decimals places, strips trailing zeros and groups thousands with commas
+// (12,345.68) — the same canonical convention the daemon uses in events and
+// notifications. Fixed precision remains reserved for chart geometry and CSS
+// dimensions.
 export function fmtNum(value, decimals = 2, fallback = "—") {
   const number = Number(value);
   if (!Number.isFinite(number)) return fallback;
-  return number.toFixed(decimals).replace(/(\.\d*?)0+$/, "$1").replace(/\.$/, "");
+  const trimmed = number.toFixed(decimals).replace(/(\.\d*?)0+$/, "$1").replace(/\.$/, "");
+  const [whole, fraction] = trimmed.split(".");
+  const grouped = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  return fraction === undefined ? grouped : grouped + "." + fraction;
 }
 
 export function fmtUptime(value) {
@@ -91,9 +96,13 @@ export function fmtMetricValue(value, unit) {
   }
 }
 
+// fmtTime renders timestamps in UTC with an explicit suffix, matching the
+// daemon's event timestamps so the same instant never reads differently
+// between the event log, notifications and the dashboard.
 export function fmtTime(value) {
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? (value || "") : date.toLocaleString();
+  if (Number.isNaN(date.getTime())) return value || "";
+  return date.toISOString().slice(0, 19).replace("T", " ") + " UTC";
 }
 
 export function fmtRemain(until) {

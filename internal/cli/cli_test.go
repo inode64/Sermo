@@ -582,6 +582,8 @@ func TestEventsList(t *testing.T) {
 	sample := []event{
 		{Time: "2026-06-13T10:05:00Z", Service: "web", Kind: "action", Action: "restart", Status: "ok", Message: "restarted"},
 		{Time: "2026-06-13T10:00:00Z", Watch: "storage-root", Kind: "alert", Message: "high usage"},
+		{Time: "2026-06-13T09:58:00Z", App: "salt-minion", Kind: "firing", Message: "error: cancelled"},
+		{Time: "2026-06-13T09:55:00Z", Service: "web", Kind: "recovered", Rule: "alert-if-memory-high", Message: "rule condition recovered"},
 	}
 	app := App{
 		FetchEvents: func(ctx context.Context, opts options, service string, limit int) ([]event, error) {
@@ -602,6 +604,15 @@ func TestEventsList(t *testing.T) {
 	out := stdout.String()
 	if !strings.Contains(out, "web") || !strings.Contains(out, "storage-root") || !strings.Contains(out, "restart") {
 		t.Fatalf("events list output missing data:\n%s", out)
+	}
+	// An app event's target is the app name, never the "-" placeholder.
+	if !strings.Contains(out, "salt-minion") {
+		t.Fatalf("events list must show the app as target:\n%s", out)
+	}
+	// The rule column disambiguates several rules of one service recovering in
+	// the same cycle (they used to render as identical rows).
+	if !strings.Contains(out, "RULE") || !strings.Contains(out, "alert-if-memor") {
+		t.Fatalf("events list must show the rule column:\n%s", out)
 	}
 	if gotService != "" || gotLimit != defaultEventsListLimit {
 		t.Fatalf("events list query = (%q, %d), want (%q, %d)", gotService, gotLimit, "", defaultEventsListLimit)

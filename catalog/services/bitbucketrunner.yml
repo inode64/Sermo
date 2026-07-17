@@ -22,8 +22,6 @@ watches:
       optional: true
     for:
       duration: 10m
-    clear:
-      duration: 10m
     then:
       action: alert
       message: >-
@@ -39,8 +37,6 @@ watches:
     within:
       cycles: 10
       min_matches: 3
-    clear:
-      cycles: 10
     then:
       action: alert
       message: >-

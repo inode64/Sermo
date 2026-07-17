@@ -123,11 +123,14 @@ const (
 const (
 	eventsTableTimestampWidth = 19
 	eventsTableTargetWidth    = 15
-	eventsTableKindWidth      = 8
-	eventsTableActionWidth    = 7
-	eventsTableMessageWidth   = 60
-	eventsTableEllipsisWidth  = 3
-	eventsTableEllipsis       = "..."
+	// Wide enough for the longest event kind ("notify-suppressed");
+	// "recovered" used to truncate to "recovere" at 8.
+	eventsTableKindWidth     = 17
+	eventsTableRuleWidth     = 14
+	eventsTableActionWidth   = 7
+	eventsTableMessageWidth  = 60
+	eventsTableEllipsisWidth = 3
+	eventsTableEllipsis      = "..."
 )
 
 // BackendDetector detects the service manager backend.
@@ -247,7 +250,9 @@ type event struct {
 	Time    string `json:"time"`
 	Service string `json:"service"`
 	Watch   string `json:"watch"`
+	App     string `json:"app"`
 	Kind    string `json:"kind"`
+	Rule    string `json:"rule"`
 	Action  string `json:"action"`
 	Status  string `json:"status"`
 	Message string `json:"message"`
@@ -1401,23 +1406,28 @@ func (a App) writeEvents(opts options, service string, evs []event) {
 
 func (a App) writeEventsTable(evs []event) {
 	tw := newTabWriter(a.Stdout)
-	fmt.Fprintln(tw, "TIME\tTARGET\tKIND\tACTION\tMESSAGE")
+	fmt.Fprintln(tw, "TIME\tTARGET\tKIND\tRULE\tACTION\tMESSAGE")
 	for _, e := range evs {
-		timestamp, target, kind, action, message := eventTableFields(e)
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", timestamp, target, kind, action, message)
+		timestamp, target, kind, rule, action, message := eventTableFields(e)
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\n", timestamp, target, kind, rule, action, message)
 	}
 	_ = tw.Flush()
 }
 
-func eventTableFields(e event) (string, string, string, string, string) {
+func eventTableFields(e event) (string, string, string, string, string, string) {
 	timestamp := e.Time
 	if len(timestamp) >= eventsTableTimestampWidth {
 		timestamp = timestamp[:eventsTableTimestampWidth]
 	}
 
+	// The event's identity dimension: service rules/watches, host watches, or
+	// catalog app probes. App events used to fall through to "-".
 	target := e.Service
 	if target == "" {
 		target = e.Watch
+	}
+	if target == "" {
+		target = e.App
 	}
 	if target == "" {
 		target = "-"
@@ -1425,12 +1435,18 @@ func eventTableFields(e event) (string, string, string, string, string) {
 	target = eventTableValue(target, eventsTableTargetWidth)
 
 	kind := eventTableValue(e.Kind, eventsTableKindWidth)
+	// The rule distinguishes several rules of one service transitioning in the
+	// same cycle, which otherwise render as identical rows.
+	rule := eventTableValue(e.Rule, eventsTableRuleWidth)
+	if rule == "" {
+		rule = "-"
+	}
 	action := e.Action
 	if action == "" {
 		action = e.Status
 	}
 	action = eventTableValue(action, eventsTableActionWidth)
-	return timestamp, target, kind, action, eventTableMessage(e.Message)
+	return timestamp, target, kind, rule, action, eventTableMessage(e.Message)
 }
 
 func eventTableValue(value string, width int) string {

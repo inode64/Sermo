@@ -1717,7 +1717,7 @@ check:
   path: /
   used_pct: { op: ">=", value: "90%" } # check fires when crossed
 for: { cycles: 3 }     # optional window; reuses the rules engine
-clear: { cycles: 3 }   # optional recovery hysteresis; see Rules → Windows
+clear: { cycles: 3 }   # recovery hysteresis; default 5m via defaults.clear_window (Rules → Windows)
 then:
   hook:
     command: [/usr/local/bin/alert-storage.sh, "/"]
@@ -2284,8 +2284,13 @@ By default, descendants whose name starts with `.` are skipped, including their
 subtrees. Set `include_hidden: true` to track them. A hidden path named directly
 in `path` or `paths` is always tracked.
 New entries are adopted silently unless already stale; deleted entries fire
-`existence` if configured. Each detected change or freshness breach is **one event
-and one hook run**, so a cycle that finds several paths fires several times.
+`existence` if configured. Each detected change is **one event and one hook
+run**, so a cycle that finds several changed paths fires several times — except
+`older_than`: when several paths cross the age threshold in the same cycle, the
+hook still runs once per path (with its own `SERMO_PATH`), but they produce
+**one aggregated event and notification** naming the count and up to 5 paths
+(`12 files older than 2w6d: a, b, … (+7 more)`), so a directory of stale files
+cannot burst identical events with the same timestamp.
 
 Hook extras: `SERMO_PATH` (the changed path), `SERMO_CHANGE`
 (`size`|`size_threshold`|`permissions`|`owner`|`deleted`|`older_than`),

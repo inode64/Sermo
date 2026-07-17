@@ -88,7 +88,7 @@ func (c *swapCheck) Run(_ context.Context) Result {
 		ok := levelPredsHold(c.preds, values)
 		data[DataKeyUsedPct], data[DataKeyFreePct] = usedPct, freePct
 		data[DataKeyValue] = firstPredValue(c.preds, values, usedPct)
-		res := c.result(ok, fmt.Sprintf("swap used %.1f%% free %.1f%% (%d bytes free)", usedPct, freePct, s.FreeBytes), start)
+		res := c.result(ok, fmt.Sprintf("swap used %.1f%% free %.1f%% (%s free)", usedPct, freePct, formatSummaryBytes(float64(s.FreeBytes))), start)
 		res.Data = data
 		return res
 

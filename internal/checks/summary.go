@@ -264,18 +264,24 @@ func formatSummaryUnsigned(number uint64) string {
 	return formatSummaryDecimal(strconv.FormatUint(number, summaryNumberBase))
 }
 
+// formatSummaryDecimal renders the canonical numeric convention for every
+// operator-facing surface (events, notifications, CLI, web meters): comma as
+// the thousands separator and dot as the decimal mark — `12,345.68`. One type,
+// one formatter: do not hand-format numbers with fmt verbs at call sites; route
+// them through FormatDisplayValue/FormatDisplayValueWithUnit so the convention
+// cannot drift between surfaces.
 func formatSummaryDecimal(raw string) string {
 	negative := strings.HasPrefix(raw, "-")
 	raw = strings.TrimPrefix(raw, "-")
 	whole, fraction, hasFraction := strings.Cut(raw, ".")
 	for index := len(whole) - summaryNumberGroupSize; index > 0; index -= summaryNumberGroupSize {
-		whole = whole[:index] + "." + whole[index:]
+		whole = whole[:index] + "," + whole[index:]
 	}
 	if negative {
 		whole = "-" + whole
 	}
 	if hasFraction {
-		return whole + "," + fraction
+		return whole + "." + fraction
 	}
 	return whole
 }

@@ -8,10 +8,12 @@ import (
 	"sync"
 
 	"sermo/internal/config"
+	"sermo/internal/control"
 	"sermo/internal/emission"
 	"sermo/internal/metrics"
 	"sermo/internal/notify"
 	"sermo/internal/process"
+	"sermo/internal/rules"
 )
 
 // Monitor runs service workers and host watches in reloadable generations.
@@ -165,6 +167,9 @@ func (m *Monitor) buildGenerationLocked(ctx context.Context, newCfg *config.Conf
 	if m.deps.ArtifactSamples == nil {
 		m.deps.ArtifactSamples = NewArtifactSamples()
 	}
+	// Fresh resolution cache per reload generation: workers and the web backend
+	// resolve each service unit once against the new config.
+	m.deps.Targets = control.NewTargetCache()
 
 	reloadDeps := m.deps
 	workers, svcWatches, warnings := BuildWorkers(ctx, newCfg, reloadDeps, m.collector)
@@ -185,17 +190,13 @@ func (m *Monitor) installGenerationLocked(ctx context.Context, newCfg *config.Co
 		m.readiness.UpdateCounts(len(workers), len(watches))
 	}
 	if m.web != nil {
-		for _, w := range m.web.Reload(ctx, newCfg, m.deps) {
-			m.Logger.Warn("reload web backend", monitorLogFieldWarning, w)
-		}
+		LogBuildNotices(m.Logger, "reload web backend", m.web.Reload(ctx, newCfg, m.deps))
 	}
 	if m.deps.DiagnosticLog != nil {
 		m.deps.DiagnosticLog.UpdateConfig(newCfg)
 		go m.deps.DiagnosticLog.Export()
 	}
-	for _, w := range warnings {
-		m.Logger.Warn("reload build", monitorLogFieldWarning, w)
-	}
+	LogBuildNotices(m.Logger, "reload build", warnings)
 
 	m.startGenerationLocked(ctx, false)
 
@@ -229,6 +230,7 @@ func (m *Monitor) applyConfig(cfg *config.Config) {
 	m.deps.Notifiers = notifiers
 	m.deps.GlobalNotify = config.NotifyDefault(cfg.Global.Raw)
 	m.deps.GlobalEmission = emission.Merge(cfg.Global.Raw[emission.Section], emission.Default())
+	m.deps.GlobalClear = rules.ClearWindowOrDefault(cfg.Global.Defaults[rules.SectionClearWindow])
 	for _, w := range warns {
 		m.Logger.Warn("reload notifiers", monitorLogFieldWarning, w)
 	}

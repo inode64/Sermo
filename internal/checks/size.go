@@ -9,8 +9,6 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/dustin/go-humanize"
-
 	"sermo/internal/cfgval"
 	"sermo/internal/execx"
 )
@@ -72,7 +70,7 @@ func (c *sizeCheck) Run(ctx context.Context) Result {
 	span := now.Sub(baseline.t)
 	msg := fmt.Sprintf("%s grew %s in %s (limit %s/%s)",
 		c.path, HumanizeSignedBytes(growth), span.Round(time.Second),
-		humanize.IBytes(uint64(c.growBy)), c.window)
+		formatSummaryBytes(float64(c.growBy)), c.window)
 	res := c.result(ok, msg, start)
 	res.Data = map[string]any{
 		DataKeyPath:           c.path,
@@ -87,12 +85,13 @@ func (c *sizeCheck) Run(ctx context.Context) Result {
 }
 
 // HumanizeSignedBytes renders a possibly-negative byte delta in IEC binary
-// units (KiB/MiB/GiB), the display convention for every byte value.
+// units (KiB/MiB/GiB) through the canonical value formatter, the display
+// convention for every byte value.
 func HumanizeSignedBytes(n int64) string {
 	if n < 0 {
-		return "-" + humanize.IBytes(uint64(-n))
+		return "-" + formatSummaryBytes(float64(-n))
 	}
-	return humanize.IBytes(uint64(n))
+	return formatSummaryBytes(float64(n))
 }
 
 // dirOrFileSize returns the size of a regular file, or the recursive sum of

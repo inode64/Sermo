@@ -253,6 +253,8 @@ func TestCycleAlertNotifyScope(t *testing.T) {
 func TestCycleAlertEmitsOnChangeByDefault(t *testing.T) {
 	h := &workerHarness{cache: failedCache("http")}
 	w := h.worker(alertRuleTree(nil), rules.Policy{}, nil)
+	now := t0
+	w.Now = func() time.Time { return now }
 	n := &fakeNotifier{name: "ops"}
 	w.Notifiers = map[string]notify.Notifier{"ops": n}
 	w.GlobalNotify = []string{"ops"}
@@ -260,7 +262,9 @@ func TestCycleAlertEmitsOnChangeByDefault(t *testing.T) {
 	w.RunCycle(context.Background())
 	w.RunCycle(context.Background())
 	h.cache = map[string]checks.Result{"http": {Check: "http", OK: true}}
-	w.RunCycle(context.Background())
+	w.RunCycle(context.Background()) // opens the default clear window
+	now = now.Add(rules.DefaultClearWindow + time.Minute)
+	w.RunCycle(context.Background()) // clear window elapsed: episode ends
 
 	if got := h.countEvents(eventKindAlert); got != 1 {
 		t.Fatalf("default alert rule must emit once per firing episode, got %d events: %+v", got, h.events)
@@ -327,6 +331,11 @@ func TestCycleAlertDurationWindowEmitsOnRisingEdge(t *testing.T) {
 
 	h.cache = map[string]checks.Result{"mem": {Check: "mem", OK: false}}
 	now = now.Add(time.Minute)
+	w.RunCycle(context.Background()) // opens the default clear window
+	if got := h.countEvents(eventKindRecovered); got != 0 {
+		t.Fatalf("default clear window must hold the episode, got %d recovered: %+v", got, h.events)
+	}
+	now = now.Add(rules.DefaultClearWindow + time.Minute)
 	w.RunCycle(context.Background())
 	if got := h.countEvents(eventKindRecovered); got != 1 {
 		t.Fatalf("clearing the condition must emit one recovered event, got %d: %+v", got, h.events)
@@ -1088,7 +1097,7 @@ func TestRuleMessageRuntimeContextForMetricCheck(t *testing.T) {
 	now = now.Add(10 * time.Minute)
 	w.RunCycle(context.Background())
 
-	want := "During 10m (for 10m) mem metric/memory > 60% current 73,5% on web via alert at " + now.Format(time.RFC3339)
+	want := "During 10m (for 10m) mem metric/memory > 60% current 73.5% on web via alert at " + now.Format(time.RFC3339)
 	e, ok := h.eventOf(eventKindAlert)
 	if !ok {
 		t.Fatalf("no alert emitted: %+v", h.events)
@@ -1114,8 +1123,8 @@ func TestRuleMessageRuntimeContextInlineMetric(t *testing.T) {
 		reading   metrics.Reading
 		want      string
 	}{
-		{"percent", "60%", metrics.Reading{Percent: 66.25, HasPercent: true, Ready: true}, "metric/memory > 60%: 66,25%"},
-		{"bytes", "1741594", metrics.Reading{Absolute: 2555904, Unit: metrics.MetricUnitBytes, HasAbsolute: true, Ready: true}, "metric/memory > 1,66 MiB: 2,44 MiB"},
+		{"percent", "60%", metrics.Reading{Percent: 66.25, HasPercent: true, Ready: true}, "metric/memory > 60%: 66.25%"},
+		{"bytes", "1741594", metrics.Reading{Absolute: 2555904, Unit: metrics.MetricUnitBytes, HasAbsolute: true, Ready: true}, "metric/memory > 1.66 MiB: 2.44 MiB"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			h := &workerHarness{cache: map[string]checks.Result{}}
@@ -1164,7 +1173,7 @@ func TestRuleMessageRuntimeContextFormatsByteMetric(t *testing.T) {
 	if !ok {
 		t.Fatalf("no alert emitted: %+v", h.events)
 	}
-	if want := "metric/memory > 166,09 MiB: 2,44 MiB"; e.Message != want {
+	if want := "metric/memory > 166.09 MiB: 2.44 MiB"; e.Message != want {
 		t.Fatalf("message = %q, want %q", e.Message, want)
 	}
 }
@@ -1182,14 +1191,14 @@ func TestCycleAlertRecoveryFormatsMetricContext(t *testing.T) {
 			check:     "cpu-thread-high",
 			firing:    map[string]any{checks.DataKeyType: checks.CheckTypeMetric, checks.DataKeyScope: checks.MetricScopeService, checks.DataKeyMetric: "cpu_thread", checks.DataKeyOp: ">", checks.DataKeyThreshold: "90%", checks.DataKeyValue: 91.25, checks.DataKeyUnit: metrics.MetricUnitPercent},
 			recovered: map[string]any{checks.DataKeyType: checks.CheckTypeMetric, checks.DataKeyScope: checks.MetricScopeService, checks.DataKeyMetric: "cpu_thread", checks.DataKeyOp: ">", checks.DataKeyThreshold: "90%", checks.DataKeyValue: 0.1998902696035153, checks.DataKeyUnit: metrics.MetricUnitPercent},
-			want:      "rule condition recovered: metric cpu_thread current 0,2% (threshold > 90%)",
+			want:      "rule condition recovered: metric cpu_thread current 0.2% (threshold > 90%)",
 		},
 		{
 			name:      "bytes",
 			check:     "memory-high",
 			firing:    map[string]any{checks.DataKeyType: checks.CheckTypeMetric, checks.DataKeyScope: checks.MetricScopeService, checks.DataKeyMetric: "memory", checks.DataKeyOp: ">", checks.DataKeyThreshold: "174159463", checks.DataKeyValue: 2555904, checks.DataKeyUnit: metrics.MetricUnitBytes},
 			recovered: map[string]any{checks.DataKeyType: checks.CheckTypeMetric, checks.DataKeyScope: checks.MetricScopeService, checks.DataKeyMetric: "memory", checks.DataKeyOp: ">", checks.DataKeyThreshold: "174159463", checks.DataKeyValue: 2555904, checks.DataKeyUnit: metrics.MetricUnitBytes},
-			want:      "rule condition recovered: metric memory current 2,44 MiB (threshold > 166,09 MiB)",
+			want:      "rule condition recovered: metric memory current 2.44 MiB (threshold > 166.09 MiB)",
 		},
 	}
 	for _, tc := range tests {
@@ -1197,8 +1206,12 @@ func TestCycleAlertRecoveryFormatsMetricContext(t *testing.T) {
 			h := &workerHarness{cache: map[string]checks.Result{tc.check: {Check: tc.check, Data: tc.firing}}}
 			tree := map[string]any{"rules": map[string]any{"alert-if-" + tc.check: map[string]any{"type": "alert", "if": map[string]any{"failed": map[string]any{"check": tc.check}}, "then": map[string]any{"action": "alert", "message": tc.check + " is high"}}}}
 			w := h.worker(tree, rules.Policy{}, nil)
+			now := t0
+			w.Now = func() time.Time { return now }
 			w.RunCycle(context.Background())
 			h.cache[tc.check] = checks.Result{Check: tc.check, OK: true, Data: tc.recovered}
+			w.RunCycle(context.Background()) // opens the default clear window
+			now = now.Add(rules.DefaultClearWindow + time.Minute)
 			w.RunCycle(context.Background())
 			e, ok := h.eventOf(eventKindRecovered)
 			if !ok {

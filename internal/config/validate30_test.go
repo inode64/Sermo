@@ -446,6 +446,29 @@ rules:
 	mustHave(t, issues, "rules.clear-on-remediation.clear is only supported on alert rules")
 }
 
+func TestValidateClearWindowSection(t *testing.T) {
+	issues := validateService(t, `
+name: svc
+service: x
+clear_window: { cycles: 2, min_matches: 1 }
+`)
+	mustHave(t, issues, "clear_window.min_matches is not supported")
+
+	issues = validateService(t, `
+name: svc
+service: x
+clear_window: { cycles: 2, duration: 4m }
+`)
+	mustHave(t, issues, "clear_window cannot define both cycles and duration")
+
+	issues = validateService(t, `
+name: svc
+service: x
+clear_window: { cycles: 1 }
+`)
+	mustNotHave(t, issues, "clear_window")
+}
+
 func TestValidateRuleDurationWindows(t *testing.T) {
 	issues := validateService(t, `
 name: svc
