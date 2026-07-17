@@ -448,10 +448,13 @@ func TestWebBackendLastEventIndexes(t *testing.T) {
 }
 
 func TestWebBackendActivitySummaryCountsAllServiceOperations(t *testing.T) {
-	events := NewEventLog(10)
+	events := NewEventLog(16)
 	for _, action := range serviceOperationActionList() {
 		events.Add(Event{Service: "web", Kind: eventKindAction, Action: action, Status: eventStatusOK})
 	}
+	// Cascade targets run the same service operation as the primary, so they
+	// count in the service-actions bucket too.
+	events.Add(Event{Service: "db", Kind: eventKindCascade, Action: string(rules.ActionRestart), Status: eventStatusOK, Message: "cascade from web"})
 	events.Add(Event{Watch: "storage-root", Kind: eventKindHook, Status: eventStatusOK})
 	events.Add(Event{Watch: "storage-root", Kind: eventKindExpand, Message: "grew vg0/data"})
 	events.Add(Event{Watch: "runaway", Kind: eventKindKillFailed, Message: "pid 42 survived"})
@@ -460,8 +463,8 @@ func TestWebBackendActivitySummaryCountsAllServiceOperations(t *testing.T) {
 
 	b := &WebBackend{events: events}
 	got := b.ActivitySummary(context.Background())
-	if got.ServiceActions != 5 {
-		t.Fatalf("ServiceActions = %d, want 5 for start/stop/restart/reload/resume", got.ServiceActions)
+	if got.ServiceActions != 6 {
+		t.Fatalf("ServiceActions = %d, want 6 for start/stop/restart/reload/resume plus one cascade", got.ServiceActions)
 	}
 	// Expand and kill events count in the watch-actions bucket like hooks.
 	if got.WatchHooks != 3 || got.WatchNotifies != 1 || got.Errors != 1 {

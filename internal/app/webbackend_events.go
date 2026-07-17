@@ -60,7 +60,9 @@ func (b *WebBackend) ActivitySummary(_ context.Context) web.ActivitySummary {
 	}
 	for i := range events {
 		switch {
-		case events[i].Kind == eventKindAction && isServiceOperationAction(events[i].Action):
+		case (events[i].Kind == eventKindAction || events[i].Kind == eventKindCascade) && isServiceOperationAction(events[i].Action):
+			// Cascade targets run the same service operation as the primary, so
+			// an also_apply restart of three services counts as three actions.
 			summary.ServiceActions++
 		case events[i].Kind == eventKindHook || events[i].Kind == eventKindHookFail,
 			events[i].Kind == eventKindExpand || events[i].Kind == eventKindExpandFailed || events[i].Kind == eventKindExpandSkipped,
