@@ -58,6 +58,7 @@ const (
 	contentTypeTextUTF8         = "text/plain; charset=utf-8"
 	headerValueDeny             = "DENY"
 	headerValueNoCache          = "no-cache"
+	headerValueNoStore          = "no-store"
 	headerValueNoReferrer       = "no-referrer"
 	headerValueNoSniff          = "nosniff"
 	cspNonceBytes               = 16
@@ -2023,6 +2024,9 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 		return
 	}
 	w.Header().Set(headerContentType, contentTypeJSON)
+	// API payloads can carry process cmdlines and configuration; keep them out
+	// of browser and proxy caches.
+	w.Header().Set(headerCacheControl, headerValueNoStore)
 	w.WriteHeader(status)
 	_, _ = buf.WriteTo(w)
 }
