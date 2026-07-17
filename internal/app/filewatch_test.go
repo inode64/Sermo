@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -94,6 +95,83 @@ func TestFileWatchOlderThanFiresPerPathAndRearms(t *testing.T) {
 	w.runCycle(context.Background())
 	if len(h.fired) != 2 || h.fired[1][sermoEnvAgeSeconds] != "7200" {
 		t.Fatalf("re-armed stale path fire = %v", h.fired)
+	}
+}
+
+func TestFileWatchOlderThanAggregatesOneEventPerCycle(t *testing.T) {
+	// A recursive watch over a directory of stale files used to burst one
+	// event per file with the same timestamp (GeoIP x12 in the fleet). The
+	// hooks keep their per-file contract; the visible event is one per cycle.
+	dir := t.TempDir()
+	now := time.Date(2026, time.July, 12, 12, 0, 0, 0, time.UTC)
+	stale := make([]string, 0, 7)
+	for _, name := range []string{"a", "b", "c", "d", "e", "f", "g"} {
+		p := filepath.Join(dir, name+".mmdb")
+		writeSize(t, p, 1)
+		if err := os.Chtimes(p, now.Add(-2*time.Hour), now.Add(-2*time.Hour)); err != nil {
+			t.Fatal(err)
+		}
+		stale = append(stale, p)
+	}
+	h := &fileWatchHarness{}
+	w := h.watcher(dir, true, fileCond{olderThan: time.Hour})
+	w.now = func() time.Time { return now }
+
+	w.runCycle(context.Background())
+
+	if len(h.fired) != len(stale) {
+		t.Fatalf("hooks must keep firing once per stale file, fired %d, want %d", len(h.fired), len(stale))
+	}
+	hookEvents := 0
+	var aggregated []Event
+	for _, e := range h.events {
+		switch e.Kind {
+		case eventKindHook:
+			hookEvents++
+		default:
+			aggregated = append(aggregated, e)
+		}
+	}
+	if hookEvents != len(stale) {
+		t.Fatalf("hook events = %d, want one per stale file (%d): %+v", hookEvents, len(stale), h.events)
+	}
+	if len(aggregated) != 0 {
+		t.Fatalf("unexpected extra events: %+v", aggregated)
+	}
+
+	// Re-run: nothing re-fires until the files are touched (rearm contract).
+	w.runCycle(context.Background())
+	if len(h.fired) != len(stale) {
+		t.Fatalf("stale files repeated without rearming: %d", len(h.fired))
+	}
+}
+
+func TestFileWatchOlderThanAggregatedDryRunEvent(t *testing.T) {
+	dir := t.TempDir()
+	now := time.Date(2026, time.July, 12, 12, 0, 0, 0, time.UTC)
+	for _, name := range []string{"a", "b", "c", "d", "e", "f", "g"} {
+		p := filepath.Join(dir, name+".mmdb")
+		writeSize(t, p, 1)
+		if err := os.Chtimes(p, now.Add(-2*time.Hour), now.Add(-2*time.Hour)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	h := &fileWatchHarness{}
+	w := h.watcher(dir, true, fileCond{olderThan: time.Hour})
+	w.dryRun = true
+	w.now = func() time.Time { return now }
+
+	w.runCycle(context.Background())
+
+	if len(h.fired) != 0 {
+		t.Fatalf("dry-run must not execute hooks, fired %d", len(h.fired))
+	}
+	if len(h.events) != 1 || h.events[0].Kind != eventKindDryRun {
+		t.Fatalf("dry-run must emit one aggregated event per cycle, got %+v", h.events)
+	}
+	msg := h.events[0].Message
+	if !strings.Contains(msg, "7 files older than 1h") || !strings.Contains(msg, "(+2 more)") {
+		t.Fatalf("aggregated message must carry the count and bounded list, got %q", msg)
 	}
 }
 

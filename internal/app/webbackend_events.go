@@ -236,9 +236,12 @@ func toWebEvents(events []LoggedEvent) []web.Event {
 }
 
 func loggedEventToWeb(event LoggedEvent) web.Event {
+	// Events restored from the store carry UTC times while fresh ones carry the
+	// local zone; normalizing here keeps one timestamp convention (UTC) across
+	// restarts in the web UI, sermoctl and notifications.
 	return web.Event{
 		ID:      event.ID,
-		Time:    event.Time.Format(time.RFC3339),
+		Time:    event.Time.UTC().Format(time.RFC3339),
 		Service: event.Service,
 		Watch:   event.Watch,
 		App:     event.App,

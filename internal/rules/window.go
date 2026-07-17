@@ -411,12 +411,30 @@ func ParseWithinWindow(v any) *WithinWindow {
 	return &WithinWindow{Cycles: cycles, Duration: cfgval.Duration(m[WindowKeyDuration]), MinMatches: minMatches(m)}
 }
 
+// DefaultClearWindow is the built-in recovery hysteresis: when neither the
+// rule/watch nor a global/per-service `clear_window` block configures a clear
+// window, alert rules and watches hold their firing episode until the
+// condition has stayed clear this long. `clear: {cycles: 1}` opts a target
+// back into immediate clearing.
+const DefaultClearWindow = 5 * time.Minute
+
 // ParseClearWindow parses a `clear` window ({cycles} or {duration}) from a
 // config node, or nil when absent. It shares ForWindow's shape: the consecutive
 // false cycles or wall-clock duration the condition must stay clear before a
 // firing episode ends.
 func ParseClearWindow(v any) *ForWindow {
 	return ParseForWindow(v)
+}
+
+// ClearWindowOrDefault parses a `clear_window` fallback block, substituting the
+// built-in DefaultClearWindow when the block is absent or not a mapping. Shared
+// by ParseRules and the host-watch builder so both surfaces inherit the same
+// default.
+func ClearWindowOrDefault(v any) *ForWindow {
+	if w := ParseClearWindow(v); w != nil {
+		return w
+	}
+	return &ForWindow{Duration: DefaultClearWindow}
 }
 
 // ParseWindow parses an entry's `for`/`within` sub-blocks into their windows.

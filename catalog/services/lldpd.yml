@@ -44,8 +44,6 @@ watches:
       optional: true
     for:
       duration: 4m
-    clear:
-      duration: 4m
     then:
       action: alert
       message: >-

@@ -1341,8 +1341,9 @@ mostrarlo (p. ej. unidades generadas por sysv). Una **lista por init** primero r
 coincidencia de backend; si la sonda no puede mostrar una, Sermo loguea o imprime un warning y
 recurre a la unidad seed configurada para que `sermod`, la web UI y `sermoctl` se comporten
 igual en setups históricos de init-service. Un sistema init sin entrada significa que el
-servicio *no está disponible* allí. Los servicios que usan `control:` (libvirt/docker) no
-usan el fallback de init-unit.
+servicio *no está disponible* allí: `sermod` lo omite y registra la omisión como aviso
+informativo (no como warning), porque el propio mapa declara ese backend como no soportado.
+Los servicios que usan `control:` (libvirt/docker) no usan el fallback de init-unit.
 
 Una instancia habilitada puede sobrescribir la unidad con un escalar (p. ej.
 `service: redis-cache`) para correr como su propia unidad, u omitir `service` por completo para

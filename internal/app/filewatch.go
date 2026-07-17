@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -101,6 +102,7 @@ func (w *fileWatcher) runCycle(ctx context.Context) {
 	}
 	sort.Strings(paths) // deterministic event order
 
+	var stale []staleFile
 	for _, p := range paths {
 		if ctx.Err() != nil {
 			return // shutting down: stop firing
@@ -111,7 +113,7 @@ func (w *fileWatcher) runCycle(ctx context.Context) {
 			cur.olderFired = prev.olderFired
 		}
 		if !observeOnlyCycle(ctx) && cur.older && !cur.olderFired {
-			w.fireOlderThan(ctx, p, cur)
+			stale = append(stale, staleFile{path: p, state: cur})
 			cur.olderFired = true
 		}
 		w.baseline[p] = cur
@@ -119,6 +121,7 @@ func (w *fileWatcher) runCycle(ctx context.Context) {
 			w.diff(ctx, p, prev, cur)
 		}
 	}
+	w.fireOlderThanBatch(ctx, stale)
 
 	// Deletions: paths we tracked that are absent now.
 	gone := make([]string, 0)
@@ -289,14 +292,107 @@ func (w *fileWatcher) diff(ctx context.Context, path string, prev, cur fileState
 	}
 }
 
+// fileOlderThanListedPaths bounds how many stale paths an aggregated
+// older-than event names; the rest collapse into a "(+N more)" suffix.
+const fileOlderThanListedPaths = 5
+
+// staleFile is one path that crossed older_than this cycle.
+type staleFile struct {
+	path  string
+	state fileState
+}
+
 func (w *fileWatcher) fireOlderThan(ctx context.Context, path string, cur fileState) {
-	ageSeconds := strconv.FormatInt(int64(cur.age.Seconds()), envFormatBase)
-	w.fire(ctx, path, fileChangeOlderThan,
-		fmt.Sprintf("%s was modified at %s and is older than %s", path, cur.modifiedAt.UTC().Format(time.RFC3339), units.HumanizeDuration(w.cond.olderThan)), map[string]string{
-			sermoEnvModifiedAt: cur.modifiedAt.UTC().Format(time.RFC3339),
-			sermoEnvAgeSeconds: ageSeconds,
-			sermoEnvValue:      w.cond.olderThan.String(),
-		})
+	w.fire(ctx, path, fileChangeOlderThan, w.olderThanMessage(path, cur), w.olderThanExtra(cur))
+}
+
+// fireOlderThanBatch fires the paths that crossed older_than this cycle. A
+// single path keeps the classic per-file fire; several paths run the hook once
+// per file (its SERMO_PATH contract) but emit ONE aggregated event and
+// notification, so a directory of stale files cannot burst identical events
+// with the same timestamp.
+func (w *fileWatcher) fireOlderThanBatch(ctx context.Context, stale []staleFile) {
+	if len(stale) == 0 {
+		return
+	}
+	if len(stale) == 1 {
+		w.fireOlderThan(ctx, stale[0].path, stale[0].state)
+		return
+	}
+	if len(w.hook.Command) > 0 && !w.dryRun && !w.panicking() {
+		for _, s := range stale {
+			if ctx.Err() != nil {
+				return
+			}
+			w.runOlderThanHook(ctx, s.path, s.state)
+		}
+	}
+	msg := w.olderThanBatchMessage(stale)
+	env := map[string]string{
+		sermoEnvWatch:     w.name,
+		sermoEnvCheckType: checks.CheckTypeFile,
+		sermoEnvChange:    fileChangeOlderThan,
+		sermoEnvMessage:   msg,
+		sermoEnvValue:     w.cond.olderThan.String(),
+	}
+	// The hook already ran per file above, so the aggregated dispatch carries
+	// no hook of its own.
+	dispatchWatchFire(ctx, watchFireSpec{
+		name:        w.name,
+		runner:      w.runner,
+		notifiers:   w.notifiers,
+		inPanic:     w.inPanic,
+		dryRun:      w.dryRun,
+		emit:        w.emitEvent,
+		dryRunLabel: watchDryRunMessage(w.hook, w.notifiers, nil),
+		panicLabel:  "panic mode: hook/notify suppressed",
+	}, msg, env)
+}
+
+func (w *fileWatcher) runOlderThanHook(ctx context.Context, path string, cur fileState) {
+	msg := w.summaryMessage(path, fileChangeOlderThan, w.olderThanMessage(path, cur), w.olderThanExtra(cur))
+	env := map[string]string{
+		sermoEnvWatch:     w.name,
+		sermoEnvCheckType: checks.CheckTypeFile,
+		sermoEnvPath:      path,
+		sermoEnvChange:    fileChangeOlderThan,
+		sermoEnvMessage:   msg,
+	}
+	maps.Copy(env, w.olderThanExtra(cur))
+	runner := defaultHookRunner(w.runner)
+	if err := w.hook.Run(ctx, runner, env); err != nil {
+		w.emitEvent(Event{Watch: w.name, Kind: eventKindHookFail, Message: msg + ": " + err.Error()})
+	} else {
+		w.emitEvent(Event{Watch: w.name, Kind: eventKindHook, Message: msg})
+	}
+}
+
+func (w *fileWatcher) olderThanBatchMessage(stale []staleFile) string {
+	listed := make([]string, 0, min(len(stale), fileOlderThanListedPaths))
+	for i := range min(len(stale), fileOlderThanListedPaths) {
+		listed = append(listed, stale[i].path)
+	}
+	msg := fmt.Sprintf("%d files older than %s: %s", len(stale), units.HumanizeDuration(w.cond.olderThan), strings.Join(listed, ", "))
+	if extra := len(stale) - len(listed); extra > 0 {
+		msg += fmt.Sprintf(" (+%d more)", extra)
+	}
+	return msg
+}
+
+func (w *fileWatcher) olderThanMessage(path string, cur fileState) string {
+	return fmt.Sprintf("%s was modified at %s and is older than %s", path, cur.modifiedAt.UTC().Format(time.RFC3339), units.HumanizeDuration(w.cond.olderThan))
+}
+
+func (w *fileWatcher) olderThanExtra(cur fileState) map[string]string {
+	return map[string]string{
+		sermoEnvModifiedAt: cur.modifiedAt.UTC().Format(time.RFC3339),
+		sermoEnvAgeSeconds: strconv.FormatInt(int64(cur.age.Seconds()), envFormatBase),
+		sermoEnvValue:      w.cond.olderThan.String(),
+	}
+}
+
+func (w *fileWatcher) panicking() bool {
+	return w.inPanic != nil && w.inPanic()
 }
 
 func (w *fileWatcher) clock() time.Time {

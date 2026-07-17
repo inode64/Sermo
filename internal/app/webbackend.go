@@ -305,9 +305,9 @@ func (b *WebBackend) registerService(ctx context.Context, cfg *config.Config, na
 	}
 	var warnings []string
 	disabled := cfgval.Disabled(doc.Body)
-	target, warn := control.ResolveWithFallback(ctx, name, resolved.Tree, deps.Backend, deps.Manager, resolver)
+	target, warn := resolveServiceTarget(ctx, deps, name, resolved.Tree, resolver)
 	if warn != "" {
-		warnings = append(warnings, serviceSubjectPrefix+name+": "+warn)
+		warnings = append(warnings, serviceResolutionNotice(name, warn, resolved.Tree, deps.Backend))
 	}
 	if target.Unit == "" {
 		return warnings

@@ -138,6 +138,43 @@ func TestBuildWatchesEmissionOverridesGlobal(t *testing.T) {
 	}
 }
 
+func TestBuildWatchesClearWindowFallback(t *testing.T) {
+	cfg := cfgWithWatches(map[string]any{
+		"inherits-default": map[string]any{
+			"check": map[string]any{
+				"type":     "storage",
+				"path":     "/",
+				"used_pct": map[string]any{"op": ">", "value": 90},
+			},
+		},
+		"own-clear": map[string]any{
+			"check": map[string]any{
+				"type":     "storage",
+				"path":     "/var",
+				"used_pct": map[string]any{"op": ">", "value": 90},
+			},
+			"clear": map[string]any{"cycles": 1},
+		},
+	})
+	watches, warns := BuildWatches(cfg, Deps{
+		DefaultTimeout: time.Second,
+		GlobalClear:    &rules.ForWindow{Duration: rules.DefaultClearWindow},
+	}, 30*time.Second)
+	if len(warns) != 0 {
+		t.Fatalf("unexpected warnings: %v", warns)
+	}
+	byName := map[string]*Watch{}
+	for _, w := range watches {
+		byName[w.Name] = w
+	}
+	if w := byName["inherits-default"]; w == nil || w.Window.Clear == nil || w.Window.Clear.Duration != rules.DefaultClearWindow {
+		t.Fatalf("watch without clear must inherit the global fallback, got %+v", w.Window.Clear)
+	}
+	if w := byName["own-clear"]; w == nil || w.Window.Clear == nil || w.Window.Clear.Cycles != 1 {
+		t.Fatalf("watch with its own clear must keep it, got %+v", w.Window.Clear)
+	}
+}
+
 func TestBuildWatchesDryRunFromDefaultsCanBeOverridden(t *testing.T) {
 	cfg := cfgWithWatchDefaults(map[string]any{
 		"inherited": map[string]any{

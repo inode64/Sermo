@@ -466,7 +466,7 @@ func (w *Watch) runExpand(ctx context.Context, res checks.Result, emitSkipped bo
 }
 
 func expandSuccessMessage(path string, r volume.Result) string {
-	return fmt.Sprintf("%s: grew %s/%s by %d bytes", path, r.VG, r.LV, r.GrewBytes)
+	return fmt.Sprintf("%s: grew %s/%s by %s", path, r.VG, r.LV, checks.HumanizeSignedBytes(r.GrewBytes))
 }
 
 func watchDryRunMessage(hook HookSpec, notifiers []notify.Notifier, expand *ExpandSpec) string {

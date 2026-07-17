@@ -1859,6 +1859,13 @@ Los valores de bytes usan unidades binarias IEC — `B`, `KiB`, `MiB`, `GiB` o `
 en la configuración, incluido el umbral configurado. Así se ve una oscilación alrededor del
 umbral sin tener que reconstruir la lectura desde el histórico de métricas.
 
+Todo número visible por el operador sigue una única convención canónica en todas
+las superficies (eventos, notificaciones, `sermoctl` y la web UI): coma como
+separador de millares y punto como marca decimal (`12,345.68`), con los valores
+de bytes siempre humanizados a unidades IEC (`2.44 MiB`, `1 KiB/s`) por el mismo
+formateador. Los timestamps de eventos se renderizan siempre en UTC, de modo que
+el mismo instante se lee igual antes y después de un reinicio del daemon.
+
 Las acciones y los tipos están acoplados: las acciones de operación (`restart`, `start`,
 `stop`, `reload`, `resume`) pertenecen a reglas `type: remediation` — requeridas ahí (una
 regla solo de notificación es `type: alert`) y rechazadas en otros lugares. `alert` (con un
@@ -1923,10 +1930,16 @@ alrededor de su umbral produce un solo episodio (una alerta, un `recovered`) en
 lugar de uno por cada cruce. Un ciclo en que la condición vuelve a ser verdadera
 reinicia el progreso de clear y continúa el mismo episodio sin una segunda
 alerta. Una ventana clear solo extiende un episodio — nunca recorta la ventana de
-entrada. Sin `clear`, el episodio termina el primer ciclo en que la ventana de
-entrada deja de disparar. `clear` solo es válido en reglas `type: alert` y en
+entrada. `clear` solo es válido en reglas `type: alert` y en
 watches: una regla de remediación o guard mantenida en disparo con la condición
 falsa seguiría actuando sobre ella, así que la validación lo rechaza ahí.
+
+Toda regla alert y todo watch tienen ventana clear: cuando el objetivo no declara
+su propio `clear:`, aplica el fallback `clear_window: {cycles | duration}` —
+configurable en `defaults` global y por servicio, como `rule_window` — y en su
+ausencia el default integrado es de **5 minutos**. `clear: {cycles: 1}` (o un
+`clear_window` de un ciclo) devuelve un objetivo a la limpieza inmediata: un
+ciclo falso termina el episodio.
 
 El progreso de la ventana de reglas de servicio se persiste en `paths.state`. Si `sermod`
 reinicia mientras una ventana `for` está en 2/3 coincidencias consecutivas, el siguiente ciclo

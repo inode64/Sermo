@@ -313,8 +313,12 @@ type checkWatchSpec struct {
 }
 
 // newCheckWatch wires the shared runtime for one check-backed watch. Metric
-// expansions supply a stateSlot, while ordinary watches leave it empty.
+// expansions supply a stateSlot, while ordinary watches leave it empty. A watch
+// without its own clear: inherits the global fallback recovery window.
 func newCheckWatch(spec checkWatchSpec, deps Deps) *Watch {
+	if spec.window.Clear == nil {
+		spec.window.Clear = deps.GlobalClear
+	}
 	return &Watch{
 		Name:              spec.name,
 		CheckType:         spec.checkType,

@@ -189,6 +189,28 @@ func validateRuleWindow(tree map[string]any, add addFunc) {
 	}
 }
 
+// validateClearWindowSection checks the merged `clear_window` fallback block
+// (global defaults or per-service): a mapping with exactly one of cycles or
+// duration, both positive. `clear_window: {cycles: 1}` is the immediate
+// opt-out from the built-in default.
+func validateClearWindowSection(tree map[string]any, add addFunc) {
+	cw, present := tree[sectionClearWindow]
+	if !present {
+		return
+	}
+	m, ok := cw.(map[string]any)
+	if !ok {
+		add("clear_window must be a mapping, e.g. clear_window: {cycles: 3} or clear_window: {duration: 4m}")
+		return
+	}
+	for _, key := range slices.Sorted(maps.Keys(m)) {
+		if key != rules.WindowKeyCycles && key != rules.WindowKeyDuration {
+			add("clear_window.%s is not supported; clear_window only accepts cycles or duration", key)
+		}
+	}
+	validateWindowLength(sectionClearWindow, m, add)
+}
+
 func validateRules(tree map[string]any, notifiers map[string]struct{}, add addFunc) {
 	ruleMap, ok := tree[rules.SectionRules].(map[string]any)
 	if !ok {
