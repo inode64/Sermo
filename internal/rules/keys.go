@@ -16,6 +16,7 @@ const (
 	RuleFieldThen    = "then"
 	RuleFieldFor     = "for"
 	RuleFieldWithin  = "within"
+	RuleFieldClear   = "clear"
 	RuleFieldBlocks  = "blocks"
 	RuleFieldNotify  = "notify"
 	RuleFieldActions = "actions"

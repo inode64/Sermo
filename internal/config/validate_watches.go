@@ -560,14 +560,14 @@ func HasEffectiveNotifyAction(names, defaultNotify []string) bool {
 // validateMetricWatchEntry rejects entry-level then/for/within on a multi-metric
 // watch (net, icmp, swap): those fields belong inside each metric's own block.
 func validateMetricWatchEntry(name string, entry map[string]any, add func(string, ...any)) {
-	validateInvalidWatchEntryFields(name, "multi-metric", entry, []string{rules.RuleFieldThen, rules.RuleFieldFor, rules.RuleFieldWithin}, "metrics.<name>.%s", add)
+	validateInvalidWatchEntryFields(name, "multi-metric", entry, []string{rules.RuleFieldThen, rules.RuleFieldFor, rules.RuleFieldWithin, rules.RuleFieldClear}, "metrics.<name>.%s", add)
 }
 
 // validateStatefulWatchEntry rejects entry-level for/within on a file or process
 // watch: these use internal per-path/per-PID state and never read the shared
 // rules window fields at the entry level.
 func validateStatefulWatchEntry(name, typ string, entry map[string]any, add func(string, ...any)) {
-	validateInvalidWatchEntryFields(name, typ, entry, []string{rules.RuleFieldFor, rules.RuleFieldWithin}, "", add)
+	validateInvalidWatchEntryFields(name, typ, entry, []string{rules.RuleFieldFor, rules.RuleFieldWithin, rules.RuleFieldClear}, "", add)
 }
 
 func validateInvalidWatchEntryFields(name, typ string, entry map[string]any, keys []string, moveHint string, add func(string, ...any)) {

@@ -112,20 +112,26 @@ func remediationToRecord(remediation *rules.RemediationState) state.RemediationR
 
 func windowStateFromRecord(rec state.RuleWindowRecord) *rules.WindowState {
 	return rules.WindowStateFromSnapshot(rules.WindowStateSnapshot{
-		Consecutive:  rec.Consecutive,
-		History:      append([]bool(nil), rec.History...),
-		TrueSince:    rec.TrueSince,
-		TimedHistory: ruleSamplesFromRecords(rec.TimedHistory),
+		Consecutive:      rec.Consecutive,
+		History:          append([]bool(nil), rec.History...),
+		TrueSince:        rec.TrueSince,
+		TimedHistory:     ruleSamplesFromRecords(rec.TimedHistory),
+		Firing:           rec.Firing,
+		ClearConsecutive: rec.ClearConsecutive,
+		ClearSince:       rec.ClearSince,
 	})
 }
 
 func ruleWindowRecord(window *rules.WindowState) state.RuleWindowRecord {
 	snapshot := window.Snapshot()
 	return state.RuleWindowRecord{
-		Consecutive:  snapshot.Consecutive,
-		History:      append([]bool(nil), snapshot.History...),
-		TrueSince:    snapshot.TrueSince,
-		TimedHistory: ruleRecordsFromSamples(snapshot.TimedHistory),
+		Consecutive:      snapshot.Consecutive,
+		History:          append([]bool(nil), snapshot.History...),
+		TrueSince:        snapshot.TrueSince,
+		TimedHistory:     ruleRecordsFromSamples(snapshot.TimedHistory),
+		Firing:           snapshot.Firing,
+		ClearConsecutive: snapshot.ClearConsecutive,
+		ClearSince:       snapshot.ClearSince,
 	}
 }
 

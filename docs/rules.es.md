@@ -1834,6 +1834,7 @@ rules:
     # for: { duration: 6m }        # or consecutive wall-clock time
     within: { cycles: 15, min_matches: 5 }  # sliding window (optional)
     # within: { duration: 30m, min_matches: 3 } # or a time window
+    clear: { duration: 6m }       # histéresis de recuperación, solo reglas alert (opcional)
     notify: [ops-email]           # who gets this rule's alert messages (optional)
     emission: { events: on_change, notify: on_change } # or every_cycle
     then: { action: alert, message: "http is down" }
@@ -1914,11 +1915,26 @@ dentro de los últimos 30 minutos. `min_matches` es opcional y por defecto es `1
 (verdadero al menos una vez dentro de la ventana). Una regla no puede usar a la vez `for` y
 `within`; una única ventana debe elegir o bien `cycles` o `duration`, no ambos.
 
+`clear` es la ventana del lado de la recuperación (histéresis anti-flapping): una vez
+que la regla está en un episodio de disparo, `clear: {cycles: N}` o
+`clear: {duration: 4m}` mantiene el episodio abierto hasta que la condición haya
+permanecido falsa durante toda la ventana, de modo que una métrica que oscila
+alrededor de su umbral produce un solo episodio (una alerta, un `recovered`) en
+lugar de uno por cada cruce. Un ciclo en que la condición vuelve a ser verdadera
+reinicia el progreso de clear y continúa el mismo episodio sin una segunda
+alerta. Una ventana clear solo extiende un episodio — nunca recorta la ventana de
+entrada. Sin `clear`, el episodio termina el primer ciclo en que la ventana de
+entrada deja de disparar. `clear` solo es válido en reglas `type: alert` y en
+watches: una regla de remediación o guard mantenida en disparo con la condición
+falsa seguiría actuando sobre ella, así que la validación lo rechaza ahí.
+
 El progreso de la ventana de reglas de servicio se persiste en `paths.state`. Si `sermod`
 reinicia mientras una ventana `for` está en 2/3 coincidencias consecutivas, el siguiente ciclo
 coincidente observado continúa desde 2/3 en lugar de empezar desde cero. Las ventanas basadas en
 duración persisten sus timestamps también, así que un reinicio no reinicia una ventana
-`for: {duration: ...}` pendiente.
+`for: {duration: ...}` pendiente. El episodio de disparo y el progreso de clear se
+persisten igual, así que un reinicio ni re-alerta un episodio abierto ni descarta
+una ventana clear pendiente.
 
 ### Guards
 

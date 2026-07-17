@@ -60,11 +60,17 @@ func TestBuildRuleWindowReports(t *testing.T) {
 		},
 	}}
 	ruleSet, _ := ParseRules(tree)
+	var restartRule Rule
+	for _, r := range ruleSet {
+		if r.Name == "restart-if-down" {
+			restartRule = r
+		}
+	}
 	windows := map[string]*WindowState{
 		"restart-if-down": func() *WindowState {
 			s := &WindowState{}
-			s.FiresAt(ruleSet[0], true, time.Now())
-			s.FiresAt(ruleSet[0], true, time.Now())
+			s.FiresAt(restartRule, true, time.Now())
+			s.FiresAt(restartRule, true, time.Now())
 			return s
 		}(),
 	}

@@ -276,6 +276,93 @@ func TestCycleAlertEmitsOnChangeByDefault(t *testing.T) {
 	}
 }
 
+func TestCycleAlertDurationWindowEmitsOnRisingEdge(t *testing.T) {
+	// Regression: with the default on_change emission, a for:{duration} alert
+	// rule must emit its alert (and notify) once when the window matures, and a
+	// single recovered when the condition clears. Before the episode state was
+	// tracked explicitly, the rising edge was structurally unobservable for
+	// duration windows and these rules only ever emitted recovered events.
+	h := &workerHarness{cache: metricCheckCache("mem", map[string]any{
+		checks.DataKeyType:      checks.CheckTypeMetric,
+		checks.DataKeyScope:     checks.MetricScopeService,
+		checks.DataKeyMetric:    "memory",
+		checks.DataKeyOp:        ">",
+		checks.DataKeyThreshold: "60%",
+		checks.DataKeyValue:     73.5,
+		checks.DataKeyUnit:      metrics.MetricUnitPercent,
+	})}
+	tree := map[string]any{"rules": map[string]any{
+		"memory-high": map[string]any{
+			"type": "alert",
+			"if":   map[string]any{"active": map[string]any{"check": "mem"}},
+			"for":  map[string]any{"duration": "10m"},
+			"then": map[string]any{"action": "alert", "message": "memory high"},
+		},
+	}}
+	w := h.worker(tree, rules.Policy{Cooldown: time.Minute}, nil)
+	now := t0
+	w.Now = func() time.Time { return now }
+	n := &fakeNotifier{name: "ops"}
+	w.Notifiers = map[string]notify.Notifier{"ops": n}
+	w.GlobalNotify = []string{"ops"}
+
+	w.RunCycle(context.Background())
+	if _, ok := h.eventOf(eventKindAlert); ok {
+		t.Fatalf("duration window must not fire on the first true cycle: %+v", h.events)
+	}
+	now = now.Add(10 * time.Minute)
+	w.RunCycle(context.Background())
+	if got := h.countEvents(eventKindAlert); got != 1 {
+		t.Fatalf("maturing duration window must emit one alert event, got %d: %+v", got, h.events)
+	}
+	if len(n.msgs) != 1 {
+		t.Fatalf("maturing duration window must notify once, got %d messages", len(n.msgs))
+	}
+
+	now = now.Add(time.Minute)
+	w.RunCycle(context.Background())
+	if got := h.countEvents(eventKindAlert); got != 1 {
+		t.Fatalf("on_change must not repeat the alert while the episode holds, got %d: %+v", got, h.events)
+	}
+
+	h.cache = map[string]checks.Result{"mem": {Check: "mem", OK: false}}
+	now = now.Add(time.Minute)
+	w.RunCycle(context.Background())
+	if got := h.countEvents(eventKindRecovered); got != 1 {
+		t.Fatalf("clearing the condition must emit one recovered event, got %d: %+v", got, h.events)
+	}
+}
+
+func TestCycleAlertClearWindowHoldsEpisode(t *testing.T) {
+	// A clear window keeps the episode open across condition dips: no recovered
+	// event on the dip, no second alert when the condition returns, and one
+	// recovered once the condition stays clear for the whole window.
+	h := &workerHarness{cache: failedCache("http")}
+	tree := alertRuleTree(nil)
+	rule := tree["rules"].(map[string]any)["warn-down"].(map[string]any)
+	rule["clear"] = map[string]any{"cycles": 2}
+	w := h.worker(tree, rules.Policy{}, nil)
+
+	w.RunCycle(context.Background()) // fires
+	h.cache = map[string]checks.Result{"http": {Check: "http", OK: true}}
+	w.RunCycle(context.Background()) // dip 1/2: held
+	h.cache = failedCache("http")
+	w.RunCycle(context.Background()) // condition returns: same episode
+	h.cache = map[string]checks.Result{"http": {Check: "http", OK: true}}
+	w.RunCycle(context.Background()) // clear 1/2
+	if got := h.countEvents(eventKindRecovered); got != 0 {
+		t.Fatalf("clear window must hold the episode, got %d recovered: %+v", got, h.events)
+	}
+	w.RunCycle(context.Background()) // clear 2/2: episode ends
+
+	if got := h.countEvents(eventKindAlert); got != 1 {
+		t.Fatalf("one episode must emit one alert, got %d: %+v", got, h.events)
+	}
+	if got := h.countEvents(eventKindRecovered); got != 1 {
+		t.Fatalf("episode end must emit one recovered, got %d: %+v", got, h.events)
+	}
+}
+
 func TestCycleAlertEmissionEveryCycleRepeats(t *testing.T) {
 	tree := alertRuleTree(nil)
 	rule := tree["rules"].(map[string]any)["warn-down"].(map[string]any)

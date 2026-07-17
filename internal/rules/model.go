@@ -78,11 +78,16 @@ type WithinWindow struct {
 // Rule is a resolved rule. If is kept as the generic condition tree; the
 // evaluator walks it directly so a parse step does not duplicate the model.
 type Rule struct {
-	Name    string
-	Type    RuleType
-	If      map[string]any
-	For     *ForWindow
-	Within  *WithinWindow
+	Name   string
+	Type   RuleType
+	If     map[string]any
+	For    *ForWindow
+	Within *WithinWindow
+	// Clear optionally holds a firing episode open until the condition stays
+	// false for the whole window (anti-flapping hysteresis). Alert rules and
+	// watches only: a remediation rule held firing on a false condition would
+	// keep acting on it, so ParseRules drops clear from non-alert rules.
+	Clear   *ForWindow
 	Actions []Action // all actions in order
 	Blocks  []string
 	// Notify selects which notifiers receive this rule's alert messages: explicit
@@ -288,12 +293,21 @@ func ParseRules(tree map[string]any) ([]Rule, []string) {
 				forWin, withinWin = fbFor, fbWithin
 			}
 		}
+		ruleType := RuleType(cfgval.AsString(entry[RuleFieldType]))
+		clearWin := ParseClearWindow(entry[RuleFieldClear])
+		if clearWin != nil && ruleType != RuleAlert {
+			// Safety: a clear window holds the episode firing while the condition
+			// is false; a remediation/guard rule must never act on that hold.
+			warnings = append(warnings, ruleSubjectPrefix+name+": clear is only supported on alert rules; clear window dropped")
+			clearWin = nil
+		}
 		rules = append(rules, Rule{
 			Name:     name,
-			Type:     RuleType(cfgval.AsString(entry[RuleFieldType])),
+			Type:     ruleType,
 			If:       ifNode,
 			For:      forWin,
 			Within:   withinWin,
+			Clear:    clearWin,
 			Actions:  actions,
 			Blocks:   cfgval.StringList(entry[RuleFieldBlocks]),
 			Notify:   cfgval.StringList(entry[RuleFieldNotify]),
