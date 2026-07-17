@@ -606,7 +606,9 @@ web:
 - **admin** — full access. Granted by `password`.
 - **guest** — **read-only**: can view everything but every action (a `POST`) is
   refused with `403`. Granted by `guest_password`, and/or to anyone when
-  `guest: true` (anonymous read-only).
+  `guest: true` (anonymous read-only). Process **command lines are redacted to
+  the executable** for guests (service process trees and mount blockers):
+  arguments can carry secrets that only admins should see.
 
 The **password**, not the username, selects the role — at the browser prompt enter
 any username and the admin or guest password; passwords are compared in constant
