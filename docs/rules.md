@@ -1862,6 +1862,13 @@ rates add `/s`) — matching how size suffixes are parsed in configuration, incl
 the configured threshold. This makes threshold flapping visible without having
 to reconstruct the sample from the metrics history.
 
+Every operator-facing number follows one canonical convention on every surface
+(events, notifications, `sermoctl` and the web UI): comma as the thousands
+separator and dot as the decimal mark (`12,345.68`), with byte values always
+humanized to IEC units (`2.44 MiB`, `1 KiB/s`) by the same formatter. Event
+timestamps are always rendered in UTC, so the same instant reads identically
+before and after a daemon restart.
+
 Actions and types are coupled: the operation actions (`restart`, `start`,
 `stop`, `reload`, `resume`) belong to `type: remediation` rules — required there (a
 notify-only rule is `type: alert`) and rejected elsewhere. `alert` (with a
@@ -1929,10 +1936,16 @@ metric oscillating around its threshold produces one episode (one alert, one
 `recovered`) instead of one per crossing. A cycle where the condition is true
 again resets the clear progress and continues the same episode without a second
 alert. A clear window only extends an episode — it never cuts the entry window
-short. Without `clear`, the episode ends the first cycle the entry window stops
-firing. `clear` is only valid on `type: alert` rules and on watches: a
+short. `clear` is only valid on `type: alert` rules and on watches: a
 remediation or guard rule held firing on a false condition would keep acting on
 it, so validation rejects it there.
+
+Every alert rule and watch has a clear window: when the target declares no
+`clear:` of its own, the `clear_window: {cycles | duration}` fallback applies —
+configurable in global `defaults` and per service, like `rule_window` — and
+without that the built-in default is **5 minutes**. `clear: {cycles: 1}` (or a
+`clear_window` of one cycle) opts a target back into immediate clearing: one
+false cycle ends the episode.
 
 Service rule-window progress is persisted in `paths.state`. If `sermod`
 restarts while a `for` window is at 2/3 consecutive matches, the next observed

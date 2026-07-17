@@ -234,6 +234,49 @@ func TestParseRulesClearWindow(t *testing.T) {
 	}
 }
 
+func TestParseRulesClearWindowFallback(t *testing.T) {
+	baseRules := func() map[string]any {
+		return map[string]any{
+			"alert-high": map[string]any{
+				"type": "alert",
+				"if":   map[string]any{"failed": map[string]any{"check": "http"}},
+				"then": map[string]any{"action": "alert", "message": "high"},
+			},
+			"restart-down": map[string]any{
+				"type": "remediation",
+				"if":   map[string]any{"failed": map[string]any{"check": "http"}},
+				"then": map[string]any{"action": "restart"},
+			},
+		}
+	}
+
+	// Without any configuration, alert rules inherit the built-in default.
+	byName := parseRulesByName(t, map[string]any{"rules": baseRules()})
+	if a := byName["alert-high"]; a.Clear == nil || a.Clear.Duration != DefaultClearWindow {
+		t.Fatalf("alert rule default clear = %+v, want duration %s", a.Clear, DefaultClearWindow)
+	}
+	if r := byName["restart-down"]; r.Clear != nil {
+		t.Fatalf("remediation rule must never inherit a clear window, got %+v", r.Clear)
+	}
+
+	// A merged clear_window block overrides the built-in default.
+	byName = parseRulesByName(t, map[string]any{
+		"rules":            baseRules(),
+		SectionClearWindow: map[string]any{"cycles": 3},
+	})
+	if a := byName["alert-high"]; a.Clear == nil || a.Clear.Cycles != 3 {
+		t.Fatalf("alert rule configured clear = %+v, want cycles 3", a.Clear)
+	}
+
+	// A rule's own clear always wins; {cycles: 1} is the immediate opt-out.
+	tree := map[string]any{"rules": baseRules(), SectionClearWindow: map[string]any{"cycles": 3}}
+	tree["rules"].(map[string]any)["alert-high"].(map[string]any)["clear"] = map[string]any{"cycles": 1}
+	byName = parseRulesByName(t, tree)
+	if a := byName["alert-high"]; a.Clear == nil || a.Clear.Cycles != 1 {
+		t.Fatalf("explicit clear = %+v, want cycles 1", a.Clear)
+	}
+}
+
 func TestWindowStateSnapshotKeepsEpisode(t *testing.T) {
 	at := time.Date(2026, 6, 22, 10, 0, 0, 0, time.UTC)
 	r := Rule{Clear: &ForWindow{Cycles: 3}}

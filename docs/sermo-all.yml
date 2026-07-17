@@ -66,6 +66,8 @@ paths:
 
 defaults:  # shared defaults for services and watches where applicable
   dry_run: false  # simulate automatic actions; manual operations still run
+  clear_window: { duration: 5m }  # recovery hysteresis fallback for alert rules/watches without their own clear
+
   variables:  # global custom vars; services may override them
     owner: ops
     region: local

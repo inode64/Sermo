@@ -32,7 +32,7 @@ func TestSummaryCheckFormatsResultAndConfigurationValues(t *testing.T) {
 	})
 
 	result := check.Run(context.Background())
-	const want = "GeoIP 2w6d1h is older than 2w6d in 12.345 files (/usr/share/GeoIP)"
+	const want = "GeoIP 2w6d1h is older than 2w6d in 12,345 files (/usr/share/GeoIP)"
 	if result.Message != want {
 		t.Fatalf("summary = %q, want %q", result.Message, want)
 	}
@@ -46,8 +46,15 @@ func TestSummaryCheckKeepsUnknownReferencesVisible(t *testing.T) {
 }
 
 func TestFormatDisplayValueFormatsDecimalsAndThousands(t *testing.T) {
-	if got, want := FormatDisplayValue(DataKeyValue, 12345.678), "12.345,68"; got != want {
+	// Canonical convention on every surface: comma thousands, dot decimal.
+	if got, want := FormatDisplayValue(DataKeyValue, 12345.678), "12,345.68"; got != want {
 		t.Fatalf("formatted number = %q, want %q", got, want)
+	}
+	if got, want := FormatDisplayValue(DataKeyValue, 2555904), "2,555,904"; got != want {
+		t.Fatalf("formatted integer = %q, want %q", got, want)
+	}
+	if got, want := FormatDisplayValue(DataKeyValue, -1234.5), "-1,234.5"; got != want {
+		t.Fatalf("formatted negative = %q, want %q", got, want)
 	}
 }
 
@@ -58,10 +65,11 @@ func TestFormatDisplayValueWithUnitFormatsBytes(t *testing.T) {
 		unit  string
 		want  string
 	}{
-		{name: "bytes", value: 2555904, unit: metrics.MetricUnitBytes, want: "2,44 MiB"},
-		{name: "threshold", value: "174159463", unit: metrics.MetricUnitBytes, want: "166,09 MiB"},
+		{name: "bytes", value: 2555904, unit: metrics.MetricUnitBytes, want: "2.44 MiB"},
+		{name: "threshold", value: "174159463", unit: metrics.MetricUnitBytes, want: "166.09 MiB"},
 		{name: "rate", value: 1048576, unit: metrics.MetricUnitBytesPerSecond, want: "1 MiB/s"},
-		{name: "percent", value: 73.5, unit: metrics.MetricUnitPercent, want: "73,5%"},
+		{name: "percent", value: 73.5, unit: metrics.MetricUnitPercent, want: "73.5%"},
+		{name: "grouped bytes below unit step", value: 1023.75, unit: metrics.MetricUnitBytes, want: "1,023.75 B"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -80,7 +88,7 @@ func TestSummaryFormatsMetricValuesAndThresholdsWithTheirUnit(t *testing.T) {
 		DataKeyThreshold: "174159463",
 		DataKeyUnit:      metrics.MetricUnitBytes,
 	}})
-	const want = "current 2,44 MiB; threshold 166,09 MiB; configured 166,09 MiB"
+	const want = "current 2.44 MiB; threshold 166.09 MiB; configured 166.09 MiB"
 	if result.Message != want {
 		t.Fatalf("summary = %q, want %q", result.Message, want)
 	}

@@ -40,8 +40,6 @@ watches:
     within:
       cycles: 10
       min_matches: 3
-    clear:
-      cycles: 10
     then:
       action: alert
       message: >-

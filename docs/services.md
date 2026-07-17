@@ -1336,8 +1336,10 @@ it (e.g. sysv-generated units). A **per-init list** first requires a backend
 match; if the probe cannot surface one, Sermo logs or prints a warning and falls
 back to the configured seed unit so `sermod`, the web UI and `sermoctl` behave
 the same on historic init-service setups. An init system with no entry means the
-service is *not available* there. Services using `control:` (libvirt/docker) do
-not use the init-unit fallback.
+service is *not available* there: `sermod` skips it and reports the skip as an
+informational notice (not a warning), because the map itself declares the
+backend unsupported. Services using `control:` (libvirt/docker) do not use the
+init-unit fallback.
 
 An enabled instance can override the unit with a scalar (e.g.
 `service: redis-cache`) to run as its own unit, or omit `service` entirely to

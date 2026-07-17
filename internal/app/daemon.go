@@ -144,6 +144,11 @@ var measuredCheckTypes = map[string]bool{
 type Deps struct {
 	Backend servicemgr.Backend
 	Manager servicemgr.Manager
+	// Targets memoizes service unit resolution for one build generation, so the
+	// workers build and the web backend build probe each unit once and log each
+	// resolution warning once. Optional: nil resolves directly. Create a fresh
+	// cache per config load/reload.
+	Targets *control.TargetCache
 	// BackendPIDs reports backend-owned process roots for the resolved service
 	// (systemd cgroup PIDs, Docker container init PID, etc.). Optional: nil lets
 	// the runtime derive init-backend PIDs when that is supported.
@@ -277,6 +282,12 @@ type Deps struct {
 	GlobalNotify []string
 	// GlobalEmission is the top-level automatic event/notification cadence.
 	GlobalEmission emission.Policy
+	// GlobalClear is the fallback recovery (clear) window for watches that
+	// declare no clear: of their own — defaults.clear_window, or the built-in
+	// rules.DefaultClearWindow. Optional: nil leaves watch windows untouched
+	// (tests, non-daemon builders). Service rules inherit theirs from the
+	// merged service tree in rules.ParseRules instead.
+	GlobalClear *rules.ForWindow
 	// Snapshots collects each service's latest check results for the web detail
 	// view. Optional: nil disables publishing.
 	Snapshots *Snapshots
@@ -374,9 +385,9 @@ func BuildWorkers(ctx context.Context, cfg *config.Config, deps Deps, collector 
 			warnings = append(warnings, w)
 		}
 
-		target, warn := control.ResolveWithFallback(ctx, name, resolved.Tree, deps.Backend, deps.Manager, resolver)
+		target, warn := resolveServiceTarget(ctx, deps, name, resolved.Tree, resolver)
 		if warn != "" {
-			warnings = append(warnings, serviceSubjectPrefix+name+": "+warn)
+			warnings = append(warnings, serviceResolutionNotice(name, warn, resolved.Tree, deps.Backend))
 		}
 		if target.Unit == "" {
 			continue
@@ -397,6 +408,26 @@ func BuildWorkers(ctx context.Context, cfg *config.Config, deps Deps, collector 
 	}
 	wireCascade(workers, cascadeMap, deps)
 	return workers, serviceWatchList, warnings
+}
+
+// resolveServiceTarget resolves one service's control target, through the
+// per-generation cache when the deps carry one.
+func resolveServiceTarget(ctx context.Context, deps Deps, name string, tree map[string]any, resolver servicemgr.UnitResolver) (control.Target, string) {
+	if deps.Targets != nil {
+		return deps.Targets.ResolveWithFallback(ctx, name, tree, deps.Backend, deps.Manager, resolver)
+	}
+	return control.ResolveWithFallback(ctx, name, tree, deps.Backend, deps.Manager, resolver)
+}
+
+// serviceResolutionNotice renders one service's resolution warning, demoted to
+// an informational notice when the service's own map declares no unit for the
+// active backend (skipping it is the configuration working as written).
+func serviceResolutionNotice(name, warn string, tree map[string]any, backend servicemgr.Backend) string {
+	msg := serviceSubjectPrefix + name + ": " + warn
+	if control.UnsupportedOnBackend(tree, backend, name) {
+		return infoNotice(msg)
+	}
+	return msg
 }
 
 // wireCascade gives every worker whose service declares also_apply a Cascade

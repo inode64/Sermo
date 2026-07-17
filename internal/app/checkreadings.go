@@ -6,8 +6,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dustin/go-humanize"
-
 	"sermo/internal/cfgval"
 	"sermo/internal/checks"
 	"sermo/internal/metrics"
@@ -174,10 +172,11 @@ func (rb *readingBuilder) addIntMetric(field, label, unit string) *readingBuilde
 	return rb
 }
 
-// addBytes appends the field's non-negative byte count, humanized.
+// addBytes appends the field's non-negative byte count through the canonical
+// byte formatter, so meters and event messages render bytes identically.
 func (rb *readingBuilder) addBytes(field, label string) *readingBuilder {
 	if v, ok := uintField(rb.data[field]); ok {
-		rb.out = append(rb.out, web.WatchReading{Field: field, Label: label, Value: humanize.IBytes(v)})
+		rb.out = append(rb.out, web.WatchReading{Field: field, Label: label, Value: checks.HumanizeSignedBytes(int64(v))})
 	}
 	return rb
 }
@@ -326,7 +325,7 @@ func raidCheckReadings(data map[string]any) []web.WatchReading {
 		addMetric(checks.DataKeyRaidProgressPct, "Rebuild progress", watchReadingProgressDecimals, metrics.MetricUnitPercent).
 		addString(checks.DataKeyRaidMismatchCount, "Mismatch count")
 	if size, ok := uintField(data[checks.DataKeyTotalBytes]); ok && size > 0 {
-		rb.add(checks.DataKeyTotalBytes, watchReadingLabelSize, humanize.IBytes(size))
+		rb.add(checks.DataKeyTotalBytes, watchReadingLabelSize, checks.HumanizeSignedBytes(int64(size)))
 	}
 	if details, ok := data[checks.DataKeyRaidMembers].([]checks.RaidArrayStatus); ok {
 		for _, detail := range details {

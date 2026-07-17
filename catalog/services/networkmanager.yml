@@ -70,8 +70,6 @@ watches:
     within:
       cycles: 10
       min_matches: 3
-    clear:
-      cycles: 10
     then:
       action: alert
       message: >-
@@ -85,8 +83,6 @@ watches:
       value: 31665357
       optional: true
     for:
-      duration: 4m
-    clear:
       duration: 4m
     then:
       action: alert

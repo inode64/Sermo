@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 
 	"sermo/internal/cfgval"
 	"sermo/internal/config"
@@ -93,6 +94,58 @@ func ResolveWithFallback(ctx context.Context, name string, tree map[string]any, 
 	}
 	unit := candidates[0]
 	return Target{Unit: unit, Backend: backend, Manager: manager}, fmt.Sprintf("%s (using %s)", err.Error(), unit)
+}
+
+// UnsupportedOnBackend reports whether tree's explicit per-init service map
+// declares no unit for backend. Resolution then fails by construction — the
+// profile deliberately does not support this init system — so the skip is
+// expected behavior of the configuration, not a degradation: callers report it
+// as an informational notice instead of a warning. A scalar `service:` (trusted
+// fallback) and controlled services (docker/libvirt) never match.
+func UnsupportedOnBackend(tree map[string]any, backend servicemgr.Backend, name string) bool {
+	if _, controlled, err := controlType(tree); controlled || err != nil {
+		return false
+	}
+	candidates, trust := config.ServiceCandidates(tree, string(backend), name)
+	return !trust && len(candidates) == 0
+}
+
+// TargetCache memoizes ResolveWithFallback per service name for one build
+// generation. The workers build and the web backend build iterate the same
+// configured services back-to-back on every daemon start and reload; without
+// the cache each service's unit is probed twice (systemctl cat / init-script
+// stat) and every resolution warning is logged twice. Create a fresh cache per
+// config generation — entries never expire, and the warning is returned only
+// to the first resolver so it reaches the log once.
+type TargetCache struct {
+	mu      sync.Mutex
+	entries map[string]cachedTarget
+}
+
+type cachedTarget struct {
+	target Target
+}
+
+// NewTargetCache returns an empty per-generation resolution cache.
+func NewTargetCache() *TargetCache {
+	return &TargetCache{entries: map[string]cachedTarget{}}
+}
+
+// ResolveWithFallback resolves through the cache: the first call for a service
+// resolves and reports its warning; later calls return the cached target with
+// an empty warning and no backend probes.
+func (c *TargetCache) ResolveWithFallback(ctx context.Context, name string, tree map[string]any, backend servicemgr.Backend, manager servicemgr.Manager, resolver servicemgr.UnitResolver) (Target, string) {
+	c.mu.Lock()
+	cached, ok := c.entries[name]
+	c.mu.Unlock()
+	if ok {
+		return cached.target, ""
+	}
+	target, warn := ResolveWithFallback(ctx, name, tree, backend, manager, resolver)
+	c.mu.Lock()
+	c.entries[name] = cachedTarget{target: target}
+	c.mu.Unlock()
+	return target, warn
 }
 
 func controlType(tree map[string]any) (string, bool, error) {

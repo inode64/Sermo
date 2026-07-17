@@ -222,6 +222,11 @@ func watchReadingIntMetricValue(value int64, unit string) string {
 }
 
 func watchReadingMetricValue(value float64, decimals int, unit string) string {
+	// Byte counts and rates always go through the canonical byte formatter so a
+	// reading never renders the same value differently from its event message.
+	if unit == metrics.MetricUnitBytes || unit == metrics.MetricUnitBytesPerSecond {
+		return checks.FormatDisplayValueWithUnit(checks.DataKeyValue, value, unit)
+	}
 	if unit == "" {
 		return fmt.Sprintf("%.*f", decimals, value)
 	}

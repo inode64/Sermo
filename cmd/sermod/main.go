@@ -23,12 +23,14 @@ import (
 	"sermo/internal/buildinfo"
 	"sermo/internal/cfgval"
 	"sermo/internal/config"
+	"sermo/internal/control"
 	"sermo/internal/emission"
 	"sermo/internal/execx"
 	"sermo/internal/logfile"
 	"sermo/internal/metrics"
 	"sermo/internal/notify"
 	"sermo/internal/process"
+	"sermo/internal/rules"
 	"sermo/internal/servicemgr"
 	"sermo/internal/state"
 	"sermo/internal/web"
@@ -261,6 +263,7 @@ func run(args []string) int {
 		Notifiers:         notifiers,
 		GlobalNotify:      config.NotifyDefault(cfg.Global.Raw),
 		GlobalEmission:    emission.Merge(cfg.Global.Raw[emission.Section], emission.Default()),
+		GlobalClear:       rules.ClearWindowOrDefault(cfg.Global.Defaults[rules.SectionClearWindow]),
 		Snapshots:         snapshots,
 		WatchSnapshots:    watchSnapshots,
 		Live:              app.NewLiveMetrics(),
@@ -293,11 +296,12 @@ func run(args []string) int {
 	// separate from the engine's so their rate deltas never corrupt each other.
 	deps.LiveCollector = metrics.New(metrics.OSReader{})
 	deps.ArtifactSamples = app.NewArtifactSamples()
+	// One resolution cache per startup generation: the workers build and the web
+	// backend build probe each service unit once and log its warning once.
+	deps.Targets = control.NewTargetCache()
 
 	workers, svcWatches, warnings := app.BuildWorkers(ctx, cfg, deps, collector)
-	for _, w := range warnings {
-		logger.Warn("build workers", logFieldWarning, w)
-	}
+	app.LogBuildNotices(logger, "build workers", warnings)
 
 	watches, watchWarnings := app.BuildWatches(cfg, deps, interval)
 	for _, w := range watchWarnings {
@@ -353,9 +357,7 @@ func run(args []string) int {
 	if addr != "" {
 		var webWarnings []string
 		webHolder, webWarnings = app.NewWebBackendHolder(ctx, cfg, deps)
-		for _, w := range webWarnings {
-			logger.Warn("build web backend", logFieldWarning, w)
-		}
+		app.LogBuildNotices(logger, "build web backend", webWarnings)
 		auth := webAuth(cfg)
 		server := &web.Server{
 			Addr:                   addr,

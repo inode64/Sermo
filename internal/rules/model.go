@@ -259,6 +259,9 @@ func ParseRules(tree map[string]any) ([]Rule, []string) {
 	// default-equivalent, both are nil and rules keep the built-in immediate
 	// default.
 	fbFor, fbWithin := ParseRuleWindow(tree[SectionRuleWindow])
+	// Fallback recovery window for alert rules without their own `clear:`,
+	// from the merged `clear_window` block or the built-in default.
+	fbClear := ClearWindowOrDefault(tree[SectionClearWindow])
 
 	refChecks := ReferencedChecks(tree)
 	var rules []Rule
@@ -300,6 +303,9 @@ func ParseRules(tree map[string]any) ([]Rule, []string) {
 			// is false; a remediation/guard rule must never act on that hold.
 			warnings = append(warnings, ruleSubjectPrefix+name+": clear is only supported on alert rules; clear window dropped")
 			clearWin = nil
+		}
+		if clearWin == nil && ruleType == RuleAlert {
+			clearWin = fbClear
 		}
 		rules = append(rules, Rule{
 			Name:     name,

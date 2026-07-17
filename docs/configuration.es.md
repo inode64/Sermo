@@ -1726,7 +1726,7 @@ check:
   path: /
   used_pct: { op: ">=", value: "90%" } # check fires when crossed
 for: { cycles: 3 }     # optional window; reuses the rules engine
-clear: { cycles: 3 }   # histéresis de recuperación opcional; ver Reglas → Ventanas
+clear: { cycles: 3 }   # histéresis de recuperación; default 5m vía defaults.clear_window (Reglas → Ventanas)
 then:
   hook:
     command: [/usr/local/bin/alert-storage.sh, "/"]
@@ -2301,8 +2301,14 @@ enlaces, nunca se siguen). Por defecto se omiten los descendientes cuyo nombre e
 por `.`, incluidos sus subárboles. Usa `include_hidden: true` para vigilarlos. Una ruta
 oculta indicada directamente en `path` o `paths` siempre se vigila. Las entradas nuevas se adoptan silenciosamente salvo que
 ya estén vencidas; las eliminadas disparan `existence` si está configurado. Cada
-cambio o vencimiento produce **un evento y una ejecución de hook**, de modo que un
-ciclo que encuentra varias rutas se dispara varias veces.
+cambio produce **un evento y una ejecución de hook**, de modo que un
+ciclo que encuentra varias rutas cambiadas se dispara varias veces — excepto
+`older_than`: cuando varias rutas cruzan el umbral de edad en el mismo ciclo, el
+hook sigue ejecutándose una vez por ruta (con su propio `SERMO_PATH`), pero
+producen **un único evento y notificación agregados** con el recuento y hasta 5
+rutas (`12 files older than 2w6d: a, b, … (+7 more)`), de modo que un directorio
+de ficheros vencidos no puede generar una ráfaga de eventos idénticos con el
+mismo timestamp.
 
 Extras del hook: `SERMO_PATH` (la ruta cambiada), `SERMO_CHANGE`
 (`size`|`size_threshold`|`permissions`|`owner`|`deleted`|`older_than`),

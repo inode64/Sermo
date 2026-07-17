@@ -172,11 +172,11 @@ func TestBuildSizeCheckErrors(t *testing.T) {
 func TestHumanizeSigned(t *testing.T) {
 	// Negative deltas get a sign and the magnitude of |n|; zero and positive
 	// deltas render without a sign.
-	if got := HumanizeSignedBytes(-2048); got != "-2.0 KiB" {
-		t.Errorf("HumanizeSignedBytes(-2048) = %q, want -2.0 KiB", got)
+	if got := HumanizeSignedBytes(-2048); got != "-2 KiB" {
+		t.Errorf("HumanizeSignedBytes(-2048) = %q, want -2 KiB", got)
 	}
-	if got := HumanizeSignedBytes(2048); got != "2.0 KiB" {
-		t.Errorf("HumanizeSignedBytes(2048) = %q, want 2.0 KiB", got)
+	if got := HumanizeSignedBytes(2048); got != "2 KiB" {
+		t.Errorf("HumanizeSignedBytes(2048) = %q, want 2 KiB", got)
 	}
 	if got := HumanizeSignedBytes(0); got != "0 B" {
 		t.Errorf("HumanizeSignedBytes(0) = %q, want 0 B", got)

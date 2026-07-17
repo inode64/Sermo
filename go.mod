@@ -6,7 +6,6 @@ require (
 	github.com/beevik/ntp v1.5.0
 	github.com/cloudsoda/go-smb2 v0.0.0-20260701064823-d8c5600d73b8
 	github.com/digitalocean/go-libvirt v0.0.0-20260609165003-6254771e63a8
-	github.com/dustin/go-humanize v1.0.1
 	github.com/evanw/esbuild v0.28.1
 	github.com/go-ldap/ldap/v3 v3.4.14
 	github.com/go-sql-driver/mysql v1.10.0
@@ -30,6 +29,7 @@ require (
 	filippo.io/edwards25519 v1.2.0 // indirect
 	github.com/Azure/go-ntlmssp v0.1.1 // indirect
 	github.com/cloudsoda/sddl v0.0.0-20250224235906-926454e91efc // indirect
+	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/geoffgarside/ber v1.2.0 // indirect
 	github.com/go-asn1-ber/asn1-ber v1.5.8 // indirect
 	github.com/google/go-cmp v0.7.0 // indirect

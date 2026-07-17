@@ -7,6 +7,9 @@ const (
 	SectionRules      = "rules"
 	SectionPolicy     = "policy"
 	SectionRuleWindow = "rule_window"
+	// SectionClearWindow is the global/per-service fallback recovery window
+	// applied to alert rules and watches that declare no clear: of their own.
+	SectionClearWindow = "clear_window"
 )
 
 // RuleField constants are keys inside one rule entry or its then/action block.

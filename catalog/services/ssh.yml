@@ -56,8 +56,6 @@ watches:
       optional: true
     for:
       duration: 4m
-    clear:
-      duration: 4m
     then:
       action: alert
       message: >-
@@ -72,8 +70,6 @@ watches:
       optional: true
     for:
       duration: 5m
-    clear:
-      duration: 5m
     then:
       action: alert
       message: >-
@@ -87,8 +83,6 @@ watches:
       value: 451
       optional: true
     for:
-      duration: 5m
-    clear:
       duration: 5m
     then:
       action: alert
