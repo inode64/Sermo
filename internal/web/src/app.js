@@ -163,6 +163,7 @@ const activityCriticalStatuses = [targetStateFailed, mountStateError, eventStatu
 const activityCriticalKinds = [mountStateError, eventKindHookFailed, eventKindNotifyFailed, eventKindExpandFailed, eventKindKillFailed];
 const activityWarningKinds = [actionAlert, eventKindFiring, eventKindSuppressed, eventKindPanicSuppressed, eventKindNotifySuppressed, eventKindExpandSkipped];
 const activityOKKinds = [eventKindAction, eventKindCascade, eventKindHook, eventKindNotify, eventKindRecovered, actionExpand, eventKindKill];
+const activityInfoKinds = [eventKindDryRun, eventKindReload];
 const serviceStatusFilterStates = [
   targetStateDisabled,
   targetStateStopped,
@@ -1060,8 +1061,7 @@ function activitySeverity(kind, status) {
   if (activityCriticalKinds.includes(k)) return healthStatusCriticalShort;
   if (activityWarningKinds.includes(k)) return healthStatusWarningShort;
   if (activityOKKinds.includes(k)) return healthStatusOK;
-  // dry-run and reload are informational here, matching the events table.
-  if (k === eventKindDryRun || k === eventKindReload) return healthStatusInfo;
+  if (activityInfoKinds.includes(k)) return healthStatusInfo;
   return healthStatusMuted;
 }
 
