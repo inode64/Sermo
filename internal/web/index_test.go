@@ -411,7 +411,7 @@ func TestSourceLoadDefersWatchesWithoutStaleFastPathReference(t *testing.T) {
 		t.Fatalf("read src/app.js: %v", err)
 	}
 	text := string(src)
-	watchesFetch := strings.Index(text, `getJSONResult(apiWatchesPath, null)`)
+	watchesFetch := strings.Index(text, `getJSONResult(apiWatchesPath, null, generation)`)
 	primaryRender := strings.Index(text, `renderStatus({`)
 	if watchesFetch < 0 || watchesFetch < primaryRender {
 		t.Fatalf("load() no longer defers api/watches")
@@ -432,7 +432,7 @@ func TestSourceLoadReportsPartialRefreshBeforeAdvancingFreshness(t *testing.T) {
 		`["watches", watchesResult]`,
 		`["applications", appsResult]`,
 		`["libraries", librariesResult]`,
-		`["events", { ok: eventsOK }]`,
+		`["events", eventsResult]`,
 		`showPartialRefresh(failures)`,
 		`fully updated ${fmtSince`,
 	} {
@@ -467,21 +467,21 @@ func TestSourceFullyRefreshesExpandedServicesEveryDashboardPoll(t *testing.T) {
 	if start < 0 {
 		t.Fatal("refreshExpandedServices source block not found")
 	}
-	end := strings.Index(text[start:], "async function refreshExpandedWatches()")
+	end := strings.Index(text[start:], "async function refreshExpandedWatches(generation")
 	if end < 0 {
 		t.Fatal("refreshExpandedServices source block end not found")
 	}
 	body := text[start : start+end]
-	if !strings.Contains(body, "Promise.all(keys.map(loadExpansionFor))") {
+	if !strings.Contains(body, "Promise.all(keys.map((key) => loadExpansionFor(key, generation)))") {
 		t.Fatal("expanded services are not fully loaded on each dashboard refresh")
 	}
 	for _, marker := range []string{
-		"expandedServicesPromise = refreshExpandedServices()",
+		"expandedServicesPromise = refreshExpandedServices({ generation })",
 		`["service details", { ok: expandedServicesOK }]`,
 		`["watch details", { ok: expandedWatchesOK }]`,
 		`["application details", { ok: expandedApplicationsOK }]`,
 		"const results = await Promise.all(pending)",
-		"return hydrateServiceDetail(detailData)",
+		"return hydrateServiceDetail(detailData, generation)",
 		"const expLoading = new Map()",
 	} {
 		if !strings.Contains(text, marker) {
@@ -522,7 +522,14 @@ func TestSourceUsesDashboardSnapshotWithGranularFallback(t *testing.T) {
 		"getJSONResult(dashboardAPI(daemonMetricWindow), null)",
 		"if (aggregate.ok)",
 		`getJSONResult(apiServicesPath, null)`,
-		`snapshotResult(snapshot, "host_metrics", [])`)
+		`snapshotResult(snapshot, "host_metrics", [])`,
+		"const generation = Number(snapshot.generation) || aggregate.generation",
+		"function generationMismatch(res, expectedGeneration)",
+		"getJSONResult(apiWatchesPath, null, generation)")
+}
+
+func TestSourceStartsReadOnlyUntilWhoamiSucceeds(t *testing.T) {
+	appJSMustContain(t, "whoami fail-closed", `let me = { can_act: false, role: "", auth: true };`)
 }
 
 func TestSourceMetricChartRendersZeroValuedSeries(t *testing.T) {

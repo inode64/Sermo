@@ -322,6 +322,25 @@ type dashboardSourceBackend struct {
 	calls    int
 }
 
+type generationBackend struct {
+	fakeBackend
+	generation uint64
+}
+
+func (b *generationBackend) BackendGeneration() uint64 {
+	return b.generation
+}
+
+type pinnedGenerationBackend struct {
+	fakeBackend
+	generation uint64
+	released   bool
+}
+
+func (b *pinnedGenerationBackend) BeginBackendRead() (Backend, uint64, func()) {
+	return &b.fakeBackend, b.generation, func() { b.released = true }
+}
+
 func (b *dashboardSourceBackend) DashboardSnapshot(context.Context, time.Duration) DashboardSnapshot {
 	b.calls++
 	return b.snapshot
@@ -346,6 +365,34 @@ func TestDashboardSnapshotUsesAtomicSource(t *testing.T) {
 	}
 	if len(got.Services) != 1 || got.Services[0].Name != "one-generation" || len(got.Notifiers) != 1 || got.Notifiers[0].Name != "same-generation" {
 		t.Fatalf("dashboard source snapshot = %+v, want atomic source values", got)
+	}
+}
+
+func TestBackendReadResponsesCarryGeneration(t *testing.T) {
+	b := &generationBackend{generation: 7}
+	rec := httptest.NewRecorder()
+	newServer(b).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, testAPIPath(apiSegmentServices), nil))
+	if got := rec.Header().Get(headerSermoGeneration); got != "7" {
+		t.Fatalf("response generation = %q, want 7", got)
+	}
+}
+
+func TestBackendReadResponseUsesPinnedGeneration(t *testing.T) {
+	b := &pinnedGenerationBackend{generation: 9}
+	rec := httptest.NewRecorder()
+	newServer(b).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, testAPIPath(apiSegmentDashboard), nil))
+	if got := rec.Header().Get(headerSermoGeneration); got != "9" {
+		t.Fatalf("pinned response generation = %q, want 9", got)
+	}
+	var snapshot DashboardSnapshot
+	if err := json.Unmarshal(rec.Body.Bytes(), &snapshot); err != nil {
+		t.Fatalf("decode dashboard: %v", err)
+	}
+	if snapshot.Generation != 9 {
+		t.Fatalf("dashboard generation = %d, want 9", snapshot.Generation)
+	}
+	if !b.released {
+		t.Fatal("pinned backend read was not released")
 	}
 }
 
@@ -1250,6 +1297,21 @@ func TestOperateContextIgnoresRequestCancel(t *testing.T) {
 	}
 	if b.operCtx.Err() != nil {
 		t.Fatalf("operate context cancelled early: %v", b.operCtx.Err())
+	}
+}
+
+func TestOperateContextCancelsOnDaemonShutdown(t *testing.T) {
+	shutdown, cancel := context.WithCancel(context.Background())
+	cancel()
+	b := &ctxCapturingBackend{delay: time.Hour}
+	srv := &Server{Backend: b, shutdown: shutdown}
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, postReq(testServicePath("web", apiActionRestart)))
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("operate after shutdown = %d, want %d", rec.Code, http.StatusConflict)
+	}
+	if b.operCtx == nil || b.operCtx.Err() == nil {
+		t.Fatal("operation context must be cancelled with daemon shutdown")
 	}
 }
 

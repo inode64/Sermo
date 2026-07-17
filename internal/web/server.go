@@ -48,6 +48,7 @@ const (
 	headerContentType           = httpx.HeaderContentType
 	headerReferrerPolicy        = "Referrer-Policy"
 	headerSermoCSRF             = "X-Sermo-Csrf"
+	headerSermoGeneration       = "X-Sermo-Generation"
 	headerWWWAuthenticate       = "WWW-Authenticate"
 	headerXContentTypeOptions   = "X-Content-Type-Options"
 	headerXFrameOptions         = "X-Frame-Options"
@@ -927,6 +928,10 @@ type LiveReport struct {
 // sections. Existing section endpoints remain available for API clients and as
 // a browser fallback when this aggregate request fails.
 type DashboardSnapshot struct {
+	// Generation identifies the daemon configuration generation that supplied
+	// this snapshot. The UI uses it to reject follow-up data from another
+	// generation while a reload is in progress.
+	Generation    uint64           `json:"generation,omitempty"`
 	GeneratedAt   string           `json:"generated_at"`
 	Services      []Service        `json:"services"`
 	Mounts        []Mount          `json:"mounts"`
@@ -1163,6 +1168,19 @@ type dashboardSnapshotSource interface {
 	DashboardSnapshot(ctx context.Context, since time.Duration) DashboardSnapshot
 }
 
+// backendGenerationSource exposes the active daemon configuration generation.
+// It is optional so standalone Backend implementations remain simple.
+type backendGenerationSource interface {
+	BackendGeneration() uint64
+}
+
+// backendReadSource pins a backend generation while one read response is
+// collected. Reloadable holders implement it so a response's generation
+// identifies the exact backend that produced its body.
+type backendReadSource interface {
+	BeginBackendRead() (Backend, uint64, func())
+}
+
 // Handler returns the router behind the auth middleware: the dashboard at /, the
 // service list at /api/services, and POST /api/services/{name}/{action} for
 // actions.
@@ -1397,11 +1415,11 @@ func (s *Server) extendActionWriteDeadline(w http.ResponseWriter) {
 // operateContext returns a context for start/stop/restart/reload/resume that is not tied to the
 // HTTP request. Client disconnect and the generic write deadline must not abort
 // an in-flight safe operation; the operation engine applies its own timeout.
-func (s *Server) operateContext(r *http.Request) context.Context {
+func (s *Server) operateContext(_ *http.Request) context.Context {
 	if s.shutdown != nil {
-		return context.WithoutCancel(s.shutdown)
+		return s.shutdown
 	}
-	return context.WithoutCancel(r.Context())
+	return context.Background()
 }
 
 // Run serves until ctx is cancelled, then shuts down gracefully. Timeouts bound
@@ -1416,15 +1434,25 @@ func (s *Server) Run(ctx context.Context) error {
 		WriteTimeout:      s.actionWriteTimeout(),
 		IdleTimeout:       serverIdleTimeout,
 	}
+	serveDone := make(chan struct{})
+	shutdownDone := make(chan struct{})
 	go func() { //nolint:gosec // G118: the shutdown deadline must NOT derive from ctx — it is already cancelled here
-		<-ctx.Done()
-		shutCtx, cancel := context.WithTimeout(context.Background(), serverShutdownTimeout)
-		defer cancel()
-		_ = srv.Shutdown(shutCtx) //nolint:contextcheck // detached shutdown deadline; ctx is already cancelled
+		defer close(shutdownDone)
+		select {
+		case <-ctx.Done():
+			shutCtx, cancel := context.WithTimeout(context.Background(), serverShutdownTimeout)
+			defer cancel()
+			_ = srv.Shutdown(shutCtx) //nolint:contextcheck // detached shutdown deadline; ctx is already cancelled
+		case <-serveDone:
+		}
 	}()
 	if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		close(serveDone)
+		<-shutdownDone
 		return fmt.Errorf("web server listen: %w", err)
 	}
+	close(serveDone)
+	<-shutdownDone
 	return nil
 }
 
@@ -1451,7 +1479,13 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, s.dashboardSnapshot(r.Context(), seriesSince(r)))
+	backend, generation, release := s.backendRead()
+	defer release()
+	snapshot := s.dashboardSnapshot(r.Context(), backend, seriesSince(r))
+	if generation > 0 {
+		snapshot.Generation = generation
+	}
+	s.writeBackendJSON(w, http.StatusOK, snapshot, generation)
 }
 
 // CollectDashboardSnapshot collects the reload-sensitive dashboard sections in
@@ -1477,14 +1511,14 @@ func CollectDashboardSnapshot(ctx context.Context, backend Backend, since time.D
 	return snapshot
 }
 
-func (s *Server) dashboardSnapshot(ctx context.Context, since time.Duration) DashboardSnapshot {
-	if source, ok := s.Backend.(dashboardSnapshotSource); ok {
+func (s *Server) dashboardSnapshot(ctx context.Context, backend Backend, since time.Duration) DashboardSnapshot {
+	if source, ok := backend.(dashboardSnapshotSource); ok {
 		return s.dashboardSnapshotWithReadiness(ctx, func() DashboardSnapshot {
 			return source.DashboardSnapshot(ctx, since)
 		})
 	}
 	return s.dashboardSnapshotWithReadiness(ctx, func() DashboardSnapshot {
-		return CollectDashboardSnapshot(ctx, s.Backend, since)
+		return CollectDashboardSnapshot(ctx, backend, since)
 	})
 }
 
@@ -1521,15 +1555,15 @@ func (s *Server) finishDashboardSnapshot(snapshot DashboardSnapshot) DashboardSn
 }
 
 func (s *Server) handleServices(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, s.Backend.Services(r.Context()))
+	s.readJSON(w, http.StatusOK, func(backend Backend) any { return backend.Services(r.Context()) })
 }
 
 func (s *Server) handleWatches(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, s.Backend.Watches(r.Context()))
+	s.readJSON(w, http.StatusOK, func(backend Backend) any { return backend.Watches(r.Context()) })
 }
 
 func (s *Server) handleNotifiers(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, s.Backend.Notifiers(r.Context()))
+	s.readJSON(w, http.StatusOK, func(backend Backend) any { return backend.Notifiers(r.Context()) })
 }
 
 func (s *Server) handleNotifierTest(w http.ResponseWriter, r *http.Request) {
@@ -1539,15 +1573,15 @@ func (s *Server) handleNotifierTest(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleApplications(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, s.Backend.Applications(r.Context()))
+	s.readJSON(w, http.StatusOK, func(backend Backend) any { return backend.Applications(r.Context()) })
 }
 
 func (s *Server) handleLibraries(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, s.Backend.Libraries(r.Context()))
+	s.readJSON(w, http.StatusOK, func(backend Backend) any { return backend.Libraries(r.Context()) })
 }
 
 func (s *Server) handleMounts(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, s.Backend.Mounts(r.Context()))
+	s.readJSON(w, http.StatusOK, func(backend Backend) any { return backend.Mounts(r.Context()) })
 }
 
 func (s *Server) handleMountAction(w http.ResponseWriter, r *http.Request) {
@@ -1575,20 +1609,20 @@ func (s *Server) handleMountAction(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleDaemon(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, s.Backend.DaemonInfo(r.Context()))
+	s.readJSON(w, http.StatusOK, func(backend Backend) any { return backend.DaemonInfo(r.Context()) })
 }
 
 func (s *Server) handleDaemonMetrics(w http.ResponseWriter, r *http.Request) {
 	since := seriesSince(r)
-	writeJSON(w, http.StatusOK, s.Backend.DaemonMetrics(r.Context(), since))
+	s.readJSON(w, http.StatusOK, func(backend Backend) any { return backend.DaemonMetrics(r.Context(), since) })
 }
 
 func (s *Server) handleHost(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, s.Backend.HostMetrics(r.Context()))
+	s.readJSON(w, http.StatusOK, func(backend Backend) any { return backend.HostMetrics(r.Context()) })
 }
 
 func (s *Server) handleLocks(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, s.Backend.Locks(r.Context()))
+	s.readJSON(w, http.StatusOK, func(backend Backend) any { return backend.Locks(r.Context()) })
 }
 
 func (s *Server) handleLockRelease(w http.ResponseWriter, r *http.Request) {
@@ -1597,26 +1631,30 @@ func (s *Server) handleLockRelease(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleActivity(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, s.Backend.ActivitySummary(r.Context()))
+	s.readJSON(w, http.StatusOK, func(backend Backend) any { return backend.ActivitySummary(r.Context()) })
 }
 
 func (s *Server) handleMonitoring(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, s.Backend.MonitoringStatus(r.Context()))
+	s.readJSON(w, http.StatusOK, func(backend Backend) any { return backend.MonitoringStatus(r.Context()) })
 }
 
 // handleNamed answers a lookup keyed by the request's name path parameter:
 // 404 with notFoundMsg when fn reports no match, the JSON result otherwise.
-func handleNamed[T any](w http.ResponseWriter, r *http.Request, notFoundMsg string, fn func(ctx context.Context, name string) (T, bool)) {
-	res, ok := fn(r.Context(), r.PathValue(apiParamName))
+func handleNamed[T any](s *Server, w http.ResponseWriter, r *http.Request, notFoundMsg string, fn func(Backend, context.Context, string) (T, bool)) {
+	backend, generation, release := s.backendRead()
+	defer release()
+	res, ok := fn(backend, r.Context(), r.PathValue(apiParamName))
 	if !ok {
 		writeError(w, http.StatusNotFound, notFoundMsg)
 		return
 	}
-	writeJSON(w, http.StatusOK, res)
+	s.writeBackendJSON(w, http.StatusOK, res, generation)
 }
 
 func (s *Server) handleDetail(w http.ResponseWriter, r *http.Request) {
-	handleNamed(w, r, apiErrorUnknownService, s.Backend.Detail)
+	handleNamed(s, w, r, apiErrorUnknownService, func(backend Backend, ctx context.Context, name string) (Detail, bool) {
+		return backend.Detail(ctx, name)
+	})
 }
 
 // seriesSince reads the `since` query param, defaulting and capping it.
@@ -1629,12 +1667,14 @@ func seriesSince(r *http.Request) time.Duration {
 
 func (s *Server) handleSeries(w http.ResponseWriter, r *http.Request) {
 	since := seriesSince(r)
-	points, ok := s.Backend.Series(r.Context(), r.PathValue(apiParamName), since)
+	backend, generation, release := s.backendRead()
+	defer release()
+	points, ok := backend.Series(r.Context(), r.PathValue(apiParamName), since)
 	if !ok {
 		writeError(w, http.StatusNotFound, apiErrorUnknownService)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{apiJSONKeySince: since.String(), apiJSONKeyPoints: points})
+	s.writeBackendJSON(w, http.StatusOK, map[string]any{apiJSONKeySince: since.String(), apiJSONKeyPoints: points}, generation)
 }
 
 func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
@@ -1643,17 +1683,19 @@ func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, apiErrorCheckQueryRequired)
 		return
 	}
-	res, ok := s.Backend.Metrics(r.Context(), r.PathValue(apiParamName), check, r.URL.Query().Get(apiQueryMetric), seriesSince(r))
+	backend, generation, release := s.backendRead()
+	defer release()
+	res, ok := backend.Metrics(r.Context(), r.PathValue(apiParamName), check, r.URL.Query().Get(apiQueryMetric), seriesSince(r))
 	if !ok {
 		writeError(w, http.StatusNotFound, apiErrorUnknownServiceOrCheck)
 		return
 	}
-	writeJSON(w, http.StatusOK, res)
+	s.writeBackendJSON(w, http.StatusOK, res, generation)
 }
 
 func (s *Server) handleServiceRuntime(w http.ResponseWriter, r *http.Request) {
-	handleNamed(w, r, apiErrorUnknownService, func(ctx context.Context, name string) (ServiceRuntimeMetrics, bool) {
-		return s.Backend.ServiceRuntime(ctx, name, seriesSince(r))
+	handleNamed(s, w, r, apiErrorUnknownService, func(backend Backend, ctx context.Context, name string) (ServiceRuntimeMetrics, bool) {
+		return backend.ServiceRuntime(ctx, name, seriesSince(r))
 	})
 }
 
@@ -1671,17 +1713,21 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		writeJSON(w, http.StatusOK, s.Backend.EventPage(r.Context(), EventQuery{
+		backend, generation, release := s.backendRead()
+		defer release()
+		s.writeBackendJSON(w, http.StatusOK, backend.EventPage(r.Context(), EventQuery{
 			BeforeID: beforeID, Limit: limit, Since: since, Service: filter.Service, Watch: filter.Watch,
 			Kind: filter.Kind, Status: filter.Status, OnlyErrors: filter.OnlyErrors,
-		}))
+		}), generation)
 		return
 	}
 	fetchLimit := limit
 	if filter.active() {
 		fetchLimit = maxEventLimit
 	}
-	writeJSON(w, http.StatusOK, filterEvents(s.Backend.Events(r.Context(), fetchLimit), filter, limit))
+	backend, generation, release := s.backendRead()
+	defer release()
+	s.writeBackendJSON(w, http.StatusOK, filterEvents(backend.Events(r.Context(), fetchLimit), filter, limit), generation)
 }
 
 func eventSince(r *http.Request) (time.Duration, error) {
@@ -1780,23 +1826,29 @@ func (s *Server) handlePanic(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleOperations(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, s.Backend.Operations(r.Context()))
+	s.readJSON(w, http.StatusOK, func(backend Backend) any { return backend.Operations(r.Context()) })
 }
 
 // readyReport builds the readiness report: it delegates to the configured
 // Readiness probe when present, otherwise reports ready with the service count.
 func (s *Server) readyReport(ctx context.Context) ReadyReport {
+	return s.readyReportFromBackend(ctx, s.Backend)
+}
+
+func (s *Server) readyReportFromBackend(ctx context.Context, backend Backend) ReadyReport {
 	if s.Readiness != nil {
 		return s.Readiness.Report(ctx)
 	}
 	return ReadyReport{
 		Ready: true, Status: apiStatusOK,
-		Services: len(s.Backend.Services(ctx)),
+		Services: len(backend.Services(ctx)),
 	}
 }
 
 func (s *Server) handleReadyz(w http.ResponseWriter, r *http.Request) {
-	rep := s.readyReport(r.Context())
+	backend, generation, release := s.backendRead()
+	defer release()
+	rep := s.readyReportFromBackend(r.Context(), backend)
 	status := http.StatusOK
 	if !rep.Ready {
 		status = http.StatusServiceUnavailable
@@ -1811,7 +1863,7 @@ func (s *Server) handleReadyz(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	writeJSON(w, status, rep)
+	s.writeBackendJSON(w, status, rep, generation)
 }
 
 // handleLivez is the liveness probe: if the daemon's web server can answer, the
@@ -1826,31 +1878,35 @@ func (s *Server) handleLivez(w http.ResponseWriter, r *http.Request) {
 	}
 	now := time.Now()
 	uptime := now.Sub(s.started)
-	writeJSON(w, http.StatusOK, map[string]any{
+	backend, generation, release := s.backendRead()
+	defer release()
+	s.writeBackendJSON(w, http.StatusOK, map[string]any{
 		apiJSONKeyStatus:        apiStatusOK,
 		apiJSONKeyStartedAt:     s.started.Format(time.RFC3339),
 		apiJSONKeyNow:           now.Format(time.RFC3339),
 		apiJSONKeyUptime:        uptime.Round(time.Second).String(),
 		apiJSONKeyUptimeSeconds: int64(uptime.Seconds()),
-		apiJSONKeyServices:      len(s.Backend.Services(r.Context())),
+		apiJSONKeyServices:      len(backend.Services(r.Context())),
 		apiJSONKeyGo:            runtime.Version(),
-	})
+	}, generation)
 }
 
 func (s *Server) handleServiceEvents(w http.ResponseWriter, r *http.Request) {
-	handleNamed(w, r, apiErrorUnknownService, func(ctx context.Context, name string) ([]Event, bool) {
-		return s.Backend.ServiceEvents(ctx, name, eventLimit(r))
+	handleNamed(s, w, r, apiErrorUnknownService, func(backend Backend, ctx context.Context, name string) ([]Event, bool) {
+		return backend.ServiceEvents(ctx, name, eventLimit(r))
 	})
 }
 
 func (s *Server) handleApplicationEvents(w http.ResponseWriter, r *http.Request) {
-	handleNamed(w, r, apiErrorUnknownApplication, func(ctx context.Context, name string) ([]Event, bool) {
-		return s.Backend.ApplicationEvents(ctx, name, eventLimit(r))
+	handleNamed(s, w, r, apiErrorUnknownApplication, func(backend Backend, ctx context.Context, name string) ([]Event, bool) {
+		return backend.ApplicationEvents(ctx, name, eventLimit(r))
 	})
 }
 
 func (s *Server) handlePreflight(w http.ResponseWriter, r *http.Request) {
-	handleNamed(w, r, apiErrorUnknownService, s.Backend.Preflight)
+	handleNamed(s, w, r, apiErrorUnknownService, func(backend Backend, ctx context.Context, name string) (PreflightResult, bool) {
+		return backend.Preflight(ctx, name)
+	})
 }
 
 func (s *Server) handleAction(w http.ResponseWriter, r *http.Request) {
@@ -1922,6 +1978,40 @@ func writeActionResult(w http.ResponseWriter, ok bool, res any) {
 		status = http.StatusConflict
 	}
 	writeJSON(w, status, res)
+}
+
+// backendRead pins one reloadable backend generation for the duration of a
+// read. Ordinary Backend implementations retain their existing behavior.
+func (s *Server) backendRead() (Backend, uint64, func()) {
+	if source, ok := s.Backend.(backendReadSource); ok {
+		backend, generation, release := source.BeginBackendRead()
+		if backend != nil {
+			return backend, generation, release
+		}
+		release()
+	}
+	generation := uint64(0)
+	if source, ok := s.Backend.(backendGenerationSource); ok {
+		generation = source.BackendGeneration()
+	}
+	return s.Backend, generation, func() {}
+}
+
+// readJSON collects a read response from one backend generation and labels the
+// encoded result with that same generation.
+func (s *Server) readJSON(w http.ResponseWriter, status int, read func(Backend) any) {
+	backend, generation, release := s.backendRead()
+	defer release()
+	s.writeBackendJSON(w, status, read(backend), generation)
+}
+
+// writeBackendJSON marks a read response with the generation that produced its
+// body, so the browser can reject a response from another daemon reload.
+func (s *Server) writeBackendJSON(w http.ResponseWriter, status int, v any, generation uint64) {
+	if generation > 0 {
+		w.Header().Set(headerSermoGeneration, strconv.FormatUint(generation, 10))
+	}
+	writeJSON(w, status, v)
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

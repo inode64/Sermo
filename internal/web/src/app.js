@@ -1,7 +1,7 @@
 import { html as tpl, render as litRender, nothing } from "./vendor/lit-html.js";
 import watchPanelDescriptors from "./watch-panels.json";
 import {
-  apiActionSuffix, apiActivityPath, apiApplicationsPath, apiDaemonPath,
+  apiActionSuffix, apiActivityPath, apiApplicationsPath, apiDaemonPath, apiHeaderGeneration,
   apiEventsRecentPath, apiHostPath, apiLibrariesPath, apiLocksPath,
   apiMonitoringPath, apiMountsPath, apiNotifiersPath, apiOpsPath, apiQueryBeforeID,
   apiQueryForce, apiQueryKill, apiQueryKind, apiQueryLazy, apiQueryLimit, apiQueryName, apiQueryNoCascade,
@@ -327,7 +327,10 @@ function setStatus(msg, kind, sticky = true) {
   if (statusCls) el.classList.add(statusCls);
 }
 
-let me = { can_act: true, role: "admin", auth: false };
+// Do not expose action controls until /api/whoami positively confirms that the
+// current browser may use them. This avoids a transient fail-open UI when the
+// identity request is unavailable during startup or a network error.
+let me = { can_act: false, role: "", auth: true };
 
 async function loadMe() {
   try {
@@ -351,6 +354,7 @@ async function loadMe() {
 let connOK = true;
 let lastLoadOk = Date.now();
 let loadSeq = 0;
+let dashboardGeneration = 0;
 function showDisconnected() {
   document.body.classList.add("disconnected");
   const age = lastLoadOk ? ` (last update ${fmtSince(Date.now() - lastLoadOk)} ago)` : "";
@@ -402,6 +406,7 @@ async function loadPrimaryDashboard() {
   const aggregate = await getJSONResult(dashboardAPI(daemonMetricWindow), null);
   if (aggregate.ok) {
     const snapshot = aggregate.data || {};
+    const generation = Number(snapshot.generation) || aggregate.generation;
     return {
       servicesResult: snapshotResult(snapshot, "services", null),
       mountsResult: snapshotResult(snapshot, "mounts", null),
@@ -415,6 +420,8 @@ async function loadPrimaryDashboard() {
       monResult: snapshotResult(snapshot, "monitoring", {}),
       opsResult: snapshotResult(snapshot, "operations", {}),
       hostMetricsResult: snapshotResult(snapshot, "host_metrics", []),
+      generation,
+      generationMismatch: !!(generation && aggregate.generation && generation !== aggregate.generation),
     };
   }
 
@@ -435,9 +442,10 @@ async function loadPrimaryDashboard() {
   const [servicesResult, mountsResult, notifiersResult, daemonResult, daemonMetricsResult,
     locksResult, activityResult, readyResult, liveResult, monResult, opsResult,
     hostMetricsResult] = results;
+  const { generation, mismatch: generationMismatch } = sharedBackendGeneration(results);
   return { servicesResult, mountsResult, notifiersResult, daemonResult, daemonMetricsResult,
     locksResult, activityResult, readyResult, liveResult, monResult, opsResult,
-    hostMetricsResult };
+    hostMetricsResult, generation, generationMismatch };
 }
 
 async function performLoad() {
@@ -447,8 +455,13 @@ async function performLoad() {
   const sameLoad = () => seq === loadSeq;
   const { servicesResult, mountsResult, notifiersResult, daemonResult,
     daemonMetricsResult, locksResult, activityResult, readyResult, liveResult,
-    monResult, opsResult, hostMetricsResult } = await loadPrimaryDashboard();
+    monResult, opsResult, hostMetricsResult, generation, generationMismatch } = await loadPrimaryDashboard();
   if (!sameLoad()) return;
+  if (generationMismatch) {
+    load();
+    return;
+  }
+  dashboardGeneration = generation;
   const services = servicesResult.data;
   const mounts = mountsResult.data;
   const notifiers = notifiersResult.data;
@@ -469,7 +482,7 @@ async function performLoad() {
     clearStatusAfterRefresh();
     // Open expansions fetch fresh detail once per poll here; re-renders in
     // between (filter keystrokes, ops ticker) only re-assert cached content.
-    expandedServicesPromise = refreshExpandedServices();
+    expandedServicesPromise = refreshExpandedServices({ generation });
   } else {
     connOK = false;
     showDisconnected();
@@ -502,14 +515,18 @@ async function performLoad() {
     setFavicon(healthStatusWarning);
   }
 
-  const [watchesResult, appsResult, librariesResult, eventsOK, expandedServicesOK] = await Promise.all([
-    getJSONResult(apiWatchesPath, null),
-    getJSONResult(apiApplicationsPath, null),
-    getJSONResult(apiLibrariesPath, null),
-    connOK ? loadEvents(seq) : Promise.resolve(false),
+  const [watchesResult, appsResult, librariesResult, eventsResult, expandedServicesOK] = await Promise.all([
+    getJSONResult(apiWatchesPath, null, generation),
+    getJSONResult(apiApplicationsPath, null, generation),
+    getJSONResult(apiLibrariesPath, null, generation),
+    connOK ? loadEvents(seq, false, generation) : Promise.resolve({ ok: false }),
     expandedServicesPromise,
   ]);
   if (!sameLoad()) return;
+  if (watchesResult.generationMismatch || appsResult.generationMismatch || librariesResult.generationMismatch || eventsResult.generationMismatch) {
+    load();
+    return;
+  }
   if (watchesResult.ok) {
     renderWatches(watchesResult.data);
     if (connOK) renderAttention();
@@ -522,8 +539,8 @@ async function performLoad() {
   if (!connOK) return;
 
   const [expandedWatchesOK, expandedApplicationsOK] = await Promise.all([
-    watchesResult.ok ? refreshExpandedWatches() : Promise.resolve(false),
-    appsResult.ok ? refreshExpandedApplications() : Promise.resolve(false),
+    watchesResult.ok ? refreshExpandedWatches(generation) : Promise.resolve(false),
+    appsResult.ok ? refreshExpandedApplications(generation) : Promise.resolve(false),
   ]);
   if (!sameLoad()) return;
 
@@ -532,7 +549,7 @@ async function performLoad() {
     ["daemon metrics", daemonMetricsResult], ["locks", locksResult], ["activity", activityResult],
     ["readiness", readyResult], ["liveness", liveResult], ["monitoring", monResult],
     ["operations", opsResult], ["host metrics", hostMetricsResult], ["watches", watchesResult],
-    ["applications", appsResult], ["libraries", librariesResult], ["events", { ok: eventsOK }],
+    ["applications", appsResult], ["libraries", librariesResult], ["events", eventsResult],
     ["service details", { ok: expandedServicesOK }],
     ["watch details", { ok: expandedWatchesOK }],
     ["application details", { ok: expandedApplicationsOK }],
@@ -592,7 +609,7 @@ function renderOpsPanel(o) {
 let eventNextBeforeID = 0;
 let eventHasMore = false;
 
-async function loadEvents(seq = 0, append = false) {
+async function loadEvents(seq = 0, append = false, generation = dashboardGeneration) {
   try {
     const params = new URLSearchParams({ [apiQueryLimit]: eventLogLimit, [apiQueryPage]: queryBoolOne });
     const add = (id, key) => {
@@ -608,10 +625,14 @@ async function loadEvents(seq = 0, append = false) {
     if ($("#event-errors") && $("#event-errors").checked) params.set(apiQueryOnlyErrors, queryBoolOne);
     if (append && eventNextBeforeID > 0) params.set(apiQueryBeforeID, String(eventNextBeforeID));
     const res = await fetch(eventsAPI(params));
-    if (!res.ok) return false;
+    if (generationMismatch(res, generation)) {
+      if (!seq) load();
+      return { ok: false, generationMismatch: true };
+    }
+    if (!res.ok) return { ok: false };
     const page = await res.json();
     const events = Array.isArray(page.events) ? page.events : [];
-    if (seq && seq !== loadSeq) return true;
+    if (seq && seq !== loadSeq) return { ok: true };
     if (append) {
       const known = new Set(allEvents.map((event) => event.id));
       allEvents = allEvents.concat(events.filter((event) => !known.has(event.id)));
@@ -621,9 +642,9 @@ async function loadEvents(seq = 0, append = false) {
     eventNextBeforeID = Number(page.next_before_id) || 0;
     eventHasMore = !!page.has_more;
     renderGlobalEvents();
-    return true;
+    return { ok: true };
   } catch (e) {
-    return false; // keep the last feed on a transient error
+    return { ok: false }; // keep the last feed on a transient error
   }
 }
 
@@ -1870,7 +1891,12 @@ function stopLiveOpsTimerIfIdle() {
   }
 }
 async function updateLiveOps() {
-  liveOpsSlots = await getJSON(apiOpsPath, liveOpsSlots || {});
+  const result = await getJSONResult(apiOpsPath, liveOpsSlots || {}, dashboardGeneration);
+  if (result.generationMismatch) {
+    load();
+    return;
+  }
+  liveOpsSlots = result.data;
   renderOperationLive();
   renderServices();
   if (liveOps.size === 0) stopLiveOpsTimerIfIdle();
@@ -2480,7 +2506,7 @@ function reassertExpansions() {
   expanded.forEach((k) => {
     if (!isServiceExpansionKey(k) && !isWatchExpansionKey(k)) return;
     if (!expCache[k]) {
-      loadExpansionFor(k);
+      loadExpansionFor(k, dashboardGeneration);
       return;
     }
     const cell = expansionCell(k);
@@ -2488,7 +2514,7 @@ function reassertExpansions() {
     // Re-hydrate charts/events for service details: a recreated row renders
     // the cached markup with empty chart containers.
     const detail = expDetailCache[k];
-    if (detail) hydrateServiceDetail(detail);
+    if (detail) hydrateServiceDetail(detail, dashboardGeneration);
   });
 }
 
@@ -2503,24 +2529,29 @@ async function refreshExpandedServices(opts = {}) {
     expanded.forEach((k) => {
       if (!isServiceExpansionKey(k)) return;
       const detail = expDetailCache[k];
-      if (detail) hydrateServiceDetail(detail);
+      if (detail) hydrateServiceDetail(detail, opts.generation || dashboardGeneration);
     });
     return true;
   }
   const keys = [...expanded].filter(isServiceExpansionKey);
-  const results = await Promise.all(keys.map(loadExpansionFor));
+  const generation = opts.generation || dashboardGeneration;
+  const results = await Promise.all(keys.map((key) => loadExpansionFor(key, generation)));
   return results.every(Boolean);
 }
 
 // refreshExpandedWatches refetches recent events once per dashboard refresh and
 // re-renders every open watch expansion from that single response, instead of
 // one events download per expanded watch per render.
-async function refreshExpandedWatches() {
+async function refreshExpandedWatches(generation = dashboardGeneration) {
   if (document.hidden) return true;
   const keys = [...expanded].filter(isWatchExpansionKey);
   if (!keys.length) return true;
   try {
     const res = await fetch(apiEventsRecentPath);
+    if (generationMismatch(res, generation)) {
+      load();
+      return false;
+    }
     if (!res.ok) return false;
     const events = (await res.json()) || [];
     keys.forEach((k) => renderWatchExpansionInto(k, events));
@@ -2634,14 +2665,19 @@ function renderWatchExpansionInto(key, events) {
 
 const expLoading = new Map(); // key -> shared in-flight detail fetch
 
-function loadExpansionFor(key) {
-  if (expLoading.has(key)) return expLoading.get(key);
+function loadExpansionFor(key, generation = dashboardGeneration) {
+  const loadingKey = `${generation}:${key}`;
+  if (expLoading.has(loadingKey)) return expLoading.get(loadingKey);
   const pending = (async () => {
     const cell = expansionCell(key);
     if (cell && !expCache[key]) litRender(tpl`<span class="muted">loading…</span>`, cell);
     if (isServiceExpansionKey(key)) {
       const name = expansionName(key, expansionPrefixService);
       const res = await fetch(serviceAPI(name));
+      if (generationMismatch(res, generation)) {
+        load();
+        return false;
+      }
       if (!res.ok) return false;
       const detailData = await res.json();
       expDetailCache[key] = detailData;
@@ -2649,18 +2685,22 @@ function loadExpansionFor(key) {
       expCache[key] = html;
       const target = expansionCell(key);
       if (target) litRender(html, target);
-      return hydrateServiceDetail(detailData);
+      return hydrateServiceDetail(detailData, generation);
     } else if (isWatchExpansionKey(key)) {
       const res = await fetch(apiEventsRecentPath);
+      if (generationMismatch(res, generation)) {
+        load();
+        return false;
+      }
       const events = res.ok ? await res.json() : [];
       renderWatchExpansionInto(key, events);
       return res.ok;
     }
     return true;
   })().catch(() => false).finally(() => {
-    expLoading.delete(key);
+    expLoading.delete(loadingKey);
   });
-  expLoading.set(key, pending);
+  expLoading.set(loadingKey, pending);
   return pending;
 }
 
@@ -3000,13 +3040,17 @@ function renderSLAIncidentList(incidents) {
   return `<div class="sla-incident-list"><span class="muted">Incidents</span>${chips}${more}</div>`;
 }
 
-async function loadServiceSLA(name) {
+async function loadServiceSLA(name, generation = dashboardGeneration) {
   const summary = document.getElementById(detailDomId(name, "sla-summary"));
   const chart = document.getElementById(detailDomId(name, "sla-chart"));
   if (!summary || !chart) return true;
   const win = serviceMetricState(name).window;
   try {
     const res = await fetch(serviceSLAAPI(name, win));
+    if (generationMismatch(res, generation)) {
+      load();
+      return false;
+    }
     if (!res.ok) throw new Error("HTTP " + res.status);
     const body = await res.json();
     if (serviceMetricState(name).window !== win) return true;
@@ -3362,20 +3406,20 @@ function renderServiceDetail(d) {
   </div>`;
 }
 
-async function hydrateServiceDetail(d) {
-  const results = await Promise.all([refreshServiceGraphs(d), loadServiceEvents(d.name)]);
+async function hydrateServiceDetail(d, generation = dashboardGeneration) {
+  const results = await Promise.all([refreshServiceGraphs(d, generation), loadServiceEvents(d.name, generation)]);
   return results.every(Boolean);
 }
 
-async function refreshServiceGraphs(d) {
+async function refreshServiceGraphs(d, generation = dashboardGeneration) {
   const measured = serviceMeasuredChecks(d);
   const checkMetrics = serviceCheckMetrics(d);
   syncWindowButtons("setMetricWin", serviceMetricState(d.name).window, d.name);
-  const pending = [loadServiceSLA(d.name)];
-  pending.push(...checkMetrics.map((metric) => loadCheckMetric(d.name, metric)));
+  const pending = [loadServiceSLA(d.name, generation)];
+  pending.push(...checkMetrics.map((metric) => loadCheckMetric(d.name, metric, generation)));
   if (!d.no_resident_process) {
-    if (measured.length) pending.push(loadMetrics(d.name, measured));
-    pending.push(loadServiceRuntimeMetrics(d.name));
+    if (measured.length) pending.push(loadMetrics(d.name, measured, generation));
+    pending.push(loadServiceRuntimeMetrics(d.name, generation));
   }
   const results = await Promise.all(pending);
   return results.every(Boolean);
@@ -4617,22 +4661,24 @@ function renderAppExpansion(a) {
 // loadAppEvents fills an expanded application's "Recent events" table with its
 // monitoring history (errors/recoveries), mirroring loadServiceEvents.
 const appEventLoads = new Map();
-function loadAppEvents(name) {
-  if (appEventLoads.has(name)) return appEventLoads.get(name);
+function loadAppEvents(name, generation = dashboardGeneration) {
+  const loadingKey = `${generation}:${name}`;
+  if (appEventLoads.has(loadingKey)) return appEventLoads.get(loadingKey);
   const pending = loadEventRows(
     detailDomId(name, "app-events"),
     applicationEventsAPI(name, eventDetailLimit),
-  ).finally(() => appEventLoads.delete(name));
-  appEventLoads.set(name, pending);
+    generation,
+  ).finally(() => appEventLoads.delete(loadingKey));
+  appEventLoads.set(loadingKey, pending);
   return pending;
 }
 
-async function refreshExpandedApplications() {
+async function refreshExpandedApplications(generation = dashboardGeneration) {
   if (document.hidden) return true;
   const names = (allApps || [])
     .filter((app) => expanded.has(appExpansionKey(app.name)))
     .map((app) => app.name);
-  const results = await Promise.all(names.map(loadAppEvents));
+  const results = await Promise.all(names.map((name) => loadAppEvents(name, generation)));
   return results.every(Boolean);
 }
 
@@ -5568,30 +5614,53 @@ function renderOverview(ctx) {
   litRender(tiles, band);
 }
 
+// responseGeneration returns the daemon configuration generation attached to
+// a read response. Older/test backends omit it, which keeps their existing
+// behaviour while reloadable sermod instances get the stronger consistency
+// check below.
+function responseGeneration(res) {
+  const generation = Number(res.headers.get(apiHeaderGeneration));
+  return Number.isSafeInteger(generation) && generation > 0 ? generation : 0;
+}
+
+function generationMismatch(res, expectedGeneration) {
+  const actualGeneration = responseGeneration(res);
+  return !!(expectedGeneration && actualGeneration && actualGeneration !== expectedGeneration);
+}
+
+function sharedBackendGeneration(results) {
+  const generations = [...new Set(results.map((result) => result.generation).filter(Boolean))];
+  return { generation: generations[0] || 0, mismatch: generations.length > 1 };
+}
+
 // getJSONResult keeps failure information next to the fallback value so the
 // dashboard can retain the last panel render without claiming a full refresh.
-async function getJSONResult(url, dflt) {
+// When expectedGeneration is set, data produced after a daemon reload is kept
+// out of the current render and the next queued refresh obtains one view.
+async function getJSONResult(url, dflt, expectedGeneration = 0) {
   try {
     const r = await fetch(url);
-    return r.ok ? { ok: true, data: await r.json() } : { ok: false, data: dflt };
+    const generation = responseGeneration(r);
+    if (generationMismatch(r, expectedGeneration)) {
+      return { ok: false, data: dflt, generation, generationMismatch: true };
+    }
+    return r.ok ? { ok: true, data: await r.json(), generation } : { ok: false, data: dflt, generation };
   } catch (_) {
     return { ok: false, data: dflt };
   }
 }
 
-async function getJSON(url, dflt) {
-  return (await getJSONResult(url, dflt)).data;
-}
-
-// fetchReadyReport loads GET /readyz?verbose. Unlike getJSON, it parses the JSON
-// body even when the probe returns 503 (starting / shutting_down), so the header
-// status line keeps showing the daemon lifecycle state.
+// fetchReadyReport loads GET /readyz?verbose and parses the JSON body even when
+// the probe returns 503 (starting / shutting_down), so the header status line
+// keeps showing the daemon lifecycle state.
 async function fetchReadyReportResult() {
   try {
     const r = await fetch(readyVerbosePath);
     const data = await r.json();
     const validStatus = r.ok || r.status === httpStatusServiceUnavailable;
-    return (validStatus && data && typeof data === "object") ? { ok: true, data } : { ok: false, data: {} };
+    const generation = responseGeneration(r);
+    return (validStatus && data && typeof data === "object")
+      ? { ok: true, data, generation } : { ok: false, data: {}, generation };
   } catch (_) {
     return { ok: false, data: {} };
   }
@@ -6183,10 +6252,15 @@ async function confirmAction(name, action) {
   if (cascadeBox) cascadeBox.checked = false;
 
   try {
+    const generation = dashboardGeneration;
     const [detailRes, eventRes] = await Promise.all([
       fetch(serviceAPI(name)),
       fetch(serviceEventsAPI(name, eventContextLimit)),
     ]);
+    if (generationMismatch(detailRes, generation) || generationMismatch(eventRes, generation)) {
+      load();
+      throw new Error("configuration changed; refresh and try again");
+    }
     if (!detailRes.ok) throw new Error("HTTP " + detailRes.status);
     confirmCtx.detail = await detailRes.json();
     if (eventRes.ok) {
@@ -6327,12 +6401,16 @@ async function runPreflight(name) {
   }
 }
 
-async function loadEventRows(targetID, url) {
+async function loadEventRows(targetID, url, generation = dashboardGeneration) {
   const target = document.getElementById(targetID);
   if (!target) return true;
   renderEventsLoading(target);
   try {
     const res = await fetch(url);
+    if (generationMismatch(res, generation)) {
+      load();
+      return false;
+    }
     if (!res.ok) throw new Error("HTTP " + res.status);
     litRender(eventRows(await res.json(), false), target);
     return true;
@@ -6342,10 +6420,11 @@ async function loadEventRows(targetID, url) {
   }
 }
 
-async function loadServiceEvents(name) {
+async function loadServiceEvents(name, generation = dashboardGeneration) {
   return loadEventRows(
     detailDomId(name, "events"),
     serviceEventsAPI(name, eventDetailLimit),
+    generation,
   );
 }
 
@@ -6417,7 +6496,7 @@ function syncWindowButtons(kind, selected, service = "") {
   });
 }
 
-async function loadMetrics(name, measured) {
+async function loadMetrics(name, measured, generation = dashboardGeneration) {
   const check = selectedMetricCheck(name, measured || []);
   if (!check) return true;
   const summary = document.getElementById(detailDomId(name, "lat-summary"));
@@ -6426,6 +6505,10 @@ async function loadMetrics(name, measured) {
   const win = serviceMetricState(name).window;
   try {
     const res = await fetch(serviceMetricsAPI(name, check, win));
+    if (generationMismatch(res, generation)) {
+      load();
+      return false;
+    }
     if (!res.ok) throw new Error("HTTP " + res.status);
     const body = await res.json();
     if (serviceMetricState(name).window !== win || selectedMetricCheck(name, measured || []) !== check) return true;
@@ -6449,13 +6532,17 @@ function metricSeriesSummary(series) {
   return `avg <b>${esc(fmtMetricValue(summary.avg, unit))}</b> · min ${esc(fmtMetricValue(summary.min, unit))} · max ${esc(fmtMetricValue(summary.max, unit))}`;
 }
 
-async function loadCheckMetric(name, metric) {
+async function loadCheckMetric(name, metric, generation = dashboardGeneration) {
   const summary = document.getElementById(serviceCheckMetricDomID(name, metric.check, metric.name, "summary"));
   const chart = document.getElementById(serviceCheckMetricDomID(name, metric.check, metric.name, "chart"));
   if (!summary || !chart) return true;
   const win = serviceMetricState(name).window;
   try {
     const res = await fetch(serviceMetricsAPI(name, metric.check, win, metric.name));
+    if (generationMismatch(res, generation)) {
+      load();
+      return false;
+    }
     if (!res.ok) throw new Error("HTTP " + res.status);
     const body = await res.json();
     if (serviceMetricState(name).window !== win) return true;
@@ -6471,7 +6558,7 @@ async function loadCheckMetric(name, metric) {
   }
 }
 
-async function loadServiceRuntimeMetrics(name) {
+async function loadServiceRuntimeMetrics(name, generation = dashboardGeneration) {
   const setAll = (msg) => runtimeMetricDefs.forEach(({ key }) => {
     const id = key;
     const summary = document.getElementById(detailDomId(name, `runtime-${id}-summary`));
@@ -6482,6 +6569,10 @@ async function loadServiceRuntimeMetrics(name) {
   const win = serviceMetricState(name).window;
   try {
     const res = await fetch(serviceRuntimeAPI(name, win));
+    if (generationMismatch(res, generation)) {
+      load();
+      return false;
+    }
     if (!res.ok) throw new Error("HTTP " + res.status);
     const body = await res.json();
     if (serviceMetricState(name).window !== win) return true;
@@ -6506,8 +6597,12 @@ function renderServiceRuntimeMetric(name, suffix, series, label, fallbackUnit, w
 
 async function loadDaemonMetrics() {
   try {
-    const body = await getJSON(daemonMetricsAPI(daemonMetricWindow), null);
-    if (body) renderDaemonMetrics(body);
+    const result = await getJSONResult(daemonMetricsAPI(daemonMetricWindow), null, dashboardGeneration);
+    if (result.generationMismatch) {
+      load();
+      return;
+    }
+    if (result.data) renderDaemonMetrics(result.data);
   } catch (_) { /* getJSON already degrades */ }
 }
 
