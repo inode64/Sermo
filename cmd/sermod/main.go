@@ -378,6 +378,7 @@ func run(args []string) int {
 			Addr:                   addr,
 			Backend:                webHolder,
 			Auth:                   auth,
+			AllowedHosts:           webAllowedHosts(cfg),
 			Logger:                 logger,
 			AccessLog:              accessLog,
 			OperationTimeout:       app.MaxOperationTimeout(cfg, deps.OperationTimeout),
@@ -596,6 +597,16 @@ func webAuth(cfg *config.Config) web.Auth {
 	auth.GuestPassword, _ = m[config.WebKeyGuestPassword].(string)
 	auth.AnonymousGuest, _ = m[config.WebKeyGuest].(bool)
 	return auth
+}
+
+// webAllowedHosts reads web.allowed_hosts: extra Host header names the open
+// (auth-less) UI accepts besides localhost, IP literals and the bind host.
+func webAllowedHosts(cfg *config.Config) []string {
+	m, _ := cfg.Global.Raw[config.SectionWeb].(map[string]any)
+	if m == nil {
+		return nil
+	}
+	return cfgval.StringList(m[config.WebKeyAllowedHosts])
 }
 
 func openEngineLog(logger *slog.Logger, cfg *config.Config, key string) *logfile.Writer {

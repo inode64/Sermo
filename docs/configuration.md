@@ -618,6 +618,23 @@ hides the action buttons for guests; the API enforces it regardless. When no
 password/guest is set, auth is disabled (open) and the daemon **logs a warning**
 at startup. `GET /api/whoami` reports the caller's role.
 
+In **open mode** the server additionally validates the request `Host` header
+(DNS-rebinding protection): `localhost`, IP-literal Hosts and the bind address
+are accepted, any other DNS name is refused with `421`. A rebound hostile page
+necessarily presents its own domain in `Host`, while direct browsing by IP or
+localhost is unaffected. If an auth-less deployment sits behind a proxy that
+forwards another hostname, list it explicitly:
+
+```yaml
+web:
+  port: 9797
+  allowed_hosts: [dashboard.internal]   # extra Host names accepted in open mode
+```
+
+With auth enabled the check does not apply — a rebound origin cannot attach
+Basic credentials, and proxies keep whatever `Host` they use. Plain `/livez`
+and `/readyz` probes are always exempt.
+
 ### Behind a reverse proxy (required to expose it)
 
 The web server speaks **plain HTTP only** and binds to loopback by default. To

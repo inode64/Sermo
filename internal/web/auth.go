@@ -4,8 +4,15 @@ import (
 	"context"
 	"crypto/sha256"
 	"crypto/subtle"
+	"net"
 	"net/http"
+	"slices"
+	"strings"
 )
+
+// hostLocalname is the hostname (and suffix, `*.localhost`) that always
+// resolves to loopback per RFC 6761.
+const hostLocalname = "localhost"
 
 // Auth controls access to the dashboard via HTTP Basic auth with two roles:
 //
@@ -46,7 +53,40 @@ const (
 	authMessageMissingCSRFHeader = "missing " + headerSermoCSRF + " header (CSRF protection)"
 	authMessageReadOnly          = "read-only access"
 	authMessageRequired          = "authentication required"
+	authMessageForeignHost       = "request Host does not name this server (DNS-rebinding protection); add it to web.allowed_hosts if legitimate"
 )
+
+// hostAllowed reports whether the request Host names this server: a loopback
+// name/address, the configured bind host, or an explicit AllowedHosts entry.
+// Ports are ignored — rebinding controls the name, not the port.
+func (s *Server) hostAllowed(hostport string) bool {
+	host := canonicalHost(hostport)
+	if host == "" {
+		return false
+	}
+	if host == hostLocalname || strings.HasSuffix(host, "."+hostLocalname) {
+		return true
+	}
+	// Any IP-literal Host is direct addressing, not rebinding: a rebound
+	// request necessarily carries the attacker's DNS name in Host.
+	if ip := net.ParseIP(host); ip != nil {
+		return true
+	}
+	if bind := canonicalHost(s.Addr); bind != "" && host == bind {
+		return true
+	}
+	return slices.ContainsFunc(s.AllowedHosts, func(allowed string) bool {
+		return canonicalHost(allowed) == host
+	})
+}
+
+// canonicalHost lowercases and strips an optional port and IPv6 brackets.
+func canonicalHost(hostport string) string {
+	if h, _, err := net.SplitHostPort(hostport); err == nil {
+		hostport = h
+	}
+	return strings.ToLower(strings.Trim(hostport, "[]"))
+}
 
 // role resolves a request to roleAdmin, roleGuest, or "" (unauthenticated).
 func (a Auth) role(r *http.Request) string {
@@ -85,6 +125,15 @@ func (s *Server) withAuth(next http.Handler) http.Handler {
 		// so they follow normal read auth when auth is enabled.
 		if isPlainHealthProbe(r) {
 			next.ServeHTTP(w, r)
+			return
+		}
+
+		// Open mode has no credential boundary, so a DNS-rebound page could
+		// drive the API from a hostile origin; only Hosts that name this server
+		// are served. With auth enabled the Basic credential check covers it (a
+		// rebound origin cannot attach credentials) and proxies keep their Host.
+		if !s.Auth.Enabled() && s.Addr != "" && !s.hostAllowed(r.Host) {
+			writeJSON(w, http.StatusMisdirectedRequest, ActionResult{OK: false, Message: authMessageForeignHost})
 			return
 		}
 

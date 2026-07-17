@@ -1144,6 +1144,14 @@ type Server struct {
 	Auth    Auth
 	Logger  *slog.Logger
 
+	// AllowedHosts lists extra hostnames accepted in the Host header when auth
+	// is disabled (open mode), e.g. the public name of a fronting proxy.
+	// localhost, IP-literal Hosts and the bind host are always accepted; other
+	// names are refused (DNS-rebinding protection). The check needs Addr set
+	// (Run always has it) and does not apply with auth enabled: a DNS-rebound
+	// origin cannot attach Basic credentials, and proxies keep their Host.
+	AllowedHosts []string
+
 	OperationTimeout time.Duration
 	// OperationTimeoutSource supplies the active maximum timeout after a daemon
 	// reload. It is optional; OperationTimeout remains the fallback.

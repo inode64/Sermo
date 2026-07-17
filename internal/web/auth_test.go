@@ -234,6 +234,60 @@ func TestWhoami(t *testing.T) {
 	check("", "", "guest", false)
 }
 
+func TestOpenModeRejectsForeignHosts(t *testing.T) {
+	h := (&Server{Backend: &fakeBackend{services: []Service{{Name: "web"}}}, Addr: "127.0.0.1:9797"}).Handler()
+	serve := func(host, path string) int {
+		r := req(http.MethodGet, path, "", "")
+		r.Host = host
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, r)
+		return rec.Code
+	}
+
+	// DNS rebinding lands with the attacker's hostname in Host; the open
+	// (auth-less) UI must refuse it.
+	if code := serve("evil.example.com", apiPathServices); code != http.StatusMisdirectedRequest {
+		t.Fatalf("open mode with foreign Host = %d, want 421", code)
+	}
+	for _, host := range []string{"localhost:9797", "127.0.0.1:9797", "[::1]:9797", "127.0.0.1"} {
+		if code := serve(host, apiPathServices); code != http.StatusOK {
+			t.Fatalf("open mode with local Host %q = %d, want 200", host, code)
+		}
+	}
+	// Plain health probes stay reachable for load balancers regardless of Host.
+	if code := serve("evil.example.com", routePathLivez); code != http.StatusOK {
+		t.Fatalf("plain livez with foreign Host = %d, want 200", code)
+	}
+}
+
+func TestOpenModeAllowsConfiguredHosts(t *testing.T) {
+	h := (&Server{
+		Backend:      &fakeBackend{services: []Service{{Name: "web"}}},
+		Addr:         "127.0.0.1:9797",
+		AllowedHosts: []string{"sermo.internal"},
+	}).Handler()
+	r := req(http.MethodGet, apiPathServices, "", "")
+	r.Host = "sermo.internal:8443"
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, r)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("allowed_hosts entry = %d, want 200", rec.Code)
+	}
+}
+
+func TestAuthedModeServesAnyHost(t *testing.T) {
+	// With Basic auth on, a rebound origin cannot attach credentials, so the
+	// Host check is not applied and reverse proxies keep working.
+	h := authServer(Auth{AdminPassword: "secret"})
+	r := req(http.MethodGet, apiPathServices, "admin", "secret")
+	r.Host = "public.example.com"
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, r)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("authed request with proxy Host = %d, want 200", rec.Code)
+	}
+}
+
 func TestGuestSeesRedactedCmdlines(t *testing.T) {
 	b := &fakeBackend{
 		services: []Service{{Name: "web"}},
