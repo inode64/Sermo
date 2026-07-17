@@ -1857,6 +1857,16 @@ function renderAttention() {
 }
 function isTrackedOperation(action) { return serviceTrackedActions.includes(action); }
 function isMonitorToggle(action) { return action === actionMonitor || action === actionUnmonitor; }
+// acquireMonitorToggle registers a monitor/unmonitor request as in flight.
+// Returns the guard key, "" for non-toggle actions, or null when the same
+// toggle is already pending (the caller must ignore the click).
+function acquireMonitorToggle(prefix, name, action) {
+  if (!isMonitorToggle(action)) return "";
+  const key = prefix + name;
+  if (pendingMonitorToggles.has(key)) return null;
+  pendingMonitorToggles.add(key);
+  return key;
+}
 // releaseMonitorToggleAfterRefresh triggers the post-action refresh and, for a
 // monitor/unmonitor toggle, holds the pending guard until that refresh lands so
 // an intermediate re-render cannot re-enable the button against stale state.
@@ -5853,11 +5863,8 @@ async function act(name, action) {
     noCascade = confirmNoCascade;
     confirmNoCascade = false;
   }
-  const toggleKey = isMonitorToggle(action) ? "svc:" + name : "";
-  if (toggleKey) {
-    if (pendingMonitorToggles.has(toggleKey)) return;
-    pendingMonitorToggles.add(toggleKey);
-  }
+  const toggleKey = acquireMonitorToggle("svc:", name, action);
+  if (toggleKey === null) return;
   const tracked = isTrackedOperation(action);
   try {
     // Everything after the guard-add runs inside the try so a throw (even from
@@ -5886,11 +5893,8 @@ async function actWatch(name, action) {
     headers = { "X-Sermo-Confirm": w.raid_array || "" };
   }
   if (action === actionResume && !(await confirmWatchRAIDResume(name))) return;
-  const toggleKey = isMonitorToggle(action) ? "wat:" + name : "";
-  if (toggleKey) {
-    if (pendingMonitorToggles.has(toggleKey)) return;
-    pendingMonitorToggles.add(toggleKey);
-  }
+  const toggleKey = acquireMonitorToggle("wat:", name, action);
+  if (toggleKey === null) return;
   try {
     // Guard-add render inside the try, as in act(): a throw must not strand
     // the pending key.
