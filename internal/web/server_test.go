@@ -1413,7 +1413,7 @@ func TestIsErrorEventClassification(t *testing.T) {
 }
 
 func TestFilterEventsByKind(t *testing.T) {
-	events := []Event{{Kind: eventKindAlert}, {Kind: eventKindRecovery}, {Kind: eventKindAlert}}
+	events := []Event{{Kind: eventKindAlert}, {Kind: "recovered"}, {Kind: eventKindAlert}}
 	got := filterEvents(events, eventFilter{Kind: eventKindAlert}, 100)
 	if len(got) != 2 {
 		t.Fatalf("filtered %d events, want 2 alerts", len(got))
