@@ -493,7 +493,9 @@ async function performLoad() {
   } else if (reachable) {
     connOK = true;
     document.body.classList.remove("disconnected");
-    setStatus("services unavailable — keeping the last known list", feedbackStatusWarn, false);
+    // Only claim to keep a list when one was actually rendered before.
+    const hasList = (allServices || []).length > 0;
+    setStatus(hasList ? "services unavailable — keeping the last known list" : "services unavailable", feedbackStatusWarn, false);
   } else {
     connOK = false;
     showDisconnected();
