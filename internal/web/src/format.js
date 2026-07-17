@@ -87,7 +87,7 @@ export function fmtMetricValue(value, unit) {
     case metricUnitMilliseconds:
       return fmtNum(number, 2) + metricUnitMilliseconds;
     default:
-      return fmtNum(number, 2) + (unit || "");
+      return fmtNum(number, 2) + (unit ? " " + unit : "");
   }
 }
 

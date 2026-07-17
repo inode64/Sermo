@@ -3121,6 +3121,22 @@ function serviceMeasuredChecks(d) {
   return (d.checks || []).filter((c) => metricTypes.includes(c.type));
 }
 
+function serviceCheckMetrics(d) {
+  return (d.checks || []).flatMap((check) => (check.metrics || []).map((metric) => ({
+    check: check.name,
+    name: metric.name,
+    unit: metric.unit,
+  })));
+}
+
+function serviceCheckMetricDomID(service, check, metric, suffix) {
+  return detailDomId(service, `metric-${detailDomKey(check + ":" + metric)}-${suffix}`);
+}
+
+function serviceCheckMetricLabel(metric) {
+  return `${metric.check} · ${metric.name}`;
+}
+
 function serviceMetricState(name) {
   let state = serviceMetricStates.get(name);
   if (!state) {
@@ -3214,6 +3230,7 @@ function renderServiceDetail(d) {
     : tpl`<div class="${procWarnings.length ? "bad" : "muted"}">${procWarnings.length ? "No processes discovered; check discovery warnings." : "No processes found."}</div>`;
 
   const measured = serviceMeasuredChecks(d);
+  const checkMetrics = serviceCheckMetrics(d);
   const metricState = serviceMetricState(d.name);
   const activeMetricCheck = selectedMetricCheck(d.name, measured);
   const checkBtns = measured.length
@@ -3244,6 +3261,11 @@ function renderServiceDetail(d) {
         <div id="${detailDomId(d.name, "runtime-io-summary")}" class="muted">loading…</div>
         <div id="${detailDomId(d.name, "runtime-io-chart")}" class="muted chart-box"></div>
       </div>`;
+  const checkMetricPanels = checkMetrics.map((metric) => tpl`<div class="metric-panel" data-service-metric-check="${metric.check}" data-service-metric-name="${metric.name}">
+    <div class="metric-title">${serviceCheckMetricLabel(metric)}</div>
+    <div id="${serviceCheckMetricDomID(d.name, metric.check, metric.name, "summary")}" class="muted">loading…</div>
+    <div id="${serviceCheckMetricDomID(d.name, metric.check, metric.name, "chart")}" class="muted chart-box"></div>
+  </div>`);
   const graphs = tpl`<h2>Graphs <span class="muted">${winButtons(metricWins, metricState.window, "setMetricWin", "Graph time window", d.name)}</span></h2>
     <div class="metric-grid">
       <div class="metric-panel metric-panel-wide">
@@ -3257,6 +3279,7 @@ function renderServiceDetail(d) {
           </div>
         </div>
       </div>
+      ${checkMetricPanels}
       ${runtimeGraphPanels}
     </div>`;
 
@@ -3329,8 +3352,10 @@ async function hydrateServiceDetail(d) {
 
 async function refreshServiceGraphs(d) {
   const measured = serviceMeasuredChecks(d);
+  const checkMetrics = serviceCheckMetrics(d);
   syncWindowButtons("setMetricWin", serviceMetricState(d.name).window, d.name);
   const pending = [loadServiceSLA(d.name)];
+  pending.push(...checkMetrics.map((metric) => loadCheckMetric(d.name, metric)));
   if (!d.no_resident_process) {
     if (measured.length) pending.push(loadMetrics(d.name, measured));
     pending.push(loadServiceRuntimeMetrics(d.name));
@@ -6396,6 +6421,35 @@ async function loadMetrics(name, measured) {
   } catch (e) {
     if (serviceMetricState(name).window !== win || selectedMetricCheck(name, measured || []) !== check) return true;
     chart.textContent = "Failed to load latency: " + e.message;
+    return false;
+  }
+}
+
+function metricSeriesSummary(series) {
+  const summary = (series && series.summary) || {};
+  const unit = (series && series.unit) || "";
+  if (!summary.count) return '<span class="muted">No data yet for this window.</span>';
+  return `avg <b>${esc(fmtMetricValue(summary.avg, unit))}</b> · min ${esc(fmtMetricValue(summary.min, unit))} · max ${esc(fmtMetricValue(summary.max, unit))}`;
+}
+
+async function loadCheckMetric(name, metric) {
+  const summary = document.getElementById(serviceCheckMetricDomID(name, metric.check, metric.name, "summary"));
+  const chart = document.getElementById(serviceCheckMetricDomID(name, metric.check, metric.name, "chart"));
+  if (!summary || !chart) return true;
+  const win = serviceMetricState(name).window;
+  try {
+    const res = await fetch(serviceMetricsAPI(name, metric.check, win, metric.name));
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const body = await res.json();
+    if (serviceMetricState(name).window !== win) return true;
+    const unit = body.unit || metric.unit || "";
+    summary.innerHTML = metricSeriesSummary({ ...body, unit });
+    chart.innerHTML = drawMetricChart(body.points || [], unit, win, `${serviceCheckMetricLabel(metric)} chart`);
+    return true;
+  } catch (e) {
+    if (serviceMetricState(name).window !== win) return true;
+    summary.innerHTML = `<span class="muted">Failed to load ${esc(serviceCheckMetricLabel(metric))}: ${esc(e.message)}</span>`;
+    chart.innerHTML = "";
     return false;
   }
 }
