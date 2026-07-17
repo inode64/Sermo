@@ -128,6 +128,8 @@ const (
 	SectionWeb = "web"
 	// WebKeyAddress is web.address.
 	WebKeyAddress = "address"
+	// WebKeyAllowedHosts is web.allowed_hosts.
+	WebKeyAllowedHosts = "allowed_hosts"
 	// WebKeyGuest is web.guest.
 	WebKeyGuest = "guest"
 	// WebKeyGuestPassword is web.guest_password.
