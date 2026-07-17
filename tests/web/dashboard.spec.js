@@ -369,6 +369,8 @@ test("libraries inventory is visible and searchable", async ({ page }) => {
 });
 
 test("application and library inventories filter, group, sort, and expand", async ({ page }) => {
+  const pageErrors = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
   await page.locator("#app-category").selectOption("data");
   await expect(page.locator("#app-row-postgres")).toBeVisible();
   await expect(page.locator("#app-row-nginx")).toBeHidden();
@@ -403,6 +405,15 @@ test("application and library inventories filter, group, sort, and expand", asyn
   await expect(page.locator("#library-row-zlib")).toBeVisible();
   await page.locator('[data-library-sort="version"]').click();
   await expect(page.locator('[data-library-sort="version"]')).toHaveAttribute("aria-sort", "ascending");
+  expect(pageErrors).toEqual([]);
+});
+
+test("application deep links expand after its inventory renders", async ({ page }) => {
+  const pageErrors = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  await page.goto("/#app:postgres");
+  await expect(page.locator('[id="exp-app:postgres"]')).toContainText("16.3");
+  expect(pageErrors).toEqual([]);
 });
 
 test("graph selections remain isolated per service", async ({ page }) => {

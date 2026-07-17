@@ -2409,9 +2409,29 @@ function renderServices() {
   updateSectionNav();
 }
 
-// toggleExpand / loadExpansionFor drive inline expansion, shared by services and
-// host watches. Keys are "svc:<name>" (full inline service detail) or
-// "wat:<name>" (watch config + recent activity).
+// renderExpansionTarget updates only the panel that owns an expansion. Keeping
+// other lit-html roots untouched avoids invalidating a nested expansion while
+// its own panel is rendering.
+function renderExpansionTarget(key) {
+  if (isServiceExpansionKey(key)) renderServices();
+  else if (isWatchExpansionKey(key)) renderWatches();
+  else if (isAppExpansionKey(key)) renderApps();
+  else if (isLibraryExpansionKey(key)) renderLibraries();
+}
+
+// scheduleHashExpansion defers the render until the current lit-html render
+// completes. applyHash can run while a panel is rendering after new data
+// arrives; rendering that same panel recursively corrupts lit-html's parts.
+function scheduleHashExpansion(key) {
+  if (expanded.has(key)) return;
+  expanded.add(key);
+  queueMicrotask(() => {
+    if (expanded.has(key)) renderExpansionTarget(key);
+  });
+}
+
+// toggleExpand / loadExpansionFor drive inline expansion for services, host
+// watches, applications and libraries.
 function toggleExpand(key) {
   if (expanded.has(key)) {
     expanded.delete(key);
@@ -2424,10 +2444,7 @@ function toggleExpand(key) {
       history.replaceState(null, "", "#" + key); // shareable deep-link
     }
   }
-  renderServices();
-  renderWatches();
-  renderApps();
-  renderLibraries();
+  renderExpansionTarget(key);
   saveUIState();
 }
 
@@ -2537,7 +2554,7 @@ function applyHash() {
     const name = expansionName(h, expansionPrefixService);
     if (!(allServices || []).some((s) => s.name === name)) return;
     openSectionForService(name);
-    if (!expanded.has(h)) { expanded.add(h); renderServices(); }
+    scheduleHashExpansion(h);
     if (!hashScrolled) {
       const el = document.getElementById("svc-row-" + name);
       if (el) el.scrollIntoView({ block: "center" });
@@ -2551,7 +2568,7 @@ function applyHash() {
     if (!w) return;
     const sec = $(watchSectionFor(w));
     if (sec) { setPanelVisible(sec, true); sec.open = true; }
-    if (!expanded.has(h)) { expanded.add(h); renderWatches(); }
+    scheduleHashExpansion(h);
     if (!hashScrolled) {
       const el = document.getElementById("wat-row-" + name);
       if (el) el.scrollIntoView({ block: "center" });
@@ -2564,7 +2581,7 @@ function applyHash() {
     if (!(allApps || []).some((a) => a.name === name)) return;
     const sec = $("#apps-section");
     if (sec) { setPanelVisible(sec, true); sec.open = true; }
-    if (!expanded.has(h)) { expanded.add(h); renderApps(); }
+    scheduleHashExpansion(h);
     if (!hashScrolled) {
       const el = document.getElementById("app-row-" + name);
       if (el) el.scrollIntoView({ block: "center" });
@@ -2577,7 +2594,7 @@ function applyHash() {
     if (!(allLibraries || []).some((library) => library.name === name)) return;
     const sec = $("#libraries-section");
     if (sec) { setPanelVisible(sec, true); sec.open = true; }
-    if (!expanded.has(h)) { expanded.add(h); renderLibraries(); }
+    scheduleHashExpansion(h);
     if (!hashScrolled) {
       const el = document.getElementById("library-row-" + name);
       if (el) el.scrollIntoView({ block: "center" });
