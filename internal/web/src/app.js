@@ -189,29 +189,8 @@ const refreshAgeTickMs = millisecondsPerSecond;
 const chartViewWidth = 640;
 const chartViewHeight = 160;
 const chartColumnCount = 120;
-const slaChartPadLeft = 42;
-const slaChartPadRight = 16;
-const slaChartPadTop = 14;
-const slaChartPadBottom = 30;
 const metricChartPad = 34;
-const slaChartReferenceThresholds = [slaHealthyPct, slaWarningPct];
-const slaChartYLabelCandidates = [
-  percentMax,
-  slaHealthyPct,
-  slaWarningPct,
-  90,
-  75,
-  50,
-  25,
-];
-const slaChartYMinSteps = [
-  { threshold: 99.5, floor: slaHealthyPct },
-  { threshold: slaHealthyPct, floor: 98 },
-  { threshold: slaWarningPct, floor: 90 },
-  { threshold: 90, floor: 80 },
-  { threshold: 70, floor: 60 },
-  { threshold: 40, floor: 30 },
-];
+const slaBarCount = 90;
 const overviewActiveServiceStates = [targetStateStarted, targetStateActive, targetStateCollecting, targetStateMonitored];
 const mountStateClasses = {
   [mountStateActive]: "state-running",
@@ -2895,13 +2874,6 @@ function slaColor(pct) {
   return themeHealthColor(healthStatusCritical);
 }
 
-function slaChartYFloor(worstPct) {
-  for (const step of slaChartYMinSteps) {
-    if (worstPct >= step.threshold) return step.floor;
-  }
-  return percentMin;
-}
-
 function renderSLAWindows(wins, compact) {
   wins = wins || [];
   if (!wins.length) return tpl`<span class="muted">No SLA data yet.</span>`;
@@ -3108,104 +3080,42 @@ async function loadServiceSLA(name, generation = dashboardGeneration) {
   }
 }
 
+// drawSLAChart renders the detail SLA panel as a status-page style bar strip:
+// one full-height bar per sub-span (oldest left), colored by availability,
+// hatched when the sub-span has no observations.
 function drawSLAChart(points, win) {
-  const W = chartViewWidth;
-  const H = chartViewHeight;
-  const padL = slaChartPadLeft;
-  const padR = slaChartPadRight;
-  const padT = slaChartPadTop;
-  const padB = slaChartPadBottom;
-  const cols = chartColumnCount;
+  const cols = slaBarCount;
   const span = windowMs[win || defaultMetricWindow] || millisecondsPerDay;
   const endMs = Date.now();
   const startMs = endMs - span;
-  const plotW = W - padL - padR;
-  const plotH = H - padT - padB;
-  const baseY = padT + plotH;
   const observed = (points || []).map((p) => ({ p, t: slaPointTime(p), pct: slaPointPct(p) }))
     .filter((o) => o.t != null && o.t >= startMs && o.t <= endMs && o.pct != null)
     .sort((a, b) => a.t - b.t);
   if (!observed.length) return '<span class="muted">No SLA data yet for this window.</span>';
 
-  // Zoom the vertical scale to the data. SLA lives near 100%, so a fixed 0–100%
-  // axis squashes the line against the top and crowds the 95/100 labels into one
-  // another. Pick a "nice" floor just below the worst observed value: healthy
-  // data gets a tight 99–100 / 95–100 view, real downtime widens it as needed.
-  const lo = Math.min.apply(null, observed.map((o) => o.pct));
-  const yMin = slaChartYFloor(lo);
-  const x = (t) => padL + ((t - startMs) / span) * plotW;
-  const y = (pct) => padT + (percentMax - Math.max(yMin, Math.min(percentMax, pct))) / (percentMax - yMin) * plotH;
-
-  const breakMs = Math.max(span / cols * 2.5, 6 * millisecondsPerMinute);
-  const segments = [];
-  let seg = [];
-  observed.forEach((o) => {
-    if (seg.length && o.t - seg[seg.length - 1].t > breakMs) {
-      segments.push(seg);
-      seg = [];
-    }
-    seg.push(o);
-  });
-  if (seg.length) segments.push(seg);
-
-  // Reference threshold bands (the slaColor breakpoints), drawn only when inside
-  // the current range.
-  const refs = slaChartReferenceThresholds.filter((v) => v > yMin && v < percentMax).map((v) =>
-    `<line x1="${padL}" y1="${y(v).toFixed(1)}" x2="${W - padR}" y2="${y(v).toFixed(1)}" stroke="#8883" stroke-dasharray="3 4"></line>`).join("");
-  // Y labels: candidates coarsest→finest, placed greedily top-down and skipped
-  // when they would land within 11px of an already-placed one, so they never
-  // overlap no matter how tight or wide the zoomed range is.
-  const placed = [];
-  const yLabels = slaChartYLabelCandidates.concat(yMin)
-    .filter((v, i, a) => v >= yMin && v <= percentMax && a.indexOf(v) === i)
-    .sort((a, b) => b - a)
-    .map((v) => {
-      const yy = y(v);
-      if (placed.some((py) => Math.abs(py - yy) < 11)) return "";
-      placed.push(yy);
-      return `<text x="${padL - 6}" y="${yy.toFixed(1)}" font-size="10" fill="#888" text-anchor="end" dominant-baseline="middle">${v}%</text>`;
-    }).join("");
-  const axis = `
-    <line x1="${padL}" y1="${padT}" x2="${padL}" y2="${baseY}" stroke="#8886"></line>
-    <line x1="${padL}" y1="${baseY}" x2="${W - padR}" y2="${baseY}" stroke="#8886"></line>
-    ${refs}${yLabels}
-    <text x="${padL}" y="${H - 6}" font-size="10" fill="#888">${esc(new Date(startMs).toLocaleString())}</text>
-    <text x="${W - padR}" y="${H - 6}" font-size="10" fill="#888" text-anchor="end">now</text>`;
-  // Soft area under each segment gives the line body and makes the trend readable
-  // at a glance (SVG fills keep the literal palette so they read on both schemes).
-  const areas = segments.filter((s) => s.length > 1).map((s) => {
-    const top = s.map((o) => `${x(o.t).toFixed(1)},${y(o.pct).toFixed(1)}`).join(" ");
-    return `<polygon points="${x(s[0].t).toFixed(1)},${baseY.toFixed(1)} ${top} ${x(s[s.length - 1].t).toFixed(1)},${baseY.toFixed(1)}" fill="#1a7f3718" stroke="none"></polygon>`;
-  }).join("");
-  const lines = segments.map((s) => {
-    if (s.length === 1) {
-      const o = s[0];
-      return `<circle cx="${x(o.t).toFixed(1)}" cy="${y(o.pct).toFixed(1)}" r="2.6" fill="${slaColor(o.pct)}"><title>${esc(fmtTime(new Date(o.t).toISOString()) + " · " + fmtPct(o.pct))}</title></circle>`;
-    }
-    const pts = s.map((o) => `${x(o.t).toFixed(1)},${y(o.pct).toFixed(1)}`).join(" ");
-    return `<polyline points="${pts}" fill="none" stroke="#1a7f37" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"></polyline>`;
+  const { buckets } = bucketize(points, span, cols,
+    () => ({ up: 0, total: 0 }),
+    (b, p) => {
+      b.up += Number(p.up || 0);
+      b.total += Number(p.total || 0);
+    });
+  const bars = buckets.map((b, i) => {
+    const segStart = startMs + (i / cols) * span;
+    const segEnd = startMs + ((i + 1) / cols) * span;
+    const when = `${fmtTime(new Date(segStart).toISOString())} – ${fmtTime(new Date(segEnd).toISOString())}`;
+    if (!b.total) return `<span class="sla-bar-seg sla-gap" title="${esc(when + " · no data")}" aria-label="${esc(when)}: no data"></span>`;
+    const pct = pctClamp(b.up / b.total * percentScale);
+    const pctText = fmtPct(pct);
+    const tip = `${when} · ${pctText} · ${b.up}/${b.total}`;
+    return `<span class="sla-bar-seg" style="--sla-color:${slaColor(pct)}" title="${esc(tip)}" aria-label="${esc(when)}: ${esc(pctText)} available"></span>`;
   }).join("");
   const incidents = slaIncidentPoints(points, startMs, endMs);
-  const markers = incidents.map((o) => {
-    const tx = x(o.t);
-    const ty = y(o.pct);
-    const tip = `Incident ${fmtTime(new Date(o.t).toISOString())} · ${fmtPct(o.pct)} · ${Number(o.p.up || 0)}/${Number(o.p.total || 0)}`;
-    return `<g>
-      <title>${esc(tip)}</title>
-      <circle cx="${tx.toFixed(1)}" cy="${ty.toFixed(1)}" r="3.4" fill="#cf222e"></circle>
-    </g>`;
-  }).join("");
-  const hover = observed.map((o) => {
-    const tx = x(o.t);
-    const tip = `${fmtTime(new Date(o.t).toISOString())} · SLA ${fmtPct(o.pct)} · ${Number(o.p.up || 0)}/${Number(o.p.total || 0)}`;
-    return `<circle cx="${tx.toFixed(1)}" cy="${y(o.pct).toFixed(1)}" r="5" fill="transparent"><title>${esc(tip)}</title></circle>`;
-  }).join("");
-  const latestPct = observed.length ? observed[observed.length - 1].pct : null;
-  const slaAria = latestPct != null
-    ? `SLA timeline: latest ${fmtPct(latestPct)}, ${incidents.length} incident${incidents.length === 1 ? "" : "s"}`
-    : "SLA timeline";
+  const latestPct = observed[observed.length - 1].pct;
+  const slaAria = `SLA timeline: latest ${fmtPct(latestPct)}, ${incidents.length} incident${incidents.length === 1 ? "" : "s"}`;
   const dataTable = slaChartDataTable(observed);
-  return `${dataTable}<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="${esc(slaAria)}">${axis}${areas}${lines}${hover}${markers}</svg>${renderSLAIncidentList(incidents)}`;
+  return `${dataTable}<div class="sla-bars" role="img" aria-label="${esc(slaAria)}">${bars}</div>` +
+    `<div class="sla-bars-axis"><span>${esc(new Date(startMs).toLocaleString())}</span><span>now</span></div>` +
+    renderSLAIncidentList(incidents);
 }
 
 function totalsCpuCell(pt) {

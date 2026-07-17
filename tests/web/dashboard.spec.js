@@ -157,7 +157,18 @@ async function mockAPI(page) {
         const eventsMatch = path.match(/^\/api\/services\/([^/]+)\/events$/);
         if (detailMatch) body = serviceDetail(decodeURIComponent(detailMatch[1]));
         else if (eventsMatch) body = [];
-        else if (path.endsWith("/sla")) body = { since: url.searchParams.get("since"), points: [] };
+        else if (path.endsWith("/sla")) {
+          if (path.startsWith("/api/services/web/")) {
+            const now = Date.now();
+            body = {
+              since: url.searchParams.get("since"),
+              points: [
+                { start: new Date(now - 30 * 60 * 1000).toISOString(), up: 60, total: 60 },
+                { start: new Date(now - 5 * 60 * 1000).toISOString(), up: 30, total: 60 },
+              ],
+            };
+          } else body = { since: url.searchParams.get("since"), points: [] };
+        }
         else if (path.endsWith("/metrics")) {
           if (url.searchParams.get("metric") === "count") {
             if (path.startsWith("/api/services/db/")) {
@@ -320,7 +331,18 @@ test("process continuity stays separate from observed SLA", async ({ page }) => 
   await expect(detail.getByRole("heading", { name: "Process continuity" })).toBeVisible();
   await expect(detail).toContainText("30m / 1h");
   await expect(detail).toContainText("Confirmed process continuity, not observed check health.");
-  await expect(detail.locator(".sla-gap")).toBeVisible();
+  await expect(detail.locator(".sla-seg.sla-gap").first()).toBeVisible();
+});
+
+test("service SLA renders a status-page bar strip with incidents", async ({ page }) => {
+  await page.locator("#svc-row-web .row-toggle").click();
+  const detail = page.locator('[data-service-detail="web"]');
+  const strip = detail.locator(".sla-bars");
+  await expect(strip).toBeVisible();
+  await expect(strip.locator(".sla-bar-seg")).toHaveCount(90);
+  await expect(strip.locator(".sla-bar-seg:not(.sla-gap)")).toHaveCount(2);
+  await expect(detail.locator(".sla-bars-axis")).toContainText("now");
+  await expect(detail.locator(".sla-incident-list")).toContainText("Incidents");
 });
 
 test("service detail graphs named check metrics and reports fetch failures", async ({ page }) => {
