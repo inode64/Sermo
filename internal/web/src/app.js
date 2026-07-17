@@ -1857,6 +1857,17 @@ function renderAttention() {
 }
 function isTrackedOperation(action) { return serviceTrackedActions.includes(action); }
 function isMonitorToggle(action) { return action === actionMonitor || action === actionUnmonitor; }
+// releaseMonitorToggleAfterRefresh triggers the post-action refresh and, for a
+// monitor/unmonitor toggle, holds the pending guard until that refresh lands so
+// an intermediate re-render cannot re-enable the button against stale state.
+function releaseMonitorToggleAfterRefresh(toggleKey, render) {
+  const refresh = load();
+  if (!toggleKey) return;
+  refresh.finally(() => {
+    pendingMonitorToggles.delete(toggleKey);
+    render();
+  });
+}
 function serviceBusy(name) {
   const op = liveOps.get(name);
   return !!op && !op.finished;
@@ -5862,9 +5873,8 @@ async function act(name, action) {
     if (tracked) finishOperation(name, false, e.message);
     setStatus(`${action} ${name}: ${e.message}`, feedbackStatusErr);
   } finally {
-    if (toggleKey) pendingMonitorToggles.delete(toggleKey);
+    releaseMonitorToggleAfterRefresh(toggleKey, renderServices);
   }
-  load();
 }
 
 async function actWatch(name, action) {
@@ -5893,8 +5903,7 @@ async function actWatch(name, action) {
     if (action === actionProbe) {
       applyWatchProbeResult(name, body, failed);
       setStatus(`${action} watch ${name}: ${body.message || (failed ? "failed" : feedbackStatusOK)}`, failed ? feedbackStatusErr : feedbackStatusOK);
-      load();
-      return;
+      return; // the finally below triggers the refresh
     }
     if (failed) {
       throw new Error(body.message || ("HTTP " + res.status));
@@ -5904,9 +5913,8 @@ async function actWatch(name, action) {
     if (action === actionProbe) finishWatchProbe(name);
     setStatus(`${action} watch ${name}: ${e.message}`, feedbackStatusErr);
   } finally {
-    if (toggleKey) pendingMonitorToggles.delete(toggleKey);
+    releaseMonitorToggleAfterRefresh(toggleKey, renderWatches);
   }
-  load();
 }
 
 function applyWatchProbeResult(name, body, failed) {
