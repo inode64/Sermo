@@ -512,6 +512,15 @@ func TestSecurityHeaders(t *testing.T) {
 	}
 }
 
+func TestAPIResponsesAreNotCached(t *testing.T) {
+	h := newServer(&fakeBackend{})
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, apiPathServices, nil))
+	if got := rec.Header().Get(headerCacheControl); got != headerValueNoStore {
+		t.Fatalf("Cache-Control = %q, want %q on API responses (they can carry cmdlines and config)", got, headerValueNoStore)
+	}
+}
+
 // getJSON issues a GET against b's server at path, asserts a 200, and decodes the
 // JSON body into T.
 func getJSON[T any](t *testing.T, b Backend, path string) T {
