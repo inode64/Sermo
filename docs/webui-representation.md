@@ -113,6 +113,13 @@ Editable notes:
   not clear it, so a result like `umount failed: device busy` remains readable.
   Starting a new action clears it immediately, and the disconnected banner is
   exempt — it disappears on the first successful refresh.
+- Connection state has three levels. Connected: normal rendering. Partially
+  degraded: the services list request failed but some other dashboard endpoint
+  still answered — the page keeps the last rendered services list (or shows
+  none on a cold load), stays undimmed, and warns `services unavailable` in the
+  status line. Disconnected: no dashboard endpoint answered — the panels dim
+  (`body.disconnected`) and the `Disconnected — retrying…` banner shows until
+  the first successful refresh.
 
 ## Overview tiles
 

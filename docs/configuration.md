@@ -909,7 +909,11 @@ Because the daemon runs as root, the UI is hardened: it binds to loopback by
 default, supports auth (above), sets HTTP timeouts, and requires an
 **`X-Sermo-Csrf`** header on every action (POST) request — the dashboard sends it;
 an API client must too (e.g. `curl -H 'X-Sermo-Csrf: 1' -X POST …`). This blocks
-cross-site request forgery from a browser. See
+cross-site request forgery from a browser. The header's value is not a secret:
+the protection is the OWASP custom-request-header pattern — browsers refuse to
+attach custom headers to cross-site requests without a CORS preflight, and the
+server never answers preflights. That guarantee holds only while the server
+sends no `Access-Control-Allow-Origin` header; do not add permissive CORS. See
 [safety](safety.md#trust-model).
 
 ## Availability (SLA)
