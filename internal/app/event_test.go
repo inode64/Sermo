@@ -78,3 +78,30 @@ func TestSlogEmitterLogsHookAtInfo(t *testing.T) {
 		t.Fatalf("hook event not logged at info with watch attr: %q", out)
 	}
 }
+
+func TestSlogEmitterSeverityPerKind(t *testing.T) {
+	// Failed watch actions must be visible at the daemon's default Info level;
+	// expand-failed and kill-failed used to fall through to Debug.
+	cases := []struct {
+		kind string
+		want string
+	}{
+		{eventKindExpandFailed, "level=ERROR"},
+		{eventKindKillFailed, "level=ERROR"},
+		{eventKindExpand, "level=INFO"},
+		{eventKindKill, "level=INFO"},
+		{eventKindReload, "level=INFO"},
+		{eventKindPanicSuppressed, "level=INFO"},
+		{eventKindNotifySuppressed, "level=INFO"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.kind, func(t *testing.T) {
+			var buf bytes.Buffer
+			logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
+			SlogEmitter(logger)(Event{Watch: "w", Kind: tc.kind, Message: "x"})
+			if !strings.Contains(buf.String(), tc.want) {
+				t.Fatalf("kind %s logged as %q, want %s", tc.kind, buf.String(), tc.want)
+			}
+		})
+	}
+}
