@@ -453,6 +453,8 @@ func TestWebBackendActivitySummaryCountsAllServiceOperations(t *testing.T) {
 		events.Add(Event{Service: "web", Kind: eventKindAction, Action: action, Status: eventStatusOK})
 	}
 	events.Add(Event{Watch: "storage-root", Kind: eventKindHook, Status: eventStatusOK})
+	events.Add(Event{Watch: "storage-root", Kind: eventKindExpand, Message: "grew vg0/data"})
+	events.Add(Event{Watch: "runaway", Kind: eventKindKillFailed, Message: "pid 42 survived"})
 	events.Add(Event{Watch: "storage-root", Kind: eventKindNotify, Status: eventStatusOK})
 	events.Add(Event{Kind: eventKindError, Message: "boom"})
 
@@ -461,8 +463,9 @@ func TestWebBackendActivitySummaryCountsAllServiceOperations(t *testing.T) {
 	if got.ServiceActions != 5 {
 		t.Fatalf("ServiceActions = %d, want 5 for start/stop/restart/reload/resume", got.ServiceActions)
 	}
-	if got.WatchHooks != 1 || got.WatchNotifies != 1 || got.Errors != 1 {
-		t.Fatalf("ActivitySummary = %+v, want hook/notify/error counted", got)
+	// Expand and kill events count in the watch-actions bucket like hooks.
+	if got.WatchHooks != 3 || got.WatchNotifies != 1 || got.Errors != 1 {
+		t.Fatalf("ActivitySummary = %+v, want hook+expand+kill/notify/error counted", got)
 	}
 }
 

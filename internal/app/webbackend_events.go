@@ -62,7 +62,11 @@ func (b *WebBackend) ActivitySummary(_ context.Context) web.ActivitySummary {
 		switch {
 		case events[i].Kind == eventKindAction && isServiceOperationAction(events[i].Action):
 			summary.ServiceActions++
-		case events[i].Kind == eventKindHook || events[i].Kind == eventKindHookFail:
+		case events[i].Kind == eventKindHook || events[i].Kind == eventKindHookFail,
+			events[i].Kind == eventKindExpand || events[i].Kind == eventKindExpandFailed || events[i].Kind == eventKindExpandSkipped,
+			events[i].Kind == eventKindKill || events[i].Kind == eventKindKillFailed:
+			// Every watch-driven action (hook, volume expand, process kill) counts
+			// in the watch-actions bucket, like hooks always did.
 			summary.WatchHooks++
 		case events[i].Kind == eventKindNotify || events[i].Kind == eventKindNotifyFail:
 			summary.WatchNotifies++
