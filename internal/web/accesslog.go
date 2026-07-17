@@ -40,6 +40,13 @@ func (r *accessStatusRecorder) WriteHeader(code int) {
 	r.ResponseWriter.WriteHeader(code)
 }
 
+// Unwrap keeps optional ResponseWriter capabilities available through the
+// access-log middleware, including ResponseController write deadlines used by
+// long-running safe operations.
+func (r *accessStatusRecorder) Unwrap() http.ResponseWriter {
+	return r.ResponseWriter
+}
+
 func (s *Server) withAccessLog(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if s.AccessLog == nil || isReadMethod(r.Method) || !strings.HasPrefix(r.URL.Path, apiPathPrefix) {

@@ -9,18 +9,22 @@ import (
 	"sermo/internal/web"
 )
 
-const webBackendUnavailableMessage = "web backend unavailable"
+const (
+	webBackendUnavailableMessage = "web backend unavailable"
+	initialWebBackendGeneration  = 1
+)
 
 // WebBackendHolder exposes a web.Backend that can be swapped on config reload.
 type WebBackendHolder struct {
-	mu sync.RWMutex
-	b  *WebBackend
+	mu         sync.RWMutex
+	b          *WebBackend
+	generation uint64
 }
 
 // NewWebBackendHolder builds the initial backend.
 func NewWebBackendHolder(ctx context.Context, cfg *config.Config, deps Deps) (*WebBackendHolder, []string) {
 	b, warnings := NewWebBackend(ctx, cfg, deps)
-	return &WebBackendHolder{b: b}, warnings
+	return &WebBackendHolder{b: b, generation: initialWebBackendGeneration}, warnings
 }
 
 // Reload rebuilds the backend from the new config and swaps it in atomically.
@@ -34,17 +38,50 @@ func (h *WebBackendHolder) Reload(ctx context.Context, cfg *config.Config, deps 
 		b.daemonMetrics = h.b.daemonMetrics
 	}
 	h.b = b
+	if h.generation == 0 {
+		h.generation = initialWebBackendGeneration
+	} else {
+		h.generation++
+	}
 	h.mu.Unlock()
 	return warnings
 }
 
 func (h *WebBackendHolder) backend() *WebBackend {
+	b, _ := h.backendAndGeneration()
+	return b
+}
+
+func (h *WebBackendHolder) backendAndGeneration() (*WebBackend, uint64) {
 	if h == nil {
-		return nil
+		return nil, 0
 	}
 	h.mu.RLock()
 	defer h.mu.RUnlock()
-	return h.b
+	return h.b, h.generation
+}
+
+// BackendGeneration reports the active configuration generation for web API
+// responses. It is sampled after a read so callers can detect a concurrent
+// reload and avoid combining old and new views.
+func (h *WebBackendHolder) BackendGeneration() uint64 {
+	_, generation := h.backendAndGeneration()
+	return generation
+}
+
+// BeginBackendRead pins one backend generation until release. The web server
+// uses it for each read response so a reload cannot swap the backend between
+// collecting data and attaching that response's generation marker.
+func (h *WebBackendHolder) BeginBackendRead() (web.Backend, uint64, func()) {
+	if h == nil {
+		return nil, 0, func() {}
+	}
+	h.mu.RLock()
+	if h.b == nil {
+		h.mu.RUnlock()
+		return nil, h.generation, func() {}
+	}
+	return h.b, h.generation, h.mu.RUnlock
 }
 
 // MaxOperationTimeout reports the longest current operation timeout, including
@@ -58,9 +95,13 @@ func (h *WebBackendHolder) MaxOperationTimeout() time.Duration {
 // DashboardSnapshot collects the aggregate dashboard from exactly one active
 // backend generation, even if Reload swaps the holder while the request runs.
 func (h *WebBackendHolder) DashboardSnapshot(ctx context.Context, since time.Duration) web.DashboardSnapshot {
-	return webCall(h, web.DashboardSnapshot{}, func(b *WebBackend) web.DashboardSnapshot {
-		return b.DashboardSnapshot(ctx, since)
-	})
+	b, generation := h.backendAndGeneration()
+	if b == nil {
+		return web.DashboardSnapshot{}
+	}
+	snapshot := b.DashboardSnapshot(ctx, since)
+	snapshot.Generation = generation
+	return snapshot
 }
 
 // webCall runs fn against the active backend, returning zero when no backend

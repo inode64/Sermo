@@ -40,8 +40,8 @@ overflow and axe WCAG 2.2 AA rules against deterministic API fixtures.
 
 | Area | Endpoint | Notes |
 | --- | --- | --- |
-| Current user | `GET /api/whoami` | role and action permissions |
-| Dashboard snapshot | `GET /api/dashboard?since=WINDOW` | aggregate of the frequently refreshed service/runtime panels from one active daemon configuration generation; the browser falls back to the individual endpoints if unavailable |
+| Current user | `GET /api/whoami` | role and action permissions; action controls stay hidden until this request succeeds |
+| Dashboard snapshot | `GET /api/dashboard?since=WINDOW` | aggregate of the frequently refreshed service/runtime panels from one active daemon configuration generation; it carries `generation`, and dashboard data responses carry `X-Sermo-Generation` so the browser discards a mixed reload view before rendering it; the browser falls back to the individual endpoints if unavailable |
 | Readiness | `GET /readyz?verbose` | daemon `status:` in the top bar (`starting` / `ok` / …) |
 | Services | `GET /api/services` | configured runtime services loaded by sermod (not `sermoctl services` catalog inventory); `status_observed_at` identifies the real init-status sample behind a cached row |
 | Service expansion | `GET /api/services/{name}` | checks, process info, rules |
