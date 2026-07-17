@@ -214,17 +214,20 @@ func uintField(v any) (uint64, bool) {
 	return 0, false
 }
 
+// watchReadingIntMetricValue renders an integer reading through the canonical
+// value formatter, so grouped counts and IEC byte values read identically to
+// event messages.
 func watchReadingIntMetricValue(value int64, unit string) string {
-	if unit == "" {
-		return strconv.FormatInt(value, 10)
-	}
-	return fmt.Sprintf("%d %s", value, unit)
+	return checks.FormatDisplayValueWithUnit(checks.DataKeyValue, value, unit)
 }
 
+// watchReadingMetricValue renders a float reading. Default-precision readings
+// (and every byte count/rate) go through the canonical value formatter; the
+// readings that need explicit precision — clock offsets (3/6 decimals), await
+// tenths, rebuild progress — keep their fixed fmt rendering, since the
+// canonical formatter caps at two decimals and trims trailing zeros.
 func watchReadingMetricValue(value float64, decimals int, unit string) string {
-	// Byte counts and rates always go through the canonical byte formatter so a
-	// reading never renders the same value differently from its event message.
-	if unit == metrics.MetricUnitBytes || unit == metrics.MetricUnitBytesPerSecond {
+	if decimals == watchReadingDefaultMetricDecimals || unit == metrics.MetricUnitBytes || unit == metrics.MetricUnitBytesPerSecond {
 		return checks.FormatDisplayValueWithUnit(checks.DataKeyValue, value, unit)
 	}
 	if unit == "" {

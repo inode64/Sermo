@@ -40,7 +40,7 @@ func TestCheckReadingsForAllTypes(t *testing.T) {
 			name: "diskio canonical byte rates",
 			typ:  "diskio",
 			data: map[string]any{"device": "sda", "util_pct": 50.0, "read_bytes": 1024.0, "write_bytes": 2555904.0, "await_ms": 1.5},
-			want: map[string]string{"read_bytes": "1 KiB/s", "write_bytes": "2.44 MiB/s", "util_pct": "50.00%"},
+			want: map[string]string{"read_bytes": "1 KiB/s", "write_bytes": "2.44 MiB/s", "util_pct": "50%"},
 		},
 		{
 			name: "clock",
@@ -83,19 +83,19 @@ func TestCheckReadingsForAllTypes(t *testing.T) {
 			name: "storage",
 			typ:  "storage",
 			data: map[string]any{"path": "/", "used_pct": 88.5, "free_bytes": uint64(1 << 30)},
-			want: map[string]string{"used_pct": "88.50%"},
+			want: map[string]string{"used_pct": "88.5%"},
 		},
 		{
 			name: "pressure",
 			typ:  "pressure",
 			data: map[string]any{"some_avg60": 2.5, "value": 2.5},
-			want: map[string]string{"some_avg60": "2.50%"},
+			want: map[string]string{"some_avg60": "2.5%"},
 		},
 		{
 			name: "diskio",
 			typ:  "diskio",
 			data: map[string]any{"device": "sda", "util_pct": 50.0, "read_bytes": 1024.0},
-			want: map[string]string{"util_pct": "50.00%"},
+			want: map[string]string{"util_pct": "50%"},
 		},
 		{
 			name: "raid",
