@@ -122,6 +122,7 @@ watches:
   alert-if-fds-high:
     check: { type: metric, scope: service, name: fds, op: ">", value: 50000 }
     within: { cycles: 10, min_matches: 3 }
+    clear: { cycles: 10 }
     then: { action: alert, message: "fds high", notify: [ops] }
 `, "alert-if-fds-high", "alert")
 	// notify is an entry-level rule field, not part of then.
@@ -131,6 +132,10 @@ watches:
 	within := nested(t, rule, "within")
 	if got := cfgval.String(within["min_matches"]); got != "3" {
 		t.Fatalf("within.min_matches = %q, want 3 (copied)", got)
+	}
+	clearWin := nested(t, rule, "clear")
+	if got := cfgval.String(clearWin["cycles"]); got != "10" {
+		t.Fatalf("clear.cycles = %q, want 10 (copied from watch)", got)
 	}
 }
 

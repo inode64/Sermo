@@ -15,18 +15,20 @@ import (
 	"sermo/internal/servicemgr"
 )
 
-// validateWindow checks an optional for/within firing window at the dotted prefix,
-// shared by rules, host watches and per-metric sub-watches. A window may declare
-// at most one of for/within; each window must choose exactly one of cycles or
-// duration; cycles and duration must be positive; and within.min_matches —
-// optional, defaulting to 1 (true at least once within the window) — must be
-// positive and no larger than within.cycles when cycles are used.
+// validateWindow checks an optional for/within firing window and an optional
+// clear (recovery) window at the dotted prefix, shared by rules, host watches
+// and per-metric sub-watches. A window may declare at most one of for/within;
+// each window (including clear) must choose exactly one of cycles or duration;
+// cycles and duration must be positive; and within.min_matches — optional,
+// defaulting to 1 (true at least once within the window) — must be positive and
+// no larger than within.cycles when cycles are used.
 func validateWindow(prefix string, entry map[string]any, add addFunc) {
 	rawFor, hasFor := entry[rules.RuleFieldFor]
 	rawWithin, hasWithin := entry[rules.RuleFieldWithin]
 	if hasFor && hasWithin {
 		add("%s cannot define both for and within", prefix)
 	}
+	validateClearWindow(prefix, entry, add)
 	if hasFor {
 		f, ok := rawFor.(map[string]any)
 		if !ok {
@@ -64,6 +66,26 @@ func validateWindow(prefix string, entry map[string]any, add addFunc) {
 			}
 		}
 	}
+}
+
+// validateClearWindow checks the optional clear (recovery hysteresis) window: a
+// mapping with exactly one of cycles or duration, both positive.
+func validateClearWindow(prefix string, entry map[string]any, add addFunc) {
+	rawClear, hasClear := entry[rules.RuleFieldClear]
+	if !hasClear {
+		return
+	}
+	c, ok := rawClear.(map[string]any)
+	if !ok {
+		add("%s.clear must be a mapping, e.g. clear: {cycles: 3} or clear: {duration: 4m}", prefix)
+		return
+	}
+	for _, key := range slices.Sorted(maps.Keys(c)) {
+		if key != rules.WindowKeyCycles && key != rules.WindowKeyDuration {
+			add("%s.clear.%s is not supported; clear only accepts cycles or duration", prefix, key)
+		}
+	}
+	validateWindowLength(prefix+".clear", c, add)
 }
 
 func validateWindowLength(prefix string, m map[string]any, add addFunc) (cycles int, hasCycles bool) {
@@ -203,6 +225,11 @@ func validateRule(path string, entry map[string]any, notifiers, checkNames, syst
 	actions := ruleActions(then)
 	validateRuleActions(path, entry, ruleType, actions, hasThen, add)
 	validateWindow(path, entry, add)
+	// A clear window holds the episode firing while the condition is false; a
+	// remediation or guard rule must never keep acting on that hold.
+	if _, present := entry[rules.RuleFieldClear]; present && ruleType != string(rules.RuleAlert) {
+		add("%s.clear is only supported on alert rules and watches", path)
+	}
 	if hasIf {
 		validateCondition(ifNode, path+".if", checkNames, systemMetricChecks, ruleType == string(rules.RuleAlert), add)
 	}

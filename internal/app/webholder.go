@@ -106,8 +106,6 @@ func (h *WebBackendHolder) DashboardSnapshot(ctx context.Context, since time.Dur
 
 // webCall runs fn against the active backend, returning zero when no backend
 // is installed; the nil-guard shared by every delegate below.
-//
-//nolint:ireturn // T is the caller's concrete result type, not an interface.
 func webCall[T any](h *WebBackendHolder, zero T, fn func(b *WebBackend) T) T {
 	if b := h.backend(); b != nil {
 		return fn(b)
@@ -117,8 +115,6 @@ func webCall[T any](h *WebBackendHolder, zero T, fn func(b *WebBackend) T) T {
 
 // webCallOK is webCall for the (value, ok) lookups; a missing backend reports
 // zero, false.
-//
-//nolint:ireturn // T is the caller's concrete result type, not an interface.
 func webCallOK[T any](h *WebBackendHolder, zero T, fn func(b *WebBackend) (T, bool)) (T, bool) {
 	if b := h.backend(); b != nil {
 		return fn(b)

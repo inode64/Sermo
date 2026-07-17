@@ -284,6 +284,10 @@ linters:
         path: internal/cli/wizard\.go
       - linters: [ireturn]
         path: internal/(servicemgr/manager|dockerctl/manager|virt/manager|mountctl/mountctl|locks/(named|scanner)|process/discover)\.go
+      # The web-backend holder hands out the generation-tracked web.Backend
+      # interface by design; callers must never see the concrete swap type.
+      - linters: [ireturn]
+        path: internal/(app/webholder|web/server)\.go
       # Test fixtures are written to throwaway temp dirs with 0644; not a concern.
       - linters: [gosec]
         path: _test\.go

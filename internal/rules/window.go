@@ -16,21 +16,33 @@ type WindowSample struct {
 }
 
 // WindowState tracks a rule's condition history across cycles and timestamps so
-// for/within windows can be evaluated. One instance per rule per service,
-// persisted by the worker between cycles.
+// for/within windows can be evaluated, plus the firing episode those windows
+// open and the progress of an optional `clear` window that ends it. One
+// instance per rule per service, persisted by the worker between cycles.
 type WindowState struct {
 	consecutive  int
 	history      []bool // sliding window for `within: {cycles: ...}`
 	trueSince    time.Time
 	timedHistory []WindowSample // true samples for `within: {duration: ...}`
+	// firing is the current episode: it rises when the entry window matures and
+	// falls when the entry window stops firing (immediately, or after the clear
+	// window when one is configured). Reading it before FiresAt is the only
+	// race-free way to observe the rising/falling edge: recomputing IsFiringAt
+	// with the same timestamp reads a duration window as already elapsed.
+	firing           bool
+	clearConsecutive int
+	clearSince       time.Time
 }
 
 // WindowStateSnapshot is the serializable form of a WindowState.
 type WindowStateSnapshot struct {
-	Consecutive  int
-	History      []bool
-	TrueSince    time.Time
-	TimedHistory []WindowSample
+	Consecutive      int
+	History          []bool
+	TrueSince        time.Time
+	TimedHistory     []WindowSample
+	Firing           bool
+	ClearConsecutive int
+	ClearSince       time.Time
 }
 
 // withinWindow returns a within-window's cycle count and effective minimum
@@ -61,12 +73,63 @@ func (r Rule) forWindow() (cycles int, duration time.Duration) {
 	return 1, 0
 }
 
+// clearWindow returns the configured clear window: the consecutive false cycles
+// or wall-clock duration the condition must stay clear before a firing episode
+// ends. Both zero means no clear window (the episode ends the first cycle the
+// entry window stops firing).
+func (r Rule) clearWindow() (cycles int, duration time.Duration) {
+	if r.Clear != nil {
+		if r.Clear.Duration > 0 {
+			return 0, r.Clear.Duration
+		}
+		if r.Clear.Cycles > 0 {
+			return r.Clear.Cycles, 0
+		}
+	}
+	return 0, 0
+}
+
 // FiresAt updates the window with this cycle's condition value and reports
-// whether the rule fires. With neither for nor within, the default is
-// `for 1 cycle`. Workers and watches pass an explicit observation time so
-// duration-based windows share the same injected clock as policy/cooldown
-// logic and tests can avoid wall-clock sleeps.
+// whether the rule is in a firing episode. The entry window (for/within;
+// neither defaults to `for 1 cycle`) opens the episode; without a clear window
+// the episode tracks the entry window exactly, and with one the episode is held
+// open until the condition stays false for the whole clear window (a clear
+// window only extends an episode, it never cuts the entry window short).
+// Workers and watches pass an explicit observation time so duration-based
+// windows share the same injected clock as policy/cooldown logic and tests can
+// avoid wall-clock sleeps.
 func (s *WindowState) FiresAt(r Rule, conditionTrue bool, at time.Time) bool {
+	raw := s.advance(r, conditionTrue, at)
+	clearCycles, clearDuration := r.clearWindow()
+	if (clearCycles == 0 && clearDuration == 0) || !s.firing {
+		s.firing = raw
+		s.resetClear()
+		return s.firing
+	}
+	if conditionTrue {
+		// The episode continues; the entry window may be rebuilding after a dip,
+		// so the raw value is not consulted until the condition clears again.
+		s.resetClear()
+		return true
+	}
+	if s.clearSince.IsZero() {
+		s.clearSince = at
+	}
+	s.clearConsecutive++
+	cleared := s.clearConsecutive >= clearCycles
+	if clearDuration > 0 {
+		cleared = durationElapsed(s.clearSince, at) >= clearDuration
+	}
+	s.firing = raw || !cleared
+	if !s.firing {
+		s.resetClear()
+	}
+	return s.firing
+}
+
+// advance updates the entry window (for/within) with this cycle's condition
+// value and reports whether it fires, independent of the episode/clear state.
+func (s *WindowState) advance(r Rule, conditionTrue bool, at time.Time) bool {
 	if cycles, duration, minMatches, ok := r.withinWindow(); ok {
 		if duration > 0 {
 			if conditionTrue {
@@ -99,6 +162,31 @@ func (s *WindowState) FiresAt(r Rule, conditionTrue bool, at time.Time) bool {
 	return s.consecutive >= cycles
 }
 
+// resetClear drops the clear window's progress, on episode boundaries and every
+// cycle the condition is true again.
+func (s *WindowState) resetClear() {
+	s.clearConsecutive = 0
+	s.clearSince = time.Time{}
+}
+
+// Firing reports whether the rule is currently in a firing episode, as of the
+// last FiresAt call (read-only, nil-safe). Callers observing the rising or
+// falling edge must read it before calling FiresAt for the cycle.
+func (s *WindowState) Firing() bool {
+	return s != nil && s.firing
+}
+
+// EndEpisode force-closes the firing episode without advancing the entry
+// window, used when a restored episode is reconciled against a check that no
+// longer fires.
+func (s *WindowState) EndEpisode() {
+	if s == nil {
+		return
+	}
+	s.firing = false
+	s.resetClear()
+}
+
 // counters returns the window's read-only counters; a nil state (a rule that
 // has not ticked yet) reads as zero progress. The read-only methods go through
 // this accessor instead of rebinding the receiver.
@@ -109,10 +197,15 @@ func (s *WindowState) counters() (consecutive int, history []bool, trueSince tim
 	return s.consecutive, s.history, s.trueSince, s.timedHistory
 }
 
-// IsFiringAt reports whether the rule would fire from the current window state
+// IsFiringAt reports whether the rule is firing from the current window state
 // without advancing it (read-only, nil-safe; use FiresAt during evaluation).
-// at is the read time for duration windows.
+// An open episode — including one held by a clear window — reads as firing;
+// otherwise the entry window's counters decide. at is the read time for
+// duration windows.
 func (s *WindowState) IsFiringAt(r Rule, at time.Time) bool {
+	if s.Firing() {
+		return true
+	}
 	consecutive, history, trueSince, timedHistory := s.counters()
 	if _, duration, minMatches, ok := r.withinWindow(); ok {
 		if duration > 0 {
@@ -160,10 +253,13 @@ func (s *WindowState) Snapshot() WindowStateSnapshot {
 		return WindowStateSnapshot{}
 	}
 	return WindowStateSnapshot{
-		Consecutive:  s.consecutive,
-		History:      slices.Clone(s.history),
-		TrueSince:    s.trueSince,
-		TimedHistory: slices.Clone(s.timedHistory),
+		Consecutive:      s.consecutive,
+		History:          slices.Clone(s.history),
+		TrueSince:        s.trueSince,
+		TimedHistory:     slices.Clone(s.timedHistory),
+		Firing:           s.firing,
+		ClearConsecutive: s.clearConsecutive,
+		ClearSince:       s.clearSince,
 	}
 }
 
@@ -171,10 +267,13 @@ func (s *WindowState) Snapshot() WindowStateSnapshot {
 func WindowStateFromSnapshot(snapshot WindowStateSnapshot) *WindowState {
 	snapshot.Consecutive = max(snapshot.Consecutive, 0)
 	return &WindowState{
-		consecutive:  snapshot.Consecutive,
-		history:      slices.Clone(snapshot.History),
-		trueSince:    snapshot.TrueSince,
-		timedHistory: slices.Clone(snapshot.TimedHistory),
+		consecutive:      snapshot.Consecutive,
+		history:          slices.Clone(snapshot.History),
+		trueSince:        snapshot.TrueSince,
+		timedHistory:     slices.Clone(snapshot.TimedHistory),
+		firing:           snapshot.Firing,
+		clearConsecutive: max(snapshot.ClearConsecutive, 0),
+		clearSince:       snapshot.ClearSince,
 	}
 }
 
@@ -312,6 +411,14 @@ func ParseWithinWindow(v any) *WithinWindow {
 	return &WithinWindow{Cycles: cycles, Duration: cfgval.Duration(m[WindowKeyDuration]), MinMatches: minMatches(m)}
 }
 
+// ParseClearWindow parses a `clear` window ({cycles} or {duration}) from a
+// config node, or nil when absent. It shares ForWindow's shape: the consecutive
+// false cycles or wall-clock duration the condition must stay clear before a
+// firing episode ends.
+func ParseClearWindow(v any) *ForWindow {
+	return ParseForWindow(v)
+}
+
 // ParseWindow parses an entry's `for`/`within` sub-blocks into their windows.
 // Shared by the rules parser and the host-watch builder so both read a window the
 // same way.
@@ -319,11 +426,11 @@ func ParseWindow(entry map[string]any) (*ForWindow, *WithinWindow) {
 	return ParseForWindow(entry[RuleFieldFor]), ParseWithinWindow(entry[RuleFieldWithin])
 }
 
-// ParseWindowRule returns a Rule carrying only the for/within window from entry —
-// the shape host watches use to reuse the rules window machinery.
+// ParseWindowRule returns a Rule carrying only the for/within/clear windows from
+// entry — the shape host watches use to reuse the rules window machinery.
 func ParseWindowRule(entry map[string]any) Rule {
 	forWin, withinWin := ParseWindow(entry)
-	return Rule{For: forWin, Within: withinWin}
+	return Rule{For: forWin, Within: withinWin, Clear: ParseClearWindow(entry[RuleFieldClear])}
 }
 
 // ParseRuleWindow parses the global/per-service `rule_window` fallback block

@@ -1278,8 +1278,6 @@ func cspNonceFrom(ctx context.Context) string {
 // queryCapped reads query param name via parse (which reports whether the
 // value is usable), defaulting to def and capping at maxV; the shared clamp
 // behind the limit/since query readers.
-//
-//nolint:ireturn // T is a scalar type parameter (int/Duration), not an interface.
 func queryCapped[T cmp.Ordered](r *http.Request, name string, def, maxV T, parse func(string) (T, bool)) T {
 	v := def
 	if q := r.URL.Query().Get(name); q != "" {
@@ -1555,15 +1553,15 @@ func (s *Server) finishDashboardSnapshot(snapshot DashboardSnapshot) DashboardSn
 }
 
 func (s *Server) handleServices(w http.ResponseWriter, r *http.Request) {
-	s.readJSON(w, http.StatusOK, func(backend Backend) any { return backend.Services(r.Context()) })
+	s.readJSON(w, r, func(ctx context.Context, backend Backend) any { return backend.Services(ctx) })
 }
 
 func (s *Server) handleWatches(w http.ResponseWriter, r *http.Request) {
-	s.readJSON(w, http.StatusOK, func(backend Backend) any { return backend.Watches(r.Context()) })
+	s.readJSON(w, r, func(ctx context.Context, backend Backend) any { return backend.Watches(ctx) })
 }
 
 func (s *Server) handleNotifiers(w http.ResponseWriter, r *http.Request) {
-	s.readJSON(w, http.StatusOK, func(backend Backend) any { return backend.Notifiers(r.Context()) })
+	s.readJSON(w, r, func(ctx context.Context, backend Backend) any { return backend.Notifiers(ctx) })
 }
 
 func (s *Server) handleNotifierTest(w http.ResponseWriter, r *http.Request) {
@@ -1573,15 +1571,15 @@ func (s *Server) handleNotifierTest(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleApplications(w http.ResponseWriter, r *http.Request) {
-	s.readJSON(w, http.StatusOK, func(backend Backend) any { return backend.Applications(r.Context()) })
+	s.readJSON(w, r, func(ctx context.Context, backend Backend) any { return backend.Applications(ctx) })
 }
 
 func (s *Server) handleLibraries(w http.ResponseWriter, r *http.Request) {
-	s.readJSON(w, http.StatusOK, func(backend Backend) any { return backend.Libraries(r.Context()) })
+	s.readJSON(w, r, func(ctx context.Context, backend Backend) any { return backend.Libraries(ctx) })
 }
 
 func (s *Server) handleMounts(w http.ResponseWriter, r *http.Request) {
-	s.readJSON(w, http.StatusOK, func(backend Backend) any { return backend.Mounts(r.Context()) })
+	s.readJSON(w, r, func(ctx context.Context, backend Backend) any { return backend.Mounts(ctx) })
 }
 
 func (s *Server) handleMountAction(w http.ResponseWriter, r *http.Request) {
@@ -1609,20 +1607,20 @@ func (s *Server) handleMountAction(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleDaemon(w http.ResponseWriter, r *http.Request) {
-	s.readJSON(w, http.StatusOK, func(backend Backend) any { return backend.DaemonInfo(r.Context()) })
+	s.readJSON(w, r, func(ctx context.Context, backend Backend) any { return backend.DaemonInfo(ctx) })
 }
 
 func (s *Server) handleDaemonMetrics(w http.ResponseWriter, r *http.Request) {
 	since := seriesSince(r)
-	s.readJSON(w, http.StatusOK, func(backend Backend) any { return backend.DaemonMetrics(r.Context(), since) })
+	s.readJSON(w, r, func(ctx context.Context, backend Backend) any { return backend.DaemonMetrics(ctx, since) })
 }
 
 func (s *Server) handleHost(w http.ResponseWriter, r *http.Request) {
-	s.readJSON(w, http.StatusOK, func(backend Backend) any { return backend.HostMetrics(r.Context()) })
+	s.readJSON(w, r, func(ctx context.Context, backend Backend) any { return backend.HostMetrics(ctx) })
 }
 
 func (s *Server) handleLocks(w http.ResponseWriter, r *http.Request) {
-	s.readJSON(w, http.StatusOK, func(backend Backend) any { return backend.Locks(r.Context()) })
+	s.readJSON(w, r, func(ctx context.Context, backend Backend) any { return backend.Locks(ctx) })
 }
 
 func (s *Server) handleLockRelease(w http.ResponseWriter, r *http.Request) {
@@ -1631,11 +1629,11 @@ func (s *Server) handleLockRelease(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleActivity(w http.ResponseWriter, r *http.Request) {
-	s.readJSON(w, http.StatusOK, func(backend Backend) any { return backend.ActivitySummary(r.Context()) })
+	s.readJSON(w, r, func(ctx context.Context, backend Backend) any { return backend.ActivitySummary(ctx) })
 }
 
 func (s *Server) handleMonitoring(w http.ResponseWriter, r *http.Request) {
-	s.readJSON(w, http.StatusOK, func(backend Backend) any { return backend.MonitoringStatus(r.Context()) })
+	s.readJSON(w, r, func(ctx context.Context, backend Backend) any { return backend.MonitoringStatus(ctx) })
 }
 
 // handleNamed answers a lookup keyed by the request's name path parameter:
@@ -1826,15 +1824,12 @@ func (s *Server) handlePanic(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleOperations(w http.ResponseWriter, r *http.Request) {
-	s.readJSON(w, http.StatusOK, func(backend Backend) any { return backend.Operations(r.Context()) })
+	s.readJSON(w, r, func(ctx context.Context, backend Backend) any { return backend.Operations(ctx) })
 }
 
-// readyReport builds the readiness report: it delegates to the configured
-// Readiness probe when present, otherwise reports ready with the service count.
-func (s *Server) readyReport(ctx context.Context) ReadyReport {
-	return s.readyReportFromBackend(ctx, s.Backend)
-}
-
+// readyReportFromBackend builds the readiness report: it delegates to the
+// configured Readiness probe when present, otherwise reports ready with the
+// service count.
 func (s *Server) readyReportFromBackend(ctx context.Context, backend Backend) ReadyReport {
 	if s.Readiness != nil {
 		return s.Readiness.Report(ctx)
@@ -1998,11 +1993,12 @@ func (s *Server) backendRead() (Backend, uint64, func()) {
 }
 
 // readJSON collects a read response from one backend generation and labels the
-// encoded result with that same generation.
-func (s *Server) readJSON(w http.ResponseWriter, status int, read func(Backend) any) {
+// encoded result with that same generation. Reads always answer 200: a backend
+// read cannot fail, only observe the current snapshot.
+func (s *Server) readJSON(w http.ResponseWriter, r *http.Request, read func(context.Context, Backend) any) {
 	backend, generation, release := s.backendRead()
 	defer release()
-	s.writeBackendJSON(w, status, read(backend), generation)
+	s.writeBackendJSON(w, http.StatusOK, read(r.Context(), backend), generation)
 }
 
 // writeBackendJSON marks a read response with the generation that produced its

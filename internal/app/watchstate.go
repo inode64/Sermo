@@ -58,7 +58,7 @@ func (w *Watch) runtimeRecord() state.WatchRuntimeRecord {
 		LastNotifyAt: w.lastNotifyAt,
 		Policy:       remediationToRecord(&w.policyState),
 	}
-	if w.Window.For != nil || w.Window.Within != nil {
+	if w.Window.For != nil || w.Window.Within != nil || w.Window.Clear != nil {
 		rec.Window = ruleWindowRecord(&w.state)
 	}
 	return rec
@@ -76,6 +76,7 @@ func (w *Watch) reconcileRestoredEpisode(res checks.Result) {
 		return
 	}
 	w.firing = false
+	w.state.EndEpisode()
 	w.lastNotifyAt = time.Time{}
 	w.emit(Event{Watch: w.Name, Kind: eventKindRecovered, Message: res.Message})
 }
@@ -114,6 +115,9 @@ func watchRuntimeRecordsEqual(a, b state.WatchRuntimeRecord) bool {
 		slices.Equal(a.Window.History, b.Window.History) &&
 		a.Window.TrueSince.Equal(b.Window.TrueSince) &&
 		windowSamplesEqual(a.Window.TimedHistory, b.Window.TimedHistory) &&
+		a.Window.Firing == b.Window.Firing &&
+		a.Window.ClearSince.Equal(b.Window.ClearSince) &&
+		a.Window.ClearConsecutive == b.Window.ClearConsecutive &&
 		a.Policy.LastActionAt.Equal(b.Policy.LastActionAt) &&
 		slices.EqualFunc(a.Policy.RecentActions, b.Policy.RecentActions, func(x, y time.Time) bool { return x.Equal(y) }) &&
 		a.Policy.CurrentBackoff == b.Policy.CurrentBackoff

@@ -729,7 +729,11 @@ func (w *Worker) fires(ctx context.Context, ev *rules.Evaluator, r rules.Rule, a
 		cond = false
 	}
 	window := w.windowState(r.Name)
-	wasFiring := window.IsFiringAt(r, at)
+	// The previous cycle's episode state is the only reliable edge reference:
+	// recomputing IsFiringAt with this cycle's timestamp reads a for:{duration}
+	// window as already elapsed, which made rising unobservable (alerts were
+	// silently never emitted while recovered fired on every episode end).
+	wasFiring := window.Firing()
 	firing := window.FiresAt(r, cond, at)
 	return ruleFiringState{firing: firing, rising: !wasFiring && firing, recovered: wasFiring && !firing, change: ev.Change}
 }
