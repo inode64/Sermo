@@ -11,6 +11,7 @@ const services = [
     name: "db", display_name: "Database", category: "service", enabled: true,
     monitored: true, status: "active", state: "started", can_reload: true,
     uptime_seconds: 10800, status_observed_at: "2026-07-10T12:00:00Z",
+    last_event: { time: "2026-07-10T11:59:00Z", kind: "reload", message: "config reloaded" },
   },
 ];
 
@@ -440,6 +441,10 @@ test("monitor toggles send one request even on a double click", async ({ page })
   await page.waitForTimeout(600);
   expect(servicePosts).toBe(1);
   expect(watchPosts).toBe(1);
+});
+
+test("a reload event paints the activity cell as info like the events table", async ({ page }) => {
+  await expect(page.locator("#svc-row-db .activity-time")).toHaveClass(/activity-info/);
 });
 
 test("a failing services list alone does not dim the dashboard as disconnected", async ({ page }) => {

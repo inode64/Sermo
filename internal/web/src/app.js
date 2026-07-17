@@ -152,6 +152,7 @@ const eventKindNotifyFailed = "notify-failed";
 const eventKindNotifySuppressed = "notify-suppressed";
 const eventKindPanicSuppressed = "panic-suppressed";
 const eventKindRecovered = "recovered";
+const eventKindReload = "reload";
 const eventKindSuppressed = "suppressed";
 const eventStatusPreflightFailed = "preflight_failed";
 const eventStatusPostflightFailed = "postflight_failed";
@@ -1055,7 +1056,8 @@ function activitySeverity(kind, status) {
   if (activityCriticalKinds.includes(k)) return healthStatusCriticalShort;
   if (activityWarningKinds.includes(k)) return healthStatusWarningShort;
   if (activityOKKinds.includes(k)) return healthStatusOK;
-  if (k === eventKindDryRun) return healthStatusInfo;
+  // dry-run and reload are informational here, matching the events table.
+  if (k === eventKindDryRun || k === eventKindReload) return healthStatusInfo;
   return healthStatusMuted;
 }
 
