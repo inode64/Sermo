@@ -228,14 +228,12 @@ func (b *WebBackend) operationSettlingPending(name string) bool {
 	return rec.Phase == state.OperationSettlingRunning || rec.Phase == state.OperationSettlingSettling
 }
 
-// checkHealthSummary reports required-check health for the service list. It uses
-// the same rule as SLA availability: a required, non-skipped check with OK=false
-// counts as failing; optional failures are ignored. Paused services are "paused";
-// services with no observed checks yet are "unknown".
-func checkHealthSummary(snap map[string]CheckSnapshot, checkNames []string, monitored bool) (failing int, health string) {
-	return checkHealthSummaryCurrent(snap, checkNames, monitored, nil)
-}
-
+// checkHealthSummaryCurrent reports required-check health for the service list.
+// It uses the same rule as SLA availability: a required, non-skipped check with
+// OK=false counts as failing; optional failures are ignored. Paused services are
+// "paused"; services with no observed checks yet are "unknown". current, when
+// set, filters snapshots to the ones the running config still declares; nil
+// keeps every snapshot.
 func checkHealthSummaryCurrent(snap map[string]CheckSnapshot, checkNames []string, monitored bool, current func(string, CheckSnapshot) bool) (failing int, health string) {
 	if !monitored {
 		return 0, TargetStatePaused
