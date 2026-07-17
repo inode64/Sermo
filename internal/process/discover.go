@@ -2,10 +2,12 @@ package process
 
 import (
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"regexp"
 	"sermo/internal/cfgval"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -121,7 +123,7 @@ func (d Discoverer) Discover(selectors []Selector) ([]Process, []string) {
 	}
 
 	// 2. command_match across the snapshot.
-	for _, pid := range sortedPIDs(snapshot) {
+	for _, pid := range slices.Sorted(maps.Keys(snapshot)) {
 		id := snapshot[pid]
 		for i := range selectors {
 			if selectors[i].Type == SelectorCommandMatch && d.matches(&selectors[i], id, resolve) {
@@ -465,15 +467,6 @@ func buildSnapshot(reader Reader) map[int]Identity {
 	return snapshot
 }
 
-func sortedPIDs(snapshot map[int]Identity) []int {
-	pids := make([]int, 0, len(snapshot))
-	for pid := range snapshot {
-		pids = append(pids, pid)
-	}
-	sort.Ints(pids)
-	return pids
-}
-
 // ReadPidfile reads the first PID line from a pidfile. Most pidfiles contain
 // only that line; PostgreSQL's postmaster.pid keeps the PID on line one and
 // cluster metadata below it.
@@ -509,7 +502,7 @@ func ParseSelectors(tree map[string]any) ([]Selector, []string) {
 		})
 	}
 	if pidfiles, ok := tree[ServiceKeyPidfiles].(map[string]any); ok {
-		for _, role := range sortedMapKeys(pidfiles) {
+		for _, role := range slices.Sorted(maps.Keys(pidfiles)) {
 			paths := cfgval.StringList(pidfiles[role])
 			if len(paths) == 0 {
 				continue
@@ -528,7 +521,7 @@ func ParseSelectors(tree map[string]any) ([]Selector, []string) {
 	}
 
 	var warnings []string
-	for _, name := range sortedMapKeys(raw) {
+	for _, name := range slices.Sorted(maps.Keys(raw)) {
 		entry, ok := raw[name].(map[string]any)
 		if !ok {
 			warnings = append(warnings, fmt.Sprintf("process selector %q is not a mapping", name))
@@ -560,13 +553,4 @@ func ParseSelectors(tree map[string]any) ([]Selector, []string) {
 		selectors = append(selectors, sel)
 	}
 	return selectors, warnings
-}
-
-func sortedMapKeys(m map[string]any) []string {
-	names := make([]string, 0, len(m))
-	for name := range m {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	return names
 }
