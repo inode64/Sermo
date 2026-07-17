@@ -474,6 +474,12 @@ async function performLoad() {
   const mon = monResult.data;
   const ops = opsResult.data;
   const hostMetrics = hostMetricsResult.data;
+  // Disconnected means the daemon is unreachable, not that one endpoint
+  // failed: on the fallback path a services-only error must not dim a
+  // dashboard whose other sections still answer.
+  const reachable = servicesResult.ok || [mountsResult, notifiersResult, daemonResult,
+    daemonMetricsResult, locksResult, activityResult, readyResult, liveResult,
+    monResult, opsResult, hostMetricsResult].some((r) => r && r.ok);
   if (servicesResult.ok) {
     render(services);
     connOK = true;
@@ -483,6 +489,10 @@ async function performLoad() {
     // Open expansions fetch fresh detail once per poll here; re-renders in
     // between (filter keystrokes, ops ticker) only re-assert cached content.
     expandedServicesPromise = refreshExpandedServices({ generation });
+  } else if (reachable) {
+    connOK = true;
+    document.body.classList.remove("disconnected");
+    setStatus("services unavailable — keeping the last known list", feedbackStatusWarn, false);
   } else {
     connOK = false;
     showDisconnected();

@@ -442,6 +442,26 @@ test("monitor toggles send one request even on a double click", async ({ page })
   expect(watchPosts).toBe(1);
 });
 
+test("a failing services list alone does not dim the dashboard as disconnected", async ({ page }) => {
+  const error = { status: 500, contentType: "application/json", body: JSON.stringify({ message: "boom" }) };
+  await page.route("**/api/dashboard**", (route) => route.fulfill(error));
+  await page.route("**/api/services", (route) => route.fulfill(error));
+
+  await page.locator("#refresh-now").click();
+  await expect(page.locator("#daemon-backend")).toHaveText("systemd");
+  await expect(page.locator("body")).not.toHaveClass(/disconnected/);
+  await expect(page.locator("#svc-row-web")).toBeVisible();
+});
+
+test("the dashboard dims as disconnected when every endpoint fails", async ({ page }) => {
+  const error = { status: 500, contentType: "application/json", body: JSON.stringify({ message: "down" }) };
+  await page.route("**/api/**", (route) => route.fulfill(error));
+
+  await page.locator("#refresh-now").click();
+  await expect(page.locator("body")).toHaveClass(/disconnected/);
+  await expect(page.locator("#err")).toContainText("Disconnected");
+});
+
 test("graph selections remain isolated per service", async ({ page }) => {
   for (const name of ["web", "db"]) {
     await page.locator("#target-search").fill(`service: ${name}`);
