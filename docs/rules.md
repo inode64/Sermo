@@ -1857,15 +1857,17 @@ events and are recorded whenever the operation is attempted.
 
 For a recovered rule with exactly one direct check or metric leaf, the event also
 records the current formatted value and its configured operator and threshold.
-Byte values use IEC binary units — `B`, `KiB`, `MiB`, `GiB` or `TiB` (and byte
-rates add `/s`) — matching how size suffixes are parsed in configuration, including
-the configured threshold. This makes threshold flapping visible without having
-to reconstruct the sample from the metrics history.
+Byte sizes use IEC binary units — `B`, `KiB`, `MiB`, `GiB` or `TiB` — matching
+how size suffixes are parsed in configuration, including the configured
+threshold; byte rates use SI decimal units — `B/s`, `KB/s`, `MB/s`, `GB/s` or
+`TB/s`. This makes threshold flapping visible without having to reconstruct the
+sample from the metrics history.
 
 Every operator-facing number follows one canonical convention on every surface
 (events, notifications, `sermoctl` and the web UI): comma as the thousands
-separator and dot as the decimal mark (`12,345.68`), with byte values always
-humanized to IEC units (`2.44 MiB`, `1 KiB/s`) by the same formatter. Event
+separator and dot as the decimal mark (`12,345.68`), with byte sizes always
+humanized to IEC units (`2.44 MiB`) and byte rates to decimal units
+(`1.02 KB/s`) by the same formatter. Event
 timestamps are always rendered in UTC, so the same instant reads identically
 before and after a daemon restart.
 

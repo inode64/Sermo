@@ -2112,7 +2112,9 @@ watches:
 
 Predicates: `util_pct` (0–100), `await_ms` (plain ms), and `read_bytes`/
 `write_bytes` — **bytes per second**, written with the shared size grammar
-(`50M` = 50 MiB/s). All present predicates must hold (AND), so `util_pct` +
+(`50M` = 50 MiB/s = 52,428,800 B/s; note rates are *displayed* in SI decimal
+units, so that threshold reads back as `52.43 MB/s` in events and the web UI).
+All present predicates must hold (AND), so `util_pct` +
 `await_ms` together distinguish "busy and slow" from merely busy. A device
 missing from `/proc/diskstats` never fires (the check reports the error). Hook
 extras: `SERMO_DEVICE`, `SERMO_UTIL_PCT`, `SERMO_READ_BYTES`,

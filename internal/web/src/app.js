@@ -15,7 +15,7 @@ import {
   servicePreflightAPI, serviceRuntimeAPI, serviceSLAAPI, stateCompactAPI, watchAPI,
 } from "./api.js";
 import {
-  fmtAge, fmtBytes, fmtMetricValue, fmtNum, fmtPct, fmtRemain, fmtSeconds,
+  fmtAge, fmtBytes, fmtBytesPerSecond, fmtMetricValue, fmtNum, fmtPct, fmtRemain, fmtSeconds,
   fmtSince, fmtTime, fmtUntilShort, fmtUptime, hoursPerDay, millisecondsPerDay,
   millisecondsPerHour, millisecondsPerMinute, millisecondsPerSecond,
   metricUnitBytes, metricUnitBytesPerSecond, metricUnitMilliseconds,
@@ -2747,7 +2747,7 @@ function procCpuCells(p) {
 }
 function procIoFdThreadCells(p) {
   const io = (p.io_read || p.io_write) ? `${fmtBytes(p.io_read || 0)} / ${fmtBytes(p.io_write || 0)}` : '—';
-  return tpl`<td>${io}</td><td class="muted">${p.fds || '—'}</td><td class="muted">${p.threads || '—'}</td>`;
+  return tpl`<td>${io}</td><td class="muted">${p.fds ? fmtNum(p.fds, 0) : '—'}</td><td class="muted">${p.threads ? fmtNum(p.threads, 0) : '—'}</td>`;
 }
 function procCmd(p) {
   return (p.cmdline || []).join(" ").trim();
@@ -3219,7 +3219,7 @@ function renderServiceDetail(d) {
     ? tpl` ${usageBarMini(memPct(pt.rss || 0), fmtPct(memPct(pt.rss || 0)))}`
     : nothing;
   const totals = pt
-    ? tpl`<p class="muted detail-totals">Service totals (including child processes): memory <b>${fmtBytes(pt.rss || 0)}</b>${totalBar}${cpuTotalsLine(pt)} · IO r/w <b>${fmtBytes(pt.io_read || 0)} / ${fmtBytes(pt.io_write || 0)}</b> · fds <b>${pt.fds || 0}</b> · threads <b>${pt.threads || 0}</b> · ${pt.count} process${pt.count === 1 ? "" : "es"}</p>`
+    ? tpl`<p class="muted detail-totals">Service totals (including child processes): memory <b>${fmtBytes(pt.rss || 0)}</b>${totalBar}${cpuTotalsLine(pt)} · IO r/w <b>${fmtBytes(pt.io_read || 0)} / ${fmtBytes(pt.io_write || 0)}</b> · fds <b>${fmtNum(pt.fds || 0, 0)}</b> · threads <b>${fmtNum(pt.threads || 0, 0)}</b> · ${pt.count} process${pt.count === 1 ? "" : "es"}</p>`
     : nothing;
   const procWarns = procWarnings.map((w) => tpl`<div class="bad detail-warn">discovery warning: ${w}</div>`);
   const procSummary = tpl`<p class="muted detail-summary">${procs.length} discovered${procWarnings.length ? ` · ${procWarnings.length} discovery warning${procWarnings.length === 1 ? "" : "s"}` : ""}</p>`;
@@ -3302,7 +3302,7 @@ function renderServiceDetail(d) {
       <div><span class="muted">CPU total</span><br>${totalsCpuCell(pt)}</div>
       <div><span class="muted">Memory</span><br>${memoryInline(pt && pt.rss)}</div>
       <div><span class="muted">IO R/W</span><br>${ioRWInline(pt && pt.io_read, pt && pt.io_write)}</div>
-      <div><span class="muted">FDs / Threads</span><br>${pt ? `${pt.fds || 0} / ${pt.threads || 0}` : tpl`<span class="muted">—</span>`}</div>`;
+      <div><span class="muted">FDs / Threads</span><br>${pt ? `${fmtNum(pt.fds || 0, 0)} / ${fmtNum(pt.threads || 0, 0)}` : tpl`<span class="muted">—</span>`}</div>`;
   const general = tpl`<h2>General data</h2>
     <div class="runtime-grid">
       <div><span class="muted">State</span><br>${serviceStateCell(d)}</div>
@@ -3469,14 +3469,14 @@ function meterParts(m) {
       return [`${m.num_cpu || 0} CPU${(m.num_cpu === 1) ? "" : "s"}`,
         `load1 ${fmtNum(m.load || 0, 2)} · ${fmtPct(m.used_pct)} of capacity`];
     case "fds":
-      return [`${(m.max || 0).toLocaleString()} file descriptors max`,
-        `${(m.count || 0).toLocaleString()} allocated · ${((m.max || 0) - (m.count || 0)).toLocaleString()} free`];
+      return [`${fmtNum(m.max || 0, 0)} file descriptors max`,
+        `${fmtNum(m.count || 0, 0)} allocated · ${fmtNum((m.max || 0) - (m.count || 0), 0)} free`];
     case "pids":
-      return [`${(m.max || 0).toLocaleString()} max`,
-        `${(m.count || 0).toLocaleString()} in use · ${((m.max || 0) - (m.count || 0)).toLocaleString()} free`];
+      return [`${fmtNum(m.max || 0, 0)} max`,
+        `${fmtNum(m.count || 0, 0)} in use · ${fmtNum((m.max || 0) - (m.count || 0), 0)} free`];
     case "conntrack":
-      return [`${(m.max || 0).toLocaleString()} max`,
-        `${(m.count || 0).toLocaleString()} entries · ${((m.max || 0) - (m.count || 0)).toLocaleString()} free`];
+      return [`${fmtNum(m.max || 0, 0)} max`,
+        `${fmtNum(m.count || 0, 0)} entries · ${fmtNum((m.max || 0) - (m.count || 0), 0)} free`];
     default:
       return null;
   }
@@ -3850,7 +3850,7 @@ function renderStorageWatch(d) {
     ? (d.options || []).map((o, i) => i ? [" ", tpl`<code>${o}</code>`] : tpl`<code>${o}</code>`)
     : tpl`<span class="muted">none</span>`;
   const inodes = d.inodes_total
-    ? `${(Number(d.inodes_total) - Number(d.inodes_free || 0)).toLocaleString()} used / ${Number(d.inodes_total).toLocaleString()} total (${fmtPct(d.inodes_used_pct)} used)`
+    ? `${fmtNum(Number(d.inodes_total) - Number(d.inodes_free || 0), 0)} used / ${fmtNum(d.inodes_total, 0)} total (${fmtPct(d.inodes_used_pct)} used)`
     : tpl`<span class="muted">not reported</span>`;
   const errors = [
     d.sample_error ? `statfs: ${d.sample_error}` : "",
@@ -3888,10 +3888,10 @@ function renderMeterWatch(m) {
   } else { // fds | pids | conntrack
     const label = m.kind === "fds" ? "Allocated" : (m.kind === "conntrack" ? "Entries" : "In use");
     cells.push(
-      tpl`<div><span class="muted">${label}</span><br><b>${(m.count || 0).toLocaleString()}</b></div>`,
-      tpl`<div><span class="muted">Max</span><br><b>${(m.max || 0).toLocaleString()}</b></div>`,
+      tpl`<div><span class="muted">${label}</span><br><b>${fmtNum(m.count || 0, 0)}</b></div>`,
+      tpl`<div><span class="muted">Max</span><br><b>${fmtNum(m.max || 0, 0)}</b></div>`,
       tpl`<div><span class="muted">Used</span><br>${usageBar(usedPct)} <b>${fmtPct(m.used_pct)}</b></div>`,
-      tpl`<div><span class="muted">Free</span><br><b>${((m.max || 0) - (m.count || 0)).toLocaleString()}</b></div>`);
+      tpl`<div><span class="muted">Free</span><br><b>${fmtNum((m.max || 0) - (m.count || 0), 0)}</b></div>`);
   }
   return tpl`<div class="watch-grid">${cells}</div>`;
 }
@@ -6573,13 +6573,13 @@ function renderDaemonMetrics(body) {
     if (el) el.textContent = (val === 0 || val) ? String(val) : "—";
   };
   setText("#daemon-pid", c.pid);
-  setText("#daemon-fds", c.fds);
-  setText("#daemon-threads", c.threads);
+  setText("#daemon-fds", (c.fds === 0 || c.fds) ? fmtNum(c.fds, 0) : null);
+  setText("#daemon-threads", (c.threads === 0 || c.threads) ? fmtNum(c.threads, 0) : null);
   setText("#daemon-cpu-live", c.cpu_ready ? `${fmtNum(c.cpu || 0, 2)}${metricUnitPercent}` : "measuring");
   const mem = c.rss ? fmtBytes(c.rss) : "";
   const memPct = (c.memory_percent === 0 || c.memory_percent) ? ` (${fmtNum(c.memory_percent, 2)}${metricUnitPercent})` : "";
   setText("#daemon-memory-live", mem ? mem + memPct : "");
-  setText("#daemon-io-live", c.io_ready ? `${fmtBytes(c.io || 0)}/s` : "measuring");
+  setText("#daemon-io-live", c.io_ready ? fmtBytesPerSecond(c.io || 0) : "measuring");
 
   const win = $("#daemon-metric-windows");
   if (win) litRender(winButtons(metricWins, daemonMetricWindow, "setDaemonMetricWin", "Daemon metrics time window"), win);

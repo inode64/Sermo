@@ -47,13 +47,31 @@ export function fmtUptime(value) {
   return parts.join(" ");
 }
 
+// Sizes are IEC binary (KiB, base 1024); byte rates are SI decimal (KB/s,
+// base 1000). The daemon's formatSummaryBytes/formatSummaryBytesPerSecond
+// mirror this split exactly — keep both sides in step.
+const byteBase = 1024;
+const byteRateBase = 1000;
+
 export function fmtBytes(value) {
   let number = Number(value);
   if (!Number.isFinite(number) || number < 0) return "0 B";
   const units = ["B", "KiB", "MiB", "GiB", "TiB"];
   let unit = 0;
-  while (number >= 1024 && unit < units.length - 1) {
-    number /= 1024;
+  while (number >= byteBase && unit < units.length - 1) {
+    number /= byteBase;
+    unit++;
+  }
+  return fmtNum(number, 2, "0") + " " + units[unit];
+}
+
+export function fmtBytesPerSecond(value) {
+  let number = Number(value);
+  if (!Number.isFinite(number) || number < 0) return "0 B/s";
+  const units = ["B/s", "KB/s", "MB/s", "GB/s", "TB/s"];
+  let unit = 0;
+  while (number >= byteRateBase && unit < units.length - 1) {
+    number /= byteRateBase;
     unit++;
   }
   return fmtNum(number, 2, "0") + " " + units[unit];
@@ -86,7 +104,7 @@ export function fmtMetricValue(value, unit) {
     case metricUnitBytes:
       return fmtBytes(number);
     case metricUnitBytesPerSecond:
-      return fmtBytes(number) + "/s";
+      return fmtBytesPerSecond(number);
     case metricUnitPercent:
       return fmtNum(number, 2) + metricUnitPercent;
     case metricUnitMilliseconds:
