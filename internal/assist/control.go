@@ -101,19 +101,11 @@ func applyControlledSettings(p *Prompt, names []string, apply func(string, servi
 	if len(names) == 0 {
 		return
 	}
-	var shared *serviceSettings
-	if len(names) > 1 && p.Confirm("Apply the same monitor state, interval and dry-run mode to all selected services?", true) {
-		s := askServiceSettings(p, "all selected services")
-		shared = &s
-	}
-	for _, name := range names {
-		settings := shared
-		if settings == nil {
-			s := askServiceSettings(p, name)
-			settings = &s
-		}
-		apply(name, *settings)
-	}
+	shared := sharedSettingsFor(p, names, "Apply the same monitor state, interval and dry-run mode to all selected services?",
+		"all selected services", func(label string) serviceSettings { return askServiceSettings(p, label) })
+	forEachWithSettings(names, shared,
+		func(name string) serviceSettings { return askServiceSettings(p, name) },
+		apply)
 }
 
 func addControlledService(p *Prompt, env Env, services map[string]any, name string, body map[string]any, settings serviceSettings) bool {

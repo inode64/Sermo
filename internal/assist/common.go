@@ -140,12 +140,32 @@ func chooseCandidates[T any](p *Prompt, question string, cands []T, label func(T
 // the shared answer.
 func chooseSharedSettings[C, S any](p *Prompt, question string, cands []C, label func(C) string, confirmPrompt, scope string, ask func(string) S) ([]C, *S) {
 	selected := chooseCandidates(p, question, cands, label)
-	var shared *S
+	return selected, sharedSettingsFor(p, selected, confirmPrompt, scope, ask)
+}
+
+// sharedSettingsFor offers — when more than one candidate is selected — to
+// gather one settings answer for all of them. It returns nil when the user
+// declined or picked a single candidate, in which case the caller asks per
+// candidate. scope is the label passed to ask for the shared answer.
+func sharedSettingsFor[C, S any](p *Prompt, selected []C, confirmPrompt, scope string, ask func(string) S) *S {
 	if len(selected) > 1 && p.Confirm(confirmPrompt, true) {
 		s := ask(scope)
-		shared = &s
+		return &s
 	}
-	return selected, shared
+	return nil
+}
+
+// forEachWithSettings applies one settings value per selected candidate: the
+// shared answer when one was gathered, otherwise ask per candidate.
+func forEachWithSettings[C, S any](selected []C, shared *S, ask func(C) S, apply func(C, S)) {
+	for _, c := range selected {
+		s := shared
+		if s == nil {
+			t := ask(c)
+			s = &t
+		}
+		apply(c, *s)
+	}
 }
 
 func candidatesByIndexes[T any](cands []T, indexes []int) []T {
