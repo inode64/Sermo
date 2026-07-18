@@ -16,7 +16,6 @@ const (
 	DataKeyBackend            = CheckKeyBackend
 	DataKeyBaselineCount      = "baseline_count"
 	DataKeyBaselineBytes      = "baseline_bytes"
-	DataKeyCE                 = fieldCE
 	DataKeyChanged            = "changed"
 	DataKeyChip               = CheckKeyChip
 	DataKeyCount              = CheckKeyCount
@@ -28,9 +27,7 @@ const (
 	DataKeyDNSNames           = "dns_names"
 	DataKeyDatabase           = CheckKeyDatabase
 	DataKeyEngine             = CheckKeyEngine
-	DataKeyEgress             = "egress"
 	DataKeyFamily             = "family"
-	DataKeyFan                = sensorFan
 	DataKeyFingerprint        = "fingerprint"
 	DataKeyFingerprintOld     = "fingerprint_old"
 	DataKeyFreeBytes          = fieldFreeBytes
@@ -128,13 +125,11 @@ const (
 	DataKeyStratum            = "stratum"
 	DataKeySubject            = "subject"
 	DataKeySubprotocol        = CheckKeySubprotocol
-	DataKeyTemp               = sensorTemp
 	DataKeyThreshold          = CheckKeyThreshold
 	DataKeyTrigger            = "trigger"
 	DataKeyTotal              = fieldTotal
 	DataKeyTotalBytes         = fieldTotalBytes
 	DataKeyType               = CheckKeyType
-	DataKeyUE                 = fieldUE
 	DataKeyUnit               = "unit"
 	DataKeyUsedBytes          = fieldUsedBytes
 	DataKeyUsedPct            = fieldUsedPct
@@ -142,7 +137,6 @@ const (
 	DataKeyVersion            = "version"
 	DataKeyVersionOld         = "version_old"
 	DataKeyVersionShort       = "version_short"
-	DataKeyVoltage            = sensorVoltage
 	DataKeyWindow             = "window"
 	DataKeyNumberFiles        = "number_files"
 	DataKeyZombies            = "zombies"

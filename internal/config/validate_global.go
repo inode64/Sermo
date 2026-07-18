@@ -59,7 +59,6 @@ const (
 
 // Notify selection keywords.
 const (
-	NotifyKeywordAll     = SelectionKeywordAll
 	NotifyKeywordDefault = SelectionKeywordDefault
 	// NotifyNone is the reserved notify sentinel: a notify selection of `none`
 	// suppresses delivery, and no notifier may take it as a name.
