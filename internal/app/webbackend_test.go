@@ -1856,6 +1856,28 @@ func TestWebBackendWatchesShareSystemSnapshot(t *testing.T) {
 	}
 }
 
+// snapshotOnlyBackend builds a backend whose storage view may only read the
+// published watch snapshots: any statfs or mount-table sampling fails the test.
+func snapshotOnlyBackend(t *testing.T, cfg *config.Config, snapshots *WatchSnapshots, now time.Time) *WebBackend {
+	t.Helper()
+	b, warns := NewWebBackend(t.Context(), cfg, Deps{
+		WatchSnapshots: snapshots,
+		Now:            func() time.Time { return now },
+		StorageUsage: func(string) (checks.StorageStats, error) {
+			t.Fatal("web storage view must not call statfs")
+			return checks.StorageStats{}, nil
+		},
+		MountSampler: func() ([]checks.Mount, error) {
+			t.Fatal("web storage view must not read mounts")
+			return nil, nil
+		},
+	})
+	if len(warns) != 0 {
+		t.Fatalf("unexpected warnings: %v", warns)
+	}
+	return b
+}
+
 func TestWebBackendStorageWatchUsesSnapshot(t *testing.T) {
 	cfg := cfgWithWatches(map[string]any{
 		"storage-data": map[string]any{
@@ -1892,21 +1914,7 @@ func TestWebBackendStorageWatchUsesSnapshot(t *testing.T) {
 			checks.DataKeyInodesFreePct: 20.0,
 		},
 	})
-	b, warns := NewWebBackend(t.Context(), cfg, Deps{
-		WatchSnapshots: snapshots,
-		Now:            func() time.Time { return now },
-		StorageUsage: func(string) (checks.StorageStats, error) {
-			t.Fatal("web storage view must not call statfs")
-			return checks.StorageStats{}, nil
-		},
-		MountSampler: func() ([]checks.Mount, error) {
-			t.Fatal("web storage view must not read mounts")
-			return nil, nil
-		},
-	})
-	if len(warns) != 0 {
-		t.Fatalf("unexpected warnings: %v", warns)
-	}
+	b := snapshotOnlyBackend(t, cfg, snapshots, now)
 	watches := b.Watches(context.Background())
 	if len(watches) != 1 || watches[0].Storage == nil {
 		t.Fatalf("watch storage info = %+v", watches)
@@ -1943,21 +1951,7 @@ func TestWebBackendStorageMountOnlyUsesSnapshot(t *testing.T) {
 			checks.DataKeyOptions:    "rw,hard",
 		},
 	})
-	b, warns := NewWebBackend(t.Context(), cfg, Deps{
-		WatchSnapshots: snapshots,
-		Now:            func() time.Time { return now },
-		StorageUsage: func(string) (checks.StorageStats, error) {
-			t.Fatal("web storage view must not call statfs")
-			return checks.StorageStats{}, nil
-		},
-		MountSampler: func() ([]checks.Mount, error) {
-			t.Fatal("web storage view must not read mounts")
-			return nil, nil
-		},
-	})
-	if len(warns) != 0 {
-		t.Fatalf("unexpected warnings: %v", warns)
-	}
+	b := snapshotOnlyBackend(t, cfg, snapshots, now)
 
 	watches := b.Watches(context.Background())
 	if len(watches) != 1 {
@@ -2002,21 +1996,7 @@ func TestWebBackendStorageMountedExpectationProjectsSnapshot(t *testing.T) {
 			checks.DataKeyMounted: false,
 		},
 	})
-	b, warns := NewWebBackend(t.Context(), cfg, Deps{
-		WatchSnapshots: snapshots,
-		Now:            func() time.Time { return now },
-		StorageUsage: func(string) (checks.StorageStats, error) {
-			t.Fatal("web storage view must not call statfs")
-			return checks.StorageStats{}, nil
-		},
-		MountSampler: func() ([]checks.Mount, error) {
-			t.Fatal("web storage view must not read mounts")
-			return nil, nil
-		},
-	})
-	if len(warns) != 0 {
-		t.Fatalf("unexpected warnings: %v", warns)
-	}
+	b := snapshotOnlyBackend(t, cfg, snapshots, now)
 
 	watches := b.Watches(context.Background())
 	if len(watches) != 1 {
@@ -2213,21 +2193,7 @@ func TestWebBackendStorageWatchProjectsSnapshotErrors(t *testing.T) {
 			checks.DataKeyMountSampleError: "mount table failed",
 		},
 	})
-	b, warns := NewWebBackend(t.Context(), cfg, Deps{
-		WatchSnapshots: snapshots,
-		Now:            func() time.Time { return now },
-		StorageUsage: func(string) (checks.StorageStats, error) {
-			t.Fatal("web storage view must not call statfs")
-			return checks.StorageStats{}, nil
-		},
-		MountSampler: func() ([]checks.Mount, error) {
-			t.Fatal("web storage view must not read mounts")
-			return nil, nil
-		},
-	})
-	if len(warns) != 0 {
-		t.Fatalf("unexpected warnings: %v", warns)
-	}
+	b := snapshotOnlyBackend(t, cfg, snapshots, now)
 
 	watches := b.Watches(context.Background())
 	if len(watches) != 1 || watches[0].Storage == nil {
