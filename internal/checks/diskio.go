@@ -107,8 +107,8 @@ func (c *diskIOCheck) Run(_ context.Context) Result {
 
 	ok := levelPredsHold(c.preds, values)
 
-	res := c.result(ok, fmt.Sprintf("diskio %s util %.1f%% read %s/s write %s/s await %.1fms",
-		c.device, rates.UtilPct, formatSummaryBytes(rates.ReadBytes), formatSummaryBytes(rates.WriteBytes), rates.AwaitMs), start)
+	res := c.result(ok, fmt.Sprintf("diskio %s util %.1f%% read %s write %s await %.1fms",
+		c.device, rates.UtilPct, formatSummaryBytesPerSecond(rates.ReadBytes), formatSummaryBytesPerSecond(rates.WriteBytes), rates.AwaitMs), start)
 	res.Data = DiskIOResultData(c.device, rates)
 	res.Data[DataKeyValue] = firstPredValue(c.preds, values, rates.UtilPct)
 	return res

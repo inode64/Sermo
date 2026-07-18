@@ -19,6 +19,7 @@ const (
 	summaryNumberPrecision = 2
 	summaryFloatBits       = 64
 	summaryByteBase        = 1024
+	summaryByteRateBase    = 1000 // sizes are IEC binary (KiB…), rates are SI decimal (KB/s…)
 	summaryNumberGroupSize = 3
 )
 
@@ -161,7 +162,7 @@ func FormatDisplayValueWithUnit(name string, value any, unit string) string {
 		case metrics.MetricUnitBytes:
 			return formatSummaryBytes(number)
 		case metrics.MetricUnitBytesPerSecond:
-			return formatSummaryBytes(number) + "/s"
+			return formatSummaryBytesPerSecond(number)
 		}
 	}
 
@@ -220,6 +221,22 @@ func formatSummaryBytes(number float64) string {
 		unit++
 	}
 	return formatSummaryNumber(number) + " " + byteUnits[unit]
+}
+
+// formatSummaryBytesPerSecond renders a byte rate in SI decimal units (B/s,
+// KB/s, MB/s, GB/s, TB/s). Rates are decimal on purpose while sizes stay IEC
+// binary (formatSummaryBytes); the web fmtBytesPerSecond mirrors this exactly.
+func formatSummaryBytesPerSecond(number float64) string {
+	if math.IsNaN(number) || math.IsInf(number, 0) {
+		return "-"
+	}
+	byteRateUnits := []string{"B/s", "KB/s", "MB/s", "GB/s", "TB/s"}
+	unit := 0
+	for number >= summaryByteRateBase && unit < len(byteRateUnits)-1 {
+		number /= summaryByteRateBase
+		unit++
+	}
+	return formatSummaryNumber(number) + " " + byteRateUnits[unit]
 }
 
 func formatSummaryString(name, value string) string {

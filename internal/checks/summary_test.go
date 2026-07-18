@@ -67,7 +67,14 @@ func TestFormatDisplayValueWithUnitFormatsBytes(t *testing.T) {
 	}{
 		{name: "bytes", value: 2555904, unit: metrics.MetricUnitBytes, want: "2.44 MiB"},
 		{name: "threshold", value: "174159463", unit: metrics.MetricUnitBytes, want: "166.09 MiB"},
-		{name: "rate", value: 1048576, unit: metrics.MetricUnitBytesPerSecond, want: "1 MiB/s"},
+		{name: "rate", value: 1048576, unit: metrics.MetricUnitBytesPerSecond, want: "1.05 MB/s"},
+		{name: "zero rate", value: 0, unit: metrics.MetricUnitBytesPerSecond, want: "0 B/s"},
+		{name: "rate below unit step", value: 999, unit: metrics.MetricUnitBytesPerSecond, want: "999 B/s"},
+		{name: "rate at unit step", value: 1000, unit: metrics.MetricUnitBytesPerSecond, want: "1 KB/s"},
+		{name: "binary kilobyte rate", value: 1024, unit: metrics.MetricUnitBytesPerSecond, want: "1.02 KB/s"},
+		{name: "rate trims trailing zeros", value: 2500000, unit: metrics.MetricUnitBytesPerSecond, want: "2.5 MB/s"},
+		{name: "terabyte rate", value: 1e12, unit: metrics.MetricUnitBytesPerSecond, want: "1 TB/s"},
+		{name: "grouped rate below unit step", value: 999995, unit: metrics.MetricUnitBytesPerSecond, want: "1,000 KB/s"},
 		{name: "percent", value: 73.5, unit: metrics.MetricUnitPercent, want: "73.5%"},
 		{name: "grouped bytes below unit step", value: 1023.75, unit: metrics.MetricUnitBytes, want: "1,023.75 B"},
 	}

@@ -505,9 +505,12 @@ The visual layer is a token-driven design system (June 2026 redesign):
     trailing zeros stripped, `—` when non-finite). Every other helper builds on it.
   - **Percentages** → `fmtPct(n)` (`fmtNum(n,2)+"%"`). Includes CPU%, memory %,
     saturation, SLA % — tiles, bars and detail readings all use it.
-  - **Bytes / byte-rates** → `fmtBytes(n)` (and `fmtBytes(n)+"/s"`); via
-    `fmtMetricValue(v, unit)` for unit-tagged time series (`bytes`, `B/s`, `%`,
-    `ms`, default).
+  - **Bytes (sizes)** → `fmtBytes(n)` — IEC binary units, base 1024 (`KiB`,
+    `MiB`, …). **Byte rates** → `fmtBytesPerSecond(n)` — SI decimal units,
+    base 1000 (`KB/s`, `MB/s`, …); the daemon's `formatSummaryBytes`/
+    `formatSummaryBytesPerSecond` mirror the same split. Unit-tagged time
+    series route through `fmtMetricValue(v, unit)` (`bytes`, `B/s`, `%`, `ms`,
+    default).
   - **Durations** → `fmtUptime`/`fmtSeconds`/`shortDur`; **relative time** →
     `fmtRemain`/`fmtUntilShort`/`fmtAge`/`fmtSince`; **absolute timestamps** →
     `fmtTime`.
