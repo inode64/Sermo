@@ -187,13 +187,13 @@ func lvmReasons(row lvmRow) []string {
 // remains the monitoring health state.
 func lvmDeviceState(row lvmRow) (string, float64, bool) {
 	switch strings.ToLower(strings.TrimSpace(row.RaidSyncAction)) {
-	case "check":
+	case raidSyncActionCheck:
 		return lvmProgressState(DeviceStateTesting, row)
-	case "repair":
+	case raidSyncActionRepair:
 		return lvmProgressState(DeviceStateRepairing, row)
-	case "recover", "resync":
+	case raidSyncActionRecover, raidSyncActionResync:
 		return lvmProgressState(DeviceStateRecovering, row)
-	case "reshape":
+	case raidSyncActionReshape:
 		return lvmProgressState(DeviceStateRebuilding, row)
 	}
 
