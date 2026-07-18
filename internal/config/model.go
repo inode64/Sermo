@@ -51,9 +51,6 @@ const (
 // SectionControl is the per-service control backend override block.
 const SectionControl = sectionControl
 
-// SectionCommands is the service/app command definition block.
-const SectionCommands = sectionCommands
-
 // SectionReload is the native service reload override block.
 const SectionReload = sectionReload
 
@@ -176,14 +173,6 @@ const (
 	StopPolicyKeyUsers = keyUsers
 	// StopPolicyKeyExeAny is stop_policy.kill_only_if.exe_any.
 	StopPolicyKeyExeAny = keyExeAny
-	// StopPolicyKeyPidfileAbsent is stop_policy.pidfile_absent.
-	StopPolicyKeyPidfileAbsent = keyPidfileAbsent
-	// StopPolicyKeyFilesAbsent is stop_policy.files_absent.
-	StopPolicyKeyFilesAbsent = keyFilesAbsent
-	// StopPolicyKeyCleanAfterStop is stop_policy.clean_after_stop.
-	StopPolicyKeyCleanAfterStop = keyCleanAfterStop
-	// StopPolicyKeyCleanOnStop is stop_policy.clean_on_stop.
-	StopPolicyKeyCleanOnStop = keyCleanOnStop
 )
 
 // Storage mount field keys.

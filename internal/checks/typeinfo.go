@@ -120,13 +120,13 @@ var typeInfos = []TypeInfo{
 
 var typeInfoByName = indexTypeInfos(typeInfos)
 
-// SingleShotCheckTypes are the check types valid in a service's
-// checks:/preflight: sections and (minus service-scoped types) as
-// host watches. Config validation consumes this list directly and
-// TestSingleShotCheckTypesAreBuildable locks it against the buildCheck dispatch,
-// so the two can never drift. Connection-protocol types (mysql, smtp, ...) are
-// intentionally absent: they come from the conn registry.
-var SingleShotCheckTypes = typeInfoNames(typeInfos)
+// singleShotCheckTypes are the check types valid in a service's
+// checks:/preflight: sections and (minus service-scoped types) as host
+// watches. TestSingleShotCheckTypesAreBuildable locks the list against the
+// buildCheck dispatch so the advertised types and the builder cannot drift.
+// Connection-protocol types (mysql, smtp, ...) are intentionally absent: they
+// come from the conn registry.
+var singleShotCheckTypes = typeInfoNames(typeInfos)
 
 func indexTypeInfos(infos []TypeInfo) map[string]TypeInfo {
 	out := make(map[string]TypeInfo, len(infos))
