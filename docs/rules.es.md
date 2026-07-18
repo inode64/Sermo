@@ -1864,7 +1864,14 @@ Todo número visible por el operador sigue una única convención canónica en t
 las superficies (eventos, notificaciones, `sermoctl` y la web UI): coma como
 separador de millares y punto como marca decimal (`12,345.68`), con los tamaños
 en bytes siempre humanizados a unidades IEC (`2.44 MiB`) y las tasas a unidades
-decimales (`1.02 KB/s`) por el mismo formateador. Los timestamps de eventos se renderizan siempre en UTC, de modo que
+decimales (`1.02 KB/s`) por el mismo formateador. Las duraciones se muestran
+como componentes enteros separados por espacio, de mayor a menor y omitiendo
+ceros (`2h 3m 20s`, `3y 2mo 10d 12h 20s`), promocionando la unidad cabeza solo
+bien pasado su límite: segundos sueltos hasta 360 s, horas hasta 72 h
+(`70h 15m`), días hasta 120 d, meses (de 30 días) hasta 24, y después años (de
+12 de esos meses). El progreso de ventanas de reglas (`3m/6m`) es la única
+excepción: refleja la ventana configurada por el operador con su propia
+ortografía. Los timestamps de eventos se renderizan siempre en UTC, de modo que
 el mismo instante se lee igual antes y después de un reinicio del daemon.
 
 Las acciones y los tipos están acoplados: las acciones de operación (`restart`, `start`,

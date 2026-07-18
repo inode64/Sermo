@@ -1867,7 +1867,13 @@ Every operator-facing number follows one canonical convention on every surface
 (events, notifications, `sermoctl` and the web UI): comma as the thousands
 separator and dot as the decimal mark (`12,345.68`), with byte sizes always
 humanized to IEC units (`2.44 MiB`) and byte rates to decimal units
-(`1.02 KB/s`) by the same formatter. Event
+(`1.02 KB/s`) by the same formatter. Durations render as space-separated whole
+components, greatest-first with zeros omitted (`2h 3m 20s`,
+`3y 2mo 10d 12h 20s`), promoting the head unit only well past its boundary:
+bare seconds up to 360s, hours up to 72h (`70h 15m`), days up to 120d, months
+(30 days) up to 24, then years (12 such months). Rule-window progress
+(`3m/6m`) is the one exception: it echoes the operator's configured window in
+its own spelling. Event
 timestamps are always rendered in UTC, so the same instant reads identically
 before and after a daemon restart.
 

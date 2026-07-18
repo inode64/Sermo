@@ -32,18 +32,50 @@ export function fmtNum(value, decimals = 2, fallback = "—") {
   return fraction === undefined ? grouped : grouped + "." + fraction;
 }
 
-export function fmtUptime(value) {
+// Duration display constants: month = rollingMonthDays (30 days) and the
+// display year is exactly 12 such months (360 days) so month components can
+// never overflow into a 13th month. rollingYearDays (365) is a different
+// concept — the length of rolling SLA chart windows — and stays as is. Each
+// ceiling is the largest (inclusive) value still shown with that head unit;
+// keep them in step with units.HumanizeDuration in internal/units/units.go.
+const monthsPerYear = 12;
+const durationSecondsCeiling = 360;
+const durationHoursCeiling = 72;
+const durationDaysCeiling = 120;
+const durationMonthsCeiling = 24;
+
+// fmtDuration is the one formatter for every user-visible duration. It renders
+// space-separated whole components, greatest-first, skipping zeros ("2h 3m
+// 20s", "3y 2mo 10d 12h 20s"), promoting the head unit with hysteresis: bare
+// seconds up to 360s, hours up to 72h ("70h 15m"), days up to 120d, months up
+// to 24mo, then years. Mirrors the daemon's units.HumanizeDuration exactly —
+// tests/web/format.spec.js checks both sides against the same case table.
+export function fmtDuration(value) {
   const seconds = Math.floor(Number(value));
-  if (!Number.isFinite(seconds) || seconds < 0) return "";
-  const days = Math.floor(seconds / secondsPerDay);
-  const hours = Math.floor((seconds % secondsPerDay) / secondsPerHour);
-  const minutes = Math.floor((seconds % secondsPerHour) / secondsPerMinute);
-  const remainingSeconds = seconds % secondsPerMinute;
+  if (!Number.isFinite(seconds)) return "";
+  if (seconds <= 0) return "0s";
+  if (seconds <= durationSecondsCeiling) return seconds + "s";
+  const month = rollingMonthDays * secondsPerDay;
+  const year = monthsPerYear * month;
+  const units = [
+    [year, "y"], [month, "mo"], [secondsPerDay, "d"],
+    [secondsPerHour, "h"], [secondsPerMinute, "m"], [1, "s"],
+  ];
+  // A unit leads only once the value exceeds the lower unit's ceiling
+  // (e.g. days lead only past 72 hours).
+  let head;
+  if (seconds > durationMonthsCeiling * month) head = 0;
+  else if (seconds > durationDaysCeiling * secondsPerDay) head = 1;
+  else if (seconds > durationHoursCeiling * secondsPerHour) head = 2;
+  else head = 3;
   const parts = [];
-  if (days) parts.push(days + "d");
-  if (days || hours) parts.push(hours + "h");
-  if (days || hours || minutes) parts.push(minutes + "m");
-  parts.push(remainingSeconds + "s");
+  let rest = seconds;
+  for (const [size, suffix] of units.slice(head)) {
+    if (rest >= size) {
+      parts.push(Math.floor(rest / size) + suffix);
+      rest %= size;
+    }
+  }
   return parts.join(" ");
 }
 
@@ -88,16 +120,6 @@ export function pctClamp(value) {
   return Math.max(percentMin, Math.min(percentMax, number));
 }
 
-export function shortDur(value) {
-  const seconds = Math.max(0, Math.floor(Number(value) || 0));
-  if (seconds < secondsPerMinute) return seconds + "s";
-  if (seconds < secondsPerHour) return Math.floor(seconds / secondsPerMinute) + "m";
-  if (seconds < secondsPerDay) return Math.floor(seconds / secondsPerHour) + "h";
-  return Math.floor(seconds / secondsPerDay) + "d";
-}
-
-export function fmtSeconds(value) { return shortDur(value); }
-
 export function fmtMetricValue(value, unit) {
   const number = Number(value || 0);
   switch (unit) {
@@ -128,8 +150,8 @@ export function fmtRemain(until) {
   if (Number.isNaN(date.getTime())) return "";
   const seconds = Math.floor((date - Date.now()) / millisecondsPerSecond);
   if (seconds <= 0) return "elapsed";
-  if (seconds < secondsPerHour) return shortDur(seconds) + " remaining";
-  return Math.floor(seconds / secondsPerHour) + "h remaining · until " + fmtTime(until);
+  if (seconds < secondsPerHour) return fmtDuration(seconds) + " remaining";
+  return fmtDuration(seconds) + " remaining · until " + fmtTime(until);
 }
 
 export function fmtUntilShort(until) {
@@ -137,7 +159,7 @@ export function fmtUntilShort(until) {
   if (Number.isNaN(date.getTime())) return "";
   const seconds = Math.floor((date - Date.now()) / millisecondsPerSecond);
   if (seconds <= 0) return "now";
-  if (seconds < secondsPerDay) return "in " + shortDur(seconds);
+  if (seconds < secondsPerDay) return "in " + fmtDuration(seconds);
   return date.toLocaleDateString();
 }
 
@@ -146,14 +168,12 @@ export function fmtAge(value) {
   if (Number.isNaN(date.getTime())) return "";
   const seconds = Math.floor((Date.now() - date) / millisecondsPerSecond);
   if (seconds < 0) return "just now";
-  if (seconds < secondsPerDay) return shortDur(seconds) + " ago";
+  if (seconds < secondsPerDay) return fmtDuration(seconds) + " ago";
   return fmtTime(value);
 }
 
+// fmtSince takes an elapsed time in milliseconds (the only duration helper
+// that does) and renders it through the canonical duration formatter.
 export function fmtSince(value) {
-  const seconds = Math.max(0, Math.round(value / millisecondsPerSecond));
-  if (seconds < secondsPerMinute) return seconds + "s";
-  const minutes = Math.floor(seconds / secondsPerMinute);
-  const remainingSeconds = seconds % secondsPerMinute;
-  return remainingSeconds ? `${minutes}m ${remainingSeconds}s` : `${minutes}m`;
+  return fmtDuration(Math.max(0, Math.round(value / millisecondsPerSecond)));
 }

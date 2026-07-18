@@ -511,7 +511,9 @@ The visual layer is a token-driven design system (June 2026 redesign):
     `formatSummaryBytesPerSecond` mirror the same split. Unit-tagged time
     series route through `fmtMetricValue(v, unit)` (`bytes`, `B/s`, `%`, `ms`,
     default).
-  - **Durations** → `fmtUptime`/`fmtSeconds`/`shortDur`; **relative time** →
+  - **Durations** → `fmtDuration` (hysteresis ladder mirrored by the daemon's
+    `units.HumanizeDuration`; parity pinned by `tests/web/format.spec.js` and
+    `internal/units/testdata/duration_cases.json`); **relative time** →
     `fmtRemain`/`fmtUntilShort`/`fmtAge`/`fmtSince`; **absolute timestamps** →
     `fmtTime`.
   - **Gauges** → `usageBar` (full-width host gauge), `usageBarMini` (dense table

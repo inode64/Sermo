@@ -134,7 +134,7 @@ func TestCheckReadingsForAllTypes(t *testing.T) {
 			name: "smart formats power-on time as a duration",
 			typ:  "smart",
 			data: map[string]any{"power_on_hours": float64(12000)},
-			want: map[string]string{"power_on_hours": "16mo2w6d"},
+			want: map[string]string{"power_on_hours": "16mo 20d"},
 		},
 		{
 			name: "sql exposes observed scalar and condition",

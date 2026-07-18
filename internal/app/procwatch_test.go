@@ -259,7 +259,7 @@ func TestProcWatchEventUsesReadableAge(t *testing.T) {
 	h.tick(w, 0)
 	h.tick(w, 25*time.Hour)
 
-	if len(h.events) != 1 || h.events[0].Message != "worker pid 42 matches (age 1d1h, rss 100)" {
+	if len(h.events) != 1 || h.events[0].Message != "worker pid 42 matches (age 25h, rss 100)" {
 		t.Fatalf("process events = %+v", h.events)
 	}
 }

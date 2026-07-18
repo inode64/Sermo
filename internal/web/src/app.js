@@ -15,13 +15,13 @@ import {
   servicePreflightAPI, serviceRuntimeAPI, serviceSLAAPI, stateCompactAPI, watchAPI,
 } from "./api.js";
 import {
-  fmtAge, fmtBytes, fmtBytesPerSecond, fmtMetricValue, fmtNum, fmtPct, fmtRemain, fmtSeconds,
-  fmtSince, fmtTime, fmtUntilShort, fmtUptime, hoursPerDay, millisecondsPerDay,
+  fmtAge, fmtBytes, fmtBytesPerSecond, fmtDuration, fmtMetricValue, fmtNum, fmtPct, fmtRemain,
+  fmtSince, fmtTime, fmtUntilShort, hoursPerDay, millisecondsPerDay,
   millisecondsPerHour, millisecondsPerMinute, millisecondsPerSecond,
   metricUnitBytes, metricUnitBytesPerSecond, metricUnitMilliseconds,
   metricUnitPercent, minutesPerHour, pctClamp, percentMax, percentMin,
   percentScale, rollingMonthDays, rollingWeekDays, rollingYearDays,
-  secondsPerDay, secondsPerHour, secondsPerMinute, shortDur,
+  secondsPerDay, secondsPerHour, secondsPerMinute,
 } from "./format.js";
 
 const $ = (s) => document.querySelector(s);
@@ -2799,7 +2799,7 @@ function procTreeLabel(row) {
 }
 
 function serviceUptimeCell(s) {
-  const up = s ? fmtUptime(s.uptime_seconds) : "";
+  const up = s ? fmtDuration(s.uptime_seconds) : "";
   if (!up) return tpl`<span class="muted">—</span>`;
   const title = s.started_at ? `started ${fmtTime(s.started_at)}` : nothing;
   return tpl`<span title="${title}">${up}</span>`;
@@ -2906,7 +2906,7 @@ function renderProcessUptimeWindows(wins) {
     const pct = w.ratio == null ? null : Number(w.ratio) * percentScale;
     const label = slaWindowLabel(w.window);
     const coverage = pct == null ? "—" : fmtPct(pct);
-    const duration = `${fmtSeconds(Number(w.up || 0))} / ${fmtSeconds(Number(w.total || 0))}`;
+    const duration = `${fmtDuration(Number(w.up || 0))} / ${fmtDuration(Number(w.total || 0))}`;
     const title = `${label} · ${coverage} process continuity confirmed · ${duration}`;
     const track = Array.isArray(w.segments) && w.segments.length
       ? renderProcessUptimeTimeline(w.segments, w.window, w.observed_at)
@@ -5206,7 +5206,7 @@ function lockStateHTML(l) {
 
 function lockTTL(l) {
   if (!l.expires_at) return tpl`<span class="muted">—</span>`;
-  if (l.ttl_remaining_seconds > 0) return tpl`<span title="${fmtTime(l.expires_at)}">${fmtSeconds(l.ttl_remaining_seconds)}</span>`;
+  if (l.ttl_remaining_seconds > 0) return tpl`<span title="${fmtTime(l.expires_at)}">${fmtDuration(l.ttl_remaining_seconds)}</span>`;
   return tpl`<span class="muted" title="${fmtTime(l.expires_at)}">expired</span>`;
 }
 
@@ -5218,7 +5218,7 @@ function lockOwner(l) {
 }
 
 function lockCreated(l) {
-  if (l.created_age_seconds > 0) return tpl`<span title="${fmtTime(l.created_at)}">${fmtSeconds(l.created_age_seconds)} ago</span>`;
+  if (l.created_age_seconds > 0) return tpl`<span title="${fmtTime(l.created_at)}">${fmtDuration(l.created_age_seconds)} ago</span>`;
   if (l.created_at) return tpl`<span title="${fmtTime(l.created_at)}">${fmtAge(l.created_at)}</span>`;
   return tpl`<span class="muted">—</span>`;
 }
@@ -5547,7 +5547,7 @@ function renderOverview(ctx) {
     // the run queue exceeds the cores.
     const hasCap = load.total > 0;
     const p = hasCap ? pctClamp(load.percent || 0) : 0;
-    const loadSub = hasCap ? `${fmtNum(load.total, 0)} CPUs · ${fmtPct(load.percent)}` : (live && fmtUptime(live.uptime_seconds) ? `up ${fmtUptime(live.uptime_seconds)}` : "");
+    const loadSub = hasCap ? `${fmtNum(load.total, 0)} CPUs · ${fmtPct(load.percent)}` : (live && fmtDuration(live.uptime_seconds) ? `up ${fmtDuration(live.uptime_seconds)}` : "");
     const gaugeId = hasCap ? tileGaugeId("load") : nothing;
     tiles.push(tile({
       label: "Load 1m",
@@ -5730,7 +5730,7 @@ function renderStatus(ctx) {
     }
     // Host uptime and daemon lifecycle status are always the last two readings,
     // paired so status stays immediately after uptime.
-    const hostUp = fmtUptime(daemon.host_uptime_seconds);
+    const hostUp = fmtDuration(daemon.host_uptime_seconds);
     const statusText = ready.status || (ready.ready ? healthStatusOK : "");
     const statusCls = ready.panic ? "status-panic" : (statusText === daemonStatusStarting ? "status-starting" : (ready.ready ? healthStatusOK : "inactive"));
     const statusLabel = statusText === daemonStatusStarting && ready.message
@@ -5749,7 +5749,7 @@ function renderStatus(ctx) {
     // Also populate the runtime part of the Daemon info panel
     const set = (id, val) => { const el = $(id); if (el) el.textContent = val || "—"; };
     if (live.started_at) set("#daemon-started", live.started_at);
-    set("#daemon-uptime", fmtUptime(live.uptime_seconds));
+    set("#daemon-uptime", fmtDuration(live.uptime_seconds));
     if (live.go) set("#daemon-go", live.go);
     if (ready.status) {
       const cls = ready.panic ? "status-panic" : (ready.status === daemonStatusStarting ? "status-starting" : (ready.ready ? healthStatusOK : "inactive"));

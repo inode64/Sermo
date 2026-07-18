@@ -71,7 +71,7 @@ func TestWebBackendServicesExposeRemediationAndLastEventSummary(t *testing.T) {
 		t.Fatalf("Services length = %d, want 1", len(services))
 	}
 	svc := services[0]
-	if svc.PolicyCooldown != "5m" || svc.RemediationState != "cooldown" {
+	if svc.PolicyCooldown != "300s" || svc.RemediationState != "cooldown" {
 		t.Fatalf("service remediation summary = cooldown %q state %q", svc.PolicyCooldown, svc.RemediationState)
 	}
 	wantNext := t0.Add(5 * time.Minute).Format(time.RFC3339)
