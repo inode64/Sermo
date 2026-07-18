@@ -233,11 +233,11 @@ func RaidDeviceState(details []RaidArrayStatus) (string, float64, bool) {
 
 func raidArrayDeviceState(detail RaidArrayStatus) string {
 	switch detail.Operation {
-	case "check":
+	case raidSyncActionCheck:
 		return DeviceStateTesting
-	case "recovery":
+	case raidSyncActionRecovery:
 		return DeviceStateRecovering
-	case "resync", "reshape":
+	case raidSyncActionResync, raidSyncActionReshape:
 		return DeviceStateRebuilding
 	default:
 		return ""
@@ -300,6 +300,13 @@ const (
 	raidSyncActionFile   = "sync_action"
 	raidSyncActionIdle   = "idle"
 	raidSyncActionResync = "resync"
+	// The remaining md sync_action values; lvs raid_sync_action mirrors them,
+	// so the lvm device-state mapping shares this vocabulary.
+	raidSyncActionCheck    = "check"
+	raidSyncActionRecovery = "recovery"
+	raidSyncActionRecover  = "recover"
+	raidSyncActionRepair   = "repair"
+	raidSyncActionReshape  = "reshape"
 )
 
 // parseMdstat parses /proc/mdstat. An array is degraded when its active count
@@ -513,7 +520,7 @@ func raidStateTransitions(previous, current RaidArrayStatus) []string {
 
 func isRaidRebuild(operation string) bool {
 	switch operation {
-	case "recovery", "resync", "reshape":
+	case raidSyncActionRecovery, raidSyncActionResync, raidSyncActionReshape:
 		return true
 	default:
 		return false
