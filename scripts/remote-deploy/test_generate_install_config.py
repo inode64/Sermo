@@ -25,6 +25,20 @@ def generator_module():
 generator = generator_module()
 
 
+def default_options():
+    """The GenerationOptions every test in this file exercises."""
+    return generator.GenerationOptions(
+        web_port=9797,
+        web_password="test",
+        storage_free_pct="5%",
+        expand_by="5G",
+        smart_interval="24h",
+        hdparm_interval="6h",
+        active_services_only=True,
+        catalog_services_dir=Path(__file__).parents[2] / "catalog/services",
+    )
+
+
 class EndpointGenerationTest(unittest.TestCase):
     def generate(self, hints: str):
         temp = tempfile.TemporaryDirectory()
@@ -39,16 +53,7 @@ class EndpointGenerationTest(unittest.TestCase):
             json.dumps({"services": [{"name": "nginx", "installed": True, "ok": True, "status": "ok"}]}),
             encoding="utf-8",
         )
-        options = generator.GenerationOptions(
-            web_port=9797,
-            web_password="test",
-            storage_free_pct="5%",
-            expand_by="5G",
-            smart_interval="24h",
-            hdparm_interval="6h",
-            active_services_only=True,
-            catalog_services_dir=Path(__file__).parents[2] / "catalog/services",
-        )
+        options = default_options()
         report = generator.generate_for_host("host", stage, root / "configs", options)
         body = (root / "configs/host/root/etc/sermo/services/nginx.yml").read_text(encoding="utf-8")
         return report, body
@@ -108,16 +113,7 @@ class EndpointGenerationTest(unittest.TestCase):
             }),
             encoding="utf-8",
         )
-        options = generator.GenerationOptions(
-            web_port=9797,
-            web_password="test",
-            storage_free_pct="5%",
-            expand_by="5G",
-            smart_interval="24h",
-            hdparm_interval="6h",
-            active_services_only=True,
-            catalog_services_dir=Path(__file__).parents[2] / "catalog/services",
-        )
+        options = default_options()
         report = generator.generate_for_host("host", stage, root / "configs", options)
         self.assertFalse((root / "configs/host/root/etc/sermo/watches/lvm-vg0-root.yml").exists())
         self.assertFalse((root / "configs/host/root/etc/sermo/watches/lvm-vg0-capacity.yml").exists())
@@ -140,16 +136,7 @@ class EndpointGenerationTest(unittest.TestCase):
             encoding="utf-8",
         )
         (stage / "fstab").write_text("/dev/vda1 / ext4 defaults 0 1\n", encoding="utf-8")
-        options = generator.GenerationOptions(
-            web_port=9797,
-            web_password="test",
-            storage_free_pct="5%",
-            expand_by="5G",
-            smart_interval="24h",
-            hdparm_interval="6h",
-            active_services_only=True,
-            catalog_services_dir=Path(__file__).parents[2] / "catalog/services",
-        )
+        options = default_options()
 
         report = generator.generate_for_host("host", stage, root / "configs", options)
         storage_body = (root / "configs/host/root/etc/sermo/storages/storage-root.yml").read_text(encoding="utf-8")
@@ -175,16 +162,7 @@ class EndpointGenerationTest(unittest.TestCase):
             ]}),
             encoding="utf-8",
         )
-        options = generator.GenerationOptions(
-            web_port=9797,
-            web_password="test",
-            storage_free_pct="5%",
-            expand_by="5G",
-            smart_interval="24h",
-            hdparm_interval="6h",
-            active_services_only=True,
-            catalog_services_dir=Path(__file__).parents[2] / "catalog/services",
-        )
+        options = default_options()
 
         report = generator.generate_for_host("host", stage, root / "configs", options)
 
@@ -219,16 +197,7 @@ class EndpointGenerationTest(unittest.TestCase):
             encoding="utf-8",
         )
         (stage / "nfs_routes").write_text("k2keu3.intranet\t172.31.28.4\tintranet\n", encoding="utf-8")
-        options = generator.GenerationOptions(
-            web_port=9797,
-            web_password="test",
-            storage_free_pct="5%",
-            expand_by="5G",
-            smart_interval="24h",
-            hdparm_interval="6h",
-            active_services_only=True,
-            catalog_services_dir=Path(__file__).parents[2] / "catalog/services",
-        )
+        options = default_options()
 
         report = generator.generate_for_host("host", stage, root / "configs", options)
 
@@ -265,16 +234,7 @@ class EndpointGenerationTest(unittest.TestCase):
             "k2keu3.intranet:/srv/backup /mnt/backup nfs defaults,_netdev 0 0\n",
             encoding="utf-8",
         )
-        options = generator.GenerationOptions(
-            web_port=9797,
-            web_password="test",
-            storage_free_pct="5%",
-            expand_by="5G",
-            smart_interval="24h",
-            hdparm_interval="6h",
-            active_services_only=True,
-            catalog_services_dir=Path(__file__).parents[2] / "catalog/services",
-        )
+        options = default_options()
 
         report = generator.generate_for_host("host", stage, root / "configs", options)
 
@@ -294,16 +254,7 @@ class EndpointGenerationTest(unittest.TestCase):
         (stage / "init").write_text("systemd\n", encoding="utf-8")
         (stage / "active_units").write_text("", encoding="utf-8")
         (stage / "geoip_directory").write_text(f"{generator.GEOIP_DATABASE_DIRECTORY}\n", encoding="utf-8")
-        options = generator.GenerationOptions(
-            web_port=9797,
-            web_password="test",
-            storage_free_pct="5%",
-            expand_by="5G",
-            smart_interval="24h",
-            hdparm_interval="6h",
-            active_services_only=True,
-            catalog_services_dir=Path(__file__).parents[2] / "catalog/services",
-        )
+        options = default_options()
 
         generator.generate_for_host("host", stage, root / "configs", options)
 
