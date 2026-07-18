@@ -337,6 +337,34 @@ func nodeByID(doc *html.Node, id string) *html.Node {
 	return found
 }
 
+// assertAttrEquals asserts #id exists in the shell and its attribute name
+// equals want.
+func assertAttrEquals(t *testing.T, doc *html.Node, id, name, want string) {
+	t.Helper()
+	el := nodeByID(doc, id)
+	if el == nil {
+		t.Errorf("shell missing #%s", id)
+		return
+	}
+	if got, ok := attr(el, name); !ok || got != want {
+		t.Errorf("#%s %s = %q, want %q", id, name, got, want)
+	}
+}
+
+// assertAttrContains asserts #id exists in the shell and its attribute name
+// contains want.
+func assertAttrContains(t *testing.T, doc *html.Node, id, name, want string) {
+	t.Helper()
+	el := nodeByID(doc, id)
+	if el == nil {
+		t.Errorf("shell missing #%s", id)
+		return
+	}
+	if got, ok := attr(el, name); !ok || !strings.Contains(got, want) {
+		t.Errorf("#%s %s = %q, want it to contain %q", id, name, got, want)
+	}
+}
+
 func hasDescendantAttr(root *html.Node, atomName atom.Atom, key, value string) bool {
 	found := false
 	walk(root, func(n *html.Node) {
@@ -899,127 +927,30 @@ func TestIndexAccessibilityShell(t *testing.T) {
 		}
 	}
 
-	overview := nodeByID(doc, "overview")
-	if overview == nil {
-		t.Fatal(`shell missing #overview`)
-	}
-	if role, ok := attr(overview, "role"); !ok || role != "region" {
-		t.Errorf(`#overview role = %q, want "region"`, role)
-	}
-	if label, ok := attr(overview, "aria-label"); !ok || label != "Overview" {
-		t.Errorf(`#overview aria-label = %q, want "Overview"`, label)
-	}
-
-	footer := nodeByID(doc, "app-footer")
-	if footer == nil {
-		t.Fatal(`shell missing #app-footer`)
-	}
-	if role, ok := attr(footer, "role"); !ok || role != "contentinfo" {
-		t.Errorf(`#app-footer role = %q, want "contentinfo"`, role)
-	}
-
-	panicBanner := nodeByID(doc, "panic-banner")
-	if panicBanner == nil {
-		t.Fatal(`shell missing #panic-banner`)
-	}
-	if live, ok := attr(panicBanner, "aria-live"); !ok || live != "assertive" {
-		t.Errorf(`#panic-banner aria-live = %q, want "assertive"`, live)
-	}
-
-	brandDot := nodeByID(doc, "brand-dot")
-	if brandDot == nil {
-		t.Fatal(`shell missing #brand-dot`)
-	}
-	if hidden, ok := attr(brandDot, "aria-hidden"); !ok || hidden != "true" {
-		t.Errorf(`#brand-dot aria-hidden = %q, want "true"`, hidden)
-	}
+	assertAttrEquals(t, doc, "overview", "role", "region")
+	assertAttrEquals(t, doc, "overview", "aria-label", "Overview")
+	assertAttrEquals(t, doc, "app-footer", "role", "contentinfo")
+	assertAttrEquals(t, doc, "panic-banner", "aria-live", "assertive")
+	assertAttrEquals(t, doc, "brand-dot", "aria-hidden", "true")
 
 	if nodeByID(doc, "simple-confirm") == nil {
 		t.Error(`shell missing #simple-confirm dialog`)
 	}
-
-	if panicBtn := nodeByID(doc, "panic-btn"); panicBtn != nil {
-		if got, ok := attr(panicBtn, "aria-label"); !ok || !strings.Contains(got, "panic mode") {
-			t.Errorf(`#panic-btn aria-label = %q, want panic mode wording`, got)
-		}
-	} else {
-		t.Error(`shell missing #panic-btn`)
+	if nodeByID(doc, "confirm-preflight-hint") == nil {
+		t.Error(`shell missing #confirm-preflight-hint`)
 	}
 
-	if preflightBtn := nodeByID(doc, "confirm-preflight-btn"); preflightBtn != nil {
-		if got, ok := attr(preflightBtn, "aria-label"); !ok || got != "Run preflight checks" {
-			t.Errorf(`#confirm-preflight-btn aria-label = %q, want "Run preflight checks"`, got)
-		}
-		if nodeByID(doc, "confirm-preflight-hint") == nil {
-			t.Error(`shell missing #confirm-preflight-hint`)
-		}
-	} else {
-		t.Error(`shell missing #confirm-preflight-btn`)
-	}
+	assertAttrContains(t, doc, "panic-btn", "aria-label", "panic mode")
+	assertAttrEquals(t, doc, "confirm-preflight-btn", "aria-label", "Run preflight checks")
+	assertAttrEquals(t, doc, "panic-cancel-btn", "aria-label", "Cancel panic mode change")
+	assertAttrEquals(t, doc, "confirm-cancel-btn", "aria-label", "Cancel service operation")
+	assertAttrEquals(t, doc, "confirm-action-btn", "aria-label", "Confirm service operation")
+	assertAttrEquals(t, doc, "refresh-select", "aria-label", "Dashboard auto-refresh interval")
+	assertAttrEquals(t, doc, "refresh-now", "aria-label", "Refresh dashboard now")
+	assertAttrEquals(t, doc, "event-reset-filters", "aria-label", "Reset event filters")
+	assertAttrContains(t, doc, "watches-section", "class", "panel-hidden")
+	assertAttrContains(t, doc, "event-clear", "class", "admin-hidden")
 
-	if cancel := nodeByID(doc, "panic-cancel-btn"); cancel != nil {
-		if got, ok := attr(cancel, "aria-label"); !ok || got != "Cancel panic mode change" {
-			t.Errorf(`#panic-cancel-btn aria-label = %q, want "Cancel panic mode change"`, got)
-		}
-	} else {
-		t.Error(`shell missing #panic-cancel-btn`)
-	}
-
-	if cancel := nodeByID(doc, "confirm-cancel-btn"); cancel != nil {
-		if got, ok := attr(cancel, "aria-label"); !ok || got != "Cancel service operation" {
-			t.Errorf(`#confirm-cancel-btn aria-label = %q, want "Cancel service operation"`, got)
-		}
-	} else {
-		t.Error(`shell missing #confirm-cancel-btn`)
-	}
-
-	if actionBtn := nodeByID(doc, "confirm-action-btn"); actionBtn != nil {
-		if got, ok := attr(actionBtn, "aria-label"); !ok || got != "Confirm service operation" {
-			t.Errorf(`#confirm-action-btn aria-label = %q, want "Confirm service operation"`, got)
-		}
-	} else {
-		t.Error(`shell missing #confirm-action-btn`)
-	}
-
-	if refreshSel := nodeByID(doc, "refresh-select"); refreshSel != nil {
-		if got, ok := attr(refreshSel, "aria-label"); !ok || got != "Dashboard auto-refresh interval" {
-			t.Errorf(`#refresh-select aria-label = %q, want "Dashboard auto-refresh interval"`, got)
-		}
-	} else {
-		t.Error(`shell missing #refresh-select`)
-	}
-
-	if refreshBtn := nodeByID(doc, "refresh-now"); refreshBtn != nil {
-		if got, ok := attr(refreshBtn, "aria-label"); !ok || got != "Refresh dashboard now" {
-			t.Errorf(`#refresh-now aria-label = %q, want "Refresh dashboard now"`, got)
-		}
-	} else {
-		t.Error(`shell missing #refresh-now`)
-	}
-
-	if resetFilters := nodeByID(doc, "event-reset-filters"); resetFilters != nil {
-		if got, ok := attr(resetFilters, "aria-label"); !ok || got != "Reset event filters" {
-			t.Errorf(`#event-reset-filters aria-label = %q, want "Reset event filters"`, got)
-		}
-	} else {
-		t.Error(`shell missing #event-reset-filters`)
-	}
-
-	if watches := nodeByID(doc, "watches-section"); watches != nil {
-		if cls, ok := attr(watches, "class"); !ok || !strings.Contains(cls, "panel-hidden") {
-			t.Errorf(`#watches-section class = %q, want panel-hidden`, cls)
-		}
-	} else {
-		t.Error(`shell missing #watches-section`)
-	}
-
-	if eventClear := nodeByID(doc, "event-clear"); eventClear != nil {
-		if cls, ok := attr(eventClear, "class"); !ok || !strings.Contains(cls, "admin-hidden") {
-			t.Errorf(`#event-clear class = %q, want admin-hidden`, cls)
-		}
-	} else {
-		t.Error(`shell missing #event-clear`)
-	}
 	if eventGroup := nodeByID(doc, "event-group"); eventGroup != nil {
 		if _, checked := attr(eventGroup, "checked"); checked {
 			t.Error("#event-group is checked by default")
