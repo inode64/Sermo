@@ -247,7 +247,6 @@ func applyServiceRuntimeFields(svc *web.Service, cur web.ServiceRuntime) {
 	svc.StartedAt = cur.StartedAt
 	svc.Uptime = cur.Uptime
 	svc.UptimeSeconds = cur.UptimeSeconds
-	svc.ProcessCount = cur.Count
 	svc.RSS = cur.RSS
 	svc.IORead = cur.IORead
 	svc.IOWrite = cur.IOWrite

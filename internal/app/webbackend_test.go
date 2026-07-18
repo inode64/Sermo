@@ -217,8 +217,8 @@ func TestWebBackendDetailIncludesCheckSLA(t *testing.T) {
 	if !ok {
 		t.Fatal("detail not found")
 	}
-	if len(detail.SLA) != 1 || detail.SLA[0].Ratio == nil || *detail.SLA[0].Ratio != 0.9 {
-		t.Fatalf("service SLA = %+v, want 90%%", detail.SLA)
+	if sla := b.serviceSLAWindows("web", time.Now()); len(sla) != 1 || sla[0].Ratio == nil || *sla[0].Ratio != 0.9 {
+		t.Fatalf("service SLA = %+v, want 90%%", sla)
 	}
 	if len(detail.Checks) != 1 || len(detail.Checks[0].SLA) != 1 ||
 		detail.Checks[0].SLA[0].Ratio == nil || *detail.Checks[0].SLA[0].Ratio != 0.75 {
@@ -447,15 +447,13 @@ func TestWebBackendLastEventIndexes(t *testing.T) {
 	}
 }
 
-func TestWebBackendActivitySummaryCountsAllServiceOperations(t *testing.T) {
+func TestWebBackendActivitySummaryCountsErrors(t *testing.T) {
 	events := NewEventLog(16)
 	for _, action := range serviceOperationActionList() {
 		events.Add(Event{Service: "web", Kind: eventKindAction, Action: action, Status: eventStatusOK})
 	}
-	// Cascade targets run the same service operation as the primary, so they
-	// count in the service-actions bucket too — but mirroring the primary's
-	// kind mapping: only a successful cascade is an action, a blocked one is
-	// suppressed (uncounted), and any failure counts as an error.
+	// Cascade targets mirror the primary's kind mapping: a successful or
+	// blocked cascade is not an error, any failure is.
 	events.Add(Event{Service: "db", Kind: eventKindCascade, Action: string(rules.ActionRestart), Status: eventStatusOK, Message: "cascade from web"})
 	events.Add(Event{Service: "cache", Kind: eventKindCascade, Action: string(rules.ActionRestart), Status: eventStatusBlocked, Message: "cascade from web"})
 	events.Add(Event{Service: "queue", Kind: eventKindCascade, Action: string(rules.ActionRestart), Status: eventStatusFailed, Message: "cascade from web"})
@@ -467,13 +465,13 @@ func TestWebBackendActivitySummaryCountsAllServiceOperations(t *testing.T) {
 
 	b := &WebBackend{events: events}
 	got := b.ActivitySummary(context.Background())
-	if got.ServiceActions != 6 {
-		t.Fatalf("ServiceActions = %d, want 6 for start/stop/restart/reload/resume plus one successful cascade", got.ServiceActions)
+	// Only the error event and the failed cascade count as errors: successful
+	// and blocked operations, hooks, expands, kills and notifies do not.
+	if got.Errors != 2 {
+		t.Fatalf("ActivitySummary = %+v, want errors=2 (error event + failed cascade)", got)
 	}
-	// Expand and kill events count in the watch-actions bucket like hooks; the
-	// failed cascade counts as an error and the blocked one is not counted.
-	if got.WatchHooks != 3 || got.WatchNotifies != 1 || got.Errors != 2 {
-		t.Fatalf("ActivitySummary = %+v, want hook+expand+kill/notify counted and errors=2 (error event + failed cascade)", got)
+	if got.LastEventKind != eventKindError {
+		t.Fatalf("LastEventKind = %q, want %q", got.LastEventKind, eventKindError)
 	}
 }
 

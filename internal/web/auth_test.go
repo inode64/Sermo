@@ -290,8 +290,9 @@ func TestAuthedModeServesAnyHost(t *testing.T) {
 
 func TestGuestSeesRedactedCmdlines(t *testing.T) {
 	b := &fakeBackend{
-		services: []Service{{Name: "web"}},
-		mounts:   []Mount{{Name: "data", Blockers: []MountBlocker{{PID: 9, Cmdline: []string{"rsync", "--password=hunter2", "/data"}}}}},
+		services:      []Service{{Name: "web"}},
+		mounts:        []Mount{{Name: "data", Blockers: []MountBlocker{{PID: 9, Cmdline: []string{"rsync", "--password=hunter2", "/data"}}}}},
+		mountBlockers: MountBlockersResult{OK: true, Name: "data", Blockers: []MountBlocker{{PID: 9, Cmdline: []string{"rsync", "--password=hunter2", "/data"}}}},
 	}
 	h := (&Server{Backend: b, Auth: Auth{AdminPassword: "secret", GuestPassword: "guest"}}).Handler()
 
@@ -317,6 +318,11 @@ func TestGuestSeesRedactedCmdlines(t *testing.T) {
 	if got := guestMounts[0].Blockers[0].Cmdline; len(got) != 1 || got[0] != "rsync" {
 		t.Fatalf("guest mount blocker cmdline = %q, want just the executable", got)
 	}
+	var guestBlockers MountBlockersResult
+	fetch(testMountPath("data", apiSegmentBlockers), "guest", &guestBlockers)
+	if got := guestBlockers.Blockers[0].Cmdline; len(got) != 1 || got[0] != "rsync" {
+		t.Fatalf("guest blockers cmdline = %q, want just the executable", got)
+	}
 
 	var adminDetail Detail
 	fetch(testServicePath("web"), "secret", &adminDetail)
@@ -327,6 +333,11 @@ func TestGuestSeesRedactedCmdlines(t *testing.T) {
 	fetch(apiPathMounts, "secret", &adminMounts)
 	if got := adminMounts[0].Blockers[0].Cmdline; len(got) != 3 {
 		t.Fatalf("admin mount blocker cmdline = %q, want the full command line", got)
+	}
+	var adminBlockers MountBlockersResult
+	fetch(testMountPath("data", apiSegmentBlockers), "secret", &adminBlockers)
+	if got := adminBlockers.Blockers[0].Cmdline; len(got) != 3 {
+		t.Fatalf("admin blockers cmdline = %q, want the full command line", got)
 	}
 }
 

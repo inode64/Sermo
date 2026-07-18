@@ -100,6 +100,7 @@ const (
 	apiSegmentRoot         = "api"
 	apiSegmentActivity     = "activity"
 	apiSegmentApplications = "applications"
+	apiSegmentBlockers     = "blockers"
 	apiSegmentDashboard    = "dashboard"
 	apiSegmentDaemon       = "daemon"
 	apiSegmentEvents       = "events"
@@ -139,7 +140,6 @@ const (
 	apiActionRelease   = "release"
 	apiActionClear     = "clear"
 	apiActionCompact   = "compact"
-	apiActionBlockers  = "blockers"
 	apiActionAlert     = string(rules.ActionAlert)
 	apiActionTest      = "test"
 
@@ -229,6 +229,7 @@ const (
 	routeAPIDashboard      = routeMethodGet + apiPathDashboard
 	routeAPIMounts         = routeMethodGet + apiPathMounts
 	routeAPIMountAction    = routeMethodPost + apiPathMounts + "/" + routeVarName + "/" + routeVarAction
+	routeAPIMountBlockers  = routeMethodGet + apiPathMounts + "/" + routeVarName + "/" + apiSegmentBlockers
 	routeAPIDaemon         = routeMethodGet + apiPathDaemon
 	routeAPIDaemonMetrics  = routeMethodGet + apiPathDaemon + "/" + apiSegmentMetrics
 	routeAPIHost           = routeMethodGet + apiPathHost
@@ -305,7 +306,6 @@ type Service struct {
 	StartedAt         string   `json:"started_at,omitempty"`          // oldest discovered process start time, RFC3339
 	Uptime            string   `json:"uptime,omitempty"`              // display-ready age of StartedAt
 	UptimeSeconds     int64    `json:"uptime_seconds,omitempty"`
-	ProcessCount      int      `json:"process_count,omitempty"`
 	RSS               int64    `json:"rss,omitempty"`
 	IORead            int64    `json:"io_read,omitempty"`  // cumulative disk read bytes
 	IOWrite           int64    `json:"io_write,omitempty"` // cumulative disk write bytes
@@ -386,8 +386,6 @@ type MountActionResult struct {
 type MountBlockersResult struct {
 	OK            bool           `json:"ok"`
 	Name          string         `json:"name,omitempty"`
-	Path          string         `json:"path,omitempty"`
-	Mounted       bool           `json:"mounted"`
 	CanUmount     bool           `json:"can_umount"`
 	UmountReason  string         `json:"umount_disabled_reason,omitempty"`
 	HasKillPolicy bool           `json:"has_kill_policy"`
@@ -399,12 +397,10 @@ type MountBlockersResult struct {
 
 // MountAlertResult is the outcome of notifying users that block a mount.
 type MountAlertResult struct {
-	OK        bool     `json:"ok"`
-	Name      string   `json:"name,omitempty"`
-	Path      string   `json:"path,omitempty"`
-	Users     []string `json:"users,omitempty"`
-	Delivered int      `json:"delivered"`
-	Message   string   `json:"message,omitempty"`
+	OK      bool   `json:"ok"`
+	Name    string `json:"name,omitempty"`
+	Path    string `json:"path,omitempty"`
+	Message string `json:"message,omitempty"`
 }
 
 // CatalogItem is the shared web view of one installed catalog application or
@@ -652,15 +648,8 @@ type ServiceRuntimeMetrics struct {
 // It helps operators get a quick sense of what's been happening (especially
 // useful when services=0 and you are mostly watching host resources).
 type ActivitySummary struct {
-	TotalEvents      int    `json:"total_events"`
-	ServiceActions   int    `json:"service_actions"` // start/stop/restart/reload/resume
-	WatchHooks       int    `json:"watch_hooks"`     // watch-driven actions: hooks, volume expands, process kills
-	WatchNotifies    int    `json:"watch_notifies"`
-	Errors           int    `json:"errors"`
-	LastEventTime    string `json:"last_event_time,omitempty"` // RFC3339
-	LastEventKind    string `json:"last_event_kind,omitempty"`
-	LastEventService string `json:"last_event_service,omitempty"`
-	LastEventWatch   string `json:"last_event_watch,omitempty"`
+	Errors        int    `json:"errors"`
+	LastEventKind string `json:"last_event_kind,omitempty"`
 }
 
 // MonitoringStatus summarizes how many services are currently being monitored
@@ -832,11 +821,10 @@ type Lock struct {
 	Releaseable         bool     `json:"releaseable,omitempty"`
 }
 
-// Detail is a single service's view: its summary plus its checks and SLA.
+// Detail is a single service's view: its summary plus its checks.
 type Detail struct {
 	Service
 	Checks            []Check        `json:"checks"`
-	SLA               []SLAWindow    `json:"sla"`
 	ProcessUptime     []SLAWindow    `json:"process_uptime,omitempty"`
 	Locks             []Lock         `json:"locks,omitempty"`
 	LockWarnings      []string       `json:"lock_warnings,omitempty"`
@@ -934,7 +922,6 @@ type DashboardSnapshot struct {
 	// this snapshot. The UI uses it to reject follow-up data from another
 	// generation while a reload is in progress.
 	Generation    uint64           `json:"generation,omitempty"`
-	GeneratedAt   string           `json:"generated_at"`
 	Services      []Service        `json:"services"`
 	Mounts        []Mount          `json:"mounts"`
 	Notifiers     []Notifier       `json:"notifiers"`
@@ -1212,6 +1199,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc(routeAPILibraries, s.handleLibraries)
 	mux.HandleFunc(routeAPIMounts, s.handleMounts)
 	mux.HandleFunc(routeAPIMountAction, s.handleMountAction)
+	mux.HandleFunc(routeAPIMountBlockers, s.handleMountBlockers)
 	mux.HandleFunc(routeAPIDaemon, s.handleDaemon)
 	mux.HandleFunc(routeAPIDaemonMetrics, s.handleDaemonMetrics)
 	mux.HandleFunc(routeAPIHost, s.handleHost)
@@ -1554,7 +1542,6 @@ func (s *Server) dashboardSnapshotWithReadiness(ctx context.Context, collect fun
 func (s *Server) finishDashboardSnapshot(snapshot DashboardSnapshot) DashboardSnapshot {
 	now := time.Now()
 	uptime := now.Sub(s.started)
-	snapshot.GeneratedAt = now.UTC().Format(time.RFC3339)
 	snapshot.Live = LiveReport{
 		Status:        apiStatusOK,
 		StartedAt:     s.started.Format(time.RFC3339),
@@ -1615,9 +1602,6 @@ func (s *Server) handleMountAction(w http.ResponseWriter, r *http.Request) {
 			KillBlockers: queryBool(r, apiQueryKill),
 		})
 		writeActionResult(w, res.OK, res)
-	case apiActionBlockers:
-		res := s.Backend.MountBlockers(r.Context(), name)
-		writeActionResult(w, res.OK, res)
 	case apiActionAlert:
 		s.extendActionWriteDeadline(w)
 		res := s.Backend.AlertMountUsers(s.operateContext(r), name) //nolint:contextcheck // see operateContext
@@ -1625,6 +1609,17 @@ func (s *Server) handleMountAction(w http.ResponseWriter, r *http.Request) {
 	default:
 		writeError(w, http.StatusBadRequest, apiErrorUnknownMountActionPrefix+action)
 	}
+}
+
+func (s *Server) handleMountBlockers(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue(apiParamName)
+	s.readJSON(w, r, func(ctx context.Context, backend Backend) any {
+		res := backend.MountBlockers(ctx, name)
+		if roleFrom(ctx) == roleGuest {
+			res.Blockers = redactBlockerCmdlines(res.Blockers)
+		}
+		return res
+	})
 }
 
 func (s *Server) handleDaemon(w http.ResponseWriter, r *http.Request) {
