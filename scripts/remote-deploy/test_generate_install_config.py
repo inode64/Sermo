@@ -123,6 +123,40 @@ class EndpointGenerationTest(unittest.TestCase):
             report["skipped_watches"],
         )
 
+    def test_network_block_devices_get_no_smart_watch(self):
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        root = Path(temp.name)
+        stage = root / "stage" / "host" / "out"
+        stage.mkdir(parents=True)
+        (stage / "init").write_text("systemd\n", encoding="utf-8")
+        (stage / "active_units").write_text("", encoding="utf-8")
+        (stage / "features").write_text("smartctl=1\n", encoding="utf-8")
+        (stage / "lsblk.json").write_text(
+            json.dumps({"blockdevices": [
+                {"name": "sda", "path": "/dev/sda", "type": "disk", "ro": False, "tran": "sata"},
+                {"name": "nbd0", "path": "/dev/nbd0", "type": "disk", "ro": False},
+                {"name": "drbd0", "path": "/dev/drbd0", "type": "disk", "ro": False},
+            ]}),
+            encoding="utf-8",
+        )
+        options = default_options()
+
+        report = generator.generate_for_host("host", stage, root / "configs", options)
+        watches = root / "configs/host/root/etc/sermo/watches"
+
+        self.assertTrue((watches / "smart-sda.yml").exists())
+        self.assertFalse((watches / "smart-nbd0.yml").exists())
+        self.assertFalse((watches / "smart-drbd0.yml").exists())
+        # diskio still covers network block devices via /proc/diskstats.
+        self.assertTrue((watches / "diskio-nbd0.yml").exists())
+        self.assertTrue((watches / "diskio-drbd0.yml").exists())
+        for name in ("smart-nbd0", "smart-drbd0"):
+            self.assertIn(
+                {"kind": name, "reason": "network block device without SMART data"},
+                report["skipped_watches"],
+            )
+
     def test_root_storage_watch_is_not_a_mount_unit(self):
         temp = tempfile.TemporaryDirectory()
         self.addCleanup(temp.cleanup)

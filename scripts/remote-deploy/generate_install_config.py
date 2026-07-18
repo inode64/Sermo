@@ -412,6 +412,12 @@ def truthy(value: object) -> bool:
     return str(value).lower() in {"1", "true", "yes"}
 
 
+# Network block devices (NBD, DRBD) expose no SMART data: smartctl cannot
+# query them, so no smart watch must ever be generated for these disks.
+# They still get diskio watches — /proc/diskstats covers them fine.
+SMARTLESS_DISK_PREFIXES = ("nbd", "drbd")
+
+
 def block_inventory(stage: Path) -> tuple[list[dict], set[str]]:
     data = read_json(stage / "lsblk.json")
     disks: list[dict] = []
@@ -1520,11 +1526,14 @@ dry_run: true
             simple_watch(f"diskio-{disk_name}", "storage", "30s", ["type: diskio", f"device: {yaml_quote(disk_name)}", 'util_pct: { op: ">=", value: "80%" }']),
         )
         if features.get("smartctl") == "1":
-            add_watch(
-                "watches",
-                f"smart-{slug(disk_name)}",
-                simple_watch(f"smart-{slug(disk_name)}", "storage", options.smart_interval, ["type: smart", f"device: {yaml_quote(disk_path)}"], cycles=1),
-            )
+            if disk_name.startswith(SMARTLESS_DISK_PREFIXES):
+                skip(f"smart-{slug(disk_name)}", "network block device without SMART data")
+            else:
+                add_watch(
+                    "watches",
+                    f"smart-{slug(disk_name)}",
+                    simple_watch(f"smart-{slug(disk_name)}", "storage", options.smart_interval, ["type: smart", f"device: {yaml_quote(disk_path)}"], cycles=1),
+                )
         if features.get("hdparm") == "1" and (disk_path.startswith(("/dev/sd", "/dev/hd")) or disk.get("tran") in {"ata", "sata", "scsi", "usb"}):
             add_watch(
                 "watches",
