@@ -83,14 +83,6 @@ func SmartResultData(device, health string, selfTestRunning bool, values map[str
 	return data
 }
 
-// SmartSample is one smartctl observation.
-type SmartSample struct {
-	Health          string
-	HealthKnown     bool
-	SelfTestRunning bool
-	Values          map[string]float64
-}
-
 func smartctlArgs(device string) []string {
 	// -c exposes ATA self-test progress; health and attribute readings stay the
 	// same. This makes a manually requested test observable on later cycles.
