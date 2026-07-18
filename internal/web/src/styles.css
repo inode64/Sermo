@@ -97,7 +97,6 @@
   .sort-ind { font-size: .7rem; color: var(--accent); }
   .services-table td { white-space: nowrap; }
   .services-table .svc-main { display: flex; align-items: baseline; gap: .25rem; min-width: 11rem; font-weight: 500; }
-  .services-table .svc-sub { margin-left: 1.15rem; max-width: 13rem; overflow: hidden; text-overflow: ellipsis; }
   .services-table .unit-cell { max-width: 15rem; overflow: hidden; text-overflow: ellipsis; }
   .services-table .event-cell, .apps-table .event-cell { max-width: 15rem; overflow: hidden; text-overflow: ellipsis; }
   .services-table .policy-cell { max-width: 11rem; }
@@ -182,7 +181,6 @@
     .usagebar-fill, .sla-fill, .sla-seg, .sla-bar-seg { forced-color-adjust: none; }
     .sla-bar-seg { border: 1px solid CanvasText; }
   }
-  .pill { display: inline-block; padding: .05rem .5rem; border-radius: 1rem; font-size: .8rem; border: 1px solid var(--line-2); }
 
   /* ---- controls ------------------------------------------------------------ */
   button {
@@ -244,7 +242,6 @@
   .daemon-metrics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1rem; margin-top: .5rem; }
   .panel-footnote { font-size: .8rem; }
   .panel-ops { margin: .6rem 0 0; }
-  .activity-stats { display: flex; gap: 1.25rem; flex-wrap: wrap; font-size: .9rem; }
   #act-last { flex: 1; min-width: 180px; }
   section#locks-section { margin-top: 1rem; }
   .panel-controls input { min-width: 13rem; }
@@ -447,7 +444,6 @@
   .activity-muted { color: var(--text-2); }
   .lvl-error { color: var(--crit); font-weight: 600; }
   .lvl-warning { color: var(--warn); font-weight: 600; }
-  .lvl-info { color: var(--text-2); }
   #event-controls { display: flex; gap: .45rem; align-items: center; flex-wrap: wrap; margin: .1rem 0 .6rem; }
   #event-controls input[type="text"] { width: 8.5rem; }
   .event-group td { background: color-mix(in srgb, var(--text) 4%, transparent); font-weight: 600; }
@@ -465,8 +461,6 @@
   .watch-type-heading { display: flex; align-items: baseline; justify-content: space-between; gap: .65rem; flex-wrap: wrap; }
   .watch-type-heading h3 { margin-bottom: .35rem; }
   .watch-type-filter { display: inline-flex; align-items: center; gap: .35rem; color: var(--text-2); font-size: .85rem; }
-  /* Keep the certificate Expires date (RFC3339) on a single line. */
-  .watch-table td.cert-expires { white-space: nowrap; }
   .apps-table { min-width: 36rem; font-size: .88rem; font-variant-numeric: tabular-nums; }
   .apps-table th, .apps-table td { padding: .34rem .5rem; vertical-align: top; }
   .watch-summary { min-width: 18rem; max-width: 30rem; overflow-wrap: anywhere; }
@@ -564,7 +558,7 @@
     /* services -> Service · State · Actions. */
     .services-table th:nth-child(9), .services-table td:nth-child(9) { display: none; }
     .services-table td { white-space: normal; }
-    .services-table .svc-sub, .services-table .unit-cell, .services-table .event-cell, .apps-table .event-cell { max-width: 60vw; }
+    .services-table .unit-cell, .services-table .event-cell, .apps-table .event-cell { max-width: 60vw; }
     /* watches -> Name · State · Actions; typed tables keep their live metric. */
     .watch-table th:not(:first-child):not(:nth-last-child(-n+2)),
     .watch-table td:not(:first-child):not(:nth-last-child(-n+2)) { display: none; }
