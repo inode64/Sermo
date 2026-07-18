@@ -2,6 +2,7 @@ const httpMethodPost = "POST";
 const csrfHeader = "X-Sermo-Csrf";
 const csrfHeaderValue = "1";
 export const apiHeaderGeneration = "X-Sermo-Generation";
+export const apiHeaderConfirm = "X-Sermo-Confirm";
 
 export const apiApplicationsPath = "api/applications";
 export const apiActivityPath = "api/activity";
@@ -25,6 +26,7 @@ export const apiWatchesPath = "api/watches";
 export const apiWhoamiPath = "api/whoami";
 
 const apiQueryCheck = "check";
+export const apiQueryBefore = "before";
 export const apiQueryBeforeID = "before_id";
 export const apiQueryForce = "force";
 export const apiQueryKill = "kill";
@@ -50,8 +52,9 @@ const apiSuffixRelease = "/release";
 const apiSuffixRuntime = "/runtime";
 const apiSuffixSLA = "/sla";
 const apiSuffixTest = "/test";
-export const readyVerbosePath = "readyz?verbose";
-export const liveVerbosePath = "livez?verbose";
+const apiQueryVerbose = "verbose";
+export const readyVerbosePath = `readyz?${apiQueryVerbose}`;
+export const liveVerbosePath = `livez?${apiQueryVerbose}`;
 
 export function csrfPostOptions(headers = {}) {
   return { method: httpMethodPost, headers: { [csrfHeader]: csrfHeaderValue, ...headers } };

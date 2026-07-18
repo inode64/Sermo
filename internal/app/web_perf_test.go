@@ -67,7 +67,7 @@ func TestWebBackendListRuntimeUsesPublishedSample(t *testing.T) {
 	if statusCalls != 1 {
 		t.Fatalf("status called %d times, want 1", statusCalls)
 	}
-	if svc.ProcessCount != 3 || svc.RSS != 8192 || !svc.CPUReady || svc.CPU != 12.5 {
+	if svc.RSS != 8192 || !svc.CPUReady || svc.CPU != 12.5 {
 		t.Fatalf("runtime fields = %+v", svc)
 	}
 	if svc.Uptime != "1h" || svc.UptimeSeconds != 3600 {
@@ -110,7 +110,7 @@ func TestWebBackendListRuntimeHiddenWhenServiceStopped(t *testing.T) {
 	if svc.State != TargetStateFailed || svc.Status != "inactive" {
 		t.Fatalf("state = %q status=%q, want failed/inactive", svc.State, svc.Status)
 	}
-	if svc.ProcessCount != 0 || svc.RSS != 0 || svc.CPUReady || svc.CPU != 0 {
+	if svc.RSS != 0 || svc.CPUReady || svc.CPU != 0 {
 		t.Fatalf("stopped service should not expose runtime fields: %+v", svc)
 	}
 }

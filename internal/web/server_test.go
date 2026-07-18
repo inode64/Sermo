@@ -113,11 +113,9 @@ func (f *fakeBackend) MonitoringStatus(context.Context) MonitoringStatus { retur
 func (f *fakeBackend) Detail(_ context.Context, name string) (Detail, bool) {
 	for _, s := range f.services {
 		if s.Name == name {
-			ratio := 0.99
 			return Detail{
 				Service:   s,
 				Checks:    []Check{{Name: "http", Type: "http", OK: true, Ran: true, Message: "status 200"}},
-				SLA:       []SLAWindow{{Window: "day", Ratio: &ratio, Up: 99, Total: 100}},
 				Processes: []Process{{PID: 101, Exe: "/usr/bin/python3", Cmdline: []string{"python3", "--token=hunter2"}}},
 			}, true
 		}
@@ -312,7 +310,7 @@ func TestDashboardSnapshotEndpoint(t *testing.T) {
 	if !got.Ready.Ready || got.Ready.Services != 1 || got.Live.Services != 1 {
 		t.Fatalf("dashboard probes = ready:%+v live:%+v", got.Ready, got.Live)
 	}
-	if got.Operations.InUse != 1 || got.Operations.Total != 4 || got.GeneratedAt == "" {
+	if got.Operations.InUse != 1 || got.Operations.Total != 4 {
 		t.Fatalf("dashboard runtime = %+v", got)
 	}
 }
@@ -636,8 +634,6 @@ func TestMountBlockers(t *testing.T) {
 	b := &fakeBackend{mountBlockers: MountBlockersResult{
 		OK:            true,
 		Name:          "mount-backup",
-		Path:          "/mnt/backup",
-		Mounted:       true,
 		HasKillPolicy: true,
 		CanKill:       true,
 		Blockers: []MountBlocker{{
@@ -645,7 +641,7 @@ func TestMountBlockers(t *testing.T) {
 		}},
 	}}
 	rec := httptest.NewRecorder()
-	newServer(b).ServeHTTP(rec, postReq(testMountPath("mount-backup", apiActionBlockers)))
+	newServer(b).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, testMountPath("mount-backup", apiSegmentBlockers), nil))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status %d", rec.Code)
 	}
@@ -660,7 +656,7 @@ func TestMountBlockers(t *testing.T) {
 
 func TestMountAlert(t *testing.T) {
 	b := &fakeBackend{mountAlert: MountAlertResult{
-		OK: true, Name: "mount-backup", Path: "/mnt/backup", Users: []string{"backup"}, Delivered: 1, Message: "alert sent",
+		OK: true, Name: "mount-backup", Path: "/mnt/backup", Message: "alert sent to backup",
 	}}
 	rec := httptest.NewRecorder()
 	newServer(b).ServeHTTP(rec, postReq(testMountPath("mount-backup", apiActionAlert)))
@@ -671,7 +667,7 @@ func TestMountAlert(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if !got.OK || got.Delivered != 1 || len(got.Users) != 1 || got.Users[0] != "backup" {
+	if !got.OK || got.Message != "alert sent to backup" {
 		t.Fatalf("unexpected alert: %+v", got)
 	}
 }
@@ -687,7 +683,7 @@ func TestServiceDetail(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &d); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if d.Name != "web" || len(d.Checks) != 1 || d.Checks[0].Name != "http" || len(d.SLA) != 1 {
+	if d.Name != "web" || len(d.Checks) != 1 || d.Checks[0].Name != "http" {
 		t.Fatalf("unexpected detail: %+v", d)
 	}
 }

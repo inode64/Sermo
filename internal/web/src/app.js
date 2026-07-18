@@ -3,7 +3,8 @@ import watchPanelDescriptors from "./watch-panels.json";
 import {
   apiActionSuffix, apiActivityPath, apiApplicationsPath, apiDaemonPath, apiHeaderGeneration,
   apiEventsRecentPath, apiHostPath, apiLibrariesPath, apiLocksPath,
-  apiMonitoringPath, apiMountsPath, apiNotifiersPath, apiOpsPath, apiQueryBeforeID,
+  apiHeaderConfirm, apiMonitoringPath, apiMountsPath, apiNotifiersPath, apiOpsPath,
+  apiQueryBefore, apiQueryBeforeID,
   apiQueryForce, apiQueryKill, apiQueryKind, apiQueryLazy, apiQueryLimit, apiQueryName, apiQueryNoCascade,
   apiQueryOnlyErrors, apiQueryPage, apiQueryService, apiQuerySince, apiQueryStatus,
   apiQueryWatch, apiReloadPath, notifierTestAPI,
@@ -786,7 +787,7 @@ async function clearEventLog(beforeValue) {
   const btn = $("#event-clear");
   if (btn) btn.disabled = true;
   try {
-    const q = before ? `?before=${encodeURIComponent(before)}` : "";
+    const q = before ? `?${apiQueryBefore}=${encodeURIComponent(before)}` : "";
     const res = await fetch(eventsClearAPI(q), csrfPostOptions());
     const body = await jsonOrThrow(res);
     const n = Number(body.pruned) || 0;
@@ -810,7 +811,7 @@ async function compactState() {
   const btn = $("#state-compact-btn");
   if (btn) btn.disabled = true;
   try {
-    const q = before ? `?before=${encodeURIComponent(before)}` : "";
+    const q = before ? `?${apiQueryBefore}=${encodeURIComponent(before)}` : "";
     const res = await fetch(stateCompactAPI(q), csrfPostOptions());
     const body = await jsonOrThrow(res);
     const n = Number(body.pruned) || 0;
@@ -5798,7 +5799,7 @@ async function actWatch(name, action) {
   if (action === actionPause) {
     const w = (allWatches || []).find((item) => item && item.name === name) || {};
     if (!(await confirmWatchRAIDPause(name, w.raid_array || ""))) return;
-    headers = { "X-Sermo-Confirm": w.raid_array || "" };
+    headers = { [apiHeaderConfirm]: w.raid_array || "" };
   }
   if (action === actionResume && !(await confirmWatchRAIDResume(name))) return;
   const toggleKey = acquireMonitorToggle("wat:", name, action);
@@ -5893,7 +5894,7 @@ async function testNotifier(name) {
 }
 
 async function fetchMountBlockers(name) {
-  const res = await fetch(mountBlockersAPI(name), csrfPostOptions());
+  const res = await fetch(mountBlockersAPI(name));
   return jsonOrThrow(res);
 }
 
