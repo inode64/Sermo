@@ -36,21 +36,13 @@ func (netAssistant) Run(p *Prompt, env Env) (res Result, err error) {
 	}
 	selected := chooseIfaces(p, "Which interfaces do you want to monitor?", cands, env.DefaultIfaces, false)
 
-	var shared *netSettings
-	if len(selected) > 1 && p.Confirm("Apply the same settings to all selected interfaces?", true) {
-		s := askNetSettings(p, env, "the selected interfaces")
-		shared = &s
-	}
+	shared := sharedSettingsFor(p, selected, "Apply the same settings to all selected interfaces?",
+		"the selected interfaces", func(label string) netSettings { return askNetSettings(p, env, label) })
 
 	watches := map[string]any{}
-	for _, c := range selected {
-		s := shared
-		if s == nil {
-			t := askNetSettings(p, env, c.Name)
-			s = &t
-		}
-		watches[netWatchPrefix+c.Name] = buildNetWatch(c, *s)
-	}
+	forEachWithSettings(selected, shared,
+		func(c Iface) netSettings { return askNetSettings(p, env, c.Name) },
+		func(c Iface, s netSettings) { watches[netWatchPrefix+c.Name] = buildNetWatch(c, s) })
 	return Result{Watches: watches, Summary: fmt.Sprintf("%d net watch(es)", len(watches))}, nil
 }
 
