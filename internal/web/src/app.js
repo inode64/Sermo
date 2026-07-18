@@ -2513,10 +2513,6 @@ function toggleServiceExpansion(name) {
   toggleExpand(serviceExpansionKey(name));
 }
 
-function refreshExpandedServiceDetails() {
-  refreshExpandedServices({ metricsOnly: true });
-}
-
 // reassertExpansions re-fills open expansion cells from cache after a
 // structural table re-render (filter keystrokes, sorting, grouping, the 1s
 // operations ticker), which can recreate rows and blank their detail cells.

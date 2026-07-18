@@ -44,14 +44,6 @@ func Open(path string) (*Writer, error) {
 	return &Writer{path: path, f: f, now: time.Now}, nil
 }
 
-// Path returns the configured file path.
-func (w *Writer) Path() string {
-	if w == nil {
-		return ""
-	}
-	return w.path
-}
-
 // Write marshals v as one JSON line and appends it to the log.
 func (w *Writer) Write(v any) error {
 	if w == nil || w.f == nil {
