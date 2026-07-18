@@ -2102,7 +2102,9 @@ watches:
 
 Predicados: `util_pct` (0–100), `await_ms` (ms simples), y `read_bytes`/
 `write_bytes` — **bytes por segundo**, escritos con la gramática de tamaño compartida
-(`50M` = 50 MiB/s). Todos los predicados presentes deben cumplirse (AND), de modo que
+(`50M` = 50 MiB/s = 52.428.800 B/s; ojo: las tasas se *muestran* en unidades
+decimales SI, así que ese umbral se lee como `52.43 MB/s` en eventos y en la web
+UI). Todos los predicados presentes deben cumplirse (AND), de modo que
 `util_pct` + `await_ms` juntos distinguen "ocupado y lento" de meramente ocupado. Un
 dispositivo ausente de `/proc/diskstats` nunca se dispara (la comprobación reporta el
 error). Hook extras: `SERMO_DEVICE`, `SERMO_UTIL_PCT`, `SERMO_READ_BYTES`,

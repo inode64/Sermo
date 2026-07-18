@@ -1226,8 +1226,8 @@ func TestWebBackendAdditionalHostWatchReadings(t *testing.T) {
 	if got := readingByField(diskio.Readings, "util_pct").Value; got != "50.00%" {
 		t.Fatalf("diskio util = %q, want 50.00%%", got)
 	}
-	if got := readingByField(diskio.Readings, "read_bytes").Value; got != "1 KiB/s" {
-		t.Fatalf("diskio read = %q, want 1 KiB/s", got)
+	if got := readingByField(diskio.Readings, "read_bytes").Value; got != "1.02 KB/s" {
+		t.Fatalf("diskio read = %q, want 1.02 KB/s", got)
 	}
 
 	// A second dashboard viewer must receive the same daemon-cycle result.
@@ -1239,8 +1239,8 @@ func TestWebBackendAdditionalHostWatchReadings(t *testing.T) {
 	if got := readingByField(quick["diskio-root"].Readings, "util_pct").Value; got != "50.00%" {
 		t.Fatalf("diskio util on quick re-poll = %q, want cached 50.00%%", got)
 	}
-	if got := readingByField(quick["diskio-root"].Readings, "read_bytes").Value; got != "1 KiB/s" {
-		t.Fatalf("diskio read on quick re-poll = %q, want cached 1 KiB/s", got)
+	if got := readingByField(quick["diskio-root"].Readings, "read_bytes").Value; got != "1.02 KB/s" {
+		t.Fatalf("diskio read on quick re-poll = %q, want cached 1.02 KB/s", got)
 	}
 
 	edac := byName["edac"]

@@ -26,7 +26,9 @@ const dashboard = {
   }],
   notifiers: [{ name: "ops", type: "slack", enabled: true, summary: "hooks.slack.com", used_by: 2 }],
   daemon: { backend: "systemd", hostname: "fixture", host_uptime_seconds: 86400 },
-  daemon_metrics: null,
+  daemon_metrics: {
+    current: { pid: 4242, fds: 12345, threads: 8, cpu_ready: true, cpu: 1.5, rss: 1048576, io_ready: true, io: 2048 },
+  },
   locks: [],
   activity: { errors: 0, last_event_kind: "action" },
   ready: { ready: true, status: "ok", backend: "systemd", services: 2, watches: 1 },
@@ -506,6 +508,13 @@ test("a failing services list alone does not dim the dashboard as disconnected",
   await page.goto("/");
   await expect(page.locator("#err")).toContainText("services unavailable");
   await expect(page.locator("#err")).not.toContainText("keeping the last known list");
+});
+
+test("daemon metrics use decimal byte rates and grouped counts", async ({ page }) => {
+  // Sizes stay IEC binary (KiB, 1024); rates are SI decimal (KB/s, 1000).
+  await expect(page.locator("#daemon-io-live")).toHaveText("2.05 KB/s");
+  await expect(page.locator("#daemon-memory-live")).toContainText("1 MiB");
+  await expect(page.locator("#daemon-fds")).toHaveText("12,345");
 });
 
 test("the dashboard dims as disconnected when every endpoint fails", async ({ page }) => {

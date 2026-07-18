@@ -1854,16 +1854,17 @@ operación.
 
 Cuando una regla recuperada tiene exactamente una hoja directa de check o métrica, el
 evento también registra el valor actual formateado, el operador y el umbral configurado.
-Los valores de bytes usan unidades binarias IEC — `B`, `KiB`, `MiB`, `GiB` o `TiB`
-(y las tasas de bytes añaden `/s`) — igual que se interpretan los sufijos de tamaño
-en la configuración, incluido el umbral configurado. Así se ve una oscilación alrededor del
+Los tamaños en bytes usan unidades binarias IEC — `B`, `KiB`, `MiB`, `GiB` o `TiB`
+— igual que se interpretan los sufijos de tamaño en la configuración, incluido el
+umbral configurado; las tasas de bytes usan unidades decimales SI — `B/s`, `KB/s`,
+`MB/s`, `GB/s` o `TB/s`. Así se ve una oscilación alrededor del
 umbral sin tener que reconstruir la lectura desde el histórico de métricas.
 
 Todo número visible por el operador sigue una única convención canónica en todas
 las superficies (eventos, notificaciones, `sermoctl` y la web UI): coma como
-separador de millares y punto como marca decimal (`12,345.68`), con los valores
-de bytes siempre humanizados a unidades IEC (`2.44 MiB`, `1 KiB/s`) por el mismo
-formateador. Los timestamps de eventos se renderizan siempre en UTC, de modo que
+separador de millares y punto como marca decimal (`12,345.68`), con los tamaños
+en bytes siempre humanizados a unidades IEC (`2.44 MiB`) y las tasas a unidades
+decimales (`1.02 KB/s`) por el mismo formateador. Los timestamps de eventos se renderizan siempre en UTC, de modo que
 el mismo instante se lee igual antes y después de un reinicio del daemon.
 
 Las acciones y los tipos están acoplados: las acciones de operación (`restart`, `start`,
