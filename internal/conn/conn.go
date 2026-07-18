@@ -9,6 +9,7 @@ import (
 	"bufio"
 	"context"
 	"crypto/rand"
+	"database/sql"
 	"encoding/binary"
 	"io"
 	"strings"
@@ -543,6 +544,18 @@ func randXID32() uint32 {
 
 func hostPort(host string, port int) string {
 	return netutil.JoinHostPort(host, port)
+}
+
+// pingAndVersion verifies a database/sql pool answers a ping and best-effort
+// reads the server version with versionQuery — a successful ping already proves
+// connect + auth. The probe tail shared by the SQL-backed protocols.
+func pingAndVersion(ctx context.Context, db *sql.DB, versionQuery string) (Result, error) {
+	if err := db.PingContext(ctx); err != nil {
+		return Result{}, err
+	}
+	var version string
+	_ = db.QueryRowContext(ctx, versionQuery).Scan(&version)
+	return Result{Version: version}, nil
 }
 
 // hostPortDefaults returns cfg's host and port with the probe defaults applied:
