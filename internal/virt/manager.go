@@ -275,7 +275,7 @@ func runWithClient[T any](ctx context.Context, m Manager, fn func(Client) (T, er
 		err   error
 	}
 	ch := make(chan out, 1)
-	timeout := timeoutFromContext(ctx)
+	timeout := netutil.TimeoutFromContext(ctx, conn.DefaultLibvirtTimeout)
 	go func() {
 		client, err := m.client(timeout)
 		if err != nil {
@@ -333,17 +333,6 @@ func (m Manager) client(timeout time.Duration) (Client, error) {
 		dialers.WithSocket(filepath.Clean(socket)),
 		dialers.WithLocalTimeout(timeout),
 	)), nil
-}
-
-func timeoutFromContext(ctx context.Context) time.Duration {
-	dl, ok := ctx.Deadline()
-	if !ok {
-		return conn.DefaultLibvirtTimeout
-	}
-	if d := time.Until(dl); d > 0 {
-		return d
-	}
-	return time.Nanosecond
 }
 
 func statusFromDomainState(state libvirt.DomainState) servicemgr.Status {

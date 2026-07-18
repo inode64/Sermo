@@ -2,9 +2,11 @@
 package netutil
 
 import (
+	"context"
 	"net"
 	"strconv"
 	"strings"
+	"time"
 )
 
 const (
@@ -24,6 +26,20 @@ const (
 // JoinHostPort formats host with an integer port using net.JoinHostPort rules.
 func JoinHostPort(host string, port int) string {
 	return net.JoinHostPort(host, strconv.Itoa(port))
+}
+
+// TimeoutFromContext derives a dial timeout from ctx's deadline: the remaining
+// time when one is set, fallback when there is none, and 1ns when the deadline
+// has already passed so the dial fails fast instead of hanging.
+func TimeoutFromContext(ctx context.Context, fallback time.Duration) time.Duration {
+	dl, ok := ctx.Deadline()
+	if !ok {
+		return fallback
+	}
+	if d := time.Until(dl); d > 0 {
+		return d
+	}
+	return time.Nanosecond
 }
 
 // TLS mode tokens shared by the transports that accept a friendly tls value.

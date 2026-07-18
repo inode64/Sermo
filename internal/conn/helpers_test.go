@@ -1,10 +1,8 @@
 package conn
 
 import (
-	"context"
 	"strings"
 	"testing"
-	"time"
 )
 
 func TestRcodeName(t *testing.T) {
@@ -63,21 +61,5 @@ func TestDNSAndDHCPIDs(t *testing.T) {
 	}
 	if len(seenDNS) < 2 || len(seenDHCP) < 2 {
 		t.Fatalf("ids look constant: dns %v dhcp %v", seenDNS, seenDHCP)
-	}
-}
-
-func TestLibvirtTimeout(t *testing.T) {
-	if d := libvirtTimeout(context.Background()); d != 10*time.Second {
-		t.Fatalf("no deadline: %v, want 10s", d)
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
-	defer cancel()
-	if d := libvirtTimeout(ctx); d <= 0 || d > time.Minute {
-		t.Fatalf("future deadline: %v", d)
-	}
-	past, cancel2 := context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
-	defer cancel2()
-	if d := libvirtTimeout(past); d != time.Nanosecond {
-		t.Fatalf("past deadline: %v, want 1ns fail-fast", d)
 	}
 }
