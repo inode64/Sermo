@@ -12,14 +12,7 @@ func TestFTPHandshakeAnonymous(t *testing.T) {
 
 func TestFTPHandshakeLogin(t *testing.T) {
 	replies := "220 ready\r\n" + "331 password required\r\n" + "230 user logged in\r\n"
-	conn := rw{in: strings.NewReader(replies), out: &bytes.Buffer{}}
-	if _, err := ftpHandshake(conn, Config{User: "joe", Password: "secret"}); err != nil {
-		t.Fatalf("handshake: %v", err)
-	}
-	sent := conn.out.String()
-	if !strings.Contains(sent, "USER joe") || !strings.Contains(sent, "PASS secret") {
-		t.Fatalf("USER/PASS not sent: %q", sent)
-	}
+	assertHandshakeLogin(t, ftpHandshake, replies, Config{User: "joe", Password: "secret"}, "USER joe", "PASS secret")
 }
 
 func TestFTPHandshakeUserNoPassword(t *testing.T) {

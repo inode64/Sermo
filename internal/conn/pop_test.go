@@ -1,8 +1,6 @@
 package conn
 
 import (
-	"bytes"
-	"strings"
 	"testing"
 )
 
@@ -12,14 +10,7 @@ func TestPOPHandshakeAnonymous(t *testing.T) {
 
 func TestPOPHandshakeLogin(t *testing.T) {
 	replies := "+OK ready\r\n" + "+OK user accepted\r\n" + "+OK mailbox locked and ready\r\n"
-	conn := rw{in: strings.NewReader(replies), out: &bytes.Buffer{}}
-	if _, err := popHandshake(conn, Config{User: "joe", Password: "secret"}); err != nil {
-		t.Fatalf("handshake: %v", err)
-	}
-	sent := conn.out.String()
-	if !strings.Contains(sent, "USER joe") || !strings.Contains(sent, "PASS secret") {
-		t.Fatalf("USER/PASS not sent: %q", sent)
-	}
+	assertHandshakeLogin(t, popHandshake, replies, Config{User: "joe", Password: "secret"}, "USER joe", "PASS secret")
 }
 
 func TestPOPHandshakeLoginFails(t *testing.T) {
