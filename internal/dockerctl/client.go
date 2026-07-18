@@ -54,11 +54,11 @@ const (
 	tlsModeFalse      = "false"
 	tlsModeNo         = "no"
 	tlsModeOff        = "off"
-	tlsModeTrue       = "true"
+	tlsModeTrue       = netutil.TLSModeTrue
 	tlsModeYes        = "yes"
 	tlsModeOn         = "on"
 	tlsModeRequired   = "required"
-	tlsModeSkipVerify = "skip-verify"
+	tlsModeSkipVerify = netutil.TLSModeSkipVerify
 )
 
 // TLSValueSummary is the compact user-facing list of Docker TLS modes.
