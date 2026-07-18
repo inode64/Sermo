@@ -1685,31 +1685,33 @@ func (s *Server) handleDetail(w http.ResponseWriter, r *http.Request) {
 // backend's own slices are never mutated.
 
 func redactProcessCmdlines(procs []Process) []Process {
-	out := slices.Clone(procs)
-	for i := range out {
-		if len(out[i].Cmdline) > 1 {
-			out[i].Cmdline = out[i].Cmdline[:1]
-		}
-	}
-	return out
+	return redactCloned(procs, func(p *Process) { p.Cmdline = executableOnly(p.Cmdline) })
 }
 
 func redactMountCmdlines(mounts []Mount) []Mount {
-	out := slices.Clone(mounts)
+	return redactCloned(mounts, func(m *Mount) { m.Blockers = redactBlockerCmdlines(m.Blockers) })
+}
+
+func redactBlockerCmdlines(blockers []MountBlocker) []MountBlocker {
+	return redactCloned(blockers, func(b *MountBlocker) { b.Cmdline = executableOnly(b.Cmdline) })
+}
+
+// redactCloned applies redact to every element of a clone of items, leaving
+// the backend's own slice untouched.
+func redactCloned[T any](items []T, redact func(*T)) []T {
+	out := slices.Clone(items)
 	for i := range out {
-		out[i].Blockers = redactBlockerCmdlines(out[i].Blockers)
+		redact(&out[i])
 	}
 	return out
 }
 
-func redactBlockerCmdlines(blockers []MountBlocker) []MountBlocker {
-	out := slices.Clone(blockers)
-	for i := range out {
-		if len(out[i].Cmdline) > 1 {
-			out[i].Cmdline = out[i].Cmdline[:1]
-		}
+// executableOnly trims a command line to its argv[0].
+func executableOnly(cmdline []string) []string {
+	if len(cmdline) > 1 {
+		return cmdline[:1]
 	}
-	return out
+	return cmdline
 }
 
 // seriesSince reads the `since` query param, defaulting and capping it.
