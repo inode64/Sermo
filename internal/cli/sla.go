@@ -164,15 +164,26 @@ type serviceProcessUptime struct {
 }
 
 func (a App) writeSLAJSON(reports []serviceSLA) {
+	writeSLAWindowJSON(a, cliJSONKeySLA, reports,
+		func(r serviceSLA) (string, []state.SLAValue) { return r.Service, r.Windows },
+		func(v state.SLAValue) (string, map[string]any) { return v.Window, slaValueJSON(v) })
+}
+
+// writeSLAWindowJSON renders the {top: [{service, windows}]} JSON envelope
+// shared by the availability and process-uptime reports so their shape cannot
+// drift, mirroring writeSLAWindowTable for the table forms.
+func writeSLAWindowJSON[R, V any](a App, topKey string, reports []R, fields func(R) (string, []V), window func(V) (string, map[string]any)) {
 	out := make([]map[string]any, 0, len(reports))
 	for _, r := range reports {
-		windows := make(map[string]any, len(r.Windows))
-		for _, v := range r.Windows {
-			windows[v.Window] = slaValueJSON(v)
+		service, values := fields(r)
+		windows := make(map[string]any, len(values))
+		for _, v := range values {
+			name, entry := window(v)
+			windows[name] = entry
 		}
-		out = append(out, map[string]any{cliJSONKeyService: r.Service, cliJSONKeyWindows: windows})
+		out = append(out, map[string]any{cliJSONKeyService: service, cliJSONKeyWindows: windows})
 	}
-	writeJSON(a.Stdout, map[string]any{cliJSONKeySLA: out})
+	writeJSON(a.Stdout, map[string]any{topKey: out})
 }
 
 func slaValueJSON(v state.SLAValue) map[string]any {
@@ -184,15 +195,9 @@ func slaValueJSON(v state.SLAValue) map[string]any {
 }
 
 func (a App) writeProcessUptimeJSON(reports []serviceProcessUptime) {
-	out := make([]map[string]any, 0, len(reports))
-	for _, r := range reports {
-		windows := make(map[string]any, len(r.Windows))
-		for _, v := range r.Windows {
-			windows[v.Window] = processUptimeValueJSON(v)
-		}
-		out = append(out, map[string]any{cliJSONKeyService: r.Service, cliJSONKeyWindows: windows})
-	}
-	writeJSON(a.Stdout, map[string]any{cliJSONKeyProcessUptime: out})
+	writeSLAWindowJSON(a, cliJSONKeyProcessUptime, reports,
+		func(r serviceProcessUptime) (string, []state.ProcessUptimeWindow) { return r.Service, r.Windows },
+		func(v state.ProcessUptimeWindow) (string, map[string]any) { return v.Window, processUptimeValueJSON(v) })
 }
 
 func processUptimeValueJSON(v state.ProcessUptimeWindow) map[string]any {
