@@ -296,8 +296,8 @@ func TestFileWatchSnapshotUsesReadableAge(t *testing.T) {
 
 	w.runCycle(context.Background())
 
-	if age := got.Data[checks.DataKeyAge]; age != "1d1h" {
-		t.Fatalf("snapshot age = %v, want 1d1h", age)
+	if age := got.Data[checks.DataKeyAge]; age != "25h" {
+		t.Fatalf("snapshot age = %v, want 25h", age)
 	}
 }
 

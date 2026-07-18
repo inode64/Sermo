@@ -32,7 +32,7 @@ func TestSummaryCheckFormatsResultAndConfigurationValues(t *testing.T) {
 	})
 
 	result := check.Run(context.Background())
-	const want = "GeoIP 2w6d1h is older than 2w6d in 12,345 files (/usr/share/GeoIP)"
+	const want = "GeoIP 20d 1h is older than 20d in 12,345 files (/usr/share/GeoIP)"
 	if result.Message != want {
 		t.Fatalf("summary = %q, want %q", result.Message, want)
 	}
