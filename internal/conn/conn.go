@@ -220,7 +220,7 @@ const ParamValueTrue = "true"
 
 // TLSModeSkipVerify is the tls mode that enables TLS without certificate
 // verification.
-const TLSModeSkipVerify = "skip-verify"
+const TLSModeSkipVerify = netutil.TLSModeSkipVerify
 
 const (
 	// TLSValueSummary is the user-facing list of accepted connection-check TLS values.
