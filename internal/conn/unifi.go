@@ -29,14 +29,7 @@ func (unifiProtocol) DefaultPort() int   { return defaultPortUniFi }
 func (unifiProtocol) RequiresUser() bool { return false }
 
 func (unifiProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	host := cfg.Host
-	if host == "" {
-		host = DefaultHost
-	}
-	port := cfg.Port
-	if port == 0 {
-		port = defaultPortUniFi
-	}
+	host, port := cfg.hostPortDefaults(defaultPortUniFi)
 
 	tc := tlsClientConfig(host)
 	// UniFi controllers ship a self-signed certificate; skip verification unless

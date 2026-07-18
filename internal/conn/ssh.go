@@ -43,15 +43,7 @@ const (
 )
 
 func (sshProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	host := cfg.Host
-	if host == "" {
-		host = DefaultHost
-	}
-	port := cfg.Port
-	if port == 0 {
-		port = defaultPortSSH
-	}
-	addr := hostPort(host, port)
+	addr := cfg.addrDefaults(defaultPortSSH)
 
 	c, err := BindDialer(cfg.Interface).DialContext(ctx, networkTCP, addr)
 	if err != nil {

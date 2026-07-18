@@ -72,18 +72,10 @@ func postgresConnector(cfg Config) (*pq.Connector, error) {
 // buildPGDSN renders a lib/pq connection URL from cfg. A URL (with
 // url.UserPassword) escapes special characters in the password correctly.
 func buildPGDSN(cfg Config) string {
-	host := cfg.Host
-	if host == "" {
-		host = DefaultHost
-	}
-	port := cfg.Port
-	if port == 0 {
-		port = defaultPortPostgres
-	}
 	u := url.URL{
 		Scheme: ProtocolNamePostgres,
 		User:   url.UserPassword(cfg.User, cfg.Password),
-		Host:   hostPort(host, port),
+		Host:   cfg.addrDefaults(defaultPortPostgres),
 		Path:   "/" + cfg.Database,
 	}
 	q := url.Values{}

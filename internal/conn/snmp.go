@@ -8,6 +8,8 @@ import (
 	"time"
 
 	g "github.com/gosnmp/gosnmp"
+
+	"sermo/internal/netutil"
 )
 
 func init() { Register(snmpProtocol{}) }
@@ -44,12 +46,7 @@ func (snmpProtocol) DefaultPort() int   { return defaultSNMPPort }
 func (snmpProtocol) RequiresUser() bool { return false }
 
 func (snmpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	timeout := defaultSNMPProbeTimeout
-	if dl, ok := ctx.Deadline(); ok {
-		if d := time.Until(dl); d > 0 {
-			timeout = d
-		}
-	}
+	timeout := netutil.TimeoutFromContext(ctx, defaultSNMPProbeTimeout)
 	params := buildSNMPParams(ctx, cfg, timeout)
 	if err := params.Connect(); err != nil {
 		return Result{}, err
@@ -97,14 +94,7 @@ func snmpVersionName(cfg Config) string {
 // when no user is set, otherwise v3 USM (authNoPriv with SHA when a password is
 // present, else noAuthNoPriv).
 func buildSNMPParams(ctx context.Context, cfg Config, timeout time.Duration) *g.GoSNMP {
-	host := cfg.Host
-	if host == "" {
-		host = DefaultHost
-	}
-	port := cfg.Port
-	if port == 0 {
-		port = defaultSNMPPort
-	}
+	host, port := cfg.hostPortDefaults(defaultSNMPPort)
 	p := &g.GoSNMP{
 		Target:    host,
 		Port:      uint16(port),
