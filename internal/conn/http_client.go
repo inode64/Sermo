@@ -29,14 +29,7 @@ func httpProbeClient(iface string, tlsConfig *tls.Config) *http.Client {
 // TLS follows the normal probe policy (plaintext by default, or HTTPS with an
 // optional operator-selected skip-verify mode).
 func httpProbeBase(cfg Config, defaultPort int) (*http.Client, string) {
-	host := cfg.Host
-	if host == "" {
-		host = DefaultHost
-	}
-	port := cfg.Port
-	if port == 0 {
-		port = defaultPort
-	}
+	host, port := cfg.hostPortDefaults(defaultPort)
 	scheme := schemeHTTP
 	client := httpProbeClient(cfg.Interface, nil)
 	mode := NormalizeTLS(cfg.TLS)

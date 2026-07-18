@@ -51,10 +51,7 @@ func probeBanner(ctx context.Context, cfg Config, defaultPort int, handshake fun
 // TLS without certificate verification, anything else → verified TLS. Shared by
 // the natively-probed protocols (redis, imap, …).
 func dialConn(ctx context.Context, cfg Config, port int) (net.Conn, error) {
-	host := cfg.Host
-	if host == "" {
-		host = DefaultHost
-	}
+	host, _ := cfg.hostPortDefaults(port)
 	addr := hostPort(host, port)
 	d := BindDialer(cfg.Interface)
 	switch NormalizeTLS(cfg.TLS) {
@@ -144,15 +141,7 @@ func probeUnixSocket(ctx context.Context, cfg Config, defaultSocket string) (Res
 // applies the context deadline. The prologue shared by the byte-protocol
 // probes that never upgrade to TLS; the caller closes the connection.
 func dialTCPDeadline(ctx context.Context, cfg Config, defaultPort int) (net.Conn, error) {
-	host := cfg.Host
-	if host == "" {
-		host = DefaultHost
-	}
-	port := cfg.Port
-	if port == 0 {
-		port = defaultPort
-	}
-	c, err := BindDialer(cfg.Interface).DialContext(ctx, networkTCP, hostPort(host, port))
+	c, err := BindDialer(cfg.Interface).DialContext(ctx, networkTCP, cfg.addrDefaults(defaultPort))
 	if err != nil {
 		return nil, err
 	}
@@ -191,15 +180,7 @@ func probeLineCommand(ctx context.Context, cfg Config, defaultPort int, command 
 // deadline, sends request, and returns the first reply datagram (up to
 // bufBytes). The round-trip shared by the datagram probes (rpcbind, nebula).
 func exchangeUDP(ctx context.Context, cfg Config, defaultPort int, request []byte, bufBytes int) ([]byte, error) {
-	host := cfg.Host
-	if host == "" {
-		host = DefaultHost
-	}
-	port := cfg.Port
-	if port == 0 {
-		port = defaultPort
-	}
-	c, err := BindDialer(cfg.Interface).DialContext(ctx, networkUDP, hostPort(host, port))
+	c, err := BindDialer(cfg.Interface).DialContext(ctx, networkUDP, cfg.addrDefaults(defaultPort))
 	if err != nil {
 		return nil, err
 	}

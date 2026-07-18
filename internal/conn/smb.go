@@ -85,15 +85,7 @@ const (
 )
 
 func (smbProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	host := cfg.Host
-	if host == "" {
-		host = DefaultHost
-	}
-	port := cfg.Port
-	if port == 0 {
-		port = defaultPortSMB
-	}
-	addr := hostPort(host, port)
+	addr := cfg.addrDefaults(defaultPortSMB)
 
 	dialect, signingRequired, err := smbNegotiate(ctx, addr, cfg.Interface)
 	if err != nil {

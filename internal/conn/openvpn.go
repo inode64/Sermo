@@ -59,21 +59,13 @@ func (openvpnProtocol) DefaultPort() int   { return defaultPortOpenVPN }
 func (openvpnProtocol) RequiresUser() bool { return false }
 
 func (openvpnProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	host := cfg.Host
-	if host == "" {
-		host = DefaultHost
-	}
-	port := cfg.Port
-	if port == 0 {
-		port = defaultPortOpenVPN
-	}
 	transport := networkUDP
 	if cfg.Params[ParamKeyTransport] == networkTCP {
 		transport = networkTCP
 	}
 
 	sid := openvpnSessionID()
-	c, err := BindDialer(cfg.Interface).DialContext(ctx, transport, hostPort(host, port))
+	c, err := BindDialer(cfg.Interface).DialContext(ctx, transport, cfg.addrDefaults(defaultPortOpenVPN))
 	if err != nil {
 		return Result{}, err
 	}

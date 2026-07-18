@@ -544,3 +544,22 @@ func randXID32() uint32 {
 func hostPort(host string, port int) string {
 	return netutil.JoinHostPort(host, port)
 }
+
+// hostPortDefaults returns cfg's host and port with the probe defaults applied:
+// DefaultHost when the host is empty, defaultPort when the port is zero.
+func (cfg Config) hostPortDefaults(defaultPort int) (string, int) {
+	host := cfg.Host
+	if host == "" {
+		host = DefaultHost
+	}
+	port := cfg.Port
+	if port == 0 {
+		port = defaultPort
+	}
+	return host, port
+}
+
+// addrDefaults renders cfg's host:port address with the probe defaults applied.
+func (cfg Config) addrDefaults(defaultPort int) string {
+	return hostPort(cfg.hostPortDefaults(defaultPort))
+}

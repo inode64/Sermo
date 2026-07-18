@@ -177,15 +177,7 @@ func libvirtTransport(cfg Config) (mode, addr, uri string) {
 	if cfg.Socket != "" {
 		return libvirtTransportSocket, cfg.Socket, uri
 	}
-	host := cfg.Host
-	if host == "" {
-		host = DefaultHost
-	}
-	port := cfg.Port
-	if port == 0 {
-		port = defaultPortLibvirt
-	}
-	return networkTCP, hostPort(host, port), uri
+	return networkTCP, cfg.addrDefaults(defaultPortLibvirt), uri
 }
 
 // formatLibvirtVersion renders libvirt's packed version (major*1e6 + minor*1e3 +

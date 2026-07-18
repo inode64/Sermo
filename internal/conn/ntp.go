@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/beevik/ntp"
+
+	"sermo/internal/netutil"
 )
 
 func init() { Register(ntpProtocol{}) }
@@ -52,15 +54,6 @@ func (ntpProtocol) DefaultPort() int   { return defaultPortNTP }
 func (ntpProtocol) RequiresUser() bool { return false }
 
 func (ntpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	host := cfg.Host
-	if host == "" {
-		host = DefaultHost
-	}
-	port := cfg.Port
-	if port == 0 {
-		port = defaultPortNTP
-	}
-
 	opt := ntp.QueryOptions{
 		Timeout: ntpTimeout(ctx),
 		// Route the UDP query through the shared dialer so interface binding works
@@ -69,7 +62,7 @@ func (ntpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 			return BindDialer(cfg.Interface).DialContext(ctx, networkUDP, remote)
 		},
 	}
-	resp, err := ntp.QueryWithOptions(hostPort(host, port), opt)
+	resp, err := ntp.QueryWithOptions(cfg.addrDefaults(defaultPortNTP), opt)
 	if err != nil {
 		return Result{}, err
 	}
@@ -90,13 +83,7 @@ func (ntpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 // ntpTimeout derives the query timeout from the context deadline, falling back to
 // beevik's own default (0 means "use the library default") when none is set.
 func ntpTimeout(ctx context.Context) time.Duration {
-	if dl, ok := ctx.Deadline(); ok {
-		if d := time.Until(dl); d > 0 {
-			return d
-		}
-		return time.Nanosecond
-	}
-	return 0
+	return netutil.TimeoutFromContext(ctx, 0)
 }
 
 // ntpExtraFields decodes the diagnostic fields RFC 5905 carries alongside the
