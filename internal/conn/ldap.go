@@ -7,6 +7,8 @@ import (
 	"time"
 
 	ldap "github.com/go-ldap/ldap/v3"
+
+	"sermo/internal/netutil"
 )
 
 func init() { Register(ldapProtocol{}) }
@@ -29,20 +31,8 @@ func (ldapProtocol) DefaultPort() int   { return defaultLDAPPort }
 func (ldapProtocol) RequiresUser() bool { return false }
 
 func (ldapProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	host := cfg.Host
-	if host == "" {
-		host = DefaultHost
-	}
-	port := cfg.Port
-	if port == 0 {
-		port = defaultLDAPPort
-	}
-	timeout := defaultLDAPProbeTimeout
-	if dl, ok := ctx.Deadline(); ok {
-		if d := time.Until(dl); d > 0 {
-			timeout = d
-		}
-	}
+	host, port := cfg.hostPortDefaults(defaultLDAPPort)
+	timeout := netutil.TimeoutFromContext(ctx, defaultLDAPProbeTimeout)
 
 	url, useTLS := buildLDAPURL(host, port, cfg.TLS)
 	opts := []ldap.DialOpt{ldap.DialWithDialer(probeDialer(cfg.Interface, timeout))}

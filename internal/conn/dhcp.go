@@ -107,15 +107,7 @@ func (dhcpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	// No interface -> unicast to a known server/relay; resolve its address now.
 	var server string
 	if iface == "" {
-		host := cfg.Host
-		if host == "" {
-			host = DefaultHost
-		}
-		port := cfg.Port
-		if port == 0 {
-			port = dhcpServerPort
-		}
-		server = hostPort(host, port)
+		server = cfg.addrDefaults(dhcpServerPort)
 	}
 
 	reply, err := dhcpExchange(ctx, iface, server, packet, xid)

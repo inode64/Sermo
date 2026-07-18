@@ -97,14 +97,7 @@ func mongoRole(primary, secondary, arbiter bool, setName string) string {
 
 // MongoConnect builds a lazy MongoDB client from cfg.
 func MongoConnect(cfg Config) (*mongo.Client, error) {
-	host := cfg.Host
-	if host == "" {
-		host = DefaultHost
-	}
-	port := cfg.Port
-	if port == 0 {
-		port = defaultPortMongoDB
-	}
+	host, port := cfg.hostPortDefaults(defaultPortMongoDB)
 	opts := options.Client().SetHosts([]string{hostPort(host, port)})
 	if cfg.Interface != "" {
 		opts.SetDialer(BindDialer(cfg.Interface))
