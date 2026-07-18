@@ -13,18 +13,9 @@ func TestIMAPHandshakeAnonymous(t *testing.T) {
 
 func TestIMAPHandshakeLogin(t *testing.T) {
 	replies := "* OK ready\r\n" + "a1 OK [CAPABILITY IMAP4rev1] Logged in\r\n"
-	conn := rw{in: strings.NewReader(replies), out: &bytes.Buffer{}}
-	if _, err := imapHandshake(conn, Config{User: "joe@x.com", Password: "p\"ss"}); err != nil {
-		t.Fatalf("handshake: %v", err)
-	}
-	sent := conn.out.String()
-	if !strings.Contains(sent, "LOGIN") || !strings.Contains(sent, "joe@x.com") {
-		t.Fatalf("login not sent: %q", sent)
-	}
-	// Password with a quote must be escaped inside the quoted string.
-	if !strings.Contains(sent, `"p\"ss"`) {
-		t.Fatalf("password not quoted/escaped: %q", sent)
-	}
+	// The quote in the password must arrive escaped inside the quoted string.
+	assertHandshakeLogin(t, imapHandshake, replies, Config{User: "joe@x.com", Password: "p\"ss"},
+		"LOGIN", "joe@x.com", `"p\"ss"`)
 }
 
 func TestIMAPHandshakeLoginFails(t *testing.T) {

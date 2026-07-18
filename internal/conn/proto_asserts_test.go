@@ -148,6 +148,21 @@ func assertHandshakeAnonymous(t *testing.T, fn handshakeFn, replies, mustNotSend
 	}
 }
 
+// assertHandshakeLogin runs an authenticated handshake and asserts it succeeds
+// after sending every mustSend fragment (e.g. "USER joe", "PASS secret").
+func assertHandshakeLogin(t *testing.T, fn handshakeFn, replies string, cfg Config, mustSend ...string) {
+	t.Helper()
+	conn := newRW(replies)
+	if _, err := fn(conn, cfg); err != nil {
+		t.Fatalf("handshake: %v", err)
+	}
+	for _, fragment := range mustSend {
+		if !strings.Contains(conn.out.String(), fragment) {
+			t.Fatalf("%s not sent: %q", fragment, conn.out.String())
+		}
+	}
+}
+
 // assertHandshakeFails runs a handshake expected to return an error.
 func assertHandshakeFails(t *testing.T, fn handshakeFn, replies string, cfg Config) {
 	t.Helper()
