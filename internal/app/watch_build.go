@@ -530,23 +530,15 @@ func parseFileCond(check map[string]any) (fileCond, error) {
 			c.sizeOp, c.sizeValue = op, v
 		}
 	}
-	if p, ok := check[checks.CheckKeyPermissions].(map[string]any); ok {
-		if cfgval.AsString(p[checks.CheckKeyOn]) != checks.OnModeChange {
-			return c, errors.New("file permissions requires on: change")
-		}
-		c.permChange = true
+	var err error
+	if c.permChange, err = fileOnFlag(check, checks.CheckKeyPermissions, checks.OnModeChange); err != nil {
+		return c, err
 	}
-	if o, ok := check[checks.CheckKeyOwner].(map[string]any); ok {
-		if cfgval.AsString(o[checks.CheckKeyOn]) != checks.OnModeChange {
-			return c, errors.New("file owner requires on: change")
-		}
-		c.ownerChange = true
+	if c.ownerChange, err = fileOnFlag(check, checks.CheckKeyOwner, checks.OnModeChange); err != nil {
+		return c, err
 	}
-	if e, ok := check[checks.CheckKeyExistence].(map[string]any); ok {
-		if cfgval.AsString(e[checks.CheckKeyOn]) != checks.OnModeDelete {
-			return c, errors.New("file existence requires on: delete")
-		}
-		c.onDelete = true
+	if c.onDelete, err = fileOnFlag(check, checks.CheckKeyExistence, checks.OnModeDelete); err != nil {
+		return c, err
 	}
 	if v, present := check[checks.CheckKeyOlderThan]; present {
 		d := cfgval.Duration(v)
@@ -559,6 +551,20 @@ func parseFileCond(check map[string]any) (fileCond, error) {
 		return c, fmt.Errorf("file check requires at least one of %s", config.FileWatchConditionSummary)
 	}
 	return c, nil
+}
+
+// fileOnFlag reads a file-watch sub-condition that only supports a single
+// `on:` trigger (permissions/owner on change, existence on delete). It reports
+// whether the key is present and errors when it names any other trigger.
+func fileOnFlag(check map[string]any, key, mode string) (bool, error) {
+	m, ok := check[key].(map[string]any)
+	if !ok {
+		return false, nil
+	}
+	if cfgval.AsString(m[checks.CheckKeyOn]) != mode {
+		return false, fmt.Errorf("file %s requires on: %s", key, mode)
+	}
+	return true, nil
 }
 
 // parseThenAndExplicit reads the (optional) `then` block and returns the hook +
