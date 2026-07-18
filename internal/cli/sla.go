@@ -45,6 +45,19 @@ func (a App) runSLA(ctx context.Context, opts options) int {
 		return a.runProcessUptime(ctx, opts, cfg)
 	}
 
+	return runWindowsReport(ctx, a, opts, cfg,
+		func(s *state.Store, name string, now time.Time) ([]state.SLAValue, error) {
+			return s.SLAReport(name, now)
+		},
+		a.writeSLAJSON, a.writeSLATable)
+}
+
+// runWindowsReport loads each service's per-window values via report and
+// renders them as JSON or a table — the body shared by `sla` and
+// `sla --process-uptime`.
+func runWindowsReport[V any](ctx context.Context, a App, opts options, cfg *config.Config,
+	report func(*state.Store, string, time.Time) ([]V, error),
+	writeJSON, writeTable func([]serviceWindows[V])) int {
 	services, code := a.slaServices(opts, cfg)
 	if code != exitSuccess {
 		return code
@@ -57,19 +70,19 @@ func (a App) runSLA(ctx context.Context, opts options) int {
 	defer store.Close()
 
 	now := time.Now()
-	reports := make([]serviceSLA, 0, len(services))
+	reports := make([]serviceWindows[V], 0, len(services))
 	for _, name := range services {
-		values, err := store.SLAReport(name, now)
+		values, err := report(store, name, now)
 		if err != nil {
 			return a.fail(opts, fmt.Sprintf("sla %s failed: %v", name, err))
 		}
-		reports = append(reports, serviceSLA{Service: name, Windows: values})
+		reports = append(reports, serviceWindows[V]{Service: name, Windows: values})
 	}
 
 	if opts.json {
-		a.writeSLAJSON(reports)
+		writeJSON(reports)
 	} else {
-		a.writeSLATable(reports)
+		writeTable(reports)
 	}
 	return exitSuccess
 }
@@ -88,31 +101,11 @@ func (a App) slaServices(opts options, cfg *config.Config) ([]string, int) {
 // runProcessUptime reports trusted process-continuity coverage. It remains
 // separate from SLA because a process being alive cannot prove check health.
 func (a App) runProcessUptime(ctx context.Context, opts options, cfg *config.Config) int {
-	services, code := a.slaServices(opts, cfg)
-	if code != exitSuccess {
-		return code
-	}
-	store, err := openStateStore(ctx, cfg)
-	if err != nil {
-		return a.fail(opts, fmt.Sprintf("sla failed: %v", err))
-	}
-	defer store.Close()
-
-	now := time.Now()
-	reports := make([]serviceProcessUptime, 0, len(services))
-	for _, name := range services {
-		values, err := store.ProcessUptimeReport(name, now)
-		if err != nil {
-			return a.fail(opts, fmt.Sprintf("sla %s failed: %v", name, err))
-		}
-		reports = append(reports, serviceProcessUptime{Service: name, Windows: values})
-	}
-	if opts.json {
-		a.writeProcessUptimeJSON(reports)
-	} else {
-		a.writeProcessUptimeTable(reports)
-	}
-	return exitSuccess
+	return runWindowsReport(ctx, a, opts, cfg,
+		func(s *state.Store, name string, now time.Time) ([]state.ProcessUptimeWindow, error) {
+			return s.ProcessUptimeReport(name, now)
+		},
+		a.writeProcessUptimeJSON, a.writeProcessUptimeTable)
 }
 
 // runSLASeries emits one service's stored per-minute availability series, the
@@ -153,35 +146,30 @@ func (a App) runSLASeries(ctx context.Context, opts options, cfg *config.Config)
 	return exitSuccess
 }
 
-type serviceSLA struct {
+// serviceWindows pairs one service with its per-window values (SLA
+// availability or process-uptime coverage).
+type serviceWindows[V any] struct {
 	Service string
-	Windows []state.SLAValue
+	Windows []V
 }
 
-type serviceProcessUptime struct {
-	Service string
-	Windows []state.ProcessUptimeWindow
-}
-
-func (a App) writeSLAJSON(reports []serviceSLA) {
+func (a App) writeSLAJSON(reports []serviceWindows[state.SLAValue]) {
 	writeSLAWindowJSON(a, cliJSONKeySLA, reports,
-		func(r serviceSLA) (string, []state.SLAValue) { return r.Service, r.Windows },
 		func(v state.SLAValue) (string, map[string]any) { return v.Window, slaValueJSON(v) })
 }
 
 // writeSLAWindowJSON renders the {top: [{service, windows}]} JSON envelope
 // shared by the availability and process-uptime reports so their shape cannot
 // drift, mirroring writeSLAWindowTable for the table forms.
-func writeSLAWindowJSON[R, V any](a App, topKey string, reports []R, fields func(R) (string, []V), window func(V) (string, map[string]any)) {
+func writeSLAWindowJSON[V any](a App, topKey string, reports []serviceWindows[V], window func(V) (string, map[string]any)) {
 	out := make([]map[string]any, 0, len(reports))
 	for _, r := range reports {
-		service, values := fields(r)
-		windows := make(map[string]any, len(values))
-		for _, v := range values {
+		windows := make(map[string]any, len(r.Windows))
+		for _, v := range r.Windows {
 			name, entry := window(v)
 			windows[name] = entry
 		}
-		out = append(out, map[string]any{cliJSONKeyService: service, cliJSONKeyWindows: windows})
+		out = append(out, map[string]any{cliJSONKeyService: r.Service, cliJSONKeyWindows: windows})
 	}
 	writeJSON(a.Stdout, map[string]any{topKey: out})
 }
@@ -194,9 +182,8 @@ func slaValueJSON(v state.SLAValue) map[string]any {
 	return entry
 }
 
-func (a App) writeProcessUptimeJSON(reports []serviceProcessUptime) {
+func (a App) writeProcessUptimeJSON(reports []serviceWindows[state.ProcessUptimeWindow]) {
 	writeSLAWindowJSON(a, cliJSONKeyProcessUptime, reports,
-		func(r serviceProcessUptime) (string, []state.ProcessUptimeWindow) { return r.Service, r.Windows },
 		func(v state.ProcessUptimeWindow) (string, map[string]any) { return v.Window, processUptimeValueJSON(v) })
 }
 
@@ -212,17 +199,17 @@ func processUptimeValueJSON(v state.ProcessUptimeWindow) map[string]any {
 	return entry
 }
 
-func (a App) writeSLATable(reports []serviceSLA) {
-	writeSLAWindowTable(a, reports, func(r serviceSLA) (string, []state.SLAValue) { return r.Service, r.Windows }, formatSLA)
+func (a App) writeSLATable(reports []serviceWindows[state.SLAValue]) {
+	writeSLAWindowTable(a, reports, formatSLA)
 }
 
-func (a App) writeProcessUptimeTable(reports []serviceProcessUptime) {
-	writeSLAWindowTable(a, reports, func(r serviceProcessUptime) (string, []state.ProcessUptimeWindow) { return r.Service, r.Windows }, formatProcessUptime)
+func (a App) writeProcessUptimeTable(reports []serviceWindows[state.ProcessUptimeWindow]) {
+	writeSLAWindowTable(a, reports, formatProcessUptime)
 }
 
 // writeSLAWindowTable renders one SERVICE + per-SLA-window table, shared by the
 // availability and process-uptime reports so their layout cannot drift.
-func writeSLAWindowTable[R, V any](a App, reports []R, fields func(R) (string, []V), format func(V) string) {
+func writeSLAWindowTable[V any](a App, reports []serviceWindows[V], format func(V) string) {
 	if len(reports) == 0 {
 		fmt.Fprintln(a.Stdout, "no services")
 		return
@@ -234,10 +221,9 @@ func writeSLAWindowTable[R, V any](a App, reports []R, fields func(R) (string, [
 	}
 	fmt.Fprintln(a.Stdout, strings.Join(cols, "\t"))
 	for _, report := range reports {
-		service, windows := fields(report)
-		row := make([]string, 0, len(windows)+1)
-		row = append(row, service)
-		for _, window := range windows {
+		row := make([]string, 0, len(report.Windows)+1)
+		row = append(row, report.Service)
+		for _, window := range report.Windows {
 			row = append(row, format(window))
 		}
 		fmt.Fprintln(a.Stdout, strings.Join(row, "\t"))
