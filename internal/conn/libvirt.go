@@ -10,6 +10,7 @@ import (
 	"github.com/digitalocean/go-libvirt"
 	"github.com/digitalocean/go-libvirt/socket/dialers"
 
+	"sermo/internal/netutil"
 	"sermo/internal/units"
 )
 
@@ -54,7 +55,7 @@ func (libvirtProtocol) RequiresUser() bool { return false }
 
 func (libvirtProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	mode, addr, uri := libvirtTransport(cfg)
-	timeout := libvirtTimeout(ctx)
+	timeout := netutil.TimeoutFromContext(ctx, DefaultLibvirtTimeout)
 
 	var l *libvirt.Libvirt
 	switch mode {
@@ -185,19 +186,6 @@ func libvirtTransport(cfg Config) (mode, addr, uri string) {
 		port = defaultPortLibvirt
 	}
 	return networkTCP, hostPort(host, port), uri
-}
-
-// libvirtTimeout derives a dialer timeout from the context deadline, falling
-// back to 10s when the context has none.
-func libvirtTimeout(ctx context.Context) time.Duration {
-	dl, ok := ctx.Deadline()
-	if !ok {
-		return DefaultLibvirtTimeout
-	}
-	if d := time.Until(dl); d > 0 {
-		return d
-	}
-	return time.Nanosecond // already past the deadline: fail fast
 }
 
 // formatLibvirtVersion renders libvirt's packed version (major*1e6 + minor*1e3 +
