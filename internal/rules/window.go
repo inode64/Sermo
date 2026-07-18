@@ -370,6 +370,11 @@ func durationElapsed(since, at time.Time) time.Duration {
 	return at.Sub(since)
 }
 
+// formatWindowDuration echoes the operator's configured window back in its own
+// spelling ("6m", "30m"), so ProgressAt keeps the config↔display match. It
+// deliberately does NOT use units.HumanizeDuration: the hysteresis ladder is
+// for measured/elapsed durations and would render a configured 6m window as
+// "360s".
 func formatWindowDuration(d time.Duration) string {
 	if d <= 0 {
 		return "0s"
