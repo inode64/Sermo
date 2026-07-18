@@ -31,14 +31,8 @@ func (postgresProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	}
 	defer func() { _ = db.Close() }()
 
-	if err := db.PingContext(ctx); err != nil {
-		return Result{}, err
-	}
-	var version string
-	// Best effort: a successful ping already proves connect + auth.
 	// SHOW server_version gives a clean number (vs the verbose version()).
-	_ = db.QueryRowContext(ctx, "SHOW server_version").Scan(&version)
-	return Result{Version: version}, nil
+	return pingAndVersion(ctx, db, "SHOW server_version")
 }
 
 // PostgresDSN renders a lib/pq connection URL from cfg (escaping the password).

@@ -56,13 +56,7 @@ func (mysqlProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	}
 	defer func() { _ = db.Close() }()
 
-	if err := db.PingContext(ctx); err != nil {
-		return Result{}, err
-	}
-	var version string
-	// Best effort: a successful ping already proves connect + auth.
-	_ = db.QueryRowContext(ctx, "SELECT VERSION()").Scan(&version)
-	return Result{Version: version}, nil
+	return pingAndVersion(ctx, db, "SELECT VERSION()")
 }
 
 // maxMySQLHandshake bounds the initial handshake packet we are willing to read,
