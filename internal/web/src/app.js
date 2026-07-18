@@ -6862,6 +6862,31 @@ function bindSortHeader(th, action) {
   });
 }
 
+// bindConfirmDialog wires a result-button dialog: a click on a
+// resultSelector button closes it with dataset[resultKey] === "true", and a
+// bare dialog close while pending() resolves as false. A missing dlg is a no-op.
+function bindConfirmDialog(dlg, resultSelector, resultKey, close, pending) {
+  if (!dlg) return;
+  dlg.addEventListener(domEventClick, (e) => {
+    const b = closestFrom(e, resultSelector);
+    if (b) close(b.dataset[resultKey] === domBoolTrue);
+  });
+  dlg.addEventListener(domEventClose, () => {
+    if (pending()) close(false);
+  });
+}
+
+// bindStopClick wires a click that only stops propagation before invoking fn —
+// the admin-button idiom where default button behavior stays intact. A missing
+// el is a no-op.
+function bindStopClick(el, fn) {
+  if (!el) return;
+  el.addEventListener(domEventClick, (e) => {
+    e.stopPropagation();
+    fn();
+  });
+}
+
 // bindActionClick wires a click on el that suppresses default/propagation before
 // invoking fn — the group-toggle button idiom. A missing el is a no-op.
 function bindActionClick(el, fn) {
@@ -7021,13 +7046,7 @@ function initStaticHandlers() {
   if (eventResetFilters) eventResetFilters.addEventListener(domEventClick, clearEventFilters);
   const eventMore = $("#event-more");
   if (eventMore) eventMore.addEventListener(domEventClick, loadOlderEvents);
-  const eventClear = $("#event-clear");
-  if (eventClear) {
-    eventClear.addEventListener(domEventClick, (e) => {
-      e.stopPropagation();
-      clearEventLog();
-    });
-  }
+  bindStopClick($("#event-clear"), clearEventLog);
 
   document.querySelectorAll("[data-confirm-result]").forEach((btn) => {
     btn.addEventListener(domEventClick, () => closeActionConfirm(btn.dataset.confirmResult === domBoolTrue));
@@ -7035,52 +7054,12 @@ function initStaticHandlers() {
   const confirmPreflight = $("#confirm-preflight-btn");
   if (confirmPreflight) confirmPreflight.addEventListener(domEventClick, runConfirmPreflight);
 
-  const reloadBtn = $("#reload-btn");
-  if (reloadBtn) {
-    reloadBtn.addEventListener(domEventClick, (e) => {
-      e.stopPropagation();
-      reloadConfig();
-    });
-  }
-  const stateCompactBtn = $("#state-compact-btn");
-  if (stateCompactBtn) {
-    stateCompactBtn.addEventListener(domEventClick, (e) => {
-      e.stopPropagation();
-      compactState();
-    });
-  }
-  const panicBtn = $("#panic-btn");
-  if (panicBtn) {
-    panicBtn.addEventListener(domEventClick, (e) => {
-      e.stopPropagation();
-      requestPanic(!panicOn);
-    });
-  }
-  const panicDlg = $("#panic-confirm");
-  if (panicDlg) {
-    panicDlg.addEventListener(domEventClick, (e) => {
-      const b = e.target.closest("[data-panic-result]");
-      if (b) closePanicConfirm(b.dataset.panicResult === domBoolTrue);
-    });
-    panicDlg.addEventListener(domEventClose, () => { if (panicResolve) closePanicConfirm(false); });
-  }
-
-  const simpleDlg = $("#simple-confirm");
-  if (simpleDlg) {
-    simpleDlg.addEventListener(domEventClick, (e) => {
-      const b = closestFrom(e, "[data-simple-result]");
-      if (b) closePromptConfirm(b.dataset.simpleResult === domBoolTrue);
-    });
-    simpleDlg.addEventListener(domEventClose, () => { if (promptConfirmResolve) closePromptConfirm(false); });
-  }
-  const mountUmountDlg = $("#mount-umount-confirm");
-  if (mountUmountDlg) {
-    mountUmountDlg.addEventListener(domEventClick, (e) => {
-      const b = closestFrom(e, "[data-mount-umount-result]");
-      if (b) closeMountUnmountConfirm(b.dataset.mountUmountResult === domBoolTrue);
-    });
-    mountUmountDlg.addEventListener(domEventClose, () => { if (mountUnmountConfirmResolve) closeMountUnmountConfirm(false); });
-  }
+  bindStopClick($("#reload-btn"), reloadConfig);
+  bindStopClick($("#state-compact-btn"), compactState);
+  bindStopClick($("#panic-btn"), () => requestPanic(!panicOn));
+  bindConfirmDialog($("#panic-confirm"), "[data-panic-result]", "panicResult", closePanicConfirm, () => panicResolve);
+  bindConfirmDialog($("#simple-confirm"), "[data-simple-result]", "simpleResult", closePromptConfirm, () => promptConfirmResolve);
+  bindConfirmDialog($("#mount-umount-confirm"), "[data-mount-umount-result]", "mountUmountResult", closeMountUnmountConfirm, () => mountUnmountConfirmResolve);
   const mountUmountKill = $("#mount-umount-kill");
   if (mountUmountKill) {
     mountUmountKill.addEventListener(domEventChange, () => {
@@ -7095,103 +7074,45 @@ function initDelegatedHandlers() {
     if (typeFilter) setWatchTypeFilter(typeFilter.dataset.watchTypeFilterPanel || "host", typeFilter.dataset.watchTypeFilter || "", typeFilter.value);
   });
 
-  document.addEventListener(domEventClick, (e) => {
-    const eventToggle = closestFrom(e, "[data-event-toggle]");
-    if (eventToggle) {
-      toggleEventMsg(eventToggle.dataset.eventToggle || "");
-      return;
-    }
-
-    const panelTarget = closestFrom(e, "[data-panel-target]");
-    if (panelTarget) {
-      openPanelTarget(panelTarget.dataset.panelTarget || "");
-      return;
-    }
-
-    const serviceAction = closestFrom(e, "[data-service-action][data-service]");
-    if (serviceAction) {
-      act(serviceAction.dataset.service || "", serviceAction.dataset.serviceAction || "");
-      return;
-    }
-
-    const watchAction = closestFrom(e, "[data-watch-action][data-watch]");
-    if (watchAction) {
-      actWatch(watchAction.dataset.watch || "", watchAction.dataset.watchAction || "");
-      return;
-    }
-
-    const mountAction = closestFrom(e, "[data-mount-action][data-mount]");
-    if (mountAction) {
-      actMount(mountAction.dataset.mount || "", mountAction.dataset.mountAction || "");
-      return;
-    }
-
-    const notifierTest = closestFrom(e, "[data-notifier-test]");
-    if (notifierTest) {
-      testNotifier(notifierTest.dataset.notifierTest || "");
-      return;
-    }
-
-    const serviceExpand = closestFrom(e, "[data-service-expand]");
-    if (serviceExpand) {
-      toggleServiceExpansion(serviceExpand.dataset.serviceExpand || "");
-      return;
-    }
-
-    const serviceOpen = closestFrom(e, "[data-service-open]");
-    if (serviceOpen) {
-      openServiceExpansion(serviceOpen.dataset.serviceOpen || "", true);
-      return;
-    }
-
-    const release = closestFrom(e, "[data-lock-release]");
-    if (release) {
-      releaseLock(release.dataset.lockService || "", release.dataset.lockName || "");
-      return;
-    }
-
-    const preflight = closestFrom(e, "[data-preflight-service]");
-    if (preflight) {
-      runPreflight(preflight.dataset.preflightService || "");
-      return;
-    }
-
-    const metricCheckBtn = closestFrom(e, "[data-metric-check]");
-    if (metricCheckBtn) {
-      setMetricCheck(metricCheckBtn.dataset.metricCheck || "", metricCheckBtn.dataset.metricService || "");
-      return;
-    }
-
-    const windowBtn = closestFrom(e, "[data-window-kind][data-window-value]");
-    if (windowBtn) {
-      const val = windowBtn.dataset.windowValue || "";
-      switch (windowBtn.dataset.windowKind) {
+  // Delegated click routes: the first selector matching an ancestor of the
+  // click target wins, mirroring the previous if/return chain. The plain-row
+  // fallthrough stays outside because rowClick also needs the event.
+  const clickRoutes = [
+    ["[data-event-toggle]", (el) => toggleEventMsg(el.dataset.eventToggle || "")],
+    ["[data-panel-target]", (el) => openPanelTarget(el.dataset.panelTarget || "")],
+    ["[data-service-action][data-service]", (el) => act(el.dataset.service || "", el.dataset.serviceAction || "")],
+    ["[data-watch-action][data-watch]", (el) => actWatch(el.dataset.watch || "", el.dataset.watchAction || "")],
+    ["[data-mount-action][data-mount]", (el) => actMount(el.dataset.mount || "", el.dataset.mountAction || "")],
+    ["[data-notifier-test]", (el) => testNotifier(el.dataset.notifierTest || "")],
+    ["[data-service-expand]", (el) => toggleServiceExpansion(el.dataset.serviceExpand || "")],
+    ["[data-service-open]", (el) => openServiceExpansion(el.dataset.serviceOpen || "", true)],
+    ["[data-lock-release]", (el) => releaseLock(el.dataset.lockService || "", el.dataset.lockName || "")],
+    ["[data-preflight-service]", (el) => runPreflight(el.dataset.preflightService || "")],
+    ["[data-metric-check]", (el) => setMetricCheck(el.dataset.metricCheck || "", el.dataset.metricService || "")],
+    ["[data-window-kind][data-window-value]", (el) => {
+      const val = el.dataset.windowValue || "";
+      switch (el.dataset.windowKind) {
         case "setMetricWin":
-          setMetricWin(val, windowBtn.dataset.windowService || "");
+          setMetricWin(val, el.dataset.windowService || "");
           break;
         case "setDaemonMetricWin":
           setDaemonMetricWin(val);
           break;
       }
-      return;
-    }
+    }],
+    ["[data-watch-type-sort-panel][data-watch-type-sort-type][data-watch-type-sort]",
+      (el) => setWatchTypeSort(el.dataset.watchTypeSortPanel || "host", el.dataset.watchTypeSortType || "", el.dataset.watchTypeSort || "name")],
+    ["[data-group-panel][data-group-name]", (el) => toggleGroup(el.dataset.groupPanel || "", el.dataset.groupName || "")],
+    ["[data-exp-toggle]", (el) => toggleExpand(el.dataset.expToggle || "")],
+  ];
 
-    const typeSort = closestFrom(e, "[data-watch-type-sort-panel][data-watch-type-sort-type][data-watch-type-sort]");
-    if (typeSort) {
-      setWatchTypeSort(typeSort.dataset.watchTypeSortPanel || "host", typeSort.dataset.watchTypeSortType || "", typeSort.dataset.watchTypeSort || "name");
-      return;
-    }
-
-    const group = closestFrom(e, "[data-group-panel][data-group-name]");
-    if (group) {
-      toggleGroup(group.dataset.groupPanel || "", group.dataset.groupName || "");
-      return;
-    }
-
-    const expToggle = closestFrom(e, "[data-exp-toggle]");
-    if (expToggle) {
-      toggleExpand(expToggle.dataset.expToggle || "");
-      return;
+  document.addEventListener(domEventClick, (e) => {
+    for (const [selector, handle] of clickRoutes) {
+      const el = closestFrom(e, selector);
+      if (el) {
+        handle(el);
+        return;
+      }
     }
 
     const row = closestFrom(e, "[data-exp-key]");

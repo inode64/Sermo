@@ -593,7 +593,7 @@ func TestSourceKeepsMetricSelectionPerService(t *testing.T) {
 		`function serviceMetricState(name)`,
 		`serviceMetricStates: Object.fromEntries(serviceMetricStates)`,
 		`data-window-service="${service || nothing}"`,
-		`setMetricWin(val, windowBtn.dataset.windowService || "")`,
+		`setMetricWin(val, el.dataset.windowService || "")`,
 		`serviceMetricState(name).window !== win`,
 	} {
 		if !strings.Contains(text, marker) {
@@ -708,7 +708,7 @@ func TestSourceCompactsRowActionsWithoutChangingDispatch(t *testing.T) {
 		`data-service-action="${action}"`,
 		`data-watch-action="${action}"`,
 		`data-mount-action="${actionUmount}"`,
-		`act(serviceAction.dataset.service || "", serviceAction.dataset.serviceAction || "")`)
+		`act(el.dataset.service || "", el.dataset.serviceAction || "")`)
 }
 
 // TestIndexAccessibilitySectionHeadings pins the per-section <h2> headings that
