@@ -59,18 +59,25 @@ func (r Rule) withinWindow() (cycles int, duration time.Duration, minMatches int
 	return 0, 0, 0, false
 }
 
+// windowSpec returns w's wall-clock duration or consecutive cycle count
+// (duration wins when both are set), falling back to defCycles cycles when w is
+// nil or empty.
+func windowSpec(w *ForWindow, defCycles int) (cycles int, duration time.Duration) {
+	if w != nil {
+		if w.Duration > 0 {
+			return 0, w.Duration
+		}
+		if w.Cycles > 0 {
+			return w.Cycles, 0
+		}
+	}
+	return defCycles, 0
+}
+
 // forWindow returns the configured consecutive cycles or duration. With no
 // window the default is 1 cycle (fire the moment the condition is true).
 func (r Rule) forWindow() (cycles int, duration time.Duration) {
-	if r.For != nil {
-		if r.For.Duration > 0 {
-			return 0, r.For.Duration
-		}
-		if r.For.Cycles > 0 {
-			return r.For.Cycles, 0
-		}
-	}
-	return 1, 0
+	return windowSpec(r.For, 1)
 }
 
 // clearWindow returns the configured clear window: the consecutive false cycles
@@ -78,15 +85,7 @@ func (r Rule) forWindow() (cycles int, duration time.Duration) {
 // ends. Both zero means no clear window (the episode ends the first cycle the
 // entry window stops firing).
 func (r Rule) clearWindow() (cycles int, duration time.Duration) {
-	if r.Clear != nil {
-		if r.Clear.Duration > 0 {
-			return 0, r.Clear.Duration
-		}
-		if r.Clear.Cycles > 0 {
-			return r.Clear.Cycles, 0
-		}
-	}
-	return 0, 0
+	return windowSpec(r.Clear, 0)
 }
 
 // FiresAt updates the window with this cycle's condition value and reports
