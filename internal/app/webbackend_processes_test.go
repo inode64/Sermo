@@ -258,8 +258,8 @@ processes: {}
 	if !services[0].NoResidentProcess {
 		t.Fatal("service list should mark firehol as no resident process")
 	}
-	if services[0].CPUReady || services[0].NumCPU != 0 || services[0].ProcessCount != 0 || services[0].RSS != 0 {
-		t.Fatalf("service list runtime = cpuReady:%v numCPU:%d processes:%d rss:%d, want empty", services[0].CPUReady, services[0].NumCPU, services[0].ProcessCount, services[0].RSS)
+	if services[0].CPUReady || services[0].NumCPU != 0 || services[0].RSS != 0 {
+		t.Fatalf("service list runtime = cpuReady:%v numCPU:%d rss:%d, want empty", services[0].CPUReady, services[0].NumCPU, services[0].RSS)
 	}
 	if runtime, ok := wb.ServiceRuntime(context.Background(), "firehol", time.Hour); ok {
 		t.Fatalf("ServiceRuntime returned %+v for no resident process service", runtime)

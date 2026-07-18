@@ -45,42 +45,18 @@ func (b *WebBackend) ActivitySummary(_ context.Context) web.ActivitySummary {
 	}
 
 	events := b.events.Recent("", activitySummaryEventScanLimit)
-	summary.TotalEvents = len(events)
 	if len(events) > 0 {
-		latest := events[0]
-		// UTC like every event timestamp, so persisted and in-memory events keep
-		// one wire convention across daemon restarts.
-		summary.LastEventTime = latest.Time.UTC().Format(time.RFC3339)
-		summary.LastEventKind = latest.Kind
-		summary.LastEventService = latest.Service
-		summary.LastEventWatch = latest.Watch
+		summary.LastEventKind = events[0].Kind
 	}
 	for i := range events {
 		switch {
-		case events[i].Kind == eventKindAction && isServiceOperationAction(events[i].Action):
-			summary.ServiceActions++
 		case events[i].Kind == eventKindCascade && isServiceOperationAction(events[i].Action):
-			// Cascade targets run the same service operation as the primary, so
-			// an also_apply restart of three services counts as three actions.
-			// Unlike action events, cascade keeps one kind for every outcome
-			// (the primary encodes failures via eventKindForResult), so gate on
-			// status here: success counts as an action, blocked stays uncounted
-			// like suppressed primaries, and any failure is an error.
-			switch events[i].Status {
-			case eventStatusOK:
-				summary.ServiceActions++
-			case eventStatusBlocked:
-			default:
+			// Cascade keeps one kind for every outcome (the primary encodes
+			// failures via eventKindForResult), so gate on status here: blocked
+			// stays uncounted like suppressed primaries, any failure is an error.
+			if events[i].Status != eventStatusOK && events[i].Status != eventStatusBlocked {
 				summary.Errors++
 			}
-		case events[i].Kind == eventKindHook || events[i].Kind == eventKindHookFail,
-			events[i].Kind == eventKindExpand || events[i].Kind == eventKindExpandFailed || events[i].Kind == eventKindExpandSkipped,
-			events[i].Kind == eventKindKill || events[i].Kind == eventKindKillFailed:
-			// Every watch-driven action (hook, volume expand, process kill) counts
-			// in the watch-actions bucket, like hooks always did.
-			summary.WatchHooks++
-		case events[i].Kind == eventKindNotify || events[i].Kind == eventKindNotifyFail:
-			summary.WatchNotifies++
 		case events[i].Kind == eventKindError:
 			summary.Errors++
 		}

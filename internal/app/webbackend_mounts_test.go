@@ -580,7 +580,7 @@ func TestWebBackendAlertMountUsers(t *testing.T) {
 			}
 
 			res := b.AlertMountUsers(context.Background(), "mount-backup")
-			if !res.OK || !alerter.called || scans != 1 || res.Delivered != 1 || len(res.Users) != 1 || res.Users[0] != "backup" {
+			if !res.OK || !alerter.called || scans != 1 || res.Message != "alert sent to backup" {
 				t.Fatalf("AlertMountUsers = %+v called=%v scans=%d", res, alerter.called, scans)
 			}
 		})

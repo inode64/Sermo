@@ -362,8 +362,6 @@ func (b *WebBackend) MountBlockers(ctx context.Context, name string) web.MountBl
 		return web.MountBlockersResult{
 			OK:           true,
 			Name:         spec.Name,
-			Path:         spec.Path,
-			Mounted:      true,
 			CanUmount:    false,
 			UmountReason: reason,
 			Message:      reason,
@@ -374,28 +372,24 @@ func (b *WebBackend) MountBlockers(ctx context.Context, name string) web.MountBl
 	ctrl := b.mountController()
 	status, err := ctrl.ReadStatus(spec)
 	if err != nil {
-		return web.MountBlockersResult{OK: false, Name: name, Path: spec.Path, Message: err.Error()}
+		return web.MountBlockersResult{OK: false, Name: name, Message: err.Error()}
 	}
 	if !status.Mounted {
 		return web.MountBlockersResult{
 			OK:        true,
 			Name:      spec.Name,
-			Path:      spec.Path,
-			Mounted:   false,
 			CanUmount: true,
 			Message:   "not mounted",
 		}
 	}
 	blockers, err := ctrl.Blockers(opCtx, spec)
 	if err != nil {
-		return web.MountBlockersResult{OK: false, Name: spec.Name, Path: spec.Path, Mounted: true, Message: err.Error()}
+		return web.MountBlockersResult{OK: false, Name: spec.Name, Message: err.Error()}
 	}
 	webBlockers := b.mountBlockers(spec, blockers)
 	return web.MountBlockersResult{
 		OK:            true,
 		Name:          spec.Name,
-		Path:          spec.Path,
-		Mounted:       true,
 		CanUmount:     true,
 		HasKillPolicy: spec.KillOnlyIf.Configured(),
 		CanKill:       mountCanKill(webBlockers),
@@ -524,21 +518,17 @@ func (b *WebBackend) AlertMountUsers(ctx context.Context, name string) web.Mount
 	delivery, err := alerter.AlertMountUsers(opCtx, spec, blockers)
 	if err != nil {
 		return web.MountAlertResult{
-			OK:        false,
-			Name:      spec.Name,
-			Path:      spec.Path,
-			Users:     delivery.Users,
-			Delivered: delivery.Delivered,
-			Message:   err.Error(),
+			OK:      false,
+			Name:    spec.Name,
+			Path:    spec.Path,
+			Message: err.Error(),
 		}
 	}
 	return web.MountAlertResult{
-		OK:        true,
-		Name:      spec.Name,
-		Path:      spec.Path,
-		Users:     delivery.Users,
-		Delivered: delivery.Delivered,
-		Message:   "alert sent",
+		OK:      true,
+		Name:    spec.Name,
+		Path:    spec.Path,
+		Message: "alert sent to " + strings.Join(delivery.Users, ", "),
 	}
 }
 

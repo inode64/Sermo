@@ -84,7 +84,8 @@ la autenticación web está habilitada.
 | Acción de servicio | `POST /api/services/{name}/{action}[?no_cascade=1]` | `monitor`, `unmonitor`, `start`, `stop`, `restart`, `reload`, `resume`; `reload` se ofrece solo cuando el servicio informa `can_reload` desde soporte de reload del backend de init o desde un fallback `reload:` válido; `no_cascade` omite los objetivos de `also_apply` en start/stop/restart |
 | Preflight de servicio | `POST /api/services/{name}/preflight` | ejecuta los checks de preflight sin cambiar el estado del servicio |
 | Acción de watch | `POST /api/watches/{name}/{action}` | `monitor`, `unmonitor`, `expand` |
-| Acción de montaje | `POST /api/mounts/{name}/{action}[?force=1&lazy=1&kill=1]` | `mount`, `umount`, `blockers`, `alert`; `force=1` permite `umount -f`, `lazy=1` permite `umount -l` como último fallback y `kill=1` habilita señalización de blockers limitada por `kill_only_if`; `/` rechaza las rutas de desmontaje |
+| Acción de montaje | `POST /api/mounts/{name}/{action}[?force=1&lazy=1&kill=1]` | `mount`, `umount`, `alert`; `force=1` permite `umount -f`, `lazy=1` permite `umount -l` como último fallback y `kill=1` habilita señalización de blockers limitada por `kill_only_if`; `/` rechaza las rutas de desmontaje |
+| Blockers de montaje | `GET /api/mounts/{name}/blockers` | escaneo read-only fresco de blockers de una unidad de montaje; a los guests se les redactan las líneas de comando como en `GET /api/mounts` |
 | Liberación de lock | `POST /api/locks/{service}/release?name=NAME` | libera locks con nombre inactivos, obsoletos o caducados; los locks activos se rechazan |
 | Limpieza de eventos | `POST /api/events/clear?before=TIME` | borra las filas persistidas de eventos/actividad; `before` acepta una duración positiva o un timestamp RFC3339 no futuro |
 | Compactación de estado | `POST /api/state/compact?before=TIME` | poda el historial antiguo de SLA/métricas/eventos y compacta la base de datos de estado; equivale a `sermoctl state compact` |
@@ -340,7 +341,7 @@ Todas las cabeceras salvo Actions son ordenables.
 `GET /api/mounts` incluye un resumen read-only cacheado de blockers para la tabla
 y un objeto `operation` opcional (`action`, `state`, `started_at`, `message`) cuando
 el daemon está montando o desmontando esa unidad.
-Antes de `umount` o `alert`, la UI consulta `POST /api/mounts/{name}/blockers` y
+Antes de `umount` o `alert`, la UI consulta `GET /api/mounts/{name}/blockers` y
 muestra una lista fresca de procesos para la ruta. El diálogo de umount muestra
 siempre la tabla de blockers; `kill blockers` solo se habilita cuando
 `has_kill_policy` y `can_kill` son true, y solo las filas marcadas como

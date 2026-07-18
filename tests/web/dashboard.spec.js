@@ -16,7 +16,6 @@ const services = [
 ];
 
 const dashboard = {
-  generated_at: "2026-07-10T12:00:00Z",
   services,
   mounts: [{
     name: "data.mount", display_name: "Data", category: "storage", path: "/data",
@@ -29,7 +28,7 @@ const dashboard = {
   daemon: { backend: "systemd", hostname: "fixture", host_uptime_seconds: 86400 },
   daemon_metrics: null,
   locks: [],
-  activity: { total_events: 1, last_event_kind: "action", last_event_time: "2026-07-10T12:00:00Z" },
+  activity: { errors: 0, last_event_kind: "action" },
   ready: { ready: true, status: "ok", backend: "systemd", services: 2, watches: 1 },
   live: { status: "ok", uptime: "1h", uptime_seconds: 3600, services: 2, go: "go1.test" },
   monitoring: { monitored: 2, paused: 0, total: 2 },
