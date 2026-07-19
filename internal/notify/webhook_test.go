@@ -19,13 +19,13 @@ func TestPostWebhookDeliversJSON(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	if err := sendWebhook(context.Background(), nil, TypeSlack, srv.URL, []byte(`{"text":"hi"}`)); err != nil {
+	if err := sendWebhook(context.Background(), nil, TypeSlack, srv.URL, nil, []byte(`{"text":"hi"}`)); err != nil {
 		t.Fatalf("slack webhook: %v", err)
 	}
 	if gotContentType != "application/json" || string(gotBody) != `{"text":"hi"}` {
 		t.Fatalf("got Content-Type %q body %q", gotContentType, gotBody)
 	}
-	if err := sendWebhook(context.Background(), nil, TypeTeams, srv.URL, []byte(`{}`)); err != nil {
+	if err := sendWebhook(context.Background(), nil, TypeTeams, srv.URL, nil, []byte(`{}`)); err != nil {
 		t.Fatalf("teams webhook: %v", err)
 	}
 }
@@ -37,7 +37,7 @@ func TestPostWebhookNon2xxCarriesLabelAndSnippet(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	err := postWebhook(context.Background(), "teams", srv.URL, []byte(`{}`))
+	err := postWebhook(context.Background(), "teams", srv.URL, nil, []byte(`{}`))
 	if err == nil || !strings.Contains(err.Error(), "teams webhook returned") || !strings.Contains(err.Error(), "kaboom") {
 		t.Fatalf("err = %v, want teams label and body snippet", err)
 	}
@@ -50,7 +50,7 @@ func TestPostWebhookConnectionError(t *testing.T) {
 	url := srv.URL
 	srv.Close() // refuse the connection
 
-	if err := postWebhook(context.Background(), "slack", url, []byte(`{}`)); err == nil {
+	if err := postWebhook(context.Background(), "slack", url, nil, []byte(`{}`)); err == nil {
 		t.Fatal("expected a connection error")
 	}
 }

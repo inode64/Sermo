@@ -2,6 +2,7 @@ package notify
 
 import (
 	"context"
+	"slices"
 	"testing"
 )
 
@@ -29,9 +30,9 @@ func assertBuildWebhookNotifier(t *testing.T, build func(name string, entry map[
 
 // capturingPost returns a post func that asserts the label equals wantLabel and
 // records the posted url and payload into the given pointers.
-func capturingPost(t *testing.T, wantLabel string, url *string, payload *[]byte) func(context.Context, string, string, []byte) error {
+func capturingPost(t *testing.T, wantLabel string, url *string, payload *[]byte) func(context.Context, string, string, map[string]string, []byte) error {
 	t.Helper()
-	return func(_ context.Context, label, gotURL string, gotPayload []byte) error {
+	return func(_ context.Context, label, gotURL string, _ map[string]string, gotPayload []byte) error {
 		t.Helper()
 		if label != wantLabel {
 			t.Fatalf("label = %q, want %q", label, wantLabel)
@@ -109,8 +110,9 @@ func TestBuildCanSkipTemplates(t *testing.T) {
 
 func TestSupportedTypes(t *testing.T) {
 	got := SupportedTypes()
-	if len(got) != 5 || got[0] != "email" || got[1] != "slack" || got[2] != "teams" || got[3] != "tty" || got[4] != "wall" {
-		t.Fatalf("SupportedTypes = %v, want [email slack teams tty wall]", got)
+	want := []string{TypeEmail, TypeNtfy, TypeSlack, TypeTeams, TypeTTY, TypeWall}
+	if !slices.Equal(got, want) {
+		t.Fatalf("SupportedTypes = %v, want %v", got, want)
 	}
 }
 
