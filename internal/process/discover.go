@@ -439,12 +439,12 @@ func buildSnapshotIndex(snapshot map[int]Identity) *snapshotIndex {
 // indexedSnapshotReader is the optional capability the shared CachingReader
 // implements: serve the index built once per snapshot refresh.
 type indexedSnapshotReader interface {
-	SnapshotIndex() *snapshotIndex
+	snapshotIndex() *snapshotIndex
 }
 
 func snapshotIndexFor(reader Reader) *snapshotIndex {
 	if ir, ok := reader.(indexedSnapshotReader); ok {
-		return ir.SnapshotIndex()
+		return ir.snapshotIndex()
 	}
 	return buildSnapshotIndex(snapshotIdentities(reader))
 }

@@ -55,12 +55,8 @@ func (c *CachingReader) Snapshot() map[int]Identity {
 	return c.snapshotIndex().byPID
 }
 
-// SnapshotIndex serves the pre-derived snapshot index (sorted PIDs, children
+// snapshotIndex serves the pre-derived snapshot index (sorted PIDs, children
 // map) built once per refresh, so per-service discovery does not rebuild it.
-func (c *CachingReader) SnapshotIndex() *snapshotIndex {
-	return c.snapshotIndex()
-}
-
 func (c *CachingReader) snapshotIndex() *snapshotIndex {
 	c.mu.Lock()
 	defer c.mu.Unlock()
