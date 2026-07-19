@@ -1036,6 +1036,22 @@ Notifier types:
     present, are only sent over an encrypted connection.
   - **`from`** — the sender address (a bare `addr` or `Name <addr>`).
   - **`to`** — one or more recipient addresses.
+- **`gotify`** — pushes to a **[Gotify](https://gotify.net) server**
+  (self-hosted push with its own mobile app).
+  - **`webhook`** — the server base URL (`https://push.example.net`).
+  - **`token`** — the Gotify application token, sent as the `X-Gotify-Key`
+    header so it never appears in a URL. The subject travels as the title and
+    the detail (the `SERMO_*` fields) as the message.
+
+```yaml
+# /etc/sermo/notifiers/gotify.yml
+notifiers:
+  push:
+    type: gotify
+    webhook: "https://push.example.net"
+    token: "A.XXXXXXXX"
+```
+
 - **`ntfy`** — publishes to an **[ntfy](https://ntfy.sh) topic** (self-hosted or
   ntfy.sh): push notifications on phone and desktop with no external
   dependency.
