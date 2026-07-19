@@ -314,9 +314,22 @@ var migrations = []string{
 // use; access is serialized onto a single connection (the store is low-traffic
 // and this avoids cross-process "database is locked" surprises).
 type Store struct {
-	db  *sql.DB
-	now func() time.Time
-	ctx context.Context
+	db *sql.DB
+	// reader is a separate read-only connection. Under WAL a reader runs
+	// concurrently with the single writer connection, so a cold rolling-year
+	// SLA aggregation no longer stalls the daemon's per-cycle writes behind
+	// it. Nil (tests constructing Store directly) falls back to db.
+	reader *sql.DB
+	now    func() time.Time
+	ctx    context.Context
+}
+
+// reads returns the connection SELECT-only paths should use.
+func (s *Store) reads() *sql.DB {
+	if s.reader != nil {
+		return s.reader
+	}
+	return s.db
 }
 
 // sqlCtx is the context passed to database/sql *Context methods.
@@ -417,13 +430,30 @@ func OpenContextWith(ctx context.Context, path string, opts Options) (*Store, er
 		db.Close()
 		return nil, fmt.Errorf("migrate state db %s: %w", path, err)
 	}
+	// A dedicated read-only connection keeps heavy aggregations (rolling-year
+	// SLA windows) off the write connection; query_only guards against any
+	// read path accidentally writing through it.
+	reader, err := sql.Open(sqliteDriverName, dsn+"&_pragma=query_only(on)")
+	if err != nil {
+		db.Close()
+		return nil, fmt.Errorf("open state db reader %s: %w", path, err)
+	}
+	reader.SetMaxOpenConns(1)
+	s.reader = reader
 	return s, nil
 }
 
-// Close releases the database handle.
+// Close releases the database handles.
 func (s *Store) Close() error {
+	var readerErr error
+	if s.reader != nil {
+		readerErr = s.reader.Close()
+	}
 	if err := s.db.Close(); err != nil {
 		return fmt.Errorf("close state store: %w", err)
+	}
+	if readerErr != nil {
+		return fmt.Errorf("close state store reader: %w", readerErr)
 	}
 	return nil
 }
@@ -509,7 +539,7 @@ func (s *Store) MonitorState(service string) (MonitorRecord, bool, error) {
 func (s *Store) loadFlagRow(query string, key any, errContext string) (on bool, source string, at time.Time, found bool, err error) {
 	var v int
 	var updated string
-	err = s.db.QueryRowContext(s.sqlCtx(), query, key).Scan(&v, &source, &updated)
+	err = s.reads().QueryRowContext(s.sqlCtx(), query, key).Scan(&v, &source, &updated)
 	switch {
 	case err == sql.ErrNoRows:
 		return false, "", time.Time{}, false, nil
@@ -535,7 +565,7 @@ func (s *Store) upsertFlagRow(query string, key any, on bool, source, errContext
 // default — typically "monitor on").
 func (s *Store) Active(service string) (active, found bool, err error) {
 	var v int
-	err = s.db.QueryRowContext(s.sqlCtx(), "SELECT active FROM monitor_state WHERE service = ?;", service).Scan(&v)
+	err = s.reads().QueryRowContext(s.sqlCtx(), "SELECT active FROM monitor_state WHERE service = ?;", service).Scan(&v)
 	switch {
 	case err == sql.ErrNoRows:
 		return false, false, nil
@@ -581,7 +611,7 @@ func (s *Store) SetOperationSettling(service, action, phase, source string) erro
 // OperationSettling returns a service's current operation-settling row.
 func (s *Store) OperationSettling(service string) (OperationSettlingRecord, bool, error) {
 	var action, phase, source, updated string
-	err := s.db.QueryRowContext(s.sqlCtx(),
+	err := s.reads().QueryRowContext(s.sqlCtx(),
 		`SELECT action, phase, source, updated_at FROM operation_settling WHERE service = ?;`,
 		service,
 	).Scan(&action, &phase, &source, &updated)
@@ -678,7 +708,7 @@ func (s *Store) WatchCheckSnapshots() (map[string]map[string]CheckSnapshotRecord
 }
 
 func (s *Store) groupedCheckSnapshots(query, label string) (map[string]map[string]CheckSnapshotRecord, error) {
-	rows, err := s.db.QueryContext(s.sqlCtx(), query)
+	rows, err := s.reads().QueryContext(s.sqlCtx(), query)
 	if err != nil {
 		return nil, fmt.Errorf("load %s: %w", label, err)
 	}
@@ -883,7 +913,7 @@ func (s *Store) WatchRuntimeState(watch, slot string) (WatchRuntimeRecord, bool,
 		clearSince         int64
 		clearConsecutive   int
 	)
-	err := s.db.QueryRowContext(s.sqlCtx(),
+	err := s.reads().QueryRowContext(s.sqlCtx(),
 		`SELECT firing, last_notify_at, consecutive, history, true_since,
 		        timed_history, last_action_at, recent_actions, current_backoff_ns,
 		        clear_since, clear_consecutive
@@ -1004,7 +1034,7 @@ func (s *Store) RemediationState(service string) (RemediationRecord, bool, error
 		recentActions    string
 		currentBackoffNS int64
 	)
-	err := s.db.QueryRowContext(s.sqlCtx(),
+	err := s.reads().QueryRowContext(s.sqlCtx(),
 		`SELECT last_action_at, recent_actions, current_backoff_ns
 		   FROM remediation_state WHERE service = ?;`,
 		service,
@@ -1059,7 +1089,7 @@ func (s *Store) SetRemediationState(service string, rec RemediationRecord) error
 // RuleWindowStates returns the persisted for/within progress for a service's
 // rules, keyed by rule name.
 func (s *Store) RuleWindowStates(service string) (map[string]RuleWindowRecord, error) {
-	rows, err := s.db.QueryContext(s.sqlCtx(),
+	rows, err := s.reads().QueryContext(s.sqlCtx(),
 		`SELECT rule_name, consecutive, history, true_since, timed_history,
 		        firing, clear_since, clear_consecutive
 		   FROM rule_window_state WHERE service = ? ORDER BY rule_name;`,
@@ -1278,7 +1308,7 @@ func (s *Store) RecentEventsBefore(beforeID int64, limit int) ([]EventRecord, er
 	}
 	query += ` ORDER BY id DESC LIMIT ?;`
 	args = append(args, limit)
-	rows, err := s.db.QueryContext(s.sqlCtx(), query, args...)
+	rows, err := s.reads().QueryContext(s.sqlCtx(), query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("load recent events: %w", err)
 	}
@@ -1518,7 +1548,7 @@ func (s *Store) ProcessUptimeSpans(service string, from, to time.Time) ([]Proces
 	if !to.After(from) {
 		return nil, fmt.Errorf("load process uptime spans for %s: invalid time range", service)
 	}
-	rows, err := s.db.QueryContext(s.sqlCtx(), `SELECT started_at, confirmed_at
+	rows, err := s.reads().QueryContext(s.sqlCtx(), `SELECT started_at, confirmed_at
 		FROM process_uptime_span
 		WHERE service = ? AND confirmed_at >= ? AND started_at < ?
 		ORDER BY started_at;`, service, from.UTC().Unix(), to.UTC().Unix())
@@ -1693,7 +1723,7 @@ func (s *Store) recordSLABucket(query string, keys []any, up bool, at time.Time,
 
 func (s *Store) sumSLA(query string, keys []any, span time.Duration, now time.Time, kind, target string) (up, total int64, err error) {
 	args := append(append([]any{}, keys...), minuteBucket(now.Add(-span)))
-	err = s.db.QueryRowContext(s.sqlCtx(), query, args...).Scan(&up, &total)
+	err = s.reads().QueryRowContext(s.sqlCtx(), query, args...).Scan(&up, &total)
 	if err != nil {
 		return 0, 0, fmt.Errorf("sum %s for %s: %w", kind, target, err)
 	}
@@ -1702,7 +1732,7 @@ func (s *Store) sumSLA(query string, keys []any, span time.Duration, now time.Ti
 
 func (s *Store) loadSLASeries(query string, keys []any, from, to time.Time, kind, target string) ([]SLAPoint, error) {
 	args := append(append([]any{}, keys...), minuteBucket(from), minuteBucket(to))
-	rows, err := s.db.QueryContext(s.sqlCtx(), query, args...)
+	rows, err := s.reads().QueryContext(s.sqlCtx(), query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("load %s series for %s: %w", kind, target, err)
 	}
@@ -1825,7 +1855,7 @@ func (s *Store) slaTimelines(query string, keyArgs []any, now time.Time) ([]SLAW
 		args = append(args, startBucket, segSpan)
 		args = append(args, keyArgs...)
 		args = append(args, startBucket, endBucket)
-		rows, err := s.db.QueryContext(s.sqlCtx(), query, args...)
+		rows, err := s.reads().QueryContext(s.sqlCtx(), query, args...)
 		if err != nil {
 			return nil, fmt.Errorf("load SLA timeline for %s: %w", w.Name, err)
 		}
@@ -1953,7 +1983,7 @@ func (s *Store) RecordMeasurement(service, check string, valueMs float64, at tim
 // MeasurementSummary returns the average/min/max and sample count for a check over
 // the rolling window ending at now (buckets with start >= now-span).
 func (s *Store) MeasurementSummary(service, check string, span time.Duration, now time.Time) (MeasurementStat, error) {
-	return summaryFromRow(s.db.QueryRowContext(s.sqlCtx(),
+	return summaryFromRow(s.reads().QueryRowContext(s.sqlCtx(),
 		`SELECT COALESCE(SUM(n),0), SUM(sum_ms), MIN(min_ms), MAX(max_ms)
 		   FROM measurement WHERE service = ? AND check_name = ? AND bucket >= ?;`,
 		service, check, minuteBucket(now.Add(-span))))
@@ -2021,7 +2051,7 @@ func (s *Store) RecordMetric(service, check, metric string, value float64, at ti
 // MetricSummary returns a named metric's average/min/max and sample count over the
 // rolling window ending at now.
 func (s *Store) MetricSummary(service, check, metric string, span time.Duration, now time.Time) (MeasurementStat, error) {
-	return summaryFromRow(s.db.QueryRowContext(s.sqlCtx(),
+	return summaryFromRow(s.reads().QueryRowContext(s.sqlCtx(),
 		`SELECT COALESCE(SUM(n),0), SUM(sum_v), MIN(min_v), MAX(max_v)
 		   FROM measurement_metric WHERE service = ? AND check_name = ? AND metric = ? AND bucket >= ?;`,
 		service, check, metric, minuteBucket(now.Add(-span))))
@@ -2054,7 +2084,7 @@ func (s *Store) RecordDaemonMetric(metric string, value float64, at time.Time) e
 // DaemonMetricSummary returns a daemon metric's average/min/max and sample count
 // over the rolling window ending at now.
 func (s *Store) DaemonMetricSummary(metric string, span time.Duration, now time.Time) (MeasurementStat, error) {
-	return summaryFromRow(s.db.QueryRowContext(s.sqlCtx(),
+	return summaryFromRow(s.reads().QueryRowContext(s.sqlCtx(),
 		`SELECT COALESCE(SUM(n),0), SUM(sum_v), MIN(min_v), MAX(max_v)
 		   FROM daemon_metric WHERE metric = ? AND bucket >= ?;`,
 		metric, minuteBucket(now.Add(-span))))
@@ -2087,7 +2117,7 @@ func (s *Store) RecordServiceMetric(service, metric string, value float64, at ti
 // ServiceMetricSummary returns a service runtime metric's average/min/max and
 // sample count over the rolling window ending at now.
 func (s *Store) ServiceMetricSummary(service, metric string, span time.Duration, now time.Time) (MeasurementStat, error) {
-	return summaryFromRow(s.db.QueryRowContext(s.sqlCtx(),
+	return summaryFromRow(s.reads().QueryRowContext(s.sqlCtx(),
 		`SELECT COALESCE(SUM(n),0), SUM(sum_v), MIN(min_v), MAX(max_v)
 		   FROM service_metric WHERE service = ? AND metric = ? AND bucket >= ?;`,
 		service, metric, minuteBucket(now.Add(-span))))
@@ -2113,7 +2143,7 @@ func (s *Store) ServiceMetricSeries(service, metric string, from, to time.Time) 
 // context.
 func (s *Store) aggregateSeries(query, kind, target string, args ...any) ([]MeasurementPoint, error) {
 	description := kind + " series for " + target
-	rows, err := s.db.QueryContext(s.sqlCtx(), query, args...)
+	rows, err := s.reads().QueryContext(s.sqlCtx(), query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("load %s: %w", description, err)
 	}
