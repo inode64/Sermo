@@ -45,15 +45,17 @@ func ruleStatePersister(store RuleStateStore, emit func(Event), service string, 
 		return nil
 	}
 	plan := newRuleStatePlan(ruleSet)
+	// Change-gated like the watch runtime state: a steady cycle whose rule
+	// state matches the last successful persist writes nothing. The closure
+	// runs only on its service's worker goroutine, so no locking is needed.
+	var lastPrimed bool
+	var lastRemediation state.RemediationRecord
+	var lastWindows map[string]state.RuleWindowRecord
 	return func(remediation *rules.RemediationState, windows map[string]*rules.WindowState) {
+		remediationRecord := state.RemediationRecord{}
 		if plan.hasRemediation {
-			if err := store.SetRemediationState(service, remediationToRecord(remediation)); err != nil {
-				emitRuleStateError(emit, service, "persist remediation state", err)
-			}
-		} else if err := store.SetRemediationState(service, state.RemediationRecord{}); err != nil {
-			emitRuleStateError(emit, service, "delete remediation state", err)
+			remediationRecord = remediationToRecord(remediation)
 		}
-
 		records := map[string]state.RuleWindowRecord{}
 		for name, window := range windows {
 			if !plan.tracks(name) || window == nil {
@@ -61,10 +63,73 @@ func ruleStatePersister(store RuleStateStore, emit func(Event), service string, 
 			}
 			records[name] = ruleWindowRecord(window)
 		}
+		if lastPrimed && remediationRecordsEqual(remediationRecord, lastRemediation) && ruleWindowMapsEqual(records, lastWindows) {
+			return
+		}
+
+		persisted := true
+		context := "persist remediation state"
+		if !plan.hasRemediation {
+			context = "delete remediation state"
+		}
+		if err := store.SetRemediationState(service, remediationRecord); err != nil {
+			emitRuleStateError(emit, service, context, err)
+			persisted = false
+		}
 		if err := store.SetRuleWindowStates(service, records); err != nil {
 			emitRuleStateError(emit, service, "persist rule window state", err)
+			persisted = false
+		}
+		if persisted {
+			lastPrimed, lastRemediation, lastWindows = true, remediationRecord, records
 		}
 	}
+}
+
+// remediationRecordsEqual compares records with time.Equal so monotonic-clock
+// noise never defeats the change gate.
+func remediationRecordsEqual(a, b state.RemediationRecord) bool {
+	if !a.LastActionAt.Equal(b.LastActionAt) || a.CurrentBackoff != b.CurrentBackoff || len(a.RecentActions) != len(b.RecentActions) {
+		return false
+	}
+	for i := range a.RecentActions {
+		if !a.RecentActions[i].Equal(b.RecentActions[i]) {
+			return false
+		}
+	}
+	return true
+}
+
+func ruleWindowRecordsEqual(a, b state.RuleWindowRecord) bool {
+	if a.Consecutive != b.Consecutive || a.Firing != b.Firing || a.ClearConsecutive != b.ClearConsecutive ||
+		!a.TrueSince.Equal(b.TrueSince) || !a.ClearSince.Equal(b.ClearSince) ||
+		len(a.History) != len(b.History) || len(a.TimedHistory) != len(b.TimedHistory) {
+		return false
+	}
+	for i := range a.History {
+		if a.History[i] != b.History[i] {
+			return false
+		}
+	}
+	for i := range a.TimedHistory {
+		if a.TimedHistory[i].Match != b.TimedHistory[i].Match || !a.TimedHistory[i].At.Equal(b.TimedHistory[i].At) {
+			return false
+		}
+	}
+	return true
+}
+
+func ruleWindowMapsEqual(a, b map[string]state.RuleWindowRecord) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for name, rec := range a {
+		other, ok := b[name]
+		if !ok || !ruleWindowRecordsEqual(rec, other) {
+			return false
+		}
+	}
+	return true
 }
 
 type ruleStatePlan struct {
