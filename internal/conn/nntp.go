@@ -1,11 +1,9 @@
 package conn
 
 import (
-	"bufio"
 	"context"
 	"fmt"
 	"io"
-	"net/textproto"
 	"strconv"
 )
 
@@ -41,13 +39,12 @@ func (nntpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 // prohibited), authenticates with AUTHINFO USER/PASS when a user is supplied, and
 // quits. NNTP shares the 3-digit status-line format parsed by net/textproto.
 func nntpHandshake(rw io.ReadWriter, cfg Config) (Result, error) {
-	tp := textproto.NewReader(bufio.NewReader(rw))
-	code, greeting, err := tp.ReadResponse(0)
+	tp, code, greeting, err := readTextGreeting(rw)
 	if err != nil {
 		return Result{}, err
 	}
 	if code != nntpStatusPostingAllowed && code != nntpStatusPostingProhibited {
-		return Result{}, fmt.Errorf("unexpected greeting: %d %s", code, greeting)
+		return Result{}, unexpectedGreeting(code, greeting)
 	}
 	res := Result{Extra: map[string]string{
 		extraGreeting:           greeting,
