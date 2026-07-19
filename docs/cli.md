@@ -116,6 +116,13 @@ window Sermo can confirm a trusted service process was alive. It can include
 time before a `sermod` restart when the process's start time proves that the
 same process predates the new daemon.
 
+The coverage ratio is measured against the **knowable period** of each window —
+from the earliest recorded process start (the PID's kernel start time) to now —
+not against the full window span. Time before any evidence could exist is
+unknown and excluded, so a service continuously alive since its first evidence
+reads 100% in every window, including year. Gaps inside the knowable period (a
+process restart) still count against the ratio.
+
 This is evidence of process continuity, **not** a synthetic SLA sample or a
 health result: it cannot make HTTP, TCP, command or any other check pass, and
 it does not hide a recorded check failure. A window with no confirmed process
