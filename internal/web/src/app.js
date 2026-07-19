@@ -1596,6 +1596,7 @@ function clearGlobalTargetFilters(target) {
       if (panel) {
         panel.query = "";
         panel.status = filterAll;
+        panel.collapsedGroups.delete(categoryOf(target.item, "service"));
       } else {
         svcQuery = "";
         svcStatus = filterAll;
@@ -1610,6 +1611,7 @@ function clearGlobalTargetFilters(target) {
       panel.query = "";
       panel.status = filterAll;
       panel.type = filterAll;
+      panel.collapsedGroups.delete(watchGroupOf(target.item));
       renderWatches();
       break;
     }
@@ -1631,6 +1633,7 @@ function clearGlobalTargetFilters(target) {
       mountQuery = "";
       mountStatus = filterAll;
       mountCategory = filterAll;
+      mountCollapsedGroups.delete(categoryOf(target.item, "storage"));
       renderMounts();
       break;
   }
