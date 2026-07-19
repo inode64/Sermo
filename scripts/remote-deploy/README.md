@@ -35,6 +35,30 @@ The remote scripts must run as root on the target host:
   after copying any required evidence locally, remove the exact staging directory
   created for that run.
 
+## Fleet update orchestrator
+
+`update_fleet.sh` drives a whole-fleet update from the local checkout: it
+builds, prepares the payload once, then per host uploads it and runs
+`remote_update_payload.sh` over SSH (as root). With `--with-config` it also
+runs `remote_collect_inventory.sh` (read-only), regenerates that host's
+configuration locally with `generate_install_config.py`, backs up `/etc/sermo`
+to `/etc/sermo.backup.<run-id>` on the host and applies the generated tree with
+`remote_apply.sh`. Regeneration replaces the generated config directories, so
+review the run's `configs/<host>/` output before relying on it where hosts
+carry manual tweaks.
+
+```sh
+scripts/remote-deploy/update_fleet.sh --with-config --hosts fleet.txt
+scripts/remote-deploy/update_fleet.sh --dry-run web1 web2   # plan only
+```
+
+It honors the first-four-host gate below (pause and confirm before the fifth
+host; `--yes` skips the pause), records and skips unreachable or unhealthy
+hosts, fetches failed hosts' `out.tar.gz` artifacts into its run root, and
+cleans up the exact remote staging directories it created on success.
+`remote_collect_inventory.sh` mirrors `remote_stage.sh`'s read-only evidence
+collection for already installed hosts — keep both in step.
+
 ## Fleet install and update failure handling
 
 The first-four-host gate applies only to workflows that install, update, apply
