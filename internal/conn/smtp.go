@@ -1,12 +1,10 @@
 package conn
 
 import (
-	"bufio"
 	"context"
 	"encoding/base64"
 	"fmt"
 	"io"
-	"net/textproto"
 )
 
 func init() { Register(smtpProtocol{}) }
@@ -39,14 +37,13 @@ func (smtpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 // authenticates with AUTH PLAIN when a user is supplied, and quits. The
 // multi-line RFC 959 reply format is parsed by net/textproto.
 func smtpHandshake(rw io.ReadWriter, cfg Config) (Result, error) {
-	tp := textproto.NewReader(bufio.NewReader(rw))
-	code, greeting, err := tp.ReadResponse(0)
+	tp, code, greeting, err := readTextGreeting(rw)
 	if err != nil {
 		return Result{}, err
 	}
 	res := Result{Extra: map[string]string{extraGreeting: greeting}}
 	if code != smtpStatusGreetingReady {
-		return Result{}, fmt.Errorf("unexpected greeting: %d %s", code, greeting)
+		return Result{}, unexpectedGreeting(code, greeting)
 	}
 
 	if _, err := fmt.Fprint(rw, smtpCommandEHLO); err != nil {

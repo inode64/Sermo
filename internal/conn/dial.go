@@ -1,11 +1,13 @@
 package conn
 
 import (
+	"bufio"
 	"context"
 	"crypto/tls"
 	"fmt"
 	"io"
 	"net"
+	"net/textproto"
 	"time"
 )
 
@@ -153,6 +155,21 @@ func dialTCPDeadline(ctx context.Context, cfg Config, defaultPort int) (net.Conn
 // command, reads one greeting line and parses it with parse; a foreign reply
 // (parse ok=false) fails with errFormat applied to the offending line. The
 // command→greeting skeleton shared by clamd, spamd and asterisk.
+// readTextGreeting reads a server's 3-digit greeting through net/textproto —
+// the handshake prologue ftp, smtp and nntp share. The returned reader carries
+// the buffered stream, so the caller must keep using it for later responses.
+func readTextGreeting(rw io.ReadWriter) (*textproto.Reader, int, string, error) {
+	tp := textproto.NewReader(bufio.NewReader(rw))
+	code, greeting, err := tp.ReadResponse(0)
+	return tp, code, greeting, err
+}
+
+// unexpectedGreeting is the shared refusal for a greeting whose status code is
+// not one the protocol accepts.
+func unexpectedGreeting(code int, greeting string) error {
+	return fmt.Errorf("unexpected greeting: %d %s", code, greeting)
+}
+
 func probeLineCommand(ctx context.Context, cfg Config, defaultPort int, command string, parse func(line string) (Result, bool), errFormat string) (Result, error) {
 	c, err := dialDeadline(ctx, cfg, defaultPort)
 	if err != nil {
