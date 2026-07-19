@@ -120,6 +120,7 @@ const (
 	apiSegmentServices     = "services"
 	apiSegmentSLA          = "sla"
 	apiSegmentState        = "state"
+	apiSegmentStream       = "stream"
 	apiSegmentWatches      = "watches"
 	apiSegmentWhoami       = "whoami"
 )
@@ -211,6 +212,7 @@ const (
 	apiPathReload       = apiPathPrefix + apiSegmentReload
 	apiPathServices     = apiPathPrefix + apiSegmentServices
 	apiPathState        = apiPathPrefix + apiSegmentState
+	apiPathStream       = apiPathPrefix + apiSegmentStream
 	apiPathWatches      = apiPathPrefix + apiSegmentWatches
 	apiPathWhoami       = apiPathPrefix + apiSegmentWhoami
 )
@@ -245,6 +247,7 @@ const (
 	routeAPIServiceEvents  = routeMethodGet + apiPathServices + "/" + routeVarName + "/" + apiSegmentEvents
 	routeAPIAppEvents      = routeMethodGet + apiPathApplications + "/" + routeVarName + "/" + apiSegmentEvents
 	routeAPIEvents         = routeMethodGet + apiPathEvents
+	routeAPIStream         = routeMethodGet + apiPathStream
 	routeAPIEventsClear    = routeMethodPost + apiPathEvents + "/" + apiActionClear
 	routeAPIStateCompact   = routeMethodPost + apiPathState + "/" + apiActionCompact
 	routeAPIPanic          = routeMethodPost + apiPathPanic + "/" + routeVarAction
@@ -1154,6 +1157,12 @@ type Server struct {
 	// AccessLog appends operator POST audit records when engine.access is set.
 	AccessLog *logfile.Writer
 
+	// Changes, if set, enables GET /api/stream: a Server-Sent Events channel
+	// that pushes a payload-free "change" signal whenever the daemon emits an
+	// event, so connected dashboards refetch immediately instead of waiting
+	// for their next poll. Nil disables the endpoint (404).
+	Changes *Broadcaster
+
 	started  time.Time       // when the server began serving; for /livez uptime
 	shutdown context.Context // daemon lifetime; set in Run
 }
@@ -1215,6 +1224,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc(routeAPIServiceEvents, s.handleServiceEvents)
 	mux.HandleFunc(routeAPIAppEvents, s.handleApplicationEvents)
 	mux.HandleFunc(routeAPIEvents, s.handleEvents)
+	mux.HandleFunc(routeAPIStream, s.handleStream)
 	mux.HandleFunc(routeAPIEventsClear, s.handleEventsClear)
 	mux.HandleFunc(routeAPIStateCompact, s.handleStateCompact)
 	mux.HandleFunc(routeAPIPanic, s.handlePanic)
