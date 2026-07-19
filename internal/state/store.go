@@ -341,7 +341,7 @@ func (s *Store) exec(ctx context.Context, query string, args ...any) (sql.Result
 		stmt, err = s.db.PrepareContext(ctx, query)
 		if err != nil {
 			s.stmtMu.Unlock()
-			return nil, err
+			return nil, fmt.Errorf("prepare state statement: %w", err)
 		}
 		if s.stmts == nil {
 			s.stmts = map[string]*sql.Stmt{}
@@ -349,7 +349,11 @@ func (s *Store) exec(ctx context.Context, query string, args ...any) (sql.Result
 		s.stmts[query] = stmt
 	}
 	s.stmtMu.Unlock()
-	return stmt.ExecContext(ctx, args...)
+	res, err := stmt.ExecContext(ctx, args...)
+	if err != nil {
+		return nil, fmt.Errorf("exec state statement: %w", err)
+	}
+	return res, nil
 }
 
 // reads returns the connection SELECT-only paths should use.
@@ -2063,7 +2067,7 @@ func (s *Store) PruneMeasurements(before time.Time) (int64, error) {
 // per-minute bucket tables. table is always a compile-time literal, never
 // operator input.
 func (s *Store) pruneBuckets(table string, before time.Time) (int64, error) {
-	res, err := s.exec(s.sqlCtx(), `DELETE FROM `+table+` WHERE bucket < ?;`, minuteBucket(before)) //nolint:gosec // table is a package-internal literal
+	res, err := s.exec(s.sqlCtx(), `DELETE FROM `+table+` WHERE bucket < ?;`, minuteBucket(before))
 	if err != nil {
 		return 0, fmt.Errorf("prune %s buckets before %s: %w", table, before.UTC().Format(time.RFC3339), err)
 	}
