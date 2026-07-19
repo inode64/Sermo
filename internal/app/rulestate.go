@@ -84,7 +84,12 @@ func ruleStatePersister(store RuleStateStore, emit func(Event), service string, 
 		}
 		if persisted {
 			lastPrimed, lastRemediation, lastWindows = true, remediationRecord, records
+			return
 		}
+		// A partial failure (one of the two independent writes succeeded) leaves
+		// the DB diverged from `last`. Drop the gate so the next cycle rewrites
+		// both tables unconditionally, restoring the pre-gate self-healing.
+		lastPrimed = false
 	}
 }
 
