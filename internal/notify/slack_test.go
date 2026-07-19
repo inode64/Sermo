@@ -15,10 +15,12 @@ func TestBuildSlackRequiresWebhook(t *testing.T) {
 func TestSlackSendPostsPayload(t *testing.T) {
 	var gotURL string
 	var gotPayload []byte
-	s := &Slack{
+	s := &webhookNotifier{
 		name:    "team",
+		typ:     TypeSlack,
 		webhook: "https://hooks.slack.com/services/x",
 		post:    capturingPost(t, TypeSlack, &gotURL, &gotPayload),
+		payload: slackPayload,
 	}
 	if err := s.Send(context.Background(), Message{Subject: "[sermo] storage-root: 95% used", Body: "SERMO_PATH=/"}); err != nil {
 		t.Fatal(err)

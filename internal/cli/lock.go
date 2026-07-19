@@ -39,11 +39,8 @@ func (a App) runLock(ctx context.Context, opts options) int {
 }
 
 func (a App) runLockAcquire(opts options, cfg *config.Config, locker locks.NamedLocker, args []string) int {
-	if len(args) == 0 {
-		return a.commandUsageError(commandLock, "lock acquire requires a service name")
-	}
-	if len(args) > 1 {
-		return a.commandUsageError(commandLock, "lock acquire takes exactly one service name")
+	if code := a.requireSingleServiceName(len(args) > 0, len(args), commandLock, "lock acquire"); code != exitSuccess {
+		return code
 	}
 	if code := requireLockMeta(a, opts); code != exitSuccess {
 		return code
@@ -61,11 +58,8 @@ func (a App) runLockAcquire(opts options, cfg *config.Config, locker locks.Named
 }
 
 func (a App) runLockRelease(opts options, cfg *config.Config, locker locks.NamedLocker, args []string) int {
-	if len(args) == 0 {
-		return a.commandUsageError(commandLock, "lock release requires a service name")
-	}
-	if len(args) > 1 {
-		return a.commandUsageError(commandLock, "lock release takes exactly one service name")
+	if code := a.requireSingleServiceName(len(args) > 0, len(args), commandLock, "lock release"); code != exitSuccess {
+		return code
 	}
 	service := canonicalServiceIfKnown(cfg, args[0])
 	if err := locker.Release(service, opts.name); err != nil {

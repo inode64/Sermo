@@ -296,14 +296,7 @@ func loadPersistentMetricTriplet(check string, at time.Time, since time.Duration
 }
 
 func (s *DaemonMetricSampler) trimLocked(cutoff time.Time) {
-	i := 0
-	for i < len(s.samples) && s.samples[i].at.Before(cutoff) {
-		i++
-	}
-	if i > 0 {
-		copy(s.samples, s.samples[i:])
-		s.samples = s.samples[:len(s.samples)-i]
-	}
+	s.samples = trimBefore(s.samples, cutoff, func(sample daemonMetricSample) time.Time { return sample.at })
 }
 
 func samplesSince(samples []daemonMetricSample, cutoff time.Time) []daemonMetricSample {

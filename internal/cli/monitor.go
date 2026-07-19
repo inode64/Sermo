@@ -20,11 +20,8 @@ func (a App) runMonitor(ctx context.Context, opts options, pause bool) int {
 		verb = commandUnmonitor
 	}
 	service := opts.service()
-	if service == "" {
-		return a.commandUsageError(verb, verb+" requires a service name")
-	}
-	if len(opts.args) > 1 {
-		return a.commandUsageError(verb, verb+" takes exactly one service name")
+	if code := a.requireSingleServiceName(service != "", len(opts.args), verb, verb); code != exitSuccess {
+		return code
 	}
 
 	cfg, code := a.loadConfig(opts)

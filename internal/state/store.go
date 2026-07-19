@@ -524,11 +524,7 @@ func (s *Store) loadFlagRow(query string, key any, errContext string) (on bool, 
 // upsertFlagRow writes an on/off flag row keyed by key with source and the
 // current timestamp; the write half shared by the boolean flag tables.
 func (s *Store) upsertFlagRow(query string, key any, on bool, source, errContext string) error {
-	v := 0
-	if on {
-		v = 1
-	}
-	if _, err := s.db.ExecContext(s.sqlCtx(), query, key, v, source, s.now().UTC().Format(time.RFC3339)); err != nil {
+	if _, err := s.db.ExecContext(s.sqlCtx(), query, key, boolInt(on), source, s.now().UTC().Format(time.RFC3339)); err != nil {
 		return fmt.Errorf("%s: %w", errContext, err)
 	}
 	return nil
@@ -961,10 +957,7 @@ func (s *Store) SetWatchRuntimeState(watch, slot string, rec WatchRuntimeRecord)
 	if err != nil {
 		return err
 	}
-	firing := 0
-	if rec.Firing {
-		firing = 1
-	}
+	firing := boolInt(rec.Firing)
 	_, err = s.db.ExecContext(s.sqlCtx(),
 		`INSERT INTO watch_runtime_state (
 		   watch, slot, firing, last_notify_at, consecutive, history, true_since,
@@ -1129,10 +1122,7 @@ func (s *Store) SetRuleWindowStates(service string, records map[string]RuleWindo
 			if err != nil {
 				return err
 			}
-			firing := 0
-			if rec.Firing {
-				firing = 1
-			}
+			firing := boolInt(rec.Firing)
 			if _, err := tx.ExecContext(s.sqlCtx(),
 				`INSERT INTO rule_window_state (service, rule_name, consecutive, history, true_since, timed_history,
 				                                firing, clear_since, clear_consecutive)
@@ -1668,11 +1658,7 @@ func processUptimeCoverage(spans []ProcessUptimeSpan, from, to time.Time) time.D
 }
 
 func (s *Store) recordSLABucket(query string, keys []any, up bool, at time.Time, kind, target string) error {
-	upCount := 0
-	if up {
-		upCount = 1
-	}
-	args := append(append([]any{}, keys...), minuteBucket(at), upCount)
+	args := append(append([]any{}, keys...), minuteBucket(at), boolInt(up))
 	if _, err := s.db.ExecContext(s.sqlCtx(), query, args...); err != nil {
 		return fmt.Errorf("record %s for %s: %w", kind, target, err)
 	}

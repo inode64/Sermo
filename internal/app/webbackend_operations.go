@@ -64,29 +64,26 @@ func (b *WebBackend) Operations(_ context.Context) web.OperationSlots {
 	return web.OperationSlots{InUse: inUse, Total: total, ActiveUsers: users}
 }
 
+// operateError emits the error event for a rejected service action and returns
+// the matching failed ActionResult.
+func (b *WebBackend) operateError(name, action, msg string) web.ActionResult {
+	if b.emit != nil {
+		b.emit(Event{Service: name, Kind: eventKindError, Action: action, Message: msg})
+	}
+	return web.ActionResult{OK: false, Message: msg}
+}
+
 // Operate runs a start/stop/restart/reload/resume action on a service.
 func (b *WebBackend) Operate(ctx context.Context, name, action string, opts web.OperateOpts) web.ActionResult {
 	e := b.entries[name]
 	if e == nil {
-		msg := unknownServiceMessage + name
-		if b.emit != nil {
-			b.emit(Event{Service: name, Kind: eventKindError, Action: action, Message: msg})
-		}
-		return web.ActionResult{OK: false, Message: msg}
+		return b.operateError(name, action, unknownServiceMessage+name)
 	}
 	if e.disabled {
-		msg := serviceSubjectPrefix + name + " is disabled in configuration"
-		if b.emit != nil {
-			b.emit(Event{Service: name, Kind: eventKindError, Action: action, Message: msg})
-		}
-		return web.ActionResult{OK: false, Message: msg}
+		return b.operateError(name, action, serviceSubjectPrefix+name+" is disabled in configuration")
 	}
 	if action == string(rules.ActionReload) && !e.canReload {
-		msg := serviceSubjectPrefix + name + " does not support reload"
-		if b.emit != nil {
-			b.emit(Event{Service: name, Kind: eventKindError, Action: action, Message: msg})
-		}
-		return web.ActionResult{OK: false, Message: msg}
+		return b.operateError(name, action, serviceSubjectPrefix+name+" does not support reload")
 	}
 
 	var r operation.Result

@@ -60,6 +60,37 @@ func sendWebhook(ctx context.Context, post webhookPoster, label, webhook string,
 	return post(ctx, label, webhook, payload)
 }
 
+// webhookNotifier is the shared shape of the webhook-posting notifiers (Slack,
+// Teams): a named webhook plus the payload renderer that gives each service its
+// body format. Uses only net/http (no external dependency).
+type webhookNotifier struct {
+	name    string
+	typ     string
+	webhook string
+	post    webhookPoster
+	payload func(Message) []byte
+}
+
+// Name returns the notifier's configured name.
+func (n *webhookNotifier) Name() string { return n.name }
+
+// Type returns the notifier type identifier.
+func (n *webhookNotifier) Type() string { return n.typ }
+
+// Send posts the rendered message to the configured webhook.
+func (n *webhookNotifier) Send(ctx context.Context, msg Message) error {
+	return sendWebhook(ctx, n.post, n.typ, n.webhook, n.payload(msg))
+}
+
+// newWebhookNotifier constructs a webhook notifier from a config entry.
+func newWebhookNotifier(typ, name string, entry map[string]any, payload func(Message) []byte) (Notifier, error) {
+	webhook, err := webhookURL(typ, entry)
+	if err != nil {
+		return nil, err
+	}
+	return &webhookNotifier{name: name, typ: typ, webhook: webhook, payload: payload}, nil
+}
+
 // postWebhook POSTs a JSON payload and fails on a non-2xx answer; label names
 // the transport in error messages.
 func postWebhook(ctx context.Context, label, webhook string, payload []byte) error {
