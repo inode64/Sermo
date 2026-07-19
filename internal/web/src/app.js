@@ -6313,21 +6313,23 @@ function renderActionConfirm() {
 }
 
 async function runConfirmPreflight() {
-  if (!confirmCtx) return;
-  syncConfirmPreflightButton(confirmCtx.action, { running: true });
+  const ctx = confirmCtx;
+  if (!ctx) return;
+  syncConfirmPreflightButton(ctx.action, { running: true });
   $("#confirm-preflight-btn").textContent = "running…";
   try {
-    const res = await fetch(servicePreflightAPI(confirmCtx.name), csrfPostOptions());
+    const res = await fetch(servicePreflightAPI(ctx.name), csrfPostOptions());
     if (!res.ok) throw new Error("HTTP " + res.status);
-    confirmCtx.preflight = await res.json();
-    renderActionConfirm();
+    ctx.preflight = await res.json();
   } catch (e) {
-    confirmCtx.preflight = { ok: false, checks: [{ name: "preflight", ok: false, message: e.message }] };
-    renderActionConfirm();
-  } finally {
-    $("#confirm-preflight-btn").textContent = "run preflight";
-    syncConfirmPreflightButton(confirmCtx.action);
+    ctx.preflight = { ok: false, checks: [{ name: "preflight", ok: false, message: e.message }] };
   }
+  // The dialog may close (Esc/Cancel) while the request is in flight, which
+  // nulls confirmCtx; a stale result must not touch the closed dialog.
+  if (confirmCtx !== ctx) return;
+  renderActionConfirm();
+  $("#confirm-preflight-btn").textContent = "run preflight";
+  syncConfirmPreflightButton(ctx.action);
 }
 
 function preflightRows(checks) {
