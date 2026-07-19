@@ -25,7 +25,6 @@ type daemonWatchReading struct {
 type daemonWatchDetail struct {
 	Name          string               `json:"name"`
 	State         string               `json:"state"`
-	CheckType     string               `json:"check_type"`
 	LastCheckedAt string               `json:"last_checked_at"`
 	Readings      []daemonWatchReading `json:"readings"`
 }

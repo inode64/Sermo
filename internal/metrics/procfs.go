@@ -35,7 +35,6 @@ const (
 const (
 	procStatUTimeIndex            = 11
 	procStatSTimeIndex            = 12
-	procStatStartTimeIndex        = 19
 	procStatmResidentPagesIndex   = 1
 	procStatCPULabelIndex         = 0
 	procStatCPUValuesStartIndex   = procStatCPULabelIndex + 1

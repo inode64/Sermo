@@ -41,11 +41,9 @@ type clockCheck struct {
 type clockSample struct {
 	server           string
 	iface            string
-	perIface         map[string]any
 	offsetSeconds    float64
 	offsetAbsSeconds float64
 	stratum          int
-	latency          time.Duration
 	data             map[string]any
 }
 
@@ -195,11 +193,9 @@ func parseClockSample(server, iface string, perIface map[string]any, port int, l
 	return clockSample{
 		server:           server,
 		iface:            iface,
-		perIface:         perIface,
 		offsetSeconds:    offsetSeconds,
 		offsetAbsSeconds: offsetAbsSeconds,
 		stratum:          stratum,
-		latency:          latency,
 		data:             data,
 	}, nil
 }

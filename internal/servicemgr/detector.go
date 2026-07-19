@@ -60,27 +60,15 @@ type Detector struct {
 	Timeout time.Duration
 }
 
-// Detection describes the selected backend and how it was selected.
+// Detection describes the selected backend.
 type Detection struct {
 	Backend Backend
-	Source  string // how Backend was chosen: SourceRequested or SourceAuto
-	Systemd BackendProbe
-	OpenRC  BackendProbe
 }
-
-// Detection source values for Detection.Source.
-const (
-	// SourceRequested: the backend was explicitly requested (config/flag).
-	SourceRequested = "requested"
-	// SourceAuto: the backend was chosen by auto-detection.
-	SourceAuto = "auto"
-)
 
 // BackendProbe contains probe data for one backend.
 type BackendProbe struct {
 	Available bool
 	Active    bool
-	State     string
 }
 
 // NewDetector returns a detector using the real host.
@@ -115,12 +103,12 @@ func (d Detector) Detect(ctx context.Context, requested Backend) (Detection, err
 		if !systemd.Available {
 			return Detection{}, errors.New("requested backend systemd is not available")
 		}
-		return Detection{Backend: BackendSystemd, Source: SourceRequested, Systemd: systemd, OpenRC: openrc}, nil
+		return Detection{Backend: BackendSystemd}, nil
 	case BackendOpenRC:
 		if !openrc.Available {
 			return Detection{}, errors.New("requested backend openrc is not available")
 		}
-		return Detection{Backend: BackendOpenRC, Source: SourceRequested, Systemd: systemd, OpenRC: openrc}, nil
+		return Detection{Backend: BackendOpenRC}, nil
 	case BackendAuto:
 	default:
 		return Detection{}, fmt.Errorf("unsupported backend %q", requested)
@@ -128,15 +116,15 @@ func (d Detector) Detect(ctx context.Context, requested Backend) (Detection, err
 
 	switch {
 	case systemd.Available && !openrc.Available:
-		return Detection{Backend: BackendSystemd, Source: SourceAuto, Systemd: systemd, OpenRC: openrc}, nil
+		return Detection{Backend: BackendSystemd}, nil
 	case openrc.Available && !systemd.Available:
-		return Detection{Backend: BackendOpenRC, Source: SourceAuto, Systemd: systemd, OpenRC: openrc}, nil
+		return Detection{Backend: BackendOpenRC}, nil
 	case systemd.Available && openrc.Available:
 		if systemd.Active {
-			return Detection{Backend: BackendSystemd, Source: SourceAuto, Systemd: systemd, OpenRC: openrc}, nil
+			return Detection{Backend: BackendSystemd}, nil
 		}
 		if openrc.Active {
-			return Detection{Backend: BackendOpenRC, Source: SourceAuto, Systemd: systemd, OpenRC: openrc}, nil
+			return Detection{Backend: BackendOpenRC}, nil
 		}
 		return Detection{}, errors.New("ambiguous backend: both systemd and openrc appear available; set --backend, SERMO_BACKEND or engine.backend")
 	default:
@@ -159,7 +147,6 @@ func (d Detector) probeSystemd(ctx context.Context) BackendProbe {
 	return BackendProbe{
 		Available: state != "",
 		Active:    active,
-		State:     state,
 	}
 }
 
@@ -170,17 +157,14 @@ func (d Detector) probeOpenRC(ctx context.Context) BackendProbe {
 
 	hasRunDir := d.Probe.PathExists(openRCRuntimeDir)
 	rcStatusWorks := false
-	state := ""
 	if d.Probe.CommandExists(cmdRcStatus) {
-		result, err := d.run(ctx, cmdRcStatus)
-		state = strings.TrimSpace(result.Stdout)
+		_, err := d.run(ctx, cmdRcStatus)
 		rcStatusWorks = err == nil
 	}
 
 	return BackendProbe{
 		Available: hasRunDir || rcStatusWorks,
 		Active:    hasRunDir && rcStatusWorks,
-		State:     state,
 	}
 }
 

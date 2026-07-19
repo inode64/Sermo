@@ -32,9 +32,6 @@ const (
 	DaysPerMonthApprox = 30
 	// MonthsPerYear converts display years to display months.
 	MonthsPerYear = 12
-	// DaysPerYearApprox is the display-year length: exactly 12 30-day months
-	// (360 days), so month components can never overflow into a 13th month.
-	DaysPerYearApprox = MonthsPerYear * DaysPerMonthApprox
 )
 
 // Duration display promotes to a larger head unit only well past that unit's

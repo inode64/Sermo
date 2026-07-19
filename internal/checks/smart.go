@@ -193,6 +193,3 @@ func smartSelfTestRunning(value *int, status string) bool {
 	}
 	return strings.Contains(strings.ToLower(status), "in progress")
 }
-
-// parseSmartPreds reads the optional temperature/reallocated/wear/power_on_hours
-// predicates.

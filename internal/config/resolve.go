@@ -739,14 +739,10 @@ func (c *Config) globalVars() map[string]string {
 }
 
 func (c *Config) expansionVariables(tree map[string]any, name string) (map[string]string, []string) {
-	return c.expansionVariablesForKind(tree, name, cfgval.String(tree[keyKind]))
-}
-
-func (c *Config) expansionVariablesForKind(tree map[string]any, name, kind string) (map[string]string, []string) {
 	vars := c.globalVars()
 	appVars, errs := c.appVariables(tree)
 	maps.Copy(vars, appVars)
-	maps.Copy(vars, collectVariablesForKind(tree, kind)) // service/doc variables override app and global custom ones
+	maps.Copy(vars, collectVariables(tree)) // service/doc variables override app and global custom ones
 	errs = append(errs, validateVariableValues(vars)...)
 	injectBuiltinVariables(vars, name, tree)
 	errs = append(errs, resolveFileVars(vars, tree)...)
@@ -770,7 +766,7 @@ func (c *Config) appVariables(tree map[string]any) (map[string]string, []string)
 		}
 		body := stripMeta(doc.Body)
 		errs = append(errs, prepareExpansionInputs(body)...)
-		appVars := collectVariablesForKind(body, doc.Kind)
+		appVars := collectVariables(body)
 		errs = append(errs, resolveFileVars(appVars, body)...)
 		// Iterate variable names in sorted order so conflict errors surface in a
 		// stable, reproducible order (map ranging is randomized).
@@ -1356,7 +1352,7 @@ func (c *Config) resolveDocBody(doc *Document, name string, appChain []string) (
 	body := stripMeta(doc.Body)
 	body = pruneEnableIfMap(body, nil)
 	errs := prepareExpansionInputs(body)
-	vars, varErrs := c.expansionVariablesForKind(body, name, doc.Kind)
+	vars, varErrs := c.expansionVariables(body, name)
 	errs = append(errs, varErrs...)
 	expanded, expErrs := expandTree(body, vars)
 	errs = append(errs, expErrs...)
