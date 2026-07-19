@@ -104,16 +104,9 @@ func buildSQLCheck(b base, entry map[string]any) (Check, string) {
 	if query == "" {
 		return nil, "sql check requires a query"
 	}
-	op := cfgval.AsString(entry[CheckKeyOp])
-	if !validCompareOp(op) {
-		return nil, "sql check op must be one of " + cfgval.AssertOpSummary
-	}
-	value := cfgval.String(entry[CheckKeyValue])
-	if value == "" {
-		return nil, "sql check requires a value"
-	}
-	if err := ValidateAssertionValue(CheckKeyValue, op, value); err != nil {
-		return nil, "sql check " + err.Error()
+	op, value, msg := assertOpValue(entry, CheckTypeSQL)
+	if msg != "" {
+		return nil, msg
 	}
 
 	var dsn string

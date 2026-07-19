@@ -292,10 +292,7 @@ func configureHTTPCert(hc *httpCheck, entry map[string]any, rawURL string) strin
 	if u.Scheme != URLSchemeHTTPS {
 		return "http check: cert_* options require an https url"
 	}
-	verify := true
-	if v, ok := entry[CheckKeyCertVerify].(bool); ok {
-		verify = v
-	}
+	verify := boolWithDefault(entry[CheckKeyCertVerify], true)
 	days := 0
 	if v, ok := cfgval.Int(entry[CheckKeyCertExpiresInDays]); ok {
 		days = v

@@ -199,15 +199,7 @@ func (s *ServiceMetricSampler) persistentSeries(name string, cur web.ServiceRunt
 }
 
 func (s *ServiceMetricSampler) trimLocked(name string, cutoff time.Time) {
-	samples := s.samples[name]
-	i := 0
-	for i < len(samples) && samples[i].at.Before(cutoff) {
-		i++
-	}
-	if i > 0 {
-		copy(samples, samples[i:])
-		s.samples[name] = samples[:len(samples)-i]
-	}
+	s.samples[name] = trimBefore(s.samples[name], cutoff, func(sample serviceMetricSample) time.Time { return sample.at })
 }
 
 func serviceSamplesSince(samples []serviceMetricSample, cutoff time.Time) []serviceMetricSample {

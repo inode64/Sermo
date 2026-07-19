@@ -63,13 +63,22 @@ func (c *Config) resolveExpandedService(merged map[string]any, name string) (map
 	errs = append(errs, c.resolveChangedLibraries(expanded)...)
 	errs = append(errs, expandReloadOnChange(expanded)...)
 	errs = append(errs, c.expandApps(expanded)...)
+	errs = append(errs, c.expandServiceSugar(expanded)...)
+	return expanded, errs
+}
+
+// expandServiceSugar runs the post-expansion desugar tail shared by
+// resolveExpandedService and resolveDocBody: analyze, pidfile(s), service
+// artifacts and embedded watches.
+func (c *Config) expandServiceSugar(expanded map[string]any) []string {
+	var errs []string
 	errs = append(errs, c.expandAnalyze(expanded)...)
 	errs = append(errs, expandPidfile(expanded)...)
 	errs = append(errs, expandPidfiles(expanded)...)
 	errs = append(errs, expandServiceArtifact(expanded, artifactSocket)...)
 	errs = append(errs, expandServiceArtifact(expanded, artifactLockfile)...)
 	errs = append(errs, expandServiceWatches(expanded)...)
-	return expanded, errs
+	return errs
 }
 
 // ResolveStorage returns one resolved storage watch in the tree shape mount
@@ -1360,12 +1369,7 @@ func (c *Config) resolveDocBody(doc *Document, name string, appChain []string) (
 		errs = append(errs, c.expandRestartOnChange(expanded)...)
 	}
 	errs = append(errs, c.expandAppsChain(expanded, appChain)...)
-	errs = append(errs, c.expandAnalyze(expanded)...)
-	errs = append(errs, expandPidfile(expanded)...)
-	errs = append(errs, expandPidfiles(expanded)...)
-	errs = append(errs, expandServiceArtifact(expanded, artifactSocket)...)
-	errs = append(errs, expandServiceArtifact(expanded, artifactLockfile)...)
-	errs = append(errs, expandServiceWatches(expanded)...)
+	errs = append(errs, c.expandServiceSugar(expanded)...)
 	return Resolved{Name: name, Tree: expanded}, errs
 }
 

@@ -303,11 +303,7 @@ func (e Engine) startService(ctx context.Context, result *Result) bool {
 	if err := e.Manager.Start(ctx, e.Unit); err != nil {
 		return failPhase(ctx, result, "operation timed out during start", "start: ", err)
 	}
-	if status, err := e.Manager.Status(ctx, e.Unit); err == nil && status.Status == servicemgr.StatusFailed {
-		result.Status, result.Message = ResultFailed, "service failed after start"
-		return false
-	}
-	return true
+	return e.ensureServiceHealthy(ctx, result, "start")
 }
 
 func (e Engine) stopService(ctx context.Context, result *Result) (alsoStopErrs, staleWarn []string, stopped bool) {

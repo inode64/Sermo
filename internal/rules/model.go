@@ -100,14 +100,23 @@ type Rule struct {
 	Emission emission.Policy
 }
 
+// isOperation reports whether the action type is a service operation
+// (restart/start/stop/reload/resume) rather than an alert/block action.
+func (t ActionType) isOperation() bool {
+	switch t {
+	case ActionRestart, ActionStart, ActionStop, ActionReload, ActionResume:
+		return true
+	default:
+		return false
+	}
+}
+
 // Primary is the action other code treats as the rule's main one: the operation
 // (restart/start/stop/reload/resume) if present, else the first.
 func (r Rule) Primary() Action {
 	for _, a := range r.Actions {
-		switch a.Type {
-		case ActionRestart, ActionStart, ActionStop, ActionReload, ActionResume:
+		if a.Type.isOperation() {
 			return a
-		default: // alert/block actions are never the primary one
 		}
 	}
 	if len(r.Actions) > 0 {
@@ -119,10 +128,8 @@ func (r Rule) Primary() Action {
 // OperationAction returns the rule's restart/start/stop/reload/resume action, if any.
 func (r Rule) OperationAction() (ActionType, bool) {
 	for _, a := range r.Actions {
-		switch a.Type {
-		case ActionRestart, ActionStart, ActionStop, ActionReload, ActionResume:
+		if a.Type.isOperation() {
 			return a.Type, true
-		default: // alert/block actions are not operations
 		}
 	}
 	return "", false

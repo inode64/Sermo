@@ -1,9 +1,5 @@
 package notify
 
-import (
-	"context"
-)
-
 const (
 	teamsAdaptiveCardSchema    = "http://adaptivecards.io/schemas/adaptive-card.json"
 	teamsAdaptiveCardType      = "AdaptiveCard"
@@ -29,33 +25,11 @@ const (
 	teamsTextWrapKey           = "wrap"
 )
 
-// Teams posts notifications to a Microsoft Teams incoming webhook (a Teams
-// Workflows / Power Automate "when a webhook request is received" URL). Uses
-// only net/http (no external dependency).
-type Teams struct {
-	name    string
-	webhook string
-	post    webhookPoster
-}
-
-// Name returns the notifier's configured name.
-func (t *Teams) Name() string { return t.name }
-
-// Type returns the notifier type identifier.
-func (t *Teams) Type() string { return TypeTeams }
-
-// Send posts the message to the configured Teams webhook.
-func (t *Teams) Send(ctx context.Context, msg Message) error {
-	return sendWebhook(ctx, t.post, TypeTeams, t.webhook, teamsPayload(msg))
-}
-
-// buildTeams constructs a Teams notifier from a config entry.
+// buildTeams constructs a Microsoft Teams incoming-webhook notifier (a Teams
+// Workflows / Power Automate "when a webhook request is received" URL) from a
+// config entry.
 func buildTeams(name string, entry map[string]any) (Notifier, error) {
-	webhook, err := webhookURL(TypeTeams, entry)
-	if err != nil {
-		return nil, err
-	}
-	return &Teams{name: name, webhook: webhook}, nil
+	return newWebhookNotifier(TypeTeams, name, entry, teamsPayload)
 }
 
 // teamsPayload renders the Teams webhook body as a message with one Adaptive

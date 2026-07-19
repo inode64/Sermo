@@ -230,19 +230,10 @@ func (OSReader) TotalMemoryAndSwap() (memoryTotal, memoryUsed, swapTotal, swapUs
 	return totals.memoryTotal, totals.memoryUsed, totals.swapTotal, totals.swapUsed, totals.memoryOK, totals.swapOK
 }
 
-type procMeminfoTotals struct {
-	memoryTotal uint64
-	memoryUsed  uint64
-	memoryOK    bool
-	swapTotal   uint64
-	swapUsed    uint64
-	swapOK      bool
-}
-
-func readProcMeminfoTotals() procMeminfoTotals {
+func readProcMeminfoTotals() memoryTotals {
 	data, err := os.ReadFile(procPath(procFileMeminfo))
 	if err != nil {
-		return procMeminfoTotals{}
+		return memoryTotals{}
 	}
 	return parseProcMeminfoTotals(data)
 }
@@ -269,8 +260,8 @@ func ParseMeminfo(data []byte) (memTotal, memAvailable, swapTotal, swapFree uint
 	return
 }
 
-func parseProcMeminfoTotals(data []byte) procMeminfoTotals {
-	var totals procMeminfoTotals
+func parseProcMeminfoTotals(data []byte) memoryTotals {
+	var totals memoryTotals
 	memTotal, memoryAvailable, swapTotal, swapFree, haveMemTotal, haveMemoryAvailable, haveSwapTotal, haveSwapFree := ParseMeminfo(data)
 	totals.memoryTotal, totals.memoryOK = memTotal, haveMemTotal
 	totals.swapTotal, totals.swapOK = swapTotal, haveSwapTotal
