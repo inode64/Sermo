@@ -23,6 +23,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"sync"
 	"time"
 
 	"sermo/internal/units"
@@ -322,6 +323,33 @@ type Store struct {
 	reader *sql.DB
 	now    func() time.Time
 	ctx    context.Context
+
+	// stmtMu guards stmts, the prepared-statement cache for the write paths.
+	// database/sql re-prepares a db.Exec query on every call; the per-cycle
+	// upsert burst repeats the same handful of statements, so preparing each
+	// once on the single write connection removes that overhead.
+	stmtMu sync.Mutex
+	stmts  map[string]*sql.Stmt
+}
+
+// exec runs a write statement through the prepared-statement cache.
+func (s *Store) exec(ctx context.Context, query string, args ...any) (sql.Result, error) {
+	s.stmtMu.Lock()
+	stmt, ok := s.stmts[query]
+	if !ok {
+		var err error
+		stmt, err = s.db.PrepareContext(ctx, query)
+		if err != nil {
+			s.stmtMu.Unlock()
+			return nil, err
+		}
+		if s.stmts == nil {
+			s.stmts = map[string]*sql.Stmt{}
+		}
+		s.stmts[query] = stmt
+	}
+	s.stmtMu.Unlock()
+	return stmt.ExecContext(ctx, args...)
 }
 
 // reads returns the connection SELECT-only paths should use.
@@ -445,6 +473,12 @@ func OpenContextWith(ctx context.Context, path string, opts Options) (*Store, er
 
 // Close releases the database handles.
 func (s *Store) Close() error {
+	s.stmtMu.Lock()
+	for _, stmt := range s.stmts {
+		_ = stmt.Close()
+	}
+	s.stmts = nil
+	s.stmtMu.Unlock()
 	var readerErr error
 	if s.reader != nil {
 		readerErr = s.reader.Close()
@@ -554,7 +588,7 @@ func (s *Store) loadFlagRow(query string, key any, errContext string) (on bool, 
 // upsertFlagRow writes an on/off flag row keyed by key with source and the
 // current timestamp; the write half shared by the boolean flag tables.
 func (s *Store) upsertFlagRow(query string, key any, on bool, source, errContext string) error {
-	if _, err := s.db.ExecContext(s.sqlCtx(), query, key, boolInt(on), source, s.now().UTC().Format(time.RFC3339)); err != nil {
+	if _, err := s.exec(s.sqlCtx(), query, key, boolInt(on), source, s.now().UTC().Format(time.RFC3339)); err != nil {
 		return fmt.Errorf("%s: %w", errContext, err)
 	}
 	return nil
@@ -592,7 +626,7 @@ func (s *Store) SetActive(service string, active bool, source string) error {
 // SetOperationSettling records that a service operation is running or awaiting
 // its first post-operation observation cycle.
 func (s *Store) SetOperationSettling(service, action, phase, source string) error {
-	_, err := s.db.ExecContext(s.sqlCtx(),
+	_, err := s.exec(s.sqlCtx(),
 		`INSERT INTO operation_settling (service, action, phase, source, updated_at)
 		 VALUES (?, ?, ?, ?, ?)
 		 ON CONFLICT(service) DO UPDATE SET
@@ -628,7 +662,7 @@ func (s *Store) OperationSettling(service string) (OperationSettlingRecord, bool
 
 // ClearOperationSettling removes a service's operation-settling row.
 func (s *Store) ClearOperationSettling(service string) error {
-	_, err := s.db.ExecContext(s.sqlCtx(), `DELETE FROM operation_settling WHERE service = ?;`, service)
+	_, err := s.exec(s.sqlCtx(), `DELETE FROM operation_settling WHERE service = ?;`, service)
 	if err != nil {
 		return fmt.Errorf("clear operation settling for %s: %w", service, err)
 	}
@@ -773,7 +807,7 @@ func (s *Store) SetWatchCheckSnapshot(watch, slot string, rec CheckSnapshotRecor
 	if err != nil {
 		return err
 	}
-	_, err = s.db.ExecContext(s.sqlCtx(),
+	_, err = s.exec(s.sqlCtx(),
 		`INSERT INTO watch_check_snapshot
 		   (watch, slot, check_type, ok, condition, optional, skipped, message, data, ran, at)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -969,7 +1003,7 @@ func (s *Store) WatchRuntimeState(watch, slot string) (WatchRuntimeRecord, bool,
 // empty record deletes any existing row.
 func (s *Store) SetWatchRuntimeState(watch, slot string, rec WatchRuntimeRecord) error {
 	if watchRuntimeRecordEmpty(rec) {
-		_, err := s.db.ExecContext(s.sqlCtx(), `DELETE FROM watch_runtime_state WHERE watch = ? AND slot = ?;`, watch, slot)
+		_, err := s.exec(s.sqlCtx(), `DELETE FROM watch_runtime_state WHERE watch = ? AND slot = ?;`, watch, slot)
 		if err != nil {
 			return fmt.Errorf("clear watch runtime state for %s/%s: %w", watch, slot, err)
 		}
@@ -988,7 +1022,7 @@ func (s *Store) SetWatchRuntimeState(watch, slot string, rec WatchRuntimeRecord)
 		return err
 	}
 	firing := boolInt(rec.Firing)
-	_, err = s.db.ExecContext(s.sqlCtx(),
+	_, err = s.exec(s.sqlCtx(),
 		`INSERT INTO watch_runtime_state (
 		   watch, slot, firing, last_notify_at, consecutive, history, true_since,
 		   timed_history, last_action_at, recent_actions, current_backoff_ns,
@@ -1061,7 +1095,7 @@ func (s *Store) RemediationState(service string) (RemediationRecord, bool, error
 // record deletes any existing row.
 func (s *Store) SetRemediationState(service string, rec RemediationRecord) error {
 	if rec.LastActionAt.IsZero() && len(rec.RecentActions) == 0 && rec.CurrentBackoff == 0 {
-		_, err := s.db.ExecContext(s.sqlCtx(), `DELETE FROM remediation_state WHERE service = ?;`, service)
+		_, err := s.exec(s.sqlCtx(), `DELETE FROM remediation_state WHERE service = ?;`, service)
 		if err != nil {
 			return fmt.Errorf("clear remediation state for %s: %w", service, err)
 		}
@@ -1071,7 +1105,7 @@ func (s *Store) SetRemediationState(service string, rec RemediationRecord) error
 	if err != nil {
 		return err
 	}
-	_, err = s.db.ExecContext(s.sqlCtx(),
+	_, err = s.exec(s.sqlCtx(),
 		`INSERT INTO remediation_state (service, last_action_at, recent_actions, current_backoff_ns)
 		 VALUES (?, ?, ?, ?)
 		 ON CONFLICT(service) DO UPDATE SET
@@ -1272,7 +1306,7 @@ func (s *Store) RecordEvent(e EventRecord) (int64, error) {
 	if at.IsZero() {
 		at = s.now()
 	}
-	result, err := s.db.ExecContext(s.sqlCtx(),
+	result, err := s.exec(s.sqlCtx(),
 		`INSERT INTO event_log (at, service, watch, app, kind, rule, action, status, message, output)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
 		at.UTC().UnixNano(), e.Service, e.Watch, e.App, e.Kind, e.Rule, e.Action, e.Status, e.Message, e.Output,
@@ -1338,9 +1372,9 @@ func (s *Store) PruneEvents(before time.Time) (int64, error) {
 		err error
 	)
 	if before.IsZero() {
-		res, err = s.db.ExecContext(s.sqlCtx(), `DELETE FROM event_log;`)
+		res, err = s.exec(s.sqlCtx(), `DELETE FROM event_log;`)
 	} else {
-		res, err = s.db.ExecContext(s.sqlCtx(), `DELETE FROM event_log WHERE at < ?;`, before.UTC().UnixNano())
+		res, err = s.exec(s.sqlCtx(), `DELETE FROM event_log WHERE at < ?;`, before.UTC().UnixNano())
 	}
 	if err != nil {
 		return 0, fmt.Errorf("prune event log: %w", err)
@@ -1529,7 +1563,7 @@ func (s *Store) RecordProcessUptime(service string, startedAt, confirmedAt time.
 	if startedAt.After(confirmedAt) {
 		return fmt.Errorf("record process uptime for %s: process start time is after confirmation", service)
 	}
-	if _, err := s.db.ExecContext(s.sqlCtx(), `INSERT INTO process_uptime_span (service, started_at, confirmed_at)
+	if _, err := s.exec(s.sqlCtx(), `INSERT INTO process_uptime_span (service, started_at, confirmed_at)
 		VALUES (?, ?, ?)
 		ON CONFLICT(service, started_at) DO UPDATE SET
 		  confirmed_at = max(confirmed_at, excluded.confirmed_at);`,
@@ -1715,7 +1749,7 @@ func processUptimeCoverage(spans []ProcessUptimeSpan, from, to time.Time) time.D
 
 func (s *Store) recordSLABucket(query string, keys []any, up bool, at time.Time, kind, target string) error {
 	args := append(append([]any{}, keys...), minuteBucket(at), boolInt(up))
-	if _, err := s.db.ExecContext(s.sqlCtx(), query, args...); err != nil {
+	if _, err := s.exec(s.sqlCtx(), query, args...); err != nil {
 		return fmt.Errorf("record %s for %s: %w", kind, target, err)
 	}
 	return nil
@@ -1957,7 +1991,7 @@ var (
 )
 
 func (s *Store) recordAggregate(spec aggregateRecordSpec, first, second, third string, values ...any) error {
-	if _, err := s.db.ExecContext(s.sqlCtx(), spec.query, values...); err != nil {
+	if _, err := s.exec(s.sqlCtx(), spec.query, values...); err != nil {
 		return fmt.Errorf("record %s%s%s: %w", spec.kind, spec.targetPrefix, aggregateRecordTarget(first, second, third), err)
 	}
 	return nil
@@ -2030,7 +2064,7 @@ func (s *Store) PruneMeasurements(before time.Time) (int64, error) {
 // per-minute bucket tables. table is always a compile-time literal, never
 // operator input.
 func (s *Store) pruneBuckets(table string, before time.Time) (int64, error) {
-	res, err := s.db.ExecContext(s.sqlCtx(), `DELETE FROM `+table+` WHERE bucket < ?;`, minuteBucket(before)) //nolint:gosec // table is a package-internal literal
+	res, err := s.exec(s.sqlCtx(), `DELETE FROM `+table+` WHERE bucket < ?;`, minuteBucket(before)) //nolint:gosec // table is a package-internal literal
 	if err != nil {
 		return 0, fmt.Errorf("prune %s buckets before %s: %w", table, before.UTC().Format(time.RFC3339), err)
 	}
@@ -2202,7 +2236,7 @@ func (s *Store) PruneSLA(before time.Time) (int64, error) {
 // older than before. A long-running process remains retained because its most
 // recent confirmation still overlaps the retention window.
 func (s *Store) PruneProcessUptime(before time.Time) (int64, error) {
-	res, err := s.db.ExecContext(s.sqlCtx(), `DELETE FROM `+stateTableProcessUptime+` WHERE confirmed_at < ?`, before.UTC().Unix())
+	res, err := s.exec(s.sqlCtx(), `DELETE FROM `+stateTableProcessUptime+` WHERE confirmed_at < ?`, before.UTC().Unix())
 	if err != nil {
 		return 0, fmt.Errorf("prune process uptime: %w", err)
 	}
@@ -2246,10 +2280,10 @@ func (s *Store) PruneHistory(before time.Time) (PruneHistoryResult, error) {
 // Compact checkpoints the WAL and vacuums the SQLite state database so space
 // freed by pruning can be returned to the filesystem.
 func (s *Store) Compact(ctx context.Context) error {
-	if _, err := s.db.ExecContext(ctx, `PRAGMA wal_checkpoint(TRUNCATE);`); err != nil {
+	if _, err := s.exec(ctx, `PRAGMA wal_checkpoint(TRUNCATE);`); err != nil {
 		return fmt.Errorf("checkpoint state db WAL: %w", err)
 	}
-	if _, err := s.db.ExecContext(ctx, `VACUUM;`); err != nil {
+	if _, err := s.exec(ctx, `VACUUM;`); err != nil {
 		return fmt.Errorf("vacuum state db: %w", err)
 	}
 	return nil
