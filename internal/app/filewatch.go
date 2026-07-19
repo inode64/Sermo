@@ -359,12 +359,7 @@ func (w *fileWatcher) runOlderThanHook(ctx context.Context, path string, cur fil
 		sermoEnvMessage:   msg,
 	}
 	maps.Copy(env, w.olderThanExtra(cur))
-	runner := defaultHookRunner(w.runner)
-	if err := w.hook.Run(ctx, runner, env); err != nil {
-		w.emitEvent(Event{Watch: w.name, Kind: eventKindHookFail, Message: msg + ": " + err.Error()})
-	} else {
-		w.emitEvent(Event{Watch: w.name, Kind: eventKindHook, Message: msg})
-	}
+	runWatchHook(ctx, w.hook, w.runner, w.emitEvent, w.name, msg, env)
 }
 
 func (w *fileWatcher) olderThanBatchMessage(stale []staleFile) string {
