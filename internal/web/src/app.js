@@ -1198,6 +1198,7 @@ const watchPanels = Object.fromEntries(watchPanelDescriptors.map((descriptor) =>
 
 const UI_STATE_KEY = "sermo-ui-state";
 const KEYBOARD_SHORTCUTS_KEY = "sermo-keyboard-shortcuts";
+const BROWSER_NOTIFY_KEY = "sermo-browser-notify";
 
 function restoreUIState() {
   try {
@@ -1776,6 +1777,62 @@ function setFavicon(status) {
     dot.style.boxShadow = `0 0 0 3px ${color}38`;
   }
 }
+function browserNotifyEnabled() {
+  try { return localStorage.getItem(BROWSER_NOTIFY_KEY) === storageBoolTrue; } catch (_) { return false; }
+}
+
+function setBrowserNotifyEnabled(enabled) {
+  try { localStorage.setItem(BROWSER_NOTIFY_KEY, enabled ? storageBoolTrue : storageBoolFalse); } catch (_) {}
+  syncNotifyToggle();
+}
+
+function syncNotifyToggle() {
+  const btn = $("#notify-toggle");
+  if (!btn) return;
+  if (!(notificationAPIName in window)) {
+    btn.hidden = true;
+    return;
+  }
+  const on = browserNotifyEnabled() && Notification.permission === notifyPermissionGranted;
+  btn.setAttribute("aria-pressed", on ? domBoolTrue : domBoolFalse);
+}
+
+const notificationAPIName = "Notification";
+const notifyPermissionGranted = "granted";
+const notifyPermissionDefault = "default";
+const notifyPreviewNames = 4;
+// notifiedAttention is the last cycle's failing-target set; null until the
+// first render, which only sets the baseline (pre-existing failures are
+// already on screen — announcing them on page load is noise).
+let notifiedAttention = null;
+
+// maybeNotifyAttention sends one browser notification (opt-in) for targets
+// that newly started failing, and only while the tab is hidden — when visible
+// the attention banner and favicon already carry the signal.
+function maybeNotifyAttention(failingSvcs, firingWatches, failedApps) {
+  if (!(notificationAPIName in window)) return;
+  const current = new Map();
+  failingSvcs.forEach((s) => current.set(expansionPrefixService + s.name, s.name));
+  firingWatches.forEach((w) => current.set(expansionPrefixWatch + w.name, displayName(w) || w.name));
+  failedApps.forEach((a) => current.set(expansionPrefixApp + a.name, displayName(a) || a.name));
+  const previous = notifiedAttention;
+  notifiedAttention = current;
+  if (previous === null) return;
+  if (!browserNotifyEnabled() || Notification.permission !== notifyPermissionGranted || !document.hidden) return;
+  const fresh = [...current.keys()].filter((key) => !previous.has(key));
+  if (!fresh.length) return;
+  const names = fresh.map((key) => current.get(key));
+  const title = fresh.length === 1 ? "Sermo: 1 target failing" : `Sermo: ${fresh.length} targets failing`;
+  const body = names.slice(0, notifyPreviewNames).join(", ") + (names.length > notifyPreviewNames ? ` and ${names.length - notifyPreviewNames} more` : "");
+  try {
+    const note = new Notification(title, { body, tag: "sermo-attention" });
+    note.onclick = () => {
+      window.focus();
+      note.close();
+    };
+  } catch (_) { /* notification constructors can throw in some embeds */ }
+}
+
 function renderAttention() {
   const box = $("#attention");
   if (!box) return;
@@ -1816,6 +1873,7 @@ function renderAttention() {
       target: "failed-apps",
     });
   }
+  maybeNotifyAttention(failing, failingWatches, failingApps);
   const activeLocks = (latestLocks || []).filter((l) => l.state === lockStateActive);
   if (activeLocks.length) {
     items.push({
@@ -7011,6 +7069,26 @@ function initStaticHandlers() {
 
   const refreshButton = $("#refresh-now");
   if (refreshButton) refreshButton.addEventListener(domEventClick, refreshNow);
+
+  const notifyToggle = $("#notify-toggle");
+  if (notifyToggle) {
+    syncNotifyToggle();
+    notifyToggle.addEventListener(domEventClick, async () => {
+      if (!(notificationAPIName in window)) return;
+      if (browserNotifyEnabled()) {
+        setBrowserNotifyEnabled(false);
+        return;
+      }
+      let permission = Notification.permission;
+      if (permission === notifyPermissionDefault) permission = await Notification.requestPermission();
+      if (permission !== notifyPermissionGranted) {
+        setBrowserNotifyEnabled(false);
+        setStatus("browser notifications are blocked for this site", feedbackStatusWarn, false);
+        return;
+      }
+      setBrowserNotifyEnabled(true);
+    });
+  }
 
   const shortcutToggle = $("#shortcut-toggle");
   if (shortcutToggle) {
