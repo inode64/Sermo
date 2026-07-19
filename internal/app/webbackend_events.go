@@ -18,15 +18,6 @@ const (
 	webEventPageMaxScan           = 5000
 )
 
-func isServiceOperationAction(action string) bool {
-	switch rules.ActionType(action) {
-	case rules.ActionStart, rules.ActionStop, rules.ActionRestart, rules.ActionReload, rules.ActionResume:
-		return true
-	default:
-		return false
-	}
-}
-
 func serviceOperationActionList() []string {
 	return []string{
 		string(rules.ActionStart),
@@ -50,7 +41,7 @@ func (b *WebBackend) ActivitySummary(_ context.Context) web.ActivitySummary {
 	}
 	for i := range events {
 		switch {
-		case events[i].Kind == eventKindCascade && isServiceOperationAction(events[i].Action):
+		case events[i].Kind == eventKindCascade && rules.ActionType(events[i].Action).IsOperation():
 			// Cascade keeps one kind for every outcome (the primary encodes
 			// failures via eventKindForResult), so gate on status here: blocked
 			// stays uncounted like suppressed primaries, any failure is an error.

@@ -100,11 +100,34 @@ type Rule struct {
 	Emission emission.Policy
 }
 
-// isOperation reports whether the action type is a service operation
-// (restart/start/stop/reload/resume) rather than an alert/block action.
-func (t ActionType) isOperation() bool {
+// IsOperation reports whether the action type is a service operation that
+// drives the operation engine (restart/start/stop/reload/resume) rather than
+// an alert/block action.
+func (t ActionType) IsOperation() bool {
 	switch t {
 	case ActionRestart, ActionStart, ActionStop, ActionReload, ActionResume:
+		return true
+	default:
+		return false
+	}
+}
+
+// SettlesAfter reports whether a successful operation leaves the service in a
+// settling window that observation should confirm (every operation but stop).
+func (t ActionType) SettlesAfter() bool {
+	switch t {
+	case ActionStart, ActionRestart, ActionReload, ActionResume:
+		return true
+	default:
+		return false
+	}
+}
+
+// CanRemainActiveAfterPostflightFailure reports whether a failed postflight
+// can still leave the service running and needing observation.
+func (t ActionType) CanRemainActiveAfterPostflightFailure() bool {
+	switch t {
+	case ActionStart, ActionRestart, ActionResume:
 		return true
 	default:
 		return false
@@ -115,7 +138,7 @@ func (t ActionType) isOperation() bool {
 // (restart/start/stop/reload/resume) if present, else the first.
 func (r Rule) Primary() Action {
 	for _, a := range r.Actions {
-		if a.Type.isOperation() {
+		if a.Type.IsOperation() {
 			return a
 		}
 	}
@@ -128,7 +151,7 @@ func (r Rule) Primary() Action {
 // OperationAction returns the rule's restart/start/stop/reload/resume action, if any.
 func (r Rule) OperationAction() (ActionType, bool) {
 	for _, a := range r.Actions {
-		if a.Type.isOperation() {
+		if a.Type.IsOperation() {
 			return a.Type, true
 		}
 	}

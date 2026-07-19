@@ -138,7 +138,7 @@ func (b *WebBackend) operationResultWithMonitor(ctx context.Context, name, actio
 }
 
 func (b *WebBackend) activeAfterPostflightFailure(ctx context.Context, name, action string, result operation.Result) bool {
-	if result.Status != operation.ResultPostflightFailed || !ManualActionCanRemainActiveAfterPostflightFailure(action) {
+	if result.Status != operation.ResultPostflightFailed || !rules.ActionType(action).CanRemainActiveAfterPostflightFailure() {
 		return false
 	}
 	e := b.entries[name]
