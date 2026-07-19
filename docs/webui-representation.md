@@ -35,6 +35,11 @@ overflow and axe WCAG 2.2 AA rules against deterministic API fixtures.
   services fall back to `service`, applications to `app`, storage watches to
   `storage` and other watches to `watch`.
 - State-changing buttons use the same safe backend path as `sermoctl`.
+- Every panel header carries a small copy-link control that puts the section's
+  deep link (page URL + `#section-id`) on the clipboard.
+- Timestamps render in UTC, the daemon's canonical convention shared with
+  events and notifications; the visible timestamps in the event and activity
+  views carry the viewer's local time as their hover title.
 
 ## Data sources
 
@@ -80,12 +85,14 @@ enabled.
 | --- | --- | --- |
 | Service action | `POST /api/services/{name}/{action}[?no_cascade=1]` | `monitor`, `unmonitor`, `start`, `stop`, `restart`, `reload`, `resume`; `reload` is offered only when the service reports `can_reload` from init backend reload support or a valid `reload:` fallback; `no_cascade` skips `also_apply` targets on start/stop/restart |
 | Service preflight | `POST /api/services/{name}/preflight` | run preflight checks without changing service state |
-| Watch action | `POST /api/watches/{name}/{action}` | `monitor`, `unmonitor`, `expand` |
+| Watch action | `POST /api/watches/{name}/{action}` | `monitor`, `unmonitor`, `expand`, `probe` (one manual sample), plus RAID `pause`/`resume`, which run a check-and-verify operation and require the `X-Sermo-Confirm` header |
+| Notifier test | `POST /api/notifiers/{name}/test` | sends one test notification through the named notifier after confirmation |
 | Mount action | `POST /api/mounts/{name}/{action}[?force=1&lazy=1&kill=1]` | `mount`, `umount`, `alert`; `force=1` allows `umount -f`, `lazy=1` allows `umount -l` as the last fallback, and `kill=1` enables `kill_only_if`-gated blocker signalling for `umount`; `/` rejects unmount paths |
 | Mount blockers | `GET /api/mounts/{name}/blockers` | read-only fresh blocker scan for one mount unit; guests get command lines redacted like `GET /api/mounts` |
 | Lock release | `POST /api/locks/{service}/release?name=NAME` | releases inactive stale/expired named locks; active locks are refused |
 | Events clear | `POST /api/events/clear?before=TIME` | clears persisted event/activity rows; `before` accepts a positive duration or non-future RFC3339 timestamp |
 | State compact | `POST /api/state/compact?before=TIME` | prunes old SLA/metrics/event history and vacuums the state database; matches `sermoctl state compact` |
+| Panic mode | `POST /api/panic/{action}` | `on` / `off`; admin-only daemon-wide suspension of hooks, alerts and automatic remediation |
 | Daemon reload | `POST /api/reload` | requests a `sermod` configuration reload |
 
 ## Top bar
@@ -96,6 +103,7 @@ enabled.
 | Role | admin / read-only label |
 | Find target | one autocomplete over loaded services, watches, applications and mounts; selection clears only that panel's filters and opens the target |
 | Refresh | select with refresh interval, manual refresh button |
+| Notifications | opt-in browser-notification bell; once granted, targets that newly start failing raise one grouped notification while the tab is hidden |
 | Status | last complete refresh age, connection errors, or panels retaining older data after a partial refresh; `#statusbar` ends with host `uptime:` then daemon `status:` (`ok` / `starting` / …) as a paired tail |
 | System status | host identity, host type, daemon/backend/runtime summary |
 
@@ -205,6 +213,7 @@ Columns:
 | FDs | open file-descriptor count from the process tree; blank for `no_resident_process` services |
 | IO R/W | cumulative process-tree disk read/write bytes; blank for `no_resident_process` services |
 | Actions | compact, individual state-aware icon buttons for start/stop, restart, reload, resume and monitor/unmonitor; reload is disabled when `can_reload` is false; the start/stop/restart confirm dialog offers **skip also_apply** when `also_apply` is set |
+| Pin | a per-row star toggle lifts hand-picked services to the top of the panel (and of their group), persisted locally with the rest of the UI state |
 
 ## Containers and virtual machines panels
 
@@ -454,7 +463,7 @@ Section id: `events-section`
 | Part | Current representation |
 | --- | --- |
 | Title | `Events` plus dry-run note |
-| Controls | guided service, watch, kind, status and time-range selects; only errors, optional group actions, reset filters, optional `before` cutoff, clear log (admin) |
+| Controls | guided service, watch, kind, status and time-range selects; absolute from/until date-time pickers; only errors, optional group actions, reset filters, optional `before` cutoff, clear log (admin) |
 | Table | chronological event rows by default; optional client-side grouping by action |
 | Limit | latest matching events; **load older** continues with a stable event-ID cursor |
 
@@ -462,9 +471,11 @@ Editable notes:
 
 - Service/watch choices follow the currently known targets while kind/status
   use the daemon event vocabulary. The time-range presets request `since` from
-  the backend. Escape or **reset filters** clears every filter. The `only
-  errors` checkbox refetches on change. Grouping stays client-side, optional and
-  off by default; raw chronology is the default view.
+  the backend. The absolute from/until pickers (local time) apply their exact
+  bounds client-side; a set "from" also narrows the server fetch, since the
+  API's `since` accepts only durations. Escape or **reset filters** clears
+  every filter. The `only errors` checkbox refetches on change. Grouping stays
+  client-side, optional and off by default; raw chronology is the default view.
 - Event expansion state is keyed by the persisted event ID. Loading older rows
   appends a cursor page without duplicating events or shifting open rows.
 - **clear log** (admin only) calls `POST /api/events/clear` after confirmation,

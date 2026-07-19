@@ -38,6 +38,12 @@ deterministas de la API.
   los servicios recurren a `service`, las aplicaciones a `app`, las watches de
   storage a `storage` y el resto de watches a `watch`.
 - Los botones que cambian de estado usan la misma ruta segura de backend que `sermoctl`.
+- Cada cabecera de panel lleva un pequeño control de copiar enlace que pone el
+  deep link de la sección (URL de la página + `#section-id`) en el portapapeles.
+- Las marcas de tiempo se muestran en UTC, la convención canónica del daemon
+  compartida con eventos y notificaciones; las marcas visibles en las vistas de
+  eventos y actividad llevan la hora local del usuario como título al pasar el
+  ratón.
 
 ## Fuentes de datos
 
@@ -84,12 +90,14 @@ la autenticación web está habilitada.
 | --- | --- | --- |
 | Acción de servicio | `POST /api/services/{name}/{action}[?no_cascade=1]` | `monitor`, `unmonitor`, `start`, `stop`, `restart`, `reload`, `resume`; `reload` se ofrece solo cuando el servicio informa `can_reload` desde soporte de reload del backend de init o desde un fallback `reload:` válido; `no_cascade` omite los objetivos de `also_apply` en start/stop/restart |
 | Preflight de servicio | `POST /api/services/{name}/preflight` | ejecuta los checks de preflight sin cambiar el estado del servicio |
-| Acción de watch | `POST /api/watches/{name}/{action}` | `monitor`, `unmonitor`, `expand` |
+| Acción de watch | `POST /api/watches/{name}/{action}` | `monitor`, `unmonitor`, `expand`, `probe` (una muestra manual), más `pause`/`resume` de RAID, que ejecutan una operación de re-chequeo y verificación y requieren la cabecera `X-Sermo-Confirm` |
+| Prueba de notifier | `POST /api/notifiers/{name}/test` | envía una notificación de prueba por el notifier nombrado tras confirmación |
 | Acción de montaje | `POST /api/mounts/{name}/{action}[?force=1&lazy=1&kill=1]` | `mount`, `umount`, `alert`; `force=1` permite `umount -f`, `lazy=1` permite `umount -l` como último fallback y `kill=1` habilita señalización de blockers limitada por `kill_only_if`; `/` rechaza las rutas de desmontaje |
 | Blockers de montaje | `GET /api/mounts/{name}/blockers` | escaneo read-only fresco de blockers de una unidad de montaje; a los guests se les redactan las líneas de comando como en `GET /api/mounts` |
 | Liberación de lock | `POST /api/locks/{service}/release?name=NAME` | libera locks con nombre inactivos, obsoletos o caducados; los locks activos se rechazan |
 | Limpieza de eventos | `POST /api/events/clear?before=TIME` | borra las filas persistidas de eventos/actividad; `before` acepta una duración positiva o un timestamp RFC3339 no futuro |
 | Compactación de estado | `POST /api/state/compact?before=TIME` | poda el historial antiguo de SLA/métricas/eventos y compacta la base de datos de estado; equivale a `sermoctl state compact` |
+| Modo pánico | `POST /api/panic/{action}` | `on` / `off`; suspensión (solo admin) a nivel de daemon de hooks, alertas y remediación automática |
 | Recarga del daemon | `POST /api/reload` | solicita una recarga de configuración de `sermod` |
 
 ## Barra superior
@@ -100,6 +108,7 @@ la autenticación web está habilitada.
 | Rol | etiqueta admin / solo lectura |
 | Buscar target | autocompletado único sobre services, watches, aplicaciones y mounts cargados; la selección limpia solo los filtros de ese panel y abre el target |
 | Refresco | selector con intervalo de refresco, botón de refresco manual |
+| Notificaciones | campana de notificaciones del navegador (opt-in); con el permiso concedido, los objetivos que empiezan a fallar generan una única notificación agrupada mientras la pestaña está oculta |
 | Estado | antigüedad del último refresco completo, errores de conexión o lista de paneles que conservan datos anteriores tras un refresco parcial; `#statusbar` termina con el `uptime:` del host y luego el `status:` del daemon (`ok` / `starting` / …) como una cola emparejada |
 | Estado del sistema | identidad del host, tipo de host, resumen de daemon/backend/runtime |
 
@@ -203,6 +212,7 @@ Columnas:
 | FDs | recuento de descriptores de archivo abiertos del árbol de procesos; vacío para servicios `no_resident_process` |
 | IO R/W | bytes acumulados de lectura/escritura en disco del árbol de procesos; vacío para servicios `no_resident_process` |
 | Actions | botones icono compactos e individuales para start/stop, restart, reload, resume y monitor/unmonitor; reload se desactiva cuando `can_reload` es false; el diálogo de confirmación de start/stop/restart ofrece **skip also_apply** cuando `also_apply` está definido |
+| Fijar | una estrella por fila sube los servicios elegidos a lo alto del panel (y de su grupo), persistida localmente con el resto del estado de la UI |
 
 ## Paneles de contenedores y máquinas virtuales
 
@@ -460,7 +470,7 @@ Section id: `events-section`
 | Parte | Representación actual |
 | --- | --- |
 | Título | `Events` más nota de eventos dry-run |
-| Controles | selectores guiados de service, watch, kind, status y rango temporal; only errors, agrupar acciones opcional, restablecer filtros, corte `before` opcional, limpiar log (admin) |
+| Controles | selectores guiados de service, watch, kind, status y rango temporal; selectores absolutos de fecha/hora desde/hasta; only errors, agrupar acciones opcional, restablecer filtros, corte `before` opcional, limpiar log (admin) |
 | Tabla | filas cronológicas por defecto; agrupación opcional en cliente por acción |
 | Límite | últimos eventos coincidentes; **load older** continúa con un cursor de ID estable |
 
@@ -468,7 +478,10 @@ Notas editables:
 
 - Las opciones de service/watch siguen los targets conocidos y kind/status usan
   el vocabulario de eventos del daemon. Los rangos temporales solicitan `since`
-  al backend. Escape o **restablecer filtros** limpia todos los filtros. La
+  al backend. Los selectores absolutos desde/hasta (hora local) aplican sus
+  límites exactos en el cliente; un "desde" definido acota además la petición
+  al servidor, ya que el `since` de la API solo acepta duraciones. Escape o
+  **restablecer filtros** limpia todos los filtros. La
   casilla `only errors` vuelve a cargar al cambiar. La agrupación permanece en
   el cliente, es opcional y está desactivada por defecto; la cronología en bruto
   es la vista predeterminada.
