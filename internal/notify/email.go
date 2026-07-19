@@ -15,6 +15,7 @@ import (
 	gomailsmtp "github.com/wneessen/go-mail/smtp"
 
 	"sermo/internal/cfgval"
+	"sermo/internal/netutil"
 )
 
 // dialTimeout bounds the SMTP connection attempt, and is the fallback deadline
@@ -102,7 +103,7 @@ func buildEmail(name string, entry map[string]any) (Notifier, error) {
 func parseEmailDSN(s string) (emailDSN, error) {
 	u, err := url.Parse(s)
 	if err != nil {
-		return emailDSN{}, fmt.Errorf("invalid dsn: %w", err)
+		return emailDSN{}, fmt.Errorf("invalid dsn %q", netutil.RedactURL(s))
 	}
 	var d emailDSN
 	switch u.Scheme {
