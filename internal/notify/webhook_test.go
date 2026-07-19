@@ -60,3 +60,16 @@ func TestEmailDSNAddr(t *testing.T) {
 		t.Fatalf("addr = %q", got)
 	}
 }
+
+// A transport failure must never surface the request URL, since a Telegram
+// bot URL carries the token. Only the underlying cause may appear.
+func TestPostWebhookHidesURLOnTransportError(t *testing.T) {
+	const secretURL = "https://127.0.0.1:1/bot123456:SECRETTOKEN/sendMessage"
+	err := postWebhook(context.Background(), "telegram", secretURL, nil, []byte(`{}`))
+	if err == nil {
+		t.Fatal("expected a transport error")
+	}
+	if strings.Contains(err.Error(), "SECRETTOKEN") || strings.Contains(err.Error(), secretURL) {
+		t.Fatalf("error leaked the request URL/token: %v", err)
+	}
+}
