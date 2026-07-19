@@ -135,10 +135,7 @@ func New(c Config) Engine {
 		// service (whose SIGKILL could then hit the freshly restarted PID).
 		// Derive the TTL from the effective operation timeout — which already
 		// accounts for stop_policy escalation — plus a margin.
-		ttl = ResolveTimeout(c.OperationTimeout, c.Tree) + lockTTLMargin
-		if ttl < defaultLockTTL {
-			ttl = defaultLockTTL
-		}
+		ttl = max(ResolveTimeout(c.OperationTimeout, c.Tree)+lockTTLMargin, defaultLockTTL)
 	}
 
 	return Engine{
