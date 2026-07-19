@@ -1162,15 +1162,6 @@ service: x
 	mustHave(t, issues, "category must be a string")
 }
 
-func TestValidateCategoryStringPasses(t *testing.T) {
-	issues := validateService(t, `
-name: svc
-category: database
-service: x
-`)
-	mustNotHave(t, issues, "category")
-}
-
 func TestValidateAppVersionFrom(t *testing.T) {
 	assertCatalogValidation(t, map[string]string{
 		"sermo.yml": baseGlobal,

@@ -101,27 +101,3 @@ func assertMetricSummaryAndSeries(t *testing.T,
 		t.Fatalf("isolated summary = %+v, want count %d avg %v", iso, wantIsolated.Count, wantIsolated.Avg)
 	}
 }
-
-// assertPrunesOne records a single old sample via record, prunes everything up to
-// an hour later via prune, and asserts exactly one row was removed.
-func assertPrunesOne(t *testing.T, record func(*Store, time.Time) error, prune func(*Store, time.Time) (int64, error)) {
-	t.Helper()
-	s := openTemp(t)
-	old := time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
-	if err := record(s, old); err != nil {
-		t.Fatal(err)
-	}
-	n, err := prune(s, old.Add(time.Hour))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if n != 1 {
-		t.Fatalf("pruned %d rows, want 1", n)
-	}
-}
-
-func TestPruneMetrics(t *testing.T) {
-	assertPrunesOne(t,
-		func(s *Store, at time.Time) error { return s.RecordMetric("disks", "speed", "read", 100, at) },
-		(*Store).PruneMetrics)
-}

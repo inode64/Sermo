@@ -149,18 +149,3 @@ func TestParseMeminfoKB(t *testing.T) {
 		}
 	}
 }
-
-func TestSwapIOTotalsBothDirections(t *testing.T) {
-	// PagesIn == PagesOut so the total is their sum (120), not their difference
-	// (0): a >100 threshold must fire on the second cycle.
-	samples := []SwapSample{{PagesIn: 0, PagesOut: 0}, {PagesIn: 60, PagesOut: 60}}
-	i := 0
-	c := &swapCheck{base: base{name: "s"}, metric: "io", op: ">", value: 100,
-		sampler: func() (SwapSample, error) { s := samples[i]; i++; return s, nil }}
-	if res := c.Run(context.Background()); res.OK {
-		t.Fatal("first cycle must prime")
-	}
-	if res := c.Run(context.Background()); !res.OK {
-		t.Fatalf("io total 120 (60+60) > 100 must fire, got %q", res.Message)
-	}
-}

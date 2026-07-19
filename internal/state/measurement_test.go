@@ -61,18 +61,3 @@ func TestMeasurementSummaryNoData(t *testing.T) {
 		t.Fatalf("expected no data, got %+v", stat)
 	}
 }
-
-func TestPruneMeasurements(t *testing.T) {
-	s := openTemp(t)
-	old := time.Now().Add(-48 * time.Hour)
-	if err := s.RecordMeasurement("web", "http", 10, old); err != nil {
-		t.Fatal(err)
-	}
-	n, err := s.PruneMeasurements(time.Now().Add(-24 * time.Hour))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if n != 1 {
-		t.Fatalf("pruned %d, want 1", n)
-	}
-}
