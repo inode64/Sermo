@@ -1,6 +1,6 @@
 [Unit]
 Description=Sermo service supervisor
-Documentation=https://github.com/sermo/sermo
+Documentation=https://github.com/inode64/Sermo
 After=network.target
 
 [Service]
