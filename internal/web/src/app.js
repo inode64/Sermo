@@ -3172,7 +3172,7 @@ function slaIncidentPoints(points, startMs, endMs) {
 }
 
 function slaIncidentTime(t) {
-  return new Date(t).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  return fmtTime(new Date(t).toISOString());
 }
 
 function slaTimelineSummary(points) {
@@ -3262,7 +3262,7 @@ function drawSLAChart(points, win) {
   const slaAria = `SLA timeline: latest ${fmtPct(latestPct)}, ${incidents.length} incident${incidents.length === 1 ? "" : "s"}`;
   const dataTable = slaChartDataTable(observed);
   return `${dataTable}<div class="sla-bars" role="img" aria-label="${esc(slaAria)}">${bars}</div>` +
-    `<div class="sla-bars-axis"><span>${esc(new Date(startMs).toLocaleString())}</span><span>now</span></div>` +
+    `<div class="sla-bars-axis"><span>${esc(fmtTime(new Date(startMs).toISOString()))}</span><span>now</span></div>` +
     renderSLAIncidentList(incidents);
 }
 
@@ -6765,7 +6765,7 @@ function metricChartDataTable(pts, unit, startMs, span, cols) {
   const rows = shown.map((o) => {
     const t = new Date(startMs + (o.i + 0.5) * (span / cols));
     const b = o.b;
-    return `<tr><td>${esc(t.toLocaleString())}</td><td>${esc(fmtMetricValue(b.sum / b.n, unit))}</td><td>${esc(fmtMetricValue(b.min, unit))}</td><td>${esc(fmtMetricValue(b.max, unit))}</td></tr>`;
+    return `<tr><td>${esc(fmtTime(t.toISOString()))}</td><td>${esc(fmtMetricValue(b.sum / b.n, unit))}</td><td>${esc(fmtMetricValue(b.min, unit))}</td><td>${esc(fmtMetricValue(b.max, unit))}</td></tr>`;
   }).join("");
   return `<table class="chart-data visually-hidden"><caption>Chart data</caption><thead><tr><th scope="col">Time</th><th scope="col">Avg</th><th scope="col">Min</th><th scope="col">Max</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
@@ -6812,13 +6812,13 @@ function drawMetricChart(points, unit, win, label) {
     <line x1="${pad}" y1="${H - pad}" x2="${W - pad}" y2="${H - pad}" stroke="#8886"></line>
     <text x="2" y="${pad + 4}" font-size="10" fill="#888">${esc(fmtMetricValue(maxV, unit))}</text>
     <text x="2" y="${H - pad}" font-size="10" fill="#888">0</text>
-    <text x="${pad}" y="${H - 6}" font-size="10" fill="#888">${new Date(startMs).toLocaleString()}</text>
+    <text x="${pad}" y="${H - 6}" font-size="10" fill="#888">${esc(fmtTime(new Date(startMs).toISOString()))}</text>
     <text x="${W - pad}" y="${H - 6}" font-size="10" fill="#888" text-anchor="end">now</text>`;
   // Transparent per-bucket strips carry a native <title> tooltip (value + time).
   const bw = (W - 2 * pad) / cols;
   const hover = pts.map((o) => {
     const t = new Date(startMs + (o.i + 0.5) * (span / cols));
-    const tip = `${t.toLocaleString()}\navg ${fmtMetricValue(o.b.sum / o.b.n, unit)} · min ${fmtMetricValue(o.b.min, unit)} · max ${fmtMetricValue(o.b.max, unit)}`;
+    const tip = `${fmtTime(t.toISOString())}\navg ${fmtMetricValue(o.b.sum / o.b.n, unit)} · min ${fmtMetricValue(o.b.min, unit)} · max ${fmtMetricValue(o.b.max, unit)}`;
     return `<rect x="${(x(o.i) - bw / 2).toFixed(1)}" y="${pad}" width="${bw.toFixed(1)}" height="${(H - 2 * pad).toFixed(1)}" fill="transparent"><title>${esc(tip)}</title></rect>`;
   }).join("");
   const chartLabel = label || "Metric chart";
