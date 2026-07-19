@@ -464,6 +464,7 @@ async function performLoad() {
   if (servicesResult.ok) {
     render(services);
     connOK = true;
+    refreshFailures = 0;
     lastLoadOk = Date.now();
     document.body.classList.remove("disconnected");
     clearStatusAfterRefresh();
@@ -475,12 +476,14 @@ async function performLoad() {
     // failed: a services-only error must not dim a dashboard whose other
     // sections still answer.
     connOK = true;
+    refreshFailures = 0;
     document.body.classList.remove("disconnected");
     // Only claim to keep a list when one was actually rendered before.
     const hasList = (allServices || []).length > 0;
     setStatus(hasList ? "services unavailable — keeping the last known list" : "services unavailable", feedbackStatusWarn, false);
   } else {
     connOK = false;
+    refreshFailures++;
     showDisconnected();
   }
   if (mounts) renderMounts(mounts);
@@ -7167,6 +7170,15 @@ setInterval(tickRefreshAge, refreshAgeTickMs);
 
 let refreshTimer = null;
 let refreshDelay = 0;
+// While the daemon is unreachable each failed poll doubles the retry delay up
+// to a cap, so a downed daemon is not hammered at the configured cadence; any
+// successful load (scheduled, manual or visibility-driven) resets it.
+const refreshBackoffMaxMs = 2 * millisecondsPerMinute;
+let refreshFailures = 0;
+function refreshInterval() {
+  if (!refreshFailures) return refreshDelay;
+  return Math.min(refreshDelay * 2 ** refreshFailures, Math.max(refreshDelay, refreshBackoffMaxMs));
+}
 function scheduleRefresh() {
   if (refreshTimer) clearTimeout(refreshTimer);
   refreshTimer = null;
@@ -7175,7 +7187,7 @@ function scheduleRefresh() {
     refreshTimer = null;
     await load();
     scheduleRefresh();
-  }, refreshDelay);
+  }, refreshInterval());
 }
 function applyRefresh(ms) {
   refreshDelay = ms;
