@@ -2062,7 +2062,7 @@ function renderOperationLive() {
   const html = slotText + ops.map((op) => {
     const state = opStateText(op);
     const cls = op.finished ? (op.ok ? targetStateOK : targetStateFailed) : "";
-    const since = op.finished ? `${opElapsed(op)}s total` : `${opElapsed(op)}s elapsed`;
+    const since = op.finished ? `${fmtDuration(opElapsed(op))} total` : `${fmtDuration(opElapsed(op))} elapsed`;
     return `<div class="op-card">
       <span class="op-dot ${cls}" aria-hidden="true"></span>
       <b>${esc(op.action)}</b>
@@ -2418,7 +2418,7 @@ function serviceRowParts(s, opts = {}) {
   const busy = serviceBusy(s.name);
   const showResume = !!opts.showResume;
   const busyText = op
-    ? tpl`<div id="svc-${s.name}-busy" class="svc-busy ${op.finished ? (op.ok ? 'ok' : 'bad') : 'inactive'}" role="status" aria-live="polite">${op.action} ${opStateText(op)} · ${opElapsed(op)}s${op.message ? tpl` <span class="muted">${op.message}</span>` : nothing}</div>`
+    ? tpl`<div id="svc-${s.name}-busy" class="svc-busy ${op.finished ? (op.ok ? 'ok' : 'bad') : 'inactive'}" role="status" aria-live="polite">${op.action} ${opStateText(op)} · ${fmtDuration(opElapsed(op))}${op.message ? tpl` <span class="muted">${op.message}</span>` : nothing}</div>`
     : nothing;
   let actions;
   if (!s.enabled) {
