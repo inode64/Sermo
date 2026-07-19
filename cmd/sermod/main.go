@@ -251,6 +251,10 @@ func run(args []string) int {
 		go diagnosticLog.Run(ctx, config.EngineDiagnosticsInterval(cfg, config.DefaultEngineDiagnosticsInterval))
 	}
 	panicGate := app.NewPanicGate(store)
+	// webChanges pushes a change signal to connected dashboards (SSE) on every
+	// emitted event; with the web UI disabled nobody subscribes and Notify is
+	// a cheap no-op.
+	webChanges := web.NewBroadcaster()
 	userLookup := app.EngineUserLookup(cfg, runner)
 	readiness := app.NewReadiness(string(detection.Backend), 0, 0)
 	readiness.WatchPanic(panicGate.Active)
@@ -265,8 +269,9 @@ func run(args []string) int {
 		MaxParallel:      app.EngineInt(cfg, config.EngineKeyMaxParallelChecks, app.DefaultEngineMaxParallelChecks),
 		Sleep:            time.Sleep,
 		Now:              time.Now,
-		// Events go to slog and to the persisted ring the web UI reads.
-		Emit:              app.MultiEmit(app.SlogEmitter(logger), eventLog.Add),
+		// Events go to slog, to the persisted ring the web UI reads, and to
+		// the dashboard change stream.
+		Emit:              app.MultiEmit(app.SlogEmitter(logger), eventLog.Add, func(app.Event) { webChanges.Notify() }),
 		Monitor:           store,
 		OperationSettling: store,
 		Panic:             panicGate,
@@ -385,6 +390,7 @@ func run(args []string) int {
 			OperationTimeout:       app.MaxOperationTimeout(cfg, deps.OperationTimeout),
 			OperationTimeoutSource: webHolder.MaxOperationTimeout,
 			Readiness:              readiness,
+			Changes:                webChanges,
 			// Trigger reload by signalling ourself with SIGHUP. This re-uses the
 			// exact same Monitor.Reload path as sermoctl daemon reload.
 			Reload: func() error {

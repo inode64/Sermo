@@ -22,6 +22,7 @@ const apiPanicPath = "api/panic";
 export const apiReloadPath = "api/reload";
 export const apiServicesPath = "api/services";
 const apiStateCompactPath = "api/state/compact";
+export const apiStreamPath = "api/stream";
 export const apiWatchesPath = "api/watches";
 export const apiWhoamiPath = "api/whoami";
 

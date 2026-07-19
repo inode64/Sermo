@@ -8,7 +8,7 @@ import {
   apiQueryForce, apiQueryKill, apiQueryKind, apiQueryLazy, apiQueryLimit, apiQueryName, apiQueryNoCascade,
   apiQueryOnlyErrors, apiQueryPage, apiQueryService, apiQuerySince, apiQueryStatus,
   apiQueryWatch, apiReloadPath, notifierTestAPI,
-  apiServicesPath, apiWatchesPath, apiWhoamiPath, applicationEventsAPI,
+  apiServicesPath, apiStreamPath, apiWatchesPath, apiWhoamiPath, applicationEventsAPI,
   csrfPostOptions, dashboardAPI, daemonMetricsAPI, eventsAPI, eventsClearAPI,
   liveVerbosePath, lockReleaseAPI, mountAPI, mountBlockersAPI, panicAPI,
   readyVerbosePath, serviceAPI, serviceEventsAPI, serviceMetricsAPI,
@@ -54,6 +54,9 @@ const domBoolFalse = "false";
 const domEventChange = "change";
 const domEventClick = "click";
 const domEventClose = "close";
+const domEventError = "error";
+const domEventOpen = "open";
+const eventSourceAPIName = "EventSource";
 const domEventHashChange = "hashchange";
 const domEventInput = "input";
 const domEventKeydown = "keydown";
@@ -1831,10 +1834,10 @@ function maybeNotifyAttention(failingSvcs, firingWatches, failedApps) {
   const body = names.slice(0, notifyPreviewNames).join(", ") + (names.length > notifyPreviewNames ? ` and ${names.length - notifyPreviewNames} more` : "");
   try {
     const note = new Notification(title, { body, tag: "sermo-attention" });
-    note.onclick = () => {
+    note.addEventListener(domEventClick, () => {
       window.focus();
       note.close();
-    };
+    });
   } catch (_) { /* notification constructors can throw in some embeds */ }
 }
 
@@ -7338,10 +7341,45 @@ let refreshDelay = 0;
 // successful load (scheduled, manual or visibility-driven) resets it.
 const refreshBackoffMaxMs = 2 * millisecondsPerMinute;
 let refreshFailures = 0;
+// With the change stream connected the daemon pushes on every event, so the
+// scheduled poll relaxes to a slow reconciliation pass.
+const streamReconcileMs = 2 * millisecondsPerMinute;
+let streamConnected = false;
 function refreshInterval() {
-  if (!refreshFailures) return refreshDelay;
+  if (!refreshFailures) {
+    return streamConnected ? Math.max(refreshDelay, streamReconcileMs) : refreshDelay;
+  }
   return Math.min(refreshDelay * 2 ** refreshFailures, Math.max(refreshDelay, refreshBackoffMaxMs));
 }
+
+// The change stream (SSE) turns the dashboard push-driven: the daemon signals
+// every emitted event and the client refetches through the normal API within
+// a debounce window. EventSource reconnects on its own; while disconnected
+// (or where the endpoint is unavailable) the configured poll cadence returns.
+const streamLoadDebounceMs = 500;
+let streamLoadTimer = null;
+(function initChangeStream() {
+  if (!(eventSourceAPIName in window)) return;
+  const source = new EventSource(apiStreamPath);
+  source.addEventListener(domEventOpen, () => {
+    streamConnected = true;
+    scheduleRefresh();
+  });
+  source.addEventListener(domEventChange, () => {
+    if (streamLoadTimer) clearTimeout(streamLoadTimer);
+    streamLoadTimer = setTimeout(() => {
+      streamLoadTimer = null;
+      // A hidden tab catches up via the visibilitychange reload instead.
+      if (!document.hidden) load();
+    }, streamLoadDebounceMs);
+  });
+  source.addEventListener(domEventError, () => {
+    if (streamConnected) {
+      streamConnected = false;
+      scheduleRefresh();
+    }
+  });
+})();
 function scheduleRefresh() {
   if (refreshTimer) clearTimeout(refreshTimer);
   refreshTimer = null;

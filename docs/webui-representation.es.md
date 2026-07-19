@@ -45,6 +45,7 @@ deterministas de la API.
 | --- | --- | --- |
 | Usuario actual | `GET /api/whoami` | rol y permisos de acción; los controles de acción permanecen ocultos hasta que esta petición tiene éxito |
 | Snapshot del dashboard | `GET /api/dashboard?since=WINDOW` | agregado de los paneles de servicio/runtime que se refrescan con frecuencia y provienen de una generación activa de configuración del daemon; incluye `generation` y las respuestas de datos del panel llevan `X-Sermo-Generation`, para que el navegador descarte una vista mezclada durante la recarga antes de renderizarla; el navegador vuelve a los endpoints individuales si no está disponible |
+| Flujo de cambios | `GET /api/stream` | canal Server-Sent Events que empuja una señal `change` sin payload con cada evento del daemon; el dashboard refresca de inmediato y relaja su sondeo a una pasada lenta de reconciliación mientras está conectado, volviendo a la cadencia de sondeo configurada cuando el flujo no está disponible |
 | Disponibilidad | `GET /readyz?verbose` | `status:` del daemon en la barra superior (`starting` / `ok` / …) |
 | Servicios | `GET /api/services` | servicios de runtime configurados cargados por sermod (no el inventario de catálogo de `sermoctl services`); `status_observed_at` identifica la muestra real de estado de init que hay detrás de una fila cacheada |
 | Expansión de servicio | `GET /api/services/{name}` | checks, información del proceso, reglas |
