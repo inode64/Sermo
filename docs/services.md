@@ -1041,6 +1041,18 @@ Set `versions.unversioned: false` to ignore the marker-less or `current_from`
 active slot; a map form can still override fields for the unversioned instance
 when a template needs a custom label:
 
+```yaml
+name: python%n
+display_name: "Python ${n}"
+versions:
+  unversioned:
+    description: "Active Python interpreter"
+variables:
+  binary: "/usr/bin/python${n}"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+```
+
 If a template would materialize a `name:` that already exists as an explicit
 document in the same catalog category, validation reports a collision. Remove
 one definition or adjust the template discovery; Sermo does not silently choose
@@ -1059,18 +1071,6 @@ inventory commands may still add the `current` label at inspection time when an
 active-slot wrapper reports the same `version_short` as one materialized
 version, which keeps wrappers such as Gentoo Java generic without `from_file`
 catalog metadata.
-
-```yaml
-name: python%n
-display_name: "Python ${n}"
-versions:
-  unversioned:
-    description: "Active Python interpreter"
-variables:
-  binary: "/usr/bin/python${n}"
-preflight:
-  binary: { type: binary, path: "${binary}" }
-```
 
 Use `%i`/`${instance}` for named init instances discovered from bounded service
 metadata. Scope backend-specific discovery to matching service candidates; for
