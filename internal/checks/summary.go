@@ -210,33 +210,29 @@ func displayNumber(value any) (float64, bool) {
 	}
 }
 
-func formatSummaryBytes(number float64) string {
+// formatUnitLadder renders number through a unit ladder, dividing by base
+// while a larger unit remains. Sizes climb the IEC binary ladder (1024) and
+// rates the SI decimal one (1000) — deliberately different presentations
+// sharing one loop; the web fmtBytes/fmtBytesPerSecond mirror both exactly.
+func formatUnitLadder(number, base float64, unitNames []string) string {
 	if math.IsNaN(number) || math.IsInf(number, 0) {
 		return "-"
 	}
-	byteUnits := []string{"B", "KiB", "MiB", "GiB", "TiB"}
 	unit := 0
-	for number >= summaryByteBase && unit < len(byteUnits)-1 {
-		number /= summaryByteBase
+	for number >= base && unit < len(unitNames)-1 {
+		number /= base
 		unit++
 	}
-	return formatSummaryNumber(number) + " " + byteUnits[unit]
+	return formatSummaryNumber(number) + " " + unitNames[unit]
 }
 
-// formatSummaryBytesPerSecond renders a byte rate in SI decimal units (B/s,
-// KB/s, MB/s, GB/s, TB/s). Rates are decimal on purpose while sizes stay IEC
-// binary (formatSummaryBytes); the web fmtBytesPerSecond mirrors this exactly.
+func formatSummaryBytes(number float64) string {
+	return formatUnitLadder(number, summaryByteBase, []string{"B", "KiB", "MiB", "GiB", "TiB"})
+}
+
+// formatSummaryBytesPerSecond renders a byte rate in SI decimal units.
 func formatSummaryBytesPerSecond(number float64) string {
-	if math.IsNaN(number) || math.IsInf(number, 0) {
-		return "-"
-	}
-	byteRateUnits := []string{"B/s", "KB/s", "MB/s", "GB/s", "TB/s"}
-	unit := 0
-	for number >= summaryByteRateBase && unit < len(byteRateUnits)-1 {
-		number /= summaryByteRateBase
-		unit++
-	}
-	return formatSummaryNumber(number) + " " + byteRateUnits[unit]
+	return formatUnitLadder(number, summaryByteRateBase, []string{"B/s", "KB/s", "MB/s", "GB/s", "TB/s"})
 }
 
 func formatSummaryString(name, value string) string {
