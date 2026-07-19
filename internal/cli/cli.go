@@ -737,7 +737,7 @@ func (a App) finishManualOperationSettling(cfg *config.Config, store *state.Stor
 }
 
 func (a App) activeAfterPostflightFailure(ctx context.Context, opts options, _ *config.Config, resolved config.Resolved, service, action string, result operation.Result, opErr error) bool {
-	if opErr != nil || result.Status != operation.ResultPostflightFailed || !app.ManualActionCanRemainActiveAfterPostflightFailure(action) {
+	if opErr != nil || result.Status != operation.ResultPostflightFailed || !rules.ActionType(action).CanRemainActiveAfterPostflightFailure() {
 		return false
 	}
 	if a.Detector == nil || a.NewManager == nil {
