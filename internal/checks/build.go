@@ -416,7 +416,7 @@ func buildCertCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 	if v, ok := cfgval.Int(entry[CheckKeyExpiresInDays]); ok {
 		days = v
 	}
-	verify := boolWithDefault(entry[CheckKeyCertVerify], true)
+	verify := boolDefaultTrue(entry[CheckKeyCertVerify])
 	return &certCheck{
 		base:           b,
 		host:           host,
