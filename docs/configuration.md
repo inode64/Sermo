@@ -1056,7 +1056,9 @@ notifiers:
   ntfy.sh): push notifications on phone and desktop with no external
   dependency.
   - **`webhook`** — the full topic URL (`https://ntfy.example.net/sermo-alerts`).
-    The subject travels as the notification title and the detail (the
+    A reverse-proxy subpath is kept (`https://host/ntfy/alerts` publishes to
+    `https://host/ntfy` with topic `alerts`). The subject travels as the
+    notification title and the detail (the
     `SERMO_*` fields) as the message.
   - **`token`** — optional access token for a protected topic (sent as an
     `Authorization: Bearer` header). The dashboard shows only the server host;

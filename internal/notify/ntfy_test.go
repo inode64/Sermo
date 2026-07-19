@@ -11,11 +11,21 @@ func TestBuildNtfyRequiresWebhook(t *testing.T) {
 		"https://ntfy.sh/sermo-alerts", "ntfy.sh/sermo-alerts")
 }
 
-func TestBuildNtfyRequiresOneTopic(t *testing.T) {
-	for _, webhook := range []string{"https://ntfy.sh", "https://ntfy.sh/", "https://ntfy.sh/a/b"} {
+func TestBuildNtfyRequiresTopic(t *testing.T) {
+	for _, webhook := range []string{"https://ntfy.sh", "https://ntfy.sh/"} {
 		if _, err := buildNtfy("push", map[string]any{"type": "ntfy", "webhook": webhook}); err == nil {
-			t.Fatalf("webhook %q should be rejected", webhook)
+			t.Fatalf("webhook %q should be rejected (no topic)", webhook)
 		}
+	}
+}
+
+func TestNtfySubpathInstallKeepsPrefix(t *testing.T) {
+	base, topic, err := ParseNtfyWebhook("https://host.example.net/ntfy/sermo-alerts")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if base != "https://host.example.net/ntfy" || topic != "sermo-alerts" {
+		t.Fatalf("subpath parse = base %q topic %q, want the /ntfy prefix kept", base, topic)
 	}
 }
 
