@@ -72,9 +72,9 @@ deterministas de la API.
 | Operaciones en vivo | `GET /api/ops` | slots de operaciones activas |
 
 Las cachés de estado de init, inspección de aplicaciones y líneas temporales de
-SLA exponen sus horas de muestra reales. La UI muestra su antigüedad y las marcas
-de los segmentos SLA permanecen ancladas a `observed_at`, en lugar de avanzar
-con el reloj del navegador mientras están cacheadas.
+SLA exponen sus horas de muestra reales, y las marcas de los segmentos SLA
+permanecen ancladas a `observed_at`, en lugar de avanzar con el reloj del
+navegador mientras están cacheadas.
 Los refrescos son single-flight: las recargas automáticas, manuales y posteriores
 a una acción nunca se ejecutan a la vez, y el siguiente intervalo automático
 empieza cuando termina el refresco anterior.
