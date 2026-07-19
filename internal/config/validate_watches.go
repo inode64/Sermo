@@ -257,17 +257,6 @@ func isRuleClassAction(action string) bool {
 	return false
 }
 
-// isOperationAction reports whether an action drives the operation engine (the
-// actions a guard may block).
-func isOperationAction(action string) bool {
-	switch rules.ActionType(action) {
-	case rules.ActionRestart, rules.ActionStart, rules.ActionStop, rules.ActionReload, rules.ActionResume:
-		return true
-	default:
-		return false
-	}
-}
-
 // validateWatchThenAction validates a unified service watch whose then declares a
 // rule-class action. It desugars to a generated check + rule, so its then accepts
 // action/message/blocks/notify but not fire-and-forget hook/expand/kill side
@@ -300,7 +289,7 @@ func validateWatchThenAction(prefix, action string, then map[string]any, add fun
 			add("%s requires a non-empty blocks: [list of actions] for a block (guard) action", prefix+"."+rules.RuleFieldThen)
 		}
 		for _, b := range blocks {
-			if !isOperationAction(b) {
+			if !rules.ActionType(b).IsOperation() {
 				add("%s entry %q must be an operation action (restart/start/stop/reload/resume)", thenFieldPath(prefix, rules.RuleFieldBlocks), b)
 			}
 		}

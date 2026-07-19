@@ -11,28 +11,8 @@ import (
 
 const operationSettlingMaxAge = 15 * time.Minute
 
-func operationActionSettlesAfter(action string) bool {
-	switch rules.ActionType(action) {
-	case rules.ActionStart, rules.ActionRestart, rules.ActionReload, rules.ActionResume:
-		return true
-	default:
-		return false
-	}
-}
-
-// ManualActionCanRemainActiveAfterPostflightFailure reports whether a failed
-// postflight can still leave the service running and needing observation.
-func ManualActionCanRemainActiveAfterPostflightFailure(action string) bool {
-	switch rules.ActionType(action) {
-	case rules.ActionStart, rules.ActionRestart, rules.ActionResume:
-		return true
-	default:
-		return false
-	}
-}
-
 func beginOperationSettling(store OperationSettlingStore, service, action, source string) error {
-	if store == nil || !isServiceOperationAction(action) {
+	if store == nil || !rules.ActionType(action).IsOperation() {
 		return nil
 	}
 	if err := store.SetOperationSettling(service, action, state.OperationSettlingRunning, source); err != nil {
@@ -47,11 +27,11 @@ func BeginOperationSettling(store OperationSettlingStore, service, action, sourc
 }
 
 func finishOperationSettling(store OperationSettlingStore, service, action, source string, result operation.Result, opErr error, activeAfterPostflightFailure bool) error {
-	if store == nil || !isServiceOperationAction(action) {
+	if store == nil || !rules.ActionType(action).IsOperation() {
 		return nil
 	}
-	settleAfter := result.OK() || (activeAfterPostflightFailure && result.Status == operation.ResultPostflightFailed && ManualActionCanRemainActiveAfterPostflightFailure(action))
-	if opErr == nil && settleAfter && operationActionSettlesAfter(action) {
+	settleAfter := result.OK() || (activeAfterPostflightFailure && result.Status == operation.ResultPostflightFailed && rules.ActionType(action).CanRemainActiveAfterPostflightFailure())
+	if opErr == nil && settleAfter && rules.ActionType(action).SettlesAfter() {
 		if err := store.SetOperationSettling(service, action, state.OperationSettlingSettling, source); err != nil {
 			return fmt.Errorf("mark post-operation settling for %s: %w", service, err)
 		}
