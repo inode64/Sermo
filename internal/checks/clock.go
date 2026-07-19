@@ -238,28 +238,30 @@ func (c clockCheck) failureMessage(sample clockSample) string {
 	return "clock has no healthy NTP sample via " + netutil.JoinHostPort(sample.server, c.port)
 }
 
-func requiredFloatExtra(res conn.Result, key string) (float64, error) {
-	raw, ok := res.Extra[key]
-	if !ok || strings.TrimSpace(raw) == "" {
-		return 0, fmt.Errorf("%s unavailable", key)
+// requiredExtra reads a mandatory Extra value and parses it; the presence and
+// error shape shared by the numeric readers below. want names the expected
+// form in the parse-failure message.
+func requiredExtra[T any](res conn.Result, key, want string, parse func(string) (T, error)) (T, error) {
+	var zero T
+	raw := strings.TrimSpace(res.Extra[key])
+	if raw == "" {
+		return zero, fmt.Errorf("%s unavailable", key)
 	}
-	val, err := strconv.ParseFloat(strings.TrimSpace(raw), numericBits64)
+	val, err := parse(raw)
 	if err != nil {
-		return 0, fmt.Errorf("%s %q is not numeric", key, raw)
+		return zero, fmt.Errorf("%s %q is not %s", key, raw, want)
 	}
 	return val, nil
 }
 
+func requiredFloatExtra(res conn.Result, key string) (float64, error) {
+	return requiredExtra(res, key, "numeric", func(raw string) (float64, error) {
+		return strconv.ParseFloat(raw, numericBits64)
+	})
+}
+
 func requiredIntExtra(res conn.Result, key string) (int, error) {
-	raw, ok := res.Extra[key]
-	if !ok || strings.TrimSpace(raw) == "" {
-		return 0, fmt.Errorf("%s unavailable", key)
-	}
-	val, err := strconv.Atoi(strings.TrimSpace(raw))
-	if err != nil {
-		return 0, fmt.Errorf("%s %q is not an integer", key, raw)
-	}
-	return val, nil
+	return requiredExtra(res, key, "an integer", strconv.Atoi)
 }
 
 func copyStringExtra(data map[string]any, res conn.Result, key string) {
