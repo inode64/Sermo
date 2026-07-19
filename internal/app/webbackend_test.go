@@ -1074,15 +1074,6 @@ func readingByField(readings []web.WatchReading, field string) web.WatchReading 
 	return web.WatchReading{}
 }
 
-func conditionByField(conditions []web.WatchCondition, field string) web.WatchCondition {
-	for _, condition := range conditions {
-		if condition.Field == field {
-			return condition
-		}
-	}
-	return web.WatchCondition{}
-}
-
 func TestWatchMetricConditionsComparisons(t *testing.T) {
 	conditions := watchMetricConditions(map[string]any{
 		"errors": map[string]any{
