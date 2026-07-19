@@ -9,9 +9,8 @@
 # backs up /etc/sermo to /etc/sermo.backup.<run-id> and applies the generated
 # tree with remote_apply.sh.
 #
-# Mutating fleet runs pause after the first four hosts for confirmation
-# (see README.md "Fleet install and update failure handling"); unreachable or
-# unhealthy hosts are recorded and skipped, never forced through.
+# Unreachable or unhealthy hosts are recorded and skipped, never forced
+# through (see README.md "Fleet install and update failure handling").
 set -u
 
 script_dir="$(cd "$(dirname "$0")" && pwd)"
@@ -23,7 +22,6 @@ ssh_user="root"
 with_config=0
 skip_build=0
 dry_run=0
-assume_yes=0
 run_root=""
 hosts=()
 
@@ -43,7 +41,6 @@ options:
   --ssh-user USER   SSH user, must reach root on the target (default: root)
   --skip-build      reuse existing bin/sermoctl and bin/sermod
   --dry-run         print the per-host plan without contacting any host
-  --yes             do not pause for confirmation after the first four hosts
   -h, --help        show this help
 
 environment:
@@ -84,7 +81,6 @@ while [ $# -gt 0 ]; do
 			;;
 		--skip-build) skip_build=1; shift ;;
 		--dry-run) dry_run=1; shift ;;
-		--yes) assume_yes=1; shift ;;
 		-h | --help) usage; exit 0 ;;
 		-*) die "unknown option: $1" ;;
 		*) hosts+=("$1"); shift ;;
@@ -118,7 +114,7 @@ if [ "$dry_run" = "1" ]; then
 		echo "  6. back up /etc/sermo to /etc/sermo.backup.${run_id}"
 		echo "  7. apply config with remote_apply.sh ${run_id}"
 	fi
-	echo "hosts (gate pauses after the first four):"
+	echo "hosts:"
 	printf '  %s\n' "${hosts[@]}"
 	exit 0
 fi
@@ -170,24 +166,6 @@ failures=0
 processed=0
 
 for host in "${hosts[@]}"; do
-	if [ "$processed" -eq 4 ] && [ "$assume_yes" = "0" ]; then
-		if [ ! -t 0 ]; then
-			echo "four hosts processed; refusing to continue non-interactively without --yes" >&2
-			record "-" "gate" "stopped" "remaining hosts skipped"
-			failures=$((failures + 1))
-			break
-		fi
-		printf 'First four hosts done. Review %s, then continue with the remaining %s host(s)? [y/N] ' "$report" "$((${#hosts[@]} - processed))"
-		read -r answer
-		case "$answer" in
-			y | Y | yes) ;;
-			*)
-				echo "stopped at the four-host gate"
-				record "-" "gate" "stopped" "user declined to continue"
-				break
-				;;
-		esac
-	fi
 	processed=$((processed + 1))
 	host_dir="${run_root}/hosts/${host}"
 	mkdir -p "$host_dir"

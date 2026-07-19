@@ -52,10 +52,11 @@ scripts/remote-deploy/update_fleet.sh --with-config --hosts fleet.txt
 scripts/remote-deploy/update_fleet.sh --dry-run web1 web2   # plan only
 ```
 
-It honors the first-four-host gate below (pause and confirm before the fifth
-host; `--yes` skips the pause), records and skips unreachable or unhealthy
-hosts, fetches failed hosts' `out.tar.gz` artifacts into its run root, and
-cleans up the exact remote staging directories it created on success.
+It processes the whole selected fleet in one pass (this manually launched
+orchestrator does not apply the first-four-host gate below), records and skips
+unreachable or unhealthy hosts, fetches failed hosts' `out.tar.gz` artifacts
+into its run root, and cleans up the exact remote staging directories it
+created on success.
 `remote_collect_inventory.sh` mirrors `remote_stage.sh`'s read-only evidence
 collection for already installed hosts — keep both in step.
 
