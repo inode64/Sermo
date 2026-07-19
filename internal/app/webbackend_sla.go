@@ -91,19 +91,38 @@ func (b *WebBackend) cachedWindows(key slaCacheKey, now time.Time, load func() (
 	return windows
 }
 
-func toWebProcessUptimeWindows(timelines []state.ProcessUptimeWindow, observedAt time.Time) []web.SLAWindow {
+// toWebWindows converts each source timeline window with convert and stamps
+// the shared observation time; the skeleton shared by the observed-SLA and
+// process-continuity converters.
+func toWebWindows[T any](timelines []T, observedAt time.Time, convert func(T) web.SLAWindow) []web.SLAWindow {
+	at := observedAt.UTC().Format(time.RFC3339)
 	out := make([]web.SLAWindow, 0, len(timelines))
 	for _, timeline := range timelines {
+		win := convert(timeline)
+		win.ObservedAt = at
+		out = append(out, win)
+	}
+	return out
+}
+
+// slaRatio returns up/total as an optional ratio: nil when the window is
+// unknown or nothing was observed (total 0), which renders as a gap.
+func slaRatio(up, total int64, known bool) *float64 {
+	if !known || total <= 0 {
+		return nil
+	}
+	ratio := float64(up) / float64(total)
+	return &ratio
+}
+
+func toWebProcessUptimeWindows(timelines []state.ProcessUptimeWindow, observedAt time.Time) []web.SLAWindow {
+	return toWebWindows(timelines, observedAt, func(timeline state.ProcessUptimeWindow) web.SLAWindow {
 		win := web.SLAWindow{
-			Window:     timeline.Window,
-			Evidence:   slaEvidenceProcess,
-			Up:         timeline.CoveredSeconds,
-			Total:      timeline.TotalSeconds,
-			ObservedAt: observedAt.UTC().Format(time.RFC3339),
-		}
-		if timeline.Known && timeline.TotalSeconds > 0 {
-			ratio := float64(timeline.CoveredSeconds) / float64(timeline.TotalSeconds)
-			win.Ratio = &ratio
+			Window:   timeline.Window,
+			Evidence: slaEvidenceProcess,
+			Up:       timeline.CoveredSeconds,
+			Total:    timeline.TotalSeconds,
+			Ratio:    slaRatio(timeline.CoveredSeconds, timeline.TotalSeconds, timeline.Known),
 		}
 		if len(timeline.Segments) > 0 {
 			segments := make([]*float64, len(timeline.Segments))
@@ -114,30 +133,20 @@ func toWebProcessUptimeWindows(timelines []state.ProcessUptimeWindow, observedAt
 			}
 			win.Segments = segments
 		}
-		out = append(out, win)
-	}
-	return out
+		return win
+	})
 }
 
 func toWebSLAWindows(timelines []state.SLAWindowTimeline, observedAt time.Time) []web.SLAWindow {
-	out := make([]web.SLAWindow, 0, len(timelines))
-	for _, timeline := range timelines {
-		win := web.SLAWindow{Window: timeline.Window, Up: timeline.Up, Total: timeline.Total, ObservedAt: observedAt.UTC().Format(time.RFC3339)}
-		if timeline.Total > 0 {
-			ratio := float64(timeline.Up) / float64(timeline.Total)
-			win.Ratio = &ratio
-		}
+	return toWebWindows(timelines, observedAt, func(timeline state.SLAWindowTimeline) web.SLAWindow {
+		win := web.SLAWindow{Window: timeline.Window, Up: timeline.Up, Total: timeline.Total, Ratio: slaRatio(timeline.Up, timeline.Total, true)}
 		if len(timeline.Segments) > 0 {
 			segments := make([]*float64, len(timeline.Segments))
 			for i, segment := range timeline.Segments {
-				if segment.Total > 0 {
-					ratio := float64(segment.Up) / float64(segment.Total)
-					segments[i] = &ratio
-				}
+				segments[i] = slaRatio(segment.Up, segment.Total, true)
 			}
 			win.Segments = segments
 		}
-		out = append(out, win)
-	}
-	return out
+		return win
+	})
 }
