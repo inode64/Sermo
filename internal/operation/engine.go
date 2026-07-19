@@ -466,6 +466,16 @@ func (e Engine) cleanOnStopWarnings() []string {
 
 func cleanStopPath(path CleanPath) []string {
 	if path.Recursive {
+		// The config validator proves the configured path is safe at load time,
+		// but a symlink planted in an ancestor afterwards would redirect the
+		// recursive delete elsewhere (e.g. an ancestor pointing at /etc). Refuse
+		// to delete through any symlinked component — fail safe rather than
+		// remove the wrong tree as root.
+		if link, err := firstSymlinkAncestor(path.Path); err != nil {
+			return []string{fmt.Sprintf("could not clean %s: %v", path.Path, err)}
+		} else if link != "" {
+			return []string{fmt.Sprintf("refusing to clean %s: %s is a symlink", path.Path, link)}
+		}
 		if err := os.RemoveAll(path.Path); err != nil {
 			return []string{fmt.Sprintf("could not clean %s: %v", path.Path, err)}
 		}
@@ -487,6 +497,37 @@ func cleanStopPath(path CleanPath) []string {
 		}
 	}
 	return warns
+}
+
+// firstSymlinkAncestor returns the first ancestor of path (from root down,
+// excluding path itself) that is a symlink, or "" if none is. A missing
+// ancestor is not a symlink; a stat error other than not-exist is returned so
+// the caller fails safe. Checking ancestors (not path itself) is what matters
+// for a recursive delete: os.RemoveAll does not follow a symlink AT path, but
+// it does traverse symlinked parents.
+func firstSymlinkAncestor(path string) (string, error) {
+	clean := filepath.Clean(path)
+	var ancestors []string
+	for dir := filepath.Dir(clean); ; dir = filepath.Dir(dir) {
+		ancestors = append(ancestors, dir)
+		if dir == "/" || dir == "." || dir == filepath.Dir(dir) {
+			break
+		}
+	}
+	// Walk root-first so the report names the highest symlink.
+	for i := len(ancestors) - 1; i >= 0; i-- {
+		info, err := os.Lstat(ancestors[i])
+		if err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
+			return "", err
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			return ancestors[i], nil
+		}
+	}
+	return "", nil
 }
 
 // clearResiduals discovers residual processes after a stop and applies signal
