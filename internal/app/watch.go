@@ -562,6 +562,16 @@ type watchFireSpec struct {
 	action      func() // runs between the hook and the notify fan-out (e.g. kill)
 }
 
+// runWatchHook runs a watch hook and emits its hook/hook-failed completion
+// event; the shape every watcher shares.
+func runWatchHook(ctx context.Context, hook HookSpec, runner HookRunner, emit func(Event), watch, msg string, env map[string]string) {
+	if err := hook.Run(ctx, defaultHookRunner(runner), env); err != nil {
+		emit(Event{Watch: watch, Kind: eventKindHookFail, Message: msg + ": " + err.Error()})
+		return
+	}
+	emit(Event{Watch: watch, Kind: eventKindHook, Message: msg})
+}
+
 // dispatchWatchFire applies the dry-run → panic → hook → action → notify tail
 // every watcher fire ends with.
 func dispatchWatchFire(ctx context.Context, spec watchFireSpec, msg string, env map[string]string) {
@@ -575,12 +585,7 @@ func dispatchWatchFire(ctx context.Context, spec watchFireSpec, msg string, env 
 		return
 	}
 	if len(spec.hook.Command) > 0 {
-		runner := defaultHookRunner(spec.runner)
-		if err := spec.hook.Run(ctx, runner, env); err != nil {
-			spec.emit(Event{Watch: spec.name, Kind: eventKindHookFail, Message: msg + ": " + err.Error()})
-		} else {
-			spec.emit(Event{Watch: spec.name, Kind: eventKindHook, Message: msg})
-		}
+		runWatchHook(ctx, spec.hook, spec.runner, spec.emit, spec.name, msg, env)
 	}
 	if spec.action != nil {
 		spec.action()
