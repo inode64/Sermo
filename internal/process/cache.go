@@ -1,6 +1,7 @@
 package process
 
 import (
+	"slices"
 	"sync"
 	"time"
 )
@@ -73,14 +74,10 @@ func (c *CachingReader) snapshotIndex() *snapshotIndex {
 	return c.idx
 }
 
-// PIDs satisfies Reader by serving the cached snapshot's process IDs.
+// PIDs satisfies Reader by serving the cached snapshot's process IDs, reusing
+// the index's already-sorted order.
 func (c *CachingReader) PIDs() ([]int, error) {
-	snap := c.Snapshot()
-	pids := make([]int, 0, len(snap))
-	for pid := range snap {
-		pids = append(pids, pid)
-	}
-	return pids, nil
+	return slices.Clone(c.snapshotIndex().sorted), nil
 }
 
 // Identity satisfies Reader by serving one process from the cached snapshot.

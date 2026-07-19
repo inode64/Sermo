@@ -2,6 +2,8 @@ package app
 
 import (
 	"fmt"
+	"maps"
+	"slices"
 	"time"
 
 	"sermo/internal/rules"
@@ -89,47 +91,21 @@ func ruleStatePersister(store RuleStateStore, emit func(Event), service string, 
 // remediationRecordsEqual compares records with time.Equal so monotonic-clock
 // noise never defeats the change gate.
 func remediationRecordsEqual(a, b state.RemediationRecord) bool {
-	if !a.LastActionAt.Equal(b.LastActionAt) || a.CurrentBackoff != b.CurrentBackoff || len(a.RecentActions) != len(b.RecentActions) {
-		return false
-	}
-	for i := range a.RecentActions {
-		if !a.RecentActions[i].Equal(b.RecentActions[i]) {
-			return false
-		}
-	}
-	return true
+	return a.LastActionAt.Equal(b.LastActionAt) && a.CurrentBackoff == b.CurrentBackoff &&
+		slices.EqualFunc(a.RecentActions, b.RecentActions, time.Time.Equal)
 }
 
 func ruleWindowRecordsEqual(a, b state.RuleWindowRecord) bool {
-	if a.Consecutive != b.Consecutive || a.Firing != b.Firing || a.ClearConsecutive != b.ClearConsecutive ||
-		!a.TrueSince.Equal(b.TrueSince) || !a.ClearSince.Equal(b.ClearSince) ||
-		len(a.History) != len(b.History) || len(a.TimedHistory) != len(b.TimedHistory) {
-		return false
-	}
-	for i := range a.History {
-		if a.History[i] != b.History[i] {
-			return false
-		}
-	}
-	for i := range a.TimedHistory {
-		if a.TimedHistory[i].Match != b.TimedHistory[i].Match || !a.TimedHistory[i].At.Equal(b.TimedHistory[i].At) {
-			return false
-		}
-	}
-	return true
+	return a.Consecutive == b.Consecutive && a.Firing == b.Firing && a.ClearConsecutive == b.ClearConsecutive &&
+		a.TrueSince.Equal(b.TrueSince) && a.ClearSince.Equal(b.ClearSince) &&
+		slices.Equal(a.History, b.History) &&
+		slices.EqualFunc(a.TimedHistory, b.TimedHistory, func(x, y state.RuleWindowSample) bool {
+			return x.Match == y.Match && x.At.Equal(y.At)
+		})
 }
 
 func ruleWindowMapsEqual(a, b map[string]state.RuleWindowRecord) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for name, rec := range a {
-		other, ok := b[name]
-		if !ok || !ruleWindowRecordsEqual(rec, other) {
-			return false
-		}
-	}
-	return true
+	return maps.EqualFunc(a, b, ruleWindowRecordsEqual)
 }
 
 type ruleStatePlan struct {
