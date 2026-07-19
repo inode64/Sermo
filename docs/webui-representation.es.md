@@ -83,8 +83,15 @@ empieza cuando termina el refresco anterior.
 
 ## Endpoints de acción
 
-Los endpoints que cambian de estado están protegidos por CSRF y son solo para administradores cuando
-la autenticación web está habilitada.
+Toda petición que cambia de estado (cualquier método distinto de `GET`) debe
+llevar la cabecera `X-Sermo-Csrf: 1`; sin ella el servidor responde `403`. Esta
+guarda CSRF se aplica de forma incondicional —también en modo abierto sin
+autenticación—, así que un cliente de la API debe enviarla siempre. Con la
+autenticación web habilitada, estos endpoints son además solo para
+administradores. Los códigos de estado son estables: `401` (desafío de
+autenticación), `403` (falta la cabecera CSRF o un invitado intenta escribir),
+`421` (`Host` rechazado en modo abierto), `404` (objetivo desconocido), `200`
+con un cuerpo `{"ok": bool, "message": string}` para una acción atendida.
 
 | Área | Endpoint | Notas |
 | --- | --- | --- |

@@ -1191,8 +1191,8 @@ notify: [wall]     # broadcast to every logged-in terminal session
   `wall` intencionadamente no tiene opción `users`; usa `tty` cuando necesites apuntar
   solo a usuarios seleccionados.
 
-Los tipos de notifier soportados hoy son `email`, `slack`, `teams`, `tty` y
-`wall`.
+Los tipos de notifier soportados hoy son `email`, `ntfy`, `gotify`,
+`telegram`, `slack`, `teams`, `tty` y `wall`.
 
 Establece **`enabled: false`** en cualquier notifier para mantenerlo definido pero
 omitir la entrega. Los notifiers deshabilitados aún pueden ser referenciados por las

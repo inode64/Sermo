@@ -78,8 +78,14 @@ refresh completes.
 
 ## Action Endpoints
 
-State-changing endpoints are CSRF-protected and admin-only when web auth is
-enabled.
+Every state-changing request (any non-`GET`) must carry the header
+`X-Sermo-Csrf: 1`; without it the server responds `403`. This CSRF guard is
+enforced unconditionally — in open (no-auth) mode too — so an API client must
+always send it. When web auth is enabled these endpoints are additionally
+admin-only. Status codes are stable: `401` (auth challenge), `403` (missing
+CSRF header or guest attempting a write), `421` (rejected `Host` in open mode),
+`404` (unknown target), `200` with an `{"ok": bool, "message": string}` body
+for a handled action.
 
 | Area | Endpoint | Notes |
 | --- | --- | --- |
