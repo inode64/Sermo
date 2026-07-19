@@ -621,6 +621,14 @@ async function loadEvents(seq = 0, append = false, generation = dashboardGenerat
     add("event-kind", apiQueryKind);
     add("event-status", apiQueryStatus);
     add("event-range", apiQuerySince);
+    // An absolute "from" narrows the server fetch too: the API's since only
+    // takes durations, so send now-from and let the exact bounds filter
+    // client-side in renderGlobalEvents.
+    const { fromMs } = eventDateBounds();
+    if (fromMs && !params.has(apiQuerySince)) {
+      const sinceMs = Date.now() - fromMs;
+      if (sinceMs > 0) params.set(apiQuerySince, `${Math.ceil(sinceMs / millisecondsPerSecond)}s`);
+    }
     if ($("#event-errors") && $("#event-errors").checked) params.set(apiQueryOnlyErrors, queryBoolOne);
     if (append && eventNextBeforeID > 0) params.set(apiQueryBeforeID, String(eventNextBeforeID));
     const res = await fetch(eventsAPI(params));
@@ -664,7 +672,7 @@ function eventFilterKey(e) {
 }
 
 function clearEventFilters() {
-  ["event-service", "event-watch", "event-kind", "event-status", "event-range"].forEach((id) => {
+  ["event-service", "event-watch", "event-kind", "event-status", "event-range", "event-from", "event-to"].forEach((id) => {
     const el = $("#" + id);
     if (el) el.value = "";
   });
@@ -899,11 +907,34 @@ function sortedEvents(events) {
   return sortedBy(events.slice(), evSort, evSortKeys, "time");
 }
 
+// eventDateBounds reads the absolute from/until filters as epoch-ms bounds
+// (0 when unset or unparsable); datetime-local values are the viewer's local
+// time, which new Date() parses as such.
+function eventDateBounds() {
+  const read = (id) => {
+    const el = $("#" + id);
+    if (!el || !el.value) return 0;
+    const ms = new Date(el.value).getTime();
+    return Number.isFinite(ms) ? ms : 0;
+  };
+  return { fromMs: read("event-from"), toMs: read("event-to") };
+}
+
+function eventsWithinDateBounds(events) {
+  const { fromMs, toMs } = eventDateBounds();
+  if (!fromMs && !toMs) return events;
+  return events.filter((e) => {
+    const at = Date.parse(e.time);
+    if (!Number.isFinite(at)) return true;
+    return (!fromMs || at >= fromMs) && (!toMs || at <= toMs);
+  });
+}
+
 function renderGlobalEvents() {
   const tbody = $("#events");
   if (!tbody) return;
   updateEvSortIndicators();
-  const events = sortedEvents(allEvents || []);
+  const events = sortedEvents(eventsWithinDateBounds(allEvents || []));
   const cnt = $("#event-count");
   if (cnt) cnt.textContent = events.length ? `${events.length} shown` : "";
   const more = $("#event-more");
@@ -1260,6 +1291,8 @@ function restoreUIState() {
       setVal("#event-kind", ef.kind);
       setVal("#event-status", ef.status);
       setVal("#event-range", ef.range);
+      setVal("#event-from", ef.from);
+      setVal("#event-to", ef.to);
       const err = $("#event-errors");
       if (err && typeof ef.onlyErrors === "boolean") err.checked = ef.onlyErrors;
       const grp = $("#event-group");
@@ -1287,6 +1320,8 @@ function saveUIState() {
         kind: ($("#event-kind") || {}).value || "",
         status: ($("#event-status") || {}).value || "",
         range: ($("#event-range") || {}).value || "",
+        from: ($("#event-from") || {}).value || "",
+        to: ($("#event-to") || {}).value || "",
         onlyErrors: !!($("#event-errors") && $("#event-errors").checked),
         group: !($("#event-group") && !$("#event-group").checked),
       },
@@ -7068,7 +7103,7 @@ function initStaticHandlers() {
     bindSortHeader(th, () => setLibrarySort(th.dataset.librarySort || ""));
   });
 
-  ["event-service", "event-watch", "event-kind", "event-status", "event-range"].forEach((id) => {
+  ["event-service", "event-watch", "event-kind", "event-status", "event-range", "event-from", "event-to"].forEach((id) => {
     const el = $("#" + id);
     if (!el) return;
     el.addEventListener(domEventChange, flushLoadEvents);

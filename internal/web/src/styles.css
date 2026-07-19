@@ -219,7 +219,7 @@
   #panic-banner svg { flex: none; }
   .panic-dialog-body { display: flex; gap: .9rem; align-items: flex-start; }
   .panic-dialog-body svg { flex: none; color: var(--crit); }
-  input[type="search"], input[type="text"], select {
+  input[type="search"], input[type="text"], input[type="datetime-local"], select {
     font: inherit; font-size: .85rem; padding: .26rem .55rem; color: var(--text);
     min-height: 1.5rem;
     border-radius: var(--radius-s); border: 1px solid var(--line-2); background: var(--panel);
