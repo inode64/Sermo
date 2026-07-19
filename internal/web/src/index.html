@@ -325,6 +325,10 @@
       <option value="168h">last 7 days</option>
       <option value="720h">last 30 days</option>
     </select>
+    <label for="event-from" class="visually-hidden">Show events from date and time</label>
+    <input id="event-from" type="datetime-local" class="event-date" title="From (local time)" aria-label="Show events from date and time">
+    <label for="event-to" class="visually-hidden">Show events until date and time</label>
+    <input id="event-to" type="datetime-local" class="event-date" title="Until (local time)" aria-label="Show events until date and time">
     <label class="muted"><input id="event-errors" type="checkbox"> only errors</label>
     <label class="muted"><input id="event-group" type="checkbox"> group actions</label>
     <button id="event-reset-filters" type="button" aria-label="Reset event filters">reset filters</button>
