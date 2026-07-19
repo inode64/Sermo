@@ -230,7 +230,7 @@ func buildInfluxCheck(b base, entry map[string]any) (Check, string) {
 	if query == "" {
 		return nil, "influxdb-query check requires a query"
 	}
-	op, value, msg := assertOpValue(entry, "influxdb-query")
+	op, value, msg := assertOpValue(entry, CheckTypeInfluxDBQuery)
 	if msg != "" {
 		return nil, msg
 	}

@@ -35,7 +35,6 @@ const (
 	sshBannerSeparator     = "-"
 	sshDefaultProbeUser    = "anonymous"
 	sshExtraHostKeyAlgo    = "host_key_algo"
-	sshExtraServerVersion  = "server_version"
 	sshLineTerminator      = '\n'
 	sshLineTrimRight       = "\r\n"
 	sshMaxBannerBytes      = 16 * units.BytesPerKiB
@@ -107,10 +106,10 @@ func (sshProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	return Result{
 		Version: software,
 		Extra: map[string]string{
-			ExtraKeyFingerprint:   ssh.FingerprintSHA256(hostKey),
-			sshExtraHostKeyAlgo:   hostKey.Type(),
-			sshExtraServerVersion: banner,
-			extraProtocol:         proto,
+			ExtraKeyFingerprint: ssh.FingerprintSHA256(hostKey),
+			sshExtraHostKeyAlgo: hostKey.Type(),
+			extraServerVer:      banner,
+			extraProtocol:       proto,
 		},
 	}, nil
 }

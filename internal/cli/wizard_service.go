@@ -541,7 +541,7 @@ func (a App) writeWizardServices(p *assist.Prompt, opts options, globalPath stri
 		}
 		deletes = append(deletes, more...)
 	}
-	return a.finishWizardWrite(opts, globalPath, "service", deletes, docs, writeServiceFiles)
+	return a.finishWizardWrite(opts, globalPath, wizardNounService, deletes, docs, writeServiceFiles)
 }
 
 func serviceCleanupDirs(globalPath string, _ *config.Config) []string {

@@ -151,7 +151,7 @@ func serviceWatches(service string, tree map[string]any, checkDeps checks.Deps, 
 		}
 		sd := deps
 		sd.WatchCheckDeps = &entryDeps
-		ws, warns := buildWatchEntry(service+":"+wn, entry, sd, interval)
+		ws, warns := buildWatchEntry(service+serviceWatchNameSeparator+wn, entry, sd, interval)
 		watches = append(watches, ws...)
 		warnings = append(warnings, warns...)
 	}

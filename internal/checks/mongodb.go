@@ -132,7 +132,7 @@ func mongoRawScalar(rv bson.RawValue) (string, bool) {
 
 // buildMongoCheck builds a mongodb-query check.
 func buildMongoCheck(b base, entry map[string]any) (Check, string) {
-	op, value, msg := assertOpValue(entry, "mongodb-query")
+	op, value, msg := assertOpValue(entry, CheckTypeMongoDBQuery)
 	if msg != "" {
 		return nil, msg
 	}

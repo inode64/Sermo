@@ -383,7 +383,7 @@ func (w *procWatcher) dryRunActions(killable bool) string {
 	if !killable {
 		return base
 	}
-	if base == "dry-run: no configured watch actions" {
+	if base == watchDryRunMessageNoActions {
 		return "dry-run: would run kill"
 	}
 	return base + ", kill"

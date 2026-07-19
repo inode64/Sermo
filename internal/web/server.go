@@ -48,6 +48,7 @@ const (
 	headerContentSecurityPolicy = "Content-Security-Policy"
 	headerContentType           = httpx.HeaderContentType
 	headerReferrerPolicy        = "Referrer-Policy"
+	headerSermoConfirm          = "X-Sermo-Confirm"
 	headerSermoCSRF             = "X-Sermo-Csrf"
 	headerSermoGeneration       = "X-Sermo-Generation"
 	headerWWWAuthenticate       = "WWW-Authenticate"
@@ -1991,7 +1992,7 @@ func (s *Server) handleWatchAction(w http.ResponseWriter, r *http.Request) {
 		case apiActionProbe:
 			res = s.Backend.ProbeWatch(s.operateContext(r), name) //nolint:contextcheck // see operateContext
 		default:
-			res = s.Backend.ControlRAID(s.operateContext(r), name, action, r.Header.Get("X-Sermo-Confirm")) //nolint:contextcheck // see operateContext
+			res = s.Backend.ControlRAID(s.operateContext(r), name, action, r.Header.Get(headerSermoConfirm)) //nolint:contextcheck // see operateContext
 		}
 		writeActionResult(w, res.OK, res)
 		return

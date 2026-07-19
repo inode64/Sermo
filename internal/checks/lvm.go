@@ -117,7 +117,7 @@ func (c *lvmCheck) finish(start time.Time, row lvmRow, health, reasons string, v
 		r.Data[key] = value
 	}
 	if c.primed && health != c.previousHealth {
-		r.Data["lvm_transition"] = LVMTransition{OldState: c.previousHealth, NewState: health, PreviousReasons: c.previousReasons, Reasons: reasons}
+		r.Data[DataKeyLVMTransition] = LVMTransition{OldState: c.previousHealth, NewState: health, PreviousReasons: c.previousReasons, Reasons: reasons}
 	}
 	c.primed, c.previousHealth, c.previousReasons = true, health, reasons
 	return r
@@ -229,6 +229,6 @@ func lvmAttributeAt(attr string, index int) byte {
 
 // LVMTransitionFromResult returns the state change, when this sample crossed it.
 func LVMTransitionFromResult(result Result) (LVMTransition, bool) {
-	transition, ok := result.Data["lvm_transition"].(LVMTransition)
+	transition, ok := result.Data[DataKeyLVMTransition].(LVMTransition)
 	return transition, ok
 }
