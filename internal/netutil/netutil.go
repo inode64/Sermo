@@ -3,11 +3,53 @@ package netutil
 
 import (
 	"context"
+	"errors"
 	"net"
+	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
 )
+
+// redactedMark replaces any credential material in a redacted URL.
+const redactedMark = "xxxxx"
+
+// userinfoPasswordPattern matches the password in a URL userinfo section
+// (scheme://user:PASSWORD@host), used to scrub a URL that url.Parse rejects.
+var userinfoPasswordPattern = regexp.MustCompile(`(//[^/@\s:]+:)[^/@\s]*(@)`)
+
+// RedactURL strips credential material from a URL so it is safe to put in an
+// error, event or log. It drops the entire query string — `?token=` /
+// `?access_token=` are common credential carriers Go never redacts — and masks
+// the userinfo password. A URL that url.Parse rejects (e.g. a control char in
+// the password) is scrubbed textually so a parse failure can never surface the
+// raw credential either.
+func RedactURL(raw string) string {
+	if i := strings.IndexByte(raw, '?'); i >= 0 {
+		raw = raw[:i]
+	}
+	if u, err := url.Parse(raw); err == nil {
+		if u.User != nil {
+			if _, hasPassword := u.User.Password(); hasPassword {
+				u.User = url.UserPassword(u.User.Username(), redactedMark)
+			}
+		}
+		return u.String()
+	}
+	return userinfoPasswordPattern.ReplaceAllString(raw, "${1}"+redactedMark+"${2}")
+}
+
+// URLErrorCause unwraps a *url.Error to its underlying cause, dropping the URL
+// text it embeds (which may carry a credential). Callers that still want to
+// show the URL should pass it separately through RedactURL.
+func URLErrorCause(err error) error {
+	var urlErr *url.Error
+	if errors.As(err, &urlErr) && urlErr.Err != nil {
+		return urlErr.Err
+	}
+	return err
+}
 
 const (
 	// LoopbackIPv4 is the IPv4 loopback address used for local-only defaults.

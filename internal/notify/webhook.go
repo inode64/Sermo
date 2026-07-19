@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"strings"
 	"time"
 
@@ -101,7 +100,7 @@ func postWebhook(ctx context.Context, label, webhook string, headers map[string]
 	if err != nil {
 		// url.Parse also returns a *url.Error embedding the raw URL (reachable
 		// when a token carries a control char), so scrub this path too.
-		return fmt.Errorf("build %s webhook request: %w", label, underlyingURLError(err))
+		return fmt.Errorf("build %s webhook request: %w", label, netutil.URLErrorCause(err))
 	}
 	req.Header.Set(webhookHeaderContentType, webhookContentTypeJSON)
 	for name, value := range headers {
@@ -115,7 +114,7 @@ func postWebhook(ctx context.Context, label, webhook string, headers map[string]
 		// URL; for Telegram that URL carries the bot token, and this error is
 		// surfaced in notify-failed events and the web UI. Report only the
 		// underlying cause so no credential ever reaches an event or log.
-		return fmt.Errorf("post %s webhook: %w", label, underlyingURLError(err))
+		return fmt.Errorf("post %s webhook: %w", label, netutil.URLErrorCause(err))
 	}
 	defer resp.Body.Close()
 
@@ -124,16 +123,6 @@ func postWebhook(ctx context.Context, label, webhook string, headers map[string]
 		return fmt.Errorf("%s webhook returned %s: %s", label, resp.Status, strings.TrimSpace(string(snippet)))
 	}
 	return nil
-}
-
-// underlyingURLError unwraps a *url.Error to its cause, dropping the URL text
-// (which may contain a secret token) while keeping the actionable reason.
-func underlyingURLError(err error) error {
-	var urlErr *url.Error
-	if errors.As(err, &urlErr) && urlErr.Err != nil {
-		return urlErr.Err
-	}
-	return err
 }
 
 // webhookURL reads and validates the `webhook` field shared by the webhook
