@@ -1969,6 +1969,10 @@ block-during-backup:
   then: { action: block, message: "Backup is running" }
 ```
 
+Las reglas guard evalúan su condición en el momento en que se solicita una
+acción, así que no admiten ventanas `for:` ni `within:`; declararlas en un guard
+es un error de validación.
+
 Los servicios de catálogo MySQL, MariaDB y PostgreSQL que se envían incluyen una comprobación de proceso
 `backup` opcional por defecto y un
 guard `block-restart-during-backup`. La comprobación coincide con herramientas comunes de backup local

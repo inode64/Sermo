@@ -1975,6 +1975,10 @@ block-during-backup:
   then: { action: block, message: "Backup is running" }
 ```
 
+Guard rules evaluate their condition at the moment an action is requested, so
+they do not support `for:` or `within:` windows; declaring either on a guard is
+a validation error.
+
 The shipped MySQL, MariaDB and PostgreSQL catalog services include a default
 optional `backup` process check and a
 `block-restart-during-backup` guard. The check matches common local backup

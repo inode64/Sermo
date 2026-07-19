@@ -1046,6 +1046,18 @@ Establezca `versions.unversioned: false` para ignorar el slot activo sin marcado
 `current_from`; una forma de map todavía puede sobrescribir campos para la instancia sin versión
 cuando una plantilla necesita una etiqueta personalizada:
 
+```yaml
+name: python%n
+display_name: "Python ${n}"
+versions:
+  unversioned:
+    description: "Active Python interpreter"
+variables:
+  binary: "/usr/bin/python${n}"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+```
+
 Si una plantilla materializaría un `name:` que ya existe como documento explícito
 en la misma categoría de catálogo, la validación reporta una colisión. Elimine
 una definición o ajuste el descubrimiento de la plantilla; Sermo no elige silenciosamente
@@ -1064,18 +1076,6 @@ inventario de app/servicio todavía pueden añadir la etiqueta `current` en tiem
 wrapper de slot activo reporta el mismo `version_short` que una versión
 materializada, lo que mantiene wrappers como el Java genérico de Gentoo sin metadatos de
 catálogo `from_file`.
-
-```yaml
-name: python%n
-display_name: "Python ${n}"
-versions:
-  unversioned:
-    description: "Active Python interpreter"
-variables:
-  binary: "/usr/bin/python${n}"
-preflight:
-  binary: { type: binary, path: "${binary}" }
-```
 
 Use `%i`/`${instance}` para instancias de init con nombre descubiertas desde metadatos de
 servicio acotados. Limite el descubrimiento específico de backend a candidatos de servicio
