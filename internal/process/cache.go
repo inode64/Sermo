@@ -23,7 +23,7 @@ type CachingReader struct {
 
 	mu        sync.Mutex
 	freshness time.Duration
-	snap      map[int]Identity
+	idx       *snapshotIndex
 	at        time.Time
 	primed    bool
 }
@@ -51,16 +51,26 @@ func (c *CachingReader) Invalidate() {
 // returned map is shared and must not be mutated by callers (discovery only
 // reads it).
 func (c *CachingReader) Snapshot() map[int]Identity {
+	return c.snapshotIndex().byPID
+}
+
+// SnapshotIndex serves the pre-derived snapshot index (sorted PIDs, children
+// map) built once per refresh, so per-service discovery does not rebuild it.
+func (c *CachingReader) SnapshotIndex() *snapshotIndex {
+	return c.snapshotIndex()
+}
+
+func (c *CachingReader) snapshotIndex() *snapshotIndex {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	now := c.now()
 	if c.primed && c.freshness > 0 && now.Sub(c.at) < c.freshness {
-		return c.snap
+		return c.idx
 	}
-	c.snap = buildSnapshot(c.inner)
+	c.idx = buildSnapshotIndex(buildSnapshot(c.inner))
 	c.at = now
 	c.primed = true
-	return c.snap
+	return c.idx
 }
 
 // PIDs satisfies Reader by serving the cached snapshot's process IDs.
