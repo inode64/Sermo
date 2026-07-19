@@ -499,7 +499,9 @@ async function performLoad() {
     ops,
     locks: locks || latestLocks,
     daemon: daemon || {},
-    hostMetrics: hostMetrics || [],
+    // The failure fallback for host metrics is [] (truthy), so keeping the
+    // last known readings needs the result's ok flag, not || on the data.
+    hostMetrics: hostMetricsResult.ok ? hostMetrics : latestHostMetrics,
   });
   applyHash();
   if (connOK) {
