@@ -171,7 +171,7 @@ for host in "${hosts[@]}"; do
 	mkdir -p "$host_dir"
 	echo "=== ${host} (${processed}/${#hosts[@]}) ==="
 
-	if ! run_ssh "$host" "mkdir -p ${remote_dir} && df -Pk /tmp | awk 'NR == 2 { exit (\$4 < 204800) }'"; then
+	if ! run_ssh "$host" "df -Pk /tmp | awk 'NR == 2 { exit (\$4 < 204800) }' && mkdir -p ${remote_dir}"; then
 		echo "  preflight failed (unreachable or < 200 MiB free in /tmp); skipping" >&2
 		record "$host" "preflight" "skipped" "ssh unreachable or /tmp space below 200 MiB"
 		failures=$((failures + 1))
