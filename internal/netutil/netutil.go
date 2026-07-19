@@ -64,3 +64,17 @@ func NormalizeTLS(s string) string {
 		return s
 	}
 }
+
+// ValidTLSValue reports whether s is one of the shared friendly tls spellings
+// every transport accepts (the boolean forms plus required and skip-verify).
+// Transports with extra modes (e.g. the SQL drivers' sslmode names) extend it
+// on their side, so a common spelling can never be accepted by one transport
+// and rejected by another.
+func ValidTLSValue(s string) bool {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case TLSModeTrue, "false", "yes", "no", "on", "off", "required", TLSModeSkipVerify:
+		return true
+	default:
+		return false
+	}
+}
