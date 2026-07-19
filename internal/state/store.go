@@ -406,9 +406,8 @@ func OpenContext(ctx context.Context, path string) (*Store, error) {
 // DefaultCacheBytes is the SQLite page-cache size used when the caller does not
 // override it. The time-series tables (measurement/metric/sla) and their indexes
 // grow into the tens of MB; 64 MiB keeps the hot index pages resident so a
-// per-cycle upsert burst does not thrash them from disk and — because every
-// statement shares the single connection — stall interactive control writes
-// (monitor/unmonitor) behind it for seconds.
+// per-cycle upsert burst does not thrash them from disk. Reads run on their own
+// connection (see Store.reader), so the budget applies per connection.
 const DefaultCacheBytes = 64 * units.BytesPerMiB
 
 // Options tunes an opened Store.
