@@ -56,12 +56,8 @@ func (b *WebBackend) SetMonitored(_ context.Context, name string, monitored bool
 	emit := func(action, kind, status, message string) {
 		b.emitMonitorEvent(name, action, kind, status, message)
 	}
-	if _, ok := b.entries[name]; !ok {
-		msg := fmt.Sprintf(unknownServiceMessageFmt, name)
-		emit(monitorAction(monitored), eventKindError, "", msg)
-		return fmt.Errorf("%s", msg)
-	}
-	return b.setMonitoringState(name, monitored, emit)
+	_, known := b.entries[name]
+	return b.setMonitoredTarget(known, name, fmt.Sprintf(unknownServiceMessageFmt, name), monitored, emit)
 }
 
 // SetWatchMonitored enables or disables monitoring for a host watch.
@@ -69,12 +65,19 @@ func (b *WebBackend) SetWatchMonitored(_ context.Context, name string, monitored
 	emit := func(action, kind, status, message string) {
 		b.emitWatchMonitorEvent(name, action, kind, status, message)
 	}
-	if _, ok := b.watches[name]; !ok {
-		msg := fmt.Sprintf(unknownWatchMessageFmt, name)
-		emit(monitorAction(monitored), eventKindError, "", msg)
-		return fmt.Errorf("%s", msg)
+	_, known := b.watches[name]
+	return b.setMonitoredTarget(known, watchMonitorKey(name), fmt.Sprintf(unknownWatchMessageFmt, name), monitored, emit)
+}
+
+// setMonitoredTarget rejects an unknown target with the emitted error and
+// otherwise flips its monitoring state; the lookup+emit shape shared by the
+// service and watch toggles.
+func (b *WebBackend) setMonitoredTarget(known bool, key, unknownMsg string, monitored bool, emit monitorEventEmitter) error {
+	if !known {
+		emit(monitorAction(monitored), eventKindError, "", unknownMsg)
+		return fmt.Errorf("%s", unknownMsg)
 	}
-	return b.setMonitoringState(watchMonitorKey(name), monitored, emit)
+	return b.setMonitoringState(key, monitored, emit)
 }
 
 type monitorEventEmitter func(action, kind, status, message string)
