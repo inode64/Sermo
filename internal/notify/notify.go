@@ -61,6 +61,7 @@ type buildOptions struct {
 // Type constants are the supported notifier transport names.
 const (
 	TypeEmail    = "email"
+	TypeGotify   = "gotify"
 	TypeNtfy     = "ntfy"
 	TypeSlack    = "slack"
 	TypeTeams    = "teams"
@@ -103,6 +104,7 @@ func Enabled(entry map[string]any) bool {
 // here (e.g. a future "discord").
 var builders = map[string]func(name string, entry map[string]any) (Notifier, error){
 	TypeEmail:    buildEmail,
+	TypeGotify:   buildGotify,
 	TypeNtfy:     buildNtfy,
 	TypeSlack:    buildSlack,
 	TypeTeams:    buildTeams,
