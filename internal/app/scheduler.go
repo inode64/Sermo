@@ -2,6 +2,8 @@ package app
 
 import (
 	"context"
+	"log/slog"
+	"runtime/debug"
 	"sync"
 	"time"
 
@@ -23,9 +25,11 @@ type Scheduler struct {
 	StartupDelay time.Duration
 }
 
-// cycler is anything the scheduler ticks once per interval.
+// cycler is anything the scheduler ticks once per interval. cycleTarget names
+// it for the panic-recovery log so one target's crash is attributable.
 type cycler interface {
 	RunCycle(ctx context.Context)
+	cycleTarget() string
 }
 
 // Run starts every worker and watch and blocks until ctx is cancelled and all of
@@ -161,11 +165,26 @@ func runCycler(ctx context.Context, c cycler, interval, offset time.Duration) {
 		if ctx.Err() != nil {
 			return
 		}
-		c.RunCycle(ctx)
+		runCycleGuarded(ctx, c)
 		if !sleepCtx(ctx, interval) {
 			return
 		}
 	}
+}
+
+// runCycleGuarded runs one cycle with a panic barrier: an unrecovered panic in
+// any goroutine crashes the whole process, so a defect in one service's rules,
+// operation, hook or notify path must not take the daemon down for the entire
+// fleet. Recover it, log it, and let the next cycle proceed. (Checks recover
+// per-check separately in checks.Run.)
+func runCycleGuarded(ctx context.Context, c cycler) {
+	defer func() {
+		if r := recover(); r != nil {
+			slog.Error("recovered panic in monitor cycle",
+				"target", c.cycleTarget(), "panic", r, "stack", string(debug.Stack()))
+		}
+	}()
+	c.RunCycle(ctx)
 }
 
 // sleepCtx waits for d or ctx cancellation, returning false if cancelled.

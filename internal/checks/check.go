@@ -85,6 +85,19 @@ func Run(ctx context.Context, built []Built, maxParallel int) []Result {
 				sem <- struct{}{}
 				defer func() { <-sem }()
 			}
+			// A check runs untrusted parsing (procfs layouts, command output,
+			// network replies); a panic in one check must fail only that check,
+			// never crash the daemon. Recover it into a failed result.
+			defer func() {
+				if r := recover(); r != nil {
+					results[i] = Result{
+						Check:    b.Check.Name(),
+						OK:       false,
+						Optional: b.Optional,
+						Message:  fmt.Sprintf("check panicked: %v", r),
+					}
+				}
+			}()
 			res := b.Check.Run(ctx)
 			// A check may mark its own result optional (a warning, e.g. an output
 			// pattern match graded `warning`); keep that, and the static flag also
