@@ -57,18 +57,13 @@ const (
 	watchReadingFieldRAIDArrayPrefix = "raid_array_"
 	watchReadingFieldSample          = "sample"
 	watchCategoryFallback            = config.WatchCategoryWatch
-	watchReadingFieldState           = checks.CheckKeyState
 	watchReadingFieldUser            = checks.CheckKeyUser
-	watchReadingStateActive          = string(servicemgr.StatusActive)
-	watchReadingStateBaseline        = "baseline"
-	watchReadingStateMissing         = "missing"
 	lockOwnerStatusLive              = "live"
 	lockReleaseDefaultRule           = "default"
 	unknownServiceMessage            = "unknown service "
 	unknownServiceMessageFmt         = unknownServiceMessage + "%q"
 	unknownWatchMessageFmt           = "unknown watch %q"
 	watchReadingValueNone            = "none"
-	watchReadingValueUnknown         = checks.NetStateUnknown
 )
 
 // webEntry is one service's web-backend record.

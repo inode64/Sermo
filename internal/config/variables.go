@@ -61,10 +61,6 @@ var fromFileVariableKeys = set(varKeyFromFile, varKeyDirective, varKeyPattern, v
 // type (binary, file, socket or pidfile); collectVariables just consumes the
 // resulting variables map.
 func collectVariables(tree map[string]any) map[string]string {
-	return collectVariablesForKind(tree, cfgval.String(tree[keyKind]))
-}
-
-func collectVariablesForKind(tree map[string]any, _ string) map[string]string {
 	raw, ok := tree[sectionVariables].(map[string]any)
 	vars := map[string]string{}
 	if ok {
@@ -138,7 +134,7 @@ func documentBinaryCandidates(tree map[string]any) []string {
 // config file. It runs after the rest of the variable map (and builtins) is
 // assembled so the file path may reference other variables such as ${config}. A
 // missing file or unmatched key leaves the default already set by
-// collectVariablesForKind in place. Malformed specs and unresolved path
+// collectVariables in place. Malformed specs and unresolved path
 // variables are configuration errors.
 func resolveFileVars(vars map[string]string, tree map[string]any) []string {
 	raw, ok := tree[sectionVariables].(map[string]any)

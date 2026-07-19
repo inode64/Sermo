@@ -102,5 +102,3 @@ func readEdacCounter(path string) (int64, error) {
 	}
 	return int64(n), nil
 }
-
-// parseEdacPreds reads the optional ce/ue predicates.

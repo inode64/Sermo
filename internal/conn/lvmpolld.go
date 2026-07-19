@@ -27,7 +27,6 @@ const (
 )
 
 const (
-	lvmDaemonFieldSeparator     = '='
 	lvmDaemonInitialBufferBytes = 256
 	lvmDaemonMaxMessageBytes    = 1 << 16
 	lvmDaemonReadBufferBytes    = 512
