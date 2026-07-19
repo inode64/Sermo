@@ -1125,6 +1125,9 @@ let svcStatus = filterAll; // all | disabled | stopped | started | starting | co
 let svcCategory = filterAll;
 let svcGrouped = false;
 let svcCollapsedGroups = new Set();
+// svcPinned lifts hand-picked services to the top of their panel (and group),
+// persisted with the rest of the UI state.
+let svcPinned = new Set();
 let svcSort = { key: "", dir: 1 };
 const splitServicePanels = {
   container: {
@@ -1274,6 +1277,7 @@ function restoreUIState() {
     if (typeof s.appGrouped === "boolean") appGrouped = s.appGrouped;
     if (typeof s.libraryGrouped === "boolean") libraryGrouped = s.libraryGrouped;
     if (Array.isArray(s.svcCollapsedGroups)) svcCollapsedGroups = new Set(s.svcCollapsedGroups);
+    if (Array.isArray(s.svcPinned)) svcPinned = new Set(s.svcPinned);
     if (Array.isArray(s.appCollapsedGroups)) appCollapsedGroups = new Set(s.appCollapsedGroups);
     if (Array.isArray(s.libraryCollapsedGroups)) libraryCollapsedGroups = new Set(s.libraryCollapsedGroups);
     if (Array.isArray(s.mountCollapsedGroups)) mountCollapsedGroups = new Set(s.mountCollapsedGroups);
@@ -1312,6 +1316,7 @@ function saveUIState() {
       serviceMetricStates: Object.fromEntries(serviceMetricStates), daemonMetricWindow,
       expanded: [...expanded],
       svcCollapsedGroups: [...svcCollapsedGroups],
+      svcPinned: [...svcPinned],
       appCollapsedGroups: [...appCollapsedGroups],
       libraryCollapsedGroups: [...libraryCollapsedGroups],
       mountCollapsedGroups: [...mountCollapsedGroups],
@@ -2438,9 +2443,11 @@ function serviceRowParts(s, opts = {}) {
   const open = expanded.has(key);
   const chev = tpl`<span class="exp" aria-hidden="true">${open ? '▾' : '▸'}</span>`;
   const name = tpl`<button type="button" class="name row-toggle" data-service-expand="${s.name}" aria-expanded="${open}" aria-controls="${open ? "exp-" + key : nothing}" aria-label="${expandToggleAriaLabel(label, open, "service details")}">${label}</button>`;
+  const pinned = svcPinned.has(s.name);
+  const pin = tpl`<button type="button" class="icon-btn pin-btn${pinned ? " pinned" : ""}" data-service-pin="${s.name}" aria-pressed="${pinned ? domBoolTrue : domBoolFalse}" title="${pinned ? "Unpin from top" : "Pin to top"}" aria-label="${(pinned ? "Unpin " : "Pin ") + label + (pinned ? " from the top of the list" : " to the top of the list")}">${pinned ? "★" : "☆"}</button>`;
   const rowClass = state === targetStateFailed ? "row-failing" : (state === targetStateWarning ? "row-warning" : "");
   const main = tpl`<tr id="svc-row-${s.name}" class="clickable ${rowClass}" data-exp-key="${key}">
-    <td><div class="svc-main">${chev}${name}</div>${busyText}</td>
+    <td><div class="svc-main">${chev}${name}${pin}</div>${busyText}</td>
     <td>${categoryBadge(category)}</td>
     <td>${serviceStateCell(s)}</td>
     <td>${serviceUptimeCell(s)}</td>
@@ -2487,6 +2494,19 @@ function sortServiceList(list, sort) {
     // Default: failing services first (stable sort keeps backend order in groups).
     list.sort((a, b) => (isFailing(b) ? 1 : 0) - (isFailing(a) ? 1 : 0));
   }
+  // Pinned services lead regardless of the chosen order (stable sort keeps
+  // the sorted order within the pinned and unpinned halves).
+  if (svcPinned.size) {
+    list.sort((a, b) => (svcPinned.has(b.name) ? 1 : 0) - (svcPinned.has(a.name) ? 1 : 0));
+  }
+}
+
+function toggleServicePin(name) {
+  if (!name) return;
+  if (svcPinned.has(name)) svcPinned.delete(name);
+  else svcPinned.add(name);
+  saveUIState();
+  renderServices();
 }
 
 function renderPrimaryServices() {
@@ -7233,6 +7253,7 @@ function initDelegatedHandlers() {
     ["[data-watch-action][data-watch]", (el) => actWatch(el.dataset.watch || "", el.dataset.watchAction || "")],
     ["[data-mount-action][data-mount]", (el) => actMount(el.dataset.mount || "", el.dataset.mountAction || "")],
     ["[data-notifier-test]", (el) => testNotifier(el.dataset.notifierTest || "")],
+    ["[data-service-pin]", (el) => toggleServicePin(el.dataset.servicePin || "")],
     ["[data-service-expand]", (el) => toggleServiceExpansion(el.dataset.serviceExpand || "")],
     ["[data-service-open]", (el) => openServiceExpansion(el.dataset.serviceOpen || "", true)],
     ["[data-lock-release]", (el) => releaseLock(el.dataset.lockService || "", el.dataset.lockName || "")],
