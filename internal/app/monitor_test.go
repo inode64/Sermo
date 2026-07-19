@@ -156,7 +156,8 @@ checks:
 	collector := metrics.New(metrics.OSReader{})
 	workers, _, _ := BuildWorkers(t.Context(), cfg, deps, collector)
 	forceWorkerBackendActive(workers)
-	workers[0].cycle = 5
+	const seededCycle = 5
+	workers[0].cycle = seededCycle
 
 	mon := NewMonitor(cfg, deps, Scheduler{Interval: 20 * time.Millisecond}, ready, collector, nil)
 	mon.ConfigPath = global
@@ -178,22 +179,20 @@ defaults:
 	if err := os.WriteFile(global, []byte(invalid), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	mon.mu.Lock()
-	before := mon.workers[0].cycle
-	mon.mu.Unlock()
-
 	mon.Reload(ctx)
 
-	// Stop briefly for a race-free observation of live worker state (the reject
-	// path does not replace workers, the old generation keeps running).
+	// Stop briefly for a race-free observation of live worker state: reading
+	// worker.cycle while the generation runs would race the cycle increment.
+	// The reject path does not replace workers, so the seeded generation keeps
+	// running — a replaced generation would reset cycle below the seeded value.
 	mon.stopGenerationLocked(false)
 	mon.mu.Lock()
 	after := mon.workers[0].cycle
 	mon.mu.Unlock()
 	mon.startGenerationLocked(ctx, false)
 
-	if after < before {
-		t.Fatalf("cycle after rejected reload = %d, want preserved >= %d", after, before)
+	if after < seededCycle {
+		t.Fatalf("cycle after rejected reload = %d, want the seeded generation preserved (>= %d)", after, seededCycle)
 	}
 	if rep := ready.Report(context.Background()); !rep.Ready || rep.Status != TargetStateOK {
 		t.Fatalf("readiness = %+v, want ready during rejected reload", rep)
