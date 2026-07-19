@@ -71,7 +71,8 @@ func (d Discoverer) Discover(selectors []Selector) ([]Process, []string) {
 	if len(backendPIDs) == 0 && len(selectors) == 0 {
 		return nil, nil
 	}
-	snapshot := snapshotIdentities(reader)
+	idx := snapshotIndexFor(reader)
+	snapshot := idx.byPID
 
 	found := map[int]Process{}
 	var order []int
@@ -123,7 +124,7 @@ func (d Discoverer) Discover(selectors []Selector) ([]Process, []string) {
 	}
 
 	// 2. command_match across the snapshot.
-	for _, pid := range slices.Sorted(maps.Keys(snapshot)) {
+	for _, pid := range idx.sorted {
 		id := snapshot[pid]
 		for i := range selectors {
 			if selectors[i].Type == SelectorCommandMatch && d.matches(&selectors[i], id, resolve) {
@@ -134,7 +135,7 @@ func (d Discoverer) Discover(selectors []Selector) ([]Process, []string) {
 	}
 
 	// 3. descendants from the process tree.
-	for _, pid := range descendants(snapshot, order) {
+	for _, pid := range descendants(idx.children, order) {
 		add(snapshot[pid], RoleChild, sourceChild)
 	}
 
@@ -409,17 +410,49 @@ func toProcess(id Identity, role, source string) Process {
 	}
 }
 
-// descendants returns every PID reachable as a child of the seed PIDs, excluding
-// the seeds themselves, in a stable order.
-func descendants(snapshot map[int]Identity, seeds []int) []int {
-	children := map[int][]int{}
-	for pid, id := range snapshot {
-		children[id.PPID] = append(children[id.PPID], pid)
+// snapshotIndex pairs an identity snapshot with the derived structures every
+// Discover call walks: the sorted PID order (deterministic command_match scan)
+// and the parent-to-children map (tree expansion). Building it once per /proc
+// walk — instead of once per service discovery — keeps the per-cycle cost flat
+// as services multiply.
+type snapshotIndex struct {
+	byPID    map[int]Identity
+	sorted   []int
+	children map[int][]int
+}
+
+func buildSnapshotIndex(snapshot map[int]Identity) *snapshotIndex {
+	idx := &snapshotIndex{
+		byPID:    snapshot,
+		sorted:   slices.Sorted(maps.Keys(snapshot)),
+		children: map[int][]int{},
 	}
-	for _, kids := range children {
+	for pid, id := range snapshot {
+		idx.children[id.PPID] = append(idx.children[id.PPID], pid)
+	}
+	for _, kids := range idx.children {
 		sort.Ints(kids)
 	}
+	return idx
+}
 
+// indexedSnapshotReader is the optional capability the shared CachingReader
+// implements: serve the index built once per snapshot refresh.
+type indexedSnapshotReader interface {
+	SnapshotIndex() *snapshotIndex
+}
+
+func snapshotIndexFor(reader Reader) *snapshotIndex {
+	if ir, ok := reader.(indexedSnapshotReader); ok {
+		return ir.SnapshotIndex()
+	}
+	return buildSnapshotIndex(snapshotIdentities(reader))
+}
+
+// descendants returns every PID reachable as a child of the seed PIDs, excluding
+// the seeds themselves, in a stable order. children is the prebuilt
+// parent-to-children map of the snapshot being walked.
+func descendants(children map[int][]int, seeds []int) []int {
 	seen := map[int]bool{}
 	for _, pid := range seeds {
 		seen[pid] = true
