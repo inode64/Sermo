@@ -1548,6 +1548,9 @@ func (s *Store) ProcessUptimeSpans(service string, from, to time.Time) ([]Proces
 // trusted process instance was continuously confirmed. It is process evidence,
 // not observed service health: Known is false when no such evidence overlaps
 // the window, and Segments retain those unknown gaps for the dashboard.
+// TotalSeconds is the knowable portion of the window — bounded below by the
+// earliest recorded process start — so time before any evidence could exist is
+// excluded from the ratio rather than counted against continuity.
 type ProcessUptimeWindow struct {
 	Window         string
 	Known          bool
@@ -1577,7 +1580,23 @@ func (s *Store) ProcessUptimeReport(service string, now time.Time) ([]ProcessUpt
 
 func processUptimeWindow(spans []ProcessUptimeSpan, window SLAWindow, now time.Time) ProcessUptimeWindow {
 	start := now.Add(-window.Span)
-	totalSeconds := int64(window.Span / time.Second)
+	// The denominator is the knowable portion of the window: process evidence
+	// reaches back at most to the earliest recorded process start, so time
+	// before that is unknown — excluded from the ratio, not counted as broken
+	// continuity. A span older than the window leaves the full span in place.
+	effectiveStart := start
+	if len(spans) > 0 {
+		first := spans[0].StartedAt
+		for _, span := range spans[1:] {
+			if span.StartedAt.Before(first) {
+				first = span.StartedAt
+			}
+		}
+		if first.After(effectiveStart) {
+			effectiveStart = first
+		}
+	}
+	totalSeconds := max(int64(now.Sub(effectiveStart)/time.Second), 0)
 	segments := window.Segments
 	if segments <= 0 {
 		segments = 1
@@ -1592,7 +1611,7 @@ func processUptimeWindow(spans []ProcessUptimeSpan, window SLAWindow, now time.T
 		TotalSeconds: totalSeconds,
 		Segments:     make([]float64, segments),
 	}
-	covered := processUptimeCoverage(spans, start, now)
+	covered := processUptimeCoverage(spans, effectiveStart, now)
 	if covered <= 0 {
 		return out
 	}
@@ -1604,11 +1623,18 @@ func processUptimeWindow(spans []ProcessUptimeSpan, window SLAWindow, now time.T
 		if i == len(out.Segments)-1 || segmentEnd.After(now) {
 			segmentEnd = now
 		}
-		span := segmentEnd.Sub(segmentStart)
+		// Each segment's denominator clamps to the knowable period too, so
+		// fully-covered partial segments read 1.0 and segments entirely before
+		// the first evidence stay 0 (rendered as gaps, not downtime).
+		denomStart := segmentStart
+		if effectiveStart.After(denomStart) {
+			denomStart = effectiveStart
+		}
+		span := segmentEnd.Sub(denomStart)
 		if span <= 0 {
 			continue
 		}
-		out.Segments[i] = min(float64(processUptimeCoverage(spans, segmentStart, segmentEnd))/float64(span), 1)
+		out.Segments[i] = min(float64(processUptimeCoverage(spans, denomStart, segmentEnd))/float64(span), 1)
 	}
 	return out
 }
