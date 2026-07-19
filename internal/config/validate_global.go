@@ -100,6 +100,13 @@ func validateNotifierType(name string, entry map[string]any, add func(string, ..
 	switch typ {
 	case notify.TypeEmail:
 		validateEmailNotifier(name, entry, add)
+	case notify.TypeNtfy:
+		validateWebhookNotifier(name, typ, entry, add)
+		if webhook := cfgval.String(entry[notify.KeyWebhook]); webhook != "" {
+			if _, _, err := notify.ParseNtfyWebhook(webhook); err != nil {
+				add("%s: %s", notifierFieldPath(name, notify.KeyWebhook), err.Error())
+			}
+		}
 	case notify.TypeSlack, notify.TypeTeams:
 		validateWebhookNotifier(name, typ, entry, add)
 	case notify.TypeTTY:

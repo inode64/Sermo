@@ -13,7 +13,9 @@ func ConfigSummary(typ string, entry map[string]any) string {
 	case TypeEmail:
 		to := cfgval.StringList(entry[KeyTo])
 		return listSummary(to, "")
-	case TypeSlack, TypeTeams:
+	case TypeNtfy, TypeSlack, TypeTeams:
+		// For ntfy this deliberately shows the server host only: the topic
+		// acts as a capability and must stay off the dashboard.
 		webhook := cfgval.AsString(entry[KeyWebhook])
 		if webhook == "" {
 			return ""

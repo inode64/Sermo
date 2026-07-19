@@ -1076,6 +1076,24 @@ Tipos de notifier:
     cuando están presentes, solo se envían sobre una conexión cifrada.
   - **`from`** — la dirección del remitente (un `addr` desnudo o `Name <addr>`).
   - **`to`** — una o más direcciones de destinatario.
+- **`ntfy`** — publica en un **topic de [ntfy](https://ntfy.sh)** (autoalojado o
+  ntfy.sh): notificaciones push en móvil y escritorio sin dependencias externas.
+  - **`webhook`** — la URL completa del topic (`https://ntfy.example.net/sermo-alerts`).
+    El asunto viaja como título de la notificación y el detalle (los campos
+    `SERMO_*`) como mensaje.
+  - **`token`** — token de acceso opcional para un topic protegido (se envía
+    como cabecera `Authorization: Bearer`). El dashboard muestra solo el host
+    del servidor; el nombre del topic queda privado.
+
+```yaml
+# /etc/sermo/notifiers/push.yml
+notifiers:
+  push:
+    type: ntfy
+    webhook: "https://ntfy.example.net/sermo-alerts"
+    token: "tk_XXXXXXXX"   # opcional
+```
+
 - **`slack`** — publica en un **incoming webhook** de Slack.
   - **`webhook`** — la URL del incoming-webhook (`https://hooks.slack.com/services/…`).
     El asunto de la notificación es la línea principal y su detalle (los campos
