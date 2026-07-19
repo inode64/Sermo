@@ -123,11 +123,11 @@ type Watch struct {
 
 const watchEnvAssignSeparator = "="
 
-// RunCycle runs the check, advances the window, and fires the hook on a firing
-// cycle. An evaluation/hook error is emitted, never fatal.
 // cycleTarget names this watch for the scheduler panic-recovery log.
 func (w *Watch) cycleTarget() string { return "watch " + w.Name }
 
+// RunCycle runs the check, advances the window, and fires the hook on a firing
+// cycle. An evaluation/hook error is emitted, never fatal.
 func (w *Watch) RunCycle(ctx context.Context) {
 	observeOnly, skip := w.prepareCycle()
 	if skip {

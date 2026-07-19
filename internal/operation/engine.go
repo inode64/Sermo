@@ -515,16 +515,16 @@ func firstSymlinkAncestor(path string) (string, error) {
 		}
 	}
 	// Walk root-first so the report names the highest symlink.
-	for i := len(ancestors) - 1; i >= 0; i-- {
-		info, err := os.Lstat(ancestors[i])
+	for _, dir := range slices.Backward(ancestors) {
+		info, err := os.Lstat(dir)
 		if err != nil {
 			if os.IsNotExist(err) {
 				continue
 			}
-			return "", err
+			return "", fmt.Errorf("lstat %s: %w", dir, err)
 		}
 		if info.Mode()&os.ModeSymlink != 0 {
-			return ancestors[i], nil
+			return dir, nil
 		}
 	}
 	return "", nil
