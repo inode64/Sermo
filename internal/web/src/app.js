@@ -5454,7 +5454,9 @@ function renderOverview(ctx) {
       ? `${failedWatches.length} firing`
       : (staleWatches.length ? `${staleWatches.length} stale`
         : (watchesSettlingSub() || "quiet"));
-    const watchesUp = enabledWatches.length - failedWatches.length - staleWatches.length;
+    // A single predicate over the enabled set: subtracting the failed/stale
+    // list lengths (which span all watches and can overlap) could go negative.
+    const watchesUp = enabledWatches.filter((w) => watchStateText(w) !== targetStateFailed && !isWatchSampleStale(w)).length;
     tiles.push(tile({
       label: "Watches",
       value: tpl`${watchesUp}<small> / ${enabledWatches.length}</small>`,
