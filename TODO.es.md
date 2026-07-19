@@ -102,3 +102,16 @@ una CLI configtest, `mosquitto`, `supervisord`, `udisks2`, `pm2`, etc. (`redis` 
       cadena de shell).
 - [ ] Referencias de variable a variable (`variables.x: "${y}"`), con detección
   de ciclos. Hoy un valor de variable que contiene `${...}` es un error de validación.
+- [ ] Watches de servicio — vista en vivo web: los `watches:` embebidos de un servicio
+      se listan y controlan (monitor/unmonitor) en la web UI pero omiten el
+      Meter/Lecturas en vivo, porque la ruta de vista en vivo web acotada al host
+      no modela el árbol de PIDs del servicio. Cablear una vista en vivo acotada
+      al servicio (reutilizando las deps `serviceRuntime` por servicio del web
+      backend) para que sus gauges se rendericen como los watches de host.
+- [ ] Watches de servicio — watch `process` acotado al árbol: el watch `process`
+      con estado (condiciones cpu/memoria/io por PID y `kill`) se rechaza dentro
+      de un servicio porque casa a nivel de host por nombre/usuario y podría matar
+      procesos ajenos al servicio. Añadir una variante acotada al árbol de PIDs
+      (restringir el matching y cualquier kill al conjunto de procesos descubierto
+      del servicio) para ofrecerlo con seguridad; hoy usa `process_count`/`metric`
+      para monitorización de procesos acotada al servicio.

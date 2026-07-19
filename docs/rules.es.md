@@ -2020,16 +2020,43 @@ rules:
 Los guards se evalúan antes que la remediación; una acción de remediación que un guard
 bloquea nunca se ejecuta.
 
-Las cadenas `message:` pueden usar los built-ins de runtime `${date}` (RFC3339), `${event}`
-(el nombre de la regla que se dispara) y `${action}`, más los resueltos `${service}`/`${host}`
-— p. ej. `message: "[${host}] ${service}: ${event} -> ${action} at ${date}"`.
-Las reglas con una hoja `changed:` también pueden usar `${change.path}`,
-`${change.library}`, `${change.app}`, `${change.level}`,
-`${change.old_version}` y `${change.new_version}`; old/new se rellenan para
-`changed: {app: ...}`.
+Las cadenas `message:` pueden usar built-ins de runtime. `${date}` es el
+timestamp RFC3339 actual, `${event}` es el nombre de la regla que se dispara y
+`${action}` es la acción primaria de la regla. `${rule.duration}` es el lapso
+configurado de la regla (`10m`, `3 cycles` o `current cycle`) y `${rule.window}`
+es la descripción más completa de la ventana (`for 10m`, `within 15 cycles
+(min 3)`, `immediate`). `${service}` y `${host}` se resuelven durante la
+configuración.
 
-Los marcadores `${check.threshold}` y `${check.value}` de una métrica expresada
-en bytes usan la misma presentación de `B` a `TB` que los eventos de recuperación.
+Para reglas cuya condición tiene exactamente una hoja directa de check o
+métrica, los mensajes de alerta también pueden usar `${check.name}`,
+`${check.type}`, `${check.metric}`, `${check.scope}`, `${check.op}`,
+`${check.threshold}` y `${check.value}`. Las condiciones complejas con varios
+checks dejan esos valores `${check.*}` vacíos en lugar de adivinar qué check
+debería describir la alerta. Los marcadores de métricas expresadas en bytes usan
+la misma presentación de `B` a `TB` que los eventos de recuperación, tanto para
+el valor actual como para el umbral.
+
+Para reglas guiadas por una hoja `changed:`, los mensajes de alerta pueden usar
+`${change.path}`, `${change.library}`, `${change.app}`, `${change.level}`,
+`${change.old_version}` y `${change.new_version}`. Los valores old/new se
+rellenan para reglas `changed: {app: ...}`.
+
+```yaml
+rules:
+  alert-if-memory-high:
+    type: alert
+    if:
+      active:
+        check: memory-high
+    for:
+      duration: 10m
+    then:
+      action: alert
+      message: >-
+        During ${rule.duration}, ${service} ${check.metric} stayed above
+        ${check.threshold} (current ${check.value}) at ${date}
+```
 
 ## Política de remediación
 
