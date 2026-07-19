@@ -946,6 +946,12 @@ function renderGlobalEvents() {
   updateSectionNav();
   const grouped = $("#event-group") && $("#event-group").checked;
   if (!grouped) {
+    // Loaded-but-filtered-out must not read as an empty log: the date bounds
+    // (and server-side filters) may hide every fetched event.
+    if (!events.length && (allEvents || []).length) {
+      litRender(tpl`<tr><td class="muted">No events match the filter.</td></tr>`, tbody);
+      return;
+    }
     litRender(eventRows(events, true, { prefix: "global" }), tbody);
     return;
   }
