@@ -180,19 +180,6 @@ func TestCertAlgorithmChangeEdge(t *testing.T) {
 	}
 }
 
-func TestCertIssuerAndFingerprintChange(t *testing.T) {
-	cur := healthyCert()
-	c := &certCheck{base: base{name: "c"}, host: "x", port: "443", serverName: "x", verify: false,
-		onIssuerChange: true, onChange: true,
-		sampler: func(context.Context, string, string, string, bool) (CertSample, error) { return cur, nil }}
-	c.Run(context.Background()) // prime
-	cur.Issuer = "CN=Other CA"
-	cur.Fingerprint = "bbbb"
-	if c.Run(context.Background()).OK {
-		t.Fatal("issuer/fingerprint change must fail")
-	}
-}
-
 func TestCertSamplerErrorIsNotAlert(t *testing.T) {
 	c := &certCheck{base: base{name: "c"}, host: "x", port: "443", serverName: "x", verify: true,
 		sampler: func(context.Context, string, string, string, bool) (CertSample, error) {

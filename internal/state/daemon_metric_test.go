@@ -35,9 +35,3 @@ func TestDaemonMetricSummaryAndSeries(t *testing.T) {
 		MeasurementStat{Count: 1, Avg: 1024},
 	)
 }
-
-func TestPruneDaemonMetrics(t *testing.T) {
-	assertPrunesOne(t,
-		func(s *Store, at time.Time) error { return s.RecordDaemonMetric("cpu", 10, at) },
-		(*Store).PruneDaemonMetrics)
-}

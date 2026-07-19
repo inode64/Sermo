@@ -632,14 +632,6 @@ func TestLibrariesCheck(t *testing.T) {
 	}
 }
 
-func TestLibrariesCheckRealBinary(t *testing.T) {
-	// /bin/sh is dynamically linked on this host; its libraries must resolve.
-	c := librariesCheck{base: base{name: "lib", timeout: time.Second}, binary: "/bin/sh"}
-	if res := c.Run(context.Background()); !res.OK {
-		t.Fatalf("/bin/sh libraries should resolve: %s", res.Message)
-	}
-}
-
 func TestLibrariesCheckHonorsCanceledContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()

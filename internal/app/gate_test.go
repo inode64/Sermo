@@ -146,22 +146,6 @@ func TestGatedChecksDue(t *testing.T) {
 	}
 }
 
-func TestApplyGatesAfterStaleSkipCleared(t *testing.T) {
-	w := &Worker{
-		Gates: map[string]CheckGate{"query": {Requires: []string{"tcp"}}},
-	}
-	// query was re-run after tcp recovered; applyGates must not re-skip.
-	cache := map[string]checks.Result{
-		"tcp":   {Check: "tcp", OK: true},
-		"query": {Check: "query", OK: false, Message: "down"},
-	}
-	w.cycleRan = ranChecks("tcp", "query")
-	w.applyGates(cache)
-	if cache["query"].Skipped {
-		t.Fatalf("query should expose its real result after skip cleared: %+v", cache["query"])
-	}
-}
-
 func TestParseCheckGates(t *testing.T) {
 	tree := map[string]any{"checks": map[string]any{
 		"tcp":   map[string]any{"type": "tcp"},

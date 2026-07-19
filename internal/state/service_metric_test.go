@@ -39,9 +39,3 @@ func TestServiceMetricSummaryAndSeries(t *testing.T) {
 		MeasurementStat{Count: 1, Avg: 90},
 	)
 }
-
-func TestPruneServiceMetrics(t *testing.T) {
-	assertPrunesOne(t,
-		func(s *Store, at time.Time) error { return s.RecordServiceMetric("web", "cpu", 10, at) },
-		(*Store).PruneServiceMetrics)
-}

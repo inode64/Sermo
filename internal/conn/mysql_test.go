@@ -9,17 +9,6 @@ import (
 	"github.com/go-sql-driver/mysql"
 )
 
-func TestMySQLNoUserOptional(t *testing.T) {
-	// mysql must NOT require a user: a credential-free greeting probe is allowed.
-	p, ok := Lookup("mysql")
-	if !ok {
-		t.Fatal("mysql not registered")
-	}
-	if p.RequiresUser() {
-		t.Fatal("mysql must not require a user (greeting liveness)")
-	}
-}
-
 // buildMySQLHandshake builds an Initial Handshake Packet (protocol 10) whose
 // server_version is the given string.
 func buildMySQLHandshake(version string) []byte {

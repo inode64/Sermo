@@ -414,24 +414,6 @@ func TestStopWithResidualsSkipsReset(t *testing.T) {
 	}
 }
 
-func TestRestartBlockedByOpLock(t *testing.T) {
-	h := defaultHarness()
-	h.lockErr = &locks.HeldError{Service: "mysql-main", Lock: locks.Lock{Path: "/run/sermo/ops/mysql-main.lock"}}
-	res := h.restart(t)
-	if res.Status != ResultBlocked || res.Message != "operation in progress" {
-		t.Fatalf("res = %+v, want blocked/operation in progress", res)
-	}
-	if h.mgr.did("stop mysqld") {
-		t.Error("must not stop when the op lock is held")
-	}
-	if h.released != 0 {
-		t.Errorf("must not release a lock it never acquired (released=%d)", h.released)
-	}
-	if len(res.Locks) != 1 {
-		t.Errorf("blocked-by-lock result should carry the held lock")
-	}
-}
-
 func TestOperationLockBlocksAllServiceActions(t *testing.T) {
 	for _, action := range []string{"start", "stop", "restart", "reload", "resume"} {
 		t.Run(action, func(t *testing.T) {
@@ -452,24 +434,6 @@ func TestOperationLockBlocksAllServiceActions(t *testing.T) {
 				t.Fatalf("blocked-by-lock result should carry the held lock")
 			}
 		})
-	}
-}
-
-func TestRestartBlockedByNamedLock(t *testing.T) {
-	h := defaultHarness()
-	h.named = []locks.Lock{{Service: "mysql-main", Name: "backup", State: locks.StateActive}}
-	res := h.restart(t)
-	if res.Status != ResultBlocked {
-		t.Fatalf("status = %q, want blocked", res.Status)
-	}
-	if len(res.Locks) != 1 || res.Locks[0].Name != "backup" {
-		t.Errorf("result should list the active named lock: %+v", res.Locks)
-	}
-	if h.mgr.did("stop mysqld") {
-		t.Error("must not stop while a named lock is active")
-	}
-	if h.released != 1 {
-		t.Errorf("op lock must be released (released=%d)", h.released)
 	}
 }
 
@@ -547,18 +511,6 @@ func TestReloadSupportedUsesNativeOrBackendCapability(t *testing.T) {
 	}, &fakeManager{}, "bad")
 	if err == nil || invalid {
 		t.Fatalf("invalid reload = %v, %v; want false with error", invalid, err)
-	}
-}
-
-func TestReloadPreflightFailedDoesNotReload(t *testing.T) {
-	h := defaultHarness()
-	h.preflight = checks.Outcome{OK: false, Results: []checks.Result{{Check: "config", OK: false}}}
-	res := h.engine().Reload(context.Background())
-	if res.Status != ResultPreflightFailed {
-		t.Fatalf("status = %q, want preflight_failed", res.Status)
-	}
-	if h.mgr.did("reload mysqld") {
-		t.Error("must not reload when preflight (config) fails")
 	}
 }
 

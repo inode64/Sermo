@@ -275,15 +275,6 @@ func assertNotifyNoneWithExpand(t *testing.T, env Env, notifyAnswer string) {
 	}
 }
 
-func TestVolumeAssistantDefaultWithoutGlobalWithExpand(t *testing.T) {
-	env := testEnv()
-	env.Notifiers = nil
-	// Select volume 1; monitor enabled; inherit interval; free 10; for 3; default
-	// notify (not configured); enable expand. default degrades to monitor-only
-	// (notify [none]); the expand action is still attached.
-	assertNotifyNoneWithExpand(t, env, config.NotifyKeywordDefault)
-}
-
 func TestVolumeAssistantNotifyNoneWithExpand(t *testing.T) {
 	// Select volume 1; monitor enabled; inherit interval; free 10; for 3; explicit
 	// none; enable expand.

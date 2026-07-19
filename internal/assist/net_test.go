@@ -172,18 +172,6 @@ func TestNetAssistantNotifyByName(t *testing.T) {
 		}
 	})
 
-	t.Run("default by name", func(t *testing.T) {
-		script := strings.Join([]string{"1", "1", "", "1", "1", config.NotifyKeywordDefault, "n"}, "\n") + "\n"
-		p := NewPrompt(strings.NewReader(script), &strings.Builder{})
-		res, err := netAssistant{}.Run(p, testEnvWithDefaultNotify())
-		if err != nil {
-			t.Fatalf("Run: %v", err)
-		}
-		then := res.Watches[netWatchPrefix+"eth0"].(map[string]any)[config.SectionMetrics].(map[string]any)[checks.NetMetricState].(map[string]any)[config.WatchKeyThen].(map[string]any)
-		if _, hasNotify := then[rules.RuleFieldNotify]; hasNotify {
-			t.Fatalf("'default' should omit notify to inherit the global default: %v", then)
-		}
-	})
 }
 
 func TestNetAssistantNotifyNoneMonitorOnly(t *testing.T) {

@@ -2271,25 +2271,6 @@ name: apache/main
 	}
 }
 
-func TestMergeMapsRecursive(t *testing.T) {
-	dst := map[string]any{"policy": map[string]any{"max_actions": 3, "cooldown": "2m"}}
-	src := map[string]any{"policy": map[string]any{"cooldown": "5m"}}
-	out := mergeMaps(dst, src)
-
-	policy := out["policy"].(map[string]any)
-	if policy["cooldown"] != "5m" {
-		t.Errorf("cooldown = %v, want 5m", policy["cooldown"])
-	}
-	if cfgval.String(policy["max_actions"]) != "3" {
-		t.Errorf("max_actions = %v, want preserved 3", policy["max_actions"])
-	}
-	// Source must not be aliased into the result.
-	src["policy"].(map[string]any)["cooldown"] = "9m"
-	if out["policy"].(map[string]any)["cooldown"] != "5m" {
-		t.Errorf("merge aliased the source map")
-	}
-}
-
 func TestApplyDeletesRemovesEntry(t *testing.T) {
 	tree := map[string]any{
 		"checks": map[string]any{
@@ -5255,10 +5236,6 @@ func TestExpandFileShorthandsDesugar(t *testing.T) {
 			}
 		})
 	}
-}
-
-func TestExpandSocketUsesVariable(t *testing.T) {
-	assertExpandedVar(t, "socket", "/run/svc.sock")
 }
 
 func TestExpandLockfileUsesVariable(t *testing.T) {

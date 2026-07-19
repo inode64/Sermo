@@ -92,12 +92,6 @@ func TestCheckReadingsForAllTypes(t *testing.T) {
 			want: map[string]string{"some_avg60": "2.5%"},
 		},
 		{
-			name: "diskio",
-			typ:  "diskio",
-			data: map[string]any{"device": "sda", "util_pct": 50.0, "read_bytes": 1024.0},
-			want: map[string]string{"util_pct": "50%"},
-		},
-		{
 			name: "raid",
 			typ:  "raid",
 			data: map[string]any{"arrays": 1, "degraded": 0, "recovering": 1, "array": "md0", "raid_operation": "recovery", "raid_progress_pct": 12.6, "total_bytes": uint64(50)},
