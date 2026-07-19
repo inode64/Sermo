@@ -20,6 +20,10 @@ import (
 
 const (
 	defaultLockTTL = 5 * time.Minute
+	// lockTTLMargin keeps the operation lock alive past the operation it guards,
+	// covering the time between the engine's operation timeout firing and the
+	// deferred lock release running.
+	lockTTLMargin = time.Minute
 
 	reloadCommandPath             = config.SectionReload + "." + config.ReloadKeyCommand
 	reloadCommandLabel            = config.SectionReload + " " + config.ReloadKeyCommand
@@ -125,7 +129,16 @@ func New(c Config) Engine {
 
 	ttl := c.LockTTL
 	if ttl <= 0 {
-		ttl = defaultLockTTL
+		// The operation lock must outlive the operation it guards. A long
+		// graceful stop can run past a fixed default and expire the lock
+		// mid-flight, letting a second operation run concurrently on the same
+		// service (whose SIGKILL could then hit the freshly restarted PID).
+		// Derive the TTL from the effective operation timeout — which already
+		// accounts for stop_policy escalation — plus a margin.
+		ttl = ResolveTimeout(c.OperationTimeout, c.Tree) + lockTTLMargin
+		if ttl < defaultLockTTL {
+			ttl = defaultLockTTL
+		}
 	}
 
 	return Engine{
