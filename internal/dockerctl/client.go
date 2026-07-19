@@ -49,17 +49,9 @@ const (
 	dockerContainerPathPrefix = "/containers/"
 )
 
-// Docker TLS mode tokens accepted from control.tls.
-const (
-	tlsModeFalse      = "false"
-	tlsModeNo         = "no"
-	tlsModeOff        = "off"
-	tlsModeTrue       = netutil.TLSModeTrue
-	tlsModeYes        = "yes"
-	tlsModeOn         = "on"
-	tlsModeRequired   = "required"
-	tlsModeSkipVerify = netutil.TLSModeSkipVerify
-)
+// tlsModeSkipVerify is the canonical unverified-TLS mode; the accepted input
+// spellings live in netutil (NormalizeTLS / ValidTLSValue).
+const tlsModeSkipVerify = netutil.TLSModeSkipVerify
 
 // TLSValueSummary is the compact user-facing list of Docker TLS modes.
 const TLSValueSummary = "true, false, required, skip-verify"
@@ -400,7 +392,8 @@ func NormalizeTLS(s string) string {
 	return netutil.NormalizeTLS(s)
 }
 
-// ValidTLSValue reports whether v is accepted by Sermo's Docker transport.
+// ValidTLSValue reports whether v is accepted by Sermo's Docker transport: an
+// omitted or boolean value, or one of the shared friendly tls spellings.
 func ValidTLSValue(v any) bool {
 	switch t := v.(type) {
 	case nil:
@@ -408,12 +401,7 @@ func ValidTLSValue(v any) bool {
 	case bool:
 		return true
 	case string:
-		switch strings.ToLower(strings.TrimSpace(t)) {
-		case tlsModeTrue, tlsModeFalse, tlsModeYes, tlsModeNo, tlsModeOn, tlsModeOff, tlsModeRequired, tlsModeSkipVerify:
-			return true
-		default:
-			return false
-		}
+		return netutil.ValidTLSValue(t)
 	default:
 		return false
 	}
