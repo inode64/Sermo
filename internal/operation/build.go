@@ -496,11 +496,17 @@ func checkDepsForEval(ctx context.Context, deps checks.Deps, sample func(context
 func sectionRunner(tree map[string]any, deps checks.Deps, sample func(context.Context) checks.MetricReader) func(context.Context) checks.Outcome {
 	return func(ctx context.Context) checks.Outcome {
 		entries, _ := tree[config.SectionPreflight].(map[string]any)
-		built, warnings := checks.BuildWithWarnings(entries, checkDepsForEval(ctx, deps, sample))
-		results := checks.BuildWarningResults(warnings)
-		results = append(results, checks.Run(ctx, built, 0)...)
-		return checks.Evaluate(results)
+		return runCheckSection(ctx, entries, deps, sample)
 	}
+}
+
+// runCheckSection builds and evaluates one resolved check section; the
+// execution shared by the preflight and verify runners.
+func runCheckSection(ctx context.Context, entries map[string]any, deps checks.Deps, sample func(context.Context) checks.MetricReader) checks.Outcome {
+	built, warnings := checks.BuildWithWarnings(entries, checkDepsForEval(ctx, deps, sample))
+	results := checks.BuildWarningResults(warnings)
+	results = append(results, checks.Run(ctx, built, 0)...)
+	return checks.Evaluate(results)
 }
 
 // verifyRunner builds the post-operation verification outcome from every check
@@ -512,11 +518,7 @@ func sectionRunner(tree map[string]any, deps checks.Deps, sample func(context.Co
 // as a missing postflight section was.
 func verifyRunner(tree map[string]any, deps checks.Deps, sample func(context.Context) checks.MetricReader) func(context.Context) checks.Outcome {
 	return func(ctx context.Context) checks.Outcome {
-		section := collectVerifyChecks(tree)
-		built, warnings := checks.BuildWithWarnings(section, checkDepsForEval(ctx, deps, sample))
-		results := checks.BuildWarningResults(warnings)
-		results = append(results, checks.Run(ctx, built, 0)...)
-		return checks.Evaluate(results)
+		return runCheckSection(ctx, collectVerifyChecks(tree), deps, sample)
 	}
 }
 
