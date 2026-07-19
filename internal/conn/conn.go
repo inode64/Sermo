@@ -312,7 +312,6 @@ const (
 	tlsModeNo     = "no"
 	tlsModeOn     = "on"
 	tlsModeOff    = "off"
-	tlsRequired   = "required"
 	tlsDisable    = "disable"
 	tlsRequire    = "require"
 	tlsPrefer     = "prefer"
@@ -456,11 +455,14 @@ type Protocol interface {
 }
 
 // ValidTLSValue reports whether value is one of the connection-check TLS mode
-// strings accepted by config validation.
+// strings accepted by config validation: the shared spellings from
+// netutil.ValidTLSValue plus the SQL drivers' sslmode names.
 func ValidTLSValue(value string) bool {
+	if netutil.ValidTLSValue(value) {
+		return true
+	}
 	switch strings.ToLower(strings.TrimSpace(value)) {
-	case ParamValueTrue, tlsModeFalse, tlsModeYes, tlsModeNo, tlsModeOn, tlsModeOff,
-		tlsRequired, tlsSkipVerify, tlsDisable, tlsRequire, tlsPrefer, tlsVerifyCA, tlsVerifyFull:
+	case tlsDisable, tlsRequire, tlsPrefer, tlsVerifyCA, tlsVerifyFull:
 		return true
 	default:
 		return false
