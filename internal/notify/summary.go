@@ -25,6 +25,12 @@ func ConfigSummary(typ string, entry map[string]any) string {
 			return ""
 		}
 		return u.Host
+	case TypeTelegram:
+		// The chat target is not a secret; the bot token never appears.
+		if chat := cfgval.String(entry[KeyChatID]); chat != "" {
+			return "chat " + chat
+		}
+		return ""
 	case TypeTTY:
 		users := cfgval.StringList(entry[KeyUsers])
 		return listSummary(users, "all active terminals")

@@ -497,7 +497,7 @@ func TestValidateNotifiers(t *testing.T) {
 		"notifiers.bad-dsn.dsn must be an smtp:// or smtps:// URL",
 		"notifiers.no-webhook.webhook is required for a slack notifier",
 		"notifiers.bad-webhook.webhook must be an http(s) URL",
-		"notifiers.bad-type.type \"smoke-signal\" is not supported (email, ntfy, slack, teams, tty, wall)",
+		"notifiers.bad-type.type \"smoke-signal\" is not supported (email, ntfy, slack, teams, telegram, tty, wall)",
 		"notifiers.no-type.type is required",
 		"notifiers.bad-enabled.enabled must be a boolean",
 		"notifiers.bad-users.users must be a string or list of strings",

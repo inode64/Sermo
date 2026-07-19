@@ -109,6 +109,13 @@ func validateNotifierType(name string, entry map[string]any, add func(string, ..
 		}
 	case notify.TypeSlack, notify.TypeTeams:
 		validateWebhookNotifier(name, typ, entry, add)
+	case notify.TypeTelegram:
+		if cfgval.String(entry[notify.KeyToken]) == "" {
+			add("%s is required for a telegram notifier", notifierFieldPath(name, notify.KeyToken))
+		}
+		if cfgval.String(entry[notify.KeyChatID]) == "" {
+			add("%s is required for a telegram notifier", notifierFieldPath(name, notify.KeyChatID))
+		}
 	case notify.TypeTTY:
 		if users, present := entry[notify.KeyUsers]; present && !cfgval.IsStringOrStringList(users) {
 			add(validationStringListFormat, notifierFieldPath(name, notify.KeyUsers))

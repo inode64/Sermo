@@ -43,6 +43,7 @@ const (
 	KeyFrom     = "from"
 	KeyTemplate = "template"
 	KeyTo       = "to"
+	KeyChatID   = "chat_id"
 	KeyToken    = "token"
 	KeyType     = "type"
 	KeyUsers    = "users"
@@ -59,12 +60,13 @@ type buildOptions struct {
 
 // Type constants are the supported notifier transport names.
 const (
-	TypeEmail = "email"
-	TypeNtfy  = "ntfy"
-	TypeSlack = "slack"
-	TypeTeams = "teams"
-	TypeTTY   = "tty"
-	TypeWall  = "wall"
+	TypeEmail    = "email"
+	TypeNtfy     = "ntfy"
+	TypeSlack    = "slack"
+	TypeTeams    = "teams"
+	TypeTelegram = "telegram"
+	TypeTTY      = "tty"
+	TypeWall     = "wall"
 )
 
 const (
@@ -100,12 +102,13 @@ func Enabled(entry map[string]any) bool {
 // builders maps a notifier `type` to its constructor. Register new transports
 // here (e.g. a future "discord").
 var builders = map[string]func(name string, entry map[string]any) (Notifier, error){
-	TypeEmail: buildEmail,
-	TypeNtfy:  buildNtfy,
-	TypeSlack: buildSlack,
-	TypeTeams: buildTeams,
-	TypeTTY:   buildTTY,
-	TypeWall:  buildWall,
+	TypeEmail:    buildEmail,
+	TypeNtfy:     buildNtfy,
+	TypeSlack:    buildSlack,
+	TypeTeams:    buildTeams,
+	TypeTelegram: buildTelegram,
+	TypeTTY:      buildTTY,
+	TypeWall:     buildWall,
 }
 
 // Build constructs global notifiers. Malformed or unknown-type entries become
