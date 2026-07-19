@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -98,7 +99,9 @@ func newWebhookNotifier(typ, name string, entry map[string]any, payload func(Mes
 func postWebhook(ctx context.Context, label, webhook string, headers map[string]string, payload []byte) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, webhook, bytes.NewReader(payload))
 	if err != nil {
-		return fmt.Errorf("build %s webhook request: %w", label, err)
+		// url.Parse also returns a *url.Error embedding the raw URL (reachable
+		// when a token carries a control char), so scrub this path too.
+		return fmt.Errorf("build %s webhook request: %w", label, underlyingURLError(err))
 	}
 	req.Header.Set(webhookHeaderContentType, webhookContentTypeJSON)
 	for name, value := range headers {
@@ -108,7 +111,11 @@ func postWebhook(ctx context.Context, label, webhook string, headers map[string]
 	client := &http.Client{Timeout: webhookTimeout}
 	resp, err := client.Do(req)
 	if err != nil {
-		return fmt.Errorf("post webhook: %w", err)
+		// A transport error is a *url.Error whose text embeds the full request
+		// URL; for Telegram that URL carries the bot token, and this error is
+		// surfaced in notify-failed events and the web UI. Report only the
+		// underlying cause so no credential ever reaches an event or log.
+		return fmt.Errorf("post %s webhook: %w", label, underlyingURLError(err))
 	}
 	defer resp.Body.Close()
 
@@ -117,6 +124,16 @@ func postWebhook(ctx context.Context, label, webhook string, headers map[string]
 		return fmt.Errorf("%s webhook returned %s: %s", label, resp.Status, strings.TrimSpace(string(snippet)))
 	}
 	return nil
+}
+
+// underlyingURLError unwraps a *url.Error to its cause, dropping the URL text
+// (which may contain a secret token) while keeping the actionable reason.
+func underlyingURLError(err error) error {
+	var urlErr *url.Error
+	if errors.As(err, &urlErr) && urlErr.Err != nil {
+		return urlErr.Err
+	}
+	return err
 }
 
 // webhookURL reads and validates the `webhook` field shared by the webhook
