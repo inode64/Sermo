@@ -95,7 +95,7 @@ func StartTicks(pid int) (uint64, bool) {
 	if !ok || len(fields) <= procStatStartTimeIndex {
 		return 0, false
 	}
-	ticks, err := strconv.ParseUint(fields[procStatStartTimeIndex], 10, 64)
+	ticks, err := strconv.ParseUint(fields[procStatStartTimeIndex], numericIDBase, 64)
 	if err != nil {
 		return 0, false
 	}

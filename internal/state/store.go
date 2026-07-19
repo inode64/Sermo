@@ -2158,7 +2158,7 @@ func (s *Store) PruneSLA(before time.Time) (int64, error) {
 // older than before. A long-running process remains retained because its most
 // recent confirmation still overlaps the retention window.
 func (s *Store) PruneProcessUptime(before time.Time) (int64, error) {
-	res, err := s.db.ExecContext(s.sqlCtx(), `DELETE FROM process_uptime_span WHERE confirmed_at < ?`, before.UTC().Unix())
+	res, err := s.db.ExecContext(s.sqlCtx(), `DELETE FROM `+stateTableProcessUptime+` WHERE confirmed_at < ?`, before.UTC().Unix())
 	if err != nil {
 		return 0, fmt.Errorf("prune process uptime: %w", err)
 	}

@@ -344,9 +344,9 @@ func raidTransitionResult(base checks.Result, transition checks.RaidTransition) 
 	result.Data["raid_field"] = transition.Field
 	result.Data[checks.DataKeyOld] = transition.Old
 	result.Data[checks.DataKeyNew] = transition.New
-	result.Data["raid_operation"] = transition.Operation
+	result.Data[checks.DataKeyRaidOperation] = transition.Operation
 	if transition.HasProgress {
-		result.Data["raid_progress_pct"] = transition.Progress
+		result.Data[checks.DataKeyRaidProgressPct] = transition.Progress
 	}
 	result.Message = raidTransitionMessage(transition)
 	return result

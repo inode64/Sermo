@@ -279,7 +279,7 @@ func netCheckReadings(data map[string]any) []web.WatchReading {
 // scalarQueryCheckReadings exposes the scalar observed by a query check and
 // its effective comparison without exposing the configured query text.
 func scalarQueryCheckReadings(data map[string]any) []web.WatchReading {
-	rb := readingsFrom(data).addString(checks.DataKeyResult, "Value")
+	rb := readingsFrom(data).addString(checks.DataKeyResult, watchReadingLabelValue)
 	if op := cfgval.String(data[checks.DataKeyOp]); op != "" {
 		if threshold := cfgval.String(data[checks.DataKeyThreshold]); threshold != "" {
 			rb.add(checks.DataKeyThreshold, "Condition", op+" "+threshold)

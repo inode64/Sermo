@@ -28,6 +28,7 @@ import (
 	"sermo/internal/execx"
 	"sermo/internal/logfile"
 	"sermo/internal/metrics"
+	"sermo/internal/netutil"
 	"sermo/internal/notify"
 	"sermo/internal/process"
 	"sermo/internal/rules"
@@ -56,7 +57,7 @@ const (
 
 const (
 	defaultRuntimeDir    = config.DefaultRuntime
-	defaultWebAddress    = "127.0.0.1"
+	defaultWebAddress    = netutil.LoopbackIPv4
 	daemonPIDFilename    = config.DaemonPIDFilename
 	instanceLockFilename = "sermod.lock"
 	daemonEventLogLimit  = 1000
