@@ -2042,7 +2042,7 @@ func TestWatchSnapshotsFeedProcessView(t *testing.T) {
 	snapshots.Publish("hot-workers", checks.CheckTypeProcess, checks.Result{
 		Check:   "hot-workers",
 		OK:      true,
-		Message: "process apache2 user apache: 2 matching processes, rss 300 bytes",
+		Message: "process apache2 user apache: 2 matching processes, rss 300 B",
 		Data: map[string]any{
 			watchReadingFieldProcess:  "apache2",
 			watchReadingFieldUser:     "apache",
