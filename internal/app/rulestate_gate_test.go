@@ -23,7 +23,7 @@ func (c *countingRuleStateStore) SetRemediationState(string, state.RemediationRe
 }
 
 func (c *countingRuleStateStore) RuleWindowStates(string) (map[string]state.RuleWindowRecord, error) {
-	return nil, nil
+	return map[string]state.RuleWindowRecord{}, nil
 }
 
 func (c *countingRuleStateStore) SetRuleWindowStates(string, map[string]state.RuleWindowRecord) error {
