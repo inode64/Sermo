@@ -151,10 +151,6 @@ func dialTCPDeadline(ctx context.Context, cfg Config, defaultPort int) (net.Conn
 	return c, nil
 }
 
-// probeLineCommand dials cfg (dialDeadline semantics), optionally sends
-// command, reads one greeting line and parses it with parse; a foreign reply
-// (parse ok=false) fails with errFormat applied to the offending line. The
-// command→greeting skeleton shared by clamd, spamd and asterisk.
 // readTextGreeting reads a server's 3-digit greeting through net/textproto —
 // the handshake prologue ftp, smtp and nntp share. The returned reader carries
 // the buffered stream, so the caller must keep using it for later responses.
@@ -170,6 +166,10 @@ func unexpectedGreeting(code int, greeting string) error {
 	return fmt.Errorf("unexpected greeting: %d %s", code, greeting)
 }
 
+// probeLineCommand dials cfg (dialDeadline semantics), optionally sends
+// command, reads one greeting line and parses it with parse; a foreign reply
+// (parse ok=false) fails with errFormat applied to the offending line. The
+// command→greeting skeleton shared by clamd, spamd and asterisk.
 func probeLineCommand(ctx context.Context, cfg Config, defaultPort int, command string, parse func(line string) (Result, bool), errFormat string) (Result, error) {
 	c, err := dialDeadline(ctx, cfg, defaultPort)
 	if err != nil {
