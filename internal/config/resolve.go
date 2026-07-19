@@ -71,8 +71,7 @@ func (c *Config) resolveExpandedService(merged map[string]any, name string) (map
 // resolveExpandedService and resolveDocBody: analyze, pidfile(s), service
 // artifacts and embedded watches.
 func (c *Config) expandServiceSugar(expanded map[string]any) []string {
-	var errs []string
-	errs = append(errs, c.expandAnalyze(expanded)...)
+	errs := c.expandAnalyze(expanded)
 	errs = append(errs, expandPidfile(expanded)...)
 	errs = append(errs, expandPidfiles(expanded)...)
 	errs = append(errs, expandServiceArtifact(expanded, artifactSocket)...)
