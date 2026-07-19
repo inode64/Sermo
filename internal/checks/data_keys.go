@@ -61,6 +61,7 @@ const (
 	DataKeyLVMSizeBytes       = "vg_size_bytes"
 	DataKeyLVMThinDataPct     = "thin_data_pct"
 	DataKeyLVMThinMetadataPct = "thin_metadata_pct"
+	DataKeyLVMTransition      = "lvm_transition"
 	DataKeyLVMUsedBytes       = "vg_used_bytes"
 	DataKeyLoad5              = fieldLoad5
 	DataKeyLoad15             = fieldLoad15

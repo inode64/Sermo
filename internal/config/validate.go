@@ -404,7 +404,7 @@ func validateDocumentInterval(doc *Document, scope string) []Issue {
 		return nil
 	}
 	if value, present := doc.Body[keyInterval]; present && !isPositiveDuration(cfgval.String(value)) {
-		return []Issue{{Scope: scope, Msg: fmt.Sprintf("interval %q must be a valid positive duration", cfgval.String(value))}}
+		return []Issue{{Scope: scope, Msg: fmt.Sprintf(validationPositiveDurationFormat, keyInterval, cfgval.String(value))}}
 	}
 	return nil
 }
@@ -814,7 +814,7 @@ func validateResolved(name string, tree map[string]any, runtime string, notifier
 	}
 
 	if v, present := tree[keyInterval]; present && !isPositiveDuration(cfgval.String(v)) {
-		add("interval %q must be a valid positive duration", cfgval.String(v))
+		add(validationPositiveDurationFormat, keyInterval, cfgval.String(v))
 	}
 
 	if mode, present := tree[keyMonitor]; present {

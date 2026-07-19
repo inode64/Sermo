@@ -55,20 +55,20 @@ func formatConditionLeaf(op string, body any) string {
 	case ConditionFailed, ConditionActive:
 		return formatConditionField(op, body, FieldCheck)
 	case ConditionMetric:
-		if name := formatConditionField("metric", body, FieldName); name != "" {
+		if name := formatConditionField(op, body, FieldName); name != "" {
 			return name
 		}
-		return formatConditionField("metric", body, FieldMetric)
+		return formatConditionField(op, body, FieldMetric)
 	case ConditionService:
-		return formatConditionField("service", body, ConditionService)
+		return formatConditionField(op, body, ConditionService)
 	case ConditionProcess:
-		return formatConditionField("process", body, FieldName)
+		return formatConditionField(op, body, FieldName)
 	case ConditionFile:
-		return formatConditionField("file", body, FieldPath)
+		return formatConditionField(op, body, FieldPath)
 	case ConditionCommand:
-		return "command"
+		return ConditionCommand
 	case ConditionChanged:
-		return formatConditionField("changed", body, FieldPath)
+		return formatConditionField(op, body, FieldPath)
 	default:
 		return ""
 	}
