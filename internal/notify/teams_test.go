@@ -15,10 +15,12 @@ func TestBuildTeamsRequiresWebhook(t *testing.T) {
 func TestTeamsSendPostsAdaptiveCard(t *testing.T) {
 	var gotURL string
 	var gotPayload []byte
-	n := &Teams{
+	n := &webhookNotifier{
 		name:    "ops",
+		typ:     TypeTeams,
 		webhook: "https://prod-01.westeurope.logic.azure.com/workflows/x",
 		post:    capturingPost(t, TypeTeams, &gotURL, &gotPayload),
+		payload: teamsPayload,
 	}
 	if err := n.Send(context.Background(), Message{Subject: "[sermo] storage-root: 95% used", Body: "SERMO_PATH=/"}); err != nil {
 		t.Fatal(err)

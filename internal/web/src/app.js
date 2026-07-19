@@ -2928,19 +2928,20 @@ function renderProcessUptimeWindows(wins) {
     <p class="muted">Confirmed process continuity, not observed check health.</p>`;
 }
 
-// renderSLAFill is the single-fill bar used when a window has no segment data.
-function renderSLAFill(pct) {
+// renderBarFill is the single-fill bar used when a window has no segment data;
+// the SLA and process-continuity variants differ only in color and labels.
+function renderBarFill(pct, color, label, emptyLabel) {
   const width = pct == null ? 0 : pctClamp(pct);
   const empty = pct == null ? " sla-empty" : "";
-  const label = pct == null ? "No SLA data" : `${fmtPct(pct)} available`;
-  return tpl`<span class="sla-bar" aria-label="${label}"><span class="sla-fill${empty}" style="--sla-pct:${width.toFixed(2)}%; --sla-color:${slaColor(pct)}"></span></span>`;
+  return tpl`<span class="sla-bar" aria-label="${pct == null ? emptyLabel : label}"><span class="sla-fill${empty}" style="--sla-pct:${width.toFixed(2)}%; --sla-color:${color}"></span></span>`;
+}
+
+function renderSLAFill(pct) {
+  return renderBarFill(pct, slaColor(pct), `${fmtPct(pct)} available`, "No SLA data");
 }
 
 function renderProcessUptimeFill(pct) {
-  const width = pct == null ? 0 : pctClamp(pct);
-  const empty = pct == null ? " sla-empty" : "";
-  const label = pct == null ? "No process continuity confirmed" : `${fmtPct(pct)} process continuity confirmed`;
-  return tpl`<span class="sla-bar" aria-label="${label}"><span class="sla-fill${empty}" style="--sla-pct:${width.toFixed(2)}%; --sla-color:var(--info)"></span></span>`;
+  return renderBarFill(pct, "var(--info)", `${fmtPct(pct)} process continuity confirmed`, "No process continuity confirmed");
 }
 
 function slaTimelineDataRows(segments, window, observedAt, unavailable = "no data") {
@@ -2960,9 +2961,11 @@ function slaTimelineDataRows(segments, window, observedAt, unavailable = "no dat
   });
 }
 
-// renderSLATimeline draws a contiguous status-page style availability band: one
-// colored cell per sub-span (oldest left), hatched where no data was observed.
-function renderSLATimeline(segments, window, observedAt) {
+// renderTimelineBand draws the contiguous status-page style band shared by the
+// SLA and process-continuity timelines: one colored cell per sub-span (oldest
+// left), hatched where nothing was observed. opts carries the per-variant
+// color function, gap/cell labels and data-table texts.
+function renderTimelineBand(segments, window, observedAt, opts) {
   const n = segments.length;
   const spanMs = slaWindowSpanMs(window);
   const sampledMs = Date.parse(observedAt);
@@ -2972,30 +2975,40 @@ function renderSLATimeline(segments, window, observedAt) {
     const segStart = endMs - spanMs + (i / n) * spanMs;
     const segEnd = endMs - spanMs + ((i + 1) / n) * spanMs;
     const when = `${fmtTime(new Date(segStart).toISOString())} – ${fmtTime(new Date(segEnd).toISOString())}`;
-    if (pct == null) return tpl`<span class="sla-seg sla-gap" title="${when + " · no data"}" aria-label="${when}: no data"></span>`;
+    if (pct == null) return tpl`<span class="sla-seg sla-gap" title="${when + " · " + opts.gapText}" aria-label="${when}: ${opts.gapAria}"></span>`;
     const pctText = fmtPct(pct);
-    return tpl`<span class="sla-seg" style="--sla-color:${slaColor(pct)}" title="${when + " · " + pctText}" aria-label="${when}: ${pctText} available"></span>`;
+    return tpl`<span class="sla-seg" style="--sla-color:${opts.color(pct)}" title="${when + " · " + pctText + opts.titleSuffix}" aria-label="${when}: ${pctText} ${opts.cellAria}"></span>`;
   });
-  const dataRows = slaTimelineDataRows(segments, window, observedAt);
-  return tpl`<table class="chart-data visually-hidden"><caption>SLA timeline data</caption><thead><tr><th scope="col">Period</th><th scope="col">Availability</th></tr></thead><tbody>${dataRows}</tbody></table><span class="sla-timeline" role="img" aria-label="SLA availability timeline">${cells}</span>`;
+  const dataRows = slaTimelineDataRows(segments, window, observedAt, opts.unavailable);
+  return tpl`<table class="chart-data visually-hidden"><caption>${opts.caption}</caption><thead><tr><th scope="col">Period</th><th scope="col">${opts.column}</th></tr></thead><tbody>${dataRows}</tbody></table><span class="sla-timeline" role="img" aria-label="${opts.bandAria}">${cells}</span>`;
+}
+
+function renderSLATimeline(segments, window, observedAt) {
+  return renderTimelineBand(segments, window, observedAt, {
+    color: slaColor,
+    gapText: "no data",
+    gapAria: "no data",
+    titleSuffix: "",
+    cellAria: "available",
+    unavailable: "no data",
+    caption: "SLA timeline data",
+    column: "Availability",
+    bandAria: "SLA availability timeline",
+  });
 }
 
 function renderProcessUptimeTimeline(segments, window, observedAt) {
-  const n = segments.length;
-  const spanMs = slaWindowSpanMs(window);
-  const sampledMs = Date.parse(observedAt);
-  const endMs = Number.isFinite(sampledMs) ? sampledMs : Date.now();
-  const cells = segments.map((ratio, i) => {
-    const pct = ratio == null ? null : Number(ratio) * percentScale;
-    const segStart = endMs - spanMs + (i / n) * spanMs;
-    const segEnd = endMs - spanMs + ((i + 1) / n) * spanMs;
-    const when = `${fmtTime(new Date(segStart).toISOString())} – ${fmtTime(new Date(segEnd).toISOString())}`;
-    if (pct == null) return tpl`<span class="sla-seg sla-gap" title="${when + " · not confirmed"}" aria-label="${when}: process continuity not confirmed"></span>`;
-    const pctText = fmtPct(pct);
-    return tpl`<span class="sla-seg" style="--sla-color:var(--info)" title="${when + " · " + pctText + " process continuity confirmed"}" aria-label="${when}: ${pctText} process continuity confirmed"></span>`;
+  return renderTimelineBand(segments, window, observedAt, {
+    color: () => "var(--info)",
+    gapText: "not confirmed",
+    gapAria: "process continuity not confirmed",
+    titleSuffix: " process continuity confirmed",
+    cellAria: "process continuity confirmed",
+    unavailable: "not confirmed",
+    caption: "Process continuity timeline data",
+    column: "Continuity",
+    bandAria: "Process continuity timeline",
   });
-  const dataRows = slaTimelineDataRows(segments, window, observedAt, "not confirmed");
-  return tpl`<table class="chart-data visually-hidden"><caption>Process continuity timeline data</caption><thead><tr><th scope="col">Period</th><th scope="col">Continuity</th></tr></thead><tbody>${dataRows}</tbody></table><span class="sla-timeline" role="img" aria-label="Process continuity timeline">${cells}</span>`;
 }
 
 function slaWindowSpanMs(window) {

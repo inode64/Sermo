@@ -15,6 +15,21 @@ func mapSlice[S, D any](in []S, conv func(S) D) []D {
 	return out
 }
 
+// trimBefore drops the leading samples whose timestamp (via at) is before
+// cutoff, shifting the retained tail in place; the ring-buffer trim shared by
+// the metric samplers.
+func trimBefore[T any](samples []T, cutoff time.Time, at func(T) time.Time) []T {
+	i := 0
+	for i < len(samples) && at(samples[i]).Before(cutoff) {
+		i++
+	}
+	if i > 0 {
+		copy(samples, samples[i:])
+		samples = samples[:len(samples)-i]
+	}
+	return samples
+}
+
 // filterSince returns the samples whose timestamp (via at) is not before
 // cutoff; the rolling-window trim shared by the runtime metric recorders.
 func filterSince[T any](samples []T, cutoff time.Time, at func(T) time.Time) []T {

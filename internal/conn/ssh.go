@@ -44,12 +44,11 @@ const (
 func (sshProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	addr := cfg.addrDefaults(defaultPortSSH)
 
-	c, err := BindDialer(cfg.Interface).DialContext(ctx, networkTCP, addr)
+	c, err := dialTCPDeadline(ctx, cfg, defaultPortSSH)
 	if err != nil {
 		return Result{}, err
 	}
 	defer func() { _ = c.Close() }()
-	applyDeadline(ctx, c)
 
 	// Read the server identification banner ourselves (byte by byte, so no kex
 	// bytes are consumed) and replay it to the ssh handshake via prefixConn.

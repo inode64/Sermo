@@ -490,11 +490,8 @@ func (a App) runBackend(ctx context.Context, opts options) int {
 }
 
 func (a App) runStatus(ctx context.Context, opts options) int {
-	if opts.service() == "" {
-		return a.commandUsageError(commandStatus, "status requires a service name")
-	}
-	if len(opts.args) > 1 {
-		return a.commandUsageError(commandStatus, "status takes exactly one service name")
+	if code := a.requireSingleServiceName(opts.service() != "", len(opts.args), commandStatus, commandStatus); code != exitSuccess {
+		return code
 	}
 
 	status, code := a.serviceStatus(ctx, opts)
@@ -515,11 +512,8 @@ func (a App) runStatus(ctx context.Context, opts options) int {
 }
 
 func (a App) runIsActive(ctx context.Context, opts options) int {
-	if opts.service() == "" {
-		return a.commandUsageError(commandIsActive, "is-active requires a service name")
-	}
-	if len(opts.args) > 1 {
-		return a.commandUsageError(commandIsActive, "is-active takes exactly one service name")
+	if code := a.requireSingleServiceName(opts.service() != "", len(opts.args), commandIsActive, commandIsActive); code != exitSuccess {
+		return code
 	}
 
 	status, code := a.serviceStatus(ctx, opts)
@@ -547,11 +541,8 @@ func (a App) runIsActive(ctx context.Context, opts options) int {
 // handling and postflight. Manual sermoctl actions are not rate limited, but are
 // fully guarded.
 func (a App) runAction(ctx context.Context, opts options, action string) int {
-	if opts.service() == "" {
-		return a.commandUsageError(action, action+" requires a service name")
-	}
-	if len(opts.args) > 1 {
-		return a.commandUsageError(action, action+" takes exactly one service name")
+	if code := a.requireSingleServiceName(opts.service() != "", len(opts.args), action, action); code != exitSuccess {
+		return code
 	}
 	service := opts.service()
 
@@ -1050,11 +1041,8 @@ func engineDefaultTimeout(cfg *config.Config) time.Duration {
 // runLocks reports the named runtime locks for a service (active, expired and
 // stale), reading the runtime root from the loaded config.
 func (a App) runLocks(opts options) int {
-	if opts.service() == "" {
-		return a.commandUsageError(commandLocks, "locks requires a service name")
-	}
-	if len(opts.args) > 1 {
-		return a.commandUsageError(commandLocks, "locks takes exactly one service name")
+	if code := a.requireSingleServiceName(opts.service() != "", len(opts.args), commandLocks, commandLocks); code != exitSuccess {
+		return code
 	}
 
 	cfg, code := a.loadConfig(opts)
@@ -1116,15 +1104,25 @@ func formatLock(lock locks.Lock) string {
 
 // runProcesses discovers and reports the processes belonging to a service
 // , reading the service's `processes` selectors from resolved config.
+// requireSingleServiceName runs the shared usage guard for commands that take
+// exactly one service name: a missing name and extra arguments are usage
+// errors. noun names the command in the usage messages.
+func (a App) requireSingleServiceName(hasService bool, argCount int, cmd, noun string) int {
+	if !hasService {
+		return a.commandUsageError(cmd, noun+" requires a service name")
+	}
+	if argCount > 1 {
+		return a.commandUsageError(cmd, noun+" takes exactly one service name")
+	}
+	return exitSuccess
+}
+
 // resolveServiceCommand runs the shared single-service command header: usage
 // guards, config load, service canonicalization and resolve. noun names the
 // command in the usage messages.
 func (a App) resolveServiceCommand(opts options, cmd, noun string) (cfg *config.Config, service string, resolved config.Resolved, code int) {
-	if opts.service() == "" {
-		return nil, "", config.Resolved{}, a.commandUsageError(cmd, noun+" requires a service name")
-	}
-	if len(opts.args) > 1 {
-		return nil, "", config.Resolved{}, a.commandUsageError(cmd, noun+" takes exactly one service name")
+	if code := a.requireSingleServiceName(opts.service() != "", len(opts.args), cmd, noun); code != exitSuccess {
+		return nil, "", config.Resolved{}, code
 	}
 	service = opts.service()
 

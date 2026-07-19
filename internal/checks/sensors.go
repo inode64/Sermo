@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -143,13 +144,13 @@ func SummarizeSensors(readings []SensorReading, chip, label string) SensorValues
 	}
 	values := SensorValues{Count: len(temps) + len(fans) + len(volts)}
 	if len(temps) > 0 {
-		values.Temp, values.HasTemp = maxFloat(temps), true
+		values.Temp, values.HasTemp = slices.Max(temps), true
 	}
 	if len(fans) > 0 {
-		values.Fan, values.HasFan = minFloat(fans), true
+		values.Fan, values.HasFan = slices.Min(fans), true
 	}
 	if len(volts) > 0 {
-		values.Voltage, values.HasVoltage = minFloat(volts), true
+		values.Voltage, values.HasVoltage = slices.Min(volts), true
 	}
 	return values
 }
@@ -215,24 +216,4 @@ func readTrim(path string) string {
 		return ""
 	}
 	return strings.TrimSpace(string(b))
-}
-
-func maxFloat(vs []float64) float64 {
-	m := vs[0]
-	for _, v := range vs[1:] {
-		if v > m {
-			m = v
-		}
-	}
-	return m
-}
-
-func minFloat(vs []float64) float64 {
-	m := vs[0]
-	for _, v := range vs[1:] {
-		if v < m {
-			m = v
-		}
-	}
-	return m
 }
