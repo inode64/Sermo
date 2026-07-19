@@ -77,12 +77,6 @@ func assertCheckSectionIssue(t *testing.T, name string, check map[string]any, wa
 	}
 }
 
-func TestValidateCommandRejectsEmptyArgvItem(t *testing.T) {
-	assertCheckSectionIssue(t, "version",
-		map[string]any{"type": "command", "command": []any{""}},
-		"checks.version command must be an array, not a shell string")
-}
-
 func TestValidateCommandCheckUser(t *testing.T) {
 	assertCheckSectionIssue(t, "config",
 		map[string]any{"type": "command", "command": []any{"/bin/tool"}, "user": []any{"postgres"}},

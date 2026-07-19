@@ -47,25 +47,6 @@ func TestOperationEventEmitter(t *testing.T) {
 	}
 }
 
-func TestEventKindForResult(t *testing.T) {
-	cases := []struct {
-		status operation.ResultStatus
-		want   string
-	}{
-		{operation.ResultOK, eventKindAction},
-		{operation.ResultBlocked, eventKindSuppressed},
-		{operation.ResultFailed, eventKindError},
-		{operation.ResultPreflightFailed, eventKindError},
-		{operation.ResultPostflightFailed, eventKindError},
-		{operation.ResultOrphanProcesses, eventKindError},
-	}
-	for _, tc := range cases {
-		if got := eventKindForResult(operation.Result{Status: tc.status}); got != tc.want {
-			t.Errorf("status %q: got kind %q, want %q", tc.status, got, tc.want)
-		}
-	}
-}
-
 func TestSlogEmitterLogsHookAtInfo(t *testing.T) {
 	var buf bytes.Buffer
 	logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelInfo}))

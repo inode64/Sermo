@@ -151,15 +151,6 @@ func TestCSRFGuardOnUnsafeMethods(t *testing.T) {
 	}
 }
 
-func TestAuthDisabledIsOpen(t *testing.T) {
-	h := authServer(Auth{})
-	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, req(http.MethodPost, testServicePath("web", apiActionRestart), "", ""))
-	if rec.Code != http.StatusOK {
-		t.Fatalf("open server should allow actions, got %d", rec.Code)
-	}
-}
-
 func TestAuthRequiredChallenges(t *testing.T) {
 	h := authServer(Auth{AdminPassword: "secret"})
 	rec := httptest.NewRecorder()

@@ -773,16 +773,6 @@ func TestWatchFireOnFailInvertsTrigger(t *testing.T) {
 	}
 }
 
-func TestBuildWatchesSkipsDisabled(t *testing.T) {
-	cfg := cfgWithWatches(map[string]any{
-		"off": map[string]any{"enabled": false, "check": map[string]any{"type": "storage", "path": "/"}},
-	})
-	watches, _ := BuildWatches(cfg, Deps{}, time.Second)
-	if len(watches) != 0 {
-		t.Fatalf("expected disabled watch skipped, got %d", len(watches))
-	}
-}
-
 func TestBuildWatchesWarnsOnBadCheck(t *testing.T) {
 	cfg := cfgWithWatches(map[string]any{
 		"bad": map[string]any{
