@@ -958,6 +958,21 @@ function syncEventTargetFilters() {
   ]);
 }
 
+// fmtLocalTime renders a timestamp in the viewer's local zone, for hover
+// titles only — the visible value stays the daemon's canonical UTC.
+function fmtLocalTime(value) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "" : date.toLocaleString();
+}
+
+// fmtTimeTitled is the canonical UTC timestamp with the viewer's local time as
+// its hover title, so operators in other zones never convert mentally.
+function fmtTimeTitled(value) {
+  const local = fmtLocalTime(value);
+  if (!local) return fmtTime(value);
+  return tpl`<span title="${local + " local"}">${fmtTime(value)}</span>`;
+}
+
 function eventRows(events, withService, opts = {}) {
   const cols = withService ? 4 : 3;
   if (!events || !events.length) return tpl`<tr><td colspan="${cols}" class="muted">No events yet.</td></tr>`;
@@ -968,7 +983,7 @@ function eventRows(events, withService, opts = {}) {
     const key = eventKey(prefix, e, i);
     const rowId = opts.panelId && i === 0 ? opts.panelId : nothing;
     return tpl`<tr id="${rowId}">
-      <td class="t">${fmtTime(e.time)}</td>
+      <td class="t">${fmtTimeTitled(e.time)}</td>
       ${withService && who ? tpl`<td>${who}</td>` : nothing}
       <td class="kind kind-${e.kind || ""}">${e.kind}</td>
       <td>${detail ? tpl`<span class="muted">${detail}</span> ` : nothing}${eventMessageHTML(e, key)}</td>
@@ -1053,7 +1068,8 @@ function activityDateCell(e) {
   if (!time) return tpl`<span class="muted">—</span>`;
   const kind = e.kind || "";
   const detail = [kind, e.action, e.status].filter(Boolean).join(" ");
-  const title = [fmtTime(time), detail, e.message || ""].filter(Boolean).join(" · ");
+  const local = fmtLocalTime(time);
+  const title = [fmtTime(time), local && local + " local", detail, e.message || ""].filter(Boolean).join(" · ");
   const cls = "activity-time activity-" + activitySeverity(kind, e.status);
   const label = [fmtTime(time), detail || "activity"].filter(Boolean).join(" · ");
   return tpl`<div class="event-cell" title="${title}"><span class="${cls}" aria-label="${label}">${fmtTime(time)}</span></div>`;
@@ -4856,7 +4872,7 @@ function renderWatchExpansion(w, events) {
   const rows = events.slice(0, 50).map((e) => {
     const detail = [e.action, e.status].filter(Boolean).join(" ");
     return tpl`<tr>
-      <td class="t">${fmtTime(e.time)}</td>
+      <td class="t">${fmtTimeTitled(e.time)}</td>
       <td class="kind kind-${e.kind}">${e.kind}</td>
       <td>${detail ? tpl`<span class="muted">${detail}</span> ` : nothing}${e.message || ""}</td>
     </tr>`;
@@ -6303,7 +6319,7 @@ function renderActionConfirm() {
     ? tpl`<span class="muted">No resident process expected</span>`
     : tpl`${(d.processes || []).length} discovered${procWarnings.length ? tpl` <span class="bad">· ${procWarnings.length} warning${procWarnings.length === 1 ? "" : "s"}</span>` : nothing}`;
   const lastEvent = ev
-    ? tpl`${fmtTime(ev.time)} · <span class="kind kind-${ev.kind}">${ev.kind || ""}</span> ${[ev.action, ev.status].filter(Boolean).join(" ")} <span class="muted">${ev.message || ""}</span>`
+    ? tpl`${fmtTimeTitled(ev.time)} · <span class="kind kind-${ev.kind}">${ev.kind || ""}</span> ${[ev.action, ev.status].filter(Boolean).join(" ")} <span class="muted">${ev.message || ""}</span>`
     : tpl`<span class="muted">none recorded</span>`;
   const preRows = pre ? tpl`<div class="confirm-preflight-block">${preflightRows(pre.checks || [])}</div>` : nothing;
   const warning = ctx.action === actionRestart
