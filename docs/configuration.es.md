@@ -1095,7 +1095,9 @@ notifiers:
 - **`ntfy`** — publica en un **topic de [ntfy](https://ntfy.sh)** (autoalojado o
   ntfy.sh): notificaciones push en móvil y escritorio sin dependencias externas.
   - **`webhook`** — la URL completa del topic (`https://ntfy.example.net/sermo-alerts`).
-    El asunto viaja como título de la notificación y el detalle (los campos
+    Se conserva un subpath de proxy inverso (`https://host/ntfy/alerts` publica
+    en `https://host/ntfy` con topic `alerts`). El asunto viaja como título de
+    la notificación y el detalle (los campos
     `SERMO_*`) como mensaje.
   - **`token`** — token de acceso opcional para un topic protegido (se envía
     como cabecera `Authorization: Bearer`). El dashboard muestra solo el host

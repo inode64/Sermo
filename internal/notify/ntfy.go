@@ -17,19 +17,26 @@ const (
 	ntfyBearerPrefix        = "Bearer "
 )
 
-// ParseNtfyWebhook splits an ntfy topic URL (https://ntfy.sh/alerts) into the
-// server base URL and the topic name. Publishing goes to the server root as
-// JSON with the topic in the payload, which keeps title and body structured.
-func ParseNtfyWebhook(webhook string) (server, topic string, err error) {
+// ParseNtfyWebhook splits an ntfy topic URL into the publish base URL and the
+// topic name. The topic is the last path segment; any leading segments are a
+// reverse-proxy subpath kept on the base (https://host/ntfy/alerts →
+// base https://host/ntfy, topic alerts). Publishing POSTs the topic in the
+// JSON body to that base, which keeps title and body structured.
+func ParseNtfyWebhook(webhook string) (base, topic string, err error) {
 	u, err := url.Parse(webhook)
 	if err != nil || u.Host == "" {
 		return "", "", errors.New("ntfy webhook must be a full topic URL (https://server/topic)")
 	}
-	topic = strings.Trim(u.Path, "/")
-	if topic == "" || strings.Contains(topic, "/") {
-		return "", "", errors.New("ntfy webhook must name exactly one topic (https://server/topic)")
+	segments := strings.Split(strings.Trim(u.Path, "/"), "/")
+	topic = segments[len(segments)-1]
+	if topic == "" {
+		return "", "", errors.New("ntfy webhook must name a topic (https://server/topic)")
 	}
-	return u.Scheme + "://" + u.Host, topic, nil
+	base = u.Scheme + "://" + u.Host
+	if prefix := segments[:len(segments)-1]; len(prefix) > 0 {
+		base += "/" + strings.Join(prefix, "/")
+	}
+	return base, topic, nil
 }
 
 // buildNtfy constructs an ntfy notifier from a config entry: `webhook` is the
