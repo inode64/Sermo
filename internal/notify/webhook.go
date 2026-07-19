@@ -45,19 +45,20 @@ const (
 )
 
 // webhookPoster delivers a JSON payload to a webhook; injected so tests do not
-// hit the network. label names the transport in error messages.
-type webhookPoster func(ctx context.Context, label, webhook string, payload []byte) error
+// hit the network. label names the transport in error messages; headers are
+// optional extra request headers (e.g. an Authorization token).
+type webhookPoster func(ctx context.Context, label, webhook string, headers map[string]string, payload []byte) error
 
 func webhookPayload(v any) []byte {
 	b, _ := json.Marshal(v) //nolint:errchkjson // callers pass maps of plain strings, which cannot fail to encode
 	return b
 }
 
-func sendWebhook(ctx context.Context, post webhookPoster, label, webhook string, payload []byte) error {
+func sendWebhook(ctx context.Context, post webhookPoster, label, webhook string, headers map[string]string, payload []byte) error {
 	if post == nil {
 		post = postWebhook
 	}
-	return post(ctx, label, webhook, payload)
+	return post(ctx, label, webhook, headers, payload)
 }
 
 // webhookNotifier is the shared shape of the webhook-posting notifiers (Slack,
@@ -67,6 +68,7 @@ type webhookNotifier struct {
 	name    string
 	typ     string
 	webhook string
+	headers map[string]string // optional extra request headers (auth tokens)
 	post    webhookPoster
 	payload func(Message) []byte
 }
@@ -79,7 +81,7 @@ func (n *webhookNotifier) Type() string { return n.typ }
 
 // Send posts the rendered message to the configured webhook.
 func (n *webhookNotifier) Send(ctx context.Context, msg Message) error {
-	return sendWebhook(ctx, n.post, n.typ, n.webhook, n.payload(msg))
+	return sendWebhook(ctx, n.post, n.typ, n.webhook, n.headers, n.payload(msg))
 }
 
 // newWebhookNotifier constructs a webhook notifier from a config entry.
@@ -93,12 +95,15 @@ func newWebhookNotifier(typ, name string, entry map[string]any, payload func(Mes
 
 // postWebhook POSTs a JSON payload and fails on a non-2xx answer; label names
 // the transport in error messages.
-func postWebhook(ctx context.Context, label, webhook string, payload []byte) error {
+func postWebhook(ctx context.Context, label, webhook string, headers map[string]string, payload []byte) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, webhook, bytes.NewReader(payload))
 	if err != nil {
 		return fmt.Errorf("build %s webhook request: %w", label, err)
 	}
 	req.Header.Set(webhookHeaderContentType, webhookContentTypeJSON)
+	for name, value := range headers {
+		req.Header.Set(name, value)
+	}
 
 	client := &http.Client{Timeout: webhookTimeout}
 	resp, err := client.Do(req)
