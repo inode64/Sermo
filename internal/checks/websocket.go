@@ -17,6 +17,7 @@ import (
 
 	"sermo/internal/cfgval"
 	"sermo/internal/conn"
+	"sermo/internal/netutil"
 )
 
 // wsGUID is the RFC 6455 magic value appended to the client key to derive the
@@ -99,7 +100,7 @@ func (c *websocketCheck) handshake(ctx context.Context, iface string, start time
 	addr := net.JoinHostPort(c.host, c.port)
 	nc, err := conn.BindDialer(iface).DialContext(ctx, conn.TransportTCP, addr)
 	if err != nil {
-		return c.result(false, fmt.Sprintf("websocket %s: %v", c.rawURL, err), start)
+		return c.result(false, fmt.Sprintf("websocket %s: %v", netutil.RedactURL(c.rawURL), netutil.URLErrorCause(err)), start)
 	}
 	defer func() { _ = nc.Close() }()
 	if dl, ok := ctx.Deadline(); ok {
@@ -113,7 +114,7 @@ func (c *websocketCheck) handshake(ctx context.Context, iface string, start time
 		}
 		tlsConn := tls.Client(nc, tc)
 		if err := tlsConn.HandshakeContext(ctx); err != nil {
-			return c.result(false, fmt.Sprintf("websocket %s: TLS: %v", c.rawURL, err), start)
+			return c.result(false, fmt.Sprintf("websocket %s: TLS: %v", netutil.RedactURL(c.rawURL), netutil.URLErrorCause(err)), start)
 		}
 		nc = tlsConn
 	}
@@ -123,23 +124,23 @@ func (c *websocketCheck) handshake(ctx context.Context, iface string, start time
 		return c.result(false, "websocket: "+err.Error(), start)
 	}
 	if _, err := nc.Write([]byte(c.handshakeRequest(key))); err != nil {
-		return c.result(false, fmt.Sprintf("websocket %s: %v", c.rawURL, err), start)
+		return c.result(false, fmt.Sprintf("websocket %s: %v", netutil.RedactURL(c.rawURL), netutil.URLErrorCause(err)), start)
 	}
 
 	resp, err := http.ReadResponse(bufio.NewReader(nc), &http.Request{Method: http.MethodGet})
 	if err != nil {
-		return c.result(false, fmt.Sprintf("websocket %s: %v", c.rawURL, err), start)
+		return c.result(false, fmt.Sprintf("websocket %s: %v", netutil.RedactURL(c.rawURL), netutil.URLErrorCause(err)), start)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusSwitchingProtocols {
-		return c.result(false, fmt.Sprintf("websocket %s: status %d (want 101)", c.rawURL, resp.StatusCode), start)
+		return c.result(false, fmt.Sprintf("websocket %s: status %d (want 101)", netutil.RedactURL(c.rawURL), resp.StatusCode), start)
 	}
 	if got := resp.Header.Get(wsHeaderAccept); got != wsAccept(key) {
-		return c.result(false, fmt.Sprintf("websocket %s: invalid Sec-WebSocket-Accept %q", c.rawURL, got), start)
+		return c.result(false, fmt.Sprintf("websocket %s: invalid Sec-WebSocket-Accept %q", netutil.RedactURL(c.rawURL), got), start)
 	}
 
-	res := c.result(true, fmt.Sprintf("websocket %s: 101 Switching Protocols", c.rawURL), start)
+	res := c.result(true, fmt.Sprintf("websocket %s: 101 Switching Protocols", netutil.RedactURL(c.rawURL)), start)
 	res.Data = websocketResponseData(resp)
 	return res
 }
