@@ -1082,6 +1082,22 @@ notifiers:
     webhook: "https://prod-01.westeurope.logic.azure.com:443/workflows/…"
 ```
 
+- **`telegram`** — sends through a **Telegram bot** (`sendMessage`).
+  - **`token`** — the bot token from `@BotFather`. It stays inside the API URL
+    and never appears on the dashboard.
+  - **`chat_id`** — the numeric chat/group id or an `@channel` name. The
+    subject is the lead line and the detail (the `SERMO_*` fields) follows as
+    plain text.
+
+```yaml
+# /etc/sermo/notifiers/telegram.yml
+notifiers:
+  ops-telegram:
+    type: telegram
+    token: "123456789:AAF...XXXX"
+    chat_id: -1001234567890
+```
+
 - **`tty`** — writes directly to active Linux terminal sessions, similar to
   `write(1)` but implemented inside Sermo without invoking an external command.
   The built-in notifier named `tty` is always available and can be overridden to
