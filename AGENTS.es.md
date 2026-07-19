@@ -112,6 +112,26 @@ la funcionalidad aplica intencionadamente solo a una superficie, documenta esa l
 donde viva la decisión de dispatch/validación y en la documentación de usuario (ver
 Documentation lockstep).
 
+## Constantes y valores repetidos
+
+Evita literales mágicos en el código de producción. Antes de añadir un literal
+numérico o de cadena, busca una constante existente, un enum tipado, un valor de
+configuración o un helper del paquete propietario y reutilízalo, especialmente al
+editar un `switch`, mapa, slice o array que ya usa constantes para el mismo
+concepto.
+
+Crea o reutiliza constantes para valores que aparecen más de tres veces, y para
+valores con carga conceptual incluso cuando aparecen menos: estados, kinds,
+categorías, modos, nombres de backend, sufijos de fichero, claves de
+configuración/YAML, nombres de protocolo, unidades de métricas, defaults de
+timeout/intervalo, umbrales, factores de conversión matemáticos/físicos y
+cálculos similares. Prefiere las constantes tipadas públicas existentes del
+paquete propietario antes que duplicar constantes de cadena localmente.
+
+No escondas tras constantes literales de un solo uso, datos de fixtures de test,
+ejemplos YAML realistas o texto de error local, salvo que mejore la corrección o
+elimine duplicación real.
+
 ## Naming and terminology
 
 Los nombres son vocabulario. Usa exactamente el mismo nombre para un concepto dado a través de

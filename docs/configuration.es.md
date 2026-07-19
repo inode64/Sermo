@@ -632,7 +632,9 @@ web:
 - **admin** — acceso completo. Otorgado por `password`.
 - **guest** — **solo lectura**: puede ver todo pero cada acción (un `POST`) se rechaza
   con `403`. Otorgado por `guest_password`, y/o a cualquiera cuando `guest: true`
-  (solo lectura anónima).
+  (solo lectura anónima). Las **líneas de comando de procesos se redactan al
+  ejecutable** para los invitados (árboles de procesos de servicios y blockers
+  de mounts): los argumentos pueden llevar secretos que solo los admins deben ver.
 
 La **contraseña**, no el nombre de usuario, selecciona el rol — en el prompt del
 navegador introduce cualquier nombre de usuario y la contraseña de admin o guest; las
@@ -642,6 +644,24 @@ escalar a admin. La interfaz oculta los botones de acción a los invitados; la A
 impone de todos modos. Cuando no se establece ninguna contraseña/guest, la autenticación
 está deshabilitada (abierta) y el daemon **registra una advertencia** al arrancar.
 `GET /api/whoami` reporta el rol del llamante.
+
+En **modo abierto** el servidor valida además la cabecera `Host` de la petición
+(protección anti DNS-rebinding): se aceptan `localhost`, Hosts con IP literal y
+la dirección de enlace; cualquier otro nombre DNS se rechaza con `421`. Una
+página hostil "rebotada" presenta necesariamente su propio dominio en `Host`,
+mientras que navegar directamente por IP o localhost no se ve afectado. Si un
+despliegue sin autenticación está detrás de un proxy que reenvía otro nombre de
+host, decláralo explícitamente:
+
+```yaml
+web:
+  port: 9797
+  allowed_hosts: [dashboard.internal]   # nombres Host extra aceptados en modo abierto
+```
+
+Con la autenticación habilitada la comprobación no aplica — un origen rebotado
+no puede adjuntar credenciales Basic, y los proxies conservan el `Host` que
+usen. Las sondas planas `/livez` y `/readyz` están siempre exentas.
 
 ### Detrás de un proxy inverso (requerido para exponerlo)
 
@@ -1623,6 +1643,22 @@ watch desde el último ciclo de watches del daemon; no inicia sondas propias de
 comandos, red, SQL, firewall, count, disk I/O, `hdparm` o `smart` en cada poll
 del dashboard.
 
+La Web UI y `sermoctl watch probe` pueden solicitar una muestra explícita para
+los watches de host `hdparm`, `lvm`, `raid` y `smart` configurados. `hdparm`,
+`lvm` y `raid` son muestras de solo lectura; una sonda manual de `smart`, en
+cambio, inicia el self-test corto del dispositivo con `smartctl --test=short
+DEVICE`. Que el comando se confirme con éxito significa que el self-test quedó
+programado, no que la unidad esté sana; los ciclos SMART programados siguen
+leyendo salud y atributos con `smartctl -H -A -c -j`. Mientras un self-test está
+en curso, el estado compartido Web/CLI es `testing`; muestras posteriores del
+daemon lo limpian cuando el dispositivo informa de que el test terminó. Los
+watches de RAID y LVM muestran igualmente el trabajo del dispositivo como
+`testing`, `recovering`, `rebuilding`, `repairing`, `moving` o `merging`, con su
+progreso cuando está disponible. Son estados de operación del dispositivo, no
+veredictos de salud. El daemon registra la sonda y el evento para la vista
+compartida Web/CLI, pero no evalúa su ventana de watch ni ejecuta reglas,
+notifiers, hooks ni acciones de remediación.
+
 ### Watches de servicio (acotados a un servicio)
 
 Un servicio puede llevar su propio bloque `watches:` — la misma forma que un watch
@@ -1714,6 +1750,38 @@ watches:
   block-restart-during-backup: # un guard: rechaza restart mientras corre el backup
     check: { type: process_count, exe: "${backup_binary}", count: { op: ">", value: 0 } }
     then: { action: block, blocks: [restart], message: "backup en ejecucion" }
+```
+
+```yaml
+# services/mail-queue.yml — un watch acotado a este servicio
+name: mail-queue
+uses: postfix
+
+watches:
+  deferred-backlog:            # emitido como "mail-queue:deferred-backlog"
+    interval: 1m
+    check:
+      type: count
+      path: /var/spool/postfix/deferred
+      of: file
+      recursive: true
+      count: { op: ">=", value: 5000 }
+    for: { cycles: 3 }
+    then:
+      hook: { command: [/usr/local/bin/drain-queue.sh] }
+      notify: [ops-email]
+  worker-runaway:              # process_count sobre el árbol de PIDs del servicio
+    check:
+      type: process_count      # sin user/exe — cuenta solo el árbol de este servicio
+      count: { op: ">", value: 40 }
+    then:
+      notify: [ops-email]
+  thread-hot:                  # cpu_thread del árbol del servicio, desde un collector dedicado
+    interval: 30s
+    check: { type: metric, scope: service, name: cpu_thread, op: ">", value: "90%" }
+    for: { duration: 6m }
+    then:
+      notify: [ops-email]
 ```
 
 ```yaml
@@ -2447,6 +2515,22 @@ puede sobrescribirlo con su propio `dry_run` de nivel superior.
 
 `defaults.policy.cooldown` es **requerido y positivo**: cada service resuelto hereda un
 cooldown de prevención de bucles a menos que lo sustituya.
+
+`defaults.restart_on_change` controla solo los flags de permiso heredados para
+el azúcar automático de restart-on-change. No puede declarar `paths`, `apps`,
+`libraries` ni `messages` globales; esas fuentes quedan locales a un servicio de
+catálogo o configurado.
+
+```yaml
+defaults:
+  restart_on_change:
+    config: false   # bloquea por defecto las reglas generadas de restart_on_change.paths
+    version: true   # permite las reglas generadas de restart_on_change.apps/libraries
+```
+
+Un servicio puede sustituir cualquiera de los dos flags en su propio bloque
+`restart_on_change`. Los flags ausentes se consideran permitidos, de modo que las
+entradas `restart_on_change` locales existentes conservan su comportamiento.
 
 `defaults.rule_window` es la **ventana de disparo alternativa** para cualquier regla que
 no declare ni su propio `for` ni `within` (ver la sección de reglas). Acepta:

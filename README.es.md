@@ -104,6 +104,7 @@ sermoctl daemon reload           # ask sermod to re-read its config
 sermoctl sla                     # all services
 sermoctl sla apache-main         # one service
 sermoctl sla --series apache-main --since 168h  # per-minute series (graph data)
+sermoctl sla --process-uptime apache-main       # continuidad de proceso confirmada, no salud de checks
 
 # Run the daemon
 sermod run --config /etc/sermo/sermo.yml

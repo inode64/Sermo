@@ -204,10 +204,11 @@ periódicos siguen siendo lecturas no invasivas de salud y atributos. El comando
 registra un evento `probe` y la hora del último check, pero no ejecuta reglas,
 notificaciones ni remediación. Un watch RAID con
 `raid_control.pause_resume: true` y `check.array` explícito permite además
-`watch pause` y `watch resume`. Pausar requiere `--confirm MD_ARRAY`, vuelve a
-comprobar el array, toma un bloqueo de operación exclusivo y verifica el estado
-del kernel. Resume acepta cualquier array configurado actualmente pausado,
-aunque se hubiera pausado fuera de Sermo.
+`watch pause` y `watch resume`. Pausar requiere `--confirm MD_ARRAY` además de
+nombrar el watch; ambas acciones vuelven a comprobar el array, toman un bloqueo
+de operación exclusivo y verifican el estado resultante del kernel. Resume
+acepta cualquier array configurado actualmente pausado, aunque se hubiera
+pausado fuera de Sermo.
 
 El daemon registra `probe/running` al iniciar una muestra manual y el evento de
 fin `probe/ok` o `probe/failed` con el tiempo empleado. Un autotest SMART
