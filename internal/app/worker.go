@@ -176,14 +176,14 @@ type workerCycleMode struct {
 	operation   bool
 }
 
+// cycleTarget names this worker for the scheduler panic-recovery log.
+func (w *Worker) cycleTarget() string { return "service " + w.Service }
+
 // RunCycle runs one monitoring cycle for the service: build the
 // check cache, evaluate remediation rules in name order, and run the first
 // firing rule whose action is not guard-blocked and is allowed by policy. Then
 // fire any alert rules. The internal operation lock already
 // prevents overlapping operations, so cycles never run concurrently per service.
-// cycleTarget names this worker for the scheduler panic-recovery log.
-func (w *Worker) cycleTarget() string { return "service " + w.Service }
-
 func (w *Worker) RunCycle(ctx context.Context) {
 	w.cycle++
 	defer w.publishRemediation()

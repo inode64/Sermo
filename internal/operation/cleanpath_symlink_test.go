@@ -11,13 +11,13 @@ import (
 // planted parent symlink cannot redirect the delete to another tree.
 func TestCleanStopPathRefusesSymlinkedAncestor(t *testing.T) {
 	root := t.TempDir()
-	real := filepath.Join(root, "real")
-	if err := os.MkdirAll(filepath.Join(real, "data"), 0o755); err != nil {
+	realDir := filepath.Join(root, "real")
+	if err := os.MkdirAll(filepath.Join(realDir, "data"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	// link -> real; deleting link/data would traverse the symlink.
 	link := filepath.Join(root, "link")
-	if err := os.Symlink(real, link); err != nil {
+	if err := os.Symlink(realDir, link); err != nil {
 		t.Fatal(err)
 	}
 	target := filepath.Join(link, "data")
@@ -27,7 +27,7 @@ func TestCleanStopPathRefusesSymlinkedAncestor(t *testing.T) {
 		t.Fatalf("warns = %v, want a refusal naming the symlink", warns)
 	}
 	// The real tree must be untouched.
-	if _, err := os.Stat(filepath.Join(real, "data")); err != nil {
+	if _, err := os.Stat(filepath.Join(realDir, "data")); err != nil {
 		t.Fatalf("real data was deleted through the symlink: %v", err)
 	}
 }
