@@ -280,12 +280,19 @@ var signalNames = map[string]syscall.Signal{
 // `SIGHUP` all resolve to SIGHUP). An unknown name is an error so a typo in a
 // `reload.signal` fails validation instead of silently sending nothing.
 func ParseSignal(name string) (syscall.Signal, error) {
+	return parseNamedSignal(signalNames, name, "unknown signal %q")
+}
+
+// parseNamedSignal normalizes a signal name (trim, uppercase, optional SIG
+// prefix) and resolves it in names; the lookup shared by ParseSignal and
+// ParseKillSignal. errFormat receives the original name.
+func parseNamedSignal(names map[string]syscall.Signal, name, errFormat string) (syscall.Signal, error) {
 	key := strings.ToUpper(strings.TrimSpace(name))
 	key = strings.TrimPrefix(key, signalNamePrefix)
-	if sig, ok := signalNames[key]; ok {
+	if sig, ok := names[key]; ok {
 		return sig, nil
 	}
-	return 0, fmt.Errorf("unknown signal %q", name)
+	return 0, fmt.Errorf(errFormat, name)
 }
 
 // SignalNames returns the accepted signal names, sorted, for diagnostics and docs.
@@ -316,10 +323,5 @@ const KillSignalSummary = "TERM or KILL"
 // non-termination signal, so a typo or an inappropriate signal fails validation
 // instead of silently sending the wrong thing.
 func ParseKillSignal(name string) (syscall.Signal, error) {
-	key := strings.ToUpper(strings.TrimSpace(name))
-	key = strings.TrimPrefix(key, signalNamePrefix)
-	if sig, ok := killSignalNames[key]; ok {
-		return sig, nil
-	}
-	return 0, fmt.Errorf("kill signal %q: only %s are valid", name, KillSignalSummary)
+	return parseNamedSignal(killSignalNames, name, "kill signal %q: only "+KillSignalSummary+" are valid")
 }
