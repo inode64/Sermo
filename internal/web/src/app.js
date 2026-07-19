@@ -1449,7 +1449,7 @@ function serviceStateBadge(s) {
 }
 
 function serviceStateCell(s) {
-  return tpl`${serviceStateBadge(s)}${sampledAge(s && s.status_observed_at)}`;
+  return tpl`${serviceStateBadge(s)}`;
 }
 
 const serviceSurfaceRegular = "service";
@@ -3018,13 +3018,12 @@ function slaColor(pct) {
 function renderSLAWindows(wins, compact) {
   wins = wins || [];
   if (!wins.length) return tpl`<span class="muted">No SLA data yet.</span>`;
-  const observedAt = wins.find((w) => w && w.observed_at)?.observed_at || "";
   const rows = wins.map((w) => {
     const pct = w.ratio == null ? null : Number(w.ratio) * percentScale;
     const label = slaWindowLabel(w.window);
     const pctText = pct == null ? "—" : fmtPct(pct);
     const count = `${Number(w.up || 0)}/${Number(w.total || 0)}`;
-    const title = `${label} · ${pctText} · ${count}${w.observed_at ? ` · sampled ${fmtAge(w.observed_at)}` : ""}`;
+    const title = `${label} · ${pctText} · ${count}`;
     const track = Array.isArray(w.segments) && w.segments.length
       ? renderSLATimeline(w.segments, w.window, w.observed_at)
       : renderSLAFill(pct);
@@ -3035,7 +3034,7 @@ function renderSLAWindows(wins, compact) {
       <span class="sla-count">${count}</span>
     </div>`;
   });
-  return tpl`<div class="sla-windows${compact ? " sla-compact" : ""}">${rows}${sampledAge(observedAt)}</div>`;
+  return tpl`<div class="sla-windows${compact ? " sla-compact" : ""}">${rows}</div>`;
 }
 
 // renderProcessUptimeWindows shows trusted process continuity separately from
@@ -4640,7 +4639,7 @@ function appStatusLabel(a) {
 function appStatusCell(a) {
   const state = appStateText(a);
   const detail = (a && a.status && a.status !== targetStateOK) ? a.status : appStatusLabel(a);
-  return tpl`<td class="status-cell status-${state}" title="${detail}">${stateBadgeLabel(state, appStatusLabel(a))}${sampledAge(a && a.observed_at)}</td>`;
+  return tpl`<td class="status-cell status-${state}" title="${detail}">${stateBadgeLabel(state, appStatusLabel(a))}</td>`;
 }
 
 function artifactMatches(item, surface, categoryFilter, statusFilter, statusFilterStates, query) {
@@ -5861,7 +5860,7 @@ function renderStatus(ctx) {
       if (mem != null) sp.push(`mem: <b>${esc(mem)}</b>`);
       if (swap != null) sp.push(`swap: <b>${esc(swap)}</b>`);
       if (load != null) sp.push(`load: <b>${esc(load)}</b>`);
-      setHTMLIfChanged(sys, sp.join(" &middot; "));
+      setHTMLIfChanged(sys, sp.map((s) => `<span class="stat">${s}</span>`).join(""));
     }
 
     const parts = [];
@@ -5899,8 +5898,9 @@ function renderStatus(ctx) {
       `uptime: <b>${esc(hostUp || "—")}</b>`,
       `status: <span class="${statusCls}">${statusLabel}</span>`,
     ];
-    parts.push(`<span class="status-tail">${tail.join(" &middot; ")}</span>`);
-    setHTMLIfChanged(bar, parts.join(" &middot; "));
+    const statItems = parts.map((p) => `<span class="stat">${p}</span>`);
+    statItems.push(`<span class="stat status-tail">${tail.join(" &middot; ")}</span>`);
+    setHTMLIfChanged(bar, statItems.join(""));
     updatePanicView(ready.panic);
     renderOverview({ ready, live, mon, ops, locks, hostMetrics });
     updateSectionNav();
@@ -6885,10 +6885,6 @@ function renderRemediation(r) {
   if (r.last_action_at) parts.push(tpl`<span class="muted">last action ${fmtAge(r.last_action_at)}</span>`);
   // Intersperse " · " separators between the parts (TemplateResults can't be join()ed).
   return parts.map((p, i) => i ? [" · ", p] : p);
-}
-
-function sampledAge(t) {
-  return t ? tpl`<div class="muted sample-age">sampled ${fmtAge(t)}</div>` : nothing;
 }
 
 function esc(s) {

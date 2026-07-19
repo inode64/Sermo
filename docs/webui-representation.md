@@ -68,8 +68,8 @@ overflow and axe WCAG 2.2 AA rules against deterministic API fixtures.
 | Live operations | `GET /api/ops` | active operation slots |
 
 Init status, application inspection and SLA timeline caches expose their actual
-sample times. The UI labels their ages, and SLA segment timestamps stay anchored
-to `observed_at` instead of sliding forward on the browser clock while cached.
+sample times, and SLA segment timestamps stay anchored to `observed_at` instead
+of sliding forward on the browser clock while cached.
 Dashboard refreshes are single-flight: automatic, manual and post-action reloads
 never execute concurrently, and the next automatic delay starts after the prior
 refresh completes.
