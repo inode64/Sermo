@@ -61,7 +61,7 @@ func buildHTTPCheck(b base, entry map[string]any, client *http.Client) (Check, s
 	}
 	hc := &httpCheck{
 		base:        b,
-		client:      httpClientWithRedirectPolicy(reqClient, boolWithDefault(entry[CheckKeyFollowRedirects], true)),
+		client:      httpClientWithRedirectPolicy(reqClient, boolDefaultTrue(entry[CheckKeyFollowRedirects])),
 		url:         rawURL,
 		method:      method,
 		headers:     cfgval.StringMap(entry[CheckKeyHeaders]),
@@ -80,7 +80,7 @@ func buildHTTPCheck(b base, entry map[string]any, client *http.Client) (Check, s
 		return nil, warn
 	}
 	if hc.certClient != nil {
-		hc.certClient = httpClientWithRedirectPolicy(hc.certClient, boolWithDefault(entry[CheckKeyFollowRedirects], true))
+		hc.certClient = httpClientWithRedirectPolicy(hc.certClient, boolDefaultTrue(entry[CheckKeyFollowRedirects]))
 	}
 	return hc, ""
 }
@@ -176,11 +176,13 @@ func configureHTTPLatency(check *httpCheck, entry map[string]any) string {
 	return ""
 }
 
-func boolWithDefault(v any, def bool) bool {
+// boolDefaultTrue reads an optional boolean entry value that defaults to true
+// when absent or not a bool — the shape follow_redirects and cert_verify share.
+func boolDefaultTrue(v any) bool {
 	if b, ok := v.(bool); ok {
 		return b
 	}
-	return def
+	return true
 }
 
 func httpClientWithRedirectPolicy(client *http.Client, follow bool) *http.Client {
@@ -292,7 +294,7 @@ func configureHTTPCert(hc *httpCheck, entry map[string]any, rawURL string) strin
 	if u.Scheme != URLSchemeHTTPS {
 		return "http check: cert_* options require an https url"
 	}
-	verify := boolWithDefault(entry[CheckKeyCertVerify], true)
+	verify := boolDefaultTrue(entry[CheckKeyCertVerify])
 	days := 0
 	if v, ok := cfgval.Int(entry[CheckKeyCertExpiresInDays]); ok {
 		days = v
