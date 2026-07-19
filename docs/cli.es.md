@@ -117,6 +117,14 @@ servicio confiable estuvo vivo. Puede incluir tiempo anterior a un reinicio de
 `sermod` cuando la hora de inicio demuestra que el mismo proceso ya existía
 antes del nuevo daemon.
 
+El ratio de cobertura se mide sobre el **periodo conocible** de cada ventana —
+desde el inicio de proceso registrado más antiguo (la hora de arranque del PID
+según el kernel) hasta ahora — no sobre el span completo de la ventana. El
+tiempo anterior a cualquier evidencia posible es desconocido y queda excluido,
+así que un servicio vivo de forma continua desde su primera evidencia lee 100%
+en todas las ventanas, incluida la anual. Los huecos dentro del periodo
+conocible (un reinicio del proceso) sí cuentan en contra del ratio.
+
 Es evidencia de continuidad de proceso, **no** una muestra SLA sintética ni un
 resultado de salud: no puede hacer pasar HTTP, TCP, `command` ni ninguna otra
 comprobación, y no oculta un fallo de comprobación registrado. Una ventana sin

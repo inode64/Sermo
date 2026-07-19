@@ -124,7 +124,9 @@ func TestSLACommandReportsProcessUptimeSeparately(t *testing.T) {
 	if code != exitSuccess {
 		t.Fatalf("sla --process-uptime exit = %d, output: %s", code, out)
 	}
-	if !strings.Contains(out, "HOUR") || !strings.Contains(out, "/1h") {
+	// The denominator is the knowable period since the earliest process
+	// evidence (30m here), not the window span.
+	if !strings.Contains(out, "HOUR") || !strings.Contains(out, "30m/30m") {
 		t.Fatalf("process uptime table = %s", out)
 	}
 
@@ -149,8 +151,9 @@ func TestSLACommandReportsProcessUptimeSeparately(t *testing.T) {
 		t.Fatalf("process uptime services = %+v", payload.ProcessUptime)
 	}
 	hour := payload.ProcessUptime[0].Windows["hour"]
-	if hour.CoveredSeconds <= 0 || hour.TotalSeconds != int64(time.Hour.Seconds()) || hour.Ratio == nil || *hour.Ratio <= 0 {
-		t.Fatalf("process uptime hour = %+v", hour)
+	halfHour := int64((30 * time.Minute).Seconds())
+	if hour.CoveredSeconds != halfHour || hour.TotalSeconds < halfHour || hour.TotalSeconds >= int64(time.Hour.Seconds()) || hour.Ratio == nil || *hour.Ratio <= 0.9 {
+		t.Fatalf("process uptime hour = %+v, want a 30m knowable period fully covered", hour)
 	}
 
 	if _, code := run("sla", "--series", "--process-uptime", "web"); code != exitUsage {
