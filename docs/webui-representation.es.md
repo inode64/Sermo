@@ -38,8 +38,6 @@ deterministas de la API.
   los servicios recurren a `service`, las aplicaciones a `app`, las watches de
   storage a `storage` y el resto de watches a `watch`.
 - Los botones que cambian de estado usan la misma ruta segura de backend que `sermoctl`.
-- Cada cabecera de panel lleva un pequeño control de copiar enlace que pone el
-  deep link de la sección (URL de la página + `#section-id`) en el portapapeles.
 - Las marcas de tiempo se muestran en UTC, la convención canónica del daemon
   compartida con eventos y notificaciones; las marcas visibles en las vistas de
   eventos y actividad llevan la hora local del usuario como título al pasar el

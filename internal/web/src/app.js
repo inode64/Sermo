@@ -7472,58 +7472,6 @@ document.addEventListener(domEventKeydown, (e) => {
   target.box.focus();
 });
 
-const copyLinkFeedbackMs = 1200;
-const copyLinkGlyph = "#";
-const copyLinkCopiedGlyph = "✓";
-
-// copyTextToClipboard copies text, falling back to the legacy execCommand path
-// because the dashboard is commonly served over plain http (port 9797) where
-// navigator.clipboard is unavailable.
-function copyTextToClipboard(text, done) {
-  if (navigator.clipboard && navigator.clipboard.writeText) {
-    navigator.clipboard.writeText(text).then(done, () => {});
-    return;
-  }
-  const scratch = document.createElement("textarea");
-  scratch.value = text;
-  scratch.setAttribute("aria-hidden", domBoolTrue);
-  document.body.appendChild(scratch);
-  scratch.select();
-  try {
-    if (document.execCommand("copy")) done();
-  } catch (_) { /* leave the button unchanged: nothing was copied */ }
-  scratch.remove();
-}
-
-// Every panel header gets a small copy-link control that puts the section's
-// deep link (page URL + #section-id) on the clipboard, so "look at this panel"
-// is one click to share.
-(function initSectionLinks() {
-  document.querySelectorAll("details.panel[id], section.panel[id]").forEach((panel) => {
-    const header = panel.querySelector("summary") || panel.querySelector("h2");
-    if (!header) return;
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "icon-btn copy-link";
-    btn.textContent = copyLinkGlyph;
-    btn.title = "Copy link to this section";
-    btn.setAttribute("aria-label", "Copy link to this section");
-    btn.addEventListener(domEventClick, (ev) => {
-      // Inside <summary> a button click would also toggle the panel.
-      ev.preventDefault();
-      ev.stopPropagation();
-      copyTextToClipboard(`${location.origin}${location.pathname}#${panel.id}`, () => {
-        btn.textContent = copyLinkCopiedGlyph;
-        btn.classList.add("copied");
-        setTimeout(() => {
-          btn.textContent = copyLinkGlyph;
-          btn.classList.remove("copied");
-        }, copyLinkFeedbackMs);
-      });
-    });
-    header.appendChild(btn);
-  });
-})();
 
 // Remember which sections the operator left open/closed across reloads. Each
 // <details id="..."> restores its saved state on load and saves on every toggle;

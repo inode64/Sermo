@@ -35,8 +35,6 @@ overflow and axe WCAG 2.2 AA rules against deterministic API fixtures.
   services fall back to `service`, applications to `app`, storage watches to
   `storage` and other watches to `watch`.
 - State-changing buttons use the same safe backend path as `sermoctl`.
-- Every panel header carries a small copy-link control that puts the section's
-  deep link (page URL + `#section-id`) on the clipboard.
 - Timestamps render in UTC, the daemon's canonical convention shared with
   events and notifications; the visible timestamps in the event and activity
   views carry the viewer's local time as their hover title.
