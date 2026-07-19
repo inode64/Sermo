@@ -476,9 +476,11 @@ func TestSourceLoadReportsPartialRefreshBeforeAdvancingFreshness(t *testing.T) {
 }
 
 func TestSourceRendersBackendCacheObservationTimes(t *testing.T) {
+	// The SLA timeline is the surviving cache-observation surface: its segment
+	// timestamps stay anchored to the backend's observed_at instead of sliding
+	// on the browser clock. (The per-row "sampled … ago" captions were removed;
+	// service/app rows no longer render their observed_at.)
 	appJSMustContain(t, "cache-observation",
-		"s.status_observed_at",
-		"a.observed_at",
 		"w.observed_at",
 		"renderSLATimeline(w.segments, w.window, w.observed_at)",
 		"const sampledMs = Date.parse(observedAt)",
