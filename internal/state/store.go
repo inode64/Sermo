@@ -1699,23 +1699,25 @@ func (s *Store) loadSLASeries(query string, keys []any, from, to time.Time, kind
 // SLAReport returns a service's availability across every SLAWindow, ordered as
 // SLAWindows (hour..year).
 func (s *Store) SLAReport(service string, now time.Time) ([]SLAValue, error) {
-	out := make([]SLAValue, 0, len(SLAWindows))
-	for _, w := range SLAWindows {
-		up, total, err := s.SLA(service, w.Span, now)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, SLAValue{Window: w.Name, Up: up, Total: total})
-	}
-	return out, nil
+	return reportWindows(func(span time.Duration) (int64, int64, error) {
+		return s.SLA(service, span, now)
+	})
 }
 
 // CheckSLAReport returns one check's availability across every SLAWindow,
 // ordered as SLAWindows (hour..year).
 func (s *Store) CheckSLAReport(service, check string, now time.Time) ([]SLAValue, error) {
+	return reportWindows(func(span time.Duration) (int64, int64, error) {
+		return s.CheckSLA(service, check, span, now)
+	})
+}
+
+// reportWindows collects one SLAValue per SLAWindow from the given up/total
+// reader; the loop shared by the service- and check-level reports.
+func reportWindows(sla func(span time.Duration) (up, total int64, err error)) ([]SLAValue, error) {
 	out := make([]SLAValue, 0, len(SLAWindows))
 	for _, w := range SLAWindows {
-		up, total, err := s.CheckSLA(service, check, w.Span, now)
+		up, total, err := sla(w.Span)
 		if err != nil {
 			return nil, err
 		}
