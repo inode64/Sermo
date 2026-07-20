@@ -165,7 +165,7 @@ func (b *WebBackend) serviceRuntimeObservabilityReady(name string, e *webEntry) 
 
 // serviceProcessActive only reads the worker-published runtime sample. The web
 // request must not scan /proc to turn an unobserved service into active: daemon
-// cycles own process-continuity evidence and its freshness boundary.
+// cycles own the runtime evidence and its freshness boundary.
 func (b *WebBackend) serviceProcessActive(name string, e *webEntry) bool {
 	if e == nil || e.noResidentProcess || b.serviceMetrics == nil {
 		return false
@@ -314,8 +314,6 @@ func (b *WebBackend) Detail(ctx context.Context, name string) (web.Detail, bool)
 		ch.SLA = b.checkSLAWindows(name, cn, now)
 		d.Checks = append(d.Checks, ch)
 	}
-
-	d.ProcessUptime = b.processUptimeWindows(name, now)
 
 	if report, err := serviceLocksReport(b.cfg, name); err == nil {
 		for i := range report.Locks {

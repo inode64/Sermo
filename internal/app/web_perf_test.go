@@ -203,30 +203,6 @@ func TestWebBackendSLATimelineCache(t *testing.T) {
 	}
 }
 
-func TestWebBackendProcessUptimeTimelineCache(t *testing.T) {
-	now := time.Date(2026, 6, 16, 12, 0, 0, 0, time.UTC)
-	calls := 0
-	b := &WebBackend{
-		processUptime: perfProcessUptimeReader{calls: &calls},
-		slaCache:      map[slaCacheKey]cachedSLATimelines{},
-	}
-	first := b.processUptimeWindows("web", now)
-	second := b.processUptimeWindows("web", now.Add(10*time.Second))
-	if calls != 1 {
-		t.Fatalf("ProcessUptimeReport called %d times, want 1", calls)
-	}
-	if len(first) != 1 || len(second) != 1 || first[0].Evidence != slaEvidenceProcess || first[0].Ratio == nil || *first[0].Ratio != 0.5 {
-		t.Fatalf("cached process continuity = %+v then %+v", first, second)
-	}
-	if first[0].Segments[0] != nil || second[0].Segments[1] == nil {
-		t.Fatalf("process continuity gaps = %+v then %+v", first[0].Segments, second[0].Segments)
-	}
-	refreshed := b.processUptimeWindows("web", now.Add(slaTimelineCacheTTL))
-	if calls != 2 || refreshed[0].ObservedAt != now.Add(slaTimelineCacheTTL).Format(time.RFC3339) {
-		t.Fatalf("refreshed process continuity calls=%d windows=%+v", calls, refreshed)
-	}
-}
-
 type countingProcReader struct {
 	calls *int
 }
@@ -242,17 +218,6 @@ func (r countingProcReader) Identity(int) (process.Identity, bool) {
 
 type perfSLAReader struct {
 	calls *int
-}
-
-type perfProcessUptimeReader struct {
-	calls *int
-}
-
-func (r perfProcessUptimeReader) ProcessUptimeReport(string, time.Time) ([]state.ProcessUptimeWindow, error) {
-	*r.calls++
-	return []state.ProcessUptimeWindow{{
-		Window: "hour", Known: true, CoveredSeconds: 1800, TotalSeconds: 3600, Segments: []float64{0, 1},
-	}}, nil
 }
 
 func (f perfSLAReader) SLAReport(string, time.Time) ([]state.SLAValue, error) { return nil, nil }

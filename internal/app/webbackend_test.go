@@ -29,14 +29,6 @@ type fakeSLAReader struct {
 	check   map[string][]state.SLAValue
 }
 
-type fakeProcessUptimeReader struct {
-	service map[string][]state.ProcessUptimeWindow
-}
-
-func (f fakeProcessUptimeReader) ProcessUptimeReport(service string, _ time.Time) ([]state.ProcessUptimeWindow, error) {
-	return f.service[service], nil
-}
-
 func (f fakeSLAReader) SLAReport(service string, _ time.Time) ([]state.SLAValue, error) {
 	return f.service[service], nil
 }
@@ -201,9 +193,6 @@ func TestWebBackendDetailIncludesCheckSLA(t *testing.T) {
 			service: map[string][]state.SLAValue{"web": {{Window: "hour", Up: 9, Total: 10}}},
 			check:   map[string][]state.SLAValue{"web\x00http": {{Window: "hour", Up: 3, Total: 4}}},
 		},
-		processUptime: fakeProcessUptimeReader{service: map[string][]state.ProcessUptimeWindow{
-			"web": {{Window: "hour", Known: true, CoveredSeconds: 1800, TotalSeconds: 3600, Segments: []float64{0, 1}}},
-		}},
 	}
 
 	detail, ok := b.Detail(context.Background(), "web")
@@ -216,10 +205,6 @@ func TestWebBackendDetailIncludesCheckSLA(t *testing.T) {
 	if len(detail.Checks) != 1 || len(detail.Checks[0].SLA) != 1 ||
 		detail.Checks[0].SLA[0].Ratio == nil || *detail.Checks[0].SLA[0].Ratio != 0.75 {
 		t.Fatalf("check SLA = %+v, want 75%%", detail.Checks)
-	}
-	if len(detail.ProcessUptime) != 1 || detail.ProcessUptime[0].Evidence != slaEvidenceProcess ||
-		detail.ProcessUptime[0].Ratio == nil || *detail.ProcessUptime[0].Ratio != 0.5 {
-		t.Fatalf("process continuity = %+v, want separate 50%% evidence", detail.ProcessUptime)
 	}
 }
 

@@ -103,64 +103,6 @@ func TestSLASeriesCommand(t *testing.T) {
 	}
 }
 
-func TestSLACommandReportsProcessUptimeSeparately(t *testing.T) {
-	root, global := writeCatalogServiceConfig(t)
-	catalogDir := filepath.Join(root, "catalog")
-	stateDir := filepath.Join(root, "state")
-	store, err := state.OpenContext(context.Background(), filepath.Join(stateDir, state.Filename))
-	if err != nil {
-		t.Fatal(err)
-	}
-	now := time.Now()
-	if err := store.RecordProcessUptime("web", now.Add(-30*time.Minute), now); err != nil {
-		t.Fatal(err)
-	}
-	if err := store.Close(); err != nil {
-		t.Fatal(err)
-	}
-
-	run := slaRunner(t, global, catalogDir)
-	out, code := run("sla", "--process-uptime", "web")
-	if code != exitSuccess {
-		t.Fatalf("sla --process-uptime exit = %d, output: %s", code, out)
-	}
-	// The denominator is the knowable period since the earliest process
-	// evidence (30m here), not the window span.
-	if !strings.Contains(out, "HOUR") || !strings.Contains(out, "30m/30m") {
-		t.Fatalf("process uptime table = %s", out)
-	}
-
-	jsonOut, code := run("--json", "sla", "--process-uptime", "web")
-	if code != exitSuccess {
-		t.Fatalf("sla --process-uptime --json exit = %d, output: %s", code, jsonOut)
-	}
-	var payload struct {
-		ProcessUptime []struct {
-			Service string `json:"service"`
-			Windows map[string]struct {
-				CoveredSeconds int64    `json:"covered_seconds"`
-				TotalSeconds   int64    `json:"total_seconds"`
-				Ratio          *float64 `json:"ratio"`
-			} `json:"windows"`
-		} `json:"process_uptime"`
-	}
-	if err := json.Unmarshal([]byte(jsonOut), &payload); err != nil {
-		t.Fatalf("decode process uptime json: %v\n%s", err, jsonOut)
-	}
-	if len(payload.ProcessUptime) != 1 || payload.ProcessUptime[0].Service != "web" {
-		t.Fatalf("process uptime services = %+v", payload.ProcessUptime)
-	}
-	hour := payload.ProcessUptime[0].Windows["hour"]
-	halfHour := int64((30 * time.Minute).Seconds())
-	if hour.CoveredSeconds != halfHour || hour.TotalSeconds < halfHour || hour.TotalSeconds >= int64(time.Hour.Seconds()) || hour.Ratio == nil || *hour.Ratio <= 0.9 {
-		t.Fatalf("process uptime hour = %+v, want a 30m knowable period fully covered", hour)
-	}
-
-	if _, code := run("sla", "--series", "--process-uptime", "web"); code != exitUsage {
-		t.Fatalf("sla --series --process-uptime exit = %d, want %d", code, exitUsage)
-	}
-}
-
 // slaSample is one SLA data point: up/down and how long before now it occurred.
 type slaSample struct {
 	up  bool

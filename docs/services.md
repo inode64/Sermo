@@ -755,21 +755,6 @@ These feed monitoring **and** the residual reaper, so a richer selector lets a
 stop catch and kill more leftovers (an unkillable residual stays
 `orphan_processes`). The `process` *check* still matches by `exe`/`user` only.
 
-### Process-continuity evidence
-
-On an eligible monitored cycle, Sermo can persist trusted process-continuity
-evidence from a service process start time. That lets `sermoctl sla
---process-uptime` and the Web UI cover time before a `sermod` restart without
-inventing check results. Backend-derived process roots are trusted; an explicit
-cmdline match is trusted only when its selector also has exact `exe` and `user`.
-Children, pidfile-only matches and cmdline-only matches are not continuity
-proof.
-
-No additional YAML is needed. This history is recorded only while the service is
-actively monitored, and it remains separate from SLA and check health. A fresh
-trusted process may make the dashboard state `active` before a first check
-snapshot; it confirms the process only, not the application.
-
 ### Stopped-state invariants (`stop_policy`)
 
 After a **clean** stop, the engine can verify the service left nothing behind:

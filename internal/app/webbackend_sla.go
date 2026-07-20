@@ -14,9 +14,8 @@ const (
 )
 
 type slaCacheKey struct {
-	service  string
-	check    string // empty for service-level SLA
-	evidence string // empty for observed SLA, "process" for process continuity
+	service string
+	check   string // empty for service-level SLA
 }
 
 type cachedSLATimelines struct {
@@ -51,23 +50,6 @@ func (b *WebBackend) cachedSLAWindows(service, check string, now time.Time) []we
 	})
 }
 
-const slaEvidenceProcess = "process"
-
-// processUptimeWindows renders separately confirmed process-continuity coverage.
-// It intentionally is not part of the observed service/check SLA.
-func (b *WebBackend) processUptimeWindows(service string, now time.Time) []web.SLAWindow {
-	if b.processUptime == nil {
-		return nil
-	}
-	return b.cachedWindows(slaCacheKey{service: service, evidence: slaEvidenceProcess}, now, func() ([]web.SLAWindow, bool) {
-		timelines, err := b.processUptime.ProcessUptimeReport(service, now)
-		if err != nil {
-			return nil, false
-		}
-		return toWebProcessUptimeWindows(timelines, now), true
-	})
-}
-
 func (b *WebBackend) cachedWindows(key slaCacheKey, now time.Time, load func() ([]web.SLAWindow, bool)) []web.SLAWindow {
 	b.slaCacheMu.Lock()
 	if b.slaCache == nil {
@@ -92,8 +74,7 @@ func (b *WebBackend) cachedWindows(key slaCacheKey, now time.Time, load func() (
 }
 
 // toWebWindows converts each source timeline window with convert and stamps
-// the shared observation time; the skeleton shared by the observed-SLA and
-// process-continuity converters.
+// the shared observation time.
 func toWebWindows[T any](timelines []T, observedAt time.Time, convert func(T) web.SLAWindow) []web.SLAWindow {
 	at := observedAt.UTC().Format(time.RFC3339)
 	out := make([]web.SLAWindow, 0, len(timelines))
@@ -113,28 +94,6 @@ func slaRatio(up, total int64, known bool) *float64 {
 	}
 	ratio := float64(up) / float64(total)
 	return &ratio
-}
-
-func toWebProcessUptimeWindows(timelines []state.ProcessUptimeWindow, observedAt time.Time) []web.SLAWindow {
-	return toWebWindows(timelines, observedAt, func(timeline state.ProcessUptimeWindow) web.SLAWindow {
-		win := web.SLAWindow{
-			Window:   timeline.Window,
-			Evidence: slaEvidenceProcess,
-			Up:       timeline.CoveredSeconds,
-			Total:    timeline.TotalSeconds,
-			Ratio:    slaRatio(timeline.CoveredSeconds, timeline.TotalSeconds, timeline.Known),
-		}
-		if len(timeline.Segments) > 0 {
-			segments := make([]*float64, len(timeline.Segments))
-			for i, coverage := range timeline.Segments {
-				if coverage > 0 {
-					segments[i] = &coverage
-				}
-			}
-			win.Segments = segments
-		}
-		return win
-	})
 }
 
 func toWebSLAWindows(timelines []state.SLAWindowTimeline, observedAt time.Time) []web.SLAWindow {
