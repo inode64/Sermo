@@ -44,25 +44,7 @@ jobs:
       - name: Install browser test runtime
         run: npx playwright install --with-deps chromium
       - run: make build
-      # `make check` split into named steps so a failure pinpoints the stage
-      # instead of collapsing into one opaque "make check" result.
-      - run: make modules-check
-      - run: make lint
-      - run: make actions-lint
-      - run: make scripts-lint
-      - run: make yaml-validate
-      - run: make markdown-check
-      - run: make web-e2e
-      - run: go test ./...
-      - name: upload playwright report on failure
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: playwright-report
-          path: |
-            test-results/
-            playwright-report/
-          if-no-files-found: ignore
+      - run: make check
       # Advisory: unreachable-function report. Reflection and build tags cause
       # false positives, so this never fails the build — triage by hand.
       - name: deadcode (advisory)
