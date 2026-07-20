@@ -5700,13 +5700,17 @@ function renderOverview(ctx) {
   const usedFreeSub = (m) => m.total
     ? `${fmtBytes(m.absolute || 0)} used · ${fmtBytes(Math.max(m.total - (m.absolute || 0), 0))} free`
     : "";
+  // Until the first complete snapshot the host readings may be missing or a
+  // pre-sample zero, so show a neutral loading dash — same as the Alerts tile —
+  // rather than a value that corrects a moment later.
+  const loading = !firstSnapshotDone;
   if (cpu) {
     const p = pctClamp(cpu.percent || 0);
     const gaugeId = tileGaugeId(metricNameCPU);
     tiles.push(tile({
-      label: "Host CPU", value: tpl`${fmtNum(p, 2)}<small>${metricUnitPercent}</small>`, sub: "", extra: usageBar(p, fmtPct(p), gaugeId), target: "daemon-section",
-      ariaLabel: tileAriaLabel("Host CPU", fmtPct(p), "", "daemon-section"),
-      describedBy: gaugeId,
+      label: "Host CPU", value: loading ? "…" : tpl`${fmtNum(p, 2)}<small>${metricUnitPercent}</small>`, sub: loading ? "loading…" : "", extra: loading ? nothing : usageBar(p, fmtPct(p), gaugeId), target: "daemon-section",
+      ariaLabel: loading ? "Host CPU loading" : tileAriaLabel("Host CPU", fmtPct(p), "", "daemon-section"),
+      describedBy: loading ? nothing : gaugeId,
     }));
   }
   if (mem) {
@@ -5714,9 +5718,9 @@ function renderOverview(ctx) {
     const memSub = usedFreeSub(mem);
     const gaugeId = tileGaugeId("mem");
     tiles.push(tile({
-      label: "Host memory", value: tpl`${fmtNum(p, 2)}<small>${metricUnitPercent}</small>`, sub: memSub, extra: usageBar(p, fmtPct(p), gaugeId), target: "daemon-section",
-      ariaLabel: tileAriaLabel("Host memory", fmtPct(p), memSub, "daemon-section"),
-      describedBy: gaugeId,
+      label: "Host memory", value: loading ? "…" : tpl`${fmtNum(p, 2)}<small>${metricUnitPercent}</small>`, sub: loading ? "loading…" : memSub, extra: loading ? nothing : usageBar(p, fmtPct(p), gaugeId), target: "daemon-section",
+      ariaLabel: loading ? "Host memory loading" : tileAriaLabel("Host memory", fmtPct(p), memSub, "daemon-section"),
+      describedBy: loading ? nothing : gaugeId,
     }));
   }
   if (swap && swap.total) {
@@ -5724,9 +5728,9 @@ function renderOverview(ctx) {
     const swapSub = usedFreeSub(swap);
     const gaugeId = tileGaugeId("swap");
     tiles.push(tile({
-      label: "Host swap", value: tpl`${fmtNum(p, 2)}<small>${metricUnitPercent}</small>`, sub: swapSub, cls: p >= 90 ? "t-crit" : (p >= 70 ? "t-warn" : ""), extra: usageBar(p, fmtPct(p), gaugeId), target: "daemon-section",
-      ariaLabel: tileAriaLabel("Host swap", fmtPct(p), swapSub, "daemon-section"),
-      describedBy: gaugeId,
+      label: "Host swap", value: loading ? "…" : tpl`${fmtNum(p, 2)}<small>${metricUnitPercent}</small>`, sub: loading ? "loading…" : swapSub, cls: loading ? "" : (p >= 90 ? "t-crit" : (p >= 70 ? "t-warn" : "")), extra: loading ? nothing : usageBar(p, fmtPct(p), gaugeId), target: "daemon-section",
+      ariaLabel: loading ? "Host swap loading" : tileAriaLabel("Host swap", fmtPct(p), swapSub, "daemon-section"),
+      describedBy: loading ? nothing : gaugeId,
     }));
   }
   if (load && load.absolute != null) {
@@ -5739,13 +5743,13 @@ function renderOverview(ctx) {
     const gaugeId = hasCap ? tileGaugeId("load") : nothing;
     tiles.push(tile({
       label: "Load 1m",
-      value: fmtNum(load.absolute, 2),
-      sub: loadSub,
-      cls: hasCap ? (p >= percentMax ? "t-crit" : (p >= loadWarnPct ? "t-warn" : "")) : "",
-      extra: hasCap ? usageBar(p, fmtPct(p), gaugeId) : nothing,
+      value: loading ? "…" : fmtNum(load.absolute, 2),
+      sub: loading ? "loading…" : loadSub,
+      cls: loading ? "" : (hasCap ? (p >= percentMax ? "t-crit" : (p >= loadWarnPct ? "t-warn" : "")) : ""),
+      extra: loading || !hasCap ? nothing : usageBar(p, fmtPct(p), gaugeId),
       target: "daemon-section",
-      ariaLabel: tileAriaLabel("Load 1m", fmtNum(load.absolute, 2), loadSub, "daemon-section"),
-      describedBy: gaugeId,
+      ariaLabel: loading ? "Load 1m loading" : tileAriaLabel("Load 1m", fmtNum(load.absolute, 2), loadSub, "daemon-section"),
+      describedBy: loading ? nothing : gaugeId,
     }));
   }
   litRender(tiles, band);
