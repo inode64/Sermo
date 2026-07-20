@@ -34,9 +34,8 @@ actuar**:
 - **Portable.** La misma configuración y comportamiento corren sobre systemd *y*
   OpenRC; el backend de init se autodetecta.
 - **Disponibilidad honesta.** El SLA cuenta solo los ciclos que realmente
-  observó, y la cobertura de continuidad de proceso se mide contra el periodo
-  *conocible* — el tiempo anterior a que pudiera existir evidencia se excluye, no
-  se cuenta como caída.
+  observó — el tiempo anterior a que pudiera existir evidencia es un hueco, no se
+  cuenta como caída.
 
 ## Características
 
@@ -70,9 +69,8 @@ actuar**:
 - **Invariantes de seguridad duros** que el YAML no puede desactivar (ver abajo).
 
 **Disponibilidad e historial**
-- **SLA por servicio en ventanas móviles** (hora → año), una serie por minuto
-  para gráficas, y **continuidad de proceso** rastreada por separado, derivada
-  del tiempo de arranque del PID en el kernel.
+- **SLA por servicio en ventanas móviles** (hora → año) y una serie por minuto
+  para gráficas.
 - Un **registro de eventos/actividad** con retención y compactación del almacén
   de estado.
 
@@ -244,7 +242,6 @@ sermoctl lock apache-main --reason backup --ttl 1h -- /usr/local/bin/backup.sh
 sermoctl sla                     # all services
 sermoctl sla apache-main         # one service
 sermoctl sla --series apache-main --since 168h  # per-minute series (graph data)
-sermoctl sla --process-uptime apache-main       # continuidad de proceso confirmada, no salud de checks
 
 # Run the daemon
 sermod run --config /etc/sermo/sermo.yml
