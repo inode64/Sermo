@@ -47,6 +47,11 @@
   .visually-hidden {
     position: absolute;
     width: 1px;
+    /* On a <table> (e.g. the chart-data accessibility fallbacks) width:1px is a
+       minimum, so a nowrap caption stretches the absolutely-positioned box wide
+       and its box — though clipped from view — adds phantom horizontal page
+       scroll. max-width caps it for those cases. */
+    max-width: 1px;
     height: 1px;
     padding: 0;
     margin: -1px;
