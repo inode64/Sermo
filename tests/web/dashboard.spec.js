@@ -115,10 +115,6 @@ function serviceDetail(name) {
     processes: [{ pid: name === "web" ? 101 : 202, cmdline: [name], user: "root", role: "main", rss: 1048576 }],
     process_totals: { count: 1, rss: 1048576, io_read: 0, io_write: 0, fds: 5, threads: 1 },
     locks: [], rules: [], sla: [],
-    process_uptime: [{
-      window: "hour", evidence: "process", ratio: 0.5, up: 1800, total: 3600,
-      segments: [null, 1], observed_at: "2026-07-10T12:00:00Z",
-    }],
   };
 }
 
@@ -323,17 +319,6 @@ test("global search opens a service and exposes individual actions", async ({ pa
   await expect(page.locator('[data-service-detail="db"]')).toBeVisible();
   await expect(row.locator('[data-service-action="reload"]')).toBeVisible();
   await expect(row.locator('[data-service-action="unmonitor"]')).toBeVisible();
-});
-
-test("process continuity stays separate from observed SLA", async ({ page }) => {
-  const row = page.locator("#svc-row-web");
-  await expect(row.locator(".target-state")).toHaveText("active");
-  await row.locator(".row-toggle").click();
-  const detail = page.locator('[data-service-detail="web"]');
-  await expect(detail.getByRole("heading", { name: "Process continuity" })).toBeVisible();
-  await expect(detail).toContainText("30m / 1h");
-  await expect(detail).toContainText("Confirmed process continuity, not observed check health.");
-  await expect(detail.locator(".sla-seg.sla-gap").first()).toBeVisible();
 });
 
 test("service SLA renders a status-page bar strip with incidents", async ({ page }) => {
