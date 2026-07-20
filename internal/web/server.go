@@ -698,7 +698,6 @@ type StateCompactResult struct {
 	Metrics        int64  `json:"metrics,omitempty"`
 	DaemonMetrics  int64  `json:"daemon_metrics,omitempty"`
 	ServiceMetrics int64  `json:"service_metrics,omitempty"`
-	ProcessUptime  int64  `json:"process_uptime,omitempty"`
 	Events         int64  `json:"events,omitempty"`
 	Vacuum         bool   `json:"vacuum"`
 }
@@ -726,14 +725,11 @@ type Check struct {
 	SLA     []SLAWindow   `json:"sla,omitempty"`
 }
 
-// SLAWindow is one rolling availability or process-continuity window. Evidence
-// is empty for observed check SLA and "process" for inferred process
-// continuity. Ratio is nil when the window has no data. Segments is the window
-// split into equal sub-spans (oldest first); each entry is its coverage ratio in
-// [0,1], or nil for a gap.
+// SLAWindow is one rolling availability window. Ratio is nil when the window has
+// no data. Segments is the window split into equal sub-spans (oldest first);
+// each entry is its availability ratio in [0,1], or nil for a gap.
 type SLAWindow struct {
 	Window     string     `json:"window"`
-	Evidence   string     `json:"evidence,omitempty"`
 	Ratio      *float64   `json:"ratio"`
 	Up         int64      `json:"up"`
 	Total      int64      `json:"total"`
@@ -829,7 +825,6 @@ type Lock struct {
 type Detail struct {
 	Service
 	Checks            []Check        `json:"checks"`
-	ProcessUptime     []SLAWindow    `json:"process_uptime,omitempty"`
 	Locks             []Lock         `json:"locks,omitempty"`
 	LockWarnings      []string       `json:"lock_warnings,omitempty"`
 	NoResidentProcess bool           `json:"no_resident_process,omitempty"`

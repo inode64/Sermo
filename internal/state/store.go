@@ -48,7 +48,6 @@ const (
 	stateTableMeasurementMetric = "measurement_metric"
 	stateTableDaemonMetric      = "daemon_metric"
 	stateTableServiceMetric     = "service_metric"
-	stateTableProcessUptime     = "process_uptime_span"
 )
 
 // Sources record who last changed a monitoring state row, for inspection.
@@ -309,6 +308,9 @@ var migrations = []string{
 	`ALTER TABLE rule_window_state ADD COLUMN clear_consecutive INTEGER NOT NULL DEFAULT 0;`,
 	`ALTER TABLE watch_runtime_state ADD COLUMN clear_since INTEGER NOT NULL DEFAULT 0;`,
 	`ALTER TABLE watch_runtime_state ADD COLUMN clear_consecutive INTEGER NOT NULL DEFAULT 0;`,
+	// The process-continuity feature was removed; drop its evidence table. The
+	// original CREATE TABLE migration above stays for version continuity.
+	`DROP TABLE IF EXISTS process_uptime_span;`,
 }
 
 // Store is a handle to the persistent state database. It is safe for concurrent
@@ -394,7 +396,6 @@ type PruneHistoryResult struct {
 	Metrics        int64
 	DaemonMetrics  int64
 	ServiceMetrics int64
-	ProcessUptime  int64
 	Events         int64
 	Rows           int64
 }
@@ -1542,214 +1543,6 @@ func (s *Store) CheckSLASeries(service, check string, from, to time.Time) ([]SLA
 	return s.loadSLASeries(checkSLAQueries.series, []any{service, check}, from, to, "check SLA", service+"/"+check)
 }
 
-// ProcessUptimeSpan is evidence that one trusted process instance belonging to
-// a service was continuously alive from StartedAt through ConfirmedAt. It does
-// not represent check health, latency, or any other daemon-observed metric.
-type ProcessUptimeSpan struct {
-	StartedAt   time.Time
-	ConfirmedAt time.Time
-}
-
-// RecordProcessUptime records or extends the continuity evidence for a trusted
-// process instance. Repeated daemon cycles for the same process start extend
-// ConfirmedAt without creating unbounded per-minute history.
-func (s *Store) RecordProcessUptime(service string, startedAt, confirmedAt time.Time) error {
-	if service == "" {
-		return errors.New("record process uptime: service is empty")
-	}
-	if startedAt.IsZero() {
-		return fmt.Errorf("record process uptime for %s: process start time is zero", service)
-	}
-	if confirmedAt.IsZero() {
-		return fmt.Errorf("record process uptime for %s: confirmation time is zero", service)
-	}
-	if startedAt.After(confirmedAt) {
-		return fmt.Errorf("record process uptime for %s: process start time is after confirmation", service)
-	}
-	if _, err := s.exec(s.sqlCtx(), `INSERT INTO process_uptime_span (service, started_at, confirmed_at)
-		VALUES (?, ?, ?)
-		ON CONFLICT(service, started_at) DO UPDATE SET
-		  confirmed_at = max(confirmed_at, excluded.confirmed_at);`,
-		service, startedAt.UTC().Unix(), confirmedAt.UTC().Unix()); err != nil {
-		return fmt.Errorf("record process uptime for %s: %w", service, err)
-	}
-	return nil
-}
-
-// ProcessUptimeSpans returns continuity evidence whose closed intervals overlap
-// [from, to), ordered by their process start timestamp.
-func (s *Store) ProcessUptimeSpans(service string, from, to time.Time) ([]ProcessUptimeSpan, error) {
-	if service == "" {
-		return nil, errors.New("load process uptime spans: service is empty")
-	}
-	if !to.After(from) {
-		return nil, fmt.Errorf("load process uptime spans for %s: invalid time range", service)
-	}
-	rows, err := s.reads().QueryContext(s.sqlCtx(), `SELECT started_at, confirmed_at
-		FROM process_uptime_span
-		WHERE service = ? AND confirmed_at >= ? AND started_at < ?
-		ORDER BY started_at;`, service, from.UTC().Unix(), to.UTC().Unix())
-	if err != nil {
-		return nil, fmt.Errorf("load process uptime spans for %s: %w", service, err)
-	}
-	defer rows.Close()
-
-	var spans []ProcessUptimeSpan
-	for rows.Next() {
-		var startedAt, confirmedAt int64
-		if err := rows.Scan(&startedAt, &confirmedAt); err != nil {
-			return nil, fmt.Errorf("scan process uptime span for %s: %w", service, err)
-		}
-		spans = append(spans, ProcessUptimeSpan{
-			StartedAt:   time.Unix(startedAt, 0).UTC(),
-			ConfirmedAt: time.Unix(confirmedAt, 0).UTC(),
-		})
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate process uptime spans for %s: %w", service, err)
-	}
-	return spans, nil
-}
-
-// ProcessUptimeWindow is the portion of one rolling SLA window for which a
-// trusted process instance was continuously confirmed. It is process evidence,
-// not observed service health: Known is false when no such evidence overlaps
-// the window, and Segments retain those unknown gaps for the dashboard.
-// TotalSeconds is the knowable portion of the window — bounded below by the
-// earliest recorded process start — so time before any evidence could exist is
-// excluded from the ratio rather than counted against continuity.
-type ProcessUptimeWindow struct {
-	Window         string
-	Known          bool
-	CoveredSeconds int64
-	TotalSeconds   int64
-	Segments       []float64
-}
-
-// ProcessUptimeReport returns process-continuity coverage across every
-// SLAWindow. Overlapping process intervals are unioned before calculating a
-// duration, so concurrent roots or repeated confirmations never double-count.
-func (s *Store) ProcessUptimeReport(service string, now time.Time) ([]ProcessUptimeWindow, error) {
-	if service == "" {
-		return nil, errors.New("load process uptime report: service is empty")
-	}
-	from := now.Add(-slaSpanYear)
-	spans, err := s.ProcessUptimeSpans(service, from, now)
-	if err != nil {
-		return nil, err
-	}
-	out := make([]ProcessUptimeWindow, 0, len(SLAWindows))
-	for _, window := range SLAWindows {
-		out = append(out, processUptimeWindow(spans, window, now))
-	}
-	return out, nil
-}
-
-func processUptimeWindow(spans []ProcessUptimeSpan, window SLAWindow, now time.Time) ProcessUptimeWindow {
-	start := now.Add(-window.Span)
-	// The denominator is the knowable portion of the window: process evidence
-	// reaches back at most to the earliest recorded process start, so time
-	// before that is unknown — excluded from the ratio, not counted as broken
-	// continuity. A span older than the window leaves the full span in place.
-	effectiveStart := start
-	if len(spans) > 0 {
-		first := spans[0].StartedAt
-		for _, span := range spans[1:] {
-			if span.StartedAt.Before(first) {
-				first = span.StartedAt
-			}
-		}
-		if first.After(effectiveStart) {
-			effectiveStart = first
-		}
-	}
-	totalSeconds := max(int64(now.Sub(effectiveStart)/time.Second), 0)
-	segments := window.Segments
-	if segments <= 0 {
-		segments = 1
-	}
-	segmentSpan := window.Span / time.Duration(segments)
-	if segmentSpan <= 0 {
-		segmentSpan = time.Second
-	}
-
-	out := ProcessUptimeWindow{
-		Window:       window.Name,
-		TotalSeconds: totalSeconds,
-		Segments:     make([]float64, segments),
-	}
-	covered := processUptimeCoverage(spans, effectiveStart, now)
-	if covered <= 0 {
-		return out
-	}
-	out.Known = true
-	out.CoveredSeconds = int64(covered / time.Second)
-	for i := range out.Segments {
-		segmentStart := start.Add(time.Duration(i) * segmentSpan)
-		segmentEnd := segmentStart.Add(segmentSpan)
-		if i == len(out.Segments)-1 || segmentEnd.After(now) {
-			segmentEnd = now
-		}
-		// Each segment's denominator clamps to the knowable period too, so
-		// fully-covered partial segments read 1.0 and segments entirely before
-		// the first evidence stay 0 (rendered as gaps, not downtime).
-		denomStart := segmentStart
-		if effectiveStart.After(denomStart) {
-			denomStart = effectiveStart
-		}
-		span := segmentEnd.Sub(denomStart)
-		if span <= 0 {
-			continue
-		}
-		out.Segments[i] = min(float64(processUptimeCoverage(spans, denomStart, segmentEnd))/float64(span), 1)
-	}
-	return out
-}
-
-type processUptimeRange struct {
-	start time.Time
-	end   time.Time
-}
-
-func processUptimeCoverage(spans []ProcessUptimeSpan, from, to time.Time) time.Duration {
-	if !to.After(from) {
-		return 0
-	}
-	ranges := make([]processUptimeRange, 0, len(spans))
-	for _, span := range spans {
-		start := span.StartedAt
-		if start.Before(from) {
-			start = from
-		}
-		end := span.ConfirmedAt
-		if end.After(to) {
-			end = to
-		}
-		if end.After(start) {
-			ranges = append(ranges, processUptimeRange{start: start, end: end})
-		}
-	}
-	if len(ranges) == 0 {
-		return 0
-	}
-	sort.Slice(ranges, func(i, j int) bool {
-		return ranges[i].start.Before(ranges[j].start)
-	})
-	current := ranges[0]
-	var covered time.Duration
-	for _, next := range ranges[1:] {
-		if next.start.After(current.end) {
-			covered += current.end.Sub(current.start)
-			current = next
-			continue
-		}
-		if next.end.After(current.end) {
-			current.end = next.end
-		}
-	}
-	return covered + current.end.Sub(current.start)
-}
-
 func (s *Store) recordSLABucket(query string, keys []any, up bool, at time.Time, kind, target string) error {
 	args := append(append([]any{}, keys...), minuteBucket(at), boolInt(up))
 	if _, err := s.exec(s.sqlCtx(), query, args...); err != nil {
@@ -2235,23 +2028,8 @@ func (s *Store) PruneSLA(before time.Time) (int64, error) {
 	return total + rows, nil
 }
 
-// PruneProcessUptime deletes continuity intervals whose last confirmation is
-// older than before. A long-running process remains retained because its most
-// recent confirmation still overlaps the retention window.
-func (s *Store) PruneProcessUptime(before time.Time) (int64, error) {
-	res, err := s.exec(s.sqlCtx(), `DELETE FROM `+stateTableProcessUptime+` WHERE confirmed_at < ?`, before.UTC().Unix())
-	if err != nil {
-		return 0, fmt.Errorf("prune process uptime: %w", err)
-	}
-	n, err := res.RowsAffected()
-	if err != nil {
-		return 0, fmt.Errorf("count pruned process uptime: %w", err)
-	}
-	return n, nil
-}
-
 // PruneHistory deletes old history from SLA, measurement, daemon runtime,
-// service runtime metric, process-uptime, and event tables.
+// service runtime metric, and event tables.
 func (s *Store) PruneHistory(before time.Time) (PruneHistoryResult, error) {
 	var out PruneHistoryResult
 	var err error
@@ -2270,13 +2048,10 @@ func (s *Store) PruneHistory(before time.Time) (PruneHistoryResult, error) {
 	if out.ServiceMetrics, err = s.PruneServiceMetrics(before); err != nil {
 		return PruneHistoryResult{}, err
 	}
-	if out.ProcessUptime, err = s.PruneProcessUptime(before); err != nil {
-		return PruneHistoryResult{}, err
-	}
 	if out.Events, err = s.PruneEvents(before); err != nil {
 		return PruneHistoryResult{}, err
 	}
-	out.Rows = out.SLA + out.Measurements + out.Metrics + out.DaemonMetrics + out.ServiceMetrics + out.ProcessUptime + out.Events
+	out.Rows = out.SLA + out.Measurements + out.Metrics + out.DaemonMetrics + out.ServiceMetrics + out.Events
 	return out, nil
 }
 

@@ -3100,10 +3100,10 @@ function slaTimelineDataRows(segments, window, observedAt, unavailable = "no dat
   });
 }
 
-// renderTimelineBand draws the contiguous status-page style band shared by the
-// SLA and process-continuity timelines: one colored cell per sub-span (oldest
-// left), hatched where nothing was observed. opts carries the per-variant
-// color function, gap/cell labels and data-table texts.
+// renderTimelineBand draws the contiguous status-page style band for the SLA
+// timeline: one colored cell per sub-span (oldest left), hatched where nothing
+// was observed. opts carries the per-variant color function, gap/cell labels
+// and data-table texts.
 function renderTimelineBand(segments, window, observedAt, opts) {
   const n = segments.length;
   const spanMs = slaWindowSpanMs(window);

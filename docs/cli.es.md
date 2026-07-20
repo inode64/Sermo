@@ -90,7 +90,6 @@ sermoctl patterns
 
 sermoctl sla [SERVICE]                  # service availability windows (all services, or one)
 sermoctl sla --series SERVICE [--since DURATION]  # per-minute series; --since default 24h
-sermoctl sla --process-uptime [SERVICE] # cobertura de continuidad de proceso confirmada aparte
 
 sermoctl events [SERVICE] [--limit N]   # list recent events (global or for SERVICE)
 sermoctl events clear [--before TIME]   # omit TIME to clear all; TIME may be non-future RFC3339 or positive duration
@@ -108,27 +107,14 @@ sermoctl wizard
 sermoctl wizard service|docker|vm|mount|volume|net|uplink
 ```
 
-## Disponibilidad y continuidad de proceso
+## Disponibilidad
 
 `sermoctl sla` es disponibilidad observada por comprobaciones: solo cuenta los
-ciclos monitorizados del daemon. En cambio, `sermoctl sla --process-uptime`
-informa qué parte de cada ventana móvil puede confirmar Sermo que un proceso de
-servicio confiable estuvo vivo. Puede incluir tiempo anterior a un reinicio de
-`sermod` cuando la hora de inicio demuestra que el mismo proceso ya existía
-antes del nuevo daemon.
-
-El ratio de cobertura se mide sobre el **periodo conocible** de cada ventana —
-desde el inicio de proceso registrado más antiguo (la hora de arranque del PID
-según el kernel) hasta ahora — no sobre el span completo de la ventana. El
-tiempo anterior a cualquier evidencia posible es desconocido y queda excluido,
-así que un servicio vivo de forma continua desde su primera evidencia lee 100%
-en todas las ventanas, incluida la anual. Los huecos dentro del periodo
-conocible (un reinicio del proceso) sí cuentan en contra del ratio.
-
-Es evidencia de continuidad de proceso, **no** una muestra SLA sintética ni un
-resultado de salud: no puede hacer pasar HTTP, TCP, `command` ni ninguna otra
-comprobación, y no oculta un fallo de comprobación registrado. Una ventana sin
-un intervalo de proceso confirmado es `n/a`, no downtime.
+ciclos monitorizados del daemon. Una ventana sin ciclos observados lee `n/a`, no
+downtime — el tiempo caído del daemon o los datos ausentes nunca se convierten en
+downtime observado. `sermoctl sla --series SERVICE` emite la serie por minuto
+almacenada de ese servicio (los datos crudos con los que se construye una
+gráfica).
 
 Ejemplos:
 

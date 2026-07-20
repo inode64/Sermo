@@ -51,7 +51,7 @@ overflow and axe WCAG 2.2 AA rules against deterministic API fixtures.
 | Service expansion | `GET /api/services/{name}` | checks, process info, rules |
 | Service check metrics | `GET /api/services/{name}/metrics?check=NAME[&metric=KEY]` | the detail renders latency when `metric` is omitted and one graph for every named numeric metric published by a check |
 | Service runtime metrics | `GET /api/services/{name}/runtime` | read-only persisted service CPU/memory/IO history sampled exclusively by worker cycles |
-| Service SLA | `GET /api/services/{name}/sla` | per-minute availability history for the service detail SLA timeline and API clients; observed-SLA ratios count only monitored minutes, and the separate process-continuity windows measure coverage against the knowable period since the earliest process evidence — never the full window span, so unmeasured time is a gap, not downtime |
+| Service SLA | `GET /api/services/{name}/sla` | per-minute availability history for the service detail SLA timeline and API clients; observed-SLA ratios count only monitored minutes, so unmeasured time is a gap, not downtime |
 | Service events | `GET /api/services/{name}/events` | per-service event feed |
 | Host watches | `GET /api/watches` | host-level watches |
 | Applications | `GET /api/applications` | installed catalog apps; `observed_at` remains fixed while the version/status inventory is served from cache |
