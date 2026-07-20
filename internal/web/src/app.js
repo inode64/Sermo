@@ -540,6 +540,16 @@ async function performLoad() {
   if (librariesResult.ok) renderLibraries(librariesResult.data);
   if (!connOK) return;
 
+  // First complete snapshot: watches and apps have now loaded, so render the
+  // alert-count tile and the attention banner for real (they were held neutral
+  // until here). Later polls already carry this data into phase one, so this
+  // one-time reveal runs only on the initial load.
+  if (!firstSnapshotDone) {
+    firstSnapshotDone = true;
+    renderOverview({ ready, live, mon, ops, locks: locks || latestLocks, hostMetrics: hostMetricsResult.ok ? hostMetrics : latestHostMetrics });
+    renderAttention();
+  }
+
   const [expandedWatchesOK, expandedApplicationsOK] = await Promise.all([
     watchesResult.ok ? refreshExpandedWatches(generation) : Promise.resolve(false),
     appsResult.ok ? refreshExpandedApplications(generation) : Promise.resolve(false),
@@ -1401,6 +1411,10 @@ let latestHostMetrics = [];   // last /api/host readings (for process memory bar
 // Defer favicon/title until load() has the full dashboard snapshot. Avoids a
 // green default flashing to red while panels hydrate.
 let healthIconReady = false;
+// The alert count and attention banner also need watches/apps, which load in a
+// second phase after the aggregate dashboard. Stays false until the first
+// complete snapshot so a reload never flashes a partial/false alert.
+let firstSnapshotDone = false;
 
 function targetStateClass(state) {
   return targetStateClasses[state] || healthStatusMuted;
@@ -1850,6 +1864,14 @@ function maybeNotifyAttention(failingSvcs, firingWatches, failedApps) {
 function renderAttention() {
   const box = $("#attention");
   if (!box) return;
+  // Before the first complete snapshot the alert set is incomplete (watches and
+  // apps still loading), so keep the banner empty and the tab icon neutral —
+  // performLoad calls this again once the full snapshot lands.
+  if (!firstSnapshotDone) {
+    box.classList.add("live-hidden");
+    setHTMLIfChanged(box, "");
+    return;
+  }
   const items = [];
   const failing = (allServices || []).filter(isServiceAttention);
   if (failing.length) {
@@ -5628,13 +5650,16 @@ function renderOverview(ctx) {
   const alertsSub = alerts
     ? [failedSvcs.length && `${failedSvcs.length} svc`, failedWatches.length && `${failedWatches.length} watch`, failedApps.length && `${failedApps.length} app`, activeLocks.length && `${activeLocks.length} lock`].filter(Boolean).join(" · ")
     : "nothing on fire";
+  // Until the first complete snapshot (watches/apps still loading) the alert
+  // total is incomplete, so show a neutral loading dash rather than a wrong
+  // count that jumps a moment later.
   tiles.push(tile({
     label: "Alerts",
-    value: String(alerts),
-    cls: alerts ? "t-crit" : "t-ok",
-    sub: alertsSub,
+    value: firstSnapshotDone ? String(alerts) : "…",
+    cls: !firstSnapshotDone ? "" : (alerts ? "t-crit" : "t-ok"),
+    sub: firstSnapshotDone ? alertsSub : "loading…",
     target: alertsTarget,
-    ariaLabel: tileAriaLabel("Alerts", String(alerts), alertsSub, alertsTarget),
+    ariaLabel: firstSnapshotDone ? tileAriaLabel("Alerts", String(alerts), alertsSub, alertsTarget) : "Alerts loading",
   }));
   const monitoredTarget = collectingSvcs.length && !failedSvcs.length
     ? "collecting-services"
@@ -5882,9 +5907,13 @@ function renderStatus(ctx) {
     const hostUp = fmtDuration(daemon.host_uptime_seconds);
     const statusText = ready.status || (ready.ready ? healthStatusOK : "");
     const statusCls = ready.panic ? "status-panic" : (statusText === daemonStatusStarting ? "status-starting" : (ready.ready ? healthStatusOK : "inactive"));
+    // Label the healthy daemon state "running", not "ok": "ok" reads as "all
+    // services fine", but this line only reflects the daemon's own lifecycle
+    // (service health is shown by the brand dot and the Alerts tile).
+    const statusDisplay = statusText === healthStatusOK ? "running" : statusText;
     const statusLabel = statusText === daemonStatusStarting && ready.message
       ? `${esc(statusText)} <span class="muted">(${esc(ready.message)})</span>`
-      : esc(statusText || "—");
+      : esc(statusDisplay || "—");
     const statItems = parts.map(([k, p]) => `<span class="stat stat-${k}">${p}</span>`);
     statItems.push(`<span class="stat stat-uptime">uptime: <b>${esc(hostUp || "—")}</b></span>`);
     statItems.push(`<span class="stat stat-status">status: <span class="${statusCls}">${statusLabel}</span></span>`);
