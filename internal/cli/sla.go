@@ -9,7 +9,6 @@ import (
 	"sermo/internal/config"
 	"sermo/internal/metrics"
 	"sermo/internal/state"
-	"sermo/internal/units"
 )
 
 // defaultSLASeriesWindow is the series lookback used when --since is omitted.
@@ -23,9 +22,8 @@ const cliTextNotAvailable = "n/a"
 // observed cycles reads "n/a" rather than 0%.
 //
 // With --series it instead emits SERVICE's stored per-minute availability series
-// over --since (default 24h) — the raw time series a graph is built from. With
-// --process-uptime it reports separately confirmed process-continuity coverage.
-// Neither form turns daemon downtime or missing data into observed downtime.
+// over --since (default 24h) — the raw time series a graph is built from. Neither
+// form turns daemon downtime or missing data into observed downtime.
 func (a App) runSLA(ctx context.Context, opts options) int {
 	if len(opts.args) > 1 {
 		return a.commandUsageError(commandSLA, "sla accepts at most one service name")
@@ -35,14 +33,8 @@ func (a App) runSLA(ctx context.Context, opts options) int {
 		return code
 	}
 
-	if opts.series && opts.processUptime {
-		return a.commandUsageError(commandSLA, "sla --series and --process-uptime cannot be used together")
-	}
 	if opts.series {
 		return a.runSLASeries(ctx, opts, cfg)
-	}
-	if opts.processUptime {
-		return a.runProcessUptime(ctx, opts, cfg)
 	}
 
 	return runWindowsReport(ctx, a, opts, cfg,
@@ -53,8 +45,7 @@ func (a App) runSLA(ctx context.Context, opts options) int {
 }
 
 // runWindowsReport loads each service's per-window values via report and
-// renders them as JSON or a table — the body shared by `sla` and
-// `sla --process-uptime`.
+// renders them as JSON or a table.
 func runWindowsReport[V any](ctx context.Context, a App, opts options, cfg *config.Config,
 	report func(*state.Store, string, time.Time) ([]V, error),
 	writeJSON, writeTable func([]serviceWindows[V])) int {
@@ -98,16 +89,6 @@ func (a App) slaServices(opts options, cfg *config.Config) ([]string, int) {
 	return sortedUnique(cfg.Services), exitSuccess
 }
 
-// runProcessUptime reports trusted process-continuity coverage. It remains
-// separate from SLA because a process being alive cannot prove check health.
-func (a App) runProcessUptime(ctx context.Context, opts options, cfg *config.Config) int {
-	return runWindowsReport(ctx, a, opts, cfg,
-		func(s *state.Store, name string, now time.Time) ([]state.ProcessUptimeWindow, error) {
-			return s.ProcessUptimeReport(name, now)
-		},
-		a.writeProcessUptimeJSON, a.writeProcessUptimeTable)
-}
-
 // runSLASeries emits one service's stored per-minute availability series, the
 // data a future graph plots.
 func (a App) runSLASeries(ctx context.Context, opts options, cfg *config.Config) int {
@@ -146,8 +127,7 @@ func (a App) runSLASeries(ctx context.Context, opts options, cfg *config.Config)
 	return exitSuccess
 }
 
-// serviceWindows pairs one service with its per-window values (SLA
-// availability or process-uptime coverage).
+// serviceWindows pairs one service with its per-window availability values.
 type serviceWindows[V any] struct {
 	Service string
 	Windows []V
@@ -158,9 +138,8 @@ func (a App) writeSLAJSON(reports []serviceWindows[state.SLAValue]) {
 		func(v state.SLAValue) (string, map[string]any) { return v.Window, slaValueJSON(v) })
 }
 
-// writeSLAWindowJSON renders the {top: [{service, windows}]} JSON envelope
-// shared by the availability and process-uptime reports so their shape cannot
-// drift, mirroring writeSLAWindowTable for the table forms.
+// writeSLAWindowJSON renders the {top: [{service, windows}]} JSON envelope,
+// mirroring writeSLAWindowTable for the table form.
 func writeSLAWindowJSON[V any](a App, topKey string, reports []serviceWindows[V], window func(V) (string, map[string]any)) {
 	out := make([]map[string]any, 0, len(reports))
 	for _, r := range reports {
@@ -182,33 +161,11 @@ func slaValueJSON(v state.SLAValue) map[string]any {
 	return entry
 }
 
-func (a App) writeProcessUptimeJSON(reports []serviceWindows[state.ProcessUptimeWindow]) {
-	writeSLAWindowJSON(a, cliJSONKeyProcessUptime, reports,
-		func(v state.ProcessUptimeWindow) (string, map[string]any) { return v.Window, processUptimeValueJSON(v) })
-}
-
-func processUptimeValueJSON(v state.ProcessUptimeWindow) map[string]any {
-	entry := map[string]any{
-		cliJSONKeyCoveredSeconds: v.CoveredSeconds,
-		cliJSONKeyTotalSeconds:   v.TotalSeconds,
-		cliJSONKeyRatio:          nil,
-	}
-	if v.Known && v.TotalSeconds > 0 {
-		entry[cliJSONKeyRatio] = float64(v.CoveredSeconds) / float64(v.TotalSeconds)
-	}
-	return entry
-}
-
 func (a App) writeSLATable(reports []serviceWindows[state.SLAValue]) {
 	writeSLAWindowTable(a, reports, formatSLA)
 }
 
-func (a App) writeProcessUptimeTable(reports []serviceWindows[state.ProcessUptimeWindow]) {
-	writeSLAWindowTable(a, reports, formatProcessUptime)
-}
-
-// writeSLAWindowTable renders one SERVICE + per-SLA-window table, shared by the
-// availability and process-uptime reports so their layout cannot drift.
+// writeSLAWindowTable renders one SERVICE + per-SLA-window availability table.
 func writeSLAWindowTable[V any](a App, reports []serviceWindows[V], format func(V) string) {
 	if len(reports) == 0 {
 		fmt.Fprintln(a.Stdout, "no services")
@@ -237,15 +194,6 @@ func formatSLA(v state.SLAValue) string {
 		return cliTextNotAvailable
 	}
 	return fmt.Sprintf("%.2f%%", ratio*metrics.PercentScale)
-}
-
-func formatProcessUptime(v state.ProcessUptimeWindow) string {
-	if !v.Known || v.TotalSeconds <= 0 {
-		return cliTextNotAvailable
-	}
-	covered := units.HumanizeDuration(time.Duration(v.CoveredSeconds) * time.Second)
-	total := units.HumanizeDuration(time.Duration(v.TotalSeconds) * time.Second)
-	return covered + "/" + total
 }
 
 func (a App) writeSLASeriesTable(service string, points []state.SLAPoint) {

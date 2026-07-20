@@ -486,14 +486,12 @@ var commandUsages = []commandUsage{
 	},
 	{
 		Name:    commandSLA,
-		Summary: "Report observed SLA, a per-minute series, or process continuity.",
+		Summary: "Report observed SLA or a per-minute availability series.",
 		Usage: []string{
 			"sermoctl sla [SERVICE]",
 			"sermoctl sla --series SERVICE [--since DURATION]",
-			"sermoctl sla --process-uptime [SERVICE]",
 		},
 		Flags: []string{
-			"--process-uptime   print separately confirmed process-continuity coverage",
 			"--series           print observed per-minute series for one service",
 			"--since DURATION   series lookback; default is 24h",
 		},
@@ -501,7 +499,6 @@ var commandUsages = []commandUsage{
 			"sermoctl sla",
 			"sermoctl sla apache-main",
 			"sermoctl sla --series apache-main --since 168h",
-			"sermoctl sla --process-uptime apache-main",
 		},
 	},
 	{

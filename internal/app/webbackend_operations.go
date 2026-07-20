@@ -218,7 +218,6 @@ func (b *WebBackend) CompactState(ctx context.Context, before time.Time) web.Sta
 		Metrics:        result.Metrics,
 		DaemonMetrics:  result.DaemonMetrics,
 		ServiceMetrics: result.ServiceMetrics,
-		ProcessUptime:  result.ProcessUptime,
 		Events:         result.Events,
 		Vacuum:         true,
 	}

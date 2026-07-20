@@ -56,13 +56,6 @@ type SLARecorder interface {
 	RecordCheckSLA(service, check string, up bool, at time.Time) error
 }
 
-// ProcessUptimeRecorder persists trusted process-continuity evidence. It is
-// deliberately separate from SLARecorder because a running process does not
-// prove check health or produce a synthetic check result.
-type ProcessUptimeRecorder interface {
-	RecordProcessUptime(service string, startedAt, confirmedAt time.Time) error
-}
-
 // SLAReader reports a service's availability for the web detail view: the rolling
 // windows and the per-minute history series. Implemented by internal/state.Store.
 type SLAReader interface {
@@ -72,13 +65,6 @@ type SLAReader interface {
 	CheckSLASeries(service, check string, from, to time.Time) ([]state.SLAPoint, error)
 	SLATimelines(service string, now time.Time) ([]state.SLAWindowTimeline, error)
 	CheckSLATimelines(service, check string, now time.Time) ([]state.SLAWindowTimeline, error)
-}
-
-// ProcessUptimeReader reports process-continuity coverage for the web and CLI.
-// Unlike SLAReader, it contains no check outcome: a process interval is only
-// evidence that a trusted process was alive for part of a rolling window.
-type ProcessUptimeReader interface {
-	ProcessUptimeReport(service string, now time.Time) ([]state.ProcessUptimeWindow, error)
 }
 
 // MeasurementRecorder persists per-check observations per observed cycle: the
@@ -194,10 +180,6 @@ type Deps struct {
 	// SLA persists per-cycle availability samples for SLA reporting. Optional: nil
 	// disables SLA tracking.
 	SLA SLARecorder
-	// ProcessUptime persists continuity evidence for a trusted running service
-	// process. Optional: nil disables inference across daemon restarts without
-	// changing observed SLA accounting.
-	ProcessUptime ProcessUptimeRecorder
 	// DaemonMetrics persists sermod's own process metric history for the web UI.
 	// Optional: nil keeps only in-memory history for this process lifetime.
 	DaemonMetrics DaemonMetricStore
@@ -520,16 +502,8 @@ func buildWorker(ctx context.Context, name, unit string, tree map[string]any, de
 	pidsForCycle := func() []int { return processPIDs(processesForCycle()) }
 	sampleMetrics := metricSampler(name, tree, collector, pidsForCycle)
 	liveSample := liveSampler(name, deps.LiveCollector, deps.Live, deps.ServiceMetrics, pidsForCycle, deps.Now)
-	uptimeReader := metrics.Reader(metrics.OSReader{})
-	for _, candidate := range []*metrics.Collector{collector, deps.LiveCollector} {
-		if candidate != nil && candidate.Reader != nil {
-			uptimeReader = candidate.Reader
-		}
-	}
-	recordProcessUptime := processUptimeRecorder(deps, name, selectors, processesForCycle, uptimeReader)
 	if noResident {
 		liveSample = nil
-		recordProcessUptime = nil
 	}
 
 	// A per-check `interval` runs that check every N cycles (N rounded from
@@ -557,39 +531,38 @@ func buildWorker(ctx context.Context, name, unit string, tree map[string]any, de
 	warnings = append(warnings, stateWarnings...)
 
 	worker = &Worker{
-		Service:             name,
-		Rules:               ruleSet,
-		MetricChecks:        rules.ReferencedChecks(tree),
-		Policy:              rules.ParsePolicy(tree),
-		State:               remediationState,
-		Notifiers:           deps.Notifiers,
-		GlobalNotify:        deps.GlobalNotify,
-		GlobalEmission:      deps.GlobalEmission,
-		Remediation:         deps.Remediation,
-		RuleWindows:         deps.RuleWindows,
-		CheckDeps:           checkDeps,
-		Interval:            cfgval.Duration(tree[config.EntryKeyInterval]),
-		Gates:               parseCheckGates(tree),
-		Sample:              sampleMetrics,
-		LiveSample:          liveSample,
-		RecordProcessUptime: recordProcessUptime,
-		Operate:             engine.Do,
-		IsPaused:            monitorPaused(deps.Monitor, name),
-		InPanic:             deps.Panic.Active,
-		Settling:            deps.Settling,
-		OperationSettling:   deps.OperationSettling,
-		Observability:       deps.Observability,
-		DryRun:              config.DryRun(tree),
-		ResolveRefs:         func() rules.RefResolver { return rules.NewCheckResolver(preflightBuilt, maxParallel) },
-		RecordHealth:        healthRecorder(deps, name),
-		RecordChecks:        checkSLARecorder(deps, name),
-		Publish:             publishSnapshots(deps.Snapshots, name, checkTypes),
-		PersistState:        ruleStatePersister(deps.RuleState, deps.Emit, name, ruleSet),
-		Now:                 deps.Now,
-		Emit:                deps.Emit,
-		windows:             windowStates,
-		libBaseline:         libBaseline,
-		artifactSamples:     deps.ArtifactSamples,
+		Service:           name,
+		Rules:             ruleSet,
+		MetricChecks:      rules.ReferencedChecks(tree),
+		Policy:            rules.ParsePolicy(tree),
+		State:             remediationState,
+		Notifiers:         deps.Notifiers,
+		GlobalNotify:      deps.GlobalNotify,
+		GlobalEmission:    deps.GlobalEmission,
+		Remediation:       deps.Remediation,
+		RuleWindows:       deps.RuleWindows,
+		CheckDeps:         checkDeps,
+		Interval:          cfgval.Duration(tree[config.EntryKeyInterval]),
+		Gates:             parseCheckGates(tree),
+		Sample:            sampleMetrics,
+		LiveSample:        liveSample,
+		Operate:           engine.Do,
+		IsPaused:          monitorPaused(deps.Monitor, name),
+		InPanic:           deps.Panic.Active,
+		Settling:          deps.Settling,
+		OperationSettling: deps.OperationSettling,
+		Observability:     deps.Observability,
+		DryRun:            config.DryRun(tree),
+		ResolveRefs:       func() rules.RefResolver { return rules.NewCheckResolver(preflightBuilt, maxParallel) },
+		RecordHealth:      healthRecorder(deps, name),
+		RecordChecks:      checkSLARecorder(deps, name),
+		Publish:           publishSnapshots(deps.Snapshots, name, checkTypes),
+		PersistState:      ruleStatePersister(deps.RuleState, deps.Emit, name, ruleSet),
+		Now:               deps.Now,
+		Emit:              deps.Emit,
+		windows:           windowStates,
+		libBaseline:       libBaseline,
+		artifactSamples:   deps.ArtifactSamples,
 
 		appVersionCmd:   appVersionCmds(tree),
 		appVersions:     map[string]string{},
@@ -841,82 +814,6 @@ func checkSLARecorder(deps Deps, name string) func(map[string]checks.Result, map
 				deps.Emit(Event{Service: name, Kind: eventKindError, Message: "record check sla: " + err.Error()})
 			}
 		}
-	}
-}
-
-// processUptimeRecorder returns the worker hook that persists one compact
-// continuity interval for the current trusted process instance. It is separate
-// from SLA recording: this evidence is only used to explain an otherwise
-// unobserved daemon-restart gap.
-func processUptimeRecorder(deps Deps, name string, selectors []process.Selector, processes func() []process.Process, reader metrics.Reader) func(context.Context) {
-	if deps.ProcessUptime == nil || processes == nil || reader == nil {
-		return nil
-	}
-	now := deps.Now
-	if now == nil {
-		now = time.Now
-	}
-	return func(_ context.Context) {
-		confirmedAt := now()
-		startedAt, ok := trustedProcessUptimeStart(processes(), selectors, reader, confirmedAt)
-		if !ok {
-			return
-		}
-		if err := deps.ProcessUptime.RecordProcessUptime(name, startedAt, confirmedAt); err != nil && deps.Emit != nil {
-			deps.Emit(Event{Service: name, Kind: eventKindError, Message: "record process uptime: " + err.Error()})
-		}
-	}
-}
-
-// trustedProcessUptimeStart returns the oldest start time among process roots
-// whose membership is strong enough to infer process continuity. Backend roots
-// are reported by the selected service manager. Command-match roots require an
-// exact executable and real-user selector. Descendants and pidfile-only roots
-// are intentionally excluded: they are useful runtime data but not reliable
-// enough to backfill a daemon outage.
-func trustedProcessUptimeStart(procs []process.Process, selectors []process.Selector, reader metrics.Reader, confirmedAt time.Time) (time.Time, bool) {
-	startReader, ok := reader.(processStartReader)
-	if !ok || confirmedAt.IsZero() {
-		return time.Time{}, false
-	}
-	strictRoles := strictProcessRoles(selectors)
-	var startedAt time.Time
-	for _, proc := range procs {
-		if !trustedProcess(proc, strictRoles) {
-			continue
-		}
-		processStart, found := startReader.ProcessStartTime(proc.PID)
-		if !found || processStart.IsZero() || processStart.After(confirmedAt) {
-			continue
-		}
-		if startedAt.IsZero() || processStart.Before(startedAt) {
-			startedAt = processStart
-		}
-	}
-	if startedAt.IsZero() {
-		return time.Time{}, false
-	}
-	return startedAt, true
-}
-
-func strictProcessRoles(selectors []process.Selector) map[string]bool {
-	roles := make(map[string]bool, len(selectors))
-	for _, selector := range selectors {
-		if selector.Type == process.SelectorCommandMatch && selector.Name != "" && selector.Exe != "" && selector.User != "" {
-			roles[selector.Name] = true
-		}
-	}
-	return roles
-}
-
-func trustedProcess(proc process.Process, strictRoles map[string]bool) bool {
-	switch proc.Source {
-	case process.SourceBackend:
-		return true
-	case process.SelectorCommandMatch:
-		return strictRoles[proc.Role]
-	default:
-		return false
 	}
 }
 

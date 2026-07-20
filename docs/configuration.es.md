@@ -219,7 +219,7 @@ remediación automática, el progreso de las ventanas `for`/`within` de las regl
 últimas lecturas de comprobaciones de service y watches de host, de modo que reiniciar
 `sermod` no restablece cuándo una regla puede actuar de nuevo ni hace que el panel pierda
 el último resultado real del ciclo del daemon. Las mediciones de SLA y de comprobaciones,
-los intervalos confirmados de continuidad de proceso, además del historial de métricas de
+además del historial de métricas de
 proceso de service y daemon mostrado en la interfaz web, también viven ahí. El esquema está versionado y se migra automáticamente hacia
 adelante, de modo que las funciones futuras
 pueden añadir tablas sin una actualización manual.
@@ -1008,23 +1008,6 @@ sermoctl --json sla          # machine-readable: up/total/ratio per window
 ```
 
 Una ventana sin muestras se lee como `n/a` (disponibilidad desconocida), no `0%`.
-
-### Continuidad de proceso
-
-`sermoctl sla --process-uptime [SERVICE]` y el panel de detalle de servicio
-**Continuidad de proceso** informan una cobertura móvil separada: el tiempo para
-el que se confirmó que un proceso de servicio confiable estaba vivo. Tras
-reiniciar `sermod`, su primer ciclo elegible puede registrar un intervalo que
-comienza en la hora de inicio del kernel de ese proceso, por lo que la cobertura
-puede atravesar el tiempo que el daemon estuvo parado.
-
-Esto nunca crea muestras SLA/de comprobación ni cambia la salud de una
-comprobación. Un intervalo de proceso ausente o no confiable sigue siendo un
-hueco visible, no un fallo de proceso ni de salud. El panel puede mostrar un
-servicio monitorizado como `active` antes de su primer snapshot de
-comprobaciones/runtime si tiene evidencia reciente de proceso confiable;
-`active` significa proceso confirmado, no salud de la aplicación. Consulta el
-SLA observado y las comprobaciones para la salud.
 
 ### Series temporales de disponibilidad
 

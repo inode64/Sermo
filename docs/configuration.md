@@ -209,8 +209,8 @@ monitoring state. It also stores automatic-remediation cooldown/backoff, rule
 `for`/`within` window progress and the latest service-check and host-watch
 readings, so restarting `sermod` does not reset when a rule may act again or make
 the dashboard lose the last real daemon-cycle result. SLA and check measurements,
-confirmed process-continuity intervals, plus service and daemon process metric
-history shown in the web UI live there too. The schema is versioned and migrated forward automatically, so future
+plus service and daemon process metric history shown in the web UI live there
+too. The schema is versioned and migrated forward automatically, so future
 features can add tables without a manual upgrade.
 
 Both directories are created **0700, owner root**. On systemd they come from the
@@ -972,21 +972,6 @@ sermoctl --json sla          # machine-readable: up/total/ratio per window
 ```
 
 A window with no samples reads `n/a` (availability unknown), not `0%`.
-
-### Process continuity
-
-`sermoctl sla --process-uptime [SERVICE]` and the service-detail **Process
-continuity** panel report a separate rolling coverage value: time for which a
-trusted service process was confirmed alive. After `sermod` restarts, its first
-eligible cycle can record an interval beginning at that process's kernel start
-time, so the coverage can bridge the daemon's downtime.
-
-This never creates SLA/check samples and never changes check health. An absent
-or untrusted process interval remains a visible gap, not a process failure or a
-health failure. The dashboard may show a monitored service as `active` before
-its first check/runtime snapshot when it has fresh trusted process evidence;
-`active` means process confirmed, not application health. Read the observed SLA
-and checks for health.
 
 ### Availability time series
 
