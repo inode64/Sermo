@@ -482,7 +482,7 @@ func TestSourceRendersBackendCacheObservationTimes(t *testing.T) {
 	// service/app rows no longer render their observed_at.)
 	appJSMustContain(t, "cache-observation",
 		"w.observed_at",
-		"renderSLATimeline(w.segments, w.window, w.observed_at)",
+		"renderSLATimeline(segs, w.window, w.observed_at)",
 		"const sampledMs = Date.parse(observedAt)",
 	)
 }
