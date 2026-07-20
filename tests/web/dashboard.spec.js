@@ -210,25 +210,26 @@ test("dashboard passes axe and fits the viewport", async ({ page }) => {
   await expect(page.locator("#target-search")).toBeVisible();
 });
 
-test("section navigation uses two scrollable rows on compact screens", async ({ page }) => {
+test("section navigation wraps instead of scrolling sideways on compact screens", async ({ page }) => {
   const nav = page.locator("#section-nav");
   const layout = await nav.evaluate((element) => {
     const style = getComputedStyle(element);
     return {
       display: style.display,
-      gridAutoFlow: style.gridAutoFlow,
-      rows: style.gridTemplateRows,
+      flexWrap: style.flexWrap,
       overflowX: style.overflowX,
+      fits: element.scrollWidth <= element.clientWidth + 1,
     };
   });
 
-  expect(layout.overflowX).toBe("auto");
+  expect(layout.display).toBe("flex");
   if ((page.viewportSize() || {}).width <= 1024) {
-    expect(layout.display).toBe("grid");
-    expect(layout.gridAutoFlow).toBe("column");
-    expect(layout.rows.split(" ")).toHaveLength(2);
+    // Every section pill wraps into view so no sideways swipe is needed.
+    expect(layout.flexWrap).toBe("wrap");
+    expect(layout.overflowX).toBe("visible");
+    expect(layout.fits).toBe(true);
   } else {
-    expect(layout.display).toBe("flex");
+    expect(layout.overflowX).toBe("auto");
   }
 });
 

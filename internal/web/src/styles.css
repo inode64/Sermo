@@ -290,7 +290,6 @@
   /* Each reading is its own flex item so the row's gap spaces them and a
      label never wraps away from its value on narrow screens. */
   #system-status .stat, #statusbar .stat { white-space: nowrap; }
-  .status-tail { display: inline-flex; align-items: center; gap: 1.1rem; flex-wrap: nowrap; }
   #section-nav {
     display: flex; align-items: center; gap: .35rem;
     margin: .45rem 0 0; padding-bottom: .08rem;
@@ -498,6 +497,22 @@
       min-width: 0;
       max-width: 100%;
     }
+    /* Compact mode drops columns, but a single wide, unbreakable value (a
+       network watch address, a long mount path, a unit name) can still push a
+       table past the viewport. Let the remaining cells wrap — breaking inside
+       long tokens when needed — so every table shrinks to fit instead of
+       forcing a page-wide sideways scroll, the documented intent of this
+       breakpoint. Headers stay nowrap; their labels are short. */
+    .services-table td, .watch-table td, .apps-table td, .mount-table td,
+    .events td, #notifiers-section td, #locks-section td {
+      white-space: normal;
+      overflow-wrap: anywhere;
+    }
+    .watch-table .row-toggle, .mount-table .row-toggle,
+    .apps-table .row-toggle { white-space: normal; overflow-wrap: anywhere; }
+    /* The event timestamp is nowrap by default; let it wrap here so the events
+       table can shrink to the viewport. */
+    .events .t { white-space: normal; }
     .services-table .actions, .watch-table .actions, .mount-table .actions {
       min-width: 0;
       white-space: normal;
@@ -525,20 +540,25 @@
     .watch-table.watch-type-table th:nth-child(2), .watch-table.watch-type-table td:nth-child(2) { display: table-cell; }
     /* mount units: hide Refcount first; usage remains visible on tablet widths. */
     .mount-table th:nth-child(5), .mount-table td:nth-child(5) { display: none; }
+    /* The processes/users columns carry long nowrap paths behind fixed
+       min-widths; drop those constraints and let the entries wrap so the mount
+       table shrinks to the viewport instead of overflowing. */
+    .mount-table .mount-processes, .mount-table .mount-users { min-width: 0; max-width: none; }
+    .mount-table .mount-usage-item, .mount-table .mount-usage-extra { white-space: normal; }
   }
   @media (max-width: 1024px) {
-    /* A single nav rail only exposes a few sections on touch screens. Fill two
-       compact rows by column instead, retaining horizontal scrolling for the
-       full inventory without growing the sticky header into a long menu. */
+    /* On touch screens a horizontally scrolling rail hides most sections behind
+       a sideways swipe. Wrap the pills onto as many rows as needed so every
+       section (Services, VMs, Apps, …) is visible without scrolling the sticky
+       header left/right. */
     #section-nav {
-      display: grid;
-      grid-auto-flow: column;
-      grid-template-rows: repeat(2, minmax(1.85rem, auto));
-      grid-auto-columns: max-content;
-      align-items: stretch;
+      flex-wrap: wrap;
+      /* Both axes must be visible: with overflow-y left as hidden the browser
+         computes overflow-x back to auto (CSS overflow-shorthand rule). */
+      overflow: visible;
+      scroll-snap-type: none;
       gap: .3rem .4rem;
-      padding: .05rem .05rem .28rem;
-      scroll-padding-inline: .05rem;
+      padding-bottom: .1rem;
     }
     .section-jump { align-items: center; }
   }
@@ -546,14 +566,34 @@
   @media (max-width: 640px) {
     body { padding: 0 .7rem 1rem; }
     #topbar { padding: .7rem .7rem .5rem; margin: 0 -.7rem .35rem; }
+    /* Shrink the sticky header on phones: drop the title's descriptive suffix
+       (the brand dot + "SERMO" stay) and every reading except host and uptime:
+       identity in the Daemon panel (type/backend/OS), watches/users/locks in
+       their sections, and status is already shown by the brand dot's color. */
+    .brand-sub { display: none; }
+    #system-status .stat-type, #system-status .stat-backend, #system-status .stat-os,
+    #statusbar .stat-watches, #statusbar .stat-users, #statusbar .stat-locks,
+    #statusbar .stat-status { display: none; }
+    /* Flow host and uptime onto one line (each still a nowrap unit; a slightly
+       smaller font keeps the pair within the viewport, and if it ever can't
+       fit, uptime drops to a second line). */
+    #system-status, #statusbar { display: inline-flex; margin-top: .2rem; font-size: .76rem; }
+    #system-status { margin-right: .7rem; }
     #overview { grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr)); gap: .5rem; }
     .tile { min-height: 5.4rem; padding: .5rem .6rem .55rem; }
     .tile .t-value { font-size: 1.2rem; }
     #section-nav { gap: .25rem .32rem; }
     .section-jump { min-height: 2rem; padding: .18rem .45rem; font-size: .76rem; }
+    /* Trim the two secondary destinations from the phone nav so it stays short
+       (they remain reachable by scrolling the page). */
+    #section-nav .section-jump[data-panel-target="notifiers-section"],
+    #section-nav .section-jump[data-panel-target="daemon-section"] { display: none; }
     details, section#locks-section { padding: 0 .7rem; }
     summary { padding: .6rem .7rem; margin: 0 -.7rem; }
-    .panel-controls input { min-width: 0; flex: 1 1 100%; }
+    /* Let the search box share the toggles' line (grow to fill it) instead of
+       claiming a full row, so a section header is two lines: toggles + search,
+       then category + filters. */
+    .panel-controls input { min-width: 8rem; flex: 1 1 auto; }
     #event-controls { display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; }
     .services-table th, .services-table td,
     .watch-table th, .watch-table td,
@@ -566,7 +606,9 @@
     .services-table th:nth-child(9), .services-table td:nth-child(9) { display: none; }
     .services-table td { white-space: normal; }
     .services-table .unit-cell, .services-table .event-cell, .apps-table .event-cell { max-width: 60vw; }
-    /* watches -> Name · State · Actions; typed tables keep their live metric. */
+    /* watches -> Name · State · Actions; typed tables keep their leading live
+       metric (its column stays sortable). Wide values wrap rather than scroll,
+       so Actions is never pushed off-screen. */
     .watch-table th:not(:first-child):not(:nth-last-child(-n+2)),
     .watch-table td:not(:first-child):not(:nth-last-child(-n+2)) { display: none; }
     .watch-table.watch-type-table th:nth-child(2), .watch-table.watch-type-table td:nth-child(2) { display: table-cell; }
@@ -589,6 +631,15 @@
       overflow-wrap: anywhere;
       text-align: center;
     }
+  }
+
+  @media (max-width: 400px) {
+    /* On the narrowest phones the typed watch tables also drop their metric
+       column (still in the row expansion) so Name · State · Actions fits without
+       a sideways scroll. Wider phones (>=412, e.g. the mobile test viewport)
+       keep the sortable metric column. */
+    .watch-table.watch-type-table th:nth-child(2),
+    .watch-table.watch-type-table td:nth-child(2) { display: none; }
   }
 
   /* ---- transient banners ------------------------------------------------------ */

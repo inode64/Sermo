@@ -2194,7 +2194,12 @@ function sortedBy(list, sort, sortKeys, fallbackKey) {
 function renderFilterButtonCounts(selector, counts) {
   document.querySelectorAll(`${selector} button`).forEach((b) => {
     const key = b.dataset.f || b.dataset.cf || b.dataset.vf || b.dataset.wf || b.dataset.af || b.dataset.mf;
-    if (counts[key] !== undefined) b.innerHTML = `${key} <span class="muted">${counts[key]}</span>`;
+    if (counts[key] === undefined) return;
+    b.innerHTML = `${key} <span class="muted">${counts[key]}</span>`;
+    // Keep the filter row compact by hiding states with no matches — except
+    // "all" and whichever filter is currently selected (so an emptied
+    // selection stays visible and can be switched away from).
+    b.hidden = counts[key] === 0 && key !== filterAll && !b.classList.contains("f-active");
   });
 }
 
@@ -5840,66 +5845,49 @@ function renderStatus(ctx) {
     // System-status line (line 2): host identity + detected backend + OS + live readings.
     const sys = $("#system-status");
     if (sys) {
+      // Each reading carries a key so the compact (mobile) layout can drop the
+      // host identity only. The live cpu/mem/swap/load readings live in the
+      // overview tiles (Host CPU/Memory/Swap/Load) — repeating them here was
+      // redundant, so they are intentionally not added.
       const sp = [];
-      if (daemon.hostname) sp.push(`host: <b>${esc(daemon.hostname)}</b>`);
+      if (daemon.hostname) sp.push(["host", `host: <b>${esc(daemon.hostname)}</b>`]);
       const hostType = hostTypeDisplay(daemon.host_type);
       if (hostType.label) {
         const title = hostType.title ? ` title="${esc(hostType.title)}"` : "";
-        sp.push(`type: <b${title}>${esc(hostType.label)}</b>`);
+        sp.push(["type", `type: <b${title}>${esc(hostType.label)}</b>`]);
       }
-      if (ready.backend) sp.push(`backend: <b>${esc(ready.backend)}</b>`);
-      if (daemon.os) sp.push(`OS: <b>${esc(daemon.os)}</b>`);
-      // cpu/mem/swap are percent-type: show 0.0% when present-but-zero instead
-      // of hiding them (omitempty drops an exact 0 from the JSON). load is an
-      // absolute reading, so it keeps the generic formatter.
-      const cpu = pctVal(hostMetrics, hostMetricTotalCPU);
-      const mem = pctVal(hostMetrics, hostMetricTotalMemory);
-      const swap = pctVal(hostMetrics, hostMetricTotalSwap);
-      const load = hostMetricVal(hostMetrics, hostMetricLoad1);
-      if (cpu != null) sp.push(`cpu: <b>${esc(cpu)}</b>`);
-      if (mem != null) sp.push(`mem: <b>${esc(mem)}</b>`);
-      if (swap != null) sp.push(`swap: <b>${esc(swap)}</b>`);
-      if (load != null) sp.push(`load: <b>${esc(load)}</b>`);
-      setHTMLIfChanged(sys, sp.map((s) => `<span class="stat">${s}</span>`).join(""));
+      if (ready.backend) sp.push(["backend", `backend: <b>${esc(ready.backend)}</b>`]);
+      if (daemon.os) sp.push(["os", `OS: <b>${esc(daemon.os)}</b>`]);
+      setHTMLIfChanged(sys, sp.map(([k, s]) => `<span class="stat stat-${k}">${s}</span>`).join(""));
     }
 
+    // services/monitoring/ops each have their own overview tile (Services
+    // active, Monitored, Op slots), so they are not repeated here. The header
+    // keeps only readings without a tile: watches, active users and locks.
     const parts = [];
-    parts.push(`services: <b>${ready.services || 0}</b>`);
-    parts.push(`watches: <b>${ready.watches || 0}</b>`);
-    if (mon.total != null) {
-      let monStr = `monitoring: <b>${mon.monitored || 0}/${mon.total || 0}</b>`;
-      if (mon.paused > 0) monStr += ` <span class="muted">(${mon.paused} paused)</span>`;
-      parts.push(monStr);
-    }
-    if (ops.total != null) {
-      let opsStr = `ops: <b>${ops.in_use || 0}/${ops.total || 0}</b>`;
-      if ((ops.in_use || 0) > 0) opsStr += ` <span class="muted">(in use)</span>`;
-      parts.push(opsStr);
-    }
+    parts.push(["watches", `watches: <b>${ready.watches || 0}</b>`]);
     if (ops.active_users != null) {
-      parts.push(`users: <b>${ops.active_users || 0}</b>`);
+      parts.push(["users", `users: <b>${ops.active_users || 0}</b>`]);
     }
     const activeLocks = (locks || []).filter(l => l.state === lockStateActive).length;
     if (activeLocks > 0 || (locks || []).length > 0) {
       let lockStr = `locks: <b>${activeLocks}</b>`;
       if (activeLocks < (locks || []).length) lockStr += `/${(locks || []).length}`;
       if (activeLocks > 0) lockStr += ` <span class="muted">(active)</span>`;
-      parts.push(lockStr);
+      parts.push(["locks", lockStr]);
     }
-    // Host uptime and daemon lifecycle status are always the last two readings,
-    // paired so status stays immediately after uptime.
+    // Host uptime and daemon lifecycle status, as separate keyed readings. On
+    // phones the status text is dropped — the brand dot next to "SERMO" already
+    // shows overall health by color — leaving just host and uptime.
     const hostUp = fmtDuration(daemon.host_uptime_seconds);
     const statusText = ready.status || (ready.ready ? healthStatusOK : "");
     const statusCls = ready.panic ? "status-panic" : (statusText === daemonStatusStarting ? "status-starting" : (ready.ready ? healthStatusOK : "inactive"));
     const statusLabel = statusText === daemonStatusStarting && ready.message
       ? `${esc(statusText)} <span class="muted">(${esc(ready.message)})</span>`
       : esc(statusText || "—");
-    const tail = [
-      `uptime: <b>${esc(hostUp || "—")}</b>`,
-      `status: <span class="${statusCls}">${statusLabel}</span>`,
-    ];
-    const statItems = parts.map((p) => `<span class="stat">${p}</span>`);
-    statItems.push(`<span class="stat status-tail">${tail.join(" &middot; ")}</span>`);
+    const statItems = parts.map(([k, p]) => `<span class="stat stat-${k}">${p}</span>`);
+    statItems.push(`<span class="stat stat-uptime">uptime: <b>${esc(hostUp || "—")}</b></span>`);
+    statItems.push(`<span class="stat stat-status">status: <span class="${statusCls}">${statusLabel}</span></span>`);
     setHTMLIfChanged(bar, statItems.join(""));
     updatePanicView(ready.panic);
     renderOverview({ ready, live, mon, ops, locks, hostMetrics });
