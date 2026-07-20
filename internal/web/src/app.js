@@ -3071,36 +3071,8 @@ function renderSLAWindows(wins, compact) {
   return tpl`<div class="sla-windows${compact ? " sla-compact" : ""}">${rows}</div>`;
 }
 
-// renderProcessUptimeWindows shows trusted process continuity separately from
-// observed SLA. An uncovered segment means no continuity was confirmed; it is
-// never rendered as a failed health check.
-function renderProcessUptimeWindows(wins) {
-  wins = wins || [];
-  if (!wins.some((w) => w && w.ratio != null)) {
-    return tpl`<p class="muted">No process continuity confirmed yet.</p>`;
-  }
-  const rows = wins.map((w) => {
-    const pct = w.ratio == null ? null : Number(w.ratio) * percentScale;
-    const label = slaWindowLabel(w.window);
-    const coverage = pct == null ? "—" : fmtPct(pct);
-    const duration = `${fmtDuration(Number(w.up || 0))} / ${fmtDuration(Number(w.total || 0))}`;
-    const title = `${label} · ${coverage} process continuity confirmed · ${duration}`;
-    const track = Array.isArray(w.segments) && w.segments.length
-      ? renderProcessUptimeTimeline(w.segments, w.window, w.observed_at)
-      : renderProcessUptimeFill(pct);
-    return tpl`<div class="sla-window" title="${title}">
-      <span class="sla-label">${label}</span>
-      ${track}
-      <span class="sla-pct">${coverage}</span>
-      <span class="sla-count">${duration}</span>
-    </div>`;
-  });
-  return tpl`<div class="sla-windows">${rows}</div>
-    <p class="muted">Confirmed process continuity, not observed check health.</p>`;
-}
-
-// renderBarFill is the single-fill bar used when a window has no segment data;
-// the SLA and process-continuity variants differ only in color and labels.
+// renderBarFill is the single-fill availability bar used when a window has no
+// segment data.
 function renderBarFill(pct, color, label, emptyLabel) {
   const width = pct == null ? 0 : pctClamp(pct);
   const empty = pct == null ? " sla-empty" : "";
@@ -3109,10 +3081,6 @@ function renderBarFill(pct, color, label, emptyLabel) {
 
 function renderSLAFill(pct) {
   return renderBarFill(pct, slaColor(pct), `${fmtPct(pct)} available`, "No SLA data");
-}
-
-function renderProcessUptimeFill(pct) {
-  return renderBarFill(pct, "var(--info)", `${fmtPct(pct)} process continuity confirmed`, "No process continuity confirmed");
 }
 
 function slaTimelineDataRows(segments, window, observedAt, unavailable = "no data") {
@@ -3145,8 +3113,7 @@ function renderTimelineBand(segments, window, observedAt, opts) {
   // state (a service checked every few minutes was up between checks too), so a
   // continuously-monitored target reads as continuous instead of striped with
   // sampling gaps. Only leading sub-spans before the first-ever sample stay
-  // hatched (genuinely unknown). Process continuity opts out — its gaps mean
-  // "no evidence" and must be preserved.
+  // hatched (genuinely unknown).
   let lastPct = null;
   const cells = segments.map((ratio, i) => {
     let pct = ratio == null ? null : Number(ratio) * percentScale;
@@ -3179,20 +3146,6 @@ function renderSLATimeline(segments, window, observedAt) {
     column: "Availability",
     bandAria: "SLA availability timeline",
     carryForward: true,
-  });
-}
-
-function renderProcessUptimeTimeline(segments, window, observedAt) {
-  return renderTimelineBand(segments, window, observedAt, {
-    color: () => "var(--info)",
-    gapText: "not confirmed",
-    gapAria: "process continuity not confirmed",
-    titleSuffix: " process continuity confirmed",
-    cellAria: "process continuity confirmed",
-    unavailable: "not confirmed",
-    caption: "Process continuity timeline data",
-    column: "Continuity",
-    bandAria: "Process continuity timeline",
   });
 }
 
@@ -3536,14 +3489,10 @@ function renderServiceDetail(d) {
     ? nothing
     : tpl`<h2>Processes</h2>
       ${procSummary}${totals}${procWarns}${procTable}`;
-  const processContinuity = d.process_uptime && d.process_uptime.length
-    ? tpl`<h2>Process continuity</h2>${renderProcessUptimeWindows(d.process_uptime)}`
-    : nothing;
   return tpl`<div class="service-detail" data-service-detail="${d.name}">
     <h2>${displayName(d)} <span class="muted">${d.unit || ""}</span></h2>
     ${disabledNote}
     ${general}
-    ${processContinuity}
     ${graphs}
     ${processSection}
     <h2>Checks</h2>
