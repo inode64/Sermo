@@ -30,9 +30,8 @@ around the opposite principle — **prove it is safe, then act**:
   outage.
 - **Portable.** The same configuration and behaviour run over systemd *and*
   OpenRC; the init backend is auto-detected.
-- **Honest availability.** SLA counts only cycles it actually observed, and
-  process-continuity coverage is measured against the *knowable* period — time
-  before any evidence could exist is excluded, not counted as downtime.
+- **Honest availability.** SLA counts only cycles it actually observed — time
+  before any evidence could exist is a gap, not counted as downtime.
 
 ## Features
 
@@ -63,9 +62,8 @@ around the opposite principle — **prove it is safe, then act**:
 - **Hard safety invariants** that YAML cannot disable (see below).
 
 **Availability & history**
-- Per-service **SLA over rolling windows** (hour → year), a per-minute series for
-  graphs, and separately-tracked **process continuity** derived from the PID's
-  kernel start time.
+- Per-service **SLA over rolling windows** (hour → year) and a per-minute series
+  for graphs.
 - An **event/activity log** with retention and compaction of the state store.
 
 **Operate**
@@ -228,7 +226,6 @@ sermoctl lock apache-main --reason backup --ttl 1h -- /usr/local/bin/backup.sh
 sermoctl sla                     # all services
 sermoctl sla apache-main         # one service
 sermoctl sla --series apache-main --since 168h  # per-minute series (graph data)
-sermoctl sla --process-uptime apache-main       # confirmed process continuity, not check health
 
 # Run the daemon
 sermod run --config /etc/sermo/sermo.yml
