@@ -3051,8 +3051,15 @@ function renderSLAWindows(wins, compact) {
     const pctText = pct == null ? "—" : fmtPct(pct);
     const count = `${Number(w.up || 0)}/${Number(w.total || 0)}`;
     const title = `${label} · ${pctText} · ${count}`;
-    const track = Array.isArray(w.segments) && w.segments.length
-      ? renderSLATimeline(w.segments, w.window, w.observed_at)
+    // (B) When a target is sampled far less often than the window has segments
+    // (a check every few hours vs the hour's 5-min sub-spans), most segments
+    // carry no sample and the strip would be mostly hatched. Below half-measured
+    // fall back to the single availability bar, which states the window's ratio
+    // without implying per-sub-span measurements that never happened.
+    const segs = Array.isArray(w.segments) ? w.segments : [];
+    const measured = segs.reduce((c, s) => c + (s == null ? 0 : 1), 0);
+    const track = segs.length && measured * 2 >= segs.length
+      ? renderSLATimeline(segs, w.window, w.observed_at)
       : renderSLAFill(pct);
     return tpl`<div class="sla-window" title="${title}">
       <span class="sla-label">${label}</span>
@@ -3134,14 +3141,27 @@ function renderTimelineBand(segments, window, observedAt, opts) {
   const spanMs = slaWindowSpanMs(window);
   const sampledMs = Date.parse(observedAt);
   const endMs = Number.isFinite(sampledMs) ? sampledMs : Date.now();
+  // (A) For availability, a sub-span with no sample inherits the last observed
+  // state (a service checked every few minutes was up between checks too), so a
+  // continuously-monitored target reads as continuous instead of striped with
+  // sampling gaps. Only leading sub-spans before the first-ever sample stay
+  // hatched (genuinely unknown). Process continuity opts out — its gaps mean
+  // "no evidence" and must be preserved.
+  let lastPct = null;
   const cells = segments.map((ratio, i) => {
-    const pct = ratio == null ? null : Number(ratio) * percentScale;
+    let pct = ratio == null ? null : Number(ratio) * percentScale;
+    let held = false;
+    if (opts.carryForward) {
+      if (pct != null) lastPct = pct;
+      else if (lastPct != null) { pct = lastPct; held = true; }
+    }
     const segStart = endMs - spanMs + (i / n) * spanMs;
     const segEnd = endMs - spanMs + ((i + 1) / n) * spanMs;
     const when = `${fmtTime(new Date(segStart).toISOString())} – ${fmtTime(new Date(segEnd).toISOString())}`;
     if (pct == null) return tpl`<span class="sla-seg sla-gap" title="${when + " · " + opts.gapText}" aria-label="${when}: ${opts.gapAria}"></span>`;
     const pctText = fmtPct(pct);
-    return tpl`<span class="sla-seg" style="--sla-color:${opts.color(pct)}" title="${when + " · " + pctText + opts.titleSuffix}" aria-label="${when}: ${pctText} ${opts.cellAria}"></span>`;
+    const suffix = held ? " · held (last observed, not re-measured this sub-span)" : opts.titleSuffix;
+    return tpl`<span class="sla-seg" style="--sla-color:${opts.color(pct)}" title="${when + " · " + pctText + suffix}" aria-label="${when}: ${pctText} ${opts.cellAria}${held ? " (held)" : ""}"></span>`;
   });
   const dataRows = slaTimelineDataRows(segments, window, observedAt, opts.unavailable);
   return tpl`<table class="chart-data visually-hidden"><caption>${opts.caption}</caption><thead><tr><th scope="col">Period</th><th scope="col">${opts.column}</th></tr></thead><tbody>${dataRows}</tbody></table><span class="sla-timeline" role="img" aria-label="${opts.bandAria}">${cells}</span>`;
@@ -3158,6 +3178,7 @@ function renderSLATimeline(segments, window, observedAt) {
     caption: "SLA timeline data",
     column: "Availability",
     bandAria: "SLA availability timeline",
+    carryForward: true,
   });
 }
 
