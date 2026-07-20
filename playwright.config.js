@@ -4,11 +4,13 @@ module.exports = defineConfig({
   testDir: "./tests/web",
   outputDir: "./test-results/playwright",
   fullyParallel: true,
-  // CI runners are 2-core; 4 workers oversubscribe them, and the resulting CPU
-  // starvation stretches timer/microtask-driven assertions (expansion fills,
-  // click-guard windows) past their timeouts, flaking under load. Match workers
-  // to the runner's cores there and keep retry headroom; local dev keeps 4.
-  workers: process.env.CI ? 2 : 4,
+  // A few tests assert on timer/microtask windows (the double-click monitor
+  // guard, inline-expansion fills). On CI's shared 2-core runners any parallel
+  // worker contention starves the CPU and stretches those windows past their
+  // timeouts, so even retries fail. Run serially on CI — each test then gets a
+  // full core and the windows hold — and keep retries as headroom; local dev
+  // keeps full parallelism for speed.
+  workers: process.env.CI ? 1 : 4,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
   reporter: "line",
