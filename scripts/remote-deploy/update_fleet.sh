@@ -123,7 +123,9 @@ if [ "$skip_build" = "0" ]; then
 	echo "building sermo (GOAMD64=v1 SERMO_DATADIR=/usr/share/sermo make build)"
 	(cd "$repo" && GOAMD64=v1 SERMO_DATADIR=/usr/share/sermo make build) || die "local build failed"
 fi
-[ -x "${repo}/bin/sermoctl" ] && [ -x "${repo}/bin/sermod" ] || die "missing bin/sermoctl or bin/sermod (run without --skip-build)"
+if [ ! -x "${repo}/bin/sermoctl" ] || [ ! -x "${repo}/bin/sermod" ]; then
+	die "missing bin/sermoctl or bin/sermod (run without --skip-build)"
+fi
 
 if [ -z "$run_root" ]; then
 	run_root="$(mktemp -d "/tmp/sermo-fleet-${run_id}.XXXX")" || die "mktemp failed"
