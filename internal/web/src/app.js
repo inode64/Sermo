@@ -3300,15 +3300,24 @@ function drawSLAChart(points, win) {
       b.up += Number(p.up || 0);
       b.total += Number(p.total || 0);
     });
+  // The strip has a fixed bar count (slaBarCount) while the series is sampled
+  // per cycle, so short windows have more bars than samples and every few bars
+  // land on no sample — a continuously-up service looked striped. Carry the last
+  // observed availability forward across those empty bars (the service held that
+  // state between samples). Only bars before the first-ever sample stay hatched.
+  let lastPct = null;
   const bars = buckets.map((b, i) => {
     const segStart = startMs + (i / cols) * span;
     const segEnd = startMs + ((i + 1) / cols) * span;
     const when = `${fmtTime(new Date(segStart).toISOString())} – ${fmtTime(new Date(segEnd).toISOString())}`;
-    if (!b.total) return `<span class="sla-bar-seg sla-gap" title="${esc(when + " · no data")}" aria-label="${esc(when)}: no data"></span>`;
-    const pct = pctClamp(b.up / b.total * percentScale);
+    let pct = null;
+    let held = false;
+    if (b.total) { pct = pctClamp(b.up / b.total * percentScale); lastPct = pct; }
+    else if (lastPct != null) { pct = lastPct; held = true; }
+    if (pct == null) return `<span class="sla-bar-seg sla-gap" title="${esc(when + " · no data")}" aria-label="${esc(when)}: no data"></span>`;
     const pctText = fmtPct(pct);
-    const tip = `${when} · ${pctText} · ${b.up}/${b.total}`;
-    return `<span class="sla-bar-seg" style="--sla-color:${slaColor(pct)}" title="${esc(tip)}" aria-label="${esc(when)}: ${esc(pctText)} available"></span>`;
+    const tip = held ? `${when} · ${pctText} · held (no sample this sub-span)` : `${when} · ${pctText} · ${b.up}/${b.total}`;
+    return `<span class="sla-bar-seg" style="--sla-color:${slaColor(pct)}" title="${esc(tip)}" aria-label="${esc(when)}: ${esc(pctText)} available${held ? " (held)" : ""}"></span>`;
   }).join("");
   const incidents = slaIncidentPoints(points, startMs, endMs);
   const latestPct = observed[observed.length - 1].pct;
