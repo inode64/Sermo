@@ -1288,7 +1288,6 @@ function restoreUIState() {
         if (!state || typeof state !== "object") continue;
         serviceMetricStates.set(name, {
           window: typeof state.window === "string" ? state.window : defaultMetricWindow,
-          check: typeof state.check === "string" ? state.check : "",
         });
       }
     }
@@ -3309,6 +3308,10 @@ function serviceCheckMetricDomID(service, check, metric, suffix) {
   return detailDomId(service, `metric-${detailDomKey(check + ":" + metric)}-${suffix}`);
 }
 
+function serviceLatencyDomID(service, check, suffix) {
+  return detailDomId(service, `lat-${detailDomKey(check)}-${suffix}`);
+}
+
 function serviceCheckMetricLabel(metric) {
   return `${metric.check} · ${metric.name}`;
 }
@@ -3316,16 +3319,10 @@ function serviceCheckMetricLabel(metric) {
 function serviceMetricState(name) {
   let state = serviceMetricStates.get(name);
   if (!state) {
-    state = { window: defaultMetricWindow, check: "" };
+    state = { window: defaultMetricWindow };
     serviceMetricStates.set(name, state);
   }
   return state;
-}
-
-function selectedMetricCheck(service, measured) {
-  const selected = serviceMetricState(service).check;
-  if (selected && measured.some((c) => c.name === selected)) return selected;
-  return measured.length ? measured[0].name : "";
 }
 
 function renderServiceDetail(d) {
@@ -3408,21 +3405,23 @@ function renderServiceDetail(d) {
   const measured = serviceMeasuredChecks(d);
   const checkMetrics = serviceCheckMetrics(d);
   const metricState = serviceMetricState(d.name);
-  const activeMetricCheck = selectedMetricCheck(d.name, measured);
-  const checkBtns = measured.length
-    ? metricCheckButtons(d.name, measured, activeMetricCheck)
-    : tpl`<span class="muted">No latency checks</span>`;
-  const latencyPanel = measured.length
-    ? tpl`<div id="${detailDomId(d.name, "lat-summary")}" class="muted">loading…</div>
-      <div id="${detailDomId(d.name, "lat-chart")}" class="muted chart-box"></div>`
-    : tpl`<div class="muted">No latency checks configured for this service.</div>`;
+  // One latency graph per measured check (health, port, service, …) instead of a
+  // single chart switched by buttons; these lead the graph grid.
+  const latencyPanels = noResidentProcess
+    ? []
+    : measured.length
+    ? measured.map((c) => tpl`<div class="metric-panel" data-latency-check="${c.name}">
+        <div class="metric-title">Latency <span class="muted">${c.name}</span></div>
+        <div id="${serviceLatencyDomID(d.name, c.name, "summary")}" class="muted">loading…</div>
+        <div id="${serviceLatencyDomID(d.name, c.name, "chart")}" class="muted chart-box"></div>
+      </div>`)
+    : [tpl`<div class="metric-panel">
+        <div class="metric-title">Latency</div>
+        <div class="muted">No latency checks configured for this service.</div>
+      </div>`];
   const runtimeGraphPanels = noResidentProcess
     ? nothing
     : tpl`<div class="metric-panel">
-        <div class="metric-title">Latency <span class="muted">${checkBtns}</span></div>
-        ${latencyPanel}
-      </div>
-      <div class="metric-panel">
         <div class="metric-title">CPU</div>
         <div id="${detailDomId(d.name, "runtime-cpu-summary")}" class="muted">loading…</div>
         <div id="${detailDomId(d.name, "runtime-cpu-chart")}" class="muted chart-box"></div>
@@ -3455,6 +3454,7 @@ function renderServiceDetail(d) {
           </div>
         </div>
       </div>
+      ${latencyPanels}
       ${checkMetricPanels}
       ${runtimeGraphPanels}
     </div>`;
@@ -6560,16 +6560,6 @@ const windowMs = {
 const metricTypes = ["tcp", "http", "ports", "service"];
 const metricWins = [["1h", "1h"], ["24h", "24h"], ["7d", "168h"], ["30d", "720h"], ["1y", "8760h"]];
 
-function setMetricCheck(name, service) {
-  if (!service) return;
-  serviceMetricState(service).check = name;
-  saveUIState();
-  if (service) syncMetricCheckButtons(service, name);
-  const key = service ? serviceExpansionKey(service) : "";
-  const detail = key ? expDetailCache[key] : null;
-  if (detail) loadMetrics(service, serviceMeasuredChecks(detail));
-  else loadExpansionFor(key);
-}
 function setMetricWin(win, service) {
   if (!service) return;
   serviceMetricState(service).window = win;
@@ -6584,21 +6574,6 @@ function setDaemonMetricWin(win) {
   saveUIState();
   syncWindowButtons("setDaemonMetricWin", daemonMetricWindow);
   loadDaemonMetrics();
-}
-
-function metricCheckButtons(serviceName, measured, selected) {
-  const btns = measured.map((c) =>
-    tpl`<button data-metric-service="${serviceName}" data-metric-check="${c.name}" aria-pressed=${c.name === selected ? domBoolTrue : domBoolFalse} class="${c.name === selected ? "win-btn-active" : nothing}">${c.name}</button> `);
-  return tpl`<span role="group" aria-label="Latency check">${btns}</span>`;
-}
-
-function syncMetricCheckButtons(serviceName, selected) {
-  document.querySelectorAll("[data-metric-check][data-metric-service]").forEach((btn) => {
-    if (btn.dataset.metricService !== serviceName) return;
-    const active = btn.dataset.metricCheck === selected;
-    btn.classList.toggle("win-btn-active", active);
-    btn.setAttribute("aria-pressed", active ? domBoolTrue : domBoolFalse);
-  });
 }
 
 function winButtons(list, selected, fn, groupLabel, service = "") {
@@ -6618,10 +6593,15 @@ function syncWindowButtons(kind, selected, service = "") {
 }
 
 async function loadMetrics(name, measured, generation = dashboardGeneration) {
-  const check = selectedMetricCheck(name, measured || []);
-  if (!check) return true;
-  const summary = document.getElementById(detailDomId(name, "lat-summary"));
-  const chart = document.getElementById(detailDomId(name, "lat-chart"));
+  const list = measured || [];
+  if (!list.length) return true;
+  const results = await Promise.all(list.map((c) => loadLatencyCheck(name, c.name, generation)));
+  return results.every(Boolean);
+}
+
+async function loadLatencyCheck(name, check, generation = dashboardGeneration) {
+  const summary = document.getElementById(serviceLatencyDomID(name, check, "summary"));
+  const chart = document.getElementById(serviceLatencyDomID(name, check, "chart"));
   if (!summary || !chart) return true;
   const win = serviceMetricState(name).window;
   try {
@@ -6632,15 +6612,15 @@ async function loadMetrics(name, measured, generation = dashboardGeneration) {
     }
     if (!res.ok) throw new Error("HTTP " + res.status);
     const body = await res.json();
-    if (serviceMetricState(name).window !== win || selectedMetricCheck(name, measured || []) !== check) return true;
+    if (serviceMetricState(name).window !== win) return true;
     const s = body.summary || {};
     summary.innerHTML = s.count
       ? `avg <b>${fmtNum(s.avg, 2)}</b> ${metricUnitMilliseconds} &middot; min ${fmtNum(s.min, 2)} &middot; max ${fmtNum(s.max, 2)}`
       : '<span class="muted">No latency data yet for this window.</span>';
-    chart.innerHTML = drawMetricChart(body.points || [], body.unit || metricUnitMilliseconds, win, "Service latency metric chart");
+    chart.innerHTML = drawMetricChart(body.points || [], body.unit || metricUnitMilliseconds, win, `Service latency chart (${check})`);
     return true;
   } catch (e) {
-    if (serviceMetricState(name).window !== win || selectedMetricCheck(name, measured || []) !== check) return true;
+    if (serviceMetricState(name).window !== win) return true;
     chart.textContent = "Failed to load latency: " + e.message;
     return false;
   }
@@ -7263,7 +7243,6 @@ function initDelegatedHandlers() {
     ["[data-service-open]", (el) => openServiceExpansion(el.dataset.serviceOpen || "", true)],
     ["[data-lock-release]", (el) => releaseLock(el.dataset.lockService || "", el.dataset.lockName || "")],
     ["[data-preflight-service]", (el) => runPreflight(el.dataset.preflightService || "")],
-    ["[data-metric-check]", (el) => setMetricCheck(el.dataset.metricCheck || "", el.dataset.metricService || "")],
     ["[data-window-kind][data-window-value]", (el) => {
       const val = el.dataset.windowValue || "";
       switch (el.dataset.windowKind) {
