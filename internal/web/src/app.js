@@ -6621,7 +6621,8 @@ async function loadLatencyCheck(name, check, generation = dashboardGeneration) {
     return true;
   } catch (e) {
     if (serviceMetricState(name).window !== win) return true;
-    chart.textContent = "Failed to load latency: " + e.message;
+    summary.innerHTML = `<span class="muted">Failed to load latency (${esc(check)}): ${esc(e.message)}</span>`;
+    chart.innerHTML = "";
     return false;
   }
 }
