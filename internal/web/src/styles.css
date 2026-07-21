@@ -419,21 +419,26 @@
   .metric-panel-wide { grid-column: 1 / -1; }
   .metric-title { font-weight: 650; margin-bottom: .25rem; }
   .metric-title .muted { font-weight: 400; }
-  /* Reserve each chart's box up-front (the SVGs are a fixed 640x160 = 4:1, scaled
-     to the container width). Without this the box is empty/short while the data is
-     re-fetched on every auto-refresh and then grows when the SVG lands, jolting the
-     scroll position. Reserving 4:1 keeps the height constant across the loading,
-     no-data and rendered states. .chart-box caps at the SVG's own 640px max width;
-     .chart-box-wide (the full-width SLA timeline) scales unbounded and may grow a
-     little more for its incident list below the graph.
+  /* Reserve each metric chart's box up-front (the SVGs are a fixed 640x160 = 4:1,
+     scaled to the container width). Without this the box is empty/short while the
+     data is re-fetched on every auto-refresh and then grows when the SVG lands,
+     jolting the scroll position. Reserving 4:1 keeps the height constant across
+     the loading, no-data and rendered states. .chart-box caps at the SVG's own
+     640px max width.
      position/overflow clip the screen-reader chart-data <table> (visually-hidden
      is position:absolute but table rows still extend the document without a clipped
      containing block — visible when Daemon / Engine settings is open). */
-  .chart-box, .chart-box-wide {
+  .chart-box {
     position: relative; overflow: hidden;
-    width: 100%; aspect-ratio: 640 / 160;
+    width: 100%; aspect-ratio: 640 / 160; max-width: 640px;
   }
-  .chart-box { max-width: 640px; }
+  /* The SLA timeline is a short fixed-height bar strip (2.4rem bars + axis), not a
+     4:1 SVG, so it reserves just the strip height and grows for its incident list.
+     A 640/160 aspect ratio at full grid width left a tall empty gap below it. */
+  .chart-box-wide {
+    position: relative; overflow: hidden;
+    width: 100%; min-height: 3.6rem;
+  }
   .chart-box > .chart-data.visually-hidden, .chart-box-wide > .chart-data.visually-hidden {
     left: 0; top: 0; white-space: normal;
   }
