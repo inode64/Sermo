@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"maps"
-	"sermo/internal/netutil"
 	"strings"
 
 	"github.com/go-sql-driver/mysql"
@@ -153,11 +152,4 @@ func buildMySQLConfig(cfg Config) *mysql.Config {
 // special characters in the password are escaped correctly.
 func buildDSN(cfg Config) string {
 	return buildMySQLConfig(cfg).FormatDSN()
-}
-
-// NormalizeTLS maps a friendly tls value to the canonical mode ("" plaintext,
-// "true" verified TLS, "skip-verify", or a custom registered config name); the
-// shared normalization lives in netutil.
-func NormalizeTLS(s string) string {
-	return netutil.NormalizeTLS(s)
 }

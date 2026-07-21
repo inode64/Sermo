@@ -469,6 +469,14 @@ func ValidTLSValue(value string) bool {
 	}
 }
 
+// NormalizeTLS maps a friendly tls value to the canonical mode ("" plaintext,
+// "true" verified TLS, "skip-verify", or a custom registered config name); the
+// shared normalization lives in netutil. Used across the connection probes
+// (dial, http, ldap, mongodb, mysql, unifi).
+func NormalizeTLS(s string) string {
+	return netutil.NormalizeTLS(s)
+}
+
 // registry maps protocol names (canonical and aliases) to protocols.
 type registry struct {
 	mu     sync.RWMutex
