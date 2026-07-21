@@ -211,7 +211,7 @@ func NewClient(spec Spec) (*Client, error) {
 		tr.DialContext = spec.DialContext
 	}
 	scheme := dockerSchemeHTTP
-	if mode := NormalizeTLS(spec.TLS); mode != "" {
+	if mode := netutil.NormalizeTLS(spec.TLS); mode != "" {
 		scheme = dockerSchemeHTTPS
 		tc := &tls.Config{ServerName: host, MinVersion: tls.VersionTLS12}
 		if mode == tlsModeSkipVerify {
@@ -383,13 +383,6 @@ func dockerStatusError(resp *http.Response) error {
 
 func containerPath(container, suffix string) string {
 	return dockerContainerPathPrefix + url.PathEscape(container) + suffix
-}
-
-// NormalizeTLS maps friendly TLS values to Docker HTTP client modes. It shares
-// the conn probes' normalization: the accepted spellings and canonical modes
-// are the same (netutil.NormalizeTLS).
-func NormalizeTLS(s string) string {
-	return netutil.NormalizeTLS(s)
 }
 
 // ValidTLSValue reports whether v is accepted by Sermo's Docker transport: an
