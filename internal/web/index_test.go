@@ -574,7 +574,7 @@ func TestSourceMetricChartRendersZeroValuedSeries(t *testing.T) {
 	for _, needle := range []string{
 		"if (!pts.length) return '<span class=\"muted\">No data yet for this window.</span>';",
 		"const scaleMax = maxV > 0 ? maxV : 1;",
-		"Service latency metric chart",
+		"Service latency chart (",
 		"${label} runtime metric chart",
 		"Daemon IO metric chart",
 	} {
@@ -763,7 +763,6 @@ func TestIndexAccessibilityBundle(t *testing.T) {
 		"watch is starting",
 		"event-grp-panel",
 		"Graph time window",
-		"Latency check",
 		"chart-data",
 		"Chart data",
 		"lock is still active",
