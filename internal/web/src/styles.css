@@ -634,6 +634,10 @@
     /* notifiers -> Name · Type · State. */
     #notifiers-section th:nth-child(3), #notifiers-section td:nth-child(3),
     #notifiers-section th:nth-child(4), #notifiers-section td:nth-child(4) { display: none; }
+    /* Service-detail "General data": a compact two-column mosaic instead of one
+       tall vertical stack (the default auto-fit drops to a single column once the
+       12rem cell minimum no longer fits the phone viewport). */
+    .runtime-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: .8rem; }
     #app-footer .footer-version {
       margin-left: 0;
       flex-basis: 100%;
