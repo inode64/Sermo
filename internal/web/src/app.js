@@ -16,12 +16,12 @@ import {
 } from "./api.js";
 import {
   fmtAge, fmtBytes, fmtBytesPerSecond, fmtDuration, fmtMetricValue, fmtNum, fmtPct, fmtRemain,
-  fmtSince, fmtTime, fmtUntilShort, hoursPerDay, millisecondsPerDay,
+  fmtSince, fmtTime, fmtUntilShort, millisecondsPerDay,
   millisecondsPerHour, millisecondsPerMinute, millisecondsPerSecond,
   metricUnitBytes, metricUnitBytesPerSecond, metricUnitMilliseconds,
-  metricUnitPercent, minutesPerHour, pctClamp, percentMax, percentMin,
+  metricUnitPercent, pctClamp, percentMax,
   percentScale, rollingMonthDays, rollingWeekDays, rollingYearDays,
-  secondsPerDay, secondsPerHour, secondsPerMinute,
+  secondsPerHour, secondsPerMinute,
 } from "./format.js";
 
 const $ = (s) => document.querySelector(s);
@@ -319,7 +319,7 @@ async function loadMe() {
   try {
     const res = await fetch(apiWhoamiPath);
     if (res.ok) me = await res.json();
-  } catch (e) { /* keep defaults */ }
+  } catch { /* keep defaults */ }
   if (!me.auth) { $("#me").innerHTML = ""; }
   else if (me.role === "admin") { $("#me").textContent = "(admin)"; }
   else { $("#me").innerHTML = 'read-only &middot; <a href="login">log in</a>'; }
@@ -596,7 +596,7 @@ async function reloadConfig() {
   if (btn) btn.disabled = true;
   try {
     const res = await fetch(apiReloadPath, csrfPostOptions());
-    const body = await jsonOrThrow(res);
+    await jsonOrThrow(res);
     setStatus("config reload requested", feedbackStatusOK);
     // next auto-refresh (or manual load) will pick up any service changes
     setTimeout(load, 800);
@@ -669,7 +669,7 @@ async function loadEvents(seq = 0, append = false, generation = dashboardGenerat
     eventHasMore = !!page.has_more;
     renderGlobalEvents();
     return { ok: true };
-  } catch (e) {
+  } catch {
     return { ok: false }; // keep the last feed on a transient error
   }
 }
@@ -3666,60 +3666,14 @@ function meterParts(m) {
   }
 }
 
-function meterSummaryCell(m) {
-  const parts = meterParts(m);
-  if (!parts) return nothing;
-  return tpl`<div>${parts[0]}</div>
-    <div>${usageBar(pctClamp(m.used_pct || 0))} <span class="muted">· ${parts[1]}</span></div>`;
-}
-
 function watchReadings(w) {
   return (w && Array.isArray(w.readings)) ? w.readings.filter(Boolean) : [];
 }
 
-function readingText(r) {
-  if (!r) return "";
-  const label = r.label || r.field || "sample";
-  return r.error ? `${label}: ${r.error}` : `${label} ${r.value || ""}`.trim();
-}
-
-function readingsSummaryCell(w) {
-  const list = watchReadings(w);
-  if (!list.length) return nothing;
-  const errors = list.filter((r) => r.error);
-  if (errors.length) {
-    return errors.map((r, i) => i ? [tpl`<br>`, tpl`<span class="bad">${readingText(r)}</span>`] : tpl`<span class="bad">${readingText(r)}</span>`);
-  }
-  const detail = w.summary ? "" : list.slice(0, 3).map(readingText).filter(Boolean).join(" · ");
-  return tpl`<div>${w.summary || w.check_type || "watch"}</div>${
-    detail ? tpl`<div class="muted">· ${detail}</div>` : nothing}`;
-}
-
-function watchSummaryCell(w) {
-  if (!w) return "—";
-  const sw = w.swap;
-  if (sw) {
-    // Volume-style rendering for a swap watch: bar + used/free, like storage.
-    return tpl`<div><span class="muted">${fmtBytes(sw.total_bytes)} total</span></div>
-      <div>${usageBar(pctClamp(sw.used_pct || 0))} <span class="muted">· ${fmtBytes(sw.used_bytes)} used · ${fmtBytes(sw.free_bytes)} free</span></div>`;
-  }
-  const meterCell = meterSummaryCell(w.meter);
-  if (meterCell !== nothing) return meterCell;
-  const readingCell = readingsSummaryCell(w);
-  if (readingCell !== nothing) return readingCell;
-  const d = w.storage;
-  if (d) {
-    if (d.sample_error) {
-      return tpl`<span class="bad">${d.path || ""}: ${d.sample_error}</span>`;
-    }
-    const fs = d.filesystem ? ` · ${d.filesystem}` : "";
-    const mount = d.mount_point && d.mount_point !== d.path ? ` · ${d.mount_point}` : "";
-    const usedPct = storageUsedPct(d);
-    const bar = usedPct == null ? tpl`<span class="muted">—</span>` : usageBar(usedPct);
-    return tpl`<div>${d.path || ""}<span class="muted">${fs}${mount}</span></div>
-      <div>${bar} <span class="muted">· ${fmtBytes(d.used_bytes)} used · ${fmtBytes(d.free_bytes)} free</span></div>`;
-  }
-  return w.summary ? w.summary : "—";
+function readingText(reading) {
+  if (!reading) return "";
+  const label = reading.label || reading.field || "sample";
+  return reading.error ? `${label}: ${reading.error}` : `${label} ${reading.value || ""}`.trim();
 }
 
 function watchMonitorHint(w) {
@@ -3995,7 +3949,7 @@ function updateWatchSortIndicators(panelKey) {
   });
 }
 
-function watchPanelKeyFor(w) {
+function watchPanelKeyFor(_watch) {
   return "host";
 }
 
@@ -4276,19 +4230,6 @@ function watchRowParts(w, cells, colCount) {
     ${watchActionsCell(w)}
   </tr>`;
   return { row, expRow: watchExpansionRow(key, open, colCount) };
-}
-
-// watchRowHTML builds the table row(s) for one watch — the main row plus its
-// expansion row when open. Shared by every watch type so they render
-// identically (including the expand action).
-function watchRowHTML(w) {
-  const parts = watchRowParts(w, [
-    tpl`<td>${categoryBadge(watchGroupOf(w))}</td>`,
-    tpl`<td>${w.check_type || ""}</td>`,
-    tpl`<td>${watchPrimaryMetric(w)}</td>`,
-    tpl`<td class="watch-summary">${watchSummaryCell(w)}</td>`,
-  ], 9);
-  return parts.expRow ? [parts.row, parts.expRow] : [parts.row];
 }
 
 // storageUsageCell renders the occupied-space progress bar (with used/total
@@ -5363,31 +5304,6 @@ function hostTypeDisplay(hostType) {
   return { label, title: detail.join(" · ") };
 }
 
-// hostMetricVal finds a single host metric by name and formats its value
-// (percent or absolute+unit), or returns null when absent. Used to fold the
-// live host readings into the system-status line.
-function hostMetricVal(metrics, name) {
-  const m = (metrics || []).find((x) => x.name === name);
-  if (!m) return null;
-  let val;
-  if (m.percent != null) val = fmtPct(m.percent);
-  else if (m.absolute != null) { val = fmtNum(m.absolute, 2) + (m.unit ? " " + m.unit : ""); }
-  else return null;
-  if (!m.ready) val += " (stale)";
-  return val;
-}
-
-// pctVal formats a percent-type host metric (cpu/mem/swap). A value of exactly
-// 0% is dropped from the JSON by omitempty, so a metric that is present but has
-// no percent is shown as 0.0% rather than hidden. Returns null only when the
-// metric is absent entirely (e.g. no swap device).
-function pctVal(metrics, name) {
-  const m = (metrics || []).find((x) => x.name === name);
-  if (!m) return null;
-  const v = fmtPct(m.percent != null ? m.percent : 0);
-  return m.ready === false ? v + " (stale)" : v;
-}
-
 function lockName(l) {
   return l.name || "(default)";
 }
@@ -5474,7 +5390,7 @@ async function releaseLock(service, name) {
   const qs = name ? `?${apiQueryName}=${encodeURIComponent(name)}` : "";
   try {
     const res = await fetch(lockReleaseAPI(service, qs), targetPostOptions());
-    const body = await jsonOrThrow(res);
+    await jsonOrThrow(res);
     setStatus(`released lock ${label}`, feedbackStatusOK);
     await load();
   } catch (e) {
@@ -5950,7 +5866,7 @@ function renderStatus(ctx) {
       }
     }
     renderAttention();
-  } catch (e) {
+  } catch {
     bar.textContent = "status unavailable";
   }
 }

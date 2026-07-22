@@ -12,6 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from normalize_yaml_flow import iter_yaml_files, normalize_line  # noqa: E402
+
 YAMLFMT = os.environ.get("YAMLFMT", "yamlfmt")
 CONF = ROOT / ".yamlfmt"
 

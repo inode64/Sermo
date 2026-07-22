@@ -1,0 +1,14 @@
+[lint]
+select = [
+  "B",    # likely bugs and design problems
+  "C4",   # unnecessary collection construction
+  "E4",   # import errors
+  "E7",   # statement errors
+  "E9",   # runtime and syntax errors
+  "F",    # Pyflakes
+  "I",    # import ordering
+  "PERF", # avoidable performance costs
+  "PIE",  # miscellaneous unnecessary code
+  "SIM",  # simplifiable control flow
+  "UP",   # modern Python idioms
+]
