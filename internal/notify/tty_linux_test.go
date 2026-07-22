@@ -5,13 +5,14 @@ package notify
 import (
 	"context"
 	"errors"
+	"sermo/internal/strutil"
 	"strings"
 	"testing"
 	"time"
 )
 
 func TestTTYNotifierTargetsFilterUsersAndUnsafeLines(t *testing.T) {
-	n := &ttyNotifier{users: stringSet([]string{"root"}), devRoot: "/dev"}
+	n := &ttyNotifier{users: strutil.Set([]string{"root"}), devRoot: "/dev"}
 	got := n.targetTTYs([]ttySession{
 		{User: "root", Line: "pts/0"},
 		{User: "root", Line: "../pts/1"},

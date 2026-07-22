@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"sermo/internal/execx"
+	"sermo/internal/strutil"
 )
 
 const (
@@ -59,7 +60,7 @@ func ParseSystemdActiveUnits(stdout string) []string {
 			out = append(out, fields[systemdListUnitNameIndex])
 		}
 	}
-	return uniqueStrings(nil, out...)
+	return strutil.MergeUnique(nil, out...)
 }
 
 // ParseOpenRCActiveUnits extracts started services from rc-status output.
@@ -82,7 +83,7 @@ func ParseOpenRCActiveUnits(stdout string) []string {
 	}
 	// A service can appear in more than one matched runlevel, and duplicates are
 	// not guaranteed to be adjacent.
-	return uniqueStrings(nil, out...)
+	return strutil.MergeUnique(nil, out...)
 }
 
 func openRCRunlevel(line string) (string, bool) {
@@ -121,25 +122,4 @@ func openRCStartedService(line string) string {
 		return ""
 	}
 	return fields[openRCServiceNameIndex]
-}
-
-func uniqueStrings(list []string, values ...string) []string {
-	seen := make(map[string]struct{}, len(list)+len(values))
-	for _, value := range list {
-		if value == "" {
-			continue
-		}
-		seen[value] = struct{}{}
-	}
-	for _, value := range values {
-		if value == "" {
-			continue
-		}
-		if _, ok := seen[value]; ok {
-			continue
-		}
-		seen[value] = struct{}{}
-		list = append(list, value)
-	}
-	return list
 }

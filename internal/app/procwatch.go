@@ -485,11 +485,7 @@ func (s ProcInfo) asProcess() process.Process {
 	}
 }
 
-func (w *procWatcher) emitEvent(e Event) {
-	if w.emit != nil {
-		w.emit(e)
-	}
-}
+func (w *procWatcher) emitEvent(e Event) { emitSafe(w.emit, e) }
 
 // cpuPercent derives a process's CPU% from two tick samples: Δticks/hz over the
 // elapsed wall time across all CPUs. Not ready without a previous sample, and a

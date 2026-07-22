@@ -38,7 +38,7 @@ func engineValue(cfg *config.Config, key string) any {
 
 // EngineDuration reads a duration field from the engine block.
 func EngineDuration(cfg *config.Config, key string, fallback time.Duration) time.Duration {
-	return engineDuration(cfg, key, fallback)
+	return config.EngineDuration(cfg, key, fallback)
 }
 
 // EngineInt reads an int field from the engine block.
@@ -67,13 +67,6 @@ func EngineUserLookup(cfg *config.Config, runner execx.Runner) *process.UserLook
 		Timeout: EngineDuration(cfg, config.EngineKeyUserLookupTimeout, process.DefaultUserLookupTimeout),
 		Runner:  runner,
 	})
-}
-
-func engineDuration(cfg *config.Config, key string, fallback time.Duration) time.Duration {
-	if d := cfgval.Duration(engineValue(cfg, key)); d > 0 {
-		return d
-	}
-	return fallback
 }
 
 func engineInt(cfg *config.Config, key string, fallback int) int {

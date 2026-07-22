@@ -465,8 +465,4 @@ func (w *fileWatcher) summaryMessage(path, change, message string, extra map[str
 	return checks.ApplySummary(w.summary, w.check, checks.Result{Check: w.name, Message: message, Data: data}).Message
 }
 
-func (w *fileWatcher) emitEvent(e Event) {
-	if w.emit != nil {
-		w.emit(e)
-	}
-}
+func (w *fileWatcher) emitEvent(e Event) { emitSafe(w.emit, e) }
