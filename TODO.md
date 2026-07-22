@@ -92,10 +92,10 @@ a configtest CLI, `mosquitto`, `supervisord`, `udisks2`, `pm2`, etc. (`redis` /
 ## Engine and config
 
 - [ ] Service priorities: configurable per-service `priority` (integer or named
-      tier), validation and defaults; use in remediation/operation ordering when
-      multiple services compete for the global semaphore; expose in `sermoctl
-      services` (sort/filter), the web UI services table and detail panel, and
-      the service wizard.
+      tier), validation and defaults; use in remediation ordering when multiple
+      services queue actions in the same cycle; expose in `sermoctl services`
+      (sort/filter), the web UI services table and detail panel, and the
+      service wizard.
 - [ ] `exec` rule action: not implemented. If scheduled, add an `ActionExec`
       model constant, validation, docs and safe execution through `execx` —
       `then: {action: exec, command: [...], timeout: ...}` (array form, never a
