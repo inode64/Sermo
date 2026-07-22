@@ -16,7 +16,8 @@ import (
 	"time"
 )
 
-// Watches returns the configured host watches, including disabled ones.
+// Watches returns configured host-level and service-scoped watches, including
+// disabled ones.
 func (b *WebBackend) Watches(_ context.Context) []web.Watch {
 	if len(b.watchOrder) == 0 {
 		return []web.Watch{}
@@ -40,8 +41,12 @@ func (b *WebBackend) watchView(w *webWatch, system metrics.Snapshot, activity wa
 	if monitorMode == "" {
 		monitorMode = config.MonitorEnabled
 	}
+	scope := web.WatchScopeHost
+	if w.serviceScoped {
+		scope = web.WatchScopeService
+	}
 	view := web.Watch{
-		Name: w.name, DisplayName: w.displayName, Category: w.category, CheckType: w.checkType,
+		Name: w.name, Scope: scope, DisplayName: w.displayName, Category: w.category, CheckType: w.checkType,
 		Summary: watchSummary(w, storage, summary), SummaryConfigured: cfgval.String(w.check[checks.CheckKeySummary]) != "",
 		Interval: units.HumanizeDuration(w.interval), Enabled: !w.disabled, Monitor: monitorMode,
 		Monitored: !w.disabled && monitorMode != config.MonitorDisabled, FireOnFail: w.fireOnFail,

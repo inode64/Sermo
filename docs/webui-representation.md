@@ -53,7 +53,7 @@ overflow and axe WCAG 2.2 AA rules against deterministic API fixtures.
 | Service runtime metrics | `GET /api/services/{name}/runtime` | read-only persisted service CPU/memory/IO history sampled exclusively by worker cycles; `current` is the latest published sample and dashboard reads never repeat process discovery |
 | Service SLA | `GET /api/services/{name}/sla` | per-minute availability history for the service detail SLA timeline and API clients; observed-SLA ratios count only monitored minutes, so unmeasured time is a gap, not downtime |
 | Service events | `GET /api/services/{name}/events` | per-service event feed |
-| Host watches | `GET /api/watches` | host-level watches |
+| Watches | `GET /api/watches` | host-level and service-scoped watches; `scope` distinguishes them and service watch names use `service:watch` |
 | Applications | `GET /api/applications` | installed catalog apps; `observed_at` remains fixed while the version/status inventory is served from cache |
 | Libraries | `GET /api/libraries` | installed catalog libraries; `observed_at` remains fixed while the file/version inventory is served from cache |
 | Mount units | `GET /api/mounts` | storage watches with `mount:` backed by fstab |
@@ -169,10 +169,10 @@ Editable notes:
 | Items | warning / critical buttons |
 | Click behavior | opens the related panel |
 
-Signals include failing services, firing host watches, failed installed
+Signals include failing services, firing watches, failed installed
 applications, recent errors and readiness issues (including
 `shutting_down`). A failing-services item opens the Services panel with the
-`failed` filter; a firing-watches item opens Host watches with the `failed`
+`failed` filter; a firing-watches item opens Watches with the `failed`
 filter (`failed-watches` target); a failing-apps item opens Installed
 applications with the `failed` filter (`failed-apps` target). Daemon startup
 progress stays in the top-bar `status: starting` line, not in this box.
@@ -367,14 +367,13 @@ sends a native TTY message to logged-in blocking users. For `path: /`,
 unmount-flow buttons and the API rejects `umount?kill=1` without scanning
 blockers or sending signals.
 
-## Host watch panels
+## Watch panel
 
-Section ids: `storage-section`, `network-section`, `cert-section`,
-`diskio-section`, `watches-section`
+Section id: `watches-section`
 
-`Storage` contains `storage` watches, `Network` contains `net`/`icmp` watches,
-`Certificate watches` contains `cert` watches, `Disk I/O watches` contains
-`diskio` watches, and `Host watches` contains the remaining host watch types.
+`Watches` contains both host-level and service-scoped watches. Every row shows
+its `scope`; service-scoped names use `service:watch` and run as part of that
+service's worker rather than independently as host watches do.
 
 A `storage` watch summary shows the path, filesystem, mount point and used/free
 space from the latest fresh daemon-cycle snapshot. The Web UI does not rescan
@@ -396,7 +395,7 @@ service detail.
 | Sorting | every data column except Actions is sortable independently inside its check-type table; each table defaults to Name ascending |
 | Visibility | hidden when no watches are configured for that panel's subset |
 
-Host watches are grouped as System, Storage, Network and Security, then split
+Watches are grouped as System, Storage, Network and Security, then split
 into a check-type table. Every type table ends with Last checked, Last activity,
 State and Actions; it does not use a generic Summary column. Last checked is the
 latest completed daemon-cycle or manual sample, while Last activity is an event.
@@ -585,7 +584,7 @@ Copy this section when proposing a Web UI change.
 
 ### Panel
 
-Services / Host watches / Installed applications / Installed libraries / Events / Notifiers /
+Services / Watches / Installed applications / Installed libraries / Events / Notifiers /
 Daemon settings / Runtime locks / Service detail /
 Action dialog / Overview
 

@@ -57,7 +57,7 @@ deterministas de la API.
 | Métricas de runtime del servicio | `GET /api/services/{name}/runtime` | historial persistido de CPU/memoria/IO del servicio, de solo lectura y muestreado exclusivamente por ciclos del worker; `current` es la última muestra publicada y las lecturas del panel nunca repiten el descubrimiento de procesos |
 | SLA del servicio | `GET /api/services/{name}/sla` | historial de disponibilidad por minuto para la línea temporal de SLA del detalle del servicio y los clientes de la API; los ratios de SLA observado cuentan solo minutos monitorizados, así que el tiempo sin mediciones es un hueco, no caída |
 | Eventos del servicio | `GET /api/services/{name}/events` | feed de eventos por servicio |
-| Watches de host | `GET /api/watches` | watches a nivel de host |
+| Watches | `GET /api/watches` | watches de host y de service; `scope` los distingue y los nombres de watch de service usan `service:watch` |
 | Aplicaciones | `GET /api/applications` | aplicaciones de catálogo instaladas; `observed_at` permanece fijo mientras el inventario de versión/estado se sirve desde caché |
 | Librerías | `GET /api/libraries` | librerías de catálogo instaladas; `observed_at` permanece fijo mientras el inventario de fichero/versión se sirve desde caché |
 | Unidades de montaje | `GET /api/mounts` | watches de storage con `mount:` respaldadas por fstab |
@@ -170,10 +170,10 @@ Notas editables:
 | Elementos | botones de advertencia / crítico |
 | Comportamiento al hacer clic | abre el panel relacionado |
 
-Las señales incluyen servicios en fallo, watches de host disparados, aplicaciones instaladas
+Las señales incluyen servicios en fallo, watches disparados, aplicaciones instaladas
 en fallo, errores recientes y problemas de disponibilidad (incluido
 `shutting_down`). Un elemento de servicios en fallo abre el panel de Servicios con el
-filtro `failed`; un elemento de watches disparados abre Watches de host con el filtro
+filtro `failed`; un elemento de watches disparados abre Watches con el filtro
 `failed` (objetivo `failed-watches`); un elemento de aplicaciones en fallo abre Aplicaciones
 instaladas con el filtro `failed` (objetivo `failed-apps`). El progreso de arranque del daemon
 permanece en la línea `status: starting` de la barra superior, no en este recuadro.
@@ -371,14 +371,14 @@ devuelve `can_umount: false`; la Web UI deshabilita los botones del flujo de
 desmontaje y la API rechaza `umount?kill=1` sin escanear blockers ni enviar
 señales.
 
-## Paneles de watches de host
+## Panel de watches
 
-Section ids: `storage-section`, `network-section`, `cert-section`,
-`diskio-section`, `watches-section`
+Section id: `watches-section`
 
-`Storage` contiene los watches de `storage`, `Network` contiene los watches `net`/`icmp`,
-`Certificate watches` contiene los watches `cert`, `Disk I/O watches` contiene
-los watches `diskio`, y `Host watches` contiene los tipos restantes de watch de host.
+`Watches` contiene tanto watches de host como watches de service. Cada fila
+muestra su `scope`; los nombres de watches de service usan `service:watch` y se
+ejecutan como parte del worker de ese service, no de forma independiente como
+los watches de host.
 
 El resumen de un watch `storage` muestra la ruta, el sistema de archivos, el
 punto de montaje y el espacio usado/libre, además del recuento de **archivos
@@ -402,7 +402,7 @@ aparecen en el detalle del servicio.
 | Ordenación | cada columna de datos salvo Actions es ordenable de forma independiente dentro de su tabla de tipo; cada tabla empieza por Name ascendente |
 | Visibilidad | oculto cuando no hay watches configurados para el subconjunto de ese panel |
 
-Los host watches se agrupan en System, Storage, Network y Security y después se
+Los watches se agrupan en System, Storage, Network y Security y después se
 dividen en una tabla por tipo de check. Cada tabla termina en Last checked, Last
 activity, State y Actions; no usa una columna genérica Summary. Last checked es
 la última muestra completada por el ciclo del daemon o manual, mientras que Last
@@ -596,7 +596,7 @@ Copia esta sección al proponer un cambio en la interfaz web.
 
 ### Panel
 
-Services / Host watches / Installed applications / Installed libraries / Events / Notifiers /
+Services / Watches / Installed applications / Installed libraries / Events / Notifiers /
 Daemon settings / Runtime locks / Service detail /
 Action dialog / Overview
 

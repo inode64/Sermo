@@ -536,7 +536,7 @@ A per-check `interval` **cannot be shorter than the resolution** and should be a
 
 ## Web UI
 
-The daemon can serve a small web dashboard to view services and host watches.
+The daemon can serve a small web dashboard to view services and watches.
 Admins can monitor/unmonitor both, and can start/stop/restart/reload/resume services
 over the same safe operation engine the CLI uses.
 
@@ -726,8 +726,9 @@ Read-only endpoints:
   sample (with its original `at` timestamp); API reads never trigger another
   process discovery pass.
 - `GET /api/services/{name}/events?limit=N` — events for one service.
-- `GET /api/watches` — host watches, monitor state, conditions, notifications,
-  live readings when available and recent activity.
+- `GET /api/watches` — host-level and service-scoped watches, their `scope`,
+  monitor state, conditions, notifications, live readings when available and
+  recent activity. Service-scoped names use `service:watch`.
 - `GET /api/notifiers` — configured notifier targets.
 - `POST /api/notifiers/{name}/test` — sends an explicit test message through one enabled notifier.
 - `GET /api/applications` — installed catalog applications.
@@ -766,7 +767,7 @@ accepted operation cannot switch targets during a concurrent reload.
 - `POST /api/services/{name}/{action}` — service action. `action` is `monitor`,
   `unmonitor`, `start`, `stop`, `restart`, `reload` or `resume`;
   start/stop/restart/reload/resume go through the safe operation engine.
-- `POST /api/watches/{name}/{action}` — host watch action. `action` is
+- `POST /api/watches/{name}/{action}` — watch action. `action` is
   `monitor`, `unmonitor`, `expand`, `probe`, `pause` or `resume`. `probe` is
   read-only and is available for LVM, RAID and SMART watches. `pause`/`resume`
   require the RAID control block below.

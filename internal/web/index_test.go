@@ -735,7 +735,7 @@ func TestIndexAccessibilitySectionHeadings(t *testing.T) {
 	})
 	for _, want := range []string{
 		"Services", "Containers", "Virtual machines", "Installed applications", "Installed libraries",
-		"Host watches", "Events", "Mount units", "Notifiers",
+		"Watches", "Events", "Mount units", "Notifiers",
 		"Daemon / Engine settings",
 	} {
 		if !headings[want] {
