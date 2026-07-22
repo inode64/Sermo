@@ -154,6 +154,9 @@ const (
 const (
 	apiErrorCheckQueryRequired       = "check query parameter is required"
 	apiErrorEncodeResponse           = "failed to encode response"
+	apiErrorGenerationInvalid        = "invalid X-Sermo-Generation header"
+	apiErrorGenerationMissing        = "X-Sermo-Generation header is required"
+	apiErrorGenerationStale          = "configuration changed; refresh and try again"
 	apiErrorPanicAction              = "panic action must be on or off"
 	apiErrorReloadUnavailable        = "reload is not available for this daemon"
 	apiErrorUnknownActionPrefix      = "unknown action "
@@ -1573,8 +1576,13 @@ func (s *Server) handleNotifiers(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleNotifierTest(w http.ResponseWriter, r *http.Request) {
+	backend, release, ok := s.mutationBackend(w, r)
+	if !ok {
+		return
+	}
+	defer release()
 	s.extendActionWriteDeadline(w)
-	res := s.Backend.TestNotifier(s.operateContext(r), r.PathValue(apiParamName)) //nolint:contextcheck // see operateContext
+	res := backend.TestNotifier(s.operateContext(r), r.PathValue(apiParamName)) //nolint:contextcheck // see operateContext
 	writeActionResult(w, res.OK, res)
 }
 
@@ -1597,12 +1605,17 @@ func (s *Server) handleMounts(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleMountAction(w http.ResponseWriter, r *http.Request) {
+	backend, release, ok := s.mutationBackend(w, r)
+	if !ok {
+		return
+	}
+	defer release()
 	name := r.PathValue(apiParamName)
 	action := r.PathValue(apiParamAction)
 	switch action {
 	case mountctl.ActionMount, mountctl.ActionUmount:
 		s.extendActionWriteDeadline(w)
-		res := s.Backend.MountAction(s.operateContext(r), name, action, MountActionOptions{ //nolint:contextcheck // see operateContext
+		res := backend.MountAction(s.operateContext(r), name, action, MountActionOptions{ //nolint:contextcheck // see operateContext
 			AllowForce:   queryBool(r, apiQueryForce),
 			AllowLazy:    queryBool(r, apiQueryLazy),
 			KillBlockers: queryBool(r, apiQueryKill),
@@ -1610,7 +1623,7 @@ func (s *Server) handleMountAction(w http.ResponseWriter, r *http.Request) {
 		writeActionResult(w, res.OK, res)
 	case apiActionAlert:
 		s.extendActionWriteDeadline(w)
-		res := s.Backend.AlertMountUsers(s.operateContext(r), name) //nolint:contextcheck // see operateContext
+		res := backend.AlertMountUsers(s.operateContext(r), name) //nolint:contextcheck // see operateContext
 		writeActionResult(w, res.OK, res)
 	default:
 		writeError(w, http.StatusBadRequest, apiErrorUnknownMountActionPrefix+action)
@@ -1646,7 +1659,12 @@ func (s *Server) handleLocks(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleLockRelease(w http.ResponseWriter, r *http.Request) {
-	res := s.Backend.ReleaseLock(r.Context(), r.PathValue(apiParamService), r.URL.Query().Get(apiParamName))
+	backend, release, ok := s.mutationBackend(w, r)
+	if !ok {
+		return
+	}
+	defer release()
+	res := backend.ReleaseLock(r.Context(), r.PathValue(apiParamService), r.URL.Query().Get(apiParamName))
 	writeActionResult(w, res.OK, res)
 }
 
@@ -1959,22 +1977,35 @@ func (s *Server) handleApplicationEvents(w http.ResponseWriter, r *http.Request)
 }
 
 func (s *Server) handlePreflight(w http.ResponseWriter, r *http.Request) {
-	handleNamed(s, w, r, apiErrorUnknownService, func(backend Backend, ctx context.Context, name string) (PreflightResult, bool) {
-		return backend.Preflight(ctx, name)
-	})
+	backend, release, ok := s.mutationBackend(w, r)
+	if !ok {
+		return
+	}
+	defer release()
+	res, found := backend.Preflight(r.Context(), r.PathValue(apiParamName))
+	if !found {
+		writeError(w, http.StatusNotFound, apiErrorUnknownService)
+		return
+	}
+	writeJSON(w, http.StatusOK, res)
 }
 
 func (s *Server) handleAction(w http.ResponseWriter, r *http.Request) {
+	backend, release, ok := s.mutationBackend(w, r)
+	if !ok {
+		return
+	}
+	defer release()
 	name := r.PathValue(apiParamName)
 	action := r.PathValue(apiParamAction)
 	switch {
 	case operateActions[action]:
 		s.extendActionWriteDeadline(w)
 		opts := OperateOpts{NoCascade: queryBool(r, apiQueryNoCascade)}
-		res := s.Backend.Operate(s.operateContext(r), name, action, opts) //nolint:contextcheck // see operateContext
+		res := backend.Operate(s.operateContext(r), name, action, opts) //nolint:contextcheck // see operateContext
 		writeActionResult(w, res.OK, res)
 	case monitorActions[action]:
-		err := s.Backend.SetMonitored(r.Context(), name, action == apiActionMonitor)
+		err := backend.SetMonitored(r.Context(), name, action == apiActionMonitor)
 		if err != nil {
 			writeError(w, http.StatusConflict, err.Error())
 			return
@@ -1986,6 +2017,11 @@ func (s *Server) handleAction(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleWatchAction(w http.ResponseWriter, r *http.Request) {
+	backend, release, ok := s.mutationBackend(w, r)
+	if !ok {
+		return
+	}
+	defer release()
 	name := r.PathValue(apiParamName)
 	action := r.PathValue(apiParamAction)
 	if watchOperateActions[action] {
@@ -1993,11 +2029,11 @@ func (s *Server) handleWatchAction(w http.ResponseWriter, r *http.Request) {
 		var res ActionResult
 		switch action {
 		case apiActionExpand:
-			res = s.Backend.ExpandWatch(s.operateContext(r), name) //nolint:contextcheck // see operateContext
+			res = backend.ExpandWatch(s.operateContext(r), name) //nolint:contextcheck // see operateContext
 		case apiActionProbe:
-			res = s.Backend.ProbeWatch(s.operateContext(r), name) //nolint:contextcheck // see operateContext
+			res = backend.ProbeWatch(s.operateContext(r), name) //nolint:contextcheck // see operateContext
 		default:
-			res = s.Backend.ControlRAID(s.operateContext(r), name, action, r.Header.Get(headerSermoConfirm)) //nolint:contextcheck // see operateContext
+			res = backend.ControlRAID(s.operateContext(r), name, action, r.Header.Get(headerSermoConfirm)) //nolint:contextcheck // see operateContext
 		}
 		writeActionResult(w, res.OK, res)
 		return
@@ -2006,7 +2042,7 @@ func (s *Server) handleWatchAction(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, apiErrorUnknownActionPrefix+action)
 		return
 	}
-	if err := s.Backend.SetWatchMonitored(r.Context(), name, action == apiActionMonitor); err != nil {
+	if err := backend.SetWatchMonitored(r.Context(), name, action == apiActionMonitor); err != nil {
 		writeError(w, http.StatusConflict, err.Error())
 		return
 	}
@@ -2050,6 +2086,36 @@ func (s *Server) backendRead() (Backend, uint64, func()) {
 		generation = source.BackendGeneration()
 	}
 	return s.Backend, generation, func() {}
+}
+
+// mutationBackend pins the active backend for one target-scoped mutation and
+// rejects a request whose dashboard generation is missing or stale. Holding the
+// read pin through the action prevents a reload from swapping service/watch
+// identity after the precondition has been checked.
+func (s *Server) mutationBackend(w http.ResponseWriter, r *http.Request) (Backend, func(), bool) {
+	backend, generation, release := s.backendRead()
+	if generation == 0 {
+		return backend, release, true
+	}
+	w.Header().Set(headerSermoGeneration, strconv.FormatUint(generation, 10))
+	raw := strings.TrimSpace(r.Header.Get(headerSermoGeneration))
+	if raw == "" {
+		release()
+		writeError(w, http.StatusPreconditionRequired, apiErrorGenerationMissing)
+		return nil, func() {}, false
+	}
+	expected, err := strconv.ParseUint(raw, 10, 64)
+	if err != nil || expected == 0 {
+		release()
+		writeError(w, http.StatusBadRequest, apiErrorGenerationInvalid)
+		return nil, func() {}, false
+	}
+	if expected != generation {
+		release()
+		writeError(w, http.StatusPreconditionFailed, apiErrorGenerationStale)
+		return nil, func() {}, false
+	}
+	return backend, release, true
 }
 
 // readJSON collects a read response from one backend generation and labels the

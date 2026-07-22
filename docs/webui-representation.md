@@ -80,10 +80,13 @@ Every state-changing request (any non-`GET`) must carry the header
 `X-Sermo-Csrf: 1`; without it the server responds `403`. This CSRF guard is
 enforced unconditionally — in open (no-auth) mode too — so an API client must
 always send it. When web auth is enabled these endpoints are additionally
-admin-only. Status codes are stable: `401` (auth challenge), `403` (missing
-CSRF header or guest attempting a write), `421` (rejected `Host` in open mode),
-`404` (unknown target), `200` with an `{"ok": bool, "message": string}` body
-for a handled action.
+admin-only. Target-scoped actions also carry the current
+`X-Sermo-Generation`; the server holds that backend generation through the
+action and executes nothing when the header is missing (`428`) or stale after a
+reload (`412`). The UI refreshes before a later retry. Other stable status codes
+are `401` (auth challenge), `403` (missing CSRF header or guest attempting a
+write), `421` (rejected `Host` in open mode), `404` (unknown target), and `200`
+with an `{"ok": bool, "message": string}` body for a handled action.
 
 | Area | Endpoint | Notes |
 | --- | --- | --- |

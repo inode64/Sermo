@@ -338,6 +338,12 @@ let connOK = true;
 let lastLoadOk = Date.now();
 let loadSeq = 0;
 let dashboardGeneration = 0;
+function targetPostOptions(headers = {}) {
+  const generation = dashboardGeneration > 0
+    ? { [apiHeaderGeneration]: String(dashboardGeneration) }
+    : {};
+  return csrfPostOptions({ ...generation, ...headers });
+}
 function showDisconnected() {
   document.body.classList.add("disconnected");
   const age = lastLoadOk ? ` (last update ${fmtSince(Date.now() - lastLoadOk)} ago)` : "";
@@ -5442,7 +5448,7 @@ async function releaseLock(service, name) {
   setStatus("");
   const qs = name ? `?${apiQueryName}=${encodeURIComponent(name)}` : "";
   try {
-    const res = await fetch(lockReleaseAPI(service, qs), csrfPostOptions());
+    const res = await fetch(lockReleaseAPI(service, qs), targetPostOptions());
     const body = await jsonOrThrow(res);
     setStatus(`released lock ${label}`, feedbackStatusOK);
     await load();
@@ -5941,7 +5947,7 @@ async function act(name, action) {
     setStatus("");
     if (tracked) beginOperation(name, action);
     const q = noCascade ? `?${apiQueryNoCascade}=${queryBoolOne}` : "";
-    const res = await fetch(serviceAPI(name, apiActionSuffix(action, q)), csrfPostOptions());
+    const res = await fetch(serviceAPI(name, apiActionSuffix(action, q)), targetPostOptions());
     const body = await jsonOrThrow(res);
     if (tracked) finishOperation(name, true, body.message || "operation completed");
   } catch (e) {
@@ -5969,7 +5975,7 @@ async function actWatch(name, action) {
     if (toggleKey) renderWatches();
     setStatus("");
     if (action === actionProbe) beginWatchProbe(name);
-    const res = await fetch(watchAPI(name, apiActionSuffix(action)), csrfPostOptions(headers));
+    const res = await fetch(watchAPI(name, apiActionSuffix(action)), targetPostOptions(headers));
     const body = await res.json().catch(() => ({}));
     const failed = !res.ok || body.ok === false;
     if (action === actionProbe) {
@@ -6043,7 +6049,7 @@ async function testNotifier(name) {
   }))) return;
   setStatus("");
   try {
-    const res = await fetch(notifierTestAPI(name), csrfPostOptions());
+    const res = await fetch(notifierTestAPI(name), targetPostOptions());
     const body = await jsonOrThrow(res);
     setStatus(body.message || `test notification sent to ${name}`, feedbackStatusOK);
   } catch (e) {
@@ -6223,7 +6229,7 @@ async function actMount(name, action) {
   setStatus("");
   if (tracked) startMountOperation(name, action);
   try {
-    const res = await fetch(mountAPI(name, apiActionSuffix(postAction, query)), csrfPostOptions());
+    const res = await fetch(mountAPI(name, apiActionSuffix(postAction, query)), targetPostOptions());
     const body = await res.json().catch(() => ({}));
     if (!res.ok || body.ok === false) {
       const blockers = body.blockers && body.blockers.length ? `; blockers: ${mountBlockerSummary(body.blockers)}` : "";
@@ -6477,7 +6483,7 @@ async function runConfirmPreflight() {
   syncConfirmPreflightButton(ctx.action, { running: true });
   $("#confirm-preflight-btn").textContent = "running…";
   try {
-    const res = await fetch(servicePreflightAPI(ctx.name), csrfPostOptions());
+    const res = await fetch(servicePreflightAPI(ctx.name), targetPostOptions());
     if (!res.ok) throw new Error("HTTP " + res.status);
     ctx.preflight = await res.json();
   } catch (e) {
@@ -6510,7 +6516,7 @@ async function runPreflight(name) {
   if (!target) return;
   litRender(tpl`<span class="muted">running…</span>`, target);
   try {
-    const res = await fetch(servicePreflightAPI(name), csrfPostOptions());
+    const res = await fetch(servicePreflightAPI(name), targetPostOptions());
     if (!res.ok) throw new Error("HTTP " + res.status);
     const body = await res.json();
     const head = body.ok
