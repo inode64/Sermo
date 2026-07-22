@@ -578,7 +578,7 @@ reconstruye, por ejemplo tras una recarga de configuración.
 Cada comprobación tiene un `timeout` opcional (si no `engine.default_timeout`) y un
 `interval` opcional para ejecutarla con menos frecuencia que el ciclo del worker — cada
 `round(interval / resolution)` ciclos, reutilizando su último resultado entre tanto (ver
-[intervalo por comprobación](configuration.es.md#per-check-interval)).
+[intervalo por comprobación](configuration.es.md#intervalo-por-comprobación)).
 
 Una comprobación de salud (`tcp`/`http`/`service`/`command`/`cert`/…) puede además
 marcar `verify: true` para servir como **verificación de arranque tras la operación**:
@@ -1841,7 +1841,7 @@ rules:
 ```
 
 El **`notify`** de una regla selecciona qué notificadores reciben sus mensajes `alert`,
-sobreescribiendo el default global ([Notificaciones](configuration.es.md#default-selection-and-precedence)):
+sobreescribiendo el default global ([Notificaciones](configuration.es.md#selección-por-defecto-y-precedencia)):
 una lista explícita gana, `notify: none` suprime, y omitirlo hereda el
 default global `notify`. Aplica a los mensajes de alerta de la regla; las operaciones de
 remediación se reportan como eventos, no como notificaciones. Por defecto esos eventos

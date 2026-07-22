@@ -105,6 +105,16 @@ No introduzcas una segunda forma de expresar el mismo concepto solo porque el nu
 call site sea ligeramente diferente. Si el nuevo comportamiento necesita una ruta diferente,
 documenta por qué en el punto de dispatch o validación.
 
+Trata el ejemplo del usuario, un test que falla, una entrada de catálogo, un panel
+de UI, un perfil de servicio o un reporte de bug local como evidencia de un caso de
+uso, no como el alcance completo del cambio. El caso de uso es el comportamiento o
+invariante implicado por ese ejemplo a través de rutas de código equivalentes, tipos
+de target y superficies de cara al usuario. Después de implementar una función, tipo,
+helper, parser, builder o lógica para un ejemplo, busca el mismo concepto en otros
+sitios y decide si el comportamiento debería aplicar también allí. Si debe, extiende
+el owner existente en el mismo cambio; si no, documenta la limitación en el punto de
+decisión y, cuando sea visible para el usuario, en los docs.
+
 Cuando un nuevo check, opción, flag de monitor, comportamiento de notificación o acción web sea
 generalmente útil tanto para los `watches:` del host como para los servicios, impleméntalo para
 ambas superficies en el mismo cambio a menos que haya una razón documentada para no hacerlo. Si
@@ -389,6 +399,9 @@ Antes de finalizar cualquier cambio de código:
   editar, preserva los cambios de usuario no relacionados, haz commit solo cuando se solicite o cuando
   la tarea incluya el commit, y nunca hagas push a menos que se pida explícitamente.
 - Busca el owner existente con `rg` antes de añadir un nuevo helper o switch.
+- Trata el prompt, ejemplo o fixture que falla como una señal de caso de uso: busca
+  conceptos y superficies equivalentes antes de finalizar, y evita arreglar solo la
+  muestra literal a menos que el comportamiento sea intencionadamente específico de esa muestra.
 - Mantén el patch cerca de ese owner; evita refactors no relacionados.
 - Preserva los nombres de campo públicos de YAML, JSON, CLI y web a menos que el cambio sea
   explícitamente una migración.
@@ -409,14 +422,22 @@ Antes de finalizar cualquier cambio de código:
 
 **Las fuentes viven en `internal/web/src/`; `internal/web/index.html` es un artefacto generado,
 committeado — nunca lo edites a mano.** El dashboard se escribe como un
-shell (`src/index.html`), `src/styles.css`, y módulos ES (`src/app.js` y el
-`src/vendor/lit-html.js` vendorizado). `make web` ejecuta el build de esbuild in-process
+shell (`src/index.html`), `src/styles.css`, descriptores de watch-panel compartidos
+(`src/watch-panels.json`), y módulos ES (`src/app.js`, `src/api.js`,
+`src/format.js` y el `src/vendor/lit-html.js` vendorizado). El builder de Go y
+el registro de runtime consumen ambos `watch-panels.json`; añade o cambia IDs, columnas,
+controles y copy repetitivos de watch panels ahí, mientras que el matching de ejecutables
+y el comportamiento de render de filas se queda en `watchPanelBehaviors` en `src/app.js`.
+`make web` ejecuta el build de esbuild in-process
 (`internal/web/build`, la API de Go — sin Node/npm) para bundlear + minificar en
 `internal/web/index.html`, dejando los placeholders `{{CSP_NONCE}}`/`{{VERSION}}`
 para que el servidor los rellene por request. **Después de editar cualquier cosa bajo
 `internal/web/src/`, ejecuta `make web` y committea el `index.html` regenerado.**
 `make web-check` (conectado a `validate`/`check`/CI, modelado sobre `fmt-check`) falla
-si el archivo committeado está obsoleto.
+si el archivo committeado está obsoleto. `make web-e2e` sirve ese bundle committeado con
+APIs mockeadas deterministas y ejecuta los flujos de Playwright desktop/mobile más los
+checks axe WCAG 2.2 AA; también forma parte de `validate`/`check`/CI. Instala su navegador
+una vez con `npx playwright install chromium` (CI usa `--with-deps`).
 
 **El renderizado usa lit-html.** Construye markup con `tpl\`...\`` (el tag `html`,
 importado con alias `tpl`) y renderiza en un contenedor con `litRender(...)` (el
@@ -489,10 +510,15 @@ La capa visual es un sistema de diseño basado en tokens (rediseño de junio de 
     ceros finales eliminados, `—` cuando no es finito). Todos los demás helpers se construyen sobre él.
   - **Porcentajes** → `fmtPct(n)` (`fmtNum(n,2)+"%"`). Incluye CPU%, memoria %,
     saturación, SLA % — tiles, barras y lecturas de detalle lo usan todos.
-  - **Bytes / tasas de bytes** → `fmtBytes(n)` (y `fmtBytes(n)+"/s"`); vía
-    `fmtMetricValue(v, unit)` para series temporales con unidad etiquetada (`bytes`, `B/s`, `%`,
-    `ms`, default).
-  - **Duraciones** → `fmtUptime`/`fmtSeconds`/`shortDur`; **tiempo relativo** →
+  - **Bytes (tamaños)** → `fmtBytes(n)` — unidades binarias IEC, base 1024 (`KiB`,
+    `MiB`, …). **Tasas de bytes** → `fmtBytesPerSecond(n)` — unidades decimales SI,
+    base 1000 (`KB/s`, `MB/s`, …); los `formatSummaryBytes`/
+    `formatSummaryBytesPerSecond` del daemon reflejan la misma separación. Las series
+    temporales con unidad etiquetada se enrutan a través de `fmtMetricValue(v, unit)`
+    (`bytes`, `B/s`, `%`, `ms`, default).
+  - **Duraciones** → `fmtDuration` (escalera de histéresis reflejada por el
+    `units.HumanizeDuration` del daemon; la paridad se fija con `tests/web/format.spec.js` y
+    `internal/units/testdata/duration_cases.json`); **tiempo relativo** →
     `fmtRemain`/`fmtUntilShort`/`fmtAge`/`fmtSince`; **timestamps absolutos** →
     `fmtTime`.
   - **Gauges** → `usageBar` (gauge de host de ancho completo), `usageBarMini` (celdas de tabla
@@ -501,7 +527,7 @@ La capa visual es un sistema de diseño basado en tokens (rediseño de junio de 
   barra CSS (`--usage-pct`, `--sla-pct`) mantienen su propia precisión fija. Cuando un
   valor necesite una representación que ningún helper cubra, añade o extiende un helper junto a
   los otros en lugar de formatear inline en el call site. Ver el comentario de banner de `fmtNum`
-  en `internal/web/src/app.js`.
+  en `internal/web/src/format.js`.
 
 **CSP e inline styles:** `style-src` lleva deliberadamente `'unsafe-inline'`
 **sin** un nonce — según CSP2, un nonce en la lista hace que los navegadores ignoren
@@ -514,7 +540,7 @@ script-src sigue siendo nonce-strict (ver `securityHeaders` en
 
 El wizard interactivo (`sermoctl wizard`, `internal/assist`) sigue **un
 flujo de preguntas canónico para cada asistente, presente y futuro** — documentado
-en [docs/wizards.es.md](docs/wizards.es.md). Léelo antes de añadir o cambiar un
+en [docs/wizards.md](docs/wizards.md). Léelo antes de añadir o cambiar un
 wizard; los invariantes de abajo no deben derivar por asistente.
 
 Dirige cada selección a través de los helpers `Prompt` compartidos — nunca hagas a mano una
@@ -534,7 +560,7 @@ notifiers configurados** — el wizard nunca se bloquea en la pregunta de notifi
 solo-monitor** con una nota de una línea; nunca debe volver a preguntar ni abortar (ver
 `chooseNotifiers` en `internal/assist/notify.go`). El paso final previsualiza lo que
 se escribirá, confirma, y ofrece eliminar archivos gestionados cuyo target ya
-no se detecta. Mantén `docs/wizards.es.md`, `docs/configuration.es.md` y esta
+no se detecta. Mantén `docs/wizards.md`, `docs/configuration.es.md` y esta
 sección en step cuando algo de esto cambie.
 
 ## Catalog: instanced systemd services
@@ -627,15 +653,15 @@ Notas de herramientas:
   `contextcheck`, `goprintffuncname`, `iface`, `ineffassign`, `intrange`,
   `interfacebloat` (`internal/web/server.go` excluido), `mirror`, `misspell`,
   `modernize`, `depguard` (denegaciones acotadas — checks/conn/rules/config no
-  importan `operation`; `rules/` de producción no importa `execx`), `wrapcheck`
+  importan `operation`; `rules/` de producción no importa `execx`), `nilerr`,
+  `nilnesserr`, `wrapcheck`
   (piloto: `internal/operation/`, `internal/app/`, `internal/cli/`,
   `internal/state/`, `internal/process/`, `internal/web/`, `internal/servicemgr/`,
   `internal/rules/` y `internal/config/`; `*_test.go` y el resto de paquetes
   excluidos), `ireturn`
   (activo; builders de checks/notify, registro conn,
   constructores de managers y fábricas similares excluidos — ver
-  `.golangci.yml`), `nilerr`,
-  `nilnesserr`, `noctx` (desactivado en `internal/conn/`
+  `.golangci.yml`), `noctx` (desactivado en `internal/conn/`
   y `*_test.go`), `nolintlint`, `recvcheck`, `sloglint`, `thelper` y
   `wastedassign`.
   El `database/sql` de producción en `internal/state` usa métodos `*Context` con
