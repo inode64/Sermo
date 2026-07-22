@@ -171,6 +171,27 @@ func TestCheckReadingsForAllTypes(t *testing.T) {
 			want:     map[string]string{"value": "82.5%"},
 			minCount: 1,
 		},
+		{
+			// Rehydrated from the JSON state store, a cert's DNS names arrive as
+			// []any, not []string; the reading must still render (regression:
+			// the bare []string assertion dropped it after a daemon restart).
+			name:     "cert dns names survive json hydration",
+			typ:      "cert",
+			data:     map[string]any{"source": "/c.pem", "dns_names": []any{"example.com", "www.example.com"}},
+			want:     map[string]string{"dns_names": "example.com, www.example.com"},
+			minCount: 1,
+		},
+		{
+			// Same hydration path for RAID members: []any of maps, not
+			// []RaidArrayStatus. The per-array reading must still render.
+			name: "raid members survive json hydration",
+			typ:  "raid",
+			data: map[string]any{"arrays": 1, "raid_members": []any{
+				map[string]any{"Name": "md0", "Degraded": false, "Operation": "recovery", "HasProgress": true, "ProgressPct": 12.6},
+			}},
+			want:     map[string]string{"raid_array_md0": "good · recovery 12.6%"},
+			minCount: 1,
+		},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
