@@ -167,46 +167,6 @@ func TestValidateIdentifier(t *testing.T) {
 """
         write(test, t.rstrip() + add + "\n")
         return
-    if src_name == "slotpool.go" and mid == "70":
-        needle = "// TestSlotPoolReclaimsExpiredSlot covers the TTL safety net:"
-        insert = """// TestSlotPoolDefaultTTL pins ttl<=0 default and sub-second ttl explicit (mutant slotpool .70).
-func TestSlotPoolDefaultTTL(t *testing.T) {
-\tnow := time.Unix(50_000, 0)
-\tproc := fakeProc{alive: map[int]bool{9000: true}, ticks: map[int]uint64{9000: 1}}
-\tself := func() (int, uint64) { return 9000, 1 }
-\tt.Run("zero uses default", func(t *testing.T) {
-\t\tdir := t.TempDir()
-\t\tpool := SlotPool{Dir: dir, Slots: 1, TTL: 0, Proc: proc, Now: func() time.Time { return now }, Self: self, Sleep: time.Sleep}
-\t\th, err := pool.Acquire(context.Background())
-\t\tif err != nil { t.Fatalf("acquire: %v", err) }
-\t\tdefer h.Release()
-\t\tgot, err := readLockFile(h.path)
-\t\tif err != nil { t.Fatalf("read: %v", err) }
-\t\tif want := now.Add(time.Hour); !got.ExpiresAt.Equal(want) {
-\t\t\tt.Fatalf("ExpiresAt = %v want %v", got.ExpiresAt, want)
-\t\t}
-\t})
-\tt.Run("sub-second ttl stays explicit", func(t *testing.T) {
-\t\tdir := t.TempDir()
-\t\tpool := SlotPool{Dir: dir, Slots: 1, TTL: time.Nanosecond, Proc: proc, Now: func() time.Time { return now }, Self: self, Sleep: time.Sleep}
-\t\th, err := pool.Acquire(context.Background())
-\t\tif err != nil { t.Fatalf("acquire: %v", err) }
-\t\tdefer h.Release()
-\t\tgot, err := readLockFile(h.path)
-\t\tif err != nil { t.Fatalf("read: %v", err) }
-\t\tif want := now.Add(time.Nanosecond); !got.ExpiresAt.Equal(want) {
-\t\t\tt.Fatalf("ExpiresAt = %v want %v", got.ExpiresAt, want)
-\t\t}
-\t})
-}
-
-"""
-        if "TestSlotPoolDefaultTTL" in t:
-            raise SystemExit("TestSlotPoolDefaultTTL already present")
-        if needle not in t:
-            raise SystemExit("anchor missing for slotpool .70")
-        write(test, t.replace(needle, insert + needle, 1))
-        return
     print(f"no fix recipe for {src_name}.{mid}", file=sys.stderr)
     sys.exit(4)
 
@@ -224,7 +184,7 @@ def main() -> None:
         sys.exit(3)
     if base == "cfgval.go":
         apply_cfgval(test, mid)
-    elif base in ("lock.go", "slotpool.go"):
+    elif base == "lock.go":
         apply_lock(test, base, mid)
     else:
         raise SystemExit(f"unsupported source {base}")
