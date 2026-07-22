@@ -3,14 +3,12 @@ package app
 import (
 	"context"
 	"slices"
-	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"sermo/internal/checks"
 	"sermo/internal/execx"
-	"sermo/internal/operation"
 	"sermo/internal/servicemgr"
 )
 
@@ -52,7 +50,7 @@ func TestSchedulerGateWaitsForFirstCycles(t *testing.T) {
 	defer cancel()
 	done := make(chan struct{})
 	go func() {
-		Scheduler{Interval: 20 * time.Millisecond}.Run(ctx, nil, []*Watch{mkWatch("a"), mkWatch("b")}, nil, ready, false, true)
+		Scheduler{Interval: 20 * time.Millisecond}.Run(ctx, nil, []*Watch{mkWatch("a"), mkWatch("b")}, ready, false, true)
 		close(done)
 	}()
 
@@ -104,7 +102,7 @@ func runSchedulerUntilDone(t *testing.T, sched Scheduler, workers []*Worker, ctx
 
 	done := make(chan struct{})
 	go func() {
-		sched.Run(ctx, workers, nil, nil, nil, true, false)
+		sched.Run(ctx, workers, nil, nil, true, false)
 		close(done)
 	}()
 
@@ -157,7 +155,7 @@ func TestSchedulerStartupDelayHoldsBeforeFirstCycle(t *testing.T) {
 
 	done := make(chan struct{})
 	go func() {
-		Scheduler{Interval: 10 * time.Millisecond, StartupDelay: 60 * time.Millisecond}.Run(ctx, workers, nil, nil, nil, true, false)
+		Scheduler{Interval: 10 * time.Millisecond, StartupDelay: 60 * time.Millisecond}.Run(ctx, workers, nil, nil, true, false)
 		close(done)
 	}()
 
@@ -192,7 +190,7 @@ func TestSchedulerStartupDelayInterruptedByShutdown(t *testing.T) {
 
 	done := make(chan struct{})
 	go func() {
-		Scheduler{Interval: 10 * time.Millisecond, StartupDelay: time.Hour}.Run(ctx, workers, nil, nil, nil, true, false)
+		Scheduler{Interval: 10 * time.Millisecond, StartupDelay: time.Hour}.Run(ctx, workers, nil, nil, true, false)
 		close(done)
 	}()
 
@@ -225,7 +223,7 @@ func TestSchedulerRunsWatches(t *testing.T) {
 
 	done := make(chan struct{})
 	go func() {
-		Scheduler{Interval: 15 * time.Millisecond}.Run(ctx, nil, []*Watch{w}, nil, nil, true, false)
+		Scheduler{Interval: 15 * time.Millisecond}.Run(ctx, nil, []*Watch{w}, nil, true, false)
 		close(done)
 	}()
 
@@ -236,55 +234,6 @@ func TestSchedulerRunsWatches(t *testing.T) {
 	}
 	if atomic.LoadInt32(&fired) < 2 {
 		t.Fatalf("watch did not cycle repeatedly: %d", fired)
-	}
-}
-
-func TestGateOperateSerializesAcrossWorkers(t *testing.T) {
-	gate := NewOpGate(1, "")
-
-	var mu sync.Mutex
-	var inFlight, maxInFlight int
-	body := func(context.Context, string) operation.Result {
-		return trackPeakConcurrency(&mu, &inFlight, &maxInFlight)
-	}
-
-	workers := make([]*Worker, 4)
-	for i := range workers {
-		w := &Worker{Service: "w", Operate: body}
-		gateOperate(w, gate)
-		workers[i] = w
-	}
-
-	var wg sync.WaitGroup
-	for _, w := range workers {
-		wg.Add(1)
-		go func(w *Worker) {
-			defer wg.Done()
-			w.Operate(context.Background(), "restart")
-		}(w)
-	}
-	wg.Wait()
-
-	if maxInFlight != 1 {
-		t.Fatalf("max concurrent operations = %d, want 1 (global semaphore)", maxInFlight)
-	}
-}
-
-func TestGateOperateReturnsOnShutdown(t *testing.T) {
-	gate := NewOpGate(1, "")
-	gate.mem <- struct{}{} // pre-fill: no slot available
-
-	w := &Worker{Service: "w", Operate: func(context.Context, string) operation.Result {
-		t.Fatal("inner Operate must not run when no slot and ctx is cancelled")
-		return operation.Result{}
-	}}
-	gateOperate(w, gate)
-
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-	res := w.Operate(ctx, "restart")
-	if res.Status != operation.ResultFailed || res.Message != "shutting down" {
-		t.Fatalf("result = %+v, want failed/shutting down", res)
 	}
 }
 
@@ -325,7 +274,7 @@ func TestSchedulerRunsWatchWithCustomInjectedRunnerVerifiesEnv(t *testing.T) {
 
 	done := make(chan struct{})
 	go func() {
-		Scheduler{Interval: 10 * time.Millisecond}.Run(ctx, nil, []*Watch{w}, nil, nil, true, false)
+		Scheduler{Interval: 10 * time.Millisecond}.Run(ctx, nil, []*Watch{w}, nil, true, false)
 		close(done)
 	}()
 
@@ -374,7 +323,7 @@ func TestSchedulerGateCompletesWithInactiveWorker(t *testing.T) {
 	defer cancel()
 	done := make(chan struct{})
 	go func() {
-		Scheduler{Interval: 20 * time.Millisecond}.Run(ctx, []*Worker{w}, nil, nil, ready, false, true)
+		Scheduler{Interval: 20 * time.Millisecond}.Run(ctx, []*Worker{w}, nil, ready, false, true)
 		close(done)
 	}()
 

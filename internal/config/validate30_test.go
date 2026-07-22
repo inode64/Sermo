@@ -80,7 +80,6 @@ engine:
   artifact_interval: invalid
   unexpected: true
   max_parallel_checks: 0
-  max_parallel_operations: -1
 paths:
   services: [ @ROOT@/services ]
 defaults:
@@ -93,7 +92,6 @@ defaults:
 		"engine.artifact_interval",
 		"engine.unexpected is not supported",
 		"engine.max_parallel_checks",
-		"engine.max_parallel_operations",
 	} {
 		mustHave(t, issues, want)
 	}

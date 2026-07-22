@@ -34,7 +34,6 @@ type fakeBackend struct {
 	eventQuery      EventQuery
 	metricCheck     string
 	metricSince     time.Duration
-	opsSlots        OperationSlots
 	preflightCalled string
 	events          []Event
 	releasedLocks   []string
@@ -222,7 +221,6 @@ func (f *fakeBackend) ServiceRuntime(_ context.Context, name string, since time.
 	}
 	return ServiceRuntimeMetrics{}, false
 }
-func (f *fakeBackend) Operations(context.Context) OperationSlots { return f.opsSlots }
 func (f *fakeBackend) Operate(_ context.Context, name, action string, opts OperateOpts) ActionResult {
 	suffix := ""
 	if opts.NoCascade {
@@ -293,7 +291,6 @@ func TestDashboardSnapshotEndpoint(t *testing.T) {
 	b := &fakeBackend{
 		services: []Service{{Name: "web", State: "monitored"}},
 		mounts:   []Mount{{Name: "data", Path: "/data"}},
-		opsSlots: OperationSlots{InUse: 1, Total: 4},
 	}
 	rec := httptest.NewRecorder()
 	newServer(b).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, testAPIPath(apiSegmentDashboard), nil))
@@ -309,9 +306,6 @@ func TestDashboardSnapshotEndpoint(t *testing.T) {
 	}
 	if !got.Ready.Ready || got.Ready.Services != 1 || got.Live.Services != 1 {
 		t.Fatalf("dashboard probes = ready:%+v live:%+v", got.Ready, got.Live)
-	}
-	if got.Operations.InUse != 1 || got.Operations.Total != 4 {
-		t.Fatalf("dashboard runtime = %+v", got)
 	}
 }
 
@@ -1059,22 +1053,6 @@ func TestDaemonMetrics(t *testing.T) {
 	}
 	if got.Current.PID != 123 || got.Current.FDs != 9 || got.CPU.Metric != "cpu" || len(got.CPU.Points) != 1 {
 		t.Fatalf("daemon metrics = %+v", got)
-	}
-}
-
-func TestOperationsAPI(t *testing.T) {
-	b := &fakeBackend{opsSlots: OperationSlots{InUse: 2, Total: 2}}
-	rec := httptest.NewRecorder()
-	newServer(b).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, apiPathOps, nil))
-	if rec.Code != http.StatusOK {
-		t.Fatalf("ops status %d", rec.Code)
-	}
-	var got OperationSlots
-	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	if got.InUse != 2 || got.Total != 2 {
-		t.Fatalf("unexpected ops: %+v", got)
 	}
 }
 

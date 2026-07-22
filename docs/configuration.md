@@ -313,7 +313,6 @@ engine:
   backend: auto               # auto | systemd | openrc
   interval: 30s               # default cycle interval; per-service overridable
   max_parallel_checks: 8        # bound on concurrent checks across all services
-  max_parallel_operations: 2  # bound on concurrent start/stop/restart/reload/resume operations
   default_timeout: 10s        # default per-check timeout
   operation_timeout: 90s        # outer deadline for safe service actions
   artifact_interval: 5m       # cadence for apps, libraries and service config/version artifacts
@@ -372,13 +371,12 @@ also the override order: CLI flag > environment > config > auto-detection.
 For OpenRC oneshot services whose `status` command cannot report cleanly, Sermo
 falls back to `rc-status -a` and trusts the init state.
 
-`engine.max_parallel_operations` limits how many safe service actions
-(`start`, `stop`, `restart`, `reload`, `resume`) may run at the same time across automatic
-remediation, the web UI and `sermoctl`. It is separate from
-`max_parallel_checks`: many checks can run while only a few service operations proceed.
-Slots are shared across processes under `<paths.runtime>/op-slots` (default
-`/run/sermo/op-slots`); when all slots are busy, another action waits until one
-is free. The default is `2`.
+Safe service actions (`start`, `stop`, `restart`, `reload`, `resume`) run
+without a global concurrency cap. Each service is still serialized by its own
+cross-process operation lock (`<paths.runtime>/ops/<service>.lock`), automatic
+remediation is rate-limited by the mandatory per-service `policy` block
+(cooldown, `max_actions`, backoff), and every action is bounded by
+`engine.operation_timeout`.
 
 `engine.operation_timeout` is the outer deadline for a safe
 start/stop/restart/reload/resume. The engine may raise it per service when the resolved
@@ -448,10 +446,7 @@ The `web` block is also startup-only: its listener address/port, authentication
 and guest policy are installed on the HTTP server when `sermod` starts. Change
 those settings with a full restart; a configuration reload rejects them rather
 than leaving the old web access policy active.
-`engine.max_parallel_operations` sets the cross-process operation-slot pool.
-Changing its capacity also requires a full restart, so a reload rejects it
-rather than briefly exceeding a reduced safety limit while old operations hold
-the previous slots. `engine.interval` remains reloadable and immediately
+`engine.interval` remains reloadable and immediately
 reschedules services that inherit the global cadence. `engine.operation_timeout`
 is also reloadable; web action responses extend their deadline from the active
 configuration, including a resolved per-service `stop_policy` timeout.
@@ -749,8 +744,6 @@ Read-only endpoints:
   response to continue toward older rows. Without `page`/`before_id`, the
   endpoint keeps returning the legacy event array. Cursor pages also accept a
   positive `since` duration such as `24h`.
-- `GET /api/ops` — global operation slot usage: `{in_use, total}` for
-  `engine.max_parallel_operations`.
 
 State-changing endpoints are CSRF-protected for every non-GET/HEAD request and
 require admin permissions when auth is enabled:
@@ -2487,7 +2480,7 @@ Only target-safe parts of `defaults` merge into configured targets:
 `dry_run` applies to services and watches; `stop_policy`, `policy` and
 `rule_window` apply to services; `restart_on_change` applies to services only
 for the inherited `config`/`version` permission flags. Engine-wide settings (`interval`,
-`max_parallel_checks`, `max_parallel_operations`, `default_timeout`,
+`max_parallel_checks`, `default_timeout`,
 `operation_timeout`, `artifact_interval`, `startup_delay`, `backend`, `user_lookup`,
 `user_lookup_timeout`, `state_cache_size`) are daemon configuration and never
 merge into a service.
@@ -2784,8 +2777,6 @@ array. Every finding has `level` (`error` / `warning` / `info`), `scope` and
   (a `pressure` check on a kernel without `/proc/pressure` — `CONFIG_PSI=n` —
   which would otherwise silently never fire).
 - **Locks** — malformed lock files under `<paths.runtime>/locks`.
-- **Operation slots** — usage from the running daemon (`info` when some slots are
-  in use, `warning` when saturated); see also `GET /api/ops`.
 
 Rotate and retain `engine.diagnostics` with your host's log tooling; Sermo does
 not prune that file.

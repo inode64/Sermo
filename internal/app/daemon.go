@@ -291,9 +291,6 @@ type Deps struct {
 	// SystemFreshness caches system metrics so concurrent workers in one cycle
 	// share a computation; it must be below the scheduler interval.
 	SystemFreshness time.Duration
-	// OpGate bounds concurrent operations across workers and the web UI. sermoctl
-	// uses the same slot pool under <paths.runtime>/op-slots.
-	OpGate *OpGate
 	// Collector provides live system and per-service metrics (cpu, memory, load).
 	// Made available to the web UI for host overview.
 	Collector *metrics.Collector

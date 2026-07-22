@@ -335,15 +335,17 @@ func TestEngineAndNotifierAccessors(t *testing.T) {
 	// (previously engineInt only accepted bare numeric types; durations already string-only).
 	cfg2 := &config.Config{Global: config.Global{Raw: map[string]any{
 		config.SectionEngine: map[string]any{
-			config.EngineKeyMaxParallelChecks:     "16", // string form (e.g. from some expansions)
-			config.EngineKeyDefaultTimeout:        "45s",
-			config.EngineKeyMaxParallelOperations: 4, // int form
+			config.EngineKeyMaxParallelChecks: "16", // string form (e.g. from some expansions)
+			config.EngineKeyDefaultTimeout:    "45s",
 		},
 	}}}
 	if got := app.EngineInt(cfg2, config.EngineKeyMaxParallelChecks, app.DefaultEngineMaxParallelChecks); got != 16 {
 		t.Fatalf("EngineInt string-num = %d, want 16", got)
 	}
-	if got := app.EngineInt(cfg2, config.EngineKeyMaxParallelOperations, app.DefaultEngineMaxParallelOperations); got != 4 {
+	cfg3 := &config.Config{Global: config.Global{Raw: map[string]any{
+		config.SectionEngine: map[string]any{config.EngineKeyMaxParallelChecks: 4}, // int form
+	}}}
+	if got := app.EngineInt(cfg3, config.EngineKeyMaxParallelChecks, app.DefaultEngineMaxParallelChecks); got != 4 {
 		t.Fatalf("EngineInt bare-int = %d, want 4", got)
 	}
 	if got := app.EngineDuration(cfg2, config.EngineKeyDefaultTimeout, app.DefaultEngineCheckTimeout); got != 45*time.Second {
