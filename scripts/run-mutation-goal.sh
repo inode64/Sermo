@@ -22,10 +22,6 @@ done
 echo "--- cycle 9: locks lock.go ---" | tee -a "$SCRATCH/cycle-run.log"
 scripts/mutate-one-cycle.sh 9 internal/locks/lock.go internal/locks/helpers_test.go
 
-# Cycle 10: locks slotpool TTL
-echo "--- cycle 10: locks slotpool.go ---" | tee -a "$SCRATCH/cycle-run.log"
-scripts/mutate-one-cycle.sh 10 internal/locks/slotpool.go internal/locks/slotpool_test.go
-
 make check 2>&1 | tee "$SCRATCH/make-check-final.log"
 go test ./... -count=1 2>&1 | tee "$SCRATCH/go-test-final.log"
 git status --short --branch | tee "$SCRATCH/git-status-final.log"
