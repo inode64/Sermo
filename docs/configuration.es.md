@@ -781,6 +781,14 @@ Los endpoints que cambian el estado están protegidos contra CSRF para toda peti
 que no sea GET/HEAD y requieren permisos de admin cuando la autenticación está
 habilitada:
 
+Las peticiones con un objetivo concreto (service, watch, mount, notifier, lock y
+preflight) también deben enviar `X-Sermo-Generation` con la generación devuelta
+más recientemente por la API de datos del panel. El daemon devuelve `428` si
+falta y `412` si una recarga la dejó obsoleta; antes de reintentar, obtén un
+snapshot nuevo del panel. El daemon fija esa generación hasta que termina la
+petición, por lo que una operación aceptada no puede cambiar de objetivo durante
+una recarga concurrente.
+
 - `POST /api/services/{name}/preflight` — ejecuta las mismas comprobaciones de preflight
   que `sermoctl preflight SERVICE`, sin iniciar ni detener nada.
 - `POST /api/services/{name}/{action}` — acción de service. `action` es `monitor`,
