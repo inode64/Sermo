@@ -50,7 +50,7 @@ overflow and axe WCAG 2.2 AA rules against deterministic API fixtures.
 | Services | `GET /api/services` | configured runtime services loaded by sermod (not `sermoctl services` catalog inventory); `status_observed_at` identifies the real init-status sample behind a cached row |
 | Service expansion | `GET /api/services/{name}` | checks, process info, rules |
 | Service check metrics | `GET /api/services/{name}/metrics?check=NAME[&metric=KEY]` | the detail renders latency when `metric` is omitted and one graph for every named numeric metric published by a check |
-| Service runtime metrics | `GET /api/services/{name}/runtime` | read-only persisted service CPU/memory/IO history sampled exclusively by worker cycles |
+| Service runtime metrics | `GET /api/services/{name}/runtime` | read-only persisted service CPU/memory/IO history sampled exclusively by worker cycles; `current` is the latest published sample and dashboard reads never repeat process discovery |
 | Service SLA | `GET /api/services/{name}/sla` | per-minute availability history for the service detail SLA timeline and API clients; observed-SLA ratios count only monitored minutes, so unmeasured time is a gap, not downtime |
 | Service events | `GET /api/services/{name}/events` | per-service event feed |
 | Host watches | `GET /api/watches` | host-level watches |
