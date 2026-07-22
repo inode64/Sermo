@@ -93,7 +93,7 @@ type webEntry struct {
 	statusAt     time.Time
 }
 
-// webWatch is a configured host watch for UI visibility (services may be 0).
+// webWatch is a configured host-level or service-scoped watch for UI visibility.
 type webWatch struct {
 	name          string
 	displayName   string

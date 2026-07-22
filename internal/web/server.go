@@ -443,13 +443,15 @@ const (
 	WatchSampleStateCollecting = "collecting"
 	WatchSampleStateFresh      = "fresh"
 	WatchSampleStateStale      = "stale"
+	WatchScopeHost             = "host"
+	WatchScopeService          = "service"
 )
 
-// Watch is a view of a host watch for the dashboard (when services=0
-// the watches section is the main thing to show). Enriched with useful
-// runtime/config info for operators.
+// Watch is a dashboard view of a host-level or service-scoped watch, enriched
+// with useful runtime/config info for operators.
 type Watch struct {
 	Name              string            `json:"name"`
+	Scope             string            `json:"scope"` // host | service
 	DisplayName       string            `json:"display_name,omitempty"`
 	Category          string            `json:"category,omitempty"`
 	CheckType         string            `json:"check_type,omitempty"`
@@ -1007,8 +1009,8 @@ type Backend interface {
 	// Services returns the current view of every configured service (including those
 	// with `enabled: false` in their YAML so they remain visible for activation).
 	Services(ctx context.Context) []Service
-	// Watches returns configured host watches (including those with `enabled: false`
-	// so they remain visible even when services=0).
+	// Watches returns configured host-level and service-scoped watches (including
+	// those with `enabled: false` so they remain visible in the dashboard).
 	Watches(ctx context.Context) []Watch
 	// Notifiers returns the named notifiers configured for use by watches.
 	Notifiers(ctx context.Context) []Notifier

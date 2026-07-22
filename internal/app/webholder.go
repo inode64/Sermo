@@ -132,7 +132,7 @@ func (h *WebBackendHolder) Services(ctx context.Context) []web.Service {
 	return webCall(h, nil, func(b *WebBackend) []web.Service { return b.Services(ctx) })
 }
 
-// Watches returns the host watches from the active backend.
+// Watches returns host-level and service-scoped watches from the active backend.
 func (h *WebBackendHolder) Watches(ctx context.Context) []web.Watch {
 	return webCall(h, nil, func(b *WebBackend) []web.Watch { return b.Watches(ctx) })
 }

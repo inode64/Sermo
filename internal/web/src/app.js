@@ -1199,7 +1199,7 @@ let allWatches = [];
 let globalTargetsByValue = new Map();
 let globalTargetSyncPending = false;
 // watchPanelDescriptors is shared with the Go web builder: one descriptor owns
-// static shell IDs, columns and text. The one Host watches panel uses semantic
+// static shell IDs, columns and text. The Watches panel uses semantic
 // groups so a new check type does not need a parallel table or action layout.
 const watchPanels = Object.fromEntries(watchPanelDescriptors.map((descriptor) => [descriptor.key, {
   ...descriptor,
@@ -1593,7 +1593,7 @@ function openPanelTarget(target) {
   if (target === "failed-watches") {
     // Each watch panel is its own <details>; a firing watch could be in any of
     // them, so open all and scroll to whichever actually holds one (in panel
-    // declaration order, Host watches as the fallback).
+    // declaration order, Watches as the fallback).
     openAllWatchPanels();
     setAllWatchStatuses(targetStateFailed);
     let dest = $(getWatchPanel("host").section);
@@ -3815,6 +3815,7 @@ function watchSearchText(w) {
   return [
     displayName(w),
     w.name,
+    watchScope(w),
     category,
     w.check_type,
     watchSummaryText(w),
@@ -4099,7 +4100,14 @@ const networkWatchTypes = new Set(["conntrack", "firewall", "icmp", "net"]);
 const securityWatchTypes = new Set(["cert", "file"]);
 const summaryFileWatchType = "file-summary";
 
-// watchGroupOf is the presentation taxonomy for host watches. It deliberately
+const watchScopeHost = "host";
+const watchScopeService = "service";
+
+function watchScope(w) {
+  return w && w.scope === watchScopeService ? watchScopeService : watchScopeHost;
+}
+
+// watchGroupOf is the presentation taxonomy for watches. It deliberately
 // groups stable operator concepts instead of creating a new table per check.
 function watchGroupOf(w) {
   const type = String((w && w.check_type) || "").toLowerCase();
@@ -4210,7 +4218,7 @@ function watchLastCheckedCell(w) {
 // watchNameCell renders the shared expandable name cell (chevron + toggle).
 function watchNameCell(w, key, open) {
   const chev = tpl`<span class="exp" aria-hidden="true">${open ? '▾' : '▸'}</span>`;
-  return tpl`<td>${chev}<button type="button" class="row-toggle" data-exp-toggle="${key}" aria-expanded="${open}" aria-controls="${open ? "exp-" + key : nothing}" aria-label="${expandToggleAriaLabel(displayName(w), open, "watch details")}">${displayName(w)}</button></td>`;
+  return tpl`<td>${chev}<button type="button" class="row-toggle" data-exp-toggle="${key}" aria-expanded="${open}" aria-controls="${open ? "exp-" + key : nothing}" aria-label="${expandToggleAriaLabel(displayName(w), open, "watch details")}">${displayName(w)} <span class="muted watch-scope">${watchScope(w)}</span></button></td>`;
 }
 
 // watchActionsCell renders the shared actions cell (expand / monitor / unmonitor).
@@ -4239,7 +4247,7 @@ function watchActionsCell(w) {
 
 // watchRowClass mirrors the service/app row highlight: a firing watch (state
 // "failed") paints the row red, a warning amber, matching serviceRowParts so
-// certificate and every other host-watch panel follow the same visual line.
+// certificate and every other watch type follow the same visual line.
 function watchRowClass(state) {
   return state === targetStateFailed ? "row-failing" : (state === targetStateWarning || state === targetStateStale ? "row-warning" : "");
 }
@@ -4271,8 +4279,8 @@ function watchRowParts(w, cells, colCount) {
 }
 
 // watchRowHTML builds the table row(s) for one watch — the main row plus its
-// expansion row when open. Shared by the Storage, Network and Host watches
-// panels so they render identically (including the expand action).
+// expansion row when open. Shared by every watch type so they render
+// identically (including the expand action).
 function watchRowHTML(w) {
   const parts = watchRowParts(w, [
     tpl`<td>${categoryBadge(watchGroupOf(w))}</td>`,
@@ -4572,9 +4580,8 @@ function renderWatches(watches) {
   updateSectionNav();
 }
 
-// renderWatchPanel fills one watch table (Storage, Network, or Host watches)
-// from its already-classified subset, using the same search/type/status filters,
-// visible count and column sorting for every panel.
+// renderWatchPanel fills the watch table from its already-classified subset,
+// using the same search/type/status filters, visible count and column sorting.
 function renderWatchPanel(panelKey, watches) {
   const panel = getWatchPanel(panelKey);
   const section = $(panel.section);
@@ -4989,7 +4996,7 @@ function renderArtifactRow(item, panel) {
   return expansion ? [row, expansion] : [row];
 }
 
-// renderWatchExpansion shows a host watch's config summary and its recent
+// renderWatchExpansion shows a watch's config summary and its recent
 // activity (hooks/notifies fired), reusing the inline expansion mechanism.
 function renderWatchExpansion(w, events) {
   w = w || {};
@@ -5004,6 +5011,7 @@ function renderWatchExpansion(w, events) {
     : (w.has_hook ? tpl`<span class="muted">configured</span>` : tpl`<span class="muted">none</span>`);
   const category = categoryOf(w, "watch");
   const cfg = tpl`<div class="watch-grid">
+    <div><span class="muted">Scope</span><br><b>${watchScope(w)}</b></div>
     <div><span class="muted">Type</span><br><b>${w.check_type || ""}</b></div>
     <div><span class="muted">Category</span><br>${categoryBadge(category)}</div>
     <div><span class="muted">Interval</span><br><b>${w.interval || ""}</b></div>
@@ -5535,7 +5543,7 @@ function panelTargetLabel(target) {
     case "containers-section": return "containers panel";
     case "vms-section": return "virtual machines panel";
     case "daemon-section": return "daemon panel";
-    case "watches-section": return "host watches panel";
+    case "watches-section": return "watches panel";
     case "services-section":
     default: return "services panel";
   }
