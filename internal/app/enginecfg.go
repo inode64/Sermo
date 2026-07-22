@@ -20,8 +20,6 @@ const (
 	DefaultEngineOperationTimeout = operation.DefaultOperationTimeout
 	// DefaultEngineMaxParallelChecks is the fallback check worker limit.
 	DefaultEngineMaxParallelChecks = 8
-	// DefaultEngineMaxParallelOperations is the fallback operation slot limit.
-	DefaultEngineMaxParallelOperations = 2
 )
 
 func engineMap(cfg *config.Config) map[string]any {

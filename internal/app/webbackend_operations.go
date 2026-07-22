@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"sermo/internal/cfgval"
 	"sermo/internal/checks"
-	"sermo/internal/notify"
 	"sermo/internal/operation"
 	"sermo/internal/rules"
 	"sermo/internal/servicemgr"
@@ -52,16 +51,6 @@ func (b *WebBackend) SetPanic(_ context.Context, on bool) web.ActionResult {
 	}
 	b.emitMonitorEvent("", action, eventKindAction, eventStatusOK, msg)
 	return web.ActionResult{OK: true, Message: msg}
-}
-
-// Operations returns current operation-slot usage and the active-user count.
-func (b *WebBackend) Operations(_ context.Context) web.OperationSlots {
-	users := notify.ActiveUserCount()
-	if b.opGate == nil {
-		return web.OperationSlots{ActiveUsers: users}
-	}
-	inUse, total := b.opGate.Usage()
-	return web.OperationSlots{InUse: inUse, Total: total, ActiveUsers: users}
 }
 
 // operateError emits the error event for a rejected service action and returns
@@ -163,15 +152,7 @@ func (b *WebBackend) operationResult(ctx context.Context, name, action string) o
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	run := func(ctx context.Context) operation.Result {
-		return e.engine.Do(ctx, action)
-	}
-	var r operation.Result
-	if b.opGate != nil {
-		r = b.opGate.Run(ctx, name, action, run)
-	} else {
-		r = run(ctx)
-	}
+	r := e.engine.Do(ctx, action)
 	if r.Action == "" && action != "" {
 		r.Action = action
 	}

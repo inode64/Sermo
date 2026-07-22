@@ -2,7 +2,6 @@ package app
 
 import (
 	"context"
-	"fmt"
 	"sync"
 	"time"
 
@@ -14,12 +13,11 @@ import (
 // DiagnosticLog runs scheduled diagnostics and appends snapshots to
 // engine.diagnostics when configured.
 type DiagnosticLog struct {
-	mu     sync.Mutex
-	cfg    *config.Config
-	host   diag.Host
-	opGate *OpGate
-	file   *logfile.Writer
-	now    func() time.Time
+	mu   sync.Mutex
+	cfg  *config.Config
+	host diag.Host
+	file *logfile.Writer
+	now  func() time.Time
 }
 
 const (
@@ -29,12 +27,11 @@ const (
 	diagFieldFindings = "findings"
 
 	diagScopeLocks                 = "locks"
-	diagScopeOperations            = "operations"
 	diagnosticExtraFindingCapacity = 4
 )
 
 // NewDiagnosticLog builds a scheduled diagnostics exporter. file must be set.
-func NewDiagnosticLog(cfg *config.Config, host diag.Host, opGate *OpGate, file *logfile.Writer, now func() time.Time) *DiagnosticLog {
+func NewDiagnosticLog(cfg *config.Config, host diag.Host, file *logfile.Writer, now func() time.Time) *DiagnosticLog {
 	if now == nil {
 		now = time.Now
 	}
@@ -42,11 +39,10 @@ func NewDiagnosticLog(cfg *config.Config, host diag.Host, opGate *OpGate, file *
 		host = diag.OSHost{}
 	}
 	return &DiagnosticLog{
-		cfg:    cfg,
-		host:   host,
-		opGate: opGate,
-		file:   file,
-		now:    now,
+		cfg:  cfg,
+		host: host,
+		file: file,
+		now:  now,
 	}
 }
 
@@ -68,12 +64,11 @@ func (l *DiagnosticLog) Export() {
 	l.mu.Lock()
 	cfg := l.cfg
 	host := l.host
-	opGate := l.opGate
 	file := l.file
 	now := l.now
 	l.mu.Unlock()
 
-	findings := collectDiagnosticFindings(cfg, host, opGate)
+	findings := collectDiagnosticFindings(cfg, host)
 	at := now().UTC()
 	errors, warnings := countDiagFindingLevels(findings)
 	_ = file.Write(map[string]any{
@@ -102,14 +97,10 @@ func (l *DiagnosticLog) Run(ctx context.Context, interval time.Duration) {
 	}
 }
 
-func collectDiagnosticFindings(cfg *config.Config, host diag.Host, opGate *OpGate) []diag.Finding {
+func collectDiagnosticFindings(cfg *config.Config, host diag.Host) []diag.Finding {
 	r := diag.Diagnose(cfg, host)
 	out := make([]diag.Finding, 0, len(r.Findings)+diagnosticExtraFindingCapacity)
 	out = append(out, r.Findings...)
-	if opGate != nil {
-		inUse, total := opGate.Usage()
-		out = append(out, operationSlotDiagFindings(inUse, total)...)
-	}
 	out = append(out, lockDiagFindings(cfg)...)
 	return out
 }
@@ -140,22 +131,4 @@ func lockDiagFindings(cfg *config.Config) []diag.Finding {
 		out = append(out, diag.Finding{Level: diag.LevelWarning, Scope: diagScopeLocks, Message: w})
 	}
 	return out
-}
-
-func operationSlotDiagFindings(inUse, total int) []diag.Finding {
-	if total <= 0 || inUse <= 0 {
-		return nil
-	}
-	if inUse >= total {
-		return []diag.Finding{{
-			Level:   diag.LevelWarning,
-			Scope:   diagScopeOperations,
-			Message: fmt.Sprintf("operation slots saturated (%d/%d in use)", inUse, total),
-		}}
-	}
-	return []diag.Finding{{
-		Level:   diag.LevelInfo,
-		Scope:   diagScopeOperations,
-		Message: fmt.Sprintf("operation slots %d/%d in use", inUse, total),
-	}}
 }

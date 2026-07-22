@@ -305,10 +305,12 @@ then at most one operation.
   skips, never a backlog of catch-up cycles. Skips are per service and logged.
 - **Jitter**: workers start with a small per-service offset so ticks spread
   across the interval.
-- **Bounded concurrency**: operations across all services share the global
-  semaphore (`engine.max_parallel_operations`); check execution shares a
-  separate global pool (`engine.max_parallel_checks`). A check that cannot get
-  a slot waits — it is not skipped.
+- **Bounded concurrency**: each service runs at most one operation at a time
+  (the cross-process operation lock), and automatic remediation is rate-limited
+  by the mandatory per-service `policy` block (cooldown, `max_actions`,
+  backoff). Check execution shares a global pool
+  (`engine.max_parallel_checks`). A check that cannot get a slot waits — it is
+  not skipped.
 - **Shutdown** (SIGTERM/SIGINT): stop starting cycles, cancel worker contexts;
   an in-flight operation observes cancellation, its deferred cleanup releases
   the lock and emits the event, and a partially stopped service is left as-is —

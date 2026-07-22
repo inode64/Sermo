@@ -9,15 +9,14 @@ import (
 )
 
 const (
-	enginePathBackend               = SectionEngine + "." + EngineKeyBackend
-	enginePathDiagnostics           = SectionEngine + "." + EngineKeyDiagnostics
-	enginePathDiagnosticsInterval   = SectionEngine + "." + EngineKeyDiagnosticsInterval
-	enginePathMaxParallelChecks     = SectionEngine + "." + EngineKeyMaxParallelChecks
-	enginePathMaxParallelOperations = SectionEngine + "." + EngineKeyMaxParallelOperations
-	enginePathStartupDelay          = SectionEngine + "." + EngineKeyStartupDelay
-	enginePathStateCacheSize        = SectionEngine + "." + EngineKeyStateCacheSize
-	enginePathUserLookup            = SectionEngine + "." + EngineKeyUserLookup
-	enginePathUserLookupTimeout     = SectionEngine + "." + EngineKeyUserLookupTimeout
+	enginePathBackend             = SectionEngine + "." + EngineKeyBackend
+	enginePathDiagnostics         = SectionEngine + "." + EngineKeyDiagnostics
+	enginePathDiagnosticsInterval = SectionEngine + "." + EngineKeyDiagnosticsInterval
+	enginePathMaxParallelChecks   = SectionEngine + "." + EngineKeyMaxParallelChecks
+	enginePathStartupDelay        = SectionEngine + "." + EngineKeyStartupDelay
+	enginePathStateCacheSize      = SectionEngine + "." + EngineKeyStateCacheSize
+	enginePathUserLookup          = SectionEngine + "." + EngineKeyUserLookup
+	enginePathUserLookupTimeout   = SectionEngine + "." + EngineKeyUserLookupTimeout
 
 	pathsPathLocks     = SectionPaths + "." + pathKeyLocks
 	pathsPathRuntime   = SectionPaths + "." + pathKeyRuntime

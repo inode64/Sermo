@@ -773,10 +773,13 @@ checklist). Imita el estilo existente de la suite en lugar de inventar uno.
     semántica. Ver `docs/safety.es.md` (locks).
 16. El scheduler ejecuta un worker independiente por servicio; una operación larga
     (un restart de varios minutos) en un servicio nunca debe bloquear la monitorización de
-    otro. Nunca serialices todos los servicios a través de un único bucle. Los restarts masivos
-    están acotados por un semáforo global de operación, y la ejecución concurrente de checks
-    entre todos los servicios está acotada por `engine.max_parallel_checks` (un pool global
-    separado). Ver `docs/safety.es.md` (scheduler y concurrencia).
+    otro. Nunca serialices todos los servicios a través de un único bucle. Cada
+    servicio ejecuta como máximo una operación a la vez (el lock de operación por
+    servicio), y las tormentas de restarts se previenen con la `policy` de
+    remediación obligatoria por servicio (cooldown/backoff), no con un tope
+    global de operaciones. La ejecución concurrente de checks entre todos los
+    servicios está acotada por `engine.max_parallel_checks` (un pool global).
+    Ver `docs/safety.es.md` (scheduler y concurrencia).
 
 ## graphify
 

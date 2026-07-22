@@ -197,7 +197,6 @@ def base_config(options: GenerationOptions, backend: str = "auto") -> str:
   backend: {backend}
   interval: 30s
   max_parallel_checks: 8
-  max_parallel_operations: 2
   default_timeout: 10s
   operation_timeout: 90s
   startup_delay: 0

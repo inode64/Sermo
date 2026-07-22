@@ -15,7 +15,6 @@ export const apiHostPath = "api/host";
 export const apiLibrariesPath = "api/libraries";
 export const apiLocksPath = "api/locks";
 export const apiMonitoringPath = "api/monitoring";
-export const apiOpsPath = "api/ops";
 export const apiMountsPath = "api/mounts";
 export const apiNotifiersPath = "api/notifiers";
 const apiPanicPath = "api/panic";

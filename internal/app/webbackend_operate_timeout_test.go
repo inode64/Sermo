@@ -12,11 +12,20 @@ import (
 	"sermo/internal/web"
 )
 
-// TestWebBackendOperateBoundsSlotWait pins that a web Operate cannot hang waiting
-// for a saturated operation-slot pool: it bounds the wait by operationTimeout and
-// returns a non-OK result. Before the fix the handler used an unbounded context,
-// so the goroutine could block until daemon shutdown.
-func TestWebBackendOperateBoundsSlotWait(t *testing.T) {
+// hangingManager blocks Start until the operation context is cancelled, so the
+// test can pin that Operate is bounded by operationTimeout.
+type hangingManager struct{ fakeManager }
+
+func (hangingManager) Start(ctx context.Context, _ string) error {
+	<-ctx.Done()
+	return ctx.Err()
+}
+
+// TestWebBackendOperateBoundsBackendHang pins that a web Operate cannot hang on
+// a stuck backend operation: the handler bounds the whole call by
+// operationTimeout and returns a non-OK result. Before the fix the handler used
+// an unbounded context, so the goroutine could block until daemon shutdown.
+func TestWebBackendOperateBoundsBackendHang(t *testing.T) {
 	dir := t.TempDir()
 	locker := locks.NewOperationLocker(locks.RuntimeOpsDir(dir))
 	engine := operation.New(operation.Config{
@@ -24,24 +33,20 @@ func TestWebBackendOperateBoundsSlotWait(t *testing.T) {
 		Unit:    "nginx",
 		Backend: string(servicemgr.BackendSystemd),
 		Tree:    map[string]any{"policy": map[string]any{"cooldown": "5m"}},
-		Manager: fakeManager{},
+		Manager: hangingManager{},
 		Locker:  &locker,
 		Scanner: locks.NewScanner(locks.RuntimeLocksDir(dir)),
 		CheckDeps: checks.Deps{
 			DefaultTimeout: time.Second,
 			Status: func(context.Context) (servicemgr.Status, error) {
-				return servicemgr.StatusActive, nil
+				return servicemgr.StatusInactive, nil
 			},
 		},
 		Emit: operationEventEmitter(func(Event) {}),
 	})
 
-	gate := NewOpGate(1, "")
-	gate.mem <- struct{}{} // saturate the only slot; it never frees
-
 	b := &WebBackend{
 		entries:          map[string]*webEntry{"web": {engine: engine}},
-		opGate:           gate,
 		operationTimeout: 100 * time.Millisecond,
 		emit:             func(Event) {},
 	}
@@ -53,12 +58,12 @@ func TestWebBackendOperateBoundsSlotWait(t *testing.T) {
 	select {
 	case res := <-done:
 		if res.OK {
-			t.Fatalf("operate should fail when no slot frees, got OK: %+v", res)
+			t.Fatalf("operate should fail when the backend hangs, got OK: %+v", res)
 		}
 		if elapsed := time.Since(start); elapsed > 3*time.Second {
 			t.Fatalf("operate took %v, want ~operationTimeout", elapsed)
 		}
 	case <-time.After(5 * time.Second):
-		t.Fatal("Operate hung waiting for a slot (unbounded context)")
+		t.Fatal("Operate hung on a stuck backend (unbounded context)")
 	}
 }

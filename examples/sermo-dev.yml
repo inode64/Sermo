@@ -15,7 +15,6 @@ engine:
   backend: auto
   interval: 30s
   max_parallel_checks: 8
-  max_parallel_operations: 2
   default_timeout: 10s
   operation_timeout: 90s
   artifact_interval: 5m

@@ -30,7 +30,7 @@ const dashboard = {
     mounted: true, state: "active", refcount: 0, blockers: [], can_umount: true,
   }],
   notifiers: [{ name: "ops", type: "slack", enabled: true, summary: "hooks.slack.com", used_by: 2 }],
-  daemon: { backend: "systemd", hostname: "fixture", host_uptime_seconds: 86400 },
+  daemon: { backend: "systemd", hostname: "fixture", host_uptime_seconds: 86400, active_users: 1 },
   daemon_metrics: {
     current: { pid: 4242, fds: 12345, threads: 8, cpu_ready: true, cpu: 1.5, rss: 1048576, io_ready: true, io: 2048 },
   },
@@ -39,7 +39,6 @@ const dashboard = {
   ready: { ready: true, status: "ok", backend: "systemd", services: 2, watches: 1 },
   live: { status: "ok", uptime: "1h", uptime_seconds: 3600, services: 2, go: "go1.test" },
   monitoring: { monitored: 2, paused: 0, total: 2 },
-  operations: { in_use: 0, total: 4, active_users: 1 },
   host_metrics: [],
 };
 

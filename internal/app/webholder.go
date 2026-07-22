@@ -248,11 +248,6 @@ func (h *WebBackendHolder) EventPage(ctx context.Context, query web.EventQuery) 
 	return webCall(h, web.EventPage{}, func(b *WebBackend) web.EventPage { return b.EventPage(ctx, query) })
 }
 
-// Operations returns operation-slot usage from the active backend.
-func (h *WebBackendHolder) Operations(ctx context.Context) web.OperationSlots {
-	return webCall(h, web.OperationSlots{}, func(b *WebBackend) web.OperationSlots { return b.Operations(ctx) })
-}
-
 // ServiceEvents returns a service's recent events from the active backend.
 func (h *WebBackendHolder) ServiceEvents(ctx context.Context, name string, limit int) ([]web.Event, bool) {
 	return webCallOK(h, nil, func(b *WebBackend) ([]web.Event, bool) { return b.ServiceEvents(ctx, name, limit) })

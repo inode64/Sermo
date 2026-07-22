@@ -243,10 +243,9 @@ func run(args []string) int {
 
 	interval := config.EngineInterval(cfg, config.DefaultEngineInterval)
 	runner := execx.CommandRunner{}
-	opGate := app.NewOpGate(app.EngineInt(cfg, config.EngineKeyMaxParallelOperations, app.DefaultEngineMaxParallelOperations), cfg.Global.RuntimeDir())
 	var diagnosticLog *app.DiagnosticLog
 	if diagFile != nil {
-		diagnosticLog = app.NewDiagnosticLog(cfg, nil, opGate, diagFile, time.Now)
+		diagnosticLog = app.NewDiagnosticLog(cfg, nil, diagFile, time.Now)
 		go diagnosticLog.Run(ctx, config.EngineDiagnosticsInterval(cfg, config.DefaultEngineDiagnosticsInterval))
 	}
 	panicGate := app.NewPanicGate(store)
@@ -292,7 +291,6 @@ func run(args []string) int {
 		Events:            eventLog,
 		DiagnosticLog:     diagnosticLog,
 		SystemFreshness:   interval / app.SystemFreshnessIntervalDivisor,
-		OpGate:            opGate,
 		ExecxRunner:       runner,
 		UserLookup:        userLookup,
 		Settling:          settling,
@@ -418,7 +416,6 @@ func run(args []string) int {
 
 	monitor := app.NewMonitor(cfg, deps, app.Scheduler{
 		Interval:     interval,
-		OpSlots:      app.EngineInt(cfg, config.EngineKeyMaxParallelOperations, app.DefaultEngineMaxParallelOperations),
 		StartupDelay: startupDelay,
 	}, readiness, collector, webHolder)
 	monitor.ConfigPath = globalPath
