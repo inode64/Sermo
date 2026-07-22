@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"sermo/internal/execx"
+	"sermo/internal/strutil"
 )
 
 // UnitResolver resolves a service to the concrete unit name the active backend
@@ -38,7 +39,7 @@ func (r UnitResolver) Resolve(ctx context.Context, backend Backend, candidates [
 		probe = OSProbe{}
 	}
 
-	candidates = uniqueStrings(nil, candidates...)
+	candidates = strutil.MergeUnique(nil, candidates...)
 	var tried []string
 	var known []string
 	seenUnits := map[string]struct{}{}

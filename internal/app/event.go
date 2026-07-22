@@ -202,3 +202,19 @@ func SlogEmitter(logger *slog.Logger) func(Event) {
 		}
 	}
 }
+
+// emitSafe forwards e to emit when an emitter is wired, and is a no-op
+// otherwise.
+func emitSafe(emit func(Event), e Event) {
+	if emit != nil {
+		emit(e)
+	}
+}
+
+// reportCallbackError forwards a non-nil err to cb when a callback is wired,
+// and is a no-op otherwise.
+func reportCallbackError(cb func(error), err error) {
+	if err != nil && cb != nil {
+		cb(err)
+	}
+}

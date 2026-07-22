@@ -26,15 +26,17 @@ func EngineLogPath(cfg *Config, key string) string {
 // EngineDiagnosticsInterval returns engine.diagnostics_interval, or fallback
 // when unset/invalid.
 func EngineDiagnosticsInterval(cfg *Config, fallback time.Duration) time.Duration {
-	return engineDuration(cfg, EngineKeyDiagnosticsInterval, fallback)
+	return EngineDuration(cfg, EngineKeyDiagnosticsInterval, fallback)
 }
 
 // EngineInterval returns engine.interval, or fallback when unset/invalid.
 func EngineInterval(cfg *Config, fallback time.Duration) time.Duration {
-	return engineDuration(cfg, keyInterval, fallback)
+	return EngineDuration(cfg, keyInterval, fallback)
 }
 
-func engineDuration(cfg *Config, key string, fallback time.Duration) time.Duration {
+// EngineDuration returns the engine.<key> duration, or fallback when the field
+// is unset, unparseable or not positive.
+func EngineDuration(cfg *Config, key string, fallback time.Duration) time.Duration {
 	if cfg == nil {
 		return fallback
 	}

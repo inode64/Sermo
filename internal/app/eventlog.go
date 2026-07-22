@@ -395,11 +395,7 @@ func (l *EventLog) pruneStore(before time.Time, memoryCleared int) int {
 	return int(cleared)
 }
 
-func (l *EventLog) reportStoreError(err error) {
-	if err != nil && l.onStoreError != nil {
-		l.onStoreError(err)
-	}
-}
+func (l *EventLog) reportStoreError(err error) { reportCallbackError(l.onStoreError, err) }
 
 // MultiEmit fans an event out to several emitters (e.g. slog plus the event log),
 // skipping nil ones.
