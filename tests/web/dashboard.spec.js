@@ -1,6 +1,10 @@
 const { test, expect } = require("@playwright/test");
 const AxeBuilder = require("@axe-core/playwright").default;
 
+const delay = (milliseconds) => new Promise((resolve) => {
+  setTimeout(resolve, milliseconds);
+});
+
 const services = [
   {
     name: "web", display_name: "Web server", category: "service", enabled: true,
@@ -452,13 +456,13 @@ test("monitor toggles send one request even on a double click", async ({ page })
   let servicePosts = 0;
   await page.route("**/api/services/web/unmonitor", async (route) => {
     servicePosts += 1;
-    await new Promise((resolve) => setTimeout(resolve, 400));
+    await delay(400);
     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true, message: "unmonitored" }) });
   });
   let watchPosts = 0;
   await page.route("**/api/watches/process-queue/unmonitor", async (route) => {
     watchPosts += 1;
-    await new Promise((resolve) => setTimeout(resolve, 400));
+    await delay(400);
     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true, message: "unmonitored" }) });
   });
 
@@ -478,11 +482,11 @@ test("monitor toggle stays guarded until the follow-up refresh lands", async ({ 
   let posts = 0;
   await page.route("**/api/services/web/unmonitor", async (route) => {
     posts += 1;
-    await new Promise((resolve) => setTimeout(resolve, 200));
+    await delay(200);
     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true, message: "unmonitored" }) });
   });
   await page.route("**/api/dashboard**", async (route) => {
-    await new Promise((resolve) => setTimeout(resolve, 800));
+    await delay(800);
     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(dashboard) });
   });
 

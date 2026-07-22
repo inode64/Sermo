@@ -33,7 +33,6 @@ from urllib.parse import urlsplit
 
 import yaml
 
-
 PSEUDO_FS = {
     "autofs",
     "binfmt_misc",

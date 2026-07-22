@@ -40,9 +40,7 @@ def iter_yaml_files() -> list[Path]:
             if any(part in path.parts for part in EXCLUDE_PARTS):
                 continue
             out.append(path)
-    for path in EXTRA_FILES:
-        if path.exists():
-            out.append(path)
+    out.extend(path for path in EXTRA_FILES if path.exists())
     return sorted(set(out))
 
 
@@ -128,7 +126,7 @@ def normalize_flow_segment(segment: str) -> str:
 
 
 def normalize_line(line: str) -> str:
-    if "{" not in line or "${" == line.strip():
+    if "{" not in line or line.strip() == "${":
         return line
     return normalize_flow_segment(line)
 
@@ -136,9 +134,7 @@ def normalize_line(line: str) -> str:
 def normalize_file(path: Path) -> bool:
     original = path.read_text(encoding="utf-8")
     updated = "\n".join(normalize_line(line) for line in original.splitlines())
-    if original.endswith("\n"):
-        updated += "\n"
-    elif updated and not updated.endswith("\n"):
+    if original.endswith("\n") or updated and not updated.endswith("\n"):
         updated += "\n"
     if updated == original:
         return False
@@ -153,9 +149,7 @@ def main() -> int:
         if check_only:
             original = path.read_text(encoding="utf-8")
             updated = "\n".join(normalize_line(line) for line in original.splitlines())
-            if original.endswith("\n"):
-                updated += "\n"
-            elif updated and not updated.endswith("\n"):
+            if original.endswith("\n") or updated and not updated.endswith("\n"):
                 updated += "\n"
             if updated != original:
                 print(path.relative_to(ROOT))
