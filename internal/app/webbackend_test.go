@@ -535,8 +535,10 @@ func TestWebBackendApplicationsCache(t *testing.T) {
 		t.Fatalf("catalogInventoryCacheTTL = %s, want at least 5m to avoid frequent version probes", catalogInventoryCacheTTL)
 	}
 
+	now := time.Date(2026, 7, 23, 10, 0, 0, 0, time.UTC)
 	calls := 0
 	b := &WebBackend{
+		now: func() time.Time { return now },
 		applications: catalogInventoryCache{list: func(context.Context) []web.CatalogItem {
 			calls++
 			name := "first"
@@ -554,6 +556,9 @@ func TestWebBackendApplicationsCache(t *testing.T) {
 	if first[0].ObservedAt == "" {
 		t.Fatal("first Applications response must expose observed_at")
 	}
+	if first[0].ObservedAt != now.Format(time.RFC3339) {
+		t.Fatalf("first observed_at = %q, want %q", first[0].ObservedAt, now.Format(time.RFC3339))
+	}
 	first[0].Name = "mutated"
 
 	second := b.Applications(context.Background())
@@ -564,7 +569,7 @@ func TestWebBackendApplicationsCache(t *testing.T) {
 		t.Fatalf("cached observed_at = %q, want original %q", second[0].ObservedAt, first[0].ObservedAt)
 	}
 
-	b.applications.at = time.Now().Add(-catalogInventoryCacheTTL - time.Nanosecond)
+	now = now.Add(catalogInventoryCacheTTL + time.Nanosecond)
 	third := b.Applications(context.Background())
 	if calls != 2 || len(third) != 1 || third[0].Name != "second" {
 		t.Fatalf("expired Applications = %v, calls=%d; want refreshed second", third, calls)
