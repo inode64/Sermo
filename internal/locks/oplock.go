@@ -128,27 +128,24 @@ func (l OperationLocker) Acquire(service string, ttl time.Duration) (*Handle, er
 			CreatedAt:       now(),
 			ExpiresAt:       now().Add(ttl),
 		}
-	}, proc, now, held, onReclaim, true, exhausted)
+	}, proc, now, held, onReclaim, exhausted)
 	if err != nil {
 		return nil, err
 	}
 	return &Handle{ol}, nil
 }
 
-// acquireExclusive is the bounded create/reclaim loop shared by the operation,
-// named and slot lockers. On success it returns the ownedLock the caller wraps in
+// acquireExclusive is the bounded create/reclaim loop shared by the operation
+// and named lockers. On success it returns the ownedLock the caller wraps in
 // its handle type. mkPayload builds a fresh lock payload each attempt (re-stamping
 // timestamps); the returned ownedLock carries that payload's owner identity. held
-// maps an already-active lock to the caller's error (*HeldError, or errSlotBusy).
-// onReclaim, when non-nil, is invoked with the stale reason after a stale lock is
-// reclaimed. recheck controls the post-reclaim-failure re-read that classifies a
-// lock which turned active as held; the slot pool omits it (recheck=false) and
-// instead yields exhausted the moment a reclaim race is lost. exhausted is the
-// error returned when attempts run out (or a reclaim race is lost with recheck
-// false): a synthetic *HeldError for the operation/named lockers, errSlotBusy for
-// the slot pool. Bounding the loop at maxAcquireAttempts keeps a pathologically
-// contended lock from spinning without limit.
-func acquireExclusive(path string, mkPayload func() lockFile, proc ProcessProber, now func() time.Time, held func(lockFile, State, string) error, onReclaim func(string), recheck bool, exhausted error) (ownedLock, error) {
+// maps an already-active lock to the caller's error (*HeldError). onReclaim, when
+// non-nil, is invoked with the stale reason after a stale lock is reclaimed.
+// After a failed reclaim the lock is re-read: if it turned active it is held,
+// otherwise the loop retries. exhausted is the synthetic *HeldError returned when
+// attempts run out. Bounding the loop at maxAcquireAttempts keeps a
+// pathologically contended lock from spinning without limit.
+func acquireExclusive(path string, mkPayload func() lockFile, proc ProcessProber, now func() time.Time, held func(lockFile, State, string) error, onReclaim func(string), exhausted error) (ownedLock, error) {
 	for range maxAcquireAttempts {
 		payload := mkPayload()
 		err := writeLockFileExclusive(path, payload)
@@ -177,9 +174,6 @@ func acquireExclusive(path string, mkPayload func() lockFile, proc ProcessProber
 				onReclaim(staleReason)
 			}
 			continue // reclaimed; retry the exclusive create
-		}
-		if !recheck {
-			return ownedLock{}, exhausted
 		}
 		// Could not reclaim: it changed under us. Re-classify; if it went active,
 		// it is held, otherwise loop and try again.
