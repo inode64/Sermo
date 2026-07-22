@@ -37,7 +37,7 @@ func (b *WebBackend) catalogItems(
 		cached := slices.Clone(inventory.items)
 		observedAt := inventory.at
 		hasCache := !observedAt.IsZero()
-		if hasCache && time.Since(observedAt) < catalogInventoryCacheTTL {
+		if hasCache && b.webNow().Sub(observedAt) < catalogInventoryCacheTTL {
 			inventory.mu.Unlock()
 			return decorateCatalogItems(cached, observedAt)
 		}
@@ -86,7 +86,7 @@ func (b *WebBackend) catalogItems(
 		inventory.mu.Unlock()
 		return decorateCatalogItems(items, observedAt)
 	}
-	inventory.at = time.Now()
+	inventory.at = b.webNow()
 	observedAt := inventory.at
 	inventory.items = slices.Clone(items)
 	inventory.mu.Unlock()

@@ -92,11 +92,7 @@ func (b *WebBackend) eventPageCutoff(query web.EventQuery) time.Time {
 	if query.Since <= 0 {
 		return time.Time{}
 	}
-	now := time.Now
-	if b.now != nil {
-		now = b.now
-	}
-	return now().Add(-query.Since)
+	return b.webNow().Add(-query.Since)
 }
 
 func trimWebEventPageBatch(batch []LoggedEvent) ([]LoggedEvent, bool) {
