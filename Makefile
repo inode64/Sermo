@@ -2,6 +2,7 @@ BIN := bin
 CGO_ENABLED ?= 0
 GOAMD64 ?= v1
 GO_BUILD_ENV := CGO_ENABLED=$(CGO_ENABLED) GOAMD64=$(GOAMD64)
+GO_PACKAGES := ./cmd/... ./internal/...
 
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 # Go linker flags for -ldflags. Named GO_LDFLAGS (not LDFLAGS) so Gentoo and
@@ -65,7 +66,7 @@ config_subst = sed -e 's|/usr/share/sermo|$(SERMO_DATADIR)|g' -e 's|/etc/sermo|$
 # Rewrite runtime/state dirs in the tmpfiles config.
 tmpfiles_subst = sed -e 's|/run/sermo|$(SERMO_RUNDIR)|g' -e 's|/var/lib/sermo|$(SERMO_STATEDIR)|g'
 
-.PHONY: all build test vet fmt fmt-check lint modules-check actions-lint race fuzz deadcode quality-report scripts-lint yaml-fmt yaml-fmt-check yaml-lint yaml-validate markdown-check web web-check web-e2e validate check cover tidy clean \
+.PHONY: all build test vet fmt fmt-check lint modules-check actions-lint race fuzz deadcode quality-report scripts-lint yaml-fmt yaml-fmt-check yaml-lint yaml-validate markdown-check web web-check web-lint web-e2e validate check cover tidy clean \
         install install-bin install-catalog install-examples install-config install-templates install-tmpfiles install-systemd install-openrc \
         uninstall
 
@@ -125,10 +126,15 @@ web-check:
 	fi; \
 	rm -f "$$tmp"
 
+# Static analysis for the authored dashboard modules and browser tests. The
+# vendored lit-html module and generated bundle are excluded in eslint.config.mjs.
+web-lint:
+	@npm run --silent lint:web
+
 # Browser-level dashboard flows and WCAG 2.2 AA checks. The fixture server
 # serves the committed bundle and Playwright intercepts APIs with deterministic
 # data, so this never starts sermod or performs service operations.
-web-e2e: web-check
+web-e2e: web-check web-lint
 	@$(PLAYWRIGHT) test
 
 # Shell and Python helper scripts (deploy, mutation, YAML normalization).
@@ -142,10 +148,10 @@ scripts-lint:
 validate: modules-check lint actions-lint scripts-lint yaml-validate markdown-check web-e2e
 
 test: validate
-	go test ./...
+	go test $(GO_PACKAGES)
 
 vet:
-	go vet ./...
+	go vet $(GO_PACKAGES)
 
 fmt:
 	gofmt -w internal cmd
@@ -161,16 +167,16 @@ fmt-check:
 # golangci-lint (runs gosec plus focused bug analyzers via .golangci.yml), and
 # govulncheck.
 lint: fmt-check
-	@echo "go fix -diff ./..."
-	@go fix -diff ./...
-	@echo "staticcheck -checks=all ./..."
-	@$(LINT_CACHE_ENV) staticcheck -checks=all ./...
-	@echo "revive -config revive.toml ./..."
-	@$(LINT_PATH) revive -config revive.toml ./...
+	@echo "go fix -diff $(GO_PACKAGES)"
+	@go fix -diff $(GO_PACKAGES)
+	@echo "staticcheck -checks=all $(GO_PACKAGES)"
+	@$(LINT_CACHE_ENV) staticcheck -checks=all $(GO_PACKAGES)
+	@echo "revive -config revive.toml $(GO_PACKAGES)"
+	@$(LINT_PATH) revive -config revive.toml $(GO_PACKAGES)
 	@echo "golangci-lint run"
-	@$(LINT_CACHE_ENV) golangci-lint run
-	@echo "govulncheck ./..."
-	@$(LINT_CACHE_ENV) govulncheck ./...
+	@$(LINT_CACHE_ENV) golangci-lint run $(GO_PACKAGES)
+	@echo "govulncheck $(GO_PACKAGES)"
+	@$(LINT_CACHE_ENV) govulncheck $(GO_PACKAGES)
 
 # Verify module checksums and fail when the dependency manifests are not tidy.
 modules-check:
@@ -184,7 +190,7 @@ actions-lint:
 # Race instrumentation is substantially slower than normal tests, so CI runs it
 # in its own job instead of extending the default PR gate.
 race:
-	go test -race -count=1 ./...
+	go test -race -count=1 $(GO_PACKAGES)
 
 # Keep fuzzing bounded and focused on untrusted configuration input. Scheduled
 # CI can override FUZZ_TIME for a longer campaign.
@@ -195,7 +201,7 @@ fuzz:
 # golang.org/x/tools/cmd/deadcode. Reflection and build tags cause false
 # positives, so findings need human triage before acting on them.
 deadcode:
-	@$(LINT_PATH) deadcode -test ./...
+	@$(LINT_PATH) deadcode -test $(GO_PACKAGES)
 
 # Advisory only (not part of lint/check): keep the remaining cyclomatic
 # complexity baseline visible while it is reduced in focused refactors.
@@ -203,7 +209,7 @@ deadcode:
 # non-zero codes as analyzer failures.
 quality-report:
 	@out="$$(mktemp)"; status=0; \
-	$(LINT_CACHE_ENV) golangci-lint run --enable-only=$(QUALITY_REPORT_LINTERS) --output.text.path "$$out" || status="$$?"; \
+	$(LINT_CACHE_ENV) golangci-lint run --enable-only=$(QUALITY_REPORT_LINTERS) --output.text.path "$$out" $(GO_PACKAGES) || status="$$?"; \
 	cat "$$out"; \
 	rm -f "$$out"; \
 	if [ "$$status" -ne 0 ] && [ "$$status" -ne 1 ]; then exit "$$status"; fi
@@ -214,7 +220,7 @@ check: vet test
 
 # Coverage: print the total and write a browsable HTML report.
 cover: validate
-	go test -coverprofile=coverage.out ./...
+	go test -coverprofile=coverage.out $(GO_PACKAGES)
 	@go tool cover -func=coverage.out | tail -1
 	@go tool cover -html=coverage.out -o coverage.html
 	@echo "wrote coverage.html"

@@ -25,7 +25,11 @@ def apply_cfgval(test: Path, mid: str) -> None:
     t = read(test)
     if mid in ("8", "12"):
         old = '\t\t{int64(-7), "-7"},\n\t\t{uint64(9), "9"},'
-        new = '\t\t{int64(-7), "-7"},\n\t\t{int64(10), "10"}, // FormatInt decimal base (mutant .%s)\n\t\t{uint64(9), "9"},' % mid
+        new = (
+            '\t\t{int64(-7), "-7"},\n'
+            f'\t\t{{int64(10), "10"}}, // FormatInt decimal base (mutant .{mid})\n'
+            '\t\t{uint64(9), "9"},'
+        )
         if old not in t:
             raise SystemExit(f"anchor missing for cfgval .{mid}")
         write(test, t.replace(old, new, 1))

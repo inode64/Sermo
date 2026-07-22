@@ -36,6 +36,7 @@ linters:
     - gochecknoinits  # package initialization is forbidden outside static protocol registration
     - gochecksumtype  # exhaustive switches over documented sum types
     - gocognit  # cognitive complexity; documented exceptions preserve ordered contracts
+    - goconst  # repeated production strings above the project constant threshold
     - gocyclo  # reject functions above the established cyclomatic complexity budget
     - gocritic  # focused stable bug and duplication checks (see settings)
     - godoclint  # exported APIs must retain actionable Go documentation
@@ -130,6 +131,18 @@ linters:
           deny:
             - pkg: sermo/internal/execx$
               desc: rule conditions must not run commands; use checks or rule actions
+        # External commands must use the bounded, injectable execx runner. The
+        # lock wrapper is the documented foreground-process exception.
+        no-direct-os-exec:
+          list-mode: lax
+          files:
+            - $all
+            - "!$test"
+            - "!**/internal/execx/**"
+            - "!**/internal/cli/lock.go"
+          deny:
+            - pkg: os/exec$
+              desc: use internal/execx; only lock wrap may execute operator argv directly
     exhaustive:
       # A default: arm is an explicit statement that the remaining cases are
       # handled; only flag switches with neither all cases nor a default.
@@ -191,6 +204,11 @@ linters:
         - unslice
         - weakCond
         - whyNoLint
+    goconst:
+      # AGENTS.md requires a shared constant only when a production value
+      # appears more than three times. Test fixtures stay literal and readable.
+      min-occurrences: 4
+      ignore-tests: true
     misspell:
       # Eclipse Mosquitto — real MQTT broker name in catalog/tests.
       ignore-rules:
@@ -207,6 +225,8 @@ linters:
   #   wrapcheck (rest of tree) — later phases; hundreds of interface-boundary returns.
   exclusions:
     generated: lax
+    paths:
+      - node_modules/
     presets:
       - comments
       - common-false-positives
