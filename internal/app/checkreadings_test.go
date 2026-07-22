@@ -136,6 +136,31 @@ func TestCheckReadingsForAllTypes(t *testing.T) {
 			data: map[string]any{"result": "51", "op": ">", "threshold": "50"},
 			want: map[string]string{"result": "51", "threshold": "> 50"},
 		},
+		{
+			// process_count/users store their count as an int; the reading must
+			// still render (regression: a bare float64 assertion dropped it).
+			name:     "process_count renders its integer count",
+			typ:      "process_count",
+			data:     map[string]any{"count": 12, "value": float64(12)},
+			want:     map[string]string{"count": "12 processes"},
+			minCount: 1,
+		},
+		{
+			name:     "users renders its integer count",
+			typ:      "users",
+			data:     map[string]any{"count": 3, "value": float64(3)},
+			want:     map[string]string{"count": "3 users"},
+			minCount: 1,
+		},
+		{
+			// A metric check surfaces the observed value with its unit, labelled
+			// by the metric, instead of only its event message.
+			name:     "metric exposes the observed value",
+			typ:      "metric",
+			data:     map[string]any{"type": "metric", "scope": "host", "metric": "cpu", "op": ">", "threshold": "80", "value": 82.5, "unit": "%"},
+			want:     map[string]string{"value": "82.5%"},
+			minCount: 1,
+		},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
