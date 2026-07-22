@@ -217,7 +217,6 @@ func (m *Monitor) applyConfig(cfg *config.Config) {
 	m.deps.OperationTimeout = EngineDuration(cfg, config.EngineKeyOperationTimeout, DefaultEngineOperationTimeout)
 	m.deps.MaxParallel = EngineInt(cfg, config.EngineKeyMaxParallelChecks, DefaultEngineMaxParallelChecks)
 	m.scheduler.Interval = m.deps.Interval
-	m.scheduler.OpSlots = EngineInt(cfg, config.EngineKeyMaxParallelOperations, DefaultEngineMaxParallelOperations)
 	m.deps.UserLookup = EngineUserLookup(cfg, m.deps.ExecxRunner)
 	m.deps.SystemFreshness = m.deps.Interval / SystemFreshnessIntervalDivisor
 	if m.collector != nil && m.deps.SystemFreshness > 0 {
@@ -270,7 +269,7 @@ func (m *Monitor) startGenerationLocked(ctx context.Context, firstBoot bool) {
 	}
 
 	m.genWG.Go(func() {
-		sched.Run(genCtx, m.workers, m.watches, m.deps.OpGate, m.readiness, false, firstGen)
+		sched.Run(genCtx, m.workers, m.watches, m.readiness, false, firstGen)
 	})
 	if sampler := m.deps.DaemonMetricSampler; sampler != nil {
 		interval := m.deps.Interval
@@ -314,10 +313,6 @@ func reloadConfigCompatibilityError(current, next *config.Config) string {
 	}
 	if !reflect.DeepEqual(current.Global.Raw[config.SectionWeb], next.Global.Raw[config.SectionWeb]) {
 		return "web configuration changed; restart sermod"
-	}
-	if EngineInt(current, config.EngineKeyMaxParallelOperations, DefaultEngineMaxParallelOperations) !=
-		EngineInt(next, config.EngineKeyMaxParallelOperations, DefaultEngineMaxParallelOperations) {
-		return "engine.max_parallel_operations changed; restart sermod"
 	}
 	return ""
 }

@@ -327,7 +327,6 @@ engine:
   backend: auto               # auto | systemd | openrc
   interval: 30s               # default cycle interval; per-service overridable
   max_parallel_checks: 8        # bound on concurrent checks across all services
-  max_parallel_operations: 2  # bound on concurrent start/stop/restart/reload/resume operations
   default_timeout: 10s        # default per-check timeout
   operation_timeout: 90s        # outer deadline for safe service actions
   artifact_interval: 5m       # cadencia de apps, librerías y artefactos config/versión de servicios
@@ -385,14 +384,12 @@ autodetección.
 Para los services oneshot de OpenRC cuyo comando `status` no puede reportar
 limpiamente, Sermo recurre a `rc-status -a` y confía en el estado del init.
 
-`engine.max_parallel_operations` limita cuántas acciones seguras de service
-(`start`, `stop`, `restart`, `reload`, `resume`) pueden ejecutarse al mismo tiempo a
-través de la remediación automática, la interfaz web y `sermoctl`. Es independiente de
-`max_parallel_checks`: muchas comprobaciones pueden ejecutarse mientras solo unas pocas
-operaciones de service avanzan. Los slots se comparten entre procesos bajo
-`<paths.runtime>/op-slots` (por defecto `/run/sermo/op-slots`); cuando todos los slots
-están ocupados, otra acción espera hasta que uno quede libre. El valor por defecto es
-`2`.
+Las acciones seguras de service (`start`, `stop`, `restart`, `reload`,
+`resume`) se ejecutan sin un tope global de concurrencia. Cada service sigue
+serializado por su propio lock de operación entre procesos
+(`<paths.runtime>/ops/<service>.lock`), la remediación automática está limitada
+por el bloque `policy` obligatorio por service (cooldown, `max_actions`,
+backoff), y toda acción está acotada por `engine.operation_timeout`.
 
 `engine.operation_timeout` es el plazo externo para un start/stop/restart/reload/resume
 seguro. El motor puede aumentarlo por service cuando el `stop_policy` resuelto necesita
@@ -464,10 +461,7 @@ El bloque `web` también se aplica solo al arrancar: la dirección/puerto del
 listener, autenticación y política guest se instalan en el servidor HTTP al
 iniciar `sermod`. Cambia esos ajustes con un reinicio completo; la recarga los
 rechaza en vez de dejar activa la política de acceso web anterior.
-`engine.max_parallel_operations` define el pool de slots de operación entre
-procesos. Cambiar su capacidad también requiere un reinicio completo, por lo
-que la recarga lo rechaza en vez de exceder brevemente un límite de seguridad
-reducido mientras operaciones antiguas conservan sus slots. `engine.interval`
+`engine.interval`
 sigue siendo recargable y replanifica inmediatamente los services que heredan
 la cadencia global. `engine.operation_timeout` también es recargable; las
 respuestas de acciones web extienden su plazo desde la configuración activa,
@@ -778,8 +772,6 @@ Endpoints de solo lectura:
   `before_id` de esa respuesta para continuar hacia filas más antiguas. Sin
   `page`/`before_id`, el endpoint mantiene el array de eventos anterior. Las
   páginas por cursor también aceptan una duración positiva `since`, como `24h`.
-- `GET /api/ops` — uso global de slots de operación: `{in_use, total}` para
-  `engine.max_parallel_operations`.
 
 Los endpoints que cambian el estado están protegidos contra CSRF para toda petición
 que no sea GET/HEAD y requieren permisos de admin cuando la autenticación está
@@ -2552,7 +2544,7 @@ la misma estructura de watch/hook.
 Solo las partes seguras por target de `defaults` se fusionan con targets
 configurados: `dry_run` aplica a services y watches; `stop_policy`, `policy` y
 `rule_window` aplican a services. Los ajustes de ámbito de motor (`interval`,
-`max_parallel_checks`, `max_parallel_operations`, `default_timeout`,
+`max_parallel_checks`, `default_timeout`,
 `operation_timeout`, `artifact_interval`, `startup_delay`, `backend`, `user_lookup`,
 `user_lookup_timeout`, `state_cache_size`) son configuración del daemon y nunca se
 fusionan con un service.
@@ -2853,8 +2845,6 @@ comprobaciones cubren:
   (una comprobación `pressure` en un kernel sin `/proc/pressure` — `CONFIG_PSI=n` —
   que de otro modo nunca se dispararía silenciosamente).
 - **Locks** — archivos de lock malformados bajo `<paths.runtime>/locks`.
-- **Slots de operación** — uso del daemon en ejecución (`info` cuando algunos slots están
-  en uso, `warning` cuando están saturados); ver también `GET /api/ops`.
 
 Rota y conserva `engine.diagnostics` con las herramientas de logs de tu host; Sermo no
 poda ese archivo.

@@ -94,7 +94,6 @@ var validEngineKeys = set(
 	EngineKeyDiagnosticsInterval,
 	EngineKeyEvents,
 	EngineKeyMaxParallelChecks,
-	EngineKeyMaxParallelOperations,
 	EngineKeyOperationTimeout,
 	EngineKeyStartupDelay,
 	EngineKeyStateCacheSize,
@@ -158,7 +157,6 @@ func validateGlobalEngine(raw map[string]any, add addFunc) {
 		add(validationPositiveDurationFormat, enginePathUserLookupTimeout, cfgval.String(v))
 	}
 	validateGlobalEnginePositiveInt(engine, EngineKeyMaxParallelChecks, enginePathMaxParallelChecks, add)
-	validateGlobalEnginePositiveInt(engine, EngineKeyMaxParallelOperations, enginePathMaxParallelOperations, add)
 	if v, present := engine[EngineKeyStateCacheSize]; present {
 		if n, ok := cfgval.ByteSize(v); !ok || n == 0 {
 			add("%s must be a positive size with a K/M/G suffix (e.g. 64M)", enginePathStateCacheSize)

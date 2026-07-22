@@ -305,10 +305,12 @@ y luego como mucho una operación.
   omisiones, nunca un atasco de ciclos de recuperación. Las omisiones son por servicio y se registran.
 - **Jitter**: los workers arrancan con un pequeño offset por servicio para que los ticks se repartan
   a lo largo del intervalo.
-- **Concurrencia acotada**: las operaciones de todos los servicios comparten el semáforo
-  global (`engine.max_parallel_operations`); la ejecución de checks comparte un
-  pool global separado (`engine.max_parallel_checks`). Un check que no consigue
-  un slot espera — no se omite.
+- **Concurrencia acotada**: cada servicio ejecuta como máximo una operación a la
+  vez (el lock de operación entre procesos), y la remediación automática está
+  limitada por el bloque `policy` obligatorio por servicio (cooldown,
+  `max_actions`, backoff). La ejecución de checks comparte un pool global
+  (`engine.max_parallel_checks`). Un check que no consigue un slot espera — no
+  se omite.
 - **Apagado** (SIGTERM/SIGINT): dejar de iniciar ciclos, cancelar los contextos de los workers;
   una operación en curso observa la cancelación, su limpieza diferida libera
   el lock y emite el evento, y un servicio parcialmente detenido se deja como está —

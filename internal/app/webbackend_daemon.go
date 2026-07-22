@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"sermo/internal/config"
+	"sermo/internal/notify"
 	"sermo/internal/servicemgr"
 	"sermo/internal/units"
 	"sermo/internal/web"
@@ -13,6 +14,7 @@ import (
 // DaemonInfo returns the daemon's effective configuration and host identity.
 func (b *WebBackend) DaemonInfo(_ context.Context) web.DaemonInfo {
 	info := web.DaemonInfo{}
+	info.ActiveUsers = notify.ActiveUserCount()
 
 	if h, err := os.Hostname(); err == nil {
 		info.Hostname = h
@@ -37,7 +39,6 @@ func (b *WebBackend) DaemonInfo(_ context.Context) web.DaemonInfo {
 		// Engine block (effective values with documented fallbacks)
 		info.Interval = units.HumanizeDuration(config.EngineInterval(b.cfg, config.DefaultEngineInterval))
 		info.MaxParallelChecks = EngineInt(b.cfg, config.EngineKeyMaxParallelChecks, DefaultEngineMaxParallelChecks)
-		info.MaxParallelOperations = EngineInt(b.cfg, config.EngineKeyMaxParallelOperations, DefaultEngineMaxParallelOperations)
 		info.DefaultTimeout = units.HumanizeDuration(EngineDuration(b.cfg, config.EngineKeyDefaultTimeout, DefaultEngineCheckTimeout))
 		info.OperationTimeout = units.HumanizeDuration(EngineDuration(b.cfg, config.EngineKeyOperationTimeout, DefaultEngineOperationTimeout))
 		info.StartupDelay = units.HumanizeDuration(EngineDuration(b.cfg, config.EngineKeyStartupDelay, 0))

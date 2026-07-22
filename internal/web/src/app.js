@@ -3,7 +3,7 @@ import watchPanelDescriptors from "./watch-panels.json";
 import {
   apiActionSuffix, apiActivityPath, apiApplicationsPath, apiDaemonPath, apiHeaderGeneration,
   apiEventsRecentPath, apiHostPath, apiLibrariesPath, apiLocksPath,
-  apiHeaderConfirm, apiMonitoringPath, apiMountsPath, apiNotifiersPath, apiOpsPath,
+  apiHeaderConfirm, apiMonitoringPath, apiMountsPath, apiNotifiersPath,
   apiQueryBefore, apiQueryBeforeID,
   apiQueryForce, apiQueryKill, apiQueryKind, apiQueryLazy, apiQueryLimit, apiQueryName, apiQueryNoCascade,
   apiQueryOnlyErrors, apiQueryPage, apiQueryService, apiQuerySince, apiQueryStatus,
@@ -407,7 +407,6 @@ async function loadPrimaryDashboard() {
       readyResult: snapshotResult(snapshot, "ready", {}),
       liveResult: snapshotResult(snapshot, "live", {}),
       monResult: snapshotResult(snapshot, "monitoring", {}),
-      opsResult: snapshotResult(snapshot, "operations", {}),
       hostMetricsResult: snapshotResult(snapshot, "host_metrics", []),
       generation,
       generationMismatch: !!(generation && aggregate.generation && generation !== aggregate.generation),
@@ -426,15 +425,14 @@ async function loadPrimaryDashboard() {
     fetchReadyReportResult(),
     getJSONResult(liveVerbosePath, {}),
     getJSONResult(apiMonitoringPath, {}),
-    getJSONResult(apiOpsPath, {}),
     getJSONResult(apiHostPath, []),
   ]);
   const [servicesResult, mountsResult, notifiersResult, daemonResult, daemonMetricsResult,
-    locksResult, activityResult, readyResult, liveResult, monResult, opsResult,
+    locksResult, activityResult, readyResult, liveResult, monResult,
     hostMetricsResult] = results;
   const { generation, mismatch: generationMismatch } = sharedBackendGeneration(results);
   return { servicesResult, mountsResult, notifiersResult, daemonResult, daemonMetricsResult,
-    locksResult, activityResult, readyResult, liveResult, monResult, opsResult,
+    locksResult, activityResult, readyResult, liveResult, monResult,
     hostMetricsResult, generation, generationMismatch,
     // Derived from the same collection the endpoints live in, so adding a new
     // endpoint to the Promise.all above keeps reachability in sync for free.
@@ -448,7 +446,7 @@ async function performLoad() {
   const sameLoad = () => seq === loadSeq;
   const { servicesResult, mountsResult, notifiersResult, daemonResult,
     daemonMetricsResult, locksResult, activityResult, readyResult, liveResult,
-    monResult, opsResult, hostMetricsResult, generation, generationMismatch,
+    monResult, hostMetricsResult, generation, generationMismatch,
     daemonReachable } = await loadPrimaryDashboard();
   if (!sameLoad()) return;
   if (generationMismatch) {
@@ -466,7 +464,6 @@ async function performLoad() {
   const ready = readyResult.data;
   const live = liveResult.data;
   const mon = monResult.data;
-  const ops = opsResult.data;
   const hostMetrics = hostMetricsResult.data;
   if (servicesResult.ok) {
     render(services);
@@ -506,7 +503,6 @@ async function performLoad() {
     ready,
     live,
     mon,
-    ops,
     locks: locks || latestLocks,
     daemon: daemon || {},
     // The failure fallback for host metrics is [] (truthy), so keeping the
@@ -515,7 +511,6 @@ async function performLoad() {
   });
   applyHash();
   if (connOK) {
-    renderOpsPanel(ops);
     healthIconReady = true;
     renderAttention();
   } else {
@@ -552,7 +547,7 @@ async function performLoad() {
   // one-time reveal runs only on the initial load.
   if (!firstSnapshotDone) {
     firstSnapshotDone = true;
-    renderOverview({ ready, live, mon, ops, locks: locks || latestLocks, hostMetrics: hostMetricsResult.ok ? hostMetrics : latestHostMetrics });
+    renderOverview({ ready, live, mon, locks: locks || latestLocks, hostMetrics: hostMetricsResult.ok ? hostMetrics : latestHostMetrics });
     renderAttention();
   }
 
@@ -566,7 +561,7 @@ async function performLoad() {
     ["mounts", mountsResult], ["notifiers", notifiersResult], ["daemon", daemonResult],
     ["daemon metrics", daemonMetricsResult], ["locks", locksResult], ["activity", activityResult],
     ["readiness", readyResult], ["liveness", liveResult], ["monitoring", monResult],
-    ["operations", opsResult], ["host metrics", hostMetricsResult], ["watches", watchesResult],
+    ["host metrics", hostMetricsResult], ["watches", watchesResult],
     ["applications", appsResult], ["libraries", librariesResult], ["events", eventsResult],
     ["service details", { ok: expandedServicesOK }],
     ["watch details", { ok: expandedWatchesOK }],
@@ -605,23 +600,6 @@ async function reloadConfig() {
   } finally {
     if (btn) btn.disabled = false;
   }
-}
-
-// renderOpsPanel updates the services-panel slot summary from data load() already
-// fetched; updateLiveOps still polls /api/ops while browser-local ops are active.
-function renderOpsPanel(o) {
-  if (!o) return;
-  liveOpsSlots = o;
-  if (liveOps.size) renderOperationLive();
-  const el = $("#ops");
-  if (!el) return;
-  if (!o.total) {
-    el.textContent = "";
-    return;
-  }
-  const saturated = o.in_use >= o.total;
-  const cls = saturated ? targetStateFailed : "";
-  el.innerHTML = `Operation slots: <span class="${cls}">${o.in_use}/${o.total}</span> in use`;
 }
 
 let eventNextBeforeID = 0;
@@ -1409,7 +1387,6 @@ const liveOps = new Map(); // operations started from this browser session, keye
 const pendingMonitorToggles = new Set();
 const liveMountOps = new Map(); // mount operations started from this browser session, keyed by mount name
 let liveOpsTimer = null;
-let liveOpsSlots = null;
 let latestLocks = [];
 let latestActivity = null;
 let latestReady = null;
@@ -1934,14 +1911,6 @@ function renderAttention() {
       target: "locks-section",
     });
   }
-  if (liveOpsSlots && liveOpsSlots.total > 0 && liveOpsSlots.in_use >= liveOpsSlots.total) {
-    items.push({
-      level: healthStatusWarning,
-      title: "Operation slots saturated",
-      detail: `${liveOpsSlots.in_use}/${liveOpsSlots.total} slots in use`,
-      target: "services-section",
-    });
-  }
   if (latestReady && latestReady.ready === false && latestReady.status === daemonStatusShuttingDown) {
     items.push({
       level: healthStatusWarning,
@@ -2036,12 +2005,10 @@ function beginOperation(name, action) {
     started: Date.now(),
     finished: 0,
     ok: false,
-    message: "waiting for operation slot",
+    message: "operation in progress",
   });
   ensureLiveOpsTimer();
   updateLiveOps();
-  renderOperationLive();
-  renderServices();
 }
 function finishOperation(name, ok, message) {
   const op = liveOps.get(name) || { name, action: "operation", started: Date.now() };
@@ -2069,13 +2036,9 @@ function stopLiveOpsTimerIfIdle() {
     liveOpsTimer = null;
   }
 }
-async function updateLiveOps() {
-  const result = await getJSONResult(apiOpsPath, liveOpsSlots || {}, dashboardGeneration);
-  if (result.generationMismatch) {
-    load();
-    return;
-  }
-  liveOpsSlots = result.data;
+// updateLiveOps re-renders the browser-local in-flight operation cards so
+// their elapsed times tick while an operation is active.
+function updateLiveOps() {
   renderOperationLive();
   renderServices();
   if (liveOps.size === 0) stopLiveOpsTimerIfIdle();
@@ -2089,11 +2052,8 @@ function renderOperationLive() {
     setHTMLIfChanged(box, "");
     return;
   }
-  const slotText = liveOpsSlots && liveOpsSlots.total != null
-    ? `<div class="muted op-slots-summary">Operation slots: <b class="${(liveOpsSlots.in_use || 0) >= (liveOpsSlots.total || 1) ? targetStateFailed : ''}">${liveOpsSlots.in_use || 0}/${liveOpsSlots.total || 0}</b> in use</div>`
-    : "";
   box.classList.remove("live-hidden");
-  const html = slotText + ops.map((op) => {
+  const html = ops.map((op) => {
     const state = opStateText(op);
     const cls = op.finished ? (op.ok ? targetStateOK : targetStateFailed) : "";
     const since = op.finished ? `${fmtDuration(opElapsed(op))} total` : `${fmtDuration(opElapsed(op))} elapsed`;
@@ -5287,7 +5247,6 @@ function renderDaemon(info) {
   set("#daemon-state", info.state_dir);
   set("#engine-interval", info.interval);
   set("#engine-max-checks", info.max_parallel_checks);
-  set("#engine-max-ops", info.max_parallel_operations);
   set("#engine-default-timeout", info.default_timeout);
   set("#engine-op-timeout", info.operation_timeout);
   set("#engine-startup-delay", info.startup_delay);
@@ -5482,7 +5441,7 @@ function tileGaugeId(key) {
 function renderOverview(ctx) {
   const band = $("#overview");
   if (!band) return;
-  const { ready, live, mon, ops, locks, hostMetrics } = ctx;
+  const { ready, live, mon, locks, hostMetrics } = ctx;
   const svcs = allServices || [];
   const enabled = svcs.filter((s) => s.enabled);
   const failedSvcs = svcs.filter((s) => serviceDisplayState(s) === targetStateFailed);
@@ -5603,18 +5562,6 @@ function renderOverview(ctx) {
       sub: monitoredSub,
       target: monitoredTarget,
       ariaLabel: tileAriaLabel("Monitored", `${monitoredSvcs.length} of ${enabled.length}`, monitoredSub, monitoredTarget),
-    }));
-  }
-  if (ops && ops.total) {
-    const saturated = (ops.in_use || 0) >= ops.total;
-    const opSub = saturated ? "saturated" : "";
-    tiles.push(tile({
-      label: "Op slots",
-      value: tpl`${ops.in_use || 0}<small> / ${ops.total}</small>`,
-      cls: saturated ? "t-warn" : "",
-      sub: opSub,
-      target: defaultServiceTarget,
-      ariaLabel: tileAriaLabel("Op slots", `${ops.in_use || 0} of ${ops.total}`, opSub, defaultServiceTarget),
     }));
   }
   const cpu = (hostMetrics || []).find((m) => m.name === hostMetricTotalCPU);
@@ -5791,9 +5738,8 @@ function renderStatus(ctx) {
   const bar = $("#statusbar");
   if (!bar) return;
   try {
-    const { ready, live, mon, ops, locks, daemon, hostMetrics } = ctx || {};
+    const { ready, live, mon, locks, daemon, hostMetrics } = ctx || {};
     latestReady = ready || {};
-    liveOpsSlots = ops || liveOpsSlots;
     latestLocks = locks || [];
     latestHostMetrics = hostMetrics || [];
 
@@ -5821,8 +5767,8 @@ function renderStatus(ctx) {
     // keeps only readings without a tile: watches, active users and locks.
     const parts = [];
     parts.push(["watches", `watches: <b>${ready.watches || 0}</b>`]);
-    if (ops.active_users != null) {
-      parts.push(["users", `users: <b>${ops.active_users || 0}</b>`]);
+    if (daemon.active_users != null) {
+      parts.push(["users", `users: <b>${daemon.active_users || 0}</b>`]);
     }
     const activeLocks = (locks || []).filter(l => l.state === lockStateActive).length;
     if (activeLocks > 0 || (locks || []).length > 0) {
@@ -5849,7 +5795,7 @@ function renderStatus(ctx) {
     statItems.push(`<span class="stat stat-status">status: <span class="${statusCls}">${statusLabel}</span></span>`);
     setHTMLIfChanged(bar, statItems.join(""));
     updatePanicView(ready.panic);
-    renderOverview({ ready, live, mon, ops, locks, hostMetrics });
+    renderOverview({ ready, live, mon, locks, hostMetrics });
     updateSectionNav();
 
     // Also populate the runtime part of the Daemon info panel

@@ -200,7 +200,7 @@ defaults:
 }
 
 func TestReloadConfigCompatibilityRejectsProcessLifetimeChanges(t *testing.T) {
-	current := reloadCompatibilityConfig("/run/sermo", "/var/lib/sermo", "current", 2)
+	current := reloadCompatibilityConfig("/run/sermo", "/var/lib/sermo", "current")
 	tests := []struct {
 		name string
 		next *config.Config
@@ -208,27 +208,22 @@ func TestReloadConfigCompatibilityRejectsProcessLifetimeChanges(t *testing.T) {
 	}{
 		{
 			name: "unchanged paths",
-			next: reloadCompatibilityConfig("/run/sermo", "/var/lib/sermo", "current", 2),
+			next: reloadCompatibilityConfig("/run/sermo", "/var/lib/sermo", "current"),
 		},
 		{
 			name: "runtime changed",
-			next: reloadCompatibilityConfig("/run/sermo-next", "/var/lib/sermo", "current", 2),
+			next: reloadCompatibilityConfig("/run/sermo-next", "/var/lib/sermo", "current"),
 			want: "paths.runtime changed; restart sermod",
 		},
 		{
 			name: "state changed",
-			next: reloadCompatibilityConfig("/run/sermo", "/var/lib/sermo-next", "current", 2),
+			next: reloadCompatibilityConfig("/run/sermo", "/var/lib/sermo-next", "current"),
 			want: "paths.state changed; restart sermod",
 		},
 		{
 			name: "web auth changed",
-			next: reloadCompatibilityConfig("/run/sermo", "/var/lib/sermo", "next", 2),
+			next: reloadCompatibilityConfig("/run/sermo", "/var/lib/sermo", "next"),
 			want: "web configuration changed; restart sermod",
-		},
-		{
-			name: "operation slots changed",
-			next: reloadCompatibilityConfig("/run/sermo", "/var/lib/sermo", "current", 4),
-			want: "engine.max_parallel_operations changed; restart sermod",
 		},
 	}
 
@@ -241,24 +236,22 @@ func TestReloadConfigCompatibilityRejectsProcessLifetimeChanges(t *testing.T) {
 	}
 }
 
-func reloadCompatibilityConfig(runtime, stateDir, password string, operationSlots int) *config.Config {
+func reloadCompatibilityConfig(runtime, stateDir, password string) *config.Config {
 	return &config.Config{Global: config.Global{
 		Runtime: runtime, State: stateDir,
 		Raw: map[string]any{
-			config.SectionEngine: map[string]any{config.EngineKeyMaxParallelOperations: operationSlots},
-			config.SectionWeb:    map[string]any{config.WebKeyPort: 9797, config.WebKeyPassword: password},
+			config.SectionWeb: map[string]any{config.WebKeyPort: 9797, config.WebKeyPassword: password},
 		},
 	}}
 }
 
 func TestMonitorApplyConfigUpdatesSchedulerInterval(t *testing.T) {
-	current := reloadCompatibilityConfig("/run/sermo", "/var/lib/sermo", "current", 2)
-	next := reloadCompatibilityConfig("/run/sermo", "/var/lib/sermo", "current", 2)
+	current := reloadCompatibilityConfig("/run/sermo", "/var/lib/sermo", "current")
+	next := reloadCompatibilityConfig("/run/sermo", "/var/lib/sermo", "current")
 	next.Global.Raw[config.SectionEngine] = map[string]any{
-		config.EntryKeyInterval:               "10s",
-		config.EngineKeyMaxParallelOperations: 2,
+		config.EntryKeyInterval: "10s",
 	}
-	mon := NewMonitor(current, Deps{Interval: time.Minute}, Scheduler{Interval: time.Minute, OpSlots: 2}, nil, nil, nil)
+	mon := NewMonitor(current, Deps{Interval: time.Minute}, Scheduler{Interval: time.Minute}, nil, nil, nil)
 	mon.Logger = slog.Default()
 
 	mon.applyConfig(next)

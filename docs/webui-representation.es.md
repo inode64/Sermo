@@ -69,7 +69,6 @@ deterministas de la API.
 | Eventos | `GET /api/events` | actividad de servicios/watches; admite `limit`, `service`, `watch`, `kind`, `status`, `only_errors` |
 | Actividad reciente | `GET /api/activity` | resumen de eventos recientes |
 | Recuentos de monitorización | `GET /api/monitoring` | recuentos de servicios monitorizados frente a pausados |
-| Operaciones en vivo | `GET /api/ops` | slots de operaciones activas |
 
 Las cachés de estado de init, inspección de aplicaciones y líneas temporales de
 SLA exponen sus horas de muestra reales, y las marcas de los segmentos SLA
@@ -183,11 +182,9 @@ permanece en la línea `status: starting` de la barra superior, no en este recua
 | Elemento | Representación actual |
 | --- | --- |
 | Contenedor | visible mientras hay operaciones activas/recientes |
-| Texto de slots | slots de operación en uso / total |
 | Tarjetas | acción, servicio, estado, tiempo transcurrido, mensaje |
 
-Local de la sesión para operaciones iniciadas desde el navegador actual; enriquecido con
-`/api/ops` cuando está disponible.
+Local de la sesión para operaciones iniciadas desde el navegador actual.
 
 ## Panel de servicios
 

@@ -65,7 +65,6 @@ overflow and axe WCAG 2.2 AA rules against deterministic API fixtures.
 | Events | `GET /api/events` | service/watch activity; supports `limit`, `service`, `watch`, `kind`, `status`, `only_errors` |
 | Activity summary | `GET /api/activity` | internal recent-event rollup used for dashboard attention indicators |
 | Monitoring counts | `GET /api/monitoring` | monitored vs paused service counts |
-| Live operations | `GET /api/ops` | active operation slots |
 
 Init status, application inspection and SLA timeline caches expose their actual
 sample times, and SLA segment timestamps stay anchored to `observed_at` instead
@@ -182,11 +181,9 @@ progress stays in the top-bar `status: starting` line, not in this box.
 | Element | Current representation |
 | --- | --- |
 | Container | visible while operations are active/recent |
-| Slot text | operation slots in use / total |
 | Cards | action, service, state, elapsed time, message |
 
-Session-local for operations started from the current browser; enriched with
-`/api/ops` where available.
+Session-local for operations started from the current browser.
 
 ## Services panel
 

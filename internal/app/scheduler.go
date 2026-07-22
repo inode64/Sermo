@@ -12,13 +12,13 @@ import (
 
 // Scheduler runs each worker on its own goroutine with an independent interval
 // timer measured from cycle completion (so overruns skip ticks, never queue
-// them), spreads worker starts with jitter, and bounds concurrent operations
-// across all services with a global semaphore.
+// them) and spreads worker starts with jitter. Operation concurrency is bounded
+// per service by the operation lock and by mandatory remediation policy, not by
+// a global cap.
 type Scheduler struct {
 	// Interval is the global default cycle interval (engine.interval) used by
 	// every worker and watch that does not set its own.
 	Interval time.Duration
-	OpSlots  int // global operation semaphore; <=0 means a default of 2
 	// StartupDelay holds the daemon for this long before starting any worker,
 	// giving the host time to finish booting so services that are still coming
 	// up are not flagged or remediated prematurely. <=0 disables the wait.
@@ -37,11 +37,7 @@ type cycler interface {
 // wrapped so it waits for a global operation slot, pausing only that service's
 // monitoring. Watches run on their own goroutines using their own interval.
 // When finalShutdown is false (config reload), readiness is left unchanged.
-func (s Scheduler) Run(ctx context.Context, workers []*Worker, watches []*Watch, opGate *OpGate, ready *Readiness, finalShutdown, gateReady bool) {
-	if opGate == nil {
-		opGate = NewOpGate(s.OpSlots, "")
-	}
-
+func (s Scheduler) Run(ctx context.Context, workers []*Worker, watches []*Watch, ready *Readiness, finalShutdown, gateReady bool) {
 	interval := s.Interval
 	if interval <= 0 {
 		interval = config.DefaultEngineInterval
@@ -80,7 +76,6 @@ func (s Scheduler) Run(ctx context.Context, workers []*Worker, watches []*Watch,
 	var wg sync.WaitGroup
 	idx := 0
 	for _, w := range workers {
-		gateOperate(w, opGate)
 		wi := w.Interval
 		if wi <= 0 {
 			wi = interval

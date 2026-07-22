@@ -112,7 +112,6 @@ const (
 	apiSegmentMonitoring   = "monitoring"
 	apiSegmentMounts       = "mounts"
 	apiSegmentNotifiers    = "notifiers"
-	apiSegmentOps          = "ops"
 	apiSegmentPanic        = "panic"
 	apiSegmentPreflight    = "preflight"
 	apiSegmentReload       = "reload"
@@ -210,7 +209,6 @@ const (
 	apiPathMonitoring   = apiPathPrefix + apiSegmentMonitoring
 	apiPathMounts       = apiPathPrefix + apiSegmentMounts
 	apiPathNotifiers    = apiPathPrefix + apiSegmentNotifiers
-	apiPathOps          = apiPathPrefix + apiSegmentOps
 	apiPathPanic        = apiPathPrefix + apiSegmentPanic
 	apiPathReload       = apiPathPrefix + apiSegmentReload
 	apiPathServices     = apiPathPrefix + apiSegmentServices
@@ -254,7 +252,6 @@ const (
 	routeAPIEventsClear    = routeMethodPost + apiPathEvents + "/" + apiActionClear
 	routeAPIStateCompact   = routeMethodPost + apiPathState + "/" + apiActionCompact
 	routeAPIPanic          = routeMethodPost + apiPathPanic + "/" + routeVarAction
-	routeAPIOps            = routeMethodGet + apiPathOps
 	routeAPIPreflight      = routeMethodPost + apiPathServices + "/" + routeVarName + "/" + apiSegmentPreflight
 	routeAPIAction         = routeMethodPost + apiPathServices + "/" + routeVarName + "/" + routeVarAction
 	routeAPIReload         = routeMethodPost + apiPathReload
@@ -578,21 +575,23 @@ type Notifier struct {
 // (engine settings and paths). Useful for operators to see effective
 // behavior without reading the config file.
 type DaemonInfo struct {
-	Backend               string        `json:"backend,omitempty"`
-	Hostname              string        `json:"hostname,omitempty"`
-	OS                    string        `json:"os,omitempty"`
-	HostType              *HostTypeInfo `json:"host_type,omitempty"`
-	HostUptime            string        `json:"host_uptime,omitempty"`         // display-ready uptime of the host/server since boot
-	HostUptimeSeconds     int64         `json:"host_uptime_seconds,omitempty"` // host/server uptime in whole seconds
-	ConfigPath            string        `json:"config_path,omitempty"`
-	RuntimeDir            string        `json:"runtime_dir,omitempty"`
-	StateDir              string        `json:"state_dir,omitempty"`
-	Interval              string        `json:"interval"`
-	MaxParallelChecks     int           `json:"max_parallel_checks"`
-	MaxParallelOperations int           `json:"max_parallel_operations"`
-	DefaultTimeout        string        `json:"default_timeout"`
-	OperationTimeout      string        `json:"operation_timeout"`
-	StartupDelay          string        `json:"startup_delay"`
+	Backend           string        `json:"backend,omitempty"`
+	Hostname          string        `json:"hostname,omitempty"`
+	OS                string        `json:"os,omitempty"`
+	HostType          *HostTypeInfo `json:"host_type,omitempty"`
+	HostUptime        string        `json:"host_uptime,omitempty"`         // display-ready uptime of the host/server since boot
+	HostUptimeSeconds int64         `json:"host_uptime_seconds,omitempty"` // host/server uptime in whole seconds
+	ConfigPath        string        `json:"config_path,omitempty"`
+	RuntimeDir        string        `json:"runtime_dir,omitempty"`
+	StateDir          string        `json:"state_dir,omitempty"`
+	Interval          string        `json:"interval"`
+	MaxParallelChecks int           `json:"max_parallel_checks"`
+	// ActiveUsers is the number of distinct users with an active login session,
+	// shown in the dashboard header.
+	ActiveUsers      int    `json:"active_users"`
+	DefaultTimeout   string `json:"default_timeout"`
+	OperationTimeout string `json:"operation_timeout"`
+	StartupDelay     string `json:"startup_delay"`
 }
 
 // HostTypeInfo describes the host's virtualization class for the dashboard.
@@ -885,15 +884,6 @@ type CheckMetric struct {
 	Unit string `json:"unit"`
 }
 
-// OperationSlots is the global start/stop/restart/reload/resume concurrency pool.
-type OperationSlots struct {
-	InUse int `json:"in_use"`
-	Total int `json:"total"`
-	// ActiveUsers is the number of distinct users with an active login session,
-	// surfaced on this payload so the header can show it alongside slot usage.
-	ActiveUsers int `json:"active_users"`
-}
-
 // ReadyReport is the /readyz readiness probe payload.
 type ReadyReport struct {
 	Ready    bool   `json:"ready"`
@@ -936,7 +926,6 @@ type DashboardSnapshot struct {
 	Ready         ReadyReport      `json:"ready"`
 	Live          LiveReport       `json:"live"`
 	Monitoring    MonitoringStatus `json:"monitoring"`
-	Operations    OperationSlots   `json:"operations"`
 	HostMetrics   []HostMetric     `json:"host_metrics"`
 }
 
@@ -1045,8 +1034,6 @@ type Backend interface {
 	Events(ctx context.Context, limit int) []Event
 	// EventPage returns one filtered cursor page from the global feed.
 	EventPage(ctx context.Context, query EventQuery) EventPage
-	// Operations reports how many global operation slots are in use.
-	Operations(ctx context.Context) OperationSlots
 	// ServiceEvents returns up to limit recent events for one service, newest
 	// first; ok is false for unknown names.
 	ServiceEvents(ctx context.Context, name string, limit int) ([]Event, bool)
@@ -1228,7 +1215,6 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc(routeAPIEventsClear, s.handleEventsClear)
 	mux.HandleFunc(routeAPIStateCompact, s.handleStateCompact)
 	mux.HandleFunc(routeAPIPanic, s.handlePanic)
-	mux.HandleFunc(routeAPIOps, s.handleOperations)
 	mux.HandleFunc(routeAPIPreflight, s.handlePreflight)
 	mux.HandleFunc(routeAPIAction, s.handleAction)
 	mux.HandleFunc(routeAPIReload, s.handleReload)
@@ -1517,7 +1503,6 @@ func CollectDashboardSnapshot(ctx context.Context, backend Backend, since time.D
 	run(func() { snapshot.Locks = backend.Locks(ctx) })
 	run(func() { snapshot.Activity = backend.ActivitySummary(ctx) })
 	run(func() { snapshot.Monitoring = backend.MonitoringStatus(ctx) })
-	run(func() { snapshot.Operations = backend.Operations(ctx) })
 	run(func() { snapshot.HostMetrics = backend.HostMetrics(ctx) })
 	wg.Wait()
 	return snapshot
@@ -1901,10 +1886,6 @@ func (s *Server) handlePanic(w http.ResponseWriter, r *http.Request) {
 	}
 	res := s.Backend.SetPanic(s.operateContext(r), on) //nolint:contextcheck // see operateContext
 	writeActionResult(w, res.OK, res)
-}
-
-func (s *Server) handleOperations(w http.ResponseWriter, r *http.Request) {
-	s.readJSON(w, r, func(ctx context.Context, backend Backend) any { return backend.Operations(ctx) })
 }
 
 // readyReportFromBackend builds the readiness report: it delegates to the

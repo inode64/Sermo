@@ -105,8 +105,6 @@ const (
 	EngineKeyEvents = "events"
 	// EngineKeyMaxParallelChecks is engine.max_parallel_checks.
 	EngineKeyMaxParallelChecks = "max_parallel_checks"
-	// EngineKeyMaxParallelOperations is engine.max_parallel_operations.
-	EngineKeyMaxParallelOperations = "max_parallel_operations"
 	// EngineKeyOperationTimeout is engine.operation_timeout.
 	EngineKeyOperationTimeout = "operation_timeout"
 	// EngineKeyStartupDelay is engine.startup_delay.

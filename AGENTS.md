@@ -765,10 +765,13 @@ checklist). Match the suite's existing style instead of inventing one.
     semantics. See `docs/safety.md` (locks).
 16. The scheduler runs one independent worker per service; a long operation
     (a multi-minute restart) on one service must never block monitoring of
-    another. Never serialize all services through a single loop. Mass restarts
-    are bounded by a global operation semaphore, and concurrent check execution
-    across all services is bounded by `engine.max_parallel_checks` (a separate
-    global pool). See `docs/safety.md` (scheduler and concurrency).
+    another. Never serialize all services through a single loop. Each service
+    runs at most one operation at a time (the per-service operation lock), and
+    restart storms are prevented by the mandatory per-service remediation
+    `policy` (cooldown/backoff), not by a global operation cap. Concurrent
+    check execution across all services is bounded by
+    `engine.max_parallel_checks` (a global pool). See `docs/safety.md`
+    (scheduler and concurrency).
 
 ## graphify
 

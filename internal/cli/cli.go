@@ -811,10 +811,7 @@ func (a App) defaultOperate(ctx context.Context, opts options, cfg *config.Confi
 	opCtx, cancel := context.WithTimeout(ctx, opTimeout)
 	defer cancel()
 
-	gate := app.NewOpGate(app.OpSlotsFromConfig(cfg), cfg.Global.RuntimeDir())
-	result := gate.Run(opCtx, service, action, func(ctx context.Context) operation.Result {
-		return engine.Do(ctx, action)
-	})
+	result := engine.Do(opCtx, action)
 	if result.Message == "unknown action" && result.Status == operation.ResultFailed {
 		return operation.Result{}, fmt.Errorf("unknown action %q", action)
 	}

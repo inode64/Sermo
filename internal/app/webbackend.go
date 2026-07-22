@@ -169,7 +169,6 @@ type WebBackend struct {
 	mountSignaler     process.Signaler
 	mountAlerter      MountUserAlerter
 	emit              func(Event)
-	opGate            *OpGate
 	defaultTimeout    time.Duration
 	operationTimeout  time.Duration
 	now               func() time.Time
@@ -264,7 +263,6 @@ func NewWebBackend(ctx context.Context, cfg *config.Config, deps Deps) (*WebBack
 		mountSignaler:     deps.MountSignaler,
 		mountAlerter:      deps.MountUserAlerter,
 		emit:              deps.Emit,
-		opGate:            deps.OpGate,
 		defaultTimeout:    deps.DefaultTimeout,
 		operationTimeout:  deps.OperationTimeout,
 		now:               deps.Now,
