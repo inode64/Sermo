@@ -197,7 +197,7 @@ Lista las entradas de servicio **configuradas** desde la configuración cargada,
 excluyendo contenedores Docker (`category: docker`) y máquinas virtuales
 (`category: virtual-machine`), que se muestran en paneles propios. Esto no es
 `sermoctl services`, que inventaría los perfiles de servicio del **catálogo**
-bajo `catalog/services`. Consulta [cli.md](cli.es.md#catalog-inventory).
+bajo `catalog/services`. Consulta [cli.md](cli.es.md#inventario-de-catálogo).
 
 | Parte | Representación actual |
 | --- | --- |
@@ -548,7 +548,7 @@ active por accidente. Mientras el modo pánico está activo, el estado del daemo
 muestra **`panic mode`** (rojo), aparece un banner bajo la cabecera, y el daemon
 sigue monitorizando mientras suprime hooks, notificaciones de alerta y remediación
 automática. El mismo conmutador está disponible desde la CLI como `sermoctl panic
-on|off|status`. Consulta [cli.md](cli.es.md#panic-mode).
+on|off|status`. Consulta [cli.md](cli.es.md#modo-pánico).
 
 ## Panel de locks de runtime
 

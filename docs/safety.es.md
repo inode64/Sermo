@@ -95,7 +95,7 @@ el start posterior conserva esa decisión del operador.
 Una métrica `scope: system` ("¿está la máquina bajo presión?") **no** es un disparador
 sólido para reiniciar un único servicio, así que solo se permite en reglas `alert` — nunca en
 reglas de remediación, ni directamente ni mediante una referencia de check. Véase
-[Métricas](rules.es.md#metrics) para las listas de métricas `scope: service` y `scope: system`.
+[Métricas](rules.es.md#métricas) para las listas de métricas `scope: service` y `scope: system`.
 
 ## Privilegios: el daemon se ejecuta como root
 
@@ -136,7 +136,7 @@ Dado que el daemon se ejecuta como root:
   navegador), y establece timeouts HTTP. Habla HTTP plano, así que para alcanzarla desde fuera
   del host **debes** ponerla detrás de un reverse proxy con terminación TLS
   (nginx/Apache) — véase
-  [detrás de un reverse proxy](configuration.es.md#behind-a-reverse-proxy-required-to-expose-it).
+  [detrás de un reverse proxy](configuration.es.md#detrás-de-un-proxy-inverso-requerido-para-exponerlo).
   Mantén `web.address` en loopback; nunca publiques el puerto directamente. El daemon registra
   una advertencia si la interfaz se ejecuta sin autenticación.
 - **Sin shell, sin kills por nombre, sin SIGKILL por defecto** — véanse las invariantes

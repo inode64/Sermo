@@ -103,7 +103,7 @@ clients ── sermoctl (CLI) ─┐                    ┌── operation.Engi
       config + packaged catalog ────┘                       └── web.Server (dashboard + /api)
 ```
 
-See [docs/architecture.es.md](docs/architecture.es.md) for the faithful,
+See [docs/architecture.md](docs/architecture.md) for the faithful,
 code-anchored diagrams (operation pipeline, lock states, monitoring cycle).
 
 ## The two binaries
@@ -252,5 +252,5 @@ Daemon flags (`--verbose`) are in
   resolved-exe + UID match only).
 - [Web dashboard](docs/webui-representation.md) — what every panel, badge and
   graph on the dashboard means.
-- [Architecture](docs/architecture.es.md) — end-to-end diagrams of the daemon,
+- [Architecture](docs/architecture.md) — end-to-end diagrams of the daemon,
   the operation pipeline, lock states and the monitoring cycle.
