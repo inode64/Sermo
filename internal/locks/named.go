@@ -149,7 +149,7 @@ func (l NamedLocker) acquire(service, name, reason string, ttl time.Duration, ow
 			CreatedAt:       now(),
 			ExpiresAt:       now().Add(ttl),
 		}
-	}, proc, now, held, nil, true, exhausted)
+	}, proc, now, held, nil, exhausted)
 	if err != nil {
 		return nil, err
 	}
