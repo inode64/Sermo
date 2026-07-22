@@ -846,6 +846,10 @@ func numericData(v any) (float64, bool) {
 		return float64(t), true
 	case int64:
 		return float64(t), true
+	case uint64:
+		return float64(t), true
+	case uint:
+		return float64(t), true
 	default:
 		return 0, false
 	}
