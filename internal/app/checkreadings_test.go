@@ -153,6 +153,16 @@ func TestCheckReadingsForAllTypes(t *testing.T) {
 			minCount: 1,
 		},
 		{
+			// numericData also coerces uint64 (the type level count checks such
+			// as fds/pids/conntrack use), not only int, so a graphable metric
+			// stored unsigned still renders.
+			name:     "users renders an unsigned count",
+			typ:      "users",
+			data:     map[string]any{"count": uint64(5)},
+			want:     map[string]string{"count": "5 users"},
+			minCount: 1,
+		},
+		{
 			// A metric check surfaces the observed value with its unit, labelled
 			// by the metric, instead of only its event message.
 			name:     "metric exposes the observed value",
