@@ -92,8 +92,8 @@ una CLI configtest, `mosquitto`, `supervisord`, `udisks2`, `pm2`, etc. (`redis` 
 ## Engine y configuración
 
 - [ ] Prioridades de servicio: `priority` configurable por servicio (entero o nivel
-      con nombre), validación y valores por defecto; usar en el orden de remediación/operación cuando
-      varios servicios compiten por el semáforo global; exponer en `sermoctl
+      con nombre), validación y valores por defecto; usar en el orden de remediación
+      cuando varios servicios encolan acciones en el mismo ciclo; exponer en `sermoctl
       services` (orden/filtro), la tabla de servicios y el panel de detalle de la web UI, y
       el wizard de servicios.
 - [ ] Acción de regla `exec`: no implementada. Si se planifica, añadir una constante
