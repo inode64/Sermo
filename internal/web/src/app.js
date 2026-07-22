@@ -1400,6 +1400,7 @@ restoreUIState();
 let allEvents = [];
 let expCache = {};         // last rendered expansion HTML per key (avoids flicker)
 let expDetailCache = {};   // last /api/services/{name} JSON per svc expansion key
+const expCellCache = new Map(); // live detail cells preserved across outer table renders
 let eventExpanded = new Set();
 const liveOps = new Map(); // operations started from this browser session, keyed by service
 // Monitor/unmonitor requests in flight, keyed by "svc:"/"wat:" + name. These
@@ -2626,6 +2627,7 @@ function renderSplitServicePanel(panelKey) {
 }
 
 function renderServices() {
+  preserveExpansionCells(isServiceExpansionKey);
   renderPrimaryServices();
   renderSplitServicePanel("container");
   renderSplitServicePanel("vm");
@@ -2661,6 +2663,7 @@ function toggleExpand(key) {
     expanded.delete(key);
     delete expCache[key];
     delete expDetailCache[key];
+    expCellCache.delete(key);
     if (location.hash === "#" + key) history.replaceState(null, "", location.pathname + location.search);
   } else {
     expanded.add(key);
@@ -2690,7 +2693,18 @@ function toggleServiceExpansion(name) {
   toggleExpand(serviceExpansionKey(name));
 }
 
-// reassertExpansions re-fills open expansion cells from cache after a
+// preserveExpansionCells retains the live detail DOM (including SVG charts and
+// event rows) before an outer lit-html table render removes its row. Reusing
+// the original cell also preserves its nested lit-html render state.
+function preserveExpansionCells(matches) {
+  expanded.forEach((key) => {
+    if (!matches(key)) return;
+    const cell = expansionCell(key);
+    if (cell) expCellCache.set(key, cell);
+  });
+}
+
+// reassertExpansions restores open expansion cells after a
 // structural table re-render (filter keystrokes, sorting, grouping, the 1s
 // operations ticker), which can recreate rows and blank their detail cells.
 // It performs no network requests: fresh data arrives once per dashboard poll
@@ -2699,16 +2713,18 @@ function toggleServiceExpansion(name) {
 function reassertExpansions() {
   expanded.forEach((k) => {
     if (!isServiceExpansionKey(k) && !isWatchExpansionKey(k)) return;
+    const preserved = expCellCache.get(k);
+    const cell = expansionCell(k);
+    if (preserved && cell) {
+      if (preserved !== cell) cell.replaceWith(preserved);
+      expCellCache.delete(k);
+      return;
+    }
     if (!expCache[k]) {
       loadExpansionFor(k, dashboardGeneration);
       return;
     }
-    const cell = expansionCell(k);
     if (cell) litRender(expCache[k], cell);
-    // Re-hydrate charts/events for service details: a recreated row renders
-    // the cached markup with empty chart containers.
-    const detail = expDetailCache[k];
-    if (detail) hydrateServiceDetail(detail, dashboardGeneration);
   });
 }
 
@@ -4549,6 +4565,7 @@ function renderWatchGroups(panel, watches) {
 function renderWatches(watches) {
   if (watches) allWatches = watches;
   scheduleGlobalTargetSync();
+  preserveExpansionCells(isWatchExpansionKey);
   renderWatchPanel("host", allWatches || []);
   reassertExpansions();
   applyHash();

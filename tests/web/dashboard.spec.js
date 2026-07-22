@@ -359,6 +359,25 @@ test("service detail graphs named check metrics and reports fetch failures", asy
   await expect(dbMetric).toContainText("Failed to load users · count: HTTP 500");
 });
 
+test("service table re-renders preserve hydrated detail without more requests", async ({ page }) => {
+  let detailRequests = 0;
+  page.on("request", (request) => {
+    if (new URL(request.url()).pathname.startsWith("/api/services/web")) detailRequests++;
+  });
+
+  await page.locator("#svc-row-web .row-toggle").click();
+  const detail = page.locator('[data-service-detail="web"]');
+  await expect(detail.locator('[data-service-metric-check="users"] svg')).toBeVisible();
+  await page.waitForTimeout(100);
+  const hydratedRequests = detailRequests;
+
+  await page.locator("#svc-search").fill("web");
+  await page.waitForTimeout(1100);
+
+  await expect(detail.locator('[data-service-metric-check="users"] svg')).toBeVisible();
+  expect(detailRequests).toBe(hydratedRequests);
+});
+
 test("notifier test asks for confirmation and posts one named notifier", async ({ page }) => {
   await page.locator("#notifiers-section > summary").click();
   const button = page.locator('[data-notifier-test="ops"]');
