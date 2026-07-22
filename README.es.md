@@ -130,7 +130,7 @@ al código (pipeline de operación, estados de locks, ciclo de monitorización).
   webhooks), y puede servir el **dashboard web** (configura `web.port`,
   recomendado `9797`) — HTTP en loopback con auth opcional; expónlo solo detrás
   de un reverse proxy TLS
-  ([cómo](docs/configuration.es.md#behind-a-reverse-proxy-required-to-expose-it)).
+  ([cómo](docs/configuration.es.md#detrás-de-un-proxy-inverso-requerido-para-exponerlo)).
 
 ## Invariantes de seguridad
 
@@ -169,7 +169,7 @@ inspección de `/proc` entre usuarios incluyendo IO por proceso, sockets ICMP ra
 unidades empaquetadas lo ejecutan como root; avisa al arrancar si no lo es. Por tanto la config es
 entrada confiable, propiedad de root — los checks `command` y los `hook`s se ejecutan como root
 (nunca a través de un shell), así que mantén `/etc/sermo` solo para root y pon los secretos en el
-entorno (`${env:NAME}`). Ver [safety](docs/safety.es.md#privileges-the-daemon-runs-as-root).
+entorno (`${env:NAME}`). Ver [safety](docs/safety.es.md#privilegios-el-daemon-se-ejecuta-como-root).
 Los comandos de `sermoctl` de solo lectura (status, config, etc.) no necesitan root.
 
 ## Install
@@ -250,9 +250,9 @@ sermod run --config /etc/sermo/sermo.yml
 Las definiciones empaquetadas viven en [`catalog/`](catalog/), las configs de ejemplo en
 [`examples/`](examples/), las unidades de empaquetado en [`packaging/`](packaging/). El
 layout de archivos en el host está en
-[configuration → layout](docs/configuration.es.md#layout).
+[configuration → layout](docs/configuration.es.md#disposición).
 Los flags del daemon (`--verbose`) están en
-[CLI → sermod daemon flags](docs/cli.es.md#sermod-daemon-flags).
+[CLI → sermod daemon flags](docs/cli.es.md#flags-del-daemon-sermod).
 
 ## Documentation
 

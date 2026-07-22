@@ -52,7 +52,7 @@ mostrando cuáles están instalados, la versión que su comando de versión repo
 si resuelven sin error (añada `all` para incluir los no instalados).
 Las instancias de servicio configuradas (bajo `paths.services`) se listan
 en la web UI y `GET /api/services`, no en `sermoctl services` — véase
-[cli.md](cli.es.md#catalog-inventory).
+[cli.md](cli.es.md#inventario-de-catálogo).
 `sermoctl patterns` lista los conjuntos de patterns y sus conteos de reglas (véase el
 bloque `analyze:` en [rules.md](rules.es.md)).
 
@@ -1452,7 +1452,7 @@ genéricos, pero los **nombres reservados** son consumidos por features:
   sobre `version` para health de app; `version` permanece solo-display.
 - **`version`** (y `version_short`) — ejecutado por los listados `sermoctl apps`/`libs`/
   `services` para reportar la versión de un servicio, y **cada ciclo** por el
-  monitor `version.on_change` (véase [Condiciones de salud del servicio](rules.es.md#service-health-conditions-version--state--config)).
+  monitor `version.on_change` (véase [Condiciones de salud del servicio](rules.es.md#condiciones-de-salud-del-servicio-versión--estado--configuración)).
   Ese monitor compara el `version_short` numérico, y un opcional
   `version.on_change.level` (`major`/`minor`/`patch`, por defecto `patch`) selecciona en
   qué granularidad `a.b.c` debería alertar un cambio.

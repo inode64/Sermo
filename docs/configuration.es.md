@@ -498,7 +498,7 @@ arriba). `sermoctl reload <service>` es una operación diferente — recarga *es
 en su sitio a través del motor (preflight → reload → health). Cómo recarga un service,
 incluyendo el bloque `reload:` que permite a Sermo enviar una señal a un service cuando
 su unidad de init no tiene recarga, está documentado en
-[services.md](services.es.md#reload-on-config-change-reload_on_change).
+[services.md](services.es.md#reload-al-cambiar-la-configuración-reload_on_change).
 Si ni el backend de init ni un fallback válido `reload.command`/`reload.signal`
 pueden recargar el service, `sermoctl reload <service>` se rechaza antes de
 ejecutarse.
@@ -574,7 +574,7 @@ declarar un destino `control:` por service para recursos que no son de init:
 `control.type: libvirt` para VMs de QEMU/libvirt o `control.type: docker` para
 contenedores Docker. Esos destinos siguen usando los mismos locks, guards,
 comprobaciones de preflight y timeouts de operación; consulta
-[services](services.es.md#control-docker--docker-containers).
+[services](services.es.md#control-docker--contenedores-docker).
 
 Debajo de la tabla de services, el panel lista las **aplicaciones instaladas** (los
 daemons de app del catálogo cuyo binario está presente) y las **librerías instaladas**
@@ -740,7 +740,7 @@ Endpoints de solo lectura:
   `observability_missing`, locks activos, estado/fuente/marca de tiempo de monitor, backend,
   unidad, cooldown, estado de remediación, próxima acción elegible y último evento. Esto
   no es `sermoctl services`, que lista los perfiles de service del catálogo — consulta
-  [cli.md](cli.es.md#catalog-inventory).
+  [cli.md](cli.es.md#inventario-de-catálogo).
 - `GET /api/services/{name}` — detalle del service: últimas comprobaciones, SLA móvil,
   locks de runtime con nombre, procesos descubiertos, estado de la política de
   remediación automática y progreso de la ventana de reglas.
@@ -977,7 +977,7 @@ por defecto, soporta autenticación (arriba), establece timeouts HTTP y requiere
 cabecera **`X-Sermo-Csrf`** en cada petición de acción (POST) — el panel la envía; un
 cliente de API también debe hacerlo (p. ej. `curl -H 'X-Sermo-Csrf: 1' -X POST …`). Esto
 bloquea la falsificación de peticiones entre sitios desde un navegador. Consulta
-[safety](safety.es.md#trust-model).
+[safety](safety.es.md#modelo-de-confianza).
 
 ## Disponibilidad (SLA)
 
@@ -1562,7 +1562,7 @@ Estas convenciones mantienen cortas las secciones por tipo a continuación:
   ```
 
   Los mismos campos `expect_exit` / `expect_stdout` / `expect_stderr` funcionan en una
-  comprobación `command` (ver [Checks](rules.es.md#checks)). Las comprobaciones de comando
+  comprobación `command` (ver [Checks](rules.es.md#comprobaciones)). Las comprobaciones de comando
   también soportan `user` para ejecutar el argv como un usuario del SO específico; los
   comandos de hook no.
 - **Modelo de evaluación.** Una **comprobación de nivel** (`storage`, `memory`,
@@ -1674,7 +1674,7 @@ comprobaciones de service (`tcp`, `ports`, `http`, `command`, `file_exists`, `fi
 de protocolo de conexión como `mysql`/`smtp`) — pueden usarse como un watch
 aquí, y las de recursos de host pueden igualmente usarse como entradas `watches:`
 solo-check de un service o como `checks:`/reglas explícitas (ver
-[Checks](rules.es.md#checks)). Un watch dispara su hook con el resultado de
+[Checks](rules.es.md#comprobaciones)). Un watch dispara su hook con el resultado de
 **alerta** de la comprobación: umbral cruzado para comprobaciones de condición, **fallo**
 para comprobaciones de salud (`tcp`/`http`/`firewall_rules`/`cert`/…), de modo que p. ej.
 un watch `http` alerta cuando el endpoint está caído, un watch `firewall_rules` alerta
@@ -1684,7 +1684,7 @@ forma de watch multimétrica (`net`, `icmp`, `swap`) de abajo (un mapa `metrics:
 por métrica) y los tipos multidestino (`file`, `process`) son solo-watch;
 la forma de métrica única de `net`/`icmp`/`swap` (un campo `metric:` explícito) también
 funciona como watch solo-check de service o como entrada explícita `checks:` (ver
-[Checks](rules.es.md#checks)).
+[Checks](rules.es.md#comprobaciones)).
 Cuando la Web UI está habilitada, `GET /api/watches` renderiza las lecturas del
 watch desde el último ciclo de watches del daemon; no inicia sondas propias de
 comandos, red, SQL, firewall, count, disk I/O, `hdparm` o `smart` en cada poll
@@ -2628,9 +2628,9 @@ variable y hacer que cada referencia `${var}` se resuelva al nuevo valor.
   `delete: true`.
 
 Los ejemplos trabajados (clonación, deshabilitación, múltiples instancias) viven en
-[services](services.es.md#cloning).
+[services](services.es.md#clonado).
 Las plantillas de catálogo para versiones/instancias instaladas usan `%v`, `%n` y `%i`;
-ver [versioned services](services.es.md#versioned-services).
+ver [versioned services](services.es.md#servicios-versionados).
 Cuando las plantillas simples `%v` o `%n` también tienen un binario de slot activo sin un
 sufijo, como `php` junto a `php8.4` o `python` junto a `python3`, Sermo materializa esa
 entrada sin versión automáticamente. Las plantillas compuestas con tokens adicionales no
