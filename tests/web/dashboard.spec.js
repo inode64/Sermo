@@ -16,6 +16,7 @@ const services = [
 ];
 
 const dashboard = {
+  generation: 7,
   services,
   mounts: [{
     name: "data.mount", display_name: "Data", category: "storage", path: "/data",
@@ -366,7 +367,7 @@ test("notifier test asks for confirmation and posts one named notifier", async (
   await button.click();
   await expect(page.locator("#simple-confirm")).toBeVisible();
   await page.locator('[data-simple-result="true"]').click();
-  await request;
+  expect((await request).headers()["x-sermo-generation"]).toBe("7");
 });
 
 test("libraries inventory is visible and searchable", async ({ page }) => {

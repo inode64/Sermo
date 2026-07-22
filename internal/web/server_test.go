@@ -336,6 +336,22 @@ type pinnedGenerationBackend struct {
 	released   bool
 }
 
+type pinnedMutationBackend struct {
+	fakeBackend
+	generation            uint64
+	released              bool
+	releasedDuringOperate bool
+}
+
+func (b *pinnedMutationBackend) BeginBackendRead() (Backend, uint64, func()) {
+	return b, b.generation, func() { b.released = true }
+}
+
+func (b *pinnedMutationBackend) Operate(ctx context.Context, name, action string, opts OperateOpts) ActionResult {
+	b.releasedDuringOperate = b.released
+	return b.fakeBackend.Operate(ctx, name, action, opts)
+}
+
 func (b *pinnedGenerationBackend) BeginBackendRead() (Backend, uint64, func()) {
 	return &b.fakeBackend, b.generation, func() { b.released = true }
 }
@@ -400,6 +416,46 @@ func postReq(path string) *http.Request {
 	r := httptest.NewRequest(http.MethodPost, path, nil)
 	r.Header.Set(headerSermoCSRF, "1")
 	return r
+}
+
+func TestTargetMutationRequiresCurrentGeneration(t *testing.T) {
+	tests := []struct {
+		name       string
+		generation string
+		wantStatus int
+		wantCalls  int
+	}{
+		{name: "missing", wantStatus: http.StatusPreconditionRequired},
+		{name: "invalid", generation: "old", wantStatus: http.StatusBadRequest},
+		{name: "stale", generation: "6", wantStatus: http.StatusPreconditionFailed},
+		{name: "current", generation: "7", wantStatus: http.StatusOK, wantCalls: 1},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			b := &pinnedMutationBackend{generation: 7}
+			req := postReq(testServicePath("web", apiActionRestart))
+			if tt.generation != "" {
+				req.Header.Set(headerSermoGeneration, tt.generation)
+			}
+			rec := httptest.NewRecorder()
+			newServer(b).ServeHTTP(rec, req)
+			if rec.Code != tt.wantStatus {
+				t.Fatalf("status = %d body=%s, want %d", rec.Code, rec.Body.String(), tt.wantStatus)
+			}
+			if len(b.operated) != tt.wantCalls {
+				t.Fatalf("operate calls = %v, want %d", b.operated, tt.wantCalls)
+			}
+			if !b.released {
+				t.Fatal("backend generation pin was not released")
+			}
+			if b.releasedDuringOperate {
+				t.Fatal("backend generation pin was released before the operation completed")
+			}
+			if got := rec.Header().Get(headerSermoGeneration); got != "7" {
+				t.Fatalf("response generation = %q, want 7", got)
+			}
+		})
+	}
 }
 
 func TestHandlePanicToggles(t *testing.T) {

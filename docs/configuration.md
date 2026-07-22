@@ -752,6 +752,13 @@ Read-only endpoints:
 State-changing endpoints are CSRF-protected for every non-GET/HEAD request and
 require admin permissions when auth is enabled:
 
+Target-scoped requests (service, watch, mount, notifier, lock and preflight)
+must also send `X-Sermo-Generation` with the generation most recently returned
+by the dashboard data API. The daemon returns `428` when it is missing and
+`412` when a reload has made it stale; fetch a fresh dashboard snapshot before
+retrying. The daemon pins that generation until the request finishes, so an
+accepted operation cannot switch targets during a concurrent reload.
+
 - `POST /api/services/{name}/preflight` — run the same preflight checks as
   `sermoctl preflight SERVICE`, without starting or stopping anything.
 - `POST /api/services/{name}/{action}` — service action. `action` is `monitor`,
