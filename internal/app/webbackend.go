@@ -192,6 +192,13 @@ type WebBackend struct {
 	mountOperations   map[string]web.MountOperation
 }
 
+func (b *WebBackend) webNow() time.Time {
+	if b != nil && b.now != nil {
+		return b.now()
+	}
+	return time.Now()
+}
+
 // DashboardSnapshot collects every reload-sensitive dashboard section from one
 // backend generation. The holder calls it after taking one pointer, so a reload
 // cannot combine services from one configuration with daemon data from another.

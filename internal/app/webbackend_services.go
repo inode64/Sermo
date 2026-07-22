@@ -317,7 +317,7 @@ func (b *WebBackend) Detail(ctx context.Context, name string) (web.Detail, bool)
 
 	if report, err := serviceLocksReport(b.cfg, name); err == nil {
 		for i := range report.Locks {
-			d.Locks = append(d.Locks, lockToWeb(report.Locks[i], name))
+			d.Locks = append(d.Locks, lockToWebAt(report.Locks[i], name, now))
 		}
 		if len(report.Warnings) > 0 {
 			d.LockWarnings = slices.Clone(report.Warnings)

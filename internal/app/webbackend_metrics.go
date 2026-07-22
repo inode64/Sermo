@@ -19,7 +19,7 @@ func (b *WebBackend) Series(_ context.Context, name string, since time.Duration)
 	if b.sla == nil {
 		return []web.SeriesPoint{}, true
 	}
-	now := time.Now()
+	now := b.webNow()
 	points, err := b.sla.SLASeries(name, now.Add(-since), now)
 	if err != nil {
 		return []web.SeriesPoint{}, true
@@ -46,7 +46,7 @@ func (b *WebBackend) Metrics(_ context.Context, name, check, metric string, sinc
 	if !ok {
 		return web.MetricSeries{}, false
 	}
-	now := time.Now()
+	now := b.webNow()
 
 	if metric == "" {
 		if !measuredCheckTypes[checkType] {

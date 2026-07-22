@@ -282,18 +282,8 @@ func (b *WebBackend) latestPublishedServiceRuntime(name string, e *webEntry) (we
 	return cur, at, true
 }
 
-func (b *WebBackend) webNow() time.Time {
-	if b != nil && b.now != nil {
-		return b.now()
-	}
-	return time.Now()
-}
-
 func (b *WebBackend) probeServiceRuntime(name string, e *webEntry) web.ServiceRuntime {
-	now := time.Now()
-	if b.now != nil {
-		now = b.now()
-	}
+	now := b.webNow()
 	cur := web.ServiceRuntime{At: now.UTC().Format(time.RFC3339)}
 	if e == nil || e.disabled || e.noResidentProcess {
 		return cur

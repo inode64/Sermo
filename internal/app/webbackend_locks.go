@@ -94,7 +94,7 @@ func (b *WebBackend) lockReportsByService() map[string]locks.Report {
 // Locks returns the active and stale runtime locks across services.
 func (b *WebBackend) Locks(_ context.Context) []web.Lock {
 	var out []web.Lock
-	now := time.Now()
+	now := b.webNow()
 	reports := b.lockReportsByService()
 	for _, name := range b.order {
 		e := b.entries[name]
@@ -162,15 +162,8 @@ func (b *WebBackend) emitLockReleaseEvent(service, name, kind, status, message s
 	})
 }
 
-// attachLiveCPU folds the per-cycle live CPU sample into a service's detail: the
-// per-process single-core rate onto each Process, and the whole-machine /
-// single-core aggregates onto ProcessTotals. No-op when no sample exists yet
-// (CPU stays unset and the UI shows "measuring"). aggregateProcesses can't
-// compute these — a CPU rate needs two samples over time, which the live
-func lockToWeb(lk locks.Lock, service string) web.Lock {
-	return lockToWebAt(lk, service, time.Now())
-}
-
+// lockToWebAt maps one runtime lock to its API view using the caller's shared
+// observation time for age and remaining-TTL fields.
 func lockToWebAt(lk locks.Lock, service string, now time.Time) web.Lock {
 	w := web.Lock{
 		Service:     service,
