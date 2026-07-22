@@ -344,6 +344,9 @@ func TestWebBackendListsAndControlsServiceWatches(t *testing.T) {
 	if found.CheckType != "count" || !found.HasHook {
 		t.Errorf("listed watch = %+v", found)
 	}
+	if found.Scope != web.WatchScopeService {
+		t.Errorf("service watch scope = %q, want %q", found.Scope, web.WatchScopeService)
+	}
 	hasPathReading := false
 	for _, reading := range found.Readings {
 		if reading.Field == checks.DataKeyPath && reading.Value == "/tmp" {

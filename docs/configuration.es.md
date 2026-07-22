@@ -557,7 +557,7 @@ arrancar.
 
 ## Interfaz web
 
-El daemon puede servir un pequeño panel web para ver services y host watches. Los
+El daemon puede servir un pequeño panel web para ver services y watches. Los
 administradores pueden monitorizar/desmonitorizar ambos, y pueden
 iniciar/detener/reiniciar/recargar/reanudar services sobre el mismo motor de
 operaciones seguras que usa la CLI.
@@ -754,8 +754,10 @@ Endpoints de solo lectura:
   por el worker (con su timestamp `at` original); las lecturas de la API nunca
   inician otra pasada de descubrimiento de procesos.
 - `GET /api/services/{name}/events?limit=N` — eventos de un service.
-- `GET /api/watches` — host watches, estado de monitor, condiciones, notificaciones,
-  lecturas en vivo cuando están disponibles y actividad reciente.
+- `GET /api/watches` — watches de host y de service, su `scope`, estado de
+  monitor, condiciones, notificaciones, lecturas en vivo cuando están
+  disponibles y actividad reciente. Los nombres de watch de service usan
+  `service:watch`.
 - `GET /api/notifiers` — destinos de notifier configurados.
 - `POST /api/notifiers/{name}/test` — envía un mensaje de prueba explícito por un notifier habilitado.
 - `GET /api/applications` — aplicaciones del catálogo instaladas.
@@ -796,7 +798,7 @@ una recarga concurrente.
 - `POST /api/services/{name}/{action}` — acción de service. `action` es `monitor`,
   `unmonitor`, `start`, `stop`, `restart`, `reload` o `resume`;
   start/stop/restart/reload/resume pasan por el motor de operaciones seguras.
-- `POST /api/watches/{name}/{action}` — acción de host watch. `action` es
+- `POST /api/watches/{name}/{action}` — acción de watch. `action` es
   `monitor`, `unmonitor`, `expand`, `probe`, `pause` o `resume`. `probe` es de
   solo lectura para watches LVM, RAID y SMART; `pause`/`resume` requieren el
   bloque RAID siguiente.

@@ -4,6 +4,8 @@ import (
 	"context"
 	"testing"
 	"time"
+
+	"sermo/internal/web"
 )
 
 func TestWebBackendSetMonitoredEmitsEvent(t *testing.T) {
@@ -182,5 +184,8 @@ func TestWebBackendWatchesIncludeMonitoringState(t *testing.T) {
 	}
 	if watches[0].Monitor != "previous" {
 		t.Fatalf("watch monitor mode = %q, want previous", watches[0].Monitor)
+	}
+	if watches[0].Scope != web.WatchScopeHost {
+		t.Fatalf("watch scope = %q, want %q", watches[0].Scope, web.WatchScopeHost)
 	}
 }

@@ -41,6 +41,7 @@ const dashboard = {
 
 const watches = [{
   name: "process-queue", display_name: "Process queue", category: "watch",
+  scope: "service",
   enabled: true, monitored: true, state: "ok", check_type: "process",
   summary: "2 processes", interval: "1m", status_observed_at: "2026-07-10T12:00:00Z",
 }, {
@@ -239,6 +240,7 @@ test("single-choice filters stay hidden", async ({ page }) => {
 
 test("inventory panels group by their meaningful type", async ({ page }) => {
   await expect(page.locator("#watch-rows .group-row")).toHaveCount(3);
+  await expect(page.locator("#wat-row-process-queue .watch-scope")).toHaveText("service");
   await page.locator("#mount-group-toggle").click();
   await expect(page.locator("#mount-rows .group-row")).toHaveCount(2);
   await page.locator('#watch-rows [data-group-name="Network"]').click();
