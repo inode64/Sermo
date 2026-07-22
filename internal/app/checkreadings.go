@@ -233,6 +233,8 @@ func checkReadings(checkType string, data map[string]any) []web.WatchReading {
 		return sensorsCheckReadings(data)
 	case checks.CheckTypeHdparm, checks.CheckTypeSmart, checks.CheckTypeEDAC:
 		return metricCheckReadings(checkType, data)
+	case checks.CheckTypeMetric:
+		return metricValueCheckReadings(data)
 	default:
 		if graphMetrics := checks.GraphMetrics(checkType); len(graphMetrics) > 0 {
 			return metricCheckReadings(checkType, data)
@@ -526,7 +528,10 @@ func metricCheckReadings(checkType string, data map[string]any) []web.WatchReadi
 		addString(checks.DataKeyDeviceState, watchReadingLabelState).
 		addString(checks.DataKeyHealth, watchReadingLabelHealth)
 	for _, m := range checks.GraphMetrics(checkType) {
-		v, ok := data[m.Key].(float64)
+		// numericData (not a bare float64 assertion) so integer-valued metrics
+		// still render — count checks such as users/process_count store their
+		// DataKeyCount as an int, the same coercion the graph recorder uses.
+		v, ok := numericData(data[m.Key])
 		if !ok {
 			continue
 		}
@@ -541,4 +546,20 @@ func metricCheckReadings(checkType string, data map[string]any) []web.WatchReadi
 		rb.add(m.Key, label, value)
 	}
 	return rb.readings()
+}
+
+// metricValueCheckReadings surfaces the value a `metric` check observed and
+// compared, labelled by the metric name, so a metric watch/check shows its
+// measured reading (e.g. "cpu 82%") instead of only its event message. The
+// value/unit are present only when the source reading resolved a numeric value,
+// so a metric that was unavailable yields no reading row.
+func metricValueCheckReadings(data map[string]any) []web.WatchReading {
+	label := cfgval.String(data[checks.DataKeyMetric])
+	if label == "" {
+		label = watchReadingLabelValue
+	}
+	unit := cfgval.String(data[checks.DataKeyUnit])
+	return readingsFrom(data).
+		addMetric(checks.DataKeyValue, label, watchReadingDefaultMetricDecimals, unit).
+		readings()
 }
