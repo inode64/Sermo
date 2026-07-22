@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"sermo/internal/cfgval"
+	"slices"
 	"sort"
 	"strings"
 
@@ -704,35 +705,30 @@ func (c *Config) CatalogNamesInCategory(category string) []string {
 		names = append(names, c.CatalogServiceNames...)
 	}
 	sort.Strings(names)
-	return uniqueStrings(names)
-}
-
-// uniqueStrings returns the sorted input with adjacent duplicates removed.
-func uniqueStrings(sorted []string) []string {
-	out := sorted[:0]
-	for i, s := range sorted {
-		if i == 0 || sorted[i-1] != s {
-			out = append(out, s)
-		}
-	}
-	return out
+	return slices.Compact(names)
 }
 
 // DisplayName returns the human-friendly `display_name` from a document body
 // (e.g. "MariaDB"), falling back to fallback — typically the document's own
 // `name` — when the field is absent or blank.
 func DisplayName(body map[string]any, fallback string) string {
-	if s, ok := body[keyDisplayName].(string); ok && strings.TrimSpace(s) != "" {
-		return s
-	}
-	return fallback
+	return bodyString(body, keyDisplayName, fallback, false)
 }
 
 // CategoryLabel returns the optional UI grouping category from a document body,
 // falling back to fallback when the field is absent or blank.
 func CategoryLabel(body map[string]any, fallback string) string {
-	if s, ok := body[keyCategory].(string); ok && strings.TrimSpace(s) != "" {
-		return strings.TrimSpace(s)
+	return bodyString(body, keyCategory, fallback, true)
+}
+
+// bodyString reads a non-blank string field from a document body, optionally
+// trimming the returned value, and falls back when absent or blank.
+func bodyString(body map[string]any, key, fallback string, trim bool) string {
+	if s, ok := body[key].(string); ok && strings.TrimSpace(s) != "" {
+		if trim {
+			return strings.TrimSpace(s)
+		}
+		return s
 	}
 	return fallback
 }

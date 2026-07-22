@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"sermo/internal/cfgval"
+	"sermo/internal/strutil"
 	"sermo/internal/utmp"
 )
 
@@ -45,7 +46,7 @@ func buildTTY(name string, entry map[string]any) (Notifier, error) {
 	return &ttyNotifier{
 		name:      name,
 		typ:       TypeTTY,
-		users:     stringSet(cfgval.StringList(entry[KeyUsers])),
+		users:     strutil.Set(cfgval.StringList(entry[KeyUsers])),
 		utmpPaths: defaultUTMPPaths(),
 		devRoot:   defaultTTYDevRoot,
 		writeTTY:  writeTTYLinux,
@@ -231,18 +232,4 @@ func writeTTYLinux(ctx context.Context, path string, payload []byte) error {
 		payload = payload[n:]
 	}
 	return nil
-}
-
-func stringSet(values []string) map[string]struct{} {
-	if len(values) == 0 {
-		return nil
-	}
-	out := make(map[string]struct{}, len(values))
-	for _, value := range values {
-		value = strings.TrimSpace(value)
-		if value != "" {
-			out[value] = struct{}{}
-		}
-	}
-	return out
 }

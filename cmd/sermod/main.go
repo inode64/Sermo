@@ -13,7 +13,6 @@ import (
 	"path/filepath"
 	"slices"
 	"strconv"
-	"strings"
 	"syscall"
 	"time"
 
@@ -22,6 +21,7 @@ import (
 	"sermo/internal/app"
 	"sermo/internal/buildinfo"
 	"sermo/internal/cfgval"
+	"sermo/internal/cliutil"
 	"sermo/internal/config"
 	"sermo/internal/control"
 	"sermo/internal/emission"
@@ -45,14 +45,13 @@ const (
 )
 
 const (
-	commandRun             = "run"
-	commandVersion         = "version"
-	flagConfig             = "config"
-	flagVerbose            = "verbose"
-	flagVersion            = "--version"
-	flagVersionAlt         = "-V"
-	pflagUnknownFlagPrefix = "unknown flag: "
-	shortVerbose           = "v"
+	commandRun     = "run"
+	commandVersion = "version"
+	flagConfig     = "config"
+	flagVerbose    = "verbose"
+	flagVersion    = "--version"
+	flagVersionAlt = "-V"
+	shortVerbose   = "v"
 )
 
 const (
@@ -530,7 +529,7 @@ func parseArgs(args []string) (cliArgs, error) {
 	fs.StringVar(&parsed.globalPath, flagConfig, config.DefaultGlobalPath, "")
 	fs.BoolVarP(&parsed.verbose, flagVerbose, shortVerbose, false, "")
 	if err := fs.Parse(args); err != nil {
-		return cliArgs{}, normalizePflagError(err)
+		return cliArgs{}, cliutil.NormalizePflagError(err)
 	}
 
 	rest := fs.Args()
@@ -544,13 +543,6 @@ func parseArgs(args []string) (cliArgs, error) {
 		return cliArgs{}, errors.New("missing command")
 	}
 	return parsed, nil
-}
-
-func normalizePflagError(err error) error {
-	if msg := err.Error(); strings.HasPrefix(msg, pflagUnknownFlagPrefix) {
-		return fmt.Errorf("unknown flag %s", strings.TrimPrefix(msg, pflagUnknownFlagPrefix))
-	}
-	return err
 }
 
 // webListenAddr returns the host:port the web UI should bind to, or "" when the

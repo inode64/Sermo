@@ -277,14 +277,6 @@ func snapshotRecord(snap CheckSnapshot) state.CheckSnapshotRecord {
 	}
 }
 
-func (s *Snapshots) reportStoreError(err error) {
-	if s.reportError != nil {
-		s.reportError(err)
-	}
-}
+func (s *Snapshots) reportStoreError(err error) { reportCallbackError(s.reportError, err) }
 
-func (s *WatchSnapshots) reportStoreError(err error) {
-	if s.reportError != nil {
-		s.reportError(err)
-	}
-}
+func (s *WatchSnapshots) reportStoreError(err error) { reportCallbackError(s.reportError, err) }

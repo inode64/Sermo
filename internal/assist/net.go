@@ -7,6 +7,7 @@ import (
 	"sermo/internal/cfgval"
 	"sermo/internal/checks"
 	"sermo/internal/config"
+	"sermo/internal/strutil"
 )
 
 // netAssistant creates `net` (network interface) watches: per-interface metrics
@@ -57,13 +58,14 @@ func nonLoopbackIfaces(ifaces []Iface) []Iface {
 }
 
 func chooseIfaces(p *Prompt, question string, cands []Iface, defaultIfaces []string, allowDefault bool) []Iface {
-	defaults := stringSet(defaultIfaces)
+	defaults := strutil.Set(defaultIfaces)
 	labels := make([]string, len(cands))
 	var hasActive, hasDefault bool
 	for i, c := range cands {
-		labels[i] = ifaceLabel(c, defaults[c.Name])
+		_, isDefault := defaults[c.Name]
+		labels[i] = ifaceLabel(c, isDefault)
 		hasActive = hasActive || c.Up
-		hasDefault = hasDefault || defaults[c.Name]
+		hasDefault = hasDefault || isDefault
 	}
 	var keywords []string
 	if hasActive {
@@ -77,7 +79,7 @@ func chooseIfaces(p *Prompt, question string, cands []Iface, defaultIfaces []str
 	case netKeywordActive:
 		return filterIfaces(cands, func(c Iface) bool { return c.Up })
 	case config.SelectionKeywordDefault:
-		return filterIfaces(cands, func(c Iface) bool { return defaults[c.Name] })
+		return filterIfaces(cands, func(c Iface) bool { _, ok := defaults[c.Name]; return ok })
 	default:
 		return candidatesByIndexes(cands, sel)
 	}
@@ -101,14 +103,6 @@ func filterIfaces(ifaces []Iface, keep func(Iface) bool) []Iface {
 		if keep(iface) {
 			out = append(out, iface)
 		}
-	}
-	return out
-}
-
-func stringSet(values []string) map[string]bool {
-	out := map[string]bool{}
-	for _, value := range values {
-		out[value] = true
 	}
 	return out
 }

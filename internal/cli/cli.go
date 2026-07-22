@@ -24,6 +24,7 @@ import (
 	"sermo/internal/buildinfo"
 	"sermo/internal/cfgval"
 	"sermo/internal/checks"
+	"sermo/internal/cliutil"
 	"sermo/internal/config"
 	"sermo/internal/control"
 	"sermo/internal/execx"
@@ -85,7 +86,6 @@ const (
 	daemonAPIQueryLimit          = "limit"
 	cliUnknownServiceFormat      = "unknown service %q"
 	cliWarningFormat             = "warning: %s\n"
-	pflagUnknownFlagPrefix       = "unknown flag: "
 )
 
 const (
@@ -1876,7 +1876,7 @@ func parseArgs(args []string) (options, error) {
 	fs.DurationVar(&opts.ttl, cliFlagTTL, 0, "")
 
 	if err := fs.Parse(flagArgs); err != nil {
-		return opts, normalizePflagError(err)
+		return opts, cliutil.NormalizePflagError(err) //nolint:wrapcheck // the normalized message is printed verbatim as the usage error; wrapping would re-add the pflag prefix noise the helper strips
 	}
 	opts.timeoutSet = fs.Changed(cliFlagTimeout)
 	// --limit defaults to 0 (unset → runEvents applies its default). An explicit
@@ -1912,13 +1912,6 @@ func splitCommandArgs(args []string) (flagArgs, commandArgs []string) {
 		}
 	}
 	return args, nil
-}
-
-func normalizePflagError(err error) error {
-	if msg := err.Error(); strings.HasPrefix(msg, pflagUnknownFlagPrefix) {
-		return fmt.Errorf("unknown flag %s", strings.TrimPrefix(msg, pflagUnknownFlagPrefix))
-	}
-	return err
 }
 
 func writeJSON(w io.Writer, value any) {
