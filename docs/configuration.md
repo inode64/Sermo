@@ -722,7 +722,9 @@ Read-only endpoints:
   history + summary. Add `metric=KEY` for a named numeric metric published by
   that check, see below.
 - `GET /api/services/{name}/runtime?since=24h` — service process tree CPU,
-  memory and IO history.
+  memory and IO history. Its current value is the latest worker-published
+  sample (with its original `at` timestamp); API reads never trigger another
+  process discovery pass.
 - `GET /api/services/{name}/events?limit=N` — events for one service.
 - `GET /api/watches` — host watches, monitor state, conditions, notifications,
   live readings when available and recent activity.
