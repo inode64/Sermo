@@ -212,7 +212,7 @@ func (b *WebBackend) ServiceRuntime(_ context.Context, name string, since time.D
 	if e == nil || e.noResidentProcess {
 		return web.ServiceRuntimeMetrics{}, false
 	}
-	cur := b.probeServiceRuntime(name, e)
+	cur, _, _ := b.latestPublishedServiceRuntime(name, e)
 	if b.serviceMetrics == nil {
 		return web.ServiceRuntimeMetrics{Since: since.String(), Current: cur}, true
 	}
@@ -260,20 +260,26 @@ func (b *WebBackend) listServiceRuntime(name string, e *webEntry) web.ServiceRun
 }
 
 func (b *WebBackend) publishedServiceRuntime(name string, e *webEntry) (web.ServiceRuntime, bool) {
-	if e == nil || e.disabled || e.noResidentProcess {
+	cur, at, ok := b.latestPublishedServiceRuntime(name, e)
+	if !ok || b.webNow().Sub(at) > runtimePublishMaxAge(e.interval) {
 		return web.ServiceRuntime{}, false
 	}
-	now := b.webNow()
-	maxAge := runtimePublishMaxAge(e.interval)
-	if b.serviceMetrics == nil {
-		return web.ServiceRuntime{}, false
+	return cur, true
+}
+
+// latestPublishedServiceRuntime returns the last process-tree sample produced
+// by the worker. Runtime history reads use it even when old: At exposes its age,
+// and a web request must never start a second process discovery pass.
+func (b *WebBackend) latestPublishedServiceRuntime(name string, e *webEntry) (web.ServiceRuntime, time.Time, bool) {
+	if e == nil || e.disabled || e.noResidentProcess || b.serviceMetrics == nil {
+		return web.ServiceRuntime{}, time.Time{}, false
 	}
 	cur, at, ok := b.serviceMetrics.LatestWithAt(name)
-	if !ok || now.Sub(at) > maxAge {
-		return web.ServiceRuntime{}, false
+	if !ok {
+		return web.ServiceRuntime{}, time.Time{}, false
 	}
 	attachLiveTotals(&cur.ProcessTotals, b.live, name)
-	return cur, true
+	return cur, at, true
 }
 
 func (b *WebBackend) webNow() time.Time {

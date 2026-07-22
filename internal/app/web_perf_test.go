@@ -81,6 +81,55 @@ func TestWebBackendListRuntimeUsesPublishedSample(t *testing.T) {
 	}
 }
 
+func TestWebBackendRuntimeSeriesNeverDiscoversProcesses(t *testing.T) {
+	t0 := time.Date(2026, 6, 16, 12, 0, 0, 0, time.UTC)
+	tests := []struct {
+		name      string
+		published bool
+		wantRSS   int64
+	}{
+		{name: "published stale sample", published: true, wantRSS: 8192},
+		{name: "no published sample"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			discoverCalls := 0
+			var sampler *ServiceMetricSampler
+			if tt.published {
+				sampler = NewServiceMetricSampler()
+				sampler.Record("web", web.ServiceRuntime{
+					At:            t0.Format(time.RFC3339),
+					ProcessTotals: web.ProcessTotals{Count: 1, RSS: tt.wantRSS},
+				})
+			}
+			b := &WebBackend{
+				entries: map[string]*webEntry{
+					"web": {
+						interval:   30 * time.Second,
+						discoverer: process.Discoverer{Reader: countingProcReader{calls: &discoverCalls}},
+						selectors: []process.Selector{{
+							Name: "main", Type: process.SelectorCommandMatch, Exe: "/usr/sbin/nope",
+						}},
+					},
+				},
+				serviceMetrics: sampler,
+				now:            func() time.Time { return t0.Add(5 * time.Minute) },
+			}
+
+			got, ok := b.ServiceRuntime(context.Background(), "web", time.Hour)
+			if !ok {
+				t.Fatal("ServiceRuntime not found")
+			}
+			if discoverCalls != 0 {
+				t.Fatalf("discover called %d times, want 0", discoverCalls)
+			}
+			if got.Current.RSS != tt.wantRSS {
+				t.Fatalf("current RSS = %d, want %d", got.Current.RSS, tt.wantRSS)
+			}
+		})
+	}
+}
+
 func TestWebBackendListRuntimeHiddenWhenServiceStopped(t *testing.T) {
 	t0 := time.Date(2026, 6, 16, 12, 0, 0, 0, time.UTC)
 	now := t0.Add(5 * time.Second)

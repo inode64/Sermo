@@ -750,7 +750,9 @@ Endpoints de solo lectura:
   comprobación + resumen. Añade `metric=KEY` para una métrica numérica con nombre
   publicada por esa comprobación, ver abajo.
 - `GET /api/services/{name}/runtime?since=24h` — historial de CPU, memoria e IO del
-  árbol de procesos del service.
+  árbol de procesos del service. Su valor actual es la última muestra publicada
+  por el worker (con su timestamp `at` original); las lecturas de la API nunca
+  inician otra pasada de descubrimiento de procesos.
 - `GET /api/services/{name}/events?limit=N` — eventos de un service.
 - `GET /api/watches` — host watches, estado de monitor, condiciones, notificaciones,
   lecturas en vivo cuando están disponibles y actividad reciente.
