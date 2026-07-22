@@ -329,10 +329,8 @@ func raidCheckReadings(data map[string]any) []web.WatchReading {
 	if size, ok := uintField(data[checks.DataKeyTotalBytes]); ok && size > 0 {
 		rb.add(checks.DataKeyTotalBytes, watchReadingLabelSize, checks.HumanizeSignedBytes(int64(size)))
 	}
-	if details, ok := data[checks.DataKeyRaidMembers].([]checks.RaidArrayStatus); ok {
-		for _, detail := range details {
-			rb.add(watchReadingFieldRAIDArrayPrefix+detail.Name, detail.Name, raidArrayReading(detail))
-		}
+	for _, detail := range raidMemberDetails(data[checks.DataKeyRaidMembers]) {
+		rb.add(watchReadingFieldRAIDArrayPrefix+detail.Name, detail.Name, raidArrayReading(detail))
 	}
 	return rb.readings()
 }
@@ -351,6 +349,58 @@ func raidArrayReading(detail checks.RaidArrayStatus) string {
 	return state + readingSummarySeparator + detail.Operation
 }
 
+// raidMemberDetails reads the per-array RAID breakdown from Result.Data,
+// tolerating both the live []RaidArrayStatus and the []any of maps that a
+// snapshot becomes once it is rehydrated from the JSON state store after a
+// daemon restart (a bare []RaidArrayStatus assertion silently dropped the
+// per-array readings until the next fresh sample).
+func raidMemberDetails(v any) []checks.RaidArrayStatus {
+	switch t := v.(type) {
+	case []checks.RaidArrayStatus:
+		return t
+	case []any:
+		out := make([]checks.RaidArrayStatus, 0, len(t))
+		for _, e := range t {
+			m, ok := e.(map[string]any)
+			if !ok {
+				continue
+			}
+			pct, _ := cfgval.Float(m["ProgressPct"])
+			degraded, _ := m["Degraded"].(bool)
+			hasProgress, _ := m["HasProgress"].(bool)
+			out = append(out, checks.RaidArrayStatus{
+				Name:        cfgval.String(m["Name"]),
+				Degraded:    degraded,
+				Operation:   cfgval.String(m["Operation"]),
+				ProgressPct: pct,
+				HasProgress: hasProgress,
+			})
+		}
+		return out
+	default:
+		return nil
+	}
+}
+
+// coerceStringSlice reads a string list from Result.Data, tolerating both the
+// live []string and the []any that JSON hydration produces after a restart.
+func coerceStringSlice(v any) []string {
+	switch t := v.(type) {
+	case []string:
+		return t
+	case []any:
+		out := make([]string, 0, len(t))
+		for _, e := range t {
+			if s := cfgval.String(e); s != "" {
+				out = append(out, s)
+			}
+		}
+		return out
+	default:
+		return nil
+	}
+}
+
 func certCheckReadings(data map[string]any) []web.WatchReading {
 	rb := readingsFrom(data).
 		addString(checks.DataKeySource, watchReadingLabelSource).
@@ -358,7 +408,7 @@ func certCheckReadings(data map[string]any) []web.WatchReading {
 		addString(checks.DataKeyNotAfter, watchReadingLabelExpires).
 		addString(checks.DataKeyPublicKeyAlgorithm, watchReadingLabelKeyType).
 		addInt(checks.DataKeyKeyBits, watchReadingLabelKeyBits)
-	if names, ok := data[checks.DataKeyDNSNames].([]string); ok && len(names) > 0 {
+	if names := coerceStringSlice(data[checks.DataKeyDNSNames]); len(names) > 0 {
 		rb.add(checks.DataKeyDNSNames, watchReadingLabelDNSNames, strings.Join(names, displayListSeparator))
 	}
 	return rb.addString(checks.DataKeyIssuer, watchReadingLabelIssuer).readings()
