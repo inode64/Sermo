@@ -29,6 +29,39 @@ services such as databases, caches and queues may carry stricter local `policy`
 settings than the global defaults, with longer cooldowns, rate limits and
 backoff to avoid restart loops.
 
+## Contents
+
+- [Categories](#categories)
+- [Library services](#library-services)
+- [Reload on config change (reload_on_change)](#reload-on-config-change-reload_on_change)
+  - [Native reload (reload:) — when the init can't, Sermo can](#native-reload-reload--when-the-init-cant-sermo-can)
+- [App dependencies (apps)](#app-dependencies-apps)
+- [Metadata fields](#metadata-fields)
+  - [Built-in variables](#built-in-variables)
+  - [OS-specific blocks (os:)](#os-specific-blocks-os)
+  - [control: libvirt — QEMU/libvirt virtual machines](#control-libvirt--qemulibvirt-virtual-machines)
+  - [control: docker — Docker containers](#control-docker--docker-containers)
+  - [also_service — auxiliary init units](#also_service--auxiliary-init-units)
+  - [also_apply — cascade to other services](#also_apply--cascade-to-other-services)
+  - [processes: by executable or cmdline](#processes-by-executable-or-cmdline)
+  - [Stopped-state invariants (stop_policy)](#stopped-state-invariants-stop_policy)
+  - [pidfile: and pidfiles: shorthand (selectors + health checks)](#pidfile-and-pidfiles-shorthand-selectors--health-checks)
+  - [socket: shorthand (gated health check)](#socket-shorthand-gated-health-check)
+  - [lockfile: shorthand (gated health check)](#lockfile-shorthand-gated-health-check)
+- [Versioned services](#versioned-services)
+  - [Integer and instance placeholders](#integer-and-instance-placeholders)
+  - [Composite names with a separator (%s)](#composite-names-with-a-separator-s)
+  - [Service-owned discovery](#service-owned-discovery)
+  - [Optional components (enable_if)](#optional-components-enable_if)
+  - [Variables read from a config file (from_file)](#variables-read-from-a-config-file-from_file)
+  - [Listing installed applications](#listing-installed-applications)
+- [Service unit](#service-unit)
+- [Cloning](#cloning)
+- [Multiple instances of one application](#multiple-instances-of-one-application)
+- [Disabling and deleting inherited entries](#disabling-and-deleting-inherited-entries)
+- [Monitoring flag](#monitoring-flag)
+- [Auxiliary commands](#auxiliary-commands)
+
 ## Categories
 
 Catalog documents are grouped by the subdirectory they live in under the

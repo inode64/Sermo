@@ -1,5 +1,34 @@
 # Checks, conditions and rules
 
+## Contents
+
+- [Checks](#checks)
+  - [Service health conditions (version / state / config)](#service-health-conditions-version--state--config)
+  - [Egress interface (interface)](#egress-interface-interface)
+  - [Check interdependencies (requires / skip_when_changed)](#check-interdependencies-requires--skip_when_changed)
+  - [Ports](#ports)
+  - [HTTP](#http)
+  - [Cert](#cert)
+  - [Database connection (mysql / mariadb)](#database-connection-mysql--mariadb)
+  - [SQLite integrity (sqlite / sqlite3)](#sqlite-integrity-sqlite--sqlite3)
+  - [SQL query (sql)](#sql-query-sql)
+  - [MongoDB query (mongodb-query)](#mongodb-query-mongodb-query)
+  - [InfluxDB query (influxdb-query)](#influxdb-query-influxdb-query)
+  - [Size growth (size)](#size-growth-size)
+  - [WebSocket (websocket)](#websocket-websocket)
+  - [Clock drift (clock)](#clock-drift-clock)
+  - [Default route (route)](#default-route-route)
+  - [Firewall rules (firewall_rules)](#firewall-rules-firewall_rules)
+  - [Disk throughput (hdparm)](#disk-throughput-hdparm)
+  - [Hardware sensors](#hardware-sensors)
+  - [Autofs](#autofs)
+  - [Count](#count)
+- [Metrics](#metrics)
+- [Rules](#rules)
+  - [Windows](#windows)
+  - [Guards](#guards)
+- [Remediation policy](#remediation-policy)
+
 ## Checks
 
 Checks are single-shot probes under `checks` (and `preflight`, which reuses
