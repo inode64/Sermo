@@ -18,10 +18,20 @@ func (b *WebBackend) view(ctx context.Context, name string, e *webEntry) web.Ser
 }
 
 func (b *WebBackend) viewWithEvent(ctx context.Context, name string, e *webEntry, lastEvent *web.Event) web.Service {
-	return b.viewWithRuntime(ctx, name, e, lastEvent, nil, false)
+	return b.viewWithRuntime(ctx, name, e, lastEvent, serviceLockView{})
 }
 
-func (b *WebBackend) viewWithRuntime(ctx context.Context, name string, e *webEntry, lastEvent *web.Event, activeLocks []string, activeLocksReady bool) web.Service {
+// serviceLockView carries one service's already-scanned lock state, so the
+// batched Services path reads each lock directory once for the whole fleet
+// instead of per row. ready distinguishes "scanned, nothing held" from "not
+// scanned yet", which is what the single-service path reports.
+type serviceLockView struct {
+	active          []string
+	operationActive bool
+	ready           bool
+}
+
+func (b *WebBackend) viewWithRuntime(ctx context.Context, name string, e *webEntry, lastEvent *web.Event, lockView serviceLockView) web.Service {
 	svc := web.Service{
 		Name:              name,
 		DisplayName:       e.displayName,
@@ -62,12 +72,14 @@ func (b *WebBackend) viewWithRuntime(ctx context.Context, name string, e *webEnt
 	if failing > 0 {
 		svc.ChecksFailing = failing
 	}
-	if !activeLocksReady {
-		activeLocks = activeLockNames(b.cfg, name)
+	if !lockView.ready {
+		lockView.active = activeLockNames(b.cfg, name)
+		lockView.operationActive = operationActive(b.cfg, name)
 	}
-	if len(activeLocks) > 0 {
-		svc.ActiveLocks = activeLocks
+	if len(lockView.active) > 0 {
+		svc.ActiveLocks = lockView.active
 	}
+	svc.OperationActive = lockView.operationActive
 	b.decorateRemediation(name, &svc)
 	observed := (b.settling == nil || b.settling.Observed(SettlingServiceKey(name))) && !b.operationSettlingPending(name)
 	svc.ObservabilityReady, svc.ObservabilityMissing = b.serviceObservability(name, e, svc.Status, svc.CheckHealth, svc.Monitored, observed)
@@ -270,8 +282,13 @@ func (b *WebBackend) Services(ctx context.Context) []web.Service {
 	out := make([]web.Service, 0, len(b.order))
 	lastEvents := b.lastServiceEvents()
 	activeLocks := b.activeLockNamesByService()
+	operating := b.operationActiveByService()
 	for _, name := range b.order {
-		out = append(out, b.viewWithRuntime(ctx, name, b.entries[name], lastEvents[name], activeLocks[name], true))
+		out = append(out, b.viewWithRuntime(ctx, name, b.entries[name], lastEvents[name], serviceLockView{
+			active:          activeLocks[name],
+			operationActive: operating[name],
+			ready:           true,
+		}))
 	}
 	return out
 }

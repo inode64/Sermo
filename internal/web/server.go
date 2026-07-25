@@ -297,6 +297,7 @@ type Service struct {
 	ObservabilityReady   bool     `json:"observability_ready"`             // true when monitored service has fresh visible indicators
 	ObservabilityMissing []string `json:"observability_missing,omitempty"` // indicator groups still collecting
 	ActiveLocks          []string `json:"active_locks,omitempty"`          // named runtime locks blocking actions
+	OperationActive      bool     `json:"operation_active,omitempty"`      // true while the engine holds this service's operation lock: an action is running, whoever started it
 	PolicyCooldown       string   `json:"policy_cooldown,omitempty"`       // resolved automatic remediation cooldown
 	RemediationState     string   `json:"remediation_state,omitempty"`     // eligible | cooldown | rate limit | paused | pending | disabled
 	NextEligibleAt       string   `json:"next_eligible_at,omitempty"`      // RFC3339 when automatic remediation is next eligible

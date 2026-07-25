@@ -211,6 +211,63 @@ func TestWebBackendServicesActiveLocks(t *testing.T) {
 	}
 }
 
+// An engine action holds the service's operation lock in <runtime>/ops for its
+// whole duration, so the dashboard can show "operation in progress" for an
+// action started anywhere — another client, sermoctl or automatic remediation —
+// and keep showing it across a page reload. The named-lock scan does not see it:
+// the two lock directories are separate.
+func TestWebBackendServicesOperationActive(t *testing.T) {
+	useFakeLockProber(t)
+	root := t.TempDir()
+	runtime := filepath.Join(root, "run")
+	expires := time.Now().Add(time.Hour).UTC()
+
+	writeWebLockFixture(t, locks.RuntimeOpsDir(runtime), "mysql.lock", map[string]any{
+		"service":           "mysql",
+		"owner_pid":         os.Getpid(),
+		"owner_start_ticks": fakeOwnerTicks,
+		"expires_at":        expires.Format(time.RFC3339),
+	})
+	// A named lock on another service must not be mistaken for an operation.
+	writeWebLockFixture(t, locks.RuntimeLocksDir(runtime), "redis\\backup.lock", map[string]any{
+		"service":           "redis",
+		"name":              "backup",
+		"owner_pid":         os.Getpid(),
+		"owner_start_ticks": fakeOwnerTicks,
+		"expires_at":        expires.Format(time.RFC3339),
+	})
+
+	b := &WebBackend{
+		order:   []string{"mysql", "redis"},
+		entries: map[string]*webEntry{"mysql": {}, "redis": {}},
+		cfg:     &config.Config{Global: config.Global{Runtime: runtime}},
+	}
+
+	operating := map[string]bool{}
+	locked := map[string][]string{}
+	for _, svc := range b.Services(context.Background()) {
+		operating[svc.Name] = svc.OperationActive
+		locked[svc.Name] = svc.ActiveLocks
+	}
+	if !operating["mysql"] {
+		t.Fatal("mysql OperationActive = false, want true while its operation lock is held")
+	}
+	if len(locked["mysql"]) != 0 {
+		t.Fatalf("mysql ActiveLocks = %+v, want none: the operation lock is not a named lock", locked["mysql"])
+	}
+	if operating["redis"] {
+		t.Fatal("redis OperationActive = true, want false: a named lock is not an operation")
+	}
+	if len(locked["redis"]) != 1 || locked["redis"][0] != "backup" {
+		t.Fatalf("redis ActiveLocks = %+v, want [backup]", locked["redis"])
+	}
+
+	// The single-service path (Detail/view) scans on its own.
+	if svc := b.view(context.Background(), "mysql", b.entries["mysql"]); !svc.OperationActive {
+		t.Fatal("single-service view OperationActive = false, want true")
+	}
+}
+
 func TestWebBackendLocksContext(t *testing.T) {
 	useFakeLockProber(t)
 	root := t.TempDir()

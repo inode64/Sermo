@@ -2000,9 +2000,15 @@ function releaseMonitorToggleAfterRefresh(toggleKey, render) {
     render();
   });
 }
-function serviceBusy(name) {
-  const op = liveOps.get(name);
-  return !!op && !op.finished;
+// serviceBusy reports an engine action in flight on a service: one this browser
+// started (liveOps, which carries the action name and elapsed time) or one the
+// daemon reports through operation_active — an action started from another tab,
+// from sermoctl or by automatic remediation, and the operator's own action after
+// a page reload dropped the liveOps entry.
+function serviceBusy(s) {
+  const op = liveOps.get(s && s.name);
+  if (op) return !op.finished;
+  return !!(s && s.operation_active);
 }
 function opElapsed(op) {
   const end = op.finished || Date.now();
@@ -2448,11 +2454,16 @@ function serviceRowParts(s, opts = {}) {
   const category = categoryOf(s, defaultCategoryService);
   const label = displayName(s);
   const op = liveOps.get(s.name);
-  const busy = serviceBusy(s.name);
+  const busy = serviceBusy(s);
   const showResume = !!opts.showResume;
+  // With a liveOps entry the note names the action and its elapsed time. Without
+  // one, operation_active still tells us the engine holds the lock, so the row
+  // says so instead of looking idle while it churns.
   const busyText = op
     ? tpl`<div id="svc-${s.name}-busy" class="svc-busy ${op.finished ? (op.ok ? 'ok' : 'bad') : 'inactive'}" role="status" aria-live="polite">${op.action} ${opStateText(op)} · ${fmtDuration(opElapsed(op))}${op.message ? tpl` <span class="muted">${op.message}</span>` : nothing}</div>`
-    : nothing;
+    : (s.operation_active
+      ? tpl`<div id="svc-${s.name}-busy" class="svc-busy inactive" role="status" aria-live="polite">operation in progress</div>`
+      : nothing);
   let actions;
   if (!s.enabled) {
     actions = tpl`<span class="muted">disabled in config</span>`;
