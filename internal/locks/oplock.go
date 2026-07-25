@@ -24,8 +24,8 @@ type HeldError struct {
 
 func (e *HeldError) Error() string { return "operation in progress" }
 
-// ownedLock is the owner-checked release shared by the operation lock and the
-// slot pool: the file is removed only while it still carries this owner's
+// ownedLock is the owner-checked release shared by the operation and named
+// lockers: the file is removed only while it still carries this owner's
 // identity; a lock reclaimed by someone else is left untouched.
 type ownedLock struct {
 	path            string
