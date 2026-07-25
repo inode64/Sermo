@@ -62,24 +62,109 @@ func TestDetectProcOpenRCStartStopDaemonArg(t *testing.T) {
 	}
 }
 
-func TestDetectProcOpenRCCleansAbsolutePaths(t *testing.T) {
-	assertDetectProc(t, "dhcpd", map[string]string{
-		"/etc/init.d/dhcpd": `pidfile="//run/dhcp/dhcpd.pid"
+// OpenRC init-script parsing: each case feeds one script and asserts the pidfile
+// and executable DetectProcInfo derives from it. Rows cover the substitutions the
+// parser has to perform — SVCNAME prefix stripping, an empty CHROOT, legacy
+// /var/run — rather than one function per substitution.
+func TestDetectProcOpenRCScripts(t *testing.T) {
+	tests := []struct {
+		name    string
+		service string
+		files   map[string]string
+		want    ProcInfo
+	}{
+		{
+			name:    "cleans absolute paths",
+			service: "dhcpd",
+			files: map[string]string{
+				"/etc/init.d/dhcpd": `pidfile="//run/dhcp/dhcpd.pid"
 command="//usr/sbin/dhcpd"
 `,
-	}, ProcInfo{
-		Pidfile: "/run/dhcp/dhcpd.pid",
-		Exe:     "/usr/sbin/dhcpd",
-		Cmd:     `(^|[[:space:]])/usr/sbin/dhcpd($|[[:space:]])`,
-	})
-}
-
-func TestDetectProcNormalizesLegacyVarRun(t *testing.T) {
-	assertDetectProc(t, "apache2", map[string]string{
-		"/etc/init.d/apache2": `pidfile="/var/run/apache2.pid"
+			},
+			want: ProcInfo{
+				Pidfile: "/run/dhcp/dhcpd.pid",
+				Exe:     "/usr/sbin/dhcpd",
+				Cmd:     `(^|[[:space:]])/usr/sbin/dhcpd($|[[:space:]])`,
+			},
+		},
+		{
+			name:    "normalizes legacy /var/run",
+			service: "apache2",
+			files: map[string]string{
+				"/etc/init.d/apache2": `pidfile="/var/run/apache2.pid"
 command="/usr/sbin/apache2"
 `,
-	}, ProcInfo{Pidfile: "/run/apache2.pid"})
+			},
+			want: ProcInfo{Pidfile: "/run/apache2.pid"},
+		},
+		{
+			name:    "SVCNAME prefix removal",
+			service: "php8.2",
+			files: map[string]string{
+				"/etc/init.d/php8.2": `PHP_SLOT="${SVCNAME#php-fpm-}"
+command="/usr/lib64/${PHP_SLOT}/bin/php-fpm"
+pidfile="/run/php-fpm-${PHP_SLOT}.pid"
+`,
+			},
+			want: ProcInfo{
+				Pidfile: "/run/php-fpm-php8.2.pid",
+				Exe:     "/usr/lib64/php8.2/bin/php-fpm",
+			},
+		},
+		{
+			name:    "SVCNAME pattern prefix removal",
+			service: "openvpn.tun1",
+			files: map[string]string{
+				"/etc/init.d/openvpn.tun1": `VPN=${SVCNAME#*.}
+if [ -n "${VPN}" ] && [ ${SVCNAME} != "openvpn" ]; then
+	VPNPID="/run/openvpn.${VPN}.pid"
+else
+	VPNPID="/run/openvpn.pid"
+fi
+start-stop-daemon --start --exec /usr/sbin/openvpn -- \
+	--config "/etc/openvpn/${VPN}.conf" --writepid "${VPNPID}" --daemon
+`,
+			},
+			want: ProcInfo{
+				Pidfile: "/run/openvpn.tun1.pid",
+				Exe:     "/usr/sbin/openvpn",
+			},
+		},
+		{
+			name:    "empty CHROOT defaults to host root",
+			service: "named",
+			files: map[string]string{
+				"/etc/init.d/named": `PIDFILE="${CHROOT}/run/named/named.pid"
+start-stop-daemon --start --pidfile ${PIDFILE} --exec /usr/sbin/named
+`,
+			},
+			want: ProcInfo{
+				Pidfile: "/run/named/named.pid",
+				Exe:     "/usr/sbin/named",
+			},
+		},
+		{
+			name:    "command user",
+			service: "influxdb",
+			files: map[string]string{
+				"/etc/init.d/influxdb": `user=${user:-influxdb}
+group=${group:-influxdb}
+command=/usr/bin/influxd
+command_user="${user}:${group}"
+`,
+			},
+			want: ProcInfo{
+				Exe:  "/usr/bin/influxd",
+				User: "influxdb",
+				Cmd:  `(^|[[:space:]])/usr/bin/influxd($|[[:space:]])`,
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assertDetectProc(t, tt.service, tt.files, tt.want)
+		})
+	}
 }
 
 func TestDetectProcOpenRCSkipsNonAbsoluteExec(t *testing.T) {
@@ -131,60 +216,6 @@ command_args="${SSHD_OPTS} -o PidFile=${pidfile}"
 	if info.Cmd == "" {
 		t.Fatal("cmd fallback should be derived from command")
 	}
-}
-
-func TestDetectProcOpenRCPrefixRemoval(t *testing.T) {
-	assertDetectProc(t, "php8.2", map[string]string{
-		"/etc/init.d/php8.2": `PHP_SLOT="${SVCNAME#php-fpm-}"
-command="/usr/lib64/${PHP_SLOT}/bin/php-fpm"
-pidfile="/run/php-fpm-${PHP_SLOT}.pid"
-`,
-	}, ProcInfo{
-		Pidfile: "/run/php-fpm-php8.2.pid",
-		Exe:     "/usr/lib64/php8.2/bin/php-fpm",
-	})
-}
-
-func TestDetectProcOpenRCPatternPrefixRemoval(t *testing.T) {
-	assertDetectProc(t, "openvpn.tun1", map[string]string{
-		"/etc/init.d/openvpn.tun1": `VPN=${SVCNAME#*.}
-if [ -n "${VPN}" ] && [ ${SVCNAME} != "openvpn" ]; then
-	VPNPID="/run/openvpn.${VPN}.pid"
-else
-	VPNPID="/run/openvpn.pid"
-fi
-start-stop-daemon --start --exec /usr/sbin/openvpn -- \
-	--config "/etc/openvpn/${VPN}.conf" --writepid "${VPNPID}" --daemon
-`,
-	}, ProcInfo{
-		Pidfile: "/run/openvpn.tun1.pid",
-		Exe:     "/usr/sbin/openvpn",
-	})
-}
-
-func TestDetectProcOpenRCChrootDefaultsToHostRoot(t *testing.T) {
-	assertDetectProc(t, "named", map[string]string{
-		"/etc/init.d/named": `PIDFILE="${CHROOT}/run/named/named.pid"
-start-stop-daemon --start --pidfile ${PIDFILE} --exec /usr/sbin/named
-`,
-	}, ProcInfo{
-		Pidfile: "/run/named/named.pid",
-		Exe:     "/usr/sbin/named",
-	})
-}
-
-func TestDetectProcOpenRCCommandUser(t *testing.T) {
-	assertDetectProc(t, "influxdb", map[string]string{
-		"/etc/init.d/influxdb": `user=${user:-influxdb}
-group=${group:-influxdb}
-command=/usr/bin/influxd
-command_user="${user}:${group}"
-`,
-	}, ProcInfo{
-		Exe:  "/usr/bin/influxd",
-		User: "influxdb",
-		Cmd:  `(^|[[:space:]])/usr/bin/influxd($|[[:space:]])`,
-	})
 }
 
 func TestDetectProcOpenRCRuntimeOptionsFallback(t *testing.T) {
