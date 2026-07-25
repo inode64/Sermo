@@ -3197,30 +3197,50 @@ function renderSLAIncidentList(incidents) {
   return `<div class="sla-incident-list"><span class="muted">Incidents</span>${chips}${more}</div>`;
 }
 
-async function loadServiceSLA(name, generation = dashboardGeneration) {
-  const summary = document.getElementById(detailDomId(name, "sla-summary"));
-  const chart = document.getElementById(detailDomId(name, "sla-chart"));
-  if (!summary || !chart) return true;
+// loadServiceWindowGraph runs the fetch protocol every service-detail graph
+// shares, so its three staleness rules live in one place: a response from
+// another daemon generation triggers a full reload; a response that arrives
+// after the operator picked a different window is dropped instead of
+// overwriting the fresh panel — on the error path too, which is easy to forget
+// when the protocol is copied. url(win) builds the request, render(body, win)
+// fills the panel and fail(error) paints the failure. Returns false only when
+// the caller should treat its refresh as failed.
+async function loadServiceWindowGraph(name, generation, url, render, fail) {
   const win = serviceMetricState(name).window;
+  const windowChanged = () => serviceMetricState(name).window !== win;
   try {
-    const res = await fetch(serviceSLAAPI(name, win));
+    const res = await fetch(url(win));
     if (generationMismatch(res, generation)) {
       load();
       return false;
     }
     if (!res.ok) throw new Error("HTTP " + res.status);
     const body = await res.json();
-    if (serviceMetricState(name).window !== win) return true;
-    const points = body.points || [];
-    summary.innerHTML = slaTimelineSummary(points);
-    chart.innerHTML = drawSLAChart(points, win);
+    if (windowChanged()) return true;
+    render(body, win);
     return true;
   } catch (e) {
-    if (serviceMetricState(name).window !== win) return true;
-    summary.innerHTML = `<span class="bad">Failed to load SLA: ${esc(e.message)}</span>`;
-    chart.innerHTML = "";
+    if (windowChanged()) return true;
+    fail(e);
     return false;
   }
+}
+
+function loadServiceSLA(name, generation = dashboardGeneration) {
+  const summary = document.getElementById(detailDomId(name, "sla-summary"));
+  const chart = document.getElementById(detailDomId(name, "sla-chart"));
+  if (!summary || !chart) return Promise.resolve(true);
+  return loadServiceWindowGraph(name, generation,
+    (win) => serviceSLAAPI(name, win),
+    (body, win) => {
+      const points = body.points || [];
+      summary.innerHTML = slaTimelineSummary(points);
+      chart.innerHTML = drawSLAChart(points, win);
+    },
+    (e) => {
+      summary.innerHTML = `<span class="bad">Failed to load SLA: ${esc(e.message)}</span>`;
+      chart.innerHTML = "";
+    });
 }
 
 // drawSLAChart renders the detail SLA panel as a status-page style bar strip:
@@ -6507,32 +6527,23 @@ async function loadMetrics(name, measured, generation = dashboardGeneration) {
   return results.every(Boolean);
 }
 
-async function loadLatencyCheck(name, check, generation = dashboardGeneration) {
+function loadLatencyCheck(name, check, generation = dashboardGeneration) {
   const summary = document.getElementById(serviceLatencyDomID(name, check, "summary"));
   const chart = document.getElementById(serviceLatencyDomID(name, check, "chart"));
-  if (!summary || !chart) return true;
-  const win = serviceMetricState(name).window;
-  try {
-    const res = await fetch(serviceMetricsAPI(name, check, win));
-    if (generationMismatch(res, generation)) {
-      load();
-      return false;
-    }
-    if (!res.ok) throw new Error("HTTP " + res.status);
-    const body = await res.json();
-    if (serviceMetricState(name).window !== win) return true;
-    const s = body.summary || {};
-    summary.innerHTML = s.count
-      ? `avg <b>${fmtNum(s.avg, 2)}</b> ${metricUnitMilliseconds} &middot; min ${fmtNum(s.min, 2)} &middot; max ${fmtNum(s.max, 2)}`
-      : '<span class="muted">No latency data yet for this window.</span>';
-    chart.innerHTML = drawMetricChart(body.points || [], body.unit || metricUnitMilliseconds, win, `Service latency chart (${check})`);
-    return true;
-  } catch (e) {
-    if (serviceMetricState(name).window !== win) return true;
-    summary.innerHTML = `<span class="muted">Failed to load latency (${esc(check)}): ${esc(e.message)}</span>`;
-    chart.innerHTML = "";
-    return false;
-  }
+  if (!summary || !chart) return Promise.resolve(true);
+  return loadServiceWindowGraph(name, generation,
+    (win) => serviceMetricsAPI(name, check, win),
+    (body, win) => {
+      const s = body.summary || {};
+      summary.innerHTML = s.count
+        ? `avg <b>${fmtNum(s.avg, 2)}</b> ${metricUnitMilliseconds} &middot; min ${fmtNum(s.min, 2)} &middot; max ${fmtNum(s.max, 2)}`
+        : '<span class="muted">No latency data yet for this window.</span>';
+      chart.innerHTML = drawMetricChart(body.points || [], body.unit || metricUnitMilliseconds, win, `Service latency chart (${check})`);
+    },
+    (e) => {
+      summary.innerHTML = `<span class="muted">Failed to load latency (${esc(check)}): ${esc(e.message)}</span>`;
+      chart.innerHTML = "";
+    });
 }
 
 function metricSeriesSummary(series) {
@@ -6542,59 +6553,36 @@ function metricSeriesSummary(series) {
   return `avg <b>${esc(fmtMetricValue(summary.avg, unit))}</b> · min ${esc(fmtMetricValue(summary.min, unit))} · max ${esc(fmtMetricValue(summary.max, unit))}`;
 }
 
-async function loadCheckMetric(name, metric, generation = dashboardGeneration) {
+function loadCheckMetric(name, metric, generation = dashboardGeneration) {
   const summary = document.getElementById(serviceCheckMetricDomID(name, metric.check, metric.name, "summary"));
   const chart = document.getElementById(serviceCheckMetricDomID(name, metric.check, metric.name, "chart"));
-  if (!summary || !chart) return true;
-  const win = serviceMetricState(name).window;
-  try {
-    const res = await fetch(serviceMetricsAPI(name, metric.check, win, metric.name));
-    if (generationMismatch(res, generation)) {
-      load();
-      return false;
-    }
-    if (!res.ok) throw new Error("HTTP " + res.status);
-    const body = await res.json();
-    if (serviceMetricState(name).window !== win) return true;
-    const unit = body.unit || metric.unit || "";
-    summary.innerHTML = metricSeriesSummary({ ...body, unit });
-    chart.innerHTML = drawMetricChart(body.points || [], unit, win, `${serviceCheckMetricLabel(metric)} chart`);
-    return true;
-  } catch (e) {
-    if (serviceMetricState(name).window !== win) return true;
-    summary.innerHTML = `<span class="muted">Failed to load ${esc(serviceCheckMetricLabel(metric))}: ${esc(e.message)}</span>`;
-    chart.innerHTML = "";
-    return false;
-  }
+  if (!summary || !chart) return Promise.resolve(true);
+  return loadServiceWindowGraph(name, generation,
+    (win) => serviceMetricsAPI(name, metric.check, win, metric.name),
+    (body, win) => {
+      const unit = body.unit || metric.unit || "";
+      summary.innerHTML = metricSeriesSummary({ ...body, unit });
+      chart.innerHTML = drawMetricChart(body.points || [], unit, win, `${serviceCheckMetricLabel(metric)} chart`);
+    },
+    (e) => {
+      summary.innerHTML = `<span class="muted">Failed to load ${esc(serviceCheckMetricLabel(metric))}: ${esc(e.message)}</span>`;
+      chart.innerHTML = "";
+    });
 }
 
-async function loadServiceRuntimeMetrics(name, generation = dashboardGeneration) {
+function loadServiceRuntimeMetrics(name, generation = dashboardGeneration) {
   const setAll = (msg) => runtimeMetricDefs.forEach(({ key }) => {
-    const id = key;
-    const summary = document.getElementById(detailDomId(name, `runtime-${id}-summary`));
-    const chart = document.getElementById(detailDomId(name, `runtime-${id}-chart`));
+    const summary = document.getElementById(detailDomId(name, `runtime-${key}-summary`));
+    const chart = document.getElementById(detailDomId(name, `runtime-${key}-chart`));
     if (summary) summary.innerHTML = `<span class="muted">${esc(msg)}</span>`;
     if (chart) chart.innerHTML = "";
   });
-  const win = serviceMetricState(name).window;
-  try {
-    const res = await fetch(serviceRuntimeAPI(name, win));
-    if (generationMismatch(res, generation)) {
-      load();
-      return false;
-    }
-    if (!res.ok) throw new Error("HTTP " + res.status);
-    const body = await res.json();
-    if (serviceMetricState(name).window !== win) return true;
-    runtimeMetricDefs.forEach(({ key, label, unit }) => {
+  return loadServiceWindowGraph(name, generation,
+    (win) => serviceRuntimeAPI(name, win),
+    (body, win) => runtimeMetricDefs.forEach(({ key, label, unit }) => {
       renderServiceRuntimeMetric(name, key, body[key], label, unit, win);
-    });
-    return true;
-  } catch (e) {
-    if (serviceMetricState(name).window !== win) return true;
-    setAll("Failed to load runtime metrics: " + e.message);
-    return false;
-  }
+    }),
+    (e) => setAll("Failed to load runtime metrics: " + e.message));
 }
 
 function renderServiceRuntimeMetric(name, suffix, series, label, fallbackUnit, win) {
