@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -117,6 +118,39 @@ func TestWorkerMarksObservabilityReadyAfterNormalStartupCycle(t *testing.T) {
 	at, ready := observability.Ready("web")
 	if !ready || !at.Equal(now) {
 		t.Fatalf("observability ready = %v at %s, want ready at %s", ready, at, now)
+	}
+}
+
+// failingSettlingStore fails every access, the way a state store does when the
+// host filesystem is full.
+type failingSettlingStore struct{ err error }
+
+func (s failingSettlingStore) SetOperationSettling(_, _, _, _ string) error { return s.err }
+
+func (s failingSettlingStore) OperationSettling(string) (state.OperationSettlingRecord, bool, error) {
+	return state.OperationSettlingRecord{}, false, s.err
+}
+
+func (s failingSettlingStore) ClearOperationSettling(string) error { return s.err }
+
+// TestWorkerOperationSettlingStoreErrorEmitsOnChange keeps a store-level failure
+// from repeating every cycle. A full disk breaks every access, so the
+// unconditional emission turned one host problem into an endless event stream.
+func TestWorkerOperationSettlingStoreErrorEmitsOnChange(t *testing.T) {
+	h := &workerHarness{cache: failedCache("http")}
+	w := h.worker(alertRuleTree(nil), rules.Policy{}, nil)
+	w.OperationSettling = failingSettlingStore{err: errors.New("database or disk is full")}
+
+	w.RunCycle(context.Background())
+	after1 := h.countEvents(eventKindError)
+	w.RunCycle(context.Background())
+	w.RunCycle(context.Background())
+
+	if after1 == 0 {
+		t.Fatal("a failing settling store must be reported at least once")
+	}
+	if got := h.countEvents(eventKindError); got != after1 {
+		t.Fatalf("an unchanged store error must not repeat per cycle, %d after one cycle vs %d after three: %+v", after1, got, h.events)
 	}
 }
 
@@ -604,6 +638,39 @@ func TestPanicSuppressesAlertDeliveryButKeepsEvent(t *testing.T) {
 	}
 	if _, ok := h.eventOf(eventKindNotifySuppressed); !ok {
 		t.Errorf("expected a notify-suppressed event: %+v", h.events)
+	}
+}
+
+// TestCycleGuardErrorEmitsOnChangeByDefault covers the guard twin of the
+// evaluation-error throttle: a guard whose own condition cannot be evaluated is
+// consulted on every cycle the remediation rule stays firing, so it repeated its
+// error for as long as the underlying probe stayed broken.
+func TestCycleGuardErrorEmitsOnChangeByDefault(t *testing.T) {
+	h := &workerHarness{cache: failedCache("http"), opResult: operation.Result{Status: operation.ResultOK}}
+	tree := map[string]any{"rules": map[string]any{
+		"block-restart-if-config-invalid": map[string]any{
+			"type":   "guard",
+			"blocks": []any{"restart"},
+			"if":     map[string]any{"failed": map[string]any{"check": "absent"}},
+			"then":   map[string]any{"action": "block", "message": "config invalid"},
+		},
+		"restart-if-down": map[string]any{
+			"type": "remediation",
+			"if":   map[string]any{"failed": map[string]any{"check": "http"}},
+			"then": map[string]any{"action": "restart"},
+		},
+	}}
+	w := h.worker(tree, rules.Policy{}, nil)
+
+	w.RunCycle(context.Background())
+	w.RunCycle(context.Background())
+	w.RunCycle(context.Background())
+
+	if got := h.countEvents(eventKindError); got != 1 {
+		t.Fatalf("an unchanged guard error must be reported once, got %d events: %+v", got, h.events)
+	}
+	if len(h.ops) != 0 {
+		t.Fatalf("a guard that cannot be evaluated must keep blocking remediation, ops=%v", h.ops)
 	}
 }
 
