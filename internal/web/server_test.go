@@ -327,27 +327,21 @@ func (b *generationBackend) BackendGeneration() uint64 {
 type pinnedGenerationBackend struct {
 	fakeBackend
 	generation uint64
-	released   bool
 }
 
+// pinnedMutationBackend answers BeginBackendRead with itself, so the recorded
+// Operate calls prove the action ran against the pinned instance.
 type pinnedMutationBackend struct {
 	fakeBackend
-	generation            uint64
-	released              bool
-	releasedDuringOperate bool
+	generation uint64
 }
 
-func (b *pinnedMutationBackend) BeginBackendRead() (Backend, uint64, func()) {
-	return b, b.generation, func() { b.released = true }
+func (b *pinnedMutationBackend) BeginBackendRead() (Backend, uint64) {
+	return b, b.generation
 }
 
-func (b *pinnedMutationBackend) Operate(ctx context.Context, name, action string, opts OperateOpts) ActionResult {
-	b.releasedDuringOperate = b.released
-	return b.fakeBackend.Operate(ctx, name, action, opts)
-}
-
-func (b *pinnedGenerationBackend) BeginBackendRead() (Backend, uint64, func()) {
-	return &b.fakeBackend, b.generation, func() { b.released = true }
+func (b *pinnedGenerationBackend) BeginBackendRead() (Backend, uint64) {
+	return &b.fakeBackend, b.generation
 }
 
 func (b *dashboardSourceBackend) DashboardSnapshot(context.Context, time.Duration) DashboardSnapshot {
@@ -400,9 +394,6 @@ func TestBackendReadResponseUsesPinnedGeneration(t *testing.T) {
 	if snapshot.Generation != 9 {
 		t.Fatalf("dashboard generation = %d, want 9", snapshot.Generation)
 	}
-	if !b.released {
-		t.Fatal("pinned backend read was not released")
-	}
 }
 
 // postReq is a POST request carrying the CSRF header (as the dashboard sends).
@@ -438,12 +429,6 @@ func TestTargetMutationRequiresCurrentGeneration(t *testing.T) {
 			}
 			if len(b.operated) != tt.wantCalls {
 				t.Fatalf("operate calls = %v, want %d", b.operated, tt.wantCalls)
-			}
-			if !b.released {
-				t.Fatal("backend generation pin was not released")
-			}
-			if b.releasedDuringOperate {
-				t.Fatal("backend generation pin was released before the operation completed")
 			}
 			if got := rec.Header().Get(headerSermoGeneration); got != "7" {
 				t.Fatalf("response generation = %q, want 7", got)
