@@ -22,8 +22,9 @@ type operateFn func(ctx context.Context, service, action string) operation.Resul
 
 // cascader orchestrates an action across a service and the services it lists in
 // also_apply. It owns the ordering so it can place the primary correctly for the
-// dependency-aware semantics, and runs strictly sequentially (each Operate
-// acquires its own global slot, so a serial walk never self-deadlocks).
+// dependency-aware semantics, and runs strictly sequentially (each Operate takes
+// that service's own operation lock and releases it before the next step, so a
+// serial walk never self-deadlocks even when a target repeats).
 type cascader struct {
 	op     operateFn
 	lookup func(service string) []string // a service's also_apply targets
