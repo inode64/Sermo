@@ -141,6 +141,9 @@
      Pills carry a colored dot via ::before and a tint of the same color, so
      every state reads at a glance; `state-failed` pulses like a heartbeat. */
   .count-badge { display: inline-block; min-width: 1.5rem; text-align: right; font-weight: 600; }
+  /* Lock names sit beside their count in the service detail grid; bounded so a
+     long list ellipsizes inside its cell instead of widening the grid. */
+  .lock-names { font-size: .85em; max-width: min(16rem, 40vw); color: var(--text-2); }
   .status { font-weight: 600; }
   .active, .ok { color: var(--ok); }
   .inactive, .unknown { color: var(--warn); }
