@@ -2643,6 +2643,15 @@ preflight:
   file: { type: file, path: "${binary}" }
 ```
 
+In this single-path form the check passes when `path` exists and is a regular
+file. Add `non_empty: true` when a zero-byte file must fail too — useful for a
+generated config or a certificate bundle that a failed build can leave empty:
+
+```yaml
+preflight:
+  bundle: { type: file, path: /etc/ssl/certs/ca-bundle.crt, non_empty: true }
+```
+
 Command checks can declare variables too. `from: stdout` and `trim: true` are the
 defaults; `default` is optional and otherwise empty. When the command succeeds,
 those values are also attached to the result `data`. The built-in `version` and
