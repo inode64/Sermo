@@ -1379,7 +1379,8 @@ let expDetailCache = {};   // last /api/services/{name} JSON per svc expansion k
 const expCellCache = new Map(); // live detail cells preserved across outer table renders
 let eventExpanded = new Set();
 const liveOps = new Map(); // operations started from this browser session, keyed by service
-// Monitor/unmonitor requests in flight, keyed by "svc:"/"wat:" + name. These
+// Monitor/unmonitor requests in flight, keyed by expansionPrefixService /
+// expansionPrefixWatch + name (serviceExpansionKey / watchExpansionKey). These
 // actions are not tracked in liveOps, so this guards their buttons against a
 // double click until the reply (and the follow-up load) lands.
 const pendingMonitorToggles = new Set();
@@ -2319,7 +2320,7 @@ function serviceActionDisabled(s, action, busy) {
     case actionResume: return !!(busy || !paused);
     case actionReload: return !!(busy || st !== backendStatusActive || !s.can_reload);
     case actionMonitor:
-    case actionUnmonitor: return !!(busy || pendingMonitorToggles.has("svc:" + s.name));
+    case actionUnmonitor: return !!(busy || pendingMonitorToggles.has(serviceExpansionKey(s.name)));
     default: return false;
   }
 }
@@ -4075,8 +4076,8 @@ function watchActionDisabled(w, action) {
   if (!w || !w.enabled) return true;
   if (watchStateText(w) === targetStateStarting) return true;
   switch (action) {
-    case actionMonitor: return !!w.monitored || pendingMonitorToggles.has("wat:" + w.name);
-    case actionUnmonitor: return !w.monitored || pendingMonitorToggles.has("wat:" + w.name);
+    case actionMonitor: return !!w.monitored || pendingMonitorToggles.has(watchExpansionKey(w.name));
+    case actionUnmonitor: return !w.monitored || pendingMonitorToggles.has(watchExpansionKey(w.name));
     case actionExpand: return !watchHasExpand(w);
     case actionProbe: return !w.can_probe || watchProbeRunning(w);
     case actionPause: return !w.can_control_raid;
@@ -5859,7 +5860,7 @@ async function act(name, action) {
     noCascade = confirmNoCascade;
     confirmNoCascade = false;
   }
-  const toggleKey = acquireMonitorToggle("svc:", name, action);
+  const toggleKey = acquireMonitorToggle(expansionPrefixService, name, action);
   if (toggleKey === null) return;
   const tracked = isTrackedOperation(action);
   try {
@@ -5889,7 +5890,7 @@ async function actWatch(name, action) {
     headers = { [apiHeaderConfirm]: w.raid_array || "" };
   }
   if (action === actionResume && !(await confirmWatchRAIDResume(name))) return;
-  const toggleKey = acquireMonitorToggle("wat:", name, action);
+  const toggleKey = acquireMonitorToggle(expansionPrefixWatch, name, action);
   if (toggleKey === null) return;
   try {
     // Guard-add render inside the try, as in act(): a throw must not strand
@@ -6743,11 +6744,11 @@ function renderRemediation(r) {
   if (!r) return tpl`<span class="muted">not observed yet</span>`;
   const parts = [];
   if (!r.allowed) {
-    if (r.reason === "cooldown") {
+    if (r.reason === policyStateCooldown) {
       const rem = r.cooldown_until ? fmtRemain(r.cooldown_until) : "";
       parts.push(tpl`<span class="inactive">cooldown</span>${rem ? " · " + rem : nothing}`);
       if (r.effective_cooldown) parts.push(tpl`<span class="muted">effective ${r.effective_cooldown}</span>`);
-    } else if (r.reason === "rate limit") {
+    } else if (r.reason === policyStateRateLimit) {
       const lim = r.max_actions ? `${r.recent_actions || 0}/${r.max_actions}` : String(r.recent_actions || 0);
       parts.push(tpl`<span class="inactive">rate limit</span> · ${lim}`);
       if (r.max_actions_window) parts.push(tpl`<span class="muted">in ${r.max_actions_window}</span>`);
