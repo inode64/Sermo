@@ -54,8 +54,6 @@ const domBoolFalse = "false";
 const domEventChange = "change";
 const domEventClick = "click";
 const domEventClose = "close";
-const domEventError = "error";
-const domEventOpen = "open";
 const eventSourceAPIName = "EventSource";
 const domEventHashChange = "hashchange";
 const domEventInput = "input";
@@ -7216,30 +7214,22 @@ let refreshDelay = 0;
 // successful load (scheduled, manual or visibility-driven) resets it.
 const refreshBackoffMaxMs = 2 * millisecondsPerMinute;
 let refreshFailures = 0;
-// With the change stream connected the daemon pushes on every event, so the
-// scheduled poll relaxes to a slow reconciliation pass.
-const streamReconcileMs = 2 * millisecondsPerMinute;
-let streamConnected = false;
 function refreshInterval() {
-  if (!refreshFailures) {
-    return streamConnected ? Math.max(refreshDelay, streamReconcileMs) : refreshDelay;
-  }
+  if (!refreshFailures) return refreshDelay;
   return Math.min(refreshDelay * 2 ** refreshFailures, Math.max(refreshDelay, refreshBackoffMaxMs));
 }
 
-// The change stream (SSE) turns the dashboard push-driven: the daemon signals
-// every emitted event and the client refetches through the normal API within
-// a debounce window. EventSource reconnects on its own; while disconnected
-// (or where the endpoint is unavailable) the configured poll cadence returns.
+// The change stream (SSE) makes the dashboard push-driven on top of the poll:
+// the daemon signals every emitted event and the client refetches through the
+// normal API within a debounce window. It never slows the scheduled poll down,
+// because the daemon only notifies on events (action, alert, firing, …) —
+// nothing pushes when a metric sample changes, so host CPU/memory/load, service
+// runtime and watch readings still depend on the operator's chosen cadence.
 const streamLoadDebounceMs = 500;
 let streamLoadTimer = null;
 (function initChangeStream() {
   if (!(eventSourceAPIName in window)) return;
   const source = new EventSource(apiStreamPath);
-  source.addEventListener(domEventOpen, () => {
-    streamConnected = true;
-    scheduleRefresh();
-  });
   source.addEventListener(domEventChange, () => {
     if (streamLoadTimer) clearTimeout(streamLoadTimer);
     streamLoadTimer = setTimeout(() => {
@@ -7247,12 +7237,6 @@ let streamLoadTimer = null;
       // A hidden tab catches up via the visibilitychange reload instead.
       if (!document.hidden) load();
     }, streamLoadDebounceMs);
-  });
-  source.addEventListener(domEventError, () => {
-    if (streamConnected) {
-      streamConnected = false;
-      scheduleRefresh();
-    }
   });
 })();
 function scheduleRefresh() {
