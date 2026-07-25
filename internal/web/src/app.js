@@ -383,6 +383,7 @@ let loadCompleted = 0;
 let loadWorker = null;
 
 function load() {
+  setRefreshPending(false);
   loadRequested++;
   if (!loadWorker) {
     loadWorker = runLoadQueue().finally(() => { loadWorker = null; });
@@ -7022,6 +7023,9 @@ function initStaticHandlers() {
   const refreshButton = $("#refresh-now");
   if (refreshButton) refreshButton.addEventListener(domEventClick, refreshNow);
 
+  const refreshPendingButton = $("#refresh-pending");
+  if (refreshPendingButton) refreshPendingButton.addEventListener(domEventClick, refreshNow);
+
   const notifyToggle = $("#notify-toggle");
   if (notifyToggle) {
     syncNotifyToggle();
@@ -7290,10 +7294,25 @@ let streamLoadTimer = null;
     streamLoadTimer = setTimeout(() => {
       streamLoadTimer = null;
       // A hidden tab catches up via the visibilitychange reload instead.
-      if (!document.hidden) load();
+      if (document.hidden) return;
+      // Auto-refresh "stop" means the view is frozen on purpose — the operator
+      // is reading a row or copying a value. Never repaint underneath them;
+      // offer the update instead.
+      if (refreshDelay <= 0) {
+        setRefreshPending(true);
+        return;
+      }
+      load();
     }, streamLoadDebounceMs);
   });
 })();
+
+// setRefreshPending shows or hides the topbar "new data" button, the escape
+// hatch that keeps a frozen dashboard from silently going out of date.
+function setRefreshPending(pending) {
+  const btn = $("#refresh-pending");
+  if (btn) btn.hidden = !pending;
+}
 function scheduleRefresh() {
   if (refreshTimer) clearTimeout(refreshTimer);
   refreshTimer = null;
@@ -7314,11 +7333,20 @@ document.addEventListener(domEventVisibilityChange, () => {
     refreshTimer = null;
     return;
   }
+  // Same rule as the change stream: with auto-refresh stopped, coming back to
+  // the tab must not discard the frozen view.
+  if (refreshDelay <= 0) {
+    setRefreshPending(true);
+    return;
+  }
   load().finally(scheduleRefresh);
 });
 function setRefresh(v) {
   const ms = parseInt(v, 10) || 0;
   applyRefresh(ms);
+  // Leaving "stop" resumes at once; waiting out the first interval would look
+  // like the selector did nothing.
+  if (ms > 0) refreshNow();
   try { localStorage.setItem("sermo-refresh", String(ms)); } catch (_) {}
 }
 (function initRefresh() {
