@@ -2707,6 +2707,16 @@ preflight:
   file: { type: file, path: "${binary}" }
 ```
 
+En esta forma de ruta única la comprobación pasa cuando `path` existe y es un
+fichero regular. Añade `non_empty: true` cuando un fichero de cero bytes también
+deba fallar — útil para una configuración generada o un bundle de certificados
+que una compilación fallida puede dejar vacío:
+
+```yaml
+preflight:
+  bundle: { type: file, path: /etc/ssl/certs/ca-bundle.crt, non_empty: true }
+```
+
 Las comprobaciones de comando también pueden declarar variables. `from: stdout` y
 `trim: true` son los valores por defecto; `default` es opcional y de lo contrario vacío.
 Cuando el comando tiene éxito, esos valores también se adjuntan al `data` del resultado.
