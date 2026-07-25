@@ -1241,21 +1241,164 @@ checks:
 	mustHave(t, bad, "checks.unsupported-mount-controls.options is not supported for a storage check")
 }
 
-func TestValidateCheckInterval(t *testing.T) {
-	assertServiceValidation(t, `
+// Paired good/bad validation: good must produce no issue mentioning goodToken,
+// bad must produce every substring in want. Rows go here instead of one function
+// each; assertServiceValidation does the work.
+func TestServiceValidationGoodAndBad(t *testing.T) {
+	tests := []struct {
+		name      string
+		good      string
+		goodToken string
+		bad       string
+		want      []string
+	}{
+		{
+			name: "check interval",
+			good: `
 name: svc
 service: x
 policy: { cooldown: 5m }
 checks:
   http: { type: http, url: "http://x/health", interval: 30m }
-`, "interval", `
+`,
+			goodToken: "interval",
+			bad: `
 name: svc
 service: x
 policy: { cooldown: 5m }
 checks:
   http: { type: http, url: "http://x/health", interval: soon }
 `,
-		`checks.http.interval "soon" must be a valid positive duration`)
+			want: []string{`checks.http.interval "soon" must be a valid positive duration`},
+		},
+		{
+			name: "service interval",
+			good: `
+name: svc
+service: x
+interval: 10s
+policy: { cooldown: 5m }
+`,
+			goodToken: "interval",
+			bad: `
+name: svc
+service: x
+interval: notaduration
+policy: { cooldown: 5m }
+`,
+			want: []string{"interval"},
+		},
+		{
+			name: "count check nested threshold",
+			good: `
+name: svc
+service: x
+policy: { cooldown: 5m }
+checks:
+  backlog: { type: count, path: /var/spool, count: { op: ">", value: 1000 } }
+`,
+			goodToken: "count",
+			bad: `
+name: svc
+service: x
+policy: { cooldown: 5m }
+checks:
+  backlog: { type: count, path: /var/spool, op: ">", value: 5, count: { op: ">", value: 1000 } }
+`,
+			want: []string{"count check must not mix a nested count {op, value} with top-level op/value"},
+		},
+		{
+			name: "rule window min_matches optional",
+			good: `
+name: svc
+service: x
+policy: { cooldown: 5m }
+rule_window: { cycles: 5, mode: within }
+checks:
+  http: { type: http, url: "http://127.0.0.1/" }
+`,
+			goodToken: "rule_window",
+			bad: `
+name: svc
+service: x
+policy: { cooldown: 5m }
+rule_window: { cycles: 5, mode: within, min_matches: 0 }
+checks:
+  http: { type: http, url: "http://127.0.0.1/" }
+`,
+			want: []string{"rule_window.min_matches must be > 0"},
+		},
+		{
+			name: "rule window duration",
+			good: `
+name: svc
+service: x
+policy: { cooldown: 5m }
+rule_window: { duration: 6m, mode: consecutive }
+checks:
+  http: { type: http, url: "http://127.0.0.1/" }
+`,
+			goodToken: "rule_window",
+			bad: `
+name: svc
+service: x
+policy: { cooldown: 5m }
+rule_window: { cycles: 3, duration: 6m }
+checks:
+  http: { type: http, url: "http://127.0.0.1/" }
+`,
+			want: []string{"rule_window cannot define both cycles and duration"},
+		},
+		{
+			name: "file condition exists boolean",
+			good: `
+name: svc
+service: x
+policy: { cooldown: 5m }
+rules:
+  marker:
+    type: alert
+    if: { file: { path: /run/x.flag, exists: false } }
+    then: { action: alert, message: "flag" }
+`,
+			goodToken: "file.exists",
+			bad: `
+name: svc
+service: x
+policy: { cooldown: 5m }
+rules:
+  marker:
+    type: alert
+    if: { file: { path: /run/x.flag, exists: "false" } }
+    then: { action: alert, message: "flag" }
+`,
+			want: []string{"file.exists must be a boolean"},
+		},
+		{
+			name: "pids check",
+			good: `
+name: svc
+service: x
+policy: { cooldown: 5m }
+checks:
+  pid-table: { type: pids, used_pct: { op: ">=", value: "90%" } }
+`,
+			goodToken: "pid-table",
+			bad: `
+name: svc
+service: x
+policy: { cooldown: 5m }
+checks:
+  no-pred: { type: pids }
+`,
+			want: []string{"checks.no-pred requires at least one of used_pct/free/count"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assertServiceValidation(t, tt.good, tt.goodToken, tt.bad, tt.want...)
+		})
+	}
 }
 
 func TestValidateCertCheck(t *testing.T) {
@@ -1639,38 +1782,6 @@ rules:
 	}
 }
 
-func TestValidateServiceInterval(t *testing.T) {
-	assertServiceValidation(t, `
-name: svc
-service: x
-interval: 10s
-policy: { cooldown: 5m }
-`, "interval", `
-name: svc
-service: x
-interval: notaduration
-policy: { cooldown: 5m }
-`,
-		"interval")
-}
-
-func TestValidateCountCheckNestedThreshold(t *testing.T) {
-	assertServiceValidation(t, `
-name: svc
-service: x
-policy: { cooldown: 5m }
-checks:
-  backlog: { type: count, path: /var/spool, count: { op: ">", value: 1000 } }
-`, "count", `
-name: svc
-service: x
-policy: { cooldown: 5m }
-checks:
-  backlog: { type: count, path: /var/spool, op: ">", value: 5, count: { op: ">", value: 1000 } }
-`,
-		"count check must not mix a nested count {op, value} with top-level op/value")
-}
-
 // assertCheckRequiresPath asserts that a check of the given type reports
 // "path is required for a <type> check" both when path is omitted and when path
 // is a list containing a non-string element.
@@ -1756,44 +1867,6 @@ func TestValidateLockfileCheckRequiresPath(t *testing.T) {
 	assertCheckRequiresPath(t, "lockfile")
 }
 
-func TestValidateRuleWindowMinMatchesOptional(t *testing.T) {
-	assertServiceValidation(t, `
-name: svc
-service: x
-policy: { cooldown: 5m }
-rule_window: { cycles: 5, mode: within }
-checks:
-  http: { type: http, url: "http://127.0.0.1/" }
-`, "rule_window", `
-name: svc
-service: x
-policy: { cooldown: 5m }
-rule_window: { cycles: 5, mode: within, min_matches: 0 }
-checks:
-  http: { type: http, url: "http://127.0.0.1/" }
-`,
-		"rule_window.min_matches must be > 0")
-}
-
-func TestValidateRuleWindowDuration(t *testing.T) {
-	assertServiceValidation(t, `
-name: svc
-service: x
-policy: { cooldown: 5m }
-rule_window: { duration: 6m, mode: consecutive }
-checks:
-  http: { type: http, url: "http://127.0.0.1/" }
-`, "rule_window", `
-name: svc
-service: x
-policy: { cooldown: 5m }
-rule_window: { cycles: 3, duration: 6m }
-checks:
-  http: { type: http, url: "http://127.0.0.1/" }
-`,
-		"rule_window cannot define both cycles and duration")
-}
-
 func TestValidateCertServerNameAndFileScope(t *testing.T) {
 	issues := validateService(t, `
 name: svc
@@ -1817,29 +1890,6 @@ checks:
 `)
 	mustNotHave(t, good, "cert")
 	mustNotHave(t, good, "server_name")
-}
-
-func TestValidateFileConditionExistsBoolean(t *testing.T) {
-	assertServiceValidation(t, `
-name: svc
-service: x
-policy: { cooldown: 5m }
-rules:
-  marker:
-    type: alert
-    if: { file: { path: /run/x.flag, exists: false } }
-    then: { action: alert, message: "flag" }
-`, "file.exists", `
-name: svc
-service: x
-policy: { cooldown: 5m }
-rules:
-  marker:
-    type: alert
-    if: { file: { path: /run/x.flag, exists: "false" } }
-    then: { action: alert, message: "flag" }
-`,
-		"file.exists must be a boolean")
 }
 
 func TestValidateMemoryCheckBothSurfaces(t *testing.T) {
@@ -1879,23 +1929,6 @@ checks:
 `,
 		"checks.bad-res.resource must be cpu, memory or io",
 		"checks.no-pred requires at least one of some_avg10/some_avg60/some_avg300/full_avg10/full_avg60/full_avg300")
-}
-
-func TestValidatePidsCheck(t *testing.T) {
-	assertServiceValidation(t, `
-name: svc
-service: x
-policy: { cooldown: 5m }
-checks:
-  pid-table: { type: pids, used_pct: { op: ">=", value: "90%" } }
-`, "pid-table", `
-name: svc
-service: x
-policy: { cooldown: 5m }
-checks:
-  no-pred: { type: pids }
-`,
-		"checks.no-pred requires at least one of used_pct/free/count")
 }
 
 func TestValidateDiskIOCheck(t *testing.T) {
