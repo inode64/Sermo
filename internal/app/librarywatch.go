@@ -38,6 +38,7 @@ type artifactFileSample struct {
 type artifactAppSample struct {
 	version string
 	status  string
+	output  string
 	sampled bool
 }
 
@@ -95,15 +96,27 @@ func (s *ArtifactSamples) RegisterApp(name string) bool {
 	return false
 }
 
-// StoreAppVersion records one app version observation and its inspection status.
-// A non-OK observation remains sampled so workers do not re-run its probe.
-func (s *ArtifactSamples) StoreAppVersion(name, version, status string) {
+// StoreAppVersion records one app version observation, its inspection status and
+// the probe's bounded output. A non-OK observation remains sampled so workers do
+// not re-run its probe.
+func (s *ArtifactSamples) StoreAppVersion(name, version, status, output string) {
 	if s == nil || name == "" {
 		return
 	}
 	s.mu.Lock()
-	s.appVersions[name] = artifactAppSample{version: version, status: status, sampled: true}
+	s.appVersions[name] = artifactAppSample{version: version, status: status, output: output, sampled: true}
 	s.mu.Unlock()
+}
+
+// AppProbeOutput returns the bounded stdout/stderr captured by the app's last
+// probe, so a rule that cannot evaluate because of it can show the operator why.
+func (s *ArtifactSamples) AppProbeOutput(name string) string {
+	if s == nil {
+		return ""
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.appVersions[name].output
 }
 
 // AppVersion returns the latest sampled app version and its probe outcome.
