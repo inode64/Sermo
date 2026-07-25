@@ -75,31 +75,24 @@ func (s Scheduler) Run(ctx context.Context, workers []*Worker, watches []*Watch,
 	staggerTotal := len(workers) + len(watches)
 	var wg sync.WaitGroup
 	idx := 0
-	for _, w := range workers {
-		wi := w.Interval
-		if wi <= 0 {
-			wi = interval
+	// launch takes the target's own interval; a target that configures none
+	// falls back to the engine cadence. Workers are launched before watches so
+	// the stagger slots stay in the documented order.
+	launch := func(c cycler, own time.Duration) {
+		if own <= 0 {
+			own = interval
 		}
 		offset := staggerOffset(idx, staggerTotal, interval)
 		idx++
-		wg.Add(1)
-		go func(w *Worker, wi, offset time.Duration) {
-			defer wg.Done()
-			runCycler(ctx, w, wi, offset)
-		}(w, wi, offset)
+		wg.Go(func() {
+			runCycler(ctx, c, own, offset)
+		})
+	}
+	for _, w := range workers {
+		launch(w, w.Interval)
 	}
 	for _, wt := range watches {
-		wi := wt.Interval
-		if wi <= 0 {
-			wi = interval
-		}
-		offset := staggerOffset(idx, staggerTotal, interval)
-		idx++
-		wg.Add(1)
-		go func(wt *Watch, wi, offset time.Duration) {
-			defer wg.Done()
-			runCycler(ctx, wt, wi, offset)
-		}(wt, wi, offset)
+		launch(wt, wt.Interval)
 	}
 	wg.Wait()
 	if finalShutdown && ready != nil {
