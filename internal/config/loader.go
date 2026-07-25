@@ -67,11 +67,12 @@ func WithLoadContext(ctx context.Context) Option {
 	return func(o *loadOptions) { o.loadCtx = ctx }
 }
 
-// WithServiceUnits provides active backend units for service-derived catalog
+// withServiceUnits provides active backend units for service-derived catalog
 // service template materialization. Production loads query the active init
 // backend lazily; this option is the inject seam so tests can pin units without
-// probing the host.
-func WithServiceUnits(backend string, units []string) Option {
+// probing the host. Unexported like withPathDirs because only this package's
+// own tests use it — WithCatalogDirs stays exported for the other packages'.
+func withServiceUnits(backend string, units []string) Option {
 	return func(o *loadOptions) {
 		if o.serviceUnits == nil {
 			o.serviceUnits = map[string][]string{}
