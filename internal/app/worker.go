@@ -141,10 +141,11 @@ type Worker struct {
 	// windows holds per-rule for/within state across cycles.
 	windows map[string]*rules.WindowState
 
-	// evalErrs holds the last emitted evaluation error per rule so a persistent
-	// failure — a version probe whose binary cannot run, for example — is
-	// reported when it appears or changes instead of on every cycle. Cleared
-	// when the rule evaluates cleanly again.
+	// evalErrs holds the last emitted evaluation error per rule condition so a
+	// persistent failure — a version probe whose binary cannot run, for example —
+	// is reported when it appears or changes instead of on every cycle. Keyed by
+	// rule name, plus the blocked action for a guard. Cleared when the condition
+	// evaluates cleanly again.
 	evalErrs map[string]string
 	// libBaseline holds the acknowledged fingerprint of each watched path (a
 	// `changed:` condition target, typically a library .so) across cycles.
@@ -298,9 +299,10 @@ func (w *Worker) operationSettlingState(now time.Time) (observeOnly, running boo
 	}
 	rec, found, err := w.OperationSettling.OperationSettling(w.Service)
 	if err != nil {
-		w.emit(Event{Kind: eventKindError, Message: "operation settling: " + err.Error()})
+		w.emitStoreError(operationSettlingReadErrKey, "operation settling: "+err.Error())
 		return false, false
 	}
+	w.clearEvalError(operationSettlingReadErrKey)
 	if !found {
 		return false, false
 	}
@@ -325,8 +327,10 @@ func (w *Worker) clearOperationSettling() {
 		return
 	}
 	if err := w.OperationSettling.ClearOperationSettling(w.Service); err != nil {
-		w.emit(Event{Kind: eventKindError, Message: "operation settling: " + err.Error()})
+		w.emitStoreError(operationSettlingClearErrKey, "operation settling: "+err.Error())
+		return
 	}
+	w.clearEvalError(operationSettlingClearErrKey)
 }
 
 func (w *Worker) clearObservability() {
@@ -557,10 +561,18 @@ func (w *Worker) emitRemediationAlerts(ctx context.Context, ev *rules.Evaluator,
 
 func (w *Worker) remediationSuppression(ctx context.Context, ev *rules.Evaluator, firing firingRule, action string, now func() time.Time) (string, bool) {
 	blocked, reason, err := rules.Guard(ctx, w.Rules, action, ev)
+	// A guard is consulted on every cycle its rule keeps firing, so an
+	// unevaluable guard repeats for as long as the underlying probe stays
+	// broken. Same emission policy as the rule's own condition error.
+	guardKey := firing.Name + evalErrKeySep + action
 	if err != nil {
-		w.emit(Event{Kind: eventKindError, Rule: firing.Name, Action: action, Message: "guard: " + err.Error()})
+		msg := "guard: " + err.Error()
+		if emission.ShouldRepeat(w.ruleEmission(firing.Rule).Events, w.evalErrorChanged(guardKey, msg)) {
+			w.emit(Event{Kind: eventKindError, Rule: firing.Name, Action: action, Message: msg})
+		}
 		return "", true
 	}
+	w.clearEvalError(guardKey)
 	if blocked {
 		return "guard: " + reason, false
 	}
@@ -978,6 +990,33 @@ func fileFingerprint(path string) string {
 		return ""
 	}
 	return fmt.Sprintf("%d:%d", info.Size(), info.ModTime().UnixNano())
+}
+
+// evalErrKeySep separates the rule name from the blocked action in an evalErrs
+// key, so a guard error and its rule's own condition error never collide. The
+// NUL byte cannot appear in either part, which also lets the store-level keys
+// below start with it without ever colliding with a rule name.
+const evalErrKeySep = "\x00"
+
+// Keys for errors that belong to no single rule.
+const (
+	operationSettlingReadErrKey  = evalErrKeySep + "operation-settling-read"
+	operationSettlingClearErrKey = evalErrKeySep + "operation-settling-clear"
+)
+
+// workerEmission is the event cadence for errors that belong to no single rule,
+// so they inherit the global policy instead of repeating unconditionally.
+func (w *Worker) workerEmission() emission.Policy {
+	return emission.Resolve(w.GlobalEmission, emission.Default())
+}
+
+// emitStoreError reports a store-level error under the worker's emission policy.
+// A store that keeps failing — a full disk, for example — would otherwise repeat
+// the same line on every cycle for as long as the condition lasts.
+func (w *Worker) emitStoreError(key, msg string) {
+	if emission.ShouldRepeat(w.workerEmission().Events, w.evalErrorChanged(key, msg)) {
+		w.emit(Event{Kind: eventKindError, Message: msg})
+	}
 }
 
 // evalErrorChanged records msg as the current evaluation error for rule name and
