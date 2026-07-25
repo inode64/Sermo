@@ -163,19 +163,21 @@ arranque); si la API web es inalcanzable, recurre al backend de init más los
 metadatos locales de monitorización, como antes. Los estados de servicio son:
 `disabled`, `stopped`, `started` (backend activo pero no monitorizado),
 `starting` (asentamiento de arranque/operación), `collecting` (activo y
-monitorizado, pero las gráficas/indicadores aún no están completos),
-`monitored` (activo, monitorizado y con observabilidad lista) y `failed`. Sin la
-vista del daemon, un servicio configurado activo y monitorizado cae a
-`collecting`; un servicio activo que no consta como monitorizado cae a
-`started`. **`sermoctl is-active` es
-diferente:** siempre sondea el backend de init (`active` / `inactive` /
-`paused`) para obtener el código de salida y la salida en texto plano. Por tanto,
-un servicio monitorizado que aún se está asentando con un backend inactivo
-muestra `state=starting` en `status` pero sale con **1** en `is-active` hasta que
-la unidad reporta active. La misma preferencia se aplica a `sermoctl watch status
-WATCH` y a la columna STATUS de `sermoctl apps` para las aplicaciones instaladas
-monitorizadas por el daemon. Las apps de catálogo cuyo binario no está instalado
-se omiten de `sermoctl apps` y no participan en el asentamiento de arranque.
+monitorizado, pero las gráficas/indicadores aún no están completos), `monitored`
+(activo, monitorizado y con observabilidad lista) y `failed`. Sin la vista del
+daemon, un servicio configurado activo y monitorizado cae a `collecting`; un
+servicio activo que no consta como monitorizado cae a `started`.
+
+**`sermoctl is-active` es diferente:** siempre sondea el backend de init
+(`active` / `inactive` / `paused`) para obtener el código de salida y la salida
+en texto plano. Por tanto, un servicio monitorizado que aún se está asentando
+con un backend inactivo muestra `state=starting` en `status` pero sale con **1**
+en `is-active` hasta que la unidad reporta active.
+
+La misma preferencia se aplica a `sermoctl watch status WATCH` y a la columna
+STATUS de `sermoctl apps` para las aplicaciones instaladas monitorizadas por el
+daemon. Las apps de catálogo cuyo binario no está instalado se omiten de
+`sermoctl apps` y no participan en el asentamiento de arranque.
 
 Cuando el daemon dispone de lecturas actuales del watch, `sermoctl watch status
 WATCH` también las imprime (incluidas la operación RAID y el porcentaje de
