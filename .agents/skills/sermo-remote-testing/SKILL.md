@@ -602,6 +602,25 @@ echo $! > /tmp/sermo-remote-test-XXX/sermod.pid
 ## Cleanup
 
 - Leave no persistent installation behind: no systemd unit, no OpenRC service, and no files outside `/tmp`.
+- **Stop the temporary daemon before removing its directory.** Removing the
+  directory alone leaves `sermod` running against a deleted binary and a deleted
+  config, indefinitely and invisibly — the run looks cleaned up while the daemon
+  survives every later check that only looks for files. Signal the PID recorded
+  in `<dir>/sermod.pid`, and only after confirming `/proc/<pid>/exe` resolves
+  under `/tmp/sermo-remote-test-`, so the run never signals a process it did not
+  start:
+
+  ```sh
+  pid="$(cat /tmp/sermo-remote-test-XXX/sermod.pid)"
+  case "$(readlink "/proc/${pid}/exe")" in
+    /tmp/sermo-remote-test-*) kill -TERM "$pid" ;;
+    *) echo "pid ${pid} is not this run's sermod; not signaling" ;;
+  esac
+  ```
+
+- After the signal, confirm no process remains whose `/proc/<pid>/exe` resolves
+  under `/tmp/sermo-`; escalate to `kill -KILL` only for a PID that passed the
+  same identity check. Record every daemon stopped.
 - Clean only directories matching the exact remote prefix created for the run, e.g. `/tmp/sermo-remote-test-*`.
 - Before removing a directory, verify it starts with `/tmp/sermo-remote-test-`.
 - If cleanup fails due to DNS/SSH, report the host and remote directory path.
@@ -638,6 +657,7 @@ Summarize:
 - `acpid` operation tests run or skipped, with reason;
 - missing paths, unsupported apps, or catalog gaps to fix locally;
 - Sermo blockers encountered, their reproducibility evidence and the actions completed before stopping;
+- temporary daemons stopped, and any that could not be stopped, with host and PID;
 - temporary artifacts removed after successful installations, retained evidence
   requested by the operator, and remote `/tmp` directories left behind, if any;
 - protected-path metadata check status for `/`, `/etc`, `/usr`, `/usr/lib`,
