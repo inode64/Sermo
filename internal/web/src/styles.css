@@ -289,6 +289,17 @@
   .topbar-tools label { color: var(--text-2); font-size: .82rem; white-space: nowrap; }
   #target-search { width: min(19rem, 42vw); }
   #last-refresh { font-size: .78rem; white-space: nowrap; }
+  /* With auto-refresh stopped the daemon's change signal cannot repaint the
+     frozen view, so it surfaces here instead: an --info tinted pill the operator
+     activates when ready. Tinted rather than plain so it reads as a pending
+     update, not as another piece of chrome. */
+  #refresh-pending {
+    border-color: color-mix(in srgb, var(--info) 55%, transparent);
+    background: color-mix(in srgb, var(--info) 14%, transparent);
+    color: color-mix(in srgb, var(--info) 82%, var(--text));
+    font-weight: 600; white-space: nowrap;
+  }
+  #refresh-pending:hover { background: color-mix(in srgb, var(--info) 22%, transparent); }
   #system-status, #statusbar { margin: .25rem 0 0; font-size: .82rem; display: flex; gap: .4rem 1.1rem; flex-wrap: wrap; align-items: center; color: var(--text-2); }
   #system-status b, #statusbar b { color: var(--text); font-weight: 600; }
   /* Each reading is its own flex item so the row's gap spaces them and a
