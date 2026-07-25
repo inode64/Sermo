@@ -2,14 +2,94 @@ package config
 
 import "testing"
 
-func TestValidateMySQLCheckValid(t *testing.T) {
-	issues := validateService(t, `
+// Connection-check validation: each case loads one service YAML and asserts
+// whether Validate reports issues against the named check. Same want/absent
+// shape as TestServiceValidationIssues in validate30_test.go; kept here because
+// these cases are the per-protocol connection schemas this file owns.
+func TestConnCheckValidationIssues(t *testing.T) {
+	tests := []struct {
+		name    string
+		service string
+		want    []string
+		absent  []string
+	}{
+		{
+			name: "mysql check valid",
+			service: `
 name: db
 service: x
 checks:
   conn: { type: mysql, user: monitor, password: secret, port: 3306, tls: false }
-`)
-	mustNotHave(t, issues, "checks.conn")
+`,
+			absent: []string{"checks.conn"},
+		},
+		{
+			name: "postgres sslmode accepted",
+			service: `
+name: db
+service: x
+checks:
+  conn: { type: postgres, user: monitor, tls: verify-full }
+`,
+			absent: []string{"checks.conn"},
+		},
+		{
+			name: "cloudflared check valid",
+			service: `
+name: tunnel
+service: cloudflared
+checks:
+  protocol: { type: cloudflared, host: 127.0.0.1, port: 60123, tls: false }
+`,
+			absent: []string{"checks.protocol"},
+		},
+		{
+			name: "dhclient check valid",
+			service: `
+name: dhclient
+service: dhclient
+checks:
+  protocol: { type: dhclient, host: 0.0.0.0, port: 68, lease_file: /var/lib/dhcp/dhclient.leases }
+`,
+			absent: []string{"checks.protocol"},
+		},
+		{
+			name: "mysql check bad tls",
+			service: `
+name: db
+service: x
+checks:
+  conn: { type: mariadb, user: u, tls: maybe }
+`,
+			want: []string{"tls"},
+		},
+		{
+			name: "conn expect valid",
+			service: `
+name: dns
+service: x
+checks:
+  resolver:
+    type: dns
+    host: 1.1.1.1
+    expect:
+      rcode: NOERROR
+      answers: { op: ">", value: 0 }
+`,
+			absent: []string{"checks.resolver"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			issues := validateService(t, tt.service)
+			for _, want := range tt.want {
+				mustHave(t, issues, want)
+			}
+			for _, absent := range tt.absent {
+				mustNotHave(t, issues, absent)
+			}
+		})
+	}
 }
 
 func TestValidateMySQLCheckNoUserOK(t *testing.T) {
@@ -30,46 +110,6 @@ service: x
 checks:
   conn: { type: postgres }
 `), "user is required")
-}
-
-func TestValidatePostgresSSLModeAccepted(t *testing.T) {
-	issues := validateService(t, `
-name: db
-service: x
-checks:
-  conn: { type: postgres, user: monitor, tls: verify-full }
-`)
-	mustNotHave(t, issues, "checks.conn")
-}
-
-func TestValidateCloudflaredCheckValid(t *testing.T) {
-	issues := validateService(t, `
-name: tunnel
-service: cloudflared
-checks:
-  protocol: { type: cloudflared, host: 127.0.0.1, port: 60123, tls: false }
-`)
-	mustNotHave(t, issues, "checks.protocol")
-}
-
-func TestValidateDHClientCheckValid(t *testing.T) {
-	issues := validateService(t, `
-name: dhclient
-service: dhclient
-checks:
-  protocol: { type: dhclient, host: 0.0.0.0, port: 68, lease_file: /var/lib/dhcp/dhclient.leases }
-`)
-	mustNotHave(t, issues, "checks.protocol")
-}
-
-func TestValidateMySQLCheckBadTLS(t *testing.T) {
-	issues := validateService(t, `
-name: db
-service: x
-checks:
-  conn: { type: mariadb, user: u, tls: maybe }
-`)
-	mustHave(t, issues, "tls")
 }
 
 func TestValidateConnSharedFieldErrors(t *testing.T) {
@@ -96,21 +136,6 @@ checks:
 	} {
 		mustHave(t, issues, want)
 	}
-}
-
-func TestValidateConnExpectValid(t *testing.T) {
-	issues := validateService(t, `
-name: dns
-service: x
-checks:
-  resolver:
-    type: dns
-    host: 1.1.1.1
-    expect:
-      rcode: NOERROR
-      answers: { op: ">", value: 0 }
-`)
-	mustNotHave(t, issues, "checks.resolver")
 }
 
 func TestValidateConnExpectErrors(t *testing.T) {
