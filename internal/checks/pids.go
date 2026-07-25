@@ -33,10 +33,7 @@ type pidsCheck struct {
 }
 
 func (c pidsCheck) Run(_ context.Context) Result {
-	sampler := c.sampler
-	if sampler == nil {
-		sampler = defaultPidsSampler
-	}
+	sampler := samplerOr(c.sampler, defaultPidsSampler)
 	return runLevelCountCheck(c.base, c.preds, func() (uint64, uint64, error) {
 		s, err := sampler()
 		return s.Threads, s.Max, err

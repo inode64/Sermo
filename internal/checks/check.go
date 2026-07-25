@@ -148,6 +148,36 @@ func (b base) result(ok bool, message string, start time.Time) Result {
 // lowercase local is `limit`, not `max`, only to avoid shadowing the Go `max`
 // builtin — keep it that way. When it is 0 the maximum is unknown, so used_pct/
 // free are omitted and a predicate on them cannot hold (the level check is an AND).
+// samplerOr returns the check's injected sampler, falling back to the package
+// default when no test seam was wired. Every Run that reads the host opens with
+// this resolution; the three shapes here cover the samplers whose only inputs
+// are the check's own configuration. Samplers with richer signatures (cert,
+// firewall, icmp, size) resolve their default at the call site.
+func samplerOr[T any](s, def func() (T, error)) func() (T, error) {
+	if s == nil {
+		return def
+	}
+	return s
+}
+
+// okSamplerOr is samplerOr for the samplers that report availability with a
+// bool instead of an error (entropy, oom, zombies).
+func okSamplerOr[T any](s, def func() (T, bool)) func() (T, bool) {
+	if s == nil {
+		return def
+	}
+	return s
+}
+
+// keyedSamplerOr is samplerOr for the samplers selected by a single name: a
+// device, interface, pressure resource or address family.
+func keyedSamplerOr[T any](s, def func(string) (T, error)) func(string) (T, error) {
+	if s == nil {
+		return def
+	}
+	return s
+}
+
 // runLevelCountCheck samples one count/max observation and evaluates the level
 // predicates against it — the shared Run body of the count-vs-limit level
 // checks (fds, pids, conntrack).

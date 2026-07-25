@@ -29,10 +29,7 @@ type zombieCheck struct {
 }
 
 func (c zombieCheck) Run(_ context.Context) Result {
-	sampler := c.sampler
-	if sampler == nil {
-		sampler = defaultZombieSampler
-	}
+	sampler := okSamplerOr(c.sampler, defaultZombieSampler)
 	return runThresholdCheck(c.base, c.op, c.value, sampler, "zombies: cannot read /proc",
 		func(count uint64) string { return fmt.Sprintf("%d zombie processes", count) }, DataKeyZombies)
 }

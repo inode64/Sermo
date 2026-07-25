@@ -74,10 +74,7 @@ type diskIOCheck struct {
 
 func (c *diskIOCheck) Run(_ context.Context) Result {
 	start := time.Now()
-	sampler := c.sampler
-	if sampler == nil {
-		sampler = defaultDiskIOSampler
-	}
+	sampler := keyedSamplerOr(c.sampler, defaultDiskIOSampler)
 	clock := c.clock
 	if clock == nil {
 		clock = time.Now

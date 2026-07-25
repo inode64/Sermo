@@ -33,10 +33,7 @@ type loadCheck struct {
 
 func (c loadCheck) Run(_ context.Context) Result {
 	start := time.Now()
-	sampler := c.sampler
-	if sampler == nil {
-		sampler = defaultLoadSampler
-	}
+	sampler := samplerOr(c.sampler, defaultLoadSampler)
 	s, err := sampler()
 	if err != nil {
 		return c.result(false, "load: "+err.Error(), start)

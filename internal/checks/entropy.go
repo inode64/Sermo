@@ -22,10 +22,7 @@ type entropyCheck struct {
 }
 
 func (c entropyCheck) Run(_ context.Context) Result {
-	sampler := c.sampler
-	if sampler == nil {
-		sampler = defaultEntropySampler
-	}
+	sampler := okSamplerOr(c.sampler, defaultEntropySampler)
 	return runThresholdCheck(c.base, c.op, c.value, sampler, "entropy: entropy_avail unavailable",
 		func(avail uint64) string { return fmt.Sprintf("entropy_avail %d bits", avail) }, DataKeyAvail)
 }

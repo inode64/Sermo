@@ -32,10 +32,7 @@ type edacCheck struct {
 
 func (c edacCheck) Run(_ context.Context) Result {
 	start := time.Now()
-	sampler := c.sampler
-	if sampler == nil {
-		sampler = defaultEdacSampler
-	}
+	sampler := samplerOr(c.sampler, defaultEdacSampler)
 	st, err := sampler()
 	if err != nil {
 		return c.result(false, "edac: "+err.Error(), start)

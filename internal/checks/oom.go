@@ -31,10 +31,7 @@ type oomCheck struct {
 
 func (c *oomCheck) Run(_ context.Context) Result {
 	start := time.Now()
-	sampler := c.sampler
-	if sampler == nil {
-		sampler = defaultOomSampler
-	}
+	sampler := okSamplerOr(c.sampler, defaultOomSampler)
 	count, ok := sampler()
 	if !ok {
 		return c.result(false, "oom: oom_kill counter unavailable", start)

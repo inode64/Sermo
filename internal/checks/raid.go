@@ -88,10 +88,7 @@ type raidCheck struct {
 
 func (c *raidCheck) Run(_ context.Context) Result {
 	start := time.Now()
-	sampler := c.sampler
-	if sampler == nil {
-		sampler = defaultRaidSampler
-	}
+	sampler := samplerOr(c.sampler, defaultRaidSampler)
 	st, err := sampler()
 	if err != nil {
 		return c.result(false, "raid: "+err.Error(), start)

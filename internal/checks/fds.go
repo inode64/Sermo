@@ -33,10 +33,7 @@ type fdsCheck struct {
 }
 
 func (c fdsCheck) Run(_ context.Context) Result {
-	sampler := c.sampler
-	if sampler == nil {
-		sampler = defaultFdsSampler
-	}
+	sampler := samplerOr(c.sampler, defaultFdsSampler)
 	return runLevelCountCheck(c.base, c.preds, func() (uint64, uint64, error) {
 		s, err := sampler()
 		return s.Allocated, s.Max, err

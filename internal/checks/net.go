@@ -103,10 +103,7 @@ type netCheck struct {
 
 func (c *netCheck) Run(_ context.Context) Result {
 	start := time.Now()
-	sampler := c.sampler
-	if sampler == nil {
-		sampler = defaultNetSampler
-	}
+	sampler := keyedSamplerOr(c.sampler, defaultNetSampler)
 	s, err := sampler(c.iface)
 	if err != nil {
 		return c.result(false, fmt.Sprintf("net %s: %v", c.iface, err), start)
