@@ -396,6 +396,67 @@ func TestCycleAlertEmissionEveryCycleRepeats(t *testing.T) {
 	}
 }
 
+// evalErrorRuleTree returns an alert rule whose condition references a check the
+// cycle cache never produces, so evaluating it fails on every cycle the way a
+// version probe does when its binary cannot run on the host.
+func evalErrorRuleTree() map[string]any {
+	return map[string]any{"rules": map[string]any{"warn-down": map[string]any{
+		"type": "alert",
+		"if":   map[string]any{"failed": map[string]any{"check": "absent"}},
+		"then": map[string]any{"action": "alert", "message": "http is down"},
+	}}}
+}
+
+// TestCycleEvaluationErrorEmitsOnChangeByDefault pins the fix for an error feed
+// that drowned itself: an unevaluable condition was reported every cycle, so a
+// handful of broken hosts filled the whole retrievable event history and
+// evicted every other event.
+func TestCycleEvaluationErrorEmitsOnChangeByDefault(t *testing.T) {
+	h := &workerHarness{cache: failedCache("http")}
+	w := h.worker(evalErrorRuleTree(), rules.Policy{}, nil)
+
+	w.RunCycle(context.Background())
+	w.RunCycle(context.Background())
+	w.RunCycle(context.Background())
+
+	if got := h.countEvents(eventKindError); got != 1 {
+		t.Fatalf("an unchanged evaluation error must be reported once, got %d events: %+v", got, h.events)
+	}
+}
+
+func TestCycleEvaluationErrorEmissionEveryCycleRepeats(t *testing.T) {
+	tree := evalErrorRuleTree()
+	rule := tree["rules"].(map[string]any)["warn-down"].(map[string]any)
+	rule[emission.Section] = map[string]any{emission.KeyEvents: emission.ModeEveryCycle}
+	h := &workerHarness{cache: failedCache("http")}
+	w := h.worker(tree, rules.Policy{}, nil)
+
+	w.RunCycle(context.Background())
+	w.RunCycle(context.Background())
+
+	if got := h.countEvents(eventKindError); got != 2 {
+		t.Fatalf("an every-cycle rule must report its evaluation error every cycle, got %d events: %+v", got, h.events)
+	}
+}
+
+// TestCycleEvaluationErrorReemittedAfterCleanEvaluation guards the other side of
+// the throttle: suppression must not hide a failure that returns after the rule
+// evaluated cleanly again.
+func TestCycleEvaluationErrorReemittedAfterCleanEvaluation(t *testing.T) {
+	h := &workerHarness{cache: failedCache("http")}
+	w := h.worker(evalErrorRuleTree(), rules.Policy{}, nil)
+
+	w.RunCycle(context.Background())
+	h.cache = failedCache("absent")
+	w.RunCycle(context.Background())
+	h.cache = failedCache("http")
+	w.RunCycle(context.Background())
+
+	if got := h.countEvents(eventKindError); got != 2 {
+		t.Fatalf("a recurring evaluation error must be reported again, got %d events: %+v", got, h.events)
+	}
+}
+
 type workerHarness struct {
 	cache    map[string]checks.Result
 	ops      []string
