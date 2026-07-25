@@ -1478,11 +1478,13 @@ no tiene override de emisión a nivel de service. Los eventos reales de resultad
 operación siguen siendo eventos de auditoría y se registran siempre que se intenta una
 operación.
 
-`emission.events` gobierna también el evento `error` que emite una regla cuando su
-condición no se puede evaluar en absoluto — por ejemplo una sonda de versión cuyo
-binario se niega a arrancar. Con `on_change` el fallo se reporta al aparecer, y de
-nuevo cuando cambia su mensaje o reaparece tras una evaluación limpia, no una vez por
-ciclo mientras el host siga roto.
+`emission.events` gobierna también los eventos `error` que emite un worker por fallos
+sobre los que no puede actuar: una condición de regla que no se puede evaluar en
+absoluto (una sonda de versión cuyo binario se niega a arrancar), un guard que no se
+puede evaluar mientras su regla sigue disparada, y un state store que falla (disco
+lleno). Con `on_change` cada uno se reporta al aparecer, y de nuevo cuando cambia su
+mensaje o reaparece tras un ciclo limpio, no una vez por ciclo mientras el host siga
+roto. Los errores de store no pertenecen a ninguna regla y siguen la política global.
 
 ```yaml
 # /etc/sermo/storages/storage-root.yml
