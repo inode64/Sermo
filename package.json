@@ -3,7 +3,8 @@
   "private": true,
   "scripts": {
     "lint:web": "eslint eslint.config.mjs internal/web/src tests/web",
-    "test:web": "playwright test"
+    "test:web": "playwright test",
+    "lint:css": "stylelint internal/web/src/**/*.css"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.12.1",
@@ -12,6 +13,9 @@
     "eslint": "10.7.0",
     "eslint-plugin-sonarjs": "4.2.0",
     "globals": "17.7.0",
-    "markdownlint-cli": "0.49.1"
+    "markdownlint-cli": "0.49.1",
+    "stylelint": "17.14.1",
+    "stylelint-config-standard": "40.0.0",
+    "stylelint-declaration-strict-value": "1.11.1"
   }
 }

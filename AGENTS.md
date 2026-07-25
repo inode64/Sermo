@@ -516,6 +516,14 @@ The visual layer is a token-driven design system (June 2026 redesign):
   hardcode a color in new CSS — use the tokens, deriving tints with
   `color-mix(in srgb, var(--x) N%, transparent)`. (JS-emitted inline SVG fills
   keep the GitHub-ish literal palette, which reads on both schemes.)
+- **Enforced, not just documented.** `make web-lint` runs `stylelint` over
+  `internal/web/src/*.css` with `.stylelintrc.json`: the token rule above is a
+  linter rule, so a literal colour in `color`, `background*`, `border-*-color`,
+  `outline-color`, `fill` or `stroke` fails the gate. Following `.golangci.yml`,
+  the config enables only rules that catch defects — no formatting opinions, so
+  the compact one-line declarations stay as they are. A colour inside a
+  `linear-gradient()` is not reached by the rule; keep those to the documented
+  literal palette.
 - **Panel cards.** Every `<details>` section (plus `#locks-section` and
   `#detail`) is styled as a card automatically — rounded border, shadow, the
   `<summary>` as header. A new section needs no extra classes.

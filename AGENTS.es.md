@@ -521,6 +521,15 @@ La capa visual es un sistema de diseño basado en tokens (rediseño de junio de 
   hardcodees un color en CSS nuevo — usa los tokens, derivando tintes con
   `color-mix(in srgb, var(--x) N%, transparent)`. (Los fills SVG inline emitidos por JS
   mantienen la paleta literal estilo GitHub, que se lee en ambos esquemas.)
+- **Verificado, no solo documentado.** `make web-lint` ejecuta `stylelint`
+  sobre `internal/web/src/*.css` con `.stylelintrc.json`: la regla de tokens de
+  arriba es una regla de linter, así que un color literal en `color`,
+  `background*`, `border-*-color`, `outline-color`, `fill` o `stroke` hace
+  fallar el gate. Siguiendo a `.golangci.yml`, la config habilita solo reglas
+  que cazan defectos — sin opiniones de formato, para que las declaraciones
+  compactas de una línea se queden como están. Un color dentro de
+  `linear-gradient()` queda fuera del alcance de la regla; mantén esos en la
+  paleta literal documentada.
 - **Panel cards.** Cada sección `<details>` (más `#locks-section` y
   `#detail`) se estiliza como una card automáticamente — borde redondeado, sombra, el
   `<summary>` como header. Una nueva sección no necesita clases extra.

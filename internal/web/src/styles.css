@@ -252,7 +252,6 @@
   .daemon-metrics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1rem; margin-top: .5rem; }
   .panel-footnote { font-size: .8rem; }
   #act-last { flex: 1; min-width: 180px; }
-  section#locks-section { margin-top: 1rem; }
   .panel-controls input { min-width: 13rem; }
   #svc-filters button, #container-filters button, #vm-filters button, #storage-filters button, #watch-filters button, #network-filters button, #mount-filters button, #app-filters button, #library-filters button { border-color: transparent; background: transparent; color: var(--text-2); }
   #svc-filters button:hover, #container-filters button:hover, #vm-filters button:hover, #storage-filters button:hover, #watch-filters button:hover, #network-filters button:hover, #mount-filters button:hover, #app-filters button:hover, #library-filters button:hover { background: var(--panel-2); color: var(--text); }
@@ -376,7 +375,7 @@
   .shortcut-toggle { display: inline-flex; align-items: center; gap: .3rem; white-space: nowrap; }
   .shortcut-toggle input { margin: 0; }
   #app-footer .footer-version { margin-left: auto; font-size: .78rem; white-space: nowrap; }
-  section#locks-section { padding-top: .15rem; }
+  section#locks-section { margin-top: 1rem; padding-top: .15rem; }
   section#locks-section h2 { font-size: .98rem; margin: .55rem 0 .5rem; }
   .service-detail h2 { font-size: .85rem; text-transform: uppercase; letter-spacing: .05em; color: var(--text-2); margin: 1.15rem 0 .45rem; }
   .service-detail h2:first-child { margin-top: 0; }
