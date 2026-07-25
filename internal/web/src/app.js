@@ -1084,11 +1084,15 @@ function policyCell(s) {
   return tpl`<div class="policy-cell"><span class="${policyStateClass(state)}">${state}</span>${cd}</div>`;
 }
 
+// locksCell names the active locks, it does not just count them: they are what
+// blocks every engine action on the service, so the operator needs to know which
+// lock to go look at. A title alone would not do — it is unreachable on touch
+// and invisible to a keyboard user.
 function locksCell(s) {
-  const locks = s.active_locks || [];
+  const locks = serviceLockNames(s);
   if (!locks.length) return tpl`<span class="muted count-badge">0</span>`;
-  const label = locks.length === 1 ? locks[0] : locks.join(", ");
-  return tpl`<span class="bad count-badge" title="${label}">${locks.length}</span>`;
+  const label = locks.join(", ");
+  return tpl`<span class="bad count-badge">${locks.length}</span> <span class="truncate lock-names" title="${label}">${label}</span>`;
 }
 
 function lastEventCell(s) {
