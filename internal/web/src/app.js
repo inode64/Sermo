@@ -3953,6 +3953,10 @@ function parseDurationSeconds(raw) {
   if (!s) return 0;
   let total = 0;
   let matched = false;
+  // The input is a duration this dashboard formatted itself (fmtDuration),
+  // never operator or network text, so the backtracking below is bounded by a
+  // short fixed shape.
+  // eslint-disable-next-line sonarjs/super-linear-regex -- bounded fmtDuration input
   const re = /(\d+(?:\.\d+)?)(ms|s|m|h)/g;
   let m;
   while ((m = re.exec(s)) !== null) {
