@@ -2887,13 +2887,13 @@ function bucketize(points, span, cols, makeBucket, fold) {
   return { buckets, startMs };
 }
 
-// procCpuCells and procIoFdThreadCells render the per-process metric columns
-// shared by the expansion and detail process tables, keeping the two identical
-// (only the memory column differs: the expansion shows a host-RAM bar).
-function procCpuCells(p) {
-  if (!p.has_cpu) return tpl`<td>—</td><td>—</td>`;
-  const cpu = Number(p.cpu) || 0;
-  return tpl`<td>${fmtPct(cpu)}</td><td>${cpuBarMini(cpu)}</td>`;
+// procCpuCell and procIoFdThreadCells render the per-process metric columns of
+// the detail process table. Process CPU is already single-core normalized
+// (100% = one core), so one cpuBarMini cell carries it the way every other CPU
+// bar does: percentage inside the bar, precise value in the tooltip.
+function procCpuCell(p) {
+  if (!p.has_cpu) return tpl`<td>—</td>`;
+  return tpl`<td>${cpuBarMini(Number(p.cpu) || 0)}</td>`;
 }
 function procIoFdThreadCells(p) {
   const io = (p.io_read || p.io_write) ? `${fmtBytes(p.io_read || 0)} / ${fmtBytes(p.io_write || 0)}` : '—';
@@ -2955,12 +2955,22 @@ function serviceUptimeCell(s) {
   return tpl`<span title="${title}">${up}</span>`;
 }
 
-function cpuInline(cpu, ready, numCPU) {
+function cpuInline(cpu, ready, numCPU, cpuThread) {
   if (!ready) return numCPU ? tpl`<span class="muted">measuring…</span>` : tpl`<span class="muted">—</span>`;
   const v = Number(cpu) || 0;
   // Same shape as every other CPU bar (cpuBarMini): the percentage lives inside
-  // the bar and the precise value in the tooltip — no separate label prefix.
-  return usageBarMini(pctClamp(v), fmtPct(v), `${fmtPct(v)} of ${numCPU || "?"} host CPUs`);
+  // the bar and the precise value in the tooltip — no separate label prefix. The
+  // tooltip also carries the daemon's cpu_thread reading (the busiest single
+  // process against one core), which the whole-machine bar cannot show.
+  return usageBarMini(pctClamp(v), fmtPct(v), `${fmtPct(v)} of ${numCPU || "?"} host CPUs${cpuThreadSuffix(cpuThread)}`);
+}
+
+// cpuThreadSuffix renders the cpu_thread reading as a tooltip clause, or "" when
+// the daemon published no busiest-process rate for this sample.
+function cpuThreadSuffix(cpuThread) {
+  const peak = Number(cpuThread) || 0;
+  if (peak <= 0) return "";
+  return ` · busiest process ${fmtPct(peak)} of one core`;
 }
 
 function serviceHasNoResidentProcess(s) {
@@ -2969,7 +2979,7 @@ function serviceHasNoResidentProcess(s) {
 
 function serviceCpuCell(s) {
   if (serviceHasNoResidentProcess(s)) return tpl`<span class="muted">—</span>`;
-  return cpuInline(s && s.cpu, !!(s && s.cpu_ready), s && s.num_cpu);
+  return cpuInline(s && s.cpu, !!(s && s.cpu_ready), s && s.num_cpu, s && s.cpu_thread);
 }
 
 function memoryInline(rss) {
@@ -3261,7 +3271,7 @@ function drawSLAChart(points, win) {
 }
 
 function totalsCpuCell(pt) {
-  return cpuInline(pt && pt.cpu, !!(pt && pt.has_cpu), pt && pt.num_cpu);
+  return cpuInline(pt && pt.cpu, !!(pt && pt.has_cpu), pt && pt.num_cpu, pt && pt.cpu_thread);
 }
 
 function detailDomKey(name) {
@@ -3370,13 +3380,13 @@ function renderServiceDetail(d) {
   const procTable = procs.length
     ? tpl`<table class="detail-compact-table">
         <caption class="visually-hidden">Service processes</caption>
-        <thead><tr><th scope="col">PID</th><th scope="col">CMD</th><th scope="col">User</th><th scope="col">Role</th><th scope="col">CPU</th><th scope="col" title="CPU used by this process, normalized to one core">Core peak</th><th scope="col">Mem</th><th scope="col">IO r/w</th><th scope="col">FDs</th><th scope="col">Threads</th></tr></thead>
+        <thead><tr><th scope="col">PID</th><th scope="col">CMD</th><th scope="col">User</th><th scope="col">Role</th><th scope="col" title="CPU used by this process, normalized to one core">CPU</th><th scope="col">Mem</th><th scope="col">IO r/w</th><th scope="col">FDs</th><th scope="col">Threads</th></tr></thead>
         <tbody>${procRows.map((row) => { const p = row.p; return tpl`<tr>
           <td>${p.pid}</td>
           <td>${procTreeLabel(row)}</td>
           <td class="muted">${p.user || ""}</td>
           <td class="muted">${p.role || ""}</td>
-          ${procCpuCells(p)}
+          ${procCpuCell(p)}
           <td>${p.rss ? (hostMem > 0 ? usageBarMini(memPct(p.rss), fmtBytes(p.rss)) : fmtBytes(p.rss)) : '—'}</td>
           ${procIoFdThreadCells(p)}
         </tr>`; })}</tbody></table>`
@@ -3570,15 +3580,22 @@ function cpuBarMini(pct) {
   return usageBarMini(pctClamp(v), fmtPct(v), `${fmtPct(v)} of one core used by this process`);
 }
 
-// cpuTotalsLine renders the whole-tree CPU summary (whole-machine %) for a
-// process_totals object, or a "measuring" hint until the first rate is
-// available. "" when CPU was never sampled (no live registry).
+// cpuTotalsLine renders the whole-tree CPU summary for a process_totals object:
+// the whole-machine rate plus the daemon's cpu_thread reading (the busiest
+// single process against one core), which is what a saturated worker shows up
+// in while the machine-wide figure still looks low. "measuring" until the first
+// rate is available, "" when CPU was never sampled (no live registry).
 function cpuTotalsLine(pt) {
   if (!pt) return nothing;
   if (!pt.has_cpu) return pt.num_cpu ? tpl` · cpu <span class="muted">measuring…</span>` : nothing;
   const machine = Number(pt.cpu) || 0;
-  const machineBar = usageBarMini(pctClamp(machine), fmtPct(machine), `${fmtPct(machine)} of ${pt.num_cpu || "?"} cores`);
-  return tpl` · cpu <b>${fmtPct(machine)}</b> ${machineBar}`;
+  const peak = Number(pt.cpu_thread) || 0;
+  const machineBar = usageBarMini(pctClamp(machine), fmtPct(machine),
+    `${fmtPct(machine)} of ${pt.num_cpu || "?"} cores${cpuThreadSuffix(peak)}`);
+  const peakPart = peak > 0
+    ? tpl` · core peak <b>${fmtPct(peak)}</b> ${cpuBarMini(peak)}`
+    : nothing;
+  return tpl` · cpu <b>${fmtPct(machine)}</b> ${machineBar}${peakPart}`;
 }
 
 // storageUsedPct returns the used percentage 0..100, or null when the volume
