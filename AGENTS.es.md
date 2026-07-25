@@ -5,6 +5,33 @@ no implementadas (logs de acceso/eventos, acciones de regla `exec`, prioridades 
 servicio, sinks de notificadores extra, modo de clúster, …) viven en [TODO.es.md](TODO.es.md) —
 no trates los elementos TODO ausentes como huecos accidentales en el código.
 
+## Contenido
+
+- [AI / agent workflow — standard git commits](#ai--agent-workflow--standard-git-commits)
+- [Reuse and shared behavior](#reuse-and-shared-behavior)
+- [Constantes y valores repetidos](#constantes-y-valores-repetidos)
+- [Naming and terminology](#naming-and-terminology)
+- [Configuration structure changes](#configuration-structure-changes)
+- [Runtime paths](#runtime-paths)
+- [Configuration file granularity](#configuration-file-granularity)
+- [Catalog init and reload fallback verification](#catalog-init-and-reload-fallback-verification)
+- [Service operations](#service-operations)
+- [Native by default](#native-by-default)
+- [Protocol probes: interface binding is mandatory](#protocol-probes-interface-binding-is-mandatory)
+- [Documentation lockstep](#documentation-lockstep)
+- [Documentation scope and style](#documentation-scope-and-style)
+- [Central builders](#central-builders)
+- [Timeout discipline](#timeout-discipline)
+- [Daemon performance discipline](#daemon-performance-discipline)
+- [Small-change checklist](#small-change-checklist)
+- [Web UI cohesion](#web-ui-cohesion)
+- [Wizard option selection](#wizard-option-selection)
+- [Catalog: instanced systemd services](#catalog-instanced-systemd-services)
+- [Go quality gates](#go-quality-gates)
+- [Testing](#testing)
+- [Security and safety invariants](#security-and-safety-invariants)
+- [graphify](#graphify)
+
 ## AI / agent workflow — standard git commits
 
 Los agentes de IA, sub-agentes, sesiones de asistente y procesos automatizados de programación usan el
