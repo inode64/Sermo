@@ -41,6 +41,26 @@ The remote scripts must run as root on the target host:
   after copying any required evidence locally, remove the exact staging directory
   created for that run.
 
+## Fleet install orchestrator
+
+`install_fleet.sh` is the fresh-install counterpart of `update_fleet.sh`, for
+hosts that do not have Sermo yet. Per host it runs `remote_stage.sh`, fetches
+the staged inventory, regenerates that host's configuration locally with
+`generate_install_config.py` and applies it with `remote_apply.sh`, which
+enables and starts `sermod` through the host's real init so the service survives
+a reboot.
+
+```sh
+scripts/remote-deploy/install_fleet.sh --hosts new-hosts.txt
+scripts/remote-deploy/install_fleet.sh --dry-run web1 web2   # plan only
+```
+
+It records and skips unreachable or unhealthy hosts exactly like
+`update_fleet.sh`. A host that already has `/etc/sermo` is reinstalled rather
+than merged: `remote_stage.sh` overwrites `sermo.yml` and `remote_apply.sh`
+replaces the generated directories. That is the intended path for a
+configuration too old to normalize incrementally — back up `/etc/sermo` first.
+
 ## Fleet update orchestrator
 
 `update_fleet.sh` drives a whole-fleet update from the local checkout: it
