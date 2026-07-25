@@ -195,24 +195,42 @@ func TestDedupeWizardCatalogCandidatesByUnit(t *testing.T) {
 	assertStringsEqual(t, names, want)
 }
 
-func TestParseCephMonAddrsPrefersV2(t *testing.T) {
-	host, port := parseCephMonAddrs("[v2:192.0.2.102:3300/0,v1:192.0.2.102:6789/0]")
-	if host != "192.0.2.102" || port != 3300 {
-		t.Fatalf("endpoint = %s:%d, want 192.0.2.102:3300", host, port)
+// parseCephMonAddrs picks one endpoint out of a mon_addrs list: v2 wins over v1
+// when both are advertised, and a bracketed IPv6 literal must come back
+// unbracketed.
+func TestParseCephMonAddrs(t *testing.T) {
+	tests := []struct {
+		name     string
+		addrs    string
+		wantHost string
+		wantPort int
+	}{
+		{
+			name:     "prefers v2",
+			addrs:    "[v2:192.0.2.102:3300/0,v1:192.0.2.102:6789/0]",
+			wantHost: "192.0.2.102",
+			wantPort: 3300,
+		},
+		{
+			name:     "falls back to v1",
+			addrs:    "[v1:192.0.2.102:6789/0]",
+			wantHost: "192.0.2.102",
+			wantPort: 6789,
+		},
+		{
+			name:     "IPv6",
+			addrs:    "[v2:[fd00::102]:3300/0,v1:[fd00::102]:6789/0]",
+			wantHost: "fd00::102",
+			wantPort: 3300,
+		},
 	}
-}
-
-func TestParseCephMonAddrsFallsBackToV1(t *testing.T) {
-	host, port := parseCephMonAddrs("[v1:192.0.2.102:6789/0]")
-	if host != "192.0.2.102" || port != 6789 {
-		t.Fatalf("endpoint = %s:%d, want 192.0.2.102:6789", host, port)
-	}
-}
-
-func TestParseCephMonAddrsIPv6(t *testing.T) {
-	host, port := parseCephMonAddrs("[v2:[fd00::102]:3300/0,v1:[fd00::102]:6789/0]")
-	if host != "fd00::102" || port != 3300 {
-		t.Fatalf("endpoint = %s:%d, want fd00::102:3300", host, port)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			host, port := parseCephMonAddrs(tt.addrs)
+			if host != tt.wantHost || port != tt.wantPort {
+				t.Fatalf("endpoint = %s:%d, want %s:%d", host, port, tt.wantHost, tt.wantPort)
+			}
+		})
 	}
 }
 
