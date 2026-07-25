@@ -721,6 +721,12 @@ Notas de herramientas:
   acotadas `args[i]`, `G118` de contexto de shutdown) se suprimen en el call
   site con `//nolint:gosec` más un comentario justificativo — prefiere eso sobre
   ampliar la config.
+- **`make npm-audit`** es el equivalente JavaScript de `govulncheck`: hace
+  fallar el gate ante un aviso `high` o `critical` en cualquier punto del árbol
+  npm, dependencias de desarrollo incluidas — se ejecutan en CI y en las
+  máquinas de desarrollo, así que una herramienta de build también es
+  superficie de ataque. Resuelve los hallazgos actualizando el lockfile
+  (`npm audit fix --package-lock-only`) en vez de bajar el nivel.
 - **`make scripts-lint`** ejecuta `shellcheck` en `scripts/*.sh` y
   `scripts/remote-deploy/*.sh`, y luego `ruff check` en los helpers Python bajo
   `scripts/`. Forma parte de `validate`/`check`.
