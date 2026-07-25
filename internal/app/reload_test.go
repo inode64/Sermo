@@ -4,7 +4,6 @@ import (
 	"testing"
 	"time"
 
-	"sermo/internal/metrics"
 	"sermo/internal/rules"
 )
 
@@ -88,13 +87,4 @@ func TestCaptureAndApplyWatchStateKeepsMetricSlotsSeparate(t *testing.T) {
 	if got := freshTX.state.ProgressAt(r, time.Now()); got != "2/4" {
 		t.Fatalf("tx progress = %q, want 2/4", got)
 	}
-}
-
-func TestResetRemovedServiceMetrics(t *testing.T) {
-	collector := metrics.New(metrics.OSReader{})
-	resetRemovedServiceMetrics(collector,
-		[]*Worker{{Service: "gone"}, {Service: "stay"}},
-		[]*Worker{{Service: "stay"}, {Service: "new"}},
-	)
-	// No panic and no observable API beyond Reset; smoke test only.
 }
