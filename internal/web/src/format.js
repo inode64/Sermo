@@ -26,8 +26,13 @@ export const millisecondsPerDay = millisecondsPerHour * hoursPerDay;
 export function fmtNum(value, decimals = 2, fallback = "—") {
   const number = Number(value);
   if (!Number.isFinite(number)) return fallback;
+  // Both regexes run on Number.prototype.toFixed output: at most ~20
+  // characters of a fixed [-]digits[.digits] shape, so their backtracking
+  // cannot be driven by any input reaching this dashboard.
+  // eslint-disable-next-line sonarjs/super-linear-regex -- bounded toFixed output
   const trimmed = number.toFixed(decimals).replace(/(\.\d*?)0+$/, "$1").replace(/\.$/, "");
   const [whole, fraction] = trimmed.split(".");
+  // eslint-disable-next-line sonarjs/super-linear-regex -- same bounded input
   const grouped = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
   return fraction === undefined ? grouped : grouped + "." + fraction;
 }
