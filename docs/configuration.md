@@ -2262,9 +2262,10 @@ message and display.
 by the comparison, `${trigger}` is the active trigger when the checker exposes
 one, and every resolved check field can be referenced directly or through
 `${check.<field>}`. Result data is also available as `${result.<field>}`. Numbers
-use dot thousands separators; durations and timestamps use the normal readable
-format. Unknown references remain visible, which makes a mistaken field name
-easy to identify.
+follow the canonical convention described in [rules.md](rules.md) — comma as the
+thousands separator and dot as the decimal mark (`12,345.68`); durations and
+timestamps use the normal readable format. Unknown references remain visible,
+which makes a mistaken field name easy to identify.
 
 ```yaml
 check:
