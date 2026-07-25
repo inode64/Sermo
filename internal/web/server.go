@@ -1167,11 +1167,12 @@ type backendGenerationSource interface {
 	BackendGeneration() uint64
 }
 
-// backendReadSource pins a backend generation while one read response is
-// collected. Reloadable holders implement it so a response's generation
-// identifies the exact backend that produced its body.
+// backendReadSource pins a backend generation for one request. Reloadable
+// holders implement it so a response's generation identifies the exact backend
+// that produced its body. The pin is the returned instance, so holding it costs
+// nothing and never delays a reload.
 type backendReadSource interface {
-	BeginBackendRead() (Backend, uint64, func())
+	BeginBackendRead() (Backend, uint64)
 }
 
 // Handler returns the router behind the auth middleware: the dashboard at /, the
@@ -1474,8 +1475,7 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
-	backend, generation, release := s.backendRead()
-	defer release()
+	backend, generation := s.backendRead()
 	snapshot := s.dashboardSnapshot(r.Context(), backend, seriesSince(r))
 	if roleFrom(r.Context()) == roleGuest {
 		snapshot.Mounts = redactMountCmdlines(snapshot.Mounts)
@@ -1563,11 +1563,10 @@ func (s *Server) handleNotifiers(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleNotifierTest(w http.ResponseWriter, r *http.Request) {
-	backend, release, ok := s.mutationBackend(w, r)
+	backend, ok := s.mutationBackend(w, r)
 	if !ok {
 		return
 	}
-	defer release()
 	s.extendActionWriteDeadline(w)
 	res := backend.TestNotifier(s.operateContext(r), r.PathValue(apiParamName)) //nolint:contextcheck // see operateContext
 	writeActionResult(w, res.OK, res)
@@ -1592,11 +1591,10 @@ func (s *Server) handleMounts(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleMountAction(w http.ResponseWriter, r *http.Request) {
-	backend, release, ok := s.mutationBackend(w, r)
+	backend, ok := s.mutationBackend(w, r)
 	if !ok {
 		return
 	}
-	defer release()
 	name := r.PathValue(apiParamName)
 	action := r.PathValue(apiParamAction)
 	switch action {
@@ -1646,11 +1644,10 @@ func (s *Server) handleLocks(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleLockRelease(w http.ResponseWriter, r *http.Request) {
-	backend, release, ok := s.mutationBackend(w, r)
+	backend, ok := s.mutationBackend(w, r)
 	if !ok {
 		return
 	}
-	defer release()
 	res := backend.ReleaseLock(r.Context(), r.PathValue(apiParamService), r.URL.Query().Get(apiParamName))
 	writeActionResult(w, res.OK, res)
 }
@@ -1666,8 +1663,7 @@ func (s *Server) handleMonitoring(w http.ResponseWriter, r *http.Request) {
 // handleNamed answers a lookup keyed by the request's name path parameter:
 // 404 with notFoundMsg when fn reports no match, the JSON result otherwise.
 func handleNamed[T any](s *Server, w http.ResponseWriter, r *http.Request, notFoundMsg string, fn func(Backend, context.Context, string) (T, bool)) {
-	backend, generation, release := s.backendRead()
-	defer release()
+	backend, generation := s.backendRead()
 	res, ok := fn(backend, r.Context(), r.PathValue(apiParamName))
 	if !ok {
 		writeError(w, http.StatusNotFound, notFoundMsg)
@@ -1730,8 +1726,7 @@ func seriesSince(r *http.Request) time.Duration {
 
 func (s *Server) handleSeries(w http.ResponseWriter, r *http.Request) {
 	since := seriesSince(r)
-	backend, generation, release := s.backendRead()
-	defer release()
+	backend, generation := s.backendRead()
 	points, ok := backend.Series(r.Context(), r.PathValue(apiParamName), since)
 	if !ok {
 		writeError(w, http.StatusNotFound, apiErrorUnknownService)
@@ -1746,8 +1741,7 @@ func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, apiErrorCheckQueryRequired)
 		return
 	}
-	backend, generation, release := s.backendRead()
-	defer release()
+	backend, generation := s.backendRead()
 	res, ok := backend.Metrics(r.Context(), r.PathValue(apiParamName), check, r.URL.Query().Get(apiQueryMetric), seriesSince(r))
 	if !ok {
 		writeError(w, http.StatusNotFound, apiErrorUnknownServiceOrCheck)
@@ -1776,8 +1770,7 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		backend, generation, release := s.backendRead()
-		defer release()
+		backend, generation := s.backendRead()
 		s.writeBackendJSON(w, http.StatusOK, backend.EventPage(r.Context(), EventQuery{
 			BeforeID: beforeID, Limit: limit, Since: since, Service: filter.Service, Watch: filter.Watch,
 			Kind: filter.Kind, Status: filter.Status, OnlyErrors: filter.OnlyErrors,
@@ -1788,8 +1781,7 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 	if filter.active() {
 		fetchLimit = maxEventLimit
 	}
-	backend, generation, release := s.backendRead()
-	defer release()
+	backend, generation := s.backendRead()
 	s.writeBackendJSON(w, http.StatusOK, filterEvents(backend.Events(r.Context(), fetchLimit), filter, limit), generation)
 }
 
@@ -1902,8 +1894,7 @@ func (s *Server) readyReportFromBackend(ctx context.Context, backend Backend) Re
 }
 
 func (s *Server) handleReadyz(w http.ResponseWriter, r *http.Request) {
-	backend, generation, release := s.backendRead()
-	defer release()
+	backend, generation := s.backendRead()
 	rep := s.readyReportFromBackend(r.Context(), backend)
 	status := http.StatusOK
 	if !rep.Ready {
@@ -1934,8 +1925,7 @@ func (s *Server) handleLivez(w http.ResponseWriter, r *http.Request) {
 	}
 	now := time.Now()
 	uptime := now.Sub(s.started)
-	backend, generation, release := s.backendRead()
-	defer release()
+	backend, generation := s.backendRead()
 	s.writeBackendJSON(w, http.StatusOK, map[string]any{
 		apiJSONKeyStatus:        apiStatusOK,
 		apiJSONKeyStartedAt:     s.started.Format(time.RFC3339),
@@ -1960,11 +1950,10 @@ func (s *Server) handleApplicationEvents(w http.ResponseWriter, r *http.Request)
 }
 
 func (s *Server) handlePreflight(w http.ResponseWriter, r *http.Request) {
-	backend, release, ok := s.mutationBackend(w, r)
+	backend, ok := s.mutationBackend(w, r)
 	if !ok {
 		return
 	}
-	defer release()
 	res, found := backend.Preflight(r.Context(), r.PathValue(apiParamName))
 	if !found {
 		writeError(w, http.StatusNotFound, apiErrorUnknownService)
@@ -1974,11 +1963,10 @@ func (s *Server) handlePreflight(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleAction(w http.ResponseWriter, r *http.Request) {
-	backend, release, ok := s.mutationBackend(w, r)
+	backend, ok := s.mutationBackend(w, r)
 	if !ok {
 		return
 	}
-	defer release()
 	name := r.PathValue(apiParamName)
 	action := r.PathValue(apiParamAction)
 	switch {
@@ -2000,11 +1988,10 @@ func (s *Server) handleAction(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleWatchAction(w http.ResponseWriter, r *http.Request) {
-	backend, release, ok := s.mutationBackend(w, r)
+	backend, ok := s.mutationBackend(w, r)
 	if !ok {
 		return
 	}
-	defer release()
 	name := r.PathValue(apiParamName)
 	action := r.PathValue(apiParamAction)
 	if watchOperateActions[action] {
@@ -2056,57 +2043,52 @@ func writeActionResult(w http.ResponseWriter, ok bool, res any) {
 
 // backendRead pins one reloadable backend generation for the duration of a
 // read. Ordinary Backend implementations retain their existing behavior.
-func (s *Server) backendRead() (Backend, uint64, func()) {
+func (s *Server) backendRead() (Backend, uint64) {
 	if source, ok := s.Backend.(backendReadSource); ok {
-		backend, generation, release := source.BeginBackendRead()
-		if backend != nil {
-			return backend, generation, release
+		if backend, generation := source.BeginBackendRead(); backend != nil {
+			return backend, generation
 		}
-		release()
 	}
 	generation := uint64(0)
 	if source, ok := s.Backend.(backendGenerationSource); ok {
 		generation = source.BackendGeneration()
 	}
-	return s.Backend, generation, func() {}
+	return s.Backend, generation
 }
 
 // mutationBackend pins the active backend for one target-scoped mutation and
-// rejects a request whose dashboard generation is missing or stale. Holding the
-// read pin through the action prevents a reload from swapping service/watch
-// identity after the precondition has been checked.
-func (s *Server) mutationBackend(w http.ResponseWriter, r *http.Request) (Backend, func(), bool) {
-	backend, generation, release := s.backendRead()
+// rejects a request whose dashboard generation is missing or stale. The returned
+// instance is the pin: the action keeps running against the generation whose
+// precondition it passed, so a concurrent reload can neither swap service/watch
+// identity underneath it nor wait on it.
+func (s *Server) mutationBackend(w http.ResponseWriter, r *http.Request) (Backend, bool) {
+	backend, generation := s.backendRead()
 	if generation == 0 {
-		return backend, release, true
+		return backend, true
 	}
 	w.Header().Set(headerSermoGeneration, strconv.FormatUint(generation, 10))
 	raw := strings.TrimSpace(r.Header.Get(headerSermoGeneration))
 	if raw == "" {
-		release()
 		writeError(w, http.StatusPreconditionRequired, apiErrorGenerationMissing)
-		return nil, func() {}, false
+		return nil, false
 	}
 	expected, err := strconv.ParseUint(raw, 10, 64)
 	if err != nil || expected == 0 {
-		release()
 		writeError(w, http.StatusBadRequest, apiErrorGenerationInvalid)
-		return nil, func() {}, false
+		return nil, false
 	}
 	if expected != generation {
-		release()
 		writeError(w, http.StatusPreconditionFailed, apiErrorGenerationStale)
-		return nil, func() {}, false
+		return nil, false
 	}
-	return backend, release, true
+	return backend, true
 }
 
 // readJSON collects a read response from one backend generation and labels the
 // encoded result with that same generation. Reads always answer 200: a backend
 // read cannot fail, only observe the current snapshot.
 func (s *Server) readJSON(w http.ResponseWriter, r *http.Request, read func(context.Context, Backend) any) {
-	backend, generation, release := s.backendRead()
-	defer release()
+	backend, generation := s.backendRead()
 	s.writeBackendJSON(w, http.StatusOK, read(r.Context(), backend), generation)
 }
 
