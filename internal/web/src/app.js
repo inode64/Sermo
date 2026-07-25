@@ -5254,7 +5254,10 @@ function renderMounts(mounts) {
   updateGroupButtons("mount", mountGrouped, groups, mountCollapsedGroups, "mount units", "group");
   if (filterCount) filterCount.textContent = (mountQuery || mountStatus !== filterAll || mountCategory !== filterAll) ? `showing ${list.length} of ${total}` : "";
   const rows = mountGrouped ? renderGroupedMountRows(list) : list.map(mountRowHTML).join("");
-  tbody.innerHTML = rows || `<tr><td colspan="9" class="muted">No mount units match the filter.</td></tr>`;
+  // setHTMLIfChanged, not a bare write: an unchanged poll must not destroy and
+  // recreate every row, which would drop the focus of whoever is tabbing
+  // through the action buttons and clear any text selection.
+  setHTMLIfChanged(tbody, rows || `<tr><td colspan="9" class="muted">No mount units match the filter.</td></tr>`);
   updateSectionNav();
 }
 
@@ -5309,7 +5312,7 @@ function renderNotifiers(notifiers) {
       : '<span class="muted">—</span>';
     return `<tr><td>${esc(n.name)}</td><td>${esc(n.type)}</td><td class="muted">${dest}</td><td>${watches}</td><td class="${cls}">${state}</td><td class="actions">${test}</td></tr>`;
   });
-  tbody.innerHTML = rows.join("") || `<tr><td colspan="6" class="muted">No notifiers.</td></tr>`;
+  setHTMLIfChanged(tbody, rows.join("") || `<tr><td colspan="6" class="muted">No notifiers.</td></tr>`);
   updateSectionNav();
 }
 
@@ -6088,7 +6091,7 @@ function updateMountUnmountBlockers(info) {
   const tbody = $("#mount-umount-blockers");
   if (!tbody) return;
   const killSelected = !!$("#mount-umount-kill")?.checked;
-  tbody.innerHTML = mountBlockerRowsHTML(info.blockers || [], killSelected);
+  setHTMLIfChanged(tbody, mountBlockerRowsHTML(info.blockers || [], killSelected));
 }
 
 let mountUnmountConfirmResolve = null;
