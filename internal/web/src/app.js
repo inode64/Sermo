@@ -5777,9 +5777,9 @@ function renderStatus(ctx) {
       setHTMLIfChanged(sys, sp.map(([k, s]) => `<span class="stat stat-${k}">${s}</span>`).join(""));
     }
 
-    // services/monitoring/ops each have their own overview tile (Services
-    // active, Monitored, Op slots), so they are not repeated here. The header
-    // keeps only readings without a tile: watches, active users and locks.
+    // Services active and Monitored each have their own overview tile, so they
+    // are not repeated here. The header keeps only readings without a tile:
+    // watches, active users and locks.
     const parts = [];
     parts.push(["watches", `watches: <b>${ready.watches || 0}</b>`]);
     if (daemon.active_users != null) {
