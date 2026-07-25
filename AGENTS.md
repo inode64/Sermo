@@ -709,7 +709,9 @@ Tool notes:
   - *Tests:*
     `testableexamples`, `thelper`, `tparallel`, `usetesting`
 
-  Project-specific caveats, all encoded in `.golangci.yml`: `dupword` and
+  Project-specific caveats, all encoded in `.golangci.yml`: `dupl` runs at a
+  threshold of 70 tokens rather than the default 150, and is off in
+  `*_test.go`; `dupword` and
   `exhaustive` are off in `*_test.go` (and a `default:` arm counts as
   exhaustive); `gocritic` runs a curated check list, not the default set;
   `interfacebloat` excludes `internal/web/server.go`; `depguard` enforces the
