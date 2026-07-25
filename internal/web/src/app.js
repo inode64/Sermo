@@ -170,6 +170,9 @@ const eventStatusPreflightFailed = "preflight_failed";
 const eventStatusPostflightFailed = "postflight_failed";
 const eventStatusOrphanProcesses = "orphan_processes";
 const servicePreflightActions = [actionStart, actionStop, actionRestart];
+// The engine operations (mirrors operateActions in internal/web/server.go): the
+// actions that run through the operation pipeline, so they are the ones this
+// browser tracks in liveOps and the ones a named lock blocks.
 const serviceTrackedActions = [actionStart, actionStop, actionRestart, actionReload, actionResume];
 const activityCriticalStatuses = [targetStateFailed, mountStateError, eventStatusPreflightFailed, eventStatusPostflightFailed, eventStatusOrphanProcesses];
 const activityCriticalKinds = [mountStateError, eventKindHookFailed, eventKindNotifyFailed, eventKindExpandFailed, eventKindKillFailed];
@@ -2320,17 +2323,35 @@ function toggleAllSvcGroups() {
   saveUIState();
 }
 
+// serviceLockNames returns the active named runtime locks the daemon reports for
+// a service. While any of them is active it blocks every engine action on that
+// service — the operation pipeline checks named locks right after taking the
+// operation lock (docs/architecture.md) — so the dashboard must not offer an
+// action the daemon is going to refuse. Monitoring toggles are not engine
+// actions and stay available.
+function serviceLockNames(s) {
+  return (s && s.active_locks) || [];
+}
+
+function serviceLockedReason(s, action) {
+  if (!isTrackedOperation(action)) return "";
+  const names = serviceLockNames(s);
+  if (!names.length) return "";
+  return `blocked by active lock${names.length === 1 ? "" : "s"}: ${names.join(", ")}`;
+}
+
 function serviceActionDisabled(s, action, busy) {
   const st = (s.status || backendStatusUnknown).toLowerCase();
   const paused = st === targetStatePaused;
   const stopped = st === backendStatusInactive || st === targetStateFailed;
+  const locked = !!serviceLockedReason(s, action);
   switch (action) {
     case actionStart:
-      return !!(busy || st === backendStatusActive || paused);
-    case actionStop: return !!(busy || stopped);
-    case actionRestart: return !!busy;
-    case actionResume: return !!(busy || !paused);
-    case actionReload: return !!(busy || st !== backendStatusActive || !s.can_reload);
+      return !!(busy || locked || st === backendStatusActive || paused);
+    case actionStop: return !!(busy || locked || stopped);
+    case actionRestart: return !!(busy || locked);
+    case actionResume: return !!(busy || locked || !paused);
+    case actionReload: return !!(busy || locked || st !== backendStatusActive || !s.can_reload);
     case actionMonitor:
     case actionUnmonitor: return !!(busy || pendingMonitorToggles.has(serviceExpansionKey(s.name)));
     default: return false;
@@ -2340,6 +2361,8 @@ function serviceActionDisabled(s, action, busy) {
 function serviceActionDisabledReason(s, action, busy) {
   const st = (s.status || backendStatusUnknown).toLowerCase();
   if (busy) return "operation in progress";
+  const locked = serviceLockedReason(s, action);
+  if (locked) return locked;
   const paused = st === targetStatePaused;
   const stopped = st === backendStatusInactive || st === targetStateFailed;
   switch (action) {
