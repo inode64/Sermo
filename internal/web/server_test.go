@@ -457,11 +457,29 @@ func TestHandlePanicToggles(t *testing.T) {
 	}
 }
 
-func TestHandlePanicRejectsBadAction(t *testing.T) {
-	rec := httptest.NewRecorder()
-	newServer(&fakeBackend{}).ServeHTTP(rec, postReq(testAPIPath(apiSegmentPanic, "maybe")))
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("POST /api/panic/maybe = %d, want 400", rec.Code)
+// POST requests the server must refuse, each against the bare fake backend: the
+// row pins the status the router or the backend result maps to. The fake accepts
+// nothing, so a change in routing or in the OK-to-status mapping shows up here.
+func TestPostRequestRejections(t *testing.T) {
+	tests := []struct {
+		name string
+		path string
+		want int
+	}{
+		{name: "unknown panic action", path: testAPIPath(apiSegmentPanic, "maybe"), want: http.StatusBadRequest},
+		{name: "unknown mount action", path: testMountPath("mount-backup", "reboot"), want: http.StatusBadRequest},
+		{name: "unknown service action", path: testServicePath("web", "destroy"), want: http.StatusBadRequest},
+		{name: "preflight on an unknown service", path: testServicePath("ghost", apiSegmentPreflight), want: http.StatusNotFound},
+		{name: "release refused by the backend", path: testLockPath(apiActionRelease), want: http.StatusConflict},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			newServer(&fakeBackend{}).ServeHTTP(rec, postReq(tt.path))
+			if rec.Code != tt.want {
+				t.Fatalf("POST %s = %d, want %d", tt.path, rec.Code, tt.want)
+			}
+		})
 	}
 }
 
@@ -654,14 +672,6 @@ func TestMountAction(t *testing.T) {
 	}
 	if !res.OK || res.Action != mountctl.ActionUmount {
 		t.Fatalf("unexpected response: %+v", res)
-	}
-}
-
-func TestMountActionRejectsUnknown(t *testing.T) {
-	rec := httptest.NewRecorder()
-	newServer(&fakeBackend{}).ServeHTTP(rec, postReq(testMountPath("mount-backup", "reboot")))
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("status %d, want 400", rec.Code)
 	}
 }
 
@@ -1055,14 +1065,6 @@ func TestReleaseLockEndpoint(t *testing.T) {
 	}
 }
 
-func TestReleaseLockEndpointConflict(t *testing.T) {
-	rec := httptest.NewRecorder()
-	newServer(&fakeBackend{}).ServeHTTP(rec, postReq(testLockPath(apiActionRelease)))
-	if rec.Code != http.StatusConflict {
-		t.Fatalf("blocked release status = %d, want 409", rec.Code)
-	}
-}
-
 func TestOperateActions(t *testing.T) {
 	b := &fakeBackend{}
 	h := newServer(b)
@@ -1178,14 +1180,6 @@ func TestWatchProbeAndRAIDActions(t *testing.T) {
 	}
 }
 
-func TestUnknownActionIsBadRequest(t *testing.T) {
-	rec := httptest.NewRecorder()
-	newServer(&fakeBackend{}).ServeHTTP(rec, postReq(testServicePath("web", "destroy")))
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("unknown action = %d, want 400", rec.Code)
-	}
-}
-
 func TestEventsClear(t *testing.T) {
 	b := &fakeBackend{
 		events: []Event{
@@ -1247,14 +1241,6 @@ func TestPreflightEndpoint(t *testing.T) {
 	}
 	if !body.OK || len(body.Checks) != 1 || body.Checks[0].Name != "storage" {
 		t.Fatalf("body = %+v", body)
-	}
-}
-
-func TestPreflightUnknownService(t *testing.T) {
-	rec := httptest.NewRecorder()
-	newServer(&fakeBackend{}).ServeHTTP(rec, postReq(testServicePath("ghost", apiSegmentPreflight)))
-	if rec.Code != http.StatusNotFound {
-		t.Fatalf("unknown preflight = %d, want 404", rec.Code)
 	}
 }
 
