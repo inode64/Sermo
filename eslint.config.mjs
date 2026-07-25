@@ -1,5 +1,6 @@
 import js from "@eslint/js";
 import globals from "globals";
+import sonarjs from "eslint-plugin-sonarjs";
 
 export default [
   {
@@ -12,6 +13,7 @@ export default [
   js.configs.recommended,
   {
     files: ["internal/web/src/**/*.js"],
+    plugins: { sonarjs },
     languageOptions: {
       ecmaVersion: "latest",
       sourceType: "module",
@@ -36,6 +38,16 @@ export default [
       "max-params": ["error", 8],
       "max-depth": ["error", 4],
       "max-nested-callbacks": ["error", 3],
+      // Duplication and regex guards, the counterpart of dupl and the ReDoS
+      // half of gosec on the Go side. They report nothing today except the
+      // three bounded-input regexes suppressed at their call sites; they are
+      // here so a copy-pasted function or a regex over daemon-independent
+      // input cannot land unnoticed.
+      "sonarjs/no-identical-functions": "error",
+      "sonarjs/no-identical-conditions": "error",
+      "sonarjs/no-identical-expressions": "error",
+      "sonarjs/no-all-duplicated-branches": "error",
+      "sonarjs/super-linear-regex": "error",
     },
   },
   {
