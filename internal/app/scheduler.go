@@ -33,10 +33,11 @@ type cycler interface {
 }
 
 // Run starts every worker and watch and blocks until ctx is cancelled and all of
-// them have returned (graceful shutdown). Each worker's Operate is
-// wrapped so it waits for a global operation slot, pausing only that service's
-// monitoring. Watches run on their own goroutines using their own interval.
-// When finalShutdown is false (config reload), readiness is left unchanged.
+// them have returned (graceful shutdown). Workers and watches each run on their
+// own goroutine at their own interval; concurrency between operations on the
+// same service is bounded by that service's operation lock, not by any
+// fleet-wide limit. When finalShutdown is false (config reload), readiness is
+// left unchanged.
 func (s Scheduler) Run(ctx context.Context, workers []*Worker, watches []*Watch, ready *Readiness, finalShutdown, gateReady bool) {
 	interval := s.Interval
 	if interval <= 0 {
