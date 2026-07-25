@@ -204,6 +204,12 @@ linters:
         - unslice
         - weakCond
         - whyNoLint
+    dupl:
+      # The default is 150 tokens, which only sees very large clones. 70 is the
+      # lowest value production code is clean at: below it the reports are shape
+      # matches — a struct-to-struct mapping, a spec-driven assistant Run — not
+      # duplicated logic worth folding. Lower it further only alongside a fold.
+      threshold: 70
     goconst:
       # AGENTS.md requires a shared constant only when a production value
       # appears more than three times. Test fixtures stay literal and readable.
@@ -244,6 +250,13 @@ linters:
       # Test fixtures repeat protocol tokens (NUT UPS), YAML keys and scripted
       # wizard answers — not prose typos.
       - linters: [dupword]
+        path: _test\.go
+      # Table-driven tests share a shape by design (AGENTS.md prescribes it), so
+      # at this threshold dupl matches the mould rather than duplicated logic:
+      # restart_on_change vs defaults.restart_on_change, one protocol probe vs
+      # another. Copy-pasted tests are found by reviewing a family's bodies, not
+      # by token similarity.
+      - linters: [dupl]
         path: _test\.go
       # Test request fixtures deliberately use nil for an absent body; production
       # requests use http.NoBody so the request metadata stays explicit.
