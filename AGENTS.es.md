@@ -646,24 +646,42 @@ Notas de herramientas:
   fuera de tests; evita locales que sombreen nombres de import. Documenta los
   nuevos símbolos exportados — la regla `exported` está activa.
 - **`golangci-lint`** usa `.golangci.yml` (**formato v2** — el binario debe ser
-  v2) para `gosec`, `asciicheck`, `bidichk`, `bodyclose`, `copyloopvar`,
-  `dupword` (desactivado en `*_test.go`), `errcheck`, `errchkjson`, `errname`,
-  `exhaustive` (un brazo `default:` cuenta como exhaustivo; desactivado en
-  `*_test.go`), `fatcontext`, `gocritic` (solo `appendAssign`, `unlambda`),
-  `contextcheck`, `goprintffuncname`, `iface`, `ineffassign`, `intrange`,
-  `interfacebloat` (`internal/web/server.go` excluido), `mirror`, `misspell`,
-  `modernize`, `depguard` (denegaciones acotadas — checks/conn/rules/config no
-  importan `operation`; `rules/` de producción no importa `execx`), `nilerr`,
-  `nilnesserr`, `wrapcheck`
-  (piloto: `internal/operation/`, `internal/app/`, `internal/cli/`,
-  `internal/state/`, `internal/process/`, `internal/web/`, `internal/servicemgr/`,
-  `internal/rules/` y `internal/config/`; `*_test.go` y el resto de paquetes
-  excluidos), `ireturn`
-  (activo; builders de checks/notify, registro conn,
-  constructores de managers y fábricas similares excluidos — ver
-  `.golangci.yml`), `noctx` (desactivado en `internal/conn/`
-  y `*_test.go`), `nolintlint`, `recvcheck`, `sloglint`, `thelper` y
-  `wastedassign`.
+  v2). Ese fichero manda: **69 linters**, agrupados aquí por lo que te exigen.
+  Consúltalo ante la duda — no des por hecho que un linter está apagado porque
+  este resumen sea más corto que la config.
+
+  - *Presupuestos que condicionan cómo escribes:*
+    `dupl`, `gocognit`, `goconst`, `gocyclo`, `maintidx`, `mnd`, `perfsprint`,
+    `prealloc`, `unparam`
+  - *Corrección y seguridad:*
+    `asasalint`, `bidichk`, `bodyclose`, `canonicalheader`, `contextcheck`,
+    `copyloopvar`, `durationcheck`, `errcheck`, `errchkjson`, `errorlint`,
+    `exhaustive`, `fatcontext`, `forcetypeassert`, `gochecksumtype`, `gosec`,
+    `ineffassign`, `makezero`, `nilerr`, `nilnesserr`, `nilnil`, `noctx`,
+    `nosprintfhostport`, `reassign`, `recvcheck`, `rowserrcheck`,
+    `sqlclosecheck`, `unqueryvet`, `wastedassign`
+  - *Forma de la API y arquitectura:*
+    `asciicheck`, `depguard`, `errname`, `gochecknoinits`, `godoclint`,
+    `gomoddirectives`, `iface`, `inamedparam`, `interfacebloat`, `iotamixing`,
+    `ireturn`, `musttag`, `predeclared`, `wrapcheck`
+  - *Idioma y modernización:*
+    `dupword`, `exptostd`, `gocheckcompilerdirectives`, `gocritic`,
+    `goprintffuncname`, `intrange`, `loggercheck`, `mirror`, `misspell`,
+    `modernize`, `nolintlint`, `sloglint`, `unconvert`, `usestdlibvars`
+  - *Tests:*
+    `testableexamples`, `thelper`, `tparallel`, `usetesting`
+
+  Salvedades del proyecto, todas codificadas en `.golangci.yml`: `dupword` y
+  `exhaustive` están desactivados en `*_test.go` (y un brazo `default:` cuenta
+  como exhaustivo); `gocritic` ejecuta una lista curada, no el set por defecto;
+  `interfacebloat` excluye `internal/web/server.go`; `depguard` impone las
+  fronteras de import (checks/conn/rules/config no importan `operation`;
+  `rules/` de producción no importa `execx`); `wrapcheck` es un piloto sobre
+  operation, app, cli, state, process, web, servicemgr, rules y config de
+  `internal/`, con `*_test.go` y el resto de paquetes excluidos; `ireturn`
+  excluye los builders de checks/notify, el registro conn, los constructores de
+  managers y fábricas similares; `noctx` está desactivado en `internal/conn/` y
+  `*_test.go`; `goconst` exige cuatro apariciones antes de pedir una constante.
   El `database/sql` de producción en `internal/state` usa métodos `*Context` con
   `sqlCtx()` (ctx de `OpenContext` / `context.Background()` vía `Open`).
   `contextcheck` está desactivado en `internal/state/` y en los CLI que tocan el
