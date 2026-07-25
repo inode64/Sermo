@@ -714,6 +714,11 @@ Tool notes:
   intentional `0644` writes, bounded `args[i]` reads, shutdown-context `G118`)
   are suppressed at the call site with `//nolint:gosec` plus a justifying
   comment — prefer that over widening the config.
+- **`make npm-audit`** is the JavaScript counterpart of `govulncheck`: it fails
+  the gate on a `high` or `critical` advisory anywhere in the npm tree,
+  dev dependencies included — they run in CI and on developer machines, so a
+  build-time tool is still an attack surface. Resolve findings by updating the
+  lockfile (`npm audit fix --package-lock-only`) rather than lowering the level.
 - **`make scripts-lint`** runs `shellcheck` on `scripts/*.sh` and
   `scripts/remote-deploy/*.sh`, then `ruff check` on the tracked Python helpers
   under `scripts/`. It is part of `validate`/`check`.
