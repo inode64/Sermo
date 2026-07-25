@@ -686,9 +686,9 @@ func TestCycleAppVersionChangeUsesArtifactSample(t *testing.T) {
 	samples.RegisterApp("containerd")
 	w.artifactSamples = samples
 
-	samples.StoreAppVersion("containerd", "containerd v1.7.0", appinspect.StatusOK)
+	samples.StoreAppVersion("containerd", "containerd v1.7.0", appinspect.StatusOK, "")
 	w.RunCycle(context.Background()) // establish baseline from the artifact cache
-	samples.StoreAppVersion("containerd", "containerd v1.7.1", appinspect.StatusOK)
+	samples.StoreAppVersion("containerd", "containerd v1.7.1", appinspect.StatusOK, "")
 	w.RunCycle(context.Background())
 
 	if len(h.ops) != 1 || h.ops[0] != string(rules.ActionRestart) {
@@ -720,6 +720,31 @@ func TestCycleUnsampledArtifactAppDefersChangedRule(t *testing.T) {
 	}
 }
 
+// TestCycleEvaluationErrorCarriesAppProbeOutput pins the fix for an error event
+// that showed only a probe's first stderr line — "Traceback (most recent call
+// last):" for a broken Python entry point — while the captured output that
+// explained the failure was dropped on the way out of rule evaluation.
+func TestCycleEvaluationErrorCarriesAppProbeOutput(t *testing.T) {
+	runner := &sequenceRunner{stdout: []string{"containerd v9.9.9"}}
+	h := &workerHarness{opResult: operation.Result{Status: operation.ResultOK}}
+	w := appVersionWorker(h, runner, "patch")
+	samples := NewArtifactSamples()
+	samples.RegisterApp("containerd")
+	w.artifactSamples = samples
+
+	const probeOutput = "Traceback (most recent call last):\n  File \"/usr/bin/containerd\"\nImportError: no module named runtime"
+	samples.StoreAppVersion("containerd", "", "exit 1 (want 0): Traceback (most recent call last):", probeOutput)
+	w.RunCycle(context.Background())
+
+	e, ok := h.eventOf(eventKindError)
+	if !ok {
+		t.Fatalf("a failing app probe must emit a rule evaluation error, events=%+v", h.events)
+	}
+	if e.Output != probeOutput {
+		t.Fatalf("evaluation error must carry the probe output, got %q", e.Output)
+	}
+}
+
 func TestCycleMissingArtifactAppSkipsChangedRule(t *testing.T) {
 	runner := &sequenceRunner{stdout: []string{"containerd v9.9.9"}}
 	h := &workerHarness{opResult: operation.Result{Status: operation.ResultOK}}
@@ -728,7 +753,7 @@ func TestCycleMissingArtifactAppSkipsChangedRule(t *testing.T) {
 	samples.RegisterApp("containerd")
 	w.artifactSamples = samples
 
-	samples.StoreAppVersion("containerd", "", appinspect.StatusNotInstalled)
+	samples.StoreAppVersion("containerd", "", appinspect.StatusNotInstalled, "")
 	w.RunCycle(context.Background())
 	w.RunCycle(context.Background())
 	if len(h.ops) != 0 {
@@ -741,13 +766,13 @@ func TestCycleMissingArtifactAppSkipsChangedRule(t *testing.T) {
 		t.Fatalf("worker must not re-run a cached missing app probe, calls=%d", runner.calls)
 	}
 
-	samples.StoreAppVersion("containerd", "containerd v1.7.0", appinspect.StatusOK)
+	samples.StoreAppVersion("containerd", "containerd v1.7.0", appinspect.StatusOK, "")
 	w.RunCycle(context.Background())
 	if len(h.ops) != 0 {
 		t.Fatalf("first available app sample must establish a baseline, ops=%v", h.ops)
 	}
 
-	samples.StoreAppVersion("containerd", "containerd v1.7.1", appinspect.StatusOK)
+	samples.StoreAppVersion("containerd", "containerd v1.7.1", appinspect.StatusOK, "")
 	w.RunCycle(context.Background())
 	if len(h.ops) != 1 || h.ops[0] != string(rules.ActionRestart) {
 		t.Fatalf("version change after app installation must restart once, ops=%v", h.ops)

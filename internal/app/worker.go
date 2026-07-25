@@ -722,7 +722,12 @@ func (w *Worker) fires(ctx context.Context, ev *rules.Evaluator, r rules.Rule, a
 	}
 	cond, err := w.evalRule(ctx, ev, r, evals)
 	if err != nil {
-		w.emit(Event{Kind: eventKindError, Rule: r.Name, Message: "evaluate: " + err.Error()})
+		event := Event{Kind: eventKindError, Rule: r.Name, Message: "evaluate: " + err.Error()}
+		var probeErr *appProbeError
+		if errors.As(err, &probeErr) {
+			event.Output = probeErr.output
+		}
+		w.emit(event)
 		cond = false
 	}
 	window := w.windowState(r.Name)
@@ -860,6 +865,17 @@ func (w *Worker) acknowledgeChanges() {
 // daemon start never triggers a restart); thereafter it stays true until
 // acknowledged. When the output carries no parseable version it compares the
 // first non-empty line, so a change is never silently missed.
+// appProbeError is an evaluation failure whose app probe captured command
+// output. The probe's status is the message; the output travels alongside it so
+// the emitted event can carry the reason instead of only the probe's first
+// stderr line.
+type appProbeError struct {
+	status string
+	output string
+}
+
+func (e *appProbeError) Error() string { return e.status }
+
 func (w *Worker) changedAppVersion(ctx context.Context, app string, level int) (bool, error) {
 	if w.artifactSamples != nil {
 		raw, status, sampled := w.artifactSamples.AppVersion(app)
@@ -872,7 +888,7 @@ func (w *Worker) changedAppVersion(ctx context.Context, app string, level int) (
 			return false, nil
 		}
 		if status != appinspect.StatusOK {
-			return false, errors.New(status)
+			return false, &appProbeError{status: status, output: w.artifactSamples.AppProbeOutput(app)}
 		}
 		return w.compareAppVersion(app, level, raw)
 	}
