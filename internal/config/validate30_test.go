@@ -294,17 +294,34 @@ control:
 `), "control key \"interface\"")
 }
 
-// Service-document validation: each case loads one service YAML and asserts the
-// issues Validate reports for it. want lists issue substrings that must appear,
-// absent lists substrings that must not — a case can use either or both. One row
-// per validation rule; add the next rule here rather than as another function.
-func TestServiceValidationIssues(t *testing.T) {
-	tests := []struct {
-		name    string
-		service string
-		want    []string
-		absent  []string
-	}{
+// serviceIssueCase is one service-document validation case: load service and
+// assert which issue substrings Validate must report (want) and must not
+// (absent). A case can use either or both.
+type serviceIssueCase struct {
+	name    string
+	service string
+	want    []string
+	absent  []string
+}
+
+func runServiceIssueCases(t *testing.T, tests []serviceIssueCase) {
+	t.Helper()
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			issues := validateService(t, tt.service)
+			for _, want := range tt.want {
+				mustHave(t, issues, want)
+			}
+			for _, absent := range tt.absent {
+				mustNotHave(t, issues, absent)
+			}
+		})
+	}
+}
+
+// Service-document validation — rules, conditions, windows, inline probes and metrics.
+func TestServiceValidationRules(t *testing.T) {
+	runServiceIssueCases(t, []serviceIssueCase{
 		{
 			name: "rule structure",
 			service: `
@@ -491,6 +508,23 @@ rules:
 			want: []string{"must contain exactly one condition/operator"},
 		},
 		{
+			name: "scalar window rejected",
+			service: `
+name: svc
+service: x
+policy: { cooldown: 5m }
+checks:
+  http: { type: http, url: "http://127.0.0.1/" }
+rules:
+  bad:
+    type: remediation
+    if: { failed: { check: http } }
+    for: 3
+    then: { action: restart }
+`,
+			want: []string{"for must be a mapping"},
+		},
+		{
 			name: "inline command condition needs timeout",
 			service: `
 name: svc
@@ -602,6 +636,12 @@ rules:
 				"value \"abc\" must be a number",
 			},
 		},
+	})
+}
+
+// Service-document validation — check schemas, commands, process selectors and stop/remediation policy.
+func TestServiceValidationChecksAndPolicy(t *testing.T) {
+	runServiceIssueCases(t, []serviceIssueCase{
 		{
 			name: "force kill requires selector",
 			service: `
@@ -702,33 +742,6 @@ policy:
 			want: []string{"max_actions must be a positive integer"},
 		},
 		{
-			name: "description must be string",
-			service: `
-name: svc
-description: [not, a, string]
-service: x
-`,
-			want: []string{"description must be a string"},
-		},
-		{
-			name: "description string passes",
-			service: `
-name: svc
-description: "A friendly label"
-service: x
-`,
-			absent: []string{"description"},
-		},
-		{
-			name: "category must be string",
-			service: `
-name: svc
-category: [not, a, string]
-service: x
-`,
-			want: []string{"category must be a string"},
-		},
-		{
 			name: "command expect exit",
 			service: `
 name: svc
@@ -774,6 +787,62 @@ processes:
 				"processes.main.extra is not supported",
 				"processes.worker.unexpected is not supported",
 			},
+		},
+		{
+			name: "percent bound",
+			service: `
+name: svc
+service: x
+policy: { cooldown: 5m }
+checks:
+  rootfs: { type: storage, path: /, used_pct: { op: ">=", value: "150%" } }
+`,
+			want: []string{`used_pct value "150%" must be a percentage in 0..100`},
+		},
+		{
+			name: "contains op",
+			service: `
+name: svc
+service: x
+policy: { cooldown: 5m }
+checks:
+  q: { type: sql, engine: sqlite, path: /var/db/x.db, query: "select status from t", op: contains, value: ok }
+  redis: { type: redis, expect: { role: { op: contains, value: master } } }
+`,
+			absent: []string{"op"},
+		},
+	})
+}
+
+// Service-document validation — description, category, enable_if and variable specs.
+func TestServiceValidationMetadataAndVariables(t *testing.T) {
+	runServiceIssueCases(t, []serviceIssueCase{
+		{
+			name: "description must be string",
+			service: `
+name: svc
+description: [not, a, string]
+service: x
+`,
+			want: []string{"description must be a string"},
+		},
+		{
+			name: "description string passes",
+			service: `
+name: svc
+description: "A friendly label"
+service: x
+`,
+			absent: []string{"description"},
+		},
+		{
+			name: "category must be string",
+			service: `
+name: svc
+category: [not, a, string]
+service: x
+`,
+			want: []string{"category must be a string"},
 		},
 		{
 			name: "enable if is limited and disabled branches still validate",
@@ -871,58 +940,7 @@ variables:
 `,
 			want: []string{"variables.binary must be a non-empty path string or list"},
 		},
-		{
-			name: "percent bound",
-			service: `
-name: svc
-service: x
-policy: { cooldown: 5m }
-checks:
-  rootfs: { type: storage, path: /, used_pct: { op: ">=", value: "150%" } }
-`,
-			want: []string{`used_pct value "150%" must be a percentage in 0..100`},
-		},
-		{
-			name: "contains op",
-			service: `
-name: svc
-service: x
-policy: { cooldown: 5m }
-checks:
-  q: { type: sql, engine: sqlite, path: /var/db/x.db, query: "select status from t", op: contains, value: ok }
-  redis: { type: redis, expect: { role: { op: contains, value: master } } }
-`,
-			absent: []string{"op"},
-		},
-		{
-			name: "scalar window rejected",
-			service: `
-name: svc
-service: x
-policy: { cooldown: 5m }
-checks:
-  http: { type: http, url: "http://127.0.0.1/" }
-rules:
-  bad:
-    type: remediation
-    if: { failed: { check: http } }
-    for: 3
-    then: { action: restart }
-`,
-			want: []string{"for must be a mapping"},
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			issues := validateService(t, tt.service)
-			for _, want := range tt.want {
-				mustHave(t, issues, want)
-			}
-			for _, absent := range tt.absent {
-				mustNotHave(t, issues, absent)
-			}
-		})
-	}
+	})
 }
 
 func TestValidateMultiAction(t *testing.T) {
