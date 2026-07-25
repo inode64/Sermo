@@ -3838,7 +3838,7 @@ defaults:
 		t.Fatal(err)
 	}
 
-	cfg, err := loadConfig(t, global, WithServiceUnits("systemd", []string{"postgresql-16.service"}))
+	cfg, err := loadConfig(t, global, withServiceUnits("systemd", []string{"postgresql-16.service"}))
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -4478,7 +4478,7 @@ defaults: { policy: { cooldown: 5m } }
 		t.Fatal(err)
 	}
 
-	cfg, err := loadConfig(t, global, WithServiceUnits("openrc", []string{"openvpn.tun1", "openvpn.client-a"}))
+	cfg, err := loadConfig(t, global, withServiceUnits("openrc", []string{"openvpn.tun1", "openvpn.client-a"}))
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -4556,7 +4556,7 @@ name: openvpn-client-tun1
 uses: openvpn-client-tun1
 `,
 	})
-	cfg, err := loadConfig(t, global, WithServiceUnits("systemd", []string{"openvpn-client@tun1.service"}))
+	cfg, err := loadConfig(t, global, withServiceUnits("systemd", []string{"openvpn-client@tun1.service"}))
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -4606,7 +4606,7 @@ defaults: { policy: { cooldown: 5m } }
 
 	cfg, err := loadConfig(t, global,
 		WithCatalogDirs(filepath.Dir(catalogDir)),
-		WithServiceUnits(backend, []string{activeUnit}),
+		withServiceUnits(backend, []string{activeUnit}),
 	)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
@@ -4857,7 +4857,7 @@ defaults:
 		t.Fatal(err)
 	}
 
-	cfg, err := loadConfig(t, global, WithServiceUnits("systemd", []string{
+	cfg, err := loadConfig(t, global, withServiceUnits("systemd", []string{
 		"ceph-osd@0.service",
 		"ceph-osd@1.service",
 		"ceph-osd@3.service",
@@ -4937,7 +4937,7 @@ defaults:
 `, servicesDir), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	cfg, err := loadConfig(t, global, WithServiceUnits("systemd", nil))
+	cfg, err := loadConfig(t, global, withServiceUnits("systemd", nil))
 	if err != nil {
 		t.Fatalf("Load() with no OSDs must not error, got %v", err)
 	}
@@ -5551,7 +5551,7 @@ defaults: { policy: { cooldown: 5m } }
 		t.Fatal(err)
 	}
 
-	cfg, err := loadConfig(t, global, WithServiceUnits("systemd", []string{
+	cfg, err := loadConfig(t, global, withServiceUnits("systemd", []string{
 		"tomcat-8.5-main.service",
 		"tomcat-9-guacamole.service",
 		"tomcat-8.5.service",
@@ -5787,7 +5787,7 @@ paths: { services: [ %s ], runtime: /run/sermo }
 defaults: { policy: { cooldown: 5m } }
 `, servicesDir))
 
-	cfg, err := loadConfig(t, global, WithServiceUnits("systemd", []string{"nut-driver@rack.snmp.service"}))
+	cfg, err := loadConfig(t, global, withServiceUnits("systemd", []string{"nut-driver@rack.snmp.service"}))
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
