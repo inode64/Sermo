@@ -290,8 +290,10 @@ Validation must fail on unresolved variables.
 ## Typed fields and variable interaction
 
 Variables are always strings, but some fields are logically numeric or have a
-small grammar. Use a tolerant scalar (`FlexInt`) for these so YAML never fails
-just because a value was quoted or carried a `${var}`; parse after expansion. See
+small grammar. Read those through the tolerant coercions in `internal/cfgval` —
+`cfgval.Int` takes an integer, a float or a decimal string, and there are
+siblings for the other scalar shapes — so YAML never fails just because a value
+was quoted or carried a `${var}`; parse after expansion. See
 `docs/configuration.md`.
 
 ```text
