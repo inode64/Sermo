@@ -80,6 +80,23 @@ verify_protected_paths() {
 	return 1
 }
 
+rollback() {
+	if [ -f "${work}/sermoctl.previous" ]; then
+		install -o 0 -g 0 -m 0755 "${work}/sermoctl.previous" /usr/bin/sermoctl
+	fi
+	if [ -f "${work}/sermod.previous" ]; then
+		install -o 0 -g 0 -m 0755 "${work}/sermod.previous" /usr/bin/sermod
+	fi
+	if [ -d "${work}/catalog.previous" ]; then
+		rm -rf /usr/share/sermo/catalog
+		mv "${work}/catalog.previous" /usr/share/sermo/catalog
+	fi
+	case "$init" in
+		systemd) capture rollback_restart systemctl restart sermod ;;
+		openrc) capture rollback_restart rc-service sermod restart ;;
+	esac
+}
+
 cleanup_success() {
 	[ "$keep_remote_artifacts" = "0" ] || return 0
 
@@ -171,20 +188,44 @@ elif [ "$init" = "openrc" ]; then
 fi
 printf '%s\n' "$payload_members" >"${out}/payload_members"
 
-rm -rf /usr/share/sermo/catalog
 read -r -a _payload_members <<< "$payload_members"
+
+# Stage the payload and validate the live configuration with the CANDIDATE
+# sermoctl before anything on disk changes. A configuration the new binary
+# rejects — a canonically retired key, for example — must abort the update with
+# the host untouched, instead of leaving new binaries beside the still-running
+# old process for the next restart to trip over.
+stage="${work}/stage"
+mkdir -p "$stage"
+tar --no-same-owner -C "$stage" -xzf "$payload" "${_payload_members[@]}" >"${out}/payload_stage.out" 2>"${out}/payload_stage.err"
+stage_rc=$?
+printf '%s\n' "$stage_rc" >"${out}/payload_stage.rc"
+if [ "$stage_rc" -ne 0 ]; then
+	finish 20
+fi
+
+capture sermoctl_version "${stage}/usr/bin/sermoctl" --version
+capture sermod_version "${stage}/usr/bin/sermod" --version
+capture config_validate env SERMO_BACKEND="$config_backend" SERMO_INIT="$config_backend" "${stage}/usr/bin/sermoctl" --config /etc/sermo/sermo.yml config validate
+if [ "$(cat "${out}/config_validate.rc" 2>/dev/null || echo 1)" != "0" ]; then
+	finish 30
+fi
+
+# Keep the previous binaries and catalog so a failed restart or readiness check
+# can put the host back exactly as it was.
+cp -a /usr/bin/sermoctl "${work}/sermoctl.previous" 2>/dev/null || true
+cp -a /usr/bin/sermod "${work}/sermod.previous" 2>/dev/null || true
+if [ -d /usr/share/sermo/catalog ]; then
+	rm -rf "${work}/catalog.previous"
+	mv /usr/share/sermo/catalog "${work}/catalog.previous"
+fi
+
 tar --no-same-owner -C / -xzf "$payload" "${_payload_members[@]}" >"${out}/payload_extract.out" 2>"${out}/payload_extract.err"
 extract_rc=$?
 printf '%s\n' "$extract_rc" >"${out}/payload_extract.rc"
 if [ "$extract_rc" -ne 0 ]; then
+	rollback
 	finish 20
-fi
-
-capture sermoctl_version /usr/bin/sermoctl --version
-capture sermod_version /usr/bin/sermod --version
-capture config_validate env SERMO_BACKEND="$config_backend" SERMO_INIT="$config_backend" /usr/bin/sermoctl --config /etc/sermo/sermo.yml config validate
-if [ "$(cat "${out}/config_validate.rc" 2>/dev/null || echo 1)" != "0" ]; then
-	finish 30
 fi
 
 if [ "$init" = "systemd" ]; then
@@ -200,6 +241,7 @@ elif [ "$init" = "openrc" ]; then
 else
 	echo "unsupported init" >"${out}/sermod_restart.err"
 	echo 40 >"${out}/sermod_restart.rc"
+	rollback
 	finish 40
 fi
 
@@ -228,4 +270,12 @@ elif command -v netstat >/dev/null 2>&1; then
 	netstat -ltnp >"${out}/port9797_after" 2>&1 || true
 fi
 
-finish "$ready_rc"
+if [ "$ready_rc" -ne 0 ]; then
+	# The new binaries are on disk but the daemon never became ready: restore the
+	# previous binaries and catalog and restart, so the host keeps a working
+	# Sermo instead of one that only fails at the next restart.
+	rollback
+	finish 50
+fi
+
+finish 0

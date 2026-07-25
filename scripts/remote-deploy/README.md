@@ -25,8 +25,14 @@ The remote scripts must run as root on the target host:
 - `remote_apply.sh` replaces generated config directories under `/etc/sermo`,
   validates the config, enables/restarts `sermod`, and verifies the local Web UI.
 - `remote_update_payload.sh` refreshes binaries/catalog on an already configured
-  host, validates the current `/etc/sermo` with the detected init backend, then
-  restarts `sermod` and verifies the local Web UI. HTTP probes are bounded to
+  host. It stages the payload under its work directory and validates the current
+  `/etc/sermo` with the **candidate** `sermoctl` and the detected init backend
+  *before* replacing anything on disk, so a configuration the new binary rejects
+  aborts with exit `30` and the host untouched. Only then does it install the
+  binaries and catalog, restart `sermod` and verify the local Web UI; if the
+  daemon never becomes ready, or the init backend is unsupported, it restores the
+  previous binaries and catalog, restarts, and exits `50` (`40` for the init
+  case). HTTP probes are bounded to
   five seconds by default (`SERMO_HTTP_TIMEOUT_SECONDS`). After a successful
   update it deletes only its exact `/tmp/sermo-update-<run-id>` work directory
   and the uploaded `/tmp/sermo-*/<payload>.tgz`, freeing the payload and captured
