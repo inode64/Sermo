@@ -1398,9 +1398,20 @@ service: web
 	}
 }
 
-func TestIncludedStorageWatchRejectsDuplicate(t *testing.T) {
-	assertLoadError(t, map[string]string{
-		"sermo.yml": `
+// Included documents the loader must reject outright, before validation: a
+// duplicate definition or a malformed fragment aborts Load with the message in
+// want. One row per rejection; they share this table because they are one
+// concern, include-time rejection, not merely one helper.
+func TestLoadIncludedDocumentErrors(t *testing.T) {
+	tests := []struct {
+		name  string
+		files map[string]string
+		want  string
+	}{
+		{
+			name: "storage watch duplicated by an included document",
+			files: map[string]string{
+				"sermo.yml": `
 paths:
   watches: [ @ROOT@/storages ]
 watches:
@@ -1409,7 +1420,7 @@ watches:
     then:
       hook: { command: [/bin/true] }
 `,
-		"storages/storage-root.yml": `
+				"storages/storage-root.yml": `
 name: storage-root
 check:
   type: storage
@@ -1418,12 +1429,13 @@ check:
 then:
   hook: { command: [/bin/true] }
 `,
-	}, `watch "storage-root" is already defined`)
-}
-
-func TestLoadIncludedWatchDocumentRejectsDuplicate(t *testing.T) {
-	assertLoadError(t, map[string]string{
-		"sermo.yml": `
+			},
+			want: `watch "storage-root" is already defined`,
+		},
+		{
+			name: "watch document duplicated in one directory",
+			files: map[string]string{
+				"sermo.yml": `
 paths:
   watches: [ @ROOT@/watches ]
 defaults:
@@ -1432,46 +1444,99 @@ watches:
   load:
     check: { type: load, load5: { op: ">", value: 2 } }
 `,
-		"watches/load.yml": `
+				"watches/load.yml": `
 name: load
 check: { type: load, load5: { op: ">", value: 3 } }
 `,
-	}, `watch "load" is already defined`)
-}
-
-func TestLoadIncludedWatchDocumentRejectsDuplicateAcrossWatchDirs(t *testing.T) {
-	assertLoadError(t, map[string]string{
-		"sermo.yml": `
+			},
+			want: `watch "load" is already defined`,
+		},
+		{
+			name: "watch document duplicated across watch directories",
+			files: map[string]string{
+				"sermo.yml": `
 paths:
   watches: [ @ROOT@/networks, @ROOT@/watches ]
 defaults:
   policy: { cooldown: 5m }
 `,
-		"networks/ping-gw.yml": `
+				"networks/ping-gw.yml": `
 name: ping-gw
 category: network
 check: { type: icmp, host: 192.0.2.1 }
 `,
-		"watches/ping-gw.yml": `
+				"watches/ping-gw.yml": `
 name: ping-gw
 category: host
 check: { type: load, load5: { op: ">", value: 3 } }
 `,
-	}, `watch "ping-gw" is already defined`)
-}
-
-func TestLoadIncludedWatchDocumentRequiresName(t *testing.T) {
-	assertLoadError(t, map[string]string{
-		"sermo.yml": `
+			},
+			want: `watch "ping-gw" is already defined`,
+		},
+		{
+			name: "watch document without a name",
+			files: map[string]string{
+				"sermo.yml": `
 paths:
   watches: [ @ROOT@/watches ]
 defaults:
   policy: { cooldown: 5m }
 `,
-		"watches/load.yml": `
+				"watches/load.yml": `
 check: { type: load, load5: { op: ">", value: 3 } }
 `,
-	}, "watch documents must define name")
+			},
+			want: "watch documents must define name",
+		},
+		{
+			name: "notifier fragment duplicating a notifier",
+			files: map[string]string{
+				"sermo.yml": `
+paths:
+  notifiers: [ @ROOT@/notifiers ]
+defaults:
+  policy: { cooldown: 5m }
+notifiers:
+  ops:
+    enabled: false
+    type: email
+`,
+				"notifiers/ops.yml": `
+notifiers:
+  ops:
+    enabled: false
+    type: email
+`,
+			},
+			want: `notifier "ops" is already defined`,
+		},
+		{
+			name: "notifier fragment with more than one entry",
+			files: map[string]string{
+				"sermo.yml": `
+paths:
+  notifiers: [ @ROOT@/notifiers ]
+defaults:
+  policy: { cooldown: 5m }
+`,
+				"notifiers/multi.yml": `
+notifiers:
+  ops:
+    enabled: false
+    type: email
+  pager:
+    enabled: false
+    type: email
+`,
+			},
+			want: "notifiers fragments must contain exactly one entry",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assertLoadError(t, tt.files, tt.want)
+		})
+	}
 }
 
 func TestLoadIncludedWatchDocumentRejectsGroupedWatchesMap(t *testing.T) {
@@ -1669,47 +1734,6 @@ then:
 	if issues := Validate(cfg); len(issues) != 0 {
 		t.Fatalf("included notifier/watch config should validate, got %v", issues)
 	}
-}
-
-func TestLoadIncludedNotifierFragmentRejectsDuplicate(t *testing.T) {
-	assertLoadError(t, map[string]string{
-		"sermo.yml": `
-paths:
-  notifiers: [ @ROOT@/notifiers ]
-defaults:
-  policy: { cooldown: 5m }
-notifiers:
-  ops:
-    enabled: false
-    type: email
-`,
-		"notifiers/ops.yml": `
-notifiers:
-  ops:
-    enabled: false
-    type: email
-`,
-	}, `notifier "ops" is already defined`)
-}
-
-func TestLoadIncludedNotifierFragmentRequiresSingleEntry(t *testing.T) {
-	assertLoadError(t, map[string]string{
-		"sermo.yml": `
-paths:
-  notifiers: [ @ROOT@/notifiers ]
-defaults:
-  policy: { cooldown: 5m }
-`,
-		"notifiers/multi.yml": `
-notifiers:
-  ops:
-    enabled: false
-    type: email
-  pager:
-    enabled: false
-    type: email
-`,
-	}, "notifiers fragments must contain exactly one entry")
 }
 
 func TestLoadIncludedNotifierFragmentRejectsInvalidShape(t *testing.T) {
