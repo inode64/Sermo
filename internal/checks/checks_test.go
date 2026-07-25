@@ -360,26 +360,61 @@ func (r *recordingUserRunner) RunUser(_ context.Context, user, name string, args
 	return r.result, nil
 }
 
-type slowCommandRunner struct{}
+// slowRunner never returns until its context is cancelled, so a check running
+// under it can only finish by hitting its own timeout. Shared by every
+// shell-out check's timeout case: the runner's error text is not part of any
+// assertion, which is what made a per-check copy of it redundant.
+type slowRunner struct{}
 
-func (slowCommandRunner) Run(ctx context.Context, _ string, _ ...string) (execx.Result, error) {
+func (slowRunner) Run(ctx context.Context, _ string, _ ...string) (execx.Result, error) {
 	<-ctx.Done()
 	return execx.Result{ExitCode: -1}, fmt.Errorf("run tool: %w", ctx.Err())
 }
 
-func TestCommandCheckTimeoutMessage(t *testing.T) {
-	check := commandCheck{
-		base:       base{name: "c", timeout: time.Millisecond},
-		runner:     slowCommandRunner{},
-		argv:       []string{"/bin/tool", "--version"},
-		expectExit: []int{0},
+// A check that shells out must report its configured timeout in the failure
+// message, not leak a bare context error. One row per check type.
+func TestCheckTimeoutMessage(t *testing.T) {
+	tests := []struct {
+		name  string
+		check Check
+	}{
+		{
+			name: "command",
+			check: commandCheck{
+				base:       base{name: "c", timeout: time.Millisecond},
+				runner:     slowRunner{},
+				argv:       []string{"/bin/tool", "--version"},
+				expectExit: []int{0},
+			},
+		},
+		{
+			name: "smart",
+			check: smartCheck{
+				base:   base{name: "sm", timeout: time.Millisecond},
+				runner: slowRunner{},
+				device: "/dev/sda",
+			},
+		},
+		{
+			name: "hdparm",
+			check: hdparmCheck{
+				base:   base{name: "hd", timeout: time.Millisecond},
+				runner: slowRunner{},
+				device: "/dev/sda",
+				preds:  []levelPred{{field: "cached", op: "<", value: 100}},
+			},
+		},
 	}
-	res := check.Run(context.Background())
-	if res.OK {
-		t.Fatal("expected timeout failure")
-	}
-	if !strings.Contains(res.Message, "timeout after 1ms") {
-		t.Fatalf("message = %q, want timeout after duration", res.Message)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			res := tt.check.Run(context.Background())
+			if res.OK {
+				t.Fatalf("%s check should fail once its timeout elapses", tt.name)
+			}
+			if !strings.Contains(res.Message, "timeout after 1ms") {
+				t.Fatalf("message = %q, want timeout after duration", res.Message)
+			}
+		})
 	}
 }
 
