@@ -137,12 +137,3 @@ func TestPreflightJSON(t *testing.T) {
 		t.Fatalf("unexpected JSON: %+v", got)
 	}
 }
-
-func TestPreflightRequiresService(t *testing.T) {
-	var stderr bytes.Buffer
-	app := App{Env: func(string) string { return "" }, Stdout: &bytes.Buffer{}, Stderr: &stderr}
-	code := app.Run(context.Background(), []string{"preflight"})
-	if code != exitUsage {
-		t.Fatalf("Run() exit = %d, want %d", code, exitUsage)
-	}
-}

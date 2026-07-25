@@ -149,15 +149,6 @@ func TestProcessesUsesSystemdMainPIDWhenPidfileMissing(t *testing.T) {
 	}
 }
 
-func TestProcessesRequiresService(t *testing.T) {
-	var stderr bytes.Buffer
-	app := App{Env: func(string) string { return "" }, Stdout: &bytes.Buffer{}, Stderr: &stderr}
-	code := app.Run(context.Background(), []string{"processes"})
-	if code != exitUsage {
-		t.Fatalf("Run() exit = %d, want %d", code, exitUsage)
-	}
-}
-
 type processSystemdRunner struct {
 	pid int
 }

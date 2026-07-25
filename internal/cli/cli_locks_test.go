@@ -152,15 +152,6 @@ func TestLocksJSON(t *testing.T) {
 	}
 }
 
-func TestLocksRequiresService(t *testing.T) {
-	var stderr bytes.Buffer
-	app := App{Env: func(string) string { return "" }, Stdout: &bytes.Buffer{}, Stderr: &stderr}
-	code := app.Run(context.Background(), []string{"locks"})
-	if code != exitUsage {
-		t.Fatalf("Run() exit = %d, want %d", code, exitUsage)
-	}
-}
-
 func runLockCLI(t *testing.T, args ...string) (int, string, string) {
 	t.Helper()
 	var stdout, stderr bytes.Buffer

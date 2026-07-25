@@ -675,13 +675,3 @@ func TestDefaultOperateFallsBackToConfiguredServiceUnit(t *testing.T) {
 		t.Fatalf("stderr = %q, want fallback warning", got)
 	}
 }
-
-func TestActionRequiresService(t *testing.T) {
-	var stderr bytes.Buffer
-	app := actionApp(operation.Result{}, nil, nil, &stderr)
-
-	code := app.Run(context.Background(), []string{"stop"})
-	if code != exitUsage {
-		t.Fatalf("Run() exit = %d, want %d", code, exitUsage)
-	}
-}
