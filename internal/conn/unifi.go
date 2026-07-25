@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 )
 
@@ -40,19 +39,13 @@ func (unifiProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	client := httpProbeClient(cfg.Interface, tc)
 
 	url := schemeHTTPS + urlSchemeSeparator + hostPort(host, port) + unifiStatusEndpoint
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
+	resp, err := getHTTPProbe(ctx, client, url, maxHTTPProbeBody)
 	if err != nil {
 		return Result{}, err
 	}
-	resp, err := client.Do(req)
-	if err != nil {
-		return Result{}, err
+	if resp.status != http.StatusOK {
+		return Result{}, fmt.Errorf("unifi: HTTP status %d", resp.status)
 	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		return Result{}, fmt.Errorf("unifi: HTTP status %d", resp.StatusCode)
-	}
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, maxHTTPProbeBody))
 
 	var status struct {
 		Meta struct {
@@ -61,7 +54,7 @@ func (unifiProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 			UUID          string `json:"uuid"`
 		} `json:"meta"`
 	}
-	if err := json.Unmarshal(body, &status); err != nil {
+	if err := json.Unmarshal(resp.body, &status); err != nil {
 		return Result{}, fmt.Errorf("unifi: invalid JSON response: %w", err)
 	}
 	if status.Meta.RC != unifiRCOK {

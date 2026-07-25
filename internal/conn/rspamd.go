@@ -3,7 +3,6 @@ package conn
 import (
 	"context"
 	"fmt"
-	"io"
 	"net/http"
 	"strings"
 )
@@ -30,25 +29,18 @@ const (
 func (rspamdProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	client, base := httpProbeBase(cfg, defaultPortRspamd)
 	url := base + rspamdPingEndpoint
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
+	resp, err := getHTTPProbe(ctx, client, url, maxHTTPProbeShortBody)
 	if err != nil {
 		return Result{}, err
 	}
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return Result{}, err
+	if resp.status != http.StatusOK {
+		return Result{}, fmt.Errorf("rspamd: HTTP status %d", resp.status)
 	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		return Result{}, fmt.Errorf("rspamd: HTTP status %d", resp.StatusCode)
-	}
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, maxHTTPProbeShortBody))
-	if !strings.EqualFold(strings.TrimSpace(string(body)), respPong) {
-		return Result{}, fmt.Errorf("rspamd: %s returned %q, want pong", rspamdPingEndpoint, strings.TrimSpace(string(body)))
+	if pong := strings.TrimSpace(string(resp.body)); !strings.EqualFold(pong, respPong) {
+		return Result{}, fmt.Errorf("rspamd: %s returned %q, want pong", rspamdPingEndpoint, pong)
 	}
 
-	server := resp.Header.Get(httpHeaderServer)
+	server := resp.header.Get(httpHeaderServer)
 	extra := map[string]string{extraPing: respPong}
 	if server != "" {
 		extra[ExtraKeyServer] = server

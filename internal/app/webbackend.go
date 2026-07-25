@@ -366,6 +366,16 @@ func attachServiceRuntime(ctx context.Context, entry *webEntry, name string, tre
 	return nil
 }
 
+// enabledEntry returns the named service entry when it exists and is not
+// disabled in configuration.
+func (b *WebBackend) enabledEntry(name string) (*webEntry, bool) {
+	e := b.entries[name]
+	if e == nil || e.disabled {
+		return nil, false
+	}
+	return e, true
+}
+
 func (b *WebBackend) registerServiceWatches(service string, tree map[string]any, globalNotify []string, interval time.Duration, disabled bool) {
 	watches, ok := tree[config.SectionWatches].(map[string]any)
 	if !ok {
