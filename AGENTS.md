@@ -703,10 +703,12 @@ Tool notes:
   the check/notify builders, the conn registry, manager constructors and similar
   factories; `noctx` is off in `internal/conn/` and `*_test.go`; `goconst` wants
   four occurrences before a shared constant is due.
+
   Production `database/sql` in `internal/state` uses `*Context` methods with
   `sqlCtx()` (ctx from `OpenContext` / `context.Background()` via `Open`).
   `contextcheck` is off in `internal/state/` and store-touching CLI files
   because the linter does not trace embedded store context.
+
   Accepted gosec exceptions live in that config: `G115`, and in test fixtures
   `G306`/`G101`/`G703`. By-design cases (`G204` operator-configured commands,
   intentional `0644` writes, bounded `args[i]` reads, shutdown-context `G118`)

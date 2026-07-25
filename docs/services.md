@@ -872,15 +872,17 @@ adding a public `processes:` entry — and (b) a `pidfile` health check gated by
 `requires: [service]`. Because of the gate, a missing or stale pidfile is
 reported as an **error only while the service is active** (it means the service
 died or lost its pidfile without the service manager noticing); a legitimately
-stopped service is skipped, not alarmed. A check already named `pidfile` is
-respected, so a catalog service that needs a custom check can still spell it out. Public
-`processes:` entries stay limited to `exe`/`cmd` selectors with optional
-`user`/`group`; do not put `pidfile` under `processes:`. The shorthand path can
-reference variables (e.g. `pidfile: "${pidfile}"`) and accepts a scalar path, a
-candidate list, or `{path: ..., optional: true}`. Candidate lists are tried in
-order and pass on the first live pidfile; if none exists, the backend PID
-fallback can still satisfy the gated health check. `optional: true` keeps a
-missing pidfile as a warning instead of making the service unhealthy.
+stopped service is skipped, not alarmed.
+
+A check already named `pidfile` is respected, so a catalog service that needs a
+custom check can still spell it out. Public `processes:` entries stay limited to
+`exe`/`cmd` selectors with optional `user`/`group`; do not put `pidfile` under
+`processes:`. The shorthand path can reference variables (e.g. `pidfile:
+"${pidfile}"`) and accepts a scalar path, a candidate list, or `{path: ...,
+optional: true}`. Candidate lists are tried in order and pass on the first live
+pidfile; if none exists, the backend PID fallback can still satisfy the gated
+health check. `optional: true` keeps a missing pidfile as a warning instead of
+making the service unhealthy.
 
 When a single service owns several independent resident processes, use
 `pidfiles:` as a map keyed by process role. Each role must also exist under

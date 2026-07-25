@@ -870,21 +870,25 @@ de catálogo preservando la compatibilidad Linux/init. Antes de confirmar un nue
 path de pidfile o socket, resuélvalo con `readlink -f` o inspecciónelo con
 `namei -l`; si algún componente es un symlink, use el target canónico resuelto.
 
-En la resolución esto crea (a) un selector interno de descubrimiento de pidfile — de modo que el
-proceso padre **y sus descendientes** se descubren y monitorizan sin
-añadir una entrada `processes:` pública — y (b) un health check `pidfile` controlado por
-`requires: [service]`. Debido al control, un pidfile ausente u obsoleto se
-reporta como un **error solo mientras el servicio está activo** (significa que el servicio
-murió o perdió su pidfile sin que el gestor de servicios lo notara); un servicio
-legítimamente parado se omite, no se alarma. Un check ya llamado `pidfile` se
-respeta, de modo que un servicio de catálogo que necesite un check personalizado todavía puede deletrearlo. Las entradas
-`processes:` públicas se mantienen limitadas a selectores `exe`/`cmd` con `user`/`group`
-opcionales; no ponga `pidfile` bajo `processes:`. El path del atajo puede
-referenciar variables (p. ej. `pidfile: "${pidfile}"`) y acepta un path escalar,
-una lista de candidatos, o `{path: ..., optional: true}`. Las listas de candidatos
-se prueban en orden y pasan en el primer pidfile vivo; si ninguno existe, el fallback
-de PID del backend todavía puede satisfacer el health check controlado. `optional: true`
-mantiene un pidfile ausente como warning en vez de hacer que el servicio no esté sano.
+En la resolución esto crea (a) un selector interno de descubrimiento de pidfile
+— de modo que el proceso padre **y sus descendientes** se descubren y
+monitorizan sin añadir una entrada `processes:` pública — y (b) un health check
+`pidfile` controlado por `requires: [service]`. Debido al control, un pidfile
+ausente u obsoleto se reporta como un **error solo mientras el servicio está
+activo** (significa que el servicio murió o perdió su pidfile sin que el gestor
+de servicios lo notara); un servicio legítimamente parado se omite, no se
+alarma.
+
+Un check ya llamado `pidfile` se respeta, de modo que un servicio de catálogo
+que necesite un check personalizado todavía puede deletrearlo. Las entradas
+`processes:` públicas se mantienen limitadas a selectores `exe`/`cmd` con
+`user`/`group` opcionales; no ponga `pidfile` bajo `processes:`. El path del
+atajo puede referenciar variables (p. ej. `pidfile: "${pidfile}"`) y acepta un
+path escalar, una lista de candidatos, o `{path: ..., optional: true}`. Las
+listas de candidatos se prueban en orden y pasan en el primer pidfile vivo; si
+ninguno existe, el fallback de PID del backend todavía puede satisfacer el
+health check controlado. `optional: true` mantiene un pidfile ausente como
+warning en vez de hacer que el servicio no esté sano.
 
 Cuando un único servicio posee varios procesos residentes independientes, use
 `pidfiles:` como un map indexado por rol de proceso. Cada rol también debe existir bajo

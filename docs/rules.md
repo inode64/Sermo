@@ -450,21 +450,25 @@ checks:
 
 It passes (health-style, `OK == true`) when the status matches **and** every
 assertion holds. **`method`** accepts any standard HTTP verb — `GET` (default),
-`HEAD`, `POST`, `PUT`, `PATCH`, `DELETE`, `OPTIONS`, `TRACE`, `CONNECT` — written
-in any case (it is normalized to upper-case); an unknown verb is rejected at
-config validation. A request `body`/`json` is sent for any method that carries
-one (`POST`/`PUT`/`PATCH`/…). **`http3: true`** sends the request over **HTTP/3
-(QUIC)** instead of TCP — see below. **`proxy`** routes the request through a forward proxy such as
-**Squid** (`http://[user:pass@]host:port`; `http`, `https`, `socks5` or `socks5h` schemes —
-credentials, when present, go in the URL). This both monitors that the proxy
-forwards correctly and that the target is reachable through it; for an `https://`
-target the proxy is used via `CONNECT`, and certificate inspection (below) still
-applies to the target's certificate. `json:` marshals the value and sets `Content-Type:
-application/json` (override it via `headers`); `body:` sends a raw string. The
-response is only read when `expect_body`/`expect_json` is set (capped at 1 MiB).
-`expect_json` looks up **dotted paths** into nested objects. A scalar value is an
-equality check (compared as a string); a `{op, value}` mapping uses an operator —
-`>`, `>=`, `<`, `<=` (numeric), `==`, `!=`, `contains` (string), or `=~` (regex).
+`HEAD`, `POST`, `PUT`, `PATCH`, `DELETE`, `OPTIONS`, `TRACE`, `CONNECT` —
+written in any case (it is normalized to upper-case); an unknown verb is
+rejected at config validation. A request `body`/`json` is sent for any method
+that carries one (`POST`/`PUT`/`PATCH`/…). **`http3: true`** sends the request
+over **HTTP/3 (QUIC)** instead of TCP — see below. **`proxy`** routes the
+request through a forward proxy such as **Squid**
+(`http://[user:pass@]host:port`; `http`, `https`, `socks5` or `socks5h` schemes
+— credentials, when present, go in the URL). This both monitors that the proxy
+forwards correctly and that the target is reachable through it; for an
+`https://` target the proxy is used via `CONNECT`, and certificate inspection
+(below) still applies to the target's certificate.
+
+`json:` marshals the value and sets `Content-Type: application/json` (override
+it via `headers`); `body:` sends a raw string. The response is only read when
+`expect_body`/`expect_json` is set (capped at 1 MiB). `expect_json` looks up
+**dotted paths** into nested objects. A scalar value is an equality check
+(compared as a string); a `{op, value}` mapping uses an operator — `>`, `>=`,
+`<`, `<=` (numeric), `==`, `!=`, `contains` (string), or `=~` (regex).
+
 By default the check follows HTTP redirects using Go's standard client policy.
 Set `follow_redirects: false` when the redirect itself is the health signal, for
 example a local HTTP listener that intentionally redirects every request to

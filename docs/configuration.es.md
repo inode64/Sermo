@@ -242,26 +242,29 @@ Los alias de service permiten que los comandos `sermoctl` acepten nombres altern
 y operen sobre el service configurado canónico. Los alias no deben duplicar otro nombre
 o alias del mismo kind de documento.
 
-Cuando un catalog service o service lista apps, cada variable de la app también está
-disponible para ese catalog service/service con un prefijo de nombre de app
-normalizado: una app con
-`variables: { binary: /usr/bin/cupsd, cups_config: /usr/bin/cups-config }`
-expone `${cupsd_binary}` y `${cupsd_cups_config}`. Las entradas de preflight de comando
-llamadas `version` o `version_short` también declaran `${cupsd_version}` y
-`${cupsd_version_short}` con valores por defecto vacíos; un `export:` de comando
-explícito puede declarar variables adicionales. En runtime, las comprobaciones de
-comando exitosas publican los mismos nombres exportados en el `data` del resultado de la
-comprobación; un comando `version` también deriva `version_short` de su stdout,
-prefiriendo `major.minor[.patch]` y aceptando salida `version N` solo-entero protegida,
-incluyendo lanzamientos codificados por fecha, cuando no hay una versión con puntos
-presente. Los guiones y otros caracteres no alfanuméricos se convierten en guiones
-bajos. Esto permite que un service reutilice rutas de binarios propiedad de una o más
-apps sin colisiones de nombres. Cuando se enlaza exactamente una app, sus variables
-también se exponen sin el prefijo como valores por defecto, de modo que un service puede
-usar `${binary}` mientras la app sigue siendo la propietaria de la ruta del binario. Una
-entrada `variables:` local con el mismo nombre prefijado o sin prefijo sigue
-prevaleciendo para sustituciones específicas del host. Cuando se enlazan varias apps,
-usa los nombres prefijados para evitar ambigüedad.
+Cuando un catalog service o service lista apps, cada variable de la app también
+está disponible para ese catalog service/service con un prefijo de nombre de app
+normalizado: una app con `variables: { binary: /usr/bin/cupsd, cups_config:
+/usr/bin/cups-config }` expone `${cupsd_binary}` y `${cupsd_cups_config}`. Las
+entradas de preflight de comando llamadas `version` o `version_short` también
+declaran `${cupsd_version}` y `${cupsd_version_short}` con valores por defecto
+vacíos; un `export:` de comando explícito puede declarar variables adicionales.
+En runtime, las comprobaciones de comando exitosas publican los mismos nombres
+exportados en el `data` del resultado de la comprobación; un comando `version`
+también deriva `version_short` de su stdout, prefiriendo `major.minor[.patch]` y
+aceptando salida `version N` solo-entero protegida, incluyendo lanzamientos
+codificados por fecha, cuando no hay una versión con puntos presente.
+
+Los guiones y otros caracteres no alfanuméricos se convierten en guiones bajos.
+Esto permite que un service reutilice rutas de binarios propiedad de una o más
+apps sin colisiones de nombres.
+
+Cuando se enlaza exactamente una app, sus variables también se exponen sin el
+prefijo como valores por defecto, de modo que un service puede usar `${binary}`
+mientras la app sigue siendo la propietaria de la ruta del binario. Una entrada
+`variables:` local con el mismo nombre prefijado o sin prefijo sigue
+prevaleciendo para sustituciones específicas del host. Cuando se enlazan varias
+apps, usa los nombres prefijados para evitar ambigüedad.
 
 `paths.state` (por defecto `/var/lib/sermo`) es la raíz de la base de datos de estado
 persistente `sermo.db` (SQLite). A diferencia de `paths.runtime`, sobrevive a los
@@ -493,35 +496,38 @@ configuración del daemon en ejecución y se aplica la próxima vez que `sermod`
 base de datos (un reinicio, ya que el handle se mantiene abierto durante toda la vida
 del daemon).
 
-Cuando `sermoctl daemon reload` pide al daemon en ejecución que recargue, `sermod` lee
-la configuración desde la ruta pasada a `sermod run --config` (el mismo archivo que usa
-`sermoctl`). `sermod` valida la nueva config, reconstruye sus workers de service y los
-host watches, y los intercambia sin reiniciar el proceso. El estado de runtime por
-service se preserva a través de la recarga:
-los contadores de ciclo de monitorización y las líneas base de archivos vigilados para
-las condiciones `changed:` permanecen en memoria, mientras que el cooldown/backoff de
-remediación y las ventanas `for`/`within` de reglas también se persisten en
-`paths.state` y sobreviven a un reinicio completo del proceso `sermod`. Una config
-inválida, o una config sin services ni watches incluidos, se rechaza y la generación
-actual sigue ejecutándose; se registra un evento `reload` o `error`. La recarga no
-repite `startup_delay` ni marca `/readyz` como apagándose.
+Cuando `sermoctl daemon reload` pide al daemon en ejecución que recargue,
+`sermod` lee la configuración desde la ruta pasada a `sermod run --config` (el
+mismo archivo que usa `sermoctl`). `sermod` valida la nueva config, reconstruye
+sus workers de service y los host watches, y los intercambia sin reiniciar el
+proceso. El estado de runtime por service se preserva a través de la recarga:
+los contadores de ciclo de monitorización y las líneas base de archivos
+vigilados para las condiciones `changed:` permanecen en memoria, mientras que el
+cooldown/backoff de remediación y las ventanas `for`/`within` de reglas también
+se persisten en `paths.state` y sobreviven a un reinicio completo del proceso
+`sermod`. Una config inválida, o una config sin services ni watches incluidos,
+se rechaza y la generación actual sigue ejecutándose; se registra un evento
+`reload` o `error`. La recarga no repite `startup_delay` ni marca `/readyz` como
+apagándose.
+
 `paths.runtime` y `paths.state` son recursos de toda la vida del proceso:
 contienen los locks de instancia/operación y el almacén persistente abierto del
-daemon. Cambiar cualquiera requiere reiniciar completamente `sermod`; la
-recarga rechaza el cambio y mantiene la generación actual.
+daemon. Cambiar cualquiera requiere reiniciar completamente `sermod`; la recarga
+rechaza el cambio y mantiene la generación actual.
+
 El bloque `web` también se aplica solo al arrancar: la dirección/puerto del
 listener, autenticación y política guest se instalan en el servidor HTTP al
 iniciar `sermod`. Cambia esos ajustes con un reinicio completo; la recarga los
 rechaza en vez de dejar activa la política de acceso web anterior.
-`engine.interval`
-sigue siendo recargable y replanifica inmediatamente los services que heredan
-la cadencia global. `engine.operation_timeout` también es recargable; las
-respuestas de acciones web extienden su plazo desde la configuración activa,
-incluido el timeout `stop_policy` resuelto por service.
-Las líneas base de tasa de CPU por service solo se restablecen cuando un service se
-elimina de la config en ejecución; el historial de métricas y eventos persistido
-permanece en `paths.state` hasta la retención normal o un `sermoctl state compact`
-explícito.
+
+`engine.interval` sigue siendo recargable y replanifica inmediatamente los
+services que heredan la cadencia global. `engine.operation_timeout` también es
+recargable; las respuestas de acciones web extienden su plazo desde la
+configuración activa, incluido el timeout `stop_policy` resuelto por service.
+Las líneas base de tasa de CPU por service solo se restablecen cuando un service
+se elimina de la config en ejecución; el historial de métricas y eventos
+persistido permanece en `paths.state` hasta la retención normal o un `sermoctl
+state compact` explícito.
 
 Dispara una recarga de configuración del daemon con:
 
@@ -622,24 +628,26 @@ contenedores Docker. Esos destinos siguen usando los mismos locks, guards,
 comprobaciones de preflight y timeouts de operación; consulta
 [services](services.es.md#control-docker--contenedores-docker).
 
-Debajo de la tabla de services, el panel lista las **aplicaciones instaladas** (los
-daemons de app del catálogo cuyo binario está presente) y las **librerías instaladas**
-(los ficheros de librería del catálogo cuyo `preflight.file` está presente). Ambos
-inventarios muestran el nombre y la versión corta cuando está disponible; un comando
-`health` de la app, cuando está configurado, decide OK/error a partir de su código de
-salida antes de considerar el comando de versión. Si no hay ningún comando `health`
-configurado, el comando `version` es la sonda alternativa mientras se obtiene la
-versión mostrada. Las listas son ordenables por nombre, categoría o versión, y al
-expandir una fila se revela la cadena de versión completa, la ubicación del archivo y
-sus permisos. Cuando una versión se hereda a través de `version_from`, la fila de la
+Debajo de la tabla de services, el panel lista las **aplicaciones instaladas**
+(los daemons de app del catálogo cuyo binario está presente) y las **librerías
+instaladas** (los ficheros de librería del catálogo cuyo `preflight.file` está
+presente). Ambos inventarios muestran el nombre y la versión corta cuando está
+disponible; un comando `health` de la app, cuando está configurado, decide
+OK/error a partir de su código de salida antes de considerar el comando de
+versión. Si no hay ningún comando `health` configurado, el comando `version` es
+la sonda alternativa mientras se obtiene la versión mostrada.
+
+Las listas son ordenables por nombre, categoría o versión, y al expandir una
+fila se revela la cadena de versión completa, la ubicación del archivo y sus
+permisos. Cuando una versión se hereda a través de `version_from`, la fila de la
 API incluye `version_source` con el nombre de la app proveedora. Los services,
 aplicaciones y librerías pueden filtrarse y agruparse por su campo de metadatos
-`category` de nivel superior. Los mismos datos están disponibles desde `sermoctl apps`,
-`sermoctl libs`, `GET /api/applications` y `GET /api/libraries`. El panel cachea cada
-inventario hasta 5 minutos, de modo que las autoactualizaciones no reejecutan cada
-sonda de versión. Cada fila muestra cuándo se ejecutaron realmente esas sondas de
-versión/estado; servir una respuesta cacheada no adelanta la hora de la muestra.
-Para un mapa editable panel por panel, consulta
+`category` de nivel superior. Los mismos datos están disponibles desde `sermoctl
+apps`, `sermoctl libs`, `GET /api/applications` y `GET /api/libraries`. El panel
+cachea cada inventario hasta 5 minutos, de modo que las autoactualizaciones no
+reejecutan cada sonda de versión. Cada fila muestra cuándo se ejecutaron
+realmente esas sondas de versión/estado; servir una respuesta cacheada no
+adelanta la hora de la muestra. Para un mapa editable panel por panel, consulta
 [webui-representation.md](webui-representation.es.md).
 
 **La interfaz web solo se activa cuando `web.port` está explícitamente definido.** Si se
@@ -878,40 +886,46 @@ usa [diagnósticos](#diagnósticos).
 
 ### Readiness (`/readyz`)
 
-`GET /readyz` es una sonda de readiness: devuelve **200** solo después de que `sermod`
-haya terminado `engine.startup_delay` (si lo hay) **y cada destino monitorizado —
-services, host watches y apps instaladas — haya completado su primer ciclo**, de modo
-que el daemon realmente tiene datos en lugar de simplemente haberse lanzado. Mientras se
-asienta, el `message` verbose reporta el progreso (`starting: 3/10 monitored targets
-have reported`) y la cabecera de la interfaz web muestra `status: starting` con un
-favicon de pestaña gris neutral. Cada service monitorizado, host watch y app instalada
-también reporta `state: starting` hasta que su primer ciclo de observación se haya
-completado, salvo un service con evidencia de proceso confiable reciente, que puede
-reportar `state: active` (proceso confirmado, no salud de comprobación). Los services que aún esperan un backend de init `active` completan el
-asentamiento en la primera sonda de estado (afloran como `failed` mientras están
-inactivos); las comprobaciones y la remediación esperan hasta que el backend está
-activo.
-Solo las aplicaciones del catálogo **instaladas** con un app-monitor activo participan en
-ese registro de asentamiento; las entradas del catálogo cuyo binario no está presente se
-omiten de `GET /api/applications` y nunca muestran `starting`. Durante el asentamiento,
-las apps instaladas pueden aparecer con `state: starting` antes de que su primer ciclo
-de app-watch se complete;
-durante esa ventana Sermo no ejecuta comprobaciones de service (mientras el backend aún
-está inactivo), y suprime alertas, hooks, notificaciones y remediación automática en el
-primer ciclo de observación activa. Durante
-el periodo de gracia de arranque, el asentamiento del primer ciclo, o mientras el daemon
-se está apagando, devuelve **503**. Para evitar una estampida de arranque, el primer
-ciclo de toda la flota se escalona a lo largo de un `engine.interval` (la cadencia lenta
-por app se usa solo después de esa primera comprobación); una **recarga de config no
-vuelve a bloquear** `/readyz` — el daemon permanece `ready` y la cabecera/favicon web no
-vuelven al estado `starting` gris. Los destinos monitorizados recién añadidos o
-cambiados aún pueden reportar `state: starting` individualmente hasta que su primer ciclo
-de observación se complete. Una
-petición plana devuelve `ok` o `starting` / `shutting_down` como `text/plain`;
-`GET /readyz?verbose` devuelve JSON con `ready`, `status`, `backend`, `services`,
-`watches` (host watches más monitores de app instaladas) y un `message` opcional.
-Como `/livez`, solo la sonda plana es pública; la forma verbose sigue la
-autenticación normal de lectura cuando la autenticación web está configurada:
+`GET /readyz` es una sonda de readiness: devuelve **200** solo después de que
+`sermod` haya terminado `engine.startup_delay` (si lo hay) **y cada destino
+monitorizado — services, host watches y apps instaladas — haya completado su
+primer ciclo**, de modo que el daemon realmente tiene datos en lugar de
+simplemente haberse lanzado. Mientras se asienta, el `message` verbose reporta
+el progreso (`starting: 3/10 monitored targets have reported`) y la cabecera de
+la interfaz web muestra `status: starting` con un favicon de pestaña gris
+neutral. Cada service monitorizado, host watch y app instalada también reporta
+`state: starting` hasta que su primer ciclo de observación se haya completado,
+salvo un service con evidencia de proceso confiable reciente, que puede reportar
+`state: active` (proceso confirmado, no salud de comprobación). Los services que
+aún esperan un backend de init `active` completan el asentamiento en la primera
+sonda de estado (afloran como `failed` mientras están inactivos); las
+comprobaciones y la remediación esperan hasta que el backend está activo.
+
+Solo las aplicaciones del catálogo **instaladas** con un app-monitor activo
+participan en ese registro de asentamiento; las entradas del catálogo cuyo
+binario no está presente se omiten de `GET /api/applications` y nunca muestran
+`starting`. Durante el asentamiento, las apps instaladas pueden aparecer con
+`state: starting` antes de que su primer ciclo de app-watch se complete; durante
+esa ventana Sermo no ejecuta comprobaciones de service (mientras el backend aún
+está inactivo), y suprime alertas, hooks, notificaciones y remediación
+automática en el primer ciclo de observación activa.
+
+Durante el periodo de gracia de arranque, el asentamiento del primer ciclo, o
+mientras el daemon se está apagando, devuelve **503**. Para evitar una estampida
+de arranque, el primer ciclo de toda la flota se escalona a lo largo de un
+`engine.interval` (la cadencia lenta por app se usa solo después de esa primera
+comprobación); una **recarga de config no vuelve a bloquear** `/readyz` — el
+daemon permanece `ready` y la cabecera/favicon web no vuelven al estado
+`starting` gris. Los destinos monitorizados recién añadidos o cambiados aún
+pueden reportar `state: starting` individualmente hasta que su primer ciclo de
+observación se complete.
+
+Una petición plana devuelve `ok` o `starting` / `shutting_down` como
+`text/plain`; `GET /readyz?verbose` devuelve JSON con `ready`, `status`,
+`backend`, `services`, `watches` (host watches más monitores de app instaladas)
+y un `message` opcional. Como `/livez`, solo la sonda plana es pública; la forma
+verbose sigue la autenticación normal de lectura cuando la autenticación web
+está configurada:
 
 ```sh
 curl -fsS http://127.0.0.1:9797/readyz                 # -> ok (when monitoring)
@@ -993,28 +1007,31 @@ retención de 366 días (~1 año). Los services que declaran un mapa vacío
 `processes: { }` no tienen árbol de procesos residente; el panel omite su tabla de
 procesos y los gráficos de latencia/CPU/memoria/IO.
 
-Los cambios de monitor disparados desde la web se registran con la fuente `web` en el
-almacén de estado; los stops manuales desde la web UI o la CLI usan
-`web-manual-stop` / `cli-manual-stop` hasta que un start correcto posterior restaura el
-estado monitorizado anterior. Un `umount` correcto de storage pausa la watch de
-capacidad de ese storage con `web-mount-umount` o `cli-mount-umount`; un `mount`
-correcto posterior la restaura solo cuando ese umount creó la pausa. El panel y
-`GET /api/services` / `GET /api/watches` exponen `state`, `monitored`,
-`monitor_source` y `monitor_changed_at` por separado. Un service puede mostrar
-`started` cuando el backend está activo pero la monitorización está pausada,
-`collecting` mientras la monitorización está activa pero los indicadores de
-runtime/check/SLA todavía se están llenando, y `monitored` solo cuando esos
-indicadores están listos. Los host watches no tienen estados `started` o
-`stopped` del gestor de servicios; su `state` es `disabled` cuando la
-configuración o el estado de monitorización los excluye de las comprobaciones
+Los cambios de monitor disparados desde la web se registran con la fuente `web`
+en el almacén de estado; los stops manuales desde la web UI o la CLI usan
+`web-manual-stop` / `cli-manual-stop` hasta que un start correcto posterior
+restaura el estado monitorizado anterior. Un `umount` correcto de storage pausa
+la watch de capacidad de ese storage con `web-mount-umount` o
+`cli-mount-umount`; un `mount` correcto posterior la restaura solo cuando ese
+umount creó la pausa.
+
+El panel y `GET /api/services` / `GET /api/watches` exponen `state`,
+`monitored`, `monitor_source` y `monitor_changed_at` por separado. Un service
+puede mostrar `started` cuando el backend está activo pero la monitorización
+está pausada, `collecting` mientras la monitorización está activa pero los
+indicadores de runtime/check/SLA todavía se están llenando, y `monitored` solo
+cuando esos indicadores están listos. Los host watches no tienen estados
+`started` o `stopped` del gestor de servicios; su `state` es `disabled` cuando
+la configuración o el estado de monitorización los excluye de las comprobaciones
 activas, `starting` antes de la primera muestra monitorizada, `failed` para una
 condición activa fallida y `ok` en el resto de casos. Su flag de monitorización
 separado sigue expuesto para acciones y metadatos.
-Las operaciones toman el lock de operación por service, de modo que nunca se solapan con
-la acción de un worker sobre el mismo service. El almacén de estado también conserva una
-marca corta de asentamiento de operación, de modo que las acciones iniciadas por
-`sermoctl` y por la web retienen las alertas de service hasta que el daemon tiene una
-muestra posterior a la operación.
+
+Las operaciones toman el lock de operación por service, de modo que nunca se
+solapan con la acción de un worker sobre el mismo service. El almacén de estado
+también conserva una marca corta de asentamiento de operación, de modo que las
+acciones iniciadas por `sermoctl` y por la web retienen las alertas de service
+hasta que el daemon tiene una muestra posterior a la operación.
 
 Como el daemon se ejecuta como root, la interfaz está endurecida: se enlaza a loopback
 por defecto, soporta autenticación (arriba), establece timeouts HTTP y requiere una
@@ -1709,26 +1726,30 @@ En un watch `lvm`, `then.notify_on: [on_change]` notifica sólo cuando la salud
 efectiva cambia entre `ok` y `error`, incluida la recuperación. No puede
 combinarse con `then.notify_interval`.
 
-**Las checks y los watches comparten los mismos tipos de comprobación.** Cualquier
-comprobación de un solo disparo — las de recursos de host de abajo (`storage`, `memory`,
-`pressure`, `load`, `fds`, `pids`, `conntrack`, `entropy`, `zombies`, `oom`, entre otras) *y* las
-comprobaciones de service (`tcp`, `ports`, `http`, `command`, `file_exists`, `file`,
-`lockfile`, `binary`, `pidfile`, `socket`, `libraries`, `config`, `autofs`, `route`,
-`clock`, `firewall_rules`, `cert`, `sqlite`/`sqlite3`, `websocket`, `count`, y las comprobaciones
-de protocolo de conexión como `mysql`/`smtp`) — pueden usarse como un watch
-aquí, y las de recursos de host pueden igualmente usarse como entradas `watches:`
-solo-check de un service o como `checks:`/reglas explícitas (ver
-[Checks](rules.es.md#comprobaciones)). Un watch dispara su hook con el resultado de
-**alerta** de la comprobación: umbral cruzado para comprobaciones de condición, **fallo**
-para comprobaciones de salud (`tcp`/`http`/`firewall_rules`/`cert`/…), de modo que p. ej.
-un watch `http` alerta cuando el endpoint está caído, un watch `firewall_rules` alerta
-cuando el recuento de reglas cargadas está por debajo de `min_rules`, y un watch `cert`
-alerta cuando el certificado es inválido o está caducando. La
-forma de watch multimétrica (`net`, `icmp`, `swap`) de abajo (un mapa `metrics:`, un hook
-por métrica) y los tipos multidestino (`file`, `process`) son solo-watch;
-la forma de métrica única de `net`/`icmp`/`swap` (un campo `metric:` explícito) también
-funciona como watch solo-check de service o como entrada explícita `checks:` (ver
-[Checks](rules.es.md#comprobaciones)).
+**Las checks y los watches comparten los mismos tipos de comprobación.**
+Cualquier comprobación de un solo disparo — las de recursos de host de abajo
+(`storage`, `memory`, `pressure`, `load`, `fds`, `pids`, `conntrack`, `entropy`,
+`zombies`, `oom`, entre otras) *y* las comprobaciones de service (`tcp`,
+`ports`, `http`, `command`, `file_exists`, `file`, `lockfile`, `binary`,
+`pidfile`, `socket`, `libraries`, `config`, `autofs`, `route`, `clock`,
+`firewall_rules`, `cert`, `sqlite`/`sqlite3`, `websocket`, `count`, y las
+comprobaciones de protocolo de conexión como `mysql`/`smtp`) — pueden usarse
+como un watch aquí, y las de recursos de host pueden igualmente usarse como
+entradas `watches:` solo-check de un service o como `checks:`/reglas explícitas
+(ver [Checks](rules.es.md#comprobaciones)).
+
+Un watch dispara su hook con el resultado de **alerta** de la comprobación:
+umbral cruzado para comprobaciones de condición, **fallo** para comprobaciones
+de salud (`tcp`/`http`/`firewall_rules`/`cert`/…), de modo que p. ej. un watch
+`http` alerta cuando el endpoint está caído, un watch `firewall_rules` alerta
+cuando el recuento de reglas cargadas está por debajo de `min_rules`, y un watch
+`cert` alerta cuando el certificado es inválido o está caducando. La forma de
+watch multimétrica (`net`, `icmp`, `swap`) de abajo (un mapa `metrics:`, un hook
+por métrica) y los tipos multidestino (`file`, `process`) son solo-watch; la
+forma de métrica única de `net`/`icmp`/`swap` (un campo `metric:` explícito)
+también funciona como watch solo-check de service o como entrada explícita
+`checks:` (ver [Checks](rules.es.md#comprobaciones)).
+
 Cuando la Web UI está habilitada, `GET /api/watches` renderiza las lecturas del
 watch desde el último ciclo de watches del daemon; no inicia sondas propias de
 comandos, red, SQL, firewall, count, disk I/O, `hdparm` o `smart` en cada poll
@@ -2677,31 +2698,35 @@ variable y hacer que cada referencia `${var}` se resuelva al nuevo valor.
 - Deshabilita una entrada heredada con `enabled: false`; elimínala con
   `delete: true`.
 
-Los ejemplos trabajados (clonación, deshabilitación, múltiples instancias) viven en
-[services](services.es.md#clonado).
-Las plantillas de catálogo para versiones/instancias instaladas usan `%v`, `%n` y `%i`;
-ver [versioned services](services.es.md#servicios-versionados).
-Cuando las plantillas simples `%v` o `%n` también tienen un binario de slot activo sin un
-sufijo, como `php` junto a `php8.4` o `python` junto a `python3`, Sermo materializa esa
-entrada sin versión automáticamente. Las plantillas compuestas con tokens adicionales no
-infieren un slot activo de `versions.from`; declara `versions.current_from` para entradas
-de compatibilidad como `/usr/bin/java` junto al descubrimiento de versiones de Java.
-`current_from` puede ser una ruta o una lista de rutas. Establece
-`versions.unversioned: false` solo cuando el slot activo sin marcador o `current_from`
-deba ignorarse. Un nombre materializado no debe colisionar con un documento explícito de
-la misma categoría; la validación reporta eso como un error de configuración. Cuando una
-plantilla usa `${current}`, los listados de inventario también marcan una entrada con
-versión como actual cuando el wrapper de slot activo y esa entrada reportan el mismo
-`version_short`.
-`versions.from` puede ser una ruta/lista neutral respecto al backend, o un mapa con ramas
-`systemd` y `openrc`. Las ramas de mapa son exclusivas: Sermo selecciona solo el backend
-de init activo de `engine.backend` o `SERMO_BACKEND`, recurriendo al `${init}` detectado.
-Las plantillas de catalog service deberían poner los tokens en `service:` en su lugar;
-las unidades systemd/OpenRC activas materializan sus instancias de daemon para el
-descubrimiento. Cuando un servicio configurado nombra explícitamente una instancia
-materializada en `uses:`, dicha instancia sigue disponible aunque la unidad esté parada
-o fallida para que la validación y la monitorización informen su estado. Las apps
-enlazadas poseen el descubrimiento y la validación de binarios.
+Los ejemplos trabajados (clonación, deshabilitación, múltiples instancias) viven
+en [services](services.es.md#clonado). Las plantillas de catálogo para
+versiones/instancias instaladas usan `%v`, `%n` y `%i`; ver [versioned
+services](services.es.md#servicios-versionados).
+
+Cuando las plantillas simples `%v` o `%n` también tienen un binario de slot
+activo sin un sufijo, como `php` junto a `php8.4` o `python` junto a `python3`,
+Sermo materializa esa entrada sin versión automáticamente. Las plantillas
+compuestas con tokens adicionales no infieren un slot activo de `versions.from`;
+declara `versions.current_from` para entradas de compatibilidad como
+`/usr/bin/java` junto al descubrimiento de versiones de Java. `current_from`
+puede ser una ruta o una lista de rutas. Establece `versions.unversioned: false`
+solo cuando el slot activo sin marcador o `current_from` deba ignorarse. Un
+nombre materializado no debe colisionar con un documento explícito de la misma
+categoría; la validación reporta eso como un error de configuración. Cuando una
+plantilla usa `${current}`, los listados de inventario también marcan una
+entrada con versión como actual cuando el wrapper de slot activo y esa entrada
+reportan el mismo `version_short`.
+
+`versions.from` puede ser una ruta/lista neutral respecto al backend, o un mapa
+con ramas `systemd` y `openrc`. Las ramas de mapa son exclusivas: Sermo
+selecciona solo el backend de init activo de `engine.backend` o `SERMO_BACKEND`,
+recurriendo al `${init}` detectado. Las plantillas de catalog service deberían
+poner los tokens en `service:` en su lugar; las unidades systemd/OpenRC activas
+materializan sus instancias de daemon para el descubrimiento. Cuando un servicio
+configurado nombra explícitamente una instancia materializada en `uses:`, dicha
+instancia sigue disponible aunque la unidad esté parada o fallida para que la
+validación y la monitorización informen su estado. Las apps enlazadas poseen el
+descubrimiento y la validación de binarios.
 
 ## Variables de recurso de binario
 

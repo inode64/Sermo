@@ -235,24 +235,26 @@ as `apache2` for the canonical `apache` profile. Service aliases let
 configured service. Aliases must not duplicate another name or alias of the same
 document kind.
 
-When a catalog service or service lists apps, every app variable is also available to that
-catalog service/service with a normalized app-name prefix: an app with
-`variables: { binary: /usr/bin/cupsd, cups_config: /usr/bin/cups-config }`
-exposes `${cupsd_binary}` and `${cupsd_cups_config}`. Command preflight entries
-named `version` or `version_short` also declare `${cupsd_version}` and
+When a catalog service or service lists apps, every app variable is also
+available to that catalog service/service with a normalized app-name prefix: an
+app with `variables: { binary: /usr/bin/cupsd, cups_config: /usr/bin/cups-config
+}` exposes `${cupsd_binary}` and `${cupsd_cups_config}`. Command preflight
+entries named `version` or `version_short` also declare `${cupsd_version}` and
 `${cupsd_version_short}` with empty defaults; an explicit command `export:` may
 declare additional variables. At runtime, successful command checks publish the
 same exported names in the check result `data`; a `version` command also derives
 `version_short` from its stdout, preferring `major.minor[.patch]` and accepting
 guarded integer-only `version N` output, including date-coded releases, when no
-dotted version is present. Dashes and other non-alphanumeric characters become
-underscores. This lets a service reuse binary paths owned by one or more apps
-without naming collisions. When exactly one app is linked, its variables are also
-exposed without the prefix as defaults, so a service can use
-`${binary}` while the app remains the owner of the binary path. A local
-`variables:` entry with the same prefixed or unprefixed name still wins for
-host-specific overrides. When several apps are linked, use the prefixed names to
-avoid ambiguity.
+dotted version is present.
+
+Dashes and other non-alphanumeric characters become underscores. This lets a
+service reuse binary paths owned by one or more apps without naming collisions.
+
+When exactly one app is linked, its variables are also exposed without the
+prefix as defaults, so a service can use `${binary}` while the app remains the
+owner of the binary path. A local `variables:` entry with the same prefixed or
+unprefixed name still wins for host-specific overrides. When several apps are
+linked, use the prefixed names to avoid ambiguity.
 
 `paths.state` (default `/var/lib/sermo`) is the root for the persistent state
 database `sermo.db` (SQLite). Unlike `paths.runtime`, it survives reboots, which
@@ -480,31 +482,33 @@ handle is held open for the daemon's lifetime).
 
 When `sermoctl daemon reload` asks the running daemon to reload, `sermod` reads
 the configuration from the path passed to `sermod run --config` (the same file
-`sermoctl` uses). `sermod` validates the new config, rebuilds its service workers
-and host watches, and swaps them in without restarting the process. Per-service
-runtime state is preserved across reload:
-monitoring cycle counters and watched-file baselines for `changed:` conditions
-stay in memory, while remediation cooldown/backoff and rule `for`/`within`
-windows are also persisted in `paths.state` and survive a full `sermod` process
-restart. Invalid config, or
+`sermoctl` uses). `sermod` validates the new config, rebuilds its service
+workers and host watches, and swaps them in without restarting the process.
+Per-service runtime state is preserved across reload: monitoring cycle counters
+and watched-file baselines for `changed:` conditions stay in memory, while
+remediation cooldown/backoff and rule `for`/`within` windows are also persisted
+in `paths.state` and survive a full `sermod` process restart. Invalid config, or
 a config with no included services or watches, is rejected and the current
 generation keeps running; a `reload` or `error` event is recorded. Reload does
 not repeat `startup_delay` and does not mark `/readyz` as shutting down.
+
 `paths.runtime` and `paths.state` are process-lifetime resources: they contain
 the daemon singleton/operation locks and its open persistent store. Changing
 either requires a full `sermod` restart; a configuration reload rejects that
 change and leaves the current generation running.
+
 The `web` block is also startup-only: its listener address/port, authentication
 and guest policy are installed on the HTTP server when `sermod` starts. Change
 those settings with a full restart; a configuration reload rejects them rather
 than leaving the old web access policy active.
-`engine.interval` remains reloadable and immediately
-reschedules services that inherit the global cadence. `engine.operation_timeout`
-is also reloadable; web action responses extend their deadline from the active
-configuration, including a resolved per-service `stop_policy` timeout.
-Per-service CPU rate baselines are reset only when a service is removed from the
-running config; persisted metric and event history remains in `paths.state`
-until normal retention or an explicit `sermoctl state compact`.
+
+`engine.interval` remains reloadable and immediately reschedules services that
+inherit the global cadence. `engine.operation_timeout` is also reloadable; web
+action responses extend their deadline from the active configuration, including
+a resolved per-service `stop_policy` timeout. Per-service CPU rate baselines are
+reset only when a service is removed from the running config; persisted metric
+and event history remains in `paths.state` until normal retention or an explicit
+`sermoctl state compact`.
 
 Trigger a daemon configuration reload with:
 
@@ -600,22 +604,23 @@ targets still use the same locks, guards, preflight checks and operation
 timeouts; see [services](services.md#control-docker--docker-containers).
 
 Below the services table the dashboard lists **installed applications** (catalog
-app daemons whose binary is present) and **installed libraries** (catalog library
-files whose `preflight.file` is present). Both inventories show name and short
-version when available; an app `health` command, when configured, decides OK/error
-from its exit code before the version command is considered. If no `health` command
-is configured, the `version` command is the fallback probe while fetching the
-displayed version. The lists are sortable by name, category or version, and
-expanding a row reveals the full version string, file location and permissions.
-When a version is inherited through `version_from`, the API row includes
-`version_source` with the provider app name. Services, applications and libraries
-can be filtered and grouped by their top-level `category` metadata field. The same
-data is available from `sermoctl apps`, `sermoctl libs`, `GET /api/applications`
-and `GET /api/libraries`. The dashboard caches each inventory for up to 5 minutes,
-so auto-refreshes do not rerun every version probe. Each row shows when those
-version/status probes actually ran; serving a cached response does not advance that
-sample time.
-For an editable panel-by-panel map, see
+app daemons whose binary is present) and **installed libraries** (catalog
+library files whose `preflight.file` is present). Both inventories show name and
+short version when available; an app `health` command, when configured, decides
+OK/error from its exit code before the version command is considered. If no
+`health` command is configured, the `version` command is the fallback probe
+while fetching the displayed version.
+
+The lists are sortable by name, category or version, and expanding a row reveals
+the full version string, file location and permissions. When a version is
+inherited through `version_from`, the API row includes `version_source` with the
+provider app name. Services, applications and libraries can be filtered and
+grouped by their top-level `category` metadata field. The same data is available
+from `sermoctl apps`, `sermoctl libs`, `GET /api/applications` and `GET
+/api/libraries`. The dashboard caches each inventory for up to 5 minutes, so
+auto-refreshes do not rerun every version probe. Each row shows when those
+version/status probes actually ran; serving a cached response does not advance
+that sample time. For an editable panel-by-panel map, see
 [webui-representation.md](webui-representation.md).
 
 **The web UI is only activated when `web.port` is explicitly defined.** If the
@@ -849,37 +854,40 @@ It reports process liveness only; for configuration/host/database health use
 ### Readiness (`/readyz`)
 
 `GET /readyz` is a readiness probe: it returns **200** only after `sermod` has
-finished `engine.startup_delay` (if any) **and every monitored target — services,
-host watches and installed apps — has completed its first cycle**, so the daemon
-actually has data rather than merely having launched. While settling, the verbose
-`message` reports progress (`starting: 3/10 monitored targets have reported`) and
-the web UI header shows `status: starting` with a neutral grey tab favicon. Each
-monitored service, host watch and installed app also reports `state: starting`
-until its first observation cycle has completed, except a service with fresh
-trusted process evidence may report `state: active` (process confirmed, not
-check health). Services still waiting for an
-`active` init backend complete settling on the first status probe (they surface
-as `failed` while inactive); checks and remediation wait until the backend is
-active.
-Only **installed** catalog applications with an active app-monitor participate in
-that settling registry; catalog entries whose binary is not present are omitted
-from `GET /api/applications` and never show `starting`. During settling, installed
-apps may appear with `state: starting` before their first app-watch cycle completes;
-during that window Sermo does not run service checks (while the backend is still
-inactive), and it suppresses alerts, hooks, notifications and automatic
-remediation on the first active observation cycle. During
-the startup grace period, the first-cycle settling, or while the daemon is shutting
-down, it returns **503**. To avoid a startup stampede the first cycle of the whole
-fleet is staggered across one `engine.interval` (the slow per-app cadence is used
-only after that first check); a **config reload does not re-gate** `/readyz` — the
-daemon stays `ready` and the web header/favicon do not return to the grey
-`starting` state. Newly added or changed monitored targets can still report
-`state: starting` individually until their first observation cycle completes. A
-plain request returns `ok` or `starting` / `shutting_down` as `text/plain`;
-`GET /readyz?verbose` returns JSON with `ready`, `status`, `backend`, `services`,
-`watches` (host watches plus installed-app monitors) and an optional `message`.
-Like `/livez`, only the plain probe is public; the verbose form follows normal
-read authentication when web auth is configured:
+finished `engine.startup_delay` (if any) **and every monitored target —
+services, host watches and installed apps — has completed its first cycle**, so
+the daemon actually has data rather than merely having launched. While settling,
+the verbose `message` reports progress (`starting: 3/10 monitored targets have
+reported`) and the web UI header shows `status: starting` with a neutral grey
+tab favicon. Each monitored service, host watch and installed app also reports
+`state: starting` until its first observation cycle has completed, except a
+service with fresh trusted process evidence may report `state: active` (process
+confirmed, not check health). Services still waiting for an `active` init
+backend complete settling on the first status probe (they surface as `failed`
+while inactive); checks and remediation wait until the backend is active.
+
+Only **installed** catalog applications with an active app-monitor participate
+in that settling registry; catalog entries whose binary is not present are
+omitted from `GET /api/applications` and never show `starting`. During settling,
+installed apps may appear with `state: starting` before their first app-watch
+cycle completes; during that window Sermo does not run service checks (while the
+backend is still inactive), and it suppresses alerts, hooks, notifications and
+automatic remediation on the first active observation cycle.
+
+During the startup grace period, the first-cycle settling, or while the daemon
+is shutting down, it returns **503**. To avoid a startup stampede the first
+cycle of the whole fleet is staggered across one `engine.interval` (the slow
+per-app cadence is used only after that first check); a **config reload does not
+re-gate** `/readyz` — the daemon stays `ready` and the web header/favicon do not
+return to the grey `starting` state. Newly added or changed monitored targets
+can still report `state: starting` individually until their first observation
+cycle completes.
+
+A plain request returns `ok` or `starting` / `shutting_down` as `text/plain`;
+`GET /readyz?verbose` returns JSON with `ready`, `status`, `backend`,
+`services`, `watches` (host watches plus installed-app monitors) and an optional
+`message`. Like `/livez`, only the plain probe is public; the verbose form
+follows normal read authentication when web auth is configured:
 
 ```sh
 curl -fsS http://127.0.0.1:9797/readyz                 # -> ok (when monitoring)
@@ -960,20 +968,22 @@ their process table and latency/CPU/memory/IO charts.
 
 Web-triggered monitor changes are recorded with source `web` in the state store;
 manual stops from the web UI or CLI use `web-manual-stop` / `cli-manual-stop`
-until a later successful start restores the previous monitored state. A successful
-storage `umount` pauses that storage watch with `web-mount-umount` or
+until a later successful start restores the previous monitored state. A
+successful storage `umount` pauses that storage watch with `web-mount-umount` or
 `cli-mount-umount`; a later successful `mount` restores it only when that umount
-created the pause. The dashboard and
-`GET /api/services` / `GET /api/watches` expose `state`, `monitored`,
-`monitor_source` and `monitor_changed_at` separately. A service can show
-`started` while its backend is active but monitoring is paused, `collecting`
-while monitoring is active but runtime/check/SLA indicators are still filling,
-and `monitored` only once those indicators are ready. Host watches do not have
-service-manager `started` or `stopped` states; their `state` is `disabled` when
-configuration or monitor state excludes them from active checks, `starting`
-before the first monitored sample, `failed` for an active failing condition, and
-`ok` otherwise. Their separate monitor flag is still exposed for actions and
-metadata.
+created the pause.
+
+The dashboard and `GET /api/services` / `GET /api/watches` expose `state`,
+`monitored`, `monitor_source` and `monitor_changed_at` separately. A service can
+show `started` while its backend is active but monitoring is paused,
+`collecting` while monitoring is active but runtime/check/SLA indicators are
+still filling, and `monitored` only once those indicators are ready. Host
+watches do not have service-manager `started` or `stopped` states; their `state`
+is `disabled` when configuration or monitor state excludes them from active
+checks, `starting` before the first monitored sample, `failed` for an active
+failing condition, and `ok` otherwise. Their separate monitor flag is still
+exposed for actions and metadata.
+
 Operations take the per-service operation lock, so they never overlap a worker's
 action on the same service. The state store also carries a short-lived
 operation-settling marker so `sermoctl`-initiated actions and web actions both
@@ -1662,40 +1672,42 @@ be combined with `then.notify_interval`.
 host-resource ones below (`storage`, `memory`, `pressure`, `load`, `fds`,
 `pids`, `conntrack`, `entropy`, `zombies`, `oom`, among others) *and* the
 service checks (`tcp`, `ports`, `http`, `command`, `file_exists`, `file`,
-`lockfile`, `binary`, `pidfile`, `socket`, `libraries`, `config`, `autofs`, `route`,
-`clock`, `firewall_rules`, `cert`, `sqlite`/`sqlite3`, `websocket`, `count`, and
-connection-protocol checks such as `mysql`/`smtp`) — can be used as a watch
-here, and
-the host-resource ones can equally be used in a service's check-only `watches:`
-entries or explicit `checks:`/rules (see [Checks](rules.md#checks)). A watch fires
-its hook on the check's **alert**
-outcome: threshold crossed for condition checks, **failure** for health checks
+`lockfile`, `binary`, `pidfile`, `socket`, `libraries`, `config`, `autofs`,
+`route`, `clock`, `firewall_rules`, `cert`, `sqlite`/`sqlite3`, `websocket`,
+`count`, and connection-protocol checks such as `mysql`/`smtp`) — can be used as
+a watch here, and the host-resource ones can equally be used in a service's
+check-only `watches:` entries or explicit `checks:`/rules (see
+[Checks](rules.md#checks)).
+
+A watch fires its hook on the check's **alert** outcome: threshold crossed for
+condition checks, **failure** for health checks
 (`tcp`/`http`/`firewall_rules`/`cert`/…), so e.g. an `http` watch alerts when
 the endpoint is down, a `firewall_rules` watch alerts when the loaded rule count
 is below `min_rules`, and a `cert` watch alerts when the certificate is invalid
-or expiring. The
-multi-metric (`net`, `icmp`, `swap`) watch shape below (a `metrics:` map, one
-hook per metric) and the multi-target (`file`, `process`) types are watch-only;
-the single-metric form of `net`/`icmp`/`swap` (an explicit `metric:` field) also
-works as a service check-only watch or explicit `checks:` entry (see
-[Checks](rules.md#checks)).
+or expiring. The multi-metric (`net`, `icmp`, `swap`) watch shape below (a
+`metrics:` map, one hook per metric) and the multi-target (`file`, `process`)
+types are watch-only; the single-metric form of `net`/`icmp`/`swap` (an explicit
+`metric:` field) also works as a service check-only watch or explicit `checks:`
+entry (see [Checks](rules.md#checks)).
+
 When the Web UI is enabled, `GET /api/watches` renders watch readings from the
 latest daemon watch cycle; it does not start its own command, network, SQL,
 firewall, count, disk I/O, `hdparm` or `smart` probes on each dashboard poll.
 The Web UI and `sermoctl watch probe` can request one explicit sample for
-configured `hdparm`, `lvm`, `raid` and `smart` host watches. `hdparm`, `lvm`
-and `raid` are read-only samples; a manual `smart` probe instead starts the
-device's short self-test with `smartctl --test=short DEVICE`. Its successful
-command acknowledgement means the self-test was scheduled, not that the drive
-is healthy; scheduled SMART cycles continue to read health and attributes with
-`smartctl -H -A -c -j`. While a self-test is in progress, the shared Web/CLI
-state is `testing`; later daemon samples clear it when the device reports that
-the test ended. RAID and LVM watches likewise surface device work as
-`testing`, `recovering`, `rebuilding`, `repairing`, `moving` or `merging`, with
-their reported progress where available. These are device-operation states, not
-health verdicts. The daemon records the probe and event for the shared Web/CLI
-view, but does not evaluate its watch window or run a rule, notifier, hook or
-remediation action.
+configured `hdparm`, `lvm`, `raid` and `smart` host watches. `hdparm`, `lvm` and
+`raid` are read-only samples; a manual `smart` probe instead starts the device's
+short self-test with `smartctl --test=short DEVICE`. Its successful command
+acknowledgement means the self-test was scheduled, not that the drive is
+healthy; scheduled SMART cycles continue to read health and attributes with
+`smartctl -H -A -c -j`.
+
+While a self-test is in progress, the shared Web/CLI state is `testing`; later
+daemon samples clear it when the device reports that the test ended. RAID and
+LVM watches likewise surface device work as `testing`, `recovering`,
+`rebuilding`, `repairing`, `moving` or `merging`, with their reported progress
+where available. These are device-operation states, not health verdicts. The
+daemon records the probe and event for the shared Web/CLI view, but does not
+evaluate its watch window or run a rule, notifier, hook or remediation action.
 
 ### Service watches (scoped to a service)
 
@@ -2608,9 +2620,10 @@ variable and have every `${var}` reference resolve to the new value.
   `delete: true`.
 
 Worked examples (cloning, disabling, multiple instances) live in
-[services](services.md#cloning).
-Catalog templates for installed versions/instances use `%v`, `%n` and `%i`; see
-[versioned services](services.md#versioned-services).
+[services](services.md#cloning). Catalog templates for installed
+versions/instances use `%v`, `%n` and `%i`; see [versioned
+services](services.md#versioned-services).
+
 When simple `%v` or `%n` templates also have an active-slot binary without a
 suffix, such as `php` next to `php8.4` or `python` next to `python3`, Sermo
 materializes that unversioned entry automatically. Composite templates with
@@ -2623,15 +2636,16 @@ collide with an explicit document in the same category; validation reports that
 as a configuration error. When a template uses `${current}`, inventory listings
 also mark a versioned entry as current when the active-slot wrapper and that
 entry report the same `version_short`.
+
 `versions.from` may be a backend-neutral path/list, or a map with `systemd` and
-`openrc` branches. Map branches are exclusive: Sermo selects only the active init
-backend from `engine.backend` or `SERMO_BACKEND`, falling back to detected
+`openrc` branches. Map branches are exclusive: Sermo selects only the active
+init backend from `engine.backend` or `SERMO_BACKEND`, falling back to detected
 `${init}`. Catalog service templates should put tokens in `service:` instead;
 active systemd/OpenRC units materialize their daemon instances for discovery.
 When a configured service explicitly names a materialized instance in `uses:`,
-that instance remains available while its unit is stopped or failed so validation
-and monitoring can report its state. Linked apps own binary discovery and
-validation.
+that instance remains available while its unit is stopped or failed so
+validation and monitoring can report its state. Linked apps own binary discovery
+and validation.
 
 ## Binary resource variables
 
