@@ -151,8 +151,16 @@ scripts-lint:
 	@echo "ruff check $(SCRIPT_PY)"
 	@$(LINT_PATH) $(RUFF) check $(SCRIPT_PY)
 
+# Documentation that describes the code must keep describing the code: cited
+# source paths, identifiers named by skills, the linter roll-call, operator
+# config keys and EN/ES parity. Each check exists because that drift reached the
+# repository at least once and no other tool in the gate can see it.
+docs-sync:
+	@echo "docs-sync"
+	@$(LINT_PATH) python3 scripts/docs_sync_check.py
+
 # Formatting and static analysis gates; make test and make check run this first.
-validate: modules-check lint actions-lint scripts-lint npm-audit yaml-validate markdown-check web-e2e
+validate: modules-check lint actions-lint scripts-lint npm-audit yaml-validate markdown-check docs-sync web-e2e
 
 test: validate
 	go test $(GO_PACKAGES)
