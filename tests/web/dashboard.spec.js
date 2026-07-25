@@ -117,8 +117,14 @@ function serviceDetail(name) {
     unit: `${name}.service`,
     interval: "30s",
     checks: [{ name: "latency", type: "http", ran: true, ok: true, message: "status 200", sla: [] }, ...namedMetrics],
-    processes: [{ pid: name === "web" ? 101 : 202, cmdline: [name], user: "root", role: "main", rss: 1048576 }],
-    process_totals: { count: 1, rss: 1048576, io_read: 0, io_write: 0, fds: 5, threads: 1 },
+    processes: [{
+      pid: name === "web" ? 101 : 202, cmdline: [name], user: "root", role: "main", rss: 1048576,
+      has_cpu: true, cpu: 96.25,
+    }],
+    process_totals: {
+      count: 1, rss: 1048576, io_read: 0, io_write: 0, fds: 5, threads: 1,
+      has_cpu: true, cpu: 12.5, cpu_thread: 96.25, num_cpu: 4,
+    },
     locks: [], rules: [], sla: [],
   };
 }
@@ -362,6 +368,21 @@ test("service detail graphs named check metrics and reports fetch failures", asy
   await failedMetricRequest;
   const dbMetric = page.locator('[data-service-detail="db"] [data-service-metric-check="users"][data-service-metric-name="count"]');
   await expect(dbMetric).toContainText("Failed to load users · count: HTTP 500");
+});
+
+test("service detail surfaces the daemon's cpu_thread beside the machine-wide rate", async ({ page }) => {
+  await page.locator("#svc-row-web .row-toggle").click();
+  const detail = page.locator('[data-service-detail="web"]');
+  const totals = detail.locator(".detail-totals");
+  // The whole-machine rate alone hides a single saturated worker, so the totals
+  // line carries process_totals.cpu_thread too.
+  await expect(totals).toContainText("cpu 12.5%");
+  await expect(totals).toContainText("core peak 96.25%");
+  // Process CPU is already single-core normalized, so it gets one column, not a
+  // percentage column plus an identical bar column.
+  const headers = detail.getByRole("table", { name: "Service processes" }).locator("thead th");
+  await expect(headers).toHaveCount(9);
+  await expect(headers.nth(4)).toHaveText("CPU");
 });
 
 test("service table re-renders preserve hydrated detail without more requests", async ({ page }) => {
