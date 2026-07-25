@@ -716,7 +716,9 @@ Notas de herramientas:
   - *Tests:*
     `testableexamples`, `thelper`, `tparallel`, `usetesting`
 
-  Salvedades del proyecto, todas codificadas en `.golangci.yml`: `dupword` y
+  Salvedades del proyecto, todas codificadas en `.golangci.yml`: `dupl` corre
+  con umbral de 70 tokens en vez de los 150 por defecto, y está desactivado en
+  `*_test.go`; `dupword` y
   `exhaustive` están desactivados en `*_test.go` (y un brazo `default:` cuenta
   como exhaustivo); `gocritic` ejecuta una lista curada, no el set por defecto;
   `interfacebloat` excluye `internal/web/server.go`; `depguard` impone las
