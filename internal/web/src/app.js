@@ -44,6 +44,18 @@ const globalTargetWatch = "watch";
 const globalTargetApplication = "application";
 const globalTargetLibrary = "library";
 const globalTargetMount = "mount";
+// Fallback category for a target whose configuration sets none. It becomes the
+// group heading, so each panel names its own — these are group labels, not the
+// globalTarget* search kinds above (storage mounts group under "storage").
+const defaultCategoryService = "service";
+const defaultCategoryWatch = "watch";
+const defaultCategoryStorage = "storage";
+const defaultCategoryApp = "app";
+const defaultCategoryLibrary = "library";
+// Key of the host watch panel in watch-panels.json. Distinct from
+// watchScopeHost, which is the daemon's `scope` value for a host-level watch:
+// same string, different vocabulary.
+const watchPanelKeyHost = "host";
 const eventDetailLimit = "50";
 const eventContextLimit = "1";
 const queryBoolOne = "1";
@@ -1455,7 +1467,7 @@ const dockerServiceCategory = "docker";
 const vmServiceCategory = "virtual-machine";
 
 function serviceSurfaceOf(s) {
-  const category = categoryOf(s, "service").toLowerCase();
+  const category = categoryOf(s, defaultCategoryService).toLowerCase();
   if (category === dockerServiceCategory) return serviceSurfaceContainer;
   if (category === vmServiceCategory) return serviceSurfaceVM;
   return serviceSurfaceRegular;
@@ -1572,7 +1584,7 @@ function openPanelTarget(target) {
     // declaration order, Watches as the fallback).
     openAllWatchPanels();
     setAllWatchStatuses(targetStateFailed);
-    let dest = $(getWatchPanel("host").section);
+    let dest = $(getWatchPanel(watchPanelKeyHost).section);
     for (const [key, panel] of Object.entries(watchPanels)) {
       const sec = $(panel.section);
       if (sec && panelVisible(sec) && (allWatches || []).some((w) => watchPanelKeyFor(w) === key && isWatchAttention(w))) {
@@ -1586,14 +1598,14 @@ function openPanelTarget(target) {
   if (target === "starting-watches") {
     openAllWatchPanels();
     setAllWatchStatuses(targetStateStarting);
-    const sec = $(getWatchPanel("host").section);
+    const sec = $(getWatchPanel(watchPanelKeyHost).section);
     sec && sec.scrollIntoView({ block: scrollBlockStart, behavior: scrollBehaviorSmooth });
     return;
   }
   if (target === "stale-watches") {
     openAllWatchPanels();
     setAllWatchStatuses(targetStateStale);
-    const sec = $(getWatchPanel("host").section);
+    const sec = $(getWatchPanel(watchPanelKeyHost).section);
     sec && sec.scrollIntoView({ block: scrollBlockStart, behavior: scrollBehaviorSmooth });
     return;
   }
@@ -1661,12 +1673,12 @@ function clearGlobalTargetFilters(target) {
       if (panel) {
         panel.query = "";
         panel.status = filterAll;
-        panel.collapsedGroups.delete(categoryOf(target.item, "service"));
+        panel.collapsedGroups.delete(categoryOf(target.item, defaultCategoryService));
       } else {
         svcQuery = "";
         svcStatus = filterAll;
         svcCategory = filterAll;
-        svcCollapsedGroups.delete(categoryOf(target.item, "service"));
+        svcCollapsedGroups.delete(categoryOf(target.item, defaultCategoryService));
       }
       renderServices();
       break;
@@ -1684,21 +1696,21 @@ function clearGlobalTargetFilters(target) {
       appQuery = "";
       appStatus = filterAll;
       appCategory = filterAll;
-      appCollapsedGroups.delete(categoryOf(target.item, "app"));
+      appCollapsedGroups.delete(categoryOf(target.item, defaultCategoryApp));
       renderApps();
       break;
     case globalTargetLibrary:
       libraryQuery = "";
       libraryStatus = filterAll;
       libraryCategory = filterAll;
-      libraryCollapsedGroups.delete(categoryOf(target.item, "library"));
+      libraryCollapsedGroups.delete(categoryOf(target.item, defaultCategoryLibrary));
       renderLibraries();
       break;
     case globalTargetMount:
       mountQuery = "";
       mountStatus = filterAll;
       mountCategory = filterAll;
-      mountCollapsedGroups.delete(categoryOf(target.item, "storage"));
+      mountCollapsedGroups.delete(categoryOf(target.item, defaultCategoryStorage));
       renderMounts();
       break;
   }
@@ -2082,7 +2094,7 @@ function serviceQueryMatches(s, query, category) {
 
 function serviceMatches(s) {
   if (serviceSurfaceOf(s) !== serviceSurfaceRegular) return false;
-  const category = categoryOf(s, "service");
+  const category = categoryOf(s, defaultCategoryService);
   if (svcCategory !== filterAll && category !== svcCategory) return false;
   return serviceQueryMatches(s, svcQuery, category) && serviceStatusMatches(s, svcStatus);
 }
@@ -2095,7 +2107,7 @@ function getSplitServicePanel(panelKey) {
 }
 
 function splitServiceMatches(s, panel) {
-  const category = categoryOf(s, "service");
+  const category = categoryOf(s, defaultCategoryService);
   return serviceQueryMatches(s, panel.query, category) && serviceStatusMatches(s, panel.status);
 }
 
@@ -2232,7 +2244,7 @@ function syncFilterButtons(selector, datasetKey, activeValue) {
 // sorts by it (ascending), and clicking the same header again flips direction.
 const svcSortKeys = {
   name: (s) => displayName(s).toLowerCase(),
-  category: (s) => categoryOf(s, "service").toLowerCase(),
+  category: (s) => categoryOf(s, defaultCategoryService).toLowerCase(),
   state: (s) => stateRank(serviceDisplayState(s)),
   uptime: (s) => numericSortValue(s && s.uptime_seconds),
   cpu: (s) => (s && s.cpu_ready) ? numericSortValue(s.cpu) : 0,
@@ -2302,7 +2314,7 @@ function setSvcGrouped(v) {
 
 function toggleAllSvcGroups() {
   const list = (allServices || []).filter(serviceMatches);
-  const categories = sortedCategories(list, "service");
+  const categories = sortedCategories(list, defaultCategoryService);
   toggleAllGroups(categories, svcCollapsedGroups);
   renderServices();
   saveUIState();
@@ -2410,7 +2422,7 @@ function serviceActionButton(s, action, busy, compact = false, title = "") {
 // Shared by the full tbody rebuild and the large-fleet in-place patch path.
 function serviceRowParts(s, opts = {}) {
   const state = serviceState(s);
-  const category = categoryOf(s, "service");
+  const category = categoryOf(s, defaultCategoryService);
   const label = displayName(s);
   const op = liveOps.get(s.name);
   const busy = serviceBusy(s.name);
@@ -2525,12 +2537,12 @@ function renderPrimaryServices() {
     if (cnt) cnt.textContent = "";
     return;
   }
-  svcCategory = syncCategorySelect("#svc-category", source, "service", svcCategory);
+  svcCategory = syncCategorySelect("#svc-category", source, defaultCategoryService, svcCategory);
   renderFilterCounts(source);
   const list = source.filter(serviceMatches);
   sortServiceList(list, svcSort);
   updateSortIndicators();
-  const visibleCategories = sortedCategories(list, "service");
+  const visibleCategories = sortedCategories(list, defaultCategoryService);
   svcCollapsedGroups.forEach((category) => { if (!visibleCategories.includes(category)) svcCollapsedGroups.delete(category); });
   if (visibleCategories.length < 2) svcGrouped = false;
   updateGroupButtons("svc", svcGrouped, visibleCategories, svcCollapsedGroups, "services");
@@ -2543,7 +2555,7 @@ function renderPrimaryServices() {
       : tpl`<tr><td colspan="10" class="muted">No services.</td></tr>`;
   } else {
     content = svcGrouped
-      ? renderGroupedRows(list, svcCollapsedGroups, "svc", "svc", (s) => categoryOf(s, "service"), 10, (s) => serviceRowHTML(s), svcSort.key === "category" ? svcSort.dir : 1)
+      ? renderGroupedRows(list, svcCollapsedGroups, "svc", "svc", (s) => categoryOf(s, defaultCategoryService), 10, (s) => serviceRowHTML(s), svcSort.key === "category" ? svcSort.dir : 1)
       : list.flatMap((s) => serviceRowHTML(s));
   }
   litRender(content, rows);
@@ -2571,7 +2583,7 @@ function renderSplitServicePanel(panelKey) {
   const list = source.filter((s) => splitServiceMatches(s, panel));
   sortServiceList(list, panel.sort);
   updateSortIndicatorsFor(panel.sortIndicator, panel.sort, `${panel.section} .services-table th.sortable[data-${panel.sortAttr}]`, panel.sortDataset);
-  const groups = sortedCategories(list, "service");
+  const groups = sortedCategories(list, defaultCategoryService);
   panel.collapsedGroups.forEach((group) => { if (!groups.includes(group)) panel.collapsedGroups.delete(group); });
   if (groups.length < 2) panel.grouped = false;
   updateGroupButtons(panelKey, panel.grouped, groups, panel.collapsedGroups, panel.label);
@@ -2579,7 +2591,7 @@ function renderSplitServicePanel(panelKey) {
   const filtered = servicePanelFilterActive(panel.query, panel.status);
   const content = list.length
     ? (panel.grouped
-      ? renderGroupedRows(list, panel.collapsedGroups, panelKey, "svc", (s) => categoryOf(s, "service"), 10, (s) => serviceRowHTML(s, { showResume: true }), panel.sort.key === "category" ? panel.sort.dir : 1)
+      ? renderGroupedRows(list, panel.collapsedGroups, panelKey, "svc", (s) => categoryOf(s, defaultCategoryService), 10, (s) => serviceRowHTML(s, { showResume: true }), panel.sort.key === "category" ? panel.sort.dir : 1)
       : list.flatMap((s) => serviceRowHTML(s, { showResume: true })))
     : tpl`<tr><td colspan="10" class="muted">${filtered ? panel.emptyFiltered : panel.empty}</td></tr>`;
   litRender(content, rows);
@@ -3483,7 +3495,7 @@ function renderServiceDetail(d) {
   const general = tpl`<h2>General data</h2>
     <div class="runtime-grid">
       <div><span class="muted">State</span><br>${serviceStateCell(d)}</div>
-      <div><span class="muted">Category</span><br>${categoryBadge(categoryOf(d, "service"))}</div>
+      <div><span class="muted">Category</span><br>${categoryBadge(categoryOf(d, defaultCategoryService))}</div>
       <div><span class="muted">Unit</span><br>${unitCell(d)}</div>
       <div><span class="muted">Backend</span><br>${d.backend || "—"}</div>
       <div><span class="muted">Uptime</span><br>${serviceUptimeCell(d)}</div>
@@ -3761,7 +3773,7 @@ function watchSummaryText(w) {
 
 function watchSearchText(w) {
   const conditions = (w.conditions || []).map((c) => `${c.field || ""} ${c.op || ""} ${c.value || ""}`).join(" ");
-  const category = categoryOf(w, "watch");
+  const category = categoryOf(w, defaultCategoryWatch);
   return [
     displayName(w),
     w.name,
@@ -3793,7 +3805,7 @@ function getWatchPanel(panel) {
 // filter by check_type; a panel can override with typeOf (e.g. Storage filters
 // by filesystem type since all its watches share one check_type).
 function watchTypeValue(panel, w) {
-  if (panel.key === "host") return watchGroupOf(w);
+  if (panel.key === watchPanelKeyHost) return watchGroupOf(w);
   return (panel.typeOf ? panel.typeOf(w) : w.check_type) || "";
 }
 
@@ -3946,7 +3958,7 @@ function updateWatchSortIndicators(panelKey) {
 }
 
 function watchPanelKeyFor(_watch) {
-  return "host";
+  return watchPanelKeyHost;
 }
 
 // watchPanelKeyForElement reads the panel key straight from the enclosing
@@ -3954,7 +3966,7 @@ function watchPanelKeyFor(_watch) {
 function watchPanelKeyForElement(el) {
   const details = el && el.closest("details[data-panel]");
   const key = details ? details.dataset.panel : "";
-  return watchPanels[key] ? key : "host";
+  return watchPanels[key] ? key : watchPanelKeyHost;
 }
 
 function renderConditionRows(conditions) {
@@ -4062,8 +4074,8 @@ function watchScope(w) {
 function watchGroupOf(w) {
   const type = String((w && w.check_type) || "").toLowerCase();
   if (storageWatchTypes.has(type)) return "Storage";
-  if (networkWatchTypes.has(type) || categoryOf(w, "watch").toLowerCase() === "network") return "Network";
-  if (securityWatchTypes.has(type) || categoryOf(w, "watch").toLowerCase() === "security") return "Security";
+  if (networkWatchTypes.has(type) || categoryOf(w, defaultCategoryWatch).toLowerCase() === "network") return "Network";
+  if (securityWatchTypes.has(type) || categoryOf(w, defaultCategoryWatch).toLowerCase() === "security") return "Security";
   return "System";
 }
 
@@ -4511,7 +4523,7 @@ function renderWatches(watches) {
   if (watches) allWatches = watches;
   scheduleGlobalTargetSync();
   preserveExpansionCells(isWatchExpansionKey);
-  renderWatchPanel("host", allWatches || []);
+  renderWatchPanel(watchPanelKeyHost, allWatches || []);
   reassertExpansions();
   applyHash();
   updateSectionNav();
@@ -4564,7 +4576,7 @@ function renderWatchPanel(panelKey, watches) {
 // ---- Installed applications ----------------------------------------------
 const appSortKeys = {
   name: (a) => displayName(a).toLowerCase(),
-  category: (a) => categoryOf(a, "app").toLowerCase(),
+  category: (a) => categoryOf(a, defaultCategoryApp).toLowerCase(),
   state: appStateRank,
   version: (a) => (a.version_short || a.version || "").toLowerCase(),
   last: lastEventTime,
@@ -4763,7 +4775,7 @@ async function refreshExpandedApplications(generation = dashboardGeneration) {
 // ---- Installed libraries --------------------------------------------------
 const librarySortKeys = {
   name: (library) => displayName(library).toLowerCase(),
-  category: (library) => categoryOf(library, "library").toLowerCase(),
+  category: (library) => categoryOf(library, defaultCategoryLibrary).toLowerCase(),
   state: appStateRank,
   version: (library) => (library.version_short || library.version || "").toLowerCase(),
 };
@@ -4946,7 +4958,7 @@ function renderWatchExpansion(w, events) {
   const hook = (w.hook_command || []).length
     ? tpl`<code>${(w.hook_command || []).join(" ")}</code>`
     : (w.has_hook ? tpl`<span class="muted">configured</span>` : tpl`<span class="muted">none</span>`);
-  const category = categoryOf(w, "watch");
+  const category = categoryOf(w, defaultCategoryWatch);
   const cfg = tpl`<div class="watch-grid">
     <div><span class="muted">Scope</span><br><b>${watchScope(w)}</b></div>
     <div><span class="muted">Type</span><br><b>${w.check_type || ""}</b></div>
@@ -5085,7 +5097,7 @@ function mountPathCell(m) {
 
 const mountSortKeys = {
   name: (m) => displayName(m).toLowerCase(),
-  category: (m) => categoryOf(m, "storage").toLowerCase(),
+  category: (m) => categoryOf(m, defaultCategoryStorage).toLowerCase(),
   path: (m) => (m.path || "").toLowerCase(),
   mounted: (m) => mountStateRank(m),
   refcount: (m) => numericSortValue(m && m.refcount),
@@ -5099,7 +5111,7 @@ function setMountQuery(v) { mountQuery = (v || "").trim().toLowerCase(); renderM
 function setMountCategory(v) { mountCategory = v || filterAll; renderMounts(); saveUIState(); }
 function setMountGrouped(grouped) { mountGrouped = !!grouped; renderMounts(); saveUIState(); }
 function toggleAllMountGroups() {
-  toggleAllGroups(sortedCategories((allMounts || []).filter(mountMatches), "storage"), mountCollapsedGroups);
+  toggleAllGroups(sortedCategories((allMounts || []).filter(mountMatches), defaultCategoryStorage), mountCollapsedGroups);
   renderMounts();
   saveUIState();
 }
@@ -5111,7 +5123,7 @@ function setMountStatus(v) {
 }
 
 function mountMatches(m) {
-  const category = categoryOf(m, "storage");
+  const category = categoryOf(m, defaultCategoryStorage);
   if (mountCategory !== filterAll && category !== mountCategory) return false;
   if (mountStatus !== filterAll && mountStateText(m) !== mountStatus && mountBaseStateText(m) !== mountStatus) return false;
   if (!mountQuery) return true;
@@ -5127,7 +5139,7 @@ function renderMountFilterCounts() {
 }
 
 function syncMountCategorySelect() {
-  return syncCategorySelect("#mount-category", allMounts || [], "storage", mountCategory, "all groups");
+  return syncCategorySelect("#mount-category", allMounts || [], defaultCategoryStorage, mountCategory, "all groups");
 }
 
 function updateMountSortIndicators() {
@@ -5136,7 +5148,7 @@ function updateMountSortIndicators() {
 
 function mountRowHTML(m) {
   const label = esc(m.display_name || m.name);
-  const category = categoryOf(m, "storage");
+  const category = categoryOf(m, defaultCategoryStorage);
   const mounted = !!m.mounted;
   const state = mountStateText(m);
   const detail = m.message ? ` title="${esc(m.message)}"` : "";
@@ -5161,7 +5173,7 @@ function mountRowHTML(m) {
 function renderGroupedMountRows(list) {
   const groups = new Map();
   list.forEach((mount) => {
-    const group = categoryOf(mount, "storage");
+    const group = categoryOf(mount, defaultCategoryStorage);
     if (!groups.has(group)) groups.set(group, []);
     groups.get(group).push(mount);
   });
@@ -5202,7 +5214,7 @@ function renderMounts(mounts) {
     sortedBy(list, mountSort, mountSortKeys, "name");
   }
   updateMountSortIndicators();
-  const groups = sortedCategories(list, "storage");
+  const groups = sortedCategories(list, defaultCategoryStorage);
   mountCollapsedGroups.forEach((group) => { if (!groups.includes(group)) mountCollapsedGroups.delete(group); });
   if (groups.length < 2) mountGrouped = false;
   updateGroupButtons("mount", mountGrouped, groups, mountCollapsedGroups, "mount units", "group");
@@ -7042,7 +7054,7 @@ function initStaticHandlers() {
     bindActionClick($("#" + panelKey + "-groups-toggle"), () => toggleAllWatchGroups(panelKey));
     bindFilterButtons($(panel.filters), "wf", (v) => setWatchStatus(panelKey, v));
   }
-  ["host"].forEach(bindWatchPanelControls);
+  [watchPanelKeyHost].forEach(bindWatchPanelControls);
 
   document.querySelectorAll(".watch-table th.sortable[data-watch-sort]").forEach((th) => {
     bindSortHeader(th, () => setWatchSort(watchPanelKeyForElement(th), th.dataset.watchSort || ""));
@@ -7123,7 +7135,7 @@ function initStaticHandlers() {
 function initDelegatedHandlers() {
   document.addEventListener(domEventChange, (e) => {
     const typeFilter = closestFrom(e, "[data-watch-type-filter-panel][data-watch-type-filter]");
-    if (typeFilter) setWatchTypeFilter(typeFilter.dataset.watchTypeFilterPanel || "host", typeFilter.dataset.watchTypeFilter || "", typeFilter.value);
+    if (typeFilter) setWatchTypeFilter(typeFilter.dataset.watchTypeFilterPanel || watchPanelKeyHost, typeFilter.dataset.watchTypeFilter || "", typeFilter.value);
   });
 
   // Delegated click routes: the first selector matching an ancestor of the
@@ -7153,7 +7165,7 @@ function initDelegatedHandlers() {
       }
     }],
     ["[data-watch-type-sort-panel][data-watch-type-sort-type][data-watch-type-sort]",
-      (el) => setWatchTypeSort(el.dataset.watchTypeSortPanel || "host", el.dataset.watchTypeSortType || "", el.dataset.watchTypeSort || "name")],
+      (el) => setWatchTypeSort(el.dataset.watchTypeSortPanel || watchPanelKeyHost, el.dataset.watchTypeSortType || "", el.dataset.watchTypeSort || "name")],
     ["[data-group-panel][data-group-name]", (el) => toggleGroup(el.dataset.groupPanel || "", el.dataset.groupName || "")],
     ["[data-exp-toggle]", (el) => toggleExpand(el.dataset.expToggle || "")],
   ];
@@ -7176,7 +7188,7 @@ function initDelegatedHandlers() {
     const typeSort = closestFrom(e, "[data-watch-type-sort-panel][data-watch-type-sort-type][data-watch-type-sort]");
     if (!typeSort) return;
     e.preventDefault();
-    setWatchTypeSort(typeSort.dataset.watchTypeSortPanel || "host", typeSort.dataset.watchTypeSortType || "", typeSort.dataset.watchTypeSort || "name");
+    setWatchTypeSort(typeSort.dataset.watchTypeSortPanel || watchPanelKeyHost, typeSort.dataset.watchTypeSortType || "", typeSort.dataset.watchTypeSort || "name");
   });
 }
 
