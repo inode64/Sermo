@@ -29,6 +29,39 @@ bases de datos, cachés y colas pueden llevar ajustes de `policy` locales más
 estrictos que los valores por defecto globales, con cooldowns más largos, rate
 limits y backoff para evitar bucles de reinicio.
 
+## Contenido
+
+- [Categorías](#categorías)
+- [Servicios de librería](#servicios-de-librería)
+- [Reload al cambiar la configuración (reload_on_change)](#reload-al-cambiar-la-configuración-reload_on_change)
+  - [Reload nativo (reload:) — cuando el init no puede, Sermo sí](#reload-nativo-reload--cuando-el-init-no-puede-sermo-sí)
+- [Dependencias de app (apps)](#dependencias-de-app-apps)
+- [Campos de metadatos](#campos-de-metadatos)
+  - [Variables integradas](#variables-integradas)
+  - [Bloques específicos de OS (os:)](#bloques-específicos-de-os-os)
+  - [control: libvirt — máquinas virtuales QEMU/libvirt](#control-libvirt--máquinas-virtuales-qemulibvirt)
+  - [control: docker — contenedores Docker](#control-docker--contenedores-docker)
+  - [also_service — unidades init auxiliares](#also_service--unidades-init-auxiliares)
+  - [also_apply — cascada a otros servicios](#also_apply--cascada-a-otros-servicios)
+  - [processes: por ejecutable o cmdline](#processes-por-ejecutable-o-cmdline)
+  - [Invariantes de estado parado (stop_policy)](#invariantes-de-estado-parado-stop_policy)
+  - [Atajo pidfile: y pidfiles: (selectores + health checks)](#atajo-pidfile-y-pidfiles-selectores--health-checks)
+  - [Atajo socket: (health check controlado)](#atajo-socket-health-check-controlado)
+  - [Atajo lockfile: (health check controlado)](#atajo-lockfile-health-check-controlado)
+- [Servicios versionados](#servicios-versionados)
+  - [Placeholders de entero e instancia](#placeholders-de-entero-e-instancia)
+  - [Nombres compuestos con un separador (%s)](#nombres-compuestos-con-un-separador-s)
+  - [Descubrimiento propiedad del servicio](#descubrimiento-propiedad-del-servicio)
+  - [Componentes opcionales (enable_if)](#componentes-opcionales-enable_if)
+  - [Variables leídas desde un fichero de config (from_file)](#variables-leídas-desde-un-fichero-de-config-from_file)
+  - [Listar aplicaciones instaladas](#listar-aplicaciones-instaladas)
+- [Unidad de servicio](#unidad-de-servicio)
+- [Clonado](#clonado)
+- [Múltiples instancias de una aplicación](#múltiples-instancias-de-una-aplicación)
+- [Deshabilitar y borrar entradas heredadas](#deshabilitar-y-borrar-entradas-heredadas)
+- [Flag de monitorización](#flag-de-monitorización)
+- [Comandos auxiliares](#comandos-auxiliares)
+
 ## Categorías
 
 Los documentos de catálogo se agrupan por el subdirectorio en el que viven bajo la

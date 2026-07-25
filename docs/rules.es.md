@@ -1,5 +1,34 @@
 # Comprobaciones, condiciones y reglas
 
+## Contenido
+
+- [Comprobaciones](#comprobaciones)
+  - [Condiciones de salud del servicio (versión / estado / configuración)](#condiciones-de-salud-del-servicio-versión--estado--configuración)
+  - [Interfaz de salida (interface)](#interfaz-de-salida-interface)
+  - [Interdependencias de comprobaciones (requires / skip_when_changed)](#interdependencias-de-comprobaciones-requires--skip_when_changed)
+  - [Ports](#ports)
+  - [HTTP](#http)
+  - [Cert](#cert)
+  - [Conexión a base de datos (mysql / mariadb)](#conexión-a-base-de-datos-mysql--mariadb)
+  - [Integridad SQLite (sqlite / sqlite3)](#integridad-sqlite-sqlite--sqlite3)
+  - [Consulta SQL (sql)](#consulta-sql-sql)
+  - [Consulta MongoDB (mongodb-query)](#consulta-mongodb-mongodb-query)
+  - [Consulta InfluxDB (influxdb-query)](#consulta-influxdb-influxdb-query)
+  - [Crecimiento de tamaño (size)](#crecimiento-de-tamaño-size)
+  - [WebSocket (websocket)](#websocket-websocket)
+  - [Deriva de reloj (clock)](#deriva-de-reloj-clock)
+  - [Ruta por defecto (route)](#ruta-por-defecto-route)
+  - [Reglas de firewall (firewall_rules)](#reglas-de-firewall-firewall_rules)
+  - [Rendimiento de disco (hdparm)](#rendimiento-de-disco-hdparm)
+  - [Sensores de hardware](#sensores-de-hardware)
+  - [Autofs](#autofs)
+  - [Count](#count)
+- [Métricas](#métricas)
+- [Reglas](#reglas)
+  - [Ventanas](#ventanas)
+  - [Guards](#guards)
+- [Política de remediación](#política-de-remediación)
+
 ## Comprobaciones
 
 Las comprobaciones son sondas de un solo disparo bajo `checks` (y `preflight`,

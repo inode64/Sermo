@@ -17,6 +17,30 @@ Keep changes concrete:
 including global search, compact row actions, per-service graph state, viewport
 overflow and axe WCAG 2.2 AA rules against deterministic API fixtures.
 
+## Contents
+
+- [Global rules](#global-rules)
+- [Data sources](#data-sources)
+- [Action Endpoints](#action-endpoints)
+- [Top bar](#top-bar)
+- [Overview tiles](#overview-tiles)
+- [Attention required](#attention-required)
+- [Live operations](#live-operations)
+- [Services panel](#services-panel)
+- [Containers and virtual machines panels](#containers-and-virtual-machines-panels)
+- [Service row expansion](#service-row-expansion)
+- [Installed applications panel](#installed-applications-panel)
+- [Installed libraries panel](#installed-libraries-panel)
+- [Mount units panel](#mount-units-panel)
+- [Watch panel](#watch-panel)
+- [Events panel](#events-panel)
+- [Notifiers panel](#notifiers-panel)
+- [Daemon / Engine settings panel](#daemon--engine-settings-panel)
+  - [Panic mode](#panic-mode)
+- [Runtime locks panel](#runtime-locks-panel)
+- [Action confirmation dialog](#action-confirmation-dialog)
+- [Change template](#change-template)
+
 ## Global rules
 
 - The Web UI is one embedded document: `internal/web/index.html`.

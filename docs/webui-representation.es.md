@@ -18,6 +18,30 @@ incluyendo búsqueda global, acciones compactas por fila, estado de gráficas po
 servicio, desbordamiento del viewport y reglas axe WCAG 2.2 AA contra fixtures
 deterministas de la API.
 
+## Contenido
+
+- [Reglas globales](#reglas-globales)
+- [Fuentes de datos](#fuentes-de-datos)
+- [Endpoints de acción](#endpoints-de-acción)
+- [Barra superior](#barra-superior)
+- [Tarjetas de resumen](#tarjetas-de-resumen)
+- [Atención requerida](#atención-requerida)
+- [Operaciones en vivo](#operaciones-en-vivo)
+- [Panel de servicios](#panel-de-servicios)
+- [Paneles de contenedores y máquinas virtuales](#paneles-de-contenedores-y-máquinas-virtuales)
+- [Expansión de fila de servicio](#expansión-de-fila-de-servicio)
+- [Panel de aplicaciones instaladas](#panel-de-aplicaciones-instaladas)
+- [Panel de librerías instaladas](#panel-de-librerías-instaladas)
+- [Panel de unidades de montaje](#panel-de-unidades-de-montaje)
+- [Panel de watches](#panel-de-watches)
+- [Panel de eventos](#panel-de-eventos)
+- [Panel de notifiers](#panel-de-notifiers)
+- [Panel de configuración de daemon / engine](#panel-de-configuración-de-daemon--engine)
+  - [Modo pánico](#modo-pánico)
+- [Panel de locks de runtime](#panel-de-locks-de-runtime)
+- [Diálogo de confirmación de acción](#diálogo-de-confirmación-de-acción)
+- [Plantilla de cambio](#plantilla-de-cambio)
+
 ## Reglas globales
 
 - La interfaz web es un único documento embebido: `internal/web/index.html`.
