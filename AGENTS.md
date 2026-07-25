@@ -714,6 +714,13 @@ Tool notes:
   intentional `0644` writes, bounded `args[i]` reads, shutdown-context `G118`)
   are suppressed at the call site with `//nolint:gosec` plus a justifying
   comment — prefer that over widening the config.
+- **`make docs-sync`** checks the documentation against the code it describes:
+  every source path a document cites exists, every Go identifier a skill names
+  exists, AGENTS.md names every linter `.golangci.yml` enables, every
+  operator-writable config key appears in `docs/`, and the EN/ES pairs agree on
+  headings and on every number. Each check was added after that exact drift
+  reached the repository; no other tool in the gate can see it. Add a check
+  there when you find a new class of doc/code drift.
 - **`make npm-audit`** is the JavaScript counterpart of `govulncheck`: it fails
   the gate on a `high` or `critical` advisory anywhere in the npm tree,
   dev dependencies included — they run in CI and on developer machines, so a

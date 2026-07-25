@@ -721,6 +721,14 @@ Notas de herramientas:
   acotadas `args[i]`, `G118` de contexto de shutdown) se suprimen en el call
   site con `//nolint:gosec` más un comentario justificativo — prefiere eso sobre
   ampliar la config.
+- **`make docs-sync`** contrasta la documentación con el código que describe:
+  toda ruta citada existe, todo identificador Go nombrado por una skill existe,
+  AGENTS.md nombra todos los linters que habilita `.golangci.yml`, toda clave de
+  configuración escribible por el operador aparece en `docs/`, y las parejas
+  EN/ES coinciden en titulares y en todas las cifras. Cada comprobación se
+  añadió después de que esa deriva concreta llegara al repositorio; ninguna otra
+  herramienta del gate la ve. Añade una cuando encuentres una clase nueva de
+  deriva entre documentación y código.
 - **`make npm-audit`** es el equivalente JavaScript de `govulncheck`: hace
   fallar el gate ante un aviso `high` o `critical` en cualquier punto del árbol
   npm, dependencias de desarrollo incluidas — se ejecutan en CI y en las
