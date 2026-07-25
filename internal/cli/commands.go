@@ -57,10 +57,8 @@ const (
 )
 
 const (
-	commandPanicEnable  = "enable"
-	commandPanicDisable = "disable"
-	commandPanicOn      = "on"
-	commandPanicOff     = "off"
+	commandPanicOn  = "on"
+	commandPanicOff = "off"
 )
 
 const (
