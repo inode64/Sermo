@@ -270,8 +270,8 @@ Estado ejecutado:
 
 - `internal/notify/webhook.go` usa constantes locales para divisor de clase HTTP
   y clase de exito.
-- `internal/checks/types.go` usa una constante local para calcular la clase de
-  estado en `statusMatcher`.
+- `internal/checks/httpcheck.go` usa la constante local `httpStatusClassDivisor`
+  para calcular la clase de estado en `statusMatcher`.
 - Validacion ejecutada: `go test ./internal/notify ./internal/checks` y
   `make check` pasan.
 
