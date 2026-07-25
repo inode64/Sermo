@@ -47,10 +47,7 @@ type routeCheck struct {
 
 func (c routeCheck) Run(_ context.Context) Result {
 	start := time.Now()
-	sampler := c.sampler
-	if sampler == nil {
-		sampler = defaultRouteSampler
-	}
+	sampler := keyedSamplerOr(c.sampler, defaultRouteSampler)
 	routes, err := sampler(c.family)
 	if err != nil {
 		return c.result(false, "route: "+err.Error(), start)

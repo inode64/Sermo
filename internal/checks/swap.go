@@ -57,10 +57,7 @@ type swapCheck struct {
 
 func (c *swapCheck) Run(_ context.Context) Result {
 	start := time.Now()
-	sampler := c.sampler
-	if sampler == nil {
-		sampler = defaultSwapSampler
-	}
+	sampler := samplerOr(c.sampler, defaultSwapSampler)
 	s, err := sampler()
 	if err != nil {
 		return c.result(false, "swap: "+err.Error(), start)

@@ -60,10 +60,7 @@ type pressureCheck struct {
 
 func (c pressureCheck) Run(_ context.Context) Result {
 	start := time.Now()
-	sampler := c.sampler
-	if sampler == nil {
-		sampler = defaultPressureSampler
-	}
+	sampler := keyedSamplerOr(c.sampler, defaultPressureSampler)
 	s, err := sampler(c.resource)
 	if err != nil {
 		// A kernel without PSI (CONFIG_PSI=n) never fires, mirroring the

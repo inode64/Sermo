@@ -37,10 +37,7 @@ type autofsCheck struct {
 
 func (c autofsCheck) Run(_ context.Context) Result {
 	start := time.Now()
-	sampler := c.sampler
-	if sampler == nil {
-		sampler = defaultMountSampler
-	}
+	sampler := samplerOr(c.sampler, defaultMountSampler)
 	mounts, err := sampler()
 	if err != nil {
 		return c.result(false, "autofs: "+err.Error(), start)

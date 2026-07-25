@@ -24,10 +24,7 @@ type usersCheck struct {
 
 func (c usersCheck) Run(_ context.Context) Result {
 	start := time.Now()
-	sampler := c.sampler
-	if sampler == nil {
-		sampler = defaultUsersSampler
-	}
+	sampler := samplerOr(c.sampler, defaultUsersSampler)
 	n, err := sampler()
 	if err != nil {
 		return c.result(false, "users: "+err.Error(), start)
