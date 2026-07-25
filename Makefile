@@ -137,6 +137,13 @@ web-lint:
 web-e2e: web-check web-lint
 	@$(PLAYWRIGHT) test
 
+# Known vulnerabilities in the npm dependency tree, the JavaScript counterpart
+# of govulncheck. Dev dependencies are in scope: they run in CI and on developer
+# machines, and a build-time tool is still an attack surface.
+npm-audit:
+	@echo "npm audit"
+	@npm audit --audit-level=high
+
 # Shell and Python helper scripts (deploy, mutation, YAML normalization).
 scripts-lint:
 	@echo "shellcheck $(SCRIPT_SH)"
@@ -145,7 +152,7 @@ scripts-lint:
 	@$(LINT_PATH) $(RUFF) check $(SCRIPT_PY)
 
 # Formatting and static analysis gates; make test and make check run this first.
-validate: modules-check lint actions-lint scripts-lint yaml-validate markdown-check web-e2e
+validate: modules-check lint actions-lint scripts-lint npm-audit yaml-validate markdown-check web-e2e
 
 test: validate
 	go test $(GO_PACKAGES)
