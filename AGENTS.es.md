@@ -709,15 +709,18 @@ Notas de herramientas:
   excluye los builders de checks/notify, el registro conn, los constructores de
   managers y fábricas similares; `noctx` está desactivado en `internal/conn/` y
   `*_test.go`; `goconst` exige cuatro apariciones antes de pedir una constante.
+
   El `database/sql` de producción en `internal/state` usa métodos `*Context` con
   `sqlCtx()` (ctx de `OpenContext` / `context.Background()` vía `Open`).
   `contextcheck` está desactivado en `internal/state/` y en los CLI que tocan el
   store porque el linter no sigue el contexto embebido.
-  Las excepciones aceptadas de gosec viven en esa config: `G115`, y en fixtures de test
-  `G306`/`G101`/`G703`. Los casos by-design (`G204` comandos configurados por el operador,
-  escrituras `0644` intencionales, lecturas acotadas `args[i]`, `G118` de contexto de shutdown)
-  se suprimen en el call site con `//nolint:gosec` más un comentario
-  justificativo — prefiere eso sobre ampliar la config.
+
+  Las excepciones aceptadas de gosec viven en esa config: `G115`, y en fixtures
+  de test `G306`/`G101`/`G703`. Los casos by-design (`G204` comandos
+  configurados por el operador, escrituras `0644` intencionales, lecturas
+  acotadas `args[i]`, `G118` de contexto de shutdown) se suprimen en el call
+  site con `//nolint:gosec` más un comentario justificativo — prefiere eso sobre
+  ampliar la config.
 - **`make scripts-lint`** ejecuta `shellcheck` en `scripts/*.sh` y
   `scripts/remote-deploy/*.sh`, y luego `ruff check` en los helpers Python bajo
   `scripts/`. Forma parte de `validate`/`check`.
