@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"io"
 	"net/http"
 	"strconv"
 )
@@ -27,28 +26,22 @@ const (
 
 func (cloudflaredProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	client, base := cloudflaredClient(cfg)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+cloudflaredMetricsEndpoint, http.NoBody)
+	resp, err := getHTTPProbe(ctx, client, base+cloudflaredMetricsEndpoint, maxHTTPProbeLargeBody)
 	if err != nil {
 		return Result{}, err
 	}
-	resp, err := client.Do(req)
-	if err != nil {
-		return Result{}, err
+	if resp.status != http.StatusOK {
+		return Result{}, fmt.Errorf("cloudflared: %s HTTP status %d", cloudflaredMetricsEndpoint, resp.status)
 	}
-	defer func() { _ = resp.Body.Close() }()
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, maxHTTPProbeLargeBody))
-	if resp.StatusCode != http.StatusOK {
-		return Result{}, fmt.Errorf("cloudflared: %s HTTP status %d", cloudflaredMetricsEndpoint, resp.StatusCode)
-	}
-	if !bytes.Contains(body, []byte(cloudflaredMetricPrefix)) {
+	if !bytes.Contains(resp.body, []byte(cloudflaredMetricPrefix)) {
 		return Result{}, fmt.Errorf("cloudflared: %s response did not contain cloudflared metrics", cloudflaredMetricsEndpoint)
 	}
 
 	extra := map[string]string{
 		extraEndpoint:  cloudflaredMetricsEndpoint,
-		ExtraKeyStatus: strconv.Itoa(resp.StatusCode),
+		ExtraKeyStatus: strconv.Itoa(resp.status),
 	}
-	if ct := resp.Header.Get(httpHeaderContentType); ct != "" {
+	if ct := resp.header.Get(httpHeaderContentType); ct != "" {
 		extra[extraContentType] = ct
 	}
 	return Result{Extra: extra}, nil

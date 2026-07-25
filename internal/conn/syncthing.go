@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 )
 
@@ -77,16 +76,14 @@ func syncthingGet(ctx context.Context, client *http.Client, url, apiKey string, 
 	if apiKey != "" {
 		req.Header.Set(httpHeaderSyncthingAuth, apiKey)
 	}
-	resp, err := client.Do(req)
+	resp, err := doHTTPProbe(client, req, maxHTTPProbeBody)
 	if err != nil {
 		return err
 	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("syncthing: HTTP status %d", resp.StatusCode)
+	if resp.status != http.StatusOK {
+		return fmt.Errorf("syncthing: HTTP status %d", resp.status)
 	}
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, maxHTTPProbeBody))
-	if err := json.Unmarshal(body, out); err != nil {
+	if err := json.Unmarshal(resp.body, out); err != nil {
 		return fmt.Errorf("syncthing: invalid JSON response: %w", err)
 	}
 	return nil

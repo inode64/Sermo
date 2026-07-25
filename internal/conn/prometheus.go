@@ -2,9 +2,7 @@ package conn
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 )
 
@@ -55,12 +53,10 @@ func promBuildInfo(ctx context.Context, client *http.Client, base string, cfg Co
 		return Result{}, true, err
 	}
 	promAuth(req, cfg)
-	resp, err := client.Do(req)
+	resp, err := doHTTPProbe(client, req, maxHTTPProbeBody)
 	if err != nil {
 		return Result{}, true, err // server unreachable — conclusive
 	}
-	defer func() { _ = resp.Body.Close() }()
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, maxHTTPProbeBody))
 
 	var info struct {
 		Status string `json:"status"`
@@ -69,7 +65,7 @@ func promBuildInfo(ctx context.Context, client *http.Client, base string, cfg Co
 			Revision string `json:"revision"`
 		} `json:"data"`
 	}
-	if json.Unmarshal(body, &info) != nil || info.Status == "" {
+	if !decodedJSON(resp.body, &info) || info.Status == "" {
 		return Result{}, false, nil // not the Prometheus API JSON — fall back
 	}
 	if info.Status != promStatusSuccess {
@@ -92,14 +88,12 @@ func promHealthy(ctx context.Context, client *http.Client, base string, cfg Conf
 		return Result{}, err
 	}
 	promAuth(req, cfg)
-	resp, err := client.Do(req)
+	resp, err := doHTTPProbe(client, req, maxHTTPProbeShortBody)
 	if err != nil {
 		return Result{}, err
 	}
-	defer func() { _ = resp.Body.Close() }()
-	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, maxHTTPProbeShortBody))
-	if resp.StatusCode != http.StatusOK {
-		return Result{}, fmt.Errorf("prometheus: %s HTTP status %d", promHealthyEndpoint, resp.StatusCode)
+	if resp.status != http.StatusOK {
+		return Result{}, fmt.Errorf("prometheus: %s HTTP status %d", promHealthyEndpoint, resp.status)
 	}
 	return Result{}, nil
 }

@@ -4,8 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"strconv"
-	"strings"
+	"sermo/internal/metrics"
 	"time"
 )
 
@@ -60,11 +59,5 @@ func defaultOomSampler() (uint64, bool) {
 	if err != nil {
 		return 0, false
 	}
-	for line := range strings.SplitSeq(string(data), checkLineSeparator) {
-		if v, ok := strings.CutPrefix(line, oomVMStatKillPrefix); ok {
-			n, err := strconv.ParseUint(strings.TrimSpace(v), numericBaseDecimal, numericBits64)
-			return n, err == nil
-		}
-	}
-	return 0, false
+	return metrics.ScanUintField(string(data), oomVMStatKillPrefix)
 }

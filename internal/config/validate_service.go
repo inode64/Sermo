@@ -92,9 +92,7 @@ func validateStopPolicy(tree map[string]any, add addFunc) {
 		return
 	}
 	for _, field := range []string{keyGracefulTimeout, keyTermTimeout, keyKillTimeout} {
-		if v, present := sp[field]; present && !isPositiveDuration(cfgval.String(v)) {
-			add(validationPositiveDurationFormat, stopPolicyFieldPath(field), cfgval.String(v))
-		}
+		validatePositiveDurationField(sp, field, stopPolicyFieldPath(field), add)
 	}
 	force, _ := sp[keyForceKill].(bool)
 	koi, hasKoi := sp[keyKillOnlyIf].(map[string]any)
@@ -271,17 +269,13 @@ func validatePolicyExtras(tree map[string]any, add addFunc) {
 	if !ok {
 		return
 	}
-	if v, present := policy[rules.PolicyKeyMaxActions]; present {
-		if n, ok := cfgval.Int(v); !ok || n <= 0 {
-			add("%s must be an integer > 0", policyPathMaxActions)
-		}
+	if _, present := policy[rules.PolicyKeyMaxActions]; present {
+		validatePositiveIntField(policy, rules.PolicyKeyMaxActions, policyPathMaxActions, add)
 		if _, hasWindow := policy[rules.PolicyKeyMaxActionsWindow]; !hasWindow {
 			add("%s requires %s", policyPathMaxActions, policyPathMaxActionsWindow)
 		}
 	}
-	if v, present := policy[rules.PolicyKeyMaxActionsWindow]; present && !isPositiveDuration(cfgval.String(v)) {
-		add(validationPositiveDurationFormat, policyPathMaxActionsWindow, cfgval.String(v))
-	}
+	validatePositiveDurationField(policy, rules.PolicyKeyMaxActionsWindow, policyPathMaxActionsWindow, add)
 	if bo, ok := policy[rules.PolicyKeyBackoff].(map[string]any); ok {
 		initial := cfgval.String(bo[rules.BackoffKeyInitial])
 		maxStr := cfgval.String(bo[rules.BackoffKeyMax])

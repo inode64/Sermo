@@ -75,8 +75,7 @@ func (b *WebBackend) lockReportsByService() map[string]locks.Report {
 	}
 	names := make([]string, 0, len(b.order))
 	for _, name := range b.order {
-		entry := b.entries[name]
-		if entry == nil || entry.disabled {
+		if _, ok := b.enabledEntry(name); !ok {
 			continue
 		}
 		names = append(names, name)
@@ -97,8 +96,7 @@ func (b *WebBackend) Locks(_ context.Context) []web.Lock {
 	now := b.webNow()
 	reports := b.lockReportsByService()
 	for _, name := range b.order {
-		e := b.entries[name]
-		if e == nil || e.disabled {
+		if _, ok := b.enabledEntry(name); !ok {
 			continue
 		}
 		report := reports[name]

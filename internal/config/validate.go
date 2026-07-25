@@ -143,9 +143,7 @@ func validateGlobalEngine(raw map[string]any, add addFunc) {
 		add(validationNotOneOfFormat, enginePathBackend, backend, backendSummary)
 	}
 	for _, field := range []string{keyInterval, EngineKeyArtifactInterval, EngineKeyDefaultTimeout, EngineKeyOperationTimeout} {
-		if v, present := engine[field]; present && !isPositiveDuration(cfgval.String(v)) {
-			add(validationPositiveDurationFormat, engineFieldPath(field), cfgval.String(v))
-		}
+		validatePositiveDurationField(engine, field, engineFieldPath(field), add)
 	}
 	if v, present := engine[EngineKeyStartupDelay]; present && !isNonNegativeDuration(cfgval.String(v)) {
 		add("%s %q must be a valid non-negative duration (0 disables the wait)", enginePathStartupDelay, cfgval.String(v))
@@ -153,10 +151,8 @@ func validateGlobalEngine(raw map[string]any, add addFunc) {
 	if mode := cfgval.String(engine[EngineKeyUserLookup]); !process.ValidUserLookupMode(mode) {
 		add(validationNotOneOfFormat, enginePathUserLookup, mode, userLookupModeSummary)
 	}
-	if v, present := engine[EngineKeyUserLookupTimeout]; present && !isPositiveDuration(cfgval.String(v)) {
-		add(validationPositiveDurationFormat, enginePathUserLookupTimeout, cfgval.String(v))
-	}
-	validateGlobalEnginePositiveInt(engine, EngineKeyMaxParallelChecks, enginePathMaxParallelChecks, add)
+	validatePositiveDurationField(engine, EngineKeyUserLookupTimeout, enginePathUserLookupTimeout, add)
+	validatePositiveIntField(engine, EngineKeyMaxParallelChecks, enginePathMaxParallelChecks, add)
 	if v, present := engine[EngineKeyStateCacheSize]; present {
 		if n, ok := cfgval.ByteSize(v); !ok || n == 0 {
 			add("%s must be a positive size with a K/M/G suffix (e.g. 64M)", enginePathStateCacheSize)
@@ -182,11 +178,21 @@ func validateGlobalEngine(raw map[string]any, add addFunc) {
 	}
 }
 
-func validateGlobalEnginePositiveInt(engine map[string]any, key, path string, add addFunc) {
-	if v, present := engine[key]; present {
+// validatePositiveIntField reports path when fields[key] is present but is not
+// a positive integer.
+func validatePositiveIntField(fields map[string]any, key, path string, add addFunc) {
+	if v, present := fields[key]; present {
 		if n, ok := cfgval.Int(v); !ok || n <= 0 {
-			add("%s must be an integer > 0", path)
+			add("%s must be a positive integer", path)
 		}
+	}
+}
+
+// validatePositiveDurationField reports path when fields[key] is present but is
+// not a positive duration.
+func validatePositiveDurationField(fields map[string]any, key, path string, add addFunc) {
+	if v, present := fields[key]; present && !isPositiveDuration(cfgval.String(v)) {
+		add(validationPositiveDurationFormat, path, cfgval.String(v))
 	}
 }
 
@@ -768,9 +774,7 @@ func validateStorageMount(mount map[string]any, add addFunc) {
 			}
 		}
 		for _, field := range []string{StopPolicyKeyTermTimeout, StopPolicyKeyKillTimeout} {
-			if v, present := umount[field]; present && !isPositiveDuration(cfgval.String(v)) {
-				add(validationPositiveDurationFormat, mountUmountFieldPath(field), cfgval.String(v))
-			}
+			validatePositiveDurationField(umount, field, mountUmountFieldPath(field), add)
 		}
 	}
 
@@ -811,9 +815,7 @@ func validateResolved(name string, tree map[string]any, runtime string, notifier
 		issues = append(issues, Issue{Scope: name, Msg: fmt.Sprintf(format, args...)})
 	}
 
-	if v, present := tree[keyInterval]; present && !isPositiveDuration(cfgval.String(v)) {
-		add(validationPositiveDurationFormat, keyInterval, cfgval.String(v))
-	}
+	validatePositiveDurationField(tree, keyInterval, keyInterval, add)
 
 	if mode, present := tree[keyMonitor]; present {
 		validateMonitorMode(keyMonitor, mode, add)

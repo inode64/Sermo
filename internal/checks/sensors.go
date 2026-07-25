@@ -3,7 +3,6 @@ package checks
 import (
 	"context"
 	"fmt"
-	"os"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -209,11 +208,8 @@ func readSensorKind(dir, chip, kind string, scale float64) []SensorReading {
 	return out
 }
 
-// readTrim reads a sysfs file and trims trailing whitespace, returning "" on error.
+// readTrim reads a sysfs file and trims surrounding whitespace, returning ""
+// on error.
 func readTrim(path string) string {
-	b, err := os.ReadFile(path)
-	if err != nil {
-		return ""
-	}
-	return strings.TrimSpace(string(b))
+	return strings.TrimSpace(ReadTextFile(path))
 }

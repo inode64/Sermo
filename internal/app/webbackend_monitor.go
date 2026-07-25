@@ -31,8 +31,7 @@ func (b *WebBackend) MonitoringStatus(_ context.Context) web.MonitoringStatus {
 	total := 0
 	monitored := 0
 	for _, name := range b.order {
-		e := b.entries[name]
-		if e == nil || e.disabled {
+		if _, ok := b.enabledEntry(name); !ok {
 			continue
 		}
 		total++
