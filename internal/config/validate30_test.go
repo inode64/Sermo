@@ -1130,7 +1130,7 @@ policy:
   cooldown: 5m
   max_actions: 0
 `)
-	mustHave(t, issues, "max_actions must be an integer > 0")
+	mustHave(t, issues, "max_actions must be a positive integer")
 }
 
 func TestValidateDescriptionMustBeString(t *testing.T) {

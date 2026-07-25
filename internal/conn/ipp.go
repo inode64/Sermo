@@ -6,7 +6,6 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 )
 
@@ -72,16 +71,14 @@ func (ippProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	}
 	req.Header.Set(httpHeaderContentType, ippContentType)
 
-	resp, err := client.Do(req)
+	resp, err := doHTTPProbe(client, req, maxHTTPProbeBody)
 	if err != nil {
 		return Result{}, err
 	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		return Result{}, fmt.Errorf("ipp: HTTP status %d", resp.StatusCode)
+	if resp.status != http.StatusOK {
+		return Result{}, fmt.Errorf("ipp: HTTP status %d", resp.status)
 	}
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, maxHTTPProbeBody))
-	version, status, err := parseIPPResponse(body)
+	version, status, err := parseIPPResponse(resp.body)
 	if err != nil {
 		return Result{}, err
 	}

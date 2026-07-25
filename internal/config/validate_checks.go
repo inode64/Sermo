@@ -1013,11 +1013,7 @@ func validateICMPSingleShotCheck(path string, entry map[string]any, _ string, ad
 	if cfgval.String(entry[checks.CheckKeyHost]) == "" {
 		add("%s.host is required for an icmp check", path)
 	}
-	if v, present := entry[checks.CheckKeyCount]; present {
-		if n, ok := cfgval.Int(v); !ok || n <= 0 {
-			add("%s.count must be a positive integer", path)
-		}
-	}
+	validatePositiveIntField(entry, checks.CheckKeyCount, path+"."+checks.CheckKeyCount, add)
 	validateICMPMetricCondition(path, cfgval.String(entry[checks.CheckKeyMetric]), entry, add)
 }
 

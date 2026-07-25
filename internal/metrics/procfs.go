@@ -107,10 +107,18 @@ func procBootTime() (int64, bool) {
 	if err != nil {
 		return 0, false
 	}
-	for line := range strings.SplitSeq(string(data), procLineSeparator) {
-		if v, ok := strings.CutPrefix(line, procStatBootTimePrefix); ok {
-			sec, err := strconv.ParseInt(strings.TrimSpace(v), procDecimalBase, procIntBits)
-			return sec, err == nil
+	sec, ok := ScanUintField(string(data), procStatBootTimePrefix)
+	return int64(sec), ok
+}
+
+// ScanUintField scans newline-separated procfs/sysfs text for the first line
+// with the given prefix and parses the remainder as an unsigned decimal. It
+// reports false when the prefix is absent or the value does not parse.
+func ScanUintField(data, prefix string) (uint64, bool) {
+	for line := range strings.SplitSeq(data, procLineSeparator) {
+		if v, ok := strings.CutPrefix(line, prefix); ok {
+			n, err := strconv.ParseUint(strings.TrimSpace(v), procDecimalBase, procUintBits)
+			return n, err == nil
 		}
 	}
 	return 0, false
@@ -162,22 +170,8 @@ func (OSReader) ProcessIO(pid int) (read, write uint64, ok bool) {
 }
 
 func parseProcIO(data string) (read, write uint64, ok bool) {
-	var haveR, haveW bool
-	for line := range strings.SplitSeq(data, procLineSeparator) {
-		if v, found := strings.CutPrefix(line, procIOReadBytesPrefix); found {
-			if n, err := strconv.ParseUint(strings.TrimSpace(v), procDecimalBase, procUintBits); err == nil {
-				read, haveR = n, true
-			} else {
-				return 0, 0, false
-			}
-		} else if v, found := strings.CutPrefix(line, procIOWriteBytesPrefix); found {
-			if n, err := strconv.ParseUint(strings.TrimSpace(v), procDecimalBase, procUintBits); err == nil {
-				write, haveW = n, true
-			} else {
-				return 0, 0, false
-			}
-		}
-	}
+	read, haveR := ScanUintField(data, procIOReadBytesPrefix)
+	write, haveW := ScanUintField(data, procIOWriteBytesPrefix)
 	if !haveR || !haveW {
 		return 0, 0, false
 	}

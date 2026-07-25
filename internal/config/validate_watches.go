@@ -34,9 +34,7 @@ func validateWatches(watches map[string]any, locksDir string, notifiers map[stri
 
 		// Entry-level fields are validated before the check so a watch with a
 		// missing/invalid check still reports every other problem in one pass.
-		if v, present := entry[keyInterval]; present && !isPositiveDuration(cfgval.String(v)) {
-			add(validationPositiveDurationFormat, watchFieldPath(name, keyInterval), cfgval.String(v))
-		}
+		validatePositiveDurationField(entry, keyInterval, watchFieldPath(name, keyInterval), add)
 		if v, present := entry[keyDryRun]; present {
 			if _, ok := v.(bool); !ok {
 				add(validationBooleanFormat, watchFieldPath(name, keyDryRun))
@@ -209,9 +207,7 @@ func validateServiceWatchEntry(name string, entry map[string]any, notifiers map[
 	if mode, present := entry[keyMonitor]; present {
 		validateMonitorMode(watchFieldPath(name, keyMonitor), mode, add)
 	}
-	if v, present := entry[keyInterval]; present && !isPositiveDuration(cfgval.String(v)) {
-		add(validationPositiveDurationFormat, watchFieldPath(name, keyInterval), cfgval.String(v))
-	}
+	validatePositiveDurationField(entry, keyInterval, watchFieldPath(name, keyInterval), add)
 	if v, present := entry[keyDryRun]; present {
 		if _, ok := v.(bool); !ok {
 			add(validationBooleanFormat, watchFieldPath(name, keyDryRun))
@@ -431,9 +427,7 @@ func validateWatchHookAction(prefix string, hook map[string]any, hasHook bool, a
 	if !cfgval.IsNonEmptyStringArray(hook[WatchHookKeyCommand]) {
 		add("%s must be a non-empty array", thenHookPath(prefix)+"."+WatchHookKeyCommand)
 	}
-	if v, present := hook[WatchHookKeyTimeout]; present && !isPositiveDuration(cfgval.String(v)) {
-		add(validationPositiveDurationFormat, thenHookPath(prefix)+"."+WatchHookKeyTimeout, cfgval.String(v))
-	}
+	validatePositiveDurationField(hook, WatchHookKeyTimeout, thenHookPath(prefix)+"."+WatchHookKeyTimeout, add)
 	validateCommandExpectations(thenHookPath(prefix), hook, add)
 }
 
@@ -492,9 +486,7 @@ func validateKillAction(prefix string, kill map[string]any, add func(string, ...
 		}
 	}
 	for _, f := range []string{WatchKillKeyTermTimeout, WatchKillKeyKillTimeout} {
-		if v, present := kill[f]; present && !isPositiveDuration(cfgval.String(v)) {
-			add(validationPositiveDurationFormat, thenKillPath(prefix)+"."+f, cfgval.String(v))
-		}
+		validatePositiveDurationField(kill, f, thenKillPath(prefix)+"."+f, add)
 	}
 }
 
@@ -513,9 +505,7 @@ func validateWatchPolicy(prefix string, entry map[string]any, add addFunc) {
 		return
 	}
 	padd := func(format string, args ...any) { add(prefix+"."+format, args...) }
-	if v, has := policy[rules.PolicyKeyCooldown]; has && !isPositiveDuration(cfgval.String(v)) {
-		add(validationPositiveDurationFormat, prefix+"."+policyPathCooldown, cfgval.String(v))
-	}
+	validatePositiveDurationField(policy, rules.PolicyKeyCooldown, prefix+"."+policyPathCooldown, add)
 	validatePolicyExtras(entry, padd)
 }
 
@@ -697,11 +687,7 @@ func validateICMPCheck(name string, check, entry map[string]any, defaultNotify [
 	if cfgval.String(check[checks.CheckKeyHost]) == "" {
 		add("%s is required for an icmp check", watchCheckFieldPath(name, checks.CheckKeyHost))
 	}
-	if v, present := check[checks.CheckKeyCount]; present {
-		if n, ok := cfgval.Int(v); !ok || n <= 0 {
-			add("%s must be a positive integer", watchCheckFieldPath(name, checks.CheckKeyCount))
-		}
-	}
+	validatePositiveIntField(check, checks.CheckKeyCount, watchCheckFieldPath(name, checks.CheckKeyCount), add)
 	validateMetricWatchEntries(name, "icmp", entry, defaultNotify, validateICMPMetricCondition, add)
 }
 

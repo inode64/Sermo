@@ -1,7 +1,10 @@
 package conn
 
 import (
+	"context"
 	"crypto/tls"
+	"encoding/json"
+	"io"
 	"net/http"
 
 	"sermo/internal/httpx"
@@ -42,4 +45,41 @@ func httpProbeBase(cfg Config, defaultPort int) (*http.Client, string) {
 		client = httpProbeClient(cfg.Interface, tlsConfig)
 	}
 	return client, scheme + urlSchemeSeparator + hostPort(host, port)
+}
+
+// httpProbeResponse is one bounded HTTP probe exchange: the status code, the
+// response headers and the body truncated to the caller's limit.
+type httpProbeResponse struct {
+	status int
+	header http.Header
+	body   []byte
+}
+
+// doHTTPProbe sends req through client and reads at most limit bytes of the
+// response body. Transport errors are returned as-is so each probe applies its
+// own protocol prefix; status handling stays with the caller.
+func doHTTPProbe(client *http.Client, req *http.Request, limit int64) (httpProbeResponse, error) {
+	resp, err := client.Do(req)
+	if err != nil {
+		return httpProbeResponse{}, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, limit))
+	return httpProbeResponse{status: resp.StatusCode, header: resp.Header, body: body}, nil
+}
+
+// getHTTPProbe builds a plain GET for url and performs doHTTPProbe.
+func getHTTPProbe(ctx context.Context, client *http.Client, url string, limit int64) (httpProbeResponse, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
+	if err != nil {
+		return httpProbeResponse{}, err
+	}
+	return doHTTPProbe(client, req, limit)
+}
+
+// decodedJSON reports whether data parses as JSON into out. Probes use it to
+// decide between a recognised API reply and a fallback endpoint, where a parse
+// failure is a routing signal rather than an error.
+func decodedJSON(data []byte, out any) bool {
+	return json.Unmarshal(data, out) == nil
 }

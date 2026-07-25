@@ -38,8 +38,8 @@ func (b *WebBackend) Series(_ context.Context, name string, since time.Duration)
 
 // Metrics returns a check's measured metric series over the window.
 func (b *WebBackend) Metrics(_ context.Context, name, check, metric string, since time.Duration) (web.MetricSeries, bool) {
-	entry := b.entries[name]
-	if entry == nil || entry.disabled {
+	entry, ok := b.enabledEntry(name)
+	if !ok {
 		return web.MetricSeries{}, false
 	}
 	checkType, ok := entry.checkTypes[check]
