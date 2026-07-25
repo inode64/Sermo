@@ -12,7 +12,7 @@ func storeAppSample(samples *ArtifactSamples, name string, report appinspect.Rep
 	if samples == nil {
 		return
 	}
-	samples.StoreAppVersion(name, report.Version, report.Status)
+	samples.StoreAppVersion(name, report.Version, report.Status, report.Output)
 }
 
 // BuildAppWatches builds one app-watch per installed catalog application. Each

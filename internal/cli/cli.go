@@ -254,6 +254,9 @@ type event struct {
 	Action  string `json:"action"`
 	Status  string `json:"status"`
 	Message string `json:"message"`
+	// Output carries the failing command's bounded stdout/stderr. The table view
+	// stays one line per event; `--json` is where the detail is available.
+	Output string `json:"output,omitempty"`
 }
 
 // globalPath returns the --config path, or the packaged default.
