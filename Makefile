@@ -130,6 +130,7 @@ web-check:
 # vendored lit-html module and generated bundle are excluded in eslint.config.mjs.
 web-lint:
 	@npm run --silent lint:web
+	@npm run --silent lint:css
 
 # Browser-level dashboard flows and WCAG 2.2 AA checks. The fixture server
 # serves the committed bundle and Playwright intercepts APIs with deterministic
