@@ -1893,8 +1893,12 @@ una condición de montaje (solo-montaje está bien). El montaje se comprueba pri
 `/proc/mounts`: si falta cuando `mounted: true` (o está presente cuando `mounted:
 false`), la comprobación alerta sobre eso y los predicados de espacio se omiten (sus
 números no tendrían sentido). `fstype`, `device` y `options` no son predicados
-configurables; se reportan como datos de resultado y se muestran en la WebUI como
-información en vivo del sistema de archivos.
+configurables; se reportan como datos de resultado y, mientras estén frescos, se
+muestran en la Web UI a partir del snapshot del ciclo del daemon. Esta es la
+comprobación segura de sistemas de archivos para ext2/3/4, XFS, btrfs, vfat y
+otros sistemas montados: comprueba la ruta montada, la capacidad y los datos de
+inodos donde el sistema de archivos los expone, y nunca ejecuta un comando de
+reparación o `fsck` sobre un sistema de archivos vivo.
 
 Cuando la condición se cumple para la ventana `for`/`within`, el hook se ejecuta (solo
 argv, nunca una shell) y/o los notifiers se disparan, con estas variables de entorno:
@@ -2209,7 +2213,7 @@ watches:
 
 Predicados: `util_pct` (0–100), `await_ms` (ms simples), y `read_bytes`/
 `write_bytes` — **bytes por segundo**, escritos con la gramática de tamaño compartida
-(`50M` = 50 MiB/s = 52.428.800 B/s; ojo: las tasas se *muestran* en unidades
+(`50M` = 50 MiB/s = 52,428,800 B/s; ojo: las tasas se *muestran* en unidades
 decimales SI, así que ese umbral se lee como `52.43 MB/s` en eventos y en la web
 UI). Todos los predicados presentes deben cumplirse (AND), de modo que
 `util_pct` + `await_ms` juntos distinguen "ocupado y lento" de meramente ocupado. Un
@@ -2319,9 +2323,11 @@ presentación específicos actuales del checker.
 observado usado por la comparación, `${trigger}` es el disparador activo cuando
 el checker lo expone, y cada campo resuelto del check puede referenciarse de
 forma directa o mediante `${check.<campo>}`. Los datos del resultado también
-están disponibles como `${result.<campo>}`. Los números usan puntos de miles;
-las duraciones y marcas de tiempo usan el formato legible habitual. Las
-referencias desconocidas permanecen visibles para identificar errores de nombre.
+están disponibles como `${result.<campo>}`. Los números siguen la convención
+canónica descrita en [rules.es.md](rules.es.md) — coma como separador de millares
+y punto como marca decimal (`12,345.68`); las duraciones y marcas de tiempo usan
+el formato legible habitual. Las referencias desconocidas permanecen visibles
+para identificar errores de nombre.
 
 ```yaml
 check:
