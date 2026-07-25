@@ -35,10 +35,7 @@ type conntrackCheck struct {
 }
 
 func (c conntrackCheck) Run(_ context.Context) Result {
-	sampler := c.sampler
-	if sampler == nil {
-		sampler = defaultConntrackSampler
-	}
+	sampler := samplerOr(c.sampler, defaultConntrackSampler)
 	return runLevelCountCheck(c.base, c.preds, func() (uint64, uint64, error) {
 		s, err := sampler()
 		return s.Count, s.Max, err

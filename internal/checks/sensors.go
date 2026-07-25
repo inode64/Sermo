@@ -69,10 +69,7 @@ type sensorsCheck struct {
 
 func (c sensorsCheck) Run(_ context.Context) Result {
 	start := time.Now()
-	sampler := c.sampler
-	if sampler == nil {
-		sampler = defaultSensorSampler
-	}
+	sampler := samplerOr(c.sampler, defaultSensorSampler)
 	readings, err := sampler()
 	if err != nil {
 		return c.result(false, "sensors: "+err.Error(), start)

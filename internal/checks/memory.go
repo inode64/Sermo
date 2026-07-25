@@ -27,10 +27,7 @@ type memoryCheck struct {
 
 func (c memoryCheck) Run(_ context.Context) Result {
 	start := time.Now()
-	sampler := c.sampler
-	if sampler == nil {
-		sampler = defaultMemorySampler
-	}
+	sampler := samplerOr(c.sampler, defaultMemorySampler)
 	s, err := sampler()
 	if err != nil {
 		return c.result(false, "memory: "+err.Error(), start)
