@@ -15,10 +15,22 @@ import (
 // one so lock state does not depend on the host's /proc.
 var lockProcProber locks.ProcessProber = locks.OSProcessProber{}
 
-func locksScanner(cfg *config.Config) locks.Scanner {
-	s := locks.NewScanner(locks.RuntimeLocksDir(cfg.Global.RuntimeDir()))
+func lockScannerFor(dir string) locks.Scanner {
+	s := locks.NewScanner(dir)
 	s.Proc = lockProcProber
 	return s
+}
+
+func locksScanner(cfg *config.Config) locks.Scanner {
+	return lockScannerFor(locks.RuntimeLocksDir(cfg.Global.RuntimeDir()))
+}
+
+// operationLocksScanner reads the operation-lock directory (<runtime>/ops),
+// which is separate from the named runtime locks: the operation lock is the
+// engine's own per-service serializer, held for exactly as long as a
+// start/stop/restart/reload/resume runs.
+func operationLocksScanner(cfg *config.Config) locks.Scanner {
+	return lockScannerFor(locks.RuntimeOpsDir(cfg.Global.RuntimeDir()))
 }
 
 func serviceLocksReport(cfg *config.Config, service string) (locks.Report, error) {
@@ -57,6 +69,50 @@ func activeLockNamesFromReport(report locks.Report) []string {
 	return names
 }
 
+func reportHasActiveLock(report locks.Report) bool {
+	for i := range report.Locks {
+		if report.Locks[i].State == locks.StateActive {
+			return true
+		}
+	}
+	return false
+}
+
+// operationActive reports whether an engine action is running on service right
+// now, by observing the operation lock the engine holds for its duration. It is
+// true regardless of who started the action — this dashboard, another client,
+// sermoctl or automatic remediation.
+func operationActive(cfg *config.Config, service string) bool {
+	if cfg == nil {
+		return false
+	}
+	report, err := operationLocksScanner(cfg).Scan(service)
+	if err != nil {
+		return false
+	}
+	return reportHasActiveLock(report)
+}
+
+// operationActiveByService is operationActive for the whole fleet, reading the
+// operation-lock directory once per dashboard refresh.
+func (b *WebBackend) operationActiveByService() map[string]bool {
+	names := b.enabledServiceNames()
+	if b.cfg == nil || len(names) == 0 {
+		return nil
+	}
+	reports, err := operationLocksScanner(b.cfg).ScanServices(names)
+	if err != nil {
+		return nil
+	}
+	out := make(map[string]bool, len(reports))
+	for name, report := range reports {
+		if reportHasActiveLock(report) {
+			out[name] = true
+		}
+	}
+	return out
+}
+
 func (b *WebBackend) activeLockNamesByService() map[string][]string {
 	reports := b.lockReportsByService()
 	if len(reports) == 0 {
@@ -69,10 +125,9 @@ func (b *WebBackend) activeLockNamesByService() map[string][]string {
 	return out
 }
 
-func (b *WebBackend) lockReportsByService() map[string]locks.Report {
-	if b.cfg == nil || len(b.order) == 0 {
-		return nil
-	}
+// enabledServiceNames lists the services a fleet-wide lock scan covers, in
+// configuration order.
+func (b *WebBackend) enabledServiceNames() []string {
 	names := make([]string, 0, len(b.order))
 	for _, name := range b.order {
 		if _, ok := b.enabledEntry(name); !ok {
@@ -80,6 +135,14 @@ func (b *WebBackend) lockReportsByService() map[string]locks.Report {
 		}
 		names = append(names, name)
 	}
+	return names
+}
+
+func (b *WebBackend) lockReportsByService() map[string]locks.Report {
+	if b.cfg == nil || len(b.order) == 0 {
+		return nil
+	}
+	names := b.enabledServiceNames()
 	if len(names) == 0 {
 		return nil
 	}
