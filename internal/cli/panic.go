@@ -25,9 +25,9 @@ func (a App) runPanic(ctx context.Context, opts options) int {
 
 	var set, on bool
 	switch sub {
-	case commandPanicOn, commandPanicEnable:
+	case commandPanicOn:
 		set, on = true, true
-	case commandPanicOff, commandPanicDisable:
+	case commandPanicOff:
 		set, on = true, false
 	case "", commandStatus:
 		set = false
