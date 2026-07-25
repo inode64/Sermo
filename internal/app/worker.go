@@ -140,6 +140,12 @@ type Worker struct {
 
 	// windows holds per-rule for/within state across cycles.
 	windows map[string]*rules.WindowState
+
+	// evalErrs holds the last emitted evaluation error per rule so a persistent
+	// failure — a version probe whose binary cannot run, for example — is
+	// reported when it appears or changes instead of on every cycle. Cleared
+	// when the rule evaluates cleanly again.
+	evalErrs map[string]string
 	// libBaseline holds the acknowledged fingerprint of each watched path (a
 	// `changed:` condition target, typically a library .so) across cycles.
 	libBaseline map[string]string
@@ -717,18 +723,29 @@ func (w *Worker) fires(ctx context.Context, ev *rules.Evaluator, r rules.Rule, a
 	// never trigger anything but an alert. ParseRules already drops such
 	// rules; this catches one that bypassed parsing entirely.
 	if r.Type != rules.RuleAlert && rules.ConditionUsesSystemMetric(r.If, w.MetricChecks) {
-		w.emit(Event{Kind: eventKindError, Rule: r.Name, Message: "scope: system metric may only drive alert rules; rule suppressed"})
+		msg := "scope: system metric may only drive alert rules; rule suppressed"
+		if emission.ShouldRepeat(w.ruleEmission(r).Events, w.evalErrorChanged(r.Name, msg)) {
+			w.emit(Event{Kind: eventKindError, Rule: r.Name, Message: msg})
+		}
 		return ruleFiringState{}
 	}
 	cond, err := w.evalRule(ctx, ev, r, evals)
 	if err != nil {
-		event := Event{Kind: eventKindError, Rule: r.Name, Message: "evaluate: " + err.Error()}
+		// Honor the rule's emission policy here too: an unevaluable condition
+		// persists for as long as the host stays broken, and emitting it every
+		// cycle buries every other event in the operator's feed.
+		msg := "evaluate: " + err.Error()
+		event := Event{Kind: eventKindError, Rule: r.Name, Message: msg}
 		var probeErr *appProbeError
 		if errors.As(err, &probeErr) {
 			event.Output = probeErr.output
 		}
-		w.emit(event)
+		if emission.ShouldRepeat(w.ruleEmission(r).Events, w.evalErrorChanged(r.Name, msg)) {
+			w.emit(event)
+		}
 		cond = false
+	} else {
+		w.clearEvalError(r.Name)
 	}
 	window := w.windowState(r.Name)
 	// The previous cycle's episode state is the only reliable edge reference:
@@ -961,6 +978,26 @@ func fileFingerprint(path string) string {
 		return ""
 	}
 	return fmt.Sprintf("%d:%d", info.Size(), info.ModTime().UnixNano())
+}
+
+// evalErrorChanged records msg as the current evaluation error for rule name and
+// reports whether it differs from the last one recorded. The result is the
+// rising edge an emission policy needs.
+func (w *Worker) evalErrorChanged(name, msg string) bool {
+	if w.evalErrs == nil {
+		w.evalErrs = map[string]string{}
+	}
+	if w.evalErrs[name] == msg {
+		return false
+	}
+	w.evalErrs[name] = msg
+	return true
+}
+
+// clearEvalError forgets a rule's last evaluation error so a recurrence is
+// reported again instead of being taken for the same unresolved failure.
+func (w *Worker) clearEvalError(name string) {
+	delete(w.evalErrs, name)
 }
 
 func (w *Worker) windowState(name string) *rules.WindowState {

@@ -1426,6 +1426,12 @@ rules:
 service does not have a service-wide emission override. Real operation result
 events remain audit events and are recorded whenever an operation is attempted.
 
+`emission.events` also governs the `error` event a rule emits when its condition
+cannot be evaluated at all — a version probe whose binary refuses to run, for
+example. Under `on_change` the failure is reported when it appears and again
+whenever its message changes or it returns after a clean evaluation, not once per
+cycle for as long as the host stays broken.
+
 ```yaml
 # /etc/sermo/storages/storage-root.yml
 name: storage-root
