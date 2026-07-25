@@ -373,17 +373,43 @@ func TestStatusFallsBackToConfiguredServiceUnit(t *testing.T) {
 	}
 }
 
-func TestStatusRequiresService(t *testing.T) {
-	var stderr bytes.Buffer
-	app := statusApp(servicemgr.ServiceStatus{}, nil, nil, &stderr)
-
-	code := app.Run(context.Background(), []string{"status"})
-	if code != exitUsage {
-		t.Fatalf("Run() exit = %d, want %d", code, exitUsage)
+// Every single-service command must refuse a missing service name with a usage
+// exit and a message that names the command, then print that command's focused
+// usage. They share one production path — requireSingleServiceName into
+// commandUsageError — except reload, which points at `daemon reload` instead. The
+// guard is the first statement of each command, so no backend fakes are needed.
+func TestSingleServiceCommandsRequireAService(t *testing.T) {
+	tests := []struct {
+		command string
+		want    string
+	}{
+		{command: commandStatus, want: "status requires a service name"},
+		{command: commandPreflight, want: "preflight requires a service name"},
+		{command: commandProcesses, want: "processes requires a service name"},
+		{command: commandLocks, want: "locks requires a service name"},
+		{command: commandStop, want: "stop requires a service name"},
+		{
+			command: commandReload,
+			want:    "reload requires a service name; use `sermoctl daemon reload` to reload sermod config",
+		},
 	}
-	out := stderr.String()
-	if !strings.Contains(out, "status requires a service name") || !strings.Contains(out, "Command: sermoctl status") {
-		t.Fatalf("stderr = %q, want focused status usage", out)
+	for _, tt := range tests {
+		t.Run(tt.command, func(t *testing.T) {
+			var stderr bytes.Buffer
+			app := App{Env: func(string) string { return "" }, Stdout: &bytes.Buffer{}, Stderr: &stderr}
+
+			code := app.Run(context.Background(), []string{tt.command})
+			if code != exitUsage {
+				t.Fatalf("Run(%s) exit = %d, want %d", tt.command, code, exitUsage)
+			}
+			out := stderr.String()
+			if !strings.Contains(out, tt.want) {
+				t.Fatalf("stderr = %q, want %q", out, tt.want)
+			}
+			if header := "Command: sermoctl " + tt.command; !strings.Contains(out, header) {
+				t.Fatalf("stderr = %q, want the focused usage header %q", out, header)
+			}
+		})
 	}
 }
 
@@ -527,18 +553,6 @@ func (m fakeManager) record(action, service string) error {
 		*m.actions = append(*m.actions, action+" "+service)
 	}
 	return m.actionErr
-}
-
-func TestReloadRequiresService(t *testing.T) {
-	var stderr bytes.Buffer
-	app := App{Env: func(string) string { return "" }, Stdout: &bytes.Buffer{}, Stderr: &stderr}
-	code := app.Run(context.Background(), []string{"reload"})
-	if code != exitUsage {
-		t.Fatalf("reload without service exit = %d, want %d", code, exitUsage)
-	}
-	if got := stderr.String(); !strings.Contains(got, "reload requires a service name") || !strings.Contains(got, "daemon reload") {
-		t.Fatalf("reload usage error = %q", got)
-	}
 }
 
 // TestDaemonReloadNoPid exercises the error path for sermoctl daemon reload when no
