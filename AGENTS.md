@@ -461,6 +461,15 @@ deterministic mocked APIs and runs the desktop/mobile Playwright flows plus axe
 WCAG 2.2 AA checks; it is also part of `validate`/`check`/CI. Install its browser
 once with `npx playwright install chromium` (CI uses `--with-deps`).
 
+The dashboard modules carry complexity budgets in `eslint.config.mjs`, the
+counterpart of `gocyclo`/`gocognit`/`maintidx` on the Go side: `complexity`,
+`max-lines-per-function`, `max-params`, `max-depth` and `max-nested-callbacks`.
+They are pinned at the current ceiling, so they block regressions rather than
+demanding a cleanup: a new function may not be worse than the worst one already
+there. Lower a threshold whenever you split an outlier — `renderOverview`
+(complexity 121) and `renderServiceDetail` (183 lines) are the two worth
+attacking first.
+
 **Rendering uses lit-html.** Build markup with `tpl\`...\`` (the `html` tag,
 imported aliased as `tpl`) and render into a container with `litRender(...)` (the
 `render` export). lit-html escapes text/attribute bindings, so do **not** wrap

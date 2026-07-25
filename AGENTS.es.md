@@ -466,6 +466,15 @@ APIs mockeadas deterministas y ejecuta los flujos de Playwright desktop/mobile m
 checks axe WCAG 2.2 AA; también forma parte de `validate`/`check`/CI. Instala su navegador
 una vez con `npx playwright install chromium` (CI usa `--with-deps`).
 
+Los módulos del dashboard llevan presupuestos de complejidad en
+`eslint.config.mjs`, el equivalente de `gocyclo`/`gocognit`/`maintidx` del lado
+Go: `complexity`, `max-lines-per-function`, `max-params`, `max-depth` y
+`max-nested-callbacks`. Están fijados en el techo actual, así que bloquean
+regresiones en vez de exigir una limpieza: una función nueva no puede ser peor
+que la peor que ya existe. Baja un umbral cada vez que partas un caso extremo —
+`renderOverview` (complejidad 121) y `renderServiceDetail` (183 líneas) son los
+dos primeros candidatos.
+
 **El renderizado usa lit-html.** Construye markup con `tpl\`...\`` (el tag `html`,
 importado con alias `tpl`) y renderiza en un contenedor con `litRender(...)` (el
 export `render`). lit-html escapa los bindings de texto/atributos, así que **no** envuelvas las
