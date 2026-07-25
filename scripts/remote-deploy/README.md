@@ -85,6 +85,17 @@ locally before redeploying every host already touched.
   packaged catalog. It snapshots `/etc/sermo`, rejects payloads containing any
   other path, and rolls back the binaries and catalog if validation, restart or
   authenticated Web UI checks fail.
+- `remote_normalize_retired_engine_keys.sh` removes only the retired
+  `engine.max_parallel_operations` key from an existing `/etc/sermo`, so a host
+  configured before the global operation semaphore was removed validates against
+  the current binary. It edits that key only inside a top-level `engine:` block,
+  validates with the candidate `sermoctl` and restores `/etc/sermo` if validation
+  fails. Run it *before* `remote_update_payload.sh` on hosts configured before
+  the removal: their `/etc/sermo` fails validation against the current binary,
+  which blocks the update.
+  Hosts whose configuration carries further retired keys (for example
+  `paths.catalog`) are too old to normalize incrementally — back up `/etc/sermo`
+  and reinstall them through `remote_stage.sh` + `remote_apply.sh` instead.
 - `remote_normalize_retired_umount_keys.sh` removes only the retired
   `mount.umount.allow_lazy: false` and `allow_sigkill: false` keys from existing
   YAML. It rejects non-false values, validates with the candidate binary and
