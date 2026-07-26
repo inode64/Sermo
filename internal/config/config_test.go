@@ -4090,6 +4090,114 @@ func assertUnversionedVersionTemplate(t *testing.T, cfg *Config, bin string) {
 	}
 }
 
+// Berkeley DB ships one binary per subcommand and no bare db5.3, so a trailing
+// %v used to capture "5.3_archive", "5.3_dump", ... and materialize one app per
+// subcommand. versions.suffix trims the subcommand back to the release.
+func TestVersionTemplateSuffixCollapsesSubcommandBinaries(t *testing.T) {
+	root := t.TempDir()
+	bin := filepath.Join(root, "bin")
+	if err := os.MkdirAll(bin, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// Two releases installed side by side, each as a family of subcommands.
+	for _, name := range []string{
+		"db5.3_archive", "db5.3_dump", "db5.3_stat", "db5.3_tuner",
+		"db6.2_archive", "db6.2_dump",
+	} {
+		if err := os.WriteFile(filepath.Join(bin, name), []byte("x"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	appsDir := filepath.Join(root, "catalog", "apps")
+	servicesDir := filepath.Join(root, "services")
+	for _, dir := range []string{appsDir, servicesDir} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(appsDir, "db.yml"), fmt.Appendf(nil, `
+name: db%%v
+display_name: "Berkeley DB ${version}"
+versions:
+  from: "%[1]s/db${version}"
+  suffix: "_*"
+variables:
+  binary:
+    - "%[1]s/db${version}_dump"
+    - "%[1]s/db${version}_stat"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+`, bin), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	global := filepath.Join(root, "sermo.yml")
+	if err := os.WriteFile(global, fmt.Appendf(nil, `
+engine: { backend: auto }
+paths: { services: [ %s ], runtime: /run/sermo }
+defaults: { policy: { cooldown: 5m } }
+`, servicesDir), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := loadConfig(t, global)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if got := strings.Join(cfg.CatalogNamesInCategory(CategoryApp), ","); got != "db5.3,db6.2" {
+		t.Fatalf("app names = %s, want db5.3,db6.2 (one per release, not per subcommand)", got)
+	}
+	for name, wantBinary := range map[string]string{
+		"db5.3": filepath.Join(bin, "db5.3_dump"),
+		"db6.2": filepath.Join(bin, "db6.2_dump"),
+	} {
+		doc, ok := cfg.Apps[name]
+		if !ok {
+			t.Fatalf("app %q was not materialized", name)
+		}
+		if got := DisplayName(doc.Body, name); got != "Berkeley DB "+strings.TrimPrefix(name, "db") {
+			t.Fatalf("%s display_name = %q", name, got)
+		}
+		// The pinned candidate list wins: discovery came from versions.from, so
+		// the probe is not rebaked to whichever subcommand globbed first.
+		resolved, errs := cfg.ResolveCatalog(CategoryApp, name)
+		if len(errs) > 0 {
+			t.Fatalf("ResolveCatalog(%s): %v", name, errs)
+		}
+		preflight := nested(t, resolved.Tree, "preflight", "binary")
+		if got := cfgval.String(preflight["path"]); got != wantBinary {
+			t.Fatalf("%s probe binary = %q, want %q", name, got, wantBinary)
+		}
+	}
+}
+
+func TestTrimVersionSuffix(t *testing.T) {
+	tests := []struct {
+		name    string
+		value   string
+		globs   []string
+		want    string
+		trimmed bool
+	}{
+		{name: "subcommand suffix", value: "5.3_archive", globs: []string{"_*"}, want: "5.3", trimmed: true},
+		{name: "longest suffix wins", value: "5.3_log_verify", globs: []string{"_*"}, want: "5.3", trimmed: true},
+		{name: "bare version untouched", value: "5.3", globs: []string{"_*"}, want: "5.3"},
+		{name: "no suffix match", value: "8.332-p09", globs: []string{"_*"}, want: "8.332-p09"},
+		{name: "several globs", value: "1.2-beta", globs: []string{"_*", "-*"}, want: "1.2", trimmed: true},
+		{name: "would empty the value", value: "_archive", globs: []string{"_*"}, want: "_archive"},
+		{name: "trims to the shortest remainder", value: "5.3", globs: []string{".3"}, want: "5", trimmed: true},
+		{name: "no globs", value: "5.3_archive", want: "5.3_archive"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, trimmed := trimVersionSuffix(tt.value, tt.globs)
+			if got != tt.want || trimmed != tt.trimmed {
+				t.Fatalf("trimVersionSuffix(%q, %v) = (%q, %v), want (%q, %v)", tt.value, tt.globs, got, trimmed, tt.want, tt.trimmed)
+			}
+		})
+	}
+}
+
 func TestVersionTemplateCurrentMarker(t *testing.T) {
 	root := t.TempDir()
 	bin := filepath.Join(root, "bin")

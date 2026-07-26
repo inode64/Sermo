@@ -1756,6 +1756,32 @@ checks:
 	mustHave(t, issues, "versions.from.launchd is not supported; use systemd or openrc")
 }
 
+func TestValidateVersionsSuffixSpecs(t *testing.T) {
+	global := writeConfig(t, map[string]string{
+		"sermo.yml": baseGlobal,
+		"catalog/apps/db.yml": `
+name: db%v
+versions:
+  from: /usr/bin/db${version}
+  suffix:
+    - "_*"
+    - ""
+    - "*"
+    - 42
+preflight:
+  binary: { type: binary, path: "${binary}" }
+`,
+	})
+	cfg, err := loadConfig(t, global)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	issues := Validate(cfg)
+	mustHave(t, issues, "versions.suffix[1] must be a non-empty suffix glob")
+	mustHave(t, issues, `versions.suffix[2] must start with a literal separator, not a wildcard: "*" would consume the version itself`)
+	mustHave(t, issues, "versions.suffix[3] must be a suffix glob string or list of suffix glob strings")
+}
+
 func TestValidateCleanServicePasses(t *testing.T) {
 	issues := validateService(t, `
 name: svc
