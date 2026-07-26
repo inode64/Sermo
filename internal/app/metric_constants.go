@@ -10,6 +10,11 @@ const (
 	observabilityMissingStartup = "startup observation"
 	observabilityMissingHistory = "availability history"
 	observabilityMissingRuntime = "runtime metrics"
+	// observabilityMissingProcesses is the definite counterpart of
+	// observabilityMissingRuntime: the daemon completed a cycle and attributed
+	// no process at all to an active service, so runtime metrics are not late,
+	// they are unavailable until the selectors or the host situation change.
+	observabilityMissingProcesses = "service processes"
 )
 
 const (

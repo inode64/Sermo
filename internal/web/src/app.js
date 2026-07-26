@@ -187,6 +187,7 @@ const serviceStatusFilterStates = [
   targetStateStarting,
   targetStateCollecting,
   targetStateMonitored,
+  targetStateWarning,
   targetStateFailed,
 ];
 const watchStatusFilterStates = [targetStateDisabled, targetStateOK, targetStateStarting, targetStateStale, targetStateTesting, targetStateRecovering, targetStateRebuilding, targetStateRepairing, targetStateMoving, targetStateMerging, targetStateFailed];
@@ -206,7 +207,9 @@ const chartViewHeight = 160;
 const chartColumnCount = 120;
 const metricChartPad = 34;
 const slaBarCount = 90;
-const overviewActiveServiceStates = [targetStateStarted, targetStateActive, targetStateCollecting, targetStateMonitored];
+// A warning service is running with passing checks — only its process-tree
+// observability is missing — so it counts as active like a collecting one.
+const overviewActiveServiceStates = [targetStateStarted, targetStateActive, targetStateCollecting, targetStateWarning, targetStateMonitored];
 const mountStateClasses = {
   [mountStateActive]: "state-running",
   [mountStateInactive]: "state-stopped",
@@ -1454,13 +1457,19 @@ function serviceDisplayState(s) {
 
 function serviceStateBadge(s) {
   const st = serviceDisplayState(s);
-  const missing = (st === targetStateCollecting && s && Array.isArray(s.observability_missing) && s.observability_missing.length)
-    ? `Collecting ${s.observability_missing.join(", ")}`
+  const indicators = (s && Array.isArray(s.observability_missing) && s.observability_missing.length)
+    ? s.observability_missing.join(", ")
+    : "";
+  const missing = (st === targetStateCollecting && indicators) ? `Collecting ${indicators}` : "";
+  // The warning state is reached only through the definite indicator gap, so it
+  // is worth saying that waiting will not clear it.
+  const blind = (st === targetStateWarning && indicators)
+    ? `The unit is active and its checks pass, but the daemon attributes no process to it, so ${indicators} stay unavailable`
     : "";
   const active = st === targetStateActive
     ? "Process confirmed; checks and runtime metrics are not available yet"
     : "";
-  const title = missing || active;
+  const title = missing || blind || active;
   return title ? tpl`<span title="${title}">${stateBadge(st)}</span>` : stateBadge(st);
 }
 
@@ -1565,6 +1574,10 @@ function openPanelTarget(target) {
   }
   if (target === "collecting-services") {
     openServiceStatusTarget(targetStateCollecting);
+    return;
+  }
+  if (target === "warning-services") {
+    openServiceStatusTarget(targetStateWarning);
     return;
   }
   if (target === "monitored-services") {
@@ -5509,6 +5522,7 @@ function panelTargetLabel(target) {
     case "failed-services": return "service targets panel, failed filter";
     case "starting-services": return "service targets panel, starting filter";
     case "collecting-services": return "service targets panel, collecting filter";
+    case "warning-services": return "service targets panel, warning filter";
     case "monitored-services": return "service targets panel, monitored filter";
     case "failed-watches": return "watches panel, failed filter";
     case "starting-watches": return "watches panel, starting filter";
@@ -5538,6 +5552,33 @@ function tileGaugeId(key) {
 
 // renderOverview fills the at-a-glance tile band under the topbar: one tile per
 // vital sign, colored by health, each clickable to jump to its panel. load()
+// firstMatch returns the value paired with the first truthy condition, or the
+// fallback when none match. The overview picks a tile's class, subtitle and
+// click target from ordered priority lists; written as nested ternaries those
+// chains are the same logic but unreadable, and they dominate this function's
+// measured complexity.
+function firstMatch(pairs, fallback) {
+  const hit = pairs.find(([when]) => when);
+  return hit ? hit[1] : fallback;
+}
+
+// settlingSub renders a tile's settling subtitle: its own starting count when
+// it has one, otherwise the other panels still settling, in order.
+function settlingSub(ownCount, others) {
+  if (ownCount) return `${ownCount} starting`;
+  return others.filter(([when]) => when).map(([, label]) => label).join(" · ");
+}
+
+// overviewTile renders one clickable band tile. Module scope so renderOverview
+// stays within its size budget; the band's default target is passed in.
+const overviewTile = (opts, defaultTarget) => tpl`
+  <button class="tile ${opts.cls || ""}" data-panel-target="${opts.target || defaultTarget}" aria-label="${opts.ariaLabel || opts.label}" aria-describedby="${opts.describedBy || nothing}">
+    <span class="t-label">${opts.label}</span>
+    <div class="t-value">${opts.value}</div>
+    <div class="t-sub">${opts.sub || ""}</div>
+    ${opts.extra || nothing}
+  </button>`;
+
 // passes the same burst snapshot into renderStatus — no extra requests here.
 function renderOverview(ctx) {
   const band = $("#overview");
@@ -5548,6 +5589,8 @@ function renderOverview(ctx) {
   const failedSvcs = svcs.filter((s) => serviceDisplayState(s) === targetStateFailed);
   const startingSvcs = svcs.filter((s) => serviceDisplayState(s) === targetStateStarting);
   const collectingSvcs = svcs.filter((s) => serviceDisplayState(s) === targetStateCollecting);
+  // Running, checks passing, but no attributable process tree: a blind spot.
+  const blindSvcs = svcs.filter((s) => serviceDisplayState(s) === targetStateWarning);
   const activeSvcs = enabled.filter((s) => overviewActiveServiceStates.includes(serviceDisplayState(s)));
   const monitoredSvcs = enabled.filter((s) => serviceDisplayState(s) === targetStateMonitored);
   const watches = allWatches || [];
@@ -5561,51 +5604,51 @@ function renderOverview(ctx) {
   const failedApps = (allApps || []).filter((a) => appStateText(a) === targetStateFailed);
   const alerts = failedSvcs.length + failedWatches.length + failedApps.length + activeLocks.length;
   const settling = daemonStarting || startingSvcs.length > 0 || startingWatches.length > 0 || startingApps.length > 0;
-  const servicesSettlingSub = () => {
-    if (startingSvcs.length) return `${startingSvcs.length} starting`;
-    const parts = [];
-    if (daemonStarting) parts.push("daemon starting");
-    if (startingWatches.length) parts.push(`${startingWatches.length} watch starting`);
-    if (startingApps.length) parts.push(`${startingApps.length} app starting`);
-    return parts.length ? parts.join(" · ") : "";
-  };
-  const watchesSettlingSub = () => {
-    if (startingWatches.length) return `${startingWatches.length} starting`;
-    const parts = [];
-    if (daemonStarting) parts.push("daemon starting");
-    if (startingSvcs.length) parts.push(`${startingSvcs.length} svc starting`);
-    if (startingApps.length) parts.push(`${startingApps.length} app starting`);
-    return parts.length ? parts.join(" · ") : "";
-  };
-  const watchesSettling = settling && !failedWatches.length && !staleWatches.length;
+  const servicesSettlingSub = () => settlingSub(startingSvcs.length, [
+    [daemonStarting, "daemon starting"],
+    [startingWatches.length, `${startingWatches.length} watch starting`],
+    [startingApps.length, `${startingApps.length} app starting`],
+  ]);
+  const watchesSettlingSub = () => settlingSub(startingWatches.length, [
+    [daemonStarting, "daemon starting"],
+    [startingSvcs.length, `${startingSvcs.length} svc starting`],
+    [startingApps.length, `${startingApps.length} app starting`],
+  ]);
   const defaultServiceTarget = defaultServicePanelTarget();
-  const servicesTarget = failedSvcs.length ? "failed-services"
-    : (startingSvcs.length || daemonStarting ? "starting-services"
-      : (collectingSvcs.length ? "collecting-services"
-        : (startingWatches.length ? "starting-watches"
-          : (startingApps.length ? "starting-apps" : defaultServiceTarget))));
-  const watchesTarget = failedWatches.length ? "failed-watches"
-    : (staleWatches.length ? "stale-watches"
-      : (startingWatches.length ? "starting-watches"
-        : (startingApps.length && !startingSvcs.length && !daemonStarting ? "starting-apps"
-          : (settling ? "starting-services" : "watches-section"))));
+  const servicesTarget = firstMatch([
+    [failedSvcs.length, "failed-services"],
+    [startingSvcs.length || daemonStarting, "starting-services"],
+    [collectingSvcs.length, "collecting-services"],
+    [blindSvcs.length, "warning-services"],
+    [startingWatches.length, "starting-watches"],
+    [startingApps.length, "starting-apps"],
+  ], defaultServiceTarget);
+  const watchesTarget = firstMatch([
+    [failedWatches.length, "failed-watches"],
+    [staleWatches.length, "stale-watches"],
+    [startingWatches.length, "starting-watches"],
+    [startingApps.length && !startingSvcs.length && !daemonStarting, "starting-apps"],
+    [settling, "starting-services"],
+  ], "watches-section");
 
-  const tile = (opts) => tpl`
-    <button class="tile ${opts.cls || ""}" data-panel-target="${opts.target || defaultServiceTarget}" aria-label="${opts.ariaLabel || opts.label}" aria-describedby="${opts.describedBy || nothing}">
-      <span class="t-label">${opts.label}</span>
-      <div class="t-value">${opts.value}</div>
-      <div class="t-sub">${opts.sub || ""}</div>
-      ${opts.extra || nothing}
-    </button>`;
-
+  const tile = (opts) => overviewTile(opts, defaultServiceTarget);
   const tiles = [];
-  const servicesSub = failedSvcs.length
-    ? `${failedSvcs.length} failed`
-    : (servicesSettlingSub() || (collectingSvcs.length ? `${collectingSvcs.length} collecting` : (enabled.length === 0 ? "none enabled" : "all active")));
+  const servicesSub = firstMatch([
+    [failedSvcs.length, `${failedSvcs.length} failed`],
+    [servicesSettlingSub(), servicesSettlingSub()],
+    [collectingSvcs.length, `${collectingSvcs.length} collecting`],
+    [blindSvcs.length, `${blindSvcs.length} without processes`],
+    [enabled.length === 0, "none enabled"],
+  ], "all active");
   tiles.push(tile({
     label: "Services active",
     value: tpl`${activeSvcs.length}<small> / ${enabled.length}</small>`,
-    cls: failedSvcs.length ? "t-crit" : (collectingSvcs.length ? "t-warn" : (settling ? "" : (enabled.length ? "t-ok" : ""))),
+    cls: firstMatch([
+      [failedSvcs.length, "t-crit"],
+      [collectingSvcs.length || blindSvcs.length, "t-warn"],
+      [settling, ""],
+      [enabled.length, "t-ok"],
+    ], ""),
     sub: servicesSub,
     target: servicesTarget,
     ariaLabel: tileAriaLabel("Services active", `${activeSvcs.length} of ${enabled.length}`, servicesSub, servicesTarget),
@@ -5621,18 +5664,18 @@ function renderOverview(ctx) {
     tiles.push(tile({
       label: "Watches",
       value: tpl`${watchesUp}<small> / ${enabledWatches.length}</small>`,
-      cls: failedWatches.length ? "t-crit" : (staleWatches.length ? "t-warn" : (watchesSettling ? "" : "t-ok")),
+      cls: failedWatches.length ? "t-crit" : (staleWatches.length ? "t-warn" : (settling ? "" : "t-ok")),
       sub: watchesSub,
       target: watchesTarget,
       ariaLabel: tileAriaLabel("Watches", `${watchesUp} of ${enabledWatches.length}`, watchesSub, watchesTarget),
     }));
   }
-  const alertsTarget = alerts
-    ? (failedSvcs.length ? "failed-services"
-      : (failedWatches.length ? "failed-watches"
-        : (failedApps.length ? "failed-apps"
-          : (activeLocks.length ? "locks-section" : defaultServiceTarget))))
-    : defaultServiceTarget;
+  const alertsTarget = firstMatch([
+    [failedSvcs.length, "failed-services"],
+    [failedWatches.length, "failed-watches"],
+    [failedApps.length, "failed-apps"],
+    [activeLocks.length, "locks-section"],
+  ], defaultServiceTarget);
   const alertsSub = alerts
     ? [failedSvcs.length && `${failedSvcs.length} svc`, failedWatches.length && `${failedWatches.length} watch`, failedApps.length && `${failedApps.length} app`, activeLocks.length && `${activeLocks.length} lock`].filter(Boolean).join(" · ")
     : "nothing on fire";
@@ -5647,19 +5690,26 @@ function renderOverview(ctx) {
     target: alertsTarget,
     ariaLabel: firstSnapshotDone ? tileAriaLabel("Alerts", String(alerts), alertsSub, alertsTarget) : "Alerts loading",
   }));
-  const monitoredTarget = collectingSvcs.length && !failedSvcs.length
-    ? "collecting-services"
-    : (settling && !failedSvcs.length
-    ? servicesTarget
-    : (monitoredSvcs.length ? "monitored-services" : defaultServiceTarget));
-  const monitoredSub = collectingSvcs.length
-    ? `${collectingSvcs.length} collecting`
-    : (settling && !failedSvcs.length ? (servicesSettlingSub() || "settling") : "");
+  const monitoredTarget = firstMatch([
+    [collectingSvcs.length && !failedSvcs.length, "collecting-services"],
+    [settling && !failedSvcs.length, servicesTarget],
+    [blindSvcs.length && !failedSvcs.length, "warning-services"],
+    [monitoredSvcs.length, "monitored-services"],
+  ], defaultServiceTarget);
+  const monitoredSub = firstMatch([
+    [collectingSvcs.length, `${collectingSvcs.length} collecting`],
+    [settling && !failedSvcs.length, servicesSettlingSub() || "settling"],
+    [blindSvcs.length, `${blindSvcs.length} without processes`],
+  ], "");
   if (enabled.length || (mon && mon.total != null)) {
     tiles.push(tile({
       label: "Monitored",
       value: tpl`${monitoredSvcs.length}<small> / ${enabled.length}</small>`,
-      cls: collectingSvcs.length ? "t-warn" : (settling && !failedSvcs.length ? "" : (enabled.length && monitoredSvcs.length === enabled.length ? "t-ok" : "")),
+      cls: firstMatch([
+        [collectingSvcs.length || blindSvcs.length, "t-warn"],
+        [settling && !failedSvcs.length, ""],
+        [enabled.length && monitoredSvcs.length === enabled.length, "t-ok"],
+      ], ""),
       sub: monitoredSub,
       target: monitoredTarget,
       ariaLabel: tileAriaLabel("Monitored", `${monitoredSvcs.length} of ${enabled.length}`, monitoredSub, monitoredTarget),

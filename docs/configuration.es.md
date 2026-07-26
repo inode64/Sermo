@@ -1019,8 +1019,11 @@ El panel y `GET /api/services` / `GET /api/watches` exponen `state`,
 `monitored`, `monitor_source` y `monitor_changed_at` por separado. Un service
 puede mostrar `started` cuando el backend está activo pero la monitorización
 está pausada, `collecting` mientras la monitorización está activa pero los
-indicadores de runtime/check/SLA todavía se están llenando, y `monitored` solo
-cuando esos indicadores están listos. Los host watches no tienen estados
+indicadores de runtime/check/SLA todavía se están llenando, `warning` cuando el
+único indicador que falta ya no va a llegar —el unit está activo y sus checks
+pasan, pero un ciclo completo del daemon no le atribuyó ningún proceso, así que
+`observability_missing` informa `service processes`— y `monitored` solo cuando
+esos indicadores están listos. Los host watches no tienen estados
 `started` o `stopped` del gestor de servicios; su `state` es `disabled` cuando
 la configuración o el estado de monitorización los excluye de las comprobaciones
 activas, `starting` antes de la primera muestra monitorizada, `failed` para una
