@@ -285,6 +285,63 @@ func TestReadPidfilePostgresFormat(t *testing.T) {
 	}
 }
 
+func TestReadPidfileProcessGroupForm(t *testing.T) {
+	dir := t.TempDir()
+	tests := []struct {
+		name    string
+		content string
+		want    int
+		wantErr bool
+	}{
+		{name: "negative is the group leader pid", content: "-3730\n", want: 3730},
+		{name: "negative with trailing metadata", content: "-42\nsomething else\n", want: 42},
+		{name: "minus one names every process", content: "-1\n", wantErr: true},
+		{name: "minus zero is not a group", content: "-0\n", wantErr: true},
+		{name: "zero stays invalid", content: "0\n", wantErr: true},
+		{name: "non numeric stays invalid", content: "-\n", wantErr: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			pidfile := filepath.Join(dir, strings.ReplaceAll(tt.name, " ", "_")+".pid")
+			if err := os.WriteFile(pidfile, []byte(tt.content), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			got, err := ReadPidfile(pidfile)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatalf("ReadPidfile(%q) = %d, want an error", tt.content, got)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("ReadPidfile(%q) error = %v", tt.content, err)
+			}
+			if got != tt.want {
+				t.Fatalf("ReadPidfile(%q) = %d, want %d", tt.content, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestDiscoverPidfileProcessGroupMatchesLeader(t *testing.T) {
+	dir := t.TempDir()
+	pidfile := filepath.Join(dir, "dccifd.pid")
+	if err := os.WriteFile(pidfile, []byte("-3730\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	reader := &fakeReader{ids: map[int]Identity{
+		3730: {PID: 3730, PPID: 3729, UID: 0, Exe: "/usr/sbin/dccifd", ExeOK: true, Cmdline: []string{"/usr/sbin/dccifd"}},
+	}}
+	d := Discoverer{Reader: reader}
+	procs, warnings := d.Discover([]Selector{{Name: "main", Type: SelectorPidfile, Paths: []string{pidfile}}})
+	if len(warnings) != 0 {
+		t.Fatalf("warnings = %v, want none", warnings)
+	}
+	if len(procs) != 1 || procs[0].PID != 3730 || procs[0].Source != SelectorPidfile {
+		t.Fatalf("procs = %+v, want the group leader 3730 from the pidfile", procs)
+	}
+}
+
 func TestDiscoverPidfileDeadPIDWarns(t *testing.T) {
 	dir := t.TempDir()
 	pidfile := filepath.Join(dir, "mysqld.pid")
