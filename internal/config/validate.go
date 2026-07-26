@@ -371,6 +371,7 @@ func validateDocument(cfg *Config, doc *Document) ([]Issue, bool) {
 	issues = append(issues, validateVersionFrom(cfg, doc, scope)...)
 	issues = append(issues, validateVersionsFrom(doc, scope)...)
 	issues = append(issues, validateVersionsCurrentFrom(doc, scope)...)
+	issues = append(issues, validateVersionsSuffix(doc, scope)...)
 	issues = append(issues, validateAppLinks(cfg, doc, scope)...)
 	issues = append(issues, validateVersionMatch(doc, scope)...)
 	issues = append(issues, validateDocumentInterval(doc, scope)...)
@@ -583,6 +584,31 @@ func validateVersionsCurrentFrom(doc *Document, scope string) []Issue {
 
 func validateVersionsFrom(doc *Document, scope string) []Issue {
 	return validateVersionsValue(doc, scope, keyVersionsFrom, versionsPathFrom, validateVersionsFromValue)
+}
+
+func validateVersionsSuffix(doc *Document, scope string) []Issue {
+	return validateVersionsValue(doc, scope, keyVersionsSuffix, versionsPathSuffix, validateVersionsSuffixValue)
+}
+
+// validateVersionsSuffixValue rejects a suffix glob that cannot leave a version
+// behind. A bare wildcard would erase the whole captured value, so a suffix must
+// begin with a literal character that separates it from the version.
+func validateVersionsSuffixValue(path string, raw any, add addFunc) {
+	switch v := raw.(type) {
+	case string:
+		switch {
+		case v == "":
+			add("%s must be a non-empty suffix glob", path)
+		case v[0] == '*' || v[0] == '?':
+			add("%s must start with a literal separator, not a wildcard: %q would consume the version itself", path, v)
+		}
+	case []any:
+		for i, item := range v {
+			validateVersionsSuffixValue(fmt.Sprintf(validationListIndexFormat, path, i), item, add)
+		}
+	default:
+		add("%s must be a suffix glob string or list of suffix glob strings", path)
+	}
 }
 
 func validateVersionsValue(doc *Document, scope, key, path string, validate func(string, any, addFunc)) []Issue {

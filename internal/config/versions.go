@@ -55,6 +55,7 @@ const (
 	keyVersionsRequire     = "require"
 	keyVersionsCurrentFrom = "current_from"
 	keyVersionsUnversioned = "unversioned"
+	keyVersionsSuffix      = "suffix"
 	// Template token variable names: the ${...} body variable each placeholder
 	// binds, and the key its captured value is stored under in a match.
 	varVersion  = "version"
@@ -172,6 +173,7 @@ func (c *Config) materializeRegistry(ctx context.Context, names []string, reg ma
 func (c *Config) recordTemplateValidationIssues(tmpl *Document) {
 	c.validationIssues = append(c.validationIssues, validateVersionsFrom(tmpl, documentScope(tmpl))...)
 	c.validationIssues = append(c.validationIssues, validateVersionsCurrentFrom(tmpl, documentScope(tmpl))...)
+	c.validationIssues = append(c.validationIssues, validateVersionsSuffix(tmpl, documentScope(tmpl))...)
 }
 
 func (c *Config) recordMaterializedNameCollision(kind string, tmpl, inst, existing *Document) {
@@ -560,7 +562,7 @@ type templateMatch struct {
 }
 
 func materializedTemplateMatches(discoverPaths []string, matchedBinary bool, options map[string]any, toks []tmplToken) []templateMatch {
-	matches := discoverTokenMatches(discoverPaths, toks, matchedBinary)
+	matches := stripVersionSuffixes(discoverTokenMatches(discoverPaths, toks, matchedBinary), options)
 	if tok, ok := unversionedTemplateToken(toks); ok && versionUnversionedEnabled(options, tok) {
 		matches = append(matches, currentFromTemplateMatches(options, toks)...)
 	}
@@ -578,6 +580,90 @@ func materializedTemplateMatches(discoverPaths []string, matchedBinary bool, opt
 	matches = dedupeTemplateMatches(matches, toks)
 	sortTemplateMatches(matches)
 	return matches
+}
+
+// stripVersionSuffixes trims the `versions.suffix` globs from each discovered
+// `${version}` value. A package that ships one binary per subcommand
+// (Berkeley DB's db5.3_archive, db5.3_dump, ...) otherwise materializes one app
+// per subcommand, because a trailing `%v` captures everything after the name.
+// Declaring `suffix: "_*"` makes all of those collapse to version 5.3, which
+// dedupeTemplateMatches then folds into a single instance.
+//
+// Trimming is best effort per value: a value that does not end in the suffix,
+// or that the suffix would consume entirely, is kept whole. A version only ever
+// gets shorter, so it stays digit-leading and can never grow into another one.
+func stripVersionSuffixes(matches []templateMatch, options map[string]any) []templateMatch {
+	globs := versionsSuffixGlobs(options)
+	if len(globs) == 0 {
+		return matches
+	}
+	for _, match := range matches {
+		value, ok := match.values[varVersion]
+		if !ok || value == "" {
+			continue
+		}
+		if trimmed, ok := trimVersionSuffix(value, globs); ok {
+			match.values[varVersion] = trimmed
+		}
+	}
+	return matches
+}
+
+func versionsSuffixGlobs(body map[string]any) []string {
+	v, ok := body[keyVersions].(map[string]any)
+	if !ok {
+		return nil
+	}
+	return cfgval.StringList(v[keyVersionsSuffix])
+}
+
+// trimVersionSuffix removes the longest match of any suffix glob anchored at the
+// end of value. Globs use the same `*` / `?` wildcards as a discovery path, but
+// match a version value rather than a filesystem path.
+func trimVersionSuffix(value string, globs []string) (string, bool) {
+	best := value
+	for _, glob := range globs {
+		re := suffixGlobRegexp(glob)
+		if re == nil {
+			continue
+		}
+		loc := re.FindStringIndex(value)
+		if loc == nil {
+			continue
+		}
+		if candidate := value[:loc[0]]; len(candidate) < len(best) {
+			best = candidate
+		}
+	}
+	if best == value || best == "" {
+		return value, false
+	}
+	return best, true
+}
+
+// suffixGlobRegexp compiles a suffix glob into a regex anchored at the end of the
+// value. The leftmost match wins in FindStringIndex, so the longest suffix is
+// what gets trimmed.
+func suffixGlobRegexp(glob string) *regexp.Regexp {
+	if glob == "" {
+		return nil
+	}
+	var sb strings.Builder
+	for _, r := range glob {
+		switch r {
+		case '*':
+			sb.WriteString("[^/]*")
+		case '?':
+			sb.WriteString("[^/]")
+		default:
+			sb.WriteString(regexp.QuoteMeta(string(r)))
+		}
+	}
+	re, err := regexp.Compile(sb.String() + "$")
+	if err != nil {
+		return nil
+	}
+	return re
 }
 
 func unversionedTemplateToken(toks []tmplToken) (tmplToken, bool) {

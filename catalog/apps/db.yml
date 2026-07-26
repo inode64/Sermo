@@ -2,8 +2,19 @@ name: db%v
 display_name: "Berkeley DB ${version}"
 category: database
 description: "Oracle Berkeley DB"
+# Berkeley DB ships one binary per subcommand (db5.3_archive, db5.3_dump, ...)
+# and no bare db5.3, so discovery globs the whole family and `suffix` trims the
+# subcommand back to the release. The probe binary is pinned rather than left to
+# glob order: db5.3_tuner does not accept -V.
+versions:
+  from: ${bindir}/db${version}
+  suffix: "_*"
 variables:
-  binary: ${bindir}/db${version}
+  binary:
+    - ${bindir}/db${version}_dump
+    - ${bindir}/db${version}_stat
+    - ${bindir}/db${version}_load
+    - ${bindir}/db${version}_verify
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}", "-V"], timeout: 10s }

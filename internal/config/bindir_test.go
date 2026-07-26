@@ -118,3 +118,64 @@ preflight:
 		t.Errorf("unexpected validation issue: %s", issue)
 	}
 }
+
+// versions.from and versions.current_from name binaries in the same standard
+// directories variables.binary does, so ${bindir} has to reach them too --
+// otherwise a template discovering a family of tools silently matches nothing.
+func TestExpandBindirVersionDiscoveryPaths(t *testing.T) {
+	expanded := func(suffix string) []any {
+		return []any{"/usr/bin/" + suffix, "/usr/sbin/" + suffix, "/usr/local/bin/" + suffix, "/usr/local/sbin/" + suffix}
+	}
+	tests := []struct {
+		name     string
+		versions map[string]any
+		key      string
+		want     any
+	}{
+		{
+			name:     "from",
+			key:      "from",
+			versions: map[string]any{"from": "${bindir}/db${version}"},
+			want:     expanded("db${version}"),
+		},
+		{
+			name:     "current_from",
+			key:      "current_from",
+			versions: map[string]any{"current_from": "${bindir}/db"},
+			want:     expanded("db"),
+		},
+		{
+			name:     "backend keyed from",
+			key:      "from",
+			versions: map[string]any{"from": map[string]any{"openrc": "${bindir}/db${version}"}},
+			want:     map[string]any{"openrc": expanded("db${version}")},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			body := map[string]any{keyVersions: tt.versions}
+			expandBindirVersionPaths(body)
+			versions, _ := body[keyVersions].(map[string]any)
+			if got := versions[tt.key]; !reflect.DeepEqual(got, tt.want) {
+				t.Fatalf("versions.%s = %#v, want %#v", tt.key, got, tt.want)
+			}
+		})
+	}
+}
+
+// A versions block without ${bindir}, or without discovery paths at all, passes
+// through untouched.
+func TestExpandBindirVersionPathsLeavesOtherValues(t *testing.T) {
+	body := map[string]any{keyVersions: map[string]any{
+		"from":   "/opt/db${version}/bin/db",
+		"suffix": "_*",
+	}}
+	expandBindirVersionPaths(body)
+	versions, _ := body[keyVersions].(map[string]any)
+	if got := versions["from"]; got != "/opt/db${version}/bin/db" {
+		t.Fatalf("versions.from = %#v, want the original string", got)
+	}
+	if got := versions["suffix"]; got != "_*" {
+		t.Fatalf("versions.suffix = %#v, want %q", got, "_*")
+	}
+}

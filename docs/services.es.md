@@ -1028,6 +1028,46 @@ con versiones. Aun así, un placeholder acotado en ambos lados (p. ej.
 `/usr/lib64/php${version}/bin/php-fpm`, en el path `variables.binary` de la app) descubre con más
 precisión.
 
+### Sufijos de subcomando al final
+
+Algunos paquetes instalan un binario por subcomando y ningún punto de entrada
+versionado simple: Berkeley DB instala `db5.3_archive`, `db5.3_dump`,
+`db5.3_stat`, … y ningún `db5.3`. Un `${version}` final captura todo lo que
+sigue al nombre, así que cada subcomando materializaría su propia app
+(`Berkeley DB 5.3_archive`, `Berkeley DB 5.3_dump`, …).
+
+`versions.suffix` nombra la parte del valor capturado que no es la versión.
+Acepta un glob o una lista, anclados al final del valor; se recorta la
+coincidencia más larga, y todos los valores recortados se deduplican en una
+única instancia:
+
+```yaml
+name: db%v
+display_name: "Berkeley DB ${version}"
+versions:
+  from: ${bindir}/db${version}
+  suffix: "_*"
+variables:
+  binary:
+    - ${bindir}/db${version}_dump
+    - ${bindir}/db${version}_stat
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}", "-V"], timeout: 10s }
+```
+
+`db5.3_archive`, `db5.3_dump` y `db5.3_stat` se recortan todos a `5.3`, así que
+se registra una app `db5.3` por release instalada. Un valor que el sufijo no
+casa, o que consumiría por completo, se mantiene íntegro — un `db6.2` simple
+sigue registrándose como `6.2`. Un sufijo debe empezar por un separador
+literal; un `*` o `?` inicial se rechaza porque se tragaría la versión misma.
+
+Fija `variables.binary` cuando la familia se descubre así. El descubrimiento
+desde `versions.from` no toca el binario declarado, así que es la lista de
+candidatos —y no el primero que casó el glob— la que decide qué subcomando
+sondea el preflight; importa cuando algunos se comportan distinto
+(`db5.3_tuner` rechaza `-V`).
+
 ### Placeholders de entero e instancia
 
 `%v`/`${version}` acepta una versión que empieza con dígito (`8.3`, `12.0.2`); use
