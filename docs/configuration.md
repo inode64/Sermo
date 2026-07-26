@@ -977,7 +977,10 @@ The dashboard and `GET /api/services` / `GET /api/watches` expose `state`,
 `monitored`, `monitor_source` and `monitor_changed_at` separately. A service can
 show `started` while its backend is active but monitoring is paused,
 `collecting` while monitoring is active but runtime/check/SLA indicators are
-still filling, and `monitored` only once those indicators are ready. Host
+still filling, `warning` when the only indicator left is one that will not
+arrive — the unit is active and its checks pass, but a completed daemon cycle
+attributed no process to it, so `observability_missing` reports `service
+processes` — and `monitored` only once those indicators are ready. Host
 watches do not have service-manager `started` or `stopped` states; their `state`
 is `disabled` when configuration or monitor state excludes them from active
 checks, `starting` before the first monitored sample, `failed` for an active
