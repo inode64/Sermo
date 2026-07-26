@@ -66,6 +66,9 @@ func TestLVMCheckCapacityPredicate(t *testing.T) {
 	if got := result.Data[DataKeyLogicalVolume]; got != "root" {
 		t.Fatalf("logical volume = %v, want root", got)
 	}
+	if want := "lvm vg0/root health=error"; result.Message != want {
+		t.Fatalf("message = %q, want %q", result.Message, want)
+	}
 	if got := result.Data[DataKeyLVMFreeBytes]; got != float64(50) {
 		t.Fatalf("free bytes = %v, want 50", got)
 	}
@@ -89,5 +92,8 @@ func TestLVMVolumeGroupCapacityWatchKeepsLogicalVolumeEmpty(t *testing.T) {
 	}
 	if got := result.Data[DataKeyLogicalVolume]; got != "" {
 		t.Fatalf("logical volume = %v, want empty for VG capacity watch", got)
+	}
+	if want := "lvm vg0 health=ok"; result.Message != want {
+		t.Fatalf("message = %q, want %q (a VG watch must not name one member LV)", result.Message, want)
 	}
 }

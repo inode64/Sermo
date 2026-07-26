@@ -84,7 +84,8 @@ func (c *lvmCheck) Run(ctx context.Context) Result {
 	if len(reasons) > 0 {
 		health = LVMHealthError
 	}
-	message := fmt.Sprintf("lvm %s/%s health=%s", row.VGName, row.LVName, health)
+	vg, lv := c.resultTarget(row)
+	message := fmt.Sprintf("lvm %s health=%s", lvmTargetLabel(vg, lv), health)
 	return c.finish(start, row, health, strings.Join(reasons, ","), values, message)
 }
 
@@ -121,6 +122,16 @@ func (c *lvmCheck) finish(start time.Time, row lvmRow, health, reasons string, v
 	}
 	c.primed, c.previousHealth, c.previousReasons = true, health, reasons
 	return r
+}
+
+// lvmTargetLabel names what the watch actually covers: "vg/lv" for a volume
+// scoped watch, plain "vg" for a volume-group scoped one. A group watch must not
+// borrow the first matched row's LV name, which belongs to a different watch.
+func lvmTargetLabel(vg, lv string) string {
+	if lv == "" {
+		return vg
+	}
+	return vg + "/" + lv
 }
 
 func (c *lvmCheck) resultTarget(row lvmRow) (string, string) {
