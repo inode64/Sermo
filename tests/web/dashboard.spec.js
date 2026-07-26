@@ -250,6 +250,8 @@ test("single-choice filters stay hidden", async ({ page }) => {
 test("inventory panels group by their meaningful type", async ({ page }) => {
   await expect(page.locator("#watch-rows .group-row")).toHaveCount(3);
   await expect(page.locator("#wat-row-process-queue .watch-scope")).toHaveText("service");
+  // Host scope is the panel default and is not repeated after every name.
+  await expect(page.locator("#wat-row-storage-data .watch-scope")).toHaveCount(0);
   await page.locator("#mount-group-toggle").click();
   await expect(page.locator("#mount-rows .group-row")).toHaveCount(2);
   await page.locator('#watch-rows [data-group-name="Network"]').click();
