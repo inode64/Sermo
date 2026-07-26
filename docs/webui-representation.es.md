@@ -396,10 +396,12 @@ señales.
 
 Section id: `watches-section`
 
-`Watches` contiene tanto watches de host como watches de service. Cada fila
-muestra su `scope`; los nombres de watches de service usan `service:watch` y se
-ejecutan como parte del worker de ese service, no de forma independiente como
-los watches de host.
+`Watches` contiene tanto watches de host como watches de service. El scope de
+host es el predeterminado del panel, así que solo las filas de service marcan su
+`scope` junto al nombre; esos nombres usan `service:watch` y se ejecutan como
+parte del worker de ese service, no de forma independiente como los watches de
+host. La expansión de cada fila muestra el valor completo de `scope`, y ambos
+valores siguen siendo buscables.
 
 El resumen de un watch `storage` muestra la ruta, el sistema de archivos, el
 punto de montaje y el espacio usado/libre, además del recuento de **archivos
