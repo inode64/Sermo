@@ -1,0 +1,49 @@
+name: nebula-mgmt
+display_name: Nebula Management Server
+category: vpn
+description: Nebula Mesh control plane for certificates, hosts, and configuration.
+service:
+  systemd:
+    - nebula-mgmt
+  openrc:
+    - nebula-mgmt
+apps:
+  - nebula-mgmt
+variables:
+  user: nebula-mgmt
+  config: /etc/nebula-mgmt/server.yml
+  host:
+    from_file: ${config}
+    pattern: >-
+      (?m)^\s*listen:\s*['"]?(\[[^]]+\]|[^'"\s:]+)
+    default: 127.0.0.1
+  port:
+    from_file: ${config}
+    pattern: >-
+      (?m)^\s*listen:\s*['"]?(?:\[[^]]+\]|[^'"\s:]+):(\d+)
+    default: 8080
+config_files:
+  - ${config}
+preflight:
+  config:
+    type: file
+    path: ${config}
+pidfile:
+  path: /run/supervise-nebula-mgmt.pid
+  optional: true
+processes:
+  main:
+    exe: ${nebula_mgmt_binary}
+    user: ${user}
+watches:
+  service:
+    check:
+      type: service
+      expect: active
+  ready:
+    check:
+      type: http
+      url: http://${host}:${port}/readyz
+      expect_status: 200
+      timeout: 5s
+      verify: true
