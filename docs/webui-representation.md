@@ -392,9 +392,11 @@ blockers or sending signals.
 
 Section id: `watches-section`
 
-`Watches` contains both host-level and service-scoped watches. Every row shows
-its `scope`; service-scoped names use `service:watch` and run as part of that
-service's worker rather than independently as host watches do.
+`Watches` contains both host-level and service-scoped watches. Host scope is the
+panel default, so only a service-scoped row marks its `scope` next to the name;
+those names use `service:watch` and run as part of that service's worker rather
+than independently as host watches do. Every row's expansion shows the full
+`scope` value, and both values remain searchable.
 
 A `storage` watch summary shows the path, filesystem, mount point and used/free
 space from the latest fresh daemon-cycle snapshot. The Web UI does not rescan

@@ -4112,6 +4112,13 @@ function watchScope(w) {
   return w && w.scope === watchScopeService ? watchScopeService : watchScopeHost;
 }
 
+// watchScopeSuffix is the scope marker appended to a watch name in the row. Host
+// scope is the default for the panel, so only the service scope is worth the
+// pixels; the full value stays available in the expansion and in search text.
+function watchScopeSuffix(w) {
+  return watchScope(w) === watchScopeService ? tpl` <span class="muted watch-scope">${watchScopeService}</span>` : nothing;
+}
+
 // watchGroupOf is the presentation taxonomy for watches. It deliberately
 // groups stable operator concepts instead of creating a new table per check.
 function watchGroupOf(w) {
@@ -4223,7 +4230,7 @@ function watchLastCheckedCell(w) {
 // watchNameCell renders the shared expandable name cell (chevron + toggle).
 function watchNameCell(w, key, open) {
   const chev = tpl`<span class="exp" aria-hidden="true">${open ? '▾' : '▸'}</span>`;
-  return tpl`<td>${chev}<button type="button" class="row-toggle" data-exp-toggle="${key}" aria-expanded="${open}" aria-controls="${open ? "exp-" + key : nothing}" aria-label="${expandToggleAriaLabel(displayName(w), open, "watch details")}">${displayName(w)} <span class="muted watch-scope">${watchScope(w)}</span></button></td>`;
+  return tpl`<td>${chev}<button type="button" class="row-toggle" data-exp-toggle="${key}" aria-expanded="${open}" aria-controls="${open ? "exp-" + key : nothing}" aria-label="${expandToggleAriaLabel(displayName(w), open, "watch details")}">${displayName(w)}${watchScopeSuffix(w)}</button></td>`;
 }
 
 // watchActionsCell renders the shared actions cell (expand / monitor / unmonitor).
