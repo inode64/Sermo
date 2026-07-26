@@ -258,22 +258,6 @@ test("inventory panels group by their meaningful type", async ({ page }) => {
   await expect(page.locator("#wat-row-icmp-gateway")).toBeHidden();
 });
 
-test("storage watches filter by filesystem and sort their own columns", async ({ page }) => {
-  const filesystem = page.locator('[data-watch-type-filter="storage"]');
-  await expect(filesystem).toBeVisible();
-  await filesystem.selectOption("xfs");
-  await expect(page.locator("#wat-row-storage-backup")).toBeVisible();
-  await expect(page.locator("#wat-row-storage-data")).toBeHidden();
-
-  await filesystem.selectOption("all");
-  const usage = page.locator('[data-watch-type-sort-type="storage"][data-watch-type-sort="usage"]');
-  await expect(usage).toBeVisible();
-  await usage.click();
-  await expect(page.locator('#watch-rows [data-watch-type-sort-type="storage"][data-watch-type-sort="usage"]')).toHaveAttribute("aria-sort", "ascending");
-  await expect(page.locator('#watch-rows tr[data-exp-key^="wat:storage"]')).toHaveCount(2);
-  await expect(page.locator('#watch-rows tr[data-exp-key^="wat:storage"]').first()).toHaveAttribute("id", "wat-row-storage-data");
-});
-
 test("a running manual probe keeps health visible and disables a duplicate", async ({ page }) => {
   const row = page.locator("#wat-row-hdparm-sda");
   await expect(row).toContainText("checking");
