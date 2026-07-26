@@ -152,7 +152,11 @@ func (c *Config) materializeRegistry(ctx context.Context, names []string, reg ma
 			matches = dedupeTemplateMatches(matches, toks)
 			sortTemplateMatches(matches)
 			matches = c.withCurrentMatches(matches, tmpl.Name, toks, kind)
+			require := versionsRequire(body)
 			for _, match := range matches {
+				if !requireSatisfied(require, match.values, toks) {
+					continue
+				}
 				instances = append(instances, instantiateVersion(
 					body, tmpl.Name, match, tok, tmpl.Path, kind,
 				))
