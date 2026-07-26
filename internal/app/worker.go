@@ -746,7 +746,9 @@ func (w *Worker) fires(ctx context.Context, ev *rules.Evaluator, r rules.Rule, a
 		// Honor the rule's emission policy here too: an unevaluable condition
 		// persists for as long as the host stays broken, and emitting it every
 		// cycle buries every other event in the operator's feed.
-		msg := "evaluate: " + err.Error()
+		// evalRule already labels the failure ("evaluate rule condition: ..."),
+		// so this message needs no prefix of its own.
+		msg := err.Error()
 		event := Event{Kind: eventKindError, Rule: r.Name, Message: msg}
 		var probeErr *appProbeError
 		if errors.As(err, &probeErr) {
