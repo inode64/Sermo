@@ -2704,7 +2704,10 @@ variables:
 `${bindir}` is a prefix, not a standalone value: always write `${bindir}/<name>`.
 It composes with `${version}` templates (`${bindir}/php-fpm${version}`) and may
 be mixed with explicit paths inside a list when a binary also lives outside the
-standard directories. Because candidates resolve to the first one that exists,
+standard directories. It expands in `variables` and in the `versions.from` /
+`versions.current_from` discovery globs (including their per-backend branches),
+which name binaries in the same directories; it is not substituted anywhere
+else. Because candidates resolve to the first one that exists,
 the selected path is the installed one regardless of search order. For binaries
 outside these four directories (e.g. `/opt/...`, `/usr/lib/...`), keep an
 explicit path.

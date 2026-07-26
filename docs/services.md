@@ -1022,6 +1022,45 @@ for versions. Even so, a placeholder bounded on both sides (e.g.
 `/usr/lib64/php${version}/bin/php-fpm`, in the app `variables.binary` path) discovers most
 precisely.
 
+### Trailing subcommand suffixes
+
+Some packages ship one binary per subcommand and no plain versioned entry point:
+Berkeley DB installs `db5.3_archive`, `db5.3_dump`, `db5.3_stat`, … and no
+`db5.3`. A trailing `${version}` captures everything after the name, so each
+subcommand would materialize its own app (`Berkeley DB 5.3_archive`,
+`Berkeley DB 5.3_dump`, …).
+
+`versions.suffix` names the part of the captured value that is not the version.
+It takes one glob or a list of them, anchored at the end of the value; the
+longest match is trimmed, and every trimmed value then de-duplicates into a
+single instance:
+
+```yaml
+name: db%v
+display_name: "Berkeley DB ${version}"
+versions:
+  from: ${bindir}/db${version}
+  suffix: "_*"
+variables:
+  binary:
+    - ${bindir}/db${version}_dump
+    - ${bindir}/db${version}_stat
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}", "-V"], timeout: 10s }
+```
+
+`db5.3_archive`, `db5.3_dump` and `db5.3_stat` all trim to `5.3`, so one
+`db5.3` app is registered per installed release. A value the suffix does not
+match, or would consume entirely, is kept whole — a bare `db6.2` still
+registers as `6.2`. A suffix must begin with a literal separator; a leading `*`
+or `?` is rejected because it would swallow the version itself.
+
+Pin `variables.binary` when the family is discovered this way. Discovery from
+`versions.from` leaves the declared binary alone, so the candidate list decides
+which subcommand preflight probes instead of whichever one globbed first — it
+matters when some of them behave differently (`db5.3_tuner` rejects `-V`).
+
 ### Integer and instance placeholders
 
 `%v`/`${version}` accepts a digit-leading version (`8.3`, `12.0.2`); use

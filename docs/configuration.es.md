@@ -2785,7 +2785,10 @@ variables:
 `${bindir}` es un prefijo, no un valor independiente: siempre escribe
 `${bindir}/<name>`. Se compone con plantillas `${version}`
 (`${bindir}/php-fpm${version}`) y puede mezclarse con rutas explícitas dentro de una
-lista cuando un binario también reside fuera de los directorios estándar. Como los
+lista cuando un binario también reside fuera de los directorios estándar. Se
+expande en `variables` y en los globs de descubrimiento `versions.from` /
+`versions.current_from` (incluidas sus ramas por backend), que nombran binarios
+en esos mismos directorios; no se sustituye en ningún otro sitio. Como los
 candidatos se resuelven al primero que existe, la ruta seleccionada es la instalada
 independientemente del orden de búsqueda. Para binarios fuera de estos cuatro directorios
 (p. ej. `/opt/...`, `/usr/lib/...`), mantén una ruta explícita.

@@ -41,6 +41,7 @@ const (
 
 	versionsPathCurrentFrom = keyVersions + "." + keyVersionsCurrentFrom
 	versionsPathFrom        = keyVersions + "." + keyVersionsFrom
+	versionsPathSuffix      = keyVersions + "." + keyVersionsSuffix
 
 	mountPath           = StorageKeyMount
 	mountPathRefcount   = mountPath + "." + MountKeyRefcount

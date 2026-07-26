@@ -23,11 +23,38 @@ var binDirSearch = []string{"/usr/bin", "/usr/sbin", "/usr/local/bin", "/usr/loc
 func (c *Config) expandBindir() {
 	for _, doc := range c.docs {
 		expandBindirVariables(doc.Body)
+		expandBindirVersionPaths(doc.Body)
 	}
 	if c.Global.Raw != nil {
 		if defaults, ok := c.Global.Raw[sectionDefaults].(map[string]any); ok {
 			expandBindirVariables(defaults)
 		}
+	}
+}
+
+// expandBindirVersionPaths expands ${bindir} across the `versions` discovery
+// globs. They name binaries in the same standard directories `variables.binary`
+// does — a template discovering a family of tools (`versions.from:
+// ${bindir}/db${version}`) should not have to spell the search path by hand —
+// and both are consumed as candidate lists, so one string becoming several is
+// already the expected shape. Backend-keyed `from` maps expand per branch.
+func expandBindirVersionPaths(body map[string]any) {
+	versions, ok := body[keyVersions].(map[string]any)
+	if !ok {
+		return
+	}
+	for _, key := range []string{keyVersionsFrom, keyVersionsCurrentFrom} {
+		value, present := versions[key]
+		if !present {
+			continue
+		}
+		if branches, keyed := value.(map[string]any); keyed {
+			for branch, paths := range branches {
+				branches[branch] = expandBindirValue(paths)
+			}
+			continue
+		}
+		versions[key] = expandBindirValue(value)
 	}
 }
 
