@@ -1171,6 +1171,12 @@ cuando los nombres systemd/OpenRC difieren. La app enlazada (genérica como `ope
 versionada como `php-fpm${version}`) sigue suministrando `${binary}` para preflight e
 identidad de proceso. Un servicio nunca descubre desde su propio *binary*.
 
+Cuando una grafía genérica de unidad también pudiera nombrar otro daemon, defina
+`versions.require` con un path que contenga las mismas variables de plantilla.
+Sermo materializa una instancia de un solo token o compuesta solo si existe al
+menos uno de los paths requeridos; así las unidades con nombres solapados no
+acaban en el perfil de catálogo equivocado.
+
 Cuando el descubrimiento viene de metadatos de servicio de init, deje que la app enlazada posea la
 validación de binary de runtime cuando esté versionada. Por ejemplo, PHP-FPM enlaza
 `php-fpm${version}`; esa app ya valida `/usr/sbin/php-fpm${version}` o
@@ -1374,6 +1380,14 @@ Las unidades systemd/OpenRC activas normalmente materializan instancias de catá
 para el descubrimiento. Una instancia explícita en `uses:` también se materializa
 cuando su unidad está parada o fallida, de modo que `sermod` informa ese estado en
 lugar de rechazar toda la configuración.
+
+Los componentes asociados de Nebula Mesh se catalogan por separado como
+`nebula-agent` y `nebula-mgmt`. Ambos resuelven su unidad nativa de systemd u
+OpenRC y la identidad exacta del proceso. El perfil del servidor de gestión lee
+`listen:` de `/etc/nebula-mgmt/server.yml` (con `127.0.0.1:8080` como valor por
+defecto) y comprueba su endpoint sin autenticación `/readyz`. Estos perfiles solo
+monitorizan: no añaden reglas de reinicio automático para servicios de
+certificados ni del plano de control.
 
 ## Unidad de servicio
 

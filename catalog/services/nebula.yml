@@ -11,6 +11,9 @@ service:
     - nebula.${instance}
 apps:
   - nebula
+versions:
+  require:
+    - /etc/nebula/${instance}.yml
 restart_on_change:
   apps:
     - nebula

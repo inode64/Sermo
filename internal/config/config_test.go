@@ -6111,3 +6111,63 @@ defaults: { policy: { cooldown: 5m } }
 		t.Error("app5.6 must be gated out: its required binary is absent")
 	}
 }
+
+// TestSingleTokenDiscoveryRequireGate keeps overlapping one-token unit names in
+// their own catalog profile unless the matching Nebula-style config exists.
+func TestSingleTokenDiscoveryRequireGate(t *testing.T) {
+	root := t.TempDir()
+	candidates := filepath.Join(root, "candidates")
+	required := filepath.Join(root, "required")
+	for _, dir := range []string{candidates, required} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, name := range []string{"app1", "app2"} {
+		if err := os.WriteFile(filepath.Join(candidates, name), []byte("enabled: true\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(required, "app1.yml"), []byte("enabled: true\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	catalogDir := filepath.Join(root, "catalog", "services")
+	servicesDir := filepath.Join(root, "services")
+	if err := os.MkdirAll(catalogDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(servicesDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(catalogDir, "app%v.yml"), fmt.Appendf(nil, `
+name: app%%v
+service: "app${version}"
+versions:
+  from: "%s/app${version}"
+  require:
+    - "%s/app${version}.yml"
+checks:
+  service: { type: service, expect: active }
+`, candidates, required), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	global := filepath.Join(root, "sermo.yml")
+	if err := os.WriteFile(global, fmt.Appendf(nil, `
+engine: { backend: auto }
+paths: { services: [ %s ], runtime: /run/sermo }
+defaults: { policy: { cooldown: 5m } }
+`, servicesDir), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := loadConfig(t, global)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if _, ok := cfg.CatalogServices["app1"]; !ok {
+		t.Error("app1 must materialize when its required config exists")
+	}
+	if _, ok := cfg.CatalogServices["app2"]; ok {
+		t.Error("app2 must be gated out: its required config is absent")
+	}
+}

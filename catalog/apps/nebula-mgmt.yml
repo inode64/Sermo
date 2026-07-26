@@ -1,0 +1,8 @@
+name: nebula-mgmt
+display_name: Nebula Management Server
+category: vpn
+variables:
+  binary: ${bindir}/nebula-mgmt
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}", "version"], timeout: 10s }

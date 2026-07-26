@@ -773,6 +773,93 @@ func TestCatalogUnifiUsesMongodAppBinary(t *testing.T) {
 	}
 }
 
+func TestNebulaMeshCatalogProfiles(t *testing.T) {
+	root := repoRoot(t)
+	dir := t.TempDir()
+	global := filepath.Join(dir, "sermo.yml")
+	body := "paths:\n  services: []\n" +
+		"defaults:\n  policy: { cooldown: 5m }\n"
+	if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := loadConfig(t, global, WithCatalogDirs(repoCatalogDir(root)))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	tests := []struct {
+		name          string
+		app           string
+		user          string
+		pid           string
+		verifyService bool
+	}{
+		{
+			name:          "nebula-agent",
+			app:           "nebula-agent",
+			user:          "root",
+			pid:           "/run/supervise-nebula-agent.pid",
+			verifyService: true,
+		},
+		{
+			name: "nebula-mgmt",
+			app:  "nebula-mgmt",
+			user: "nebula-mgmt",
+			pid:  "/run/supervise-nebula-mgmt.pid",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assertNebulaMeshCatalogProfile(t, cfg, root, tt.name, tt.app, tt.user, tt.pid, tt.verifyService)
+		})
+	}
+
+	mgmt, errs := cfg.ResolveCatalog(CategoryService, "nebula-mgmt")
+	if len(errs) > 0 {
+		t.Fatalf("ResolveCatalog(nebula-mgmt): %v", errs)
+	}
+	ready := nested(t, mgmt.Tree, "checks", "ready")
+	if got := cfgval.String(ready["url"]); got != "http://127.0.0.1:8080/readyz" {
+		t.Fatalf("ready URL = %q, want default Nebula Mesh readiness endpoint", got)
+	}
+	if !cfgval.Bool(ready["verify"]) {
+		t.Fatal("management ready check must verify start")
+	}
+}
+
+func assertNebulaMeshCatalogProfile(t *testing.T, cfg *Config, root, name, app, user, pid string, verifyService bool) {
+	t.Helper()
+	doc := catalogDocByName(t, root, "services", name)
+	for _, backend := range []string{"systemd", "openrc"} {
+		candidates, trust := ServiceCandidates(doc, backend, name)
+		if trust || !slices.Equal(candidates, []string{name}) {
+			t.Fatalf("%s service candidates = %v, trust = %v", backend, candidates, trust)
+		}
+	}
+	if apps := cfgval.StringList(doc["apps"]); !slices.Equal(apps, []string{app}) {
+		t.Fatalf("apps = %v, want [%s]", apps, app)
+	}
+	pidfile := nested(t, doc, "pidfile")
+	if got := cfgval.String(pidfile["path"]); got != pid || !cfgval.Bool(pidfile["optional"]) {
+		t.Fatalf("pidfile = %v, want optional %q", pidfile, pid)
+	}
+
+	resolved, errs := cfg.ResolveCatalog(CategoryService, name)
+	if len(errs) > 0 {
+		t.Fatalf("ResolveCatalog(%s): %v", name, errs)
+	}
+	process := nested(t, resolved.Tree, "processes", "main")
+	if got := cfgval.String(process["user"]); got != user {
+		t.Fatalf("process user = %q, want %q", got, user)
+	}
+	if got := cfgval.String(process["exe"]); got == "" {
+		t.Fatal("process executable is empty")
+	}
+	if verifyService && !cfgval.Bool(nested(t, resolved.Tree, "checks", "service")["verify"]) {
+		t.Fatal("service check must verify start")
+	}
+}
+
 func TestSMBCatalogUsesPerRolePidfiles(t *testing.T) {
 	root := repoRoot(t)
 	dir := t.TempDir()

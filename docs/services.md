@@ -1164,6 +1164,11 @@ when systemd/OpenRC names differ. The linked app (generic like `openvpn`, or
 versioned like `php-fpm${version}`) still supplies `${binary}` for preflight and
 process identity. A service never discovers from its own *binary*.
 
+When a generic unit spelling could also name a different daemon, set
+`versions.require` to a path containing the same template variables. Sermo
+materializes a single-token or composite instance only if at least one required
+path exists; this keeps overlapping unit names out of the wrong catalog profile.
+
 When discovery comes from init service metadata, let the linked app own runtime
 binary validation when it is versioned. For example, PHP-FPM links
 `php-fpm${version}`; that app already validates `/usr/sbin/php-fpm${version}` or
@@ -1367,6 +1372,13 @@ Active systemd/OpenRC units normally materialize catalog instances for discovery
 An explicitly configured `uses:` instance also materializes when its unit is
 stopped or failed, so `sermod` can report that service state instead of rejecting
 the whole configuration.
+
+Nebula Mesh's accompanying components are cataloged separately as
+`nebula-agent` and `nebula-mgmt`. Both resolve their native systemd or OpenRC
+unit and exact process identity. The management-server profile reads `listen:`
+from `/etc/nebula-mgmt/server.yml` (falling back to `127.0.0.1:8080`) and checks
+its unauthenticated `/readyz` endpoint. These profiles are monitor-only: they
+do not add automatic restart rules for certificate or control-plane services.
 
 ## Service unit
 

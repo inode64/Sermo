@@ -1,0 +1,29 @@
+name: nebula-agent
+display_name: Nebula Agent
+category: vpn
+description: Nebula Mesh host enrollment and configuration-update agent.
+service:
+  systemd:
+    - nebula-agent
+  openrc:
+    - nebula-agent
+apps:
+  - nebula-agent
+variables:
+  user: root
+  config: /etc/nebula-agent/agent.yml
+config_files:
+  - ${config}
+pidfile:
+  path: /run/supervise-nebula-agent.pid
+  optional: true
+processes:
+  main:
+    exe: ${nebula_agent_binary}
+    user: ${user}
+watches:
+  service:
+    check:
+      type: service
+      expect: active
+      verify: true
