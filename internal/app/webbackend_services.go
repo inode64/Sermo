@@ -53,7 +53,7 @@ func (b *WebBackend) viewWithRuntime(ctx context.Context, name string, e *webEnt
 	svc.LastEvent = lastEvent
 	if e.disabled {
 		svc.Status = TargetStateDisabled
-		svc.State = ServiceState(false, false, svc.Status, "", true, false, false)
+		svc.State = ServiceState(false, false, svc.Status, "", true, false, false, false)
 		svc.Monitored = false
 		svc.CheckHealth = ""
 		svc.RemediationState = TargetStateDisabled
@@ -83,7 +83,8 @@ func (b *WebBackend) viewWithRuntime(ctx context.Context, name string, e *webEnt
 	b.decorateRemediation(name, &svc)
 	observed := (b.settling == nil || b.settling.Observed(SettlingServiceKey(name))) && !b.operationSettlingPending(name)
 	svc.ObservabilityReady, svc.ObservabilityMissing = b.serviceObservability(name, e, svc.Status, svc.CheckHealth, svc.Monitored, observed)
-	svc.State = ServiceState(svc.Enabled, svc.Monitored, svc.Status, svc.CheckHealth, observed, svc.ObservabilityReady, b.serviceProcessActive(name, e))
+	svc.State = ServiceState(svc.Enabled, svc.Monitored, svc.Status, svc.CheckHealth, observed, svc.ObservabilityReady,
+		b.serviceProcessActive(name, e), onlyMissingProcesses(svc.ObservabilityMissing))
 	if len(e.alsoApply) > 0 {
 		svc.AlsoApply = slices.Clone(e.alsoApply)
 	}
@@ -131,14 +132,28 @@ func (b *WebBackend) serviceObservability(name string, e *webEntry, status, chec
 		if _, ready := b.observability.Ready(name); !ready {
 			addMissing(observabilityMissingHistory)
 		}
-		if !e.noResidentProcess && !b.serviceRuntimeObservabilityReady(name, e) {
-			addMissing(observabilityMissingRuntime)
+		if !e.noResidentProcess {
+			switch b.serviceRuntimeObservability(name, e) {
+			case runtimeObservabilityEmpty:
+				addMissing(observabilityMissingProcesses)
+			case runtimeObservabilityPending:
+				addMissing(observabilityMissingRuntime)
+			case runtimeObservabilityReady:
+			}
 		}
 	}
 	if len(missing) > 0 {
 		return false, missing
 	}
 	return true, nil
+}
+
+// onlyMissingProcesses reports whether the empty process tree is the sole
+// indicator gap. Anything else in the list is genuinely still populating, so
+// the service keeps reading as collecting until that settles and the blind
+// spot is the only thing left.
+func onlyMissingProcesses(missing []string) bool {
+	return len(missing) == 1 && missing[0] == observabilityMissingProcesses
 }
 
 func (b *WebBackend) serviceCheckHealth(name string, e *webEntry, monitored bool) (int, string) {
@@ -164,15 +179,36 @@ func (b *WebBackend) serviceCheckSnapshotCurrent(e *webEntry, name string, snap 
 	return b.webNow().Sub(snap.At) <= runtimePublishMaxAge(interval)
 }
 
-func (b *WebBackend) serviceRuntimeObservabilityReady(name string, e *webEntry) bool {
+// runtimeObservability classifies the per-service runtime indicator. The split
+// that matters is between "no answer yet" and "a complete answer of nothing":
+// workers publish a sample every observed cycle, so a fresh sample counting
+// zero processes is the daemon reporting that it looked and found none, not
+// that the numbers are still on their way.
+type runtimeObservability int
+
+const (
+	runtimeObservabilityPending runtimeObservability = iota
+	runtimeObservabilityEmpty
+	runtimeObservabilityReady
+)
+
+func (b *WebBackend) serviceRuntimeObservability(name string, e *webEntry) runtimeObservability {
 	if e == nil || e.noResidentProcess || b.serviceMetrics == nil {
-		return true
+		return runtimeObservabilityReady
 	}
 	cur, at, ok := b.serviceMetrics.LatestWithAt(name)
 	if !ok || b.webNow().Sub(at) > runtimePublishMaxAge(e.interval) {
-		return false
+		return runtimeObservabilityPending
 	}
-	return cur.Count > 0 && cur.HasCPU && cur.IOReady
+	if cur.Count == 0 {
+		return runtimeObservabilityEmpty
+	}
+	// Processes are visible; the CPU and IO rates need a second sample to
+	// derive, so they are genuinely still populating.
+	if cur.HasCPU && cur.IOReady {
+		return runtimeObservabilityReady
+	}
+	return runtimeObservabilityPending
 }
 
 // serviceProcessActive only reads the worker-published runtime sample. The web

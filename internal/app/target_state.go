@@ -33,7 +33,13 @@ const (
 // state is intentionally a single service-axis value: "active" means a trusted
 // service process is currently confirmed, while "monitored" additionally means
 // the current daemon generation has every indicator needed to show it observed.
-func ServiceState(enabled, monitored bool, backendStatus, checkHealth string, observed, observabilityReady, processActive bool) string {
+//
+// processesMissing marks the one indicator gap that never resolves on its own:
+// the unit is active and its checks pass, but the daemon attributes no process
+// to it, so runtime metrics will not arrive until the service definition or
+// the host changes. That is a monitoring blind spot to act on rather than a
+// cycle to wait out, so it settles on "warning" instead of "collecting".
+func ServiceState(enabled, monitored bool, backendStatus, checkHealth string, observed, observabilityReady, processActive, processesMissing bool) string {
 	if !enabled {
 		return TargetStateDisabled
 	}
@@ -72,6 +78,9 @@ func ServiceState(enabled, monitored bool, backendStatus, checkHealth string, ob
 	if !observabilityReady {
 		if processActive {
 			return TargetStateActive
+		}
+		if processesMissing {
+			return TargetStateWarning
 		}
 		return TargetStateCollecting
 	}

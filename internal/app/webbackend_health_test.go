@@ -2,11 +2,13 @@ package app
 
 import (
 	"context"
+	"slices"
 	"testing"
 	"time"
 
 	"sermo/internal/checks"
 	"sermo/internal/servicemgr"
+	"sermo/internal/web"
 )
 
 func TestCheckHealthSummary(t *testing.T) {
@@ -187,5 +189,67 @@ func TestWebBackendServiceStateStartupCollectingMonitored(t *testing.T) {
 	svc = b.view(context.Background(), "web", b.entries["web"])
 	if svc.State != TargetStateMonitored || !svc.ObservabilityReady || len(svc.ObservabilityMissing) != 0 {
 		t.Fatalf("monitored service = %+v, want monitored with observability ready", svc)
+	}
+}
+
+// An active service whose process selectors match nothing used to sit in
+// "collecting" for as long as it ran, because the runtime indicator never
+// arrived and nothing distinguished "late" from "never".
+func TestWebBackendServiceStateEmptyProcessTreeWarnsInsteadOfCollectingForever(t *testing.T) {
+	now := time.Now()
+	settling := NewSettling(nil)
+	settling.Reset([]string{SettlingServiceKey("rpcbind")})
+	settling.MarkObserved(SettlingServiceKey("rpcbind"))
+	observability := NewObservabilityRegistry()
+	observability.MarkReady("rpcbind", now)
+	snaps := NewSnapshots()
+	snaps.Publish("rpcbind", map[string]checks.Result{
+		"service": {Check: "service", OK: true},
+	}, map[string]bool{"service": true})
+	metrics := NewServiceMetricSampler()
+	b := &WebBackend{
+		order: []string{"rpcbind"},
+		entries: map[string]*webEntry{
+			"rpcbind": {
+				checkNames: []string{"service"},
+				interval:   30 * time.Second,
+				status:     func(context.Context) (servicemgr.Status, error) { return servicemgr.StatusActive, nil },
+			},
+		},
+		snapshots:      snaps,
+		settling:       settling,
+		observability:  observability,
+		serviceMetrics: metrics,
+		now:            func() time.Time { return now },
+	}
+
+	// No sample published yet: the runtime numbers really are still on the way.
+	svc := b.view(context.Background(), "rpcbind", b.entries["rpcbind"])
+	if svc.State != TargetStateCollecting || !slices.Contains(svc.ObservabilityMissing, observabilityMissingRuntime) {
+		t.Fatalf("service before the first sample = %+v, want collecting on runtime metrics", svc)
+	}
+
+	// A completed cycle that attributed no process is a definite answer.
+	metrics.Record("rpcbind", web.ServiceRuntime{At: now.UTC().Format(time.RFC3339)})
+	svc = b.view(context.Background(), "rpcbind", b.entries["rpcbind"])
+	if svc.State != TargetStateWarning {
+		t.Fatalf("service with an empty process tree = %+v, want %q", svc, TargetStateWarning)
+	}
+	if !slices.Contains(svc.ObservabilityMissing, observabilityMissingProcesses) {
+		t.Fatalf("missing indicators = %v, want %q", svc.ObservabilityMissing, observabilityMissingProcesses)
+	}
+	if svc.ObservabilityReady {
+		t.Fatal("an empty process tree must not report observability ready")
+	}
+
+	// Once processes show up again it goes back to waiting for the derived
+	// CPU/IO rates rather than warning.
+	metrics.Record("rpcbind", web.ServiceRuntime{
+		At:            now.UTC().Format(time.RFC3339),
+		ProcessTotals: web.ProcessTotals{Count: 1, HasCPU: true},
+	})
+	svc = b.view(context.Background(), "rpcbind", b.entries["rpcbind"])
+	if svc.State == TargetStateWarning || !slices.Contains(svc.ObservabilityMissing, observabilityMissingRuntime) {
+		t.Fatalf("service with a visible process = %+v, want collecting on runtime metrics", svc)
 	}
 }

@@ -163,8 +163,10 @@ arranque); si la API web es inalcanzable, recurre al backend de init más los
 metadatos locales de monitorización, como antes. Los estados de servicio son:
 `disabled`, `stopped`, `started` (backend activo pero no monitorizado),
 `starting` (asentamiento de arranque/operación), `collecting` (activo y
-monitorizado, pero las gráficas/indicadores aún no están completos), `monitored`
-(activo, monitorizado y con observabilidad lista) y `failed`. Sin la vista del
+monitorizado, pero las gráficas/indicadores aún no están completos), `warning`
+(activo y monitorizado con checks correctos, pero el daemon no le atribuye
+ningún proceso, así que sus indicadores de runtime nunca se completan),
+`monitored` (activo, monitorizado y con observabilidad lista) y `failed`. Sin la vista del
 daemon, un servicio configurado activo y monitorizado cae a `collecting`; un
 servicio activo que no consta como monitorizado cae a `started`.
 

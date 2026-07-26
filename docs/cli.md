@@ -158,8 +158,10 @@ state (including `starting` during startup settling); if the web API is
 unreachable it falls back to the init backend plus local monitor metadata, as
 before. Service states are: `disabled`, `stopped`, `started` (backend active but
 not monitored), `starting` (startup/operation settling), `collecting` (active
-and monitored, but graphs/indicators are not complete yet), `monitored` (active,
-monitored and observability-ready) and `failed`. Without the daemon view, a
+and monitored, but graphs/indicators are not complete yet), `warning` (active
+and monitored with passing checks, but the daemon attributes no process to it,
+so its runtime indicators never complete), `monitored` (active, monitored and
+observability-ready) and `failed`. Without the daemon view, a
 configured active monitored service falls back to `collecting`; an active
 service that is not known to be monitored falls back to `started`.
 
