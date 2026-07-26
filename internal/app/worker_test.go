@@ -154,6 +154,33 @@ func TestWorkerOperationSettlingStoreErrorEmitsOnChange(t *testing.T) {
 	}
 }
 
+// TestWorkerRuleEvalErrorMessageIsNotDoublyPrefixed pins the one line an
+// operator reads when a rule condition cannot be evaluated. evalRule already
+// labels the failure, so a second prefix at the emit site made every such event
+// read "evaluate: evaluate rule condition: ...".
+func TestWorkerRuleEvalErrorMessageIsNotDoublyPrefixed(t *testing.T) {
+	tree := map[string]any{"rules": map[string]any{"restart-on-change-app-version": map[string]any{
+		"type": "alert",
+		"if":   map[string]any{"changed": map[string]any{"app": "missing-app"}},
+		"then": map[string]any{"action": "alert", "message": "version changed"},
+	}}}
+	h := &workerHarness{cache: failedCache("http")}
+	w := h.worker(tree, rules.Policy{}, nil)
+
+	w.RunCycle(context.Background())
+
+	event, ok := h.eventOf(eventKindError)
+	if !ok {
+		t.Fatalf("an unevaluable rule condition must emit an error event, got %+v", h.events)
+	}
+	if !strings.HasPrefix(event.Message, "evaluate rule condition: ") {
+		t.Fatalf("message = %q, want it to start with %q", event.Message, "evaluate rule condition: ")
+	}
+	if strings.Contains(event.Message, "evaluate: evaluate") {
+		t.Fatalf("message = %q, want no doubled evaluate prefix", event.Message)
+	}
+}
+
 func TestWorkerOperationRunningSkipsChecksAndAlerts(t *testing.T) {
 	store := newFakeStore()
 	store.now = func() time.Time { return t0 }
