@@ -135,6 +135,18 @@ const (
 	WebKeyPort = "port"
 )
 
+// SectionTelegramBot is the top-level interactive Telegram report-bot block. It
+// is distinct from a `telegram` notifier under `notifiers`: the bot receives
+// commands (long polling) and answers with read-only reports.
+const SectionTelegramBot = "telegram_bot"
+
+// SectionMap returns the named top-level section as a mapping, or nil when the
+// section is absent or is not a mapping.
+func SectionMap(raw map[string]any, section string) map[string]any {
+	m, _ := raw[section].(map[string]any)
+	return m
+}
+
 // stop_policy timeout and kill-guard field keys.
 const (
 	keyGracefulTimeout = process.StopPolicyKeyGracefulTimeout
