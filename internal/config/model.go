@@ -129,8 +129,14 @@ const (
 	WebKeyGuest = "guest"
 	// WebKeyGuestPassword is web.guest_password.
 	WebKeyGuestPassword = "guest_password"
+	// WebKeyGuestPasswordFile is web.guest_password_file: a file holding the
+	// guest password, used instead of web.guest_password.
+	WebKeyGuestPasswordFile = "guest_password_file"
 	// WebKeyPassword is web.password.
 	WebKeyPassword = "password"
+	// WebKeyPasswordFile is web.password_file: a file holding the admin
+	// password, used instead of web.password.
+	WebKeyPasswordFile = "password_file"
 	// WebKeyPort is web.port.
 	WebKeyPort = "port"
 )
@@ -635,6 +641,15 @@ type Global struct {
 	Runtime       string
 	State         string
 	Templates     string
+
+	// Dashboard passwords read from web.password_file / web.guest_password_file
+	// at load time; empty when those keys are unused. Read them through
+	// WebPassword and WebGuestPassword, which fall back to the inline keys.
+	webPassword      string
+	webGuestPassword string
+	// issues collects load-time findings (an unreadable password file) for
+	// Validate to report.
+	issues []Issue
 }
 
 // PathSpec is one configured directory under paths.*. Recursive defaults to

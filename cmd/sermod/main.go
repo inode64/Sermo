@@ -588,8 +588,8 @@ func webAuth(cfg *config.Config) web.Auth {
 		return web.Auth{}
 	}
 	auth := web.Auth{}
-	auth.AdminPassword, _ = m[config.WebKeyPassword].(string)
-	auth.GuestPassword, _ = m[config.WebKeyGuestPassword].(string)
+	auth.AdminPassword = cfg.Global.WebPassword()
+	auth.GuestPassword = cfg.Global.WebGuestPassword()
 	auth.AnonymousGuest, _ = m[config.WebKeyGuest].(bool)
 	return auth
 }
