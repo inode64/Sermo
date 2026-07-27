@@ -71,6 +71,9 @@ around the opposite principle — **prove it is safe, then act**:
   config validation, locks, processes, preflight, inventory, SLA and events.
 - **Notifications** to email, Slack, Teams and webhook sinks (ntfy/Telegram/
   Gotify) with a templated default message.
+- An optional **interactive Telegram report bot** (read-only): ask it `/status`,
+  `/services`, `/sla` and it replies with live reports — long polling only, no
+  inbound port, answering allow-listed chats.
 - A **daemon-wide panic switch** to pause all automatic remediation instantly.
 - **Guided wizards** for common setups (service, docker, vm, mount, volume, net,
   uplink).

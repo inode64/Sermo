@@ -124,6 +124,7 @@ func validateGlobal(cfg *Config) []Issue {
 	validateGlobalPaths(cfg, raw, add)
 	validateGlobalSecurity(raw, add)
 	validateGlobalWebAndEmission(raw, add)
+	validateTelegramBot(raw, add)
 	validateGlobalDefaults(cfg, raw, add)
 
 	return issues

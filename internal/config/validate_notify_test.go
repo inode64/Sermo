@@ -117,6 +117,68 @@ func TestValidateTeamsNotifier(t *testing.T) {
 	}
 }
 
+func TestValidateTelegramNotifier(t *testing.T) {
+	cases := []struct {
+		name    string
+		entry   map[string]any
+		wantSub string // "" = expect no issue
+	}{
+		{"valid minimal", map[string]any{"type": "telegram", "token": "t", "chat_id": "1"}, ""},
+		{"valid full", map[string]any{"type": "telegram", "token": "t", "chat_id": "1", "parse_mode": "HTML", "silent": true, "message_thread_id": 7}, ""},
+		{"missing token", map[string]any{"type": "telegram", "chat_id": "1"}, "token is required for a telegram notifier"},
+		{"missing chat", map[string]any{"type": "telegram", "token": "t"}, "chat_id is required for a telegram notifier"},
+		{"bad parse_mode", map[string]any{"type": "telegram", "token": "t", "chat_id": "1", "parse_mode": "rtf"}, "parse_mode must be one of"},
+		{"non-bool silent", map[string]any{"type": "telegram", "token": "t", "chat_id": "1", "silent": "yes"}, "silent must be a boolean"},
+		{"non-int thread", map[string]any{"type": "telegram", "token": "t", "chat_id": "1", "message_thread_id": "nope"}, "message_thread_id must be an integer"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			issues := collect(func(add func(string, ...any)) {
+				validateNotifiers(map[string]any{"tg": c.entry}, t.TempDir(), add)
+			})
+			joined := strings.Join(issues, "\n")
+			if c.wantSub == "" {
+				if len(issues) != 0 {
+					t.Errorf("expected no issues, got: %v", issues)
+				}
+			} else if !strings.Contains(joined, c.wantSub) {
+				t.Errorf("expected %q, got: %v", c.wantSub, issues)
+			}
+		})
+	}
+}
+
+func TestValidateTelegramBot(t *testing.T) {
+	cases := []struct {
+		name    string
+		section map[string]any
+		wantSub string // "" = expect no issue
+	}{
+		{"valid", map[string]any{"token": "t", "allowed_chats": []any{123, -1001234567890}}, ""},
+		{"valid full", map[string]any{"token": "t", "allowed_chats": []any{1}, "poll_interval": "45s"}, ""},
+		{"disabled skips checks", map[string]any{"enabled": false}, ""},
+		{"missing token", map[string]any{"allowed_chats": []any{123}}, "telegram_bot.token is required"},
+		{"no chats", map[string]any{"token": "t"}, "telegram_bot.allowed_chats must list at least one chat id"},
+		{"bad interval", map[string]any{"token": "t", "allowed_chats": []any{1}, "poll_interval": "nope"}, "telegram_bot.poll_interval must be a positive duration"},
+		{"non-bool enabled", map[string]any{"enabled": "yes", "token": "t", "allowed_chats": []any{1}}, "telegram_bot.enabled must be a boolean"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			issues := collect(func(add func(string, ...any)) {
+				validateTelegramBot(map[string]any{SectionTelegramBot: c.section}, add)
+			})
+			joined := strings.Join(issues, "\n")
+			if c.wantSub == "" {
+				if len(issues) != 0 {
+					t.Errorf("expected no issues, got: %v", issues)
+				}
+			} else if !strings.Contains(joined, c.wantSub) {
+				t.Errorf("expected %q, got: %v", c.wantSub, issues)
+			}
+		})
+	}
+}
+
 func TestValidateNotifierTemplate(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "default-alert.yml"), []byte("subject: '{{ .Subject }}'\nbody: '{{ .Body }}'\n"), 0o644); err != nil {

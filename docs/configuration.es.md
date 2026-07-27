@@ -59,6 +59,7 @@ directorio equivocado. La configuración distribuida la omite.
 - [Notificaciones](#notificaciones)
   - [Plantillas de notificación](#plantillas-de-notificación)
   - [Selección por defecto y precedencia](#selección-por-defecto-y-precedencia)
+- [Bot de informes de Telegram](#bot-de-informes-de-telegram)
 - [Host watches](#host-watches)
   - [then.expand — crecimiento de volumen (watch de storage)](#thenexpand--crecimiento-de-volumen-watch-de-storage)
   - [Control manual de reconstrucción RAID](#control-manual-de-reconstrucción-raid)
@@ -1204,6 +1205,13 @@ notifiers:
   - **`chat_id`** — el id numérico del chat/grupo o un nombre `@canal`. El
     asunto es la línea principal y el detalle (los campos `SERMO_*`) sigue como
     texto plano.
+  - **`parse_mode`** *(opcional)* — `MarkdownV2`, `Markdown` o `HTML` para
+    renderizar el mensaje como texto con formato (negrita, código, enlaces) en
+    lugar de texto plano. Omítelo para texto plano.
+  - **`silent`** *(opcional)* — `true` entrega el mensaje en silencio, sin sonido
+    ni vibración (`disable_notification` de la Bot API).
+  - **`message_thread_id`** *(opcional)* — un id entero de tema (forum topic),
+    para publicar en un tema concreto de un grupo.
 
 ```yaml
 # /etc/sermo/notifiers/telegram.yml
@@ -1212,6 +1220,9 @@ notifiers:
     type: telegram
     token: "123456789:AAF...XXXX"
     chat_id: -1001234567890
+    # parse_mode: MarkdownV2       # opcional: formatea el texto del mensaje
+    # silent: true                 # opcional: entrega sin sonido
+    # message_thread_id: 42        # opcional: publica en un tema del grupo
 ```
 
 - **`tty`** — escribe directamente en las sesiones de terminal Linux activas, similar a
@@ -1345,6 +1356,58 @@ clave `then` en un watch (o por métrica) es otra forma de obtener comportamient
 solo-alerta (estado de disparo + eventos en la interfaz y el log, pero sin acciones y sin
 herencia de los globales). Consulta la sección de host watches a continuación para el
 ejemplo de `check` + `for` desnudo.
+
+## Bot de informes de Telegram
+
+La sección opcional de nivel superior **`telegram_bot`** ejecuta un bot de Telegram
+interactivo y de **solo lectura** dentro de `sermod`. Mientras que un notifier
+`telegram` *empuja* alertas, el bot permite al operador *pedir* informes bajo demanda:
+envíale `/status` y responde con el resumen actual del fleet. Nunca puede cambiar el
+host — solo lee el mismo estado que sirve el dashboard web.
+
+Recibe comandos mediante **long polling** de la Bot API (`getUpdates`), así que no
+necesita puerto entrante, ni exposición pública, ni proxy inverso — en línea con la
+postura de solo-salida de Sermo. El token del bot queda dentro de la URL de la API y se
+depura de logs y errores, igual que el notifier `telegram`.
+
+```yaml
+# /etc/sermo/sermo.yml (o un fragmento drop-in)
+telegram_bot:
+  token: "${env:TELEGRAM_BOT_TOKEN}"   # token del bot de @BotFather
+  allowed_chats:                       # obligatorio: solo se responde a estos chats
+    - 123456789
+    - -1001234567890
+  # poll_interval: 30s                 # timeout opcional del long-poll getUpdates
+  # enabled: false                     # opcional; omitido => habilitado
+```
+
+- **`token`** — el token del bot de `@BotFather` (usado tanto para `getUpdates` como
+  para las respuestas). Prefiere `${env:...}` para no escribirlo en un archivo.
+- **`allowed_chats`** — la lista de ids numéricos de chat que el bot responde. Un
+  mensaje de cualquier otro chat se ignora, nunca se responde. Este es el control de
+  acceso: limítalo a los operadores/grupos que pueden consultar el daemon.
+- **`poll_interval`** *(opcional)* — el timeout del long-poll, por defecto `30s`,
+  acotado a `1s`–`10m`.
+- **`enabled`** *(opcional)* — ponlo en `false` para conservar la sección pero detener
+  el polling.
+
+Comandos (todos de solo lectura):
+
+| Comando | Respuesta |
+| --- | --- |
+| `/status` | resumen del fleet: services ok/fallando, monitorizados/pausados, errores recientes, uptime del host |
+| `/services [name]` | la lista de services, o el estado y salud de un service concreto |
+| `/watches` | estados de host watches y watches de servicio |
+| `/sla <service>` | ventanas de disponibilidad (hora…año) de un service |
+| `/events [count]` | los eventos más recientes (por defecto 10, máximo 50) |
+| `/help` | la lista de comandos |
+
+Recargar (`sermoctl daemon reload` / `SIGHUP`) aplica cambios en `token`,
+`allowed_chats` y `poll_interval` sin reiniciar. Como la goroutine solo se arranca al
+inicio cuando la sección está presente, **habilitar el bot por primera vez requiere un
+reinicio** (la misma regla que sigue la interfaz web para su puerto). Al arrancar, el bot
+descarta cualquier comando encolado mientras estuvo caído, así que un reinicio nunca
+reproduce solicitudes antiguas.
 
 ## Host watches
 
