@@ -20,6 +20,9 @@ type Issue struct {
 	Msg   string
 }
 
+// globalScope is the Issue scope for findings in sermo.yml itself.
+const globalScope = "global"
+
 var validBackends = map[string]struct{}{"": {}, backendAuto: {}, backendSystemd: {}, backendOpenRC: {}}
 
 const (
@@ -116,7 +119,7 @@ func validateGlobal(cfg *Config) []Issue {
 	var issues []Issue
 	raw := cfg.Global.Raw
 	add := func(format string, args ...any) {
-		issues = append(issues, Issue{Scope: "global", Msg: fmt.Sprintf(format, args...)})
+		issues = append(issues, Issue{Scope: globalScope, Msg: fmt.Sprintf(format, args...)})
 	}
 
 	validateEnableIfTree(raw, add)
