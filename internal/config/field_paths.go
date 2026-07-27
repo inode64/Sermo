@@ -23,12 +23,14 @@ const (
 	pathsPathState     = SectionPaths + "." + pathKeyState
 	pathsPathTemplates = SectionPaths + "." + pathKeyTemplates
 
-	webPathAddress       = SectionWeb + "." + WebKeyAddress
-	webPathAllowedHosts  = SectionWeb + "." + WebKeyAllowedHosts
-	webPathGuest         = SectionWeb + "." + WebKeyGuest
-	webPathGuestPassword = SectionWeb + "." + WebKeyGuestPassword
-	webPathPassword      = SectionWeb + "." + WebKeyPassword
-	webPathPort          = SectionWeb + "." + WebKeyPort
+	webPathAddress           = SectionWeb + "." + WebKeyAddress
+	webPathAllowedHosts      = SectionWeb + "." + WebKeyAllowedHosts
+	webPathGuest             = SectionWeb + "." + WebKeyGuest
+	webPathGuestPassword     = SectionWeb + "." + WebKeyGuestPassword
+	webPathGuestPasswordFile = SectionWeb + "." + WebKeyGuestPasswordFile
+	webPathPassword          = SectionWeb + "." + WebKeyPassword
+	webPathPasswordFile      = SectionWeb + "." + WebKeyPasswordFile
+	webPathPort              = SectionWeb + "." + WebKeyPort
 
 	policyPathBackoff          = sectionPolicy + "." + rules.PolicyKeyBackoff
 	policyPathBackoffInitial   = policyPathBackoff + "." + rules.BackoffKeyInitial

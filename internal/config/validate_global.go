@@ -29,7 +29,9 @@ func validateWeb(webCfg map[string]any, add func(string, ...any)) {
 	}
 	for _, pathAndKey := range [][2]string{
 		{webPathPassword, WebKeyPassword},
+		{webPathPasswordFile, WebKeyPasswordFile},
 		{webPathGuestPassword, WebKeyGuestPassword},
+		{webPathGuestPasswordFile, WebKeyGuestPasswordFile},
 	} {
 		path, key := pathAndKey[0], pathAndKey[1]
 		if v, present := webCfg[key]; present {
@@ -38,6 +40,7 @@ func validateWeb(webCfg map[string]any, add func(string, ...any)) {
 			}
 		}
 	}
+	validateWebPasswordFiles(webCfg, add)
 	if v, present := webCfg[WebKeyGuest]; present {
 		if _, isBool := v.(bool); !isBool {
 			add("%s must be a boolean (allow anonymous read-only access)", webPathGuest)
@@ -46,6 +49,29 @@ func validateWeb(webCfg map[string]any, add func(string, ...any)) {
 	if v, present := webCfg[WebKeyAllowedHosts]; present {
 		if _, err := cfgval.StrictStringList(v); err != nil {
 			add("%s must be a hostname or list of hostnames", webPathAllowedHosts)
+		}
+	}
+}
+
+// validateWebPasswordFiles checks each password / `*_file` pair. The two
+// spellings are mutually exclusive — accepting both would leave which one wins
+// up to the reader — and the file variant needs an actual path. Whether the
+// file can be read is settled at load time, in resolveWebPasswordFiles.
+func validateWebPasswordFiles(webCfg map[string]any, add addFunc) {
+	for _, pair := range [][4]string{
+		{WebKeyPassword, WebKeyPasswordFile, webPathPassword, webPathPasswordFile},
+		{WebKeyGuestPassword, WebKeyGuestPasswordFile, webPathGuestPassword, webPathGuestPasswordFile},
+	} {
+		inlineKey, fileKey, inlinePath, filePath := pair[0], pair[1], pair[2], pair[3]
+		raw, present := webCfg[fileKey]
+		if !present {
+			continue
+		}
+		if _, inlinePresent := webCfg[inlineKey]; inlinePresent {
+			add("%s and %s are mutually exclusive", inlinePath, filePath)
+		}
+		if s, isStr := raw.(string); isStr && strings.TrimSpace(s) == "" {
+			add("%s must name a file holding the password", filePath)
 		}
 	}
 }

@@ -129,6 +129,8 @@ func Load(globalPath string, opts ...Option) (*Config, error) {
 		Patterns:        map[string]*Document{},
 		Services:        map[string]*Document{},
 		serviceUnits:    cloneServiceUnits(o.serviceUnits),
+
+		validationIssues: global.issues,
 	}
 
 	for _, spec := range uniquePathSpecs(catalogPaths) {
@@ -209,6 +211,7 @@ func loadGlobal(path string) (Global, error) {
 		g.Templates = cfgval.String(paths[pathKeyTemplates])
 	}
 	resolveConfigPaths(path, &g)
+	resolveWebPasswordFiles(&g)
 	return g, nil
 }
 

@@ -119,3 +119,7 @@ web:
   # password: "change-me"        # admin: read + actions
   # guest_password: "read-only"  # optional read-only login
   # guest: false                 # set true to allow anonymous read-only access
+  # Instead of the two passwords above, read them from files (chmod 0600) so the
+  # secret never lives in this config. Each *_file key excludes its plain twin.
+  # password_file: /etc/sermo/secrets/web.pass
+  # guest_password_file: /etc/sermo/secrets/guest.pass

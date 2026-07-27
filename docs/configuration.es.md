@@ -690,6 +690,37 @@ web:
   ejecutable** para los invitados (árboles de procesos de servicios y blockers
   de mounts): los argumentos pueden llevar secretos que solo los admins deben ver.
 
+#### Contraseñas desde un fichero
+
+Cualquiera de las dos contraseñas puede venir de un **fichero**, mediante su
+clave acompañante `_file` — para un secreto que provisiona otra herramienta
+(`LoadCredential` de systemd, un gestor de secretos, una plantilla de Ansible) y
+que nunca debe escribirse en `sermo.yml`:
+
+```yaml
+web:
+  port: 9797
+  password_file: /etc/sermo/secrets/web.pass          # en lugar de `password`
+  guest_password_file: /etc/sermo/secrets/guest.pass  # en lugar de `guest_password`
+```
+
+- El fichero contiene **la contraseña y nada más**; se recortan los espacios
+  circundantes y el salto de línea final que añade cualquier editor. Un fichero
+  vacío es un error de configuración, no una contraseña vacía.
+- Una ruta **relativa** se resuelve respecto al directorio que contiene
+  `sermo.yml`, igual que los directorios `paths.*`. `${env:...}` funciona en la
+  ruta como en cualquier otro sitio.
+- `password` y `password_file` son **mutuamente excluyentes**, igual que
+  `guest_password` y `guest_password_file`. Definir ambas es un error de
+  configuración: cuál de las dos gana no debe quedar al criterio de quien lea.
+- Si el fichero no se puede leer, `sermod` **se niega a arrancar** (salida `78`,
+  el código estándar de error de configuración) y registra el motivo. Nunca
+  recurre a un panel abierto. `sermoctl` sigue funcionando, y `config validate`
+  informa del mismo mensaje.
+- Mantén el fichero legible solo por el usuario del daemon (`chmod 0600`). Es un
+  secreto en el sistema de ficheros, no en la configuración, y debe tratarse
+  como tal.
+
 La **contraseña**, no el nombre de usuario, selecciona el rol — en el prompt del
 navegador introduce cualquier nombre de usuario y la contraseña de admin o guest; las
 contraseñas se comparan en tiempo constante. Con `guest: true` el panel se carga en solo

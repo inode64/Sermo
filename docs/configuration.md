@@ -662,6 +662,35 @@ web:
   the executable** for guests (service process trees and mount blockers):
   arguments can carry secrets that only admins should see.
 
+#### Passwords from a file
+
+Either password can come from a **file** instead, through its `_file` companion
+key — for a secret provisioned by another tool (systemd `LoadCredential`, a
+secrets manager, an Ansible template) that must never be written into
+`sermo.yml`:
+
+```yaml
+web:
+  port: 9797
+  password_file: /etc/sermo/secrets/web.pass          # instead of `password`
+  guest_password_file: /etc/sermo/secrets/guest.pass  # instead of `guest_password`
+```
+
+- The file holds **the password and nothing else**; surrounding whitespace and
+  the trailing newline every editor adds are stripped. An empty file is a
+  configuration error rather than an empty password.
+- A **relative** path resolves against the directory holding `sermo.yml`, like
+  the `paths.*` directories. `${env:...}` works in the path as anywhere else.
+- `password` and `password_file` are **mutually exclusive**, as are
+  `guest_password` and `guest_password_file`. Setting both is a configuration
+  error — which of the two wins should never be left to the reader.
+- If the file cannot be read, `sermod` **refuses to start** (exit `78`, the
+  standard configuration-error code) and logs the reason. It never falls back to
+  an open dashboard. `sermoctl` still runs, and `config validate` reports the
+  same message.
+- Keep the file readable by the daemon user only (`chmod 0600`). It is a secret
+  in the filesystem, not in the config, and it should be treated as one.
+
 The **password**, not the username, selects the role — at the browser prompt enter
 any username and the admin or guest password; passwords are compared in constant
 time. With `guest: true` the dashboard loads read-only without a prompt, and a

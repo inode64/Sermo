@@ -1621,10 +1621,7 @@ func applyDaemonWebAuth(req *http.Request, cfg *config.Config) {
 }
 
 func daemonWebPassword(cfg *config.Config) string {
-	if wraw, ok := cfg.Global.Raw[config.SectionWeb].(map[string]any); ok {
-		return cfgval.String(wraw[config.WebKeyPassword])
-	}
-	return ""
+	return cfg.Global.WebPassword()
 }
 
 func daemonWebBasicAuth(password string) string {
