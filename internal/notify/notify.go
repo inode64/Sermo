@@ -39,15 +39,18 @@ type Notifier interface {
 
 // Config key constants name fields inside one notifier configuration entry.
 const (
-	KeyDSN      = "dsn"
-	KeyFrom     = "from"
-	KeyTemplate = "template"
-	KeyTo       = "to"
-	KeyChatID   = "chat_id"
-	KeyToken    = "token"
-	KeyType     = "type"
-	KeyUsers    = "users"
-	KeyWebhook  = "webhook"
+	KeyDSN             = "dsn"
+	KeyFrom            = "from"
+	KeyTemplate        = "template"
+	KeyTo              = "to"
+	KeyChatID          = "chat_id"
+	KeyToken           = "token"
+	KeyType            = "type"
+	KeyUsers           = "users"
+	KeyWebhook         = "webhook"
+	KeyParseMode       = "parse_mode"
+	KeySilent          = "silent"
+	KeyMessageThreadID = "message_thread_id"
 )
 
 // Option customizes notifier construction.

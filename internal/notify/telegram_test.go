@@ -48,3 +48,55 @@ func TestTelegramSendPostsSendMessage(t *testing.T) {
 		t.Fatalf("unexpected telegram body: %+v", body)
 	}
 }
+
+func TestTelegramSendIncludesConfiguredOptions(t *testing.T) {
+	n, err := buildTelegram("tg", map[string]any{
+		"type": "telegram", "token": "123:abc", "chat_id": "1",
+		"parse_mode": "MarkdownV2", "silent": true, "message_thread_id": 42,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	wn := n.(*webhookNotifier)
+	var gotURL string
+	var gotPayload []byte
+	wn.post = capturingPost(t, TypeTelegram, &gotURL, &gotPayload)
+	if err := n.Send(context.Background(), Message{Subject: "s", Body: "b"}); err != nil {
+		t.Fatal(err)
+	}
+	var body struct {
+		ParseMode           string `json:"parse_mode"`
+		DisableNotification bool   `json:"disable_notification"`
+		MessageThreadID     int    `json:"message_thread_id"`
+	}
+	if err := json.Unmarshal(gotPayload, &body); err != nil {
+		t.Fatalf("payload not JSON: %v (%s)", err, gotPayload)
+	}
+	if body.ParseMode != "MarkdownV2" || !body.DisableNotification || body.MessageThreadID != 42 {
+		t.Fatalf("unexpected telegram options: %+v", body)
+	}
+}
+
+func TestTelegramSendOmitsUnsetOptions(t *testing.T) {
+	n, err := buildTelegram("tg", map[string]any{"type": "telegram", "token": "123:abc", "chat_id": "1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	wn := n.(*webhookNotifier)
+	var gotURL string
+	var gotPayload []byte
+	wn.post = capturingPost(t, TypeTelegram, &gotURL, &gotPayload)
+	if err := n.Send(context.Background(), Message{Subject: "s"}); err != nil {
+		t.Fatal(err)
+	}
+	var body map[string]any
+	if err := json.Unmarshal(gotPayload, &body); err != nil {
+		t.Fatalf("payload not JSON: %v (%s)", err, gotPayload)
+	}
+	// A plain notifier must post exactly the fields it always did.
+	for _, k := range []string{telegramParseModeKey, telegramSilentKey, telegramThreadIDKey} {
+		if _, ok := body[k]; ok {
+			t.Fatalf("unset option %q should be omitted, got %v", k, body)
+		}
+	}
+}
