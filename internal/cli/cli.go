@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -75,17 +76,20 @@ const (
 	daemonWebCSRFValue           = "1"
 	daemonWebHeaderAuthorization = httpx.HeaderAuthorization
 	daemonWebBasicAuthPrefix     = "Basic "
-	daemonAPIPathRoot            = "/api"
-	daemonAPIPathApplications    = daemonAPIPathRoot + "/applications"
-	daemonAPIPathEvents          = daemonAPIPathRoot + "/events"
-	daemonAPIPathEventsClear     = daemonAPIPathEvents + "/clear"
-	daemonAPIPathServices        = daemonAPIPathRoot + "/services"
-	daemonAPIPathWatches         = daemonAPIPathRoot + "/watches"
-	daemonAPIPathServiceEvents   = "/events"
-	daemonAPIQueryBefore         = "before"
-	daemonAPIQueryLimit          = "limit"
-	cliUnknownServiceFormat      = "unknown service %q"
-	cliWarningFormat             = "warning: %s\n"
+	// daemonWebLocalhostName is the hostname that always resolves to loopback
+	// (RFC 6761), so a web.address spelled that way names a local daemon.
+	daemonWebLocalhostName     = "localhost"
+	daemonAPIPathRoot          = "/api"
+	daemonAPIPathApplications  = daemonAPIPathRoot + "/applications"
+	daemonAPIPathEvents        = daemonAPIPathRoot + "/events"
+	daemonAPIPathEventsClear   = daemonAPIPathEvents + "/clear"
+	daemonAPIPathServices      = daemonAPIPathRoot + "/services"
+	daemonAPIPathWatches       = daemonAPIPathRoot + "/watches"
+	daemonAPIPathServiceEvents = "/events"
+	daemonAPIQueryBefore       = "before"
+	daemonAPIQueryLimit        = "limit"
+	cliUnknownServiceFormat    = "unknown service %q"
+	cliWarningFormat           = "warning: %s\n"
 )
 
 const (
@@ -94,7 +98,10 @@ const (
 	cliFlagBefore    = daemonAPIQueryBefore
 	cliFlagConfig    = commandConfig
 	cliFlagConfirm   = "confirm"
+	cliFlagCost      = "cost"
 	cliFlagForce     = "force"
+	cliFlagGenerate  = "generate"
+	cliFlagHash      = "hash"
 	cliFlagHelp      = commandHelp
 	cliFlagJSON      = "json"
 	cliFlagKill      = "kill-blockers"
@@ -108,6 +115,7 @@ const (
 	cliFlagReason    = "reason"
 	cliFlagSeries    = "series"
 	cliFlagSince     = "since"
+	cliFlagStdin     = "stdin"
 	cliFlagTimeout   = checks.CheckKeyTimeout
 	cliFlagTTL       = "ttl"
 	cliFlagVersion   = commandVersion
@@ -240,6 +248,11 @@ type options struct {
 	before string // --before for events clear (RFC3339 or duration)
 	// events list flags
 	eventLimit int
+	// web hash-password flags
+	generate bool   // --generate: hash a freshly generated secret and print it once
+	stdin    bool   // --stdin: read the password from standard input
+	hash     string // --hash: credential format (bcrypt or sha256)
+	cost     int    // --cost: bcrypt work factor (0 means the default)
 }
 
 // event is a minimal struct for unmarshaling events from the daemon's /api/events
@@ -288,6 +301,16 @@ func Main(ctx context.Context, args []string) int {
 	}
 	cliApp.Operate = cliApp.defaultOperate
 	return cliApp.Run(ctx, args)
+}
+
+// env reads an environment variable through the injected seam, falling back to
+// the real environment for an App built directly (helpers reachable without
+// withDefaults, such as the daemon API calls).
+func (a App) env(name string) string {
+	if a.Env == nil {
+		return os.Getenv(name)
+	}
+	return a.Env(name)
 }
 
 func (a App) withDefaults() App {
@@ -387,6 +410,7 @@ var commandHandlers = map[string]commandHandler{
 	commandPanic:     App.runPanic,
 	commandSLA:       App.runSLA,
 	commandWizard:    App.runWizard,
+	commandWeb:       func(a App, _ context.Context, opts options) int { return a.runWeb(opts) },
 }
 
 func (a App) run(ctx context.Context, args []string) int {
@@ -1548,7 +1572,7 @@ func (a App) daemonWebRequest(ctx context.Context, opts options, method, what st
 		req.Header.Set(daemonWebCSRFHeader, daemonWebCSRFValue)
 	}
 	// If the config declares an admin password, send Basic auth (any user + pw).
-	applyDaemonWebAuth(req, cfg)
+	a.applyDaemonWebAuth(req, cfg)
 
 	client := &http.Client{Timeout: daemonWebClientTimeout}
 	resp, err := client.Do(req)
@@ -1573,7 +1597,7 @@ func (a App) pruneDaemonEvents(ctx context.Context, opts options, before time.Ti
 
 	body, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusOK {
-		return 0, fmt.Errorf("clear failed (%d): %s", resp.StatusCode, strings.TrimSpace(string(body)))
+		return 0, fmt.Errorf("clear failed (%d): %s%s", resp.StatusCode, strings.TrimSpace(string(body)), daemonWebStatusHint(resp.StatusCode))
 	}
 
 	var res struct {
@@ -1604,7 +1628,7 @@ func (a App) fetchEvents(ctx context.Context, opts options, service string, limi
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("events fetch failed (%d): %s", resp.StatusCode, strings.TrimSpace(string(body)))
+		return nil, fmt.Errorf("events fetch failed (%d): %s%s", resp.StatusCode, strings.TrimSpace(string(body)), daemonWebStatusHint(resp.StatusCode))
 	}
 
 	var evs []event
@@ -1614,14 +1638,82 @@ func (a App) fetchEvents(ctx context.Context, opts options, service string, limi
 	return evs, nil
 }
 
-func applyDaemonWebAuth(req *http.Request, cfg *config.Config) {
-	if pw := daemonWebPassword(cfg); pw != "" {
+func (a App) applyDaemonWebAuth(req *http.Request, cfg *config.Config) {
+	if pw := a.daemonWebPassword(cfg); pw != "" {
 		req.Header.Set(daemonWebHeaderAuthorization, daemonWebBasicAuth(pw))
 	}
 }
 
-func daemonWebPassword(cfg *config.Config) string {
-	return cfg.Global.WebPassword()
+// daemonWebPassword resolves the credential sermoctl sends to the daemon web
+// API, in order of precedence:
+//
+//  1. $SERMO_WEB_PASSWORD — an explicit operator choice, and the only option
+//     when the daemon is not on this host.
+//  2. <paths.runtime>/web.token — the daemon's own runtime token, but only for a
+//     daemon on this host: the token of a local sermod means nothing to a remote
+//     one. It is what makes hashed credentials usable, since a hash cannot be
+//     turned back into the password the API expects.
+//  3. A cleartext password in the configuration, which the daemon accepts as-is.
+//
+// An empty result means no credential was found. The request is still sent: the
+// dashboard may have no authentication at all, and a 401 is reported by the
+// caller with the guidance in daemonWebAuthHint.
+func (a App) daemonWebPassword(cfg *config.Config) string {
+	if pw := strings.TrimSpace(a.env(config.EnvWebPassword)); pw != "" {
+		return pw
+	}
+	if daemonIsLocal(cfg) {
+		if token := readDaemonWebToken(cfg.Global.RuntimeDir()); token != "" {
+			return token
+		}
+	}
+	pw, _ := cfg.Global.WebCredentials().Plaintext()
+	return pw
+}
+
+// daemonIsLocal reports whether web.address names this host. A runtime token is
+// only a credential for the daemon that wrote it, so sending it to a remote
+// sermod would replace a working password with a guaranteed 401.
+func daemonIsLocal(cfg *config.Config) bool {
+	wraw, _ := cfg.Global.Raw[config.SectionWeb].(map[string]any)
+	addr := cfgval.String(wraw[config.WebKeyAddress])
+	if addr == "" {
+		return true // the default bind address is loopback
+	}
+	if addr == daemonWebLocalhostName || strings.HasSuffix(addr, "."+daemonWebLocalhostName) {
+		return true
+	}
+	ip := net.ParseIP(addr)
+	// A wildcard bind (0.0.0.0, ::) is reached over loopback from this host.
+	return ip != nil && (ip.IsLoopback() || ip.IsUnspecified())
+}
+
+// daemonWebAuthHint tells the operator how to supply a credential when the
+// daemon refuses the request. Hashed credentials cannot be sent as a password,
+// so the runtime token or SERMO_WEB_PASSWORD is the way in.
+const daemonWebAuthHint = " — run as the daemon user so " + config.DaemonWebTokenFilename +
+	" under paths.runtime is readable, or set " + config.EnvWebPassword
+
+// daemonWebStatusHint appends the credential hint to a refused request, and
+// nothing to any other failure.
+func daemonWebStatusHint(status int) string {
+	if status == http.StatusUnauthorized {
+		return daemonWebAuthHint
+	}
+	return ""
+}
+
+// readDaemonWebToken reads the daemon's runtime token, or "" when it is absent
+// or unreadable (sermoctl running as another user).
+func readDaemonWebToken(runtimeDir string) string {
+	if runtimeDir == "" {
+		runtimeDir = config.DefaultRuntime
+	}
+	data, err := os.ReadFile(filepath.Join(runtimeDir, config.DaemonWebTokenFilename))
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(data))
 }
 
 func daemonWebBasicAuth(password string) string {
@@ -1643,7 +1735,7 @@ func (a App) daemonAPIGet(ctx context.Context, opts options, path string) ([]byt
 	if err != nil {
 		return nil, 0, fmt.Errorf("build daemon API request for %s: %w", path, err)
 	}
-	applyDaemonWebAuth(req, cfg)
+	a.applyDaemonWebAuth(req, cfg)
 	client := &http.Client{Timeout: daemonWebClientTimeout}
 	resp, err := client.Do(req)
 	if err != nil {
@@ -1864,6 +1956,10 @@ func parseArgs(args []string) (options, error) {
 	fs.DurationVar(&opts.since, cliFlagSince, 0, "")
 	fs.StringVar(&opts.before, cliFlagBefore, "", "")
 	fs.IntVar(&opts.eventLimit, cliFlagLimit, 0, "")
+	fs.BoolVar(&opts.generate, cliFlagGenerate, false, "")
+	fs.BoolVar(&opts.stdin, cliFlagStdin, false, "")
+	fs.StringVar(&opts.hash, cliFlagHash, "", "")
+	fs.IntVar(&opts.cost, cliFlagCost, 0, "")
 	fs.StringVar(&backend, cliFlagBackend, "", "")
 	fs.DurationVar(&opts.timeout, cliFlagTimeout, 0, "")
 	fs.StringVar(&opts.config, cliFlagConfig, "", "")

@@ -148,7 +148,15 @@ func daemonAPITestConfig(t *testing.T, serverURL, template string) (root, global
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Pin paths.runtime inside the temp root: the daemon web token lives there,
+	// and these tests must not pick up (or miss) the one a real sermod wrote.
+	runtimeEntry := "  runtime: " + filepath.Join(root, "run") + "\n"
 	content := template
+	if strings.Contains(content, "paths:\n") {
+		content = strings.Replace(content, "paths:\n", "paths:\n"+runtimeEntry, 1)
+	} else {
+		content += "\npaths:\n" + runtimeEntry
+	}
 	content = strings.ReplaceAll(content, "HOST", u.Hostname())
 	content = strings.ReplaceAll(content, "PORT", strconv.Itoa(port))
 	content = strings.ReplaceAll(content, "SERVICES", filepath.Join(root, "services"))

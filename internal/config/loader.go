@@ -211,7 +211,7 @@ func loadGlobal(path string) (Global, error) {
 		g.Templates = cfgval.String(paths[pathKeyTemplates])
 	}
 	resolveConfigPaths(path, &g)
-	resolveWebPasswordFiles(&g)
+	resolveWebCredentials(&g)
 	return g, nil
 }
 
