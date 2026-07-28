@@ -14,7 +14,7 @@ require (
 	github.com/google/nftables v0.3.0
 	github.com/gosnmp/gosnmp v1.44.0
 	github.com/lib/pq v1.12.3
-	github.com/quic-go/quic-go v0.60.0
+	github.com/quic-go/quic-go v0.61.0
 	github.com/spf13/pflag v1.0.10
 	github.com/vishvananda/netlink v1.3.1
 	github.com/wneessen/go-mail v0.8.1
