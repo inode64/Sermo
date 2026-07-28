@@ -545,6 +545,11 @@ al arrancar para hacer fiable `sermoctl daemon reload`. Si no hay pidfile presen
 `sermoctl daemon reload` recurre a localizar el proceso `sermod` en ejecución por
 nombre — un escaneo nativo de `/proc`, sin necesidad de `pidof`/`pgrep` externos.
 
+Mientras el panel exige autenticación, el daemon escribe además
+`<paths.runtime>/web.token` (modo `0600`, borrado al parar): la credencial admin
+que `sermoctl` usa para llegar al API web, y que una contraseña hasheada no puede
+proporcionar. Véase [Credenciales hasheadas](#credenciales-hasheadas).
+
 `sermoctl daemon reload` recarga la propia configuración de `sermod` (como se indica
 arriba). `sermoctl reload <service>` es una operación diferente — recarga *ese service*
 en su sitio a través del motor (preflight → reload → health). Cómo recarga un service,
@@ -704,9 +709,12 @@ web:
   guest_password_file: /etc/sermo/secrets/guest.pass  # en lugar de `guest_password`
 ```
 
-- El fichero contiene **la contraseña y nada más**; se recortan los espacios
-  circundantes y el salto de línea final que añade cualquier editor. Un fichero
-  vacío es un error de configuración, no una contraseña vacía.
+- El fichero contiene **una credencial por línea**. Se ignoran las líneas vacías
+  y las que empiezan por `#`; se recortan los espacios circundantes y el salto de
+  línea final que añade cualquier editor. Un fichero sin ninguna credencial
+  utilizable es un error de configuración, no una contraseña vacía.
+- **Cualquiera** de las credenciales del fichero otorga el rol de ese fichero.
+  Así se rota una contraseña sin corte, y así cada operador tiene la suya.
 - Una ruta **relativa** se resuelve respecto al directorio que contiene
   `sermo.yml`, igual que los directorios `paths.*`. `${env:...}` funciona en la
   ruta como en cualquier otro sitio.
@@ -719,7 +727,70 @@ web:
   informa del mismo mensaje.
 - Mantén el fichero legible solo por el usuario del daemon (`chmod 0600`). Es un
   secreto en el sistema de ficheros, no en la configuración, y debe tratarse
-  como tal.
+  como tal. `sermod` registra una advertencia al arrancar si el fichero es
+  legible más allá de su propietario.
+
+#### Credenciales hasheadas
+
+Una credencial puede guardarse **hasheada**, de modo que el fichero nunca
+contenga una contraseña legible — el modelo de `/etc/shadow`, sin ninguna clave
+de descifrado que provisionar:
+
+```
+# /etc/sermo/secrets/web.pass
+$2a$12$K3JqR7uH...                          # ana
+$sha256$c2FsdA$9b74c9bd...                  # provisión automática
+en-claro-si-lo-prefieres
+```
+
+`sermoctl web hash-password` genera la línea:
+
+```console
+$ sermoctl web hash-password --name ana >> /etc/sermo/secrets/web.pass
+Password: ****
+Repeat:   ****
+
+$ sermoctl web hash-password --generate      # secreto generado, mostrado una vez
+secret: X7KGiJqO-stXR3W1dlWLqzguYt-TJkZYCgiP2hP0XcA
+$sha256$i6xhXZ6zQlQpysyEusOo4A$2PnStYnKgGXhXLNqy2a/gEBn5EuBv9HmWOZjVJigIys
+
+$ printf '%s' "$PASS" | sermoctl web hash-password --stdin
+```
+
+- **`$2a$` / `$2b$` / `$2y$` (bcrypt)** es para una contraseña **elegida por una
+  persona**: es lento a propósito, y eso es lo que hace difícil romper un fichero
+  robado. `--cost` fija el factor de trabajo (12 por defecto).
+- **`$sha256$`** es para un secreto **generado** (`--generate`). Verificarlo
+  cuesta microsegundos en lugar de un cuarto de segundo; contra un secreto
+  aleatorio de 256 bits no hay nada que adivinar, así que el coste del hash no
+  aporta nada. No lo uses para una contraseña inventada por una persona.
+- Una línea que empieza por `$` se lee siempre como un hash. Un formato `$...$`
+  **desconocido** es un error de configuración, nunca una contraseña literal: un
+  hash mal escrito no debe convertirse en silencio en la contraseña.
+- Una línea que no empieza por `$` es una credencial en claro y puede contener
+  `#` y espacios. En una línea hasheada, lo que sigue al hash es un comentario.
+- Por tanto una **contraseña en claro no puede empezar por `$`** — ni en el
+  fichero ni en `web.password`. `sermod` se niega a arrancar en lugar de adivinar
+  (salida `78`); en ese caso, hashea la contraseña.
+- Cada fuente admite como máximo **64** credenciales: cada intento fallido se
+  comprueba contra todas ellas.
+- El resultado de la verificación se cachea brevemente, de modo que el coste de
+  bcrypt se paga una vez por credencial y no en cada petición.
+- Las credenciales se leen **al arrancar el daemon**, no con `sermoctl daemon
+  reload`: editar el fichero surte efecto en el siguiente reinicio de `sermod`.
+  Añadir la credencial nueva antes de retirar la vieja sigue siendo lo que rota
+  sin corte.
+
+Como un hash no se puede convertir de vuelta en contraseña, `sermoctl` no puede
+enviar ninguna. Se autentica con el **token de runtime** que `sermod` escribe en
+`<paths.runtime>/web.token` (modo `0600`, borrado al parar el daemon), que otorga
+acceso admin a quien pueda leerlo — el mismo modelo de confianza que el socket de
+control. `sermoctl` resuelve su credencial en este orden:
+
+1. `$SERMO_WEB_PASSWORD` — necesaria para un daemon remoto, o al ejecutar como un
+   usuario que no puede leer el token.
+2. `<paths.runtime>/web.token`.
+3. Una contraseña en claro en la configuración.
 
 La **contraseña**, no el nombre de usuario, selecciona el rol — en el prompt del
 navegador introduce cualquier nombre de usuario y la contraseña de admin o guest; las
