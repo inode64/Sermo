@@ -35,6 +35,7 @@ import (
 	"sermo/internal/servicemgr"
 	"sermo/internal/state"
 	"sermo/internal/web"
+	"sermo/internal/webcred"
 )
 
 const (
@@ -62,6 +63,15 @@ const (
 	daemonEventLogLimit  = 1000
 	daemonPIDFileMode    = 0o644
 	daemonRuntimeDirMode = 0o700
+	// daemonWebTokenFileMode keeps the runtime token owner-only: reading it is
+	// equivalent to holding the admin password.
+	daemonWebTokenFileMode = 0o600
+	// secretGroupOtherMask matches any group or other permission bit, which on a
+	// file holding a password is worth a warning.
+	secretGroupOtherMask = 0o077
+	// tmpFileExt names the staging file of an atomic write, the same spelling
+	// mountctl uses for its state files.
+	tmpFileExt = ".tmp"
 	// shutdownPruneDrainTimeout bounds how long shutdown waits for an in-flight
 	// history-prune statement; it must stay well under init-system stop
 	// timeouts (systemd defaults to 90s) so a long DELETE cannot force SIGKILL.
@@ -94,6 +104,7 @@ const (
 	logFieldEUID                  = "euid"
 	logFieldKey                   = "key"
 	logFieldMessage               = "message"
+	logFieldMode                  = "mode"
 	logFieldPath                  = "path"
 	logFieldPID                   = "pid"
 	logFieldReason                = "reason"
@@ -376,6 +387,10 @@ func run(args []string) int {
 		webHolder, webWarnings = app.NewWebBackendHolder(ctx, cfg, deps)
 		app.LogBuildNotices(logger, "build web backend", webWarnings)
 		auth := webAuth(cfg)
+		warnWorldReadableSecret(logger, cfg)
+		token, removeToken := writeWebToken(logger, rt, auth)
+		defer removeToken()
+		auth.RuntimeToken = token
 		server := &web.Server{
 			Addr:                   addr,
 			Backend:                webHolder,
@@ -580,18 +595,80 @@ func countArtifactWatches(watches []*app.Watch, category string) int {
 	return count
 }
 
-// webAuth builds the web access control from the `web` block (admin password,
-// optional guest password, optional anonymous guest read access).
+// webAuth builds the web access control from the `web` block (admin
+// credentials, optional guest credentials, optional anonymous guest read
+// access).
 func webAuth(cfg *config.Config) web.Auth {
 	m, _ := cfg.Global.Raw[config.SectionWeb].(map[string]any)
 	if m == nil {
 		return web.Auth{}
 	}
 	auth := web.Auth{}
-	auth.AdminPassword = cfg.Global.WebPassword()
-	auth.GuestPassword = cfg.Global.WebGuestPassword()
+	auth.AdminCredentials = cfg.Global.WebCredentials()
+	auth.GuestCredentials = cfg.Global.WebGuestCredentials()
 	auth.AnonymousGuest, _ = m[config.WebKeyGuest].(bool)
 	return auth
+}
+
+// writeWebToken generates the runtime token that grants sermoctl admin access to
+// the web API and writes it to <runtime>/web.token, readable only by the daemon
+// user. Hashed credentials leave no password for the CLI to send, so without the
+// token `sermoctl status` and friends could not authenticate at all.
+//
+// It returns the token and a cleanup function; both are empty when auth is
+// disabled (an open dashboard needs no credential) or the file cannot be
+// written, which is logged and left non-fatal: the dashboard itself still works.
+func writeWebToken(logger *slog.Logger, runtimeDir string, auth web.Auth) (string, func()) {
+	if !auth.Enabled() {
+		return "", func() {}
+	}
+	path := filepath.Join(runtimeDir, config.DaemonWebTokenFilename)
+	token, err := webcred.GenerateSecret()
+	if err == nil {
+		err = writeFileAtomic(path, []byte(token+"\n"), daemonWebTokenFileMode)
+	}
+	if err != nil {
+		logger.Warn("write web token failed (sermoctl will need SERMO_WEB_PASSWORD)", logFieldPath, path, logFieldError, err)
+		return "", func() {}
+	}
+	return token, func() { _ = os.Remove(path) }
+}
+
+// writeFileAtomic writes data through a temporary file in the same directory, so
+// a reader never sees a half-written secret and a crash cannot leave one behind
+// under the real name.
+func writeFileAtomic(path string, data []byte, mode os.FileMode) error {
+	tmp := path + tmpFileExt
+	// os.WriteFile only applies mode when it creates the file, so a staging file
+	// left behind by an earlier crash would donate its own permissions to the
+	// secret. Start from nothing.
+	if err := os.Remove(tmp); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	if err := os.WriteFile(tmp, data, mode); err != nil {
+		return err
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		_ = os.Remove(tmp)
+		return err
+	}
+	return nil
+}
+
+// warnWorldReadableSecret logs a password file whose mode lets other users read
+// it. It is a warning, not a validation error: the daemon can still run, and
+// refusing to start over a permission bit would be worse than saying so.
+func warnWorldReadableSecret(logger *slog.Logger, cfg *config.Config) {
+	for _, path := range cfg.Global.WebCredentialFiles() {
+		info, err := os.Stat(path)
+		if err != nil {
+			continue
+		}
+		if info.Mode().Perm()&secretGroupOtherMask != 0 {
+			logger.Warn("web password file is readable beyond its owner (chmod 0600 recommended)",
+				logFieldPath, path, logFieldMode, info.Mode().Perm().String())
+		}
+	}
 }
 
 // webAllowedHosts reads web.allowed_hosts: extra Host header names the open

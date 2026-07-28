@@ -80,6 +80,9 @@ sermoctl panic on|off|status          # daemon-wide emergency switch (see Panic 
 
 sermoctl config validate
 
+sermoctl web hash-password [--stdin|--generate] [--hash bcrypt|sha256] [--cost N] [--name LABEL]
+                                       # print one credential line for web.password_file
+
 sermoctl daemon reload                 # reload sermod config, not services
 sermoctl notifier test NAME            # send an explicit test message through one notifier
 

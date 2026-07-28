@@ -121,5 +121,8 @@ web:
   # guest: false                 # set true to allow anonymous read-only access
   # Instead of the two passwords above, read them from files (chmod 0600) so the
   # secret never lives in this config. Each *_file key excludes its plain twin.
+  # One credential per line, any of which grants that file's role, in cleartext
+  # or hashed ($2a$... bcrypt, $sha256$... for a generated secret). Build a line
+  # with `sermoctl web hash-password`.
   # password_file: /etc/sermo/secrets/web.pass
   # guest_password_file: /etc/sermo/secrets/guest.pass

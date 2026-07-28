@@ -56,7 +56,8 @@ func validateWeb(webCfg map[string]any, add func(string, ...any)) {
 // validateWebPasswordFiles checks each password / `*_file` pair. The two
 // spellings are mutually exclusive — accepting both would leave which one wins
 // up to the reader — and the file variant needs an actual path. Whether the
-// file can be read is settled at load time, in resolveWebPasswordFiles.
+// source can be read and parsed is settled at load time, in
+// resolveWebCredentials.
 func validateWebPasswordFiles(webCfg map[string]any, add addFunc) {
 	for _, pair := range [][4]string{
 		{WebKeyPassword, WebKeyPasswordFile, webPathPassword, webPathPasswordFile},

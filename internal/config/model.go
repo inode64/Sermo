@@ -15,6 +15,7 @@ import (
 	"sermo/internal/notify"
 	"sermo/internal/process"
 	"sermo/internal/rules"
+	"sermo/internal/webcred"
 	"slices"
 )
 
@@ -590,6 +591,11 @@ const DefaultRuntime = "/run/sermo"
 // DaemonPIDFilename is the sermod pidfile name written under the runtime root.
 const DaemonPIDFilename = "sermod.pid"
 
+// DaemonWebTokenFilename is the runtime token sermod writes under the runtime
+// root while the dashboard requires authentication. It grants admin access to
+// the web API, so it is written owner-only and removed when the daemon stops.
+const DaemonWebTokenFilename = "web.token"
+
 // DefaultState is the persistent state root used when paths.state is unset. It
 // lives under /var/lib so it survives reboots, unlike the runtime root on tmpfs.
 const DefaultState = "/var/lib/sermo"
@@ -642,11 +648,11 @@ type Global struct {
 	State         string
 	Templates     string
 
-	// Dashboard passwords read from web.password_file / web.guest_password_file
-	// at load time; empty when those keys are unused. Read them through
-	// WebPassword and WebGuestPassword, which fall back to the inline keys.
-	webPassword      string
-	webGuestPassword string
+	// Dashboard credentials parsed at load time from web.password_file /
+	// web.guest_password_file, or from the inline keys. Read them through
+	// WebCredentials and WebGuestCredentials.
+	webCredentials      webcred.List
+	webGuestCredentials webcred.List
 	// issues collects load-time findings (an unreadable password file) for
 	// Validate to report.
 	issues []Issue

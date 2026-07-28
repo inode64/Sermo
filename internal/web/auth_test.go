@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"sermo/internal/webcred"
 )
 
 func authServer(a Auth) http.Handler {
@@ -29,7 +31,7 @@ func (f fakeReadiness) Report(_ context.Context) ReadyReport { return f.rep }
 
 func TestLivezPublicEvenWithAuth(t *testing.T) {
 	// auth required for everything else, but /livez must answer without credentials
-	h := authServer(Auth{AdminPassword: "secret"})
+	h := authServer(Auth{AdminCredentials: webcred.Plain("secret")})
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, routePathLivez, nil))
 	if rec.Code != http.StatusOK {
@@ -49,7 +51,7 @@ func TestLivezPublicEvenWithAuth(t *testing.T) {
 func TestReadyzPublicEvenWithAuth(t *testing.T) {
 	h := (&Server{
 		Backend:   &fakeBackend{services: []Service{{Name: "web"}}},
-		Auth:      Auth{AdminPassword: "secret"},
+		Auth:      Auth{AdminCredentials: webcred.Plain("secret")},
 		Readiness: fakeReadiness{rep: ReadyReport{Ready: true, Status: apiStatusOK, Services: 1}},
 	}).Handler()
 	rec := httptest.NewRecorder()
@@ -65,7 +67,7 @@ func TestReadyzPublicEvenWithAuth(t *testing.T) {
 func TestVerboseHealthRequiresAuth(t *testing.T) {
 	h := (&Server{
 		Backend:   &fakeBackend{services: []Service{{Name: "web"}}},
-		Auth:      Auth{AdminPassword: "secret"},
+		Auth:      Auth{AdminCredentials: webcred.Plain("secret")},
 		Readiness: fakeReadiness{rep: ReadyReport{Ready: true, Status: apiStatusOK, Services: 1}},
 	}).Handler()
 	for _, path := range []string{
@@ -152,7 +154,7 @@ func TestCSRFGuardOnUnsafeMethods(t *testing.T) {
 }
 
 func TestAuthRequiredChallenges(t *testing.T) {
-	h := authServer(Auth{AdminPassword: "secret"})
+	h := authServer(Auth{AdminCredentials: webcred.Plain("secret")})
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req(http.MethodGet, apiPathServices, "", ""))
 	if rec.Code != http.StatusUnauthorized || rec.Header().Get("WWW-Authenticate") == "" {
@@ -161,7 +163,7 @@ func TestAuthRequiredChallenges(t *testing.T) {
 }
 
 func TestAdminFullAccess(t *testing.T) {
-	h := authServer(Auth{AdminPassword: "secret", GuestPassword: "guestpw"})
+	h := authServer(Auth{AdminCredentials: webcred.Plain("secret"), GuestCredentials: webcred.Plain("guestpw")})
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req(http.MethodPost, testServicePath("web", apiActionRestart), "admin", "secret"))
 	if rec.Code != http.StatusOK {
@@ -170,7 +172,7 @@ func TestAdminFullAccess(t *testing.T) {
 }
 
 func TestGuestIsReadOnly(t *testing.T) {
-	h := authServer(Auth{AdminPassword: "secret", GuestPassword: "guestpw"})
+	h := authServer(Auth{AdminCredentials: webcred.Plain("secret"), GuestCredentials: webcred.Plain("guestpw")})
 	// guest can read
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req(http.MethodGet, apiPathServices, "guest", "guestpw"))
@@ -191,7 +193,7 @@ func TestGuestIsReadOnly(t *testing.T) {
 }
 
 func TestAnonymousGuestReadOnly(t *testing.T) {
-	h := authServer(Auth{AdminPassword: "secret", AnonymousGuest: true})
+	h := authServer(Auth{AdminCredentials: webcred.Plain("secret"), AnonymousGuest: true})
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req(http.MethodGet, apiPathServices, "", ""))
 	if rec.Code != http.StatusOK {
@@ -205,7 +207,7 @@ func TestAnonymousGuestReadOnly(t *testing.T) {
 }
 
 func TestWhoami(t *testing.T) {
-	h := authServer(Auth{AdminPassword: "secret", AnonymousGuest: true})
+	h := authServer(Auth{AdminCredentials: webcred.Plain("secret"), AnonymousGuest: true})
 	check := func(user, pass, role string, canAct bool) {
 		rec := httptest.NewRecorder()
 		h.ServeHTTP(rec, req(http.MethodGet, apiPathWhoami, user, pass))
@@ -269,7 +271,7 @@ func TestOpenModeAllowsConfiguredHosts(t *testing.T) {
 func TestAuthedModeServesAnyHost(t *testing.T) {
 	// With Basic auth on, a rebound origin cannot attach credentials, so the
 	// Host check is not applied and reverse proxies keep working.
-	h := authServer(Auth{AdminPassword: "secret"})
+	h := authServer(Auth{AdminCredentials: webcred.Plain("secret")})
 	r := req(http.MethodGet, apiPathServices, "admin", "secret")
 	r.Host = "public.example.com"
 	rec := httptest.NewRecorder()
@@ -285,7 +287,7 @@ func TestGuestSeesRedactedCmdlines(t *testing.T) {
 		mounts:        []Mount{{Name: "data", Blockers: []MountBlocker{{PID: 9, Cmdline: []string{"rsync", "--password=hunter2", "/data"}}}}},
 		mountBlockers: MountBlockersResult{OK: true, Name: "data", Blockers: []MountBlocker{{PID: 9, Cmdline: []string{"rsync", "--password=hunter2", "/data"}}}},
 	}
-	h := (&Server{Backend: b, Auth: Auth{AdminPassword: "secret", GuestPassword: "guest"}}).Handler()
+	h := (&Server{Backend: b, Auth: Auth{AdminCredentials: webcred.Plain("secret"), GuestCredentials: webcred.Plain("guest")}}).Handler()
 
 	fetch := func(path, pass string, into any) {
 		t.Helper()
@@ -349,7 +351,7 @@ func TestWhoamiWithoutResolvedRoleFailsClosed(t *testing.T) {
 }
 
 func TestLoginChallengesThenRedirects(t *testing.T) {
-	h := authServer(Auth{AdminPassword: "secret", AnonymousGuest: true})
+	h := authServer(Auth{AdminCredentials: webcred.Plain("secret"), AnonymousGuest: true})
 	// a guest hitting /login gets a Basic challenge (to escalate)
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req(http.MethodGet, routePathLogin, "", ""))
@@ -361,5 +363,69 @@ func TestLoginChallengesThenRedirects(t *testing.T) {
 	h.ServeHTTP(rec, req(http.MethodGet, routePathLogin, "admin", "secret"))
 	if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != routePathRoot {
 		t.Fatalf("/login as admin = %d loc=%q, want 303 /", rec.Code, rec.Header().Get("Location"))
+	}
+}
+
+// Every credential configured for a role grants that role, which is what lets an
+// operator rotate a password or give each person their own without a cut.
+func TestRoleFromAnyCredential(t *testing.T) {
+	adminHash, err := webcred.HashBcrypt("hashed-admin", webcred.MinBcryptCost)
+	if err != nil {
+		t.Fatal(err)
+	}
+	admin, err := webcred.Parse("first\nsecond\n" + adminHash + "   # ana\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	guest, err := webcred.Parse("guest-one\nguest-two\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := authServer(Auth{AdminCredentials: admin, GuestCredentials: guest, RuntimeToken: "run-token"})
+
+	tests := []struct {
+		name     string
+		password string
+		wantRead int
+		wantAct  int
+	}{
+		{name: "first admin credential", password: "first", wantRead: http.StatusOK, wantAct: http.StatusOK},
+		{name: "second admin credential", password: "second", wantRead: http.StatusOK, wantAct: http.StatusOK},
+		{name: "hashed admin credential", password: "hashed-admin", wantRead: http.StatusOK, wantAct: http.StatusOK},
+		{name: "runtime token is admin", password: "run-token", wantRead: http.StatusOK, wantAct: http.StatusOK},
+		{name: "first guest credential", password: "guest-one", wantRead: http.StatusOK, wantAct: http.StatusForbidden},
+		{name: "second guest credential", password: "guest-two", wantRead: http.StatusOK, wantAct: http.StatusForbidden},
+		{name: "the hash itself is not a password", password: adminHash, wantRead: http.StatusUnauthorized, wantAct: http.StatusUnauthorized},
+		{name: "the label is not a password", password: "ana", wantRead: http.StatusUnauthorized, wantAct: http.StatusUnauthorized},
+		{name: "unknown password", password: "nope", wantRead: http.StatusUnauthorized, wantAct: http.StatusUnauthorized},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			h.ServeHTTP(rec, req(http.MethodGet, apiPathServices, "anyone", tc.password))
+			if rec.Code != tc.wantRead {
+				t.Errorf("GET = %d, want %d", rec.Code, tc.wantRead)
+			}
+			rec = httptest.NewRecorder()
+			h.ServeHTTP(rec, req(http.MethodPost, testServicePath("web", apiActionRestart), "anyone", tc.password))
+			if rec.Code != tc.wantAct {
+				t.Errorf("POST = %d, want %d", rec.Code, tc.wantAct)
+			}
+		})
+	}
+}
+
+// The runtime token is a way in for sermoctl, never a reason to close an open
+// dashboard or to open a closed one beyond admin.
+func TestRuntimeTokenDoesNotEnableAuth(t *testing.T) {
+	open := Auth{RuntimeToken: "run-token"}
+	if open.Enabled() {
+		t.Error("Auth with only a runtime token reports auth enabled")
+	}
+	h := authServer(Auth{GuestCredentials: webcred.Plain("guestpw"), RuntimeToken: "run-token"})
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req(http.MethodPost, testServicePath("web", apiActionRestart), "sermoctl", "run-token"))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("token action with only guest credentials configured = %d, want 200", rec.Code)
 	}
 }
