@@ -23,6 +23,19 @@ variables:
   port: 5432
   user: postgres
   backup_user: postgres
+  # Replication watches connect over TCP as this role. It needs pg_monitor (or
+  # superuser) to read other backends' rows in pg_stat_replication; a plain role
+  # sees NULL there and the lag watches would silently never fire.
+  monitor_user: postgres
+  database: postgres
+  # Thresholds are plain numbers: a sql check compares numerically and does not
+  # accept size suffixes, so the queries return MiB (and seconds) directly.
+  # A healthy primary already retains ~16 MiB (one WAL segment) because a
+  # logical slot's restart_lsn trails by design, so stay far above that.
+  slot_backlog_mib: 1024
+  logical_unconfirmed_mib: 512
+  replay_lag_mib: 256
+  standby_delay_seconds: 300
   data_dir: /var/lib/postgresql/${version}/data
   config_dir: /var/lib/postgresql/${version}/data
 os:
@@ -139,6 +152,22 @@ watches:
       cycles: 3
     then:
       action: restart
+  # A watch `then` takes a single action, so the restart watches above cannot
+  # also alert. This one reports the outage on its own, one cycle before the
+  # restart fires, so an incident resolved by the restart is still visible.
+  alert-if-not-connectable:
+    check:
+      type: postgres
+      host: 127.0.0.1
+      port: ${port}
+      user: ${user}
+      timeout: 5s
+    for:
+      cycles: 2
+    then:
+      action: alert
+      message: >-
+        ${display_name} is not accepting connections on 127.0.0.1:${port}
   alert-if-memory-high:
     check:
       type: metric
@@ -153,3 +182,139 @@ watches:
       action: alert
       message: >-
         During ${rule.duration}, ${display_name} memory usage stayed above ${check.threshold} (current ${check.value})
+  # Replication sensors. All are optional so a node without replication stays a
+  # warning instead of failing the service, and all read a scalar over TCP: a
+  # connection failure yields "not ok", never an alert, so a down server is
+  # reported by alert-if-not-connectable rather than by a false lag alert.
+  # The CASE on pg_is_in_recovery() keeps every query valid on a standby, where
+  # pg_current_wal_lsn() cannot be executed.
+  alert-if-replication-slot-backlog:
+    check:
+      type: sql
+      engine: postgres
+      host: 127.0.0.1
+      port: ${port}
+      user: ${monitor_user}
+      database: ${database}
+      timeout: 10s
+      optional: true
+      query: |-
+        SELECT round(coalesce(max(pg_wal_lsn_diff(
+          CASE WHEN pg_is_in_recovery() THEN pg_last_wal_receive_lsn() ELSE pg_current_wal_lsn() END,
+          restart_lsn)), 0) / 1048576.0, 1)
+        FROM pg_replication_slots WHERE restart_lsn IS NOT NULL
+      op: '>'
+      value: ${slot_backlog_mib}
+      summary: >-
+        ${display_name} retains ${value} MiB of WAL for its most lagging replication slot (limit ${check.value} MiB)
+    for:
+      duration: 10m
+    then:
+      action: alert
+      message: >-
+        During ${rule.duration}, ${display_name} kept retaining ${check.value} MiB of WAL for a replication slot (limit ${check.threshold} MiB); pg_wal grows until the slot is consumed or dropped
+  # Only logical slots have a confirmed_flush_lsn; a physical slot leaves it
+  # NULL, so filtering by slot_type keeps this reading about the consumer that
+  # has genuinely not acknowledged the data yet.
+  alert-if-logical-slot-unconfirmed:
+    check:
+      type: sql
+      engine: postgres
+      host: 127.0.0.1
+      port: ${port}
+      user: ${monitor_user}
+      database: ${database}
+      timeout: 10s
+      optional: true
+      query: |-
+        SELECT round(coalesce(max(pg_wal_lsn_diff(
+          CASE WHEN pg_is_in_recovery() THEN pg_last_wal_receive_lsn() ELSE pg_current_wal_lsn() END,
+          confirmed_flush_lsn)), 0) / 1048576.0, 1)
+        FROM pg_replication_slots WHERE slot_type = 'logical'
+      op: '>'
+      value: ${logical_unconfirmed_mib}
+      summary: >-
+        ${display_name} has ${value} MiB unconfirmed by its logical replication consumer (limit ${check.value} MiB)
+    for:
+      duration: 10m
+    then:
+      action: alert
+      message: >-
+        During ${rule.duration}, a logical replication consumer of ${display_name} left ${check.value} MiB unconfirmed (limit ${check.threshold} MiB)
+  # An inactive slot keeps retaining WAL with nobody consuming it. The window
+  # rides out brief consumer reconnections.
+  alert-if-replication-slot-inactive:
+    check:
+      type: sql
+      engine: postgres
+      host: 127.0.0.1
+      port: ${port}
+      user: ${monitor_user}
+      database: ${database}
+      timeout: 10s
+      optional: true
+      query: SELECT count(*) FROM pg_replication_slots WHERE NOT active
+      op: '>'
+      value: 0
+      summary: >-
+        ${display_name} has ${value} replication slot(s) with no consumer connected, still retaining WAL
+    for:
+      duration: 15m
+    then:
+      action: alert
+      message: >-
+        During ${rule.duration}, ${display_name} kept ${check.value} replication slot(s) with no consumer connected; they retain WAL until consumed or dropped
+  # pg_stat_replication is empty on a standby (no walsenders), so this reads 0
+  # there instead of erroring.
+  alert-if-replication-replay-lag:
+    check:
+      type: sql
+      engine: postgres
+      host: 127.0.0.1
+      port: ${port}
+      user: ${monitor_user}
+      database: ${database}
+      timeout: 10s
+      optional: true
+      query: >-
+        SELECT round(coalesce(max(pg_wal_lsn_diff(sent_lsn, replay_lsn)), 0) / 1048576.0, 1) FROM pg_stat_replication
+      op: '>'
+      value: ${replay_lag_mib}
+      summary: >-
+        ${display_name} sent ${value} MiB not yet replayed by its most lagging replica (limit ${check.value} MiB)
+    for:
+      duration: 5m
+    then:
+      action: alert
+      message: >-
+        During ${rule.duration}, a replica of ${display_name} stayed ${check.value} MiB behind in replay (limit ${check.threshold} MiB)
+  # The IS DISTINCT FROM guard is required: on an idle but fully caught-up
+  # standby, now() - pg_last_xact_replay_timestamp() keeps growing with no lag
+  # at all, which would alert forever. Comparing the receive and replay LSNs
+  # reports a delay only when the standby really is behind.
+  alert-if-standby-replay-delay:
+    check:
+      type: sql
+      engine: postgres
+      host: 127.0.0.1
+      port: ${port}
+      user: ${monitor_user}
+      database: ${database}
+      timeout: 10s
+      optional: true
+      query: |-
+        SELECT CASE
+          WHEN pg_is_in_recovery()
+           AND pg_last_wal_receive_lsn() IS DISTINCT FROM pg_last_wal_replay_lsn()
+          THEN round(coalesce(extract(epoch FROM now() - pg_last_xact_replay_timestamp()), 0)::numeric, 1)
+          ELSE 0 END
+      op: '>'
+      value: ${standby_delay_seconds}
+      summary: >-
+        ${display_name} standby is ${value} seconds behind the primary (limit ${check.value} s)
+    for:
+      duration: 5m
+    then:
+      action: alert
+      message: >-
+        During ${rule.duration}, the ${display_name} standby stayed ${check.value} seconds behind the primary (limit ${check.threshold} s)

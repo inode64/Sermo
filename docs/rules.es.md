@@ -2097,6 +2097,42 @@ rules:
         ${check.threshold} (current ${check.value}) at ${date}
 ```
 
+Un check `sql` convierte una consulta escalar en el mismo tipo de watch por
+umbral. Su `value` se compara numéricamente y **no** admite los sufijos de
+tamaño `K`/`M`/`G` que sí aceptan los campos de bytes de `storage`, así que una
+consulta que informe de un tamaño debe convertirlo en SQL e indicar la unidad en
+el mensaje. El servicio de catálogo de PostgreSQL usa esta forma para vigilar el
+WAL retenido por un slot de replicación:
+
+```yaml
+watches:
+  alert-if-replication-slot-backlog:
+    check:
+      type: sql
+      engine: postgres
+      host: 127.0.0.1
+      port: ${port}
+      user: ${monitor_user}
+      database: ${database}
+      optional: true
+      query: >-
+        SELECT round(coalesce(max(pg_wal_lsn_diff(pg_current_wal_lsn(),
+        restart_lsn)), 0) / 1048576.0, 1) FROM pg_replication_slots
+      op: ">"
+      value: 1024          # MiB, un número simple: aquí no hay sufijo de tamaño
+    for:
+      duration: 10m
+    then:
+      action: alert
+      message: >-
+        During ${rule.duration}, ${service} kept retaining ${check.value} MiB of
+        WAL for a replication slot (limit ${check.threshold} MiB)
+```
+
+Como un check `sql` informa «no ok» cuando falla la propia conexión, una base de
+datos caída nunca dispara la alerta de umbral: ese caso se cubre con un check de
+conexión aparte (`type: postgres`, `type: mysql`, …), no relajando la consulta.
+
 ## Política de remediación
 
 ```yaml
