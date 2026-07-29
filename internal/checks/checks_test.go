@@ -962,3 +962,28 @@ func TestIsReportingMode(t *testing.T) {
 		t.Error(`IsReportingMode("") = true; an empty mode is the absent default, not a valid value`)
 	}
 }
+
+// `reports:` is the last word on alert-style semantics; the check type only
+// supplies the default. This is what lets the same type be a health assertion
+// in one service and a sensor in another.
+func TestResolveCondition(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		typ     string
+		reports string
+		want    bool
+	}{
+		{"health type defaults to health", CheckTypeTCP, "", false},
+		{"non-health type defaults to condition", CheckTypeMetric, "", true},
+		{"explicit condition on a health type", CheckTypeProcess, ReportsCondition, true},
+		{"explicit health on a condition type", CheckTypeMetric, ReportsHealth, false},
+		{"a state sensor is never alert-style", CheckTypeMetric, ReportsState, false},
+		{"unknown mode falls back to the type default", CheckTypeMetric, "nonsense", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := ResolveCondition(tc.typ, tc.reports); got != tc.want {
+				t.Errorf("ResolveCondition(%q, %q) = %v, want %v", tc.typ, tc.reports, got, tc.want)
+			}
+		})
+	}
+}

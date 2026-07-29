@@ -395,8 +395,19 @@ leyendo el resultado en crudo.
 
 | modo | significado | panel | SLA |
 |---|---|---|---|
-| `health` (por defecto) | OK significa que el objetivo está disponible | `ok` / `fail` | se cuenta |
+| `health` | OK significa que el objetivo está disponible | `ok` / `fail` | se cuenta |
+| `condition` | OK significa que la condición se ha disparado, así que la disponibilidad se invierte | `ok` / `fail` | se cuenta |
 | `state` | OK significa que el estado sensado está presente; ninguna cara es buena ni mala | `active` / `inactive` | no se registra |
+
+Si se omite, el **tipo** de la comprobación aporta el valor por defecto: los tipos
+de salud (`tcp`, `http`, `service`, los protocolos de conexión…) usan `health`, y
+los de umbral y métrica `condition`. El tipo es solo el defecto: el mismo tipo
+puede ser una aserción de salud en un servicio y un sensor en otro, así que la
+comprobación tiene la última palabra.
+
+Una comprobación `condition` sigue mostrando `ok` / `fail`, no
+`active` / `inactive`: a diferencia de un sensor de estado, su cara disparada sí
+es un problema y tiene que parecerlo.
 
 Usa `state` cuando la comprobación existe para responder «¿está pasando esto
 ahora?» y no para afirmar que algo debe cumplirse. El watch `backup` del catálogo
