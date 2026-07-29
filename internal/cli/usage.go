@@ -534,12 +534,12 @@ var commandUsages = []commandUsage{
 	},
 	{
 		Name:    commandState,
-		Summary: "Prune old history and vacuum the persistent state database.",
+		Summary: "Consolidate and prune stored history, then vacuum the persistent state database.",
 		Usage: []string{
 			"sermoctl state compact [--before TIME]",
 		},
 		Flags: []string{
-			"--before TIME  non-future RFC3339 timestamp or positive duration; omitted means normal retention",
+			"--before TIME  non-future RFC3339 timestamp or positive duration; additionally drops history older than it",
 		},
 		Examples: []string{
 			"sermoctl state compact",

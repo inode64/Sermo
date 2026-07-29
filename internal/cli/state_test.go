@@ -61,8 +61,11 @@ defaults: { policy: { cooldown: 5m } }
 	if code != exitSuccess {
 		t.Fatalf("state compact exit=%d stderr=%s", code, stderr.String())
 	}
-	if got := stdout.String(); !strings.Contains(got, "pruned 7 row(s)") || !strings.Contains(got, "service_metrics=1") || !strings.Contains(got, "events=1") {
-		t.Fatalf("state compact output = %q, want pruned history summary", got)
+	got := stdout.String()
+	for _, want := range []string{"consolidated ", "pruned ", "archives=", "events="} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("state compact output = %q, want it to report %q", got, want)
+		}
 	}
 
 	store, err = state.OpenContext(context.Background(), filepath.Join(root, "state", state.Filename))
@@ -70,11 +73,14 @@ defaults: { policy: { cooldown: 5m } }
 		t.Fatalf("reopen state: %v", err)
 	}
 	defer store.Close()
+	// A span this wide resolves to the day archive, so the surviving sample is
+	// reported as the day bucket containing it, not as its original minute.
 	points, err := store.ServiceMetricSeries("web", "cpu", old.Add(-time.Minute), recent.Add(time.Minute))
 	if err != nil {
 		t.Fatalf("ServiceMetricSeries: %v", err)
 	}
-	if len(points) != 1 || !points[0].Start.Equal(recent) {
-		t.Fatalf("service metric points = %+v, want only recent bucket", points)
+	wantBucket := recent.Truncate(24 * time.Hour)
+	if len(points) != 1 || !points[0].Start.Equal(wantBucket) {
+		t.Fatalf("service metric points = %+v, want only the day bucket at %s", points, wantBucket)
 	}
 }

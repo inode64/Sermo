@@ -419,7 +419,7 @@
   .sla-label, .sla-count { color: var(--text-2); }
   .sla-pct { text-align: right; font-weight: 650; }
   .sla-bar { height: .62rem; border-radius: 999px; overflow: hidden; background: var(--line); border: 1px solid var(--line-2); }
-  .sla-fill { display: block; height: 100%; width: var(--sla-pct); background: var(--sla-color); min-width: .12rem; }
+  .sla-fill { display: block; height: 100%; width: var(--sla-pct); background: var(--sla-color, var(--line-2)); min-width: .12rem; }
   .sla-fill.sla-empty { min-width: 0; }
   .sla-timeline { display: flex; height: .62rem; border-radius: 999px; overflow: hidden; background: var(--line); border: 1px solid var(--line-2); }
   .sla-seg { flex: 1 1 0; min-width: 0; background: var(--sla-color, var(--line-2)); }
@@ -507,6 +507,16 @@
   .usagebar.usage-warn { --usage-color: var(--warn); }
   .usagebar.usage-high { --usage-color: color-mix(in srgb, var(--warn) 55%, var(--crit)); }
   .usagebar.usage-crit { --usage-color: var(--crit); }
+  /* SLA severity bands: the share of a sub-span that was down, green only at
+     exactly zero. Mirrors the usagebar bands above — the level is chosen in JS by
+     name (slaDownBand) and the colour lives here, under the token linter. Applies
+     to .sla-seg, .sla-bar-seg and .sla-fill alike; .sla-gap still overrides
+     background, so an unmonitored sub-span stays hatched. */
+  .sla-down-none { --sla-color: var(--ok); }
+  .sla-down-low { --sla-color: var(--warn); }
+  .sla-down-mid { --sla-color: color-mix(in srgb, var(--warn) 50%, var(--crit)); }
+  .sla-down-high { --sla-color: color-mix(in srgb, var(--warn) 25%, var(--crit) 75%); }
+  .sla-down-full { --sla-color: var(--crit); }
   .usagebar-label { position: relative; z-index: 1; font-size: .68rem; font-weight: 700; line-height: 1; color: var(--text); text-shadow: 0 1px 0 var(--panel), 0 -1px 0 var(--panel), 1px 0 0 var(--panel), -1px 0 0 var(--panel); }
   .usagebar.usagebar-sm { width: 5.5rem; height: .85rem; }
   .usagebar.usagebar-sm .usagebar-label { font-size: .58rem; }

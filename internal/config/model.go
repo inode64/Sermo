@@ -108,6 +108,21 @@ const (
 	EngineKeyMaxParallelChecks = "max_parallel_checks"
 	// EngineKeyOperationTimeout is engine.operation_timeout.
 	EngineKeyOperationTimeout = "operation_timeout"
+	// EngineKeyRetention1m is engine.retention_1m, the per-minute history window.
+	EngineKeyRetention1m = "retention_1m"
+	// EngineKeyRetention5m is engine.retention_5m, the 5-minute history window.
+	EngineKeyRetention5m = "retention_5m"
+	// EngineKeyRetention1h is engine.retention_1h, the hourly history window.
+	EngineKeyRetention1h = "retention_1h"
+	// EngineKeyRetention6h is engine.retention_6h, the 6-hourly history window.
+	EngineKeyRetention6h = "retention_6h"
+	// EngineKeyRetention1d is engine.retention_1d, the daily history window.
+	EngineKeyRetention1d = "retention_1d"
+	// EngineKeyRetentionEvents is engine.retention_events, the event feed window.
+	EngineKeyRetentionEvents = "retention_events"
+	// EngineKeyRollupInterval is engine.rollup_interval, the cadence at which the
+	// daemon consolidates and prunes stored history.
+	EngineKeyRollupInterval = "rollup_interval"
 	// EngineKeyStartupDelay is engine.startup_delay.
 	EngineKeyStartupDelay = "startup_delay"
 	// EngineKeyStateCacheSize is engine.state_cache_size.
