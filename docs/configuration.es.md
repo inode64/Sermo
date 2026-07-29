@@ -1201,7 +1201,9 @@ notifiers:
 
 - **`telegram`** — envía a través de un **bot de Telegram** (`sendMessage`).
   - **`token`** — el token del bot de `@BotFather`. Queda dentro de la URL de la
-    API y nunca aparece en el dashboard.
+    API y nunca aparece en el dashboard. Prefiere `${env:...}`; si queda vacío
+    (la variable no está definida) el notifier queda inactivo en lugar de fallar
+    la carga de configuración.
   - **`chat_id`** — el id numérico del chat/grupo o un nombre `@canal`. El
     asunto es la línea principal y el detalle (los campos `SERMO_*`) sigue como
     texto plano.
@@ -1382,7 +1384,9 @@ telegram_bot:
 ```
 
 - **`token`** — el token del bot de `@BotFather` (usado tanto para `getUpdates` como
-  para las respuestas). Prefiere `${env:...}` para no escribirlo en un archivo.
+  para las respuestas). Prefiere `${env:...}` para no escribirlo en un archivo. Opcional:
+  si queda vacío (la variable de entorno no está definida) el bot simplemente queda
+  inactivo y el resto de la configuración se carga igual.
 - **`allowed_chats`** — la lista de ids numéricos de chat que el bot responde. Un
   mensaje de cualquier otro chat se ignora, nunca se responde. Este es el control de
   acceso: limítalo a los operadores/grupos que pueden consultar el daemon.

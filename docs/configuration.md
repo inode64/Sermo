@@ -1156,7 +1156,9 @@ notifiers:
 
 - **`telegram`** — sends through a **Telegram bot** (`sendMessage`).
   - **`token`** — the bot token from `@BotFather`. It stays inside the API URL
-    and never appears on the dashboard.
+    and never appears on the dashboard. Prefer `${env:...}`; when it resolves
+    empty (the variable is unset) the notifier stays inactive instead of failing
+    config load.
   - **`chat_id`** — the numeric chat/group id or an `@channel` name. The
     subject is the lead line and the detail (the `SERMO_*` fields) follows as
     plain text.
@@ -1332,7 +1334,9 @@ telegram_bot:
 ```
 
 - **`token`** — the bot token from `@BotFather` (used for both `getUpdates` and
-  replies). Prefer `${env:...}` so it is not written in a file.
+  replies). Prefer `${env:...}` so it is not written in a file. Optional: when it
+  resolves empty (the env var is unset) the bot simply stays inactive and the
+  rest of the config still loads.
 - **`allowed_chats`** — the list of numeric chat ids the bot answers. A message
   from any other chat is ignored, never answered. This is the access control:
   keep it to the operators/groups that may query the daemon.
