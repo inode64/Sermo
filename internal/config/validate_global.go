@@ -149,9 +149,11 @@ func validateEmailNotifier(name string, entry map[string]any, add func(string, .
 	}
 }
 
-// validateTelegramBot checks the optional top-level `telegram_bot` section:
-// when present and not disabled it requires a token and at least one allowed
-// chat id; a poll interval, when set, must be a positive duration.
+// validateTelegramBot checks the optional top-level `telegram_bot` section. The
+// token is usually sourced from ${env:...}, so an empty token (an unset
+// variable) leaves the bot inactive rather than failing config load — mirroring
+// telegrambot.Config.active(). When a token is present the section requires at
+// least one allowed chat id; a poll interval, when set, must be positive.
 func validateTelegramBot(raw map[string]any, add func(string, ...any)) {
 	section, ok := raw[SectionTelegramBot].(map[string]any)
 	if !ok {
@@ -166,8 +168,11 @@ func validateTelegramBot(raw map[string]any, add func(string, ...any)) {
 	if enabled, ok := section[telegrambot.KeyEnabled].(bool); ok && !enabled {
 		return
 	}
+	// An empty token (typically an unset ${env:...} secret) leaves the bot
+	// inactive instead of failing validation, so a host without the token still
+	// loads its config. Mirrors telegrambot.Config.active().
 	if cfgval.String(section[telegrambot.KeyToken]) == "" {
-		add(validationRequiredFormat, field(telegrambot.KeyToken))
+		return
 	}
 	if ids, ok := cfgval.IntList(section[telegrambot.KeyAllowedChats]); !ok || len(ids) == 0 {
 		add("%s must list at least one chat id", field(telegrambot.KeyAllowedChats))
@@ -178,8 +183,12 @@ func validateTelegramBot(raw map[string]any, add func(string, ...any)) {
 }
 
 func validateTelegramNotifier(name string, entry map[string]any, add func(string, ...any)) {
+	// The token is usually sourced from ${env:...}; an empty token (an unset
+	// variable) leaves the notifier inactive rather than failing config load.
+	// Build() skips a tokenless telegram notifier with a warning, and its name
+	// stays defined so `notify` references to it still resolve.
 	if cfgval.String(entry[notify.KeyToken]) == "" {
-		add("%s is required for a telegram notifier", notifierFieldPath(name, notify.KeyToken))
+		return
 	}
 	if cfgval.String(entry[notify.KeyChatID]) == "" {
 		add("%s is required for a telegram notifier", notifierFieldPath(name, notify.KeyChatID))
