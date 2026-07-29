@@ -80,6 +80,7 @@ type webEntry struct {
 	checkNames        []string          // sorted
 	checkTypes        map[string]string // check name -> type
 	checkReports      map[string]string // check name -> `reports:` mode, when declared
+	checkUnits        map[string]string // check name -> `unit:` for its scalar result, when declared
 	checkIntervals    map[string]time.Duration
 	discoverer        process.Discoverer
 	selectors         []process.Selector
@@ -354,6 +355,7 @@ func attachServiceRuntime(ctx context.Context, entry *webEntry, name string, tre
 	entry.checkNames = names
 	entry.checkTypes = types
 	entry.checkReports = checkReportingModes(tree)
+	entry.checkUnits = checkDeclaredUnits(tree)
 	entry.checkIntervals = intervals
 	entry.discoverer = discoverer
 	entry.selectors = selectors
@@ -512,20 +514,32 @@ func checkCatalog(tree map[string]any, defaultInterval time.Duration) ([]string,
 // reads configuration rather than the published result because the mode is
 // static: sourcing it here keeps it correct on the first cycle and across a
 // daemon restart, without widening the persisted snapshot record.
+func checkDeclaredUnits(tree map[string]any) map[string]string {
+	return checkStringField(tree, checks.CheckKeyUnit)
+}
+
 func checkReportingModes(tree map[string]any) map[string]string {
+	return checkStringField(tree, checks.CheckKeyReports)
+}
+
+// checkStringField collects one string field per configured check. Both callers
+// read configuration rather than the published result because these are static
+// declarations: sourcing them here keeps them correct on the first cycle and
+// across a daemon restart, without widening the persisted snapshot record.
+func checkStringField(tree map[string]any, key string) map[string]string {
 	section, ok := tree[config.SectionChecks].(map[string]any)
 	if !ok {
 		return nil
 	}
-	modes := map[string]string{}
+	out := map[string]string{}
 	for name, raw := range section {
 		m, ok := raw.(map[string]any)
 		if !ok {
 			continue
 		}
-		if mode := cfgval.AsString(m[checks.CheckKeyReports]); mode != "" {
-			modes[name] = mode
+		if v := cfgval.AsString(m[key]); v != "" {
+			out[name] = v
 		}
 	}
-	return modes
+	return out
 }

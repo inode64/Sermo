@@ -987,3 +987,30 @@ func TestResolveCondition(t *testing.T) {
 		})
 	}
 }
+
+// A check type declares its graphable metrics statically, but some types cannot:
+// a sql check's unit depends on its query, so the same type reports MiB on one
+// service and seconds on another. `unit:` closes that gap per check.
+func TestDeclaredGraphMetrics(t *testing.T) {
+	if got := DeclaredGraphMetrics(CheckTypeSQL, ""); len(got) != 0 {
+		t.Errorf("sql without a unit publishes %d metrics, want none", len(got))
+	}
+
+	got := DeclaredGraphMetrics(CheckTypeSQL, "MiB")
+	if len(got) != 1 {
+		t.Fatalf("sql with a unit publishes %d metrics, want 1", len(got))
+	}
+	if got[0].Key != DataKeyValue || got[0].Unit != "MiB" {
+		t.Errorf("declared metric = %+v, want the scalar result keyed %q in MiB", got[0], DataKeyValue)
+	}
+
+	// The type's own metrics survive, so declaring a unit adds to them.
+	static := GraphMetrics(CheckTypeSensors)
+	both := DeclaredGraphMetrics(CheckTypeSensors, "°C")
+	if len(both) != len(static)+1 {
+		t.Errorf("declared metrics = %d, want the type's %d plus one", len(both), len(static))
+	}
+	if len(static) > 0 && GraphMetrics(CheckTypeSensors)[0].Key != static[0].Key {
+		t.Error("DeclaredGraphMetrics must not mutate the static per-type table")
+	}
+}

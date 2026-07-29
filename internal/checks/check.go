@@ -37,10 +37,14 @@ const (
 	// declaring it makes that explicit, or applies it to a type whose default is
 	// health.
 	ReportsCondition = "condition"
+	// ReportsValue marks a measurement: the check publishes a number and passes
+	// no judgement on it. Like a state sensor it has no verdict and no SLA; the
+	// dashboard shows the reading and rules compare it themselves.
+	ReportsValue = "value"
 )
 
 // ReportingModes lists the values `reports:` accepts, for validation and docs.
-var ReportingModes = []string{ReportsHealth, ReportsState, ReportsCondition}
+var ReportingModes = []string{ReportsHealth, ReportsState, ReportsCondition, ReportsValue}
 
 // ConditionByDefault reports whether a check of this type is alert-style unless
 // `reports:` says otherwise. The type only supplies the default: the same type
@@ -54,7 +58,7 @@ func ResolveCondition(typ, reports string) bool {
 	switch reports {
 	case ReportsCondition:
 		return true
-	case ReportsHealth, ReportsState:
+	case ReportsHealth, ReportsState, ReportsValue:
 		return false
 	default:
 		return ConditionByDefault(typ)
@@ -86,12 +90,19 @@ type Result struct {
 // is unaffected; only health, SLA and the dashboard label change.
 func (r Result) StateSensor() bool { return r.Reports == ReportsState }
 
+// Verdictless reports whether this result passes no judgement, so it never
+// counts toward health and records no availability: a state sensor and a
+// measurement both observe without asserting.
+func (r Result) Verdictless() bool {
+	return r.Reports == ReportsState || r.Reports == ReportsValue
+}
+
 // Healthy reports whether this result means the target is available. Most
 // checks are health-style (OK means healthy); condition checks are alert-style
 // (OK means the condition fired), so their availability is inverted. A state
 // sensor asserts nothing about availability and is never unhealthy.
 func (r Result) Healthy() bool {
-	if r.StateSensor() {
+	if r.Verdictless() {
 		return true
 	}
 	if r.Condition {

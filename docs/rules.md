@@ -398,6 +398,7 @@ check's raw outcome.
 | `health` | OK means the target is available | `ok` / `fail` | counted |
 | `condition` | OK means the condition fired, so availability is inverted | `ok` / `fail` | counted |
 | `state` | OK means a sensed state is present; neither side is good or bad | `active` / `inactive` | not recorded |
+| `value` | the check measures and passes no judgement | the reading | not recorded |
 
 Omitted, the check **type** supplies the default: health-style types
 (`tcp`, `http`, `service`, the connection protocols, …) default to `health`, the
@@ -407,6 +408,27 @@ check has the last word.
 
 A `condition` check still reads `ok` / `fail`, not `active` / `inactive`: unlike
 a state sensor, its firing side really is a problem and has to look like one.
+
+#### Graphing a check's value (`unit`)
+
+Most check types declare their graphable metrics statically, but some cannot: a
+`sql` check's unit depends on its query, so five sensors on one service can
+report MiB, seconds and a bare count. `unit:` declares it per check, and the
+check's scalar result is then recorded and graphed like any other metric:
+
+```yaml
+alert-if-replication-slot-backlog:
+  check:
+    type: sql
+    engine: postgres
+    query: "SELECT …"     # returns MiB
+    op: ">"
+    value: 1024
+    unit: MiB             # graph the result, labelled MiB
+```
+
+It is independent of `reports:` — a `condition` check keeps its threshold verdict
+*and* gets a graph — and it adds to whatever the type already publishes.
 
 Use `state` for a check that exists to answer "is this happening right now?"
 rather than to assert something must hold. The catalog's `backup` watch is the

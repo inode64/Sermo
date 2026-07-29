@@ -366,7 +366,7 @@ func (b *WebBackend) Detail(ctx context.Context, name string) (web.Detail, bool)
 		if seen && !cs.At.IsZero() {
 			ch.At = cs.At.UTC().Format(time.RFC3339)
 		}
-		for _, m := range checks.GraphMetrics(e.checkTypes[cn]) {
+		for _, m := range checks.DeclaredGraphMetrics(e.checkTypes[cn], e.checkUnits[cn]) {
 			ch.Metrics = append(ch.Metrics, web.CheckMetric{Name: m.Key, Unit: m.Unit})
 		}
 		ch.SLA = b.checkSLAWindows(name, cn, now)
