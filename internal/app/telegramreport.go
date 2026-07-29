@@ -34,6 +34,12 @@ type telegramReporter struct {
 
 // NewTelegramReporter builds a telegrambot.Reporter over the reload-safe web
 // backend holder and an SLA source (the state store). now defaults to time.Now.
+// NewTelegramReporter adapts the daemon's web backend to the bot's read-only
+// port. It returns the interface on purpose: the concrete adapter is an
+// implementation detail, and exporting it would let a caller reach past the
+// read-only surface the bot is deliberately confined to.
+//
+//nolint:ireturn // returns the narrow read-only port by design; see above.
 func NewTelegramReporter(webHolder *WebBackendHolder, sla telegramSLAReader, now func() time.Time) telegrambot.Reporter {
 	if now == nil {
 		now = time.Now
@@ -63,32 +69,38 @@ func (r *telegramReporter) Status(ctx context.Context) (telegrambot.StatusReport
 	return rep, nil
 }
 
+// mapLines projects a web listing onto the bot's own line type. Both listings
+// are the same shape — read all, convert each — and only the projection differs.
+func mapLines[S, D any](src []S, to func(S) D) []D {
+	out := make([]D, 0, len(src))
+	for _, item := range src {
+		out = append(out, to(item))
+	}
+	return out
+}
+
+//nolint:dupl // parallel projections of two unrelated web types; merging them would need reflection.
 func (r *telegramReporter) Services(ctx context.Context) ([]telegrambot.ServiceLine, error) {
-	services := r.web.Services(ctx)
-	lines := make([]telegrambot.ServiceLine, 0, len(services))
-	for _, s := range services {
-		lines = append(lines, telegrambot.ServiceLine{
+	return mapLines(r.web.Services(ctx), func(s web.Service) telegrambot.ServiceLine {
+		return telegrambot.ServiceLine{
 			Name:      s.Name,
 			State:     s.State,
 			Health:    s.CheckHealth,
 			Monitored: s.Monitored,
-		})
-	}
-	return lines, nil
+		}
+	}), nil
 }
 
+//nolint:dupl // parallel projections of two unrelated web types; merging them would need reflection.
 func (r *telegramReporter) Watches(ctx context.Context) ([]telegrambot.WatchLine, error) {
-	watches := r.web.Watches(ctx)
-	lines := make([]telegrambot.WatchLine, 0, len(watches))
-	for _, w := range watches {
-		lines = append(lines, telegrambot.WatchLine{
+	return mapLines(r.web.Watches(ctx), func(w web.Watch) telegrambot.WatchLine {
+		return telegrambot.WatchLine{
 			Name:      w.Name,
 			Scope:     w.Scope,
 			State:     w.State,
 			Monitored: w.Monitored,
-		})
-	}
-	return lines, nil
+		}
+	}), nil
 }
 
 func (r *telegramReporter) SLA(ctx context.Context, service string) ([]telegrambot.SLAWindow, bool, error) {
@@ -97,7 +109,7 @@ func (r *telegramReporter) SLA(ctx context.Context, service string) ([]telegramb
 	}
 	values, err := r.sla.SLAReport(service, r.now())
 	if err != nil {
-		return nil, true, err
+		return nil, true, fmt.Errorf("sla report for %s: %w", service, err)
 	}
 	windows := make([]telegrambot.SLAWindow, 0, len(values))
 	for _, v := range values {
@@ -129,12 +141,15 @@ func (r *telegramReporter) serviceExists(ctx context.Context, name string) bool 
 	return false
 }
 
+// ratioToPercent scales an availability fraction in [0,1] for display.
+const ratioToPercent = 100
+
 func formatSLARatio(v state.SLAValue) string {
 	ratio, ok := v.Ratio()
 	if !ok {
 		return "n/a"
 	}
-	return fmt.Sprintf("%.2f%%", ratio*100)
+	return fmt.Sprintf("%.2f%%", ratio*ratioToPercent)
 }
 
 func eventTarget(e web.Event) string {

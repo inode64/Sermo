@@ -16,10 +16,15 @@ type command struct {
 }
 
 // commands is the read-only command registry, mirroring sermoctl's dispatch
-// table. Every handler only reads state through the Reporter. It is populated
-// in init to avoid a self-reference cycle (cmdHelp -> helpText -> commands).
+// table. Every handler only reads state through the Reporter.
 var commands map[string]command
 
+// The table is self-referential — it holds cmdHelp, which reads it back through
+// helpText — so neither a package-level literal nor a lazily built var can
+// express it: Go rejects both as an initialization cycle. init is exempt, which
+// is exactly the case it exists for.
+//
+//nolint:gochecknoinits // self-referential dispatch table; a var initializer is an initialization cycle.
 func init() {
 	commands = map[string]command{
 		"/status":   {help: "daemon and service health summary", handler: cmdStatus},
@@ -67,7 +72,7 @@ func parseCommand(text string) (name string, args []string) {
 func cmdStatus(ctx context.Context, b *Bot, _ []string) (string, error) {
 	rep, err := b.reporter.Status(ctx)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("status: %w", err)
 	}
 	return formatStatus(rep), nil
 }
@@ -75,7 +80,7 @@ func cmdStatus(ctx context.Context, b *Bot, _ []string) (string, error) {
 func cmdServices(ctx context.Context, b *Bot, args []string) (string, error) {
 	lines, err := b.reporter.Services(ctx)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("services: %w", err)
 	}
 	if len(args) > 0 {
 		name := args[0]
@@ -84,7 +89,7 @@ func cmdServices(ctx context.Context, b *Bot, args []string) (string, error) {
 				return formatServiceDetail(s), nil
 			}
 		}
-		return fmt.Sprintf("No service named %q.", name), nil
+		return noSuchService(name), nil
 	}
 	return formatServices(lines), nil
 }
@@ -92,7 +97,7 @@ func cmdServices(ctx context.Context, b *Bot, args []string) (string, error) {
 func cmdWatches(ctx context.Context, b *Bot, _ []string) (string, error) {
 	lines, err := b.reporter.Watches(ctx)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("watches: %w", err)
 	}
 	return formatWatches(lines), nil
 }
@@ -104,10 +109,10 @@ func cmdSLA(ctx context.Context, b *Bot, args []string) (string, error) {
 	service := args[0]
 	windows, ok, err := b.reporter.SLA(ctx, service)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("sla %s: %w", service, err)
 	}
 	if !ok {
-		return fmt.Sprintf("No service named %q.", service), nil
+		return noSuchService(service), nil
 	}
 	return formatSLA(service, windows), nil
 }
@@ -124,10 +129,14 @@ func cmdEvents(ctx context.Context, b *Bot, args []string) (string, error) {
 	}
 	lines, err := b.reporter.Events(ctx, limit)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("events: %w", err)
 	}
 	return formatEvents(lines), nil
 }
+
+// noSuchService is the one wording for a name that matches no configured
+// service, shared by /services and /sla.
+func noSuchService(name string) string { return fmt.Sprintf("No service named %q.", name) }
 
 func cmdHelp(_ context.Context, _ *Bot, _ []string) (string, error) {
 	return helpText(), nil
@@ -139,5 +148,5 @@ func helpText() string {
 	for _, name := range slices.Sorted(maps.Keys(commands)) {
 		fmt.Fprintf(&b, "%s — %s\n", name, commands[name].help)
 	}
-	return strings.TrimRight(b.String(), "\n")
+	return trimReply(&b)
 }
