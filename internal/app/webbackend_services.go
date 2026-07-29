@@ -352,7 +352,11 @@ func (b *WebBackend) Detail(ctx context.Context, name string) (web.Detail, bool)
 			Ran:   current && cs.Ran,
 		}
 		if current {
-			ch.OK = cs.OK
+			// Availability, not the raw comparison: a condition check reports
+			// OK when its threshold is crossed, so passing it through unchanged
+			// would render a healthy sensor as "fail" next to a 100% SLA column.
+			// The service health above (and the SLA series) already use healthy().
+			ch.OK = cs.healthy()
 			ch.Optional = cs.Optional
 			ch.Skipped = cs.Skipped
 			ch.Message = cs.Message

@@ -146,6 +146,44 @@ func TestWebBackendDetailRanFlag(t *testing.T) {
 	}
 }
 
+// A condition check reports OK when its threshold is crossed, so the detail
+// view must expose availability, not the raw comparison: an under-threshold
+// sensor is healthy and has to read ok, not fail.
+func TestWebBackendDetailConditionCheckReportsAvailability(t *testing.T) {
+	snaps := NewSnapshots()
+	snaps.PublishWithCheckTypes("web", map[string]checks.Result{
+		"lag-quiet":  {Check: "lag-quiet", OK: false, Condition: true, Message: "16 MiB (limit 1024 MiB)"},
+		"lag-firing": {Check: "lag-firing", OK: true, Condition: true, Message: "2048 MiB (limit 1024 MiB)"},
+		"port-up":    {Check: "port-up", OK: true, Message: "connected"},
+		"port-down":  {Check: "port-down", OK: false, Message: "refused"},
+	}, map[string]bool{"lag-quiet": true, "lag-firing": true, "port-up": true, "port-down": true},
+		map[string]string{"lag-quiet": "sql", "lag-firing": "sql", "port-up": "tcp", "port-down": "tcp"})
+
+	names := []string{"lag-quiet", "lag-firing", "port-up", "port-down"}
+	types := map[string]string{"lag-quiet": "sql", "lag-firing": "sql", "port-up": "tcp", "port-down": "tcp"}
+	b := webBackendWithEntry(snaps, names, types)
+
+	detail, ok := b.Detail(context.Background(), "web")
+	if !ok {
+		t.Fatal("detail not found")
+	}
+	got := map[string]bool{}
+	for _, c := range detail.Checks {
+		got[c.Name] = c.OK
+	}
+	want := map[string]bool{
+		"lag-quiet":  true,  // under threshold: healthy
+		"lag-firing": false, // threshold crossed: alerting
+		"port-up":    true,  // health check keeps its polarity
+		"port-down":  false,
+	}
+	for name, expected := range want {
+		if got[name] != expected {
+			t.Errorf("detail check %q ok = %v, want %v", name, got[name], expected)
+		}
+	}
+}
+
 func TestWebBackendDetailCheckReadings(t *testing.T) {
 	snap := NewSnapshots()
 	snap.PublishWithCheckTypes("web", map[string]checks.Result{
