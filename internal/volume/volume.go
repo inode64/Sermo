@@ -314,6 +314,10 @@ func pseudoFilesystem(fstype string) bool {
 	}
 }
 
+// storageFilesystem reports whether a filesystem type backs real storage even
+// though its device is not under /dev — network and pooled filesystems, plus any
+// fuse.* mount. IsStorageMount takes the /dev shortcut first, so device-backed
+// types (ext4, xfs, btrfs, …) deliberately do not appear here.
 func storageFilesystem(fstype string) bool {
 	switch fstype {
 	case "ceph", "cifs", "glusterfs", "gfs2", "lustre", "nfs", "nfs4",

@@ -59,6 +59,9 @@ PSEUDO_FS = {
     "tmpfs",
 }
 
+# Filesystems that back a generated storage watch. Network ones are excluded by
+# NETWORK_FS before this set is consulted, and any other fuse.* mount is picked
+# up by the fallback in mount_is_local_storage, so neither belongs here.
 REAL_STORAGE_FS = {
     "bcachefs",
     "btrfs",
@@ -69,7 +72,6 @@ REAL_STORAGE_FS = {
     "ext4",
     "exfat",
     "f2fs",
-    "fuse.sshfs",
     "gfs2",
     "glusterfs",
     "nfs",
