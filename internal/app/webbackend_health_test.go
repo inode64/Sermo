@@ -18,12 +18,12 @@ func TestCheckHealthSummary(t *testing.T) {
 		"warn": {OK: false, Optional: true},
 		"gate": {OK: true, Skipped: true},
 	}
-	failing, health := checkHealthSummaryCurrent(snap, []string{"http", "tcp", "warn", "gate"}, true, nil)
+	failing, health := checkHealthSummaryCurrent(snap, []string{"http", "tcp", "warn", "gate"}, true, nil, nil)
 	if failing != 1 || health != "failing" {
 		t.Fatalf("got failing=%d health=%q, want 1 failing", failing, health)
 	}
 
-	failing, health = checkHealthSummaryCurrent(snap, []string{"http", "warn", "gate"}, true, nil)
+	failing, health = checkHealthSummaryCurrent(snap, []string{"http", "warn", "gate"}, true, nil, nil)
 	if failing != 0 || health != "ok" {
 		t.Fatalf("without tcp: failing=%d health=%q, want ok", failing, health)
 	}
@@ -31,27 +31,27 @@ func TestCheckHealthSummary(t *testing.T) {
 	snap = map[string]CheckSnapshot{
 		"cert": {OK: false, Condition: true},
 	}
-	failing, health = checkHealthSummaryCurrent(snap, []string{"cert"}, true, nil)
+	failing, health = checkHealthSummaryCurrent(snap, []string{"cert"}, true, nil, nil)
 	if failing != 0 || health != "ok" {
 		t.Fatalf("healthy condition: failing=%d health=%q, want ok", failing, health)
 	}
 	snap["cert"] = CheckSnapshot{OK: true, Condition: true}
-	failing, health = checkHealthSummaryCurrent(snap, []string{"cert"}, true, nil)
+	failing, health = checkHealthSummaryCurrent(snap, []string{"cert"}, true, nil, nil)
 	if failing != 1 || health != "failing" {
 		t.Fatalf("firing condition: failing=%d health=%q, want failing", failing, health)
 	}
 
-	failing, health = checkHealthSummaryCurrent(nil, []string{"http"}, true, nil)
+	failing, health = checkHealthSummaryCurrent(nil, []string{"http"}, true, nil, nil)
 	if failing != 0 || health != "unknown" {
 		t.Fatalf("no snapshot: failing=%d health=%q, want unknown", failing, health)
 	}
 
-	failing, health = checkHealthSummaryCurrent(nil, []string{"http"}, false, nil)
+	failing, health = checkHealthSummaryCurrent(nil, []string{"http"}, false, nil, nil)
 	if failing != 0 || health != "paused" {
 		t.Fatalf("paused: failing=%d health=%q, want paused", failing, health)
 	}
 
-	failing, health = checkHealthSummaryCurrent(map[string]CheckSnapshot{}, []string{"http"}, true, nil)
+	failing, health = checkHealthSummaryCurrent(map[string]CheckSnapshot{}, []string{"http"}, true, nil, nil)
 	if failing != 0 || health != "unknown" {
 		t.Fatalf("no observed checks: failing=%d health=%q, want unknown", failing, health)
 	}
@@ -251,5 +251,31 @@ func TestWebBackendServiceStateEmptyProcessTreeWarnsInsteadOfCollectingForever(t
 	svc = b.view(context.Background(), "rpcbind", b.entries["rpcbind"])
 	if svc.State == TargetStateWarning || !slices.Contains(svc.ObservabilityMissing, observabilityMissingRuntime) {
 		t.Fatalf("service with a visible process = %+v, want collecting on runtime metrics", svc)
+	}
+}
+
+// A verdictless check asserts nothing, so it must not drag the service into a
+// failing state — the documented contract, and what the worker already does via
+// Result.Healthy. The snapshot carries no reporting mode, so the summary has to
+// be told which checks are verdictless.
+func TestCheckHealthSummaryIgnoresVerdictlessChecks(t *testing.T) {
+	snap := map[string]CheckSnapshot{
+		// A required state sensor whose sensed state is absent: OK=false, and
+		// `process` is a health type so Condition stays false.
+		"backup": {OK: false},
+		"http":   {OK: true},
+	}
+	verdictless := func(name string) bool { return name == "backup" }
+
+	failing, health := checkHealthSummaryCurrent(snap, []string{"backup", "http"}, true, nil, verdictless)
+	if failing != 0 || health != TargetStateOK {
+		t.Fatalf("failing=%d health=%q, want a healthy service: a state sensor is not a verdict", failing, health)
+	}
+
+	// Without the predicate the same snapshot must still fail, so the test is
+	// pinning the new behaviour rather than a vacuous pass.
+	failing, health = checkHealthSummaryCurrent(snap, []string{"backup", "http"}, true, nil, nil)
+	if failing != 1 || health != checkHealthFailing {
+		t.Fatalf("failing=%d health=%q, want the check counted when it is not declared verdictless", failing, health)
 	}
 }

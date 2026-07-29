@@ -170,9 +170,13 @@ func (b *WebBackend) checkView(service, cn string, e *webEntry, snap map[string]
 	if current {
 		// Availability, not the raw comparison: a condition check reports OK
 		// when its threshold is crossed, so passing it through unchanged would
-		// render a healthy sensor as "fail" next to a 100% SLA column. The
-		// service health above (and the SLA series) already use healthy().
+		// render a healthy sensor as "fail" next to a 100% SLA column. A
+		// verdictless check has no availability to report, so it carries the
+		// sensed state itself — that is what active/inactive renders.
 		ch.OK = cs.healthy()
+		if checks.VerdictlessMode(ch.Reports) {
+			ch.OK = cs.OK
+		}
 		ch.Optional = cs.Optional
 		ch.Skipped = cs.Skipped
 		ch.Message = cs.Message
@@ -197,9 +201,11 @@ func (b *WebBackend) serviceCheckHealth(name string, e *webEntry, monitored bool
 	if e == nil {
 		return 0, checkHealthUnknown
 	}
-	return checkHealthSummaryCurrent(b.snapshots.Get(name), e.checkNames, monitored, func(check string, snap CheckSnapshot) bool {
-		return b.serviceCheckSnapshotCurrent(e, check, snap)
-	})
+	return checkHealthSummaryCurrent(b.snapshots.Get(name), e.checkNames, monitored,
+		func(check string, snap CheckSnapshot) bool {
+			return b.serviceCheckSnapshotCurrent(e, check, snap)
+		},
+		func(check string) bool { return checks.VerdictlessMode(e.checkReports[check]) })
 }
 
 // serviceCheckSnapshotCurrent accepts only a result produced by the configured
@@ -319,7 +325,10 @@ func (b *WebBackend) operationSettlingPending(name string) bool {
 // "paused"; services with no observed checks yet are "unknown". current, when
 // set, filters snapshots to the ones the running config still declares; nil
 // keeps every snapshot.
-func checkHealthSummaryCurrent(snap map[string]CheckSnapshot, checkNames []string, monitored bool, current func(string, CheckSnapshot) bool) (failing int, health string) {
+// checkHealthSummaryCurrent counts the checks that make a service unhealthy.
+// verdictless names the checks that assert nothing (`reports: state`/`value`);
+// it comes from configuration because the snapshot carries no reporting mode.
+func checkHealthSummaryCurrent(snap map[string]CheckSnapshot, checkNames []string, monitored bool, current func(string, CheckSnapshot) bool, verdictless func(string) bool) (failing int, health string) {
 	if !monitored {
 		return 0, TargetStatePaused
 	}
@@ -336,7 +345,7 @@ func checkHealthSummaryCurrent(snap map[string]CheckSnapshot, checkNames []strin
 			continue
 		}
 		observed = true
-		if cs.Skipped || cs.Optional || cs.healthy() {
+		if cs.Skipped || cs.Optional || (verdictless != nil && verdictless(name)) || cs.healthy() {
 			continue
 		}
 		failing++
