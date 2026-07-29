@@ -3400,11 +3400,16 @@ function serviceMetricState(name) {
   return state;
 }
 
+// Reporting modes a check can declare (`reports:` in its configuration). Mirrors
+// the Reports* constants in internal/checks.
+const REPORTS_STATE = "state";
+const REPORTS_VALUE = "value";
+
 // verdictlessCheck reports whether a check passes no judgement, so it has no
 // availability: the SLA column reads "n/a" rather than "no data yet", which
 // would suggest a series that is merely still filling.
 function verdictlessCheck(c) {
-  return c.reports === "state" || c.reports === "value";
+  return c.reports === REPORTS_STATE || c.reports === REPORTS_VALUE;
 }
 
 // checkStateHTML renders a check's state cell. A `reports: state` check is a
@@ -3417,12 +3422,12 @@ function checkStateHTML(c, age) {
   if (c.stale) return tpl`<span class="inactive">stale</span>${age}`;
   if (!c.ran) return c.at ? tpl`<span class="muted">cached</span>${age}` : tpl`<span class="muted">not run yet</span>`;
   if (c.skipped) return tpl`<span class="muted">skipped</span>${age}`;
-  if (c.reports === "state") {
+  if (c.reports === REPORTS_STATE) {
     return c.ok
       ? tpl`<span class="state-on">active</span>${age}`
       : tpl`<span class="state-off">inactive</span>${age}`;
   }
-  if (c.reports === "value") return tpl`<span class="state-on">measured</span>${age}`;
+  if (c.reports === REPORTS_VALUE) return tpl`<span class="state-on">measured</span>${age}`;
   return c.ok ? tpl`<span class="ok">ok</span>${age}` : tpl`<span class="bad">fail</span>${age}`;
 }
 
