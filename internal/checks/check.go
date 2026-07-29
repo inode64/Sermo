@@ -46,35 +46,38 @@ const (
 // ReportingModes lists the values `reports:` accepts, for validation and docs.
 var ReportingModes = []string{ReportsHealth, ReportsState, ReportsCondition, ReportsValue}
 
-// ConditionByDefault reports whether a check of this type is alert-style unless
+// conditionByDefault reports whether a check of this type is alert-style unless
 // `reports:` says otherwise. The type only supplies the default: the same type
 // can be a health assertion in one service and a sensor in another, so the
 // check has the last word.
-func ConditionByDefault(typ string) bool { return !IsHealthType(typ) }
+func conditionByDefault(typ string) bool { return !IsHealthType(typ) }
 
 // ResolveCondition decides whether a check is alert-style: an explicit
 // `reports:` wins, otherwise the check type's default applies.
 func ResolveCondition(typ, reports string) bool {
-	switch reports {
-	case ReportsCondition:
+	switch {
+	case reports == ReportsCondition:
 		return true
-	case ReportsHealth, ReportsState, ReportsValue:
+	case reports == ReportsHealth || VerdictlessMode(reports):
 		return false
 	default:
-		return ConditionByDefault(typ)
+		return conditionByDefault(typ)
 	}
 }
 
 // IsReportingMode reports whether s names a supported `reports:` value.
 func IsReportingMode(s string) bool { return slices.Contains(ReportingModes, s) }
 
+// verdictlessModes are the reporting modes that assert nothing: they observe a
+// state or a number without judging it, so they never count toward health and
+// record no availability.
+var verdictlessModes = []string{ReportsState, ReportsValue}
+
 // VerdictlessMode reports whether a declared `reports:` value passes no
 // judgement, so the check has no availability to report. The configured
 // counterpart of Result.Verdictless, for callers that hold the declaration
 // rather than a result.
-func VerdictlessMode(reports string) bool {
-	return reports == ReportsState || reports == ReportsValue
-}
+func VerdictlessMode(reports string) bool { return slices.Contains(verdictlessModes, reports) }
 
 // Result is the observable outcome of one check.
 type Result struct {
@@ -93,17 +96,11 @@ type Result struct {
 	Data     map[string]any `json:"data,omitempty"`
 }
 
-// StateSensor reports whether this result carries no verdict, only a sensed
-// state. Rules still read OK directly, so a guard keyed on `active: {check: …}`
-// is unaffected; only health, SLA and the dashboard label change.
-func (r Result) StateSensor() bool { return r.Reports == ReportsState }
-
 // Verdictless reports whether this result passes no judgement, so it never
 // counts toward health and records no availability: a state sensor and a
-// measurement both observe without asserting.
-func (r Result) Verdictless() bool {
-	return r.Reports == ReportsState || r.Reports == ReportsValue
-}
+// measurement both observe without asserting. Rules still read OK directly, so
+// a guard keyed on `active: {check: …}` is unaffected.
+func (r Result) Verdictless() bool { return VerdictlessMode(r.Reports) }
 
 // Healthy reports whether this result means the target is available. Most
 // checks are health-style (OK means healthy); condition checks are alert-style

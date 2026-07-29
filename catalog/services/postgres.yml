@@ -20,6 +20,7 @@ restart_on_change:
     app: >-
       ${display_name} will restart after version change of ${change.app}: ${change.old_version} -> ${change.new_version}
 variables:
+  host: 127.0.0.1
   port: 5432
   user: postgres
   backup_user: postgres
@@ -136,7 +137,7 @@ watches:
   restart-if-ready-failed:
     check:
       type: postgres
-      host: 127.0.0.1
+      host: ${host}
       port: ${port}
       user: ${user}
       timeout: 5s
@@ -159,7 +160,7 @@ watches:
   alert-if-not-connectable:
     check:
       type: postgres
-      host: 127.0.0.1
+      host: ${host}
       port: ${port}
       user: ${user}
       timeout: 5s
@@ -193,7 +194,7 @@ watches:
     check:
       type: sql
       engine: postgres
-      host: 127.0.0.1
+      host: ${host}
       port: ${port}
       user: ${monitor_user}
       database: ${database}
@@ -222,7 +223,7 @@ watches:
     check:
       type: sql
       engine: postgres
-      host: 127.0.0.1
+      host: ${host}
       port: ${port}
       user: ${monitor_user}
       database: ${database}
@@ -250,7 +251,7 @@ watches:
     check:
       type: sql
       engine: postgres
-      host: 127.0.0.1
+      host: ${host}
       port: ${port}
       user: ${monitor_user}
       database: ${database}
@@ -274,7 +275,7 @@ watches:
     check:
       type: sql
       engine: postgres
-      host: 127.0.0.1
+      host: ${host}
       port: ${port}
       user: ${monitor_user}
       database: ${database}
@@ -301,7 +302,7 @@ watches:
     check:
       type: sql
       engine: postgres
-      host: 127.0.0.1
+      host: ${host}
       port: ${port}
       user: ${monitor_user}
       database: ${database}
