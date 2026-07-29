@@ -2099,6 +2099,42 @@ rules:
         ${check.threshold} (current ${check.value}) at ${date}
 ```
 
+A `sql` check turns a scalar query into the same kind of threshold watch. Its
+`value` is compared numerically and does **not** accept the `K`/`M`/`G` size
+suffixes that `storage` byte fields take, so a query that reports a size should
+convert it in SQL and name the unit in the message. The PostgreSQL catalog
+service uses this shape to watch WAL retained by a replication slot:
+
+```yaml
+watches:
+  alert-if-replication-slot-backlog:
+    check:
+      type: sql
+      engine: postgres
+      host: 127.0.0.1
+      port: ${port}
+      user: ${monitor_user}
+      database: ${database}
+      optional: true
+      query: >-
+        SELECT round(coalesce(max(pg_wal_lsn_diff(pg_current_wal_lsn(),
+        restart_lsn)), 0) / 1048576.0, 1) FROM pg_replication_slots
+      op: ">"
+      value: 1024          # MiB, a plain number: no size suffix here
+    for:
+      duration: 10m
+    then:
+      action: alert
+      message: >-
+        During ${rule.duration}, ${service} kept retaining ${check.value} MiB of
+        WAL for a replication slot (limit ${check.threshold} MiB)
+```
+
+Because a `sql` check reports "not ok" when the connection itself fails, a
+database that is down never raises the threshold alert — cover that case with a
+separate connection check (`type: postgres`, `type: mysql`, …) rather than by
+relaxing the query.
+
 ## Remediation policy
 
 ```yaml

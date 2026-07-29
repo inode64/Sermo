@@ -60,6 +60,7 @@ backoff to avoid restart loops.
 - [Multiple instances of one application](#multiple-instances-of-one-application)
 - [Disabling and deleting inherited entries](#disabling-and-deleting-inherited-entries)
 - [Monitoring flag](#monitoring-flag)
+- [PostgreSQL replication watches](#postgresql-replication-watches)
 - [Auxiliary commands](#auxiliary-commands)
 
 ## Categories
@@ -1510,6 +1511,39 @@ A service may also carry its own `watches:` block — per-service watches that c
 fire a hook/notification or compact `then.action`, and can use the service-scoped
 `service`/`metric`/`process_count` check types. See
 [Service watches](configuration.md#service-watches-scoped-to-a-service).
+
+## PostgreSQL replication watches
+
+The `postgres` catalog service ships five replication sensors built on the `sql`
+check: `alert-if-replication-slot-backlog`, `alert-if-logical-slot-unconfirmed`,
+`alert-if-replication-slot-inactive`, `alert-if-replication-replay-lag` and
+`alert-if-standby-replay-delay`. They are tuned by these variables:
+
+| variable | default | meaning |
+|---|---|---|
+| `monitor_user` | `postgres` | role the replication queries connect as |
+| `database` | `postgres` | database the queries connect to |
+| `slot_backlog_mib` | `1024` | WAL retained by the most lagging slot, in MiB |
+| `logical_unconfirmed_mib` | `512` | data a logical consumer has not confirmed, in MiB |
+| `replay_lag_mib` | `256` | sent but not replayed by the most lagging replica, in MiB |
+| `standby_delay_seconds` | `300` | how far behind a standby may fall, in seconds |
+
+The thresholds are plain numbers because a `sql` check compares numerically and
+does not take size suffixes, so the queries return MiB and seconds directly.
+Pick them well above the idle baseline: a healthy primary already retains around
+16 MiB (one WAL segment) because a logical slot's `restart_lsn` trails by design.
+
+**`monitor_user` must hold `pg_monitor`** (the default `postgres` superuser
+does). A role without `pg_monitor` or `pg_read_all_stats` still sees rows in
+`pg_stat_replication`, but with `sent_lsn`/`replay_lsn` as NULL for other
+backends — the aggregate then collapses to `0` and the lag watches never fire,
+silently. `pg_replication_slots` is readable by any role, so the slot watches
+are unaffected.
+
+These watches only make sense where replication actually happens.
+`scripts/remote-deploy/generate_install_config.py` disables the ones a host
+cannot satisfy from the `postgres_clusters` inventory evidence — see
+[the remote-deploy README](../scripts/remote-deploy/README.md).
 
 ## Auxiliary commands
 
