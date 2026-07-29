@@ -375,6 +375,13 @@ engine:
   user_lookup: auto           # auto | native | getent | numeric
   user_lookup_timeout: 250ms  # per-getent lookup timeout; cached in-process
   state_cache_size: 64M       # SQLite page cache for the state database
+  retention_1m: 3h            # per-minute history (the 1h graphs)
+  retention_5m: 30h           # 5-minute history (the 24h graphs)
+  retention_1h: 216h            # hourly history (the 7d graphs)
+  retention_6h: 912h           # 6-hourly history (the 30d graphs)
+  retention_1d: 8784h          # daily history (the 1y graphs, rolling-year SLA)
+  retention_events: 720h       # event/activity feed
+  rollup_interval: 5m         # consolidation + prune cadence
   # Optional append-only JSONL export logs (opt-in: omit a key to disable it).
   # access: /var/log/sermo/access.log
   # events: /var/log/sermo/event.log
@@ -472,14 +479,62 @@ match. For critical stop policies, numeric UIDs/GIDs are the most deterministic
 form.
 
 `engine.state_cache_size` (default `64M`) sets the SQLite page cache for the
-state database (`paths.state`). The state DB accumulates per-minute SLA,
-measurement and metric history, whose indexes grow into the tens of MB; the cache
+state database (`paths.state`). The state DB accumulates SLA, measurement and
+metric history whose indexes grow into the tens of MB; the cache
 keeps those hot pages in memory so a per-cycle write burst does not read them back
 from disk and stall an interactive `monitor`/`unmonitor` (every statement shares
 one connection). Raise it on hosts with a large history and spare RAM (the value
 is a byte size with a `K`/`M`/`G` suffix); it is taken from the running daemon's
 config and applies the next time `sermod` opens the database (a restart, since the
 handle is held open for the daemon's lifetime).
+
+#### Stored history resolution
+
+Sermo keeps one archive per graph window instead of per-minute history for a year.
+Every chart draws a fixed number of columns — 120 for the metric charts, 90 for the
+SLA strip — so a bucket finer than `window / columns` would be stored and never
+displayed. Each archive holds the bucket span its window actually draws, and is
+retained just past that window:
+
+| Bucket span | `engine` key | Default | Serves |
+|---|---|---|---|
+| 1 minute | `retention_1m` | `3h` | the `1h` graphs, and recent-incident detail |
+| 5 minutes | `retention_5m` | `30h` | the `24h` graphs |
+| 1 hour | `retention_1h` | `216h` (9 days) | the `7d` graphs |
+| 6 hours | `retention_6h` | `912h` (38 days) | the `30d` graphs |
+| 1 day | `retention_1d` | `8784h` (366 days) | the `1y` graphs and the rolling-year SLA |
+
+Each archive is consolidated from the one below it, not from the live samples, so a
+long daemon outage cannot lose a resolution. **Consolidation is exact**:
+availability sums its counters, metrics sum the sample count and total (keeping the
+average weighted, never an average of averages) and carry the minimum and maximum
+through. A ratio, average or extreme read from the daily archive equals the one
+computed from its minute buckets.
+
+What consolidation does give up is *when*: past `retention_1m` an incident is
+located to its bucket, not to its minute. The count survives — each bucket records
+how many one-minute buckets inside it saw a failure — so a window reports "3
+affected minutes" however coarse it has become, and the SLA strip colours those
+buckets accordingly (see [Web UI](webui-representation.md#sla-timeline-strip)).
+For the exact timestamp of an old incident, use the event/activity feed, retained
+separately by `engine.retention_events` (default `720h`, 30 days).
+
+`engine.rollup_interval` (default `5m`) is how often `sermod` consolidates and
+prunes. Keep it well under `retention_1m`: the per-minute archive is the source
+every coarser one reads, and its prune is floored at the consolidation watermark,
+so a slower cadence delays reclaiming space rather than losing history. A window
+served by a consolidated archive is therefore at most one interval behind the live
+samples; the `1h` window reads per-minute buckets and is immediate.
+
+Raising a retention costs proportionally more disk at that resolution; lowering one
+takes effect on the next maintenance pass. Reclaiming the freed pages needs a
+`VACUUM`, which `sermoctl state compact` performs.
+
+When sizing the disk, budget roughly **twice** the archive rows: each archive table
+carries an index on `(res, bucket)` so consolidation and pruning seek instead of
+scanning the whole resolution, and on these key-organized tables that index costs
+about as much as the table itself. It buys a maintenance pass that does not hold the
+write connection the monitoring cycles share.
 
 When `sermoctl daemon reload` asks the running daemon to reload, `sermod` reads
 the configuration from the path passed to `sermod run --config` (the same file
@@ -508,8 +563,8 @@ inherit the global cadence. `engine.operation_timeout` is also reloadable; web
 action responses extend their deadline from the active configuration, including
 a resolved per-service `stop_policy` timeout. Per-service CPU rate baselines are
 reset only when a service is removed from the running config; persisted metric
-and event history remains in `paths.state` until normal retention or an explicit
-`sermoctl state compact`.
+and event history remains in `paths.state` until the configured retention prunes
+it or an explicit `sermoctl state compact` runs.
 
 Trigger a daemon configuration reload with:
 
@@ -867,8 +922,10 @@ Read-only endpoints:
 - `GET /api/services/{name}` — service detail: latest checks, rolling SLA, named
   runtime locks, discovered processes, automatic remediation policy state and
   rule window progress.
-- `GET /api/services/{name}/sla?since=24h` — per-minute availability history;
-  `since` is a duration, default 24h, capped at the 366-day (~1 year) retention.
+- `GET /api/services/{name}/sla?since=24h` — availability history at the
+  resolution that window is stored at (see [Stored history
+  resolution](#stored-history-resolution)); `since` is a duration, default 24h,
+  capped at `engine.retention_1d` (default 366 days, ~1 year).
 - `GET /api/services/{name}/metrics?check=NAME&since=24h` — check latency
   history + summary. Add `metric=KEY` for a named numeric metric published by
   that check, see below.
@@ -925,9 +982,10 @@ accepted operation cannot switch targets during a concurrent reload.
 - `POST /api/events/clear?before=TIME` — clear the persisted event/activity log;
   `before` may be a positive duration or a non-future RFC3339 timestamp. Omit it
   to clear all events.
-- `POST /api/state/compact?before=TIME` — prune old SLA, measurement, daemon
-  metric, service runtime metric and event history, then vacuum the state
-  database; matches `sermoctl state compact`.
+- `POST /api/state/compact?before=TIME` — consolidate and prune stored history to
+  the configured retention, then vacuum the state database. `before` optionally
+  drops whatever history remains older than an explicit cutoff. Matches
+  `sermoctl state compact`.
 - `POST /api/reload` — request a `sermod` configuration reload, equivalent to
   `sermoctl daemon reload`.
 
@@ -1046,22 +1104,23 @@ avg,min,max}, points:[{start,n,avg,min,max}], unit:"ms"}`. Add `metric=KEY` to
 read a named numeric metric for checks that publish one, such as `hdparm`
 `read`/`cached`, `sensors` `temp`/`fan`/`voltage`, `smart` `temperature`/`wear`
 or `edac` `ce`/`ue`; in that case `unit` is the metric's unit instead of `ms`.
-Measurements are kept per minute for roughly a year (pruned like the SLA
-samples); a check that only runs every N cycles ([per-check
+Measurements follow the same archive ladder as the SLA samples ([Stored history
+resolution](#stored-history-resolution)), so the minimum and maximum of a spike
+survive at every resolution; a check that only runs every N cycles ([per-check
 interval](#per-check-interval)) records a sample only when it actually runs, so
 the average is not skewed.
 
 The `Daemon / Engine settings` process charts use the same persistent state
 database for sermod's own CPU, memory and IO history, so those graphs survive a
-daemon restart or host reboot. They are pruned to the same 366-day (~1 year)
-retention window.
+daemon restart or host reboot. They follow the same archive ladder as every other
+stored series.
 
 The service detail's CPU, memory and IO charts use the same persistent state
 database for each service process tree, so those graphs also survive a daemon
 restart or host reboot. They start filling as soon as the service is monitored;
 CPU and IO rates need two cycles before the first rate point exists, while
-memory can render from the first process sample. Runtime metric buckets are
-pruned to the same 366-day (~1 year) retention window. Services that declare an
+memory can render from the first process sample. Runtime metric buckets follow the
+same archive ladder as every other stored series. Services that declare an
 empty `processes: { }` map have no resident process tree; the dashboard omits
 their process table and latency/CPU/memory/IO charts.
 
@@ -2722,8 +2781,8 @@ Only target-safe parts of `defaults` merge into configured targets:
 for the inherited `config`/`version` permission flags. Engine-wide settings (`interval`,
 `max_parallel_checks`, `default_timeout`,
 `operation_timeout`, `artifact_interval`, `startup_delay`, `backend`, `user_lookup`,
-`user_lookup_timeout`, `state_cache_size`) are daemon configuration and never
-merge into a service.
+`user_lookup_timeout`, `state_cache_size`, the `retention_*` windows and
+`rollup_interval`) are daemon configuration and never merge into a service.
 
 `defaults.dry_run` is optional and defaults to `false`; a service or watch may
 override it with its own top-level `dry_run`.
@@ -3038,14 +3097,14 @@ not prune that file.
 To reclaim old state-database history intentionally, use:
 
 ```sh
-sermoctl state compact                  # normal 366-day retention, then VACUUM
-sermoctl state compact --before 720h    # prune history older than 30 days
+sermoctl state compact                  # configured retention, then VACUUM
+sermoctl state compact --before 720h    # also drop history older than 30 days
 sermoctl state compact --before 2026-01-01T00:00:00Z
 ```
 
-`state compact` deletes old bucketed SLA, measurement, daemon metric, service
-runtime metric and event rows, then checkpoints and vacuums the SQLite state
-database so freed pages can return to the filesystem. Without `--before`, it
-applies the same 366-day (~1 year) retention window that `sermod` applies at
-startup. When supplied, `--before` must be a positive duration or a non-future
-RFC3339 timestamp.
+`state compact` runs the same consolidation and prune pass `sermod` runs on its
+`engine.rollup_interval`, then checkpoints and vacuums the SQLite state database so
+freed pages can return to the filesystem. `--before` additionally drops whatever
+history remains older than an explicit cutoff, at every resolution; it must be a
+positive duration or a non-future RFC3339 timestamp. A bucket that straddles the
+cutoff is kept, so the cutoff never deletes samples newer than itself.

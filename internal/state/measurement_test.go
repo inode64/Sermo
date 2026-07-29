@@ -51,6 +51,38 @@ func TestMeasurementSummaryAndSeries(t *testing.T) {
 	}
 }
 
+// TestMeasuredLatencyIsSeparateFromADeclaredLatencyMetric pins that the two
+// series stay distinct. A check may declare a metric literally called "latency"
+// (checks.IcmpMetricLatency), so keying the measured latency by metric name inside
+// a shared check scope would silently accumulate both into one bucket.
+func TestMeasuredLatencyIsSeparateFromADeclaredLatencyMetric(t *testing.T) {
+	s := openTemp(t)
+	at := time.Date(2026, 6, 7, 12, 0, 0, 0, time.UTC)
+	now := at.Add(time.Minute)
+
+	if err := s.RecordMeasurement("web", "http", 10, at); err != nil {
+		t.Fatalf("RecordMeasurement: %v", err)
+	}
+	if err := s.RecordMetric("web", "http", "latency", 500, at); err != nil {
+		t.Fatalf("RecordMetric: %v", err)
+	}
+
+	measured, err := s.MeasurementSummary("web", "http", time.Hour, now)
+	if err != nil {
+		t.Fatalf("MeasurementSummary: %v", err)
+	}
+	declared, err := s.MetricSummary("web", "http", "latency", time.Hour, now)
+	if err != nil {
+		t.Fatalf("MetricSummary: %v", err)
+	}
+	if measured.Count != 1 || measured.Avg != 10 {
+		t.Fatalf("measured latency = %+v, want one sample of 10", measured)
+	}
+	if declared.Count != 1 || declared.Avg != 500 {
+		t.Fatalf("declared latency metric = %+v, want one sample of 500", declared)
+	}
+}
+
 func TestMeasurementSummaryNoData(t *testing.T) {
 	s := openTemp(t)
 	stat, err := s.MeasurementSummary("web", "http", time.Hour, time.Now())

@@ -62,8 +62,8 @@ around the opposite principle — **prove it is safe, then act**:
 - **Hard safety invariants** that YAML cannot disable (see below).
 
 **Availability & history**
-- Per-service **SLA over rolling windows** (hour → year) and a per-minute series
-  for graphs.
+- Per-service **SLA over rolling windows** (hour → year), stored as one archive per
+  graph window so a year of history stays bounded without losing an incident.
 - An **event/activity log** with retention and compaction of the state store.
 
 **Operate**

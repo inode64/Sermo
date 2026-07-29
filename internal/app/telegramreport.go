@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"sermo/internal/metrics"
 	"sermo/internal/state"
 	"sermo/internal/telegrambot"
 	"sermo/internal/web"
@@ -141,15 +142,19 @@ func (r *telegramReporter) serviceExists(ctx context.Context, name string) bool 
 	return false
 }
 
-// ratioToPercent scales an availability fraction in [0,1] for display.
-const ratioToPercent = 100
-
+// formatSLARatio renders one window's availability, naming the affected minutes
+// when there were any. A window can round to 100.00% and still have had an
+// incident, so the percentage alone would hide it.
 func formatSLARatio(v state.SLAValue) string {
 	ratio, ok := v.Ratio()
 	if !ok {
 		return "n/a"
 	}
-	return fmt.Sprintf("%.2f%%", ratio*ratioToPercent)
+	pct := fmt.Sprintf("%.2f%%", ratio*metrics.PercentScale)
+	if v.DownBuckets <= 0 {
+		return pct
+	}
+	return fmt.Sprintf("%s (%d min affected)", pct, v.DownBuckets)
 }
 
 func eventTarget(e web.Event) string {

@@ -129,9 +129,14 @@ type webNotifier struct {
 }
 
 type stateMaintainer interface {
-	PruneHistory(before time.Time) (state.PruneHistoryResult, error)
-	Compact(ctx context.Context) error
+	CompactHistory(ctx context.Context, now, before time.Time) (state.MaintainResult, error)
 }
+
+// CompactState type-asserts the store to stateMaintainer at runtime, so a signature
+// change would silently degrade the web compact action to "state store unavailable"
+// instead of failing a build. Pin it here: the web fake implements CompactState one
+// layer up and never exercises this port.
+var _ stateMaintainer = (*state.Store)(nil)
 
 // WebBackend implements web.Backend over the daemon's services: status from the
 // backend, monitoring state and SLA from the store, the latest check results from
