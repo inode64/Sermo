@@ -6501,7 +6501,9 @@ function renderActionConfirm() {
   const ctx = confirmCtx || {};
   const d = ctx.detail || {};
   const activeLocks = (d.locks || []).filter((l) => l.state === lockStateActive);
-  const failingChecks = (d.checks || []).filter((c) => c.ran && !c.ok && !c.optional);
+  // A verdictless check has no verdict to fail: its ok flag carries the sensed
+  // state, so an idle state sensor would otherwise read as a blocker here.
+  const failingChecks = (d.checks || []).filter((c) => c.ran && !c.ok && !c.optional && !verdictlessCheck(c));
   const procWarnings = d.process_warnings || [];
   const noResidentProcess = !!d.no_resident_process;
   const ev = ctx.lastEvent;
