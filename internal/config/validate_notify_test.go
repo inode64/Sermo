@@ -125,7 +125,7 @@ func TestValidateTelegramNotifier(t *testing.T) {
 	}{
 		{"valid minimal", map[string]any{"type": "telegram", "token": "t", "chat_id": "1"}, ""},
 		{"valid full", map[string]any{"type": "telegram", "token": "t", "chat_id": "1", "parse_mode": "HTML", "silent": true, "message_thread_id": 7}, ""},
-		{"missing token", map[string]any{"type": "telegram", "chat_id": "1"}, "token is required for a telegram notifier"},
+		{"empty token leaves notifier inactive", map[string]any{"type": "telegram", "chat_id": "1"}, ""},
 		{"missing chat", map[string]any{"type": "telegram", "token": "t"}, "chat_id is required for a telegram notifier"},
 		{"bad parse_mode", map[string]any{"type": "telegram", "token": "t", "chat_id": "1", "parse_mode": "rtf"}, "parse_mode must be one of"},
 		{"non-bool silent", map[string]any{"type": "telegram", "token": "t", "chat_id": "1", "silent": "yes"}, "silent must be a boolean"},
@@ -157,7 +157,8 @@ func TestValidateTelegramBot(t *testing.T) {
 		{"valid", map[string]any{"token": "t", "allowed_chats": []any{123, -1001234567890}}, ""},
 		{"valid full", map[string]any{"token": "t", "allowed_chats": []any{1}, "poll_interval": "45s"}, ""},
 		{"disabled skips checks", map[string]any{"enabled": false}, ""},
-		{"missing token", map[string]any{"allowed_chats": []any{123}}, "telegram_bot.token is required"},
+		{"empty token leaves bot inactive", map[string]any{"allowed_chats": []any{123}}, ""},
+		{"enabled without token is optional", map[string]any{"enabled": true, "allowed_chats": []any{123}}, ""},
 		{"no chats", map[string]any{"token": "t"}, "telegram_bot.allowed_chats must list at least one chat id"},
 		{"bad interval", map[string]any{"token": "t", "allowed_chats": []any{1}, "poll_interval": "nope"}, "telegram_bot.poll_interval must be a positive duration"},
 		{"non-bool enabled", map[string]any{"enabled": "yes", "token": "t", "allowed_chats": []any{1}}, "telegram_bot.enabled must be a boolean"},
