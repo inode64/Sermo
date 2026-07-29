@@ -34,6 +34,7 @@ import (
 	"sermo/internal/rules"
 	"sermo/internal/servicemgr"
 	"sermo/internal/state"
+	"sermo/internal/telegrambot"
 	"sermo/internal/web"
 	"sermo/internal/webcred"
 )
@@ -379,13 +380,20 @@ func run(args []string) int {
 		}
 	}
 
+	botCfg := telegrambot.ParseConfig(config.SectionMap(cfg.Global.Raw, config.SectionTelegramBot))
+
 	var webHolder *app.WebBackendHolder
-	var webDone chan struct{}
 	addr, webDisabledReason := webListenAddr(cfg)
-	if addr != "" {
+	// The web backend feeds both the dashboard and the report bot; build it when
+	// either is enabled, even if the HTTP server itself stays off.
+	if addr != "" || botCfg.Enabled {
 		var webWarnings []string
 		webHolder, webWarnings = app.NewWebBackendHolder(ctx, cfg, deps)
 		app.LogBuildNotices(logger, "build web backend", webWarnings)
+	}
+
+	var webDone chan struct{}
+	if addr != "" {
 		auth := webAuth(cfg)
 		warnWorldReadableSecret(logger, cfg)
 		token, removeToken := writeWebToken(logger, rt, auth)
@@ -423,6 +431,21 @@ func run(args []string) int {
 		}
 	} else {
 		logger.Warn("web ui disabled; no port will be opened", logFieldReason, webDisabledReason)
+	}
+
+	// Interactive read-only report bot (long polling; no inbound socket). It
+	// reads the same web backend the dashboard serves and replies to commands
+	// from allow-listed chats only.
+	var botDone chan struct{}
+	if botCfg.Enabled {
+		bot := telegrambot.New(app.NewTelegramReporter(webHolder, store, time.Now), botCfg, logger)
+		deps.TelegramBot = bot
+		botDone = make(chan struct{})
+		go func() {
+			defer close(botDone)
+			bot.Run(ctx)
+		}()
+		logger.Info("telegram report bot enabled", "allowed_chats", len(botCfg.AllowedChats))
 	}
 
 	pruneDone := startOldHistoryPrune(ctx, logger, store, time.Now().Add(-state.DefaultHistoryRetention))
@@ -467,6 +490,9 @@ func run(args []string) int {
 	// and the straggling statement fails with a closed-database error at worst.
 	if webDone != nil {
 		<-webDone
+	}
+	if botDone != nil {
+		<-botDone
 	}
 	if !drainOrTimeout(pruneDone, shutdownPruneDrainTimeout) {
 		logger.Warn("history prune still running at shutdown; closing the store without it")
