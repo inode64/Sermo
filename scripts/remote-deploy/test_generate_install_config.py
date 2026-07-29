@@ -295,5 +295,121 @@ class EndpointGenerationTest(unittest.TestCase):
         body = (root / "configs/host/root/etc/sermo/watches/geoip-database-freshness.yml").read_text(encoding="utf-8")
         self.assertIn('summary: "GeoIP ${value} is older than ${older_than} in ${number_files} files"', body)
 
+class PostgresReplicationGenerationTest(unittest.TestCase):
+    """The replication watches must reach only nodes whose cluster facts can
+    make them fire. The scenarios mirror the measured fleet: a primary with two
+    slots and two walsenders, and a standby with none."""
+
+    def postgres_doc(self):
+        docs = generator.load_catalog_services(default_options().catalog_services_dir)
+        doc, _ = generator.catalog_doc_for_service("postgres-18", docs)
+        self.assertIsNotNone(doc, "the postgres catalog service must resolve")
+        return doc
+
+    def overrides(self, clusters_evidence: str | None):
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        stage = Path(temp.name)
+        if clusters_evidence is not None:
+            (stage / "postgres_clusters").write_text(clusters_evidence, encoding="utf-8")
+        return generator.replication_watch_overrides(stage, self.postgres_doc())
+
+    def test_catalog_ships_every_gated_replication_watch(self):
+        # Locks the gate table against the catalog: a renamed watch would
+        # otherwise silently stop being gated and ship everywhere.
+        watches = self.postgres_doc().get("watches", {})
+        for watch_name in generator.POSTGRES_REPLICATION_WATCHES:
+            self.assertIn(watch_name, watches)
+
+    def test_primary_with_slots_and_walsenders_keeps_the_primary_side_watches(self):
+        disabled, checks = self.overrides("/var/lib/postgresql/18/data\tprimary\t2\t2\n")
+        self.assertEqual(disabled, {"alert-if-standby-replay-delay"})
+        active = {item["watch"]: item["active"] for item in checks}
+        self.assertTrue(active["alert-if-replication-slot-backlog"])
+        self.assertTrue(active["alert-if-logical-slot-unconfirmed"])
+        self.assertTrue(active["alert-if-replication-slot-inactive"])
+        self.assertTrue(active["alert-if-replication-replay-lag"])
+        self.assertFalse(active["alert-if-standby-replay-delay"])
+
+    def test_standby_without_slots_keeps_only_the_standby_watch(self):
+        disabled, checks = self.overrides("/var/lib/postgresql/18/data\tstandby\t0\t0\n")
+        self.assertEqual(
+            disabled,
+            {
+                "alert-if-replication-slot-backlog",
+                "alert-if-logical-slot-unconfirmed",
+                "alert-if-replication-slot-inactive",
+                "alert-if-replication-replay-lag",
+            },
+        )
+        active = {item["watch"]: item["active"] for item in checks}
+        self.assertTrue(active["alert-if-standby-replay-delay"])
+
+    def test_standalone_postgres_disables_every_replication_watch(self):
+        disabled, checks = self.overrides("/var/lib/postgresql/18/data\tprimary\t0\t0\n")
+        self.assertEqual(disabled, set(generator.POSTGRES_REPLICATION_WATCHES))
+        reasons = {item["watch"]: item["reason"] for item in checks}
+        self.assertEqual(reasons["alert-if-replication-slot-backlog"], "no replication slot present on this host")
+        self.assertEqual(reasons["alert-if-replication-replay-lag"], "no walsender connected to this primary")
+        self.assertEqual(reasons["alert-if-standby-replay-delay"], "host is not a standby")
+
+    def test_missing_cluster_evidence_disables_with_its_own_reason(self):
+        disabled, checks = self.overrides(None)
+        self.assertEqual(disabled, set(generator.POSTGRES_REPLICATION_WATCHES))
+        for item in checks:
+            self.assertEqual(item["reason"], "no running PostgreSQL cluster discovered")
+
+    def test_malformed_evidence_lines_are_ignored(self):
+        disabled, _ = self.overrides(
+            "not-enough-fields\n"
+            "/data\tunknown-role\t2\t2\n"
+            "/data\tprimary\tmany\t2\n"
+            "/var/lib/postgresql/18/data\tstandby\t0\t0\n"
+        )
+        self.assertNotIn("alert-if-standby-replay-delay", disabled)
+        self.assertIn("alert-if-replication-slot-backlog", disabled)
+
+    def test_non_postgres_service_is_untouched(self):
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        stage = Path(temp.name)
+        (stage / "postgres_clusters").write_text("/data\tprimary\t2\t2\n", encoding="utf-8")
+        disabled, checks = generator.replication_watch_overrides(stage, {"name": "nginx", "watches": {"http": {}}})
+        self.assertEqual(disabled, set())
+        self.assertEqual(checks, [])
+
+    def test_generated_service_file_disables_the_watches_and_audits_them(self):
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        root = Path(temp.name)
+        stage = root / "stage" / "host" / "out"
+        stage.mkdir(parents=True)
+        (stage / "init").write_text("systemd\n", encoding="utf-8")
+        (stage / "active_units").write_text("postgresql-18.service\n", encoding="utf-8")
+        (stage / "postgres_clusters").write_text("/var/lib/postgresql/18/data\tstandby\t0\t0\n", encoding="utf-8")
+        (stage / "services_json.out").write_text(
+            json.dumps({"services": [{"name": "postgres-18", "installed": True, "ok": True, "status": "ok"}]}),
+            encoding="utf-8",
+        )
+        options = default_options()
+
+        report = generator.generate_for_host("host", stage, root / "configs", options)
+
+        body = (root / "configs/host/root/etc/sermo/services/postgres-18.yml").read_text(encoding="utf-8")
+        self.assertIn("  alert-if-replication-slot-backlog:\n    enabled: false", body)
+        self.assertIn("  alert-if-replication-replay-lag:\n    enabled: false", body)
+        self.assertNotIn("alert-if-standby-replay-delay:\n    enabled: false", body)
+        entry = next(item for item in report["services"]["enabled"] if item["name"] == "postgres-18")
+        self.assertEqual(
+            {item["watch"] for item in entry["replication_checks"] if not item["active"]},
+            {
+                "alert-if-replication-slot-backlog",
+                "alert-if-logical-slot-unconfirmed",
+                "alert-if-replication-slot-inactive",
+                "alert-if-replication-replay-lag",
+            },
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

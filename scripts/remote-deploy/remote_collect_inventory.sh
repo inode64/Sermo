@@ -115,6 +115,47 @@ if [ -r /etc/fstab ]; then
 		printf '%s\t%s\t%s\n' "$host" "$address" "$iface" >>"${out}/nfs_routes"
 	done < <(awk '$1 !~ /^#/ && ($3 == "nfs" || $3 == "nfs4") { print $1 }' /etc/fstab)
 fi
+# PostgreSQL cluster facts, one line per postmaster, so the generator can enable
+# the replication watches only on nodes that actually replicate. Everything here
+# is read from /proc and the data directory: no database connection, no
+# credentials, consistent with the read-only contract of this script.
+: >"${out}/postgres_clusters"
+for pid in /proc/[0-9]*; do
+	[ -r "${pid}/comm" ] || continue
+	case "$(cat "${pid}/comm" 2>/dev/null)" in
+		postgres | postmaster) ;;
+		*) continue ;;
+	esac
+	# Only the postmaster: backends and auxiliary workers are its children.
+	[ "$(awk '/^PPid:/ { print $2; exit }' "${pid}/status" 2>/dev/null)" = "1" ] || continue
+	datadir="$(readlink -f "${pid}/cwd" 2>/dev/null || true)"
+	[ -n "$datadir" ] && [ -d "$datadir" ] || continue
+	if [ -f "${datadir}/standby.signal" ] || [ -f "${datadir}/recovery.conf" ]; then
+		role="standby"
+	else
+		role="primary"
+	fi
+	# A slot exists on disk even with no consumer connected, which is exactly the
+	# case that silently retains WAL until the filesystem fills.
+	slots=0
+	if [ -d "${datadir}/pg_replslot" ]; then
+		slots="$(find "${datadir}/pg_replslot" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l)"
+	fi
+	# Walsenders are children of this postmaster, so the count stays correct when
+	# a host runs more than one cluster. PostgreSQL puts the role in the process
+	# title, which is what /proc exposes as the command line.
+	postmaster_pid="${pid#/proc/}"
+	walsenders=0
+	for child in /proc/[0-9]*; do
+		[ -r "${child}/status" ] || continue
+		[ "$(awk '/^PPid:/ { print $2; exit }' "${child}/status" 2>/dev/null)" = "$postmaster_pid" ] || continue
+		case "$(tr '\0' ' ' <"${child}/cmdline" 2>/dev/null)" in
+			"postgres: walsender "*) walsenders=$((walsenders + 1)) ;;
+		esac
+	done
+	printf '%s\t%s\t%s\t%s\n' "$datadir" "$role" "$slots" "$walsenders" >>"${out}/postgres_clusters"
+done
+
 lsblk -J -O >"${out}/lsblk.json" 2>/dev/null || true
 lsblk -P -o NAME,KNAME,PATH,TYPE,FSTYPE,MOUNTPOINTS,RM,RO,TRAN,MODEL,SERIAL,SIZE,PKNAME >"${out}/lsblk.pairs" 2>/dev/null || true
 
