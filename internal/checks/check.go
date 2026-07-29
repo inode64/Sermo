@@ -32,10 +32,34 @@ const (
 	// (a backup is running), and neither side is good or bad. It has no verdict,
 	// so it never counts toward health or SLA and reads active/inactive.
 	ReportsState = "state"
+	// ReportsCondition is alert-style: OK means the condition fired, so
+	// availability is inverted. It is what most non-health types get by default;
+	// declaring it makes that explicit, or applies it to a type whose default is
+	// health.
+	ReportsCondition = "condition"
 )
 
 // ReportingModes lists the values `reports:` accepts, for validation and docs.
-var ReportingModes = []string{ReportsHealth, ReportsState}
+var ReportingModes = []string{ReportsHealth, ReportsState, ReportsCondition}
+
+// ConditionByDefault reports whether a check of this type is alert-style unless
+// `reports:` says otherwise. The type only supplies the default: the same type
+// can be a health assertion in one service and a sensor in another, so the
+// check has the last word.
+func ConditionByDefault(typ string) bool { return !IsHealthType(typ) }
+
+// ResolveCondition decides whether a check is alert-style: an explicit
+// `reports:` wins, otherwise the check type's default applies.
+func ResolveCondition(typ, reports string) bool {
+	switch reports {
+	case ReportsCondition:
+		return true
+	case ReportsHealth, ReportsState:
+		return false
+	default:
+		return ConditionByDefault(typ)
+	}
+}
 
 // IsReportingMode reports whether s names a supported `reports:` value.
 func IsReportingMode(s string) bool { return slices.Contains(ReportingModes, s) }
