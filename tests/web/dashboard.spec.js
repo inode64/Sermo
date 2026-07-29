@@ -171,8 +171,8 @@ async function mockAPI(page) {
             body = {
               since: url.searchParams.get("since"),
               points: [
-                { start: new Date(now - 30 * 60 * 1000).toISOString(), up: 60, total: 60 },
-                { start: new Date(now - 5 * 60 * 1000).toISOString(), up: 30, total: 60 },
+                { start: new Date(now - 30 * 60 * 1000).toISOString(), up: 60, total: 60, down_buckets: 0 },
+                { start: new Date(now - 5 * 60 * 1000).toISOString(), up: 30, total: 60, down_buckets: 1 },
               ],
             };
           } else body = { since: url.searchParams.get("since"), points: [] };

@@ -170,9 +170,6 @@ func (b *WebBackend) CompactState(ctx context.Context, before time.Time) web.Sta
 		return web.StateCompactResult{OK: false, Message: "state store unavailable"}
 	}
 	now := b.webNow()
-	if before.IsZero() {
-		before = now.Add(-state.DefaultHistoryRetention)
-	}
 	timeout := b.operationTimeout
 	if timeout <= 0 {
 		timeout = b.defaultTimeout
@@ -183,24 +180,24 @@ func (b *WebBackend) CompactState(ctx context.Context, before time.Time) web.Sta
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	result, err := maint.PruneHistory(before)
+	// The store owns the sequence (consolidate, prune, optional cutoff, vacuum) so
+	// this path and `sermoctl state compact` cannot drift.
+	result, err := maint.CompactHistory(ctx, now, before)
 	if err != nil {
-		return web.StateCompactResult{OK: false, Message: "prune state history: " + err.Error()}
+		return web.StateCompactResult{OK: false, Message: err.Error()}
 	}
-	if err := maint.Compact(ctx); err != nil {
-		return web.StateCompactResult{OK: false, Message: "compact state database: " + err.Error()}
+	cutoff := ""
+	if !before.IsZero() {
+		cutoff = before.UTC().Format(time.RFC3339)
 	}
 	return web.StateCompactResult{
-		OK:             true,
-		Pruned:         result.Rows,
-		Before:         before.UTC().Format(time.RFC3339),
-		SLA:            result.SLA,
-		Measurements:   result.Measurements,
-		Metrics:        result.Metrics,
-		DaemonMetrics:  result.DaemonMetrics,
-		ServiceMetrics: result.ServiceMetrics,
-		Events:         result.Events,
-		Vacuum:         true,
+		OK:       true,
+		Pruned:   result.Pruned(),
+		Before:   cutoff,
+		Rolled:   result.Rolled,
+		Archives: result.Archives,
+		Events:   result.Events,
+		Vacuum:   true,
 	}
 }
 

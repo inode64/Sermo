@@ -193,8 +193,15 @@ const serviceStatusFilterStates = [
 const watchStatusFilterStates = [targetStateDisabled, targetStateOK, targetStateStarting, targetStateStale, targetStateTesting, targetStateRecovering, targetStateRebuilding, targetStateRepairing, targetStateMoving, targetStateMerging, targetStateFailed];
 const appStatusFilterStates = [targetStateOK, targetStateStarting, targetStateWarning, targetStateFailed];
 const mountStatusFilterStates = [mountStateActive, mountStateInactive];
-const slaHealthyPct = 99;
-const slaWarningPct = 95;
+// SLA strips colour by how much of a bucket was down, not by availability: a
+// 40-second outage inside a day-long bucket is 99.93% available, which any
+// availability threshold reads as healthy. These are the upper edges of the four
+// non-zero severity bands, in percent of failed cycles; zero down is the only
+// green.
+const slaNoData = "no data";
+const slaDownBandLow = 25;
+const slaDownBandMid = 50;
+const slaDownBandHigh = 75;
 const usageCriticalPct = 95;
 const usageHighPct = 90;
 const usageWarnPct = 75;
@@ -3089,11 +3096,38 @@ function slaWindowLabel(window) {
   }
 }
 
-function slaColor(pct) {
-  if (pct == null) return "color-mix(in srgb, var(--text-2) 40%, transparent)";
-  if (pct >= slaHealthyPct) return themeHealthColor(healthStatusOK);
-  if (pct >= slaWarningPct) return themeHealthColor(healthStatusWarning);
-  return themeHealthColor(healthStatusCritical);
+// slaDownPct is the share of a bucket's observed cycles that failed, in percent,
+// or null when nothing was observed (a gap).
+function slaDownPct(up, total) {
+  const observed = Number(total) || 0;
+  if (observed <= 0) return null;
+  return (1 - (Number(up) || 0) / observed) * percentScale;
+}
+
+// slaDownBand maps that share onto one of five severity classes. Green is reserved
+// for exactly zero, so no bucket containing a failure can read as healthy however
+// little of the bucket it affected; the band then says how much of it was down,
+// which is what separates a brief blip from a half-day outage.
+//
+// The class names carry the level and styles.css holds the colours (as the usagebar
+// bands do), so the scale stays inside the token linter and a cell costs no
+// getComputedStyle call to paint.
+function slaDownBand(down) {
+  if (down == null || down <= 0) return down == null ? "" : "sla-down-none";
+  if (down <= slaDownBandLow) return "sla-down-low";
+  if (down <= slaDownBandMid) return "sla-down-mid";
+  if (down <= slaDownBandHigh) return "sla-down-high";
+  return "sla-down-full";
+}
+
+// slaAffectedText names how much of a bucket was affected, so the colour is never
+// the only carrier of that information (WCAG 2.2 1.4.1).
+function slaAffectedText(down, downBuckets) {
+  if (down == null) return "no data";
+  if (down <= 0) return "no failures";
+  const minutes = Number(downBuckets) || 0;
+  const affected = minutes ? `, ${minutes} minute${minutes === 1 ? "" : "s"} affected` : "";
+  return `${fmtPct(down)} down${affected}`;
 }
 
 function renderSLAWindows(wins, compact) {
@@ -3104,17 +3138,18 @@ function renderSLAWindows(wins, compact) {
     const label = slaWindowLabel(w.window);
     const pctText = pct == null ? "—" : fmtPct(pct);
     const count = `${Number(w.up || 0)}/${Number(w.total || 0)}`;
-    const title = `${label} · ${pctText} · ${count}`;
+    const down = slaDownPct(w.up, w.total);
+    const title = `${label} · ${pctText} · ${count} · ${slaAffectedText(down, w.down_buckets)}`;
     // (B) When a target is sampled far less often than the window has segments
     // (a check every few hours vs the hour's 5-min sub-spans), most segments
     // carry no sample and the strip would be mostly hatched. Below half-measured
     // fall back to the single availability bar, which states the window's ratio
     // without implying per-sub-span measurements that never happened.
     const segs = Array.isArray(w.segments) ? w.segments : [];
-    const measured = segs.reduce((c, s) => c + (s == null ? 0 : 1), 0);
+    const measured = segs.reduce((c, s) => c + (s && Number(s.total) > 0 ? 1 : 0), 0);
     const track = segs.length && measured * 2 >= segs.length
       ? renderSLATimeline(segs, w.window, w.observed_at)
-      : renderSLAFill(pct);
+      : renderSLAFill(pct, down, w.down_buckets);
     return tpl`<div class="sla-window" title="${title}">
       <span class="sla-label">${label}</span>
       ${track}
@@ -3125,82 +3160,92 @@ function renderSLAWindows(wins, compact) {
   return tpl`<div class="sla-windows${compact ? " sla-compact" : ""}">${rows}</div>`;
 }
 
-// renderBarFill is the single-fill availability bar used when a window has no
-// segment data.
-function renderBarFill(pct, color, label, emptyLabel) {
+// renderSLAFill is the single availability bar used when a window has too few
+// measured sub-spans to draw a timeline.
+function renderSLAFill(pct, down, downBuckets) {
   const width = pct == null ? 0 : pctClamp(pct);
-  const empty = pct == null ? " sla-empty" : "";
-  return tpl`<span class="sla-bar" aria-label="${pct == null ? emptyLabel : label}"><span class="sla-fill${empty}" style="--sla-pct:${width.toFixed(2)}%; --sla-color:${color}"></span></span>`;
+  const label = pct == null
+    ? "No SLA data"
+    : `${fmtPct(pct)} available, ${slaAffectedText(down, downBuckets)}`;
+  const classes = ["sla-fill", pct == null ? "sla-empty" : "", slaDownBand(down)].filter(Boolean).join(" ");
+  return tpl`<span class="sla-bar" aria-label="${label}"><span class="${classes}" style="--sla-pct:${width.toFixed(2)}%"></span></span>`;
 }
 
-function renderSLAFill(pct) {
-  return renderBarFill(pct, slaColor(pct), `${fmtPct(pct)} available`, "No SLA data");
+// slaSegmentCell reduces one wire segment to what the strip renders: availability,
+// the share of the sub-span that was down, and how many one-minute buckets in it
+// failed. null means nothing was observed (a gap) — total 0 is the gap signal, so
+// the ratio does not need to travel on the wire.
+function slaSegmentCell(seg) {
+  const total = seg == null ? 0 : Number(seg.total) || 0;
+  if (total <= 0) return null;
+  const up = Number(seg.up) || 0;
+  return {
+    pct: (up / total) * percentScale,
+    down: slaDownPct(up, total),
+    downBuckets: Number(seg.down_buckets) || 0,
+  };
 }
 
-function slaTimelineDataRows(segments, window, observedAt, unavailable = "no data") {
-  const n = segments.length;
-  if (!n) return nothing;
-  const spanMs = slaWindowSpanMs(window);
+// slaSegmentBounds is the wall-clock range of segment idx of n covering spanMs and
+// ending at endMs.
+function slaSegmentBounds(idx, n, spanMs, endMs) {
+  const start = endMs - spanMs + (idx / n) * spanMs;
+  const end = endMs - spanMs + ((idx + 1) / n) * spanMs;
+  return `${fmtTime(start)} – ${fmtTime(end)}`;
+}
+
+function slaTimelineEndMs(observedAt) {
   const sampledMs = Date.parse(observedAt);
-  const endMs = Number.isFinite(sampledMs) ? sampledMs : Date.now();
-  const startIdx = Math.max(0, n - chartDataTableMaxRows);
-  return segments.slice(startIdx).map((ratio, i) => {
-    const idx = startIdx + i;
-    const segStart = endMs - spanMs + (idx / n) * spanMs;
-    const segEnd = endMs - spanMs + ((idx + 1) / n) * spanMs;
-    const when = `${fmtTime(new Date(segStart).toISOString())} – ${fmtTime(new Date(segEnd).toISOString())}`;
-    const pctText = ratio == null ? unavailable : fmtPct(Number(ratio) * percentScale);
-    return tpl`<tr><td>${when}</td><td>${pctText}</td></tr>`;
+  return Number.isFinite(sampledMs) ? sampledMs : Date.now();
+}
+
+// slaTimelineDataRows is the visually-hidden table beside the band: the same
+// per-sub-span figures as text, so the colour is not the only carrier (WCAG 2.2
+// 1.4.1). It consumes the cells the band already derived rather than walking the
+// segments a second time.
+function slaTimelineDataRows(cells) {
+  if (!cells.length) return nothing;
+  return cells.slice(Math.max(0, cells.length - chartDataTableMaxRows)).map(({ cell, held, when }) => {
+    if (cell == null) return tpl`<tr><td>${when}</td><td>${slaNoData}</td><td>${slaNoData}</td></tr>`;
+    // A held sub-span was not measured; the band marks it in its aria-label, so the
+    // table must too rather than presenting the carried value as observed.
+    const suffix = held ? " (held)" : "";
+    return tpl`<tr><td>${when}</td><td>${fmtPct(cell.pct) + suffix}</td><td>${slaAffectedText(cell.down, cell.downBuckets) + suffix}</td></tr>`;
   });
 }
 
-// renderTimelineBand draws the contiguous status-page style band for the SLA
-// timeline: one colored cell per sub-span (oldest left), hatched where nothing
-// was observed. opts carries the per-variant color function, gap/cell labels
-// and data-table texts.
-function renderTimelineBand(segments, window, observedAt, opts) {
-  const n = segments.length;
-  const spanMs = slaWindowSpanMs(window);
-  const sampledMs = Date.parse(observedAt);
-  const endMs = Number.isFinite(sampledMs) ? sampledMs : Date.now();
-  // (A) For availability, a sub-span with no sample inherits the last observed
-  // state (a service checked every few minutes was up between checks too), so a
-  // continuously-monitored target reads as continuous instead of striped with
-  // sampling gaps. Only leading sub-spans before the first-ever sample stay
-  // hatched (genuinely unknown).
-  let lastPct = null;
-  const cells = segments.map((ratio, i) => {
-    let pct = ratio == null ? null : Number(ratio) * percentScale;
-    let held = false;
-    if (opts.carryForward) {
-      if (pct != null) lastPct = pct;
-      else if (lastPct != null) { pct = lastPct; held = true; }
-    }
-    const segStart = endMs - spanMs + (i / n) * spanMs;
-    const segEnd = endMs - spanMs + ((i + 1) / n) * spanMs;
-    const when = `${fmtTime(new Date(segStart).toISOString())} – ${fmtTime(new Date(segEnd).toISOString())}`;
-    if (pct == null) return tpl`<span class="sla-seg sla-gap" title="${when + " · " + opts.gapText}" aria-label="${when}: ${opts.gapAria}"></span>`;
-    const pctText = fmtPct(pct);
-    const suffix = held ? " · held (last observed, not re-measured this sub-span)" : opts.titleSuffix;
-    return tpl`<span class="sla-seg" style="--sla-color:${opts.color(pct)}" title="${when + " · " + pctText + suffix}" aria-label="${when}: ${pctText} ${opts.cellAria}${held ? " (held)" : ""}"></span>`;
-  });
-  const dataRows = slaTimelineDataRows(segments, window, observedAt, opts.unavailable);
-  return tpl`<table class="chart-data visually-hidden"><caption>${opts.caption}</caption><thead><tr><th scope="col">Period</th><th scope="col">${opts.column}</th></tr></thead><tbody>${dataRows}</tbody></table><span class="sla-timeline" role="img" aria-label="${opts.bandAria}">${cells}</span>`;
-}
-
+// renderSLATimeline draws the contiguous status-page style availability band: one
+// cell per equal sub-span (oldest left), hatched where nothing was observed.
+//
+// Cells are banded by how much of the sub-span was down, so a coarse sub-span
+// containing a brief failure cannot render as healthy; the figure is repeated in
+// each cell's title and aria-label and in the data table beside it.
 function renderSLATimeline(segments, window, observedAt) {
-  return renderTimelineBand(segments, window, observedAt, {
-    color: slaColor,
-    gapText: "no data",
-    gapAria: "no data",
-    titleSuffix: "",
-    cellAria: "available",
-    unavailable: "no data",
-    caption: "SLA timeline data",
-    column: "Availability",
-    bandAria: "SLA availability timeline",
-    carryForward: true,
+  const n = segments.length;
+  const spanMs = slaWindowSpanMs(window);
+  const endMs = slaTimelineEndMs(observedAt);
+  // A sub-span with no sample inherits the last observed state (a service checked
+  // every few minutes was up between checks too), so a continuously-monitored
+  // target reads as continuous instead of striped with sampling gaps. Only leading
+  // sub-spans before the first-ever sample stay hatched (genuinely unknown).
+  let lastCell = null;
+  const cells = segments.map((seg, i) => {
+    let cell = slaSegmentCell(seg);
+    let held = false;
+    if (cell != null) lastCell = cell;
+    else if (lastCell != null) { cell = lastCell; held = true; }
+    return { cell, held, when: slaSegmentBounds(i, n, spanMs, endMs) };
   });
+  const band = cells.map(({ cell, held, when }) => {
+    if (cell == null) {
+      return tpl`<span class="sla-seg sla-gap" title="${when + " · " + slaNoData}" aria-label="${when}: ${slaNoData}"></span>`;
+    }
+    const pctText = fmtPct(cell.pct);
+    const affected = slaAffectedText(cell.down, cell.downBuckets);
+    const heldNote = held ? " · held (last observed, not re-measured this sub-span)" : "";
+    return tpl`<span class="sla-seg ${slaDownBand(cell.down)}" title="${when + " · " + pctText + " · " + affected + heldNote}" aria-label="${when}: ${pctText} available, ${affected}${held ? " (held)" : ""}"></span>`;
+  });
+  return tpl`<table class="chart-data visually-hidden"><caption>SLA timeline data</caption><thead><tr><th scope="col">Period</th><th scope="col">Availability</th><th scope="col">Affected</th></tr></thead><tbody>${slaTimelineDataRows(cells)}</tbody></table><span class="sla-timeline" role="img" aria-label="SLA availability timeline">${band}</span>`;
 }
 
 function slaWindowSpanMs(window) {
@@ -3235,17 +3280,26 @@ function slaIncidentTime(t) {
   return fmtTime(new Date(t).toISOString());
 }
 
+// slaAffectedMinutes counts the one-minute buckets that saw a failure, summing over
+// the incident points already selected for this window. It reads down_buckets rather
+// than counting those points: past the per-minute retention one point covers hours
+// or a whole day, so counting points would report three separate bad minutes inside
+// one day as a single incident.
+function slaAffectedMinutes(incidents) {
+  return (incidents || []).reduce((n, o) => n + (Number(o.p.down_buckets) || 0), 0);
+}
+
 function slaTimelineSummary(points) {
-  let up = 0, total = 0;
+  let up = 0, total = 0, affected = 0;
   (points || []).forEach((p) => {
     up += Number(p.up || 0);
     total += Number(p.total || 0);
+    affected += Number(p.down_buckets) || 0;
   });
   if (total <= 0) return '<span class="muted">No data in this window.</span>';
   const pct = up / total * percentScale;
-  const incidentCount = (points || []).filter((p) => Number(p.total || 0) > Number(p.up || 0)).length;
-  const head = incidentCount
-    ? `<span class="bad">${incidentCount} incident${incidentCount === 1 ? "" : "s"}</span>`
+  const head = affected
+    ? `<span class="bad">${affected} affected minute${affected === 1 ? "" : "s"}</span>`
     : '<span class="ok">No incidents</span>';
   return `${head} &middot; ${fmtPct(pct)}`;
 }
@@ -3322,36 +3376,41 @@ function drawSLAChart(points, win) {
   if (!observed.length) return '<span class="muted">No SLA data yet for this window.</span>';
 
   const { buckets } = bucketize(points, span, cols,
-    () => ({ up: 0, total: 0 }),
+    () => ({ up: 0, total: 0, downBuckets: 0 }),
     (b, p) => {
       b.up += Number(p.up || 0);
       b.total += Number(p.total || 0);
+      b.downBuckets += Number(p.down_buckets || 0);
     });
   // The strip has a fixed bar count (slaBarCount) while the series is sampled
   // per cycle, so short windows have more bars than samples and every few bars
   // land on no sample — a continuously-up service looked striped. Carry the last
   // observed availability forward across those empty bars (the service held that
   // state between samples). Only bars before the first-ever sample stay hatched.
-  let lastPct = null;
+  let lastCell = null;
   const bars = buckets.map((b, i) => {
-    const segStart = startMs + (i / cols) * span;
-    const segEnd = startMs + ((i + 1) / cols) * span;
-    const when = `${fmtTime(new Date(segStart).toISOString())} – ${fmtTime(new Date(segEnd).toISOString())}`;
-    let pct = null;
+    const when = slaSegmentBounds(i, cols, span, endMs);
+    let cell = null;
     let held = false;
-    if (b.total) { pct = pctClamp(b.up / b.total * percentScale); lastPct = pct; }
-    else if (lastPct != null) { pct = lastPct; held = true; }
-    if (pct == null) return `<span class="sla-bar-seg sla-gap" title="${esc(when + " · no data")}" aria-label="${esc(when)}: no data"></span>`;
-    const pctText = fmtPct(pct);
-    const tip = held ? `${when} · ${pctText} · held (no sample this sub-span)` : `${when} · ${pctText} · ${b.up}/${b.total}`;
-    return `<span class="sla-bar-seg" style="--sla-color:${slaColor(pct)}" title="${esc(tip)}" aria-label="${esc(when)}: ${esc(pctText)} available${held ? " (held)" : ""}"></span>`;
+    if (b.total) {
+      cell = { pct: pctClamp(b.up / b.total * percentScale), down: slaDownPct(b.up, b.total), downBuckets: b.downBuckets };
+      lastCell = cell;
+    } else if (lastCell != null) { cell = lastCell; held = true; }
+    if (cell == null) return `<span class="sla-bar-seg sla-gap" title="${esc(when + " · " + slaNoData)}" aria-label="${esc(when)}: ${slaNoData}"></span>`;
+    const pctText = fmtPct(cell.pct);
+    const affected = slaAffectedText(cell.down, cell.downBuckets);
+    const tip = held
+      ? `${when} · ${pctText} · held (no sample this sub-span)`
+      : `${when} · ${pctText} · ${b.up}/${b.total} · ${affected}`;
+    return `<span class="sla-bar-seg ${slaDownBand(cell.down)}" title="${esc(tip)}" aria-label="${esc(when)}: ${esc(pctText)} available, ${esc(affected)}${held ? " (held)" : ""}"></span>`;
   }).join("");
   const incidents = slaIncidentPoints(points, startMs, endMs);
+  const affectedMinutes = slaAffectedMinutes(incidents);
   const latestPct = observed[observed.length - 1].pct;
-  const slaAria = `SLA timeline: latest ${fmtPct(latestPct)}, ${incidents.length} incident${incidents.length === 1 ? "" : "s"}`;
+  const slaAria = `SLA timeline: latest ${fmtPct(latestPct)}, ${affectedMinutes} affected minute${affectedMinutes === 1 ? "" : "s"}`;
   const dataTable = slaChartDataTable(observed);
   return `${dataTable}<div class="sla-bars" role="img" aria-label="${esc(slaAria)}">${bars}</div>` +
-    `<div class="sla-bars-axis"><span>${esc(fmtTime(new Date(startMs).toISOString()))}</span><span>now</span></div>` +
+    `<div class="sla-bars-axis"><span>${esc(fmtTime(startMs))}</span><span>now</span></div>` +
     renderSLAIncidentList(incidents);
 }
 

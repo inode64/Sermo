@@ -390,6 +390,13 @@ engine:
   user_lookup: auto           # auto | native | getent | numeric
   user_lookup_timeout: 250ms  # per-getent lookup timeout; cached in-process
   state_cache_size: 64M       # SQLite page cache for the state database
+  retention_1m: 3h            # historial por minuto (los gráficos de 1h)
+  retention_5m: 30h           # historial de 5 minutos (los gráficos de 24h)
+  retention_1h: 216h            # historial horario (los gráficos de 7d)
+  retention_6h: 912h           # historial de 6 horas (los gráficos de 30d)
+  retention_1d: 8784h          # historial diario (los gráficos de 1y, SLA anual móvil)
+  retention_events: 720h       # feed de eventos/actividad
+  rollup_interval: 5m         # cadencia de consolidación + poda
   # Optional append-only JSONL export logs (opt-in: omit a key to disable it).
   # access: /var/log/sermo/access.log
   # events: /var/log/sermo/event.log
@@ -488,7 +495,7 @@ más determinista.
 
 `engine.state_cache_size` (por defecto `64M`) establece la caché de páginas SQLite para
 la base de datos de estado (`paths.state`). La BD de estado acumula historial de SLA,
-mediciones y métricas por minuto, cuyos índices crecen hasta decenas de MB; la caché
+mediciones y métricas cuyos índices crecen hasta decenas de MB; la caché
 mantiene esas páginas calientes en memoria de modo que una ráfaga de escrituras por
 ciclo no las relea desde el disco y atasque un `monitor`/`unmonitor` interactivo (cada
 sentencia comparte una conexión). Súbela en hosts con un historial grande y RAM de
@@ -496,6 +503,56 @@ sobra (el valor es un tamaño en bytes con sufijo `K`/`M`/`G`); se toma de la
 configuración del daemon en ejecución y se aplica la próxima vez que `sermod` abra la
 base de datos (un reinicio, ya que el handle se mantiene abierto durante toda la vida
 del daemon).
+
+#### Resolución del historial almacenado
+
+Sermo guarda un archivo por ventana de gráfica en lugar de historial por minuto durante
+un año. Cada gráfica dibuja un número fijo de columnas — 120 en las gráficas de métricas,
+90 en la tira de SLA — así que un bucket más fino que `ventana / columnas` se almacenaría
+y nunca se mostraría. Cada archivo guarda el intervalo de bucket que su ventana dibuja
+realmente, y se retiene justo por encima de esa ventana:
+
+| Intervalo de bucket | Clave de `engine` | Por defecto | Sirve |
+|---|---|---|---|
+| 1 minuto | `retention_1m` | `3h` | los gráficos de `1h`, y el detalle de un incidente reciente |
+| 5 minutos | `retention_5m` | `30h` | los gráficos de `24h` |
+| 1 hora | `retention_1h` | `216h` (9 días) | los gráficos de `7d` |
+| 6 horas | `retention_6h` | `912h` (38 días) | los gráficos de `30d` |
+| 1 día | `retention_1d` | `8784h` (366 días) | los gráficos de `1y` y el SLA anual móvil |
+
+Cada archivo se consolida desde el inmediatamente inferior, no desde las muestras en
+vivo, así que una parada larga del daemon no puede perder una resolución. **La
+consolidación es exacta**: la disponibilidad suma sus contadores, las métricas suman el
+número de muestras y el total (manteniendo el promedio ponderado, nunca un promedio de
+promedios) y arrastran el mínimo y el máximo. Un ratio, promedio o extremo leído del
+archivo diario es igual al calculado sobre sus buckets de minuto.
+
+Lo que la consolidación sí cede es el *cuándo*: pasado `retention_1m` un incidente queda
+localizado en su bucket, no en su minuto. El recuento sobrevive — cada bucket registra
+cuántos buckets de un minuto dentro de él vieron un fallo — así que una ventana informa
+de «3 minutos afectados» por gruesa que se haya vuelto, y la tira de SLA colorea esos
+buckets en consecuencia (ver [Web UI](webui-representation.es.md#tira-temporal-de-sla)).
+Para el timestamp exacto de un incidente antiguo, usa el feed de eventos/actividad,
+retenido aparte por `engine.retention_events` (por defecto `720h`, 30 días).
+
+`engine.rollup_interval` (por defecto `5m`) es cada cuánto `sermod` consolida y poda.
+Mantenlo bien por debajo de `retention_1m`: el archivo por minuto es la fuente que lee
+cada archivo más grueso, y su poda tiene como suelo el watermark de consolidación, así
+que una cadencia más lenta retrasa la recuperación de espacio en lugar de perder
+historial. Una ventana servida por un archivo consolidado va por tanto como máximo un
+intervalo por detrás de las muestras en vivo; la ventana de `1h` lee buckets por minuto y
+es inmediata.
+
+Subir una retención cuesta proporcionalmente más disco a esa resolución; bajarla surte
+efecto en la siguiente pasada de mantenimiento. Recuperar las páginas liberadas necesita
+un `VACUUM`, que `sermoctl state compact` realiza.
+
+Al dimensionar el disco, presupuesta aproximadamente el **doble** de las filas de los
+archivos: cada tabla de archivo lleva un índice sobre `(res, bucket)` para que la
+consolidación y la poda busquen en lugar de escanear la resolución completa, y en estas
+tablas organizadas por clave ese índice cuesta más o menos lo mismo que la propia tabla.
+A cambio, la pasada de mantenimiento no retiene la conexión de escritura que comparten
+los ciclos de monitorización.
 
 Cuando `sermoctl daemon reload` pide al daemon en ejecución que recargue,
 `sermod` lee la configuración desde la ruta pasada a `sermod run --config` (el
@@ -527,8 +584,8 @@ recargable; las respuestas de acciones web extienden su plazo desde la
 configuración activa, incluido el timeout `stop_policy` resuelto por service.
 Las líneas base de tasa de CPU por service solo se restablecen cuando un service
 se elimina de la config en ejecución; el historial de métricas y eventos
-persistido permanece en `paths.state` hasta la retención normal o un `sermoctl
-state compact` explícito.
+persistido permanece en `paths.state` hasta que la retención configurada lo poda o se
+ejecuta un `sermoctl state compact` explícito.
 
 Dispara una recarga de configuración del daemon con:
 
@@ -901,8 +958,10 @@ Endpoints de solo lectura:
 - `GET /api/services/{name}` — detalle del service: últimas comprobaciones, SLA móvil,
   locks de runtime con nombre, procesos descubiertos, estado de la política de
   remediación automática y progreso de la ventana de reglas.
-- `GET /api/services/{name}/sla?since=24h` — historial de disponibilidad por minuto;
-  `since` es una duración, por defecto 24h, limitada a la retención de 366 días (~1 año).
+- `GET /api/services/{name}/sla?since=24h` — historial de disponibilidad a la resolución
+  a la que esa ventana está almacenada (ver [Resolución del historial
+  almacenado](#resolución-del-historial-almacenado)); `since` es una duración, por
+  defecto 24h, limitada a `engine.retention_1d` (por defecto 366 días, ~1 año).
 - `GET /api/services/{name}/metrics?check=NAME&since=24h` — historial de latencia de la
   comprobación + resumen. Añade `metric=KEY` para una métrica numérica con nombre
   publicada por esa comprobación, ver abajo.
@@ -962,9 +1021,10 @@ una recarga concurrente.
 - `POST /api/events/clear?before=TIME` — limpia el log persistido de eventos/actividad;
   `before` puede ser una duración positiva o un timestamp RFC3339 no futuro.
   Omítelo para limpiar todos los eventos.
-- `POST /api/state/compact?before=TIME` — poda el historial antiguo de SLA, mediciones,
-  métricas de daemon, métricas de runtime de service y eventos, luego compacta la base
-  de datos de estado; coincide con `sermoctl state compact`.
+- `POST /api/state/compact?before=TIME` — consolida y poda el historial almacenado a la
+  retención configurada, luego compacta la base de datos de estado. `before`
+  opcionalmente descarta el historial que quede más antiguo que un corte explícito.
+  Coincide con `sermoctl state compact`.
 - `POST /api/reload` — solicita una recarga de configuración de `sermod`, equivalente a
   `sermoctl daemon reload`.
 
@@ -1090,23 +1150,25 @@ avg,min,max}, points:[{start,n,avg,min,max}], unit:"ms"}`. Añade `metric=KEY` p
 una métrica numérica con nombre para comprobaciones que publican una, como `hdparm`
 `read`/`cached`, `sensors` `temp`/`fan`/`voltage`, `smart` `temperature`/`wear` o
 `edac` `ce`/`ue`; en ese caso `unit` es la unidad de la métrica en lugar de `ms`.
-Las mediciones se mantienen por minuto durante aproximadamente un año (podadas como las
-muestras de SLA); una comprobación que solo se ejecuta cada N ciclos ([intervalo por
+Las mediciones siguen la misma escalera de archivos que las muestras de SLA
+([Resolución del historial almacenado](#resolución-del-historial-almacenado)), así que el
+mínimo y el máximo de un pico sobreviven a cualquier resolución; una comprobación que
+solo se ejecuta cada N ciclos ([intervalo por
 comprobación](#intervalo-por-comprobación)) registra una muestra solo cuando realmente se
 ejecuta, de modo que el promedio no se sesga.
 
 Los gráficos de proceso de `Daemon / Engine settings` usan la misma base de datos de
 estado persistente para el propio historial de CPU, memoria e IO de sermod, de modo que
-esos gráficos sobreviven a un reinicio del daemon o del host. Se podan a la misma
-ventana de retención de 366 días (~1 año).
+esos gráficos sobreviven a un reinicio del daemon o del host. Siguen la misma escalera de
+archivos que cualquier otra serie almacenada.
 
 Los gráficos de CPU, memoria e IO del detalle del service usan la misma base de datos de
 estado persistente para cada árbol de procesos de service, de modo que esos gráficos
 también sobreviven a un reinicio del daemon o del host. Empiezan a llenarse en cuanto el
 service se monitoriza; las tasas de CPU e IO necesitan dos ciclos antes de que exista el
 primer punto de tasa, mientras que la memoria puede renderizarse desde la primera
-muestra de proceso. Los buckets de métricas de runtime se podan a la misma ventana de
-retención de 366 días (~1 año). Los services que declaran un mapa vacío
+muestra de proceso. Los buckets de métricas de runtime siguen la misma escalera de
+archivos que cualquier otra serie almacenada. Los services que declaran un mapa vacío
 `processes: { }` no tienen árbol de procesos residente; el panel omite su tabla de
 procesos y los gráficos de latencia/CPU/memoria/IO.
 
@@ -2805,7 +2867,8 @@ configurados: `dry_run` aplica a services y watches; `stop_policy`, `policy` y
 `rule_window` aplican a services. Los ajustes de ámbito de motor (`interval`,
 `max_parallel_checks`, `default_timeout`,
 `operation_timeout`, `artifact_interval`, `startup_delay`, `backend`, `user_lookup`,
-`user_lookup_timeout`, `state_cache_size`) son configuración del daemon y nunca se
+`user_lookup_timeout`, `state_cache_size`, las ventanas `retention_*` y
+`rollup_interval`) son configuración del daemon y nunca se
 fusionan con un service.
 
 `defaults.dry_run` es opcional y por defecto es `false`; cada service o watch
@@ -3128,14 +3191,15 @@ poda ese archivo.
 Para reclamar el historial antiguo de la base de datos de estado intencionadamente, usa:
 
 ```sh
-sermoctl state compact                  # normal 366-day retention, then VACUUM
-sermoctl state compact --before 720h    # prune history older than 30 days
+sermoctl state compact                  # configured retention, then VACUUM
+sermoctl state compact --before 720h    # also drop history older than 30 days
 sermoctl state compact --before 2026-01-01T00:00:00Z
 ```
 
-`state compact` elimina las filas antiguas en buckets de SLA, mediciones, métricas de
-daemon, métricas de runtime de service y eventos, luego hace checkpoint y vacía la base
-de datos de estado SQLite de modo que las páginas liberadas puedan volver al sistema de
-archivos. Sin `--before`, aplica la misma ventana de retención de 366 días (~1 año) que
-`sermod` aplica al arrancar. Cuando se suministra, `--before` debe ser una
-duración positiva o un timestamp RFC3339 no futuro.
+`state compact` ejecuta la misma pasada de consolidación y poda que `sermod` ejecuta en
+su `engine.rollup_interval`, luego hace checkpoint y vacía la base de datos de estado
+SQLite de modo que las páginas liberadas puedan volver al sistema de archivos.
+`--before` descarta además el historial que quede más antiguo que un corte explícito, a
+todas las resoluciones; debe ser una duración positiva o un timestamp RFC3339 no futuro.
+Un bucket que cruza el corte se conserva, así que el corte nunca elimina muestras más
+nuevas que él.

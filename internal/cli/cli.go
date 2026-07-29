@@ -712,10 +712,16 @@ func (a App) operateWithCascade(ctx context.Context, opts options, cfg *config.C
 	return app.DowngradePrimaryOnCascadeFailure(primary, cascadeFailed), primaryErr
 }
 
-// openStateStore opens the persistent state store under paths.state.
+// openStateStore opens the persistent state store under paths.state. It passes
+// the engine's cache and retention settings so sermoctl reads history through the
+// same resolution ladder the daemon writes it with.
 func openStateStore(ctx context.Context, cfg *config.Config) (*state.Store, error) {
 	//nolint:wrapcheck // each command prefixes its own "<verb> failed:" context.
-	return state.OpenContext(ctx, filepath.Join(cfg.Global.StateDir(), state.Filename))
+	return state.OpenContextWith(
+		ctx,
+		filepath.Join(cfg.Global.StateDir(), state.Filename),
+		app.EngineStateOptions(cfg),
+	)
 }
 
 func (a App) openManualActionStore(ctx context.Context, cfg *config.Config, action string) *state.Store {

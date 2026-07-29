@@ -391,7 +391,7 @@ func TestStoreRuleWindowReplaceRemovesStaleRules(t *testing.T) {
 	}
 }
 
-func TestPruneHistory(t *testing.T) {
+func TestPruneBeforeDropsHistoryAtEveryResolution(t *testing.T) {
 	s := openTemp(t)
 	old := time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
 	recent := time.Date(2026, 6, 13, 12, 0, 0, 0, time.UTC)
@@ -420,17 +420,19 @@ func TestPruneHistory(t *testing.T) {
 		}
 	}
 
-	result, err := s.PruneHistory(recent)
+	now := recent.Add(time.Minute)
+	result, err := s.PruneBefore(context.Background(), recent)
 	if err != nil {
-		t.Fatalf("PruneHistory: %v", err)
+		t.Fatalf("PruneBefore: %v", err)
 	}
-	if result.SLA != 2 || result.Measurements != 1 || result.Metrics != 1 || result.DaemonMetrics != 1 || result.ServiceMetrics != 1 || result.Events != 1 || result.Rows != 7 {
-		t.Fatalf("PruneHistory = %+v, want one old bucket per history table", result)
+	// Two SLA rows (service and check) plus four metric rows, all at the finest
+	// resolution, and the one old event.
+	if result.Archives != 6 || result.Events != 1 || result.Pruned() != 7 {
+		t.Fatalf("PruneBefore = %+v (pruned %d), want 6 archive rows and 1 event", result, result.Pruned())
 	}
 
-	now := recent.Add(time.Minute)
-	if _, total, err := s.SLA("web", 2*time.Minute, now); err != nil || total != 1 {
-		t.Fatalf("recent SLA total=%d err=%v, want 1", total, err)
+	if value, err := s.sumSLA("web", "", 2*time.Minute, now); err != nil || value.Total != 1 {
+		t.Fatalf("recent SLA total=%d err=%v, want 1", value.Total, err)
 	}
 	if stat, err := s.MeasurementSummary("web", "http", 2*time.Minute, now); err != nil || stat.Count != 1 {
 		t.Fatalf("recent measurement = %+v err=%v, want 1", stat, err)
@@ -456,7 +458,7 @@ func TestRecordAggregatesPreserveErrorContext(t *testing.T) {
 	}{
 		"measurement": {func() error { return s.RecordMeasurement("web", "http", 1, at) }, "record measurement for web/http:"},
 		"metric":      {func() error { return s.RecordMetric("web", "http", "latency", 1, at) }, "record metric for web/http/latency:"},
-		"daemon":      {func() error { return s.RecordDaemonMetric("cpu", 1, at) }, "record daemon metric cpu:"},
+		"daemon":      {func() error { return s.RecordDaemonMetric("cpu", 1, at) }, "record daemon metric for cpu:"},
 		"service":     {func() error { return s.RecordServiceMetric("web", "cpu", 1, at) }, "record service metric for web/cpu:"},
 	} {
 		t.Run(name, func(t *testing.T) {

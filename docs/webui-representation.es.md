@@ -22,6 +22,7 @@ deterministas de la API.
 
 - [Reglas globales](#reglas-globales)
 - [Fuentes de datos](#fuentes-de-datos)
+- [Tira temporal de SLA](#tira-temporal-de-sla)
 - [Endpoints de acción](#endpoints-de-acción)
 - [Barra superior](#barra-superior)
 - [Tarjetas de resumen](#tarjetas-de-resumen)
@@ -79,7 +80,7 @@ deterministas de la API.
 | Expansión de servicio | `GET /api/services/{name}` | checks, información del proceso, reglas |
 | Métricas de check del servicio | `GET /api/services/{name}/metrics?check=NAME[&metric=KEY]` | el detalle muestra la latencia cuando se omite `metric` y un gráfico por cada métrica numérica con nombre publicada por un check |
 | Métricas de runtime del servicio | `GET /api/services/{name}/runtime` | historial persistido de CPU/memoria/IO del servicio, de solo lectura y muestreado exclusivamente por ciclos del worker; `current` es la última muestra publicada y las lecturas del panel nunca repiten el descubrimiento de procesos |
-| SLA del servicio | `GET /api/services/{name}/sla` | historial de disponibilidad por minuto para la línea temporal de SLA del detalle del servicio y los clientes de la API; los ratios de SLA observado cuentan solo minutos monitorizados, así que el tiempo sin mediciones es un hueco, no caída |
+| SLA del servicio | `GET /api/services/{name}/sla` | historial de disponibilidad para la línea temporal de SLA del detalle del servicio y los clientes de la API, a la resolución a la que esa ventana está almacenada; los ratios de SLA observado cuentan solo minutos monitorizados, así que el tiempo sin mediciones es un hueco, no caída; cada punto lleva además `down_buckets`, los buckets de un minuto dentro de él que vieron un fallo |
 | Eventos del servicio | `GET /api/services/{name}/events` | feed de eventos por servicio |
 | Watches | `GET /api/watches` | watches de host y de service; `scope` los distingue y los nombres de watch de service usan `service:watch` |
 | Aplicaciones | `GET /api/applications` | aplicaciones de catálogo instaladas; `observed_at` permanece fijo mientras el inventario de versión/estado se sirve desde caché |
@@ -101,6 +102,43 @@ navegador mientras están cacheadas.
 Los refrescos son single-flight: las recargas automáticas, manuales y posteriores
 a una acción nunca se ejecutan a la vez, y el siguiente intervalo automático
 empieza cuando termina el refresco anterior.
+
+## Tira temporal de SLA
+
+Las tiras de disponibilidad y la gráfica de SLA del detalle del servicio colorean
+cada celda por **cuánto de ella estuvo caído**, no por su disponibilidad. El
+historial almacenado guarda un intervalo de bucket por ventana ([Resolución del
+historial almacenado](configuration.es.md#resolución-del-historial-almacenado)),
+así que en las ventanas anchas una celda cubre horas o un día entero: un corte de
+40 segundos dentro de una celda de un día es un 99.93% de disponibilidad, que
+cualquier umbral de disponibilidad lee como sano. Colorear por la fracción caída en
+su lugar mantiene ese corte visible.
+
+Cinco bandas, con el verde reservado a exactamente cero — ninguna celda que
+contenga un fallo puede leerse como sana, por poco de la celda que haya afectado:
+
+| Fracción caída de la celda | Color |
+|---|---|
+| 0% | verde (`.sla-down-none`) |
+| hasta 25% | ámbar (`.sla-down-low`) |
+| hasta 50% | naranja (`.sla-down-mid`, mezcla `--warn`/`--crit`) |
+| hasta 75% | rojo anaranjado (`.sla-down-high`, mezcla `--warn`/`--crit`) |
+| hasta 100% | rojo (`.sla-down-full`) |
+
+La banda dice cuánto de la celda se vio afectado, que es lo que separa un blip
+breve de un corte de medio día. Una celda sin ninguna observación sigue siendo un
+`.sla-gap` rayado, distinto de ambos: un hueco es tiempo sin monitorizar, no una
+caída.
+
+El color nunca es el único portador de esto (WCAG 2.2 1.4.1): el `title` y el
+`aria-label` de cada celda indican la disponibilidad, la fracción caída y cuántos
+buckets de un minuto dentro de ella vieron un fallo, y la tabla de datos oculta
+visualmente junto a cada tira los repite por sub-intervalo en una columna
+`Affected`.
+
+Los recuentos de incidentes vienen de esos buckets de un minuto en lugar del número
+de puntos con fallos, así que tres minutos malos separados dentro de un mismo bucket
+consolidado se informan como tres minutos afectados, no como uno.
 
 ## Endpoints de acción
 
@@ -128,7 +166,7 @@ con un cuerpo `{"ok": bool, "message": string}` para una acción atendida.
 | Blockers de montaje | `GET /api/mounts/{name}/blockers` | escaneo read-only fresco de blockers de una unidad de montaje; a los guests se les redactan las líneas de comando como en `GET /api/mounts` |
 | Liberación de lock | `POST /api/locks/{service}/release?name=NAME` | libera locks con nombre inactivos, obsoletos o caducados; los locks activos se rechazan |
 | Limpieza de eventos | `POST /api/events/clear?before=TIME` | borra las filas persistidas de eventos/actividad; `before` acepta una duración positiva o un timestamp RFC3339 no futuro |
-| Compactación de estado | `POST /api/state/compact?before=TIME` | poda el historial antiguo de SLA/métricas/eventos y compacta la base de datos de estado; equivale a `sermoctl state compact` |
+| Compactación de estado | `POST /api/state/compact?before=TIME` | consolida y poda el historial almacenado a la retención configurada, luego compacta la base de datos de estado; `before` opcionalmente descarta lo que quede más antiguo que un corte explícito; equivale a `sermoctl state compact` |
 | Modo pánico | `POST /api/panic/{action}` | `on` / `off`; suspensión (solo admin) a nivel de daemon de hooks, alertas y remediación automática |
 | Recarga del daemon | `POST /api/reload` | solicita una recarga de configuración de `sermod` |
 

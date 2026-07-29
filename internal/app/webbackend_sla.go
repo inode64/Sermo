@@ -98,11 +98,21 @@ func slaRatio(up, total int64, known bool) *float64 {
 
 func toWebSLAWindows(timelines []state.SLAWindowTimeline, observedAt time.Time) []web.SLAWindow {
 	return toWebWindows(timelines, observedAt, func(timeline state.SLAWindowTimeline) web.SLAWindow {
-		win := web.SLAWindow{Window: timeline.Window, Up: timeline.Up, Total: timeline.Total, Ratio: slaRatio(timeline.Up, timeline.Total, true)}
+		win := web.SLAWindow{
+			Window:      timeline.Window,
+			Up:          timeline.Up,
+			Total:       timeline.Total,
+			DownBuckets: timeline.DownBuckets,
+			Ratio:       slaRatio(timeline.Up, timeline.Total, true),
+		}
 		if len(timeline.Segments) > 0 {
-			segments := make([]*float64, len(timeline.Segments))
+			segments := make([]web.SLASegment, len(timeline.Segments))
 			for i, segment := range timeline.Segments {
-				segments[i] = slaRatio(segment.Up, segment.Total, true)
+				segments[i] = web.SLASegment{
+					Up:          segment.Up,
+					Total:       segment.Total,
+					DownBuckets: segment.DownBuckets,
+				}
 			}
 			win.Segments = segments
 		}

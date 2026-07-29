@@ -99,8 +99,8 @@ sermoctl events clear [--before TIME]   # omit TIME to clear all; TIME may be no
                                         # only events strictly before the timestamp are removed
 sermoctl activity clear [--before TIME] # limpia el mismo registro mostrado en Events
 
-sermoctl state compact [--before TIME]  # prunes old history and vacuums the state database
-                                        # omit TIME for normal 366-day retention; TIME may be non-future RFC3339 or positive duration
+sermoctl state compact [--before TIME]  # consolidates and prunes stored history, then vacuums the state database
+                                        # omit TIME for the configured retention; TIME additionally drops older history (non-future RFC3339 or positive duration)
 
 sermoctl lock SERVICE [--name NAME] --reason REASON --ttl DURATION -- COMMAND...
 sermoctl lock acquire SERVICE [--name NAME] --reason REASON --ttl DURATION

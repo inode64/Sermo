@@ -19,6 +19,7 @@ import (
 	"sermo/internal/config"
 	"sermo/internal/execx"
 	"sermo/internal/servicemgr"
+	"sermo/internal/state"
 	"sermo/internal/web"
 	"sermo/internal/webcred"
 )
@@ -212,8 +213,8 @@ func TestWebAuthFromConfig(t *testing.T) {
 	}
 }
 
-func TestStartOldHistoryPruneDoesNotBlockStartup(t *testing.T) {
-	store := &blockingOldHistoryPruner{
+func TestStartStateMaintenanceDoesNotBlockStartup(t *testing.T) {
+	store := &blockingStateMaintainer{
 		started: make(chan struct{}),
 		release: make(chan struct{}),
 	}
@@ -222,24 +223,24 @@ func TestStartOldHistoryPruneDoesNotBlockStartup(t *testing.T) {
 
 	done := make(chan struct{})
 	go func() {
-		startOldHistoryPrune(context.Background(), logger, store, time.Now())
+		startStateMaintenance(context.Background(), logger, store, time.Hour)
 		close(done)
 	}()
 
 	select {
 	case <-done:
 	case <-time.After(time.Second):
-		t.Fatal("startOldHistoryPrune blocked on history pruning")
+		t.Fatal("startStateMaintenance blocked on the first maintenance pass")
 	}
 	select {
 	case <-store.started:
 	case <-time.After(time.Second):
-		t.Fatal("history pruning goroutine did not start")
+		t.Fatal("maintenance goroutine did not start")
 	}
 }
 
-func TestStartOldHistoryPruneStopsAtShutdownAndReportsDone(t *testing.T) {
-	store := &blockingOldHistoryPruner{
+func TestStartStateMaintenanceStopsAtShutdownAndReportsDone(t *testing.T) {
+	store := &blockingStateMaintainer{
 		started: make(chan struct{}),
 		release: make(chan struct{}),
 	}
@@ -247,25 +248,48 @@ func TestStartOldHistoryPruneStopsAtShutdownAndReportsDone(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	done := startOldHistoryPrune(ctx, logger, store, time.Now())
+	done := startStateMaintenance(ctx, logger, store, time.Millisecond)
 	select {
 	case <-store.started:
 	case <-time.After(time.Second):
-		t.Fatal("history pruning goroutine did not start")
+		t.Fatal("maintenance goroutine did not start")
 	}
 
-	// Shutdown while the first prune step is still running: the goroutine must
-	// skip the remaining steps and report done so main can close the store.
+	// Shutdown while the first pass is still running: the goroutine must stop
+	// ticking and report done so main can close the store.
 	cancel()
 	close(store.release)
 	select {
 	case <-done:
 	case <-time.After(time.Second):
-		t.Fatal("prune goroutine did not report done after shutdown")
+		t.Fatal("maintenance goroutine did not report done after shutdown")
 	}
 	if n := store.calls.Load(); n != 1 {
-		t.Fatalf("prune steps after shutdown = %d, want 1 (remaining steps skipped)", n)
+		t.Fatalf("maintenance passes after shutdown = %d, want 1 (no further ticks)", n)
 	}
+}
+
+// TestRunStateMaintenanceRepeatsOnTheInterval pins that maintenance is periodic:
+// a daemon left running for weeks must keep consolidating, which the one-shot
+// startup prune it replaced never did.
+func TestRunStateMaintenanceRepeatsOnTheInterval(t *testing.T) {
+	store := &blockingStateMaintainer{started: make(chan struct{}), release: make(chan struct{})}
+	close(store.release) // never block a pass
+	logger := slog.New(slog.DiscardHandler)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	done := startStateMaintenance(ctx, logger, store, time.Millisecond)
+	deadline := time.After(2 * time.Second)
+	for store.calls.Load() < 3 {
+		select {
+		case <-deadline:
+			t.Fatalf("maintenance ran %d times, want it to repeat on the interval", store.calls.Load())
+		case <-time.After(time.Millisecond):
+		}
+	}
+	cancel()
+	<-done
 }
 
 func TestDrainOrTimeout(t *testing.T) {
@@ -286,31 +310,21 @@ func TestDrainOrTimeout(t *testing.T) {
 	}
 }
 
-type blockingOldHistoryPruner struct {
+// blockingStateMaintainer holds the first maintenance pass open until release is
+// closed, so a test can observe startup and shutdown while one is in flight.
+type blockingStateMaintainer struct {
 	once    sync.Once
 	started chan struct{}
 	release chan struct{}
 	calls   atomic.Int64
 }
 
-// count records one prune step; the shared body of every non-blocking method.
-func (p *blockingOldHistoryPruner) count() (int64, error) {
-	p.calls.Add(1)
-	return 0, nil
-}
-
-func (p *blockingOldHistoryPruner) PruneSLA(time.Time) (int64, error) {
+func (p *blockingStateMaintainer) Maintain(context.Context, time.Time) (state.MaintainResult, error) {
 	p.calls.Add(1)
 	p.once.Do(func() { close(p.started) })
 	<-p.release
-	return 0, nil
+	return state.MaintainResult{}, nil
 }
-
-func (p *blockingOldHistoryPruner) PruneMeasurements(time.Time) (int64, error)   { return p.count() }
-func (p *blockingOldHistoryPruner) PruneMetrics(time.Time) (int64, error)        { return p.count() }
-func (p *blockingOldHistoryPruner) PruneDaemonMetrics(time.Time) (int64, error)  { return p.count() }
-func (p *blockingOldHistoryPruner) PruneServiceMetrics(time.Time) (int64, error) { return p.count() }
-func (p *blockingOldHistoryPruner) PruneEvents(time.Time) (int64, error)         { return p.count() }
 
 func TestEngineAndNotifierAccessors(t *testing.T) {
 	cfg := &config.Config{Global: config.Global{Raw: map[string]any{

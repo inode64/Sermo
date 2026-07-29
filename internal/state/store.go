@@ -23,6 +23,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -39,15 +40,6 @@ const (
 	secondsPerMinute    = units.SecondsPerMinute
 	sqliteBusyTimeoutMS = 5000
 	sqliteDriverName    = "sqlite"
-)
-
-const (
-	stateTableSLASample         = "sla_sample"
-	stateTableCheckSLASample    = "check_sla_sample"
-	stateTableMeasurement       = "measurement"
-	stateTableMeasurementMetric = "measurement_metric"
-	stateTableDaemonMetric      = "daemon_metric"
-	stateTableServiceMetric     = "service_metric"
 )
 
 // Sources record who last changed a monitoring state row, for inspection.
@@ -311,6 +303,73 @@ var migrations = []string{
 	// The process-continuity feature was removed; drop its evidence table. The
 	// original CREATE TABLE migration above stays for version continuity.
 	`DROP TABLE IF EXISTS process_uptime_span;`,
+	// The six single-resolution series tables above are replaced by two
+	// multi-resolution archives (see the resolution ladder in archive.go). They
+	// only ever held per-minute history that the archives rebuild from live
+	// samples, so they are dropped rather than migrated.
+	`DROP TABLE IF EXISTS sla_sample;`,
+	`DROP TABLE IF EXISTS check_sla_sample;`,
+	`DROP TABLE IF EXISTS measurement;`,
+	`DROP TABLE IF EXISTS measurement_metric;`,
+	`DROP TABLE IF EXISTS daemon_metric;`,
+	`DROP TABLE IF EXISTS service_metric;`,
+	// sla_archive holds availability at every stored resolution: res is the
+	// bucket span in seconds, so the same table carries per-minute samples and
+	// the coarser archives consolidated from them. check_name '' is the
+	// service-level series. down_buckets counts the one-minute buckets that had
+	// at least one failed cycle, so a short outage stays visible (and countable)
+	// after consolidation instead of being diluted by the window's ratio.
+	// res leads the primary key: every read knows it, and pruning one
+	// resolution stays inside that key prefix. WITHOUT ROWID stores the key once
+	// instead of duplicating it in a rowid table plus its automatic index.
+	`CREATE TABLE sla_archive (
+		res          INTEGER NOT NULL,
+		service      TEXT    NOT NULL,
+		check_name   TEXT    NOT NULL,
+		bucket       INTEGER NOT NULL,
+		up_count     INTEGER NOT NULL,
+		total_count  INTEGER NOT NULL,
+		down_buckets INTEGER NOT NULL,
+		PRIMARY KEY (res, service, check_name, bucket)
+	) WITHOUT ROWID;`,
+	// metric_archive is the numeric counterpart, holding every measured series at
+	// every stored resolution. scope separates the check, service and daemon
+	// dimensions that used to have a table each; metric names the series within
+	// the scope (check latency, cpu/memory/io, or a check's declared metric).
+	// n/sum_v keep the average weight-correct across resolutions, and min_v/max_v
+	// carry the extremes through consolidation so a spike survives.
+	`CREATE TABLE metric_archive (
+		res        INTEGER NOT NULL,
+		scope      TEXT    NOT NULL,
+		service    TEXT    NOT NULL,
+		check_name TEXT    NOT NULL,
+		metric     TEXT    NOT NULL,
+		bucket     INTEGER NOT NULL,
+		n          INTEGER NOT NULL,
+		sum_v      REAL    NOT NULL,
+		min_v      REAL    NOT NULL,
+		max_v      REAL    NOT NULL,
+		PRIMARY KEY (res, scope, service, check_name, metric, bucket)
+	) WITHOUT ROWID;`,
+	// rollup_state records how far each coarser archive has consolidated its
+	// source. It is the prune safety floor: a resolution is never deleted ahead
+	// of the archive that still has to read it.
+	`CREATE TABLE rollup_state (
+		res       INTEGER PRIMARY KEY,
+		watermark INTEGER NOT NULL
+	) WITHOUT ROWID;`,
+	// Maintenance filters on (res, bucket) with no series key, but bucket is the
+	// last primary-key column, so consolidation and pruning would each scan a whole
+	// resolution partition — on the single write connection the per-cycle upserts
+	// share. These indexes turn those into range seeks.
+	//
+	// They are not free: on a WITHOUT ROWID table a secondary index carries the full
+	// primary key as its payload, so they cost real disk (see
+	// TestArchiveIndexCostAndBenefit, which measures both sides). The read paths do
+	// not need them — they already seek on the primary key, which leads with the
+	// series columns — so these exist purely for the maintenance pass.
+	`CREATE INDEX sla_archive_res_bucket_idx ON sla_archive (res, bucket);`,
+	`CREATE INDEX metric_archive_res_bucket_idx ON metric_archive (res, bucket);`,
 }
 
 // Store is a handle to the persistent state database. It is safe for concurrent
@@ -325,6 +384,16 @@ type Store struct {
 	reader *sql.DB
 	now    func() time.Time
 	ctx    context.Context
+
+	// retention is the resolution ladder every read consults to pick the archive
+	// answering a window, and the maintenance pass consults to prune it.
+	retention Retention
+
+	// pruneMu guards pruned, the per-(table,resolution) memo of the newest prune
+	// boundary already issued. It skips DELETEs that provably match nothing; see
+	// pruneArchive.
+	pruneMu sync.Mutex
+	pruned  map[pruneKey]int64
 
 	// stmtMu guards stmts, the prepared-statement cache for the write paths.
 	// database/sql re-prepares a db.Exec query on every call; the per-cycle
@@ -380,25 +449,9 @@ const (
 	eventQueryMaxArgs    = 2
 )
 
-// DefaultHistoryRetention is the normal SLA/metrics/event history window kept
-// unless an operator runs state compact with an explicit --before cutoff.
-const DefaultHistoryRetention = historyRetentionDays * hoursPerDay * time.Hour
-
 // DefaultSeriesWindow is the normal lookback used when a series request omits
 // its `since` window.
 const DefaultSeriesWindow = hoursPerDay * time.Hour
-
-// PruneHistoryResult summarizes old persisted history removed from time-series
-// and event tables.
-type PruneHistoryResult struct {
-	SLA            int64
-	Measurements   int64
-	Metrics        int64
-	DaemonMetrics  int64
-	ServiceMetrics int64
-	Events         int64
-	Rows           int64
-}
 
 // OpenContext opens (creating if needed) the database at path, creating the
 // parent directory and running any pending migrations. WAL mode plus a busy
@@ -419,6 +472,9 @@ const DefaultCacheBytes = 64 * units.BytesPerMiB
 type Options struct {
 	// CacheBytes sets the SQLite page cache. Values <= 0 use DefaultCacheBytes.
 	CacheBytes int64
+	// Retention is the per-resolution history window. A zero value, or any
+	// non-positive field in it, falls back to DefaultRetention.
+	Retention Retention
 }
 
 // OpenContextWith opens the store with explicit context and options.
@@ -457,7 +513,7 @@ func OpenContextWith(ctx context.Context, path string, opts Options) (*Store, er
 	// lock contention; the state store sees little traffic so this costs nothing.
 	db.SetMaxOpenConns(1)
 
-	s := &Store{db: db, now: time.Now, ctx: ctx}
+	s := &Store{db: db, now: time.Now, ctx: ctx, retention: opts.Retention.normalized()}
 	if err := s.migrate(ctx); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("migrate state db %s: %w", path, err)
@@ -1421,8 +1477,6 @@ const (
 	slaSegmentsWeek  = 28
 	slaSegmentsMonth = 30
 	slaSegmentsYear  = 12
-
-	slaTimelineFixedQueryArgs = 4
 )
 
 // SLAWindows are the reported rolling windows, shortest first. Segment counts
@@ -1437,11 +1491,16 @@ var SLAWindows = []SLAWindow{
 }
 
 // SLAValue is the availability of one service over one window: the up and total
-// observed cycle counts. Ratio derives the fraction (and whether any data exists).
+// observed cycle counts, plus how many one-minute buckets in the window saw a
+// failure. Ratio derives the fraction (and whether any data exists).
+//
+// DownBuckets survives consolidation, so a window whose ratio rounds to 100% can
+// still be reported as having had incidents, and they can still be counted.
 type SLAValue struct {
-	Window string `json:"window"`
-	Up     int64  `json:"up"`
-	Total  int64  `json:"total"`
+	Window      string `json:"window"`
+	Up          int64  `json:"up"`
+	Total       int64  `json:"total"`
+	DownBuckets int64  `json:"down_buckets"`
 }
 
 // Ratio returns the availability fraction in [0,1] and whether the window has any
@@ -1453,171 +1512,180 @@ func (v SLAValue) Ratio() (float64, bool) {
 	return float64(v.Up) / float64(v.Total), true
 }
 
-// minuteBucket truncates t to the start of its UTC minute as a unix epoch — the
-// bucket key shared by every cycle observed in that minute.
-func minuteBucket(t time.Time) int64 {
-	return t.UTC().Truncate(time.Minute).Unix()
-}
-
-type slaQueries struct {
-	record string
-	sum    string
-	series string
-}
-
-var serviceSLAQueries = slaQueries{
-	record: `INSERT INTO sla_sample (service, bucket, up_count, total_count)
-		 VALUES (?, ?, ?, 1)
-		 ON CONFLICT(service, bucket) DO UPDATE SET
-		   up_count    = up_count + excluded.up_count,
-		   total_count = total_count + excluded.total_count;`,
-	sum: `SELECT COALESCE(SUM(up_count), 0), COALESCE(SUM(total_count), 0)
-		  FROM sla_sample WHERE service = ? AND bucket >= ?;`,
-	series: `SELECT bucket, up_count, total_count
-		   FROM sla_sample
-		  WHERE service = ? AND bucket >= ? AND bucket < ?
-		  ORDER BY bucket;`,
-}
-
-var checkSLAQueries = slaQueries{
-	record: `INSERT INTO check_sla_sample (service, check_name, bucket, up_count, total_count)
-		 VALUES (?, ?, ?, ?, 1)
-		 ON CONFLICT(service, check_name, bucket) DO UPDATE SET
-		   up_count    = up_count + excluded.up_count,
-		   total_count = total_count + excluded.total_count;`,
-	sum: `SELECT COALESCE(SUM(up_count), 0), COALESCE(SUM(total_count), 0)
-		  FROM check_sla_sample WHERE service = ? AND check_name = ? AND bucket >= ?;`,
-	series: `SELECT bucket, up_count, total_count
-		   FROM check_sla_sample
-		  WHERE service = ? AND check_name = ? AND bucket >= ? AND bucket < ?
-		  ORDER BY bucket;`,
-}
-
 // RecordSLA accumulates one observed monitoring cycle into a service's current
 // UTC-minute bucket: total_count +1, and up_count +1 when up. Paused or
 // unobserved cycles are simply never recorded, so they do not count as downtime.
 func (s *Store) RecordSLA(service string, up bool, at time.Time) error {
-	return s.recordSLABucket(serviceSLAQueries.record, []any{service}, up, at, "SLA", service)
+	return s.recordSLABucket(service, "", up, at)
 }
 
 // RecordCheckSLA accumulates one observed check execution into its current
 // UTC-minute bucket. Interval-deferred checks are not recorded by callers, so
 // the per-check SLA reflects only real check runs.
 func (s *Store) RecordCheckSLA(service, check string, up bool, at time.Time) error {
-	return s.recordSLABucket(checkSLAQueries.record, []any{service, check}, up, at, "check SLA", service+"/"+check)
+	return s.recordSLABucket(service, check, up, at)
 }
 
-// SLA sums a service's up and total observed cycles over the rolling window
-// ending at now (buckets with start >= now-span). total==0 means no data.
-func (s *Store) SLA(service string, span time.Duration, now time.Time) (up, total int64, err error) {
-	return s.sumSLA(serviceSLAQueries.sum, []any{service}, span, now, "SLA", service)
-}
-
-// CheckSLA sums one check's up and total observed executions over the rolling
-// window ending at now. total==0 means no data.
-func (s *Store) CheckSLA(service, check string, span time.Duration, now time.Time) (up, total int64, err error) {
-	return s.sumSLA(checkSLAQueries.sum, []any{service, check}, span, now, "check SLA", service+"/"+check)
-}
-
-// SLAPoint is one time bucket of a service's availability series: the up and
-// total observed cycles in that UTC minute. It is the unit a future availability
-// graph plots. A minute with no point means the service was not monitored then
-// (Sermo down, or the service paused/disabled) — excluded, not counted as down.
-type SLAPoint struct {
-	Start time.Time `json:"start"`
-	Up    int64     `json:"up"`
-	Total int64     `json:"total"`
-}
-
-// SLASeries returns a service's per-minute availability points in [from, to),
-// oldest first. Unmonitored minutes are absent (gaps) rather than zero rows, so a
-// caller can render excluded periods distinctly from downtime. This is the stored
-// "control" a graph is built from later.
-func (s *Store) SLASeries(service string, from, to time.Time) ([]SLAPoint, error) {
-	return s.loadSLASeries(serviceSLAQueries.series, []any{service}, from, to, "SLA", service)
-}
-
-// CheckSLASeries returns one check's per-minute availability points in [from,
-// to), oldest first. Unobserved minutes are absent.
-func (s *Store) CheckSLASeries(service, check string, from, to time.Time) ([]SLAPoint, error) {
-	return s.loadSLASeries(checkSLAQueries.series, []any{service, check}, from, to, "check SLA", service+"/"+check)
-}
-
-func (s *Store) recordSLABucket(query string, keys []any, up bool, at time.Time, kind, target string) error {
-	args := append(append([]any{}, keys...), minuteBucket(at), boolInt(up))
-	if _, err := s.exec(s.sqlCtx(), query, args...); err != nil {
-		return fmt.Errorf("record %s for %s: %w", kind, target, err)
+// recordSLABucket writes one observed cycle into the per-minute archive. An empty
+// check is the service-level series. down_buckets is recomputed rather than
+// accumulated: at this resolution the bucket is the unit it counts, so it is 1 as
+// soon as any cycle in the minute failed.
+func (s *Store) recordSLABucket(service, check string, up bool, at time.Time) error {
+	if _, err := s.exec(s.sqlCtx(), slaRecordStmt,
+		resMinute, service, check, alignBucket(at, resMinute), boolInt(up), boolInt(!up),
+	); err != nil {
+		return fmt.Errorf("record %s for %s: %w", slaKind(check), slaTarget(service, check), err)
 	}
 	return nil
 }
 
-func (s *Store) sumSLA(query string, keys []any, span time.Duration, now time.Time, kind, target string) (up, total int64, err error) {
-	args := append(append([]any{}, keys...), minuteBucket(now.Add(-span)))
-	err = s.reads().QueryRowContext(s.sqlCtx(), query, args...).Scan(&up, &total)
-	if err != nil {
-		return 0, 0, fmt.Errorf("sum %s for %s: %w", kind, target, err)
+// slaKind and slaTarget name one SLA series for an error message. They are called
+// only from the error branches: the per-cycle write path runs for every service
+// and check on every cycle, so building the target string eagerly would allocate
+// once per call for a message that is almost never used.
+func slaKind(check string) string {
+	if check == "" {
+		return "SLA"
 	}
-	return up, total, nil
+	return "check SLA"
 }
 
-func (s *Store) loadSLASeries(query string, keys []any, from, to time.Time, kind, target string) ([]SLAPoint, error) {
-	args := append(append([]any{}, keys...), minuteBucket(from), minuteBucket(to))
-	rows, err := s.reads().QueryContext(s.sqlCtx(), query, args...)
+func slaTarget(service, check string) string {
+	if check == "" {
+		return service
+	}
+	return service + "/" + check
+}
+
+// SLAPoint is one time bucket of a service's availability series: the up and
+// total observed cycles in that bucket, plus how many of its one-minute
+// sub-buckets saw a failure. A missing point means the service was not monitored
+// then (Sermo down, or the service paused/disabled) — excluded, not counted as
+// down. The bucket span is the archive the window resolved to, so a point covers
+// one minute on the hour window and one day on the year window.
+type SLAPoint struct {
+	Start       time.Time `json:"start"`
+	Up          int64     `json:"up"`
+	Total       int64     `json:"total"`
+	DownBuckets int64     `json:"down_buckets"`
+}
+
+// SLASeries returns a service's availability points in [from, to), oldest first,
+// at the resolution that window is stored at. Unmonitored buckets are absent
+// (gaps) rather than zero rows, so a caller can render excluded periods
+// distinctly from downtime.
+func (s *Store) SLASeries(service string, from, to time.Time) ([]SLAPoint, error) {
+	return s.loadSLASeries(service, "", from, to)
+}
+
+// CheckSLASeries returns one check's availability points in [from, to), oldest
+// first. Unobserved buckets are absent.
+func (s *Store) CheckSLASeries(service, check string, from, to time.Time) ([]SLAPoint, error) {
+	return s.loadSLASeries(service, check, from, to)
+}
+
+// sumSLA totals one series over the rolling window ending at now. The archive is
+// chosen from the requested span, and every read of the same window resolves to
+// the same one, which is what keeps a window total and its segment breakdown in
+// agreement.
+func (s *Store) sumSLA(service, check string, span time.Duration, now time.Time) (SLAValue, error) {
+	from := now.Add(-span)
+	stored := s.retention.archiveFor(from, now)
+	var value SLAValue
+	if err := s.reads().QueryRowContext(s.sqlCtx(), slaSumStmt,
+		stored.Res, service, check, alignBucket(from, stored.Res),
+	).Scan(&value.Up, &value.Total, &value.DownBuckets); err != nil {
+		return SLAValue{}, fmt.Errorf("sum %s for %s: %w", slaKind(check), slaTarget(service, check), err)
+	}
+	return value, nil
+}
+
+func (s *Store) loadSLASeries(service, check string, from, to time.Time) ([]SLAPoint, error) {
+	// The resolution is chosen relative to `to`, the caller's reference instant —
+	// every caller passes now. A range that both starts and ends in the past is
+	// therefore resolved by its span, which may name an archive whose retention has
+	// already dropped it; it then legitimately returns no rows.
+	stored := s.retention.archiveFor(from, to)
+	// The upper bound covers the bucket holding `to` rather than truncating to
+	// its start, so the newest (still filling) bucket is not dropped from the
+	// series. A bucket start is never in the future, so nothing beyond `to` can
+	// appear.
+	rows, err := s.reads().QueryContext(s.sqlCtx(), slaSeriesStmt,
+		stored.Res, service, check,
+		alignBucket(from, stored.Res), alignBucket(to, stored.Res)+stored.Res)
 	if err != nil {
-		return nil, fmt.Errorf("load %s series for %s: %w", kind, target, err)
+		return nil, fmt.Errorf("load %s series for %s: %w", slaKind(check), slaTarget(service, check), err)
 	}
 	defer rows.Close()
 
 	var out []SLAPoint
 	for rows.Next() {
-		var bucket, up, total int64
-		if err := rows.Scan(&bucket, &up, &total); err != nil {
-			return nil, fmt.Errorf("scan %s series row for %s: %w", kind, target, err)
+		var bucket int64
+		var point SLAPoint
+		if err := rows.Scan(&bucket, &point.Up, &point.Total, &point.DownBuckets); err != nil {
+			return nil, fmt.Errorf("scan %s series row for %s: %w", slaKind(check), slaTarget(service, check), err)
 		}
-		out = append(out, SLAPoint{Start: time.Unix(bucket, 0).UTC(), Up: up, Total: total})
+		point.Start = time.Unix(bucket, 0).UTC()
+		out = append(out, point)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate %s series for %s: %w", kind, target, err)
+		return nil, fmt.Errorf("iterate %s series for %s: %w", slaKind(check), slaTarget(service, check), err)
 	}
 	return out, nil
+}
+
+// SeriesResolution is the bucket span a series request for [from, to) resolves to.
+// Callers rendering a series report it, so a reader knows whether a row is a minute
+// or a day; inferring it back from the returned points cannot work for a series with
+// a single point.
+func (s *Store) SeriesResolution(from, to time.Time) time.Duration {
+	return time.Duration(s.retention.archiveFor(from, to).Res) * time.Second
 }
 
 // SLAReport returns a service's availability across every SLAWindow, ordered as
 // SLAWindows (hour..year).
 func (s *Store) SLAReport(service string, now time.Time) ([]SLAValue, error) {
-	return reportWindows(func(span time.Duration) (int64, int64, error) {
-		return s.SLA(service, span, now)
+	return reportWindows(func(span time.Duration) (SLAValue, error) {
+		return s.sumSLA(service, "", span, now)
 	})
 }
 
 // CheckSLAReport returns one check's availability across every SLAWindow,
 // ordered as SLAWindows (hour..year).
 func (s *Store) CheckSLAReport(service, check string, now time.Time) ([]SLAValue, error) {
-	return reportWindows(func(span time.Duration) (int64, int64, error) {
-		return s.CheckSLA(service, check, span, now)
+	return reportWindows(func(span time.Duration) (SLAValue, error) {
+		return s.sumSLA(service, check, span, now)
 	})
 }
 
-// reportWindows collects one SLAValue per SLAWindow from the given up/total
-// reader; the loop shared by the service- and check-level reports.
-func reportWindows(sla func(span time.Duration) (up, total int64, err error)) ([]SLAValue, error) {
+// reportWindows collects one SLAValue per SLAWindow from the given sum reader;
+// the loop shared by the service- and check-level reports.
+func reportWindows(sum func(span time.Duration) (SLAValue, error)) ([]SLAValue, error) {
 	out := make([]SLAValue, 0, len(SLAWindows))
 	for _, w := range SLAWindows {
-		up, total, err := sla(w.Span)
+		value, err := sum(w.Span)
 		if err != nil {
 			return nil, err
 		}
-		out = append(out, SLAValue{Window: w.Name, Up: up, Total: total})
+		value.Window = w.Name
+		out = append(out, value)
 	}
 	return out, nil
 }
 
 // SLASegment is one equal sub-span of a windowed SLA timeline: the up and total
-// observed cycles within it. Total==0 marks a gap (an unmonitored sub-span),
-// which renders distinctly from downtime — the same gap convention as SLASeries.
+// observed cycles within it, plus how many of its one-minute sub-buckets saw a
+// failure. Total==0 marks a gap (an unmonitored sub-span), which renders
+// distinctly from downtime — the same gap convention as SLASeries.
+//
+// DownBuckets is what keeps a short outage visible after consolidation: a
+// 40-second failure inside a day-long segment barely moves Up/Total, but it
+// leaves DownBuckets at 1, so the renderer can colour the whole segment as
+// affected instead of rounding it to healthy.
 type SLASegment struct {
-	Up    int64 `json:"up"`
-	Total int64 `json:"total"`
+	Up          int64 `json:"up"`
+	Total       int64 `json:"total"`
+	DownBuckets int64 `json:"down_buckets"`
 }
 
 // SLAWindowTimeline is a service's availability over one rolling window plus the
@@ -1625,99 +1693,84 @@ type SLASegment struct {
 // Up/Total are the window totals (the sum of the segments), so a caller rendering
 // the strip needs no separate SLAReport query.
 type SLAWindowTimeline struct {
-	Window   string
-	Up       int64
-	Total    int64
-	Segments []SLASegment
+	Window      string
+	Up          int64
+	Total       int64
+	DownBuckets int64
+	Segments    []SLASegment
 }
 
 // SLATimelines returns a service's availability for every SLAWindow split into
 // equal sub-spans for the web timeline strip, ordered as SLAWindows (hour..year).
 func (s *Store) SLATimelines(service string, now time.Time) ([]SLAWindowTimeline, error) {
-	return s.slaTimelines(slaTimelineQuery, []any{service}, now)
+	return s.slaTimelines(service, "", now)
 }
 
 // CheckSLATimelines returns one check's windowed availability split into sub-spans
 // for the web timeline strip, ordered as SLAWindows (hour..year).
 func (s *Store) CheckSLATimelines(service, check string, now time.Time) ([]SLAWindowTimeline, error) {
-	return s.slaTimelines(checkSLATimelineQuery, []any{service, check}, now)
+	return s.slaTimelines(service, check, now)
 }
 
-const (
-	slaTimelineQuery = `SELECT (bucket - ?)/? AS seg, COALESCE(SUM(up_count), 0), COALESCE(SUM(total_count), 0)
-			   FROM sla_sample
-			  WHERE service = ? AND bucket >= ? AND bucket < ?
-			  GROUP BY seg ORDER BY seg;`
-	checkSLATimelineQuery = `SELECT (bucket - ?)/? AS seg, COALESCE(SUM(up_count), 0), COALESCE(SUM(total_count), 0)
-			   FROM check_sla_sample
-			  WHERE service = ? AND check_name = ? AND bucket >= ? AND bucket < ?
-			  GROUP BY seg ORDER BY seg;`
-)
-
-// slaTimelines divides each SLAWindow into Segments equal sub-spans ending at
-// now and aggregates the per-minute buckets with a single grouped query per
-// window — the same indexed range scan SLA() already does, returning the
-// per-segment breakdown as well. query is one of the package constants above;
-// keyArgs select the service (and check) rows.
-func (s *Store) slaTimelines(query string, keyArgs []any, now time.Time) ([]SLAWindowTimeline, error) {
+// slaTimelines reports every SLAWindow for one series. An empty check is the
+// service-level series.
+func (s *Store) slaTimelines(service, check string, now time.Time) ([]SLAWindowTimeline, error) {
 	out := make([]SLAWindowTimeline, 0, len(SLAWindows))
 	for _, w := range SLAWindows {
-		segCount := w.Segments
-		if segCount <= 0 {
-			segCount = 1
-		}
-		spanSec := int64(w.Span / time.Second)
-		startBucket := minuteBucket(now.Add(-w.Span))
-		// Include the current (partial) minute so the window total matches SLA(),
-		// which lower-bounds on the same start bucket but has no upper bound. Using
-		// startBucket+spanSec would stop one bucket short and exclude the current
-		// minute, making SLAWindowTimeline.Up/Total disagree with SLAReport for the
-		// same window. The current minute clamps into the last segment below.
-		endBucket := minuteBucket(now) + secondsPerMinute
-		segSpan := spanSec / int64(segCount)
-		if segSpan <= 0 {
-			segSpan = 1
-		}
-
-		// Placeholder order matches the SQL left-to-right: the SELECT segment
-		// expression (start, span) first, then the WHERE key args, then the range.
-		args := make([]any, 0, len(keyArgs)+slaTimelineFixedQueryArgs)
-		args = append(args, startBucket, segSpan)
-		args = append(args, keyArgs...)
-		args = append(args, startBucket, endBucket)
-		rows, err := s.reads().QueryContext(s.sqlCtx(), query, args...)
+		timeline, err := s.slaTimeline(service, check, w, now)
 		if err != nil {
-			return nil, fmt.Errorf("load SLA timeline for %s: %w", w.Name, err)
+			return nil, err
 		}
-
-		segs := make([]SLASegment, segCount)
-		var winUp, winTotal int64
-		for rows.Next() {
-			var seg, up, total int64
-			if err := rows.Scan(&seg, &up, &total); err != nil {
-				//nolint:sqlclosecheck // this loop opens rows per SLA window; defer would retain every cursor until return.
-				rows.Close()
-				return nil, fmt.Errorf("scan SLA timeline row for %s: %w", w.Name, err)
-			}
-			if seg < 0 {
-				seg = 0
-			} else if seg >= int64(segCount) {
-				seg = int64(segCount) - 1
-			}
-			segs[seg].Up += up
-			segs[seg].Total += total
-			winUp += up
-			winTotal += total
-		}
-		if err := rows.Err(); err != nil {
-			rows.Close()
-			return nil, fmt.Errorf("iterate SLA timeline for %s: %w", w.Name, err)
-		}
-		rows.Close()
-
-		out = append(out, SLAWindowTimeline{Window: w.Name, Up: winUp, Total: winTotal, Segments: segs})
+		out = append(out, timeline)
 	}
 	return out, nil
+}
+
+// slaTimeline divides one window into Segments equal sub-spans ending at now and
+// aggregates the stored buckets with a single grouped query — the same indexed
+// range scan sumSLA does, returning the per-segment breakdown as well.
+//
+// The archive is picked exactly as sumSLA picks it, so the window totals here and
+// SLAReport's for the same window are aggregated from the same rows and agree.
+// Each window's segment span is a whole number of buckets in that archive (see
+// the resolution ladder), so no bucket contributes to two segments.
+func (s *Store) slaTimeline(service, check string, w SLAWindow, now time.Time) (SLAWindowTimeline, error) {
+	segCount := max(w.Segments, 1)
+	from := now.Add(-w.Span)
+	stored := s.retention.archiveFor(from, now)
+	startBucket := alignBucket(from, stored.Res)
+	// Include the current (partial) bucket so the window total matches sumSLA,
+	// which lower-bounds on the same start bucket but has no upper bound. Stopping
+	// at startBucket+span would exclude it and make Up/Total disagree with
+	// SLAReport for the same window. That bucket clamps into the last segment.
+	endBucket := alignBucket(now, stored.Res) + stored.Res
+	segSpan := max(int64(w.Span/time.Second)/int64(segCount), 1)
+
+	rows, err := s.reads().QueryContext(s.sqlCtx(), slaTimelineStmt,
+		startBucket, segSpan, stored.Res, service, check, startBucket, endBucket)
+	if err != nil {
+		return SLAWindowTimeline{}, fmt.Errorf("load SLA timeline for %s: %w", w.Name, err)
+	}
+	defer rows.Close()
+
+	timeline := SLAWindowTimeline{Window: w.Name, Segments: make([]SLASegment, segCount)}
+	for rows.Next() {
+		var seg, up, total, down int64
+		if err := rows.Scan(&seg, &up, &total, &down); err != nil {
+			return SLAWindowTimeline{}, fmt.Errorf("scan SLA timeline row for %s: %w", w.Name, err)
+		}
+		seg = min(max(seg, 0), int64(segCount)-1)
+		timeline.Segments[seg].Up += up
+		timeline.Segments[seg].Total += total
+		timeline.Segments[seg].DownBuckets += down
+		timeline.Up += up
+		timeline.Total += total
+		timeline.DownBuckets += down
+	}
+	if err := rows.Err(); err != nil {
+		return SLAWindowTimeline{}, fmt.Errorf("iterate SLA timeline for %s: %w", w.Name, err)
+	}
+	return timeline, nil
 }
 
 // MeasurementPoint is one time bucket of a check's measurement series: the sample
@@ -1739,90 +1792,177 @@ type MeasurementStat struct {
 	Max   float64 `json:"max"`
 }
 
-type aggregateRecordSpec struct {
-	query, kind, targetPrefix string
+// metricSeries identifies one stored numeric series in metric_archive. The four
+// families that used to have a table each — check latency, a check's declared
+// metrics, service runtime metrics and the daemon's own — differ only in these
+// key columns, so one statement per shape serves all of them.
+type metricSeries struct {
+	scope   string
+	service string
+	check   string
+	metric  string
 }
 
-var (
-	measurementRecordSpec = aggregateRecordSpec{
-		query: `INSERT INTO measurement (service, check_name, bucket, n, sum_ms, min_ms, max_ms)
-		 VALUES (?, ?, ?, 1, ?, ?, ?)
-		 ON CONFLICT(service, check_name, bucket) DO UPDATE SET
-		   n      = n + 1,
-		   sum_ms = sum_ms + excluded.sum_ms,
-		   min_ms = min(min_ms, excluded.min_ms),
-		   max_ms = max(max_ms, excluded.max_ms);`,
-		kind: "measurement", targetPrefix: " for ",
-	}
-	metricRecordSpec = aggregateRecordSpec{
-		query: `INSERT INTO measurement_metric (service, check_name, metric, bucket, n, sum_v, min_v, max_v)
-		 VALUES (?, ?, ?, ?, 1, ?, ?, ?)
-		 ON CONFLICT(service, check_name, metric, bucket) DO UPDATE SET
-		   n     = n + 1,
-		   sum_v = sum_v + excluded.sum_v,
-		   min_v = min(min_v, excluded.min_v),
-		   max_v = max(max_v, excluded.max_v);`,
-		kind: "metric", targetPrefix: " for ",
-	}
-	daemonMetricRecordSpec = aggregateRecordSpec{
-		query: `INSERT INTO daemon_metric (metric, bucket, n, sum_v, min_v, max_v)
-		 VALUES (?, ?, 1, ?, ?, ?)
-		 ON CONFLICT(metric, bucket) DO UPDATE SET
-		   n     = n + 1,
-		   sum_v = sum_v + excluded.sum_v,
-		   min_v = min(min_v, excluded.min_v),
-		   max_v = max(max_v, excluded.max_v);`,
-		kind: "daemon metric", targetPrefix: " ",
-	}
-	serviceMetricRecordSpec = aggregateRecordSpec{
-		query: `INSERT INTO service_metric (service, metric, bucket, n, sum_v, min_v, max_v)
-		 VALUES (?, ?, ?, 1, ?, ?, ?)
-		 ON CONFLICT(service, metric, bucket) DO UPDATE SET
-		   n     = n + 1,
-		   sum_v = sum_v + excluded.sum_v,
-		   min_v = min(min_v, excluded.min_v),
-		   max_v = max(max_v, excluded.max_v);`,
-		kind: "service metric", targetPrefix: " for ",
-	}
-)
+// checkLatencySeries is the measured latency of one service check.
+func checkLatencySeries(service, check string) metricSeries {
+	return metricSeries{scope: metricScopeLatency, service: service, check: check}
+}
 
-func (s *Store) recordAggregate(spec aggregateRecordSpec, first, second, third string, values ...any) error {
-	if _, err := s.exec(s.sqlCtx(), spec.query, values...); err != nil {
-		return fmt.Errorf("record %s%s%s: %w", spec.kind, spec.targetPrefix, aggregateRecordTarget(first, second, third), err)
+// checkMetricSeries is one of a check's declared numeric metrics.
+func checkMetricSeries(service, check, metric string) metricSeries {
+	return metricSeries{scope: metricScopeCheckMetric, service: service, check: check, metric: metric}
+}
+
+// serviceRuntimeSeries is one of a service process tree's runtime metrics.
+func serviceRuntimeSeries(service, metric string) metricSeries {
+	return metricSeries{scope: metricScopeService, service: service, metric: metric}
+}
+
+// daemonRuntimeSeries is one of sermod's own process metrics.
+func daemonRuntimeSeries(metric string) metricSeries {
+	return metricSeries{scope: metricScopeDaemon, metric: metric}
+}
+
+// kind and target name the series for an error message, derived from the scope and
+// the key columns. They are called only from the error branches: record runs for
+// every service, check and declared metric on every cycle, so building the target
+// eagerly would allocate once per call for a message that is almost never used.
+func (m metricSeries) kind() string {
+	switch m.scope {
+	case metricScopeLatency:
+		return "measurement"
+	case metricScopeService:
+		return "service metric"
+	case metricScopeDaemon:
+		return "daemon metric"
+	default:
+		return "metric"
+	}
+}
+
+func (m metricSeries) target() string {
+	keyParts := []string{m.service, m.check, m.metric}
+	parts := make([]string, 0, len(keyParts))
+	for _, part := range keyParts {
+		if part != "" {
+			parts = append(parts, part)
+		}
+	}
+	return strings.Join(parts, "/")
+}
+
+// record accumulates one observation into the series' current per-minute bucket:
+// n+1, sum+value and the running min/max.
+func (s *Store) record(m metricSeries, value float64, at time.Time) error {
+	if _, err := s.exec(s.sqlCtx(), metricRecordStmt,
+		resMinute, m.scope, m.service, m.check, m.metric, alignBucket(at, resMinute),
+		value, value, value,
+	); err != nil {
+		return fmt.Errorf("record %s for %s: %w", m.kind(), m.target(), err)
 	}
 	return nil
 }
 
-func aggregateRecordTarget(first, second, third string) string {
-	if third != "" {
-		return first + "/" + second + "/" + third
+// summary returns the series' average/min/max and sample count over the rolling
+// window ending at now. The average stays weight-correct at every resolution
+// because n and sum_v are consolidated together.
+func (s *Store) summary(m metricSeries, span time.Duration, now time.Time) (MeasurementStat, error) {
+	from := now.Add(-span)
+	stored := s.retention.archiveFor(from, now)
+	return summaryFromRow(s.reads().QueryRowContext(s.sqlCtx(), metricSummaryStmt,
+		stored.Res, m.scope, m.service, m.check, m.metric, alignBucket(from, stored.Res)))
+}
+
+// series returns the series' points in [from, to), oldest first, at the
+// resolution that window is stored at. Buckets with no observation are absent
+// (gaps), as in SLASeries.
+func (s *Store) series(m metricSeries, from, to time.Time) ([]MeasurementPoint, error) {
+	stored := s.retention.archiveFor(from, to)
+	// As in loadSLASeries the upper bound covers the bucket holding `to`, so the
+	// newest still-filling bucket stays in the series.
+	rows, err := s.reads().QueryContext(s.sqlCtx(), metricSeriesStmt,
+		stored.Res, m.scope, m.service, m.check, m.metric,
+		alignBucket(from, stored.Res), alignBucket(to, stored.Res)+stored.Res)
+	kind, target := m.kind(), m.target()
+	description := kind + " series for " + target
+	if err != nil {
+		return nil, fmt.Errorf("load %s: %w", description, err)
 	}
-	if second != "" {
-		return first + "/" + second
-	}
-	return first
+	return measurementPointsFromRows(rows, kind+" series row for "+target, description)
 }
 
 // RecordMeasurement accumulates one numeric observation (milliseconds) for a
-// service+check into its current UTC-minute bucket: n+1, sum+value, and the
-// running min/max.
+// service+check into its current UTC-minute bucket.
 func (s *Store) RecordMeasurement(service, check string, valueMs float64, at time.Time) error {
-	return s.recordAggregate(measurementRecordSpec, service, check, "", service, check, minuteBucket(at), valueMs, valueMs, valueMs)
+	return s.record(checkLatencySeries(service, check), valueMs, at)
 }
 
 // MeasurementSummary returns the average/min/max and sample count for a check over
-// the rolling window ending at now (buckets with start >= now-span).
+// the rolling window ending at now.
 func (s *Store) MeasurementSummary(service, check string, span time.Duration, now time.Time) (MeasurementStat, error) {
-	return summaryFromRow(s.reads().QueryRowContext(s.sqlCtx(),
-		`SELECT COALESCE(SUM(n),0), SUM(sum_ms), MIN(min_ms), MAX(max_ms)
-		   FROM measurement WHERE service = ? AND check_name = ? AND bucket >= ?;`,
-		service, check, minuteBucket(now.Add(-span))))
+	return s.summary(checkLatencySeries(service, check), span, now)
 }
 
-// summaryFromRow scans the COALESCE(SUM(n),0), SUM, MIN, MAX aggregate row
-// shared by the measurement and metric summaries into a MeasurementStat (avg =
-// sum/count, guarded against an empty bucket set), so both summaries express
-// only their differing query.
+// MeasurementSeries returns a check's latency points in [from, to), oldest first.
+func (s *Store) MeasurementSeries(service, check string, from, to time.Time) ([]MeasurementPoint, error) {
+	return s.series(checkLatencySeries(service, check), from, to)
+}
+
+// RecordMetric accumulates one observation of a named per-check metric (e.g.
+// hdparm "read" MB/s) into its current UTC-minute bucket. It is the generic
+// counterpart of RecordMeasurement (latency).
+func (s *Store) RecordMetric(service, check, metric string, value float64, at time.Time) error {
+	return s.record(checkMetricSeries(service, check, metric), value, at)
+}
+
+// MetricSummary returns a named metric's average/min/max and sample count over the
+// rolling window ending at now.
+func (s *Store) MetricSummary(service, check, metric string, span time.Duration, now time.Time) (MeasurementStat, error) {
+	return s.summary(checkMetricSeries(service, check, metric), span, now)
+}
+
+// MetricSeries returns a named metric's points in [from, to), oldest first.
+func (s *Store) MetricSeries(service, check, metric string, from, to time.Time) ([]MeasurementPoint, error) {
+	return s.series(checkMetricSeries(service, check, metric), from, to)
+}
+
+// RecordDaemonMetric accumulates one sermod process metric observation into its
+// current UTC-minute bucket.
+func (s *Store) RecordDaemonMetric(metric string, value float64, at time.Time) error {
+	return s.record(daemonRuntimeSeries(metric), value, at)
+}
+
+// DaemonMetricSummary returns a daemon metric's average/min/max and sample count
+// over the rolling window ending at now.
+func (s *Store) DaemonMetricSummary(metric string, span time.Duration, now time.Time) (MeasurementStat, error) {
+	return s.summary(daemonRuntimeSeries(metric), span, now)
+}
+
+// DaemonMetricSeries returns a daemon metric's points in [from, to), oldest first.
+func (s *Store) DaemonMetricSeries(metric string, from, to time.Time) ([]MeasurementPoint, error) {
+	return s.series(daemonRuntimeSeries(metric), from, to)
+}
+
+// RecordServiceMetric accumulates one service process-tree metric observation
+// into its current UTC-minute bucket.
+func (s *Store) RecordServiceMetric(service, metric string, value float64, at time.Time) error {
+	return s.record(serviceRuntimeSeries(service, metric), value, at)
+}
+
+// ServiceMetricSummary returns a service runtime metric's average/min/max and
+// sample count over the rolling window ending at now.
+func (s *Store) ServiceMetricSummary(service, metric string, span time.Duration, now time.Time) (MeasurementStat, error) {
+	return s.summary(serviceRuntimeSeries(service, metric), span, now)
+}
+
+// ServiceMetricSeries returns a service runtime metric's points in [from, to),
+// oldest first.
+func (s *Store) ServiceMetricSeries(service, metric string, from, to time.Time) ([]MeasurementPoint, error) {
+	return s.series(serviceRuntimeSeries(service, metric), from, to)
+}
+
+// summaryFromRow scans the COALESCE(SUM(n),0), SUM, MIN, MAX aggregate row into a
+// MeasurementStat (avg = sum/count, guarded against an empty bucket set).
 func summaryFromRow(row *sql.Row) (MeasurementStat, error) {
 	var count sql.NullInt64
 	var sum, minV, maxV sql.NullFloat64
@@ -1836,152 +1976,6 @@ func summaryFromRow(row *sql.Row) (MeasurementStat, error) {
 		stat.Max = maxV.Float64
 	}
 	return stat, nil
-}
-
-// MeasurementSeries returns a check's per-minute points in [from, to), oldest
-// first. Minutes with no observation are absent (gaps), as in SLASeries.
-func (s *Store) MeasurementSeries(service, check string, from, to time.Time) ([]MeasurementPoint, error) {
-	return s.aggregateSeries(
-		`SELECT bucket, n, sum_ms, min_ms, max_ms
-		   FROM measurement
-		  WHERE service = ? AND check_name = ? AND bucket >= ? AND bucket < ?
-		  ORDER BY bucket;`,
-		"measurement", service+"/"+check,
-		service, check, minuteBucket(from), minuteBucket(to),
-	)
-}
-
-// PruneMeasurements deletes measurement buckets older than before. Returns rows removed.
-func (s *Store) PruneMeasurements(before time.Time) (int64, error) {
-	return s.pruneBuckets(stateTableMeasurement, before)
-}
-
-// pruneBuckets deletes rows with a bucket older than before from one of the
-// per-minute bucket tables. table is always a compile-time literal, never
-// operator input.
-func (s *Store) pruneBuckets(table string, before time.Time) (int64, error) {
-	res, err := s.exec(s.sqlCtx(), `DELETE FROM `+table+` WHERE bucket < ?;`, minuteBucket(before))
-	if err != nil {
-		return 0, fmt.Errorf("prune %s buckets before %s: %w", table, before.UTC().Format(time.RFC3339), err)
-	}
-	n, err := res.RowsAffected()
-	if err != nil {
-		return 0, fmt.Errorf("read pruned %s row count: %w", table, err)
-	}
-	return n, nil
-}
-
-// RecordMetric accumulates one observation of a named per-check metric (e.g.
-// hdparm "read" MB/s) into its current UTC-minute bucket: n+1, sum+value and the
-// running min/max. It is the generic counterpart of RecordMeasurement (latency).
-func (s *Store) RecordMetric(service, check, metric string, value float64, at time.Time) error {
-	return s.recordAggregate(metricRecordSpec, service, check, metric, service, check, metric, minuteBucket(at), value, value, value)
-}
-
-// MetricSummary returns a named metric's average/min/max and sample count over the
-// rolling window ending at now.
-func (s *Store) MetricSummary(service, check, metric string, span time.Duration, now time.Time) (MeasurementStat, error) {
-	return summaryFromRow(s.reads().QueryRowContext(s.sqlCtx(),
-		`SELECT COALESCE(SUM(n),0), SUM(sum_v), MIN(min_v), MAX(max_v)
-		   FROM measurement_metric WHERE service = ? AND check_name = ? AND metric = ? AND bucket >= ?;`,
-		service, check, metric, minuteBucket(now.Add(-span))))
-}
-
-// MetricSeries returns a named metric's per-minute points in [from, to), oldest
-// first (minutes with no observation are absent).
-func (s *Store) MetricSeries(service, check, metric string, from, to time.Time) ([]MeasurementPoint, error) {
-	return s.aggregateSeries(
-		`SELECT bucket, n, sum_v, min_v, max_v
-		   FROM measurement_metric
-		  WHERE service = ? AND check_name = ? AND metric = ? AND bucket >= ? AND bucket < ?
-		  ORDER BY bucket;`,
-		"metric", service+"/"+check+"/"+metric,
-		service, check, metric, minuteBucket(from), minuteBucket(to),
-	)
-}
-
-// PruneMetrics deletes named-metric buckets older than before. Returns rows removed.
-func (s *Store) PruneMetrics(before time.Time) (int64, error) {
-	return s.pruneBuckets(stateTableMeasurementMetric, before)
-}
-
-// RecordDaemonMetric accumulates one sermod process metric observation into its
-// current UTC-minute bucket: n+1, sum+value and running min/max.
-func (s *Store) RecordDaemonMetric(metric string, value float64, at time.Time) error {
-	return s.recordAggregate(daemonMetricRecordSpec, metric, "", "", metric, minuteBucket(at), value, value, value)
-}
-
-// DaemonMetricSummary returns a daemon metric's average/min/max and sample count
-// over the rolling window ending at now.
-func (s *Store) DaemonMetricSummary(metric string, span time.Duration, now time.Time) (MeasurementStat, error) {
-	return summaryFromRow(s.reads().QueryRowContext(s.sqlCtx(),
-		`SELECT COALESCE(SUM(n),0), SUM(sum_v), MIN(min_v), MAX(max_v)
-		   FROM daemon_metric WHERE metric = ? AND bucket >= ?;`,
-		metric, minuteBucket(now.Add(-span))))
-}
-
-// DaemonMetricSeries returns a daemon metric's per-minute points in [from, to),
-// oldest first.
-func (s *Store) DaemonMetricSeries(metric string, from, to time.Time) ([]MeasurementPoint, error) {
-	return s.aggregateSeries(
-		`SELECT bucket, n, sum_v, min_v, max_v
-		   FROM daemon_metric
-		  WHERE metric = ? AND bucket >= ? AND bucket < ?
-		  ORDER BY bucket;`,
-		"daemon metric", metric,
-		metric, minuteBucket(from), minuteBucket(to),
-	)
-}
-
-// PruneDaemonMetrics deletes daemon metric buckets older than before. Returns rows removed.
-func (s *Store) PruneDaemonMetrics(before time.Time) (int64, error) {
-	return s.pruneBuckets(stateTableDaemonMetric, before)
-}
-
-// RecordServiceMetric accumulates one service process-tree metric observation
-// into its current UTC-minute bucket: n+1, sum+value and running min/max.
-func (s *Store) RecordServiceMetric(service, metric string, value float64, at time.Time) error {
-	return s.recordAggregate(serviceMetricRecordSpec, service, metric, "", service, metric, minuteBucket(at), value, value, value)
-}
-
-// ServiceMetricSummary returns a service runtime metric's average/min/max and
-// sample count over the rolling window ending at now.
-func (s *Store) ServiceMetricSummary(service, metric string, span time.Duration, now time.Time) (MeasurementStat, error) {
-	return summaryFromRow(s.reads().QueryRowContext(s.sqlCtx(),
-		`SELECT COALESCE(SUM(n),0), SUM(sum_v), MIN(min_v), MAX(max_v)
-		   FROM service_metric WHERE service = ? AND metric = ? AND bucket >= ?;`,
-		service, metric, minuteBucket(now.Add(-span))))
-}
-
-// ServiceMetricSeries returns a service runtime metric's per-minute points in
-// [from, to), oldest first.
-func (s *Store) ServiceMetricSeries(service, metric string, from, to time.Time) ([]MeasurementPoint, error) {
-	return s.aggregateSeries(
-		`SELECT bucket, n, sum_v, min_v, max_v
-		   FROM service_metric
-		  WHERE service = ? AND metric = ? AND bucket >= ? AND bucket < ?
-		  ORDER BY bucket;`,
-		"service metric", service+"/"+metric,
-		service, metric, minuteBucket(from), minuteBucket(to),
-	)
-
-}
-
-// aggregateSeries executes a static aggregate-series query and converts its
-// minute buckets. query is always a package literal; values remain bound query
-// parameters. kind and target preserve the callers' load, scan and iteration
-// context.
-func (s *Store) aggregateSeries(query, kind, target string, args ...any) ([]MeasurementPoint, error) {
-	description := kind + " series for " + target
-	rows, err := s.reads().QueryContext(s.sqlCtx(), query, args...)
-	if err != nil {
-		return nil, fmt.Errorf("load %s: %w", description, err)
-	}
-	return measurementPointsFromRows(
-		rows,
-		kind+" series row for "+target,
-		description,
-	)
 }
 
 // measurementPointsFromRows scans per-minute aggregate rows shared by every
@@ -2005,53 +1999,6 @@ func measurementPointsFromRows(rows *sql.Rows, scanContext, iterateContext strin
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("iterate %s: %w", iterateContext, err)
 	}
-	return out, nil
-}
-
-// PruneServiceMetrics deletes service runtime metric buckets older than before.
-// Returns rows removed.
-func (s *Store) PruneServiceMetrics(before time.Time) (int64, error) {
-	return s.pruneBuckets(stateTableServiceMetric, before)
-}
-
-// PruneSLA deletes SLA buckets older than before, bounding the table to roughly
-// one year of per-minute samples per service. Returns the rows removed.
-func (s *Store) PruneSLA(before time.Time) (int64, error) {
-	total, err := s.pruneBuckets(stateTableSLASample, before)
-	if err != nil {
-		return 0, err
-	}
-	rows, err := s.pruneBuckets(stateTableCheckSLASample, before)
-	if err != nil {
-		return 0, err
-	}
-	return total + rows, nil
-}
-
-// PruneHistory deletes old history from SLA, measurement, daemon runtime,
-// service runtime metric, and event tables.
-func (s *Store) PruneHistory(before time.Time) (PruneHistoryResult, error) {
-	var out PruneHistoryResult
-	var err error
-	if out.SLA, err = s.PruneSLA(before); err != nil {
-		return PruneHistoryResult{}, err
-	}
-	if out.Measurements, err = s.PruneMeasurements(before); err != nil {
-		return PruneHistoryResult{}, err
-	}
-	if out.Metrics, err = s.PruneMetrics(before); err != nil {
-		return PruneHistoryResult{}, err
-	}
-	if out.DaemonMetrics, err = s.PruneDaemonMetrics(before); err != nil {
-		return PruneHistoryResult{}, err
-	}
-	if out.ServiceMetrics, err = s.PruneServiceMetrics(before); err != nil {
-		return PruneHistoryResult{}, err
-	}
-	if out.Events, err = s.PruneEvents(before); err != nil {
-		return PruneHistoryResult{}, err
-	}
-	out.Rows = out.SLA + out.Measurements + out.Metrics + out.DaemonMetrics + out.ServiceMetrics + out.Events
 	return out, nil
 }
 

@@ -37,6 +37,15 @@ engine:
   user_lookup: auto  # auto | native | getent | numeric
   user_lookup_timeout: 250ms  # per-getent lookup timeout; cached in-process
   state_cache_size: 64M  # SQLite page cache for the state DB (K/M/G suffix)
+  # Stored history, one archive per graph window. Each archive keeps the bucket
+  # span that window actually draws, so the state DB stays bounded.
+  retention_1m: 3h  # per-minute buckets: the 1h graphs, and recent-incident detail
+  retention_5m: 30h  # 5-minute buckets: the 24h graphs
+  retention_1h: 216h  # hourly buckets: the 7d graphs
+  retention_6h: 912h  # 6-hourly buckets: the 30d graphs
+  retention_1d: 8784h  # daily buckets: the 1y graphs and the rolling-year SLA
+  retention_events: 720h  # event/activity feed, the only history keeping exact timestamps
+  rollup_interval: 5m  # cadence at which the daemon consolidates and prunes history
 
 paths:
   # Directory entries are non-recursive unless a list item uses

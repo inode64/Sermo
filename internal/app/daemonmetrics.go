@@ -14,7 +14,7 @@ import (
 
 const (
 	daemonMetricMaxInt64              = uint64(1<<63 - 1)
-	daemonMetricRetention             = state.DefaultHistoryRetention
+	daemonMetricRetention             = state.DefaultRetention1d
 	metricSeriesBucket                = time.Minute
 	defaultDaemonMetricSampleInterval = 30 * time.Second
 )

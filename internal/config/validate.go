@@ -98,6 +98,13 @@ var validEngineKeys = set(
 	EngineKeyEvents,
 	EngineKeyMaxParallelChecks,
 	EngineKeyOperationTimeout,
+	EngineKeyRetention1m,
+	EngineKeyRetention5m,
+	EngineKeyRetention1h,
+	EngineKeyRetention6h,
+	EngineKeyRetention1d,
+	EngineKeyRetentionEvents,
+	EngineKeyRollupInterval,
 	EngineKeyStartupDelay,
 	EngineKeyStateCacheSize,
 	EngineKeyUserLookup,
@@ -146,7 +153,12 @@ func validateGlobalEngine(raw map[string]any, add addFunc) {
 	if backend := cfgval.String(engine[EngineKeyBackend]); !isValidBackend(backend) {
 		add(validationNotOneOfFormat, enginePathBackend, backend, backendSummary)
 	}
-	for _, field := range []string{keyInterval, EngineKeyArtifactInterval, EngineKeyDefaultTimeout, EngineKeyOperationTimeout} {
+	for _, field := range []string{
+		keyInterval, EngineKeyArtifactInterval, EngineKeyDefaultTimeout, EngineKeyOperationTimeout,
+		EngineKeyRetention1m, EngineKeyRetention5m, EngineKeyRetention1h,
+		EngineKeyRetention6h, EngineKeyRetention1d, EngineKeyRetentionEvents,
+		EngineKeyRollupInterval,
+	} {
 		validatePositiveDurationField(engine, field, engineFieldPath(field), add)
 	}
 	if v, present := engine[EngineKeyStartupDelay]; present && !isNonNegativeDuration(cfgval.String(v)) {
