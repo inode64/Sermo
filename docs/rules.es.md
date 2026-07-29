@@ -397,14 +397,20 @@ leyendo el resultado en crudo.
 |---|---|---|---|
 | `health` | OK significa que el objetivo está disponible | `ok` / `fail` | se cuenta |
 | `condition` | OK significa que la condición se ha disparado, así que la disponibilidad se invierte | `ok` / `fail` | se cuenta |
-| `state` | OK significa que el estado sensado está presente; ninguna cara es buena ni mala | `active` / `inactive` | no se registra |
-| `value` | la comprobación mide y no juzga | la lectura | no se registra |
+| `state` | OK significa que el estado sensado está presente; ninguna cara es buena ni mala | `active` / `inactive` | `n/a` |
+| `value` | la comprobación mide y no juzga | `measured` más la lectura | `n/a` |
 
 Si se omite, el **tipo** de la comprobación aporta el valor por defecto: los tipos
 de salud (`tcp`, `http`, `service`, los protocolos de conexión…) usan `health`, y
 los de umbral y métrica `condition`. El tipo es solo el defecto: el mismo tipo
 puede ser una aserción de salud en un servicio y un sensor en otro, así que la
 comprobación tiene la última palabra.
+
+Los modos `state` y `value` no registran disponibilidad, así que su columna de
+SLA muestra `n/a` en vez de una serie vacía: no hay tiempo de servicio que
+acumular, y las ventanas registradas antes de declarar el modo se descartan en
+lugar de ir caducando. Tienen colores propios —informativo para un estado activo,
+apagado para uno inactivo— para que ninguno se confunda con el veredicto ok/fail.
 
 Una comprobación `condition` sigue mostrando `ok` / `fail`, no
 `active` / `inactive`: a diferencia de un sensor de estado, su cara disparada sí

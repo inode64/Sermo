@@ -147,6 +147,10 @@
   .status { font-weight: 600; }
   .active, .ok { color: var(--ok); }
   .inactive, .unknown { color: var(--warn); }
+  /* State-sensor readings: a sensed state is informative, not good or bad, so
+     it takes the info accent rather than the ok/fail green and red. */
+  .state-on { color: var(--info); font-weight: 600; }
+  .state-off { color: var(--text-2); }
   .failed, .error, .bad { color: var(--crit); }
   .target-state {
     display: inline-flex; align-items: center; gap: .38em;

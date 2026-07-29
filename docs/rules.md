@@ -397,14 +397,20 @@ check's raw outcome.
 |---|---|---|---|
 | `health` | OK means the target is available | `ok` / `fail` | counted |
 | `condition` | OK means the condition fired, so availability is inverted | `ok` / `fail` | counted |
-| `state` | OK means a sensed state is present; neither side is good or bad | `active` / `inactive` | not recorded |
-| `value` | the check measures and passes no judgement | the reading | not recorded |
+| `state` | OK means a sensed state is present; neither side is good or bad | `active` / `inactive` | `n/a` |
+| `value` | the check measures and passes no judgement | `measured` plus the reading | `n/a` |
 
 Omitted, the check **type** supplies the default: health-style types
 (`tcp`, `http`, `service`, the connection protocols, …) default to `health`, the
 threshold and metric types to `condition`. The type is only a default — the same
 type can be a health assertion in one service and a sensor in another, so the
 check has the last word.
+
+The `state` and `value` modes record no availability, so their SLA column reads
+`n/a` rather than an empty series: there is no uptime to accumulate, and any
+windows recorded before the mode was declared are dropped instead of ageing out.
+They keep their own colours — informative for a live state, muted for an idle
+one — so neither is mistaken for the ok/fail verdict.
 
 A `condition` check still reads `ok` / `fail`, not `active` / `inactive`: unlike
 a state sensor, its firing side really is a problem and has to look like one.

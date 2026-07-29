@@ -156,6 +156,43 @@ func onlyMissingProcesses(missing []string) bool {
 	return len(missing) == 1 && missing[0] == observabilityMissingProcesses
 }
 
+// checkView builds one check's detail row from its latest snapshot.
+func (b *WebBackend) checkView(service, cn string, e *webEntry, snap map[string]CheckSnapshot, now time.Time) web.Check {
+	cs, seen := snap[cn]
+	current := seen && b.serviceCheckSnapshotCurrent(e, cn, cs)
+	ch := web.Check{
+		Name:    cn,
+		Type:    e.checkTypes[cn],
+		Reports: e.checkReports[cn],
+		Stale:   seen && !current,
+		Ran:     current && cs.Ran,
+	}
+	if current {
+		// Availability, not the raw comparison: a condition check reports OK
+		// when its threshold is crossed, so passing it through unchanged would
+		// render a healthy sensor as "fail" next to a 100% SLA column. The
+		// service health above (and the SLA series) already use healthy().
+		ch.OK = cs.healthy()
+		ch.Optional = cs.Optional
+		ch.Skipped = cs.Skipped
+		ch.Message = cs.Message
+		ch.Readings = checkReadings(e.checkTypes[cn], cs.Data)
+	}
+	if seen && !cs.At.IsZero() {
+		ch.At = cs.At.UTC().Format(time.RFC3339)
+	}
+	for _, m := range checks.DeclaredGraphMetrics(e.checkTypes[cn], e.checkUnits[cn]) {
+		ch.Metrics = append(ch.Metrics, web.CheckMetric{Name: m.Key, Unit: m.Unit})
+	}
+	// A verdictless check records no availability, so it has no SLA to show.
+	// Skipping it here also drops whatever series it accumulated before the mode
+	// was declared, instead of leaving stale windows to age out.
+	if !checks.VerdictlessMode(ch.Reports) {
+		ch.SLA = b.checkSLAWindows(service, cn, now)
+	}
+	return ch
+}
+
 func (b *WebBackend) serviceCheckHealth(name string, e *webEntry, monitored bool) (int, string) {
 	if e == nil {
 		return 0, checkHealthUnknown
@@ -343,34 +380,7 @@ func (b *WebBackend) Detail(ctx context.Context, name string) (web.Detail, bool)
 
 	snap := b.snapshots.Get(name)
 	for _, cn := range e.checkNames {
-		cs, seen := snap[cn]
-		current := seen && b.serviceCheckSnapshotCurrent(e, cn, cs)
-		ch := web.Check{
-			Name:    cn,
-			Type:    e.checkTypes[cn],
-			Reports: e.checkReports[cn],
-			Stale:   seen && !current,
-			Ran:     current && cs.Ran,
-		}
-		if current {
-			// Availability, not the raw comparison: a condition check reports
-			// OK when its threshold is crossed, so passing it through unchanged
-			// would render a healthy sensor as "fail" next to a 100% SLA column.
-			// The service health above (and the SLA series) already use healthy().
-			ch.OK = cs.healthy()
-			ch.Optional = cs.Optional
-			ch.Skipped = cs.Skipped
-			ch.Message = cs.Message
-			ch.Readings = checkReadings(e.checkTypes[cn], cs.Data)
-		}
-		if seen && !cs.At.IsZero() {
-			ch.At = cs.At.UTC().Format(time.RFC3339)
-		}
-		for _, m := range checks.DeclaredGraphMetrics(e.checkTypes[cn], e.checkUnits[cn]) {
-			ch.Metrics = append(ch.Metrics, web.CheckMetric{Name: m.Key, Unit: m.Unit})
-		}
-		ch.SLA = b.checkSLAWindows(name, cn, now)
-		d.Checks = append(d.Checks, ch)
+		d.Checks = append(d.Checks, b.checkView(name, cn, e, snap, now))
 	}
 
 	if report, err := serviceLocksReport(b.cfg, name); err == nil {

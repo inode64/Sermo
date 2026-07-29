@@ -3400,18 +3400,37 @@ function serviceMetricState(name) {
   return state;
 }
 
+// verdictlessCheck reports whether a check passes no judgement, so it has no
+// availability: the SLA column reads "n/a" rather than "no data yet", which
+// would suggest a series that is merely still filling.
+function verdictlessCheck(c) {
+  return c.reports === "state" || c.reports === "value";
+}
+
 // checkStateHTML renders a check's state cell. A `reports: state` check is a
 // state sensor with no verdict — "a backup is running" is neither healthy nor
-// failing — so it reads active/inactive instead of ok/fail, and inactive stays
-// neutral rather than the warn-coloured `inactive` class used for stale.
+// failing — so it reads active/inactive instead of ok/fail, in its own colours:
+// informative for active, muted for inactive. Neither reuses the ok/fail green
+// and red, which would imply a judgement, nor the warn-coloured `inactive`
+// class used for stale.
 function checkStateHTML(c, age) {
   if (c.stale) return tpl`<span class="inactive">stale</span>${age}`;
   if (!c.ran) return c.at ? tpl`<span class="muted">cached</span>${age}` : tpl`<span class="muted">not run yet</span>`;
   if (c.skipped) return tpl`<span class="muted">skipped</span>${age}`;
   if (c.reports === "state") {
-    return c.ok ? tpl`<span class="active">active</span>${age}` : tpl`<span class="muted">inactive</span>${age}`;
+    return c.ok
+      ? tpl`<span class="state-on">active</span>${age}`
+      : tpl`<span class="state-off">inactive</span>${age}`;
   }
+  if (c.reports === "value") return tpl`<span class="state-on">measured</span>${age}`;
   return c.ok ? tpl`<span class="ok">ok</span>${age}` : tpl`<span class="bad">fail</span>${age}`;
+}
+
+// checkSLAHTML renders the SLA cell, or an explicit n/a for a check that will
+// never have one.
+function checkSLAHTML(c) {
+  if (verdictlessCheck(c)) return tpl`<span class="muted" title="This check reports no availability">n/a</span>`;
+  return renderSLAWindows(c.sla, true);
 }
 
 function renderServiceDetail(d) {
@@ -3429,7 +3448,7 @@ function renderServiceDetail(d) {
     const detailCell = (hasReadings || c.message) ? tpl`${readings}${msg}` : "—";
     return tpl`<tr><td>${c.name}</td><td class="muted">${c.type || ""}</td>
       <td>${state}${c.optional ? tpl` <span class="muted">(optional)</span>` : nothing}</td>
-      <td class="sla-cell">${renderSLAWindows(c.sla, true)}</td>
+      <td class="sla-cell">${checkSLAHTML(c)}</td>
       <td class="muted">${detailCell}</td></tr>`;
   });
   const checks = checkRows.length ? checkRows : tpl`<tr><td colspan="5" class="muted">No checks.</td></tr>`;

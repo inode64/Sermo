@@ -68,6 +68,14 @@ func ResolveCondition(typ, reports string) bool {
 // IsReportingMode reports whether s names a supported `reports:` value.
 func IsReportingMode(s string) bool { return slices.Contains(ReportingModes, s) }
 
+// VerdictlessMode reports whether a declared `reports:` value passes no
+// judgement, so the check has no availability to report. The configured
+// counterpart of Result.Verdictless, for callers that hold the declaration
+// rather than a result.
+func VerdictlessMode(reports string) bool {
+	return reports == ReportsState || reports == ReportsValue
+}
+
 // Result is the observable outcome of one check.
 type Result struct {
 	Service string `json:"service,omitempty"`
