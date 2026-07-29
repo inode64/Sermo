@@ -120,6 +120,13 @@ notifiers:
     enabled: false  # keep configured but skip delivery
     type: teams
     webhook: "https://prod-01.westeurope.logic.azure.com:443/workflows/x"
+  ops-telegram:
+    type: telegram
+    token: "${env:TELEGRAM_TOKEN:-123456789:AAF...XXXX}"
+    chat_id: "-1001234567890"
+    parse_mode: MarkdownV2  # optional: HTML, Markdown or MarkdownV2
+    silent: true  # optional: deliver without sound
+    message_thread_id: 42  # optional: post into a forum topic
   tty:
     type: tty
     users: [root]  # optional; omit to notify every active terminal
@@ -129,6 +136,15 @@ notifiers:
 # Default targets for watches/rules that omit notify; notify: [none] suppresses
 # delivery per site (a watch whose only action is [none] is monitor-only).
 notify: [ops-email]
+
+# Interactive read-only Telegram report bot (long polling; no inbound port).
+# Distinct from a `telegram` notifier: it answers /status, /services, /sla, ...
+# from allow-listed chats only, and can never change the host.
+telegram_bot:
+  enabled: true
+  token: "${env:TELEGRAM_BOT_TOKEN:-123456789:AAF...XXXX}"
+  allowed_chats: [123456789, -1001234567890]
+  poll_interval: 30s
 
 # Host watches: one entry per concern. This reference groups several examples
 # only to keep the schema readable; real config stores each watch as its own
