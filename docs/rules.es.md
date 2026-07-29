@@ -6,6 +6,7 @@
   - [Condiciones de salud del servicio (versión / estado / configuración)](#condiciones-de-salud-del-servicio-versión--estado--configuración)
   - [Interfaz de salida (interface)](#interfaz-de-salida-interface)
   - [Interdependencias de comprobaciones (requires / skip_when_changed)](#interdependencias-de-comprobaciones-requires--skip_when_changed)
+  - [Modo de reporte (reports)](#modo-de-reporte-reports)
   - [Ports](#ports)
   - [HTTP](#http)
   - [Cert](#cert)
@@ -384,6 +385,47 @@ rules:
           message: "${service} will restart after library change: ${change.library}"
         - type: restart
 ```
+
+### Modo de reporte (`reports`)
+
+`reports:` declara qué *significa* el resultado de una comprobación, que es lo
+que decide la disponibilidad, el SLA y cómo la etiqueta el panel. No cambia cómo
+se ejecuta la sonda, y **no afecta a las reglas**: `active:` / `failed:` siguen
+leyendo el resultado en crudo.
+
+| modo | significado | panel | SLA |
+|---|---|---|---|
+| `health` (por defecto) | OK significa que el objetivo está disponible | `ok` / `fail` | se cuenta |
+| `state` | OK significa que el estado sensado está presente; ninguna cara es buena ni mala | `active` / `inactive` | no se registra |
+
+Usa `state` cuando la comprobación existe para responder «¿está pasando esto
+ahora?» y no para afirmar que algo debe cumplirse. El watch `backup` del catálogo
+es el caso: detecta una copia en curso para que un guard pueda bloquear un
+reinicio, y un host sin copia en marcha es lo normal, no algo enfermo.
+
+```yaml
+watches:
+  backup:
+    check:
+      type: process
+      reports: state              # active / inactive, sin veredicto ni SLA
+      exe_any: [/usr/bin/pg_dump, /usr/bin/pgbackrest]
+      user: postgres
+      state: running              # lo que se sensa — no tiene que ver con `reports`
+rules:
+  block-restart-during-backup:
+    type: guard
+    blocks: [restart]
+    if:
+      active: { check: backup }   # sigue leyendo el resultado en crudo
+    then:
+      action: block
+      message: backup is running; restart denied
+```
+
+Sin esto, una comprobación así es una aserción de salud que falla siempre que el
+estado está ausente: un `fail` rojo permanente y una serie de disponibilidad al
+0 % para lo que en realidad es la condición normal.
 
 ### Ports
 

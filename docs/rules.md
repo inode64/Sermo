@@ -6,7 +6,8 @@
   - [Service health conditions (version / state / config)](#service-health-conditions-version--state--config)
   - [Egress interface (interface)](#egress-interface-interface)
   - [Check interdependencies (requires / skip_when_changed)](#check-interdependencies-requires--skip_when_changed)
-  - [Ports](#ports)
+  - [Reporting mode (reports)](#reporting-mode-reports)
+- [Ports](#ports)
   - [HTTP](#http)
   - [Cert](#cert)
   - [Database connection (mysql / mariadb)](#database-connection-mysql--mariadb)
@@ -384,6 +385,47 @@ rules:
           message: "${service} will restart after library change: ${change.library}"
         - type: restart
 ```
+
+### Reporting mode (`reports`)
+
+`reports:` declares what a check's result *means*, which is what decides
+availability, SLA and how the dashboard labels it. It does not change how the
+probe runs, and **rules are unaffected**: `active:` / `failed:` keep reading the
+check's raw outcome.
+
+| mode | meaning | dashboard | SLA |
+|---|---|---|---|
+| `health` (default) | OK means the target is available | `ok` / `fail` | counted |
+| `state` | OK means a sensed state is present; neither side is good or bad | `active` / `inactive` | not recorded |
+
+Use `state` for a check that exists to answer "is this happening right now?"
+rather than to assert something must hold. The catalog's `backup` watch is the
+case: it detects a running backup so a guard can block a restart, and a host
+with no backup in progress is normal, not unhealthy.
+
+```yaml
+watches:
+  backup:
+    check:
+      type: process
+      reports: state              # active / inactive, no verdict, no SLA
+      exe_any: [/usr/bin/pg_dump, /usr/bin/pgbackrest]
+      user: postgres
+      state: running              # what is sensed — unrelated to `reports`
+rules:
+  block-restart-during-backup:
+    type: guard
+    blocks: [restart]
+    if:
+      active: { check: backup }   # still reads the raw outcome
+    then:
+      action: block
+      message: backup is running; restart denied
+```
+
+Without it, such a check is a health assertion that fails whenever the state is
+absent — a permanent red `fail` and a 0% availability series for what is in fact
+the normal condition.
 
 ### Ports
 

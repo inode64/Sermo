@@ -94,6 +94,7 @@ watches:
   backup:
     check:
       type: process
+      reports: state
       optional: true
       exe_any:
         - /usr/bin/mariadb-dump

@@ -922,3 +922,43 @@ func TestCommandCheckAnalyzeClean(t *testing.T) {
 		t.Fatalf("no pattern match must pass, got %+v", res)
 	}
 }
+
+// Availability semantics per reporting mode. A state sensor asserts nothing
+// about availability, so neither side of it is ever unhealthy; rules keep
+// reading OK directly, which is what a guard like block-restart-during-backup
+// depends on.
+func TestResultHealthyByReportingMode(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		result  Result
+		healthy bool
+	}{
+		{"health check passing", Result{OK: true}, true},
+		{"health check failing", Result{OK: false}, false},
+		{"condition under threshold", Result{OK: false, Condition: true}, true},
+		{"condition crossed", Result{OK: true, Condition: true}, false},
+		{"state sensor active", Result{OK: true, Reports: ReportsState}, true},
+		{"state sensor inactive", Result{OK: false, Reports: ReportsState}, true},
+		{"explicit health mode", Result{OK: false, Reports: ReportsHealth}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := tc.result.Healthy(); got != tc.healthy {
+				t.Errorf("Healthy() = %v, want %v", got, tc.healthy)
+			}
+		})
+	}
+}
+
+func TestIsReportingMode(t *testing.T) {
+	for _, mode := range ReportingModes {
+		if !IsReportingMode(mode) {
+			t.Errorf("IsReportingMode(%q) = false, want true", mode)
+		}
+	}
+	if IsReportingMode("running") {
+		t.Error(`IsReportingMode("running") = true; the mode names how a check reports, not what it senses`)
+	}
+	if IsReportingMode("") {
+		t.Error(`IsReportingMode("") = true; an empty mode is the absent default, not a valid value`)
+	}
+}
