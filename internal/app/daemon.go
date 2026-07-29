@@ -22,6 +22,7 @@ import (
 	"sermo/internal/rules"
 	"sermo/internal/servicemgr"
 	"sermo/internal/state"
+	"sermo/internal/telegrambot"
 	"sermo/internal/web"
 )
 
@@ -288,6 +289,9 @@ type Deps struct {
 	Events *EventLog
 	// DiagnosticLog exports scheduled diagnostics to engine.diagnostics when set.
 	DiagnosticLog *DiagnosticLog
+	// TelegramBot is the interactive read-only report bot. Optional: nil when the
+	// `telegram_bot` section is absent. It is refreshed on reload via UpdateConfig.
+	TelegramBot *telegrambot.Bot
 	// SystemFreshness caches system metrics so concurrent workers in one cycle
 	// share a computation; it must be below the scheduler interval.
 	SystemFreshness time.Duration

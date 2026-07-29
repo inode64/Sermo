@@ -57,6 +57,7 @@ configuration omits it.
 - [Notifications](#notifications)
   - [Notification templates](#notification-templates)
   - [Default selection and precedence](#default-selection-and-precedence)
+- [Telegram report bot](#telegram-report-bot)
 - [Host watches](#host-watches)
   - [then.expand — volume growth (storage watch)](#thenexpand--volume-growth-storage-watch)
   - [Manual RAID reconstruction control](#manual-raid-reconstruction-control)
@@ -1253,10 +1254,19 @@ notifiers:
 
 - **`telegram`** — sends through a **Telegram bot** (`sendMessage`).
   - **`token`** — the bot token from `@BotFather`. It stays inside the API URL
-    and never appears on the dashboard.
+    and never appears on the dashboard. Prefer `${env:...}`; when it resolves
+    empty (the variable is unset) the notifier stays inactive instead of failing
+    config load.
   - **`chat_id`** — the numeric chat/group id or an `@channel` name. The
     subject is the lead line and the detail (the `SERMO_*` fields) follows as
     plain text.
+  - **`parse_mode`** *(optional)* — `MarkdownV2`, `Markdown` or `HTML` to render
+    the message as formatted text (bold, code, links) instead of plain text. Omit
+    for plain text.
+  - **`silent`** *(optional)* — `true` delivers the message quietly, with no
+    sound or vibration (Bot API `disable_notification`).
+  - **`message_thread_id`** *(optional)* — an integer forum-topic id, to post
+    into a specific topic within a group.
 
 ```yaml
 # /etc/sermo/notifiers/telegram.yml
@@ -1265,6 +1275,9 @@ notifiers:
     type: telegram
     token: "123456789:AAF...XXXX"
     chat_id: -1001234567890
+    # parse_mode: MarkdownV2       # optional: format the message text
+    # silent: true                 # optional: deliver without sound
+    # message_thread_id: 42        # optional: post into a forum topic
 ```
 
 - **`tty`** — writes directly to active Linux terminal sessions, similar to
@@ -1393,6 +1406,59 @@ entire `then` key on a watch (or per-metric) is another way to get pure
 alert-only behaviour (firing state + events in the UI and log, but no actions
 and no inheritance of globals). See the host watches section below for the
 bare `check` + `for` example.
+
+## Telegram report bot
+
+The optional top-level **`telegram_bot`** section runs an interactive,
+**read-only** Telegram bot inside `sermod`. Where a `telegram` notifier *pushes*
+alerts, the bot lets an operator *ask* for reports on demand: send it `/status`
+and it replies with the current fleet summary. It can never change the host — it
+only reads the same state the web dashboard serves.
+
+It receives commands over Bot API **long polling** (`getUpdates`), so it needs
+no inbound port, no public exposure and no reverse proxy — matching Sermo's
+outbound-only posture. The bot token stays inside the API URL and is scrubbed
+from logs and errors, exactly like the `telegram` notifier.
+
+```yaml
+# /etc/sermo/sermo.yml (or a drop-in fragment)
+telegram_bot:
+  token: "${env:TELEGRAM_BOT_TOKEN}"   # bot token from @BotFather
+  allowed_chats:                       # required: only these chats are answered
+    - 123456789
+    - -1001234567890
+  # poll_interval: 30s                 # optional getUpdates long-poll timeout
+  # enabled: false                     # optional; omitted => enabled
+```
+
+- **`token`** — the bot token from `@BotFather` (used for both `getUpdates` and
+  replies). Prefer `${env:...}` so it is not written in a file. Optional: when it
+  resolves empty (the env var is unset) the bot simply stays inactive and the
+  rest of the config still loads.
+- **`allowed_chats`** — the list of numeric chat ids the bot answers. A message
+  from any other chat is ignored, never answered. This is the access control:
+  keep it to the operators/groups that may query the daemon.
+- **`poll_interval`** *(optional)* — the long-poll timeout, default `30s`,
+  clamped to `1s`–`10m`.
+- **`enabled`** *(optional)* — set `false` to keep the section but stop polling.
+
+Commands (all read-only):
+
+| Command | Reply |
+| --- | --- |
+| `/status` | fleet summary: services ok/failing, monitored/paused, recent errors, host uptime |
+| `/services [name]` | the service list, or one named service's state and health |
+| `/watches` | host and service watch states |
+| `/sla <service>` | availability windows (hour…year) for a service |
+| `/events [count]` | the most recent events (default 10, max 50) |
+| `/help` | the command list |
+
+Reloading (`sermoctl daemon reload` / `SIGHUP`) applies changes to `token`,
+`allowed_chats` and `poll_interval` without a restart. Because the goroutine is
+only started at boot when the section is present, **enabling the bot for the
+first time requires a restart** (the same rule the web UI follows for its port).
+On startup the bot discards any commands queued while it was down, so a restart
+never replays old requests.
 
 ## Host watches
 
