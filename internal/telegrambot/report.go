@@ -69,9 +69,35 @@ const (
 	EventsMaxLimit     = 50
 )
 
+// Fallbacks for fields a report may not carry. Named so the same field reads
+// the same way in every reply: the service list and the service detail render
+// one service, and must not disagree about how an unknown state looks.
+const (
+	fallbackUnknownField = "?"
+	fallbackHealth       = "unknown"
+	fallbackHost         = "host"
+)
+
+// listReply renders the shared shape of every list command: an empty-state
+// line, a "Header (n):" lead and one bullet per item.
+func listReply[T any](header, empty string, items []T, line func(T) string) string {
+	if len(items) == 0 {
+		return empty
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "%s (%d):\n", header, len(items))
+	for _, item := range items {
+		fmt.Fprintf(&b, "- %s\n", line(item))
+	}
+	return trimReply(&b)
+}
+
+// trimReply drops the trailing newline every builder-based reply accumulates.
+func trimReply(b *strings.Builder) string { return strings.TrimRight(b.String(), "\n") }
+
 func formatStatus(r StatusReport) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "Sermo status — %s\n", nonEmpty(r.Host, "host"))
+	fmt.Fprintf(&b, "Sermo status — %s\n", nonEmpty(r.Host, fallbackHost))
 	fmt.Fprintf(&b, "Services: %d (ok %d, failing %d)\n", r.Services, r.OK, r.Failing)
 	fmt.Fprintf(&b, "Monitoring: %d monitored, %d paused\n", r.Monitored, r.Paused)
 	fmt.Fprintf(&b, "Recent errors: %d\n", r.Errors)
@@ -81,20 +107,17 @@ func formatStatus(r StatusReport) string {
 	if r.HostUptime != "" {
 		fmt.Fprintf(&b, "Host uptime: %s\n", r.HostUptime)
 	}
-	return strings.TrimRight(b.String(), "\n")
+	return trimReply(&b)
 }
 
 func formatServices(lines []ServiceLine) string {
-	if len(lines) == 0 {
-		return "No services configured."
-	}
-	var b strings.Builder
-	fmt.Fprintf(&b, "Services (%d):\n", len(lines))
-	for _, s := range lines {
-		fmt.Fprintf(&b, "- %s: %s / %s%s\n", s.Name, nonEmpty(s.State, "?"), nonEmpty(s.Health, "unknown"), monitorSuffix(s.Monitored))
-	}
-	return strings.TrimRight(b.String(), "\n")
+	return listReply("Services", "No services configured.", lines, func(s ServiceLine) string {
+		return fmt.Sprintf("%s: %s / %s%s", s.Name, serviceState(s), serviceHealth(s), monitorSuffix(s.Monitored))
+	})
 }
+
+func serviceState(s ServiceLine) string  { return nonEmpty(s.State, fallbackUnknownField) }
+func serviceHealth(s ServiceLine) string { return nonEmpty(s.Health, fallbackHealth) }
 
 func formatServiceDetail(s ServiceLine) string {
 	mon := "monitored"
@@ -102,21 +125,18 @@ func formatServiceDetail(s ServiceLine) string {
 		mon = "not monitored"
 	}
 	return fmt.Sprintf("%s\nState: %s\nHealth: %s\nMonitoring: %s",
-		s.Name, nonEmpty(s.State, "?"), nonEmpty(s.Health, "unknown"), mon)
+		s.Name, serviceState(s), serviceHealth(s), mon)
 }
 
 func formatWatches(lines []WatchLine) string {
-	if len(lines) == 0 {
-		return "No watches configured."
-	}
-	var b strings.Builder
-	fmt.Fprintf(&b, "Watches (%d):\n", len(lines))
-	for _, w := range lines {
-		fmt.Fprintf(&b, "- %s (%s): %s%s\n", w.Name, nonEmpty(w.Scope, "?"), nonEmpty(w.State, "?"), monitorSuffix(w.Monitored))
-	}
-	return strings.TrimRight(b.String(), "\n")
+	return listReply("Watches", "No watches configured.", lines, func(w WatchLine) string {
+		return fmt.Sprintf("%s (%s): %s%s", w.Name,
+			nonEmpty(w.Scope, fallbackUnknownField), nonEmpty(w.State, fallbackUnknownField), monitorSuffix(w.Monitored))
+	})
 }
 
+// formatSLA keeps its own shape: the lead names the service instead of counting
+// the windows, so listReply's "Header (n):" would read wrong.
 func formatSLA(service string, windows []SLAWindow) string {
 	if len(windows) == 0 {
 		return fmt.Sprintf("No SLA data for %s.", service)
@@ -126,23 +146,17 @@ func formatSLA(service string, windows []SLAWindow) string {
 	for _, w := range windows {
 		fmt.Fprintf(&b, "- %s: %s\n", w.Window, w.Ratio)
 	}
-	return strings.TrimRight(b.String(), "\n")
+	return trimReply(&b)
 }
 
 func formatEvents(lines []EventLine) string {
-	if len(lines) == 0 {
-		return "No recent events."
-	}
-	var b strings.Builder
-	fmt.Fprintf(&b, "Recent events (%d):\n", len(lines))
-	for _, e := range lines {
+	return listReply("Recent events", "No recent events.", lines, func(e EventLine) string {
 		target := ""
 		if e.Target != "" {
 			target = " " + e.Target
 		}
-		fmt.Fprintf(&b, "- %s [%s]%s: %s\n", e.Time, nonEmpty(e.Kind, "?"), target, e.Message)
-	}
-	return strings.TrimRight(b.String(), "\n")
+		return fmt.Sprintf("%s [%s]%s: %s", e.Time, nonEmpty(e.Kind, fallbackUnknownField), target, e.Message)
+	})
 }
 
 func monitorSuffix(monitored bool) string {

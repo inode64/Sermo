@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"sermo/internal/telegramapi"
 	"strings"
 	"testing"
 	"time"
@@ -28,7 +29,7 @@ func testClient(base, token string) *client {
 func TestGetUpdatesParsesMessages(t *testing.T) {
 	const token = "123:abc"
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !strings.HasSuffix(r.URL.Path, "/bot"+token+"/"+telegramGetUpdatesMethod) {
+		if !strings.HasSuffix(r.URL.Path, "/bot"+token+"/"+telegramapi.MethodGetUpdates) {
 			t.Errorf("unexpected path %q", r.URL.Path)
 		}
 		var body struct {
@@ -40,7 +41,7 @@ func TestGetUpdatesParsesMessages(t *testing.T) {
 		if body.Offset != 7 || body.Timeout != 30 || len(body.AllowedUpdates) != 1 || body.AllowedUpdates[0] != "message" {
 			t.Errorf("unexpected getUpdates request: %+v", body)
 		}
-		io.WriteString(w, `{"ok":true,"result":[{"update_id":9,"message":{"message_id":1,"chat":{"id":42,"type":"private"},"text":"/status"}}]}`)
+		_, _ = io.WriteString(w, `{"ok":true,"result":[{"update_id":9,"message":{"message_id":1,"chat":{"id":42,"type":"private"},"text":"/status"}}]}`)
 	}))
 	defer srv.Close()
 
@@ -61,11 +62,11 @@ func TestSendMessagePostsChatAndText(t *testing.T) {
 		MessageThreadID int    `json:"message_thread_id"`
 	}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !strings.HasSuffix(r.URL.Path, "/"+telegramSendMessageMethod) {
+		if !strings.HasSuffix(r.URL.Path, "/"+telegramapi.MethodSendMessage) {
 			t.Errorf("unexpected path %q", r.URL.Path)
 		}
 		_ = json.NewDecoder(r.Body).Decode(&got)
-		io.WriteString(w, `{"ok":true}`)
+		_, _ = io.WriteString(w, `{"ok":true}`)
 	}))
 	defer srv.Close()
 
@@ -81,7 +82,7 @@ func TestSendMessageOmitsThreadWhenZero(t *testing.T) {
 	var raw map[string]any
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewDecoder(r.Body).Decode(&raw)
-		io.WriteString(w, `{"ok":true}`)
+		_, _ = io.WriteString(w, `{"ok":true}`)
 	}))
 	defer srv.Close()
 
@@ -96,7 +97,7 @@ func TestSendMessageOmitsThreadWhenZero(t *testing.T) {
 func TestCallReportsAPIError(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
-		io.WriteString(w, `{"ok":false,"description":"chat not found"}`)
+		_, _ = io.WriteString(w, `{"ok":false,"description":"chat not found"}`)
 	}))
 	defer srv.Close()
 
@@ -114,7 +115,7 @@ func TestCallScrubsTokenFromTransportError(t *testing.T) {
 		// request URL — for Telegram that URL carries the bot token.
 		return nil, &url.Error{Op: "Post", URL: r.URL.String(), Err: errors.New("dial tcp: refused")}
 	})
-	err := c.call(context.Background(), telegramGetUpdatesMethod, map[string]any{}, nil)
+	err := c.call(context.Background(), telegramapi.MethodGetUpdates, map[string]any{}, nil)
 	if err == nil {
 		t.Fatal("expected an error")
 	}

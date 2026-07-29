@@ -12,12 +12,10 @@ import (
 
 	"sermo/internal/httpx"
 	"sermo/internal/netutil"
+	"sermo/internal/telegramapi"
 )
 
 const (
-	telegramAPIBase           = "https://api.telegram.org/bot"
-	telegramGetUpdatesMethod  = "getUpdates"
-	telegramSendMessageMethod = "sendMessage"
 	// pollClientMargin extends the HTTP timeout past the long-poll timeout so a
 	// legitimately held-open getUpdates is not cut off by the client.
 	pollClientMargin = 10 * time.Second
@@ -30,7 +28,7 @@ const (
 // httpDoer performs an HTTP request; *http.Client satisfies it. Injected so
 // tests exercise the client without real network I/O.
 type httpDoer interface {
-	Do(*http.Request) (*http.Response, error)
+	Do(req *http.Request) (*http.Response, error)
 }
 
 // client talks to the Telegram Bot API for one bot token. The token lives only
@@ -43,7 +41,7 @@ type client struct {
 
 func newClient(token string, timeout time.Duration) *client {
 	return &client{
-		base:  telegramAPIBase,
+		base:  telegramapi.APIBase,
 		token: token,
 		http:  &http.Client{Timeout: timeout, Transport: httpx.CloneDefaultTransport()},
 	}
@@ -74,16 +72,16 @@ type chat struct {
 // up to timeout. Only message updates are requested.
 func (c *client) getUpdates(ctx context.Context, offset int64, timeout time.Duration) ([]update, error) {
 	body := map[string]any{
-		"offset":          offset,
-		"timeout":         int(timeout / time.Second),
-		"allowed_updates": []string{"message"},
+		telegramapi.FieldOffset:         offset,
+		telegramapi.FieldTimeout:        int(timeout / time.Second),
+		telegramapi.FieldAllowedUpdates: []string{telegramapi.UpdateTypeMessage},
 	}
 	var resp struct {
 		OK          bool     `json:"ok"`
 		Result      []update `json:"result"`
 		Description string   `json:"description"`
 	}
-	if err := c.call(ctx, telegramGetUpdatesMethod, body, &resp); err != nil {
+	if err := c.call(ctx, telegramapi.MethodGetUpdates, body, &resp); err != nil {
 		return nil, err
 	}
 	if !resp.OK {
@@ -95,15 +93,15 @@ func (c *client) getUpdates(ctx context.Context, offset int64, timeout time.Dura
 // sendMessage posts a plain-text reply to chatID, optionally within a forum
 // topic thread (threadID 0 means the chat's main timeline).
 func (c *client) sendMessage(ctx context.Context, chatID int64, threadID int, text string) error {
-	body := map[string]any{"chat_id": chatID, "text": text}
+	body := map[string]any{telegramapi.FieldChatID: chatID, telegramapi.FieldText: text}
 	if threadID != 0 {
-		body["message_thread_id"] = threadID
+		body[telegramapi.FieldThreadID] = threadID
 	}
 	var resp struct {
 		OK          bool   `json:"ok"`
 		Description string `json:"description"`
 	}
-	if err := c.call(ctx, telegramSendMessageMethod, body, &resp); err != nil {
+	if err := c.call(ctx, telegramapi.MethodSendMessage, body, &resp); err != nil {
 		return err
 	}
 	if !resp.OK {

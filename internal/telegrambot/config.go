@@ -11,6 +11,7 @@
 package telegrambot
 
 import (
+	"slices"
 	"time"
 
 	"sermo/internal/cfgval"
@@ -77,10 +78,5 @@ func (c Config) active() bool { return c.Enabled && c.Token != "" }
 
 // allows reports whether chat id may command the bot.
 func (c Config) allows(chatID int64) bool {
-	for _, id := range c.AllowedChats {
-		if id == chatID {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(c.AllowedChats, chatID)
 }

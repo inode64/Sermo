@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"sermo/internal/telegramapi"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -38,7 +39,7 @@ func (f *fakeReporter) Events(_ context.Context, limit int) ([]EventLine, error)
 	return f.events, f.err
 }
 
-func discardLogger() *slog.Logger { return slog.New(slog.NewTextHandler(io.Discard, nil)) }
+func discardLogger() *slog.Logger { return slog.New(slog.DiscardHandler) }
 
 func TestParseCommand(t *testing.T) {
 	cases := []struct {
@@ -127,7 +128,7 @@ func TestHandleUpdateAuthorization(t *testing.T) {
 	var sends atomic.Int32
 	var lastText string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasSuffix(r.URL.Path, "/"+telegramSendMessageMethod) {
+		if strings.HasSuffix(r.URL.Path, "/"+telegramapi.MethodSendMessage) {
 			sends.Add(1)
 			var body struct {
 				Text string `json:"text"`
@@ -135,7 +136,7 @@ func TestHandleUpdateAuthorization(t *testing.T) {
 			_ = json.NewDecoder(r.Body).Decode(&body)
 			lastText = body.Text
 		}
-		io.WriteString(w, `{"ok":true}`)
+		_, _ = io.WriteString(w, `{"ok":true}`)
 	}))
 	defer srv.Close()
 

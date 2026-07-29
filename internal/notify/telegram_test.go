@@ -3,6 +3,7 @@ package notify
 import (
 	"context"
 	"encoding/json"
+	"sermo/internal/telegramapi"
 	"strings"
 	"testing"
 )
@@ -33,7 +34,7 @@ func TestTelegramSendPostsSendMessage(t *testing.T) {
 	if err := n.Send(context.Background(), Message{Subject: "[sermo] ssh: memory high", Body: "SERMO_SERVICE=ssh"}); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.HasPrefix(gotURL, telegramAPIBase) || !strings.HasSuffix(gotURL, telegramSendMessagePath) || !strings.Contains(gotURL, "123:abc") {
+	if !strings.HasPrefix(gotURL, telegramapi.APIBase) || !strings.HasSuffix(gotURL, "/"+telegramapi.MethodSendMessage) || !strings.Contains(gotURL, "123:abc") {
 		t.Fatalf("posted to %q, want the bot sendMessage URL", gotURL)
 	}
 	var body struct {
@@ -94,7 +95,7 @@ func TestTelegramSendOmitsUnsetOptions(t *testing.T) {
 		t.Fatalf("payload not JSON: %v (%s)", err, gotPayload)
 	}
 	// A plain notifier must post exactly the fields it always did.
-	for _, k := range []string{telegramParseModeKey, telegramSilentKey, telegramThreadIDKey} {
+	for _, k := range []string{telegramapi.FieldParseMode, telegramapi.FieldSilent, telegramapi.FieldThreadID} {
 		if _, ok := body[k]; ok {
 			t.Fatalf("unset option %q should be omitted, got %v", k, body)
 		}
