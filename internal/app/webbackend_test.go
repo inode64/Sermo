@@ -2213,3 +2213,45 @@ func TestWebBackendDetailCarriesReportingMode(t *testing.T) {
 		t.Errorf("port reports = %q, want empty for the default health semantics", got["port"])
 	}
 }
+
+// A verdictless check reports no availability, so the detail must carry no SLA
+// windows for it: an empty series renders as "n/a", while stale windows left
+// over from before the mode was declared would keep implying uptime it never had.
+func TestWebBackendDetailOmitsSLAForVerdictlessChecks(t *testing.T) {
+	snaps := NewSnapshots()
+	snaps.PublishWithCheckTypes("web", map[string]checks.Result{
+		"backup": {Check: "backup", OK: false, Reports: checks.ReportsState},
+		"gauge":  {Check: "gauge", OK: true, Reports: checks.ReportsValue},
+		"port":   {Check: "port", OK: true},
+	}, map[string]bool{"backup": true, "gauge": true, "port": true},
+		map[string]string{"backup": "process", "gauge": "sql", "port": "tcp"})
+
+	b := webBackendWithEntry(snaps, []string{"backup", "gauge", "port"},
+		map[string]string{"backup": "process", "gauge": "sql", "port": "tcp"})
+	b.entries["web"].checkReports = map[string]string{
+		"backup": checks.ReportsState,
+		"gauge":  checks.ReportsValue,
+	}
+	// Every check has a recorded series, so an empty one in the result can only
+	// come from the omission under test.
+	windows := []state.SLAValue{{Window: "hour", Up: 10, Total: 10}}
+	b.sla = fakeSLAReader{check: map[string][]state.SLAValue{
+		"web\x00backup": windows,
+		"web\x00gauge":  windows,
+		"web\x00port":   windows,
+	}}
+
+	detail, ok := b.Detail(context.Background(), "web")
+	if !ok {
+		t.Fatal("detail not found")
+	}
+	for _, c := range detail.Checks {
+		verdictless := checks.VerdictlessMode(c.Reports)
+		if verdictless && len(c.SLA) != 0 {
+			t.Errorf("check %q reports %q but carries %d SLA windows", c.Name, c.Reports, len(c.SLA))
+		}
+		if !verdictless && len(c.SLA) == 0 {
+			t.Errorf("check %q should keep its SLA windows", c.Name)
+		}
+	}
+}
