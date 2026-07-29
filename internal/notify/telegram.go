@@ -2,30 +2,17 @@ package notify
 
 import (
 	"errors"
-	"slices"
 
 	"sermo/internal/cfgval"
+	"sermo/internal/telegramapi"
 )
-
-const (
-	telegramAPIBase         = "https://api.telegram.org/bot"
-	telegramSendMessagePath = "/sendMessage"
-	telegramChatIDKey       = "chat_id"
-	telegramTextKey         = "text"
-	telegramParseModeKey    = "parse_mode"
-	telegramSilentKey       = "disable_notification"
-	telegramThreadIDKey     = "message_thread_id"
-)
-
-// telegramParseModes are the Bot API `parse_mode` values Sermo accepts, sorted.
-var telegramParseModes = []string{"HTML", "Markdown", "MarkdownV2"}
 
 // TelegramParseModes returns the accepted `parse_mode` values, for validation
 // and docs.
-func TelegramParseModes() []string { return slices.Clone(telegramParseModes) }
+func TelegramParseModes() []string { return telegramapi.ParseModes() }
 
 // ValidTelegramParseMode reports whether s is an accepted `parse_mode`.
-func ValidTelegramParseMode(s string) bool { return slices.Contains(telegramParseModes, s) }
+func ValidTelegramParseMode(s string) bool { return telegramapi.ValidParseMode(s) }
 
 // telegramOptions carries the optional sendMessage tuning read from config.
 type telegramOptions struct {
@@ -39,6 +26,8 @@ type telegramOptions struct {
 // `token` is the bot token (kept inside the API URL, never surfaced) and
 // `chat_id` the numeric chat or `@channel` target. Optional `parse_mode`,
 // `silent` and `message_thread_id` tune the sendMessage delivery.
+//
+//nolint:unparam // name is fixed by the shared builders registry signature; every notifier builder takes it.
 func buildTelegram(name string, entry map[string]any) (Notifier, error) {
 	token := cfgval.String(entry[KeyToken])
 	if token == "" {
@@ -60,7 +49,7 @@ func buildTelegram(name string, entry map[string]any) (Notifier, error) {
 	return &webhookNotifier{
 		name:    name,
 		typ:     TypeTelegram,
-		webhook: telegramAPIBase + token + telegramSendMessagePath,
+		webhook: telegramapi.MethodURL(token, telegramapi.MethodSendMessage),
 		payload: func(msg Message) []byte { return telegramPayload(chatID, opts, msg) },
 	}, nil
 }
@@ -74,15 +63,15 @@ func telegramPayload(chatID string, opts telegramOptions, msg Message) []byte {
 	if msg.Body != "" {
 		text = msg.Subject + notifyLF + msg.Body
 	}
-	body := map[string]any{telegramChatIDKey: chatID, telegramTextKey: text}
+	body := map[string]any{telegramapi.FieldChatID: chatID, telegramapi.FieldText: text}
 	if opts.parseMode != "" {
-		body[telegramParseModeKey] = opts.parseMode
+		body[telegramapi.FieldParseMode] = opts.parseMode
 	}
 	if opts.silent {
-		body[telegramSilentKey] = true
+		body[telegramapi.FieldSilent] = true
 	}
 	if opts.hasThread {
-		body[telegramThreadIDKey] = opts.threadID
+		body[telegramapi.FieldThreadID] = opts.threadID
 	}
 	return webhookPayload(body)
 }
