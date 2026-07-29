@@ -583,6 +583,10 @@ func validateCheckSection(tree map[string]any, section, locksDir string, add add
 				add(validationBooleanFormat, path+"."+checks.CheckKeyOptional)
 			}
 		}
+		if v, present := entry[checks.CheckKeyReports]; present && !checks.IsReportingMode(cfgval.String(v)) {
+			add("%s.%s %q must be one of %s", path, checks.CheckKeyReports, cfgval.String(v),
+				strings.Join(checks.ReportingModes, ", "))
+		}
 		validateCheckSummary(path, entry, add)
 		// A per-check interval runs the check every N cycles (N rounded from
 		// interval/resolution). It must be a positive duration; the daemon warns at

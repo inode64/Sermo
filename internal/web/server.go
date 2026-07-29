@@ -715,9 +715,13 @@ type PreflightResult struct {
 
 // Check is one check's latest observed result in a service detail.
 type Check struct {
-	Name     string         `json:"name"`
-	Type     string         `json:"type"`
-	OK       bool           `json:"ok"`
+	Name string `json:"name"`
+	Type string `json:"type"`
+	OK   bool   `json:"ok"`
+	// Reports is the check's declared reporting mode ("state" for a state
+	// sensor); empty means the default health semantics. It tells the dashboard
+	// whether to label the check ok/fail or active/inactive.
+	Reports  string         `json:"reports,omitempty"`
 	Stale    bool           `json:"stale,omitempty"`
 	Optional bool           `json:"optional"`
 	Skipped  bool           `json:"skipped,omitempty"` // gated off (requires/skip_when_changed)

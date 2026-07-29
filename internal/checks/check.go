@@ -14,29 +14,62 @@ package checks
 import (
 	"context"
 	"fmt"
+	"slices"
 	"sync"
 	"time"
 
 	"sermo/internal/conn"
 )
 
+// Reporting modes a check can declare with `reports:`. They describe what the
+// result *means*, which is what decides availability, SLA and how the dashboard
+// labels the check — not how the probe runs.
+const (
+	// ReportsHealth is the default: OK means the target is available, so the
+	// check reads ok/fail and counts toward availability.
+	ReportsHealth = "health"
+	// ReportsState marks a state sensor: OK means the sensed state is present
+	// (a backup is running), and neither side is good or bad. It has no verdict,
+	// so it never counts toward health or SLA and reads active/inactive.
+	ReportsState = "state"
+)
+
+// ReportingModes lists the values `reports:` accepts, for validation and docs.
+var ReportingModes = []string{ReportsHealth, ReportsState}
+
+// IsReportingMode reports whether s names a supported `reports:` value.
+func IsReportingMode(s string) bool { return slices.Contains(ReportingModes, s) }
+
 // Result is the observable outcome of one check.
 type Result struct {
-	Service   string         `json:"service,omitempty"`
-	Check     string         `json:"check"`
-	OK        bool           `json:"ok"`
-	Condition bool           `json:"-"`
-	Optional  bool           `json:"optional,omitempty"`
-	Skipped   bool           `json:"skipped,omitempty"` // gated off this cycle (requires/skip_when_changed)
-	Message   string         `json:"message,omitempty"`
-	Latency   time.Duration  `json:"latency_ns,omitempty"`
-	Data      map[string]any `json:"data,omitempty"`
+	Service string `json:"service,omitempty"`
+	Check   string `json:"check"`
+	OK      bool   `json:"ok"`
+	// Condition inverts availability: OK means the condition fired, not that
+	// the target is well. Derived from the check type.
+	Condition bool `json:"-"`
+	// Reports is the declared reporting mode; empty means ReportsHealth.
+	Reports  string         `json:"-"`
+	Optional bool           `json:"optional,omitempty"`
+	Skipped  bool           `json:"skipped,omitempty"` // gated off this cycle (requires/skip_when_changed)
+	Message  string         `json:"message,omitempty"`
+	Latency  time.Duration  `json:"latency_ns,omitempty"`
+	Data     map[string]any `json:"data,omitempty"`
 }
+
+// StateSensor reports whether this result carries no verdict, only a sensed
+// state. Rules still read OK directly, so a guard keyed on `active: {check: …}`
+// is unaffected; only health, SLA and the dashboard label change.
+func (r Result) StateSensor() bool { return r.Reports == ReportsState }
 
 // Healthy reports whether this result means the target is available. Most
 // checks are health-style (OK means healthy); condition checks are alert-style
-// (OK means the condition fired), so their availability is inverted.
+// (OK means the condition fired), so their availability is inverted. A state
+// sensor asserts nothing about availability and is never unhealthy.
 func (r Result) Healthy() bool {
+	if r.StateSensor() {
+		return true
+	}
 	if r.Condition {
 		return !r.OK
 	}
@@ -116,6 +149,7 @@ type base struct {
 	service   string
 	timeout   time.Duration
 	condition bool
+	reports   string
 }
 
 func (b base) Name() string { return b.name }
@@ -134,6 +168,7 @@ func (b base) result(ok bool, message string, start time.Time) Result {
 		Check:     b.name,
 		OK:        ok,
 		Condition: b.condition,
+		Reports:   b.reports,
 		Message:   message,
 		Latency:   time.Since(start),
 	}

@@ -104,6 +104,7 @@ const (
 	CheckKeyQuick                 = "quick"
 	CheckKeyRecursive             = "recursive"
 	CheckKeyRegex                 = "regex"
+	CheckKeyReports               = "reports"
 	CheckKeyResolvconf            = "resolvconf"
 	CheckKeyResource              = "resource"
 	CheckKeyResult                = "result"
