@@ -130,6 +130,7 @@ const (
 	CheckKeyTransport             = "transport"
 	CheckKeyTrim                  = "trim"
 	CheckKeyType                  = "type"
+	CheckKeyUnit                  = "unit"
 	CheckKeyURL                   = "url"
 	CheckKeyUser                  = "user"
 	CheckKeyUPS                   = "ups"

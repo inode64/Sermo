@@ -398,6 +398,7 @@ leyendo el resultado en crudo.
 | `health` | OK significa que el objetivo está disponible | `ok` / `fail` | se cuenta |
 | `condition` | OK significa que la condición se ha disparado, así que la disponibilidad se invierte | `ok` / `fail` | se cuenta |
 | `state` | OK significa que el estado sensado está presente; ninguna cara es buena ni mala | `active` / `inactive` | no se registra |
+| `value` | la comprobación mide y no juzga | la lectura | no se registra |
 
 Si se omite, el **tipo** de la comprobación aporta el valor por defecto: los tipos
 de salud (`tcp`, `http`, `service`, los protocolos de conexión…) usan `health`, y
@@ -408,6 +409,28 @@ comprobación tiene la última palabra.
 Una comprobación `condition` sigue mostrando `ok` / `fail`, no
 `active` / `inactive`: a diferencia de un sensor de estado, su cara disparada sí
 es un problema y tiene que parecerlo.
+
+#### Graficar el valor de una comprobación (`unit`)
+
+La mayoría de tipos declaran sus métricas graficables de forma estática, pero
+algunos no pueden: la unidad de una comprobación `sql` depende de su consulta, así
+que cinco sensores de un mismo servicio pueden reportar MiB, segundos y un
+recuento. `unit:` lo declara por comprobación, y su resultado escalar pasa a
+registrarse y graficarse como cualquier otra métrica:
+
+```yaml
+alert-if-replication-slot-backlog:
+  check:
+    type: sql
+    engine: postgres
+    query: "SELECT …"     # devuelve MiB
+    op: ">"
+    value: 1024
+    unit: MiB             # grafica el resultado, etiquetado en MiB
+```
+
+Es independiente de `reports:` — una comprobación `condition` conserva su
+veredicto de umbral *y* obtiene gráfica — y se suma a lo que el tipo ya publique.
 
 Usa `state` cuando la comprobación existe para responder «¿está pasando esto
 ahora?» y no para afirmar que algo debe cumplirse. El watch `backup` del catálogo
