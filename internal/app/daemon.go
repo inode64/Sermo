@@ -804,10 +804,10 @@ func checkSLARecorder(deps Deps, name string) func(map[string]checks.Result, map
 	}
 	return func(cache map[string]checks.Result, ran map[string]bool) {
 		for check, r := range cache {
-			// A state sensor has no availability to record: neither side of
-			// "a backup is running" is uptime, so it gets no SLA series rather
-			// than a permanent 0% or a meaningless 100%.
-			if !ran[check] || r.Skipped || r.StateSensor() {
+			// A verdictless check has no availability to record: neither side of
+			// "a backup is running" is uptime, and a bare measurement asserts
+			// nothing at all, so neither gets an SLA series.
+			if !ran[check] || r.Skipped || r.Verdictless() {
 				continue
 			}
 			if err := deps.SLA.RecordCheckSLA(name, check, r.Healthy(), now()); err != nil && deps.Emit != nil {
@@ -829,7 +829,8 @@ func graphableCheckMetrics(tree map[string]any) map[string][]checks.GraphMetric 
 			continue
 		}
 		typ, _ := m[checks.CheckKeyType].(string)
-		if g := checks.GraphMetrics(typ); len(g) > 0 {
+		unit := cfgval.AsString(m[checks.CheckKeyUnit])
+		if g := checks.DeclaredGraphMetrics(typ, unit); len(g) > 0 {
 			out[cn] = g
 		}
 	}

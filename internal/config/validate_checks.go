@@ -583,10 +583,7 @@ func validateCheckSection(tree map[string]any, section, locksDir string, add add
 				add(validationBooleanFormat, path+"."+checks.CheckKeyOptional)
 			}
 		}
-		if v, present := entry[checks.CheckKeyReports]; present && !checks.IsReportingMode(cfgval.String(v)) {
-			add("%s.%s %q must be one of %s", path, checks.CheckKeyReports, cfgval.String(v),
-				strings.Join(checks.ReportingModes, ", "))
-		}
+		validateCheckReporting(path, entry, add)
 		validateCheckSummary(path, entry, add)
 		// A per-check interval runs the check every N cycles (N rounded from
 		// interval/resolution). It must be a positive duration; the daemon warns at
@@ -617,6 +614,21 @@ func validateCheckSection(tree map[string]any, section, locksDir string, add add
 			add("%s has unknown type %q", path, typ)
 			continue
 		}
+	}
+}
+
+// validateCheckReporting validates the two declarations that describe what a
+// check's result means rather than how it is probed: the `reports:` mode and the
+// `unit:` label for its scalar value.
+func validateCheckReporting(path string, entry map[string]any, add addFunc) {
+	if v, present := entry[checks.CheckKeyReports]; present && !checks.IsReportingMode(cfgval.String(v)) {
+		add("%s.%s %q must be one of %s", path, checks.CheckKeyReports, cfgval.String(v),
+			strings.Join(checks.ReportingModes, ", "))
+	}
+	// `unit:` is a display label for the check's scalar result, not an
+	// enumeration: a sql check reports whatever its query returns.
+	if v, present := entry[checks.CheckKeyUnit]; present && cfgval.String(v) == "" {
+		add("%s.%s must be a non-empty string naming the unit of the check's value", path, checks.CheckKeyUnit)
 	}
 }
 

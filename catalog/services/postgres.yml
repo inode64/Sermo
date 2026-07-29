@@ -205,6 +205,7 @@ watches:
           restart_lsn)), 0) / 1048576.0, 1)
         FROM pg_replication_slots WHERE restart_lsn IS NOT NULL
       op: '>'
+      unit: MiB
       value: ${slot_backlog_mib}
       summary: >-
         ${display_name} retains ${value} MiB of WAL for its most lagging replication slot (limit ${check.value} MiB)
@@ -233,6 +234,7 @@ watches:
           confirmed_flush_lsn)), 0) / 1048576.0, 1)
         FROM pg_replication_slots WHERE slot_type = 'logical'
       op: '>'
+      unit: MiB
       value: ${logical_unconfirmed_mib}
       summary: >-
         ${display_name} has ${value} MiB unconfirmed by its logical replication consumer (limit ${check.value} MiB)
@@ -256,6 +258,7 @@ watches:
       optional: true
       query: SELECT count(*) FROM pg_replication_slots WHERE NOT active
       op: '>'
+      unit: slots
       value: 0
       summary: >-
         ${display_name} has ${value} replication slot(s) with no consumer connected, still retaining WAL
@@ -280,6 +283,7 @@ watches:
       query: >-
         SELECT round(coalesce(max(pg_wal_lsn_diff(sent_lsn, replay_lsn)), 0) / 1048576.0, 1) FROM pg_stat_replication
       op: '>'
+      unit: MiB
       value: ${replay_lag_mib}
       summary: >-
         ${display_name} sent ${value} MiB not yet replayed by its most lagging replica (limit ${check.value} MiB)
@@ -310,6 +314,7 @@ watches:
           THEN round(coalesce(extract(epoch FROM now() - pg_last_xact_replay_timestamp()), 0)::numeric, 1)
           ELSE 0 END
       op: '>'
+      unit: s
       value: ${standby_delay_seconds}
       summary: >-
         ${display_name} standby is ${value} seconds behind the primary (limit ${check.value} s)
