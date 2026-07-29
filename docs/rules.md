@@ -395,8 +395,18 @@ check's raw outcome.
 
 | mode | meaning | dashboard | SLA |
 |---|---|---|---|
-| `health` (default) | OK means the target is available | `ok` / `fail` | counted |
+| `health` | OK means the target is available | `ok` / `fail` | counted |
+| `condition` | OK means the condition fired, so availability is inverted | `ok` / `fail` | counted |
 | `state` | OK means a sensed state is present; neither side is good or bad | `active` / `inactive` | not recorded |
+
+Omitted, the check **type** supplies the default: health-style types
+(`tcp`, `http`, `service`, the connection protocols, …) default to `health`, the
+threshold and metric types to `condition`. The type is only a default — the same
+type can be a health assertion in one service and a sensor in another, so the
+check has the last word.
+
+A `condition` check still reads `ok` / `fail`, not `active` / `inactive`: unlike
+a state sensor, its firing side really is a problem and has to look like one.
 
 Use `state` for a check that exists to answer "is this happening right now?"
 rather than to assert something must hold. The catalog's `backup` watch is the
