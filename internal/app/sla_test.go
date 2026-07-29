@@ -96,3 +96,27 @@ func TestCheckSLARecorderOnlyRecordsRanNonSkippedChecks(t *testing.T) {
 		t.Fatalf("records = %+v, want http=false and cert=true", store.records)
 	}
 }
+
+// A state sensor gets no SLA series at all. Recording it would be a permanent
+// 0% (a backup is idle almost always) or, once availability stops being the
+// raw flag, a meaningless 100% — neither is uptime.
+func TestCheckSLARecorderSkipsStateSensors(t *testing.T) {
+	store := &checkSLACapture{}
+	record := checkSLARecorder(Deps{
+		SLA: store,
+		Now: func() time.Time { return time.Unix(0, 0) },
+	}, "svc")
+	record(map[string]checks.Result{
+		"backup": {Check: "backup", OK: false, Reports: checks.ReportsState},
+		"busy":   {Check: "busy", OK: true, Reports: checks.ReportsState},
+		"http":   {Check: "http", OK: true},
+	}, map[string]bool{"backup": true, "busy": true, "http": true})
+
+	got := map[string]bool{}
+	for _, r := range store.records {
+		got[r.check] = r.up
+	}
+	if len(got) != 1 || !got["http"] {
+		t.Fatalf("records = %+v, want only http recorded", store.records)
+	}
+}

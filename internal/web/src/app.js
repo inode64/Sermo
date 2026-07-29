@@ -3400,17 +3400,27 @@ function serviceMetricState(name) {
   return state;
 }
 
+// checkStateHTML renders a check's state cell. A `reports: state` check is a
+// state sensor with no verdict — "a backup is running" is neither healthy nor
+// failing — so it reads active/inactive instead of ok/fail, and inactive stays
+// neutral rather than the warn-coloured `inactive` class used for stale.
+function checkStateHTML(c, age) {
+  if (c.stale) return tpl`<span class="inactive">stale</span>${age}`;
+  if (!c.ran) return c.at ? tpl`<span class="muted">cached</span>${age}` : tpl`<span class="muted">not run yet</span>`;
+  if (c.skipped) return tpl`<span class="muted">skipped</span>${age}`;
+  if (c.reports === "state") {
+    return c.ok ? tpl`<span class="active">active</span>${age}` : tpl`<span class="muted">inactive</span>${age}`;
+  }
+  return c.ok ? tpl`<span class="ok">ok</span>${age}` : tpl`<span class="bad">fail</span>${age}`;
+}
+
 function renderServiceDetail(d) {
   const procs = d.processes || [];
   const procWarnings = d.process_warnings || [];
   const noResidentProcess = !!d.no_resident_process;
   const checkRows = (d.checks || []).map((c) => {
     const age = c.at ? tpl` <span class="muted">· ${fmtAge(c.at)}</span>` : nothing;
-    const state = c.stale ? tpl`<span class="inactive">stale</span>${age}`
-      : !c.ran
-      ? (c.at ? tpl`<span class="muted">cached</span>${age}` : tpl`<span class="muted">not run yet</span>`)
-      : c.skipped ? tpl`<span class="muted">skipped</span>${age}`
-      : c.ok ? tpl`<span class="ok">ok</span>${age}` : tpl`<span class="bad">fail</span>${age}`;
+    const state = checkStateHTML(c, age);
     const readings = (c.readings && c.readings.length) ? renderWatchReadings(c.readings) : nothing;
     const msg = c.message
       ? tpl`<span class="truncate check-message" title="${c.message || ""}">${c.message || ""}</span>`

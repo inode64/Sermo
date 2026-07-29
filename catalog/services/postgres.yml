@@ -119,6 +119,7 @@ watches:
   backup:
     check:
       type: process
+      reports: state
       optional: true
       exe_any:
         - /usr/bin/pg_basebackup

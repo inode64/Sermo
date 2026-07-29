@@ -79,6 +79,7 @@ type webEntry struct {
 	status            func(context.Context) (servicemgr.Status, error)
 	checkNames        []string          // sorted
 	checkTypes        map[string]string // check name -> type
+	checkReports      map[string]string // check name -> `reports:` mode, when declared
 	checkIntervals    map[string]time.Duration
 	discoverer        process.Discoverer
 	selectors         []process.Selector
@@ -352,6 +353,7 @@ func attachServiceRuntime(ctx context.Context, entry *webEntry, name string, tre
 	entry.status = checkDeps.Status
 	entry.checkNames = names
 	entry.checkTypes = types
+	entry.checkReports = checkReportingModes(tree)
 	entry.checkIntervals = intervals
 	entry.discoverer = discoverer
 	entry.selectors = selectors
@@ -504,4 +506,26 @@ func checkCatalog(tree map[string]any, defaultInterval time.Duration) ([]string,
 	}
 	sort.Strings(names)
 	return names, types, intervals
+}
+
+// checkReportingModes maps each check that declares `reports:` to its mode. It
+// reads configuration rather than the published result because the mode is
+// static: sourcing it here keeps it correct on the first cycle and across a
+// daemon restart, without widening the persisted snapshot record.
+func checkReportingModes(tree map[string]any) map[string]string {
+	section, ok := tree[config.SectionChecks].(map[string]any)
+	if !ok {
+		return nil
+	}
+	modes := map[string]string{}
+	for name, raw := range section {
+		m, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		if mode := cfgval.AsString(m[checks.CheckKeyReports]); mode != "" {
+			modes[name] = mode
+		}
+	}
+	return modes
 }

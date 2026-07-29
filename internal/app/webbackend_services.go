@@ -346,10 +346,11 @@ func (b *WebBackend) Detail(ctx context.Context, name string) (web.Detail, bool)
 		cs, seen := snap[cn]
 		current := seen && b.serviceCheckSnapshotCurrent(e, cn, cs)
 		ch := web.Check{
-			Name:  cn,
-			Type:  e.checkTypes[cn],
-			Stale: seen && !current,
-			Ran:   current && cs.Ran,
+			Name:    cn,
+			Type:    e.checkTypes[cn],
+			Reports: e.checkReports[cn],
+			Stale:   seen && !current,
+			Ran:     current && cs.Ran,
 		}
 		if current {
 			// Availability, not the raw comparison: a condition check reports

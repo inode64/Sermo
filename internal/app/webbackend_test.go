@@ -2182,3 +2182,34 @@ watches:
 		t.Fatalf("custom runner via webbackend Deps did not receive expected SERMO_ env: %v", call.env)
 	}
 }
+
+// A state sensor must reach the dashboard tagged as such, so the detail table
+// can label it active/inactive instead of ok/fail. The mode comes from
+// configuration, not from the published result, so it is right on the first
+// cycle and after a restart.
+func TestWebBackendDetailCarriesReportingMode(t *testing.T) {
+	snaps := NewSnapshots()
+	snaps.PublishWithCheckTypes("web", map[string]checks.Result{
+		"backup": {Check: "backup", OK: false, Reports: checks.ReportsState, Message: "state absent"},
+		"port":   {Check: "port", OK: true, Message: "connected"},
+	}, map[string]bool{"backup": true, "port": true},
+		map[string]string{"backup": "process", "port": "tcp"})
+
+	b := webBackendWithEntry(snaps, []string{"backup", "port"}, map[string]string{"backup": "process", "port": "tcp"})
+	b.entries["web"].checkReports = map[string]string{"backup": checks.ReportsState}
+
+	detail, ok := b.Detail(context.Background(), "web")
+	if !ok {
+		t.Fatal("detail not found")
+	}
+	got := map[string]string{}
+	for _, c := range detail.Checks {
+		got[c.Name] = c.Reports
+	}
+	if got["backup"] != checks.ReportsState {
+		t.Errorf("backup reports = %q, want %q", got["backup"], checks.ReportsState)
+	}
+	if got["port"] != "" {
+		t.Errorf("port reports = %q, want empty for the default health semantics", got["port"])
+	}
+}

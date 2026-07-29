@@ -281,6 +281,7 @@ func BuildWithWarnings(section map[string]any, deps Deps) ([]Built, []BuildWarni
 			service:   deps.Service,
 			timeout:   timeout,
 			condition: !IsHealthType(typ),
+			reports:   cfgval.AsString(entry[CheckKeyReports]),
 		}
 
 		check, warn := buildCheck(typ, b, entry, runner, client, deps)
