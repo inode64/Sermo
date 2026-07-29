@@ -53,10 +53,10 @@ func TestDefaultRoutesFromNetlinkIPv6SkipsLoopback(t *testing.T) {
 }
 
 func TestNetlinkFamily(t *testing.T) {
-	if family, err := netlinkFamily("ipv4"); err != nil || family != netlink.FAMILY_V4 {
+	if family, err := netlinkFamily("ipv4"); err != nil || family != familyV4 {
 		t.Fatalf("ipv4 family = %d, %v", family, err)
 	}
-	if family, err := netlinkFamily("ipv6"); err != nil || family != netlink.FAMILY_V6 {
+	if family, err := netlinkFamily("ipv6"); err != nil || family != familyV6 {
 		t.Fatalf("ipv6 family = %d, %v", family, err)
 	}
 	if _, err := netlinkFamily("ipx"); err == nil {
