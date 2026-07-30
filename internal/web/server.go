@@ -781,7 +781,7 @@ type Process struct {
 	// busiest thread, normalized so 100% is one saturated core. It never exceeds CPU,
 	// and equals it for a single-threaded process. MaxCoreExact is false when the
 	// figure is CPU standing in as an upper bound because the process was below the
-	// threads-sampling floor — the UI marks those as estimates.
+	// threads-sampling floor — the UI says so in the cell's tooltip.
 	MaxCore      float64 `json:"max_core,omitempty"`
 	MaxCoreExact bool    `json:"max_core_exact,omitempty"`
 }

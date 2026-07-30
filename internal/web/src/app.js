@@ -2987,8 +2987,11 @@ function procCpuCell(p) {
 // pegging a single core can report the same total.
 //
 // max_core_exact false means the daemon has not read this process's threads (it was
-// below the sampling floor) and the value is its whole rate standing in as an upper
-// bound, so it is shown as "≤" rather than as a reading.
+// below the sampling floor) and the value is the process's whole rate standing in as an
+// upper bound. That distinction lives in the tooltip and not in the cell: below the
+// floor a bound and a measurement are indistinguishable for any decision, and on an
+// idle host every non-zero row is a bound — a marker present on every row of a column
+// distinguishes nothing and only crowds the number.
 function procMaxCoreCell(p) {
   // Gated on has_cpu alone, exactly like procCpuCell: both readings come from the
   // same live sample, so whenever one exists the other does. An absent max_core means
@@ -2996,10 +2999,9 @@ function procMaxCoreCell(p) {
   if (!p.has_cpu) return tpl`<td>—</td>`;
   const peak = Number(p.max_core) || 0;
   const shown = fmtPct(peak);
-  const bar = cpuBarMini(peak, p.max_core_exact
+  return tpl`<td>${cpuBarMini(peak, p.max_core_exact
     ? `${shown} of one core, this process's busiest thread`
-    : `at most ${shown} of one core: not measured per thread, bounded by the process rate`);
-  return tpl`<td>${p.max_core_exact ? bar : tpl`<span class="muted">≤</span> ${bar}`}</td>`;
+    : `at most ${shown} of one core: not measured per thread, bounded by the process rate`)}</td>`;
 }
 function procIoFdThreadCells(p) {
   const io = (p.io_read || p.io_write) ? `${fmtBytes(p.io_read || 0)} / ${fmtBytes(p.io_write || 0)}` : '—';
@@ -3597,7 +3599,7 @@ function renderServiceDetail(d) {
   const procTable = procs.length
     ? tpl`<table class="detail-compact-table">
         <caption class="visually-hidden">Service processes</caption>
-        <thead><tr><th scope="col">PID</th><th scope="col">CMD</th><th scope="col">User</th><th scope="col">Role</th><th scope="col" title="CPU used by this process, normalized to one core">CPU</th><th scope="col" title="The most a single core was used by this process: its busiest thread. Prefixed with ≤ when bounded by the process rate rather than measured per thread.">Max core</th><th scope="col">Mem</th><th scope="col">IO r/w</th><th scope="col">FDs</th><th scope="col">Threads</th></tr></thead>
+        <thead><tr><th scope="col">PID</th><th scope="col">CMD</th><th scope="col">User</th><th scope="col">Role</th><th scope="col" title="CPU used by this process, normalized to one core">CPU</th><th scope="col" title="The most a single core was used by this process: its busiest thread. Each cell's own tooltip says whether that figure was measured per thread or bounded by the process rate.">Max core</th><th scope="col">Mem</th><th scope="col">IO r/w</th><th scope="col">FDs</th><th scope="col">Threads</th></tr></thead>
         <tbody>${procRows.map((row) => { const p = row.p; return tpl`<tr>
           <td>${p.pid}</td>
           <td>${procTreeLabel(row)}</td>

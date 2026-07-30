@@ -377,8 +377,10 @@ test("the process table reports each process's busiest core beside its total", a
   const cells = table.locator("tbody tr").first().locator("td");
   await expect(cells.nth(4)).toContainText("96.25%");
   await expect(cells.nth(5)).toContainText("61.5%");
-  // Measured, not bounded — no ≤ marker.
-  await expect(cells.nth(5)).not.toContainText("≤");
+  // Measured, not bounded: the distinction lives in the tooltip, since a marker on the
+  // cell would sit on every row of an idle host and so distinguish nothing.
+  await expect(cells.nth(5).locator("[title]").first())
+    .toHaveAttribute("title", /busiest thread/);
 
   // The aggregate no longer restates it in the General data grid: it would hide
   // which process the peak belongs to.
@@ -421,8 +423,10 @@ test("an unmeasured busiest core is shown as a bound, not a reading", async ({ p
   const cell = page.locator('[data-service-detail="db"]')
     .getByRole("table", { name: "Service processes" })
     .locator("tbody tr").first().locator("td").nth(5);
-  await expect(cell).toContainText("≤");
   await expect(cell).toContainText("96.25%");
+  // Nothing marks the cell; the tooltip is what says the figure is an upper bound.
+  await expect(cell.locator("[title]").first())
+    .toHaveAttribute("title", /at most .* not measured per thread/);
 });
 
 test("service detail complements the row instead of repeating it", async ({ page }) => {
