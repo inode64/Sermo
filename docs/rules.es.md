@@ -1976,7 +1976,10 @@ alerta. Mantén los umbrales de las reglas por encima de ese suelo; uno por deba
 compararía contra una cota y no contra una medición. Un proceso que acaba de ponerse a
 trabajar queda acotado un ciclo y medido desde el siguiente, porque una tasa por hilo
 necesita dos muestras por hilo. La tabla de procesos de la interfaz web muestra la
-cifra por proceso y marca la cota con `≤`.
+cifra por proceso, y su tooltip indica si esa cifra se midió por hilo o se acotó con la
+tasa del proceso. La celda no lleva marca: por debajo del umbral una cota y una medición
+son indistinguibles para cualquier decisión, y en un host en reposo toda fila no nula es
+una cota — una marca en todas las filas no distingue nada.
 
 > **Al actualizar:** `cpu_thread` era antes el *proceso* más ocupado y no el *hilo* más
 > ocupado, lo que sumaba los núcleos de un proceso multi-hilo y podía reportar muy por

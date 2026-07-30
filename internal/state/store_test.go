@@ -2,6 +2,8 @@ package state
 
 import (
 	"context"
+	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -517,4 +519,63 @@ func TestOpenCreatesParentDir(t *testing.T) {
 		t.Fatalf("Open must create the parent dir, got: %v", err)
 	}
 	s.Close()
+}
+
+// TestCompactReturnsSpaceToTheFilesystem asserts that compaction hands freed pages
+// back to the filesystem rather than merely to SQLite's freelist.
+//
+// Scope, honestly: this covers the plain case and would catch the VACUUM going away.
+// It does NOT reproduce the WAL-with-live-reader condition that made the real bug —
+// `sermoctl state compact` leaving a 1.4 GB file holding 11 MB — and it passes with or
+// without the trailing checkpoint. Two attempts to reproduce that condition failed in
+// opposite directions: with no reader, VACUUM truncates on its own; with a held read
+// transaction, the checkpoint cannot truncate at all, which is not what a daemon does
+// either. The ordering fix in Store.Compact was verified against a live host instead:
+// after `state compact` the database held 90 pages in a 157 MB file, and a checkpoint
+// took it to 360 KB.
+func TestCompactReturnsSpaceToTheFilesystem(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, Filename)
+	s, err := OpenContext(context.Background(), path)
+	if err != nil {
+		t.Fatalf("OpenContext: %v", err)
+	}
+	defer s.Close()
+
+	at := time.Date(2026, 7, 30, 10, 0, 0, 0, time.UTC)
+	for minute := range 600 {
+		when := at.Add(time.Duration(minute) * time.Minute)
+		for svc := range 20 {
+			service := fmt.Sprintf("svc-%02d", svc)
+			if err := s.RecordSLA(service, true, when); err != nil {
+				t.Fatalf("RecordSLA: %v", err)
+			}
+			if err := s.RecordMeasurement(service, "check", float64(minute), when); err != nil {
+				t.Fatalf("RecordMeasurement: %v", err)
+			}
+		}
+	}
+	if err := s.Compact(context.Background()); err != nil {
+		t.Fatalf("Compact (grow): %v", err)
+	}
+	grown := fileSize(t, path)
+
+	if _, err := s.PruneBefore(context.Background(), at.Add(1000*time.Hour)); err != nil {
+		t.Fatalf("PruneBefore: %v", err)
+	}
+	if err := s.Compact(context.Background()); err != nil {
+		t.Fatalf("Compact (shrink): %v", err)
+	}
+	if shrunk := fileSize(t, path); shrunk >= grown {
+		t.Fatalf("file did not shrink: %d bytes before compaction, %d after; freed pages must be returned to the filesystem, not just to the freelist", grown, shrunk)
+	}
+}
+
+func fileSize(t *testing.T, path string) int64 {
+	t.Helper()
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("stat %s: %v", path, err)
+	}
+	return info.Size()
 }
