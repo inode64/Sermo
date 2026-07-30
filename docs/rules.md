@@ -1972,7 +1972,10 @@ below any threshold worth alerting on. Keep rule thresholds above that floor;
 a threshold under it would compare against a bound rather than a measurement. A
 process that has just become busy is bounded for one cycle and measured from the next,
 because a per-thread rate needs two per-thread samples. The Web UI's process table
-shows the per-process figure and marks a bound with `≤`.
+shows the per-process figure, with its tooltip saying whether that figure was measured
+per thread or bounded by the process rate. The cell itself carries no marker: below the
+floor a bound and a measurement are indistinguishable for any decision, and on an idle
+host every non-zero row is a bound — a marker on every row distinguishes nothing.
 
 > **Upgrading:** `cpu_thread` used to be the busiest *process* rather than the busiest
 > *thread*, which summed a multi-threaded process's cores together and could report
