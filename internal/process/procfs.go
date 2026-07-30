@@ -73,7 +73,21 @@ const ProcFileTask = procFileTask
 // starttime index 19. Shared by every /proc stat consumer so the comm-splitting
 // subtlety lives in one place.
 func StatFields(pid int) ([]string, bool) {
-	data, err := os.ReadFile(PIDPath(pid, ProcFileStat))
+	return statFieldsAt(PIDPath(pid, ProcFileStat))
+}
+
+// ThreadStatFields is StatFields for one thread: /proc/<pid>/task/<tid>/stat,
+// which carries the same field layout as the process file, so the same indices
+// apply. A thread that exits between listing the task directory and this read
+// simply reports not-ok, the same as a vanished process.
+func ThreadStatFields(pid, tid int) ([]string, bool) {
+	return statFieldsAt(filepath.Join(PIDPath(pid, ProcFileTask), strconv.Itoa(tid), ProcFileStat))
+}
+
+// statFieldsAt is the shared decoder behind StatFields and ThreadStatFields: the
+// comm-splitting subtlety must not be reimplemented per caller.
+func statFieldsAt(path string) ([]string, bool) {
+	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, false
 	}

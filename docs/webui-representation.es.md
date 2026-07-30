@@ -305,14 +305,26 @@ Compartida por los paneles Services, Containers y Virtual machines:
 
 | Área | Contenido |
 | --- | --- |
-| Datos generales | estado, categoría, unidad/backend, uptime, intervalo, política, locks, último evento, próxima remediación, estado de remediación y totales del proceso; mientras la insignia de la fila sea `starting`, la expansión puede mostrar todavía el backend de init en bruto (`inactive`) y muestras de check en curso del ciclo de solo observación |
+| Datos generales | una cuadrícula sin encabezado, primera área de la expansión: nombre, estado, categoría, unidad/backend, uptime, intervalo, política, locks, último evento, próxima remediación, estado de remediación y totales del proceso; mientras la insignia de la fila sea `starting`, la expansión puede mostrar todavía el backend de init en bruto (`inactive`) y muestras de check en curso del ciclo de solo observación |
 | Gráficos | línea temporal de SLA a ancho completo seguida de gráficos de latencia, CPU, memoria e IO; cada servicio persiste su propia ventana temporal y check de latencia; los servicios `no_resident_process` muestran solo SLA porque no tienen runtime de procesos para graficar |
-| Procesos | tabla del árbol de procesos detectado a ancho completo, con los procesos hijos marcados en CMD y mantenidos bajo su padre; se omite cuando `no_resident_process` es true |
+| Procesos | tabla del árbol de procesos detectado a ancho completo, con los procesos hijos marcados en CMD y mantenidos bajo su padre; **Max core** sigue a CPU e informa del uso máximo que ese proceso hizo de un solo core —su hilo más ocupado—, con prefijo `≤` cuando el daemon lo acotó en vez de medirlo por hilo; las advertencias de descubrimiento se listan encima, una por línea; se omite cuando `no_resident_process` es true |
 | Checks | checks configurados y resultado actual |
 | Locks con nombre | estado de los locks de runtime |
 | Reglas | estado de las reglas de remediación/alerta |
 | Preflight | ejecutor de preflight en línea y resultados |
 | Eventos | eventos de servicio retenidos recientes |
+
+La expansión complementa la fila en vez de repetirla: no lleva encabezado con el
+nombre (la fila es el encabezado) ni una línea de resumen que reitere la cuadrícula.
+Un campo de datos generales cuya lectura ya es una columna de la tabla se muestra
+**solo en los anchos donde esa columna está oculta** — Categoría, Uptime, CPU total,
+Memoria e IO R/W por debajo de 1420px; Último evento por debajo de 640px — así cada
+lectura aparece exactamente una vez y un móvil no pierde nada. Nombre y Estado se
+mantienen en todos los anchos como ancla de la expansión, y `FDs / Threads` nunca se
+oculta porque la columna FDs no lleva el número de hilos. La cifra del hilo más
+ocupado no se repite en la cuadrícula: pertenece a un proceso, así que la tabla de
+procesos la lleva por fila (ver **Procesos** más abajo) en vez de flotar como un total
+que esconde de qué proceso viene.
 
 Las expansiones abiertas de servicio obtienen y renderizan por completo detalle
 fresco una vez por refresco del dashboard; las subpeticiones de SLA, métricas,

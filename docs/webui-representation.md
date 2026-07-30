@@ -300,14 +300,25 @@ Shared by the Services, Containers and Virtual machines panels.
 
 | Area | Content |
 | --- | --- |
-| General data | state, category, unit/backend, uptime, interval, policy, locks, last event, next remediation, remediation state and process totals; while the row badge is `starting`, expansion may still show the raw init backend (`inactive`) and in-flight check samples from the observe-only cycle |
+| General data | an unheaded grid, first area of the expansion: name, state, category, unit/backend, uptime, interval, policy, locks, last event, next remediation, remediation state and process totals; while the row badge is `starting`, expansion may still show the raw init backend (`inactive`) and in-flight check samples from the observe-only cycle |
 | Graphs | full-width SLA timeline followed by latency, CPU, memory and IO charts; each service persists its own time window and latency check; `no_resident_process` services show only SLA because they have no process runtime to chart |
-| Processes | full-width detected process tree table, with child processes marked in CMD and kept under their parent; omitted when `no_resident_process` is true |
+| Processes | full-width detected process tree table, with child processes marked in CMD and kept under their parent; **Max core** follows CPU and reports the most a single core was used by that process — its busiest thread — prefixed `≤` when the daemon bounded it instead of measuring per thread; discovery warnings are listed above it, one per line; omitted when `no_resident_process` is true |
 | Checks | configured checks and current result |
 | Named locks | runtime lock state |
 | Rules | remediation/alert rule state |
 | Preflight | inline preflight runner and results |
 | Events | recent retained service events |
+
+The expansion complements the row rather than repeating it: it carries no name
+heading (the row is the heading) and no summary line restating the grid. A General
+data field whose reading is already a table column is shown **only at the widths
+where that column is hidden** — Category, Uptime, CPU total, Memory and IO R/W below
+1420px, Last event below 640px — so each reading appears exactly once and a phone
+loses nothing. Name and State stay at every width as the expansion's anchor, and
+`FDs / Threads` is never hidden because the FDs column does not carry the thread
+count. The busiest-thread figure is not restated in the grid: it belongs to a
+process, so the process table carries it per row (see **Processes** below) instead of
+floating as a total that hides which process it came from.
 
 Open service expansions fetch and fully render fresh detail once per dashboard
 refresh; SLA, metric, runtime and event subrequests plus open watch/application

@@ -52,6 +52,20 @@ const defaultCategoryWatch = "watch";
 const defaultCategoryStorage = "storage";
 const defaultCategoryApp = "app";
 const defaultCategoryLibrary = "library";
+// Classes for a General data field in a service/container/VM expansion whose
+// reading is also a .services-table column: the field is hidden while that column
+// is on screen and revealed at the breakpoint that retires it, so the reading is
+// shown exactly once and a narrow viewport loses nothing. The suffix names the
+// breakpoint, matching the .col-dup rules in styles.css — colDupWide for the
+// columns the 1420px block drops (Category, Uptime, CPU total, Memory, FDs, IO R/W)
+// and colDupPhone for Last activity, which survives down to 640px.
+//
+// A field the column does not restate *exactly* carries neither class:
+// "FDs / Threads" also reports the thread count, which has no column of its own.
+// TestIndexDetailDedupesVisibleColumns pins these against both the CSS and the
+// fields that use them.
+const colDupWide = "col-dup col-dup-1420";
+const colDupPhone = "col-dup col-dup-640";
 // Key of the host watch panel in watch-panels.json. Distinct from
 // watchScopeHost, which is the daemon's `scope` value for a host-level watch:
 // same string, different vocabulary.
@@ -2967,6 +2981,26 @@ function procCpuCell(p) {
   if (!p.has_cpu) return tpl`<td>—</td>`;
   return tpl`<td>${cpuBarMini(Number(p.cpu) || 0)}</td>`;
 }
+// procMaxCoreCell renders the most any single core was used on this process's
+// behalf: its busiest thread, against one core. It sits beside CPU because the two
+// answer different questions — a process spread thinly over eight cores and one
+// pegging a single core can report the same total.
+//
+// max_core_exact false means the daemon has not read this process's threads (it was
+// below the sampling floor) and the value is its whole rate standing in as an upper
+// bound, so it is shown as "≤" rather than as a reading.
+function procMaxCoreCell(p) {
+  // Gated on has_cpu alone, exactly like procCpuCell: both readings come from the
+  // same live sample, so whenever one exists the other does. An absent max_core means
+  // a measured zero (omitempty drops it), not an unknown — "—" would misreport it.
+  if (!p.has_cpu) return tpl`<td>—</td>`;
+  const peak = Number(p.max_core) || 0;
+  const shown = fmtPct(peak);
+  const bar = cpuBarMini(peak, p.max_core_exact
+    ? `${shown} of one core, this process's busiest thread`
+    : `at most ${shown} of one core: not measured per thread, bounded by the process rate`);
+  return tpl`<td>${p.max_core_exact ? bar : tpl`<span class="muted">≤</span> ${bar}`}</td>`;
+}
 function procIoFdThreadCells(p) {
   const io = (p.io_read || p.io_write) ? `${fmtBytes(p.io_read || 0)} / ${fmtBytes(p.io_write || 0)}` : '—';
   return tpl`<td>${io}</td><td class="muted">${p.fds ? fmtNum(p.fds, 0) : '—'}</td><td class="muted">${p.threads ? fmtNum(p.threads, 0) : '—'}</td>`;
@@ -3042,7 +3076,7 @@ function cpuInline(cpu, ready, numCPU, cpuThread) {
 function cpuThreadSuffix(cpuThread) {
   const peak = Number(cpuThread) || 0;
   if (peak <= 0) return "";
-  return ` · busiest process ${fmtPct(peak)} of one core`;
+  return ` · busiest thread ${fmtPct(peak)} of one core`;
 }
 
 function serviceHasNoResidentProcess(s) {
@@ -3414,8 +3448,16 @@ function drawSLAChart(points, win) {
     renderSLAIncidentList(incidents);
 }
 
+// totalsCpuCell renders the whole-tree machine-wide CPU rate for the General data
+// grid, the same reading the table's CPU column shows.
+//
+// The busiest-thread figure is deliberately not spelled out here: it belongs to a
+// process, and the process table now carries it per row (procMaxCoreCell). An
+// aggregate maximum only restates whichever row is highest while hiding which one
+// that is. cpu_thread still rides along so cpuInline can name it in the tooltip.
 function totalsCpuCell(pt) {
-  return cpuInline(pt && pt.cpu, !!(pt && pt.has_cpu), pt && pt.num_cpu, pt && pt.cpu_thread);
+  const { cpu, has_cpu: ready, num_cpu: cores, cpu_thread: thread } = pt || {};
+  return cpuInline(cpu, !!ready, cores, thread);
 }
 
 function detailDomKey(name) {
@@ -3543,28 +3585,26 @@ function renderServiceDetail(d) {
     count: procs.length,
   });
   // When the host RAM total is known, show each process's resident memory as a
-  // share of host RAM (a compact bar), plus a bar on the whole-tree total.
+  // share of host RAM (a compact bar).
   const hostMem = hostMemTotalBytes();
   const memPct = (rss) => hostMem > 0 ? pctClamp((Number(rss) || 0) / hostMem * percentScale) : 0;
-  const totalBar = pt && hostMem > 0
-    ? tpl` ${usageBarMini(memPct(pt.rss || 0), fmtPct(memPct(pt.rss || 0)))}`
-    : nothing;
-  const totals = pt
-    ? tpl`<p class="muted detail-totals">Service totals (including child processes): memory <b>${fmtBytes(pt.rss || 0)}</b>${totalBar}${cpuTotalsLine(pt)} · IO r/w <b>${fmtBytes(pt.io_read || 0)} / ${fmtBytes(pt.io_write || 0)}</b> · fds <b>${fmtNum(pt.fds || 0, 0)}</b> · threads <b>${fmtNum(pt.threads || 0, 0)}</b> · ${pt.count} process${pt.count === 1 ? "" : "es"}</p>`
-    : nothing;
+  // The whole-tree totals (memory, cpu, IO, fds, threads, process count) are the
+  // General data grid's job; a summary line above the table would restate every
+  // one of them. Discovery warnings are listed individually just below, so their
+  // count would be restated too.
   const procWarns = procWarnings.map((w) => tpl`<div class="bad detail-warn">discovery warning: ${w}</div>`);
-  const procSummary = tpl`<p class="muted detail-summary">${procs.length} discovered${procWarnings.length ? ` · ${procWarnings.length} discovery warning${procWarnings.length === 1 ? "" : "s"}` : ""}</p>`;
   const procRows = processRows(procs);
   const procTable = procs.length
     ? tpl`<table class="detail-compact-table">
         <caption class="visually-hidden">Service processes</caption>
-        <thead><tr><th scope="col">PID</th><th scope="col">CMD</th><th scope="col">User</th><th scope="col">Role</th><th scope="col" title="CPU used by this process, normalized to one core">CPU</th><th scope="col">Mem</th><th scope="col">IO r/w</th><th scope="col">FDs</th><th scope="col">Threads</th></tr></thead>
+        <thead><tr><th scope="col">PID</th><th scope="col">CMD</th><th scope="col">User</th><th scope="col">Role</th><th scope="col" title="CPU used by this process, normalized to one core">CPU</th><th scope="col" title="The most a single core was used by this process: its busiest thread. Prefixed with ≤ when bounded by the process rate rather than measured per thread.">Max core</th><th scope="col">Mem</th><th scope="col">IO r/w</th><th scope="col">FDs</th><th scope="col">Threads</th></tr></thead>
         <tbody>${procRows.map((row) => { const p = row.p; return tpl`<tr>
           <td>${p.pid}</td>
           <td>${procTreeLabel(row)}</td>
           <td class="muted">${p.user || ""}</td>
           <td class="muted">${p.role || ""}</td>
           ${procCpuCell(p)}
+          ${procMaxCoreCell(p)}
           <td>${p.rss ? (hostMem > 0 ? usageBarMini(memPct(p.rss), fmtBytes(p.rss)) : fmtBytes(p.rss)) : '—'}</td>
           ${procIoFdThreadCells(p)}
         </tr>`; })}</tbody></table>`
@@ -3633,22 +3673,26 @@ function renderServiceDetail(d) {
   const processGeneral = noResidentProcess
     ? nothing
     : tpl`<div><span class="muted">Processes</span><br>${pt ? `${pt.count} process${pt.count === 1 ? "" : "es"}` : tpl`<span class="muted">—</span>`}</div>
-      <div><span class="muted">CPU total</span><br>${totalsCpuCell(pt)}</div>
-      <div><span class="muted">Memory</span><br>${memoryInline(pt && pt.rss)}</div>
-      <div><span class="muted">IO R/W</span><br>${ioRWInline(pt && pt.io_read, pt && pt.io_write)}</div>
+      <div class="${colDupWide}"><span class="muted">CPU total</span><br>${totalsCpuCell(pt)}</div>
+      <div class="${colDupWide}"><span class="muted">Memory</span><br>${memoryInline(pt && pt.rss)}</div>
+      <div class="${colDupWide}"><span class="muted">IO R/W</span><br>${ioRWInline(pt && pt.io_read, pt && pt.io_write)}</div>
       <div><span class="muted">FDs / Threads</span><br>${pt ? `${fmtNum(pt.fds || 0, 0)} / ${fmtNum(pt.threads || 0, 0)}` : tpl`<span class="muted">—</span>`}</div>`;
-  const general = tpl`<h2>General data</h2>
-    <div class="runtime-grid">
+  // Name leads the grid: the row's own heading was dropped as a repeat of the
+  // component, and an expansion scrolled away from its row otherwise has nothing
+  // identifying it. Name and State stay put at every width for that reason; every
+  // other field that also exists as a column is deduplicated — see colDupWide.
+  const general = tpl`<div class="runtime-grid">
+      <div><span class="muted">Name</span><br><b>${displayName(d)}</b></div>
       <div><span class="muted">State</span><br>${serviceStateCell(d)}</div>
-      <div><span class="muted">Category</span><br>${categoryBadge(categoryOf(d, defaultCategoryService))}</div>
+      <div class="${colDupWide}"><span class="muted">Category</span><br>${categoryBadge(categoryOf(d, defaultCategoryService))}</div>
       <div><span class="muted">Unit</span><br>${unitCell(d)}</div>
       <div><span class="muted">Backend</span><br>${d.backend || "—"}</div>
-      <div><span class="muted">Uptime</span><br>${serviceUptimeCell(d)}</div>
+      <div class="${colDupWide}"><span class="muted">Uptime</span><br>${serviceUptimeCell(d)}</div>
       <div><span class="muted">Interval</span><br>${d.interval ? d.interval : tpl`<span class="muted">—</span>`}</div>
       <div><span class="muted">Dry run</span><br><b>${d.dry_run ? "yes" : "no"}</b></div>
       <div><span class="muted">Policy</span><br>${policyCell(d)}</div>
       <div><span class="muted">Locks</span><br>${locksCell(d)}</div>
-      <div><span class="muted">Last event</span><br>${lastEventCell(d)}</div>
+      <div class="${colDupPhone}"><span class="muted">Last event</span><br>${lastEventCell(d)}</div>
       <div><span class="muted">Next remediation</span><br>${nextRemediationCell(d)}</div>
       <div><span class="muted">Remediation</span><br>${renderRemediation(d.remediation)}</div>
       ${processGeneral}
@@ -3656,9 +3700,8 @@ function renderServiceDetail(d) {
   const processSection = noResidentProcess
     ? nothing
     : tpl`<h2>Processes</h2>
-      ${procSummary}${totals}${procWarns}${procTable}`;
+      ${procWarns}${procTable}`;
   return tpl`<div class="service-detail" data-service-detail="${d.name}">
-    <h2>${displayName(d)} <span class="muted">${d.unit || ""}</span></h2>
     ${disabledNote}
     ${general}
     ${graphs}
@@ -3753,27 +3796,11 @@ function hostMemTotalBytes() {
 // cpuBarMini renders a single-core-normalized CPU% as a compact bar (100% = one
 // full core). A multithreaded process can exceed 100%; the bar caps at full but
 // the label keeps the true value.
-function cpuBarMini(pct) {
+// title overrides the default tooltip for callers whose bar is not "this process's
+// own rate" — the busiest-thread cell, for one.
+function cpuBarMini(pct, title) {
   const v = Number(pct) || 0;
-  return usageBarMini(pctClamp(v), fmtPct(v), `${fmtPct(v)} of one core used by this process`);
-}
-
-// cpuTotalsLine renders the whole-tree CPU summary for a process_totals object:
-// the whole-machine rate plus the daemon's cpu_thread reading (the busiest
-// single process against one core), which is what a saturated worker shows up
-// in while the machine-wide figure still looks low. "measuring" until the first
-// rate is available, "" when CPU was never sampled (no live registry).
-function cpuTotalsLine(pt) {
-  if (!pt) return nothing;
-  if (!pt.has_cpu) return pt.num_cpu ? tpl` · cpu <span class="muted">measuring…</span>` : nothing;
-  const machine = Number(pt.cpu) || 0;
-  const peak = Number(pt.cpu_thread) || 0;
-  const machineBar = usageBarMini(pctClamp(machine), fmtPct(machine),
-    `${fmtPct(machine)} of ${pt.num_cpu || "?"} cores${cpuThreadSuffix(peak)}`);
-  const peakPart = peak > 0
-    ? tpl` · core peak <b>${fmtPct(peak)}</b> ${cpuBarMini(peak)}`
-    : nothing;
-  return tpl` · cpu <b>${fmtPct(machine)}</b> ${machineBar}${peakPart}`;
+  return usageBarMini(pctClamp(v), fmtPct(v), title != null ? title : `${fmtPct(v)} of one core used by this process`);
 }
 
 // storageUsedPct returns the used percentage 0..100, or null when the volume

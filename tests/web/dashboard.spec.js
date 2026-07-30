@@ -119,7 +119,9 @@ function serviceDetail(name) {
     checks: [{ name: "latency", type: "http", ran: true, ok: true, message: "status 200", sla: [] }, ...namedMetrics],
     processes: [{
       pid: name === "web" ? 101 : 202, cmdline: [name], user: "root", role: "main", rss: 1048576,
-      has_cpu: true, cpu: 96.25,
+      // 96.25% spread over threads, of which the busiest held 61.5% of one core:
+      // max_core must be readable as its own figure, not confused with cpu.
+      has_cpu: true, cpu: 96.25, threads: 4, max_core: 61.5, max_core_exact: true,
     }],
     process_totals: {
       count: 1, rss: 1048576, io_read: 0, io_write: 0, fds: 5, threads: 1,
@@ -356,19 +358,129 @@ test("service detail graphs named check metrics and reports fetch failures", asy
   await expect(dbMetric).toContainText("Failed to load users · count: HTTP 500");
 });
 
-test("service detail surfaces the daemon's cpu_thread beside the machine-wide rate", async ({ page }) => {
+test("the process table reports each process's busiest core beside its total", async ({ page }) => {
   await page.locator("#svc-row-web .row-toggle").click();
   const detail = page.locator('[data-service-detail="web"]');
-  const totals = detail.locator(".detail-totals");
-  // The whole-machine rate alone hides a single saturated worker, so the totals
-  // line carries process_totals.cpu_thread too.
-  await expect(totals).toContainText("cpu 12.5%");
-  await expect(totals).toContainText("core peak 96.25%");
-  // Process CPU is already single-core normalized, so it gets one column, not a
-  // percentage column plus an identical bar column.
-  const headers = detail.getByRole("table", { name: "Service processes" }).locator("thead th");
-  await expect(headers).toHaveCount(9);
+  const table = detail.getByRole("table", { name: "Service processes" });
+
+  // Max core sits immediately after CPU: the two answer different questions, and a
+  // process spread over eight cores reports the same total as one pegging a single
+  // core. Process CPU is already single-core normalized, so each gets one column,
+  // not a percentage column plus an identical bar column.
+  const headers = table.locator("thead th");
+  await expect(headers).toHaveCount(10);
   await expect(headers.nth(4)).toHaveText("CPU");
+  await expect(headers.nth(5)).toHaveText("Max core");
+
+  // 96.25% total, busiest thread 61.5% of one core: the row must show both, so the
+  // busiest-thread figure can never be read as the process total.
+  const cells = table.locator("tbody tr").first().locator("td");
+  await expect(cells.nth(4)).toContainText("96.25%");
+  await expect(cells.nth(5)).toContainText("61.5%");
+  // Measured, not bounded — no ≤ marker.
+  await expect(cells.nth(5)).not.toContainText("≤");
+
+  // The aggregate no longer restates it in the General data grid: it would hide
+  // which process the peak belongs to.
+  await expect(detail.locator(".runtime-grid")).not.toContainText("core peak");
+});
+
+test("a genuinely idle process reads 0% in both CPU columns", async ({ page }) => {
+  // max_core carries omitempty, so a process at exactly 0% sends no field at all.
+  // That must read the same as its CPU cell — "0%", a measured zero — not "—", which
+  // means "unknown". The two columns are fed by the same sample: if one has a rate,
+  // so does the other.
+  await page.route("**/api/services/db", async (route) => {
+    const body = JSON.parse(JSON.stringify(serviceDetail("db")));
+    delete body.processes[0].cpu;
+    delete body.processes[0].max_core;
+    body.processes[0].has_cpu = true;
+    body.processes[0].max_core_exact = true;
+    await route.fulfill({ json: body });
+  });
+  await page.locator("#svc-row-db .row-toggle").click();
+
+  const cells = page.locator('[data-service-detail="db"]')
+    .getByRole("table", { name: "Service processes" })
+    .locator("tbody tr").first().locator("td");
+  await expect(cells.nth(4)).toContainText("0%");
+  await expect(cells.nth(5)).toContainText("0%");
+});
+
+test("an unmeasured busiest core is shown as a bound, not a reading", async ({ page }) => {
+  // Below the daemon's thread-sampling floor there is no per-thread measurement, so
+  // the process rate stands in as an upper bound and must be marked as one.
+  await page.route("**/api/services/db", async (route) => {
+    const body = JSON.parse(JSON.stringify(serviceDetail("db")));
+    body.processes[0].max_core = body.processes[0].cpu;
+    body.processes[0].max_core_exact = false;
+    await route.fulfill({ json: body });
+  });
+  await page.locator("#svc-row-db .row-toggle").click();
+
+  const cell = page.locator('[data-service-detail="db"]')
+    .getByRole("table", { name: "Service processes" })
+    .locator("tbody tr").first().locator("td").nth(5);
+  await expect(cell).toContainText("≤");
+  await expect(cell).toContainText("96.25%");
+});
+
+test("service detail complements the row instead of repeating it", async ({ page }) => {
+  await page.locator("#svc-row-web .row-toggle").click();
+  const detail = page.locator('[data-service-detail="web"]');
+  // The row already names the service and the grid is self-evident, so neither
+  // heading survives; the name moved into the grid as the expansion's anchor.
+  await expect(detail.getByRole("heading", { name: "General data" })).toHaveCount(0);
+  // Pinned as "which heading opens the expansion" rather than "no heading is named
+  // after the service": several headings embed the display name through a nested
+  // control's aria-label (Preflight's run button among them), so a name-based
+  // absence check either matches one of those or, keyed on the service key instead
+  // of displayName's "Web server", passes vacuously.
+  await expect(detail.locator("h2").first()).toHaveText(/^Graphs/);
+  await expect(detail.locator(".runtime-grid > div", { hasText: "Name" }).first()).toContainText("Web server");
+  // The process count and the whole-tree totals are grid fields; the lines that
+  // restated them above the table are gone.
+  await expect(detail.locator(".detail-summary")).toHaveCount(0);
+  await expect(detail.locator(".detail-totals")).toHaveCount(0);
+  await expect(detail.getByRole("heading", { name: "Processes" })).toBeVisible();
+});
+
+// A duplicated General data field and its table column are mutually exclusive at
+// every width: exactly one of the pair is on screen, so the reading is never shown
+// twice and never lost. The widths are driven here rather than left to the project
+// viewports because neither project is wide enough to clear the 1420px breakpoint —
+// devices["Desktop Chrome"] is 1280px, already inside compact mode.
+test("detail fields appear only where their table column is hidden", async ({ page }) => {
+  await page.locator("#svc-row-web .row-toggle").click();
+  const detail = page.locator('[data-service-detail="web"]');
+  const pairs = [
+    { label: "IO R/W", field: ".col-dup-1420", column: "io" },
+    { label: "Last event", field: ".col-dup-640", column: "last" },
+  ];
+  // One width per band of the responsive rules, with the columns each band still
+  // shows spelled out. Asserting the expected column visibility rather than reading
+  // it back is what makes the field assertion mean something: derived from the live
+  // state, "column hidden so field visible" would hold with the CSS deleted.
+  const bands = [
+    { width: 1600, shows: ["io", "last"] }, // full table
+    { width: 1200, shows: ["last"] }, // metric columns retired
+    { width: 500, shows: [] }, // Last activity retired too
+  ];
+  for (const band of bands) {
+    await page.setViewportSize({ width: band.width, height: 900 });
+    for (const pair of pairs) {
+      const at = `${pair.label} at ${band.width}px`;
+      const field = detail.locator(`.runtime-grid > ${pair.field}`, { hasText: pair.label });
+      const column = page.locator(`.services-table th[data-sort="${pair.column}"]`);
+      if (band.shows.includes(pair.column)) {
+        await expect(column, `${at}: column expected on screen`).toBeVisible();
+        await expect(field, `${at}: column shown, field must not repeat it`).toBeHidden();
+      } else {
+        await expect(column, `${at}: column expected retired`).toBeHidden();
+        await expect(field, `${at}: column hidden, field must carry the reading`).toBeVisible();
+      }
+    }
+  }
 });
 
 test("service table re-renders preserve hydrated detail without more requests", async ({ page }) => {
