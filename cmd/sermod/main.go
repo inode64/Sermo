@@ -34,7 +34,9 @@ import (
 	"sermo/internal/rules"
 	"sermo/internal/servicemgr"
 	"sermo/internal/state"
+	"sermo/internal/telegrambot"
 	"sermo/internal/web"
+	"sermo/internal/webcred"
 )
 
 const (
@@ -62,9 +64,19 @@ const (
 	daemonEventLogLimit  = 1000
 	daemonPIDFileMode    = 0o644
 	daemonRuntimeDirMode = 0o700
+	// daemonWebTokenFileMode keeps the runtime token owner-only: reading it is
+	// equivalent to holding the admin password.
+	daemonWebTokenFileMode = 0o600
+	// secretGroupOtherMask matches any group or other permission bit, which on a
+	// file holding a password is worth a warning.
+	secretGroupOtherMask = 0o077
+	// tmpFileExt names the staging file of an atomic write, the same spelling
+	// mountctl uses for its state files.
+	tmpFileExt = ".tmp"
 	// shutdownPruneDrainTimeout bounds how long shutdown waits for an in-flight
-	// history-prune statement; it must stay well under init-system stop
-	// timeouts (systemd defaults to 90s) so a long DELETE cannot force SIGKILL.
+	// state-maintenance statement; it must stay well under init-system stop
+	// timeouts (systemd defaults to 90s) so a long DELETE or consolidation cannot
+	// force SIGKILL.
 	shutdownPruneDrainTimeout = 5 * time.Second
 )
 
@@ -94,6 +106,7 @@ const (
 	logFieldEUID                  = "euid"
 	logFieldKey                   = "key"
 	logFieldMessage               = "message"
+	logFieldMode                  = "mode"
 	logFieldPath                  = "path"
 	logFieldPID                   = "pid"
 	logFieldReason                = "reason"
@@ -368,14 +381,25 @@ func run(args []string) int {
 		}
 	}
 
+	botCfg := telegrambot.ParseConfig(config.SectionMap(cfg.Global.Raw, config.SectionTelegramBot))
+
 	var webHolder *app.WebBackendHolder
-	var webDone chan struct{}
 	addr, webDisabledReason := webListenAddr(cfg)
-	if addr != "" {
+	// The web backend feeds both the dashboard and the report bot; build it when
+	// either is enabled, even if the HTTP server itself stays off.
+	if addr != "" || botCfg.Enabled {
 		var webWarnings []string
 		webHolder, webWarnings = app.NewWebBackendHolder(ctx, cfg, deps)
 		app.LogBuildNotices(logger, "build web backend", webWarnings)
+	}
+
+	var webDone chan struct{}
+	if addr != "" {
 		auth := webAuth(cfg)
+		warnWorldReadableSecret(logger, cfg)
+		token, removeToken := writeWebToken(logger, rt, auth)
+		defer removeToken()
+		auth.RuntimeToken = token
 		server := &web.Server{
 			Addr:                   addr,
 			Backend:                webHolder,
@@ -383,6 +407,7 @@ func run(args []string) int {
 			AllowedHosts:           webAllowedHosts(cfg),
 			Logger:                 logger,
 			AccessLog:              accessLog,
+			MaxSeriesWindow:        app.EngineRetention(cfg).MaxWindow(),
 			OperationTimeout:       app.MaxOperationTimeout(cfg, deps.OperationTimeout),
 			OperationTimeoutSource: webHolder.MaxOperationTimeout,
 			Readiness:              readiness,
@@ -410,7 +435,22 @@ func run(args []string) int {
 		logger.Warn("web ui disabled; no port will be opened", logFieldReason, webDisabledReason)
 	}
 
-	pruneDone := startOldHistoryPrune(ctx, logger, store, time.Now().Add(-state.DefaultHistoryRetention))
+	// Interactive read-only report bot (long polling; no inbound socket). It
+	// reads the same web backend the dashboard serves and replies to commands
+	// from allow-listed chats only.
+	var botDone chan struct{}
+	if botCfg.Enabled {
+		bot := telegrambot.New(app.NewTelegramReporter(webHolder, store, time.Now), botCfg, logger)
+		deps.TelegramBot = bot
+		botDone = make(chan struct{})
+		go func() {
+			defer close(botDone)
+			bot.Run(ctx)
+		}()
+		logger.Info("telegram report bot enabled", "allowed_chats", len(botCfg.AllowedChats))
+	}
+
+	maintenanceDone := startStateMaintenance(ctx, logger, store, app.EngineRollupInterval(cfg))
 
 	logger.Info("sermod starting", logFieldBackend, detection.Backend, logFieldServices, len(workers), logFieldWatches, len(watches))
 
@@ -453,8 +493,11 @@ func run(args []string) int {
 	if webDone != nil {
 		<-webDone
 	}
-	if !drainOrTimeout(pruneDone, shutdownPruneDrainTimeout) {
-		logger.Warn("history prune still running at shutdown; closing the store without it")
+	if botDone != nil {
+		<-botDone
+	}
+	if !drainOrTimeout(maintenanceDone, shutdownPruneDrainTimeout) {
+		logger.Warn("state maintenance still running at shutdown; closing the store without it")
 	}
 	// Since Go 1.26 NotifyContext records the received signal as the
 	// cancellation cause; name it so operators can tell SIGTERM from SIGINT.
@@ -467,7 +510,7 @@ func run(args []string) int {
 }
 
 func openDaemonStore(cfg *config.Config, logger *slog.Logger) (*state.Store, int) {
-	store, err := state.OpenContextWith(context.Background(), filepath.Join(cfg.Global.StateDir(), state.Filename), state.Options{CacheBytes: app.EngineByteSize(cfg, config.EngineKeyStateCacheSize, state.DefaultCacheBytes)})
+	store, err := state.OpenContextWith(context.Background(), filepath.Join(cfg.Global.StateDir(), state.Filename), app.EngineStateOptions(cfg))
 	if err != nil {
 		logger.Error("open state store", logFieldError, err)
 		return nil, exitFailure
@@ -580,18 +623,80 @@ func countArtifactWatches(watches []*app.Watch, category string) int {
 	return count
 }
 
-// webAuth builds the web access control from the `web` block (admin password,
-// optional guest password, optional anonymous guest read access).
+// webAuth builds the web access control from the `web` block (admin
+// credentials, optional guest credentials, optional anonymous guest read
+// access).
 func webAuth(cfg *config.Config) web.Auth {
 	m, _ := cfg.Global.Raw[config.SectionWeb].(map[string]any)
 	if m == nil {
 		return web.Auth{}
 	}
 	auth := web.Auth{}
-	auth.AdminPassword, _ = m[config.WebKeyPassword].(string)
-	auth.GuestPassword, _ = m[config.WebKeyGuestPassword].(string)
+	auth.AdminCredentials = cfg.Global.WebCredentials()
+	auth.GuestCredentials = cfg.Global.WebGuestCredentials()
 	auth.AnonymousGuest, _ = m[config.WebKeyGuest].(bool)
 	return auth
+}
+
+// writeWebToken generates the runtime token that grants sermoctl admin access to
+// the web API and writes it to <runtime>/web.token, readable only by the daemon
+// user. Hashed credentials leave no password for the CLI to send, so without the
+// token `sermoctl status` and friends could not authenticate at all.
+//
+// It returns the token and a cleanup function; both are empty when auth is
+// disabled (an open dashboard needs no credential) or the file cannot be
+// written, which is logged and left non-fatal: the dashboard itself still works.
+func writeWebToken(logger *slog.Logger, runtimeDir string, auth web.Auth) (string, func()) {
+	if !auth.Enabled() {
+		return "", func() {}
+	}
+	path := filepath.Join(runtimeDir, config.DaemonWebTokenFilename)
+	token, err := webcred.GenerateSecret()
+	if err == nil {
+		err = writeFileAtomic(path, []byte(token+"\n"), daemonWebTokenFileMode)
+	}
+	if err != nil {
+		logger.Warn("write web token failed (sermoctl will need SERMO_WEB_PASSWORD)", logFieldPath, path, logFieldError, err)
+		return "", func() {}
+	}
+	return token, func() { _ = os.Remove(path) }
+}
+
+// writeFileAtomic writes data through a temporary file in the same directory, so
+// a reader never sees a half-written secret and a crash cannot leave one behind
+// under the real name.
+func writeFileAtomic(path string, data []byte, mode os.FileMode) error {
+	tmp := path + tmpFileExt
+	// os.WriteFile only applies mode when it creates the file, so a staging file
+	// left behind by an earlier crash would donate its own permissions to the
+	// secret. Start from nothing.
+	if err := os.Remove(tmp); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	if err := os.WriteFile(tmp, data, mode); err != nil {
+		return err
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		_ = os.Remove(tmp)
+		return err
+	}
+	return nil
+}
+
+// warnWorldReadableSecret logs a password file whose mode lets other users read
+// it. It is a warning, not a validation error: the daemon can still run, and
+// refusing to start over a permission bit would be worse than saying so.
+func warnWorldReadableSecret(logger *slog.Logger, cfg *config.Config) {
+	for _, path := range cfg.Global.WebCredentialFiles() {
+		info, err := os.Stat(path)
+		if err != nil {
+			continue
+		}
+		if info.Mode().Perm()&secretGroupOtherMask != 0 {
+			logger.Warn("web password file is readable beyond its owner (chmod 0600 recommended)",
+				logFieldPath, path, logFieldMode, info.Mode().Perm().String())
+		}
+	}
 }
 
 // webAllowedHosts reads web.allowed_hosts: extra Host header names the open
@@ -618,48 +723,56 @@ func openEngineLog(logger *slog.Logger, cfg *config.Config, key string) *logfile
 	return w
 }
 
-type oldHistoryPruner interface {
-	PruneSLA(before time.Time) (int64, error)
-	PruneMeasurements(before time.Time) (int64, error)
-	PruneMetrics(before time.Time) (int64, error)
-	PruneDaemonMetrics(before time.Time) (int64, error)
-	PruneServiceMetrics(before time.Time) (int64, error)
-	PruneEvents(before time.Time) (int64, error)
+// stateMaintainer consolidates stored history into the coarser archives and
+// prunes each resolution to its retention.
+type stateMaintainer interface {
+	Maintain(ctx context.Context, now time.Time) (state.MaintainResult, error)
 }
 
-func startOldHistoryPrune(ctx context.Context, logger *slog.Logger, store oldHistoryPruner, cutoff time.Time) <-chan struct{} {
+// startStateMaintenance keeps the resolution ladder current for the daemon's
+// lifetime: one pass immediately, then one per interval.
+//
+// It is started here rather than per configuration generation so a reload does
+// not restart the cadence, and it runs off the startup critical path so health
+// endpoints and the Web UI bind before the first pass. The pass is interruptible
+// between statements: main waits for this goroutine before the deferred
+// store.Close(), so continuing would only delay exit.
+func startStateMaintenance(ctx context.Context, logger *slog.Logger, store stateMaintainer, interval time.Duration) <-chan struct{} {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		pruneOldHistory(ctx, logger, store, cutoff)
+		runStateMaintenance(ctx, logger, store, interval)
 	}()
 	return done
 }
 
-func pruneOldHistory(ctx context.Context, logger *slog.Logger, store oldHistoryPruner, cutoff time.Time) {
-	// Retention can scan large history tables on long-lived installations. Keep it
-	// out of the startup critical path so health endpoints and the Web UI bind
-	// before old samples are removed. Stop between steps on shutdown: main waits
-	// for this goroutine before the deferred store.Close(), so remaining steps
-	// would only delay exit.
-	for _, p := range []struct {
-		what  string
-		prune func(time.Time) (int64, error)
-	}{
-		{"sla samples", store.PruneSLA},
-		{"measurements", store.PruneMeasurements},
-		{"metrics", store.PruneMetrics},
-		{"daemon metrics", store.PruneDaemonMetrics},
-		{"service metrics", store.PruneServiceMetrics},
-		{"events", store.PruneEvents},
-	} {
-		if ctx.Err() != nil {
+func runStateMaintenance(ctx context.Context, logger *slog.Logger, store stateMaintainer, interval time.Duration) {
+	maintainStateOnce(ctx, logger, store)
+	if interval <= 0 {
+		interval = state.DefaultRollupInterval
+	}
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
 			return
+		case <-ticker.C:
+			maintainStateOnce(ctx, logger, store)
 		}
-		if n, err := p.prune(cutoff); err != nil {
-			logger.Warn("prune "+p.what, logFieldError, err)
-		} else if n > 0 {
-			logger.Info("pruned old "+p.what, logFieldRows, n)
-		}
+	}
+}
+
+func maintainStateOnce(ctx context.Context, logger *slog.Logger, store stateMaintainer) {
+	if ctx.Err() != nil {
+		return
+	}
+	result, err := store.Maintain(ctx, time.Now())
+	if err != nil {
+		logger.Warn("consolidate stored history", logFieldError, err)
+	}
+	if result.Rolled > 0 || result.Pruned() > 0 {
+		logger.Info("consolidated stored history",
+			"rolled", result.Rolled, logFieldRows, result.Pruned())
 	}
 }

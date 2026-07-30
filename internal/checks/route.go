@@ -118,9 +118,9 @@ func SampleRoutes(family string) ([]DefaultRoute, error) { return defaultRouteSa
 func netlinkFamily(family string) (int, error) {
 	switch family {
 	case FamilyIPv4, "":
-		return netlink.FAMILY_V4, nil
+		return familyV4, nil
 	case FamilyIPv6:
-		return netlink.FAMILY_V6, nil
+		return familyV6, nil
 	default:
 		return 0, fmt.Errorf("unknown route family %q", family)
 	}

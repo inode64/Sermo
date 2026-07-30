@@ -41,7 +41,11 @@ const (
 	commandState     = "state"
 	commandPanic     = "panic"
 	commandValidate  = "validate"
+	commandWeb       = config.SectionWeb
 )
+
+// commandWebHashPassword prints a credential line for web.password_file.
+const commandWebHashPassword = "hash-password"
 
 const (
 	commandMountList    = "list"

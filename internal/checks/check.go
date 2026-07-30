@@ -14,29 +14,102 @@ package checks
 import (
 	"context"
 	"fmt"
+	"slices"
 	"sync"
 	"time"
 
 	"sermo/internal/conn"
 )
 
+// Reporting modes a check can declare with `reports:`. They describe what the
+// result *means*, which is what decides availability, SLA and how the dashboard
+// labels the check — not how the probe runs.
+const (
+	// ReportsHealth is the default: OK means the target is available, so the
+	// check reads ok/fail and counts toward availability.
+	ReportsHealth = "health"
+	// ReportsState marks a state sensor: OK means the sensed state is present
+	// (a backup is running), and neither side is good or bad. It has no verdict,
+	// so it never counts toward health or SLA and reads active/inactive.
+	ReportsState = "state"
+	// ReportsCondition is alert-style: OK means the condition fired, so
+	// availability is inverted. It is what most non-health types get by default;
+	// declaring it makes that explicit, or applies it to a type whose default is
+	// health.
+	ReportsCondition = "condition"
+	// ReportsValue marks a measurement: the check publishes a number and passes
+	// no judgement on it. Like a state sensor it has no verdict and no SLA; the
+	// dashboard shows the reading and rules compare it themselves.
+	ReportsValue = "value"
+)
+
+// ReportingModes lists the values `reports:` accepts, for validation and docs.
+var ReportingModes = []string{ReportsHealth, ReportsState, ReportsCondition, ReportsValue}
+
+// conditionByDefault reports whether a check of this type is alert-style unless
+// `reports:` says otherwise. The type only supplies the default: the same type
+// can be a health assertion in one service and a sensor in another, so the
+// check has the last word.
+func conditionByDefault(typ string) bool { return !IsHealthType(typ) }
+
+// ResolveCondition decides whether a check is alert-style: an explicit
+// `reports:` wins, otherwise the check type's default applies.
+func ResolveCondition(typ, reports string) bool {
+	switch {
+	case reports == ReportsCondition:
+		return true
+	case reports == ReportsHealth || VerdictlessMode(reports):
+		return false
+	default:
+		return conditionByDefault(typ)
+	}
+}
+
+// IsReportingMode reports whether s names a supported `reports:` value.
+func IsReportingMode(s string) bool { return slices.Contains(ReportingModes, s) }
+
+// verdictlessModes are the reporting modes that assert nothing: they observe a
+// state or a number without judging it, so they never count toward health and
+// record no availability.
+var verdictlessModes = []string{ReportsState, ReportsValue}
+
+// VerdictlessMode reports whether a declared `reports:` value passes no
+// judgement, so the check has no availability to report. The configured
+// counterpart of Result.Verdictless, for callers that hold the declaration
+// rather than a result.
+func VerdictlessMode(reports string) bool { return slices.Contains(verdictlessModes, reports) }
+
 // Result is the observable outcome of one check.
 type Result struct {
-	Service   string         `json:"service,omitempty"`
-	Check     string         `json:"check"`
-	OK        bool           `json:"ok"`
-	Condition bool           `json:"-"`
-	Optional  bool           `json:"optional,omitempty"`
-	Skipped   bool           `json:"skipped,omitempty"` // gated off this cycle (requires/skip_when_changed)
-	Message   string         `json:"message,omitempty"`
-	Latency   time.Duration  `json:"latency_ns,omitempty"`
-	Data      map[string]any `json:"data,omitempty"`
+	Service string `json:"service,omitempty"`
+	Check   string `json:"check"`
+	OK      bool   `json:"ok"`
+	// Condition inverts availability: OK means the condition fired, not that
+	// the target is well. Derived from the check type.
+	Condition bool `json:"-"`
+	// Reports is the declared reporting mode; empty means ReportsHealth.
+	Reports  string         `json:"-"`
+	Optional bool           `json:"optional,omitempty"`
+	Skipped  bool           `json:"skipped,omitempty"` // gated off this cycle (requires/skip_when_changed)
+	Message  string         `json:"message,omitempty"`
+	Latency  time.Duration  `json:"latency_ns,omitempty"`
+	Data     map[string]any `json:"data,omitempty"`
 }
+
+// Verdictless reports whether this result passes no judgement, so it never
+// counts toward health and records no availability: a state sensor and a
+// measurement both observe without asserting. Rules still read OK directly, so
+// a guard keyed on `active: {check: …}` is unaffected.
+func (r Result) Verdictless() bool { return VerdictlessMode(r.Reports) }
 
 // Healthy reports whether this result means the target is available. Most
 // checks are health-style (OK means healthy); condition checks are alert-style
-// (OK means the condition fired), so their availability is inverted.
+// (OK means the condition fired), so their availability is inverted. A state
+// sensor asserts nothing about availability and is never unhealthy.
 func (r Result) Healthy() bool {
+	if r.Verdictless() {
+		return true
+	}
 	if r.Condition {
 		return !r.OK
 	}
@@ -116,6 +189,7 @@ type base struct {
 	service   string
 	timeout   time.Duration
 	condition bool
+	reports   string
 }
 
 func (b base) Name() string { return b.name }
@@ -134,6 +208,7 @@ func (b base) result(ok bool, message string, start time.Time) Result {
 		Check:     b.name,
 		OK:        ok,
 		Condition: b.condition,
+		Reports:   b.reports,
 		Message:   message,
 		Latency:   time.Since(start),
 	}

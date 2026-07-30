@@ -33,6 +33,23 @@ var graphMetrics = map[string][]GraphMetric{
 // when the type publishes none.
 func GraphMetrics(checkType string) []GraphMetric { return graphMetrics[checkType] }
 
+// DeclaredGraphMetrics returns the graphable metrics for one configured check:
+// the check type's static set, plus its own scalar result when the check
+// declares a `unit:`. The per-check form exists because some types cannot
+// declare a unit statically — a sql check's unit depends on its query, so five
+// sensors on one service can report MiB, seconds and a bare count.
+func DeclaredGraphMetrics(checkType, unit string) []GraphMetric {
+	byType := GraphMetrics(checkType)
+	if unit == "" {
+		return byType
+	}
+	declared := GraphMetric{Key: DataKeyValue, Unit: unit, Label: graphMetricValueLabel, Decimals: 1}
+	return append(append(make([]GraphMetric, 0, len(byType)+1), byType...), declared)
+}
+
+// graphMetricValueLabel names the scalar a check publishes under `unit:`.
+const graphMetricValueLabel = "Value"
+
 // GraphMetricUnit returns the unit for a check type's metric key, or "".
 func GraphMetricUnit(checkType, key string) string {
 	for _, m := range graphMetrics[checkType] {

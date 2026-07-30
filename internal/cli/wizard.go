@@ -91,7 +91,7 @@ func (a App) runWizardSession(ctx context.Context, opts options) (code int, err 
 		return exitRuntimeError, nil
 	}
 
-	p := assist.NewPrompt(a.wizardStdin(), a.Stdout)
+	p := assist.NewPrompt(a.stdinReader(), a.Stdout)
 
 	as, code := a.selectAssistant(p, opts)
 	if as == nil {
@@ -204,7 +204,9 @@ func (a App) selectAssistant(p *assist.Prompt, opts options) (assist.Assistant, 
 	return all[p.Choose("Which kind of check do you want to add?", labels)], exitSuccess
 }
 
-func (a App) wizardStdin() io.Reader {
+// stdinReader returns the interactive input source, defaulting to os.Stdin
+// when no seam is injected.
+func (a App) stdinReader() io.Reader {
 	if a.Stdin != nil {
 		return a.Stdin
 	}

@@ -79,6 +79,8 @@ type webEntry struct {
 	status            func(context.Context) (servicemgr.Status, error)
 	checkNames        []string          // sorted
 	checkTypes        map[string]string // check name -> type
+	checkReports      map[string]string // check name -> `reports:` mode, when declared
+	checkUnits        map[string]string // check name -> `unit:` for its scalar result, when declared
 	checkIntervals    map[string]time.Duration
 	discoverer        process.Discoverer
 	selectors         []process.Selector
@@ -127,9 +129,14 @@ type webNotifier struct {
 }
 
 type stateMaintainer interface {
-	PruneHistory(before time.Time) (state.PruneHistoryResult, error)
-	Compact(ctx context.Context) error
+	CompactHistory(ctx context.Context, now, before time.Time) (state.MaintainResult, error)
 }
+
+// CompactState type-asserts the store to stateMaintainer at runtime, so a signature
+// change would silently degrade the web compact action to "state store unavailable"
+// instead of failing a build. Pin it here: the web fake implements CompactState one
+// layer up and never exercises this port.
+var _ stateMaintainer = (*state.Store)(nil)
 
 // WebBackend implements web.Backend over the daemon's services: status from the
 // backend, monitoring state and SLA from the store, the latest check results from
@@ -352,6 +359,8 @@ func attachServiceRuntime(ctx context.Context, entry *webEntry, name string, tre
 	entry.status = checkDeps.Status
 	entry.checkNames = names
 	entry.checkTypes = types
+	entry.checkReports = checkReportingModes(tree)
+	entry.checkUnits = checkDeclaredUnits(tree)
 	entry.checkIntervals = intervals
 	entry.discoverer = discoverer
 	entry.selectors = selectors
@@ -504,4 +513,38 @@ func checkCatalog(tree map[string]any, defaultInterval time.Duration) ([]string,
 	}
 	sort.Strings(names)
 	return names, types, intervals
+}
+
+// checkReportingModes maps each check that declares `reports:` to its mode. It
+// reads configuration rather than the published result because the mode is
+// static: sourcing it here keeps it correct on the first cycle and across a
+// daemon restart, without widening the persisted snapshot record.
+func checkDeclaredUnits(tree map[string]any) map[string]string {
+	return checkStringField(tree, checks.CheckKeyUnit)
+}
+
+func checkReportingModes(tree map[string]any) map[string]string {
+	return checkStringField(tree, checks.CheckKeyReports)
+}
+
+// checkStringField collects one string field per configured check. Both callers
+// read configuration rather than the published result because these are static
+// declarations: sourcing them here keeps them correct on the first cycle and
+// across a daemon restart, without widening the persisted snapshot record.
+func checkStringField(tree map[string]any, key string) map[string]string {
+	section, ok := tree[config.SectionChecks].(map[string]any)
+	if !ok {
+		return nil
+	}
+	out := map[string]string{}
+	for name, raw := range section {
+		m, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		if v := cfgval.AsString(m[key]); v != "" {
+			out[name] = v
+		}
+	}
+	return out
 }

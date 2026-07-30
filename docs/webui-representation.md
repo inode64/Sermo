@@ -21,6 +21,7 @@ overflow and axe WCAG 2.2 AA rules against deterministic API fixtures.
 
 - [Global rules](#global-rules)
 - [Data sources](#data-sources)
+- [SLA timeline strip](#sla-timeline-strip)
 - [Action Endpoints](#action-endpoints)
 - [Top bar](#top-bar)
 - [Overview tiles](#overview-tiles)
@@ -75,7 +76,7 @@ overflow and axe WCAG 2.2 AA rules against deterministic API fixtures.
 | Service expansion | `GET /api/services/{name}` | checks, process info, rules |
 | Service check metrics | `GET /api/services/{name}/metrics?check=NAME[&metric=KEY]` | the detail renders latency when `metric` is omitted and one graph for every named numeric metric published by a check |
 | Service runtime metrics | `GET /api/services/{name}/runtime` | read-only persisted service CPU/memory/IO history sampled exclusively by worker cycles; `current` is the latest published sample and dashboard reads never repeat process discovery |
-| Service SLA | `GET /api/services/{name}/sla` | per-minute availability history for the service detail SLA timeline and API clients; observed-SLA ratios count only monitored minutes, so unmeasured time is a gap, not downtime |
+| Service SLA | `GET /api/services/{name}/sla` | availability history for the service detail SLA timeline and API clients, at the resolution that window is stored at; observed-SLA ratios count only monitored minutes, so unmeasured time is a gap, not downtime; each point also carries `down_buckets`, the one-minute buckets inside it that saw a failure |
 | Service events | `GET /api/services/{name}/events` | per-service event feed |
 | Watches | `GET /api/watches` | host-level and service-scoped watches; `scope` distinguishes them and service watch names use `service:watch` |
 | Applications | `GET /api/applications` | installed catalog apps; `observed_at` remains fixed while the version/status inventory is served from cache |
@@ -96,6 +97,40 @@ of sliding forward on the browser clock while cached.
 Dashboard refreshes are single-flight: automatic, manual and post-action reloads
 never execute concurrently, and the next automatic delay starts after the prior
 refresh completes.
+
+## SLA timeline strip
+
+The availability strips and the service detail's SLA chart colour each cell by
+**how much of it was down**, not by its availability. Stored history keeps one
+bucket span per window ([Stored history
+resolution](configuration.md#stored-history-resolution)), so on the wide windows a
+cell covers hours or a whole day: a 40-second outage inside a day-long cell is
+99.93% available, which any availability threshold reads as healthy. Colouring by
+the down share instead keeps that outage visible.
+
+Five bands, with green reserved for exactly zero — no cell containing a failure can
+read as healthy, however little of the cell it affected:
+
+| Down share of the cell | Colour |
+|---|---|
+| 0% | green (`.sla-down-none`) |
+| up to 25% | amber (`.sla-down-low`) |
+| up to 50% | orange (`.sla-down-mid`, a `--warn`/`--crit` blend) |
+| up to 75% | red-orange (`.sla-down-high`, a `--warn`/`--crit` blend) |
+| up to 100% | red (`.sla-down-full`) |
+
+The band says how much of the cell was affected, which is what separates a brief
+blip from a half-day outage. A cell with no observation at all stays a hatched
+`.sla-gap`, distinct from both — a gap is unmonitored time, not downtime.
+
+Colour is never the only carrier of this (WCAG 2.2 1.4.1): each cell's `title` and
+`aria-label` state the availability, the down share and how many one-minute buckets
+inside it saw a failure, and the visually-hidden data table beside each strip
+repeats them per sub-span in an `Affected` column.
+
+Incident counts come from those per-minute buckets rather than from the number of
+points with failures, so three separate bad minutes inside one consolidated bucket
+report as three affected minutes, not one.
 
 ## Action Endpoints
 
@@ -121,7 +156,7 @@ with an `{"ok": bool, "message": string}` body for a handled action.
 | Mount blockers | `GET /api/mounts/{name}/blockers` | read-only fresh blocker scan for one mount unit; guests get command lines redacted like `GET /api/mounts` |
 | Lock release | `POST /api/locks/{service}/release?name=NAME` | releases inactive stale/expired named locks; active locks are refused |
 | Events clear | `POST /api/events/clear?before=TIME` | clears persisted event/activity rows; `before` accepts a positive duration or non-future RFC3339 timestamp |
-| State compact | `POST /api/state/compact?before=TIME` | prunes old SLA/metrics/event history and vacuums the state database; matches `sermoctl state compact` |
+| State compact | `POST /api/state/compact?before=TIME` | consolidates and prunes stored history to the configured retention, then vacuums the state database; `before` optionally drops whatever remains older than an explicit cutoff; matches `sermoctl state compact` |
 | Panic mode | `POST /api/panic/{action}` | `on` / `off`; admin-only daemon-wide suspension of hooks, alerts and automatic remediation |
 | Daemon reload | `POST /api/reload` | requests a `sermod` configuration reload |
 
@@ -265,14 +300,25 @@ Shared by the Services, Containers and Virtual machines panels.
 
 | Area | Content |
 | --- | --- |
-| General data | state, category, unit/backend, uptime, interval, policy, locks, last event, next remediation, remediation state and process totals; while the row badge is `starting`, expansion may still show the raw init backend (`inactive`) and in-flight check samples from the observe-only cycle |
+| General data | an unheaded grid, first area of the expansion: name, state, category, unit/backend, uptime, interval, policy, locks, last event, next remediation, remediation state and process totals; while the row badge is `starting`, expansion may still show the raw init backend (`inactive`) and in-flight check samples from the observe-only cycle |
 | Graphs | full-width SLA timeline followed by latency, CPU, memory and IO charts; each service persists its own time window and latency check; `no_resident_process` services show only SLA because they have no process runtime to chart |
-| Processes | full-width detected process tree table, with child processes marked in CMD and kept under their parent; omitted when `no_resident_process` is true |
+| Processes | full-width detected process tree table, with child processes marked in CMD and kept under their parent; **Max core** follows CPU and reports the most a single core was used by that process — its busiest thread — whose tooltip says whether the daemon measured it per thread or bounded it by the process rate; discovery warnings are listed above it, one per line; omitted when `no_resident_process` is true |
 | Checks | configured checks and current result |
 | Named locks | runtime lock state |
 | Rules | remediation/alert rule state |
 | Preflight | inline preflight runner and results |
 | Events | recent retained service events |
+
+The expansion complements the row rather than repeating it: it carries no name
+heading (the row is the heading) and no summary line restating the grid. A General
+data field whose reading is already a table column is shown **only at the widths
+where that column is hidden** — Category, Uptime, CPU total, Memory and IO R/W below
+1420px, Last event below 640px — so each reading appears exactly once and a phone
+loses nothing. Name and State stay at every width as the expansion's anchor, and
+`FDs / Threads` is never hidden because the FDs column does not carry the thread
+count. The busiest-thread figure is not restated in the grid: it belongs to a
+process, so the process table carries it per row (see **Processes** below) instead of
+floating as a total that hides which process it came from.
 
 Open service expansions fetch and fully render fresh detail once per dashboard
 refresh; SLA, metric, runtime and event subrequests plus open watch/application

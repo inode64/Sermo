@@ -29,6 +29,24 @@ engine:
   user_lookup: auto
   # Timeout for each getent lookup. Results are cached in-process.
   user_lookup_timeout: 250ms
+  # Stored history keeps one archive per graph window, at the bucket span that
+  # window actually draws (the charts render a fixed number of columns, so a finer
+  # bucket would be stored and never shown). Each archive is consolidated from the
+  # one below it, exactly: availability, averages and extremes are preserved, only
+  # the exact minute of an old event is not.
+  retention_1m: 3h
+  retention_5m: 30h
+  retention_1h: 216h
+  retention_6h: 912h
+  retention_1d: 8784h
+  # The event/activity feed keeps per-event timestamps, so it is where an old
+  # incident can still be located in time. Raise it if you need that history.
+  retention_events: 720h
+  # How often the daemon consolidates and prunes. It must stay well under
+  # retention_1m: per-minute buckets are the source every coarser archive reads,
+  # and pruning them is floored at the consolidation watermark, so a slower cadence
+  # delays reclaiming space rather than losing history.
+  rollup_interval: 5m
   # Optional append-only JSONL export logs (omit to disable):
   # access: /var/log/sermo/access.log
   # events: /var/log/sermo/event.log
@@ -119,3 +137,10 @@ web:
   # password: "change-me"        # admin: read + actions
   # guest_password: "read-only"  # optional read-only login
   # guest: false                 # set true to allow anonymous read-only access
+  # Instead of the two passwords above, read them from files (chmod 0600) so the
+  # secret never lives in this config. Each *_file key excludes its plain twin.
+  # One credential per line, any of which grants that file's role, in cleartext
+  # or hashed ($2a$... bcrypt, $sha256$... for a generated secret). Build a line
+  # with `sermoctl web hash-password`.
+  # password_file: /etc/sermo/secrets/web.pass
+  # guest_password_file: /etc/sermo/secrets/guest.pass

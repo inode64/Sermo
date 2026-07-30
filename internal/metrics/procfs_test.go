@@ -3,7 +3,9 @@ package metrics
 import (
 	"os"
 	"runtime"
+	"sync/atomic"
 	"testing"
+	"time"
 )
 
 // TestOSReaderProcfs exercises the real /proc readers. It is Linux-only (the
@@ -178,5 +180,80 @@ func TestParseProcMeminfoTotalsAvailableEqualsTotal(t *testing.T) {
 	totals := parseProcMeminfoTotals(data)
 	if !totals.memoryOK || totals.memoryTotal != 1000*1024 || totals.memoryUsed != 0 {
 		t.Fatalf("equal mem totals = %+v, want valid memory with 0 used", totals)
+	}
+}
+
+// TestOSReaderProcessThreadCPU exercises the real /proc/<pid>/task reader against
+// this test binary, whose Go runtime is genuinely multithreaded. It is the one part
+// of the cpu_thread path that a fake Reader cannot cover: the procfs layout, the
+// comm-splitting in each thread's stat, and that per-thread jiffies actually advance
+// independently.
+//
+// It pins the property the metric exists for: one busy thread must stand out from its
+// idle siblings. Comparing the peak against the average is what a per-process
+// maximum could never show.
+func TestOSReaderProcessThreadCPU(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("OSReader reads Linux /proc")
+	}
+	r := OSReader{}
+	pid := os.Getpid()
+
+	first, ok := r.ProcessThreadCPU(pid)
+	if !ok {
+		t.Fatalf("ProcessThreadCPU(%d) not ok; want this process's own threads", pid)
+	}
+	if len(first) < 2 {
+		t.Skipf("runtime exposed only %d thread(s); nothing to distinguish", len(first))
+	}
+
+	// Pin one goroutine to its own OS thread and spin it, leaving the rest idle. The
+	// spin is the point: this test needs one thread to accumulate jiffies that its
+	// siblings do not, which is precisely what cpu_thread has to surface.
+	var stop atomic.Bool
+	spinning := make(chan struct{})
+	go func() {
+		runtime.LockOSThread()
+		defer runtime.UnlockOSThread()
+		close(spinning)
+		for !stop.Load() {
+			runtime.Gosched()
+		}
+	}()
+	<-spinning
+	deadline := time.Now().Add(300 * time.Millisecond)
+	for time.Now().Before(deadline) {
+		runtime.Gosched()
+	}
+	stop.Store(true)
+
+	second, ok := r.ProcessThreadCPU(pid)
+	if !ok {
+		t.Fatal("second ProcessThreadCPU read failed")
+	}
+
+	var deltas []uint64
+	var sum, peak uint64
+	for tid, cur := range second {
+		prev, seen := first[tid]
+		if !seen || cur < prev {
+			continue
+		}
+		d := cur - prev
+		deltas = append(deltas, d)
+		sum += d
+		if d > peak {
+			peak = d
+		}
+	}
+	if len(deltas) < 2 {
+		t.Fatalf("only %d thread(s) present in both samples; want at least 2", len(deltas))
+	}
+	if peak == 0 {
+		t.Fatal("no thread accumulated CPU time across the two samples")
+	}
+	// The spinning thread must carry visibly more than an even split would give it.
+	if avg := float64(sum) / float64(len(deltas)); float64(peak) <= avg {
+		t.Errorf("peak thread delta %d not above the %v average across %d threads: a busy thread must stand out", peak, avg, len(deltas))
 	}
 }

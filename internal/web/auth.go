@@ -2,12 +2,13 @@ package web
 
 import (
 	"context"
-	"crypto/sha256"
-	"crypto/subtle"
+	"fmt"
 	"net"
 	"net/http"
 	"slices"
 	"strings"
+
+	"sermo/internal/webcred"
 )
 
 // hostLocalname is the hostname (and suffix, `*.localhost`) that always
@@ -16,24 +17,39 @@ const hostLocalname = "localhost"
 
 // Auth controls access to the dashboard via HTTP Basic auth with two roles:
 //
-//   - admin: full access (read and actions). Granted by AdminPassword.
+//   - admin: full access (read and actions). Granted by AdminCredentials.
 //   - guest: read-only (GET/HEAD only; state-changing requests are refused). Granted by
-//     GuestPassword, or to anonymous requests when AnonymousGuest is set.
+//     GuestCredentials, or to anonymous requests when AnonymousGuest is set.
 //
 // When no field is set, auth is disabled and every request is treated as admin
 // (the UI is open) — suitable only behind a trusted boundary.
 //
-// The password (not the username) determines the role: enter any username and the
-// admin or guest password. Passwords are compared in constant time.
+// The password (not the username) determines the role: enter any username and any
+// of the passwords configured for that role. Passwords are compared in constant
+// time; see internal/webcred for the credential formats.
 type Auth struct {
-	AdminPassword  string
-	GuestPassword  string
-	AnonymousGuest bool
+	AdminCredentials webcred.List
+	GuestCredentials webcred.List
+	AnonymousGuest   bool
+
+	// RuntimeToken is the daemon-generated admin credential sermoctl reads from
+	// <paths.runtime>/web.token. It exists because hashed credentials leave no
+	// password for the CLI to send. Empty disables it.
+	RuntimeToken string
 }
 
-// Enabled reports whether any access control is configured.
+// String redacts the runtime token, which is an admin credential in its own
+// right and must not reach a log line through a formatted Auth or Server.
+func (a Auth) String() string {
+	return fmt.Sprintf("web.Auth{admin: %v, guest: %v, anonymous_guest: %v, runtime_token: %v}",
+		a.AdminCredentials, a.GuestCredentials, a.AnonymousGuest, a.RuntimeToken != "")
+}
+
+// Enabled reports whether any access control is configured. The runtime token is
+// not access control by itself: it is generated only alongside a configured
+// credential, and it must never turn the open dashboard into a closed one.
 func (a Auth) Enabled() bool {
-	return a.AdminPassword != "" || a.GuestPassword != "" || a.AnonymousGuest
+	return !a.AdminCredentials.Empty() || !a.GuestCredentials.Empty() || a.AnonymousGuest
 }
 
 // Role values returned by role() and surfaced in the whoami response. The empty
@@ -94,10 +110,16 @@ func (a Auth) role(r *http.Request) string {
 		return roleAdmin
 	}
 	if _, pass, ok := r.BasicAuth(); ok {
-		if a.AdminPassword != "" && secureEqual(pass, a.AdminPassword) {
+		// The token is checked first: it is the cheap comparison, and it is what
+		// sermoctl sends on every call.
+		if a.RuntimeToken != "" && webcred.SecureEqual(pass, a.RuntimeToken) {
 			return roleAdmin
 		}
-		if a.GuestPassword != "" && secureEqual(pass, a.GuestPassword) {
+		ctx := r.Context()
+		if a.AdminCredentials.Verify(ctx, pass) {
+			return roleAdmin
+		}
+		if a.GuestCredentials.Verify(ctx, pass) {
 			return roleGuest
 		}
 	}
@@ -183,12 +205,6 @@ func (s *Server) handleWhoami(w http.ResponseWriter, r *http.Request) {
 		whoamiFieldCanAct: role == roleAdmin,
 		whoamiFieldAuth:   s.Auth.Enabled(),
 	})
-}
-
-func secureEqual(a, b string) bool {
-	ah := sha256.Sum256([]byte(a))
-	bh := sha256.Sum256([]byte(b))
-	return subtle.ConstantTimeCompare(ah[:], bh[:]) == 1
 }
 
 func isReadMethod(method string) bool {

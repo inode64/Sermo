@@ -72,9 +72,19 @@ func attachLiveCPU(d *web.Detail, live *LiveMetrics, service string) {
 	}
 	if sample.PerProcCPU != nil {
 		for i := range d.Processes {
-			if pct, ok := sample.PerProcCPU[d.Processes[i].PID]; ok {
-				d.Processes[i].CPU = pct
-				d.Processes[i].HasCPU = true
+			pid := d.Processes[i].PID
+			pct, ok := sample.PerProcCPU[pid]
+			if !ok {
+				continue
+			}
+			d.Processes[i].CPU = pct
+			d.Processes[i].HasCPU = true
+			// MaxCore rides on the same sample: without a per-thread measurement it
+			// is the process rate itself, flagged inexact so the UI shows it as a
+			// bound rather than a reading.
+			if maxCore, ok := sample.PerProcMaxCore[pid]; ok {
+				d.Processes[i].MaxCore = maxCore
+				d.Processes[i].MaxCoreExact = sample.PerProcMaxCoreExact[pid]
 			}
 		}
 	}

@@ -112,7 +112,7 @@ func (a App) probeDaemonWatch(ctx context.Context, opts options, watch string) (
 		return daemonWatchProbe{}, fmt.Errorf("build probe request: %w", err)
 	}
 	req.Header.Set(daemonWebCSRFHeader, daemonWebCSRFValue)
-	applyDaemonWebAuth(req, cfg)
+	a.applyDaemonWebAuth(req, cfg)
 	client := &http.Client{Timeout: daemonWebClientTimeout}
 	resp, err := client.Do(req)
 	if err != nil {
@@ -127,7 +127,7 @@ func (a App) probeDaemonWatch(ctx context.Context, opts options, watch string) (
 		if result.Message == "" {
 			result.Message = resp.Status
 		}
-		return result, fmt.Errorf("probe failed (%d): %s", resp.StatusCode, strings.TrimSpace(result.Message))
+		return result, fmt.Errorf("probe failed (%d): %s%s", resp.StatusCode, strings.TrimSpace(result.Message), daemonWebStatusHint(resp.StatusCode))
 	}
 	return result, nil
 }

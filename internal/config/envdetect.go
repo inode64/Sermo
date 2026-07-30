@@ -9,6 +9,12 @@ import (
 // manager backend for validation and CLI defaults.
 const EnvBackendOverride = "SERMO_BACKEND"
 
+// EnvWebPassword is the environment variable that supplies the dashboard
+// password sermoctl sends to the daemon web API. It takes precedence over the
+// runtime token, and it is the way in when the credentials are hashed and the
+// token is out of reach (a non-root operator, or a remote daemon).
+const EnvWebPassword = "SERMO_WEB_PASSWORD" //nolint:gosec // G101: the value is the variable's name, not a credential
+
 const (
 	envHostOverride     = "SERMO_HOST"
 	envHostnameOverride = "SERMO_HOSTNAME"

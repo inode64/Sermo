@@ -542,10 +542,25 @@ La capa visual es un sistema de diseño basado en tokens (rediseño de junio de 
   solo necesitan una clase de color `state-<name>`.
 - **SLA timeline strip.** `renderSLATimeline(segments, window)` renderiza una
   banda contigua de disponibilidad estilo status-page — una celda `.sla-seg` por sub-span
-  igual (más antiguo a la izquierda), coloreada por `slaColor`, rayada `.sla-gap` donde no
-  se observó ciclo. `renderSLAWindows` la usa para cada ventana de SLA rodante;
-  los ratios por segmento vienen del backend (`SLAWindow.Segments`). Reutilízala
-  donde se necesite un historial de disponibilidad compacto.
+  igual (más antiguo a la izquierda), rayada `.sla-gap` donde no se observó ciclo.
+  `renderSLAWindows` la usa para cada ventana de SLA rodante; los registros
+  `{up, total, down_buckets}` por segmento vienen del backend
+  (`SLAWindow.Segments`) — `total: 0` es la señal de hueco y el ratio de
+  disponibilidad se deriva en el cliente. Reutilízala donde se necesite un
+  historial de disponibilidad compacto.
+  Las celdas se agrupan en bandas con `slaDownBand(slaDownPct(up, total))` — cinco
+  niveles de severidad sobre la fracción del sub-span que estuvo **caída**, verde
+  solo en exactamente cero — no con un umbral de disponibilidad. El historial
+  almacenado guarda un intervalo de bucket por ventana, así que la celda de una
+  ventana ancha cubre horas o un día y un corte breve dentro de ella supera el 99%
+  de disponibilidad; un umbral de disponibilidad lo renderizaría como sano. No
+  reintroduzcas uno. La banda nombra una clase y `styles.css` tiene el color
+  (`.sla-down-none` … `.sla-down-full`, replicando las bandas `.usagebar.usage-*`),
+  así que la escala queda bajo el linter de tokens y una celda no cuesta ningún
+  `getComputedStyle`. El color no es el único indicador: `title`, `aria-label` y la
+  tabla de datos oculta visualmente repiten la fracción caída y el recuento de
+  minutos afectados (`down_buckets`). Ver
+  [docs/webui-representation.es.md](docs/webui-representation.es.md#tira-temporal-de-sla).
 - **Value formatting (un tipo → un formatter).** Un tipo dado de valor debe
   renderizarse idénticamente en todas partes; nunca formatees a mano con `toFixed` desnudo, concatenación
   de strings o un `${value}` crudo. Cada tipo tiene un único helper canónico —

@@ -60,6 +60,7 @@ limits y backoff para evitar bucles de reinicio.
 - [Múltiples instancias de una aplicación](#múltiples-instancias-de-una-aplicación)
 - [Deshabilitar y borrar entradas heredadas](#deshabilitar-y-borrar-entradas-heredadas)
 - [Flag de monitorización](#flag-de-monitorización)
+- [Watches de replicación de PostgreSQL](#watches-de-replicación-de-postgresql)
 - [Comandos auxiliares](#comandos-auxiliares)
 
 ## Categorías
@@ -1530,6 +1531,41 @@ Un servicio también puede llevar su propio bloque `watches:` — watches por
 servicio que pueden disparar un hook/notificación o un `then.action` compacto,
 y pueden usar los tipos `service`/`metric` y el `process_count` acotado por PIDs. Véase
 [Watches de servicio](configuration.es.md#watches-de-servicio-acotados-a-un-servicio).
+
+## Watches de replicación de PostgreSQL
+
+El servicio de catálogo `postgres` incluye cinco sensores de replicación
+construidos sobre el check `sql`: `alert-if-replication-slot-backlog`,
+`alert-if-logical-slot-unconfirmed`, `alert-if-replication-slot-inactive`,
+`alert-if-replication-replay-lag` y `alert-if-standby-replay-delay`. Se ajustan
+con estas variables:
+
+| variable | valor por defecto | significado |
+|---|---|---|
+| `monitor_user` | `postgres` | rol con el que conectan las consultas de replicación |
+| `database` | `postgres` | base de datos a la que conectan |
+| `slot_backlog_mib` | `1024` | WAL retenido por el slot más rezagado, en MiB |
+| `logical_unconfirmed_mib` | `512` | datos que un consumidor lógico no ha confirmado, en MiB |
+| `replay_lag_mib` | `256` | enviado pero no aplicado por la réplica más rezagada, en MiB |
+| `standby_delay_seconds` | `300` | cuánto puede retrasarse un standby, en segundos |
+
+Los umbrales son números simples porque un check `sql` compara numéricamente y no
+admite sufijos de tamaño, así que las consultas devuelven MiB y segundos
+directamente. Conviene fijarlos muy por encima del ruido en reposo: un primario
+sano ya retiene unos 16 MiB (un segmento WAL) porque el `restart_lsn` de un slot
+lógico va rezagado por diseño.
+
+**`monitor_user` debe tener `pg_monitor`** (el superusuario `postgres` por
+defecto lo cumple). Un rol sin `pg_monitor` ni `pg_read_all_stats` sigue viendo
+filas en `pg_stat_replication`, pero con `sent_lsn`/`replay_lsn` a NULL para las
+sesiones ajenas: el agregado se queda entonces en `0` y los watches de lag no
+disparan nunca, en silencio. `pg_replication_slots` es legible por cualquier rol,
+así que los watches de slots no se ven afectados.
+
+Estos watches solo tienen sentido donde hay replicación de verdad.
+`scripts/remote-deploy/generate_install_config.py` desactiva los que un host no
+puede satisfacer a partir de la evidencia de inventario `postgres_clusters` —
+ver [el README de remote-deploy](../scripts/remote-deploy/README.md).
 
 ## Comandos auxiliares
 

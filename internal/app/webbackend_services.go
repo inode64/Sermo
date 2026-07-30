@@ -156,13 +156,56 @@ func onlyMissingProcesses(missing []string) bool {
 	return len(missing) == 1 && missing[0] == observabilityMissingProcesses
 }
 
+// checkView builds one check's detail row from its latest snapshot.
+func (b *WebBackend) checkView(service, cn string, e *webEntry, snap map[string]CheckSnapshot, now time.Time) web.Check {
+	cs, seen := snap[cn]
+	current := seen && b.serviceCheckSnapshotCurrent(e, cn, cs)
+	ch := web.Check{
+		Name:    cn,
+		Type:    e.checkTypes[cn],
+		Reports: e.checkReports[cn],
+		Stale:   seen && !current,
+		Ran:     current && cs.Ran,
+	}
+	if current {
+		// Availability, not the raw comparison: a condition check reports OK
+		// when its threshold is crossed, so passing it through unchanged would
+		// render a healthy sensor as "fail" next to a 100% SLA column. A
+		// verdictless check has no availability to report, so it carries the
+		// sensed state itself — that is what active/inactive renders.
+		ch.OK = cs.healthy()
+		if checks.VerdictlessMode(ch.Reports) {
+			ch.OK = cs.OK
+		}
+		ch.Optional = cs.Optional
+		ch.Skipped = cs.Skipped
+		ch.Message = cs.Message
+		ch.Readings = checkReadings(e.checkTypes[cn], cs.Data)
+	}
+	if seen && !cs.At.IsZero() {
+		ch.At = cs.At.UTC().Format(time.RFC3339)
+	}
+	for _, m := range checks.DeclaredGraphMetrics(e.checkTypes[cn], e.checkUnits[cn]) {
+		ch.Metrics = append(ch.Metrics, web.CheckMetric{Name: m.Key, Unit: m.Unit})
+	}
+	// A verdictless check records no availability, so it has no SLA to show.
+	// Skipping it here also drops whatever series it accumulated before the mode
+	// was declared, instead of leaving stale windows to age out.
+	if !checks.VerdictlessMode(ch.Reports) {
+		ch.SLA = b.checkSLAWindows(service, cn, now)
+	}
+	return ch
+}
+
 func (b *WebBackend) serviceCheckHealth(name string, e *webEntry, monitored bool) (int, string) {
 	if e == nil {
 		return 0, checkHealthUnknown
 	}
-	return checkHealthSummaryCurrent(b.snapshots.Get(name), e.checkNames, monitored, func(check string, snap CheckSnapshot) bool {
-		return b.serviceCheckSnapshotCurrent(e, check, snap)
-	})
+	return checkHealthSummaryCurrent(b.snapshots.Get(name), e.checkNames, monitored,
+		func(check string, snap CheckSnapshot) bool {
+			return b.serviceCheckSnapshotCurrent(e, check, snap)
+		},
+		func(check string) bool { return checks.VerdictlessMode(e.checkReports[check]) })
 }
 
 // serviceCheckSnapshotCurrent accepts only a result produced by the configured
@@ -282,7 +325,10 @@ func (b *WebBackend) operationSettlingPending(name string) bool {
 // "paused"; services with no observed checks yet are "unknown". current, when
 // set, filters snapshots to the ones the running config still declares; nil
 // keeps every snapshot.
-func checkHealthSummaryCurrent(snap map[string]CheckSnapshot, checkNames []string, monitored bool, current func(string, CheckSnapshot) bool) (failing int, health string) {
+// checkHealthSummaryCurrent counts the checks that make a service unhealthy.
+// verdictless names the checks that assert nothing (`reports: state`/`value`);
+// it comes from configuration because the snapshot carries no reporting mode.
+func checkHealthSummaryCurrent(snap map[string]CheckSnapshot, checkNames []string, monitored bool, current func(string, CheckSnapshot) bool, verdictless func(string) bool) (failing int, health string) {
 	if !monitored {
 		return 0, TargetStatePaused
 	}
@@ -299,7 +345,7 @@ func checkHealthSummaryCurrent(snap map[string]CheckSnapshot, checkNames []strin
 			continue
 		}
 		observed = true
-		if cs.Skipped || cs.Optional || cs.healthy() {
+		if cs.Skipped || cs.Optional || (verdictless != nil && verdictless(name)) || cs.healthy() {
 			continue
 		}
 		failing++
@@ -343,29 +389,7 @@ func (b *WebBackend) Detail(ctx context.Context, name string) (web.Detail, bool)
 
 	snap := b.snapshots.Get(name)
 	for _, cn := range e.checkNames {
-		cs, seen := snap[cn]
-		current := seen && b.serviceCheckSnapshotCurrent(e, cn, cs)
-		ch := web.Check{
-			Name:  cn,
-			Type:  e.checkTypes[cn],
-			Stale: seen && !current,
-			Ran:   current && cs.Ran,
-		}
-		if current {
-			ch.OK = cs.OK
-			ch.Optional = cs.Optional
-			ch.Skipped = cs.Skipped
-			ch.Message = cs.Message
-			ch.Readings = checkReadings(e.checkTypes[cn], cs.Data)
-		}
-		if seen && !cs.At.IsZero() {
-			ch.At = cs.At.UTC().Format(time.RFC3339)
-		}
-		for _, m := range checks.GraphMetrics(e.checkTypes[cn]) {
-			ch.Metrics = append(ch.Metrics, web.CheckMetric{Name: m.Key, Unit: m.Unit})
-		}
-		ch.SLA = b.checkSLAWindows(name, cn, now)
-		d.Checks = append(d.Checks, ch)
+		d.Checks = append(d.Checks, b.checkView(name, cn, e, snap, now))
 	}
 
 	if report, err := serviceLocksReport(b.cfg, name); err == nil {

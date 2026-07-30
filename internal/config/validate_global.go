@@ -8,6 +8,7 @@ import (
 	"sermo/internal/cfgval"
 	"sermo/internal/notify"
 	"sermo/internal/rules"
+	"sermo/internal/telegrambot"
 )
 
 // validateWatches checks each host-watch entry: a known check type with valid
@@ -29,7 +30,9 @@ func validateWeb(webCfg map[string]any, add func(string, ...any)) {
 	}
 	for _, pathAndKey := range [][2]string{
 		{webPathPassword, WebKeyPassword},
+		{webPathPasswordFile, WebKeyPasswordFile},
 		{webPathGuestPassword, WebKeyGuestPassword},
+		{webPathGuestPasswordFile, WebKeyGuestPasswordFile},
 	} {
 		path, key := pathAndKey[0], pathAndKey[1]
 		if v, present := webCfg[key]; present {
@@ -38,6 +41,7 @@ func validateWeb(webCfg map[string]any, add func(string, ...any)) {
 			}
 		}
 	}
+	validateWebPasswordFiles(webCfg, add)
 	if v, present := webCfg[WebKeyGuest]; present {
 		if _, isBool := v.(bool); !isBool {
 			add("%s must be a boolean (allow anonymous read-only access)", webPathGuest)
@@ -46,6 +50,30 @@ func validateWeb(webCfg map[string]any, add func(string, ...any)) {
 	if v, present := webCfg[WebKeyAllowedHosts]; present {
 		if _, err := cfgval.StrictStringList(v); err != nil {
 			add("%s must be a hostname or list of hostnames", webPathAllowedHosts)
+		}
+	}
+}
+
+// validateWebPasswordFiles checks each password / `*_file` pair. The two
+// spellings are mutually exclusive — accepting both would leave which one wins
+// up to the reader — and the file variant needs an actual path. Whether the
+// source can be read and parsed is settled at load time, in
+// resolveWebCredentials.
+func validateWebPasswordFiles(webCfg map[string]any, add addFunc) {
+	for _, pair := range [][4]string{
+		{WebKeyPassword, WebKeyPasswordFile, webPathPassword, webPathPasswordFile},
+		{WebKeyGuestPassword, WebKeyGuestPasswordFile, webPathGuestPassword, webPathGuestPasswordFile},
+	} {
+		inlineKey, fileKey, inlinePath, filePath := pair[0], pair[1], pair[2], pair[3]
+		raw, present := webCfg[fileKey]
+		if !present {
+			continue
+		}
+		if _, inlinePresent := webCfg[inlineKey]; inlinePresent {
+			add("%s and %s are mutually exclusive", inlinePath, filePath)
+		}
+		if s, isStr := raw.(string); isStr && strings.TrimSpace(s) == "" {
+			add("%s must name a file holding the password", filePath)
 		}
 	}
 }
@@ -115,12 +143,7 @@ func validateNotifierType(name string, entry map[string]any, add func(string, ..
 	case notify.TypeSlack, notify.TypeTeams:
 		validateWebhookNotifier(name, typ, entry, add)
 	case notify.TypeTelegram:
-		if cfgval.String(entry[notify.KeyToken]) == "" {
-			add("%s is required for a telegram notifier", notifierFieldPath(name, notify.KeyToken))
-		}
-		if cfgval.String(entry[notify.KeyChatID]) == "" {
-			add("%s is required for a telegram notifier", notifierFieldPath(name, notify.KeyChatID))
-		}
+		validateTelegramNotifier(name, entry, add)
 	case notify.TypeTTY:
 		if users, present := entry[notify.KeyUsers]; present && !cfgval.IsStringOrStringList(users) {
 			add(validationStringListFormat, notifierFieldPath(name, notify.KeyUsers))
@@ -150,6 +173,68 @@ func validateEmailNotifier(name string, entry map[string]any, add func(string, .
 	}
 	if !cfgval.IsNonEmptyStringList(entry[notify.KeyTo]) {
 		add("%s must list at least one address", notifierFieldPath(name, notify.KeyTo))
+	}
+}
+
+// validateTelegramBot checks the optional top-level `telegram_bot` section. The
+// token is usually sourced from ${env:...}, so an empty token (an unset
+// variable) leaves the bot inactive rather than failing config load — mirroring
+// telegrambot.Config.active(). When a token is present the section requires at
+// least one allowed chat id; a poll interval, when set, must be positive.
+func validateTelegramBot(raw map[string]any, add func(string, ...any)) {
+	section, ok := raw[SectionTelegramBot].(map[string]any)
+	if !ok {
+		return
+	}
+	field := func(key string) string { return SectionTelegramBot + "." + key }
+	if v, present := section[telegrambot.KeyEnabled]; present {
+		if _, isBool := v.(bool); !isBool {
+			add(validationBooleanFormat, field(telegrambot.KeyEnabled))
+		}
+	}
+	if enabled, ok := section[telegrambot.KeyEnabled].(bool); ok && !enabled {
+		return
+	}
+	// An empty token (typically an unset ${env:...} secret) leaves the bot
+	// inactive instead of failing validation, so a host without the token still
+	// loads its config. Mirrors telegrambot.Config.active().
+	if cfgval.String(section[telegrambot.KeyToken]) == "" {
+		return
+	}
+	if ids, ok := cfgval.IntList(section[telegrambot.KeyAllowedChats]); !ok || len(ids) == 0 {
+		add("%s must list at least one chat id", field(telegrambot.KeyAllowedChats))
+	}
+	if v, present := section[telegrambot.KeyPollInterval]; present && cfgval.Duration(v) <= 0 {
+		add("%s must be a positive duration", field(telegrambot.KeyPollInterval))
+	}
+}
+
+func validateTelegramNotifier(name string, entry map[string]any, add func(string, ...any)) {
+	// The token is usually sourced from ${env:...}; an empty token (an unset
+	// variable) leaves the notifier inactive rather than failing config load.
+	// Build() skips a tokenless telegram notifier with a warning, and its name
+	// stays defined so `notify` references to it still resolve.
+	if cfgval.String(entry[notify.KeyToken]) == "" {
+		return
+	}
+	if cfgval.String(entry[notify.KeyChatID]) == "" {
+		add("%s is required for a telegram notifier", notifierFieldPath(name, notify.KeyChatID))
+	}
+	if v, present := entry[notify.KeyParseMode]; present {
+		mode, ok := v.(string)
+		if !ok || !notify.ValidTelegramParseMode(mode) {
+			add("%s must be one of %s", notifierFieldPath(name, notify.KeyParseMode), strings.Join(notify.TelegramParseModes(), ", "))
+		}
+	}
+	if v, present := entry[notify.KeySilent]; present {
+		if _, ok := v.(bool); !ok {
+			add(validationBooleanFormat, notifierFieldPath(name, notify.KeySilent))
+		}
+	}
+	if v, present := entry[notify.KeyMessageThreadID]; present {
+		if _, ok := cfgval.Int(v); !ok {
+			add("%s must be an integer", notifierFieldPath(name, notify.KeyMessageThreadID))
+		}
 	}
 }
 

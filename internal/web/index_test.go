@@ -682,6 +682,71 @@ func TestIndexResponsiveTablesDoNotKeepDesktopMinWidth(t *testing.T) {
 	}
 }
 
+// TestIndexDetailDedupesVisibleColumns pins the two halves of the expansion's
+// deduplication: the CSS that hides a General data field while its table column is
+// on screen, and the per-field classes that say which breakpoint drops that column.
+// They live in different files and would otherwise drift silently — a field left
+// unclassed is shown twice, a field classed for the wrong breakpoint disappears at a
+// width where its column is already gone.
+func TestIndexDetailDedupesVisibleColumns(t *testing.T) {
+	cssBundleMustContain(t, "detail dedup",
+		".runtime-grid>.col-dup{display:none}",
+		"@media(max-width:1420px){.runtime-grid>.col-dup-1420{display:block}}",
+		"@media(max-width:640px){.runtime-grid>.col-dup-640{display:block}}",
+	)
+	// All three selectors have equal specificity, so the media queries only override
+	// the base hide rule by coming after it.
+	css := strings.ReplaceAll(bundledCSS(t), " ", "")
+	base := strings.Index(css, ".runtime-grid>.col-dup{display:none}")
+	for _, reveal := range []string{
+		".runtime-grid>.col-dup-1420{display:block}",
+		".runtime-grid>.col-dup-640{display:block}",
+	} {
+		if at := strings.Index(css, reveal); at >= 0 && at < base {
+			t.Errorf("detail reveal rule %q precedes the base hide rule and cannot override it", reveal)
+		}
+	}
+
+	// Each field whose column the responsive rules retire, paired with the constant
+	// naming that breakpoint. Asserted against the source because the constants are
+	// what carry the mapping — the bundle only holds their minified names.
+	for _, field := range []struct{ label, cls string }{
+		{"Category", "colDupWide"},
+		{"Uptime", "colDupWide"},
+		{"CPU total", "colDupWide"},
+		{"Memory", "colDupWide"},
+		{"IO R/W", "colDupWide"},
+		{"Last event", "colDupPhone"},
+	} {
+		appJSMustContain(t, "deduplicated detail field",
+			`<div class="${`+field.cls+`}"><span class="muted">`+field.label+`</span>`)
+	}
+	appJSMustContain(t, "detail dedup class",
+		`const colDupWide = "col-dup col-dup-1420";`,
+		`const colDupPhone = "col-dup col-dup-640";`,
+	)
+
+	// Name and State anchor the expansion at every width, and FDs / Threads reports a
+	// thread count no column carries, so none of the three may be deduplicated: each
+	// must sit in a bare <div>. Asserted positively, because "does not contain
+	// col-dup" would silently pass on any change to how the class is spelled.
+	for _, label := range []string{"Name", "State", "FDs / Threads"} {
+		appJSMustContain(t, "always-visible detail field",
+			`<div><span class="muted">`+label+`</span>`)
+	}
+
+	script := bundledScript(t)
+	// The expansion no longer repeats the row: no name heading, no "General data"
+	// heading, and no process summary or totals line restating the grid.
+	// "core peak" belongs with them: the busiest-thread figure moved into the process
+	// table, where it names the process it belongs to instead of floating as a total.
+	for _, bad := range []string{"detail-totals", "detail-summary", "General data", "Service totals", "core peak"} {
+		if strings.Contains(script, bad) {
+			t.Errorf("bundled script still contains removed expansion marker %q", bad)
+		}
+	}
+}
+
 func TestIndexServiceActionsUseSinglePowerButton(t *testing.T) {
 	script := bundledScript(t)
 	for _, bad := range []string{"start-only", "start only", "data-no-cascade"} {

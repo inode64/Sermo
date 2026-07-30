@@ -20,6 +20,9 @@ type Issue struct {
 	Msg   string
 }
 
+// globalScope is the Issue scope for findings in sermo.yml itself.
+const globalScope = "global"
+
 var validBackends = map[string]struct{}{"": {}, backendAuto: {}, backendSystemd: {}, backendOpenRC: {}}
 
 const (
@@ -95,6 +98,13 @@ var validEngineKeys = set(
 	EngineKeyEvents,
 	EngineKeyMaxParallelChecks,
 	EngineKeyOperationTimeout,
+	EngineKeyRetention1m,
+	EngineKeyRetention5m,
+	EngineKeyRetention1h,
+	EngineKeyRetention6h,
+	EngineKeyRetention1d,
+	EngineKeyRetentionEvents,
+	EngineKeyRollupInterval,
 	EngineKeyStartupDelay,
 	EngineKeyStateCacheSize,
 	EngineKeyUserLookup,
@@ -116,7 +126,7 @@ func validateGlobal(cfg *Config) []Issue {
 	var issues []Issue
 	raw := cfg.Global.Raw
 	add := func(format string, args ...any) {
-		issues = append(issues, Issue{Scope: "global", Msg: fmt.Sprintf(format, args...)})
+		issues = append(issues, Issue{Scope: globalScope, Msg: fmt.Sprintf(format, args...)})
 	}
 
 	validateEnableIfTree(raw, add)
@@ -124,6 +134,7 @@ func validateGlobal(cfg *Config) []Issue {
 	validateGlobalPaths(cfg, raw, add)
 	validateGlobalSecurity(raw, add)
 	validateGlobalWebAndEmission(raw, add)
+	validateTelegramBot(raw, add)
 	validateGlobalDefaults(cfg, raw, add)
 
 	return issues
@@ -142,7 +153,12 @@ func validateGlobalEngine(raw map[string]any, add addFunc) {
 	if backend := cfgval.String(engine[EngineKeyBackend]); !isValidBackend(backend) {
 		add(validationNotOneOfFormat, enginePathBackend, backend, backendSummary)
 	}
-	for _, field := range []string{keyInterval, EngineKeyArtifactInterval, EngineKeyDefaultTimeout, EngineKeyOperationTimeout} {
+	for _, field := range []string{
+		keyInterval, EngineKeyArtifactInterval, EngineKeyDefaultTimeout, EngineKeyOperationTimeout,
+		EngineKeyRetention1m, EngineKeyRetention5m, EngineKeyRetention1h,
+		EngineKeyRetention6h, EngineKeyRetention1d, EngineKeyRetentionEvents,
+		EngineKeyRollupInterval,
+	} {
 		validatePositiveDurationField(engine, field, engineFieldPath(field), add)
 	}
 	if v, present := engine[EngineKeyStartupDelay]; present && !isNonNegativeDuration(cfgval.String(v)) {
