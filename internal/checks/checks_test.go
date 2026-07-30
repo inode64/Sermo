@@ -922,3 +922,95 @@ func TestCommandCheckAnalyzeClean(t *testing.T) {
 		t.Fatalf("no pattern match must pass, got %+v", res)
 	}
 }
+
+// Availability semantics per reporting mode. A state sensor asserts nothing
+// about availability, so neither side of it is ever unhealthy; rules keep
+// reading OK directly, which is what a guard like block-restart-during-backup
+// depends on.
+func TestResultHealthyByReportingMode(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		result  Result
+		healthy bool
+	}{
+		{"health check passing", Result{OK: true}, true},
+		{"health check failing", Result{OK: false}, false},
+		{"condition under threshold", Result{OK: false, Condition: true}, true},
+		{"condition crossed", Result{OK: true, Condition: true}, false},
+		{"state sensor active", Result{OK: true, Reports: ReportsState}, true},
+		{"state sensor inactive", Result{OK: false, Reports: ReportsState}, true},
+		{"explicit health mode", Result{OK: false, Reports: ReportsHealth}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := tc.result.Healthy(); got != tc.healthy {
+				t.Errorf("Healthy() = %v, want %v", got, tc.healthy)
+			}
+		})
+	}
+}
+
+func TestIsReportingMode(t *testing.T) {
+	for _, mode := range ReportingModes {
+		if !IsReportingMode(mode) {
+			t.Errorf("IsReportingMode(%q) = false, want true", mode)
+		}
+	}
+	if IsReportingMode("running") {
+		t.Error(`IsReportingMode("running") = true; the mode names how a check reports, not what it senses`)
+	}
+	if IsReportingMode("") {
+		t.Error(`IsReportingMode("") = true; an empty mode is the absent default, not a valid value`)
+	}
+}
+
+// `reports:` is the last word on alert-style semantics; the check type only
+// supplies the default. This is what lets the same type be a health assertion
+// in one service and a sensor in another.
+func TestResolveCondition(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		typ     string
+		reports string
+		want    bool
+	}{
+		{"health type defaults to health", CheckTypeTCP, "", false},
+		{"non-health type defaults to condition", CheckTypeMetric, "", true},
+		{"explicit condition on a health type", CheckTypeProcess, ReportsCondition, true},
+		{"explicit health on a condition type", CheckTypeMetric, ReportsHealth, false},
+		{"a state sensor is never alert-style", CheckTypeMetric, ReportsState, false},
+		{"unknown mode falls back to the type default", CheckTypeMetric, "nonsense", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := ResolveCondition(tc.typ, tc.reports); got != tc.want {
+				t.Errorf("ResolveCondition(%q, %q) = %v, want %v", tc.typ, tc.reports, got, tc.want)
+			}
+		})
+	}
+}
+
+// A check type declares its graphable metrics statically, but some types cannot:
+// a sql check's unit depends on its query, so the same type reports MiB on one
+// service and seconds on another. `unit:` closes that gap per check.
+func TestDeclaredGraphMetrics(t *testing.T) {
+	if got := DeclaredGraphMetrics(CheckTypeSQL, ""); len(got) != 0 {
+		t.Errorf("sql without a unit publishes %d metrics, want none", len(got))
+	}
+
+	got := DeclaredGraphMetrics(CheckTypeSQL, "MiB")
+	if len(got) != 1 {
+		t.Fatalf("sql with a unit publishes %d metrics, want 1", len(got))
+	}
+	if got[0].Key != DataKeyValue || got[0].Unit != "MiB" {
+		t.Errorf("declared metric = %+v, want the scalar result keyed %q in MiB", got[0], DataKeyValue)
+	}
+
+	// The type's own metrics survive, so declaring a unit adds to them.
+	static := GraphMetrics(CheckTypeSensors)
+	both := DeclaredGraphMetrics(CheckTypeSensors, "°C")
+	if len(both) != len(static)+1 {
+		t.Errorf("declared metrics = %d, want the type's %d plus one", len(both), len(static))
+	}
+	if len(static) > 0 && GraphMetrics(CheckTypeSensors)[0].Key != static[0].Key {
+		t.Error("DeclaredGraphMetrics must not mutate the static per-type table")
+	}
+}

@@ -314,9 +314,17 @@ func pseudoFilesystem(fstype string) bool {
 	}
 }
 
+// storageFilesystem reports whether a filesystem type backs real storage even
+// though its device is not under /dev — network and pooled filesystems, plus any
+// fuse.* mount. IsStorageMount takes the /dev shortcut first, so device-backed
+// types (ext4, xfs, btrfs, …) deliberately do not appear here.
+//
+// Lustre is deliberately absent: the config generator never emitted a watch for
+// it, so listing it here only produced a runtime watch no generated
+// configuration matched. Both sides now agree that Lustre is unsupported.
 func storageFilesystem(fstype string) bool {
 	switch fstype {
-	case "ceph", "cifs", "glusterfs", "gfs2", "lustre", "nfs", "nfs4",
+	case "ceph", "cifs", "glusterfs", "gfs2", "nfs", "nfs4",
 		"ocfs2", "smb3", "zfs":
 		return true
 	default:

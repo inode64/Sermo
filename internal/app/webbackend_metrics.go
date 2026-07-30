@@ -26,12 +26,13 @@ func (b *WebBackend) Series(_ context.Context, name string, since time.Duration)
 	}
 	out := make([]web.SeriesPoint, 0, len(points))
 	for _, point := range points {
-		seriesPoint := web.SeriesPoint{Start: point.Start.Format(time.RFC3339), Up: point.Up, Total: point.Total}
-		if point.Total > 0 {
-			ratio := float64(point.Up) / float64(point.Total)
-			seriesPoint.Ratio = &ratio
-		}
-		out = append(out, seriesPoint)
+		out = append(out, web.SeriesPoint{
+			Start:       point.Start.Format(time.RFC3339),
+			Up:          point.Up,
+			Total:       point.Total,
+			DownBuckets: point.DownBuckets,
+			Ratio:       slaRatio(point.Up, point.Total, true),
+		})
 	}
 	return out, true
 }

@@ -317,7 +317,7 @@ type Service struct {
 	FDs               int64    `json:"fds,omitempty"`
 	Threads           int64    `json:"threads,omitempty"`
 	CPU               float64  `json:"cpu,omitempty"`        // live CPU %, all host CPUs
-	CPUThread         float64  `json:"cpu_thread,omitempty"` // busiest process, single-core normalized
+	CPUThread         float64  `json:"cpu_thread,omitempty"` // busiest thread, single-core normalized
 	NumCPU            int      `json:"num_cpu,omitempty"`
 	CPUReady          bool     `json:"cpu_ready,omitempty"`
 	AlsoApply         []string `json:"also_apply,omitempty"` // also_apply cascade targets
@@ -694,17 +694,16 @@ type OperateOpts struct {
 // StateCompactResult is the outcome of pruning old persisted history and
 // vacuuming the SQLite state database.
 type StateCompactResult struct {
-	OK             bool   `json:"ok"`
-	Message        string `json:"message,omitempty"`
-	Pruned         int64  `json:"pruned"`
-	Before         string `json:"before,omitempty"` // RFC3339 cutoff
-	SLA            int64  `json:"sla,omitempty"`
-	Measurements   int64  `json:"measurements,omitempty"`
-	Metrics        int64  `json:"metrics,omitempty"`
-	DaemonMetrics  int64  `json:"daemon_metrics,omitempty"`
-	ServiceMetrics int64  `json:"service_metrics,omitempty"`
-	Events         int64  `json:"events,omitempty"`
-	Vacuum         bool   `json:"vacuum"`
+	OK      bool   `json:"ok"`
+	Message string `json:"message,omitempty"`
+	Pruned  int64  `json:"pruned"`
+	Before  string `json:"before,omitempty"` // RFC3339 cutoff, empty when none was given
+	Rolled  int64  `json:"rolled,omitempty"`
+	// Archives is the rows pruned from the resolution archives; Events the rows
+	// pruned from the event feed. Pruned is their sum.
+	Archives int64 `json:"archives,omitempty"`
+	Events   int64 `json:"events,omitempty"`
+	Vacuum   bool  `json:"vacuum"`
 }
 
 // PreflightResult is the outcome of an on-demand preflight run.
@@ -715,9 +714,13 @@ type PreflightResult struct {
 
 // Check is one check's latest observed result in a service detail.
 type Check struct {
-	Name     string         `json:"name"`
-	Type     string         `json:"type"`
-	OK       bool           `json:"ok"`
+	Name string `json:"name"`
+	Type string `json:"type"`
+	OK   bool   `json:"ok"`
+	// Reports is the check's declared reporting mode ("state" for a state
+	// sensor); empty means the default health semantics. It tells the dashboard
+	// whether to label the check ok/fail or active/inactive.
+	Reports  string         `json:"reports,omitempty"`
 	Stale    bool           `json:"stale,omitempty"`
 	Optional bool           `json:"optional"`
 	Skipped  bool           `json:"skipped,omitempty"` // gated off (requires/skip_when_changed)
@@ -734,12 +737,26 @@ type Check struct {
 // no data. Segments is the window split into equal sub-spans (oldest first);
 // each entry is its availability ratio in [0,1], or nil for a gap.
 type SLAWindow struct {
-	Window     string     `json:"window"`
-	Ratio      *float64   `json:"ratio"`
-	Up         int64      `json:"up"`
-	Total      int64      `json:"total"`
-	Segments   []*float64 `json:"segments,omitempty"`
-	ObservedAt string     `json:"observed_at,omitempty"` // RFC3339 when this rolling window was calculated
+	Window string   `json:"window"`
+	Ratio  *float64 `json:"ratio"`
+	Up     int64    `json:"up"`
+	Total  int64    `json:"total"`
+	// DownBuckets is how many one-minute buckets in the window saw a failed cycle.
+	// It survives consolidation, so a window whose ratio rounds to 100% can still
+	// be reported as having had incidents, and they can still be counted.
+	DownBuckets int64        `json:"down_buckets"`
+	Segments    []SLASegment `json:"segments,omitempty"`
+	ObservedAt  string       `json:"observed_at,omitempty"` // RFC3339 when this rolling window was calculated
+}
+
+// SLASegment is one equal sub-span of a window's timeline strip. Total 0 marks a
+// sub-span where nothing was observed (a gap, rendered distinctly from downtime).
+// The availability ratio is not carried: the client derives it from Up/Total, which
+// it needs anyway to compute how much of the sub-span was down.
+type SLASegment struct {
+	Up          int64 `json:"up"`
+	Total       int64 `json:"total"`
+	DownBuckets int64 `json:"down_buckets"`
 }
 
 // Process is a discovered process belonging to a service (parity with
@@ -760,6 +777,13 @@ type Process struct {
 	Threads     int64    `json:"threads,omitempty"`  // thread count
 	CPU         float64  `json:"cpu,omitempty"`      // live CPU %, single-core normalized (100% = one core)
 	HasCPU      bool     `json:"has_cpu,omitempty"`  // true when a live CPU rate is available (distinguishes 0% from unknown)
+	// MaxCore is the most any single core was used on this process's behalf: its
+	// busiest thread, normalized so 100% is one saturated core. It never exceeds CPU,
+	// and equals it for a single-threaded process. MaxCoreExact is false when the
+	// figure is CPU standing in as an upper bound because the process was below the
+	// threads-sampling floor — the UI says so in the cell's tooltip.
+	MaxCore      float64 `json:"max_core,omitempty"`
+	MaxCoreExact bool    `json:"max_core_exact,omitempty"`
 }
 
 // ProcessTotals aggregates a service's whole discovered process tree — the
@@ -773,7 +797,7 @@ type ProcessTotals struct {
 	FDs     int64 `json:"fds,omitempty"`
 	Threads int64 `json:"threads,omitempty"`
 	// Live CPU for the whole tree: CPU is the whole-machine rate (% of all
-	// cores); CPUThread is the busiest single process against one core (100% =
+	// cores); CPUThread is the busiest single thread against one core (100% =
 	// one saturated core); NumCPU is the logical CPU count. HasCPU is true once a
 	// rate is available (two samples), so the UI can tell 0% from "measuring".
 	CPU       float64 `json:"cpu,omitempty"`
@@ -840,13 +864,16 @@ type Detail struct {
 	Rules             []RuleWindow   `json:"rules,omitempty"`
 }
 
-// SeriesPoint is one per-minute availability sample of the SLA history. Ratio is
-// nil for a minute with no observed cycle.
+// SeriesPoint is one availability bucket of the SLA history. Ratio is nil for a
+// bucket with no observed cycle. The bucket span is the resolution the requested
+// window is stored at, so a point covers one minute on a short window and up to a
+// day on the rolling year.
 type SeriesPoint struct {
-	Start string   `json:"start"` // RFC3339, minute-aligned
-	Ratio *float64 `json:"ratio"`
-	Up    int64    `json:"up"`
-	Total int64    `json:"total"`
+	Start       string   `json:"start"` // RFC3339, bucket-aligned
+	Ratio       *float64 `json:"ratio"`
+	Up          int64    `json:"up"`
+	Total       int64    `json:"total"`
+	DownBuckets int64    `json:"down_buckets"`
 }
 
 // MetricPoint is one time bucket of a check's latency series (milliseconds).
@@ -984,8 +1011,9 @@ const (
 	eventStatusFailed       = string(operation.ResultFailed)
 )
 
-// maxSeriesWindow bounds the history a single request may ask for (the retention).
-const maxSeriesWindow = state.DefaultHistoryRetention
+// defaultMaxSeriesWindow bounds the history a single request may ask for when the
+// daemon did not supply the configured coarsest retention.
+var defaultMaxSeriesWindow = state.DefaultRetention().MaxWindow()
 
 // defaultEventLimit / maxEventLimit bound how many log events a request returns.
 const defaultEventLimit = 100
@@ -1130,6 +1158,10 @@ type Server struct {
 	// (Run always has it) and does not apply with auth enabled: a DNS-rebound
 	// origin cannot attach Basic credentials, and proxies keep their Host.
 	AllowedHosts []string
+
+	// MaxSeriesWindow caps the history one series request may ask for. Zero uses
+	// defaultMaxSeriesWindow; the daemon sets it from engine.retention_1d.
+	MaxSeriesWindow time.Duration
 
 	OperationTimeout time.Duration
 	// OperationTimeoutSource supplies the active maximum timeout after a daemon
@@ -1477,7 +1509,7 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 	backend, generation := s.backendRead()
-	snapshot := s.dashboardSnapshot(r.Context(), backend, seriesSince(r))
+	snapshot := s.dashboardSnapshot(r.Context(), backend, s.seriesSince(r))
 	if roleFrom(r.Context()) == roleGuest {
 		snapshot.Mounts = redactMountCmdlines(snapshot.Mounts)
 	}
@@ -1632,7 +1664,7 @@ func (s *Server) handleDaemon(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleDaemonMetrics(w http.ResponseWriter, r *http.Request) {
-	since := seriesSince(r)
+	since := s.seriesSince(r)
 	s.readJSON(w, r, func(ctx context.Context, backend Backend) any { return backend.DaemonMetrics(ctx, since) })
 }
 
@@ -1717,16 +1749,22 @@ func executableOnly(cmdline []string) []string {
 	return cmdline
 }
 
-// seriesSince reads the `since` query param, defaulting and capping it.
-func seriesSince(r *http.Request) time.Duration {
-	return queryCapped(r, apiQuerySince, defaultSeriesWindow, maxSeriesWindow, func(q string) (time.Duration, bool) {
+// seriesSince reads the `since` query param, defaulting and capping it at the
+// coarsest archive's retention: asking for more history than is stored cannot
+// return anything, and an unbounded window would let one request scan the lot.
+func (s *Server) seriesSince(r *http.Request) time.Duration {
+	limit := s.MaxSeriesWindow
+	if limit <= 0 {
+		limit = defaultMaxSeriesWindow
+	}
+	return queryCapped(r, apiQuerySince, defaultSeriesWindow, limit, func(q string) (time.Duration, bool) {
 		d, err := time.ParseDuration(q)
 		return d, err == nil && d > 0
 	})
 }
 
 func (s *Server) handleSeries(w http.ResponseWriter, r *http.Request) {
-	since := seriesSince(r)
+	since := s.seriesSince(r)
 	backend, generation := s.backendRead()
 	points, ok := backend.Series(r.Context(), r.PathValue(apiParamName), since)
 	if !ok {
@@ -1743,7 +1781,7 @@ func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	backend, generation := s.backendRead()
-	res, ok := backend.Metrics(r.Context(), r.PathValue(apiParamName), check, r.URL.Query().Get(apiQueryMetric), seriesSince(r))
+	res, ok := backend.Metrics(r.Context(), r.PathValue(apiParamName), check, r.URL.Query().Get(apiQueryMetric), s.seriesSince(r))
 	if !ok {
 		writeError(w, http.StatusNotFound, apiErrorUnknownServiceOrCheck)
 		return
@@ -1753,7 +1791,7 @@ func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleServiceRuntime(w http.ResponseWriter, r *http.Request) {
 	handleNamed(s, w, r, apiErrorUnknownService, func(backend Backend, ctx context.Context, name string) (ServiceRuntimeMetrics, bool) {
-		return backend.ServiceRuntime(ctx, name, seriesSince(r))
+		return backend.ServiceRuntime(ctx, name, s.seriesSince(r))
 	})
 }
 

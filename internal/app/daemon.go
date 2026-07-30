@@ -22,6 +22,7 @@ import (
 	"sermo/internal/rules"
 	"sermo/internal/servicemgr"
 	"sermo/internal/state"
+	"sermo/internal/telegrambot"
 	"sermo/internal/web"
 )
 
@@ -288,6 +289,9 @@ type Deps struct {
 	Events *EventLog
 	// DiagnosticLog exports scheduled diagnostics to engine.diagnostics when set.
 	DiagnosticLog *DiagnosticLog
+	// TelegramBot is the interactive read-only report bot. Optional: nil when the
+	// `telegram_bot` section is absent. It is refreshed on reload via UpdateConfig.
+	TelegramBot *telegrambot.Bot
 	// SystemFreshness caches system metrics so concurrent workers in one cycle
 	// share a computation; it must be below the scheduler interval.
 	SystemFreshness time.Duration
@@ -804,7 +808,10 @@ func checkSLARecorder(deps Deps, name string) func(map[string]checks.Result, map
 	}
 	return func(cache map[string]checks.Result, ran map[string]bool) {
 		for check, r := range cache {
-			if !ran[check] || r.Skipped {
+			// A verdictless check has no availability to record: neither side of
+			// "a backup is running" is uptime, and a bare measurement asserts
+			// nothing at all, so neither gets an SLA series.
+			if !ran[check] || r.Skipped || r.Verdictless() {
 				continue
 			}
 			if err := deps.SLA.RecordCheckSLA(name, check, r.Healthy(), now()); err != nil && deps.Emit != nil {
@@ -826,7 +833,8 @@ func graphableCheckMetrics(tree map[string]any) map[string][]checks.GraphMetric 
 			continue
 		}
 		typ, _ := m[checks.CheckKeyType].(string)
-		if g := checks.GraphMetrics(typ); len(g) > 0 {
+		unit := cfgval.AsString(m[checks.CheckKeyUnit])
+		if g := checks.DeclaredGraphMetrics(typ, unit); len(g) > 0 {
 			out[cn] = g
 		}
 	}
@@ -1072,12 +1080,14 @@ func liveSampler(service string, lc *metrics.Collector, live *LiveMetrics, servi
 		pidList := pids()
 		sc := lc.SampleServiceCPU(service, pidList)
 		sl := ServiceLive{
-			CPU:            sc.CPU.Percent,
-			CPUReady:       sc.CPU.Ready,
-			CPUThread:      sc.CPUThread.Percent,
-			CPUThreadReady: sc.CPUThread.Ready,
-			NumCPU:         sc.NumCPU,
-			PerProcCPU:     sc.PerProc,
+			CPU:                 sc.CPU.Percent,
+			CPUReady:            sc.CPU.Ready,
+			CPUThread:           sc.CPUThread.Percent,
+			CPUThreadReady:      sc.CPUThread.Ready,
+			NumCPU:              sc.NumCPU,
+			PerProcCPU:          sc.PerProc,
+			PerProcMaxCore:      sc.PerProcMaxCore,
+			PerProcMaxCoreExact: sc.PerProcMaxCoreExact,
 		}
 		live.Publish(service, sl)
 		if serviceMetrics == nil {

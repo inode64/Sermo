@@ -6,7 +6,8 @@
   - [Service health conditions (version / state / config)](#service-health-conditions-version--state--config)
   - [Egress interface (interface)](#egress-interface-interface)
   - [Check interdependencies (requires / skip_when_changed)](#check-interdependencies-requires--skip_when_changed)
-  - [Ports](#ports)
+  - [Reporting mode (reports)](#reporting-mode-reports)
+- [Ports](#ports)
   - [HTTP](#http)
   - [Cert](#cert)
   - [Database connection (mysql / mariadb)](#database-connection-mysql--mariadb)
@@ -384,6 +385,85 @@ rules:
           message: "${service} will restart after library change: ${change.library}"
         - type: restart
 ```
+
+### Reporting mode (`reports`)
+
+`reports:` declares what a check's result *means*, which is what decides
+availability, SLA and how the dashboard labels it. It does not change how the
+probe runs, and **rules are unaffected**: `active:` / `failed:` keep reading the
+check's raw outcome.
+
+| mode | meaning | dashboard | SLA |
+|---|---|---|---|
+| `health` | OK means the target is available | `ok` / `fail` | counted |
+| `condition` | OK means the condition fired, so availability is inverted | `ok` / `fail` | counted |
+| `state` | OK means a sensed state is present; neither side is good or bad | `active` / `inactive` | `n/a` |
+| `value` | the check measures and passes no judgement | `measured` plus the reading | `n/a` |
+
+Omitted, the check **type** supplies the default: health-style types
+(`tcp`, `http`, `service`, the connection protocols, …) default to `health`, the
+threshold and metric types to `condition`. The type is only a default — the same
+type can be a health assertion in one service and a sensor in another, so the
+check has the last word.
+
+The `state` and `value` modes record no availability, so their SLA column reads
+`n/a` rather than an empty series: there is no uptime to accumulate, and any
+windows recorded before the mode was declared are dropped instead of ageing out.
+They keep their own colours — informative for a live state, muted for an idle
+one — so neither is mistaken for the ok/fail verdict.
+
+A `condition` check still reads `ok` / `fail`, not `active` / `inactive`: unlike
+a state sensor, its firing side really is a problem and has to look like one.
+
+#### Graphing a check's value (`unit`)
+
+Most check types declare their graphable metrics statically, but some cannot: a
+`sql` check's unit depends on its query, so five sensors on one service can
+report MiB, seconds and a bare count. `unit:` declares it per check, and the
+check's scalar result is then recorded and graphed like any other metric:
+
+```yaml
+alert-if-replication-slot-backlog:
+  check:
+    type: sql
+    engine: postgres
+    query: "SELECT …"     # returns MiB
+    op: ">"
+    value: 1024
+    unit: MiB             # graph the result, labelled MiB
+```
+
+It is independent of `reports:` — a `condition` check keeps its threshold verdict
+*and* gets a graph — and it adds to whatever the type already publishes.
+
+Use `state` for a check that exists to answer "is this happening right now?"
+rather than to assert something must hold. The catalog's `backup` watch is the
+case: it detects a running backup so a guard can block a restart, and a host
+with no backup in progress is normal, not unhealthy.
+
+```yaml
+watches:
+  backup:
+    check:
+      type: process
+      reports: state              # active / inactive, no verdict, no SLA
+      exe_any: [/usr/bin/pg_dump, /usr/bin/pgbackrest]
+      user: postgres
+      state: running              # what is sensed — unrelated to `reports`
+rules:
+  block-restart-during-backup:
+    type: guard
+    blocks: [restart]
+    if:
+      active: { check: backup }   # still reads the raw outcome
+    then:
+      action: block
+      message: backup is running; restart denied
+```
+
+Without it, such a check is a health assertion that fails whenever the state is
+absent — a permanent red `fail` and a 0% availability series for what is in fact
+the normal condition.
 
 ### Ports
 
@@ -1527,6 +1607,46 @@ The health checks (`tcp`, `ports`, `http`, `command`, `service`, `file_exists`,
 opposite (`OK == true` is healthy), so as a watch they fire the hook on
 **failure**.
 
+### Edge sensors: a `for:` window suppresses them
+
+A few checks report an **increment** rather than a state: `oom` reads the kernel's
+cumulative `oom_kill` counter and reports the per-cycle delta, so a kill makes the
+condition true for exactly **one** cycle and false again on the next.
+
+A `for:`/`within:` window asks the condition to hold for several consecutive cycles.
+On an edge condition that can never happen, so **the window silences the sensor
+entirely** — the watch stays green right through the event. Configure an edge sensor
+with no entry window at all, so it fires on the first increment:
+
+```yaml
+name: watch-oom
+interval: 30s
+check: { type: oom }
+clear: { duration: 1h }   # how long the alert stays up; see below
+```
+
+Without an entry window the alert would also *end* on the next cycle, one 30s flash
+nobody sees. That is what `clear:` is for — it holds the firing episode open while the
+condition is quiet, so an edge sensor's whole visible alert life is its clear window.
+The lifecycle:
+
+| Cycle | What happens |
+|---|---|
+| the kill | condition true → fires immediately → `firing` event + one notification |
+| next cycles | delta back to 0; the clear window holds the alert up; no repeat actions |
+| after `clear:` | `recovered` event → sensor back to `ok` |
+
+Notifications are sent once per episode, on the rising edge; add
+`then.notify_interval` if you want reminders while the alert is up. A later increment
+after recovery opens a fresh episode and notifies again.
+
+Sermo warns at startup when a watch gates an increment-only check behind a window it
+cannot satisfy, naming the watch and the ceiling. It is a warning and not an error so
+an upgrade is never blocked by a config that predates the check. Rate-shaped deltas
+(`swap` io, `net` errors) are *not* edge sensors — they stay true while the pressure
+lasts, so a window is legitimate hysteresis for them; a `count` delta likewise holds
+for its own `within` span and is only flagged when the rule window outlasts it.
+
 The multi-metric watches (`net`, `icmp`, `swap`) keep their `metrics:` map shape
 (one hook per metric) watch-only, but their **single-metric form** — an explicit
 `metric:` field producing one result, e.g. `{type: net, interface: ppp0, metric:
@@ -1836,14 +1956,34 @@ core on an 8-thread host reads `~12.5%`. `total_cpu` uses the same whole-machine
 basis.
 
 `cpu_thread` complements `cpu` for the **single-thread** case: it is the **busiest
-single process** in the tree (parent or any child) measured against **one** CPU
-thread, so `100%` means one process is saturating a full core. Because the
-whole-machine `cpu` dilutes a single hot process across all cores (a core-bound
-process on an 8-thread host shows only `~12.5%` there), `cpu_thread` is what you
-alert on to catch a process — especially a single-threaded one — pegging its
-thread: `metric` `scope: service`, `metric: cpu_thread`, `op: ">"`, `value:
-"90%"`. A multi-threaded process spanning several cores can read above `100%`.
-`cpu_thread` is a rate, so it is not ready on the first cycle.
+single thread** in the tree (of the parent or of any child) measured against **one**
+CPU thread, so `100%` means one thread is saturating a full core and the metric never
+reads above `100%` — no single core can give more. Because the whole-machine `cpu`
+dilutes one hot thread across all cores (a core-bound process on an 8-thread host
+shows only `~12.5%` there), `cpu_thread` is what you alert on to catch a thread
+pegging its core: `metric` `scope: service`, `metric: cpu_thread`, `op: ">"`, `value:
+"90%"`. `cpu_thread` is a rate, so it is not ready on the first cycle.
+
+Reading a process's individual threads costs one file per thread per cycle, so it is
+done only for processes at or above **5% of one core**. Below that the process's own
+rate is published as an **upper bound**: no thread can exceed the whole process, so a
+saturated core can never hide behind a bound — it can only over-report, and only far
+below any threshold worth alerting on. Keep rule thresholds above that floor;
+a threshold under it would compare against a bound rather than a measurement. A
+process that has just become busy is bounded for one cycle and measured from the next,
+because a per-thread rate needs two per-thread samples. The Web UI's process table
+shows the per-process figure, with its tooltip saying whether that figure was measured
+per thread or bounded by the process rate. The cell itself carries no marker: below the
+floor a bound and a measurement are indistinguishable for any decision, and on an idle
+host every non-zero row is a bound — a marker on every row distinguishes nothing.
+
+> **Upgrading:** `cpu_thread` used to be the busiest *process* rather than the busiest
+> *thread*, which summed a multi-threaded process's cores together and could report
+> well above `100%` — describing a core that cannot exist. The corrected metric is
+> always **≤** the old one, so stored history shows a step down at the upgrade and
+> alerts that fired on the inflated value may stop firing. Nothing is migrated; use
+> `sermoctl state compact --before TIME` to drop the older semantics if the step
+> bothers you.
 
 `cpu`/`cpu_thread`/`total_cpu` and the `io*` metrics are rates: they are **not
 ready** on the first cycle and a condition over a not-ready value is false. A `%`
@@ -2098,6 +2238,42 @@ rules:
         During ${rule.duration}, ${service} ${check.metric} stayed above
         ${check.threshold} (current ${check.value}) at ${date}
 ```
+
+A `sql` check turns a scalar query into the same kind of threshold watch. Its
+`value` is compared numerically and does **not** accept the `K`/`M`/`G` size
+suffixes that `storage` byte fields take, so a query that reports a size should
+convert it in SQL and name the unit in the message. The PostgreSQL catalog
+service uses this shape to watch WAL retained by a replication slot:
+
+```yaml
+watches:
+  alert-if-replication-slot-backlog:
+    check:
+      type: sql
+      engine: postgres
+      host: 127.0.0.1
+      port: ${port}
+      user: ${monitor_user}
+      database: ${database}
+      optional: true
+      query: >-
+        SELECT round(coalesce(max(pg_wal_lsn_diff(pg_current_wal_lsn(),
+        restart_lsn)), 0) / 1048576.0, 1) FROM pg_replication_slots
+      op: ">"
+      value: 1024          # MiB, a plain number: no size suffix here
+    for:
+      duration: 10m
+    then:
+      action: alert
+      message: >-
+        During ${rule.duration}, ${service} kept retaining ${check.value} MiB of
+        WAL for a replication slot (limit ${check.threshold} MiB)
+```
+
+Because a `sql` check reports "not ok" when the connection itself fails, a
+database that is down never raises the threshold alert — cover that case with a
+separate connection check (`type: postgres`, `type: mysql`, …) rather than by
+relaxing the query.
 
 ## Remediation policy
 

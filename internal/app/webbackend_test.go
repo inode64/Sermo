@@ -146,6 +146,44 @@ func TestWebBackendDetailRanFlag(t *testing.T) {
 	}
 }
 
+// A condition check reports OK when its threshold is crossed, so the detail
+// view must expose availability, not the raw comparison: an under-threshold
+// sensor is healthy and has to read ok, not fail.
+func TestWebBackendDetailConditionCheckReportsAvailability(t *testing.T) {
+	snaps := NewSnapshots()
+	snaps.PublishWithCheckTypes("web", map[string]checks.Result{
+		"lag-quiet":  {Check: "lag-quiet", OK: false, Condition: true, Message: "16 MiB (limit 1024 MiB)"},
+		"lag-firing": {Check: "lag-firing", OK: true, Condition: true, Message: "2048 MiB (limit 1024 MiB)"},
+		"port-up":    {Check: "port-up", OK: true, Message: "connected"},
+		"port-down":  {Check: "port-down", OK: false, Message: "refused"},
+	}, map[string]bool{"lag-quiet": true, "lag-firing": true, "port-up": true, "port-down": true},
+		map[string]string{"lag-quiet": "sql", "lag-firing": "sql", "port-up": "tcp", "port-down": "tcp"})
+
+	names := []string{"lag-quiet", "lag-firing", "port-up", "port-down"}
+	types := map[string]string{"lag-quiet": "sql", "lag-firing": "sql", "port-up": "tcp", "port-down": "tcp"}
+	b := webBackendWithEntry(snaps, names, types)
+
+	detail, ok := b.Detail(context.Background(), "web")
+	if !ok {
+		t.Fatal("detail not found")
+	}
+	got := map[string]bool{}
+	for _, c := range detail.Checks {
+		got[c.Name] = c.OK
+	}
+	want := map[string]bool{
+		"lag-quiet":  true,  // under threshold: healthy
+		"lag-firing": false, // threshold crossed: alerting
+		"port-up":    true,  // health check keeps its polarity
+		"port-down":  false,
+	}
+	for name, expected := range want {
+		if got[name] != expected {
+			t.Errorf("detail check %q ok = %v, want %v", name, got[name], expected)
+		}
+	}
+}
+
 func TestWebBackendDetailCheckReadings(t *testing.T) {
 	snap := NewSnapshots()
 	snap.PublishWithCheckTypes("web", map[string]checks.Result{
@@ -2142,5 +2180,78 @@ watches:
 	}
 	if !hasWatch || !hasType {
 		t.Fatalf("custom runner via webbackend Deps did not receive expected SERMO_ env: %v", call.env)
+	}
+}
+
+// A state sensor must reach the dashboard tagged as such, so the detail table
+// can label it active/inactive instead of ok/fail. The mode comes from
+// configuration, not from the published result, so it is right on the first
+// cycle and after a restart.
+func TestWebBackendDetailCarriesReportingMode(t *testing.T) {
+	snaps := NewSnapshots()
+	snaps.PublishWithCheckTypes("web", map[string]checks.Result{
+		"backup": {Check: "backup", OK: false, Reports: checks.ReportsState, Message: "state absent"},
+		"port":   {Check: "port", OK: true, Message: "connected"},
+	}, map[string]bool{"backup": true, "port": true},
+		map[string]string{"backup": "process", "port": "tcp"})
+
+	b := webBackendWithEntry(snaps, []string{"backup", "port"}, map[string]string{"backup": "process", "port": "tcp"})
+	b.entries["web"].checkReports = map[string]string{"backup": checks.ReportsState}
+
+	detail, ok := b.Detail(context.Background(), "web")
+	if !ok {
+		t.Fatal("detail not found")
+	}
+	got := map[string]string{}
+	for _, c := range detail.Checks {
+		got[c.Name] = c.Reports
+	}
+	if got["backup"] != checks.ReportsState {
+		t.Errorf("backup reports = %q, want %q", got["backup"], checks.ReportsState)
+	}
+	if got["port"] != "" {
+		t.Errorf("port reports = %q, want empty for the default health semantics", got["port"])
+	}
+}
+
+// A verdictless check reports no availability, so the detail must carry no SLA
+// windows for it: an empty series renders as "n/a", while stale windows left
+// over from before the mode was declared would keep implying uptime it never had.
+func TestWebBackendDetailOmitsSLAForVerdictlessChecks(t *testing.T) {
+	snaps := NewSnapshots()
+	snaps.PublishWithCheckTypes("web", map[string]checks.Result{
+		"backup": {Check: "backup", OK: false, Reports: checks.ReportsState},
+		"gauge":  {Check: "gauge", OK: true, Reports: checks.ReportsValue},
+		"port":   {Check: "port", OK: true},
+	}, map[string]bool{"backup": true, "gauge": true, "port": true},
+		map[string]string{"backup": "process", "gauge": "sql", "port": "tcp"})
+
+	b := webBackendWithEntry(snaps, []string{"backup", "gauge", "port"},
+		map[string]string{"backup": "process", "gauge": "sql", "port": "tcp"})
+	b.entries["web"].checkReports = map[string]string{
+		"backup": checks.ReportsState,
+		"gauge":  checks.ReportsValue,
+	}
+	// Every check has a recorded series, so an empty one in the result can only
+	// come from the omission under test.
+	windows := []state.SLAValue{{Window: "hour", Up: 10, Total: 10}}
+	b.sla = fakeSLAReader{check: map[string][]state.SLAValue{
+		"web\x00backup": windows,
+		"web\x00gauge":  windows,
+		"web\x00port":   windows,
+	}}
+
+	detail, ok := b.Detail(context.Background(), "web")
+	if !ok {
+		t.Fatal("detail not found")
+	}
+	for _, c := range detail.Checks {
+		verdictless := checks.VerdictlessMode(c.Reports)
+		if verdictless && len(c.SLA) != 0 {
+			t.Errorf("check %q reports %q but carries %d SLA windows", c.Name, c.Reports, len(c.SLA))
+		}
+		if !verdictless && len(c.SLA) == 0 {
+			t.Errorf("check %q should keep its SLA windows", c.Name)
+		}
 	}
 }

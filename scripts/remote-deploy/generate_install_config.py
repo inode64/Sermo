@@ -59,6 +59,9 @@ PSEUDO_FS = {
     "tmpfs",
 }
 
+# Filesystems that back a generated storage watch. Network ones are excluded by
+# NETWORK_FS before this set is consulted, and any other fuse.* mount is picked
+# up by the fallback in mount_is_local_storage, so neither belongs here.
 REAL_STORAGE_FS = {
     "bcachefs",
     "btrfs",
@@ -69,7 +72,6 @@ REAL_STORAGE_FS = {
     "ext4",
     "exfat",
     "f2fs",
-    "fuse.sshfs",
     "gfs2",
     "glusterfs",
     "nfs",
@@ -113,6 +115,23 @@ ENDPOINT_CHECK_TYPES = {"dns", "http", "ports", "tcp"}
 TCP_PROTOCOL = "tcp"
 UDP_PROTOCOL = "udp"
 WILDCARD_LISTEN_HOSTS = {"0.0.0.0", "::"}
+
+# The PostgreSQL catalog service ships replication watches that only make sense
+# on a node that actually replicates. Each one names the cluster fact it needs,
+# resolved against the postgres_clusters inventory evidence.
+POSTGRES_CATALOG_SERVICE = "postgres-%v"
+POSTGRES_REPLICATION_WATCHES = {
+    "alert-if-replication-slot-backlog": "slots",
+    "alert-if-logical-slot-unconfirmed": "slots",
+    "alert-if-replication-slot-inactive": "slots",
+    "alert-if-replication-replay-lag": "walsenders",
+    "alert-if-standby-replay-delay": "standby",
+}
+POSTGRES_REPLICATION_REASONS = {
+    "slots": "no replication slot present on this host",
+    "walsenders": "no walsender connected to this primary",
+    "standby": "host is not a standby",
+}
 
 
 @dataclass(frozen=True)
@@ -245,6 +264,7 @@ def simple_watch(
     then_lines: list[str] | None = None,
     policy: bool = False,
     display_name: str | None = None,
+    clear: str | None = None,
 ) -> str:
     body = [
         f"name: {name}",
@@ -261,6 +281,12 @@ def simple_watch(
     body.extend(f"  {line}" for line in check_lines)
     if cycles:
         body.append(f"for: {{ cycles: {cycles} }}")
+    if clear:
+        # Recovery hysteresis: how long the condition must stay quiet before the alert
+        # clears. Only worth spelling out for an edge sensor, whose condition is true
+        # for a single cycle and whose whole visible alert life is therefore this
+        # window; level watches are fine inheriting the global default.
+        body.append(f"clear: {{ {clear} }}")
     if then_lines:
         body.append("then:")
         body.extend(f"  {line}" for line in then_lines)
@@ -1054,6 +1080,65 @@ def endpoint_watch_overrides(stage: Path, doc: dict, variables: dict[str, str]) 
             item["reason"] = reason or "no associated listening socket for configured endpoint"
         report.append(item)
     return disabled, report
+def parse_postgres_clusters(stage: Path) -> list[dict[str, object]]:
+    """Read the postgres_clusters inventory evidence: one line per postmaster,
+    tab separated as <datadir> <primary|standby> <slots> <walsenders>."""
+    clusters: list[dict[str, object]] = []
+    for line in read_text(stage / "postgres_clusters").splitlines():
+        fields = line.split("\t")
+        if len(fields) < 4:
+            continue
+        datadir, role, slots, walsenders = fields[0], fields[1], fields[2], fields[3]
+        if not datadir or role not in {"primary", "standby"}:
+            continue
+        if not slots.isdigit() or not walsenders.isdigit():
+            continue
+        clusters.append({"datadir": datadir, "role": role, "slots": int(slots), "walsenders": int(walsenders)})
+    return clusters
+
+
+def postgres_replication_fact(clusters: list[dict[str, object]], requirement: str) -> bool:
+    """Report whether any cluster on the host satisfies a watch's requirement."""
+    if requirement == "slots":
+        return any(int(str(cluster["slots"])) > 0 for cluster in clusters)
+    if requirement == "walsenders":
+        return any(cluster["role"] == "primary" and int(str(cluster["walsenders"])) > 0 for cluster in clusters)
+    if requirement == "standby":
+        return any(cluster["role"] == "standby" for cluster in clusters)
+    return False
+
+
+def replication_watch_overrides(stage: Path, doc: dict) -> tuple[set[str], list[dict[str, object]]]:
+    """Disable the PostgreSQL replication watches the host cannot satisfy, so a
+    standalone node does not carry slot/lag sensors that can never fire. Mirrors
+    endpoint_watch_overrides: a disabled set plus one audited report entry per
+    watch."""
+    disabled: set[str] = set()
+    report: list[dict[str, object]] = []
+    if str(doc.get("name") or "") != POSTGRES_CATALOG_SERVICE:
+        return disabled, report
+    watches = doc.get("watches", {})
+    if not isinstance(watches, dict):
+        return disabled, report
+    clusters = parse_postgres_clusters(stage)
+    for watch_name, requirement in sorted(POSTGRES_REPLICATION_WATCHES.items()):
+        if watch_name not in watches:
+            continue
+        active = postgres_replication_fact(clusters, requirement)
+        item: dict[str, object] = {"watch": watch_name, "requires": requirement, "active": active}
+        if active:
+            item["source"] = "postgres cluster inventory"
+        else:
+            disabled.add(watch_name)
+            item["reason"] = (
+                POSTGRES_REPLICATION_REASONS[requirement]
+                if clusters
+                else "no running PostgreSQL cluster discovered"
+            )
+        report.append(item)
+    return disabled, report
+
+
 def docker_container_name(entry: dict) -> str:
     names = entry.get("Names")
     if isinstance(names, list):
@@ -1188,6 +1273,8 @@ def generate_for_host(host_slug: str, stage: Path, configs_dir: Path, options: G
         doc, values = values_for_service(name, stage, catalog_docs)
         effective_variables = effective_service_variables(doc or {}, values, variable_overrides)
         disabled_endpoint_watches, endpoint_checks = endpoint_watch_overrides(stage, doc or {}, effective_variables)
+        disabled_replication_watches, replication_checks = replication_watch_overrides(stage, doc or {})
+        disabled_watches = disabled_endpoint_watches | disabled_replication_watches
         body = f"""name: {name}
 uses: {name}
 monitor: enabled
@@ -1200,9 +1287,9 @@ dry_run: true
         process_override = service_process_override(stage, name)
         if process_override:
             body += process_override
-        if disabled_endpoint_watches:
+        if disabled_watches:
             body += "watches:\n"
-            for watch_name in sorted(disabled_endpoint_watches):
+            for watch_name in sorted(disabled_watches):
                 body += f"  {watch_name}:\n    enabled: false\n"
         write_file(root, f"etc/sermo/services/{slug(name)}.yml", body)
         enabled = {"name": name, "status": svc.get("status", "")}
@@ -1213,6 +1300,8 @@ dry_run: true
             enabled["process_selector_source"] = "cloudflared deleted exe fallback"
         if endpoint_checks:
             enabled["endpoint_checks"] = endpoint_checks
+        if replication_checks:
+            enabled["replication_checks"] = replication_checks
         report["services"]["enabled"].append(enabled)
     report["services"]["skipped"] = skipped_services
 
@@ -1414,10 +1503,28 @@ dry_run: true
         ("watch-pids", "system", "30s", ["type: pids", 'used_pct: { op: ">=", value: "80%" }']),
         ("watch-entropy", "system", "30s", ["type: entropy", 'avail: { op: "<", value: 256 }']),
         ("watch-zombies", "system", "30s", ["type: zombies", 'count: { op: ">", value: 0 }']),
-        ("watch-oom", "system", "30s", ["type: oom"]),
     ]
     for name, category, interval, check_lines in generic_watches:
         add_watch("watches", name, simple_watch(name, category, interval, check_lines))
+
+    # watch-oom is the fleet's one edge sensor, so it inverts both window defaults.
+    #
+    # No `for:`: oom_kill is a cumulative event counter and the check consumes the
+    # delta, so one kill makes the condition true for exactly one cycle. The default
+    # multi-cycle window could never be satisfied, and a real OOM was reported nowhere.
+    # The level checks above (load, memory, fds) describe a state that persists, so a
+    # window there is what keeps a momentary spike from alerting.
+    #
+    # An explicit `clear:`: with the condition true for a single cycle, the recovery
+    # window *is* the alert's whole visible life. The global default (5m) would leave a
+    # kill on screen too briefly to be seen, and being inherited it would not be legible
+    # here. One hour keeps an overnight OOM visible to whoever looks next; the event
+    # feed keeps the exact timestamp far longer either way.
+    add_watch(
+        "watches",
+        "watch-oom",
+        simple_watch("watch-oom", "system", "30s", ["type: oom"], cycles=0, clear="duration: 1h"),
+    )
 
     add_watch(
         "watches",

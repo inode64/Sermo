@@ -52,6 +52,20 @@ const defaultCategoryWatch = "watch";
 const defaultCategoryStorage = "storage";
 const defaultCategoryApp = "app";
 const defaultCategoryLibrary = "library";
+// Classes for a General data field in a service/container/VM expansion whose
+// reading is also a .services-table column: the field is hidden while that column
+// is on screen and revealed at the breakpoint that retires it, so the reading is
+// shown exactly once and a narrow viewport loses nothing. The suffix names the
+// breakpoint, matching the .col-dup rules in styles.css — colDupWide for the
+// columns the 1420px block drops (Category, Uptime, CPU total, Memory, FDs, IO R/W)
+// and colDupPhone for Last activity, which survives down to 640px.
+//
+// A field the column does not restate *exactly* carries neither class:
+// "FDs / Threads" also reports the thread count, which has no column of its own.
+// TestIndexDetailDedupesVisibleColumns pins these against both the CSS and the
+// fields that use them.
+const colDupWide = "col-dup col-dup-1420";
+const colDupPhone = "col-dup col-dup-640";
 // Key of the host watch panel in watch-panels.json. Distinct from
 // watchScopeHost, which is the daemon's `scope` value for a host-level watch:
 // same string, different vocabulary.
@@ -193,8 +207,15 @@ const serviceStatusFilterStates = [
 const watchStatusFilterStates = [targetStateDisabled, targetStateOK, targetStateStarting, targetStateStale, targetStateTesting, targetStateRecovering, targetStateRebuilding, targetStateRepairing, targetStateMoving, targetStateMerging, targetStateFailed];
 const appStatusFilterStates = [targetStateOK, targetStateStarting, targetStateWarning, targetStateFailed];
 const mountStatusFilterStates = [mountStateActive, mountStateInactive];
-const slaHealthyPct = 99;
-const slaWarningPct = 95;
+// SLA strips colour by how much of a bucket was down, not by availability: a
+// 40-second outage inside a day-long bucket is 99.93% available, which any
+// availability threshold reads as healthy. These are the upper edges of the four
+// non-zero severity bands, in percent of failed cycles; zero down is the only
+// green.
+const slaNoData = "no data";
+const slaDownBandLow = 25;
+const slaDownBandMid = 50;
+const slaDownBandHigh = 75;
 const usageCriticalPct = 95;
 const usageHighPct = 90;
 const usageWarnPct = 75;
@@ -2960,6 +2981,28 @@ function procCpuCell(p) {
   if (!p.has_cpu) return tpl`<td>—</td>`;
   return tpl`<td>${cpuBarMini(Number(p.cpu) || 0)}</td>`;
 }
+// procMaxCoreCell renders the most any single core was used on this process's
+// behalf: its busiest thread, against one core. It sits beside CPU because the two
+// answer different questions — a process spread thinly over eight cores and one
+// pegging a single core can report the same total.
+//
+// max_core_exact false means the daemon has not read this process's threads (it was
+// below the sampling floor) and the value is the process's whole rate standing in as an
+// upper bound. That distinction lives in the tooltip and not in the cell: below the
+// floor a bound and a measurement are indistinguishable for any decision, and on an
+// idle host every non-zero row is a bound — a marker present on every row of a column
+// distinguishes nothing and only crowds the number.
+function procMaxCoreCell(p) {
+  // Gated on has_cpu alone, exactly like procCpuCell: both readings come from the
+  // same live sample, so whenever one exists the other does. An absent max_core means
+  // a measured zero (omitempty drops it), not an unknown — "—" would misreport it.
+  if (!p.has_cpu) return tpl`<td>—</td>`;
+  const peak = Number(p.max_core) || 0;
+  const shown = fmtPct(peak);
+  return tpl`<td>${cpuBarMini(peak, p.max_core_exact
+    ? `${shown} of one core, this process's busiest thread`
+    : `at most ${shown} of one core: not measured per thread, bounded by the process rate`)}</td>`;
+}
 function procIoFdThreadCells(p) {
   const io = (p.io_read || p.io_write) ? `${fmtBytes(p.io_read || 0)} / ${fmtBytes(p.io_write || 0)}` : '—';
   return tpl`<td>${io}</td><td class="muted">${p.fds ? fmtNum(p.fds, 0) : '—'}</td><td class="muted">${p.threads ? fmtNum(p.threads, 0) : '—'}</td>`;
@@ -3035,7 +3078,7 @@ function cpuInline(cpu, ready, numCPU, cpuThread) {
 function cpuThreadSuffix(cpuThread) {
   const peak = Number(cpuThread) || 0;
   if (peak <= 0) return "";
-  return ` · busiest process ${fmtPct(peak)} of one core`;
+  return ` · busiest thread ${fmtPct(peak)} of one core`;
 }
 
 function serviceHasNoResidentProcess(s) {
@@ -3089,11 +3132,38 @@ function slaWindowLabel(window) {
   }
 }
 
-function slaColor(pct) {
-  if (pct == null) return "color-mix(in srgb, var(--text-2) 40%, transparent)";
-  if (pct >= slaHealthyPct) return themeHealthColor(healthStatusOK);
-  if (pct >= slaWarningPct) return themeHealthColor(healthStatusWarning);
-  return themeHealthColor(healthStatusCritical);
+// slaDownPct is the share of a bucket's observed cycles that failed, in percent,
+// or null when nothing was observed (a gap).
+function slaDownPct(up, total) {
+  const observed = Number(total) || 0;
+  if (observed <= 0) return null;
+  return (1 - (Number(up) || 0) / observed) * percentScale;
+}
+
+// slaDownBand maps that share onto one of five severity classes. Green is reserved
+// for exactly zero, so no bucket containing a failure can read as healthy however
+// little of the bucket it affected; the band then says how much of it was down,
+// which is what separates a brief blip from a half-day outage.
+//
+// The class names carry the level and styles.css holds the colours (as the usagebar
+// bands do), so the scale stays inside the token linter and a cell costs no
+// getComputedStyle call to paint.
+function slaDownBand(down) {
+  if (down == null || down <= 0) return down == null ? "" : "sla-down-none";
+  if (down <= slaDownBandLow) return "sla-down-low";
+  if (down <= slaDownBandMid) return "sla-down-mid";
+  if (down <= slaDownBandHigh) return "sla-down-high";
+  return "sla-down-full";
+}
+
+// slaAffectedText names how much of a bucket was affected, so the colour is never
+// the only carrier of that information (WCAG 2.2 1.4.1).
+function slaAffectedText(down, downBuckets) {
+  if (down == null) return "no data";
+  if (down <= 0) return "no failures";
+  const minutes = Number(downBuckets) || 0;
+  const affected = minutes ? `, ${minutes} minute${minutes === 1 ? "" : "s"} affected` : "";
+  return `${fmtPct(down)} down${affected}`;
 }
 
 function renderSLAWindows(wins, compact) {
@@ -3104,17 +3174,18 @@ function renderSLAWindows(wins, compact) {
     const label = slaWindowLabel(w.window);
     const pctText = pct == null ? "—" : fmtPct(pct);
     const count = `${Number(w.up || 0)}/${Number(w.total || 0)}`;
-    const title = `${label} · ${pctText} · ${count}`;
+    const down = slaDownPct(w.up, w.total);
+    const title = `${label} · ${pctText} · ${count} · ${slaAffectedText(down, w.down_buckets)}`;
     // (B) When a target is sampled far less often than the window has segments
     // (a check every few hours vs the hour's 5-min sub-spans), most segments
     // carry no sample and the strip would be mostly hatched. Below half-measured
     // fall back to the single availability bar, which states the window's ratio
     // without implying per-sub-span measurements that never happened.
     const segs = Array.isArray(w.segments) ? w.segments : [];
-    const measured = segs.reduce((c, s) => c + (s == null ? 0 : 1), 0);
+    const measured = segs.reduce((c, s) => c + (s && Number(s.total) > 0 ? 1 : 0), 0);
     const track = segs.length && measured * 2 >= segs.length
       ? renderSLATimeline(segs, w.window, w.observed_at)
-      : renderSLAFill(pct);
+      : renderSLAFill(pct, down, w.down_buckets);
     return tpl`<div class="sla-window" title="${title}">
       <span class="sla-label">${label}</span>
       ${track}
@@ -3125,82 +3196,92 @@ function renderSLAWindows(wins, compact) {
   return tpl`<div class="sla-windows${compact ? " sla-compact" : ""}">${rows}</div>`;
 }
 
-// renderBarFill is the single-fill availability bar used when a window has no
-// segment data.
-function renderBarFill(pct, color, label, emptyLabel) {
+// renderSLAFill is the single availability bar used when a window has too few
+// measured sub-spans to draw a timeline.
+function renderSLAFill(pct, down, downBuckets) {
   const width = pct == null ? 0 : pctClamp(pct);
-  const empty = pct == null ? " sla-empty" : "";
-  return tpl`<span class="sla-bar" aria-label="${pct == null ? emptyLabel : label}"><span class="sla-fill${empty}" style="--sla-pct:${width.toFixed(2)}%; --sla-color:${color}"></span></span>`;
+  const label = pct == null
+    ? "No SLA data"
+    : `${fmtPct(pct)} available, ${slaAffectedText(down, downBuckets)}`;
+  const classes = ["sla-fill", pct == null ? "sla-empty" : "", slaDownBand(down)].filter(Boolean).join(" ");
+  return tpl`<span class="sla-bar" aria-label="${label}"><span class="${classes}" style="--sla-pct:${width.toFixed(2)}%"></span></span>`;
 }
 
-function renderSLAFill(pct) {
-  return renderBarFill(pct, slaColor(pct), `${fmtPct(pct)} available`, "No SLA data");
+// slaSegmentCell reduces one wire segment to what the strip renders: availability,
+// the share of the sub-span that was down, and how many one-minute buckets in it
+// failed. null means nothing was observed (a gap) — total 0 is the gap signal, so
+// the ratio does not need to travel on the wire.
+function slaSegmentCell(seg) {
+  const total = seg == null ? 0 : Number(seg.total) || 0;
+  if (total <= 0) return null;
+  const up = Number(seg.up) || 0;
+  return {
+    pct: (up / total) * percentScale,
+    down: slaDownPct(up, total),
+    downBuckets: Number(seg.down_buckets) || 0,
+  };
 }
 
-function slaTimelineDataRows(segments, window, observedAt, unavailable = "no data") {
-  const n = segments.length;
-  if (!n) return nothing;
-  const spanMs = slaWindowSpanMs(window);
+// slaSegmentBounds is the wall-clock range of segment idx of n covering spanMs and
+// ending at endMs.
+function slaSegmentBounds(idx, n, spanMs, endMs) {
+  const start = endMs - spanMs + (idx / n) * spanMs;
+  const end = endMs - spanMs + ((idx + 1) / n) * spanMs;
+  return `${fmtTime(start)} – ${fmtTime(end)}`;
+}
+
+function slaTimelineEndMs(observedAt) {
   const sampledMs = Date.parse(observedAt);
-  const endMs = Number.isFinite(sampledMs) ? sampledMs : Date.now();
-  const startIdx = Math.max(0, n - chartDataTableMaxRows);
-  return segments.slice(startIdx).map((ratio, i) => {
-    const idx = startIdx + i;
-    const segStart = endMs - spanMs + (idx / n) * spanMs;
-    const segEnd = endMs - spanMs + ((idx + 1) / n) * spanMs;
-    const when = `${fmtTime(new Date(segStart).toISOString())} – ${fmtTime(new Date(segEnd).toISOString())}`;
-    const pctText = ratio == null ? unavailable : fmtPct(Number(ratio) * percentScale);
-    return tpl`<tr><td>${when}</td><td>${pctText}</td></tr>`;
+  return Number.isFinite(sampledMs) ? sampledMs : Date.now();
+}
+
+// slaTimelineDataRows is the visually-hidden table beside the band: the same
+// per-sub-span figures as text, so the colour is not the only carrier (WCAG 2.2
+// 1.4.1). It consumes the cells the band already derived rather than walking the
+// segments a second time.
+function slaTimelineDataRows(cells) {
+  if (!cells.length) return nothing;
+  return cells.slice(Math.max(0, cells.length - chartDataTableMaxRows)).map(({ cell, held, when }) => {
+    if (cell == null) return tpl`<tr><td>${when}</td><td>${slaNoData}</td><td>${slaNoData}</td></tr>`;
+    // A held sub-span was not measured; the band marks it in its aria-label, so the
+    // table must too rather than presenting the carried value as observed.
+    const suffix = held ? " (held)" : "";
+    return tpl`<tr><td>${when}</td><td>${fmtPct(cell.pct) + suffix}</td><td>${slaAffectedText(cell.down, cell.downBuckets) + suffix}</td></tr>`;
   });
 }
 
-// renderTimelineBand draws the contiguous status-page style band for the SLA
-// timeline: one colored cell per sub-span (oldest left), hatched where nothing
-// was observed. opts carries the per-variant color function, gap/cell labels
-// and data-table texts.
-function renderTimelineBand(segments, window, observedAt, opts) {
-  const n = segments.length;
-  const spanMs = slaWindowSpanMs(window);
-  const sampledMs = Date.parse(observedAt);
-  const endMs = Number.isFinite(sampledMs) ? sampledMs : Date.now();
-  // (A) For availability, a sub-span with no sample inherits the last observed
-  // state (a service checked every few minutes was up between checks too), so a
-  // continuously-monitored target reads as continuous instead of striped with
-  // sampling gaps. Only leading sub-spans before the first-ever sample stay
-  // hatched (genuinely unknown).
-  let lastPct = null;
-  const cells = segments.map((ratio, i) => {
-    let pct = ratio == null ? null : Number(ratio) * percentScale;
-    let held = false;
-    if (opts.carryForward) {
-      if (pct != null) lastPct = pct;
-      else if (lastPct != null) { pct = lastPct; held = true; }
-    }
-    const segStart = endMs - spanMs + (i / n) * spanMs;
-    const segEnd = endMs - spanMs + ((i + 1) / n) * spanMs;
-    const when = `${fmtTime(new Date(segStart).toISOString())} – ${fmtTime(new Date(segEnd).toISOString())}`;
-    if (pct == null) return tpl`<span class="sla-seg sla-gap" title="${when + " · " + opts.gapText}" aria-label="${when}: ${opts.gapAria}"></span>`;
-    const pctText = fmtPct(pct);
-    const suffix = held ? " · held (last observed, not re-measured this sub-span)" : opts.titleSuffix;
-    return tpl`<span class="sla-seg" style="--sla-color:${opts.color(pct)}" title="${when + " · " + pctText + suffix}" aria-label="${when}: ${pctText} ${opts.cellAria}${held ? " (held)" : ""}"></span>`;
-  });
-  const dataRows = slaTimelineDataRows(segments, window, observedAt, opts.unavailable);
-  return tpl`<table class="chart-data visually-hidden"><caption>${opts.caption}</caption><thead><tr><th scope="col">Period</th><th scope="col">${opts.column}</th></tr></thead><tbody>${dataRows}</tbody></table><span class="sla-timeline" role="img" aria-label="${opts.bandAria}">${cells}</span>`;
-}
-
+// renderSLATimeline draws the contiguous status-page style availability band: one
+// cell per equal sub-span (oldest left), hatched where nothing was observed.
+//
+// Cells are banded by how much of the sub-span was down, so a coarse sub-span
+// containing a brief failure cannot render as healthy; the figure is repeated in
+// each cell's title and aria-label and in the data table beside it.
 function renderSLATimeline(segments, window, observedAt) {
-  return renderTimelineBand(segments, window, observedAt, {
-    color: slaColor,
-    gapText: "no data",
-    gapAria: "no data",
-    titleSuffix: "",
-    cellAria: "available",
-    unavailable: "no data",
-    caption: "SLA timeline data",
-    column: "Availability",
-    bandAria: "SLA availability timeline",
-    carryForward: true,
+  const n = segments.length;
+  const spanMs = slaWindowSpanMs(window);
+  const endMs = slaTimelineEndMs(observedAt);
+  // A sub-span with no sample inherits the last observed state (a service checked
+  // every few minutes was up between checks too), so a continuously-monitored
+  // target reads as continuous instead of striped with sampling gaps. Only leading
+  // sub-spans before the first-ever sample stay hatched (genuinely unknown).
+  let lastCell = null;
+  const cells = segments.map((seg, i) => {
+    let cell = slaSegmentCell(seg);
+    let held = false;
+    if (cell != null) lastCell = cell;
+    else if (lastCell != null) { cell = lastCell; held = true; }
+    return { cell, held, when: slaSegmentBounds(i, n, spanMs, endMs) };
   });
+  const band = cells.map(({ cell, held, when }) => {
+    if (cell == null) {
+      return tpl`<span class="sla-seg sla-gap" title="${when + " · " + slaNoData}" aria-label="${when}: ${slaNoData}"></span>`;
+    }
+    const pctText = fmtPct(cell.pct);
+    const affected = slaAffectedText(cell.down, cell.downBuckets);
+    const heldNote = held ? " · held (last observed, not re-measured this sub-span)" : "";
+    return tpl`<span class="sla-seg ${slaDownBand(cell.down)}" title="${when + " · " + pctText + " · " + affected + heldNote}" aria-label="${when}: ${pctText} available, ${affected}${held ? " (held)" : ""}"></span>`;
+  });
+  return tpl`<table class="chart-data visually-hidden"><caption>SLA timeline data</caption><thead><tr><th scope="col">Period</th><th scope="col">Availability</th><th scope="col">Affected</th></tr></thead><tbody>${slaTimelineDataRows(cells)}</tbody></table><span class="sla-timeline" role="img" aria-label="SLA availability timeline">${band}</span>`;
 }
 
 function slaWindowSpanMs(window) {
@@ -3235,17 +3316,26 @@ function slaIncidentTime(t) {
   return fmtTime(new Date(t).toISOString());
 }
 
+// slaAffectedMinutes counts the one-minute buckets that saw a failure, summing over
+// the incident points already selected for this window. It reads down_buckets rather
+// than counting those points: past the per-minute retention one point covers hours
+// or a whole day, so counting points would report three separate bad minutes inside
+// one day as a single incident.
+function slaAffectedMinutes(incidents) {
+  return (incidents || []).reduce((n, o) => n + (Number(o.p.down_buckets) || 0), 0);
+}
+
 function slaTimelineSummary(points) {
-  let up = 0, total = 0;
+  let up = 0, total = 0, affected = 0;
   (points || []).forEach((p) => {
     up += Number(p.up || 0);
     total += Number(p.total || 0);
+    affected += Number(p.down_buckets) || 0;
   });
   if (total <= 0) return '<span class="muted">No data in this window.</span>';
   const pct = up / total * percentScale;
-  const incidentCount = (points || []).filter((p) => Number(p.total || 0) > Number(p.up || 0)).length;
-  const head = incidentCount
-    ? `<span class="bad">${incidentCount} incident${incidentCount === 1 ? "" : "s"}</span>`
+  const head = affected
+    ? `<span class="bad">${affected} affected minute${affected === 1 ? "" : "s"}</span>`
     : '<span class="ok">No incidents</span>';
   return `${head} &middot; ${fmtPct(pct)}`;
 }
@@ -3322,41 +3412,54 @@ function drawSLAChart(points, win) {
   if (!observed.length) return '<span class="muted">No SLA data yet for this window.</span>';
 
   const { buckets } = bucketize(points, span, cols,
-    () => ({ up: 0, total: 0 }),
+    () => ({ up: 0, total: 0, downBuckets: 0 }),
     (b, p) => {
       b.up += Number(p.up || 0);
       b.total += Number(p.total || 0);
+      b.downBuckets += Number(p.down_buckets || 0);
     });
   // The strip has a fixed bar count (slaBarCount) while the series is sampled
   // per cycle, so short windows have more bars than samples and every few bars
   // land on no sample — a continuously-up service looked striped. Carry the last
   // observed availability forward across those empty bars (the service held that
   // state between samples). Only bars before the first-ever sample stay hatched.
-  let lastPct = null;
+  let lastCell = null;
   const bars = buckets.map((b, i) => {
-    const segStart = startMs + (i / cols) * span;
-    const segEnd = startMs + ((i + 1) / cols) * span;
-    const when = `${fmtTime(new Date(segStart).toISOString())} – ${fmtTime(new Date(segEnd).toISOString())}`;
-    let pct = null;
+    const when = slaSegmentBounds(i, cols, span, endMs);
+    let cell = null;
     let held = false;
-    if (b.total) { pct = pctClamp(b.up / b.total * percentScale); lastPct = pct; }
-    else if (lastPct != null) { pct = lastPct; held = true; }
-    if (pct == null) return `<span class="sla-bar-seg sla-gap" title="${esc(when + " · no data")}" aria-label="${esc(when)}: no data"></span>`;
-    const pctText = fmtPct(pct);
-    const tip = held ? `${when} · ${pctText} · held (no sample this sub-span)` : `${when} · ${pctText} · ${b.up}/${b.total}`;
-    return `<span class="sla-bar-seg" style="--sla-color:${slaColor(pct)}" title="${esc(tip)}" aria-label="${esc(when)}: ${esc(pctText)} available${held ? " (held)" : ""}"></span>`;
+    if (b.total) {
+      cell = { pct: pctClamp(b.up / b.total * percentScale), down: slaDownPct(b.up, b.total), downBuckets: b.downBuckets };
+      lastCell = cell;
+    } else if (lastCell != null) { cell = lastCell; held = true; }
+    if (cell == null) return `<span class="sla-bar-seg sla-gap" title="${esc(when + " · " + slaNoData)}" aria-label="${esc(when)}: ${slaNoData}"></span>`;
+    const pctText = fmtPct(cell.pct);
+    const affected = slaAffectedText(cell.down, cell.downBuckets);
+    const tip = held
+      ? `${when} · ${pctText} · held (no sample this sub-span)`
+      : `${when} · ${pctText} · ${b.up}/${b.total} · ${affected}`;
+    return `<span class="sla-bar-seg ${slaDownBand(cell.down)}" title="${esc(tip)}" aria-label="${esc(when)}: ${esc(pctText)} available, ${esc(affected)}${held ? " (held)" : ""}"></span>`;
   }).join("");
   const incidents = slaIncidentPoints(points, startMs, endMs);
+  const affectedMinutes = slaAffectedMinutes(incidents);
   const latestPct = observed[observed.length - 1].pct;
-  const slaAria = `SLA timeline: latest ${fmtPct(latestPct)}, ${incidents.length} incident${incidents.length === 1 ? "" : "s"}`;
+  const slaAria = `SLA timeline: latest ${fmtPct(latestPct)}, ${affectedMinutes} affected minute${affectedMinutes === 1 ? "" : "s"}`;
   const dataTable = slaChartDataTable(observed);
   return `${dataTable}<div class="sla-bars" role="img" aria-label="${esc(slaAria)}">${bars}</div>` +
-    `<div class="sla-bars-axis"><span>${esc(fmtTime(new Date(startMs).toISOString()))}</span><span>now</span></div>` +
+    `<div class="sla-bars-axis"><span>${esc(fmtTime(startMs))}</span><span>now</span></div>` +
     renderSLAIncidentList(incidents);
 }
 
+// totalsCpuCell renders the whole-tree machine-wide CPU rate for the General data
+// grid, the same reading the table's CPU column shows.
+//
+// The busiest-thread figure is deliberately not spelled out here: it belongs to a
+// process, and the process table now carries it per row (procMaxCoreCell). An
+// aggregate maximum only restates whichever row is highest while hiding which one
+// that is. cpu_thread still rides along so cpuInline can name it in the tooltip.
 function totalsCpuCell(pt) {
-  return cpuInline(pt && pt.cpu, !!(pt && pt.has_cpu), pt && pt.num_cpu, pt && pt.cpu_thread);
+  const { cpu, has_cpu: ready, num_cpu: cores, cpu_thread: thread } = pt || {};
+  return cpuInline(cpu, !!ready, cores, thread);
 }
 
 function detailDomKey(name) {
@@ -3400,17 +3503,51 @@ function serviceMetricState(name) {
   return state;
 }
 
+// Reporting modes a check can declare (`reports:` in its configuration). Mirrors
+// the Reports* constants in internal/checks.
+const REPORTS_STATE = "state";
+const REPORTS_VALUE = "value";
+
+// verdictlessCheck reports whether a check passes no judgement, so it has no
+// availability: the SLA column reads "n/a" rather than "no data yet", which
+// would suggest a series that is merely still filling.
+function verdictlessCheck(c) {
+  return c.reports === REPORTS_STATE || c.reports === REPORTS_VALUE;
+}
+
+// checkStateHTML renders a check's state cell. A `reports: state` check is a
+// state sensor with no verdict — "a backup is running" is neither healthy nor
+// failing — so it reads active/inactive instead of ok/fail, in its own colours:
+// informative for active, muted for inactive. Neither reuses the ok/fail green
+// and red, which would imply a judgement, nor the warn-coloured `inactive`
+// class used for stale.
+function checkStateHTML(c, age) {
+  if (c.stale) return tpl`<span class="inactive">stale</span>${age}`;
+  if (!c.ran) return c.at ? tpl`<span class="muted">cached</span>${age}` : tpl`<span class="muted">not run yet</span>`;
+  if (c.skipped) return tpl`<span class="muted">skipped</span>${age}`;
+  if (c.reports === REPORTS_STATE) {
+    return c.ok
+      ? tpl`<span class="state-on">active</span>${age}`
+      : tpl`<span class="state-off">inactive</span>${age}`;
+  }
+  if (c.reports === REPORTS_VALUE) return tpl`<span class="state-on">measured</span>${age}`;
+  return c.ok ? tpl`<span class="ok">ok</span>${age}` : tpl`<span class="bad">fail</span>${age}`;
+}
+
+// checkSLAHTML renders the SLA cell, or an explicit n/a for a check that will
+// never have one.
+function checkSLAHTML(c) {
+  if (verdictlessCheck(c)) return tpl`<span class="muted" title="This check reports no availability">n/a</span>`;
+  return renderSLAWindows(c.sla, true);
+}
+
 function renderServiceDetail(d) {
   const procs = d.processes || [];
   const procWarnings = d.process_warnings || [];
   const noResidentProcess = !!d.no_resident_process;
   const checkRows = (d.checks || []).map((c) => {
     const age = c.at ? tpl` <span class="muted">· ${fmtAge(c.at)}</span>` : nothing;
-    const state = c.stale ? tpl`<span class="inactive">stale</span>${age}`
-      : !c.ran
-      ? (c.at ? tpl`<span class="muted">cached</span>${age}` : tpl`<span class="muted">not run yet</span>`)
-      : c.skipped ? tpl`<span class="muted">skipped</span>${age}`
-      : c.ok ? tpl`<span class="ok">ok</span>${age}` : tpl`<span class="bad">fail</span>${age}`;
+    const state = checkStateHTML(c, age);
     const readings = (c.readings && c.readings.length) ? renderWatchReadings(c.readings) : nothing;
     const msg = c.message
       ? tpl`<span class="truncate check-message" title="${c.message || ""}">${c.message || ""}</span>`
@@ -3419,7 +3556,7 @@ function renderServiceDetail(d) {
     const detailCell = (hasReadings || c.message) ? tpl`${readings}${msg}` : "—";
     return tpl`<tr><td>${c.name}</td><td class="muted">${c.type || ""}</td>
       <td>${state}${c.optional ? tpl` <span class="muted">(optional)</span>` : nothing}</td>
-      <td class="sla-cell">${renderSLAWindows(c.sla, true)}</td>
+      <td class="sla-cell">${checkSLAHTML(c)}</td>
       <td class="muted">${detailCell}</td></tr>`;
   });
   const checks = checkRows.length ? checkRows : tpl`<tr><td colspan="5" class="muted">No checks.</td></tr>`;
@@ -3450,28 +3587,26 @@ function renderServiceDetail(d) {
     count: procs.length,
   });
   // When the host RAM total is known, show each process's resident memory as a
-  // share of host RAM (a compact bar), plus a bar on the whole-tree total.
+  // share of host RAM (a compact bar).
   const hostMem = hostMemTotalBytes();
   const memPct = (rss) => hostMem > 0 ? pctClamp((Number(rss) || 0) / hostMem * percentScale) : 0;
-  const totalBar = pt && hostMem > 0
-    ? tpl` ${usageBarMini(memPct(pt.rss || 0), fmtPct(memPct(pt.rss || 0)))}`
-    : nothing;
-  const totals = pt
-    ? tpl`<p class="muted detail-totals">Service totals (including child processes): memory <b>${fmtBytes(pt.rss || 0)}</b>${totalBar}${cpuTotalsLine(pt)} · IO r/w <b>${fmtBytes(pt.io_read || 0)} / ${fmtBytes(pt.io_write || 0)}</b> · fds <b>${fmtNum(pt.fds || 0, 0)}</b> · threads <b>${fmtNum(pt.threads || 0, 0)}</b> · ${pt.count} process${pt.count === 1 ? "" : "es"}</p>`
-    : nothing;
+  // The whole-tree totals (memory, cpu, IO, fds, threads, process count) are the
+  // General data grid's job; a summary line above the table would restate every
+  // one of them. Discovery warnings are listed individually just below, so their
+  // count would be restated too.
   const procWarns = procWarnings.map((w) => tpl`<div class="bad detail-warn">discovery warning: ${w}</div>`);
-  const procSummary = tpl`<p class="muted detail-summary">${procs.length} discovered${procWarnings.length ? ` · ${procWarnings.length} discovery warning${procWarnings.length === 1 ? "" : "s"}` : ""}</p>`;
   const procRows = processRows(procs);
   const procTable = procs.length
     ? tpl`<table class="detail-compact-table">
         <caption class="visually-hidden">Service processes</caption>
-        <thead><tr><th scope="col">PID</th><th scope="col">CMD</th><th scope="col">User</th><th scope="col">Role</th><th scope="col" title="CPU used by this process, normalized to one core">CPU</th><th scope="col">Mem</th><th scope="col">IO r/w</th><th scope="col">FDs</th><th scope="col">Threads</th></tr></thead>
+        <thead><tr><th scope="col">PID</th><th scope="col">CMD</th><th scope="col">User</th><th scope="col">Role</th><th scope="col" title="CPU used by this process, normalized to one core">CPU</th><th scope="col" title="The most a single core was used by this process: its busiest thread. Each cell's own tooltip says whether that figure was measured per thread or bounded by the process rate.">Max core</th><th scope="col">Mem</th><th scope="col">IO r/w</th><th scope="col">FDs</th><th scope="col">Threads</th></tr></thead>
         <tbody>${procRows.map((row) => { const p = row.p; return tpl`<tr>
           <td>${p.pid}</td>
           <td>${procTreeLabel(row)}</td>
           <td class="muted">${p.user || ""}</td>
           <td class="muted">${p.role || ""}</td>
           ${procCpuCell(p)}
+          ${procMaxCoreCell(p)}
           <td>${p.rss ? (hostMem > 0 ? usageBarMini(memPct(p.rss), fmtBytes(p.rss)) : fmtBytes(p.rss)) : '—'}</td>
           ${procIoFdThreadCells(p)}
         </tr>`; })}</tbody></table>`
@@ -3540,22 +3675,26 @@ function renderServiceDetail(d) {
   const processGeneral = noResidentProcess
     ? nothing
     : tpl`<div><span class="muted">Processes</span><br>${pt ? `${pt.count} process${pt.count === 1 ? "" : "es"}` : tpl`<span class="muted">—</span>`}</div>
-      <div><span class="muted">CPU total</span><br>${totalsCpuCell(pt)}</div>
-      <div><span class="muted">Memory</span><br>${memoryInline(pt && pt.rss)}</div>
-      <div><span class="muted">IO R/W</span><br>${ioRWInline(pt && pt.io_read, pt && pt.io_write)}</div>
+      <div class="${colDupWide}"><span class="muted">CPU total</span><br>${totalsCpuCell(pt)}</div>
+      <div class="${colDupWide}"><span class="muted">Memory</span><br>${memoryInline(pt && pt.rss)}</div>
+      <div class="${colDupWide}"><span class="muted">IO R/W</span><br>${ioRWInline(pt && pt.io_read, pt && pt.io_write)}</div>
       <div><span class="muted">FDs / Threads</span><br>${pt ? `${fmtNum(pt.fds || 0, 0)} / ${fmtNum(pt.threads || 0, 0)}` : tpl`<span class="muted">—</span>`}</div>`;
-  const general = tpl`<h2>General data</h2>
-    <div class="runtime-grid">
+  // Name leads the grid: the row's own heading was dropped as a repeat of the
+  // component, and an expansion scrolled away from its row otherwise has nothing
+  // identifying it. Name and State stay put at every width for that reason; every
+  // other field that also exists as a column is deduplicated — see colDupWide.
+  const general = tpl`<div class="runtime-grid">
+      <div><span class="muted">Name</span><br><b>${displayName(d)}</b></div>
       <div><span class="muted">State</span><br>${serviceStateCell(d)}</div>
-      <div><span class="muted">Category</span><br>${categoryBadge(categoryOf(d, defaultCategoryService))}</div>
+      <div class="${colDupWide}"><span class="muted">Category</span><br>${categoryBadge(categoryOf(d, defaultCategoryService))}</div>
       <div><span class="muted">Unit</span><br>${unitCell(d)}</div>
       <div><span class="muted">Backend</span><br>${d.backend || "—"}</div>
-      <div><span class="muted">Uptime</span><br>${serviceUptimeCell(d)}</div>
+      <div class="${colDupWide}"><span class="muted">Uptime</span><br>${serviceUptimeCell(d)}</div>
       <div><span class="muted">Interval</span><br>${d.interval ? d.interval : tpl`<span class="muted">—</span>`}</div>
       <div><span class="muted">Dry run</span><br><b>${d.dry_run ? "yes" : "no"}</b></div>
       <div><span class="muted">Policy</span><br>${policyCell(d)}</div>
       <div><span class="muted">Locks</span><br>${locksCell(d)}</div>
-      <div><span class="muted">Last event</span><br>${lastEventCell(d)}</div>
+      <div class="${colDupPhone}"><span class="muted">Last event</span><br>${lastEventCell(d)}</div>
       <div><span class="muted">Next remediation</span><br>${nextRemediationCell(d)}</div>
       <div><span class="muted">Remediation</span><br>${renderRemediation(d.remediation)}</div>
       ${processGeneral}
@@ -3563,9 +3702,8 @@ function renderServiceDetail(d) {
   const processSection = noResidentProcess
     ? nothing
     : tpl`<h2>Processes</h2>
-      ${procSummary}${totals}${procWarns}${procTable}`;
+      ${procWarns}${procTable}`;
   return tpl`<div class="service-detail" data-service-detail="${d.name}">
-    <h2>${displayName(d)} <span class="muted">${d.unit || ""}</span></h2>
     ${disabledNote}
     ${general}
     ${graphs}
@@ -3660,27 +3798,11 @@ function hostMemTotalBytes() {
 // cpuBarMini renders a single-core-normalized CPU% as a compact bar (100% = one
 // full core). A multithreaded process can exceed 100%; the bar caps at full but
 // the label keeps the true value.
-function cpuBarMini(pct) {
+// title overrides the default tooltip for callers whose bar is not "this process's
+// own rate" — the busiest-thread cell, for one.
+function cpuBarMini(pct, title) {
   const v = Number(pct) || 0;
-  return usageBarMini(pctClamp(v), fmtPct(v), `${fmtPct(v)} of one core used by this process`);
-}
-
-// cpuTotalsLine renders the whole-tree CPU summary for a process_totals object:
-// the whole-machine rate plus the daemon's cpu_thread reading (the busiest
-// single process against one core), which is what a saturated worker shows up
-// in while the machine-wide figure still looks low. "measuring" until the first
-// rate is available, "" when CPU was never sampled (no live registry).
-function cpuTotalsLine(pt) {
-  if (!pt) return nothing;
-  if (!pt.has_cpu) return pt.num_cpu ? tpl` · cpu <span class="muted">measuring…</span>` : nothing;
-  const machine = Number(pt.cpu) || 0;
-  const peak = Number(pt.cpu_thread) || 0;
-  const machineBar = usageBarMini(pctClamp(machine), fmtPct(machine),
-    `${fmtPct(machine)} of ${pt.num_cpu || "?"} cores${cpuThreadSuffix(peak)}`);
-  const peakPart = peak > 0
-    ? tpl` · core peak <b>${fmtPct(peak)}</b> ${cpuBarMini(peak)}`
-    : nothing;
-  return tpl` · cpu <b>${fmtPct(machine)}</b> ${machineBar}${peakPart}`;
+  return usageBarMini(pctClamp(v), fmtPct(v), title != null ? title : `${fmtPct(v)} of one core used by this process`);
 }
 
 // storageUsedPct returns the used percentage 0..100, or null when the volume
@@ -6467,7 +6589,9 @@ function renderActionConfirm() {
   const ctx = confirmCtx || {};
   const d = ctx.detail || {};
   const activeLocks = (d.locks || []).filter((l) => l.state === lockStateActive);
-  const failingChecks = (d.checks || []).filter((c) => c.ran && !c.ok && !c.optional);
+  // A verdictless check has no verdict to fail: its ok flag carries the sensed
+  // state, so an idle state sensor would otherwise read as a blocker here.
+  const failingChecks = (d.checks || []).filter((c) => c.ran && !c.ok && !c.optional && !verdictlessCheck(c));
   const procWarnings = d.process_warnings || [];
   const noResidentProcess = !!d.no_resident_process;
   const ev = ctx.lastEvent;

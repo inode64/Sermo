@@ -14,6 +14,7 @@ import (
 	"sermo/internal/notify"
 	"sermo/internal/process"
 	"sermo/internal/rules"
+	"sermo/internal/telegrambot"
 )
 
 // Monitor runs service workers and host watches in reloadable generations.
@@ -195,6 +196,9 @@ func (m *Monitor) installGenerationLocked(ctx context.Context, newCfg *config.Co
 	if m.deps.DiagnosticLog != nil {
 		m.deps.DiagnosticLog.UpdateConfig(newCfg)
 		go m.deps.DiagnosticLog.Export()
+	}
+	if m.deps.TelegramBot != nil {
+		m.deps.TelegramBot.UpdateConfig(telegrambot.ParseConfig(config.SectionMap(newCfg.Global.Raw, config.SectionTelegramBot)))
 	}
 	LogBuildNotices(m.Logger, "reload build", warnings)
 

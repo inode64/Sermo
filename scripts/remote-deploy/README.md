@@ -216,3 +216,28 @@ records the reason in `config-report.json`; it never turns unrelated listeners
 into checks. Disabled source watches are removed before catalog resolution can
 derive a check or remediation rule from them. HTTP and DNS therefore run only
 for discovered active endpoints.
+
+The PostgreSQL replication watches are gated the same way, from cluster facts
+instead of listening sockets. `remote_collect_inventory.sh` writes
+`postgres_clusters`, one tab-separated line per running postmaster:
+
+```
+<datadir> <primary|standby> <slots> <walsenders>
+```
+
+(the separator is a literal tab, as in `nfs_routes`)
+
+Every field comes from `/proc` and the data directory — the role from
+`standby.signal`/`recovery.conf`, the slot count from `pg_replslot/` (a slot
+exists on disk even with no consumer attached, which is the case that silently
+retains WAL), the walsender count from the postmaster's children. No database
+connection and no credentials are involved, so the script stays read-only.
+
+The generator then keeps `alert-if-replication-slot-backlog`,
+`alert-if-logical-slot-unconfirmed` and `alert-if-replication-slot-inactive`
+only where a slot exists, `alert-if-replication-replay-lag` only on a primary
+with a connected walsender, and `alert-if-standby-replay-delay` only on a
+standby. The rest are written as `enabled: false`, and every decision — kept or
+dropped, with its reason — is recorded per service under `replication_checks` in
+`config-report.json`. A host with no running cluster gets all five disabled
+rather than sensors that could never fire.

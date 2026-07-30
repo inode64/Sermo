@@ -781,7 +781,7 @@ func TestSLASeriesDefaultsAndCaps(t *testing.T) {
 		testPathQuery(testServicePath("web", apiSegmentSLA), testQueryParam(apiQuerySince, "99999h")),
 		nil,
 	))
-	if b.seriesSince != maxSeriesWindow {
+	if b.seriesSince != defaultMaxSeriesWindow {
 		t.Fatalf("since not capped: %v", b.seriesSince)
 	}
 }
@@ -1384,13 +1384,19 @@ func TestEventLimitParsing(t *testing.T) {
 }
 
 func TestSeriesSinceParsing(t *testing.T) {
+	srv := &Server{}
 	check := func(in string, want time.Duration) {
-		assertQueryParse(t, routePathRoot, apiQuerySince, in, seriesSince, want)
+		assertQueryParse(t, routePathRoot, apiQuerySince, in, srv.seriesSince, want)
 	}
 	check("2h", 2*time.Hour)
 	// A non-positive duration is ignored (d > 0 guard), keeping the default.
 	check("0s", defaultSeriesWindow)
-	check("100000h", maxSeriesWindow)
+	// Without a configured retention the cap is the built-in coarsest window.
+	check("100000h", defaultMaxSeriesWindow)
+
+	// A configured retention becomes the cap.
+	configured := &Server{MaxSeriesWindow: 48 * time.Hour}
+	assertQueryParse(t, routePathRoot, apiQuerySince, "100000h", configured.seriesSince, 48*time.Hour)
 }
 
 func TestIsErrorEventClassification(t *testing.T) {

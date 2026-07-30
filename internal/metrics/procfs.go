@@ -70,9 +70,52 @@ type OSReader struct{}
 
 // ProcessCPU sums utime (field 14) and stime (field 15) of /proc/<pid>/stat.
 func (OSReader) ProcessCPU(pid int) (uint64, bool) {
-	// utime is field 14 (index 11 post-comm), stime field 15 (index 12).
 	fields, ok := process.StatFields(pid)
-	if !ok || len(fields) <= procStatSTimeIndex {
+	if !ok {
+		return 0, false
+	}
+	return cpuTicks(fields)
+}
+
+// ProcessThreadCPU sums utime+stime for every thread of pid, keyed by tid, from
+// /proc/<pid>/task/<tid>/stat.
+//
+// This is the only way to attribute CPU to a single core: procfs exposes no
+// per-core breakdown per process, so the busiest thread's rate is what stands in
+// for "the most a single core was used by this process". Callers must keep it
+// behind a threshold — a process with hundreds of threads costs one read each,
+// every cycle (see CPUThreadSampleFloorPercent).
+//
+// A thread that exits between listing the directory and its read is skipped, the
+// same way a vanished process is; ok is false only when the task directory itself
+// cannot be read.
+func (OSReader) ProcessThreadCPU(pid int) (map[int]uint64, bool) {
+	entries, err := os.ReadDir(process.PIDPath(pid, process.ProcFileTask))
+	if err != nil {
+		return nil, false
+	}
+	out := make(map[int]uint64, len(entries))
+	for _, entry := range entries {
+		tid, err := strconv.Atoi(entry.Name())
+		if err != nil {
+			continue
+		}
+		fields, ok := process.ThreadStatFields(pid, tid)
+		if !ok {
+			continue
+		}
+		if ticks, ok := cpuTicks(fields); ok {
+			out[tid] = ticks
+		}
+	}
+	return out, true
+}
+
+// cpuTicks sums utime (field 14, index 11 post-comm) and stime (field 15, index
+// 12) from already-split stat fields, so the process and per-thread readers share
+// one decoder.
+func cpuTicks(fields []string) (uint64, bool) {
+	if len(fields) <= procStatSTimeIndex {
 		return 0, false
 	}
 	utime, err1 := strconv.ParseUint(fields[procStatUTimeIndex], procDecimalBase, procUintBits)

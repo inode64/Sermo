@@ -536,10 +536,24 @@ The visual layer is a token-driven design system (June 2026 redesign):
   only need a `state-<name>` color class.
 - **SLA timeline strip.** `renderSLATimeline(segments, window)` renders a
   contiguous status-page availability band — one `.sla-seg` cell per equal
-  sub-span (oldest left), colored by `slaColor`, hatched `.sla-gap` where no
-  cycle was observed. `renderSLAWindows` uses it for every rolling SLA window;
-  the per-segment ratios come from the backend (`SLAWindow.Segments`). Reuse it
-  anywhere a compact availability history is needed.
+  sub-span (oldest left), hatched `.sla-gap` where no cycle was observed.
+  `renderSLAWindows` uses it for every rolling SLA window; the per-segment
+  `{up, total, down_buckets}` records come from the backend
+  (`SLAWindow.Segments`) — `total: 0` is the gap signal and the availability ratio
+  is derived client-side. Reuse it anywhere a compact availability history is
+  needed.
+  Cells are banded by `slaDownBand(slaDownPct(up, total))` — five severity levels
+  over the share of the sub-span that was **down**, green only at exactly zero —
+  not by an availability threshold. Stored history keeps one bucket span per
+  window, so a wide window's cell covers hours or a day and a short outage inside
+  it is >99% available; an availability threshold would render it healthy. Do not
+  reintroduce one. The band names a class and `styles.css` holds the colour
+  (`.sla-down-none` … `.sla-down-full`, mirroring the `.usagebar.usage-*` bands),
+  so the scale stays under the token linter and a cell costs no
+  `getComputedStyle`. Colour is not the sole indicator: `title`, `aria-label` and
+  the visually-hidden data table repeat the down share and the affected minute
+  count (`down_buckets`). See
+  [docs/webui-representation.md](docs/webui-representation.md#sla-timeline-strip).
 - **Value formatting (one type → one formatter).** A given kind of value must
   render identically everywhere; never hand-format with bare `toFixed`, string
   concatenation or a raw `${value}`. Each type has a single canonical helper —
