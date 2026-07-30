@@ -1607,6 +1607,46 @@ The health checks (`tcp`, `ports`, `http`, `command`, `service`, `file_exists`,
 opposite (`OK == true` is healthy), so as a watch they fire the hook on
 **failure**.
 
+### Edge sensors: a `for:` window suppresses them
+
+A few checks report an **increment** rather than a state: `oom` reads the kernel's
+cumulative `oom_kill` counter and reports the per-cycle delta, so a kill makes the
+condition true for exactly **one** cycle and false again on the next.
+
+A `for:`/`within:` window asks the condition to hold for several consecutive cycles.
+On an edge condition that can never happen, so **the window silences the sensor
+entirely** — the watch stays green right through the event. Configure an edge sensor
+with no entry window at all, so it fires on the first increment:
+
+```yaml
+name: watch-oom
+interval: 30s
+check: { type: oom }
+clear: { duration: 1h }   # how long the alert stays up; see below
+```
+
+Without an entry window the alert would also *end* on the next cycle, one 30s flash
+nobody sees. That is what `clear:` is for — it holds the firing episode open while the
+condition is quiet, so an edge sensor's whole visible alert life is its clear window.
+The lifecycle:
+
+| Cycle | What happens |
+|---|---|
+| the kill | condition true → fires immediately → `firing` event + one notification |
+| next cycles | delta back to 0; the clear window holds the alert up; no repeat actions |
+| after `clear:` | `recovered` event → sensor back to `ok` |
+
+Notifications are sent once per episode, on the rising edge; add
+`then.notify_interval` if you want reminders while the alert is up. A later increment
+after recovery opens a fresh episode and notifies again.
+
+Sermo warns at startup when a watch gates an increment-only check behind a window it
+cannot satisfy, naming the watch and the ceiling. It is a warning and not an error so
+an upgrade is never blocked by a config that predates the check. Rate-shaped deltas
+(`swap` io, `net` errors) are *not* edge sensors — they stay true while the pressure
+lasts, so a window is legitimate hysteresis for them; a `count` delta likewise holds
+for its own `within` span and is only flagged when the rule window outlasts it.
+
 The multi-metric watches (`net`, `icmp`, `swap`) keep their `metrics:` map shape
 (one hook per metric) watch-only, but their **single-metric form** — an explicit
 `metric:` field producing one result, e.g. `{type: net, interface: ppp0, metric:
@@ -1916,14 +1956,31 @@ core on an 8-thread host reads `~12.5%`. `total_cpu` uses the same whole-machine
 basis.
 
 `cpu_thread` complements `cpu` for the **single-thread** case: it is the **busiest
-single process** in the tree (parent or any child) measured against **one** CPU
-thread, so `100%` means one process is saturating a full core. Because the
-whole-machine `cpu` dilutes a single hot process across all cores (a core-bound
-process on an 8-thread host shows only `~12.5%` there), `cpu_thread` is what you
-alert on to catch a process — especially a single-threaded one — pegging its
-thread: `metric` `scope: service`, `metric: cpu_thread`, `op: ">"`, `value:
-"90%"`. A multi-threaded process spanning several cores can read above `100%`.
-`cpu_thread` is a rate, so it is not ready on the first cycle.
+single thread** in the tree (of the parent or of any child) measured against **one**
+CPU thread, so `100%` means one thread is saturating a full core and the metric never
+reads above `100%` — no single core can give more. Because the whole-machine `cpu`
+dilutes one hot thread across all cores (a core-bound process on an 8-thread host
+shows only `~12.5%` there), `cpu_thread` is what you alert on to catch a thread
+pegging its core: `metric` `scope: service`, `metric: cpu_thread`, `op: ">"`, `value:
+"90%"`. `cpu_thread` is a rate, so it is not ready on the first cycle.
+
+Reading a process's individual threads costs one file per thread per cycle, so it is
+done only for processes at or above **5% of one core**. Below that the process's own
+rate is published as an **upper bound**: no thread can exceed the whole process, so a
+saturated core can never hide behind a bound — it can only over-report, and only far
+below any threshold worth alerting on. Keep rule thresholds above that floor;
+a threshold under it would compare against a bound rather than a measurement. A
+process that has just become busy is bounded for one cycle and measured from the next,
+because a per-thread rate needs two per-thread samples. The Web UI's process table
+shows the per-process figure and marks a bound with `≤`.
+
+> **Upgrading:** `cpu_thread` used to be the busiest *process* rather than the busiest
+> *thread*, which summed a multi-threaded process's cores together and could report
+> well above `100%` — describing a core that cannot exist. The corrected metric is
+> always **≤** the old one, so stored history shows a step down at the upgrade and
+> alerts that fired on the inflated value may stop firing. Nothing is migrated; use
+> `sermoctl state compact --before TIME` to drop the older semantics if the step
+> bothers you.
 
 `cpu`/`cpu_thread`/`total_cpu` and the `io*` metrics are rates: they are **not
 ready** on the first cycle and a condition over a not-ready value is false. A `%`

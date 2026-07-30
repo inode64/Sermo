@@ -638,3 +638,55 @@ func TestIsFiringAtDurationBoundary(t *testing.T) {
 		t.Fatal("IsFiringAt must not fire before the duration")
 	}
 }
+
+// TestEdgeConditionFiresOnceAndIsHeldByClearWindow pins the lifecycle an
+// increment-watching sensor depends on: an oom_kill counter delta is true for exactly
+// one cycle, so the entry window must let it fire immediately and the clear window is
+// what keeps the alert visible afterwards.
+//
+// This is the contract behind the OOM that went unreported on a host: with a
+// for: {cycles: 10} entry window the first assertion below is what failed — the
+// condition could never hold ten consecutive cycles, so it never fired at all.
+func TestEdgeConditionFiresOnceAndIsHeldByClearWindow(t *testing.T) {
+	at := time.Date(2026, 7, 30, 10, 12, 41, 0, time.UTC)
+	// No entry window: fire on the first true cycle. One hour of recovery hysteresis.
+	r := Rule{Clear: &ForWindow{Duration: time.Hour}}
+	s := &WindowState{}
+
+	if !s.FiresAt(r, true, at) {
+		t.Fatal("an edge condition must fire on its very first true cycle")
+	}
+	// The counter delta is back to zero from here on, as it is between events. The
+	// clear window measures consecutive quiet time, so it starts at this first quiet
+	// cycle rather than at the firing instant — the episode therefore outlasts the
+	// kill by one interval plus the window.
+	firstQuiet := at.Add(30 * time.Second)
+	for _, elapsed := range []time.Duration{0, 5 * time.Minute, 30 * time.Minute, 59 * time.Minute} {
+		if !s.FiresAt(r, false, firstQuiet.Add(elapsed)) {
+			t.Fatalf("episode ended %v into the quiet period, before the clear window elapsed: the alert must stay visible", elapsed)
+		}
+	}
+	if s.FiresAt(r, false, firstQuiet.Add(time.Hour)) {
+		t.Fatal("episode must end once the clear window has elapsed, returning the sensor to ok")
+	}
+	// A later kill opens a fresh episode rather than being swallowed by the last one.
+	if !s.FiresAt(r, true, at.Add(2*time.Hour)) {
+		t.Fatal("a new increment after recovery must fire again")
+	}
+}
+
+// TestEdgeConditionWithoutClearWindowFlashesForOneCycle is the counterpart: with no
+// clear window the sensor returns to ok on the next cycle, which is why the generated
+// oom watch declares one instead of leaving the alert a single 30s flash.
+func TestEdgeConditionWithoutClearWindowFlashesForOneCycle(t *testing.T) {
+	at := time.Date(2026, 7, 30, 10, 12, 41, 0, time.UTC)
+	r := Rule{}
+	s := &WindowState{}
+
+	if !s.FiresAt(r, true, at) {
+		t.Fatal("must fire on the first true cycle")
+	}
+	if s.FiresAt(r, false, at.Add(30*time.Second)) {
+		t.Fatal("without a clear window the episode ends immediately")
+	}
+}

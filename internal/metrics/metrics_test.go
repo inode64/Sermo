@@ -93,14 +93,27 @@ type fakeReader struct {
 	ioWrite map[int]uint64
 	fds     map[int]uint64
 	threads map[int]uint64
-	hz      float64
-	ncpu    int
+	// threadCPU is pid -> tid -> jiffies. threadCPUReads, when non-nil, counts every
+	// ProcessThreadCPU call, so a test can pin that the sampling floor keeps an idle
+	// process's threads unread rather than merely unused.
+	threadCPU      map[int]map[int]uint64
+	threadCPUReads *[]int
+	hz             float64
+	ncpu           int
 	// system
 	memTotal, memUsed uint64
 	sysBusy, sysTotal uint64
 }
 
-func (r fakeReader) ProcessCPU(pid int) (uint64, bool)  { v, ok := r.cpu[pid]; return v, ok }
+func (r fakeReader) ProcessCPU(pid int) (uint64, bool) { v, ok := r.cpu[pid]; return v, ok }
+func (r fakeReader) ProcessThreadCPU(pid int) (map[int]uint64, bool) {
+	if r.threadCPUReads != nil {
+		*r.threadCPUReads = append(*r.threadCPUReads, pid)
+	}
+	v, ok := r.threadCPU[pid]
+	return v, ok
+}
+
 func (r fakeReader) ProcessRSS(pid int) (uint64, bool)  { v, ok := r.rss[pid]; return v, ok }
 func (r fakeReader) ProcessSwap(pid int) (uint64, bool) { v, ok := r.swap[pid]; return v, ok }
 func (r fakeReader) ProcessIO(pid int) (uint64, uint64, bool) {
@@ -414,7 +427,7 @@ func TestSampleServiceCPUPerProcessAndAggregate(t *testing.T) {
 		t.Fatalf("PerProc[10] = %v, want ~20", got)
 	}
 	if got := sc.CPUThread.Percent; got < 79.9 || got > 80.1 {
-		t.Fatalf("CPUThread = %v, want ~80 (busiest single process)", got)
+		t.Fatalf("CPUThread = %v, want ~80 (busiest single thread)", got)
 	}
 	// Whole-machine: 100 ticks = 1 CPU-second over 4 cores -> 25%.
 	if got := sc.CPU.Percent; got < 24.9 || got > 25.1 {
@@ -423,7 +436,7 @@ func TestSampleServiceCPUPerProcessAndAggregate(t *testing.T) {
 }
 
 func TestServiceCPUThreadMaxOverTree(t *testing.T) {
-	// cpu_thread tracks the busiest single process against ONE thread, regardless
+	// cpu_thread tracks the busiest single thread against ONE core, regardless
 	// of how many CPUs the host has.
 	clock := time.Unix(0, 0)
 	reader := fakeReader{cpu: map[int]uint64{10: 0, 11: 0, 12: 0}, hz: 100, ncpu: 8}
@@ -447,7 +460,7 @@ func TestServiceCPUThreadMaxOverTree(t *testing.T) {
 	// Busiest process is pid 11 at ~95% of one thread — NOT diluted by the 8 cores
 	// the way the whole-machine `cpu` metric would be.
 	if got := snap["cpu_thread"].Percent; got < 94.9 || got > 95.1 {
-		t.Fatalf("cpu_thread = %v, want ~95 (busiest single process on one thread)", got)
+		t.Fatalf("cpu_thread = %v, want ~95 (busiest single thread on one core)", got)
 	}
 	// The whole-machine cpu sums all three (110 ticks = 1.1s) over 8 cores ->
 	// ~13.75%, which looks unremarkable even though one process is pegging a core.
@@ -697,5 +710,171 @@ func TestSampleSystemFreshnessBoundary(t *testing.T) {
 	got := c.SampleSystem()["total_cpu"]
 	if !got.Ready || got.Percent < 59.9 || got.Percent > 60.1 {
 		t.Fatalf("sample at the freshness boundary must recompute, got %+v", got)
+	}
+}
+
+// TestCPUThreadMeasuresBusiestThread drives the stored-metric path end to end. pid 10
+// burns 300% of one core across three threads; cpu_thread must report the 100% a
+// single core actually gave it, not the 300% sum.
+//
+// It also pins the one-cycle delay: deciding whether a process is worth thread-reading
+// needs its rate, which needs two process samples, so the first cycle with a rate can
+// only bound.
+func TestCPUThreadMeasuresBusiestThread(t *testing.T) {
+	clock := time.Unix(0, 0)
+	reader := fakeReader{
+		cpu:     map[int]uint64{10: 0},
+		threads: map[int]uint64{10: 3},
+		threadCPU: map[int]map[int]uint64{
+			10: {101: 0, 102: 0, 103: 0},
+		},
+		hz: 100, ncpu: 8,
+	}
+	c := New(reader)
+	c.Now = func() time.Time { return clock }
+
+	if snap := c.SampleService("svc", []int{10}); snap[MetricCPUThread].Ready {
+		t.Fatal("cpu_thread must not be ready on the first cycle: no delta yet")
+	}
+
+	// Cycle 2: the process rate appears (300% of one core) but no per-thread delta
+	// exists yet, so the reading is the process-rate bound.
+	clock = clock.Add(time.Second)
+	reader.cpu[10] = 300
+	reader.threadCPU[10] = map[int]uint64{101: 100, 102: 100, 103: 100}
+	c.Reader = reader
+	snap := c.SampleService("svc", []int{10})
+	if got := snap[MetricCPUThread]; !got.Ready || got.Percent != 300 {
+		t.Fatalf("cycle 2 (bound): got %+v, want the 300%% process bound", got)
+	}
+
+	// Cycle 3: two per-thread samples exist, so the measurement replaces the bound.
+	clock = clock.Add(time.Second)
+	reader.cpu[10] = 600
+	reader.threadCPU[10] = map[int]uint64{101: 200, 102: 200, 103: 200}
+	c.Reader = reader
+	snap = c.SampleService("svc", []int{10})
+	if got := snap[MetricCPUThread]; !got.Ready || got.Percent != 100 {
+		t.Fatalf("cycle 3 (measured): got %+v, want 100%% — one core's worth, not the 300%% sum", got)
+	}
+}
+
+// TestCPUThreadFloorLeavesIdleThreadsUnread is the cost guard: a container runtime
+// idling with hundreds of threads must not cost one file read each, every cycle.
+func TestCPUThreadFloorLeavesIdleThreadsUnread(t *testing.T) {
+	clock := time.Unix(0, 0)
+	var reads []int
+	reader := fakeReader{
+		cpu:     map[int]uint64{10: 0},
+		threads: map[int]uint64{10: 800},
+		hz:      100, ncpu: 8,
+		threadCPUReads: &reads,
+	}
+	c := New(reader)
+	c.Now = func() time.Time { return clock }
+	c.SampleService("svc", []int{10})
+
+	// One tick of CPU over a second: 1% of one core, far below the floor.
+	clock = clock.Add(time.Second)
+	reader.cpu[10] = 1
+	c.Reader = reader
+	snap := c.SampleService("svc", []int{10})
+
+	if len(reads) != 0 {
+		t.Errorf("idle process was thread-read %d time(s) (pids %v); the floor exists to prevent that", len(reads), reads)
+	}
+	if got := snap[MetricCPUThread]; !got.Ready || got.Percent != 1 {
+		t.Fatalf("unsampled process: got %+v, want its own 1%% rate as the bound", got)
+	}
+}
+
+// TestSampleServiceCPUReportsPerProcessMaxCore covers the live Web UI path. It must
+// agree with the stored metric — same helper underneath — and additionally say, per
+// process, whether the figure was measured or bounded, since the table marks a bound.
+func TestSampleServiceCPUReportsPerProcessMaxCore(t *testing.T) {
+	clock := time.Unix(0, 0)
+	reader := fakeReader{
+		cpu:     map[int]uint64{10: 0, 20: 0},
+		threads: map[int]uint64{10: 4, 20: 1},
+		threadCPU: map[int]map[int]uint64{
+			10: {101: 0, 102: 0},
+		},
+		hz: 100, ncpu: 4,
+	}
+	c := New(reader)
+	c.Now = func() time.Time { return clock }
+	c.SampleServiceCPU("svc", []int{10, 20})
+
+	// Two more cycles so pid 10's threads have a delta of their own: 400% of one core
+	// each cycle, split 300/100 between two threads. The second cycle's result is the
+	// one under test — re-sampling without advancing the clock would leave no delta.
+	var out ServiceCPU
+	// pid 20 keeps burning CPU too, so its rate stays non-zero: a zero bound would be
+	// reported as exact (nothing can be below zero), which is not the case under test.
+	for _, ticks := range []struct{ proc, p20, t1, t2 uint64 }{{400, 50, 300, 100}, {800, 100, 600, 200}} {
+		clock = clock.Add(time.Second)
+		reader.cpu[10] = ticks.proc
+		reader.cpu[20] = ticks.p20
+		reader.threadCPU[10] = map[int]uint64{101: ticks.t1, 102: ticks.t2}
+		c.Reader = reader
+		out = c.SampleServiceCPU("svc", []int{10, 20})
+	}
+
+	if got := out.PerProcMaxCore[10]; got != 300 {
+		t.Errorf("pid 10 max core: got %v, want 300%% (its busiest thread, not the 400%% tree)", got)
+	}
+	if !out.PerProcMaxCoreExact[10] {
+		t.Error("pid 10 was thread-sampled, so its figure must be reported as measured")
+	}
+	// pid 20 is single-threaded: never read, and its own rate is already exact.
+	if out.PerProcMaxCoreExact[20] {
+		t.Error("pid 20 was never thread-sampled, so its figure must be reported as a bound")
+	}
+	if !out.CPUThread.Ready || out.CPUThread.Percent != 300 {
+		t.Errorf("aggregate cpu_thread: got %+v, want the 300%% busiest thread", out.CPUThread)
+	}
+}
+
+// TestCPUThreadFloorReleasesACooledProcess guards the floor against latching. A
+// process that spikes once must go back to being bounded: if carrying per-thread
+// state were enough to keep sampling, every cycle would repopulate that state and a
+// single spike would pin hundreds of reads per cycle forever — exactly the cost the
+// floor exists to bound.
+func TestCPUThreadFloorReleasesACooledProcess(t *testing.T) {
+	clock := time.Unix(0, 0)
+	var reads []int
+	reader := fakeReader{
+		cpu:       map[int]uint64{10: 0},
+		threads:   map[int]uint64{10: 800},
+		threadCPU: map[int]map[int]uint64{10: {101: 0}},
+		hz:        100, ncpu: 8,
+		threadCPUReads: &reads,
+	}
+	c := New(reader)
+	c.Now = func() time.Time { return clock }
+	c.SampleService("svc", []int{10})
+
+	// One hot cycle: 50% of one core, above the floor, so its threads are read.
+	clock = clock.Add(time.Second)
+	reader.cpu[10] = 50
+	reader.threadCPU[10] = map[int]uint64{101: 50}
+	c.Reader = reader
+	c.SampleService("svc", []int{10})
+	if len(reads) == 0 {
+		t.Fatal("a process above the floor must have its threads read")
+	}
+
+	// Now idle for several cycles. Reads must stop, not continue forever.
+	before := len(reads)
+	for range 4 {
+		clock = clock.Add(time.Second)
+		c.Reader = reader // cpu unchanged: 0% this cycle
+		c.SampleService("svc", []int{10})
+	}
+	after := len(reads) - before
+	// One trailing read is the intended courtesy: it completes the measurement for the
+	// cycle the process was still hot in. Four is the latch.
+	if after > 1 {
+		t.Errorf("cooled process was thread-read %d more time(s) over 4 idle cycles; want at most 1", after)
 	}
 }

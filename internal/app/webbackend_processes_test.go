@@ -508,12 +508,19 @@ type liveCPUReader struct {
 	ioWrite map[int]uint64
 	fds     map[int]uint64
 	threads map[int]uint64
-	hz      float64
-	ncpu    int
+	// threadCPU is pid -> tid -> jiffies, for the busiest-thread (max_core) reading.
+	threadCPU map[int]map[int]uint64
+	hz        float64
+	ncpu      int
 }
 
 func (r *liveCPUReader) ProcessCPU(pid int) (uint64, bool) {
 	v, ok := r.cpu[pid]
+	return v, ok
+}
+
+func (r *liveCPUReader) ProcessThreadCPU(pid int) (map[int]uint64, bool) {
+	v, ok := r.threadCPU[pid]
 	return v, ok
 }
 

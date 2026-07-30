@@ -317,7 +317,7 @@ type Service struct {
 	FDs               int64    `json:"fds,omitempty"`
 	Threads           int64    `json:"threads,omitempty"`
 	CPU               float64  `json:"cpu,omitempty"`        // live CPU %, all host CPUs
-	CPUThread         float64  `json:"cpu_thread,omitempty"` // busiest process, single-core normalized
+	CPUThread         float64  `json:"cpu_thread,omitempty"` // busiest thread, single-core normalized
 	NumCPU            int      `json:"num_cpu,omitempty"`
 	CPUReady          bool     `json:"cpu_ready,omitempty"`
 	AlsoApply         []string `json:"also_apply,omitempty"` // also_apply cascade targets
@@ -777,6 +777,13 @@ type Process struct {
 	Threads     int64    `json:"threads,omitempty"`  // thread count
 	CPU         float64  `json:"cpu,omitempty"`      // live CPU %, single-core normalized (100% = one core)
 	HasCPU      bool     `json:"has_cpu,omitempty"`  // true when a live CPU rate is available (distinguishes 0% from unknown)
+	// MaxCore is the most any single core was used on this process's behalf: its
+	// busiest thread, normalized so 100% is one saturated core. It never exceeds CPU,
+	// and equals it for a single-threaded process. MaxCoreExact is false when the
+	// figure is CPU standing in as an upper bound because the process was below the
+	// threads-sampling floor — the UI marks those as estimates.
+	MaxCore      float64 `json:"max_core,omitempty"`
+	MaxCoreExact bool    `json:"max_core_exact,omitempty"`
 }
 
 // ProcessTotals aggregates a service's whole discovered process tree — the
@@ -790,7 +797,7 @@ type ProcessTotals struct {
 	FDs     int64 `json:"fds,omitempty"`
 	Threads int64 `json:"threads,omitempty"`
 	// Live CPU for the whole tree: CPU is the whole-machine rate (% of all
-	// cores); CPUThread is the busiest single process against one core (100% =
+	// cores); CPUThread is the busiest single thread against one core (100% =
 	// one saturated core); NumCPU is the logical CPU count. HasCPU is true once a
 	// rate is available (two samples), so the UI can tell 0% from "measuring".
 	CPU       float64 `json:"cpu,omitempty"`
