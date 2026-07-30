@@ -100,17 +100,97 @@ func TestPerProcCPURates(t *testing.T) {
 	}
 }
 
-func TestMaxProcCPURate(t *testing.T) {
+// TestMaxCoreRates pins the distinction the metric exists for: pid 2 burns 300% of
+// one core, but spread over three equally busy threads no single core gave it more
+// than 100%. Reporting 300% — what a per-process maximum does — describes a core that
+// cannot exist.
+func TestMaxCoreRates(t *testing.T) {
 	t0 := time.Unix(1000, 0)
 	t2 := t0.Add(1 * time.Second)
-	prev := procCPUSample{ticks: map[int]uint64{1: 0, 2: 0}, at: t0}
-	cur := procCPUSample{ticks: map[int]uint64{1: 100, 2: 300}, at: t2}
-
-	if r := maxProcCPURate(prev, cur, 100); !r.Ready || r.Percent != 300 {
-		t.Errorf("peak: got %+v, want 300%% ready", r)
+	prev := procCPUSample{
+		ticks: map[int]uint64{1: 0, 2: 0},
+		threadTicks: map[int]map[int]uint64{
+			2: {21: 0, 22: 0, 23: 0},
+		},
+		at: t0,
 	}
-	// Not ready without a previous sample.
-	if r := maxProcCPURate(procCPUSample{}, cur, 100); r.Ready {
-		t.Errorf("no prev: got %+v, want not ready", r)
+	cur := procCPUSample{
+		ticks: map[int]uint64{1: 100, 2: 300},
+		threadTicks: map[int]map[int]uint64{
+			2: {21: 100, 22: 100, 23: 100},
+		},
+		at: t2,
+	}
+	procRates, ready := perProcCPURates(prev, cur, 100)
+	if !ready {
+		t.Fatal("per-process rates: want ready")
+	}
+
+	values, exact := maxCoreRates(prev, cur, 100, procRates)
+	// pid 1 was never thread-sampled, so its own rate stands in as the bound — which
+	// for a single-threaded process is also the exact answer.
+	if values[1] != 100 || exact[1] {
+		t.Errorf("pid 1 (unsampled): got %v exact=%v, want 100%% bounded", values[1], exact[1])
+	}
+	// A zero bound is exact: no thread of an idle process used a core.
+	zero, zeroExact := maxCoreRates(prev, cur, 100, map[int]float64{9: 0})
+	if zero[9] != 0 || !zeroExact[9] {
+		t.Errorf("idle pid: got %v exact=%v, want an exact 0%%", zero[9], zeroExact[9])
+	}
+	if values[2] != 100 || !exact[2] {
+		t.Errorf("pid 2 (3 threads x 100%%): got %v exact=%v, want a measured 100%%", values[2], exact[2])
+	}
+	if r := maxCoreReading(values); !r.Ready || r.Percent != 100 {
+		t.Errorf("aggregate: got %+v, want 100%% ready", r)
+	}
+	// The no-previous-sample case belongs to sampleMaxCore, which returns before
+	// reaching here; TestCPUThreadMeasuresBusiestThread covers it on its first cycle.
+}
+
+// TestMaxThreadRateSkipsUnusableThreads covers the tid bookkeeping: a thread absent
+// from the previous sample cannot yield a delta, and a counter that went backwards
+// means the tid was recycled onto a different thread.
+func TestMaxThreadRateSkipsUnusableThreads(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		prev, cur map[int]uint64
+		wantRate  float64
+		wantOK    bool
+	}{
+		{"new tid ignored", map[int]uint64{1: 0}, map[int]uint64{1: 50, 2: 900}, 50, true},
+		{"recycled tid ignored", map[int]uint64{1: 0, 2: 500}, map[int]uint64{1: 50, 2: 10}, 50, true},
+		{"no prev sample", nil, map[int]uint64{1: 50}, 0, false},
+		{"no cur sample", map[int]uint64{1: 0}, nil, 0, false},
+		{"no usable tid", map[int]uint64{1: 0}, map[int]uint64{2: 50}, 0, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			rate, ok := maxThreadRate(tc.prev, tc.cur, 100, 1)
+			if ok != tc.wantOK || rate != tc.wantRate {
+				t.Errorf("got %v ok=%v, want %v ok=%v", rate, ok, tc.wantRate, tc.wantOK)
+			}
+		})
+	}
+}
+
+// TestThreadSampleTargets pins the floor: it is what keeps an idle container runtime
+// from paying one file read per thread, every cycle.
+func TestThreadSampleTargets(t *testing.T) {
+	threads := map[int]uint64{1: 1, 2: 800, 3: 800, 4: 800}
+	rates := map[int]float64{
+		1: 90,                              // single-threaded: never worth reading
+		2: 0.6,                             // idle-but-huge: below the floor
+		3: CPUThreadSampleFloorPercent,     // exactly at the floor: sampled
+		4: CPUThreadSampleFloorPercent / 2, // under the floor: bounded, whatever it did before
+	}
+
+	got := threadSampleTargets(rates, threads)
+	want := map[int]bool{3: true}
+	if len(got) != len(want) {
+		t.Fatalf("targets: got %v, want pids %v", got, want)
+	}
+	for _, pid := range got {
+		if !want[pid] {
+			t.Errorf("pid %d sampled but should not be", pid)
+		}
 	}
 }

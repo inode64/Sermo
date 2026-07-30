@@ -382,7 +382,12 @@
   section#locks-section { padding-top: .15rem; }
   section#locks-section h2 { font-size: .98rem; margin: .55rem 0 .5rem; }
   .service-detail h2 { font-size: .85rem; text-transform: uppercase; letter-spacing: .05em; color: var(--text-2); margin: 1.15rem 0 .45rem; }
-  .service-detail h2:first-child { margin-top: 0; }
+  /* Whatever opens the expansion must not push it down: since the name heading was
+     dropped as a repeat of the row, that is the General data grid — or the disabled
+     note ahead of it, an unreset <p> that would otherwise contribute the browser's
+     1em. Keyed on the position rather than on a tag, so it keeps holding whatever
+     ends up first. */
+  .service-detail > :first-child { margin-top: 0; }
   .service-detail table { width: 100%; margin-bottom: .6rem; }
   .detail-compact-table { font-size: .85rem; }
   .expansion-heading { font-size: .95rem; margin: .8rem 0 .3rem; }
@@ -394,8 +399,6 @@
   .confirm-preflight-block { margin-top: .65rem; }
   .confirm-cascade-line { margin-top: .5rem; }
   .detail-warn { margin-top: .25rem; }
-  .detail-totals { margin: -.1rem 0 .35rem; }
-  .detail-summary { margin-top: -.25rem; }
   .svc-busy { margin-left: 1.15rem; }
   .admin-before-input { max-width: 11rem; }
   .proc-tree { display: inline-flex; align-items: center; gap: .28rem; min-width: 0; padding-left: calc(var(--proc-depth, 0) * .9rem); }
@@ -404,6 +407,21 @@
   .proc-tree-child .process-cmd { max-width: min(36rem, 44vw); }
   .runtime-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); gap: .45rem 1rem; margin: .25rem 0 .75rem; font-size: .9rem; }
   .runtime-grid > div { min-width: 0; overflow-wrap: anywhere; }
+  /* General data fields that restate a .services-table column: hidden while that
+     column is on screen, revealed at the breakpoint that drops it — so a reading
+     is shown exactly once, and a narrow viewport loses nothing.
+
+     The breakpoints and the fields carrying each class must match the
+     .services-table nth-child rules further down: the 1420px block drops Category,
+     Uptime, CPU total, Memory, FDs and IO R/W, the 640px one drops Last activity.
+     Only a field the column restates exactly is deduplicated, which is why
+     "FDs / Threads" is not — the FDs column does not carry the thread count.
+     TestIndexDetailDedupesVisibleColumns pins both sides and this source order:
+     all three selectors have equal specificity, so the media queries only win by
+     coming after the base rule. */
+  .runtime-grid > .col-dup { display: none; }
+  @media (max-width: 1420px) { .runtime-grid > .col-dup-1420 { display: block; } }
+  @media (max-width: 640px) { .runtime-grid > .col-dup-640 { display: block; } }
   .sla-panel { width: 100%; margin: .2rem 0 .85rem; }
   .sla-chart-panel { min-width: 0; width: 100%; }
   .sla-chart-head { display: flex; justify-content: space-between; align-items: baseline; gap: .65rem; flex-wrap: wrap; margin: 0 0 .18rem; }

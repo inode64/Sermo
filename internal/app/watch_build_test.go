@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"slices"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -833,5 +834,122 @@ func TestHasConfiguredTargets(t *testing.T) {
 	}
 	if !HasConfiguredTargets(disabledSvc) {
 		t.Fatalf("disabled service should still count as a configured target")
+	}
+}
+
+// TestBuildWatchesWarnsOomBehindMultiCycleWindow reproduces, at the product level, how
+// a real OOM went unreported: the generated watch-oom carried the default
+// for: {cycles: 10}, but an oom check reports a one-cycle counter delta, so the window
+// could never be satisfied and the watch stayed green through the kill.
+func TestBuildWatchesWarnsOomBehindMultiCycleWindow(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		window   map[string]any
+		field    string
+		wantWarn bool
+	}{
+		{"ten consecutive cycles", map[string]any{"cycles": 10}, "for", true},
+		{"a duration window", map[string]any{"duration": "5m"}, "for", true},
+		{"a within window", map[string]any{"cycles": 10, "min_matches": 2}, "within", true},
+		// One cycle is the built-in default: it fires on the first kill, so it is
+		// redundant rather than broken.
+		{"one cycle", map[string]any{"cycles": 1}, "for", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			entry := map[string]any{"check": map[string]any{"type": "oom"}}
+			entry[tc.field] = tc.window
+			watches, warns := BuildWatches(cfgWithWatches(map[string]any{"watch-oom": entry}),
+				Deps{DefaultTimeout: time.Second}, 30*time.Second)
+
+			warned := false
+			for _, w := range warns {
+				if strings.Contains(w, "watch-oom") && strings.Contains(w, "can never be satisfied") {
+					warned = true
+				}
+			}
+			if warned != tc.wantWarn {
+				t.Errorf("warned=%v, want %v; warnings=%v", warned, tc.wantWarn, warns)
+			}
+			// The watch is still built either way: a warning must not silently drop
+			// monitoring, only tell the operator the window is unsatisfiable.
+			if len(watches) != 1 {
+				t.Errorf("built %d watches, want the watch to still run", len(watches))
+			}
+		})
+	}
+}
+
+// TestBuildWatchesWarnsCountDeltaBeyondItsOwnWindow extends the guard past oom. A count
+// delta is measured over the check's own `within` span, so its condition holds for that
+// many cycles — the guard must compare the rule window against that span rather than
+// assume one cycle, or it would both miss real holes and invent false ones.
+func TestBuildWatchesWarnsCountDeltaBeyondItsOwnWindow(t *testing.T) {
+	// interval 30s and within 2m: the condition can hold for 4 cycles.
+	for _, tc := range []struct {
+		name     string
+		check    map[string]any
+		window   map[string]any
+		wantWarn bool
+	}{
+		{
+			name:     "window outlasts the delta span",
+			check:    map[string]any{"type": "count", "path": "/tmp", "delta": map[string]any{"op": ">", "value": 0}, "within": "2m"},
+			window:   map[string]any{"cycles": 10},
+			wantWarn: true,
+		},
+		{
+			name:     "window fits inside the delta span",
+			check:    map[string]any{"type": "count", "path": "/tmp", "delta": map[string]any{"op": ">", "value": 0}, "within": "2m"},
+			window:   map[string]any{"cycles": 3},
+			wantWarn: false,
+		},
+		{
+			// A level threshold describes a state that persists: no ceiling to exceed.
+			name:     "level threshold is not delta-only",
+			check:    map[string]any{"type": "count", "path": "/tmp", "count": map[string]any{"op": ">", "value": 100}},
+			window:   map[string]any{"cycles": 10},
+			wantWarn: false,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, warns := BuildWatches(cfgWithWatches(map[string]any{
+				"watch-count": map[string]any{"check": tc.check, "for": tc.window},
+			}), Deps{DefaultTimeout: time.Second}, 30*time.Second)
+
+			warned := false
+			for _, w := range warns {
+				if strings.Contains(w, "can never be satisfied") {
+					warned = true
+				}
+			}
+			if warned != tc.wantWarn {
+				t.Errorf("warned=%v, want %v; warnings=%v", warned, tc.wantWarn, warns)
+			}
+		})
+	}
+}
+
+// TestBuildWatchesDoesNotWarnRateDeltaBehindWindow keeps the guard narrow: swap io and
+// net errors are rates that stay true while the pressure lasts, so a window is
+// meaningful for them and must not be flagged.
+func TestBuildWatchesDoesNotWarnRateDeltaBehindWindow(t *testing.T) {
+	cfg := cfgWithWatches(map[string]any{
+		"watch-swap": map[string]any{
+			"check": map[string]any{
+				"type": "swap",
+				"metrics": map[string]any{
+					"io": map[string]any{
+						"delta": map[string]any{"op": ">", "value": 1000},
+						"for":   map[string]any{"cycles": 10},
+					},
+				},
+			},
+		},
+	})
+	_, warns := BuildWatches(cfg, Deps{DefaultTimeout: time.Second}, 30*time.Second)
+	for _, w := range warns {
+		if strings.Contains(w, "can never be satisfied") {
+			t.Errorf("rate-shaped delta must not be flagged: %s", w)
+		}
 	}
 }

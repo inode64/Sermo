@@ -264,6 +264,7 @@ def simple_watch(
     then_lines: list[str] | None = None,
     policy: bool = False,
     display_name: str | None = None,
+    clear: str | None = None,
 ) -> str:
     body = [
         f"name: {name}",
@@ -280,6 +281,12 @@ def simple_watch(
     body.extend(f"  {line}" for line in check_lines)
     if cycles:
         body.append(f"for: {{ cycles: {cycles} }}")
+    if clear:
+        # Recovery hysteresis: how long the condition must stay quiet before the alert
+        # clears. Only worth spelling out for an edge sensor, whose condition is true
+        # for a single cycle and whose whole visible alert life is therefore this
+        # window; level watches are fine inheriting the global default.
+        body.append(f"clear: {{ {clear} }}")
     if then_lines:
         body.append("then:")
         body.extend(f"  {line}" for line in then_lines)
@@ -1496,10 +1503,28 @@ dry_run: true
         ("watch-pids", "system", "30s", ["type: pids", 'used_pct: { op: ">=", value: "80%" }']),
         ("watch-entropy", "system", "30s", ["type: entropy", 'avail: { op: "<", value: 256 }']),
         ("watch-zombies", "system", "30s", ["type: zombies", 'count: { op: ">", value: 0 }']),
-        ("watch-oom", "system", "30s", ["type: oom"]),
     ]
     for name, category, interval, check_lines in generic_watches:
         add_watch("watches", name, simple_watch(name, category, interval, check_lines))
+
+    # watch-oom is the fleet's one edge sensor, so it inverts both window defaults.
+    #
+    # No `for:`: oom_kill is a cumulative event counter and the check consumes the
+    # delta, so one kill makes the condition true for exactly one cycle. The default
+    # multi-cycle window could never be satisfied, and a real OOM was reported nowhere.
+    # The level checks above (load, memory, fds) describe a state that persists, so a
+    # window there is what keeps a momentary spike from alerting.
+    #
+    # An explicit `clear:`: with the condition true for a single cycle, the recovery
+    # window *is* the alert's whole visible life. The global default (5m) would leave a
+    # kill on screen too briefly to be seen, and being inherited it would not be legible
+    # here. One hour keeps an overnight OOM visible to whoever looks next; the event
+    # feed keeps the exact timestamp far longer either way.
+    add_watch(
+        "watches",
+        "watch-oom",
+        simple_watch("watch-oom", "system", "30s", ["type: oom"], cycles=0, clear="duration: 1h"),
+    )
 
     add_watch(
         "watches",

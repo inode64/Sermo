@@ -410,6 +410,61 @@ class PostgresReplicationGenerationTest(unittest.TestCase):
             },
         )
 
+class OomWatchGenerationTest(unittest.TestCase):
+    """The OOM watch must fire on the first kill it sees."""
+
+    def _generate_oom_watch(self) -> str:
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        root = Path(temp.name)
+        stage = root / "stage" / "host" / "out"
+        stage.mkdir(parents=True)
+        (stage / "init").write_text("systemd\n", encoding="utf-8")
+        (stage / "active_units").write_text("", encoding="utf-8")
+        generator.generate_for_host("host", stage, root / "configs", default_options())
+        return (root / "configs/host/root/etc/sermo/watches/watch-oom.yml").read_text(encoding="utf-8")
+
+    def test_oom_watch_has_no_multi_cycle_window(self):
+        # oom_kill is a cumulative event counter and the check consumes the delta, so a
+        # kill makes the condition true for exactly one cycle. Any `for:` window asking
+        # for two or more consecutive cycles can never be satisfied, and the kill is
+        # reported nowhere -- which is how a real OOM on fr3 went unnoticed.
+        # TestOomConditionHoldsForOneCycleOnly pins the one-cycle property in Go.
+        body = self._generate_oom_watch()
+        self.assertIn("type: oom", body)
+        self.assertNotIn("for:", body)
+
+    def test_oom_watch_still_evaluates_and_reports(self):
+        # dry_run keeps evaluation and firing events active (internal/app/watch.go), so
+        # the kill still surfaces as an event and a failing watch state.
+        body = self._generate_oom_watch()
+        self.assertIn("monitor: enabled", body)
+        self.assertIn("interval: 30s", body)
+
+    def test_oom_watch_holds_the_alert_for_an_hour(self):
+        # With the condition true for a single cycle, the recovery window is the alert's
+        # whole visible life: without it the sensor would flash for one 30s cycle and go
+        # green again. Spelled out rather than inherited from the global 5m default,
+        # which is both invisible here and too short to be noticed.
+        body = self._generate_oom_watch()
+        self.assertIn("clear: { duration: 1h }", body)
+
+    def test_level_watches_do_not_gain_an_explicit_clear(self):
+        # The explicit recovery window is the edge sensor's exception, not a new rule for
+        # every watch: a level check describes a state that persists, so its alert lasts
+        # as long as the condition and the global default is the right hysteresis.
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        root = Path(temp.name)
+        stage = root / "stage" / "host" / "out"
+        stage.mkdir(parents=True)
+        (stage / "init").write_text("systemd\n", encoding="utf-8")
+        (stage / "active_units").write_text("", encoding="utf-8")
+        generator.generate_for_host("host", stage, root / "configs", default_options())
+        body = (root / "configs/host/root/etc/sermo/watches/watch-memory.yml").read_text(encoding="utf-8")
+        self.assertIn("for: { cycles: 10 }", body)
+        self.assertNotIn("clear:", body)
+
 
 if __name__ == "__main__":
     unittest.main()

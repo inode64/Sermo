@@ -82,6 +82,9 @@ func buildWatchEntry(name string, entry map[string]any, deps Deps, defaultInterv
 	if w := applyWatchMonitorMode(deps.Monitor, name, config.MonitorMode(entry)); w != "" {
 		warnings = append(warnings, w)
 	}
+	if w := warnEventCounterWindow(name, entry, checkEntry, interval); w != "" {
+		warnings = append(warnings, w)
+	}
 	switch cfgval.AsString(checkEntry[checks.CheckKeyType]) {
 	case checks.CheckTypeNet, checks.CheckTypeICMP, checks.CheckTypeSwap:
 		expanded, warns := buildMetricWatches(name, entry, checkEntry, deps, interval)
@@ -93,6 +96,71 @@ func buildWatchEntry(name string, entry map[string]any, deps Deps, defaultInterv
 	default:
 		return watchOrWarn(buildSingleWatch(name, entry, checkEntry, deps, interval))(warnings)
 	}
+}
+
+// sustainableCycles reports how many consecutive cycles a delta-only check's condition
+// can stay true, or 0 for checks that are not delta-only and so never run out.
+//
+// This is the distinction that matters for windows, and it is not "is it a delta":
+// swap io and net errors are deltas too, but they are *rates* that stay true while the
+// pressure lasts, so a window is legitimate hysteresis for them. Those also live in
+// per-metric sub-entries (buildMetricWatches), not in the entry-level check this reads.
+func sustainableCycles(checkEntry map[string]any, interval time.Duration) int {
+	switch cfgval.AsString(checkEntry[checks.CheckKeyType]) {
+	case checks.CheckTypeOOM:
+		// The kernel's oom_kill counter is cumulative and the check consumes the
+		// delta each cycle, so a kill is true exactly once. There is no level form.
+		return 1
+	case checks.CheckTypeCount:
+		// A count check is delta-only or level-only; mixing is rejected at build. Its
+		// delta is measured over the check's own `within` span (a different key from
+		// the rule-level within), so the condition holds for that many cycles.
+		if _, hasDelta := checkEntry[checks.CheckKeyDelta]; !hasDelta {
+			return 0
+		}
+		within := cfgval.DurationOr(checkEntry[checks.CheckKeyWithin], 0)
+		if within <= 0 || interval <= 0 {
+			return 0
+		}
+		return int(math.Ceil(float64(within) / float64(interval)))
+	}
+	return 0
+}
+
+// warnEventCounterWindow warns when a watch gates a delta-only check behind a window
+// demanding more consecutive cycles than that check's condition can possibly sustain.
+//
+// The condition then never fires and the event is reported nowhere — the watch looks
+// healthy right through it. This is not hypothetical: it is how a real OOM went
+// unnoticed on a host whose generated watch-oom carried the default `for: {cycles: 10}`
+// against a condition true for one cycle.
+//
+// It is a warning and not a validation error on purpose: erroring would make the
+// upgrade path refuse to install on every host still carrying the old generated config
+// (remote_update_payload.sh exits 30), turning a monitoring fix into a blocked rollout.
+func warnEventCounterWindow(name string, entry, checkEntry map[string]any, interval time.Duration) string {
+	sustainable := sustainableCycles(checkEntry, interval)
+	if sustainable == 0 {
+		return ""
+	}
+	forWin, withinWin := rules.ParseWindow(entry)
+	var cycles int
+	var duration time.Duration
+	if forWin != nil {
+		cycles, duration = forWin.Cycles, forWin.Duration
+	}
+	if withinWin != nil {
+		cycles, duration = max(cycles, withinWin.Cycles), max(duration, withinWin.Duration)
+	}
+	const hint = "; drop the for/within window so it fires on the first increment"
+	kind := cfgval.AsString(checkEntry[checks.CheckKeyType])
+	switch {
+	case cycles > sustainable:
+		return fmt.Sprintf("%s%s: the %s check's condition holds for at most %d cycle(s), so a window of %d consecutive cycles can never be satisfied and an increment would go unreported%s", watchSubjectPrefix, name, kind, sustainable, cycles, hint)
+	case duration > 0 && interval > 0 && duration > time.Duration(sustainable)*interval:
+		return fmt.Sprintf("%s%s: the %s check's condition holds for at most %d cycle(s), so a %s window can never be satisfied and an increment would go unreported%s", watchSubjectPrefix, name, kind, sustainable, duration, hint)
+	}
+	return ""
 }
 
 // watchOrWarn folds a single-watch builder's (watch, warn) result into the

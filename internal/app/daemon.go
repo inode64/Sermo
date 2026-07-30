@@ -1080,12 +1080,14 @@ func liveSampler(service string, lc *metrics.Collector, live *LiveMetrics, servi
 		pidList := pids()
 		sc := lc.SampleServiceCPU(service, pidList)
 		sl := ServiceLive{
-			CPU:            sc.CPU.Percent,
-			CPUReady:       sc.CPU.Ready,
-			CPUThread:      sc.CPUThread.Percent,
-			CPUThreadReady: sc.CPUThread.Ready,
-			NumCPU:         sc.NumCPU,
-			PerProcCPU:     sc.PerProc,
+			CPU:                 sc.CPU.Percent,
+			CPUReady:            sc.CPU.Ready,
+			CPUThread:           sc.CPUThread.Percent,
+			CPUThreadReady:      sc.CPUThread.Ready,
+			NumCPU:              sc.NumCPU,
+			PerProcCPU:          sc.PerProc,
+			PerProcMaxCore:      sc.PerProcMaxCore,
+			PerProcMaxCoreExact: sc.PerProcMaxCoreExact,
 		}
 		live.Publish(service, sl)
 		if serviceMetrics == nil {

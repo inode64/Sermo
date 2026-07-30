@@ -72,3 +72,28 @@ func TestBuildOomCheckDefaultsToAnyKill(t *testing.T) {
 		t.Fatal("invalid oom delta op should warn")
 	}
 }
+
+// TestOomConditionHoldsForOneCycleOnly pins why an oom watch must never sit behind a
+// multi-cycle `for:` window. The kernel counter is cumulative and Run consumes the
+// delta, so one kill makes the condition true for exactly one cycle: a window asking
+// for two or more consecutive true cycles can never be satisfied, and the kill is
+// reported nowhere. Contrast the rate-shaped deltas (swap io, net errors), which stay
+// true while the pressure lasts and for which a window is meaningful.
+func TestOomConditionHoldsForOneCycleOnly(t *testing.T) {
+	// A single kill (7 -> 8), then the counter sits still as it does between events.
+	c := &oomCheck{base: base{name: "o"}, op: ">", value: 0, sampler: scriptedOom(7, 8, 8, 8)}
+	c.Run(context.Background()) // prime the baseline
+
+	streak, longest := 0, 0
+	for range 3 {
+		if c.Run(context.Background()).OK {
+			streak++
+			longest = max(longest, streak)
+			continue
+		}
+		streak = 0
+	}
+	if longest != 1 {
+		t.Fatalf("longest run of consecutive met cycles = %d, want exactly 1", longest)
+	}
+}
