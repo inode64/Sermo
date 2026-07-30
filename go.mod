@@ -4,7 +4,7 @@ go 1.26.5
 
 require (
 	github.com/beevik/ntp v1.5.0
-	github.com/cloudsoda/go-smb2 v0.0.0-20260701064823-d8c5600d73b8
+	github.com/cloudsoda/go-smb2 v0.0.0-20260725063021-373e9530b9d6
 	github.com/digitalocean/go-libvirt v0.0.0-20260609165003-6254771e63a8
 	github.com/evanw/esbuild v0.28.1
 	github.com/go-ldap/ldap/v3 v3.4.14
@@ -22,7 +22,7 @@ require (
 	golang.org/x/crypto v0.54.0
 	golang.org/x/net v0.57.0
 	golang.org/x/sys v0.47.0
-	modernc.org/sqlite v1.54.0
+	modernc.org/sqlite v1.55.0
 )
 
 require (
@@ -41,8 +41,8 @@ require (
 	github.com/jcmturner/goidentity/v6 v6.0.1 // indirect
 	github.com/jcmturner/gokrb5/v8 v8.4.4 // indirect
 	github.com/jcmturner/rpc/v2 v2.0.3 // indirect
-	github.com/klauspost/compress v1.19.0 // indirect
-	github.com/mattn/go-isatty v0.0.23 // indirect
+	github.com/klauspost/compress v1.19.1 // indirect
+	github.com/mattn/go-isatty v0.0.24 // indirect
 	github.com/mdlayher/netlink v1.11.2 // indirect
 	github.com/mdlayher/socket v0.6.1 // indirect
 	github.com/ncruces/go-strftime v1.0.0 // indirect
@@ -55,7 +55,7 @@ require (
 	github.com/youmark/pkcs8 v0.0.0-20240726163527-a2c0da244d78 // indirect
 	golang.org/x/sync v0.22.0 // indirect
 	golang.org/x/text v0.40.0 // indirect
-	modernc.org/libc v1.74.1 // indirect
+	modernc.org/libc v1.74.4 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect
 )
