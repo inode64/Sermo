@@ -80,6 +80,9 @@ sermoctl panic on|off|status          # daemon-wide emergency switch (see Panic 
 
 sermoctl config validate
 
+sermoctl web hash-password [--stdin|--generate] [--hash bcrypt|sha256] [--cost N] [--name LABEL]
+                                       # print one credential line for web.password_file
+
 sermoctl daemon reload                 # reload sermod config, not services
 sermoctl notifier test NAME            # send an explicit test message through one notifier
 
@@ -96,8 +99,8 @@ sermoctl events clear [--before TIME]   # omit TIME to clear all; TIME may be no
                                         # only events strictly before the timestamp are removed
 sermoctl activity clear [--before TIME] # clears the same log shown in Events
 
-sermoctl state compact [--before TIME]  # prunes old history and vacuums the state database
-                                        # omit TIME for normal 366-day retention; TIME may be non-future RFC3339 or positive duration
+sermoctl state compact [--before TIME]  # consolidates and prunes stored history, then vacuums the state database
+                                        # omit TIME for the configured retention; TIME additionally drops older history (non-future RFC3339 or positive duration)
 
 sermoctl lock SERVICE [--name NAME] --reason REASON --ttl DURATION -- COMMAND...
 sermoctl lock acquire SERVICE [--name NAME] --reason REASON --ttl DURATION

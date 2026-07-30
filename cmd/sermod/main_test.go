@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -18,6 +19,9 @@ import (
 	"sermo/internal/config"
 	"sermo/internal/execx"
 	"sermo/internal/servicemgr"
+	"sermo/internal/state"
+	"sermo/internal/web"
+	"sermo/internal/webcred"
 )
 
 func TestRunRejectsInvalidConfig(t *testing.T) {
@@ -198,18 +202,19 @@ func TestWebAuthFromConfig(t *testing.T) {
 		},
 	}}}
 	auth := webAuth(cfg)
-	if auth.AdminPassword != "admin-pw" || auth.GuestPassword != "guest-pw" || !auth.AnonymousGuest {
+	if !auth.AdminCredentials.Verify(t.Context(), "admin-pw") ||
+		!auth.GuestCredentials.Verify(t.Context(), "guest-pw") || !auth.AnonymousGuest {
 		t.Fatalf("auth = %+v", auth)
 	}
 
 	empty := webAuth(&config.Config{Global: config.Global{Raw: map[string]any{}}})
-	if empty.AdminPassword != "" || empty.GuestPassword != "" || empty.AnonymousGuest {
+	if !empty.AdminCredentials.Empty() || !empty.GuestCredentials.Empty() || empty.AnonymousGuest {
 		t.Fatalf("auth without web section = %+v, want zero value", empty)
 	}
 }
 
-func TestStartOldHistoryPruneDoesNotBlockStartup(t *testing.T) {
-	store := &blockingOldHistoryPruner{
+func TestStartStateMaintenanceDoesNotBlockStartup(t *testing.T) {
+	store := &blockingStateMaintainer{
 		started: make(chan struct{}),
 		release: make(chan struct{}),
 	}
@@ -218,24 +223,24 @@ func TestStartOldHistoryPruneDoesNotBlockStartup(t *testing.T) {
 
 	done := make(chan struct{})
 	go func() {
-		startOldHistoryPrune(context.Background(), logger, store, time.Now())
+		startStateMaintenance(context.Background(), logger, store, time.Hour)
 		close(done)
 	}()
 
 	select {
 	case <-done:
 	case <-time.After(time.Second):
-		t.Fatal("startOldHistoryPrune blocked on history pruning")
+		t.Fatal("startStateMaintenance blocked on the first maintenance pass")
 	}
 	select {
 	case <-store.started:
 	case <-time.After(time.Second):
-		t.Fatal("history pruning goroutine did not start")
+		t.Fatal("maintenance goroutine did not start")
 	}
 }
 
-func TestStartOldHistoryPruneStopsAtShutdownAndReportsDone(t *testing.T) {
-	store := &blockingOldHistoryPruner{
+func TestStartStateMaintenanceStopsAtShutdownAndReportsDone(t *testing.T) {
+	store := &blockingStateMaintainer{
 		started: make(chan struct{}),
 		release: make(chan struct{}),
 	}
@@ -243,25 +248,48 @@ func TestStartOldHistoryPruneStopsAtShutdownAndReportsDone(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	done := startOldHistoryPrune(ctx, logger, store, time.Now())
+	done := startStateMaintenance(ctx, logger, store, time.Millisecond)
 	select {
 	case <-store.started:
 	case <-time.After(time.Second):
-		t.Fatal("history pruning goroutine did not start")
+		t.Fatal("maintenance goroutine did not start")
 	}
 
-	// Shutdown while the first prune step is still running: the goroutine must
-	// skip the remaining steps and report done so main can close the store.
+	// Shutdown while the first pass is still running: the goroutine must stop
+	// ticking and report done so main can close the store.
 	cancel()
 	close(store.release)
 	select {
 	case <-done:
 	case <-time.After(time.Second):
-		t.Fatal("prune goroutine did not report done after shutdown")
+		t.Fatal("maintenance goroutine did not report done after shutdown")
 	}
 	if n := store.calls.Load(); n != 1 {
-		t.Fatalf("prune steps after shutdown = %d, want 1 (remaining steps skipped)", n)
+		t.Fatalf("maintenance passes after shutdown = %d, want 1 (no further ticks)", n)
 	}
+}
+
+// TestRunStateMaintenanceRepeatsOnTheInterval pins that maintenance is periodic:
+// a daemon left running for weeks must keep consolidating, which the one-shot
+// startup prune it replaced never did.
+func TestRunStateMaintenanceRepeatsOnTheInterval(t *testing.T) {
+	store := &blockingStateMaintainer{started: make(chan struct{}), release: make(chan struct{})}
+	close(store.release) // never block a pass
+	logger := slog.New(slog.DiscardHandler)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	done := startStateMaintenance(ctx, logger, store, time.Millisecond)
+	deadline := time.After(2 * time.Second)
+	for store.calls.Load() < 3 {
+		select {
+		case <-deadline:
+			t.Fatalf("maintenance ran %d times, want it to repeat on the interval", store.calls.Load())
+		case <-time.After(time.Millisecond):
+		}
+	}
+	cancel()
+	<-done
 }
 
 func TestDrainOrTimeout(t *testing.T) {
@@ -282,31 +310,21 @@ func TestDrainOrTimeout(t *testing.T) {
 	}
 }
 
-type blockingOldHistoryPruner struct {
+// blockingStateMaintainer holds the first maintenance pass open until release is
+// closed, so a test can observe startup and shutdown while one is in flight.
+type blockingStateMaintainer struct {
 	once    sync.Once
 	started chan struct{}
 	release chan struct{}
 	calls   atomic.Int64
 }
 
-// count records one prune step; the shared body of every non-blocking method.
-func (p *blockingOldHistoryPruner) count() (int64, error) {
-	p.calls.Add(1)
-	return 0, nil
-}
-
-func (p *blockingOldHistoryPruner) PruneSLA(time.Time) (int64, error) {
+func (p *blockingStateMaintainer) Maintain(context.Context, time.Time) (state.MaintainResult, error) {
 	p.calls.Add(1)
 	p.once.Do(func() { close(p.started) })
 	<-p.release
-	return 0, nil
+	return state.MaintainResult{}, nil
 }
-
-func (p *blockingOldHistoryPruner) PruneMeasurements(time.Time) (int64, error)   { return p.count() }
-func (p *blockingOldHistoryPruner) PruneMetrics(time.Time) (int64, error)        { return p.count() }
-func (p *blockingOldHistoryPruner) PruneDaemonMetrics(time.Time) (int64, error)  { return p.count() }
-func (p *blockingOldHistoryPruner) PruneServiceMetrics(time.Time) (int64, error) { return p.count() }
-func (p *blockingOldHistoryPruner) PruneEvents(time.Time) (int64, error)         { return p.count() }
 
 func TestEngineAndNotifierAccessors(t *testing.T) {
 	cfg := &config.Config{Global: config.Global{Raw: map[string]any{
@@ -455,5 +473,70 @@ func waitHTTPOK(t *testing.T, url string, within time.Duration) {
 			t.Fatalf("%s not OK within %s (last err %v)", url, within, err)
 		}
 		time.Sleep(50 * time.Millisecond)
+	}
+}
+
+// The runtime token is what lets sermoctl authenticate against a dashboard whose
+// credentials are hashed, so it must exist while the daemon runs, be readable
+// only by its owner, and be gone afterwards.
+func TestWriteWebToken(t *testing.T) {
+	runtimeDir := t.TempDir()
+	path := filepath.Join(runtimeDir, config.DaemonWebTokenFilename)
+	logger := slog.New(slog.DiscardHandler)
+
+	token, remove := writeWebToken(logger, runtimeDir, web.Auth{AdminCredentials: webcred.Plain("secret")})
+	if token == "" {
+		t.Fatal("writeWebToken() = empty token, want one")
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("stat token: %v", err)
+	}
+	if perm := info.Mode().Perm(); perm != daemonWebTokenFileMode {
+		t.Errorf("token mode = %v, want %v", perm, os.FileMode(daemonWebTokenFileMode))
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.TrimSpace(string(data)); got != token {
+		t.Errorf("token file holds %q, want %q", got, token)
+	}
+	// The token authenticates as admin, and nothing else does.
+	auth := web.Auth{AdminCredentials: webcred.Plain("secret"), RuntimeToken: token}
+	if !webcred.SecureEqual(auth.RuntimeToken, token) {
+		t.Error("the written token is not the one returned")
+	}
+
+	remove()
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Errorf("token file survived cleanup (err = %v)", err)
+	}
+
+	// An open dashboard has no credential boundary, so there is no token to hand out.
+	if token, _ := writeWebToken(logger, runtimeDir, web.Auth{}); token != "" {
+		t.Error("writeWebToken() with auth disabled = a token, want none")
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Error("writeWebToken() wrote a token with auth disabled")
+	}
+
+	// A staging file left behind by an earlier crash must not donate its own
+	// permissions to the new token: os.WriteFile applies a mode only when it
+	// creates the file.
+	if err := os.WriteFile(path+tmpFileExt, []byte("leftover"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(path+tmpFileExt, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, remove = writeWebToken(logger, runtimeDir, web.Auth{AdminCredentials: webcred.Plain("secret")})
+	defer remove()
+	info, err = os.Stat(path)
+	if err != nil {
+		t.Fatalf("stat token after a stale staging file: %v", err)
+	}
+	if perm := info.Mode().Perm(); perm != daemonWebTokenFileMode {
+		t.Errorf("token mode after a stale staging file = %v, want %v", perm, os.FileMode(daemonWebTokenFileMode))
 	}
 }

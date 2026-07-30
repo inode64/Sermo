@@ -3,6 +3,9 @@ package cli
 import (
 	"fmt"
 	"io"
+	"strings"
+
+	"sermo/internal/webcred"
 )
 
 type commandUsage struct {
@@ -34,7 +37,7 @@ var commandGroups = []commandGroup{
 	},
 	{
 		Title:    "Configuration And Catalog",
-		Commands: []string{commandConfig, commandDaemon, commandNotifier, commandServices, commandApps, commandLibs, commandPatterns, commandWizard},
+		Commands: []string{commandConfig, commandDaemon, commandNotifier, commandServices, commandApps, commandLibs, commandPatterns, commandWizard, commandWeb},
 	},
 	{
 		Title:    "History And State",
@@ -363,6 +366,34 @@ var commandUsages = []commandUsage{
 		},
 	},
 	{
+		Name:    commandWeb,
+		Summary: "Dashboard credential tooling.",
+		Usage: []string{
+			"sermoctl web hash-password",
+			"sermoctl web hash-password --stdin",
+			"sermoctl web hash-password --generate",
+		},
+		Flags: []string{
+			"--generate      hash a freshly generated secret and print it once",
+			"--stdin         read the password from standard input",
+			fmt.Sprintf("--hash %s  credential format; default %s with --generate, %s otherwise",
+				strings.Join(webcred.Formats(), "|"), webcred.FormatSHA256, webcred.FormatBcrypt),
+			fmt.Sprintf("--cost N        bcrypt work factor (%d-%d); default %d",
+				webcred.MinBcryptCost, webcred.MaxBcryptCost, webcred.DefaultBcryptCost),
+			"--name LABEL    append a trailing `# LABEL` comment to the credential line",
+		},
+		Notes: []string{
+			"Prints one line for web.password_file or web.guest_password_file; append it to the file yourself.",
+			"bcrypt is for a password a person chose; sha256 is fast and only safe for a generated secret.",
+			"The daemon accepts every credential in the file, so credentials rotate without a cut.",
+		},
+		Examples: []string{
+			"sermoctl web hash-password --name ana >> /etc/sermo/secrets/web.pass",
+			"sermoctl web hash-password --generate",
+			"printf '%s' \"$PASS\" | sermoctl web hash-password --stdin",
+		},
+	},
+	{
 		Name:    commandDaemon,
 		Summary: "Reload the running sermod process.",
 		Usage: []string{
@@ -503,12 +534,12 @@ var commandUsages = []commandUsage{
 	},
 	{
 		Name:    commandState,
-		Summary: "Prune old history and vacuum the persistent state database.",
+		Summary: "Consolidate and prune stored history, then vacuum the persistent state database.",
 		Usage: []string{
 			"sermoctl state compact [--before TIME]",
 		},
 		Flags: []string{
-			"--before TIME  non-future RFC3339 timestamp or positive duration; omitted means normal retention",
+			"--before TIME  non-future RFC3339 timestamp or positive duration; additionally drops history older than it",
 		},
 		Examples: []string{
 			"sermoctl state compact",

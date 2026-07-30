@@ -15,6 +15,7 @@ import (
 	"sermo/internal/notify"
 	"sermo/internal/process"
 	"sermo/internal/rules"
+	"sermo/internal/webcred"
 	"slices"
 )
 
@@ -107,6 +108,21 @@ const (
 	EngineKeyMaxParallelChecks = "max_parallel_checks"
 	// EngineKeyOperationTimeout is engine.operation_timeout.
 	EngineKeyOperationTimeout = "operation_timeout"
+	// EngineKeyRetention1m is engine.retention_1m, the per-minute history window.
+	EngineKeyRetention1m = "retention_1m"
+	// EngineKeyRetention5m is engine.retention_5m, the 5-minute history window.
+	EngineKeyRetention5m = "retention_5m"
+	// EngineKeyRetention1h is engine.retention_1h, the hourly history window.
+	EngineKeyRetention1h = "retention_1h"
+	// EngineKeyRetention6h is engine.retention_6h, the 6-hourly history window.
+	EngineKeyRetention6h = "retention_6h"
+	// EngineKeyRetention1d is engine.retention_1d, the daily history window.
+	EngineKeyRetention1d = "retention_1d"
+	// EngineKeyRetentionEvents is engine.retention_events, the event feed window.
+	EngineKeyRetentionEvents = "retention_events"
+	// EngineKeyRollupInterval is engine.rollup_interval, the cadence at which the
+	// daemon consolidates and prunes stored history.
+	EngineKeyRollupInterval = "rollup_interval"
 	// EngineKeyStartupDelay is engine.startup_delay.
 	EngineKeyStartupDelay = "startup_delay"
 	// EngineKeyStateCacheSize is engine.state_cache_size.
@@ -129,11 +145,29 @@ const (
 	WebKeyGuest = "guest"
 	// WebKeyGuestPassword is web.guest_password.
 	WebKeyGuestPassword = "guest_password"
+	// WebKeyGuestPasswordFile is web.guest_password_file: a file holding the
+	// guest password, used instead of web.guest_password.
+	WebKeyGuestPasswordFile = "guest_password_file"
 	// WebKeyPassword is web.password.
 	WebKeyPassword = "password"
+	// WebKeyPasswordFile is web.password_file: a file holding the admin
+	// password, used instead of web.password.
+	WebKeyPasswordFile = "password_file"
 	// WebKeyPort is web.port.
 	WebKeyPort = "port"
 )
+
+// SectionTelegramBot is the top-level interactive Telegram report-bot block. It
+// is distinct from a `telegram` notifier under `notifiers`: the bot receives
+// commands (long polling) and answers with read-only reports.
+const SectionTelegramBot = "telegram_bot"
+
+// SectionMap returns the named top-level section as a mapping, or nil when the
+// section is absent or is not a mapping.
+func SectionMap(raw map[string]any, section string) map[string]any {
+	m, _ := raw[section].(map[string]any)
+	return m
+}
 
 // stop_policy timeout and kill-guard field keys.
 const (
@@ -584,6 +618,11 @@ const DefaultRuntime = "/run/sermo"
 // DaemonPIDFilename is the sermod pidfile name written under the runtime root.
 const DaemonPIDFilename = "sermod.pid"
 
+// DaemonWebTokenFilename is the runtime token sermod writes under the runtime
+// root while the dashboard requires authentication. It grants admin access to
+// the web API, so it is written owner-only and removed when the daemon stops.
+const DaemonWebTokenFilename = "web.token"
+
 // DefaultState is the persistent state root used when paths.state is unset. It
 // lives under /var/lib so it survives reboots, unlike the runtime root on tmpfs.
 const DefaultState = "/var/lib/sermo"
@@ -635,6 +674,15 @@ type Global struct {
 	Runtime       string
 	State         string
 	Templates     string
+
+	// Dashboard credentials parsed at load time from web.password_file /
+	// web.guest_password_file, or from the inline keys. Read them through
+	// WebCredentials and WebGuestCredentials.
+	webCredentials      webcred.List
+	webGuestCredentials webcred.List
+	// issues collects load-time findings (an unreadable password file) for
+	// Validate to report.
+	issues []Issue
 }
 
 // PathSpec is one configured directory under paths.*. Recursive defaults to

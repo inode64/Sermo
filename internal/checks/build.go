@@ -276,11 +276,13 @@ func BuildWithWarnings(section map[string]any, deps Deps) ([]Built, []BuildWarni
 				continue
 			}
 		}
+		reports := cfgval.AsString(entry[CheckKeyReports])
 		b := base{
 			name:      name,
 			service:   deps.Service,
 			timeout:   timeout,
-			condition: !IsHealthType(typ),
+			condition: ResolveCondition(typ, reports),
+			reports:   reports,
 		}
 
 		check, warn := buildCheck(typ, b, entry, runner, client, deps)
@@ -451,7 +453,7 @@ func BuildInline(name string, entry map[string]any, deps Deps) (Check, error) {
 		name:      name,
 		service:   deps.Service,
 		timeout:   cfgval.DurationOr(entry[CheckKeyTimeout], deps.DefaultTimeout),
-		condition: !IsHealthType(typ),
+		condition: ResolveCondition(typ, cfgval.AsString(entry[CheckKeyReports])),
 	}
 	check, warn := buildCheck(typ, b, entry, runner, client, deps)
 	if warn != "" {

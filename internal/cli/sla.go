@@ -122,7 +122,7 @@ func (a App) runSLASeries(ctx context.Context, opts options, cfg *config.Config)
 	if opts.json {
 		a.writeSLASeriesJSON(service, window, points)
 	} else {
-		a.writeSLASeriesTable(service, points)
+		a.writeSLASeriesTable(service, points, store.SeriesResolution(now.Add(-window), now))
 	}
 	return exitSuccess
 }
@@ -154,7 +154,12 @@ func writeSLAWindowJSON[V any](a App, topKey string, reports []serviceWindows[V]
 }
 
 func slaValueJSON(v state.SLAValue) map[string]any {
-	entry := map[string]any{cliJSONKeyUp: v.Up, cliJSONKeyTotal: v.Total, cliJSONKeyRatio: nil}
+	entry := map[string]any{
+		cliJSONKeyUp:          v.Up,
+		cliJSONKeyTotal:       v.Total,
+		cliJSONKeyDownBuckets: v.DownBuckets,
+		cliJSONKeyRatio:       nil,
+	}
 	if ratio, ok := v.Ratio(); ok {
 		entry[cliJSONKeyRatio] = ratio
 	}
@@ -196,18 +201,22 @@ func formatSLA(v state.SLAValue) string {
 	return fmt.Sprintf("%.2f%%", ratio*metrics.PercentScale)
 }
 
-func (a App) writeSLASeriesTable(service string, points []state.SLAPoint) {
+func (a App) writeSLASeriesTable(service string, points []state.SLAPoint, step time.Duration) {
 	if len(points) == 0 {
 		fmt.Fprintf(a.Stdout, "no samples for %s in range (service unmonitored or Sermo not running)\n", service)
 		return
 	}
-	fmt.Fprintln(a.Stdout, "TIME\tUP\tTOTAL\tSLA")
+	// The bucket span depends on the archive the window resolved to, so state it
+	// rather than letting the reader assume the per-minute rows this used to print.
+	fmt.Fprintf(a.Stdout, "resolution: %s per row\n", step)
+	fmt.Fprintln(a.Stdout, "TIME\tUP\tTOTAL\tSLA\tAFFECTED_MIN")
 	for _, p := range points {
 		sla := cliTextNotAvailable
 		if ratio, ok := slaPointRatio(p); ok {
 			sla = fmt.Sprintf("%.2f%%", ratio*metrics.PercentScale)
 		}
-		fmt.Fprintf(a.Stdout, "%s\t%d\t%d\t%s\n", p.Start.Format(time.RFC3339), p.Up, p.Total, sla)
+		fmt.Fprintf(a.Stdout, "%s\t%d\t%d\t%s\t%d\n",
+			p.Start.Format(time.RFC3339), p.Up, p.Total, sla, p.DownBuckets)
 	}
 }
 
@@ -224,7 +233,13 @@ func (a App) writeSLASeriesJSON(service string, window time.Duration, points []s
 }
 
 func slaPointJSON(p state.SLAPoint) map[string]any {
-	entry := map[string]any{cliJSONKeyStart: p.Start.Format(time.RFC3339), cliJSONKeyUp: p.Up, cliJSONKeyTotal: p.Total, cliJSONKeyRatio: nil}
+	entry := map[string]any{
+		cliJSONKeyStart:       p.Start.Format(time.RFC3339),
+		cliJSONKeyUp:          p.Up,
+		cliJSONKeyTotal:       p.Total,
+		cliJSONKeyDownBuckets: p.DownBuckets,
+		cliJSONKeyRatio:       nil,
+	}
 	if ratio, ok := slaPointRatio(p); ok {
 		entry[cliJSONKeyRatio] = ratio
 	}

@@ -6,6 +6,7 @@
   - [Condiciones de salud del servicio (versión / estado / configuración)](#condiciones-de-salud-del-servicio-versión--estado--configuración)
   - [Interfaz de salida (interface)](#interfaz-de-salida-interface)
   - [Interdependencias de comprobaciones (requires / skip_when_changed)](#interdependencias-de-comprobaciones-requires--skip_when_changed)
+  - [Modo de reporte (reports)](#modo-de-reporte-reports)
   - [Ports](#ports)
   - [HTTP](#http)
   - [Cert](#cert)
@@ -384,6 +385,87 @@ rules:
           message: "${service} will restart after library change: ${change.library}"
         - type: restart
 ```
+
+### Modo de reporte (`reports`)
+
+`reports:` declara qué *significa* el resultado de una comprobación, que es lo
+que decide la disponibilidad, el SLA y cómo la etiqueta el panel. No cambia cómo
+se ejecuta la sonda, y **no afecta a las reglas**: `active:` / `failed:` siguen
+leyendo el resultado en crudo.
+
+| modo | significado | panel | SLA |
+|---|---|---|---|
+| `health` | OK significa que el objetivo está disponible | `ok` / `fail` | se cuenta |
+| `condition` | OK significa que la condición se ha disparado, así que la disponibilidad se invierte | `ok` / `fail` | se cuenta |
+| `state` | OK significa que el estado sensado está presente; ninguna cara es buena ni mala | `active` / `inactive` | `n/a` |
+| `value` | la comprobación mide y no juzga | `measured` más la lectura | `n/a` |
+
+Si se omite, el **tipo** de la comprobación aporta el valor por defecto: los tipos
+de salud (`tcp`, `http`, `service`, los protocolos de conexión…) usan `health`, y
+los de umbral y métrica `condition`. El tipo es solo el defecto: el mismo tipo
+puede ser una aserción de salud en un servicio y un sensor en otro, así que la
+comprobación tiene la última palabra.
+
+Los modos `state` y `value` no registran disponibilidad, así que su columna de
+SLA muestra `n/a` en vez de una serie vacía: no hay tiempo de servicio que
+acumular, y las ventanas registradas antes de declarar el modo se descartan en
+lugar de ir caducando. Tienen colores propios —informativo para un estado activo,
+apagado para uno inactivo— para que ninguno se confunda con el veredicto ok/fail.
+
+Una comprobación `condition` sigue mostrando `ok` / `fail`, no
+`active` / `inactive`: a diferencia de un sensor de estado, su cara disparada sí
+es un problema y tiene que parecerlo.
+
+#### Graficar el valor de una comprobación (`unit`)
+
+La mayoría de tipos declaran sus métricas graficables de forma estática, pero
+algunos no pueden: la unidad de una comprobación `sql` depende de su consulta, así
+que cinco sensores de un mismo servicio pueden reportar MiB, segundos y un
+recuento. `unit:` lo declara por comprobación, y su resultado escalar pasa a
+registrarse y graficarse como cualquier otra métrica:
+
+```yaml
+alert-if-replication-slot-backlog:
+  check:
+    type: sql
+    engine: postgres
+    query: "SELECT …"     # devuelve MiB
+    op: ">"
+    value: 1024
+    unit: MiB             # grafica el resultado, etiquetado en MiB
+```
+
+Es independiente de `reports:` — una comprobación `condition` conserva su
+veredicto de umbral *y* obtiene gráfica — y se suma a lo que el tipo ya publique.
+
+Usa `state` cuando la comprobación existe para responder «¿está pasando esto
+ahora?» y no para afirmar que algo debe cumplirse. El watch `backup` del catálogo
+es el caso: detecta una copia en curso para que un guard pueda bloquear un
+reinicio, y un host sin copia en marcha es lo normal, no algo enfermo.
+
+```yaml
+watches:
+  backup:
+    check:
+      type: process
+      reports: state              # active / inactive, sin veredicto ni SLA
+      exe_any: [/usr/bin/pg_dump, /usr/bin/pgbackrest]
+      user: postgres
+      state: running              # lo que se sensa — no tiene que ver con `reports`
+rules:
+  block-restart-during-backup:
+    type: guard
+    blocks: [restart]
+    if:
+      active: { check: backup }   # sigue leyendo el resultado en crudo
+    then:
+      action: block
+      message: backup is running; restart denied
+```
+
+Sin esto, una comprobación así es una aserción de salud que falla siempre que el
+estado está ausente: un `fail` rojo permanente y una serie de disponibilidad al
+0 % para lo que en realidad es la condición normal.
 
 ### Ports
 
@@ -1528,6 +1610,48 @@ Las comprobaciones de salud (`tcp`, `ports`, `http`, `command`, `service`, `file
 opuesto (`OK == true` es sano), así que como watch disparan el hook sobre
 **fallo**.
 
+### Sensores de flanco: una ventana `for:` los silencia
+
+Unas pocas comprobaciones informan de un **incremento** y no de un estado: `oom` lee el
+contador acumulado `oom_kill` del kernel y reporta el delta por ciclo, así que un kill
+hace la condición verdadera exactamente **un** ciclo y falsa al siguiente.
+
+Una ventana `for:`/`within:` exige que la condición se mantenga varios ciclos
+consecutivos. Sobre una condición de flanco eso no puede ocurrir nunca, así que **la
+ventana silencia el sensor por completo** — el watch permanece verde durante el evento.
+Un sensor de flanco se configura sin ninguna ventana de entrada, para que dispare al
+primer incremento:
+
+```yaml
+name: watch-oom
+interval: 30s
+check: { type: oom }
+clear: { duration: 1h }   # cuánto se mantiene la alerta; ver abajo
+```
+
+Sin ventana de entrada la alerta también *terminaría* al ciclo siguiente: un destello de
+30 s que nadie ve. Para eso está `clear:` — mantiene abierto el episodio de disparo
+mientras la condición está en silencio, de modo que toda la vida visible de la alerta de
+un sensor de flanco es su ventana de recuperación. El ciclo de vida:
+
+| Ciclo | Qué ocurre |
+|---|---|
+| el kill | condición verdadera → dispara al instante → evento `firing` + una notificación |
+| ciclos siguientes | el delta vuelve a 0; la ventana `clear` sostiene la alerta; sin acciones repetidas |
+| tras `clear:` | evento `recovered` → el sensor vuelve a `ok` |
+
+Las notificaciones se envían una vez por episodio, en el flanco de subida; añade
+`then.notify_interval` si quieres recordatorios mientras la alerta está activa. Un
+incremento posterior tras la recuperación abre un episodio nuevo y vuelve a notificar.
+
+Sermo avisa al arrancar cuando un watch encierra una comprobación de solo-incremento
+detrás de una ventana que no puede satisfacer, nombrando el watch y el techo. Es un
+aviso y no un error para que una configuración anterior a la comprobación nunca bloquee
+una actualización. Los deltas con forma de tasa (`swap` io, `net` errors) **no** son
+sensores de flanco: se mantienen verdaderos mientras dura la presión, así que ahí la
+ventana es histéresis legítima; un delta de `count` se sostiene igualmente durante su
+propio `within` y solo se marca cuando la ventana de la regla lo excede.
+
 Los watches multi-métrica (`net`, `icmp`, `swap`) mantienen la forma de su mapa `metrics:`
 (un hook por métrica) solo como watch, pero su **forma de métrica única** — un
 campo `metric:` explícito que produce un resultado, p. ej. `{type: net, interface: ppp0, metric:
@@ -1833,15 +1957,37 @@ máquina aunque Sermo esté fijado a un subconjunto de CPU). Así `100%` signifi
 servicio están saturando cada hilo de CPU del servidor, y un único núcleo completamente ocupado en un
 host de 8 hilos se lee como `~12.5%`. `total_cpu` usa la misma base de toda la máquina.
 
-`cpu_thread` complementa `cpu` para el caso de **un solo hilo**: es el **proceso individual más
-ocupado** del árbol (padre o cualquier hijo) medido contra **un** hilo de CPU,
-así que `100%` significa que un proceso está saturando un núcleo completo. Como el
-`cpu` de toda la máquina diluye un único proceso caliente entre todos los núcleos (un proceso ligado a un
-núcleo en un host de 8 hilos muestra solo `~12.5%` ahí), `cpu_thread` es sobre lo que
-alertas para detectar un proceso — especialmente uno de un solo hilo — clavando su
-hilo: `metric` `scope: service`, `metric: cpu_thread`, `op: ">"`, `value:
-"90%"`. Un proceso multi-hilo que abarca varios núcleos puede leer por encima de `100%`.
-`cpu_thread` es una tasa, así que no está lista en el primer ciclo.
+`cpu_thread` complementa `cpu` para el caso de **un solo hilo**: es el **hilo individual
+más ocupado** del árbol (del padre o de cualquier hijo) medido contra **un** hilo de
+CPU, así que `100%` significa que un hilo está saturando un núcleo completo y la
+métrica nunca lee por encima de `100%` — ningún núcleo puede dar más. Como el `cpu` de
+toda la máquina diluye un único hilo caliente entre todos los núcleos (un proceso
+ligado a un núcleo en un host de 8 hilos muestra solo `~12.5%` ahí), `cpu_thread` es
+sobre lo que alertas para detectar un hilo clavando su núcleo: `metric`
+`scope: service`, `metric: cpu_thread`, `op: ">"`, `value: "90%"`. `cpu_thread` es una
+tasa, así que no está lista en el primer ciclo.
+
+Leer los hilos individuales de un proceso cuesta un fichero por hilo y por ciclo, así
+que solo se hace en procesos que alcanzan el **5% de un núcleo**. Por debajo se publica
+la tasa del propio proceso como **cota superior**: ningún hilo puede exceder al proceso
+completo, así que un núcleo saturado nunca puede esconderse detrás de una cota — solo
+puede sobre-reportar, y únicamente muy por debajo de cualquier umbral que merezca una
+alerta. Mantén los umbrales de las reglas por encima de ese suelo; uno por debajo
+compararía contra una cota y no contra una medición. Un proceso que acaba de ponerse a
+trabajar queda acotado un ciclo y medido desde el siguiente, porque una tasa por hilo
+necesita dos muestras por hilo. La tabla de procesos de la interfaz web muestra la
+cifra por proceso, y su tooltip indica si esa cifra se midió por hilo o se acotó con la
+tasa del proceso. La celda no lleva marca: por debajo del umbral una cota y una medición
+son indistinguibles para cualquier decisión, y en un host en reposo toda fila no nula es
+una cota — una marca en todas las filas no distingue nada.
+
+> **Al actualizar:** `cpu_thread` era antes el *proceso* más ocupado y no el *hilo* más
+> ocupado, lo que sumaba los núcleos de un proceso multi-hilo y podía reportar muy por
+> encima de `100%` — describiendo un núcleo que no puede existir. La métrica corregida
+> es siempre **≤** la anterior, así que el historial almacenado muestra un escalón a la
+> baja al actualizar y las alertas que disparaban con el valor inflado pueden dejar de
+> hacerlo. No se migra nada; usa `sermoctl state compact --before TIME` si quieres
+> eliminar la semántica antigua.
 
 `cpu`/`cpu_thread`/`total_cpu` y las métricas `io*` son tasas: **no están
 listas** en el primer ciclo y una condición sobre un valor no-listo es falsa. Un umbral `%`
@@ -2096,6 +2242,42 @@ rules:
         During ${rule.duration}, ${service} ${check.metric} stayed above
         ${check.threshold} (current ${check.value}) at ${date}
 ```
+
+Un check `sql` convierte una consulta escalar en el mismo tipo de watch por
+umbral. Su `value` se compara numéricamente y **no** admite los sufijos de
+tamaño `K`/`M`/`G` que sí aceptan los campos de bytes de `storage`, así que una
+consulta que informe de un tamaño debe convertirlo en SQL e indicar la unidad en
+el mensaje. El servicio de catálogo de PostgreSQL usa esta forma para vigilar el
+WAL retenido por un slot de replicación:
+
+```yaml
+watches:
+  alert-if-replication-slot-backlog:
+    check:
+      type: sql
+      engine: postgres
+      host: 127.0.0.1
+      port: ${port}
+      user: ${monitor_user}
+      database: ${database}
+      optional: true
+      query: >-
+        SELECT round(coalesce(max(pg_wal_lsn_diff(pg_current_wal_lsn(),
+        restart_lsn)), 0) / 1048576.0, 1) FROM pg_replication_slots
+      op: ">"
+      value: 1024          # MiB, un número simple: aquí no hay sufijo de tamaño
+    for:
+      duration: 10m
+    then:
+      action: alert
+      message: >-
+        During ${rule.duration}, ${service} kept retaining ${check.value} MiB of
+        WAL for a replication slot (limit ${check.threshold} MiB)
+```
+
+Como un check `sql` informa «no ok» cuando falla la propia conexión, una base de
+datos caída nunca dispara la alerta de umbral: ese caso se cubre con un check de
+conexión aparte (`type: postgres`, `type: mysql`, …), no relajando la consulta.
 
 ## Política de remediación
 

@@ -8,6 +8,7 @@ import (
 	"sermo/internal/execx"
 	"sermo/internal/operation"
 	"sermo/internal/process"
+	"sermo/internal/state"
 )
 
 const (
@@ -56,6 +57,37 @@ func EngineByteSize(cfg *config.Config, key string, fallback int64) int64 {
 		return int64(v)
 	}
 	return fallback
+}
+
+// EngineRetention reads the stored-history window of every archive resolution
+// from the engine block. A key left unset keeps that archive's default.
+func EngineRetention(cfg *config.Config) state.Retention {
+	defaults := state.DefaultRetention()
+	return state.Retention{
+		Minute:      EngineDuration(cfg, config.EngineKeyRetention1m, defaults.Minute),
+		FiveMinutes: EngineDuration(cfg, config.EngineKeyRetention5m, defaults.FiveMinutes),
+		Hour:        EngineDuration(cfg, config.EngineKeyRetention1h, defaults.Hour),
+		SixHours:    EngineDuration(cfg, config.EngineKeyRetention6h, defaults.SixHours),
+		Day:         EngineDuration(cfg, config.EngineKeyRetention1d, defaults.Day),
+		Events:      EngineDuration(cfg, config.EngineKeyRetentionEvents, defaults.Events),
+	}
+}
+
+// EngineRollupInterval reads how often the daemon consolidates and prunes stored
+// history. It must stay well below engine.retention_1m: the per-minute archive is
+// the source every coarser one reads, and its prune is floored at the
+// consolidation watermark, so a slower cadence delays reclaiming space.
+func EngineRollupInterval(cfg *config.Config) time.Duration {
+	return EngineDuration(cfg, config.EngineKeyRollupInterval, state.DefaultRollupInterval)
+}
+
+// EngineStateOptions builds the state store options from the engine block, so
+// sermod and sermoctl open the same database with the same cache and retention.
+func EngineStateOptions(cfg *config.Config) state.Options {
+	return state.Options{
+		CacheBytes: EngineByteSize(cfg, config.EngineKeyStateCacheSize, state.DefaultCacheBytes),
+		Retention:  EngineRetention(cfg),
+	}
 }
 
 // EngineUserLookup builds the user/group resolver configured under engine.

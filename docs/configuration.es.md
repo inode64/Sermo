@@ -59,6 +59,7 @@ directorio equivocado. La configuración distribuida la omite.
 - [Notificaciones](#notificaciones)
   - [Plantillas de notificación](#plantillas-de-notificación)
   - [Selección por defecto y precedencia](#selección-por-defecto-y-precedencia)
+- [Bot de informes de Telegram](#bot-de-informes-de-telegram)
 - [Host watches](#host-watches)
   - [then.expand — crecimiento de volumen (watch de storage)](#thenexpand--crecimiento-de-volumen-watch-de-storage)
   - [Control manual de reconstrucción RAID](#control-manual-de-reconstrucción-raid)
@@ -389,6 +390,13 @@ engine:
   user_lookup: auto           # auto | native | getent | numeric
   user_lookup_timeout: 250ms  # per-getent lookup timeout; cached in-process
   state_cache_size: 64M       # SQLite page cache for the state database
+  retention_1m: 3h            # historial por minuto (los gráficos de 1h)
+  retention_5m: 30h           # historial de 5 minutos (los gráficos de 24h)
+  retention_1h: 216h            # historial horario (los gráficos de 7d)
+  retention_6h: 912h           # historial de 6 horas (los gráficos de 30d)
+  retention_1d: 8784h          # historial diario (los gráficos de 1y, SLA anual móvil)
+  retention_events: 720h       # feed de eventos/actividad
+  rollup_interval: 5m         # cadencia de consolidación + poda
   # Optional append-only JSONL export logs (opt-in: omit a key to disable it).
   # access: /var/log/sermo/access.log
   # events: /var/log/sermo/event.log
@@ -487,7 +495,7 @@ más determinista.
 
 `engine.state_cache_size` (por defecto `64M`) establece la caché de páginas SQLite para
 la base de datos de estado (`paths.state`). La BD de estado acumula historial de SLA,
-mediciones y métricas por minuto, cuyos índices crecen hasta decenas de MB; la caché
+mediciones y métricas cuyos índices crecen hasta decenas de MB; la caché
 mantiene esas páginas calientes en memoria de modo que una ráfaga de escrituras por
 ciclo no las relea desde el disco y atasque un `monitor`/`unmonitor` interactivo (cada
 sentencia comparte una conexión). Súbela en hosts con un historial grande y RAM de
@@ -495,6 +503,56 @@ sobra (el valor es un tamaño en bytes con sufijo `K`/`M`/`G`); se toma de la
 configuración del daemon en ejecución y se aplica la próxima vez que `sermod` abra la
 base de datos (un reinicio, ya que el handle se mantiene abierto durante toda la vida
 del daemon).
+
+#### Resolución del historial almacenado
+
+Sermo guarda un archivo por ventana de gráfica en lugar de historial por minuto durante
+un año. Cada gráfica dibuja un número fijo de columnas — 120 en las gráficas de métricas,
+90 en la tira de SLA — así que un bucket más fino que `ventana / columnas` se almacenaría
+y nunca se mostraría. Cada archivo guarda el intervalo de bucket que su ventana dibuja
+realmente, y se retiene justo por encima de esa ventana:
+
+| Intervalo de bucket | Clave de `engine` | Por defecto | Sirve |
+|---|---|---|---|
+| 1 minuto | `retention_1m` | `3h` | los gráficos de `1h`, y el detalle de un incidente reciente |
+| 5 minutos | `retention_5m` | `30h` | los gráficos de `24h` |
+| 1 hora | `retention_1h` | `216h` (9 días) | los gráficos de `7d` |
+| 6 horas | `retention_6h` | `912h` (38 días) | los gráficos de `30d` |
+| 1 día | `retention_1d` | `8784h` (366 días) | los gráficos de `1y` y el SLA anual móvil |
+
+Cada archivo se consolida desde el inmediatamente inferior, no desde las muestras en
+vivo, así que una parada larga del daemon no puede perder una resolución. **La
+consolidación es exacta**: la disponibilidad suma sus contadores, las métricas suman el
+número de muestras y el total (manteniendo el promedio ponderado, nunca un promedio de
+promedios) y arrastran el mínimo y el máximo. Un ratio, promedio o extremo leído del
+archivo diario es igual al calculado sobre sus buckets de minuto.
+
+Lo que la consolidación sí cede es el *cuándo*: pasado `retention_1m` un incidente queda
+localizado en su bucket, no en su minuto. El recuento sobrevive — cada bucket registra
+cuántos buckets de un minuto dentro de él vieron un fallo — así que una ventana informa
+de «3 minutos afectados» por gruesa que se haya vuelto, y la tira de SLA colorea esos
+buckets en consecuencia (ver [Web UI](webui-representation.es.md#tira-temporal-de-sla)).
+Para el timestamp exacto de un incidente antiguo, usa el feed de eventos/actividad,
+retenido aparte por `engine.retention_events` (por defecto `720h`, 30 días).
+
+`engine.rollup_interval` (por defecto `5m`) es cada cuánto `sermod` consolida y poda.
+Mantenlo bien por debajo de `retention_1m`: el archivo por minuto es la fuente que lee
+cada archivo más grueso, y su poda tiene como suelo el watermark de consolidación, así
+que una cadencia más lenta retrasa la recuperación de espacio en lugar de perder
+historial. Una ventana servida por un archivo consolidado va por tanto como máximo un
+intervalo por detrás de las muestras en vivo; la ventana de `1h` lee buckets por minuto y
+es inmediata.
+
+Subir una retención cuesta proporcionalmente más disco a esa resolución; bajarla surte
+efecto en la siguiente pasada de mantenimiento. Recuperar las páginas liberadas necesita
+un `VACUUM`, que `sermoctl state compact` realiza.
+
+Al dimensionar el disco, presupuesta aproximadamente el **doble** de las filas de los
+archivos: cada tabla de archivo lleva un índice sobre `(res, bucket)` para que la
+consolidación y la poda busquen en lugar de escanear la resolución completa, y en estas
+tablas organizadas por clave ese índice cuesta más o menos lo mismo que la propia tabla.
+A cambio, la pasada de mantenimiento no retiene la conexión de escritura que comparten
+los ciclos de monitorización.
 
 Cuando `sermoctl daemon reload` pide al daemon en ejecución que recargue,
 `sermod` lee la configuración desde la ruta pasada a `sermod run --config` (el
@@ -526,8 +584,8 @@ recargable; las respuestas de acciones web extienden su plazo desde la
 configuración activa, incluido el timeout `stop_policy` resuelto por service.
 Las líneas base de tasa de CPU por service solo se restablecen cuando un service
 se elimina de la config en ejecución; el historial de métricas y eventos
-persistido permanece en `paths.state` hasta la retención normal o un `sermoctl
-state compact` explícito.
+persistido permanece en `paths.state` hasta que la retención configurada lo poda o se
+ejecuta un `sermoctl state compact` explícito.
 
 Dispara una recarga de configuración del daemon con:
 
@@ -544,6 +602,11 @@ El daemon escribe `<paths.runtime>/sermod.pid` (por defecto `/run/sermo/sermod.p
 al arrancar para hacer fiable `sermoctl daemon reload`. Si no hay pidfile presente,
 `sermoctl daemon reload` recurre a localizar el proceso `sermod` en ejecución por
 nombre — un escaneo nativo de `/proc`, sin necesidad de `pidof`/`pgrep` externos.
+
+Mientras el panel exige autenticación, el daemon escribe además
+`<paths.runtime>/web.token` (modo `0600`, borrado al parar): la credencial admin
+que `sermoctl` usa para llegar al API web, y que una contraseña hasheada no puede
+proporcionar. Véase [Credenciales hasheadas](#credenciales-hasheadas).
 
 `sermoctl daemon reload` recarga la propia configuración de `sermod` (como se indica
 arriba). `sermoctl reload <service>` es una operación diferente — recarga *ese service*
@@ -690,6 +753,103 @@ web:
   ejecutable** para los invitados (árboles de procesos de servicios y blockers
   de mounts): los argumentos pueden llevar secretos que solo los admins deben ver.
 
+#### Contraseñas desde un fichero
+
+Cualquiera de las dos contraseñas puede venir de un **fichero**, mediante su
+clave acompañante `_file` — para un secreto que provisiona otra herramienta
+(`LoadCredential` de systemd, un gestor de secretos, una plantilla de Ansible) y
+que nunca debe escribirse en `sermo.yml`:
+
+```yaml
+web:
+  port: 9797
+  password_file: /etc/sermo/secrets/web.pass          # en lugar de `password`
+  guest_password_file: /etc/sermo/secrets/guest.pass  # en lugar de `guest_password`
+```
+
+- El fichero contiene **una credencial por línea**. Se ignoran las líneas vacías
+  y las que empiezan por `#`; se recortan los espacios circundantes y el salto de
+  línea final que añade cualquier editor. Un fichero sin ninguna credencial
+  utilizable es un error de configuración, no una contraseña vacía.
+- **Cualquiera** de las credenciales del fichero otorga el rol de ese fichero.
+  Así se rota una contraseña sin corte, y así cada operador tiene la suya.
+- Una ruta **relativa** se resuelve respecto al directorio que contiene
+  `sermo.yml`, igual que los directorios `paths.*`. `${env:...}` funciona en la
+  ruta como en cualquier otro sitio.
+- `password` y `password_file` son **mutuamente excluyentes**, igual que
+  `guest_password` y `guest_password_file`. Definir ambas es un error de
+  configuración: cuál de las dos gana no debe quedar al criterio de quien lea.
+- Si el fichero no se puede leer, `sermod` **se niega a arrancar** (salida `78`,
+  el código estándar de error de configuración) y registra el motivo. Nunca
+  recurre a un panel abierto. `sermoctl` sigue funcionando, y `config validate`
+  informa del mismo mensaje.
+- Mantén el fichero legible solo por el usuario del daemon (`chmod 0600`). Es un
+  secreto en el sistema de ficheros, no en la configuración, y debe tratarse
+  como tal. `sermod` registra una advertencia al arrancar si el fichero es
+  legible más allá de su propietario.
+
+#### Credenciales hasheadas
+
+Una credencial puede guardarse **hasheada**, de modo que el fichero nunca
+contenga una contraseña legible — el modelo de `/etc/shadow`, sin ninguna clave
+de descifrado que provisionar:
+
+```
+# /etc/sermo/secrets/web.pass
+$2a$12$K3JqR7uH...                          # ana
+$sha256$c2FsdA$9b74c9bd...                  # provisión automática
+en-claro-si-lo-prefieres
+```
+
+`sermoctl web hash-password` genera la línea:
+
+```console
+$ sermoctl web hash-password --name ana >> /etc/sermo/secrets/web.pass
+Password: ****
+Repeat:   ****
+
+$ sermoctl web hash-password --generate      # secreto generado, mostrado una vez
+secret: X7KGiJqO-stXR3W1dlWLqzguYt-TJkZYCgiP2hP0XcA
+$sha256$i6xhXZ6zQlQpysyEusOo4A$2PnStYnKgGXhXLNqy2a/gEBn5EuBv9HmWOZjVJigIys
+
+$ printf '%s' "$PASS" | sermoctl web hash-password --stdin
+```
+
+- **`$2a$` / `$2b$` / `$2y$` (bcrypt)** es para una contraseña **elegida por una
+  persona**: es lento a propósito, y eso es lo que hace difícil romper un fichero
+  robado. `--cost` fija el factor de trabajo (12 por defecto).
+- **`$sha256$`** es para un secreto **generado** (`--generate`). Verificarlo
+  cuesta microsegundos en lugar de un cuarto de segundo; contra un secreto
+  aleatorio de 256 bits no hay nada que adivinar, así que el coste del hash no
+  aporta nada. No lo uses para una contraseña inventada por una persona.
+- Una línea que empieza por `$` se lee siempre como un hash. Un formato `$...$`
+  **desconocido** es un error de configuración, nunca una contraseña literal: un
+  hash mal escrito no debe convertirse en silencio en la contraseña.
+- Una línea que no empieza por `$` es una credencial en claro y puede contener
+  `#` y espacios. En una línea hasheada, lo que sigue al hash es un comentario.
+- Por tanto una **contraseña en claro no puede empezar por `$`** — ni en el
+  fichero ni en `web.password`. `sermod` se niega a arrancar en lugar de adivinar
+  (salida `78`); en ese caso, hashea la contraseña.
+- Cada fuente admite como máximo **64** credenciales: cada intento fallido se
+  comprueba contra todas ellas.
+- El resultado de la verificación se cachea brevemente, de modo que el coste de
+  bcrypt se paga una vez por credencial y no en cada petición.
+- Las credenciales se leen **al arrancar el daemon**, no con `sermoctl daemon
+  reload`: editar el fichero surte efecto en el siguiente reinicio de `sermod`.
+  Añadir la credencial nueva antes de retirar la vieja sigue siendo lo que rota
+  sin corte.
+
+Como un hash no se puede convertir de vuelta en contraseña, `sermoctl` no puede
+enviar ninguna. Se autentica con el **token de runtime** que `sermod` escribe en
+`<paths.runtime>/web.token` (modo `0600`, borrado al parar el daemon), que otorga
+acceso admin a quien pueda leerlo — el mismo modelo de confianza que el socket de
+control. `sermoctl` resuelve su credencial en este orden:
+
+1. `$SERMO_WEB_PASSWORD` — necesaria para un daemon remoto, o al ejecutar como un
+   usuario que no puede leer el token.
+2. `<paths.runtime>/web.token`.
+3. Una contraseña en claro en la configuración.
+
 La **contraseña**, no el nombre de usuario, selecciona el rol — en el prompt del
 navegador introduce cualquier nombre de usuario y la contraseña de admin o guest; las
 contraseñas se comparan en tiempo constante. Con `guest: true` el panel se carga en solo
@@ -798,8 +958,10 @@ Endpoints de solo lectura:
 - `GET /api/services/{name}` — detalle del service: últimas comprobaciones, SLA móvil,
   locks de runtime con nombre, procesos descubiertos, estado de la política de
   remediación automática y progreso de la ventana de reglas.
-- `GET /api/services/{name}/sla?since=24h` — historial de disponibilidad por minuto;
-  `since` es una duración, por defecto 24h, limitada a la retención de 366 días (~1 año).
+- `GET /api/services/{name}/sla?since=24h` — historial de disponibilidad a la resolución
+  a la que esa ventana está almacenada (ver [Resolución del historial
+  almacenado](#resolución-del-historial-almacenado)); `since` es una duración, por
+  defecto 24h, limitada a `engine.retention_1d` (por defecto 366 días, ~1 año).
 - `GET /api/services/{name}/metrics?check=NAME&since=24h` — historial de latencia de la
   comprobación + resumen. Añade `metric=KEY` para una métrica numérica con nombre
   publicada por esa comprobación, ver abajo.
@@ -859,9 +1021,10 @@ una recarga concurrente.
 - `POST /api/events/clear?before=TIME` — limpia el log persistido de eventos/actividad;
   `before` puede ser una duración positiva o un timestamp RFC3339 no futuro.
   Omítelo para limpiar todos los eventos.
-- `POST /api/state/compact?before=TIME` — poda el historial antiguo de SLA, mediciones,
-  métricas de daemon, métricas de runtime de service y eventos, luego compacta la base
-  de datos de estado; coincide con `sermoctl state compact`.
+- `POST /api/state/compact?before=TIME` — consolida y poda el historial almacenado a la
+  retención configurada, luego compacta la base de datos de estado. `before`
+  opcionalmente descarta el historial que quede más antiguo que un corte explícito.
+  Coincide con `sermoctl state compact`.
 - `POST /api/reload` — solicita una recarga de configuración de `sermod`, equivalente a
   `sermoctl daemon reload`.
 
@@ -987,23 +1150,25 @@ avg,min,max}, points:[{start,n,avg,min,max}], unit:"ms"}`. Añade `metric=KEY` p
 una métrica numérica con nombre para comprobaciones que publican una, como `hdparm`
 `read`/`cached`, `sensors` `temp`/`fan`/`voltage`, `smart` `temperature`/`wear` o
 `edac` `ce`/`ue`; en ese caso `unit` es la unidad de la métrica en lugar de `ms`.
-Las mediciones se mantienen por minuto durante aproximadamente un año (podadas como las
-muestras de SLA); una comprobación que solo se ejecuta cada N ciclos ([intervalo por
+Las mediciones siguen la misma escalera de archivos que las muestras de SLA
+([Resolución del historial almacenado](#resolución-del-historial-almacenado)), así que el
+mínimo y el máximo de un pico sobreviven a cualquier resolución; una comprobación que
+solo se ejecuta cada N ciclos ([intervalo por
 comprobación](#intervalo-por-comprobación)) registra una muestra solo cuando realmente se
 ejecuta, de modo que el promedio no se sesga.
 
 Los gráficos de proceso de `Daemon / Engine settings` usan la misma base de datos de
 estado persistente para el propio historial de CPU, memoria e IO de sermod, de modo que
-esos gráficos sobreviven a un reinicio del daemon o del host. Se podan a la misma
-ventana de retención de 366 días (~1 año).
+esos gráficos sobreviven a un reinicio del daemon o del host. Siguen la misma escalera de
+archivos que cualquier otra serie almacenada.
 
 Los gráficos de CPU, memoria e IO del detalle del service usan la misma base de datos de
 estado persistente para cada árbol de procesos de service, de modo que esos gráficos
 también sobreviven a un reinicio del daemon o del host. Empiezan a llenarse en cuanto el
 service se monitoriza; las tasas de CPU e IO necesitan dos ciclos antes de que exista el
 primer punto de tasa, mientras que la memoria puede renderizarse desde la primera
-muestra de proceso. Los buckets de métricas de runtime se podan a la misma ventana de
-retención de 366 días (~1 año). Los services que declaran un mapa vacío
+muestra de proceso. Los buckets de métricas de runtime siguen la misma escalera de
+archivos que cualquier otra serie almacenada. Los services que declaran un mapa vacío
 `processes: { }` no tienen árbol de procesos residente; el panel omite su tabla de
 procesos y los gráficos de latencia/CPU/memoria/IO.
 
@@ -1200,10 +1365,19 @@ notifiers:
 
 - **`telegram`** — envía a través de un **bot de Telegram** (`sendMessage`).
   - **`token`** — el token del bot de `@BotFather`. Queda dentro de la URL de la
-    API y nunca aparece en el dashboard.
+    API y nunca aparece en el dashboard. Prefiere `${env:...}`; si queda vacío
+    (la variable no está definida) el notifier queda inactivo en lugar de fallar
+    la carga de configuración.
   - **`chat_id`** — el id numérico del chat/grupo o un nombre `@canal`. El
     asunto es la línea principal y el detalle (los campos `SERMO_*`) sigue como
     texto plano.
+  - **`parse_mode`** *(opcional)* — `MarkdownV2`, `Markdown` o `HTML` para
+    renderizar el mensaje como texto con formato (negrita, código, enlaces) en
+    lugar de texto plano. Omítelo para texto plano.
+  - **`silent`** *(opcional)* — `true` entrega el mensaje en silencio, sin sonido
+    ni vibración (`disable_notification` de la Bot API).
+  - **`message_thread_id`** *(opcional)* — un id entero de tema (forum topic),
+    para publicar en un tema concreto de un grupo.
 
 ```yaml
 # /etc/sermo/notifiers/telegram.yml
@@ -1212,6 +1386,9 @@ notifiers:
     type: telegram
     token: "123456789:AAF...XXXX"
     chat_id: -1001234567890
+    # parse_mode: MarkdownV2       # opcional: formatea el texto del mensaje
+    # silent: true                 # opcional: entrega sin sonido
+    # message_thread_id: 42        # opcional: publica en un tema del grupo
 ```
 
 - **`tty`** — escribe directamente en las sesiones de terminal Linux activas, similar a
@@ -1345,6 +1522,60 @@ clave `then` en un watch (o por métrica) es otra forma de obtener comportamient
 solo-alerta (estado de disparo + eventos en la interfaz y el log, pero sin acciones y sin
 herencia de los globales). Consulta la sección de host watches a continuación para el
 ejemplo de `check` + `for` desnudo.
+
+## Bot de informes de Telegram
+
+La sección opcional de nivel superior **`telegram_bot`** ejecuta un bot de Telegram
+interactivo y de **solo lectura** dentro de `sermod`. Mientras que un notifier
+`telegram` *empuja* alertas, el bot permite al operador *pedir* informes bajo demanda:
+envíale `/status` y responde con el resumen actual del fleet. Nunca puede cambiar el
+host — solo lee el mismo estado que sirve el dashboard web.
+
+Recibe comandos mediante **long polling** de la Bot API (`getUpdates`), así que no
+necesita puerto entrante, ni exposición pública, ni proxy inverso — en línea con la
+postura de solo-salida de Sermo. El token del bot queda dentro de la URL de la API y se
+depura de logs y errores, igual que el notifier `telegram`.
+
+```yaml
+# /etc/sermo/sermo.yml (o un fragmento drop-in)
+telegram_bot:
+  token: "${env:TELEGRAM_BOT_TOKEN}"   # token del bot de @BotFather
+  allowed_chats:                       # obligatorio: solo se responde a estos chats
+    - 123456789
+    - -1001234567890
+  # poll_interval: 30s                 # timeout opcional del long-poll getUpdates
+  # enabled: false                     # opcional; omitido => habilitado
+```
+
+- **`token`** — el token del bot de `@BotFather` (usado tanto para `getUpdates` como
+  para las respuestas). Prefiere `${env:...}` para no escribirlo en un archivo. Opcional:
+  si queda vacío (la variable de entorno no está definida) el bot simplemente queda
+  inactivo y el resto de la configuración se carga igual.
+- **`allowed_chats`** — la lista de ids numéricos de chat que el bot responde. Un
+  mensaje de cualquier otro chat se ignora, nunca se responde. Este es el control de
+  acceso: limítalo a los operadores/grupos que pueden consultar el daemon.
+- **`poll_interval`** *(opcional)* — el timeout del long-poll, por defecto `30s`,
+  acotado a `1s`–`10m`.
+- **`enabled`** *(opcional)* — ponlo en `false` para conservar la sección pero detener
+  el polling.
+
+Comandos (todos de solo lectura):
+
+| Comando | Respuesta |
+| --- | --- |
+| `/status` | resumen del fleet: services ok/fallando, monitorizados/pausados, errores recientes, uptime del host |
+| `/services [name]` | la lista de services, o el estado y salud de un service concreto |
+| `/watches` | estados de host watches y watches de servicio |
+| `/sla <service>` | ventanas de disponibilidad (hora…año) de un service |
+| `/events [count]` | los eventos más recientes (por defecto 10, máximo 50) |
+| `/help` | la lista de comandos |
+
+Recargar (`sermoctl daemon reload` / `SIGHUP`) aplica cambios en `token`,
+`allowed_chats` y `poll_interval` sin reiniciar. Como la goroutine solo se arranca al
+inicio cuando la sección está presente, **habilitar el bot por primera vez requiere un
+reinicio** (la misma regla que sigue la interfaz web para su puerto). Al arrancar, el bot
+descarta cualquier comando encolado mientras estuvo caído, así que un reinicio nunca
+reproduce solicitudes antiguas.
 
 ## Host watches
 
@@ -2636,7 +2867,8 @@ configurados: `dry_run` aplica a services y watches; `stop_policy`, `policy` y
 `rule_window` aplican a services. Los ajustes de ámbito de motor (`interval`,
 `max_parallel_checks`, `default_timeout`,
 `operation_timeout`, `artifact_interval`, `startup_delay`, `backend`, `user_lookup`,
-`user_lookup_timeout`, `state_cache_size`) son configuración del daemon y nunca se
+`user_lookup_timeout`, `state_cache_size`, las ventanas `retention_*` y
+`rollup_interval`) son configuración del daemon y nunca se
 fusionan con un service.
 
 `defaults.dry_run` es opcional y por defecto es `false`; cada service o watch
@@ -2959,14 +3191,15 @@ poda ese archivo.
 Para reclamar el historial antiguo de la base de datos de estado intencionadamente, usa:
 
 ```sh
-sermoctl state compact                  # normal 366-day retention, then VACUUM
-sermoctl state compact --before 720h    # prune history older than 30 days
+sermoctl state compact                  # configured retention, then VACUUM
+sermoctl state compact --before 720h    # also drop history older than 30 days
 sermoctl state compact --before 2026-01-01T00:00:00Z
 ```
 
-`state compact` elimina las filas antiguas en buckets de SLA, mediciones, métricas de
-daemon, métricas de runtime de service y eventos, luego hace checkpoint y vacía la base
-de datos de estado SQLite de modo que las páginas liberadas puedan volver al sistema de
-archivos. Sin `--before`, aplica la misma ventana de retención de 366 días (~1 año) que
-`sermod` aplica al arrancar. Cuando se suministra, `--before` debe ser una
-duración positiva o un timestamp RFC3339 no futuro.
+`state compact` ejecuta la misma pasada de consolidación y poda que `sermod` ejecuta en
+su `engine.rollup_interval`, luego hace checkpoint y vacía la base de datos de estado
+SQLite de modo que las páginas liberadas puedan volver al sistema de archivos.
+`--before` descarta además el historial que quede más antiguo que un corte explícito, a
+todas las resoluciones; debe ser una duración positiva o un timestamp RFC3339 no futuro.
+Un bucket que cruza el corte se conserva, así que el corte nunca elimina muestras más
+nuevas que él.
