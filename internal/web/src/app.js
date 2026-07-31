@@ -6,7 +6,7 @@ import {
   apiHeaderConfirm, apiMonitoringPath, apiMountsPath, apiNotifiersPath,
   apiQueryBefore, apiQueryBeforeID,
   apiQueryForce, apiQueryKill, apiQueryKind, apiQueryLazy, apiQueryLimit, apiQueryName, apiQueryNoCascade,
-  apiQueryOnlyErrors, apiQueryPage, apiQueryService, apiQuerySince, apiQueryStatus,
+  apiQueryOnlyErrors, apiQueryService, apiQuerySince, apiQueryStatus,
   apiQueryWatch, apiReloadPath, notifierTestAPI,
   apiServicesPath, apiStreamPath, apiWatchesPath, apiWhoamiPath, applicationEventsAPI,
   csrfPostOptions, dashboardAPI, daemonMetricsAPI, eventsAPI, eventsClearAPI,
@@ -643,9 +643,13 @@ async function reloadConfig() {
 let eventNextBeforeID = 0;
 let eventHasMore = false;
 
+function eventPageEvents(page) {
+  return Array.isArray(page.events) ? page.events : [];
+}
+
 async function loadEvents(seq = 0, append = false, generation = dashboardGeneration) {
   try {
-    const params = new URLSearchParams({ [apiQueryLimit]: eventLogLimit, [apiQueryPage]: queryBoolOne });
+    const params = new URLSearchParams({ [apiQueryLimit]: eventLogLimit });
     const add = (id, key) => {
       const el = $("#" + id);
       const v = el ? el.value.trim() : "";
@@ -673,7 +677,7 @@ async function loadEvents(seq = 0, append = false, generation = dashboardGenerat
     }
     if (!res.ok) return { ok: false };
     const page = await res.json();
-    const events = Array.isArray(page.events) ? page.events : [];
+    const events = eventPageEvents(page);
     if (seq && seq !== loadSeq) return { ok: true };
     if (append) {
       const known = new Set(allEvents.map((event) => event.id));
@@ -2807,7 +2811,8 @@ async function refreshExpandedWatches(generation = dashboardGeneration) {
       return false;
     }
     if (!res.ok) return false;
-    const events = (await res.json()) || [];
+    const page = await res.json();
+    const events = eventPageEvents(page);
     keys.forEach((k) => renderWatchExpansionInto(k, events));
     return true;
   } catch (_) {
@@ -2946,7 +2951,8 @@ function loadExpansionFor(key, generation = dashboardGeneration) {
         load();
         return false;
       }
-      const events = res.ok ? await res.json() : [];
+      const page = res.ok ? await res.json() : {};
+      const events = eventPageEvents(page);
       renderWatchExpansionInto(key, events);
       return res.ok;
     }

@@ -1981,14 +1981,6 @@ tasa del proceso. La celda no lleva marca: por debajo del umbral una cota y una 
 son indistinguibles para cualquier decisión, y en un host en reposo toda fila no nula es
 una cota — una marca en todas las filas no distingue nada.
 
-> **Al actualizar:** `cpu_thread` era antes el *proceso* más ocupado y no el *hilo* más
-> ocupado, lo que sumaba los núcleos de un proceso multi-hilo y podía reportar muy por
-> encima de `100%` — describiendo un núcleo que no puede existir. La métrica corregida
-> es siempre **≤** la anterior, así que el historial almacenado muestra un escalón a la
-> baja al actualizar y las alertas que disparaban con el valor inflado pueden dejar de
-> hacerlo. No se migra nada; usa `sermoctl state compact --before TIME` si quieres
-> eliminar la semántica antigua.
-
 `cpu`/`cpu_thread`/`total_cpu` y las métricas `io*` son tasas: **no están
 listas** en el primer ciclo y una condición sobre un valor no-listo es falsa. Un umbral `%`
 necesita una métrica con una forma de porcentaje (`memory`, `swap`, `cpu`,

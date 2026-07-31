@@ -986,12 +986,11 @@ Endpoints de solo lectura:
 - `GET /api/activity` — resumen de actividad reciente usado por la cabecera del panel.
 - `GET /api/monitoring` — recuentos de monitorización activa frente a pausada
   para services no deshabilitados.
-- `GET /api/events?limit=N` — feed global de eventos, los más nuevos primero. Filtros
-  opcionales: `service`, `watch`, `kind`, `status` y `only_errors=1`. Añade
-  `page=1` para recibir `{events, next_before_id, has_more}`; pasa el
-  `before_id` de esa respuesta para continuar hacia filas más antiguas. Sin
-  `page`/`before_id`, el endpoint mantiene el array de eventos anterior. Las
-  páginas por cursor también aceptan una duración positiva `since`, como `24h`.
+- `GET /api/events?limit=N` — feed global de eventos como `{events, next_before_id,
+  has_more}`, los más nuevos primero. Filtros opcionales: `service`, `watch`,
+  `kind`, `status` y `only_errors=1`. Pasa el `before_id` de una respuesta para
+  continuar hacia filas más antiguas. Las páginas por cursor también aceptan una
+  duración positiva `since`, como `24h`.
 
 Los endpoints que cambian el estado están protegidos contra CSRF para toda petición
 que no sea GET/HEAD y requieren permisos de admin cuando la autenticación está
@@ -2677,10 +2676,9 @@ check:
 
 Un watch `file` monitoriza uno o varios archivos/directorios en busca de cambios de
 atributos — tamaño, permisos, propietario, eliminación y edad de modificación — y ejecuta
-el hook **una vez por cambio o por ruta vencida**. `paths:` es la lista no vacía
-preferida; el escalar histórico `path:` sigue siendo un alias compatible, pero una
-comprobación debe definir exactamente uno de ellos. Con `recursive: true` vigila cada
-subárbol, así que el hook se ejecuta por cada entrada modificada o vencida.
+el hook **una vez por cambio o por ruta vencida**. `paths:` es una lista no vacía
+obligatoria. Con `recursive: true` vigila cada subárbol, así que el hook se ejecuta por
+cada entrada modificada o vencida.
 
 ```yaml
 watches:

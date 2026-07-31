@@ -256,35 +256,31 @@ func TestValidateFileWatchErrors(t *testing.T) {
 	assertWatchIssues(t, map[string]any{
 		"watches": map[string]any{
 			"no-cond": map[string]any{
-				"check": map[string]any{"type": "file", "path": "/x"},
+				"check": map[string]any{"type": "file", "paths": []any{"/x"}},
 				"then":  map[string]any{"hook": map[string]any{"command": []any{"/x.sh"}}},
 			},
 			"bad-size": map[string]any{
-				"check": map[string]any{"type": "file", "path": "/x", "size": map[string]any{"op": "><", "value": "big"}},
+				"check": map[string]any{"type": "file", "paths": []any{"/x"}, "size": map[string]any{"op": "><", "value": "big"}},
 				"then":  map[string]any{"hook": map[string]any{"command": []any{"/x.sh"}}},
 			},
 			"bad-perm": map[string]any{
-				"check": map[string]any{"type": "file", "path": "/x", "permissions": map[string]any{"on": "touch"}},
+				"check": map[string]any{"type": "file", "paths": []any{"/x"}, "permissions": map[string]any{"on": "touch"}},
 				"then":  map[string]any{"hook": map[string]any{"command": []any{"/x.sh"}}},
 			},
 			"bad-exist": map[string]any{
-				"check": map[string]any{"type": "file", "path": "/x", "existence": map[string]any{"on": "create"}},
+				"check": map[string]any{"type": "file", "paths": []any{"/x"}, "existence": map[string]any{"on": "create"}},
 				"then":  map[string]any{"hook": map[string]any{"command": []any{"/x.sh"}}},
 			},
-			"no-path": map[string]any{
+			"no-paths": map[string]any{
 				"check": map[string]any{"type": "file", "size": map[string]any{"on": "change"}},
 				"then":  map[string]any{"hook": map[string]any{"command": []any{"/x.sh"}}},
 			},
 			"bad-older-than": map[string]any{
-				"check": map[string]any{"type": "file", "path": "/x", "older_than": "soon"},
+				"check": map[string]any{"type": "file", "paths": []any{"/x"}, "older_than": "soon"},
 				"then":  map[string]any{"hook": map[string]any{"command": []any{"/x.sh"}}},
 			},
 			"bad-include-hidden": map[string]any{
-				"check": map[string]any{"type": "file", "path": "/x", "older_than": "1h", "include_hidden": "yes"},
-				"then":  map[string]any{"hook": map[string]any{"command": []any{"/x.sh"}}},
-			},
-			"both-path-aliases": map[string]any{
-				"check": map[string]any{"type": "file", "path": "/x", "paths": []any{"/y"}, "older_than": "1h"},
+				"check": map[string]any{"type": "file", "paths": []any{"/x"}, "older_than": "1h", "include_hidden": "yes"},
 				"then":  map[string]any{"hook": map[string]any{"command": []any{"/x.sh"}}},
 			},
 		},
@@ -293,10 +289,9 @@ func TestValidateFileWatchErrors(t *testing.T) {
 		"watches.bad-size.check.size requires on: change or {op, value}",
 		"watches.bad-perm.check.permissions requires on: change",
 		"watches.bad-exist.check.existence requires on: delete",
-		"watches.no-path.check: file check requires path or paths",
+		"watches.no-paths.check: file check paths is required",
 		"watches.bad-older-than.check.older_than must be a valid positive duration",
-		"watches.bad-include-hidden.check.include_hidden must be a boolean",
-		"watches.both-path-aliases.check: file check must define only one of path or paths")
+		"watches.bad-include-hidden.check.include_hidden must be a boolean")
 }
 
 func TestValidateProcessWatchGood(t *testing.T) {

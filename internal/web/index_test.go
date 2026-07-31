@@ -256,7 +256,6 @@ func TestSourceUsesStableEventCursorPagination(t *testing.T) {
 	apiText := string(api)
 	for _, marker := range []string{
 		`const apiQueryBeforeID = "before_id"`,
-		`const apiQueryPage = "page"`,
 	} {
 		if !strings.Contains(apiText, marker) {
 			t.Errorf("API module missing event pagination marker %q", marker)

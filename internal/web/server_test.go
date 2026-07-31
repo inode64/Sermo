@@ -30,7 +30,6 @@ type fakeBackend struct {
 	raidControlled  []string
 	failOp          bool
 	seriesSince     time.Duration
-	eventLimit      int
 	eventQuery      EventQuery
 	metricCheck     string
 	metricSince     time.Duration
@@ -131,19 +130,12 @@ func (f *fakeBackend) Series(_ context.Context, name string, since time.Duration
 	}
 	return nil, false
 }
-func (f *fakeBackend) Events(_ context.Context, limit int) []Event {
-	f.eventLimit = limit
-	if f.events != nil {
-		if len(f.events) > limit {
-			return f.events[:limit]
-		}
-		return f.events
-	}
-	return []Event{{Time: "2026-06-07T10:00:00Z", Service: "web", Kind: eventKindAction, Action: apiActionRestart, Message: "restarted"}}
-}
-func (f *fakeBackend) EventPage(ctx context.Context, query EventQuery) EventPage {
+func (f *fakeBackend) EventPage(_ context.Context, query EventQuery) EventPage {
 	f.eventQuery = query
-	events := f.Events(ctx, query.Limit+1)
+	events := f.events
+	if events == nil {
+		events = []Event{{Time: "2026-06-07T10:00:00Z", Service: "web", Kind: eventKindAction, Action: apiActionRestart, Message: "restarted"}}
+	}
 	hasMore := len(events) > query.Limit
 	if hasMore {
 		events = events[:query.Limit]
@@ -805,14 +797,14 @@ func TestGlobalEvents(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("events status %d", rec.Code)
 	}
-	if b.eventLimit != 50 {
-		t.Fatalf("limit not parsed: %d", b.eventLimit)
+	if b.eventQuery.Limit != 50 {
+		t.Fatalf("limit not parsed: %d", b.eventQuery.Limit)
 	}
-	var got []Event
+	var got EventPage
 	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if len(got) != 1 || got[0].Kind != eventKindAction {
+	if len(got.Events) != 1 || got.Events[0].Kind != eventKindAction {
 		t.Fatalf("unexpected events: %+v", got)
 	}
 }
@@ -823,7 +815,7 @@ func TestGlobalEventsCursorPage(t *testing.T) {
 		{ID: 8, Service: "web", Kind: eventKindAction, Status: eventStatusOK},
 	}}
 	rec := httptest.NewRecorder()
-	query := testQueryParams(apiQueryPage, queryBoolOne, apiQueryBeforeID, "10", apiParamService, "web", apiQueryOnlyErrors, queryBoolOne, apiQueryLimit, queryBoolOne)
+	query := testQueryParams(apiQueryBeforeID, "10", apiParamService, "web", apiQueryOnlyErrors, queryBoolOne, apiQueryLimit, queryBoolOne)
 	newServer(b).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, testPathQuery(apiPathEvents, query), nil))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("events page status %d: %s", rec.Code, rec.Body.String())
@@ -840,17 +832,17 @@ func TestGlobalEventsCursorPage(t *testing.T) {
 	}
 }
 
-func TestGlobalEventsPageParsesTimeRange(t *testing.T) {
+func TestGlobalEventsParsesTimeRange(t *testing.T) {
 	b := &fakeBackend{}
 	rec := httptest.NewRecorder()
-	query := testQueryParams(apiQueryPage, queryBoolOne, apiQuerySince, "24h")
+	query := testQueryParam(apiQuerySince, "24h")
 	newServer(b).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, testPathQuery(apiPathEvents, query), nil))
 	if rec.Code != http.StatusOK || b.eventQuery.Since != 24*time.Hour {
 		t.Fatalf("status=%d event query=%+v", rec.Code, b.eventQuery)
 	}
 
 	rec = httptest.NewRecorder()
-	query = testQueryParams(apiQueryPage, queryBoolOne, apiQuerySince, "forever")
+	query = testQueryParam(apiQuerySince, "forever")
 	newServer(b).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, testPathQuery(apiPathEvents, query), nil))
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("invalid since status = %d, want 400", rec.Code)
@@ -859,7 +851,7 @@ func TestGlobalEventsPageParsesTimeRange(t *testing.T) {
 
 func TestGlobalEventsRejectsInvalidCursor(t *testing.T) {
 	rec := httptest.NewRecorder()
-	query := testQueryParams(apiQueryPage, queryBoolOne, apiQueryBeforeID, "invalid")
+	query := testQueryParam(apiQueryBeforeID, "invalid")
 	newServer(&fakeBackend{}).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, testPathQuery(apiPathEvents, query), nil))
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("invalid cursor status = %d, want 400", rec.Code)
@@ -870,20 +862,20 @@ func TestEventLimitCapAndDefault(t *testing.T) {
 	b := &fakeBackend{}
 	h := newServer(b)
 	h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, apiPathEvents, nil))
-	if b.eventLimit != defaultEventLimit {
-		t.Fatalf("default limit = %d, want %d", b.eventLimit, defaultEventLimit)
+	if b.eventQuery.Limit != defaultEventLimit {
+		t.Fatalf("default limit = %d, want %d", b.eventQuery.Limit, defaultEventLimit)
 	}
 	h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(
 		http.MethodGet,
 		testPathQuery(apiPathEvents, testQueryParam(apiQueryLimit, "99999")),
 		nil,
 	))
-	if b.eventLimit != maxEventLimit {
-		t.Fatalf("limit not capped: %d", b.eventLimit)
+	if b.eventQuery.Limit != maxEventLimit {
+		t.Fatalf("limit not capped: %d, want %d", b.eventQuery.Limit, maxEventLimit)
 	}
 }
 
-func TestGlobalEventsFilters(t *testing.T) {
+func TestGlobalEventsForwardsFilters(t *testing.T) {
 	events := []Event{
 		{Time: "2026-06-07T10:00:04Z", Service: "web", Kind: eventKindAction, Action: apiActionRestart, Status: eventStatusOK, Message: "done"},
 		{Time: "2026-06-07T10:00:03Z", Service: "db", Kind: eventKindError, Action: apiActionRestart, Status: eventStatusFailed, Message: "blocked"},
@@ -891,18 +883,15 @@ func TestGlobalEventsFilters(t *testing.T) {
 		{Time: "2026-06-07T10:00:01Z", Watch: "storage-root", Kind: eventKindHook, Status: eventStatusOK, Message: "hook ok"},
 	}
 	tests := []struct {
-		name       string
-		query      string
-		wantLimit  int
-		wantCount  int
-		wantFirst  string
-		wantStatus string
+		name  string
+		query string
+		want  EventQuery
 	}{
-		{name: "service", query: testQueryParam(apiParamService, "db"), wantLimit: maxEventLimit, wantCount: 1, wantFirst: "db"},
-		{name: "watch kind", query: testQueryParams(apiQueryWatch, "storage-root", apiQueryKind, eventKindHookFailed), wantLimit: maxEventLimit, wantCount: 1, wantFirst: "storage-root"},
-		{name: "status", query: testQueryParam(apiQueryStatus, eventStatusFailed), wantLimit: maxEventLimit, wantCount: 2, wantStatus: eventStatusFailed},
-		{name: "only errors", query: testQueryParam(apiQueryOnlyErrors, queryBoolOne), wantLimit: maxEventLimit, wantCount: 2},
-		{name: "filtered limit", query: testQueryParams(apiQueryOnlyErrors, queryBoolTrue, apiQueryLimit, queryBoolOne), wantLimit: maxEventLimit, wantCount: 1},
+		{name: "service", query: testQueryParam(apiParamService, "db"), want: EventQuery{Limit: defaultEventLimit, Service: "db"}},
+		{name: "watch kind", query: testQueryParams(apiQueryWatch, "storage-root", apiQueryKind, eventKindHookFailed), want: EventQuery{Limit: defaultEventLimit, Watch: "storage-root", Kind: eventKindHookFailed}},
+		{name: "status", query: testQueryParam(apiQueryStatus, eventStatusFailed), want: EventQuery{Limit: defaultEventLimit, Status: eventStatusFailed}},
+		{name: "only errors", query: testQueryParam(apiQueryOnlyErrors, queryBoolOne), want: EventQuery{Limit: defaultEventLimit, OnlyErrors: true}},
+		{name: "filtered limit", query: testQueryParams(apiQueryOnlyErrors, queryBoolTrue, apiQueryLimit, queryBoolOne), want: EventQuery{Limit: 1, OnlyErrors: true}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -912,27 +901,15 @@ func TestGlobalEventsFilters(t *testing.T) {
 			if rec.Code != http.StatusOK {
 				t.Fatalf("status %d", rec.Code)
 			}
-			if b.eventLimit != tt.wantLimit {
-				t.Fatalf("backend limit = %d, want %d", b.eventLimit, tt.wantLimit)
+			if b.eventQuery != tt.want {
+				t.Fatalf("event query = %+v, want %+v", b.eventQuery, tt.want)
 			}
-			var got []Event
+			var got EventPage
 			if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
 				t.Fatalf("decode: %v", err)
 			}
-			if len(got) != tt.wantCount {
-				t.Fatalf("events = %+v, want %d", got, tt.wantCount)
-			}
-			if tt.wantFirst != "" {
-				who := got[0].Service
-				if who == "" {
-					who = got[0].Watch
-				}
-				if who != tt.wantFirst {
-					t.Fatalf("first subject = %q, want %q", who, tt.wantFirst)
-				}
-			}
-			if tt.wantStatus != "" && got[0].Status != tt.wantStatus {
-				t.Fatalf("first status = %q, want %q", got[0].Status, tt.wantStatus)
+			if len(got.Events) == 0 {
+				t.Fatal("event page is empty")
 			}
 		})
 	}
@@ -1425,19 +1402,6 @@ func TestIsErrorEventClassification(t *testing.T) {
 	for _, e := range okEvents {
 		if IsErrorEvent(e) {
 			t.Fatalf("IsErrorEvent(%+v) = true, want false", e)
-		}
-	}
-}
-
-func TestFilterEventsByKind(t *testing.T) {
-	events := []Event{{Kind: eventKindAlert}, {Kind: "recovered"}, {Kind: eventKindAlert}}
-	got := filterEvents(events, eventFilter{Kind: eventKindAlert}, 100)
-	if len(got) != 2 {
-		t.Fatalf("filtered %d events, want 2 alerts", len(got))
-	}
-	for _, e := range got {
-		if e.Kind != eventKindAlert {
-			t.Fatalf("kept a non-alert event: %+v", e)
 		}
 	}
 }
