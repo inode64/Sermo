@@ -229,7 +229,7 @@ func TestWebBackendSLATimelineCache(t *testing.T) {
 	calls := 0
 	b := &WebBackend{
 		sla:      perfSLAReader{calls: &calls},
-		slaCache: map[slaCacheKey]cachedSLATimelines{},
+		slaCache: map[string]cachedSLATimelines{},
 	}
 	first := b.serviceSLAWindows("web", now)
 	second := b.serviceSLAWindows("web", now.Add(10*time.Second))
@@ -282,8 +282,4 @@ func (f perfSLAReader) CheckSLASeries(string, string, time.Time, time.Time) ([]s
 func (f perfSLAReader) SLATimelines(string, time.Time) ([]state.SLAWindowTimeline, error) {
 	*f.calls++
 	return []state.SLAWindowTimeline{{Window: "hour", Up: 1, Total: 1}}, nil
-}
-func (f perfSLAReader) CheckSLATimelines(string, string, time.Time) ([]state.SLAWindowTimeline, error) {
-	*f.calls++
-	return nil, nil
 }

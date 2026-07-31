@@ -213,6 +213,9 @@ const mountStatusFilterStates = [mountStateActive, mountStateInactive];
 // non-zero severity bands, in percent of failed cycles; zero down is the only
 // green.
 const slaNoData = "no data";
+// Shown in place of the band when the selected window holds no sample at all,
+// by both the service SLA panel and a check's SLA cell.
+const slaNoWindowData = '<span class="muted">No SLA data yet for this window.</span>';
 const slaDownBandLow = 25;
 const slaDownBandMid = 50;
 const slaDownBandHigh = 75;
@@ -3331,13 +3334,20 @@ function slaAffectedMinutes(incidents) {
   return (incidents || []).reduce((n, o) => n + (Number(o.p.down_buckets) || 0), 0);
 }
 
-function slaTimelineSummary(points) {
+// slaTotals adds a series up into the window's observed availability: the
+// figures the summary line and a check's SLA cell both state.
+function slaTotals(points) {
   let up = 0, total = 0, affected = 0;
   (points || []).forEach((p) => {
     up += Number(p.up || 0);
     total += Number(p.total || 0);
     affected += Number(p.down_buckets) || 0;
   });
+  return { up, total, affected };
+}
+
+function slaTimelineSummary(points) {
+  const { up, total, affected } = slaTotals(points);
   if (total <= 0) return '<span class="muted">No data in this window.</span>';
   const pct = up / total * percentScale;
   const head = affected
@@ -3418,7 +3428,7 @@ function loadCheckSLA(service, check, generation = dashboardGeneration) {
 // slaStrip builds the status-page availability band shared by the service SLA
 // panel and every check's SLA cell: one bar per sub-span (oldest left), coloured
 // by availability, hatched before the first observation. Returning null means
-// the window holds no sample at all, which each caller words for itself.
+// the window holds no sample at all (slaNoWindowData).
 //
 // Both scopes render through here so a check can never present a window as a
 // flat availability figure while the service shows the same window's gaps.
@@ -3475,7 +3485,7 @@ function slaStrip(points, win) {
 // axis, screen-reader table and incident list.
 function drawSLAChart(points, win) {
   const strip = slaStrip(points, win);
-  if (strip == null) return '<span class="muted">No SLA data yet for this window.</span>';
+  if (strip == null) return slaNoWindowData;
   return `${slaChartDataTable(strip.observed)}${strip.band}` +
     `<div class="sla-bars-axis"><span>${esc(fmtTime(strip.startMs))}</span><span>now</span></div>` +
     renderSLAIncidentList(strip.incidents);
@@ -3486,9 +3496,8 @@ function drawSLAChart(points, win) {
 // incident list, so it carries them in the band's tooltips only.
 function drawCheckSLAStrip(points, win) {
   const strip = slaStrip(points, win);
-  if (strip == null) return '<span class="muted">No SLA data yet for this window.</span>';
-  let up = 0, total = 0;
-  (points || []).forEach((p) => { up += Number(p.up || 0); total += Number(p.total || 0); });
+  if (strip == null) return slaNoWindowData;
+  const { up, total } = slaTotals(points);
   const pctText = total > 0 ? fmtPct(up / total * percentScale) : "—";
   return `${strip.band}<div class="sla-cell-foot"><span class="sla-pct">${pctText}</span>` +
     `<span class="sla-count">${up}/${total}</span></div>`;
