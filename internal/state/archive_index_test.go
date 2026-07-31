@@ -11,13 +11,10 @@ import (
 	"time"
 )
 
-// TestArchiveIndexCostAndBenefit records both sides of the (res, bucket) indexes:
-// what they cost on disk, and that they turn the maintenance scans into seeks.
-//
-// It is a measurement, not a threshold — it asserts only the query plans, which are
-// the reason the indexes exist. The sizes are logged so `go test -v` shows the real
-// tradeoff on the current schema instead of leaving it to an estimate.
-func TestArchiveIndexCostAndBenefit(t *testing.T) {
+// TestArchiveMaintenancePlansWithoutSecondaryIndexes pins the resolution-partition
+// scans chosen for maintenance after the costly (res, bucket) indexes are removed.
+// The fleet-shaped sizes are logged for inspection with `go test -v`.
+func TestArchiveMaintenancePlansWithoutSecondaryIndexes(t *testing.T) {
 	dir := t.TempDir()
 	s, err := OpenContext(context.Background(), filepath.Join(dir, Filename))
 	if err != nil {
@@ -56,8 +53,9 @@ func TestArchiveIndexCostAndBenefit(t *testing.T) {
 
 	logArchiveSizes(t, s, filepath.Join(dir, Filename))
 
-	// The reason the indexes exist: every maintenance statement filters on
-	// (res, bucket) with no series key, which the primary key cannot serve.
+	// Maintenance filters on (res, bucket) with no series key, so this is a scan
+	// of the selected resolution partition. The three-hour finest retention keeps
+	// it bounded and cheaper than two secondary index copies on every write.
 	for _, tc := range []struct {
 		name string
 		stmt string
@@ -77,8 +75,8 @@ func TestArchiveIndexCostAndBenefit(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			plan := queryPlan(t, s, tc.stmt, tc.args...)
 			t.Logf("plan: %s", plan)
-			if !containsAny(plan, "USING INDEX", "USING COVERING INDEX") {
-				t.Fatalf("maintenance statement does not use the (res, bucket) index; plan: %s", plan)
+			if strings.Contains(plan, "_res_bucket_idx") || !containsAny(plan, "USING PRIMARY KEY") {
+				t.Fatalf("maintenance statement must scan the selected primary-key resolution partition; plan: %s", plan)
 			}
 		})
 	}
@@ -96,9 +94,8 @@ func TestArchiveIndexCostAndBenefit(t *testing.T) {
 	})
 }
 
-// logArchiveSizes reports how much of the database each archive table and each of
-// its indexes occupies, using dbstat when the driver exposes it and the file size
-// otherwise.
+// logArchiveSizes reports how much each archive table and related database object
+// occupies, using dbstat when the driver exposes it and the file size otherwise.
 func logArchiveSizes(t *testing.T, s *Store, path string) {
 	t.Helper()
 	if info, err := os.Stat(path); err == nil {

@@ -185,8 +185,8 @@ const (
 	stateTableMetricArchive = "metric_archive"
 )
 
-// Metric scopes name the four series families that used to have a table each.
-// They are deliberately disjoint rather than sharing a "check" scope split by
+// Metric scopes name the four series families within metric_archive. They are
+// deliberately disjoint rather than sharing a "check" scope split by
 // metric name: a check may declare a metric literally called "latency"
 // (checks.IcmpMetricLatency), which would otherwise collide with the measured
 // check latency and double-count both into one bucket.
