@@ -8,6 +8,11 @@ import (
 	"time"
 )
 
+const (
+	benchmarkFleetServices    = 30
+	benchmarkChecksPerService = 5
+)
+
 // benchStore opens a store backed by a temp file (not :memory:) so the
 // benchmarks pay the real WAL/synchronous=NORMAL write cost.
 func benchStore(b *testing.B) *Store {
@@ -20,28 +25,56 @@ func benchStore(b *testing.B) *Store {
 	return s
 }
 
-// BenchmarkRecordCycle measures the persistence cost of one daemon cycle for a
-// 30-service × 5-check fleet: service SLA + per-check SLA + health rows, the
-// dominant per-cycle write pattern.
+// BenchmarkRecordCycle compares direct writes with one transaction per service
+// for a 30-service × 5-check fleet: service SLA + per-check SLA,
+// the dominant per-cycle write pattern.
 func BenchmarkRecordCycle(b *testing.B) {
-	s := benchStore(b)
-	const services, checksPerService = 30, 5
+	b.Run("direct", func(b *testing.B) {
+		s := benchStore(b)
+		benchmarkRecordCycle(b, func(service string, at time.Time) error {
+			return recordBenchmarkSLACycle(s, service, at)
+		})
+	})
+	b.Run("batch", func(b *testing.B) {
+		s := benchStore(b)
+		benchmarkRecordCycle(b, func(service string, at time.Time) error {
+			return s.WithBatch(context.Background(), func(records Batch) error {
+				return recordBenchmarkSLACycle(records, service, at)
+			})
+		})
+	})
+}
+
+type benchmarkSLARecorder interface {
+	RecordSLA(service string, up bool, at time.Time) error
+	RecordCheckSLA(service, check string, up bool, at time.Time) error
+}
+
+func benchmarkRecordCycle(b *testing.B, record func(service string, at time.Time) error) {
+	b.Helper()
 	now := time.Date(2026, 7, 16, 12, 0, 0, 0, time.UTC)
 	b.ResetTimer()
 	for i := 0; b.Loop(); i++ {
 		at := now.Add(time.Duration(i) * 30 * time.Second)
-		for svc := range services {
+		for svc := range benchmarkFleetServices {
 			name := fmt.Sprintf("svc-%02d", svc)
-			if err := s.RecordSLA(name, true, at); err != nil {
+			if err := record(name, at); err != nil {
 				b.Fatal(err)
-			}
-			for chk := range checksPerService {
-				if err := s.RecordCheckSLA(name, fmt.Sprintf("check-%d", chk), true, at); err != nil {
-					b.Fatal(err)
-				}
 			}
 		}
 	}
+}
+
+func recordBenchmarkSLACycle(records benchmarkSLARecorder, service string, at time.Time) error {
+	if err := records.RecordSLA(service, true, at); err != nil {
+		return err
+	}
+	for check := range benchmarkChecksPerService {
+		if err := records.RecordCheckSLA(service, fmt.Sprintf("check-%d", check), true, at); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // seedSLAYear fills one service with a year of per-minute buckets — the

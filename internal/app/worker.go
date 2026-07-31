@@ -104,13 +104,10 @@ type Worker struct {
 	// suppressed; wall notifications are still delivered. DryRun is independent
 	// of IsPaused (paused services skip evaluation entirely).
 	DryRun bool
-	// RecordHealth persists this cycle's availability sample for SLA tracking:
-	// up is true when no required check failed. Nil disables recording (tests, or
-	// when no store is wired). Only observed (non-paused) cycles are recorded.
-	RecordHealth func(up bool)
-	// RecordChecks persists per-check availability for checks that actually ran
-	// and were not converted to skipped by gates. Nil disables recording.
-	RecordChecks func(cache map[string]checks.Result, ran map[string]bool)
+	// RecordCycle persists this cycle's check measurements and, for an observed
+	// cycle, its availability samples. Nil disables recording (tests, or when no
+	// store is wired). Paused cycles do not invoke it.
+	RecordCycle func(ctx context.Context, cycle cycleRecord)
 	// Publish records this cycle's check cache for the web detail view. ran lists
 	// checks that actually executed (cycleRan). Nil disables publishing.
 	Publish func(cache map[string]checks.Result, ran map[string]bool)
@@ -180,6 +177,16 @@ type workerCycleMode struct {
 	operation   bool
 }
 
+// cycleRecord is the completed check result passed to persistence. Availability
+// is recorded only when recordAvailability is true; observe-only cycles still
+// retain measurements captured while their checks ran.
+type cycleRecord struct {
+	cache              map[string]checks.Result
+	ran                map[string]bool
+	up                 bool
+	recordAvailability bool
+}
+
 // cycleTarget names this worker for the scheduler panic-recovery log.
 func (w *Worker) cycleTarget() string { return "service " + w.Service }
 
@@ -202,7 +209,7 @@ func (w *Worker) RunCycle(ctx context.Context) {
 	}
 
 	deps, cache := w.runChecks(ctx)
-	w.publishCycle(cache, mode.observeOnly)
+	w.publishCycle(ctx, cache, mode.observeOnly)
 	if mode.observeOnly {
 		w.completeObserveCycle(settleKey, mode)
 		return // first active cycle: publish data only, no rules or SLA side effects
@@ -269,14 +276,14 @@ func (w *Worker) runChecks(ctx context.Context) (checks.Deps, map[string]checks.
 	return deps, cache
 }
 
-func (w *Worker) publishCycle(cache map[string]checks.Result, observeOnly bool) {
-	if !observeOnly {
-		if w.RecordChecks != nil {
-			w.RecordChecks(cache, w.cycleRan)
-		}
-		if w.RecordHealth != nil {
-			w.RecordHealth(requiredChecksOK(cache))
-		}
+func (w *Worker) publishCycle(ctx context.Context, cache map[string]checks.Result, observeOnly bool) {
+	if w.RecordCycle != nil {
+		w.RecordCycle(ctx, cycleRecord{
+			cache:              cache,
+			ran:                w.cycleRan,
+			up:                 requiredChecksOK(cache),
+			recordAvailability: !observeOnly,
+		})
 	}
 	if w.Publish != nil {
 		w.Publish(cache, w.cycleRan)
