@@ -42,7 +42,7 @@ watches:
       scope: service
       name: memory
       op: '>'
-      value: 52850688
+      value: 30%
       optional: true
     for:
       duration: 4m

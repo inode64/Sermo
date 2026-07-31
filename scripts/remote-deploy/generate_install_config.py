@@ -87,6 +87,9 @@ REAL_STORAGE_FS = {
 
 NETWORK_FS = {"nfs", "nfs4", "cifs", "smb3", "fuse.sshfs", "sshfs", "ceph", "glusterfs"}
 NFS_FILESYSTEMS = {"nfs", "nfs4"}
+# fstab options that mean "this filesystem is deliberately not mounted at boot",
+# so an absent mount is the configured state rather than a fault to alert on.
+ON_DEMAND_MOUNT_OPTIONS = ("noauto", "x-systemd.automount")
 SKIP_MOUNT_PREFIXES = (
     "/dev",
     "/proc",
@@ -105,13 +108,39 @@ SKIP_IFACE_PREFIXES = (
     "lo",
     "veth",
     "virbr",
+    # libvirt/QEMU tap devices come and go with the guests they serve; the VM
+    # itself is already monitored, so a per-tap link watch only adds churn.
+    "vnet",
 )
+
+# hdparm buffered-read floors in MB/s, below which a disk is reporting real
+# trouble rather than normal media speed. Rotational media reads an order of
+# magnitude slower than flash, so a single shared floor would alert on every
+# healthy HDD; keep the two apart.
+HDPARM_READ_FLOOR_ROTATIONAL = 20
+HDPARM_READ_FLOOR_SOLID_STATE = 100
 
 GEOIP_DATABASE_DIRECTORY = "/usr/share/GeoIP"
 GEOIP_DATABASE_OLDER_THAN = "480h"
 ROOT_MOUNT_TARGET = "/"
 NFS_ENDPOINT_TIMEOUT = "5s"
 ENDPOINT_CHECK_TYPES = {"dns", "http", "ports", "tcp"}
+# Every protocol probe registered in internal/conn. These dial a host:port just
+# like a `tcp` watch, so they need the same listening-socket evidence before a
+# generated service asserts them — otherwise a profile that probes ${host}
+# (127.0.0.1 by default) alerts forever on a service that binds elsewhere, uses
+# a unix socket, or uses an rpcbind-assigned port. Kept in step with the Go
+# registry by test_protocol_check_types_match_conn_registry.
+PROTOCOL_CHECK_TYPES = {
+    "acpid", "ajp", "amqp", "asterisk", "avahi", "ceph", "clamd", "cloudflared",
+    "dbus", "dhclient", "dhcp", "fail2ban", "fpm", "ftp", "glusterfs", "guacd",
+    "imap", "influxdb", "ipp", "kafka", "ldap", "libvirt", "lvmpolld",
+    "memcached", "mongodb", "mountd", "mqtt", "mysql", "nebula", "nfs", "nntp",
+    "ntp", "nut", "openvpn", "openvswitch", "pop", "postgres", "prometheus",
+    "rdp", "redis", "rpcbind", "rspamd", "rsync", "sieve", "smb", "smtp",
+    "snmp", "spamd", "ssh", "statd", "syncthing", "tftp", "udisks2", "unifi",
+    "varnish",
+}
 TCP_PROTOCOL = "tcp"
 UDP_PROTOCOL = "udp"
 WILDCARD_LISTEN_HOSTS = {"0.0.0.0", "::"}
@@ -394,9 +423,21 @@ def parse_fstab(text: str) -> list[dict[str, str]]:
         if len(parts) < 3:
             continue
         source, target, fstype = parts[:3]
+        options = parts[3] if len(parts) > 3 else "defaults"
         if target != "none" and target.startswith("/"):
-            entries.append({"source": source, "target": target, "fstype": fstype.lower()})
+            entries.append({
+                "source": source,
+                "target": target,
+                "fstype": fstype.lower(),
+                "options": options.lower(),
+            })
     return entries
+
+
+def fstab_is_on_demand(entry: dict[str, str]) -> bool:
+    """Report whether an fstab entry is mounted on demand rather than at boot."""
+    options = {opt.strip() for opt in entry.get("options", "").split(",")}
+    return any(option in options for option in ON_DEMAND_MOUNT_OPTIONS)
 
 
 def nfs_server_from_source(source: str) -> str:
@@ -454,7 +495,7 @@ def block_inventory(stage: Path) -> tuple[list[dict], set[str]]:
         tran = str(dev.get("tran") or "").lower()
         rm = truthy(dev.get("rm"))
         if typ == "disk" and path and not ro and not name.startswith(("loop", "sr", "ram")):
-            disks.append({"name": name, "path": path, "tran": tran, "rm": rm})
+            disks.append({"name": name, "path": path, "tran": tran, "rm": rm, "rota": truthy(dev.get("rota"))})
         mounts = dev.get("mountpoints")
         if mounts is None and dev.get("mountpoint"):
             mounts = [dev.get("mountpoint")]
@@ -482,12 +523,25 @@ def parse_md_arrays(stage: Path) -> list[str]:
     return sorted(names)
 
 
+def systemd_unit_fields(line: str) -> list[str]:
+    """Split a `systemctl list-units` row, dropping the leading status bullet.
+
+    `--plain` suppresses that column, but systemd only prints the bullet for
+    units in a non-running sub-state — so a failed-unit listing collected without
+    `--plain` puts the marker where the unit name is expected.
+    """
+    fields = line.split()
+    if fields and fields[0] in {"●", "*", "×"}:
+        fields = fields[1:]
+    return fields
+
+
 def parse_active_units(stage: Path) -> set[str]:
     init = read_text(stage / "init").strip()
     active: set[str] = set()
     if init == "systemd":
         for line in read_text(stage / "active_units").splitlines():
-            fields = line.split()
+            fields = systemd_unit_fields(line)
             if not fields:
                 continue
             unit = fields[0]
@@ -506,6 +560,39 @@ def parse_active_units(stage: Path) -> set[str]:
                 active.add(name)
         return active
     return active
+
+
+def parse_failed_units(stage: Path) -> set[str]:
+    """Units the init system reports as failed/crashed.
+
+    A failed unit is installed, enabled and broken — the case monitoring exists
+    for — so it must be monitorable even though it is not active. Without this
+    the generator's active-only rule would permanently exclude exactly the
+    services that need watching.
+    """
+    init = read_text(stage / "init").strip()
+    failed: set[str] = set()
+    if init == "systemd":
+        for line in read_text(stage / "failed_units").splitlines():
+            fields = systemd_unit_fields(line)
+            if not fields:
+                continue
+            unit = fields[0]
+            failed.add(unit)
+            if unit.endswith(".service"):
+                failed.add(unit[: -len(".service")])
+            else:
+                failed.add(unit + ".service")
+        return failed
+    if init == "openrc":
+        for line in read_text(stage / "openrc_status_all").splitlines():
+            if not re.search(r"\[\s*crashed(?:\s|\])", line):
+                continue
+            name = line.strip().split()[0]
+            if name:
+                failed.add(name)
+        return failed
+    return failed
 
 
 def host_builtins(stage: Path) -> dict[str, str]:
@@ -576,6 +663,14 @@ def catalog_doc_for_service(name: str, catalog_docs: list[dict]) -> tuple[dict |
 def values_for_service(name: str, stage: Path, catalog_docs: list[dict]) -> tuple[dict | None, dict[str, str]]:
     doc, values = catalog_doc_for_service(name, catalog_docs)
     merged = host_builtins(stage)
+    # ${host}/${hostname} are fallbacks: an explicit profile variable always wins
+    # (docs/services.md). Without this the hostname would override a profile that
+    # pins a bind address, and endpoint evidence would be looked up at the wrong
+    # host — disabling watches for endpoints that are in fact served.
+    profile_variables = (doc or {}).get("variables")
+    if isinstance(profile_variables, dict):
+        for key in set(merged) & set(profile_variables):
+            merged.pop(key)
     merged.update(values)
     return doc, merged
 
@@ -611,15 +706,20 @@ def service_unit_candidates(service_field: object, init: str, values: dict[str, 
     return list(dict.fromkeys(out))
 
 
-def active_service_filter(stage: Path, catalog_docs: list[dict]) -> tuple[set[str], dict[str, list[str]], bool]:
+def active_service_filter(stage: Path, catalog_docs: list[dict]) -> tuple[set[str], set[str], dict[str, list[str]], bool]:
+    """Split installed catalog services into those whose unit is running and
+    those whose unit has failed. Both are monitorable; only the running set
+    carries listening-socket evidence, so the caller keeps them apart."""
     active_units = parse_active_units(stage)
+    failed_units = parse_failed_units(stage)
     init = read_text(stage / "init").strip()
     data = read_json(stage / "services_json.out")
     reports = data.get("services", []) if isinstance(data, dict) else []
     active_services: set[str] = set()
+    failed_services: set[str] = set()
     candidates_by_service: dict[str, list[str]] = {}
-    if not active_units:
-        return active_services, candidates_by_service, False
+    if not active_units and not failed_units:
+        return active_services, failed_services, candidates_by_service, False
     for rep in reports:
         name = rep.get("name") or ""
         if not name:
@@ -630,20 +730,23 @@ def active_service_filter(stage: Path, catalog_docs: list[dict]) -> tuple[set[st
         candidates_by_service[name] = candidates
         if any(candidate in active_units for candidate in candidates):
             active_services.add(name)
-    return active_services, candidates_by_service, True
+        elif any(candidate in failed_units for candidate in candidates):
+            failed_services.add(name)
+    return active_services, failed_services, candidates_by_service, True
 
 
-def parse_services(stage: Path, options: GenerationOptions) -> tuple[list[dict], list[dict]]:
+def parse_services(stage: Path, options: GenerationOptions) -> tuple[list[dict], list[dict], set[str]]:
     data = read_json(stage / "services_json.out")
     reports = data.get("services", []) if isinstance(data, dict) else []
     catalog_docs = load_catalog_services(options.catalog_services_dir)
-    active_services, candidates_by_service, active_inventory_ok = active_service_filter(stage, catalog_docs)
+    active_services, failed_services, candidates_by_service, active_inventory_ok = active_service_filter(stage, catalog_docs)
     services: list[dict] = []
     skipped: list[dict] = []
     for rep in reports:
         name = rep.get("name") or ""
         installed_ok = rep.get("installed") and rep.get("ok") and name
-        active_ok = not options.active_services_only or (active_inventory_ok and name in active_services)
+        monitorable = name in active_services or name in failed_services
+        active_ok = not options.active_services_only or (active_inventory_ok and monitorable)
         if installed_ok and active_ok:
             services.append(rep)
         else:
@@ -651,9 +754,9 @@ def parse_services(stage: Path, options: GenerationOptions) -> tuple[list[dict],
             if installed_ok and options.active_services_only:
                 if not active_inventory_ok:
                     reason = "installed but active unit inventory unavailable"
-                elif name not in active_services:
+                elif not monitorable:
                     candidates = ", ".join(candidates_by_service.get(name, []))
-                    reason = "installed but no active unit matched"
+                    reason = "installed but no active or failed unit matched"
                     if candidates:
                         reason += f" ({candidates})"
             skipped.append(
@@ -664,7 +767,7 @@ def parse_services(stage: Path, options: GenerationOptions) -> tuple[list[dict],
                     "ok": bool(rep.get("ok")),
                 }
             )
-    return services, skipped
+    return services, skipped, failed_services
 
 
 def parse_interfaces(stage: Path) -> list[str]:
@@ -678,6 +781,12 @@ def parse_interfaces(stage: Path) -> list[str]:
         if any(iface == prefix or iface.startswith(prefix) for prefix in SKIP_IFACE_PREFIXES):
             continue
         if "UP" not in flags and "LOWER_UP" not in flags:
+            continue
+        # `UP` is only the administrative flag. A link the kernel marks
+        # NO-CARRIER is operationally down, and the net check reads the
+        # operational state, so watching it would alert continuously on an
+        # unplugged or idle link.
+        if "NO-CARRIER" in flags:
             continue
         interfaces.append(iface)
     return list(dict.fromkeys(interfaces))
@@ -1006,9 +1115,10 @@ def socket_listeners(hints: str) -> list[dict[str, object]]:
         host, port = endpoint
         if not port:
             continue
+        # Keep listeners with no process attribution: kernel sockets (nfsd) and
+        # unprivileged `ss` output carry none, and dropping them would report a
+        # served endpoint as absent.
         processes = set(re.findall(r'\(\("([^"]+)"', line))
-        if not processes:
-            continue
         listeners.append({"protocol": fields[1], "host": host, "port": port, "processes": processes})
     return listeners
 
@@ -1044,12 +1154,41 @@ def endpoint_target(check_type: str, check: dict, variables: dict[str, str]) -> 
     return [({TCP_PROTOCOL}, host, port) for port in ports], ""
 
 
+def protocol_endpoint_target(check: dict, variables: dict[str, str]) -> list[tuple[set[str], str, str]] | None:
+    """Resolve a protocol probe to one host:port target, or None when the port
+    cannot be resolved.
+
+    None means "not provable either way", and the caller must leave the watch
+    enabled: silently disabling a check we could not evaluate would hide real
+    outages. Both transports are accepted because the profile does not say which
+    one the probe uses, and a listener on either proves the endpoint is served.
+    """
+    host = substitute_variables(check.get("host", variables.get("host", "127.0.0.1")), variables)
+    port = substitute_variables(str(check.get("port", variables.get("port", ""))), variables)
+    if not port.isdigit():
+        return None
+    return [({TCP_PROTOCOL, UDP_PROTOCOL}, host, port)]
+
+
 def listener_matches(target: tuple[set[str], str, str], listener: dict[str, object], processes: set[str]) -> bool:
+    listener_processes = set(listener["processes"])
+    return listener_serves_endpoint(target, listener) and bool(listener_processes & processes)
+
+
+def listener_serves_endpoint(target: tuple[set[str], str, str], listener: dict[str, object]) -> bool:
+    """Whether something is listening on the probed protocol/host/port.
+
+    Deliberately ignores which process owns the socket. Disabling a watch is
+    only safe with positive evidence that nothing serves the endpoint, and
+    process attribution is not reliable enough to carry that weight: a profile's
+    process key legitimately differs from the running binary (`mariadbd` vs
+    `mysqld`) and kernel sockets report no process at all. Requiring a match
+    would turn "cannot attribute" into "proven absent" and silence real checks.
+    """
     protocols, host, port = target
     listener_host = str(listener["host"])
-    listener_processes = set(listener["processes"])
     host_matches = listener_host in WILDCARD_LISTEN_HOSTS or listener_host == host
-    return str(listener["protocol"]) in protocols and str(listener["port"]) == port and host_matches and bool(listener_processes & processes)
+    return str(listener["protocol"]) in protocols and str(listener["port"]) == port and host_matches
 
 
 def endpoint_watch_overrides(stage: Path, doc: dict, variables: dict[str, str]) -> tuple[set[str], list[dict[str, object]]]:
@@ -1068,10 +1207,23 @@ def endpoint_watch_overrides(stage: Path, doc: dict, variables: dict[str, str]) 
         if not isinstance(check, dict):
             continue
         check_type = str(check.get("type") or "")
-        if check_type not in ENDPOINT_CHECK_TYPES:
+        if check_type in PROTOCOL_CHECK_TYPES:
+            protocol_targets = protocol_endpoint_target(check, variables)
+            if protocol_targets is None:
+                continue
+            targets, reason, require_process = protocol_targets, "", False
+        elif check_type in ENDPOINT_CHECK_TYPES:
+            targets, reason = endpoint_target(check_type, check, variables)
+            require_process = True
+        else:
             continue
-        targets, reason = endpoint_target(check_type, check, variables)
-        active = bool(targets) and all(any(listener_matches(target, listener, processes) for listener in listeners) for target in targets)
+        active = bool(targets) and all(
+            any(
+                listener_matches(target, listener, processes) if require_process else listener_serves_endpoint(target, listener)
+                for listener in listeners
+            )
+            for target in targets
+        )
         item: dict[str, object] = {"watch": str(watch_name), "type": check_type, "active": active}
         if active:
             item["source"] = "associated listening socket"
@@ -1264,7 +1416,7 @@ def generate_for_host(host_slug: str, stage: Path, configs_dir: Path, options: G
     }
 
     generated_service_names: set[str] = set()
-    services, skipped_services = parse_services(stage, options)
+    services, skipped_services, failed_services = parse_services(stage, options)
     catalog_docs = load_catalog_services(options.catalog_services_dir)
     for svc in services:
         name = svc["name"]
@@ -1272,7 +1424,13 @@ def generate_for_host(host_slug: str, stage: Path, configs_dir: Path, options: G
         variable_overrides, variables_source = service_variable_overrides(stage, name)
         doc, values = values_for_service(name, stage, catalog_docs)
         effective_variables = effective_service_variables(doc or {}, values, variable_overrides)
-        disabled_endpoint_watches, endpoint_checks = endpoint_watch_overrides(stage, doc or {}, effective_variables)
+        # Endpoint gating proves a watch against a listening socket. A failed
+        # unit has no sockets by definition, so gating it would disable the very
+        # checks that would report the outage: keep them all enabled.
+        if name in failed_services:
+            disabled_endpoint_watches, endpoint_checks = set(), [{"watch": "*", "active": True, "source": "unit failed; endpoint gating skipped"}]
+        else:
+            disabled_endpoint_watches, endpoint_checks = endpoint_watch_overrides(stage, doc or {}, effective_variables)
         disabled_replication_watches, replication_checks = replication_watch_overrides(stage, doc or {})
         disabled_watches = disabled_endpoint_watches | disabled_replication_watches
         body = f"""name: {name}
@@ -1409,6 +1567,11 @@ dry_run: true
         if target in mount_watch_targets or not target.startswith("/"):
             return
         if target != ROOT_MOUNT_TARGET and any(target == prefix or target.startswith(prefix + "/") for prefix in SKIP_MOUNT_PREFIXES):
+            return
+        # An on-demand entry is unmounted by design, so `mounted: true` would
+        # alert on the operator's intended state instead of on a fault.
+        if fstab_is_on_demand(fstab):
+            skip("mount", f"{target} is fstab {fstab['options']} (mounted on demand, not at boot)")
             return
         name = f"mount-{slug(target)}"
         body = (
@@ -1640,6 +1803,9 @@ dry_run: true
                     simple_watch(f"smart-{slug(disk_name)}", "storage", options.smart_interval, ["type: smart", f"device: {yaml_quote(disk_path)}"], cycles=1),
                 )
         if features.get("hdparm") == "1" and (disk_path.startswith(("/dev/sd", "/dev/hd")) or disk.get("tran") in {"ata", "sata", "scsi", "usb"}):
+            # A rotational disk reads far slower than flash, so one shared floor
+            # would either alert on every healthy HDD or never fire on an SSD.
+            read_floor = HDPARM_READ_FLOOR_ROTATIONAL if disk.get("rota") else HDPARM_READ_FLOOR_SOLID_STATE
             add_watch(
                 "watches",
                 f"hdparm-{slug(disk_name)}",
@@ -1647,7 +1813,7 @@ dry_run: true
                     f"hdparm-{slug(disk_name)}",
                     "storage",
                     options.hdparm_interval,
-                    ["type: hdparm", f"device: {yaml_quote(disk_path)}", "timeout: 30s", 'read: { op: "<", value: 100 }'],
+                    ["type: hdparm", f"device: {yaml_quote(disk_path)}", "timeout: 30s", f'read: {{ op: "<", value: {read_floor} }}'],
                     cycles=2,
                 ),
             )

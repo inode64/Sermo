@@ -62,7 +62,9 @@ if [ ! -f /etc/sermo/sermo.yml ]; then
 fi
 
 if [ "$init" = "systemd" ]; then
-	systemctl list-units --type=service --state=active --no-legend --no-pager >"${out}/active_units" 2>/dev/null || true
+	systemctl list-units --type=service --state=active --no-legend --plain --no-pager >"${out}/active_units" 2>/dev/null || true
+	# Kept in step with remote_stage.sh: a failed unit must stay monitorable.
+	systemctl list-units --type=service --state=failed --no-legend --plain --no-pager >"${out}/failed_units" 2>/dev/null || true
 	systemctl list-unit-files --type=service --no-legend --no-pager >"${out}/unit_files" 2>/dev/null || true
 	systemctl status sermod --no-pager >"${out}/sermod_status_before" 2>&1 || true
 elif [ "$init" = "openrc" ]; then

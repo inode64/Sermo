@@ -150,11 +150,16 @@ as root can rewrite host metadata. Each mutating remote script records
 `protected_path_metadata.diff`, and exits with status `70` if any protected path
 changes type, mode, uid or gid.
 
-The generated config defaults to monitoring only installed catalog services
-whose init unit is active, `dry_run: true`, Web UI on `0.0.0.0:9797`, storage
+The generated config defaults to monitoring installed catalog services whose
+init unit is active **or failed** — a failed unit is installed, enabled and
+broken, so excluding it would blind the monitoring to precisely the services
+that need it — plus `dry_run: true`, Web UI on `0.0.0.0:9797`, storage
 free-space threshold `< 5%`, expansion by `5G`, fstab-backed non-root storage
 mount units, running Docker containers, running libvirt/QEMU virtual machines,
-SMART every `24h` and hdparm every `6h`. LVM space and logged-in-user checks are
+SMART every `24h` and hdparm every `6h`. The hdparm buffered-read floor follows
+the medium reported by `lsblk` — `20` MB/s for rotational disks, `100` MB/s for
+flash — because one shared floor either alerts on every healthy HDD or never
+fires on an SSD. LVM space and logged-in-user checks are
 disabled. The root filesystem retains its storage-capacity watch but is not a
 mount unit. Use
 `--include-inactive-installed-services` only for catalog audits where inactive
@@ -174,6 +179,20 @@ staging inventory resolves the NFS source and records its route, so the generate
 probe binds to that egress interface when one is known. Every fstab-backed
 network filesystem also receives its `mounted: true` watch even when it is not
 currently listed by `findmnt`, so an already-failed mount remains visible.
+
+An entry mounted on demand rather than at boot — `noauto` or
+`x-systemd.automount` in its fstab options — gets **no** `mounted: true` watch:
+being unmounted is its configured state, so the watch would alert on operator
+intent instead of on a fault. The decision is recorded under `skipped_watches`.
+Its NFS endpoint check is still generated, because the server's reachability is
+meaningful whether or not the share is currently mounted.
+
+A `net-<iface>` watch is generated per non-loopback link that is both
+administratively up and carrying a signal. A link the kernel flags `NO-CARRIER`
+is skipped: its `state` metric alerts on the *unhealthy* value (`expect: down`),
+so watching an already-down link would fire continuously. libvirt/QEMU `vnet`
+taps are skipped too — they come and go with their guests, which are monitored
+in their own right.
 
 Every generated configuration also includes an alert-only clock watch. It queries
 `time.cloudflare.com` and `pool.ntp.org` every five minutes and alerts after two
@@ -216,6 +235,26 @@ records the reason in `config-report.json`; it never turns unrelated listeners
 into checks. Disabled source watches are removed before catalog resolution can
 derive a check or remediation rule from them. HTTP and DNS therefore run only
 for discovered active endpoints.
+
+The same gate covers every **protocol probe** registered in `internal/conn`
+(`ceph`, `fpm`, `statd`, `mountd`, `mysql`, `nut`, …), which dial a host:port
+exactly like a `tcp` watch. Without it a profile probing `${host}` (`127.0.0.1`
+by default) alerts forever wherever the service binds another address, listens
+on a unix socket, or takes an rpcbind-assigned port — and for `ceph-mon` that
+watch carries a `restart` action, so it proposed restarting healthy quorum
+members. Two rules keep the gate from silencing real checks:
+
+- A probe whose port cannot be resolved to a number is **not** gated. Absence of
+  proof is not proof of absence, and disabling an unevaluated check would hide
+  an outage.
+- Evidence is protocol/host/port only; the owning process is not required. A
+  profile's process key legitimately differs from the running binary (`mariadbd`
+  vs `mysqld`) and kernel sockets (`nfsd`) report no process at all, so
+  requiring a match turned "cannot attribute" into "proven absent".
+
+A service whose unit has **failed** is generated with no endpoint gating at all:
+it has no listening sockets by definition, and gating it would disable exactly
+the checks that report the outage.
 
 The PostgreSQL replication watches are gated the same way, from cluster facts
 instead of listening sockets. `remote_collect_inventory.sh` writes

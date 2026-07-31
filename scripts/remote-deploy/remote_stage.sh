@@ -185,7 +185,10 @@ fi
 
 if [ "$init" = "systemd" ]; then
 	systemctl daemon-reload >"${out}/systemctl_daemon_reload.out" 2>"${out}/systemctl_daemon_reload.err" || true
-	systemctl list-units --type=service --state=active --no-legend --no-pager >"${out}/active_units" 2>/dev/null || true
+	systemctl list-units --type=service --state=active --no-legend --plain --no-pager >"${out}/active_units" 2>/dev/null || true
+	# A failed unit is installed, enabled and broken: exactly what monitoring is
+	# for. OpenRC's crashed state comes from openrc_status_all below.
+	systemctl list-units --type=service --state=failed --no-legend --plain --no-pager >"${out}/failed_units" 2>/dev/null || true
 	systemctl list-unit-files --type=service --no-legend --no-pager >"${out}/unit_files" 2>/dev/null || true
 	systemctl status sermod --no-pager >"${out}/sermod_status_before" 2>&1 || true
 elif [ "$init" = "openrc" ]; then

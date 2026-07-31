@@ -28,6 +28,7 @@ const (
 	ntpLeapDelSecond      = "del-second"
 	ntpLeapUnsynchronized = "unsynchronized"
 	ntpLeapUnknown        = "unknown"
+	ntpKissCodeUnknown    = "unknown"
 
 	ntpRefIDBytes              = 4
 	ntpPrimaryStratum          = 1
@@ -66,6 +67,15 @@ func (ntpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	if err != nil {
 		return Result{}, err
 	}
+	// A stratum-0 reply is a kiss-of-death: the server answered but is unable or
+	// unwilling to serve time, and only its kiss code says why (STEP while it is
+	// still stepping the clock, INIT before it syncs, RATE when it is rate
+	// limiting us, DENY when access is refused). Report that reason; the
+	// library's bare "kiss of death received" leaves an operator with nothing
+	// actionable, and Validate would return exactly that.
+	if resp.IsKissOfDeath() {
+		return Result{}, fmt.Errorf("server not serving time (kiss code %s)", ntpKissCode(resp))
+	}
 	if err := resp.Validate(); err != nil {
 		return Result{}, err
 	}
@@ -84,6 +94,15 @@ func (ntpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 // beevik's own default (0 means "use the library default") when none is set.
 func ntpTimeout(ctx context.Context) time.Duration {
 	return netutil.TimeoutFromContext(ctx, 0)
+}
+
+// ntpKissCode returns the kiss code of a stratum-0 response. RFC 5905 §7.4
+// leaves the field free-form, so a server may send none at all.
+func ntpKissCode(resp *ntp.Response) string {
+	if code := strings.TrimSpace(resp.KissCode); code != "" {
+		return code
+	}
+	return ntpKissCodeUnknown
 }
 
 // ntpExtraFields decodes the diagnostic fields RFC 5905 carries alongside the

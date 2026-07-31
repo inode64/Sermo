@@ -279,6 +279,211 @@ class EndpointGenerationTest(unittest.TestCase):
         self.assertIn("mounted: true", mount_body)
         self.assertEqual(report["nfs_endpoints"][0]["paths"], ["/mnt/backup"])
 
+    def test_protocol_check_types_match_conn_registry(self):
+        """The gate must cover every protocol probe. A new probe in
+        internal/conn that is missing here would ship an ungated ${host} check
+        to every host that runs the service."""
+        import re
+
+        conn = Path(__file__).parents[2] / "internal/conn"
+        registry = set()
+        for source in conn.glob("*.go"):
+            registry.update(re.findall(r'ProtocolName\w+\s*=\s*"([^"]+)"', source.read_text(encoding="utf-8")))
+        self.assertTrue(registry, "no protocol names found in internal/conn")
+        # `dns` is gated by the older URL/port-aware path in ENDPOINT_CHECK_TYPES.
+        self.assertEqual(generator.PROTOCOL_CHECK_TYPES, registry - {"dns"})
+        self.assertFalse(generator.PROTOCOL_CHECK_TYPES & generator.ENDPOINT_CHECK_TYPES)
+
+    def test_protocol_watch_disabled_without_listening_socket(self):
+        """The ceph-mon case: the monitor binds its cluster IP, the profile
+        probes ${host}, and the rule's action is `restart`. Without evidence the
+        watch must be disabled rather than restart a healthy quorum member."""
+        doc = {
+            "watches": {
+                "restart-if-messenger-failed": {"check": {"type": "ceph", "host": "${host}", "port": "${port}"}},
+                "socket": {"check": {"type": "socket", "path": "/run/ceph/x.asok"}},
+            }
+        }
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        stage = Path(temp.name)
+        (stage / "service_endpoint_hints").write_text("", encoding="utf-8")
+
+        disabled, report = generator.endpoint_watch_overrides(stage, doc, {"host": "127.0.0.1", "port": "3300"})
+
+        self.assertEqual(disabled, {"restart-if-messenger-failed"})
+        self.assertEqual([item["watch"] for item in report], ["restart-if-messenger-failed"])
+
+    def test_failed_units_are_monitorable(self):
+        """A failed unit is installed, enabled and broken. Excluding it left the
+        genuinely broken service (ceph-mon@radon) unmonitored while its healthy
+        peers were watched."""
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        stage = Path(temp.name)
+        (stage / "init").write_text("systemd\n", encoding="utf-8")
+        # systemd prints a status bullet for non-running units when --plain is absent.
+        (stage / "failed_units").write_text(
+            "● ceph-mon@radon.service loaded failed failed Ceph cluster monitor\n"
+            "squid.service            loaded failed failed Squid proxy\n",
+            encoding="utf-8",
+        )
+
+        failed = generator.parse_failed_units(stage)
+
+        self.assertIn("ceph-mon@radon.service", failed)
+        self.assertIn("ceph-mon@radon", failed)
+        self.assertIn("squid.service", failed)
+        self.assertNotIn("●", failed)
+
+    def test_openrc_crashed_units_are_monitorable(self):
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        stage = Path(temp.name)
+        (stage / "init").write_text("openrc\n", encoding="utf-8")
+        (stage / "openrc_status_all").write_text(
+            " nginx    [  started  ]\n squid    [  crashed  ]\n", encoding="utf-8"
+        )
+
+        self.assertEqual(generator.parse_failed_units(stage), {"squid"})
+
+    def test_profile_host_variable_wins_over_hostname_builtin(self):
+        """docs/services.md: an explicit `host` variable always wins over the
+        ${host} fallback. When the builtin won, endpoint evidence was looked up
+        at the hostname instead of the pinned bind address, disabling watches
+        for endpoints that were in fact being served."""
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        stage = Path(temp.name)
+        (stage / "hostname").write_text("kvm5.example.com\n", encoding="utf-8")
+        docs = [{"name": "mariadb", "variables": {"host": "127.0.0.1", "port": 3306}}]
+
+        doc, values = generator.values_for_service("mariadb", stage, docs)
+        variables = generator.effective_service_variables(doc, values, {})
+
+        self.assertEqual(variables["host"], "127.0.0.1")
+        # A profile that pins no host still gets the hostname fallback.
+        bare = [{"name": "other", "variables": {"port": 1}}]
+        _, bare_values = generator.values_for_service("other", stage, bare)
+        self.assertEqual(bare_values["host"], "kvm5")
+
+    def test_listener_without_process_attribution_counts_as_evidence(self):
+        """Kernel sockets (nfsd) report no owning process. Treating that as
+        'nothing is listening' disabled checks for served endpoints."""
+        listeners = generator.socket_listeners("socket tcp LISTEN 0 4096 0.0.0.0:2049 0.0.0.0:*\n")
+
+        self.assertEqual(len(listeners), 1)
+        self.assertEqual(listeners[0]["processes"], set())
+        self.assertTrue(generator.listener_serves_endpoint(({"tcp", "udp"}, "127.0.0.1", "2049"), listeners[0]))
+
+    def test_protocol_watch_kept_when_port_unresolved(self):
+        """A probe whose port cannot be resolved is not provable either way, so
+        it stays enabled: disabling it would hide a real outage."""
+        doc = {"watches": {"probe": {"check": {"type": "dbus", "host": "${host}"}}}}
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        stage = Path(temp.name)
+        (stage / "service_endpoint_hints").write_text("", encoding="utf-8")
+
+        disabled, report = generator.endpoint_watch_overrides(stage, doc, {"host": "127.0.0.1"})
+
+        self.assertEqual(disabled, set())
+        self.assertEqual(report, [])
+
+    def test_skips_mount_watch_for_on_demand_fstab_entry(self):
+        """A `noauto`/`x-systemd.automount` share is unmounted by design, so a
+        `mounted: true` watch would alert on the operator's intent forever. The
+        NFS endpoint check stays: server reachability is still meaningful."""
+        for options_field in ("noatime,noauto", "defaults,x-systemd.automount"):
+            with self.subTest(options=options_field):
+                temp = tempfile.TemporaryDirectory()
+                self.addCleanup(temp.cleanup)
+                root = Path(temp.name)
+                stage = root / "stage" / "host" / "out"
+                stage.mkdir(parents=True)
+                (stage / "init").write_text("systemd\n", encoding="utf-8")
+                (stage / "active_units").write_text("", encoding="utf-8")
+                (stage / "fstab").write_text(
+                    f"k2keu3.intranet:/srv/backup /mnt/backup nfs {options_field} 0 0\n",
+                    encoding="utf-8",
+                )
+
+                report = generator.generate_for_host("host", stage, root / "configs", default_options())
+
+                self.assertFalse((root / "configs/host/root/etc/sermo/mounts/mount-mnt-backup.yml").exists())
+                self.assertIn(
+                    "type: nfs",
+                    (root / "configs/host/root/etc/sermo/networks/nfs-k2keu3-intranet.yml").read_text(encoding="utf-8"),
+                )
+                reasons = [entry["reason"] for entry in report["skipped_watches"] if entry["kind"] == "mount"]
+                self.assertTrue(any("/mnt/backup" in reason and "on demand" in reason for reason in reasons), reasons)
+
+    def test_parse_fstab_records_options(self):
+        entries = generator.parse_fstab("src /mnt/a nfs noatime,noauto 0 0\nsrc2 /mnt/b ext4 defaults 0 1\nsrc3 /mnt/c xfs\n")
+        self.assertEqual([entry["options"] for entry in entries], ["noatime,noauto", "defaults", "defaults"])
+        self.assertTrue(generator.fstab_is_on_demand(entries[0]))
+        self.assertFalse(generator.fstab_is_on_demand(entries[1]))
+
+    def test_skips_net_watch_for_carrierless_and_tap_interfaces(self):
+        """`state: expect: down` is an alert condition, so a link that is
+        already operationally down must not get a watch."""
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        root = Path(temp.name)
+        stage = root / "stage" / "host" / "out"
+        stage.mkdir(parents=True)
+        (stage / "init").write_text("systemd\n", encoding="utf-8")
+        (stage / "active_units").write_text("", encoding="utf-8")
+        (stage / "ip_link").write_text(
+            "1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536\n"
+            "2: eth0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500\n"
+            "3: eth1: <NO-CARRIER,BROADCAST,MULTICAST,UP> mtu 1500\n"
+            "4: vnet68: <NO-CARRIER,BROADCAST,MULTICAST,UP> mtu 1500\n",
+            encoding="utf-8",
+        )
+
+        self.assertEqual(generator.parse_interfaces(stage), ["eth0"])
+
+        generator.generate_for_host("host", stage, root / "configs", default_options())
+
+        networks = root / "configs/host/root/etc/sermo/networks"
+        self.assertTrue((networks / "net-eth0.yml").exists())
+        self.assertFalse((networks / "net-eth1.yml").exists())
+        self.assertFalse((networks / "net-vnet68.yml").exists())
+
+    def test_hdparm_read_floor_follows_disk_medium(self):
+        """One shared floor either alerts on every healthy HDD or never fires on
+        an SSD, so the threshold follows the medium lsblk reports."""
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        root = Path(temp.name)
+        stage = root / "stage" / "host" / "out"
+        stage.mkdir(parents=True)
+        (stage / "init").write_text("systemd\n", encoding="utf-8")
+        (stage / "active_units").write_text("", encoding="utf-8")
+        (stage / "features").write_text("hdparm=1\n", encoding="utf-8")
+        (stage / "lsblk.json").write_text(
+            json.dumps({
+                "blockdevices": [
+                    {"name": "sda", "type": "disk", "rota": True, "tran": "ata", "ro": False},
+                    {"name": "sdb", "type": "disk", "rota": False, "tran": "ata", "ro": False},
+                ]
+            }),
+            encoding="utf-8",
+        )
+
+        generator.generate_for_host("host", stage, root / "configs", default_options())
+
+        watches = root / "configs/host/root/etc/sermo/watches"
+        self.assertIn(
+            f'read: {{ op: "<", value: {generator.HDPARM_READ_FLOOR_ROTATIONAL} }}',
+            (watches / "hdparm-sda.yml").read_text(encoding="utf-8"),
+        )
+        self.assertIn(
+            f'read: {{ op: "<", value: {generator.HDPARM_READ_FLOOR_SOLID_STATE} }}',
+            (watches / "hdparm-sdb.yml").read_text(encoding="utf-8"),
+        )
+
     def test_generates_geoip_summary_when_database_directory_exists(self):
         temp = tempfile.TemporaryDirectory()
         self.addCleanup(temp.cleanup)
