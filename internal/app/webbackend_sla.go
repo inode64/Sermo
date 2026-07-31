@@ -13,32 +13,20 @@ const (
 	slaTimelineCacheTTL = 45 * time.Second
 )
 
-type slaCacheKey struct {
-	service string
-	check   string // empty for service-level SLA
-}
-
 type cachedSLATimelines struct {
 	windows []web.SLAWindow
 	at      time.Time
 }
 
+// serviceSLAWindows is the rolling hour..year strip on the application card.
+// Only the service scope needs it: a check's availability is served as a series
+// from Series, on the window the detail's selector is on.
 func (b *WebBackend) serviceSLAWindows(name string, now time.Time) []web.SLAWindow {
-	return b.cachedSLAWindows(name, "", now)
-}
-
-func (b *WebBackend) cachedSLAWindows(service, check string, now time.Time) []web.SLAWindow {
 	if b.sla == nil {
 		return nil
 	}
-	return b.cachedWindows(slaCacheKey{service: service, check: check}, now, func() ([]web.SLAWindow, bool) {
-		var timelines []state.SLAWindowTimeline
-		var err error
-		if check == "" {
-			timelines, err = b.sla.SLATimelines(service, now)
-		} else {
-			timelines, err = b.sla.CheckSLATimelines(service, check, now)
-		}
+	return b.cachedWindows(name, now, func() ([]web.SLAWindow, bool) {
+		timelines, err := b.sla.SLATimelines(name, now)
 		if err != nil {
 			return nil, false
 		}
@@ -46,10 +34,10 @@ func (b *WebBackend) cachedSLAWindows(service, check string, now time.Time) []we
 	})
 }
 
-func (b *WebBackend) cachedWindows(key slaCacheKey, now time.Time, load func() ([]web.SLAWindow, bool)) []web.SLAWindow {
+func (b *WebBackend) cachedWindows(key string, now time.Time, load func() ([]web.SLAWindow, bool)) []web.SLAWindow {
 	b.slaCacheMu.Lock()
 	if b.slaCache == nil {
-		b.slaCache = map[slaCacheKey]cachedSLATimelines{}
+		b.slaCache = map[string]cachedSLATimelines{}
 	}
 	if cached, ok := b.slaCache[key]; ok && now.Sub(cached.at) < slaTimelineCacheTTL {
 		out := cached.windows

@@ -64,8 +64,9 @@ type SLAReader interface {
 	SLASeries(service string, from, to time.Time) ([]state.SLAPoint, error)
 	CheckSLAReport(service, check string, now time.Time) ([]state.SLAValue, error)
 	CheckSLASeries(service, check string, from, to time.Time) ([]state.SLAPoint, error)
+	// SLATimelines has no check-scoped counterpart: the rolling windows are a
+	// service-level view, and a check's availability is read as a series.
 	SLATimelines(service string, now time.Time) ([]state.SLAWindowTimeline, error)
-	CheckSLATimelines(service, check string, now time.Time) ([]state.SLAWindowTimeline, error)
 }
 
 // MeasurementRecorder persists per-check observations per observed cycle: the

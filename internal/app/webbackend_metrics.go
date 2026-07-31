@@ -52,8 +52,9 @@ func (b *WebBackend) Series(_ context.Context, name, check string, since time.Du
 	return out, true
 }
 
-// slaSeries reads the service-level series, or one check's when check is set —
-// the series counterpart of cachedSLAWindows' scope split.
+// slaSeries reads the service-level series, or one check's when check is set.
+// This is the only place the two scopes diverge; everything above and below it
+// is shared, which is what keeps them reporting gaps identically.
 func (b *WebBackend) slaSeries(name, check string, from, to time.Time) ([]state.SLAPoint, error) {
 	if check == "" {
 		points, err := b.sla.SLASeries(name, from, to)
