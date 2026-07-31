@@ -129,7 +129,9 @@ for pid in /proc/[0-9]*; do
 	# Only the postmaster: backends and auxiliary workers are its children.
 	[ "$(awk '/^PPid:/ { print $2; exit }' "${pid}/status" 2>/dev/null)" = "1" ] || continue
 	datadir="$(readlink -f "${pid}/cwd" 2>/dev/null || true)"
-	[ -n "$datadir" ] && [ -d "$datadir" ] || continue
+	if [ -z "$datadir" ] || [ ! -d "$datadir" ]; then
+		continue
+	fi
 	if [ -f "${datadir}/standby.signal" ] || [ -f "${datadir}/recovery.conf" ]; then
 		role="standby"
 	else
