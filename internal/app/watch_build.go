@@ -135,9 +135,8 @@ func sustainableCycles(checkEntry map[string]any, interval time.Duration) int {
 // unnoticed on a host whose generated watch-oom carried the default `for: {cycles: 10}`
 // against a condition true for one cycle.
 //
-// It is a warning and not a validation error on purpose: erroring would make the
-// upgrade path refuse to install on every host still carrying the old generated config
-// (remote_update_payload.sh exits 30), turning a monitoring fix into a blocked rollout.
+// It is a warning and not a validation error so the watch remains loadable while
+// surfacing its unsatisfiable condition.
 func warnEventCounterWindow(name string, entry, checkEntry map[string]any, interval time.Duration) string {
 	sustainable := sustainableCycles(checkEntry, interval)
 	if sustainable == 0 {

@@ -1977,14 +1977,6 @@ per thread or bounded by the process rate. The cell itself carries no marker: be
 floor a bound and a measurement are indistinguishable for any decision, and on an idle
 host every non-zero row is a bound — a marker on every row distinguishes nothing.
 
-> **Upgrading:** `cpu_thread` used to be the busiest *process* rather than the busiest
-> *thread*, which summed a multi-threaded process's cores together and could report
-> well above `100%` — describing a core that cannot exist. The corrected metric is
-> always **≤** the old one, so stored history shows a step down at the upgrade and
-> alerts that fired on the inflated value may stop firing. Nothing is migrated; use
-> `sermoctl state compact --before TIME` to drop the older semantics if the step
-> bothers you.
-
 `cpu`/`cpu_thread`/`total_cpu` and the `io*` metrics are rates: they are **not
 ready** on the first cycle and a condition over a not-ready value is false. A `%`
 threshold needs a metric with a percentage form (`memory`, `swap`, `cpu`,

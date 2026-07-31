@@ -153,14 +153,10 @@ async function mockAPI(page) {
         body = libraries;
         break;
       case "/api/events":
-        if (url.searchParams.has("page")) {
-          body = {
-            events: [{ id: 1, time: "2026-07-10T12:00:00Z", service: "web", kind: "action", status: "ok", message: "started" }],
-            has_more: false,
-          };
-        } else {
-          body = [];
-        }
+		body = {
+		  events: [{ id: 1, time: "2026-07-10T12:00:00Z", service: "web", kind: "action", status: "ok", message: "started" }],
+		  has_more: false,
+		};
         break;
       default: {
         const detailMatch = path.match(/^\/api\/services\/([^/]+)$/);

@@ -121,6 +121,23 @@ watches:
 	}
 }
 
+func TestDiagnoseFileWatchPaths(t *testing.T) {
+	global := baseGlobal + `
+watches:
+  files:
+    check: { type: file, paths: [/present, /missing] }
+    then: { hook: { command: [/bin/true] } }
+`
+	cfg := loadCfg(t, global, "")
+	r := Diagnose(cfg, fakeHost{paths: map[string]bool{"/present": true}})
+	if !has(r, `path "/missing" does not exist`) {
+		t.Fatalf("expected missing file-path warning: %+v", r.Findings)
+	}
+	if has(r, `path "/present" does not exist`) {
+		t.Fatalf("present file path must not warn: %+v", r.Findings)
+	}
+}
+
 func TestDiagnoseNewCheckResources(t *testing.T) {
 	global := baseGlobal + `
 watches:

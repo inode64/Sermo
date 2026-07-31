@@ -1134,7 +1134,7 @@ catalog metadata.
 
 Use `%i`/`${instance}` for named init instances discovered from bounded service
 metadata. Scope backend-specific discovery to matching service candidates; for
-example, a legacy OpenRC profile can expose only `service.openrc:
+example, an OpenRC-specific profile can expose only `service.openrc:
 ["openvpn.${instance}"]`, while a systemd template can expose
 `service.systemd: ["openvpn-client@${instance}"]`.
 

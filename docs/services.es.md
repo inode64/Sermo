@@ -1141,7 +1141,7 @@ catálogo `from_file`.
 
 Use `%i`/`${instance}` para instancias de init con nombre descubiertas desde metadatos de
 servicio acotados. Limite el descubrimiento específico de backend a candidatos de servicio
-coincidentes; por ejemplo, un perfil OpenRC heredado puede exponer solo `service.openrc:
+coincidentes; por ejemplo, un perfil específico de OpenRC puede exponer solo `service.openrc:
 ["openvpn.${instance}"]`, mientras una plantilla systemd puede exponer
 `service.systemd: ["openvpn-client@${instance}"]`.
 

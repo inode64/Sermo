@@ -91,7 +91,7 @@ deterministas de la API.
 | Métricas de proceso del daemon | `GET /api/daemon/metrics` | historial persistido de CPU/memoria/IO de sermod, de solo lectura y muestreado por el daemon independientemente de los clientes web |
 | Métricas de host | `GET /api/host` | valores actuales de CPU, memoria y carga del host |
 | Locks | `GET /api/locks` | locks de runtime con nombre |
-| Eventos | `GET /api/events` | actividad de servicios/watches; admite `limit`, `service`, `watch`, `kind`, `status`, `only_errors` |
+| Eventos | `GET /api/events` | página por cursor de actividad de servicios/watches; admite `limit`, `service`, `watch`, `kind`, `status`, `only_errors` |
 | Actividad reciente | `GET /api/activity` | resumen de eventos recientes |
 | Recuentos de monitorización | `GET /api/monitoring` | recuentos de servicios monitorizados frente a pausados |
 
