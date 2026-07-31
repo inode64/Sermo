@@ -2,6 +2,7 @@ package state
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -9,6 +10,77 @@ import (
 	"testing"
 	"time"
 )
+
+func TestStoreWithBatchCommitsTimeSeries(t *testing.T) {
+	s := openTemp(t)
+	at := time.Date(2026, 7, 31, 12, 0, 0, 0, time.UTC)
+
+	err := s.WithBatch(context.Background(), func(b Batch) error {
+		if err := b.RecordSLA("web", true, at); err != nil {
+			return err
+		}
+		if err := b.RecordCheckSLA("web", "http", true, at); err != nil {
+			return err
+		}
+		if err := b.RecordMeasurement("web", "http", 12, at); err != nil {
+			return err
+		}
+		return b.RecordMetric("web", "http", "requests", 42, at)
+	})
+	if err != nil {
+		t.Fatalf("WithBatch: %v", err)
+	}
+
+	service, err := s.SLASeries("web", at, at)
+	if err != nil || len(service) != 1 || service[0].Up != 1 || service[0].Total != 1 {
+		t.Fatalf("service SLA = %+v, err = %v", service, err)
+	}
+	check, err := s.CheckSLASeries("web", "http", at, at)
+	if err != nil || len(check) != 1 || check[0].Up != 1 || check[0].Total != 1 {
+		t.Fatalf("check SLA = %+v, err = %v", check, err)
+	}
+	measurements, err := s.MeasurementSeries("web", "http", at, at)
+	if err != nil || len(measurements) != 1 || measurements[0].Avg != 12 {
+		t.Fatalf("measurements = %+v, err = %v", measurements, err)
+	}
+	metrics, err := s.MetricSeries("web", "http", "requests", at, at)
+	if err != nil || len(metrics) != 1 || metrics[0].Avg != 42 {
+		t.Fatalf("metrics = %+v, err = %v", metrics, err)
+	}
+}
+
+func TestStoreWithBatchRollsBackOnRecordError(t *testing.T) {
+	s := openTemp(t)
+	at := time.Date(2026, 7, 31, 12, 0, 0, 0, time.UTC)
+	want := errors.New("reject cycle")
+
+	err := s.WithBatch(context.Background(), func(b Batch) error {
+		if err := b.RecordSLA("web", true, at); err != nil {
+			return err
+		}
+		return want
+	})
+	if !errors.Is(err, want) {
+		t.Fatalf("WithBatch error = %v, want %v", err, want)
+	}
+	series, err := s.SLASeries("web", at, at)
+	if err != nil {
+		t.Fatalf("SLASeries after rollback: %v", err)
+	}
+	if len(series) != 0 {
+		t.Fatalf("rolled back series = %+v, want empty", series)
+	}
+	if err := s.RecordSLA("web", true, at); err != nil {
+		t.Fatalf("RecordSLA after rollback: %v", err)
+	}
+}
+
+func TestStoreWithBatchRejectsNilCallback(t *testing.T) {
+	err := openTemp(t).WithBatch(context.Background(), nil)
+	if err == nil || !strings.Contains(err.Error(), "callback is nil") {
+		t.Fatalf("WithBatch(nil) error = %v", err)
+	}
+}
 
 func TestStoreActiveDefaultsToNotFound(t *testing.T) {
 	s := openTemp(t)

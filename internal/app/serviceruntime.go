@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"sync"
 	"time"
@@ -73,6 +74,10 @@ func NewServiceMetricSampler(stores ...ServiceMetricStore) *ServiceMetricSampler
 // Record appends one process-tree runtime sample for a service and returns the
 // same sample after rate fields (currently IO) have been computed.
 func (s *ServiceMetricSampler) Record(name string, cur web.ServiceRuntime) web.ServiceRuntime {
+	return s.record(context.Background(), name, cur)
+}
+
+func (s *ServiceMetricSampler) record(ctx context.Context, name string, cur web.ServiceRuntime) web.ServiceRuntime {
 	if s == nil {
 		return cur
 	}
@@ -85,7 +90,7 @@ func (s *ServiceMetricSampler) Record(name string, cur web.ServiceRuntime) web.S
 	s.mu.Lock()
 	cur = s.recordLocked(name, cur, at)
 	s.mu.Unlock()
-	s.recordPersistent(name, cur, at)
+	s.recordPersistent(ctx, name, cur, at)
 	return cur
 }
 
@@ -161,17 +166,34 @@ func (s *ServiceMetricSampler) Series(name string, cur web.ServiceRuntime, since
 	}
 }
 
-func (s *ServiceMetricSampler) recordPersistent(name string, cur web.ServiceRuntime, at time.Time) {
+func (s *ServiceMetricSampler) recordPersistent(ctx context.Context, name string, cur web.ServiceRuntime, at time.Time) {
 	if s == nil || s.store == nil {
 		return
 	}
-	recordPersistentMetrics(func(metric string, value float64, at time.Time) error {
-		return s.store.RecordServiceMetric(name, metric, value, at)
-	}, at, [3]persistentMetricValue{
+	values := [3]persistentMetricValue{
 		{name: metrics.MetricCPU, value: cur.CPU, ready: cur.HasCPU},
 		{name: metrics.MetricMemory, value: float64(cur.RSS), ready: cur.Count > 0},
 		{name: metrics.MetricIO, value: cur.IORate, ready: cur.IOReady},
-	})
+	}
+	if !hasReadyPersistentMetric(values) {
+		return
+	}
+	if recordPersistentMetricsWithBatch(ctx, s.store, func(records state.Batch) persistentMetricRecorder {
+		return func(metric string, value float64, at time.Time) error {
+			if err := records.RecordServiceMetric(name, metric, value, at); err != nil {
+				return fmt.Errorf("record service runtime metric: %w", err)
+			}
+			return nil
+		}
+	}, at, values) {
+		return
+	}
+	_ = recordPersistentMetrics(func(metric string, value float64, at time.Time) error {
+		if err := s.store.RecordServiceMetric(name, metric, value, at); err != nil {
+			return fmt.Errorf("record service runtime metric: %w", err)
+		}
+		return nil
+	}, at, values)
 }
 
 func (s *ServiceMetricSampler) persistentSeries(name string, cur web.ServiceRuntime, at time.Time, since time.Duration) (web.ServiceRuntimeMetrics, bool) {

@@ -217,14 +217,18 @@ func TestWorkerOperationSettlingObserveOnlySuppressesSideEffects(t *testing.T) {
 	h := &workerHarness{cache: failedCache("http")}
 	w := h.worker(alertRuleTree(nil), rules.Policy{}, nil)
 	w.OperationSettling = store
-	var recorded bool
-	w.RecordHealth = func(bool) { recorded = true }
+	var called bool
+	var recordAvailability bool
+	w.RecordCycle = func(_ context.Context, cycle cycleRecord) {
+		called = true
+		recordAvailability = cycle.recordAvailability
+	}
 
 	w.RunCycle(context.Background())
 	if _, ok := h.eventOf(eventKindAlert); ok {
 		t.Fatal("post-operation observe-only cycle must suppress alerts")
 	}
-	if recorded {
+	if !called || recordAvailability {
 		t.Fatal("post-operation observe-only cycle must not record SLA")
 	}
 	if _, found, _ := store.OperationSettling("web"); found {

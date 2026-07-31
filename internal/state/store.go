@@ -403,6 +403,80 @@ type Store struct {
 	stmts  map[string]*sql.Stmt
 }
 
+// Batch records related time-series samples in one SQLite transaction. A batch
+// is passed only to Store.WithBatch and must not be retained after its callback
+// returns.
+type Batch interface {
+	RecordSLA(service string, up bool, at time.Time) error
+	RecordCheckSLA(service, check string, up bool, at time.Time) error
+	RecordMeasurement(service, check string, valueMs float64, at time.Time) error
+	RecordMetric(service, check, metric string, value float64, at time.Time) error
+	RecordDaemonMetric(metric string, value float64, at time.Time) error
+	RecordServiceMetric(service, metric string, value float64, at time.Time) error
+}
+
+type batch struct {
+	tx    *sql.Tx
+	ctx   context.Context
+	stmts map[string]*sql.Stmt
+}
+
+// exec runs a batch statement through its transaction-local prepared-statement
+// cache. Store's cache cannot be used here: its one write connection is already
+// pinned by the transaction.
+func (b *batch) exec(ctx context.Context, query string, args ...any) (sql.Result, error) {
+	stmt, ok := b.stmts[query]
+	if !ok {
+		var err error
+		stmt, err = b.tx.PrepareContext(ctx, query)
+		if err != nil {
+			return nil, fmt.Errorf("prepare state batch statement: %w", err)
+		}
+		if b.stmts == nil {
+			b.stmts = map[string]*sql.Stmt{}
+		}
+		b.stmts[query] = stmt
+	}
+	result, err := stmt.ExecContext(ctx, args...)
+	if err != nil {
+		return nil, fmt.Errorf("exec state batch statement: %w", err)
+	}
+	return result, nil
+}
+
+func (b *batch) close() {
+	for _, stmt := range b.stmts {
+		_ = stmt.Close()
+	}
+	b.stmts = nil
+}
+
+// WithBatch runs record in one transaction. Returning an error from record
+// rolls back every sample in the batch; a later cycle can continue recording.
+func (s *Store) WithBatch(ctx context.Context, record func(Batch) error) error {
+	if record == nil {
+		return errors.New("record state batch: callback is nil")
+	}
+	if ctx == nil {
+		ctx = s.sqlCtx()
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin state batch: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	txBatch := &batch{tx: tx, ctx: ctx}
+	defer txBatch.close()
+	if err := record(txBatch); err != nil {
+		return fmt.Errorf("record state batch: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit state batch: %w", err)
+	}
+	return nil
+}
+
 // exec runs a write statement through the prepared-statement cache.
 func (s *Store) exec(ctx context.Context, query string, args ...any) (sql.Result, error) {
 	s.stmtMu.Lock()
@@ -1519,6 +1593,11 @@ func (s *Store) RecordSLA(service string, up bool, at time.Time) error {
 	return s.recordSLABucket(service, "", up, at)
 }
 
+// RecordSLA accumulates one observed monitoring cycle in this batch.
+func (b *batch) RecordSLA(service string, up bool, at time.Time) error {
+	return b.recordSLABucket(service, "", up, at)
+}
+
 // RecordCheckSLA accumulates one observed check execution into its current
 // UTC-minute bucket. Interval-deferred checks are not recorded by callers, so
 // the per-check SLA reflects only real check runs.
@@ -1526,12 +1605,27 @@ func (s *Store) RecordCheckSLA(service, check string, up bool, at time.Time) err
 	return s.recordSLABucket(service, check, up, at)
 }
 
+// RecordCheckSLA accumulates one observed check execution in this batch.
+func (b *batch) RecordCheckSLA(service, check string, up bool, at time.Time) error {
+	return b.recordSLABucket(service, check, up, at)
+}
+
 // recordSLABucket writes one observed cycle into the per-minute archive. An empty
 // check is the service-level series. down_buckets is recomputed rather than
 // accumulated: at this resolution the bucket is the unit it counts, so it is 1 as
 // soon as any cycle in the minute failed.
 func (s *Store) recordSLABucket(service, check string, up bool, at time.Time) error {
-	if _, err := s.exec(s.sqlCtx(), slaRecordStmt,
+	return recordSLABucket(s.sqlCtx(), s.exec, service, check, up, at)
+}
+
+func (b *batch) recordSLABucket(service, check string, up bool, at time.Time) error {
+	return recordSLABucket(b.ctx, b.exec, service, check, up, at)
+}
+
+type statementExecutor func(context.Context, string, ...any) (sql.Result, error)
+
+func recordSLABucket(ctx context.Context, exec statementExecutor, service, check string, up bool, at time.Time) error {
+	if _, err := exec(ctx, slaRecordStmt,
 		resMinute, service, check, alignBucket(at, resMinute), boolInt(up), boolInt(!up),
 	); err != nil {
 		return fmt.Errorf("record %s for %s: %w", slaKind(check), slaTarget(service, check), err)
@@ -1854,7 +1948,15 @@ func (m metricSeries) target() string {
 // record accumulates one observation into the series' current per-minute bucket:
 // n+1, sum+value and the running min/max.
 func (s *Store) record(m metricSeries, value float64, at time.Time) error {
-	if _, err := s.exec(s.sqlCtx(), metricRecordStmt,
+	return recordMetric(s.sqlCtx(), s.exec, m, value, at)
+}
+
+func (b *batch) record(m metricSeries, value float64, at time.Time) error {
+	return recordMetric(b.ctx, b.exec, m, value, at)
+}
+
+func recordMetric(ctx context.Context, exec statementExecutor, m metricSeries, value float64, at time.Time) error {
+	if _, err := exec(ctx, metricRecordStmt,
 		resMinute, m.scope, m.service, m.check, m.metric, alignBucket(at, resMinute),
 		value, value, value,
 	); err != nil {
@@ -1897,6 +1999,11 @@ func (s *Store) RecordMeasurement(service, check string, valueMs float64, at tim
 	return s.record(checkLatencySeries(service, check), valueMs, at)
 }
 
+// RecordMeasurement accumulates one latency observation in this batch.
+func (b *batch) RecordMeasurement(service, check string, valueMs float64, at time.Time) error {
+	return b.record(checkLatencySeries(service, check), valueMs, at)
+}
+
 // MeasurementSummary returns the average/min/max and sample count for a check over
 // the rolling window ending at now.
 func (s *Store) MeasurementSummary(service, check string, span time.Duration, now time.Time) (MeasurementStat, error) {
@@ -1913,6 +2020,11 @@ func (s *Store) MeasurementSeries(service, check string, from, to time.Time) ([]
 // counterpart of RecordMeasurement (latency).
 func (s *Store) RecordMetric(service, check, metric string, value float64, at time.Time) error {
 	return s.record(checkMetricSeries(service, check, metric), value, at)
+}
+
+// RecordMetric accumulates one named check metric in this batch.
+func (b *batch) RecordMetric(service, check, metric string, value float64, at time.Time) error {
+	return b.record(checkMetricSeries(service, check, metric), value, at)
 }
 
 // MetricSummary returns a named metric's average/min/max and sample count over the
@@ -1932,6 +2044,11 @@ func (s *Store) RecordDaemonMetric(metric string, value float64, at time.Time) e
 	return s.record(daemonRuntimeSeries(metric), value, at)
 }
 
+// RecordDaemonMetric accumulates one daemon metric in this batch.
+func (b *batch) RecordDaemonMetric(metric string, value float64, at time.Time) error {
+	return b.record(daemonRuntimeSeries(metric), value, at)
+}
+
 // DaemonMetricSummary returns a daemon metric's average/min/max and sample count
 // over the rolling window ending at now.
 func (s *Store) DaemonMetricSummary(metric string, span time.Duration, now time.Time) (MeasurementStat, error) {
@@ -1947,6 +2064,11 @@ func (s *Store) DaemonMetricSeries(metric string, from, to time.Time) ([]Measure
 // into its current UTC-minute bucket.
 func (s *Store) RecordServiceMetric(service, metric string, value float64, at time.Time) error {
 	return s.record(serviceRuntimeSeries(service, metric), value, at)
+}
+
+// RecordServiceMetric accumulates one service runtime metric in this batch.
+func (b *batch) RecordServiceMetric(service, metric string, value float64, at time.Time) error {
+	return b.record(serviceRuntimeSeries(service, metric), value, at)
 }
 
 // ServiceMetricSummary returns a service runtime metric's average/min/max and

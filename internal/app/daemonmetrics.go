@@ -106,7 +106,7 @@ func (s *DaemonMetricSampler) Run(ctx context.Context, interval time.Duration) {
 	if interval <= 0 {
 		interval = defaultDaemonMetricSampleInterval
 	}
-	s.sample()
+	s.sampleWithContext(ctx)
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 	for {
@@ -114,12 +114,16 @@ func (s *DaemonMetricSampler) Run(ctx context.Context, interval time.Duration) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			s.sample()
+			s.sampleWithContext(ctx)
 		}
 	}
 }
 
 func (s *DaemonMetricSampler) sample() {
+	s.sampleWithContext(context.Background())
+}
+
+func (s *DaemonMetricSampler) sampleWithContext(ctx context.Context) {
 	if s == nil {
 		return
 	}
@@ -128,7 +132,7 @@ func (s *DaemonMetricSampler) sample() {
 	s.samples = append(s.samples, sample)
 	s.trimLocked(sample.at.Add(-daemonMetricRetention))
 	s.mu.Unlock()
-	s.recordPersistent(sample)
+	s.recordPersistent(ctx, sample)
 }
 
 // Series returns current and historical daemon metrics without taking or
@@ -221,15 +225,24 @@ func (s *DaemonMetricSampler) sampleLocked() daemonMetricSample {
 	return cur
 }
 
-func (s *DaemonMetricSampler) recordPersistent(sample daemonMetricSample) {
+func (s *DaemonMetricSampler) recordPersistent(ctx context.Context, sample daemonMetricSample) {
 	if s.store == nil {
 		return
 	}
-	recordPersistentMetrics(s.store.RecordDaemonMetric, sample.at, [3]persistentMetricValue{
+	values := [3]persistentMetricValue{
 		{name: metrics.MetricMemory, value: float64(sample.rss), ready: sample.rssOK},
 		{name: metrics.MetricCPU, value: sample.cpu, ready: sample.cpuReady},
 		{name: metrics.MetricIO, value: sample.io, ready: sample.ioReady},
-	})
+	}
+	if !hasReadyPersistentMetric(values) {
+		return
+	}
+	if recordPersistentMetricsWithBatch(ctx, s.store, func(records state.Batch) persistentMetricRecorder {
+		return records.RecordDaemonMetric
+	}, sample.at, values) {
+		return
+	}
+	_ = recordPersistentMetrics(s.store.RecordDaemonMetric, sample.at, values)
 }
 
 func (s *DaemonMetricSampler) persistentSeries(sample daemonMetricSample, since time.Duration) (web.DaemonMetrics, bool) {
@@ -252,12 +265,44 @@ func (s *DaemonMetricSampler) persistentSeries(sample daemonMetricSample, since 
 	}, true
 }
 
-func recordPersistentMetrics(record func(string, float64, time.Time) error, at time.Time, values [3]persistentMetricValue) {
+type persistentMetricRecorder func(string, float64, time.Time) error
+
+func hasReadyPersistentMetric(values [3]persistentMetricValue) bool {
 	for _, value := range values {
 		if value.ready {
-			_ = record(value.name, value.value, at)
+			return true
 		}
 	}
+	return false
+}
+
+// recordPersistentMetrics records every ready value and returns the first
+// error. Direct callers intentionally ignore it to retain their best-effort
+// behavior; batch callers use it to roll back the complete metric sample.
+func recordPersistentMetrics(record persistentMetricRecorder, at time.Time, values [3]persistentMetricValue) error {
+	var firstErr error
+	for _, value := range values {
+		if value.ready {
+			if err := record(value.name, value.value, at); err != nil && firstErr == nil {
+				firstErr = err
+			}
+		}
+	}
+	return firstErr
+}
+
+// recordPersistentMetricsWithBatch records one daemon or service metric sample
+// atomically when the store supports batches. It reports whether it used that
+// path; callers retain the direct best-effort fallback for test stores.
+func recordPersistentMetricsWithBatch(ctx context.Context, store any, record func(state.Batch) persistentMetricRecorder, at time.Time, values [3]persistentMetricValue) bool {
+	batch, ok := store.(stateBatchStore)
+	if !ok {
+		return false
+	}
+	_ = batch.WithBatch(ctx, func(records state.Batch) error {
+		return recordPersistentMetrics(record(records), at, values)
+	})
+	return true
 }
 
 func loadPersistentMetricTriplet(check string, at time.Time, since time.Duration, reader persistentMetricReader) (persistentMetricTriplet, bool) {

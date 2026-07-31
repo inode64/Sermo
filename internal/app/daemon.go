@@ -520,7 +520,13 @@ func buildWorker(ctx context.Context, name, unit string, tree map[string]any, de
 	}
 	every, warnings := checkIntervals(tree, resolution)
 
-	recordMeasurement := measurementRecorder(deps, name, tree)
+	cycleWriter := newCycleWriter(deps, name, tree)
+	var recordMeasurement func(checks.Result)
+	var recordCycle func(context.Context, cycleRecord)
+	if cycleWriter != nil {
+		recordMeasurement = cycleWriter.RecordMeasurement
+		recordCycle = cycleWriter.RecordCycle
+	}
 	section, _ := tree[config.SectionChecks].(map[string]any)
 	_, checkTypes, _ := checkCatalog(tree, resolution)
 	built, checkWarnings, setCycleMetrics := buildWorkerCheckSet(section, checkDeps, sampleMetrics != nil)
@@ -555,8 +561,7 @@ func buildWorker(ctx context.Context, name, unit string, tree map[string]any, de
 		Observability:     deps.Observability,
 		DryRun:            config.DryRun(tree),
 		ResolveRefs:       func() rules.RefResolver { return rules.NewCheckResolver(preflightBuilt, maxParallel) },
-		RecordHealth:      healthRecorder(deps, name),
-		RecordChecks:      checkSLARecorder(deps, name),
+		RecordCycle:       recordCycle,
 		Publish:           publishSnapshots(deps.Snapshots, name, checkTypes),
 		PersistState:      ruleStatePersister(deps.RuleState, deps.Emit, name, ruleSet),
 		Now:               deps.Now,
@@ -759,46 +764,107 @@ func dueChecks(cycle int, built []checks.Built, every map[string]int, cache map[
 	return due
 }
 
-// measurementRecorder returns a hook that records a freshly-run check's latency
-// (ms) for tcp/ports/http/service checks, or nil when no measurement store is
-// wired or the service has no measured checks. Called only for checks that
-// actually ran this cycle (respecting per-check intervals), on observed cycles.
-func measurementRecorder(deps Deps, name string, tree map[string]any) func(checks.Result) {
-	store, ok := deps.SLA.(MeasurementRecorder)
-	if !ok || store == nil {
-		return nil
-	}
-	measured := measuredCheckNames(tree)     // latency-graphed check names
-	graphable := graphableCheckMetrics(tree) // check name -> named metrics
-	if len(measured) == 0 && len(graphable) == 0 {
-		return nil
-	}
-	now := deps.Now
-	if now == nil {
-		now = time.Now
-	}
-	fail := func(err error) {
-		if err != nil && deps.Emit != nil {
-			deps.Emit(Event{Service: name, Kind: eventKindError, Message: "record measurement: " + err.Error()})
-		}
-	}
-	return func(r checks.Result) {
-		if measured[r.Check] {
-			ms := float64(r.Latency) / float64(time.Millisecond)
-			fail(store.RecordMeasurement(name, r.Check, ms, now()))
-		}
-		for _, m := range graphable[r.Check] {
-			if v, ok := numericData(r.Data[m.Key]); ok {
-				fail(store.RecordMetric(name, r.Check, m.Key, v, now()))
-			}
-		}
-	}
+// stateBatchStore is the optional transaction capability a state store exposes.
+type stateBatchStore interface {
+	WithBatch(ctx context.Context, record func(state.Batch) error) error
 }
 
-// checkSLARecorder returns the worker's per-check SLA recording hook. Called
-// only for checks that actually ran this cycle, so per-check interval caching
-// does not create duplicate availability samples.
-func checkSLARecorder(deps Deps, name string) func(map[string]checks.Result, map[string]bool) {
+// cycleRecords is the subset of time-series record methods a worker cycle uses.
+// state.Batch and directCycleRecords both implement it, keeping the fallback for
+// test stores that intentionally do not provide transaction support.
+type cycleRecords interface {
+	SLARecorder
+	MeasurementRecorder
+}
+
+type directCycleRecords struct {
+	sla          SLARecorder
+	measurements MeasurementRecorder
+}
+
+// bestEffortCycleRecords remembers direct write errors while letting the cycle
+// continue. It preserves the pre-batch behavior for alternate state stores that
+// do not support transactions.
+type bestEffortCycleRecords struct {
+	cycleRecords
+	err error
+}
+
+func (r *bestEffortCycleRecords) record(err error) error {
+	if err != nil && r.err == nil {
+		r.err = err
+	}
+	return nil
+}
+
+func (r *bestEffortCycleRecords) RecordSLA(service string, up bool, at time.Time) error {
+	return r.record(r.cycleRecords.RecordSLA(service, up, at))
+}
+
+func (r *bestEffortCycleRecords) RecordCheckSLA(service, check string, up bool, at time.Time) error {
+	return r.record(r.cycleRecords.RecordCheckSLA(service, check, up, at))
+}
+
+func (r *bestEffortCycleRecords) RecordMeasurement(service, check string, valueMs float64, at time.Time) error {
+	return r.record(r.cycleRecords.RecordMeasurement(service, check, valueMs, at))
+}
+
+func (r *bestEffortCycleRecords) RecordMetric(service, check, metric string, value float64, at time.Time) error {
+	return r.record(r.cycleRecords.RecordMetric(service, check, metric, value, at))
+}
+
+func (r directCycleRecords) RecordSLA(service string, up bool, at time.Time) error {
+	if err := r.sla.RecordSLA(service, up, at); err != nil {
+		return fmt.Errorf("record SLA: %w", err)
+	}
+	return nil
+}
+
+func (r directCycleRecords) RecordCheckSLA(service, check string, up bool, at time.Time) error {
+	if err := r.sla.RecordCheckSLA(service, check, up, at); err != nil {
+		return fmt.Errorf("record check SLA: %w", err)
+	}
+	return nil
+}
+
+func (r directCycleRecords) RecordMeasurement(service, check string, valueMs float64, at time.Time) error {
+	if err := r.measurements.RecordMeasurement(service, check, valueMs, at); err != nil {
+		return fmt.Errorf("record measurement: %w", err)
+	}
+	return nil
+}
+
+func (r directCycleRecords) RecordMetric(service, check, metric string, value float64, at time.Time) error {
+	if err := r.measurements.RecordMetric(service, check, metric, value, at); err != nil {
+		return fmt.Errorf("record metric: %w", err)
+	}
+	return nil
+}
+
+type cycleMeasurement struct {
+	check  string
+	metric string
+	value  float64
+	at     time.Time
+}
+
+// cycleWriter buffers time-series samples while checks run, then records the
+// complete observed cycle in one short transaction. It deliberately starts the
+// transaction only after the checks finish, so a slow probe never holds the
+// store's single writer connection.
+type cycleWriter struct {
+	name         string
+	now          func() time.Time
+	emit         func(Event)
+	sla          SLARecorder
+	measurements MeasurementRecorder
+	batch        stateBatchStore
+	measured     map[string]bool
+	graphable    map[string][]checks.GraphMetric
+	records      []cycleMeasurement
+}
+
+func newCycleWriter(deps Deps, name string, tree map[string]any) *cycleWriter {
 	if deps.SLA == nil {
 		return nil
 	}
@@ -806,19 +872,99 @@ func checkSLARecorder(deps Deps, name string) func(map[string]checks.Result, map
 	if now == nil {
 		now = time.Now
 	}
-	return func(cache map[string]checks.Result, ran map[string]bool) {
-		for check, r := range cache {
+	w := &cycleWriter{name: name, now: now, emit: deps.Emit, sla: deps.SLA}
+	if measurements, ok := deps.SLA.(MeasurementRecorder); ok && measurements != nil {
+		w.measurements = measurements
+		w.measured = measuredCheckNames(tree)
+		w.graphable = graphableCheckMetrics(tree)
+	}
+	if batch, ok := deps.SLA.(stateBatchStore); ok {
+		w.batch = batch
+	}
+	return w
+}
+
+// RecordMeasurement stages a just-completed check result. It retains the
+// observation timestamp from completion so batching changes commits, not the
+// archive bucket assigned to a result.
+func (w *cycleWriter) RecordMeasurement(r checks.Result) {
+	if w == nil || w.measurements == nil {
+		return
+	}
+	at := w.now()
+	if w.measured[r.Check] {
+		w.records = append(w.records, cycleMeasurement{
+			check: r.Check,
+			value: float64(r.Latency) / float64(time.Millisecond),
+			at:    at,
+		})
+	}
+	for _, metric := range w.graphable[r.Check] {
+		if value, ok := numericData(r.Data[metric.Key]); ok {
+			w.records = append(w.records, cycleMeasurement{
+				check:  r.Check,
+				metric: metric.Key,
+				value:  value,
+				at:     at,
+			})
+		}
+	}
+}
+
+// RecordCycle writes the staged measurements plus, for observed cycles, check
+// and service SLA after checks complete. A failed batch rolls back the entire
+// cycle and emits one best-effort error event; it never blocks rule evaluation
+// or remediation.
+func (w *cycleWriter) RecordCycle(ctx context.Context, cycle cycleRecord) {
+	if w == nil {
+		return
+	}
+	defer func() { w.records = w.records[:0] }()
+
+	var err error
+	if w.batch != nil {
+		err = w.batch.WithBatch(ctx, func(records state.Batch) error {
+			return w.writeCycle(records, cycle)
+		})
+	} else {
+		direct := &bestEffortCycleRecords{cycleRecords: directCycleRecords{sla: w.sla, measurements: w.measurements}}
+		_ = w.writeCycle(direct, cycle)
+		err = direct.err
+	}
+	if err != nil && w.emit != nil {
+		w.emit(Event{Service: w.name, Kind: eventKindError, Message: "record cycle: " + err.Error()})
+	}
+}
+
+func (w *cycleWriter) writeCycle(records cycleRecords, cycle cycleRecord) error {
+	for _, sample := range w.records {
+		var err error
+		if sample.metric == "" {
+			err = records.RecordMeasurement(w.name, sample.check, sample.value, sample.at)
+		} else {
+			err = records.RecordMetric(w.name, sample.check, sample.metric, sample.value, sample.at)
+		}
+		if err != nil {
+			return fmt.Errorf("record cycle measurement for %s: %w", sample.check, err)
+		}
+	}
+	if cycle.recordAvailability {
+		for check, result := range cycle.cache {
 			// A verdictless check has no availability to record: neither side of
 			// "a backup is running" is uptime, and a bare measurement asserts
 			// nothing at all, so neither gets an SLA series.
-			if !ran[check] || r.Skipped || r.Verdictless() {
+			if !cycle.ran[check] || result.Skipped || result.Verdictless() {
 				continue
 			}
-			if err := deps.SLA.RecordCheckSLA(name, check, r.Healthy(), now()); err != nil && deps.Emit != nil {
-				deps.Emit(Event{Service: name, Kind: eventKindError, Message: "record check sla: " + err.Error()})
+			if err := records.RecordCheckSLA(w.name, check, result.Healthy(), w.now()); err != nil {
+				return fmt.Errorf("record cycle check SLA for %s: %w", check, err)
 			}
 		}
+		if err := records.RecordSLA(w.name, cycle.up, w.now()); err != nil {
+			return fmt.Errorf("record cycle SLA: %w", err)
+		}
 	}
+	return nil
 }
 
 // graphableCheckMetrics maps each configured check name to the named metrics its
@@ -897,24 +1043,6 @@ func measuredCheckNames(tree map[string]any) map[string]bool {
 		}
 	}
 	return out
-}
-
-// healthRecorder returns the worker's per-cycle SLA recording hook, or nil when
-// no store is wired. A write error is logged through Emit but never blocks the
-// cycle — SLA accounting is best-effort and must not affect remediation.
-func healthRecorder(deps Deps, name string) func(up bool) {
-	if deps.SLA == nil {
-		return nil
-	}
-	now := deps.Now
-	if now == nil {
-		now = time.Now
-	}
-	return func(up bool) {
-		if err := deps.SLA.RecordSLA(name, up, now()); err != nil && deps.Emit != nil {
-			deps.Emit(Event{Service: name, Kind: eventKindError, Message: "record sla: " + err.Error()})
-		}
-	}
 }
 
 // applyMonitorMode reconciles a service's persisted monitoring state with its
@@ -1075,7 +1203,7 @@ func liveSampler(service string, lc *metrics.Collector, live *LiveMetrics, servi
 	if now == nil {
 		now = time.Now
 	}
-	return func(_ context.Context) {
+	return func(ctx context.Context) {
 		at := now()
 		pidList := pids()
 		sc := lc.SampleServiceCPU(service, pidList)
@@ -1106,7 +1234,7 @@ func liveSampler(service string, lc *metrics.Collector, live *LiveMetrics, servi
 		if started, ok := oldestPIDStart(pidList, lc.Reader, at); ok {
 			cur.StartedAt, cur.Uptime, cur.UptimeSeconds = serviceRuntimeUptime(started, at)
 		}
-		serviceMetrics.Record(service, cur)
+		serviceMetrics.record(ctx, service, cur)
 	}
 }
 

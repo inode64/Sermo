@@ -41,13 +41,15 @@ func TestRecordHealthReflectsRequiredChecks(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			var got *bool
 			w := &Worker{
-				Service:      "web",
-				Checks:       func(context.Context, checks.Deps) map[string]checks.Result { return tc.cache },
-				RecordHealth: func(up bool) { got = &up },
+				Service: "web",
+				Checks:  func(context.Context, checks.Deps) map[string]checks.Result { return tc.cache },
+				RecordCycle: func(_ context.Context, cycle cycleRecord) {
+					got = &cycle.up
+				},
 			}
 			w.RunCycle(context.Background())
 			if got == nil {
-				t.Fatal("RecordHealth was not called for an observed cycle")
+				t.Fatal("RecordCycle was not called for an observed cycle")
 			}
 			if *got != tc.want {
 				t.Fatalf("recorded up=%v, want %v", *got, tc.want)
@@ -64,7 +66,7 @@ func TestRecordHealthSkippedWhenPaused(t *testing.T) {
 		Checks: func(context.Context, checks.Deps) map[string]checks.Result {
 			return map[string]checks.Result{"http": {OK: false}}
 		},
-		RecordHealth: func(bool) { called = true },
+		RecordCycle: func(context.Context, cycleRecord) { called = true },
 	}
 	w.RunCycle(context.Background())
 	if called {
@@ -74,19 +76,24 @@ func TestRecordHealthSkippedWhenPaused(t *testing.T) {
 
 func TestCheckSLARecorderOnlyRecordsRanNonSkippedChecks(t *testing.T) {
 	store := &checkSLACapture{}
-	record := checkSLARecorder(Deps{
+	writer := newCycleWriter(Deps{
 		SLA: store,
 		Now: func() time.Time { return time.Unix(0, 0) },
-	}, "svc")
-	if record == nil {
-		t.Fatal("expected check SLA recorder")
+	}, "svc", nil)
+	if writer == nil {
+		t.Fatal("expected cycle writer")
 	}
-	record(map[string]checks.Result{
-		"http":   {Check: "http", OK: false},
-		"cert":   {Check: "cert", OK: false, Condition: true},
-		"cached": {Check: "cached", OK: true},
-		"gated":  {Check: "gated", OK: true, Skipped: true},
-	}, map[string]bool{"http": true, "cert": true, "gated": true})
+	writer.RecordCycle(context.Background(), cycleRecord{
+		cache: map[string]checks.Result{
+			"http":   {Check: "http", OK: false},
+			"cert":   {Check: "cert", OK: false, Condition: true},
+			"cached": {Check: "cached", OK: true},
+			"gated":  {Check: "gated", OK: true, Skipped: true},
+		},
+		ran:                map[string]bool{"http": true, "cert": true, "gated": true},
+		up:                 true,
+		recordAvailability: true,
+	})
 
 	got := map[string]bool{}
 	for _, r := range store.records {
@@ -102,15 +109,20 @@ func TestCheckSLARecorderOnlyRecordsRanNonSkippedChecks(t *testing.T) {
 // raw flag, a meaningless 100% — neither is uptime.
 func TestCheckSLARecorderSkipsStateSensors(t *testing.T) {
 	store := &checkSLACapture{}
-	record := checkSLARecorder(Deps{
+	writer := newCycleWriter(Deps{
 		SLA: store,
 		Now: func() time.Time { return time.Unix(0, 0) },
-	}, "svc")
-	record(map[string]checks.Result{
-		"backup": {Check: "backup", OK: false, Reports: checks.ReportsState},
-		"busy":   {Check: "busy", OK: true, Reports: checks.ReportsState},
-		"http":   {Check: "http", OK: true},
-	}, map[string]bool{"backup": true, "busy": true, "http": true})
+	}, "svc", nil)
+	writer.RecordCycle(context.Background(), cycleRecord{
+		cache: map[string]checks.Result{
+			"backup": {Check: "backup", OK: false, Reports: checks.ReportsState},
+			"busy":   {Check: "busy", OK: true, Reports: checks.ReportsState},
+			"http":   {Check: "http", OK: true},
+		},
+		ran:                map[string]bool{"backup": true, "busy": true, "http": true},
+		up:                 true,
+		recordAvailability: true,
+	})
 
 	got := map[string]bool{}
 	for _, r := range store.records {
