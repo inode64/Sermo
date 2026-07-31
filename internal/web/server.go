@@ -728,8 +728,10 @@ type Check struct {
 	Ran      bool           `json:"ran"`          // false if not observed yet
 	At       string         `json:"at,omitempty"` // RFC3339 when the check last ran (cached checks keep prior time)
 	// Metrics are the check's graphable named series (time-series), if any.
+	// A check's availability is not embedded here: the dashboard reads it from
+	// /api/services/{name}/sla?check=NAME, on the window its selector is on, the
+	// same endpoint and window the service-level timeline uses.
 	Metrics []CheckMetric `json:"metrics,omitempty"`
-	SLA     []SLAWindow   `json:"sla,omitempty"`
 }
 
 // SLAWindow is one rolling availability window. Ratio is nil when the window has
@@ -1049,9 +1051,10 @@ type Backend interface {
 	AlertMountUsers(ctx context.Context, name string) MountAlertResult
 	// Detail returns one service's checks and SLA; ok is false for unknown names.
 	Detail(ctx context.Context, name string) (Detail, bool)
-	// Series returns a service's per-minute availability history over since; ok is
-	// false for unknown names.
-	Series(ctx context.Context, name string, since time.Duration) ([]SeriesPoint, bool)
+	// Series returns a service's per-minute availability history over since, or
+	// one of its checks' when check is non-empty; ok is false for unknown names
+	// and for a check the service does not define.
+	Series(ctx context.Context, name, check string, since time.Duration) ([]SeriesPoint, bool)
 	// Metrics returns a check's latency summary and per-minute history over since;
 	// ok is false for unknown service names.
 	Metrics(ctx context.Context, name, check, metric string, since time.Duration) (MetricSeries, bool)
@@ -1729,10 +1732,15 @@ func (s *Server) seriesSince(r *http.Request) time.Duration {
 
 func (s *Server) handleSeries(w http.ResponseWriter, r *http.Request) {
 	since := s.seriesSince(r)
+	check := r.URL.Query().Get(apiQueryCheck)
 	backend, generation := s.backendRead()
-	points, ok := backend.Series(r.Context(), r.PathValue(apiParamName), since)
+	points, ok := backend.Series(r.Context(), r.PathValue(apiParamName), check, since)
 	if !ok {
-		writeError(w, http.StatusNotFound, apiErrorUnknownService)
+		notFound := apiErrorUnknownService
+		if check != "" {
+			notFound = apiErrorUnknownServiceOrCheck
+		}
+		writeError(w, http.StatusNotFound, notFound)
 		return
 	}
 	s.writeBackendJSON(w, http.StatusOK, map[string]any{apiJSONKeySince: since.String(), apiJSONKeyPoints: points}, generation)

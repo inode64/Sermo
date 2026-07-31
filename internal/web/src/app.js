@@ -3404,10 +3404,25 @@ function loadServiceSLA(name, generation = dashboardGeneration) {
     });
 }
 
-// drawSLAChart renders the detail SLA panel as a status-page style bar strip:
-// one full-height bar per sub-span (oldest left), colored by availability,
-// hatched when the sub-span has no observations.
-function drawSLAChart(points, win) {
+// loadCheckSLA fills one check's SLA cell from the same endpoint and window
+// selector the service panel uses, scoped with ?check=.
+function loadCheckSLA(service, check, generation = dashboardGeneration) {
+  const cell = document.getElementById(checkSLADomId(service, check));
+  if (!cell) return Promise.resolve(true);
+  return loadServiceWindowGraph(service, generation,
+    (win) => serviceSLAAPI(service, win, check),
+    (body, win) => { cell.innerHTML = drawCheckSLAStrip(body.points || [], win); },
+    (e) => { cell.innerHTML = `<span class="bad">Failed: ${esc(e.message)}</span>`; });
+}
+
+// slaStrip builds the status-page availability band shared by the service SLA
+// panel and every check's SLA cell: one bar per sub-span (oldest left), coloured
+// by availability, hatched before the first observation. Returning null means
+// the window holds no sample at all, which each caller words for itself.
+//
+// Both scopes render through here so a check can never present a window as a
+// flat availability figure while the service shows the same window's gaps.
+function slaStrip(points, win) {
   const cols = slaBarCount;
   const span = windowMs[win || defaultMetricWindow] || millisecondsPerDay;
   const endMs = Date.now();
@@ -3415,7 +3430,7 @@ function drawSLAChart(points, win) {
   const observed = (points || []).map((p) => ({ p, t: slaPointTime(p), pct: slaPointPct(p) }))
     .filter((o) => o.t != null && o.t >= startMs && o.t <= endMs && o.pct != null)
     .sort((a, b) => a.t - b.t);
-  if (!observed.length) return '<span class="muted">No SLA data yet for this window.</span>';
+  if (!observed.length) return null;
 
   const { buckets } = bucketize(points, span, cols,
     () => ({ up: 0, total: 0, downBuckets: 0 }),
@@ -3450,10 +3465,33 @@ function drawSLAChart(points, win) {
   const affectedMinutes = slaAffectedMinutes(incidents);
   const latestPct = observed[observed.length - 1].pct;
   const slaAria = `SLA timeline: latest ${fmtPct(latestPct)}, ${affectedMinutes} affected minute${affectedMinutes === 1 ? "" : "s"}`;
-  const dataTable = slaChartDataTable(observed);
-  return `${dataTable}<div class="sla-bars" role="img" aria-label="${esc(slaAria)}">${bars}</div>` +
-    `<div class="sla-bars-axis"><span>${esc(fmtTime(startMs))}</span><span>now</span></div>` +
-    renderSLAIncidentList(incidents);
+  return {
+    observed, incidents, startMs,
+    band: `<div class="sla-bars" role="img" aria-label="${esc(slaAria)}">${bars}</div>`,
+  };
+}
+
+// drawSLAChart renders the service detail SLA panel: the shared band plus its
+// axis, screen-reader table and incident list.
+function drawSLAChart(points, win) {
+  const strip = slaStrip(points, win);
+  if (strip == null) return '<span class="muted">No SLA data yet for this window.</span>';
+  return `${slaChartDataTable(strip.observed)}${strip.band}` +
+    `<div class="sla-bars-axis"><span>${esc(fmtTime(strip.startMs))}</span><span>now</span></div>` +
+    renderSLAIncidentList(strip.incidents);
+}
+
+// drawCheckSLAStrip renders one check's SLA cell: the same band as the service,
+// with the window's availability beside it. A cell is too small for the axis and
+// incident list, so it carries them in the band's tooltips only.
+function drawCheckSLAStrip(points, win) {
+  const strip = slaStrip(points, win);
+  if (strip == null) return '<span class="muted">No SLA data yet for this window.</span>';
+  let up = 0, total = 0;
+  (points || []).forEach((p) => { up += Number(p.up || 0); total += Number(p.total || 0); });
+  const pctText = total > 0 ? fmtPct(up / total * percentScale) : "—";
+  return `${strip.band}<div class="sla-cell-foot"><span class="sla-pct">${pctText}</span>` +
+    `<span class="sla-count">${up}/${total}</span></div>`;
 }
 
 // totalsCpuCell renders the whole-tree machine-wide CPU rate for the General data
@@ -3476,8 +3514,18 @@ function detailDomId(name, suffix) {
   return "svc-detail-" + detailDomKey(name) + "-" + suffix;
 }
 
+function checkSLADomId(service, check) {
+  return detailDomId(service, `sla-${detailDomKey(check)}`);
+}
+
 function serviceMeasuredChecks(d) {
   return (d.checks || []).filter((c) => metricTypes.includes(c.type));
+}
+
+// serviceSLAChecks are the checks whose SLA cell is loaded on demand: every one
+// that records availability at all.
+function serviceSLAChecks(d) {
+  return (d.checks || []).filter((c) => !verdictlessCheck(c));
 }
 
 function serviceCheckMetrics(d) {
@@ -3541,10 +3589,11 @@ function checkStateHTML(c, age) {
 }
 
 // checkSLAHTML renders the SLA cell, or an explicit n/a for a check that will
-// never have one.
-function checkSLAHTML(c) {
+// never have one. The strip itself arrives from loadCheckSLA, on the window the
+// detail's selector is on.
+function checkSLAHTML(service, c) {
   if (verdictlessCheck(c)) return tpl`<span class="muted" title="This check reports no availability">n/a</span>`;
-  return renderSLAWindows(c.sla, true);
+  return tpl`<div id="${checkSLADomId(service, c.name)}" class="muted sla-check-strip">loading…</div>`;
 }
 
 function renderServiceDetail(d) {
@@ -3562,7 +3611,7 @@ function renderServiceDetail(d) {
     const detailCell = (hasReadings || c.message) ? tpl`${readings}${msg}` : "—";
     return tpl`<tr><td>${c.name}</td><td class="muted">${c.type || ""}</td>
       <td>${state}${c.optional ? tpl` <span class="muted">(optional)</span>` : nothing}</td>
-      <td class="sla-cell">${checkSLAHTML(c)}</td>
+      <td class="sla-cell">${checkSLAHTML(d.name, c)}</td>
       <td class="muted">${detailCell}</td></tr>`;
   });
   const checks = checkRows.length ? checkRows : tpl`<tr><td colspan="5" class="muted">No checks.</td></tr>`;
@@ -3746,6 +3795,7 @@ async function refreshServiceGraphs(d, generation = dashboardGeneration) {
   const checkMetrics = serviceCheckMetrics(d);
   syncWindowButtons("setMetricWin", serviceMetricState(d.name).window, d.name);
   const pending = [loadServiceSLA(d.name, generation)];
+  pending.push(...serviceSLAChecks(d).map((c) => loadCheckSLA(d.name, c.name, generation)));
   pending.push(...checkMetrics.map((metric) => loadCheckMetric(d.name, metric, generation)));
   if (!d.no_resident_process) {
     if (measured.length) pending.push(loadMetrics(d.name, measured, generation));

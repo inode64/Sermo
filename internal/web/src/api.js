@@ -89,6 +89,9 @@ export function serviceMetricsAPI(name, check, since, metric = "") {
 }
 export function servicePreflightAPI(name) { return serviceAPI(name, apiSuffixPreflight); }
 export function serviceRuntimeAPI(name, since) { return serviceAPI(name, apiSinceSuffix(apiSuffixRuntime, since)); }
-export function serviceSLAAPI(name, since) { return serviceAPI(name, apiSinceSuffix(apiSuffixSLA, since)); }
+export function serviceSLAAPI(name, since, check = "") {
+  const checkQuery = check ? `&${apiQueryCheck}=${encodeURIComponent(check)}` : "";
+  return serviceAPI(name, `${apiSinceSuffix(apiSuffixSLA, since)}${checkQuery}`);
+}
 export function stateCompactAPI(query = "") { return `${apiStateCompactPath}${query}`; }
 export function watchAPI(name, suffix = "") { return apiEntityPath(apiWatchesPath, name, suffix); }

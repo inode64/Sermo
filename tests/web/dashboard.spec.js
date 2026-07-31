@@ -111,12 +111,12 @@ const libraries = [{
 
 function serviceDetail(name) {
   const service = services.find((item) => item.name === name);
-  const namedMetrics = [{ name: "users", type: "users", ran: true, ok: true, message: "2 users", metrics: [{ name: "count", unit: "users" }], sla: [] }];
+  const namedMetrics = [{ name: "users", type: "users", ran: true, ok: true, message: "2 users", metrics: [{ name: "count", unit: "users" }] }];
   return {
     ...service,
     unit: `${name}.service`,
     interval: "30s",
-    checks: [{ name: "latency", type: "http", ran: true, ok: true, message: "status 200", sla: [] }, ...namedMetrics],
+    checks: [{ name: "latency", type: "http", ran: true, ok: true, message: "status 200" }, ...namedMetrics],
     processes: [{
       pid: name === "web" ? 101 : 202, cmdline: [name], user: "root", role: "main", rss: 1048576,
       // 96.25% spread over threads, of which the busiest held 61.5% of one core:
@@ -166,13 +166,16 @@ async function mockAPI(page) {
         else if (path.endsWith("/sla")) {
           if (path.startsWith("/api/services/web/")) {
             const now = Date.now();
-            body = {
-              since: url.searchParams.get("since"),
-              points: [
+            // A check's series is scoped with ?check= and is deliberately
+            // distinct from the service's, so the strip cannot be passing by
+            // reading the service series for a check.
+            const points = url.searchParams.get("check")
+              ? [{ start: new Date(now - 10 * 60 * 1000).toISOString(), up: 40, total: 40, down_buckets: 0 }]
+              : [
                 { start: new Date(now - 30 * 60 * 1000).toISOString(), up: 60, total: 60, down_buckets: 0 },
                 { start: new Date(now - 5 * 60 * 1000).toISOString(), up: 30, total: 60, down_buckets: 1 },
-              ],
-            };
+              ];
+            body = { since: url.searchParams.get("since"), points };
           } else body = { since: url.searchParams.get("since"), points: [] };
         }
         else if (path.endsWith("/metrics")) {
@@ -320,12 +323,33 @@ test("global search opens a service and exposes individual actions", async ({ pa
 test("service SLA renders a status-page bar strip with incidents", async ({ page }) => {
   await page.locator("#svc-row-web .row-toggle").click();
   const detail = page.locator('[data-service-detail="web"]');
-  const strip = detail.locator(".sla-bars");
+  const strip = detail.locator(".sla-chart-panel .sla-bars");
   await expect(strip).toBeVisible();
   await expect(strip.locator(".sla-bar-seg")).toHaveCount(90);
   await expect(strip.locator(".sla-bar-seg:not(.sla-gap)")).toHaveCount(2);
   await expect(detail.locator(".sla-bars-axis")).toContainText("now");
   await expect(detail.locator(".sla-incident-list")).toContainText("Incidents");
+});
+
+// A check's availability comes from the same endpoint and window as the service
+// timeline, and renders the same band. The band is what keeps unobserved time
+// visible: the previous per-check strip collapsed a barely-measured window into
+// a flat 100% bar, which read as a fully measured window.
+test("check SLA uses the service series endpoint and hatches unobserved time", async ({ page }) => {
+  const checkRequest = page.waitForRequest((request) => {
+    const url = new URL(request.url());
+    return url.pathname === "/api/services/web/sla" && url.searchParams.get("check") === "latency";
+  });
+  await page.locator("#svc-row-web .row-toggle").click();
+  await checkRequest;
+
+  const cell = page.locator('[data-service-detail="web"] .sla-check-strip').first();
+  const bars = cell.locator(".sla-bar-seg");
+  await expect(bars).toHaveCount(90);
+  // The mock's single check sample sits 10 minutes into a 24h window, so every
+  // bar before it must stay hatched rather than inherit the window's ratio.
+  expect(await cell.locator(".sla-bar-seg.sla-gap").count()).toBeGreaterThan(0);
+  await expect(cell.locator(".sla-count")).toHaveText("40/40");
 });
 
 test("service detail graphs named check metrics and reports fetch failures", async ({ page }) => {

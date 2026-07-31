@@ -157,7 +157,7 @@ func onlyMissingProcesses(missing []string) bool {
 }
 
 // checkView builds one check's detail row from its latest snapshot.
-func (b *WebBackend) checkView(service, cn string, e *webEntry, snap map[string]CheckSnapshot, now time.Time) web.Check {
+func (b *WebBackend) checkView(cn string, e *webEntry, snap map[string]CheckSnapshot) web.Check {
 	cs, seen := snap[cn]
 	current := seen && b.serviceCheckSnapshotCurrent(e, cn, cs)
 	ch := web.Check{
@@ -187,12 +187,6 @@ func (b *WebBackend) checkView(service, cn string, e *webEntry, snap map[string]
 	}
 	for _, m := range checks.DeclaredGraphMetrics(e.checkTypes[cn], e.checkUnits[cn]) {
 		ch.Metrics = append(ch.Metrics, web.CheckMetric{Name: m.Key, Unit: m.Unit})
-	}
-	// A verdictless check records no availability, so it has no SLA to show.
-	// Skipping it here also drops whatever series it accumulated before the mode
-	// was declared, instead of leaving stale windows to age out.
-	if !checks.VerdictlessMode(ch.Reports) {
-		ch.SLA = b.checkSLAWindows(service, cn, now)
 	}
 	return ch
 }
@@ -389,7 +383,7 @@ func (b *WebBackend) Detail(ctx context.Context, name string) (web.Detail, bool)
 
 	snap := b.snapshots.Get(name)
 	for _, cn := range e.checkNames {
-		d.Checks = append(d.Checks, b.checkView(name, cn, e, snap, now))
+		d.Checks = append(d.Checks, b.checkView(cn, e, snap))
 	}
 
 	if report, err := serviceLocksReport(b.cfg, name); err == nil {

@@ -237,9 +237,9 @@ func (h *WebBackendHolder) Detail(ctx context.Context, name string) (web.Detail,
 	return webCallOK(h, web.Detail{}, func(b *WebBackend) (web.Detail, bool) { return b.Detail(ctx, name) })
 }
 
-// Series returns a service's SLA series from the active backend.
-func (h *WebBackendHolder) Series(ctx context.Context, name string, since time.Duration) ([]web.SeriesPoint, bool) {
-	return webCallOK(h, nil, func(b *WebBackend) ([]web.SeriesPoint, bool) { return b.Series(ctx, name, since) })
+// Series returns a service's (or one check's) SLA series from the active backend.
+func (h *WebBackendHolder) Series(ctx context.Context, name, check string, since time.Duration) ([]web.SeriesPoint, bool) {
+	return webCallOK(h, nil, func(b *WebBackend) ([]web.SeriesPoint, bool) { return b.Series(ctx, name, check, since) })
 }
 
 // Metrics returns a check's metric series from the active backend.

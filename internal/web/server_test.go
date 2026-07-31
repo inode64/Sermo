@@ -12,6 +12,10 @@ import (
 	"sermo/internal/mountctl"
 )
 
+// testSeriesCheck is the only check name fakeBackend serves an SLA series for,
+// so an unknown one still resolves to a 404.
+const testSeriesCheck = "http"
+
 type fakeBackend struct {
 	services        []Service
 	applications    []Application
@@ -30,6 +34,7 @@ type fakeBackend struct {
 	raidControlled  []string
 	failOp          bool
 	seriesSince     time.Duration
+	seriesCheck     string
 	eventQuery      EventQuery
 	metricCheck     string
 	metricSince     time.Duration
@@ -120,12 +125,19 @@ func (f *fakeBackend) Detail(_ context.Context, name string) (Detail, bool) {
 	}
 	return Detail{}, false
 }
-func (f *fakeBackend) Series(_ context.Context, name string, since time.Duration) ([]SeriesPoint, bool) {
+func (f *fakeBackend) Series(_ context.Context, name, check string, since time.Duration) ([]SeriesPoint, bool) {
+	if check != "" && check != testSeriesCheck {
+		return nil, false
+	}
 	for _, s := range f.services {
 		if s.Name == name {
-			f.seriesSince = since
+			f.seriesSince, f.seriesCheck = since, check
 			r := 1.0
-			return []SeriesPoint{{Start: "2026-06-07T10:00:00Z", Ratio: &r, Up: 2, Total: 2}}, true
+			total := int64(2)
+			if check != "" {
+				total = 4 // distinguishes the check series from the service's
+			}
+			return []SeriesPoint{{Start: "2026-06-07T10:00:00Z", Ratio: &r, Up: 2, Total: total}}, true
 		}
 	}
 	return nil, false
@@ -756,6 +768,44 @@ func TestSLASeries(t *testing.T) {
 	}
 	if len(body.Points) != 1 || body.Points[0].Total != 2 {
 		t.Fatalf("unexpected points: %+v", body.Points)
+	}
+}
+
+// TestSLASeriesScopedToCheck covers the query that lets a check's availability
+// come from the same endpoint, and the same window, as the service timeline.
+func TestSLASeriesScopedToCheck(t *testing.T) {
+	b := &fakeBackend{services: []Service{{Name: "web"}}}
+	h := newServer(b)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(
+		http.MethodGet,
+		testPathQuery(testServicePath("web", apiSegmentSLA), testQueryParam(apiQueryCheck, testSeriesCheck)),
+		nil,
+	))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("check series status %d", rec.Code)
+	}
+	if b.seriesCheck != testSeriesCheck {
+		t.Fatalf("check not forwarded: %q", b.seriesCheck)
+	}
+	var body struct {
+		Points []SeriesPoint `json:"points"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(body.Points) != 1 || body.Points[0].Total != 4 {
+		t.Fatalf("points = %+v, want the check series", body.Points)
+	}
+
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(
+		http.MethodGet,
+		testPathQuery(testServicePath("web", apiSegmentSLA), testQueryParam(apiQueryCheck, "absent")),
+		nil,
+	))
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("unknown check status %d, want 404", rec.Code)
 	}
 }
 
