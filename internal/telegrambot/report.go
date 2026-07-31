@@ -64,9 +64,10 @@ type SLAWindow struct {
 }
 
 const (
-	// EventsDefaultLimit and EventsMaxLimit bound the /events reply size.
+	// EventsDefaultLimit is the number of events returned when no limit is requested.
 	EventsDefaultLimit = 10
-	EventsMaxLimit     = 50
+	// EventsMaxLimit is the largest number of events returned in one reply.
+	EventsMaxLimit = 50
 )
 
 // Fallbacks for fields a report may not carry. Named so the same field reads

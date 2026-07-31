@@ -10,10 +10,9 @@ import (
 )
 
 const (
-	// FormatBcrypt and FormatSHA256 name the credential formats Hash produces.
-	// They live here, next to the parser that reads them back, so adding a
-	// format is one package's business.
+	// FormatBcrypt names the bcrypt credential format Hash produces.
 	FormatBcrypt = "bcrypt"
+	// FormatSHA256 names the SHA-256 credential format Hash produces.
 	FormatSHA256 = "sha256"
 )
 
