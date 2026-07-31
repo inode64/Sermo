@@ -275,10 +275,8 @@ remediación automática, el progreso de las ventanas `for`/`within` de las regl
 últimas lecturas de comprobaciones de service y watches de host, de modo que reiniciar
 `sermod` no restablece cuándo una regla puede actuar de nuevo ni hace que el panel pierda
 el último resultado real del ciclo del daemon. Las mediciones de SLA y de comprobaciones,
-además del historial de métricas de
-proceso de service y daemon mostrado en la interfaz web, también viven ahí. El esquema está versionado y se migra automáticamente hacia
-adelante, de modo que las funciones futuras
-pueden añadir tablas sin una actualización manual.
+además del historial de métricas de proceso de service y daemon mostrado en la interfaz
+web, también viven ahí.
 
 Ambos directorios se crean **0700, propietario root**. En systemd provienen del
 `tmpfiles.d/sermo.conf` distribuido (instalado en `/usr/lib/tmpfiles.d/sermo.conf`),
@@ -547,12 +545,12 @@ Subir una retención cuesta proporcionalmente más disco a esa resolución; baja
 efecto en la siguiente pasada de mantenimiento. Recuperar las páginas liberadas necesita
 un `VACUUM`, que `sermoctl state compact` realiza.
 
-Al dimensionar el disco, presupuesta aproximadamente el **doble** de las filas de los
-archivos: cada tabla de archivo lleva un índice sobre `(res, bucket)` para que la
-consolidación y la poda busquen en lugar de escanear la resolución completa, y en estas
-tablas organizadas por clave ese índice cuesta más o menos lo mismo que la propia tabla.
-A cambio, la pasada de mantenimiento no retiene la conexión de escritura que comparten
-los ciclos de monitorización.
+El mantenimiento de archivos escanea la partición de resolución elegida en lugar de
+mantener índices secundarios `(res, bucket)`. Con la retención fina predeterminada de
+tres horas ese escaneo está acotado, mientras que eliminar las dos copias de índice
+reduce la amplificación de escritura y el uso de disco. Al dimensionar, cuenta las filas
+de archivo más el margen normal de SQLite/WAL; no dupliques la estimación por esos
+índices eliminados.
 
 Cuando `sermoctl daemon reload` pide al daemon en ejecución que recargue,
 `sermod` lee la configuración desde la ruta pasada a `sermod run --config` (el

@@ -8,10 +8,8 @@
 // remediation cooldown/backoff and rule-window progress from resetting when
 // sermod restarts.
 //
-// The schema is versioned through PRAGMA user_version and migrated forward on
-// Open, so future history and retention changes add
-// a migration to the list below without any manual upgrade step. The driver is
-// modernc.org/sqlite — pure Go, no CGO — to keep cross-compilation simple.
+// The store creates its current schema on open. The driver is modernc.org/sqlite
+// — pure Go, no CGO — to keep cross-compilation simple.
 package state
 
 import (
@@ -77,96 +75,18 @@ func IsMountUmountSource(source string) bool {
 	}
 }
 
-// migrations are applied in order; index i upgrades the schema from version i to
-// i+1. Never edit or reorder an existing entry once released — only append.
-var migrations = []string{
-	`CREATE TABLE monitor_state (
+// storageSchema defines the complete current storage layout.
+var storageSchema = []string{
+	`CREATE TABLE IF NOT EXISTS monitor_state (
 		service    TEXT PRIMARY KEY,
 		active     INTEGER NOT NULL,
 		source     TEXT NOT NULL,
 		updated_at TEXT NOT NULL
 	);`,
-	// sla_sample accumulates one row per service per UTC minute: total_count is
-	// the observed monitoring cycles in that minute and up_count the subset where
-	// the service was healthy. Availability over any rolling window is the ratio
-	// of the two summed across that window's buckets (SLA tracking).
-	`CREATE TABLE sla_sample (
-		service     TEXT NOT NULL,
-		bucket      INTEGER NOT NULL,
-		up_count    INTEGER NOT NULL,
-		total_count INTEGER NOT NULL,
-		PRIMARY KEY (service, bucket)
-	);`,
-	// measurement accumulates a numeric per-check observation (currently the check
-	// latency in milliseconds for tcp/ports/http/service checks) into one row per
-	// service+check per UTC minute: n samples whose sum/min/max let any rolling
-	// window report an average, minimum and maximum.
-	`CREATE TABLE measurement (
-		service    TEXT NOT NULL,
-		check_name TEXT NOT NULL,
-		bucket     INTEGER NOT NULL,
-		n          INTEGER NOT NULL,
-		sum_ms     REAL NOT NULL,
-		min_ms     REAL NOT NULL,
-		max_ms     REAL NOT NULL,
-		PRIMARY KEY (service, check_name, bucket)
-	);`,
-	// measurement_metric is the generic per-check NAMED-metric time series: any
-	// check's numeric Result.Data fields (e.g. hdparm read/cached MB/s) accumulate
-	// into one row per service+check+metric per UTC minute, mirroring `measurement`
-	// but with a metric dimension and unit-agnostic columns. Reusable by any check
-	// that declares graphable metrics.
-	`CREATE TABLE measurement_metric (
-		service    TEXT NOT NULL,
-		check_name TEXT NOT NULL,
-		metric     TEXT NOT NULL,
-		bucket     INTEGER NOT NULL,
-		n          INTEGER NOT NULL,
-		sum_v      REAL NOT NULL,
-		min_v      REAL NOT NULL,
-		max_v      REAL NOT NULL,
-		PRIMARY KEY (service, check_name, metric, bucket)
-	);`,
-	// daemon_metric stores sermod's own process metrics (the "Daemon / Engine
-	// settings" graphs) per UTC minute. It has no service/check dimensions:
-	// metric is one of cpu, memory or io.
-	`CREATE TABLE daemon_metric (
-		metric TEXT NOT NULL,
-		bucket INTEGER NOT NULL,
-		n      INTEGER NOT NULL,
-		sum_v  REAL NOT NULL,
-		min_v  REAL NOT NULL,
-		max_v  REAL NOT NULL,
-		PRIMARY KEY (metric, bucket)
-	);`,
-	// check_sla_sample accumulates one row per service+check per UTC minute.
-	// It mirrors sla_sample but keeps the check dimension, so the dashboard can
-	// show which individual check degraded over each rolling SLA window.
-	`CREATE TABLE check_sla_sample (
-		service     TEXT NOT NULL,
-		check_name  TEXT NOT NULL,
-		bucket      INTEGER NOT NULL,
-		up_count    INTEGER NOT NULL,
-		total_count INTEGER NOT NULL,
-		PRIMARY KEY (service, check_name, bucket)
-	);`,
-	// service_metric stores each service process tree's runtime metrics for the
-	// web detail graphs. The service dimension keeps CPU, memory and IO history
-	// across daemon restarts without mixing services.
-	`CREATE TABLE service_metric (
-		service TEXT NOT NULL,
-		metric  TEXT NOT NULL,
-		bucket  INTEGER NOT NULL,
-		n       INTEGER NOT NULL,
-		sum_v   REAL NOT NULL,
-		min_v   REAL NOT NULL,
-		max_v   REAL NOT NULL,
-		PRIMARY KEY (service, metric, bucket)
-	);`,
 	// event_log stores the operator-visible event/activity feed. Unlike the
 	// runtime ring in sermod, this table survives daemon restarts so the web UI
 	// and per-service detail panes can repopulate their recent history.
-	`CREATE TABLE event_log (
+	`CREATE TABLE IF NOT EXISTS event_log (
 			id      INTEGER PRIMARY KEY AUTOINCREMENT,
 			at      INTEGER NOT NULL,
 			service TEXT NOT NULL DEFAULT '',
@@ -175,14 +95,16 @@ var migrations = []string{
 			rule    TEXT NOT NULL DEFAULT '',
 			action  TEXT NOT NULL DEFAULT '',
 			status  TEXT NOT NULL DEFAULT '',
-			message TEXT NOT NULL DEFAULT ''
+			message TEXT NOT NULL DEFAULT '',
+			app     TEXT NOT NULL DEFAULT '',
+			output  TEXT NOT NULL DEFAULT ''
 		);`,
-	`CREATE INDEX event_log_at_idx ON event_log (at DESC, id DESC);`,
-	`CREATE INDEX event_log_service_at_idx ON event_log (service, at DESC, id DESC);`,
+	`CREATE INDEX IF NOT EXISTS event_log_at_idx ON event_log (at DESC, id DESC);`,
+	`CREATE INDEX IF NOT EXISTS event_log_service_at_idx ON event_log (service, at DESC, id DESC);`,
 	// remediation_state stores automatic remediation cooldown, rate-limit and
 	// backoff state per service. It is control state, not historical metrics, so
 	// daemon restarts must not reset when a rule may act again.
-	`CREATE TABLE remediation_state (
+	`CREATE TABLE IF NOT EXISTS remediation_state (
 		service            TEXT PRIMARY KEY,
 		last_action_at     INTEGER NOT NULL DEFAULT 0,
 		recent_actions     TEXT NOT NULL DEFAULT '[]',
@@ -190,38 +112,33 @@ var migrations = []string{
 	);`,
 	// rule_window_state stores each service rule's for/within progress so
 	// restarting sermod does not make a pending rule start counting from zero.
-	`CREATE TABLE rule_window_state (
+	`CREATE TABLE IF NOT EXISTS rule_window_state (
 		service     TEXT NOT NULL,
 		rule_name   TEXT NOT NULL,
 		consecutive INTEGER NOT NULL DEFAULT 0,
 		history     TEXT NOT NULL DEFAULT '[]',
+		true_since        INTEGER NOT NULL DEFAULT 0,
+		timed_history     TEXT NOT NULL DEFAULT '[]',
+		firing            INTEGER NOT NULL DEFAULT 0,
+		clear_since       INTEGER NOT NULL DEFAULT 0,
+		clear_consecutive INTEGER NOT NULL DEFAULT 0,
 		PRIMARY KEY (service, rule_name)
 	);`,
-	`ALTER TABLE rule_window_state ADD COLUMN true_since INTEGER NOT NULL DEFAULT 0;`,
-	`ALTER TABLE rule_window_state ADD COLUMN timed_history TEXT NOT NULL DEFAULT '[]';`,
 	// global_state holds daemon-wide on/off flags that are not keyed by service
 	// (currently the "panic_mode" toggle). It is control state, not metrics, so it
 	// survives daemon restarts — clearing panic mode must be a deliberate act.
-	`CREATE TABLE global_state (
+	`CREATE TABLE IF NOT EXISTS global_state (
 		key        TEXT PRIMARY KEY,
 		value      INTEGER NOT NULL,
 		source     TEXT NOT NULL,
 		updated_at TEXT NOT NULL
 	);`,
-	// event_log gains an `app` dimension (alongside service/watch) so installed
-	// application monitoring can record per-app errors/recoveries queryable on
-	// their own, like per-service events.
-	`ALTER TABLE event_log ADD COLUMN app TEXT NOT NULL DEFAULT '';`,
-	`CREATE INDEX event_log_app_at_idx ON event_log (app, at DESC, id DESC);`,
-	// event_log gains an `output` column: the bounded stdout/stderr of the failing
-	// command (app probe or service `command` check) behind the event, so the
-	// dashboard can show why it failed.
-	`ALTER TABLE event_log ADD COLUMN output TEXT NOT NULL DEFAULT '';`,
+	`CREATE INDEX IF NOT EXISTS event_log_app_at_idx ON event_log (app, at DESC, id DESC);`,
 	// operation_settling suppresses service rules/alerts around manual or
 	// automatic service operations. A row starts in phase "running" while the
 	// operation is in progress, then moves to "settling" after a successful
 	// relaunch until the worker has observed one active check cycle.
-	`CREATE TABLE operation_settling (
+	`CREATE TABLE IF NOT EXISTS operation_settling (
 		service    TEXT PRIMARY KEY,
 		action     TEXT NOT NULL,
 		phase      TEXT NOT NULL,
@@ -231,7 +148,7 @@ var migrations = []string{
 	// service_check_snapshot stores the latest service check result published by
 	// each worker. It is current observable state, not history, so the web UI can
 	// show the last real daemon-cycle reading immediately after a restart.
-	`CREATE TABLE service_check_snapshot (
+	`CREATE TABLE IF NOT EXISTS service_check_snapshot (
 		service    TEXT NOT NULL,
 		check_name TEXT NOT NULL,
 		ok         INTEGER NOT NULL,
@@ -242,12 +159,13 @@ var migrations = []string{
 		data       TEXT NOT NULL,
 		ran        INTEGER NOT NULL,
 		at         INTEGER NOT NULL,
+		check_type TEXT NOT NULL DEFAULT '',
 		PRIMARY KEY (service, check_name)
 	);`,
 	// watch_check_snapshot stores the latest host-watch result per visible slot
 	// (for example one slot per metric). It keeps /api/watches backed by daemon
 	// cycle data across process restarts.
-	`CREATE TABLE watch_check_snapshot (
+	`CREATE TABLE IF NOT EXISTS watch_check_snapshot (
 		watch      TEXT NOT NULL,
 		slot       TEXT NOT NULL,
 		check_type TEXT NOT NULL,
@@ -264,7 +182,7 @@ var migrations = []string{
 	// watch_runtime_state persists one watch slot's firing episode, notification
 	// pacing, condition window and automatic-action policy state. This prevents a
 	// daemon restart from turning an unchanged condition into a new episode.
-	`CREATE TABLE watch_runtime_state (
+	`CREATE TABLE IF NOT EXISTS watch_runtime_state (
 		watch              TEXT NOT NULL,
 		slot               TEXT NOT NULL,
 		firing             INTEGER NOT NULL DEFAULT 0,
@@ -276,43 +194,10 @@ var migrations = []string{
 		last_action_at     INTEGER NOT NULL DEFAULT 0,
 		recent_actions     TEXT NOT NULL DEFAULT '[]',
 		current_backoff_ns INTEGER NOT NULL DEFAULT 0,
+		clear_since        INTEGER NOT NULL DEFAULT 0,
+		clear_consecutive INTEGER NOT NULL DEFAULT 0,
 		PRIMARY KEY (watch, slot)
 	);`,
-	// Service snapshots initially persisted only their check name. Keep the type
-	// too: a reload may retain a name while changing its check implementation.
-	// The web layer must then wait for a result from the new implementation.
-	`ALTER TABLE service_check_snapshot ADD COLUMN check_type TEXT NOT NULL DEFAULT '';`,
-	// process_uptime_span records the bounded evidence that one trusted service
-	// process instance was still alive at a daemon-cycle timestamp. It is a
-	// compact continuity interval, not a synthetic check or metric sample.
-	`CREATE TABLE process_uptime_span (
-		service      TEXT NOT NULL,
-		started_at   INTEGER NOT NULL,
-		confirmed_at INTEGER NOT NULL,
-		PRIMARY KEY (service, started_at)
-	);`,
-	`CREATE INDEX process_uptime_span_service_confirmed_idx ON process_uptime_span (service, confirmed_at);`,
-	// Rule windows gained an explicit firing episode (so the rising edge of
-	// duration windows survives restarts) and clear-window progress; the watch
-	// table already had firing and only needs the clear columns.
-	`ALTER TABLE rule_window_state ADD COLUMN firing INTEGER NOT NULL DEFAULT 0;`,
-	`ALTER TABLE rule_window_state ADD COLUMN clear_since INTEGER NOT NULL DEFAULT 0;`,
-	`ALTER TABLE rule_window_state ADD COLUMN clear_consecutive INTEGER NOT NULL DEFAULT 0;`,
-	`ALTER TABLE watch_runtime_state ADD COLUMN clear_since INTEGER NOT NULL DEFAULT 0;`,
-	`ALTER TABLE watch_runtime_state ADD COLUMN clear_consecutive INTEGER NOT NULL DEFAULT 0;`,
-	// The process-continuity feature was removed; drop its evidence table. The
-	// original CREATE TABLE migration above stays for version continuity.
-	`DROP TABLE IF EXISTS process_uptime_span;`,
-	// The six single-resolution series tables above are replaced by two
-	// multi-resolution archives (see the resolution ladder in archive.go). They
-	// only ever held per-minute history that the archives rebuild from live
-	// samples, so they are dropped rather than migrated.
-	`DROP TABLE IF EXISTS sla_sample;`,
-	`DROP TABLE IF EXISTS check_sla_sample;`,
-	`DROP TABLE IF EXISTS measurement;`,
-	`DROP TABLE IF EXISTS measurement_metric;`,
-	`DROP TABLE IF EXISTS daemon_metric;`,
-	`DROP TABLE IF EXISTS service_metric;`,
 	// sla_archive holds availability at every stored resolution: res is the
 	// bucket span in seconds, so the same table carries per-minute samples and
 	// the coarser archives consolidated from them. check_name '' is the
@@ -322,7 +207,7 @@ var migrations = []string{
 	// res leads the primary key: every read knows it, and pruning one
 	// resolution stays inside that key prefix. WITHOUT ROWID stores the key once
 	// instead of duplicating it in a rowid table plus its automatic index.
-	`CREATE TABLE sla_archive (
+	`CREATE TABLE IF NOT EXISTS sla_archive (
 		res          INTEGER NOT NULL,
 		service      TEXT    NOT NULL,
 		check_name   TEXT    NOT NULL,
@@ -334,11 +219,11 @@ var migrations = []string{
 	) WITHOUT ROWID;`,
 	// metric_archive is the numeric counterpart, holding every measured series at
 	// every stored resolution. scope separates the check, service and daemon
-	// dimensions that used to have a table each; metric names the series within
-	// the scope (check latency, cpu/memory/io, or a check's declared metric).
+	// dimensions; metric names the series within the scope (check latency,
+	// cpu/memory/io, or a check's declared metric).
 	// n/sum_v keep the average weight-correct across resolutions, and min_v/max_v
 	// carry the extremes through consolidation so a spike survives.
-	`CREATE TABLE metric_archive (
+	`CREATE TABLE IF NOT EXISTS metric_archive (
 		res        INTEGER NOT NULL,
 		scope      TEXT    NOT NULL,
 		service    TEXT    NOT NULL,
@@ -354,22 +239,10 @@ var migrations = []string{
 	// rollup_state records how far each coarser archive has consolidated its
 	// source. It is the prune safety floor: a resolution is never deleted ahead
 	// of the archive that still has to read it.
-	`CREATE TABLE rollup_state (
+	`CREATE TABLE IF NOT EXISTS rollup_state (
 		res       INTEGER PRIMARY KEY,
 		watermark INTEGER NOT NULL
 	) WITHOUT ROWID;`,
-	// Maintenance filters on (res, bucket) with no series key, but bucket is the
-	// last primary-key column, so consolidation and pruning would each scan a whole
-	// resolution partition — on the single write connection the per-cycle upserts
-	// share. These indexes turn those into range seeks.
-	//
-	// They are not free: on a WITHOUT ROWID table a secondary index carries the full
-	// primary key as its payload, so they cost real disk (see
-	// TestArchiveIndexCostAndBenefit, which measures both sides). The read paths do
-	// not need them — they already seek on the primary key, which leads with the
-	// series columns — so these exist purely for the maintenance pass.
-	`CREATE INDEX sla_archive_res_bucket_idx ON sla_archive (res, bucket);`,
-	`CREATE INDEX metric_archive_res_bucket_idx ON metric_archive (res, bucket);`,
 }
 
 // Store is a handle to the persistent state database. It is safe for concurrent
@@ -528,7 +401,7 @@ const (
 const DefaultSeriesWindow = hoursPerDay * time.Hour
 
 // OpenContext opens (creating if needed) the database at path, creating the
-// parent directory and running any pending migrations. WAL mode plus a busy
+// parent directory and initializing the current schema. WAL mode plus a busy
 // timeout let the daemon (long-lived reader/writer) and sermoctl (short-lived
 // writer) coexist across processes.
 func OpenContext(ctx context.Context, path string) (*Store, error) {
@@ -536,9 +409,9 @@ func OpenContext(ctx context.Context, path string) (*Store, error) {
 }
 
 // DefaultCacheBytes is the SQLite page-cache size used when the caller does not
-// override it. The time-series tables (measurement/metric/sla) and their indexes
-// grow into the tens of MB; 64 MiB keeps the hot index pages resident so a
-// per-cycle upsert burst does not thrash them from disk. Reads run on their own
+// override it. The archive tables and their indexes grow into the tens of MB;
+// 64 MiB keeps the hot index pages resident so a per-cycle upsert burst does not
+// thrash them from disk. Reads run on their own
 // connection (see Store.reader), so the budget applies per connection.
 const DefaultCacheBytes = 64 * units.BytesPerMiB
 
@@ -588,9 +461,9 @@ func OpenContextWith(ctx context.Context, path string, opts Options) (*Store, er
 	db.SetMaxOpenConns(1)
 
 	s := &Store{db: db, now: time.Now, ctx: ctx, retention: opts.Retention.normalized()}
-	if err := s.migrate(ctx); err != nil {
+	if err := s.initializeSchema(ctx); err != nil {
 		db.Close()
-		return nil, fmt.Errorf("migrate state db %s: %w", path, err)
+		return nil, fmt.Errorf("initialize state db %s: %w", path, err)
 	}
 	// A dedicated read-only connection keeps heavy aggregations (rolling-year
 	// SLA windows) off the write connection; query_only guards against any
@@ -626,28 +499,19 @@ func (s *Store) Close() error {
 	return nil
 }
 
-func (s *Store) migrate(ctx context.Context) error {
-	var version int
-	if err := s.db.QueryRowContext(ctx, "PRAGMA user_version;").Scan(&version); err != nil {
-		return fmt.Errorf("read state db user_version: %w", err)
+func (s *Store) initializeSchema(ctx context.Context) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin state schema: %w", err)
 	}
-	for i := version; i < len(migrations); i++ {
-		tx, err := s.db.BeginTx(ctx, nil)
-		if err != nil {
-			return fmt.Errorf("begin state db migration %d: %w", i+1, err)
-		}
-		if _, err := tx.ExecContext(ctx, migrations[i]); err != nil {
+	for _, stmt := range storageSchema {
+		if _, err := tx.ExecContext(ctx, stmt); err != nil {
 			_ = tx.Rollback()
-			return fmt.Errorf("apply state db migration %d: %w", i+1, err)
+			return fmt.Errorf("create state schema: %w", err)
 		}
-		// user_version cannot be parameterized; i+1 is a trusted integer.
-		if _, err := tx.ExecContext(ctx, fmt.Sprintf("PRAGMA user_version=%d;", i+1)); err != nil {
-			_ = tx.Rollback()
-			return fmt.Errorf("set state db user_version %d: %w", i+1, err)
-		}
-		if err := tx.Commit(); err != nil {
-			return fmt.Errorf("commit state db migration %d: %w", i+1, err)
-		}
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit state schema: %w", err)
 	}
 	return nil
 }

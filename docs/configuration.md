@@ -264,9 +264,7 @@ monitoring state. It also stores automatic-remediation cooldown/backoff, rule
 `for`/`within` window progress and the latest service-check and host-watch
 readings, so restarting `sermod` does not reset when a rule may act again or make
 the dashboard lose the last real daemon-cycle result. SLA and check measurements,
-plus service and daemon process metric history shown in the web UI live there
-too. The schema is versioned and migrated forward automatically, so future
-features can add tables without a manual upgrade.
+plus service and daemon process metric history shown in the web UI live there too.
 
 Both directories are created **0700, owner root**. On systemd they come from the
 shipped `tmpfiles.d/sermo.conf` (installed at `/usr/lib/tmpfiles.d/sermo.conf`),
@@ -530,11 +528,11 @@ Raising a retention costs proportionally more disk at that resolution; lowering 
 takes effect on the next maintenance pass. Reclaiming the freed pages needs a
 `VACUUM`, which `sermoctl state compact` performs.
 
-When sizing the disk, budget roughly **twice** the archive rows: each archive table
-carries an index on `(res, bucket)` so consolidation and pruning seek instead of
-scanning the whole resolution, and on these key-organized tables that index costs
-about as much as the table itself. It buys a maintenance pass that does not hold the
-write connection the monitoring cycles share.
+Archive maintenance scans the selected resolution partition instead of carrying
+secondary `(res, bucket)` indexes. With the default three-hour finest retention that
+scan is bounded, while removing the two index copies reduces write amplification and
+disk use. Budget the archive rows plus normal SQLite/WAL headroom; do not double the
+archive estimate for those removed indexes.
 
 When `sermoctl daemon reload` asks the running daemon to reload, `sermod` reads
 the configuration from the path passed to `sermod run --config` (the same file
