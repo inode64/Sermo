@@ -18,6 +18,16 @@ restart_on_change:
 pidfile:
   - /run/tuned/tuned.pid
   - /run/tuned.pid
+# TuneD is a Python script, so /proc/<pid>/exe resolves to the interpreter
+# (`/usr/bin/python3.13 -Es /usr/sbin/tuned -l -P`) and an `exe` selector can
+# never match. Narrow on the script path in the cmdline instead, as the unifi
+# profile does for its JVM. Without any process selector the profile relied on
+# the pidfile alone, and a stopped service has no pidfile — which made discovery
+# fail and blocked Sermo from ever starting it.
+processes:
+  main:
+    cmd: (^|/)python[0-9.]* .*${tuned_binary}( |$)
+    user: root
 policy:
   cooldown: 15m
   max_actions: 2
@@ -48,7 +58,7 @@ watches:
       scope: service
       name: memory
       op: '>'
-      value: 41965159
+      value: 30%
       optional: true
     for:
       duration: 4m
