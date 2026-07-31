@@ -187,7 +187,7 @@ type WebBackend struct {
 	libraries    catalogInventoryCache
 
 	slaCacheMu sync.Mutex
-	slaCache   map[slaCacheKey]cachedSLATimelines
+	slaCache   map[string]cachedSLATimelines
 
 	mountUsageMu     sync.Mutex
 	mountUsageAt     time.Time
@@ -273,7 +273,7 @@ func NewWebBackend(ctx context.Context, cfg *config.Config, deps Deps) (*WebBack
 		defaultTimeout:    deps.DefaultTimeout,
 		operationTimeout:  deps.OperationTimeout,
 		now:               deps.Now,
-		slaCache:          map[slaCacheKey]cachedSLATimelines{},
+		slaCache:          map[string]cachedSLATimelines{},
 		probes:            map[string]time.Time{},
 	}
 	if wb.serviceMetrics == nil {
