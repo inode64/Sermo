@@ -27,10 +27,6 @@ func (b *WebBackend) serviceSLAWindows(name string, now time.Time) []web.SLAWind
 	return b.cachedSLAWindows(name, "", now)
 }
 
-func (b *WebBackend) checkSLAWindows(service, check string, now time.Time) []web.SLAWindow {
-	return b.cachedSLAWindows(service, check, now)
-}
-
 func (b *WebBackend) cachedSLAWindows(service, check string, now time.Time) []web.SLAWindow {
 	if b.sla == nil {
 		return nil
