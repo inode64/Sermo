@@ -16,11 +16,6 @@ func TestFileWatchPaths(t *testing.T) {
 		wantErr string
 	}{
 		{
-			name:  "legacy path",
-			check: map[string]any{checks.CheckKeyPath: "/srv/a"},
-			want:  []string{"/srv/a"},
-		},
-		{
 			name:  "paths list",
 			check: map[string]any{checks.CheckKeyPaths: []any{"/srv/a", "/srv/b"}},
 			want:  []string{"/srv/a", "/srv/b"},
@@ -30,11 +25,7 @@ func TestFileWatchPaths(t *testing.T) {
 			check: map[string]any{checks.CheckKeyPaths: []string{"/srv/a", "/srv/b"}},
 			want:  []string{"/srv/a", "/srv/b"},
 		},
-		{
-			name:    "both aliases",
-			check:   map[string]any{checks.CheckKeyPath: "/srv/a", checks.CheckKeyPaths: []any{"/srv/b"}},
-			wantErr: "only one",
-		},
+		{name: "paths required", check: map[string]any{}, wantErr: "paths is required"},
 		{
 			name:    "paths must be list",
 			check:   map[string]any{checks.CheckKeyPaths: "/srv/a"},

@@ -36,7 +36,6 @@ export const apiQueryLimit = "limit";
 export const apiQueryName = "name";
 export const apiQueryNoCascade = "no_cascade";
 export const apiQueryOnlyErrors = "only_errors";
-export const apiQueryPage = "page";
 export const apiQueryService = "service";
 export const apiQuerySince = "since";
 export const apiQueryStatus = "status";

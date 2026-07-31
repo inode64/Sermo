@@ -182,7 +182,6 @@ const (
 	apiQueryMetric     = "metric"
 	apiQueryNoCascade  = "no_cascade"
 	apiQueryOnlyErrors = "only_errors"
-	apiQueryPage       = "page"
 	apiQuerySince      = "since"
 	apiQueryStatus     = "status"
 	apiQueryVerbose    = "verbose"
@@ -1059,8 +1058,6 @@ type Backend interface {
 	// ServiceRuntime returns process-tree CPU, memory and IO history for one
 	// service over since; ok is false for unknown service names.
 	ServiceRuntime(ctx context.Context, name string, since time.Duration) (ServiceRuntimeMetrics, bool)
-	// Events returns up to limit recent events, newest first (the global feed).
-	Events(ctx context.Context, limit int) []Event
 	// EventPage returns one filtered cursor page from the global feed.
 	EventPage(ctx context.Context, query EventQuery) EventPage
 	// ServiceEvents returns up to limit recent events for one service, newest
@@ -1324,23 +1321,26 @@ func eventLimit(r *http.Request) int {
 	})
 }
 
-type eventFilter struct {
-	Service    string
-	Watch      string
-	Kind       string
-	Status     string
-	OnlyErrors bool
-}
-
-func parseEventFilter(r *http.Request) eventFilter {
+func parseEventQuery(r *http.Request) (EventQuery, error) {
+	beforeID, err := eventBeforeID(r)
+	if err != nil {
+		return EventQuery{}, err
+	}
+	since, err := eventSince(r)
+	if err != nil {
+		return EventQuery{}, err
+	}
 	q := r.URL.Query()
-	return eventFilter{
+	return EventQuery{
+		BeforeID:   beforeID,
+		Limit:      eventLimit(r),
+		Since:      since,
 		Service:    q.Get(apiParamService),
 		Watch:      q.Get(apiQueryWatch),
 		Kind:       q.Get(apiQueryKind),
 		Status:     q.Get(apiQueryStatus),
 		OnlyErrors: truthy(q.Get(apiQueryOnlyErrors)),
-	}
+	}, nil
 }
 
 func truthy(v string) bool {
@@ -1350,42 +1350,6 @@ func truthy(v string) bool {
 	default:
 		return false
 	}
-}
-
-func (f eventFilter) active() bool {
-	return f.Service != "" || f.Watch != "" || f.Kind != "" || f.Status != "" || f.OnlyErrors
-}
-
-func filterEvents(events []Event, f eventFilter, limit int) []Event {
-	if !f.active() {
-		if len(events) > limit {
-			return events[:limit]
-		}
-		return events
-	}
-	out := make([]Event, 0, min(limit, len(events)))
-	for _, e := range events {
-		if f.Service != "" && e.Service != f.Service {
-			continue
-		}
-		if f.Watch != "" && e.Watch != f.Watch {
-			continue
-		}
-		if f.Kind != "" && e.Kind != f.Kind {
-			continue
-		}
-		if f.Status != "" && e.Status != f.Status {
-			continue
-		}
-		if f.OnlyErrors && !IsErrorEvent(e) {
-			continue
-		}
-		out = append(out, e)
-		if len(out) >= limit {
-			break
-		}
-	}
-	return out
 }
 
 // IsErrorEvent reports whether an event counts as an error for the
@@ -1796,32 +1760,13 @@ func (s *Server) handleServiceRuntime(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
-	limit := eventLimit(r)
-	filter := parseEventFilter(r)
-	if queryBool(r, apiQueryPage) || r.URL.Query().Has(apiQueryBeforeID) {
-		beforeID, err := eventBeforeID(r)
-		if err != nil {
-			writeError(w, http.StatusBadRequest, err.Error())
-			return
-		}
-		since, err := eventSince(r)
-		if err != nil {
-			writeError(w, http.StatusBadRequest, err.Error())
-			return
-		}
-		backend, generation := s.backendRead()
-		s.writeBackendJSON(w, http.StatusOK, backend.EventPage(r.Context(), EventQuery{
-			BeforeID: beforeID, Limit: limit, Since: since, Service: filter.Service, Watch: filter.Watch,
-			Kind: filter.Kind, Status: filter.Status, OnlyErrors: filter.OnlyErrors,
-		}), generation)
+	query, err := parseEventQuery(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	fetchLimit := limit
-	if filter.active() {
-		fetchLimit = maxEventLimit
-	}
 	backend, generation := s.backendRead()
-	s.writeBackendJSON(w, http.StatusOK, filterEvents(backend.Events(r.Context(), fetchLimit), filter, limit), generation)
+	s.writeBackendJSON(w, http.StatusOK, backend.EventPage(r.Context(), query), generation)
 }
 
 func eventSince(r *http.Request) (time.Duration, error) {

@@ -949,12 +949,10 @@ Read-only endpoints:
 - `GET /api/activity` — recent activity summary used by the dashboard header.
 - `GET /api/monitoring` — monitoring-enabled vs paused counts for non-disabled
   services.
-- `GET /api/events?limit=N` — global event feed, newest first. Optional filters:
-  `service`, `watch`, `kind`, `status` and `only_errors=1`. Add `page=1` to
-  receive `{events, next_before_id, has_more}`; pass `before_id` from that
-  response to continue toward older rows. Without `page`/`before_id`, the
-  endpoint keeps returning the legacy event array. Cursor pages also accept a
-  positive `since` duration such as `24h`.
+- `GET /api/events?limit=N` — global event feed as `{events, next_before_id,
+  has_more}`, newest first. Optional filters: `service`, `watch`, `kind`, `status`
+  and `only_errors=1`. Pass `before_id` from a response to continue toward older
+  rows. Cursor pages also accept a positive `since` duration such as `24h`.
 
 State-changing endpoints are CSRF-protected for every non-GET/HEAD request and
 require admin permissions when auth is enabled:
@@ -2596,10 +2594,9 @@ check:
 
 A `file` watch monitors one or more files/directories for attribute changes —
 size, permissions, owner, deletion and modification age — and runs the entry's
-hook **once per path change or freshness breach**. `paths:` is the preferred
-non-empty list form; the legacy scalar `path:` remains a compatible alias, but a
-check must define exactly one of them. With `recursive: true` it watches every
-subtree, so a hook fires per changed or stale entry.
+hook **once per path change or freshness breach**. `paths:` is a required non-empty
+list. With `recursive: true` it watches every subtree, so a hook fires per changed
+or stale entry.
 
 ```yaml
 watches:

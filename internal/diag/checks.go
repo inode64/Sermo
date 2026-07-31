@@ -76,8 +76,12 @@ func diagWatches(b *builder, cfg *config.Config, global time.Duration, host Host
 		case checks.CheckTypeNet:
 			warnMissingInterface(b, scope, check, host)
 		case checks.CheckTypeFile:
-			if p := cfgval.AsString(check[checks.CheckKeyPath]); p != "" && !host.PathExists(p) {
-				b.addf(LevelWarning, scope, diagMessagePathMissing, p)
+			if paths, err := config.FileWatchPaths(check); err == nil {
+				for _, path := range paths {
+					if !host.PathExists(path) {
+						b.addf(LevelWarning, scope, diagMessagePathMissing, path)
+					}
+				}
 			}
 		default:
 			// Every single-shot check type shares the same resource probes as a
