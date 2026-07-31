@@ -27,22 +27,25 @@ import (
 type fakeSLAReader struct {
 	service map[string][]state.SLAValue
 	check   map[string][]state.SLAValue
+	// series is keyed by service for the service-level series and by
+	// service\x00check for one check's, the same convention check uses.
+	series map[string][]state.SLAPoint
 }
 
 func (f fakeSLAReader) SLAReport(service string, _ time.Time) ([]state.SLAValue, error) {
 	return f.service[service], nil
 }
 
-func (f fakeSLAReader) SLASeries(string, time.Time, time.Time) ([]state.SLAPoint, error) {
-	return nil, nil
+func (f fakeSLAReader) SLASeries(service string, _, _ time.Time) ([]state.SLAPoint, error) {
+	return f.series[service], nil
 }
 
 func (f fakeSLAReader) CheckSLAReport(service, check string, _ time.Time) ([]state.SLAValue, error) {
 	return f.check[service+"\x00"+check], nil
 }
 
-func (f fakeSLAReader) CheckSLASeries(string, string, time.Time, time.Time) ([]state.SLAPoint, error) {
-	return nil, nil
+func (f fakeSLAReader) CheckSLASeries(service, check string, _, _ time.Time) ([]state.SLAPoint, error) {
+	return f.series[service+"\x00"+check], nil
 }
 
 func (f fakeSLAReader) SLATimelines(service string, _ time.Time) ([]state.SLAWindowTimeline, error) {
@@ -216,7 +219,13 @@ func TestWebBackendDetailCheckReadings(t *testing.T) {
 	}
 }
 
-func TestWebBackendDetailIncludesCheckSLA(t *testing.T) {
+// TestWebBackendSeriesScopesToServiceOrCheck pins the one path both SLA scopes
+// share. A check's availability is no longer embedded in the detail payload; it
+// is read from the same series endpoint the service timeline uses, so the two
+// cannot drift apart in how they report unobserved time.
+func TestWebBackendSeriesScopesToServiceOrCheck(t *testing.T) {
+	servicePoint := state.SLAPoint{Start: t0, Up: 9, Total: 10}
+	checkPoint := state.SLAPoint{Start: t0, Up: 3, Total: 4}
 	b := &WebBackend{
 		order: []string{"web"},
 		entries: map[string]*webEntry{
@@ -227,22 +236,30 @@ func TestWebBackendDetailIncludesCheckSLA(t *testing.T) {
 				status:      func(context.Context) (servicemgr.Status, error) { return servicemgr.StatusActive, nil },
 			},
 		},
-		sla: fakeSLAReader{
-			service: map[string][]state.SLAValue{"web": {{Window: "hour", Up: 9, Total: 10}}},
-			check:   map[string][]state.SLAValue{"web\x00http": {{Window: "hour", Up: 3, Total: 4}}},
-		},
+		sla: fakeSLAReader{series: map[string][]state.SLAPoint{
+			"web":         {servicePoint},
+			"web\x00http": {checkPoint},
+		}},
 	}
 
 	detail, ok := b.Detail(context.Background(), "web")
 	if !ok {
 		t.Fatal("detail not found")
 	}
-	if sla := b.serviceSLAWindows("web", time.Now()); len(sla) != 1 || sla[0].Ratio == nil || *sla[0].Ratio != 0.9 {
-		t.Fatalf("service SLA = %+v, want 90%%", sla)
+	if len(detail.Checks) != 1 {
+		t.Fatalf("checks = %+v, want one", detail.Checks)
 	}
-	if len(detail.Checks) != 1 || len(detail.Checks[0].SLA) != 1 ||
-		detail.Checks[0].SLA[0].Ratio == nil || *detail.Checks[0].SLA[0].Ratio != 0.75 {
-		t.Fatalf("check SLA = %+v, want 75%%", detail.Checks)
+
+	points, ok := b.Series(context.Background(), "web", "", time.Hour)
+	if !ok || len(points) != 1 || points[0].Total != 10 {
+		t.Fatalf("service series = %+v ok=%v, want the service point", points, ok)
+	}
+	points, ok = b.Series(context.Background(), "web", "http", time.Hour)
+	if !ok || len(points) != 1 || points[0].Total != 4 {
+		t.Fatalf("check series = %+v ok=%v, want the check point", points, ok)
+	}
+	if _, ok := b.Series(context.Background(), "web", "absent", time.Hour); ok {
+		t.Fatal("a check the service does not define must not resolve")
 	}
 }
 
@@ -2234,11 +2251,11 @@ func TestWebBackendDetailOmitsSLAForVerdictlessChecks(t *testing.T) {
 	}
 	// Every check has a recorded series, so an empty one in the result can only
 	// come from the omission under test.
-	windows := []state.SLAValue{{Window: "hour", Up: 10, Total: 10}}
-	b.sla = fakeSLAReader{check: map[string][]state.SLAValue{
-		"web\x00backup": windows,
-		"web\x00gauge":  windows,
-		"web\x00port":   windows,
+	series := []state.SLAPoint{{Start: t0, Up: 10, Total: 10}}
+	b.sla = fakeSLAReader{series: map[string][]state.SLAPoint{
+		"web\x00backup": series,
+		"web\x00gauge":  series,
+		"web\x00port":   series,
 	}}
 
 	detail, ok := b.Detail(context.Background(), "web")
@@ -2246,12 +2263,16 @@ func TestWebBackendDetailOmitsSLAForVerdictlessChecks(t *testing.T) {
 		t.Fatal("detail not found")
 	}
 	for _, c := range detail.Checks {
-		verdictless := checks.VerdictlessMode(c.Reports)
-		if verdictless && len(c.SLA) != 0 {
-			t.Errorf("check %q reports %q but carries %d SLA windows", c.Name, c.Reports, len(c.SLA))
+		points, ok := b.Series(context.Background(), "web", c.Name, time.Hour)
+		if !ok {
+			t.Errorf("check %q has no series", c.Name)
+			continue
 		}
-		if !verdictless && len(c.SLA) == 0 {
-			t.Errorf("check %q should keep its SLA windows", c.Name)
+		if checks.VerdictlessMode(c.Reports) && len(points) != 0 {
+			t.Errorf("check %q reports %q but serves %d SLA points", c.Name, c.Reports, len(points))
+		}
+		if !checks.VerdictlessMode(c.Reports) && len(points) == 0 {
+			t.Errorf("check %q should keep its SLA series", c.Name)
 		}
 	}
 }
