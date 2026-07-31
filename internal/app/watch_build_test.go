@@ -357,9 +357,9 @@ func TestBuildWatchesAbsentThenIsPureMonitorOnly(t *testing.T) {
 	cfg := cfgWithWatches(map[string]any{
 		"app-data": map[string]any{
 			"check": map[string]any{
-				"type": "file",
-				"path": "/var/lib/app",
-				"size": map[string]any{"on": "change"},
+				"type":  "file",
+				"paths": []any{"/var/lib/app"},
+				"size":  map[string]any{"on": "change"},
 			},
 			// no then key
 		},
