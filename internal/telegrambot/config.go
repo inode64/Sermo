@@ -28,8 +28,9 @@ const (
 const (
 	// DefaultPollInterval is the getUpdates long-poll timeout when unset.
 	DefaultPollInterval = 30 * time.Second
-	// MinPollInterval and MaxPollInterval bound the configured poll interval.
+	// MinPollInterval is the lowest permitted configured poll interval.
 	MinPollInterval = 1 * time.Second
+	// MaxPollInterval is the highest permitted configured poll interval.
 	MaxPollInterval = 10 * time.Minute
 )
 
