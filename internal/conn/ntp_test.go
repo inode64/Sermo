@@ -63,3 +63,24 @@ func TestNTPHealthy(t *testing.T) {
 		t.Fatal("kiss-o'-death (0) and unsynchronized (16) must not be healthy")
 	}
 }
+
+// The kiss code is the only part of a stratum-0 reply that says why the server
+// will not serve time, so it must survive into the operator-visible error.
+func TestNTPKissCode(t *testing.T) {
+	tests := []struct {
+		name string
+		code string
+		want string
+	}{
+		{name: "reported", code: "STEP", want: "STEP"},
+		{name: "padded", code: " RATE ", want: "RATE"},
+		{name: "absent", code: "", want: ntpKissCodeUnknown},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := ntpKissCode(&ntp.Response{KissCode: test.code}); got != test.want {
+				t.Errorf("ntpKissCode(%q) = %q, want %q", test.code, got, test.want)
+			}
+		})
+	}
+}
