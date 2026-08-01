@@ -671,5 +671,71 @@ class OomWatchGenerationTest(unittest.TestCase):
         self.assertNotIn("clear:", body)
 
 
+
+
+class ClockAndDeadLetterGenerationTest(unittest.TestCase):
+    """The three-tier drift policy and the dead.letter sensor must reach a host
+    through the fleet deployment, not only through a hand-copied example. Tier 2
+    carries a real clock step, so what it must NOT reach matters as much as what
+    it must."""
+
+    def generate(self, active_units: str):
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        root = Path(temp.name)
+        stage = root / "stage" / "host" / "out"
+        stage.mkdir(parents=True)
+        (stage / "init").write_text("systemd\n", encoding="utf-8")
+        (stage / "active_units").write_text(active_units, encoding="utf-8")
+
+        generator.generate_for_host("host", stage, root / "configs", options=default_options())
+        return root / "configs/host/root/etc/sermo/watches"
+
+    @staticmethod
+    def unit_lines(*units: str) -> str:
+        # `systemctl list-units` columns: UNIT LOAD ACTIVE SUB DESCRIPTION.
+        return "".join(f"{unit} loaded active running {unit}\n" for unit in units)
+
+    def test_tier_one_alerts_at_one_second_on_every_host(self):
+        body = (self.generate("") / "watch-clock-drift.yml").read_text(encoding="utf-8")
+        self.assertIn("max_offset: 1s", body)
+        self.assertNotIn("max_offset: 3s", body)
+
+    def test_tier_two_steps_the_clock_on_a_chrony_host(self):
+        watches = self.generate(self.unit_lines("chronyd.service"))
+        body = (watches / "watch-clock-step.yml").read_text(encoding="utf-8")
+        self.assertIn("max_offset: 5s", body)
+        self.assertIn("source: chrony", body)
+        self.assertIn(f"socket: {generator.CHRONY_COMMAND_SOCKET}", body)
+        self.assertIn("makestep:", body)
+        # then.makestep is refused without a positive cooldown, and the fleet
+        # posture must keep the step reported rather than performed.
+        self.assertIn("cooldown: 30m", body)
+        self.assertIn("dry_run: true", body)
+
+    def test_tier_two_never_reaches_a_ceph_host(self):
+        # The dangerous case is a ceph node that also runs chrony: everything
+        # tier 2 needs is present, and stepping the clock there can cost the
+        # monitor its quorum.
+        watches = self.generate(self.unit_lines("chronyd.service", "ceph-mon@bk1.service"))
+        self.assertFalse((watches / "watch-clock-step.yml").exists())
+        # Tier 1 is read-only, so a ceph host still gets the alert.
+        self.assertTrue((watches / "watch-clock-drift.yml").exists())
+
+    def test_tier_two_is_skipped_without_chrony(self):
+        # ntpd and systemd-timesyncd have no step command at all; their forced
+        # correction is the catalog's restart-if-clock-drifting watch.
+        for unit in ("ntpd.service", "systemd-timesyncd.service"):
+            with self.subTest(unit=unit):
+                watches = self.generate(self.unit_lines(unit))
+                self.assertFalse((watches / "watch-clock-step.yml").exists())
+
+    def test_dead_letter_watch_reaches_every_host(self):
+        body = (self.generate("") / "watch-dead-letter.yml").read_text(encoding="utf-8")
+        self.assertIn("type: file", body)
+        self.assertIn(generator.DEAD_LETTER_PATH, body)
+        self.assertIn('size: { op: ">", value: 0 }', body)
+
+
 if __name__ == "__main__":
     unittest.main()

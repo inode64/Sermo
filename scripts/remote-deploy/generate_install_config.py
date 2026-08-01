@@ -122,6 +122,13 @@ HDPARM_READ_FLOOR_SOLID_STATE = 100
 
 GEOIP_DATABASE_DIRECTORY = "/usr/share/GeoIP"
 GEOIP_DATABASE_OLDER_THAN = "480h"
+# chronyd's Unix command socket, the only channel that can command a clock step.
+CHRONY_COMMAND_SOCKET = "/run/chrony/chronyd.sock"
+# Unit name prefixes of the ceph daemons. They are templated (ceph-mon@host),
+# so these are matched as prefixes over the active unit set.
+CEPH_UNIT_PREFIXES = ("ceph-mon", "ceph-osd", "ceph-mds", "ceph-mgr")
+# mail(1)/mailx write the undeliverable message body here.
+DEAD_LETTER_PATH = "/root/dead.letter"
 ROOT_MOUNT_TARGET = "/"
 NFS_ENDPOINT_TIMEOUT = "5s"
 ENDPOINT_CHECK_TYPES = {"dns", "http", "ports", "tcp"}
@@ -132,7 +139,8 @@ ENDPOINT_CHECK_TYPES = {"dns", "http", "ports", "tcp"}
 # a unix socket, or uses an rpcbind-assigned port. Kept in step with the Go
 # registry by test_protocol_check_types_match_conn_registry.
 PROTOCOL_CHECK_TYPES = {
-    "acpid", "ajp", "amqp", "asterisk", "avahi", "ceph", "clamd", "cloudflared",
+    "acpid", "ajp", "amqp", "asterisk", "avahi", "ceph", "chrony", "clamd",
+    "cloudflared",
     "dbus", "dhclient", "dhcp", "fail2ban", "fpm", "ftp", "glusterfs", "guacd",
     "imap", "influxdb", "ipp", "kafka", "ldap", "libvirt", "lvmpolld",
     "memcached", "mongodb", "mountd", "mqtt", "mysql", "nebula", "nfs", "nntp",
@@ -1375,6 +1383,27 @@ def has_active_swap(stage: Path) -> bool:
     return False
 
 
+def runs_chrony(active_units: set[str]) -> bool:
+    """True when chronyd is the host's time daemon.
+
+    The forced clock correction is chrony-specific: Sermo issues it as a command
+    on chronyd's Unix socket. Neither ntpd nor systemd-timesyncd has a step
+    command at all, and both correct a sustained drift through the
+    restart-if-clock-drifting watch their catalog service already ships.
+    """
+    return "chronyd" in active_units or "chrony" in active_units
+
+
+def runs_ceph(active_units: set[str]) -> bool:
+    """True when a ceph daemon runs on the host.
+
+    A step is a discontinuity, not a slew, and a clock jump can cost a ceph
+    monitor its paxos quorum — ceph's own mon_clock_drift_allowed defaults to
+    50ms. Tier 2 of the drift policy is never generated for these hosts.
+    """
+    return any(unit.startswith(CEPH_UNIT_PREFIXES) for unit in active_units)
+
+
 def tar_config(config_root: Path, tar_path: Path) -> None:
     def root_owned(info: tarfile.TarInfo) -> tarfile.TarInfo:
         info.uid = 0
@@ -1689,6 +1718,9 @@ dry_run: true
         simple_watch("watch-oom", "system", "30s", ["type: oom"], cycles=0, clear="duration: 1h"),
     )
 
+    # Tier 1 of the three-tier drift policy: ALERT at 1s, read-only, on every
+    # host. Two servers and cycles=2 on purpose, so one unreachable server or a
+    # single bad sample does not raise an alert.
     add_watch(
         "watches",
         "watch-clock-drift",
@@ -1701,12 +1733,78 @@ dry_run: true
                 "servers:",
                 "  - time.cloudflare.com",
                 "  - pool.ntp.org",
-                "max_offset: 3s",
+                "max_offset: 1s",
                 "max_stratum: 4",
                 "max_root_dispersion: 250ms",
                 "timeout: 3s",
             ],
             cycles=2,
+        ),
+    )
+
+    # Tier 2: the FORCED CORRECTION at 5s. Sermo asks the local chronyd to step
+    # the clock over its command socket — natively, no external process. The
+    # check reads the same socket it is about to command, so a passing check is
+    # standing evidence the action's channel is reachable before it is needed.
+    #
+    # Generated watches carry dry_run: true like every other one here, so the
+    # step is reported and not performed until the host is taken out of dry-run.
+    # Tier 3 (alert at 5ms, never step) stays an opt-in example: 5ms is
+    # site-specific and noisy on clusters with worse hardware.
+    clock_units = parse_active_units(stage)
+    if runs_ceph(clock_units):
+        skip("clock-step", "ceph runs on this host; a forced clock step can cost a monitor its quorum")
+    elif not runs_chrony(clock_units):
+        skip("clock-step", "chrony is not the time daemon; ntpd and systemd-timesyncd force the correction through the restart-if-clock-drifting watch their catalog service ships")
+    else:
+        add_watch(
+            "watches",
+            "watch-clock-step",
+            simple_watch(
+                "watch-clock-step",
+                "system",
+                "1m",
+                [
+                    "type: clock",
+                    "source: chrony",
+                    f"socket: {CHRONY_COMMAND_SOCKET}",
+                    "max_offset: 5s",
+                    "unit: s",
+                    "timeout: 3s",
+                ],
+                cycles=3,
+                then_lines=["makestep:", f"  socket: {CHRONY_COMMAND_SOCKET}"],
+                policy=True,
+            ),
+        )
+
+    # A non-empty /root/dead.letter means mail(1)/mailx could not hand a message
+    # to the MTA and wrote the body there instead: a cron job or a script tried
+    # to send mail and it never left the host — silently, since the sender had
+    # already exited. Nothing else on the host reports this.
+    #
+    # The size threshold is edge-triggered, so the crossing is reported once
+    # instead of every cycle, and again after a restart or a config reload, which
+    # re-arms the watcher's baseline. Clear it by emptying the file
+    # (`: > /root/dead.letter`, which re-arms the watch) or by removing it.
+    add_watch(
+        "watches",
+        "watch-dead-letter",
+        simple_watch(
+            "watch-dead-letter",
+            "files",
+            "5m",
+            [
+                "type: file",
+                "paths:",
+                f"  - {yaml_quote(DEAD_LETTER_PATH)}",
+                'size: { op: ">", value: 0 }',
+                # The healthy state is the file not being there at all. Without
+                # this the watch asserts its path exists and is red on every
+                # host that has nothing wrong with it.
+                "absent_ok: true",
+            ],
+            cycles=0,
         ),
     )
 

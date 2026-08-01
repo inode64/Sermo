@@ -613,3 +613,53 @@ func TestFileWatchSizeThresholdFiresAfterObserveOnlyCycle(t *testing.T) {
 		t.Fatalf("threshold fired %d times while still breaching, want 1", len(h.fired))
 	}
 }
+
+func TestFileWatchAbsentPathIsFailureByDefault(t *testing.T) {
+	// The default contract: the watch asserts its paths exist, which is what a
+	// config file or a database directory needs.
+	var got checks.Result
+	w := &fileWatcher{
+		name:    "fw",
+		paths:   []string{filepath.Join(t.TempDir(), "nope")},
+		cond:    fileCond{sizeOp: ">", sizeValue: 0},
+		publish: func(_, _ string, r checks.Result) { got = r },
+	}
+	w.runCycle(context.Background())
+	if got.OK {
+		t.Fatalf("a missing watched path must fail by default, got %+v", got)
+	}
+}
+
+func TestFileWatchAbsentOKReportsHealthyUntilTheFileAppears(t *testing.T) {
+	// /root/dead.letter is the canonical case: the file not existing is exactly
+	// what healthy looks like, so the watch must not sit red on every host that
+	// has nothing wrong with it — while still firing once the file shows up.
+	dir := t.TempDir()
+	f := filepath.Join(dir, "dead.letter")
+	var got checks.Result
+	h := &fileWatchHarness{}
+	w := h.watcher(f, false, fileCond{sizeOp: ">", sizeValue: 0})
+	w.absentOK = true
+	w.publish = func(_, _ string, r checks.Result) { got = r }
+
+	w.runCycle(context.Background())
+	if !got.OK {
+		t.Fatalf("an absent path must be healthy with absent_ok, got %+v", got)
+	}
+	if len(h.fired) != 0 {
+		t.Fatalf("an absent path must not fire, got %v", h.fired)
+	}
+
+	writeSize(t, f, 500)
+	w.runCycle(context.Background())
+	if len(h.fired) != 1 {
+		t.Fatalf("the file appearing over the threshold must still fire, got %d", len(h.fired))
+	}
+	// The published state of a stateful file watch answers "do the paths exist",
+	// never "is the condition met" — every condition signals through the edge
+	// event instead. absent_ok only flips the answer for an empty scan, so a
+	// present file reads OK here exactly as it does for every other file watch.
+	if !got.OK {
+		t.Fatalf("a present path publishes OK for every file watch, got %+v", got)
+	}
+}

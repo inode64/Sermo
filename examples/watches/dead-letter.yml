@@ -19,5 +19,8 @@ check:
   paths:
     - /root/dead.letter
   size: { op: ">", value: 0 }
+  # An absent /root/dead.letter is the healthy state, not a missing path: this
+  # watch reports a file appearing, it does not assert that one is there.
+  absent_ok: true
 then:
   notify: [ops-email]

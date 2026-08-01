@@ -194,9 +194,35 @@ so watching an already-down link would fire continuously. libvirt/QEMU `vnet`
 taps are skipped too — they come and go with their guests, which are monitored
 in their own right.
 
-Every generated configuration also includes an alert-only clock watch. It queries
-`time.cloudflare.com` and `pool.ntp.org` every five minutes and alerts after two
-consecutive samples whose wall-clock drift exceeds `3s`; it never corrects time.
+Every generated configuration includes tier 1 of the three-tier clock-drift
+policy: an alert-only `watch-clock-drift`. It queries `time.cloudflare.com` and
+`pool.ntp.org` every five minutes and alerts after two consecutive samples whose
+wall-clock drift exceeds `1s`. It never corrects time.
+
+Tier 2, `watch-clock-step`, is the forced correction at `5s`: Sermo asks the
+local chronyd to step the clock over its Unix command socket, natively and with
+no external process. It is generated **only** where it is both applicable and
+safe, and the generation report records why it was left out otherwise:
+
+- never on a host running any ceph daemon — a step is a discontinuity, not a
+  slew, and a clock jump can cost a monitor its paxos quorum;
+- only on a host whose time daemon is chrony. Neither ntpd nor
+  systemd-timesyncd has a step command at all; on those hosts the forced
+  correction is the `restart-if-clock-drifting` watch their catalog service
+  already ships.
+
+Like every generated watch it carries `dry_run: true`, so the step is reported
+and not performed until the host is taken out of dry-run. Tier 3 (alert at `5ms`
+for ceph nodes, never stepping) stays an opt-in example: `5ms` is site-specific
+and noisy on clusters with worse hardware.
+
+Every generated configuration also includes `watch-dead-letter`, an alert-only
+size threshold on `/root/dead.letter`. `mail(1)`/`mailx` write an undeliverable
+message body there, so a non-empty file means a cron job or a script tried to
+send mail and it never left the host — silently, since the sender had already
+exited. The threshold is edge-triggered, so the crossing is reported once rather
+than every cycle, and again after a restart or a config reload, which re-arms the
+watcher's baseline.
 
 For every md array discovered in the staged `/proc/mdstat`, the generator writes
 one individual `raid-<array>` watch. It watches degradation and exposes rebuild
