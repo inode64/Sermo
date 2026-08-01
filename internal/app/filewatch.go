@@ -70,17 +70,23 @@ type fileWatcher struct {
 	paths         []string
 	recursive     bool
 	includeHidden bool
-	cond          fileCond
-	summary       string
-	check         map[string]any
-	hook          HookSpec
-	notifiers     []notify.Notifier
-	dryRun        bool
-	inPanic       func() bool
-	runner        HookRunner
-	emit          func(Event)
-	publish       func(string, string, checks.Result)
-	now           func() time.Time
+	// absentOK inverts what a missing path means. By default the watcher asserts
+	// its paths exist, which is right for a config file or a database directory.
+	// A watch that exists to report a file *appearing* (/root/dead.letter, a core
+	// dump, /forcefsck) asserts the opposite, and for it an absent path is the
+	// healthy state rather than a permanent failure.
+	absentOK  bool
+	cond      fileCond
+	summary   string
+	check     map[string]any
+	hook      HookSpec
+	notifiers []notify.Notifier
+	dryRun    bool
+	inPanic   func() bool
+	runner    HookRunner
+	emit      func(Event)
+	publish   func(string, string, checks.Result)
+	now       func() time.Time
 
 	baseline    map[string]fileState
 	numberFiles int
@@ -169,10 +175,14 @@ func (w *fileWatcher) publishSnapshot(current map[string]fileState) {
 		return
 	}
 	if len(current) == 0 {
+		message := "file watch: no configured path found"
+		if w.absentOK {
+			message = "file watch: no watched path exists"
+		}
 		result := checks.Result{
 			Check:   w.name,
-			OK:      false,
-			Message: "file watch: no configured path found",
+			OK:      w.absentOK,
+			Message: message,
 			Data:    map[string]any{checks.DataKeyPaths: w.paths},
 		}
 		w.publish(w.name, checks.CheckTypeFile, checks.ApplySummary(w.summary, w.check, result))

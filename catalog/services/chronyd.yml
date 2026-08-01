@@ -96,8 +96,11 @@ watches:
     # condition with its own window rather than dropping the service's SLA.
     #
     # Deliberately alert-only: a shipped service must never step the host clock
-    # on its own. See examples/watches/clock-makestep.yml for the opt-in
-    # forced-correction tier, and clock-ceph.yml for the ceph profile.
+    # on its own, because `uses: chronyd` is inherited unread. The forced
+    # correction is a host watch instead, where the host's role can gate it:
+    # the fleet generator emits watch-clock-step only on a chrony host that runs
+    # no ceph daemon. See examples/watches/clock-makestep.yml for the standalone
+    # opt-in tier, and clock-ceph.yml for the ceph profile.
     check:
       type: clock
       source: chrony

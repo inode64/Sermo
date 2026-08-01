@@ -785,6 +785,11 @@ func validateFileCheck(name string, check, entry map[string]any, defaultNotify [
 			add(validationBooleanFormat, watchCheckFieldPath(name, checks.CheckKeyIncludeHidden))
 		}
 	}
+	if v, present := check[checks.CheckKeyAbsentOK]; present {
+		if _, ok := v.(bool); !ok {
+			add(validationBooleanFormat, watchCheckFieldPath(name, checks.CheckKeyAbsentOK))
+		}
+	}
 
 	conds := 0
 	if sz, ok := check[checks.CheckKeySize].(map[string]any); ok {

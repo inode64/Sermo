@@ -2737,6 +2737,7 @@ watches:
         - /srv/myapp/incoming
       recursive: true                 # optional, default false (whole subtree)
       include_hidden: true            # optional, default false (include .files/.dirs)
+      absent_ok: true                 # optional, default false (a missing path is healthy)
       older_than: 24h                 # optional: mtime age; any stale path fires
       summary: "${path} age ${value}, limit ${older_than}, files ${number_files}"
       size: { op: ">", value: 1048576 }   # edge threshold; or `size: { on: change }`
@@ -2769,6 +2770,15 @@ The conditions (declare at least one):
   time since a path's modification time (`mtime`) becomes greater than that
   duration. A path already stale on the first cycle fires immediately; it re-arms
   once the path is modified or removed.
+
+The watch's own state answers **"do the configured paths exist"** — the conditions
+above signal through events, not through it. So a watch none of whose paths exist
+reads as failed by default, which is what a config file or a database directory
+needs. Set **`absent_ok: true`** to invert that for a watch whose job is to report
+a file *appearing* — `/root/dead.letter`, a crash dump, `/forcefsck`. There the
+absence is the healthy state, and without it the watch sits red on every host that
+has nothing wrong with it. The conditions are unaffected: the file showing up over
+its `size` threshold still fires.
 
 When `recursive: true` and a selected path is a directory, every entry in that
 subtree is tracked independently (symlinks are watched as links, never followed).
