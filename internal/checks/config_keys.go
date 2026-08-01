@@ -117,6 +117,7 @@ const (
 	CheckKeySkipWhenChanged       = "skip_when_changed"
 	CheckKeySize                  = "size"
 	CheckKeySocket                = "socket"
+	CheckKeySource                = "source"
 	CheckKeyState                 = "state"
 	CheckKeySysfsChanges          = "sysfs_changes"
 	CheckKeyStatusPath            = "status_path"

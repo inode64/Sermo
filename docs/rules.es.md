@@ -76,7 +76,7 @@ Las comprobaciones de protocolo de conexión (MySQL, PostgreSQL, Redis, Docker, 
 | `conntrack`   | la tabla conntrack de netfilter frente a su máximo (used_pct/free/count)      |
 | `firewall_rules` | nftables/iptables tiene al menos `min_rules` reglas cargadas (ver Reglas de firewall) |
 | `route`       | existe una ruta por defecto activa, opcionalmente saliendo por una `interface` dada (ver Ruta por defecto)|
-| `clock`       | el desfase del reloj local se mantiene dentro de `max_offset` frente a uno de los `servers` NTP configurados |
+| `clock`       | el desfase del reloj local se mantiene dentro de `max_offset`, medido frente a los `servers` NTP configurados o (`source: chrony`) al chronyd local |
 | `net`         | una métrica de interfaz (`metric: state\|speed\|errors\|address`) se cumple — forma de métrica única del watch net |
 | `icmp`        | una métrica de ping (`metric: state\|latency`) contra `host`, opcionalmente ligada a una `interface` |
 | `swap`        | una métrica de swap (`metric: usage\|io`) se cumple — forma de métrica única del watch swap |
@@ -98,6 +98,7 @@ Las comprobaciones de protocolo de conexión (MySQL, PostgreSQL, Redis, Docker, 
 | `fpm` / `php-fpm` | un pool PHP-FPM responde a un `/ping` FastCGI con `pong`; un `status_path` opcional expone métricas del pool para `expect` (socket Unix o TCP, ver Base de datos) |
 | `dns`         | un servidor DNS responde a una consulta (NOERROR/NXDOMAIN) para `query` (ver Base de datos) |
 | `ntp`         | un servidor NTP responde con una hora sincronizada (modo servidor, estrato 1–15); expone leap, precisión, retardo/dispersión raíz y reference id para `expect` (ver Base de datos) |
+| `chrony` / `chronyd` | el chronyd local responde en su puerto de mando; expone el seguimiento (estrato, desfase, leap, skew, frecuencia) y los recuentos de fuentes para `expect` — usa esta, no `ntp`, para un chrony cliente que no sirve NTP (ver Base de datos) |
 | `snmp`        | un agente SNMP responde a un GET del sistema (comunidad v2c o usuario/contraseña v3); expone sys name/contact/location/uptime para `expect`; `on_change` alerta sobre cambios de la identidad del dispositivo (ver Base de datos) |
 | `tftp`        | un servidor TFTP responde a un RRQ con un paquete válido (DATA o ERROR) (ver Base de datos) |
 | `ldap`        | un directorio LDAP acepta un bind anónimo, o un bind simple con credenciales (ver Base de datos) |
@@ -333,11 +334,13 @@ checks:
 - **Dónde aplica.** `tcp`, `ports`, `icmp`, `websocket`, y toda
   comprobación de protocolo de conexión que marque TCP/UDP — sondas nativas y sondas
   respaldadas por driver con un dialer personalizado como `mysql`, `postgres`, `mongodb`, `ldap`,
-  `libvirt`, `redis`, `smtp`, `dns`, `ntp`, `nfs`, `dhcp`, `openvpn`, `nebula`,
-  `tftp`, …, más sondas de protocolo basadas en HTTP como
+  `libvirt`, `redis`, `smtp`, `dns`, `ntp`, `chrony`, `nfs`, `dhcp`, `openvpn`,
+  `nebula`, `tftp`, …, más sondas de protocolo basadas en HTTP como
   `influxdb`/`prometheus`/`cloudflared`/`syncthing`/`unifi`/`rspamd`/`ipp` —
   honra la **lista completa + `interface_match`**. La comprobación `http` independiente
-  honra una **única** interfaz (la primera listada).
+  honra una **única** interfaz (la primera listada). Una comprobación que marca un
+  socket Unix en lugar de un host (`chrony` con `socket:`, `docker`, `libvirt`, …)
+  no tiene enlace de salida, así que un pin de `interface` no le aplica.
 
 ### Interdependencias de comprobaciones (`requires` / `skip_when_changed`)
 
@@ -813,6 +816,39 @@ Protocolos, en el orden de la tabla de arriba:
   `root_delay_ms`, `root_dispersion_ms` y el `reference_id` (una etiqueta de refclock
   de estrato-1 como `GPS`, o la IP del servidor superior). Así una regla `expect:`
   puede afirmar p. ej. `leap == none` o un techo de `root_dispersion_ms`. RFC 5905.
+- `chrony` (alias `chronyd`) — puerto por defecto 323 (UDP, el puerto de mando de
+  chronyd), o `socket` para su socket de mando (normalmente
+  `/run/chrony/chronyd.sock`). Sin auth. Esta es la sonda para un host que ejecuta
+  chrony: una configuración de chrony **solo-cliente** no sirve NTP en el puerto 123
+  en absoluto, así que la sonda `ntp` no puede verlo, mientras que el protocolo de
+  mando propio de chrony informa de la visión del reloj que tiene el demonio. Lee el
+  estado de seguimiento del demonio y sus contadores de fuentes, y nunca emite una
+  orden que cambie nada. Los datos del resultado comparten los nombres de `ntp`
+  donde el significado coincide — `stratum`, `offset_seconds` (la corrección de
+  chronyd al reloj del sistema), `leap`, `root_delay_ms`, `root_dispersion_ms`,
+  `reference_id` — más `synchronized`, `reference_address`, `reference_time`,
+  `reference_age_seconds`, `skew_ppm` (que ya es una cota de error sin signo), más
+  `frequency_ppm` y `residual_frequency_ppm` — cada uno de esos dos también como
+  `frequency_abs_ppm` / `residual_frequency_abs_ppm`, ya que `expect:` no tiene
+  operador de valor absoluto —, `rms_offset_seconds`, `last_offset_seconds`, `update_interval_seconds`
+  y `sources`, `sources_online`, `sources_offline`, `sources_burst_online`,
+  `sources_burst_offline`, `sources_unresolved`. Un demonio que está en marcha pero
+  todavía no disciplina el reloj responde normalmente con `synchronized: false` —
+  eso es un demonio vivo, así que dale a la pérdida de sincronía su propia watch con
+  una ventana `for:` en lugar de esperar que la sonda falle. **UDP es el valor por
+  defecto porque es el canal solo-monitorización de chronyd**: rechaza las órdenes
+  privilegiadas, mientras que el socket de mando es el totalmente privilegiado.
+  `reference_id` es el *hash* que chrony hace de la dirección del par y no la
+  dirección en sí, por lo que se informa como hexadecimal (una etiqueta ASCII de
+  refclock para el estrato 1, igual que con `ntp`); el par real es
+  `reference_address` — que es además la clave con la que comparar cuando una regla
+  deba funcionar con ambas sondas, ya que chrony deriva el identificador de un par
+  IPv6 hasheándolo pero usa la dirección de un par IPv4 tal cual, de modo que el
+  mismo servidor superior puede leerse como `192.168.1.10` desde `ntp` y como
+  `C0A8010A` desde `chrony`. chronyd no informa de versión por este protocolo, así que
+  `on_version_change` es inerte — usa el preflight `--version` de la app `chronyd`.
+  Prefiere `type: clock` con `source: chrony` cuando quieras umbrales de deriva y una
+  gráfica en lugar de aserciones sobre campos (ver Deriva del reloj).
 - `snmp` — puerto por defecto 161 (UDP). Con **ningún `user`** usa **SNMPv2c** con una
   cadena de comunidad (`password`, por defecto `public` — el modelo anónimo/de secreto-compartido).
   Con un **`user`** usa **SNMPv3 USM**: una `password` añade autenticación SHA
@@ -1590,6 +1626,52 @@ techo. Los datos del resultado llevan el `server`, `port`, `offset_seconds`,
 `offset_abs_seconds`, `stratum`, `leap`, `precision_seconds`, `root_delay_ms`,
 `root_dispersion_ms` y `reference_id` seleccionados; los hooks reciben los mismos
 valores como campos de entorno `SERMO_*`.
+
+Una fuente que responde pero no está sincronizada — estrato 0, o un `leap` de
+`unsynchronized` — siempre falla, sea cual sea el `max_stratum` permitido: su
+desfase es casi cero y de otro modo parecería la mejor muestra disponible.
+
+#### Leer un chronyd local (`source: chrony`)
+
+`source:` selecciona de dónde viene la muestra: `ntp` (el valor por defecto) consulta
+los `servers` remotos de arriba, y `chrony` lee el chronyd local mediante su protocolo
+de mando. Usa `chrony` en un host donde chrony funciona como cliente — no sirve NTP
+propio que consultar, y sus propios datos de seguimiento son la respuesta autorizada
+sobre cuánto se aleja este reloj de la hora real.
+
+```yaml
+watches:
+  chrony-drift:
+    interval: 5m
+    check:
+      type: clock
+      source: chrony
+      host: 127.0.0.1       # opcional, este es el valor por defecto
+      port: 323             # opcional, el puerto de mando de chronyd
+      # socket: /run/chrony/chronyd.sock   # en lugar de host/port
+      max_offset: 100ms
+      max_stratum: 4
+      max_root_dispersion: 200ms
+      unit: s               # grafica el desfase a lo largo del tiempo
+      timeout: 3s
+```
+
+Con `source: chrony`, `servers` se rechaza (el objetivo es el demonio local, no una
+lista remota) y `host`/`port`/`socket` lo direccionan en su lugar; `max_offset` sigue
+siendo obligatorio y los umbrales significan lo mismo. `offset_seconds` es la
+corrección propia de chronyd al reloj del sistema — lo que `chronyc tracking` imprime
+como "System time … of NTP time" — así que es directamente comparable con la fuente
+`ntp`.
+
+Los datos del resultado añaden los diagnósticos propios del demonio sobre los campos
+compartidos: `synchronized`, `reference_address`, `reference_time`,
+`reference_age_seconds`, `skew_ppm`, `frequency_ppm`, `residual_frequency_ppm`,
+`rms_offset_seconds`, `last_offset_seconds`, `update_interval_seconds` y `sources`,
+`sources_online`, `sources_offline`, `sources_unresolved`. Como números en el
+resultado son graficables y llegan a los hooks como campos `SERMO_*`. Para aserciones
+sobre campos concretos — un número mínimo de fuentes, un techo de skew — usa el tipo
+de comprobación `chrony` directamente con `expect:`; el servicio de catálogo `chronyd`
+que se distribuye hace ambas cosas.
 
 Cada tipo de arriba es una **comprobación de un solo disparo** (`Check.Run → Result`) y es usable en
 **ambos** lugares:

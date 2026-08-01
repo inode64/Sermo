@@ -192,17 +192,30 @@ func probeLineCommand(ctx context.Context, cfg Config, defaultPort int, command 
 	return res, nil
 }
 
+// dialUDPDeadline opens a connected UDP socket to cfg's host (defaulting to
+// DefaultHost) and port (defaulting to defaultPort) through BindDialer and
+// applies the context deadline. The UDP twin of dialTCPDeadline; the caller
+// closes the connection. Probes that exchange more than one datagram with the
+// same peer (chrony) dial once through this instead of repeating exchangeUDP.
+func dialUDPDeadline(ctx context.Context, cfg Config, defaultPort int) (net.Conn, error) {
+	c, err := BindDialer(cfg.Interface).DialContext(ctx, networkUDP, cfg.addrDefaults(defaultPort))
+	if err != nil {
+		return nil, err
+	}
+	applyDeadline(ctx, c)
+	return c, nil
+}
+
 // exchangeUDP dials cfg's host (defaulting to DefaultHost) and port
 // (defaulting to defaultPort) over UDP through BindDialer, applies the context
 // deadline, sends request, and returns the first reply datagram (up to
 // bufBytes). The round-trip shared by the datagram probes (rpcbind, nebula).
 func exchangeUDP(ctx context.Context, cfg Config, defaultPort int, request []byte, bufBytes int) ([]byte, error) {
-	c, err := BindDialer(cfg.Interface).DialContext(ctx, networkUDP, cfg.addrDefaults(defaultPort))
+	c, err := dialUDPDeadline(ctx, cfg, defaultPort)
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = c.Close() }()
-	applyDeadline(ctx, c)
 	if _, err := c.Write(request); err != nil {
 		return nil, err
 	}
