@@ -2755,7 +2755,12 @@ The conditions (declare at least one):
   the last cycle) or a threshold `{op, value}` (same operator set as storage). The
   threshold is **edge-triggered**: it fires once when the size crosses into the
   condition and re-arms only after it drops back out — not every cycle while
-  breached.
+  breached. A path first seen *already* satisfying the threshold counts as a
+  crossing and fires, the same way `older_than` reports a path that is already
+  stale, so a file whose very appearance is the event (a `dead.letter`, a crash
+  dump) is caught — on the first real cycle, since the startup observation cycle
+  reports nothing. The baseline lives with the watch, so a reload re-arms it and
+  a still-breaching path is reported once more, exactly as `older_than` behaves.
 - **`permissions`** — `on: change`; fires when the permission bits change.
 - **`owner`** — `on: change`; fires when the owning uid or gid changes.
 - **`existence`** — `on: delete`; fires when a path that existed stops existing
@@ -2770,8 +2775,11 @@ subtree is tracked independently (symlinks are watched as links, never followed)
 By default, descendants whose name starts with `.` are skipped, including their
 subtrees. Set `include_hidden: true` to track them. A hidden path named directly
 in `path` or `paths` is always tracked.
-New entries are adopted silently unless already stale; deleted entries fire
-`existence` if configured. Each detected change is **one event and one hook
+New entries are adopted silently unless already stale or already over a `size`
+threshold — the two conditions judgeable from a single observation. The others
+(`size: {on: change}`, `permissions`, `owner`, `existence`) name a transition, so
+they have no prior to compare against and stay silent on adoption. Deleted entries
+fire `existence` if configured. Each detected change is **one event and one hook
 run**, so a cycle that finds several changed paths fires several times — except
 `older_than`: when several paths cross the age threshold in the same cycle, the
 hook still runs once per path (with its own `SERMO_PATH`), but they produce

@@ -1,0 +1,83 @@
+name: systemd-timesyncd
+aliases:
+  - timesyncd
+display_name: systemd-timesyncd
+category: network
+description: systemd's SNTP client for system clock synchronization.
+# systemd-only by construction: timesyncd ships with systemd and has no openrc
+# equivalent. It carries no `apps:` entry because its version is systemd's.
+service:
+  systemd:
+    - systemd-timesyncd
+variables:
+  clock_check_interval: 5m
+  ntp_server: time.cloudflare.com
+  ntp_server_fallback: pool.ntp.org
+  max_offset: 1s
+  max_offset_step: 5s
+  max_stratum: 4
+  max_root_dispersion: 250ms
+watches:
+  service:
+    check:
+      type: service
+      expect: active
+  clock:
+    interval: ${clock_check_interval}
+    # Host wall-clock drift, alert-only and graphed. timesyncd exposes no way to
+    # read its own correction — its only D-Bus method is SetRuntimeNTPServers —
+    # so this must query remote servers. Point them at your own NTP servers if
+    # you do not want the public pool.
+    check:
+      type: clock
+      servers:
+        - ${ntp_server}
+        - ${ntp_server_fallback}
+      max_offset: ${max_offset}
+      max_stratum: ${max_stratum}
+      max_root_dispersion: ${max_root_dispersion}
+      unit: s
+      optional: true
+      timeout: 3s
+  restart-if-clock-drifting:
+    interval: ${clock_check_interval}
+    # timesyncd has no "step now" command at all: org.freedesktop.timesync1
+    # exposes only SetRuntimeNTPServers, and org.freedesktop.timedate1.SetTime
+    # is refused while NTP synchronization is enabled. The forced correction is
+    # therefore a restart: an offset this large, sustained this long, means
+    # timesyncd is not synchronizing at all, and a restart makes it re-resolve
+    # its servers and step on the first successful sync. This goes through the
+    # safe operation engine (locks, guards, preflight) and the service's
+    # policy.cooldown.
+    #
+    # Two servers and a long window on purpose: a rule fires on *any* check
+    # failure, so a single unreachable server must not restart the daemon.
+    check:
+      type: clock
+      servers:
+        - ${ntp_server}
+        - ${ntp_server_fallback}
+      max_offset: ${max_offset_step}
+      max_stratum: ${max_stratum}
+      optional: true
+      timeout: 3s
+    for:
+      duration: 15m
+    then:
+      action: restart
+      message: >-
+        During ${rule.duration}, the clock check kept failing (offset above ${max_offset_step}, or no usable NTP sample); restarting ${display_name} to resynchronize
+  alert-if-memory-high:
+    check:
+      type: metric
+      scope: service
+      name: memory
+      op: '>'
+      value: 30%
+      optional: true
+    for:
+      duration: 4m
+    then:
+      action: alert
+      message: >-
+        During ${rule.duration}, ${display_name} memory usage stayed above ${check.threshold} (current ${check.value})
