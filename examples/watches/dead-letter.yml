@@ -1,0 +1,23 @@
+name: dead-letter
+category: files
+# Notify when /root/dead.letter appears with anything in it.
+#
+# mail(1)/mailx write the message body there when they cannot hand it to the
+# MTA, so a non-empty dead.letter means a cron job or a script tried to send
+# mail and it did not leave the host — silently, since the sender already exited.
+#
+# The size threshold is edge-triggered, so you are told once and not every
+# cycle. Clearing it means emptying or removing the file:
+#   : > /root/dead.letter      # keeps the file, re-arms the watch
+#   rm /root/dead.letter       # removes it entirely
+# A file left in place is reported again after a daemon restart or a config
+# reload, which re-arms the watch's baseline.
+monitor: disabled
+interval: 5m
+check:
+  type: file
+  paths:
+    - /root/dead.letter
+  size: { op: ">", value: 0 }
+then:
+  notify: [ops-email]

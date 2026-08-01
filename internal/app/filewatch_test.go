@@ -44,7 +44,7 @@ func TestFileWatchFirstCycleSilent(t *testing.T) {
 	f := filepath.Join(t.TempDir(), "a.txt")
 	writeSize(t, f, 10)
 	h := &fileWatchHarness{}
-	w := h.watcher(f, false, fileCond{sizeChange: true, permChange: true})
+	w := h.watcher(f, false, fileCond{sizeChange: true, permChange: true, ownerChange: true})
 	w.runCycle(context.Background())
 	if len(h.fired) != 0 {
 		t.Fatalf("first cycle must adopt the baseline silently, fired %d hooks", len(h.fired))
@@ -555,5 +555,61 @@ func TestFileWatchMissingRootDeletion(t *testing.T) {
 		if _, still := w.baseline[f]; still {
 			t.Error("baseline entry for deleted root must be removed")
 		}
+	}
+}
+
+func TestFileWatchSizeThresholdFiresForAPathThatArrivesBreaching(t *testing.T) {
+	// A file whose very appearance is the event — /root/dead.letter is the
+	// canonical case — was adopted silently and never fired, because the
+	// threshold only ran for paths already in the baseline. An absolute
+	// condition can be judged from a single observation, which is the rule
+	// older_than already follows for a path that is stale when first seen.
+	f := filepath.Join(t.TempDir(), "dead.letter")
+	h := &fileWatchHarness{}
+	w := h.watcher(f, false, fileCond{sizeOp: ">", sizeValue: 0})
+
+	w.runCycle(context.Background()) // absent
+	if len(h.fired) != 0 {
+		t.Fatalf("an absent path must not fire, got %v", h.fired)
+	}
+
+	writeSize(t, f, 500)
+	w.runCycle(context.Background())
+	if len(h.fired) != 1 {
+		t.Fatalf("a path that arrives over the threshold must fire once, got %d", len(h.fired))
+	}
+	if h.fired[0]["SERMO_CHANGE"] != "size_threshold" || h.fired[0]["SERMO_SIZE"] != "500" {
+		t.Fatalf("unexpected threshold env: %v", h.fired[0])
+	}
+
+	// Still breaching: edge-triggered, so it must not repeat.
+	w.runCycle(context.Background())
+	if len(h.fired) != 1 {
+		t.Fatalf("threshold fired %d times while still breaching, want 1", len(h.fired))
+	}
+}
+
+func TestFileWatchSizeThresholdFiresAfterObserveOnlyCycle(t *testing.T) {
+	// A file already over the threshold when the daemon starts. The settling
+	// cycle must observe without reporting, and must not record the breach as
+	// the prior state — doing so made the first real cycle see no edge and stay
+	// silent forever, which is the whole dead.letter-survives-a-restart case.
+	// This mirrors TestFileWatchOlderThanFiresAfterObserveOnlyCycle.
+	f := filepath.Join(t.TempDir(), "dead.letter")
+	writeSize(t, f, 500)
+	h := &fileWatchHarness{}
+	w := h.watcher(f, false, fileCond{sizeOp: ">", sizeValue: 0})
+
+	w.runCycle(withObserveOnly(context.Background(), true))
+	if len(h.fired) != 0 {
+		t.Fatalf("the settling cycle must observe silently, got %v", h.fired)
+	}
+	w.runCycle(context.Background())
+	if len(h.fired) != 1 {
+		t.Fatalf("a path already breaching at startup must fire once it settles, got %d", len(h.fired))
+	}
+	w.runCycle(context.Background())
+	if len(h.fired) != 1 {
+		t.Fatalf("threshold fired %d times while still breaching, want 1", len(h.fired))
 	}
 }
