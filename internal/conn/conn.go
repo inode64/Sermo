@@ -12,6 +12,7 @@ import (
 	"database/sql"
 	"encoding/binary"
 	"io"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -40,6 +41,7 @@ const (
 	ProtocolNameAsterisk    = "asterisk"
 	ProtocolNameAvahi       = "avahi"
 	ProtocolNameCeph        = "ceph"
+	ProtocolNameChrony      = "chrony"
 	ProtocolNameClamd       = "clamd"
 	ProtocolNameCloudflared = "cloudflared"
 	ProtocolNameDBus        = "dbus"
@@ -98,6 +100,7 @@ const (
 	protocolAliasAMI              = "ami"
 	protocolAliasAvahiDaemon      = "avahi-daemon"
 	protocolAliasCephMon          = "ceph-mon"
+	protocolAliasChronyd          = "chronyd"
 	protocolAliasCIFS             = "cifs"
 	protocolAliasClamAV           = "clamav"
 	protocolAliasCloudflareTunnel = "cloudflare-tunnel"
@@ -244,6 +247,7 @@ const (
 	defaultPortAMQP        = 5672
 	defaultPortAsterisk    = 5038
 	defaultPortCeph        = 3300
+	defaultPortChrony      = 323
 	defaultPortClamd       = 3310
 	defaultPortCloudflared = 60123
 	defaultPortFPM         = 9000
@@ -296,6 +300,9 @@ const (
 	networkTCP    = TransportTCP
 	networkUDP    = TransportUDP
 	networkUnix   = netutil.NetworkUnix
+	// networkUnixgram is the datagram Unix-socket network. Only chronyd's command
+	// socket needs it: it is SOCK_DGRAM, so the stream networkUnix cannot reach it.
+	networkUnixgram = "unixgram"
 
 	// HTTP probe body limits keep service probes bounded against unexpected peers.
 	maxHTTPProbeBody      = 64 * units.BytesPerKiB
@@ -344,6 +351,7 @@ const (
 	extraHealth                = "health"
 	extraImplementation        = "implementation"
 	extraInterface             = "interface"
+	extraLeap                  = "leap"
 	extraLeaseExpires          = "lease_expires_at"
 	extraLeaseFile             = "lease_file"
 	extraLeaseSeconds          = "lease_seconds"
@@ -360,8 +368,11 @@ const (
 	extraPool                  = "pool"
 	extraProcessManager        = "process_manager"
 	extraRC                    = "rc"
+	extraReferenceID           = "reference_id"
 	extraResult                = "result"
 	extraRevision              = "revision"
+	extraRootDelayMS           = "root_delay_ms"
+	extraRootDispersionMS      = "root_dispersion_ms"
 	extraRunning               = "running"
 	extraSecurity              = "security"
 	extraSelect                = "select"
@@ -410,6 +421,39 @@ const (
 
 // ExtraKeySocket is the Result.Extra key carrying the Unix socket path a probe used.
 const ExtraKeySocket = extraSocket
+
+// Numeric rendering shared by the probes that report measurements as Extra
+// strings, so two probes reporting the same field render it identically.
+const (
+	formatFixed = 'f'
+	formatBits  = 64
+	msPerSecond = 1000
+	// msPrecision keeps microsecond resolution in a millisecond field.
+	msPrecision = 3
+	// secondsPrecision keeps nanosecond resolution in a seconds field, the
+	// resolution the time protocols measure an offset at.
+	secondsPrecision = 9
+)
+
+// Vocabulary shared by the time protocols: NTP's leap indicator (RFC 5905) and
+// chrony's leap_status use the same 0..3 encoding, so both probes report the
+// same values under Result.Extra["leap"] and an expect: rule reads identically
+// against either.
+const (
+	leapNameNone           = "none"
+	leapNameAddSecond      = "add-second"
+	leapNameDelSecond      = "del-second"
+	leapNameUnsynchronized = "unsynchronized"
+	leapNameUnknown        = "unknown"
+	// primaryStratum is the lowest real stratum: a reference clock. Below it
+	// (stratum 0) a source is not serving usable time.
+	primaryStratum = 1
+	// refIDBytes is the width of a reference identifier.
+	refIDBytes = 4
+)
+
+// leapNames indexes the leap-indicator codes 0..3.
+var leapNames = [...]string{leapNameNone, leapNameAddSecond, leapNameDelSecond, leapNameUnsynchronized}
 
 // Config is the connection target for a protocol probe. Fields that do not apply
 // to a protocol are ignored by it.
@@ -554,6 +598,52 @@ func randXID32() uint32 {
 
 func hostPort(host string, port int) string {
 	return netutil.JoinHostPort(host, port)
+}
+
+// fixedString renders v in fixed-point notation with prec decimals. The probes
+// that publish measurements as Extra strings share it so the same field renders
+// identically whichever probe produced it.
+func fixedString(v float64, prec int) string {
+	return strconv.FormatFloat(v, formatFixed, prec, formatBits)
+}
+
+// msString renders a duration in seconds as milliseconds, and secondsString a
+// duration in seconds. The time protocols share both because they publish the
+// same offset and root delay / dispersion keys.
+func msString(seconds float64) string      { return fixedString(seconds*msPerSecond, msPrecision) }
+func secondsString(seconds float64) string { return fixedString(seconds, secondsPrecision) }
+
+// leapName renders a leap indicator code, or "unknown" for a code outside 0..3.
+func leapName(code int) string {
+	if code < 0 || code >= len(leapNames) {
+		return leapNameUnknown
+	}
+	return leapNames[code]
+}
+
+// Synchronized reports whether a time source sample is disciplining the clock.
+// A source that is up but not synchronized reports stratum 0 and a leap status
+// saying so; both the chrony probe and the clock check judge it by this one
+// rule so they cannot drift apart.
+func Synchronized(stratum int, leap string) bool {
+	return stratum >= primaryStratum && leap != leapNameUnsynchronized
+}
+
+// refIDLabel renders a reference identifier's four bytes as an ASCII refclock
+// label (e.g. "GPS", "PPS"), or "" when they do not spell a printable one.
+func refIDLabel(id uint32) string {
+	var b [refIDBytes]byte
+	binary.BigEndian.PutUint32(b[:], id)
+	label := strings.TrimRight(string(b[:]), "\x00 ")
+	if label == "" {
+		return ""
+	}
+	for i := range len(label) {
+		if label[i] < ' ' || label[i] > '~' {
+			return ""
+		}
+	}
+	return label
 }
 
 // pingAndVersion verifies a database/sql pool answers a ping and best-effort

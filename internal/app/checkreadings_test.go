@@ -56,6 +56,33 @@ func TestCheckReadingsForAllTypes(t *testing.T) {
 			want: map[string]string{"offset_seconds": "-0.125 s", "offset_abs_seconds": "0.125 s", "stratum": "2"},
 		},
 		{
+			// source: chrony adds the local daemon's own diagnostics to the row.
+			name: "clock via a local chronyd",
+			typ:  "clock",
+			data: map[string]any{
+				"socket":                "/run/chrony/chronyd.sock",
+				"protocol":              "chrony",
+				"synchronized":          "true",
+				"offset_seconds":        0.000044694,
+				"offset_abs_seconds":    0.000044694,
+				"stratum":               3,
+				"skew_ppm":              0.024,
+				"frequency_ppm":         2.56,
+				"sources_online":        4.0,
+				"sources_unresolved":    0.0,
+				"reference_age_seconds": 90.0,
+			},
+			want: map[string]string{
+				"socket":                "/run/chrony/chronyd.sock",
+				"stratum":               "3",
+				"synchronized":          "true",
+				"skew_ppm":              "0.024 ppm",
+				"frequency_ppm":         "2.560 ppm",
+				"sources_online":        "4",
+				"reference_age_seconds": "90 s",
+			},
+		},
+		{
 			name: "firewall_rules",
 			typ:  "firewall_rules",
 			data: map[string]any{"backend": "nftables", "rules": uint64(99), "min_rules": 1},

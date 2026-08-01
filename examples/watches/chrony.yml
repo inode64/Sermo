@@ -1,0 +1,22 @@
+name: chrony-sync
+category: host
+# Assert the local chronyd is actually disciplining the clock. A chrony client
+# serves no NTP on port 123, so `type: ntp` cannot see it — this reads chronyd's
+# own command port instead. Use `type: clock` with `source: chrony` when you want
+# a drift threshold and a graph rather than field assertions.
+monitor: disabled
+interval: 5m
+check:
+  type: chrony
+  host: 127.0.0.1
+  port: 323
+  # socket: /run/chrony/chronyd.sock   # the privileged channel, instead of host/port
+  expect:
+    synchronized: 'true'
+    stratum: { op: "<=", value: 4 }
+    sources_online: { op: ">=", value: 3 }
+    skew_ppm: { op: "<", value: 10 }
+  timeout: 3s
+for: { duration: 10m }
+then:
+  notify: [ops-email]

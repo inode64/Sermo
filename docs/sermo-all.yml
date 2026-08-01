@@ -224,6 +224,37 @@ watches:
         timeout: 2m
         expect_exit: 0
 
+  # Same check reading the local chronyd instead of querying remote servers: a
+  # chrony client serves no NTP of its own, so this is the only way to see it.
+  chrony-drift:
+    monitor: disabled
+    interval: 5m
+    check:
+      type: clock
+      source: chrony
+      host: 127.0.0.1
+      port: 323
+      max_offset: 100ms
+      max_stratum: 4
+      max_root_dispersion: 200ms
+      unit: s
+      timeout: 3s
+    then: { notify: [ops-email] }
+
+  # Field-level assertions on the same daemon, via the chrony check type.
+  chrony-sources:
+    monitor: disabled
+    check:
+      type: chrony
+      host: 127.0.0.1
+      port: 323
+      expect:
+        synchronized: 'true'
+        sources_online: { op: ">=", value: 3 }
+        skew_ppm: { op: "<", value: 10 }
+    for: { duration: 10m }
+    then: { notify: [ops-email] }
+
   audit-log-growth:
     monitor: disabled
     check: { type: size, path: /var/log/audit/audit.log, grow_by: 500M, within: 1h }
@@ -868,7 +899,8 @@ watches:
       query: example.com
       expect: { rcode: NOERROR, answers: { op: ">", value: 0 } }
       # Other registered connection-protocol check types:
-      # acpid, ajp, amqp/rabbitmq, asterisk/ami, avahi, ceph/ceph-mon, clamd/clamav,
+      # acpid, ajp, amqp/rabbitmq, asterisk/ami, avahi, ceph/ceph-mon,
+      # chrony/chronyd, clamd/clamav,
       # cloudflared/cloudflare-tunnel, dbus, dhclient/dhcp-client, dhcp, docker,
       # fail2ban, fpm/php-fpm, ftp, glusterfs/glusterd/gluster, guacd/guacamole,
       # imap, influxdb/influx, ipp/cups, kafka, ldap, libvirt/libvirtd, lvmpolld,

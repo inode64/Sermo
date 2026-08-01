@@ -2280,8 +2280,41 @@ watches:
 `interface_match` bind the NTP request through specific links, matching the other
 network checks. Hooks receive `SERMO_SERVER`, `SERMO_OFFSET_SECONDS`,
 `SERMO_OFFSET_ABS_SECONDS`, `SERMO_STRATUM`, `SERMO_ROOT_DISPERSION_MS` and the
-other returned NTP fields, so the script can decide whether to run `chronyc`,
-`ntpdate`, `timedatectl` or a site-local correction flow.
+other returned NTP fields, so the script can decide whether to run `ntpdate`,
+`timedatectl` or a site-local correction flow.
+
+On a host that already runs chrony, set `source: chrony` instead: Sermo reads the
+local chronyd over its command protocol rather than sending its own NTP queries,
+which is the only option when chrony runs as a client and therefore serves no NTP
+on port 123 to probe.
+
+```yaml
+watches:
+  chrony-drift:
+    interval: 5m
+    check:
+      type: clock
+      source: chrony
+      host: 127.0.0.1       # optional, the default
+      port: 323             # optional, chronyd's command port
+      # socket: /run/chrony/chronyd.sock   # instead of host/port
+      max_offset: 100ms
+      max_stratum: 4
+      max_root_dispersion: 200ms
+      unit: s
+      timeout: 3s
+```
+
+`servers` is rejected with `source: chrony`, and `host`/`port`/`socket` name the
+local daemon instead. With `socket:` the result reports `socket` in place of
+`server` and `port`, so a hook receives `SERMO_SOCKET` and no
+`SERMO_SERVER`/`SERMO_PORT`. Hooks then also receive `SERMO_SYNCHRONIZED`,
+`SERMO_SKEW_PPM`, `SERMO_FREQUENCY_PPM`, `SERMO_RMS_OFFSET_SECONDS`,
+`SERMO_REFERENCE_AGE_SECONDS` and `SERMO_SOURCES_ONLINE`, so a script can tell a
+clock that is merely drifting from one whose sources have gone away. An
+`interface` pin does not apply when `socket:` is used — a Unix socket has no
+egress link. To assert individual fields rather than a drift threshold, use the
+[`chrony` check type](rules.md) with `expect:`.
 
 ### `swap` — system swap
 

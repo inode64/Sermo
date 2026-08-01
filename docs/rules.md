@@ -76,7 +76,7 @@ Connection-protocol checks (MySQL, PostgreSQL, Redis, Docker, libvirt, etc.) are
 | `conntrack`   | the netfilter conntrack table vs its max (used_pct/free/count)      |
 | `firewall_rules` | nftables/iptables has at least `min_rules` loaded rules (see Firewall rules) |
 | `route`       | an up default route exists, optionally egressing a given `interface` (see Default route)|
-| `clock`       | local wall-clock offset stays within `max_offset` against one of the configured NTP `servers` |
+| `clock`       | local wall-clock offset stays within `max_offset`, measured against the configured NTP `servers` or (`source: chrony`) the local chronyd |
 | `net`         | one interface metric (`metric: state\|speed\|errors\|address`) holds — single-metric form of the net watch |
 | `icmp`        | one ping metric (`metric: state\|latency`) against `host`, optionally bound to an `interface` |
 | `swap`        | one swap metric (`metric: usage\|io`) holds — single-metric form of the swap watch |
@@ -98,6 +98,7 @@ Connection-protocol checks (MySQL, PostgreSQL, Redis, Docker, libvirt, etc.) are
 | `fpm` / `php-fpm` | a PHP-FPM pool answers a FastCGI `/ping` with `pong`; an optional `status_path` exposes pool metrics for `expect` (Unix socket or TCP, see Database) |
 | `dns`         | a DNS server answers a query (NOERROR/NXDOMAIN) for `query` (see Database) |
 | `ntp`         | an NTP server answers with a synchronized time (server mode, stratum 1–15); exposes leap, precision, root delay/dispersion and reference id for `expect` (see Database) |
+| `chrony` / `chronyd` | the local chronyd answers on its command port; exposes tracking (stratum, offset, leap, skew, frequency) and source counts for `expect` — use this, not `ntp`, for a chrony client that serves no NTP (see Database) |
 | `snmp`        | an SNMP agent answers a system GET (v2c community or v3 user/password); exposes sys name/contact/location/uptime for `expect`; `on_change` alerts on device-identity change (see Database) |
 | `tftp`        | a TFTP server answers an RRQ with a valid packet (DATA or ERROR) (see Database) |
 | `ldap`        | an LDAP directory accepts an anonymous bind, or a simple bind with credentials (see Database) |
@@ -333,11 +334,13 @@ checks:
 - **Where it applies.** `tcp`, `ports`, `icmp`, `websocket`, and every
   connection-protocol check that dials TCP/UDP — native probes and driver-backed
   probes with a custom dialer such as `mysql`, `postgres`, `mongodb`, `ldap`,
-  `libvirt`, `redis`, `smtp`, `dns`, `ntp`, `nfs`, `dhcp`, `openvpn`, `nebula`,
-  `tftp`, …, plus HTTP-based protocol probes such as
+  `libvirt`, `redis`, `smtp`, `dns`, `ntp`, `chrony`, `nfs`, `dhcp`, `openvpn`,
+  `nebula`, `tftp`, …, plus HTTP-based protocol probes such as
   `influxdb`/`prometheus`/`cloudflared`/`syncthing`/`unifi`/`rspamd`/`ipp` —
   honors the **full list + `interface_match`**. The standalone `http` check
-  honors a **single** interface (the first listed).
+  honors a **single** interface (the first listed). A check that dials a Unix
+  socket instead of a host (`chrony` with `socket:`, `docker`, `libvirt`, …) has
+  no egress link, so an `interface` pin does not apply to it.
 
 ### Check interdependencies (`requires` / `skip_when_changed`)
 
@@ -809,6 +812,38 @@ Protocols, in the order of the table above:
   `root_delay_ms`, `root_dispersion_ms` and the `reference_id` (a stratum-1
   refclock label such as `GPS`, or the upstream server's IP). So an `expect:`
   rule can assert e.g. `leap == none` or a `root_dispersion_ms` ceiling. RFC 5905.
+- `chrony` (alias `chronyd`) — default port 323 (UDP, chronyd's command port), or
+  `socket` for its command socket (usually `/run/chrony/chronyd.sock`). No auth.
+  This is the probe for a host running chrony: a chrony **client-only**
+  configuration serves no NTP on port 123 at all, so the `ntp` probe cannot see
+  it, while chrony's own command protocol reports the daemon's view of the clock.
+  It reads the daemon's tracking state and its source counters, and never issues
+  a command that changes anything. Result data shares the `ntp` names where the
+  meaning matches — `stratum`, `offset_seconds` (chronyd's correction to the
+  system clock), `leap`, `root_delay_ms`, `root_dispersion_ms`, `reference_id` —
+  plus `synchronized`, `reference_address`, `reference_time`,
+  `reference_age_seconds`, `skew_ppm` (already an unsigned error bound), plus
+  `frequency_ppm` and `residual_frequency_ppm` — each of those two also as
+  `frequency_abs_ppm` / `residual_frequency_abs_ppm`, since `expect:` has no
+  absolute-value operator —
+  `rms_offset_seconds`, `last_offset_seconds`, `update_interval_seconds` and
+  `sources`, `sources_online`, `sources_offline`, `sources_burst_online`,
+  `sources_burst_offline`, `sources_unresolved`. A daemon that is running but not
+  yet disciplining the clock answers normally with `synchronized: false` — that is
+  a live daemon, so give sync loss its own watch with a `for:` window rather than
+  expecting the probe to fail. **UDP is the default because it is chronyd's
+  monitoring-only channel**: it refuses privileged commands, while the command
+  socket is the fully privileged one. `reference_id` is chrony's *hash* of the
+  peer address rather than the address itself, so it is reported as hex (an ASCII
+  refclock label for stratum 1, as with `ntp`); the real peer is
+  `reference_address` — which is also the key to match on when a rule must work
+  against both probes, since chrony derives an IPv6 peer's identifier by
+  hashing it but uses an IPv4 peer's address verbatim, so the same upstream can
+  read `192.168.1.10` from `ntp` and `C0A8010A` from `chrony`. chronyd reports
+  no version over this protocol, so
+  `on_version_change` is inert — use the `chronyd` app's `--version` preflight.
+  Prefer `type: clock` with `source: chrony` when you want drift thresholds and a
+  graph rather than field assertions (see Clock drift).
 - `snmp` — default port 161 (UDP). With **no `user`** it uses **SNMPv2c** with a
   community string (`password`, default `public` — the anonymous/shared-secret
   model). With a **`user`** it uses **SNMPv3 USM**: a `password` adds SHA
@@ -1587,6 +1622,50 @@ passes when one server answers with synchronized NTP data whose absolute
 selected `server`, `port`, `offset_seconds`, `offset_abs_seconds`, `stratum`,
 `leap`, `precision_seconds`, `root_delay_ms`, `root_dispersion_ms` and
 `reference_id`; hooks receive the same values as `SERMO_*` environment fields.
+
+A source that answers but is not synchronized — stratum 0, or a `leap` of
+`unsynchronized` — always fails, whatever `max_stratum` allows: its offset is
+near zero and would otherwise look like the best sample available.
+
+#### Reading a local chronyd (`source: chrony`)
+
+`source:` selects where the sample comes from: `ntp` (the default) queries the
+remote `servers` above, and `chrony` reads the local chronyd over its command
+protocol. Use `chrony` on a host where chrony runs as a client — it serves no NTP
+of its own to query, and its own tracking data is the authoritative answer for
+how far this clock is from true time.
+
+```yaml
+watches:
+  chrony-drift:
+    interval: 5m
+    check:
+      type: clock
+      source: chrony
+      host: 127.0.0.1       # optional, this is the default
+      port: 323             # optional, chronyd's command port
+      # socket: /run/chrony/chronyd.sock   # instead of host/port
+      max_offset: 100ms
+      max_stratum: 4
+      max_root_dispersion: 200ms
+      unit: s               # graph the offset over time
+      timeout: 3s
+```
+
+With `source: chrony`, `servers` is rejected (the target is the local daemon, not
+a remote list) and `host`/`port`/`socket` address it instead; `max_offset` is
+still required and the thresholds mean the same thing. `offset_seconds` is
+chronyd's own correction to the system clock — what `chronyc tracking` prints as
+"System time … of NTP time" — so it is directly comparable to the `ntp` source.
+
+Result data adds the daemon's own diagnostics on top of the shared fields:
+`synchronized`, `reference_address`, `reference_time`, `reference_age_seconds`,
+`skew_ppm`, `frequency_ppm`, `residual_frequency_ppm`, `rms_offset_seconds`,
+`last_offset_seconds`, `update_interval_seconds` and `sources`, `sources_online`,
+`sources_offline`, `sources_unresolved`. As numbers in the result they are
+graphable and reach hooks as `SERMO_*` fields. For assertions on individual
+fields — a minimum source count, a skew ceiling — use the `chrony` check type
+directly with `expect:`; the shipped `chronyd` catalog service does both.
 
 Every type above is a **single-shot check** (`Check.Run → Result`) and is usable in
 **both** places:

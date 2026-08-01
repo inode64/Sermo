@@ -17,31 +17,13 @@ import (
 func init() { Register(ntpProtocol{}) }
 
 const (
-	ntpExtraKeyLeap             = "leap"
 	ntpExtraKeyPrecisionSeconds = "precision_seconds"
-	ntpExtraKeyRootDelayMS      = "root_delay_ms"
-	ntpExtraKeyRootDispersionMS = "root_dispersion_ms"
-	ntpExtraKeyReferenceID      = "reference_id"
 
-	ntpLeapNone           = "none"
-	ntpLeapAddSecond      = "add-second"
-	ntpLeapDelSecond      = "del-second"
-	ntpLeapUnsynchronized = "unsynchronized"
-	ntpLeapUnknown        = "unknown"
-	ntpKissCodeUnknown    = "unknown"
+	ntpKissCodeUnknown = "unknown"
 
-	ntpRefIDBytes              = 4
-	ntpPrimaryStratum          = 1
-	ntpMinHealthyStratum       = 1
-	ntpMaxHealthyStratum       = 15
-	ntpMillisecondsPerSecond   = 1000
-	ntpOffsetPrecision         = 6
-	ntpPrecisionSignificant    = 4
-	ntpRootDelayPrecision      = 3
-	ntpRootDispersionPrecision = 3
-	ntpFormatFixed             = 'f'
-	ntpFormatCompact           = 'g'
-	ntpFormatBits              = 64
+	ntpMaxHealthyStratum    = 15
+	ntpPrecisionSignificant = 4
+	ntpFormatCompact        = 'g'
 )
 
 // ntpProtocol probes an NTP server (RFC 5905) with the github.com/beevik/ntp
@@ -86,7 +68,7 @@ func (ntpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 
 	extra := ntpExtraFields(resp)
 	extra[extraStratum] = strconv.Itoa(stratum)
-	extra[extraOffsetSeconds] = strconv.FormatFloat(resp.ClockOffset.Seconds(), ntpFormatFixed, ntpOffsetPrecision, ntpFormatBits)
+	extra[extraOffsetSeconds] = secondsString(resp.ClockOffset.Seconds())
 	return Result{Extra: extra}, nil
 }
 
@@ -111,34 +93,33 @@ func ntpKissCode(resp *ntp.Response) string {
 // reference identifier. These let an expect: rule assert sync quality, e.g.
 // leap == none or root_dispersion_ms below a threshold.
 func ntpExtraFields(resp *ntp.Response) map[string]string {
-	leaps := [...]string{ntpLeapNone, ntpLeapAddSecond, ntpLeapDelSecond, ntpLeapUnsynchronized}
-	leap := ntpLeapUnknown
-	if int(resp.Leap) < len(leaps) {
-		leap = leaps[resp.Leap]
-	}
 	return map[string]string{
-		ntpExtraKeyLeap:             leap,
-		ntpExtraKeyPrecisionSeconds: strconv.FormatFloat(resp.Precision.Seconds(), ntpFormatCompact, ntpPrecisionSignificant, ntpFormatBits),
-		ntpExtraKeyRootDelayMS:      strconv.FormatFloat(resp.RootDelay.Seconds()*ntpMillisecondsPerSecond, ntpFormatFixed, ntpRootDelayPrecision, ntpFormatBits),
-		ntpExtraKeyRootDispersionMS: strconv.FormatFloat(resp.RootDispersion.Seconds()*ntpMillisecondsPerSecond, ntpFormatFixed, ntpRootDispersionPrecision, ntpFormatBits),
-		ntpExtraKeyReferenceID:      ntpRefID(resp.ReferenceID, int(resp.Stratum)),
+		extraLeap:                   leapName(int(resp.Leap)),
+		ntpExtraKeyPrecisionSeconds: strconv.FormatFloat(resp.Precision.Seconds(), ntpFormatCompact, ntpPrecisionSignificant, formatBits),
+		extraRootDelayMS:            msString(resp.RootDelay.Seconds()),
+		extraRootDispersionMS:       msString(resp.RootDispersion.Seconds()),
+		extraReferenceID:            ntpRefID(resp.ReferenceID, int(resp.Stratum)),
 	}
 }
 
 // ntpRefID renders the 4-byte reference identifier: an ASCII refclock label
 // (e.g. "GPS", "PPS") for a stratum-1 server, otherwise the dotted IPv4 of the
-// upstream server it syncs from.
+// upstream server it syncs from. A stratum-1 identifier that does not spell a
+// printable label falls back to the same dotted rendering rather than to an
+// empty field, which would drop the key from the result entirely.
 func ntpRefID(id uint32, stratum int) string {
-	var b [ntpRefIDBytes]byte
-	binary.BigEndian.PutUint32(b[:], id)
-	if stratum <= ntpPrimaryStratum {
-		return strings.TrimRight(string(b[:]), "\x00 ")
+	if stratum <= primaryStratum {
+		if label := refIDLabel(id); label != "" {
+			return label
+		}
 	}
+	var b [refIDBytes]byte
+	binary.BigEndian.PutUint32(b[:], id)
 	return net.IP(b[:]).String()
 }
 
 // ntpHealthy reports whether the server is synchronized (stratum 1..15); stratum
 // 0 is kiss-o'-death and 16 is unsynchronized.
 func ntpHealthy(stratum int) bool {
-	return stratum >= ntpMinHealthyStratum && stratum <= ntpMaxHealthyStratum
+	return stratum >= primaryStratum && stratum <= ntpMaxHealthyStratum
 }

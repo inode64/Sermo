@@ -2356,8 +2356,41 @@ watches:
 `interface_match` ligan la petición NTP a enlaces concretos, igual que las demás
 comprobaciones de red. Los hooks reciben `SERMO_SERVER`, `SERMO_OFFSET_SECONDS`,
 `SERMO_OFFSET_ABS_SECONDS`, `SERMO_STRATUM`, `SERMO_ROOT_DISPERSION_MS` y el resto de
-campos NTP devueltos, de modo que el script puede decidir si ejecutar `chronyc`,
-`ntpdate`, `timedatectl` o un flujo de corrección propio del sitio.
+campos NTP devueltos, de modo que el script puede decidir si ejecutar `ntpdate`,
+`timedatectl` o un flujo de corrección propio del sitio.
+
+En un host que ya ejecuta chrony, usa `source: chrony` en su lugar: Sermo lee el
+chronyd local mediante su protocolo de mando en vez de enviar sus propias consultas
+NTP, que es la única opción cuando chrony funciona como cliente y por tanto no sirve
+NTP en el puerto 123 que sondear.
+
+```yaml
+watches:
+  chrony-drift:
+    interval: 5m
+    check:
+      type: clock
+      source: chrony
+      host: 127.0.0.1       # opcional, el valor por defecto
+      port: 323             # opcional, el puerto de mando de chronyd
+      # socket: /run/chrony/chronyd.sock   # en lugar de host/port
+      max_offset: 100ms
+      max_stratum: 4
+      max_root_dispersion: 200ms
+      unit: s
+      timeout: 3s
+```
+
+`servers` se rechaza con `source: chrony`, y `host`/`port`/`socket` nombran al demonio
+local en su lugar. Con `socket:` el resultado informa de `socket` en lugar de
+`server` y `port`, así que un hook recibe `SERMO_SOCKET` y ningún
+`SERMO_SERVER`/`SERMO_PORT`. Los hooks reciben además `SERMO_SYNCHRONIZED`, `SERMO_SKEW_PPM`,
+`SERMO_FREQUENCY_PPM`, `SERMO_RMS_OFFSET_SECONDS`, `SERMO_REFERENCE_AGE_SECONDS` y
+`SERMO_SOURCES_ONLINE`, de modo que un script puede distinguir un reloj que
+simplemente deriva de uno cuyas fuentes han desaparecido. Un pin de `interface` no
+aplica cuando se usa `socket:` — un socket Unix no tiene enlace de salida. Para
+afirmar campos concretos en lugar de un umbral de deriva, usa el
+[tipo de comprobación `chrony`](rules.es.md) con `expect:`.
 
 ### `swap` — swap del sistema
 
