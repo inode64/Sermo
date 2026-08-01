@@ -2,7 +2,6 @@ package checks
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"math"
 	"strconv"
@@ -11,7 +10,6 @@ import (
 
 	"sermo/internal/cfgval"
 	"sermo/internal/conn"
-	"sermo/internal/netutil"
 )
 
 const (
@@ -24,18 +22,71 @@ const (
 	clockMSPrecision      = 3
 )
 
-type ntpProbeFunc func(context.Context, conn.Config) (conn.Result, error)
+// Time sources the clock check can measure drift against. The names are the
+// connection protocol names, so the configured source is also the probe lookup.
+const (
+	// ClockSourceNTP queries the configured remote NTP servers (the default).
+	ClockSourceNTP = conn.ProtocolNameNTP
+	// ClockSourceChrony reads the local chronyd's own view of the clock over its
+	// command protocol, for hosts where chrony runs as a client and therefore
+	// serves no NTP of its own to query.
+	ClockSourceChrony = conn.ProtocolNameChrony
+	// ClockSourceSummary is the user-facing list of accepted source names.
+	ClockSourceSummary = ClockSourceNTP + " or " + ClockSourceChrony
+)
+
+// The optional sample fields the clock check carries from the probe into
+// Result.Data, by the type they are stored as. Everything after the first group
+// in each list comes only from source: chrony — the local daemon's own
+// diagnostics — and the copy helpers skip keys a sample does not carry, so an
+// ntp sample is unaffected.
+var (
+	clockStringExtras = []string{
+		DataKeyLeap,
+		DataKeyReferenceID,
+		DataKeyReferenceAddress,
+		DataKeyReferenceTime,
+		DataKeySynchronized,
+	}
+	clockFloatExtras = []string{
+		DataKeyPrecisionSeconds,
+		DataKeyRootDelayMS,
+		DataKeyRootDispersionMS,
+		DataKeyReferenceAgeSecs,
+		DataKeyFrequencyPPM,
+		DataKeyResidualFreqPPM,
+		DataKeySkewPPM,
+		DataKeyRMSOffsetSeconds,
+		DataKeyLastOffsetSeconds,
+		DataKeyUpdateIntervalSecs,
+		DataKeySources,
+		DataKeySourcesOnline,
+		DataKeySourcesOffline,
+		DataKeySourcesUnresolved,
+	}
+)
+
+type clockProbeFunc func(context.Context, conn.Config) (conn.Result, error)
 
 type clockCheck struct {
 	base
+	source string
+	// servers holds the remote servers to try in order for source: ntp, and the
+	// single local daemon address for source: chrony.
 	servers           []string
 	port              int
+	socket            string
 	maxOffset         time.Duration
 	maxStratum        int
 	maxRootDispersion time.Duration
 	ifaces            []string
 	ifaceAll          bool
-	probe             ntpProbeFunc
+	probe             clockProbeFunc
+}
+
+// address renders the probe target for messages and result data.
+func (c clockCheck) address(server string) string {
+	return targetAddress(c.socket, server, c.port)
 }
 
 type clockSample struct {
@@ -48,9 +99,37 @@ type clockSample struct {
 }
 
 func buildClockCheck(b base, entry map[string]any) (Check, string) {
-	servers := cfgval.StringList(entry[CheckKeyServers])
-	if len(servers) == 0 {
-		return nil, "clock check requires servers"
+	source := cfgval.AsString(entry[CheckKeySource])
+	if source == "" {
+		source = ClockSourceNTP
+	}
+	var servers []string
+	var socket string
+	switch source {
+	case ClockSourceNTP:
+		servers = cfgval.StringList(entry[CheckKeyServers])
+		if len(servers) == 0 {
+			return nil, "clock check requires servers"
+		}
+		// The mirror of the servers rule below: silently ignoring a socket
+		// would look like the local daemon was being read when it is not.
+		if _, present := entry[CheckKeySocket]; present {
+			return nil, "clock check socket is only valid with source: " + ClockSourceChrony
+		}
+	case ClockSourceChrony:
+		// chrony reads one local daemon, addressed like any other conn check.
+		// Rejecting servers outright keeps a misplaced remote list from looking
+		// as if it were being queried.
+		if _, present := entry[CheckKeyServers]; present {
+			return nil, "clock check servers is only valid with source: " + ClockSourceNTP
+		}
+		host := cfgval.AsString(entry[CheckKeyHost])
+		if host == "" {
+			host = conn.DefaultHost
+		}
+		servers, socket = []string{host}, cfgval.AsString(entry[CheckKeySocket])
+	default:
+		return nil, "clock check source must be " + ClockSourceSummary
 	}
 	maxOffset := cfgval.Duration(entry[CheckKeyMaxOffset])
 	if maxOffset <= 0 {
@@ -71,7 +150,7 @@ func buildClockCheck(b base, entry map[string]any) (Check, string) {
 			return nil, "clock check max_root_dispersion must be a positive duration"
 		}
 	}
-	port := conn.DefaultPort(conn.ProtocolNameNTP)
+	port := conn.DefaultPort(source)
 	if raw, present := entry[CheckKeyPort]; present {
 		n, ok := cfgval.Int(raw)
 		if !ok || n < cfgval.MinTCPPort || n > cfgval.MaxTCPPort {
@@ -83,14 +162,16 @@ func buildClockCheck(b base, entry map[string]any) (Check, string) {
 	if iwarn != "" {
 		return nil, "clock check: " + iwarn
 	}
-	proto, ok := conn.Lookup(conn.ProtocolNameNTP)
+	proto, ok := conn.Lookup(source)
 	if !ok {
-		return nil, "clock check requires the ntp protocol"
+		return nil, "clock check requires the " + source + " protocol"
 	}
 	return clockCheck{
 		base:              b,
+		source:            source,
 		servers:           servers,
 		port:              port,
+		socket:            socket,
 		maxOffset:         maxOffset,
 		maxStratum:        maxStratum,
 		maxRootDispersion: maxRootDispersion,
@@ -105,61 +186,65 @@ func (c clockCheck) Run(ctx context.Context) Result {
 	ctx, cancel := c.withTimeout(ctx)
 	defer cancel()
 
+	// best keeps the closest sample seen so it can be reported when every server
+	// fails a threshold, along with the reason it failed — recomputing that from
+	// the sample afterwards would just repeat work the loop already did.
 	var best *clockSample
+	var bestFailure string
 	var failures []string
 	for _, server := range c.servers {
 		sample, err := c.probeServer(ctx, server)
 		if err != nil {
-			failures = append(failures, fmt.Sprintf("%s: %v", server, err))
+			failures = append(failures, fmt.Sprintf("%s: %v", c.address(server), err))
 			continue
 		}
+		fail := c.sampleFailure(sample)
 		if best == nil || sample.offsetAbsSeconds < best.offsetAbsSeconds {
-			best = &sample
+			best, bestFailure = &sample, fail
 		}
-		if fail := c.sampleFailure(sample); fail != "" {
-			failures = append(failures, fmt.Sprintf("%s: %s", server, fail))
+		if fail != "" {
+			failures = append(failures, fmt.Sprintf("%s: %s", c.address(server), fail))
 			continue
 		}
 		return c.clockResult(true, c.okMessage(sample), sample, start)
 	}
 	if best != nil {
-		return c.clockResult(false, c.failureMessage(*best), *best, start)
+		return c.clockResult(false, c.failureMessage(*best, bestFailure), *best, start)
 	}
-	return c.result(false, "clock: all NTP servers failed: "+strings.Join(failures, "; "), start)
+	return c.result(false, "clock: no usable "+c.source+" sample: "+strings.Join(failures, "; "), start)
 }
 
 func (c clockCheck) probeServer(ctx context.Context, server string) (clockSample, error) {
-	probe := c.probe
-	if probe == nil {
-		proto, ok := conn.Lookup(conn.ProtocolNameNTP)
-		if !ok {
-			return clockSample{}, errors.New("ntp protocol unavailable")
-		}
-		probe = proto.Probe
-	}
-	cfg := conn.Config{Host: server, Port: c.port}
+	cfg := conn.Config{Host: server, Port: c.port, Socket: c.socket}
 	var res conn.Result
 	var latency time.Duration
-	chosen, perIface, err := tryInterfaces(c.ifaces, c.ifaceAll, func(iface string) error {
+	probe := func(iface string) error {
 		cfg.Interface = iface
 		start := time.Now()
-		r, e := probe(ctx, cfg)
+		r, e := c.probe(ctx, cfg)
 		if e == nil {
 			res, latency = trimConnResult(r), time.Since(start)
 		}
 		return e
-	})
+	}
+	// A Unix socket has no egress link, so an interface pin cannot apply to it.
+	// Probing once and reporting no interface keeps the result honest: walking
+	// the list here would stamp Data with an interface the dial never bound,
+	// and with interface_match: all would report every one of them as ok.
+	if c.socket != "" {
+		if err := probe(""); err != nil {
+			return clockSample{}, err
+		}
+		return c.parseClockSample(server, "", nil, latency, res)
+	}
+	chosen, perIface, err := tryInterfaces(c.ifaces, c.ifaceAll, probe)
 	if err != nil {
 		return clockSample{}, err
 	}
-	sample, err := parseClockSample(server, chosen, perIface, c.port, latency, res)
-	if err != nil {
-		return clockSample{}, err
-	}
-	return sample, nil
+	return c.parseClockSample(server, chosen, perIface, latency, res)
 }
 
-func parseClockSample(server, iface string, perIface map[string]any, port int, latency time.Duration, res conn.Result) (clockSample, error) {
+func (c clockCheck) parseClockSample(server, iface string, perIface map[string]any, latency time.Duration, res conn.Result) (clockSample, error) {
 	offsetSeconds, err := requiredFloatExtra(res, DataKeyOffsetSeconds)
 	if err != nil {
 		return clockSample{}, err
@@ -170,14 +255,17 @@ func parseClockSample(server, iface string, perIface map[string]any, port int, l
 	}
 	offsetAbsSeconds := math.Abs(offsetSeconds)
 	data := map[string]any{
-		DataKeyServer:           server,
-		DataKeyPort:             port,
-		DataKeyProtocol:         conn.ProtocolNameNTP,
+		DataKeyProtocol:         c.source,
 		DataKeyLatencyMS:        latency.Milliseconds(),
 		DataKeyOffsetSeconds:    offsetSeconds,
 		DataKeyOffsetAbsSeconds: offsetAbsSeconds,
 		DataKeyStratum:          stratum,
 		DataKeyValue:            offsetAbsSeconds,
+	}
+	if c.socket != "" {
+		data[DataKeySocket] = c.socket
+	} else {
+		data[DataKeyServer], data[DataKeyPort] = server, c.port
 	}
 	if iface != "" {
 		data[DataKeyInterface] = iface
@@ -185,11 +273,12 @@ func parseClockSample(server, iface string, perIface map[string]any, port int, l
 	if perIface != nil {
 		data[DataKeyInterfaces] = perIface
 	}
-	copyStringExtra(data, res, DataKeyLeap)
-	copyStringExtra(data, res, DataKeyReferenceID)
-	copyFloatExtra(data, res, DataKeyPrecisionSeconds)
-	copyFloatExtra(data, res, DataKeyRootDelayMS)
-	copyFloatExtra(data, res, DataKeyRootDispersionMS)
+	for _, key := range clockStringExtras {
+		copyStringExtra(data, res, key)
+	}
+	for _, key := range clockFloatExtras {
+		copyFloatExtra(data, res, key)
+	}
 	return clockSample{
 		server:           server,
 		iface:            iface,
@@ -201,6 +290,19 @@ func parseClockSample(server, iface string, perIface map[string]any, port int, l
 }
 
 func (c clockCheck) sampleFailure(sample clockSample) string {
+	// An unsynchronized source reports stratum 0 and an offset near zero, so it
+	// would otherwise look like the best sample available and satisfy every
+	// threshold. The ntp probe already rejects those replies itself; chronyd
+	// reports the state instead of refusing, so the check owns the rule — and
+	// shares conn.Synchronized with the probe so the two cannot diverge.
+	leap, _ := sample.data[DataKeyLeap].(string)
+	if !conn.Synchronized(sample.stratum, leap) {
+		reason := fmt.Sprintf("source is unsynchronized (stratum %d", sample.stratum)
+		if leap != "" {
+			reason += ", leap " + leap
+		}
+		return reason + ")"
+	}
 	if sample.offsetAbsSeconds > c.maxOffset.Seconds() {
 		return fmt.Sprintf("offset %s exceeds max_offset %s", formatClockSeconds(sample.offsetSeconds), c.maxOffset)
 	}
@@ -228,40 +330,36 @@ func (c clockCheck) clockResult(ok bool, message string, sample clockSample, sta
 
 func (c clockCheck) okMessage(sample clockSample) string {
 	return fmt.Sprintf("clock offset %s via %s%s (stratum %d)",
-		formatClockSeconds(sample.offsetSeconds), netutil.JoinHostPort(sample.server, c.port), ifaceSuffix(sample.iface), sample.stratum)
+		formatClockSeconds(sample.offsetSeconds), c.address(sample.server), ifaceSuffix(sample.iface), sample.stratum)
 }
 
-func (c clockCheck) failureMessage(sample clockSample) string {
-	if fail := c.sampleFailure(sample); fail != "" {
-		return fmt.Sprintf("clock %s via %s%s", fail, netutil.JoinHostPort(sample.server, c.port), ifaceSuffix(sample.iface))
-	}
-	return "clock has no healthy NTP sample via " + netutil.JoinHostPort(sample.server, c.port)
+// failureMessage renders the reason the loop already computed for sample.
+func (c clockCheck) failureMessage(sample clockSample, failure string) string {
+	return fmt.Sprintf("clock %s via %s%s", failure, c.address(sample.server), ifaceSuffix(sample.iface))
 }
 
-// requiredExtra reads a mandatory Extra value and parses it; the presence and
+// requiredExtra reads a mandatory Extra value and coerces it; the presence and
 // error shape shared by the numeric readers below. want names the expected
 // form in the parse-failure message.
-func requiredExtra[T any](res conn.Result, key, want string, parse func(string) (T, error)) (T, error) {
+func requiredExtra[T any](res conn.Result, key, want string, coerce func(any) (T, bool)) (T, error) {
 	var zero T
 	raw := strings.TrimSpace(res.Extra[key])
 	if raw == "" {
 		return zero, fmt.Errorf("%s unavailable", key)
 	}
-	val, err := parse(raw)
-	if err != nil {
+	val, ok := coerce(raw)
+	if !ok {
 		return zero, fmt.Errorf("%s %q is not %s", key, raw, want)
 	}
 	return val, nil
 }
 
 func requiredFloatExtra(res conn.Result, key string) (float64, error) {
-	return requiredExtra(res, key, "numeric", func(raw string) (float64, error) {
-		return strconv.ParseFloat(raw, numericBits64)
-	})
+	return requiredExtra(res, key, "numeric", cfgval.Float)
 }
 
 func requiredIntExtra(res conn.Result, key string) (int, error) {
-	return requiredExtra(res, key, "an integer", strconv.Atoi)
+	return requiredExtra(res, key, "an integer", cfgval.Int)
 }
 
 func copyStringExtra(data map[string]any, res conn.Result, key string) {
@@ -271,11 +369,7 @@ func copyStringExtra(data map[string]any, res conn.Result, key string) {
 }
 
 func copyFloatExtra(data map[string]any, res conn.Result, key string) {
-	raw := strings.TrimSpace(res.Extra[key])
-	if raw == "" {
-		return
-	}
-	if val, err := strconv.ParseFloat(raw, numericBits64); err == nil {
+	if val, ok := cfgval.Float(res.Extra[key]); ok {
 		data[key] = val
 	}
 }

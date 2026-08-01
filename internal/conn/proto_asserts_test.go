@@ -194,15 +194,26 @@ func serveOnce(t *testing.T, onConn func(c net.Conn)) int {
 	return port
 }
 
-// serveUDPOnce listens on a loopback UDP port, reads one datagram and hands it to
-// reply; a non-nil return is written back to the sender. Returns the port.
-func serveUDPOnce(t *testing.T, reply func(req []byte) []byte) int {
+// listenUDPLoopback binds an ephemeral loopback UDP socket, closes it on
+// cleanup and returns it with its port. The prologue every datagram-probe test
+// server shares.
+func listenUDPLoopback(t *testing.T) (net.PacketConn, int) {
 	t.Helper()
 	pc, err := net.ListenPacket("udp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = pc.Close() })
+	_, portStr, _ := net.SplitHostPort(pc.LocalAddr().String())
+	port, _ := strconv.Atoi(portStr)
+	return pc, port
+}
+
+// serveUDPOnce listens on a loopback UDP port, reads one datagram and hands it to
+// reply; a non-nil return is written back to the sender. Returns the port.
+func serveUDPOnce(t *testing.T, reply func(req []byte) []byte) int {
+	t.Helper()
+	pc, port := listenUDPLoopback(t)
 	go func() {
 		buf := make([]byte, 1500)
 		n, addr, err := pc.ReadFrom(buf)
@@ -213,9 +224,36 @@ func serveUDPOnce(t *testing.T, reply func(req []byte) []byte) int {
 			_, _ = pc.WriteTo(out, addr)
 		}
 	}()
-	_, portStr, _ := net.SplitHostPort(pc.LocalAddr().String())
-	port, _ := strconv.Atoi(portStr)
 	return port
+}
+
+// serveUDPLoop is serveUDPOnce for probes that exchange several datagrams with
+// the same peer (chrony): it keeps answering until the listener is closed. A nil
+// return from reply drops the datagram.
+func serveUDPLoop(t *testing.T, reply func(req []byte) []byte) int {
+	t.Helper()
+	pc, port := listenUDPLoopback(t)
+	go serveDatagrams(pc, reply, nil)
+	return port
+}
+
+// serveDatagrams answers datagrams on pc until it is closed. When peer is
+// non-nil each sender's address is recorded through it, which is how the
+// unixgram tests observe that a client bound a named socket.
+func serveDatagrams(pc net.PacketConn, reply func(req []byte) []byte, peer func(net.Addr)) {
+	buf := make([]byte, 1500)
+	for {
+		n, addr, err := pc.ReadFrom(buf)
+		if err != nil {
+			return
+		}
+		if peer != nil {
+			peer(addr)
+		}
+		if out := reply(buf[:n]); out != nil {
+			_, _ = pc.WriteTo(out, addr)
+		}
+	}
 }
 
 // serveBanner serves a single connection that optionally reads one line into

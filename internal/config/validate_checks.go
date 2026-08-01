@@ -386,12 +386,28 @@ func validatePortsFields(prefix string, fields map[string]any, add addFunc) {
 	}
 }
 
-// validateClockFields validates a clock drift check: explicit NTP servers, a
-// positive max_offset threshold, and optional quality ceilings.
+// validateClockFields validates a clock drift check: a time source with the
+// target it needs, a positive max_offset threshold, and optional quality
+// ceilings. source: ntp (the default) queries the listed remote servers;
+// source: chrony reads the local daemon addressed by host/port or socket.
 func validateClockFields(prefix string, fields map[string]any, add addFunc) {
-	servers, err := cfgval.StrictStringList(fields[checks.CheckKeyServers])
-	if err != nil || len(servers) == 0 {
-		add("%s.servers must be a non-empty string or list of strings", prefix)
+	switch source := cfgval.String(fields[checks.CheckKeySource]); source {
+	case "", checks.ClockSourceNTP:
+		servers, err := cfgval.StrictStringList(fields[checks.CheckKeyServers])
+		if err != nil || len(servers) == 0 {
+			add("%s.servers must be a non-empty string or list of strings", prefix)
+		}
+		if _, present := fields[checks.CheckKeySocket]; present {
+			add("%s.socket is only valid with source: %s; source: %s queries the remote servers",
+				prefix, checks.ClockSourceChrony, checks.ClockSourceNTP)
+		}
+	case checks.ClockSourceChrony:
+		if _, present := fields[checks.CheckKeyServers]; present {
+			add("%s.servers is only valid with source: %s; source: %s reads the local chronyd addressed by host/port or socket",
+				prefix, checks.ClockSourceNTP, checks.ClockSourceChrony)
+		}
+	default:
+		add("%s.source %q must be %s", prefix, source, checks.ClockSourceSummary)
 	}
 	if !isPositiveDuration(cfgval.String(fields[checks.CheckKeyMaxOffset])) {
 		add("%s.max_offset must be a valid positive duration", prefix)

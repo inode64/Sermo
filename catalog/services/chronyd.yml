@@ -1,0 +1,225 @@
+name: chronyd
+display_name: chrony NTP Daemon
+category: network
+description: chrony NTP client/server daemon
+service:
+  systemd:
+    - chronyd
+    - chrony
+  openrc:
+    - chronyd
+    - chrony
+apps:
+  - chronyd
+restart_on_change:
+  apps:
+    - chronyd
+  messages:
+    app: >-
+      ${display_name} will restart after version change of ${change.app}: ${change.old_version} -> ${change.new_version}
+variables:
+  host: 127.0.0.1
+  port: 323
+  user: ntp
+  min_sources: 1
+  sync_check_interval: 2m
+  max_stratum: 4
+  max_offset: 1s
+  max_root_dispersion: 200ms
+  max_reference_age_seconds: 3600
+  max_skew_ppm: 10
+  max_frequency_ppm: 100
+  max_residual_frequency_ppm: 1
+  max_rms_offset_seconds: 0.05
+os:
+  debian:
+    variables:
+      user: _chrony
+  ubuntu:
+    variables:
+      user: _chrony
+pidfile: /run/chrony/chronyd.pid
+config_files:
+  - /etc/chrony/chrony.conf
+  - /etc/chrony.conf
+processes:
+  main:
+    exe: ${chronyd_binary}
+    user: ${user}
+watches:
+  service:
+    check:
+      type: service
+      expect: active
+  port:
+    # chronyd's command port. A chrony client-only host serves no NTP on 123 at
+    # all, so this — not a `type: ntp` probe — is what proves the daemon is up.
+    # Liveness only: a running-but-resyncing chronyd answers here, and the sync
+    # watches below own that condition with their own windows.
+    check:
+      type: chrony
+      host: ${host}
+      port: ${port}
+      timeout: 3s
+  alert-if-memory-high:
+    check:
+      type: metric
+      scope: service
+      name: memory
+      op: '>'
+      value: 30%
+      optional: true
+    for:
+      duration: 4m
+    then:
+      action: alert
+      message: >-
+        During ${rule.duration}, ${display_name} memory usage stayed above ${check.threshold} (current ${check.value})
+  alert-if-cpu-thread-high:
+    check:
+      type: metric
+      scope: service
+      name: cpu_thread
+      op: '>'
+      value: 90%
+      optional: true
+    for:
+      duration: 5m
+    then:
+      action: alert
+      message: >-
+        During ${rule.duration}, ${display_name} single-thread CPU usage stayed above ${check.threshold} (current ${check.value})
+  clock:
+    # The graphed drift reading. source: chrony reads the local daemon's own
+    # view of the clock, so it costs no external NTP traffic. Optional because a
+    # resyncing chronyd fails it, and alert-if-unsynchronized owns that
+    # condition with its own window rather than dropping the service's SLA.
+    check:
+      type: clock
+      source: chrony
+      host: ${host}
+      port: ${port}
+      max_offset: ${max_offset}
+      max_stratum: ${max_stratum}
+      max_root_dispersion: ${max_root_dispersion}
+      unit: s
+      optional: true
+      timeout: 3s
+  alert-if-unsynchronized:
+    interval: ${sync_check_interval}
+    check:
+      type: chrony
+      host: ${host}
+      port: ${port}
+      expect:
+        synchronized: 'true'
+      optional: true
+      timeout: 3s
+    for:
+      duration: 10m
+    then:
+      action: alert
+      message: >-
+        During ${rule.duration}, ${display_name} reported no synchronised reference clock
+  alert-if-reference-stale:
+    interval: ${sync_check_interval}
+    check:
+      type: chrony
+      host: ${host}
+      port: ${port}
+      expect:
+        reference_age_seconds: { op: '<', value: '${max_reference_age_seconds}' }
+      optional: true
+      timeout: 3s
+    for:
+      duration: 15m
+    then:
+      action: alert
+      message: >-
+        During ${rule.duration}, ${display_name} did not update its reference clock (limit ${max_reference_age_seconds} s)
+  alert-if-no-sources-online:
+    interval: ${sync_check_interval}
+    check:
+      type: chrony
+      host: ${host}
+      port: ${port}
+      expect:
+        sources_online: { op: '>=', value: '${min_sources}' }
+      optional: true
+      timeout: 3s
+    for:
+      duration: 5m
+    then:
+      action: alert
+      message: >-
+        During ${rule.duration}, ${display_name} had fewer than ${min_sources} reachable time source(s)
+  alert-if-sources-unresolved:
+    interval: ${sync_check_interval}
+    # Pool names that never resolve: chronyd is up, but DNS is not answering.
+    check:
+      type: chrony
+      host: ${host}
+      port: ${port}
+      expect:
+        sources_unresolved: { op: '==', value: 0 }
+      optional: true
+      timeout: 3s
+    for:
+      duration: 15m
+    then:
+      action: alert
+      message: >-
+        During ${rule.duration}, ${display_name} left configured time source(s) unresolved; check DNS
+  alert-if-skew-high:
+    interval: ${sync_check_interval}
+    # Skew is chronyd's error bound on its frequency estimate: it stays high
+    # when the local clock is erratic or the sources disagree.
+    check:
+      type: chrony
+      host: ${host}
+      port: ${port}
+      expect:
+        skew_ppm: { op: '<', value: '${max_skew_ppm}' }
+      optional: true
+      timeout: 3s
+    for:
+      duration: 15m
+    then:
+      action: alert
+      message: >-
+        During ${rule.duration}, ${display_name} kept a frequency skew above ${max_skew_ppm} ppm
+  alert-if-frequency-extreme:
+    interval: ${sync_check_interval}
+    # frequency_abs_ppm, not frequency_ppm: the correction is signed and expect:
+    # has no absolute-value operator.
+    check:
+      type: chrony
+      host: ${host}
+      port: ${port}
+      expect:
+        frequency_abs_ppm: { op: '<', value: '${max_frequency_ppm}' }
+      optional: true
+      timeout: 3s
+    for:
+      duration: 30m
+    then:
+      action: alert
+      message: >-
+        During ${rule.duration}, ${display_name} corrected the oscillator by more than ${max_frequency_ppm} ppm; the hardware clock may be failing
+  alert-if-not-converging:
+    interval: ${sync_check_interval}
+    check:
+      type: chrony
+      host: ${host}
+      port: ${port}
+      expect:
+        residual_frequency_abs_ppm: { op: '<', value: '${max_residual_frequency_ppm}' }
+        rms_offset_seconds: { op: '<', value: '${max_rms_offset_seconds}' }
+      optional: true
+      timeout: 3s
+    for:
+      duration: 30m
+    then:
+      action: alert
+      message: >-
+        During ${rule.duration}, ${display_name} did not converge on its time sources (residual frequency or RMS offset above policy)

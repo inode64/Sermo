@@ -231,6 +231,114 @@ func TestValidateClockWatch(t *testing.T) {
 		"servers", "max_offset", "max_stratum", "max_root_dispersion", "port")
 }
 
+func TestValidateClockWatchSource(t *testing.T) {
+	// source: chrony reads the local daemon, so it takes host/port or socket
+	// instead of a remote server list.
+	assertNoWatchIssues(t, map[string]any{
+		"watches": map[string]any{
+			"chrony-drift": map[string]any{
+				"check": map[string]any{
+					"type":                "clock",
+					"source":              "chrony",
+					"max_offset":          "1s",
+					"max_stratum":         4,
+					"max_root_dispersion": "200ms",
+				},
+			},
+			"chrony-drift-socket": map[string]any{
+				"check": map[string]any{
+					"type":       "clock",
+					"source":     "chrony",
+					"socket":     "/run/chrony/chronyd.sock",
+					"max_offset": "1s",
+				},
+			},
+			"ntp-drift-explicit": map[string]any{
+				"check": map[string]any{
+					"type":       "clock",
+					"source":     "ntp",
+					"servers":    []any{"pool.ntp.org"},
+					"max_offset": "2s",
+				},
+			},
+		},
+	})
+
+	assertWatchIssues(t, map[string]any{
+		"watches": map[string]any{
+			"bad-source": map[string]any{
+				"check": map[string]any{"type": "clock", "source": "timesyncd", "max_offset": "1s"},
+			},
+		},
+	}, "source")
+
+	assertWatchIssues(t, map[string]any{
+		"watches": map[string]any{
+			"chrony-with-servers": map[string]any{
+				"check": map[string]any{
+					"type":       "clock",
+					"source":     "chrony",
+					"servers":    []any{"pool.ntp.org"},
+					"max_offset": "1s",
+				},
+			},
+		},
+	}, "servers")
+
+	assertWatchIssues(t, map[string]any{
+		"watches": map[string]any{
+			"ntp-with-socket": map[string]any{
+				"check": map[string]any{
+					"type":       "clock",
+					"servers":    []any{"pool.ntp.org"},
+					"socket":     "/run/chrony/chronyd.sock",
+					"max_offset": "2s",
+				},
+			},
+		},
+	}, "socket")
+
+	// max_offset stays required whichever source is configured.
+	assertWatchIssues(t, map[string]any{
+		"watches": map[string]any{
+			"chrony-no-threshold": map[string]any{
+				"check": map[string]any{"type": "clock", "source": "chrony"},
+			},
+		},
+	}, "max_offset")
+}
+
+func TestValidateChronyWatch(t *testing.T) {
+	// The chrony protocol check validates through the shared conn path, so it
+	// needs no validator of its own.
+	assertNoWatchIssues(t, map[string]any{
+		"watches": map[string]any{
+			"chronyd": map[string]any{
+				"check": map[string]any{
+					"type": "chrony",
+					"host": "127.0.0.1",
+					"port": 323,
+					"expect": map[string]any{
+						"synchronized":   "true",
+						"sources_online": map[string]any{"op": ">=", "value": 3},
+					},
+				},
+			},
+			"chronyd-socket": map[string]any{
+				"check": map[string]any{"type": "chrony", "socket": "/run/chrony/chronyd.sock"},
+			},
+		},
+	})
+
+	assertWatchIssues(t, map[string]any{
+		"watches": map[string]any{
+			"chronyd": map[string]any{
+				"check": map[string]any{"type": "chrony", "port": 99999},
+			},
+		},
+	}, "port")
+}
+
 func TestValidateFileWatchGood(t *testing.T) {
 	assertNoWatchIssues(t, map[string]any{
 		"watches": map[string]any{

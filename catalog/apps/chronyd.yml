@@ -1,0 +1,8 @@
+name: chronyd
+display_name: "chrony NTP Daemon"
+category: network
+variables:
+  binary: ${bindir}/chronyd
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}", "--version"], timeout: 10s }

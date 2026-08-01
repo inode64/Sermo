@@ -17,6 +17,7 @@ func TestProbeMetadata(t *testing.T) {
 		{[]string{"asterisk", "ami"}, 5038, false},
 		{[]string{"avahi", "avahi-daemon"}, 0, false},
 		{[]string{"ceph", "ceph-mon"}, 3300, false},
+		{[]string{"chrony", "chronyd"}, 323, false},
 		{[]string{"clamd", "clamav"}, 3310, false},
 		{[]string{"cloudflared", "cloudflare-tunnel"}, 60123, false},
 		{[]string{"dbus"}, 0, false},

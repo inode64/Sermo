@@ -16,8 +16,10 @@ import (
 const (
 	watchReadingClockDecimals          = 3
 	watchReadingClockPrecisionDecimals = 6
-	watchReadingDefaultMetricDecimals  = 2
-	watchReadingProgressDecimals       = 1
+	// watchReadingWholeDecimals renders a reading that has no useful fraction.
+	watchReadingWholeDecimals         = 0
+	watchReadingDefaultMetricDecimals = 2
+	watchReadingProgressDecimals      = 1
 
 	watchReadingLabelAddresses         = "Addresses"
 	watchReadingLabelAllocated         = "Allocated"
@@ -122,13 +124,23 @@ const (
 	watchReadingLabelReferenceID       = "Reference ID"
 	watchReadingLabelRootDelay         = "Root delay"
 	watchReadingLabelRootDispersion    = "Root dispersion"
+	// Reported by a clock check reading a local chronyd (source: chrony).
+	watchReadingLabelFrequency         = "Frequency"
+	watchReadingLabelReferenceAge      = "Reference age"
+	watchReadingLabelSkew              = "Skew"
+	watchReadingLabelSourcesOnline     = "Sources online"
+	watchReadingLabelSourcesUnresolved = "Sources unresolved"
+	watchReadingLabelSynchronized      = "Synchronized"
 )
 
 const (
 	watchReadingUnitBits              = metrics.MetricUnitBits
 	watchReadingUnitMegabitsPerSecond = metrics.MetricUnitMegabitsPerSecond
 	watchReadingUnitSeconds           = "s"
-	maxWatchReadingDuration           = time.Duration(1<<63 - 1)
+	// watchReadingUnitPPM is the frequency-error unit chrony reports its
+	// oscillator correction and skew in.
+	watchReadingUnitPPM     = "ppm"
+	maxWatchReadingDuration = time.Duration(1<<63 - 1)
 )
 
 // readingBuilder accumulates the WatchReading list a *CheckReadings builder
@@ -469,9 +481,13 @@ func sizeCheckReadings(data map[string]any) []web.WatchReading {
 	return rb.readings()
 }
 
+// clockCheckReadings renders a clock check's row. The trailing fields come from
+// a local chronyd (source: chrony) and are simply absent for an ntp sample,
+// which the add* helpers skip.
 func clockCheckReadings(data map[string]any) []web.WatchReading {
 	return readingsFrom(data).
 		addString(checks.DataKeyServer, watchReadingLabelServer).
+		addString(checks.DataKeySocket, watchReadingLabelSocket).
 		addInt(checks.DataKeyPort, watchReadingLabelPort).
 		addMetric(checks.DataKeyOffsetSeconds, watchReadingLabelOffset, watchReadingClockDecimals, watchReadingUnitSeconds).
 		addMetric(checks.DataKeyOffsetAbsSeconds, watchReadingLabelOffsetAbs, watchReadingClockDecimals, watchReadingUnitSeconds).
@@ -481,6 +497,12 @@ func clockCheckReadings(data map[string]any) []web.WatchReading {
 		addMetric(checks.DataKeyRootDelayMS, watchReadingLabelRootDelay, watchReadingClockDecimals, metrics.MetricUnitMilliseconds).
 		addMetric(checks.DataKeyRootDispersionMS, watchReadingLabelRootDispersion, watchReadingClockDecimals, metrics.MetricUnitMilliseconds).
 		addString(checks.DataKeyReferenceID, watchReadingLabelReferenceID).
+		addString(checks.DataKeySynchronized, watchReadingLabelSynchronized).
+		addMetric(checks.DataKeySkewPPM, watchReadingLabelSkew, watchReadingClockDecimals, watchReadingUnitPPM).
+		addMetric(checks.DataKeyFrequencyPPM, watchReadingLabelFrequency, watchReadingClockDecimals, watchReadingUnitPPM).
+		addInt(checks.DataKeySourcesOnline, watchReadingLabelSourcesOnline).
+		addInt(checks.DataKeySourcesUnresolved, watchReadingLabelSourcesUnresolved).
+		addMetric(checks.DataKeyReferenceAgeSecs, watchReadingLabelReferenceAge, watchReadingWholeDecimals, watchReadingUnitSeconds).
 		readings()
 }
 

@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -120,4 +121,91 @@ func documentedProtocolsFromRules(t *testing.T) map[string][]string {
 		t.Fatal("docs/rules.md protocol list parsed no protocols")
 	}
 	return out
+}
+
+// TestRefIDLabelFallbacksAreEquivalent pins the regression the shared
+// refIDLabel extraction introduced: ntpRefID used to return the raw trimmed
+// bytes for a stratum-1 server, and briefly returned "" for a non-printable
+// identifier, which drops reference_id from the result entirely.
+func TestRefIDLabelFallbacksAreEquivalent(t *testing.T) {
+	cases := []struct {
+		name    string
+		id      uint32
+		stratum int
+		wantNTP string
+	}{
+		{"printable refclock", 0x47505300, 1, "GPS"},
+		{"non-printable stratum 1 falls back", 0x00010203, 1, "0.1.2.3"},
+		{"all-zero stratum 1 falls back", 0x00000000, 1, "0.0.0.0"},
+		{"stratum 2 is the upstream address", 0x0a000007, 2, "10.0.0.7"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := ntpRefID(tc.id, tc.stratum); got != tc.wantNTP {
+				t.Fatalf("ntpRefID(%#08x, %d) = %q, want %q", tc.id, tc.stratum, got, tc.wantNTP)
+			}
+			if ntpRefID(tc.id, tc.stratum) == "" {
+				t.Fatal("reference_id must never be empty; an empty value is dropped from the result")
+			}
+			if chronyRefID(tc.id, tc.stratum) == "" {
+				t.Fatal("chrony reference_id must never be empty either")
+			}
+		})
+	}
+}
+
+// TestSecondsStringPreservesNanoseconds pins the precision widening: the ntp
+// probe used to render offset_seconds at 6 decimals, truncating a
+// nanosecond-resolution time.Duration to whole microseconds.
+func TestSecondsStringPreservesNanoseconds(t *testing.T) {
+	cases := []float64{0, 1e-9, -1e-9, 0.000000123, -0.000044694, 1.5, -1234.5}
+	for _, want := range cases {
+		got, err := strconv.ParseFloat(secondsString(want), 64)
+		if err != nil {
+			t.Fatalf("secondsString(%v) = %q, unparseable: %v", want, secondsString(want), err)
+		}
+		if got != want {
+			t.Errorf("secondsString(%v) round-trips to %v", want, got)
+		}
+	}
+}
+
+// TestSynchronizedHandlesAbsentLeap covers the clock check's call shape: a
+// sample whose probe published no leap field yields "" here.
+func TestSynchronizedHandlesAbsentLeap(t *testing.T) {
+	if !Synchronized(3, "") {
+		t.Error("a synchronized stratum with no leap field must not be rejected")
+	}
+	if Synchronized(0, "") {
+		t.Error("stratum 0 must be rejected whatever the leap field says")
+	}
+	if Synchronized(3, leapNameUnsynchronized) {
+		t.Error("an unsynchronized leap must be rejected at any stratum")
+	}
+	// leapName never returns a value Synchronized would misread as healthy.
+	for code := -1; code <= 4; code++ {
+		name := leapName(code)
+		if (code == 3) != (name == leapNameUnsynchronized) {
+			t.Errorf("leapName(%d) = %q; only code 3 is the unsynchronized value", code, name)
+		}
+	}
+	// The rule the chrony probe reports as `synchronized` and the clock check
+	// rejects a sample by — one predicate so the two cannot diverge.
+	codes := []struct {
+		stratum int
+		leap    int
+		want    bool
+	}{
+		{3, 0, true},
+		{1, 0, true},
+		{3, 1, true},  // a pending leap second is still synchronized
+		{0, 3, false}, // chronyd's unsynchronized state
+		{0, 0, false},
+		{3, 3, false},
+	}
+	for _, tc := range codes {
+		if got := Synchronized(tc.stratum, leapName(tc.leap)); got != tc.want {
+			t.Errorf("Synchronized(%d, %s) = %v, want %v", tc.stratum, leapName(tc.leap), got, tc.want)
+		}
+	}
 }

@@ -104,10 +104,17 @@ func (c connCheck) Run(ctx context.Context) Result {
 }
 
 func (c connCheck) address() string {
-	if c.cfg.Socket != "" {
-		return c.cfg.Socket
+	return targetAddress(c.cfg.Socket, c.cfg.Host, c.cfg.Port)
+}
+
+// targetAddress renders a probe target for messages and result data: a Unix
+// socket names itself, otherwise it is host:port. Shared with the clock check so
+// both report a target the same way.
+func targetAddress(socket, host string, port int) string {
+	if socket != "" {
+		return socket
 	}
-	return netutil.JoinHostPort(c.cfg.Host, c.cfg.Port)
+	return netutil.JoinHostPort(host, port)
 }
 
 func (c connCheck) probeResult(ctx context.Context) (conn.Result, time.Duration, map[string]any, error) {
