@@ -62,6 +62,7 @@ directorio equivocado. La configuración distribuida la omite.
 - [Bot de informes de Telegram](#bot-de-informes-de-telegram)
 - [Host watches](#host-watches)
   - [then.expand — crecimiento de volumen (watch de storage)](#thenexpand--crecimiento-de-volumen-watch-de-storage)
+  - [then.makestep — corrección forzosa del reloj (watch de clock)](#thenmakestep--corrección-forzosa-del-reloj-watch-de-clock)
   - [Control manual de reconstrucción RAID](#control-manual-de-reconstrucción-raid)
   - [Watches de servicio (acotados a un servicio)](#watches-de-servicio-acotados-a-un-servicio)
   - [net — interfaz de red](#net--interfaz-de-red)
@@ -1631,7 +1632,8 @@ fusionan con un service.
 > preguntas. Consulta [wizards](wizards.md) para el flujo completo.
 
 El bloque `then` de un watch (cuando está presente) declara las acciones tomadas cuando
-se dispara — un `hook`, una lista `notify`, un `expand` (solo storage), un `kill`
+se dispara — un `hook`, una lista `notify`, un `expand` (solo storage), un `makestep`
+(solo clock), un `kill`
 (solo process), o cualquier combinación.
 
 **Omitir `then` por completo** está soportado y significa *solo-alerta / solo-monitor*:
@@ -1742,7 +1744,7 @@ Dry-run solo afecta a acciones automáticas disparadas por monitorización/regla
   evalúan pero no se ejecutan;
 - los monitores de service `version.on_change` / `config.on_change` heredan el
   `dry_run` del service, por lo que se suprimen sus notificaciones no-console;
-- las acciones de watch (`hook`, `expand`, `kill`) se evalúan pero no se ejecutan;
+- las acciones de watch (`hook`, `expand`, `kill`, `makestep`) se evalúan pero no se ejecutan;
 - las notificaciones se suprimen salvo `wall`, que sigue entregándose para visibilidad
   local en consola.
 
@@ -1784,7 +1786,7 @@ watches:
 ```
 
 Usa `dry_run` para host watches mientras pruebas umbrales, argv/env de hook, enrutamiento
-de notifier o el gating de política de `then.expand` / `then.kill`. Quítalo cuando las
+de notifier o el gating de política de `then.expand` / `then.kill` / `then.makestep`. Quítalo cuando las
 acciones automáticas deban ejecutarse realmente. Si solo quieres una señal de panel/log a
 largo plazo, omite `then` por completo o usa `notify: [none]`; esas son configuraciones
 solo-monitor, no ensayos de acción.
@@ -1926,6 +1928,100 @@ Cuando la interfaz web está habilitada, un watch de storage con `then.expand` t
 muestra una acción **expand**. Esa acción manual usa los mismos valores configurados
 `check.path` y `expand.by` del YAML; el navegador no envía una ruta ni un tamaño.
 
+### `then.makestep` — corrección forzosa del reloj (watch de clock)
+
+Un watch `clock` puede llevar una acción nativa `then.makestep`: Sermo pide al chronyd
+local que corrija la hora del sistema de inmediato. Envía el `REQ_MAKESTEP` de chrony
+— la orden que manda `chronyc makestep` — por el socket Unix de mando de chronyd. Sin
+proceso externo, sin script del operador.
+
+```yaml
+watches:
+  clock-step:
+    interval: 1m
+    check:
+      type: clock
+      source: chrony
+      socket: /run/chrony/chronyd.sock
+      max_offset: 5s
+      timeout: 3s
+    for: { cycles: 3 }
+    policy:
+      cooldown: 30m
+    then:
+      makestep:
+        socket: /run/chrony/chronyd.sock
+      notify: [ops-email]
+```
+
+`socket` es el único campo y por defecto vale `/run/chrony/chronyd.sock`. No existe
+forma host/port y un `host:` o `port:` aquí se rechaza, no se ignora: el puerto UDP de
+mando de chronyd es su canal solo-monitorización y rechaza de plano las órdenes
+privilegiadas, así que el salto solo es posible por el socket. sermod se ejecuta como
+root y debe poder escribir en él.
+
+**`policy.cooldown` es obligatorio y debe ser positivo.** A diferencia de `then.expand`,
+un watch que lo omita se rechaza en validación y el builder se niega a construirlo: un
+salto es una *discontinuidad* del reloj, no un empujón idempotente, y una acción sin
+control se ejecuta en cada ciclo de disparo. Cada intento — con éxito o no — inicia el
+cooldown, de modo que un demonio que rechaza no recibe insistencia.
+
+**La acción solo se dispara ante un exceso de desfase.** Una comprobación de reloj falla
+por varios motivos, y solo el exceso de desfase es uno que un salto pueda arreglar;
+saltar porque la fuente no está sincronizada, está demasiado lejos o demasiado dispersa
+movería el reloj una cantidad desconocida o nula. La comprobación informa de cuál fue en
+`clock_failure` (`offset`, `unsynchronized`, `stratum`, `root_dispersion`, y por tanto
+`SERMO_CLOCK_FAILURE` para un hook), y cualquier valor distinto de `offset` se omite
+dejando constancia del motivo.
+
+Fíjate en lo que `dry_run` **no** te da: suprime todos los notificadores salvo
+`wall`, así que un watch en dry-run no es la forma de "avisar pero no corregir
+nunca". Para un escalón de solo aviso, configura un watch **sin** la acción — que es
+exactamente lo que son los escalones 1 y 3. Reserva `dry_run` para ensayar un watch
+que piensas armar.
+
+Los resultados se registran como eventos `makestep` / `makestep-skipped` /
+`makestep-failed`. `dry_run: true` y el modo pánico lo suprimen igual que las demás
+acciones, y deliberadamente **no** hay botón de acción en la web: un salto de reloj a un
+clic no pinta en un navegador.
+
+Apuntar la comprobación al mismo `socket:` que la acción va a mandar merece la pena — una
+comprobación que pasa es entonces prueba de que el socket es alcanzable antes de que la
+acción lo necesite.
+
+**`then.makestep` es solo para chrony, porque chrony es el único de los tres
+demonios de hora que ofrece una orden de "corrige el reloj ahora".** ntpd no expone
+ninguna, y toda la superficie D-Bus de systemd-timesyncd es `SetRuntimeNTPServers`
+— mientras que `org.freedesktop.timedate1.SetTime` se rechaza de plano siempre que
+la sincronización NTP está habilitada, que es justo cuando hay un demonio de hora
+funcionando. Para esos dos la corrección forzosa es un **reinicio del demonio**, que
+es lo que hacen los servicios de catálogo `ntpd` y `systemd-timesyncd`:
+
+```yaml
+# catalog/services/ntpd.yml (y systemd-timesyncd.yml)
+watches:
+  restart-if-clock-drifting:
+    check:
+      type: clock
+      servers: [time.cloudflare.com, pool.ntp.org]
+      max_offset: 5s
+      optional: true
+    for: { duration: 15m }
+    then:
+      action: restart
+```
+
+Esa ruta pasa por el **motor de operaciones seguro** — locks, guards, preflight y el
+`policy.cooldown` del servicio — igual que un `sermoctl restart` manual. Merece la
+pena conocer dos diferencias con `then.makestep`: reinicia el demonio en lugar de
+saltar el reloj en el sitio, y una regla se dispara ante *cualquier* fallo del check,
+así que un servidor NTP inalcanzable puede activarla. De ahí los dos servidores y la
+ventana larga; apunta `servers:` a tus propios hosts NTP.
+
+**Nunca habilites esto en un host mon u osd de ceph.** Un salto de reloj puede costarle
+el quórum a un monitor. Usa allí un watch de solo alerta; ver
+`examples/watches/clock-ceph.yml`.
+
 `then.notify` lista nombres de notifier (cada uno debe estar definido bajo `notifiers`).
 Para los watches multimétrica (`net`, `icmp`, `swap`) el `notify`/`hook` viven en el
 propio `then` de cada métrica, de modo que una métrica puede tener sus propios destinos.
@@ -2014,7 +2110,7 @@ notifiers, hooks ni acciones de remediación.
 
 Un servicio puede llevar su propio bloque `watches:` — la misma forma que un watch
 de host (un `check:`, una ventana `for`/`within` opcional y un bloque `then` con
-`hook`, `notify`, `expand` o `kill` fire-and-forget, o una `action` de servicio)
+`hook`, `notify`, `expand`, `kill` o `makestep` fire-and-forget, o una `action` de servicio)
 — declarado **dentro del documento del servicio**. Los eventos se etiquetan
 `<servicio>:<watch>`. Las entradas fire-and-forget reutilizan el runtime de
 host-watch (ventanas firing/recovered, hooks, notifiers, dry-run); las entradas
@@ -2053,7 +2149,7 @@ panel Watches de la Web UI y responde a
 #### `then.action` unificado (operación / guard / alerta)
 
 El `then` de un watch de servicio puede declarar una **`action`** en lugar del
-`hook`/`expand`/`kill` fire-and-forget, de modo que una entrada `watches:` expresa
+`hook`/`expand`/`kill`/`makestep` fire-and-forget, de modo que una entrada `watches:` expresa
 un check **y** su remediación/guard/alerta juntos:
 
 - `action: restart | start | stop | reload | resume` — una **remediación** que
@@ -2327,7 +2423,9 @@ socket ICMP raw. Esta iteración es **solo-IPv4**.
 Un watch `clock` comprueba el desfase del reloj local frente a servidores NTP externos.
 Está pensado para hosts que pueden no ejecutar un daemon NTP local: Sermo envía consultas
 NTP de cliente por sí mismo, dispara la alerta cuando la deriva sale de la política, y deja
-cualquier corrección de hora al script de hook.
+la corrección a una acción del watch
+([`then.makestep`](#thenmakestep--corrección-forzosa-del-reloj-watch-de-clock) en un host
+con chrony) o a tu script de hook.
 
 ```yaml
 watches:
@@ -2356,8 +2454,8 @@ watches:
 `interface_match` ligan la petición NTP a enlaces concretos, igual que las demás
 comprobaciones de red. Los hooks reciben `SERMO_SERVER`, `SERMO_OFFSET_SECONDS`,
 `SERMO_OFFSET_ABS_SECONDS`, `SERMO_STRATUM`, `SERMO_ROOT_DISPERSION_MS` y el resto de
-campos NTP devueltos, de modo que el script puede decidir si ejecutar `ntpdate`,
-`timedatectl` o un flujo de corrección propio del sitio.
+campos NTP devueltos, de modo que el script puede decidir qué ejecutar — aunque en un
+host con chrony `then.makestep` corrige el reloj de forma nativa, sin script.
 
 En un host que ya ejecuta chrony, usa `source: chrony` en su lugar: Sermo lee el
 chronyd local mediante su protocolo de mando en vez de enviar sus propias consultas

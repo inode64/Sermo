@@ -60,7 +60,7 @@ func validateWatches(watches map[string]any, locksDir string, notifiers map[stri
 			// The one single-shot type with its own case: a storage watch may carry
 			// a then.expand action, so its hook block allows expand.
 			validateStorageFields(checkPath, check, add)
-			validateHookBlock(prefix, entry, true, false, defaultNotify, add)
+			validateHookBlock(prefix, entry, watchNativeActions{expand: true}, defaultNotify, add)
 		case checks.CheckTypeNet:
 			validateNetCheck(name, check, entry, defaultNotify, add)
 		case checks.CheckTypeICMP:
@@ -78,7 +78,7 @@ func validateWatches(watches map[string]any, locksDir string, notifiers map[stri
 			// a host watch: validate its fields with the same per-type validators a
 			// checks: section uses and require a hook (section: unified checks).
 			if validateWatchableCheck(checkPath, typ, check, locksDir, add) {
-				validateHookBlock(prefix, entry, false, false, defaultNotify, add)
+				validateHookBlock(prefix, entry, watchNativeActions{makeStep: typ == checks.CheckTypeClock}, defaultNotify, add)
 			} else {
 				add(validationValueNotSupportedFormat, watchCheckFieldPath(name, checks.CheckKeyType), typ)
 			}
@@ -198,7 +198,7 @@ func validateServiceWatch(name string, entry map[string]any, locksDir string, no
 		validateWatchThenAction(prefix, action, then, add)
 		return
 	}
-	validateHookBlock(prefix, entry, typ == checks.CheckTypeStorage, false, defaultNotify, add)
+	validateHookBlock(prefix, entry, watchNativeActions{expand: typ == checks.CheckTypeStorage, makeStep: typ == checks.CheckTypeClock}, defaultNotify, add)
 }
 
 func validateServiceWatchEntry(name string, entry map[string]any, notifiers map[string]struct{}, add addFunc) {
@@ -262,7 +262,7 @@ func validateWatchThenAction(prefix, action string, then map[string]any, add fun
 		add(validationNotOneOfFormat, thenFieldPath(prefix, rules.RuleFieldAction), action, rules.RuleActionSummary)
 		return
 	}
-	for _, k := range []string{WatchThenKeyHook, WatchThenKeyExpand, WatchThenKeyKill} {
+	for _, k := range []string{WatchThenKeyHook, WatchThenKeyExpand, WatchThenKeyKill, WatchThenKeyMakeStep} {
 		if _, has := then[k]; has {
 			add("%s cannot be combined with an action (a watch is either an operation/alert or a fire-and-forget %s)", thenFieldPath(prefix, k), k)
 		}
@@ -321,12 +321,55 @@ func validateWatchMetadata(name string, entry map[string]any, add func(string, .
 	}
 }
 
+// validateWatchMakeStepAction checks a clock watch's `then.makestep` action: the
+// forced clock correction Sermo issues natively over chronyd's command socket.
+// Unlike then.expand it REQUIRES a positive watch-level policy.cooldown (safety
+// invariant 8) — a zero policy allows an action on every cycle, and a clock step
+// is a discontinuity, not an idempotent nudge.
+func validateWatchMakeStepAction(prefix string, block, then map[string]any, allow bool, add func(string, ...any)) bool {
+	raw, present := then[WatchThenKeyMakeStep]
+	step, hasStep := raw.(map[string]any)
+	switch {
+	case present && !hasStep:
+		add("%s must be a mapping with an optional %s", thenMakeStepPath(prefix), WatchMakeStepKeySocket)
+	case hasStep && !allow:
+		add("%s is only valid on a clock watch", thenMakeStepPath(prefix))
+	case hasStep:
+		// Reject rather than ignore an unknown key: a host/port here would look
+		// like the daemon was addressed that way, and it cannot be — chronyd's
+		// UDP port refuses privileged commands.
+		for _, key := range slices.Sorted(maps.Keys(step)) {
+			if key != WatchMakeStepKeySocket {
+				add(validationNotSupportedFormat, thenMakeStepPath(prefix)+"."+key)
+			}
+		}
+		if socket := cfgval.String(step[WatchMakeStepKeySocket]); socket != "" && !filepath.IsAbs(socket) {
+			add("%s %q must be an absolute path to chronyd's command socket",
+				thenMakeStepPath(prefix)+"."+WatchMakeStepKeySocket, socket)
+		}
+		policy, _ := block[sectionPolicy].(map[string]any)
+		if !isPositiveDuration(cfgval.String(policy[rules.PolicyKeyCooldown])) {
+			add("%s requires %s as a positive duration: a forced clock step must be paced",
+				thenMakeStepPath(prefix), prefix+"."+policyPathCooldown)
+		}
+	}
+	return hasStep
+}
+
+// watchNativeActions names the native then-actions a watch type permits. A
+// struct rather than three adjacent booleans, which no call site could read.
+type watchNativeActions struct {
+	expand   bool
+	kill     bool
+	makeStep bool
+}
+
 // validateHookBlock validates a `then` action block: a hook and/or a notify list
 // (at least one), or a storage-only expand action. The hook command (when present)
 // must be a non-empty array with a valid optional timeout. Notifier-name
 // references are checked separately by validateNotifyRefs (which has the
 // configured notifier set).
-func validateHookBlock(prefix string, block map[string]any, allowExpand, allowKill bool, defaultNotify []string, add func(string, ...any)) {
+func validateHookBlock(prefix string, block map[string]any, allow watchNativeActions, defaultNotify []string, add func(string, ...any)) {
 	then, ok := watchThenMapping(prefix, block, add)
 	if !ok {
 		return
@@ -336,14 +379,15 @@ func validateHookBlock(prefix string, block map[string]any, allowExpand, allowKi
 	notify := cfgval.StringList(then[rules.RuleFieldNotify])
 	_, hasNotifyOn := then[WatchThenKeyNotifyOn]
 	validateWatchNotifyInterval(prefix, then, hasNotifyOn, notify, defaultNotify, add)
-	hasExpand := validateWatchExpandAction(prefix, then, allowExpand, add)
-	hasKill := validateWatchKillAction(prefix, then, allowKill, add)
+	hasExpand := validateWatchExpandAction(prefix, then, allow.expand, add)
+	hasKill := validateWatchKillAction(prefix, then, allow.kill, add)
+	hasMakeStep := validateWatchMakeStepAction(prefix, block, then, allow.makeStep, add)
 	// An explicit `then: { notify: [none] }` (or with a hook/expand/kill too) is a
 	// deliberate monitor-only watch (state in the dashboard and events, no
 	// delivery). A present `then` that selects nothing is rejected. Omitting the
 	// `then` key entirely is another supported way to get alert-only behavior.
-	if !hasHook && !hasNotifyOn && !HasEffectiveNotifyAction(notify, defaultNotify) && !hasExpand && !hasKill && !NotifyOptedOut(notify) {
-		add("%s requires a hook, notify, kill and/or expand", prefix+"."+rules.RuleFieldThen)
+	if !hasHook && !hasNotifyOn && !HasEffectiveNotifyAction(notify, defaultNotify) && !hasExpand && !hasKill && !hasMakeStep && !NotifyOptedOut(notify) {
+		add("%s requires a hook, notify, kill, expand and/or makestep", prefix+"."+rules.RuleFieldThen)
 		return
 	}
 	validateWatchHookAction(prefix, hook, hasHook, add)
@@ -365,7 +409,7 @@ func watchThenMapping(prefix string, block map[string]any, add func(string, ...a
 }
 
 func validateWatchThenKeys(prefix string, then map[string]any, add func(string, ...any)) {
-	allowed := set(WatchThenKeyHook, rules.RuleFieldNotify, WatchThenKeyNotifyInterval, WatchThenKeyNotifyOn, WatchThenKeyExpand, WatchThenKeyKill)
+	allowed := set(WatchThenKeyHook, rules.RuleFieldNotify, WatchThenKeyNotifyInterval, WatchThenKeyNotifyOn, WatchThenKeyExpand, WatchThenKeyKill, WatchThenKeyMakeStep)
 	for _, key := range slices.Sorted(maps.Keys(then)) {
 		if _, ok := allowed[key]; !ok {
 			add(validationNotSupportedFormat, thenFieldPath(prefix, key))
@@ -493,7 +537,9 @@ func validateKillAction(prefix string, kill map[string]any, add func(string, ...
 // validateWatchPolicy checks a watch-level `policy` block — the pacing for a
 // firing watch's actions (notably then.expand): an optional positive cooldown
 // plus the same max_actions/backoff extras a service policy allows. Unlike a
-// service, a watch does not require a cooldown; absent means "fire every cycle".
+// service, a watch does not generally require a cooldown; absent means "fire
+// every cycle". then.makestep is the exception and requires one, enforced by
+// validateWatchMakeStepAction.
 func validateWatchPolicy(prefix string, entry map[string]any, add addFunc) {
 	raw, present := entry[sectionPolicy]
 	if !present {
@@ -586,7 +632,7 @@ func validateMetricWatchEntries(name, typ string, entry map[string]any, defaultN
 		}
 		validateCondition(prefix, key, metric, add)
 		validateEmission(metric, prefix+"."+emission.Section, add)
-		validateHookBlock(prefix, metric, false, false, defaultNotify, add)
+		validateHookBlock(prefix, metric, watchNativeActions{}, defaultNotify, add)
 		validateWindow(prefix, metric, add)
 	}
 }
@@ -773,7 +819,7 @@ func validateFileCheck(name string, check, entry map[string]any, defaultNotify [
 		add("%s requires at least one of %s", watchCheckPath(name), FileWatchConditionSummary)
 	}
 
-	validateHookBlock(watchPath(name), entry, false, false, defaultNotify, add)
+	validateHookBlock(watchPath(name), entry, watchNativeActions{}, defaultNotify, add)
 }
 
 // validateProcessWatch validates a process watch: a name, an optional user, and
@@ -813,7 +859,7 @@ func validateProcessWatch(name string, check, entry map[string]any, defaultNotif
 	}
 
 	// A process watch is the one type that may carry a native `then.kill` action.
-	validateHookBlock(watchPath(name), entry, false, true, defaultNotify, add)
+	validateHookBlock(watchPath(name), entry, watchNativeActions{kill: true}, defaultNotify, add)
 	validateProcessWatchKillSelector(name, check, entry, add)
 }
 

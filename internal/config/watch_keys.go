@@ -26,9 +26,14 @@ const (
 	WatchThenKeyHook           = "hook"
 	WatchThenKeyExpand         = "expand"
 	WatchThenKeyKill           = "kill"
+	WatchThenKeyMakeStep       = "makestep"
 	WatchThenKeyNotifyInterval = "notify_interval"
 	WatchThenKeyNotifyOn       = "notify_on"
 )
+
+// WatchMakeStepKeySocket addresses chronyd's command socket for a clock watch's
+// then.makestep action. It aliases the check key so `socket` has one spelling.
+const WatchMakeStepKeySocket = checks.CheckKeySocket
 
 // Watch hook keys mirror command-check command/expectation fields.
 const (

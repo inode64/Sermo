@@ -18,6 +18,7 @@ const (
 	DataKeyBaselineBytes      = "baseline_bytes"
 	DataKeyChanged            = "changed"
 	DataKeyChip               = CheckKeyChip
+	DataKeyClockFailure       = "clock_failure"
 	DataKeyCount              = CheckKeyCount
 	DataKeyCurrentBytes       = "current_bytes"
 	DataKeyDaysLeft           = "days_left"

@@ -12,6 +12,7 @@ import (
 
 	"sermo/internal/cfgval"
 	"sermo/internal/checks"
+	"sermo/internal/config"
 	"sermo/internal/metrics"
 	"sermo/internal/notify"
 	"sermo/internal/process"
@@ -381,14 +382,10 @@ func (w *procWatcher) summaryMessage(info ProcInfo, message string, env map[stri
 // kill when it applies to this fire — the process-watch analogue of
 // watchDryRunMessage (which does not know about kill).
 func (w *procWatcher) dryRunActions(killable bool) string {
-	base := watchDryRunMessage(w.hook, w.notifiers, nil)
 	if !killable {
-		return base
+		return watchDryRunMessage(w.hook, w.notifiers)
 	}
-	if base == watchDryRunMessageNoActions {
-		return "dry-run: would run kill"
-	}
-	return base + ", kill"
+	return watchDryRunMessage(w.hook, w.notifiers, config.WatchThenKeyKill)
 }
 
 // doKill signals a matched PID through process.Reaper and process.KillSelector.

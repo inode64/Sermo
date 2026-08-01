@@ -637,3 +637,97 @@ func TestClockCheckSocketIgnoresInterfacePin(t *testing.T) {
 		t.Errorf("message = %q, must not name an interface it never used", res.Message)
 	}
 }
+
+func TestClockFailureCodeBelongsToTheReportedSample(t *testing.T) {
+	// The reported sample is the one with the smallest offset, which is not
+	// necessarily the last tried nor the one whose failure the loop saw first.
+	// clock_failure gates the forced clock correction, so a code leaking from
+	// another sample would let a step fire on a failure a step cannot fix.
+	cases := []struct {
+		name       string
+		servers    []string
+		results    map[string]conn.Result
+		wantServer string
+		wantCode   string
+	}{
+		{
+			// Closest sample fails on stratum; a worse one fails on offset.
+			name:    "best fails on stratum, another on offset",
+			servers: []string{"near.example", "far.example"},
+			results: map[string]conn.Result{
+				"near.example": testClockResult("1.000000", "9", "10.000"),
+				"far.example":  testClockResult("5.000000", "2", "10.000"),
+			},
+			wantServer: "near.example",
+			wantCode:   ClockFailureStratum,
+		},
+		{
+			// Same, reversed order, so it cannot pass by accident of iteration.
+			name:    "best is last and fails on root dispersion",
+			servers: []string{"far.example", "near.example"},
+			results: map[string]conn.Result{
+				"far.example":  testClockResult("5.000000", "2", "10.000"),
+				"near.example": testClockResult("1.000000", "2", "900.000"),
+			},
+			wantServer: "near.example",
+			wantCode:   ClockFailureRootDispersion,
+		},
+		{
+			name:    "an unsynchronized sample is always the closest",
+			servers: []string{"drifting.example", "dead.example"},
+			results: map[string]conn.Result{
+				"drifting.example": testClockResult("5.000000", "2", "10.000"),
+				"dead.example":     testClockUnsynchronized(),
+			},
+			wantServer: "dead.example",
+			wantCode:   ClockFailureUnsynchronized,
+		},
+		{
+			name:    "a plain offset breach",
+			servers: []string{"far.example"},
+			results: map[string]conn.Result{
+				"far.example": testClockResult("5.000000", "2", "10.000"),
+			},
+			wantServer: "far.example",
+			wantCode:   ClockFailureOffset,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			res := testClockCheck(tc.servers, tc.results, nil).Run(context.Background())
+			if res.OK {
+				t.Fatalf("every sample fails, got OK: %s", res.Message)
+			}
+			if res.Data[DataKeyServer] != tc.wantServer {
+				t.Fatalf("reported server = %v, want %q", res.Data[DataKeyServer], tc.wantServer)
+			}
+			if got := res.Data[DataKeyClockFailure]; got != tc.wantCode {
+				t.Fatalf("clock_failure = %v, want %q (the reported sample's own failure)", got, tc.wantCode)
+			}
+		})
+	}
+}
+
+func TestClockFailureCodeAbsentWhenHealthyOrUnsampled(t *testing.T) {
+	// A passing check must not publish a failure code, and a check that got no
+	// sample at all must leave it absent rather than empty-but-present — the
+	// makestep gate reads it straight off Result.Data.
+	ok := testClockCheck([]string{"time.example"}, map[string]conn.Result{
+		"time.example": testClockResult("0.250000", "3", "10.000"),
+	}, nil).Run(context.Background())
+	if !ok.OK {
+		t.Fatalf("check should pass: %s", ok.Message)
+	}
+	if val, present := ok.Data[DataKeyClockFailure]; present {
+		t.Fatalf("a passing check published clock_failure = %v", val)
+	}
+
+	none := testClockCheck([]string{"time.example"}, nil,
+		map[string]error{"time.example": errors.New("timeout")}).Run(context.Background())
+	if none.OK {
+		t.Fatal("a check with no usable sample must fail")
+	}
+	if val, present := none.Data[DataKeyClockFailure]; present {
+		t.Fatalf("a check with no sample published clock_failure = %v", val)
+	}
+}

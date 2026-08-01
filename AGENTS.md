@@ -826,7 +826,9 @@ checklist). Match the suite's existing style instead of inventing one.
    config resolution, with optional max_actions/backoff; see `docs/rules.md`
    (remediation policy). Cooldown is decided by the daemon's rule evaluation
    before the shared engine runs. Manual operator commands are exempt from
-   cooldown but still subject to locks, guards and preflight.
+   cooldown but still subject to locks, guards and preflight. The native mutating watch actions
+   that grow or correct the host are policy-gated the same way: `then.makestep` (a forced clock
+   step) requires a positive `policy.cooldown` at validation and again at build.
 9. Always log whether an action was executed or blocked, and why. Today that
    means daemon events (`action`, `blocked`, `dry-run`, `suppressed`, …) via the
    in-process event log (web UI / `sermoctl activity`) and explicit CLI status

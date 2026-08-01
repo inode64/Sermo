@@ -561,7 +561,8 @@ Editable notes:
   `panic-suppressed`, `alert`, `error`, `firing`, `recovered`, `dry-run`,
   `reload` (a successful config reload of the running daemon),
   `hook`/`hook-failed`, `notify`/`notify-failed`/`notify-suppressed`,
-  `expand`/`expand-skipped`/`expand-failed`, `kill`/`kill-failed`, and `cascade`
+  `expand`/`expand-skipped`/`expand-failed`, `kill`/`kill-failed`,
+  `makestep`/`makestep-skipped`/`makestep-failed`, and `cascade`
   (a service operation triggered through a cascade action).
 
 ## Notifiers panel

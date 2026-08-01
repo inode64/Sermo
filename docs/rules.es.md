@@ -822,8 +822,10 @@ Protocolos, en el orden de la tabla de arriba:
   chrony: una configuración de chrony **solo-cliente** no sirve NTP en el puerto 123
   en absoluto, así que la sonda `ntp` no puede verlo, mientras que el protocolo de
   mando propio de chrony informa de la visión del reloj que tiene el demonio. Lee el
-  estado de seguimiento del demonio y sus contadores de fuentes, y nunca emite una
-  orden que cambie nada. Los datos del resultado comparten los nombres de `ntp`
+  estado de seguimiento del demonio y sus contadores de fuentes. La *sonda* nunca emite
+  una orden que cambie nada; la única orden mutante que Sermo habla solo es alcanzable
+  desde la acción `then.makestep` de un watch de reloj, nunca desde una comprobación, y
+  solo por el socket de mando. Los datos del resultado comparten los nombres de `ntp`
   donde el significado coincide — `stratum`, `offset_seconds` (la corrección de
   chronyd al reloj del sistema), `leap`, `root_delay_ms`, `root_dispersion_ms`,
   `reference_id` — más `synchronized`, `reference_address`, `reference_time`,
@@ -1591,9 +1593,11 @@ son agnósticos al protocolo, así que un nuevo protocolo solo se registra a sí
 ### Deriva de reloj (`clock`)
 
 La comprobación `clock` mide el desfase del reloj local consultando uno o más servidores
-NTP remotos como cliente. No requiere un daemon NTP local y no cambia la hora del sistema
-por sí misma; usa la ruta de alerta/hook para notificar o para ejecutar un script de
-sincronización propio del operador.
+NTP remotos como cliente. No requiere un daemon NTP local, y la comprobación en sí nunca
+cambia la hora del sistema — las comprobaciones son de solo lectura. La corrección es una
+*acción* del watch: un watch de reloj puede llevar
+[`then.makestep`](configuration.es.md#thenmakestep--corrección-forzosa-del-reloj-watch-de-clock),
+que pide al chronyd local que salte el reloj, o un hook que ejecuta un script tuyo.
 
 ```yaml
 watches:
@@ -1625,11 +1629,22 @@ cuyo `root_dispersion_ms` queda dentro de `max_root_dispersion` cuando se config
 techo. Los datos del resultado llevan el `server`, `port`, `offset_seconds`,
 `offset_abs_seconds`, `stratum`, `leap`, `precision_seconds`, `root_delay_ms`,
 `root_dispersion_ms` y `reference_id` seleccionados; los hooks reciben los mismos
-valores como campos de entorno `SERMO_*`.
+valores como campos de entorno `SERMO_*`. Un resultado **fallido** lleva además
+`clock_failure`, que nombra qué regla se rompió — `offset`, `unsynchronized`,
+`stratum` o `root_dispersion` — para que una acción pueda distinguir una deriva
+que sabe corregir de una fuente que no.
 
 Una fuente que responde pero no está sincronizada — estrato 0, o un `leap` de
 `unsynchronized` — siempre falla, sea cual sea el `max_stratum` permitido: su
 desfase es casi cero y de otro modo parecería la mejor muestra disponible.
+
+Para corregir la deriva en lugar de solo informarla, un host con chrony puede llevar
+[`then.makestep`](configuration.es.md#thenmakestep--corrección-forzosa-del-reloj-watch-de-clock).
+ntpd y systemd-timesyncd no exponen ninguna orden de salto, así que los servicios de
+catálogo `ntpd` y `systemd-timesyncd` fuerzan la corrección **reiniciando el demonio**,
+por la ruta de operación segura. Esa ruta se dispara ante cualquier fallo del check —
+incluido un servidor NTP inalcanzable — y por eso se distribuye con dos servidores y una
+ventana de 15 minutos.
 
 #### Leer un chronyd local (`source: chrony`)
 

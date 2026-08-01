@@ -344,7 +344,7 @@ func (w *fileWatcher) fireOlderThanBatch(ctx context.Context, stale []staleFile)
 		inPanic:     w.inPanic,
 		dryRun:      w.dryRun,
 		emit:        w.emitEvent,
-		dryRunLabel: watchDryRunMessage(w.hook, w.notifiers, nil),
+		dryRunLabel: watchDryRunMessage(w.hook, w.notifiers),
 		panicLabel:  "panic mode: hook/notify suppressed",
 	}, msg, env)
 }
@@ -436,7 +436,7 @@ func (w *fileWatcher) fire(ctx context.Context, path, change, msg string, extra 
 		inPanic:     w.inPanic,
 		dryRun:      w.dryRun,
 		emit:        w.emitEvent,
-		dryRunLabel: watchDryRunMessage(w.hook, w.notifiers, nil),
+		dryRunLabel: watchDryRunMessage(w.hook, w.notifiers),
 		panicLabel:  "panic mode: hook/notify suppressed",
 	}, msg, env)
 }

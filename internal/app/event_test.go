@@ -69,7 +69,10 @@ func TestSlogEmitterSeverityPerKind(t *testing.T) {
 	}{
 		{eventKindExpandFailed, "level=ERROR"},
 		{eventKindKillFailed, "level=ERROR"},
+		{eventKindMakeStepFailed, "level=ERROR"},
 		{eventKindExpand, "level=INFO"},
+		{eventKindMakeStep, "level=INFO"},
+		{eventKindMakeStepSkipped, "level=INFO"},
 		{eventKindKill, "level=INFO"},
 		{eventKindReload, "level=INFO"},
 		{eventKindPanicSuppressed, "level=INFO"},

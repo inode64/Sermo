@@ -1,6 +1,9 @@
 name: clock-drift
 category: host
-# Alert when local wall-clock drift exceeds policy; the hook owns correction.
+# Tier 1 of the three-tier drift policy: ALERT at 1s. Read-only.
+#
+# Tier 2 (clock-makestep.yml) forces a correction at 5s; tier 3 (clock-ceph.yml)
+# tightens the alert to 5ms on ceph nodes and never steps the clock.
 monitor: disabled
 interval: 5m
 check:
@@ -8,13 +11,10 @@ check:
   servers:
     - time.cloudflare.com
     - pool.ntp.org
-  max_offset: 2s
+  max_offset: 1s
   max_stratum: 4
   max_root_dispersion: 250ms
   timeout: 3s
 for: { cycles: 2 }
 then:
-  hook:
-    command: [/usr/local/sbin/sermo-sync-clock.sh]
-    timeout: 2m
-    expect_exit: 0
+  notify: [ops-email]

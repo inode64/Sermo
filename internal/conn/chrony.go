@@ -16,6 +16,10 @@ import (
 
 func init() { Register(chronyProtocol{}, protocolAliasChronyd) }
 
+// DefaultChronySocket is chronyd's command socket on a stock install: the
+// default target of a clock watch's `then.makestep` action.
+const DefaultChronySocket = "/run/chrony/chronyd.sock"
+
 // candm wire framing (chrony's candm.h). All fields are big-endian.
 const (
 	chronyProtoVersion       = 6
@@ -34,6 +38,10 @@ const (
 	// waiting out the check's whole budget for it would report success while
 	// pinning a worker and inflating the measured latency.
 	chronyOptionalTimeout = 250 * time.Millisecond
+	// chronyMakeStepTimeout bounds the one mutating exchange. chronyd is local
+	// and acknowledges immediately; a watch action must not pin a worker for the
+	// whole cycle budget waiting for a reply that is not coming.
+	chronyMakeStepTimeout = 3 * time.Second
 )
 
 // Request header field offsets. The attempt counter at offset 6 is left at the
@@ -68,12 +76,17 @@ type chronyCommand struct {
 const (
 	chronyReqNSources = 14
 	chronyReqTracking = 33
+	chronyReqMakeStep = 43
 	chronyReqActivity = 44
 
+	// chronyRpyNull is the empty acknowledgement a state-changing command
+	// answers with, and the reply chronyd sends when it refuses one.
+	chronyRpyNull     = 1
 	chronyRpyNSources = 2
 	chronyRpyTracking = 5
 	chronyRpyActivity = 12
 
+	chronyPayloadNull     = 0
 	chronyPayloadNSources = 4
 	chronyPayloadTracking = 76
 	chronyPayloadActivity = 20
@@ -88,6 +101,9 @@ var (
 	}
 	chronyCmdActivity = chronyCommand{
 		name: "activity", request: chronyReqActivity, reply: chronyRpyActivity, payload: chronyPayloadActivity,
+	}
+	chronyCmdMakeStep = chronyCommand{
+		name: "makestep", request: chronyReqMakeStep, reply: chronyRpyNull, payload: chronyPayloadNull,
 	}
 )
 
@@ -221,9 +237,12 @@ const (
 //
 // The probe reads REQ_TRACKING (mandatory — the liveness proof) plus
 // REQ_ACTIVITY and REQ_N_SOURCES for the source counts. It never issues a
-// command that changes state, and the default UDP transport is chronyd's
-// monitoring-only channel, which refuses privileged commands outright.
-// No auth.
+// command that changes state: the one mutating command Sermo speaks —
+// REQ_MAKESTEP, in MakeStep below — is deliberately kept out of this probe and
+// out of every check, reachable only from a watch's `then.makestep` action and
+// only over the Unix command socket. TestChronyProbeNeverMutates pins that
+// separation. The default UDP transport is chronyd's monitoring-only channel,
+// which refuses privileged commands outright. No auth.
 type chronyProtocol struct{}
 
 func (chronyProtocol) Name() string       { return ProtocolNameChrony }
@@ -276,6 +295,36 @@ func chronyLimitOptional(ctx context.Context, c net.Conn) {
 		limit = deadline
 	}
 	_ = c.SetReadDeadline(limit)
+}
+
+// MakeStep asks the local chronyd to correct the system clock immediately: the
+// REQ_MAKESTEP command `chronyc makestep` sends. It is the only candm command
+// Sermo issues that changes state, it is deliberately not part of any probe or
+// check, and it is reached only from a clock watch's `then.makestep` action.
+//
+// It is socket-only by construction. chronyd's UDP command port is its
+// monitoring-only channel and answers a privileged command with STT_UNAUTH
+// (verified against chronyd 4.8), so there is no host/port form to offer.
+// An empty socket means DefaultChronySocket.
+//
+// Success means chronyd accepted the command and applied the correction it had
+// already computed — a clock *discontinuity*, not a slew. The caller owns the
+// policy deciding that is warranted; conn only carries the command.
+func MakeStep(ctx context.Context, socket string) error {
+	if socket == "" {
+		socket = DefaultChronySocket
+	}
+	ctx, cancel := context.WithTimeout(ctx, chronyMakeStepTimeout)
+	defer cancel()
+
+	c, err := chronyDialUnix(ctx, socket)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = c.Close() }()
+
+	_, err = chronyExchange(c, chronyCmdMakeStep)
+	return err
 }
 
 // chronyDial opens the command channel: cfg.Socket selects chronyd's Unix

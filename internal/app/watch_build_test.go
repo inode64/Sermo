@@ -953,3 +953,91 @@ func TestBuildWatchesDoesNotWarnRateDeltaBehindWindow(t *testing.T) {
 		}
 	}
 }
+
+func TestBuildWatchMakeStepRequiresAPositiveCooldown(t *testing.T) {
+	// Belt and braces with the validator: ParsePolicy yields a zero Policy for a
+	// tree with no `policy:`, and a zero Policy allows an action every cycle.
+	clockCheck := map[string]any{
+		"type": "clock", "source": "chrony", "max_offset": "5s",
+	}
+	cases := []struct {
+		name  string
+		entry map[string]any
+		want  string
+	}{
+		{
+			name: "no policy at all",
+			entry: map[string]any{
+				"check": clockCheck,
+				"then":  map[string]any{"makestep": map[string]any{}},
+			},
+			want: "requires a positive policy.cooldown",
+		},
+		{
+			name: "zero cooldown",
+			entry: map[string]any{
+				"check":  clockCheck,
+				"policy": map[string]any{"cooldown": "0s"},
+				"then":   map[string]any{"makestep": map[string]any{}},
+			},
+			want: "requires a positive policy.cooldown",
+		},
+		{
+			name: "not a clock watch",
+			entry: map[string]any{
+				"check": map[string]any{"type": "http", "url": "http://example.test"},
+				"then":  map[string]any{"makestep": map[string]any{}},
+			},
+			want: "only valid on a clock watch",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := cfgWithWatches(map[string]any{"clock-step": tc.entry})
+			watches, warns := BuildWatches(cfg, Deps{DefaultTimeout: time.Second}, 30*time.Second)
+			if len(watches) != 0 {
+				t.Fatalf("watch must not build: %d built", len(watches))
+			}
+			if len(warns) == 0 || !strings.Contains(warns[0], tc.want) {
+				t.Fatalf("warns = %v, want %q", warns, tc.want)
+			}
+		})
+	}
+}
+
+func TestBuildWatchMakeStepWiresTheStepper(t *testing.T) {
+	var called []string
+	cfg := cfgWithWatches(map[string]any{
+		"clock-step": map[string]any{
+			"check":  map[string]any{"type": "clock", "source": "chrony", "max_offset": "5s"},
+			"policy": map[string]any{"cooldown": "30m"},
+			"then":   map[string]any{"makestep": map[string]any{}},
+		},
+	})
+	watches, warns := BuildWatches(cfg, Deps{
+		DefaultTimeout: time.Second,
+		ClockStepper: func(_ context.Context, socket string) error {
+			called = append(called, socket)
+			return nil
+		},
+	}, 30*time.Second)
+	if len(warns) != 0 || len(watches) != 1 {
+		t.Fatalf("watch should build: warns=%v", warns)
+	}
+	w := watches[0]
+	if w.MakeStep == nil || w.Stepper == nil {
+		t.Fatal("makestep action and stepper must both be wired")
+	}
+	if w.MakeStep.Socket != "/run/chrony/chronyd.sock" {
+		t.Fatalf("socket = %q, want chronyd's default command socket", w.MakeStep.Socket)
+	}
+	if w.Policy.Cooldown != 30*time.Minute {
+		t.Fatalf("cooldown = %v, want 30m", w.Policy.Cooldown)
+	}
+	if err := w.Stepper(context.Background(), w.MakeStep.Socket); err != nil {
+		t.Fatalf("injected stepper: %v", err)
+	}
+	if len(called) != 1 {
+		t.Fatalf("Deps.ClockStepper must be used verbatim, calls = %v", called)
+	}
+}

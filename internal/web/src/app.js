@@ -173,6 +173,9 @@ const eventKindHook = "hook";
 const eventKindHookFailed = "hook-failed";
 const eventKindKill = "kill";
 const eventKindKillFailed = "kill-failed";
+const eventKindMakeStep = "makestep";
+const eventKindMakeStepFailed = "makestep-failed";
+const eventKindMakeStepSkipped = "makestep-skipped";
 const eventKindNotify = "notify";
 const eventKindNotifyFailed = "notify-failed";
 const eventKindNotifySuppressed = "notify-suppressed";
@@ -189,9 +192,9 @@ const servicePreflightActions = [actionStart, actionStop, actionRestart];
 // browser tracks in liveOps and the ones a named lock blocks.
 const serviceTrackedActions = [actionStart, actionStop, actionRestart, actionReload, actionResume];
 const activityCriticalStatuses = [targetStateFailed, mountStateError, eventStatusPreflightFailed, eventStatusPostflightFailed, eventStatusOrphanProcesses];
-const activityCriticalKinds = [mountStateError, eventKindHookFailed, eventKindNotifyFailed, eventKindExpandFailed, eventKindKillFailed];
-const activityWarningKinds = [actionAlert, eventKindFiring, eventKindSuppressed, eventKindPanicSuppressed, eventKindNotifySuppressed, eventKindExpandSkipped];
-const activityOKKinds = [eventKindAction, eventKindCascade, eventKindHook, eventKindNotify, eventKindRecovered, actionExpand, eventKindKill];
+const activityCriticalKinds = [mountStateError, eventKindHookFailed, eventKindNotifyFailed, eventKindExpandFailed, eventKindKillFailed, eventKindMakeStepFailed];
+const activityWarningKinds = [actionAlert, eventKindFiring, eventKindSuppressed, eventKindPanicSuppressed, eventKindNotifySuppressed, eventKindExpandSkipped, eventKindMakeStepSkipped];
+const activityOKKinds = [eventKindAction, eventKindCascade, eventKindHook, eventKindNotify, eventKindRecovered, actionExpand, eventKindKill, eventKindMakeStep];
 const activityInfoKinds = [eventKindDryRun, eventKindReload];
 const serviceStatusFilterStates = [
   targetStateDisabled,

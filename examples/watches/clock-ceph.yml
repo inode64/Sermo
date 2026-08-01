@@ -1,0 +1,27 @@
+name: clock-drift-ceph
+category: host
+# Tier 3 of the three-tier drift policy: ALERT ONLY at 5ms, for ceph nodes.
+#
+# A ceph monitor leaves the paxos quorum when the monitors' clocks disagree —
+# ceph's own mon_clock_drift_allowed defaults to 50ms — so this alerts an order
+# of magnitude earlier, while there is still time to act.
+#
+# It deliberately carries NO then.makestep: a forced step is itself a
+# discontinuity that can cost a mon its quorum. Correct a drifting ceph node by
+# hand, in a maintenance window.
+#
+# 5ms is below what a remote NTP query can resolve — a single server's error
+# bound runs to tens of milliseconds — so this must read the local daemon.
+monitor: disabled
+interval: 1m
+check:
+  type: clock
+  source: chrony
+  socket: /run/chrony/chronyd.sock
+  max_offset: 5ms
+  max_root_dispersion: 20ms
+  unit: s
+  timeout: 3s
+for: { cycles: 3 }
+then:
+  notify: [ops-email]

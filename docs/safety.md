@@ -126,6 +126,13 @@ least-privilege setup.
 
 Because the daemon runs as root:
 
+- **`then.expand` and `then.makestep` are policy-gated.** Both
+  `then.makestep` change the host, so they run at most once per
+  `policy.cooldown`, and every attempt starts the cooldown so a failing target is
+  not retried each cycle. `then.makestep` — which asks the local chronyd to step
+  the system clock — additionally *requires* a positive cooldown and acts only on
+  an offset breach. **Never enable it on a ceph mon or osd host**: a clock jump
+  can cost a monitor its quorum, so alert there instead.
 - **The config is trusted, root-owned input.** `command` checks and watch `hook`s
   run their `argv` **as root** (never via a shell). Keep `/etc/sermo` writable
   only by root; anyone who can edit it can run code as root. Secrets belong in the

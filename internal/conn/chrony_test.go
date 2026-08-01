@@ -5,11 +5,14 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"errors"
+	"maps"
 	"math"
 	"net"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -83,7 +86,7 @@ func chronyRefusal(req []byte, status uint16) []byte {
 	b[chronyRepOffVersion] = chronyProtoVersion
 	b[chronyRepOffPktType] = chronyPktTypeReply
 	binary.BigEndian.PutUint16(b[chronyRepOffCommand:], binary.BigEndian.Uint16(req[chronyReqOffCommand:]))
-	binary.BigEndian.PutUint16(b[chronyRepOffReply:], 1) // RPY_NULL
+	binary.BigEndian.PutUint16(b[chronyRepOffReply:], chronyRpyNull)
 	binary.BigEndian.PutUint16(b[chronyRepOffStatus:], status)
 	binary.BigEndian.PutUint32(b[chronyRepOffSequence:], binary.BigEndian.Uint32(req[chronyReqOffSequence:]))
 	return b
@@ -160,6 +163,7 @@ func TestChronyRequestPadding(t *testing.T) {
 		{chronyCmdTracking, 104},
 		{chronyCmdNSources, 32},
 		{chronyCmdActivity, 48},
+		{chronyCmdMakeStep, 28}, // RPY_NULL has no payload, so the floor is the header
 	}
 	for _, tc := range cases {
 		t.Run(tc.cmd.name, func(t *testing.T) {
@@ -684,5 +688,118 @@ func TestChronyClientSocketCloseIsIdempotent(t *testing.T) {
 	_ = c.Close()
 	if _, err := os.Stat(local); err != nil {
 		t.Fatalf("a second Close deleted a file it no longer owns: %v", err)
+	}
+}
+
+// chronyRecorder records what a fake chronyd was asked, safely across the
+// server goroutine and the test body.
+type chronyRecorder struct {
+	mu       sync.Mutex
+	commands []uint16
+	lengths  []int
+}
+
+func (r *chronyRecorder) record(req []byte) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.commands = append(r.commands, binary.BigEndian.Uint16(req[chronyReqOffCommand:]))
+	r.lengths = append(r.lengths, len(req))
+}
+
+func (r *chronyRecorder) seen() ([]uint16, []int) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return slices.Clone(r.commands), slices.Clone(r.lengths)
+}
+
+// serveChronyUnix starts a fake chronyd on a unixgram socket and returns its
+// path plus a recorder of the requests it received.
+func serveChronyUnix(t *testing.T, reply func(req []byte) []byte) (string, *chronyRecorder) {
+	t.Helper()
+	socket := filepath.Join(t.TempDir(), "chronyd.sock")
+	pc, err := net.ListenPacket(networkUnixgram, socket)
+	if err != nil {
+		t.Skipf("unixgram sockets unavailable: %v", err)
+	}
+	t.Cleanup(func() { _ = pc.Close() })
+	rec := &chronyRecorder{}
+	go serveDatagrams(pc, func(req []byte) []byte {
+		if len(req) >= chronyRequestHeaderBytes {
+			rec.record(req)
+		}
+		return reply(req)
+	}, nil)
+	return socket, rec
+}
+
+func TestChronyMakeStepOverUnixSocket(t *testing.T) {
+	socket, rec := serveChronyUnix(t, func(req []byte) []byte {
+		return chronyReply(req, chronyCmdMakeStep, nil)
+	})
+	if err := MakeStep(context.Background(), socket); err != nil {
+		t.Fatalf("makestep: %v", err)
+	}
+	commands, lengths := rec.seen()
+	if len(commands) != 1 || commands[0] != chronyReqMakeStep {
+		t.Fatalf("commands seen = %v, want exactly [%d]", commands, chronyReqMakeStep)
+	}
+	if lengths[0] != chronyCmdMakeStep.requestBytes() {
+		t.Fatalf("request was %d bytes, want %d (chronyd's anti-amplification floor)",
+			lengths[0], chronyCmdMakeStep.requestBytes())
+	}
+	// The client socket must not outlive the command.
+	leftover, err := filepath.Glob(filepath.Join(filepath.Dir(socket), "sermo-chrony.*.sock"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(leftover) != 0 {
+		t.Fatalf("client sockets left behind: %v", leftover)
+	}
+}
+
+func TestChronyMakeStepRefused(t *testing.T) {
+	// chronyd refuses rather than silently ignoring, and the operator needs the
+	// reason by name — "unauthorized" is what a UDP-reachable daemon answers.
+	cases := []struct {
+		name    string
+		status  uint16
+		wantErr string
+	}{
+		{"unauthorized", 2, "unauthorized"},
+		{"failed", 1, "failed"},
+		{"bad length", 19, "bad-pkt-length"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			socket, _ := serveChronyUnix(t, func(req []byte) []byte {
+				return chronyRefusal(req, tc.status)
+			})
+			err := MakeStep(context.Background(), socket)
+			if err == nil {
+				t.Fatal("a refused makestep must be an error")
+			}
+			if !strings.Contains(err.Error(), tc.wantErr) {
+				t.Fatalf("error = %q, want it to name %q", err, tc.wantErr)
+			}
+		})
+	}
+}
+
+func TestChronyProbeNeverMutates(t *testing.T) {
+	// The guard for the probe's documented contract: a check must never be able
+	// to change the daemon's state. If someone folds the step into the probe,
+	// this fails.
+	socket, rec := serveChronyUnix(t, fakeChronyd(decodeHex(t, bk1Tracking), true))
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	if _, err := (chronyProtocol{}).Probe(ctx, Config{Socket: socket}); err != nil {
+		t.Fatalf("probe: %v", err)
+	}
+	commands, _ := rec.seen()
+	want := map[uint16]bool{chronyReqTracking: true, chronyReqActivity: true, chronyReqNSources: true}
+	for _, cmd := range commands {
+		if !want[cmd] {
+			t.Fatalf("the probe sent command %d; it may only read (%v)", cmd, slices.Sorted(maps.Keys(want)))
+		}
 	}
 }

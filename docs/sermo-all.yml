@@ -203,6 +203,7 @@ watches:
       headers: { Authorization: "Bearer ${env:API_TOKEN:-demo}" }
     then: { notify: [ops-email] }
 
+  # Tier 1 of the drift policy: alert at 1s.
   clock-drift:
     monitor: disabled
     interval: 5m
@@ -211,7 +212,7 @@ watches:
       servers:
         - time.cloudflare.com
         - pool.ntp.org
-      max_offset: 2s
+      max_offset: 1s
       max_stratum: 4
       max_root_dispersion: 250ms
       timeout: 3s
@@ -219,10 +220,44 @@ watches:
     then:
       notify: [ops-email]
       notify_interval: 30m
-      hook:
-        command: [/usr/local/sbin/sermo-sync-clock.sh]
-        timeout: 2m
-        expect_exit: 0
+
+  # Tier 2: forced correction at 5s. Sermo asks the local chronyd to step the
+  # clock over its command socket. policy.cooldown is REQUIRED for makestep.
+  # Never enable on a ceph mon/osd host: a clock jump can cost it its quorum.
+  clock-step:
+    monitor: disabled
+    interval: 1m
+    check:
+      type: clock
+      source: chrony
+      socket: /run/chrony/chronyd.sock
+      max_offset: 5s
+      unit: s
+      timeout: 3s
+    for: { cycles: 3 }
+    policy:
+      cooldown: 30m
+    then:
+      makestep:
+        socket: /run/chrony/chronyd.sock
+      notify: [ops-email]
+
+  # Tier 3: ceph nodes alert at 5ms and never step. 5ms is below what a remote
+  # NTP query can resolve, so it must read the local daemon.
+  clock-drift-ceph:
+    monitor: disabled
+    interval: 1m
+    check:
+      type: clock
+      source: chrony
+      socket: /run/chrony/chronyd.sock
+      max_offset: 5ms
+      max_root_dispersion: 20ms
+      unit: s
+      timeout: 3s
+    for: { cycles: 3 }
+    then:
+      notify: [ops-email]
 
   # Same check reading the local chronyd instead of querying remote servers: a
   # chrony client serves no NTP of its own, so this is the only way to see it.
