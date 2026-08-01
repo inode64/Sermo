@@ -2841,7 +2841,13 @@ Las condiciones (declara al menos una):
   del último ciclo) o un umbral `{op, value}` (el mismo conjunto de operadores que
   storage). El umbral es **disparado por flancos**: se dispara una vez cuando el tamaño
   cruza hacia la condición y se rearma solo después de que vuelve a salir — no cada ciclo
-  mientras está violado.
+  mientras está violado. Una ruta vista por primera vez cumpliendo *ya* el umbral cuenta
+  como un cruce y dispara, igual que `older_than` informa de una ruta que ya está
+  obsoleta, de modo que un fichero cuya sola aparición es el suceso (un `dead.letter`, un
+  volcado de fallo) se detecta — en el primer ciclo real, ya que el ciclo de observación
+  del arranque no informa de nada. El baseline vive con el watch, así que una recarga lo
+  rearma y una ruta que sigue violando el umbral se informa una vez más, igual que se
+  comporta `older_than`.
 - **`permissions`** — `on: change`; se dispara cuando los bits de permiso cambian.
 - **`owner`** — `on: change`; se dispara cuando el uid o gid propietario cambia.
 - **`existence`** — `on: delete`; se dispara cuando una ruta que existía deja de existir
@@ -2857,7 +2863,11 @@ subárbol se rastrea de forma independiente (los enlaces simbólicos se vigilan 
 enlaces, nunca se siguen). Por defecto se omiten los descendientes cuyo nombre empieza
 por `.`, incluidos sus subárboles. Usa `include_hidden: true` para vigilarlos. Una ruta
 oculta indicada directamente en `path` o `paths` siempre se vigila. Las entradas nuevas se adoptan silenciosamente salvo que
-ya estén vencidas; las eliminadas disparan `existence` si está configurado. Cada
+ya estén vencidas o ya superen un umbral `size` — las dos condiciones juzgables con una
+sola observación. Las demás (`size: {on: change}`, `permissions`, `owner`, `existence`)
+nombran una transición, así que no tienen un valor previo con el que comparar y
+permanecen en silencio al adoptarlas. Las eliminadas disparan `existence`
+si está configurado. Cada
 cambio produce **un evento y una ejecución de hook**, de modo que un
 ciclo que encuentra varias rutas cambiadas se dispara varias veces — excepto
 `older_than`: cuando varias rutas cruzan el umbral de edad en el mismo ciclo, el

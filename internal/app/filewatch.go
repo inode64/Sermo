@@ -62,7 +62,9 @@ const (
 // fileWatcher monitors configured files/directories (optionally their whole
 // subtrees) for attribute changes and modification age. It is stateful: it
 // remembers each path's attributes across cycles and reports only transitions.
-// The baseline is adopted silently on first sight except for already-stale paths.
+// The baseline is adopted silently on first sight except for the conditions that
+// can be judged from a single observation — an already-stale path and one that
+// already satisfies a size threshold.
 type fileWatcher struct {
 	name          string
 	paths         []string
@@ -116,9 +118,27 @@ func (w *fileWatcher) runCycle(ctx context.Context) {
 			stale = append(stale, staleFile{path: p, state: cur})
 			cur.olderFired = true
 		}
+		if observeOnlyCycle(ctx) {
+			// The startup observation must not swallow the edge: recording a
+			// fresh breach here would make the first real cycle see it as the
+			// prior state and stay silent forever. older_than avoids this by
+			// latching olderFired only on a real cycle; mirror that.
+			cur.breached = known && prev.breached
+			w.baseline[p] = cur
+			continue
+		}
 		w.baseline[p] = cur
-		if known && !observeOnlyCycle(ctx) {
+		if known {
 			w.diff(ctx, p, prev, cur)
+			continue
+		}
+		// A path seen for the first time already over its size threshold has
+		// crossed into the condition as far as this watcher can tell — the same
+		// rule older_than follows for a path that is already stale when first
+		// seen. The change conditions (size on: change, permissions, owner) have
+		// no prior to compare against and stay silent on adoption.
+		if w.cond.sizeOp != "" && cur.breached {
+			w.fireSizeThreshold(ctx, p, cur)
 		}
 	}
 	w.fireOlderThanBatch(ctx, stale)
@@ -256,6 +276,18 @@ func (w *fileWatcher) stateOf(info fs.FileInfo, now time.Time) fileState {
 	return st
 }
 
+// fireSizeThreshold reports a path whose size satisfies the configured
+// threshold, whether it crossed into it while being watched or arrived that way.
+func (w *fileWatcher) fireSizeThreshold(ctx context.Context, path string, cur fileState) {
+	val := strconv.FormatFloat(w.cond.sizeValue, envFloatFormat, envFloatPrecisionAuto, envFloatBits)
+	w.fire(ctx, path, fileChangeSizeThreshold,
+		fmt.Sprintf("%s size %d %s %s", path, cur.size, w.cond.sizeOp, val), map[string]string{
+			sermoEnvSize:  strconv.FormatInt(cur.size, envFormatBase),
+			sermoEnvOp:    w.cond.sizeOp,
+			sermoEnvValue: val,
+		})
+}
+
 // diff fires a hook for each configured attribute that changed between prev and
 // cur for one path.
 func (w *fileWatcher) diff(ctx context.Context, path string, prev, cur fileState) {
@@ -269,13 +301,7 @@ func (w *fileWatcher) diff(ctx context.Context, path string, prev, cur fileState
 	}
 	// Edge-triggered: fire only when the threshold is newly crossed.
 	if c.sizeOp != "" && cur.breached && !prev.breached {
-		val := strconv.FormatFloat(c.sizeValue, envFloatFormat, envFloatPrecisionAuto, envFloatBits)
-		w.fire(ctx, path, fileChangeSizeThreshold,
-			fmt.Sprintf("%s size %d %s %s", path, cur.size, c.sizeOp, val), map[string]string{
-				sermoEnvSize:  strconv.FormatInt(cur.size, envFormatBase),
-				sermoEnvOp:    c.sizeOp,
-				sermoEnvValue: val,
-			})
+		w.fireSizeThreshold(ctx, path, cur)
 	}
 	if c.permChange && cur.perm != prev.perm {
 		w.fire(ctx, path, fileChangePermissions, fmt.Sprintf("%s permissions %04o -> %04o", path, prev.perm, cur.perm), map[string]string{
