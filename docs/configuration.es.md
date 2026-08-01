@@ -2823,6 +2823,7 @@ watches:
         - /srv/myapp/incoming
       recursive: true                 # optional, default false (whole subtree)
       include_hidden: true            # opcional, false por defecto (incluye .archivos/.directorios)
+      absent_ok: true                 # opcional, false por defecto (una ruta ausente es sana)
       older_than: 24h                 # opcional: edad de mtime; dispara cualquier ruta vencida
       summary: "${path} edad ${value}, límite ${older_than}, archivos ${number_files}"
       size: { op: ">", value: 1048576 }   # edge threshold; or `size: { on: change }`
@@ -2857,6 +2858,16 @@ Las condiciones (declara al menos una):
   desde la modificación (`mtime`) de una ruta es mayor que esa duración. Una ruta
   ya vencida en el primer ciclo dispara de inmediato; vuelve a armarse al modificarla
   o eliminarla.
+
+El estado propio del watch responde a **«¿existen las rutas configuradas?»** — las
+condiciones anteriores señalan mediante eventos, no a través de él. Así, un watch
+ninguna de cuyas rutas existe se lee como fallido por defecto, que es lo que necesita
+un fichero de configuración o un directorio de base de datos. Pon **`absent_ok: true`**
+para invertirlo en un watch cuyo cometido es informar de que un fichero *aparece* —
+`/root/dead.letter`, un volcado de fallo, `/forcefsck`. Ahí la ausencia es el estado
+sano, y sin ello el watch queda en rojo en cada host que no tiene nada malo. Las
+condiciones no se ven afectadas: que el fichero aparezca superando su umbral `size`
+sigue disparando.
 
 Cuando `recursive: true` y una ruta seleccionada es un directorio, cada entrada del
 subárbol se rastrea de forma independiente (los enlaces simbólicos se vigilan como

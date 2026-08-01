@@ -457,6 +457,7 @@ func buildFileWatch(name string, entry, checkEntry map[string]any, deps Deps, in
 		paths:         paths,
 		recursive:     cfgval.Bool(checkEntry[checks.CheckKeyRecursive]),
 		includeHidden: cfgval.Bool(checkEntry[checks.CheckKeyIncludeHidden]),
+		absentOK:      cfgval.Bool(checkEntry[checks.CheckKeyAbsentOK]),
 		cond:          cond,
 		summary:       cfgval.String(checkEntry[checks.CheckKeySummary]),
 		check:         checkEntry,
