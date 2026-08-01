@@ -60,6 +60,7 @@ configuration omits it.
 - [Telegram report bot](#telegram-report-bot)
 - [Host watches](#host-watches)
   - [then.expand — volume growth (storage watch)](#thenexpand--volume-growth-storage-watch)
+  - [then.makestep — forced clock correction (clock watch)](#thenmakestep--forced-clock-correction-clock-watch)
   - [Manual RAID reconstruction control](#manual-raid-reconstruction-control)
   - [Service watches (scoped to a service)](#service-watches-scoped-to-a-service)
   - [net — network interface](#net--network-interface)
@@ -1681,7 +1682,7 @@ Dry-run applies only to automatic actions driven by monitoring/rules:
   `resume`) are evaluated but not executed;
 - service-owned `version.on_change` / `config.on_change` monitors inherit the
   service's `dry_run` flag, so their non-console notifications are suppressed;
-- watch actions (`hook`, `expand`, `kill`) are evaluated but not executed;
+- watch actions (`hook`, `expand`, `kill`, `makestep`) are evaluated but not executed;
 - notifications are suppressed except `wall`, which is still delivered for local
   console visibility.
 
@@ -1723,7 +1724,7 @@ watches:
 ```
 
 Use `dry_run` for host watches while you are proving thresholds, hook argv/env,
-notifier routing or `then.expand` / `then.kill` policy gating. Remove it when
+notifier routing or `then.expand` / `then.kill` / `then.makestep` policy gating. Remove it when
 automatic actions should actually execute. If you only want a long-term
 dashboard/log signal, omit `then` entirely or use `notify: [none]`; those are
 monitor-only configurations, not action rehearsals.
@@ -1860,6 +1861,98 @@ When the web UI is enabled, a storage watch with `then.expand` also shows an
 **expand** action. That manual action uses the same configured `check.path` and
 `expand.by` values from YAML; the browser does not send a path or size.
 
+### `then.makestep` — forced clock correction (clock watch)
+
+A `clock` watch may carry a native `then.makestep` action: Sermo asks the local
+chronyd to correct the system clock immediately. It sends chrony's `REQ_MAKESTEP`
+— the command `chronyc makestep` sends — over chronyd's Unix command socket. No
+external process, no operator script.
+
+```yaml
+watches:
+  clock-step:
+    interval: 1m
+    check:
+      type: clock
+      source: chrony
+      socket: /run/chrony/chronyd.sock
+      max_offset: 5s
+      timeout: 3s
+    for: { cycles: 3 }
+    policy:
+      cooldown: 30m
+    then:
+      makestep:
+        socket: /run/chrony/chronyd.sock
+      notify: [ops-email]
+```
+
+`socket` is the only field and defaults to `/run/chrony/chronyd.sock`. There is
+no host/port form and a `host:` or `port:` here is rejected, not ignored:
+chronyd's UDP command port is its monitoring-only channel and refuses privileged
+commands outright, so the step is only ever possible over the socket. sermod runs
+as root and must be able to write to it.
+
+**`policy.cooldown` is required and must be positive.** Unlike `then.expand`, a
+watch that omits it is rejected at validation and refused by the builder: a step
+is a clock *discontinuity*, not an idempotent nudge, and an ungated action runs
+on every firing cycle. Each attempt — success or failure — starts the cooldown,
+so a daemon that refuses is not hammered.
+
+**The action only ever fires on an offset breach.** A clock check fails for
+several reasons, and only an offset breach is one a step can fix; stepping
+because the source is unsynchronized, too distant or too dispersed would jump the
+clock by an unknown or zero correction. The check reports which one it was as
+`clock_failure` (`offset`, `unsynchronized`, `stratum`, `root_dispersion`, and so
+`SERMO_CLOCK_FAILURE` to a hook), and any value other than `offset` is skipped
+with the reason recorded.
+
+Note what `dry_run` does **not** give you: it suppresses every notifier except
+`wall`, so a dry-run watch is not a way to "alert but never correct". For an
+alert-only tier, configure a watch **without** the action — that is exactly what
+tiers 1 and 3 are. Reserve `dry_run` for rehearsing a watch you intend to arm.
+
+Results are recorded as `makestep` / `makestep-skipped` / `makestep-failed`
+events. `dry_run: true` and panic mode both suppress it exactly like the other
+actions, and there is deliberately **no** web action button: a one-click clock
+step does not belong in a browser.
+
+Pointing the check at the same `socket:` the action will command is worth doing —
+a passing check is then standing evidence that the socket is reachable before the
+action ever needs it.
+
+**`then.makestep` is chrony-only, because chrony is the only one of the three
+time daemons that offers a "correct the clock now" command.** ntpd exposes none,
+and systemd-timesyncd's entire D-Bus surface is `SetRuntimeNTPServers` — while
+`org.freedesktop.timedate1.SetTime` is refused outright whenever NTP
+synchronization is enabled, which is exactly when a time daemon is running. For
+those two the forced correction is a **restart of the daemon**, which is what the
+shipped `ntpd` and `systemd-timesyncd` catalog services do:
+
+```yaml
+# catalog/services/ntpd.yml (and systemd-timesyncd.yml)
+watches:
+  restart-if-clock-drifting:
+    check:
+      type: clock
+      servers: [time.cloudflare.com, pool.ntp.org]
+      max_offset: 5s
+      optional: true
+    for: { duration: 15m }
+    then:
+      action: restart
+```
+
+That route goes through the **safe operation engine** — locks, guards, preflight
+and the service's `policy.cooldown` — exactly like a manual `sermoctl restart`.
+Two differences from `then.makestep` are worth knowing: it restarts the daemon
+rather than stepping the clock in place, and a rule fires on *any* check failure,
+so an unreachable NTP server can trigger it. Hence the two servers and the long
+window; point `servers:` at your own NTP hosts.
+
+**Never enable this on a ceph mon or osd host.** A clock jump can cost a monitor
+its quorum. Use an alert-only watch there; see `examples/watches/clock-ceph.yml`.
+
 `then.notify` lists notifier names (each must be defined under `notifiers`). For
 the multi-metric watches (`net`, `icmp`, `swap`) the `notify`/`hook` live in each
 metric's own `then`, so a metric can have its own targets. The notification's
@@ -1943,7 +2036,7 @@ evaluate its watch window or run a rule, notifier, hook or remediation action.
 
 A service can carry its own `watches:` block — the same entry shape as a host
 watch (a `check:`, an optional `for`/`within` window, and a `then` block with a
-fire-and-forget `hook`, `notify`, `expand` or `kill`, or a service `action`) —
+fire-and-forget `hook`, `notify`, `expand`, `kill` or `makestep`, or a service `action`) —
 declared **inside the service document**. Events are labelled
 `<service>:<watch>`. Fire-and-forget entries reuse the host-watch runtime
 (firing/recovered windows, hooks, notifiers, dry-run); entries with
@@ -2250,8 +2343,9 @@ to open a raw ICMP socket. This iteration is **IPv4-only**.
 
 A `clock` watch checks this host's wall-clock offset against external NTP servers.
 It is meant for hosts that may not run a local NTP daemon: Sermo sends client NTP
-queries itself, raises the alert when drift is outside policy, and leaves any time
-correction to your hook script.
+queries itself, raises the alert when drift is outside policy, and leaves the correction to a
+watch action ([`then.makestep`](#thenmakestep--forced-clock-correction-clock-watch)
+on a chrony host) or to your hook script.
 
 ```yaml
 watches:
@@ -2280,8 +2374,8 @@ watches:
 `interface_match` bind the NTP request through specific links, matching the other
 network checks. Hooks receive `SERMO_SERVER`, `SERMO_OFFSET_SECONDS`,
 `SERMO_OFFSET_ABS_SECONDS`, `SERMO_STRATUM`, `SERMO_ROOT_DISPERSION_MS` and the
-other returned NTP fields, so the script can decide whether to run `ntpdate`,
-`timedatectl` or a site-local correction flow.
+other returned NTP fields, so the script can decide what to run — though on a
+chrony host `then.makestep` corrects the clock natively, with no script.
 
 On a host that already runs chrony, set `source: chrony` instead: Sermo reads the
 local chronyd over its command protocol rather than sending its own NTP queries,

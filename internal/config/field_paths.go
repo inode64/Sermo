@@ -189,3 +189,7 @@ func thenHookPath(prefix string) string {
 func thenKillPath(prefix string) string {
 	return thenFieldPath(prefix, WatchThenKeyKill)
 }
+
+func thenMakeStepPath(prefix string) string {
+	return thenFieldPath(prefix, WatchThenKeyMakeStep)
+}

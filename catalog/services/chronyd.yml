@@ -94,6 +94,10 @@ watches:
     # view of the clock, so it costs no external NTP traffic. Optional because a
     # resyncing chronyd fails it, and alert-if-unsynchronized owns that
     # condition with its own window rather than dropping the service's SLA.
+    #
+    # Deliberately alert-only: a shipped service must never step the host clock
+    # on its own. See examples/watches/clock-makestep.yml for the opt-in
+    # forced-correction tier, and clock-ceph.yml for the ceph profile.
     check:
       type: clock
       source: chrony

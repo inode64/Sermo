@@ -22,6 +22,17 @@ const (
 	clockMSPrecision      = 3
 )
 
+// Clock failure codes name why a clock sample was rejected, published as
+// Result.Data["clock_failure"] on a failing check (and so as SERMO_CLOCK_FAILURE
+// to a hook). A forced correction acts only on ClockFailureOffset: it is the
+// only one a clock step can fix.
+const (
+	ClockFailureUnsynchronized = "unsynchronized"
+	ClockFailureOffset         = "offset"
+	ClockFailureStratum        = "stratum"
+	ClockFailureRootDispersion = "root_dispersion"
+)
+
 // Time sources the clock check can measure drift against. The names are the
 // connection protocol names, so the configured source is also the probe lookup.
 const (
@@ -198,15 +209,17 @@ func (c clockCheck) Run(ctx context.Context) Result {
 			failures = append(failures, fmt.Sprintf("%s: %v", c.address(server), err))
 			continue
 		}
-		fail := c.sampleFailure(sample)
+		fail, code := c.sampleFailure(sample)
+		if fail == "" {
+			return c.clockResult(true, c.okMessage(sample), sample, start)
+		}
+		// Only a failing sample reaches here, so the code belongs to this
+		// sample's own data map and needs no separate tracking.
+		sample.data[DataKeyClockFailure] = code
+		failures = append(failures, fmt.Sprintf("%s: %s", c.address(server), fail))
 		if best == nil || sample.offsetAbsSeconds < best.offsetAbsSeconds {
 			best, bestFailure = &sample, fail
 		}
-		if fail != "" {
-			failures = append(failures, fmt.Sprintf("%s: %s", c.address(server), fail))
-			continue
-		}
-		return c.clockResult(true, c.okMessage(sample), sample, start)
 	}
 	if best != nil {
 		return c.clockResult(false, c.failureMessage(*best, bestFailure), *best, start)
@@ -289,7 +302,12 @@ func (c clockCheck) parseClockSample(server, iface string, perIface map[string]a
 	}, nil
 }
 
-func (c clockCheck) sampleFailure(sample clockSample) string {
+// sampleFailure reports why a sample is unacceptable: a human reason and a
+// stable code. The code exists so an action can tell an offset breach — the one
+// failure a forced clock step can fix — from a source that is unsynchronized,
+// too distant or too dispersed, where stepping would jump the clock by an
+// unknown or zero correction. "" and "" mean the sample is good.
+func (c clockCheck) sampleFailure(sample clockSample) (reason, code string) {
 	// An unsynchronized source reports stratum 0 and an offset near zero, so it
 	// would otherwise look like the best sample available and satisfy every
 	// threshold. The ntp probe already rejects those replies itself; chronyd
@@ -297,29 +315,32 @@ func (c clockCheck) sampleFailure(sample clockSample) string {
 	// shares conn.Synchronized with the probe so the two cannot diverge.
 	leap, _ := sample.data[DataKeyLeap].(string)
 	if !conn.Synchronized(sample.stratum, leap) {
-		reason := fmt.Sprintf("source is unsynchronized (stratum %d", sample.stratum)
+		unsynchronized := fmt.Sprintf("source is unsynchronized (stratum %d", sample.stratum)
 		if leap != "" {
-			reason += ", leap " + leap
+			unsynchronized += ", leap " + leap
 		}
-		return reason + ")"
+		return unsynchronized + ")", ClockFailureUnsynchronized
 	}
 	if sample.offsetAbsSeconds > c.maxOffset.Seconds() {
-		return fmt.Sprintf("offset %s exceeds max_offset %s", formatClockSeconds(sample.offsetSeconds), c.maxOffset)
+		return fmt.Sprintf("offset %s exceeds max_offset %s",
+			formatClockSeconds(sample.offsetSeconds), c.maxOffset), ClockFailureOffset
 	}
 	if sample.stratum > c.maxStratum {
-		return fmt.Sprintf("stratum %d exceeds max_stratum %d", sample.stratum, c.maxStratum)
+		return fmt.Sprintf("stratum %d exceeds max_stratum %d",
+			sample.stratum, c.maxStratum), ClockFailureStratum
 	}
 	if c.maxRootDispersion > 0 {
 		dispersionMS, ok := sample.data[DataKeyRootDispersionMS].(float64)
 		if !ok {
-			return "root dispersion is unavailable"
+			return "root dispersion is unavailable", ClockFailureRootDispersion
 		}
 		limitMS := float64(c.maxRootDispersion) / float64(time.Millisecond)
 		if dispersionMS > limitMS {
-			return fmt.Sprintf("root dispersion %sms exceeds max_root_dispersion %s", formatClockMS(dispersionMS), c.maxRootDispersion)
+			return fmt.Sprintf("root dispersion %sms exceeds max_root_dispersion %s",
+				formatClockMS(dispersionMS), c.maxRootDispersion), ClockFailureRootDispersion
 		}
 	}
-	return ""
+	return "", ""
 }
 
 func (c clockCheck) clockResult(ok bool, message string, sample clockSample, start time.Time) Result {

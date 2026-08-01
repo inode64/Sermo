@@ -817,8 +817,10 @@ Protocols, in the order of the table above:
   This is the probe for a host running chrony: a chrony **client-only**
   configuration serves no NTP on port 123 at all, so the `ntp` probe cannot see
   it, while chrony's own command protocol reports the daemon's view of the clock.
-  It reads the daemon's tracking state and its source counters, and never issues
-  a command that changes anything. Result data shares the `ntp` names where the
+  It reads the daemon's tracking state and its source counters. The *probe* never
+  issues a command that changes anything; the one mutating command Sermo speaks
+  is reachable only from a clock watch's `then.makestep` action, never from a
+  check, and only over the command socket. Result data shares the `ntp` names where the
   meaning matches — `stratum`, `offset_seconds` (chronyd's correction to the
   system clock), `leap`, `root_delay_ms`, `root_dispersion_ms`, `reference_id` —
   plus `synchronized`, `reference_address`, `reference_time`,
@@ -1587,9 +1589,11 @@ are protocol-agnostic, so a new protocol only registers itself.
 ### Clock drift (`clock`)
 
 The `clock` check measures this host's wall-clock offset by querying one or more
-remote NTP servers as a client. It does **not** require a local NTP daemon and it
-does **not** set the system clock itself; use the alert/hook path to notify or to
-run an operator-owned sync script.
+remote NTP servers as a client. It does **not** require a local NTP daemon, and
+the check itself never sets the system clock — checks are read-only. Correction
+is a watch *action*: a clock watch may carry
+[`then.makestep`](configuration.md#thenmakestep--forced-clock-correction-clock-watch),
+which asks the local chronyd to step the clock, or a hook running a script you own.
 
 ```yaml
 watches:
@@ -1622,10 +1626,21 @@ passes when one server answers with synchronized NTP data whose absolute
 selected `server`, `port`, `offset_seconds`, `offset_abs_seconds`, `stratum`,
 `leap`, `precision_seconds`, `root_delay_ms`, `root_dispersion_ms` and
 `reference_id`; hooks receive the same values as `SERMO_*` environment fields.
+A **failing** result additionally carries `clock_failure`, naming which rule was
+broken — `offset`, `unsynchronized`, `stratum` or `root_dispersion` — so an
+action can tell a drift it can correct from a source it cannot.
 
 A source that answers but is not synchronized — stratum 0, or a `leap` of
 `unsynchronized` — always fails, whatever `max_stratum` allows: its offset is
 near zero and would otherwise look like the best sample available.
+
+To correct the drift rather than only report it, a chrony host can carry
+[`then.makestep`](configuration.md#thenmakestep--forced-clock-correction-clock-watch).
+ntpd and systemd-timesyncd expose no step command at all, so the shipped `ntpd`
+and `systemd-timesyncd` catalog services force the correction by **restarting the
+daemon** instead, through the safe operation path. That route fires on any check
+failure — an unreachable NTP server included — which is why it ships with two
+servers and a 15-minute window.
 
 #### Reading a local chronyd (`source: chrony`)
 

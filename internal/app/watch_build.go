@@ -14,6 +14,7 @@ import (
 	"sermo/internal/cfgval"
 	"sermo/internal/checks"
 	"sermo/internal/config"
+	"sermo/internal/conn"
 	"sermo/internal/emission"
 	"sermo/internal/execx"
 	"sermo/internal/metrics"
@@ -272,9 +273,10 @@ func buildSingleWatch(name string, entry, checkEntry map[string]any, deps Deps, 
 		return nil, watchSubjectPrefix + name + ": " + err.Error()
 	}
 	actions, err := resolveWatchActions(entry, deps, watchActionOptions{
-		checkType:    typ,
-		parseExpand:  true,
-		emptyMessage: "then requires a hook, notify and/or expand",
+		checkType:     typ,
+		parseExpand:   true,
+		parseMakeStep: true,
+		emptyMessage:  "then requires a hook, notify, expand and/or makestep",
 	})
 	if err != nil {
 		return nil, watchSubjectPrefix + name + ": " + err.Error()
@@ -289,12 +291,32 @@ func buildSingleWatch(name string, entry, checkEntry map[string]any, deps Deps, 
 		dryRun:    config.DryRun(entry),
 		interval:  interval,
 	}, deps)
+	if actions.expand != nil || actions.makeStep != nil {
+		w.Policy = rules.ParsePolicy(entry)
+	}
 	if actions.expand != nil {
 		w.Expand = actions.expand
-		w.Policy = rules.ParsePolicy(entry)
 		w.Expander = configuredVolumeExpander(deps)
 	}
+	if actions.makeStep != nil {
+		// Belt and braces with the validator: ParsePolicy yields a zero Policy
+		// for a tree with no `policy:`, and a zero Policy allows an action every
+		// cycle. Expand tolerates that; a forced clock step must not.
+		if w.Policy.Cooldown <= 0 {
+			return nil, watchSubjectPrefix + name + ": then.makestep requires a positive policy.cooldown"
+		}
+		w.MakeStep = actions.makeStep
+		w.Stepper = configuredClockStepper(deps)
+	}
 	return w, ""
+}
+
+// configuredClockStepper returns the injected stepper or the real chrony one.
+func configuredClockStepper(deps Deps) ClockStepper {
+	if deps.ClockStepper != nil {
+		return deps.ClockStepper
+	}
+	return conn.MakeStep
 }
 
 func configuredVolumeExpander(deps Deps) VolumeExpander {
@@ -700,14 +722,16 @@ type watchActions struct {
 	lvmNotifyOnChange bool
 	expand            *ExpandSpec
 	kill              *killSpec
+	makeStep          *MakeStepSpec
 	notifyInterval    time.Duration
 }
 
 type watchActionOptions struct {
-	checkType    string
-	parseExpand  bool
-	parseKill    bool
-	emptyMessage string
+	checkType     string
+	parseExpand   bool
+	parseKill     bool
+	parseMakeStep bool
+	emptyMessage  string
 }
 
 func resolveWatchActions(entry map[string]any, deps Deps, opts watchActionOptions) (watchActions, error) {
@@ -743,7 +767,14 @@ func resolveWatchActions(entry map[string]any, deps Deps, opts watchActionOption
 			return watchActions{}, err
 		}
 	}
-	if !hasWatchAction(hook, names, effectiveNames, expand) && kill == nil {
+	var makeStep *MakeStepSpec
+	if opts.parseMakeStep {
+		makeStep, err = parseMakeStep(thenBlock, opts.checkType)
+		if err != nil {
+			return watchActions{}, err
+		}
+	}
+	if !hasWatchAction(hook, names, effectiveNames, expand) && kill == nil && makeStep == nil {
 		return watchActions{}, errors.New(opts.emptyMessage)
 	}
 	return watchActions{
@@ -753,6 +784,7 @@ func resolveWatchActions(entry map[string]any, deps Deps, opts watchActionOption
 		lvmNotifyOnChange: lvmNotifyOnChange,
 		expand:            expand,
 		kill:              kill,
+		makeStep:          makeStep,
 		notifyInterval:    cfgval.Duration(thenBlock[config.WatchThenKeyNotifyInterval]),
 	}, nil
 }
@@ -805,6 +837,28 @@ func parseKill(then map[string]any) (*killSpec, error) {
 		ks.killTimeout = defaultWatchKillTimeout
 	}
 	return ks, nil
+}
+
+// parseMakeStep reads a `then.makestep` clock-correction action. It is only
+// valid on a clock watch: the action asks the local time daemon to step the
+// system clock, and the clock check is the one that measures whether it should.
+func parseMakeStep(then map[string]any, checkType string) (*MakeStepSpec, error) {
+	raw, present := then[config.WatchThenKeyMakeStep]
+	if !present {
+		return nil, nil //nolint:nilnil // absent optional makestep action has no parse error
+	}
+	spec, ok := raw.(map[string]any)
+	if !ok {
+		return nil, errors.New("then.makestep must be a mapping")
+	}
+	if checkType != checks.CheckTypeClock {
+		return nil, fmt.Errorf("then.makestep is only valid on a clock watch, not %q", checkType)
+	}
+	socket := cfgval.AsString(spec[config.WatchMakeStepKeySocket])
+	if socket == "" {
+		socket = conn.DefaultChronySocket
+	}
+	return &MakeStepSpec{Socket: socket}, nil
 }
 
 // parseExpand reads a `then.expand` storage-expansion action. It is only valid on
