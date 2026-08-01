@@ -700,7 +700,7 @@ func TestValidateNotifyReferences(t *testing.T) {
 			},
 		},
 	})
-	if !hasIssue(noDefault, "watches.no-action.then requires a hook, notify, kill and/or expand") {
+	if !hasIssue(noDefault, "watches.no-action.then requires a hook, notify, kill, expand and/or makestep") {
 		t.Fatalf("expected empty then without global notify to fail, got %v", noDefault)
 	}
 	if hasIssue(noDefault, "watches.dry-run-only") {
@@ -1367,4 +1367,97 @@ func TestValidateFileProcessWatchRejectsEntryLevelWindow(t *testing.T) {
 	},
 		"watches.cfg.for is not valid on a file watch",
 		"watches.proc.within is not valid on a process watch")
+}
+
+func TestValidateWatchMakeStepAction(t *testing.T) {
+	clockCheck := map[string]any{"type": "clock", "source": "chrony", "max_offset": "5s"}
+
+	// The shipped shape: a clock watch with a positive cooldown.
+	assertNoWatchIssues(t, map[string]any{
+		"watches": map[string]any{
+			"clock-step": map[string]any{
+				"check":  clockCheck,
+				"policy": map[string]any{"cooldown": "30m"},
+				"then": map[string]any{
+					"makestep": map[string]any{"socket": "/run/chrony/chronyd.sock"},
+				},
+			},
+			"clock-step-default-socket": map[string]any{
+				"check":  clockCheck,
+				"policy": map[string]any{"cooldown": "30m"},
+				"then":   map[string]any{"makestep": map[string]any{}},
+			},
+		},
+	})
+
+	cases := []struct {
+		name  string
+		entry map[string]any
+		want  string
+	}{
+		{
+			name: "requires a cooldown",
+			entry: map[string]any{
+				"check": clockCheck,
+				"then":  map[string]any{"makestep": map[string]any{}},
+			},
+			want: "policy.cooldown",
+		},
+		{
+			name: "rejects a zero cooldown",
+			entry: map[string]any{
+				"check":  clockCheck,
+				"policy": map[string]any{"cooldown": "0s"},
+				"then":   map[string]any{"makestep": map[string]any{}},
+			},
+			want: "policy.cooldown",
+		},
+		{
+			name: "only on a clock watch",
+			entry: map[string]any{
+				"check":  map[string]any{"type": "http", "url": "http://example.test"},
+				"policy": map[string]any{"cooldown": "30m"},
+				"then":   map[string]any{"makestep": map[string]any{}},
+			},
+			want: "only valid on a clock watch",
+		},
+		{
+			name: "must be a mapping",
+			entry: map[string]any{
+				"check":  clockCheck,
+				"policy": map[string]any{"cooldown": "30m"},
+				"then":   map[string]any{"makestep": true},
+			},
+			want: "must be a mapping",
+		},
+		{
+			// chronyd's UDP port refuses privileged commands, so a host/port form
+			// cannot work — reject it rather than silently ignore it.
+			name: "rejects a host/port form",
+			entry: map[string]any{
+				"check":  clockCheck,
+				"policy": map[string]any{"cooldown": "30m"},
+				"then": map[string]any{
+					"makestep": map[string]any{"host": "127.0.0.1", "port": 323},
+				},
+			},
+			want: "makestep.host",
+		},
+		{
+			name: "socket must be absolute",
+			entry: map[string]any{
+				"check":  clockCheck,
+				"policy": map[string]any{"cooldown": "30m"},
+				"then":   map[string]any{"makestep": map[string]any{"socket": "chronyd.sock"}},
+			},
+			want: "absolute path",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			assertWatchIssues(t, map[string]any{
+				"watches": map[string]any{"clock-step": tc.entry},
+			}, tc.want)
+		})
+	}
 }

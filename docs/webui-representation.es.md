@@ -578,7 +578,8 @@ Notas editables:
   `panic-suppressed`, `alert`, `error`, `firing`, `recovered`, `dry-run`,
   `reload` (una recarga de configuración correcta del daemon en ejecución),
   `hook`/`hook-failed`, `notify`/`notify-failed`/`notify-suppressed`,
-  `expand`/`expand-skipped`/`expand-failed`, `kill`/`kill-failed`, y `cascade`
+  `expand`/`expand-skipped`/`expand-failed`, `kill`/`kill-failed`,
+  `makestep`/`makestep-skipped`/`makestep-failed`, y `cascade`
   (una operación de servicio activada mediante una acción en cascada).
 
 ## Panel de notifiers

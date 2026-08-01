@@ -332,6 +332,10 @@ type Deps struct {
 	// nil uses volume.Expander with ExecxRunner. Tests inject a fake so no real
 	// LVM/filesystem commands run.
 	VolumeExpander VolumeExpander
+	// ClockStepper corrects the system clock for a clock watch's `then.makestep`.
+	// Optional: nil uses conn.MakeStep. Tests inject a fake so no real chronyd is
+	// ever commanded.
+	ClockStepper ClockStepper
 	// Settling tracks per-target startup observation for the web UI and suppresses
 	// premature alerts and remediation. Optional: nil disables settling gates.
 	Settling *Settling

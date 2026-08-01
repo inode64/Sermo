@@ -22,7 +22,10 @@ import (
 
 const (
 	watchDryRunMessageNoActions = "dry-run: no configured watch actions"
-	watchDryRunMessagePrefix    = "dry-run: would run "
+	// watchDryRunSharedActions counts the hook and notify entries every watch
+	// type can contribute on top of its own native actions.
+	watchDryRunSharedActions = 2
+	watchDryRunMessagePrefix = "dry-run: would run "
 )
 
 // VolumeExpander grows the filesystem backing a path. Satisfied by
@@ -37,6 +40,20 @@ type VolumeExpander interface {
 // group's free space).
 type ExpandSpec struct {
 	By int64
+}
+
+// ClockStepper asks the local time daemon to correct the system clock now.
+// Satisfied by conn.MakeStep; injected so a watch's makestep action can be
+// tested without commanding a real chronyd.
+type ClockStepper func(ctx context.Context, socket string) error
+
+// MakeStepSpec is a watch's native clock-correction action (`then.makestep`):
+// ask the local chronyd to step the system clock over its Unix command socket.
+// It is meant for `clock` watches, it is policy-gated with a *mandatory*
+// cooldown, and it acts only on an offset breach — a step is a discontinuity,
+// not a slew.
+type MakeStepSpec struct {
+	Socket string
 }
 
 // Watch monitors one host resource: each cycle it runs its check, advances its
@@ -84,11 +101,11 @@ type Watch struct {
 	StateStore WatchStateStore
 	StateSlot  string
 	// IsPaused reports whether this watch is currently paused by an operator.
-	// Paused watches skip checks/hooks/notifies/expand until monitored again.
+	// Paused watches skip checks/hooks/notifies/expand/makestep until monitored again.
 	IsPaused func() bool
 	// InPanic reports whether the daemon-wide panic mode is on. A panicking watch
 	// still runs its check and emits its firing event (so status stays visible)
-	// but suppresses its hook, notifications and expand action.
+	// but suppresses its hook, notifications and its expand/makestep action.
 	InPanic func() bool
 	// Settling tracks startup observation for this watch. While unsettled the
 	// first cycle runs checks only and suppresses firing, hooks and notifications.
@@ -109,6 +126,12 @@ type Watch struct {
 	// Result's checks.DataKeyPath data.
 	Expand   *ExpandSpec
 	Expander VolumeExpander
+
+	// MakeStep, when set, asks the local time daemon to step the clock on a
+	// firing cycle. It shares Policy with Expand: a watch cannot be both a
+	// storage and a clock watch, so there is at most one native action.
+	MakeStep *MakeStepSpec
+	Stepper  ClockStepper
 	Policy   rules.Policy
 
 	state          rules.WindowState
@@ -221,13 +244,16 @@ func (w *Watch) dispatchFiringActions(ctx context.Context, res checks.Result, wa
 	}
 	if w.InPanic != nil && w.InPanic() {
 		if emitFiring {
-			w.emit(Event{Watch: w.Name, Kind: eventKindPanicSuppressed, Message: "panic mode: hook/notify/expand suppressed"})
+			w.emit(Event{Watch: w.Name, Kind: eventKindPanicSuppressed, Message: "panic mode: hook/notify/expand/makestep suppressed"})
 		}
 		return
 	}
 
 	if w.Expand != nil && w.Expander != nil {
 		w.runExpand(ctx, res, emitFiring)
+	}
+	if w.MakeStep != nil && w.Stepper != nil {
+		w.runMakeStep(ctx, res, emitFiring)
 	}
 	w.runHook(ctx, res, env)
 	if len(w.RaidNotifyEvents) == 0 && !w.LVMNotifyOnChange && w.shouldNotify(wasFiring) {
@@ -447,11 +473,7 @@ func (w *Watch) emissionPolicy() emission.Policy {
 // the volume stays low; an attempt (success or failure) records the time so a
 // failing expansion is not retried every cycle.
 func (w *Watch) runExpand(ctx context.Context, res checks.Result, emitSkipped bool) {
-	now := time.Now
-	if w.Now != nil {
-		now = w.Now
-	}
-	at := now()
+	at := w.clock()
 	if allowed, reason := w.Policy.Allow(&w.policyState, at); !allowed {
 		if emitSkipped {
 			w.emit(Event{Watch: w.Name, Kind: eventKindExpandSkipped, Message: reason})
@@ -468,17 +490,60 @@ func (w *Watch) runExpand(ctx context.Context, res checks.Result, emitSkipped bo
 	w.emit(Event{Watch: w.Name, Kind: eventKindExpand, Message: expandSuccessMessage(path, r)})
 }
 
+// runMakeStep asks the local time daemon to step the clock on a firing cycle.
+// Unlike expand the cooldown is mandatory (safety invariant 8): a clock step is
+// a discontinuity, so it runs at most once per cooldown window and an attempt —
+// successful or not — records the time, so a failing daemon is not hammered.
+func (w *Watch) runMakeStep(ctx context.Context, res checks.Result, emitSkipped bool) {
+	// A clock watch fails for several reasons and only an offset breach is one a
+	// step can fix. Stepping because the source is unsynchronized would jump the
+	// clock by an unknown or zero correction, which is the harm this guard
+	// exists to prevent.
+	if code := cfgval.String(res.Data[checks.DataKeyClockFailure]); code != checks.ClockFailureOffset {
+		if emitSkipped {
+			w.emit(Event{Watch: w.Name, Kind: eventKindMakeStepSkipped, Message: makeStepSkipReason(code)})
+		}
+		return
+	}
+	at := w.clock()
+	if allowed, reason := w.Policy.Allow(&w.policyState, at); !allowed {
+		if emitSkipped {
+			w.emit(Event{Watch: w.Name, Kind: eventKindMakeStepSkipped, Message: reason})
+		}
+		return
+	}
+	err := w.Stepper(ctx, w.MakeStep.Socket)
+	w.policyState.Record(at, w.Policy)
+	if err != nil {
+		w.emit(Event{Watch: w.Name, Kind: eventKindMakeStepFailed, Message: err.Error()})
+		return
+	}
+	w.emit(Event{Watch: w.Name, Kind: eventKindMakeStep, Message: makeStepSuccessMessage(w.MakeStep.Socket, res)})
+}
+
+// makeStepSkipReason explains a skip in the operator's terms: which failure the
+// check actually reported, and why a step would not address it.
+func makeStepSkipReason(code string) string {
+	if code == "" {
+		return "no clock sample to correct"
+	}
+	return "not an offset breach (" + code + ")"
+}
+
+func makeStepSuccessMessage(socket string, res checks.Result) string {
+	return fmt.Sprintf("%s: stepped the system clock (%s)", socket, res.Message)
+}
+
 func expandSuccessMessage(path string, r volume.Result) string {
 	return fmt.Sprintf("%s: grew %s/%s by %s", path, r.VG, r.LV, checks.HumanizeSignedBytes(r.GrewBytes))
 }
 
-func watchDryRunMessage(hook HookSpec, notifiers []notify.Notifier, expand *ExpandSpec) string {
-	const watchDryRunActionCapacity = 3
-
-	actions := make([]string, 0, watchDryRunActionCapacity)
-	if expand != nil {
-		actions = append(actions, eventActionExpand)
-	}
+// watchDryRunMessage names the actions a firing watch would run. native lists
+// the watch type's own action keys (expand, makestep, kill) in the order they
+// dispatch; the hook and notify tail is the same for every watch type.
+func watchDryRunMessage(hook HookSpec, notifiers []notify.Notifier, native ...string) string {
+	actions := make([]string, 0, len(native)+watchDryRunSharedActions)
+	actions = append(actions, native...)
 	if len(hook.Command) > 0 {
 		actions = append(actions, config.WatchThenKeyHook)
 	}
@@ -492,15 +557,18 @@ func watchDryRunMessage(hook HookSpec, notifiers []notify.Notifier, expand *Expa
 }
 
 func (w *Watch) dryRunMessage() string {
-	msg := watchDryRunMessage(w.Hook, w.Notifiers, w.Expand)
-	if w.Expand == nil {
+	var native []string
+	if w.Expand != nil {
+		native = append(native, config.WatchThenKeyExpand)
+	}
+	if w.MakeStep != nil {
+		native = append(native, config.WatchThenKeyMakeStep)
+	}
+	msg := watchDryRunMessage(w.Hook, w.Notifiers, native...)
+	if len(native) == 0 {
 		return msg
 	}
-	now := time.Now
-	if w.Now != nil {
-		now = w.Now
-	}
-	if allowed, reason := w.Policy.Allow(&w.policyState, now()); !allowed && reason != "" {
+	if allowed, reason := w.Policy.Allow(&w.policyState, w.clock()); !allowed && reason != "" {
 		return msg + " (suppressed: " + reason + ")"
 	}
 	return msg

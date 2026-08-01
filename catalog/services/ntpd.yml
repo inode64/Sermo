@@ -14,6 +14,13 @@ restart_on_change:
 variables:
   port: 123
   user: ntp
+  clock_check_interval: 5m
+  ntp_server: time.cloudflare.com
+  ntp_server_fallback: pool.ntp.org
+  max_offset: 1s
+  max_offset_step: 5s
+  max_stratum: 4
+  max_root_dispersion: 250ms
 pidfile: /run/ntpd.pid
 processes:
   main:
@@ -28,6 +35,48 @@ watches:
     check:
       type: ntp
       port: ${port}
+  clock:
+    interval: ${clock_check_interval}
+    # Host wall-clock drift, alert-only and graphed. ntpd offers no local
+    # read-only view of its own correction the way chronyd's command protocol
+    # does, so this must query remote servers — point them at your own NTP
+    # servers if you do not want the public pool.
+    check:
+      type: clock
+      servers:
+        - ${ntp_server}
+        - ${ntp_server_fallback}
+      max_offset: ${max_offset}
+      max_stratum: ${max_stratum}
+      max_root_dispersion: ${max_root_dispersion}
+      unit: s
+      optional: true
+      timeout: 3s
+  restart-if-clock-drifting:
+    interval: ${clock_check_interval}
+    # ntpd has no "step now" command — neither the NTP protocol nor ntpd's
+    # control interface exposes one — so the forced correction is a restart:
+    # with -g in its options ntpd steps once at startup. This goes through the
+    # safe operation engine (locks, guards, preflight) and the service's
+    # policy.cooldown, unlike chrony's native then.makestep.
+    #
+    # Two servers and a long window on purpose: a rule fires on *any* check
+    # failure, so a single unreachable server must not restart the daemon.
+    check:
+      type: clock
+      servers:
+        - ${ntp_server}
+        - ${ntp_server_fallback}
+      max_offset: ${max_offset_step}
+      max_stratum: ${max_stratum}
+      optional: true
+      timeout: 3s
+    for:
+      duration: 15m
+    then:
+      action: restart
+      message: >-
+        During ${rule.duration}, the clock check kept failing (offset above ${max_offset_step}, or no usable NTP sample); restarting ${display_name} to resynchronize
   alert-if-memory-high:
     check:
       type: metric

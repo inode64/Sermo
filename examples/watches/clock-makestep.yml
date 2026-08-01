@@ -1,0 +1,28 @@
+name: clock-step
+category: host
+# Tier 2 of the three-tier drift policy: FORCED CORRECTION at 5s.
+#
+# Sermo asks the local chronyd to step the system clock over its Unix command
+# socket. EXAMPLE — enable deliberately: a step is a discontinuity, not a slew.
+# NEVER enable it on a ceph mon/osd host, where a clock jump can cost the
+# monitor its quorum — use clock-ceph.yml there.
+#
+# See docs/configuration.md (then.makestep) for the full contract.
+monitor: disabled
+interval: 1m
+check:
+  type: clock
+  source: chrony  # read the daemon we are about to command, over the same socket
+  socket: /run/chrony/chronyd.sock
+  max_offset: 5s
+  unit: s
+  timeout: 3s
+for: { cycles: 3 }  # confirm the breach for three cycles before stepping
+policy:
+  cooldown: 30m  # REQUIRED for then.makestep: at most one step per 30m
+  max_actions: 3
+  max_actions_window: 24h
+then:
+  makestep:
+    socket: /run/chrony/chronyd.sock  # optional; this is the default
+  notify: [ops-email]  # report every step

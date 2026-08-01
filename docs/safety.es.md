@@ -124,6 +124,12 @@ configuración de mínimo privilegio.
 
 Dado que el daemon se ejecuta como root:
 
+- **`then.expand` y `then.makestep` se controlan por política.** Ambas cambian el host, así que se ejecutan como mucho una vez por
+  `policy.cooldown`, y cada intento inicia el cooldown para que un objetivo que falla no
+  se reintente en cada ciclo. `then.makestep` — que pide al chronyd local que salte la
+  hora del sistema — además *exige* un cooldown positivo y actúa solo ante un exceso de
+  desfase. **Nunca lo habilites en un host mon u osd de ceph**: un salto de reloj puede
+  costarle el quórum a un monitor, así que allí alerta en su lugar.
 - **La configuración es entrada confiable, propiedad de root.** Los checks `command` y los `hook`s de watch
   ejecutan su `argv` **como root** (nunca mediante un shell). Mantén `/etc/sermo` escribible
   solo por root; cualquiera que pueda editarlo puede ejecutar código como root. Los secretos pertenecen al

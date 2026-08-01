@@ -48,11 +48,16 @@ const (
 	eventKindCascade          = "cascade"
 	eventKindReload           = string(rules.ActionReload)
 
-	eventKindExpand        = config.WatchThenKeyExpand
-	eventKindExpandSkipped = "expand-skipped"
-	eventKindExpandFailed  = config.WatchThenKeyExpand + eventKindFailedSuffix
-	eventKindKill          = config.WatchThenKeyKill
-	eventKindKillFailed    = config.WatchThenKeyKill + eventKindFailedSuffix
+	eventKindSkippedSuffix = "-skipped"
+
+	eventKindExpand          = config.WatchThenKeyExpand
+	eventKindExpandSkipped   = config.WatchThenKeyExpand + eventKindSkippedSuffix
+	eventKindExpandFailed    = config.WatchThenKeyExpand + eventKindFailedSuffix
+	eventKindKill            = config.WatchThenKeyKill
+	eventKindKillFailed      = config.WatchThenKeyKill + eventKindFailedSuffix
+	eventKindMakeStep        = config.WatchThenKeyMakeStep
+	eventKindMakeStepSkipped = config.WatchThenKeyMakeStep + eventKindSkippedSuffix
+	eventKindMakeStepFailed  = config.WatchThenKeyMakeStep + eventKindFailedSuffix
 )
 
 // Event status values for Event.Status — the outcome of an emitted action:
@@ -192,10 +197,11 @@ func SlogEmitter(logger *slog.Logger) func(Event) {
 			attrs = append(attrs, eventFieldMessage, e.Message)
 		}
 		switch e.Kind {
-		case eventKindError, eventKindHookFail, eventKindNotifyFail, eventKindExpandFailed, eventKindKillFailed:
+		case eventKindError, eventKindHookFail, eventKindNotifyFail, eventKindExpandFailed, eventKindKillFailed, eventKindMakeStepFailed:
 			logger.Error("sermod", attrs...)
 		case eventKindAction, eventKindAlert, eventKindSuppressed, eventKindFiring, eventKindRecovered, eventKindDryRun, eventKindHook, eventKindNotify, eventKindCascade,
-			eventKindExpand, eventKindExpandSkipped, eventKindKill, eventKindReload, eventKindPanicSuppressed, eventKindNotifySuppressed:
+			eventKindExpand, eventKindExpandSkipped, eventKindKill, eventKindReload, eventKindPanicSuppressed, eventKindNotifySuppressed,
+			eventKindMakeStep, eventKindMakeStepSkipped:
 			logger.Info("sermod", attrs...)
 		default:
 			logger.Debug("sermod", attrs...)
