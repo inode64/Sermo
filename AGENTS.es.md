@@ -751,10 +751,10 @@ Notas de herramientas:
   genera ruido):
 
   - **`wrapcheck` ON:** operation, rules, config, state, app, cli, process, web,
-    locks, managers, notify, assist, cmd — los errores de frontera de paquete
-    deben usar `%w`. **OFF:** `internal/checks/` e `internal/conn/` (el I/O de
-    probes acaba en mensajes Result/check; ampliar por protocolo con `%w`
-    contextual al limpiar uno, no en masa).
+    locks, managers, notify, assist, cmd y probes limpios (hoy
+    `internal/conn/varnish.go`). **OFF:** `internal/checks/` y el resto de
+    `internal/conn/*` (el I/O de probes acaba en mensajes Result/check; ampliar
+    por protocolo con `%w` contextual al limpiar uno, no en masa).
   - **`ireturn` ON:** operation, rules, config, state, CLI no-wizard y el resto
     del árbol. **OFF:** builders de checks/notify, registro conn, seams de app
     (watch/hook/runtime), holder de web Backend, assist/wizard y constructores

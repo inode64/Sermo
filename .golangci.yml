@@ -311,17 +311,16 @@ linters:
 
       # wrapcheck zone policy (same idea as ireturn):
       #   ON  — operation, rules, config, state, app, cli, process, web, locks,
-      #         managers, notify, assist, cmd: package-boundary errors must use %w.
-      #   OFF — checks/ and conn/: probe I/O becomes Result/check messages, not
-      #         API-boundary errors (~60 + ~145 findings of dial/ReadFile noise).
-      # Expand wrapcheck into a protocol package only when cleaning it with
-      # contextual %w, not en masse.
+      #         managers, notify, assist, cmd, and cleaned probes (varnish.go).
+      #   OFF — checks/ and remaining conn/* (probe I/O becomes Result/check
+      #         messages). Expand one protocol at a time with contextual %w.
       - linters:
           - wrapcheck
         path: '^internal/checks/'
+      # All conn production sources except varnish.go (wrapcheck-clean pilot).
       - linters:
           - wrapcheck
-        path: '^internal/conn/'
+        path: '^internal/conn/(acpid|ajp|amqp|asterisk|avahi|bind|bind_linux|bind_other|ceph|chrony|clamd|cloudflared|conn|dbus|deadline|dhclient|dhcp|dhcp_linux|dhcp_other|dial|dns|docker|fail2ban|fpm|ftp|glusterfs|guacd|http_client|imap|influxdb|ipp|kafka|ldap|libvirt|lvmpolld|memcached|mongodb|mountd|mqtt|mysql|nebula|nfs|nntp|ntp|nut|openvpn|openvswitch|pop|postgres|prometheus|rdp|redis|rpcbind|rspamd|rsync|sieve|smb|smtp|snmp|spamd|ssh|statd|syncthing|tftp|udisks2|unifi)\.go$'
 
       # ireturn zone policy:
       #   ON  — operation, rules, config, state, non-wizard CLI and the rest of
