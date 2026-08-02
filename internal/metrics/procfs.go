@@ -269,6 +269,8 @@ func (OSReader) TotalSwap() (total, used uint64, ok bool) {
 // TotalMemoryAndSwap reads memory and swap totals from /proc/meminfo with one
 // file read. The collector uses it when available so system and service metric
 // sampling do not reread meminfo for memory and swap separately.
+//
+//nolint:gocritic // tooManyResultsChecker: this signature is the optional-interface contract collector.go type-asserts on; narrowing it would close the extension point to out-of-package readers.
 func (OSReader) TotalMemoryAndSwap() (memoryTotal, memoryUsed, swapTotal, swapUsed uint64, memoryOK, swapOK bool) {
 	totals := readProcMeminfoTotals()
 	return totals.memoryTotal, totals.memoryUsed, totals.swapTotal, totals.swapUsed, totals.memoryOK, totals.swapOK
@@ -282,44 +284,58 @@ func readProcMeminfoTotals() memoryTotals {
 	return parseProcMeminfoTotals(data)
 }
 
-// ParseMeminfo extracts the MemTotal, MemAvailable, SwapTotal and SwapFree values
-// (in bytes) from raw /proc/meminfo content. Each have* flag reports whether the
-// corresponding field was present and parsed; a missing or malformed field leaves
-// its value zero. It is the single scanner shared by the metrics collector (which
-// derives used = total - available) and the checks package (which needs the raw
-// MemAvailable/SwapFree readings).
-func ParseMeminfo(data []byte) (memTotal, memAvailable, swapTotal, swapFree uint64, haveMemTotal, haveMemAvailable, haveSwapTotal, haveSwapFree bool) {
+// Meminfo is the /proc/meminfo subset Sermo reads, in bytes. Each Have* field
+// reports whether the kernel published that line: a missing or malformed field
+// leaves its value zero, which a caller must not mistake for a real reading.
+type Meminfo struct {
+	MemTotal     uint64
+	MemAvailable uint64
+	SwapTotal    uint64
+	SwapFree     uint64
+
+	HaveMemTotal     bool
+	HaveMemAvailable bool
+	HaveSwapTotal    bool
+	HaveSwapFree     bool
+}
+
+// ParseMeminfo extracts the MemTotal, MemAvailable, SwapTotal and SwapFree
+// values from raw /proc/meminfo content. It is the single scanner shared by the
+// metrics collector (which derives used = total - available) and the checks
+// package (which needs the raw MemAvailable/SwapFree readings).
+func ParseMeminfo(data []byte) Meminfo {
+	var m Meminfo
 	for line := range strings.SplitSeq(string(data), procLineSeparator) {
 		switch {
 		case strings.HasPrefix(line, procMeminfoMemTotalPrefix):
-			memTotal, haveMemTotal = parseMeminfoKB(line)
+			m.MemTotal, m.HaveMemTotal = parseMeminfoKB(line)
 		case strings.HasPrefix(line, procMeminfoMemAvailablePrefix):
-			memAvailable, haveMemAvailable = parseMeminfoKB(line)
+			m.MemAvailable, m.HaveMemAvailable = parseMeminfoKB(line)
 		case strings.HasPrefix(line, procMeminfoSwapTotalPrefix):
-			swapTotal, haveSwapTotal = parseMeminfoKB(line)
+			m.SwapTotal, m.HaveSwapTotal = parseMeminfoKB(line)
 		case strings.HasPrefix(line, procMeminfoSwapFreePrefix):
-			swapFree, haveSwapFree = parseMeminfoKB(line)
+			m.SwapFree, m.HaveSwapFree = parseMeminfoKB(line)
 		}
 	}
-	return
+	return m
 }
 
 func parseProcMeminfoTotals(data []byte) memoryTotals {
 	var totals memoryTotals
-	memTotal, memoryAvailable, swapTotal, swapFree, haveMemTotal, haveMemoryAvailable, haveSwapTotal, haveSwapFree := ParseMeminfo(data)
-	totals.memoryTotal, totals.memoryOK = memTotal, haveMemTotal
-	totals.swapTotal, totals.swapOK = swapTotal, haveSwapTotal
-	if !totals.memoryOK || !haveMemoryAvailable || totals.memoryTotal < memoryAvailable {
+	m := ParseMeminfo(data)
+	totals.memoryTotal, totals.memoryOK = m.MemTotal, m.HaveMemTotal
+	totals.swapTotal, totals.swapOK = m.SwapTotal, m.HaveSwapTotal
+	if !totals.memoryOK || !m.HaveMemAvailable || totals.memoryTotal < m.MemAvailable {
 		totals.memoryOK = false
 		totals.memoryTotal = 0
 	} else {
-		totals.memoryUsed = totals.memoryTotal - memoryAvailable
+		totals.memoryUsed = totals.memoryTotal - m.MemAvailable
 	}
-	if !totals.swapOK || !haveSwapFree || totals.swapTotal < swapFree {
+	if !totals.swapOK || !m.HaveSwapFree || totals.swapTotal < m.SwapFree {
 		totals.swapOK = false
 		totals.swapTotal = 0
 	} else {
-		totals.swapUsed = totals.swapTotal - swapFree
+		totals.swapUsed = totals.swapTotal - m.SwapFree
 	}
 	return totals
 }

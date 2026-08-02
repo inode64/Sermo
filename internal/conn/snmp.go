@@ -45,6 +45,8 @@ func (snmpProtocol) Name() string       { return ProtocolNameSNMP }
 func (snmpProtocol) DefaultPort() int   { return defaultSNMPPort }
 func (snmpProtocol) RequiresUser() bool { return false }
 
+var errNoSNMPResponse = errors.New("no response packet")
+
 func (snmpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	timeout := netutil.TimeoutFromContext(ctx, defaultSNMPProbeTimeout)
 	params := buildSNMPParams(ctx, cfg, timeout)
@@ -56,6 +58,11 @@ func (snmpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	pkt, err := params.Get([]string{oidSysDescr, oidSysObjectID, oidSysUpTime, oidSysContact, oidSysName, oidSysLocation})
 	if err != nil {
 		return Result{}, probeErr(ProtocolNameSNMP, "get", err)
+	}
+	if pkt == nil {
+		// gosnmp can report neither a packet nor an error; treat the silence as
+		// a failed probe rather than dereferencing it.
+		return Result{}, probeErr(ProtocolNameSNMP, "get", errNoSNMPResponse)
 	}
 	by := snmpByOID(pkt.Variables)
 	sysDescr := snmpString(by[oidSysDescr])

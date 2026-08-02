@@ -60,6 +60,8 @@ type promptAbort struct{}
 //		idx := p.Choose(...)
 //		...
 //	}
+//
+//nolint:gocritic // ptrToRefParam: errp is the documented out-parameter of the `defer Recover(&err)` idiom; it must write through the pointer.
 func Recover(errp *error) {
 	r := recover()
 	if r == nil {
