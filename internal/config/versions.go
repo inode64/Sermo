@@ -467,7 +467,7 @@ func buildMultiRegex(path string, toks []tmplToken) (*regexp.Regexp, []tmplToken
 	sb.WriteString("^")
 	var order []tmplToken
 	rest := path
-	for len(rest) > 0 {
+	for rest != "" {
 		idx, tk := earliestMarker(rest, toks)
 		if tk == nil {
 			sb.WriteString(regexp.QuoteMeta(rest))

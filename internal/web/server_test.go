@@ -130,15 +130,16 @@ func (f *fakeBackend) Series(_ context.Context, name, check string, since time.D
 		return nil, false
 	}
 	for _, s := range f.services {
-		if s.Name == name {
-			f.seriesSince, f.seriesCheck = since, check
-			r := 1.0
-			total := int64(2)
-			if check != "" {
-				total = 4 // distinguishes the check series from the service's
-			}
-			return []SeriesPoint{{Start: "2026-06-07T10:00:00Z", Ratio: &r, Up: 2, Total: total}}, true
+		if s.Name != name {
+			continue
 		}
+		f.seriesSince, f.seriesCheck = since, check
+		r := 1.0
+		total := int64(2)
+		if check != "" {
+			total = 4 // distinguishes the check series from the service's
+		}
+		return []SeriesPoint{{Start: "2026-06-07T10:00:00Z", Ratio: &r, Up: 2, Total: total}}, true
 	}
 	return nil, false
 }

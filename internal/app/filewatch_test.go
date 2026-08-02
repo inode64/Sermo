@@ -547,7 +547,7 @@ func TestFileWatchMissingRootDeletion(t *testing.T) {
 	if len(h.events) != 1 || h.events[0].Kind != eventKindHook {
 		t.Fatalf("expected one delete hook event, got %d: %v", len(h.events), h.events)
 	}
-	if msg := h.events[0].Message; msg == "" || !(len(msg) > 0) {
+	if msg := h.events[0].Message; msg == "" {
 		t.Errorf("delete message = %q", msg)
 	}
 	// baseline should have been cleaned

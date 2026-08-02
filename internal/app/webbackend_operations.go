@@ -90,7 +90,6 @@ func (b *WebBackend) Operate(ctx context.Context, name, action string, opts web.
 			op:     b.operationResultWithMonitor,
 			lookup: lookup,
 			emit:   b.emit,
-			sleep:  time.Sleep,
 		}
 		r = c.run(ctx, name, action)
 	}

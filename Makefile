@@ -163,8 +163,13 @@ docs-sync:
 # Formatting and static analysis gates; make test and make check run this first.
 validate: modules-check lint actions-lint scripts-lint npm-audit yaml-validate markdown-check docs-sync web-e2e
 
+# GO_TEST_FLAGS defaults to -shuffle=on so order-dependent tests surface
+# locally and in CI. Override for a stable order when debugging:
+#   make test GO_TEST_FLAGS=
+GO_TEST_FLAGS ?= -shuffle=on
+
 test: validate
-	go test $(GO_PACKAGES)
+	go test $(GO_TEST_FLAGS) $(GO_PACKAGES)
 
 vet:
 	go vet $(GO_PACKAGES)
@@ -206,7 +211,7 @@ actions-lint:
 # Race instrumentation is substantially slower than normal tests, so CI runs it
 # in its own job instead of extending the default PR gate.
 race:
-	go test -race -count=1 $(GO_PACKAGES)
+	go test -race -count=1 $(GO_TEST_FLAGS) $(GO_PACKAGES)
 
 # Keep fuzzing bounded and focused on untrusted configuration input. Scheduled
 # CI can override FUZZ_TIME for a longer campaign.
@@ -236,7 +241,7 @@ check: vet test
 
 # Coverage: print the total and write a browsable HTML report.
 cover: validate
-	go test -coverprofile=coverage.out $(GO_PACKAGES)
+	go test $(GO_TEST_FLAGS) -coverprofile=coverage.out $(GO_PACKAGES)
 	@go tool cover -func=coverage.out | tail -1
 	@go tool cover -html=coverage.out -o coverage.html
 	@echo "wrote coverage.html"

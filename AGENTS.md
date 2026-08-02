@@ -692,13 +692,15 @@ Tool notes:
   must propose no changes. If it fails, run `go fix ./...` and review the
   rewrite instead of silencing it.
 - **`revive`** (`revive.toml`): default rule set plus `unused-parameter`,
-  `struct-tag`, `import-shadowing`, `modifies-value-receiver` and
-  `package-naming` (split out of `var-naming` in revive v1.15) on production
-  code (`exclude = ["TEST"]` on `unused-parameter` and `import-shadowing` skips
-  `*_test.go`). Rename unused params to `_` in non-test code; avoid locals that
-  shadow import names. Document new exported symbols — the `exported` rule is on.
+  `struct-tag`, `import-shadowing`, `modifies-value-receiver`,
+  `package-naming` (split out of `var-naming` in revive v1.15), and the
+  concurrency rules `atomic`, `waitgroup-by-value`, `range-val-address` and
+  `range-val-in-closure` on production code (`exclude = ["TEST"]` on
+  `unused-parameter` and `import-shadowing` skips `*_test.go`). Rename unused
+  params to `_` in non-test code; avoid locals that shadow import names.
+  Document new exported symbols — the `exported` rule is on.
 - **`golangci-lint`** uses `.golangci.yml` (**v2 format** — the binary must be
-  v2). That file is authoritative: **69 linters**, grouped here by what they ask
+  v2). That file is authoritative: **70 linters**, grouped here by what they ask
   of you. Consult it when in doubt — do not assume a linter is off because this
   summary is shorter than the config.
 
@@ -708,9 +710,9 @@ Tool notes:
   - *Correctness and safety:*
     `asasalint`, `bidichk`, `bodyclose`, `canonicalheader`, `contextcheck`,
     `copyloopvar`, `durationcheck`, `errcheck`, `errchkjson`, `errorlint`,
-    `exhaustive`, `fatcontext`, `forcetypeassert`, `gochecksumtype`, `gosec`,
-    `ineffassign`, `makezero`, `nilerr`, `nilnesserr`, `nilnil`, `noctx`,
-    `nosprintfhostport`, `reassign`, `recvcheck`, `rowserrcheck`,
+    `exhaustive`, `fatcontext`, `forbidigo`, `forcetypeassert`, `gochecksumtype`,
+    `gosec`, `ineffassign`, `makezero`, `nilerr`, `nilnesserr`, `nilnil`,
+    `noctx`, `nosprintfhostport`, `reassign`, `recvcheck`, `rowserrcheck`,
     `sqlclosecheck`, `unqueryvet`, `wastedassign`
   - *API shape and architecture:*
     `asciicheck`, `depguard`, `errname`, `gochecknoinits`, `godoclint`,
@@ -728,14 +730,17 @@ Tool notes:
   `*_test.go`; `dupword` and
   `exhaustive` are off in `*_test.go` (and a `default:` arm counts as
   exhaustive); `gocritic` runs a curated check list, not the default set;
-  `interfacebloat` excludes `internal/web/server.go`; `depguard` enforces the
-  import boundaries (checks/conn/rules/config must not import `operation`;
-  production `rules/` must not import `execx`); `wrapcheck` is a pilot over
-  `internal/` operation, app, cli, state, process, web, servicemgr, rules and
-  config, with `*_test.go` and the other packages excluded; `ireturn` excludes
-  the check/notify builders, the conn registry, manager constructors and similar
-  factories; `noctx` is off in `internal/conn/` and `*_test.go`; `goconst` wants
-  four occurrences before a shared constant is due.
+  `forbidigo` bans `fmt.Print*`, stdlib `log.(Print|Fatal|Panic)*`, `os.Exit`,
+  `time.Sleep` and `http.DefaultClient` in production packages (tests, `cmd/`
+  entrypoints and `internal/web/build` are excluded); `interfacebloat` excludes
+  `internal/web/server.go`; `depguard` enforces the import boundaries
+  (checks/conn/rules/config must not import `operation`; production `rules/`
+  must not import `execx`); `wrapcheck` is a pilot over `internal/` operation,
+  app, cli, state, process, web, servicemgr, rules and config, with `*_test.go`
+  and the other packages excluded; `ireturn` excludes the check/notify builders,
+  the conn registry, manager constructors and similar factories; `noctx` is off
+  in `internal/conn/` and `*_test.go`; `goconst` wants four occurrences before a
+  shared constant is due.
 
   Production `database/sql` in `internal/state` uses `*Context` methods with
   `sqlCtx()` (ctx from `OpenContext` / `context.Background()` via `Open`).
@@ -772,6 +777,9 @@ Tool notes:
 Tests are part of the change, not an afterthought (see the small-change
 checklist). Match the suite's existing style instead of inventing one.
 
+- **`make test` / `make race` / `make cover` shuffle by default**
+  (`GO_TEST_FLAGS=-shuffle=on`) so order-dependent tests fail locally and in
+  CI. Disable for a stable order when debugging: `make test GO_TEST_FLAGS=`.
 - **Inject the seam; never touch the host from logic under test.** Every probe
   that reads the system takes an injectable function or interface, so tests run
   without real `/proc`, sockets or services: the `*SamplerFunc` fields and the

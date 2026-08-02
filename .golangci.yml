@@ -31,6 +31,7 @@ linters:
     - exhaustive  # enum switches missing cases (check/watch/backend type dispatch)
     - exptostd  # experimental APIs that now have a standard-library equivalent
     - fatcontext  # context accumulated inside loops
+    - forbidigo  # ban production anti-patterns (fmt.Print*, os.Exit, time.Sleep, …)
     - forcetypeassert  # prevent panics when values with static type any are asserted
     - gocheckcompilerdirectives  # malformed //go: directives (typos that silently no-op)
     - gochecknoinits  # package initialization is forbidden outside static protocol registration
@@ -153,6 +154,7 @@ linters:
         - appendAssign
         - appendCombine
         - argOrder
+        - assignOp  # n = n + 1 → n += 1 (and friends)
         - badCall
         - badCond
         - badRegexp
@@ -165,6 +167,9 @@ linters:
         - dupSubExpr
         - deferInLoop
         - emptyFallthrough
+        - emptyStringTest  # s == "" is clearer than len(s) == 0 for strings
+        - equalFold  # strings.EqualFold over ToLower/ToUpper equality
+        - evalOrder  # force evaluation order that matches the intended side effects
         - exitAfterDefer
         - flagDeref
         - httpNoBody
@@ -172,12 +177,14 @@ linters:
         - importShadow
         - indexAlloc
         - mapKey
+        - nestingReduce  # collapse needless nested if/else
         - newDeref
         - nilValReturn
         - offBy1
         - octalLiteral
         - paramTypeCombine
         - preferFilepathJoin
+        - preferFprint  # prefer Fprint over WriteString(fmt.Sprint(...))
         - preferStringWriter
         - rangeAppendAll
         - regexpMust
@@ -204,6 +211,22 @@ linters:
         - unslice
         - weakCond
         - whyNoLint
+        - wrapperFunc  # prefer strings.ReplaceAll, bytes.Split, …
+    forbidigo:
+      # Production anti-patterns. Entry-point mains (cmd/, web/build) and tests
+      # are excluded below; intentional control-flow panics in assist stay allowed.
+      analyze-types: true
+      forbid:
+        - pattern: ^fmt\.Print.*$
+          msg: operator diagnostics use slog or internal/cli output, not fmt.Print*
+        - pattern: ^log\.(Print|Fatal|Panic).*
+          msg: use log/slog; the standard log package is not used in production code
+        - pattern: ^os\.Exit$
+          msg: only cmd entrypoints and the web bundle builder may call os.Exit
+        - pattern: ^time\.Sleep$
+          msg: use context deadlines or time.After/NewTimer; Sleep blocks without cancellation
+        - pattern: ^http\.DefaultClient$
+          msg: use an explicit http.Client with a timeout (see internal/httpx)
     dupl:
       # The default is 150 tokens, which only sees very large clones. 70 is the
       # lowest value production code is clean at: below it the reports are shape
@@ -267,6 +290,13 @@ linters:
       # to the production paths that execute in the daemon or CLI.
       - linters: [prealloc]
         path: _test\.go
+      # Process mains and the web esbuild driver must call os.Exit / print --version.
+      - linters: [forbidigo]
+        path: _test\.go
+      - linters: [forbidigo]
+        path: ^cmd/
+      - linters: [forbidigo]
+        path: ^internal/web/build/
       # Protocols register static builders during package initialization; all
       # other packages must keep initialization explicit and injectable.
       - linters: [gochecknoinits]
