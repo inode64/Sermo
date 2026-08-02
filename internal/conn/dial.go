@@ -167,10 +167,17 @@ func probeUnixSocket(ctx context.Context, cfg Config, defaultSocket string) (Res
 // applies the context deadline. The prologue shared by the byte-protocol
 // probes that never upgrade to TLS; the caller closes the connection.
 func dialTCPDeadline(ctx context.Context, cfg Config, defaultPort int) (net.Conn, error) {
+	return dialNetworkDeadline(ctx, cfg, defaultPort, networkTCP)
+}
+
+// dialNetworkDeadline opens a connection to cfg's defaulted address through
+// BindDialer and applies the context deadline. TCP and UDP probes keep their
+// named wrappers while sharing the common dial lifecycle here.
+func dialNetworkDeadline(ctx context.Context, cfg Config, defaultPort int, network string) (net.Conn, error) {
 	addr := cfg.addrDefaults(defaultPort)
-	c, err := BindDialer(cfg.Interface).DialContext(ctx, networkTCP, addr)
+	c, err := BindDialer(cfg.Interface).DialContext(ctx, network, addr)
 	if err != nil {
-		return nil, wrapDialError(networkTCP, addr, err)
+		return nil, wrapDialError(network, addr, err)
 	}
 	applyDeadline(ctx, c)
 	return c, nil
@@ -226,13 +233,7 @@ func probeLineCommand(ctx context.Context, cfg Config, defaultPort int, command 
 // closes the connection. Probes that exchange more than one datagram with the
 // same peer (chrony) dial once through this instead of repeating exchangeUDP.
 func dialUDPDeadline(ctx context.Context, cfg Config, defaultPort int) (net.Conn, error) {
-	addr := cfg.addrDefaults(defaultPort)
-	c, err := BindDialer(cfg.Interface).DialContext(ctx, networkUDP, addr)
-	if err != nil {
-		return nil, wrapDialError(networkUDP, addr, err)
-	}
-	applyDeadline(ctx, c)
-	return c, nil
+	return dialNetworkDeadline(ctx, cfg, defaultPort, networkUDP)
 }
 
 // exchangeUDP dials cfg's host (defaulting to DefaultHost) and port
