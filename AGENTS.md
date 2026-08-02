@@ -738,13 +738,12 @@ Tool notes:
   entrypoints and `internal/web/build` are excluded); `interfacebloat` excludes
   `internal/web/server.go`; `depguard` enforces the import boundaries
   (checks/conn/rules/config must not import `operation`; production `rules/`
-  must not import `execx`); `wrapcheck` is a pilot over `internal/` operation,
-  app, cli, state, process, web, servicemgr, rules and config, with `*_test.go`
-  and `internal/checks` + `internal/conn` still excluded (~60 + ~147 findings —
-  mostly probe I/O that becomes Result messages; expand per package with
-  contextual `%w` wrapping); `ireturn` excludes the check/notify builders, the
-  conn registry, manager constructors and similar factories; `noctx` is off in
-  `internal/conn/` and `*_test.go`; `goconst` wants four occurrences before a
+  must not import `execx`); `wrapcheck` is active across production packages
+  except `internal/checks` and `internal/conn` (probe I/O becomes Result/check
+  messages, not package-boundary errors — expand per package with contextual
+  `%w` when cleaning a protocol); `ireturn` excludes the check/notify builders,
+  the conn registry, manager constructors and similar factories; `noctx` is off
+  in `internal/conn/` and `*_test.go`; `goconst` wants four occurrences before a
   shared constant is due.
 
   Production `database/sql` in `internal/state` uses `*Context` methods with

@@ -746,11 +746,10 @@ Notas de herramientas:
   (tests, entrypoints `cmd/` e `internal/web/build` están excluidos);
   `interfacebloat` excluye `internal/web/server.go`; `depguard` impone las
   fronteras de import (checks/conn/rules/config no importan `operation`;
-  `rules/` de producción no importa `execx`); `wrapcheck` es un piloto sobre
-  operation, app, cli, state, process, web, servicemgr, rules y config de
-  `internal/`, con `*_test.go` e `internal/checks` + `internal/conn` aún
-  excluidos (~60 + ~147 hallazgos — sobre todo I/O de probes que acaba en
-  mensajes Result; ampliar por paquete con wrapping contextual `%w`);
+  `rules/` de producción no importa `execx`); `wrapcheck` está activo en
+  paquetes de producción salvo `internal/checks` e `internal/conn` (el I/O de
+  probes acaba en mensajes Result/check, no en errores de frontera de paquete —
+  ampliar por protocolo con wrapping contextual `%w` al limpiar uno);
   `ireturn` excluye los builders de checks/notify, el registro conn, los
   constructores de managers y fábricas similares; `noctx` está desactivado en
   `internal/conn/` y `*_test.go`; `goconst` exige cuatro apariciones antes de
