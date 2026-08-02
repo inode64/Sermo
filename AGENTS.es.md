@@ -759,9 +759,19 @@ Notas de herramientas:
 
   - **`wrapcheck` ON:** operation, rules, config, state, app, cli, process, web,
     locks, managers, notify, assist, cmd y probes con errores contextuales.
-    **OFF:** solo los fuentes de `internal/checks/*` e `internal/conn/*` que aún
-    convierten fallos de transporte en mensajes Result/check; habilita cada uno
-    con `%w` contextual antes de abrirlo.
+    **OFF:** solo los fuentes de `internal/checks/*` que aún convierten fallos
+    de transporte en mensajes Result/check; habilita cada uno con `%w`
+    contextual antes de abrirlo. `internal/conn` está completamente activado:
+    ya no tiene ninguna exclusión de wrapcheck. Allí, un probe envuelve
+    con `probeErr(proto, step, err)` (`dial.go`) — una sola redacción,
+    `"<proto> <paso>: <causa>"`, donde `proto` es la constante `ProtocolName*`
+    y `step` nombra el intercambio en términos del operador. **No** envuelvas
+    los helpers de dial (`dialDeadline`, `dialTCPDeadline`, …): ya reportan
+    `dial <red> <addr>`, así que un segundo "dial" solo tartamudea, y al ser del
+    mismo paquete nunca disparan wrapcheck. Los helpers que devuelven algo
+    distinto de `Result` (códecs de trama, adaptadores `io.Reader`) no son
+    probes: dales su propio `%w` contextual, y nunca envuelvas un
+    `io.Reader.Read`, que debe seguir devolviendo `io.EOF` sin envolver.
   - **`ireturn` ON:** operation, rules, config, state, el registro conn, web,
     CLI y el resto del árbol. **OFF:** builders de checks/notify, seams de app
     (watch/hook/runtime), registro assist y factorías de managers. Las demás

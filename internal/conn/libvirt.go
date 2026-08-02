@@ -83,7 +83,11 @@ type libvirtRemoteDialer struct {
 
 func (d libvirtRemoteDialer) Dial() (net.Conn, error) {
 	dialer := libvirtRemoteNetDialer(d.iface, d.timeout)
-	return dialer.Dial(networkTCP, d.addr)
+	c, err := dialer.Dial(networkTCP, d.addr)
+	if err != nil {
+		return nil, probeErr(ProtocolNameLibvirt, stepDial, err)
+	}
+	return c, nil
 }
 
 func libvirtRemoteNetDialer(iface string, timeout time.Duration) *net.Dialer {
@@ -96,13 +100,13 @@ func libvirtRemoteNetDialer(iface string, timeout time.Duration) *net.Dialer {
 // counts, node capacity and an optional single domain's state, then closes.
 func libvirtProbe(l *libvirt.Libvirt, uri, mode, domain string) (Result, error) {
 	if err := l.ConnectToURI(libvirt.ConnectURI(uri)); err != nil {
-		return Result{}, err
+		return Result{}, probeErr(ProtocolNameLibvirt, stepConnect, err)
 	}
 	defer func() { _ = l.Disconnect() }()
 
 	ver, err := l.ConnectGetLibVersion()
 	if err != nil {
-		return Result{}, err
+		return Result{}, probeErr(ProtocolNameLibvirt, "version", err)
 	}
 	version := formatLibvirtVersion(ver)
 	extra := map[string]string{extraURI: uri, extraLibVersion: version, extraTransport: mode}

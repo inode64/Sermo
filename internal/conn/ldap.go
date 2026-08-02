@@ -46,7 +46,7 @@ func (ldapProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 
 	l, err := ldap.DialURL(url, opts...)
 	if err != nil {
-		return Result{}, err
+		return Result{}, probeErr(ProtocolNameLDAP, stepDial, err)
 	}
 	defer func() { _ = l.Close() }()
 	l.SetTimeout(timeout)

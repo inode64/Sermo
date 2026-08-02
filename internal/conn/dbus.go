@@ -57,13 +57,13 @@ func probeBusWithDeadline(ctx context.Context, cfg Config, probe func(ctx contex
 func dbusProbe(ctx context.Context, addr string) (Result, error) {
 	conn, err := dbus.Connect(addr, dbus.WithContext(ctx))
 	if err != nil {
-		return Result{}, err
+		return Result{}, probeErr(ProtocolNameDBus, stepConnect, err)
 	}
 	defer func() { _ = conn.Close() }()
 
 	var busID string
 	if err := conn.BusObject().CallWithContext(ctx, "org.freedesktop.DBus.GetId", dbusCallFlags).Store(&busID); err != nil {
-		return Result{}, err
+		return Result{}, probeErr(ProtocolNameDBus, "GetId", err)
 	}
 	extra := map[string]string{extraAddress: addr}
 	if busID != "" {

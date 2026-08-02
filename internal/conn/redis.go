@@ -132,8 +132,10 @@ func writeRESP(w io.Writer, args ...string) error {
 	for _, a := range args {
 		fmt.Fprintf(&b, redisRESPBulkStringFormat, len(a), a)
 	}
-	_, err := io.WriteString(w, b.String())
-	return err
+	if _, err := io.WriteString(w, b.String()); err != nil {
+		return probeErr(ProtocolNameRedis, stepRequest, err)
+	}
+	return nil
 }
 
 // readRESP reads one reply: simple string (+), integer (:) and bulk string ($)
@@ -164,7 +166,7 @@ func readRESP(br *bufio.Reader) (string, error) {
 		}
 		buf := make([]byte, n+redisRESPBulkTerminatorBytes)
 		if _, err := io.ReadFull(br, buf); err != nil {
-			return "", err
+			return "", probeErr(ProtocolNameRedis, "bulk string", err)
 		}
 		return string(buf[:n]), nil
 	default:

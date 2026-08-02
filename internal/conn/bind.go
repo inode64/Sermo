@@ -13,7 +13,7 @@ func resolveInterface(id string) (*net.Interface, error) {
 	}
 	ifaces, err := net.Interfaces()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("list interfaces: %w", err)
 	}
 	if mac, err := net.ParseMAC(id); err == nil {
 		for i := range ifaces {
@@ -62,7 +62,7 @@ func ResolveInterfaceIPv4(id string) (string, error) {
 	}
 	addrs, err := ifi.Addrs()
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("interface %q addresses: %w", id, err)
 	}
 	for _, a := range addrs {
 		if n, ok := a.(*net.IPNet); ok {

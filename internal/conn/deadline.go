@@ -1,6 +1,9 @@
 package conn
 
-import "context"
+import (
+	"context"
+	"fmt"
+)
 
 // probeWithDeadline returns promptly when ctx expires even when a third-party
 // client ignores context during its handshake or RPC. The buffered result
@@ -17,7 +20,7 @@ func probeWithDeadline(ctx context.Context, probe func(context.Context) (Result,
 	}()
 	select {
 	case <-ctx.Done():
-		return Result{}, ctx.Err()
+		return Result{}, fmt.Errorf("probe deadline: %w", ctx.Err())
 	case result := <-results:
 		return result.result, result.err
 	}

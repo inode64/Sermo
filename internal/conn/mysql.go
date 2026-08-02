@@ -51,7 +51,7 @@ func (mysqlProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 
 	db, err := sql.Open(ProtocolNameMySQL, buildDSN(cfg))
 	if err != nil {
-		return Result{}, err
+		return Result{}, probeErr(ProtocolNameMySQL, "open", err)
 	}
 	defer func() { _ = db.Close() }()
 
@@ -88,7 +88,7 @@ const (
 func mysqlGreeting(r io.Reader) (Result, error) {
 	var hdr [mysqlPacketHeaderBytes]byte
 	if _, err := io.ReadFull(r, hdr[:]); err != nil {
-		return Result{}, err
+		return Result{}, probeErr(ProtocolNameMySQL, "handshake header", err)
 	}
 	// Packet header: 3-byte little-endian payload length, then a sequence id.
 	n := int(hdr[mysqlPayloadLengthLowOffset]) |
@@ -99,7 +99,7 @@ func mysqlGreeting(r io.Reader) (Result, error) {
 	}
 	payload := make([]byte, n)
 	if _, err := io.ReadFull(r, payload); err != nil {
-		return Result{}, err
+		return Result{}, probeErr(ProtocolNameMySQL, "handshake payload", err)
 	}
 
 	switch payload[mysqlProtocolVersionOffset] {

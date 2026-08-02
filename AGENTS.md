@@ -749,9 +749,19 @@ Tool notes:
 
   - **`wrapcheck` ON:** operation, rules, config, state, app, cli, process, web,
     locks, managers, notify, assist, cmd, and probes with contextual errors.
-    **OFF:** only the `internal/checks/*` and `internal/conn/*` sources that
-    still turn raw transport failures into Result/check messages; expand each
-    with contextual `%w` before enabling it.
+    **OFF:** only the `internal/checks/*` sources that still turn raw transport
+    failures into Result/check messages; expand each with contextual `%w`
+    before enabling it. `internal/conn` is fully gated — it carries no
+    wrapcheck exclusion. There, a probe wraps
+    through `probeErr(proto, step, err)` (`dial.go`) — one wording,
+    `"<proto> <step>: <cause>"`, with `proto` the `ProtocolName*` constant and
+    `step` the exchange in the operator's terms. Do **not** wrap the dial
+    helpers (`dialDeadline`, `dialTCPDeadline`, …): they already report
+    `dial <network> <addr>`, so a second "dial" only stutters, and being
+    same-package they never trip wrapcheck. Helpers that return something other
+    than `Result` (frame codecs, `io.Reader` adapters) are not probes: give them
+    their own contextual `%w`, and never wrap an `io.Reader.Read`, which must
+    keep returning `io.EOF` unwrapped.
   - **`ireturn` ON:** operation, rules, config, state, the conn registry, web,
     CLI and the rest of the tree. **OFF:** checks/notify builders, app
     watch/hook/runtime seams, the assist registry and manager factories. Other

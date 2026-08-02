@@ -116,13 +116,13 @@ func (amqpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	defer func() { _ = c.Close() }()
 
 	if _, err := c.Write(amqpHeader); err != nil {
-		return Result{}, err
+		return Result{}, probeErr(ProtocolNameAMQP, "protocol header", err)
 	}
 
 	// A method frame header is type(1), channel(2), size(4).
 	var hdr [amqpFrameHeaderSize]byte
 	if _, err := io.ReadFull(c, hdr[:]); err != nil {
-		return Result{}, err
+		return Result{}, probeErr(ProtocolNameAMQP, "frame header", err)
 	}
 
 	// Version negotiation rejection: the broker replies with its own 8-byte
@@ -148,7 +148,7 @@ func (amqpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	// Read the payload plus the trailing frame-end octet (0xCE).
 	payload := make([]byte, int(size)+amqpFrameEndSize)
 	if _, err := io.ReadFull(c, payload); err != nil {
-		return Result{}, err
+		return Result{}, probeErr(ProtocolNameAMQP, "frame payload", err)
 	}
 	if payload[size] != amqpFrameEnd {
 		return Result{}, fmt.Errorf("malformed AMQP frame (bad frame-end 0x%02x)", payload[size])

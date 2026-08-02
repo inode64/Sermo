@@ -164,7 +164,7 @@ func readSSHBanner(c net.Conn) (raw []byte, banner string, err error) {
 			line = append(line, one[0])
 		}
 		if rerr != nil {
-			return raw, "", rerr
+			return raw, "", probeErr(ProtocolNameSSH, stepBanner, rerr)
 		}
 	}
 }
@@ -176,6 +176,10 @@ type prefixConn struct {
 	pre *bytes.Reader
 }
 
+// Read implements io.Reader, so its errors must reach the caller untouched:
+// wrapping would break the `err == io.EOF` comparisons readers still rely on.
+//
+//nolint:wrapcheck // io.Reader contract: io.EOF must not be wrapped.
 func (c *prefixConn) Read(p []byte) (int, error) {
 	if c.pre != nil && c.pre.Len() > 0 {
 		return c.pre.Read(p)

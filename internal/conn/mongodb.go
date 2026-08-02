@@ -44,7 +44,7 @@ func (mongodbProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	defer func() { MongoDisconnect(ctx, client) }()
 
 	if err := client.Ping(ctx, readpref.Primary()); err != nil {
-		return Result{}, err
+		return Result{}, probeErr(ProtocolNameMongoDB, "ping", err)
 	}
 	var info struct {
 		Version string `bson:"version"`
@@ -121,7 +121,11 @@ func MongoConnect(cfg Config) (*mongo.Client, error) {
 		}
 		opts.SetTLSConfig(tc)
 	}
-	return mongo.Connect(opts)
+	client, err := mongo.Connect(opts)
+	if err != nil {
+		return nil, probeErr(ProtocolNameMongoDB, stepConnect, err)
+	}
+	return client, nil
 }
 
 // MongoDisconnect closes a MongoDB client with the bounded teardown timeout.

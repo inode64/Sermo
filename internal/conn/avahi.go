@@ -40,14 +40,14 @@ func (avahiProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 func avahiProbe(ctx context.Context, addr string) (Result, error) {
 	conn, err := dbus.Connect(addr, dbus.WithContext(ctx))
 	if err != nil {
-		return Result{}, err
+		return Result{}, probeErr(ProtocolNameAvahi, stepConnect, err)
 	}
 	defer func() { _ = conn.Close() }()
 
 	obj := conn.Object("org.freedesktop.Avahi", "/")
 	var versionString string
 	if err := obj.CallWithContext(ctx, "org.freedesktop.Avahi.Server.GetVersionString", 0).Store(&versionString); err != nil {
-		return Result{}, err
+		return Result{}, probeErr(ProtocolNameAvahi, "GetVersionString", err)
 	}
 
 	extra := map[string]string{}

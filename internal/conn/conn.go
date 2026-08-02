@@ -11,6 +11,7 @@ import (
 	"crypto/rand"
 	"database/sql"
 	"encoding/binary"
+	"fmt"
 	"io"
 	"strconv"
 	"strings"
@@ -584,7 +585,7 @@ func readCRLFLine(br *bufio.Reader) (string, error) {
 func readGreetingLine(r io.Reader) (string, error) {
 	line, err := bufio.NewReader(r).ReadString(protocolLineBreak)
 	if err != nil && line == "" {
-		return "", err
+		return "", fmt.Errorf("read greeting line: %w", err)
 	}
 	return strings.TrimRight(line, protocolTrimCRLF), nil
 }
@@ -654,7 +655,7 @@ func refIDLabel(id uint32) string {
 // connect + auth. The probe tail shared by the SQL-backed protocols.
 func pingAndVersion(ctx context.Context, db *sql.DB, versionQuery string) (Result, error) {
 	if err := db.PingContext(ctx); err != nil {
-		return Result{}, err
+		return Result{}, fmt.Errorf("ping: %w", err)
 	}
 	var version string
 	_ = db.QueryRowContext(ctx, versionQuery).Scan(&version)

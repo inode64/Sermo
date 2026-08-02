@@ -50,7 +50,7 @@ func PrometheusClient(cfg Config) (*http.Client, string) {
 func promBuildInfo(ctx context.Context, client *http.Client, base string, cfg Config) (res Result, handled bool, err error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+promBuildInfoEndpoint, http.NoBody)
 	if err != nil {
-		return Result{}, true, err
+		return Result{}, true, probeErr(ProtocolNamePrometheus, "buildinfo request", err)
 	}
 	promAuth(req, cfg)
 	resp, err := doHTTPProbe(client, req, maxHTTPProbeBody)
@@ -85,7 +85,7 @@ func promBuildInfo(ctx context.Context, client *http.Client, base string, cfg Co
 func promHealthy(ctx context.Context, client *http.Client, base string, cfg Config) (Result, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+promHealthyEndpoint, http.NoBody)
 	if err != nil {
-		return Result{}, err
+		return Result{}, probeErr(ProtocolNamePrometheus, "health request", err)
 	}
 	promAuth(req, cfg)
 	resp, err := doHTTPProbe(client, req, maxHTTPProbeShortBody)

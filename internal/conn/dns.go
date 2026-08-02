@@ -79,7 +79,7 @@ var dnsRouteAddrs = func(host string) (net.Addr, net.Addr, error) {
 	defer cancel()
 	c, err := (&net.Dialer{}).DialContext(ctx, networkUDP, hostPort(host, dnsDefaultPort))
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, probeErr(ProtocolNameDNS, "local route", err)
 	}
 	defer func() { _ = c.Close() }()
 	return c.LocalAddr(), c.RemoteAddr(), nil
@@ -114,18 +114,18 @@ func (dnsProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 
 	c, err := BindDialer(dnsProbeInterface(host, cfg.Interface)).DialContext(ctx, networkUDP, hostPort(host, port))
 	if err != nil {
-		return Result{}, err
+		return Result{}, probeErr(ProtocolNameDNS, stepDial, err)
 	}
 	defer func() { _ = c.Close() }()
 	applyDeadline(ctx, c)
 
 	if _, err := c.Write(query); err != nil {
-		return Result{}, err
+		return Result{}, probeErr(ProtocolNameDNS, "query", err)
 	}
 	buf := make([]byte, dnsUDPBufferBytes)
 	n, err := c.Read(buf)
 	if err != nil {
-		return Result{}, err
+		return Result{}, probeErr(ProtocolNameDNS, "reply", err)
 	}
 	rid, rcode, answers, addrs, err := parseDNSReply(buf[:n])
 	if err != nil {
@@ -151,7 +151,7 @@ func (dnsProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 func firstNameserver(path string) (string, error) {
 	data, err := os.ReadFile(path) //nolint:gosec // G304: /etc/resolv.conf or fixed nameserver path
 	if err != nil {
-		return "", err
+		return "", probeErr(ProtocolNameDNS, "read resolv.conf", err)
 	}
 	for line := range strings.SplitSeq(string(data), resolvConfLineSep) {
 		fields := strings.Fields(line)
@@ -247,7 +247,7 @@ func dnsID() uint16 {
 func buildDNSQuery(id uint16, name string, qtype uint16) ([]byte, error) {
 	qname, err := dnsmessage.NewName(dnsFQDN(name))
 	if err != nil {
-		return nil, err
+		return nil, probeErr(ProtocolNameDNS, "build query", err)
 	}
 	msg := dnsmessage.Message{
 		Header: dnsmessage.Header{ID: id, RecursionDesired: true},
@@ -257,7 +257,11 @@ func buildDNSQuery(id uint16, name string, qtype uint16) ([]byte, error) {
 			Class: dnsmessage.ClassINET,
 		}},
 	}
-	return msg.Pack()
+	packed, err := msg.Pack()
+	if err != nil {
+		return nil, probeErr(ProtocolNameDNS, "pack query", err)
+	}
+	return packed, nil
 }
 
 // dnsFQDN returns name as a fully-qualified domain name (trailing dot), the form
@@ -278,7 +282,7 @@ func parseDNSReply(b []byte) (id uint16, rcode, answers int, addrs []string, err
 	var p dnsmessage.Parser
 	hdr, err := p.Start(b)
 	if err != nil {
-		return 0, 0, 0, nil, err
+		return 0, 0, 0, nil, probeErr(ProtocolNameDNS, "parse reply", err)
 	}
 	if !hdr.Response {
 		return hdr.ID, 0, 0, nil, errors.New("not a DNS response (QR=0)")

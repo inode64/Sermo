@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"context"
 	"errors"
-	"fmt"
 	"io"
 	"strconv"
 	"strings"
@@ -38,18 +37,18 @@ func (varnishProtocol) RequiresUser() bool { return false }
 func (varnishProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	c, err := dialDeadline(ctx, cfg, defaultPortVarnish)
 	if err != nil {
-		return Result{}, fmt.Errorf("varnish dial: %w", err)
+		return Result{}, err
 	}
 	defer func() { _ = c.Close() }()
 
 	br := bufio.NewReader(c)
 	line, err := br.ReadString(protocolLineBreak)
 	if err != nil && line == "" {
-		return Result{}, fmt.Errorf("varnish CLI banner: %w", err)
+		return Result{}, probeErr(ProtocolNameVarnish, "CLI banner", err)
 	}
 	status, length, err := parseVarnishStatus(line)
 	if err != nil {
-		return Result{}, fmt.Errorf("varnish CLI status: %w", err)
+		return Result{}, probeErr(ProtocolNameVarnish, "CLI status", err)
 	}
 	body := ""
 	if length > 0 && length <= maxVarnishCLIBody {
