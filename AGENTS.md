@@ -742,10 +742,10 @@ Tool notes:
   stay on for core, off only where design forces noise):
 
   - **`wrapcheck` ON:** operation, rules, config, state, app, cli, process, web,
-    locks, managers, notify, assist, cmd — package-boundary errors must use
-    `%w`. **OFF:** `internal/checks/` and `internal/conn/` (probe I/O becomes
-    Result/check messages; expand per protocol with contextual `%w` when
-    cleaning one, not en masse).
+    locks, managers, notify, assist, cmd, and cleaned probes (today
+    `internal/conn/varnish.go`). **OFF:** `internal/checks/` and other
+    `internal/conn/*` files (probe I/O becomes Result/check messages; expand
+    per protocol with contextual `%w` when cleaning one, not en masse).
   - **`ireturn` ON:** operation, rules, config, state, non-wizard CLI and the
     rest of the tree. **OFF:** checks/notify builders, conn registry, app
     watch/hook/runtime seams, web Backend holder, assist/wizard, and manager
