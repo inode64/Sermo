@@ -1829,7 +1829,18 @@ dry_run: true
                 "30s",
                 ["type: swap"],
                 [
-                    ("usage", ['used_pct: { op: ">", value: 80 }', "for: { cycles: 10 }", "then: { notify: [none] }"]),
+                    # Swap usage is a *capacity* signal, not a pressure one: pages
+                    # parked by a past peak stay there because nothing needs them
+                    # back, so a host can sit at 100% with zero paging and plenty
+                    # of MemAvailable. Measured across this fleet, every host over
+                    # the old 80% had pswpin/pswpout at 0. 95% keeps the warning
+                    # that matters — no swap left to absorb the next spike, and the
+                    # step after that is the OOM killer — without flagging hosts
+                    # that are merely holding cold pages.
+                    #
+                    # `io` is the pressure signal and stays where it is: it counts
+                    # pages actually moving, which is what costs performance.
+                    ("usage", ['used_pct: { op: ">", value: 95 }', "for: { cycles: 10 }", "then: { notify: [none] }"]),
                     ("io", ['delta: { op: ">", value: 1000 }', "for: { cycles: 10 }", "then: { notify: [none] }"]),
                 ],
             ),

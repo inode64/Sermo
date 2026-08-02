@@ -737,5 +737,40 @@ class ClockAndDeadLetterGenerationTest(unittest.TestCase):
         self.assertIn('size: { op: ">", value: 0 }', body)
 
 
+class SwapWatchGenerationTest(unittest.TestCase):
+    """Swap usage is a capacity signal and swap io is the pressure one. Keeping
+    both, and keeping usage high enough that cold pages do not flag a host, is a
+    measured decision: across this fleet every host above the old 80% had
+    pswpin/pswpout at zero."""
+
+    def generate(self):
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        root = Path(temp.name)
+        stage = root / "stage" / "host" / "out"
+        stage.mkdir(parents=True)
+        (stage / "init").write_text("systemd\n", encoding="utf-8")
+        (stage / "active_units").write_text("", encoding="utf-8")
+        (stage / "proc_swaps").write_text(
+            "Filename\t\t\t\tType\t\tSize\t\tUsed\t\tPriority\n"
+            "/dev/sda2                               partition\t999420\t\t512\t\t-2\n",
+            encoding="utf-8",
+        )
+        generator.generate_for_host("host", stage, root / "configs", options=default_options())
+        return (root / "configs/host/root/etc/sermo/watches/watch-swap.yml").read_text(encoding="utf-8")
+
+    def test_usage_threshold_is_ninety_five(self):
+        body = self.generate()
+        self.assertIn('used_pct: { op: ">", value: 95 }', body)
+        self.assertNotIn("value: 80", body)
+
+    def test_io_pressure_metric_is_kept(self):
+        # Raising the usage threshold only makes sense while the metric that
+        # detects real thrashing is still there.
+        body = self.generate()
+        self.assertIn("io:", body)
+        self.assertIn('delta: { op: ">", value: 1000 }', body)
+
+
 if __name__ == "__main__":
     unittest.main()
