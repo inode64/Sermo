@@ -303,9 +303,7 @@ func scalarQueryCheckReadings(data map[string]any) []web.WatchReading {
 }
 
 func lvmCheckReadings(data map[string]any) []web.WatchReading {
-	rb := readingsFrom(data).
-		addString(checks.DataKeyDeviceState, watchReadingLabelState).
-		addMetric(checks.DataKeyProgressPct, "Progress", watchReadingProgressDecimals, metrics.MetricUnitPercent).
+	rb := deviceProgressReadings(data).
 		addString(checks.DataKeyHealth, watchReadingLabelHealth).
 		addString(checks.DataKeyVolumeGroup, watchReadingLabelVolumeGroup).
 		addString(checks.DataKeyLogicalVolume, watchReadingLabelLogicalVolume)
@@ -327,9 +325,7 @@ func lvmCheckReadings(data map[string]any) []web.WatchReading {
 }
 
 func raidCheckReadings(data map[string]any) []web.WatchReading {
-	rb := readingsFrom(data).
-		addString(checks.DataKeyDeviceState, watchReadingLabelState).
-		addMetric(checks.DataKeyProgressPct, "Progress", watchReadingProgressDecimals, metrics.MetricUnitPercent).
+	rb := deviceProgressReadings(data).
 		addString(checks.DataKeyArrays, watchReadingLabelArrays).
 		addString(checks.DataKeyDegraded, watchReadingLabelDegraded).
 		addString(checks.DataKeyRecovering, watchReadingLabelRecovering).
@@ -345,6 +341,14 @@ func raidCheckReadings(data map[string]any) []web.WatchReading {
 		rb.add(watchReadingFieldRAIDArrayPrefix+detail.Name, detail.Name, raidArrayReading(detail))
 	}
 	return rb.readings()
+}
+
+// deviceProgressReadings starts the readings shared by storage devices that
+// expose their state and a generic operation-progress percentage.
+func deviceProgressReadings(data map[string]any) *readingBuilder {
+	return readingsFrom(data).
+		addString(checks.DataKeyDeviceState, watchReadingLabelState).
+		addMetric(checks.DataKeyProgressPct, "Progress", watchReadingProgressDecimals, metrics.MetricUnitPercent)
 }
 
 func raidArrayReading(detail checks.RaidArrayStatus) string {
