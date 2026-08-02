@@ -661,7 +661,7 @@ make check                      # vet, fmt-check, lint, yaml-validate, go test .
 YAML toolchain (install once):
 
 ```sh
-go install github.com/google/yamlfmt/cmd/yamlfmt@latest
+go install github.com/google/yamlfmt/cmd/yamlfmt@v0.21.0
 pip install yamllint            # or pipx install yamllint
 make yaml-fmt                   # format tracked YAML (catalog, examples, docs, …)
 make yaml-validate              # yamlfmt -lint + yamllint (also runs via make validate)
