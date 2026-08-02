@@ -316,19 +316,25 @@ func nativeGroupID(name string) (uint32, bool) {
 }
 
 func nativeUserName(uid uint32) (string, bool) {
-	u, err := user.LookupId(strconv.FormatUint(uint64(uid), numericIDBase))
-	if err != nil || u.Username == "" {
-		return "", false
-	}
-	return u.Username, true
+	return nativeName(uid, user.LookupId, func(u *user.User) string { return u.Username })
 }
 
 func nativeGroupName(gid uint32) (string, bool) {
-	g, err := user.LookupGroupId(strconv.FormatUint(uint64(gid), numericIDBase))
-	if err != nil || g.Name == "" {
+	return nativeName(gid, user.LookupGroupId, func(g *user.Group) string { return g.Name })
+}
+
+// nativeName resolves a numeric passwd/group ID through the os/user lookup and
+// reads the record's name, reporting false when the lookup fails or the record
+// carries no name.
+func nativeName[T any](id uint32, lookup func(string) (*T, error), name func(*T) string) (string, bool) {
+	record, err := lookup(strconv.FormatUint(uint64(id), numericIDBase))
+	if err != nil {
 		return "", false
 	}
-	return g.Name, true
+	if got := name(record); got != "" {
+		return got, true
+	}
+	return "", false
 }
 
 // parseUnixDatabaseLine extracts the name and numeric ID from the shared

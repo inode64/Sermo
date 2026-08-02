@@ -201,6 +201,21 @@ func unexpectedGreeting(code int, greeting string) error {
 	return fmt.Errorf("unexpected greeting: %d %s", code, greeting)
 }
 
+// sendTextCommand writes command and reads its status reply through tp. It is
+// the write-then-read step every textproto handshake (FTP, SMTP, NNTP) repeats
+// per command after readTextGreeting; the caller owns which status codes it
+// accepts. command must already carry its CRLF terminator.
+func sendTextCommand(rw io.Writer, tp *textproto.Reader, command string) (int, string, error) {
+	if _, err := io.WriteString(rw, command); err != nil {
+		return 0, "", fmt.Errorf("send text command: %w", err)
+	}
+	code, text, err := tp.ReadResponse(0)
+	if err != nil {
+		return code, text, fmt.Errorf("read text command reply: %w", err)
+	}
+	return code, text, nil
+}
+
 // probeLineCommand dials cfg (dialDeadline semantics), optionally sends
 // command, reads one greeting line and parses it with parse; a foreign reply
 // (parse ok=false) fails with errFormat applied to the offending line. The

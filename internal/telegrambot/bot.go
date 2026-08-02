@@ -6,6 +6,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"sermo/internal/ctxutil"
 )
 
 const (
@@ -83,7 +85,7 @@ func (b *Bot) Run(ctx context.Context) {
 		if !cfg.active() || cl == nil {
 			// Disabled or tokenless (possibly after a reload): idle rather than
 			// busy-loop, and re-check on the next tick.
-			if !sleepCtx(ctx, idlePollInterval) {
+			if !ctxutil.Sleep(ctx, idlePollInterval) {
 				return
 			}
 			continue
@@ -94,7 +96,7 @@ func (b *Bot) Run(ctx context.Context) {
 				return
 			}
 			b.log.Warn("telegram getUpdates failed", "error", err)
-			if !sleepCtx(ctx, pollErrorBackoff) {
+			if !ctxutil.Sleep(ctx, pollErrorBackoff) {
 				return
 			}
 			continue
@@ -151,17 +153,5 @@ func (b *Bot) handleUpdate(ctx context.Context, cfg Config, cl *client, u update
 	}
 	if err := cl.sendMessage(ctx, msg.Chat.ID, msg.MessageThreadID, reply); err != nil {
 		b.log.Warn("telegram sendMessage failed", "error", err)
-	}
-}
-
-// sleepCtx waits d or returns false if ctx is cancelled first.
-func sleepCtx(ctx context.Context, d time.Duration) bool {
-	timer := time.NewTimer(d)
-	defer timer.Stop()
-	select {
-	case <-ctx.Done():
-		return false
-	case <-timer.C:
-		return true
 	}
 }

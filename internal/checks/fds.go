@@ -33,11 +33,9 @@ type fdsCheck struct {
 }
 
 func (c fdsCheck) Run(_ context.Context) Result {
-	sampler := samplerOr(c.sampler, defaultFdsSampler)
-	return runLevelCountCheck(c.base, c.preds, func() (uint64, uint64, error) {
-		s, err := sampler()
-		return s.Allocated, s.Max, err
-	}, "fds", "allocated", DataKeyAllocated)
+	return runSampledLevelCount(c.base, c.preds, samplerOr(c.sampler, defaultFdsSampler),
+		func(s FdsSample) (uint64, uint64) { return s.Allocated, s.Max },
+		"fds", "allocated", DataKeyAllocated)
 }
 
 // defaultFdsSampler reads allocated (field 1) and max (field 3). The middle

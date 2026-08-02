@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"sermo/internal/config"
+	"sermo/internal/ctxutil"
 )
 
 // Scheduler runs each worker on its own goroutine with an independent interval
@@ -47,7 +48,7 @@ func (s Scheduler) Run(ctx context.Context, workers []*Worker, watches []*Watch,
 	// Grace period before the first cycle so a still-booting host can settle.
 	// A shutdown signal during the wait aborts cleanly without starting workers.
 	if s.StartupDelay > 0 {
-		if !sleepCtx(ctx, s.StartupDelay) {
+		if !ctxutil.Sleep(ctx, s.StartupDelay) {
 			if ready != nil {
 				ready.MarkShuttingDown()
 			}
@@ -146,7 +147,7 @@ func staggerOffset(idx, total int, interval time.Duration) time.Duration {
 // new operation during shutdown).
 func runCycler(ctx context.Context, c cycler, interval, offset time.Duration) {
 	if offset > 0 {
-		if !sleepCtx(ctx, offset) {
+		if !ctxutil.Sleep(ctx, offset) {
 			return
 		}
 	}
@@ -155,7 +156,7 @@ func runCycler(ctx context.Context, c cycler, interval, offset time.Duration) {
 			return
 		}
 		runCycleGuarded(ctx, c)
-		if !sleepCtx(ctx, interval) {
+		if !ctxutil.Sleep(ctx, interval) {
 			return
 		}
 	}
@@ -174,16 +175,4 @@ func runCycleGuarded(ctx context.Context, c cycler) {
 		}
 	}()
 	c.RunCycle(ctx)
-}
-
-// sleepCtx waits for d or ctx cancellation, returning false if cancelled.
-func sleepCtx(ctx context.Context, d time.Duration) bool {
-	timer := time.NewTimer(d)
-	defer timer.Stop()
-	select {
-	case <-ctx.Done():
-		return false
-	case <-timer.C:
-		return true
-	}
 }

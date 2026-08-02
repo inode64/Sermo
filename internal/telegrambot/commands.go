@@ -69,12 +69,18 @@ func parseCommand(text string) (name string, args []string) {
 	return name, fields[1:]
 }
 
-func cmdStatus(ctx context.Context, b *Bot, _ []string) (string, error) {
-	rep, err := b.reporter.Status(ctx)
+// reportCommand is the body of the argument-less report commands: read through
+// the Reporter, name the command if that fails, otherwise render the reading.
+func reportCommand[T any](ctx context.Context, name string, fetch func(context.Context) (T, error), format func(T) string) (string, error) {
+	reading, err := fetch(ctx)
 	if err != nil {
-		return "", fmt.Errorf("status: %w", err)
+		return "", fmt.Errorf("%s: %w", name, err)
 	}
-	return formatStatus(rep), nil
+	return format(reading), nil
+}
+
+func cmdStatus(ctx context.Context, b *Bot, _ []string) (string, error) {
+	return reportCommand(ctx, "status", b.reporter.Status, formatStatus)
 }
 
 func cmdServices(ctx context.Context, b *Bot, args []string) (string, error) {
@@ -95,11 +101,7 @@ func cmdServices(ctx context.Context, b *Bot, args []string) (string, error) {
 }
 
 func cmdWatches(ctx context.Context, b *Bot, _ []string) (string, error) {
-	lines, err := b.reporter.Watches(ctx)
-	if err != nil {
-		return "", fmt.Errorf("watches: %w", err)
-	}
-	return formatWatches(lines), nil
+	return reportCommand(ctx, "watches", b.reporter.Watches, formatWatches)
 }
 
 func cmdSLA(ctx context.Context, b *Bot, args []string) (string, error) {

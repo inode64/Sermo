@@ -50,20 +50,14 @@ func ftpHandshake(rw io.ReadWriter, cfg Config) (Result, error) {
 		if user == "" {
 			user = ftpAnonymousUser
 		}
-		if _, err := fmt.Fprintf(rw, ftpCommandUserFormat, user); err != nil {
-			return Result{}, err
-		}
-		code, text, err := tp.ReadResponse(0)
+		code, text, err := sendTextCommand(rw, tp, fmt.Sprintf(ftpCommandUserFormat, user))
 		if err != nil {
 			return Result{}, err
 		}
 		switch {
 		case code == ftpStatusLoggedIn: // logged in, no password needed
 		case code == ftpStatusNeedPass || code == ftpStatusNeedAccount: // password (or account) required
-			if _, err := fmt.Fprintf(rw, ftpCommandPassFormat, cfg.Password); err != nil {
-				return Result{}, err
-			}
-			code, text, err = tp.ReadResponse(0)
+			code, text, err = sendTextCommand(rw, tp, fmt.Sprintf(ftpCommandPassFormat, cfg.Password))
 			if err != nil {
 				return Result{}, err
 			}

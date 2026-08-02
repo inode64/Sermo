@@ -144,24 +144,18 @@ func (s *ServiceMetricSampler) Series(name string, cur web.ServiceRuntime, since
 	if out, ok := s.persistentSeries(name, cur, at, since); ok {
 		return out
 	}
+	triplet := sampledMetricTriplet(runtimeMetricCheck, since, samples,
+		func(p serviceMetricSample) time.Time { return p.at },
+		func(p serviceMetricSample) (float64, bool) { return p.current.CPU, p.current.HasCPU },
+		func(p serviceMetricSample) (float64, bool) { return float64(p.current.RSS), p.current.Count > 0 },
+		func(p serviceMetricSample) (float64, bool) { return p.current.IORate, p.current.IOReady },
+	)
 	return web.ServiceRuntimeMetrics{
 		Since:   since.String(),
 		Current: cur,
-		CPU: metricSeries(
-			runtimeMetricCheck, metrics.MetricCPU, metrics.MetricUnitPercent, since, samples,
-			func(p serviceMetricSample) time.Time { return p.at },
-			func(p serviceMetricSample) (float64, bool) { return p.current.CPU, p.current.HasCPU },
-		),
-		Memory: metricSeries(
-			runtimeMetricCheck, metrics.MetricMemory, metrics.MetricUnitBytes, since, samples,
-			func(p serviceMetricSample) time.Time { return p.at },
-			func(p serviceMetricSample) (float64, bool) { return float64(p.current.RSS), p.current.Count > 0 },
-		),
-		IO: metricSeries(
-			runtimeMetricCheck, metrics.MetricIO, metrics.MetricUnitBytesPerSecond, since, samples,
-			func(p serviceMetricSample) time.Time { return p.at },
-			func(p serviceMetricSample) (float64, bool) { return p.current.IORate, p.current.IOReady },
-		),
+		CPU:     triplet.cpu,
+		Memory:  triplet.memory,
+		IO:      triplet.io,
 	}
 }
 

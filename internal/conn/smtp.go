@@ -46,20 +46,14 @@ func smtpHandshake(rw io.ReadWriter, cfg Config) (Result, error) {
 		return Result{}, unexpectedGreeting(code, greeting)
 	}
 
-	if _, err := fmt.Fprint(rw, smtpCommandEHLO); err != nil {
-		return Result{}, err
-	}
-	code, _, err = tp.ReadResponse(0)
+	code, _, err = sendTextCommand(rw, tp, smtpCommandEHLO)
 	if err != nil {
 		return Result{}, err
 	}
 	if code != smtpStatusRequestedActionOK {
 		// Older servers may not support EHLO; try HELO.
-		if _, err := fmt.Fprint(rw, smtpCommandHELO); err != nil {
-			return Result{}, err
-		}
 		var text string
-		if code, text, err = tp.ReadResponse(0); err != nil {
+		if code, text, err = sendTextCommand(rw, tp, smtpCommandHELO); err != nil {
 			return Result{}, err
 		}
 		if code != smtpStatusRequestedActionOK {
@@ -69,10 +63,7 @@ func smtpHandshake(rw io.ReadWriter, cfg Config) (Result, error) {
 
 	if cfg.User != "" {
 		token := base64.StdEncoding.EncodeToString([]byte(smtpAuthPlainDelimiter + cfg.User + smtpAuthPlainDelimiter + cfg.Password))
-		if _, err := fmt.Fprintf(rw, smtpCommandAuthPlainFormat, token); err != nil {
-			return Result{}, err
-		}
-		code, text, err := tp.ReadResponse(0)
+		code, text, err := sendTextCommand(rw, tp, fmt.Sprintf(smtpCommandAuthPlainFormat, token))
 		if err != nil {
 			return Result{}, err
 		}

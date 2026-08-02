@@ -690,8 +690,7 @@ func (s *Store) SetServiceCheckSnapshots(service string, records map[string]Chec
 				`INSERT INTO service_check_snapshot
 				   (service, check_name, check_type, ok, condition, optional, skipped, message, data, ran, at)
 				 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
-				service, name, rec.CheckType, boolInt(rec.OK), boolInt(rec.Condition), boolInt(rec.Optional), boolInt(rec.Skipped),
-				rec.Message, data, boolInt(rec.Ran), timeUnixNano(rec.At),
+				checkSnapshotArgs(rec, data, service, name)...,
 			); err != nil {
 				return fmt.Errorf("insert service check snapshot %s/%s: %w", service, name, err)
 			}
@@ -820,13 +819,23 @@ func (s *Store) SetWatchCheckSnapshot(watch, slot string, rec CheckSnapshotRecor
 		   data       = excluded.data,
 		   ran        = excluded.ran,
 		   at         = excluded.at;`,
-		watch, slot, rec.CheckType, boolInt(rec.OK), boolInt(rec.Condition), boolInt(rec.Optional), boolInt(rec.Skipped),
-		rec.Message, data, boolInt(rec.Ran), timeUnixNano(rec.At),
+		checkSnapshotArgs(rec, data, watch, slot)...,
 	)
 	if err != nil {
 		return fmt.Errorf("set watch check snapshot %s/%s: %w", watch, slot, err)
 	}
 	return nil
+}
+
+// checkSnapshotArgs builds the bind arguments both check-snapshot tables take:
+// the caller's key columns followed by the shared reading payload, in the column
+// order the two INSERTs declare. One definition keeps the service and watch
+// tables from drifting when a snapshot column is added.
+func checkSnapshotArgs(rec CheckSnapshotRecord, data string, keys ...any) []any {
+	return append(keys,
+		rec.CheckType, boolInt(rec.OK), boolInt(rec.Condition), boolInt(rec.Optional), boolInt(rec.Skipped),
+		rec.Message, data, boolInt(rec.Ran), timeUnixNano(rec.At),
+	)
 }
 
 func encodeSnapshotData(data map[string]any) (string, error) {
@@ -1199,36 +1208,63 @@ func (s *Store) SetRuleWindowStates(service string, records map[string]RuleWindo
 		})
 }
 
-func encodeUnixNanos(times []time.Time) (string, error) {
-	nanos := make([]int64, 0, len(times))
-	for _, t := range times {
-		if !t.IsZero() {
-			nanos = append(nanos, t.UTC().UnixNano())
+// The two JSON-encoded history columns (rule window timestamps and rule window
+// samples) share one round-trip shape: marshal the rows that carry a timestamp,
+// and on the way back drop any row whose timestamp did not survive. encodeRows
+// and decodeRows own that shape so each column only describes its own row.
+
+// encodeRows marshals the non-zero rows of values as a JSON column. what names
+// the column in errors.
+func encodeRows[T, R any](what string, values []T, row func(T) (R, bool)) (string, error) {
+	rows := make([]R, 0, len(values))
+	for _, value := range values {
+		if r, ok := row(value); ok {
+			rows = append(rows, r)
 		}
 	}
-	b, err := json.Marshal(nanos)
+	b, err := json.Marshal(rows)
 	if err != nil {
-		return "", fmt.Errorf("encode unix nanos: %w", err)
+		return "", fmt.Errorf("encode %s: %w", what, err)
 	}
 	return string(b), nil
 }
 
-func decodeUnixNanos(raw string) ([]time.Time, error) {
+// decodeRows unmarshals a JSON column written by encodeRows, skipping rows that
+// value rejects. An empty column decodes to no values, not an error.
+func decodeRows[R, T any](what, raw string, value func(R) (T, bool)) ([]T, error) {
 	if raw == "" {
 		return nil, nil
 	}
-	var nanos []int64
-	if err := json.Unmarshal([]byte(raw), &nanos); err != nil {
-		return nil, fmt.Errorf("decode unix nanos: %w", err)
+	var rows []R
+	if err := json.Unmarshal([]byte(raw), &rows); err != nil {
+		return nil, fmt.Errorf("decode %s: %w", what, err)
 	}
-	out := make([]time.Time, 0, len(nanos))
-	for _, n := range nanos {
-		if n != 0 {
-			out = append(out, time.Unix(0, n).UTC())
+	out := make([]T, 0, len(rows))
+	for _, r := range rows {
+		if v, ok := value(r); ok {
+			out = append(out, v)
 		}
 	}
 	return out, nil
 }
+
+func encodeUnixNanos(times []time.Time) (string, error) {
+	return encodeRows(columnUnixNanos, times, func(t time.Time) (int64, bool) {
+		return t.UTC().UnixNano(), !t.IsZero()
+	})
+}
+
+func decodeUnixNanos(raw string) ([]time.Time, error) {
+	return decodeRows(columnUnixNanos, raw, func(n int64) (time.Time, bool) {
+		return time.Unix(0, n).UTC(), n != 0
+	})
+}
+
+// column* name the JSON-encoded history columns in encode/decode errors.
+const (
+	columnUnixNanos         = "unix nanos"
+	columnRuleWindowSamples = "rule window samples"
+)
 
 type ruleWindowSampleJSON struct {
 	At    int64 `json:"at"`
@@ -1236,36 +1272,15 @@ type ruleWindowSampleJSON struct {
 }
 
 func encodeRuleWindowSamples(samples []RuleWindowSample) (string, error) {
-	raw := make([]ruleWindowSampleJSON, 0, len(samples))
-	for _, sample := range samples {
-		if sample.At.IsZero() {
-			continue
-		}
-		raw = append(raw, ruleWindowSampleJSON{At: sample.At.UTC().UnixNano(), Match: sample.Match})
-	}
-	b, err := json.Marshal(raw)
-	if err != nil {
-		return "", fmt.Errorf("encode rule window samples: %w", err)
-	}
-	return string(b), nil
+	return encodeRows(columnRuleWindowSamples, samples, func(s RuleWindowSample) (ruleWindowSampleJSON, bool) {
+		return ruleWindowSampleJSON{At: s.At.UTC().UnixNano(), Match: s.Match}, !s.At.IsZero()
+	})
 }
 
 func decodeRuleWindowSamples(raw string) ([]RuleWindowSample, error) {
-	if raw == "" {
-		return nil, nil
-	}
-	var encoded []ruleWindowSampleJSON
-	if err := json.Unmarshal([]byte(raw), &encoded); err != nil {
-		return nil, fmt.Errorf("decode rule window samples: %w", err)
-	}
-	out := make([]RuleWindowSample, 0, len(encoded))
-	for _, sample := range encoded {
-		if sample.At == 0 {
-			continue
-		}
-		out = append(out, RuleWindowSample{At: time.Unix(0, sample.At).UTC(), Match: sample.Match})
-	}
-	return out, nil
+	return decodeRows(columnRuleWindowSamples, raw, func(s ruleWindowSampleJSON) (RuleWindowSample, bool) {
+		return RuleWindowSample{At: time.Unix(0, s.At).UTC(), Match: s.Match}, s.At != 0
+	})
 }
 
 func timeUnixNano(t time.Time) int64 {

@@ -35,11 +35,9 @@ type conntrackCheck struct {
 }
 
 func (c conntrackCheck) Run(_ context.Context) Result {
-	sampler := samplerOr(c.sampler, defaultConntrackSampler)
-	return runLevelCountCheck(c.base, c.preds, func() (uint64, uint64, error) {
-		s, err := sampler()
-		return s.Count, s.Max, err
-	}, "conntrack", "entries", DataKeyCount)
+	return runSampledLevelCount(c.base, c.preds, samplerOr(c.sampler, defaultConntrackSampler),
+		func(s ConntrackSample) (uint64, uint64) { return s.Count, s.Max },
+		"conntrack", "entries", DataKeyCount)
 }
 
 // defaultConntrackSampler reads the conntrack count and max from

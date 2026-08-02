@@ -224,28 +224,35 @@ func smtpDialContext(timeout time.Duration) gomail.DialContextFunc {
 	}
 }
 
+// deadlineKind* name each deadline in the error a failed SetDeadline reports.
+const (
+	deadlineKindConnection = "connection"
+	deadlineKindRead       = "read"
+	deadlineKindWrite      = "write"
+)
+
 type boundedDeadlineConn struct {
 	net.Conn
 	limit time.Time
 }
 
 func (c *boundedDeadlineConn) SetDeadline(t time.Time) error {
-	if err := c.Conn.SetDeadline(c.deadline(t)); err != nil {
-		return fmt.Errorf("set connection deadline: %w", err)
-	}
-	return nil
+	return c.bound(deadlineKindConnection, c.Conn.SetDeadline, t)
 }
 
 func (c *boundedDeadlineConn) SetReadDeadline(t time.Time) error {
-	if err := c.Conn.SetReadDeadline(c.deadline(t)); err != nil {
-		return fmt.Errorf("set read deadline: %w", err)
-	}
-	return nil
+	return c.bound(deadlineKindRead, c.Conn.SetReadDeadline, t)
 }
 
 func (c *boundedDeadlineConn) SetWriteDeadline(t time.Time) error {
-	if err := c.Conn.SetWriteDeadline(c.deadline(t)); err != nil {
-		return fmt.Errorf("set write deadline: %w", err)
+	return c.bound(deadlineKindWrite, c.Conn.SetWriteDeadline, t)
+}
+
+// bound applies set with t clamped to the connection's overall limit, naming
+// which of the three deadlines failed.
+func (c *boundedDeadlineConn) bound(kind string, set func(time.Time) error, t time.Time) error {
+	if err := set(c.deadline(t)); err != nil {
+		return fmt.Errorf("set %s deadline: %w", kind, err)
 	}
 	return nil
 }

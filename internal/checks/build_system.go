@@ -5,6 +5,29 @@ import (
 	"sermo/internal/execx"
 )
 
+// buildLevelCheck runs the shared prologue of every check configured only by
+// level predicates over fields, handing the parsed predicates to build. It is
+// the whole body of the kernel-resource counter builders (users, fds, memory,
+// pids, conntrack), which differ only in their field list and the check they
+// construct.
+func buildLevelCheck(entry map[string]any, fields []string, label string, build func([]levelPred) Check) (Check, string) {
+	preds, errs := requireLevelPreds(entry, fields, label)
+	if errs != "" {
+		return nil, errs
+	}
+	return build(preds), ""
+}
+
+// buildSingleLevelCheck is buildLevelCheck for the checks whose field list holds
+// exactly one predicate (entropy, zombies).
+func buildSingleLevelCheck(entry map[string]any, fields []string, label string, build func(levelPred) Check) (Check, string) {
+	pred, errs := requireSingleLevelPred(entry, fields, label)
+	if errs != "" {
+		return nil, errs
+	}
+	return build(pred), ""
+}
+
 // buildLoadCheck builds a system load-average check.
 func buildLoadCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 	preds, errs := requireLevelPreds(entry, LoadPredFields, "load check")
@@ -16,11 +39,9 @@ func buildLoadCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 
 // buildUsersCheck builds a logged-in-user count check.
 func buildUsersCheck(b base, entry map[string]any, deps Deps) (Check, string) {
-	preds, errs := requireLevelPreds(entry, UsersPredFields, "users check")
-	if errs != "" {
-		return nil, errs
-	}
-	return usersCheck{base: b, preds: preds, sampler: deps.UsersSampler}, ""
+	return buildLevelCheck(entry, UsersPredFields, "users check", func(preds []levelPred) Check {
+		return usersCheck{base: b, preds: preds, sampler: deps.UsersSampler}
+	})
 }
 
 // buildProcessCountCheck builds a check on the number of processes matching an
@@ -115,29 +136,23 @@ func buildEdacCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 
 // buildFdsCheck builds an open file-descriptors check.
 func buildFdsCheck(b base, entry map[string]any, deps Deps) (Check, string) {
-	preds, errs := requireLevelPreds(entry, FdsPredFields, "fds check")
-	if errs != "" {
-		return nil, errs
-	}
-	return fdsCheck{base: b, preds: preds, sampler: deps.FdsSampler}, ""
+	return buildLevelCheck(entry, FdsPredFields, "fds check", func(preds []levelPred) Check {
+		return fdsCheck{base: b, preds: preds, sampler: deps.FdsSampler}
+	})
 }
 
 // buildMemoryCheck builds a system RAM check.
 func buildMemoryCheck(b base, entry map[string]any, deps Deps) (Check, string) {
-	preds, errs := requireLevelPreds(entry, MemoryPredFields, "memory check")
-	if errs != "" {
-		return nil, errs
-	}
-	return memoryCheck{base: b, preds: preds, sampler: deps.MemorySampler}, ""
+	return buildLevelCheck(entry, MemoryPredFields, "memory check", func(preds []levelPred) Check {
+		return memoryCheck{base: b, preds: preds, sampler: deps.MemorySampler}
+	})
 }
 
 // buildPidsCheck builds a kernel PID-table check.
 func buildPidsCheck(b base, entry map[string]any, deps Deps) (Check, string) {
-	preds, errs := requireLevelPreds(entry, PidsPredFields, "pids check")
-	if errs != "" {
-		return nil, errs
-	}
-	return pidsCheck{base: b, preds: preds, sampler: deps.PidsSampler}, ""
+	return buildLevelCheck(entry, PidsPredFields, "pids check", func(preds []levelPred) Check {
+		return pidsCheck{base: b, preds: preds, sampler: deps.PidsSampler}
+	})
 }
 
 // buildDiskIOCheck builds a block-device I/O rate check.
@@ -170,29 +185,23 @@ func buildPressureCheck(b base, entry map[string]any, deps Deps) (Check, string)
 
 // buildConntrackCheck builds a netfilter conntrack-table check.
 func buildConntrackCheck(b base, entry map[string]any, deps Deps) (Check, string) {
-	preds, errs := requireLevelPreds(entry, ConntrackPredFields, "conntrack check")
-	if errs != "" {
-		return nil, errs
-	}
-	return conntrackCheck{base: b, preds: preds, sampler: deps.ConntrackSampler}, ""
+	return buildLevelCheck(entry, ConntrackPredFields, "conntrack check", func(preds []levelPred) Check {
+		return conntrackCheck{base: b, preds: preds, sampler: deps.ConntrackSampler}
+	})
 }
 
 // buildEntropyCheck builds an available-entropy check.
 func buildEntropyCheck(b base, entry map[string]any, deps Deps) (Check, string) {
-	pred, errs := requireSingleLevelPred(entry, EntropyPredFields, "entropy check")
-	if errs != "" {
-		return nil, errs
-	}
-	return entropyCheck{base: b, op: pred.op, value: pred.value, sampler: deps.EntropySampler}, ""
+	return buildSingleLevelCheck(entry, EntropyPredFields, "entropy check", func(pred levelPred) Check {
+		return entropyCheck{base: b, op: pred.op, value: pred.value, sampler: deps.EntropySampler}
+	})
 }
 
 // buildZombieCheck builds a zombie-process count check.
 func buildZombieCheck(b base, entry map[string]any, deps Deps) (Check, string) {
-	pred, errs := requireSingleLevelPred(entry, ZombiePredFields, "zombies check")
-	if errs != "" {
-		return nil, errs
-	}
-	return zombieCheck{base: b, op: pred.op, value: pred.value, sampler: deps.ZombieSampler}, ""
+	return buildSingleLevelCheck(entry, ZombiePredFields, "zombies check", func(pred levelPred) Check {
+		return zombieCheck{base: b, op: pred.op, value: pred.value, sampler: deps.ZombieSampler}
+	})
 }
 
 // buildOomCheck builds an OOM-kill delta check (defaults to firing on any kill).
