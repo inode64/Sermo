@@ -82,6 +82,13 @@ func TestStoreWithBatchRejectsNilCallback(t *testing.T) {
 	}
 }
 
+func TestStoreWithBatchRejectsNilContext(t *testing.T) {
+	err := openTemp(t).WithBatch(nil, func(Batch) error { return nil }) //nolint:staticcheck // intentional nil ctx
+	if err == nil || !strings.Contains(err.Error(), "nil context") {
+		t.Fatalf("WithBatch(nil ctx) error = %v", err)
+	}
+}
+
 func TestStoreActiveDefaultsToNotFound(t *testing.T) {
 	s := openTemp(t)
 

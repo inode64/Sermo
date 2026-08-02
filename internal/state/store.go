@@ -326,12 +326,13 @@ func (b *batch) close() {
 
 // WithBatch runs record in one transaction. Returning an error from record
 // rolls back every sample in the batch; a later cycle can continue recording.
+// Callers must pass a non-nil ctx (typically the cycle or request context).
 func (s *Store) WithBatch(ctx context.Context, record func(Batch) error) error {
 	if record == nil {
 		return errors.New("record state batch: callback is nil")
 	}
 	if ctx == nil {
-		ctx = s.sqlCtx()
+		return errors.New("record state batch: nil context")
 	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -1363,16 +1364,16 @@ func (s *Store) RecentEventsBefore(beforeID int64, limit int) ([]EventRecord, er
 }
 
 // PruneEvents deletes event rows older than before. If before is zero, every
-// persisted event is deleted.
-func (s *Store) PruneEvents(before time.Time) (int64, error) {
+// persisted event is deleted. ctx bounds the DELETE (and any busy waits).
+func (s *Store) PruneEvents(ctx context.Context, before time.Time) (int64, error) {
 	var (
 		res sql.Result
 		err error
 	)
 	if before.IsZero() {
-		res, err = s.exec(s.sqlCtx(), `DELETE FROM event_log;`)
+		res, err = s.exec(ctx, `DELETE FROM event_log;`)
 	} else {
-		res, err = s.exec(s.sqlCtx(), `DELETE FROM event_log WHERE at < ?;`, before.UTC().UnixNano())
+		res, err = s.exec(ctx, `DELETE FROM event_log WHERE at < ?;`, before.UTC().UnixNano())
 	}
 	if err != nil {
 		return 0, fmt.Errorf("prune event log: %w", err)

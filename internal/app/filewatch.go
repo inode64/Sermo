@@ -273,7 +273,8 @@ func (w *fileWatcher) scan(now time.Time) map[string]fileState {
 func (w *fileWatcher) stateOf(info fs.FileInfo, now time.Time) fileState {
 	st := fileState{size: info.Size(), kind: checks.FileKind(info.Mode()), modifiedAt: info.ModTime()}
 	if sys, ok := info.Sys().(*syscall.Stat_t); ok {
-		st.perm = uint32(sys.Mode) & fileStatePermMask
+		// Mode is uint32 on every Linux GOARCH we target (see syscall.Stat_t).
+		st.perm = sys.Mode & fileStatePermMask
 		st.uid, st.gid = sys.Uid, sys.Gid
 	}
 	if w.cond.sizeOp != "" {
