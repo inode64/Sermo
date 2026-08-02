@@ -125,7 +125,7 @@ func (c *client) call(ctx context.Context, method string, body map[string]any, o
 	}
 	req.Header.Set(httpx.HeaderContentType, httpx.ContentTypeJSON)
 
-	resp, err := c.http.Do(req)
+	resp, err := httpx.Do(c.http, req)
 	if err != nil {
 		return fmt.Errorf("%s request: %w", method, netutil.URLErrorCause(err))
 	}

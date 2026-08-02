@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"sermo/internal/cfgval"
+	"sermo/internal/httpx"
 	"sermo/internal/netutil"
 	"sermo/internal/units"
 )
@@ -83,7 +84,7 @@ func (c *httpCheck) Run(ctx context.Context) Result {
 		req.Header.Set(k, v)
 	}
 
-	resp, err := client.Do(req)
+	resp, err := httpx.Do(client, req)
 	elapsed := time.Since(start)
 	if err != nil {
 		return c.result(false, fmt.Sprintf("%s %s: %v", c.method, netutil.RedactURL(c.url), netutil.URLErrorCause(err)), start)

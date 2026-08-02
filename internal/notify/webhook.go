@@ -108,7 +108,7 @@ func postWebhook(ctx context.Context, label, webhook string, headers map[string]
 	}
 
 	client := &http.Client{Timeout: webhookTimeout}
-	resp, err := client.Do(req)
+	resp, err := httpx.Do(client, req)
 	if err != nil {
 		// A transport error is a *url.Error whose text embeds the full request
 		// URL; for Telegram that URL carries the bot token, and this error is

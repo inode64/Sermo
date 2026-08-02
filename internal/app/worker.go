@@ -1159,7 +1159,7 @@ func (w *Worker) recoveredRuleMessage(ev *rules.Evaluator, r rules.Rule, change 
 		return prefix
 	}
 
-	label := strings.TrimSpace(strings.Join([]string{rc.checkType, rc.checkMetric}, " "))
+	label := strings.TrimSpace(rc.checkType + " " + rc.checkMetric)
 	if label == "" {
 		label = rc.checkName
 	}
