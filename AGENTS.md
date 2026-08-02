@@ -759,6 +759,10 @@ Tool notes:
   (operator-configured commands via `execx`), `G304` (paths under `/proc`,
   `paths.runtime`, fstab, config dirs), intentional `0644` writes, bounded
   `args[i]` reads, shutdown-context `G118`.
+
+  `errcheck` excludes `fmt.Fprint`/`Fprintf`/`Fprintln`: CLI and daemon operator
+  output must not fail the command path when stdout/stderr is a broken pipe.
+  Other ignored returns (notably `Close` on defers) use explicit `_ = …Close()`.
 - **`make docs-sync`** checks the documentation against the code it describes:
   every source path a document cites exists, every Go identifier a skill names
   exists, AGENTS.md names every linter `.golangci.yml` enables, every

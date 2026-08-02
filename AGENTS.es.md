@@ -768,6 +768,11 @@ Notas de herramientas:
   la config: `G204` (comandos del operador vía `execx`), `G304` (rutas bajo
   `/proc`, `paths.runtime`, fstab, dirs de config), escrituras `0644`
   intencionales, lecturas acotadas `args[i]`, `G118` de contexto de shutdown.
+
+  `errcheck` excluye `fmt.Fprint`/`Fprintf`/`Fprintln`: la salida de CLI/daemon
+  al operador no debe fallar el comando si stdout/stderr es un pipe roto. Otros
+  retornos ignorados (sobre todo `Close` en defers) usan `_ = …Close()`
+  explícito.
 - **`make docs-sync`** contrasta la documentación con el código que describe:
   toda ruta citada existe, todo identificador Go nombrado por una skill existe,
   AGENTS.md nombra todos los linters que habilita `.golangci.yml`, toda clave de

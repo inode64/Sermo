@@ -88,7 +88,7 @@ func (c *httpCheck) Run(ctx context.Context) Result {
 	if err != nil {
 		return c.result(false, fmt.Sprintf("%s %s: %v", c.method, netutil.RedactURL(c.url), netutil.URLErrorCause(err)), start)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if !c.expect.matches(resp.StatusCode) {
 		return c.result(false, fmt.Sprintf("status %d (want %s)", resp.StatusCode, c.expect), start)

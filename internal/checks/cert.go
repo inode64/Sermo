@@ -430,7 +430,7 @@ func defaultCertSampler(ctx context.Context, host, port, serverName string, veri
 	if err != nil {
 		return CertSample{}, err
 	}
-	defer nc.Close()
+	defer func() { _ = nc.Close() }()
 	tlsConn, ok := nc.(*tls.Conn)
 	if !ok {
 		return CertSample{}, fmt.Errorf("TLS dialer returned %T, want *tls.Conn", nc)

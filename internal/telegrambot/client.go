@@ -129,7 +129,7 @@ func (c *client) call(ctx context.Context, method string, body map[string]any, o
 	if err != nil {
 		return fmt.Errorf("%s request: %w", method, netutil.URLErrorCause(err))
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode/httpStatusClassDivisor != httpStatusClassSuccess {
 		snippet, _ := io.ReadAll(io.LimitReader(resp.Body, errorBodySnippetLimit))

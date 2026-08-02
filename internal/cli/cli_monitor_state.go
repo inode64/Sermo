@@ -69,7 +69,7 @@ func (a App) serviceMonitorState(ctx context.Context, opts options) monitorView 
 	if err != nil {
 		return view
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 	record, found, err := store.MonitorState(service)
 	if err != nil || !found {
 		return view

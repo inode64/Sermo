@@ -745,7 +745,7 @@ func (s *Store) groupedCheckSnapshots(query, label string) (map[string]map[strin
 	if err != nil {
 		return nil, fmt.Errorf("load %s: %w", label, err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	out := map[string]map[string]CheckSnapshotRecord{}
 	for rows.Next() {
@@ -1131,7 +1131,7 @@ func (s *Store) RuleWindowStates(service string) (map[string]RuleWindowRecord, e
 	if err != nil {
 		return nil, fmt.Errorf("load rule window states for %s: %w", service, err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	out := map[string]RuleWindowRecord{}
 	for rows.Next() {
@@ -1345,7 +1345,7 @@ func (s *Store) RecentEventsBefore(beforeID int64, limit int) ([]EventRecord, er
 	if err != nil {
 		return nil, fmt.Errorf("load recent events: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var out []EventRecord
 	for rows.Next() {
@@ -1575,7 +1575,7 @@ func (s *Store) loadSLASeries(service, check string, from, to time.Time) ([]SLAP
 	if err != nil {
 		return nil, fmt.Errorf("load %s series for %s: %w", slaKind(check), slaTarget(service, check), err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var out []SLAPoint
 	for rows.Next() {
@@ -1710,7 +1710,7 @@ func (s *Store) slaTimeline(service, check string, w SLAWindow, now time.Time) (
 	if err != nil {
 		return SLAWindowTimeline{}, fmt.Errorf("load SLA timeline for %s: %w", w.Name, err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	timeline := SLAWindowTimeline{Window: w.Name, Segments: make([]SLASegment, segCount)}
 	for rows.Next() {
@@ -1968,7 +1968,7 @@ func summaryFromRow(row *sql.Row) (MeasurementStat, error) {
 // measurementPointsFromRows scans per-minute aggregate rows shared by every
 // metric history table. The callers keep their distinct SQL and error context.
 func measurementPointsFromRows(rows *sql.Rows, scanContext, iterateContext string) ([]MeasurementPoint, error) {
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var out []MeasurementPoint
 	for rows.Next() {
