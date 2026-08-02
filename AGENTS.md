@@ -748,15 +748,14 @@ Tool notes:
   stay on for core, off only where design forces noise):
 
   - **`wrapcheck` ON:** operation, rules, config, state, app, cli, process, web,
-    locks, managers, notify, assist, cmd, and cleaned probes (today
-    `internal/conn/varnish.go`). **OFF:** `internal/checks/` and other
-    `internal/conn/*` files (probe I/O becomes Result/check messages; expand
-    per protocol with contextual `%w` when cleaning one, not en masse).
-  - **`ireturn` ON:** operation, rules, config, state, non-wizard CLI and the
-    rest of the tree. **OFF:** checks/notify builders, conn registry, app
-    watch/hook/runtime seams, web Backend holder, assist/wizard, and manager
-    constructors (`servicemgr`, dockerctl, virt, mountctl, locks, process
-    discover).
+    locks, managers, notify, assist, cmd, and probes with contextual errors.
+    **OFF:** only the `internal/checks/*` and `internal/conn/*` sources that
+    still turn raw transport failures into Result/check messages; expand each
+    with contextual `%w` before enabling it.
+  - **`ireturn` ON:** operation, rules, config, state, the conn registry, web,
+    CLI and the rest of the tree. **OFF:** checks/notify builders, app
+    watch/hook/runtime seams, the assist registry and manager factories. Other
+    intentional interface boundaries use a local, explained suppression.
 
   `noctx` is off in `internal/conn/` and `*_test.go`; `goconst` wants four
   occurrences before a shared constant is due.

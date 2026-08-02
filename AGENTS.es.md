@@ -758,15 +758,14 @@ Notas de herramientas:
   genera ruido):
 
   - **`wrapcheck` ON:** operation, rules, config, state, app, cli, process, web,
-    locks, managers, notify, assist, cmd y probes limpios (hoy
-    `internal/conn/varnish.go`). **OFF:** `internal/checks/` y el resto de
-    `internal/conn/*` (el I/O de probes acaba en mensajes Result/check; ampliar
-    por protocolo con `%w` contextual al limpiar uno, no en masa).
-  - **`ireturn` ON:** operation, rules, config, state, CLI no-wizard y el resto
-    del árbol. **OFF:** builders de checks/notify, registro conn, seams de app
-    (watch/hook/runtime), holder de web Backend, assist/wizard y constructores
-    de managers (`servicemgr`, dockerctl, virt, mountctl, locks, process
-    discover).
+    locks, managers, notify, assist, cmd y probes con errores contextuales.
+    **OFF:** solo los fuentes de `internal/checks/*` e `internal/conn/*` que aún
+    convierten fallos de transporte en mensajes Result/check; habilita cada uno
+    con `%w` contextual antes de abrirlo.
+  - **`ireturn` ON:** operation, rules, config, state, el registro conn, web,
+    CLI y el resto del árbol. **OFF:** builders de checks/notify, seams de app
+    (watch/hook/runtime), registro assist y factorías de managers. Las demás
+    fronteras intencionales de interfaz usan una supresión local justificada.
 
   `noctx` está desactivado en `internal/conn/` y `*_test.go`; `goconst` exige
   cuatro apariciones antes de pedir una constante.

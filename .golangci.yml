@@ -441,23 +441,24 @@ linters:
 
       # wrapcheck zone policy (same idea as ireturn):
       #   ON  — operation, rules, config, state, app, cli, process, web, locks,
-      #         managers, notify, assist, cmd, and cleaned probes (varnish.go).
-      #   OFF — checks/ and remaining conn/* (probe I/O becomes Result/check
-      #         messages). Expand one protocol at a time with contextual %w.
+      #         managers, notify, assist, cmd, and probes whose errors already
+      #         carry context.
+      #   OFF — check and conn sources that deliberately turn transport I/O
+      #         into Result/check messages. Expand those with contextual %w.
       - linters:
           - wrapcheck
-        path: '^internal/checks/'
-      # All conn production sources except varnish.go (wrapcheck-clean pilot).
+        path: '^internal/checks/(cert|commandcheck|conntrack|count|diskio|edac|fds|firewall_nftables|firewall_nftables_other|icmp|influxdb|meminfo|mongodb|mount|net|pids|pressure|raid|route|route_family_other|sensors|size|sql|storage|tcpcheck|users|websocket)\.go$'
+      # conn sources that still need contextual wrapping before the rule can run.
       - linters:
           - wrapcheck
-        path: '^internal/conn/(acpid|ajp|amqp|asterisk|avahi|bind|bind_linux|bind_other|ceph|chrony|clamd|cloudflared|conn|dbus|deadline|dhclient|dhcp|dhcp_linux|dhcp_other|dial|dns|docker|fail2ban|fpm|ftp|glusterfs|guacd|http_client|imap|influxdb|ipp|kafka|ldap|libvirt|lvmpolld|memcached|mongodb|mountd|mqtt|mysql|nebula|nfs|nntp|ntp|nut|openvpn|openvswitch|pop|postgres|prometheus|rdp|redis|rpcbind|rspamd|rsync|sieve|smb|smtp|snmp|spamd|ssh|statd|syncthing|tftp|udisks2|unifi)\.go$'
+        path: '^internal/conn/(ajp|amqp|avahi|bind|bind_linux|bind_other|ceph|chrony|conn|dbus|deadline|dhclient|dhcp|dhcp_linux|dhcp_other|dial|dns|docker|fpm|ftp|guacd|http_client|imap|ipp|kafka|ldap|libvirt|lvmpolld|memcached|mongodb|mqtt|mysql|nfs|nntp|ntp|nut|openvpn|openvswitch|pop|prometheus|rdp|redis|smb|smtp|snmp|ssh|syncthing|tftp|udisks2)\.go$'
 
       # ireturn zone policy:
-      #   ON  — operation, rules, config, state, non-wizard CLI and the rest of
-      #         the tree: accidental interface returns fail the gate.
-      #   OFF — central builders, registries and injectable seams that must
-      #         return interfaces (AGENTS: central builders, Backend holder,
-      #         managers).
+      #   ON  — every package except central builders, manager factories and
+      #         injectable seams: accidental interface returns fail the gate.
+      #   OFF — central builders and seams that must return interfaces
+      #         (AGENTS: Backend holder and managers). Other intentional
+      #         interface boundaries carry a local, explained suppression.
       - linters:
           - ireturn
         path: '^internal/checks/'
@@ -466,19 +467,10 @@ linters:
         path: '^internal/notify/'
       - linters:
           - ireturn
-        path: '^internal/conn/conn\.go$'
-      - linters:
-          - ireturn
         path: '^internal/app/(hook|watch_build|procwatch|serviceruntime|webholder)\.go$'
       - linters:
           - ireturn
-        path: '^internal/web/server\.go$'
-      - linters:
-          - ireturn
         path: '^internal/assist/assist\.go$'
-      - linters:
-          - ireturn
-        path: '^internal/cli/wizard\.go$'
       - linters:
           - ireturn
         path: '^internal/(servicemgr/manager|dockerctl/manager|virt/manager|mountctl/mountctl|locks/(named|scanner)|process/discover)\.go$'

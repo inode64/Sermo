@@ -540,6 +540,7 @@ func (r *registry) register(p Protocol, aliases ...string) {
 	}
 }
 
+//nolint:ireturn // A registry lookup must return the protocol interface registered by plugins.
 func (r *registry) lookup(name string) (Protocol, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -554,6 +555,8 @@ var defaultRegistry = newRegistry()
 func Register(p Protocol, aliases ...string) { defaultRegistry.register(p, aliases...) }
 
 // Lookup returns the protocol registered under name (canonical or alias).
+//
+//nolint:ireturn // The public registry API returns the protocol interface selected at runtime.
 func Lookup(name string) (Protocol, bool) { return defaultRegistry.lookup(name) }
 
 // DefaultPort returns the registered protocol's default port, or 0 when name is

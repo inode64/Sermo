@@ -187,6 +187,8 @@ func renderWizardWatchPreview(_ string, entries map[string]any) ([]byte, error) 
 // selectAssistant resolves the assistant from the first positional argument, or
 // asks the user to pick one. It returns a nil assistant with an exit code when
 // it cannot proceed.
+//
+//nolint:ireturn // The wizard selects one registered Assistant implementation at runtime.
 func (a App) selectAssistant(p *assist.Prompt, opts options) (assist.Assistant, int) {
 	if name := opts.service(); name != "" {
 		as, ok := assist.Lookup(name)
