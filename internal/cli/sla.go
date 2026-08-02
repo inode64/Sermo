@@ -54,28 +54,26 @@ func runWindowsReport[V any](ctx context.Context, a App, opts options, cfg *conf
 		return code
 	}
 
-	store, err := openStateStore(ctx, cfg)
-	if err != nil {
+	return withStateStore(ctx, cfg, func(err error) int {
 		return a.fail(opts, fmt.Sprintf("sla failed: %v", err))
-	}
-	defer func() { _ = store.Close() }()
-
-	now := time.Now()
-	reports := make([]serviceWindows[V], 0, len(services))
-	for _, name := range services {
-		values, err := report(store, name, now)
-		if err != nil {
-			return a.fail(opts, fmt.Sprintf("sla %s failed: %v", name, err))
+	}, func(store *state.Store) int {
+		now := time.Now()
+		reports := make([]serviceWindows[V], 0, len(services))
+		for _, name := range services {
+			values, err := report(store, name, now)
+			if err != nil {
+				return a.fail(opts, fmt.Sprintf("sla %s failed: %v", name, err))
+			}
+			reports = append(reports, serviceWindows[V]{Service: name, Windows: values})
 		}
-		reports = append(reports, serviceWindows[V]{Service: name, Windows: values})
-	}
 
-	if opts.json {
-		writeJSON(reports)
-	} else {
-		writeTable(reports)
-	}
-	return exitSuccess
+		if opts.json {
+			writeJSON(reports)
+		} else {
+			writeTable(reports)
+		}
+		return exitSuccess
+	})
 }
 
 func (a App) slaServices(opts options, cfg *config.Config) ([]string, int) {
@@ -107,24 +105,22 @@ func (a App) runSLASeries(ctx context.Context, opts options, cfg *config.Config)
 		window = defaultSLASeriesWindow
 	}
 
-	store, err := openStateStore(ctx, cfg)
-	if err != nil {
+	return withStateStore(ctx, cfg, func(err error) int {
 		return a.fail(opts, fmt.Sprintf("sla failed: %v", err))
-	}
-	defer func() { _ = store.Close() }()
+	}, func(store *state.Store) int {
+		now := time.Now()
+		points, err := store.SLASeries(service, now.Add(-window), now)
+		if err != nil {
+			return a.fail(opts, fmt.Sprintf("sla %s failed: %v", service, err))
+		}
 
-	now := time.Now()
-	points, err := store.SLASeries(service, now.Add(-window), now)
-	if err != nil {
-		return a.fail(opts, fmt.Sprintf("sla %s failed: %v", service, err))
-	}
-
-	if opts.json {
-		a.writeSLASeriesJSON(service, window, points)
-	} else {
-		a.writeSLASeriesTable(service, points, store.SeriesResolution(now.Add(-window), now))
-	}
-	return exitSuccess
+		if opts.json {
+			a.writeSLASeriesJSON(service, window, points)
+		} else {
+			a.writeSLASeriesTable(service, points, store.SeriesResolution(now.Add(-window), now))
+		}
+		return exitSuccess
+	})
 }
 
 // serviceWindows pairs one service with its per-window availability values.
