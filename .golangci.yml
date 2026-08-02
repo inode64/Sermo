@@ -23,6 +23,7 @@ linters:
     - depguard  # architecture import boundaries (see settings.depguard.rules)
     - dupword  # duplicated words (typos); off in *_test.go (protocol/script fixtures)
     - durationcheck  # suspicious time.Duration multiplications
+    - dogsled  # too many blank identifiers in one assignment
     - dupl  # duplicate code fragments
     - errcheck  # unchecked errors (defer Rollback/Release, I/O, …)
     - errchkjson  # json.Marshal/Encode error dropped while the value can fail to encode
@@ -83,6 +84,7 @@ linters:
     - unqueryvet  # prohibit SELECT * in production SQL queries
     - usetesting  # prefer testing.T cleanup-aware helpers
     - wastedassign
+    - whitespace  # leading/trailing blank lines inside a block
     - wrapcheck  # ON in core; OFF in checks/ + conn/ probe packages (see exclusions)
   settings:
     errcheck:
@@ -162,75 +164,30 @@ linters:
           deny:
             - pkg: os/exec$
               desc: use internal/execx; only lock wrap may execute operator argv directly
+    govet:
+      # Every analyzer `go vet` does not run by default — nilness, unusedwrite,
+      # sortslice, waitgroup, atomicalign, deepequalerrors, reflectvaluecompare,
+      # httpmux, hostport — is clean here, so they are gated to keep it that way.
+      # fieldalignment is a struct-layout debate (50 findings, all cosmetic
+      # ordering); shadow flags the idiomatic `if err := f(); err != nil`
+      # redeclaration 50 times, almost all in tests. Both stay off deliberately.
+      enable-all: true
+      disable:
+        - fieldalignment
+        - shadow
     exhaustive:
       # A default: arm is an explicit statement that the remaining cases are
       # handled; only flag switches with neither all cases nor a default.
       default-signifies-exhaustive: true
     gocritic:
-      disable-all: true
-      enabled-checks:
-        - appendAssign
-        - appendCombine
-        - argOrder
-        - assignOp  # n = n + 1 → n += 1 (and friends)
-        - badCall
-        - badCond
-        - badRegexp
-        - boolExprSimplify
-        - caseOrder
-        - defaultCaseOrder
-        - dupArg
-        - dupBranchBody
-        - dupCase
-        - dupSubExpr
-        - deferInLoop
-        - emptyFallthrough
-        - emptyStringTest  # s == "" is clearer than len(s) == 0 for strings
-        - equalFold  # strings.EqualFold over ToLower/ToUpper equality
-        - evalOrder  # force evaluation order that matches the intended side effects
-        - exitAfterDefer
-        - flagDeref
-        - httpNoBody
-        - ifElseChain
-        - importShadow
-        - indexAlloc
-        - mapKey
-        - nestingReduce  # collapse needless nested if/else
-        - newDeref
-        - nilValReturn
-        - offBy1
-        - octalLiteral
-        - paramTypeCombine
-        - preferFilepathJoin
-        - preferFprint  # prefer Fprint over WriteString(fmt.Sprint(...))
-        - preferStringWriter
-        - rangeAppendAll
-        - regexpMust
-        - regexpSimplify
-        - rangeExprCopy
-        - rangeValCopy  # avoid copying large values in daemon-cycle range loops
-        - regexpPattern
-        - sloppyLen
-        - sqlQuery
-        - sloppyReassign
-        - sloppyTypeAssert
-        - singleCaseSwitch
-        - sortSlice
-        - stringXbytes
-        - syncMapLoadAndDelete
-        - truncateCmp
-        - typeAssertChain
-        - typeSwitchVar
-        - timeExprSimplify
-        - underef
-        - unlabelStmt
-        - unlambda
-        - unnecessaryBlock
-        - unnecessaryDefer
-        - unslice
-        - weakCond
-        - whyNoLint
-        - wrapperFunc  # prefer strings.ReplaceAll, bytes.Split, …
+      # Everything gocritic ships, minus the two checks that fight this
+      # codebase's value semantics: hugeParam/unnamedResult would push pointer
+      # parameters and named results onto types that are deliberately copied.
+      # Measured: enable-all costs 0 findings beyond those two.
+      enable-all: true
+      disabled-checks:
+        - hugeParam
+        - unnamedResult
       settings:
         rangeValCopy:
           sizeThreshold: 256
@@ -355,6 +312,7 @@ linters:
           - contextcheck
           - copyloopvar
           - depguard
+          - dogsled
           - dupword
           - durationcheck
           - dupl
@@ -412,6 +370,7 @@ linters:
           - usestdlibvars
           - unqueryvet
           - wastedassign
+          - whitespace
           - wrapcheck
 
       # These native protocol encoders deliberately select fixed-width wire

@@ -343,7 +343,7 @@ func (c *Client) get(ctx context.Context, path string, out any) error {
 	if err != nil {
 		return fmt.Errorf("build Docker GET %s request: %w", path, err)
 	}
-	resp, err := c.HTTP.Do(req)
+	resp, err := httpx.Do(c.HTTP, req)
 	if err != nil {
 		return fmt.Errorf("send Docker GET %s request: %w", path, err)
 	}
@@ -365,7 +365,7 @@ func (c *Client) post(ctx context.Context, path string, body io.Reader, ok ...in
 	if err != nil {
 		return fmt.Errorf("build Docker POST %s request: %w", path, err)
 	}
-	resp, err := c.HTTP.Do(req)
+	resp, err := httpx.Do(c.HTTP, req)
 	if err != nil {
 		return fmt.Errorf("send Docker POST %s request: %w", path, err)
 	}

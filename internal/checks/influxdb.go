@@ -94,7 +94,7 @@ func (c influxCheck) influxqlScalar(ctx context.Context, client *http.Client, ba
 		req.SetBasicAuth(c.cfg.User, c.cfg.Password)
 	}
 
-	resp, err := client.Do(req)
+	resp, err := httpx.Do(client, req)
 	if err != nil {
 		return "", false, err
 	}
@@ -160,7 +160,7 @@ func (c influxCheck) fluxScalar(ctx context.Context, client *http.Client, base s
 	req.Header.Set(httpHeaderContentType, influxFluxContentType)
 	req.Header.Set(httpHeaderAccept, influxFluxAccept)
 
-	resp, err := client.Do(req)
+	resp, err := httpx.Do(client, req)
 	if err != nil {
 		return "", false, err
 	}

@@ -24,11 +24,11 @@ func readMeminfo() (meminfoSample, error) {
 // package needs (MemTotal/MemAvailable/SwapTotal/SwapFree in bytes); a missing
 // field stays zero.
 func parseMeminfo(data string) meminfoSample {
-	memTotal, memAvailable, swapTotal, swapFree, _, _, _, _ := metrics.ParseMeminfo([]byte(data))
+	m := metrics.ParseMeminfo([]byte(data))
 	return meminfoSample{
-		memoryTotalBytes:     memTotal,
-		memoryAvailableBytes: memAvailable,
-		swapTotalBytes:       swapTotal,
-		swapFreeBytes:        swapFree,
+		memoryTotalBytes:     m.MemTotal,
+		memoryAvailableBytes: m.MemAvailable,
+		swapTotalBytes:       m.SwapTotal,
+		swapFreeBytes:        m.SwapFree,
 	}
 }

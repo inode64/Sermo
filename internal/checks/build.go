@@ -295,6 +295,12 @@ func BuildWithWarnings(section map[string]any, deps Deps) ([]Built, []BuildWarni
 			})
 			continue
 		}
+		if check == nil {
+			// Unreachable: buildCheck turns a silent nil into a warning above.
+			// Kept so a future builder cannot land a nil check in the catalog
+			// that panics at Run time instead of failing to build.
+			continue
+		}
 		built = append(built, Built{Check: withSummary(check, entry), Optional: cfgval.Bool(entry[CheckKeyOptional])})
 	}
 	return built, warnings
@@ -372,7 +378,14 @@ func buildCheck(typ string, b base, entry map[string]any, runner execx.Runner, c
 		return nil, "missing type"
 	}
 	if builder, ok := checkBuilders[typ]; ok {
-		return builder(checkBuildInput{base: b, entry: entry, runner: runner, client: client, deps: deps})
+		check, warn := builder(checkBuildInput{base: b, entry: entry, runner: runner, client: client, deps: deps})
+		if warn == "" && check == nil {
+			// A builder must return either a check or a warning. Turning a
+			// silent nil into a warning keeps every caller's "no warning means
+			// a usable check" assumption true instead of merely intended.
+			return nil, fmt.Sprintf("check type %q produced no check", typ)
+		}
+		return check, warn
 	}
 	// A connection-protocol check (mysql, …) is owned by conn's extensible
 	// registry, so new protocols need no change in this builder.
@@ -454,8 +467,14 @@ func BuildInline(name string, entry map[string]any, deps Deps) (Check, error) {
 		condition: ResolveCondition(typ, cfgval.AsString(entry[CheckKeyReports])),
 	}
 	check, warn := buildCheck(typ, b, entry, runner, client, deps)
-	if warn != "" {
+	switch {
+	case warn != "":
 		return nil, errors.New(warn)
+	case check == nil:
+		// buildCheck already turns a silent nil into a warning, so this is
+		// unreachable — but BuildInline's caller runs the check straight away,
+		// and an error beats a nil dereference if that ever stops holding.
+		return nil, fmt.Errorf("check %q: type %q produced no check", name, typ)
 	}
 	return withSummary(check, entry), nil
 }

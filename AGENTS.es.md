@@ -730,19 +730,21 @@ Notas de herramientas:
     `gomoddirectives`, `gomodguard`, `iface`, `inamedparam`, `interfacebloat`, `iotamixing`,
     `ireturn`, `musttag`, `predeclared`, `wrapcheck`
   - *Idioma y modernización:*
-    `dupword`, `exptostd`, `gocheckcompilerdirectives`, `gocritic`,
+    `dogsled`, `dupword`, `exptostd`, `gocheckcompilerdirectives`, `gocritic`,
     `goprintffuncname`, `intrange`, `loggercheck`, `mirror`, `misspell`,
-    `modernize`, `nolintlint`, `sloglint`, `unconvert`, `usestdlibvars`
+    `modernize`, `nolintlint`, `sloglint`, `unconvert`, `usestdlibvars`,
+    `whitespace`
   - *Tests:*
     `testableexamples`, `thelper`, `tparallel`, `usetesting`
 
   Salvedades del proyecto, todas codificadas en `.golangci.yml`: `dupl` corre
-  con umbral de 70 tokens en vez de los 150 por defecto, y está desactivado en
+  con umbral de 60 tokens en vez de los 150 por defecto, y está desactivado en
   `*_test.go`; los linters de producción están desactivados en `*_test.go` para
   que los fixtures sigan centrados, mientras `nolintlint`, `testableexamples`,
   `thelper`, `tparallel` y `usetesting` sí corren ahí; `gocognit`/`gocyclo`
   usan un presupuesto de 30 y `maintidx` un mínimo de 20; `gocritic` ejecuta
-  una lista curada, no el set por defecto; `gomodguard` permite solo
+  todos los checks salvo `hugeParam` y `unnamedResult`, y `govet` todos los
+  analizadores salvo `fieldalignment` y `shadow`; `gomodguard` permite solo
   dependencias de producción directas revisadas; `nolintlint` exige supresiones
   específicas, explicadas y aún necesarias; `loggercheck` exige claves string
   estructuradas de slog y rechaza logging de tipo printf; `dupword` y
@@ -779,6 +781,22 @@ Notas de herramientas:
 
   `noctx` está desactivado en `internal/conn/` y `*_test.go`; `goconst` exige
   cuatro apariciones antes de pedir una constante.
+
+  `govet` y `gocritic` corren con **todos** sus analizadores/checks activos,
+  menos una lista corta y medida: `fieldalignment` (orden de campos) y `shadow`
+  (marca la redeclaración idiomática `if err := f(); err != nil`) en govet;
+  `hugeParam` y `unnamedResult` en gocritic, que chocan con la semántica de
+  valor y los resultados con nombre que este código usa a propósito. Todo lo
+  demás —`nilness`, `unusedwrite`, `sortslice`, `waitgroup`, `atomicalign`,
+  `deepequalerrors`, `reflectvaluecompare` y el conjunto de diagnóstico de
+  gocritic— está activado con cero hallazgos. No recortes esas listas para
+  evitar un arreglo.
+
+  **NilAway** es un despliegue, no un piloto: `NILAWAY_PACKAGES` en el Makefile
+  activa todos los paquetes ya libres de posibles nil panics, y
+  `NILAWAY_DEFERRED` lista los cuatro que aún reportan. Limpia un paquete, corre
+  `make nilaway` y muévelo. `deadcode -test` forma parte de `make lint` y debe
+  seguir en cero.
 
   El `database/sql` de producción en `internal/state` usa métodos `*Context` con
   `sqlCtx()` (ctx de `OpenContext` / `context.Background()` vía `Open`).

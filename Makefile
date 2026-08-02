@@ -187,11 +187,34 @@ fmt-check:
 # Safety packages for NilAway and cover-gate. Operation/process own start/stop/
 # signal paths; locks/rules/config gate remediation policy and untrusted YAML.
 SAFETY_PACKAGES := ./internal/operation ./internal/process ./internal/locks ./internal/rules ./internal/config
-NILAWAY_PACKAGES := ./internal/operation/... ./internal/process/...
+# NilAway gates every package that is already free of potential nil panics, so
+# no new one can appear there. It is a rollout, not a pilot: the ten packages
+# listed under NILAWAY_DEFERRED still report findings and join this list as they
+# are cleared. Do not add a package here without running `make nilaway` first.
+NILAWAY_PACKAGES := \
+	./cmd/sermoctl/... \
+	./internal/appinspect/... ./internal/assist/... ./internal/buildinfo/... \
+	./internal/cfgval/... ./internal/cliutil/... ./internal/control/... \
+	./internal/ctxutil/... ./internal/diag/... ./internal/emission/... \
+	./internal/execx/... ./internal/httpx/... ./internal/locks/... \
+	./internal/logfile/... ./internal/metrics/... ./internal/mountctl/... \
+	./internal/mounts/... ./internal/netutil/... ./internal/operation/... \
+	./internal/output/... ./internal/process/... ./internal/procnet/... \
+	./internal/checks/... ./internal/conn/... ./internal/dockerctl/... \
+	./internal/notify/... ./internal/rules/... \
+	./internal/telegrambot/... \
+	./internal/servicemgr/... ./internal/state/... ./internal/strutil/... \
+	./internal/telegramapi/... ./internal/units/... ./internal/utmp/... \
+	./internal/virt/... ./internal/volume/... ./internal/web/... \
+	./internal/webcred/...
+
+# Still reporting NilAway findings; clear a package, then move it above.
+NILAWAY_DEFERRED := ./cmd/sermod/... ./internal/app/... ./internal/cli/... \
+	./internal/config/...
 
 # Static analysis. Finds Go-installed tools in ~/go/bin: staticcheck, revive,
 # golangci-lint (runs gosec plus focused bug analyzers via .golangci.yml),
-# govulncheck, and nilaway (operation + process pilot).
+# govulncheck, deadcode and nilaway (see NILAWAY_PACKAGES).
 lint: fmt-check
 	@echo "go fix -diff $(GO_PACKAGES)"
 	@go fix -diff $(GO_PACKAGES)
@@ -205,8 +228,10 @@ lint: fmt-check
 	@$(LINT_CACHE_ENV) govulncheck $(GO_PACKAGES)
 	@echo "nilaway -exclude-test-files $(NILAWAY_PACKAGES)"
 	@$(LINT_PATH) nilaway -exclude-test-files -pretty-print=false $(NILAWAY_PACKAGES)
+	@echo "deadcode -test $(GO_PACKAGES)"
+	@$(LINT_PATH) deadcode -test $(GO_PACKAGES)
 
-# NilAway alone (same packages and flags as the lint pilot).
+# NilAway alone (same packages and flags as the lint gate).
 nilaway:
 	@echo "nilaway -exclude-test-files $(NILAWAY_PACKAGES)"
 	@$(LINT_PATH) nilaway -exclude-test-files -pretty-print=false $(NILAWAY_PACKAGES)

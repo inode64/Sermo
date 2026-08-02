@@ -56,10 +56,12 @@ func (c routeCheck) Run(_ context.Context) Result {
 	ok := len(matched) > 0
 	var msg string
 	switch {
-	case ok && matched[0].Gateway != "":
-		msg = fmt.Sprintf("%s default route via %s (gw %s)", c.family, matched[0].Iface, matched[0].Gateway)
-	case ok:
-		msg = fmt.Sprintf("%s default route via %s", c.family, matched[0].Iface)
+	case len(matched) > 0:
+		if gw := matched[0].Gateway; gw != "" {
+			msg = fmt.Sprintf("%s default route via %s (gw %s)", c.family, matched[0].Iface, gw)
+		} else {
+			msg = fmt.Sprintf("%s default route via %s", c.family, matched[0].Iface)
+		}
 	case c.iface != "" && len(routes) > 0:
 		msg = fmt.Sprintf("no %s default route via %s (%d elsewhere)", c.family, c.iface, len(routes))
 	default:
@@ -67,7 +69,7 @@ func (c routeCheck) Run(_ context.Context) Result {
 	}
 	res := c.result(ok, msg, start)
 	res.Data = map[string]any{DataKeyFamily: c.family, DataKeyRoutes: len(routes), DataKeyValue: len(matched)}
-	if ok {
+	if len(matched) > 0 {
 		res.Data[DataKeyInterface] = matched[0].Iface
 		if matched[0].Gateway != "" {
 			res.Data[DataKeyGateway] = matched[0].Gateway

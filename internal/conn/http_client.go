@@ -59,7 +59,7 @@ type httpProbeResponse struct {
 // response body. Transport errors are returned as-is so each probe applies its
 // own protocol prefix; status handling stays with the caller.
 func doHTTPProbe(client *http.Client, req *http.Request, limit int64) (httpProbeResponse, error) {
-	resp, err := client.Do(req)
+	resp, err := httpx.Do(client, req)
 	if err != nil {
 		//nolint:wrapcheck // documented above: transport errors stay bare so each probe applies its own probeErr prefix.
 		return httpProbeResponse{}, err

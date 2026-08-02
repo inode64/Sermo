@@ -88,7 +88,9 @@ func (sshProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 				_ = ch.Reject(ssh.Prohibited, sshRejectReasonMessage)
 			}
 		}()
-		_ = sshConn.Close()
+		if sshConn != nil {
+			_ = sshConn.Close()
+		}
 	}
 
 	if hostKey == nil {

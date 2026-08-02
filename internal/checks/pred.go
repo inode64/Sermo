@@ -251,8 +251,13 @@ func requireLevelPreds(entry map[string]any, fields []string, label string) ([]l
 // field list contains exactly one entry.
 func requireSingleLevelPred(entry map[string]any, fields []string, label string) (levelPred, string) {
 	preds, errs := requireLevelPreds(entry, fields, label)
-	if errs != "" {
+	switch {
+	case errs != "":
 		return levelPred{}, errs
+	case len(preds) == 0:
+		// requireLevelPreds already rejects an empty set, so this only keeps the
+		// indexing below safe if that ever changes.
+		return levelPred{}, label + ": requires at least one of " + strings.Join(fields, "/")
 	}
 	return preds[0], ""
 }

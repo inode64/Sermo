@@ -497,6 +497,28 @@ func DocumentAliases(doc *Document) []string {
 	return cfgval.StringList(doc.Body[keyAliases])
 }
 
+// Config is the full loaded configuration set.
+type Config struct {
+	Global          Global
+	CatalogServices map[string]*Document // catalog service definitions (catalog/services)
+	Apps            map[string]*Document // kind app (tools/runtimes: binary + version)
+	Libraries       map[string]*Document // kind lib (shared libraries)
+	Patterns        map[string]*Document // kind patterns (output-analysis rule sets)
+	Services        map[string]*Document // kind service (enabled instances)
+	docs            []*Document          // every document in load order
+
+	materializedNameCollisions []materializedNameCollision
+	validationIssues           []Issue
+	serviceUnits               map[string][]string
+
+	// Load order per registry, for stable reporting.
+	CatalogServiceNames []string
+	AppNames            []string
+	LibraryNames        []string
+	PatternNames        []string
+	ServiceNames        []string
+}
+
 // CanonicalCatalogName returns the canonical name for a catalog document in
 // category, accepting exact names and `aliases`.
 func (c *Config) CanonicalCatalogName(category, name string) (string, bool) {
@@ -869,28 +891,6 @@ func (c *Config) SortedServiceNames() []string {
 		return nil
 	}
 	return slices.Sorted(maps.Keys(c.Services))
-}
-
-// Config is the full loaded configuration set.
-type Config struct {
-	Global          Global
-	CatalogServices map[string]*Document // catalog service definitions (catalog/services)
-	Apps            map[string]*Document // kind app (tools/runtimes: binary + version)
-	Libraries       map[string]*Document // kind lib (shared libraries)
-	Patterns        map[string]*Document // kind patterns (output-analysis rule sets)
-	Services        map[string]*Document // kind service (enabled instances)
-	docs            []*Document          // every document in load order
-
-	materializedNameCollisions []materializedNameCollision
-	validationIssues           []Issue
-	serviceUnits               map[string][]string
-
-	// Load order per registry, for stable reporting.
-	CatalogServiceNames []string
-	AppNames            []string
-	LibraryNames        []string
-	PatternNames        []string
-	ServiceNames        []string
 }
 
 type materializedNameCollision struct {

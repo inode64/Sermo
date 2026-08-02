@@ -73,10 +73,10 @@ func (ldapProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	}
 
 	extra := map[string]string{extraBind: mode}
-	if bindOK {
-		extra[extraResult] = ldapResultSuccess
-	} else {
+	if bindErr != nil {
 		extra[extraResult] = bindErr.Error() // anonymous: server up but bind rejected
+	} else {
+		extra[extraResult] = ldapResultSuccess
 	}
 	return Result{Extra: extra}, nil
 }

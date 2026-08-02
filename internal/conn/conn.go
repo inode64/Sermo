@@ -546,7 +546,10 @@ func (r *registry) lookup(name string) (Protocol, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	p, ok := r.byName[name]
-	return p, ok
+	if !ok || p == nil {
+		return nil, false
+	}
+	return p, true
 }
 
 // defaultRegistry holds the protocols compiled into the binary.

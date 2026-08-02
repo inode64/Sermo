@@ -1463,13 +1463,23 @@ func (a App) writeEventsTable(evs []event) {
 	tw := newTabWriter(a.Stdout)
 	fmt.Fprintln(tw, "TIME\tTARGET\tKIND\tRULE\tACTION\tMESSAGE")
 	for _, e := range evs {
-		timestamp, target, kind, rule, action, message := eventTableFields(e)
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\n", timestamp, target, kind, rule, action, message)
+		r := eventTableFields(e)
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\n", r.timestamp, r.target, r.kind, r.rule, r.action, r.message)
 	}
 	_ = tw.Flush()
 }
 
-func eventTableFields(e event) (string, string, string, string, string, string) {
+// eventTableRow is one rendered row of the events table, in column order.
+type eventTableRow struct {
+	timestamp string
+	target    string
+	kind      string
+	rule      string
+	action    string
+	message   string
+}
+
+func eventTableFields(e event) eventTableRow {
 	timestamp := e.Time
 	if len(timestamp) >= eventsTableTimestampWidth {
 		timestamp = timestamp[:eventsTableTimestampWidth]
@@ -1501,7 +1511,14 @@ func eventTableFields(e event) (string, string, string, string, string, string) 
 		action = e.Status
 	}
 	action = eventTableValue(action, eventsTableActionWidth)
-	return timestamp, target, kind, rule, action, eventTableMessage(e.Message)
+	return eventTableRow{
+		timestamp: timestamp,
+		target:    target,
+		kind:      kind,
+		rule:      rule,
+		action:    action,
+		message:   eventTableMessage(e.Message),
+	}
 }
 
 func eventTableValue(value string, width int) string {
