@@ -32,7 +32,7 @@ func acquireInstanceLock(runtimeDir string) (*os.File, error) {
 		runtimeDir = defaultRuntimeDir
 	}
 	path := filepath.Join(runtimeDir, instanceLockFilename)
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, instanceLockMode)
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, instanceLockMode) //nolint:gosec // G304: path under paths.runtime for single-instance lock
 	if err != nil {
 		return nil, fmt.Errorf("open instance lock %s: %w", path, err)
 	}
@@ -46,7 +46,7 @@ func acquireInstanceLock(runtimeDir string) (*os.File, error) {
 // readDaemonPID returns the PID from <runtime>/sermod.pid when present and
 // parseable. It is best-effort context for an already-running warning.
 func readDaemonPID(runtimeDir string) int {
-	data, err := os.ReadFile(filepath.Join(runtimeDir, daemonPIDFilename))
+	data, err := os.ReadFile(filepath.Join(runtimeDir, daemonPIDFilename)) //nolint:gosec // G304: path under paths.runtime for daemon pidfile
 	if err != nil {
 		return 0
 	}

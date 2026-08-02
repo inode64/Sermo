@@ -79,6 +79,7 @@ type CommandRunner struct{}
 // Run executes name with args and captures stdout/stderr.
 func (CommandRunner) Run(ctx context.Context, name string, args ...string) (Result, error) {
 	start := time.Now()
+	//nolint:gosec // G204: argv comes from operator-configured checks/hooks via execx; no shell
 	cmd := exec.CommandContext(ctx, name, args...)
 	prepareCommandRuntime(cmd)
 	return runPrepared(ctx, cmd, start, name)
@@ -87,6 +88,7 @@ func (CommandRunner) Run(ctx context.Context, name string, args ...string) (Resu
 // RunUser executes name with args as user and captures stdout/stderr.
 func (CommandRunner) RunUser(ctx context.Context, user, name string, args ...string) (Result, error) {
 	start := time.Now()
+	//nolint:gosec // G204: argv comes from operator-configured checks/hooks via execx; no shell
 	cmd := exec.CommandContext(ctx, name, args...)
 	if err := prepareCommandUser(cmd, user); err != nil {
 		return Result{ExitCode: ExitCodeRunFailure, Duration: time.Since(start)}, err
@@ -100,6 +102,7 @@ func (CommandRunner) RunUser(ctx context.Context, user, name string, args ...str
 // empty, it behaves like Run (inherits os.Environ).
 func (CommandRunner) RunEnv(ctx context.Context, env []string, name string, args ...string) (Result, error) {
 	start := time.Now()
+	//nolint:gosec // G204: argv comes from operator-configured checks/hooks via execx; no shell
 	cmd := exec.CommandContext(ctx, name, args...)
 	if len(env) > 0 {
 		cmd.Env = env

@@ -1715,7 +1715,7 @@ func readDaemonWebToken(runtimeDir string) string {
 	if runtimeDir == "" {
 		runtimeDir = config.DefaultRuntime
 	}
-	data, err := os.ReadFile(filepath.Join(runtimeDir, config.DaemonWebTokenFilename))
+	data, err := os.ReadFile(filepath.Join(runtimeDir, config.DaemonWebTokenFilename)) //nolint:gosec // G304: path under paths.runtime for web token file
 	if err != nil {
 		return ""
 	}
@@ -1889,7 +1889,7 @@ func (a App) runReload(_ context.Context, opts options) int {
 
 	var pid int
 	for _, p := range candidates {
-		data, err := os.ReadFile(p)
+		data, err := os.ReadFile(p) //nolint:gosec // G304: candidate pidfiles under fixed runtime paths
 		if err != nil {
 			continue
 		}

@@ -111,7 +111,7 @@ func resolveNeeded(ctx context.Context, needed, dirs []string, seen map[string]b
 			continue
 		}
 		subNeeded, _ := ef.DynString(elf.DT_NEEDED)
-		ef.Close()
+		_ = ef.Close()
 
 		if len(subNeeded) > 0 {
 			subMissing := resolveNeeded(ctx, subNeeded, dirs, seen)
@@ -203,7 +203,7 @@ func findLibrary(soname string, dirs []string) string {
 // It ignores comments and basic "include" lines (we separately scan the
 // common /etc/ld.so.conf.d directory).
 func parseLdSoConf(path string) []string {
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) //nolint:gosec // G304: path is /etc/ld.so.conf or conf.d fragment from fixed roots
 	if err != nil {
 		return nil
 	}

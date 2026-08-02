@@ -228,17 +228,17 @@ func reclaimStale(path string, expected lockFile, proc ProcessProber, now func()
 // behavior) rather than failing the acquire.
 func lockReclaimDir(path string) (func(), error) {
 	dir := filepath.Dir(path)
-	d, err := os.Open(dir)
+	d, err := os.Open(dir) //nolint:gosec // G304: lock directory under paths.runtime/ops
 	if err != nil {
 		return nil, fmt.Errorf("open lock directory %s: %w", dir, err)
 	}
 	if err := unix.Flock(int(d.Fd()), unix.LOCK_EX); err != nil {
-		d.Close()
+		_ = d.Close()
 		return nil, fmt.Errorf("lock directory %s: %w", dir, err)
 	}
 	return func() {
 		_ = unix.Flock(int(d.Fd()), unix.LOCK_UN)
-		d.Close()
+		_ = d.Close()
 	}, nil
 }
 
@@ -246,21 +246,21 @@ func lockReclaimDir(path string) (func(), error) {
 // and fsyncs the file and its directory so a lock that exists is always complete
 // after a crash. An existing file yields os.ErrExist.
 func writeLockFileExclusive(path string, lf lockFile) error {
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, lockFileMode)
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, lockFileMode) //nolint:gosec // G304: lock file path under paths.runtime/ops
 	if err != nil {
 		return fmt.Errorf("create lock %s: %w", path, err)
 	}
 	data, err := json.Marshal(lf)
 	if err != nil {
-		f.Close()
+		_ = f.Close()
 		return fmt.Errorf("marshal lock %s: %w", path, err)
 	}
 	if _, err := f.Write(data); err != nil {
-		f.Close()
+		_ = f.Close()
 		return fmt.Errorf("write lock %s: %w", path, err)
 	}
 	if err := f.Sync(); err != nil {
-		f.Close()
+		_ = f.Close()
 		return fmt.Errorf("sync lock %s: %w", path, err)
 	}
 	if err := f.Close(); err != nil {
@@ -272,7 +272,7 @@ func writeLockFileExclusive(path string, lf lockFile) error {
 
 // syncDir best-effort fsyncs a directory so a newly created lock is durable.
 func syncDir(dir string) {
-	d, err := os.Open(dir)
+	d, err := os.Open(dir) //nolint:gosec // G304: lock directory under paths.runtime/ops
 	if err != nil {
 		return
 	}

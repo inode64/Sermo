@@ -682,7 +682,7 @@ func wizardWatchStaleFile(path string, detected map[string]bool) staleFile {
 // net/route/icmp/dns watches — keys that match detectedTargetKeys). nil/nil
 // on any read or parse error.
 func parseWatchFile(path string) (names, targets []string) {
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) //nolint:gosec // G304: operator/catalog YAML path under paths.watches
 	if err != nil {
 		return nil, nil
 	}
@@ -800,7 +800,7 @@ func plannedConfigFilePaths(files []plannedConfigFile) []string {
 // the file — keeping a .bak of the original — only when a change is needed. It
 // returns the backup path written, or "" when paths.<pathKey> already covered it.
 func ensureConfigPathDir(globalPath, pathKey, relDir, targetDir string) (string, error) {
-	orig, err := os.ReadFile(globalPath)
+	orig, err := os.ReadFile(globalPath) //nolint:gosec // G304: global sermo.yml path from --config / defaults
 	if err != nil {
 		return "", fmt.Errorf("read %s: %w", globalPath, err)
 	}
