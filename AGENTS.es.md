@@ -694,7 +694,10 @@ Notas de herramientas:
   `PATH` ni llames a los binarios del analizador uno por uno a menos que estés depurando el
   target de lint en sí. `govulncheck` puede necesitar acceso a red para refrescar la
   DB de vulnerabilidades; un fallo de red/DNS ahí es un problema de entorno, no un
-  hallazgo de código.
+  hallazgo de código. Lint también ejecuta **NilAway** (`go.uber.org/nilaway`)
+  sobre `internal/operation` e `internal/process` con `-exclude-test-files`
+  (piloto de flujos nil en la ruta start/stop/signal). Amplía la lista de
+  paquetes solo cuando el siguiente piloto esté limpio.
 - **`go fix -diff ./...`** se ejecuta como parte de `make lint`: los modernizers
   de Go 1.26 no deben proponer ningún cambio. Si falla, ejecuta `go fix ./...` y
   revisa la reescritura en lugar de silenciarlo.
@@ -745,10 +748,13 @@ Notas de herramientas:
   fronteras de import (checks/conn/rules/config no importan `operation`;
   `rules/` de producción no importa `execx`); `wrapcheck` es un piloto sobre
   operation, app, cli, state, process, web, servicemgr, rules y config de
-  `internal/`, con `*_test.go` y el resto de paquetes excluidos; `ireturn`
-  excluye los builders de checks/notify, el registro conn, los constructores de
-  managers y fábricas similares; `noctx` está desactivado en `internal/conn/` y
-  `*_test.go`; `goconst` exige cuatro apariciones antes de pedir una constante.
+  `internal/`, con `*_test.go` e `internal/checks` + `internal/conn` aún
+  excluidos (~60 + ~147 hallazgos — sobre todo I/O de probes que acaba en
+  mensajes Result; ampliar por paquete con wrapping contextual `%w`);
+  `ireturn` excluye los builders de checks/notify, el registro conn, los
+  constructores de managers y fábricas similares; `noctx` está desactivado en
+  `internal/conn/` y `*_test.go`; `goconst` exige cuatro apariciones antes de
+  pedir una constante.
 
   El `database/sql` de producción en `internal/state` usa métodos `*Context` con
   `sqlCtx()` (ctx de `OpenContext` / `context.Background()` vía `Open`).
@@ -782,6 +788,16 @@ Notas de herramientas:
   funciones inalcanzables vía `golang.org/x/tools/cmd/deadcode`. La reflexión y
   los build tags producen falsos positivos — tría los hallazgos a mano antes de
   borrar nada.
+- **`make cover-gate`** (parte de `make check`) impone un suelo de cobertura de
+  statements sin regresión en paquetes de safety vía `scripts/cover_gate.py`:
+  `operation` ≥ 88%, `process` ≥ 75%, `locks` ≥ 75%, `rules` ≥ 80%,
+  `config` ≥ 85%. Los suelos quedan unos puntos por debajo del baseline medido.
+  Súbelos cuando la cobertura de un paquete suba y se mantenga; no los bajes
+  para aterrizar un cambio que borra tests.
+- **`make fuzz`** ejecuta fuzz targets acotados para config no confiable y
+  parsers de safety (`FuzzLoadGlobal`, `FuzzLoadDocument`, `FuzzParseSelectors`,
+  `FuzzParseStopPolicy`, `FuzzParseSignal`, `FuzzParseKillSignal`,
+  `FuzzParseRules`). El CI programado usa un `FUZZ_TIME` más largo.
 
 ## Testing
 
