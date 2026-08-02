@@ -116,6 +116,12 @@ var builders = map[string]func(name string, entry map[string]any) (Notifier, err
 	TypeWall:     buildWall,
 }
 
+// notifierWarning renders one build warning as "notifier <name>: <problem>", so
+// every entry Build rejects names the notifier it concerns the same way.
+func notifierWarning(name, problem string) string {
+	return "notifier " + name + ": " + problem
+}
+
 // Build constructs global notifiers. Malformed or unknown-type entries become
 // warnings, not fatal errors.
 func Build(raw map[string]any, opts ...Option) (map[string]Notifier, []string) {
@@ -131,7 +137,7 @@ func Build(raw map[string]any, opts ...Option) (map[string]Notifier, []string) {
 	for _, name := range slices.Sorted(maps.Keys(raw)) {
 		entry, ok := raw[name].(map[string]any)
 		if !ok {
-			warnings = append(warnings, "notifier "+name+": not a mapping")
+			warnings = append(warnings, notifierWarning(name, "not a mapping"))
 			continue
 		}
 		if !Enabled(entry) {
@@ -140,12 +146,12 @@ func Build(raw map[string]any, opts ...Option) (map[string]Notifier, []string) {
 		typ, _ := entry[KeyType].(string)
 		build, ok := builders[typ]
 		if !ok {
-			warnings = append(warnings, fmt.Sprintf("notifier %s: unsupported type %q", name, typ))
+			warnings = append(warnings, notifierWarning(name, fmt.Sprintf("unsupported type %q", typ)))
 			continue
 		}
 		n, err := build(name, entry)
 		if err != nil {
-			warnings = append(warnings, "notifier "+name+": "+err.Error())
+			warnings = append(warnings, notifierWarning(name, err.Error()))
 			continue
 		}
 		if templateName := cfgval.AsString(entry[KeyTemplate]); templateName != "" && !options.templatesDisabled {

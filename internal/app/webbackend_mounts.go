@@ -528,7 +528,7 @@ func (b *WebBackend) AlertMountUsers(ctx context.Context, name string) web.Mount
 		OK:      true,
 		Name:    spec.Name,
 		Path:    spec.Path,
-		Message: "alert sent to " + strings.Join(delivery.Users, ", "),
+		Message: "alert sent to " + strings.Join(delivery.Users, displayListSeparator),
 	}
 }
 

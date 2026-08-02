@@ -1002,7 +1002,7 @@ func issuesJSON(issues []config.Issue) []map[string]string {
 // runPreflight resolves a service, builds its preflight checks and runs them
 // under engine.default_timeout. A required check failure exits 1.
 func (a App) runPreflight(ctx context.Context, opts options) int {
-	cfg, service, resolved, code := a.resolveServiceCommand(opts, commandPreflight, "preflight")
+	cfg, service, resolved, code := a.resolveServiceCommand(opts, commandPreflight)
 	if code != exitSuccess {
 		return code
 	}
@@ -1173,10 +1173,12 @@ func (a App) requireSingleServiceName(hasService bool, argCount int, cmd, noun s
 }
 
 // resolveServiceCommand runs the shared single-service command header: usage
-// guards, config load, service canonicalization and resolve. noun names the
-// command in the usage messages.
-func (a App) resolveServiceCommand(opts options, cmd, noun string) (cfg *config.Config, service string, resolved config.Resolved, code int) {
-	if code := a.requireSingleServiceName(opts.service() != "", len(opts.args), cmd, noun); code != exitSuccess {
+// guards, config load, service canonicalization and resolve. These commands
+// name themselves in their usage messages, so cmd is both the command and the
+// noun; the multi-word subcommands that need a separate noun (e.g. "lock
+// acquire") call requireSingleServiceName directly.
+func (a App) resolveServiceCommand(opts options, cmd string) (cfg *config.Config, service string, resolved config.Resolved, code int) {
+	if code := a.requireSingleServiceName(opts.service() != "", len(opts.args), cmd, cmd); code != exitSuccess {
 		return nil, "", config.Resolved{}, code
 	}
 	service = opts.service()
@@ -1197,7 +1199,7 @@ func (a App) resolveServiceCommand(opts options, cmd, noun string) (cfg *config.
 }
 
 func (a App) runProcesses(ctx context.Context, opts options) int {
-	cfg, service, resolved, code := a.resolveServiceCommand(opts, commandProcesses, "processes")
+	cfg, service, resolved, code := a.resolveServiceCommand(opts, commandProcesses)
 	if code != exitSuccess {
 		return code
 	}
