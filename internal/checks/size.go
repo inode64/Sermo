@@ -98,14 +98,14 @@ func HumanizeSignedBytes(n int64) string {
 // regular-file sizes under a directory.
 func dirOrFileSize(ctx context.Context, path string, includeHidden bool) (int64, error) {
 	if err := ctx.Err(); err != nil {
-		return 0, err
+		return 0, fmt.Errorf("measure size of %q: %w", path, err)
 	}
 	info, err := os.Stat(path)
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("stat size path %q: %w", path, err)
 	}
 	if err := ctx.Err(); err != nil {
-		return 0, err
+		return 0, fmt.Errorf("measure size of %q: %w", path, err)
 	}
 	if !info.IsDir() {
 		return info.Size(), nil
@@ -113,10 +113,10 @@ func dirOrFileSize(ctx context.Context, path string, includeHidden bool) (int64,
 	var total int64
 	err = filepath.WalkDir(path, func(entryPath string, d fs.DirEntry, err error) error {
 		if ctxErr := ctx.Err(); ctxErr != nil {
-			return ctxErr
+			return fmt.Errorf("measure size of %q: %w", entryPath, ctxErr)
 		}
 		if err != nil {
-			return err
+			return fmt.Errorf("walk size path %q: %w", entryPath, err)
 		}
 		if !includeHidden && IsHiddenDescendant(path, entryPath, d) {
 			if d.IsDir() {
@@ -127,13 +127,16 @@ func dirOrFileSize(ctx context.Context, path string, includeHidden bool) (int64,
 		if d.Type().IsRegular() {
 			fi, err := d.Info()
 			if err != nil {
-				return err
+				return fmt.Errorf("read size information for %q: %w", entryPath, err)
 			}
 			total += fi.Size()
 		}
 		return nil
 	})
-	return total, err
+	if err != nil {
+		return total, fmt.Errorf("walk size path %q: %w", path, err)
+	}
+	return total, nil
 }
 
 // parseSize parses a human byte size with an explicit suffix ("1G", "500M",

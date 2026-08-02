@@ -129,6 +129,14 @@ func TestDirOrFileSizeSkipsHiddenEntriesByDefault(t *testing.T) {
 	}
 }
 
+func TestDirOrFileSizeMissingPathAddsStatContext(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "missing")
+	_, err := dirOrFileSize(context.Background(), path, false)
+	if err == nil || !strings.Contains(err.Error(), "stat size path") {
+		t.Fatalf("dirOrFileSize() error = %v, want stat context", err)
+	}
+}
+
 func TestSizeCheckHonorsCanceledContext(t *testing.T) {
 	root := t.TempDir()
 	if err := os.WriteFile(filepath.Join(root, "f.bin"), make([]byte, 1024), 0o600); err != nil {
