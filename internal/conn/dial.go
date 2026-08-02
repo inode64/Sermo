@@ -17,17 +17,29 @@ type pqBindDialer struct {
 }
 
 func (d pqBindDialer) Dial(network, address string) (net.Conn, error) {
-	return d.Dialer.Dial(network, address)
+	c, err := d.Dialer.Dial(network, address)
+	if err != nil {
+		return nil, wrapDialError(network, address, err)
+	}
+	return c, nil
 }
 
 func (d pqBindDialer) DialTimeout(network, address string, timeout time.Duration) (net.Conn, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
-	return d.Dialer.DialContext(ctx, network, address)
+	c, err := d.Dialer.DialContext(ctx, network, address)
+	if err != nil {
+		return nil, wrapDialError(network, address, err)
+	}
+	return c, nil
 }
 
 func (d pqBindDialer) DialContext(ctx context.Context, network, address string) (net.Conn, error) {
-	return d.Dialer.DialContext(ctx, network, address)
+	c, err := d.Dialer.DialContext(ctx, network, address)
+	if err != nil {
+		return nil, wrapDialError(network, address, err)
+	}
+	return c, nil
 }
 
 func pqDialer(iface string) pqBindDialer {
@@ -56,16 +68,24 @@ func dialConn(ctx context.Context, cfg Config, port int) (net.Conn, error) {
 	host, _ := cfg.hostPortDefaults(port)
 	addr := hostPort(host, port)
 	d := BindDialer(cfg.Interface)
+	var (
+		c   net.Conn
+		err error
+	)
 	switch NormalizeTLS(cfg.TLS) {
 	case "":
-		return d.DialContext(ctx, networkTCP, addr)
+		c, err = d.DialContext(ctx, networkTCP, addr)
 	case tlsSkipVerify:
 		tc := tlsClientConfig(host)
 		tc.InsecureSkipVerify = true // operator chose tls: skip-verify
-		return (&tls.Dialer{NetDialer: d, Config: tc}).DialContext(ctx, networkTCP, addr)
+		c, err = (&tls.Dialer{NetDialer: d, Config: tc}).DialContext(ctx, networkTCP, addr)
 	default:
-		return (&tls.Dialer{NetDialer: d, Config: tlsClientConfig(host)}).DialContext(ctx, networkTCP, addr)
+		c, err = (&tls.Dialer{NetDialer: d, Config: tlsClientConfig(host)}).DialContext(ctx, networkTCP, addr)
 	}
+	if err != nil {
+		return nil, wrapDialError(networkTCP, addr, err)
+	}
+	return c, nil
 }
 
 // tlsClientConfig is the TLS client config the conn probes share for an upgrade
@@ -109,7 +129,7 @@ func dialDeadline(ctx context.Context, cfg Config, defaultPort int) (net.Conn, e
 		c, err = dialConn(ctx, cfg, port)
 	}
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("open probe connection: %w", err)
 	}
 	applyDeadline(ctx, c)
 	return c, nil
@@ -119,7 +139,11 @@ func dialDeadline(ctx context.Context, cfg Config, defaultPort int) (net.Conn, e
 // probes (acpid, fail2ban, lvmpolld, docker, …) and dialDeadline share, so the
 // net.Dialer incantation lives in one place.
 func dialUnix(ctx context.Context, socket string) (net.Conn, error) {
-	return (&net.Dialer{}).DialContext(ctx, networkUnix, socket)
+	c, err := (&net.Dialer{}).DialContext(ctx, networkUnix, socket)
+	if err != nil {
+		return nil, wrapDialError(networkUnix, socket, err)
+	}
+	return c, nil
 }
 
 // probeUnixSocket verifies that a socket-only daemon is listening. A successful
@@ -143,9 +167,10 @@ func probeUnixSocket(ctx context.Context, cfg Config, defaultSocket string) (Res
 // applies the context deadline. The prologue shared by the byte-protocol
 // probes that never upgrade to TLS; the caller closes the connection.
 func dialTCPDeadline(ctx context.Context, cfg Config, defaultPort int) (net.Conn, error) {
-	c, err := BindDialer(cfg.Interface).DialContext(ctx, networkTCP, cfg.addrDefaults(defaultPort))
+	addr := cfg.addrDefaults(defaultPort)
+	c, err := BindDialer(cfg.Interface).DialContext(ctx, networkTCP, addr)
 	if err != nil {
-		return nil, err
+		return nil, wrapDialError(networkTCP, addr, err)
 	}
 	applyDeadline(ctx, c)
 	return c, nil
@@ -157,7 +182,10 @@ func dialTCPDeadline(ctx context.Context, cfg Config, defaultPort int) (net.Conn
 func readTextGreeting(rw io.ReadWriter) (*textproto.Reader, int, string, error) {
 	tp := textproto.NewReader(bufio.NewReader(rw))
 	code, greeting, err := tp.ReadResponse(0)
-	return tp, code, greeting, err
+	if err != nil {
+		return tp, code, greeting, fmt.Errorf("read text greeting: %w", err)
+	}
+	return tp, code, greeting, nil
 }
 
 // unexpectedGreeting is the shared refusal for a greeting whose status code is
@@ -178,7 +206,7 @@ func probeLineCommand(ctx context.Context, cfg Config, defaultPort int, command 
 	defer func() { _ = c.Close() }()
 	if command != "" {
 		if _, err := io.WriteString(c, command); err != nil {
-			return Result{}, err
+			return Result{}, fmt.Errorf("write protocol command: %w", err)
 		}
 	}
 	line, err := readGreetingLine(c)
@@ -198,9 +226,10 @@ func probeLineCommand(ctx context.Context, cfg Config, defaultPort int, command 
 // closes the connection. Probes that exchange more than one datagram with the
 // same peer (chrony) dial once through this instead of repeating exchangeUDP.
 func dialUDPDeadline(ctx context.Context, cfg Config, defaultPort int) (net.Conn, error) {
-	c, err := BindDialer(cfg.Interface).DialContext(ctx, networkUDP, cfg.addrDefaults(defaultPort))
+	addr := cfg.addrDefaults(defaultPort)
+	c, err := BindDialer(cfg.Interface).DialContext(ctx, networkUDP, addr)
 	if err != nil {
-		return nil, err
+		return nil, wrapDialError(networkUDP, addr, err)
 	}
 	applyDeadline(ctx, c)
 	return c, nil
@@ -213,18 +242,22 @@ func dialUDPDeadline(ctx context.Context, cfg Config, defaultPort int) (net.Conn
 func exchangeUDP(ctx context.Context, cfg Config, defaultPort int, request []byte, bufBytes int) ([]byte, error) {
 	c, err := dialUDPDeadline(ctx, cfg, defaultPort)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("open UDP exchange: %w", err)
 	}
 	defer func() { _ = c.Close() }()
 	if _, err := c.Write(request); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("write UDP exchange: %w", err)
 	}
 	buf := make([]byte, bufBytes)
 	n, err := c.Read(buf)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("read UDP exchange: %w", err)
 	}
 	return buf[:n], nil
+}
+
+func wrapDialError(network, address string, err error) error {
+	return fmt.Errorf("dial %s %q: %w", network, address, err)
 }
 
 // socketOnlyProtocol is a Unix-socket-only liveness protocol whose probe is

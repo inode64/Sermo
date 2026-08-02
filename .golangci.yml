@@ -451,7 +451,7 @@ linters:
       # conn sources that still need contextual wrapping before the rule can run.
       - linters:
           - wrapcheck
-        path: '^internal/conn/(ajp|amqp|avahi|bind|bind_linux|bind_other|ceph|chrony|conn|dbus|deadline|dhclient|dhcp|dhcp_linux|dhcp_other|dial|dns|docker|fpm|ftp|guacd|http_client|imap|ipp|kafka|ldap|libvirt|lvmpolld|memcached|mongodb|mqtt|mysql|nfs|nntp|ntp|nut|openvpn|openvswitch|pop|prometheus|rdp|redis|smb|smtp|snmp|ssh|syncthing|tftp|udisks2)\.go$'
+        path: '^internal/conn/(ajp|amqp|avahi|bind|bind_linux|bind_other|ceph|chrony|conn|dbus|deadline|dhclient|dhcp|dhcp_linux|dhcp_other|dns|docker|fpm|ftp|guacd|http_client|imap|ipp|kafka|ldap|libvirt|lvmpolld|memcached|mongodb|mqtt|mysql|nfs|nntp|ntp|nut|openvpn|openvswitch|pop|prometheus|rdp|redis|smb|smtp|snmp|ssh|syncthing|tftp|udisks2)\.go$'
 
       # ireturn zone policy:
       #   ON  — every package except central builders, manager factories and
