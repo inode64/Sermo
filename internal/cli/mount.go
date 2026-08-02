@@ -192,24 +192,24 @@ func (a App) syncStorageMountMonitoring(ctx context.Context, _ options, cfg *con
 	if !ok {
 		return
 	}
-	store, err := openStateStore(ctx, cfg)
-	if err != nil {
+	_ = withStateStore(ctx, cfg, func(err error) int {
 		msg := fmt.Sprintf("storage mount monitoring unavailable: %v", err)
 		fmt.Fprintf(a.Stderr, cliWarningFormat, msg)
 		a.recordAccess(cfg, action+"-monitor", storage, accessStatusError, msg)
-		return
-	}
-	defer func() { _ = store.Close() }()
-	change, err := app.SyncStorageMountMonitoring(store, storage, action, resultOK, monitorMode, disabled, state.SourceCLIMountUmount, state.SourceCLI)
-	if err != nil {
-		msg := err.Error()
-		fmt.Fprintf(a.Stderr, cliWarningFormat, msg)
-		a.recordAccess(cfg, action+"-monitor", storage, accessStatusError, msg)
-		return
-	}
-	if change.Changed {
-		a.recordAccess(cfg, change.Action, storage, accessStatusOK, change.Message)
-	}
+		return 0
+	}, func(store *state.Store) int {
+		change, err := app.SyncStorageMountMonitoring(store, storage, action, resultOK, monitorMode, disabled, state.SourceCLIMountUmount, state.SourceCLI)
+		if err != nil {
+			msg := err.Error()
+			fmt.Fprintf(a.Stderr, cliWarningFormat, msg)
+			a.recordAccess(cfg, action+"-monitor", storage, accessStatusError, msg)
+			return 0
+		}
+		if change.Changed {
+			a.recordAccess(cfg, change.Action, storage, accessStatusOK, change.Message)
+		}
+		return 0
+	})
 }
 
 func storageMountWatchConfig(cfg *config.Config, storage string) (monitorMode string, disabled, ok bool) {
