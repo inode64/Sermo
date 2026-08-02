@@ -37,3 +37,11 @@ exclude = ["TEST"]
 [rule.import-shadowing]
 exclude = ["TEST"]
 [rule.modifies-value-receiver]
+# Concurrency footguns: pass WaitGroup by pointer; use atomic helpers correctly.
+[rule.atomic]
+[rule.waitgroup-by-value]
+# Capturing a range variable by pointer/address in a goroutine or deferred
+# closure is still wrong even with Go 1.22 per-iteration loop vars when the
+# address escapes across iterations.
+[rule.range-val-address]
+[rule.range-val-in-closure]

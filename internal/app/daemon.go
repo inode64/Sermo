@@ -441,7 +441,7 @@ func wireCascade(workers []*Worker, cascadeMap map[string][]string, deps Deps) {
 		if len(cascadeMap[w.Service]) == 0 {
 			continue
 		}
-		c := cascader{op: op, lookup: lookup, emit: deps.Emit, sleep: time.Sleep}
+		c := cascader{op: op, lookup: lookup, emit: deps.Emit}
 		service := w.Service
 		w.Cascade = func(ctx context.Context, action string) operation.Result {
 			return c.run(ctx, service, action)
