@@ -290,13 +290,13 @@ func parseCertMaterial(data []byte) (CertSample, error) {
 	case certPEMTypeCertificate:
 		cert, err := x509.ParseCertificate(block.Bytes)
 		if err != nil {
-			return CertSample{}, err
+			return CertSample{}, fmt.Errorf("parse X.509 certificate: %w", err)
 		}
 		return certSampleFromCert(cert), nil
 	case certPEMTypeCertificateRequest, certPEMTypeNewCertificateRequest:
 		csr, err := x509.ParseCertificateRequest(block.Bytes)
 		if err != nil {
-			return CertSample{}, err
+			return CertSample{}, fmt.Errorf("parse X.509 certificate request: %w", err)
 		}
 		algo, bits := keyAlgoBits(csr.PublicKey)
 		return CertSample{
@@ -311,25 +311,25 @@ func parseCertMaterial(data []byte) (CertSample, error) {
 	case certPEMTypeRSAPrivateKey:
 		key, err := x509.ParsePKCS1PrivateKey(block.Bytes)
 		if err != nil {
-			return CertSample{}, err
+			return CertSample{}, fmt.Errorf("parse PKCS#1 private key: %w", err)
 		}
 		return privateKeySample(certKindPrivateKey, key, fp), nil
 	case certPEMTypeECPrivateKey:
 		key, err := x509.ParseECPrivateKey(block.Bytes)
 		if err != nil {
-			return CertSample{}, err
+			return CertSample{}, fmt.Errorf("parse EC private key: %w", err)
 		}
 		return privateKeySample(certKindPrivateKey, key, fp), nil
 	case certPEMTypePrivateKey:
 		key, err := x509.ParsePKCS8PrivateKey(block.Bytes)
 		if err != nil {
-			return CertSample{}, err
+			return CertSample{}, fmt.Errorf("parse PKCS#8 private key: %w", err)
 		}
 		return privateKeySample(certKindPrivateKey, key, fp), nil
 	case certPEMTypePublicKey:
 		key, err := x509.ParsePKIXPublicKey(block.Bytes)
 		if err != nil {
-			return CertSample{}, err
+			return CertSample{}, fmt.Errorf("parse PKIX public key: %w", err)
 		}
 		algo, bits := keyAlgoBits(key)
 		return CertSample{
@@ -341,7 +341,7 @@ func parseCertMaterial(data []byte) (CertSample, error) {
 	case certPEMTypeOpenSSHPrivateKey:
 		key, err := ssh.ParseRawPrivateKey(data)
 		if err != nil {
-			return CertSample{}, err
+			return CertSample{}, fmt.Errorf("parse OpenSSH private key: %w", err)
 		}
 		return privateKeySample(certKindOpenSSHPrivateKey, key, fp), nil
 	default:
@@ -428,7 +428,7 @@ func defaultCertSampler(ctx context.Context, host, port, serverName string, veri
 	cfg := &tls.Config{InsecureSkipVerify: true, ServerName: serverName} //nolint:gosec // inspected manually below
 	nc, err := (&tls.Dialer{Config: cfg}).DialContext(ctx, conn.TransportTCP, net.JoinHostPort(host, port))
 	if err != nil {
-		return CertSample{}, err
+		return CertSample{}, fmt.Errorf("dial TLS endpoint %s: %w", net.JoinHostPort(host, port), err)
 	}
 	defer func() { _ = nc.Close() }()
 	tlsConn, ok := nc.(*tls.Conn)

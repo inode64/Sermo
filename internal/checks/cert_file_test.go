@@ -13,6 +13,7 @@ import (
 	"math/big"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -198,6 +199,32 @@ func TestCertFileGarbageIsAlert(t *testing.T) {
 	res := certForPath(path).Run(context.Background())
 	if res.OK {
 		t.Fatalf("unparseable material must fail: %q", res.Message)
+	}
+}
+
+func TestParseCertMaterialInvalidPEMAddsFormatContext(t *testing.T) {
+	cases := []struct {
+		name      string
+		blockType string
+		want      string
+	}{
+		{name: "certificate", blockType: certPEMTypeCertificate, want: "parse X.509 certificate"},
+		{name: "certificate request", blockType: certPEMTypeCertificateRequest, want: "parse X.509 certificate request"},
+		{name: "pkcs1 private key", blockType: certPEMTypeRSAPrivateKey, want: "parse PKCS#1 private key"},
+		{name: "ec private key", blockType: certPEMTypeECPrivateKey, want: "parse EC private key"},
+		{name: "pkcs8 private key", blockType: certPEMTypePrivateKey, want: "parse PKCS#8 private key"},
+		{name: "pkix public key", blockType: certPEMTypePublicKey, want: "parse PKIX public key"},
+		{name: "openssh private key", blockType: certPEMTypeOpenSSHPrivateKey, want: "parse OpenSSH private key"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			data := pem.EncodeToMemory(&pem.Block{Type: tc.blockType, Bytes: []byte("invalid")})
+			_, err := parseCertMaterial(data)
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("parseCertMaterial() error = %v, want context %q", err, tc.want)
+			}
+		})
 	}
 }
 
