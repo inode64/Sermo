@@ -447,7 +447,7 @@ linters:
       #         into Result/check messages. Expand those with contextual %w.
       - linters:
           - wrapcheck
-        path: '^internal/checks/(cert|commandcheck|conntrack|count|diskio|edac|fds|firewall_nftables|firewall_nftables_other|icmp|influxdb|meminfo|mongodb|mount|net|pids|pressure|raid|route|route_family_other|sensors|size|sql|storage|tcpcheck|users|websocket)\.go$'
+        path: '^internal/checks/(commandcheck|conntrack|count|diskio|edac|fds|firewall_nftables|firewall_nftables_other|icmp|influxdb|meminfo|mongodb|mount|net|pids|pressure|raid|route|route_family_other|sensors|size|sql|storage|tcpcheck|users|websocket)\.go$'
       # conn sources that still need contextual wrapping before the rule can run.
       - linters:
           - wrapcheck
