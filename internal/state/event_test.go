@@ -1,6 +1,7 @@
 package state
 
 import (
+	"context"
 	"testing"
 	"time"
 )
@@ -47,7 +48,7 @@ func TestStoreEventsRoundTripAndPrune(t *testing.T) {
 		t.Fatalf("limited events = %+v, want newest watch event", limited)
 	}
 
-	n, err := s.PruneEvents(recent)
+	n, err := s.PruneEvents(context.Background(), recent)
 	if err != nil {
 		t.Fatalf("PruneEvents(before recent): %v", err)
 	}
@@ -62,7 +63,7 @@ func TestStoreEventsRoundTripAndPrune(t *testing.T) {
 		t.Fatalf("after prune events = %+v, want only recent", events)
 	}
 
-	n, err = s.PruneEvents(time.Time{})
+	n, err = s.PruneEvents(context.Background(), time.Time{})
 	if err != nil {
 		t.Fatalf("PruneEvents(all): %v", err)
 	}

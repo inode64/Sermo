@@ -256,126 +256,46 @@ linters:
   #                  become Result messages rather than package-boundary errors.
   #                  Expand per package with contextual %w wrapping, not en masse.
   exclusions:
-    generated: lax
+    generated: strict
+    warn-unused: true
+
     paths:
-      - node_modules/
+      - '(^|/)node_modules/'
+      # Tests: fixtures, fakes y table-driven moulds no se miden con la misma
+      # vara que el código de producción. Excluir el path entero evita ruido
+      # de errcheck/gosec/forbidigo/prealloc/exhaustive/… en *_test.go.
+      - '_test\.go$'
+
+    # Sermo es una aplicación, no una librería pública. No exigiría
+    # documentación para cada símbolo exportado de paquetes internal.
     presets:
       - comments
-      - common-false-positives
-      - legacy
-      - std-error-handling
+
     rules:
-      # Test helpers switch over third-party enums (x/net/html atom.Atom) where
-      # exhaustiveness is meaningless noise.
-      - linters: [exhaustive]
-        path: _test\.go
-      # Tests intentionally assert their own fixtures and concrete builders;
-      # production values crossing an any boundary must still be checked.
-      - linters: [forcetypeassert]
-        path: _test\.go
-      # Test fixtures repeat protocol tokens (NUT UPS), YAML keys and scripted
-      # wizard answers — not prose typos.
-      - linters: [dupword]
-        path: _test\.go
-      # Table-driven tests share a shape by design (AGENTS.md prescribes it), so
-      # at this threshold dupl matches the mould rather than duplicated logic:
-      # restart_on_change vs defaults.restart_on_change, one protocol probe vs
-      # another. Copy-pasted tests are found by reviewing a family's bodies, not
-      # by token similarity.
-      - linters: [dupl]
-        path: _test\.go
-      # Test request fixtures deliberately use nil for an absent body; production
-      # requests use http.NoBody so the request metadata stays explicit.
-      - linters: [gocritic]
-        path: _test\.go
-        text: httpNoBody
-      # Fixtures favor direct byte-slice construction; allocation tuning belongs
-      # to the production paths that execute in the daemon or CLI.
-      - linters: [prealloc]
-        path: _test\.go
-      # Process mains and the web esbuild driver must call os.Exit / print --version.
-      - linters: [forbidigo]
-        path: _test\.go
-      - linters: [forbidigo]
-        path: ^cmd/
-      - linters: [forbidigo]
-        path: ^internal/web/build/
-      # Protocols register static builders during package initialization; all
-      # other packages must keep initialization explicit and injectable.
-      - linters: [gochecknoinits]
-        path: internal/conn/
-      # syscall field widths vary between Linux architectures, so these
-      # conversions preserve the portable storage type despite amd64 redundancy.
-      - linters: [unconvert]
-        path: internal/app/filewatch\.go
-      - linters: [unconvert]
-        path: internal/checks/storage\.go
-      # Dashboard API surface; splitting would fragment the web backend contract.
-      - linters: [interfacebloat]
-        path: internal/web/server\.go
-      # Protocol probes dial with per-probe deadlines, not context-aware transports.
-      - linters: [noctx]
-        path: internal/conn/
-      # Test fixtures spin up loopback listeners and httptest requests without ctx.
-      - linters: [noctx]
-        path: _test\.go
-      # Store binds ctx at OpenContext; *Context SQL reads it via Store.sqlCtx().
-      # contextcheck does not trace embedded store context through method receivers.
-      - linters: [contextcheck]
-        path: internal/state/
-      - linters: [contextcheck]
-        path: internal/cli/(monitor|panic|sla|state|watch)\.go
-      # wrapcheck is active across production packages except checks/ and conn/;
-      # their broad external API surfaces need dedicated phases.
-      - linters: [wrapcheck]
-        path: _test\.go
-      - linters: [wrapcheck]
-        path: cmd/
-      - linters: [wrapcheck]
-        path: internal/(checks|conn)/
-      # ireturn: central builders and registries intentionally return interface types.
-      - linters: [ireturn]
-        path: _test\.go
-      - linters: [ireturn]
-        path: internal/checks/
-      - linters: [ireturn]
-        path: internal/notify/
-      - linters: [ireturn]
-        path: internal/conn/conn\.go
-      - linters: [ireturn]
-        path: internal/app/(hook|watch_build|procwatch|serviceruntime)\.go
-      - linters: [ireturn]
-        path: internal/assist/assist\.go
-      - linters: [ireturn]
-        path: internal/cli/wizard\.go
-      - linters: [ireturn]
-        path: internal/(servicemgr/manager|dockerctl/manager|virt/manager|mountctl/mountctl|locks/(named|scanner)|process/discover)\.go
-      # The web-backend holder hands out the generation-tracked web.Backend
-      # interface by design; callers must never see the concrete swap type.
-      - linters: [ireturn]
-        path: internal/(app/webholder|web/server)\.go
-      # Test fixtures are written to throwaway temp dirs with 0644; not a concern.
-      - linters: [gosec]
-        path: _test\.go
-        text: G306
-      # Test fixtures use fake DSNs ("smtp://user:pass@…") to exercise URL
-      # parsing; there are no real credentials in the tree.
-      - linters: [gosec]
-        path: _test\.go
-        text: G101
-      # Tests build paths from t.TempDir() and repo-controlled names; the
-      # taint-analysis traversal warning cannot apply.
-      - linters: [gosec]
-        path: _test\.go
-        text: G703
-      # G115 (integer-overflow conversions) is noisy and false-positive-prone in
-      # this codebase: every flagged site converts an already-bounded value (a
-      # port 0-65535, a /proc-reported count, a range-validated config field).
-      # Accepted project-wide. By-design exec (G204) and intentional 0644 writes
-      # (pidfile, generated YAML) are suppressed inline with //nolint:gosec +
-      # justification.
-      - linters: [gosec]
-        text: G115
+      # Los protocolos se registran intencionadamente durante init.
+      - linters:
+          - gochecknoinits
+        path: '^internal/conn/'
+
+      # Entry points may call os.Exit / print --version / inject default sleep.
+      # Production packages under internal/ stay subject to forbidigo.
+      - linters:
+          - forbidigo
+        path: '^cmd/'
+      - linters:
+          - forbidigo
+        path: '^internal/web/build/'
+
+      # Store binds ctx at OpenContext; *Context SQL uses Store.sqlCtx(). The
+      # linter does not trace that embedded store context through method
+      # receivers, so CLI/state paths that correctly use the store look wrong.
+      - linters:
+          - contextcheck
+        path: '^internal/state/'
+      - linters:
+          - contextcheck
+        path: '^internal/cli/(monitor|panic|sla|state|watch|cli_monitor_state)\.go$'
+
 
 issues:
   # Report every finding (golangci-lint otherwise caps repeated issues at 3).

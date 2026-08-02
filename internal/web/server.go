@@ -1024,6 +1024,11 @@ const maxEventLimit = 1000
 const defaultSeriesWindow = state.DefaultSeriesWindow
 
 // Backend is what the web server needs from the daemon.
+//
+// The surface is intentionally wide: one contract for the dashboard so the
+// holder can swap implementations on reload without fragmenting callers.
+//
+//nolint:interfacebloat // dashboard API surface; splitting would fragment the web backend contract
 type Backend interface {
 	// Services returns the current view of every configured service (including those
 	// with `enabled: false` in their YAML so they remain visible for activation).

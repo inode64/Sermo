@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"fmt"
 	"slices"
 	"sync"
@@ -23,7 +24,7 @@ type EventStore interface {
 	RecordEvent(record state.EventRecord) (int64, error)
 	RecentEvents(limit int) ([]state.EventRecord, error)
 	RecentEventsBefore(beforeID int64, limit int) ([]state.EventRecord, error)
-	PruneEvents(before time.Time) (int64, error)
+	PruneEvents(ctx context.Context, before time.Time) (int64, error)
 }
 
 // EventLog keeps the most recent events in a bounded ring buffer so the web UI
@@ -326,8 +327,9 @@ func (l *EventLog) loadRecentFromStore() error {
 }
 
 // Prune removes events strictly older than 'before'. If before.IsZero(), all
-// events are cleared. Returns the number of events removed. Safe for concurrent use.
-func (l *EventLog) Prune(before time.Time) int {
+// events are cleared. Returns the number of events removed. Safe for concurrent
+// use. ctx bounds the optional store DELETE.
+func (l *EventLog) Prune(ctx context.Context, before time.Time) int {
 	if l == nil {
 		return 0
 	}
@@ -335,7 +337,7 @@ func (l *EventLog) Prune(before time.Time) int {
 
 	if l.count == 0 {
 		l.mu.Unlock()
-		return l.pruneStore(before, 0)
+		return l.pruneStore(ctx, before, 0)
 	}
 	var cleared int
 	if before.IsZero() {
@@ -345,7 +347,7 @@ func (l *EventLog) Prune(before time.Time) int {
 		l.count = 0
 		l.rebuildIndexesLocked()
 		l.mu.Unlock()
-		return l.pruneStore(before, cleared)
+		return l.pruneStore(ctx, before, cleared)
 	}
 
 	ordered := l.orderedLocked() // oldest first
@@ -376,14 +378,14 @@ func (l *EventLog) Prune(before time.Time) int {
 	}
 	l.rebuildIndexesLocked()
 	l.mu.Unlock()
-	return l.pruneStore(before, cleared)
+	return l.pruneStore(ctx, before, cleared)
 }
 
-func (l *EventLog) pruneStore(before time.Time, memoryCleared int) int {
+func (l *EventLog) pruneStore(ctx context.Context, before time.Time, memoryCleared int) int {
 	if l.store == nil {
 		return memoryCleared
 	}
-	cleared, err := l.store.PruneEvents(before)
+	cleared, err := l.store.PruneEvents(ctx, before)
 	if err != nil {
 		l.reportStoreError(err)
 		return memoryCleared
