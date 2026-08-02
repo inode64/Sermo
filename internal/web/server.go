@@ -1311,6 +1311,8 @@ func cspNonceFrom(ctx context.Context) string {
 // queryCapped reads query param name via parse (which reports whether the
 // value is usable), defaulting to def and capping at maxV; the shared clamp
 // behind the limit/since query readers.
+//
+//nolint:ireturn // The type parameter preserves the concrete query value type for callers.
 func queryCapped[T cmp.Ordered](r *http.Request, name string, def, maxV T, parse func(string) (T, bool)) T {
 	v := def
 	if q := r.URL.Query().Get(name); q != "" {
@@ -2040,6 +2042,8 @@ func writeActionResult(w http.ResponseWriter, ok bool, res any) {
 
 // backendRead pins one reloadable backend generation for the duration of a
 // read. Ordinary Backend implementations retain their existing behavior.
+//
+//nolint:ireturn // The server must return the Backend implementation held by its reloadable seam.
 func (s *Server) backendRead() (Backend, uint64) {
 	if source, ok := s.Backend.(backendReadSource); ok {
 		if backend, generation := source.BeginBackendRead(); backend != nil {
@@ -2058,6 +2062,8 @@ func (s *Server) backendRead() (Backend, uint64) {
 // instance is the pin: the action keeps running against the generation whose
 // precondition it passed, so a concurrent reload can neither swap service/watch
 // identity underneath it nor wait on it.
+//
+//nolint:ireturn // The mutation must use the selected Backend implementation for its whole lifetime.
 func (s *Server) mutationBackend(w http.ResponseWriter, r *http.Request) (Backend, bool) {
 	backend, generation := s.backendRead()
 	if generation == 0 {
