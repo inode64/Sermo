@@ -752,11 +752,13 @@ Tool notes:
   `contextcheck` is off in `internal/state/` and store-touching CLI files
   because the linter does not trace embedded store context.
 
-  Accepted gosec exceptions live in that config: `G115`, and in test fixtures
-  `G306`/`G101`/`G703`. By-design cases (`G204` operator-configured commands,
-  intentional `0644` writes, bounded `args[i]` reads, shutdown-context `G118`)
-  are suppressed at the call site with `//nolint:gosec` plus a justifying
-  comment — prefer that over widening the config.
+  Accepted gosec exceptions live in that config: `G115` (project-wide), and in
+  test fixtures `G306`/`G101`/`G703` (tests are path-excluded from golangci).
+  By-design cases are suppressed at the call site with `//nolint:gosec` plus a
+  justifying comment — prefer that over widening the config: `G204`
+  (operator-configured commands via `execx`), `G304` (paths under `/proc`,
+  `paths.runtime`, fstab, config dirs), intentional `0644` writes, bounded
+  `args[i]` reads, shutdown-context `G118`.
 - **`make docs-sync`** checks the documentation against the code it describes:
   every source path a document cites exists, every Go identifier a skill names
   exists, AGENTS.md names every linter `.golangci.yml` enables, every

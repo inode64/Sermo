@@ -51,7 +51,7 @@ func SessionsFrom(paths []string) ([]Session, error) {
 	}
 	var missing []string
 	for _, path := range paths {
-		data, err := os.ReadFile(path)
+		data, err := os.ReadFile(path) //nolint:gosec // G304: fixed utmp/wtmp paths from the Linux session APIs
 		if errors.Is(err, os.ErrNotExist) {
 			missing = append(missing, path)
 			continue

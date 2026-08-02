@@ -42,7 +42,7 @@ func OSReleasePaths() []string {
 // osReleaseID returns the lowercased ID= field of os-release, or "".
 func osReleaseID() string {
 	for _, path := range OSReleasePaths() {
-		data, err := os.ReadFile(path)
+		data, err := os.ReadFile(path) //nolint:gosec // G304: fixed OSReleasePaths candidates (/etc/os-release)
 		if err != nil {
 			continue
 		}
