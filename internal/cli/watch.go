@@ -190,10 +190,7 @@ func configBool(entry map[string]any, key string) bool {
 // unmonitoring a service never touches its watches and vice versa. The daemon
 // reads this key live each cycle.
 func (a App) runWatchMonitor(ctx context.Context, opts options, pause bool) int {
-	verb := commandMonitor
-	if pause {
-		verb = commandUnmonitor
-	}
+	verb := monitorVerb(pause)
 	if len(opts.args) != watchCommandTargetArgCount {
 		return a.commandUsageError(commandWatch, fmt.Sprintf("watch %s requires exactly one watch name", verb))
 	}
@@ -206,21 +203,17 @@ func (a App) runWatchMonitor(ctx context.Context, opts options, pause bool) int 
 	if !knownWatchName(cfg, name) {
 		return a.fail(opts, fmt.Sprintf("unknown watch %q", name))
 	}
-	return withStateStore(ctx, cfg, func(err error) int {
-		return a.fail(opts, fmt.Sprintf("watch %s failed: %v", verb, err))
-	}, func(store *state.Store) int {
-		key := app.WatchMonitorKey(name)
-		status, err := updateMonitorState(store, key, pause)
-		if err != nil {
-			return a.fail(opts, fmt.Sprintf("watch %s failed: %v", verb, err))
-		}
-		if opts.json {
-			writeJSON(a.Stdout, map[string]any{cliJSONKeyWatch: name, cliJSONKeyMonitoring: status})
+	failPrefix := "watch " + verb
+	return a.applyMonitorTransition(ctx, opts, cfg, app.WatchMonitorKey(name), failPrefix, pause, nil,
+		func(_ *state.Store, status string) int {
+			if opts.json {
+				writeJSON(a.Stdout, map[string]any{cliJSONKeyWatch: name, cliJSONKeyMonitoring: status})
+				return exitSuccess
+			}
+			a.printMonitorStatus("watch "+name, status, "")
 			return exitSuccess
-		}
-		a.printMonitorStatus("watch "+name, status, "")
-		return exitSuccess
-	})
+		},
+	)
 }
 
 // knownWatchName reports whether name is a declared watch — a global `watches:`

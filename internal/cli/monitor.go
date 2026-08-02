@@ -5,8 +5,17 @@ import (
 	"fmt"
 	"time"
 
+	"sermo/internal/config"
 	"sermo/internal/state"
 )
+
+// monitorVerb returns the operator verb for a pause/resume transition.
+func monitorVerb(pause bool) string {
+	if pause {
+		return commandUnmonitor
+	}
+	return commandMonitor
+}
 
 // runMonitor pauses (`unmonitor`) or resumes (`monitor`) monitoring of a service.
 // A paused service keeps its config but the daemon runs no checks, rules or
@@ -15,10 +24,7 @@ import (
 // reboots — and a service whose `monitor` flag is `previous` is restored to it on
 // the next daemon start.
 func (a App) runMonitor(ctx context.Context, opts options, pause bool) int {
-	verb := commandMonitor
-	if pause {
-		verb = commandUnmonitor
-	}
+	verb := monitorVerb(pause)
 	service := opts.service()
 	if code := a.requireSingleServiceName(service != "", len(opts.args), verb, verb); code != exitSuccess {
 		return code
@@ -33,17 +39,41 @@ func (a App) runMonitor(ctx context.Context, opts options, pause bool) int {
 		return code
 	}
 
-	return withStateStore(ctx, cfg, func(err error) int {
-		return a.fail(opts, fmt.Sprintf("%s failed: %v", verb, err))
-	}, func(store *state.Store) int {
-		status, err := updateMonitorState(store, service, pause)
-		if err != nil {
+	return a.applyMonitorTransition(ctx, opts, cfg, service, verb, pause,
+		func(err error) {
 			a.recordAccess(cfg, verb, service, accessStatusError, err.Error())
-			return a.fail(opts, fmt.Sprintf("%s failed: %v", verb, err))
+		},
+		func(store *state.Store, status string) int {
+			a.recordAccess(cfg, verb, service, accessStatusOK, status)
+			a.reportMonitor(opts, store, service, status)
+			return exitSuccess
+		},
+	)
+}
+
+// applyMonitorTransition opens the store, applies pause/resume for key, and runs
+// after on success. failPrefix labels open/update failures ("monitor failed: …").
+// onUpdateErr is optional (service access-log on update failure).
+func (a App) applyMonitorTransition(
+	ctx context.Context,
+	opts options,
+	cfg *config.Config,
+	key, failPrefix string,
+	pause bool,
+	onUpdateErr func(error),
+	after func(store *state.Store, status string) int,
+) int {
+	return withStateStore(ctx, cfg, func(err error) int {
+		return a.fail(opts, fmt.Sprintf("%s failed: %v", failPrefix, err))
+	}, func(store *state.Store) int {
+		status, err := updateMonitorState(store, key, pause)
+		if err != nil {
+			if onUpdateErr != nil {
+				onUpdateErr(err)
+			}
+			return a.fail(opts, fmt.Sprintf("%s failed: %v", failPrefix, err))
 		}
-		a.recordAccess(cfg, verb, service, accessStatusOK, status)
-		a.reportMonitor(opts, store, service, status)
-		return exitSuccess
+		return after(store, status)
 	})
 }
 
