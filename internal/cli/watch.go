@@ -13,6 +13,7 @@ import (
 	"sermo/internal/app"
 	"sermo/internal/checks"
 	"sermo/internal/config"
+	"sermo/internal/state"
 )
 
 type daemonWatchReading struct {
@@ -205,23 +206,21 @@ func (a App) runWatchMonitor(ctx context.Context, opts options, pause bool) int 
 	if !knownWatchName(cfg, name) {
 		return a.fail(opts, fmt.Sprintf("unknown watch %q", name))
 	}
-	store, err := openStateStore(ctx, cfg)
-	if err != nil {
+	return withStateStore(ctx, cfg, func(err error) int {
 		return a.fail(opts, fmt.Sprintf("watch %s failed: %v", verb, err))
-	}
-	defer func() { _ = store.Close() }()
-
-	key := app.WatchMonitorKey(name)
-	status, err := updateMonitorState(store, key, pause)
-	if err != nil {
-		return a.fail(opts, fmt.Sprintf("watch %s failed: %v", verb, err))
-	}
-	if opts.json {
-		writeJSON(a.Stdout, map[string]any{cliJSONKeyWatch: name, cliJSONKeyMonitoring: status})
+	}, func(store *state.Store) int {
+		key := app.WatchMonitorKey(name)
+		status, err := updateMonitorState(store, key, pause)
+		if err != nil {
+			return a.fail(opts, fmt.Sprintf("watch %s failed: %v", verb, err))
+		}
+		if opts.json {
+			writeJSON(a.Stdout, map[string]any{cliJSONKeyWatch: name, cliJSONKeyMonitoring: status})
+			return exitSuccess
+		}
+		a.printMonitorStatus("watch "+name, status, "")
 		return exitSuccess
-	}
-	a.printMonitorStatus("watch "+name, status, "")
-	return exitSuccess
+	})
 }
 
 // knownWatchName reports whether name is a declared watch — a global `watches:`

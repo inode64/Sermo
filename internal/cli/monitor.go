@@ -33,20 +33,18 @@ func (a App) runMonitor(ctx context.Context, opts options, pause bool) int {
 		return code
 	}
 
-	store, err := openStateStore(ctx, cfg)
-	if err != nil {
+	return withStateStore(ctx, cfg, func(err error) int {
 		return a.fail(opts, fmt.Sprintf("%s failed: %v", verb, err))
-	}
-	defer func() { _ = store.Close() }()
-
-	status, err := updateMonitorState(store, service, pause)
-	if err != nil {
-		a.recordAccess(cfg, verb, service, accessStatusError, err.Error())
-		return a.fail(opts, fmt.Sprintf("%s failed: %v", verb, err))
-	}
-	a.recordAccess(cfg, verb, service, accessStatusOK, status)
-	a.reportMonitor(opts, store, service, status)
-	return exitSuccess
+	}, func(store *state.Store) int {
+		status, err := updateMonitorState(store, service, pause)
+		if err != nil {
+			a.recordAccess(cfg, verb, service, accessStatusError, err.Error())
+			return a.fail(opts, fmt.Sprintf("%s failed: %v", verb, err))
+		}
+		a.recordAccess(cfg, verb, service, accessStatusOK, status)
+		a.reportMonitor(opts, store, service, status)
+		return exitSuccess
+	})
 }
 
 // updateMonitorState persists a monitor/unmonitor request and reports whether

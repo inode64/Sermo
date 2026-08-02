@@ -32,26 +32,24 @@ func (a App) runStateCompact(ctx context.Context, opts options) int {
 		return a.fail(opts, err.Error())
 	}
 
-	store, err := openStateStore(ctx, cfg)
-	if err != nil {
+	return withStateStore(ctx, cfg, func(err error) int {
 		return a.fail(opts, fmt.Sprintf("open state database: %v", err))
-	}
-	defer func() { _ = store.Close() }()
+	}, func(store *state.Store) int {
+		// The store owns the sequence: consolidate and prune to the configured
+		// retention as the daemon does on its rollup interval, drop whatever remains
+		// older than an explicit --before, then vacuum. The deadline covers all of it.
+		compactCtx, cancel := context.WithTimeout(ctx, opts.timeout)
+		defer cancel()
+		result, err := store.CompactHistory(compactCtx, time.Now(), before)
+		if err != nil {
+			a.recordAccess(cfg, accessCommandStateCompact, "", accessStatusError, err.Error())
+			return a.fail(opts, err.Error())
+		}
 
-	// The store owns the sequence: consolidate and prune to the configured
-	// retention as the daemon does on its rollup interval, drop whatever remains
-	// older than an explicit --before, then vacuum. The deadline covers all of it.
-	compactCtx, cancel := context.WithTimeout(ctx, opts.timeout)
-	defer cancel()
-	result, err := store.CompactHistory(compactCtx, time.Now(), before)
-	if err != nil {
-		a.recordAccess(cfg, accessCommandStateCompact, "", accessStatusError, err.Error())
-		return a.fail(opts, err.Error())
-	}
-
-	a.writeStateCompactResult(opts, result, before)
-	a.recordAccess(cfg, accessCommandStateCompact, "", accessStatusOK, fmt.Sprintf("pruned %d rows", result.Pruned()))
-	return exitSuccess
+		a.writeStateCompactResult(opts, result, before)
+		a.recordAccess(cfg, accessCommandStateCompact, "", accessStatusOK, fmt.Sprintf("pruned %d rows", result.Pruned()))
+		return exitSuccess
+	})
 }
 
 // writeStateCompactResult reports one compaction in JSON or as a single line.

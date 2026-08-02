@@ -40,30 +40,28 @@ func (a App) runPanic(ctx context.Context, opts options) int {
 		return code
 	}
 
-	store, err := openStateStore(ctx, cfg)
-	if err != nil {
+	return withStateStore(ctx, cfg, func(err error) int {
 		return a.fail(opts, fmt.Sprintf("panic failed: %v", err))
-	}
-	defer func() { _ = store.Close() }()
-
-	if set {
-		cmd := "panic off"
-		if on {
-			cmd = "panic on"
+	}, func(store *state.Store) int {
+		if set {
+			cmd := "panic off"
+			if on {
+				cmd = "panic on"
+			}
+			if err := store.SetPanic(on, state.SourceCLI); err != nil {
+				a.recordAccess(cfg, cmd, "", accessStatusError, err.Error())
+				return a.fail(opts, fmt.Sprintf("panic failed: %v", err))
+			}
+			a.recordAccess(cfg, cmd, "", accessStatusOK, "")
 		}
-		if err := store.SetPanic(on, state.SourceCLI); err != nil {
-			a.recordAccess(cfg, cmd, "", accessStatusError, err.Error())
+
+		rec, found, err := store.Panic()
+		if err != nil {
 			return a.fail(opts, fmt.Sprintf("panic failed: %v", err))
 		}
-		a.recordAccess(cfg, cmd, "", accessStatusOK, "")
-	}
-
-	rec, found, err := store.Panic()
-	if err != nil {
-		return a.fail(opts, fmt.Sprintf("panic failed: %v", err))
-	}
-	a.reportPanic(opts, rec, found)
-	return exitSuccess
+		a.reportPanic(opts, rec, found)
+		return exitSuccess
+	})
 }
 
 func (a App) reportPanic(opts options, rec state.GlobalRecord, found bool) {

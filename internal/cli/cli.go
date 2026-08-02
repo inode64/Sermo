@@ -724,6 +724,31 @@ func openStateStore(ctx context.Context, cfg *config.Config) (*state.Store, erro
 	)
 }
 
+// withStateStore opens the store, runs fn, and always closes the store. onOpenErr
+// maps an open failure to a command exit code (typically a.fail with a prefix).
+// Prefer this over openStateStore + defer Close at each call site.
+func withStateStore(ctx context.Context, cfg *config.Config, onOpenErr func(error) int, fn func(*state.Store) int) int {
+	store, err := openStateStore(ctx, cfg)
+	if err != nil {
+		return onOpenErr(err)
+	}
+	defer func() { _ = store.Close() }()
+	return fn(store)
+}
+
+// withStateStoreErr opens the store for call sites that do not return an exit
+// code (e.g. best-effort status helpers). Returns the open error unchanged when
+// the store cannot be opened; otherwise runs fn and closes the store.
+func withStateStoreErr(ctx context.Context, cfg *config.Config, fn func(*state.Store)) error {
+	store, err := openStateStore(ctx, cfg)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = store.Close() }()
+	fn(store)
+	return nil
+}
+
 func (a App) openManualActionStore(ctx context.Context, cfg *config.Config, action string) *state.Store {
 	if !operationActionUsesState(action) {
 		return nil

@@ -9,6 +9,7 @@ import (
 	"sermo/internal/cfgval"
 	"sermo/internal/config"
 	"sermo/internal/servicemgr"
+	"sermo/internal/state"
 )
 
 // serviceDisplayState returns the operator-facing state for status output.
@@ -65,19 +66,18 @@ func (a App) serviceMonitorState(ctx context.Context, opts options) monitorView 
 			}
 		}
 	}
-	store, err := openStateStore(ctx, cfg)
-	if err != nil {
+	if err := withStateStoreErr(ctx, cfg, func(store *state.Store) {
+		record, found, err := store.MonitorState(service)
+		if err != nil || !found {
+			return
+		}
+		view.Paused = !record.Active
+		view.Source = record.Source
+		if !record.UpdatedAt.IsZero() {
+			view.ChangedAt = record.UpdatedAt.UTC().Format(time.RFC3339)
+		}
+	}); err != nil {
 		return view
-	}
-	defer func() { _ = store.Close() }()
-	record, found, err := store.MonitorState(service)
-	if err != nil || !found {
-		return view
-	}
-	view.Paused = !record.Active
-	view.Source = record.Source
-	if !record.UpdatedAt.IsZero() {
-		view.ChangedAt = record.UpdatedAt.UTC().Format(time.RFC3339)
 	}
 	return view
 }
