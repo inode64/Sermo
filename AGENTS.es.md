@@ -746,14 +746,23 @@ Notas de herramientas:
   (tests, entrypoints `cmd/` e `internal/web/build` están excluidos);
   `interfacebloat` excluye `internal/web/server.go`; `depguard` impone las
   fronteras de import (checks/conn/rules/config no importan `operation`;
-  `rules/` de producción no importa `execx`); `wrapcheck` está activo en
-  paquetes de producción salvo `internal/checks` e `internal/conn` (el I/O de
-  probes acaba en mensajes Result/check, no en errores de frontera de paquete —
-  ampliar por protocolo con wrapping contextual `%w` al limpiar uno);
-  `ireturn` excluye los builders de checks/notify, el registro conn, los
-  constructores de managers y fábricas similares; `noctx` está desactivado en
-  `internal/conn/` y `*_test.go`; `goconst` exige cuatro apariciones antes de
-  pedir una constante.
+  `rules/` de producción no importa `execx`); políticas por zona de
+  `wrapcheck` e `ireturn` (ambos ON en el core, OFF solo donde el diseño
+  genera ruido):
+
+  - **`wrapcheck` ON:** operation, rules, config, state, app, cli, process, web,
+    locks, managers, notify, assist, cmd — los errores de frontera de paquete
+    deben usar `%w`. **OFF:** `internal/checks/` e `internal/conn/` (el I/O de
+    probes acaba en mensajes Result/check; ampliar por protocolo con `%w`
+    contextual al limpiar uno, no en masa).
+  - **`ireturn` ON:** operation, rules, config, state, CLI no-wizard y el resto
+    del árbol. **OFF:** builders de checks/notify, registro conn, seams de app
+    (watch/hook/runtime), holder de web Backend, assist/wizard y constructores
+    de managers (`servicemgr`, dockerctl, virt, mountctl, locks, process
+    discover).
+
+  `noctx` está desactivado en `internal/conn/` y `*_test.go`; `goconst` exige
+  cuatro apariciones antes de pedir una constante.
 
   El `database/sql` de producción en `internal/state` usa métodos `*Context` con
   `sqlCtx()` (ctx de `OpenContext` / `context.Background()` vía `Open`).

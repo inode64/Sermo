@@ -738,13 +738,22 @@ Tool notes:
   entrypoints and `internal/web/build` are excluded); `interfacebloat` excludes
   `internal/web/server.go`; `depguard` enforces the import boundaries
   (checks/conn/rules/config must not import `operation`; production `rules/`
-  must not import `execx`); `wrapcheck` is active across production packages
-  except `internal/checks` and `internal/conn` (probe I/O becomes Result/check
-  messages, not package-boundary errors — expand per package with contextual
-  `%w` when cleaning a protocol); `ireturn` excludes the check/notify builders,
-  the conn registry, manager constructors and similar factories; `noctx` is off
-  in `internal/conn/` and `*_test.go`; `goconst` wants four occurrences before a
-  shared constant is due.
+  must not import `execx`); zone policies for `wrapcheck` and `ireturn` (both
+  stay on for core, off only where design forces noise):
+
+  - **`wrapcheck` ON:** operation, rules, config, state, app, cli, process, web,
+    locks, managers, notify, assist, cmd — package-boundary errors must use
+    `%w`. **OFF:** `internal/checks/` and `internal/conn/` (probe I/O becomes
+    Result/check messages; expand per protocol with contextual `%w` when
+    cleaning one, not en masse).
+  - **`ireturn` ON:** operation, rules, config, state, non-wizard CLI and the
+    rest of the tree. **OFF:** checks/notify builders, conn registry, app
+    watch/hook/runtime seams, web Backend holder, assist/wizard, and manager
+    constructors (`servicemgr`, dockerctl, virt, mountctl, locks, process
+    discover).
+
+  `noctx` is off in `internal/conn/` and `*_test.go`; `goconst` wants four
+  occurrences before a shared constant is due.
 
   Production `database/sql` in `internal/state` uses `*Context` methods with
   `sqlCtx()` (ctx from `OpenContext` / `context.Background()` via `Open`).
