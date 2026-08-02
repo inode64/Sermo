@@ -215,13 +215,13 @@ func run(args []string) int {
 	if exitCode != 0 {
 		return exitCode
 	}
-	defer instanceLock.Close()
+	defer func() { _ = instanceLock.Close() }()
 
 	store, exitCode := openDaemonStore(cfg, logger)
 	if exitCode != 0 {
 		return exitCode
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 
 	notifiers, notifyWarnings := notify.Build(cfg.Notifiers(), notify.WithTemplateDir(cfg.Global.TemplateDir()))
 	for _, w := range notifyWarnings {

@@ -1599,7 +1599,7 @@ func (a App) pruneDaemonEvents(ctx context.Context, opts options, before time.Ti
 	if err != nil {
 		return 0, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusOK {
@@ -1630,7 +1630,7 @@ func (a App) fetchEvents(ctx context.Context, opts options, service string, limi
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
@@ -1747,7 +1747,7 @@ func (a App) daemonAPIGet(ctx context.Context, opts options, path string) ([]byt
 	if err != nil {
 		return nil, 0, fmt.Errorf("daemon API GET %s: %w", path, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, resp.StatusCode, fmt.Errorf("read daemon API response for %s: %w", path, err)

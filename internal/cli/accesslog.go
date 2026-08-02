@@ -36,7 +36,7 @@ func (a App) recordAccess(cfg *config.Config, command, target, status, message s
 	if err != nil {
 		return
 	}
-	defer w.Close()
+	defer func() { _ = w.Close() }()
 
 	actor := os.Getenv("USER")
 	if actor == "" {

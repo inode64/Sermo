@@ -84,6 +84,13 @@ linters:
     - wastedassign
     - wrapcheck  # pilot: operation/ + app/ + cli/ + state/ + process/ + web/ + servicemgr/ + rules/ + config/ (see exclusions)
   settings:
+    errcheck:
+      # CLI and daemon operator output: a broken stdout/stderr pipe must not
+      # fail the command path. Real I/O errors stay covered by other writers.
+      exclude-functions:
+        - fmt.Fprint
+        - fmt.Fprintf
+        - fmt.Fprintln
     depguard:
       rules:
         # Baseline: stdlib + module imports unless a scoped deny rule matches.

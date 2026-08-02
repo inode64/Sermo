@@ -116,7 +116,7 @@ func postWebhook(ctx context.Context, label, webhook string, headers map[string]
 		// underlying cause so no credential ever reaches an event or log.
 		return fmt.Errorf("post %s webhook: %w", label, netutil.URLErrorCause(err))
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode/httpStatusClassDivisor != httpStatusClassSuccess {
 		snippet, _ := io.ReadAll(io.LimitReader(resp.Body, webhookErrorSnippetLimit))

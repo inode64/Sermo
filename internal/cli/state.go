@@ -36,7 +36,7 @@ func (a App) runStateCompact(ctx context.Context, opts options) int {
 	if err != nil {
 		return a.fail(opts, fmt.Sprintf("open state database: %v", err))
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 
 	// The store owns the sequence: consolidate and prune to the configured
 	// retention as the daemon does on its rollup interval, drop whatever remains

@@ -37,7 +37,7 @@ func (a App) runMonitor(ctx context.Context, opts options, pause bool) int {
 	if err != nil {
 		return a.fail(opts, fmt.Sprintf("%s failed: %v", verb, err))
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 
 	status, err := updateMonitorState(store, service, pause)
 	if err != nil {

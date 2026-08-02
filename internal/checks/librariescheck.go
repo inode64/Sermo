@@ -54,7 +54,7 @@ func (c librariesCheck) Run(ctx context.Context) Result {
 	if err != nil {
 		return c.result(false, c.binary+": "+err.Error(), start)
 	}
-	defer ef.Close()
+	defer func() { _ = ef.Close() }()
 
 	needed, err := ef.DynString(elf.DT_NEEDED)
 	if err != nil || len(needed) == 0 {

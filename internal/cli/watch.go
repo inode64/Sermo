@@ -118,7 +118,7 @@ func (a App) probeDaemonWatch(ctx context.Context, opts options, watch string) (
 	if err != nil {
 		return daemonWatchProbe{}, fmt.Errorf("talking to daemon web UI: %w (is sermod running with web.port set?)", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	var result daemonWatchProbe
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return daemonWatchProbe{}, fmt.Errorf("decode probe response: %w", err)
@@ -209,7 +209,7 @@ func (a App) runWatchMonitor(ctx context.Context, opts options, pause bool) int 
 	if err != nil {
 		return a.fail(opts, fmt.Sprintf("watch %s failed: %v", verb, err))
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 
 	key := app.WatchMonitorKey(name)
 	status, err := updateMonitorState(store, key, pause)

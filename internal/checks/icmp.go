@@ -201,7 +201,7 @@ func defaultPingSampler(host, iface string, count int, timeout time.Duration) (P
 	if err != nil {
 		return PingSample{}, err
 	}
-	defer icmpConn.Close()
+	defer func() { _ = icmpConn.Close() }()
 
 	perPacket := timeout / time.Duration(count)
 	if perPacket <= 0 {
