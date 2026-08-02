@@ -30,6 +30,26 @@ type metricSeriesTestSample struct {
 	ok    bool
 }
 
+func TestUintToInt64ClampsUnsignedOverflow(t *testing.T) {
+	tests := []struct {
+		name string
+		in   uint64
+		want int64
+	}{
+		{name: "zero", in: 0, want: 0},
+		{name: "largest signed value", in: daemonMetricMaxInt64, want: int64(daemonMetricMaxInt64)},
+		{name: "one above signed range", in: daemonMetricMaxInt64 + 1, want: int64(daemonMetricMaxInt64)},
+		{name: "largest unsigned value", in: ^uint64(0), want: int64(daemonMetricMaxInt64)},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := uintToInt64(tc.in); got != tc.want {
+				t.Fatalf("uintToInt64(%d) = %d, want %d", tc.in, got, tc.want)
+			}
+		})
+	}
+}
+
 func (r *fakeDaemonMetricReader) ProcessCPU(int) (uint64, bool) { return r.cpu, true }
 func (r *fakeDaemonMetricReader) ProcessRSS(int) (uint64, bool) { return r.rss, true }
 func (r *fakeDaemonMetricReader) ProcessIO(int) (uint64, uint64, bool) {

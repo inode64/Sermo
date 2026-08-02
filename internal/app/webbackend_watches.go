@@ -301,7 +301,7 @@ func watchSummary(w *webWatch, storage *web.StorageWatchInfo, liveSummary string
 			}
 			return storage.Path + ": not mounted as expected"
 		}
-		return fmt.Sprintf("%s: %.1f%% free (%s) on %s", storage.Path, storage.FreePct, checks.HumanizeSignedBytes(int64(storage.FreeBytes)), fs)
+		return fmt.Sprintf("%s: %.1f%% free (%s) on %s", storage.Path, storage.FreePct, checks.HumanizeSignedBytes(uintToInt64(storage.FreeBytes)), fs)
 	}
 	if liveSummary != "" {
 		return liveSummary

@@ -711,7 +711,7 @@ Notas de herramientas:
   de import. Documenta los nuevos símbolos exportados — la regla `exported`
   está activa.
 - **`golangci-lint`** usa `.golangci.yml` (**formato v2** — el binario debe ser
-  v2). Ese fichero manda: **70 linters**, agrupados aquí por lo que te exigen.
+  v2). Ese fichero manda: **71 linters**, agrupados aquí por lo que te exigen.
   Consúltalo ante la duda — no des por hecho que un linter está apagado porque
   este resumen sea más corto que la config.
 
@@ -727,7 +727,7 @@ Notas de herramientas:
     `sqlclosecheck`, `unqueryvet`, `wastedassign`
   - *Forma de la API y arquitectura:*
     `asciicheck`, `depguard`, `errname`, `gochecknoinits`, `godoclint`,
-    `gomoddirectives`, `iface`, `inamedparam`, `interfacebloat`, `iotamixing`,
+    `gomoddirectives`, `gomodguard`, `iface`, `inamedparam`, `interfacebloat`, `iotamixing`,
     `ireturn`, `musttag`, `predeclared`, `wrapcheck`
   - *Idioma y modernización:*
     `dupword`, `exptostd`, `gocheckcompilerdirectives`, `gocritic`,
@@ -738,9 +738,16 @@ Notas de herramientas:
 
   Salvedades del proyecto, todas codificadas en `.golangci.yml`: `dupl` corre
   con umbral de 70 tokens en vez de los 150 por defecto, y está desactivado en
-  `*_test.go`; `dupword` y
+  `*_test.go`; los linters de producción están desactivados en `*_test.go` para
+  que los fixtures sigan centrados, mientras `nolintlint`, `testableexamples`,
+  `thelper`, `tparallel` y `usetesting` sí corren ahí; `gocognit`/`gocyclo`
+  usan un presupuesto de 30 y `maintidx` un mínimo de 20; `gocritic` ejecuta
+  una lista curada, no el set por defecto; `gomodguard` permite solo
+  dependencias de producción directas revisadas; `nolintlint` exige supresiones
+  específicas, explicadas y aún necesarias; `loggercheck` exige claves string
+  estructuradas de slog y rechaza logging de tipo printf; `dupword` y
   `exhaustive` están desactivados en `*_test.go` (y un brazo `default:` cuenta
-  como exhaustivo); `gocritic` ejecuta una lista curada, no el set por defecto;
+  como exhaustivo);
   `forbidigo` prohíbe `fmt.Print*`, `log.(Print|Fatal|Panic)*` de la stdlib,
   `os.Exit`, `time.Sleep` y `http.DefaultClient` en paquetes de producción
   (tests, entrypoints `cmd/` e `internal/web/build` están excluidos);
@@ -769,11 +776,12 @@ Notas de herramientas:
   `contextcheck` está desactivado en `internal/state/` y en los CLI que tocan el
   store porque el linter no sigue el contexto embebido.
 
-  Las excepciones aceptadas de gosec viven en esa config: `G115` (en todo el
-  proyecto), y en fixtures de test `G306`/`G101`/`G703` (los tests se excluyen
-  por path de golangci). Los casos by-design se suprimen en el call site con
-  `//nolint:gosec` más un comentario justificativo — prefiere eso sobre ampliar
-  la config: `G204` (comandos del operador vía `execx`), `G304` (rutas bajo
+  Las excepciones aceptadas de gosec viven en esa config: `G115` solo en los
+  encoders de ancho fijo `fpm`, `ipp`, `kafka`, `mqtt`, `nfs`, `openvpn`, `rdp`,
+  `smb` y `snmp` (sus límites wire tienen tests de regresión). Las excepciones
+  by-design en tests usan `//nolint:gosec` con justificación. Los casos
+  by-design se suprimen en el call site con `//nolint:gosec` más un comentario
+  justificativo — prefiere eso sobre ampliar la config: `G204` (comandos del operador vía `execx`), `G304` (rutas bajo
   `/proc`, `paths.runtime`, fstab, dirs de config), escrituras `0644`
   intencionales, lecturas acotadas `args[i]`, `G118` de contexto de shutdown.
 

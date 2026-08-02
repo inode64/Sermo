@@ -151,6 +151,9 @@ func statfsUsage(path string) (StorageStats, error) {
 	if err := syscall.Statfs(path, &s); err != nil {
 		return StorageStats{}, err
 	}
+	if s.Bsize <= 0 {
+		return StorageStats{}, fmt.Errorf("statfs %q returned invalid block size %d", path, s.Bsize)
+	}
 	bsize := uint64(s.Bsize)
 	total := s.Blocks * bsize
 	free := s.Bavail * bsize // space available to unprivileged users

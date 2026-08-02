@@ -1,12 +1,36 @@
 package metrics
 
 import (
+	"math"
 	"os"
 	"runtime"
 	"sync/atomic"
 	"testing"
 	"time"
 )
+
+func TestProcBootTimeValueRejectsUnsignedOverflow(t *testing.T) {
+	tests := []struct {
+		name string
+		sec  uint64
+		ok   bool
+		want int64
+	}{
+		{name: "valid", sec: 123, ok: true, want: 123},
+		{name: "largest signed value", sec: math.MaxInt64, ok: true, want: math.MaxInt64},
+		{name: "unsigned overflow", sec: math.MaxInt64 + 1},
+		{name: "missing field"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, ok := procBootTimeValue(tc.sec, tc.ok)
+			wantOK := tc.ok && tc.sec <= math.MaxInt64
+			if ok != wantOK || got != tc.want {
+				t.Fatalf("procBootTimeValue(%d, %v) = (%d, %v), want (%d, %v)", tc.sec, tc.ok, got, ok, tc.want, wantOK)
+			}
+		})
+	}
+}
 
 // TestOSReaderProcfs exercises the real /proc readers. It is Linux-only (the
 // procfs layout it parses does not exist elsewhere).

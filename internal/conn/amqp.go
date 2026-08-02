@@ -192,7 +192,7 @@ func parseAMQPTable(b []byte) map[string]string {
 	}
 	n := binary.BigEndian.Uint32(b[:amqpTableLengthBytes])
 	b = b[amqpTableLengthBytes:]
-	if uint32(len(b)) > n {
+	if uint64(len(b)) > uint64(n) {
 		b = b[:n] // ignore trailing bytes beyond the declared table length
 	}
 	for len(b) > 0 {

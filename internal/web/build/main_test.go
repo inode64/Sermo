@@ -17,7 +17,8 @@ func TestWatchPanelDescriptorsMatchShellMarkers(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read shell: %v", err)
 	}
-	for _, panel := range panels {
+	for i := range panels {
+		panel := &panels[i]
 		marker := watchPanelMarker(panel.Key)
 		if strings.Count(string(shell), marker) != 1 {
 			t.Errorf("shell marker %q count != 1", marker)

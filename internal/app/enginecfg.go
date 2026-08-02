@@ -54,7 +54,7 @@ func EngineString(cfg *config.Config, key string) string {
 // block, falling back when unset or unparseable.
 func EngineByteSize(cfg *config.Config, key string, fallback int64) int64 {
 	if v, ok := cfgval.ByteSize(engineValue(cfg, key)); ok {
-		return int64(v)
+		return uintToInt64(v)
 	}
 	return fallback
 }

@@ -229,7 +229,7 @@ func (w *procWatcher) publishSnapshot(samples []ProcInfo, ok bool) {
 	summary := fmt.Sprintf("%s: %d matching process%s", target, len(samples), pluralSuffix(len(samples), "process"))
 	if len(samples) > 0 {
 		if rss, ok := data[watchReadingFieldRSS].(uint64); ok {
-			summary += ", rss " + checks.HumanizeSignedBytes(int64(rss))
+			summary += ", rss " + checks.HumanizeSignedBytes(uintToInt64(rss))
 		}
 	}
 	result := checks.Result{
@@ -321,7 +321,7 @@ func (w *procWatcher) evaluate(st *procState, now time.Time, s ProcInfo) (bool, 
 		ok = false
 	}
 
-	msg := fmt.Sprintf("%s pid %d matches (age %s, rss %s)", w.match.Name, s.PID, units.HumanizeDuration(age), checks.HumanizeSignedBytes(int64(s.RSS)))
+	msg := fmt.Sprintf("%s pid %d matches (age %s, rss %s)", w.match.Name, s.PID, units.HumanizeDuration(age), checks.HumanizeSignedBytes(uintToInt64(s.RSS)))
 	return ok, env, msg
 }
 

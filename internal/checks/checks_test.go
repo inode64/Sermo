@@ -159,7 +159,7 @@ func runHTTPCertCheck(t *testing.T, opts certOptions) Result {
 		w.WriteHeader(http.StatusOK)
 	}))
 	t.Cleanup(srv.Close)
-	insecure := &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}} //nolint:gosec // test client must read the test server's self-signed cert
+	insecure := &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}}
 	c := &httpCheck{
 		base: base{name: "h", timeout: time.Second}, client: insecure, certClient: insecure,
 		url: srv.URL, method: "GET", expect: statusMatcher{codes: []int{200}},

@@ -2,6 +2,7 @@ package metrics
 
 import (
 	"bytes"
+	"math"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -150,8 +151,14 @@ func procBootTime() (int64, bool) {
 	if err != nil {
 		return 0, false
 	}
-	sec, ok := ScanUintField(string(data), procStatBootTimePrefix)
-	return int64(sec), ok
+	return procBootTimeValue(ScanUintField(string(data), procStatBootTimePrefix))
+}
+
+func procBootTimeValue(sec uint64, ok bool) (int64, bool) {
+	if !ok || sec > math.MaxInt64 {
+		return 0, false
+	}
+	return int64(sec), true
 }
 
 // ScanUintField scans newline-separated procfs/sysfs text for the first line

@@ -40,21 +40,21 @@ func aggregateProcesses(procs []process.Process, r procMetricReader) ([]web.Proc
 	for i := range procs {
 		wp := processToWeb(procs[i])
 		if rss, ok := r.ProcessRSS(procs[i].PID); ok {
-			wp.RSS = int64(rss)
-			totals.RSS += int64(rss)
+			wp.RSS = uintToInt64(rss)
+			totals.RSS += uintToInt64(rss)
 		}
 		if rd, wr, ok := r.ProcessIO(procs[i].PID); ok {
-			wp.IORead, wp.IOWrite = int64(rd), int64(wr)
-			totals.IORead += int64(rd)
-			totals.IOWrite += int64(wr)
+			wp.IORead, wp.IOWrite = uintToInt64(rd), uintToInt64(wr)
+			totals.IORead += uintToInt64(rd)
+			totals.IOWrite += uintToInt64(wr)
 		}
 		if n, ok := r.ProcessFDs(procs[i].PID); ok {
-			wp.FDs = int64(n)
-			totals.FDs += int64(n)
+			wp.FDs = uintToInt64(n)
+			totals.FDs += uintToInt64(n)
 		}
 		if n, ok := r.ProcessThreads(procs[i].PID); ok {
-			wp.Threads = int64(n)
-			totals.Threads += int64(n)
+			wp.Threads = uintToInt64(n)
+			totals.Threads += uintToInt64(n)
 		}
 		out = append(out, wp)
 	}

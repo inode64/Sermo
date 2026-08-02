@@ -59,8 +59,8 @@ func (r *telegramReporter) Status(ctx context.Context) (telegrambot.StatusReport
 		LastEvent:  snap.Activity.LastEventKind,
 		HostUptime: snap.Daemon.HostUptime,
 	}
-	for _, s := range snap.Services {
-		switch s.CheckHealth {
+	for i := range snap.Services {
+		switch snap.Services[i].CheckHealth {
 		case webCheckHealthOK:
 			rep.OK++
 		case webCheckHealthFailing:
@@ -134,8 +134,9 @@ func (r *telegramReporter) Events(ctx context.Context, limit int) ([]telegrambot
 }
 
 func (r *telegramReporter) serviceExists(ctx context.Context, name string) bool {
-	for _, s := range r.web.Services(ctx) {
-		if strings.EqualFold(s.Name, name) {
+	services := r.web.Services(ctx)
+	for i := range services {
+		if strings.EqualFold(services[i].Name, name) {
 			return true
 		}
 	}

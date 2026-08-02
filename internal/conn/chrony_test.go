@@ -521,6 +521,28 @@ func TestChronyTimespec(t *testing.T) {
 	}
 }
 
+func TestChronyCountDecodesSignedWireValues(t *testing.T) {
+	tests := []struct {
+		name string
+		raw  uint32
+		want string
+	}{
+		{name: "zero", raw: 0, want: "0"},
+		{name: "largest positive", raw: math.MaxInt32, want: "2147483647"},
+		{name: "negative one", raw: math.MaxUint32, want: "-1"},
+		{name: "smallest negative", raw: uint32(1) << (chronyInt32Bits - 1), want: "-2147483648"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			var b [chronyInt32Bytes]byte
+			binary.BigEndian.PutUint32(b[:], tc.raw)
+			if got := chronyCount(b[:]); got != tc.want {
+				t.Fatalf("chronyCount(%#x) = %q, want %q", tc.raw, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestChronyActivityFields(t *testing.T) {
 	// Five distinct counters, so decoding them out of wire order cannot pass.
 	extra := map[string]string{}

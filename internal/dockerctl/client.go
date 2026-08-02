@@ -188,7 +188,7 @@ type Client struct {
 }
 
 // NewClient returns a Docker API client for spec.
-func NewClient(spec Spec) (*Client, error) {
+func NewClient(spec Spec) *Client {
 	if spec.Socket != "" {
 		socket := filepath.Clean(spec.Socket)
 		tr := &http.Transport{
@@ -196,7 +196,7 @@ func NewClient(spec Spec) (*Client, error) {
 				return (&net.Dialer{}).DialContext(ctx, networkUnix, socket)
 			},
 		}
-		return &Client{HTTP: &http.Client{Transport: tr}, Base: dockerSocketBaseURL}, nil
+		return &Client{HTTP: &http.Client{Transport: tr}, Base: dockerSocketBaseURL}
 	}
 	host := spec.Host
 	if host == "" {
@@ -219,7 +219,7 @@ func NewClient(spec Spec) (*Client, error) {
 		}
 		tr.TLSClientConfig = tc
 	}
-	return &Client{HTTP: &http.Client{Transport: tr}, Base: scheme + netutil.URLSchemeSeparator + netutil.JoinHostPort(host, port)}, nil
+	return &Client{HTTP: &http.Client{Transport: tr}, Base: scheme + netutil.URLSchemeSeparator + netutil.JoinHostPort(host, port)}
 }
 
 // CloseIdleConnections closes idle HTTP transport connections.

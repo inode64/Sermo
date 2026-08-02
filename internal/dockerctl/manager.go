@@ -134,7 +134,7 @@ func (m Manager) client() (DockerClient, error) {
 	if m.NewClient != nil {
 		return m.NewClient(m.Spec)
 	}
-	return NewClient(m.Spec)
+	return NewClient(m.Spec), nil
 }
 
 func statusFromContainer(c Container) servicemgr.Status {
