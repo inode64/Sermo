@@ -52,18 +52,12 @@ func nntpHandshake(rw io.ReadWriter, cfg Config) (Result, error) {
 	}}
 
 	if cfg.User != "" {
-		if _, err := fmt.Fprintf(rw, nntpCommandAuthInfoUserFormat, cfg.User); err != nil {
-			return Result{}, err
-		}
-		code, text, err := tp.ReadResponse(0)
+		code, text, err := sendTextCommand(rw, tp, fmt.Sprintf(nntpCommandAuthInfoUserFormat, cfg.User))
 		if err != nil {
 			return Result{}, err
 		}
 		if code == nntpStatusPasswordRequired {
-			if _, err := fmt.Fprintf(rw, nntpCommandAuthInfoPassFormat, cfg.Password); err != nil {
-				return Result{}, err
-			}
-			if code, text, err = tp.ReadResponse(0); err != nil {
+			if code, text, err = sendTextCommand(rw, tp, fmt.Sprintf(nntpCommandAuthInfoPassFormat, cfg.Password)); err != nil {
 				return Result{}, err
 			}
 		}

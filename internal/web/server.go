@@ -1815,24 +1815,11 @@ func queryBool(r *http.Request, key string) bool {
 	return v == queryBoolOne || v == queryBoolTrue || v == queryBoolYes
 }
 
+// parseBeforeQuery reads the ?before= retention cutoff through its owner in the
+// state package, which also consumes it in PruneEvents and CompactHistory.
 func parseBeforeQuery(beforeStr string) (time.Time, error) {
-	if beforeStr == "" {
-		return time.Time{}, nil
-	}
-	now := time.Now()
-	if t, err := time.Parse(time.RFC3339, beforeStr); err == nil {
-		if t.After(now) {
-			return time.Time{}, errors.New("bad before: cutoff must not be in the future")
-		}
-		return t, nil
-	}
-	if d, err := time.ParseDuration(beforeStr); err == nil {
-		if d <= 0 {
-			return time.Time{}, errors.New("bad before: duration must be positive")
-		}
-		return now.Add(-d), nil
-	}
-	return time.Time{}, errors.New("bad before: RFC3339 timestamp or duration (e.g. 1h, 30m)")
+	//nolint:wrapcheck // ParseCutoff already names the before parameter and states the accepted forms; the message is returned verbatim in the 400 body.
+	return state.ParseCutoff(apiQueryBefore, beforeStr, time.Now())
 }
 
 // handleEventsClear supports `sermoctl events clear [--before TIME]`.
@@ -1936,16 +1923,22 @@ func (s *Server) handleLivez(w http.ResponseWriter, r *http.Request) {
 	}, generation)
 }
 
-func (s *Server) handleServiceEvents(w http.ResponseWriter, r *http.Request) {
-	handleNamed(s, w, r, apiErrorUnknownService, func(backend Backend, ctx context.Context, name string) ([]Event, bool) {
-		return backend.ServiceEvents(ctx, name, eventLimit(r))
+// handleNamedEvents serves one named subject's recent events. Service and
+// application feeds differ only in the backend reader and the not-found message.
+func (s *Server) handleNamedEvents(w http.ResponseWriter, r *http.Request, notFoundMsg string,
+	events func(Backend, context.Context, string, int) ([]Event, bool),
+) {
+	handleNamed(s, w, r, notFoundMsg, func(backend Backend, ctx context.Context, name string) ([]Event, bool) {
+		return events(backend, ctx, name, eventLimit(r))
 	})
 }
 
+func (s *Server) handleServiceEvents(w http.ResponseWriter, r *http.Request) {
+	s.handleNamedEvents(w, r, apiErrorUnknownService, Backend.ServiceEvents)
+}
+
 func (s *Server) handleApplicationEvents(w http.ResponseWriter, r *http.Request) {
-	handleNamed(s, w, r, apiErrorUnknownApplication, func(backend Backend, ctx context.Context, name string) ([]Event, bool) {
-		return backend.ApplicationEvents(ctx, name, eventLimit(r))
-	})
+	s.handleNamedEvents(w, r, apiErrorUnknownApplication, Backend.ApplicationEvents)
 }
 
 func (s *Server) handlePreflight(w http.ResponseWriter, r *http.Request) {

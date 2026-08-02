@@ -818,32 +818,29 @@ func (r *bestEffortCycleRecords) RecordMetric(service, check, metric string, val
 	return r.record(r.cycleRecords.RecordMetric(service, check, metric, value, at))
 }
 
-func (r directCycleRecords) RecordSLA(service string, up bool, at time.Time) error {
-	if err := r.sla.RecordSLA(service, up, at); err != nil {
-		return fmt.Errorf("record SLA: %w", err)
+// wrapRecord names the failed write in the error the cycle reports. The four
+// direct recorders below differ only in the store call and that name.
+func wrapRecord(what string, err error) error {
+	if err != nil {
+		return fmt.Errorf("record %s: %w", what, err)
 	}
 	return nil
+}
+
+func (r directCycleRecords) RecordSLA(service string, up bool, at time.Time) error {
+	return wrapRecord("SLA", r.sla.RecordSLA(service, up, at))
 }
 
 func (r directCycleRecords) RecordCheckSLA(service, check string, up bool, at time.Time) error {
-	if err := r.sla.RecordCheckSLA(service, check, up, at); err != nil {
-		return fmt.Errorf("record check SLA: %w", err)
-	}
-	return nil
+	return wrapRecord("check SLA", r.sla.RecordCheckSLA(service, check, up, at))
 }
 
 func (r directCycleRecords) RecordMeasurement(service, check string, valueMs float64, at time.Time) error {
-	if err := r.measurements.RecordMeasurement(service, check, valueMs, at); err != nil {
-		return fmt.Errorf("record measurement: %w", err)
-	}
-	return nil
+	return wrapRecord("measurement", r.measurements.RecordMeasurement(service, check, valueMs, at))
 }
 
 func (r directCycleRecords) RecordMetric(service, check, metric string, value float64, at time.Time) error {
-	if err := r.measurements.RecordMetric(service, check, metric, value, at); err != nil {
-		return fmt.Errorf("record metric: %w", err)
-	}
-	return nil
+	return wrapRecord("metric", r.measurements.RecordMetric(service, check, metric, value, at))
 }
 
 type cycleMeasurement struct {

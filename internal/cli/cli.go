@@ -88,8 +88,10 @@ const (
 	daemonAPIPathServiceEvents = "/events"
 	daemonAPIQueryBefore       = "before"
 	daemonAPIQueryLimit        = "limit"
-	cliUnknownServiceFormat    = "unknown service %q"
-	cliWarningFormat           = "warning: %s\n"
+	// beforeFlagLabel names the --before flag in cutoff parse errors.
+	beforeFlagLabel         = "--" + daemonAPIQueryBefore
+	cliUnknownServiceFormat = "unknown service %q"
+	cliWarningFormat        = "warning: %s\n"
 )
 
 const (
@@ -1558,24 +1560,11 @@ func (a App) runEventsClear(ctx context.Context, opts options, noun string) int 
 	return exitSuccess
 }
 
+// parseBefore reads the shared --before cutoff through its owner in the state
+// package, which also consumes it in PruneEvents and CompactHistory.
 func parseBefore(value string, now func() time.Time) (time.Time, error) {
-	if value == "" {
-		return time.Time{}, nil
-	}
-	at := now()
-	if d, err := time.ParseDuration(value); err == nil {
-		if d <= 0 {
-			return time.Time{}, errors.New("invalid --before: duration must be positive")
-		}
-		return at.Add(-d), nil
-	}
-	if t, err := time.Parse(time.RFC3339, value); err == nil {
-		if t.After(at) {
-			return time.Time{}, errors.New("invalid --before: timestamp must not be in the future")
-		}
-		return t, nil
-	}
-	return time.Time{}, errors.New("invalid --before: use a non-future RFC3339 timestamp (e.g. 2026-06-13T12:00:00Z) or positive duration (e.g. 1h, 30m)")
+	//nolint:wrapcheck // ParseCutoff already names --before and states the accepted forms; the message is printed verbatim as the usage error.
+	return state.ParseCutoff(beforeFlagLabel, value, now())
 }
 
 // pruneDaemonEvents performs the HTTP call to the running sermod's web API

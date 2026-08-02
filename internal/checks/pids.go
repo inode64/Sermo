@@ -33,11 +33,9 @@ type pidsCheck struct {
 }
 
 func (c pidsCheck) Run(_ context.Context) Result {
-	sampler := samplerOr(c.sampler, defaultPidsSampler)
-	return runLevelCountCheck(c.base, c.preds, func() (uint64, uint64, error) {
-		s, err := sampler()
-		return s.Threads, s.Max, err
-	}, "pids", "in use", DataKeyCount)
+	return runSampledLevelCount(c.base, c.preds, samplerOr(c.sampler, defaultPidsSampler),
+		func(s PidsSample) (uint64, uint64) { return s.Threads, s.Max },
+		"pids", "in use", DataKeyCount)
 }
 
 // defaultPidsSampler reads the total scheduling entities from the fourth loadavg

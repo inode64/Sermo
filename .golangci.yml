@@ -251,11 +251,18 @@ linters:
         - pattern: ^http\.DefaultClient$
           msg: use an explicit http.Client with a timeout (see internal/httpx)
     dupl:
-      # The default is 150 tokens, which only sees very large clones. 70 is the
-      # lowest value production code is clean at: below it the reports are shape
-      # matches — a struct-to-struct mapping, a spec-driven assistant Run — not
-      # duplicated logic worth folding. Lower it further only alongside a fold.
-      threshold: 70
+      # The default is 150 tokens, which only sees very large clones. 60 is the
+      # lowest value production code is clean at, and only with the three
+      # //nolint:dupl sites this repo carries; 65 is clean with none. Measured
+      # floors below that: 55 -> 18 reports, 50 -> 30, all of them shape matches
+      # rather than duplicated logic — unrelated const blocks sharing only a run
+      # of `name = literal`, struct-to-struct mappings whose field lists have
+      # nothing in common, interface-forwarding delegates, and the per-type rows
+      # of the central check builders, each already a single call naming one
+      # check's constants. Folding those hides what each surface exposes; it
+      # removes no logic. Lower this only alongside a fold that moves the
+      # measured floor, never by adding exclusions.
+      threshold: 60
     goconst:
       # AGENTS.md requires a shared constant only when a production value
       # appears more than three times. Test fixtures stay literal and readable.

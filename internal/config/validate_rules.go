@@ -71,21 +71,29 @@ func validateWindow(prefix string, entry map[string]any, add addFunc) {
 // validateClearWindow checks the optional clear (recovery hysteresis) window: a
 // mapping with exactly one of cycles or duration, both positive.
 func validateClearWindow(prefix string, entry map[string]any, add addFunc) {
-	rawClear, hasClear := entry[rules.RuleFieldClear]
-	if !hasClear {
+	raw, present := entry[rules.RuleFieldClear]
+	validateWindowBlock(prefix+"."+rules.RuleFieldClear, rules.RuleFieldClear, raw, present, add)
+}
+
+// validateWindowBlock checks one hysteresis window block — a per-rule `clear:`
+// or the `clear_window:` fallback — which is a mapping accepting exactly one of
+// cycles or duration. path is the block's full operator-facing spelling and
+// label is the bare key the block's own guidance names.
+func validateWindowBlock(path, label string, raw any, present bool, add addFunc) {
+	if !present {
 		return
 	}
-	c, ok := rawClear.(map[string]any)
+	m, ok := raw.(map[string]any)
 	if !ok {
-		add("%s.clear must be a mapping, e.g. clear: {cycles: 3} or clear: {duration: 4m}", prefix)
+		add("%s must be a mapping, e.g. %s: {cycles: 3} or %s: {duration: 4m}", path, label, label)
 		return
 	}
-	for _, key := range slices.Sorted(maps.Keys(c)) {
+	for _, key := range slices.Sorted(maps.Keys(m)) {
 		if key != rules.WindowKeyCycles && key != rules.WindowKeyDuration {
-			add("%s.clear.%s is not supported; clear only accepts cycles or duration", prefix, key)
+			add("%s.%s is not supported; %s only accepts cycles or duration", path, key, label)
 		}
 	}
-	validateWindowLength(prefix+".clear", c, add)
+	validateWindowLength(path, m, add)
 }
 
 func validateWindowLength(prefix string, m map[string]any, add addFunc) (cycles int, hasCycles bool) {
@@ -194,21 +202,8 @@ func validateRuleWindow(tree map[string]any, add addFunc) {
 // duration, both positive. `clear_window: {cycles: 1}` is the immediate
 // opt-out from the built-in default.
 func validateClearWindowSection(tree map[string]any, add addFunc) {
-	cw, present := tree[sectionClearWindow]
-	if !present {
-		return
-	}
-	m, ok := cw.(map[string]any)
-	if !ok {
-		add("clear_window must be a mapping, e.g. clear_window: {cycles: 3} or clear_window: {duration: 4m}")
-		return
-	}
-	for _, key := range slices.Sorted(maps.Keys(m)) {
-		if key != rules.WindowKeyCycles && key != rules.WindowKeyDuration {
-			add("clear_window.%s is not supported; clear_window only accepts cycles or duration", key)
-		}
-	}
-	validateWindowLength(sectionClearWindow, m, add)
+	raw, present := tree[sectionClearWindow]
+	validateWindowBlock(sectionClearWindow, sectionClearWindow, raw, present, add)
 }
 
 func validateRules(tree map[string]any, notifiers map[string]struct{}, add addFunc) {

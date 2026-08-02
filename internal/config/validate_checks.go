@@ -23,9 +23,7 @@ const portSpecRequiredMessage = `is required (e.g. "80,443,1024-4000")`
 // Shared by host watches and service checks. A storage check verifies space/inodes
 // and/or whether the path is mounted, so at least one of the two must be present.
 func validateStorageFields(prefix string, fields map[string]any, add addFunc) {
-	if cfgval.String(fields[checks.CheckKeyPath]) == "" {
-		add("%s.path is required for a storage check", prefix)
-	}
+	requireCheckField(prefix, checks.CheckKeyPath, "a storage check", fields, add)
 	preds := validatePresentThresholds(prefix, fields, checks.StoragePredFields, add)
 	hasMount := validateMountConditions(prefix, fields, add)
 	if preds == 0 && !hasMount {
@@ -178,9 +176,7 @@ func gateStrings(v any) ([]string, bool) {
 // optional request (method/headers/body/json) and response-assertion fields
 // (expect_body/expect_json) shapes.
 func validateHTTPFields(prefix string, fields map[string]any, add addFunc) {
-	if cfgval.String(fields[checks.CheckKeyURL]) == "" {
-		add("%s.url is required for an http check", prefix)
-	}
+	requireCheckField(prefix, checks.CheckKeyURL, "an http check", fields, add)
 	if v, present := fields[checks.CheckKeyMethod]; present {
 		if _, warn := checks.ParseHTTPMethod(v); warn != "" {
 			add("%s.%s", prefix, warn)
@@ -460,9 +456,7 @@ func validateLoadFields(prefix string, fields map[string]any, add addFunc) {
 // validateHdparmFields validates an hdparm check: a required device and at least
 // one of the read/cached {op, value} throughput predicates.
 func validateHdparmFields(prefix string, fields map[string]any, add addFunc) {
-	if cfgval.String(fields[checks.CheckKeyDevice]) == "" {
-		add("%s.device is required for an hdparm check", prefix)
-	}
+	requireCheckField(prefix, checks.CheckKeyDevice, "an hdparm check", fields, add)
 	if validatePresentThresholds(prefix, fields, checks.HdparmPredFields, add) == 0 {
 		add("%s requires at least one of %s {op, value}", prefix, strings.Join(checks.HdparmPredFields, "/"))
 	}
@@ -472,9 +466,7 @@ func validateHdparmFields(prefix string, fields map[string]any, add addFunc) {
 // optional {op, value} attribute predicates (without one, it alerts on a failed
 // SMART health verdict).
 func validateSmartFields(prefix string, fields map[string]any, add addFunc) {
-	if cfgval.String(fields[checks.CheckKeyDevice]) == "" {
-		add("%s.device is required for a smart check", prefix)
-	}
+	requireCheckField(prefix, checks.CheckKeyDevice, "a smart check", fields, add)
 	validatePresentThresholds(prefix, fields, checks.SmartPredFields, add)
 }
 
@@ -1146,9 +1138,7 @@ func validateAutofsFields(prefix string, fields map[string]any, add addFunc) {
 // validateSizeFields validates a size (growth) check: a required path, a
 // positive parseable grow_by byte size and a positive within duration.
 func validateSizeFields(prefix string, fields map[string]any, add addFunc) {
-	if cfgval.String(fields[checks.CheckKeyPath]) == "" {
-		add("%s.path is required for a size check", prefix)
-	}
+	requireCheckField(prefix, checks.CheckKeyPath, "a size check", fields, add)
 	if v, present := fields[checks.CheckKeyIncludeHidden]; present {
 		if _, ok := v.(bool); !ok {
 			add(validationBooleanFormat, prefix+"."+checks.CheckKeyIncludeHidden)
@@ -1192,9 +1182,7 @@ func validateMongoFields(prefix string, fields map[string]any, add addFunc) {
 			add("%s.command must be a JSON object", prefix)
 		}
 	case collection != "":
-		if cfgval.String(fields[checks.CheckKeyDatabase]) == "" {
-			add("%s.database is required for a collection query", prefix)
-		}
+		requireCheckField(prefix, checks.CheckKeyDatabase, "a collection query", fields, add)
 		if pipeline != "" {
 			if result == "" {
 				add("%s.result is required with pipeline", prefix)
@@ -1237,9 +1225,7 @@ func validateInterfaceFields(prefix string, fields map[string]any, add addFunc) 
 // a value, plus the language-specific target — InfluxQL needs a `database`, Flux
 // needs an `org` and `token`.
 func validateInfluxFields(prefix string, fields map[string]any, add addFunc) {
-	if cfgval.String(fields[checks.CheckKeyQuery]) == "" {
-		add("%s.query is required for an influxdb-query check", prefix)
-	}
+	requireCheckField(prefix, checks.CheckKeyQuery, "an influxdb-query check", fields, add)
 	validateAssertionFields(prefix, fields, "influxdb-query", add)
 	language := cfgval.String(fields[checks.CheckKeyLanguage])
 	if language == "" {
@@ -1247,16 +1233,10 @@ func validateInfluxFields(prefix string, fields map[string]any, add addFunc) {
 	}
 	switch language {
 	case checks.InfluxLanguageInfluxQL:
-		if cfgval.String(fields[checks.CheckKeyDatabase]) == "" {
-			add("%s.database is required for an influxql query", prefix)
-		}
+		requireCheckField(prefix, checks.CheckKeyDatabase, "an influxql query", fields, add)
 	case checks.InfluxLanguageFlux:
-		if cfgval.String(fields[checks.CheckKeyOrg]) == "" {
-			add("%s.org is required for a flux query", prefix)
-		}
-		if cfgval.String(fields[checks.CheckKeyToken]) == "" {
-			add("%s.token is required for a flux query", prefix)
-		}
+		requireCheckField(prefix, checks.CheckKeyOrg, "a flux query", fields, add)
+		requireCheckField(prefix, checks.CheckKeyToken, "a flux query", fields, add)
 	default:
 		add("%s.language %q must be %s", prefix, language, checks.InfluxLanguageSummary)
 	}
@@ -1281,19 +1261,23 @@ func validateSQLFields(prefix string, fields map[string]any, add addFunc) {
 	if _, ok := sqlEngines[engine]; !ok {
 		add("%s.engine must be one of %s", prefix, checks.SQLEngineSummary)
 	}
-	if cfgval.String(fields[checks.CheckKeyQuery]) == "" {
-		add("%s.query is required for a sql check", prefix)
-	}
+	requireCheckField(prefix, checks.CheckKeyQuery, "a sql check", fields, add)
 	validateAssertionFields(prefix, fields, "sql", add)
 	switch engine {
 	case checks.SQLEngineSQLite, checks.SQLEngineSQLite3:
-		if cfgval.String(fields[checks.CheckKeyPath]) == "" {
-			add("%s.path is required for a sqlite sql check", prefix)
-		}
+		requireCheckField(prefix, checks.CheckKeyPath, "a sqlite sql check", fields, add)
 	case checks.SQLEngineMySQL, checks.SQLEngineMariaDB, checks.SQLEnginePostgres, checks.SQLEnginePostgreSQL:
-		if cfgval.String(fields[checks.CheckKeyUser]) == "" {
-			add("%s.user is required for a %s sql check", prefix, engine)
-		}
+		requireCheckField(prefix, checks.CheckKeyUser, "a "+engine+" sql check", fields, add)
+	}
+}
+
+// requireCheckField reports the shared "field is required" issue when the check
+// left key empty. what completes the sentence and carries its own article, e.g.
+// "an http check" or "a sqlite sql check", so the message names the check type
+// the operator wrote rather than a generic one.
+func requireCheckField(prefix, key, what string, fields map[string]any, add addFunc) {
+	if cfgval.String(fields[key]) == "" {
+		add("%s.%s is required for %s", prefix, key, what)
 	}
 }
 
@@ -1360,9 +1344,7 @@ func validateCertFields(prefix string, fields map[string]any, add addFunc) {
 // validateDiskIOFields validates a diskio check: a required block device name
 // and at least one rate predicate.
 func validateDiskIOFields(prefix string, fields map[string]any, add addFunc) {
-	if cfgval.String(fields[checks.CheckKeyDevice]) == "" {
-		add("%s.device is required for a diskio check (e.g. sda, nvme0n1)", prefix)
-	}
+	requireCheckField(prefix, checks.CheckKeyDevice, "a diskio check (e.g. sda, nvme0n1)", fields, add)
 	validateThresholdPreds(prefix, fields, checks.DiskIOPredFields, add)
 }
 
