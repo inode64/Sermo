@@ -102,9 +102,7 @@ func diagCheckResources(b *builder, scope string, entry map[string]any, host Hos
 			b.addf(LevelWarning, scope, "directory %q does not exist", p)
 		}
 	case checks.CheckTypeDiskIO:
-		if dev := cfgval.AsString(entry[checks.CheckKeyDevice]); dev != "" && !host.PathExists(checks.SysBlockPath+"/"+dev) {
-			b.addf(LevelWarning, scope, "block device %q does not exist (no /sys/class/block entry)", dev)
-		}
+		warnMissingKernelResource(b, scope, entry, checks.CheckKeyDevice, checks.SysBlockPath, "block device %q does not exist (no /sys/class/block entry)", host)
 	case checks.CheckTypeHdparm, checks.CheckTypeSmart:
 		if dev := cfgval.AsString(entry[checks.CheckKeyDevice]); dev != "" && !host.PathExists(dev) {
 			b.addf(LevelWarning, scope, "device %q does not exist", dev)
@@ -112,9 +110,16 @@ func diagCheckResources(b *builder, scope string, entry map[string]any, host Hos
 	case checks.CheckTypeRoute:
 		warnMissingInterface(b, scope, entry, host)
 	case checks.CheckTypePressure:
-		if res := cfgval.AsString(entry[checks.CheckKeyResource]); res != "" && !host.PathExists(checks.ProcPressureRootPath+"/"+res) {
-			b.addf(LevelWarning, scope, "kernel exposes no /proc/pressure/%s (CONFIG_PSI off?); this check will never fire", res)
-		}
+		warnMissingKernelResource(b, scope, entry, checks.CheckKeyResource, checks.ProcPressureRootPath, "kernel exposes no /proc/pressure/%s (CONFIG_PSI off?); this check will never fire", host)
+	}
+}
+
+// warnMissingKernelResource reports a configured kernel resource that is not
+// exposed below its expected procfs or sysfs directory.
+func warnMissingKernelResource(b *builder, scope string, entry map[string]any, key, root, message string, host Host) {
+	resource := cfgval.AsString(entry[key])
+	if resource != "" && !host.PathExists(root+"/"+resource) {
+		b.addf(LevelWarning, scope, message, resource)
 	}
 }
 
