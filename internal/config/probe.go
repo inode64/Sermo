@@ -58,7 +58,7 @@ func extractFileValue(path string, spec map[string]any) (string, bool, error) {
 }
 
 func readOptionalFile(path string) ([]byte, bool) {
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) //nolint:gosec // G304: optional host file from catalog/os-select paths
 	return data, err == nil
 }
 
@@ -79,7 +79,7 @@ func directiveValue(data []byte, key string) (string, bool) {
 // /etc/conf.d/<service> convention), with surrounding quotes stripped. ok=false
 // when the file is unreadable or the key is absent.
 func confdValue(path, key string) (string, bool) {
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) //nolint:gosec // G304: OpenRC conf.d path from catalog service unit
 	if err != nil {
 		return "", false
 	}

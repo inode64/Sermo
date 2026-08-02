@@ -135,7 +135,7 @@ func mountStaleFile(path string, detected map[string]bool) staleFile {
 }
 
 func mountFileTarget(path string) string {
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) //nolint:gosec // G304: catalog/service YAML path under controlled dirs
 	if err != nil {
 		return ""
 	}

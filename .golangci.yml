@@ -296,6 +296,16 @@ linters:
           - contextcheck
         path: '^internal/cli/(monitor|panic|sla|state|watch|cli_monitor_state)\.go$'
 
+      # G115 (integer overflow conversions) is noisy and false-positive-prone
+      # here: every flagged site converts an already-bounded value (port 0-65535,
+      # /proc-reported count, protocol field width, range-validated config).
+      # Accepted project-wide. By-design G204 (operator commands via execx) and
+      # G304 (paths under /proc, paths.runtime, fstab, config dirs) are suppressed
+      # at the call site with //nolint:gosec + justification.
+      - linters:
+          - gosec
+        text: G115
+
 
 issues:
   # Report every finding (golangci-lint otherwise caps repeated issues at 3).

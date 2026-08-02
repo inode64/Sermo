@@ -761,12 +761,13 @@ Notas de herramientas:
   `contextcheck` está desactivado en `internal/state/` y en los CLI que tocan el
   store porque el linter no sigue el contexto embebido.
 
-  Las excepciones aceptadas de gosec viven en esa config: `G115`, y en fixtures
-  de test `G306`/`G101`/`G703`. Los casos by-design (`G204` comandos
-  configurados por el operador, escrituras `0644` intencionales, lecturas
-  acotadas `args[i]`, `G118` de contexto de shutdown) se suprimen en el call
-  site con `//nolint:gosec` más un comentario justificativo — prefiere eso sobre
-  ampliar la config.
+  Las excepciones aceptadas de gosec viven en esa config: `G115` (en todo el
+  proyecto), y en fixtures de test `G306`/`G101`/`G703` (los tests se excluyen
+  por path de golangci). Los casos by-design se suprimen en el call site con
+  `//nolint:gosec` más un comentario justificativo — prefiere eso sobre ampliar
+  la config: `G204` (comandos del operador vía `execx`), `G304` (rutas bajo
+  `/proc`, `paths.runtime`, fstab, dirs de config), escrituras `0644`
+  intencionales, lecturas acotadas `args[i]`, `G118` de contexto de shutdown.
 - **`make docs-sync`** contrasta la documentación con el código que describe:
   toda ruta citada existe, todo identificador Go nombrado por una skill existe,
   AGENTS.md nombra todos los linters que habilita `.golangci.yml`, toda clave de

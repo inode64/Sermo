@@ -37,7 +37,7 @@ func Open(path string) (*Writer, error) {
 	if err := os.MkdirAll(filepath.Dir(path), logDirMode); err != nil {
 		return nil, fmt.Errorf("create log directory: %w", err)
 	}
-	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, logFileMode)
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, logFileMode) //nolint:gosec // G304: log path from operator paths.event_log configuration
 	if err != nil {
 		return nil, fmt.Errorf("open log %q: %w", path, err)
 	}

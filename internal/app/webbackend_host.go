@@ -52,7 +52,7 @@ func parseProcUptime(data []byte) (time.Duration, bool) {
 // Linux, e.g. "Debian GNU/Linux 12 (bookworm)"), falling back to runtime.GOOS.
 func osPrettyName() string {
 	for _, path := range config.OSReleasePaths() {
-		if data, err := os.ReadFile(path); err == nil {
+		if data, err := os.ReadFile(path); err == nil { //nolint:gosec // G304: fixed OSReleasePaths candidates (/etc/os-release)
 			if name := parseOSReleasePrettyName(data); name != "" {
 				return name
 			}

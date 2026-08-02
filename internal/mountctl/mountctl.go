@@ -470,7 +470,7 @@ func disabledUmountResult(spec Spec, message string) Result {
 
 func (c Controller) readState(spec Spec) (State, error) {
 	path := c.statePath(spec)
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) //nolint:gosec // G304: mount state file under paths.runtime
 	if err != nil {
 		if os.IsNotExist(err) {
 			return State{Name: spec.Name, Path: spec.Path}, nil
@@ -629,7 +629,7 @@ func FstabEntries(fstabPath string) ([]FstabEntry, error) {
 	if fstabPath == "" {
 		fstabPath = DefaultFstabPath
 	}
-	data, err := os.ReadFile(fstabPath)
+	data, err := os.ReadFile(fstabPath) //nolint:gosec // G304: fstab path defaults to /etc/fstab
 	if err != nil {
 		return nil, fmt.Errorf("read fstab %s: %w", fstabPath, err)
 	}

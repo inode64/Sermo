@@ -463,7 +463,7 @@ func OpenContextWith(ctx context.Context, path string, opts Options) (*Store, er
 
 	s := &Store{db: db, now: time.Now, ctx: ctx, retention: opts.Retention.normalized()}
 	if err := s.initializeSchema(ctx); err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, fmt.Errorf("initialize state db %s: %w", path, err)
 	}
 	// A dedicated read-only connection keeps heavy aggregations (rolling-year
@@ -471,7 +471,7 @@ func OpenContextWith(ctx context.Context, path string, opts Options) (*Store, er
 	// read path accidentally writing through it.
 	reader, err := sql.Open(sqliteDriverName, dsn+"&_pragma=query_only(on)")
 	if err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, fmt.Errorf("open state db reader %s: %w", path, err)
 	}
 	reader.SetMaxOpenConns(1)

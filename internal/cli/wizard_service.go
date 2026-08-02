@@ -360,7 +360,7 @@ func procSocketTables() []procSocketTable {
 }
 
 func procPortListening(path string, port int, states map[string]bool) bool {
-	f, err := os.Open(path)
+	f, err := os.Open(path) //nolint:gosec // G304: /proc/net/tcp{,6} for local port discovery
 	if err != nil {
 		return false
 	}
@@ -379,7 +379,7 @@ func portListenerHost(port int) (string, bool) {
 }
 
 func procPortListenerHosts(path string, port int, states map[string]bool, ipv6 bool) []string {
-	f, err := os.Open(path)
+	f, err := os.Open(path) //nolint:gosec // G304: /proc/net/tcp{,6} for local port discovery
 	if err != nil {
 		return nil
 	}
@@ -570,7 +570,7 @@ func serviceStaleFile(path string, detected map[string]bool) staleFile {
 // "docker:<container>", and libvirt VM services use "vm:<domain>". "" when
 // unreadable or not targetable.
 func serviceFileTarget(path string) string {
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) //nolint:gosec // G304: catalog/service YAML path under controlled dirs
 	if err != nil {
 		return ""
 	}
