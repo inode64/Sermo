@@ -687,7 +687,10 @@ Tool notes:
   `PATH` or call the analyzer binaries one by one unless you are debugging the
   lint target itself. `govulncheck` may need network access to refresh the
   vulnerability DB; a network/DNS failure there is an environment issue, not a
-  code finding.
+  code finding. Lint also runs **NilAway** (`go.uber.org/nilaway`) on
+  `internal/operation` and `internal/process` with `-exclude-test-files` (the
+  pilot for nil-flow bugs on the start/stop/signal path). Expand the package
+  list only after the next pilot is clean.
 - **`go fix -diff ./...`** runs as part of `make lint`: the Go 1.26 modernizers
   must propose no changes. If it fails, run `go fix ./...` and review the
   rewrite instead of silencing it.
@@ -737,9 +740,11 @@ Tool notes:
   (checks/conn/rules/config must not import `operation`; production `rules/`
   must not import `execx`); `wrapcheck` is a pilot over `internal/` operation,
   app, cli, state, process, web, servicemgr, rules and config, with `*_test.go`
-  and the other packages excluded; `ireturn` excludes the check/notify builders,
-  the conn registry, manager constructors and similar factories; `noctx` is off
-  in `internal/conn/` and `*_test.go`; `goconst` wants four occurrences before a
+  and `internal/checks` + `internal/conn` still excluded (~60 + ~147 findings —
+  mostly probe I/O that becomes Result messages; expand per package with
+  contextual `%w` wrapping); `ireturn` excludes the check/notify builders, the
+  conn registry, manager constructors and similar factories; `noctx` is off in
+  `internal/conn/` and `*_test.go`; `goconst` wants four occurrences before a
   shared constant is due.
 
   Production `database/sql` in `internal/state` uses `*Context` methods with
@@ -771,6 +776,16 @@ Tool notes:
   unreachable-function report via `golang.org/x/tools/cmd/deadcode`. Reflection
   and build tags cause false positives — triage findings by hand before
   deleting anything.
+- **`make cover-gate`** (part of `make check`) enforces a no-regression
+  statement-coverage floor on safety packages via `scripts/cover_gate.py`:
+  `operation` ≥ 88%, `process` ≥ 75%, `locks` ≥ 75%, `rules` ≥ 80%,
+  `config` ≥ 85%. Floors sit a few points under the measured baseline. Raise
+  them when a package's coverage climbs and stays there; never lower them to
+  land a change that deletes tests.
+- **`make fuzz`** runs bounded fuzz targets for untrusted config and safety
+  parsers (`FuzzLoadGlobal`, `FuzzLoadDocument`, `FuzzParseSelectors`,
+  `FuzzParseStopPolicy`, `FuzzParseSignal`, `FuzzParseKillSignal`,
+  `FuzzParseRules`). Scheduled CI uses a longer `FUZZ_TIME`.
 
 ## Testing
 

@@ -251,7 +251,10 @@ linters:
   #             not a sentinel type for every message.
   #   gochecknoglobals — registries, host detection and test injection are owned
   #                  package state, not mutable ambient application state.
-  #   wrapcheck (rest of tree) — later phases; hundreds of interface-boundary returns.
+  #   wrapcheck on checks/ + conn/ — measured ~60 (checks) + ~147 (conn) findings,
+  #                  mostly probe I/O (os.ReadFile, net.Dial, protocol libs) that
+  #                  become Result messages rather than package-boundary errors.
+  #                  Expand per package with contextual %w wrapping, not en masse.
   exclusions:
     generated: lax
     paths:

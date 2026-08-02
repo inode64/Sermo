@@ -66,7 +66,7 @@ config_subst = sed -e 's|/usr/share/sermo|$(SERMO_DATADIR)|g' -e 's|/etc/sermo|$
 # Rewrite runtime/state dirs in the tmpfiles config.
 tmpfiles_subst = sed -e 's|/run/sermo|$(SERMO_RUNDIR)|g' -e 's|/var/lib/sermo|$(SERMO_STATEDIR)|g'
 
-.PHONY: all build test vet fmt fmt-check lint modules-check actions-lint race fuzz deadcode quality-report scripts-lint yaml-fmt yaml-fmt-check yaml-lint yaml-validate markdown-check web web-check web-lint web-e2e validate check cover tidy clean \
+.PHONY: all build test vet fmt fmt-check lint modules-check actions-lint race fuzz deadcode quality-report cover-gate nilaway scripts-lint yaml-fmt yaml-fmt-check yaml-lint yaml-validate markdown-check web web-check web-lint web-e2e validate check cover tidy clean \
         install install-bin install-catalog install-examples install-config install-templates install-tmpfiles install-systemd install-openrc \
         uninstall
 
@@ -184,9 +184,14 @@ fmt-check:
 	@out="$$( $(LINT_PATH) goimports -l internal cmd)"; \
 	if [ -n "$$out" ]; then echo "goimports needed:"; echo "$$out"; exit 1; fi
 
+# Safety packages for NilAway and cover-gate. Operation/process own start/stop/
+# signal paths; locks/rules/config gate remediation policy and untrusted YAML.
+SAFETY_PACKAGES := ./internal/operation ./internal/process ./internal/locks ./internal/rules ./internal/config
+NILAWAY_PACKAGES := ./internal/operation/... ./internal/process/...
+
 # Static analysis. Finds Go-installed tools in ~/go/bin: staticcheck, revive,
-# golangci-lint (runs gosec plus focused bug analyzers via .golangci.yml), and
-# govulncheck.
+# golangci-lint (runs gosec plus focused bug analyzers via .golangci.yml),
+# govulncheck, and nilaway (operation + process pilot).
 lint: fmt-check
 	@echo "go fix -diff $(GO_PACKAGES)"
 	@go fix -diff $(GO_PACKAGES)
@@ -198,6 +203,13 @@ lint: fmt-check
 	@$(LINT_CACHE_ENV) golangci-lint run $(GO_PACKAGES)
 	@echo "govulncheck $(GO_PACKAGES)"
 	@$(LINT_CACHE_ENV) govulncheck $(GO_PACKAGES)
+	@echo "nilaway -exclude-test-files $(NILAWAY_PACKAGES)"
+	@$(LINT_PATH) nilaway -exclude-test-files -pretty-print=false $(NILAWAY_PACKAGES)
+
+# NilAway alone (same packages and flags as the lint pilot).
+nilaway:
+	@echo "nilaway -exclude-test-files $(NILAWAY_PACKAGES)"
+	@$(LINT_PATH) nilaway -exclude-test-files -pretty-print=false $(NILAWAY_PACKAGES)
 
 # Verify module checksums and fail when the dependency manifests are not tidy.
 modules-check:
@@ -213,10 +225,20 @@ actions-lint:
 race:
 	go test -race -count=1 $(GO_TEST_FLAGS) $(GO_PACKAGES)
 
-# Keep fuzzing bounded and focused on untrusted configuration input. Scheduled
-# CI can override FUZZ_TIME for a longer campaign.
+# Keep fuzzing bounded and focused on untrusted configuration and safety
+# parsers. Each Fuzz* runs for FUZZ_TIME; scheduled CI can raise FUZZ_TIME.
+# GO_TEST_FLAGS is intentionally not applied: -shuffle is meaningless for -fuzz.
 fuzz:
+	@echo "fuzz config (LoadGlobal, LoadDocument) $(FUZZ_TIME)"
 	go test -run '^$$' -fuzz '^FuzzLoadGlobal$$' -fuzztime=$(FUZZ_TIME) ./internal/config
+	go test -run '^$$' -fuzz '^FuzzLoadDocument$$' -fuzztime=$(FUZZ_TIME) ./internal/config
+	@echo "fuzz process (ParseSelectors, ParseStopPolicy, ParseSignal, ParseKillSignal) $(FUZZ_TIME)"
+	go test -run '^$$' -fuzz '^FuzzParseSelectors$$' -fuzztime=$(FUZZ_TIME) ./internal/process
+	go test -run '^$$' -fuzz '^FuzzParseStopPolicy$$' -fuzztime=$(FUZZ_TIME) ./internal/process
+	go test -run '^$$' -fuzz '^FuzzParseSignal$$' -fuzztime=$(FUZZ_TIME) ./internal/process
+	go test -run '^$$' -fuzz '^FuzzParseKillSignal$$' -fuzztime=$(FUZZ_TIME) ./internal/process
+	@echo "fuzz rules (ParseRules) $(FUZZ_TIME)"
+	go test -run '^$$' -fuzz '^FuzzParseRules$$' -fuzztime=$(FUZZ_TIME) ./internal/rules
 
 # Advisory only (not part of lint/check): unreachable-function report from
 # golang.org/x/tools/cmd/deadcode. Reflection and build tags cause false
@@ -235,9 +257,9 @@ quality-report:
 	rm -f "$$out"; \
 	if [ "$$status" -ne 0 ] && [ "$$status" -ne 1 ]; then exit "$$status"; fi
 
-# Everything CI enforces: vet, formatting, static analysis, YAML gates, and tests.
-# test depends on validate (Go lint + yaml-validate), so those gates always run first.
-check: vet test
+# Everything CI enforces: vet, formatting, static analysis, YAML gates, tests,
+# and the safety-package coverage floor.
+check: vet test cover-gate
 
 # Coverage: print the total and write a browsable HTML report.
 cover: validate
@@ -246,12 +268,19 @@ cover: validate
 	@go tool cover -html=coverage.out -o coverage.html
 	@echo "wrote coverage.html"
 
+# No-regression statement-coverage floor on safety packages (see scripts/cover_gate.py).
+# Skips validate so it can run after `make test` without re-running the full gate.
+cover-gate:
+	@echo "cover-gate $(SAFETY_PACKAGES)"
+	@go test $(GO_TEST_FLAGS) -coverprofile=coverage-safety.out $(SAFETY_PACKAGES)
+	@$(LINT_PATH) python3 scripts/cover_gate.py coverage-safety.out
+
 tidy:
 	go mod tidy
 
 clean:
 	rm -rf $(BIN)
-	rm -f coverage.out coverage.html
+	rm -f coverage.out coverage.html coverage-safety.out
 
 # Full install: binaries, the catalog, examples, sample config, tmpfiles.d, and
 # both init systems. The persistent state directory is intentionally not created
