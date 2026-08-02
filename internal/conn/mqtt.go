@@ -66,11 +66,11 @@ func (mqttProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	defer func() { _ = c.Close() }()
 
 	if _, err := c.Write(buildMQTTConnect(mqttClientID, cfg.User, cfg.Password)); err != nil {
-		return Result{}, err
+		return Result{}, probeErr(ProtocolNameMQTT, "CONNECT", err)
 	}
 	var ack [mqttConnackMinBytes]byte
 	if _, err := io.ReadFull(c, ack[:]); err != nil {
-		return Result{}, err
+		return Result{}, probeErr(ProtocolNameMQTT, "CONNACK", err)
 	}
 	code, sessionPresent, err := parseMQTTConnack(ack[:])
 	if err != nil {

@@ -71,7 +71,7 @@ func (syncthingProtocol) Probe(ctx context.Context, cfg Config) (Result, error) 
 func syncthingGet(ctx context.Context, client *http.Client, url, apiKey string, out any) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
 	if err != nil {
-		return err
+		return probeErr(ProtocolNameSyncthing, stepRequest, err)
 	}
 	if apiKey != "" {
 		req.Header.Set(httpHeaderSyncthingAuth, apiKey)

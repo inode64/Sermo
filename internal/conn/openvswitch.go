@@ -94,12 +94,12 @@ type ovsdbResponse struct {
 // the reply by id.
 func ovsdbCall(enc *json.Encoder, dec *json.Decoder, id, method string, params []any, out any) error {
 	if err := enc.Encode(map[string]any{ovsdbFieldMethod: method, ovsdbFieldParams: params, ovsdbFieldID: id}); err != nil {
-		return err
+		return probeErr(ProtocolNameOpenVSwitch, stepRequest, err)
 	}
 	for range ovsdbProbeMaxResponses {
 		var resp ovsdbResponse
 		if err := dec.Decode(&resp); err != nil {
-			return err
+			return probeErr(ProtocolNameOpenVSwitch, "response", err)
 		}
 		if resp.Method != "" { // a request from the server, not our reply
 			continue
@@ -113,7 +113,10 @@ func ovsdbCall(enc *json.Encoder, dec *json.Decoder, id, method string, params [
 			return fmt.Errorf("ovsdb %s error: %s", method, resp.Error)
 		}
 		if out != nil && len(resp.Result) > 0 {
-			return json.Unmarshal(resp.Result, out)
+			if err := json.Unmarshal(resp.Result, out); err != nil {
+				return probeErr(ProtocolNameOpenVSwitch, "decode result", err)
+			}
+			return nil
 		}
 		return nil
 	}

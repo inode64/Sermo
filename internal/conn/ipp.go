@@ -67,7 +67,7 @@ func (ippProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	url := base + ippEndpointRoot
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(buildIPPRequest(ippCUPSGetDefault, ippRequestIDDefault)))
 	if err != nil {
-		return Result{}, err
+		return Result{}, probeErr(ProtocolNameIPP, stepRequest, err)
 	}
 	req.Header.Set(httpHeaderContentType, ippContentType)
 

@@ -68,13 +68,13 @@ func rpcCallTCP(c net.Conn, payload []byte) ([]byte, error) {
 	binary.BigEndian.PutUint32(frame, uint32(len(payload))|rpcFragmentLastMask)
 	copy(frame[rpcWordBytes:], payload)
 	if _, err := c.Write(frame); err != nil {
-		return nil, err
+		return nil, probeErr(ProtocolNameNFS, "RPC request", err)
 	}
 	var reply []byte
 	for {
 		var m [rpcWordBytes]byte
 		if _, err := io.ReadFull(c, m[:]); err != nil {
-			return nil, err
+			return nil, probeErr(ProtocolNameNFS, "RPC fragment header", err)
 		}
 		marker := binary.BigEndian.Uint32(m[:])
 		n := int(marker &^ rpcFragmentLastMask)
@@ -83,7 +83,7 @@ func rpcCallTCP(c net.Conn, payload []byte) ([]byte, error) {
 		}
 		frag := make([]byte, n)
 		if _, err := io.ReadFull(c, frag); err != nil {
-			return nil, err
+			return nil, probeErr(ProtocolNameNFS, "RPC fragment", err)
 		}
 		reply = append(reply, frag...)
 		if marker&rpcFragmentLastMask != 0 {

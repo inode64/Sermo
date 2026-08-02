@@ -38,7 +38,7 @@ func (cephProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 
 	buf := make([]byte, cephBannerBytes)
 	if _, err := io.ReadFull(c, buf); err != nil {
-		return Result{}, err
+		return Result{}, probeErr(ProtocolNameCeph, stepBanner, err)
 	}
 	messenger, ok := parseCephBanner(buf)
 	if !ok {

@@ -61,6 +61,7 @@ type httpProbeResponse struct {
 func doHTTPProbe(client *http.Client, req *http.Request, limit int64) (httpProbeResponse, error) {
 	resp, err := client.Do(req)
 	if err != nil {
+		//nolint:wrapcheck // documented above: transport errors stay bare so each probe applies its own probeErr prefix.
 		return httpProbeResponse{}, err
 	}
 	defer func() { _ = resp.Body.Close() }()
@@ -72,6 +73,7 @@ func doHTTPProbe(client *http.Client, req *http.Request, limit int64) (httpProbe
 func getHTTPProbe(ctx context.Context, client *http.Client, url string, limit int64) (httpProbeResponse, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
 	if err != nil {
+		//nolint:wrapcheck // see doHTTPProbe: the caller's probeErr supplies the protocol context.
 		return httpProbeResponse{}, err
 	}
 	return doHTTPProbe(client, req, limit)

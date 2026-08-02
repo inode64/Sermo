@@ -201,6 +201,26 @@ func unexpectedGreeting(code int, greeting string) error {
 	return fmt.Errorf("unexpected greeting: %d %s", code, greeting)
 }
 
+// step* name the probe exchanges that recur across protocols. A protocol with
+// a step of its own passes a literal; these exist so the common ones cannot be
+// spelled three different ways.
+const (
+	stepAuth    = "auth"
+	stepBanner  = "banner"
+	stepConnect = "connect"
+	stepDial    = "dial"
+	stepRequest = "request"
+)
+
+// probeErr is the single wording every protocol probe reports a failure with:
+// the protocol name, the step that failed, then the cause. proto is the
+// probe's ProtocolName* constant and step names the exchange in the operator's
+// terms ("dial", "banner", "auth", "CLI status", …). Wrapping through one
+// helper is what lets wrapcheck be enabled per protocol file.
+func probeErr(proto, step string, err error) error {
+	return fmt.Errorf("%s %s: %w", proto, step, err)
+}
+
 // sendTextCommand writes command and reads its status reply through tp. It is
 // the write-then-read step every textproto handshake (FTP, SMTP, NNTP) repeats
 // per command after readTextGreeting; the caller owns which status codes it
