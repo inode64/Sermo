@@ -1,7 +1,10 @@
 package app
 
 const (
-	daemonMetricCheck    = "sermod"
+	// daemonName is how sermod names itself as the subject of its own log
+	// records and of the metric series it records for its own process.
+	daemonName           = "sermod"
+	daemonMetricCheck    = daemonName
 	runtimeMetricCheck   = "runtime"
 	displayListSeparator = ", "
 )

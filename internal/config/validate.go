@@ -404,16 +404,12 @@ func validateDocument(cfg *Config, doc *Document) ([]Issue, bool) {
 }
 
 func validateDocumentMetadata(doc *Document, scope string) []Issue {
-	fields := []struct{ key, label string }{
-		{keyDescription, "description"},
-		{keyDisplayName, "display_name"},
-		{keyCategory, "category"},
-	}
 	var issues []Issue
-	for _, field := range fields {
-		if value, present := doc.Body[field.key]; present {
+	// Each key doubles as its own operator-facing field name in the message.
+	for _, key := range []string{keyDescription, keyDisplayName, keyCategory} {
+		if value, present := doc.Body[key]; present {
 			if _, ok := value.(string); !ok {
-				issues = append(issues, Issue{Scope: scope, Msg: field.label + " must be a string"})
+				issues = append(issues, Issue{Scope: scope, Msg: key + " must be a string"})
 			}
 		}
 	}
