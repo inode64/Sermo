@@ -147,7 +147,7 @@ type Watch struct {
 const watchEnvAssignSeparator = "="
 
 // cycleTarget names this watch for the scheduler panic-recovery log.
-func (w *Watch) cycleTarget() string { return "watch " + w.Name }
+func (w *Watch) cycleTarget() string { return watchSubjectPrefix + w.Name }
 
 // RunCycle runs the check, advances the window, and fires the hook on a firing
 // cycle. An evaluation/hook error is emitted, never fatal.

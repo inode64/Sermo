@@ -404,7 +404,7 @@ func (w *fileWatcher) olderThanBatchMessage(stale []staleFile) string {
 	for i := range min(len(stale), fileOlderThanListedPaths) {
 		listed = append(listed, stale[i].path)
 	}
-	msg := fmt.Sprintf("%d files older than %s: %s", len(stale), units.HumanizeDuration(w.cond.olderThan), strings.Join(listed, ", "))
+	msg := fmt.Sprintf("%d files older than %s: %s", len(stale), units.HumanizeDuration(w.cond.olderThan), strings.Join(listed, displayListSeparator))
 	if extra := len(stale) - len(listed); extra > 0 {
 		msg += fmt.Sprintf(" (+%d more)", extra)
 	}

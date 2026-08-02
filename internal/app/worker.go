@@ -188,7 +188,7 @@ type cycleRecord struct {
 }
 
 // cycleTarget names this worker for the scheduler panic-recovery log.
-func (w *Worker) cycleTarget() string { return "service " + w.Service }
+func (w *Worker) cycleTarget() string { return serviceSubjectPrefix + w.Service }
 
 // RunCycle runs one monitoring cycle for the service: build the
 // check cache, evaluate remediation rules in name order, and run the first
