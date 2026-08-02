@@ -83,3 +83,14 @@ func TestFCGIParamsRoundTrip(t *testing.T) {
 		t.Fatalf("encoded params = %q", enc)
 	}
 }
+
+func TestWriteFCGIRecordRejectsOversizeContent(t *testing.T) {
+	var out bytes.Buffer
+	err := writeFCGIRecord(&out, fcgiStdout, make([]byte, fcgiContentLengthMax+1))
+	if err == nil {
+		t.Fatal("an oversized FastCGI record must fail")
+	}
+	if out.Len() != 0 {
+		t.Fatalf("an oversized FastCGI record wrote %d bytes", out.Len())
+	}
+}

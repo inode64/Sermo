@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"strconv"
 	"strings"
@@ -69,6 +70,7 @@ const (
 	fcgiBeginRequestFlagsClose        = 0
 	fcgiBeginRequestRoleHigh          = 0
 	fcgiContentLengthHighShift        = 8
+	fcgiContentLengthMax              = math.MaxUint16
 	fcgiHeaderBytes                   = 8
 	fcgiHeaderContentLengthHighOffset = 4
 	fcgiHeaderContentLengthLowOffset  = 5
@@ -232,9 +234,12 @@ func mergeFPMStatus(extra map[string]string, stdout string) {
 }
 
 // writeFCGIRecord writes one FastCGI record (request id 1, no padding). content
-// must be < 65536 bytes, which holds for our small params and empty streams.
+// must fit FastCGI's 16-bit content-length field.
 func writeFCGIRecord(w io.Writer, recType byte, content []byte) error {
 	n := len(content)
+	if n > fcgiContentLengthMax {
+		return fmt.Errorf("fastcgi content length %d exceeds the %d-byte record limit", n, fcgiContentLengthMax)
+	}
 	header := []byte{
 		fcgiVersion1, recType,
 		fcgiRequestIDHigh, fcgiRequestID,

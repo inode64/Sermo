@@ -461,7 +461,7 @@ func waitHTTPOK(t *testing.T, url string, within time.Duration) {
 	t.Helper()
 	deadline := time.Now().Add(within)
 	for {
-		resp, err := http.Get(url) //nolint:gosec // loopback test URL
+		resp, err := http.Get(url)
 		if err == nil {
 			ok := resp.StatusCode == http.StatusOK
 			resp.Body.Close()

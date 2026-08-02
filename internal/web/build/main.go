@@ -137,7 +137,8 @@ func build(srcDir, out string) error {
 	}
 
 	page := string(shell)
-	for _, panel := range watchPanels {
+	for i := range watchPanels {
+		panel := &watchPanels[i]
 		marker := watchPanelMarker(panel.Key)
 		if strings.Count(page, marker) != webBuildReplaceOnce {
 			return fmt.Errorf("watch panel marker %q must occur once", marker)
@@ -191,7 +192,8 @@ func loadWatchPanels(path string) ([]watchPanelDescriptor, error) {
 		return nil, errors.New("no descriptors")
 	}
 	seen := make(map[string]bool, len(panels))
-	for _, panel := range panels {
+	for i := range panels {
+		panel := &panels[i]
 		if panel.Key == "" || panel.SectionID == "" || panel.RowsID == "" || len(panel.Columns) == 0 {
 			return nil, errors.New("descriptor has missing key, section, rows or columns")
 		}
@@ -207,7 +209,7 @@ func watchPanelMarker(key string) string {
 	return "<!--__SERMO_WATCH_PANEL:" + key + "__-->"
 }
 
-func renderWatchPanel(panel watchPanelDescriptor) (string, error) {
+func renderWatchPanel(panel *watchPanelDescriptor) (string, error) {
 	var out bytes.Buffer
 	if err := watchPanelTemplate.Execute(&out, panel); err != nil {
 		return "", fmt.Errorf("render watch panel %q: %w", panel.Key, err)

@@ -39,10 +39,7 @@ func (dockerProtocol) RequiresUser() bool { return false }
 
 // Probe reads /info and, when a container is selected, that container's state.
 func (dockerProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	client, err := dockerClient(cfg)
-	if err != nil {
-		return Result{}, err
-	}
+	client := dockerClient(cfg)
 	defer client.CloseIdleConnections()
 
 	info, err := client.Info(ctx)
@@ -89,7 +86,7 @@ func dockerContainer(c dockerctl.Container, res *Result) {
 // dockerClient builds an HTTP client for the daemon: a Unix-socket transport when
 // cfg.Socket is set, otherwise TCP (egress-bound to cfg.Interface, TLS when
 // requested).
-func dockerClient(cfg Config) (*dockerctl.Client, error) {
+func dockerClient(cfg Config) *dockerctl.Client {
 	spec := dockerctl.Spec{Socket: cfg.Socket, Host: cfg.Host, Port: cfg.Port, TLS: cfg.TLS}
 	if cfg.Socket == "" {
 		spec.DialContext = BindDialer(cfg.Interface).DialContext

@@ -71,15 +71,15 @@ func NewServiceMetricSampler(stores ...ServiceMetricStore) *ServiceMetricSampler
 	}
 }
 
-// Record appends one process-tree runtime sample for a service and returns the
-// same sample after rate fields (currently IO) have been computed.
-func (s *ServiceMetricSampler) Record(name string, cur web.ServiceRuntime) web.ServiceRuntime {
-	return s.record(context.Background(), name, cur)
+// Record appends one process-tree runtime sample for a service, computing rate
+// fields (currently IO) before retaining and persisting it.
+func (s *ServiceMetricSampler) Record(name string, cur web.ServiceRuntime) {
+	s.record(context.Background(), name, cur)
 }
 
-func (s *ServiceMetricSampler) record(ctx context.Context, name string, cur web.ServiceRuntime) web.ServiceRuntime {
+func (s *ServiceMetricSampler) record(ctx context.Context, name string, cur web.ServiceRuntime) {
 	if s == nil {
-		return cur
+		return
 	}
 	at, err := time.Parse(time.RFC3339, cur.At)
 	if err != nil {
@@ -91,7 +91,6 @@ func (s *ServiceMetricSampler) record(ctx context.Context, name string, cur web.
 	cur = s.recordLocked(name, cur, at)
 	s.mu.Unlock()
 	s.recordPersistent(ctx, name, cur, at)
-	return cur
 }
 
 func (s *ServiceMetricSampler) recordLocked(name string, cur web.ServiceRuntime, at time.Time) web.ServiceRuntime {

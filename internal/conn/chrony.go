@@ -198,8 +198,10 @@ const (
 const (
 	chronyPPMPrecision      = 3
 	chronyIntervalPrecision = 3
-	// chronyInt32Bytes is the width of the int32 counters in a reply payload.
+	// chronyInt32Bytes and chronyInt32Bits are the width of signed counters in
+	// a reply payload.
 	chronyInt32Bytes = 4
+	chronyInt32Bits  = 32
 	// chronySunPathMax is the sockaddr_un sun_path capacity; the bound the client
 	// socket path must respect, leaving room for the terminating NUL.
 	chronySunPathMax = 108
@@ -524,7 +526,11 @@ func chronyActivityFields(b []byte, extra map[string]string) {
 
 // chronyCount reads a signed 32-bit counter from the head of b.
 func chronyCount(b []byte) string {
-	return strconv.Itoa(int(int32(binary.BigEndian.Uint32(b))))
+	n := int64(binary.BigEndian.Uint32(b))
+	if n > math.MaxInt32 {
+		n -= 1 << chronyInt32Bits
+	}
+	return strconv.FormatInt(n, 10)
 }
 
 // chronyFloat decodes chrony's 32-bit on-wire float at offset off.

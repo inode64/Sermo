@@ -60,7 +60,7 @@ func TestHTTP3RoundTrip(t *testing.T) {
 	defer func() { _ = srv.Close() }()
 
 	port := udp.LocalAddr().(*net.UDPAddr).Port
-	tr := &http3.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}} //nolint:gosec // test server uses a self-signed cert
+	tr := &http3.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}
 	defer func() { _ = tr.Close() }()
 
 	c := &httpCheck{
