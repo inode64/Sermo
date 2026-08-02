@@ -159,7 +159,7 @@ func (s *Store) Maintain(ctx context.Context, now time.Time) (MaintainResult, er
 	if out.Archives, err = s.PruneArchives(ctx, now); err != nil {
 		return out, err
 	}
-	if out.Events, err = s.PruneEvents(now.Add(-s.retention.normalized().Events)); err != nil {
+	if out.Events, err = s.PruneEvents(ctx, now.Add(-s.retention.normalized().Events)); err != nil {
 		return out, err
 	}
 	return out, nil
@@ -325,7 +325,7 @@ func (s *Store) PruneBefore(ctx context.Context, before time.Time) (MaintainResu
 			}
 		}
 	}
-	events, err := s.PruneEvents(before)
+	events, err := s.PruneEvents(ctx, before)
 	out.Events = events
 	if err != nil {
 		return out, err

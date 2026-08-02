@@ -70,7 +70,7 @@ func (a App) serviceMonitorState(ctx context.Context, opts options) monitorView 
 		return view
 	}
 	defer store.Close()
-	record, found, err := store.MonitorState(service) //nolint:contextcheck // ctx bound via OpenContext above
+	record, found, err := store.MonitorState(service)
 	if err != nil || !found {
 		return view
 	}

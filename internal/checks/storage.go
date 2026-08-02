@@ -162,9 +162,9 @@ func statfsUsage(path string) (StorageStats, error) {
 	}
 
 	// Inode accounting (f_files/f_ffree); 0 total means the filesystem does not
-	// track inodes.
-	inodesTotal := uint64(s.Files)
-	inodesFree := uint64(s.Ffree)
+	// track inodes. Files/Ffree are already uint64 on every Linux GOARCH we target.
+	inodesTotal := s.Files
+	inodesFree := s.Ffree
 	var inUsedPct, inFreePct float64
 	if inodesTotal > 0 {
 		inUsedPct = float64(inodesTotal-inodesFree) / float64(inodesTotal) * percentScale

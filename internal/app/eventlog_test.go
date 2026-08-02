@@ -139,7 +139,7 @@ func TestEventLogPrune(t *testing.T) {
 	l.now = func() time.Time { return now.Add(10 * time.Minute) }
 	l.Add(Event{Message: "recent"})
 
-	if got := l.Prune(now.Add(5 * time.Minute)); got != 2 {
+	if got := l.Prune(context.Background(), now.Add(5*time.Minute)); got != 2 {
 		t.Fatalf("prune before 5m pruned %d, want 2", got)
 	}
 	rem := l.Recent("", 0)
@@ -148,7 +148,7 @@ func TestEventLogPrune(t *testing.T) {
 	}
 
 	// prune all
-	if got := l.Prune(time.Time{}); got != 1 {
+	if got := l.Prune(context.Background(), time.Time{}); got != 1 {
 		t.Fatalf("prune zero-time cleared %d", got)
 	}
 	if len(l.Recent("", 0)) != 0 {

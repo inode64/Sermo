@@ -148,7 +148,8 @@ func (m *Monitor) Reload(ctx context.Context) {
 // loadReloadConfig loads and validates the config for a reload, emitting a
 // reload error and returning nil when the current generation must keep running.
 func (m *Monitor) loadReloadConfig(ctx context.Context) *config.Config {
-	newCfg, err := config.Load(m.ConfigPath, config.WithLoadContext(ctx)) //nolint:contextcheck // WithLoadContext binds ctx for service-unit discovery
+	// WithLoadContext binds ctx for service-unit discovery during Load.
+	newCfg, err := config.Load(m.ConfigPath, config.WithLoadContext(ctx)) //nolint:contextcheck // option injects ctx; Load's signature has no context param
 	if err != nil {
 		m.emitReloadError(fmt.Sprintf("load config: %v", err))
 		return nil
