@@ -82,7 +82,7 @@ linters:
     - unqueryvet  # prohibit SELECT * in production SQL queries
     - usetesting  # prefer testing.T cleanup-aware helpers
     - wastedassign
-    - wrapcheck  # pilot: operation/ + app/ + cli/ + state/ + process/ + web/ + servicemgr/ + rules/ + config/ (see exclusions)
+    - wrapcheck  # ON in core; OFF in checks/ + conn/ probe packages (see exclusions)
   settings:
     errcheck:
       # CLI and daemon operator output: a broken stdout/stderr pipe must not
@@ -249,7 +249,7 @@ linters:
       # Eclipse Mosquitto — real MQTT broker name in catalog/tests.
       ignore-rules:
         - mosquitto
-  # Considered and deliberately NOT enabled (wrapcheck is active outside checks/ and conn/; see exclusions):
+  # Considered and deliberately NOT enabled:
   #   containedctx — daemon-lifetime contexts are intentionally held by monitor,
   #                  loader, state and web server owners.
   #   embeddedstructfieldcheck — 69 field-ordering/whitespace findings; the
@@ -258,10 +258,6 @@ linters:
   #             not a sentinel type for every message.
   #   gochecknoglobals — registries, host detection and test injection are owned
   #                  package state, not mutable ambient application state.
-  #   wrapcheck on checks/ + conn/ — measured ~60 (checks) + ~147 (conn) findings,
-  #                  mostly probe I/O (os.ReadFile, net.Dial, protocol libs) that
-  #                  become Result messages rather than package-boundary errors.
-  #                  Expand per package with contextual %w wrapping, not en masse.
   exclusions:
     generated: strict
     warn-unused: true
@@ -313,16 +309,50 @@ linters:
           - gosec
         text: G115
 
-      # wrapcheck on protocol probes and host checks (~200 findings): external
-      # I/O errors become Result/check messages, not package-boundary returns.
-      # Expanding site-by-site with contextual %w is a separate cleanup; keep
-      # wrapcheck active on app/cli/operation/state/… where wrapping matters.
+      # wrapcheck zone policy (same idea as ireturn):
+      #   ON  — operation, rules, config, state, app, cli, process, web, locks,
+      #         managers, notify, assist, cmd: package-boundary errors must use %w.
+      #   OFF — checks/ and conn/: probe I/O becomes Result/check messages, not
+      #         API-boundary errors (~60 + ~145 findings of dial/ReadFile noise).
+      # Expand wrapcheck into a protocol package only when cleaning it with
+      # contextual %w, not en masse.
       - linters:
           - wrapcheck
         path: '^internal/checks/'
       - linters:
           - wrapcheck
         path: '^internal/conn/'
+
+      # ireturn zone policy:
+      #   ON  — operation, rules, config, state, non-wizard CLI and the rest of
+      #         the tree: accidental interface returns fail the gate.
+      #   OFF — central builders, registries and injectable seams that must
+      #         return interfaces (AGENTS: central builders, Backend holder,
+      #         managers).
+      - linters:
+          - ireturn
+        path: '^internal/checks/'
+      - linters:
+          - ireturn
+        path: '^internal/notify/'
+      - linters:
+          - ireturn
+        path: '^internal/conn/conn\.go$'
+      - linters:
+          - ireturn
+        path: '^internal/app/(hook|watch_build|procwatch|serviceruntime|webholder)\.go$'
+      - linters:
+          - ireturn
+        path: '^internal/web/server\.go$'
+      - linters:
+          - ireturn
+        path: '^internal/assist/assist\.go$'
+      - linters:
+          - ireturn
+        path: '^internal/cli/wizard\.go$'
+      - linters:
+          - ireturn
+        path: '^internal/(servicemgr/manager|dockerctl/manager|virt/manager|mountctl/mountctl|locks/(named|scanner)|process/discover)\.go$'
 
 
 issues:
