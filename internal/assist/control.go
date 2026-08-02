@@ -19,6 +19,7 @@ func (dockerAssistant) Title() string {
 	return "Monitor and manage Docker containers"
 }
 
+//nolint:dupl // spec-driven Run: the body is already one runControlledAssistant call whose fields are this assistant's operator-facing strings and detectors.
 func (dockerAssistant) Run(p *Prompt, env Env) (res Result, err error) {
 	defer Recover(&err)
 	return runControlledAssistant(p, env, controlledAssistantSpec[DockerCandidate]{
@@ -40,6 +41,7 @@ func (vmAssistant) Title() string {
 	return "Monitor and manage libvirt/QEMU virtual machines"
 }
 
+//nolint:dupl // spec-driven Run; see dockerAssistant.Run.
 func (vmAssistant) Run(p *Prompt, env Env) (res Result, err error) {
 	defer Recover(&err)
 	return runControlledAssistant(p, env, controlledAssistantSpec[VMCandidate]{
@@ -140,6 +142,24 @@ func chooseVMs(p *Prompt, question string, cands []VMCandidate) []VMCandidate {
 	return chooseCandidates(p, question, cands, vmLabel)
 }
 
+// runningExpect is the `expect:` mapping both controlled-service checks use to
+// require a running target: one probe field compared for equality.
+func runningExpect(field, want string) map[string]any {
+	return map[string]any{
+		field: map[string]any{checks.CheckKeyOp: cfgval.CompareOpEqual, checks.CheckKeyValue: want},
+	}
+}
+
+// attachSocket records an explicit control socket on both the control block and
+// the check that watches it, when the candidate reported one.
+func attachSocket(control, check map[string]any, controlKey, socket string) {
+	if socket == "" {
+		return
+	}
+	control[controlKey] = socket
+	check[checks.CheckKeySocket] = socket
+}
+
 func buildDockerService(c DockerCandidate) map[string]any {
 	control := map[string]any{
 		dockerctl.ControlKeyType:      dockerctl.ControlType,
@@ -149,14 +169,9 @@ func buildDockerService(c DockerCandidate) map[string]any {
 		checks.CheckKeyType:      dockerctl.ControlType,
 		checks.CheckKeyContainer: c.Container,
 		checks.CheckKeyOnChange:  true,
-		checks.CheckKeyExpect: map[string]any{
-			conn.ExtraKeyContainerStatus: map[string]any{checks.CheckKeyOp: cfgval.CompareOpEqual, checks.CheckKeyValue: conn.DockerContainerStatusRunning},
-		},
+		checks.CheckKeyExpect:    runningExpect(conn.ExtraKeyContainerStatus, conn.DockerContainerStatusRunning),
 	}
-	if c.Socket != "" {
-		control[dockerctl.ControlKeySocket] = c.Socket
-		check[checks.CheckKeySocket] = c.Socket
-	}
+	attachSocket(control, check, dockerctl.ControlKeySocket, c.Socket)
 	return controlledService(control, dockerctl.ControlType, check)
 }
 
@@ -169,18 +184,13 @@ func buildVMService(c VMCandidate) map[string]any {
 		checks.CheckKeyType:     virt.ControlType,
 		checks.CheckKeyDomain:   c.Domain,
 		checks.CheckKeyOnChange: true,
-		checks.CheckKeyExpect: map[string]any{
-			conn.ExtraKeyDomainState: map[string]any{checks.CheckKeyOp: cfgval.CompareOpEqual, checks.CheckKeyValue: conn.LibvirtDomainStateRunning},
-		},
+		checks.CheckKeyExpect:   runningExpect(conn.ExtraKeyDomainState, conn.LibvirtDomainStateRunning),
 	}
 	if c.URI != "" {
 		control[virt.ControlKeyURI] = c.URI
 		check[checks.CheckKeyQuery] = c.URI
 	}
-	if c.Socket != "" {
-		control[virt.ControlKeySocket] = c.Socket
-		check[checks.CheckKeySocket] = c.Socket
-	}
+	attachSocket(control, check, virt.ControlKeySocket, c.Socket)
 	return controlledService(control, AssistantNameVM, check)
 }
 

@@ -265,6 +265,20 @@ func runLevelCountCheck(b base, preds []levelPred, sample func() (count, limit u
 	return levelCountResult(b, preds, label, unit, countField, count, limit, start)
 }
 
+// runSampledLevelCount is runLevelCountCheck for the kernel-resource checks
+// whose sampler returns a struct: read projects the sampled struct onto the
+// count/limit pair the level predicates evaluate. It is the whole Run body of
+// fds, pids and conntrack, which differ only in sampler, projection and labels.
+func runSampledLevelCount[S any](b base, preds []levelPred, sample func() (S, error),
+	read func(S) (count, limit uint64), label, unit, countField string,
+) Result {
+	return runLevelCountCheck(b, preds, func() (uint64, uint64, error) {
+		s, err := sample()
+		count, limit := read(s)
+		return count, limit, err
+	}, label, unit, countField)
+}
+
 // runThresholdCheck samples one gauge and compares it against the configured
 // threshold — the shared Run body of the single-value level checks (entropy,
 // zombies). unavailableMsg is the failure message when the sampler reports no

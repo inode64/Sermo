@@ -79,10 +79,27 @@ type persistentMetricReader struct {
 	series  func(metric string, from, to time.Time) ([]state.MeasurementPoint, error)
 }
 
+// persistentMetricTriplet is the CPU/memory/IO series set every metric surface
+// reports, however it was sourced: loadPersistentMetricTriplet reads it back
+// from the store, sampledMetricTriplet aggregates it from in-memory samples.
 type persistentMetricTriplet struct {
 	cpu    web.MetricSeries
 	memory web.MetricSeries
 	io     web.MetricSeries
+}
+
+// sampledMetricTriplet aggregates the in-memory samples into the same triplet
+// loadPersistentMetricTriplet returns, for the path taken before a store is
+// configured. Together with that function it is the only place pairing each
+// metric with its unit, so daemon and service runtime series cannot drift.
+func sampledMetricTriplet[T any](check string, since time.Duration, samples []T,
+	at func(T) time.Time, cpu, memory, io func(T) (float64, bool),
+) persistentMetricTriplet {
+	return persistentMetricTriplet{
+		cpu:    metricSeries(check, metrics.MetricCPU, metrics.MetricUnitPercent, since, samples, at, cpu),
+		memory: metricSeries(check, metrics.MetricMemory, metrics.MetricUnitBytes, since, samples, at, memory),
+		io:     metricSeries(check, metrics.MetricIO, metrics.MetricUnitBytesPerSecond, since, samples, at, io),
+	}
 }
 
 // NewDaemonMetricSampler builds the process metric sampler shared by sermod and
@@ -155,24 +172,18 @@ func (s *DaemonMetricSampler) Series(since time.Duration) web.DaemonMetrics {
 			return out
 		}
 	}
+	triplet := sampledMetricTriplet(daemonMetricCheck, since, samples,
+		func(p daemonMetricSample) time.Time { return p.at },
+		func(p daemonMetricSample) (float64, bool) { return p.cpu, p.cpuReady },
+		func(p daemonMetricSample) (float64, bool) { return float64(p.rss), p.rssOK },
+		func(p daemonMetricSample) (float64, bool) { return p.io, p.ioReady },
+	)
 	return web.DaemonMetrics{
 		Since:   since.String(),
 		Current: daemonRuntime(sample),
-		CPU: metricSeries(
-			daemonMetricCheck, metrics.MetricCPU, metrics.MetricUnitPercent, since, samples,
-			func(p daemonMetricSample) time.Time { return p.at },
-			func(p daemonMetricSample) (float64, bool) { return p.cpu, p.cpuReady },
-		),
-		Memory: metricSeries(
-			daemonMetricCheck, metrics.MetricMemory, metrics.MetricUnitBytes, since, samples,
-			func(p daemonMetricSample) time.Time { return p.at },
-			func(p daemonMetricSample) (float64, bool) { return float64(p.rss), p.rssOK },
-		),
-		IO: metricSeries(
-			daemonMetricCheck, metrics.MetricIO, metrics.MetricUnitBytesPerSecond, since, samples,
-			func(p daemonMetricSample) time.Time { return p.at },
-			func(p daemonMetricSample) (float64, bool) { return p.io, p.ioReady },
-		),
+		CPU:     triplet.cpu,
+		Memory:  triplet.memory,
+		IO:      triplet.io,
 	}
 }
 

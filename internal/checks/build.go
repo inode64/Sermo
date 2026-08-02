@@ -436,11 +436,9 @@ func buildCertCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 
 // buildSqliteCheck builds a SQLite integrity check.
 func buildSqliteCheck(b base, entry map[string]any) (Check, string) {
-	path, errs := requireCheckPath(entry, CheckTypeSQLite)
-	if errs != "" {
-		return nil, errs
-	}
-	return sqliteCheck{base: b, path: path, quick: cfgval.Bool(entry[CheckKeyQuick])}, ""
+	return buildPathCheck(entry, CheckTypeSQLite, func(path string) Check {
+		return sqliteCheck{base: b, path: path, quick: cfgval.Bool(entry[CheckKeyQuick])}
+	})
 }
 
 // BuildInline builds a single check from an inline entry (type + fields), used

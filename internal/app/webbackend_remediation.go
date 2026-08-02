@@ -7,6 +7,7 @@ import (
 	"sermo/internal/web"
 )
 
+//nolint:dupl // a field-by-field rules.RuleWindowReport -> web.RuleWindow mapping; see processToWeb — same shape, no shared logic to fold.
 func ruleWindowToWeb(rep rules.RuleWindowReport) web.RuleWindow {
 	return web.RuleWindow{
 		Name:          rep.Name,

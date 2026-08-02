@@ -185,12 +185,16 @@ func (h *WebBackendHolder) MountAction(ctx context.Context, name, action string,
 }
 
 // MountBlockers reports current mount blockers through the active backend.
+//
+//nolint:dupl // interface forwarding: already one webCall line plus the unavailable-backend zero value this method must name; there is nothing left to fold.
 func (h *WebBackendHolder) MountBlockers(ctx context.Context, name string) web.MountBlockersResult {
 	return webCall(h, web.MountBlockersResult{OK: false, Name: name, Message: webBackendUnavailableMessage},
 		func(b *WebBackend) web.MountBlockersResult { return b.MountBlockers(ctx, name) })
 }
 
 // AlertMountUsers sends a console alert through the active backend.
+//
+//nolint:dupl // interface forwarding; see MountBlockers.
 func (h *WebBackendHolder) AlertMountUsers(ctx context.Context, name string) web.MountAlertResult {
 	return webCall(h, web.MountAlertResult{OK: false, Name: name, Message: webBackendUnavailableMessage},
 		func(b *WebBackend) web.MountAlertResult { return b.AlertMountUsers(ctx, name) })

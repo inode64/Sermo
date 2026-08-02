@@ -5,6 +5,7 @@ import (
 	"sermo/internal/web"
 )
 
+//nolint:dupl // a field-by-field process.Process -> web.Process mapping; it shares only its shape with ruleWindowToWeb, and folding unrelated field lists behind one helper would hide which fields each surface exposes.
 func processToWeb(p process.Process) web.Process {
 	return web.Process{
 		PID:         p.PID,

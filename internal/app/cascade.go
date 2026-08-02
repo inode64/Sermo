@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"sermo/internal/ctxutil"
 	"sermo/internal/operation"
 	"sermo/internal/rules"
 )
@@ -29,7 +30,7 @@ type cascader struct {
 	op     operateFn
 	lookup func(service string) []string // a service's also_apply targets
 	emit   func(Event)
-	// sleep, when non-nil, replaces the production sleepCtx backoff (tests
+	// sleep, when non-nil, replaces the production ctxutil.Sleep backoff (tests
 	// inject a no-op). Production call sites leave it nil.
 	sleep func(time.Duration)
 }
@@ -103,14 +104,14 @@ func (c cascader) operate(ctx context.Context, svc, action string) operation.Res
 }
 
 // backoff waits cascadeBlockedRetryDelay before a single blocked-lock retry.
-// Tests inject sleep as a no-op; production leaves it nil and uses sleepCtx so
+// Tests inject sleep as a no-op; production leaves it nil and uses ctxutil.Sleep so
 // the wait is cancellable and never touches bare time.Sleep (forbidigo).
 func (c cascader) backoff(ctx context.Context) {
 	if c.sleep != nil {
 		c.sleep(cascadeBlockedRetryDelay)
 		return
 	}
-	_ = sleepCtx(ctx, cascadeBlockedRetryDelay)
+	_ = ctxutil.Sleep(ctx, cascadeBlockedRetryDelay)
 }
 
 // OrderedGroup returns the services to operate, in dependency order. For stop the

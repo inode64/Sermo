@@ -9,6 +9,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"sermo/internal/ctxutil"
 )
 
 // Signaler delivers a signal to a process. It is an interface so escalation can
@@ -165,21 +167,17 @@ func Wait(ctx context.Context, sleep func(time.Duration), d time.Duration) error
 		return fmt.Errorf(waitCancelledFormat, err)
 	}
 	if sleep == nil {
-		// Default: a stoppable timer so a cancelled Wait leaks no goroutine. An
-		// injected sleep (tests) takes the goroutine path below, where the fake
-		// returns promptly and so cannot leak — unlike a real time.Sleep, which
-		// is not cancellable and would block until d elapsed.
-		timer := time.NewTimer(d)
-		defer timer.Stop()
-		select {
-		case <-ctx.Done():
+		// Default: the shared stoppable-timer wait, so a cancelled Wait leaks no
+		// goroutine. An injected sleep (tests) takes the goroutine path below,
+		// where the fake returns promptly and so cannot leak — unlike a real
+		// time.Sleep, which is not cancellable and would block until d elapsed.
+		if !ctxutil.Sleep(ctx, d) {
 			return fmt.Errorf(waitCancelledFormat, ctx.Err())
-		case <-timer.C:
-			if err := ctx.Err(); err != nil {
-				return fmt.Errorf(waitCancelledFormat, err)
-			}
-			return nil
 		}
+		if err := ctx.Err(); err != nil {
+			return fmt.Errorf(waitCancelledFormat, err)
+		}
+		return nil
 	}
 	done := make(chan struct{})
 	go func() {
