@@ -49,13 +49,13 @@ func (snmpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	timeout := netutil.TimeoutFromContext(ctx, defaultSNMPProbeTimeout)
 	params := buildSNMPParams(ctx, cfg, timeout)
 	if err := params.Connect(); err != nil {
-		return Result{}, err
+		return Result{}, probeErr(ProtocolNameSNMP, stepConnect, err)
 	}
 	defer func() { _ = params.Conn.Close() }()
 
 	pkt, err := params.Get([]string{oidSysDescr, oidSysObjectID, oidSysUpTime, oidSysContact, oidSysName, oidSysLocation})
 	if err != nil {
-		return Result{}, err
+		return Result{}, probeErr(ProtocolNameSNMP, "get", err)
 	}
 	by := snmpByOID(pkt.Variables)
 	sysDescr := snmpString(by[oidSysDescr])

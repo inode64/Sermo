@@ -47,7 +47,7 @@ func (ntpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	}
 	resp, err := ntp.QueryWithOptions(cfg.addrDefaults(defaultPortNTP), opt)
 	if err != nil {
-		return Result{}, err
+		return Result{}, probeErr(ProtocolNameNTP, "query", err)
 	}
 	// A stratum-0 reply is a kiss-of-death: the server answered but is unable or
 	// unwilling to serve time, and only its kiss code says why (STEP while it is
@@ -59,7 +59,7 @@ func (ntpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 		return Result{}, fmt.Errorf("server not serving time (kiss code %s)", ntpKissCode(resp))
 	}
 	if err := resp.Validate(); err != nil {
-		return Result{}, err
+		return Result{}, probeErr(ProtocolNameNTP, "response", err)
 	}
 	stratum := int(resp.Stratum)
 	if !ntpHealthy(stratum) {

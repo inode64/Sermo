@@ -3,6 +3,7 @@
 package conn
 
 import (
+	"fmt"
 	"syscall"
 
 	"golang.org/x/sys/unix"
@@ -21,8 +22,11 @@ func bindControl(iface string) func(network, address string, c syscall.RawConn) 
 		if err := c.Control(func(fd uintptr) {
 			serr = unix.SetsockoptString(int(fd), unix.SOL_SOCKET, unix.SO_BINDTODEVICE, dev)
 		}); err != nil {
-			return err
+			return fmt.Errorf("bind socket to %q: %w", dev, err)
 		}
-		return serr
+		if serr != nil {
+			return fmt.Errorf("bind socket to %q: %w", dev, serr)
+		}
+		return nil
 	}
 }

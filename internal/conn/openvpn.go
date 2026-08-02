@@ -67,7 +67,7 @@ func (openvpnProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	sid := openvpnSessionID()
 	c, err := BindDialer(cfg.Interface).DialContext(ctx, transport, cfg.addrDefaults(defaultPortOpenVPN))
 	if err != nil {
-		return Result{}, err
+		return Result{}, probeErr(ProtocolNameOpenVPN, stepDial, err)
 	}
 	defer func() { _ = c.Close() }()
 	applyDeadline(ctx, c)
@@ -113,25 +113,25 @@ func openvpnExchange(c net.Conn, transport string, packet []byte) ([]byte, error
 		binary.BigEndian.PutUint16(frame[:openvpnTCPFrameHeaderBytes], uint16(len(packet)))
 		copy(frame[openvpnTCPFrameHeaderBytes:], packet)
 		if _, err := c.Write(frame); err != nil {
-			return nil, err
+			return nil, probeErr(ProtocolNameOpenVPN, "control frame", err)
 		}
 		var lb [openvpnTCPFrameHeaderBytes]byte
 		if _, err := io.ReadFull(c, lb[:]); err != nil {
-			return nil, err
+			return nil, probeErr(ProtocolNameOpenVPN, "frame length", err)
 		}
 		body := make([]byte, int(binary.BigEndian.Uint16(lb[:])))
 		if _, err := io.ReadFull(c, body); err != nil {
-			return nil, err
+			return nil, probeErr(ProtocolNameOpenVPN, "frame body", err)
 		}
 		return body, nil
 	}
 	if _, err := c.Write(packet); err != nil {
-		return nil, err
+		return nil, probeErr(ProtocolNameOpenVPN, "control packet", err)
 	}
 	buf := make([]byte, openvpnMTUBytes)
 	n, err := c.Read(buf)
 	if err != nil {
-		return nil, err
+		return nil, probeErr(ProtocolNameOpenVPN, "reply", err)
 	}
 	return buf[:n], nil
 }

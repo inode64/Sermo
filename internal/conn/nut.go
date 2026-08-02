@@ -214,15 +214,17 @@ func nutListVars(rw io.ReadWriter, br *bufio.Reader, ups string) (map[string]str
 
 // writeNUT sends a single newline-terminated command.
 func writeNUT(w io.Writer, cmd string) error {
-	_, err := io.WriteString(w, cmd+nutLineTerminator)
-	return err
+	if _, err := io.WriteString(w, cmd+nutLineTerminator); err != nil {
+		return probeErr(ProtocolNameNUT, stepRequest, err)
+	}
+	return nil
 }
 
 // readNUTLine reads one CRLF/LF-terminated reply line.
 func readNUTLine(br *bufio.Reader) (string, error) {
 	s, err := br.ReadString(protocolLineBreak)
 	if err != nil && s == "" {
-		return "", err
+		return "", probeErr(ProtocolNameNUT, "reply", err)
 	}
 	return strings.TrimRight(s, protocolTrimCRLF), nil
 }

@@ -43,26 +43,26 @@ func (udisks2Protocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 func udisks2Probe(ctx context.Context, addr string) (Result, error) {
 	conn, err := dbus.Dial(addr)
 	if err != nil {
-		return Result{}, err
+		return Result{}, probeErr(ProtocolNameUDisks2, stepDial, err)
 	}
 	defer func() { _ = conn.Close() }()
 
 	if err := conn.Auth(nil); err != nil {
-		return Result{}, err
+		return Result{}, probeErr(ProtocolNameUDisks2, stepAuth, err)
 	}
 	if err := conn.Hello(); err != nil {
-		return Result{}, err
+		return Result{}, probeErr(ProtocolNameUDisks2, "Hello", err)
 	}
 
 	var owner string
 	bus := conn.Object(dbusBusName, dbusObjectPath)
 	if err := bus.CallWithContext(ctx, dbusGetNameOwner, 0, udisks2BusName).Store(&owner); err != nil {
-		return Result{}, err
+		return Result{}, probeErr(ProtocolNameUDisks2, "GetNameOwner", err)
 	}
 
 	obj := conn.Object(udisks2BusName, udisks2ManagerPath)
 	if err := obj.CallWithContext(ctx, dbusPeerPing, 0).Store(); err != nil {
-		return Result{}, err
+		return Result{}, probeErr(ProtocolNameUDisks2, "Peer.Ping", err)
 	}
 
 	return Result{Extra: map[string]string{extraOwner: owner}}, nil

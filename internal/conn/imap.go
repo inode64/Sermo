@@ -54,7 +54,7 @@ func imapHandshake(rw io.ReadWriter, cfg Config) (Result, error) {
 
 	if (cfg.User != "" || cfg.Password != "") && !preauth {
 		if _, err := fmt.Fprintf(rw, "%s %s %s %s%s", imapTagLogin, imapLoginCommand, imapQuote(cfg.User), imapQuote(cfg.Password), imapTerminator); err != nil {
-			return Result{}, err
+			return Result{}, probeErr(ProtocolNameIMAP, "login", err)
 		}
 		ok, status, err := readIMAPTagged(br, imapTagLogin)
 		if err != nil {
