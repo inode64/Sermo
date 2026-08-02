@@ -28,7 +28,11 @@ const (
 	chronyRequestHeaderBytes = 20
 	chronyReplyHeaderBytes   = 28
 	chronyStatusSuccess      = 0
-	chronyReplyBufferBytes   = 512
+	// chronyStatusFailed is STT_FAILED: the command was recognised and authorized
+	// but the daemon could not carry it out — what a chronyd started with -x
+	// reports for a step, having had control of the system clock disabled.
+	chronyStatusFailed     = 1
+	chronyReplyBufferBytes = 512
 	// chronyStaleReplyLimit bounds how many mismatched datagrams a single
 	// exchange skips before giving up. chronyd answers one reply per request, so
 	// a mismatch means a late reply from an earlier command on the same socket.
