@@ -5,6 +5,7 @@ package execx
 import (
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"os/exec"
 	osuser "os/user"
@@ -35,7 +36,9 @@ func prepareCommandUser(cmd *exec.Cmd, userName string) error {
 	if err != nil {
 		return err
 	}
-	if uid == uint32(os.Geteuid()) && gid == uint32(os.Getegid()) {
+	euid, egid := os.Geteuid(), os.Getegid()
+	if euid >= 0 && egid >= 0 && uint64(euid) <= math.MaxUint32 && uint64(egid) <= math.MaxUint32 &&
+		uid == uint32(euid) && gid == uint32(egid) {
 		return nil
 	}
 	groups, err := commandUserGroups(u)

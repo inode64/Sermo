@@ -793,6 +793,8 @@ type CleanPath struct {
 // clean stop — both removing stale `pidfile_absent`/`files_absent` leftovers and
 // deleting the `clean_on_stop` list; with it off the invariants are verified and
 // warned about but nothing is deleted. All zero when absent.
+//
+//nolint:unparam // cleanPaths feeds operation.StopArtifacts.Clean; static analysis cannot follow that safety boundary.
 func StopInvariants(tree map[string]any) (pidfilePaths, files []string, clean bool, cleanPaths []CleanPath) {
 	sp, ok := tree[sectionStopPolicy].(map[string]any)
 	if !ok {

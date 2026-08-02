@@ -87,7 +87,7 @@ func TestDockerOverUnixSocket(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() { _ = ln.Close() }()
-	srv := &http.Server{Handler: dockerMux()} //nolint:gosec // test server, no timeouts needed
+	srv := &http.Server{Handler: dockerMux()}
 	go func() { _ = srv.Serve(ln) }()
 	defer func() { _ = srv.Close() }()
 

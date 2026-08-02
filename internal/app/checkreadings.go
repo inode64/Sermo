@@ -188,7 +188,7 @@ func (rb *readingBuilder) addIntMetric(field, label, unit string) *readingBuilde
 // byte formatter, so meters and event messages render bytes identically.
 func (rb *readingBuilder) addBytes(field, label string) *readingBuilder {
 	if v, ok := uintField(rb.data[field]); ok {
-		rb.out = append(rb.out, web.WatchReading{Field: field, Label: label, Value: checks.HumanizeSignedBytes(int64(v))})
+		rb.out = append(rb.out, web.WatchReading{Field: field, Label: label, Value: checks.HumanizeSignedBytes(uintToInt64(v))})
 	}
 	return rb
 }
@@ -339,7 +339,7 @@ func raidCheckReadings(data map[string]any) []web.WatchReading {
 		addMetric(checks.DataKeyRaidProgressPct, "Rebuild progress", watchReadingProgressDecimals, metrics.MetricUnitPercent).
 		addString(checks.DataKeyRaidMismatchCount, "Mismatch count")
 	if size, ok := uintField(data[checks.DataKeyTotalBytes]); ok && size > 0 {
-		rb.add(checks.DataKeyTotalBytes, watchReadingLabelSize, checks.HumanizeSignedBytes(int64(size)))
+		rb.add(checks.DataKeyTotalBytes, watchReadingLabelSize, checks.HumanizeSignedBytes(uintToInt64(size)))
 	}
 	for _, detail := range raidMemberDetails(data[checks.DataKeyRaidMembers]) {
 		rb.add(watchReadingFieldRAIDArrayPrefix+detail.Name, detail.Name, raidArrayReading(detail))

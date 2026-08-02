@@ -22,10 +22,7 @@ func listWizardDockerContainers(ctx context.Context, timeout time.Duration) ([]a
 		}
 		return nil, fmt.Errorf("stat docker socket %s: %w", dockerctl.DefaultSocket, err)
 	}
-	client, err := dockerctl.NewClient(dockerctl.Spec{Socket: dockerctl.DefaultSocket})
-	if err != nil {
-		return nil, fmt.Errorf("connect docker socket %s: %w", dockerctl.DefaultSocket, err)
-	}
+	client := dockerctl.NewClient(dockerctl.Spec{Socket: dockerctl.DefaultSocket})
 	defer client.CloseIdleConnections()
 	ctx, cancel := context.WithTimeout(ctx, wizardDetectionTimeout(timeout))
 	defer cancel()

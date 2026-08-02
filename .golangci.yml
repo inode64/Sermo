@@ -44,6 +44,7 @@ linters:
     - goprintffuncname  # printf-like helpers must end in f
     - gosec
     - gomoddirectives  # reject unexpected replace/exclude/retract directives
+    - gomodguard_v2  # direct dependencies must be approved below
     - interfacebloat  # interfaces with too many methods (web.Backend excluded below)
     - iface  # unused / duplicated interface declarations
     - ireturn  # return-concrete; factories/registries excluded below
@@ -91,6 +92,16 @@ linters:
         - fmt.Fprint
         - fmt.Fprintf
         - fmt.Fprintln
+    gocognit:
+      # Pin the current clean complexity budget instead of inheriting a tool
+      # default that can change on upgrade. Lower only alongside a refactor.
+      min-complexity: 30
+    gocyclo:
+      # See gocognit: the limit is an intentional, reviewed project budget.
+      min-complexity: 30
+    maintidx:
+      # A lower score is harder to maintain; the current clean floor is 20.
+      under: 20
     depguard:
       rules:
         # Baseline: stdlib + module imports unless a scoped deny rule matches.
@@ -197,6 +208,7 @@ linters:
         - regexpMust
         - regexpSimplify
         - rangeExprCopy
+        - rangeValCopy  # avoid copying large values in daemon-cycle range loops
         - regexpPattern
         - sloppyLen
         - sqlQuery
@@ -219,6 +231,10 @@ linters:
         - weakCond
         - whyNoLint
         - wrapperFunc  # prefer strings.ReplaceAll, bytes.Split, …
+      settings:
+        rangeValCopy:
+          sizeThreshold: 256
+          skipTestFuncs: true
     forbidigo:
       # Production anti-patterns. Entry-point mains (cmd/, web/build) and tests
       # are excluded below; intentional control-flow panics in assist stay allowed.
@@ -245,10 +261,58 @@ linters:
       # appears more than three times. Test fixtures stay literal and readable.
       min-occurrences: 4
       ignore-tests: true
+    gomoddirectives:
+      # Sermo is an application: module and toolchain changes are deliberate
+      # supply-chain changes and must not appear as incidental go.mod edits.
+      exclude-forbidden: true
+      go-debug-forbidden: true
+      go-version-pattern: '^1\.26\.5$'
+      ignore-forbidden: true
+      tool-forbidden: true
+      toolchain-forbidden: true
+    gomodguard_v2:
+      # The allowlist covers the direct production dependencies in go.mod. A
+      # new direct dependency therefore gets an explicit quality-policy review.
+      local-replace-directives: true
+      allowed:
+        - module: github.com/beevik/ntp
+        - module: github.com/cloudsoda/go-smb2
+        - module: github.com/digitalocean/go-libvirt
+        - module: github.com/evanw/esbuild
+        - module: github.com/go-ldap/ldap/v3
+        - module: github.com/go-sql-driver/mysql
+        - module: github.com/goccy/go-yaml
+        - module: github.com/godbus/dbus/v5
+        - module: github.com/google/nftables
+        - module: github.com/gosnmp/gosnmp
+        - module: github.com/lib/pq
+        - module: github.com/quic-go/quic-go
+        - module: github.com/spf13/pflag
+        - module: github.com/vishvananda/netlink
+        - module: github.com/wneessen/go-mail
+        - module: go.mongodb.org/mongo-driver/v2
+        - module: golang.org/x/crypto
+        - module: golang.org/x/net
+        - module: golang.org/x/sys
+        - module: modernc.org/sqlite
+    loggercheck:
+      # Every log entry remains machine-queryable and avoids printf semantics.
+      no-printf-like: true
+      require-string-key: true
+      slog: true
     misspell:
       # Eclipse Mosquitto — real MQTT broker name in catalog/tests.
       ignore-rules:
         - mosquitto
+    nolintlint:
+      # A suppression is part of the code's safety contract: name the checker,
+      # explain the exception, and fail if it stops being necessary.
+      allow-unused: false
+      require-explanation: true
+      require-specific: true
+    unparam:
+      # No package in this application is a supported external API.
+      check-exported: true
   # Considered and deliberately NOT enabled:
   #   containedctx — daemon-lifetime contexts are intentionally held by monitor,
   #                  loader, state and web server owners.
@@ -264,10 +328,6 @@ linters:
 
     paths:
       - '(^|/)node_modules/'
-      # Tests: fixtures, fakes y table-driven moulds no se miden con la misma
-      # vara que el código de producción. Excluir el path entero evita ruido
-      # de errcheck/gosec/forbidigo/prealloc/exhaustive/… en *_test.go.
-      - '_test\.go$'
 
     # Sermo es una aplicación, no una librería pública. No exigiría
     # documentación para cada símbolo exportado de paquetes internal.
@@ -275,6 +335,86 @@ linters:
       - comments
 
     rules:
+      # Test fixtures and table data need literal values and intentionally
+      # incomplete fakes, but test-specific linters (thelper, tparallel,
+      # testableexamples and usetesting) must still inspect every *_test.go.
+      - path: '_test\.go$'
+        linters:
+          - asasalint
+          - asciicheck
+          - bidichk
+          - bodyclose
+          - canonicalheader
+          - contextcheck
+          - copyloopvar
+          - depguard
+          - dupword
+          - durationcheck
+          - dupl
+          - errcheck
+          - errchkjson
+          - errname
+          - errorlint
+          - exhaustive
+          - exptostd
+          - fatcontext
+          - forbidigo
+          - forcetypeassert
+          - gocheckcompilerdirectives
+          - gochecknoinits
+          - gochecksumtype
+          - gocognit
+          - goconst
+          - gocyclo
+          - gocritic
+          - godoclint
+          - goprintffuncname
+          - gosec
+          - gomoddirectives
+          - gomodguard_v2
+          - interfacebloat
+          - iface
+          - ireturn
+          - iotamixing
+          - modernize
+          - musttag
+          - ineffassign
+          - intrange
+          - inamedparam
+          - maintidx
+          - mirror
+          - misspell
+          - mnd
+          - nilerr
+          - nilnil
+          - nilnesserr
+          - noctx
+          - nosprintfhostport
+          - perfsprint
+          - prealloc
+          - predeclared
+          - reassign
+          - recvcheck
+          - rowserrcheck
+          - sloglint
+          - loggercheck
+          - makezero
+          - sqlclosecheck
+          - unconvert
+          - unparam
+          - usestdlibvars
+          - unqueryvet
+          - wastedassign
+          - wrapcheck
+
+      # These native protocol encoders deliberately select fixed-width wire
+      # fields. Their request builders have protocol-level regression tests;
+      # keep G115 active everywhere else, including the remaining conn probes.
+      - path: '^internal/conn/(fpm|ipp|kafka|mqtt|nfs|openvpn|rdp|smb|snmp)\.go$'
+        linters:
+          - gosec
+        text: G115
+
       # Los protocolos se registran intencionadamente durante init.
       - linters:
           - gochecknoinits
@@ -298,16 +438,6 @@ linters:
       - linters:
           - contextcheck
         path: '^internal/cli/(monitor|panic|sla|state|watch|cli_monitor_state)\.go$'
-
-      # G115 (integer overflow conversions) is noisy and false-positive-prone
-      # here: every flagged site converts an already-bounded value (port 0-65535,
-      # /proc-reported count, protocol field width, range-validated config).
-      # Accepted project-wide. By-design G204 (operator commands via execx) and
-      # G304 (paths under /proc, paths.runtime, fstab, config dirs) are suppressed
-      # at the call site with //nolint:gosec + justification.
-      - linters:
-          - gosec
-        text: G115
 
       # wrapcheck zone policy (same idea as ireturn):
       #   ON  — operation, rules, config, state, app, cli, process, web, locks,
