@@ -29,7 +29,9 @@ type cascader struct {
 	op     operateFn
 	lookup func(service string) []string // a service's also_apply targets
 	emit   func(Event)
-	sleep  func(time.Duration) // backoff before the single retry; injectable for tests
+	// sleep, when non-nil, replaces the production sleepCtx backoff (tests
+	// inject a no-op). Production call sites leave it nil.
+	sleep func(time.Duration)
 }
 
 // run operates root plus its also_apply graph for action, in dependency order
@@ -94,12 +96,21 @@ func downgradePrimaryOnCascadeFailure(primary operation.Result, cascadeFailed bo
 func (c cascader) operate(ctx context.Context, svc, action string) operation.Result {
 	res := c.op(ctx, svc, action)
 	if res.Status == operation.ResultBlocked {
-		if c.sleep != nil {
-			c.sleep(cascadeBlockedRetryDelay)
-		}
+		c.backoff(ctx)
 		res = c.op(ctx, svc, action)
 	}
 	return res
+}
+
+// backoff waits cascadeBlockedRetryDelay before a single blocked-lock retry.
+// Tests inject sleep as a no-op; production leaves it nil and uses sleepCtx so
+// the wait is cancellable and never touches bare time.Sleep (forbidigo).
+func (c cascader) backoff(ctx context.Context) {
+	if c.sleep != nil {
+		c.sleep(cascadeBlockedRetryDelay)
+		return
+	}
+	_ = sleepCtx(ctx, cascadeBlockedRetryDelay)
 }
 
 // OrderedGroup returns the services to operate, in dependency order. For stop the

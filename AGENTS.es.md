@@ -699,14 +699,16 @@ Notas de herramientas:
   de Go 1.26 no deben proponer ningún cambio. Si falla, ejecuta `go fix ./...` y
   revisa la reescritura en lugar de silenciarlo.
 - **`revive`** (`revive.toml`): conjunto de reglas por defecto más
-  `unused-parameter`, `struct-tag`, `import-shadowing`, `modifies-value-receiver`
-  y `package-naming` (separada de `var-naming` en revive v1.15)
-  en código de producción (`exclude = ["TEST"]` en `unused-parameter` e
-  `import-shadowing` omite `*_test.go`). Renombra parámetros no usados a `_`
-  fuera de tests; evita locales que sombreen nombres de import. Documenta los
-  nuevos símbolos exportados — la regla `exported` está activa.
+  `unused-parameter`, `struct-tag`, `import-shadowing`, `modifies-value-receiver`,
+  `package-naming` (separada de `var-naming` en revive v1.15) y las reglas de
+  concurrencia `atomic`, `waitgroup-by-value`, `range-val-address` y
+  `range-val-in-closure` en código de producción (`exclude = ["TEST"]` en
+  `unused-parameter` e `import-shadowing` omite `*_test.go`). Renombra
+  parámetros no usados a `_` fuera de tests; evita locales que sombreen nombres
+  de import. Documenta los nuevos símbolos exportados — la regla `exported`
+  está activa.
 - **`golangci-lint`** usa `.golangci.yml` (**formato v2** — el binario debe ser
-  v2). Ese fichero manda: **69 linters**, agrupados aquí por lo que te exigen.
+  v2). Ese fichero manda: **70 linters**, agrupados aquí por lo que te exigen.
   Consúltalo ante la duda — no des por hecho que un linter está apagado porque
   este resumen sea más corto que la config.
 
@@ -716,9 +718,9 @@ Notas de herramientas:
   - *Corrección y seguridad:*
     `asasalint`, `bidichk`, `bodyclose`, `canonicalheader`, `contextcheck`,
     `copyloopvar`, `durationcheck`, `errcheck`, `errchkjson`, `errorlint`,
-    `exhaustive`, `fatcontext`, `forcetypeassert`, `gochecksumtype`, `gosec`,
-    `ineffassign`, `makezero`, `nilerr`, `nilnesserr`, `nilnil`, `noctx`,
-    `nosprintfhostport`, `reassign`, `recvcheck`, `rowserrcheck`,
+    `exhaustive`, `fatcontext`, `forbidigo`, `forcetypeassert`, `gochecksumtype`,
+    `gosec`, `ineffassign`, `makezero`, `nilerr`, `nilnesserr`, `nilnil`,
+    `noctx`, `nosprintfhostport`, `reassign`, `recvcheck`, `rowserrcheck`,
     `sqlclosecheck`, `unqueryvet`, `wastedassign`
   - *Forma de la API y arquitectura:*
     `asciicheck`, `depguard`, `errname`, `gochecknoinits`, `godoclint`,
@@ -736,6 +738,9 @@ Notas de herramientas:
   `*_test.go`; `dupword` y
   `exhaustive` están desactivados en `*_test.go` (y un brazo `default:` cuenta
   como exhaustivo); `gocritic` ejecuta una lista curada, no el set por defecto;
+  `forbidigo` prohíbe `fmt.Print*`, `log.(Print|Fatal|Panic)*` de la stdlib,
+  `os.Exit`, `time.Sleep` y `http.DefaultClient` en paquetes de producción
+  (tests, entrypoints `cmd/` e `internal/web/build` están excluidos);
   `interfacebloat` excluye `internal/web/server.go`; `depguard` impone las
   fronteras de import (checks/conn/rules/config no importan `operation`;
   `rules/` de producción no importa `execx`); `wrapcheck` es un piloto sobre
@@ -783,6 +788,10 @@ Notas de herramientas:
 Los tests son parte del cambio, no una ocurrencia tardía (ver el small-change
 checklist). Imita el estilo existente de la suite en lugar de inventar uno.
 
+- **`make test` / `make race` / `make cover` barajan por defecto**
+  (`GO_TEST_FLAGS=-shuffle=on`) para que los tests dependientes del orden fallen
+  en local y en CI. Desactívalo para un orden estable al depurar:
+  `make test GO_TEST_FLAGS=`.
 - **Inyecta el seam; nunca toques el host desde la lógica bajo test.** Cada sonda
   que lee el sistema toma una función o interface inyectable, para que los tests corran
   sin `/proc`, sockets o servicios reales: los campos `*SamplerFunc` y los
