@@ -48,7 +48,7 @@ func (ldapProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	if err != nil {
 		return Result{}, err
 	}
-	defer l.Close()
+	defer func() { _ = l.Close() }()
 	l.SetTimeout(timeout)
 
 	requireAuth := cfg.User != ""

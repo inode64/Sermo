@@ -44,7 +44,7 @@ func (a App) runPanic(ctx context.Context, opts options) int {
 	if err != nil {
 		return a.fail(opts, fmt.Sprintf("panic failed: %v", err))
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 
 	if set {
 		cmd := "panic off"

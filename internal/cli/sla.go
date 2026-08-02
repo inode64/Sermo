@@ -58,7 +58,7 @@ func runWindowsReport[V any](ctx context.Context, a App, opts options, cfg *conf
 	if err != nil {
 		return a.fail(opts, fmt.Sprintf("sla failed: %v", err))
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 
 	now := time.Now()
 	reports := make([]serviceWindows[V], 0, len(services))
@@ -111,7 +111,7 @@ func (a App) runSLASeries(ctx context.Context, opts options, cfg *config.Config)
 	if err != nil {
 		return a.fail(opts, fmt.Sprintf("sla failed: %v", err))
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 
 	now := time.Now()
 	points, err := store.SLASeries(service, now.Add(-window), now)
