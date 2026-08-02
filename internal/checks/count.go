@@ -113,22 +113,22 @@ func (c countCheck) runDelta(n int, start time.Time) Result {
 // tally excludes the root path itself.
 func (c countCheck) tally(ctx context.Context) (int, error) {
 	if err := ctx.Err(); err != nil {
-		return 0, err
+		return 0, fmt.Errorf("count entries in %q: %w", c.path, err)
 	}
 	if c.recursive {
 		return c.tallyRecursive(ctx)
 	}
 	entries, err := os.ReadDir(c.path)
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("read entries in %q: %w", c.path, err)
 	}
 	if err := ctx.Err(); err != nil {
-		return 0, err
+		return 0, fmt.Errorf("count entries in %q: %w", c.path, err)
 	}
 	n := 0
 	for _, e := range entries {
 		if err := ctx.Err(); err != nil {
-			return 0, err
+			return 0, fmt.Errorf("count entries in %q: %w", c.path, err)
 		}
 		if c.matches(e.Type()) {
 			n++
@@ -141,13 +141,13 @@ func (c countCheck) tallyRecursive(ctx context.Context) (int, error) {
 	n := 0
 	err := filepath.WalkDir(c.path, func(path string, d fs.DirEntry, err error) error {
 		if ctxErr := ctx.Err(); ctxErr != nil {
-			return ctxErr
+			return fmt.Errorf("count entries in %q: %w", path, ctxErr)
 		}
 		if err != nil {
 			// A failure to open the root is fatal; an unreadable subdirectory is
 			// skipped so the count covers everything that could be read.
 			if path == c.path {
-				return err
+				return fmt.Errorf("walk entries in %q: %w", path, err)
 			}
 			return nil
 		}
@@ -165,7 +165,10 @@ func (c countCheck) tallyRecursive(ctx context.Context) (int, error) {
 		}
 		return nil
 	})
-	return n, err
+	if err != nil {
+		return n, fmt.Errorf("walk entries in %q: %w", c.path, err)
+	}
+	return n, nil
 }
 
 // matches applies the configured lstat-kind filter.

@@ -147,6 +147,27 @@ func TestCountRecursiveSkipsHiddenEntriesByDefault(t *testing.T) {
 	}
 }
 
+func TestCountMissingPathAddsReadOrWalkContext(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "missing")
+	cases := []struct {
+		name      string
+		recursive bool
+		want      string
+	}{
+		{name: "non-recursive", want: "read entries"},
+		{name: "recursive", recursive: true, want: "walk entries"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := countOf(path, CountKindAny, tc.recursive, "==", 0).tally(context.Background())
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("tally() error = %v, want context %q", err, tc.want)
+			}
+		})
+	}
+}
+
 func TestCountDeltaWithinWindowAlertsOnGrowth(t *testing.T) {
 	root := t.TempDir()
 	addCountFiles(t, root, "base", 1)
