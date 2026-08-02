@@ -313,6 +313,17 @@ linters:
           - gosec
         text: G115
 
+      # wrapcheck on protocol probes and host checks (~200 findings): external
+      # I/O errors become Result/check messages, not package-boundary returns.
+      # Expanding site-by-site with contextual %w is a separate cleanup; keep
+      # wrapcheck active on app/cli/operation/state/… where wrapping matters.
+      - linters:
+          - wrapcheck
+        path: '^internal/checks/'
+      - linters:
+          - wrapcheck
+        path: '^internal/conn/'
+
 
 issues:
   # Report every finding (golangci-lint otherwise caps repeated issues at 3).

@@ -569,7 +569,7 @@ func parseArgs(args []string) (cliArgs, error) {
 	fs.StringVar(&parsed.globalPath, flagConfig, config.DefaultGlobalPath, "")
 	fs.BoolVarP(&parsed.verbose, flagVerbose, shortVerbose, false, "")
 	if err := fs.Parse(args); err != nil {
-		return cliArgs{}, cliutil.NormalizePflagError(err)
+		return cliArgs{}, fmt.Errorf("parse flags: %w", cliutil.NormalizePflagError(err))
 	}
 
 	rest := fs.Args()
@@ -671,14 +671,14 @@ func writeFileAtomic(path string, data []byte, mode os.FileMode) error {
 	// left behind by an earlier crash would donate its own permissions to the
 	// secret. Start from nothing.
 	if err := os.Remove(tmp); err != nil && !os.IsNotExist(err) {
-		return err
+		return fmt.Errorf("remove staging file %s: %w", tmp, err)
 	}
 	if err := os.WriteFile(tmp, data, mode); err != nil {
-		return err
+		return fmt.Errorf("write staging file %s: %w", tmp, err)
 	}
 	if err := os.Rename(tmp, path); err != nil {
 		_ = os.Remove(tmp)
-		return err
+		return fmt.Errorf("rename staging file %s to %s: %w", tmp, path, err)
 	}
 	return nil
 }
