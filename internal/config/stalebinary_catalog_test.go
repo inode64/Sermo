@@ -145,3 +145,46 @@ func TestCatalogOtherServicesRestartOnStaleBinary(t *testing.T) {
 		})
 	}
 }
+
+// allow_dependencies is inheritable from global `defaults:` like dry_run. It
+// needs to be in two parallel registries (perServiceDefaults and
+// validDefaultsKeys); this asserts the value survives resolution rather than
+// just passing validation.
+func TestDefaultsAllowDependenciesReachesResolvedService(t *testing.T) {
+	for _, tc := range []struct{ defaults, want bool }{{false, false}, {true, true}} {
+		root := repoRoot(t)
+		dir := t.TempDir()
+		enabled := filepath.Join(dir, "services")
+		if err := os.MkdirAll(enabled, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(enabled, "nginx.yml"),
+			[]byte("name: nginx\nuses: nginx\nmonitor: enabled\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		body := "engine: { backend: systemd }\n" +
+			"paths:\n  services: [" + enabled + "]\n  runtime: /run/sermo\n" +
+			"defaults:\n  policy: { cooldown: 5m }\n"
+		if tc.defaults {
+			body += "  allow_dependencies: true\n"
+		}
+		global := filepath.Join(dir, "sermo.yml")
+		if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		cfg, err := Load(global, WithCatalogDirs(repoCatalogDir(root)))
+		if err != nil {
+			t.Fatalf("Load: %v", err)
+		}
+		if issues := Validate(cfg); len(issues) != 0 {
+			t.Fatalf("Validate issues = %v, want none", issues)
+		}
+		resolved, errs := cfg.Resolve("nginx")
+		if len(errs) != 0 {
+			t.Fatalf("Resolve: %v", errs)
+		}
+		if got := AllowDependencies(resolved.Tree); got != tc.want {
+			t.Fatalf("defaults allow_dependencies=%v -> resolved %v, want %v", tc.defaults, got, tc.want)
+		}
+	}
+}

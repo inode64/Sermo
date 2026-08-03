@@ -78,6 +78,7 @@ var validGlobalPathKeys = set(
 )
 
 var validDefaultsKeys = set(
+	keyAllowDependencies,
 	keyDryRun,
 	keyRestartOnChange,
 	keyRestartOnStaleBinary,
@@ -283,9 +284,11 @@ func validateGlobalDefaults(cfg *Config, raw map[string]any, add addFunc) {
 	validateDefaultsKeys(cfg.Global.Defaults, add)
 	validateDefaultsVariables(cfg.Global.Defaults, add)
 	validateDefaultsRestartOnChange(cfg.Global.Defaults, add)
-	if v, present := cfg.Global.Defaults[keyDryRun]; present {
-		if _, ok := v.(bool); !ok {
-			add(validationBooleanFormat, defaultsFieldPath(keyDryRun))
+	for _, key := range []string{keyDryRun, keyAllowDependencies} {
+		if v, present := cfg.Global.Defaults[key]; present {
+			if _, ok := v.(bool); !ok {
+				add(validationBooleanFormat, defaultsFieldPath(key))
+			}
 		}
 	}
 	for _, e := range validateVariableValues(cfg.globalVars()) {
@@ -905,6 +908,7 @@ func validateResolved(name string, tree map[string]any, runtime string, notifier
 	validateProcesses(tree, add)
 	validatePidfiles(tree, add)
 	validateStopPolicy(tree, add)
+	validateAllowDependencies(tree, add)
 	validatePolicyExtras(tree, add)
 	validateControl(tree, add)
 	validateServiceField(tree, add)

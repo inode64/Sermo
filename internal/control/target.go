@@ -44,7 +44,28 @@ func Resolve(ctx context.Context, name string, tree map[string]any, backend serv
 	if err != nil {
 		return Target{}, fmt.Errorf("resolve service unit for %s: %w", name, err)
 	}
-	return Target{Unit: unit, Backend: backend, Manager: manager}, nil
+	mgr, err := managerForService(tree, backend, manager)
+	if err != nil {
+		return Target{}, fmt.Errorf("resolve service manager for %s: %w", name, err)
+	}
+	return Target{Unit: unit, Backend: backend, Manager: mgr}, nil
+}
+
+// managerForService returns the manager this service's operations must use. The
+// shared manager already isolates operations from the dependency graph, which is
+// the default, so only a service that opts back in needs one of its own — the
+// same per-service substitution docker and libvirt already do below.
+//
+//nolint:ireturn // the caller stores this in Target.Manager, which is the backend-selected interface; returning a concrete type would defeat the seam docker and libvirt already use.
+func managerForService(tree map[string]any, backend servicemgr.Backend, shared servicemgr.Manager) (servicemgr.Manager, error) {
+	if !config.AllowDependencies(tree) {
+		return shared, nil
+	}
+	mgr, err := servicemgr.NewManagerWithOptions(backend, servicemgr.Options{AllowDependencies: true})
+	if err != nil {
+		return nil, fmt.Errorf("build dependency-aware manager: %w", err)
+	}
+	return mgr, nil
 }
 
 func resolveControlledTarget(ctx context.Context, typ string, tree map[string]any) (Target, error) {
@@ -93,7 +114,11 @@ func ResolveWithFallback(ctx context.Context, name string, tree map[string]any, 
 		return Target{}, err.Error()
 	}
 	unit := candidates[0]
-	return Target{Unit: unit, Backend: backend, Manager: manager}, fmt.Sprintf("%s (using %s)", err.Error(), unit)
+	mgr, mgrErr := managerForService(tree, backend, manager)
+	if mgrErr != nil {
+		return Target{}, mgrErr.Error()
+	}
+	return Target{Unit: unit, Backend: backend, Manager: mgr}, fmt.Sprintf("%s (using %s)", err.Error(), unit)
 }
 
 // UnsupportedOnBackend reports whether tree's explicit per-init service map

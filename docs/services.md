@@ -789,6 +789,55 @@ These feed monitoring **and** the residual reaper, so a richer selector lets a
 stop catch and kill more leftovers (an unkillable residual stays
 `orphan_processes`). The `process` *check* still matches by `exe`/`user` only.
 
+### Dependency isolation (`allow_dependencies`)
+
+Every start and stop Sermo issues is isolated from the init system's dependency
+graph, so restarting one service can never restart others. A restart is composed
+as stop then start, and both halves carry the flag — on systemd it is the stop
+that would otherwise drag down units bound to this one.
+
+| Backend | Command |
+|---|---|
+| systemd | `systemctl <verb> --job-mode=ignore-dependencies -- <unit>` |
+| OpenRC | `rc-service --nodeps <service> <verb>` |
+
+Only state-changing verbs are isolated. Status queries, `reload` and
+`reset-failed`/`zap` never propagate, so they are issued unchanged.
+
+**This cuts both ways, deliberately.** Isolation also means a start does *not*
+pull up what the service requires: if a dependency is down, the start proceeds
+and the service may fail on its own. systemd's documentation warns that
+`ignore-dependencies` can leave the system inconsistent — that is the trade
+accepted here, in exchange for never taking down a service nobody asked to
+touch.
+
+Measured on a real host, `nfs-server` is the kind of unit this protects: it
+`ConsistsOf` `nfs-mountd` and `nfs-idmapd`, both of which Sermo tracks as
+services of their own, so an un-isolated restart of one would restart three.
+
+Set the flag only on a service that is useless without the units it requires,
+and where you would rather it pull them up than fail:
+
+```yaml
+name: some-service
+allow_dependencies: true
+```
+
+No catalog service ships with it. `also_service:` is the explicit way to declare
+companion units Sermo should operate alongside a service — prefer that over
+relying on the init system's graph.
+
+It inherits from global `defaults:` like `dry_run`, so a whole host can opt back
+in at once:
+
+```yaml
+defaults:
+  allow_dependencies: true
+```
+
+Docker and libvirt services are unaffected: their backends have no dependency
+graph of this kind.
+
 ### Stopped-state invariants (`stop_policy`)
 
 After a **clean** stop, the engine can verify the service left nothing behind:
