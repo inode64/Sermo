@@ -64,7 +64,7 @@ func (memcachedProtocol) Probe(ctx context.Context, cfg Config) (Result, error) 
 // that is not memcached) fails the probe.
 func memcachedStats(rw io.ReadWriter) (Result, error) {
 	if _, err := io.WriteString(rw, memcachedCommandStats); err != nil {
-		return Result{}, probeErr(ProtocolNameMemcached, "stats", err)
+		return Result{}, probeErr(ProtocolNameMemcached, stepStats, err)
 	}
 	br := bufio.NewReader(rw)
 	fields := map[string]string{}

@@ -224,7 +224,7 @@ func writeNUT(w io.Writer, cmd string) error {
 func readNUTLine(br *bufio.Reader) (string, error) {
 	s, err := br.ReadString(protocolLineBreak)
 	if err != nil && s == "" {
-		return "", probeErr(ProtocolNameNUT, "reply", err)
+		return "", probeErr(ProtocolNameNUT, stepReply, err)
 	}
 	return strings.TrimRight(s, protocolTrimCRLF), nil
 }

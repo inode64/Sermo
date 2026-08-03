@@ -114,25 +114,25 @@ func openvpnExchange(c net.Conn, transport string, packet []byte) ([]byte, error
 		binary.BigEndian.PutUint16(frame[:openvpnTCPFrameHeaderBytes], uint16(len(packet)))
 		copy(frame[openvpnTCPFrameHeaderBytes:], packet)
 		if _, err := c.Write(frame); err != nil {
-			return nil, probeErr(ProtocolNameOpenVPN, "control frame", err)
+			return nil, probeErr(ProtocolNameOpenVPN, stepOpenVPNControlFrame, err)
 		}
 		var lb [openvpnTCPFrameHeaderBytes]byte
 		if _, err := io.ReadFull(c, lb[:]); err != nil {
-			return nil, probeErr(ProtocolNameOpenVPN, "frame length", err)
+			return nil, probeErr(ProtocolNameOpenVPN, stepOpenVPNFrameLength, err)
 		}
 		body := make([]byte, int(binary.BigEndian.Uint16(lb[:])))
 		if _, err := io.ReadFull(c, body); err != nil {
-			return nil, probeErr(ProtocolNameOpenVPN, "frame body", err)
+			return nil, probeErr(ProtocolNameOpenVPN, stepOpenVPNFrameBody, err)
 		}
 		return body, nil
 	}
 	if _, err := c.Write(packet); err != nil {
-		return nil, probeErr(ProtocolNameOpenVPN, "control packet", err)
+		return nil, probeErr(ProtocolNameOpenVPN, stepOpenVPNControlPacket, err)
 	}
 	buf := make([]byte, openvpnMTUBytes)
 	n, err := c.Read(buf)
 	if err != nil {
-		return nil, probeErr(ProtocolNameOpenVPN, "reply", err)
+		return nil, probeErr(ProtocolNameOpenVPN, stepReply, err)
 	}
 	return buf[:n], nil
 }

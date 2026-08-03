@@ -47,7 +47,7 @@ func avahiProbe(ctx context.Context, addr string) (Result, error) {
 	obj := conn.Object("org.freedesktop.Avahi", "/")
 	var versionString string
 	if err := obj.CallWithContext(ctx, "org.freedesktop.Avahi.Server.GetVersionString", 0).Store(&versionString); err != nil {
-		return Result{}, probeErr(ProtocolNameAvahi, "GetVersionString", err)
+		return Result{}, probeErr(ProtocolNameAvahi, stepAvahiGetVersionString, err)
 	}
 
 	extra := map[string]string{}

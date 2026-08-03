@@ -52,13 +52,13 @@ func (ajpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	defer func() { _ = c.Close() }()
 
 	if _, err := c.Write(buildAJPCPing()); err != nil {
-		return Result{}, probeErr(ProtocolNameAJP, "cping", err)
+		return Result{}, probeErr(ProtocolNameAJP, stepAJPCping, err)
 	}
 	// Read the full reply, not a single Read: TCP may split the small CPong across
 	// segments, and a short Read would falsely report a live connector as down.
 	var header [ajpHeaderBytes]byte
 	if _, err := io.ReadFull(c, header[:]); err != nil {
-		return Result{}, probeErr(ProtocolNameAJP, "reply header", err)
+		return Result{}, probeErr(ProtocolNameAJP, stepAJPReplyHeader, err)
 	}
 	if header[ajpMagicHighOffset] != ajpMagicResponseHigh || header[ajpMagicLowOffset] != ajpMagicResponseLow {
 		return Result{}, errors.New("not an AJP response (bad magic)")
@@ -70,7 +70,7 @@ func (ajpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	packet := make([]byte, ajpHeaderBytes+length)
 	copy(packet, header[:])
 	if _, err := io.ReadFull(c, packet[ajpPayloadOffset:]); err != nil {
-		return Result{}, probeErr(ProtocolNameAJP, "reply body", err)
+		return Result{}, probeErr(ProtocolNameAJP, stepAJPReplyBody, err)
 	}
 	prefix, err := parseAJPResponse(packet)
 	if err != nil {

@@ -44,11 +44,11 @@ func (varnishProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	br := bufio.NewReader(c)
 	line, err := br.ReadString(protocolLineBreak)
 	if err != nil && line == "" {
-		return Result{}, probeErr(ProtocolNameVarnish, "CLI banner", err)
+		return Result{}, probeErr(ProtocolNameVarnish, stepVarnishCLIBanner, err)
 	}
 	status, length, err := parseVarnishStatus(line)
 	if err != nil {
-		return Result{}, probeErr(ProtocolNameVarnish, "CLI status", err)
+		return Result{}, probeErr(ProtocolNameVarnish, stepVarnishCLIStatus, err)
 	}
 	body := ""
 	if length > 0 && length <= maxVarnishCLIBody {

@@ -46,11 +46,11 @@ func (guacdProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	defer func() { _ = c.Close() }()
 
 	if _, err := io.WriteString(c, guacInstruction(guacdSelectOp, selectProto)); err != nil {
-		return Result{}, probeErr(ProtocolNameGuacd, "select", err)
+		return Result{}, probeErr(ProtocolNameGuacd, stepGuacdSelect, err)
 	}
 	line, err := bufio.NewReader(c).ReadString(guacdInstructionEnd)
 	if err != nil && line == "" {
-		return Result{}, probeErr(ProtocolNameGuacd, "select reply", err)
+		return Result{}, probeErr(ProtocolNameGuacd, stepGuacdSelectReply, err)
 	}
 	opcode, err := parseGuacInstruction(line)
 	if err != nil {

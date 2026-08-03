@@ -44,17 +44,17 @@ func dhcpExchange(ctx context.Context, iface, server string, packet []byte, xid 
 					serr = unix.SetsockoptString(int(fd), unix.SOL_SOCKET, unix.SO_BINDTODEVICE, dev)
 				}
 			}); err != nil {
-				return probeErr(ProtocolNameDHCP, "bind socket", err)
+				return probeErr(ProtocolNameDHCP, stepDHCPBindSocket, err)
 			}
 			if serr != nil {
-				return probeErr(ProtocolNameDHCP, "bind socket", serr)
+				return probeErr(ProtocolNameDHCP, stepDHCPBindSocket, serr)
 			}
 			return nil
 		},
 	}
 	pc, err := lc.ListenPacket(ctx, "udp4", ":"+strconv.Itoa(dhcpClientPort))
 	if err != nil {
-		return nil, probeErr(ProtocolNameDHCP, "listen", err)
+		return nil, probeErr(ProtocolNameDHCP, stepListen, err)
 	}
 	defer func() { _ = pc.Close() }()
 
@@ -76,7 +76,7 @@ func dhcpExchange(ctx context.Context, iface, server string, packet []byte, xid 
 	for {
 		n, _, err := pc.ReadFrom(buf)
 		if err != nil {
-			return nil, probeErr(ProtocolNameDHCP, "reply", err)
+			return nil, probeErr(ProtocolNameDHCP, stepReply, err)
 		}
 		if n >= dhcpXIDEndOffset && buf[dhcpOpOffset] == dhcpOpBootReply && binary.BigEndian.Uint32(buf[dhcpXIDOffset:dhcpXIDEndOffset]) == xid {
 			reply := make([]byte, n)
@@ -95,15 +95,15 @@ func dhcpDestination(iface, server string) (*net.UDPAddr, error) {
 	}
 	host, portStr, err := net.SplitHostPort(server)
 	if err != nil {
-		return nil, probeErr(ProtocolNameDHCP, "server address", err)
+		return nil, probeErr(ProtocolNameDHCP, stepDHCPServerAddress, err)
 	}
 	port, err := strconv.Atoi(portStr)
 	if err != nil {
-		return nil, probeErr(ProtocolNameDHCP, "server port", err)
+		return nil, probeErr(ProtocolNameDHCP, stepDHCPServerPort, err)
 	}
 	ip, err := net.ResolveIPAddr(networkIP4, host)
 	if err != nil {
-		return nil, probeErr(ProtocolNameDHCP, "resolve server", err)
+		return nil, probeErr(ProtocolNameDHCP, stepResolveServer, err)
 	}
 	return &net.UDPAddr{IP: ip.IP, Port: port}, nil
 }
