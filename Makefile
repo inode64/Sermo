@@ -102,7 +102,7 @@ yaml-fmt-check:
 	@$(LINT_PATH) python3 scripts/yaml_format_check.py
 
 yaml-lint:
-	@$(LINT_PATH) $(YAMLLINT) --strict -c .yamllint.yml $(YAML_ROOTS) .golangci.yml .custom-gcl.yml
+	@$(LINT_PATH) $(YAMLLINT) --strict -c .yamllint.yml $(YAML_ROOTS) .semgrep .golangci.yml .custom-gcl.yml
 
 yaml-validate: yaml-fmt-check yaml-lint
 
