@@ -39,8 +39,7 @@ func ControlRAID(ctx context.Context, runtimeDir, array, action string, timeout 
 	locker := configureOperationLocker(runtimeDir, nil)
 	handle, err := locker.Acquire(raidControlLockPrefix+array, timeout)
 	if err != nil {
-		var held *locks.HeldError
-		if errors.As(err, &held) {
+		if _, held := errors.AsType[*locks.HeldError](err); held {
 			return RAIDControlResult{Message: fmt.Sprintf("RAID array %q already has an operation in progress", array)}
 		}
 		return RAIDControlResult{Message: fmt.Sprintf("lock RAID array %q: %v", array, err)}

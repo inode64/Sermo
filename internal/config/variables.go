@@ -182,7 +182,8 @@ func resolveFileVars(vars map[string]string, tree map[string]any) []string {
 }
 
 func resolveFromFileSpecVars(name string, spec map[string]any, vars map[string]string) (map[string]any, []string) {
-	out := maps.Clone(spec)
+	out := make(map[string]any, len(spec))
+	maps.Copy(out, spec)
 	pat := cfgval.String(spec[varKeyPattern])
 	if pat == "" {
 		return out, nil
@@ -421,7 +422,13 @@ func expandEnvString(s string) string {
 }
 
 func varRefName(ref string) string {
-	return strings.TrimSpace(varRef.FindStringSubmatch(ref)[varRefNameGroup])
+	// Callers pass text varRef already matched, so the submatch is present; treat
+	// a non-match as an unnamed reference rather than indexing a nil slice.
+	groups := varRef.FindStringSubmatch(ref)
+	if len(groups) <= varRefNameGroup {
+		return ""
+	}
+	return strings.TrimSpace(groups[varRefNameGroup])
 }
 
 // expandEnvTree resolves ${env:...} references across every string in a tree,
