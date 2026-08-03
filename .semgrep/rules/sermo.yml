@@ -45,3 +45,29 @@ rules:
       - metavariable-type:
           metavariable: $Y
           type: servicemgr.Manager
+
+  - id: shared-process-snapshot-must-not-be-mutated
+    languages: [go]
+    severity: ERROR
+    message: >-
+      CachingReader.Snapshot returns the cached identity map itself, shared by
+      every concurrent reader. Writing to it corrupts other callers' view and
+      races with the refresh that rebuilds it. Copy first (maps.Clone) if you
+      need to change entries.
+    patterns:
+      - pattern-either:
+          - pattern: |
+              $M := $R.Snapshot()
+              ...
+              $M[$K] = $V
+          - pattern: |
+              $M := $R.Snapshot()
+              ...
+              delete($M, $K)
+          - pattern: |
+              $M := $R.Snapshot()
+              ...
+              clear($M)
+      - metavariable-type:
+          metavariable: $R
+          type: "*process.CachingReader"

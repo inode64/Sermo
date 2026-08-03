@@ -841,6 +841,17 @@ Notas de herramientas:
   evitarlo. La diferencia se ve en el comentario: «este truncamiento *es* la
   codificación de cable» se gana el sitio, «el linter es quisquilloso» no.
 
+  **Una regla nueva en `.semgrep/rules/` se sube con su fixture, o no se sube.**
+  `make semgrep` ejecuta `semgrep --test` antes del análisis: `.semgrep/tests/sermo.go`
+  marca con `// ruleid: <id>` la línea que cada regla debe señalar y con
+  `// ok: <id>` una línea cercana que **no** debe señalar, y el target sale con
+  código distinto de cero cuando una regla deja de cumplir cualquiera de las dos.
+  Escribe ambas anotaciones. Una regla sin fixture es indistinguible de una regla
+  que no encaja con nada, y este repositorio ya ha cometido ese fallo dos veces:
+  `govet` con bloque de settings pero sin `enable`, y `revive` invocado sin
+  `-set_exit_status`. La línea `ok:` es la mitad que la gente se salta y la que
+  caza los patrones demasiado amplios.
+
   Casi todo hallazgo sobre código nuevo tiene respuesta estructural. `ireturn`:
   devuelve un tipo concreto, o escribe a través de un puntero del llamante en
   vez de devolver una interfaz desnuda — ver `applyDependencyOptions` en
