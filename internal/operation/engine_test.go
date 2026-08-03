@@ -3,6 +3,7 @@ package operation
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -82,6 +83,7 @@ func (m *fakeManager) did(call string) bool {
 
 type harness struct {
 	mgr           *fakeManager
+	backend       string
 	lockErr       error
 	released      int
 	named         []locks.Lock
@@ -101,6 +103,7 @@ type harness struct {
 func defaultHarness() *harness {
 	return &harness{
 		mgr:        &fakeManager{status: servicemgr.StatusActive},
+		backend:    string(servicemgr.BackendSystemd),
 		preflight:  checks.Outcome{OK: true},
 		postflight: checks.Outcome{OK: true},
 	}
@@ -126,7 +129,7 @@ func (h *harness) engine() Engine {
 	return Engine{
 		Service: "mysql-main",
 		Unit:    "mysqld",
-		Backend: "systemd",
+		Backend: h.backend,
 		Manager: h.mgr,
 		AcquireLock: func(time.Duration) (func() error, error) {
 			if h.lockErr != nil {
@@ -626,6 +629,89 @@ func TestRestartOrphanProcessesDoesNotStart(t *testing.T) {
 	}
 }
 
+func TestRestartAcceptsSystemdBackendReactivation(t *testing.T) {
+	h := defaultHarness()
+	h.discoverSteps = [][]process.Process{{{
+		PID:    100,
+		Source: process.SourceBackend,
+	}}}
+	signaler := &recordingSignaler{}
+	h.killPolicy = process.KillPolicy{
+		ForceKill: true,
+		KillOnlyIf: process.KillSelector{
+			Users:  []string{"mysql"},
+			ExeAny: []string{"/opt/mysqld"},
+		},
+	}
+	h.reaper = process.Reaper{
+		Signaler:    signaler,
+		ResolveUser: func(string) (uint32, bool) { return 1001, true },
+		Sleep:       func(time.Duration) {},
+	}
+
+	res := h.restart(t)
+	if !res.OK() {
+		t.Fatalf("status = %q, want ok (%s)", res.Status, res.Message)
+	}
+	if h.mgr.did("start mysqld") {
+		t.Fatalf("systemd reactivation must not start the unit a second time, calls=%v", h.mgr.calls)
+	}
+	if !h.mgr.did("stop mysqld") {
+		t.Fatalf("systemd reactivation must retain the isolated primary stop, calls=%v", h.mgr.calls)
+	}
+	if len(signaler.calls) != 0 {
+		t.Fatalf("systemd reactivation must not signal the new backend process, calls=%v", signaler.calls)
+	}
+	if !strings.Contains(res.Message, "systemd reactivated the same unit") {
+		t.Fatalf("message = %q, want systemd reactivation detail", res.Message)
+	}
+}
+
+func TestRestartSystemdReactivationRequiresTrustedActiveUnit(t *testing.T) {
+	tests := []struct {
+		name     string
+		backend  string
+		status   servicemgr.Status
+		residual process.Process
+	}{
+		{
+			name:     "selector residual is not backend attributed",
+			backend:  string(servicemgr.BackendSystemd),
+			status:   servicemgr.StatusActive,
+			residual: process.Process{PID: 100, Source: process.SelectorCommandMatch},
+		},
+		{
+			name:     "inactive systemd unit",
+			backend:  string(servicemgr.BackendSystemd),
+			status:   servicemgr.StatusInactive,
+			residual: process.Process{PID: 100, Source: process.SourceBackend},
+		},
+		{
+			name:     "openrc never accepts systemd reactivation",
+			backend:  string(servicemgr.BackendOpenRC),
+			status:   servicemgr.StatusActive,
+			residual: process.Process{PID: 100, Source: process.SourceBackend},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := defaultHarness()
+			h.backend = tt.backend
+			h.mgr.status = tt.status
+			h.discoverSteps = [][]process.Process{{tt.residual}}
+			h.killPolicy = process.KillPolicy{ForceKill: false}
+
+			res := h.restart(t)
+			if res.Status != ResultOrphanProcesses {
+				t.Fatalf("status = %q, want orphan_processes (%s)", res.Status, res.Message)
+			}
+			if h.mgr.did("start mysqld") {
+				t.Fatalf("untrusted residual must not start the unit, calls=%v", h.mgr.calls)
+			}
+		})
+	}
+}
+
 func TestRestartDiscoveryErrorDoesNotStart(t *testing.T) {
 	h := defaultHarness()
 	h.discoverErrs = []error{errors.New("selector config: process selector has invalid cmd regex")}
@@ -1110,6 +1196,15 @@ func TestStartRunsNoStop(t *testing.T) {
 type noopSignaler struct{}
 
 func (noopSignaler) Signal(int, syscall.Signal) error { return nil }
+
+type recordingSignaler struct {
+	calls []string
+}
+
+func (s *recordingSignaler) Signal(pid int, sig syscall.Signal) error {
+	s.calls = append(s.calls, fmt.Sprintf("%d %s", pid, sig))
+	return nil
+}
 
 // assertAlsoServiceWrapOrder restarts with the given also_service units and
 // asserts the stop/start calls (filtered to the expected set) occur in exactly
