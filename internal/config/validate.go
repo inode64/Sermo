@@ -77,18 +77,15 @@ var validGlobalPathKeys = set(
 	pathKeyWatches,
 )
 
-var validDefaultsKeys = set(
-	keyAllowDependencies,
-	keyDryRun,
-	keyReloadOnChange,
-	keyRestartOnChange,
-	keyRestartOnStaleBinary,
-	sectionClearWindow,
-	sectionPolicy,
-	sectionRuleWindow,
-	sectionStopPolicy,
-	sectionVariables,
-)
+// validDefaultsKeys is derived from perServiceDefaults rather than repeated:
+// every inheritable key must appear in both, and the two failure modes are
+// asymmetric. Missing here, a documented key is rejected outright — loud.
+// Missing from perServiceDefaults, it validates cleanly and merges nothing —
+// silent, and it has shipped that way before. Deriving removes the class.
+//
+// `variables` is the one defaults-only key: validateDefaultsVariables handles
+// it, and it is never merged into a service.
+var validDefaultsKeys = set(append(slices.Clone(perServiceDefaults), sectionVariables)...)
 
 var validEngineKeys = set(
 	keyInterval,
@@ -314,47 +311,36 @@ func validateDefaultsKeys(defaults map[string]any, add func(string, ...any)) {
 }
 
 func validateDefaultsRestartOnChange(defaults map[string]any, add addFunc) {
-	raw, present := defaults[keyRestartOnChange]
-	if !present {
-		return
-	}
-	roc, ok := raw.(map[string]any)
-	if !ok {
-		add(validationMappingFormat, defaultsFieldPath(keyRestartOnChange))
-		return
-	}
-	allowed := set(keyRestartConfig, keyRestartVersion)
-	for _, key := range slices.Sorted(maps.Keys(roc)) {
-		if _, ok := allowed[key]; !ok {
-			add(validationNotSupportedFormat, defaultsRestartOnChangeFieldPath(key))
-		}
-	}
-	validateRestartOnChangeFlags(defaultsFieldPath(keyRestartOnChange), roc, add)
+	validateDefaultsGateBlock(defaults, keyRestartOnChange, add, keyRestartConfig, keyRestartVersion)
 }
 
 // validateDefaultsReloadOnChange restricts the global block to the permission
 // gate. `paths:` is service data, not host policy — a host says whether
 // config-driven reloads happen, the catalog says which files drive them.
 func validateDefaultsReloadOnChange(defaults map[string]any, add addFunc) {
-	raw, present := defaults[keyReloadOnChange]
+	validateDefaultsGateBlock(defaults, keyReloadOnChange, add, keyRestartConfig)
+}
+
+// validateDefaultsGateBlock checks a global `defaults:` block that carries only
+// permission gates: it must be a mapping, may name nothing but the gates, and
+// each gate must be a boolean literal. The per-service data those blocks also
+// accept (paths, apps, libraries, messages) is deliberately rejected here — a
+// host decides whether a trigger fires, the catalog decides what fires it.
+func validateDefaultsGateBlock(defaults map[string]any, block string, add addFunc, gates ...string) {
+	raw, present := defaults[block]
 	if !present {
 		return
 	}
-	roc, ok := raw.(map[string]any)
+	body, ok := raw.(map[string]any)
 	if !ok {
-		add(validationMappingFormat, defaultsFieldPath(keyReloadOnChange))
+		add(validationMappingFormat, defaultsFieldPath(block))
 		return
 	}
-	for _, key := range slices.Sorted(maps.Keys(roc)) {
-		if key != keyRestartConfig {
-			add(validationNotSupportedFormat, defaultsFieldPath(keyReloadOnChange)+"."+key)
-		}
+	prefix := defaultsFieldPath(block)
+	for _, err := range unknownBlockKeys(prefix, body, set(gates...)) {
+		add("%s", err)
 	}
-	if v, present := roc[keyRestartConfig]; present {
-		if _, ok := v.(bool); !ok {
-			add(validationBooleanLiteralFormat, defaultsFieldPath(keyReloadOnChange)+"."+keyRestartConfig)
-		}
-	}
+	validateGateFlags(prefix, body, add, gates...)
 }
 
 // registryLabel turns a document's registry namespace (registryKey) into the

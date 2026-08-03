@@ -820,6 +820,24 @@ Tool notes:
   nothing and was removed. Every suppression here is measured — before widening
   one, check `warn-unused` output, which names exclusions that skip zero issues.
 
+  **Write new code that already passes. A `//nolint` in new code is a design
+  smell, not a formality.** When a gate fires on something you just wrote, the
+  first move is to change the code so the finding does not arise; reach for a
+  suppression only once you can say why the design cannot avoid it. The
+  difference shows up in the comment: "this truncation *is* the wire encoding"
+  earns its keep, "the linter is being fussy" does not.
+
+  Most findings on new code have a structural answer. `ireturn`: return a
+  concrete type, or write through a pointer the caller owns instead of returning
+  a bare interface — see `applyDependencyOptions` in `internal/control/target.go`,
+  which sets `Target.Manager` rather than returning a `servicemgr.Manager`.
+  `wrapcheck`: wrap with `%w` at the boundary that owns the context.
+  `nilaway`: make nil unrepresentable (value-typed map buckets, `make`+`maps.Copy`
+  rather than `maps.Clone` before a write). `mnd`: name the number, or drop the
+  capacity hint that made you want to. `dupl`: one parameterized helper instead
+  of two near-copies. Inherited suppressions are a separate matter — this rule is
+  about code added in the same change.
+
   **gosec has no config-level exceptions left.** Every by-design case is
   suppressed at the call site with `//nolint:gosec` plus a justifying comment,
   so `nolintlint` (`allow-unused: false`, `require-explanation`,

@@ -86,16 +86,36 @@ type Options struct {
 	AllowDependencies bool
 }
 
-// NewManager returns a Manager for backend using the real host commands, with
-// operations isolated from the dependency graph. Use NewManagerWithOptions for
-// a service that needs its dependencies handled.
-func NewManager(backend Backend) (Manager, error) {
-	return NewManagerWithOptions(backend, Options{})
+// isolate reports whether verb must be kept from propagating through the
+// dependency graph. Both backends ask the same question, so the rule lives here
+// rather than being spelled at each argv site.
+func (o Options) isolate(verb string) bool {
+	return !o.AllowDependencies && isolatedVerb(verb)
 }
 
-// NewManagerWithOptions returns a Manager for backend honoring opts.
-func NewManagerWithOptions(backend Backend, opts Options) (Manager, error) {
-	return newManager(backend, execx.CommandRunner{}, opts)
+// NewManager returns a Manager for backend using the real host commands, with
+// operations isolated from the dependency graph. Use WithOptions to derive a
+// manager for a service that needs its dependencies handled.
+func NewManager(backend Backend) (Manager, error) {
+	return newManager(backend, execx.CommandRunner{}, Options{})
+}
+
+// WithOptions returns m configured with opts. It derives from the given manager
+// instead of building a fresh one so the caller's runner survives — the daemon
+// and the CLI inject theirs through a single seam, and constructing a new
+// manager here would silently discard it and shell out for real. A backend with
+// no dependency graph of its own (docker, libvirt) is returned unchanged.
+func WithOptions(m Manager, opts Options) Manager {
+	switch mgr := m.(type) {
+	case systemdManager:
+		mgr.opts = opts
+		return mgr
+	case openrcManager:
+		mgr.opts = opts
+		return mgr
+	default:
+		return m
+	}
 }
 
 func newManager(backend Backend, runner execx.Runner, opts Options) (Manager, error) {
@@ -251,7 +271,7 @@ func (m systemdManager) SupportsReload(ctx context.Context, service string) (boo
 func (m systemdManager) action(ctx context.Context, verb, service string) error {
 	unit := systemdUnit(service)
 	args := []string{verb}
-	if isolatedVerb(verb) && !m.opts.AllowDependencies {
+	if m.opts.isolate(verb) {
 		args = append(args, systemctlFlagIsolateJob)
 	}
 	args = append(args, commandArgTerminator, unit)
@@ -361,7 +381,7 @@ func (m openrcManager) SupportsReload(_ context.Context, service string) (bool, 
 func (m openrcManager) action(ctx context.Context, verb, service string) error {
 	// rc-service takes its options before the service name.
 	var args []string
-	if isolatedVerb(verb) && !m.opts.AllowDependencies {
+	if m.opts.isolate(verb) {
 		args = append(args, openRCFlagNoDeps)
 	}
 	args = append(args, service, verb)
