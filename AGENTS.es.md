@@ -917,7 +917,9 @@ Notas de herramientas:
 - **`make fuzz`** ejecuta fuzz targets acotados para config no confiable y
   parsers de safety (`FuzzLoadGlobal`, `FuzzLoadDocument`, `FuzzParseSelectors`,
   `FuzzParseStopPolicy`, `FuzzParseSignal`, `FuzzParseKillSignal`,
-  `FuzzParseRules`). El CI programado usa un `FUZZ_TIME` más largo.
+  `FuzzParseRules`). El CI los ejecuta en cada push y pull request con un
+  `FUZZ_TIME` corto, en paralelo con `build & check` para no mover el reloj;
+  el cron semanal y las ejecuciones manuales usan uno más largo.
 
 ## Testing
 

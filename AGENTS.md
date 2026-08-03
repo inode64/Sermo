@@ -898,7 +898,9 @@ Tool notes:
 - **`make fuzz`** runs bounded fuzz targets for untrusted config and safety
   parsers (`FuzzLoadGlobal`, `FuzzLoadDocument`, `FuzzParseSelectors`,
   `FuzzParseStopPolicy`, `FuzzParseSignal`, `FuzzParseKillSignal`,
-  `FuzzParseRules`). Scheduled CI uses a longer `FUZZ_TIME`.
+  `FuzzParseRules`). CI runs them on every push and pull request with a short
+  `FUZZ_TIME`, in parallel with `build & check` so the wall clock does not
+  move; the weekly cron and manual runs use a longer one.
 
 ## Testing
 
