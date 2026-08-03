@@ -733,23 +733,23 @@ func validateAppLinks(cfg *Config, doc *Document, scope string) []Issue {
 
 func validateBinaryVariables(doc *Document, scope string) []Issue {
 	var issues []Issue
-	if vars, ok := doc.Body[sectionVariables].(map[string]any); ok {
-		raw := vars[VariableKeyBinary]
-		if raw == nil {
-			return issues
-		}
-		candidates, err := cfgval.StrictStringList(raw)
-		if err != nil || len(candidates) == 0 {
-			issues = append(issues, Issue{Scope: scope, Msg: fmt.Sprintf(validationNonEmptyPathListFormat, variablePath(VariableKeyBinary))})
-			return issues
-		}
-		for _, path := range candidates {
-			if !filepath.IsAbs(path) {
-				issues = append(issues, Issue{Scope: scope, Msg: fmt.Sprintf(validationPathAbsoluteFormat, variablePath(VariableKeyBinary), path)})
-			}
-		}
-	} else {
+	vars, ok := doc.Body[sectionVariables].(map[string]any)
+	if !ok {
 		return issues
+	}
+	raw := vars[VariableKeyBinary]
+	if raw == nil {
+		return issues
+	}
+	candidates, err := cfgval.StrictStringList(raw)
+	if err != nil || len(candidates) == 0 {
+		issues = append(issues, Issue{Scope: scope, Msg: fmt.Sprintf(validationNonEmptyPathListFormat, variablePath(VariableKeyBinary))})
+		return issues
+	}
+	for _, path := range candidates {
+		if !filepath.IsAbs(path) {
+			issues = append(issues, Issue{Scope: scope, Msg: fmt.Sprintf(validationPathAbsoluteFormat, variablePath(VariableKeyBinary), path)})
+		}
 	}
 	return issues
 }

@@ -120,6 +120,7 @@ const (
 )
 
 func main() {
+	//nolint:forbidigo // main cannot return an exit code; os.Exit here is the only way to propagate it.
 	os.Exit(run(os.Args[1:]))
 }
 
@@ -165,7 +166,7 @@ func loadDaemonConfig(logger *slog.Logger, globalPath string) (*config.Config, i
 //nolint:gocognit,gocyclo,maintidx // Daemon startup is intentionally ordered: locks, persistence, workers and shutdown must remain visible in one flow.
 func run(args []string) int {
 	if versionRequested(args) {
-		fmt.Println(buildinfo.String())
+		fmt.Fprintln(os.Stdout, buildinfo.String())
 		return 0
 	}
 	parsed, err := parseRunArgs(args)
@@ -280,8 +281,9 @@ func run(args []string) int {
 		DefaultTimeout:   app.EngineDuration(cfg, config.EngineKeyDefaultTimeout, app.DefaultEngineCheckTimeout),
 		OperationTimeout: app.EngineDuration(cfg, config.EngineKeyOperationTimeout, app.DefaultEngineOperationTimeout),
 		MaxParallel:      app.EngineInt(cfg, config.EngineKeyMaxParallelChecks, app.DefaultEngineMaxParallelChecks),
-		Sleep:            time.Sleep,
-		Now:              time.Now,
+		//nolint:forbidigo // the engine's injectable Sleep seam; production wires the real clock, tests stub it.
+		Sleep: time.Sleep,
+		Now:   time.Now,
 		// Events go to slog, to the persisted ring the web UI reads, and to
 		// the dashboard change stream.
 		Emit:              app.MultiEmit(app.SlogEmitter(logger), eventLog.Add, func(app.Event) { webChanges.Notify() }),

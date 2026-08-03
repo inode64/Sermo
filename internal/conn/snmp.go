@@ -103,7 +103,8 @@ func snmpVersionName(cfg Config) string {
 func buildSNMPParams(ctx context.Context, cfg Config, timeout time.Duration) *g.GoSNMP {
 	host, port := cfg.hostPortDefaults(defaultSNMPPort)
 	p := &g.GoSNMP{
-		Target:    host,
+		Target: host,
+		//nolint:gosec // G115: config validation rejects any port outside cfgval.ValidTCPPort before it reaches a probe.
 		Port:      uint16(port),
 		Transport: networkUDP,
 		Context:   ctx,

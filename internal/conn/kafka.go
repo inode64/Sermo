@@ -83,6 +83,7 @@ func kafkaAPIVersionsRequest() []byte {
 	body = binary.BigEndian.AppendUint32(body, kafkaCorrelationID)         // correlation_id
 	body = binary.BigEndian.AppendUint16(body, uint16(len(kafkaClientID))) // client_id length
 	body = append(body, kafkaClientID...)
+	//nolint:gosec // G115: Kafka frames a request with a 32-bit size prefix, and body is the fixed metadata request this package builds.
 	return append(binary.BigEndian.AppendUint32(nil, uint32(len(body))), body...)
 }
 

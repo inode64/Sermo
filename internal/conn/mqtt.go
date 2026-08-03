@@ -120,15 +120,17 @@ func buildMQTTConnect(clientID, user, pass string) []byte {
 // writeMQTTString writes a 2-byte big-endian length-prefixed UTF-8 string.
 func writeMQTTString(b *bytes.Buffer, s string) {
 	n := len(s)
-	b.WriteByte(byte(n >> mqttStringLengthShift))
-	b.WriteByte(byte(n))
+	// G115 twice below: MQTT length-prefixes every string with a 16-bit field, so
+	// these two bytes are that field's big-endian halves.
+	b.WriteByte(byte(n >> mqttStringLengthShift)) //nolint:gosec // G115: see above.
+	b.WriteByte(byte(n))                          //nolint:gosec // G115: see above.
 	b.WriteString(s)
 }
 
 // writeMQTTRemainingLength writes the MQTT variable-length "remaining length".
 func writeMQTTRemainingLength(b *bytes.Buffer, n int) {
 	for {
-		d := byte(n % mqttRemainingLengthBase)
+		d := byte(n % mqttRemainingLengthBase) //nolint:gosec // G115: the modulo keeps this below 128, one digit of MQTT's variable-length encoding.
 		n /= mqttRemainingLengthBase
 		if n > 0 {
 			d |= mqttRemainingLengthMoreFlag

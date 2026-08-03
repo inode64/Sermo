@@ -73,7 +73,7 @@ level of integration.
    ```sh
    make check        # vet + full test suite; transitively runs `make validate`,
                      # i.e. `make lint` (fmt-check, go fix -diff, staticcheck,
-                     # revive, golangci-lint, govulncheck), `make scripts-lint`
+                     # golangci-lint, govulncheck), `make scripts-lint`
                      # (shellcheck + ruff), `make yaml-validate`
                      # (yaml-fmt-check + yaml-lint), `make markdown-check`
                      # and `make web-check`
@@ -81,7 +81,7 @@ level of integration.
 
    `make check` is the single command that covers everything. Running `go test
    ./...` and/or `go vet` alone is **not** sufficient: it skips `make lint`
-   (staticcheck/revive/golangci/govulncheck) and `make yaml-validate`
+   (staticcheck/golangci/govulncheck) and `make yaml-validate`
    (yaml-fmt-check/yaml-lint), `make markdown-check` and `make web-check`, which
    catch issues the Go toolchain does not. If you only touched YAML, `make
    yaml-validate` is the minimum; if you only touched Markdown, `make
@@ -430,7 +430,7 @@ Before finishing any code change:
 - Add or move tests when a bug or ambiguous behavior is found.
 - **Validation gate — run `make check` before treating any change as complete**
   (the AI workflow step 4 spells this out). `make check` = vet + full tests, and
-  transitively runs `make lint` (fmt-check, staticcheck, revive, golangci-lint,
+  transitively runs `make lint` (fmt-check, staticcheck, golangci-lint,
   govulncheck), `make yaml-validate` (yaml-fmt-check + yaml-lint),
   `make markdown-check` and `make web-check`. Never substitute a bare
   `go test ./...` / `go vet`: those skip lint, yaml-lint, markdown and web
@@ -697,14 +697,21 @@ Tool notes:
 - **`go fix -diff ./...`** runs as part of `make lint`: the Go 1.26 modernizers
   must propose no changes. If it fails, run `go fix ./...` and review the
   rewrite instead of silencing it.
-- **`revive`** (`revive.toml`): default rule set plus `unused-parameter`,
-  `struct-tag`, `import-shadowing`, `modifies-value-receiver`,
-  `package-naming` (split out of `var-naming` in revive v1.15), and the
-  concurrency rules `atomic`, `waitgroup-by-value`, `range-val-address` and
-  `range-val-in-closure` on production code (`exclude = ["TEST"]` on
-  `unused-parameter` and `import-shadowing` skips `*_test.go`). Rename unused
-  params to `_` in non-test code; avoid locals that shadow import names.
-  Document new exported symbols — the `exported` rule is on.
+- **`revive`** now runs *inside* golangci-lint, configured under
+  `linters.settings.revive.rules` — there is no `revive.toml` and no standalone
+  step. It used to be one, invoked without `-set_exit_status`, which meant it
+  printed findings and never failed anything; do not reintroduce that shape.
+  The rule set is revive's default plus `unused-parameter`, `struct-tag`,
+  `import-shadowing`, `modifies-value-receiver`, `package-naming` (split out of
+  `var-naming` in revive v1.15), the concurrency rules `atomic`,
+  `waitgroup-by-value`, `datarace`, `range-val-address`, `range-val-in-closure`,
+  and a defect/redundancy set (`unconditional-recursion`, `identical-branches`,
+  `constant-logical-expr`, `bool-literal-in-expr`, `time-equal`, `string-of-int`,
+  `defer`, `duplicated-imports`, `redundant-import-alias`, `useless-break`,
+  `unnecessary-stmt`, `unnecessary-format`, `optimize-operands-order`,
+  `early-return`, `use-any`, `comment-spacings`). Test files are out of scope via
+  the shared `_test\.go$` exclusion. Rename unused params to `_`; avoid locals
+  that shadow import names. Document new exported symbols — `exported` is on.
 - **`golangci-lint`** uses `.golangci.yml` (**v2 format** — the binary must be
   v2). That file is authoritative: **71 linters**, grouped here by what they ask
   of you. Consult it when in doubt — do not assume a linter is off because this
@@ -783,6 +790,13 @@ Tool notes:
   else — `nilness`, `unusedwrite`, `sortslice`, `waitgroup`, `atomicalign`,
   `deepequalerrors`, `reflectvaluecompare` and the whole gocritic diagnostic
   set — is gated at zero findings. Do not narrow those lists to avoid a fix.
+  `govet` must stay in `linters.enable`: with `default: none`, its settings block
+  alone runs nothing, and the linter was silently inert until that was fixed.
+
+  Also gated at zero, and cheap to keep there: `godot` (declaration comments end
+  in a period), `godox` (no TODO/FIXME left in code — pending work belongs in
+  `TODO.md`) and `nakedret`. Like every other quality linter, they are scoped to
+  production by the `_test\.go$` exclusion rule; add new ones there too.
 
   **NilAway** rollout is complete: it is configured under
   `linters.settings.custom.nilaway` in `.golangci.yml` and runs over
@@ -791,7 +805,8 @@ Tool notes:
   they carry ~57 findings (fakes with nil fields, fixtures indexed without
   guards) that say nothing about shipped code. Do not swap that flag for a
   `_test\.go$` exclusion rule, and do not narrow `include-pkgs` to land a
-  change: fix the flow and re-check with `make nilaway`. Prefer making nil
+  change: fix the flow and re-check with `make lint`. There is no separate
+  NilAway target or package list — one config, one run. Prefer making nil
   unrepresentable (value-typed map buckets, `make`+`maps.Copy` instead of
   `maps.Clone` before a write, `httpx.Do` instead of `client.Do`) over adding a
   guard that can never fire. `deadcode -test` is part of `make lint` and must
@@ -799,18 +814,30 @@ Tool notes:
 
   Production `database/sql` in `internal/state` uses `*Context` methods with
   `sqlCtx()` (ctx from `OpenContext` / `context.Background()` via `Open`).
-  `contextcheck` is off in `internal/state/` and store-touching CLI files
-  because the linter does not trace embedded store context.
+  `contextcheck` is off in four store-touching CLI files (`monitor`, `panic`,
+  `sla`, `cli_monitor_state`) because the linter does not trace embedded store
+  context. It is **on** in `internal/state/` itself: that exclusion suppressed
+  nothing and was removed. Every suppression here is measured — before widening
+  one, check `warn-unused` output, which names exclusions that skip zero issues.
 
-  Accepted gosec exceptions live in that config: `G115` only in the fixed-width
-  encoders `fpm`, `ipp`, `kafka`, `mqtt`, `nfs`, `openvpn`, `rdp`, `smb` and
-  `snmp` (their wire bounds have regression tests). By-design exceptions in
-  tests use `//nolint:gosec` with a justification.
-  By-design cases are suppressed at the call site with `//nolint:gosec` plus a
-  justifying comment — prefer that over widening the config: `G204`
+  **gosec has no config-level exceptions left.** Every by-design case is
+  suppressed at the call site with `//nolint:gosec` plus a justifying comment,
+  so `nolintlint` (`allow-unused: false`, `require-explanation`,
+  `require-specific`) fails the build when one stops being necessary: `G204`
   (operator-configured commands via `execx`), `G304` (paths under `/proc`,
   `paths.runtime`, fstab, config dirs), intentional `0644` writes, bounded
-  `args[i]` reads, shutdown-context `G118`.
+  `args[i]` reads, shutdown-context `G118`, and `G115` in the fixed-width wire
+  encoders `fpm`, `ipp`, `kafka`, `mqtt`, `nfs`, `openvpn`, `rdp`, `smb`, `snmp`
+  — each of those names the field width that makes the truncation the encoding.
+  Never use gosec's own `#nosec`: `nolintlint` cannot see it, so it would be an
+  unvalidated suppression. Always name the rule ID in the comment (`// G402: …`)
+  — `nolintlint` only enforces that *some* explanation exists, so the ID is what
+  makes a suppression auditable. The three `G402` (transport verification off so
+  a cert probe can inspect and report a broken chain; `verifyCertChain` then
+  validates it) and the two SHA-1 ones (`G401`/`G505`, mandated by RFC 6455 for
+  `Sec-WebSocket-Accept`) are the security-sensitive ones — review them first. `forbidigo` follows the same rule — the entry-point
+  `os.Exit` calls and the engine's injectable `Sleep` seam carry
+  `//nolint:forbidigo`, and no path is exempt.
 
   `errcheck` excludes `fmt.Fprint`/`Fprintf`/`Fprintln`: CLI and daemon operator
   output must not fail the command path when stdout/stderr is a broken pipe.
