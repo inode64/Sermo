@@ -153,12 +153,48 @@ func TestCSRFGuardOnUnsafeMethods(t *testing.T) {
 	}
 }
 
-func TestAuthRequiredChallenges(t *testing.T) {
+// The Basic challenge belongs on a document load. On a subresource it makes the
+// browser throw a modal password box at someone who was only reading the
+// dashboard: the page holds an EventSource on /api/stream that the server tells
+// to reconnect every 5s, and a reconnect arriving without the cached credential
+// used to be answered with WWW-Authenticate. Every request here is still 401.
+func TestAuthChallengesDocumentsOnly(t *testing.T) {
 	h := authServer(Auth{AdminCredentials: webcred.Plain("secret")})
-	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, req(http.MethodGet, apiPathServices, "", ""))
-	if rec.Code != http.StatusUnauthorized || rec.Header().Get("WWW-Authenticate") == "" {
-		t.Fatalf("expected 401 challenge, got %d (%q)", rec.Code, rec.Header().Get("WWW-Authenticate"))
+	tests := []struct {
+		name      string
+		path      string
+		fetchMode string
+		accept    string
+		challenge bool
+	}{
+		{name: "root navigation", path: routePathRoot, fetchMode: secFetchModeNavigate, challenge: true},
+		{name: "root without headers", path: routePathRoot, challenge: true},
+		{name: "login route", path: routePathLogin, fetchMode: "cors", challenge: true},
+		{name: "html navigation", path: apiPathServices, fetchMode: secFetchModeNavigate, challenge: true},
+		{name: "legacy html client", path: apiPathServices, accept: "text/html,*/*", challenge: true},
+		{name: "dashboard poll", path: apiPathServices, fetchMode: "cors", accept: contentTypeJSON},
+		{name: "event stream reconnect", path: apiPathServices, fetchMode: "cors", accept: streamContentType},
+		{name: "bare api client", path: apiPathServices},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			r := httptest.NewRequest(http.MethodGet, tc.path, nil)
+			if tc.fetchMode != "" {
+				r.Header.Set(headerSecFetchMode, tc.fetchMode)
+			}
+			if tc.accept != "" {
+				r.Header.Set(headerAccept, tc.accept)
+			}
+			rec := httptest.NewRecorder()
+			h.ServeHTTP(rec, r)
+			if rec.Code != http.StatusUnauthorized {
+				t.Fatalf("status = %d, want 401", rec.Code)
+			}
+			got := rec.Header().Get(headerWWWAuthenticate) != ""
+			if got != tc.challenge {
+				t.Fatalf("WWW-Authenticate present = %v, want %v", got, tc.challenge)
+			}
+		})
 	}
 }
 

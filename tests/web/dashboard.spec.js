@@ -698,3 +698,24 @@ test("graph selections remain isolated per service", async ({ page }) => {
   expect(saved.serviceMetricStates.web.window).toBe("1h");
   expect(saved.serviceMetricStates.db.window).toBe("168h");
 });
+
+// The server no longer answers an API 401 with WWW-Authenticate, so a poll that
+// loses its credential can no longer make the browser raise a modal password
+// box on its own. The dashboard has to notice instead: it goes to /login, the
+// one route that still challenges deliberately and then returns home.
+test("a 401 from the API navigates to the login route", async ({ page }) => {
+  await page.route("**/login", async (route) => {
+    await route.fulfill({ status: 200, contentType: "text/html", body: "<title>login reached</title>" });
+  });
+  await page.route("**/api/**", async (route) => {
+    await route.fulfill({
+      status: 401,
+      contentType: "application/json",
+      body: JSON.stringify({ ok: false, message: "authentication required" }),
+    });
+  });
+
+  await page.locator("#reload-btn").click();
+  await page.waitForURL(/\/login$/, { timeout: 15000 });
+  expect(new URL(page.url()).pathname).toBe("/login");
+});

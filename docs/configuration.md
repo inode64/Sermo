@@ -755,6 +755,28 @@ web:
   in the filesystem, not in the config, and it should be treated as one. `sermod`
   logs a warning at startup when the file is readable beyond its owner.
 
+#### The browser password prompt
+
+The dashboard authenticates with HTTP Basic, so the browser's own password box
+is the login form. It appears when a **document** is requested without a usable
+credential: the dashboard itself (`/`), and `/login`, which exists to summon the
+box on demand and then send you back home — that is how an anonymous guest
+escalates to admin.
+
+Everything else answers `401` **without** a `WWW-Authenticate` header: the JSON
+API, and `/api/stream`, the Server-Sent Events channel the dashboard keeps open.
+That distinction matters because the stream reconnects on its own, every five
+seconds by the server's own `retry` hint. When those replies still carried the
+challenge, a reconnect that arrived without the cached credential made the
+browser raise a modal password box at an operator who was doing nothing but
+reading — and several dashboards open at once multiplied the reconnections, so
+the prompts arrived every few minutes. The dashboard now handles a bare `401`
+itself by navigating to `/login`, which asks once, deliberately.
+
+A client that sets neither `Sec-Fetch-Mode` nor `Accept` is treated as an API
+caller, except on `/` and `/login`, which always challenge so a first login
+works from anything.
+
 #### Hashed credentials
 
 A credential may be stored **hashed**, so the file never holds a password anyone

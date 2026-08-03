@@ -787,6 +787,28 @@ web:
   como tal. `sermod` registra una advertencia al arrancar si el fichero es
   legible más allá de su propietario.
 
+#### El diálogo de contraseña del navegador
+
+El panel se autentica con HTTP Basic, así que el diálogo de contraseña del
+navegador **es** el formulario de login. Aparece cuando se pide un **documento**
+sin credencial utilizable: el propio panel (`/`) y `/login`, que existe para
+invocar el diálogo a demanda y devolverte a la portada — así escala a admin un
+invitado anónimo.
+
+Todo lo demás responde `401` **sin** cabecera `WWW-Authenticate`: la API JSON y
+`/api/stream`, el canal de Server-Sent Events que el panel mantiene abierto. Esa
+distinción importa porque el stream reconecta solo, cada cinco segundos según el
+`retry` que envía el propio servidor. Cuando esas respuestas llevaban el reto,
+una reconexión que llegaba sin la credencial cacheada hacía que el navegador
+lanzara un diálogo modal a un operador que sólo estaba leyendo — y varios
+paneles abiertos a la vez multiplicaban las reconexiones, así que el diálogo
+aparecía cada pocos minutos. Ahora el panel gestiona él mismo un `401` desnudo
+navegando a `/login`, que pregunta una vez y a propósito.
+
+Un cliente que no envía ni `Sec-Fetch-Mode` ni `Accept` se trata como llamante de
+API, salvo en `/` y `/login`, que retan siempre para que un primer login funcione
+desde cualquier cosa.
+
 #### Credenciales hasheadas
 
 Una credencial puede guardarse **hasheada**, de modo que el fichero nunca
