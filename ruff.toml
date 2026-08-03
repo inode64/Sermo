@@ -9,6 +9,34 @@ select = [
   "I",    # import ordering
   "PERF", # avoidable performance costs
   "PIE",  # miscellaneous unnecessary code
+  "RUF",  # ruff's own correctness checks, incl. RUF100 stale-suppression
+  "S",    # bandit: security defects — the counterpart of gosec for scripts/
   "SIM",  # simplifiable control flow
   "UP",   # modern Python idioms
 ]
+
+# Every entry is a measured false positive, not a defect being waved through.
+# Re-measure before adding to this list; a real finding gets fixed instead.
+ignore = [
+  # generate_install_config.py *recognises* wildcard listen addresses while
+  # reading fleet configuration (WILDCARD_LISTEN_HOSTS and friends). Nothing in
+  # scripts/ opens a socket, so a bare "0.0.0.0" here is data, not a bind.
+  "S104",
+  # S603 fires on every subprocess call regardless of how safe it is, and S607
+  # wants absolute executable paths. These scripts always pass an argv list and
+  # never shell=True — S602 stays on and still catches that — and they resolve
+  # git/yamlfmt through PATH deliberately, because the fleet spans several
+  # distributions with different prefixes.
+  "S603",
+  "S607",
+  # The tree is bilingual EN/ES and uses real typography in prose: an en dash in
+  # a docstring and × as the multiplication sign are intentional, not homoglyph
+  # confusion.
+  "RUF001",
+  "RUF002",
+]
+
+[lint.per-file-ignores]
+# Fixtures need literal credentials to exercise the config generator; they are
+# test data, and no other file may hardcode one.
+"scripts/remote-deploy/test_*.py" = ["S106"]

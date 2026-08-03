@@ -134,7 +134,7 @@ def normalize_line(line: str) -> str:
 def normalize_file(path: Path) -> bool:
     original = path.read_text(encoding="utf-8")
     updated = "\n".join(normalize_line(line) for line in original.splitlines())
-    if original.endswith("\n") or updated and not updated.endswith("\n"):
+    if original.endswith("\n") or (updated and not updated.endswith("\n")):
         updated += "\n"
     if updated == original:
         return False
@@ -149,7 +149,7 @@ def main() -> int:
         if check_only:
             original = path.read_text(encoding="utf-8")
             updated = "\n".join(normalize_line(line) for line in original.splitlines())
-            if original.endswith("\n") or updated and not updated.endswith("\n"):
+            if original.endswith("\n") or (updated and not updated.endswith("\n")):
                 updated += "\n"
             if updated != original:
                 print(path.relative_to(ROOT))
