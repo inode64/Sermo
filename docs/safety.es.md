@@ -38,8 +38,13 @@ pasa por el mismo motor:
 4. Bloquear si algún guard bloquea la acción.
 5. Para stop/restart, detener, esperar `graceful_timeout`, descubrir procesos residuales.
 6. Si quedan residuales y `force_kill` es false → `orphan_processes`; un restart fallido
-   **no** inicia. Si es true, SIGTERM y luego SIGKILL solo a los procesos
-   que coincidan exactamente con `kill_only_if`, redescubriendo entre pasos.
+   **no** inicia. La excepción estrecha es un restart systemd cuyo stop aislado
+   tuvo éxito y cuyos residuales están todos atribuidos por el backend a la misma
+   unidad mientras vuelve a estar `active` (por ejemplo, por activación de
+   socket): systemd ya reinició esa unidad, así que Sermo ejecuta el postflight
+   sin un segundo start ni tocar el socket activador. Si `force_kill` es true,
+   SIGTERM y luego SIGKILL solo a los procesos que coincidan exactamente con
+   `kill_only_if`, redescubriendo entre pasos.
 7. Tras un stop limpio (sin residuales), reconciliar el estado registrado del init con
    la realidad — `systemctl reset-failed` (systemd) o `rc-service … zap` (OpenRC) —
    para que un marcador persistente de failed/stuck no pueda contradecir los procesos reales.
