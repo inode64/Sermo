@@ -793,6 +793,55 @@ Estos alimentan la monitorización **y** el reaper residual, de modo que un sele
 stop atrapar y matar más restos (un residual no matable permanece como
 `orphan_processes`). El *check* `process` sigue coincidiendo solo por `exe`/`user`.
 
+### Aislamiento de dependencias (`allow_dependencies`)
+
+Todo start y stop que emite Sermo está aislado del grafo de dependencias del
+init, así que reiniciar un servicio nunca puede reiniciar otros. Un reinicio se
+compone como stop y luego start, y ambas mitades llevan el flag: en systemd es
+el stop el que arrastraría a las unidades ligadas a esta.
+
+| Backend | Comando |
+|---|---|
+| systemd | `systemctl <verb> --job-mode=ignore-dependencies -- <unit>` |
+| OpenRC | `rc-service --nodeps <servicio> <verb>` |
+
+Sólo se aíslan los verbos que cambian de estado. Las consultas de estado,
+`reload` y `reset-failed`/`zap` no propagan, así que se emiten sin cambios.
+
+**Esto corta por los dos lados, a propósito.** El aislamiento también implica
+que un arranque **no** levanta lo que el servicio necesita: si una dependencia
+está caída, el arranque procede y el servicio puede fallar por su cuenta. La
+documentación de systemd advierte de que `ignore-dependencies` puede dejar el
+sistema inconsistente — es el precio que se acepta aquí a cambio de no tumbar
+nunca un servicio que nadie pidió tocar.
+
+Medido en un host real, `nfs-server` es justo el caso que esto protege:
+`ConsistsOf` `nfs-mountd` y `nfs-idmapd`, ambos monitorizados por Sermo como
+servicios propios, así que un reinicio sin aislar de uno reiniciaría tres.
+
+Pon el flag sólo en un servicio que no sirva de nada sin las unidades que
+necesita, y en el que prefieras que las levante a que falle:
+
+```yaml
+name: algun-servicio
+allow_dependencies: true
+```
+
+Ningún servicio del catálogo lo trae puesto. `also_service:` es la forma
+explícita de declarar unidades acompañantes que Sermo debe operar junto al
+servicio — es preferible a depender del grafo del init.
+
+Se hereda desde el `defaults:` global igual que `dry_run`, así que un host
+entero puede volver al comportamiento anterior de una vez:
+
+```yaml
+defaults:
+  allow_dependencies: true
+```
+
+Los servicios docker y libvirt no se ven afectados: sus backends no tienen un
+grafo de dependencias de este tipo.
+
 ### Invariantes de estado parado (`stop_policy`)
 
 Tras un stop **limpio**, el motor puede verificar que el servicio no dejó nada detrás:

@@ -76,17 +76,34 @@ func (ComposedRestart) ResetState(context.Context, string) error {
 	return nil
 }
 
-// NewManager returns a Manager for backend using the real host commands.
-func NewManager(backend Backend) (Manager, error) {
-	return newManager(backend, execx.CommandRunner{})
+// Options are the per-service knobs a manager applies to the commands it runs.
+type Options struct {
+	// AllowDependencies lets a start or stop propagate through the init
+	// system's dependency graph. The zero value keeps the operation isolated:
+	// Sermo acts on the service it was asked about and nothing else, so
+	// restarting one service cannot restart others. Set it for a service that
+	// is useless without the units it requires.
+	AllowDependencies bool
 }
 
-func newManager(backend Backend, runner execx.Runner) (Manager, error) {
+// NewManager returns a Manager for backend using the real host commands, with
+// operations isolated from the dependency graph. Use NewManagerWithOptions for
+// a service that needs its dependencies handled.
+func NewManager(backend Backend) (Manager, error) {
+	return NewManagerWithOptions(backend, Options{})
+}
+
+// NewManagerWithOptions returns a Manager for backend honoring opts.
+func NewManagerWithOptions(backend Backend, opts Options) (Manager, error) {
+	return newManager(backend, execx.CommandRunner{}, opts)
+}
+
+func newManager(backend Backend, runner execx.Runner, opts Options) (Manager, error) {
 	switch backend {
 	case BackendSystemd:
-		return systemdManager{runner: runner}, nil
+		return systemdManager{runner: runner, opts: opts}, nil
 	case BackendOpenRC:
-		return openrcManager{runner: runner, readFile: os.ReadFile}, nil
+		return openrcManager{runner: runner, readFile: os.ReadFile, opts: opts}, nil
 	default:
 		return nil, fmt.Errorf("no service manager for backend %q", backend)
 	}
@@ -180,6 +197,7 @@ func BackendPIDsFuncWithRunner(ctx context.Context, backend Backend, unit string
 // systemdManager queries services through systemctl.
 type systemdManager struct {
 	runner execx.Runner
+	opts   Options
 }
 
 func (m systemdManager) Status(ctx context.Context, service string) (ServiceStatus, error) {
@@ -232,17 +250,35 @@ func (m systemdManager) SupportsReload(ctx context.Context, service string) (boo
 
 func (m systemdManager) action(ctx context.Context, verb, service string) error {
 	unit := systemdUnit(service)
-	result, err := m.runner.Run(ctx, cmdSystemctl, verb, commandArgTerminator, unit)
+	args := []string{verb}
+	if isolatedVerb(verb) && !m.opts.AllowDependencies {
+		args = append(args, systemctlFlagIsolateJob)
+	}
+	args = append(args, commandArgTerminator, unit)
+	result, err := m.runner.Run(ctx, cmdSystemctl, args...)
 	if err != nil {
 		return actionError(fmt.Sprintf("%s %s %s", cmdSystemctl, verb, unit), result, err)
 	}
 	return nil
 }
 
+// isolatedVerb reports whether a verb moves the unit between states, which is
+// the only case the init system propagates through the dependency graph.
+// Querying, reloading and clearing failed state never do.
+func isolatedVerb(verb string) bool {
+	switch verb {
+	case actionStart, actionStop, actionRestart:
+		return true
+	default:
+		return false
+	}
+}
+
 // openrcManager queries services through rc-service.
 type openrcManager struct {
 	runner   execx.Runner
 	readFile func(string) ([]byte, error)
+	opts     Options
 }
 
 func (m openrcManager) Status(ctx context.Context, service string) (ServiceStatus, error) {
@@ -323,7 +359,13 @@ func (m openrcManager) SupportsReload(_ context.Context, service string) (bool, 
 }
 
 func (m openrcManager) action(ctx context.Context, verb, service string) error {
-	result, err := m.runner.Run(ctx, cmdRcService, service, verb)
+	// rc-service takes its options before the service name.
+	var args []string
+	if isolatedVerb(verb) && !m.opts.AllowDependencies {
+		args = append(args, openRCFlagNoDeps)
+	}
+	args = append(args, service, verb)
+	result, err := m.runner.Run(ctx, cmdRcService, args...)
 	if err != nil {
 		return actionError(fmt.Sprintf("%s %s %s", cmdRcService, service, verb), result, err)
 	}

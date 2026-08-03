@@ -148,10 +148,12 @@ func TestSystemdManagerActionsUseRunner(t *testing.T) {
 		t.Fatalf("Restart() error = %v", err)
 	}
 
+	// Isolated by default: a start or stop must not propagate through the
+	// dependency graph, so restarting one service cannot restart others.
 	want := []string{
-		"systemctl start -- nginx.service",
-		"systemctl stop -- nginx.service",
-		"systemctl restart -- nginx.service",
+		"systemctl start --job-mode=ignore-dependencies -- nginx.service",
+		"systemctl stop --job-mode=ignore-dependencies -- nginx.service",
+		"systemctl restart --job-mode=ignore-dependencies -- nginx.service",
 	}
 	if len(rec.calls) != len(want) {
 		t.Fatalf("calls = %v, want %v", rec.calls, want)
@@ -200,8 +202,57 @@ func TestOpenRCManagerActionUsesRunner(t *testing.T) {
 	if err := m.Restart(context.Background(), "nginx"); err != nil {
 		t.Fatalf("Restart() error = %v", err)
 	}
-	if len(rec.calls) != 1 || rec.calls[0] != "rc-service nginx restart" {
-		t.Fatalf("calls = %v, want [rc-service nginx restart]", rec.calls)
+	// Isolated by default; rc-service takes its options before the service name.
+	if len(rec.calls) != 1 || rec.calls[0] != "rc-service --nodeps nginx restart" {
+		t.Fatalf("calls = %v, want [rc-service --nodeps nginx restart]", rec.calls)
+	}
+}
+
+// A service that opts back in gets the plain command, so the init system
+// handles its dependencies as before.
+func TestManagerActionsAllowDependenciesWhenOptedIn(t *testing.T) {
+	ctx := context.Background()
+
+	sysRec := &recordRunner{}
+	sysMgr := systemdManager{runner: sysRec, opts: Options{AllowDependencies: true}}
+	if err := sysMgr.Restart(ctx, "nginx"); err != nil {
+		t.Fatalf("Restart() error = %v", err)
+	}
+	if len(sysRec.calls) != 1 || sysRec.calls[0] != "systemctl restart -- nginx.service" {
+		t.Fatalf("systemd calls = %v, want the plain restart", sysRec.calls)
+	}
+
+	rcRec := &recordRunner{}
+	rcMgr := openrcManager{runner: rcRec, opts: Options{AllowDependencies: true}}
+	if err := rcMgr.Restart(ctx, "nginx"); err != nil {
+		t.Fatalf("Restart() error = %v", err)
+	}
+	if len(rcRec.calls) != 1 || rcRec.calls[0] != "rc-service nginx restart" {
+		t.Fatalf("openrc calls = %v, want the plain restart", rcRec.calls)
+	}
+}
+
+// Only state-changing verbs propagate; querying, reloading and clearing failed
+// state must stay untouched so the flag cannot alter unrelated commands.
+func TestManagerNonStateVerbsCarryNoIsolationFlag(t *testing.T) {
+	ctx := context.Background()
+
+	sysRec := &recordRunner{}
+	sysMgr := systemdManager{runner: sysRec}
+	if err := sysMgr.Reload(ctx, "nginx"); err != nil {
+		t.Fatalf("Reload() error = %v", err)
+	}
+	if err := sysMgr.ResetState(ctx, "nginx"); err != nil {
+		t.Fatalf("ResetState() error = %v", err)
+	}
+	want := []string{
+		"systemctl reload -- nginx.service",
+		"systemctl reset-failed -- nginx.service",
+	}
+	for i := range want {
+		if sysRec.calls[i] != want[i] {
+			t.Errorf("call[%d] = %q, want %q", i, sysRec.calls[i], want[i])
+		}
 	}
 }
 
@@ -224,7 +275,7 @@ func TestResetStateReconcilesInitState(t *testing.T) {
 }
 
 func TestNewManagerUnsupportedBackend(t *testing.T) {
-	if _, err := newManager(BackendAuto, stubRunner{}); err == nil {
+	if _, err := newManager(BackendAuto, stubRunner{}, Options{}); err == nil {
 		t.Fatal("newManager(auto) error = nil, want unsupported error")
 	}
 }

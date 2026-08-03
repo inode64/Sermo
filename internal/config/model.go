@@ -191,6 +191,18 @@ const keyDryRun = "dry_run"
 // EntryKeyDryRun is the shared per-target `dry_run` key.
 const EntryKeyDryRun = keyDryRun
 
+// keyAllowDependencies lets a start or stop propagate through the init system's
+// dependency graph. Absent means isolated: an operation touches the service it
+// names and nothing else, so restarting one service cannot restart others.
+const keyAllowDependencies = "allow_dependencies"
+
+// AllowDependencies reports whether this service's operations may propagate to
+// the units it requires or that require it. False — the default — isolates them.
+func AllowDependencies(tree map[string]any) bool {
+	allow, _ := tree[keyAllowDependencies].(bool)
+	return allow
+}
+
 // keyRestartOnStaleBinary permits the generated stale-binary rule to restart.
 // It gates that one trigger: false keeps the alert and the notification and
 // drops only the restart action. A manual restart, and remediation for a real
@@ -463,7 +475,7 @@ var metaKeys = map[string]struct{}{
 
 // perServiceDefaults are the only parts of global `defaults` that merge into a
 // service. Engine-wide settings never reach individual services.
-var perServiceDefaults = []string{keyDryRun, keyRestartOnChange, keyRestartOnStaleBinary, sectionStopPolicy, sectionPolicy, sectionRuleWindow, sectionClearWindow}
+var perServiceDefaults = []string{keyDryRun, keyAllowDependencies, keyRestartOnChange, keyRestartOnStaleBinary, sectionStopPolicy, sectionPolicy, sectionRuleWindow, sectionClearWindow}
 
 // Document is a single loaded catalog definition or configured target in raw,
 // unexpanded form.
