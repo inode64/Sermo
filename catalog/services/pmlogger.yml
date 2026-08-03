@@ -21,12 +21,16 @@ watches:
     check:
       type: service
       expect: active
-  port:
+  restart-if-port-failed:
     check:
       type: tcp
       host: ${host}
       port: ${port}
       timeout: 2s
+    for:
+      cycles: 3
+    then:
+      action: restart
   alert-if-memory-high:
     check:
       type: metric
