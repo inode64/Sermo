@@ -44,7 +44,7 @@ func (dockerProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 
 	info, err := client.Info(ctx)
 	if err != nil {
-		return Result{}, probeErr(ProtocolNameDocker, "info", err)
+		return Result{}, probeErr(ProtocolNameDocker, stepInfo, err)
 	}
 	res := Result{Version: info.ServerVersion, Extra: map[string]string{
 		ExtraKeyDockerContainers: strconv.Itoa(info.Containers),
@@ -58,7 +58,7 @@ func (dockerProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	if name := cfg.Query; name != "" {
 		container, err := client.Inspect(ctx, name)
 		if err != nil {
-			return Result{}, probeErr(ProtocolNameDocker, "inspect", err)
+			return Result{}, probeErr(ProtocolNameDocker, stepInspect, err)
 		}
 		dockerContainer(container, &res)
 	}

@@ -63,7 +63,7 @@ func dbusProbe(ctx context.Context, addr string) (Result, error) {
 
 	var busID string
 	if err := conn.BusObject().CallWithContext(ctx, "org.freedesktop.DBus.GetId", dbusCallFlags).Store(&busID); err != nil {
-		return Result{}, probeErr(ProtocolNameDBus, "GetId", err)
+		return Result{}, probeErr(ProtocolNameDBus, stepDBusGetID, err)
 	}
 	extra := map[string]string{extraAddress: addr}
 	if busID != "" {

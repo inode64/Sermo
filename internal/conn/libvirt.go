@@ -106,7 +106,7 @@ func libvirtProbe(l *libvirt.Libvirt, uri, mode, domain string) (Result, error) 
 
 	ver, err := l.ConnectGetLibVersion()
 	if err != nil {
-		return Result{}, probeErr(ProtocolNameLibvirt, "version", err)
+		return Result{}, probeErr(ProtocolNameLibvirt, stepVersion, err)
 	}
 	version := formatLibvirtVersion(ver)
 	extra := map[string]string{extraURI: uri, extraLibVersion: version, extraTransport: mode}

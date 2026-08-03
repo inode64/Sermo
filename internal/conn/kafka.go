@@ -67,7 +67,7 @@ func (kafkaProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	defer func() { _ = c.Close() }()
 
 	if _, err := c.Write(kafkaAPIVersionsRequest()); err != nil {
-		return Result{}, probeErr(ProtocolNameKafka, "ApiVersions request", err)
+		return Result{}, probeErr(ProtocolNameKafka, stepKafkaAPIVersionsRequest, err)
 	}
 	return readKafkaAPIVersions(c)
 }
@@ -96,7 +96,7 @@ func kafkaAPIVersionsRequest() []byte {
 func readKafkaAPIVersions(r io.Reader) (Result, error) {
 	var sizeBuf [kafkaSizePrefixBytes]byte
 	if _, err := io.ReadFull(r, sizeBuf[:]); err != nil {
-		return Result{}, probeErr(ProtocolNameKafka, "response size", err)
+		return Result{}, probeErr(ProtocolNameKafka, stepKafkaResponseSize, err)
 	}
 	size := binary.BigEndian.Uint32(sizeBuf[:])
 	if size < kafkaMinResponse || size > maxKafkaResponse {
@@ -104,7 +104,7 @@ func readKafkaAPIVersions(r io.Reader) (Result, error) {
 	}
 	buf := make([]byte, size)
 	if _, err := io.ReadFull(r, buf); err != nil {
-		return Result{}, probeErr(ProtocolNameKafka, "response body", err)
+		return Result{}, probeErr(ProtocolNameKafka, stepResponseBody, err)
 	}
 
 	// Response header v0 is a single int32 correlation id; a mismatch means the

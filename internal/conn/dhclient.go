@@ -46,7 +46,7 @@ func (dhclientProtocol) RequiresUser() bool { return false }
 
 func (dhclientProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	if err := ctx.Err(); err != nil {
-		return Result{}, probeErr(ProtocolNameDHClient, "lease scan", err)
+		return Result{}, probeErr(ProtocolNameDHClient, stepDHCPLeaseScan, err)
 	}
 	port := cfg.Port
 	if port == 0 {
@@ -57,7 +57,7 @@ func (dhclientProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 		return Result{}, err
 	}
 	if err := ctx.Err(); err != nil {
-		return Result{}, probeErr(ProtocolNameDHClient, "lease scan", err)
+		return Result{}, probeErr(ProtocolNameDHClient, stepDHCPLeaseScan, err)
 	}
 	extra := map[string]string{
 		extraProtocol:        networkUDP,

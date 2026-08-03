@@ -63,7 +63,7 @@ func (lvmpolldProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	// The hello request body is a single config field; buffer framing appends the
 	// "\n##\n" delimiter (matching libdaemon's buffer_write exactly).
 	if _, err := io.WriteString(c, lvmDaemonHelloRequest); err != nil {
-		return Result{}, probeErr(ProtocolNameLVMPolld, "hello", err)
+		return Result{}, probeErr(ProtocolNameLVMPolld, stepLVMPolldHello, err)
 	}
 	reply, err := readLVMDaemonMessage(c)
 	if err != nil {
@@ -110,7 +110,7 @@ func readLVMDaemonMessage(r io.Reader) (string, error) {
 			if err == io.EOF && len(buf) > 0 {
 				return "", errors.New("lvmpolld: connection closed before message delimiter")
 			}
-			return "", probeErr(ProtocolNameLVMPolld, "read reply", err)
+			return "", probeErr(ProtocolNameLVMPolld, stepLVMPolldReadReply, err)
 		}
 	}
 }

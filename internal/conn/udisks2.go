@@ -51,18 +51,18 @@ func udisks2Probe(ctx context.Context, addr string) (Result, error) {
 		return Result{}, probeErr(ProtocolNameUDisks2, stepAuth, err)
 	}
 	if err := conn.Hello(); err != nil {
-		return Result{}, probeErr(ProtocolNameUDisks2, "Hello", err)
+		return Result{}, probeErr(ProtocolNameUDisks2, stepUDisks2Hello, err)
 	}
 
 	var owner string
 	bus := conn.Object(dbusBusName, dbusObjectPath)
 	if err := bus.CallWithContext(ctx, dbusGetNameOwner, 0, udisks2BusName).Store(&owner); err != nil {
-		return Result{}, probeErr(ProtocolNameUDisks2, "GetNameOwner", err)
+		return Result{}, probeErr(ProtocolNameUDisks2, stepUDisks2GetNameOwner, err)
 	}
 
 	obj := conn.Object(udisks2BusName, udisks2ManagerPath)
 	if err := obj.CallWithContext(ctx, dbusPeerPing, 0).Store(); err != nil {
-		return Result{}, probeErr(ProtocolNameUDisks2, "Peer.Ping", err)
+		return Result{}, probeErr(ProtocolNameUDisks2, stepUDisks2PeerPing, err)
 	}
 
 	return Result{Extra: map[string]string{extraOwner: owner}}, nil

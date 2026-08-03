@@ -99,7 +99,7 @@ func ovsdbCall(enc *json.Encoder, dec *json.Decoder, id, method string, params [
 	for range ovsdbProbeMaxResponses {
 		var resp ovsdbResponse
 		if err := dec.Decode(&resp); err != nil {
-			return probeErr(ProtocolNameOpenVSwitch, "response", err)
+			return probeErr(ProtocolNameOpenVSwitch, stepResponse, err)
 		}
 		if resp.Method != "" { // a request from the server, not our reply
 			continue
@@ -114,7 +114,7 @@ func ovsdbCall(enc *json.Encoder, dec *json.Decoder, id, method string, params [
 		}
 		if out != nil && len(resp.Result) > 0 {
 			if err := json.Unmarshal(resp.Result, out); err != nil {
-				return probeErr(ProtocolNameOpenVSwitch, "decode result", err)
+				return probeErr(ProtocolNameOpenVSwitch, stepOpenvSwitchDecodeResult, err)
 			}
 			return nil
 		}

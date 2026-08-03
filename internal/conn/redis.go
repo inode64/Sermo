@@ -166,7 +166,7 @@ func readRESP(br *bufio.Reader) (string, error) {
 		}
 		buf := make([]byte, n+redisRESPBulkTerminatorBytes)
 		if _, err := io.ReadFull(br, buf); err != nil {
-			return "", probeErr(ProtocolNameRedis, "bulk string", err)
+			return "", probeErr(ProtocolNameRedis, stepRedisBulkString, err)
 		}
 		return string(buf[:n]), nil
 	default:

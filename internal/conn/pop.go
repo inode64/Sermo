@@ -46,13 +46,13 @@ func popHandshake(rw io.ReadWriter, cfg Config) (Result, error) {
 
 	if cfg.User != "" {
 		if _, err := fmt.Fprintf(rw, popCommandUserFormat, cfg.User); err != nil {
-			return Result{}, probeErr(ProtocolNamePOP, "USER", err)
+			return Result{}, probeErr(ProtocolNamePOP, stepPOPUser, err)
 		}
 		if _, err := readPOPReply(br); err != nil {
 			return Result{}, fmt.Errorf("user: %w", err)
 		}
 		if _, err := fmt.Fprintf(rw, popCommandPassFormat, cfg.Password); err != nil {
-			return Result{}, probeErr(ProtocolNamePOP, "PASS", err)
+			return Result{}, probeErr(ProtocolNamePOP, stepPOPPass, err)
 		}
 		if _, err := readPOPReply(br); err != nil {
 			return Result{}, fmt.Errorf("pass: %w", err)

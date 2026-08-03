@@ -74,12 +74,12 @@ func (rdpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	defer func() { _ = c.Close() }()
 
 	if _, err := c.Write(buildRDPNegRequest(rdpRequestedProtocols)); err != nil {
-		return Result{}, probeErr(ProtocolNameRDP, "negotiation request", err)
+		return Result{}, probeErr(ProtocolNameRDP, stepRDPNegotiationRequest, err)
 	}
 	buf := make([]byte, rdpReadBufferBytes)
 	n, err := c.Read(buf)
 	if err != nil {
-		return Result{}, probeErr(ProtocolNameRDP, "negotiation response", err)
+		return Result{}, probeErr(ProtocolNameRDP, stepRDPNegotiationResponse, err)
 	}
 	security, err := parseRDPConfirm(buf[:n])
 	if err != nil {
