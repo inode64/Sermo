@@ -42,7 +42,15 @@ func expandStaleBinary(tree map[string]any) []string {
 		return nil
 	}
 
-	checkEntry := map[string]any{checks.CheckKeyType: checks.CheckTypeStaleBinary}
+	// A replaced executable needs operator attention (and may trigger the
+	// generated alert/restart rule), but it does not make the running service
+	// unavailable. Keep the raw result for the rule's `failed:` condition while
+	// marking the injected check as a verdictless state sensor for health and
+	// SLA accounting.
+	checkEntry := map[string]any{
+		checks.CheckKeyType:    checks.CheckTypeStaleBinary,
+		checks.CheckKeyReports: checks.ReportsState,
+	}
 	if err := injectGenerated(tree, sectionChecks, staleBinaryCheckName, "check", checkEntry); err != "" {
 		return []string{err}
 	}

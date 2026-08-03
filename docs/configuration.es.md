@@ -970,7 +970,7 @@ Endpoints de solo lectura:
   endpoints individuales siguientes siguen disponibles y sirven como fallback del navegador.
 - `GET /api/services` — lista de services de **runtime configurado** (los archivos de
   service bajo `paths.services`): name, `state` (`disabled`, `stopped`,
-  `started`, `starting`, `collecting`, `monitored`, `failed`), estado del backend,
+  `started`, `starting`, `collecting`, `monitored`, `warning`, `failed`), estado del backend,
   `check_health`, `checks_failing`, `observability_ready`,
   `observability_missing`, locks activos, estado/fuente/marca de tiempo de monitor, backend,
   unidad, cooldown, estado de remediación, próxima acción elegible y último evento. Esto
@@ -2933,6 +2933,12 @@ identificado por el backend de init sigue corriendo con un ejecutable inservible
 y no se reporta nada; un proceso emparejado sólo por un selector `exe:` deja de
 casar por completo, así que el servicio simplemente parece no tener procesos y
 aparece como `warning` sin causa declarada.
+
+`stale_binary` es diagnóstico, no un fallo de disponibilidad: no reduce la
+salud ni el SLA del servicio. Cuando detecta un ejecutable reemplazado, el
+servicio se muestra como `warning` con la indicación de reiniciarlo, mientras su
+regla generada sigue alertando y, cuando está permitido, reinicia de forma
+segura.
 
 Pon `restart_on_stale_binary: false` en un servicio para conservar la alerta y
 la notificación pero omitir el reinicio:

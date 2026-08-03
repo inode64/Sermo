@@ -934,7 +934,7 @@ Read-only endpoints:
   remain available and are used as a browser fallback.
 - `GET /api/services` — **configured runtime** service list (the service
   files under `paths.services`): name, `state` (`disabled`, `stopped`,
-  `started`, `starting`, `collecting`, `monitored`, `failed`), backend status,
+  `started`, `starting`, `collecting`, `monitored`, `warning`, `failed`), backend status,
   `check_health`, `checks_failing`, `observability_ready`,
   `observability_missing`, active locks, monitor state/source/timestamp,
   backend, unit, cooldown, remediation state, next eligible action and last
@@ -2841,6 +2841,11 @@ identified through the init backend keeps running with an unusable executable
 and nothing is reported at all; a process matched only by an `exe:` selector
 stops matching entirely, so the service merely looks like it has no processes
 and reads as `warning` with no stated cause.
+
+`stale_binary` is diagnostic rather than an availability failure: it does not
+reduce service health or SLA. When it finds a replaced executable, the service
+is shown as `warning` with a restart-needed explanation while its generated rule
+continues to alert and, where allowed, restart safely.
 
 Set `restart_on_stale_binary: false` on a service to keep the alert and the
 notification but drop the restart:

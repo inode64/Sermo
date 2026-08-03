@@ -53,6 +53,9 @@ func TestStaleBinaryDefaultAllowsRestart(t *testing.T) {
 	if entry[checks.CheckKeyType] != checks.CheckTypeStaleBinary {
 		t.Fatalf("stale-binary check not injected: %v", checksMap)
 	}
+	if entry[checks.CheckKeyReports] != checks.ReportsState {
+		t.Fatalf("stale-binary reports = %v, want %q", entry[checks.CheckKeyReports], checks.ReportsState)
+	}
 }
 
 // This is the OVS case. The alert and its notification survive; only the

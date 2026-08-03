@@ -68,10 +68,15 @@ func (b *WebBackend) viewWithRuntime(ctx context.Context, name string, e *webEnt
 		svc.Monitored, svc.MonitorSource, svc.MonitorChangedAt = active, source, changed
 	}
 	failing, health := b.serviceCheckHealth(name, e, svc.Monitored)
+	warningReason := b.serviceWarningReason(name, e)
+	if health == TargetStateOK && warningReason != "" {
+		health = checkHealthWarning
+	}
 	svc.CheckHealth = health
 	if failing > 0 {
 		svc.ChecksFailing = failing
 	}
+	svc.WarningReason = warningReason
 	if !lockView.ready {
 		lockView.active = activeLockNames(b.cfg, name)
 		lockView.operationActive = operationActive(b.cfg, name)
@@ -83,9 +88,6 @@ func (b *WebBackend) viewWithRuntime(ctx context.Context, name string, e *webEnt
 	b.decorateRemediation(name, &svc)
 	observed := (b.settling == nil || b.settling.Observed(SettlingServiceKey(name))) && !b.operationSettlingPending(name)
 	svc.ObservabilityReady, svc.ObservabilityMissing = b.serviceObservability(name, e, svc.Status, svc.CheckHealth, svc.Monitored, observed)
-	if !svc.ObservabilityReady {
-		svc.WarningReason = b.serviceWarningReason(name, e)
-	}
 	svc.State = ServiceState(svc.Enabled, svc.Monitored, svc.Status, svc.CheckHealth, observed, svc.ObservabilityReady,
 		b.serviceProcessActive(name, e), onlyMissingProcesses(svc.ObservabilityMissing))
 	if len(e.alsoApply) > 0 {
@@ -151,8 +153,8 @@ func (b *WebBackend) serviceObservability(name string, e *webEntry, status, chec
 	return true, nil
 }
 
-// serviceWarningReason returns the machine-readable cause behind an indicator
-// gap, for the dashboard to phrase. It reads the stale-binary check's published
+// serviceWarningReason returns the machine-readable cause of a service warning
+// for the dashboard to phrase. It reads the stale-binary check's published
 // snapshot rather than discovering processes: like serviceProcessActive below,
 // the web request must not scan /proc — daemon cycles own the runtime evidence
 // and its freshness boundary.
@@ -165,7 +167,7 @@ func (b *WebBackend) serviceWarningReason(name string, e *webEntry) string {
 		if typ != checks.CheckTypeStaleBinary {
 			continue
 		}
-		if cs, ok := snap[check]; ok && !cs.OK {
+		if cs, ok := snap[check]; ok && b.serviceCheckSnapshotCurrent(e, check, cs) && !cs.OK {
 			return warningReasonStaleBinary
 		}
 	}

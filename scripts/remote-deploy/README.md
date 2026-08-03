@@ -41,6 +41,53 @@ The remote scripts must run as root on the target host:
   after copying any required evidence locally, remove the exact staging directory
   created for that run.
 
+## Credentials deployment
+
+`deploy_credentials.py` distributes dashboard passwords without putting them in
+the inventory, command line or report. Its source inventory must have
+`cliente` and `ip_vpn` columns, and the local password source has one
+`cliente contraseña` entry per line. It writes only
+`/etc/sermo/credentials.env`, preserving existing credential lines and adding
+the server's own client password plus `inode64`; `amizalsa`, `bertolin`,
+`euromeca`, `maberauto` and `realexport` receive `optiza` too. The destination
+is atomically replaced as `root:root` mode `0600`; the daemon is not restarted.
+
+```sh
+scripts/remote-deploy/deploy_credentials.py \
+  --inventory inventario-red-172.31.16.csv \
+  --passwords .env.pass
+```
+
+For a retry against a known subset, repeat `--ip-vpn` for each exact address;
+each address must appear in the supplied inventory.
+Use `--exclude-ip-vpn` to leave selected inventory addresses untouched.
+
+After credential deployment, make active daemons load the file by adding
+`--configure-web`. It replaces any direct `web.password` or prior
+`web.password_file` with `web.password_file: /etc/sermo/credentials.env`,
+validates the configuration, then restarts only an already-active `sermod` with
+the detected init backend. On validation or restart failure it restores the
+previous configuration and attempts to restore the prior daemon state.
+
+## Opening dashboards locally
+
+`scripts/open_sermo_dashboards.py` opens the complete CSV inventory in a
+separate Chrome profile. It reads the `inode64` password at runtime and supplies
+it to HTTP Basic challenges through a temporary, origin-restricted Chrome
+extension, so the password is neither embedded in the dashboard URLs nor passed
+on Chrome's command line. Close the window when finished so the temporary
+profile and extension are deleted.
+
+```sh
+scripts/open_sermo_dashboards.py
+```
+
+It validates every mapping before contacting a host, preflights the complete
+inventory, then applies to all reachable servers concurrently (eight at a time
+by default). SSH uses `root@ip_vpn` with non-interactive, bounded connections.
+A `report.tsv` under a private `/tmp/sermo-credentials-*` directory contains no
+secret values.
+
 ## Fleet install orchestrator
 
 `install_fleet.sh` is the fresh-install counterpart of `update_fleet.sh`, for
