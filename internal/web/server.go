@@ -295,7 +295,7 @@ type Service struct {
 	Monitored            bool     `json:"monitored"`
 	MonitorSource        string   `json:"monitor_source,omitempty"`        // cli | web | config | daemon
 	MonitorChangedAt     string   `json:"monitor_changed_at,omitempty"`    // RFC3339 when monitoring state last changed
-	CheckHealth          string   `json:"check_health,omitempty"`          // ok | failing | unknown | paused | disabled
+	CheckHealth          string   `json:"check_health,omitempty"`          // ok | warning | failing | unknown | paused | disabled
 	ChecksFailing        int      `json:"checks_failing,omitempty"`        // required checks currently failing
 	ObservabilityReady   bool     `json:"observability_ready"`             // true when monitored service has fresh visible indicators
 	ObservabilityMissing []string `json:"observability_missing,omitempty"` // indicator groups still collecting
