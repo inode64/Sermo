@@ -38,7 +38,7 @@ jobs:
           go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
           go install github.com/google/yamlfmt/cmd/yamlfmt@v0.21.0
           npm ci
-          pip install 'yamllint==1.38.0' 'ruff==0.16.1'
+          pip install 'yamllint==1.38.0' 'ruff==0.16.1' 'semgrep==1.172.0'
           sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck
       # NilAway ships as a golangci-lint module plugin, so the lint gate needs a
       # bespoke binary. Both versions are pinned in .custom-gcl.yml, which is
