@@ -53,7 +53,7 @@ def fix_doc(path: Path, doc: dict) -> None:
         fix_rules(rules)
 
     name = path.name
-    if name in CEPH_STATUS_CMD and CEPH_STATUS_CMD[name]:
+    if CEPH_STATUS_CMD.get(name):
         cmd = CEPH_STATUS_CMD[name]
         for section in ("checks",):
             sec = doc.get(section, {})
