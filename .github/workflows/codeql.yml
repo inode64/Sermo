@@ -32,6 +32,8 @@ jobs:
       - uses: github/codeql-action/init@v4
         with:
           languages: ${{ matrix.language }}
+          # Keeps the generated web bundle out of scope; see the config file.
+          config-file: ./.github/codeql/codeql-config.yml
           # The default suite is the narrow one. security-extended adds the
           # lower-precision security queries; findings land in the Security tab
           # and do not fail this workflow, so widening it costs no build time
