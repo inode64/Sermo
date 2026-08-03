@@ -1,0 +1,47 @@
+# Repository invariants that no generic Go linter can express.
+#
+# depguard already enforces the *import* boundaries in .golangci.yml. These are
+# the call-level contracts that survive an allowed import, each one written
+# because the contract exists only as a comment today and was violated at least
+# once.
+rules:
+  - id: web-request-must-not-discover-processes
+    languages: [go]
+    severity: ERROR
+    message: >-
+      The service indicator path must not discover processes. Daemon cycles own
+      the runtime evidence and its freshness boundary; read the worker-published
+      snapshot instead. The dashboard polls every service, so a scan here forks
+      once per configured service per refresh.
+    paths:
+      include:
+        - internal/app/webbackend_services.go
+    patterns:
+      # Scoped to the two functions that carry the contract, not the whole file:
+      # Detail() deliberately discovers, because it renders one service the user
+      # opened rather than every row of the dashboard.
+      - pattern-either:
+          - pattern-inside: func ($B *WebBackend) serviceWarningReason(...) $R { ... }
+          - pattern-inside: func ($B *WebBackend) serviceProcessActive(...) $R { ... }
+      - pattern-either:
+          - pattern: process.PIDsByComm(...)
+          - pattern: process.NewDiscovererWithUserLookup(...)
+          - pattern: $D.Discover(...)
+
+  - id: uncomparable-servicemgr-manager
+    languages: [go]
+    severity: ERROR
+    message: >-
+      servicemgr.Manager is uncomparable: openrcManager carries a readFile func
+      field, so == on two managers panics at runtime. Compare the concrete type
+      with a type switch. Comparing against nil is safe and allowed.
+    patterns:
+      - pattern-either:
+          - pattern: $X == $Y
+          - pattern: $X != $Y
+      - metavariable-type:
+          metavariable: $X
+          type: servicemgr.Manager
+      - metavariable-type:
+          metavariable: $Y
+          type: servicemgr.Manager
