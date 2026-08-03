@@ -1,0 +1,14 @@
+# CodeQL scope for Sermo.
+#
+# internal/web/index.html is a generated, committed artifact: internal/web/build
+# minifies src/app.js and src/styles.css into the src/index.html shell. CodeQL
+# analysed both it and the sources it is built from, so every JavaScript finding
+# arrived twice -- once against a readable line in internal/web/src/, and once
+# against a 6.8 KB minified line where the variables are named La and Wn. The
+# second copy is unactionable and doubles the alert count, which is how a
+# scanner stops being read. The sources stay in scope; only the build output is
+# ignored.
+name: Sermo CodeQL config
+
+paths-ignore:
+  - internal/web/index.html
