@@ -3,6 +3,8 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"slices"
+	"strings"
 	"testing"
 
 	"sermo/internal/rules"
@@ -49,15 +51,19 @@ func reloadRuleNames(t *testing.T, cfg *Config, service string) []string {
 	ruleMap, _ := resolved.Tree[rules.SectionRules].(map[string]any)
 	var names []string
 	for name := range ruleMap {
-		if len(name) > 17 && name[:17] == "reload-on-change-" {
+		if strings.HasPrefix(name, reloadOnChangeRulePrefix) {
 			names = append(names, name)
 		}
 	}
 	return names
 }
 
-// systemd is the catalog service that ships reload_on_change paths.
-const reloadCatalogService = "systemd"
+const (
+	// systemd is the catalog service that ships reload_on_change paths.
+	reloadCatalogService = "systemd"
+	// reloadOnChangeRulePrefix is the name expandReloadOnChange generates.
+	reloadOnChangeRulePrefix = "reload-on-change-"
+)
 
 func TestReloadOnChangeGeneratesRulesByDefault(t *testing.T) {
 	cfg := writeHostConfig(t, reloadCatalogService, "", "")
@@ -67,7 +73,9 @@ func TestReloadOnChangeGeneratesRulesByDefault(t *testing.T) {
 }
 
 // The gate is what lets one host turn config-driven reloads off. Validation
-// accepting the key is not enough — the rules must actually disappear.
+// accepting the key is not enough — the rules must actually disappear. This is
+// also what pins the deep merge: under a replacing merge the catalog's block
+// would overwrite the host's gate and the rules would survive.
 func TestDefaultsReloadOnChangeConfigFalseSuppressesRules(t *testing.T) {
 	cfg := writeHostConfig(t, reloadCatalogService, "  reload_on_change: { config: false }\n", "")
 	if got := reloadRuleNames(t, cfg, reloadCatalogService); len(got) != 0 {
@@ -86,16 +94,6 @@ func TestServiceOverrideWinsOverDefaultsForReloadGate(t *testing.T) {
 	}
 }
 
-// The merge is deep: a host that only sets the gate must not wipe the catalog's
-// paths, otherwise turning the permission back on would leave nothing to watch.
-func TestDefaultsGateKeepsCatalogPaths(t *testing.T) {
-	cfg := writeHostConfig(t, reloadCatalogService,
-		"  reload_on_change: { config: true }\n", "")
-	if got := reloadRuleNames(t, cfg, reloadCatalogService); len(got) == 0 {
-		t.Fatal("setting only the gate must keep the catalog paths, got no rules")
-	}
-}
-
 func TestReloadOnChangeRejectsBadGateAndUnknownKeys(t *testing.T) {
 	for _, tc := range []struct {
 		name  string
@@ -110,5 +108,47 @@ func TestReloadOnChangeRejectsBadGateAndUnknownKeys(t *testing.T) {
 				t.Fatal("want an error")
 			}
 		})
+	}
+}
+
+// Every inheritable key must be accepted under global `defaults:` and merged
+// into the service. The two lists used to be maintained by hand and a key once
+// shipped documented-but-rejected; validDefaultsKeys is now derived, and this
+// pins that so a future refactor cannot silently split them again.
+//
+// It covers key N+1 for free, which a per-key propagation test cannot.
+func TestEveryPerServiceDefaultIsAcceptedUnderDefaults(t *testing.T) {
+	for _, key := range perServiceDefaults {
+		if _, ok := validDefaultsKeys[key]; !ok {
+			t.Errorf("%q is merged into services but rejected under defaults:", key)
+		}
+	}
+	// The reverse holds except for the one deliberately defaults-only key.
+	for key := range validDefaultsKeys {
+		if key == sectionVariables {
+			continue
+		}
+		if !slices.Contains(perServiceDefaults, key) {
+			t.Errorf("%q is accepted under defaults: but never merged into a service", key)
+		}
+	}
+}
+
+// A closed gate suppresses the rules, not the checking of what would have
+// generated them: a malformed paths list must still fail loudly rather than lie
+// dormant until someone turns the gate back on.
+func TestReloadOnChangeStillReportsBadPathsWhenGateClosed(t *testing.T) {
+	tree := map[string]any{
+		keyReloadOnChange: map[string]any{
+			keyRestartConfig: false,
+			keyPaths:         []any{123},
+		},
+	}
+	errs := expandReloadOnChange(tree)
+	if len(errs) != 1 || !strings.Contains(errs[0], reloadOnChangePathPaths) {
+		t.Fatalf("want the malformed-paths error even with the gate closed, got %v", errs)
+	}
+	if _, generated := tree[rules.SectionRules]; generated {
+		t.Fatal("a closed gate must still generate no rules")
 	}
 }

@@ -834,6 +834,24 @@ Notas de herramientas:
   suprimía nada y se eliminó. Toda supresión aquí está medida; antes de ampliar
   una, mira la salida de `warn-unused`, que nombra las que omiten cero issues.
 
+  **Escribe código nuevo que ya pase. Un `//nolint` en código nuevo es un olor
+  de diseño, no un trámite.** Cuando un gate salta sobre algo que acabas de
+  escribir, lo primero es cambiar el código para que el hallazgo no aparezca;
+  recurre a una supresión sólo cuando puedas decir por qué el diseño no puede
+  evitarlo. La diferencia se ve en el comentario: «este truncamiento *es* la
+  codificación de cable» se gana el sitio, «el linter es quisquilloso» no.
+
+  Casi todo hallazgo sobre código nuevo tiene respuesta estructural. `ireturn`:
+  devuelve un tipo concreto, o escribe a través de un puntero del llamante en
+  vez de devolver una interfaz desnuda — ver `applyDependencyOptions` en
+  `internal/control/target.go`, que fija `Target.Manager` en lugar de devolver
+  un `servicemgr.Manager`. `wrapcheck`: envuelve con `%w` en la frontera dueña
+  del contexto. `nilaway`: haz que el nil no sea representable (buckets de mapa
+  por valor, `make`+`maps.Copy` en vez de `maps.Clone` antes de escribir).
+  `mnd`: nombra el número, o quita el hint de capacidad que te llevó a él.
+  `dupl`: un helper parametrizado en vez de dos casi-copias. Las supresiones
+  heredadas son otra cosa: esta regla va del código añadido en el mismo cambio.
+
   **A gosec no le queda ninguna excepción a nivel de config.** Todo caso
   by-design se suprime en el call site con `//nolint:gosec` más un comentario
   justificativo, de modo que `nolintlint` (`allow-unused: false`,
