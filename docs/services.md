@@ -198,6 +198,46 @@ defaults:
 A catalog service or configured service may override either flag in its local
 `restart_on_change` block.
 
+### Turning restart-on-update off per host
+
+Three mechanisms restart or reload a service when something it depends on
+changes. Each has a permission gate, and every gate is settable per host:
+
+| Mechanism | Trigger | Gate | Notifies |
+|---|---|---|---|
+| `restart_on_change` | app version, library, config path | `config:` / `version:` | yes — alert, then restart |
+| `reload_on_change` | config path | `config:` | **no** — reload only, no alert action |
+| [`restart_on_stale_binary`](configuration.md#stale_binary--service-running-a-replaced-binary) | binary replaced on disk | the flag itself | yes — alert, then restart |
+
+Two levels of granularity, both on the host, neither requiring a catalog edit:
+
+```yaml
+# /etc/sermo/sermo.yml — the whole host
+defaults:
+  restart_on_change: { version: false }   # no version-driven restarts here
+  reload_on_change:  { config: false }    # no config-driven reloads either
+  restart_on_stale_binary: false
+```
+
+```yaml
+# /etc/sermo/services/nginx.yml — just this service, on this host
+name: nginx
+uses: nginx
+restart_on_change: { version: true }      # …except nginx
+```
+
+The merge is **deep**, which is what makes the host level usable: setting only
+the gate in `defaults:` folds into the catalog's block instead of replacing it,
+so the `paths`, `apps` and `messages` the catalog ships survive. Precedence is
+`defaults:` < catalog < the host's per-service file — see
+[Resolution order](configuration.md#resolution-order). A scalar the catalog sets
+explicitly (as the OVS services do for `restart_on_stale_binary`) therefore beats
+a host-wide default; override it in the per-service file instead.
+
+Global `defaults:` accepts **only the gates**, never `paths`/`apps`/`libraries`/
+`messages`: a host decides *whether* these restarts happen, the catalog decides
+*what* triggers them.
+
 `messages` is optional and local to the service or catalog service. It accepts
 `path`, `app` and `library` templates. The templates are expanded like normal
 service strings first (`${display_name}`, `${config}`, …), then rule runtime
@@ -239,6 +279,13 @@ rules:
     if: { changed: { path: /etc/systemd/system } }
     then: { action: reload }
 ```
+
+Note the single action. Unlike `restart_on_change`, the generated rule carries
+**no `alert` action, so a reload sends no notification** — it is recorded as an
+operation-result event and nothing more. That is deliberate for a non-disruptive
+reload; if you want to be told, add your own alert rule on the same `changed:`
+condition. Set `reload_on_change: { config: false }` to suppress the generated
+rules entirely, per service or per host.
 
 The **`reload`** action runs through the same safe engine as restart but in
 place: it runs **preflight first** (so an invalid config — caught by the

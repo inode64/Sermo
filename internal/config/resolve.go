@@ -474,6 +474,11 @@ func (c *Config) resolveAnalyze(scope string, analyze map[string]any) ([]any, []
 // of restart_on_change, for catalog services whose config can be reloaded (udev rules,
 // nginx vhosts, named zones, …). The block is removed; an empty paths list is a
 // no-op.
+//
+// `config: false` suppresses the generated rules, the same permission gate
+// restart_on_change.config offers. It is what lets one host turn config-driven
+// reloads off without editing the catalog: global `defaults:` merges into this
+// block, so the flag lands here while the catalog keeps owning `paths`.
 func expandReloadOnChange(tree map[string]any) []string {
 	roc, ok := tree[keyReloadOnChange].(map[string]any)
 	if !ok {
@@ -485,11 +490,15 @@ func expandReloadOnChange(tree map[string]any) []string {
 	}
 	delete(tree, keyReloadOnChange)
 
+	errs := validateReloadOnChangeKeys(roc)
+	if !restartOnChangeAllowed(roc, keyRestartConfig) {
+		return errs
+	}
+
 	ruleMap, _ := tree[rules.SectionRules].(map[string]any)
 	if ruleMap == nil {
 		ruleMap = map[string]any{}
 	}
-	var errs []string
 	for i, p := range cfgval.StringList(roc[keyPaths]) {
 		if p == "" {
 			errs = append(errs, reloadOnChangePathPaths+" entry is empty")
@@ -1041,6 +1050,28 @@ func validateRestartOnChangeFlags(prefix string, roc map[string]any, add addFunc
 			continue
 		}
 		errs = append(errs, msg)
+	}
+	return errs
+}
+
+// reloadOnChangeKeys are the only sub-keys reload_on_change accepts. Unlike
+// restart_on_change it has no apps/libraries/messages: a reload re-reads files,
+// so a version bump is not its trigger.
+var reloadOnChangeKeys = set(keyPaths, keyRestartConfig)
+
+// validateReloadOnChangeKeys rejects unknown sub-keys and a non-boolean gate, so
+// a typo in the flag fails loudly instead of silently leaving reloads enabled.
+func validateReloadOnChangeKeys(roc map[string]any) []string {
+	var errs []string
+	for _, key := range slices.Sorted(maps.Keys(roc)) {
+		if _, ok := reloadOnChangeKeys[key]; !ok {
+			errs = append(errs, fmt.Sprintf("%s.%s is not supported", keyReloadOnChange, key))
+		}
+	}
+	if v, present := roc[keyRestartConfig]; present {
+		if _, ok := v.(bool); !ok {
+			errs = append(errs, fmt.Sprintf(validationBooleanLiteralFormat, keyReloadOnChange+"."+keyRestartConfig))
+		}
 	}
 	return errs
 }
