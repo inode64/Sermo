@@ -73,6 +73,12 @@ func TestNamedLockerRejectsPathLikeIDs(t *testing.T) {
 			if _, err := l.Pin(tc.service, tc.lock, "x", time.Hour); err == nil || !strings.Contains(err.Error(), "simple name") {
 				t.Fatalf("Pin() error = %v, want simple-name validation error", err)
 			}
+			// Hold reaches the same validation through acquire, but only via
+			// that shared path: a refactor that gave it its own body would
+			// bypass the check with nothing failing here.
+			if _, err := l.Hold(tc.service, tc.lock, "x", time.Hour); err == nil || !strings.Contains(err.Error(), "simple name") {
+				t.Fatalf("Hold() error = %v, want simple-name validation error", err)
+			}
 		})
 	}
 	if _, err := os.Stat(filepath.Join(root, "escape.lock")); !os.IsNotExist(err) {
@@ -80,6 +86,13 @@ func TestNamedLockerRejectsPathLikeIDs(t *testing.T) {
 	}
 	if err := l.Release("mysql", "../backup"); err == nil || !strings.Contains(err.Error(), "simple name") {
 		t.Fatalf("Release() error = %v, want simple-name validation error", err)
+	}
+	// ReleaseInactive validates on its own rather than through acquire, so it is
+	// the entry point most easily left behind when the others are changed. It
+	// unlinks the file it resolves, which is why it must reject a path-like ID
+	// before resolving anything.
+	if _, err := l.ReleaseInactive("mysql", "../backup"); err == nil || !strings.Contains(err.Error(), "simple name") {
+		t.Fatalf("ReleaseInactive() error = %v, want simple-name validation error", err)
 	}
 }
 
