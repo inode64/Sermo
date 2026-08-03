@@ -1,0 +1,15 @@
+# Custom golangci-lint build. NilAway is not a stock golangci-lint linter (see
+# golangci/golangci-lint#4045), so it ships as a module plugin that must be
+# compiled into a bespoke binary. Both versions are pinned so the gate is
+# reproducible: `version` must match the golangci-lint pinned in CI, and the
+# plugin must match the NilAway installed there.
+#
+# Build with `make custom-gcl` (or `golangci-lint custom`); the result lands in
+# bin/, which is git-ignored.
+version: v2.12.2
+name: custom-gcl
+destination: bin
+plugins:
+  - module: go.uber.org/nilaway
+    import: go.uber.org/nilaway/cmd/gclplugin
+    version: v0.0.0-20260802165852-32ec3a0e8a41

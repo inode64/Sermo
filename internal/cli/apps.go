@@ -42,7 +42,7 @@ func (a App) listCategory(ctx context.Context, opts options, category, jsonKey, 
 	includeMissing := len(opts.args) > 0 && opts.args[0] == commandArgAll
 
 	cfg, code := a.loadConfig(opts)
-	if code != exitSuccess {
+	if cfg == nil {
 		return code
 	}
 

@@ -13,6 +13,7 @@ import (
 	"sermo/internal/app"
 	"sermo/internal/checks"
 	"sermo/internal/config"
+	"sermo/internal/httpx"
 	"sermo/internal/state"
 )
 
@@ -64,7 +65,7 @@ func (a App) runWatchProbe(ctx context.Context, opts options) int {
 		return a.commandUsageError(commandWatch, "watch probe requires exactly one watch name")
 	}
 	cfg, code := a.loadConfig(opts)
-	if code != exitSuccess {
+	if cfg == nil {
 		return code
 	}
 	entry, ok := configuredHostWatch(cfg, opts.args[1])
@@ -115,7 +116,7 @@ func (a App) probeDaemonWatch(ctx context.Context, opts options, watch string) (
 	req.Header.Set(daemonWebCSRFHeader, daemonWebCSRFValue)
 	a.applyDaemonWebAuth(req, cfg)
 	client := &http.Client{Timeout: daemonWebClientTimeout}
-	resp, err := client.Do(req)
+	resp, err := httpx.Do(client, req)
 	if err != nil {
 		return daemonWatchProbe{}, fmt.Errorf("talking to daemon web UI: %w (is sermod running with web.port set?)", err)
 	}
@@ -138,7 +139,7 @@ func (a App) runWatchRAIDControl(ctx context.Context, opts options, action strin
 		return a.commandUsageError(commandWatch, fmt.Sprintf("watch %s requires exactly one watch name", action))
 	}
 	cfg, code := a.loadConfig(opts)
-	if code != exitSuccess {
+	if cfg == nil {
 		return code
 	}
 	entry, ok := configuredHostWatch(cfg, opts.args[1])
@@ -197,7 +198,7 @@ func (a App) runWatchMonitor(ctx context.Context, opts options, pause bool) int 
 	name := opts.args[1]
 
 	cfg, code := a.loadConfig(opts)
-	if code != exitSuccess {
+	if cfg == nil {
 		return code
 	}
 	if !knownWatchName(cfg, name) {

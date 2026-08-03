@@ -387,21 +387,18 @@ func daemonRuntime(sample daemonMetricSample) web.DaemonRuntime {
 }
 
 func metricSeries[T any](check, metric, unit string, since time.Duration, samples []T, at func(T) time.Time, value func(T) (float64, bool)) web.MetricSeries {
-	byMinute := map[time.Time]*daemonMetricAgg{}
+	// Aggregates are stored by value: the zero value is a valid empty bucket, so
+	// no bucket can be nil and absent minutes need no allocation.
+	byMinute := map[time.Time]daemonMetricAgg{}
 	var summary daemonMetricAgg
 	for _, sample := range samples {
 		v, ok := value(sample)
 		if !ok {
 			continue
 		}
-		addDaemonMetric(&summary, v)
+		summary = addDaemonMetric(summary, v)
 		minute := at(sample).UTC().Truncate(metricSeriesBucket)
-		agg := byMinute[minute]
-		if agg == nil {
-			agg = &daemonMetricAgg{}
-			byMinute[minute] = agg
-		}
-		addDaemonMetric(agg, v)
+		byMinute[minute] = addDaemonMetric(byMinute[minute], v)
 	}
 
 	keys := make([]time.Time, 0, len(byMinute))
@@ -431,7 +428,10 @@ func metricSeries[T any](check, metric, unit string, since time.Duration, sample
 	}
 }
 
-func addDaemonMetric(agg *daemonMetricAgg, value float64) {
+// addDaemonMetric folds value into agg and returns the updated aggregate. It
+// takes and returns the struct by value so buckets are never pointers: the zero
+// aggregate is a valid empty bucket, which keeps every caller nil-free.
+func addDaemonMetric(agg daemonMetricAgg, value float64) daemonMetricAgg {
 	if agg.n == 0 {
 		agg.min, agg.max = value, value
 	} else {
@@ -444,6 +444,7 @@ func addDaemonMetric(agg *daemonMetricAgg, value float64) {
 	}
 	agg.n++
 	agg.sum += value
+	return agg
 }
 
 func daemonMetricSummary(agg daemonMetricAgg) web.MetricSummary {

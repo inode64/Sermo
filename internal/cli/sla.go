@@ -29,7 +29,7 @@ func (a App) runSLA(ctx context.Context, opts options) int {
 		return a.commandUsageError(commandSLA, "sla accepts at most one service name")
 	}
 	cfg, code := a.loadConfig(opts)
-	if code != exitSuccess {
+	if cfg == nil {
 		return code
 	}
 

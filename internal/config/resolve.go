@@ -1306,9 +1306,13 @@ func (c *Config) expandAppsChain(tree map[string]any, chain []string) []string {
 			if checkName == checks.DataKeyVersion {
 				if match, present := resolved.Tree[checks.CheckKeyVersionMatch]; present {
 					if checkMap, ok := check.(map[string]any); ok {
-						checkMap = maps.Clone(checkMap)
-						checkMap[checks.CheckKeyVersionMatch] = match
-						check = checkMap
+						// Build a fresh map: the asserted value may be a nil map,
+						// which maps.Clone would pass through and the write below
+						// would panic on.
+						withMatch := make(map[string]any, len(checkMap)+1)
+						maps.Copy(withMatch, checkMap)
+						withMatch[checks.CheckKeyVersionMatch] = match
+						check = withMatch
 					}
 				}
 			}
@@ -1412,6 +1416,9 @@ func (c *Config) mergedService(name string, chain []string) (map[string]any, err
 				return nil, fmt.Errorf("service %q uses unknown catalog service %q", name, uses)
 			}
 			base := c.CatalogServices[catalogName]
+			if base == nil {
+				return nil, fmt.Errorf("service %q uses catalog service %q with no document", name, catalogName)
+			}
 			merged = mergeMaps(merged, stripMeta(base.Body))
 		}
 	}

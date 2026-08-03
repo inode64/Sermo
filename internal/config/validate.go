@@ -456,10 +456,17 @@ func validateDocumentAliases(doc *Document, counts map[string]map[string]int, al
 	if err != nil {
 		return []Issue{{Scope: scope, Msg: "aliases must be a list of simple names"}}
 	}
+	// The owner set for this registry is seeded by the caller, but create it on
+	// demand so the alias recorded below never writes to a nil map.
+	owners := aliasOwners[doc.registryKey()]
+	if owners == nil {
+		owners = map[string]string{}
+		aliasOwners[doc.registryKey()] = owners
+	}
 	var issues []Issue
 	seen := map[string]bool{}
 	for _, alias := range aliases {
-		if issue := validateDocumentAlias(alias, doc, kindCounts, aliasOwners[doc.registryKey()], seen, scope); issue != nil {
+		if issue := validateDocumentAlias(alias, doc, kindCounts, owners, seen, scope); issue != nil {
 			issues = append(issues, *issue)
 			// A syntactically valid alias still belongs to this document's input
 			// set even when it collides with another document. Record it so a
@@ -471,7 +478,7 @@ func validateDocumentAliases(doc *Document, counts map[string]map[string]int, al
 			continue
 		}
 		seen[alias] = true
-		aliasOwners[doc.registryKey()][alias] = doc.Name
+		owners[alias] = doc.Name
 	}
 	return issues
 }
@@ -567,7 +574,7 @@ func validateVersionFrom(cfg *Config, doc *Document, scope string) []Issue {
 
 func versionFromCycle(cfg *Config, start string) []string {
 	seen := map[string]int{}
-	var chain []string
+	chain := []string{}
 	for name := start; ; {
 		if idx, ok := seen[name]; ok {
 			return append(chain[idx:], name)

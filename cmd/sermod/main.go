@@ -145,6 +145,8 @@ func parseRunArgs(args []string) (cliArgs, error) {
 	return parsed, nil
 }
 
+// loadDaemonConfig returns a non-nil config with exit code 0, or nil with a
+// non-zero code; callers gate on the nil config so the pairing stays checkable.
 func loadDaemonConfig(logger *slog.Logger, globalPath string) (*config.Config, int) {
 	cfg, err := config.Load(globalPath)
 	if err != nil {
@@ -192,7 +194,7 @@ func run(args []string) int {
 	}
 
 	cfg, exitCode := loadDaemonConfig(logger, globalPath)
-	if exitCode != 0 {
+	if cfg == nil {
 		return exitCode
 	}
 	logger.Debug("config loaded", logFieldPath, globalPath, logFieldServices, len(cfg.Services))

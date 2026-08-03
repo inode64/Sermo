@@ -22,7 +22,7 @@ func (a App) runNotifier(ctx context.Context, opts options) int {
 	}
 
 	cfg, code := a.loadConfig(opts)
-	if code != exitSuccess {
+	if cfg == nil {
 		return code
 	}
 	registry, warnings := a.BuildNotifiers(cfg)

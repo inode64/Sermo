@@ -66,7 +66,7 @@ config_subst = sed -e 's|/usr/share/sermo|$(SERMO_DATADIR)|g' -e 's|/etc/sermo|$
 # Rewrite runtime/state dirs in the tmpfiles config.
 tmpfiles_subst = sed -e 's|/run/sermo|$(SERMO_RUNDIR)|g' -e 's|/var/lib/sermo|$(SERMO_STATEDIR)|g'
 
-.PHONY: all build test vet fmt fmt-check lint modules-check actions-lint race fuzz deadcode quality-report cover-gate nilaway scripts-lint yaml-fmt yaml-fmt-check yaml-lint yaml-validate markdown-check web web-check web-lint web-e2e validate check cover tidy clean \
+.PHONY: all build test vet fmt fmt-check lint modules-check actions-lint race fuzz deadcode quality-report cover-gate nilaway custom-gcl scripts-lint yaml-fmt yaml-fmt-check yaml-lint yaml-validate markdown-check web web-check web-lint web-e2e validate check cover tidy clean \
         install install-bin install-catalog install-examples install-config install-templates install-tmpfiles install-systemd install-openrc \
         uninstall
 
@@ -100,7 +100,7 @@ yaml-fmt-check:
 	@$(LINT_PATH) python3 scripts/yaml_format_check.py
 
 yaml-lint:
-	@$(LINT_PATH) $(YAMLLINT) --strict -c .yamllint.yml $(YAML_ROOTS) .golangci.yml
+	@$(LINT_PATH) $(YAMLLINT) --strict -c .yamllint.yml $(YAML_ROOTS) .golangci.yml .custom-gcl.yml
 
 yaml-validate: yaml-fmt-check yaml-lint
 
@@ -187,54 +187,42 @@ fmt-check:
 # Safety packages for NilAway and cover-gate. Operation/process own start/stop/
 # signal paths; locks/rules/config gate remediation policy and untrusted YAML.
 SAFETY_PACKAGES := ./internal/operation ./internal/process ./internal/locks ./internal/rules ./internal/config
-# NilAway gates every package that is already free of potential nil panics, so
-# no new one can appear there. It is a rollout, not a pilot: the ten packages
-# listed under NILAWAY_DEFERRED still report findings and join this list as they
-# are cleared. Do not add a package here without running `make nilaway` first.
-NILAWAY_PACKAGES := \
-	./cmd/sermoctl/... \
-	./internal/appinspect/... ./internal/assist/... ./internal/buildinfo/... \
-	./internal/cfgval/... ./internal/cliutil/... ./internal/control/... \
-	./internal/ctxutil/... ./internal/diag/... ./internal/emission/... \
-	./internal/execx/... ./internal/httpx/... ./internal/locks/... \
-	./internal/logfile/... ./internal/metrics/... ./internal/mountctl/... \
-	./internal/mounts/... ./internal/netutil/... ./internal/operation/... \
-	./internal/output/... ./internal/process/... ./internal/procnet/... \
-	./internal/checks/... ./internal/conn/... ./internal/dockerctl/... \
-	./internal/notify/... ./internal/rules/... \
-	./internal/telegrambot/... \
-	./internal/servicemgr/... ./internal/state/... ./internal/strutil/... \
-	./internal/telegramapi/... ./internal/units/... ./internal/utmp/... \
-	./internal/virt/... ./internal/volume/... ./internal/web/... \
-	./internal/webcred/...
+# golangci-lint carrying the NilAway module plugin. NilAway is not a stock
+# linter, so the gate needs a bespoke binary built from .custom-gcl.yml; plain
+# `golangci-lint run` fails with `plugin "nilaway" not found` against our config.
+# Both versions are pinned there, so the binary is rebuilt only when that file
+# changes. NilAway gates the whole tree (production only, via the plugin's
+# exclude-test-files): the rollout is finished and no new nil flow may appear.
+CUSTOM_GCL := bin/custom-gcl
 
-# Still reporting NilAway findings; clear a package, then move it above.
-NILAWAY_DEFERRED := ./cmd/sermod/... ./internal/app/... ./internal/cli/... \
-	./internal/config/...
+$(CUSTOM_GCL): .custom-gcl.yml
+	@echo "golangci-lint custom"
+	@$(LINT_CACHE_ENV) golangci-lint custom
+
+custom-gcl: $(CUSTOM_GCL)
 
 # Static analysis. Finds Go-installed tools in ~/go/bin: staticcheck, revive,
-# golangci-lint (runs gosec plus focused bug analyzers via .golangci.yml),
-# govulncheck, deadcode and nilaway (see NILAWAY_PACKAGES).
-lint: fmt-check
+# custom-gcl (gosec, NilAway and focused bug analyzers via .golangci.yml),
+# govulncheck and deadcode.
+lint: fmt-check $(CUSTOM_GCL)
 	@echo "go fix -diff $(GO_PACKAGES)"
 	@go fix -diff $(GO_PACKAGES)
 	@echo "staticcheck -checks=all $(GO_PACKAGES)"
 	@$(LINT_CACHE_ENV) staticcheck -checks=all $(GO_PACKAGES)
 	@echo "revive -config revive.toml $(GO_PACKAGES)"
 	@$(LINT_PATH) revive -config revive.toml $(GO_PACKAGES)
-	@echo "golangci-lint run"
-	@$(LINT_CACHE_ENV) golangci-lint run $(GO_PACKAGES)
+	@echo "custom-gcl run (includes nilaway)"
+	@$(LINT_CACHE_ENV) $(CUSTOM_GCL) run $(GO_PACKAGES)
 	@echo "govulncheck $(GO_PACKAGES)"
 	@$(LINT_CACHE_ENV) govulncheck $(GO_PACKAGES)
-	@echo "nilaway -exclude-test-files $(NILAWAY_PACKAGES)"
-	@$(LINT_PATH) nilaway -exclude-test-files -pretty-print=false $(NILAWAY_PACKAGES)
 	@echo "deadcode -test $(GO_PACKAGES)"
 	@$(LINT_PATH) deadcode -test $(GO_PACKAGES)
 
-# NilAway alone (same packages and flags as the lint gate).
-nilaway:
-	@echo "nilaway -exclude-test-files $(NILAWAY_PACKAGES)"
-	@$(LINT_PATH) nilaway -exclude-test-files -pretty-print=false $(NILAWAY_PACKAGES)
+# NilAway alone, through the same binary and .golangci.yml settings the gate
+# uses, so there is exactly one place that configures it.
+nilaway: $(CUSTOM_GCL)
+	@echo "custom-gcl run --enable-only nilaway $(GO_PACKAGES)"
+	@$(LINT_CACHE_ENV) $(CUSTOM_GCL) run --enable-only nilaway $(GO_PACKAGES)
 
 # Verify module checksums and fail when the dependency manifests are not tidy.
 modules-check:

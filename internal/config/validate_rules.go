@@ -430,7 +430,8 @@ func validateCommandCondition(value any, path string, add addFunc) {
 		add("%s.command must be a mapping", path)
 		return
 	}
-	entry := maps.Clone(m)
+	entry := make(map[string]any, len(m)+1)
+	maps.Copy(entry, m)
 	entry[checks.CheckKeyType] = checks.CheckTypeCommand
 	validateSingleShotCheckFields(path+".command", checks.CheckTypeCommand, entry, "", add)
 	if cfgval.String(m[checks.CheckKeyTimeout]) == "" {
@@ -500,7 +501,8 @@ func validateProbe(v any, path string, checkNames, systemMetricChecks map[string
 			add("%s.%s must be a mapping", path, typ)
 			continue
 		}
-		entry := maps.Clone(fields)
+		entry := make(map[string]any, len(fields)+1)
+		maps.Copy(entry, fields)
 		entry[checks.CheckKeyType] = typ
 		if typ == checks.CheckTypeMetric {
 			validateMetric(entry, path+"."+typ, allowSystemMetric, add)

@@ -453,7 +453,8 @@ func watchDocFromEntry(name string, raw any) (map[string]any, error) {
 	if !ok {
 		return nil, fmt.Errorf("watch %q is not a mapping", name)
 	}
-	doc := maps.Clone(entry)
+	doc := make(map[string]any, len(entry)+1)
+	maps.Copy(doc, entry)
 	doc[wizardFieldName] = name
 	return doc, nil
 }

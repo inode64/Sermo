@@ -695,9 +695,13 @@ Notas de herramientas:
   target de lint en sí. `govulncheck` puede necesitar acceso a red para refrescar la
   DB de vulnerabilidades; un fallo de red/DNS ahí es un problema de entorno, no un
   hallazgo de código. Lint también ejecuta **NilAway** (`go.uber.org/nilaway`)
-  sobre `internal/operation` e `internal/process` con `-exclude-test-files`
-  (piloto de flujos nil en la ruta start/stop/signal). Amplía la lista de
-  paquetes solo cuando el siguiente piloto esté limpio.
+  sobre todo el árbol, solo ficheros de producción; está a cero hallazgos de
+  flujo nil y debe seguir así. NilAway es un *module plugin* de golangci-lint,
+  no un linter de serie, así que el gate ejecuta `bin/custom-gcl`: un binario a
+  medida construido desde `.custom-gcl.yml`. Un `golangci-lint run` normal
+  aborta con `plugin "nilaway" not found` contra nuestra config; es lo esperado,
+  usa `make lint`. `make custom-gcl` reconstruye el binario, y `make lint` lo
+  hace solo cuando cambia `.custom-gcl.yml`.
 - **`go fix -diff ./...`** se ejecuta como parte de `make lint`: los modernizers
   de Go 1.26 no deben proponer ningún cambio. Si falla, ejecuta `go fix ./...` y
   revisa la reescritura en lugar de silenciarlo.
@@ -792,11 +796,18 @@ Notas de herramientas:
   gocritic— está activado con cero hallazgos. No recortes esas listas para
   evitar un arreglo.
 
-  **NilAway** es un despliegue, no un piloto: `NILAWAY_PACKAGES` en el Makefile
-  activa todos los paquetes ya libres de posibles nil panics, y
-  `NILAWAY_DEFERRED` lista los cuatro que aún reportan. Limpia un paquete, corre
-  `make nilaway` y muévelo. `deadcode -test` forma parte de `make lint` y debe
-  seguir en cero.
+  El despliegue de **NilAway** está completo: se configura en
+  `linters.settings.custom.nilaway` dentro de `.golangci.yml` y corre sobre
+  `GO_PACKAGES`, así que todos los paquetes de producción están a cero posibles
+  nil panics. Los ficheros de test quedan fuera por el propio flag
+  `exclude-test-files` de NilAway: acumulan ~57 hallazgos (fakes con campos nil,
+  fixtures indexados sin guarda) que no dicen nada del código que se envía. No
+  cambies ese flag por una regla de exclusión `_test\.go$`, ni recortes
+  `include-pkgs` para meter un cambio: arregla el flujo y vuelve a comprobar con
+  `make nilaway`. Prefiere hacer que el nil no sea representable (buckets de
+  mapa por valor, `make`+`maps.Copy` en vez de `maps.Clone` antes de escribir,
+  `httpx.Do` en vez de `client.Do`) antes que añadir una guarda que nunca puede
+  saltar. `deadcode -test` forma parte de `make lint` y debe seguir en cero.
 
   El `database/sql` de producción en `internal/state` usa métodos `*Context` con
   `sqlCtx()` (ctx de `OpenContext` / `context.Background()` vía `Open`).

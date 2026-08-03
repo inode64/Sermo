@@ -1551,7 +1551,7 @@ func (a App) runActivity(ctx context.Context, opts options) int {
 
 func (a App) runEventsClear(ctx context.Context, opts options, noun string) int {
 	cfg, code := a.loadConfig(opts)
-	if code != exitSuccess {
+	if cfg == nil {
 		return code
 	}
 	before, err := parseBefore(opts.before, time.Now)
@@ -1614,7 +1614,7 @@ func (a App) daemonWebRequest(ctx context.Context, opts options, method, what st
 	a.applyDaemonWebAuth(req, cfg)
 
 	client := &http.Client{Timeout: daemonWebClientTimeout}
-	resp, err := client.Do(req)
+	resp, err := httpx.Do(client, req)
 	if err != nil {
 		return nil, fmt.Errorf("talking to daemon web UI: %w (is sermod running with web.port set?)", err)
 	}
@@ -1776,7 +1776,7 @@ func (a App) daemonAPIGet(ctx context.Context, opts options, path string) ([]byt
 	}
 	a.applyDaemonWebAuth(req, cfg)
 	client := &http.Client{Timeout: daemonWebClientTimeout}
-	resp, err := client.Do(req)
+	resp, err := httpx.Do(client, req)
 	if err != nil {
 		return nil, 0, fmt.Errorf("daemon API GET %s: %w", path, err)
 	}

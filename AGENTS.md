@@ -687,10 +687,13 @@ Tool notes:
   `PATH` or call the analyzer binaries one by one unless you are debugging the
   lint target itself. `govulncheck` may need network access to refresh the
   vulnerability DB; a network/DNS failure there is an environment issue, not a
-  code finding. Lint also runs **NilAway** (`go.uber.org/nilaway`) on
-  `internal/operation` and `internal/process` with `-exclude-test-files` (the
-  pilot for nil-flow bugs on the start/stop/signal path). Expand the package
-  list only after the next pilot is clean.
+  code finding. Lint also runs **NilAway** (`go.uber.org/nilaway`) over the whole
+  tree, production files only; it is at zero nil-flow findings and must stay
+  there. NilAway is a golangci-lint *module plugin*, not a stock linter, so the
+  gate runs `bin/custom-gcl` — a bespoke binary built from `.custom-gcl.yml`.
+  Plain `golangci-lint run` aborts with `plugin "nilaway" not found` against our
+  config; that is expected, use `make lint`. `make custom-gcl` rebuilds the
+  binary, and `make lint` does it automatically when `.custom-gcl.yml` changes.
 - **`go fix -diff ./...`** runs as part of `make lint`: the Go 1.26 modernizers
   must propose no changes. If it fails, run `go fix ./...` and review the
   rewrite instead of silencing it.
@@ -781,11 +784,18 @@ Tool notes:
   `deepequalerrors`, `reflectvaluecompare` and the whole gocritic diagnostic
   set — is gated at zero findings. Do not narrow those lists to avoid a fix.
 
-  **NilAway** is a rollout, not a pilot: `NILAWAY_PACKAGES` in the Makefile
-  gates every package already free of potential nil panics, and
-  `NILAWAY_DEFERRED` lists the four that still report findings. Clear a package,
-  run `make nilaway`, then move it across. `deadcode -test` is part of `make
-  lint` and must stay at zero.
+  **NilAway** rollout is complete: it is configured under
+  `linters.settings.custom.nilaway` in `.golangci.yml` and runs over
+  `GO_PACKAGES`, so every production package is gated at zero potential nil
+  panics. Test files are excluded by NilAway's own `exclude-test-files` flag —
+  they carry ~57 findings (fakes with nil fields, fixtures indexed without
+  guards) that say nothing about shipped code. Do not swap that flag for a
+  `_test\.go$` exclusion rule, and do not narrow `include-pkgs` to land a
+  change: fix the flow and re-check with `make nilaway`. Prefer making nil
+  unrepresentable (value-typed map buckets, `make`+`maps.Copy` instead of
+  `maps.Clone` before a write, `httpx.Do` instead of `client.Do`) over adding a
+  guard that can never fire. `deadcode -test` is part of `make lint` and must
+  stay at zero.
 
   Production `database/sql` in `internal/state` uses `*Context` methods with
   `sqlCtx()` (ctx from `OpenContext` / `context.Background()` via `Open`).

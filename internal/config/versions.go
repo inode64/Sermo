@@ -142,6 +142,9 @@ func (c *Config) materializeRegistry(ctx context.Context, names []string, reg ma
 		body := c.templateBody(tmpl, kind)
 		var instances []*Document
 		toks := tokensFor(tmpl.Name)
+		if len(toks) == 0 {
+			continue
+		}
 		if len(toks) > 1 {
 			instances = c.materializeMultiToken(ctx, tmpl, body, toks, kind)
 		} else {
@@ -427,6 +430,9 @@ func (c *Config) configuredServiceTemplateMatches(templateName string, body map[
 	matches := make([]templateMatch, 0)
 	for _, serviceName := range c.ServiceNames {
 		doc := c.Services[serviceName]
+		if doc == nil {
+			continue
+		}
 		uses := cfgval.String(doc.Body[ServiceKeyUses])
 		sub := re.FindStringSubmatch(uses)
 		if sub == nil {

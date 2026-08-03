@@ -17,7 +17,7 @@ func (a App) runPatterns(opts options) int {
 		return a.commandUsageError(commandPatterns, "patterns takes no arguments")
 	}
 	cfg, code := a.loadConfig(opts)
-	if code != exitSuccess {
+	if cfg == nil {
 		return code
 	}
 
