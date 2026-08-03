@@ -23,7 +23,7 @@ func (a App) runLock(ctx context.Context, opts options) int {
 	}
 
 	cfg, code := a.loadConfig(opts)
-	if code != exitSuccess {
+	if cfg == nil {
 		return code
 	}
 	locker := locks.NewNamedLocker(locks.RuntimeLocksDir(cfg.Global.RuntimeDir()))

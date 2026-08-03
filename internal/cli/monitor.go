@@ -31,7 +31,7 @@ func (a App) runMonitor(ctx context.Context, opts options, pause bool) int {
 	}
 
 	cfg, code := a.loadConfig(opts)
-	if code != exitSuccess {
+	if cfg == nil {
 		return code
 	}
 	service, code = a.canonicalService(opts, cfg, service)

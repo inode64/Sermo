@@ -191,8 +191,8 @@ func (w *procWatcher) runCycle(ctx context.Context) {
 		if ctx.Err() != nil {
 			return
 		}
-		if w.cond.onGone && !observeOnlyCycle(ctx) {
-			st := w.state[pid]
+		st := w.state[pid]
+		if st != nil && w.cond.onGone && !observeOnlyCycle(ctx) {
 			env := map[string]string{
 				sermoEnvPID:        strconv.Itoa(pid),
 				sermoEnvProcess:    w.match.Name,

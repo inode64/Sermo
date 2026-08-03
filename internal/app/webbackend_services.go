@@ -360,7 +360,11 @@ func (b *WebBackend) Services(ctx context.Context) []web.Service {
 	activeLocks := b.activeLockNamesByService()
 	operating := b.operationActiveByService()
 	for _, name := range b.order {
-		out = append(out, b.viewWithRuntime(ctx, name, b.entries[name], lastEvents[name], serviceLockView{
+		e := b.entries[name]
+		if e == nil {
+			continue
+		}
+		out = append(out, b.viewWithRuntime(ctx, name, e, lastEvents[name], serviceLockView{
 			active:          activeLocks[name],
 			operationActive: operating[name],
 			ready:           true,

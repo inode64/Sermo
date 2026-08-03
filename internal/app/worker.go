@@ -757,8 +757,7 @@ func (w *Worker) fires(ctx context.Context, ev *rules.Evaluator, r rules.Rule, a
 		// so this message needs no prefix of its own.
 		msg := err.Error()
 		event := Event{Kind: eventKindError, Rule: r.Name, Message: msg}
-		var probeErr *appProbeError
-		if errors.As(err, &probeErr) {
+		if probeErr, ok := errors.AsType[*appProbeError](err); ok {
 			event.Output = probeErr.output
 		}
 		if emission.ShouldRepeat(w.ruleEmission(r).Events, w.evalErrorChanged(r.Name, msg)) {

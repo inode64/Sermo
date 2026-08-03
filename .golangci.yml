@@ -59,6 +59,7 @@ linters:
     - mirror  # bytes.Index vs bytes.IndexByte, …
     - misspell
     - mnd  # require names for domain numbers (timeouts, units, protocol fields, exit codes)
+    - nilaway  # module plugin: nil-flow analysis over production code (see settings.custom)
     - nilerr
     - nilnil  # nil values paired with nil errors must be explicitly justified
     - nilnesserr  # err checked nil but a different err value returned
@@ -87,6 +88,24 @@ linters:
     - whitespace  # leading/trailing blank lines inside a block
     - wrapcheck  # ON in core; OFF in checks/ + conn/ probe packages (see exclusions)
   settings:
+    custom:
+      # NilAway runs as a module plugin because golangci-lint does not ship it
+      # (golangci/golangci-lint#4045). It therefore needs the custom binary built
+      # from .custom-gcl.yml — plain `golangci-lint run` silently lacks this
+      # linter, which is why `make lint` invokes bin/custom-gcl.
+      nilaway:
+        type: module
+        description: Detects potential nil panics by inferring nil flow across packages.
+        # Values must be strings: the plugin forwards them as NilAway CLI flags.
+        settings:
+          # Production only. Test files carry 57 findings (fakes with nil fields,
+          # fixtures indexed without guards) that say nothing about shipped code.
+          # This is NilAway's own flag, so test files are never analysed at all —
+          # do not replace it with a `_test\.go$` entry under exclusions.
+          exclude-test-files: "true"
+          # Report only on this module. NilAway still infers through stdlib and
+          # dependencies, but their findings are not ours to fix.
+          include-pkgs: "sermo"
     errcheck:
       # CLI and daemon operator output: a broken stdout/stderr pipe must not
       # fail the command path. Real I/O errors stay covered by other writers.

@@ -281,7 +281,10 @@ func (w *Watch) dispatchLVMTransition(ctx context.Context, res checks.Result) {
 		return
 	}
 	changed := res
-	changed.Data = maps.Clone(res.Data)
+	// Result.Data is optional, so clone into a fresh map: maps.Clone(nil) is nil
+	// and the transition keys below would panic writing to it.
+	changed.Data = make(map[string]any, len(res.Data))
+	maps.Copy(changed.Data, res.Data)
 	changed.Data["old_state"] = transition.OldState
 	changed.Data["new_state"] = transition.NewState
 	changed.Data["lvm_reasons"] = transition.Reasons
@@ -364,7 +367,10 @@ func combineRaidArrayChanges(array string, changes []checks.RaidTransition) chec
 
 func raidTransitionResult(base checks.Result, transition checks.RaidTransition) checks.Result {
 	result := base
-	result.Data = maps.Clone(base.Data)
+	// See dispatchLVMTransition: Result.Data may be nil, so build a fresh map
+	// rather than cloning one that the writes below would panic on.
+	result.Data = make(map[string]any, len(base.Data))
+	maps.Copy(result.Data, base.Data)
 	delete(result.Data, checks.DataKeyRaidTransitions)
 	delete(result.Data, checks.DataKeyRaidMembers)
 	result.Data["raid_event"] = transition.Event

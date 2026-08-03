@@ -315,8 +315,8 @@ func (l *EventLog) loadRecentFromStore() error {
 	l.buf = make([]LoggedEvent, l.size)
 	l.next = 0
 	l.count = 0
-	for i := range slices.Backward(records) {
-		logged := loggedEventFromRecord(records[i])
+	for _, rec := range slices.Backward(records) {
+		logged := loggedEventFromRecord(rec)
 		l.addLocked(logged)
 		if logged.ID > l.localID {
 			l.localID = logged.ID
