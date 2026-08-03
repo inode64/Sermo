@@ -465,7 +465,7 @@ def nfs_server_from_source(source: str) -> str:
 def parse_nfs_routes(text: str) -> dict[str, dict[str, str]]:
     routes: dict[str, dict[str, str]] = {}
     for line in text.splitlines():
-        host, address, iface = (line.split("\t") + ["", "", ""])[:3]
+        host, address, iface = [*line.split("\t"), "", "", ""][:3]
         if host and iface:
             routes[host] = {"address": address, "interface": iface}
     return routes
@@ -627,23 +627,23 @@ def catalog_name_regex(pattern: str) -> re.Pattern[str]:
     out = []
     idx = 0
     while idx < len(pattern):
-        token = pattern[idx : idx + 2]
-        if token == "%v":
+        directive = pattern[idx : idx + 2]
+        if directive == "%v":
             rest = pattern[idx + 2 :]
             terminal = not any(marker in rest for marker in ("%n", "%s", "%i"))
             capture = r"[0-9][^/]*" if terminal else r"[0-9][^/_-]*"
             out.append(rf"(?P<version>{capture})")
             idx += 2
             continue
-        if token == "%n":
+        if directive == "%n":
             out.append(r"(?P<n>[0-9]+)")
             idx += 2
             continue
-        if token == "%i":
+        if directive == "%i":
             out.append(r"(?P<instance>(?:[A-Za-z0-9][A-Za-z0-9_.-]*)?)")
             idx += 2
             continue
-        if token == "%s":
+        if directive == "%s":
             out.append(r"(?P<sep>[-_]?)")
             idx += 2
             continue
