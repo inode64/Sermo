@@ -177,7 +177,7 @@ func servicesReportSummary(reports []appinspect.Report) servicesReportStats {
 
 func servicesReportText(reports []appinspect.Report, stats servicesReportStats, includeMissing bool, host string, now time.Time) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "Sermo services report\n")
+	fmt.Fprint(&b, "Sermo services report\n")
 	fmt.Fprintf(&b, "Host: %s\n", host)
 	fmt.Fprintf(&b, "Generated: %s\n", now.Format(time.RFC3339))
 	fmt.Fprintf(&b, "Scope: %s\n\n", reportScope(includeMissing))

@@ -20,8 +20,7 @@ func (nntpProtocol) DefaultPort() int   { return defaultPortNNTP }
 func (nntpProtocol) RequiresUser() bool { return false }
 
 const (
-	// #nosec G101 -- PASS is the NNTP AUTHINFO command verb, not a credential.
-	nntpCommandAuthInfoPassFormat = "AUTHINFO PASS %s\r\n"
+	nntpCommandAuthInfoPassFormat = "AUTHINFO PASS %s\r\n" //nolint:gosec // G101: PASS is the NNTP AUTHINFO command verb; the credential is the %s argument.
 	nntpCommandAuthInfoUserFormat = "AUTHINFO USER %s\r\n"
 	nntpCommandQuit               = "QUIT\r\n"
 	nntpExtraPostingAllowed       = "posting_allowed"

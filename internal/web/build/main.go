@@ -112,6 +112,7 @@ func main() {
 
 	if err := build(*srcDir, *out); err != nil {
 		fmt.Fprintln(os.Stderr, "webbuild:", err)
+		//nolint:forbidigo // main cannot return an exit code; os.Exit here is the only way to propagate it.
 		os.Exit(webBuildFailureExitCode)
 	}
 }
@@ -119,7 +120,7 @@ func main() {
 func build(srcDir, out string) error {
 	// srcDir/out come from CLI flags driven by the Makefile, not untrusted
 	// input; this is a developer build tool, so path-traversal taint is moot.
-	shell, err := os.ReadFile(filepath.Join(srcDir, webBuildShellFilename)) // #nosec G304
+	shell, err := os.ReadFile(filepath.Join(srcDir, webBuildShellFilename)) //nolint:gosec // G304: srcDir is a Makefile-driven build flag, not untrusted input.
 	if err != nil {
 		return fmt.Errorf("read shell %s: %w", webBuildShellFilename, err)
 	}
@@ -173,14 +174,14 @@ func build(srcDir, out string) error {
 		}
 	}
 
-	if err := os.WriteFile(out, []byte(page), webBuildOutputFileMode); err != nil { // #nosec G304 G703
+	if err := os.WriteFile(out, []byte(page), webBuildOutputFileMode); err != nil { //nolint:gosec // G304,G703: out is the -out build flag of a developer tool, not untrusted input.
 		return fmt.Errorf("write %s: %w", out, err)
 	}
 	return nil
 }
 
 func loadWatchPanels(path string) ([]watchPanelDescriptor, error) {
-	data, err := os.ReadFile(path) // #nosec G304
+	data, err := os.ReadFile(path) //nolint:gosec // G304: path is derived from the -src build flag of a developer tool, not untrusted input.
 	if err != nil {
 		return nil, fmt.Errorf("read watch panels %s: %w", path, err)
 	}

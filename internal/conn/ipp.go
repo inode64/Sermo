@@ -107,9 +107,11 @@ func buildIPPRequest(op uint16, requestID uint32) []byte {
 
 func writeIPPAttr(b *bytes.Buffer, valueTag byte, name, value string) {
 	b.WriteByte(valueTag)
-	_ = binary.Write(b, binary.BigEndian, uint16(len(name)))
+	// G115 twice below: IPP encodes both lengths as 16-bit fields, and every call
+	// site passes package constants, so neither can approach the limit.
+	_ = binary.Write(b, binary.BigEndian, uint16(len(name))) //nolint:gosec // G115: see above.
 	b.WriteString(name)
-	_ = binary.Write(b, binary.BigEndian, uint16(len(value)))
+	_ = binary.Write(b, binary.BigEndian, uint16(len(value))) //nolint:gosec // G115: see above.
 	b.WriteString(value)
 }
 

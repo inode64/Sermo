@@ -9,5 +9,6 @@ import (
 )
 
 func main() {
+	//nolint:forbidigo // main cannot return an exit code; os.Exit here is the only way to propagate it.
 	os.Exit(cli.Main(context.Background(), os.Args[1:]))
 }

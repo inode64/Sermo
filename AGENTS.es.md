@@ -73,7 +73,7 @@ nivel de integración.
    ```sh
    make check        # vet + full test suite; transitively runs `make validate`,
                      # i.e. `make lint` (fmt-check, go fix -diff, staticcheck,
-                     # revive, golangci-lint, govulncheck), `make scripts-lint`
+                     # golangci-lint, govulncheck), `make scripts-lint`
                      # (shellcheck + ruff), `make yaml-validate`
                      # (yaml-fmt-check + yaml-lint), `make markdown-check`
                      # y `make web-check`
@@ -81,7 +81,7 @@ nivel de integración.
 
    `make check` es el único comando que cubre todo. Ejecutar `go test
    ./...` y/o `go vet` solos **no** es suficiente: se salta `make lint`
-   (staticcheck/revive/golangci/govulncheck) y `make yaml-validate`
+   (staticcheck/golangci/govulncheck) y `make yaml-validate`
    (yaml-fmt-check/yaml-lint), `make markdown-check` y `make web-check`, que
    detectan problemas que el toolchain de Go no detecta. Si solo tocaste YAML,
    `make yaml-validate` es el mínimo; si solo tocaste Markdown, `make
@@ -435,7 +435,7 @@ Antes de finalizar cualquier cambio de código:
 - Añade o mueve tests cuando se encuentre un bug o comportamiento ambiguo.
 - **Gate de validación — ejecuta `make check` antes de tratar cualquier cambio como completo**
   (el paso 4 del AI workflow lo detalla). `make check` = vet + tests completos, y
-  ejecuta transitivamente `make lint` (fmt-check, staticcheck, revive, golangci-lint,
+  ejecuta transitivamente `make lint` (fmt-check, staticcheck, golangci-lint,
   govulncheck), `make yaml-validate` (yaml-fmt-check + yaml-lint),
   `make markdown-check` y `make web-check`. Nunca sustituyas con un simple
   `go test ./...` / `go vet`: esos se saltan lint, yaml-lint, markdown y checks
@@ -705,15 +705,22 @@ Notas de herramientas:
 - **`go fix -diff ./...`** se ejecuta como parte de `make lint`: los modernizers
   de Go 1.26 no deben proponer ningún cambio. Si falla, ejecuta `go fix ./...` y
   revisa la reescritura en lugar de silenciarlo.
-- **`revive`** (`revive.toml`): conjunto de reglas por defecto más
+- **`revive`** ahora corre *dentro* de golangci-lint, configurado en
+  `linters.settings.revive.rules`: no hay `revive.toml` ni paso aparte. Antes lo
+  había, invocado sin `-set_exit_status`, así que imprimía hallazgos y no hacía
+  fallar nada; no reintroduzcas esa forma. El conjunto es el de por defecto más
   `unused-parameter`, `struct-tag`, `import-shadowing`, `modifies-value-receiver`,
-  `package-naming` (separada de `var-naming` en revive v1.15) y las reglas de
-  concurrencia `atomic`, `waitgroup-by-value`, `range-val-address` y
-  `range-val-in-closure` en código de producción (`exclude = ["TEST"]` en
-  `unused-parameter` e `import-shadowing` omite `*_test.go`). Renombra
-  parámetros no usados a `_` fuera de tests; evita locales que sombreen nombres
-  de import. Documenta los nuevos símbolos exportados — la regla `exported`
-  está activa.
+  `package-naming` (separada de `var-naming` en revive v1.15), las reglas de
+  concurrencia `atomic`, `waitgroup-by-value`, `datarace`, `range-val-address`,
+  `range-val-in-closure`, y un grupo de defectos/redundancia
+  (`unconditional-recursion`, `identical-branches`, `constant-logical-expr`,
+  `bool-literal-in-expr`, `time-equal`, `string-of-int`, `defer`,
+  `duplicated-imports`, `redundant-import-alias`, `useless-break`,
+  `unnecessary-stmt`, `unnecessary-format`, `optimize-operands-order`,
+  `early-return`, `use-any`, `comment-spacings`). Los tests quedan fuera por la
+  exclusión compartida `_test\.go$`. Renombra parámetros no usados a `_`; evita
+  locales que sombreen nombres de import. Documenta los nuevos símbolos
+  exportados — la regla `exported` está activa.
 - **`golangci-lint`** usa `.golangci.yml` (**formato v2** — el binario debe ser
   v2). Ese fichero manda: **71 linters**, agrupados aquí por lo que te exigen.
   Consúltalo ante la duda — no des por hecho que un linter está apagado porque
@@ -794,7 +801,15 @@ Notas de herramientas:
   demás —`nilness`, `unusedwrite`, `sortslice`, `waitgroup`, `atomicalign`,
   `deepequalerrors`, `reflectvaluecompare` y el conjunto de diagnóstico de
   gocritic— está activado con cero hallazgos. No recortes esas listas para
-  evitar un arreglo.
+  evitar un arreglo. `govet` debe seguir en `linters.enable`: con
+  `default: none`, su bloque de settings por sí solo no ejecuta nada, y el
+  linter estuvo inerte en silencio hasta que se corrigió.
+
+  También en cero y baratos de mantener ahí: `godot` (los comentarios de
+  declaración terminan en punto), `godox` (ningún TODO/FIXME en el código; el
+  trabajo pendiente va en `TODO.md`) y `nakedret`. Como el resto de linters de
+  calidad, quedan limitados a producción por la regla de exclusión `_test\.go$`;
+  añade ahí los nuevos.
 
   El despliegue de **NilAway** está completo: se configura en
   `linters.settings.custom.nilaway` dentro de `.golangci.yml` y corre sobre
@@ -804,24 +819,40 @@ Notas de herramientas:
   fixtures indexados sin guarda) que no dicen nada del código que se envía. No
   cambies ese flag por una regla de exclusión `_test\.go$`, ni recortes
   `include-pkgs` para meter un cambio: arregla el flujo y vuelve a comprobar con
-  `make nilaway`. Prefiere hacer que el nil no sea representable (buckets de
+  `make lint`. No hay target ni lista de paquetes aparte para NilAway: una sola
+  config, una sola ejecución. Prefiere hacer que el nil no sea representable
+  (buckets de
   mapa por valor, `make`+`maps.Copy` en vez de `maps.Clone` antes de escribir,
   `httpx.Do` en vez de `client.Do`) antes que añadir una guarda que nunca puede
   saltar. `deadcode -test` forma parte de `make lint` y debe seguir en cero.
 
   El `database/sql` de producción en `internal/state` usa métodos `*Context` con
   `sqlCtx()` (ctx de `OpenContext` / `context.Background()` vía `Open`).
-  `contextcheck` está desactivado en `internal/state/` y en los CLI que tocan el
-  store porque el linter no sigue el contexto embebido.
+  `contextcheck` está desactivado en cuatro ficheros CLI que tocan el store
+  (`monitor`, `panic`, `sla`, `cli_monitor_state`) porque el linter no sigue el
+  contexto embebido. En `internal/state/` está **activo**: esa exclusión no
+  suprimía nada y se eliminó. Toda supresión aquí está medida; antes de ampliar
+  una, mira la salida de `warn-unused`, que nombra las que omiten cero issues.
 
-  Las excepciones aceptadas de gosec viven en esa config: `G115` solo en los
-  encoders de ancho fijo `fpm`, `ipp`, `kafka`, `mqtt`, `nfs`, `openvpn`, `rdp`,
-  `smb` y `snmp` (sus límites wire tienen tests de regresión). Las excepciones
-  by-design en tests usan `//nolint:gosec` con justificación. Los casos
-  by-design se suprimen en el call site con `//nolint:gosec` más un comentario
-  justificativo — prefiere eso sobre ampliar la config: `G204` (comandos del operador vía `execx`), `G304` (rutas bajo
-  `/proc`, `paths.runtime`, fstab, dirs de config), escrituras `0644`
-  intencionales, lecturas acotadas `args[i]`, `G118` de contexto de shutdown.
+  **A gosec no le queda ninguna excepción a nivel de config.** Todo caso
+  by-design se suprime en el call site con `//nolint:gosec` más un comentario
+  justificativo, de modo que `nolintlint` (`allow-unused: false`,
+  `require-explanation`, `require-specific`) hace fallar el build cuando una
+  deja de hacer falta: `G204` (comandos del operador vía `execx`), `G304` (rutas
+  bajo `/proc`, `paths.runtime`, fstab, dirs de config), escrituras `0644`
+  intencionales, lecturas acotadas `args[i]`, `G118` de contexto de shutdown, y
+  `G115` en los encoders de ancho fijo `fpm`, `ipp`, `kafka`, `mqtt`, `nfs`,
+  `openvpn`, `rdp`, `smb`, `snmp` — cada uno nombra el ancho de campo que hace
+  del truncamiento la codificación. No uses nunca el `#nosec` propio de gosec:
+  `nolintlint` no lo ve, así que sería una supresión sin validar. Nombra siempre
+  el ID de regla en el comentario (`// G402: …`): `nolintlint` solo exige que
+  haya *alguna* explicación, así que el ID es lo que hace auditable la supresión.
+  Los tres `G402` (verificación desactivada en el transporte para que la sonda
+  pueda inspeccionar y reportar una cadena rota; `verifyCertChain` la valida
+  después) y los dos de SHA-1 (`G401`/`G505`, exigidos por RFC 6455 para
+  `Sec-WebSocket-Accept`) son los sensibles: revísalos primero. `forbidigo`
+  sigue la misma regla: los `os.Exit` de los entry points y el seam inyectable
+  `Sleep` del engine llevan `//nolint:forbidigo`, y ninguna ruta está exenta.
 
   `errcheck` excluye `fmt.Fprint`/`Fprintf`/`Fprintln`: la salida de CLI/daemon
   al operador no debe fallar el comando si stdout/stderr es un pipe roto. Otros

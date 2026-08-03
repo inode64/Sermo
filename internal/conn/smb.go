@@ -218,6 +218,7 @@ func buildSMBNegotiate() ([]byte, error) {
 	// NEGOTIATE request body (36 fixed bytes).
 	body := make([]byte, smb2NegotiateFixedBytes)
 	binary.LittleEndian.PutUint16(body[0:], smb2NegotiateFixedBytes)
+	//nolint:gosec // G115: SMB2 stores the dialect count in 16 bits; dialects is the short fixed list this package offers.
 	binary.LittleEndian.PutUint16(body[smb2NegotiateDialectCountOffset:], uint16(len(dialects)))
 	binary.LittleEndian.PutUint16(body[smb2NegotiateSecurityModeOffset:], smb2NegotiateSigningEnabled)
 	copy(body[12:28], guid[:])
@@ -245,9 +246,11 @@ func buildSMBNegotiate() ([]byte, error) {
 	msg := b.Bytes()
 	frame := make([]byte, smbDirectTCPHeaderBytes, smbDirectTCPHeaderBytes+len(msg))
 	frame[0] = smbDirectTCPMessageType
-	frame[smbDirectTCPLengthHighOffset] = byte(len(msg) >> smbLengthHighShift)
-	frame[smbDirectTCPLengthMiddleOffset] = byte(len(msg) >> smbLengthByteShift)
-	frame[smbDirectTCPLengthLowOffset] = byte(len(msg))
+	// G115 three times below: SMB's Direct TCP transport prefixes the message with
+	// a 24-bit big-endian length, so each byte is one octet of that field.
+	frame[smbDirectTCPLengthHighOffset] = byte(len(msg) >> smbLengthHighShift)   //nolint:gosec // G115: see above.
+	frame[smbDirectTCPLengthMiddleOffset] = byte(len(msg) >> smbLengthByteShift) //nolint:gosec // G115: see above.
+	frame[smbDirectTCPLengthLowOffset] = byte(len(msg))                          //nolint:gosec // G115: see above.
 	return append(frame, msg...), nil
 }
 

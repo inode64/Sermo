@@ -208,7 +208,7 @@ func (c *certCheck) Run(ctx context.Context) Result {
 // certMessage builds the healthy (no-alert) summary line for the material.
 func certMessage(src string, s CertSample, daysLeft int, hasExpiry bool) string {
 	if hasExpiry {
-		return fmt.Sprintf("%s: valid %d days (until %s), %s, issuer %s", src, daysLeft, s.NotAfter.Format("2006-01-02"), s.SignatureAlgorithm, s.Issuer)
+		return fmt.Sprintf("%s: valid %d days (until %s), %s, issuer %s", src, daysLeft, s.NotAfter.Format(time.DateOnly), s.SignatureAlgorithm, s.Issuer)
 	}
 	msg := fmt.Sprintf("%s: %s", src, s.Kind)
 	if s.PublicKeyAlgorithm != "" {
@@ -425,7 +425,7 @@ func verifyCertChain(leaf *x509.Certificate, peers []*x509.Certificate, serverNa
 // certificate, so it can be inspected) and reads the leaf certificate, optionally
 // verifying the chain and hostname against the system roots.
 func defaultCertSampler(ctx context.Context, host, port, serverName string, verify bool) (CertSample, error) {
-	cfg := &tls.Config{InsecureSkipVerify: true, ServerName: serverName} //nolint:gosec // inspected manually below
+	cfg := &tls.Config{InsecureSkipVerify: true, ServerName: serverName} //nolint:gosec // G402: verification is off at the transport so the probe can inspect an invalid chain and report why; verifyCertChain below validates it explicitly.
 	nc, err := (&tls.Dialer{Config: cfg}).DialContext(ctx, conn.TransportTCP, net.JoinHostPort(host, port))
 	if err != nil {
 		return CertSample{}, fmt.Errorf("dial TLS endpoint %s: %w", net.JoinHostPort(host, port), err)
