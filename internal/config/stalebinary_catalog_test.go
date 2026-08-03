@@ -171,3 +171,27 @@ func TestDefaultsAllowDependenciesReachesResolvedService(t *testing.T) {
 		})
 	}
 }
+
+// The generated rule must fire when the check FAILS, not when it passes.
+// eval.go reads `active:` as "the check is OK", and the stale-binary check is
+// OK when nothing is stale — so `active:` inverted the rule: it restarted
+// healthy services and stayed silent once a binary was actually replaced. Every
+// service that declares processes carries this rule, and dry_run was the only
+// thing keeping the fleet from acting on it.
+func TestStaleBinaryRuleFiresOnCheckFailureNotOnHealth(t *testing.T) {
+	rule := staleBinaryRule(true, "irrelevant")
+	cond, ok := rule[rules.RuleFieldIf].(map[string]any)
+	if !ok {
+		t.Fatalf("rule has no condition mapping: %#v", rule)
+	}
+	if _, wrong := cond[rules.ConditionActive]; wrong {
+		t.Error("condition uses active:, which is true while the service is healthy")
+	}
+	target, ok := cond[rules.ConditionFailed].(map[string]any)
+	if !ok {
+		t.Fatalf("condition is not failed:, got %#v", cond)
+	}
+	if got := target[rules.FieldCheck]; got != staleBinaryCheckName {
+		t.Errorf("failed: check = %v, want %q", got, staleBinaryCheckName)
+	}
+}
