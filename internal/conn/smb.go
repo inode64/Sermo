@@ -161,12 +161,12 @@ func smbNegotiate(ctx context.Context, addr, iface string) (dialect uint16, sign
 		return 0, false, err
 	}
 	if _, err := c.Write(req); err != nil {
-		return 0, false, probeErr(ProtocolNameSMB, "negotiate request", err)
+		return 0, false, probeErr(ProtocolNameSMB, stepSMBNegotiateRequest, err)
 	}
 
 	var h [smbDirectTCPHeaderBytes]byte
 	if _, err := io.ReadFull(c, h[:]); err != nil {
-		return 0, false, probeErr(ProtocolNameSMB, "response header", err)
+		return 0, false, probeErr(ProtocolNameSMB, stepResponseHeader, err)
 	}
 	n := int(h[smbDirectTCPLengthHighOffset])<<smbLengthHighShift |
 		int(h[smbDirectTCPLengthMiddleOffset])<<smbLengthByteShift |
@@ -176,7 +176,7 @@ func smbNegotiate(ctx context.Context, addr, iface string) (dialect uint16, sign
 	}
 	resp := make([]byte, n)
 	if _, err := io.ReadFull(c, resp); err != nil {
-		return 0, false, probeErr(ProtocolNameSMB, "response body", err)
+		return 0, false, probeErr(ProtocolNameSMB, stepResponseBody, err)
 	}
 	return parseSMBNegotiate(resp)
 }
@@ -199,11 +199,11 @@ func parseSMBNegotiate(resp []byte) (uint16, bool, error) {
 func buildSMBNegotiate() ([]byte, error) {
 	var guid [smbProtocolIDBytes * 4]byte
 	if _, err := rand.Read(guid[:]); err != nil {
-		return nil, probeErr(ProtocolNameSMB, "client GUID", err)
+		return nil, probeErr(ProtocolNameSMB, stepSMBClientGUID, err)
 	}
 	var salt [smb2PreauthSaltBytes]byte
 	if _, err := rand.Read(salt[:]); err != nil {
-		return nil, probeErr(ProtocolNameSMB, "preauth salt", err)
+		return nil, probeErr(ProtocolNameSMB, stepSMBPreauthSalt, err)
 	}
 	dialects := []uint16{smb2Dialect202, smb2Dialect210, smb2Dialect300, smb2Dialect302, smb2Dialect311}
 

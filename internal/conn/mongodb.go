@@ -44,7 +44,7 @@ func (mongodbProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	defer func() { MongoDisconnect(ctx, client) }()
 
 	if err := client.Ping(ctx, readpref.Primary()); err != nil {
-		return Result{}, probeErr(ProtocolNameMongoDB, "ping", err)
+		return Result{}, probeErr(ProtocolNameMongoDB, stepPing, err)
 	}
 	var info struct {
 		Version string `bson:"version"`

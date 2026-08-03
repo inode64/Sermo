@@ -370,7 +370,7 @@ func chronyDialUnix(ctx context.Context, socket string) (net.Conn, error) {
 		if !errors.Is(err, syscall.EADDRINUSE) {
 			_ = os.Remove(local)
 		}
-		return nil, probeErr(ProtocolNameChrony, "client socket", err)
+		return nil, probeErr(ProtocolNameChrony, stepChronyClientSocket, err)
 	}
 	// chronyd drops privileges to its own user and cannot write a reply to a
 	// socket only we may write. The socket lives in chronyd's own run directory,
@@ -379,7 +379,7 @@ func chronyDialUnix(ctx context.Context, socket string) (net.Conn, error) {
 	if err := os.Chmod(local, chronyClientSocketMode); err != nil {
 		_ = c.Close()
 		_ = os.Remove(local)
-		return nil, probeErr(ProtocolNameChrony, "client socket mode", err)
+		return nil, probeErr(ProtocolNameChrony, stepChronyClientSocketMode, err)
 	}
 	applyDeadline(ctx, c)
 	return &unlinkOnCloseConn{Conn: c, path: local}, nil
@@ -403,7 +403,7 @@ func (c *unlinkOnCloseConn) Close() error {
 	err := c.Conn.Close()
 	_ = os.Remove(c.path)
 	if err != nil {
-		return probeErr(ProtocolNameChrony, "close", err)
+		return probeErr(ProtocolNameChrony, stepClose, err)
 	}
 	return nil
 }
@@ -418,7 +418,7 @@ func chronyExchange(c net.Conn, cmd chronyCommand) ([]byte, error) {
 	for range chronyStaleReplyLimit {
 		n, err := c.Read(buf)
 		if err != nil {
-			return nil, probeErr(ProtocolNameChrony, "reply", err)
+			return nil, probeErr(ProtocolNameChrony, stepReply, err)
 		}
 		payload, err := parseChronyReply(buf[:n], cmd, sequence)
 		if errors.Is(err, errChronyStaleReply) {

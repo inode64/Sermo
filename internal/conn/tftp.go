@@ -55,7 +55,7 @@ func (tftpProtocol) RequiresUser() bool { return false }
 func (tftpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	server, err := net.ResolveUDPAddr(networkUDP, cfg.addrDefaults(defaultPortTFTP))
 	if err != nil {
-		return Result{}, probeErr(ProtocolNameTFTP, "resolve server", err)
+		return Result{}, probeErr(ProtocolNameTFTP, stepResolveServer, err)
 	}
 
 	// An unconnected socket: a TFTP server replies from a fresh ephemeral port
@@ -63,7 +63,7 @@ func (tftpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	lc := BindListenConfig(cfg.Interface)
 	pc, err := lc.ListenPacket(ctx, networkUDP, ":0")
 	if err != nil {
-		return Result{}, probeErr(ProtocolNameTFTP, "listen", err)
+		return Result{}, probeErr(ProtocolNameTFTP, stepListen, err)
 	}
 	defer func() { _ = pc.Close() }()
 	applyDeadline(ctx, pc)
@@ -73,12 +73,12 @@ func (tftpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 		filename = tftpDefaultProbeFilename
 	}
 	if _, err := pc.WriteTo(buildTFTPReadRequest(filename), server); err != nil {
-		return Result{}, probeErr(ProtocolNameTFTP, "read request", err)
+		return Result{}, probeErr(ProtocolNameTFTP, stepTFTPReadRequest, err)
 	}
 	buf := make([]byte, tftpReplyBufferBytes)
 	n, _, err := pc.ReadFrom(buf)
 	if err != nil {
-		return Result{}, probeErr(ProtocolNameTFTP, "reply", err)
+		return Result{}, probeErr(ProtocolNameTFTP, stepReply, err)
 	}
 	opcode, errCode, msg, err := parseTFTPReply(buf[:n])
 	if err != nil {

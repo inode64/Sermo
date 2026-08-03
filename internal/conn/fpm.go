@@ -248,11 +248,11 @@ func writeFCGIRecord(w io.Writer, recType byte, content []byte) error {
 		fcgiPaddingLengthNone, fcgiReservedByte,
 	}
 	if _, err := w.Write(header); err != nil {
-		return probeErr(ProtocolNameFPM, "record header", err)
+		return probeErr(ProtocolNameFPM, stepFPMRecordHeader, err)
 	}
 	if n > 0 {
 		if _, err := w.Write(content); err != nil {
-			return probeErr(ProtocolNameFPM, "record content", err)
+			return probeErr(ProtocolNameFPM, stepFPMRecordContent, err)
 		}
 	}
 	return nil
@@ -290,7 +290,7 @@ func readFCGIResponse(r io.Reader) (stdout, stderr string, err error) {
 	header := make([]byte, fcgiHeaderBytes)
 	for {
 		if _, err := io.ReadFull(r, header); err != nil {
-			return "", "", probeErr(ProtocolNameFPM, "response header", err)
+			return "", "", probeErr(ProtocolNameFPM, stepResponseHeader, err)
 		}
 		recType := header[fcgiHeaderTypeOffset]
 		clen := int(header[fcgiHeaderContentLengthHighOffset])<<fcgiContentLengthHighShift |
@@ -299,7 +299,7 @@ func readFCGIResponse(r io.Reader) (stdout, stderr string, err error) {
 		body := make([]byte, clen+plen)
 		if len(body) > 0 {
 			if _, err := io.ReadFull(r, body); err != nil {
-				return "", "", probeErr(ProtocolNameFPM, "response body", err)
+				return "", "", probeErr(ProtocolNameFPM, stepResponseBody, err)
 			}
 		}
 		content := body[:clen]
