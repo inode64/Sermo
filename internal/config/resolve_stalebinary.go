@@ -84,8 +84,13 @@ func staleBinaryRule(allowRestart bool, message string) map[string]any {
 	}
 	return map[string]any{
 		rules.RuleFieldType: string(generatedRuleType(then)),
+		// `failed:`, not `active:`. The check is OK when nothing is stale, and
+		// eval.go reads `active:` as "the check is OK" -- so the rule used to
+		// fire on every healthy service and go quiet exactly when a binary had
+		// been replaced. dry_run hid it fleet-wide; the first host with the flag
+		// off restarted a service that had nothing wrong with it.
 		rules.RuleFieldIf: map[string]any{
-			rules.ConditionActive: map[string]any{rules.FieldCheck: staleBinaryCheckName},
+			rules.ConditionFailed: map[string]any{rules.FieldCheck: staleBinaryCheckName},
 		},
 		rules.RuleFieldThen: then,
 	}

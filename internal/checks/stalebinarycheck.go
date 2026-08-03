@@ -18,8 +18,9 @@ type StaleBinariesFunc func() []process.StaleBinary
 
 // staleBinaryCheck reports processes of this service still running a binary
 // that was replaced or removed on disk — a package upgrade without a restart.
-// It is a condition check: OK means nothing is stale, so a rule fires it with
-// `active:`.
+// It is a condition check: OK means nothing is stale, so a rule fires on it
+// with `failed:` -- `active:` evaluates to the check's OK, which is the
+// opposite of the condition worth acting on.
 //
 // It covers the two ways the condition reaches an operator today, neither of
 // which is actionable on its own: a process attributed by the init backend
