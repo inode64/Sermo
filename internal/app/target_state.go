@@ -26,6 +26,7 @@ const (
 const (
 	checkHealthFailing = "failing"
 	checkHealthUnknown = "unknown"
+	checkHealthWarning = "warning"
 )
 
 // ServiceState folds config, backend status and monitoring health into the
@@ -69,6 +70,8 @@ func ServiceState(enabled, monitored bool, backendStatus, checkHealth string, ob
 	switch checkHealth {
 	case checkHealthFailing:
 		return TargetStateFailed
+	case checkHealthWarning:
+		return TargetStateWarning
 	case checkHealthUnknown:
 		if processActive {
 			return TargetStateActive

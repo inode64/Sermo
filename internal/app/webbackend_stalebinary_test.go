@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"testing"
+	"time"
 
 	"sermo/internal/checks"
 	"sermo/internal/servicemgr"
@@ -13,21 +14,27 @@ import (
 // fills from the service tree.
 func staleBinaryBackend(t *testing.T, ok bool) (*WebBackend, *webEntry) {
 	t.Helper()
+	at := time.Date(2026, 8, 3, 21, 0, 0, 0, time.UTC)
 	snaps := NewSnapshots()
+	snaps.now = func() time.Time { return at }
 	snaps.PublishWithCheckTypes("web",
 		map[string]checks.Result{"stale-binary": {Check: "stale-binary", OK: ok}},
 		map[string]bool{"stale-binary": true},
 		map[string]string{"stale-binary": checks.CheckTypeStaleBinary})
 
 	entry := &webEntry{
-		checkNames: []string{"stale-binary"},
-		checkTypes: map[string]string{"stale-binary": checks.CheckTypeStaleBinary},
-		status:     func(context.Context) (servicemgr.Status, error) { return servicemgr.StatusActive, nil },
+		checkNames:     []string{"stale-binary"},
+		checkTypes:     map[string]string{"stale-binary": checks.CheckTypeStaleBinary},
+		checkReports:   map[string]string{"stale-binary": checks.ReportsState},
+		checkIntervals: map[string]time.Duration{"stale-binary": time.Minute},
+		interval:       time.Minute,
+		status:         func(context.Context) (servicemgr.Status, error) { return servicemgr.StatusActive, nil },
 	}
 	return &WebBackend{
 		order:     []string{"web"},
 		entries:   map[string]*webEntry{"web": entry},
 		snapshots: snaps,
+		now:       func() time.Time { return at },
 	}, entry
 }
 
@@ -80,6 +87,20 @@ func TestServiceWarningReasonNilSafe(t *testing.T) {
 	b, _ := staleBinaryBackend(t, false)
 	if got := b.serviceWarningReason("web", nil); got != "" {
 		t.Fatalf("want no reason for a nil entry, got %q", got)
+	}
+}
+
+func TestWebBackendStaleBinaryUsesWarningWithoutFailingHealth(t *testing.T) {
+	b, entry := staleBinaryBackend(t, false)
+	svc := b.view(context.Background(), "web", entry)
+	if svc.State != TargetStateWarning || svc.CheckHealth != checkHealthWarning || svc.ChecksFailing != 0 || svc.WarningReason != warningReasonStaleBinary {
+		t.Fatalf("stale binary service = %+v, want warning without failed health", svc)
+	}
+
+	b, entry = staleBinaryBackend(t, true)
+	svc = b.view(context.Background(), "web", entry)
+	if svc.State != TargetStateMonitored || svc.CheckHealth != TargetStateOK || svc.WarningReason != "" {
+		t.Fatalf("fresh binary service = %+v, want monitored healthy", svc)
 	}
 }
 

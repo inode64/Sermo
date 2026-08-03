@@ -33,6 +33,7 @@ func TestServiceState(t *testing.T) {
 		{name: "collecting active unknown checks", enabled: true, monitored: true, backendStatus: string(servicemgr.StatusActive), checkHealth: checkHealthUnknown, observed: true, ready: true, want: TargetStateCollecting},
 		{name: "failed backend", enabled: true, monitored: true, backendStatus: string(servicemgr.StatusFailed), observed: true, want: TargetStateFailed},
 		{name: "failed checks", enabled: true, monitored: true, backendStatus: string(servicemgr.StatusActive), checkHealth: checkHealthFailing, observed: true, ready: true, want: TargetStateFailed},
+		{name: "warning checks", enabled: true, monitored: true, backendStatus: string(servicemgr.StatusActive), checkHealth: checkHealthWarning, observed: true, ready: true, want: TargetStateWarning},
 		{name: "warning active healthy with no attributable process", enabled: true, monitored: true, backendStatus: string(servicemgr.StatusActive), checkHealth: TargetStateOK, observed: true, processesMissing: true, want: TargetStateWarning},
 		{name: "trusted process outranks a stale empty tree", enabled: true, monitored: true, backendStatus: string(servicemgr.StatusActive), checkHealth: TargetStateOK, observed: true, processActive: true, processesMissing: true, want: TargetStateActive},
 		{name: "full observability outranks an empty tree", enabled: true, monitored: true, backendStatus: string(servicemgr.StatusActive), checkHealth: TargetStateOK, observed: true, ready: true, processesMissing: true, want: TargetStateMonitored},

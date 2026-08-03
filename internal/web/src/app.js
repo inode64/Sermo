@@ -238,8 +238,9 @@ const chartViewHeight = 160;
 const chartColumnCount = 120;
 const metricChartPad = 34;
 const slaBarCount = 90;
-// A warning service is running with passing checks — only its process-tree
-// observability is missing — so it counts as active like a collecting one.
+// A warning service is running without a hard health failure but needs operator
+// attention (a process-tree observability gap or a replaced binary), so it
+// counts as active like a collecting one.
 const overviewActiveServiceStates = [targetStateStarted, targetStateActive, targetStateCollecting, targetStateWarning, targetStateMonitored];
 const mountStateClasses = {
   [mountStateActive]: "state-running",
@@ -1521,21 +1522,21 @@ function serviceStateBadge(s) {
     ? s.observability_missing.join(", ")
     : "";
   const missing = (st === targetStateCollecting && indicators) ? `Collecting ${indicators}` : "";
-  // The warning state is reached only through the definite indicator gap, so it
-  // is worth saying that waiting will not clear it.
-  const blind = (st === targetStateWarning && indicators)
+  const staleBinary = st === targetStateWarning && s && s.warning_reason === warningReasonStaleBinary;
+  const blind = (st === targetStateWarning && indicators && !staleBinary)
     ? `The unit is active and its checks pass, but the daemon attributes no process to it, so ${indicators} stay unavailable`
     : "";
+  const stale = staleBinary ? "A running process uses a binary replaced on disk; restart to apply the installed version" : "";
   const active = st === targetStateActive
     ? "Process confirmed; checks and runtime metrics are not available yet"
     : "";
-  const title = missing || blind || active;
+  const title = missing || blind || stale || active;
   // A warning carries a reason the operator must act on, and a tooltip is
   // invisible until hovered — and never reachable on a touch screen. Show it
   // next to the badge instead of hiding it in the title.
-  const reason = st === targetStateWarning && indicators
+  const reason = st === targetStateWarning
     ? tpl` <span class="muted state-reason" title="${title}">${serviceWarningReason(s)}</span>`
-    : "";
+    : nothing;
   const badge = title ? tpl`<span title="${title}">${stateBadge(st)}</span>` : stateBadge(st);
   return reason ? tpl`${badge}${reason}` : badge;
 }
