@@ -66,7 +66,7 @@ config_subst = sed -e 's|/usr/share/sermo|$(SERMO_DATADIR)|g' -e 's|/etc/sermo|$
 # Rewrite runtime/state dirs in the tmpfiles config.
 tmpfiles_subst = sed -e 's|/run/sermo|$(SERMO_RUNDIR)|g' -e 's|/var/lib/sermo|$(SERMO_STATEDIR)|g'
 
-.PHONY: all build test vet fmt fmt-check lint modules-check actions-lint race fuzz deadcode quality-report cover-gate custom-gcl scripts-lint yaml-fmt yaml-fmt-check yaml-lint yaml-validate markdown-check web web-check web-lint web-e2e validate check cover tidy clean \
+.PHONY: all build test vet fmt fmt-check lint modules-check actions-lint race fuzz deadcode quality-report cover-gate custom-gcl scripts-lint semgrep yaml-fmt yaml-fmt-check yaml-lint yaml-validate markdown-check web web-check web-lint web-e2e validate check cover tidy clean \
         install install-bin install-catalog install-examples install-config install-templates install-tmpfiles install-systemd install-openrc \
         uninstall
 
@@ -84,6 +84,8 @@ MARKDOWNLINT ?= ./node_modules/.bin/markdownlint
 PLAYWRIGHT ?= ./node_modules/.bin/playwright
 SHELLCHECK ?= shellcheck
 RUFF ?= ruff
+SEMGREP ?= semgrep
+SEMGREP_TARGETS = cmd internal
 ACTIONLINT ?= actionlint
 FUZZ_TIME ?= 15s
 # gocognit, gocyclo, dupl and perfsprint are blocking linters. Keep a focused
@@ -215,6 +217,16 @@ lint: fmt-check $(CUSTOM_GCL)
 	@$(LINT_CACHE_ENV) govulncheck $(GO_PACKAGES)
 	@echo "deadcode -test $(GO_PACKAGES)"
 	@$(LINT_PATH) deadcode -test $(GO_PACKAGES)
+	@$(MAKE) --no-print-directory semgrep
+
+# Repository invariants that no generic Go linter can express: depguard bounds
+# imports, these bound what may be *called* once an import is allowed. Each rule
+# in .semgrep/ is verified in both directions -- clean on this tree, and firing
+# on a deliberately planted violation -- because a rule that matches nothing is
+# the same silent no-op that govet and revive were here before.
+semgrep:
+	@echo "semgrep .semgrep/"
+	@$(LINT_PATH) $(SEMGREP) --config .semgrep/ --metrics=off --error --quiet $(SEMGREP_TARGETS)
 
 # Verify module checksums and fail when the dependency manifests are not tidy.
 modules-check:
