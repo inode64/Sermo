@@ -73,7 +73,7 @@ level of integration.
    ```sh
    make check        # vet + full test suite; transitively runs `make validate`,
                      # i.e. `make lint` (fmt-check, go fix -diff, staticcheck,
-                     # golangci-lint, govulncheck), `make scripts-lint`
+                     # golangci-lint, govulncheck, semgrep), `make scripts-lint`
                      # (shellcheck + ruff), `make yaml-validate`
                      # (yaml-fmt-check + yaml-lint), `make markdown-check`
                      # and `make web-check`
@@ -81,7 +81,7 @@ level of integration.
 
    `make check` is the single command that covers everything. Running `go test
    ./...` and/or `go vet` alone is **not** sufficient: it skips `make lint`
-   (staticcheck/golangci/govulncheck) and `make yaml-validate`
+   (staticcheck/golangci/govulncheck/semgrep) and `make yaml-validate`
    (yaml-fmt-check/yaml-lint), `make markdown-check` and `make web-check`, which
    catch issues the Go toolchain does not. If you only touched YAML, `make
    yaml-validate` is the minimum; if you only touched Markdown, `make
@@ -431,7 +431,7 @@ Before finishing any code change:
 - **Validation gate — run `make check` before treating any change as complete**
   (the AI workflow step 4 spells this out). `make check` = vet + full tests, and
   transitively runs `make lint` (fmt-check, staticcheck, golangci-lint,
-  govulncheck), `make yaml-validate` (yaml-fmt-check + yaml-lint),
+  govulncheck, semgrep), `make yaml-validate` (yaml-fmt-check + yaml-lint),
   `make markdown-check` and `make web-check`. Never substitute a bare
   `go test ./...` / `go vet`: those skip lint, yaml-lint, markdown and web
   checks and miss real issues (e.g. revive stutter/comment rules). Fix every
