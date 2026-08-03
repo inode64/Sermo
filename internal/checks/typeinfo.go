@@ -26,6 +26,7 @@ const (
 	CheckTypePidfile       = "pidfile"
 	CheckTypeSocket        = "socket"
 	CheckTypeProcess       = "process"
+	CheckTypeStaleBinary   = "stale_binary"
 	CheckTypeMetric        = "metric"
 	CheckTypeLibraries     = "libraries"
 	CheckTypeCount         = "count"
@@ -79,6 +80,9 @@ var typeInfos = []TypeInfo{
 	{Name: CheckTypePidfile, Health: true},
 	{Name: CheckTypeSocket, Health: true},
 	{Name: CheckTypeProcess, Health: true, ServiceScoped: true},
+	// Condition, not health: OK means "nothing is stale", so a rule fires it
+	// with `active:` the same way it would an alert-style predicate.
+	{Name: CheckTypeStaleBinary, ServiceScoped: true},
 	{Name: CheckTypeMetric, ServiceScoped: true},
 	{Name: CheckTypeLibraries, Health: true},
 	{Name: CheckTypeCount},

@@ -765,6 +765,7 @@ var singleShotCheckValidators = map[string]singleShotCheckValidator{
 	checks.CheckTypeClock:         singleShotNoLock(validateClockFields),
 	checks.CheckTypeService:       validateServiceCheck,
 	checks.CheckTypeProcess:       validateProcessCheck,
+	checks.CheckTypeStaleBinary:   singleShotNoLock(validateStaleBinaryCheck),
 	checks.CheckTypeFileExists:    validateFileExistsCheck,
 	checks.CheckTypeFile:          validateSingleShotFileCheck,
 	checks.CheckTypeLockfile:      validateLockfileCheck,
@@ -867,6 +868,17 @@ func validateServiceCheck(path string, entry map[string]any, _ string, add addFu
 	}
 	if _, ok := serviceStates[state]; !ok {
 		add("%s expect %q is not one of %s", path, state, servicemgr.StatusSummary)
+	}
+}
+
+// validateStaleBinaryCheck rejects selector fields on a stale_binary check. It
+// inspects the service's own processes:/pidfile: declarations, so an exe or
+// user here would look meaningful and silently do nothing.
+func validateStaleBinaryCheck(path string, entry map[string]any, add addFunc) {
+	for _, key := range []string{checks.CheckKeyExe, checks.CheckKeyExeAny, checks.CheckKeyUser, checks.CheckKeyState} {
+		if _, present := entry[key]; present {
+			add("%s.%s is not accepted; stale_binary inspects the service's own processes and pidfile selectors", path, key)
+		}
 	}
 }
 

@@ -63,6 +63,7 @@ func serviceRuntime(ctx context.Context, name, unit string, tree map[string]any,
 		ProcessesAny:        discoverer.ObserveAnyState,
 		ProcessCount:        discoverer.CountMatching,
 		PidfileFallbackPIDs: pidfileFallbackPIDs(ctx, deps, unit, backendPIDs),
+		StaleBinaries:       func() []process.StaleBinary { return discoverer.StaleBinaries(selectors) },
 	})
 	locker := configureOperationLocker(deps.Runtime, operationLockReclaimEvent(deps.Emit))
 	engine := operation.New(operation.Config{

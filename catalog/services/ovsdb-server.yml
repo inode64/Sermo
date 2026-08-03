@@ -1,6 +1,11 @@
 name: ovsdb-server
 display_name: Open vSwitch Database Server
 category: virtualization
+# vswitchd loses its connection to the configuration database on restart and can
+# flap or drop bridge config, so a replaced binary is alerted and notified but
+# never restarted automatically. This governs that trigger only — a manual
+# restart and remediation for a real failure are unaffected.
+restart_on_stale_binary: false
 service:
   systemd:
     - ovsdb-server
