@@ -23,8 +23,12 @@ ROOT = Path(__file__).resolve().parents[1]
 DOC_GLOBS = ("docs/*.md", "*.md", ".agents/skills/*/SKILL.md", ".agents/skills/*/references/*.md")
 
 # A source path cited in prose, e.g. `internal/web/server.go`.
+# The lookbehind anchors the root: without it "tests/" matched inside any longer
+# path, so `.semgrep/tests/sermo.go` was checked as the non-existent
+# "tests/sermo.go" — a citation could be validated against the wrong file.
 CITED_PATH = re.compile(
-    r"((?:internal|cmd|scripts|packaging|catalog|templates|examples|tests|docs)"
+    r"(?<![A-Za-z0-9_./-])"
+    r"((?:\.semgrep|internal|cmd|scripts|packaging|catalog|templates|examples|tests|docs)"
     r"/[A-Za-z0-9_./-]+\.(?:go|json|jsonl|js|yml|yaml|md|css|html|sh|py|toml))\b"
 )
 # A backticked CamelCase identifier, the form skills use for Go symbols.

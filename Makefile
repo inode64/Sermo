@@ -221,12 +221,17 @@ lint: fmt-check $(CUSTOM_GCL)
 
 # Repository invariants that no generic Go linter can express: depguard bounds
 # imports, these bound what may be *called* once an import is allowed. Each rule
-# in .semgrep/ is verified in both directions -- clean on this tree, and firing
-# on a deliberately planted violation -- because a rule that matches nothing is
-# the same silent no-op that govet and revive were here before.
+# in .semgrep/rules/ is verified in both directions, and the --test pass makes
+# that permanent: .semgrep/tests/ annotates the lines each rule must flag and
+# the lines it must not, and semgrep exits non-zero when a rule stops agreeing.
+# A rule that matches nothing is the same silent no-op that govet and revive
+# were here before, so it has to prove itself on every run.
 semgrep:
-	@echo "semgrep .semgrep/"
-	@$(LINT_PATH) $(SEMGREP) --config .semgrep/ --metrics=off --error --quiet $(SEMGREP_TARGETS)
+	@echo "semgrep --test .semgrep/rules"
+	@out="$$($(LINT_PATH) $(SEMGREP) --test --config .semgrep/rules/ --metrics=off .semgrep/tests/ 2>&1)" \
+	  || { echo "$$out"; exit 1; }
+	@echo "semgrep .semgrep/rules"
+	@$(LINT_PATH) $(SEMGREP) --config .semgrep/rules/ --metrics=off --error --quiet $(SEMGREP_TARGETS)
 
 # Verify module checksums and fail when the dependency manifests are not tidy.
 modules-check:

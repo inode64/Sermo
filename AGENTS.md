@@ -827,6 +827,16 @@ Tool notes:
   difference shows up in the comment: "this truncation *is* the wire encoding"
   earns its keep, "the linter is being fussy" does not.
 
+  **A new `.semgrep/rules/` rule ships with its fixture, or it does not ship.**
+  `make semgrep` runs `semgrep --test` before the scan: `.semgrep/tests/sermo.go`
+  marks the line each rule must flag with `// ruleid: <id>` and a nearby line it
+  must *not* flag with `// ok: <id>`, and the target exits non-zero when a rule
+  stops agreeing with either. Write both annotations. A rule with no fixture
+  cannot be distinguished from a rule that matches nothing, and this repository
+  has shipped that failure twice already — `govet` with a settings block but no
+  `enable`, and `revive` invoked without `-set_exit_status`. The `ok:` line is
+  the half people skip and the half that catches over-broad patterns.
+
   Most findings on new code have a structural answer. `ireturn`: return a
   concrete type, or write through a pointer the caller owns instead of returning
   a bare interface — see `applyDependencyOptions` in `internal/control/target.go`,
