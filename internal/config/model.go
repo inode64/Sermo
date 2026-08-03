@@ -475,7 +475,7 @@ var metaKeys = map[string]struct{}{
 
 // perServiceDefaults are the only parts of global `defaults` that merge into a
 // service. Engine-wide settings never reach individual services.
-var perServiceDefaults = []string{keyDryRun, keyAllowDependencies, keyRestartOnChange, keyRestartOnStaleBinary, sectionStopPolicy, sectionPolicy, sectionRuleWindow, sectionClearWindow}
+var perServiceDefaults = []string{keyDryRun, keyAllowDependencies, keyRestartOnChange, keyReloadOnChange, keyRestartOnStaleBinary, sectionStopPolicy, sectionPolicy, sectionRuleWindow, sectionClearWindow}
 
 // Document is a single loaded catalog definition or configured target in raw,
 // unexpanded form.

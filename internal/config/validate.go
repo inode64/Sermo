@@ -80,6 +80,7 @@ var validGlobalPathKeys = set(
 var validDefaultsKeys = set(
 	keyAllowDependencies,
 	keyDryRun,
+	keyReloadOnChange,
 	keyRestartOnChange,
 	keyRestartOnStaleBinary,
 	sectionClearWindow,
@@ -284,6 +285,7 @@ func validateGlobalDefaults(cfg *Config, raw map[string]any, add addFunc) {
 	validateDefaultsKeys(cfg.Global.Defaults, add)
 	validateDefaultsVariables(cfg.Global.Defaults, add)
 	validateDefaultsRestartOnChange(cfg.Global.Defaults, add)
+	validateDefaultsReloadOnChange(cfg.Global.Defaults, add)
 	for _, key := range []string{keyDryRun, keyAllowDependencies} {
 		if v, present := cfg.Global.Defaults[key]; present {
 			if _, ok := v.(bool); !ok {
@@ -328,6 +330,31 @@ func validateDefaultsRestartOnChange(defaults map[string]any, add addFunc) {
 		}
 	}
 	validateRestartOnChangeFlags(defaultsFieldPath(keyRestartOnChange), roc, add)
+}
+
+// validateDefaultsReloadOnChange restricts the global block to the permission
+// gate. `paths:` is service data, not host policy — a host says whether
+// config-driven reloads happen, the catalog says which files drive them.
+func validateDefaultsReloadOnChange(defaults map[string]any, add addFunc) {
+	raw, present := defaults[keyReloadOnChange]
+	if !present {
+		return
+	}
+	roc, ok := raw.(map[string]any)
+	if !ok {
+		add(validationMappingFormat, defaultsFieldPath(keyReloadOnChange))
+		return
+	}
+	for _, key := range slices.Sorted(maps.Keys(roc)) {
+		if key != keyRestartConfig {
+			add(validationNotSupportedFormat, defaultsFieldPath(keyReloadOnChange)+"."+key)
+		}
+	}
+	if v, present := roc[keyRestartConfig]; present {
+		if _, ok := v.(bool); !ok {
+			add(validationBooleanLiteralFormat, defaultsFieldPath(keyReloadOnChange)+"."+keyRestartConfig)
+		}
+	}
 }
 
 // registryLabel turns a document's registry namespace (registryKey) into the

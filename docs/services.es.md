@@ -201,6 +201,47 @@ defaults:
 Un servicio de catálogo o configurado puede sobrescribir cualquiera de los dos
 flags en su bloque local `restart_on_change`.
 
+### Desactivar el reinicio-al-actualizar por host
+
+Tres mecanismos reinician o recargan un servicio cuando cambia algo de lo que
+depende. Cada uno tiene una puerta de permiso, y todas se pueden fijar por host:
+
+| Mecanismo | Disparador | Puerta | ¿Notifica? |
+|---|---|---|---|
+| `restart_on_change` | versión de app, librería, ruta de config | `config:` / `version:` | sí — alerta y luego reinicia |
+| `reload_on_change` | ruta de config | `config:` | **no** — sólo reload, sin acción de alerta |
+| [`restart_on_stale_binary`](configuration.es.md#stale_binary--servicio-ejecutando-un-binario-reemplazado) | binario reemplazado en disco | el propio flag | sí — alerta y luego reinicia |
+
+Dos granularidades, ambas en el host, ninguna exige tocar el catálogo:
+
+```yaml
+# /etc/sermo/sermo.yml — todo el host
+defaults:
+  restart_on_change: { version: false }   # aquí no se reinicia por versión
+  reload_on_change:  { config: false }    # ni se recarga por config
+  restart_on_stale_binary: false
+```
+
+```yaml
+# /etc/sermo/services/nginx.yml — sólo este servicio, en este host
+name: nginx
+uses: nginx
+restart_on_change: { version: true }      # …salvo nginx
+```
+
+El merge es **profundo**, y eso es lo que hace utilizable el nivel de host:
+poner sólo la puerta en `defaults:` se funde dentro del bloque del catálogo en
+vez de reemplazarlo, así que los `paths`, `apps` y `messages` que trae el
+catálogo sobreviven. La precedencia es `defaults:` < catálogo < fichero por
+servicio del host — ver [Orden de resolución](configuration.es.md#orden-de-resolución).
+Un escalar que el catálogo fija explícitamente (como hacen los servicios OVS con
+`restart_on_stale_binary`) gana por tanto a un default del host; sobrescríbelo
+en el fichero por servicio.
+
+El `defaults:` global acepta **sólo las puertas**, nunca `paths`/`apps`/
+`libraries`/`messages`: el host decide *si* ocurren estos reinicios, el catálogo
+decide *qué* los dispara.
+
 `messages` es opcional y local al servicio o servicio de catálogo. Acepta
 plantillas `path`, `app` y `library`. Las plantillas se expanden primero como
 cadenas normales de servicio (`${display_name}`, `${config}`, …), y los
@@ -243,6 +284,14 @@ rules:
     if: { changed: { path: /etc/systemd/system } }
     then: { action: reload }
 ```
+
+Fíjate en la única acción. A diferencia de `restart_on_change`, la regla
+generada **no lleva acción `alert`, así que un reload no envía ninguna
+notificación**: queda como evento de resultado de operación y nada más. Es
+deliberado para un reload no disruptivo; si quieres enterarte, añade tu propia
+regla de alerta sobre la misma condición `changed:`. Pon
+`reload_on_change: { config: false }` para suprimir las reglas generadas por
+completo, por servicio o por host.
 
 La acción **`reload`** corre a través del mismo motor seguro que restart pero en
 sitio: ejecuta **preflight primero** (de modo que una configuración inválida — detectada por el
