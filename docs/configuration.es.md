@@ -2936,9 +2936,9 @@ aparece como `warning` sin causa declarada.
 
 `stale_binary` es diagnóstico, no un fallo de disponibilidad: no reduce la
 salud ni el SLA del servicio. Cuando detecta un ejecutable reemplazado, el
-servicio se muestra como `warning` con la indicación de reiniciarlo, mientras su
-regla generada sigue alertando y, cuando está permitido, reinicia de forma
-segura.
+servicio se muestra como `warning` sin una indicación de reinicio separada en el
+campo State, mientras su regla generada sigue alertando y, cuando está permitido,
+reinicia de forma segura.
 
 Pon `restart_on_stale_binary: false` en un servicio para conservar la alerta y
 la notificación pero omitir el reinicio:
