@@ -491,6 +491,15 @@ func expandReloadOnChange(tree map[string]any) []string {
 	delete(tree, keyReloadOnChange)
 
 	errs := validateReloadOnChangeKeys(roc)
+
+	// Read the list the strict way restart_on_change does: cfgval.StringList
+	// swallows a non-string entry, so `paths: [123]` used to be dropped in
+	// silence. Both the type check and the key check above run whichever way the
+	// gate is set — it suppresses the generated rules, not the checking of what
+	// would have generated them, so a block that is off today still fails loudly
+	// instead of hiding a typo until someone turns it on.
+	paths, pathErrs := restartOnChangeStringList(reloadOnChangePathPaths, roc[keyPaths])
+	errs = append(errs, pathErrs...)
 	if !restartOnChangeAllowed(roc, keyRestartConfig) {
 		return errs
 	}
@@ -499,11 +508,7 @@ func expandReloadOnChange(tree map[string]any) []string {
 	if ruleMap == nil {
 		ruleMap = map[string]any{}
 	}
-	for i, p := range cfgval.StringList(roc[keyPaths]) {
-		if p == "" {
-			errs = append(errs, reloadOnChangePathPaths+" entry is empty")
-			continue
-		}
+	for i, p := range paths {
 		key := fmt.Sprintf("reload-on-change-%d", i+1)
 		changed := map[string]any{rules.FieldPath: p}
 		then := map[string]any{rules.RuleFieldAction: string(rules.ActionReload)}
@@ -1036,12 +1041,19 @@ var restartOnChangeKeys = set(
 var restartOnChangeMessageKeys = set(rules.FieldApp, rules.FieldLibrary, rules.FieldPath)
 
 func validateRestartOnChangeFlags(prefix string, roc map[string]any, add addFunc) []string {
+	return validateGateFlags(prefix, roc, add, keyRestartConfig, keyRestartVersion)
+}
+
+// validateGateFlags checks that each named permission gate, when present, is a
+// boolean literal. It keeps the dual mode the desugarer and the validation layer
+// both need: add != nil reports through it, otherwise the messages are returned.
+func validateGateFlags(prefix string, block map[string]any, add addFunc, gates ...string) []string {
 	var errs []string
-	for _, key := range []string{keyRestartConfig, keyRestartVersion} {
-		if _, present := roc[key]; !present {
+	for _, key := range gates {
+		if _, present := block[key]; !present {
 			continue
 		}
-		if _, ok := roc[key].(bool); ok {
+		if _, ok := block[key].(bool); ok {
 			continue
 		}
 		msg := fmt.Sprintf(validationBooleanLiteralFormat, prefix+"."+key)
@@ -1062,15 +1074,17 @@ var reloadOnChangeKeys = set(keyPaths, keyRestartConfig)
 // validateReloadOnChangeKeys rejects unknown sub-keys and a non-boolean gate, so
 // a typo in the flag fails loudly instead of silently leaving reloads enabled.
 func validateReloadOnChangeKeys(roc map[string]any) []string {
+	errs := unknownBlockKeys(keyReloadOnChange, roc, reloadOnChangeKeys)
+	return append(errs, validateGateFlags(keyReloadOnChange, roc, nil, keyRestartConfig)...)
+}
+
+// unknownBlockKeys names every sub-key of block that is not in allowed, sorted so
+// a config with several typos reports them in a stable order.
+func unknownBlockKeys(prefix string, block map[string]any, allowed map[string]struct{}) []string {
 	var errs []string
-	for _, key := range slices.Sorted(maps.Keys(roc)) {
-		if _, ok := reloadOnChangeKeys[key]; !ok {
-			errs = append(errs, fmt.Sprintf("%s.%s is not supported", keyReloadOnChange, key))
-		}
-	}
-	if v, present := roc[keyRestartConfig]; present {
-		if _, ok := v.(bool); !ok {
-			errs = append(errs, fmt.Sprintf(validationBooleanLiteralFormat, keyReloadOnChange+"."+keyRestartConfig))
+	for _, key := range slices.Sorted(maps.Keys(block)) {
+		if _, ok := allowed[key]; !ok {
+			errs = append(errs, fmt.Sprintf(validationNotSupportedFormat, prefix+"."+key))
 		}
 	}
 	return errs
