@@ -4,7 +4,7 @@ import (
 	"bufio"
 	"context"
 	"crypto/rand"
-	"crypto/sha1" //nolint:gosec // RFC 6455 mandates SHA-1 for the Sec-WebSocket-Accept key
+	"crypto/sha1" //nolint:gosec // G505: RFC 6455 mandates SHA-1 for the Sec-WebSocket-Accept key; it is a handshake digest, not a security primitive.
 	"crypto/tls"
 	"encoding/base64"
 	"errors"
@@ -241,7 +241,7 @@ func wsKey() (string, error) {
 
 // wsAccept computes the expected Sec-WebSocket-Accept for a client key.
 func wsAccept(key string) string {
-	h := sha1.New() //nolint:gosec // RFC 6455 mandates SHA-1 here
+	h := sha1.New() //nolint:gosec // G401: RFC 6455 mandates SHA-1 for the Sec-WebSocket-Accept digest.
 	_, _ = h.Write([]byte(key + wsGUID))
 	return base64.StdEncoding.EncodeToString(h.Sum(nil))
 }

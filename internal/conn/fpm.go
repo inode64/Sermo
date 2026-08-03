@@ -243,6 +243,7 @@ func writeFCGIRecord(w io.Writer, recType byte, content []byte) error {
 	header := []byte{
 		fcgiVersion1, recType,
 		fcgiRequestIDHigh, fcgiRequestID,
+		//nolint:gosec // G115: n is rejected above when it exceeds fcgiContentLengthMax; these two bytes are its 16-bit big-endian split.
 		byte(n >> fcgiContentLengthHighShift), byte(n),
 		fcgiPaddingLengthNone, fcgiReservedByte,
 	}
@@ -263,13 +264,15 @@ func encodeFCGIParams(pairs []fcgiParam) []byte {
 	var b bytes.Buffer
 	writeLen := func(n int) {
 		if n < fcgiShortParamLenMax {
-			b.WriteByte(byte(n))
+			b.WriteByte(byte(n)) //nolint:gosec // G115: the branch guarantees n < 128, the FastCGI one-byte length form.
 			return
 		}
-		b.WriteByte(byte(n>>fcgiLongParamLenByte3Shift) | fcgiLongParamLenFlag)
-		b.WriteByte(byte(n >> fcgiLongParamLenByte2Shift))
-		b.WriteByte(byte(n >> fcgiLongParamLenByte1Shift))
-		b.WriteByte(byte(n))
+		// G115 below: the FastCGI four-byte length form defines each octet as a
+		// shift of n, so truncating to a byte is the encoding, not a loss.
+		b.WriteByte(byte(n>>fcgiLongParamLenByte3Shift) | fcgiLongParamLenFlag) //nolint:gosec // G115: see above.
+		b.WriteByte(byte(n >> fcgiLongParamLenByte2Shift))                      //nolint:gosec // G115: see above.
+		b.WriteByte(byte(n >> fcgiLongParamLenByte1Shift))                      //nolint:gosec // G115: see above.
+		b.WriteByte(byte(n))                                                    //nolint:gosec // G115: see above.
 	}
 	for _, kv := range pairs {
 		writeLen(len(kv[fcgiParamNameIndex]))

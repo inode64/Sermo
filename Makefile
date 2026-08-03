@@ -66,7 +66,7 @@ config_subst = sed -e 's|/usr/share/sermo|$(SERMO_DATADIR)|g' -e 's|/etc/sermo|$
 # Rewrite runtime/state dirs in the tmpfiles config.
 tmpfiles_subst = sed -e 's|/run/sermo|$(SERMO_RUNDIR)|g' -e 's|/var/lib/sermo|$(SERMO_STATEDIR)|g'
 
-.PHONY: all build test vet fmt fmt-check lint modules-check actions-lint race fuzz deadcode quality-report cover-gate nilaway custom-gcl scripts-lint yaml-fmt yaml-fmt-check yaml-lint yaml-validate markdown-check web web-check web-lint web-e2e validate check cover tidy clean \
+.PHONY: all build test vet fmt fmt-check lint modules-check actions-lint race fuzz deadcode quality-report cover-gate custom-gcl scripts-lint yaml-fmt yaml-fmt-check yaml-lint yaml-validate markdown-check web web-check web-lint web-e2e validate check cover tidy clean \
         install install-bin install-catalog install-examples install-config install-templates install-tmpfiles install-systemd install-openrc \
         uninstall
 
@@ -190,9 +190,9 @@ SAFETY_PACKAGES := ./internal/operation ./internal/process ./internal/locks ./in
 # golangci-lint carrying the NilAway module plugin. NilAway is not a stock
 # linter, so the gate needs a bespoke binary built from .custom-gcl.yml; plain
 # `golangci-lint run` fails with `plugin "nilaway" not found` against our config.
-# Both versions are pinned there, so the binary is rebuilt only when that file
-# changes. NilAway gates the whole tree (production only, via the plugin's
-# exclude-test-files): the rollout is finished and no new nil flow may appear.
+# That file only pins what to compile in — every linter, NilAway included, is
+# configured in .golangci.yml and runs in the single `custom-gcl run` below.
+# Both versions are pinned there, so the binary is rebuilt only when it changes.
 CUSTOM_GCL := bin/custom-gcl
 
 $(CUSTOM_GCL): .custom-gcl.yml
@@ -201,28 +201,20 @@ $(CUSTOM_GCL): .custom-gcl.yml
 
 custom-gcl: $(CUSTOM_GCL)
 
-# Static analysis. Finds Go-installed tools in ~/go/bin: staticcheck, revive,
-# custom-gcl (gosec, NilAway and focused bug analyzers via .golangci.yml),
-# govulncheck and deadcode.
+# Static analysis. Finds Go-installed tools in ~/go/bin: staticcheck,
+# custom-gcl (gosec, NilAway, revive and focused bug analyzers, all configured
+# in .golangci.yml), govulncheck and deadcode.
 lint: fmt-check $(CUSTOM_GCL)
 	@echo "go fix -diff $(GO_PACKAGES)"
 	@go fix -diff $(GO_PACKAGES)
 	@echo "staticcheck -checks=all $(GO_PACKAGES)"
 	@$(LINT_CACHE_ENV) staticcheck -checks=all $(GO_PACKAGES)
-	@echo "revive -config revive.toml $(GO_PACKAGES)"
-	@$(LINT_PATH) revive -config revive.toml $(GO_PACKAGES)
-	@echo "custom-gcl run (includes nilaway)"
+	@echo "custom-gcl run (includes nilaway, revive)"
 	@$(LINT_CACHE_ENV) $(CUSTOM_GCL) run $(GO_PACKAGES)
 	@echo "govulncheck $(GO_PACKAGES)"
 	@$(LINT_CACHE_ENV) govulncheck $(GO_PACKAGES)
 	@echo "deadcode -test $(GO_PACKAGES)"
 	@$(LINT_PATH) deadcode -test $(GO_PACKAGES)
-
-# NilAway alone, through the same binary and .golangci.yml settings the gate
-# uses, so there is exactly one place that configures it.
-nilaway: $(CUSTOM_GCL)
-	@echo "custom-gcl run --enable-only nilaway $(GO_PACKAGES)"
-	@$(LINT_CACHE_ENV) $(CUSTOM_GCL) run --enable-only nilaway $(GO_PACKAGES)
 
 # Verify module checksums and fail when the dependency manifests are not tidy.
 modules-check:

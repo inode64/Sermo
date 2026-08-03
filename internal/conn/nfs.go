@@ -65,6 +65,7 @@ func probeRPCNull(ctx context.Context, cfg Config, defaultPort int, program, ver
 // (RFC 5531 §11) and reads the (possibly fragmented) reply.
 func rpcCallTCP(c net.Conn, payload []byte) ([]byte, error) {
 	frame := make([]byte, rpcWordBytes+len(payload))
+	//nolint:gosec // G115: ONC RPC record marking carries a 31-bit fragment length; payload is the fixed NULL call this package builds.
 	binary.BigEndian.PutUint32(frame, uint32(len(payload))|rpcFragmentLastMask)
 	copy(frame[rpcWordBytes:], payload)
 	if _, err := c.Write(frame); err != nil {

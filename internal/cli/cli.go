@@ -1295,7 +1295,9 @@ func (a App) serviceStatus(ctx context.Context, opts options) (servicemgr.Servic
 	}
 
 	service := opts.service()
-	target := control.Target{Unit: service, Backend: detection.Backend, Manager: manager}
+	// Only Unit and Manager are read below; the config branch replaces the whole
+	// target when it resolves one, so setting Backend here would never be seen.
+	target := control.Target{Unit: service, Manager: manager}
 	if cfg, err := a.LoadConfig(opts.globalPath()); err == nil {
 		if canonical, ok := cfg.CanonicalServiceName(service); ok {
 			service = canonical

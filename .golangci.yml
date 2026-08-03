@@ -1,10 +1,12 @@
 # golangci-lint v2 configuration for Sermo.
 #
-# Its purpose is to run gosec plus a small set of focused bug analyzers that are
-# not covered by the standalone tools. The other standards are covered by
-# dedicated tools (gofmt, staticcheck, revive via revive.toml, govulncheck).
+# This file is the single source of truth for every analyzer except gofmt,
+# staticcheck, govulncheck and deadcode, which stay standalone in `make lint`.
+# revive and NilAway both run from here — there is no revive.toml.
 #
-# Run with:  golangci-lint run        (requires golangci-lint v2)
+# Run with:  make lint
+# NilAway is a module plugin, so it needs bin/custom-gcl (see .custom-gcl.yml);
+# a plain `golangci-lint run` fails with `plugin "nilaway" not found`.
 version: "2"
 
 run:
@@ -42,8 +44,11 @@ linters:
     - gocyclo  # reject functions above the established cyclomatic complexity budget
     - gocritic  # focused stable bug and duplication checks (see settings)
     - godoclint  # exported APIs must retain actionable Go documentation
+    - godot  # declaration comments end in a period (already true tree-wide)
+    - godox  # no TODO/FIXME/BUG left in code; pending work belongs in TODO.md
     - goprintffuncname  # printf-like helpers must end in f
     - gosec
+    - govet  # see settings.govet: enable-all minus fieldalignment/shadow
     - gomoddirectives  # reject unexpected replace/exclude/retract directives
     - gomodguard_v2  # direct dependencies must be approved below
     - interfacebloat  # interfaces with too many methods (web.Backend excluded below)
@@ -59,6 +64,7 @@ linters:
     - mirror  # bytes.Index vs bytes.IndexByte, …
     - misspell
     - mnd  # require names for domain numbers (timeouts, units, protocol fields, exit codes)
+    - nakedret  # naked returns hide which value is returned in long functions
     - nilaway  # module plugin: nil-flow analysis over production code (see settings.custom)
     - nilerr
     - nilnil  # nil values paired with nil errors must be explicitly justified
@@ -71,6 +77,7 @@ linters:
     - predeclared  # avoid shadowing Go predeclared identifiers
     - reassign  # writes to other packages' package-level vars
     - recvcheck  # mixed value/pointer receivers on one type
+    - revive  # style and defect rules (see settings.revive.rules)
     - rowserrcheck  # database/sql Rows.Err() left unchecked
     - sloglint  # consistent log/slog usage
     - loggercheck  # log key/value pairs must match the logger API
@@ -113,6 +120,11 @@ linters:
         - fmt.Fprint
         - fmt.Fprintf
         - fmt.Fprintln
+      # Off by default. An unchecked `x := v.(T)` panics on the wrong type;
+      # forcetypeassert already gates this, so keeping both costs nothing and
+      # survives either linter being dropped. check-blank stays off: it reports
+      # 203 deliberate `_ =` discards.
+      check-type-assertions: true
     gocognit:
       # Pin the current clean complexity budget instead of inheriting a tool
       # default that can change on upgrade. Lower only alongside a refactor.
@@ -187,9 +199,14 @@ linters:
       # Every analyzer `go vet` does not run by default — nilness, unusedwrite,
       # sortslice, waitgroup, atomicalign, deepequalerrors, reflectvaluecompare,
       # httpmux, hostport — is clean here, so they are gated to keep it that way.
-      # fieldalignment is a struct-layout debate (50 findings, all cosmetic
-      # ordering); shadow flags the idiomatic `if err := f(); err != nil`
-      # redeclaration 50 times, almost all in tests. Both stay off deliberately.
+      # NOTE: this block was dead until govet was added to linters.enable above.
+      # With `default: none` a settings block alone runs nothing, so these
+      # analyzers had never actually gated anything; turning them on found a real
+      # unusedwrite in cli.go. Keep govet in the enable list, not just here.
+      # fieldalignment is a struct-layout debate (measured 267 findings on
+      # production files, all cosmetic ordering); shadow flags the idiomatic
+      # `if err := f(); err != nil` redeclaration 38 times in production alone.
+      # Both stay off deliberately. Re-measure before quoting these numbers.
       enable-all: true
       disable:
         - fieldalignment
@@ -287,6 +304,107 @@ linters:
       # Eclipse Mosquitto — real MQTT broker name in catalog/tests.
       ignore-rules:
         - mosquitto
+    perfsprint:
+      # Off by default: fmt.Sprintf("%v", err) allocates for what err.Error()
+      # already returns. Every other perfsprint check is on by default.
+      err-error: true
+    revive:
+      # Was a standalone `revive -config revive.toml` step that ran WITHOUT
+      # -set_exit_status, so it printed findings and never failed anything.
+      # Running it here fixes the gate and keeps one config: test files are
+      # scoped out by the `_test\.go$` exclusion rule like every other linter.
+      # golangci-lint rejects an unknown rule name (exit 7), so a typo here
+      # cannot silently switch a rule off.
+      rules:
+        # revive's default set.
+        - name: blank-imports
+        - name: context-as-argument
+        - name: context-keys-type
+        - name: dot-imports
+        - name: empty-block
+        - name: error-naming
+        - name: error-return
+        - name: error-strings
+        - name: errorf
+        - name: exported
+        - name: if-return
+        - name: increment-decrement
+        - name: indent-error-flow
+        - name: package-comments
+        - name: range
+        - name: receiver-naming
+        - name: redefines-builtin-id
+        - name: superfluous-else
+        - name: time-naming
+        - name: unexported-return
+        - name: unreachable-code
+        - name: var-declaration
+        - name: var-naming
+        # revive v1.15 moved the package-name checks out of var-naming into this
+        # rule; without it that coverage silently disappears.
+        - name: package-naming
+        - name: unused-parameter
+        - name: struct-tag
+        - name: import-shadowing
+        - name: modifies-value-receiver
+        # Concurrency footguns.
+        - name: atomic
+        - name: waitgroup-by-value
+        - name: datarace
+        # Capturing a range variable by pointer/address in a goroutine or
+        # deferred closure is still wrong even with Go 1.22 per-iteration loop
+        # vars, when the address escapes across iterations.
+        - name: range-val-address
+        - name: range-val-in-closure
+        # Control-flow and comparison defects.
+        - name: unconditional-recursion
+        - name: identical-branches
+        - name: constant-logical-expr
+        - name: bool-literal-in-expr
+        - name: time-equal
+        - name: string-of-int
+        # Every defer sub-check except `recover`: assist.Recover is invoked as
+        # `defer assist.Recover(&err)`, so recover() *is* inside the deferred
+        # function, but the rule only sees the helper body and reports it. The
+        # rest (defer in a loop, return inside defer, deferring a method value)
+        # are real footguns and stay on.
+        - name: defer
+          arguments:
+            - - loop
+              - call-chain
+              - method-call
+              - return
+              - immediate-recover
+        # Redundancy and dead syntax.
+        - name: duplicated-imports
+        - name: redundant-import-alias
+        - name: useless-break
+        - name: unnecessary-stmt
+        - name: unnecessary-format
+        - name: optimize-operands-order
+        - name: early-return
+        - name: use-any
+        - name: comment-spacings
+    prealloc:
+      # Off by default; simple and range-loops are already on. Classic
+      # index-loop appends get the same capacity hint as range appends.
+      for-loops: true
+    sloglint:
+      # Both off by default and both already satisfied tree-wide. A formatted
+      # message defeats log aggregation, and mixed key casing defeats querying.
+      static-msg: true
+      key-naming-case: snake
+    usestdlibvars:
+      # All off by default. tls-signature-scheme stays off: its only hit is
+      # `keyAlgorithmEd25519 = "Ed25519"` in a const block, and the suggested
+      # tls.Ed25519.String() is a method call, so it cannot be a constant.
+      time-weekday: true
+      time-month: true
+      time-layout: true
+      crypto-hash: true
+      default-rpc-path: true
+      sql-isolation-level: true
+      constant-kind: true
     nolintlint:
       # A suppression is part of the code's safety contract: name the checker,
       # explain the exception, and fail if it stops being necessary.
@@ -296,27 +414,45 @@ linters:
     unparam:
       # No package in this application is a supported external API.
       check-exported: true
-  # Considered and deliberately NOT enabled:
-  #   containedctx — daemon-lifetime contexts are intentionally held by monitor,
-  #                  loader, state and web server owners.
-  #   embeddedstructfieldcheck — 69 field-ordering/whitespace findings; the
+  # Considered and deliberately NOT enabled. Counts are measured on production
+  # files only (run.tests: false); re-measure before reopening any of these.
+  #   containedctx (5) — daemon-lifetime contexts are intentionally held by
+  #                  monitor, loader, state and web server owners.
+  #   embeddedstructfieldcheck (64) — field-ordering/whitespace findings; the
   #                  existing compact embedded check types are intentionally uniform.
-  #   err113 — operator-facing configuration errors need their concrete context,
-  #             not a sentinel type for every message.
-  #   gochecknoglobals — registries, host detection and test injection are owned
-  #                  package state, not mutable ambient application state.
+  #   err113 (469) — operator-facing configuration errors need their concrete
+  #                  context, not a sentinel type for every message.
+  #   gochecknoglobals (122) — registries, host detection and test injection are
+  #                  owned package state, not mutable ambient application state.
+  #   cyclop (202) — a second cyclomatic metric on top of gocyclo/gocognit,
+  #                  which already carry reviewed budgets.
+  #   funlen (9) / nestif (27) — length and nesting are already bounded by
+  #                  gocognit, gocyclo and maintidx; these would add a third axis.
+  #   funcorder (76) / nonamedreturns (76) — the codebase orders methods by
+  #                  topic and uses named returns deliberately in defer paths.
+  #   noinlineerr (496) — bans the idiomatic `if err := f(); err != nil`.
+  #   lll (547) / nlreturn (2911) / wsl_v5 (5508) / varnamelen (822) /
+  #   exhaustruct (920) — whitespace, line-length and total-initialisation
+  #                  churn with no defect-finding value here.
+  #   decorder, grouper, gosmopolitan — measured at 0, but their default
+  #                  configurations assert almost nothing; enabling them would
+  #                  document intent the code does not actually depend on.
   exclusions:
     generated: strict
     warn-unused: true
 
+    # `go list ./...` reaches a vendored Go sample under node_modules. GO_PACKAGES
+    # never includes it, so this suppresses nothing in `make lint` and warn-unused
+    # says so; it stays as the guard for anyone running the config over ./...
     paths:
       - '(^|/)node_modules/'
 
-    # Sermo es una aplicación, no una librería pública. No exigiría
-    # documentación para cada símbolo exportado de paquetes internal.
-    presets:
-      - comments
-
+    # The `comments` preset used to be listed here, on the argument that an
+    # application need not document every exported symbol of an internal package.
+    # Removing it changes nothing — measured at 0 findings — because the tree
+    # already documents them, and godoclint plus revive's `exported` and
+    # `package-comments` rules were the very checks it was cancelling. Keeping it
+    # would silently contradict AGENTS.md, which states `exported` is on.
     rules:
       # Test fixtures and table data need literal values and intentionally
       # incomplete fakes, but test-specific linters (thelper, tparallel,
@@ -352,8 +488,11 @@ linters:
           - gocyclo
           - gocritic
           - godoclint
+          - godot
+          - godox
           - goprintffuncname
           - gosec
+          - govet
           - gomoddirectives
           - gomodguard_v2
           - interfacebloat
@@ -369,6 +508,7 @@ linters:
           - mirror
           - misspell
           - mnd
+          - nakedret
           - nilerr
           - nilnil
           - nilnesserr
@@ -379,6 +519,7 @@ linters:
           - predeclared
           - reassign
           - recvcheck
+          - revive
           - rowserrcheck
           - sloglint
           - loggercheck
@@ -392,37 +533,25 @@ linters:
           - whitespace
           - wrapcheck
 
-      # These native protocol encoders deliberately select fixed-width wire
-      # fields. Their request builders have protocol-level regression tests;
-      # keep G115 active everywhere else, including the remaining conn probes.
-      - path: '^internal/conn/(fpm|ipp|kafka|mqtt|nfs|openvpn|rdp|smb|snmp)\.go$'
-        linters:
-          - gosec
-        text: G115
+      # G115 used to be excluded for nine whole protocol encoders here, which also
+      # exempted any conversion added to them later. The 21 deliberate wire-format
+      # truncations now carry their own //nolint:gosec at the call site, naming the
+      # field width that makes each one the encoding rather than a loss — so a new
+      # unchecked conversion in those files is caught again, and nolintlint fails
+      # the build if one of the suppressions stops being necessary.
 
       # Los protocolos se registran intencionadamente durante init.
       - linters:
           - gochecknoinits
         path: '^internal/conn/'
 
-      # Entry points may call os.Exit / print --version / inject default sleep.
-      # Production packages under internal/ stay subject to forbidigo.
-      - linters:
-          - forbidigo
-        path: '^cmd/'
-      - linters:
-          - forbidigo
-        path: '^internal/web/build/'
 
       # Store binds ctx at OpenContext; *Context SQL uses Store.sqlCtx(). The
       # linter does not trace that embedded store context through method
       # receivers, so CLI/state paths that correctly use the store look wrong.
       - linters:
           - contextcheck
-        path: '^internal/state/'
-      - linters:
-          - contextcheck
-        path: '^internal/cli/(monitor|panic|sla|state|watch|cli_monitor_state)\.go$'
+        path: '^internal/cli/(monitor|panic|sla|cli_monitor_state)\.go$'
 
       # wrapcheck zone policy (same idea as ireturn):
       #   ON  — operation, rules, config, state, app, cli, process, web, locks,

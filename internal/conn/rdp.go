@@ -98,6 +98,7 @@ func buildRDPNegRequest(protocols uint32) []byte {
 
 	// X.224 Connection Request: LI, CR(0xE0), DST-REF, SRC-REF, class.
 	x224 := make([]byte, x224HeaderBytes, x224HeaderBytes+len(neg))
+	//nolint:gosec // G115: X.224's length indicator is a single byte; neg is the fixed negotiation request built above.
 	x224[x224LengthIndicatorOffset] = byte(x224RequestVariableLenBase + len(neg))
 	x224[x224RequestPDUTypeOffset] = x224ConnectionRequest
 	x224[len(x224)-1] = x224ClassByte
@@ -106,6 +107,7 @@ func buildRDPNegRequest(protocols uint32) []byte {
 	// TPKT header (version 3).
 	pkt := make([]byte, tpktHeaderBytes, tpktHeaderBytes+len(x224))
 	pkt[tpktVersionOffset] = tpktVersion
+	//nolint:gosec // G115: TPKT carries a 16-bit total length; x224 is the fixed-size PDU assembled just above.
 	binary.BigEndian.PutUint16(pkt[tpktLengthOffset:], uint16(tpktHeaderBytes+len(x224)))
 	return append(pkt, x224...)
 }
