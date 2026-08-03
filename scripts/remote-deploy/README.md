@@ -86,6 +86,22 @@ created on success.
 `remote_collect_inventory.sh` mirrors `remote_stage.sh`'s read-only evidence
 collection for already installed hosts — keep both in step.
 
+## Web credentials
+
+Both orchestrators take the admin password from `SERMO_WEB_PASSWORD` (default
+`sermo-remote-admin`) and hand it to `generate_install_config.py`.
+
+Before generating, each host is probed for `/etc/sermo/credentials.env`. When it
+is there, the generated `sermo.yml` gets `password_file:` pointing at that file
+instead of a `password:` line holding a second copy of the secret. A host that
+already manages its own credentials keeps managing them, and the copy that would
+otherwise travel into config backups and paste buffers never exists. A host
+without the file still gets the literal password, so a first install needs no
+preparation.
+
+`password` and `password_file` are mutually exclusive in `sermo.yml`; the
+generator emits exactly one of them.
+
 ## Fleet install and update failure handling
 
 The first-four-host gate applies only to workflows that install, update, apply

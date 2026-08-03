@@ -204,11 +204,19 @@ for host in "${hosts[@]}"; do
 		continue
 	fi
 
+	# A host that already keeps its password in a credentials file keeps it:
+	# sermo.yml then references that file instead of carrying a second copy of
+	# the secret, which is the copy that ends up in backups.
+	cred_flag=()
+	if run_ssh "$host" "test -f /etc/sermo/credentials.env" 2>/dev/null; then
+		cred_flag=(--web-password-file /etc/sermo/credentials.env)
+	fi
+
 	if ! "${script_dir}/generate_install_config.py" \
 		--stage-root "$stage_root" \
 		--configs-root "${run_root}/configs" \
 		--report "${host_dir}/config-report.json" \
-		--web-password "$web_password" >/dev/null; then
+		--web-password "$web_password" "${cred_flag[@]}" >/dev/null; then
 		echo "  config generation failed" >&2
 		record "$host" "generate" "failed" "generate_install_config.py non-zero"
 		failures=$((failures + 1))

@@ -181,6 +181,11 @@ class GenerationOptions:
     hdparm_interval: str
     active_services_only: bool
     catalog_services_dir: Path
+    # When the host already keeps its credentials in a file, sermo.yml points at
+    # it instead of carrying a copy of the password. Two copies drift, and the
+    # one in sermo.yml is the one that ends up in backups and in a paste.
+    # Defaulted so existing callers keep the embedded-password behaviour.
+    web_password_file: str | None = None
 
 
 def read_text(path: Path) -> str:
@@ -288,8 +293,19 @@ defaults:
 web:
   address: 0.0.0.0
   port: {options.web_port}
-  password: {yaml_quote(options.web_password)}
-"""
+{web_credential_block(options)}"""
+
+
+def web_credential_block(options: GenerationOptions) -> str:
+    """Render the web credential line, preferring an existing credentials file.
+
+    A host that already has /etc/sermo/credentials.env keeps it: sermo.yml gets a
+    password_file pointing there rather than a second copy of the secret. Only a
+    host without one gets the literal password.
+    """
+    if options.web_password_file:
+        return f"  password_file: {yaml_quote(options.web_password_file)}\n"
+    return f"  password: {yaml_quote(options.web_password)}\n"
 
 
 def simple_watch(
@@ -2024,6 +2040,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--report", required=True, help="JSON report path to write.")
     parser.add_argument("--web-port", type=int, default=9797)
     parser.add_argument("--web-password", default="sermo-remote-admin")
+    parser.add_argument(
+        "--web-password-file",
+        default=None,
+        help="path to an existing credentials file on the host; when given, sermo.yml "
+        "references it with password_file instead of embedding --web-password",
+    )
     parser.add_argument("--storage-free-pct", default="5%")
     parser.add_argument("--expand-by", default="5G")
     parser.add_argument("--smart-interval", default="24h")
@@ -2049,6 +2071,7 @@ def main() -> int:
     options = GenerationOptions(
         web_port=args.web_port,
         web_password=args.web_password,
+        web_password_file=args.web_password_file,
         storage_free_pct=args.storage_free_pct,
         expand_by=args.expand_by,
         smart_interval=args.smart_interval,

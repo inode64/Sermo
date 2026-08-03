@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import importlib.util
 import json
 import sys
@@ -774,3 +775,23 @@ class SwapWatchGenerationTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class WebCredentialBlockTest(unittest.TestCase):
+    """sermo.yml must not carry a second copy of a password the host already has."""
+
+    def test_embeds_the_password_when_the_host_has_no_credentials_file(self):
+        block = generator.web_credential_block(default_options())
+        self.assertIn("password:", block)
+        self.assertNotIn("password_file:", block)
+
+    def test_references_the_credentials_file_when_one_exists(self):
+        options = dataclasses.replace(
+            default_options(), web_password_file="/etc/sermo/credentials.env"
+        )
+        block = generator.web_credential_block(options)
+        self.assertIn("password_file:", block)
+        self.assertIn("/etc/sermo/credentials.env", block)
+        # The literal must not survive alongside the reference: two copies drift,
+        # and this is the copy that lands in backups.
+        self.assertNotIn(default_options().web_password, block)
