@@ -71,3 +71,27 @@ rules:
       - metavariable-type:
           metavariable: $R
           type: "*process.CachingReader"
+
+  - id: redactor-must-not-mutate-its-argument
+    languages: [go]
+    severity: ERROR
+    message: >-
+      A cmdline redactor must not write through its own slice argument. Command
+      lines carry tokens and passwords, and the redacted copy is what read-only
+      viewers get; mutating in place rewrites the backend's own data, so the
+      privileged view silently loses the arguments too. Build on redactCloned,
+      which clones first.
+    patterns:
+      # Metavariables bind whole tokens, so the redact prefix is a regex on the
+      # function name rather than part of the pattern's identifier. The rule
+      # names the defect (writing through the argument) instead of the absence
+      # of the helper: pattern-not on the enclosing function eliminated both the
+      # good and the bad shape.
+      - pattern-inside: |
+          func $F($ITEMS []$T) []$T { ... }
+      - metavariable-regex:
+          metavariable: $F
+          regex: ^redact
+      - pattern-either:
+          - pattern: $ITEMS[$I].$FIELD = $V
+          - pattern: $ITEMS[$I] = $V

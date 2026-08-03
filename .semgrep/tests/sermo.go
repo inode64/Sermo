@@ -47,3 +47,20 @@ func readSharedSnapshot(r *process.CachingReader, pid int) bool {
 	_, ok := snap[pid]
 	return ok
 }
+
+type Blocker struct{ Cmdline string }
+
+func redactInPlace(items []Blocker) []Blocker {
+	for i := range items {
+		// ruleid: redactor-must-not-mutate-its-argument
+		items[i].Cmdline = ""
+	}
+	return items
+}
+
+// ok: redactor-must-not-mutate-its-argument
+func redactViaHelper(items []Blocker) []Blocker {
+	return redactCloned(items, func(b *Blocker) { b.Cmdline = "" })
+}
+
+func redactCloned[T any](items []T, redact func(*T)) []T { return items }
