@@ -177,7 +177,7 @@ func (s *Server) withAuth(next http.Handler) http.Handler {
 			return
 		}
 		if role == "" {
-			s.challenge(w)
+			s.denyUnauthenticated(w, r)
 			return
 		}
 		if !isReadMethod(r.Method) && role != roleAdmin {
@@ -191,6 +191,45 @@ func (s *Server) withAuth(next http.Handler) http.Handler {
 func (s *Server) challenge(w http.ResponseWriter) {
 	w.Header().Set(headerWWWAuthenticate, authBasicRealmSermo)
 	writeJSON(w, http.StatusUnauthorized, ActionResult{OK: false, Message: authMessageRequired})
+}
+
+// denyUnauthenticated refuses a request that carries no usable credential, and
+// decides whether the browser should be asked for one.
+//
+// WWW-Authenticate on a subresource is what made the dashboard re-prompt on its
+// own. The page holds an EventSource on /api/stream, and the server tells it to
+// reconnect every 5s; a reconnect that arrives without the cached credential
+// used to get the challenge back, which browsers answer with a modal password
+// box even though the user was doing nothing. Several dashboards open at once
+// multiply the reconnections and so the prompts.
+//
+// The challenge belongs on a document navigation, and on /login, which exists
+// precisely to summon the dialog and bounce back home. Everything else — API
+// calls, the stream — gets a plain 401 that the dashboard handles itself.
+func (s *Server) denyUnauthenticated(w http.ResponseWriter, r *http.Request) {
+	if wantsAuthDialog(r) {
+		s.challenge(w)
+		return
+	}
+	writeJSON(w, http.StatusUnauthorized, ActionResult{OK: false, Message: authMessageRequired})
+}
+
+// wantsAuthDialog reports whether a 401 for r should carry the Basic challenge.
+// Sec-Fetch-Mode is authoritative where the browser sends it: "navigate" is a
+// document load, while fetch and EventSource report cors/same-origin/no-cors.
+// Older clients fall back to Accept, where a document request asks for HTML and
+// the API asks for JSON or text/event-stream.
+func wantsAuthDialog(r *http.Request) bool {
+	// The two document routes always challenge, whatever the client sends: they
+	// are how a person reaches the dashboard, and the first login must work for
+	// a client that sets neither header.
+	if r.URL.Path == routePathRoot || r.URL.Path == routePathLogin {
+		return true
+	}
+	if mode := r.Header.Get(headerSecFetchMode); mode != "" {
+		return mode == secFetchModeNavigate
+	}
+	return strings.Contains(r.Header.Get(headerAccept), contentTypeHTML)
 }
 
 func (s *Server) handleWhoami(w http.ResponseWriter, r *http.Request) {

@@ -35,6 +35,8 @@ const hostMetricTotalSwap = "total_swap";
 const hostMetricLoad1 = "load1";
 const eventLogLimit = "500";
 const httpStatusServiceUnavailable = 503;
+const httpStatusUnauthorized = 401;
+const loginPath = "/login";
 const expansionPrefixApp = "app:";
 const expansionPrefixLibrary = "lib:";
 const expansionPrefixService = "svc:";
@@ -623,9 +625,27 @@ async function performLoad() {
   clearStatusAfterRefresh();
 }
 
+// redirectToLogin reacts to a 401 on an API call. The server sends the Basic
+// challenge only on a document navigation and on /login, so that a background
+// poll or an EventSource reconnect can no longer make the browser throw a
+// password box at someone who was just reading the dashboard. The cost of that
+// is that a 401 here would otherwise fail silently, so the page goes to /login,
+// which is the deliberate way to summon the dialog and return home. Guarded so
+// several concurrent polls cannot each start a navigation.
+let loginRedirectStarted = false;
+function redirectToLogin(res) {
+  if (!res || res.status !== httpStatusUnauthorized) return false;
+  if (!loginRedirectStarted) {
+    loginRedirectStarted = true;
+    window.location.assign(loginPath);
+  }
+  return true;
+}
+
 // jsonOrThrow parses a POST response as JSON (tolerating an empty body) and throws
 // with the server message (or HTTP status) when the request or its result failed.
 async function jsonOrThrow(res) {
+  if (redirectToLogin(res)) throw new Error("authentication required");
   const body = await res.json().catch(() => ({}));
   if (!res.ok || body.ok === false) throw new Error(body.message || ("HTTP " + res.status));
   return body;
@@ -6026,6 +6046,7 @@ function sharedBackendGeneration(results) {
 async function getJSONResult(url, dflt, expectedGeneration = 0) {
   try {
     const r = await fetch(url);
+    if (redirectToLogin(r)) return { ok: false, data: dflt };
     const generation = responseGeneration(r);
     if (generationMismatch(r, expectedGeneration)) {
       return { ok: false, data: dflt, generation, generationMismatch: true };
