@@ -64,3 +64,14 @@ func buildProcessCheck(b base, entry map[string]any, deps Deps) (Check, string) 
 	}
 	return processCheck{base: b, exes: exes, user: user, expect: expect, observe: deps.Processes, observeAny: deps.ProcessesAny}, ""
 }
+
+// buildStaleBinaryCheck builds a check reporting this service's processes whose
+// binary was replaced on disk. It takes no entry fields: the selectors it
+// inspects are the service's own `processes:`/`pidfile:` declarations, so there
+// is nothing left to configure per check.
+func buildStaleBinaryCheck(b base, deps Deps) (Check, string) {
+	if deps.StaleBinaries == nil {
+		return nil, "stale_binary check needs process discovery, unavailable here"
+	}
+	return staleBinaryCheck{base: b, stale: deps.StaleBinaries}, ""
+}

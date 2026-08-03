@@ -104,6 +104,8 @@ const targetStatePaused = "paused";
 const targetStateStopped = "stopped";
 const targetStateWarning = "warning";
 const targetStateStale = "stale";
+// Mirrors warningReasonStaleBinary in internal/app/metric_constants.go.
+const warningReasonStaleBinary = "stale_binary";
 const watchSampleStateFresh = "fresh";
 const targetStateOK = "ok";
 const targetStateMonitored = "monitored";
@@ -1501,7 +1503,23 @@ function serviceStateBadge(s) {
     ? "Process confirmed; checks and runtime metrics are not available yet"
     : "";
   const title = missing || blind || active;
-  return title ? tpl`<span title="${title}">${stateBadge(st)}</span>` : stateBadge(st);
+  // A warning carries a reason the operator must act on, and a tooltip is
+  // invisible until hovered — and never reachable on a touch screen. Show it
+  // next to the badge instead of hiding it in the title.
+  const reason = st === targetStateWarning && indicators
+    ? tpl` <span class="muted state-reason" title="${title}">${serviceWarningReason(s)}</span>`
+    : "";
+  const badge = title ? tpl`<span title="${title}">${stateBadge(st)}</span>` : stateBadge(st);
+  return reason ? tpl`${badge}${reason}` : badge;
+}
+
+// serviceWarningReason phrases the machine-readable cause the backend reports.
+// The wording lives here, so the backend never has to agree on a sentence.
+function serviceWarningReason(s) {
+  if (s && s.warning_reason === warningReasonStaleBinary) {
+    return "binary replaced on disk — restart to apply";
+  }
+  return "no process attributed";
 }
 
 function serviceStateCell(s) {
@@ -3027,6 +3045,12 @@ function procLabel(p) {
   if (p.exe_resolved && p.exe) {
     const label = cmd ? `${p.exe} ...` : p.exe;
     return tpl`<span class="truncate process-cmd" title="${cmd || p.exe}">${label}</span>`;
+  }
+  // A replaced binary resolves no exe, so without this the process reads as
+  // "unknown" — hiding the one fact that explains it and says what to do.
+  if (p.exe_previous) {
+    const title = `${p.exe_previous} was replaced or removed on disk; this process still runs the previous version${cmd ? `\n${cmd}` : ""}`;
+    return tpl`<span class="truncate process-cmd inactive" title="${title}">${p.exe_previous} (replaced on disk)</span>`;
   }
   if (cmd) {
     return tpl`<span class="truncate process-cmd" title="${cmd}">${cmd}</span>`;

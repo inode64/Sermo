@@ -2803,6 +2803,39 @@ Hook extras: `SERMO_PATH` (the changed path), `SERMO_CHANGE`
 conditions. An `older_than` event also sets `SERMO_MODIFIED_AT`,
 `SERMO_AGE_SECONDS` and `SERMO_VALUE` (the configured duration).
 
+### `stale_binary` — service running a replaced binary
+
+Service-scoped. Reports the service's processes whose executable was replaced or
+removed on disk — the normal result of upgrading a package without restarting
+the service, which keeps serving the previous version indefinitely.
+
+You do not write this check: Sermo injects it, named `stale-binary`, into every
+service that declares `processes:` or `pidfile:`, together with a rule that
+alerts and then restarts. It takes no fields; the selectors it inspects are the
+service's own.
+
+It exists because the condition is otherwise invisible or misleading. A process
+identified through the init backend keeps running with an unusable executable
+and nothing is reported at all; a process matched only by an `exe:` selector
+stops matching entirely, so the service merely looks like it has no processes
+and reads as `warning` with no stated cause.
+
+Set `restart_on_stale_binary: false` on a service to keep the alert and the
+notification but drop the restart:
+
+```yaml
+name: ovs-vswitchd
+restart_on_stale_binary: false   # restarting the dataplane cuts the host off
+```
+
+The flag governs this trigger only. A manual `sermoctl restart`, and remediation
+that restarts the service after a real failure, are unaffected. It inherits from
+`defaults:` like `dry_run`, so a whole host can opt out at once.
+
+A process whose executable was replaced still resolves no exe, so it matches no
+`exe` selector and is never signalled — see [safety.md](safety.md). This check
+reports the condition; it does not relax that rule.
+
 ### `process` — process by name
 
 A `process` watch tracks the processes whose **name** matches (the resolved exe

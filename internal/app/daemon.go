@@ -506,6 +506,13 @@ func buildWorker(ctx context.Context, name, unit string, tree map[string]any, de
 		return worker.cycle
 	})
 	pidsForCycle := func() []int { return processPIDs(processesForCycle()) }
+	// Reuse the cycle's memoized discovery: the stale-binary check runs once per
+	// service per cycle, and rediscovering would repeat the whole selector sweep
+	// (and, on systemd, the backend PID lookup's subprocesses) for a set that is
+	// normally empty.
+	checkDeps.StaleBinaries = func() []process.StaleBinary {
+		return discoverer.StaleBinariesIn(processesForCycle(), selectors)
+	}
 	sampleMetrics := metricSampler(name, tree, collector, pidsForCycle)
 	liveSample := liveSampler(name, deps.LiveCollector, deps.Live, deps.ServiceMetrics, pidsForCycle, deps.Now)
 	if noResident {

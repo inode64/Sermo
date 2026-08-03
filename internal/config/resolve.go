@@ -63,6 +63,7 @@ func (c *Config) resolveExpandedService(merged map[string]any, name string) (map
 	errs = append(errs, c.resolveChangedLibraries(expanded)...)
 	errs = append(errs, expandReloadOnChange(expanded)...)
 	errs = append(errs, c.expandApps(expanded)...)
+	errs = append(errs, expandStaleBinary(expanded)...)
 	errs = append(errs, c.expandServiceSugar(expanded)...)
 	return expanded, errs
 }

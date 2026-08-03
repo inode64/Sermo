@@ -80,6 +80,7 @@ var validGlobalPathKeys = set(
 var validDefaultsKeys = set(
 	keyDryRun,
 	keyRestartOnChange,
+	keyRestartOnStaleBinary,
 	sectionClearWindow,
 	sectionPolicy,
 	sectionRuleWindow,

@@ -221,6 +221,8 @@ func checkReadings(checkType string, data map[string]any) []web.WatchReading {
 		return fileCheckReadings(data)
 	case checks.CheckTypeProcess:
 		return processCheckReadings(data)
+	case checks.CheckTypeStaleBinary:
+		return staleBinaryCheckReadings(data)
 	case checks.CheckTypeSize:
 		return sizeCheckReadings(data)
 	case checks.CheckTypeTCP, checks.CheckTypePorts:
@@ -472,6 +474,16 @@ func processCheckReadings(data map[string]any) []web.WatchReading {
 		addIntMetric(watchReadingFieldRSS, watchReadingLabelRSS, metrics.MetricUnitBytes).
 		addInt(watchReadingFieldCPUTicks, watchReadingLabelCPUTicks).
 		addIntMetric(metrics.MetricIO, watchReadingLabelIO, metrics.MetricUnitBytes).
+		readings()
+}
+
+// staleBinaryCheckReadings surfaces which binaries were replaced and which
+// processes still run them. Without this the check computes both and the
+// dashboard drops them, leaving the operator with only a count.
+func staleBinaryCheckReadings(data map[string]any) []web.WatchReading {
+	return readingsFrom(data).
+		addString(checks.DataKeyPath, watchReadingLabelPath).
+		addString(checks.DataKeyPIDs, watchReadingLabelPIDs).
 		readings()
 }
 

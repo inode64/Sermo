@@ -1,6 +1,12 @@
 name: ovs-vswitchd
 display_name: Open vSwitch Server
 category: virtualization
+# Restarting the dataplane tears down every bridge and flow table, so a host
+# whose uplink is OVS-managed disappears. A replaced binary is therefore alerted
+# and notified but never restarted automatically; restart it by hand, in a
+# window where losing the dataplane is acceptable. This governs that trigger
+# only — a manual restart and remediation for a real failure are unaffected.
+restart_on_stale_binary: false
 service: ovs-vswitchd
 apps:
   - ovs-vswitchd

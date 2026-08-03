@@ -1,6 +1,11 @@
 name: ovsdb-client
 display_name: Open vSwitch Client
 category: virtualization
+# Tied to the same OVS control socket as ovsdb-server, so restart churn during
+# an OVS event compounds the dataplane risk. A replaced binary is alerted and
+# notified but never restarted automatically. This governs that trigger only —
+# a manual restart and remediation for a real failure are unaffected.
+restart_on_stale_binary: false
 service: ovsdb-client
 apps:
   - ovsdb-client

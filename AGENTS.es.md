@@ -733,18 +733,18 @@ Notas de herramientas:
     `asasalint`, `bidichk`, `bodyclose`, `canonicalheader`, `contextcheck`,
     `copyloopvar`, `durationcheck`, `errcheck`, `errchkjson`, `errorlint`,
     `exhaustive`, `fatcontext`, `forbidigo`, `forcetypeassert`, `gochecksumtype`,
-    `gosec`, `ineffassign`, `makezero`, `nilerr`, `nilnesserr`, `nilnil`,
-    `noctx`, `nosprintfhostport`, `reassign`, `recvcheck`, `rowserrcheck`,
-    `sqlclosecheck`, `unqueryvet`, `wastedassign`
+    `gosec`, `govet`, `ineffassign`, `makezero`, `nilaway`, `nilerr`,
+    `nilnesserr`, `nilnil`, `noctx`, `nosprintfhostport`, `reassign`,
+    `recvcheck`, `rowserrcheck`, `sqlclosecheck`, `unqueryvet`, `wastedassign`
   - *Forma de la API y arquitectura:*
     `asciicheck`, `depguard`, `errname`, `gochecknoinits`, `godoclint`,
     `gomoddirectives`, `gomodguard`, `iface`, `inamedparam`, `interfacebloat`, `iotamixing`,
     `ireturn`, `musttag`, `predeclared`, `wrapcheck`
   - *Idioma y modernización:*
     `dogsled`, `dupword`, `exptostd`, `gocheckcompilerdirectives`, `gocritic`,
-    `goprintffuncname`, `intrange`, `loggercheck`, `mirror`, `misspell`,
-    `modernize`, `nolintlint`, `sloglint`, `unconvert`, `usestdlibvars`,
-    `whitespace`
+    `godot`, `godox`, `goprintffuncname`, `intrange`, `loggercheck`, `mirror`,
+    `misspell`, `modernize`, `nakedret`, `nolintlint`, `revive`, `sloglint`,
+    `unconvert`, `usestdlibvars`, `whitespace`
   - *Tests:*
     `testableexamples`, `thelper`, `tparallel`, `usetesting`
 

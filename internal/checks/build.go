@@ -125,6 +125,10 @@ type Deps struct {
 	// accept systemd's MainPID/cgroup process set instead of failing on an
 	// intentionally absent pidfile.
 	PidfileFallbackPIDs func() []int
+	// StaleBinaries reports this service's processes whose binary was replaced
+	// or removed on disk, for `stale_binary` checks. It is read-only: such a
+	// process resolves no exe, so it is still never signalled.
+	StaleBinaries StaleBinariesFunc
 	// StorageUsage reports filesystem usage for `storage` checks. Nil uses statfs.
 	StorageUsage StorageUsageFunc
 	// NetSampler observes a network interface for `net` checks. Nil uses /sys.
@@ -334,6 +338,7 @@ var checkBuilders = map[string]checkBuilder{
 	CheckTypeLibraries:    func(in checkBuildInput) (Check, string) { return buildLibrariesCheck(in.base, in.entry) },
 	CheckTypeMetric:       func(in checkBuildInput) (Check, string) { return buildMetricCheck(in.base, in.entry, in.deps) },
 	CheckTypeProcess:      func(in checkBuildInput) (Check, string) { return buildProcessCheck(in.base, in.entry, in.deps) },
+	CheckTypeStaleBinary:  func(in checkBuildInput) (Check, string) { return buildStaleBinaryCheck(in.base, in.deps) },
 	CheckTypeCount:        func(in checkBuildInput) (Check, string) { return buildCountCheck(in.base, in.entry) },
 	CheckTypeStorage:      func(in checkBuildInput) (Check, string) { return buildStorageCheck(in.base, in.entry, in.deps) },
 	CheckTypeAutofs:       func(in checkBuildInput) (Check, string) { return buildAutofsCheck(in.base, in.entry, in.deps) },

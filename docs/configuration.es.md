@@ -2894,6 +2894,42 @@ Extras del hook: `SERMO_PATH` (la ruta cambiada), `SERMO_CHANGE`
 condiciones de tamaño. Un evento `older_than` también establece `SERMO_MODIFIED_AT`,
 `SERMO_AGE_SECONDS` y `SERMO_VALUE` (la duración configurada).
 
+### `stale_binary` — servicio ejecutando un binario reemplazado
+
+De ámbito servicio. Reporta los procesos del servicio cuyo ejecutable fue
+reemplazado o eliminado del disco: el resultado normal de actualizar un paquete
+sin reiniciar el servicio, que sigue sirviendo la versión anterior de forma
+indefinida.
+
+No se escribe a mano: Sermo lo inyecta, con el nombre `stale-binary`, en todo
+servicio que declare `processes:` o `pidfile:`, junto con una regla que alerta y
+después reinicia. No acepta campos; los selectores que inspecciona son los del
+propio servicio.
+
+Existe porque, de otro modo, la condición es invisible o engañosa. Un proceso
+identificado por el backend de init sigue corriendo con un ejecutable inservible
+y no se reporta nada; un proceso emparejado sólo por un selector `exe:` deja de
+casar por completo, así que el servicio simplemente parece no tener procesos y
+aparece como `warning` sin causa declarada.
+
+Pon `restart_on_stale_binary: false` en un servicio para conservar la alerta y
+la notificación pero omitir el reinicio:
+
+```yaml
+name: ovs-vswitchd
+restart_on_stale_binary: false   # reiniciar el dataplane deja al host sin red
+```
+
+La bandera gobierna únicamente este disparador. Un `sermoctl restart` manual, y
+la remediación que reinicia el servicio tras un fallo real, no se ven afectados.
+Se hereda desde `defaults:` igual que `dry_run`, así que un host entero puede
+quedar excluido de una vez.
+
+Un proceso cuyo ejecutable fue reemplazado sigue sin resolver exe, así que no
+casa con ningún selector `exe` y nunca recibe señales — ver
+[safety.es.md](safety.es.md). Este check reporta la condición; no relaja esa
+regla.
+
 ### `process` — proceso por nombre
 
 Un watch `process` rastrea los procesos cuyo **nombre** coincide (el basename del exe

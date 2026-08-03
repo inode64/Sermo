@@ -191,6 +191,12 @@ const keyDryRun = "dry_run"
 // EntryKeyDryRun is the shared per-target `dry_run` key.
 const EntryKeyDryRun = keyDryRun
 
+// keyRestartOnStaleBinary permits the generated stale-binary rule to restart.
+// It gates that one trigger: false keeps the alert and the notification and
+// drops only the restart action. A manual restart, and remediation for a real
+// failure, are unaffected.
+const keyRestartOnStaleBinary = "restart_on_stale_binary"
+
 // Stop policy field keys.
 const (
 	// StopPolicyKeyTermTimeout is stop_policy.term_timeout.
@@ -457,7 +463,7 @@ var metaKeys = map[string]struct{}{
 
 // perServiceDefaults are the only parts of global `defaults` that merge into a
 // service. Engine-wide settings never reach individual services.
-var perServiceDefaults = []string{keyDryRun, keyRestartOnChange, sectionStopPolicy, sectionPolicy, sectionRuleWindow, sectionClearWindow}
+var perServiceDefaults = []string{keyDryRun, keyRestartOnChange, keyRestartOnStaleBinary, sectionStopPolicy, sectionPolicy, sectionRuleWindow, sectionClearWindow}
 
 // Document is a single loaded catalog definition or configured target in raw,
 // unexpanded form.

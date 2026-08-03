@@ -263,7 +263,10 @@ Las decisiones de kill dependen de cómo se leen los hechos del proceso, así qu
 - **Un exe irresoluble falla seguro**: si `/proc/<pid>/exe` no se puede leer o
   se resuelve a una ruta `(deleted)` (binario reemplazado por una actualización), el proceso
   no coincide con ningún selector de exe — se reporta como un residual con exe desconocido y
-  nunca se señaliza.
+  nunca se señaliza. Sermo sí registra *qué* ruta ocupaba el binario borrado, para
+  que el check `stale_binary` pueda nombrarla, pero eso es sólo diagnóstico: ese
+  proceso sigue sin resolver exe, no coincide con nada y nunca se señaliza. No
+  hagas que una ruta borrada autorice emparejamiento ni kill.
 - **PID 1 y los kernel threads están protegidos** frente a señales terminadoras
   aunque un selector o camino de señal futuro los alcanzara. Las señales de
   reload no terminadoras como `SIGHUP` no se bloquean por esta protección.

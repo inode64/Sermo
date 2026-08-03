@@ -295,13 +295,16 @@ type Service struct {
 	ChecksFailing        int      `json:"checks_failing,omitempty"`        // required checks currently failing
 	ObservabilityReady   bool     `json:"observability_ready"`             // true when monitored service has fresh visible indicators
 	ObservabilityMissing []string `json:"observability_missing,omitempty"` // indicator groups still collecting
-	ActiveLocks          []string `json:"active_locks,omitempty"`          // named runtime locks blocking actions
-	OperationActive      bool     `json:"operation_active,omitempty"`      // true while the engine holds this service's operation lock: an action is running, whoever started it
-	PolicyCooldown       string   `json:"policy_cooldown,omitempty"`       // resolved automatic remediation cooldown
-	RemediationState     string   `json:"remediation_state,omitempty"`     // eligible | cooldown | rate limit | paused | pending | disabled
-	NextEligibleAt       string   `json:"next_eligible_at,omitempty"`      // RFC3339 when automatic remediation is next eligible
-	CanReload            bool     `json:"can_reload"`                      // true when init or native reload support is available
-	LastEvent            *Event   `json:"last_event,omitempty"`            // newest service event, when retained
+	// WarningReason is a machine-readable cause behind the gap (e.g.
+	// "stale_binary"), for the dashboard to phrase. Empty when unknown.
+	WarningReason    string   `json:"warning_reason,omitempty"`
+	ActiveLocks      []string `json:"active_locks,omitempty"`      // named runtime locks blocking actions
+	OperationActive  bool     `json:"operation_active,omitempty"`  // true while the engine holds this service's operation lock: an action is running, whoever started it
+	PolicyCooldown   string   `json:"policy_cooldown,omitempty"`   // resolved automatic remediation cooldown
+	RemediationState string   `json:"remediation_state,omitempty"` // eligible | cooldown | rate limit | paused | pending | disabled
+	NextEligibleAt   string   `json:"next_eligible_at,omitempty"`  // RFC3339 when automatic remediation is next eligible
+	CanReload        bool     `json:"can_reload"`                  // true when init or native reload support is available
+	LastEvent        *Event   `json:"last_event,omitempty"`        // newest service event, when retained
 
 	// Current process-tree runtime summary. These fields intentionally mirror
 	// ProcessTotals so the service list and detail expansion use the same
@@ -763,11 +766,15 @@ type SLASegment struct {
 // Process is a discovered process belonging to a service (parity with
 // `sermoctl processes`).
 type Process struct {
-	PID         int      `json:"pid"`
-	PPID        int      `json:"ppid"`
-	User        string   `json:"user,omitempty"`
-	Exe         string   `json:"exe,omitempty"`
-	ExeResolved bool     `json:"exe_resolved"`
+	PID         int    `json:"pid"`
+	PPID        int    `json:"ppid"`
+	User        string `json:"user,omitempty"`
+	Exe         string `json:"exe,omitempty"`
+	ExeResolved bool   `json:"exe_resolved"`
+	// ExePrevious names the path of a binary replaced or removed on disk while
+	// this process kept running. Without it the dashboard can only render such
+	// a process as "unknown".
+	ExePrevious string   `json:"exe_previous,omitempty"`
 	Role        string   `json:"role,omitempty"`
 	Source      string   `json:"source"`
 	Cmdline     []string `json:"cmdline,omitempty"`

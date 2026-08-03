@@ -27,6 +27,12 @@ type Process struct {
 	Cmdline []string `json:"cmdline,omitempty"` // display data; an explicit process cmd may filter on it
 	Role    string   `json:"role,omitempty"`    // selector name, "main" for backend seeds, or "child" for tree members
 	Source  string   `json:"source"`            // backend | pidfile | command_match | child
+
+	// ExePrev is the path of a binary replaced or removed on disk while this
+	// process kept running — typically a package upgrade without a restart.
+	// Diagnostic only: ExeOK stays false, so the process matches no exe
+	// selector and is never signalled.
+	ExePrev string `json:"exe_previous,omitempty"`
 }
 
 // Selector kinds.
@@ -119,6 +125,12 @@ type Selector struct {
 
 // Identity is the raw per-process data read from /proc. ExeOK is false when the
 // exe symlink could not be read or resolved to a real path (e.g. "(deleted)").
+//
+// ExePrev discriminates the "(deleted)" case from an unreadable link, which
+// ExeOK alone cannot: it is set only when the binary was replaced, and holds
+// the path it occupied. Diagnostic only — ExeOK stays false either way, so a
+// process whose binary was replaced still matches no exe selector and is never
+// signalled (see docs/safety.md).
 type Identity struct {
 	PID     int
 	PPID    int
@@ -128,6 +140,7 @@ type Identity struct {
 	Group   string
 	Exe     string
 	ExeOK   bool
+	ExePrev string // path of the replaced binary; empty unless it was deleted
 	State   string // /proc/<pid>/stat run state: R, S, D, Z (zombie), ...
 	Cmdline []string
 }

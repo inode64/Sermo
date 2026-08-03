@@ -146,6 +146,81 @@ func (d Discoverer) Discover(selectors []Selector) ([]Process, []string) {
 	return result, warnings
 }
 
+// StaleBinary reports one process still running a binary that was replaced or
+// removed on disk — almost always a package upgrade without a service restart.
+type StaleBinary struct {
+	PID  int    // the running process
+	Path string // the path the deleted binary occupied
+}
+
+// StaleBinariesIn lists the processes of a service whose binary was replaced on
+// disk. It covers both ways the condition surfaces: a process the init backend
+// or a pidfile already attributed (whose unusable exe is otherwise silent), and
+// one an exe selector would have matched but could not, which makes the service
+// look like it has no process at all.
+//
+// It takes the processes discovery already produced for this cycle rather than
+// rediscovering them, and reads the snapshot the caller already holds. It is a
+// read-only diagnostic: it never widens what Discover selects, so a process
+// reported here is still never signalled.
+func (d Discoverer) StaleBinariesIn(attributed []Process, selectors []Selector) []StaleBinary {
+	var out []StaleBinary
+	var seen map[int]bool
+	mark := func(pid int) bool {
+		if seen[pid] {
+			return false
+		}
+		if seen == nil {
+			seen = map[int]bool{}
+		}
+		seen[pid] = true
+		return true
+	}
+	for _, p := range attributed {
+		if p.ExePrev != "" && mark(p.PID) {
+			out = append(out, StaleBinary{PID: p.PID, Path: p.ExePrev})
+		}
+	}
+	if !hasExeSelector(selectors) {
+		return out
+	}
+
+	resolve := d.resolveUser()
+	idx := snapshotIndexFor(d.reader())
+	for _, pid := range idx.deleted {
+		if seen[pid] {
+			continue
+		}
+		id := idx.byPID[pid]
+		for i := range selectors {
+			if selectors[i].Type == SelectorCommandMatch && d.matchesDeletedExe(&selectors[i], id, resolve) {
+				mark(pid)
+				out = append(out, StaleBinary{PID: pid, Path: id.ExePrev})
+				break
+			}
+		}
+	}
+	return out
+}
+
+// StaleBinaries discovers the service's processes and reports the stale ones.
+// Callers that already discovered this cycle should use StaleBinariesIn.
+func (d Discoverer) StaleBinaries(selectors []Selector) []StaleBinary {
+	attributed, _ := d.Discover(selectors)
+	return d.StaleBinariesIn(attributed, selectors)
+}
+
+// hasExeSelector reports whether any selector matches on exe, the only kind a
+// replaced binary can silently break.
+func hasExeSelector(selectors []Selector) bool {
+	for i := range selectors {
+		if selectors[i].Type == SelectorCommandMatch && selectors[i].Exe != "" {
+			return true
+		}
+	}
+	return false
+}
+
 func backendPIDSeeds(fn func() []int) []int {
 	if fn == nil {
 		return nil
@@ -358,14 +433,41 @@ func (d Discoverer) matches(sel *Selector, id Identity, resolve UserResolver) bo
 	}
 	if sel.Exe != "" {
 		// Fail-safe exe match: exact resolved /proc/<pid>/exe, never cmdline.
-		exePath := sel.exePath
-		if exePath == "" {
-			exePath = canonicalizePath(sel.Exe)
-		}
-		if !id.ExeOK || exePath != id.Exe {
+		if !id.ExeOK || selectorExePath(sel) != id.Exe {
 			return false
 		}
 	}
+	return d.matchesNonExe(sel, id, resolve)
+}
+
+// selectorExePath returns the selector's canonical exe path, canonicalizing
+// lazily when ParseSelectors did not.
+func selectorExePath(sel *Selector) string {
+	if sel.exePath != "" {
+		return sel.exePath
+	}
+	return canonicalizePath(sel.Exe)
+}
+
+// matchesDeletedExe reports whether sel would have matched id if id's binary had
+// not been replaced on disk: the deleted path is exactly the selector's exe and
+// every other field matches. It authorizes nothing — matches() still returns
+// false for such a process, so it is never selected and never signalled. This
+// exists only so a package upgrade that silently breaks discovery can be
+// reported instead of surfacing as an unexplained absence of processes.
+func (d Discoverer) matchesDeletedExe(sel *Selector, id Identity, resolve UserResolver) bool {
+	if sel.Exe == "" || id.ExePrev == "" {
+		return false
+	}
+	if selectorExePath(sel) != id.ExePrev {
+		return false
+	}
+	return d.matchesNonExe(sel, id, resolve)
+}
+
+// matchesNonExe applies the cmd, user and group fields, which are shared by the
+// live and deleted-exe matchers.
+func (d Discoverer) matchesNonExe(sel *Selector, id Identity, resolve UserResolver) bool {
 	if sel.Cmd != "" {
 		re := sel.cmdRe
 		if re == nil {
@@ -407,6 +509,8 @@ func toProcess(id Identity, role, source string) Process {
 		Cmdline: id.Cmdline,
 		Role:    role,
 		Source:  source,
+
+		ExePrev: id.ExePrev,
 	}
 }
 
@@ -419,6 +523,11 @@ type snapshotIndex struct {
 	byPID    map[int]Identity
 	sorted   []int
 	children map[int][]int
+	// deleted lists the PIDs whose binary was replaced on disk, collected in
+	// the pass that builds children. Doing it here means every service shares
+	// one scan per snapshot refresh instead of each sweeping all PIDs to find
+	// a set that is normally empty.
+	deleted []int
 }
 
 func buildSnapshotIndex(snapshot map[int]Identity) *snapshotIndex {
@@ -429,7 +538,11 @@ func buildSnapshotIndex(snapshot map[int]Identity) *snapshotIndex {
 	}
 	for pid, id := range snapshot {
 		idx.children[id.PPID] = append(idx.children[id.PPID], pid)
+		if id.ExePrev != "" {
+			idx.deleted = append(idx.deleted, pid)
+		}
 	}
+	sort.Ints(idx.deleted)
 	for _, kids := range idx.children {
 		sort.Ints(kids)
 	}

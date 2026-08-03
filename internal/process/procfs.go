@@ -187,7 +187,7 @@ func (r OSReader) Identity(pid int) (Identity, bool) {
 		State:   state,
 		Cmdline: readCmdline(pid),
 	}
-	id.Exe, id.ExeOK = readExe(pid)
+	id.Exe, id.ExeOK, id.ExePrev = readExe(pid)
 	return id, true
 }
 
@@ -250,15 +250,20 @@ func readStatus(pid int) (ppid int, uid, gid uint32, state string, ok bool) {
 // readExe resolves /proc/<pid>/exe. It returns ok=false when the link cannot be
 // read or points at a deleted binary, so such a process never matches an exe
 // selector.
-func readExe(pid int) (string, bool) {
+//
+// A deleted binary additionally reports prev = the path it occupied. That is
+// diagnostic only — ok stays false, so the safety rule that an unresolvable exe
+// matches nothing and is never signalled is unchanged. Callers that act on prev
+// must not treat it as an identity.
+func readExe(pid int) (exe string, ok bool, prev string) {
 	target, err := os.Readlink(procPIDPath(pid, procFileExe))
-	if err != nil {
-		return "", false
+	if err != nil || target == "" {
+		return "", false, ""
 	}
-	if target == "" || strings.HasSuffix(target, procDeletedSuffix) {
-		return "", false
+	if strings.HasSuffix(target, procDeletedSuffix) {
+		return "", false, filepath.Clean(TrimDeletedSuffix(target))
 	}
-	return filepath.Clean(target), true
+	return filepath.Clean(target), true, ""
 }
 
 func readCmdline(pid int) []string {

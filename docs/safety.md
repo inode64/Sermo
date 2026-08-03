@@ -264,7 +264,10 @@ Kill decisions depend on how process facts are read, so this is fixed:
 - **Unresolvable exe fails safe**: if `/proc/<pid>/exe` cannot be read or
   resolves to a `(deleted)` path (binary replaced by an upgrade), the process
   matches no exe selector — it is reported as a residual with exe unknown and
-  is never signaled.
+  is never signaled. Sermo does record *which* path a deleted binary occupied,
+  so the `stale_binary` check can name it, but that is diagnostic only: such a
+  process still resolves no exe, matches nothing and is never signaled. Do not
+  make a deleted path authorize matching or killing.
 - **PID 1 and kernel threads are protected** from terminating signals even if a
   future selector or signal path would otherwise target them. Non-terminating
   reload signals such as `SIGHUP` are not blocked by this guard.
