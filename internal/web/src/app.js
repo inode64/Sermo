@@ -1430,8 +1430,15 @@ function applyUIStateToControls() {
 restoreUIState();
 
 let allEvents = [];
-let expCache = {};         // last rendered expansion HTML per key (avoids flicker)
-let expDetailCache = {};   // last /api/services/{name} JSON per svc expansion key
+// Prototype-free: both are indexed by an expansion key that ultimately comes
+// from location.hash. Every write today is behind a "svc:"/"wat:"/"app:" prefix
+// filter, so the key can never be exactly __proto__ and pollution is already
+// unreachable — but that safety lives in the callers, and a future one that
+// forgets the filter would reach Object.prototype through the assignment. A
+// null prototype removes the possibility here instead of relying on the guard
+// being repeated correctly at every call site.
+let expCache = Object.create(null);       // last rendered expansion HTML per key (avoids flicker)
+let expDetailCache = Object.create(null); // last /api/services/{name} JSON per svc expansion key
 const expCellCache = new Map(); // live detail cells preserved across outer table renders
 let eventExpanded = new Set();
 const liveOps = new Map(); // operations started from this browser session, keyed by service
