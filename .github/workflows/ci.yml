@@ -80,14 +80,23 @@ jobs:
           cache: true
       - run: make race
 
+  # Runs on every event, not just the weekly cron. The seven targets parse
+  # operator-supplied YAML and the process selectors that decide what may be
+  # signalled, so a crash here is a crash on a malformed config file — worth
+  # catching in the pull request that introduces it rather than up to a week
+  # later. Wall-clock cost is zero: jobs run in parallel and 7x20s plus build
+  # lands near four minutes, well inside the build & check job it runs beside.
+  # The cron and manual runs keep the deeper 60s budget.
   fuzz:
     name: configuration and safety-parser fuzzing
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
+    # Fuzzing is unbounded by nature; cap it so a wedged target cannot hold a
+    # runner for the account default of six hours.
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
           cache: true
-      - run: make fuzz FUZZ_TIME=60s
+      - run: make fuzz FUZZ_TIME=${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && '60s' || '20s' }}
