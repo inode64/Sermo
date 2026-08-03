@@ -1526,27 +1526,23 @@ function serviceStateBadge(s) {
   const blind = (st === targetStateWarning && indicators && !staleBinary)
     ? `The unit is active and its checks pass, but the daemon attributes no process to it, so ${indicators} stay unavailable`
     : "";
-  const stale = staleBinary ? "A running process uses a binary replaced on disk; restart to apply the installed version" : "";
   const active = st === targetStateActive
     ? "Process confirmed; checks and runtime metrics are not available yet"
     : "";
-  const title = missing || blind || stale || active;
-  // A warning carries a reason the operator must act on, and a tooltip is
-  // invisible until hovered — and never reachable on a touch screen. Show it
-  // next to the badge instead of hiding it in the title.
-  const reason = st === targetStateWarning
+  const title = missing || blind || active;
+  // Except for the stale-binary diagnostic, a warning carries a reason the
+  // operator must act on. A tooltip is invisible until hovered — and never
+  // reachable on a touch screen — so show that reason next to the badge.
+  const reason = st === targetStateWarning && !staleBinary
     ? tpl` <span class="muted state-reason" title="${title}">${serviceWarningReason(s)}</span>`
     : nothing;
   const badge = title ? tpl`<span title="${title}">${stateBadge(st)}</span>` : stateBadge(st);
   return reason ? tpl`${badge}${reason}` : badge;
 }
 
-// serviceWarningReason phrases the machine-readable cause the backend reports.
+// serviceWarningReason phrases a warning cause the dashboard needs to expose.
 // The wording lives here, so the backend never has to agree on a sentence.
-function serviceWarningReason(s) {
-  if (s && s.warning_reason === warningReasonStaleBinary) {
-    return "binary replaced on disk — restart to apply";
-  }
+function serviceWarningReason() {
   return "no process attributed";
 }
 

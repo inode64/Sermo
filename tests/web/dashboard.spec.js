@@ -17,6 +17,11 @@ const services = [
     uptime_seconds: 10800, status_observed_at: "2026-07-10T12:00:00Z",
     last_event: { time: "2026-07-10T11:59:00Z", kind: "reload", message: "config reloaded" },
   },
+  {
+    name: "stale", display_name: "Stale binary", category: "service", enabled: true,
+    monitored: true, status: "active", state: "warning", warning_reason: "stale_binary",
+    uptime_seconds: 3600, status_observed_at: "2026-07-10T12:00:00Z",
+  },
 ];
 
 const dashboard = {
@@ -279,6 +284,19 @@ test("stale watch samples are visible and filterable", async ({ page }) => {
   await page.locator('[data-wf="stale"]').click();
   await expect(row).toBeVisible();
   await expect(page.locator("#wat-row-net-wan")).toBeHidden();
+});
+
+test("stale binary keeps its warning state without a restart hint", async ({ page }) => {
+  const row = page.locator("#svc-row-stale");
+  const state = row.locator("td").nth(2);
+  await expect(state).toHaveText("warning");
+  await expect(state.locator(".state-reason")).toHaveCount(0);
+  await expect(state).not.toContainText("binary replaced on disk");
+
+  await row.locator(".row-toggle").click();
+  const detail = page.locator('[data-service-detail="stale"]');
+  await expect(detail.locator(".runtime-grid .state-reason")).toHaveCount(0);
+  await expect(detail).not.toContainText("binary replaced on disk");
 });
 
 test("paused monitoring is distinct from disabled configuration", async ({ page }) => {

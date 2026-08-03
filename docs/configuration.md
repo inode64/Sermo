@@ -2844,8 +2844,8 @@ and reads as `warning` with no stated cause.
 
 `stale_binary` is diagnostic rather than an availability failure: it does not
 reduce service health or SLA. When it finds a replaced executable, the service
-is shown as `warning` with a restart-needed explanation while its generated rule
-continues to alert and, where allowed, restart safely.
+is shown as `warning` without a separate restart hint in the State field, while
+its generated rule continues to alert and, where allowed, restart safely.
 
 Set `restart_on_stale_binary: false` on a service to keep the alert and the
 notification but drop the restart:
