@@ -276,6 +276,21 @@ func validateRuleActions(path string, entry map[string]any, ruleType string, act
 	}
 }
 
+// generatedRuleType picks the type a desugared rule must carry, honoring the
+// invariant enforced just above: only a rule with an operation action may be
+// remediation. Sugars that emit an optional operation action derive the type
+// from the actions rather than restating the rule.
+func generatedRuleType(then map[string]any) rules.RuleType {
+	actions, _ := then[rules.RuleFieldActions].([]any)
+	for _, raw := range actions {
+		action, _ := raw.(map[string]any)
+		if rules.ActionType(cfgval.String(action[rules.RuleFieldType])).IsOperation() {
+			return rules.RuleRemediation
+		}
+	}
+	return rules.RuleAlert
+}
+
 func validateRuleActionForms(path string, actions []valAction, isGuard bool, add addFunc) bool {
 	hasBlock := false
 	for _, action := range actions {
