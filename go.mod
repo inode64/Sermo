@@ -4,7 +4,7 @@ go 1.26.5
 
 require (
 	github.com/beevik/ntp v1.5.0
-	github.com/cloudsoda/go-smb2 v0.0.0-20260725063021-373e9530b9d6
+	github.com/cloudsoda/go-smb2 v0.0.0-20260803221621-0b399b9d036c
 	github.com/digitalocean/go-libvirt v0.0.0-20260609165003-6254771e63a8
 	github.com/evanw/esbuild v0.28.1
 	github.com/go-ldap/ldap/v3 v3.4.14
@@ -22,7 +22,7 @@ require (
 	golang.org/x/crypto v0.54.0
 	golang.org/x/net v0.57.0
 	golang.org/x/sys v0.47.0
-	modernc.org/sqlite v1.55.0
+	modernc.org/sqlite v1.56.0
 )
 
 require (
