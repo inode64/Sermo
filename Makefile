@@ -255,9 +255,13 @@ deadcode:
 # complexity baseline visible while it is reduced in focused refactors.
 # golangci-lint uses exit code 1 when it reports findings; preserve other
 # non-zero codes as analyzer failures.
-quality-report:
+#
+# It must use the custom binary like `lint` does: .golangci.yml declares the
+# NilAway module plugin, so a stock golangci-lint exits 3 with `plugin
+# "nilaway" not found` — a code this target correctly refuses to swallow.
+quality-report: $(CUSTOM_GCL)
 	@out="$$(mktemp)"; status=0; \
-	$(LINT_CACHE_ENV) golangci-lint run --enable-only=$(QUALITY_REPORT_LINTERS) --output.text.path "$$out" $(GO_PACKAGES) || status="$$?"; \
+	$(LINT_CACHE_ENV) $(CUSTOM_GCL) run --enable-only=$(QUALITY_REPORT_LINTERS) --output.text.path "$$out" $(GO_PACKAGES) || status="$$?"; \
 	cat "$$out"; \
 	rm -f "$$out"; \
 	if [ "$$status" -ne 0 ] && [ "$$status" -ne 1 ]; then exit "$$status"; fi

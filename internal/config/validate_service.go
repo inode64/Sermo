@@ -86,6 +86,18 @@ func validateServiceMonitors(tree map[string]any, notifiers map[string]struct{},
 	}
 }
 
+// validateAllowDependencies checks the flag that lets a start or stop propagate
+// through the init system's dependency graph.
+func validateAllowDependencies(tree map[string]any, add addFunc) {
+	v, present := tree[keyAllowDependencies]
+	if !present {
+		return
+	}
+	if _, ok := v.(bool); !ok {
+		add(validationBooleanFormat, keyAllowDependencies)
+	}
+}
+
 func validateStopPolicy(tree map[string]any, add addFunc) {
 	sp, ok := tree[sectionStopPolicy].(map[string]any)
 	if !ok {

@@ -137,8 +137,16 @@ service: svc
 		t.Fatalf("stdout = %q", stdout.String())
 	}
 	log := calls(t, logPath)
-	if !strings.Contains(log, "stop -- svc.service") || !strings.Contains(log, "start -- svc.service") {
-		t.Fatalf("expected stop then start of svc.service, calls=\n%s", log)
+	// A restart is composed as stop then start, so the isolation flag has to be
+	// on both halves: it is the stop that would otherwise drag down the units
+	// bound to this one.
+	if !strings.Contains(log, "stop --job-mode=ignore-dependencies -- svc.service") ||
+		!strings.Contains(log, "start --job-mode=ignore-dependencies -- svc.service") {
+		t.Fatalf("expected an isolated stop then start of svc.service, calls=\n%s", log)
+	}
+	// Querying and clearing failed state carry no job mode.
+	if strings.Contains(log, "is-active --job-mode") || strings.Contains(log, "reset-failed --job-mode") {
+		t.Fatalf("isolation flag leaked onto a non-state verb, calls=\n%s", log)
 	}
 }
 

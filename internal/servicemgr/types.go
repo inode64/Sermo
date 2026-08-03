@@ -36,6 +36,13 @@ const (
 	systemctlCmdListUnits       = "list-units"
 	systemctlCmdShow            = "show"
 
+	// systemctlFlagIsolateJob keeps a start/stop job from propagating to other
+	// units: it neither pulls in what the unit requires nor drags along the
+	// units bound to it (Requires=, BindsTo=, PartOf=). systemd documents this
+	// job mode as dangerous precisely because it does that — which is the point
+	// here, and why it is opt-out per service rather than unconditional.
+	systemctlFlagIsolateJob = "--job-mode=ignore-dependencies"
+
 	systemctlFlagNoLegend      = "--no-legend"
 	systemctlFlagNoPager       = "--no-pager"
 	systemctlFlagProperty      = "-p"
@@ -105,6 +112,10 @@ const (
 const (
 	openRCFlagAll      = "--all"
 	openRCFlagAllShort = "-a"
+	// openRCFlagNoDeps is rc-service's `-D, --nodeps`: run the command against
+	// this service alone, without starting what it needs or stopping what needs
+	// it. rc-service takes its options before the service name.
+	openRCFlagNoDeps = "--nodeps"
 )
 
 // ParseBackend parses a backend name used by CLI flags and environment values.
