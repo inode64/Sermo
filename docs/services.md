@@ -843,6 +843,15 @@ graph, so restarting one service can never restart others. A restart is composed
 as stop then start, and both halves carry the flag — on systemd it is the stop
 that would otherwise drag down units bound to this one.
 
+For a socket-activated systemd unit, leaving its socket untouched can make
+systemd start that **same unit** again immediately after the isolated stop. When
+the stop succeeded, every live residual is attributed by the backend to that
+unit, and its state is again `active`, Sermo treats that as the completed restart:
+it runs postflight but does not issue a second start or touch the activating
+socket. This is not an exception for arbitrary leftovers: a selector-only
+residual, an inactive/unknown unit, or any non-systemd backend still returns
+`orphan_processes` and never starts the service.
+
 | Backend | Command |
 |---|---|
 | systemd | `systemctl <verb> --job-mode=ignore-dependencies -- <unit>` |

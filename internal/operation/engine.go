@@ -206,15 +206,15 @@ func (e Engine) run(ctx context.Context, p plan) (result Result) {
 		return result
 	}
 
-	var stopped bool
+	var stopped, systemdReactivated bool
 	if p.stop {
-		alsoStopErrs, staleWarn, stopped = e.stopService(ctx, &result)
+		alsoStopErrs, staleWarn, stopped, systemdReactivated = e.stopService(ctx, &result)
 		if !stopped {
 			return result
 		}
 	}
 
-	if p.start && !e.startService(ctx, &result) {
+	if p.start && !systemdReactivated && !e.startService(ctx, &result) {
 		return result
 	}
 
@@ -229,6 +229,9 @@ func (e Engine) run(ctx context.Context, p plan) (result Result) {
 	}
 
 	result.Message = p.action + " ok"
+	if systemdReactivated {
+		result.Message += " (systemd reactivated the same unit)"
+	}
 	if len(alsoStopErrs) > 0 {
 		result.Message += " (also_service: " + strings.Join(alsoStopErrs, "; ") + ")"
 	}
@@ -306,10 +309,10 @@ func (e Engine) startService(ctx context.Context, result *Result) bool {
 	return e.ensureServiceHealthy(ctx, result, "start")
 }
 
-func (e Engine) stopService(ctx context.Context, result *Result) (alsoStopErrs, staleWarn []string, stopped bool) {
+func (e Engine) stopService(ctx context.Context, result *Result) (alsoStopErrs, staleWarn []string, stopped, systemdReactivated bool) {
 	if err := e.Manager.Stop(ctx, e.Unit); err != nil {
 		_ = failPhase(ctx, result, "operation timed out during stop", "stop: ", err)
-		return nil, nil, false
+		return nil, nil, false, false
 	}
 	for _, unit := range slices.Backward(e.AlsoUnits) {
 		if err := e.Manager.Stop(ctx, unit); err != nil {
@@ -318,24 +321,51 @@ func (e Engine) stopService(ctx context.Context, result *Result) (alsoStopErrs, 
 	}
 	if err := process.Wait(ctx, e.Sleep, e.KillPolicy.GracefulTimeout); err != nil {
 		result.Status, result.Message = ResultFailed, "operation timed out during graceful stop wait"
-		return alsoStopErrs, nil, false
+		return alsoStopErrs, nil, false, false
 	}
-	remaining, err := e.clearResiduals(ctx)
+	remaining, systemdReactivated, err := e.clearResiduals(ctx, func(residuals []process.Process) bool {
+		return e.systemdReactivated(ctx, result.Action, residuals)
+	})
 	if err != nil {
 		result.Status, result.Message, result.Processes = ResultFailed, "process discovery: "+err.Error(), remaining
-		return alsoStopErrs, nil, false
+		return alsoStopErrs, nil, false, false
 	}
 	if len(remaining) > 0 {
+		if systemdReactivated {
+			return alsoStopErrs, nil, true, true
+		}
 		result.Processes = remaining
 		if timedOut(ctx) {
 			result.Status, result.Message = ResultFailed, "operation timed out during residual process handling"
 		} else {
 			result.Status, result.Message = ResultOrphanProcesses, fmt.Sprintf("%d residual process(es) remain after stop", len(remaining))
 		}
-		return alsoStopErrs, nil, false
+		return alsoStopErrs, nil, false, false
 	}
 	_ = e.Manager.ResetState(ctx, e.Unit)
-	return alsoStopErrs, e.verifyStopped(), true
+	return alsoStopErrs, e.verifyStopped(), true, false
+}
+
+// systemdReactivated reports whether an isolated systemd restart has already
+// been completed by systemd after the primary unit stopped. This happens for
+// socket-activated units: the socket remains untouched by the isolated stop and
+// systemd starts the same service again as soon as it receives work.
+//
+// Accept only backend-attributed processes and an active unit. A selector-only
+// residual, an inactive/unknown unit, or any non-systemd backend remains an
+// orphan so this exception cannot authorize an unrelated process or a second
+// service action.
+func (e Engine) systemdReactivated(ctx context.Context, action string, residuals []process.Process) bool {
+	if action != actionRestart || e.Backend != string(servicemgr.BackendSystemd) || len(residuals) == 0 {
+		return false
+	}
+	for _, residual := range residuals {
+		if residual.Source != process.SourceBackend {
+			return false
+		}
+	}
+	status, err := e.Manager.Status(ctx, e.Unit)
+	return err == nil && status.Status == servicemgr.StatusActive
 }
 
 func (e Engine) checkNamedLocks(result *Result) bool {
@@ -531,10 +561,11 @@ func firstSymlinkAncestor(path string) (string, error) {
 }
 
 // clearResiduals discovers residual processes after a stop and applies signal
-// escalation, returning whatever remains.
-func (e Engine) clearResiduals(ctx context.Context) ([]process.Process, error) {
+// escalation, returning whatever remains. accept may acknowledge an already
+// reactivated backend-owned process set before the reaper can signal it.
+func (e Engine) clearResiduals(ctx context.Context, accept func([]process.Process) bool) ([]process.Process, bool, error) {
 	if e.Discover == nil {
-		return nil, nil
+		return nil, false, nil
 	}
 	var discoverErr error
 	discover := func() []process.Process {
@@ -546,19 +577,22 @@ func (e Engine) clearResiduals(ctx context.Context) ([]process.Process, error) {
 	}
 	residuals := discover()
 	if discoverErr != nil {
-		return residuals, discoverErr
+		return residuals, false, discoverErr
 	}
 	if len(residuals) == 0 {
-		return nil, nil
+		return nil, false, nil
+	}
+	if accept != nil && accept(residuals) {
+		return residuals, true, nil
 	}
 	reaper := e.Reaper
 	reaper.Rediscover = discover // re-evaluate identity each round
 	reaper.Sleep = e.Sleep
 	remaining := reaper.Reap(ctx, residuals, e.KillPolicy).Remaining
 	if discoverErr != nil {
-		return remaining, discoverErr
+		return remaining, false, discoverErr
 	}
-	return remaining, nil
+	return remaining, false, nil
 }
 
 func applyLockError(r *Result, err error) {

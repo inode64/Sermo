@@ -849,6 +849,16 @@ init, así que reiniciar un servicio nunca puede reiniciar otros. Un reinicio se
 compone como stop y luego start, y ambas mitades llevan el flag: en systemd es
 el stop el que arrastraría a las unidades ligadas a esta.
 
+En una unidad systemd activada por socket, dejar su socket intacto puede hacer
+que systemd arranque de nuevo **esa misma unidad** justo después del stop
+aislado. Cuando el stop tuvo éxito, todos los residuales vivos están atribuidos
+por el backend a esa unidad y su estado vuelve a ser `active`, Sermo considera
+completado el reinicio: ejecuta el postflight, pero no emite un segundo start ni
+toca el socket activador. No es una excepción para restos arbitrarios: un
+residual hallado sólo por selector, una unidad inactiva/desconocida o cualquier
+backend no systemd sigue devolviendo `orphan_processes` y nunca inicia el
+servicio.
+
 | Backend | Comando |
 |---|---|
 | systemd | `systemctl <verb> --job-mode=ignore-dependencies -- <unit>` |
