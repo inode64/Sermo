@@ -1,11 +1,10 @@
 name: cockpit
 display_name: Cockpit
 category: system
-description: Web-based Linux server administration console.
+description: Socket-activated web-based Linux server administration console.
+# cockpit.service is a static, socket-activated worker. It becomes inactive
+# between sessions even when Cockpit is healthy, so monitor the listening unit.
 service:
-  systemd:
-    - cockpit
-also_service:
   systemd:
     - cockpit.socket
 apps:
@@ -19,17 +18,6 @@ restart_on_change:
 variables:
   host: 127.0.0.1
   port: 9090
-  user: cockpit-systemd-service
-socket:
-  path:
-    - /run/cockpit/session
-    - /run/cockpit/wsinstance/http.sock
-    - /run/cockpit/wsinstance/https-factory.sock
-  optional: true
-processes:
-  main:
-    exe: ${cockpit_binary}
-    user: ${user}
 watches:
   service:
     check:

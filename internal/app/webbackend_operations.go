@@ -144,7 +144,14 @@ func (b *WebBackend) operationResult(ctx context.Context, name, action string) o
 	if e.disabled {
 		return operation.Result{Service: name, Action: action, Status: operation.ResultFailed, Message: serviceSubjectPrefix + name + " is disabled in configuration"}
 	}
-	timeout := b.operationTimeout
+	// The operation engine already resolves the configured timeout against this
+	// service's stop policy. Keep the Web UI's parent context at that effective
+	// limit so a long graceful stop is not cancelled before the engine can start
+	// the service again.
+	timeout := e.engine.OperationTimeout
+	if timeout <= 0 {
+		timeout = b.operationTimeout
+	}
 	if timeout <= 0 {
 		timeout = operation.DefaultOperationTimeout
 	}

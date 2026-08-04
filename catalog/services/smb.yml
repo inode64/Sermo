@@ -1,9 +1,9 @@
 name: smb
 aliases:
   - samba
-display_name: Samba SMB/NMB
+display_name: Samba SMB service
 category: storage
-description: Combined Samba service unit that supervises SMB and NetBIOS daemons.
+description: Samba SMB service; monitor NetBIOS separately when nmbd is enabled.
 service:
   systemd:
     - smb
@@ -12,11 +12,9 @@ service:
     - smb
 apps:
   - smbd
-  - nmbd
 restart_on_change:
   apps:
     - smbd
-    - nmbd
   messages:
     app: >-
       ${display_name} will restart after version change of ${change.app}: ${change.old_version} -> ${change.new_version}
@@ -27,7 +25,6 @@ variables:
   winbindd_binary: ${bindir}/winbindd
 pidfiles:
   smbd: /run/samba/smbd.pid
-  nmbd: /run/samba/nmbd.pid
 preflight:
   config:
     type: command
@@ -45,9 +42,6 @@ preflight:
 processes:
   smbd:
     exe: ${smbd_binary}
-    user: ${user}
-  nmbd:
-    exe: ${nmbd_binary}
     user: ${user}
   winbindd:
     exe: ${winbindd_binary}
