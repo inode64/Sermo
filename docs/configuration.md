@@ -381,6 +381,11 @@ engine:
   retention_1d: 8784h          # daily history (the 1y graphs, rolling-year SLA)
   retention_events: 720h       # event/activity feed
   rollup_interval: 5m         # consolidation + prune cadence
+  # service_restart_notice:    # optional normal alert for a newly started principal process
+  #   uptime_below: 5m
+  #   notify: [ops-email]      # explicit targets; does not inherit top-level notify
+  #   subject: "[sermo] ${restart.service}: main process restarted"
+  #   message: "${restart.service} PID ${restart.pid} started ${restart.uptime} ago"
   # Optional append-only JSONL export logs (opt-in: omit a key to disable it).
   # access: /var/log/sermo/access.log
   # events: /var/log/sermo/event.log
@@ -410,6 +415,52 @@ Omit a key to leave that channel off.
 
 `engine.interval` is the default cadence at which every service's checks are
 run. Each service runs all of its checks once per cycle.
+
+### Principal-process restart notice
+
+`engine.service_restart_notice` is opt-in. When configured, Sermo emits one
+normal `alert` event for each new identity of a service's trusted principal
+process whose real uptime is below `uptime_below`. It runs in the first active
+daemon cycle too, so it detects a restart that occurred while `sermod` was
+stopped. This is an event and notification only: it never changes the service,
+does not affect SLA, and appears through the normal Web UI and `sermoctl
+activity` feed.
+
+```yaml
+engine:
+  service_restart_notice:
+    uptime_below: 5m       # required, strictly positive
+    notify: [ops-email]    # required; `none` records the event without delivery
+    subject: "[sermo] ${restart.service}: main process restarted"  # optional
+    message: >-            # required
+      ${restart.service} principal process ${restart.process}
+      (PID ${restart.pid}) started at ${restart.started_at};
+      uptime ${restart.uptime}.
+```
+
+The selection in `notify` is deliberately explicit and never inherits the
+top-level `notify` default. `subject` defaults to
+`[sermo] ${restart.service}: main process restarted`. The message and subject
+may use `${restart.service}`, `${restart.unit}`, `${restart.process}`,
+`${restart.pid}`, `${restart.uptime}`, `${restart.uptime_seconds}`,
+`${restart.started_at}`, and `${restart.threshold}`, as well as the standard
+runtime variables such as `${date}` and `${event}`.
+
+Sermo trusts only a backend or an explicit service identity: systemd's `MainPID`,
+Docker's init PID, or an OpenRC pidfile / named `processes.main` selector. If it
+cannot identify one principal process safely, it does not guess and emits no
+restart notice. The PID and start timestamp are kept in the state database, so
+each identity produces at most one notice across daemon restarts. A Sermo
+operation is recorded but deliberately not notified during its settling cycle,
+which prevents a CLI, Web UI, or automatic Sermo restart from being reported as
+external.
+
+Outbound delivery follows normal alert safety: panic mode suppresses it and
+dry-run mode uses only the enabled terminal route. A notifier template also
+receives `SERMO_RESTART_SERVICE`, `SERMO_RESTART_UNIT`,
+`SERMO_RESTART_PROCESS`, `SERMO_RESTART_PID`, `SERMO_RESTART_UPTIME`,
+`SERMO_RESTART_UPTIME_SECONDS`, `SERMO_RESTART_STARTED_AT`, and
+`SERMO_RESTART_UPTIME_BELOW` as structured fields.
 
 `engine.artifact_interval` (default `5m`) is the cadence at which the daemon
 inspects installed catalog apps, catalog libraries, and service version/config
@@ -1440,6 +1491,12 @@ subject or body for that part. The available data is:
   fields render as an empty string.
 - **`.SortedFields`** — all structured fields as stable `{Name, Value}` entries,
   useful for `range`.
+
+A principal-process restart notice supplies the structured fields
+`SERMO_RESTART_SERVICE`, `SERMO_RESTART_UNIT`, `SERMO_RESTART_PROCESS`,
+`SERMO_RESTART_PID`, `SERMO_RESTART_UPTIME`, `SERMO_RESTART_UPTIME_SECONDS`,
+`SERMO_RESTART_STARTED_AT`, and `SERMO_RESTART_UPTIME_BELOW`; it also sets the
+usual `SERMO_SERVICE`, `SERMO_RULE` and `SERMO_EVENT` fields.
 
 Example:
 
@@ -2982,7 +3039,8 @@ for the inherited `config`/`version` permission flags. Engine-wide settings (`in
 `max_parallel_checks`, `default_timeout`,
 `operation_timeout`, `artifact_interval`, `startup_delay`, `backend`, `user_lookup`,
 `user_lookup_timeout`, `state_cache_size`, the `retention_*` windows and
-`rollup_interval`) are daemon configuration and never merge into a service.
+`rollup_interval`, and `service_restart_notice`) are daemon configuration and
+never merge into a service.
 
 For service residual cleanup, `defaults.stop_policy.force_kill` accepts `false`,
 `true` or `auto`. `true` requires an explicit `kill_only_if` selector. `auto`

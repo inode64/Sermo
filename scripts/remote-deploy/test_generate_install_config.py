@@ -773,6 +773,40 @@ class SwapWatchGenerationTest(unittest.TestCase):
         self.assertIn('delta: { op: ">", value: 1000 }', body)
 
 
+class FirewallWatchGenerationTest(unittest.TestCase):
+    def generate(self, init: str, active_inventory: str, features: str = "nft=1\niptables=1\n"):
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        root = Path(temp.name)
+        stage = root / "stage" / "host" / "out"
+        stage.mkdir(parents=True)
+        (stage / "init").write_text(init + "\n", encoding="utf-8")
+        inventory_name = "active_units" if init == "systemd" else "openrc_status_all"
+        (stage / inventory_name).write_text(active_inventory, encoding="utf-8")
+        (stage / "features").write_text(features, encoding="utf-8")
+        report = generator.generate_for_host("host", stage, root / "configs", default_options())
+        return root / "configs/host/root/etc/sermo/watches", report
+
+    def test_requires_an_active_supported_firewall_unit(self):
+        cases = {
+            "systemd-firewalld": ("systemd", "firewalld.service loaded active running firewalld\n", True),
+            "systemd-nftables": ("systemd", "nftables.service loaded active running nftables\n", True),
+            "openrc-firehol": ("openrc", " firehol    [  started  ]\n", True),
+            "systemd-tools-only": ("systemd", "nginx.service loaded active running nginx\n", False),
+            "openrc-tools-only": ("openrc", " nginx    [  started  ]\n", False),
+        }
+        for name, (init, inventory, want_watch) in cases.items():
+            with self.subTest(name=name):
+                watches, report = self.generate(init, inventory)
+                watch = watches / "watch-firewall-rules.yml"
+                self.assertEqual(watch.exists(), want_watch)
+                if not want_watch:
+                    self.assertIn(
+                        {"kind": "firewall_rules", "reason": "no active supported firewall service"},
+                        report["skipped_watches"],
+                    )
+
+
 if __name__ == "__main__":
     unittest.main()
 

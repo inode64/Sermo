@@ -268,6 +268,14 @@ policy: an alert-only `watch-clock-drift`. It queries `time.cloudflare.com` and
 `pool.ntp.org` every five minutes and alerts after two consecutive samples whose
 wall-clock drift exceeds `1s`. It never corrects time.
 
+`watch-firewall-rules` is generated only when the init inventory reports an
+active supported firewall manager (`firewalld`, `firehol`, `nftables`,
+`iptables`, `ufw`, `shorewall`, `ferm`, or a persistent iptables loader). The
+presence of `nft` or `iptables` binaries alone is not firewall evidence: those
+tools are frequently installed as dependencies on hosts with no firewall policy.
+When no supported manager is active, the generator omits the watch and records
+the reason in `skipped_watches`.
+
 Tier 2, `watch-clock-step`, is the forced correction at `5s`: Sermo asks the
 local chronyd to step the clock over its Unix command socket, natively and with
 no external process. It is generated **only** where it is both applicable and

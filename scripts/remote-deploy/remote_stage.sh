@@ -317,8 +317,6 @@ ip -o -6 route show >"${out}/ip_route6" 2>/dev/null || true
 	command -v smartctl >/dev/null 2>&1 && echo "smartctl=1" || echo "smartctl=0"
 	command -v sensors >/dev/null 2>&1 && echo "sensors=1" || echo "sensors=0"
 	command -v mdadm >/dev/null 2>&1 && echo "mdadm=1" || echo "mdadm=0"
-	command -v nft >/dev/null 2>&1 && echo "nft=1" || echo "nft=0"
-	command -v iptables >/dev/null 2>&1 && echo "iptables=1" || echo "iptables=0"
 	command -v curl >/dev/null 2>&1 && echo "curl=1" || echo "curl=0"
 	command -v wget >/dev/null 2>&1 && echo "wget=1" || echo "wget=0"
 	[ -r /proc/pressure/memory ] && echo "pressure=1" || echo "pressure=0"

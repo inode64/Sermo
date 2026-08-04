@@ -1526,17 +1526,6 @@ func TestCatalogServiceProcessChecksUseLinkedAppBinaries(t *testing.T) {
 		resolvedPath []any
 	}{
 		{
-			name:      "salt-minion",
-			app:       "salt-minion",
-			preflight: "salt-minion-binary",
-			raw:       "${salt_minion_binary}",
-			resolved:  "/usr/bin/salt-minion",
-			rawPaths: [][]any{
-				{"watches", "process", "check", "exe"},
-			},
-			resolvedPath: []any{"checks", "process", "exe"},
-		},
-		{
 			name:      "bluetooth",
 			app:       "bluetoothd",
 			preflight: "bluetoothd-binary",

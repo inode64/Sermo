@@ -127,6 +127,23 @@ CHRONY_COMMAND_SOCKET = "/run/chrony/chronyd.sock"
 # Unit name prefixes of the ceph daemons. They are templated (ceph-mon@host),
 # so these are matched as prefixes over the active unit set.
 CEPH_UNIT_PREFIXES = ("ceph-mon", "ceph-osd", "ceph-mds", "ceph-mgr")
+# Firewall command-line tools are commonly installed as dependencies even where
+# the host has no firewall policy. A loaded firewall manager is the evidence
+# required to generate the host-level rule-presence watch.
+FIREWALL_SERVICE_UNITS = frozenset(
+    {
+        "arno-iptables-firewall",
+        "ferm",
+        "firehol",
+        "firewalld",
+        "iptables",
+        "iptables-persistent",
+        "netfilter-persistent",
+        "nftables",
+        "shorewall",
+        "ufw",
+    }
+)
 # mail(1)/mailx write the undeliverable message body here.
 DEAD_LETTER_PATH = "/root/dead.letter"
 ROOT_MOUNT_TARGET = "/"
@@ -617,6 +634,11 @@ def parse_failed_units(stage: Path) -> set[str]:
                 failed.add(name)
         return failed
     return failed
+
+
+def active_firewall_units(stage: Path) -> list[str]:
+    """Return supported firewall managers that the init inventory reports active."""
+    return sorted(parse_active_units(stage) & FIREWALL_SERVICE_UNITS)
 
 
 def host_builtins(stage: Path) -> dict[str, str]:
@@ -1869,10 +1891,11 @@ dry_run: true
     else:
         skip("conntrack", "nf_conntrack counters not exposed")
 
-    if features.get("nft") == "1" or features.get("iptables") == "1":
+    firewall_units = active_firewall_units(stage)
+    if firewall_units:
         add_watch("watches", "watch-firewall-rules", simple_watch("watch-firewall-rules", "network", "1m", ["type: firewall_rules", "backend: auto", "min_rules: 1"], cycles=3))
     else:
-        skip("firewall_rules", "nft/iptables not installed")
+        skip("firewall_rules", "no active supported firewall service")
 
     if " autofs " in read_text(stage / "proc_mounts"):
         add_watch("watches", "watch-autofs", simple_watch("watch-autofs", "storage", "1m", ["type: autofs"], cycles=3))
