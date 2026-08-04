@@ -475,6 +475,16 @@ func restartIdentityClosure(mgr Manager, unit string, discover func() ([]process
 				return true, "", nil
 			}
 		}
+		// A package replacement makes /proc/<pid>/exe end in " (deleted)",
+		// deliberately preventing the old process from matching an exe selector
+		// or being signalled.  Its previous exe path and real user still give us
+		// an exact attribution to this unit, though, so the init backend may stop
+		// the named unit and start the installed binary.  Residual reaping remains
+		// fail-closed: StaleBinariesIn is diagnostic only and never authorizes a
+		// signal; if the backend leaves it behind, clearResiduals blocks the start.
+		if len(discoverer.StaleBinariesIn(procs, selectors)) > 0 {
+			return true, "", nil
+		}
 		return false, "blocked: active service has no process matching configured exact exe/user selectors", nil
 	}
 }
@@ -521,12 +531,13 @@ func runCheckSection(ctx context.Context, entries map[string]any, deps checks.De
 }
 
 // verifyRunner builds the post-operation verification outcome from every check
-// flagged `verify: true`, run once. It replaces the dedicated postflight: section:
-// the same health probe used for periodic monitoring doubles as the
-// start-verification, run immediately with the standard required/optional model
-// (a check's for/within window and then action are irrelevant here — only
-// Result.OK counts). A service with no verify checks is a trivial pass, exactly
-// as a missing postflight section was.
+// flagged `verify: true`. The operation engine reruns this closure for its
+// bounded postflight readiness attempts. It replaces the dedicated postflight:
+// section: the same health probe used for periodic monitoring doubles as the
+// start-verification, with the standard required/optional model (a check's
+// for/within window and then action are irrelevant here — only Result.OK
+// counts). A service with no verify checks is a trivial pass, exactly as a
+// missing postflight section was.
 func verifyRunner(tree map[string]any, deps checks.Deps, sample func(context.Context) checks.MetricReader) func(context.Context) checks.Outcome {
 	return func(ctx context.Context) checks.Outcome {
 		return runCheckSection(ctx, collectVerifyChecks(tree), deps, sample)
