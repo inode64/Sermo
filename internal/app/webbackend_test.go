@@ -422,6 +422,54 @@ func TestWebBackendStatusCacheIgnoresCancelledRequests(t *testing.T) {
 	}
 }
 
+func TestWebBackendServiceCheckRefreshesOlderStatusCache(t *testing.T) {
+	now := time.Date(2026, 8, 4, 18, 0, 0, 0, time.UTC)
+	var statusCalls int
+	snaps := NewSnapshots()
+	snaps.now = func() time.Time { return now }
+	b := &WebBackend{
+		now:       func() time.Time { return now },
+		snapshots: snaps,
+		entries: map[string]*webEntry{
+			"web": {
+				interval:          time.Minute,
+				noResidentProcess: true,
+				checkNames:        []string{"service"},
+				checkTypes:        map[string]string{"service": checks.CheckTypeService},
+				checkIntervals:    map[string]time.Duration{"service": time.Minute},
+				status: func(context.Context) (servicemgr.Status, error) {
+					statusCalls++
+					return servicemgr.StatusInactive, nil
+				},
+			},
+		},
+	}
+
+	first := b.view(context.Background(), "web", b.entries["web"])
+	if first.Status != string(servicemgr.StatusInactive) || first.State != TargetStateFailed {
+		t.Fatalf("initial service = %+v, want failed/inactive", first)
+	}
+
+	now = now.Add(5 * time.Second)
+	snaps.PublishWithCheckTypes("web", map[string]checks.Result{
+		"service": {
+			Check: "service", OK: true,
+			Data: map[string]any{checks.DataKeyStatus: string(servicemgr.StatusActive)},
+		},
+	}, map[string]bool{"service": true}, map[string]string{"service": checks.CheckTypeService})
+
+	refreshed := b.view(context.Background(), "web", b.entries["web"])
+	if refreshed.Status != string(servicemgr.StatusActive) || refreshed.State == TargetStateFailed {
+		t.Fatalf("fresh service check must replace stale backend status: %+v", refreshed)
+	}
+	if refreshed.StatusObservedAt != now.Format(time.RFC3339) {
+		t.Fatalf("status observed at = %q, want %q", refreshed.StatusObservedAt, now.Format(time.RFC3339))
+	}
+	if statusCalls != 1 {
+		t.Fatalf("status calls = %d, want cache-only one call", statusCalls)
+	}
+}
+
 func TestWebBackendStatusProbeHasInitQueryDeadline(t *testing.T) {
 	called := false
 	e := &webEntry{status: func(ctx context.Context) (servicemgr.Status, error) {

@@ -831,6 +831,12 @@ processes:
   narrows discovery; it never authorizes residual signaling by itself.
 - `user` / `group` — the process real UID / GID owner.
 
+Do not use a generic helper executable shared by several units as a service
+selector. On systemd, cgroup attribution identifies the unit's processes; where
+there is no unique exact identity, leave the helper unselected. A broad helper
+selector can cross-attribute another unit's live process as a residual and safely
+block the restart.
+
 These feed monitoring **and** the residual reaper, so a richer selector lets a
 stop catch and kill more leftovers (an unkillable residual stays
 `orphan_processes`). The `process` *check* still matches by `exe`/`user` only.

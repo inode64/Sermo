@@ -52,11 +52,7 @@ engine:
     uptime_below: 5m
     notify: [ops-email]  # explicit targets; does not inherit top-level notify
     subject: "[sermo] ${restart.service}: principal process restarted"
-    message: >-
-      ${restart.service} (${restart.unit}) principal process
-      ${restart.process} (PID ${restart.pid}) started at
-      ${restart.started_at}; uptime ${restart.uptime}.
-
+    message: "${restart.service} (${restart.unit}) principal process ${restart.process} (PID ${restart.pid}) started at ${restart.started_at}; uptime ${restart.uptime}."
 paths:
   # Directory entries are non-recursive unless a list item uses
   # `{ path: ..., recursive: true }`. The packaged catalog is loaded from the
