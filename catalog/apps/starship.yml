@@ -1,0 +1,9 @@
+name: starship
+display_name: Starship
+category: terminal
+description: Cross-shell prompt.
+variables:
+  binary: ${bindir}/starship
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}", "--version"], timeout: 10s }
