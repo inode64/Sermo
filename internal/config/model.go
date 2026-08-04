@@ -123,6 +123,8 @@ const (
 	// EngineKeyRollupInterval is engine.rollup_interval, the cadence at which the
 	// daemon consolidates and prunes stored history.
 	EngineKeyRollupInterval = "rollup_interval"
+	// EngineKeyServiceRestartNotice is engine.service_restart_notice.
+	EngineKeyServiceRestartNotice = "service_restart_notice"
 	// EngineKeyStartupDelay is engine.startup_delay.
 	EngineKeyStartupDelay = "startup_delay"
 	// EngineKeyStateCacheSize is engine.state_cache_size.
@@ -131,6 +133,20 @@ const (
 	EngineKeyUserLookup = "user_lookup"
 	// EngineKeyUserLookupTimeout is engine.user_lookup_timeout.
 	EngineKeyUserLookupTimeout = "user_lookup_timeout"
+)
+
+// Service restart notice field keys.
+const (
+	// ServiceRestartNoticeKeyUptimeBelow is the maximum main-process uptime that
+	// produces an external-restart notice.
+	ServiceRestartNoticeKeyUptimeBelow = "uptime_below"
+	// ServiceRestartNoticeKeyNotify selects the notification targets for the
+	// notice. It is independent of the global notify default.
+	ServiceRestartNoticeKeyNotify = "notify"
+	// ServiceRestartNoticeKeySubject is the optional notification subject.
+	ServiceRestartNoticeKeySubject = "subject"
+	// ServiceRestartNoticeKeyMessage is the operator-visible notice body.
+	ServiceRestartNoticeKeyMessage = "message"
 )
 
 // Web block and field keys.

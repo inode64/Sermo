@@ -145,6 +145,14 @@ var storageSchema = []string{
 		source     TEXT NOT NULL,
 		updated_at TEXT NOT NULL
 	);`,
+	// service_restart_notice stores the principal process identity last observed
+	// under the restart-notice uptime threshold. It is deliberately durable so a
+	// sermod restart cannot repeat an already-delivered external-restart alert.
+	`CREATE TABLE IF NOT EXISTS service_restart_notice (
+		service    TEXT PRIMARY KEY,
+		pid        INTEGER NOT NULL,
+		started_at TEXT NOT NULL
+	);`,
 	// service_check_snapshot stores the latest service check result published by
 	// each worker. It is current observable state, not history, so the web UI can
 	// show the last real daemon-cycle reading immediately after a restart.
@@ -538,6 +546,13 @@ type OperationSettlingRecord struct {
 	UpdatedAt time.Time
 }
 
+// ServiceRestartNoticeRecord is the principal process identity last handled by
+// the external-restart notice monitor for one service.
+type ServiceRestartNoticeRecord struct {
+	PID       int
+	StartedAt time.Time
+}
+
 // CheckSnapshotRecord is one persisted latest check result. Name is the service
 // check name or host-watch slot; CheckType identifies the check that produced
 // the data so callers never decode a prior result as a new check type.
@@ -664,6 +679,47 @@ func (s *Store) ClearOperationSettling(service string) error {
 	_, err := s.exec(s.sqlCtx(), `DELETE FROM operation_settling WHERE service = ?;`, service)
 	if err != nil {
 		return fmt.Errorf("clear operation settling for %s: %w", service, err)
+	}
+	return nil
+}
+
+// ServiceRestartNotice returns the principal process identity already handled
+// by the external-restart notice monitor. found is false when the service has
+// not been observed below its configured uptime threshold yet.
+func (s *Store) ServiceRestartNotice(service string) (ServiceRestartNoticeRecord, bool, error) {
+	var pid int
+	var started string
+	err := s.reads().QueryRowContext(s.sqlCtx(),
+		`SELECT pid, started_at FROM service_restart_notice WHERE service = ?;`, service,
+	).Scan(&pid, &started)
+	switch {
+	case err == sql.ErrNoRows:
+		return ServiceRestartNoticeRecord{}, false, nil
+	case err != nil:
+		return ServiceRestartNoticeRecord{}, false, fmt.Errorf("load service restart notice for %s: %w", service, err)
+	default:
+		at, err := time.Parse(time.RFC3339Nano, started)
+		if err != nil {
+			return ServiceRestartNoticeRecord{}, false, fmt.Errorf("parse service restart notice for %s: %w", service, err)
+		}
+		return ServiceRestartNoticeRecord{PID: pid, StartedAt: at}, true, nil
+	}
+}
+
+// SetServiceRestartNotice persists the principal process identity handled by
+// the external-restart notice monitor, whether delivery was sent or intentionally
+// suppressed for a Sermo-initiated operation.
+func (s *Store) SetServiceRestartNotice(service string, record ServiceRestartNoticeRecord) error {
+	_, err := s.exec(s.sqlCtx(),
+		`INSERT INTO service_restart_notice (service, pid, started_at)
+		 VALUES (?, ?, ?)
+		 ON CONFLICT(service) DO UPDATE SET
+		   pid        = excluded.pid,
+		   started_at = excluded.started_at;`,
+		service, record.PID, record.StartedAt.UTC().Format(time.RFC3339Nano),
+	)
+	if err != nil {
+		return fmt.Errorf("set service restart notice for %s: %w", service, err)
 	}
 	return nil
 }

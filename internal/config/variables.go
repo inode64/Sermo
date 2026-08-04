@@ -42,6 +42,14 @@ const (
 	runtimeVarChangeLevel    = "change.level"
 	runtimeVarChangeOld      = "change.old_version"
 	runtimeVarChangeNew      = "change.new_version"
+	runtimeVarRestartService = "restart.service"
+	runtimeVarRestartUnit    = "restart.unit"
+	runtimeVarRestartProcess = "restart.process"
+	runtimeVarRestartPID     = "restart.pid"
+	runtimeVarRestartUptime  = "restart.uptime"
+	runtimeVarRestartSecs    = "restart.uptime_seconds"
+	runtimeVarRestartStarted = "restart.started_at"
+	runtimeVarRestartBelow   = "restart.threshold"
 )
 
 const (
@@ -359,6 +367,14 @@ var runtimeVars = map[string]bool{
 	runtimeVarChangeLevel:    true,
 	runtimeVarChangeOld:      true,
 	runtimeVarChangeNew:      true,
+	runtimeVarRestartService: true,
+	runtimeVarRestartUnit:    true,
+	runtimeVarRestartProcess: true,
+	runtimeVarRestartPID:     true,
+	runtimeVarRestartUptime:  true,
+	runtimeVarRestartSecs:    true,
+	runtimeVarRestartStarted: true,
+	runtimeVarRestartBelow:   true,
 }
 
 func expandString(s string, vars map[string]string, path string, errs *[]string) string {

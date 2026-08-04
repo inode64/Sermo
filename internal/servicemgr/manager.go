@@ -189,9 +189,12 @@ func parseCgroupProcs(data []byte) []int {
 }
 
 // BackendPIDsFuncWithRunner returns a process.Discoverer.BackendPIDs closure for
-// a unit: it reports the cgroup process set (preferred) plus the MainPID,
-// deduplicated. The command and file readers are injectable for tests and for
-// callers that already carry an execx runner.
+// a unit: it reports the MainPID first, then the complete cgroup process set,
+// deduplicated. Keeping MainPID first preserves systemd's authoritative
+// principal process for read-only lifecycle observations while the remaining
+// cgroup members still provide complete service metrics. The command and file
+// readers are injectable for tests and for callers that already carry an execx
+// runner.
 func BackendPIDsFuncWithRunner(ctx context.Context, backend Backend, unit string, runner execx.Runner, readFile func(string) ([]byte, error)) func() []int {
 	return func() []int {
 		seen := map[int]bool{}
@@ -202,13 +205,13 @@ func BackendPIDsFuncWithRunner(ctx context.Context, backend Backend, unit string
 				pids = append(pids, pid)
 			}
 		}
+		if pid, ok := MainPIDContext(ctx, runner, backend, unit); ok {
+			add(pid)
+		}
 		if cg, ok := CgroupPIDsContext(ctx, runner, readFile, backend, unit); ok {
 			for _, pid := range cg {
 				add(pid)
 			}
-		}
-		if pid, ok := MainPIDContext(ctx, runner, backend, unit); ok {
-			add(pid)
 		}
 		return pids
 	}

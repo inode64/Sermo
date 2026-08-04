@@ -14,6 +14,7 @@ import (
 	"sermo/internal/appinspect"
 	"sermo/internal/cfgval"
 	"sermo/internal/checks"
+	"sermo/internal/config"
 	"sermo/internal/emission"
 	"sermo/internal/execx"
 	"sermo/internal/metrics"
@@ -30,6 +31,7 @@ import (
 // through the shared operation engine when policy allows.
 type Worker struct {
 	Service   string
+	Unit      string
 	Rules     []rules.Rule
 	Policy    rules.Policy
 	State     *rules.RemediationState
@@ -93,6 +95,16 @@ type Worker struct {
 	// awaiting one post-operation observation cycle. While active, checks may
 	// publish fresh data but must not drive SLA, alerts or remediation.
 	OperationSettling OperationSettlingStore
+	// RestartNotice is the optional global principal-process external-restart
+	// notice policy. It is intentionally observed during startup and
+	// operation-settling cycles, before ordinary rule side effects are considered.
+	RestartNotice *config.ServiceRestartNotice
+	// ServiceRestartNotice persists identities already handled by RestartNotice.
+	ServiceRestartNotice ServiceRestartNoticeStore
+	// PrimaryProcess returns this cycle's trusted principal service process and
+	// its start time. Nil means the backend/process configuration has no safe
+	// principal identity, so no restart notice is emitted.
+	PrimaryProcess func() (servicePrimaryProcess, bool)
 	// Observability marks the service ready only after a normal observed cycle has
 	// published data and recorded availability side effects.
 	Observability *ObservabilityRegistry
@@ -208,6 +220,7 @@ func (w *Worker) RunCycle(ctx context.Context) {
 		return
 	}
 
+	w.observeServiceRestart(ctx, mode)
 	deps, cache := w.runChecks(ctx)
 	w.publishCycle(ctx, cache, mode.observeOnly)
 	if mode.observeOnly {

@@ -53,3 +53,29 @@ func TestEngineDuration(t *testing.T) {
 		})
 	}
 }
+
+func TestEngineServiceRestartNotice(t *testing.T) {
+	cfg := &Config{Global: Global{Raw: map[string]any{
+		SectionEngine: map[string]any{
+			EngineKeyServiceRestartNotice: map[string]any{
+				ServiceRestartNoticeKeyUptimeBelow: "5m",
+				ServiceRestartNoticeKeyNotify:      []any{"wall"},
+				ServiceRestartNoticeKeyMessage:     "${restart.service} restarted",
+			},
+		},
+	}}}
+
+	notice, configured := EngineServiceRestartNotice(cfg)
+	if !configured {
+		t.Fatal("restart notice should be configured")
+	}
+	if notice.UptimeBelow != 5*time.Minute || len(notice.Notify) != 1 || notice.Notify[0] != "wall" {
+		t.Fatalf("notice = %+v", notice)
+	}
+	if notice.Subject != defaultServiceRestartNoticeSubject || notice.Message != "${restart.service} restarted" {
+		t.Fatalf("notice templates = %+v", notice)
+	}
+	if _, configured := EngineServiceRestartNotice(&Config{}); configured {
+		t.Fatal("missing restart notice must be disabled")
+	}
+}

@@ -153,6 +153,21 @@ func TestStoreOperationSettlingRoundTrip(t *testing.T) {
 	}
 }
 
+func TestStoreServiceRestartNoticeRoundTrip(t *testing.T) {
+	s := openTemp(t)
+	record := ServiceRestartNoticeRecord{PID: 4242, StartedAt: time.Date(2026, 6, 7, 9, 0, 0, 123456789, time.UTC)}
+	if err := s.SetServiceRestartNotice("web", record); err != nil {
+		t.Fatalf("SetServiceRestartNotice: %v", err)
+	}
+	got, found, err := s.ServiceRestartNotice("web")
+	if err != nil || !found {
+		t.Fatalf("ServiceRestartNotice: found=%v err=%v", found, err)
+	}
+	if got.PID != record.PID || !got.StartedAt.Equal(record.StartedAt) {
+		t.Fatalf("record = %+v, want %+v", got, record)
+	}
+}
+
 func TestStoreCheckSnapshotsPersistAcrossReopen(t *testing.T) {
 	path := filepath.Join(t.TempDir(), Filename)
 	at := time.Date(2026, 7, 9, 11, 30, 0, 0, time.UTC)
@@ -375,6 +390,9 @@ func writePersistentStoreState(t *testing.T, store *Store, at time.Time) {
 	if err := store.SetOperationSettling("db", "restart", OperationSettlingSettling, SourceDaemon); err != nil {
 		t.Fatalf("SetOperationSettling: %v", err)
 	}
+	if err := store.SetServiceRestartNotice("db", ServiceRestartNoticeRecord{PID: 4242, StartedAt: at.Add(-time.Minute)}); err != nil {
+		t.Fatalf("SetServiceRestartNotice: %v", err)
+	}
 }
 
 func assertPersistentStoreState(t *testing.T, store *Store, at time.Time) {
@@ -384,6 +402,7 @@ func assertPersistentStoreState(t *testing.T, store *Store, at time.Time) {
 	assertPersistedRuleWindowState(t, store, at)
 	assertPersistedWatchRuntimeState(t, store, at)
 	assertPersistedOperationSettling(t, store)
+	assertPersistedServiceRestartNotice(t, store, at)
 }
 
 func assertPersistedActiveState(t *testing.T, store *Store) {
@@ -445,6 +464,17 @@ func assertPersistedOperationSettling(t *testing.T, store *Store) {
 	}
 	if op.Action != "restart" || op.Phase != OperationSettlingSettling || op.Source != SourceDaemon {
 		t.Fatalf("operation settling state = %+v", op)
+	}
+}
+
+func assertPersistedServiceRestartNotice(t *testing.T, store *Store, at time.Time) {
+	t.Helper()
+	record, found, err := store.ServiceRestartNotice("db")
+	if err != nil || !found {
+		t.Fatalf("ServiceRestartNotice after reopen: found=%v err=%v", found, err)
+	}
+	if record.PID != 4242 || !record.StartedAt.Equal(at.Add(-time.Minute)) {
+		t.Fatalf("service restart notice = %+v", record)
 	}
 }
 

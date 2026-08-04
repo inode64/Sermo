@@ -174,6 +174,39 @@ func TestCgroupPIDs(t *testing.T) {
 	}
 }
 
+type propertyRunner struct{}
+
+func (propertyRunner) Run(_ context.Context, _ string, args ...string) (execx.Result, error) {
+	joined := strings.Join(args, " ")
+	switch {
+	case strings.Contains(joined, systemctlPropertyMainPID):
+		return execx.Result{Stdout: "1600\n"}, nil
+	case strings.Contains(joined, systemctlPropertyCGroup):
+		return execx.Result{Stdout: "/system.slice/nginx.service\n"}, nil
+	default:
+		return execx.Result{}, nil
+	}
+}
+
+func TestBackendPIDsKeepsMainPIDFirst(t *testing.T) {
+	readFile := func(path string) ([]byte, error) {
+		if path != "/sys/fs/cgroup/system.slice/nginx.service/cgroup.procs" {
+			return nil, os.ErrNotExist
+		}
+		return []byte("1508\n1600\n1602\n"), nil
+	}
+	pids := BackendPIDsFuncWithRunner(context.Background(), BackendSystemd, "nginx.service", propertyRunner{}, readFile)()
+	want := []int{1600, 1508, 1602}
+	if len(pids) != len(want) {
+		t.Fatalf("pids = %v, want %v", pids, want)
+	}
+	for i := range want {
+		if pids[i] != want[i] {
+			t.Fatalf("pids = %v, want %v", pids, want)
+		}
+	}
+}
+
 func TestResolveDeduplicatesCandidates(t *testing.T) {
 	// A unit name repeated in candidates is probed once.
 	rr := scriptRunner{results: map[string]execxResultErr{"systemctl cat -- mysql.service": {exit: 0}}, calls: map[string]int{}}
