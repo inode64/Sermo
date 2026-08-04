@@ -47,6 +47,18 @@ engine:
   # and pruning them is floored at the consolidation watermark, so a slower cadence
   # delays reclaiming space rather than losing history.
   rollup_interval: 5m
+  # Optional: emits one normal alert when the trusted principal process of a
+  # service was started more recently than uptime_below. It also runs on the
+  # daemon's first cycle, so a restart while sermod was stopped is visible.
+  # Targets are explicit and do not inherit the top-level notify selection.
+  # service_restart_notice:
+  #   uptime_below: 5m
+  #   notify: [ops-email]
+  #   subject: "[sermo] ${restart.service}: principal process restarted"
+  #   message: >-
+  #     ${restart.service} (${restart.unit}) principal process
+  #     ${restart.process} (PID ${restart.pid}) started at
+  #     ${restart.started_at}; uptime ${restart.uptime}.
   # Optional append-only JSONL export logs (omit to disable):
   # access: /var/log/sermo/access.log
   # events: /var/log/sermo/event.log

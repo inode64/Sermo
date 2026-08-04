@@ -46,6 +46,16 @@ engine:
   retention_1d: 8784h  # daily buckets: the 1y graphs and the rolling-year SLA
   retention_events: 720h  # event/activity feed, the only history keeping exact timestamps
   rollup_interval: 5m  # cadence at which the daemon consolidates and prunes history
+  # One normal alert per new trusted principal-process identity. This is also
+  # checked during the first daemon cycle, covering restarts while sermod was off.
+  service_restart_notice:
+    uptime_below: 5m
+    notify: [ops-email]  # explicit targets; does not inherit top-level notify
+    subject: "[sermo] ${restart.service}: principal process restarted"
+    message: >-
+      ${restart.service} (${restart.unit}) principal process
+      ${restart.process} (PID ${restart.pid}) started at
+      ${restart.started_at}; uptime ${restart.uptime}.
 
 paths:
   # Directory entries are non-recursive unless a list item uses

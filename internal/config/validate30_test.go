@@ -97,6 +97,41 @@ defaults:
 	}
 }
 
+func TestValidateServiceRestartNotice(t *testing.T) {
+	valid := validateGlobalDoc(t, `
+engine:
+  service_restart_notice:
+    uptime_below: 5m
+    notify: wall
+    subject: "${restart.service}: restarted"
+    message: "${restart.process} pid ${restart.pid} uptime ${restart.uptime}"
+defaults:
+  policy: { cooldown: 5m }
+`)
+	for _, token := range []string{"service_restart_notice", "restart.service", "restart.process"} {
+		mustNotHave(t, valid, token)
+	}
+
+	invalid := validateGlobalDoc(t, `
+engine:
+  service_restart_notice:
+    uptime_below: 0s
+    notify: unknown
+    message: ""
+    extra: true
+defaults:
+  policy: { cooldown: 5m }
+`)
+	for _, token := range []string{
+		"engine.service_restart_notice.uptime_below",
+		"engine.service_restart_notice.notify references unknown notifier",
+		"engine.service_restart_notice.message is required",
+		"engine.service_restart_notice.extra is not supported",
+	} {
+		mustHave(t, invalid, token)
+	}
+}
+
 func TestValidateBackoffDurations(t *testing.T) {
 	// A garbage initial must not let a valid max slip through. A previous
 	// implementation left the parsed initial at 0, so any max compared >= 0

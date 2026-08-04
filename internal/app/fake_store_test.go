@@ -17,6 +17,7 @@ type fakeStore struct {
 	panicFound bool
 	panicSrc   string
 	settling   map[string]state.OperationSettlingRecord
+	restarts   map[string]state.ServiceRestartNoticeRecord
 }
 
 func newFakeStore() *fakeStore {
@@ -26,6 +27,7 @@ func newFakeStore() *fakeStore {
 		updated:  map[string]time.Time{},
 		now:      time.Now,
 		settling: map[string]state.OperationSettlingRecord{},
+		restarts: map[string]state.ServiceRestartNoticeRecord{},
 	}
 }
 
@@ -117,5 +119,24 @@ func (f *fakeStore) ClearOperationSettling(service string) error {
 		return errors.New("clear operation settling failed")
 	}
 	delete(f.settling, service)
+	return nil
+}
+
+func (f *fakeStore) ServiceRestartNotice(service string) (state.ServiceRestartNoticeRecord, bool, error) {
+	if f == nil {
+		return state.ServiceRestartNoticeRecord{}, false, nil
+	}
+	record, found := f.restarts[service]
+	return record, found, nil
+}
+
+func (f *fakeStore) SetServiceRestartNotice(service string, record state.ServiceRestartNoticeRecord) error {
+	if f == nil {
+		return nil
+	}
+	if f.failSet {
+		return errors.New("set service restart notice failed")
+	}
+	f.restarts[service] = record
 	return nil
 }

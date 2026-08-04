@@ -6,6 +6,41 @@ import (
 	"sermo/internal/cfgval"
 )
 
+const defaultServiceRestartNoticeSubject = "[sermo] ${restart.service}: main process restarted"
+
+// ServiceRestartNotice configures a one-shot global notification when a
+// service's principal process is younger than UptimeBelow. A zero value means
+// the notice is disabled.
+type ServiceRestartNotice struct {
+	UptimeBelow time.Duration
+	Notify      []string
+	Subject     string
+	Message     string
+}
+
+// EngineServiceRestartNotice returns the resolved global restart-notice policy.
+// A missing engine.service_restart_notice block disables the feature.
+func EngineServiceRestartNotice(cfg *Config) (ServiceRestartNotice, bool) {
+	if cfg == nil {
+		return ServiceRestartNotice{}, false
+	}
+	engine, _ := cfg.Global.Raw[SectionEngine].(map[string]any)
+	raw, ok := engine[EngineKeyServiceRestartNotice].(map[string]any)
+	if !ok {
+		return ServiceRestartNotice{}, false
+	}
+	subject := cfgval.AsString(raw[ServiceRestartNoticeKeySubject])
+	if subject == "" {
+		subject = defaultServiceRestartNoticeSubject
+	}
+	return ServiceRestartNotice{
+		UptimeBelow: cfgval.Duration(raw[ServiceRestartNoticeKeyUptimeBelow]),
+		Notify:      NotifyDefault(map[string]any{sectionNotify: raw[ServiceRestartNoticeKeyNotify]}),
+		Subject:     subject,
+		Message:     cfgval.AsString(raw[ServiceRestartNoticeKeyMessage]),
+	}, true
+}
+
 const (
 	// DefaultEngineInterval is the fallback for engine.interval.
 	DefaultEngineInterval = 30 * time.Second

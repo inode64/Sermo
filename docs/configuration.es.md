@@ -396,6 +396,11 @@ engine:
   retention_1d: 8784h          # historial diario (los gráficos de 1y, SLA anual móvil)
   retention_events: 720h       # feed de eventos/actividad
   rollup_interval: 5m         # cadencia de consolidación + poda
+  # service_restart_notice:    # alerta normal opcional para un proceso principal recién iniciado
+  #   uptime_below: 5m
+  #   notify: [ops-email]      # destinos explícitos; no hereda el notify superior
+  #   subject: "[sermo] ${restart.service}: proceso principal reiniciado"
+  #   message: "${restart.service} PID ${restart.pid} se inició hace ${restart.uptime}"
   # Optional append-only JSONL export logs (opt-in: omit a key to disable it).
   # access: /var/log/sermo/access.log
   # events: /var/log/sermo/event.log
@@ -424,6 +429,53 @@ cuando se establece; los directorios padre se crean según sea necesario (direct
 
 `engine.interval` es la cadencia por defecto a la que se ejecutan las comprobaciones de
 cada service. Cada service ejecuta todas sus comprobaciones una vez por ciclo.
+
+### Aviso de reinicio del proceso principal
+
+`engine.service_restart_notice` es opcional. Cuando se configura, Sermo emite
+un evento normal de tipo `alert` para cada identidad nueva del proceso principal
+confiable de un service cuyo uptime real sea menor que `uptime_below`. También se
+ejecuta en el primer ciclo activo del daemon, por lo que detecta un reinicio que
+ocurrió mientras `sermod` estaba detenido. Solo genera un evento y una
+notificación: nunca cambia el service, no afecta al SLA y aparece en el feed
+normal de la Web UI y de `sermoctl activity`.
+
+```yaml
+engine:
+  service_restart_notice:
+    uptime_below: 5m       # obligatorio y estrictamente positivo
+    notify: [ops-email]    # obligatorio; `none` registra el evento sin entrega
+    subject: "[sermo] ${restart.service}: proceso principal reiniciado"  # opcional
+    message: >-            # obligatorio
+      El proceso principal ${restart.process} de ${restart.service}
+      (PID ${restart.pid}) se inició en ${restart.started_at};
+      uptime ${restart.uptime}.
+```
+
+La selección de `notify` es deliberadamente explícita y nunca hereda el valor
+global de nivel superior. `subject` usa por defecto
+`[sermo] ${restart.service}: main process restarted`. El asunto y el mensaje
+pueden usar `${restart.service}`, `${restart.unit}`, `${restart.process}`,
+`${restart.pid}`, `${restart.uptime}`, `${restart.uptime_seconds}`,
+`${restart.started_at}` y `${restart.threshold}`, además de las variables de
+runtime estándar como `${date}` y `${event}`.
+
+Sermo solo confía en una identidad explícita o proporcionada por el backend:
+el `MainPID` de systemd, el PID init de Docker, o un pidfile de OpenRC / selector
+nombrado `processes.main`. Si no puede identificar el proceso principal de forma
+segura, no lo adivina y no emite el aviso. El PID y su marca de inicio se guardan
+en la base de estado, de forma que cada identidad produce como máximo un aviso
+incluso tras reiniciar el daemon. Una operación de Sermo queda registrada, pero
+no se notifica durante su ciclo de estabilización; así, un reinicio desde CLI,
+Web UI o una remediación automática de Sermo no se informa como externo.
+
+La entrega externa sigue la seguridad habitual de alertas: el modo pánico la
+suprime y el modo dry-run usa únicamente la ruta de terminal habilitada. Una
+plantilla de notifier recibe además como campos estructurados
+`SERMO_RESTART_SERVICE`, `SERMO_RESTART_UNIT`, `SERMO_RESTART_PROCESS`,
+`SERMO_RESTART_PID`, `SERMO_RESTART_UPTIME`,
+`SERMO_RESTART_UPTIME_SECONDS`, `SERMO_RESTART_STARTED_AT` y
+`SERMO_RESTART_UPTIME_BELOW`.
 
 `engine.artifact_interval` (por defecto `5m`) es la cadencia con la que el daemon
 inspecciona apps del catálogo instaladas, bibliotecas del catálogo y artefactos de
@@ -1495,6 +1547,12 @@ cuerpo generado original para esa parte. Los datos disponibles son:
   campos faltantes se renderizan como una cadena vacía.
 - **`.SortedFields`** — todos los campos estructurados como entradas estables
   `{Name, Value}`, útil para `range`.
+
+Un aviso de reinicio de proceso principal añade los campos estructurados
+`SERMO_RESTART_SERVICE`, `SERMO_RESTART_UNIT`, `SERMO_RESTART_PROCESS`,
+`SERMO_RESTART_PID`, `SERMO_RESTART_UPTIME`, `SERMO_RESTART_UPTIME_SECONDS`,
+`SERMO_RESTART_STARTED_AT` y `SERMO_RESTART_UPTIME_BELOW`; también establece los
+campos habituales `SERMO_SERVICE`, `SERMO_RULE` y `SERMO_EVENT`.
 
 Ejemplo:
 
@@ -3080,8 +3138,8 @@ configurados: `dry_run` aplica a services y watches; `stop_policy`, `policy` y
 `max_parallel_checks`, `default_timeout`,
 `operation_timeout`, `artifact_interval`, `startup_delay`, `backend`, `user_lookup`,
 `user_lookup_timeout`, `state_cache_size`, las ventanas `retention_*` y
-`rollup_interval`) son configuración del daemon y nunca se
-fusionan con un service.
+`rollup_interval` y `service_restart_notice`) son configuración del daemon y
+nunca se fusionan con un service.
 
 Para limpiar residuales de servicios, `defaults.stop_policy.force_kill` acepta
 `false`, `true` o `auto`. `true` requiere un selector `kill_only_if` explícito.

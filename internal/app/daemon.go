@@ -49,6 +49,14 @@ type OperationSettlingStore interface {
 	ClearOperationSettling(service string) error
 }
 
+// ServiceRestartNoticeStore persists the principal process identity already
+// handled by the external-restart notice monitor. It is separate from
+// operation-settling state because it must survive ordinary daemon restarts.
+type ServiceRestartNoticeStore interface {
+	ServiceRestartNotice(service string) (state.ServiceRestartNoticeRecord, bool, error)
+	SetServiceRestartNotice(service string, record state.ServiceRestartNoticeRecord) error
+}
+
 // SLARecorder persists one availability sample per observed monitoring cycle, so
 // availability can be reported over rolling windows. Implemented by
 // internal/state.Store; nil disables SLA tracking.
@@ -170,6 +178,13 @@ type Deps struct {
 	// OperationSettling suppresses checks' side effects while a service operation
 	// is running and through the first active post-operation cycle.
 	OperationSettling OperationSettlingStore
+	// ServiceRestartNotice persists principal-process identities so one external
+	// restart emits at most one notice across sermod restarts. Optional: a
+	// configured notice remains safely silent without durable state.
+	ServiceRestartNotice ServiceRestartNoticeStore
+	// RestartNotice is the validated global principal-process restart notice.
+	// nil disables it for every service in this generation.
+	RestartNotice *config.ServiceRestartNotice
 	// Panic gates the daemon-wide panic mode (hooks, alerts and automatic
 	// remediation suppressed). Optional: nil means panic mode is never on.
 	Panic *PanicGate
@@ -357,6 +372,7 @@ func BuildWorkers(ctx context.Context, cfg *config.Config, deps Deps, collector 
 	}
 	resolver := servicemgr.NewUnitResolver()
 	resolver.Manager = deps.Manager
+	restartNotice, restartNoticeConfigured := config.EngineServiceRestartNotice(cfg)
 
 	for _, name := range cfg.SortedServiceNames() {
 		doc := cfg.Services[name]
@@ -384,6 +400,9 @@ func BuildWorkers(ctx context.Context, cfg *config.Config, deps Deps, collector 
 		serviceDeps.Backend = target.Backend
 		serviceDeps.Manager = target.Manager
 		serviceDeps.BackendPIDs = target.BackendPIDs
+		if restartNoticeConfigured {
+			serviceDeps.RestartNotice = &restartNotice
+		}
 		w, svcWatches, warns := buildWorker(ctx, name, target.Unit, resolved.Tree, serviceDeps, collector)
 		for _, x := range warns {
 			warnings = append(warnings, serviceSubjectPrefix+name+": "+x)
@@ -506,6 +525,7 @@ func buildWorker(ctx context.Context, name, unit string, tree map[string]any, de
 		return worker.cycle
 	})
 	pidsForCycle := func() []int { return processPIDs(processesForCycle()) }
+	primaryProcess := primaryProcessForCycle(processesForCycle, primaryStartReader(collector), deps.Now)
 	// Reuse the cycle's memoized discovery: the stale-binary check runs once per
 	// service per cycle, and rediscovering would repeat the whole selector sweep
 	// (and, on systemd, the backend PID lookup's subprocesses) for a set that is
@@ -550,37 +570,41 @@ func buildWorker(ctx context.Context, name, unit string, tree map[string]any, de
 	warnings = append(warnings, stateWarnings...)
 
 	worker = &Worker{
-		Service:           name,
-		Rules:             ruleSet,
-		MetricChecks:      rules.ReferencedChecks(tree),
-		Policy:            rules.ParsePolicy(tree),
-		State:             remediationState,
-		Notifiers:         deps.Notifiers,
-		GlobalNotify:      deps.GlobalNotify,
-		GlobalEmission:    deps.GlobalEmission,
-		Remediation:       deps.Remediation,
-		RuleWindows:       deps.RuleWindows,
-		CheckDeps:         checkDeps,
-		Interval:          cfgval.Duration(tree[config.EntryKeyInterval]),
-		Gates:             parseCheckGates(tree),
-		Sample:            sampleMetrics,
-		LiveSample:        liveSample,
-		Operate:           engine.Do,
-		IsPaused:          monitorPaused(deps.Monitor, name),
-		InPanic:           deps.Panic.Active,
-		Settling:          deps.Settling,
-		OperationSettling: deps.OperationSettling,
-		Observability:     deps.Observability,
-		DryRun:            config.DryRun(tree),
-		ResolveRefs:       func() rules.RefResolver { return rules.NewCheckResolver(preflightBuilt, maxParallel) },
-		RecordCycle:       recordCycle,
-		Publish:           publishSnapshots(deps.Snapshots, name, checkTypes),
-		PersistState:      ruleStatePersister(deps.RuleState, deps.Emit, name, ruleSet),
-		Now:               deps.Now,
-		Emit:              deps.Emit,
-		windows:           windowStates,
-		libBaseline:       libBaseline,
-		artifactSamples:   deps.ArtifactSamples,
+		Service:              name,
+		Unit:                 unit,
+		Rules:                ruleSet,
+		MetricChecks:         rules.ReferencedChecks(tree),
+		Policy:               rules.ParsePolicy(tree),
+		State:                remediationState,
+		Notifiers:            deps.Notifiers,
+		GlobalNotify:         deps.GlobalNotify,
+		GlobalEmission:       deps.GlobalEmission,
+		Remediation:          deps.Remediation,
+		RuleWindows:          deps.RuleWindows,
+		CheckDeps:            checkDeps,
+		Interval:             cfgval.Duration(tree[config.EntryKeyInterval]),
+		Gates:                parseCheckGates(tree),
+		Sample:               sampleMetrics,
+		LiveSample:           liveSample,
+		Operate:              engine.Do,
+		IsPaused:             monitorPaused(deps.Monitor, name),
+		InPanic:              deps.Panic.Active,
+		Settling:             deps.Settling,
+		OperationSettling:    deps.OperationSettling,
+		ServiceRestartNotice: deps.ServiceRestartNotice,
+		RestartNotice:        deps.RestartNotice,
+		PrimaryProcess:       primaryProcess,
+		Observability:        deps.Observability,
+		DryRun:               config.DryRun(tree),
+		ResolveRefs:          func() rules.RefResolver { return rules.NewCheckResolver(preflightBuilt, maxParallel) },
+		RecordCycle:          recordCycle,
+		Publish:              publishSnapshots(deps.Snapshots, name, checkTypes),
+		PersistState:         ruleStatePersister(deps.RuleState, deps.Emit, name, ruleSet),
+		Now:                  deps.Now,
+		Emit:                 deps.Emit,
+		windows:              windowStates,
+		libBaseline:          libBaseline,
+		artifactSamples:      deps.ArtifactSamples,
 
 		appVersionCmd:   appVersionCmds(tree),
 		appVersions:     map[string]string{},

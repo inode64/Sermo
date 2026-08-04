@@ -105,6 +105,7 @@ var validEngineKeys = set(
 	EngineKeyRetention1d,
 	EngineKeyRetentionEvents,
 	EngineKeyRollupInterval,
+	EngineKeyServiceRestartNotice,
 	EngineKeyStartupDelay,
 	EngineKeyStateCacheSize,
 	EngineKeyUserLookup,
@@ -130,7 +131,7 @@ func validateGlobal(cfg *Config) []Issue {
 	}
 
 	validateEnableIfTree(raw, add)
-	validateGlobalEngine(raw, add)
+	validateGlobalEngine(cfg, raw, add)
 	validateGlobalPaths(cfg, raw, add)
 	validateGlobalSecurity(raw, add)
 	validateGlobalWebAndEmission(raw, add)
@@ -140,7 +141,7 @@ func validateGlobal(cfg *Config) []Issue {
 	return issues
 }
 
-func validateGlobalEngine(raw map[string]any, add addFunc) {
+func validateGlobalEngine(cfg *Config, raw map[string]any, add addFunc) {
 	engine, ok := raw[SectionEngine].(map[string]any)
 	if !ok {
 		return
@@ -191,6 +192,44 @@ func validateGlobalEngine(raw map[string]any, add addFunc) {
 		} else if !isPositiveDuration(cfgval.String(v)) {
 			add(validationPositiveDurationFormat, enginePathDiagnosticsInterval, cfgval.String(v))
 		}
+	}
+	validateServiceRestartNotice(engine, notifierNames(cfg.Notifiers()), add)
+}
+
+func validateServiceRestartNotice(engine map[string]any, notifiers map[string]struct{}, add addFunc) {
+	raw, present := engine[EngineKeyServiceRestartNotice]
+	if !present {
+		return
+	}
+	notice, ok := raw.(map[string]any)
+	if !ok {
+		add(validationMappingFormat, engineFieldPath(EngineKeyServiceRestartNotice))
+		return
+	}
+	prefix := engineFieldPath(EngineKeyServiceRestartNotice)
+	for _, err := range unknownBlockKeys(prefix, notice, set(
+		ServiceRestartNoticeKeyUptimeBelow,
+		ServiceRestartNoticeKeyNotify,
+		ServiceRestartNoticeKeySubject,
+		ServiceRestartNoticeKeyMessage,
+	)) {
+		add("%s", err)
+	}
+	if _, configured := notice[ServiceRestartNoticeKeyUptimeBelow]; !configured {
+		add(validationRequiredFormat, prefix+"."+ServiceRestartNoticeKeyUptimeBelow)
+	} else {
+		validatePositiveDurationField(notice, ServiceRestartNoticeKeyUptimeBelow, prefix+"."+ServiceRestartNoticeKeyUptimeBelow, add)
+	}
+	if notifyRaw, configured := notice[ServiceRestartNoticeKeyNotify]; !configured {
+		add(validationRequiredFormat, prefix+"."+ServiceRestartNoticeKeyNotify)
+	} else {
+		validateNotifySelection(prefix+"."+ServiceRestartNoticeKeyNotify, notifyRaw, notifiers, add)
+	}
+	if message, configured := notice[ServiceRestartNoticeKeyMessage]; !configured || strings.TrimSpace(cfgval.AsString(message)) == "" {
+		add(validationRequiredFormat, prefix+"."+ServiceRestartNoticeKeyMessage)
+	}
+	if subject, configured := notice[ServiceRestartNoticeKeySubject]; configured && strings.TrimSpace(cfgval.AsString(subject)) == "" {
+		add("%s must be a non-empty string when set", prefix+"."+ServiceRestartNoticeKeySubject)
 	}
 }
 
