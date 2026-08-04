@@ -4898,6 +4898,15 @@ func TestDetectHostname(t *testing.T) {
 	}
 }
 
+func TestShortHostnameExportsDetected(t *testing.T) {
+	old := detectedHostname
+	detectedHostname = "node1"
+	defer func() { detectedHostname = old }()
+	if got := ShortHostname(); got != "node1" {
+		t.Fatalf("ShortHostname() = %q, want node1", got)
+	}
+}
+
 func TestBuiltinHostnameVar(t *testing.T) {
 	old := detectedHostname
 	detectedHostname = "node1"

@@ -171,6 +171,7 @@ with an `{"ok": bool, "message": string}` body for a handled action.
 | Notifications | opt-in browser-notification bell; once granted, targets that newly start failing raise one grouped notification while the tab is hidden |
 | Status | last complete refresh age, connection errors, or panels retaining older data after a partial refresh; `#statusbar` ends with host `uptime:` then daemon `status:` (`ok` / `starting` / …) as a paired tail |
 | System status | host identity, host type, daemon/backend/runtime summary |
+| Browser tab title | after the first full load: `Sermo - <host>` when healthy, `(N) Sermo - <host>` when attention has N signals, `Sermo - <host> · starting` while the daemon is starting; `<host>` is the short hostname from `GET /api/daemon` (same identity as the Basic auth realm) |
 
 Editable notes:
 

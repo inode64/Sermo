@@ -189,8 +189,47 @@ func (s *Server) withAuth(next http.Handler) http.Handler {
 }
 
 func (s *Server) challenge(w http.ResponseWriter) {
-	w.Header().Set(headerWWWAuthenticate, authBasicRealmSermo)
+	host := ""
+	if s != nil {
+		host = s.Hostname
+	}
+	w.Header().Set(headerWWWAuthenticate, basicAuthChallenge(host))
 	writeJSON(w, http.StatusUnauthorized, ActionResult{OK: false, Message: authMessageRequired})
+}
+
+// basicAuthRealmValue is the unquoted realm string: "Sermo" or "Sermo <host>".
+func basicAuthRealmValue(shortHost string) string {
+	shortHost = strings.TrimSpace(shortHost)
+	if shortHost == "" {
+		return authBasicRealmPrefix
+	}
+	return authBasicRealmPrefix + " " + shortHost
+}
+
+// basicAuthChallenge builds the WWW-Authenticate value for a Basic challenge.
+// The realm includes the short hostname when known so Chrome's password manager
+// labels each dashboard distinctly across many open tabs.
+func basicAuthChallenge(shortHost string) string {
+	return `Basic realm="` + escapeHTTPQuotedString(basicAuthRealmValue(shortHost)) + `"`
+}
+
+// escapeHTTPQuotedString escapes \ and " for an RFC 7230 quoted-string.
+func escapeHTTPQuotedString(s string) string {
+	if !strings.ContainsAny(s, `\"`) {
+		return s
+	}
+	// Worst case every rune is escaped: double the length is enough headroom.
+	const escapeHeadroom = 2
+	var b strings.Builder
+	b.Grow(len(s) * escapeHeadroom)
+	for i := range len(s) {
+		switch s[i] {
+		case '\\', '"':
+			b.WriteByte('\\')
+		}
+		b.WriteByte(s[i])
+	}
+	return b.String()
 }
 
 // denyUnauthenticated refuses a request that carries no usable credential, and

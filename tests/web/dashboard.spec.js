@@ -223,6 +223,13 @@ test("dashboard passes axe and fits the viewport", async ({ page }) => {
   await expect(page.locator("#target-search")).toBeVisible();
 });
 
+// Multi-host operators keep many tabs open; the document title must name the
+// short host from GET /api/daemon (fixture here) so tabs stay distinguishable.
+// Attention signals prefix "(N) "; healthy hosts use "Sermo - <host>" alone.
+test("browser tab title includes the short hostname", async ({ page }) => {
+  await expect(page).toHaveTitle(/Sermo - fixture/);
+});
+
 test("section navigation wraps instead of scrolling sideways on compact screens", async ({ page }) => {
   const nav = page.locator("#section-nav");
   const layout = await nav.evaluate((element) => {

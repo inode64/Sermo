@@ -409,6 +409,7 @@ func run(args []string) int {
 			Addr:                   addr,
 			Backend:                webHolder,
 			Auth:                   auth,
+			Hostname:               config.ShortHostname(),
 			AllowedHosts:           webAllowedHosts(cfg),
 			Logger:                 logger,
 			AccessLog:              accessLog,
