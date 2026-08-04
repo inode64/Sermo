@@ -1477,6 +1477,9 @@ let latestHostMetrics = [];   // last /api/host readings (for process memory bar
 // Defer favicon/title until load() has the full dashboard snapshot. Avoids a
 // green default flashing to red while panels hydrate.
 let healthIconReady = false;
+// Short host identity from GET /api/daemon (same source as the Basic realm).
+// Used in the browser tab title so multi-host operators can tell tabs apart.
+let dashboardHostname = "";
 // The alert count and attention banner also need watches/apps, which load in a
 // second phase after the aggregate dashboard. Stays false until the first
 // complete snapshot so a reload never flashes a partial/false alert.
@@ -1893,6 +1896,37 @@ function setFavicon(status) {
     dot.style.boxShadow = `0 0 0 3px ${color}38`;
   }
 }
+
+// shortHostName keeps the first DNS label so FQDNs from older daemons still fit
+// the tab title the same way config.ShortHostname does on the server.
+function shortHostName(name) {
+  if (!name) return "";
+  const s = String(name).trim();
+  if (!s) return "";
+  return s.split(".")[0] || s;
+}
+
+// setDocumentTitle names the tab for multi-host operators:
+//   Sermo - algieba
+//   (3) Sermo - algieba
+//   Sermo - algieba · starting
+// Until healthIconReady, leave the bootstrap <title> alone.
+function setDocumentTitle({ attentionCount = 0, starting = false } = {}) {
+  if (!healthIconReady) return;
+  const host = shortHostName(dashboardHostname);
+  const base = host ? `Sermo - ${host}` : "Sermo";
+  if (starting) {
+    document.title = host ? `${base} · starting` : "Sermo · starting";
+    return;
+  }
+  document.title = attentionCount > 0 ? `(${attentionCount}) ${base}` : base;
+}
+
+function rememberDashboardHostname(hostname) {
+  const short = shortHostName(hostname);
+  if (!short || short === dashboardHostname) return;
+  dashboardHostname = short;
+}
 function browserNotifyEnabled() {
   try { return localStorage.getItem(BROWSER_NOTIFY_KEY) === storageBoolTrue; } catch (_) { return false; }
 }
@@ -2043,16 +2077,16 @@ function renderAttention() {
   const startingNow = latestReady && latestReady.ready === false && latestReady.status === daemonStatusStarting;
   if (startingNow) {
     setFavicon(targetStateStarting);
-    if (healthIconReady) document.title = "Sermo · starting";
+    setDocumentTitle({ starting: true });
   } else if (!items.length) {
     setFavicon(healthStatusOK);
-    if (healthIconReady) document.title = "Sermo · services";
+    setDocumentTitle({ attentionCount: 0 });
     box.classList.add("live-hidden");
     setHTMLIfChanged(box, "");
     return;
   } else {
     setFavicon(items.some((it) => it.level === healthStatusCritical) ? healthStatusCritical : healthStatusWarning);
-    if (healthIconReady) document.title = `(${items.length}) Sermo · services`;
+    setDocumentTitle({ attentionCount: items.length });
   }
   box.classList.remove("live-hidden");
   const html = `
@@ -5585,6 +5619,7 @@ function renderNotifiers(notifiers) {
 
 function renderDaemon(info) {
   if (!info) return;
+  rememberDashboardHostname(info.hostname);
   const set = (id, val) => {
     const el = $(id);
     if (el) el.textContent = val || "—";
@@ -6132,6 +6167,7 @@ function renderStatus(ctx) {
     latestReady = ready || {};
     latestLocks = locks || [];
     latestHostMetrics = hostMetrics || [];
+    if (daemon && daemon.hostname) rememberDashboardHostname(daemon.hostname);
 
     // System-status line (line 2): host identity + detected backend + OS + live readings.
     const sys = $("#system-status");

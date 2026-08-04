@@ -847,6 +847,13 @@ sin credencial utilizable: el propio panel (`/`) y `/login`, que existe para
 invocar el diálogo a demanda y devolverte a la portada — así escala a admin un
 invitado anónimo.
 
+El reto usa un **realm por host**: `Basic realm="Sermo <hostname>"`, donde
+`<hostname>` es la misma identidad corta que `${hostname}` (primera etiqueta
+DNS, o `SERMO_HOSTNAME` si está definido). En `algieba` el navegador muestra el
+realm `Sermo algieba`, de modo que el gestor de contraseñas distingue un panel
+de otro cuando hay muchas pestañas abiertas. Si la identidad del host no se
+conoce, el realm cae a `Sermo`.
+
 Todo lo demás responde `401` **sin** cabecera `WWW-Authenticate`: la API JSON y
 `/api/stream`, el canal de Server-Sent Events que el panel mantiene abierto. Esa
 distinción importa porque el stream reconecta solo, cada cinco segundos según el
