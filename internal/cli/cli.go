@@ -257,8 +257,8 @@ type options struct {
 	cost     int    // --cost: bcrypt work factor (0 means the default)
 }
 
-// event is a minimal struct for unmarshaling events from the daemon's /api/events
-// (and per-service) endpoints. Matches the shape returned by web.Event / LoggedEvent.
+// event is a minimal struct for unmarshaling an event returned by the daemon's
+// global or per-service event endpoint. Matches web.Event / LoggedEvent.
 type event struct {
 	Time    string `json:"time"`
 	Service string `json:"service"`
@@ -272,6 +272,12 @@ type event struct {
 	// Output carries the failing command's bounded stdout/stderr. The table view
 	// stays one line per event; `--json` is where the detail is available.
 	Output string `json:"output,omitempty"`
+}
+
+// eventPage is the cursor response returned by the global /api/events endpoint.
+// Per-service event endpoints return the event array directly.
+type eventPage struct {
+	Events []event `json:"events"`
 }
 
 // globalPath returns the --config path, or the packaged default.
@@ -1672,11 +1678,19 @@ func (a App) fetchEvents(ctx context.Context, opts options, service string, limi
 		return nil, fmt.Errorf("events fetch failed (%d): %s%s", resp.StatusCode, strings.TrimSpace(string(body)), daemonWebStatusHint(resp.StatusCode))
 	}
 
-	var evs []event
-	if err := json.NewDecoder(resp.Body).Decode(&evs); err != nil {
+	if service != "" {
+		var events []event
+		if err := json.NewDecoder(resp.Body).Decode(&events); err != nil {
+			return nil, fmt.Errorf("decode service events: %w", err)
+		}
+		return events, nil
+	}
+
+	var page eventPage
+	if err := json.NewDecoder(resp.Body).Decode(&page); err != nil {
 		return nil, fmt.Errorf("decode events: %w", err)
 	}
-	return evs, nil
+	return page.Events, nil
 }
 
 func (a App) applyDaemonWebAuth(req *http.Request, cfg *config.Config) {
