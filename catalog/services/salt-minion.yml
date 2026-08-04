@@ -12,21 +12,35 @@ restart_on_change:
     app: >-
       ${display_name} will restart after version change of ${change.app}: ${change.old_version} -> ${change.new_version}
 pidfile: /run/salt-minion.pid
+processes:
+  main:
+    # Salt runs through its Python wrapper on Gentoo, so its real executable is
+    # the interpreter rather than /usr/bin/salt-minion.  This selector provides
+    # discovery only; it cannot authorize signals to the shared interpreter.
+    cmd: (^|[[:space:]])/usr/lib/python-exec/python[0-9.]+/salt-minion([[:space:]]|$)
+    user: root
+os:
+  gentoo:
+    # OpenRC runs Salt under supervise-daemon.  Its own pidfile is the only
+    # strict identity Sermo may signal if OpenRC leaves a stale supervisor
+    # behind; the Python minion and logger children remain discovery-only.
+    pidfile:
+      - /run/supervisor-salt-minion.pid
+      - /run/salt-minion.pid
+    processes:
+      supervisor:
+        exe: /usr/bin/supervise-daemon
+        cmd: ^supervise-daemon salt-minion --start([[:space:]]|$)
+        user: root
+    stop_policy:
+      force_kill: auto
+      term_timeout: 5s
+      kill_timeout: 5s
 watches:
   service:
     check:
       type: service
       expect: active
-  process:
-    check:
-      type: process
-      exe: ${salt_minion_binary}
-      user: root
-      state: running
-      requires:
-        - service
-      optional: true
-      verify: true
   alert-if-memory-high:
     check:
       type: metric
