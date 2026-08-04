@@ -56,14 +56,52 @@ finish() {
 	exit "$rc"
 }
 
+web_runtime_dir() {
+	runtime_dir="/run/sermo"
+	if [ -r /etc/sermo/sermo.yml ]; then
+		configured_runtime="$(awk '
+			/^paths:[[:space:]]*(#.*)?$/ { in_paths = 1; next }
+			in_paths && /^[^[:space:]]/ { exit }
+			in_paths && /^[[:space:]]+runtime:[[:space:]]*/ {
+				sub(/^[[:space:]]*runtime:[[:space:]]*/, "")
+				sub(/[[:space:]]+#.*$/, "")
+				gsub(/^[[:space:]]+|[[:space:]]+$/, "")
+				if (($0 ~ /^".*"$/) || ($0 ~ /^'"'"'.*'"'"'$/)) {
+					sub(/^./, "")
+					sub(/.$/, "")
+				}
+				print
+				exit
+			}' /etc/sermo/sermo.yml)"
+		case "$configured_runtime" in
+			/*) runtime_dir="$configured_runtime" ;;
+		esac
+	fi
+	printf '%s\n' "$runtime_dir"
+}
+
+web_admin_password() {
+	token_file="$(web_runtime_dir)/web.token"
+	if [ -r "$token_file" ]; then
+		IFS= read -r token <"$token_file" || true
+		token="${token%$'\r'}"
+		if [ -n "$token" ]; then
+			printf '%s' "$token"
+			return
+		fi
+	fi
+	printf '%s' "$web_password"
+}
+
 http_get() {
 	url="$1"
+	admin_password="$(web_admin_password)"
 	if command -v curl >/dev/null 2>&1; then
-		curl -fsS -u "admin:${web_password}" "$url"
+		curl -fsS -u "admin:${admin_password}" "$url"
 		return $?
 	fi
 	if command -v wget >/dev/null 2>&1; then
-		wget -qO- --user=admin --password="$web_password" "$url"
+		wget -qO- --user=admin --password="$admin_password" "$url"
 		return $?
 	fi
 	return 127

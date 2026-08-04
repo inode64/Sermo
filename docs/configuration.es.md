@@ -3083,6 +3083,12 @@ configurados: `dry_run` aplica a services y watches; `stop_policy`, `policy` y
 `rollup_interval`) son configuración del daemon y nunca se
 fusionan con un service.
 
+Para limpiar residuales de servicios, `defaults.stop_policy.force_kill` acepta
+`false`, `true` o `auto`. `true` requiere un selector `kill_only_if` explícito.
+`auto` reutiliza solo identidades estrictas de `processes:` que declaran `exe` y
+`user`; no autoriza un proceso por nombre ni cmdline y deja los servicios sin
+identidad verificada como `orphan_processes`.
+
 `defaults.dry_run` es opcional y por defecto es `false`; cada service o watch
 puede sobrescribirlo con su propio `dry_run` de nivel superior.
 

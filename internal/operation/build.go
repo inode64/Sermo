@@ -92,6 +92,7 @@ func New(c Config) Engine {
 	stopArtifacts := stopArtifactsFromTree(tree)
 	killPolicy, stopPolicyWarnings := process.ParseStopPolicy(tree)
 	selectors, selectorWarnings := process.ParseSelectors(tree)
+	killPolicy = process.EnableAutomaticReaping(killPolicy, selectors)
 	hasCommandMatch := hasCommandMatchSelector(selectors)
 	configErr := firstWarningError(
 		warningError(process.SectionStopPolicy, stopPolicyWarnings),

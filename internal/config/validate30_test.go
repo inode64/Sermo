@@ -653,6 +653,27 @@ stop_policy:
 			want: []string{"force_kill=true requires kill_only_if"},
 		},
 		{
+			name: "automatic force kill mode is valid",
+			service: `
+name: svc
+service: x
+stop_policy:
+  force_kill: auto
+processes:
+  main: { exe: /usr/sbin/svc, user: svc }
+`,
+		},
+		{
+			name: "force kill rejects unknown mode",
+			service: `
+name: svc
+service: x
+stop_policy:
+  force_kill: eventually
+`,
+			want: []string{`stop_policy.force_kill must be a boolean or "auto"`},
+		},
+		{
 			name: "stop policy durations",
 			service: `
 name: svc

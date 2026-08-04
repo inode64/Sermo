@@ -146,6 +146,12 @@ otherwise travel into config backups and paste buffers never exists. A host
 without the file still gets the literal password, so a first install needs no
 preparation.
 
+During an update or config apply, the remote readiness and Web UI checks prefer
+the running daemon's owner-only `<paths.runtime>/web.token`. They therefore keep
+working when an existing host uses a rotated credential file or hashed web
+credentials; the orchestrator password remains the fallback for a first
+installation before a daemon token exists.
+
 `password` and `password_file` are mutually exclusive in `sermo.yml`; the
 generator emits exactly one of them.
 

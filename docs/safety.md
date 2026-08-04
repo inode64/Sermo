@@ -12,19 +12,24 @@ any `security:` toggle that tries to disable them.
    never runs.
 3. **Active named runtime locks always block service actions.** The operation
    engine checks `<runtime>/locks` automatically — no rule needed.
-4. **Never SIGKILL by default.** `force_kill` is false unless explicitly enabled.
+4. **Never signal an unverified residual.** `force_kill: auto` derives authority
+   only from named `processes:` selectors with both an exact executable and real
+   user; `force_kill: false` disables escalation.
 5. **Never kill by process name.** A kill requires an exact match on the
    resolved `/proc/<pid>/exe` path **and** the real UID against an explicit
-   `kill_only_if` selector. A `processes.<name>.cmd` regex may narrow process
-   discovery for shared binaries, but cmdline never authorizes a kill; a process
-   whose exe cannot be resolved (permission, or a `(deleted)` binary) is never
-   killed — it is reported as a residual instead.
+   `kill_only_if` selector or one paired strict `processes:` identity. A
+   `processes.<name>.cmd` regex may narrow discovery for shared binaries, but
+   cmdline never authorizes a kill; a process whose exe cannot be resolved
+   (permission, or a `(deleted)` binary) is never killed — it is reported as a
+   residual instead.
 6. **Never send terminating signals to PID 1 or kernel threads.** `SIGTERM`,
    `SIGKILL`, `SIGINT` and `SIGQUIT` are blocked centrally for PID 1 and for
    kernel threads (`kthreadd`/children with no userspace exe or cmdline). This is
    not configurable; protected residuals are reported instead.
 7. **`force_kill: true` requires `kill_only_if`** with both a `users` selector
-   and an `exe_any` selector, each non-empty.
+   and an `exe_any` selector, each non-empty. **`force_kill: auto`** requires
+   no broad fallback: it authorizes only strict `processes:` identities and
+   leaves services without one as `orphan_processes`.
 
 ## The operation engine
 
@@ -42,9 +47,9 @@ runs through the same engine:
    isolated stop succeeded and whose residuals are all backend-attributed to the
    same unit while that unit is again `active` (for example, socket activation):
    systemd has already restarted that unit, so Sermo runs postflight without a
-   second start or touching the activating socket. If `force_kill` is true,
-   SIGTERM then SIGKILL only the processes that exactly match `kill_only_if`,
-   rediscovering between steps.
+   second start or touching the activating socket. If `force_kill` is true or
+   `auto`, SIGTERM then SIGKILL only the processes that exactly match the
+   configured or derived identity, rediscovering between steps.
 7. After a clean stop (no residuals), reconcile the init's recorded state with
    reality — `systemctl reset-failed` (systemd) or `rc-service … zap` (OpenRC) —
    so a lingering failed/stuck marker can't disagree with the actual processes.
@@ -298,11 +303,13 @@ a name-only authority.
 2. No residuals → clean stop.
 3. Residuals with `force_kill: false` → `orphan_processes` (and a restart does
    **not** start).
-4. Residuals with `force_kill: true` → classify each one: KILLABLE only when
-   every `kill_only_if` field matches (exact resolved exe **and** real UID;
-   unresolvable exe and protected PIDs are never killable). SIGTERM the killable set, wait
-   `term_timeout`, rediscover; SIGKILL what remains of the killable set, wait
-   `kill_timeout`, rediscover. A residual that never matched is never signaled.
+4. Residuals with `force_kill: true` or `auto` → classify each one: KILLABLE
+   only when every explicit `kill_only_if` field matches, or when it matches a
+   single paired strict `processes:` identity (exact resolved exe **and** real
+   UID; unresolvable exe and protected PIDs are never killable). SIGTERM the
+   killable set, wait `term_timeout`, rediscover; SIGKILL what remains of the
+   killable set, wait `kill_timeout`, rediscover. A residual that never matched
+   is never signaled.
 5. The result is `ok` only when no residuals remain at all — whether the
    survivor was deliberately spared or outlived SIGKILL, the result is
    `orphan_processes` and lists every remaining process.

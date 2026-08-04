@@ -163,7 +163,7 @@ defaults:
     graceful_timeout: 30s
     term_timeout: 15s
     kill_timeout: 5s
-    force_kill: false
+    force_kill: auto
   policy:
     cooldown: 5m
 

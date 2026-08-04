@@ -106,7 +106,19 @@ func validateStopPolicy(tree map[string]any, add addFunc) {
 	for _, field := range []string{keyGracefulTimeout, keyTermTimeout, keyKillTimeout} {
 		validatePositiveDurationField(sp, field, stopPolicyFieldPath(field), add)
 	}
-	force, _ := sp[keyForceKill].(bool)
+	force := false
+	if value, present := sp[keyForceKill]; present {
+		switch v := value.(type) {
+		case bool:
+			force = v
+		case string:
+			if v != process.StopPolicyForceKillAuto {
+				add("%s must be a boolean or %q", stopPolicyPathForceKill, process.StopPolicyForceKillAuto)
+			}
+		default:
+			add("%s must be a boolean or %q", stopPolicyPathForceKill, process.StopPolicyForceKillAuto)
+		}
+	}
 	koi, hasKoi := sp[keyKillOnlyIf].(map[string]any)
 	if force && !hasKoi {
 		add("%s=true requires %s", stopPolicyPathForceKill, keyKillOnlyIf)

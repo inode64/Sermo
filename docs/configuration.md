@@ -2984,6 +2984,12 @@ for the inherited `config`/`version` permission flags. Engine-wide settings (`in
 `user_lookup_timeout`, `state_cache_size`, the `retention_*` windows and
 `rollup_interval`) are daemon configuration and never merge into a service.
 
+For service residual cleanup, `defaults.stop_policy.force_kill` accepts `false`,
+`true` or `auto`. `true` requires an explicit `kill_only_if` selector. `auto`
+reuses only strict named `processes:` identities that declare both `exe` and
+`user`; it does not authorize a process by name or cmdline and leaves services
+without a verified identity as `orphan_processes`.
+
 `defaults.dry_run` is optional and defaults to `false`; a service or watch may
 override it with its own top-level `dry_run`.
 

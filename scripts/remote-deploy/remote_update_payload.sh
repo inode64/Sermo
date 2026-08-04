@@ -127,14 +127,52 @@ finish() {
 	exit "$rc"
 }
 
+web_runtime_dir() {
+	runtime_dir="/run/sermo"
+	if [ -r /etc/sermo/sermo.yml ]; then
+		configured_runtime="$(awk '
+			/^paths:[[:space:]]*(#.*)?$/ { in_paths = 1; next }
+			in_paths && /^[^[:space:]]/ { exit }
+			in_paths && /^[[:space:]]+runtime:[[:space:]]*/ {
+				sub(/^[[:space:]]*runtime:[[:space:]]*/, "")
+				sub(/[[:space:]]+#.*$/, "")
+				gsub(/^[[:space:]]+|[[:space:]]+$/, "")
+				if (($0 ~ /^".*"$/) || ($0 ~ /^'"'"'.*'"'"'$/)) {
+					sub(/^./, "")
+					sub(/.$/, "")
+				}
+				print
+				exit
+			}' /etc/sermo/sermo.yml)"
+		case "$configured_runtime" in
+			/*) runtime_dir="$configured_runtime" ;;
+		esac
+	fi
+	printf '%s\n' "$runtime_dir"
+}
+
+web_admin_password() {
+	token_file="$(web_runtime_dir)/web.token"
+	if [ -r "$token_file" ]; then
+		IFS= read -r token <"$token_file" || true
+		token="${token%$'\r'}"
+		if [ -n "$token" ]; then
+			printf '%s' "$token"
+			return
+		fi
+	fi
+	printf '%s' "$web_password"
+}
+
 http_get() {
 	url="$1"
+	admin_password="$(web_admin_password)"
 	if command -v curl >/dev/null 2>&1; then
-		curl --connect-timeout "$http_timeout_seconds" --max-time "$http_timeout_seconds" -fsS -u "admin:${web_password}" "$url"
+		curl --connect-timeout "$http_timeout_seconds" --max-time "$http_timeout_seconds" -fsS -u "admin:${admin_password}" "$url"
 		return $?
 	fi
 	if command -v wget >/dev/null 2>&1; then
-		wget -qO- -T "$http_timeout_seconds" --user=admin --password="$web_password" "$url"
+		wget -qO- -T "$http_timeout_seconds" --user=admin --password="$admin_password" "$url"
 		return $?
 	fi
 	return 127
@@ -245,24 +283,36 @@ else
 	finish 40
 fi
 
-ready_rc=1
-ready_started_at="$(date +%s)"
-ready_deadline=$((ready_started_at + ready_wait_seconds))
-while [ "$(date +%s)" -lt "$ready_deadline" ]; do
+livez_rc=1
+started_at="$(date +%s)"
+deadline=$((started_at + ready_wait_seconds))
+while [ "$(date +%s)" -lt "$deadline" ]; do
 	if http_get "http://127.0.0.1:9797/livez?verbose" >"${out}/livez.out" 2>"${out}/livez.err"; then
-		ready_rc=0
+		livez_rc=0
 		break
 	fi
 	sleep 1
 done
-ready_waited=$(($(date +%s) - ready_started_at))
-printf '%s\n' "$ready_rc" >"${out}/livez.rc"
-printf '%s\n' "$ready_waited" >"${out}/livez_waited_seconds"
+livez_waited=$(($(date +%s) - started_at))
+printf '%s\n' "$livez_rc" >"${out}/livez.rc"
+printf '%s\n' "$livez_waited" >"${out}/livez_waited_seconds"
 
-http_get "http://127.0.0.1:9797/readyz?verbose" >"${out}/readyz.out" 2>"${out}/readyz.err"
-printf '%s\n' "$?" >"${out}/readyz.rc"
-http_get "http://127.0.0.1:9797/api/status" >"${out}/api_status.out" 2>"${out}/api_status.err"
-printf '%s\n' "$?" >"${out}/api_status.rc"
+readyz_rc=1
+while [ "$(date +%s)" -lt "$deadline" ]; do
+	if http_get "http://127.0.0.1:9797/readyz?verbose" >"${out}/readyz.out" 2>"${out}/readyz.err"; then
+		readyz_rc=0
+		break
+	fi
+	sleep 1
+done
+readyz_waited=$(($(date +%s) - started_at))
+printf '%s\n' "$readyz_rc" >"${out}/readyz.rc"
+printf '%s\n' "$readyz_waited" >"${out}/readyz_waited_seconds"
+
+http_get "http://127.0.0.1:9797/" >"${out}/web_html.out" 2>"${out}/web_html.err"
+printf '%s\n' "$?" >"${out}/web_html.rc"
+http_get "http://127.0.0.1:9797/api/dashboard" >"${out}/api_dashboard.out" 2>"${out}/api_dashboard.err"
+printf '%s\n' "$?" >"${out}/api_dashboard.rc"
 
 if command -v ss >/dev/null 2>&1; then
 	ss -ltnp 'sport = :9797' >"${out}/port9797_after" 2>&1 || true
@@ -270,10 +320,12 @@ elif command -v netstat >/dev/null 2>&1; then
 	netstat -ltnp >"${out}/port9797_after" 2>&1 || true
 fi
 
-if [ "$ready_rc" -ne 0 ]; then
-	# The new binaries are on disk but the daemon never became ready: restore the
-	# previous binaries and catalog and restart, so the host keeps a working
-	# Sermo instead of one that only fails at the next restart.
+if [ "$livez_rc" -ne 0 ] || [ "$readyz_rc" -ne 0 ] \
+	|| [ "$(cat "${out}/web_html.rc")" != "0" ] \
+	|| [ "$(cat "${out}/api_dashboard.rc")" != "0" ]; then
+	# The new binaries are on disk but the daemon or dashboard did not become
+	# healthy: restore the previous binaries and catalog and restart, so the host
+	# keeps a working Sermo instead of one that only fails at the next restart.
 	rollback
 	finish 50
 fi
