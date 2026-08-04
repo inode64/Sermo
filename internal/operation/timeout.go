@@ -20,6 +20,8 @@ const backendMargin = 30 * time.Second
 // force_kill is enabled, plus backendMargin.
 func MinimumTimeout(tree map[string]any) time.Duration {
 	policy, _ := process.ParseStopPolicy(tree)
+	selectors, _ := process.ParseSelectors(tree)
+	policy = process.EnableAutomaticReaping(policy, selectors)
 	d := policy.GracefulTimeout
 	if policy.ForceKill {
 		d += policy.TermTimeout + policy.KillTimeout

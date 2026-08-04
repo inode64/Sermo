@@ -18,6 +18,8 @@ processes:
   main:
     exe: ${snmpd_binary}
     user: ${user}
+stop_policy:
+  force_kill: auto
 reload:
   signal: HUP
 watches:

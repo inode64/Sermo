@@ -84,7 +84,7 @@ defaults:  # shared defaults for services and watches where applicable
     graceful_timeout: 30s
     term_timeout: 15s
     kill_timeout: 5s
-    force_kill: false  # SIGKILL never allowed by default
+    force_kill: auto  # exact processes: identities authorize TERM then KILL
   policy:
     cooldown: 5m  # required and positive: loop prevention
     max_actions: 4

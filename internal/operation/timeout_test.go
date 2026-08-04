@@ -61,6 +61,22 @@ func TestResolveTimeoutForceKillEscalation(t *testing.T) {
 	}
 }
 
+func TestResolveTimeoutAutomaticEscalation(t *testing.T) {
+	tree := map[string]any{"stop_policy": map[string]any{
+		"graceful_timeout": "10s",
+		"term_timeout":     "20s",
+		"kill_timeout":     "5s",
+		"force_kill":       process.StopPolicyForceKillAuto,
+	}, "processes": map[string]any{
+		"main": map[string]any{"exe": "/usr/sbin/svc", "user": "svc"},
+	}}
+	got := ResolveTimeout(30*time.Second, tree)
+	want := 10*time.Second + 20*time.Second + 5*time.Second + backendMargin
+	if got != want {
+		t.Fatalf("ResolveTimeout = %v, want %v", got, want)
+	}
+}
+
 func TestBoundContextRespectsShorterParent(t *testing.T) {
 	parent, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
 	defer cancel()

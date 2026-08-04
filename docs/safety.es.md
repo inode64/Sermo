@@ -12,11 +12,14 @@ cualquier conmutador `security:` que intente desactivarlas.
    nunca se ejecuta.
 3. **Los locks de runtime nombrados activos siempre bloquean las acciones de servicio.** El motor
    de operaciones comprueba `<runtime>/locks` automáticamente — no se necesita ninguna regla.
-4. **Nunca SIGKILL por defecto.** `force_kill` es false salvo que se habilite explícitamente.
+4. **Nunca señalizar un residual no verificado.** `force_kill: auto` deriva
+   autorización solo de selectores `processes:` con ejecutable exacto y usuario
+   real; `force_kill: false` desactiva la escalada.
 5. **Nunca matar por nombre de proceso.** Un kill requiere una coincidencia exacta en la
    ruta `/proc/<pid>/exe` resuelta **y** el UID real frente a un selector
-   `kill_only_if` explícito. Un regex `processes.<name>.cmd` puede acotar el
-   descubrimiento de procesos para binarios compartidos, pero el cmdline nunca autoriza un kill; un proceso
+   `kill_only_if` explícito o una identidad estricta emparejada de `processes:`.
+   Un regex `processes.<name>.cmd` puede acotar el descubrimiento de procesos
+   para binarios compartidos, pero el cmdline nunca autoriza un kill; un proceso
    cuyo exe no se puede resolver (permisos, o un binario `(deleted)`) nunca se
    mata — en su lugar se reporta como un residual.
 6. **Nunca enviar señales terminadoras a PID 1 ni a procesos del kernel.**
@@ -24,7 +27,9 @@ cualquier conmutador `security:` que intente desactivarlas.
    y para kernel threads (`kthreadd`/hijos sin exe de userspace ni cmdline). Esto
    no es configurable; los residuales protegidos se reportan en su lugar.
 7. **`force_kill: true` requiere `kill_only_if`** con tanto un selector `users`
-   como un selector `exe_any`, cada uno no vacío.
+   como un selector `exe_any`, cada uno no vacío. **`force_kill: auto`** no
+   usa un fallback amplio: solo autoriza identidades estrictas de `processes:` y
+   deja los servicios sin una como `orphan_processes`.
 
 ## El motor de operaciones
 
@@ -42,9 +47,9 @@ pasa por el mismo motor:
    tuvo éxito y cuyos residuales están todos atribuidos por el backend a la misma
    unidad mientras vuelve a estar `active` (por ejemplo, por activación de
    socket): systemd ya reinició esa unidad, así que Sermo ejecuta el postflight
-   sin un segundo start ni tocar el socket activador. Si `force_kill` es true,
-   SIGTERM y luego SIGKILL solo a los procesos que coincidan exactamente con
-   `kill_only_if`, redescubriendo entre pasos.
+   sin un segundo start ni tocar el socket activador. Si `force_kill` es true o
+   `auto`, SIGTERM y luego SIGKILL solo a los procesos que coincidan exactamente
+   con la identidad configurada o derivada, redescubriendo entre pasos.
 7. Tras un stop limpio (sin residuales), reconciliar el estado registrado del init con
    la realidad — `systemctl reset-failed` (systemd) o `rc-service … zap` (OpenRC) —
    para que un marcador persistente de failed/stuck no pueda contradecir los procesos reales.
@@ -297,11 +302,13 @@ Los campos de `stop_policy` omitidos por un servicio de catálogo o servicio her
 2. Sin residuales → stop limpio.
 3. Residuales con `force_kill: false` → `orphan_processes` (y un restart **no**
    inicia).
-4. Residuales con `force_kill: true` → clasificar cada uno: MATABLE solo cuando
-   cada campo de `kill_only_if` coincide (exe resuelto exacto **y** UID real;
-   un exe irresoluble y los PIDs protegidos nunca son matables). SIGTERM al conjunto matable, esperar
-   `term_timeout`, redescubrir; SIGKILL a lo que quede del conjunto matable, esperar
-   `kill_timeout`, redescubrir. Un residual que nunca coincidió nunca se señaliza.
+4. Residuales con `force_kill: true` o `auto` → clasificar cada uno: MATABLE
+   solo cuando cada campo de `kill_only_if` coincide, o cuando coincide con una
+   identidad estricta emparejada de `processes:` (exe resuelto exacto **y** UID
+   real; un exe irresoluble y los PIDs protegidos nunca son matables). SIGTERM
+   al conjunto matable, esperar `term_timeout`, redescubrir; SIGKILL a lo que
+   quede del conjunto matable, esperar `kill_timeout`, redescubrir. Un residual
+   que nunca coincidió nunca se señaliza.
 5. El resultado es `ok` solo cuando no queda ningún residual — ya sea que el
    superviviente fuera deliberadamente perdonado o sobreviviera al SIGKILL, el resultado es
    `orphan_processes` y lista cada proceso restante.

@@ -89,6 +89,51 @@ func TestParseStopPolicy(t *testing.T) {
 	}
 }
 
+func TestEnableAutomaticReapingUsesStrictSelectorPairs(t *testing.T) {
+	policy, warnings := ParseStopPolicy(map[string]any{
+		"stop_policy": map[string]any{"force_kill": StopPolicyForceKillAuto},
+	})
+	if len(warnings) != 0 {
+		t.Fatalf("warnings = %v", warnings)
+	}
+	got := EnableAutomaticReaping(policy, []Selector{
+		{Name: "main", Type: SelectorCommandMatch, Exe: "/usr/sbin/alpha", User: "alpha"},
+		{Name: "worker", Type: SelectorCommandMatch, Exe: "/usr/sbin/beta", User: "beta"},
+		{Name: "pidfile", Type: SelectorPidfile, Paths: []string{"/run/alpha.pid"}},
+		{Name: "incomplete", Type: SelectorCommandMatch, Exe: "/usr/sbin/incomplete"},
+	})
+	if !got.Automatic || !got.ForceKill {
+		t.Fatalf("policy = %+v, want enabled automatic reaping", got)
+	}
+	resolve := fakeUsers(map[string]uint32{"alpha": 101, "beta": 102})
+	for _, tc := range []struct {
+		name string
+		proc Process
+		want bool
+	}{
+		{"first pair", Process{PID: 10, UID: 101, Exe: "/usr/sbin/alpha", ExeOK: true}, true},
+		{"second pair", Process{PID: 11, UID: 102, Exe: "/usr/sbin/beta", ExeOK: true}, true},
+		{"crossed identity", Process{PID: 12, UID: 101, Exe: "/usr/sbin/beta", ExeOK: true}, false},
+		{"unresolved executable", Process{PID: 13, UID: 101, Exe: "/usr/sbin/alpha", ExeOK: false}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if actual := got.KillOnlyIf.Killable(tc.proc, resolve); actual != tc.want {
+				t.Errorf("Killable = %v, want %v", actual, tc.want)
+			}
+		})
+	}
+}
+
+func TestEnableAutomaticReapingWithoutStrictSelectorStaysDisabled(t *testing.T) {
+	policy := EnableAutomaticReaping(KillPolicy{Automatic: true}, []Selector{
+		{Name: "pidfile", Type: SelectorPidfile, Paths: []string{"/run/svc.pid"}},
+		{Name: "cmd", Type: SelectorCommandMatch, Cmd: "svc"},
+	})
+	if policy.ForceKill {
+		t.Fatalf("policy = %+v, want force kill disabled without exact exe/user", policy)
+	}
+}
+
 func TestParseStopPolicyBadDurationWarns(t *testing.T) {
 	tree := map[string]any{"stop_policy": map[string]any{"graceful_timeout": "notaduration"}}
 	policy, warnings := ParseStopPolicy(tree)

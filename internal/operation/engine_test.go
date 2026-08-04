@@ -895,6 +895,78 @@ func TestNewResidualDiscoveryReadsLiveProcfs(t *testing.T) {
 	}
 }
 
+func TestNewEnablesAutomaticResidualReapingFromStrictProcessSelector(t *testing.T) {
+	dir := t.TempDir()
+	locker := locks.NewOperationLocker(locks.RuntimeOpsDir(dir))
+	engine := New(Config{
+		Service: "snmpd",
+		Unit:    "snmpd",
+		Tree: map[string]any{
+			"stop_policy": map[string]any{"force_kill": process.StopPolicyForceKillAuto},
+			"processes": map[string]any{
+				"main": map[string]any{"exe": "/usr/sbin/snmpd", "user": "root"},
+			},
+		},
+		Manager: &fakeManager{status: servicemgr.StatusActive},
+		Locker:  &locker,
+		Scanner: locks.NewScanner(locks.RuntimeLocksDir(dir)),
+		Discoverer: process.Discoverer{
+			ResolveUser: func(name string) (uint32, bool) { return 0, name == "root" },
+		},
+	})
+	if !engine.KillPolicy.Automatic || !engine.KillPolicy.ForceKill {
+		t.Fatalf("kill policy = %+v, want automatic force kill", engine.KillPolicy)
+	}
+	if !engine.KillPolicy.KillOnlyIf.Killable(process.Process{PID: 7, UID: 0, Exe: "/usr/sbin/snmpd", ExeOK: true}, engine.Reaper.ResolveUser) {
+		t.Fatal("automatic policy must authorize the exact configured snmpd identity")
+	}
+}
+
+func TestNewAutomaticResidualReapingClearsBeforeRestart(t *testing.T) {
+	dir := t.TempDir()
+	locker := locks.NewOperationLocker(locks.RuntimeOpsDir(dir))
+	reader := &steppedPIDReader{steps: []map[int]process.Identity{
+		{46: {PID: 46, PPID: 1, UID: 0, Exe: "/usr/sbin/snmpd", ExeOK: true, State: "S"}},
+		{},
+	}}
+	mgr := &fakeManager{status: servicemgr.StatusActive}
+	engine := New(Config{
+		Service: "snmpd",
+		Unit:    "snmpd",
+		Tree: map[string]any{
+			"stop_policy": map[string]any{"force_kill": process.StopPolicyForceKillAuto},
+			"processes": map[string]any{
+				"main": map[string]any{"exe": "/usr/sbin/snmpd", "user": "root"},
+			},
+		},
+		Manager: mgr,
+		Locker:  &locker,
+		Scanner: locks.NewScanner(locks.RuntimeLocksDir(dir)),
+		Discoverer: process.Discoverer{
+			Reader:      reader,
+			ResolveUser: func(name string) (uint32, bool) { return 0, name == "root" },
+		},
+		Sleep: func(time.Duration) {},
+	})
+	// The residual is deliberately exercised after the backend stop. This test
+	// covers cleanup itself, not the separate active-service identity preflight.
+	engine.RestartIdentity = nil
+	signaler := &recordingSignaler{}
+	engine.Reaper.Signaler = signaler
+
+	res := engine.Restart(context.Background())
+	if res.Status != ResultOK {
+		t.Fatalf("status = %q (%s), want ok", res.Status, res.Message)
+	}
+	wantSignal := fmt.Sprintf("%d %s", 46, syscall.SIGTERM)
+	if !slices.Contains(signaler.calls, wantSignal) {
+		t.Fatalf("signals = %v, want %q", signaler.calls, wantSignal)
+	}
+	if !mgr.did("start snmpd") {
+		t.Fatalf("restart must start only after reaping the residual, calls=%v", mgr.calls)
+	}
+}
+
 func TestNewRuntimeDiscoveryWarningWithoutCommandMatchBlocksRestart(t *testing.T) {
 	dir := t.TempDir()
 	locker := locks.NewOperationLocker(locks.RuntimeOpsDir(dir))

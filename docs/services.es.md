@@ -834,13 +834,22 @@ processes:
 - `cmd` — una regex Go RE2 emparejada contra el **cmdline** del proceso (argv unido).
   Úsela para binarios compartidos (`java .*unifi`, `openvpn .*tun1\.conf`) cuando un
   ejecutable sirve a varias instancias. El cmdline es spoofable, así que `cmd` solo
-  estrecha el descubrimiento; la señalización residual sigue estando autorizada solo por
-  `stop_policy.kill_only_if` (`exe_any` más `users`).
+  estrecha el descubrimiento; nunca autoriza por sí solo la señalización residual.
 - `user` / `group` — el UID / GID real propietario del proceso.
 
 Estos alimentan la monitorización **y** el reaper residual, de modo que un selector más rico permite a un
 stop atrapar y matar más restos (un residual no matable permanece como
 `orphan_processes`). El *check* `process` sigue coincidiendo solo por `exe`/`user`.
+
+Use `stop_policy.force_kill: auto` para que cada selector con `exe` exacto y
+`user` autorice limpiar ese mismo residual. Sermo mantiene unido cada par
+ejecutable/usuario, envía TERM, redescubre y solo después envía KILL al mismo
+superviviente verificado. Un selector con solo `cmd`, un ejecutable no resuelto
+o un proceso fuera de las identidades configuradas sigue siendo
+`orphan_processes` y el reinicio nunca inicia un segundo daemon.
+`force_kill: true` sigue requiriendo el selector explícito `kill_only_if`, útil
+cuando las identidades configuradas no son el conjunto deseado; `force_kill: false`
+desactiva la escalada.
 
 ### Aislamiento de dependencias (`allow_dependencies`)
 
