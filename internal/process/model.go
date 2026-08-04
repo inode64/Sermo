@@ -75,6 +75,9 @@ const (
 	StopPolicyKeyKillTimeout = "kill_timeout"
 	// StopPolicyKeyForceKill is stop_policy.force_kill.
 	StopPolicyKeyForceKill = "force_kill"
+	// StopPolicyForceKillAuto enables residual reaping from strict named process
+	// selectors when no explicit kill_only_if selector is configured.
+	StopPolicyForceKillAuto = "auto"
 	// StopPolicyKeyKillOnlyIf is stop_policy.kill_only_if.
 	StopPolicyKeyKillOnlyIf = "kill_only_if"
 	// StopPolicyKeyUsers is stop_policy.kill_only_if.users.

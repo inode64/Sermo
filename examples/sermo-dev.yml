@@ -45,7 +45,9 @@ defaults:
     graceful_timeout: 30s
     term_timeout: 15s
     kill_timeout: 5s
-    force_kill: false
+    # Reap a residual only when its configured processes: selector proves the
+    # exact executable and real user. Use false to opt a service out.
+    force_kill: auto
   policy:
     cooldown: 5m
 
