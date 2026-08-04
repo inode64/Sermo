@@ -1739,27 +1739,21 @@ func TestCatalogRRDCachedUsesUnixSocketHealth(t *testing.T) {
 	assertCatalogUnixSocketHealth(t, "rrdcached", "tcp", "/run/rrdcached.sock")
 }
 
-func TestCatalogPMLFarmUsesResidentHelperProcessHealth(t *testing.T) {
+func TestCatalogPCPFarmsDoNotCrossAttributeSharedPMPause(t *testing.T) {
 	root := repoRoot(t)
-	body := catalogDocByName(t, root, "services", "pmlogger_farm")
-	process := catalogWatchCheck(t, body, "process")
-	exes := cfgval.StringList(process["exe_any"])
-	want := []string{"${pmlogger_farm_pmpause_binary}", "${pmlogger_farm_pmsleep_binary}"}
-	if !slices.Equal(exes, want) {
-		t.Fatalf("pmlogger_farm resolved checks.process.exe_any = %v, want %v", exes, want)
-	}
-	if got := cfgval.String(process["exe"]); got != "" {
-		t.Fatalf("pmlogger_farm resolved checks.process.exe = %q, want empty", got)
-	}
-	// The helper process is optionally monitored (long-lived pmpause may show as
-	// pmsleep after PCP upgrades). Since it can legitimately be absent, it cannot be
-	// a required start-verification; that role is the service check (verify: true).
-	if !cfgval.Bool(process["optional"]) {
-		t.Fatalf("pmlogger_farm resolved checks.process must be optional for long-lived pmpause after PCP upgrades")
-	}
-	svc := catalogWatchCheck(t, body, "service")
-	if !cfgval.Bool(svc["verify"]) {
-		t.Fatalf("pmlogger_farm start-verification must be on resolved checks.service (verify: true), not the optional helper process")
+	for _, service := range []string{"pmlogger_farm", "pmie_farm"} {
+		body := catalogDocByName(t, root, "services", service)
+		if _, found := body["processes"]; found {
+			t.Fatalf("%s must not select the shared pmpause helper outside its unit cgroup", service)
+		}
+		watches := nested(t, body, "watches")
+		if _, found := watches["process"]; found {
+			t.Fatalf("%s must not publish a generic pmpause process watch", service)
+		}
+		svc := catalogWatchCheck(t, body, "service")
+		if !cfgval.Bool(svc["verify"]) {
+			t.Fatalf("%s start-verification must remain on checks.service", service)
+		}
 	}
 }
 

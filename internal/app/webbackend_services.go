@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"sermo/internal/cfgval"
 	"sermo/internal/checks"
 	"sermo/internal/config"
 	"sermo/internal/servicemgr"
@@ -60,6 +61,7 @@ func (b *WebBackend) viewWithRuntime(ctx context.Context, name string, e *webEnt
 		return svc
 	}
 	status, statusAt := e.backendStatusSnapshot(ctx, b.webNow())
+	status, statusAt = b.freshServiceCheckStatus(name, e, status, statusAt)
 	svc.Status = status
 	if !statusAt.IsZero() {
 		svc.StatusObservedAt = statusAt.UTC().Format(time.RFC3339)
@@ -95,6 +97,42 @@ func (b *WebBackend) viewWithRuntime(ctx context.Context, name string, e *webEnt
 	}
 	b.decorateServiceRuntime(name, e, &svc)
 	return svc
+}
+
+// freshServiceCheckStatus prefers a newer service-check result over the web
+// list's init-status cache. Service workers already query the same resolved
+// unit, so this keeps a CLI or external restart from displaying the cache's
+// former inactive state after monitoring has observed it active, without
+// adding an init-system query to each dashboard request.
+func (b *WebBackend) freshServiceCheckStatus(name string, e *webEntry, status string, statusAt time.Time) (string, time.Time) {
+	if e == nil || b.snapshots == nil {
+		return status, statusAt
+	}
+	snapshots := b.snapshots.Get(name)
+	for _, check := range e.checkNames {
+		if e.checkTypes[check] != checks.CheckTypeService {
+			continue
+		}
+		snap, ok := snapshots[check]
+		if !ok || !b.serviceCheckSnapshotCurrent(e, check, snap) || !snap.At.After(statusAt) {
+			continue
+		}
+		observed := servicemgr.Status(cfgval.String(snap.Data[checks.DataKeyStatus]))
+		if !normalizedServiceStatus(observed) {
+			continue
+		}
+		return string(observed), snap.At
+	}
+	return status, statusAt
+}
+
+func normalizedServiceStatus(status servicemgr.Status) bool {
+	switch status {
+	case servicemgr.StatusActive, servicemgr.StatusInactive, servicemgr.StatusPaused, servicemgr.StatusFailed, servicemgr.StatusUnknown:
+		return true
+	default:
+		return false
+	}
 }
 
 func (b *WebBackend) serviceObservability(name string, e *webEntry, status, checkHealth string, monitored, observed bool) (bool, []string) {

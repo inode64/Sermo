@@ -92,6 +92,7 @@ func selectPrimaryProcess(procs []process.Process) (process.Process, bool) {
 	return process.Process{}, false
 }
 
+//nolint:ireturn // The reader is intentionally injectable so tests can control process start times.
 func primaryStartReader(collector *metrics.Collector) processStartReader {
 	if collector != nil {
 		if reader, ok := collector.Reader.(processStartReader); ok {

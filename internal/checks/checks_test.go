@@ -564,6 +564,8 @@ func TestServiceCheck(t *testing.T) {
 	ok := serviceCheck{base: base{name: "s", timeout: time.Second}, expect: "active", status: status}
 	if res := ok.Run(context.Background()); !res.OK {
 		t.Errorf("active==active should pass: %s", res.Message)
+	} else if got := res.Data[DataKeyStatus]; got != string(servicemgr.StatusActive) {
+		t.Errorf("status data = %#v, want %q", got, servicemgr.StatusActive)
 	}
 	bad := serviceCheck{base: base{name: "s", timeout: time.Second}, expect: "inactive", status: status}
 	if res := bad.Run(context.Background()); res.OK {
