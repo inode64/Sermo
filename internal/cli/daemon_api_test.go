@@ -85,6 +85,65 @@ paths:
 	}
 }
 
+func TestFetchEventsHTTP(t *testing.T) {
+	tests := []struct {
+		name    string
+		service string
+		path    string
+		payload any
+	}{
+		{
+			name:    "global cursor page",
+			path:    "/api/events",
+			payload: map[string]any{"events": []event{{Service: "web", Kind: "alert", Message: "down"}}, "has_more": true},
+		},
+		{
+			name:    "service event array",
+			service: "web",
+			path:    "/api/services/web/events",
+			payload: []event{{Service: "web", Kind: "recovered", Message: "up"}},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path != tc.path {
+					http.NotFound(w, r)
+					return
+				}
+				if r.URL.Query().Get(daemonAPIQueryLimit) != "7" {
+					http.Error(w, "unexpected limit", http.StatusBadRequest)
+					return
+				}
+				if auth := r.Header.Get("Authorization"); auth != "Basic YWRtaW46c2VjcmV0" {
+					http.Error(w, "unauthorized", http.StatusUnauthorized)
+					return
+				}
+				writeDaemonAPITestJSON(w, tc.payload)
+			}))
+			defer srv.Close()
+
+			_, global, cfg := daemonAPITestConfig(t, srv.URL, `
+web:
+  address: HOST
+  port: PORT
+  password: secret
+paths:
+`)
+			app := App{LoadConfig: func(string, ...config.Option) (*config.Config, error) { return cfg, nil }}
+
+			events, err := app.fetchEvents(context.Background(), options{config: global}, tc.service, 7)
+			if err != nil {
+				t.Fatalf("fetchEvents() error = %v", err)
+			}
+			if len(events) != 1 || events[0].Service != "web" {
+				t.Fatalf("fetchEvents() = %+v, want one web event", events)
+			}
+		})
+	}
+}
+
 func TestProbeDaemonWatchHTTP(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost || r.URL.Path != "/api/watches/disk-speed/probe" {
