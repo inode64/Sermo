@@ -26,6 +26,13 @@ const (
 	actionRestart = string(rules.ActionRestart)
 	actionReload  = string(rules.ActionReload)
 	actionResume  = string(rules.ActionResume)
+
+	// postflightMaxAttempts lets a daemon finish binding its ready socket after
+	// its init manager reports a successful start. The retries remain within the
+	// operation's bounded context, so they never turn a failed readiness probe
+	// into an unbounded wait.
+	postflightMaxAttempts   = 5
+	postflightRetryInterval = time.Second
 )
 
 // Manager is the subset of servicemgr.Manager the engine uses. Restart is built
@@ -288,11 +295,23 @@ func (e Engine) runPostflight(ctx context.Context, p plan, result *Result) bool 
 	if !p.postflight || e.Postflight == nil {
 		return true
 	}
-	out := e.Postflight(ctx)
-	result.Checks = append(result.Checks, out.Results...)
-	if out.OK {
-		return true
+	var out checks.Outcome
+	for attempt := range postflightMaxAttempts {
+		out = e.Postflight(ctx)
+		if out.OK {
+			result.Checks = append(result.Checks, out.Results...)
+			return true
+		}
+		if attempt+1 == postflightMaxAttempts {
+			break
+		}
+		if err := process.Wait(ctx, e.Sleep, postflightRetryInterval); err != nil {
+			result.Checks = append(result.Checks, out.Results...)
+			result.Status, result.Message = ResultFailed, "operation timed out during postflight"
+			return false
+		}
 	}
+	result.Checks = append(result.Checks, out.Results...)
 	result.Status, result.Message = ResultPostflightFailed, "postflight failed"
 	return false
 }

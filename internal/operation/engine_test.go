@@ -1039,6 +1039,193 @@ func TestNewActiveServiceWithoutExactProcessMatchBlocksRestart(t *testing.T) {
 	}
 }
 
+func TestNewActiveServiceWithStaleBinaryCanRestart(t *testing.T) {
+	dir := t.TempDir()
+	locker := locks.NewOperationLocker(locks.RuntimeOpsDir(dir))
+	mgr := &fakeManager{status: servicemgr.StatusActive}
+	stale := map[int]process.Identity{
+		200: {
+			PID:     200,
+			PPID:    1,
+			UID:     1001,
+			ExeOK:   false,
+			ExePrev: "/usr/sbin/rspamd",
+			State:   "S",
+		},
+	}
+	// The stale diagnostic takes a fresh snapshot after the identity discovery;
+	// retain the old process for both reads, then model the backend stop.
+	reader := &steppedPIDReader{steps: []map[int]process.Identity{stale, stale, stale, stale, {}}}
+	engine := New(Config{
+		Service: "rspamd",
+		Unit:    "rspamd",
+		Backend: "systemd",
+		Tree: map[string]any{
+			"processes": map[string]any{
+				"main": map[string]any{"exe": "/usr/sbin/rspamd", "user": "rspamd"},
+			},
+		},
+		Manager: mgr,
+		Locker:  &locker,
+		Scanner: locks.NewScanner(locks.RuntimeLocksDir(dir)),
+		Discoverer: process.Discoverer{
+			Reader: reader,
+			ResolveUser: func(name string) (uint32, bool) {
+				return 1001, name == "rspamd"
+			},
+		},
+		Sleep: func(time.Duration) {},
+	})
+
+	res := engine.Restart(context.Background())
+	if res.Status != ResultOK {
+		t.Fatalf("status = %q (%s), want ok", res.Status, res.Message)
+	}
+	if !mgr.did("stop rspamd") || !mgr.did("start rspamd") {
+		t.Fatalf("stale binary restart must reach the backend, calls=%v", mgr.calls)
+	}
+}
+
+func TestNewActiveServiceWithCommandOnlyProcessCanRestart(t *testing.T) {
+	dir := t.TempDir()
+	locker := locks.NewOperationLocker(locks.RuntimeOpsDir(dir))
+	mgr := &fakeManager{status: servicemgr.StatusActive}
+	reader := &steppedPIDReader{steps: []map[int]process.Identity{
+		{
+			200: {
+				PID:     200,
+				PPID:    1,
+				UID:     0,
+				Exe:     "/usr/bin/python3.12",
+				ExeOK:   true,
+				Cmdline: []string{"/usr/bin/python3.12", "/usr/lib/python-exec/python3.12/salt-minion"},
+				State:   "S",
+			},
+		},
+		{},
+	}}
+	engine := New(Config{
+		Service: "salt-minion",
+		Unit:    "salt-minion",
+		Backend: "openrc",
+		Tree: map[string]any{
+			"processes": map[string]any{
+				"main": map[string]any{"cmd": "(^|/)salt-minion( |$)", "user": "root"},
+			},
+		},
+		Manager: mgr,
+		Locker:  &locker,
+		Scanner: locks.NewScanner(locks.RuntimeLocksDir(dir)),
+		Discoverer: process.Discoverer{
+			Reader: reader,
+			ResolveUser: func(name string) (uint32, bool) {
+				return 0, name == "root"
+			},
+		},
+		Sleep: func(time.Duration) {},
+	})
+
+	procs, err := engine.Discover()
+	if err != nil {
+		t.Fatalf("Discover: %v", err)
+	}
+	if len(procs) != 1 || procs[0].PID != 200 {
+		t.Fatalf("discovered processes = %+v, want Python-wrapped salt-minion", procs)
+	}
+
+	res := engine.Restart(context.Background())
+	if res.Status != ResultOK {
+		t.Fatalf("status = %q (%s), want ok", res.Status, res.Message)
+	}
+	if !mgr.did("stop salt-minion") || !mgr.did("start salt-minion") {
+		t.Fatalf("command-only restart must reach the backend, calls=%v", mgr.calls)
+	}
+}
+
+func TestNewAutomaticResidualReapingSignalsOnlySaltSupervisor(t *testing.T) {
+	dir := t.TempDir()
+	locker := locks.NewOperationLocker(locks.RuntimeOpsDir(dir))
+	supervisor := process.Identity{
+		PID:     100,
+		PPID:    1,
+		UID:     0,
+		Exe:     "/usr/bin/supervise-daemon",
+		ExeOK:   true,
+		Cmdline: []string{"supervise-daemon", "salt-minion", "--start"},
+		State:   "S",
+	}
+	minion := process.Identity{
+		PID:     101,
+		PPID:    100,
+		UID:     0,
+		Exe:     "/usr/bin/python3.12",
+		ExeOK:   true,
+		Cmdline: []string{"/usr/bin/python3.12", "/usr/lib/python-exec/python3.12/salt-minion"},
+		State:   "S",
+	}
+	reader := &steppedPIDReader{steps: []map[int]process.Identity{
+		{100: supervisor, 101: minion},
+		{100: supervisor, 101: minion},
+		{100: supervisor, 101: minion},
+		{100: supervisor, 101: minion},
+		{},
+	}}
+	mgr := &fakeManager{status: servicemgr.StatusActive}
+	engine := New(Config{
+		Service: "salt-minion",
+		Unit:    "salt-minion",
+		Backend: "openrc",
+		Tree: map[string]any{
+			"stop_policy": map[string]any{
+				"force_kill":   process.StopPolicyForceKillAuto,
+				"term_timeout": "5s",
+				"kill_timeout": "5s",
+			},
+			"processes": map[string]any{
+				"main":       map[string]any{"cmd": "(^|[[:space:]])/usr/lib/python-exec/python[0-9.]+/salt-minion([[:space:]]|$)", "user": "root"},
+				"supervisor": map[string]any{"exe": "/usr/bin/supervise-daemon", "cmd": "^supervise-daemon salt-minion --start([[:space:]]|$)", "user": "root"},
+			},
+		},
+		Manager: mgr,
+		Locker:  &locker,
+		Scanner: locks.NewScanner(locks.RuntimeLocksDir(dir)),
+		Discoverer: process.Discoverer{
+			Reader: reader,
+			ResolveUser: func(name string) (uint32, bool) {
+				return 0, name == "root"
+			},
+		},
+		Sleep: func(time.Duration) {},
+	})
+	signaler := &recordingSignaler{}
+	engine.Reaper.Signaler = signaler
+	procs, err := engine.Discover()
+	if err != nil {
+		t.Fatalf("Discover: %v", err)
+	}
+	if len(procs) != 2 || procs[0].PID != supervisor.PID || procs[1].PID != minion.PID {
+		t.Fatalf("discovered processes = %+v, want supervisor and Python minion", procs)
+	}
+	ok, reason, err := engine.RestartIdentity(context.Background())
+	if err != nil || !ok {
+		t.Fatalf("RestartIdentity = %v, %q, %v; want allowed", ok, reason, err)
+	}
+
+	res := engine.Restart(context.Background())
+	if res.Status != ResultOK {
+		t.Fatalf("status = %q (%s), want ok", res.Status, res.Message)
+	}
+	want := fmt.Sprintf("%d %s", supervisor.PID, syscall.SIGTERM)
+	if !slices.Contains(signaler.calls, want) {
+		t.Fatalf("signals = %v, want %q", signaler.calls, want)
+	}
+	for _, call := range signaler.calls {
+		if strings.HasPrefix(call, fmt.Sprintf("%d ", minion.PID)) {
+			t.Fatalf("signals = %v, must not signal Python minion", signaler.calls)
+		}
+	}
+}
+
 func TestNewFailedServiceWithoutExactProcessMatchCanRestart(t *testing.T) {
 	dir := t.TempDir()
 	exe := filepath.Join(dir, "rspamd")
@@ -1233,6 +1420,33 @@ func TestRestartPostflightFailed(t *testing.T) {
 	}
 	if !h.mgr.did("start mysqld") {
 		t.Error("postflight runs after a successful start; the service stays up")
+	}
+}
+
+func TestRestartPostflightRetriesUntilServiceIsReady(t *testing.T) {
+	h := defaultHarness()
+	engine := h.engine()
+	attempts := 0
+	engine.Postflight = func(context.Context) checks.Outcome {
+		attempts++
+		return checks.Outcome{
+			OK: attempts == 3,
+			Results: []checks.Result{{
+				Check: "tcp",
+				OK:    attempts == 3,
+			}},
+		}
+	}
+
+	res := engine.Restart(context.Background())
+	if res.Status != ResultOK {
+		t.Fatalf("status = %q (%s), want ok", res.Status, res.Message)
+	}
+	if attempts != 3 {
+		t.Fatalf("postflight attempts = %d, want 3", attempts)
+	}
+	if len(res.Checks) != 1 || !res.Checks[0].OK {
+		t.Fatalf("final postflight checks = %+v, want only the ready result", res.Checks)
 	}
 }
 
