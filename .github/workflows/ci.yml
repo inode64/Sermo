@@ -44,7 +44,7 @@ jobs:
       # bespoke binary. Both versions are pinned in .custom-gcl.yml, which is
       # therefore a sound cache key: a rebuild happens only when that file moves.
       - name: Cache custom golangci-lint
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: bin/custom-gcl
           key: custom-gcl-${{ runner.os }}-${{ hashFiles('.custom-gcl.yml') }}
