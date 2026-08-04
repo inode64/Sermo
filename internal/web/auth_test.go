@@ -198,6 +198,41 @@ func TestAuthChallengesDocumentsOnly(t *testing.T) {
 	}
 }
 
+// The realm names the host so operators with many dashboards open can tell
+// which password prompt belongs to which machine.
+func TestAuthRealmIncludesHostname(t *testing.T) {
+	tests := []struct {
+		name     string
+		hostname string
+		want     string
+	}{
+		{name: "with short host", hostname: "algieba", want: `Basic realm="Sermo algieba"`},
+		{name: "empty falls back", hostname: "", want: `Basic realm="Sermo"`},
+		{name: "whitespace only falls back", hostname: "  ", want: `Basic realm="Sermo"`},
+		{name: "quoted specials escaped", hostname: `a"b\c`, want: `Basic realm="Sermo a\"b\\c"`},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := basicAuthChallenge(tc.hostname); got != tc.want {
+				t.Fatalf("basicAuthChallenge(%q) = %q, want %q", tc.hostname, got, tc.want)
+			}
+			h := (&Server{
+				Backend:  &fakeBackend{services: []Service{{Name: "web"}}},
+				Auth:     Auth{AdminCredentials: webcred.Plain("secret")},
+				Hostname: tc.hostname,
+			}).Handler()
+			rec := httptest.NewRecorder()
+			h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, routePathRoot, nil))
+			if rec.Code != http.StatusUnauthorized {
+				t.Fatalf("status = %d, want 401", rec.Code)
+			}
+			if got := rec.Header().Get(headerWWWAuthenticate); got != tc.want {
+				t.Fatalf("WWW-Authenticate = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestAdminFullAccess(t *testing.T) {
 	h := authServer(Auth{AdminCredentials: webcred.Plain("secret"), GuestCredentials: webcred.Plain("guestpw")})
 	rec := httptest.NewRecorder()

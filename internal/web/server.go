@@ -58,20 +58,22 @@ const (
 	headerWWWAuthenticate       = "WWW-Authenticate"
 	headerXContentTypeOptions   = "X-Content-Type-Options"
 	headerXFrameOptions         = "X-Frame-Options"
-	authBasicRealmSermo         = `Basic realm="Sermo"`
-	contentTypeHTMLUTF8         = "text/html; charset=utf-8"
-	contentTypeJSON             = httpx.ContentTypeJSON
-	contentTypeTextUTF8         = "text/plain; charset=utf-8"
-	headerValueDeny             = "DENY"
-	headerValueNoCache          = "no-cache"
-	headerValueNoStore          = "no-store"
-	headerValueNoReferrer       = "no-referrer"
-	headerValueNoSniff          = "nosniff"
-	cspNonceBytes               = 16
-	cspFallbackNonceBase        = 36
-	assetIndexHTML              = "index.html"
-	templateNoncePlaceholder    = "{{CSP_NONCE}}"
-	templateVersionPlaceholder  = "{{VERSION}}"
+	// authBasicRealmPrefix is the product name in WWW-Authenticate realms.
+	// challenge() appends the short hostname when known: `Basic realm="Sermo algieba"`.
+	authBasicRealmPrefix       = "Sermo"
+	contentTypeHTMLUTF8        = "text/html; charset=utf-8"
+	contentTypeJSON            = httpx.ContentTypeJSON
+	contentTypeTextUTF8        = "text/plain; charset=utf-8"
+	headerValueDeny            = "DENY"
+	headerValueNoCache         = "no-cache"
+	headerValueNoStore         = "no-store"
+	headerValueNoReferrer      = "no-referrer"
+	headerValueNoSniff         = "nosniff"
+	cspNonceBytes              = 16
+	cspFallbackNonceBase       = 36
+	assetIndexHTML             = "index.html"
+	templateNoncePlaceholder   = "{{CSP_NONCE}}"
+	templateVersionPlaceholder = "{{VERSION}}"
 )
 
 const (
@@ -1166,6 +1168,12 @@ type Server struct {
 	Backend Backend
 	Auth    Auth
 	Logger  *slog.Logger
+
+	// Hostname is the short host identity used in the Basic auth realm
+	// (`Basic realm="Sermo <Hostname>"`) so multi-host operators can tell
+	// password prompts apart. Empty falls back to realm "Sermo". The daemon
+	// sets it from config.ShortHostname() (same source as ${hostname}).
+	Hostname string
 
 	// AllowedHosts lists extra hostnames accepted in the Host header when auth
 	// is disabled (open mode), e.g. the public name of a fronting proxy.

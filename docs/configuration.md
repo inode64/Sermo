@@ -814,6 +814,13 @@ credential: the dashboard itself (`/`), and `/login`, which exists to summon the
 box on demand and then send you back home — that is how an anonymous guest
 escalates to admin.
 
+The challenge uses a **per-host realm**: `Basic realm="Sermo <hostname>"`, where
+`<hostname>` is the same short host identity as `${hostname}` (first DNS label,
+or `SERMO_HOSTNAME` when set). On `algieba` the browser shows a realm of
+`Sermo algieba`, so the password manager can tell one dashboard from another when
+many tabs are open. If the host identity is unknown the realm falls back to
+`Sermo`.
+
 Everything else answers `401` **without** a `WWW-Authenticate` header: the JSON
 API, and `/api/stream`, the Server-Sent Events channel the dashboard keeps open.
 That distinction matters because the stream reconnects on its own, every five
