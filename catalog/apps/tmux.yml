@@ -1,0 +1,9 @@
+name: tmux
+display_name: tmux
+category: terminal
+description: Terminal multiplexer.
+variables:
+  binary: ${bindir}/tmux
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}", "-V"], timeout: 10s }

@@ -1,0 +1,19 @@
+name: virtiofsd
+display_name: virtiofsd
+category: virtualization
+description: VirtioFS daemon that shares a host directory with a virtual machine.
+variables:
+  binary: /usr/libexec/virtiofsd
+os:
+  debian:
+    variables:
+      binary: /usr/lib/qemu/virtiofsd
+  ubuntu:
+    variables:
+      binary: /usr/lib/qemu/virtiofsd
+  arch:
+    variables:
+      binary: /usr/lib/virtiofsd
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}", "--version"], timeout: 10s }

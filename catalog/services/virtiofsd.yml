@@ -1,0 +1,14 @@
+name: virtiofsd-%i
+display_name: virtiofsd ${instance}
+category: virtualization
+description: Systemd-managed VirtioFS daemon instance.
+apps:
+  - virtiofsd
+service:
+  systemd:
+    - virtiofsd@${instance}
+watches:
+  service:
+    check:
+      type: service
+      expect: active
