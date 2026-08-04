@@ -860,7 +860,7 @@ func assertNebulaMeshCatalogProfile(t *testing.T, cfg *Config, root, name, app, 
 	}
 }
 
-func TestSMBCatalogUsesPerRolePidfiles(t *testing.T) {
+func TestSMBCatalogUsesSMBDPidfile(t *testing.T) {
 	root := repoRoot(t)
 	dir := t.TempDir()
 	global := filepath.Join(dir, "sermo.yml")
@@ -878,21 +878,61 @@ func TestSMBCatalogUsesPerRolePidfiles(t *testing.T) {
 		t.Fatalf("ResolveCatalog(smb): %v", errs)
 	}
 	pidfiles := nested(t, resolved.Tree, "pidfiles")
-	for _, role := range []string{"smbd", "nmbd"} {
-		if got := cfgval.String(pidfiles[role]); got == "" {
-			t.Fatalf("pidfiles.%s missing in %v", role, pidfiles)
-		}
-		process := nested(t, resolved.Tree, "processes", role)
-		if cfgval.String(process["exe"]) == "" || cfgval.String(process["user"]) == "" {
-			t.Fatalf("processes.%s lacks exact identity: %v", role, process)
-		}
-		check := nested(t, resolved.Tree, "checks", "pidfile-"+role)
-		if cfgval.String(check["type"]) != "pidfile" || cfgval.String(check["path"]) == "" {
-			t.Fatalf("checks.pidfile-%s = %v, want pidfile check", role, check)
-		}
+	if got := cfgval.String(pidfiles["smbd"]); got == "" {
+		t.Fatalf("pidfiles.smbd missing in %v", pidfiles)
+	}
+	process := nested(t, resolved.Tree, "processes", "smbd")
+	if cfgval.String(process["exe"]) == "" || cfgval.String(process["user"]) == "" {
+		t.Fatalf("processes.smbd lacks exact identity: %v", process)
+	}
+	check := nested(t, resolved.Tree, "checks", "pidfile-smbd")
+	if cfgval.String(check["type"]) != "pidfile" || cfgval.String(check["path"]) == "" {
+		t.Fatalf("checks.pidfile-smbd = %v, want pidfile check", check)
+	}
+	if _, found := pidfiles["nmbd"]; found {
+		t.Fatalf("smb must not require nmbd pidfile: %v", pidfiles)
+	}
+	if processes := nested(t, resolved.Tree, "processes"); processes["nmbd"] != nil {
+		t.Fatalf("smb must not own nmbd process: %v", processes)
 	}
 	if _, hasLegacy := resolved.Tree["pidfile"]; hasLegacy {
 		t.Fatalf("smb must use pidfiles, not pidfile: %v", resolved.Tree["pidfile"])
+	}
+}
+
+func TestCockpitCatalogMonitorsSocketActivationUnit(t *testing.T) {
+	root := repoRoot(t)
+	dir := t.TempDir()
+	global := filepath.Join(dir, "sermo.yml")
+	body := "paths:\n  services: []\n" +
+		"defaults:\n  policy: { cooldown: 5m }\n"
+	if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := loadConfig(t, global, WithCatalogDirs(repoCatalogDir(root)))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	resolved, errs := cfg.ResolveCatalog(CategoryService, "cockpit")
+	if len(errs) > 0 {
+		t.Fatalf("ResolveCatalog(cockpit): %v", errs)
+	}
+	candidates, trust := ServiceCandidates(resolved.Tree, "systemd", "cockpit")
+	if trust || !slices.Equal(candidates, []string{"cockpit.socket"}) {
+		t.Fatalf("Cockpit systemd candidates = %v, trust = %v, want [cockpit.socket] and false", candidates, trust)
+	}
+	if units := AdditionalUnits(resolved.Tree, "systemd"); len(units) != 0 {
+		t.Fatalf("Cockpit must not operate static cockpit.service as an auxiliary unit: %v", units)
+	}
+	if _, found := resolved.Tree["socket"]; found {
+		t.Fatalf("Cockpit must not monitor session-only runtime sockets: %v", resolved.Tree["socket"])
+	}
+	if processes, found := resolved.Tree["processes"]; found {
+		t.Fatalf("Cockpit must not require a transient socket-activated worker: %v", processes)
+	}
+	check := nested(t, resolved.Tree, "checks", "service")
+	if cfgval.String(check["type"]) != "service" || cfgval.String(check["expect"]) != "active" {
+		t.Fatalf("Cockpit service check = %v, want active socket service check", check)
 	}
 }
 
