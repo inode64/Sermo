@@ -42,6 +42,17 @@ watches:
         op: <
         value: 500
       timeout: 5s
+  backup-or-restore:
+    check:
+      type: command
+      command:
+        - /usr/bin/pgrep
+        - -f
+        - '(^|.*/)restic( .*)? (backup|restore)( |$)'
+      expect_exit: [0]
+      timeout: 5s
+      optional: true
+      reports: state
   alert-if-memory-high:
     check:
       type: metric
@@ -56,3 +67,13 @@ watches:
       action: alert
       message: >-
         During ${rule.duration}, ${display_name} memory usage stayed above ${check.threshold} (current ${check.value})
+rules:
+  block-restart-during-backup-or-restore:
+    type: guard
+    blocks: [restart]
+    if:
+      active:
+        check: backup-or-restore
+    then:
+      action: block
+      message: "${display_name} backup or restore is running"
