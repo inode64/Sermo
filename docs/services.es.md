@@ -837,6 +837,12 @@ processes:
   estrecha el descubrimiento; nunca autoriza por sí solo la señalización residual.
 - `user` / `group` — el UID / GID real propietario del proceso.
 
+No use un ejecutable auxiliar genérico compartido por varias unidades como
+selector de servicio. En systemd, la atribución por cgroup identifica los procesos
+de la unidad; donde no haya una identidad exacta única, deje el auxiliar sin
+seleccionar. Un selector auxiliar amplio puede atribuir un proceso activo de otra
+unidad como residual y bloquear el reinicio de forma segura.
+
 Estos alimentan la monitorización **y** el reaper residual, de modo que un selector más rico permite a un
 stop atrapar y matar más restos (un residual no matable permanece como
 `orphan_processes`). El *check* `process` sigue coincidiendo solo por `exe`/`user`.

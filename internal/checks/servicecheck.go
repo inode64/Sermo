@@ -26,5 +26,11 @@ func (c serviceCheck) Run(ctx context.Context) Result {
 		return c.result(false, fmt.Sprintf("status: %v", err), start)
 	}
 	ok := string(status) == c.expect
-	return c.result(ok, fmt.Sprintf("status %s (want %s)", status, c.expect), start)
+	result := c.result(ok, fmt.Sprintf("status %s (want %s)", status, c.expect), start)
+	// Keep the normalized backend state with the monitoring sample. Consumers
+	// such as the dashboard can then use the service worker's fresh observation
+	// instead of retaining an older status-list cache entry after an external or
+	// CLI operation.
+	result.Data = map[string]any{DataKeyStatus: string(status)}
+	return result
 }
