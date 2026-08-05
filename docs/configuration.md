@@ -622,6 +622,19 @@ Trigger a daemon configuration reload with:
 sermoctl daemon reload
 ```
 
+Installed service managers expose the same in-place reload through their native
+interface:
+
+```sh
+systemctl reload sermod  # systemd
+rc-service sermod reload # OpenRC
+```
+
+Both send `SIGHUP` to the init-tracked `sermod` process; they validate and swap
+the configuration in place rather than restarting the daemon. As with
+`sermoctl daemon reload`, an invalid configuration leaves the current generation
+running and is reported in Sermo's event log and daemon log.
+
 Only one `sermod` instance may run per `<paths.runtime>` directory (default
 `/run/sermo`). At startup it takes an exclusive lock on
 `<paths.runtime>/sermod.lock`; if another instance already holds it, the new

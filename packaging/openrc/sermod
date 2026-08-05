@@ -1,4 +1,5 @@
 #!/sbin/openrc-run
+# shellcheck shell=sh disable=SC2034 # OpenRC consumes these service variables.
 # OpenRC init script for the Sermo service supervisor.
 #
 # Sermo runs as root (OpenRC's default for a service with no command_user): it
@@ -29,4 +30,12 @@ start_pre() {
 	checkpath --directory --mode 0700 /run/sermo
 	# Persistent state database (monitoring state, restored across reboots).
 	checkpath --directory --mode 0700 /var/lib/sermo
+}
+
+reload() {
+	ebegin "Reloading ${RC_SVCNAME} configuration"
+	# Match both the init-managed pidfile and the exact daemon executable before
+	# sending HUP, so a stale pidfile cannot target an unrelated process.
+	start-stop-daemon --signal HUP --pidfile "${pidfile}" --exec "${command}"
+	eend $?
 }

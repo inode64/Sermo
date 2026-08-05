@@ -644,6 +644,19 @@ Dispara una recarga de configuración del daemon con:
 sermoctl daemon reload
 ```
 
+Los gestores de servicio instalados exponen la misma recarga en sitio mediante
+su interfaz nativa:
+
+```sh
+systemctl reload sermod  # systemd
+rc-service sermod reload # OpenRC
+```
+
+Ambos envían `SIGHUP` al proceso `sermod` gestionado por el init; validan e
+intercambian la configuración en sitio, sin reiniciar el daemon. Igual que
+`sermoctl daemon reload`, una configuración inválida conserva la generación
+actual y se registra en el log de eventos y el log del daemon.
+
 Solo una instancia de `sermod` puede ejecutarse por directorio `<paths.runtime>` (por
 defecto `/run/sermo`). Al arrancar toma un lock exclusivo sobre
 `<paths.runtime>/sermod.lock`; si otra instancia ya lo tiene, el nuevo proceso registra

@@ -88,6 +88,44 @@ func TestRepoDevConfigHasMonitorTargets(t *testing.T) {
 	}
 }
 
+func TestPackagedServicesExposeDaemonReload(t *testing.T) {
+	root := repoRoot(t)
+	tests := []struct {
+		name string
+		path string
+		want []string
+	}{
+		{
+			name: "systemd",
+			path: filepath.Join(root, "packaging", "systemd", "sermod.service"),
+			want: []string{
+				"ExecReload=/bin/kill -HUP $MAINPID",
+			},
+		},
+		{
+			name: "openrc",
+			path: filepath.Join(root, "packaging", "openrc", "sermod"),
+			want: []string{
+				"reload()",
+				"start-stop-daemon --signal HUP --pidfile \"${pidfile}\" --exec \"${command}\"",
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			body, err := os.ReadFile(tt.path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, want := range tt.want {
+				if !strings.Contains(string(body), want) {
+					t.Errorf("%s does not contain %q", tt.path, want)
+				}
+			}
+		})
+	}
+}
+
 func TestParseArgsVerbose(t *testing.T) {
 	for _, flag := range []string{"--verbose", "-v"} {
 		parsed, err := parseArgs([]string{"run", flag, "--config", "/etc/sermo/sermo.yml"})
