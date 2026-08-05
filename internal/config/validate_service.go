@@ -99,9 +99,9 @@ func validateAllowDependencies(tree map[string]any, add addFunc) {
 }
 
 // validateRestartPolicy checks the explicit restart strategy. Native restart
-// is restricted to init-managed services: external control backends only expose
-// composed restart semantics, and also_service requires the staged ordering of
-// auxiliary units around the primary service.
+// is restricted to init-managed services because external control backends only
+// expose composed restart semantics. Auxiliary init units may remain active
+// around an atomic restart of the primary (for example a socket unit).
 func validateRestartPolicy(tree map[string]any, add addFunc) {
 	if _, err := ParseRestartMode(tree); err != nil {
 		add("%s", err)

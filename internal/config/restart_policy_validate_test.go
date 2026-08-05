@@ -57,36 +57,23 @@ func TestValidateRestartPolicyShape(t *testing.T) {
 	}
 }
 
-func TestValidateNativeRestartPolicyRejectsUnsupportedControlShapes(t *testing.T) {
+func TestValidateNativeRestartPolicyRejectsExternalControl(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		name  string
-		extra string
-		want  string
-	}{
-		{
-			name: "external control",
-			extra: `control:
+	yaml := restartPolicyServiceYAML(`restart_policy: { mode: native }
+control:
   type: docker
   container: svc
-`,
-			want: `restart_policy.mode="native" is not supported with control`,
-		},
-		{
-			name: "auxiliary init units",
-			extra: `also_service:
-  systemd: [ svc.socket ]
-`,
-			want: `restart_policy.mode="native" is not supported with also_service`,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
+`)
+	mustHave(t, validateService(t, yaml), `restart_policy.mode="native" is not supported with control`)
+}
 
-			yaml := restartPolicyServiceYAML("restart_policy: { mode: native }\n" + tt.extra)
-			mustHave(t, validateService(t, yaml), tt.want)
-		})
-	}
+func TestValidateNativeRestartPolicyAllowsAuxiliaryInitUnits(t *testing.T) {
+	t.Parallel()
+
+	yaml := restartPolicyServiceYAML(`restart_policy: { mode: native }
+also_service:
+  systemd: [ svc.socket ]
+`)
+	mustNotHave(t, validateService(t, yaml), ServiceKeyRestartPolicy)
 }
