@@ -60,6 +60,7 @@ limits y backoff para evitar bucles de reinicio.
 - [Múltiples instancias de una aplicación](#múltiples-instancias-de-una-aplicación)
 - [Deshabilitar y borrar entradas heredadas](#deshabilitar-y-borrar-entradas-heredadas)
 - [Flag de monitorización](#flag-de-monitorización)
+- [Bloquear operaciones mientras hay clientes conectados](#bloquear-operaciones-mientras-hay-clientes-conectados)
 - [Watches de replicación de PostgreSQL](#watches-de-replicación-de-postgresql)
 - [Comandos auxiliares](#comandos-auxiliares)
 
@@ -1654,6 +1655,20 @@ Un servicio también puede llevar su propio bloque `watches:` — watches por
 servicio que pueden disparar un hook/notificación o un `then.action` compacto,
 y pueden usar los tipos `service`/`metric` y el `process_count` acotado por PIDs. Véase
 [Watches de servicio](configuration.es.md#watches-de-servicio-acotados-a-un-servicio).
+
+## Bloquear operaciones mientras hay clientes conectados
+
+Reiniciar una base de datos, caché o servidor FTP con clientes activos es una
+política del sitio, no un valor por defecto de catálogo. Añade al servicio
+concreto que habilitas uno de los ejemplos opt-in:
+[MySQL](../examples/services/mysql-active-connections-guard.yml),
+[PostgreSQL](../examples/services/postgres-active-connections-guard.yml),
+[Redis](../examples/services/redis-active-connections-guard.yml) o
+[ProFTPD](../examples/services/proftpd-active-connections-guard.yml). Los
+ejemplos de base de datos cuentan sesiones de aplicación con SQL de solo lectura;
+Redis usa su métrica nativa `connected_clients`; FTP usa `tcp_connections`, que
+cuenta sockets TCP del canal de control en lugar de usuarios autenticados. Consulta
+[guards de conexiones](rules.es.md#guards-de-conexiones) para el comportamiento de seguridad.
 
 ## Watches de replicación de PostgreSQL
 

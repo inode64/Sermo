@@ -8,6 +8,7 @@
   - [Check interdependencies (requires / skip_when_changed)](#check-interdependencies-requires--skip_when_changed)
   - [Reporting mode (reports)](#reporting-mode-reports)
 - [Ports](#ports)
+  - [TCP connections (tcp_connections)](#tcp-connections-tcp_connections)
   - [HTTP](#http)
   - [Cert](#cert)
   - [Database connection (mysql / mariadb)](#database-connection-mysql--mariadb)
@@ -43,6 +44,7 @@ Connection-protocol checks (MySQL, PostgreSQL, Redis, Docker, libvirt, etc.) are
 | type          | passes when                                                        |
 |---------------|--------------------------------------------------------------------|
 | `tcp`         | a TCP connection to `host:port` succeeds                           |
+| `tcp_connections` | the number of local `ESTABLISHED` TCP sockets on `port` satisfies `count {op, value}` |
 | `ports`       | a set of `host` ports satisfy an open/closed expectation (see Ports)|
 | `http`        | the response matches `expect_status` (and optional headers/body/JSON, see HTTP)|
 | `command`     | the command exits with `expect_exit` (default 0) and its output matches optional `expect_stdout`/`expect_stderr`; optional `user` runs it as a specific OS user; `on_change` alerts when its output changes (e.g. a version), array form only |
@@ -467,6 +469,33 @@ rules:
 Without it, such a check is a health assertion that fails whenever the state is
 absent — a permanent red `fail` and a 0% availability series for what is in fact
 the normal condition.
+
+### TCP connections (`tcp_connections`)
+
+`tcp_connections` is a local, condition-style check: it counts IPv4 and IPv6
+TCP sockets in `ESTABLISHED` state whose local port equals `port`. It reads
+`/proc/net/tcp` and `/proc/net/tcp6`; it does not open a network connection.
+
+```yaml
+checks:
+  ftp-control-connections:
+    type: tcp_connections
+    port: 21
+    count: { op: ">", value: 5 }
+    reports: state              # expose active/inactive without changing SLA
+```
+
+Its result is a transport connection count, not an authenticated-user count.
+For FTP it covers control connections only: passive data sockets, TLS session
+state and login identity are deliberately not inferred. The same check is useful
+for connection thresholds on SSH, HTTP and other TCP services. Configure it on
+the host that owns the listening port; a reused port cannot be attributed to one
+service.
+
+If `/proc` cannot be read, the check is unavailable rather than reporting zero.
+When a guard references it, Sermo denies the operation conservatively. Set an
+appropriate `interval` when using it as a long-running watch; a guard always
+runs its check again immediately before an operation.
 
 ### Ports
 
@@ -2238,6 +2267,43 @@ block-during-backup:
 Guard rules evaluate their condition at the moment an action is requested, so
 they do not support `for:` or `within:` windows; declaring either on a guard is
 a validation error.
+
+#### Connection guards
+
+Connection thresholds are workload policy, so catalog services do not enable
+them by default. Add an explicit guard when an operation must wait for clients:
+
+```yaml
+checks:
+  ftp-control-connections:
+    type: tcp_connections
+    port: 21
+    count: { op: ">", value: 5 }
+    reports: state
+
+rules:
+  block-restart-with-active-connections:
+    type: guard
+    blocks: [restart, stop]
+    if: { active: { check: ftp-control-connections } }
+    then:
+      action: block
+      message: "${display_name} has active TCP connections; restart denied"
+```
+
+The operation engine evaluates this guard immediately before both manual and
+automatic actions. An unavailable connection check denies the action rather than
+treating an observation failure as an empty connection set.
+
+For MySQL/MariaDB and PostgreSQL, use a read-only `sql` check that counts the
+application sessions you want to preserve; this is more accurate than sockets
+and requires a monitoring account allowed to see other sessions. Redis/Valkey
+already exposes `connected_clients` through its `redis` check, and Memcached
+exposes `curr_connections`. Ready-to-copy service overrides cover
+[MySQL](../examples/services/mysql-active-connections-guard.yml),
+[PostgreSQL](../examples/services/postgres-active-connections-guard.yml),
+[Redis](../examples/services/redis-active-connections-guard.yml), and
+[ProFTPD](../examples/services/proftpd-active-connections-guard.yml).
 
 The shipped MySQL, MariaDB and PostgreSQL catalog services include a default
 optional `backup` process check and a

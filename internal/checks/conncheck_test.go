@@ -240,8 +240,27 @@ func TestConnCheckRunFailure(t *testing.T) {
 	if res.OK {
 		t.Fatal("a probe error must fail the check")
 	}
+	if !res.Unavailable {
+		t.Fatal("a probe error must be unavailable for guards")
+	}
 	if !strings.Contains(res.Message, "access denied") {
 		t.Fatalf("message should carry the error: %q", res.Message)
+	}
+}
+
+func TestConnCheckMissingExpectedFieldIsUnavailable(t *testing.T) {
+	c := connCheck{
+		base:   base{name: "cache", timeout: time.Second},
+		proto:  fakeProto{},
+		cfg:    conn.Config{Host: "cache", Port: 6379},
+		expect: []jsonAssertion{{path: DataKeyConnectedClients, op: ">", value: "50"}},
+		probe: func(context.Context, conn.Config) (conn.Result, error) {
+			return conn.Result{Extra: map[string]string{}}, nil
+		},
+	}
+	res := c.Run(context.Background())
+	if res.OK || !res.Unavailable {
+		t.Fatalf("missing expected field = %+v, want unavailable failure", res)
 	}
 }
 

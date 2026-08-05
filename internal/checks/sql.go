@@ -30,10 +30,14 @@ func (c sqlCheck) Run(ctx context.Context) Result {
 
 	result, isNull, err := sqlScalar(ctx, c.driver, c.dsn, c.query)
 	if err != nil {
-		return c.result(false, fmt.Sprintf("sql %s: %v", c.engine, err), start)
+		r := c.result(false, fmt.Sprintf("sql %s: %v", c.engine, err), start)
+		r.Unavailable = true
+		return r
 	}
 	if isNull {
-		return c.result(false, fmt.Sprintf("sql %s: query returned NULL", c.engine), start)
+		r := c.result(false, fmt.Sprintf("sql %s: query returned NULL", c.engine), start)
+		r.Unavailable = true
+		return r
 	}
 
 	return finishScalarCompare(c.base, "sql "+c.engine, result, c.op, c.value, start, map[string]any{

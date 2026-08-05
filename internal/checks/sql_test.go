@@ -95,8 +95,8 @@ func TestBuildSQLCheckSQLiteEndToEnd(t *testing.T) {
 			"query": "SELECT nope FROM missing", "op": ">", "value": "0",
 		},
 	}, Deps{DefaultTimeout: time.Second})
-	if res := built[0].Check.Run(context.Background()); res.OK {
-		t.Fatalf("a failing query must fail the check: %q", res.Message)
+	if res := built[0].Check.Run(context.Background()); res.OK || !res.Unavailable {
+		t.Fatalf("a failing query must be unavailable for guards: %+v", res)
 	}
 }
 

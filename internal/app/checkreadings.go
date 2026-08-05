@@ -32,6 +32,7 @@ const (
 	watchReadingLabelChipFilter        = "Chip filter"
 	watchReadingLabelConfiguredPath    = "Configured path"
 	watchReadingLabelCount             = "Count"
+	watchReadingLabelConnections       = "Connections"
 	watchReadingLabelCPUTicks          = "CPU ticks"
 	watchReadingLabelCurrentSize       = "Current size"
 	watchReadingLabelDaysLeft          = "Days left"
@@ -227,6 +228,8 @@ func checkReadings(checkType string, data map[string]any) []web.WatchReading {
 		return sizeCheckReadings(data)
 	case checks.CheckTypeTCP, checks.CheckTypePorts:
 		return connCheckReadings(data)
+	case checks.CheckTypeTCPConnections:
+		return tcpConnectionsCheckReadings(data)
 	case checks.CheckTypeHTTP, checks.URLSchemeHTTPS:
 		return httpCheckReadings(data)
 	case checks.CheckTypeStorage, checks.CheckTypeSwap, checks.CheckTypeMemory, checks.CheckTypeLoad:
@@ -250,6 +253,9 @@ func checkReadings(checkType string, data map[string]any) []web.WatchReading {
 	case checks.CheckTypeMetric:
 		return metricValueCheckReadings(data)
 	default:
+		if _, ok := data[checks.DataKeyConnectedClients]; ok {
+			return redisCheckReadings(data)
+		}
 		if graphMetrics := checks.GraphMetrics(checkType); len(graphMetrics) > 0 {
 			return metricCheckReadings(checkType, data)
 		}
@@ -302,6 +308,14 @@ func scalarQueryCheckReadings(data map[string]any) []web.WatchReading {
 		}
 	}
 	return rb.readings()
+}
+
+func tcpConnectionsCheckReadings(data map[string]any) []web.WatchReading {
+	return readingsFrom(data).
+		addInt(checks.DataKeyPort, watchReadingLabelPort).
+		addIntMetric(checks.DataKeyCount, watchReadingLabelConnections, metrics.MetricUnitConnections).
+		addString(checks.DataKeySampleError, watchReadingLabelError).
+		readings()
 }
 
 func lvmCheckReadings(data map[string]any) []web.WatchReading {
@@ -530,6 +544,13 @@ func connCheckReadings(data map[string]any) []web.WatchReading {
 		addString(checks.DataKeyProtocol, watchReadingLabelProtocol).
 		addIntMetric(checks.DataKeyLatencyMS, watchReadingLabelLatency, metrics.MetricUnitMilliseconds).
 		readings()
+}
+
+func redisCheckReadings(data map[string]any) []web.WatchReading {
+	out := connCheckReadings(data)
+	return append(out, readingsFrom(data).
+		addIntMetric(checks.DataKeyConnectedClients, watchReadingLabelConnections, metrics.MetricUnitConnections).
+		readings()...)
 }
 
 func httpCheckReadings(data map[string]any) []web.WatchReading {

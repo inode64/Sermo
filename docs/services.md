@@ -60,6 +60,7 @@ backoff to avoid restart loops.
 - [Multiple instances of one application](#multiple-instances-of-one-application)
 - [Disabling and deleting inherited entries](#disabling-and-deleting-inherited-entries)
 - [Monitoring flag](#monitoring-flag)
+- [Blocking operations while clients are connected](#blocking-operations-while-clients-are-connected)
 - [PostgreSQL replication watches](#postgresql-replication-watches)
 - [Auxiliary commands](#auxiliary-commands)
 
@@ -1643,6 +1644,19 @@ A service may also carry its own `watches:` block — per-service watches that c
 fire a hook/notification or compact `then.action`, and can use the service-scoped
 `service`/`metric`/`process_count` check types. See
 [Service watches](configuration.md#service-watches-scoped-to-a-service).
+
+## Blocking operations while clients are connected
+
+Restarting a database, cache or FTP server with active clients is a site policy,
+not a catalog default. Add one of the opt-in examples to the concrete service
+you enable: [MySQL](../examples/services/mysql-active-connections-guard.yml),
+[PostgreSQL](../examples/services/postgres-active-connections-guard.yml),
+[Redis](../examples/services/redis-active-connections-guard.yml), or
+[ProFTPD](../examples/services/proftpd-active-connections-guard.yml). The
+database examples count application sessions with read-only SQL; Redis uses its
+native `connected_clients` metric; FTP uses `tcp_connections`, which counts
+control-channel TCP sockets rather than authenticated users. See
+[connection guards](rules.md#connection-guards) for the safety behavior.
 
 ## PostgreSQL replication watches
 

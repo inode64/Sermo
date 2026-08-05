@@ -68,6 +68,24 @@ func TestEvalUnknownCheckIsError(t *testing.T) {
 	}
 }
 
+func TestGuardFailsSafeOnUnavailableCheck(t *testing.T) {
+	ev := &Evaluator{Cache: map[string]checks.Result{
+		"clients": {Check: "clients", Unavailable: true, Message: "read /proc/net/tcp: permission denied"},
+	}}
+	blocked, _, err := Guard(context.Background(), []Rule{{
+		Name:   "block-restart-with-clients",
+		Type:   RuleGuard,
+		Blocks: []string{string(ActionRestart)},
+		If:     map[string]any{"active": map[string]any{"check": "clients"}},
+	}}, string(ActionRestart), ev)
+	if err == nil {
+		t.Fatal("unavailable guard check must fail safe")
+	}
+	if blocked {
+		t.Fatal("unavailable check is an evaluation error, not a matched guard")
+	}
+}
+
 func TestEvalResolvesLazyCheckReference(t *testing.T) {
 	runs := 0
 	ev := &Evaluator{

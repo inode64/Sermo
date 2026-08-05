@@ -24,6 +24,19 @@ func buildTCPCheck(b base, entry map[string]any) (Check, string) {
 	return tcpCheck{base: b, host: host, ifaces: parseInterfaces(entry[CheckKeyInterface]), ifaceAll: all, port: port}, ""
 }
 
+// buildTCPConnectionsCheck builds a local established-TCP-connection counter.
+func buildTCPConnectionsCheck(b base, entry map[string]any) (Check, string) {
+	port, ok := cfgval.Int(entry[CheckKeyPort])
+	if !ok || !cfgval.ValidTCPPort(port) {
+		return nil, "tcp_connections check requires a port in " + cfgval.TCPPortRange()
+	}
+	preds, errs := requireLevelPreds(entry, TCPConnectionsPredFields, "tcp_connections check")
+	if errs != "" {
+		return nil, errs
+	}
+	return tcpConnectionsCheck{base: b, port: port, preds: preds}, ""
+}
+
 // buildPortsCheck builds a multi-port open/closed check.
 func buildPortsCheck(b base, entry map[string]any) (Check, string) {
 	host := cfgval.AsString(entry[CheckKeyHost])

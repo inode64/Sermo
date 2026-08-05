@@ -27,6 +27,8 @@ var graphMetrics = map[string][]GraphMetric{
 	CheckTypeEDAC:         {{Key: fieldCE, Unit: metrics.MetricUnitNone, Label: "Correctable"}, {Key: fieldUE, Unit: metrics.MetricUnitNone, Label: "Uncorrectable"}},
 	CheckTypeUsers:        {{Key: DataKeyCount, Unit: metrics.MetricUnitUsers}},
 	CheckTypeProcessCount: {{Key: DataKeyCount, Unit: metrics.MetricUnitProcesses}},
+
+	CheckTypeTCPConnections: {{Key: DataKeyCount, Unit: metrics.MetricUnitConnections, Label: "Connections"}},
 }
 
 // GraphMetrics returns the graphable metrics declared for a check type, or nil

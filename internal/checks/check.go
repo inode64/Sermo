@@ -88,12 +88,15 @@ type Result struct {
 	// the target is well. Derived from the check type.
 	Condition bool `json:"-"`
 	// Reports is the declared reporting mode; empty means ReportsHealth.
-	Reports  string         `json:"-"`
-	Optional bool           `json:"optional,omitempty"`
-	Skipped  bool           `json:"skipped,omitempty"` // gated off this cycle (requires/skip_when_changed)
-	Message  string         `json:"message,omitempty"`
-	Latency  time.Duration  `json:"latency_ns,omitempty"`
-	Data     map[string]any `json:"data,omitempty"`
+	Reports  string `json:"-"`
+	Optional bool   `json:"optional,omitempty"`
+	Skipped  bool   `json:"skipped,omitempty"` // gated off this cycle (requires/skip_when_changed)
+	// Unavailable marks a failed observation that a guard must treat as unsafe
+	// rather than as a false condition.
+	Unavailable bool           `json:"-"`
+	Message     string         `json:"message,omitempty"`
+	Latency     time.Duration  `json:"latency_ns,omitempty"`
+	Data        map[string]any `json:"data,omitempty"`
 }
 
 // Verdictless reports whether this result passes no judgement, so it never

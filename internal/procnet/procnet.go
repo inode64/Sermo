@@ -19,6 +19,7 @@ const (
 	LocalAddressIndex = 1
 	StateIndex        = 3
 	InodeIndex        = 9
+	StateEstablished  = "01"
 	StateListen       = "0A"
 	StateUDPReady     = "07"
 )

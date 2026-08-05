@@ -20,6 +20,7 @@ const (
 	DataKeyChip               = CheckKeyChip
 	DataKeyClockFailure       = "clock_failure"
 	DataKeyCount              = CheckKeyCount
+	DataKeyConnectedClients   = "connected_clients"
 	DataKeyCurrentBytes       = "current_bytes"
 	DataKeyDaysLeft           = "days_left"
 	DataKeyDegraded           = fieldDegraded

@@ -51,6 +51,9 @@ type Evaluator struct {
 	// Change is populated when a changed: leaf evaluates true, so callers can
 	// expand rule messages with the concrete changed path/app/library.
 	Change ChangeContext
+	// FailOnUnavailable turns an unavailable named check into an evaluation error.
+	// Guards enable it so failed observation never authorizes an operation.
+	FailOnUnavailable bool
 
 	memo map[string]checks.Result
 }
@@ -200,6 +203,9 @@ func (e *Evaluator) probe(ctx context.Context, v any) (checks.Result, error) {
 		}
 		if !ok {
 			return checks.Result{}, fmt.Errorf("unknown check %q", ref)
+		}
+		if e.FailOnUnavailable && res.Unavailable {
+			return checks.Result{}, fmt.Errorf("check %q is unavailable: %s", ref, res.Message)
 		}
 		return res, nil
 	}
@@ -400,11 +406,13 @@ func normalizeKey(m map[string]any) string {
 // blocking guard wins. An evaluation error is returned so the caller can fail
 // safe rather than silently proceed.
 func Guard(ctx context.Context, ruleSet []Rule, action string, ev *Evaluator) (blocked bool, reason string, err error) {
+	guardEvaluator := *ev
+	guardEvaluator.FailOnUnavailable = true
 	for i := range ruleSet {
 		if ruleSet[i].Type != RuleGuard || !slices.Contains(ruleSet[i].Blocks, action) {
 			continue
 		}
-		ok, err := ev.Eval(ctx, ruleSet[i].If)
+		ok, err := guardEvaluator.Eval(ctx, ruleSet[i].If)
 		if err != nil {
 			return false, "", fmt.Errorf("guard %s: %w", ruleSet[i].Name, err)
 		}

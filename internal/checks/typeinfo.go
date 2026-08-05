@@ -66,8 +66,12 @@ const (
 	CheckTypeFirewallRules = "firewall_rules"
 )
 
+// CheckTypeTCPConnections counts established local TCP sockets on a port.
+const CheckTypeTCPConnections = "tcp_connections"
+
 var typeInfos = []TypeInfo{
 	{Name: CheckTypeTCP, Health: true},
+	{Name: CheckTypeTCPConnections},
 	{Name: CheckTypePorts, Health: true},
 	{Name: CheckTypeHTTP, Health: true},
 	{Name: CheckTypeCommand, Health: true},

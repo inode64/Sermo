@@ -376,6 +376,8 @@ var checkBuilders = map[string]checkBuilder{
 	CheckTypeInfluxDBQuery: func(in checkBuildInput) (Check, string) { return buildInfluxCheck(in.base, in.entry) },
 	CheckTypeWebsocket:     func(in checkBuildInput) (Check, string) { return buildWebsocketCheck(in.base, in.entry) },
 	CheckTypeSize:          func(in checkBuildInput) (Check, string) { return buildSizeCheck(in.base, in.entry, in.deps) },
+
+	CheckTypeTCPConnections: func(in checkBuildInput) (Check, string) { return buildTCPConnectionsCheck(in.base, in.entry) },
 }
 
 func buildCheck(typ string, b base, entry map[string]any, runner execx.Runner, client *http.Client, deps Deps) (Check, string) {

@@ -626,6 +626,10 @@ watches:
       timeout: 3s
       interface: [eth0, 192.168.1.10]  # bind the probe to an egress NIC: name | IP | MAC
       interface_match: any  # any | all (shared by tcp/http/ports/icmp)
+  tcp-connections:
+    # Local transport sockets on this listening port, not authenticated users.
+    # Useful as a guard condition before restart/stop; see rules.md.
+    check: { type: tcp_connections, port: "${port}", count: { op: ">", value: 25 }, reports: state }
   ports:
     check:
       type: ports
