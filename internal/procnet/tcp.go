@@ -2,7 +2,6 @@ package procnet
 
 import (
 	"bufio"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -13,17 +12,20 @@ import (
 // CountTCPConnections returns the number of established TCP sockets whose
 // local port matches port. It reads both IPv4 and IPv6 kernel socket tables.
 func CountTCPConnections(port int) (int, error) {
-	paths := []string{PathTCP, PathTCP6}
+	return countTCPConnections(port, []string{PathTCP, PathTCP6})
+}
+
+// countTCPConnections counts established sockets from every path. A missing or
+// unreadable table makes the whole observation unavailable: returning a partial
+// count could authorize a guard while connections in the other address family
+// remain unseen.
+func countTCPConnections(port int, paths []string) (int, error) {
 	count := 0
-	opened := 0
-	var openErrs []error
 	for _, path := range paths {
 		f, err := os.Open(path) //nolint:gosec // G304: fixed Linux procfs socket-table path
 		if err != nil {
-			openErrs = append(openErrs, err)
-			continue
+			return 0, fmt.Errorf("open TCP socket table %s: %w", path, err)
 		}
-		opened++
 		n, scanErr := countPortState(f, port, StateEstablished)
 		closeErr := f.Close()
 		if scanErr != nil {
@@ -33,9 +35,6 @@ func CountTCPConnections(port int) (int, error) {
 			return 0, fmt.Errorf("close %s: %w", path, closeErr)
 		}
 		count += n
-	}
-	if opened == 0 {
-		return 0, fmt.Errorf("open TCP socket tables: %w", errors.Join(openErrs...))
 	}
 	return count, nil
 }
