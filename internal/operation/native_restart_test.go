@@ -221,3 +221,19 @@ func TestNativeRestartNeverInvokesReaper(t *testing.T) {
 		t.Fatalf("result = %+v, discovery calls = %d; native restart must bypass residual handling", res, h.discoverCalls)
 	}
 }
+
+func TestNativeRestartLeavesAuxiliaryInitUnitsActive(t *testing.T) {
+	t.Parallel()
+
+	h := defaultHarness()
+	engine := nativeRestartEngine(h)
+	engine.AlsoUnits = []string{"docker.socket"}
+	res := engine.Restart(context.Background())
+
+	if res.Status != ResultOK {
+		t.Fatalf("result = %+v, want ok", res)
+	}
+	if want := []string{"restart mysqld"}; !reflect.DeepEqual(h.mgr.calls, want) {
+		t.Fatalf("manager calls = %v, want %v", h.mgr.calls, want)
+	}
+}

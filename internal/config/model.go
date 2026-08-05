@@ -872,9 +872,6 @@ func ParseRestartMode(tree map[string]any) (string, error) {
 		if _, present := tree[SectionControl]; present {
 			return "", fmt.Errorf("%s=%q is not supported with %s", restartPolicyPathMode, mode, SectionControl)
 		}
-		if _, present := tree[ServiceKeyAlsoService]; present {
-			return "", fmt.Errorf("%s=%q is not supported with %s", restartPolicyPathMode, mode, ServiceKeyAlsoService)
-		}
 	}
 	return mode, nil
 }

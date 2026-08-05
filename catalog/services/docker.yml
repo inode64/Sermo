@@ -10,6 +10,8 @@ service:
 also_service:
   systemd:
     - docker.socket
+restart_policy:
+  mode: native
 apps:
   - docker
 restart_on_change:
