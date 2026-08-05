@@ -87,9 +87,10 @@ func dockerContainer(c dockerctl.Container, res *Result) {
 // cfg.Socket is set, otherwise TCP (egress-bound to cfg.Interface, TLS when
 // requested).
 func dockerClient(cfg Config) *dockerctl.Client {
+	target := newProbeTarget(cfg, dockerctl.DefaultPort)
 	spec := dockerctl.Spec{Socket: cfg.Socket, Host: cfg.Host, Port: cfg.Port, TLS: cfg.TLS}
 	if cfg.Socket == "" {
-		spec.DialContext = BindDialer(cfg.Interface).DialContext
+		spec.DialContext = target.dialer().DialContext
 	}
 	return dockerctl.NewClient(spec)
 }

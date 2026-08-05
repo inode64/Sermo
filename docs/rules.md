@@ -1036,7 +1036,9 @@ Protocols, in the order of the table above:
   socket path, or `query` for a full D-Bus address (`unix:abstract=…`,
   `tcp:host=…,port=…`). Socket-based, so there is no TCP port. No auth — access is
   governed by the socket's permissions. Result data: the bus id, address and the
-  connection's unique name. Uses `github.com/godbus/dbus/v5`.
+  connection's unique name. Uses `github.com/godbus/dbus/v5`. With `interface`
+  and a TCP `query`, use exactly `tcp:host=…,port=…`; other D-Bus TCP transport
+  options are rejected so Sermo never silently drops egress-interface binding.
 
   ```yaml
   checks:
@@ -1053,7 +1055,8 @@ Protocols, in the order of the table above:
   answering, not merely that `dbus-daemon` is up. **Target:** like `dbus`, defaults
   to the system bus; set `socket` for a different bus socket or `query` for a full
   D-Bus address. Socket-based, no TCP port, no auth. Result data: the D-Bus unique
-  name owning `org.freedesktop.UDisks2`. Uses `github.com/godbus/dbus/v5`.
+  name owning `org.freedesktop.UDisks2`. Uses `github.com/godbus/dbus/v5`. The
+  same `interface` + TCP `query` restriction as `dbus` applies.
 
   ```yaml
   checks:
@@ -1069,7 +1072,8 @@ Protocols, in the order of the table above:
   `state` (`running` when AVAHI_SERVER_RUNNING). **Target:** like `dbus`, defaults
   to the system bus; set `socket` for a different bus socket or `query` for a full
   D-Bus address. Socket-based, no TCP port, no auth. Uses
-  `github.com/godbus/dbus/v5`.
+  `github.com/godbus/dbus/v5`. The same `interface` + TCP `query` restriction as
+  `dbus` applies.
 - `syncthing` — default port 8384; `tls` supported (`skip-verify` covers
   Syncthing's default self-signed GUI certificate). Sends `GET /rest/noauth/health`
   and expects `200` with `{"status":"OK"}` — the unauthenticated liveness endpoint.

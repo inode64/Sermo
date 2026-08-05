@@ -32,7 +32,7 @@ func TestInterfaceBindingApplied(t *testing.T) {
 		}},
 		{"pq-dialer", func(t *testing.T) {
 			t.Helper()
-			d := pqDialer("eth0")
+			d := pqDialer(newProbeTarget(Config{Interface: "eth0"}, defaultPortPostgres))
 			if d.Dialer == nil || d.Dialer.Control == nil {
 				t.Fatal("pq dialer must use BindDialer when interface is set")
 			}
@@ -46,14 +46,14 @@ func TestInterfaceBindingApplied(t *testing.T) {
 		}},
 		{"ldap-probe-dialer", func(t *testing.T) {
 			t.Helper()
-			d := probeDialer("eth0", time.Second)
+			d := newProbeTarget(Config{Interface: "eth0"}, defaultLDAPPort).dialerWithTimeout(time.Second)
 			if d.Control == nil {
 				t.Fatal("LDAP probe dialer must use BindDialer when interface is set")
 			}
 		}},
 		{"libvirt-remote-dialer", func(t *testing.T) {
 			t.Helper()
-			d := libvirtRemoteNetDialer("eth0", time.Second)
+			d := libvirtRemoteNetDialer(newProbeTarget(Config{Interface: "eth0"}, defaultPortLibvirt), time.Second)
 			if d.Control == nil {
 				t.Fatal("libvirt remote dialer must use BindDialer when interface is set")
 			}

@@ -4,8 +4,6 @@ import (
 	"context"
 	"strconv"
 	"strings"
-
-	"github.com/godbus/dbus/v5"
 )
 
 func init() { Register(avahiProtocol{}, protocolAliasAvahiDaemon) }
@@ -37,8 +35,8 @@ func (avahiProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 }
 
 // avahiProbe connects to the bus and queries the Avahi server object.
-func avahiProbe(ctx context.Context, addr string) (Result, error) {
-	conn, err := dbus.Connect(addr, dbus.WithContext(ctx))
+func avahiProbe(ctx context.Context, cfg Config, addr string) (Result, error) {
+	conn, err := connectDBus(ctx, cfg, addr)
 	if err != nil {
 		return Result{}, probeErr(ProtocolNameAvahi, stepConnect, err)
 	}

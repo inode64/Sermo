@@ -55,6 +55,7 @@ func (libvirtProtocol) RequiresUser() bool { return false }
 
 func (libvirtProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	mode, addr, uri := libvirtTransport(cfg)
+	target := newProbeTarget(cfg, defaultPortLibvirt)
 	timeout := netutil.TimeoutFromContext(ctx, DefaultLibvirtTimeout)
 
 	var l *libvirt.Libvirt
@@ -65,7 +66,7 @@ func (libvirtProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 			dialers.WithLocalTimeout(timeout),
 		))
 	default: // tcp
-		l = libvirt.NewWithDialer(libvirtRemoteDialer{addr: addr, iface: cfg.Interface, timeout: timeout})
+		l = libvirt.NewWithDialer(libvirtRemoteDialer{addr: addr, target: target, timeout: timeout})
 	}
 
 	// go-libvirt's connect/RPC calls are not context-aware; the dialer timeout
@@ -77,12 +78,12 @@ func (libvirtProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 
 type libvirtRemoteDialer struct {
 	addr    string
-	iface   string
+	target  probeTarget
 	timeout time.Duration
 }
 
 func (d libvirtRemoteDialer) Dial() (net.Conn, error) {
-	dialer := libvirtRemoteNetDialer(d.iface, d.timeout)
+	dialer := libvirtRemoteNetDialer(d.target, d.timeout)
 	c, err := dialer.Dial(networkTCP, d.addr)
 	if err != nil {
 		return nil, probeErr(ProtocolNameLibvirt, stepDial, err)
@@ -90,10 +91,8 @@ func (d libvirtRemoteDialer) Dial() (net.Conn, error) {
 	return c, nil
 }
 
-func libvirtRemoteNetDialer(iface string, timeout time.Duration) *net.Dialer {
-	d := BindDialer(iface)
-	d.Timeout = timeout
-	return d
+func libvirtRemoteNetDialer(target probeTarget, timeout time.Duration) *net.Dialer {
+	return target.dialerWithTimeout(timeout)
 }
 
 // libvirtProbe opens the connection, reads the version (and hostname), domain
@@ -181,7 +180,7 @@ func libvirtTransport(cfg Config) (mode, addr, uri string) {
 	if cfg.Socket != "" {
 		return libvirtTransportSocket, cfg.Socket, uri
 	}
-	return networkTCP, cfg.addrDefaults(defaultPortLibvirt), uri
+	return networkTCP, newProbeTarget(cfg, defaultPortLibvirt).address(), uri
 }
 
 // formatLibvirtVersion renders libvirt's packed version (major*1e6 + minor*1e3 +

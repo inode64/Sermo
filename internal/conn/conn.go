@@ -679,8 +679,3 @@ func (cfg Config) hostPortDefaults(defaultPort int) (string, int) {
 	}
 	return host, port
 }
-
-// addrDefaults renders cfg's host:port address with the probe defaults applied.
-func (cfg Config) addrDefaults(defaultPort int) string {
-	return hostPort(cfg.hostPortDefaults(defaultPort))
-}
