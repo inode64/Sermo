@@ -53,8 +53,9 @@ around the opposite principle — **prove it is safe, then act**:
 
 **Safe remediation**
 - A single **operation engine** shared by the CLI and the daemon: operation
-  lock → named runtime locks → required preflight → guards → graceful stop with
-  residual discovery → init-state reconciliation → start/verify + postflight.
+  lock → named runtime locks → required preflight → guards → staged
+  residual-aware stop/start or explicit atomic init restart → verify +
+  postflight.
 - **Named runtime locks** to fence maintenance windows (backups, migrations):
   `sermoctl lock … -- COMMAND` holds a TTL'd lock for the duration of a command.
 - **Guards, windows and remediation policy** to express *when* and *how often* an

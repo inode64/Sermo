@@ -504,6 +504,9 @@ also_service:  # auxiliary init units of this same service
   systemd: [demo.socket]
   openrc: [demo-socket]
 
+restart_policy:
+  mode: staged  # staged (default, residual-aware) | native (one atomic init-backend restart)
+
 apps: [demo-app]  # injects app preflight and exposes ${demo_app_binary}
 
 variables:  # flat strings or first-existing path lists

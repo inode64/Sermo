@@ -41,6 +41,7 @@ backoff to avoid restart loops.
   - [OS-specific blocks (os:)](#os-specific-blocks-os)
   - [control: libvirt — QEMU/libvirt virtual machines](#control-libvirt--qemulibvirt-virtual-machines)
   - [control: docker — Docker containers](#control-docker--docker-containers)
+  - [restart_policy — restart strategy](#restart_policy--restart-strategy)
   - [also_service — auxiliary init units](#also_service--auxiliary-init-units)
   - [also_apply — cascade to other services](#also_apply--cascade-to-other-services)
   - [processes: by executable or cmdline](#processes-by-executable-or-cmdline)
@@ -757,12 +758,46 @@ is still authorized only by `stop_policy.kill_only_if`.
 `sermoctl wizard docker` can generate this service shape from containers
 detected through the local Docker socket.
 
+### `restart_policy` — restart strategy
+
+Every restart keeps the common operation-engine gates: one operation lock, named
+runtime locks, required preflight, guards, the active-service identity check when
+available, the operation timeout, backend status verification, postflight and
+exactly one result event. The service chooses only how the restart action itself
+is performed:
+
+```yaml
+restart_policy:
+  mode: native
+```
+
+- `staged` (default) runs Sermo's `Stop` → residual discovery/reaping → init
+  state reconciliation → `Start` flow. `stop_policy`, stopped-state cleanup and
+  residual reporting apply in full.
+- `native` invokes one atomic `Restart` on the selected systemd/OpenRC backend.
+  It does not run Sermo's stop phase, residual reaper, stopped-state cleanup or
+  init-state reconciliation. A backend error fails the operation; Sermo never
+  falls back silently to staged restart.
+
+`native` is valid only for init-managed services; a service with `control:`
+(Docker container or libvirt domain) must use `staged`. Use native mode when the
+init unit deliberately owns a delegated process tree whose workload descendants
+may survive a daemon restart and therefore must not be classified as failed-stop
+residuals. The packaged `containerd` and Docker Engine profiles use it for shims,
+proxies and container workloads. Ordinary multi-process daemons keep `staged`:
+native mode must not be used merely to hide a service that fails to stop cleanly.
+
+With `also_service`, native restart leaves auxiliary units active and restarts
+only the primary atomically; explicit `start`/`stop` and staged restart retain
+the wrap ordering below. `also_apply` still sends the restart action through
+each referenced service's own engine and policy.
+
 ### `also_service` — auxiliary init units
 
 A service can name **auxiliary init units of its own** (a `.socket`, `.timer`,
-companion unit) that are started/stopped/restarted **together with the primary**,
-in the same operation. It mirrors the `service:` shape (per-init lists, resolved
-for the active backend):
+companion unit) that are started/stopped **together with the primary**, in the
+same operation. A staged restart composes those two operations. It mirrors the
+`service:` shape (per-init lists, resolved for the active backend):
 
 ```yaml
 service:
@@ -779,7 +814,8 @@ aborts the operation before the primary starts), and stopped **after** it
 (best-effort — a stop failure is reported in the result message but does not fail
 an already-successful stop). `reload` touches the primary only. The primary's
 guards, locks and preflight wrap the whole operation. Listing the primary unit in
-`also_service` is rejected.
+`also_service` is rejected. A native restart also touches the primary only and
+leaves these auxiliary units active, as described above.
 
 ### `also_apply` — cascade to other services
 

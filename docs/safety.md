@@ -30,6 +30,10 @@ any `security:` toggle that tries to disable them.
    and an `exe_any` selector, each non-empty. **`force_kill: auto`** requires
    no broad fallback: it authorizes only strict `processes:` identities and
    leaves services without one as `orphan_processes`.
+8. **Native restart does not weaken the common gates or fall back.** It still
+   requires locks, preflight, guards, any available restart identity, timeout
+   and postflight; a failed backend `Restart` is a failed operation, never an
+   implicit staged stop/start.
 
 ## The operation engine
 
@@ -41,21 +45,24 @@ runs through the same engine:
 2. Block on any active named runtime lock.
 3. Run required preflight (start/restart/reload/resume).
 4. Block if any guard blocks the action.
-5. For stop/restart, stop, wait `graceful_timeout`, discover residual processes.
-6. If residuals remain and `force_kill` is false → `orphan_processes`; a failed
-   restart does **not** start. The narrow exception is a systemd restart whose
-   isolated stop succeeded and whose residuals are all backend-attributed to the
-   same unit while that unit is again `active` (for example, socket activation):
-   systemd has already restarted that unit, so Sermo runs postflight without a
-   second start or touching the activating socket. If `force_kill` is true or
-   `auto`, SIGTERM then SIGKILL only the processes that exactly match the
-   configured or derived identity, rediscovering between steps.
-7. After a clean stop (no residuals), reconcile the init's recorded state with
-   reality — `systemctl reset-failed` (systemd) or `rc-service … zap` (OpenRC) —
-   so a lingering failed/stuck marker can't disagree with the actual processes.
-   Best effort: it never fails a stop that already succeeded.
-8. For start/restart, start and verify status; for reload, reload in place; for
-   resume, resume the target and verify status. Run required postflight for
+5. Execute the action's service-manager phase:
+   - `stop` and `restart_policy.mode: staged` restart: stop, wait
+     `graceful_timeout`, discover residual processes and apply the configured
+     signal escalation. A restart never starts while residuals remain. The
+     narrow socket-reactivation exception is unchanged: when an isolated systemd
+     stop succeeded, every residual is backend-attributed to that same unit and
+     the unit is already `active`, Sermo accepts the backend reactivation and
+     does not issue a second start.
+   - `restart_policy.mode: native` restart: invoke one bounded backend `Restart`
+     for the primary unit. There is no Sermo stop phase, residual discovery,
+     signal escalation, stopped-artifact cleanup or init-state reset, and no
+     staged fallback. Auxiliary `also_service` units remain active.
+   - `start`, `reload` and `resume`: run their existing bounded backend action.
+6. After a clean explicit stop or staged-restart stop, reconcile the init's
+   recorded state with reality — `systemctl reset-failed` (systemd) or
+   `rc-service … zap` (OpenRC). Best effort: it never fails a stop that already
+   succeeded.
+7. Verify backend status where applicable and run required postflight for
    start/restart/reload/resume.
 
 A residual Sermo is not allowed to identify and kill is **reported, not killed**:
@@ -297,7 +304,8 @@ a name-only authority.
 ## Stop and signal escalation
 
 `stop_policy` fields omitted by a catalog service or service inherit from
-`defaults.stop_policy`. The stop phase of a stop/restart:
+`defaults.stop_policy`. The stop phase of an explicit stop or a `staged`
+restart:
 
 1. Backend `Stop`, wait `graceful_timeout`, discover residuals.
 2. No residuals → clean stop.

@@ -3061,6 +3061,11 @@ without a verified identity as `orphan_processes`.
 `defaults.dry_run` is optional and defaults to `false`; a service or watch may
 override it with its own top-level `dry_run`.
 
+`restart_policy` is intentionally per catalog/configured service and does not
+inherit from `defaults`: selecting an atomic init-backend restart requires an
+explicit service-level decision. See
+[restart strategy](services.md#restart_policy--restart-strategy).
+
 `defaults.policy.cooldown` is **required and positive**: every resolved service
 inherits a loop-prevention cooldown unless it overrides it.
 

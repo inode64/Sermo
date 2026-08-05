@@ -3159,6 +3159,11 @@ identidad verificada como `orphan_processes`.
 `defaults.dry_run` es opcional y por defecto es `false`; cada service o watch
 puede sobrescribirlo con su propio `dry_run` de nivel superior.
 
+`restart_policy` es deliberadamente propio de cada service de catálogo o
+configurado y no se hereda de `defaults`: seleccionar un restart atómico del
+backend de init requiere una decisión explícita a nivel de service. Véase
+[estrategia de reinicio](services.es.md#restart_policy--estrategia-de-reinicio).
+
 `defaults.policy.cooldown` es **requerido y positivo**: cada service resuelto hereda un
 cooldown de prevención de bucles a menos que lo sustituya.
 

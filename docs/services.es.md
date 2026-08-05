@@ -41,6 +41,7 @@ limits y backoff para evitar bucles de reinicio.
   - [Bloques específicos de OS (os:)](#bloques-específicos-de-os-os)
   - [control: libvirt — máquinas virtuales QEMU/libvirt](#control-libvirt--máquinas-virtuales-qemulibvirt)
   - [control: docker — contenedores Docker](#control-docker--contenedores-docker)
+  - [restart_policy — estrategia de reinicio](#restart_policy--estrategia-de-reinicio)
   - [also_service — unidades init auxiliares](#also_service--unidades-init-auxiliares)
   - [also_apply — cascada a otros servicios](#also_apply--cascada-a-otros-servicios)
   - [processes: por ejecutable o cmdline](#processes-por-ejecutable-o-cmdline)
@@ -763,12 +764,49 @@ sigue estando autorizada solo por `stop_policy.kill_only_if`.
 `sermoctl wizard docker` puede generar esta forma de servicio a partir de contenedores
 detectados a través del socket Docker local.
 
+### `restart_policy` — estrategia de reinicio
+
+Cada restart conserva las barreras comunes del motor de operaciones: un lock de
+operación, locks de runtime nombrados, preflight requerido, guards, la comprobación
+de identidad del servicio activo cuando esté disponible, el timeout de operación,
+la verificación de estado del backend, postflight y exactamente un evento de
+resultado. El servicio solo elige cómo se ejecuta la propia acción de reinicio:
+
+```yaml
+restart_policy:
+  mode: native
+```
+
+- `staged` (por defecto) ejecuta el flujo `Stop` → descubrimiento/recolección de
+  residuales → reconciliación del estado de init → `Start` de Sermo. Se aplican
+  por completo `stop_policy`, la limpieza de estado parado y el reporte de
+  residuales.
+- `native` invoca un único `Restart` atómico en el backend systemd/OpenRC
+  seleccionado. No ejecuta la fase de stop, el reaper residual, la limpieza de
+  estado parado ni la reconciliación del estado de init de Sermo. Un error del
+  backend hace fallar la operación; Sermo nunca vuelve silenciosamente a staged.
+
+`native` solo es válido para servicios gestionados por init; un servicio con
+`control:` (contenedor Docker o dominio libvirt) debe usar `staged`. Usa el modo
+nativo cuando la unidad de init posea deliberadamente un árbol de procesos
+delegado cuyos descendientes de workload puedan sobrevivir al reinicio del daemon
+y, por tanto, no deban clasificarse como residuales de un stop fallido. Los
+perfiles empaquetados de `containerd` y Docker Engine lo usan para shims, proxies
+y workloads de contenedores. Los daemons multiproceso ordinarios conservan
+`staged`: el modo nativo no debe usarse solo para ocultar un servicio que no se
+detiene limpiamente.
+
+Con `also_service`, el restart nativo deja activas las unidades auxiliares y
+reinicia atómicamente solo la principal; `start`/`stop` explícitos y el restart
+staged conservan el orden envolvente descrito abajo. `also_apply` sigue enviando
+la acción restart a través del motor y política propios de cada servicio referido.
+
 ### `also_service` — unidades init auxiliares
 
 Un servicio puede nombrar **unidades init auxiliares propias** (un `.socket`, `.timer`,
-unidad acompañante) que se arrancan/paran/reinician **junto con la principal**,
-en la misma operación. Refleja la forma de `service:` (listas por init, resueltas
-para el backend activo):
+unidad acompañante) que se arrancan/paran **junto con la principal**, en la misma
+operación. Un restart staged compone esas dos operaciones. Refleja la forma de
+`service:` (listas por init, resueltas para el backend activo):
 
 ```yaml
 service:
@@ -785,7 +823,8 @@ aborta la operación antes de que la principal arranque), y paradas **después**
 (best-effort — un fallo de stop se reporta en el mensaje de resultado pero no hace fallar
 un stop ya exitoso). `reload` toca solo la principal. Los guards, locks y preflight de la principal
 envuelven toda la operación. Listar la unidad principal en
-`also_service` se rechaza.
+`also_service` se rechaza. Un restart nativo también toca solo la principal y
+deja activas estas unidades auxiliares, como se describe arriba.
 
 ### `also_apply` — cascada a otros servicios
 
