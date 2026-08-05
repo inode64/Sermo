@@ -34,7 +34,7 @@ func (sieveProtocol) DefaultPort() int   { return defaultPortSieve }
 func (sieveProtocol) RequiresUser() bool { return false }
 
 func (sieveProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	c, err := dialDeadline(ctx, cfg, defaultPortSieve)
+	c, err := newProbeTarget(cfg, defaultPortSieve).openStream(ctx)
 	if err != nil {
 		return Result{}, err
 	}

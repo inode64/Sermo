@@ -50,7 +50,7 @@ const (
 // Probe connects (TCP, a Unix socket when cfg.Socket is set, TLS when
 // configured) and runs the stats handshake. The caller's context bounds it.
 func (memcachedProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	c, err := dialDeadline(ctx, cfg, defaultPortMemcached)
+	c, err := newProbeTarget(cfg, defaultPortMemcached).openStream(ctx)
 	if err != nil {
 		return Result{}, err
 	}

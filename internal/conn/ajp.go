@@ -45,7 +45,7 @@ func (ajpProtocol) DefaultPort() int   { return defaultPortAJP }
 func (ajpProtocol) RequiresUser() bool { return false }
 
 func (ajpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	c, err := dialTCPDeadline(ctx, cfg, defaultPortAJP)
+	c, err := newProbeTarget(cfg, defaultPortAJP).openTCP(ctx)
 	if err != nil {
 		return Result{}, err
 	}

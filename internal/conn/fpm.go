@@ -105,7 +105,8 @@ func (fpmProtocol) RequiresUser() bool { return false }
 // the check's status_path — pm.status_path in the pool config), it additionally
 // fetches the pool status page and exposes its metrics in Extra.
 func (fpmProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	c, err := dialDeadline(ctx, cfg, defaultPortFPM)
+	target := newProbeTarget(cfg, defaultPortFPM)
+	c, err := target.openStream(ctx)
 	if err != nil {
 		return Result{}, err
 	}
@@ -118,7 +119,7 @@ func (fpmProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	// the first after the ping). Its metrics (active/idle processes, listen
 	// queue, slow requests, …) become assertable via expect:.
 	if cfg.Query != "" {
-		if sc, derr := dialDeadline(ctx, cfg, defaultPortFPM); derr == nil {
+		if sc, derr := target.openStream(ctx); derr == nil {
 			defer func() { _ = sc.Close() }()
 			if stdout, _, rerr := fpmRequest(sc, cfg.Query, fpmStatusFormatJSON); rerr == nil {
 				mergeFPMStatus(res.Extra, stdout)

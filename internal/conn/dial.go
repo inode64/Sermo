@@ -98,6 +98,14 @@ func (t probeTarget) openNetwork(ctx context.Context, network string) (net.Conn,
 	return c, nil
 }
 
+func (t probeTarget) openTCP(ctx context.Context) (net.Conn, error) {
+	return t.openNetwork(ctx, networkTCP)
+}
+
+func (t probeTarget) openUDP(ctx context.Context) (net.Conn, error) {
+	return t.openNetwork(ctx, networkUDP)
+}
+
 // pqBindDialer adapts *net.Dialer to lib/pq's Dialer/DialerContext interfaces.
 type pqBindDialer struct {
 	*net.Dialer
@@ -217,7 +225,7 @@ func probeUnixSocket(ctx context.Context, cfg Config, defaultSocket string) (Res
 // applies the context deadline. The prologue shared by the byte-protocol
 // probes that never upgrade to TLS; the caller closes the connection.
 func dialTCPDeadline(ctx context.Context, cfg Config, defaultPort int) (net.Conn, error) {
-	return dialNetworkDeadline(ctx, cfg, defaultPort, networkTCP)
+	return newProbeTarget(cfg, defaultPort).openTCP(ctx)
 }
 
 // dialNetworkDeadline opens a connection to cfg's defaulted address through
@@ -389,7 +397,7 @@ func probeLineCommand(ctx context.Context, cfg Config, defaultPort int, command 
 // closes the connection. Probes that exchange more than one datagram with the
 // same peer (chrony) dial once through this instead of repeating exchangeUDP.
 func dialUDPDeadline(ctx context.Context, cfg Config, defaultPort int) (net.Conn, error) {
-	return dialNetworkDeadline(ctx, cfg, defaultPort, networkUDP)
+	return newProbeTarget(cfg, defaultPort).openUDP(ctx)
 }
 
 // exchangeUDP dials cfg's host (defaulting to DefaultHost) and port

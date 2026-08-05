@@ -52,7 +52,7 @@ const (
 )
 
 func (openvswitchProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	c, err := dialDeadline(ctx, cfg, defaultPortOpenVSwitch)
+	c, err := newProbeTarget(cfg, defaultPortOpenVSwitch).openStream(ctx)
 	if err != nil {
 		return Result{}, err
 	}

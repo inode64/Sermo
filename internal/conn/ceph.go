@@ -30,7 +30,7 @@ const (
 )
 
 func (cephProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	c, err := dialTCPDeadline(ctx, cfg, defaultPortCeph)
+	c, err := newProbeTarget(cfg, defaultPortCeph).openTCP(ctx)
 	if err != nil {
 		return Result{}, err
 	}
