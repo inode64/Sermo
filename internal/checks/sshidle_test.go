@@ -13,7 +13,10 @@ import (
 const (
 	sshShellPID = 100
 	sshdPID     = 90
+	sshPrivPID  = 95
+	sshPeerPID  = 96
 	testTTY     = 34816
+	localTTY    = 34817
 	testUserID  = 1000
 	testGroupID = 2000
 )
@@ -94,6 +97,78 @@ func TestSampleSSHIdle(t *testing.T) {
 				t.Fatalf("sampleSSHIdle = %+v, want %+v", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestSampleSSHSessionsSeparatesConsoleAndSSH(t *testing.T) {
+	now := time.Date(2026, time.August, 5, 12, 0, 0, 0, time.UTC)
+	snapshot := sshSnapshot(
+		process.Identity{PID: sshPrivPID, PPID: sshdPID, Exe: "/usr/lib/sshd-session", ExeOK: true},
+		process.Identity{PID: sshPeerPID, PPID: sshPrivPID, Exe: "/usr/lib/sshd-session", ExeOK: true, StartTicks: 1234, StartTicksOK: true},
+		process.Identity{PID: 101, PPID: 1, UID: testUserID, GID: testGroupID, Exe: "/bin/bash", ExeOK: true, TTY: localTTY, TTYOK: true},
+	)
+	// The shell sits below the session process, just as sshd-session does on
+	// OpenRC hosts. The closer must target that session process, never sshd.
+	snapshot[sshShellPID] = process.Identity{PID: sshShellPID, PPID: sshPeerPID, UID: testUserID, GID: testGroupID, Exe: "/bin/bash", ExeOK: true, TTY: testTTY, TTYOK: true}
+	terminal := func(line string) (utmp.Terminal, error) {
+		switch line {
+		case "pts/0":
+			return utmp.Terminal{Device: testTTY, AccessedAt: now.Add(-2 * time.Minute)}, nil
+		case "tty1":
+			return utmp.Terminal{Device: localTTY, AccessedAt: now.Add(-time.Minute)}, nil
+		default:
+			return utmp.Terminal{}, errors.New("unknown terminal")
+		}
+	}
+
+	sample, err := sampleSSHSessions([]utmp.Session{{User: "root", Line: "pts/0"}, {User: "console", Line: "tty1"}}, snapshot, terminal, now, mustSSHDFilters(t), testSSHLookup().ResolveUser)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sample.Console != 1 || len(sample.SSH) != 1 {
+		t.Fatalf("sample = %+v, want one console and one SSH session", sample)
+	}
+	got := sample.SSH[0]
+	if got.User != "root" || got.Terminal != "pts/0" || got.PID != sshPeerPID || got.StartTicks != 1234 || got.Idle != 2*time.Minute {
+		t.Fatalf("SSH session = %+v, want verified SSH peer", got)
+	}
+	if err := sample.VerifySSHSession(got); err != nil {
+		t.Fatalf("VerifySSHSession(%+v): %v", got, err)
+	}
+	got.StartTicks++
+	if err := sample.VerifySSHSession(got); err == nil {
+		t.Fatal("VerifySSHSession accepted a recycled PID")
+	}
+}
+
+func TestSampleSSHSessionsFailsClosedForUnknownTerminalAncestry(t *testing.T) {
+	now := time.Date(2026, time.August, 5, 12, 0, 0, 0, time.UTC)
+	_, err := sampleSSHSessions(
+		[]utmp.Session{{User: "root", Line: "pts/0"}},
+		map[int]process.Identity{sshShellPID: {PID: sshShellPID, PPID: sshdPID, TTY: testTTY, TTYOK: true, Exe: "/bin/bash", ExeOK: true}},
+		testSSHTerminal(now), now, mustSSHDFilters(t), testSSHLookup().ResolveUser,
+	)
+	if err == nil {
+		t.Fatal("sampleSSHSessions accepted an incomplete SSH ancestry")
+	}
+}
+
+func TestSampleSSHSessionsFailsClosedForSSHDWithAnotherUser(t *testing.T) {
+	now := time.Date(2026, time.August, 5, 12, 0, 0, 0, time.UTC)
+	filter, err := process.NewIdentityFilter("/opt/sermo-test/sshd", "0", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshot := sshSnapshot()
+	listener := snapshot[sshdPID]
+	listener.UID = 1
+	snapshot[sshdPID] = listener
+	_, err = sampleSSHSessions(
+		[]utmp.Session{{User: "root", Line: "pts/0"}}, snapshot, testSSHTerminal(now), now,
+		[]process.IdentityFilter{filter}, testSSHLookup().ResolveUser,
+	)
+	if err == nil {
+		t.Fatal("sampleSSHSessions accepted sshd with a different real UID")
 	}
 }
 

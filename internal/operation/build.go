@@ -52,7 +52,11 @@ type Config struct {
 	MetricSample func(context.Context) checks.MetricReader
 	// Changed reports whether a watched library/config path differs from its
 	// acknowledged baseline for `changed:` guard conditions. Optional.
-	Changed          func(string) (bool, error)
+	Changed func(string) (bool, error)
+	// SessionVerifier refreshes and verifies an interactive session immediately
+	// before a manual close. It is nil unless the resolved service is SSH.
+	SessionVerifier  func(context.Context, SessionTarget) error
+	SessionSignaler  process.Signaler
 	LockTTL          time.Duration
 	Sleep            func(time.Duration)
 	OperationTimeout time.Duration
@@ -166,6 +170,8 @@ func New(c Config) Engine {
 			return report.Locks, nil
 		},
 		Guard:            guardClosure(tree, deps, c.MetricSample, c.Changed),
+		SessionVerifier:  c.SessionVerifier,
+		SessionSignaler:  c.SessionSignaler,
 		Preflight:        sectionRunner(tree, deps, c.MetricSample),
 		Postflight:       verifyRunner(tree, deps, c.MetricSample),
 		RestartIdentity:  restartIdentityClosure(c.Manager, c.Unit, discover, c.Discoverer, selectors),

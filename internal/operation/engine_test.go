@@ -1550,6 +1550,51 @@ func TestStartRunsNoStop(t *testing.T) {
 	}
 }
 
+func TestCloseSessionRevalidatesThenSendsOnlyTERM(t *testing.T) {
+	h := defaultHarness()
+	e := h.engine()
+	signaler := &recordingSignaler{}
+	verified := 0
+	e.SessionVerifier = func(_ context.Context, target SessionTarget) error {
+		verified++
+		if target != (SessionTarget{PID: 96, StartTicks: 1234, Terminal: "pts/11"}) {
+			t.Fatalf("target = %+v", target)
+		}
+		return nil
+	}
+	e.SessionSignaler = signaler
+
+	res := e.CloseSession(context.Background(), SessionTarget{PID: 96, StartTicks: 1234, Terminal: "pts/11"})
+	if res.Status != ResultOK || res.Action != actionCloseSession {
+		t.Fatalf("result = %+v", res)
+	}
+	if verified != 1 || len(signaler.calls) != 1 || !strings.Contains(signaler.calls[0], "terminated") {
+		t.Fatalf("verified=%d signals=%v, want one SIGTERM after verification", verified, signaler.calls)
+	}
+	if len(h.mgr.calls) != 0 {
+		t.Fatalf("manager calls = %v, session close must not restart sshd", h.mgr.calls)
+	}
+	if len(h.emitted) != 1 || h.emitted[0].Action != actionCloseSession {
+		t.Fatalf("events = %+v, want one close-session event", h.emitted)
+	}
+}
+
+func TestCloseSessionNeverSignalsWhenVerificationRejectsIt(t *testing.T) {
+	h := defaultHarness()
+	e := h.engine()
+	signaler := &recordingSignaler{}
+	e.SessionVerifier = func(context.Context, SessionTarget) error { return errors.New("SSH session changed") }
+	e.SessionSignaler = signaler
+
+	res := e.CloseSession(context.Background(), SessionTarget{PID: 96, StartTicks: 1234, Terminal: "pts/11"})
+	if res.Status != ResultFailed || !strings.Contains(res.Message, "SSH session changed") {
+		t.Fatalf("result = %+v", res)
+	}
+	if len(signaler.calls) != 0 {
+		t.Fatalf("signals = %v, want none", signaler.calls)
+	}
+}
+
 type noopSignaler struct{}
 
 func (noopSignaler) Signal(int, syscall.Signal) error { return nil }
