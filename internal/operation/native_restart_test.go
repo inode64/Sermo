@@ -54,7 +54,7 @@ func TestNewWiresNativeRestartPolicy(t *testing.T) {
 	t.Parallel()
 
 	engine, mgr := newInvalidTreeEngine(t, "containerd", "containerd", map[string]any{
-		config.ServiceKeyRestartPolicy: map[string]any{config.RestartPolicyKeyMode: config.RestartModeNative},
+		config.ServiceKeyRestartPolicy: map[string]any{config.RestartPolicyKeyMode: string(config.RestartModeNative)},
 	})
 	res := engine.Restart(context.Background())
 
@@ -70,7 +70,7 @@ func TestNewInvalidRestartPolicyBlocksBeforeBackendAction(t *testing.T) {
 	t.Parallel()
 
 	engine, mgr := newInvalidTreeEngine(t, "containerd", "containerd", map[string]any{
-		config.ServiceKeyRestartPolicy: map[string]any{config.RestartPolicyKeyMode: config.RestartModeNative},
+		config.ServiceKeyRestartPolicy: map[string]any{config.RestartPolicyKeyMode: string(config.RestartModeNative)},
 		config.SectionControl:          map[string]any{"type": "docker"},
 	})
 	res := engine.Restart(context.Background())

@@ -16,8 +16,12 @@ func TestDelegatedRuntimeCatalogUsesNativeRestart(t *testing.T) {
 				t.Parallel()
 
 				resolved := resolveCatalogService(t, service, backend)
-				if got := RestartMode(resolved.Tree); got != RestartModeNative {
-					t.Fatalf("RestartMode(%s) = %q, want %q", service, got, RestartModeNative)
+				got, err := ParseRestartMode(resolved.Tree)
+				if err != nil {
+					t.Fatalf("ParseRestartMode(%s): %v", service, err)
+				}
+				if got != RestartModeNative {
+					t.Fatalf("ParseRestartMode(%s) = %q, want %q", service, got, RestartModeNative)
 				}
 			})
 		}
