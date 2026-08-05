@@ -7,7 +7,8 @@ existe. Nada de lo que hay aquí es alcance comprometido; elige los elementos de
 
 - [ ] Modo de clúster distribuido
 - [ ] Agentes remotos
-- [ ] Autenticación de API remota
+- [x] Autenticación de la API web remota (roles HTTP Basic admin/guest, CSRF en
+      mutaciones, loopback por defecto y proxy inverso TLS para acceso remoto)
 - [ ] RBAC multi-tenant
 - [ ] ABI de plugins
 - [x] Integraciones de notificación principales: email, Slack, Teams y plantillas
@@ -102,12 +103,9 @@ una CLI configtest, `mosquitto`, `supervisord`, `udisks2`, `pm2`, etc. (`redis` 
       cadena de shell).
 - [ ] Referencias de variable a variable (`variables.x: "${y}"`), con detección
   de ciclos. Hoy un valor de variable que contiene `${...}` es un error de validación.
-- [ ] Watches de servicio — vista en vivo web: los `watches:` embebidos de un servicio
-      se listan y controlan (monitor/unmonitor) en la web UI pero omiten el
-      Meter/Lecturas en vivo, porque la ruta de vista en vivo web acotada al host
-      no modela el árbol de PIDs del servicio. Cablear una vista en vivo acotada
-      al servicio (reutilizando las deps `serviceRuntime` por servicio del web
-      backend) para que sus gauges se rendericen como los watches de host.
+- [x] Watches de servicio — vista en vivo web: los `watches:` embebidos publican
+      los mismos `Meter`/Lecturas derivados de snapshots que los watches de host
+      y siguen siendo controlables (monitor/unmonitor) en la web UI.
 - [ ] Watches de servicio — watch `process` acotado al árbol: el watch `process`
       con estado (condiciones cpu/memoria/io por PID y `kill`) se rechaza dentro
       de un servicio porque casa a nivel de host por nombre/usuario y podría matar
