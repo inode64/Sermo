@@ -1,6 +1,8 @@
 package procnet
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -19,6 +21,21 @@ func TestCountPortState(t *testing.T) {
 	}
 	if count != 2 {
 		t.Fatalf("count = %d, want 2 established sockets on port 21", count)
+	}
+}
+
+func TestCountTCPConnectionsRejectsPartialSocketTables(t *testing.T) {
+	dir := t.TempDir()
+	tcp := filepath.Join(dir, "tcp")
+	if err := os.WriteFile(tcp, []byte("  sl  local_address rem_address   st\n   0: 0100007F:0015 0100007F:AF20 01\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	missingTCP6 := filepath.Join(dir, "tcp6")
+
+	if _, err := countTCPConnections(21, []string{tcp, missingTCP6}); err == nil {
+		t.Fatal("partial TCP tables must be unavailable")
+	} else if !strings.Contains(err.Error(), missingTCP6) {
+		t.Fatalf("error = %q, want missing TCP6 path", err)
 	}
 }
 
