@@ -92,11 +92,11 @@ func connectDBus(ctx context.Context, cfg Config, addr string) (*dbus.Conn, erro
 	}
 	if err := conn.Auth(nil); err != nil {
 		_ = conn.Close()
-		return nil, err
+		return nil, fmt.Errorf("authenticate D-Bus connection: %w", err)
 	}
 	if err := conn.Hello(); err != nil {
 		_ = conn.Close()
-		return nil, err
+		return nil, fmt.Errorf("complete D-Bus Hello handshake: %w", err)
 	}
 	return conn, nil
 }
@@ -107,7 +107,11 @@ func connectDBus(ctx context.Context, cfg Config, addr string) (*dbus.Conn, erro
 // first and handed to dbus.NewConn instead.
 func dialDBus(ctx context.Context, cfg Config, addr string) (*dbus.Conn, error) {
 	if cfg.Interface == "" || !strings.HasPrefix(addr, dbusTCPPrefix) {
-		return dbus.Dial(addr, dbus.WithContext(ctx))
+		conn, err := dbus.Dial(addr, dbus.WithContext(ctx))
+		if err != nil {
+			return nil, fmt.Errorf("dial D-Bus address %q: %w", addr, err)
+		}
+		return conn, nil
 	}
 	tcpCfg, err := dbusTCPConfig(cfg, addr)
 	if err != nil {
@@ -120,7 +124,7 @@ func dialDBus(ctx context.Context, cfg Config, addr string) (*dbus.Conn, error) 
 	conn, err := dbus.NewConn(c, dbus.WithContext(ctx))
 	if err != nil {
 		_ = c.Close()
-		return nil, err
+		return nil, fmt.Errorf("create D-Bus connection: %w", err)
 	}
 	return conn, nil
 }
