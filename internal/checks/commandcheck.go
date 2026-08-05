@@ -6,7 +6,6 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"time"
 
 	"sermo/internal/execx"
 	"sermo/internal/output"
@@ -46,9 +45,9 @@ type commandCheck struct {
 }
 
 func (c commandCheck) Run(ctx context.Context) Result {
-	start := time.Now()
-	ctx, cancel := c.withTimeout(ctx)
-	defer cancel()
+	ctx, run := c.begin(ctx)
+	defer run.close()
+	start := run.start
 
 	res, err := runCheckCommand(ctx, c.runner, c.user, c.argv)
 	// fail builds a failing result and attaches the bounded command output so the

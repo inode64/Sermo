@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"strings"
-	"time"
 
 	_ "modernc.org/sqlite" // registers the "sqlite" database/sql driver (pure Go)
 )
@@ -35,9 +34,9 @@ type sqliteCheck struct {
 }
 
 func (c sqliteCheck) Run(ctx context.Context) Result {
-	start := time.Now()
-	ctx, cancel := c.withTimeout(ctx)
-	defer cancel()
+	ctx, run := c.begin(ctx)
+	defer run.close()
+	start := run.start
 
 	if _, err := os.Stat(c.path); err != nil {
 		return c.result(false, fmt.Sprintf("%s: %v", c.path, err), start)

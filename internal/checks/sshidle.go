@@ -77,9 +77,9 @@ type sshIdleCheck struct {
 }
 
 func (c sshIdleCheck) Run(ctx context.Context) Result {
-	start := time.Now()
-	ctx, cancel := c.withTimeout(ctx)
-	defer cancel()
+	ctx, run := c.begin(ctx)
+	defer run.close()
+	start := run.start
 	if err := ctx.Err(); err != nil {
 		return c.unavailableResult(err, start)
 	}

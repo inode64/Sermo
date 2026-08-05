@@ -193,9 +193,9 @@ func buildClockCheck(b base, entry map[string]any) (Check, string) {
 }
 
 func (c clockCheck) Run(ctx context.Context) Result {
-	start := time.Now()
-	ctx, cancel := c.withTimeout(ctx)
-	defer cancel()
+	ctx, run := c.begin(ctx)
+	defer run.close()
+	start := run.start
 
 	// best keeps the closest sample seen so it can be reported when every server
 	// fails a threshold, along with the reason it failed — recomputing that from

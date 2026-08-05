@@ -3,7 +3,6 @@ package checks
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"sermo/internal/servicemgr"
 )
@@ -17,9 +16,9 @@ type serviceCheck struct {
 }
 
 func (c serviceCheck) Run(ctx context.Context) Result {
-	start := time.Now()
-	ctx, cancel := c.withTimeout(ctx)
-	defer cancel()
+	ctx, run := c.begin(ctx)
+	defer run.close()
+	start := run.start
 
 	status, err := c.status(ctx)
 	if err != nil {

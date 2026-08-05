@@ -155,9 +155,9 @@ func (c *certCheck) source() string {
 }
 
 func (c *certCheck) Run(ctx context.Context) Result {
-	start := time.Now()
-	ctx, cancel := c.withTimeout(ctx)
-	defer cancel()
+	ctx, run := c.begin(ctx)
+	defer run.close()
+	start := run.start
 
 	var s CertSample
 	if c.path != "" {

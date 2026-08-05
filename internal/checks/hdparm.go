@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-	"time"
 
 	"sermo/internal/execx"
 	"sermo/internal/output"
@@ -25,9 +24,9 @@ type hdparmCheck struct {
 }
 
 func (c hdparmCheck) Run(ctx context.Context) Result {
-	start := time.Now()
-	ctx, cancel := c.withTimeout(ctx)
-	defer cancel()
+	ctx, run := c.begin(ctx)
+	defer run.close()
+	start := run.start
 
 	// Run only the timings the predicates need (-T cached, -t buffered): a
 	// cached-only check must not pay the slow, I/O-heavy buffered read.

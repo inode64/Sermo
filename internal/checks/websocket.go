@@ -66,9 +66,9 @@ type websocketCheck struct {
 }
 
 func (c *websocketCheck) Run(ctx context.Context) Result {
-	start := time.Now()
-	ctx, cancel := c.withTimeout(ctx)
-	defer cancel()
+	ctx, run := c.begin(ctx)
+	defer run.close()
+	start := run.start
 
 	var chosenRes Result
 	chosen, perIface, perr := tryInterfaces(c.ifaces, c.ifaceAll, func(iface string) error {

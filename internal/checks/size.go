@@ -40,9 +40,9 @@ type sizeCheck struct {
 }
 
 func (c *sizeCheck) Run(ctx context.Context) Result {
-	start := time.Now()
-	ctx, cancel := c.withTimeout(ctx)
-	defer cancel()
+	ctx, run := c.begin(ctx)
+	defer run.close()
+	start := run.start
 
 	sampler := c.sampler
 	if sampler == nil {

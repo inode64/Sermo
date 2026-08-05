@@ -60,9 +60,9 @@ const maxHTTPBody = units.BytesPerMiB
 const httpStatusClassDivisor = 100
 
 func (c *httpCheck) Run(ctx context.Context) Result {
-	start := time.Now()
-	ctx, cancel := c.withTimeout(ctx)
-	defer cancel()
+	ctx, run := c.begin(ctx)
+	defer run.close()
+	start := run.start
 
 	client := c.client
 	if c.certHost != "" {
