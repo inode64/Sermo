@@ -288,6 +288,14 @@ func (h *WebBackendHolder) Operate(ctx context.Context, name, action string, opt
 	return webCall(h, unavailableAction(), func(b *WebBackend) web.ActionResult { return b.Operate(ctx, name, action, opts) })
 }
 
+// CloseSSHSession gracefully closes one revalidated SSH terminal through the
+// active backend.
+func (h *WebBackendHolder) CloseSSHSession(ctx context.Context, name string, session web.SSHSession) web.ActionResult {
+	return webCall(h, unavailableAction(), func(b *WebBackend) web.ActionResult {
+		return b.CloseSSHSession(ctx, name, session)
+	})
+}
+
 // CompactState prunes old persisted history through the active backend.
 func (h *WebBackendHolder) CompactState(ctx context.Context, before time.Time) web.StateCompactResult {
 	return webCall(h, web.StateCompactResult{OK: false, Message: webBackendUnavailableMessage},

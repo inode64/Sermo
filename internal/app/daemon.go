@@ -212,11 +212,16 @@ type Deps struct {
 	// PID, cutting discovery from O(services × processes) to O(processes).
 	// Optional: nil makes each discoverer read /proc directly.
 	ProcReader process.Reader
-	// SSHIdleSampler observes interactive SSH terminals. It owns a separate
-	// terminal-aware procfs cache because ordinary service discovery deliberately
-	// avoids reading tty_nr for every process. Optional: nil lets checks build a
-	// one-shot native sampler.
-	SSHIdleSampler checks.SSHIdleSamplerFunc
+	// SSHIdleSampler observes idle interactive SSH terminals. SSHSessionSampler
+	// presents the same terminal-aware evidence in the web UI and verifies a
+	// requested close. Both share a separate procfs cache because ordinary
+	// service discovery deliberately avoids reading tty_nr for every process.
+	// Optional nil values let checks build one-shot native samplers.
+	SSHIdleSampler    checks.SSHIdleSamplerFunc
+	SSHSessionSampler checks.SSHSessionSamplerFunc
+	// SSHSessionVerifier must obtain a fresh terminal/process snapshot for a
+	// close action. Optional nil uses an uncached native sampler.
+	SSHSessionVerifier checks.SSHSessionSamplerFunc
 	// StorageUsage reports filesystem usage for storage checks.
 	// Optional: nil uses statfs.
 	StorageUsage checks.StorageUsageFunc
@@ -345,6 +350,9 @@ type Deps struct {
 	// MountSignaler sends TERM/KILL during policy-gated web umount escalation.
 	// Optional: nil uses process.OSSignaler.
 	MountSignaler process.Signaler
+	// SSHSessionSignaler sends the single SIGTERM used to close a freshly
+	// revalidated interactive SSH session. Optional: nil uses process.OSSignaler.
+	SSHSessionSignaler process.Signaler
 	// MountUserAlerter sends a console alert to users blocking a web mount
 	// operation. Optional: nil uses the native tty notifier.
 	MountUserAlerter MountUserAlerter

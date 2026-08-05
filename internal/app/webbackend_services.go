@@ -472,6 +472,15 @@ func (b *WebBackend) Detail(ctx context.Context, name string) (web.Detail, bool)
 		d.Processes, d.ProcessTotals = aggregateProcesses(procs, b.runtimeMetricReader())
 		attachLiveCPU(&d, b.live, name)
 	}
+	if len(e.sshSessionFilters) > 0 {
+		d.SSHSessionsSupported = true
+		sessions, err := b.sshSessions(e.sshSessionFilters)
+		if err != nil {
+			d.ProcessWarnings = append(d.ProcessWarnings, sshSessionUnavailablePrefix+err.Error())
+		} else {
+			d.SSHSessions = sshSessionsToWeb(sessions)
+		}
+	}
 
 	if b.remediation != nil {
 		if rep, ok := b.remediation.Get(name); ok {

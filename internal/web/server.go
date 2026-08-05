@@ -123,6 +123,7 @@ const (
 	apiSegmentReload       = "reload"
 	apiSegmentRuntime      = "runtime"
 	apiSegmentServices     = "services"
+	apiSegmentSessions     = "sessions"
 	apiSegmentSLA          = "sla"
 	apiSegmentState        = "state"
 	apiSegmentStream       = "stream"
@@ -149,6 +150,7 @@ const (
 	apiActionCompact   = "compact"
 	apiActionAlert     = string(rules.ActionAlert)
 	apiActionTest      = "test"
+	apiActionClose     = "close"
 
 	queryBoolOne  = "1"
 	queryBoolTrue = "true"
@@ -176,6 +178,7 @@ const (
 const (
 	apiParamAction     = "action"
 	apiParamName       = "name"
+	apiParamPID        = "pid"
 	apiParamService    = "service"
 	apiQueryBefore     = "before"
 	apiQueryBeforeID   = "before_id"
@@ -190,6 +193,8 @@ const (
 	apiQueryOnlyErrors = "only_errors"
 	apiQuerySince      = "since"
 	apiQueryStatus     = "status"
+	apiQueryStartTicks = "start_ticks"
+	apiQueryTerminal   = "terminal"
 	apiQueryVerbose    = "verbose"
 	apiQueryWatch      = "watch"
 )
@@ -258,6 +263,7 @@ const (
 	routeAPIStateCompact   = routeMethodPost + apiPathState + "/" + apiActionCompact
 	routeAPIPanic          = routeMethodPost + apiPathPanic + "/" + routeVarAction
 	routeAPIPreflight      = routeMethodPost + apiPathServices + "/" + routeVarName + "/" + apiSegmentPreflight
+	routeAPISessionClose   = routeMethodPost + apiPathServices + "/" + routeVarName + "/" + apiSegmentSessions + "/{" + apiParamPID + "}/" + apiActionClose
 	routeAPIAction         = routeMethodPost + apiPathServices + "/" + routeVarName + "/" + routeVarAction
 	routeAPIReload         = routeMethodPost + apiPathReload
 )
@@ -596,11 +602,20 @@ type DaemonInfo struct {
 	Interval          string        `json:"interval"`
 	MaxParallelChecks int           `json:"max_parallel_checks"`
 	// ActiveUsers is the number of distinct users with an active login session,
-	// shown in the dashboard header.
-	ActiveUsers      int    `json:"active_users"`
-	DefaultTimeout   string `json:"default_timeout"`
-	OperationTimeout string `json:"operation_timeout"`
-	StartupDelay     string `json:"startup_delay"`
+	// retained for API consumers that need a de-duplicated account count.
+	ActiveUsers      int             `json:"active_users"`
+	Sessions         *SessionSummary `json:"sessions,omitempty"`
+	DefaultTimeout   string          `json:"default_timeout"`
+	OperationTimeout string          `json:"operation_timeout"`
+	StartupDelay     string          `json:"startup_delay"`
+}
+
+// SessionSummary separates active local-console and SSH terminal sessions.
+// It is omitted when Sermo cannot prove SSH ancestry from the configured SSH
+// service, rather than guessing from a terminal name.
+type SessionSummary struct {
+	Console int `json:"console"`
+	SSH     int `json:"ssh"`
 }
 
 // HostTypeInfo describes the host's virtualization class for the dashboard.
@@ -800,6 +815,18 @@ type Process struct {
 	MaxCoreExact bool    `json:"max_core_exact,omitempty"`
 }
 
+// SSHSession is one current interactive terminal attributed to the selected
+// SSH service. CanClose is true only when a per-session process boundary and
+// start-time identity were observed and can therefore be revalidated safely.
+type SSHSession struct {
+	User        string `json:"user"`
+	Terminal    string `json:"terminal"`
+	PID         int    `json:"pid,omitempty"`
+	StartTicks  uint64 `json:"start_ticks,omitempty"`
+	IdleSeconds int64  `json:"idle_seconds,omitempty"`
+	CanClose    bool   `json:"can_close"`
+}
+
 // ProcessTotals aggregates a service's whole discovered process tree — the
 // matched processes and their child/descendant processes — so the totals reflect
 // the service's workers and helpers, not just its main process.
@@ -867,15 +894,17 @@ type Lock struct {
 // Detail is a single service's view: its summary plus its checks.
 type Detail struct {
 	Service
-	Checks            []Check        `json:"checks"`
-	Locks             []Lock         `json:"locks,omitempty"`
-	LockWarnings      []string       `json:"lock_warnings,omitempty"`
-	NoResidentProcess bool           `json:"no_resident_process,omitempty"`
-	ProcessWarnings   []string       `json:"process_warnings,omitempty"`
-	Processes         []Process      `json:"processes,omitempty"`
-	ProcessTotals     *ProcessTotals `json:"process_totals,omitempty"`
-	Remediation       *Remediation   `json:"remediation,omitempty"`
-	Rules             []RuleWindow   `json:"rules,omitempty"`
+	Checks               []Check        `json:"checks"`
+	Locks                []Lock         `json:"locks,omitempty"`
+	LockWarnings         []string       `json:"lock_warnings,omitempty"`
+	NoResidentProcess    bool           `json:"no_resident_process,omitempty"`
+	ProcessWarnings      []string       `json:"process_warnings,omitempty"`
+	Processes            []Process      `json:"processes,omitempty"`
+	ProcessTotals        *ProcessTotals `json:"process_totals,omitempty"`
+	SSHSessionsSupported bool           `json:"ssh_sessions_supported,omitempty"`
+	SSHSessions          []SSHSession   `json:"ssh_sessions,omitempty"`
+	Remediation          *Remediation   `json:"remediation,omitempty"`
+	Rules                []RuleWindow   `json:"rules,omitempty"`
 }
 
 // SeriesPoint is one availability bucket of the SLA history. Ratio is nil for a
@@ -1092,6 +1121,9 @@ type Backend interface {
 	PruneEvents(ctx context.Context, before time.Time) int
 	// Operate runs start|stop|restart|reload|resume on a service through the safe engine.
 	Operate(ctx context.Context, name, action string, opts OperateOpts) ActionResult
+	// CloseSSHSession gracefully closes one freshly verified terminal session
+	// owned by the named SSH service.
+	CloseSSHSession(ctx context.Context, name string, session SSHSession) ActionResult
 	// CompactState prunes persisted history older than before and vacuums the
 	// state database. Zero before selects the normal retention window.
 	CompactState(ctx context.Context, before time.Time) StateCompactResult
@@ -1274,6 +1306,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc(routeAPIStateCompact, s.handleStateCompact)
 	mux.HandleFunc(routeAPIPanic, s.handlePanic)
 	mux.HandleFunc(routeAPIPreflight, s.handlePreflight)
+	mux.HandleFunc(routeAPISessionClose, s.handleSSHSessionClose)
 	mux.HandleFunc(routeAPIAction, s.handleAction)
 	mux.HandleFunc(routeAPIReload, s.handleReload)
 	return securityHeaders(s.withAccessLog(s.withAuth(mux)))
@@ -1971,6 +2004,39 @@ func (s *Server) handlePreflight(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, res)
+}
+
+// handleSSHSessionClose accepts only a fully identified session displayed by a
+// preceding detail read. The backend re-discovers it immediately before SIGTERM
+// so these request values never authorize a stale or recycled PID on their own.
+func (s *Server) handleSSHSessionClose(w http.ResponseWriter, r *http.Request) {
+	backend, ok := s.mutationBackend(w, r)
+	if !ok {
+		return
+	}
+	pid, err := strconv.Atoi(r.PathValue(apiParamPID))
+	if err != nil || pid <= 0 {
+		writeError(w, http.StatusBadRequest, "invalid SSH session pid")
+		return
+	}
+	startTicks, err := strconv.ParseUint(r.URL.Query().Get(apiQueryStartTicks), 10, 64)
+	if err != nil || startTicks == 0 {
+		writeError(w, http.StatusBadRequest, "invalid SSH session start_ticks")
+		return
+	}
+	terminal := r.URL.Query().Get(apiQueryTerminal)
+	if terminal == "" {
+		writeError(w, http.StatusBadRequest, "SSH session terminal is required")
+		return
+	}
+	s.extendActionWriteDeadline(w)
+	//nolint:contextcheck // see operateContext
+	res := backend.CloseSSHSession(s.operateContext(r), r.PathValue(apiParamName), SSHSession{
+		PID:        pid,
+		StartTicks: startTicks,
+		Terminal:   terminal,
+	})
+	writeActionResult(w, res.OK, res)
 }
 
 func (s *Server) handleAction(w http.ResponseWriter, r *http.Request) {

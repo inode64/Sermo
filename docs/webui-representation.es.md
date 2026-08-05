@@ -160,6 +160,7 @@ con un cuerpo `{"ok": bool, "message": string}` para una acción atendida.
 | --- | --- | --- |
 | Acción de servicio | `POST /api/services/{name}/{action}[?no_cascade=1]` | `monitor`, `unmonitor`, `start`, `stop`, `restart`, `reload`, `resume`; `reload` se ofrece solo cuando el servicio informa `can_reload` desde soporte de reload del backend de init o desde un fallback `reload:` válido; `no_cascade` omite los objetivos de `also_apply` en start/stop/restart |
 | Preflight de servicio | `POST /api/services/{name}/preflight` | ejecuta los checks de preflight sin cambiar el estado del servicio |
+| Cerrar sesión SSH | `POST /api/services/{name}/sessions/{pid}/close?start_ticks=TICKS&terminal=PTS` | solo admin y con confirmación: cierre elegante de un terminal SSH mostrado; el backend redescubre el terminal, el ejecutable `sshd` configurado exacto y su usuario real, exige el mismo PID y ticks de inicio y solo envía `SIGTERM` |
 | Acción de watch | `POST /api/watches/{name}/{action}` | `monitor`, `unmonitor`, `expand`, `probe` (una muestra manual), más `pause`/`resume` de RAID, que ejecutan una operación de re-chequeo y verificación y requieren la cabecera `X-Sermo-Confirm` |
 | Prueba de notifier | `POST /api/notifiers/{name}/test` | envía una notificación de prueba por el notifier nombrado tras confirmación |
 | Acción de montaje | `POST /api/mounts/{name}/{action}[?force=1&lazy=1&kill=1]` | `mount`, `umount`, `alert`; `force=1` permite `umount -f`, `lazy=1` permite `umount -l` como último fallback y `kill=1` habilita señalización de blockers limitada por `kill_only_if`; `/` rechaza las rutas de desmontaje |
@@ -180,6 +181,7 @@ con un cuerpo `{"ok": bool, "message": string}` para una acción atendida.
 | Refresco | selector con intervalo de refresco, botón de refresco manual |
 | Notificaciones | campana de notificaciones del navegador (opt-in); con el permiso concedido, los objetivos que empiezan a fallar generan una única notificación agrupada mientras la pestaña está oculta |
 | Estado | antigüedad del último refresco completo, errores de conexión o lista de paneles que conservan datos anteriores tras un refresco parcial; `#statusbar` termina con el `uptime:` del host y luego el `status:` del daemon (`ok` / `starting` / …) como una cola emparejada |
+| Sesiones | cuando se puede atribuir con seguridad un servicio SSH configurado, `sessions (console/SSH): X/Z` es el número de terminales locales y SSH con login; reemplaza el recuento anterior de usuarios distintos, así que tres terminales de la misma cuenta se ven como `0/3`, no como `1` |
 | Estado del sistema | identidad del host, tipo de host, resumen de daemon/backend/runtime |
 
 Notas editables:
@@ -308,6 +310,7 @@ Compartida por los paneles Services, Containers y Virtual machines:
 | Datos generales | una cuadrícula sin encabezado, primera área de la expansión: nombre, estado, categoría, unidad/backend, uptime, intervalo, política, locks, último evento, próxima remediación, estado de remediación y totales del proceso; mientras la insignia de la fila sea `starting`, la expansión puede mostrar todavía el backend de init en bruto (`inactive`) y muestras de check en curso del ciclo de solo observación |
 | Gráficos | línea temporal de SLA a ancho completo seguida de gráficos de latencia, CPU, memoria e IO; cada servicio persiste su propia ventana temporal y check de latencia; los servicios `no_resident_process` muestran solo SLA porque no tienen runtime de procesos para graficar |
 | Procesos | tabla del árbol de procesos detectado a ancho completo, con los procesos hijos marcados en CMD y mantenidos bajo su padre; **Max core** sigue a CPU e informa del uso máximo que ese proceso hizo de un solo core —su hilo más ocupado—, cuyo tooltip indica si el daemon lo midió por hilo o lo acotó con la tasa del proceso; las advertencias de descubrimiento se listan encima, una por línea; se omite cuando `no_resident_process` es true |
+| Sesiones SSH | solo en un servicio SSH atribuido: usuario, terminal, PID de sesión y tiempo inactivo en vivo. Los administradores pueden confirmar **close** cuando exista un límite de sesión verificado; los invitados no tienen acción y una sesión no verificable se muestra pero no se puede cerrar |
 | Checks | checks configurados y resultado actual; la columna SLA lleva la misma banda de disponibilidad que dibuja la línea temporal de SLA de Gráficas, sobre la ventana en la que esté el selector de esa sección, así que un tramo sin observar se ve como hueco rayado en ambas en vez de como un porcentaje plano en una |
 | Locks con nombre | estado de los locks de runtime |
 | Reglas | estado de las reglas de remediación/alerta |

@@ -150,6 +150,7 @@ with an `{"ok": bool, "message": string}` body for a handled action.
 | --- | --- | --- |
 | Service action | `POST /api/services/{name}/{action}[?no_cascade=1]` | `monitor`, `unmonitor`, `start`, `stop`, `restart`, `reload`, `resume`; `reload` is offered only when the service reports `can_reload` from init backend reload support or a valid `reload:` fallback; `no_cascade` skips `also_apply` targets on start/stop/restart |
 | Service preflight | `POST /api/services/{name}/preflight` | run preflight checks without changing service state |
+| Close SSH session | `POST /api/services/{name}/sessions/{pid}/close?start_ticks=TICKS&terminal=PTS` | admin-only, confirmation-required graceful close of one displayed SSH terminal; the backend re-discovers the terminal plus exact configured `sshd` executable and real user, then requires the same PID and start ticks before sending only `SIGTERM` |
 | Watch action | `POST /api/watches/{name}/{action}` | `monitor`, `unmonitor`, `expand`, `probe` (one manual sample), plus RAID `pause`/`resume`, which run a check-and-verify operation and require the `X-Sermo-Confirm` header |
 | Notifier test | `POST /api/notifiers/{name}/test` | sends one test notification through the named notifier after confirmation |
 | Mount action | `POST /api/mounts/{name}/{action}[?force=1&lazy=1&kill=1]` | `mount`, `umount`, `alert`; `force=1` allows `umount -f`, `lazy=1` allows `umount -l` as the last fallback, and `kill=1` enables `kill_only_if`-gated blocker signalling for `umount`; `/` rejects unmount paths |
@@ -170,6 +171,7 @@ with an `{"ok": bool, "message": string}` body for a handled action.
 | Refresh | select with refresh interval, manual refresh button |
 | Notifications | opt-in browser-notification bell; once granted, targets that newly start failing raise one grouped notification while the tab is hidden |
 | Status | last complete refresh age, connection errors, or panels retaining older data after a partial refresh; `#statusbar` ends with host `uptime:` then daemon `status:` (`ok` / `starting` / …) as a paired tail |
+| Sessions | when a configured SSH service can be attributed safely, `sessions (console/SSH): X/Z` is the number of logged-in local-console and SSH terminals; it replaces the former distinct-user count, so three terminals of the same account read `0/3`, not `1` |
 | System status | host identity, host type, daemon/backend/runtime summary |
 | Browser tab title | after the first full load: `Sermo - <host>` when healthy, `(N) Sermo - <host>` when attention has N signals, `Sermo - <host> · starting` while the daemon is starting; `<host>` is the short hostname from `GET /api/daemon` (same identity as the Basic auth realm) |
 
@@ -304,6 +306,7 @@ Shared by the Services, Containers and Virtual machines panels.
 | General data | an unheaded grid, first area of the expansion: name, state, category, unit/backend, uptime, interval, policy, locks, last event, next remediation, remediation state and process totals; while the row badge is `starting`, expansion may still show the raw init backend (`inactive`) and in-flight check samples from the observe-only cycle |
 | Graphs | full-width SLA timeline followed by latency, CPU, memory and IO charts; each service persists its own time window and latency check; `no_resident_process` services show only SLA because they have no process runtime to chart |
 | Processes | full-width detected process tree table, with child processes marked in CMD and kept under their parent; **Max core** follows CPU and reports the most a single core was used by that process — its busiest thread — whose tooltip says whether the daemon measured it per thread or bounded it by the process rate; discovery warnings are listed above it, one per line; omitted when `no_resident_process` is true |
+| SSH sessions | only on an attributed SSH service: live user, terminal, session PID and idle time. Admins can confirm **close** for a session with a verified boundary; guests have no action and an unverifiable session is displayed but cannot be closed |
 | Checks | configured checks and current result; the SLA column carries the same availability band the Graphs SLA timeline draws, on the window that section's selector is on, so an unobserved stretch reads as a hatched gap in both instead of a flat percentage in one |
 | Named locks | runtime lock state |
 | Rules | remediation/alert rule state |
