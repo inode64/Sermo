@@ -976,6 +976,7 @@ func TestResolveCondition(t *testing.T) {
 		want    bool
 	}{
 		{"health type defaults to health", CheckTypeTCP, "", false},
+		{"TCP connection count defaults to condition", CheckTypeTCPConnections, "", true},
 		{"non-health type defaults to condition", CheckTypeMetric, "", true},
 		{"explicit condition on a health type", CheckTypeProcess, ReportsCondition, true},
 		{"explicit health on a condition type", CheckTypeMetric, ReportsHealth, false},

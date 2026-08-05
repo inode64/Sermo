@@ -185,6 +185,8 @@ var (
 	UsersPredFields = []string{DataKeyCount}
 	// ProcessCountPredFields is the single required predicate of a process_count check.
 	ProcessCountPredFields = []string{DataKeyCount}
+	// TCPConnectionsPredFields is the single required predicate of a tcp_connections check.
+	TCPConnectionsPredFields = []string{DataKeyCount}
 	// SensorPredFields are the predicates of a sensors check.
 	SensorPredFields = []string{sensorTemp, sensorFan, sensorVoltage}
 	// HdparmPredFields are the predicates of an hdparm check.

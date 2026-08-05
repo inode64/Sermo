@@ -88,6 +88,7 @@ func (c connCheck) Run(ctx context.Context) Result {
 	res, elapsed, perIface, err := c.probeResult(ctx)
 	if err != nil {
 		r := c.result(false, fmt.Sprintf("%s %s: %v", c.proto.Name(), addr, err), start)
+		r.Unavailable = true
 		r.Data = ifaceData(perIface)
 		return r
 	}
@@ -97,8 +98,9 @@ func (c connCheck) Run(ctx context.Context) Result {
 		maps.Copy(r.Data, extra)
 		return r
 	}
-	ok, msg := c.evaluateResponse(res, elapsed, addr)
+	ok, msg, unavailable := c.evaluateResponse(res, elapsed, addr)
 	r := c.result(ok, msg, start)
+	r.Unavailable = unavailable
 	r.Data = c.resultData(elapsed, perIface, res)
 	return r
 }
@@ -171,14 +173,16 @@ func (c connCheck) changed(res conn.Result) (problems []string, extra map[string
 	return problems, extra, primed && len(problems) > 0
 }
 
-func (c connCheck) evaluateResponse(res conn.Result, elapsed time.Duration, addr string) (bool, string) {
+func (c connCheck) evaluateResponse(res conn.Result, elapsed time.Duration, addr string) (bool, string, bool) {
 	msg := fmt.Sprintf("%s %s ok", c.proto.Name(), addr)
 	if res.Version != "" {
 		msg += " (" + res.Version + ")"
 	}
 	ok := true
-	if fail := c.evalExpect(res); fail != "" {
+	unavailable := false
+	if fail, missing := c.evalExpect(res); fail != "" {
 		ok, msg = false, fmt.Sprintf("%s %s: %s", c.proto.Name(), addr, fail)
+		unavailable = missing
 	}
 	if ok && c.latencyOp != "" {
 		ms := strconv.FormatInt(elapsed.Milliseconds(), numericBaseDecimal)
@@ -190,7 +194,7 @@ func (c connCheck) evaluateResponse(res conn.Result, elapsed time.Duration, addr
 			ok, msg = false, fmt.Sprintf("%s %s: latency %sms not %s %s", c.proto.Name(), addr, ms, c.latencyOp, c.latencyValue)
 		}
 	}
-	return ok, msg
+	return ok, msg, unavailable
 }
 
 func (c connCheck) resultData(elapsed time.Duration, perIface map[string]any, res conn.Result) map[string]any {
@@ -222,9 +226,10 @@ func (c connCheck) changeData(elapsed time.Duration) map[string]any {
 }
 
 // evalExpect checks every configured assertion against the probe result and
-// returns the first failure ("" when all hold or none are configured). A field
-// is "version" (the Result.Version) or a key of Result.Extra.
-func (c connCheck) evalExpect(res conn.Result) string {
+// returns the first failure ("" when all hold or none are configured), plus
+// whether the value needed to evaluate it was unavailable. A field is "version"
+// (the Result.Version) or a key of Result.Extra.
+func (c connCheck) evalExpect(res conn.Result) (string, bool) {
 	for _, a := range c.expect {
 		var got string
 		if a.path == DataKeyVersion {
@@ -232,19 +237,19 @@ func (c connCheck) evalExpect(res conn.Result) string {
 		} else {
 			v, ok := res.Extra[a.path]
 			if !ok {
-				return fmt.Sprintf("field %q not available", a.path)
+				return fmt.Sprintf("field %q not available", a.path), true
 			}
 			got = v
 		}
 		ok, err := compareValue(got, a.op, a.value)
 		if err != nil {
-			return fmt.Sprintf("%s: %v", a.path, err)
+			return fmt.Sprintf("%s: %v", a.path, err), true
 		}
 		if !ok {
-			return fmt.Sprintf("%s %q %s %q not satisfied", a.path, got, a.op, a.value)
+			return fmt.Sprintf("%s %q %s %q not satisfied", a.path, got, a.op, a.value), false
 		}
 	}
-	return ""
+	return "", false
 }
 
 // buildConnCheck builds a connection-protocol check for a registered protocol.

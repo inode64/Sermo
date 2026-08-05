@@ -809,6 +809,8 @@ var singleShotCheckValidators = map[string]singleShotCheckValidator{
 	checks.CheckTypeInfluxDBQuery: singleShotNoLock(validateInfluxFields),
 	checks.CheckTypeSize:          singleShotNoLock(validateSizeFields),
 	checks.CheckTypeWebsocket:     singleShotNoLock(validateWebsocketFields),
+
+	checks.CheckTypeTCPConnections: validateTCPConnectionsCheck,
 }
 
 func singleShotNoLock(validate func(string, map[string]any, addFunc)) singleShotCheckValidator {
@@ -854,6 +856,13 @@ func validateTCPCheck(path string, entry map[string]any, _ string, add addFunc) 
 	if n, ok := cfgval.Int(entry[checks.CheckKeyPort]); !ok || !validTCPPort(n) {
 		add("%s.port is required and must be a port in %s for a tcp check", path, cfgval.TCPPortRange())
 	}
+}
+
+func validateTCPConnectionsCheck(path string, entry map[string]any, _ string, add addFunc) {
+	if n, ok := cfgval.Int(entry[checks.CheckKeyPort]); !ok || !validTCPPort(n) {
+		add("%s.port is required and must be a port in %s for a tcp_connections check", path, cfgval.TCPPortRange())
+	}
+	validateThresholdPreds(path, entry, checks.TCPConnectionsPredFields, add)
 }
 
 func validateSingleShotCommand(path string, entry map[string]any, _ string, add addFunc) {

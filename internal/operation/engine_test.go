@@ -600,6 +600,30 @@ func TestRestartGuardErrorFailsSafe(t *testing.T) {
 	}
 }
 
+func TestGuardClosureFailsSafeOnUnavailableSQLCheck(t *testing.T) {
+	missing := filepath.Join(t.TempDir(), "missing.db")
+	tree := map[string]any{
+		"checks": map[string]any{
+			"clients": map[string]any{
+				"type": "sql", "engine": "sqlite", "path": missing,
+				"query": "SELECT count(*) FROM sessions", "op": ">", "value": "0", "reports": "state",
+			},
+		},
+		"rules": map[string]any{
+			"block-restart-with-clients": map[string]any{
+				"type": "guard", "blocks": []any{"restart"},
+				"if":   map[string]any{"active": map[string]any{"check": "clients"}},
+				"then": map[string]any{"action": "block", "message": "clients connected"},
+			},
+		},
+	}
+	engine, _ := newInvalidTreeEngine(t, "db", "postgresql", tree)
+	blocked, _, err := engine.Guard(context.Background(), "restart")
+	if err == nil || blocked {
+		t.Fatalf("unavailable SQL guard = blocked:%v err:%v, want evaluation error", blocked, err)
+	}
+}
+
 func TestRestartStopError(t *testing.T) {
 	h := defaultHarness()
 	h.mgr.stopErr = errors.New("unit refused")

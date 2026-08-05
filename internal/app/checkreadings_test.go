@@ -101,6 +101,12 @@ func TestCheckReadingsForAllTypes(t *testing.T) {
 			want: map[string]string{"latency_ms": "12 ms"},
 		},
 		{
+			name: "tcp connections",
+			typ:  "tcp_connections",
+			data: map[string]any{"port": 21, "count": 12},
+			want: map[string]string{"port": "21", "count": "12 connections"},
+		},
+		{
 			name: "http",
 			typ:  "http",
 			data: map[string]any{"status": 200, "latency_ms": int64(45)},
@@ -170,6 +176,13 @@ func TestCheckReadingsForAllTypes(t *testing.T) {
 			typ:      "process_count",
 			data:     map[string]any{"count": 12, "value": float64(12)},
 			want:     map[string]string{"count": "12 processes"},
+			minCount: 1,
+		},
+		{
+			name:     "redis renders connected clients",
+			typ:      "redis",
+			data:     map[string]any{"protocol": "redis", "connected_clients": 12},
+			want:     map[string]string{"connected_clients": "12 connections"},
 			minCount: 1,
 		},
 		{

@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"bufio"
 	"context"
 	"encoding/binary"
 	"encoding/json"
@@ -393,29 +392,8 @@ func procPortListenerHosts(path string, port int, states map[string]bool, ipv6 b
 // returning false stops the scan. The row matching shared by the boolean and
 // host-collecting parsers.
 func scanProcSocketRows(r io.Reader, port int, states map[string]bool, found func(hostHex string) bool) error {
-	sc := bufio.NewScanner(r)
-	for sc.Scan() {
-		fields := strings.Fields(sc.Text())
-		if len(fields) < procnet.MinFields || fields[procnet.HeaderIndex] == procnet.HeaderField {
-			continue
-		}
-		if !states[strings.ToUpper(fields[procnet.StateIndex])] {
-			continue
-		}
-		hostHex, portHex, ok := strings.Cut(fields[procnet.LocalAddressIndex], procnet.AddressSeparator)
-		if !ok {
-			continue
-		}
-		got, err := strconv.ParseUint(portHex, procnet.HexBase, procnet.PortBits)
-		if err != nil || int(got) != port {
-			continue
-		}
-		if !found(hostHex) {
-			return nil
-		}
-	}
-	if err := sc.Err(); err != nil {
-		return fmt.Errorf("read proc socket table: %w", err)
+	if err := procnet.ScanPortState(r, port, states, found); err != nil {
+		return fmt.Errorf("scan proc socket rows: %w", err)
 	}
 	return nil
 }
