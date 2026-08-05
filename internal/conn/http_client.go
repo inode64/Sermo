@@ -32,19 +32,27 @@ func httpProbeClient(iface string, tlsConfig *tls.Config) *http.Client {
 // TLS follows the normal probe policy (plaintext by default, or HTTPS with an
 // optional operator-selected skip-verify mode).
 func httpProbeBase(cfg Config, defaultPort int) (*http.Client, string) {
-	host, port := cfg.hostPortDefaults(defaultPort)
+	return httpProbeBaseWithTLSMode(cfg, defaultPort, NormalizeTLS(cfg.TLS))
+}
+
+// httpProbeBaseWithTLSMode builds an HTTP probe target with an explicit TLS
+// policy. Most protocols use httpProbeBase and inherit cfg.TLS; protocols with
+// a documented policy (such as UniFi's self-signed HTTPS default) pass their
+// resolved mode here without duplicating host/port or interface binding.
+func httpProbeBaseWithTLSMode(cfg Config, defaultPort int, tlsMode string) (*http.Client, string) {
+	target := newProbeTarget(cfg, defaultPort)
+	host, _ := target.hostPort()
 	scheme := schemeHTTP
-	client := httpProbeClient(cfg.Interface, nil)
-	mode := NormalizeTLS(cfg.TLS)
-	if mode != "" {
+	client := httpProbeClient(target.cfg.Interface, nil)
+	if tlsMode != "" {
 		scheme = schemeHTTPS
 		tlsConfig := tlsClientConfig(host)
-		if mode == tlsSkipVerify {
+		if tlsMode == tlsSkipVerify {
 			tlsConfig.InsecureSkipVerify = true // operator chose tls: skip-verify
 		}
-		client = httpProbeClient(cfg.Interface, tlsConfig)
+		client = httpProbeClient(target.cfg.Interface, tlsConfig)
 	}
-	return client, scheme + urlSchemeSeparator + hostPort(host, port)
+	return client, scheme + urlSchemeSeparator + target.address()
 }
 
 // httpProbeResponse is one bounded HTTP probe exchange: the status code, the
