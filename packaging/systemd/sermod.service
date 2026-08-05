@@ -6,6 +6,9 @@ After=network.target
 [Service]
 Type=simple
 ExecStart=/usr/bin/sermod run --config /etc/sermo/sermo.yml
+# Signal only systemd's tracked main process. sermod handles SIGHUP by
+# validating and atomically swapping its monitoring configuration in place.
+ExecReload=/bin/kill -HUP $MAINPID
 Restart=on-failure
 RestartSec=5s
 # Sermo needs to inspect and signal other services' processes, so it runs as
