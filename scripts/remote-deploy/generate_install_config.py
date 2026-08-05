@@ -752,15 +752,24 @@ def service_unit_candidates(service_field: object, init: str, values: dict[str, 
     return list(dict.fromkeys(out))
 
 
+def service_reports(stage: Path) -> list[dict]:
+    """Return the complete catalog report, falling back for old inventories."""
+    for name in ("services_all_json.out", "services_json.out"):
+        data = read_json(stage / name)
+        reports = data.get("services", []) if isinstance(data, dict) else []
+        if reports:
+            return reports
+    return []
+
+
 def active_service_filter(stage: Path, catalog_docs: list[dict]) -> tuple[set[str], set[str], dict[str, list[str]], bool]:
-    """Split installed catalog services into those whose unit is running and
+    """Split catalog services into those whose unit is running and
     those whose unit has failed. Both are monitorable; only the running set
     carries listening-socket evidence, so the caller keeps them apart."""
     active_units = parse_active_units(stage)
     failed_units = parse_failed_units(stage)
     init = read_text(stage / "init").strip()
-    data = read_json(stage / "services_json.out")
-    reports = data.get("services", []) if isinstance(data, dict) else []
+    reports = service_reports(stage)
     active_services: set[str] = set()
     failed_services: set[str] = set()
     candidates_by_service: dict[str, list[str]] = {}
@@ -782,8 +791,7 @@ def active_service_filter(stage: Path, catalog_docs: list[dict]) -> tuple[set[st
 
 
 def parse_services(stage: Path, options: GenerationOptions) -> tuple[list[dict], list[dict], set[str]]:
-    data = read_json(stage / "services_json.out")
-    reports = data.get("services", []) if isinstance(data, dict) else []
+    reports = service_reports(stage)
     catalog_docs = load_catalog_services(options.catalog_services_dir)
     active_services, failed_services, candidates_by_service, active_inventory_ok = active_service_filter(stage, catalog_docs)
     services: list[dict] = []

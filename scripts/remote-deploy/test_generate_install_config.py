@@ -348,7 +348,7 @@ class EndpointGenerationTest(unittest.TestCase):
         (stage / "failed_units").write_text(
             "sntp.service loaded failed failed Set time via SNTP\n", encoding="utf-8"
         )
-        (stage / "services_json.out").write_text(
+        (stage / "services_all_json.out").write_text(
             json.dumps(
                 {
                     "services": [
