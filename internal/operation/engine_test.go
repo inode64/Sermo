@@ -574,8 +574,8 @@ func TestRestartGuardBlocks(t *testing.T) {
 	}
 }
 
-func TestGuardBlocksReloadAndResume(t *testing.T) {
-	for _, action := range []string{"reload", "resume"} {
+func TestGuardBlocksStartStopReloadAndResume(t *testing.T) {
+	for _, action := range []string{"start", "stop", "reload", "resume"} {
 		t.Run(action, func(t *testing.T) {
 			h := defaultHarness()
 			h.guardBlocked = true
