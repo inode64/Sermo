@@ -51,7 +51,7 @@ type Evaluator struct {
 	// Change is populated when a changed: leaf evaluates true, so callers can
 	// expand rule messages with the concrete changed path/app/library.
 	Change ChangeContext
-	// FailOnUnavailable turns an unavailable named check into an evaluation error.
+	// FailOnUnavailable turns an unavailable check into an evaluation error.
 	// Guards enable it so failed observation never authorizes an operation.
 	FailOnUnavailable bool
 
@@ -204,8 +204,8 @@ func (e *Evaluator) probe(ctx context.Context, v any) (checks.Result, error) {
 		if !ok {
 			return checks.Result{}, fmt.Errorf("unknown check %q", ref)
 		}
-		if e.FailOnUnavailable && res.Unavailable {
-			return checks.Result{}, fmt.Errorf("check %q is unavailable: %s", ref, res.Message)
+		if err := e.unavailableCheckError(ref, res); err != nil {
+			return checks.Result{}, err
 		}
 		return res, nil
 	}
@@ -362,18 +362,37 @@ func (e *Evaluator) evalInline(ctx context.Context, typ string, v any) (bool, er
 func (e *Evaluator) runInline(ctx context.Context, name string, entry, keyParams map[string]any) (checks.Result, error) {
 	key := name + ":" + normalizeKey(keyParams)
 	if res, ok := e.memo[key]; ok {
+		if err := e.unavailableCheckError(name, res); err != nil {
+			return checks.Result{}, err
+		}
 		return res, nil
 	}
 	check, err := checks.BuildInline(name, entry, e.Deps)
 	if err != nil {
 		return checks.Result{}, fmt.Errorf("build inline %s check: %w", name, err)
 	}
-	res := check.Run(ctx)
+	results := checks.Run(ctx, []checks.Built{{Check: check}}, 0)
+	if len(results) == 0 {
+		return checks.Result{}, fmt.Errorf("inline %s check produced no result", name)
+	}
+	res := results[0]
 	if e.memo == nil {
 		e.memo = map[string]checks.Result{}
 	}
 	e.memo[key] = res
+	if err := e.unavailableCheckError(name, res); err != nil {
+		return checks.Result{}, err
+	}
 	return res, nil
+}
+
+// unavailableCheckError preserves guard fail-closed behavior for both named
+// checks and inline probes.
+func (e *Evaluator) unavailableCheckError(name string, res checks.Result) error {
+	if !e.FailOnUnavailable || !res.Unavailable {
+		return nil
+	}
+	return fmt.Errorf("check %q is unavailable: %s", name, res.Message)
 }
 
 // inlineEntry converts an inline {<type>: params} operand into a check entry.

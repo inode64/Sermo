@@ -25,7 +25,7 @@ func TestRunRecoversPerCheckPanic(t *testing.T) {
 	if results[0].Check != "ok-before" || !results[0].OK {
 		t.Fatalf("first check = %+v, want ok-before OK", results[0])
 	}
-	if results[1].Check != "boom" || results[1].OK || !results[1].Optional || !strings.Contains(results[1].Message, "panicked") {
+	if results[1].Check != "boom" || results[1].OK || !results[1].Optional || !results[1].Unavailable || !strings.Contains(results[1].Message, "panicked") {
 		t.Fatalf("panicking check = %+v, want a failed optional result naming the panic", results[1])
 	}
 	if results[2].Check != "ok-after" || !results[2].OK {
