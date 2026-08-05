@@ -30,6 +30,10 @@ cualquier conmutador `security:` que intente desactivarlas.
    como un selector `exe_any`, cada uno no vacío. **`force_kill: auto`** no
    usa un fallback amplio: solo autoriza identidades estrictas de `processes:` y
    deja los servicios sin una como `orphan_processes`.
+8. **El restart nativo no debilita las barreras comunes ni hace fallback.** Sigue
+   exigiendo locks, preflight, guards, cualquier identidad de restart disponible,
+   timeout y postflight; un `Restart` fallido del backend es una operación
+   fallida, nunca un stop/start staged implícito.
 
 ## El motor de operaciones
 
@@ -41,22 +45,26 @@ pasa por el mismo motor:
 2. Bloquear ante cualquier lock de runtime nombrado activo.
 3. Ejecutar el preflight requerido (start/restart/reload/resume).
 4. Bloquear si algún guard bloquea la acción.
-5. Para stop/restart, detener, esperar `graceful_timeout`, descubrir procesos residuales.
-6. Si quedan residuales y `force_kill` es false → `orphan_processes`; un restart fallido
-   **no** inicia. La excepción estrecha es un restart systemd cuyo stop aislado
-   tuvo éxito y cuyos residuales están todos atribuidos por el backend a la misma
-   unidad mientras vuelve a estar `active` (por ejemplo, por activación de
-   socket): systemd ya reinició esa unidad, así que Sermo ejecuta el postflight
-   sin un segundo start ni tocar el socket activador. Si `force_kill` es true o
-   `auto`, SIGTERM y luego SIGKILL solo a los procesos que coincidan exactamente
-   con la identidad configurada o derivada, redescubriendo entre pasos.
-7. Tras un stop limpio (sin residuales), reconciliar el estado registrado del init con
-   la realidad — `systemctl reset-failed` (systemd) o `rc-service … zap` (OpenRC) —
-   para que un marcador persistente de failed/stuck no pueda contradecir los procesos reales.
-   Best effort: nunca hace fallar un stop que ya tuvo éxito.
-8. Para start/restart, iniciar y verificar el estado; para reload, recargar en sitio; para
-   resume, reanudar el objetivo y verificar el estado. Ejecutar el postflight requerido para
-   start/restart/reload/resume.
+5. Ejecutar la fase del gestor de servicios correspondiente a la acción:
+   - stop y restart con `restart_policy.mode: staged`: detener, esperar
+     `graceful_timeout`, descubrir procesos residuales y aplicar la escalada de
+     señales configurada. Un restart nunca inicia mientras queden residuales. La
+     excepción estrecha de reactivación por socket no cambia: si un stop systemd
+     aislado tuvo éxito, todos los residuales están atribuidos por el backend a
+     esa misma unidad y la unidad ya está `active`, Sermo acepta la reactivación
+     del backend y no ejecuta un segundo start.
+   - restart con `restart_policy.mode: native`: invocar un único `Restart` acotado
+     del backend para la unidad principal. No hay fase de stop, descubrimiento de
+     residuales, escalada de señales, limpieza de artefactos parados ni reset del
+     estado de init de Sermo, y tampoco fallback staged. Las unidades
+     `also_service` auxiliares permanecen activas.
+   - `start`, `reload` y `resume`: ejecutar su acción acotada de backend existente.
+6. Tras un stop explícito limpio o la fase stop de un restart staged, reconciliar
+   el estado registrado del init con la realidad — `systemctl reset-failed`
+   (systemd) o `rc-service … zap` (OpenRC). Best effort: nunca hace fallar un stop
+   que ya tuvo éxito.
+7. Verificar el estado del backend cuando corresponda y ejecutar el postflight
+   requerido para start/restart/reload/resume.
 
 Un residual que Sermo no tiene permitido identificar y matar se **reporta, no se mata**:
 un fallo limpio `orphan_processes` es más seguro que matar el proceso equivocado.
@@ -296,7 +304,8 @@ una autoridad basada solo en el nombre.
 ## Stop y escalada de señales
 
 Los campos de `stop_policy` omitidos por un servicio de catálogo o servicio heredan de
-`defaults.stop_policy`. La fase de stop de un stop/restart:
+`defaults.stop_policy`. La fase de stop de un stop explícito o de un restart
+`staged`:
 
 1. `Stop` del backend, esperar `graceful_timeout`, descubrir residuales.
 2. Sin residuales → stop limpio.
