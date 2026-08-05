@@ -271,27 +271,15 @@ func BuildWithWarnings(section map[string]any, deps Deps) ([]Built, []BuildWarni
 			continue
 		}
 
-		typ := cfgval.AsString(entry[CheckKeyType])
-		timeout := deps.DefaultTimeout
-		if raw, present := entry[CheckKeyTimeout]; present {
-			timeout = cfgval.Duration(raw)
-			if timeout <= 0 {
-				warnings = append(warnings, BuildWarning{
-					Service:  deps.Service,
-					Check:    name,
-					Text:     fmt.Sprintf("check %q: timeout must be a valid positive duration", name),
-					Optional: cfgval.Bool(entry[CheckKeyOptional]),
-				})
-				continue
-			}
-		}
-		reports := cfgval.AsString(entry[CheckKeyReports])
-		b := base{
-			name:      name,
-			service:   deps.Service,
-			timeout:   timeout,
-			condition: ResolveCondition(typ, reports),
-			reports:   reports,
+		typ, b, warn := buildCheckBase(name, entry, deps)
+		if warn != "" {
+			warnings = append(warnings, BuildWarning{
+				Service:  deps.Service,
+				Check:    name,
+				Text:     fmt.Sprintf("check %q: %s", name, warn),
+				Optional: cfgval.Bool(entry[CheckKeyOptional]),
+			})
+			continue
 		}
 
 		check, warn := buildCheck(typ, b, entry, runner, client, deps)
@@ -474,12 +462,9 @@ func buildSqliteCheck(b base, entry map[string]any) (Check, string) {
 // warning so the caller can surface a malformed inline probe.
 func BuildInline(name string, entry map[string]any, deps Deps) (Check, error) {
 	runner, client := buildDependencies(deps)
-	typ := cfgval.AsString(entry[CheckKeyType])
-	b := base{
-		name:      name,
-		service:   deps.Service,
-		timeout:   cfgval.DurationOr(entry[CheckKeyTimeout], deps.DefaultTimeout),
-		condition: ResolveCondition(typ, cfgval.AsString(entry[CheckKeyReports])),
+	typ, b, warn := buildCheckBase(name, entry, deps)
+	if warn != "" {
+		return nil, fmt.Errorf("check %q: %s", name, warn)
 	}
 	check, warn := buildCheck(typ, b, entry, runner, client, deps)
 	switch {
@@ -492,6 +477,27 @@ func BuildInline(name string, entry map[string]any, deps Deps) (Check, error) {
 		return nil, fmt.Errorf("check %q: type %q produced no check", name, typ)
 	}
 	return withSummary(check, entry), nil
+}
+
+// buildCheckBase prepares the fields shared by regular and inline checks. The
+// callers differ only in how they present a malformed entry (warning or error).
+func buildCheckBase(name string, entry map[string]any, deps Deps) (string, base, string) {
+	typ := cfgval.AsString(entry[CheckKeyType])
+	timeout := deps.DefaultTimeout
+	if raw, present := entry[CheckKeyTimeout]; present {
+		timeout = cfgval.Duration(raw)
+		if timeout <= 0 {
+			return typ, base{}, "timeout must be a valid positive duration"
+		}
+	}
+	reports := cfgval.AsString(entry[CheckKeyReports])
+	return typ, base{
+		name:      name,
+		service:   deps.Service,
+		timeout:   timeout,
+		condition: ResolveCondition(typ, reports),
+		reports:   reports,
+	}, ""
 }
 
 func buildDependencies(deps Deps) (execx.Runner, *http.Client) {

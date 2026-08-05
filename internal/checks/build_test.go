@@ -108,6 +108,24 @@ func TestBuildTimeoutPerCheck(t *testing.T) {
 	}, Deps{DefaultTimeout: 7 * time.Second}); len(warnings) == 0 {
 		t.Fatal("invalid timeout should warn")
 	}
+	if _, err := BuildInline("bad", map[string]any{
+		"type": CheckTypeBinary, "path": "/x", "timeout": "slow",
+	}, Deps{DefaultTimeout: 7 * time.Second}); err == nil || !strings.Contains(err.Error(), "timeout must be a valid positive duration") {
+		t.Fatalf("inline invalid timeout error = %v, want positive-duration error", err)
+	}
+}
+
+func TestBuildInlinePreservesReportingMode(t *testing.T) {
+	check, err := BuildInline("sensor", map[string]any{
+		"type": CheckTypeBinary, "path": "/definitely/missing", "reports": ReportsState,
+	}, Deps{})
+	if err != nil {
+		t.Fatalf("BuildInline() error = %v", err)
+	}
+	result := check.Run(context.Background())
+	if result.Reports != ReportsState || !result.Verdictless() || result.Condition {
+		t.Fatalf("inline state result = %+v, want verdictless state mode", result)
+	}
 }
 
 func TestIsHealthType(t *testing.T) {
