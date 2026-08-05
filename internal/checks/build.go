@@ -72,6 +72,7 @@ type Samplers struct {
 	EntropySampler       EntropySamplerFunc
 	ZombieSampler        ZombieSamplerFunc
 	UsersSampler         UsersSamplerFunc
+	SSHIdleSampler       SSHIdleSamplerFunc
 }
 
 // ApplyTo returns deps with every sampler from s copied into it.
@@ -97,6 +98,7 @@ func (s Samplers) ApplyTo(deps Deps) Deps {
 	deps.EntropySampler = s.EntropySampler
 	deps.ZombieSampler = s.ZombieSampler
 	deps.UsersSampler = s.UsersSampler
+	deps.SSHIdleSampler = s.SSHIdleSampler
 	return deps
 }
 
@@ -144,6 +146,9 @@ type Deps struct {
 	LoadSampler LoadSamplerFunc
 	// UsersSampler counts logged-in users for `users` checks. Nil reads utmp.
 	UsersSampler UsersSamplerFunc
+	// SSHIdleSampler observes interactive SSH terminals for `ssh_idle` checks.
+	// Nil reads utmp, terminal atimes and procfs directly.
+	SSHIdleSampler SSHIdleSamplerFunc
 	// OomSampler reads the cumulative OOM-kill counter for `oom` checks. Nil reads
 	// /proc/vmstat.
 	OomSampler OomSamplerFunc
@@ -345,6 +350,7 @@ var checkBuilders = map[string]checkBuilder{
 	CheckTypeNet:          func(in checkBuildInput) (Check, string) { return buildNetCheck(in.base, in.entry, in.deps) },
 	CheckTypeLoad:         func(in checkBuildInput) (Check, string) { return buildLoadCheck(in.base, in.entry, in.deps) },
 	CheckTypeUsers:        func(in checkBuildInput) (Check, string) { return buildUsersCheck(in.base, in.entry, in.deps) },
+	CheckTypeSSHIdle:      func(in checkBuildInput) (Check, string) { return buildSSHIdleCheck(in.base, in.entry, in.deps) },
 	CheckTypeProcessCount: func(in checkBuildInput) (Check, string) { return buildProcessCountCheck(in.base, in.entry, in.deps) },
 	CheckTypeHdparm:       func(in checkBuildInput) (Check, string) { return buildHdparmCheck(in.base, in.entry, in.runner) },
 	CheckTypeSensors:      func(in checkBuildInput) (Check, string) { return buildSensorsCheck(in.base, in.entry, in.deps) },

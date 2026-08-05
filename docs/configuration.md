@@ -2080,7 +2080,7 @@ be combined with `then.notify_interval`.
 **Checks and watches share the same check types.** Any single-shot check — the
 host-resource ones below (`storage`, `memory`, `pressure`, `load`, `fds`,
 `pids`, `conntrack`, `entropy`, `zombies`, `oom`, among others) *and* the
-service checks (`tcp`, `tcp_connections`, `ports`, `http`, `command`, `file_exists`, `file`,
+service checks (`tcp`, `tcp_connections`, `ssh_idle`, `ports`, `http`, `command`, `file_exists`, `file`,
 `lockfile`, `binary`, `pidfile`, `socket`, `libraries`, `config`, `autofs`,
 `route`, `clock`, `firewall_rules`, `cert`, `sqlite`/`sqlite3`, `websocket`,
 `count`, and connection-protocol checks such as `mysql`/`smtp`) — can be used as
@@ -2142,7 +2142,7 @@ selectors / init identity):
 - `service` binds to this service's unit.
 
 Host-global checks (`fds`, `storage`, `count`, `load`, `http`,
-`tcp_connections`, …) read the same host resource on either surface — a service
+`tcp_connections`, `ssh_idle`, …) read the same host resource on either surface — a service
 watch does not per-service-clamp them. `tcp_connections` is scoped to a local
 listening port, not a service PID tree, so use it only where that port uniquely
 identifies the service.

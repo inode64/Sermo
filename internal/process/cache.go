@@ -1,6 +1,7 @@
 package process
 
 import (
+	"fmt"
 	"slices"
 	"sync"
 	"time"
@@ -9,6 +10,13 @@ import (
 // SnapshotReader can return a whole-/proc identity snapshot in one call.
 type SnapshotReader interface {
 	Snapshot() map[int]Identity
+}
+
+// SnapshotErrorReader returns a snapshot and the error that prevented its
+// refresh. It lets read-only safety checks distinguish an empty process table
+// from an unreadable one.
+type SnapshotErrorReader interface {
+	SnapshotWithError() (map[int]Identity, error)
 }
 
 // CachingReader shares one /proc identity snapshot per freshness window, turning
@@ -25,6 +33,7 @@ type CachingReader struct {
 	mu        sync.Mutex
 	freshness time.Duration
 	idx       *snapshotIndex
+	err       error
 	at        time.Time
 	primed    bool
 }
@@ -55,16 +64,31 @@ func (c *CachingReader) Snapshot() map[int]Identity {
 	return c.snapshotIndex().byPID
 }
 
+// SnapshotWithError returns the cached snapshot and any failure from the procfs
+// walk that produced it. Callers must treat a non-nil error as incomplete data.
+func (c *CachingReader) SnapshotWithError() (map[int]Identity, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	idx := c.snapshotIndexLocked()
+	return idx.byPID, c.err
+}
+
 // snapshotIndex serves the pre-derived snapshot index (sorted PIDs, children
 // map) built once per refresh, so per-service discovery does not rebuild it.
 func (c *CachingReader) snapshotIndex() *snapshotIndex {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	return c.snapshotIndexLocked()
+}
+
+func (c *CachingReader) snapshotIndexLocked() *snapshotIndex {
 	now := c.now()
 	if c.primed && c.freshness > 0 && now.Sub(c.at) < c.freshness {
 		return c.idx
 	}
-	c.idx = buildSnapshotIndex(buildSnapshot(c.inner))
+	snapshot, err := readSnapshot(c.inner)
+	c.idx = buildSnapshotIndex(snapshot)
+	c.err = err
 	c.at = now
 	c.primed = true
 	return c.idx
@@ -80,4 +104,20 @@ func (c *CachingReader) PIDs() ([]int, error) {
 func (c *CachingReader) Identity(pid int) (Identity, bool) {
 	id, ok := c.Snapshot()[pid]
 	return id, ok
+}
+
+// Snapshot reads one whole process snapshot, retaining a procfs-read failure so
+// callers that use the result as an operation guard can fail closed.
+func Snapshot(reader Reader) (map[int]Identity, error) {
+	if sr, ok := reader.(SnapshotErrorReader); ok {
+		snapshot, err := sr.SnapshotWithError()
+		if err != nil {
+			return snapshot, fmt.Errorf("read snapshot: %w", err)
+		}
+		return snapshot, nil
+	}
+	if sr, ok := reader.(SnapshotReader); ok {
+		return sr.Snapshot(), nil
+	}
+	return readSnapshot(reader)
 }

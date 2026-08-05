@@ -183,6 +183,10 @@ var (
 	LoadPredFields = []string{fieldLoad1, fieldLoad5, fieldLoad15}
 	// UsersPredFields is the single required predicate of a users check.
 	UsersPredFields = []string{DataKeyCount}
+	// SSHIdlePredFields are the predicates of an ssh_idle check. count excludes
+	// configured protected sessions; protected_count is available to guards that
+	// must keep a named user or long-running terminal process connected.
+	SSHIdlePredFields = []string{DataKeyCount, DataKeyProtectedCount, DataKeyOldestIdleSeconds}
 	// ProcessCountPredFields is the single required predicate of a process_count check.
 	ProcessCountPredFields = []string{DataKeyCount}
 	// TCPConnectionsPredFields is the single required predicate of a tcp_connections check.

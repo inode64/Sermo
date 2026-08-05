@@ -26,6 +26,7 @@ var graphMetrics = map[string][]GraphMetric{
 	CheckTypeSmart:        {{Key: fieldTemperature, Unit: metrics.MetricUnitCelsius}, {Key: fieldReallocated, Unit: metrics.MetricUnitNone}, {Key: fieldWear, Unit: metrics.MetricUnitPercent}, {Key: fieldPowerOnHours, Unit: metrics.MetricUnitHours}},
 	CheckTypeEDAC:         {{Key: fieldCE, Unit: metrics.MetricUnitNone, Label: "Correctable"}, {Key: fieldUE, Unit: metrics.MetricUnitNone, Label: "Uncorrectable"}},
 	CheckTypeUsers:        {{Key: DataKeyCount, Unit: metrics.MetricUnitUsers}},
+	CheckTypeSSHIdle:      {{Key: DataKeyCount, Unit: metrics.MetricUnitSessions, Label: "Idle sessions"}, {Key: DataKeyProtectedCount, Unit: metrics.MetricUnitSessions, Label: "Protected sessions"}},
 	CheckTypeProcessCount: {{Key: DataKeyCount, Unit: metrics.MetricUnitProcesses}},
 
 	CheckTypeTCPConnections: {{Key: DataKeyCount, Unit: metrics.MetricUnitConnections, Label: "Connections"}},
