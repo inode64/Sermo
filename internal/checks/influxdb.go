@@ -12,7 +12,6 @@ import (
 	"net/url"
 	"slices"
 	"strings"
-	"time"
 
 	"sermo/internal/cfgval"
 	"sermo/internal/conn"
@@ -45,9 +44,9 @@ type influxCheck struct {
 }
 
 func (c influxCheck) Run(ctx context.Context) Result {
-	start := time.Now()
-	ctx, cancel := c.withTimeout(ctx)
-	defer cancel()
+	ctx, run := c.begin(ctx)
+	defer run.close()
+	start := run.start
 
 	client, base := conn.InfluxClient(c.cfg)
 	result, isNull, err := c.queryScalar(ctx, client, base)

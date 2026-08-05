@@ -39,9 +39,9 @@ type countState struct {
 }
 
 func (c countCheck) Run(ctx context.Context) Result {
-	start := time.Now()
-	ctx, cancel := c.withTimeout(ctx)
-	defer cancel()
+	ctx, run := c.begin(ctx)
+	defer run.close()
+	start := run.start
 
 	n, err := c.tally(ctx)
 	if err != nil {

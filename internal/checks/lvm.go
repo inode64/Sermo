@@ -56,9 +56,9 @@ type lvmRow struct {
 }
 
 func (c *lvmCheck) Run(ctx context.Context) Result {
-	start := time.Now()
-	ctx, cancel := c.withTimeout(ctx)
-	defer cancel()
+	ctx, run := c.begin(ctx)
+	defer run.close()
+	start := run.start
 	res, runErr := c.runner.Run(ctx, lvsCommand, "--reportformat", "json", "--units", "b", "--nosuffix", "-a", "-o", "vg_name,lv_name,lv_attr,lv_health_status,vg_free,vg_size,data_percent,metadata_percent,raid_sync_action,sync_percent,copy_percent")
 	if res.ExitCode == execx.ExitCodeRunFailure {
 		msg := execx.OperatorFailureOr(runErr, res, c.timeout, execx.CommandDidNotStart)

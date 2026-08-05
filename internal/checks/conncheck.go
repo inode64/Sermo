@@ -80,9 +80,9 @@ func trimConnResult(res conn.Result) conn.Result {
 }
 
 func (c connCheck) Run(ctx context.Context) Result {
-	start := time.Now()
-	ctx, cancel := c.withTimeout(ctx)
-	defer cancel()
+	ctx, run := c.begin(ctx)
+	defer run.close()
+	start := run.start
 
 	addr := c.address()
 	res, elapsed, perIface, err := c.probeResult(ctx)

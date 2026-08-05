@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-	"time"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
@@ -46,9 +45,9 @@ const (
 )
 
 func (c mongoCheck) Run(ctx context.Context) Result {
-	start := time.Now()
-	ctx, cancel := c.withTimeout(ctx)
-	defer cancel()
+	ctx, run := c.begin(ctx)
+	defer run.close()
+	start := run.start
 
 	client, err := conn.MongoConnect(c.cfg)
 	if err != nil {

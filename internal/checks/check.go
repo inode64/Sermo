@@ -206,6 +206,23 @@ func (b base) withTimeout(ctx context.Context) (context.Context, context.CancelF
 	return context.WithTimeout(ctx, b.timeout)
 }
 
+// checkRun owns the common lifecycle of a potentially blocking check run.
+// Local, non-blocking samplers deliberately skip it to avoid a context
+// allocation in the daemon's hot path.
+type checkRun struct {
+	start  time.Time
+	cancel context.CancelFunc
+}
+
+// begin starts latency accounting and derives the check's bounded context.
+func (b base) begin(ctx context.Context) (context.Context, checkRun) {
+	start := time.Now()
+	ctx, cancel := b.withTimeout(ctx)
+	return ctx, checkRun{start: start, cancel: cancel}
+}
+
+func (r checkRun) close() { r.cancel() }
+
 func (b base) result(ok bool, message string, start time.Time) Result {
 	return Result{
 		Service:   b.service,

@@ -22,6 +22,22 @@ import (
 	"sermo/internal/servicemgr"
 )
 
+func TestBaseBeginAppliesAndReleasesCheckTimeout(t *testing.T) {
+	ctx, run := (base{timeout: time.Second}).begin(context.Background())
+	if run.start.IsZero() {
+		t.Fatal("run start was not recorded")
+	}
+	if _, hasDeadline := ctx.Deadline(); !hasDeadline {
+		t.Fatal("check context has no timeout deadline")
+	}
+	run.close()
+	select {
+	case <-ctx.Done():
+	default:
+		t.Fatal("check context remains active after closing its run")
+	}
+}
+
 func TestTCPCheck(t *testing.T) {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {

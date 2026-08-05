@@ -55,9 +55,9 @@ type portsCheck struct {
 }
 
 func (c *portsCheck) Run(ctx context.Context) Result {
-	start := time.Now()
-	ctx, cancel := c.withTimeout(ctx)
-	defer cancel()
+	ctx, run := c.begin(ctx)
+	defer run.close()
+	start := run.start
 
 	states := c.scan(ctx)
 	if err := ctx.Err(); err != nil {
