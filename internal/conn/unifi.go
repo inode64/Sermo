@@ -28,17 +28,14 @@ func (unifiProtocol) DefaultPort() int   { return defaultPortUniFi }
 func (unifiProtocol) RequiresUser() bool { return false }
 
 func (unifiProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	host, port := cfg.hostPortDefaults(defaultPortUniFi)
-
-	tc := tlsClientConfig(host)
 	// UniFi controllers ship a self-signed certificate; skip verification unless
 	// the operator explicitly opts into it with tls: true.
-	if NormalizeTLS(cfg.TLS) != ParamValueTrue {
-		tc.InsecureSkipVerify = true // UniFi ships a self-signed cert; operator opts into verification with tls: true
+	tlsMode := tlsSkipVerify
+	if NormalizeTLS(cfg.TLS) == ParamValueTrue {
+		tlsMode = ParamValueTrue
 	}
-	client := httpProbeClient(cfg.Interface, tc)
-
-	url := schemeHTTPS + urlSchemeSeparator + hostPort(host, port) + unifiStatusEndpoint
+	client, base := httpProbeBaseWithTLSMode(cfg, defaultPortUniFi, tlsMode)
+	url := base + unifiStatusEndpoint
 	resp, err := getHTTPProbe(ctx, client, url, maxHTTPProbeBody)
 	if err != nil {
 		return Result{}, err
