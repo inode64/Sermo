@@ -76,17 +76,7 @@ const (
 // CheckTypeTCPConnections counts established local TCP sockets on a port.
 const CheckTypeTCPConnections = "tcp_connections"
 
-var (
-	checkSpecByName = indexCheckSpecs(builtinCheckSpecs)
-	typeInfoByName  = indexTypeInfos(builtinCheckSpecs)
-	// singleShotCheckTypes are the check types valid in a service's
-	// checks:/preflight: sections and (minus service-scoped types) as host
-	// watches. TestSingleShotCheckTypesAreBuildable locks the list against the
-	// buildCheck dispatch so the advertised types and the builder cannot drift.
-	// Connection-protocol types (mysql, smtp, ...) are intentionally absent:
-	// they come from the conn registry.
-	singleShotCheckTypes = checkSpecNames(builtinCheckSpecs)
-)
+var checkSpecByName = indexCheckSpecs(builtinCheckSpecs)
 
 func indexCheckSpecs(specs []checkSpec) map[string]checkSpec {
 	out := make(map[string]checkSpec, len(specs))
@@ -96,31 +86,15 @@ func indexCheckSpecs(specs []checkSpec) map[string]checkSpec {
 	return out
 }
 
-func indexTypeInfos(specs []checkSpec) map[string]TypeInfo {
-	out := make(map[string]TypeInfo, len(specs))
-	for _, spec := range specs {
-		out[spec.info.Name] = spec.info
-	}
-	return out
-}
-
-func checkSpecNames(specs []checkSpec) []string {
-	out := make([]string, 0, len(specs))
-	for _, spec := range specs {
-		out = append(out, spec.info.Name)
-	}
-	return out
-}
-
 // TypeInfoFor returns static metadata for a built-in check type.
 func TypeInfoFor(typ string) (TypeInfo, bool) {
-	info, ok := typeInfoByName[typ]
-	return info, ok
+	spec, ok := checkSpecByName[typ]
+	return spec.info, ok
 }
 
 // IsSingleShotType reports whether typ is a built-in single-shot check type.
 func IsSingleShotType(typ string) bool {
-	_, ok := typeInfoByName[typ]
+	_, ok := checkSpecByName[typ]
 	return ok
 }
 
