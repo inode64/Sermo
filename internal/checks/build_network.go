@@ -65,7 +65,7 @@ func buildPortsCheck(b base, entry map[string]any) (Check, string) {
 	if raw, present := entry[CheckKeyConnectTimeout]; present {
 		connectTimeout = cfgval.Duration(raw)
 		if connectTimeout <= 0 {
-			return nil, "ports check: connect_timeout must be a valid positive duration"
+			return nil, "ports check: " + positiveDurationMessage(CheckKeyConnectTimeout)
 		}
 	}
 	allIf, warning := parseInterfaceMatch(entry)

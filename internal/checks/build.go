@@ -20,6 +20,8 @@ import (
 const (
 	defaultTLSPort = "443"
 
+	positiveDurationMessageSuffix = " must be a valid positive duration"
+
 	// OnModeChange is the `on: change` metric/field mode: fire when the
 	// observed value changes between cycles instead of comparing to a threshold.
 	OnModeChange = "change"
@@ -487,7 +489,7 @@ func buildCheckBase(name string, entry map[string]any, deps Deps) (string, base,
 	if raw, present := entry[CheckKeyTimeout]; present {
 		timeout = cfgval.Duration(raw)
 		if timeout <= 0 {
-			return typ, base{}, "timeout must be a valid positive duration"
+			return typ, base{}, positiveDurationMessage(CheckKeyTimeout)
 		}
 	}
 	reports := cfgval.AsString(entry[CheckKeyReports])
@@ -499,6 +501,10 @@ func buildCheckBase(name string, entry map[string]any, deps Deps) (string, base,
 		reports:   reports,
 	}, ""
 }
+
+// positiveDurationMessage reports the shared validation text for a duration
+// field that was present but could not be parsed as a positive duration.
+func positiveDurationMessage(key string) string { return key + positiveDurationMessageSuffix }
 
 func buildDependencies(deps Deps) (execx.Runner, *http.Client) {
 	runner := deps.Runner
