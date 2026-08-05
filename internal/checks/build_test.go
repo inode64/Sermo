@@ -128,6 +128,23 @@ func TestBuildInlinePreservesReportingMode(t *testing.T) {
 	}
 }
 
+func TestPositiveDurationMessage(t *testing.T) {
+	tests := []struct {
+		key  string
+		want string
+	}{
+		{key: CheckKeyTimeout, want: "timeout must be a valid positive duration"},
+		{key: CheckKeyConnectTimeout, want: "connect_timeout must be a valid positive duration"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.key, func(t *testing.T) {
+			if got := positiveDurationMessage(tt.key); got != tt.want {
+				t.Errorf("positiveDurationMessage(%q) = %q, want %q", tt.key, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestIsHealthType(t *testing.T) {
 	tests := []struct {
 		typ  string
