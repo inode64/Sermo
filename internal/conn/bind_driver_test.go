@@ -77,6 +77,17 @@ func TestInterfaceBindingApplied(t *testing.T) {
 				t.Fatalf("HTTP probe base transport = %#v, want bound skip-verify transport", client.Transport)
 			}
 		}},
+		{"http-probe-base-explicit-TLS", func(t *testing.T) {
+			t.Helper()
+			client, base := httpProbeBaseWithTLSMode(Config{Host: "probe.example", Interface: "eth0"}, 8080, tlsSkipVerify)
+			if base != "https://probe.example:8080" {
+				t.Fatalf("base = %q", base)
+			}
+			tr, ok := client.Transport.(*http.Transport)
+			if !ok || tr.DialContext == nil || tr.TLSClientConfig == nil || !tr.TLSClientConfig.InsecureSkipVerify {
+				t.Fatalf("explicit TLS HTTP probe transport = %#v, want bound skip-verify transport", client.Transport)
+			}
+		}},
 		{"snmp-params", func(t *testing.T) {
 			t.Helper()
 			params := buildSNMPParams(context.Background(), Config{Host: "dev", Interface: "eth0"}, time.Second)
