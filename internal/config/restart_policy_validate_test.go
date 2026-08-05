@@ -14,22 +14,25 @@ policy:
 func TestRestartModeDefaultsToStaged(t *testing.T) {
 	t.Parallel()
 
-	if got := RestartMode(nil); got != RestartModeStaged {
-		t.Fatalf("RestartMode(nil) = %q, want %q", got, RestartModeStaged)
-	}
-	if got := RestartMode(map[string]any{}); got != RestartModeStaged {
-		t.Fatalf("RestartMode(empty) = %q, want %q", got, RestartModeStaged)
+	for _, tree := range []map[string]any{nil, map[string]any{}} {
+		got, err := ParseRestartMode(tree)
+		if err != nil {
+			t.Fatalf("ParseRestartMode(%v): %v", tree, err)
+		}
+		if got != RestartModeStaged {
+			t.Fatalf("ParseRestartMode(%v) = %q, want %q", tree, got, RestartModeStaged)
+		}
 	}
 }
 
 func TestValidateRestartPolicyModes(t *testing.T) {
 	t.Parallel()
 
-	for _, mode := range []string{RestartModeStaged, RestartModeNative} {
-		t.Run(mode, func(t *testing.T) {
+	for _, mode := range []RestartMode{RestartModeStaged, RestartModeNative} {
+		t.Run(string(mode), func(t *testing.T) {
 			t.Parallel()
 
-			issues := validateService(t, restartPolicyServiceYAML("restart_policy: { mode: "+mode+" }\n"))
+			issues := validateService(t, restartPolicyServiceYAML("restart_policy: { mode: "+string(mode)+" }\n"))
 			mustNotHave(t, issues, ServiceKeyRestartPolicy)
 		})
 	}

@@ -10,7 +10,6 @@
 package config
 
 import (
-	"fmt"
 	"maps"
 	"sermo/internal/cfgval"
 	"sermo/internal/notify"
@@ -370,18 +369,6 @@ const (
 	ServiceKeyRestartPolicy = "restart_policy"
 	// ServiceKeyConfigFiles is the catalog hint listing service config files.
 	ServiceKeyConfigFiles = "config_files"
-)
-
-// Restart policy field keys and modes.
-const (
-	// RestartPolicyKeyMode is restart_policy.mode.
-	RestartPolicyKeyMode = "mode"
-	// RestartModeStaged composes a restart from Sermo's stop and start paths.
-	RestartModeStaged = "staged"
-	// RestartModeNative delegates the restart atomically to the init backend.
-	RestartModeNative = "native"
-	// RestartModeSummary is the user-facing list of restart modes.
-	RestartModeSummary = RestartModeStaged + ", " + RestartModeNative
 )
 
 // VariableKey constants are built-in or conventional variables in variables:.
@@ -845,46 +832,6 @@ func AdditionalUnits(tree map[string]any, backend string) []string {
 		return nil
 	}
 	return cfgval.StringList(m[backend])
-}
-
-// ParseRestartMode returns the service's restart strategy and rejects malformed
-// or unsafe explicit declarations. Keeping this parser in config lets both
-// schema validation and the operation builder fail closed on the same rules.
-func ParseRestartMode(tree map[string]any) (string, error) {
-	raw, present := tree[ServiceKeyRestartPolicy]
-	if !present {
-		return RestartModeStaged, nil
-	}
-	policy, ok := raw.(map[string]any)
-	if !ok {
-		return "", fmt.Errorf("%s must be a mapping", ServiceKeyRestartPolicy)
-	}
-	for _, key := range slices.Sorted(maps.Keys(policy)) {
-		if key != RestartPolicyKeyMode {
-			return "", fmt.Errorf("%s.%s is not supported", ServiceKeyRestartPolicy, key)
-		}
-	}
-	mode := cfgval.AsString(policy[RestartPolicyKeyMode])
-	if mode != RestartModeStaged && mode != RestartModeNative {
-		return "", fmt.Errorf("%s %q is not one of %s", restartPolicyPathMode, mode, RestartModeSummary)
-	}
-	if mode == RestartModeNative {
-		if _, present := tree[SectionControl]; present {
-			return "", fmt.Errorf("%s=%q is not supported with %s", restartPolicyPathMode, mode, SectionControl)
-		}
-	}
-	return mode, nil
-}
-
-// RestartMode returns the service's validated restart strategy. Staged is the
-// fail-safe fallback when an invalid tree reaches a read-only caller; operation
-// construction uses ParseRestartMode and blocks instead of applying a fallback.
-func RestartMode(tree map[string]any) string {
-	mode, err := ParseRestartMode(tree)
-	if err != nil {
-		return RestartModeStaged
-	}
-	return mode
 }
 
 // CleanPath is one `clean_on_stop` entry: a path (or glob, when not recursive)
