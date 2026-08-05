@@ -61,7 +61,7 @@ type Engine struct {
 	Backend string
 	// RestartMode selects staged Stop+Start or one atomic backend Restart call.
 	// The zero value preserves the staged default for directly-built Engines.
-	RestartMode string
+	RestartMode config.RestartMode
 	// AlsoUnits are auxiliary init units (from `also_service`) acted on alongside
 	// the primary in wrap order: started before the primary (strict — a failure
 	// aborts before the primary starts) and stopped after it (best-effort). Empty
