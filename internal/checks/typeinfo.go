@@ -34,6 +34,7 @@ const (
 	CheckTypeAutofs        = "autofs"
 	CheckTypeLoad          = "load"
 	CheckTypeUsers         = "users"
+	CheckTypeSSHIdle       = "ssh_idle"
 	CheckTypeProcessCount  = "process_count"
 	CheckTypeHdparm        = "hdparm"
 	CheckTypeSensors       = "sensors"
@@ -94,6 +95,7 @@ var typeInfos = []TypeInfo{
 	{Name: CheckTypeAutofs, Health: true},
 	{Name: CheckTypeLoad},
 	{Name: CheckTypeUsers},
+	{Name: CheckTypeSSHIdle},
 	{Name: CheckTypeProcessCount},
 	{Name: CheckTypeHdparm},
 	{Name: CheckTypeSensors},

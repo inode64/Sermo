@@ -174,6 +174,11 @@ func (h *harness) restart(t *testing.T) Result {
 // custom Tree, which is what these config-validation tests exercise.
 func newInvalidTreeEngine(t *testing.T, service, unit string, tree map[string]any) (Engine, *fakeManager) {
 	t.Helper()
+	return newInvalidTreeEngineWithCheckDeps(t, service, unit, tree, checks.Deps{})
+}
+
+func newInvalidTreeEngineWithCheckDeps(t *testing.T, service, unit string, tree map[string]any, checkDeps checks.Deps) (Engine, *fakeManager) {
+	t.Helper()
 	dir := t.TempDir()
 	locker := locks.NewOperationLocker(locks.RuntimeOpsDir(dir))
 	mgr := &fakeManager{status: servicemgr.StatusActive}
@@ -186,6 +191,7 @@ func newInvalidTreeEngine(t *testing.T, service, unit string, tree map[string]an
 		Locker:     &locker,
 		Scanner:    locks.NewScanner(locks.RuntimeLocksDir(dir)),
 		Discoverer: process.NewDiscovererWithUserLookup(nil),
+		CheckDeps:  checkDeps,
 		Sleep:      func(time.Duration) {},
 	})
 	return engine, mgr
@@ -621,6 +627,35 @@ func TestGuardClosureFailsSafeOnUnavailableSQLCheck(t *testing.T) {
 	blocked, _, err := engine.Guard(context.Background(), "restart")
 	if err == nil || blocked {
 		t.Fatalf("unavailable SQL guard = blocked:%v err:%v, want evaluation error", blocked, err)
+	}
+}
+
+func TestGuardClosureFailsSafeOnUnavailableSSHIdleCheck(t *testing.T) {
+	tree := map[string]any{
+		"checks": map[string]any{
+			"idle-sessions": map[string]any{
+				"type": "ssh_idle", "idle_for": "30m", "sshd_exe": "/usr/sbin/sshd",
+				"count": map[string]any{"op": ">", "value": "0"}, "reports": "state",
+			},
+		},
+		"rules": map[string]any{
+			"block-restart-with-idle-sessions": map[string]any{
+				"type": "guard", "blocks": []any{"restart"},
+				"if":   map[string]any{"active": map[string]any{"check": "idle-sessions"}},
+				"then": map[string]any{"action": "block", "message": "idle SSH session"},
+			},
+		},
+	}
+	deps := checks.Deps{
+		DefaultTimeout: time.Second,
+		SSHIdleSampler: func(checks.SSHIdleConfig) (checks.SSHIdleSample, error) {
+			return checks.SSHIdleSample{}, errors.New("utmp unavailable")
+		},
+	}
+	engine, _ := newInvalidTreeEngineWithCheckDeps(t, "db", "postgresql", tree, deps)
+	blocked, _, err := engine.Guard(context.Background(), "restart")
+	if err == nil || blocked {
+		t.Fatalf("unavailable SSH idle guard = blocked:%v err:%v, want evaluation error", blocked, err)
 	}
 }
 

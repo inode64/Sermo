@@ -779,6 +779,7 @@ var singleShotCheckValidators = map[string]singleShotCheckValidator{
 	checks.CheckTypeAutofs:        singleShotNoLock(validateAutofsFields),
 	checks.CheckTypeLoad:          singleShotNoLock(validateLoadFields),
 	checks.CheckTypeUsers:         singleShotThreshold(checks.UsersPredFields),
+	checks.CheckTypeSSHIdle:       validateSSHIdleCheck,
 	checks.CheckTypeProcessCount:  validateProcessCountCheck,
 	checks.CheckTypeHdparm:        singleShotNoLock(validateHdparmFields),
 	checks.CheckTypeSensors:       validateSensorsCheck,
@@ -863,6 +864,61 @@ func validateTCPConnectionsCheck(path string, entry map[string]any, _ string, ad
 		add("%s.port is required and must be a port in %s for a tcp_connections check", path, cfgval.TCPPortRange())
 	}
 	validateThresholdPreds(path, entry, checks.TCPConnectionsPredFields, add)
+}
+
+func validateSSHIdleCheck(path string, entry map[string]any, _ string, add addFunc) {
+	idleFor := cfgval.String(entry[checks.CheckKeyIdleFor])
+	if !isPositiveDuration(idleFor) {
+		add(validationPositiveDurationFormat, path+"."+checks.CheckKeyIdleFor, idleFor)
+	}
+	if !cfgval.IsNonEmptyStringList(entry[checks.CheckKeySSHDExe]) {
+		add("%s.%s is required for an ssh_idle check", path, checks.CheckKeySSHDExe)
+	} else {
+		for _, exe := range cfgval.StringList(entry[checks.CheckKeySSHDExe]) {
+			if !filepath.IsAbs(exe) {
+				add("%s.%s path %q must be absolute", path, checks.CheckKeySSHDExe, exe)
+			}
+		}
+	}
+	validateThresholdPreds(path, entry, checks.SSHIdlePredFields, add)
+	validateSSHProtectedProcesses(path, entry[checks.CheckKeyProtectedProcesses], add)
+}
+
+func validateSSHProtectedProcesses(path string, raw any, add addFunc) {
+	if raw == nil {
+		return
+	}
+	entries, ok := raw.(map[string]any)
+	if !ok {
+		add(validationMappingFormat, path+"."+checks.CheckKeyProtectedProcesses)
+		return
+	}
+	for _, name := range slices.Sorted(maps.Keys(entries)) {
+		entryPath := path + "." + checks.CheckKeyProtectedProcesses + "." + name
+		entry, ok := entries[name].(map[string]any)
+		if !ok {
+			add(validationMappingFormat, entryPath)
+			continue
+		}
+		for _, key := range slices.Sorted(maps.Keys(entry)) {
+			if key != checks.CheckKeyExe && key != checks.CheckKeyUser && key != checks.CheckKeyGroup {
+				add("%s.%s is not supported; protected_processes entries accept exe, user and group", entryPath, key)
+			}
+		}
+		exe, user, group := cfgval.AsString(entry[checks.CheckKeyExe]), cfgval.AsString(entry[checks.CheckKeyUser]), cfgval.AsString(entry[checks.CheckKeyGroup])
+		if exe == "" && user == "" && group == "" {
+			add("%s requires exe, user or group", entryPath)
+			continue
+		}
+		for _, field := range []string{checks.CheckKeyExe, checks.CheckKeyUser, checks.CheckKeyGroup} {
+			if value, present := entry[field]; present && cfgval.AsString(value) == "" {
+				add("%s.%s must be a non-empty string", entryPath, field)
+			}
+		}
+		if exe != "" && !filepath.IsAbs(exe) {
+			add("%s.%s path %q must be absolute", entryPath, checks.CheckKeyExe, exe)
+		}
+	}
 }
 
 func validateSingleShotCommand(path string, entry map[string]any, _ string, add addFunc) {

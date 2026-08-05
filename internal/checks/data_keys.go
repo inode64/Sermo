@@ -86,6 +86,7 @@ const (
 	DataKeyOffsetAbsSeconds   = "offset_abs_seconds"
 	DataKeyOffsetSeconds      = "offset_seconds"
 	DataKeyOld                = fieldOld
+	DataKeyOldestIdleSeconds  = "oldest_idle_seconds"
 	DataKeyOp                 = CheckKeyOp
 	DataKeyOptions            = CheckKeyOptions
 	DataKeyOrg                = CheckKeyOrg
@@ -99,6 +100,7 @@ const (
 	DataKeyPIDs               = "pids"
 	DataKeyPort               = fieldPort
 	DataKeyPresent            = "present"
+	DataKeyProtectedCount     = "protected_count"
 	DataKeyProgressPct        = "progress_pct"
 	DataKeyPrecisionSeconds   = "precision_seconds"
 	DataKeyProtocol           = "protocol"

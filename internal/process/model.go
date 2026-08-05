@@ -135,8 +135,13 @@ type Selector struct {
 // process whose binary was replaced still matches no exe selector and is never
 // signalled (see docs/safety.md).
 type Identity struct {
-	PID     int
-	PPID    int
+	PID  int
+	PPID int
+	// TTY is the Linux device number of the controlling terminal. TTYOK is
+	// false when the reader was not asked to collect terminal identity or the
+	// kernel stat record could not be read.
+	TTY     uint64
+	TTYOK   bool
 	UID     uint32
 	GID     uint32
 	User    string

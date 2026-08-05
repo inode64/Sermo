@@ -212,6 +212,11 @@ type Deps struct {
 	// PID, cutting discovery from O(services × processes) to O(processes).
 	// Optional: nil makes each discoverer read /proc directly.
 	ProcReader process.Reader
+	// SSHIdleSampler observes interactive SSH terminals. It owns a separate
+	// terminal-aware procfs cache because ordinary service discovery deliberately
+	// avoids reading tty_nr for every process. Optional: nil lets checks build a
+	// one-shot native sampler.
+	SSHIdleSampler checks.SSHIdleSamplerFunc
 	// StorageUsage reports filesystem usage for storage checks.
 	// Optional: nil uses statfs.
 	StorageUsage checks.StorageUsageFunc

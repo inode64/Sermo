@@ -600,17 +600,25 @@ func snapshotIdentities(reader Reader) map[int]Identity {
 
 // buildSnapshot walks /proc once via the reader, reading each PID's identity.
 func buildSnapshot(reader Reader) map[int]Identity {
+	snapshot, _ := readSnapshot(reader)
+	return snapshot
+}
+
+// readSnapshot walks /proc once via the reader, reading each PID's identity.
+// Identities that vanish during the walk are omitted; an unreadable PID list is
+// returned to callers that must fail closed instead of accepting an empty view.
+func readSnapshot(reader Reader) (map[int]Identity, error) {
 	snapshot := map[int]Identity{}
 	pids, err := reader.PIDs()
 	if err != nil {
-		return snapshot
+		return snapshot, fmt.Errorf("list process IDs: %w", err)
 	}
 	for _, pid := range pids {
 		if id, ok := reader.Identity(pid); ok {
 			snapshot[pid] = id
 		}
 	}
-	return snapshot
+	return snapshot, nil
 }
 
 // ReadPidfile reads the first PID line from a pidfile. Most pidfiles contain

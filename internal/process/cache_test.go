@@ -1,6 +1,7 @@
 package process
 
 import (
+	"errors"
 	"testing"
 	"time"
 )
@@ -80,4 +81,26 @@ func TestCachingReaderServesReaderInterfaceFromSnapshot(t *testing.T) {
 	if _, ok := cr.Identity(999); ok {
 		t.Fatal("Identity(999) = true; want false for unknown pid")
 	}
+}
+
+func TestCachingReaderSnapshotReturnsProcError(t *testing.T) {
+	want := errors.New("cannot read proc")
+	reader := failingSnapshotReader{err: want}
+	cached := NewCachingReader(reader, time.Second)
+	_, err := Snapshot(cached)
+	if !errors.Is(err, want) {
+		t.Fatalf("Snapshot() error = %v, want %v", err, want)
+	}
+}
+
+type failingSnapshotReader struct {
+	err error
+}
+
+func (r failingSnapshotReader) PIDs() ([]int, error) {
+	return nil, r.err
+}
+
+func (failingSnapshotReader) Identity(int) (Identity, bool) {
+	return Identity{}, false
 }

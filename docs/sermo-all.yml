@@ -630,6 +630,18 @@ watches:
     # Local transport sockets on this listening port, not authenticated users.
     # Useful as a guard condition before restart/stop; see rules.md.
     check: { type: tcp_connections, port: "${port}", count: { op: ">", value: 25 }, reports: state }
+  ssh-idle:
+    # Interactive SSH terminals only. A guard can instead use protected_count
+    # to retain a named account or a long-running job on its TTY.
+    check:
+      type: ssh_idle
+      idle_for: 30m
+      sshd_exe: /usr/sbin/sshd
+      count: { op: ">", value: 0 }
+      reports: state
+      protected_processes:
+        deploy: { user: deploy }
+        backup: { exe: /usr/bin/mysqldump, user: backup }
   ports:
     check:
       type: ports

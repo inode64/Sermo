@@ -33,6 +33,7 @@ func TestCheckDepsFromAppDepsCopiesSamplers(t *testing.T) {
 		},
 		EntropySampler: func() (uint64, bool) { return 0, true },
 		ZombieSampler:  func() (uint64, bool) { return 0, true },
+		SSHIdleSampler: func(checks.SSHIdleConfig) (checks.SSHIdleSample, error) { return checks.SSHIdleSample{}, nil },
 	}
 	got := checkDepsFromAppDeps(deps, checks.Deps{Service: "web", DefaultTimeout: time.Second})
 	if got.Service != "web" || got.DefaultTimeout != time.Second {
@@ -59,6 +60,7 @@ func TestCheckDepsFromAppDepsCopiesSamplers(t *testing.T) {
 		"FirewallRulesSampler": got.FirewallRulesSampler != nil,
 		"EntropySampler":       got.EntropySampler != nil,
 		"ZombieSampler":        got.ZombieSampler != nil,
+		"SSHIdleSampler":       got.SSHIdleSampler != nil,
 	}
 	for name, ok := range samplers {
 		if !ok {

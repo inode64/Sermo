@@ -9,6 +9,7 @@
   - [Reporting mode (reports)](#reporting-mode-reports)
 - [Ports](#ports)
   - [TCP connections (tcp_connections)](#tcp-connections-tcp_connections)
+  - [SSH terminal idle (ssh_idle)](#ssh-terminal-idle-ssh_idle)
   - [HTTP](#http)
   - [Cert](#cert)
   - [Database connection (mysql / mariadb)](#database-connection-mysql--mariadb)
@@ -45,6 +46,7 @@ Connection-protocol checks (MySQL, PostgreSQL, Redis, Docker, libvirt, etc.) are
 |---------------|--------------------------------------------------------------------|
 | `tcp`         | a TCP connection to `host:port` succeeds                           |
 | `tcp_connections` | the number of local `ESTABLISHED` TCP sockets on `port` satisfies `count {op, value}` |
+| `ssh_idle`    | interactive SSH terminals idle for `idle_for`, or protected terminal sessions, satisfy their configured count predicate |
 | `ports`       | a set of `host` ports satisfy an open/closed expectation (see Ports)|
 | `http`        | the response matches `expect_status` (and optional headers/body/JSON, see HTTP)|
 | `command`     | the command exits with `expect_exit` (default 0) and its output matches optional `expect_stdout`/`expect_stderr`; optional `user` runs it as a specific OS user; `on_change` alerts when its output changes (e.g. a version), array form only |
@@ -496,6 +498,51 @@ If `/proc` cannot be read, the check is unavailable rather than reporting zero.
 When a guard references it, Sermo denies the operation conservatively. Set an
 appropriate `interval` when using it as a long-running watch; a guard always
 runs its check again immediately before an operation.
+
+### SSH terminal idle (`ssh_idle`)
+
+`ssh_idle` is a Linux condition-style check for **interactive SSH terminals**.
+It reads utmp, the terminal input-access time and the process ancestry on that
+TTY. `sshd_exe` is required and must name the exact resolved `sshd` executable;
+this keeps local pseudo-terminals from being mistaken for SSH sessions.
+It accepts one absolute path or a list of absolute paths when distributions use
+different `sshd` locations.
+
+```yaml
+checks:
+  idle-ssh:
+    type: ssh_idle
+    idle_for: 30m
+    sshd_exe: /usr/sbin/sshd
+    count: { op: ">", value: 0 }
+    reports: state
+    protected_processes:
+      deploy-account: { user: deploy }
+      dba-account: { group: database }
+      codex: { exe: /usr/local/bin/codex, user: deploy }
+      mysql-backup: { exe: /usr/bin/mysqldump, user: backup }
+```
+
+`protected_processes` is a named map: entries are ORed, while its supplied
+`exe`, `user` and `group` fields are ANDed. `exe` is an exact resolved
+`/proc/<pid>/exe` path; `user` and `group` compare real UID and primary GID
+(names or numeric IDs). An entry with only `user` or `group` is valid because
+the candidate processes are already limited to that session's TTY. It never
+widens service-process discovery or authorizes a signal.
+
+`count` is the number of unprotected SSH sessions at least `idle_for` old.
+`protected_count` is the number excluded by `protected_processes`, and
+`oldest_idle_seconds` is the maximum input-idle duration among unprotected SSH
+sessions. To make a guard retain a protected account or job, configure a second
+`ssh_idle` check with `protected_count: { op: ">", value: 0 }` and reference it
+from the guard. The check itself never closes an SSH session.
+
+SFTP/scp without a terminal and port-forward-only connections are deliberately
+outside this check; use `tcp_connections` for transport connections. Terminal
+atime depends on the host's atime policy. If utmp, a terminal, process ancestry,
+an executable needed by a protection filter, or owner resolution cannot be read,
+the check is unavailable; a guard therefore denies the operation rather than
+assuming that no session is protected.
 
 ### Ports
 

@@ -24,6 +24,7 @@ func checkSamplersFromDeps(deps Deps) checks.Samplers {
 		FirewallRulesSampler: deps.FirewallRulesSampler,
 		EntropySampler:       deps.EntropySampler,
 		ZombieSampler:        deps.ZombieSampler,
+		SSHIdleSampler:       deps.SSHIdleSampler,
 	}
 }
 

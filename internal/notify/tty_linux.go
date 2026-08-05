@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 	"slices"
 	"strings"
 	"syscall"
@@ -137,7 +136,7 @@ func (n *ttyNotifier) targetTTYs(sessions []ttySession) []string {
 				continue
 			}
 		}
-		path, ok := ttyPath(devRoot, s.Line)
+		path, ok := utmp.TTYPath(devRoot, s.Line)
 		if !ok {
 			continue
 		}
@@ -149,25 +148,6 @@ func (n *ttyNotifier) targetTTYs(sessions []ttySession) []string {
 	}
 	slices.Sort(out)
 	return out
-}
-
-func ttyPath(devRoot, line string) (string, bool) {
-	if strings.ContainsRune(line, 0) || filepath.IsAbs(line) {
-		return "", false
-	}
-	clean := filepath.Clean(line)
-	if clean == "." || clean == ".." || strings.HasPrefix(clean, "../") {
-		return "", false
-	}
-	root, err := filepath.Abs(devRoot)
-	if err != nil {
-		return "", false
-	}
-	path := filepath.Join(root, clean)
-	if path != root && strings.HasPrefix(path, root+string(os.PathSeparator)) {
-		return path, true
-	}
-	return "", false
 }
 
 func ttyPayload(msg Message, host string, at time.Time) []byte {

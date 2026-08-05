@@ -44,6 +44,36 @@ func buildUsersCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 	})
 }
 
+// buildSSHIdleCheck builds an interactive-SSH terminal idle check.
+func buildSSHIdleCheck(b base, entry map[string]any, deps Deps) (Check, string) {
+	idleFor := cfgval.Duration(entry[CheckKeyIdleFor])
+	if idleFor <= 0 {
+		return nil, "ssh_idle check requires a positive idle_for duration"
+	}
+	sshdExes := cfgval.StringList(entry[CheckKeySSHDExe])
+	if len(sshdExes) == 0 {
+		return nil, "ssh_idle check requires sshd_exe"
+	}
+	preds, err := requireLevelPreds(entry, SSHIdlePredFields, "ssh_idle check")
+	if err != "" {
+		return nil, err
+	}
+	protected, parseErr := parseProtectedProcesses(entry[CheckKeyProtectedProcesses])
+	if parseErr != nil {
+		return nil, "ssh_idle protected_processes: " + parseErr.Error()
+	}
+	return sshIdleCheck{
+		base:  b,
+		preds: preds,
+		config: SSHIdleConfig{
+			IdleFor:            idleFor,
+			SSHDExes:           sshdExes,
+			ProtectedProcesses: protected,
+		},
+		sampler: deps.SSHIdleSampler,
+	}, ""
+}
+
 // buildProcessCountCheck builds a check on the number of processes matching an
 // optional user/exe/exe_dir filter.
 func buildProcessCountCheck(b base, entry map[string]any, deps Deps) (Check, string) {
