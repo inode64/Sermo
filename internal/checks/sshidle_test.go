@@ -153,3 +153,18 @@ func TestBuildSSHIdleCheckRejectsUnsupportedProtectionField(t *testing.T) {
 		t.Fatalf("warnings = %v, want one invalid protected-process warning", warnings)
 	}
 }
+
+func TestSSHProtectedProcessFields(t *testing.T) {
+	want := [3]string{CheckKeyExe, CheckKeyUser, CheckKeyGroup}
+	if got := SSHProtectedProcessFields(); got != want {
+		t.Fatalf("SSHProtectedProcessFields() = %v, want %v", got, want)
+	}
+	for _, field := range want {
+		if !IsSSHProtectedProcessField(field) {
+			t.Fatalf("IsSSHProtectedProcessField(%q) = false, want true", field)
+		}
+	}
+	if IsSSHProtectedProcessField("cmd") {
+		t.Fatal("IsSSHProtectedProcessField(cmd) = true, want false")
+	}
+}

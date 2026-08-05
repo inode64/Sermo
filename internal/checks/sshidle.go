@@ -16,6 +16,28 @@ import (
 
 const sshIdleDevRoot = "/dev"
 
+// SSHProtectedProcessFieldSummary is the user-facing list of fields accepted
+// by one protected_processes entry.
+const SSHProtectedProcessFieldSummary = "exe, user and group"
+
+// SSHProtectedProcessFields returns the fields accepted by one
+// protected_processes entry. It returns an array copy so callers cannot alter
+// the canonical check schema.
+func SSHProtectedProcessFields() [3]string {
+	return [3]string{CheckKeyExe, CheckKeyUser, CheckKeyGroup}
+}
+
+// IsSSHProtectedProcessField reports whether field is valid in one
+// protected_processes entry.
+func IsSSHProtectedProcessField(field string) bool {
+	for _, candidate := range SSHProtectedProcessFields() {
+		if field == candidate {
+			return true
+		}
+	}
+	return false
+}
+
 // SSHIdleSample is one observation of interactive SSH terminal sessions.
 // Count excludes protected sessions; ProtectedCount stays available to guards
 // that must retain a named account or long-running terminal job.
@@ -287,11 +309,11 @@ func parseProtectedProcesses(raw any) ([]SSHProtectedProcess, error) {
 			return nil, fmt.Errorf("%s must be a mapping", name)
 		}
 		for _, key := range slices.Sorted(maps.Keys(entry)) {
-			if key != CheckKeyExe && key != CheckKeyUser && key != CheckKeyGroup {
+			if !IsSSHProtectedProcessField(key) {
 				return nil, fmt.Errorf("%s.%s is not supported", name, key)
 			}
 		}
-		for _, key := range []string{CheckKeyExe, CheckKeyUser, CheckKeyGroup} {
+		for _, key := range SSHProtectedProcessFields() {
 			if value, present := entry[key]; present && cfgval.AsString(value) == "" {
 				return nil, fmt.Errorf("%s.%s must be a non-empty string", name, key)
 			}

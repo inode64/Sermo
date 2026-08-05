@@ -901,8 +901,8 @@ func validateSSHProtectedProcesses(path string, raw any, add addFunc) {
 			continue
 		}
 		for _, key := range slices.Sorted(maps.Keys(entry)) {
-			if key != checks.CheckKeyExe && key != checks.CheckKeyUser && key != checks.CheckKeyGroup {
-				add("%s.%s is not supported; protected_processes entries accept exe, user and group", entryPath, key)
+			if !checks.IsSSHProtectedProcessField(key) {
+				add("%s.%s is not supported; protected_processes entries accept %s", entryPath, key, checks.SSHProtectedProcessFieldSummary)
 			}
 		}
 		exe, user, group := cfgval.AsString(entry[checks.CheckKeyExe]), cfgval.AsString(entry[checks.CheckKeyUser]), cfgval.AsString(entry[checks.CheckKeyGroup])
@@ -910,7 +910,7 @@ func validateSSHProtectedProcesses(path string, raw any, add addFunc) {
 			add("%s requires exe, user or group", entryPath)
 			continue
 		}
-		for _, field := range []string{checks.CheckKeyExe, checks.CheckKeyUser, checks.CheckKeyGroup} {
+		for _, field := range checks.SSHProtectedProcessFields() {
 			if value, present := entry[field]; present && cfgval.AsString(value) == "" {
 				add("%s.%s must be a non-empty string", entryPath, field)
 			}
