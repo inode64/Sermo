@@ -23,6 +23,8 @@ import (
 type fakeManager struct {
 	stopErr          error
 	startErr         error
+	restartErr       error
+	restartFunc      func(context.Context, string) error
 	reloadErr        error
 	resumeErr        error
 	resetErr         error
@@ -51,6 +53,16 @@ func (m *fakeManager) Start(_ context.Context, s string) error {
 
 func (m *fakeManager) Stop(_ context.Context, s string) error {
 	return m.record("stop", s, m.stopErr)
+}
+
+func (m *fakeManager) Restart(ctx context.Context, s string) error {
+	if err := m.record("restart", s, m.restartErr); err != nil {
+		return err
+	}
+	if m.restartFunc != nil {
+		return m.restartFunc(ctx, s)
+	}
+	return nil
 }
 
 func (m *fakeManager) Reload(_ context.Context, s string) error {
