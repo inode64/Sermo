@@ -154,21 +154,12 @@ func pqDialer(target probeTarget) pqBindDialer {
 // banner protocol's Probe repeats; the protocol supplies only its default port
 // and handshake.
 func probeBanner(ctx context.Context, cfg Config, defaultPort int, handshake func(io.ReadWriter, Config) (Result, error)) (Result, error) {
-	c, err := dialDeadline(ctx, cfg, defaultPort)
+	c, err := newProbeTarget(cfg, defaultPort).openStream(ctx)
 	if err != nil {
 		return Result{}, err
 	}
 	defer func() { _ = c.Close() }()
 	return handshake(c, cfg)
-}
-
-// dialConn opens a TCP connection to host:port, egressing through cfg.Interface
-// when set (SO_BINDTODEVICE), and wrapping it in TLS when cfg.TLS is truthy
-// (implicit TLS). normalizeTLS interprets cfg.TLS: "" → plaintext, "skip-verify" →
-// TLS without certificate verification, anything else → verified TLS. Shared by
-// the natively-probed protocols (redis, imap, …).
-func dialConn(ctx context.Context, cfg Config, port int) (net.Conn, error) {
-	return newProbeTarget(cfg, port).dialTLS(ctx)
 }
 
 // tlsClientConfig is the TLS client config the conn probes share for an upgrade
@@ -191,18 +182,8 @@ func applyDeadline(ctx context.Context, c interface {
 	}
 }
 
-// dialDeadline opens the connection a probe needs and applies the context
-// deadline to it: cfg.Socket selects a Unix socket; otherwise it dials
-// host:port (port defaulting to defaultPort, with TLS/interface handled by
-// dialConn). The caller closes the returned connection. It folds the
-// port-default + dial + deadline prologue shared by the byte-protocol probes
-// into one call.
-func dialDeadline(ctx context.Context, cfg Config, defaultPort int) (net.Conn, error) {
-	return newProbeTarget(cfg, defaultPort).openStream(ctx)
-}
-
 // dialUnix dials a Unix-domain socket. It is the one-liner the socket-only
-// probes (acpid, fail2ban, lvmpolld, docker, …) and dialDeadline share, so the
+// probes (acpid, fail2ban, docker, …) and probeTarget share, so the
 // net.Dialer incantation lives in one place.
 func dialUnix(ctx context.Context, socket string) (net.Conn, error) {
 	c, err := (&net.Dialer{}).DialContext(ctx, networkUnix, socket)
@@ -226,21 +207,6 @@ func probeUnixSocket(ctx context.Context, cfg Config, defaultSocket string) (Res
 	}
 	_ = c.Close()
 	return Result{Extra: map[string]string{extraSocket: socket}}, nil
-}
-
-// dialTCPDeadline opens a plain TCP connection to cfg's host (defaulting to
-// DefaultHost) and port (defaulting to defaultPort) through BindDialer and
-// applies the context deadline. The prologue shared by the byte-protocol
-// probes that never upgrade to TLS; the caller closes the connection.
-func dialTCPDeadline(ctx context.Context, cfg Config, defaultPort int) (net.Conn, error) {
-	return newProbeTarget(cfg, defaultPort).openTCP(ctx)
-}
-
-// dialNetworkDeadline opens a connection to cfg's defaulted address through
-// BindDialer and applies the context deadline. TCP and UDP probes keep their
-// named wrappers while sharing the common dial lifecycle here.
-func dialNetworkDeadline(ctx context.Context, cfg Config, defaultPort int, network string) (net.Conn, error) {
-	return newProbeTarget(cfg, defaultPort).openNetwork(ctx, network)
 }
 
 // readTextGreeting reads a server's 3-digit greeting through net/textproto —
@@ -373,12 +339,12 @@ func sendTextCommand(rw io.Writer, tp *textproto.Reader, command string) (int, s
 	return code, text, nil
 }
 
-// probeLineCommand dials cfg (dialDeadline semantics), optionally sends
+// probeLineCommand dials cfg through probeTarget, optionally sends
 // command, reads one greeting line and parses it with parse; a foreign reply
 // (parse ok=false) fails with errFormat applied to the offending line. The
 // command→greeting skeleton shared by clamd, spamd and asterisk.
 func probeLineCommand(ctx context.Context, cfg Config, defaultPort int, command string, parse func(line string) (Result, bool), errFormat string) (Result, error) {
-	c, err := dialDeadline(ctx, cfg, defaultPort)
+	c, err := newProbeTarget(cfg, defaultPort).openStream(ctx)
 	if err != nil {
 		return Result{}, err
 	}
@@ -399,21 +365,12 @@ func probeLineCommand(ctx context.Context, cfg Config, defaultPort int, command 
 	return res, nil
 }
 
-// dialUDPDeadline opens a connected UDP socket to cfg's host (defaulting to
-// DefaultHost) and port (defaulting to defaultPort) through BindDialer and
-// applies the context deadline. The UDP twin of dialTCPDeadline; the caller
-// closes the connection. Probes that exchange more than one datagram with the
-// same peer (chrony) dial once through this instead of repeating exchangeUDP.
-func dialUDPDeadline(ctx context.Context, cfg Config, defaultPort int) (net.Conn, error) {
-	return newProbeTarget(cfg, defaultPort).openUDP(ctx)
-}
-
 // exchangeUDP dials cfg's host (defaulting to DefaultHost) and port
 // (defaulting to defaultPort) over UDP through BindDialer, applies the context
 // deadline, sends request, and returns the first reply datagram (up to
 // bufBytes). The round-trip shared by the datagram probes (rpcbind, nebula).
 func exchangeUDP(ctx context.Context, cfg Config, defaultPort int, request []byte, bufBytes int) ([]byte, error) {
-	c, err := dialUDPDeadline(ctx, cfg, defaultPort)
+	c, err := newProbeTarget(cfg, defaultPort).openUDP(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("open UDP exchange: %w", err)
 	}

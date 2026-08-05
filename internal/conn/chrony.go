@@ -339,7 +339,7 @@ func chronyDial(ctx context.Context, cfg Config) (net.Conn, error) {
 	if cfg.Socket != "" {
 		return chronyDialUnix(ctx, cfg.Socket)
 	}
-	return dialUDPDeadline(ctx, cfg, defaultPortChrony)
+	return newProbeTarget(cfg, defaultPortChrony).openUDP(ctx)
 }
 
 // chronyDialUnix opens a datagram channel to chronyd's command socket. Unlike
