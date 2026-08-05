@@ -10,6 +10,7 @@
 package config
 
 import (
+	"fmt"
 	"maps"
 	"sermo/internal/cfgval"
 	"sermo/internal/notify"
@@ -846,16 +847,44 @@ func AdditionalUnits(tree map[string]any, backend string) []string {
 	return cfgval.StringList(m[backend])
 }
 
-// RestartMode returns the service's restart strategy. Staged is the safe
-// default when restart_policy is absent or malformed; validation reports any
-// malformed or unsupported explicit value before an operation can be built.
-func RestartMode(tree map[string]any) string {
-	policy, ok := tree[ServiceKeyRestartPolicy].(map[string]any)
+// ParseRestartMode returns the service's restart strategy and rejects malformed
+// or unsafe explicit declarations. Keeping this parser in config lets both
+// schema validation and the operation builder fail closed on the same rules.
+func ParseRestartMode(tree map[string]any) (string, error) {
+	raw, present := tree[ServiceKeyRestartPolicy]
+	if !present {
+		return RestartModeStaged, nil
+	}
+	policy, ok := raw.(map[string]any)
 	if !ok {
-		return RestartModeStaged
+		return "", fmt.Errorf("%s must be a mapping", ServiceKeyRestartPolicy)
+	}
+	for _, key := range slices.Sorted(maps.Keys(policy)) {
+		if key != RestartPolicyKeyMode {
+			return "", fmt.Errorf("%s.%s is not supported", ServiceKeyRestartPolicy, key)
+		}
 	}
 	mode := cfgval.AsString(policy[RestartPolicyKeyMode])
-	if mode == "" {
+	if mode != RestartModeStaged && mode != RestartModeNative {
+		return "", fmt.Errorf("%s %q is not one of %s", restartPolicyPathMode, mode, RestartModeSummary)
+	}
+	if mode == RestartModeNative {
+		if _, present := tree[SectionControl]; present {
+			return "", fmt.Errorf("%s=%q is not supported with %s", restartPolicyPathMode, mode, SectionControl)
+		}
+		if _, present := tree[ServiceKeyAlsoService]; present {
+			return "", fmt.Errorf("%s=%q is not supported with %s", restartPolicyPathMode, mode, ServiceKeyAlsoService)
+		}
+	}
+	return mode, nil
+}
+
+// RestartMode returns the service's validated restart strategy. Staged is the
+// fail-safe fallback when an invalid tree reaches a read-only caller; operation
+// construction uses ParseRestartMode and blocks instead of applying a fallback.
+func RestartMode(tree map[string]any) string {
+	mode, err := ParseRestartMode(tree)
+	if err != nil {
 		return RestartModeStaged
 	}
 	return mode

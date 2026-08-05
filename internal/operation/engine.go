@@ -35,12 +35,13 @@ const (
 	postflightRetryInterval = time.Second
 )
 
-// Manager is the subset of servicemgr.Manager the engine uses. Restart is built
-// from Stop+Start (not Manager.Restart) so residual processes can be handled
-// between the two phases.
+// Manager is the subset of servicemgr.Manager the engine uses. Staged restart
+// uses Stop+Start so residual processes can be handled between the phases;
+// services explicitly configured for native restart use Restart atomically.
 type Manager interface {
 	Start(ctx context.Context, service string) error
 	Stop(ctx context.Context, service string) error
+	Restart(ctx context.Context, service string) error
 	Reload(ctx context.Context, service string) error
 	// SupportsReload reports whether the init backend can reload the unit in place,
 	// so the reload step can fall back to a native signal/command when it cannot.
@@ -58,6 +59,9 @@ type Engine struct {
 	Service string // config service name
 	Unit    string // backend unit, passed to Manager
 	Backend string
+	// RestartMode selects staged Stop+Start or one atomic backend Restart call.
+	// The zero value preserves the staged default for directly-built Engines.
+	RestartMode string
 	// AlsoUnits are auxiliary init units (from `also_service`) acted on alongside
 	// the primary in wrap order: started before the primary (strict — a failure
 	// aborts before the primary starts) and stopped after it (best-effort). Empty
@@ -114,18 +118,23 @@ type StopArtifacts struct {
 type CleanPath = config.CleanPath
 
 type plan struct {
-	action     string
-	preflight  bool
-	stop       bool
-	start      bool
-	resume     bool
-	reload     bool
-	postflight bool
+	action        string
+	preflight     bool
+	stop          bool
+	start         bool
+	nativeRestart bool
+	resume        bool
+	reload        bool
+	postflight    bool
 }
 
-// Restart stops the service, clears residuals, starts it again and verifies
-// health.
+// Restart executes the configured restart strategy and verifies health. Staged
+// mode stops, clears residuals and starts; native mode delegates one atomic
+// restart to the init backend without running the residual reaper.
 func (e Engine) Restart(ctx context.Context) Result {
+	if e.RestartMode == config.RestartModeNative {
+		return e.run(ctx, plan{action: actionRestart, preflight: true, nativeRestart: true, postflight: true})
+	}
 	return e.run(ctx, plan{action: actionRestart, preflight: true, stop: true, start: true, postflight: true})
 }
 
@@ -224,6 +233,9 @@ func (e Engine) run(ctx context.Context, p plan) (result Result) {
 	if p.start && !systemdReactivated && !e.startService(ctx, &result) {
 		return result
 	}
+	if p.nativeRestart && !e.restartService(ctx, &result) {
+		return result
+	}
 
 	if p.resume && !e.resumeService(ctx, &result) {
 		return result
@@ -281,6 +293,13 @@ func (e Engine) reloadService(ctx context.Context, result *Result) bool {
 		return failPhase(ctx, result, "operation timed out during reload", "reload: ", err)
 	}
 	return e.ensureServiceHealthy(ctx, result, "reload")
+}
+
+func (e Engine) restartService(ctx context.Context, result *Result) bool {
+	if err := e.Manager.Restart(ctx, e.Unit); err != nil {
+		return failPhase(ctx, result, "operation timed out during restart", "restart: ", err)
+	}
+	return e.ensureServiceHealthy(ctx, result, actionRestart)
 }
 
 func (e Engine) ensureServiceHealthy(ctx context.Context, result *Result, action string) bool {
@@ -434,7 +453,7 @@ func (e Engine) checkGuards(ctx context.Context, p plan, result *Result) bool {
 			return false
 		}
 	}
-	if !p.stop || !p.start || e.RestartIdentity == nil {
+	if p.action != actionRestart || e.RestartIdentity == nil {
 		return true
 	}
 	ok, reason, err := e.RestartIdentity(ctx)
