@@ -101,7 +101,7 @@ http_get() {
 		return $?
 	fi
 	if command -v wget >/dev/null 2>&1; then
-		wget -qO- --user=admin --password="$admin_password" "$url"
+		wget -qO- --auth-no-challenge --user=admin --password="$admin_password" "$url"
 		return $?
 	fi
 	return 127

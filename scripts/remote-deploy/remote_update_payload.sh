@@ -172,7 +172,7 @@ http_get() {
 		return $?
 	fi
 	if command -v wget >/dev/null 2>&1; then
-		wget -qO- -T "$http_timeout_seconds" --user=admin --password="$admin_password" "$url"
+		wget -qO- -T "$http_timeout_seconds" --auth-no-challenge --user=admin --password="$admin_password" "$url"
 		return $?
 	fi
 	return 127
