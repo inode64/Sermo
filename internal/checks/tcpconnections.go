@@ -46,8 +46,7 @@ func (c tcpConnectionsCheck) Run(ctx context.Context) Result {
 }
 
 func (c tcpConnectionsCheck) unavailableResult(err error, start time.Time) Result {
-	res := c.result(false, fmt.Sprintf("tcp connections on port %d: %v", c.port, err), start)
-	res.Unavailable = true
+	res := c.base.unavailableResult(fmt.Sprintf("tcp connections on port %d: %v", c.port, err), start)
 	res.Data = map[string]any{DataKeyPort: c.port, DataKeySampleError: err.Error()}
 	return res
 }
