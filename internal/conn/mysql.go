@@ -128,15 +128,15 @@ func MySQLDSN(cfg Config) string { return buildDSN(cfg) }
 // buildMySQLConfig renders a go-sql-driver config from cfg. When cfg.Interface
 // is set, TCP dials egress through BindDialer (SO_BINDTODEVICE).
 func buildMySQLConfig(cfg Config) *mysql.Config {
+	target := newProbeTarget(cfg, defaultPortMySQL)
 	c := mysql.NewConfig()
 	c.Net = networkTCP
-	c.Addr = cfg.addrDefaults(defaultPortMySQL)
+	c.Addr = target.address()
 	c.User = cfg.User
 	c.Passwd = cfg.Password
 	c.DBName = cfg.Database
 	if cfg.Interface != "" {
-		d := BindDialer(cfg.Interface)
-		c.DialFunc = d.DialContext
+		c.DialFunc = target.dialer().DialContext
 	}
 	if tls := NormalizeTLS(cfg.TLS); tls != "" {
 		c.TLSConfig = tls

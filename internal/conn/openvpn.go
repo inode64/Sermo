@@ -65,12 +65,11 @@ func (openvpnProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	}
 
 	sid := openvpnSessionID()
-	c, err := BindDialer(cfg.Interface).DialContext(ctx, transport, cfg.addrDefaults(defaultPortOpenVPN))
+	c, err := newProbeTarget(cfg, defaultPortOpenVPN).openNetwork(ctx, transport)
 	if err != nil {
 		return Result{}, probeErr(ProtocolNameOpenVPN, stepDial, err)
 	}
 	defer func() { _ = c.Close() }()
-	applyDeadline(ctx, c)
 
 	reply, err := openvpnExchange(c, transport, openvpnClientReset(sid))
 	if err != nil {

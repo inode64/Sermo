@@ -40,6 +40,14 @@ func (t probeTarget) dialer() *net.Dialer {
 	return BindDialer(t.cfg.Interface)
 }
 
+func (t probeTarget) dialerWithTimeout(timeout time.Duration) *net.Dialer {
+	d := t.dialer()
+	if timeout > 0 {
+		d.Timeout = timeout
+	}
+	return d
+}
+
 // dialTLS opens the TCP half of a stream target. Socket selection belongs to
 // openStream so callers that require TCP (for example binary protocols) cannot
 // accidentally use a configured Unix socket.
@@ -137,8 +145,8 @@ func (d pqBindDialer) DialContext(ctx context.Context, network, address string) 
 	return c, nil
 }
 
-func pqDialer(iface string) pqBindDialer {
-	return pqBindDialer{BindDialer(iface)}
+func pqDialer(target probeTarget) pqBindDialer {
+	return pqBindDialer{target.dialer()}
 }
 
 // probeBanner dials cfg (port defaulting to defaultPort), runs handshake on the
@@ -449,15 +457,4 @@ func codeName[C comparable](code C, names map[C]string, fallbackFormat string) s
 		return name
 	}
 	return fmt.Sprintf(fallbackFormat, code)
-}
-
-// probeDialer returns a dialer for driver-backed protocol probes. When iface is
-// non-empty it egresses through SO_BINDTODEVICE (BindDialer); timeout bounds the
-// TCP connect only.
-func probeDialer(iface string, timeout time.Duration) *net.Dialer {
-	d := BindDialer(iface)
-	if timeout > 0 {
-		d.Timeout = timeout
-	}
-	return d
 }

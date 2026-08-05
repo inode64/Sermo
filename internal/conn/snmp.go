@@ -101,7 +101,8 @@ func snmpVersionName(cfg Config) string {
 // when no user is set, otherwise v3 USM (authNoPriv with SHA when a password is
 // present, else noAuthNoPriv).
 func buildSNMPParams(ctx context.Context, cfg Config, timeout time.Duration) *g.GoSNMP {
-	host, port := cfg.hostPortDefaults(defaultSNMPPort)
+	target := newProbeTarget(cfg, defaultSNMPPort)
+	host, port := target.hostPort()
 	p := &g.GoSNMP{
 		Target: host,
 		//nolint:gosec // G115: config validation rejects any port outside cfgval.ValidTCPPort before it reaches a probe.
@@ -113,7 +114,7 @@ func buildSNMPParams(ctx context.Context, cfg Config, timeout time.Duration) *g.
 		MaxOids:   g.MaxOids,
 	}
 	if cfg.Interface != "" {
-		p.Control = BindDialer(cfg.Interface).Control
+		p.Control = target.dialer().Control
 	}
 	if cfg.User == "" {
 		p.Version = g.Version2c

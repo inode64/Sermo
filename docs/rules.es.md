@@ -1044,7 +1044,9 @@ Protocolos, en el orden de la tabla de arriba:
   distinta, o `query` para una dirección D-Bus completa (`unix:abstract=…`,
   `tcp:host=…,port=…`). Basado en socket, así que no hay puerto TCP. Sin auth — el acceso está
   gobernado por los permisos del socket. Datos del resultado: el id del bus, la dirección y el
-  nombre único de la conexión. Usa `github.com/godbus/dbus/v5`.
+  nombre único de la conexión. Usa `github.com/godbus/dbus/v5`. Con `interface`
+  y un `query` TCP, usa exactamente `tcp:host=…,port=…`; el resto de opciones de
+  transporte TCP de D-Bus se rechazan para no ignorar silenciosamente el enlace de salida.
 
   ```yaml
   checks:
@@ -1061,7 +1063,8 @@ Protocolos, en el orden de la tabla de arriba:
   respondiendo, no meramente que `dbus-daemon` está activo. **Objetivo:** como `dbus`, por defecto
   el bus del sistema; establece `socket` para un socket de bus distinto o `query` para una dirección
   D-Bus completa. Basado en socket, sin puerto TCP, sin auth. Datos del resultado: el nombre único de D-Bus
-  que posee `org.freedesktop.UDisks2`. Usa `github.com/godbus/dbus/v5`.
+  que posee `org.freedesktop.UDisks2`. Usa `github.com/godbus/dbus/v5`. Se aplica la
+  misma restricción de `interface` + `query` TCP que a `dbus`.
 
   ```yaml
   checks:
@@ -1077,7 +1080,8 @@ Protocolos, en el orden de la tabla de arriba:
   del servidor (`running` cuando AVAHI_SERVER_RUNNING). **Objetivo:** como `dbus`, por defecto
   el bus del sistema; establece `socket` para un socket de bus distinto o `query` para una dirección
   D-Bus completa. Basado en socket, sin puerto TCP, sin auth. Usa
-  `github.com/godbus/dbus/v5`.
+  `github.com/godbus/dbus/v5`. Se aplica la misma restricción de `interface` +
+  `query` TCP que a `dbus`.
 - `syncthing` — puerto por defecto 8384; `tls` soportado (`skip-verify` cubre
   el certificado autofirmado por defecto de la GUI de Syncthing). Envía `GET /rest/noauth/health`
   y espera `200` con `{"status":"OK"}` — el endpoint de vivacidad no autenticado.

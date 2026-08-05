@@ -85,9 +85,9 @@ const (
 )
 
 func (smbProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	addr := cfg.addrDefaults(defaultPortSMB)
+	target := newProbeTarget(cfg, defaultPortSMB)
 
-	dialect, signingRequired, err := smbNegotiate(ctx, addr, cfg.Interface)
+	dialect, signingRequired, err := smbNegotiate(ctx, target)
 	if err != nil {
 		return Result{}, err
 	}
@@ -97,7 +97,7 @@ func (smbProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	}
 
 	if cfg.User != "" {
-		if err := smbSession(ctx, addr, cfg, extra); err != nil {
+		if err := smbSession(ctx, target, cfg, extra); err != nil {
 			return Result{}, err
 		}
 	}
@@ -105,14 +105,14 @@ func (smbProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 }
 
 // smbSession authenticates with NTLM and gathers share information.
-func smbSession(ctx context.Context, addr string, cfg Config, extra map[string]string) error {
+func smbSession(ctx context.Context, target probeTarget, cfg Config, extra map[string]string) error {
 	user, domain := splitSMBUser(cfg.User)
 	d := &smb2.Dialer{Initiator: &smb2.NTLMInitiator{User: user, Password: cfg.Password, Domain: domain}}
-	tcp, err := BindDialer(cfg.Interface).DialContext(ctx, networkTCP, addr)
+	tcp, err := target.openTCP(ctx)
 	if err != nil {
 		return fmt.Errorf("smb auth: %w", err)
 	}
-	s, err := d.DialConn(ctx, tcp, addr)
+	s, err := d.DialConn(ctx, tcp, target.address())
 	if err != nil {
 		_ = tcp.Close()
 		return fmt.Errorf("smb auth: %w", err)
@@ -148,13 +148,12 @@ func splitSMBUser(s string) (user, domain string) {
 
 // smbNegotiate sends a native SMB2 NEGOTIATE and returns the negotiated dialect
 // and whether the server requires signing.
-func smbNegotiate(ctx context.Context, addr, iface string) (dialect uint16, signingRequired bool, err error) {
-	c, err := BindDialer(iface).DialContext(ctx, networkTCP, addr)
+func smbNegotiate(ctx context.Context, target probeTarget) (dialect uint16, signingRequired bool, err error) {
+	c, err := target.openTCP(ctx)
 	if err != nil {
 		return 0, false, probeErr(ProtocolNameSMB, stepDial, err)
 	}
 	defer func() { _ = c.Close() }()
-	applyDeadline(ctx, c)
 
 	req, err := buildSMBNegotiate()
 	if err != nil {

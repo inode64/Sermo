@@ -58,7 +58,7 @@ func postgresConnector(cfg Config) (*pq.Connector, error) {
 		return nil, fmt.Errorf("postgres connector: %w", err)
 	}
 	if cfg.Interface != "" {
-		connector.Dialer(pqDialer(cfg.Interface))
+		connector.Dialer(pqDialer(newProbeTarget(cfg, defaultPortPostgres)))
 	}
 	return connector, nil
 }
@@ -69,7 +69,7 @@ func buildPGDSN(cfg Config) string {
 	u := url.URL{
 		Scheme: ProtocolNamePostgres,
 		User:   url.UserPassword(cfg.User, cfg.Password),
-		Host:   cfg.addrDefaults(defaultPortPostgres),
+		Host:   newProbeTarget(cfg, defaultPortPostgres).address(),
 		Path:   "/" + cfg.Database,
 	}
 	q := url.Values{}

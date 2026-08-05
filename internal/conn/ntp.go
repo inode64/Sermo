@@ -37,15 +37,16 @@ func (ntpProtocol) DefaultPort() int   { return defaultPortNTP }
 func (ntpProtocol) RequiresUser() bool { return false }
 
 func (ntpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
+	target := newProbeTarget(cfg, defaultPortNTP)
 	opt := ntp.QueryOptions{
 		Timeout: ntpTimeout(ctx),
 		// Route the UDP query through the shared dialer so interface binding works
 		// identically to the other probes; beevik would otherwise dial directly.
 		Dialer: func(_, remote string) (net.Conn, error) {
-			return BindDialer(cfg.Interface).DialContext(ctx, networkUDP, remote)
+			return target.dialer().DialContext(ctx, networkUDP, remote)
 		},
 	}
-	resp, err := ntp.QueryWithOptions(cfg.addrDefaults(defaultPortNTP), opt)
+	resp, err := ntp.QueryWithOptions(target.address(), opt)
 	if err != nil {
 		return Result{}, probeErr(ProtocolNameNTP, stepQuery, err)
 	}

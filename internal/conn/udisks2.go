@@ -1,10 +1,6 @@
 package conn
 
-import (
-	"context"
-
-	"github.com/godbus/dbus/v5"
-)
+import "context"
 
 func init() { Register(udisks2Protocol{}) }
 
@@ -36,12 +32,12 @@ func (udisks2Protocol) RequiresUser() bool { return false }
 func (udisks2Protocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	addr := DBusAddress(cfg.Socket, cfg.Query)
 	return probeWithDeadline(ctx, func(ctx context.Context) (Result, error) {
-		return udisks2Probe(ctx, addr)
+		return udisks2Probe(ctx, cfg, addr)
 	})
 }
 
-func udisks2Probe(ctx context.Context, addr string) (Result, error) {
-	conn, err := dbus.Dial(addr)
+func udisks2Probe(ctx context.Context, cfg Config, addr string) (Result, error) {
+	conn, err := dialDBus(ctx, cfg, addr)
 	if err != nil {
 		return Result{}, probeErr(ProtocolNameUDisks2, stepDial, err)
 	}
