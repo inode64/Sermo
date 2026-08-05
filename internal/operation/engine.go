@@ -279,10 +279,7 @@ func (e Engine) resumeService(ctx context.Context, result *Result) bool {
 		result.Status, result.Message = ResultFailed, "resume: operation unsupported by backend"
 		return false
 	}
-	if err := e.ResumeFunc(ctx); err != nil {
-		return failPhase(ctx, result, "operation timed out during resume", "resume: ", err)
-	}
-	return e.ensureServiceHealthy(ctx, result, "resume")
+	return e.runBackendAction(ctx, result, actionResume, e.ResumeFunc)
 }
 
 func (e Engine) reloadService(ctx context.Context, result *Result) bool {
@@ -290,17 +287,23 @@ func (e Engine) reloadService(ctx context.Context, result *Result) bool {
 	if reload == nil {
 		reload = func(ctx context.Context) error { return e.Manager.Reload(ctx, e.Unit) }
 	}
-	if err := reload(ctx); err != nil {
-		return failPhase(ctx, result, "operation timed out during reload", "reload: ", err)
-	}
-	return e.ensureServiceHealthy(ctx, result, "reload")
+	return e.runBackendAction(ctx, result, actionReload, reload)
 }
 
 func (e Engine) restartService(ctx context.Context, result *Result) bool {
-	if err := e.Manager.Restart(ctx, e.Unit); err != nil {
-		return failPhase(ctx, result, "operation timed out during restart", "restart: ", err)
+	return e.runBackendAction(ctx, result, actionRestart, func(ctx context.Context) error {
+		return e.Manager.Restart(ctx, e.Unit)
+	})
+}
+
+// runBackendAction centralizes the result contract shared by backend actions:
+// timeout-aware errors followed by a failed-unit status check. Higher-level
+// safety gates and postflight remain in run, around this primitive.
+func (e Engine) runBackendAction(ctx context.Context, result *Result, action string, run func(context.Context) error) bool {
+	if err := run(ctx); err != nil {
+		return failPhase(ctx, result, "operation timed out during "+action, action+": ", err)
 	}
-	return e.ensureServiceHealthy(ctx, result, actionRestart)
+	return e.ensureServiceHealthy(ctx, result, action)
 }
 
 func (e Engine) ensureServiceHealthy(ctx context.Context, result *Result, action string) bool {
@@ -342,10 +345,9 @@ func (e Engine) startService(ctx context.Context, result *Result) bool {
 			return failPhase(ctx, result, "operation timed out starting also_service "+unit, "start "+unit+": ", err)
 		}
 	}
-	if err := e.Manager.Start(ctx, e.Unit); err != nil {
-		return failPhase(ctx, result, "operation timed out during start", "start: ", err)
-	}
-	return e.ensureServiceHealthy(ctx, result, "start")
+	return e.runBackendAction(ctx, result, actionStart, func(ctx context.Context) error {
+		return e.Manager.Start(ctx, e.Unit)
+	})
 }
 
 func (e Engine) stopService(ctx context.Context, result *Result) (alsoStopErrs, staleWarn []string, stopped, systemdReactivated bool) {
