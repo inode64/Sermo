@@ -11,6 +11,93 @@ import (
 	"time"
 )
 
+// probeTarget is the resolved transport target of one connection probe. It
+// owns address defaulting, egress-interface binding and deadline propagation;
+// protocol probes keep ownership of their wire exchange and response parsing.
+//
+// It deliberately has explicit stream/TCP/UDP entry points instead of a
+// transport string exposed to protocols. A stream may select a Unix socket and
+// implicit TLS, while a UDP probe must never accidentally inherit either.
+type probeTarget struct {
+	cfg         Config
+	defaultPort int
+}
+
+func newProbeTarget(cfg Config, defaultPort int) probeTarget {
+	return probeTarget{cfg: cfg, defaultPort: defaultPort}
+}
+
+func (t probeTarget) hostPort() (string, int) {
+	return t.cfg.hostPortDefaults(t.defaultPort)
+}
+
+func (t probeTarget) address() string {
+	host, port := t.hostPort()
+	return hostPort(host, port)
+}
+
+func (t probeTarget) dialer() *net.Dialer {
+	return BindDialer(t.cfg.Interface)
+}
+
+// dialTLS opens the TCP half of a stream target. Socket selection belongs to
+// openStream so callers that require TCP (for example binary protocols) cannot
+// accidentally use a configured Unix socket.
+func (t probeTarget) dialTLS(ctx context.Context) (net.Conn, error) {
+	host, _ := t.hostPort()
+	addr := t.address()
+	d := t.dialer()
+	var (
+		c   net.Conn
+		err error
+	)
+	switch NormalizeTLS(t.cfg.TLS) {
+	case "":
+		c, err = d.DialContext(ctx, networkTCP, addr)
+	case tlsSkipVerify:
+		tc := tlsClientConfig(host)
+		tc.InsecureSkipVerify = true // operator chose tls: skip-verify
+		c, err = (&tls.Dialer{NetDialer: d, Config: tc}).DialContext(ctx, networkTCP, addr)
+	default:
+		c, err = (&tls.Dialer{NetDialer: d, Config: tlsClientConfig(host)}).DialContext(ctx, networkTCP, addr)
+	}
+	if err != nil {
+		return nil, wrapDialError(networkTCP, addr, err)
+	}
+	return c, nil
+}
+
+// openStream opens the implicit-TLS TCP or Unix-socket stream selected by the
+// target, then transfers the context deadline to the connection.
+func (t probeTarget) openStream(ctx context.Context) (net.Conn, error) {
+	var (
+		c   net.Conn
+		err error
+	)
+	if t.cfg.Socket != "" {
+		c, err = dialUnix(ctx, t.cfg.Socket)
+	} else {
+		c, err = t.dialTLS(ctx)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("open probe connection: %w", err)
+	}
+	applyDeadline(ctx, c)
+	return c, nil
+}
+
+// openNetwork opens a plain TCP or UDP target through the configured egress
+// interface and transfers the context deadline to the connection.
+func (t probeTarget) openNetwork(ctx context.Context, network string) (net.Conn, error) {
+	addr := t.address()
+	c, err := t.dialer().DialContext(ctx, network, addr)
+	if err != nil {
+		return nil, wrapDialError(network, addr, err)
+	}
+	applyDeadline(ctx, c)
+	return c, nil
+}
+
 // pqBindDialer adapts *net.Dialer to lib/pq's Dialer/DialerContext interfaces.
 type pqBindDialer struct {
 	*net.Dialer
@@ -65,27 +152,7 @@ func probeBanner(ctx context.Context, cfg Config, defaultPort int, handshake fun
 // TLS without certificate verification, anything else → verified TLS. Shared by
 // the natively-probed protocols (redis, imap, …).
 func dialConn(ctx context.Context, cfg Config, port int) (net.Conn, error) {
-	host, _ := cfg.hostPortDefaults(port)
-	addr := hostPort(host, port)
-	d := BindDialer(cfg.Interface)
-	var (
-		c   net.Conn
-		err error
-	)
-	switch NormalizeTLS(cfg.TLS) {
-	case "":
-		c, err = d.DialContext(ctx, networkTCP, addr)
-	case tlsSkipVerify:
-		tc := tlsClientConfig(host)
-		tc.InsecureSkipVerify = true // operator chose tls: skip-verify
-		c, err = (&tls.Dialer{NetDialer: d, Config: tc}).DialContext(ctx, networkTCP, addr)
-	default:
-		c, err = (&tls.Dialer{NetDialer: d, Config: tlsClientConfig(host)}).DialContext(ctx, networkTCP, addr)
-	}
-	if err != nil {
-		return nil, wrapDialError(networkTCP, addr, err)
-	}
-	return c, nil
+	return newProbeTarget(cfg, port).dialTLS(ctx)
 }
 
 // tlsClientConfig is the TLS client config the conn probes share for an upgrade
@@ -115,24 +182,7 @@ func applyDeadline(ctx context.Context, c interface {
 // port-default + dial + deadline prologue shared by the byte-protocol probes
 // into one call.
 func dialDeadline(ctx context.Context, cfg Config, defaultPort int) (net.Conn, error) {
-	var (
-		c   net.Conn
-		err error
-	)
-	if cfg.Socket != "" {
-		c, err = dialUnix(ctx, cfg.Socket)
-	} else {
-		port := cfg.Port
-		if port == 0 {
-			port = defaultPort
-		}
-		c, err = dialConn(ctx, cfg, port)
-	}
-	if err != nil {
-		return nil, fmt.Errorf("open probe connection: %w", err)
-	}
-	applyDeadline(ctx, c)
-	return c, nil
+	return newProbeTarget(cfg, defaultPort).openStream(ctx)
 }
 
 // dialUnix dials a Unix-domain socket. It is the one-liner the socket-only
@@ -174,13 +224,7 @@ func dialTCPDeadline(ctx context.Context, cfg Config, defaultPort int) (net.Conn
 // BindDialer and applies the context deadline. TCP and UDP probes keep their
 // named wrappers while sharing the common dial lifecycle here.
 func dialNetworkDeadline(ctx context.Context, cfg Config, defaultPort int, network string) (net.Conn, error) {
-	addr := cfg.addrDefaults(defaultPort)
-	c, err := BindDialer(cfg.Interface).DialContext(ctx, network, addr)
-	if err != nil {
-		return nil, wrapDialError(network, addr, err)
-	}
-	applyDeadline(ctx, c)
-	return c, nil
+	return newProbeTarget(cfg, defaultPort).openNetwork(ctx, network)
 }
 
 // readTextGreeting reads a server's 3-digit greeting through net/textproto —
