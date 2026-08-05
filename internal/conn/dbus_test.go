@@ -1,6 +1,11 @@
 package conn
 
-import "testing"
+import (
+	"fmt"
+	"testing"
+
+	"sermo/internal/cfgval"
+)
 
 func TestDBusAddress(t *testing.T) {
 	// A full address in query wins over socket.
@@ -28,6 +33,26 @@ func TestDBusTCPConfig(t *testing.T) {
 			name:    "host and port",
 			address: "tcp:host=10.0.0.5,port=44444",
 			want:    Config{Host: "10.0.0.5", Port: 44444, Interface: "eth0"},
+		},
+		{
+			name:    "minimum port",
+			address: fmt.Sprintf("tcp:host=10.0.0.5,port=%d", cfgval.MinTCPPort),
+			want:    Config{Host: "10.0.0.5", Port: cfgval.MinTCPPort, Interface: "eth0"},
+		},
+		{
+			name:    "maximum port",
+			address: fmt.Sprintf("tcp:host=10.0.0.5,port=%d", cfgval.MaxTCPPort),
+			want:    Config{Host: "10.0.0.5", Port: cfgval.MaxTCPPort, Interface: "eth0"},
+		},
+		{
+			name:    "port below minimum",
+			address: fmt.Sprintf("tcp:host=10.0.0.5,port=%d", cfgval.MinTCPPort-1),
+			wantErr: true,
+		},
+		{
+			name:    "port above maximum",
+			address: fmt.Sprintf("tcp:host=10.0.0.5,port=%d", cfgval.MaxTCPPort+1),
+			wantErr: true,
 		},
 		{
 			name:    "missing port",

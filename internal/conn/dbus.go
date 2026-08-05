@@ -7,6 +7,8 @@ import (
 	"strings"
 
 	"github.com/godbus/dbus/v5"
+
+	"sermo/internal/cfgval"
 )
 
 func init() { Register(dbusProtocol{}) }
@@ -20,7 +22,6 @@ const (
 	dbusTCPPrefix      = "tcp:"
 	dbusTCPHostKey     = "host"
 	dbusTCPPortKey     = "port"
-	dbusMaxTCPPort     = 65535
 )
 
 // dbusProtocol probes a D-Bus daemon natively over its wire protocol using the
@@ -154,7 +155,7 @@ func dbusTCPConfig(cfg Config, addr string) (Config, error) {
 				return Config{}, fmt.Errorf("D-Bus TCP address %q has multiple ports", addr)
 			}
 			parsed, err := strconv.Atoi(value)
-			if err != nil || parsed <= defaultPortNone || parsed > dbusMaxTCPPort {
+			if err != nil || !cfgval.ValidTCPPort(parsed) {
 				return Config{}, fmt.Errorf("invalid D-Bus TCP port %q", value)
 			}
 			port = parsed
