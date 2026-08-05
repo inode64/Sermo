@@ -7,6 +7,7 @@
   - [Interfaz de salida (interface)](#interfaz-de-salida-interface)
   - [Interdependencias de comprobaciones (requires / skip_when_changed)](#interdependencias-de-comprobaciones-requires--skip_when_changed)
   - [Modo de reporte (reports)](#modo-de-reporte-reports)
+  - [Conexiones TCP (tcp_connections)](#conexiones-tcp-tcp_connections)
   - [Ports](#ports)
   - [HTTP](#http)
   - [Cert](#cert)
@@ -43,6 +44,7 @@ Las comprobaciones de protocolo de conexión (MySQL, PostgreSQL, Redis, Docker, 
 | type          | pasa cuando                                                        |
 |---------------|--------------------------------------------------------------------|
 | `tcp`         | una conexión TCP a `host:port` tiene éxito                          |
+| `tcp_connections` | el número de sockets TCP locales `ESTABLISHED` en `port` satisface `count {op, value}` |
 | `ports`       | un conjunto de puertos de `host` satisface una expectativa de abierto/cerrado (ver Ports)|
 | `http`        | la respuesta coincide con `expect_status` (y cabeceras/cuerpo/JSON opcionales, ver HTTP)|
 | `command`     | el comando termina con `expect_exit` (por defecto 0) y su salida coincide con `expect_stdout`/`expect_stderr` opcionales; un `user` opcional lo ejecuta como un usuario concreto del SO; `on_change` alerta cuando su salida cambia (p. ej. una versión), solo en forma de array |
@@ -469,6 +471,33 @@ rules:
 Sin esto, una comprobación así es una aserción de salud que falla siempre que el
 estado está ausente: un `fail` rojo permanente y una serie de disponibilidad al
 0 % para lo que en realidad es la condición normal.
+
+### Conexiones TCP (`tcp_connections`)
+
+`tcp_connections` es una comprobación local de estilo condición: cuenta sockets
+TCP IPv4 e IPv6 en estado `ESTABLISHED` cuyo puerto local coincide con `port`.
+Lee `/proc/net/tcp` y `/proc/net/tcp6`; no abre una conexión de red.
+
+```yaml
+checks:
+  conexiones-control-ftp:
+    type: tcp_connections
+    port: 21
+    count: { op: ">", value: 5 }
+    reports: state              # expone activo/inactivo sin cambiar el SLA
+```
+
+El resultado es un recuento de conexiones de transporte, no de usuarios
+autenticados. Para FTP cubre solo las conexiones de control: los sockets de datos
+pasivos, el estado TLS y la identidad de login no se infieren deliberadamente.
+El mismo check sirve para umbrales de conexiones en SSH, HTTP y otros servicios
+TCP. Configúralo en el host propietario del puerto de escucha; un puerto
+reutilizado no puede atribuirse a un único servicio.
+
+Si no se puede leer `/proc`, el check no está disponible en vez de informar cero.
+Cuando un guard lo referencia, Sermo deniega la operación de forma conservadora.
+Fija un `interval` adecuado al usarlo como watch de larga duración; un guard
+vuelve a ejecutar su check justo antes de una operación.
 
 ### Ports
 
@@ -2243,6 +2272,44 @@ block-during-backup:
 Las reglas guard evalúan su condición en el momento en que se solicita una
 acción, así que no admiten ventanas `for:` ni `within:`; declararlas en un guard
 es un error de validación.
+
+#### Guards de conexiones
+
+Los umbrales de conexiones son política de carga, por lo que los servicios de
+catálogo no los activan por defecto. Añade un guard explícito cuando una operación
+deba esperar a los clientes:
+
+```yaml
+checks:
+  conexiones-control-ftp:
+    type: tcp_connections
+    port: 21
+    count: { op: ">", value: 5 }
+    reports: state
+
+rules:
+  bloquear-reinicio-con-conexiones-activas:
+    type: guard
+    blocks: [restart, stop]
+    if: { active: { check: conexiones-control-ftp } }
+    then:
+      action: block
+      message: "${display_name} tiene conexiones TCP activas; reinicio denegado"
+```
+
+El motor de operaciones evalúa este guard inmediatamente antes de las acciones
+manuales y automáticas. Un check de conexiones no disponible deniega la acción
+en vez de tratar un error de observación como un conjunto vacío de conexiones.
+
+Para MySQL/MariaDB y PostgreSQL, usa un check `sql` de solo lectura que cuente
+las sesiones de aplicación que quieres preservar; es más exacto que los sockets
+y requiere una cuenta de monitorización que pueda ver otras sesiones. Redis/Valkey
+ya expone `connected_clients` en su check `redis`, y Memcached expone
+`curr_connections`. Hay sobreescrituras de servicio listas para copiar para
+[MySQL](../examples/services/mysql-active-connections-guard.yml),
+[PostgreSQL](../examples/services/postgres-active-connections-guard.yml),
+[Redis](../examples/services/redis-active-connections-guard.yml) y
+[ProFTPD](../examples/services/proftpd-active-connections-guard.yml).
 
 Los servicios de catálogo MySQL, MariaDB y PostgreSQL que se envían incluyen una comprobación de proceso
 `backup` opcional por defecto y un

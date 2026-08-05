@@ -78,7 +78,9 @@ func assertOpValue(entry map[string]any, noun string) (op, value, errMsg string)
 func finishScalarCompare(b base, label, result, op, threshold string, start time.Time, data map[string]any) Result {
 	ok, err := compareValue(result, op, threshold)
 	if err != nil {
-		return b.result(false, fmt.Sprintf("%s: %v", label, err), start)
+		res := b.result(false, fmt.Sprintf("%s: %v", label, err), start)
+		res.Unavailable = true
+		return res
 	}
 	data[DataKeyOp] = op
 	data[DataKeyThreshold] = threshold

@@ -2151,7 +2151,7 @@ combinarse con `then.notify_interval`.
 **Las checks y los watches comparten los mismos tipos de comprobación.**
 Cualquier comprobación de un solo disparo — las de recursos de host de abajo
 (`storage`, `memory`, `pressure`, `load`, `fds`, `pids`, `conntrack`, `entropy`,
-`zombies`, `oom`, entre otras) *y* las comprobaciones de service (`tcp`,
+`zombies`, `oom`, entre otras) *y* las comprobaciones de service (`tcp`, `tcp_connections`,
 `ports`, `http`, `command`, `file_exists`, `file`, `lockfile`, `binary`,
 `pidfile`, `socket`, `libraries`, `config`, `autofs`, `route`, `clock`,
 `firewall_rules`, `cert`, `sqlite`/`sqlite3`, `websocket`, `count`, y las
@@ -2215,8 +2215,10 @@ identidad del init):
   por watch, así que sus deltas de rate nunca chocan con el muestreo del engine.
 - `service` se ata a la unidad de este servicio.
 
-Las comprobaciones host-globales (`fds`, `storage`, `count`, `load`, `http`, …)
-leen el mismo recurso del host en ambas superficies.
+Las comprobaciones host-globales (`fds`, `storage`, `count`, `load`, `http`,
+`tcp_connections`, …) leen el mismo recurso del host en ambas superficies.
+`tcp_connections` se acota a un puerto local de escucha, no al árbol PID del
+servicio, así que úsalo solo cuando ese puerto identifique unívocamente al servicio.
 
 Usa entradas fire-and-forget para un **hook/notificación** ligado a una señal local
 del servicio. Usa `then.action` para la forma compacta de operación/guard/alerta
