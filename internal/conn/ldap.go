@@ -31,11 +31,12 @@ func (ldapProtocol) DefaultPort() int   { return defaultLDAPPort }
 func (ldapProtocol) RequiresUser() bool { return false }
 
 func (ldapProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	host, port := cfg.hostPortDefaults(defaultLDAPPort)
+	target := newProbeTarget(cfg, defaultLDAPPort)
+	host, port := target.hostPort()
 	timeout := netutil.TimeoutFromContext(ctx, defaultLDAPProbeTimeout)
 
 	url, useTLS := buildLDAPURL(host, port, cfg.TLS)
-	opts := []ldap.DialOpt{ldap.DialWithDialer(probeDialer(cfg.Interface, timeout))}
+	opts := []ldap.DialOpt{ldap.DialWithDialer(target.dialerWithTimeout(timeout))}
 	if useTLS {
 		tc := tlsClientConfig(host)
 		if NormalizeTLS(cfg.TLS) == tlsSkipVerify {

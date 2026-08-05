@@ -97,10 +97,11 @@ func mongoRole(primary, secondary, arbiter bool, setName string) string {
 
 // MongoConnect builds a lazy MongoDB client from cfg.
 func MongoConnect(cfg Config) (*mongo.Client, error) {
-	host, port := cfg.hostPortDefaults(defaultPortMongoDB)
-	opts := options.Client().SetHosts([]string{hostPort(host, port)})
+	target := newProbeTarget(cfg, defaultPortMongoDB)
+	host, _ := target.hostPort()
+	opts := options.Client().SetHosts([]string{target.address()})
 	if cfg.Interface != "" {
-		opts.SetDialer(BindDialer(cfg.Interface))
+		opts.SetDialer(target.dialer())
 	}
 	if cfg.User != "" {
 		// Auth database: an explicit auth_source, else the target database, else
