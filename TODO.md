@@ -7,7 +7,8 @@ exists. Nothing here is committed scope; pick items deliberately.
 
 - [ ] Distributed cluster mode
 - [ ] Remote agents
-- [ ] Remote API authentication
+- [x] Remote web API authentication (HTTP Basic admin/guest roles, CSRF on
+      mutations, loopback by default and TLS reverse proxy for remote access)
 - [ ] Multi-tenant RBAC
 - [ ] Plugin ABI
 - [x] Core notification integrations: email, Slack, Teams and notifier
@@ -102,12 +103,9 @@ a configtest CLI, `mosquitto`, `supervisord`, `udisks2`, `pm2`, etc. (`redis` /
       shell string).
 - [ ] Variable-to-variable references (`variables.x: "${y}"`), with cycle
   detection. Today a variable value containing `${...}` is a validation error.
-- [ ] Service watches — web live view: a service's embedded `watches:` are listed
-      and controllable (monitor/unmonitor) in the web UI but omit the live
-      Meter/Readings, because the host-scoped web live-view path does not model
-      the service PID tree. Wire a service-scoped live view (reuse the web
-      backend's per-service `serviceRuntime` deps) so their gauges render like
-      host watches.
+- [x] Service watches — web live view: embedded `watches:` publish the same
+      snapshot-derived `Meter`/`Readings` as host watches and remain controllable
+      (monitor/unmonitor) in the web UI.
 - [ ] Service watches — tree-scoped `process` watch: the stateful `process` watch
       (per-PID cpu/memory/io conditions and `kill`) is rejected inside a service
       because it matches host-wide by name/user and could kill processes outside
