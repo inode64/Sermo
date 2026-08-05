@@ -54,6 +54,34 @@ type SSHIdleConfig struct {
 	ProtectedProcesses []SSHProtectedProcess
 }
 
+// SSHSession is one interactive terminal proven to descend from a configured
+// sshd executable. PID and StartTicks identify the per-session server process
+// that may be closed; they stay zero when that boundary cannot be identified
+// safely.
+type SSHSession struct {
+	User       string
+	Terminal   string
+	PID        int
+	StartTicks uint64
+	Idle       time.Duration
+}
+
+// SSHSessionSample separates local console terminals from interactive SSH
+// terminals. A collection fails closed when a logged-in terminal cannot be
+// attributed from its live process ancestry.
+type SSHSessionSample struct {
+	Console int
+	SSH     []SSHSession
+}
+
+// SSHSessionConfig identifies the trusted sshd processes for one service.
+// Exact executable and real-user identity, rather than a process name,
+// prevents a local terminal or an unrelated sshd instance from being mislabeled
+// or made closable as an SSH session.
+type SSHSessionConfig struct {
+	SSHDFilters []process.IdentityFilter
+}
+
 // SSHProtectedProcess is a named terminal-scoped process filter. Its Filter
 // never authorizes signalling; it only protects the SSH session owning the TTY.
 type SSHProtectedProcess struct {
@@ -65,6 +93,11 @@ type SSHProtectedProcess struct {
 // It is injected by the daemon so all ssh_idle checks share one procfs snapshot
 // during a cycle.
 type SSHIdleSamplerFunc func(SSHIdleConfig) (SSHIdleSample, error)
+
+// SSHSessionSamplerFunc reads current interactive console and SSH sessions.
+// It is injectable so the dashboard and the SSH-idle check can share the same
+// terminal-aware procfs cache during a daemon generation.
+type SSHSessionSamplerFunc func(SSHSessionConfig) (SSHSessionSample, error)
 
 // sshIdleCheck reports SSH sessions whose terminal has received no input for
 // idle_for. It is condition-style: a satisfied predicate means the configured
@@ -128,15 +161,34 @@ func sshIdleMessage(sample SSHIdleSample) string {
 // a process.CachingReader over an OSReader with ReadTTY enabled so configured
 // checks share one complete terminal-aware process snapshot per daemon cycle.
 func NewSSHIdleSampler(reader process.Reader, lookup *process.UserLookup) SSHIdleSamplerFunc {
+	reader, lookup = terminalSessionDeps(reader, lookup)
+	return newSSHIdleSampler(reader, lookup, utmp.Sessions, sshSessionTerminal, time.Now)
+}
+
+// NewSSHSessionSampler builds a native interactive-session sampler. reader
+// should normally be the same terminal-aware caching reader used by
+// NewSSHIdleSampler, keeping dashboard refreshes from rescanning procfs.
+func NewSSHSessionSampler(reader process.Reader, lookup *process.UserLookup) SSHSessionSamplerFunc {
+	reader, lookup = terminalSessionDeps(reader, lookup)
+	return newSSHSessionSampler(reader, lookup, utmp.Sessions, sshSessionTerminal, time.Now)
+}
+
+func terminalSessionDeps(reader process.Reader, lookup *process.UserLookup) (process.Reader, *process.UserLookup) {
 	if reader == nil {
 		reader = process.NewCachingReader(process.OSReader{ReadTTY: true}, 0)
 	}
 	if lookup == nil {
 		lookup = process.DefaultUserLookup()
 	}
-	return newSSHIdleSampler(reader, lookup, utmp.Sessions, func(line string) (utmp.Terminal, error) {
-		return utmp.TerminalInfo(sshIdleDevRoot, line)
-	}, time.Now)
+	return reader, lookup
+}
+
+func sshSessionTerminal(line string) (utmp.Terminal, error) {
+	terminal, err := utmp.TerminalInfo(sshIdleDevRoot, line)
+	if err != nil {
+		return utmp.Terminal{}, fmt.Errorf("read terminal %s: %w", line, err)
+	}
+	return terminal, nil
 }
 
 func defaultSSHIdleSampler() SSHIdleSamplerFunc {
@@ -162,6 +214,42 @@ func newSSHIdleSampler(reader process.Reader, lookup *process.UserLookup, sessio
 		}
 		return sampleSSHIdle(sessions, snapshot, lookup, terminal, now(), config, sshdFilters)
 	}
+}
+
+func newSSHSessionSampler(reader process.Reader, lookup *process.UserLookup, sessions func() ([]utmp.Session, error), terminal func(string) (utmp.Terminal, error), now func() time.Time) SSHSessionSamplerFunc {
+	return func(config SSHSessionConfig) (SSHSessionSample, error) {
+		sshdFilters, err := sshSessionFilters(config.SSHDFilters)
+		if err != nil {
+			return SSHSessionSample{}, err
+		}
+		loggedIn, err := sessions()
+		if err != nil {
+			return SSHSessionSample{}, fmt.Errorf("load terminal sessions: %w", err)
+		}
+		snapshot, err := process.Snapshot(reader)
+		if err != nil {
+			return SSHSessionSample{}, fmt.Errorf("read terminal processes: %w", err)
+		}
+		return sampleSSHSessions(loggedIn, snapshot, terminal, now(), sshdFilters, lookup.ResolveUser)
+	}
+}
+
+func sshSessionFilters(filters []process.IdentityFilter) ([]process.IdentityFilter, error) {
+	if len(filters) == 0 {
+		return nil, errors.New("sshd process selector is required")
+	}
+	out := make([]process.IdentityFilter, 0, len(filters))
+	for _, raw := range filters {
+		if raw.Exe == "" || raw.User == "" {
+			return nil, errors.New("sshd process selector requires exact exe and user")
+		}
+		filter, err := process.NewIdentityFilter(raw.Exe, raw.User, "")
+		if err != nil {
+			return nil, fmt.Errorf("sshd process selector: %w", err)
+		}
+		out = append(out, filter)
+	}
+	return out, nil
 }
 
 func sshdFilters(exes []string) ([]process.IdentityFilter, error) {
@@ -201,7 +289,10 @@ func sampleSSHIdle(sessions []utmp.Session, snapshot map[int]process.Identity, l
 		if len(processes) == 0 {
 			return SSHIdleSample{}, fmt.Errorf("terminal %s has no visible processes", session.Line)
 		}
-		ssh, unknown := terminalSSH(processes, snapshot, sshdFilters)
+		ssh, _, unknown, err := terminalSSH(processes, snapshot, sshdFilters, nil)
+		if err != nil {
+			return SSHIdleSample{}, fmt.Errorf("attribute terminal %s to sshd: %w", session.Line, err)
+		}
 		if unknown {
 			return SSHIdleSample{}, fmt.Errorf("cannot attribute terminal %s to sshd", session.Line)
 		}
@@ -227,6 +318,47 @@ func sampleSSHIdle(sessions []utmp.Session, snapshot map[int]process.Identity, l
 	return sample, nil
 }
 
+func sampleSSHSessions(sessions []utmp.Session, snapshot map[int]process.Identity, terminal func(string) (utmp.Terminal, error), now time.Time, sshdFilters []process.IdentityFilter, resolveUser process.UserResolver) (SSHSessionSample, error) {
+	seen := map[string]bool{}
+	var sample SSHSessionSample
+	for _, session := range sessions {
+		if seen[session.Line] {
+			continue
+		}
+		seen[session.Line] = true
+		info, err := terminal(session.Line)
+		if err != nil {
+			return SSHSessionSample{}, fmt.Errorf("terminal %s: %w", session.Line, err)
+		}
+		if info.Device == 0 {
+			return SSHSessionSample{}, fmt.Errorf("terminal %s has no device", session.Line)
+		}
+		processes := terminalProcesses(snapshot, info.Device)
+		if len(processes) == 0 {
+			return SSHSessionSample{}, fmt.Errorf("terminal %s has no visible processes", session.Line)
+		}
+		ssh, target, unknown, err := terminalSSH(processes, snapshot, sshdFilters, resolveUser)
+		if err != nil {
+			return SSHSessionSample{}, fmt.Errorf("attribute terminal %s to sshd: %w", session.Line, err)
+		}
+		if unknown {
+			return SSHSessionSample{}, fmt.Errorf("cannot attribute terminal %s to sshd", session.Line)
+		}
+		if !ssh {
+			sample.Console++
+			continue
+		}
+		sample.SSH = append(sample.SSH, SSHSession{
+			User:       session.User,
+			Terminal:   session.Line,
+			PID:        target.PID,
+			StartTicks: target.StartTicks,
+			Idle:       max(now.Sub(info.AccessedAt), 0),
+		})
+	}
+	return sample, nil
+}
+
 func terminalProcesses(snapshot map[int]process.Identity, device uint64) []process.Identity {
 	processes := make([]process.Identity, 0)
 	for _, id := range snapshot {
@@ -238,40 +370,93 @@ func terminalProcesses(snapshot map[int]process.Identity, device uint64) []proce
 	return processes
 }
 
-func terminalSSH(processes []process.Identity, snapshot map[int]process.Identity, filters []process.IdentityFilter) (ssh, unknown bool) {
+func terminalSSH(processes []process.Identity, snapshot map[int]process.Identity, filters []process.IdentityFilter, resolveUser process.UserResolver) (ssh bool, target process.Identity, unknown bool, err error) {
 	for _, id := range processes {
-		matched, uncertain := sshAncestor(id, snapshot, filters)
+		matched, candidate, uncertain, matchErr := sshAncestor(id, snapshot, filters, resolveUser)
+		if matchErr != nil {
+			return false, process.Identity{}, true, matchErr
+		}
 		if matched {
-			return true, false
+			return true, candidate, false, nil
 		}
 		unknown = unknown || uncertain
 	}
-	return false, unknown
+	return false, process.Identity{}, unknown, nil
 }
 
-func sshAncestor(id process.Identity, snapshot map[int]process.Identity, filters []process.IdentityFilter) (matched, unknown bool) {
+func sshAncestor(id process.Identity, snapshot map[int]process.Identity, filters []process.IdentityFilter, resolveUser process.UserResolver) (matched bool, target process.Identity, unknown bool, err error) {
 	seen := map[int]bool{}
+	terminal := id.TTY
 	for {
 		if seen[id.PID] {
-			return false, true
+			return false, process.Identity{}, true, nil
 		}
 		seen[id.PID] = true
+		if target.PID == 0 && (!id.TTYOK || id.TTY != terminal) {
+			target = id
+		}
 		for _, filter := range filters {
-			outcome, _ := filter.Match(id, nil, nil)
+			outcome, matchErr := filter.Match(id, resolveUser, nil)
+			if matchErr != nil {
+				return false, process.Identity{}, true, fmt.Errorf("match sshd identity: %w", matchErr)
+			}
+			if outcome == process.IdentityNoMatch && sshdIdentityConflict(id, filter) {
+				// The listener has the configured executable but another real UID.
+				// Treat it as untrusted rather than misreporting its terminal as a
+				// local console or offering it for a close action.
+				return false, process.Identity{}, true, nil
+			}
 			if outcome == process.IdentityMatched {
-				return true, false
+				// A direct shell child of sshd has no separate session boundary;
+				// never let the trusted listener itself become a close target.
+				if target.PID == id.PID {
+					target = process.Identity{}
+				}
+				return true, target, false, nil
 			}
 			unknown = unknown || outcome == process.IdentityUnknown
 		}
 		if id.PPID <= 1 {
-			return false, unknown
+			return false, process.Identity{}, unknown, nil
 		}
 		parent, ok := snapshot[id.PPID]
 		if !ok {
-			return false, true
+			return false, process.Identity{}, true, nil
 		}
 		id = parent
 	}
+}
+
+func sshdIdentityConflict(id process.Identity, filter process.IdentityFilter) bool {
+	if filter.Exe == "" || filter.User == "" || !id.ExeOK {
+		return false
+	}
+	exeOnly, err := process.NewIdentityFilter(filter.Exe, "", "")
+	if err != nil {
+		return true
+	}
+	outcome, err := exeOnly.Match(id, nil, nil)
+	return err != nil || outcome == process.IdentityMatched
+}
+
+// VerifySSHSession confirms that a client-requested session is still live and
+// has the same terminal boundary and process generation observed by the
+// dashboard. It is deliberately exact: a vanished terminal or recycled PID
+// must be rediscovered rather than signalled.
+func (s SSHSessionSample) VerifySSHSession(want SSHSession) error {
+	if want.PID <= 0 || want.StartTicks == 0 || want.Terminal == "" {
+		return errors.New("invalid SSH session target")
+	}
+	for _, got := range s.SSH {
+		if got.PID != want.PID || got.Terminal != want.Terminal {
+			continue
+		}
+		if got.StartTicks == 0 || got.StartTicks != want.StartTicks {
+			return errors.New("SSH session changed; refresh and try again")
+		}
+		return nil
+	}
+	return errors.New("SSH session is no longer active; refresh and try again")
 }
 
 func terminalProtected(processes []process.Identity, filters []SSHProtectedProcess, lookup *process.UserLookup) (bool, error) {

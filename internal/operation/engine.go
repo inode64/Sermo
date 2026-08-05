@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"syscall"
 	"time"
 
 	"sermo/internal/checks"
@@ -26,6 +27,10 @@ const (
 	actionRestart = string(rules.ActionRestart)
 	actionReload  = string(rules.ActionReload)
 	actionResume  = string(rules.ActionResume)
+	// actionCloseSession is intentionally not a rule action: closing an
+	// interactive SSH terminal always requires an explicit web request and is
+	// never eligible for automatic remediation.
+	actionCloseSession = "close_session"
 
 	// postflightMaxAttempts lets a daemon finish binding its ready socket after
 	// its init manager reports a successful start. The retries remain within the
@@ -83,6 +88,10 @@ type Engine struct {
 	// trusted process identity before a restart stops it. Nil means no extra
 	// identity gate is available.
 	RestartIdentity func(ctx context.Context) (ok bool, reason string, err error)
+	// SessionVerifier re-discovers a manual SSH-session target immediately before
+	// signalling it. Nil means this service does not offer session closing.
+	SessionVerifier func(ctx context.Context, target SessionTarget) error
+	SessionSignaler process.Signaler
 	// ReloadFunc reloads the service's config in place. When nil the engine falls
 	// back to Manager.Reload (the backend per-unit reload). A `reload:` block
 	// builds a richer closure: a native signal/command that either overrides the
@@ -127,6 +136,16 @@ type plan struct {
 	resume        bool
 	reload        bool
 	postflight    bool
+	closeSession  *SessionTarget
+}
+
+// SessionTarget is a freshly displayed SSH terminal session. StartTicks binds
+// its PID to one process generation so a PID that has exited and been reused is
+// rejected before it can be signalled.
+type SessionTarget struct {
+	PID        int
+	StartTicks uint64
+	Terminal   string
 }
 
 // Restart executes the configured restart strategy and verifies health. Staged
@@ -160,6 +179,15 @@ func (e Engine) Reload(ctx context.Context) Result {
 // Resume runs preflight, resumes a paused service and verifies health.
 func (e Engine) Resume(ctx context.Context) Result {
 	return e.run(ctx, plan{action: actionResume, preflight: true, resume: true, postflight: true})
+}
+
+// CloseSession gracefully terminates one operator-selected SSH session. It
+// shares the service operation lock, named locks, guards, timeout and event
+// path with normal service actions, but deliberately skips service pre/post
+// flight because the SSH daemon itself remains running. It sends only SIGTERM;
+// there is no escalation to SIGKILL for an interactive user session.
+func (e Engine) CloseSession(ctx context.Context, target SessionTarget) Result {
+	return e.run(ctx, plan{action: actionCloseSession, closeSession: &target})
 }
 
 // Do dispatches one action name to the matching operation, returning its Result.
@@ -222,6 +250,13 @@ func (e Engine) run(ctx context.Context, p plan) (result Result) {
 	if !e.checkNamedLocks(&result) || !e.runPreflight(ctx, p, &result) || !e.checkGuards(ctx, p, &result) {
 		return result
 	}
+	if p.closeSession != nil {
+		if !e.closeSession(ctx, *p.closeSession, &result) {
+			return result
+		}
+		result.Message = "close SSH session ok"
+		return result
+	}
 
 	var stopped, systemdReactivated bool
 	if p.stop {
@@ -259,6 +294,39 @@ func (e Engine) run(ctx context.Context, p plan) (result Result) {
 		result.Message += " (stale: " + strings.Join(staleWarn, "; ") + ")"
 	}
 	return result
+}
+
+func (e Engine) closeSession(ctx context.Context, target SessionTarget, result *Result) bool {
+	if e.SessionVerifier == nil {
+		result.Status = ResultFailed
+		result.Message = "SSH session close is unavailable for this service"
+		return false
+	}
+	if err := ctx.Err(); err != nil {
+		result.Status = ResultFailed
+		result.Message = "close SSH session: " + err.Error()
+		return false
+	}
+	if err := e.SessionVerifier(ctx, target); err != nil {
+		result.Status = ResultFailed
+		result.Message = "close SSH session: " + err.Error()
+		return false
+	}
+	if err := ctx.Err(); err != nil {
+		result.Status = ResultFailed
+		result.Message = "close SSH session: " + err.Error()
+		return false
+	}
+	signaler := e.SessionSignaler
+	if signaler == nil {
+		signaler = process.OSSignaler{}
+	}
+	if err := signaler.Signal(target.PID, syscall.SIGTERM); err != nil {
+		result.Status = ResultFailed
+		result.Message = "close SSH session: " + err.Error()
+		return false
+	}
+	return true
 }
 
 // failPhase marks result failed with the phase's timeout message when the

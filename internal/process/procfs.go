@@ -193,7 +193,8 @@ func (r OSReader) Identity(pid int) (Identity, bool) {
 		Cmdline: readCmdline(pid),
 	}
 	if r.ReadTTY {
-		id.TTY, id.TTYOK = terminalDevice(pid)
+		id.TTY, id.StartTicks, id.TTYOK = terminalIdentity(pid)
+		id.StartTicksOK = id.TTYOK
 		if !id.TTYOK {
 			return Identity{}, false
 		}
@@ -202,20 +203,23 @@ func (r OSReader) Identity(pid int) (Identity, bool) {
 	return id, true
 }
 
-// terminalDevice reads the controlling-terminal device number (tty_nr, stat
-// field 7). A zero device is a successfully observed process without a
-// controlling terminal; ok=false means the stat record was unavailable or
-// malformed.
-func terminalDevice(pid int) (device uint64, ok bool) {
+// terminalIdentity reads the controlling terminal device number and process
+// start time from one stat record. Terminal-aware readers need both values, so
+// keeping the parse together avoids a second procfs read per process.
+func terminalIdentity(pid int) (device, startTicks uint64, ok bool) {
 	fields, ok := StatFields(pid)
-	if !ok || len(fields) <= procStatTTYIndex {
-		return 0, false
+	if !ok || len(fields) <= procStatTTYIndex || len(fields) <= procStatStartTimeIndex {
+		return 0, 0, false
 	}
 	value, err := strconv.ParseInt(fields[procStatTTYIndex], numericIDBase, 64)
 	if err != nil || value < 0 {
-		return 0, false
+		return 0, 0, false
 	}
-	return uint64(value), true
+	start, err := strconv.ParseUint(fields[procStatStartTimeIndex], numericIDBase, 64)
+	if err != nil {
+		return 0, 0, false
+	}
+	return uint64(value), start, true
 }
 
 func (r OSReader) userName(uid uint32) string {

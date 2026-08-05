@@ -140,17 +140,21 @@ type Identity struct {
 	// TTY is the Linux device number of the controlling terminal. TTYOK is
 	// false when the reader was not asked to collect terminal identity or the
 	// kernel stat record could not be read.
-	TTY     uint64
-	TTYOK   bool
-	UID     uint32
-	GID     uint32
-	User    string
-	Group   string
-	Exe     string
-	ExeOK   bool
-	ExePrev string // path of the replaced binary; empty unless it was deleted
-	State   string // /proc/<pid>/stat run state: R, S, D, Z (zombie), ...
-	Cmdline []string
+	TTY   uint64
+	TTYOK bool
+	// StartTicks is the kernel start time (clock ticks since boot) read with
+	// terminal identity. It lets terminal-scoped actions reject a recycled PID.
+	StartTicks   uint64
+	StartTicksOK bool
+	UID          uint32
+	GID          uint32
+	User         string
+	Group        string
+	Exe          string
+	ExeOK        bool
+	ExePrev      string // path of the replaced binary; empty unless it was deleted
+	State        string // /proc/<pid>/stat run state: R, S, D, Z (zombie), ...
+	Cmdline      []string
 }
 
 // Raw process states read from /proc status/stat files.
