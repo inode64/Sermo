@@ -325,73 +325,75 @@ type checkBuildInput struct {
 
 type checkBuilder func(checkBuildInput) (Check, string)
 
-// checkBuilders is the central registry for built-in checks. Connection
-// protocols remain in conn's own registry because their types are extensible.
-var checkBuilders = map[string]checkBuilder{
-	CheckTypeTCP:          func(in checkBuildInput) (Check, string) { return buildTCPCheck(in.base, in.entry) },
-	CheckTypePorts:        func(in checkBuildInput) (Check, string) { return buildPortsCheck(in.base, in.entry) },
-	CheckTypeHTTP:         func(in checkBuildInput) (Check, string) { return buildHTTPCheck(in.base, in.entry, in.client) },
-	CheckTypeCommand:      func(in checkBuildInput) (Check, string) { return buildCommandCheck(in.base, in.entry, in.runner) },
-	CheckTypeClock:        func(in checkBuildInput) (Check, string) { return buildClockCheck(in.base, in.entry) },
-	CheckTypeService:      func(in checkBuildInput) (Check, string) { return buildServiceCheck(in.base, in.entry, in.deps) },
-	CheckTypeFileExists:   func(in checkBuildInput) (Check, string) { return buildFileExistsCheck(in.base, in.entry) },
-	CheckTypeFile:         func(in checkBuildInput) (Check, string) { return buildFileCheck(in.base, in.entry) },
-	CheckTypeLockfile:     func(in checkBuildInput) (Check, string) { return buildLockfileCheck(in.base, in.entry) },
-	CheckTypeBinary:       func(in checkBuildInput) (Check, string) { return buildBinaryCheck(in.base, in.entry) },
-	CheckTypePidfile:      func(in checkBuildInput) (Check, string) { return buildPidfileCheck(in.base, in.entry, in.deps) },
-	CheckTypeSocket:       func(in checkBuildInput) (Check, string) { return buildSocketCheck(in.base, in.entry) },
-	CheckTypeLibraries:    func(in checkBuildInput) (Check, string) { return buildLibrariesCheck(in.base, in.entry) },
-	CheckTypeMetric:       func(in checkBuildInput) (Check, string) { return buildMetricCheck(in.base, in.entry, in.deps) },
-	CheckTypeProcess:      func(in checkBuildInput) (Check, string) { return buildProcessCheck(in.base, in.entry, in.deps) },
-	CheckTypeStaleBinary:  func(in checkBuildInput) (Check, string) { return buildStaleBinaryCheck(in.base, in.deps) },
-	CheckTypeCount:        func(in checkBuildInput) (Check, string) { return buildCountCheck(in.base, in.entry) },
-	CheckTypeStorage:      func(in checkBuildInput) (Check, string) { return buildStorageCheck(in.base, in.entry, in.deps) },
-	CheckTypeAutofs:       func(in checkBuildInput) (Check, string) { return buildAutofsCheck(in.base, in.entry, in.deps) },
-	CheckTypeNet:          func(in checkBuildInput) (Check, string) { return buildNetCheck(in.base, in.entry, in.deps) },
-	CheckTypeLoad:         func(in checkBuildInput) (Check, string) { return buildLoadCheck(in.base, in.entry, in.deps) },
-	CheckTypeUsers:        func(in checkBuildInput) (Check, string) { return buildUsersCheck(in.base, in.entry, in.deps) },
-	CheckTypeSSHIdle:      func(in checkBuildInput) (Check, string) { return buildSSHIdleCheck(in.base, in.entry, in.deps) },
-	CheckTypeProcessCount: func(in checkBuildInput) (Check, string) { return buildProcessCountCheck(in.base, in.entry, in.deps) },
-	CheckTypeHdparm:       func(in checkBuildInput) (Check, string) { return buildHdparmCheck(in.base, in.entry, in.runner) },
-	CheckTypeSensors:      func(in checkBuildInput) (Check, string) { return buildSensorsCheck(in.base, in.entry, in.deps) },
-	CheckTypeSmart:        func(in checkBuildInput) (Check, string) { return buildSmartCheck(in.base, in.entry, in.runner) },
-	CheckTypeRAID:         func(in checkBuildInput) (Check, string) { return buildRaidCheck(in.base, in.entry, in.deps) },
-	CheckTypeLVM:          func(in checkBuildInput) (Check, string) { return buildLVMCheck(in.base, in.entry, in.runner) },
-	CheckTypeEDAC:         func(in checkBuildInput) (Check, string) { return buildEdacCheck(in.base, in.entry, in.deps) },
-	CheckTypeConfig:       func(in checkBuildInput) (Check, string) { return buildConfigCheck(in.base, in.entry, in.runner) },
-	CheckTypeFDS:          func(in checkBuildInput) (Check, string) { return buildFdsCheck(in.base, in.entry, in.deps) },
-	CheckTypeMemory:       func(in checkBuildInput) (Check, string) { return buildMemoryCheck(in.base, in.entry, in.deps) },
-	CheckTypePressure:     func(in checkBuildInput) (Check, string) { return buildPressureCheck(in.base, in.entry, in.deps) },
-	CheckTypePIDs:         func(in checkBuildInput) (Check, string) { return buildPidsCheck(in.base, in.entry, in.deps) },
-	CheckTypeDiskIO:       func(in checkBuildInput) (Check, string) { return buildDiskIOCheck(in.base, in.entry, in.deps) },
-	CheckTypeConntrack:    func(in checkBuildInput) (Check, string) { return buildConntrackCheck(in.base, in.entry, in.deps) },
-	CheckTypeFirewallRules: func(in checkBuildInput) (Check, string) {
+// builtinCheckSpecs is the central registry for built-in checks. It keeps
+// construction and static type capabilities together. Connection protocols
+// remain in conn's own registry because their types are extensible.
+var builtinCheckSpecs = []checkSpec{
+	{info: TypeInfo{Name: CheckTypeTCP, Health: true}, build: func(in checkBuildInput) (Check, string) { return buildTCPCheck(in.base, in.entry) }},
+	{info: TypeInfo{Name: CheckTypeTCPConnections}, build: func(in checkBuildInput) (Check, string) { return buildTCPConnectionsCheck(in.base, in.entry) }},
+	{info: TypeInfo{Name: CheckTypePorts, Health: true}, build: func(in checkBuildInput) (Check, string) { return buildPortsCheck(in.base, in.entry) }},
+	{info: TypeInfo{Name: CheckTypeHTTP, Health: true}, build: func(in checkBuildInput) (Check, string) { return buildHTTPCheck(in.base, in.entry, in.client) }},
+	{info: TypeInfo{Name: CheckTypeCommand, Health: true}, build: func(in checkBuildInput) (Check, string) { return buildCommandCheck(in.base, in.entry, in.runner) }},
+	{info: TypeInfo{Name: CheckTypeClock, Health: true}, build: func(in checkBuildInput) (Check, string) { return buildClockCheck(in.base, in.entry) }},
+	{info: TypeInfo{Name: CheckTypeService, Health: true, ServiceScoped: true}, build: func(in checkBuildInput) (Check, string) { return buildServiceCheck(in.base, in.entry, in.deps) }},
+	{info: TypeInfo{Name: CheckTypeFileExists, Health: true}, build: func(in checkBuildInput) (Check, string) { return buildFileExistsCheck(in.base, in.entry) }},
+	{info: TypeInfo{Name: CheckTypeFile, Health: true}, build: func(in checkBuildInput) (Check, string) { return buildFileCheck(in.base, in.entry) }},
+	{info: TypeInfo{Name: CheckTypeLockfile, Health: true}, build: func(in checkBuildInput) (Check, string) { return buildLockfileCheck(in.base, in.entry) }},
+	{info: TypeInfo{Name: CheckTypeBinary, Health: true}, build: func(in checkBuildInput) (Check, string) { return buildBinaryCheck(in.base, in.entry) }},
+	{info: TypeInfo{Name: CheckTypePidfile, Health: true}, build: func(in checkBuildInput) (Check, string) { return buildPidfileCheck(in.base, in.entry, in.deps) }},
+	{info: TypeInfo{Name: CheckTypeSocket, Health: true}, build: func(in checkBuildInput) (Check, string) { return buildSocketCheck(in.base, in.entry) }},
+	{info: TypeInfo{Name: CheckTypeProcess, Health: true, ServiceScoped: true}, build: func(in checkBuildInput) (Check, string) { return buildProcessCheck(in.base, in.entry, in.deps) }},
+	// Condition, not health: OK means "nothing is stale", so a rule fires it
+	// with `active:` the same way it would an alert-style predicate.
+	{info: TypeInfo{Name: CheckTypeStaleBinary, ServiceScoped: true}, build: func(in checkBuildInput) (Check, string) { return buildStaleBinaryCheck(in.base, in.deps) }},
+	{info: TypeInfo{Name: CheckTypeMetric, ServiceScoped: true}, build: func(in checkBuildInput) (Check, string) { return buildMetricCheck(in.base, in.entry, in.deps) }},
+	{info: TypeInfo{Name: CheckTypeLibraries, Health: true}, build: func(in checkBuildInput) (Check, string) { return buildLibrariesCheck(in.base, in.entry) }},
+	{info: TypeInfo{Name: CheckTypeCount}, build: func(in checkBuildInput) (Check, string) { return buildCountCheck(in.base, in.entry) }},
+	{info: TypeInfo{Name: CheckTypeStorage}, build: func(in checkBuildInput) (Check, string) { return buildStorageCheck(in.base, in.entry, in.deps) }},
+	{info: TypeInfo{Name: CheckTypeAutofs, Health: true}, build: func(in checkBuildInput) (Check, string) { return buildAutofsCheck(in.base, in.entry, in.deps) }},
+	{info: TypeInfo{Name: CheckTypeLoad}, build: func(in checkBuildInput) (Check, string) { return buildLoadCheck(in.base, in.entry, in.deps) }},
+	{info: TypeInfo{Name: CheckTypeUsers}, build: func(in checkBuildInput) (Check, string) { return buildUsersCheck(in.base, in.entry, in.deps) }},
+	{info: TypeInfo{Name: CheckTypeSSHIdle}, build: func(in checkBuildInput) (Check, string) { return buildSSHIdleCheck(in.base, in.entry, in.deps) }},
+	{info: TypeInfo{Name: CheckTypeProcessCount}, build: func(in checkBuildInput) (Check, string) { return buildProcessCountCheck(in.base, in.entry, in.deps) }},
+	{info: TypeInfo{Name: CheckTypeHdparm}, build: func(in checkBuildInput) (Check, string) { return buildHdparmCheck(in.base, in.entry, in.runner) }},
+	{info: TypeInfo{Name: CheckTypeSensors}, build: func(in checkBuildInput) (Check, string) { return buildSensorsCheck(in.base, in.entry, in.deps) }},
+	{info: TypeInfo{Name: CheckTypeSmart}, build: func(in checkBuildInput) (Check, string) { return buildSmartCheck(in.base, in.entry, in.runner) }},
+	{info: TypeInfo{Name: CheckTypeRAID}, build: func(in checkBuildInput) (Check, string) { return buildRaidCheck(in.base, in.entry, in.deps) }},
+	{info: TypeInfo{Name: CheckTypeLVM, Health: true}, build: func(in checkBuildInput) (Check, string) { return buildLVMCheck(in.base, in.entry, in.runner) }},
+	{info: TypeInfo{Name: CheckTypeEDAC}, build: func(in checkBuildInput) (Check, string) { return buildEdacCheck(in.base, in.entry, in.deps) }},
+	{info: TypeInfo{Name: CheckTypeConfig, Health: true}, build: func(in checkBuildInput) (Check, string) { return buildConfigCheck(in.base, in.entry, in.runner) }},
+	{info: TypeInfo{Name: CheckTypeFDS}, build: func(in checkBuildInput) (Check, string) { return buildFdsCheck(in.base, in.entry, in.deps) }},
+	{info: TypeInfo{Name: CheckTypeMemory}, build: func(in checkBuildInput) (Check, string) { return buildMemoryCheck(in.base, in.entry, in.deps) }},
+	{info: TypeInfo{Name: CheckTypePressure}, build: func(in checkBuildInput) (Check, string) { return buildPressureCheck(in.base, in.entry, in.deps) }},
+	{info: TypeInfo{Name: CheckTypePIDs}, build: func(in checkBuildInput) (Check, string) { return buildPidsCheck(in.base, in.entry, in.deps) }},
+	{info: TypeInfo{Name: CheckTypeDiskIO}, build: func(in checkBuildInput) (Check, string) { return buildDiskIOCheck(in.base, in.entry, in.deps) }},
+	{info: TypeInfo{Name: CheckTypeConntrack}, build: func(in checkBuildInput) (Check, string) { return buildConntrackCheck(in.base, in.entry, in.deps) }},
+	{info: TypeInfo{Name: CheckTypeEntropy}, build: func(in checkBuildInput) (Check, string) { return buildEntropyCheck(in.base, in.entry, in.deps) }},
+	{info: TypeInfo{Name: CheckTypeZombies}, build: func(in checkBuildInput) (Check, string) { return buildZombieCheck(in.base, in.entry, in.deps) }},
+	{info: TypeInfo{Name: CheckTypeOOM}, build: func(in checkBuildInput) (Check, string) { return buildOomCheck(in.base, in.entry, in.deps) }},
+	{info: TypeInfo{Name: CheckTypeCert, Health: true}, build: func(in checkBuildInput) (Check, string) { return buildCertCheck(in.base, in.entry, in.deps) }},
+	{info: TypeInfo{Name: CheckTypeSQLite, Health: true}, build: func(in checkBuildInput) (Check, string) { return buildSqliteCheck(in.base, in.entry) }},
+	{info: TypeInfo{Name: CheckTypeSQLite3, Health: true}, build: func(in checkBuildInput) (Check, string) { return buildSqliteCheck(in.base, in.entry) }},
+	{info: TypeInfo{Name: CheckTypeSQL}, build: func(in checkBuildInput) (Check, string) { return buildSQLCheck(in.base, in.entry) }},
+	{info: TypeInfo{Name: CheckTypeMongoDBQuery}, build: func(in checkBuildInput) (Check, string) { return buildMongoCheck(in.base, in.entry) }},
+	{info: TypeInfo{Name: CheckTypeInfluxDBQuery}, build: func(in checkBuildInput) (Check, string) { return buildInfluxCheck(in.base, in.entry) }},
+	{info: TypeInfo{Name: CheckTypeSize}, build: func(in checkBuildInput) (Check, string) { return buildSizeCheck(in.base, in.entry, in.deps) }},
+	{info: TypeInfo{Name: CheckTypeWebsocket, Health: true}, build: func(in checkBuildInput) (Check, string) { return buildWebsocketCheck(in.base, in.entry) }},
+	{info: TypeInfo{Name: CheckTypeNet}, build: func(in checkBuildInput) (Check, string) { return buildNetCheck(in.base, in.entry, in.deps) }},
+	{info: TypeInfo{Name: CheckTypeICMP}, build: func(in checkBuildInput) (Check, string) { return buildICMPCheck(in.base, in.entry, in.deps) }},
+	{info: TypeInfo{Name: CheckTypeSwap}, build: func(in checkBuildInput) (Check, string) { return buildSwapCheck(in.base, in.entry, in.deps) }},
+	{info: TypeInfo{Name: CheckTypeRoute, Health: true}, build: func(in checkBuildInput) (Check, string) { return buildRouteCheck(in.base, in.entry, in.deps) }},
+	{info: TypeInfo{Name: CheckTypeFirewallRules, Health: true}, build: func(in checkBuildInput) (Check, string) {
 		return buildFirewallRulesCheck(in.base, in.entry, in.runner, in.deps)
-	},
-	CheckTypeEntropy:       func(in checkBuildInput) (Check, string) { return buildEntropyCheck(in.base, in.entry, in.deps) },
-	CheckTypeZombies:       func(in checkBuildInput) (Check, string) { return buildZombieCheck(in.base, in.entry, in.deps) },
-	CheckTypeOOM:           func(in checkBuildInput) (Check, string) { return buildOomCheck(in.base, in.entry, in.deps) },
-	CheckTypeCert:          func(in checkBuildInput) (Check, string) { return buildCertCheck(in.base, in.entry, in.deps) },
-	CheckTypeSQLite:        func(in checkBuildInput) (Check, string) { return buildSqliteCheck(in.base, in.entry) },
-	CheckTypeSQLite3:       func(in checkBuildInput) (Check, string) { return buildSqliteCheck(in.base, in.entry) },
-	CheckTypeSwap:          func(in checkBuildInput) (Check, string) { return buildSwapCheck(in.base, in.entry, in.deps) },
-	CheckTypeICMP:          func(in checkBuildInput) (Check, string) { return buildICMPCheck(in.base, in.entry, in.deps) },
-	CheckTypeRoute:         func(in checkBuildInput) (Check, string) { return buildRouteCheck(in.base, in.entry, in.deps) },
-	CheckTypeSQL:           func(in checkBuildInput) (Check, string) { return buildSQLCheck(in.base, in.entry) },
-	CheckTypeMongoDBQuery:  func(in checkBuildInput) (Check, string) { return buildMongoCheck(in.base, in.entry) },
-	CheckTypeInfluxDBQuery: func(in checkBuildInput) (Check, string) { return buildInfluxCheck(in.base, in.entry) },
-	CheckTypeWebsocket:     func(in checkBuildInput) (Check, string) { return buildWebsocketCheck(in.base, in.entry) },
-	CheckTypeSize:          func(in checkBuildInput) (Check, string) { return buildSizeCheck(in.base, in.entry, in.deps) },
-
-	CheckTypeTCPConnections: func(in checkBuildInput) (Check, string) { return buildTCPConnectionsCheck(in.base, in.entry) },
+	}},
 }
 
 func buildCheck(typ string, b base, entry map[string]any, runner execx.Runner, client *http.Client, deps Deps) (Check, string) {
 	if typ == "" {
 		return nil, "missing type"
 	}
-	if builder, ok := checkBuilders[typ]; ok {
-		check, warn := builder(checkBuildInput{base: b, entry: entry, runner: runner, client: client, deps: deps})
+	if spec, ok := checkSpecByName[typ]; ok {
+		check, warn := spec.build(checkBuildInput{base: b, entry: entry, runner: runner, client: client, deps: deps})
 		if warn == "" && check == nil {
 			// A builder must return either a check or a warning. Turning a
 			// silent nil into a warning keeps every caller's "no warning means

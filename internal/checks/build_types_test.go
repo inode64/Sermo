@@ -21,6 +21,22 @@ func TestSingleShotCheckTypesAreBuildable(t *testing.T) {
 	}
 }
 
+func TestBuiltinCheckSpecsAreUniqueAndComplete(t *testing.T) {
+	seen := make(map[string]struct{}, len(builtinCheckSpecs))
+	for _, spec := range builtinCheckSpecs {
+		if spec.info.Name == "" {
+			t.Fatal("built-in check spec has no type name")
+		}
+		if _, duplicate := seen[spec.info.Name]; duplicate {
+			t.Errorf("duplicate built-in check type %q", spec.info.Name)
+		}
+		seen[spec.info.Name] = struct{}{}
+		if spec.build == nil {
+			t.Errorf("%q has no builder", spec.info.Name)
+		}
+	}
+}
+
 func TestTypeInfoCapabilities(t *testing.T) {
 	tests := []struct {
 		typ           string

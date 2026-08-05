@@ -1,17 +1,23 @@
 package checks
 
-// TypeInfo describes static capabilities of a built-in check type. Runtime
-// construction still lives in buildCheck; this table keeps public type lists,
-// validation capabilities and health/condition semantics from drifting apart.
+// TypeInfo describes static capabilities of a built-in check type.
 type TypeInfo struct {
 	Name          string
 	Health        bool
 	ServiceScoped bool
 }
 
+// checkSpec is the private source of truth for a built-in check's static
+// capabilities and constructor. Field validation remains in internal/config so
+// it can report configuration paths and error details without an import cycle.
+type checkSpec struct {
+	info  TypeInfo
+	build checkBuilder
+}
+
 // Built-in check type names (the `type:` selector of a check). This is the
-// canonical spelling reused by the typeInfos registry and the buildCheck
-// dispatch (and reusable by config validation), so a new type is named once.
+// canonical spelling reused by the built-in check registry and config
+// validation, so a new type is named once.
 const (
 	CheckTypeTCP           = "tcp"
 	CheckTypePorts         = "ports"
@@ -70,86 +76,38 @@ const (
 // CheckTypeTCPConnections counts established local TCP sockets on a port.
 const CheckTypeTCPConnections = "tcp_connections"
 
-var typeInfos = []TypeInfo{
-	{Name: CheckTypeTCP, Health: true},
-	{Name: CheckTypeTCPConnections},
-	{Name: CheckTypePorts, Health: true},
-	{Name: CheckTypeHTTP, Health: true},
-	{Name: CheckTypeCommand, Health: true},
-	{Name: CheckTypeClock, Health: true},
-	{Name: CheckTypeService, Health: true, ServiceScoped: true},
-	{Name: CheckTypeFileExists, Health: true},
-	{Name: CheckTypeFile, Health: true},
-	{Name: CheckTypeLockfile, Health: true},
-	{Name: CheckTypeBinary, Health: true},
-	{Name: CheckTypePidfile, Health: true},
-	{Name: CheckTypeSocket, Health: true},
-	{Name: CheckTypeProcess, Health: true, ServiceScoped: true},
-	// Condition, not health: OK means "nothing is stale", so a rule fires it
-	// with `active:` the same way it would an alert-style predicate.
-	{Name: CheckTypeStaleBinary, ServiceScoped: true},
-	{Name: CheckTypeMetric, ServiceScoped: true},
-	{Name: CheckTypeLibraries, Health: true},
-	{Name: CheckTypeCount},
-	{Name: CheckTypeStorage},
-	{Name: CheckTypeAutofs, Health: true},
-	{Name: CheckTypeLoad},
-	{Name: CheckTypeUsers},
-	{Name: CheckTypeSSHIdle},
-	{Name: CheckTypeProcessCount},
-	{Name: CheckTypeHdparm},
-	{Name: CheckTypeSensors},
-	{Name: CheckTypeSmart},
-	{Name: CheckTypeRAID},
-	{Name: CheckTypeLVM, Health: true},
-	{Name: CheckTypeEDAC},
-	{Name: CheckTypeConfig, Health: true},
-	{Name: CheckTypeFDS},
-	{Name: CheckTypeMemory},
-	{Name: CheckTypePressure},
-	{Name: CheckTypePIDs},
-	{Name: CheckTypeDiskIO},
-	{Name: CheckTypeConntrack},
-	{Name: CheckTypeEntropy},
-	{Name: CheckTypeZombies},
-	{Name: CheckTypeOOM},
-	{Name: CheckTypeCert, Health: true},
-	{Name: CheckTypeSQLite, Health: true},
-	{Name: CheckTypeSQLite3, Health: true},
-	{Name: CheckTypeSQL},
-	{Name: CheckTypeMongoDBQuery},
-	{Name: CheckTypeInfluxDBQuery},
-	{Name: CheckTypeSize},
-	{Name: CheckTypeWebsocket, Health: true},
-	{Name: CheckTypeNet},
-	{Name: CheckTypeICMP},
-	{Name: CheckTypeSwap},
-	{Name: CheckTypeRoute, Health: true},
-	{Name: CheckTypeFirewallRules, Health: true},
-}
+var (
+	checkSpecByName = indexCheckSpecs(builtinCheckSpecs)
+	typeInfoByName  = indexTypeInfos(builtinCheckSpecs)
+	// singleShotCheckTypes are the check types valid in a service's
+	// checks:/preflight: sections and (minus service-scoped types) as host
+	// watches. TestSingleShotCheckTypesAreBuildable locks the list against the
+	// buildCheck dispatch so the advertised types and the builder cannot drift.
+	// Connection-protocol types (mysql, smtp, ...) are intentionally absent:
+	// they come from the conn registry.
+	singleShotCheckTypes = checkSpecNames(builtinCheckSpecs)
+)
 
-var typeInfoByName = indexTypeInfos(typeInfos)
-
-// singleShotCheckTypes are the check types valid in a service's
-// checks:/preflight: sections and (minus service-scoped types) as host
-// watches. TestSingleShotCheckTypesAreBuildable locks the list against the
-// buildCheck dispatch so the advertised types and the builder cannot drift.
-// Connection-protocol types (mysql, smtp, ...) are intentionally absent: they
-// come from the conn registry.
-var singleShotCheckTypes = typeInfoNames(typeInfos)
-
-func indexTypeInfos(infos []TypeInfo) map[string]TypeInfo {
-	out := make(map[string]TypeInfo, len(infos))
-	for _, info := range infos {
-		out[info.Name] = info
+func indexCheckSpecs(specs []checkSpec) map[string]checkSpec {
+	out := make(map[string]checkSpec, len(specs))
+	for _, spec := range specs {
+		out[spec.info.Name] = spec
 	}
 	return out
 }
 
-func typeInfoNames(infos []TypeInfo) []string {
-	out := make([]string, 0, len(infos))
-	for _, info := range infos {
-		out = append(out, info.Name)
+func indexTypeInfos(specs []checkSpec) map[string]TypeInfo {
+	out := make(map[string]TypeInfo, len(specs))
+	for _, spec := range specs {
+		out[spec.info.Name] = spec.info
+	}
+	return out
+}
+
+func checkSpecNames(specs []checkSpec) []string {
+	out := make([]string, 0, len(specs))
+	for _, spec := range specs {
+		out = append(out, spec.info.Name)
 	}
 	return out
 }
