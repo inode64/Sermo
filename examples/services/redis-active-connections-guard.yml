@@ -1,0 +1,30 @@
+name: redis-active-connections-guard
+uses: redis
+
+# EXAMPLE — deny restart/stop while Redis/Valkey reports too many clients.
+#
+# Copy the checks/rules into the concrete cache service you enable. Set password
+# (and user when ACLs require it) for the target; leave password absent only when
+# the local Redis endpoint intentionally permits unauthenticated INFO/PING.
+
+variables:
+  restart_block_connections: 50
+
+checks:
+  active-connections:
+    type: redis
+    reports: state
+    host: "${host}"
+    port: "${port}"
+    password: "${env:SERMO_REDIS_PASSWORD}"
+    expect:
+      connected_clients: { op: ">", value: "${restart_block_connections}" }
+
+rules:
+  block-restart-with-active-connections:
+    type: guard
+    blocks: [restart, stop]
+    if: { active: { check: active-connections } }
+    then:
+      action: block
+      message: "${display_name} has active Redis clients; restart denied"
