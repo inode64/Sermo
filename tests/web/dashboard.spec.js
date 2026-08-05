@@ -375,7 +375,13 @@ test("check SLA uses the service series endpoint and hatches unobserved time", a
   await expect(serviceBand).toBeVisible();
   const checkBandHeight = await cell.locator(".sla-bars").evaluate((band) => getComputedStyle(band).height);
   const serviceBandHeight = await serviceBand.evaluate((band) => getComputedStyle(band).height);
+  const checkCellMinWidth = await cell.evaluate((strip) => getComputedStyle(strip.parentElement).minWidth);
+  const expectedCheckCellMinWidth = await cell.evaluate((strip) => {
+    const rem = parseFloat(getComputedStyle(document.documentElement).fontSize);
+    return Math.min(32 * rem, strip.ownerDocument.defaultView.innerWidth * 0.45);
+  });
   expect(parseFloat(checkBandHeight)).toBeCloseTo(parseFloat(serviceBandHeight), 1);
+  expect(parseFloat(checkCellMinWidth)).toBeCloseTo(expectedCheckCellMinWidth, 1);
   // The mock's single check sample sits 10 minutes into a 24h window, so every
   // bar before it must stay hatched rather than inherit the window's ratio.
   expect(await cell.locator(".sla-bar-seg.sla-gap").count()).toBeGreaterThan(0);
