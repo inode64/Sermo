@@ -36,6 +36,8 @@ const (
 
 var validMonitorModes = set(MonitorEnabled, MonitorDisabled, MonitorPrevious)
 
+var validRestartModes = set(RestartModeStaged, RestartModeNative)
+
 var validProcessSelectorKeys = set(
 	process.SelectorKeyExe,
 	process.SelectorKeyCmd,
@@ -95,6 +97,39 @@ func validateAllowDependencies(tree map[string]any, add addFunc) {
 	}
 	if _, ok := v.(bool); !ok {
 		add(validationBooleanFormat, keyAllowDependencies)
+	}
+}
+
+// validateRestartPolicy checks the explicit restart strategy. Native restart
+// is restricted to init-managed services: external control backends only expose
+// composed restart semantics, and also_service requires the staged ordering of
+// auxiliary units around the primary service.
+func validateRestartPolicy(tree map[string]any, add addFunc) {
+	raw, present := tree[ServiceKeyRestartPolicy]
+	if !present {
+		return
+	}
+	policy, ok := raw.(map[string]any)
+	if !ok {
+		add(validationMappingFormat, ServiceKeyRestartPolicy)
+		return
+	}
+	for _, err := range unknownBlockKeys(ServiceKeyRestartPolicy, policy, set(RestartPolicyKeyMode)) {
+		add("%s", err)
+	}
+	mode := cfgval.AsString(policy[RestartPolicyKeyMode])
+	if _, ok := validRestartModes[mode]; !ok {
+		add(validationNotOneOfFormat, restartPolicyPathMode, mode, RestartModeSummary)
+		return
+	}
+	if mode != RestartModeNative {
+		return
+	}
+	if _, present := tree[SectionControl]; present {
+		add("%s=%q is not supported with %s", restartPolicyPathMode, mode, SectionControl)
+	}
+	if _, present := tree[ServiceKeyAlsoService]; present {
+		add("%s=%q is not supported with %s", restartPolicyPathMode, mode, ServiceKeyAlsoService)
 	}
 }
 

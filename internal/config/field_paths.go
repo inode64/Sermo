@@ -60,9 +60,10 @@ const (
 	controlPathURI       = SectionControl + "." + virt.ControlKeyURI
 	controlPathUUID      = SectionControl + "." + virt.ControlKeyUUID
 
-	reloadPathCommand = SectionReload + "." + ReloadKeyCommand
-	reloadPathSignal  = SectionReload + "." + ReloadKeySignal
-	reloadPathWhen    = SectionReload + "." + ReloadKeyWhen
+	reloadPathCommand     = SectionReload + "." + ReloadKeyCommand
+	reloadPathSignal      = SectionReload + "." + ReloadKeySignal
+	reloadPathWhen        = SectionReload + "." + ReloadKeyWhen
+	restartPolicyPathMode = ServiceKeyRestartPolicy + "." + RestartPolicyKeyMode
 
 	stopPolicyPathCleanOnStop = sectionStopPolicy + "." + keyCleanOnStop
 	stopPolicyPathFilesAbsent = sectionStopPolicy + "." + keyFilesAbsent

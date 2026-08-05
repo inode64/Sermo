@@ -960,6 +960,7 @@ func validateResolved(name string, tree map[string]any, runtime string, notifier
 	validateProcesses(tree, add)
 	validatePidfiles(tree, add)
 	validateStopPolicy(tree, add)
+	validateRestartPolicy(tree, add)
 	validateAllowDependencies(tree, add)
 	validatePolicyExtras(tree, add)
 	validateControl(tree, add)
