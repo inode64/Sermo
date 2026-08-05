@@ -349,7 +349,18 @@ class EndpointGenerationTest(unittest.TestCase):
             "sntp.service loaded failed failed Set time via SNTP\n", encoding="utf-8"
         )
         (stage / "services_json.out").write_text(
-            json.dumps({"services": [{"name": "sntp", "installed": True, "ok": True, "status": "ok"}]}),
+            json.dumps(
+                {
+                    "services": [
+                        {
+                            "name": "sntp",
+                            "installed": False,
+                            "ok": False,
+                            "status": "no binary configured",
+                        }
+                    ]
+                }
+            ),
             encoding="utf-8",
         )
 

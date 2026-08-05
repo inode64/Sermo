@@ -790,10 +790,15 @@ def parse_services(stage: Path, options: GenerationOptions) -> tuple[list[dict],
     skipped: list[dict] = []
     for rep in reports:
         name = rep.get("name") or ""
-        installed_ok = rep.get("installed") and rep.get("ok") and name
         monitorable = name in active_services or name in failed_services
+        # A catalog service backed by a live or failed init unit is installed by
+        # definition, even when its profile has no executable probe.  Examples
+        # include systemd-logind and the sntp one-shot unit: excluding them
+        # would leave a failed unit without a Sermo recovery action.
+        installed_ok = rep.get("installed") and rep.get("ok") and name
+        available = bool(name) and (installed_ok or monitorable)
         active_ok = not options.active_services_only or (active_inventory_ok and monitorable)
-        if installed_ok and active_ok:
+        if available and active_ok:
             services.append(rep)
         else:
             reason = rep.get("status", "")
