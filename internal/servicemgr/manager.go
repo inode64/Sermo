@@ -60,10 +60,10 @@ type Manager interface {
 // backend-specific message.
 type ComposedRestart struct{}
 
-// Restart is not used by the safe operation engine; it composes restart as
-// Stop+Start so residual-process handling stays between the phases.
+// Restart rejects native restart. External backends must use the staged
+// operation-engine path so residual-process handling stays between the phases.
 func (ComposedRestart) Restart(context.Context, string) error {
-	return errors.New("restart is composed by the operation engine")
+	return errors.New("native restart is unsupported; use the staged operation engine")
 }
 
 // SupportsReload reports false; these backends cannot reload in place.

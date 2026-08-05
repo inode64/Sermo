@@ -94,9 +94,11 @@ func New(c Config) Engine {
 	selectors, selectorWarnings := process.ParseSelectors(tree)
 	killPolicy = process.EnableAutomaticReaping(killPolicy, selectors)
 	hasCommandMatch := hasCommandMatchSelector(selectors)
+	restartMode, restartPolicyErr := config.ParseRestartMode(tree)
 	configErr := firstWarningError(
 		warningError(process.SectionStopPolicy, stopPolicyWarnings),
 		warningError(selectorWarningPrefix, selectorWarnings),
+		restartPolicyErr,
 		reloadConfigError(tree),
 	)
 
@@ -143,6 +145,7 @@ func New(c Config) Engine {
 		Service:       c.Service,
 		Unit:          c.Unit,
 		Backend:       c.Backend,
+		RestartMode:   restartMode,
 		AlsoUnits:     alsoUnits,
 		StopArtifacts: stopArtifacts,
 		ConfigError:   configErr,
@@ -478,10 +481,11 @@ func restartIdentityClosure(mgr Manager, unit string, discover func() ([]process
 		// A package replacement makes /proc/<pid>/exe end in " (deleted)",
 		// deliberately preventing the old process from matching an exe selector
 		// or being signalled.  Its previous exe path and real user still give us
-		// an exact attribution to this unit, though, so the init backend may stop
-		// the named unit and start the installed binary.  Residual reaping remains
-		// fail-closed: StaleBinariesIn is diagnostic only and never authorizes a
-		// signal; if the backend leaves it behind, clearResiduals blocks the start.
+		// an exact attribution to this unit, though, so the init backend may restart
+		// the named unit. StaleBinariesIn is diagnostic only and never authorizes a
+		// signal. In staged mode, clearResiduals still blocks the start if the backend
+		// leaves that process behind; native mode delegates the unit's complete
+		// atomic restart semantics to the selected init backend.
 		if len(discoverer.StaleBinariesIn(procs, selectors)) > 0 {
 			return true, "", nil
 		}
