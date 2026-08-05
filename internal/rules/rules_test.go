@@ -86,6 +86,33 @@ func TestGuardFailsSafeOnUnavailableCheck(t *testing.T) {
 	}
 }
 
+func TestGuardFailsSafeOnInlineUnavailableCheck(t *testing.T) {
+	missing := filepath.Join(t.TempDir(), "missing.db")
+	ev := &Evaluator{}
+	condition := map[string]any{"active": map[string]any{"sql": map[string]any{
+		"engine": checks.SQLEngineSQLite,
+		"path":   missing,
+		"query":  "SELECT count(*) FROM sessions",
+		"op":     ">",
+		"value":  "0",
+	}}}
+	if active, err := ev.Eval(context.Background(), condition); err != nil || active {
+		t.Fatalf("initial unavailable inline condition = active:%v err:%v, want false without error", active, err)
+	}
+	blocked, _, err := Guard(context.Background(), []Rule{{
+		Name:   "block-restart-with-clients",
+		Type:   RuleGuard,
+		Blocks: []string{string(ActionRestart)},
+		If:     condition,
+	}}, string(ActionRestart), ev)
+	if err == nil {
+		t.Fatal("unavailable inline guard check must fail safe")
+	}
+	if blocked {
+		t.Fatal("unavailable inline check is an evaluation error, not a matched guard")
+	}
+}
+
 func TestEvalResolvesLazyCheckReference(t *testing.T) {
 	runs := 0
 	ev := &Evaluator{

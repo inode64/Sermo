@@ -167,10 +167,11 @@ func Run(ctx context.Context, built []Built, maxParallel int) []Result {
 			defer func() {
 				if r := recover(); r != nil {
 					results[i] = Result{
-						Check:    b.Check.Name(),
-						OK:       false,
-						Optional: b.Optional,
-						Message:  fmt.Sprintf("check panicked: %v", r),
+						Check:       b.Check.Name(),
+						OK:          false,
+						Optional:    b.Optional,
+						Unavailable: true,
+						Message:     fmt.Sprintf("check panicked: %v", r),
 					}
 				}
 			}()
