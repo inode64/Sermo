@@ -218,6 +218,14 @@ func (b base) result(ok bool, message string, start time.Time) Result {
 	}
 }
 
+// unavailableResult builds a failed observation that guards must not interpret
+// as an inactive condition.
+func (b base) unavailableResult(message string, start time.Time) Result {
+	res := b.result(false, message, start)
+	res.Unavailable = true
+	return res
+}
+
 // levelCountResult builds the Result shared by the count-vs-max level checks
 // (fds, pids, conntrack): the used_pct/free predicate fields — with free clamped
 // so a count momentarily above the max can't underflow the unsigned subtraction

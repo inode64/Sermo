@@ -87,8 +87,7 @@ func (c connCheck) Run(ctx context.Context) Result {
 	addr := c.address()
 	res, elapsed, perIface, err := c.probeResult(ctx)
 	if err != nil {
-		r := c.result(false, fmt.Sprintf("%s %s: %v", c.proto.Name(), addr, err), start)
-		r.Unavailable = true
+		r := c.base.unavailableResult(fmt.Sprintf("%s %s: %v", c.proto.Name(), addr, err), start)
 		r.Data = ifaceData(perIface)
 		return r
 	}
@@ -100,7 +99,9 @@ func (c connCheck) Run(ctx context.Context) Result {
 	}
 	ok, msg, unavailable := c.evaluateResponse(res, elapsed, addr)
 	r := c.result(ok, msg, start)
-	r.Unavailable = unavailable
+	if unavailable {
+		r = c.base.unavailableResult(msg, start)
+	}
 	r.Data = c.resultData(elapsed, perIface, res)
 	return r
 }
