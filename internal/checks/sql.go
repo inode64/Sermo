@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"time"
 
 	"sermo/internal/cfgval"
 	"sermo/internal/conn"
@@ -24,9 +23,9 @@ type sqlCheck struct {
 }
 
 func (c sqlCheck) Run(ctx context.Context) Result {
-	start := time.Now()
-	ctx, cancel := c.withTimeout(ctx)
-	defer cancel()
+	ctx, run := c.begin(ctx)
+	defer run.close()
+	start := run.start
 
 	result, isNull, err := sqlScalar(ctx, c.driver, c.dsn, c.query)
 	if err != nil {

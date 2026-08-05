@@ -34,9 +34,9 @@ type smartCheck struct {
 }
 
 func (c smartCheck) Run(ctx context.Context) Result {
-	start := time.Now()
-	ctx, cancel := c.withTimeout(ctx)
-	defer cancel()
+	ctx, run := c.begin(ctx)
+	defer run.close()
+	start := run.start
 
 	prefix := CheckTypeSmart + " " + c.device
 	res, runErr := c.runner.Run(ctx, smartctlCommand, smartctlArgs(c.device)...)

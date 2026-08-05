@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"sermo/internal/execx"
 )
@@ -46,9 +45,9 @@ type librariesCheck struct {
 }
 
 func (c librariesCheck) Run(ctx context.Context) Result {
-	start := time.Now()
-	ctx, cancel := c.withTimeout(ctx)
-	defer cancel()
+	ctx, run := c.begin(ctx)
+	defer run.close()
+	start := run.start
 
 	ef, err := elf.Open(c.binary)
 	if err != nil {

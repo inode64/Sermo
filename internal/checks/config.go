@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"strings"
-	"time"
 
 	"sermo/internal/execx"
 	"sermo/internal/output"
@@ -29,9 +28,9 @@ type configCheck struct {
 }
 
 func (c configCheck) Run(ctx context.Context) Result {
-	start := time.Now()
-	ctx, cancel := c.withTimeout(ctx)
-	defer cancel()
+	ctx, run := c.begin(ctx)
+	defer run.close()
+	start := run.start
 
 	// Validity: a non-zero exit from the config-test command means invalid config.
 	if len(c.argv) > 0 {

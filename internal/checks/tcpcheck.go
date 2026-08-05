@@ -3,7 +3,6 @@ package checks
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"sermo/internal/conn"
 	"sermo/internal/netutil"
@@ -20,9 +19,9 @@ type tcpCheck struct {
 }
 
 func (c tcpCheck) Run(ctx context.Context) Result {
-	start := time.Now()
-	ctx, cancel := c.withTimeout(ctx)
-	defer cancel()
+	ctx, run := c.begin(ctx)
+	defer run.close()
+	start := run.start
 
 	addr := netutil.JoinHostPort(c.host, c.port)
 	chosen, perIface, err := tryInterfaces(c.ifaces, c.ifaceAll, func(iface string) error {
