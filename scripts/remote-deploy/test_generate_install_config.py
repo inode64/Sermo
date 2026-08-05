@@ -337,6 +337,32 @@ class EndpointGenerationTest(unittest.TestCase):
         self.assertIn("squid.service", failed)
         self.assertNotIn("●", failed)
 
+    def test_failed_sntp_unit_generates_a_repairable_service(self):
+        """A one-shot unit that failed at boot must remain visible and operable."""
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        root = Path(temp.name)
+        stage = root / "stage" / "potasio" / "out"
+        stage.mkdir(parents=True)
+        (stage / "init").write_text("systemd\n", encoding="utf-8")
+        (stage / "failed_units").write_text(
+            "sntp.service loaded failed failed Set time via SNTP\n", encoding="utf-8"
+        )
+        (stage / "services_json.out").write_text(
+            json.dumps({"services": [{"name": "sntp", "installed": True, "ok": True, "status": "ok"}]}),
+            encoding="utf-8",
+        )
+
+        report = generator.generate_for_host("potasio", stage, root / "configs", default_options())
+
+        service = root / "configs/potasio/root/etc/sermo/services/sntp.yml"
+        self.assertTrue(service.exists())
+        self.assertIn("uses: sntp", service.read_text(encoding="utf-8"))
+        self.assertEqual(report["services"]["enabled"][0]["name"], "sntp")
+        self.assertEqual(report["services"]["enabled"][0]["endpoint_checks"], [
+            {"watch": "*", "active": True, "source": "unit failed; endpoint gating skipped"},
+        ])
+
     def test_openrc_crashed_units_are_monitorable(self):
         temp = tempfile.TemporaryDirectory()
         self.addCleanup(temp.cleanup)
