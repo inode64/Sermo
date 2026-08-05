@@ -65,7 +65,8 @@ type Engine struct {
 	// AlsoUnits are auxiliary init units (from `also_service`) acted on alongside
 	// the primary in wrap order: started before the primary (strict — a failure
 	// aborts before the primary starts) and stopped after it (best-effort). Empty
-	// for most services.
+	// for most services. A native restart leaves them active and restarts only the
+	// primary atomically.
 	AlsoUnits []string
 	// StopArtifacts are stopped-state invariants verified after a clean stop.
 	StopArtifacts StopArtifacts
