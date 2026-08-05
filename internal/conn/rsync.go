@@ -21,7 +21,7 @@ func (rsyncProtocol) RequiresUser() bool { return false }
 const rsyncGreetingPrefix = "@RSYNCD:"
 
 func (rsyncProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	c, err := dialTCPDeadline(ctx, cfg, defaultPortRsync)
+	c, err := newProbeTarget(cfg, defaultPortRsync).openTCP(ctx)
 	if err != nil {
 		return Result{}, err
 	}

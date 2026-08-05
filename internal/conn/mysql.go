@@ -41,7 +41,7 @@ func (mysqlProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 		// afterwards), so dial without TLS regardless of cfg.TLS.
 		plain := cfg
 		plain.TLS = ""
-		c, err := dialDeadline(ctx, plain, defaultPortMySQL)
+		c, err := newProbeTarget(plain, defaultPortMySQL).openStream(ctx)
 		if err != nil {
 			return Result{}, err
 		}

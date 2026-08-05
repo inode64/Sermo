@@ -44,7 +44,7 @@ const (
 func (sshProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	addr := cfg.addrDefaults(defaultPortSSH)
 
-	c, err := dialTCPDeadline(ctx, cfg, defaultPortSSH)
+	c, err := newProbeTarget(cfg, defaultPortSSH).openTCP(ctx)
 	if err != nil {
 		return Result{}, err
 	}

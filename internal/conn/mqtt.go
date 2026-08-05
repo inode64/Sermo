@@ -59,7 +59,7 @@ func (mqttProtocol) DefaultPort() int   { return defaultPortMQTT }
 func (mqttProtocol) RequiresUser() bool { return false }
 
 func (mqttProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	c, err := dialDeadline(ctx, cfg, defaultPortMQTT)
+	c, err := newProbeTarget(cfg, defaultPortMQTT).openStream(ctx)
 	if err != nil {
 		return Result{}, err
 	}

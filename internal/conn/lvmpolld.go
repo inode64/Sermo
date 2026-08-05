@@ -53,13 +53,11 @@ func (lvmpolldProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	if socket == "" {
 		socket = DefaultLVMPolldSocket
 	}
-	c, err := dialUnix(ctx, socket)
+	c, err := newProbeTarget(Config{Socket: socket}, defaultPortNone).openStream(ctx)
 	if err != nil {
 		return Result{}, err
 	}
 	defer func() { _ = c.Close() }()
-	applyDeadline(ctx, c)
-
 	// The hello request body is a single config field; buffer framing appends the
 	// "\n##\n" delimiter (matching libdaemon's buffer_write exactly).
 	if _, err := io.WriteString(c, lvmDaemonHelloRequest); err != nil {

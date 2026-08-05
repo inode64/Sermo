@@ -39,7 +39,7 @@ func (guacdProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 		selectProto = guacdDefaultProtocol
 	}
 
-	c, err := dialTCPDeadline(ctx, cfg, defaultPortGuacd)
+	c, err := newProbeTarget(cfg, defaultPortGuacd).openTCP(ctx)
 	if err != nil {
 		return Result{}, err
 	}
