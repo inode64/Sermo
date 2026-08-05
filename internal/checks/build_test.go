@@ -115,6 +115,21 @@ func TestBuildTimeoutPerCheck(t *testing.T) {
 	}
 }
 
+func TestBuildAndInlineShareBaseWarning(t *testing.T) {
+	entry := map[string]any{"type": CheckTypeBinary, "path": "/x", "timeout": "slow"}
+	_, warnings := BuildWithWarnings(map[string]any{"bad": entry}, Deps{})
+	if len(warnings) != 1 {
+		t.Fatalf("warnings = %v, want one warning", warnings)
+	}
+	want := checkBuildMessage("bad", positiveDurationMessage(CheckKeyTimeout))
+	if warnings[0].Text != want {
+		t.Errorf("build warning = %q, want %q", warnings[0].Text, want)
+	}
+	if _, err := BuildInline("bad", entry, Deps{}); err == nil || err.Error() != want {
+		t.Errorf("inline error = %v, want %q", err, want)
+	}
+}
+
 func TestBuildInlinePreservesReportingMode(t *testing.T) {
 	check, err := BuildInline("sensor", map[string]any{
 		"type": CheckTypeBinary, "path": "/definitely/missing", "reports": ReportsState,
