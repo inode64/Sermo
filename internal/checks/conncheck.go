@@ -352,7 +352,7 @@ func configureConnProtocol(cfg *conn.Config, protoName string, entry map[string]
 	case conn.ProtocolNameLibvirt:
 		setLocalConnSocket(cfg, entry, conn.DefaultLibvirtSocket)
 		setConnParam(cfg, conn.ParamKeyDomain, cfgval.AsString(entry[CheckKeyDomain]))
-	case conn.ProtocolNameDBus, conn.ProtocolNameAvahi:
+	case conn.ProtocolNameDBus, conn.ProtocolNameAvahi, conn.ProtocolNameLogin1:
 		cfg.Socket = conn.DBusAddress(cfgval.AsString(entry[CheckKeySocket]), cfgval.AsString(entry[CheckKeyQuery]))
 	}
 	return nil

@@ -114,6 +114,7 @@ Las comprobaciones de protocolo de conexión (MySQL, PostgreSQL, Redis, Docker, 
 | `rspamd`      | un worker rspamd responde a `GET /ping` con `pong` (ver Base de datos) |
 | `libvirt` / `libvirtd` | un daemon libvirt responde a RPC; expone recuentos de VM (`domains.active`…), capacidad del nodo y el estado de una VM para `expect`/`on_change` (ver Base de datos) |
 | `dbus`        | un daemon D-Bus completa el handshake de auth/Hello y responde a `GetId` (ver Base de datos) |
+| `login1`      | systemd-logind posee `org.freedesktop.login1` y responde a `Peer.Ping` sin activar un servicio ausente |
 | `udisks2`     | UDisks2 está registrado en el bus del sistema y responde a `Peer.Ping` en su objeto Manager (ver Base de datos) |
 | `avahi` / `avahi-daemon` | el daemon Avahi responde a `GetVersionString` sobre su API D-Bus (ver Base de datos) |
 | `syncthing`   | una instancia Syncthing responde a `/rest/noauth/health` con `{"status":"OK"}` (ver Base de datos) |

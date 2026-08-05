@@ -60,6 +60,7 @@ const (
 	ProtocolNameIPP         = "ipp"
 	ProtocolNameKafka       = "kafka"
 	ProtocolNameLDAP        = "ldap"
+	ProtocolNameLogin1      = "login1"
 	ProtocolNameLibvirt     = "libvirt"
 	ProtocolNameLVMPolld    = "lvmpolld"
 	ProtocolNameMemcached   = "memcached"

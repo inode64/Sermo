@@ -1,0 +1,17 @@
+name: systemd-logind
+display_name: systemd-logind
+category: system
+description: System login and seat manager.
+service:
+  systemd:
+    - systemd-logind
+watches:
+  service:
+    check:
+      type: service
+      expect: active
+  login1:
+    check:
+      type: login1
+      timeout: 3s
+      verify: true

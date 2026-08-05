@@ -1048,6 +1048,11 @@ Protocols, in the order of the table above:
       type: dbus
       socket: /run/dbus/system_bus_socket   # or use `query` for a full address
   ```
+- `login1` — verifies that `systemd-logind` owns `org.freedesktop.login1` on
+  the system D-Bus and answers `Peer.Ping` on `/org/freedesktop/login1`.
+  It uses `GetNameOwner`, which does not activate a missing service, so it
+  detects a stuck D-Bus activation without making it worse. Target options are
+  the same as `dbus`.
 - `udisks2` — the UDisks2 disk-management daemon on the system D-Bus bus. Connects
   to the bus (SASL auth + Hello), verifies `org.freedesktop.UDisks2` has a name
   owner, and calls `org.freedesktop.DBus.Peer.Ping` on
