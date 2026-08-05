@@ -66,6 +66,16 @@ pasa por el mismo motor:
 7. Verificar el estado del backend cuando corresponda y ejecutar el postflight
    requerido para start/restart/reload/resume.
 
+El **close SSH session** del panel es una operación manual separada del motor,
+nunca una acción de regla ni remediación automática. Toma los mismos locks de
+operación y nombrados, guards, timeout y ruta de un resultado/evento, pero no
+reinicia ni ejecuta postflight del daemon SSH. Justo antes de la única señal,
+Sermo vuelve a leer el terminal con login y su ascendencia `/proc` hasta un
+ejecutable `sshd` configurado exacto y su usuario real, y exige el mismo
+terminal, PID de sesión y ticks de inicio del proceso. Si falta esa frontera, el
+terminal cambió o el PID se recicló, se rechaza. Un cierre correcto envía un único `SIGTERM` al proceso de
+sesión; nunca escala a `SIGKILL`.
+
 Un residual que Sermo no tiene permitido identificar y matar se **reporta, no se mata**:
 un fallo limpio `orphan_processes` es más seguro que matar el proceso equivocado.
 

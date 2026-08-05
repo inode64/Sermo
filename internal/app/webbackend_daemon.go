@@ -15,6 +15,9 @@ import (
 func (b *WebBackend) DaemonInfo(_ context.Context) web.DaemonInfo {
 	info := web.DaemonInfo{}
 	info.ActiveUsers = notify.ActiveUserCount()
+	if sample, err := b.sshSessions(b.allSSHSessionFilters()); err == nil {
+		info.Sessions = &web.SessionSummary{Console: sample.Console, SSH: len(sample.SSH)}
+	}
 
 	// Short host identity — same source as ${hostname} and the Basic auth realm.
 	info.Hostname = config.ShortHostname()

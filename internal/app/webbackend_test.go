@@ -17,6 +17,7 @@ import (
 	"sermo/internal/execx"
 	"sermo/internal/metrics"
 	"sermo/internal/notify"
+	"sermo/internal/process"
 	"sermo/internal/rules"
 	"sermo/internal/servicemgr"
 	"sermo/internal/state"
@@ -30,6 +31,15 @@ type fakeSLAReader struct {
 	// series is keyed by service for the service-level series and by
 	// service\x00check for one check's, the same convention check uses.
 	series map[string][]state.SLAPoint
+}
+
+func mustWebIdentityFilter(t *testing.T, exe, user string) process.IdentityFilter {
+	t.Helper()
+	filter, err := process.NewIdentityFilter(exe, user, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return filter
 }
 
 func (f fakeSLAReader) SLAReport(service string, _ time.Time) ([]state.SLAValue, error) {
@@ -142,6 +152,48 @@ func TestWebBackendDetailRanFlag(t *testing.T) {
 	}
 	if byName["slow"] {
 		t.Fatal("interval-cached slow check should show ran=false in web detail")
+	}
+}
+
+func TestWebBackendShowsAttributedSSHSessionsAndHeaderSummary(t *testing.T) {
+	calls := 0
+	b := &WebBackend{
+		order: []string{"ssh"},
+		entries: map[string]*webEntry{
+			"ssh": {
+				displayName:       "SSH",
+				noResidentProcess: true,
+				sshSessionFilters: []process.IdentityFilter{mustWebIdentityFilter(t, "/usr/sbin/sshd", "root")},
+				status:            func(context.Context) (servicemgr.Status, error) { return servicemgr.StatusActive, nil },
+			},
+		},
+		snapshots: NewSnapshots(),
+		sshSessionSampler: func(config checks.SSHSessionConfig) (checks.SSHSessionSample, error) {
+			calls++
+			if got := len(config.SSHDFilters); got != 1 || config.SSHDFilters[0].Exe != "/usr/sbin/sshd" || config.SSHDFilters[0].User != "root" {
+				t.Fatalf("SSHDFilters = %+v", config.SSHDFilters)
+			}
+			return checks.SSHSessionSample{
+				Console: 2,
+				SSH:     []checks.SSHSession{{User: "root", Terminal: "pts/11", PID: 96, StartTicks: 1234, Idle: 2 * time.Minute}},
+			}, nil
+		},
+	}
+
+	detail, ok := b.Detail(context.Background(), "ssh")
+	if !ok || len(detail.SSHSessions) != 1 {
+		t.Fatalf("detail = %+v, ok=%v", detail, ok)
+	}
+	session := detail.SSHSessions[0]
+	if session.User != "root" || session.Terminal != "pts/11" || session.PID != 96 || !session.CanClose || session.IdleSeconds != 120 {
+		t.Fatalf("SSH session = %+v", session)
+	}
+	info := b.DaemonInfo(context.Background())
+	if info.Sessions == nil || info.Sessions.Console != 2 || info.Sessions.SSH != 1 {
+		t.Fatalf("session summary = %+v", info.Sessions)
+	}
+	if calls != 1 {
+		t.Fatalf("session sampler calls = %d, want one cached sample", calls)
 	}
 }
 

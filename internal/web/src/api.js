@@ -38,7 +38,9 @@ export const apiQueryNoCascade = "no_cascade";
 export const apiQueryOnlyErrors = "only_errors";
 export const apiQueryService = "service";
 export const apiQuerySince = "since";
+export const apiQueryStartTicks = "start_ticks";
 export const apiQueryStatus = "status";
+export const apiQueryTerminal = "terminal";
 export const apiQueryWatch = "watch";
 
 const eventRecentLimit = "200";
@@ -49,6 +51,7 @@ const apiSuffixMetrics = "/metrics";
 const apiSuffixPreflight = "/preflight";
 const apiSuffixRelease = "/release";
 const apiSuffixRuntime = "/runtime";
+const apiSuffixSessions = "/sessions";
 const apiSuffixSLA = "/sla";
 const apiSuffixTest = "/test";
 const apiQueryVerbose = "verbose";
@@ -92,6 +95,10 @@ export function serviceRuntimeAPI(name, since) { return serviceAPI(name, apiSinc
 export function serviceSLAAPI(name, since, check = "") {
   const checkQuery = check ? `&${apiQueryCheck}=${encodeURIComponent(check)}` : "";
   return serviceAPI(name, `${apiSinceSuffix(apiSuffixSLA, since)}${checkQuery}`);
+}
+export function sshSessionCloseAPI(name, pid, startTicks, terminal) {
+  const query = new URLSearchParams({ [apiQueryStartTicks]: String(startTicks), [apiQueryTerminal]: terminal });
+  return serviceAPI(name, `${apiSuffixSessions}/${encodeURIComponent(pid)}/close?${query.toString()}`);
 }
 export function stateCompactAPI(query = "") { return `${apiStateCompactPath}${query}`; }
 export function watchAPI(name, suffix = "") { return apiEntityPath(apiWatchesPath, name, suffix); }

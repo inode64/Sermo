@@ -231,14 +231,13 @@ func (m *Monitor) applyConfig(cfg *config.Config) {
 	// Recreate the shared /proc reader so reloads can change user/group lookup
 	// policy as well as the freshness window.
 	m.deps.ProcReader = process.NewCachingReader(process.OSReader{LookupUserName: m.deps.UserLookup.Username}, m.deps.SystemFreshness)
-	m.deps.SSHIdleSampler = checks.NewSSHIdleSampler(
-		process.NewCachingReader(process.OSReader{
-			LookupUserName:  m.deps.UserLookup.Username,
-			LookupGroupName: m.deps.UserLookup.GroupName,
-			ReadTTY:         true,
-		}, m.deps.SystemFreshness),
-		m.deps.UserLookup,
-	)
+	terminalReader := process.NewCachingReader(process.OSReader{
+		LookupUserName:  m.deps.UserLookup.Username,
+		LookupGroupName: m.deps.UserLookup.GroupName,
+		ReadTTY:         true,
+	}, m.deps.SystemFreshness)
+	m.deps.SSHIdleSampler = checks.NewSSHIdleSampler(terminalReader, m.deps.UserLookup)
+	m.deps.SSHSessionSampler = checks.NewSSHSessionSampler(terminalReader, m.deps.UserLookup)
 	notifiers, warns := notify.Build(cfg.Notifiers(), notify.WithTemplateDir(cfg.Global.TemplateDir()))
 	m.deps.Notifiers = notifiers
 	m.deps.GlobalNotify = config.NotifyDefault(cfg.Global.Raw)

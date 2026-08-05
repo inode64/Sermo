@@ -65,6 +65,17 @@ runs through the same engine:
 7. Verify backend status where applicable and run required postflight for
    start/restart/reload/resume.
 
+The dashboard's **close SSH session** is a separate manual engine operation,
+never a rule action or automatic remediation. It takes the same operation and
+named locks, guards, timeout and one-result event path, but does not restart or
+postflight the SSH daemon. Immediately before the only signal, Sermo re-reads
+the logged-in terminal and its `/proc` ancestry to an exact configured `sshd`
+executable and real user, and requires the same terminal, session PID and
+process start ticks.
+Any missing boundary, changed terminal or recycled PID is rejected. A successful
+close sends one `SIGTERM` to the per-session process; it never escalates to
+`SIGKILL`.
+
 A residual Sermo is not allowed to identify and kill is **reported, not killed**:
 a clean `orphan_processes` failure is safer than killing the wrong process.
 

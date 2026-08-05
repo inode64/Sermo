@@ -12,7 +12,7 @@ import {
   csrfPostOptions, dashboardAPI, daemonMetricsAPI, eventsAPI, eventsClearAPI,
   liveVerbosePath, lockReleaseAPI, mountAPI, mountBlockersAPI, panicAPI,
   readyVerbosePath, serviceAPI, serviceEventsAPI, serviceMetricsAPI,
-  servicePreflightAPI, serviceRuntimeAPI, serviceSLAAPI, stateCompactAPI, watchAPI,
+  servicePreflightAPI, serviceRuntimeAPI, serviceSLAAPI, sshSessionCloseAPI, stateCompactAPI, watchAPI,
 } from "./api.js";
 import {
   fmtAge, fmtBytes, fmtBytesPerSecond, fmtDuration, fmtMetricValue, fmtNum, fmtPct, fmtRemain,
@@ -3690,6 +3690,29 @@ function checkSLAHTML(service, c) {
   return tpl`<div id="${checkSLADomId(service, c.name)}" class="muted sla-check-strip">loading…</div>`;
 }
 
+function sshSessionCloseButton(d, session) {
+  if (!me.can_act) return tpl`<span class="muted">read-only</span>`;
+  if (!session.can_close) return tpl`<span class="muted">unavailable</span>`;
+  return tpl`<button class="danger-btn" data-ssh-session-close="1" data-ssh-service="${d.name}" data-ssh-session-pid="${session.pid}" data-ssh-session-start-ticks="${session.start_ticks}" data-ssh-session-terminal="${session.terminal}" data-ssh-session-user="${session.user || ""}">close</button>`;
+}
+
+function renderSSHSessions(d) {
+  if (!d.ssh_sessions_supported) return nothing;
+  const sessions = d.ssh_sessions || [];
+  const rows = sessions.length
+    ? sessions.map((session) => tpl`<tr>
+      <td>${session.user || "—"}</td><td>${session.terminal || "—"}</td><td>${session.pid || "—"}</td>
+      <td>${fmtDuration(session.idle_seconds)}</td><td>${sshSessionCloseButton(d, session)}</td>
+    </tr>`)
+    : tpl`<tr><td colspan="5" class="muted">No interactive SSH sessions.</td></tr>`;
+  return tpl`<h2>SSH sessions</h2>
+    <table class="detail-compact-table">
+      <caption class="visually-hidden">Current interactive SSH sessions</caption>
+      <thead><tr><th scope="col">User</th><th scope="col">Terminal</th><th scope="col">Session PID</th><th scope="col">Idle</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
 function renderServiceDetail(d) {
   const procs = d.processes || [];
   const procWarnings = d.process_warnings || [];
@@ -3857,6 +3880,7 @@ function renderServiceDetail(d) {
     ${general}
     ${graphs}
     ${processSection}
+    ${renderSSHSessions(d)}
     <h2>Checks</h2>
     <table>
       <caption class="visually-hidden">Service checks</caption>
@@ -6190,10 +6214,14 @@ function renderStatus(ctx) {
 
     // Services active and Monitored each have their own overview tile, so they
     // are not repeated here. The header keeps only readings without a tile:
-    // watches, active users and locks.
+    // watches, interactive sessions and locks.
     const parts = [];
     parts.push(["watches", `watches: <b>${ready.watches || 0}</b>`]);
-    if (daemon.active_users != null) {
+    if (daemon.sessions) {
+      const consoleSessions = Number(daemon.sessions.console) || 0;
+      const sshSessions = Number(daemon.sessions.ssh) || 0;
+      parts.push(["sessions", `sessions (console/SSH): <b>${consoleSessions}/${sshSessions}</b>`]);
+    } else if (daemon.active_users != null) {
       parts.push(["users", `users: <b>${daemon.active_users || 0}</b>`]);
     }
     const activeLocks = (locks || []).filter(l => l.state === lockStateActive).length;
@@ -6268,6 +6296,31 @@ async function act(name, action) {
     setStatus(`${action} ${name}: ${e.message}`, feedbackStatusErr);
   } finally {
     releaseMonitorToggleAfterRefresh(toggleKey, renderServices);
+  }
+}
+
+async function closeSSHSession(name, pid, startTicks, terminal, user) {
+  const sessionPID = Number(pid);
+  const sessionStartTicks = Number(startTicks);
+  if (!name || !terminal || !Number.isSafeInteger(sessionPID) || sessionPID <= 0 || !Number.isSafeInteger(sessionStartTicks) || sessionStartTicks <= 0) {
+    setStatus("close SSH session: invalid session identity; refresh and try again", feedbackStatusErr);
+    return;
+  }
+  const label = `${user || "unknown user"} on ${terminal}`;
+  if (!(await promptConfirm({
+    title: `Close SSH session for ${label}?`,
+    message: "This gracefully ends that one SSH terminal. It does not restart the SSH service and cannot be undone.",
+    okLabel: "close session",
+    danger: true,
+  }))) return;
+  setStatus("");
+  try {
+    const res = await fetch(sshSessionCloseAPI(name, sessionPID, sessionStartTicks, terminal), targetPostOptions());
+    const body = await jsonOrThrow(res);
+    setStatus(`close SSH session ${label}: ${body.message || feedbackStatusOK}`, feedbackStatusOK);
+    load();
+  } catch (e) {
+    setStatus(`close SSH session ${label}: ${e.message}`, feedbackStatusErr);
   }
 }
 
@@ -7527,6 +7580,9 @@ function initDelegatedHandlers() {
   const clickRoutes = [
     ["[data-event-toggle]", (el) => toggleEventMsg(el.dataset.eventToggle || "")],
     ["[data-panel-target]", (el) => openPanelTarget(el.dataset.panelTarget || "")],
+    ["[data-ssh-session-close]", (el) => closeSSHSession(
+      el.dataset.sshService || "", el.dataset.sshSessionPid || "", el.dataset.sshSessionStartTicks || "",
+      el.dataset.sshSessionTerminal || "", el.dataset.sshSessionUser || "")],
     ["[data-service-action][data-service]", (el) => act(el.dataset.service || "", el.dataset.serviceAction || "")],
     ["[data-watch-action][data-watch]", (el) => actWatch(el.dataset.watch || "", el.dataset.watchAction || "")],
     ["[data-mount-action][data-mount]", (el) => actMount(el.dataset.mount || "", el.dataset.mountAction || "")],

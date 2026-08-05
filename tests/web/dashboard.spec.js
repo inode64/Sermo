@@ -35,7 +35,7 @@ const dashboard = {
     mounted: true, state: "active", refcount: 0, blockers: [], can_umount: true,
   }],
   notifiers: [{ name: "ops", type: "slack", enabled: true, summary: "hooks.slack.com", used_by: 2 }],
-  daemon: { backend: "systemd", hostname: "fixture", host_uptime_seconds: 86400, active_users: 1 },
+  daemon: { backend: "systemd", hostname: "fixture", host_uptime_seconds: 86400, active_users: 1, sessions: { console: 0, ssh: 3 } },
   daemon_metrics: {
     current: { pid: 4242, fds: 12345, threads: 8, cpu_ready: true, cpu: 1.5, rss: 1048576, io_ready: true, io: 2048 },
   },
@@ -228,6 +228,10 @@ test("dashboard passes axe and fits the viewport", async ({ page }) => {
 // Attention signals prefix "(N) "; healthy hosts use "Sermo - <host>" alone.
 test("browser tab title includes the short hostname", async ({ page }) => {
   await expect(page).toHaveTitle(/Sermo - fixture/);
+});
+
+test("header separates console and SSH sessions", async ({ page }) => {
+  await expect(page.locator("#statusbar")).toContainText("sessions (console/SSH): 0/3");
 });
 
 test("section navigation wraps instead of scrolling sideways on compact screens", async ({ page }) => {
@@ -441,6 +445,33 @@ test("the process table reports each process's busiest core beside its total", a
   // The aggregate no longer restates it in the General data grid: it would hide
   // which process the peak belongs to.
   await expect(detail.locator(".runtime-grid")).not.toContainText("core peak");
+});
+
+test("SSH service detail lists live sessions and closes one verified session", async ({ page }) => {
+  await page.route("**/api/services/web", async (route) => {
+    const body = serviceDetail("web");
+    body.ssh_sessions_supported = true;
+    body.ssh_sessions = [{ user: "root", terminal: "pts/11", pid: 96, start_ticks: 1234, idle_seconds: 120, can_close: true }];
+    await route.fulfill({ json: body });
+  });
+  let closeRequest = null;
+  await page.route("**/api/services/web/sessions/96/close**", async (route) => {
+    closeRequest = new URL(route.request().url());
+    await route.fulfill({ json: { ok: true, message: "close SSH session ok" } });
+  });
+
+  await page.locator("#svc-row-web .row-toggle").click();
+  const detail = page.locator('[data-service-detail="web"]');
+  const sessions = detail.getByRole("table", { name: "Current interactive SSH sessions" });
+  await expect(sessions).toContainText("root");
+  await expect(sessions).toContainText("pts/11");
+  await expect(sessions).toContainText("120s");
+
+  await sessions.getByRole("button", { name: "close" }).click();
+  await expect(page.locator("#simple-confirm")).toBeVisible();
+  await page.locator("#simple-confirm-ok").click();
+  await expect.poll(() => closeRequest && closeRequest.searchParams.get("terminal")).toBe("pts/11");
+  expect(closeRequest.searchParams.get("start_ticks")).toBe("1234");
 });
 
 test("a genuinely idle process reads 0% in both CPU columns", async ({ page }) => {

@@ -17,33 +17,34 @@ import (
 const testSeriesCheck = "http"
 
 type fakeBackend struct {
-	services        []Service
-	applications    []Application
-	libraries       []Library
-	mounts          []Mount
-	mountAction     MountActionResult
-	mountBlockers   MountBlockersResult
-	mountAlert      MountAlertResult
-	mountOperated   []string
-	operated        []string // "name/action"
-	monitored       map[string]bool
-	watchMonitored  map[string]bool
-	panic           bool
-	watchExpanded   []string
-	watchProbed     []string
-	raidControlled  []string
-	failOp          bool
-	seriesSince     time.Duration
-	seriesCheck     string
-	eventQuery      EventQuery
-	metricCheck     string
-	metricSince     time.Duration
-	preflightCalled string
-	events          []Event
-	releasedLocks   []string
-	releaseOK       bool
-	notifierTested  string
-	notifierResult  ActionResult
+	services          []Service
+	applications      []Application
+	libraries         []Library
+	mounts            []Mount
+	mountAction       MountActionResult
+	mountBlockers     MountBlockersResult
+	mountAlert        MountAlertResult
+	mountOperated     []string
+	operated          []string // "name/action"
+	sshSessionsClosed []SSHSession
+	monitored         map[string]bool
+	watchMonitored    map[string]bool
+	panic             bool
+	watchExpanded     []string
+	watchProbed       []string
+	raidControlled    []string
+	failOp            bool
+	seriesSince       time.Duration
+	seriesCheck       string
+	eventQuery        EventQuery
+	metricCheck       string
+	metricSince       time.Duration
+	preflightCalled   string
+	events            []Event
+	releasedLocks     []string
+	releaseOK         bool
+	notifierTested    string
+	notifierResult    ActionResult
 }
 
 func (f *fakeBackend) Services(context.Context) []Service   { return f.services }
@@ -236,6 +237,14 @@ func (f *fakeBackend) Operate(_ context.Context, name, action string, opts Opera
 		return ActionResult{OK: false, Message: "blocked"}
 	}
 	return ActionResult{OK: true, Message: "ok"}
+}
+
+func (f *fakeBackend) CloseSSHSession(_ context.Context, _ string, session SSHSession) ActionResult {
+	f.sshSessionsClosed = append(f.sshSessionsClosed, session)
+	if f.failOp {
+		return ActionResult{OK: false, Message: "close rejected"}
+	}
+	return ActionResult{OK: true, Message: "close SSH session ok"}
 }
 func (f *fakeBackend) CompactState(_ context.Context, before time.Time) StateCompactResult {
 	return StateCompactResult{
@@ -1250,6 +1259,34 @@ func TestFailedOperateIsConflict(t *testing.T) {
 	newServer(&fakeBackend{failOp: true}).ServeHTTP(rec, postReq(testServicePath("web", apiActionRestart)))
 	if rec.Code != http.StatusConflict {
 		t.Fatalf("failed operate = %d, want 409", rec.Code)
+	}
+}
+
+func TestSSHSessionCloseEndpointRequiresFullSessionIdentity(t *testing.T) {
+	b := &fakeBackend{}
+	h := newServer(b)
+	path := testServicePath("ssh", apiSegmentSessions, "96", apiActionClose)
+
+	for _, query := range []string{
+		"",
+		testQueryParam(apiQueryStartTicks, "1234"),
+		testQueryParam(apiQueryTerminal, "pts/11"),
+		testQueryParams(apiQueryStartTicks, "zero", apiQueryTerminal, "pts/11"),
+	} {
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, postReq(testPathQuery(path, query)))
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("query %q status = %d, want 400", query, rec.Code)
+		}
+	}
+
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, postReq(testPathQuery(path, testQueryParams(apiQueryStartTicks, "1234", apiQueryTerminal, "pts/11"))))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("close session status = %d: %s", rec.Code, rec.Body.String())
+	}
+	if got := b.sshSessionsClosed; len(got) != 1 || got[0].PID != 96 || got[0].StartTicks != 1234 || got[0].Terminal != "pts/11" {
+		t.Fatalf("closed sessions = %+v", got)
 	}
 }
 
