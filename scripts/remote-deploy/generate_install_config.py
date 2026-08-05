@@ -160,7 +160,7 @@ PROTOCOL_CHECK_TYPES = {
     "cloudflared",
     "dbus", "dhclient", "dhcp", "fail2ban", "fpm", "ftp", "glusterfs", "guacd",
     "imap", "influxdb", "ipp", "kafka", "ldap", "libvirt", "lvmpolld",
-    "memcached", "mongodb", "mountd", "mqtt", "mysql", "nebula", "nfs", "nntp",
+    "login1", "memcached", "mongodb", "mountd", "mqtt", "mysql", "nebula", "nfs", "nntp",
     "ntp", "nut", "openvpn", "openvswitch", "pop", "postgres", "prometheus",
     "rdp", "redis", "rpcbind", "rspamd", "rsync", "sieve", "smb", "smtp",
     "snmp", "spamd", "ssh", "statd", "syncthing", "tftp", "udisks2", "unifi",
