@@ -85,6 +85,7 @@ type webEntry struct {
 	discoverer        process.Discoverer
 	selectors         []process.Selector
 	processWarnings   []string
+	sshSessionFilters []process.IdentityFilter
 	noResidentProcess bool
 	alsoApply         []string
 	canReload         bool
@@ -175,6 +176,7 @@ type WebBackend struct {
 	mountUsers        func(string) ([]process.Process, error)
 	mountSignaler     process.Signaler
 	mountAlerter      MountUserAlerter
+	sshSessionSampler checks.SSHSessionSamplerFunc
 	emit              func(Event)
 	defaultTimeout    time.Duration
 	operationTimeout  time.Duration
@@ -196,6 +198,9 @@ type WebBackend struct {
 
 	mountOperationsMu sync.Mutex
 	mountOperations   map[string]web.MountOperation
+
+	sshSessionsMu   sync.Mutex
+	sshSessionCache map[string]cachedSSHSessions
 }
 
 func (b *WebBackend) webNow() time.Time {
@@ -269,6 +274,7 @@ func NewWebBackend(ctx context.Context, cfg *config.Config, deps Deps) (*WebBack
 		mountUsers:        deps.MountDiscoverUsers,
 		mountSignaler:     deps.MountSignaler,
 		mountAlerter:      deps.MountUserAlerter,
+		sshSessionSampler: deps.SSHSessionSampler,
 		emit:              deps.Emit,
 		defaultTimeout:    deps.DefaultTimeout,
 		operationTimeout:  deps.OperationTimeout,
@@ -365,6 +371,12 @@ func attachServiceRuntime(ctx context.Context, entry *webEntry, name string, tre
 	entry.discoverer = discoverer
 	entry.selectors = selectors
 	entry.processWarnings = processWarnings
+	entry.sshSessionFilters = sshSessionFilters(tree, selectors)
+	if len(entry.sshSessionFilters) > 0 {
+		engine.SessionVerifier = freshSSHSessionVerifier(deps, entry.sshSessionFilters)
+		engine.SessionSignaler = deps.SSHSessionSignaler
+		entry.engine = engine
+	}
 	reloadCtx, cancel := context.WithTimeout(ctx, serviceInitQueryTimeout)
 	canReload, reloadErr := operation.ReloadSupported(reloadCtx, tree, target.Manager, target.Unit)
 	cancel()
