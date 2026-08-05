@@ -93,6 +93,20 @@ func TestCachingReaderSnapshotReturnsProcError(t *testing.T) {
 	}
 }
 
+func TestSnapshotIdentitiesUsesErrorAwareSnapshot(t *testing.T) {
+	reader := &errorAwareSnapshotReader{
+		snapshot: map[int]Identity{2: {PID: 2}},
+		err:      errors.New("cannot list proc"),
+	}
+	got := snapshotIdentities(reader)
+	if len(got) != 1 || got[2].PID != 2 {
+		t.Fatalf("snapshotIdentities() = %v, want error-aware snapshot", got)
+	}
+	if reader.errorCalls != 1 || reader.snapshotCalls != 0 {
+		t.Fatalf("snapshot calls = error-aware:%d plain:%d, want 1:0", reader.errorCalls, reader.snapshotCalls)
+	}
+}
+
 type failingSnapshotReader struct {
 	err error
 }
@@ -103,4 +117,29 @@ func (r failingSnapshotReader) PIDs() ([]int, error) {
 
 func (failingSnapshotReader) Identity(int) (Identity, bool) {
 	return Identity{}, false
+}
+
+type errorAwareSnapshotReader struct {
+	snapshot      map[int]Identity
+	err           error
+	errorCalls    int
+	snapshotCalls int
+}
+
+func (r *errorAwareSnapshotReader) PIDs() ([]int, error) {
+	return nil, errors.New("PIDs must not be called")
+}
+
+func (r *errorAwareSnapshotReader) Identity(int) (Identity, bool) {
+	return Identity{}, false
+}
+
+func (r *errorAwareSnapshotReader) Snapshot() map[int]Identity {
+	r.snapshotCalls++
+	return nil
+}
+
+func (r *errorAwareSnapshotReader) SnapshotWithError() (map[int]Identity, error) {
+	r.errorCalls++
+	return r.snapshot, r.err
 }

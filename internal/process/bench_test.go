@@ -2,13 +2,14 @@ package process
 
 import "testing"
 
-// BenchmarkBuildSnapshot measures one full /proc identity scan — the shared
+// BenchmarkSnapshot measures one full /proc identity scan — the shared
 // per-cycle discovery cost — against the live host process table.
-func BenchmarkBuildSnapshot(b *testing.B) {
+func BenchmarkSnapshot(b *testing.B) {
 	reader := OSReader{}
 	var n int
 	for b.Loop() {
-		n = len(buildSnapshot(reader))
+		snapshot, _ := Snapshot(reader)
+		n = len(snapshot)
 	}
 	b.ReportMetric(float64(n), "procs")
 }
