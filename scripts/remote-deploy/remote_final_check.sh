@@ -2,6 +2,47 @@
 set -u
 
 web_password="${SERMO_WEB_PASSWORD:-sermo-remote-admin}"
+
+web_runtime_dir() {
+	runtime_dir="/run/sermo"
+	if [ -r /etc/sermo/sermo.yml ]; then
+		configured_runtime="$(awk '
+			/^paths:[[:space:]]*$/ { in_paths=1; next }
+			in_paths && /^[^[:space:]][^:]*:[[:space:]]*$/ { in_paths=0 }
+			in_paths && /^[[:space:]]+runtime:[[:space:]]*/ {
+				sub(/^[[:space:]]+runtime:[[:space:]]*/, "")
+				sub(/[[:space:]]+#.*/, "")
+				gsub(/^['\"']|['\"']$/, "")
+				print
+				exit
+			}
+		' /etc/sermo/sermo.yml)"
+		case "$configured_runtime" in
+			/*) runtime_dir="$configured_runtime" ;;
+		esac
+	fi
+	printf '%s\n' "$runtime_dir"
+}
+
+web_admin_password() {
+	token_file="$(web_runtime_dir)/web.token"
+	if [ -r "$token_file" ]; then
+		IFS= read -r token <"$token_file" || true
+		token="${token%$'\r'}"
+		if [ -n "$token" ]; then
+			printf '%s' "$token"
+			return
+		fi
+	fi
+	printf '%s' "$web_password"
+}
+
+http_get() {
+	url="$1"
+	admin_password="$(web_admin_password)"
+	curl -fsS -u "admin:${admin_password}" "$url"
+}
+
 out="/tmp/sermo-final-check.out"
 : >"$out"
 
@@ -58,13 +99,13 @@ else
 fi
 
 if command -v curl >/dev/null 2>&1; then
-	curl -fsS -u "admin:${web_password}" "http://127.0.0.1:9797/livez?verbose" >/tmp/sermo-final-livez.out 2>/tmp/sermo-final-livez.err
+	http_get "http://127.0.0.1:9797/livez?verbose" >/tmp/sermo-final-livez.out 2>/tmp/sermo-final-livez.err
 	line livez_rc "$?"
 	sed 's/^/livez: /' /tmp/sermo-final-livez.out >>"$out"
-	curl -sS -u "admin:${web_password}" "http://127.0.0.1:9797/readyz?verbose" >/tmp/sermo-final-readyz.out 2>/tmp/sermo-final-readyz.err
+	http_get "http://127.0.0.1:9797/readyz?verbose" >/tmp/sermo-final-readyz.out 2>/tmp/sermo-final-readyz.err
 	line readyz_rc "$?"
 	sed 's/^/readyz: /' /tmp/sermo-final-readyz.out >>"$out"
-	curl -fsS -u "admin:${web_password}" "http://127.0.0.1:9797/" >/tmp/sermo-final-index.html 2>/tmp/sermo-final-index.err
+	http_get "http://127.0.0.1:9797/" >/tmp/sermo-final-index.html 2>/tmp/sermo-final-index.err
 	line html_rc "$?"
 else
 	line livez_rc curl-unavailable
