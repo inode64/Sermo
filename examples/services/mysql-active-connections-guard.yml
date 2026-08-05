@@ -1,0 +1,35 @@
+name: mysql-active-connections-guard
+uses: mysql
+
+# EXAMPLE — deny restart/stop while application sessions exceed the threshold.
+#
+# Copy the checks/rules into the concrete MySQL or MariaDB service you enable,
+# then set a threshold for its normal load. The monitor account needs PROCESS to
+# see sessions owned by other users. Keep its password outside this file.
+
+variables:
+  restart_block_connections: 25
+
+checks:
+  active-connections:
+    type: sql
+    reports: state
+    engine: mysql
+    host: "${host}"
+    port: "${port}"
+    user: sermo_monitor
+    password: "${env:SERMO_MYSQL_MONITOR_PASSWORD}"
+    database: information_schema
+    query: "SELECT COUNT(*) FROM PROCESSLIST WHERE ID <> CONNECTION_ID()"
+    op: ">"
+    value: "${restart_block_connections}"
+    unit: connections
+
+rules:
+  block-restart-with-active-connections:
+    type: guard
+    blocks: [restart, stop]
+    if: { active: { check: active-connections } }
+    then:
+      action: block
+      message: "${display_name} has active database connections; restart denied"

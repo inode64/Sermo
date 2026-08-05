@@ -1,0 +1,39 @@
+name: postgres-active-connections-guard
+display_name: PostgreSQL
+service: postgresql
+
+# EXAMPLE — deny restart/stop while application sessions exceed the threshold.
+#
+# Copy the checks/rules into the materialized catalog service for the installed
+# PostgreSQL version before using it. The monitor account needs pg_monitor (or
+# pg_read_all_stats) to see other sessions.
+
+variables:
+  host: 127.0.0.1
+  port: 5432
+  database: postgres
+  restart_block_connections: 25
+
+checks:
+  active-connections:
+    type: sql
+    reports: state
+    engine: postgres
+    host: "${host}"
+    port: "${port}"
+    user: sermo_monitor
+    password: "${env:SERMO_POSTGRES_MONITOR_PASSWORD}"
+    database: "${database}"
+    query: "SELECT COUNT(*) FROM pg_stat_activity WHERE backend_type = 'client backend' AND pid <> pg_backend_pid()"
+    op: ">"
+    value: "${restart_block_connections}"
+    unit: connections
+
+rules:
+  block-restart-with-active-connections:
+    type: guard
+    blocks: [restart, stop]
+    if: { active: { check: active-connections } }
+    then:
+      action: block
+      message: "${display_name} has active database connections; restart denied"

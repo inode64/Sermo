@@ -1,0 +1,26 @@
+name: proftpd-active-connections-guard
+uses: proftpd
+
+# EXAMPLE — deny restart/stop while FTP control connections exceed the threshold.
+#
+# This is a local TCP socket count, not an authenticated-user count: it excludes
+# passive data connections and cannot identify clients after an FTP login.
+
+variables:
+  restart_block_connections: 5
+
+checks:
+  active-control-connections:
+    type: tcp_connections
+    reports: state
+    port: "${port}"
+    count: { op: ">", value: "${restart_block_connections}" }
+
+rules:
+  block-restart-with-active-connections:
+    type: guard
+    blocks: [restart, stop]
+    if: { active: { check: active-control-connections } }
+    then:
+      action: block
+      message: "${display_name} has active FTP control connections; restart denied"
