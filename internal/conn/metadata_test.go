@@ -35,6 +35,7 @@ func TestProbeMetadata(t *testing.T) {
 		{[]string{"ipp", "cups"}, 631, false},
 		{[]string{"kafka"}, 9092, false},
 		{[]string{"ldap"}, 389, false},
+		{[]string{"login1"}, 0, false},
 		{[]string{"libvirt", "libvirtd"}, 16509, false},
 		{[]string{"lvmpolld"}, 0, false},
 		{[]string{"memcached", "memcache"}, 11211, false},
