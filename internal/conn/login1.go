@@ -19,10 +19,7 @@ func (login1Protocol) DefaultPort() int   { return defaultPortNone }
 func (login1Protocol) RequiresUser() bool { return false }
 
 func (login1Protocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	addr := DBusAddress(cfg.Socket, cfg.Query)
-	return probeWithDeadline(ctx, func(ctx context.Context) (Result, error) {
-		return login1Probe(ctx, cfg, addr)
-	})
+	return probeBusWithDeadline(ctx, cfg, login1Probe)
 }
 
 func login1Probe(ctx context.Context, cfg Config, addr string) (Result, error) {
