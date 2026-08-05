@@ -164,6 +164,7 @@ const (
 	ExtraKeyContainerRunning  = "container.running"
 	ExtraKeyContainerRestarts = "container.restartcount"
 	ExtraKeyContainerExitCode = "container.exitcode"
+	ExtraKeyConnectedClients  = "connected_clients"
 	ExtraKeyDockerContainers  = "containers"
 	ExtraKeyDockerRunning     = "containers.running"
 	ExtraKeyDockerPaused      = "containers.paused"

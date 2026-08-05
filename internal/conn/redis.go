@@ -26,7 +26,6 @@ const (
 
 const (
 	redisInfoAOFLastWriteStatus = "aof_last_write_status"
-	redisInfoConnectedClients   = "connected_clients"
 	redisInfoLoading            = "loading"
 	redisInfoMasterLinkStatus   = "master_link_status"
 	redisInfoMaxMemory          = "maxmemory"
@@ -109,7 +108,7 @@ func redisHandshake(rw io.ReadWriter, cfg Config) (Result, error) {
 			fields := parseRedisInfo(info)
 			res.Version = fields[redisInfoVersion]
 			for _, k := range []string{
-				ExtraKeyRole, redisInfoMasterLinkStatus, redisInfoConnectedClients,
+				ExtraKeyRole, redisInfoMasterLinkStatus, ExtraKeyConnectedClients,
 				redisInfoUsedMemory, redisInfoMaxMemory, redisInfoMemFragRatio,
 				redisInfoRDBLastSaveStatus, redisInfoAOFLastWriteStatus, redisInfoLoading,
 			} {
