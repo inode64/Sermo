@@ -262,11 +262,7 @@ func BuildWithWarnings(section map[string]any, deps Deps) ([]Built, []BuildWarni
 	for _, name := range slices.Sorted(maps.Keys(section)) {
 		entry, ok := section[name].(map[string]any)
 		if !ok {
-			warnings = append(warnings, BuildWarning{
-				Service: deps.Service,
-				Check:   name,
-				Text:    fmt.Sprintf("check %q is not a mapping", name),
-			})
+			warnings = append(warnings, newBuildWarning(deps, name, fmt.Sprintf("check %q is not a mapping", name), false))
 			continue
 		}
 		if cfgval.Disabled(entry) {
@@ -275,23 +271,13 @@ func BuildWithWarnings(section map[string]any, deps Deps) ([]Built, []BuildWarni
 
 		typ, b, warn := buildCheckBase(name, entry, deps)
 		if warn != "" {
-			warnings = append(warnings, BuildWarning{
-				Service:  deps.Service,
-				Check:    name,
-				Text:     fmt.Sprintf("check %q: %s", name, warn),
-				Optional: cfgval.Bool(entry[CheckKeyOptional]),
-			})
+			warnings = append(warnings, newBuildWarning(deps, name, checkBuildMessage(name, warn), cfgval.Bool(entry[CheckKeyOptional])))
 			continue
 		}
 
 		check, warn := buildCheck(typ, b, entry, runner, client, deps)
 		if warn != "" {
-			warnings = append(warnings, BuildWarning{
-				Service:  deps.Service,
-				Check:    name,
-				Text:     fmt.Sprintf("check %q: %s", name, warn),
-				Optional: cfgval.Bool(entry[CheckKeyOptional]),
-			})
+			warnings = append(warnings, newBuildWarning(deps, name, checkBuildMessage(name, warn), cfgval.Bool(entry[CheckKeyOptional])))
 			continue
 		}
 		if check == nil {
@@ -466,7 +452,7 @@ func BuildInline(name string, entry map[string]any, deps Deps) (Check, error) {
 	runner, client := buildDependencies(deps)
 	typ, b, warn := buildCheckBase(name, entry, deps)
 	if warn != "" {
-		return nil, fmt.Errorf("check %q: %s", name, warn)
+		return nil, errors.New(checkBuildMessage(name, warn))
 	}
 	check, warn := buildCheck(typ, b, entry, runner, client, deps)
 	switch {
@@ -479,6 +465,15 @@ func BuildInline(name string, entry map[string]any, deps Deps) (Check, error) {
 		return nil, fmt.Errorf("check %q: type %q produced no check", name, typ)
 	}
 	return withSummary(check, entry), nil
+}
+
+// newBuildWarning fills the fields every construction warning shares.
+func newBuildWarning(deps Deps, name, text string, optional bool) BuildWarning {
+	return BuildWarning{Service: deps.Service, Check: name, Text: text, Optional: optional}
+}
+
+func checkBuildMessage(name, detail string) string {
+	return fmt.Sprintf("check %q: %s", name, detail)
 }
 
 // buildCheckBase prepares the fields shared by regular and inline checks. The
