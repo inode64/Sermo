@@ -28,6 +28,7 @@ const (
 	procStatusGIDPrefix   = "Gid:"
 	procLineSeparator     = "\n"
 	procStatusFirstField  = 0
+	procStatTTYIndex      = 4 // tty_nr is stat field 7; post-comm fields start at field 3.
 	numericIDBase         = 10
 	numericIDBits         = 32
 
@@ -151,6 +152,10 @@ type OSReader struct {
 	// LookupGroupName maps a GID to a display name. Optional: nil uses native
 	// os/user lookups.
 	LookupGroupName func(uint32) string
+	// ReadTTY adds the controlling-terminal device number from /proc/<pid>/stat
+	// to Identity. It is disabled for ordinary service discovery because it adds
+	// one procfs read per process; terminal-aware checks opt in explicitly.
+	ReadTTY bool
 }
 
 // PIDs lists numeric entries under /proc.
@@ -187,8 +192,30 @@ func (r OSReader) Identity(pid int) (Identity, bool) {
 		State:   state,
 		Cmdline: readCmdline(pid),
 	}
+	if r.ReadTTY {
+		id.TTY, id.TTYOK = terminalDevice(pid)
+		if !id.TTYOK {
+			return Identity{}, false
+		}
+	}
 	id.Exe, id.ExeOK, id.ExePrev = readExe(pid)
 	return id, true
+}
+
+// terminalDevice reads the controlling-terminal device number (tty_nr, stat
+// field 7). A zero device is a successfully observed process without a
+// controlling terminal; ok=false means the stat record was unavailable or
+// malformed.
+func terminalDevice(pid int) (device uint64, ok bool) {
+	fields, ok := StatFields(pid)
+	if !ok || len(fields) <= procStatTTYIndex {
+		return 0, false
+	}
+	value, err := strconv.ParseInt(fields[procStatTTYIndex], numericIDBase, 64)
+	if err != nil || value < 0 {
+		return 0, false
+	}
+	return uint64(value), true
 }
 
 func (r OSReader) userName(uid uint32) string {

@@ -31,6 +31,7 @@ func TestTypeInfoCapabilities(t *testing.T) {
 	}{
 		{typ: "tcp", wantKnown: true, wantHealth: true, wantWatchable: true},
 		{typ: "tcp_connections", wantKnown: true, wantWatchable: true},
+		{typ: "ssh_idle", wantKnown: true, wantWatchable: true},
 		{typ: "storage", wantKnown: true, wantWatchable: true},
 		{typ: "metric", wantKnown: true, wantScoped: true},
 		{typ: "process", wantKnown: true, wantHealth: true, wantScoped: true},

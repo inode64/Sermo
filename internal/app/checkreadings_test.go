@@ -107,6 +107,12 @@ func TestCheckReadingsForAllTypes(t *testing.T) {
 			want: map[string]string{"port": "21", "count": "12 connections"},
 		},
 		{
+			name: "ssh idle exposes session protections",
+			typ:  "ssh_idle",
+			data: map[string]any{"count": 2, "protected_count": 1, "oldest_idle_seconds": 1860.0},
+			want: map[string]string{"count": "2 sessions", "protected_count": "1 sessions", "oldest_idle_seconds": "31m"},
+		},
+		{
 			name: "http",
 			typ:  "http",
 			data: map[string]any{"status": 200, "latency_ms": int64(45)},

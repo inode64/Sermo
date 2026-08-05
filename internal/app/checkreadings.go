@@ -76,6 +76,7 @@ const (
 	watchReadingLabelMode              = "Mode"
 	watchReadingLabelMountpoints       = "Mountpoints"
 	watchReadingLabelOOMKills          = "OOM kills"
+	watchReadingLabelOldestIdle        = "Oldest idle"
 	watchReadingLabelOf                = "Of"
 	watchReadingLabelOwner             = "Owner"
 	watchReadingLabelPath              = "Path"
@@ -230,6 +231,8 @@ func checkReadings(checkType string, data map[string]any) []web.WatchReading {
 		return connCheckReadings(data)
 	case checks.CheckTypeTCPConnections:
 		return tcpConnectionsCheckReadings(data)
+	case checks.CheckTypeSSHIdle:
+		return sshIdleCheckReadings(data)
 	case checks.CheckTypeHTTP, checks.URLSchemeHTTPS:
 		return httpCheckReadings(data)
 	case checks.CheckTypeStorage, checks.CheckTypeSwap, checks.CheckTypeMemory, checks.CheckTypeLoad:
@@ -551,6 +554,18 @@ func redisCheckReadings(data map[string]any) []web.WatchReading {
 	return append(out, readingsFrom(data).
 		addIntMetric(checks.DataKeyConnectedClients, watchReadingLabelConnections, metrics.MetricUnitConnections).
 		readings()...)
+}
+
+func sshIdleCheckReadings(data map[string]any) []web.WatchReading {
+	out := metricCheckReadings(checks.CheckTypeSSHIdle, data)
+	if v, ok := cfgval.Float(data[checks.DataKeyOldestIdleSeconds]); ok && v >= 0 && v <= float64(maxWatchReadingDuration)/float64(time.Second) {
+		out = append(out, web.WatchReading{
+			Field: checks.DataKeyOldestIdleSeconds,
+			Label: watchReadingLabelOldestIdle,
+			Value: units.HumanizeDuration(time.Duration(v * float64(time.Second))),
+		})
+	}
+	return out
 }
 
 func httpCheckReadings(data map[string]any) []web.WatchReading {

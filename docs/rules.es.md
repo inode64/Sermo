@@ -8,6 +8,7 @@
   - [Interdependencias de comprobaciones (requires / skip_when_changed)](#interdependencias-de-comprobaciones-requires--skip_when_changed)
   - [Modo de reporte (reports)](#modo-de-reporte-reports)
   - [Conexiones TCP (tcp_connections)](#conexiones-tcp-tcp_connections)
+  - [Inactividad de terminal SSH (ssh_idle)](#inactividad-de-terminal-ssh-ssh_idle)
   - [Ports](#ports)
   - [HTTP](#http)
   - [Cert](#cert)
@@ -45,6 +46,7 @@ Las comprobaciones de protocolo de conexión (MySQL, PostgreSQL, Redis, Docker, 
 |---------------|--------------------------------------------------------------------|
 | `tcp`         | una conexión TCP a `host:port` tiene éxito                          |
 | `tcp_connections` | el número de sockets TCP locales `ESTABLISHED` en `port` satisface `count {op, value}` |
+| `ssh_idle`    | terminales SSH interactivos inactivos durante `idle_for`, o sesiones de terminal protegidas, satisfacen el predicado de recuento configurado |
 | `ports`       | un conjunto de puertos de `host` satisface una expectativa de abierto/cerrado (ver Ports)|
 | `http`        | la respuesta coincide con `expect_status` (y cabeceras/cuerpo/JSON opcionales, ver HTTP)|
 | `command`     | el comando termina con `expect_exit` (por defecto 0) y su salida coincide con `expect_stdout`/`expect_stderr` opcionales; un `user` opcional lo ejecuta como un usuario concreto del SO; `on_change` alerta cuando su salida cambia (p. ej. una versión), solo en forma de array |
@@ -498,6 +500,54 @@ Si no se puede leer `/proc`, el check no está disponible en vez de informar cer
 Cuando un guard lo referencia, Sermo deniega la operación de forma conservadora.
 Fija un `interval` adecuado al usarlo como watch de larga duración; un guard
 vuelve a ejecutar su check justo antes de una operación.
+
+### Inactividad de terminal SSH (`ssh_idle`)
+
+`ssh_idle` es un check de condición para Linux que observa **terminales SSH
+interactivos**. Lee utmp, el tiempo de acceso de entrada del terminal y la
+ascendencia de procesos de ese TTY. `sshd_exe` es obligatorio y debe nombrar el
+ejecutable `sshd` resuelto exacto; así un pseudoterminal local no se confunde con
+una sesión SSH.
+Admite una ruta absoluta o una lista de rutas absolutas cuando las distribuciones
+usan ubicaciones distintas para `sshd`.
+
+```yaml
+checks:
+  ssh-inactivo:
+    type: ssh_idle
+    idle_for: 30m
+    sshd_exe: /usr/sbin/sshd
+    count: { op: ">", value: 0 }
+    reports: state
+    protected_processes:
+      cuenta-deploy: { user: deploy }
+      cuenta-dba: { group: database }
+      codex: { exe: /usr/local/bin/codex, user: deploy }
+      copia-mysql: { exe: /usr/bin/mysqldump, user: backup }
+```
+
+`protected_processes` es un mapa nombrado: las entradas se unen con OR y los
+campos presentes `exe`, `user` y `group` de una misma entrada con AND. `exe` es
+la ruta exacta resuelta de `/proc/<pid>/exe`; `user` y `group` comparan UID y
+GID primario reales (nombre o ID numérico). Una entrada solo con `user` o
+`group` es válida porque los procesos candidatos ya están limitados al TTY de
+esa sesión. No amplía el descubrimiento de procesos de servicio ni autoriza una
+señal.
+
+`count` es el número de sesiones SSH no protegidas cuya inactividad supera
+`idle_for`. `protected_count` es el número excluido por `protected_processes` y
+`oldest_idle_seconds` la mayor inactividad de entrada entre las SSH no
+protegidas. Para que un guard conserve una cuenta o trabajo protegido, configura
+un segundo check `ssh_idle` con `protected_count: { op: ">", value: 0 }` y haz
+que el guard lo referencie. El check nunca cierra una sesión SSH.
+
+SFTP/scp sin terminal y las conexiones que solo reenvían puertos quedan fuera a
+propósito; usa `tcp_connections` para conexiones de transporte. El atime del
+terminal depende de la política de atime del host. Si no se pueden leer utmp, un
+terminal, la ascendencia de procesos, un ejecutable necesario por un filtro de
+protección o la resolución del propietario, el check queda no disponible; por
+tanto un guard deniega la operación en vez de asumir que no hay sesiones
+protegidas.
 
 ### Ports
 
