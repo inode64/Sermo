@@ -443,9 +443,6 @@
   .sla-seg { flex: 1 1 0; min-width: 0; background: var(--sla-color, var(--line-2)); }
   .sla-seg.sla-gap { background: repeating-linear-gradient(45deg, var(--line-2) 0 2px, transparent 2px 4px); }
   .sla-cell { min-width: 15rem; }
-  /* The check's strip is the service band at table-row scale: same bars, same
-     gap hatching, shorter, with the window's availability under it. */
-  .sla-check-strip .sla-bars { height: 1.1rem; gap: 1px; }
   .sla-cell-foot { display: flex; justify-content: space-between; gap: .4rem; margin-top: .16rem; font-size: .76rem; font-variant-numeric: tabular-nums; }
   .sla-compact { min-width: 14rem; max-width: 19rem; gap: .18rem; }
   .sla-compact .sla-window { grid-template-columns: 2.8rem minmax(5.5rem, 1fr) 3.8rem; gap: .32rem; font-size: .76rem; }
