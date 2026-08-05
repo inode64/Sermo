@@ -66,7 +66,7 @@ func TestRedisHandshakeExtraFields(t *testing.T) {
 		t.Fatalf("handshake: %v", err)
 	}
 	want := map[string]string{
-		"role": "slave", "master_link_status": "up", "connected_clients": "12",
+		"role": "slave", "master_link_status": "up", ExtraKeyConnectedClients: "12",
 		"used_memory": "1048576", "maxmemory": "0", "mem_fragmentation_ratio": "1.20",
 		"rdb_last_bgsave_status": "ok", "aof_last_write_status": "ok", "loading": "0",
 		"uptime_seconds": "3600",
