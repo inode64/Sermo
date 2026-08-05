@@ -365,8 +365,22 @@ const (
 	ServiceKeyAlsoService = "also_service"
 	// ServiceKeyAlsoApply is the cascading Sermo services field.
 	ServiceKeyAlsoApply = "also_apply"
+	// ServiceKeyRestartPolicy selects how restart operations are executed.
+	ServiceKeyRestartPolicy = "restart_policy"
 	// ServiceKeyConfigFiles is the catalog hint listing service config files.
 	ServiceKeyConfigFiles = "config_files"
+)
+
+// Restart policy field keys and modes.
+const (
+	// RestartPolicyKeyMode is restart_policy.mode.
+	RestartPolicyKeyMode = "mode"
+	// RestartModeStaged composes a restart from Sermo's stop and start paths.
+	RestartModeStaged = "staged"
+	// RestartModeNative delegates the restart atomically to the init backend.
+	RestartModeNative = "native"
+	// RestartModeSummary is the user-facing list of restart modes.
+	RestartModeSummary = RestartModeStaged + ", " + RestartModeNative
 )
 
 // VariableKey constants are built-in or conventional variables in variables:.
@@ -830,6 +844,21 @@ func AdditionalUnits(tree map[string]any, backend string) []string {
 		return nil
 	}
 	return cfgval.StringList(m[backend])
+}
+
+// RestartMode returns the service's restart strategy. Staged is the safe
+// default when restart_policy is absent or malformed; validation reports any
+// malformed or unsupported explicit value before an operation can be built.
+func RestartMode(tree map[string]any) string {
+	policy, ok := tree[ServiceKeyRestartPolicy].(map[string]any)
+	if !ok {
+		return RestartModeStaged
+	}
+	mode := cfgval.AsString(policy[RestartPolicyKeyMode])
+	if mode == "" {
+		return RestartModeStaged
+	}
+	return mode
 }
 
 // CleanPath is one `clean_on_stop` entry: a path (or glob, when not recursive)
