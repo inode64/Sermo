@@ -156,9 +156,32 @@ func checkResultMetadata(check Check) Result {
 		return Result{Check: "unknown"}
 	}
 	if provider, ok := check.(resultMetadataProvider); ok {
-		return provider.resultMetadata()
+		if result, ok := safeResultMetadata(provider); ok {
+			if result.Check == "" {
+				result.Check = safeCheckName(check)
+			}
+			return result
+		}
 	}
-	return Result{Check: check.Name()}
+	return Result{Check: safeCheckName(check)}
+}
+
+func safeResultMetadata(provider resultMetadataProvider) (result Result, ok bool) {
+	defer func() {
+		if recover() != nil {
+			ok = false
+		}
+	}()
+	return provider.resultMetadata(), true
+}
+
+func safeCheckName(check Check) (name string) {
+	name = "unknown"
+	defer func() { _ = recover() }()
+	if checkName := check.Name(); checkName != "" {
+		name = checkName
+	}
+	return name
 }
 
 // IsHealthType reports whether OK==true means the check is healthy. Host watches
