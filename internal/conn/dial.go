@@ -154,7 +154,7 @@ func pqDialer(target probeTarget) pqBindDialer {
 // banner protocol's Probe repeats; the protocol supplies only its default port
 // and handshake.
 func probeBanner(ctx context.Context, cfg Config, defaultPort int, handshake func(io.ReadWriter, Config) (Result, error)) (Result, error) {
-	c, err := newProbeTarget(cfg, defaultPort).openStream(ctx)
+	c, err := probeTargetFor(ctx, cfg, defaultPort).openStream(ctx)
 	if err != nil {
 		return Result{}, err
 	}
@@ -201,7 +201,8 @@ func probeUnixSocket(ctx context.Context, cfg Config, defaultSocket string) (Res
 	if socket == "" {
 		socket = defaultSocket
 	}
-	c, err := dialUnix(ctx, socket)
+	cfg.Socket = socket
+	c, err := probeTargetFor(ctx, cfg, defaultPortNone).openStream(ctx)
 	if err != nil {
 		return Result{}, err
 	}
@@ -346,7 +347,7 @@ func sendTextCommand(rw io.Writer, tp *textproto.Reader, command string) (int, s
 // (parse ok=false) fails with errFormat applied to the offending line. The
 // command→greeting skeleton shared by clamd, spamd and asterisk.
 func probeLineCommand(ctx context.Context, cfg Config, defaultPort int, command string, parse func(line string) (Result, bool), errFormat string) (Result, error) {
-	c, err := newProbeTarget(cfg, defaultPort).openStream(ctx)
+	c, err := probeTargetFor(ctx, cfg, defaultPort).openStream(ctx)
 	if err != nil {
 		return Result{}, err
 	}

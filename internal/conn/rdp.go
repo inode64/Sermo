@@ -65,7 +65,7 @@ func (rdpProtocol) DefaultPort() int   { return defaultPortRDP }
 func (rdpProtocol) RequiresUser() bool { return false }
 
 func (rdpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	c, err := newProbeTarget(cfg, defaultPortRDP).openTCP(ctx)
+	c, err := probeTargetFor(ctx, cfg, defaultPortRDP).openTCP(ctx)
 	if err != nil {
 		return Result{}, err
 	}

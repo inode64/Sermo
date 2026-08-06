@@ -83,7 +83,7 @@ const (
 )
 
 func (smbProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	target := newProbeTarget(cfg, defaultPortSMB)
+	target := probeTargetFor(ctx, cfg, defaultPortSMB)
 
 	dialect, signingRequired, err := smbNegotiate(ctx, target)
 	if err != nil {

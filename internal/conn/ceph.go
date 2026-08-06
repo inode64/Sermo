@@ -28,7 +28,7 @@ const (
 )
 
 func (cephProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	c, err := newProbeTarget(cfg, defaultPortCeph).openTCP(ctx)
+	c, err := probeTargetFor(ctx, cfg, defaultPortCeph).openTCP(ctx)
 	if err != nil {
 		return Result{}, err
 	}
