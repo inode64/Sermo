@@ -984,10 +984,15 @@ func TestResultHealthyByReportingMode(t *testing.T) {
 }
 
 func TestIsReportingMode(t *testing.T) {
-	for _, mode := range ReportingModes {
+	for _, mode := range ReportingModes() {
 		if !IsReportingMode(mode) {
 			t.Errorf("IsReportingMode(%q) = false, want true", mode)
 		}
+	}
+	modes := ReportingModes()
+	modes[0] = "mutated"
+	if IsReportingMode("mutated") || !IsReportingMode(ReportsHealth) {
+		t.Fatal("ReportingModes exposed mutable validation state")
 	}
 	if IsReportingMode("running") {
 		t.Error(`IsReportingMode("running") = true; the mode names how a check reports, not what it senses`)
