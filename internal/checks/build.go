@@ -2,7 +2,6 @@ package checks
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"maps"
 	"net/http"
@@ -115,59 +114,83 @@ type Deps struct {
 	SizeSampler SizeSamplerFunc
 }
 
-// BuildWarning is an unusable check entry reported during construction. It can be
-// rendered as operator-facing text or folded into an Outcome as a failed Result.
-type BuildWarning struct {
+// BuildIssueKind identifies why an unusable check entry could not be built.
+type BuildIssueKind string
+
+// Supported build issue kinds.
+const (
+	BuildIssueInvalidEntry         BuildIssueKind = "invalid_entry"
+	BuildIssueInvalidConfiguration BuildIssueKind = "invalid_configuration"
+	BuildIssueUnsupportedType      BuildIssueKind = "unsupported_type"
+	BuildIssueBuilderInvariant     BuildIssueKind = "builder_invariant"
+)
+
+// BuildIssue is an unusable check entry reported during construction. Required
+// issues block the outcome; optional issues remain warnings.
+type BuildIssue struct {
 	Service  string
 	Check    string
-	Text     string
+	Type     string
+	Kind     BuildIssueKind
+	Detail   string
 	Optional bool
 }
 
-// String returns the warning text historically returned by Build.
-func (w BuildWarning) String() string { return w.Text }
+// String renders the operator-facing issue with its check identity.
+func (i BuildIssue) String() string { return checkBuildMessage(i.Check, i.Detail) }
 
-// Result returns a failed check result for this build warning. Optional malformed
+// BuildError adapts a structured issue to error for inline check callers.
+type BuildError struct {
+	Issue BuildIssue
+}
+
+// Error renders the underlying issue.
+func (e *BuildError) Error() string { return e.Issue.String() }
+
+// Result returns an unavailable result for this build issue. Optional malformed
 // checks remain optional warnings; required malformed checks block preflight and
 // start-verification like any other required check failure.
-func (w BuildWarning) Result() Result {
-	return Result{Service: w.Service, Check: w.Check, OK: false, Optional: w.Optional, Message: w.Text}
+func (i BuildIssue) Result() Result {
+	return Result{
+		Service: i.Service, Check: i.Check, OK: false, Optional: i.Optional,
+		Unavailable: true, Message: i.String(),
+	}
 }
 
-// BuildWarningResults converts build warnings into check results.
-func BuildWarningResults(warnings []BuildWarning) []Result {
-	return mapWarnings(warnings, BuildWarning.Result)
+// BuildIssueResults converts build issues into check results.
+func BuildIssueResults(issues []BuildIssue) []Result {
+	return mapBuildIssues(issues, BuildIssue.Result)
 }
 
-// mapWarnings converts warnings element-by-element via conv, preserving the
-// nil-in/nil-out convention of the warning views.
-func mapWarnings[T any](warnings []BuildWarning, conv func(BuildWarning) T) []T {
-	if len(warnings) == 0 {
+// mapBuildIssues converts issues element-by-element via conv, preserving the
+// nil-in/nil-out convention of the issue views.
+func mapBuildIssues[T any](issues []BuildIssue, conv func(BuildIssue) T) []T {
+	if len(issues) == 0 {
 		return nil
 	}
-	out := make([]T, 0, len(warnings))
-	for _, w := range warnings {
-		out = append(out, conv(w))
+	out := make([]T, 0, len(issues))
+	for _, issue := range issues {
+		out = append(out, conv(issue))
 	}
 	return out
 }
 
 // Build turns a checks/preflight section (a map keyed by check name)
 // into runnable checks, skipping `enabled: false` entries and reporting unusable
-// ones as warnings. Entries are built in name order for stable output.
+// ones as issues. Entries are built in name order for stable output.
 func Build(section map[string]any, deps Deps) ([]Built, []string) {
-	built, warnings := BuildWithWarnings(section, deps)
-	return built, BuildWarningStrings(warnings)
+	built, issues := BuildWithIssues(section, deps)
+	return built, BuildIssueStrings(issues)
 }
 
-// BuildWarningStrings renders build warnings as operator-facing strings.
-func BuildWarningStrings(warnings []BuildWarning) []string {
-	return mapWarnings(warnings, BuildWarning.String)
+// BuildIssueStrings renders build issues as operator-facing strings.
+func BuildIssueStrings(issues []BuildIssue) []string {
+	return mapBuildIssues(issues, BuildIssue.String)
 }
 
-// BuildWithWarnings is Build's structured form. Use it where build warnings
+// BuildWithIssues is Build's structured form. Use it where build issues
 // must participate in check outcomes, not only be printed.
-func BuildWithWarnings(section map[string]any, deps Deps) ([]Built, []BuildWarning) {
+func BuildWithIssues(section map[string]any, deps Deps) ([]Built, []BuildIssue) {
 	if section == nil {
 		return nil, nil
 	}
@@ -175,37 +198,43 @@ func BuildWithWarnings(section map[string]any, deps Deps) ([]Built, []BuildWarni
 	runner, client := buildDependencies(deps)
 
 	var built []Built
-	var warnings []BuildWarning
+	var issues []BuildIssue
 	for _, name := range slices.Sorted(maps.Keys(section)) {
 		entry, ok := section[name].(map[string]any)
 		if !ok {
-			warnings = append(warnings, newBuildWarning(deps, name, fmt.Sprintf("check %q is not a mapping", name), false))
+			issues = append(issues, BuildIssue{
+				Service: deps.Service, Check: name, Kind: BuildIssueInvalidEntry,
+				Detail: "entry is not a mapping",
+			})
 			continue
 		}
 		if cfgval.Disabled(entry) {
 			continue
 		}
 
-		typ, b, warn := buildCheckBase(name, entry, deps)
-		if warn != "" {
-			warnings = append(warnings, newBuildWarning(deps, name, checkBuildMessage(name, warn), cfgval.Bool(entry[CheckKeyOptional])))
+		builtCheck, issue := buildOne(name, entry, deps, runner, client)
+		if issue != nil {
+			issues = append(issues, *issue)
 			continue
 		}
-
-		check, warn := buildCheck(typ, b, entry, runner, client, deps)
-		if warn != "" {
-			warnings = append(warnings, newBuildWarning(deps, name, checkBuildMessage(name, warn), cfgval.Bool(entry[CheckKeyOptional])))
-			continue
-		}
-		if check == nil {
-			// Unreachable: buildCheck turns a silent nil into a warning above.
-			// Kept so a future builder cannot land a nil check in the catalog
-			// that panics at Run time instead of failing to build.
-			continue
-		}
-		built = append(built, Built{Check: withSummary(check, entry), Optional: cfgval.Bool(entry[CheckKeyOptional])})
+		built = append(built, builtCheck)
 	}
-	return built, warnings
+	return built, issues
+}
+
+func buildOne(name string, entry map[string]any, deps Deps, runner execx.Runner, client *http.Client) (Built, *BuildIssue) {
+	typ, b, failure := buildCheckBase(name, entry, deps)
+	if failure == nil {
+		var check Check
+		check, failure = buildCheck(typ, b, entry, runner, client, deps)
+		if failure == nil {
+			return Built{Check: withSummary(check, entry), Optional: cfgval.Bool(entry[CheckKeyOptional])}, nil
+		}
+	}
+	return Built{}, &BuildIssue{
+		Service: deps.Service, Check: name, Type: typ, Kind: failure.kind,
+		Detail: failure.detail, Optional: cfgval.Bool(entry[CheckKeyOptional]),
+	}
 }
 
 type checkBuildInput struct {
@@ -217,6 +246,11 @@ type checkBuildInput struct {
 }
 
 type checkBuilder func(checkBuildInput) (Check, string)
+
+type buildFailure struct {
+	kind   BuildIssueKind
+	detail string
+}
 
 // builtinCheckSpecs is the central registry for built-in checks. It keeps
 // construction and static type capabilities together. Connection protocols
@@ -284,26 +318,37 @@ var builtinCheckSpecs = []checkSpec{
 	}},
 }
 
-func buildCheck(typ string, b base, entry map[string]any, runner execx.Runner, client *http.Client, deps Deps) (Check, string) {
+func buildCheck(typ string, b base, entry map[string]any, runner execx.Runner, client *http.Client, deps Deps) (Check, *buildFailure) {
 	if typ == "" {
-		return nil, "missing type"
+		return nil, &buildFailure{kind: BuildIssueInvalidConfiguration, detail: "missing type"}
 	}
 	if spec, ok := checkSpecByName[typ]; ok {
 		check, warn := spec.build(checkBuildInput{base: b, entry: entry, runner: runner, client: client, deps: deps})
-		if warn == "" && check == nil {
+		switch {
+		case warn != "":
+			return nil, &buildFailure{kind: BuildIssueInvalidConfiguration, detail: warn}
+		case check == nil:
 			// A builder must return either a check or a warning. Turning a
-			// silent nil into a warning keeps every caller's "no warning means
-			// a usable check" assumption true instead of merely intended.
-			return nil, fmt.Sprintf("check type %q produced no check", typ)
+			// silent nil into an invariant issue keeps every caller's "no issue
+			// means a usable check" assumption true instead of merely intended.
+			return nil, &buildFailure{
+				kind:   BuildIssueBuilderInvariant,
+				detail: fmt.Sprintf("check type %q produced no check", typ),
+			}
+		default:
+			return check, nil
 		}
-		return check, warn
 	}
 	// A connection-protocol check (mysql, …) is owned by conn's extensible
 	// registry, so new protocols need no change in this builder.
 	if proto, ok := conn.Lookup(typ); ok {
-		return buildConnCheck(b, proto, entry)
+		check, warn := buildConnCheck(b, proto, entry)
+		if warn != "" {
+			return nil, &buildFailure{kind: BuildIssueInvalidConfiguration, detail: warn}
+		}
+		return check, nil
 	}
-	return nil, fmt.Sprintf("unsupported type %q", typ)
+	return nil, &buildFailure{kind: BuildIssueUnsupportedType, detail: fmt.Sprintf("unsupported type %q", typ)}
 }
 
 // buildConfigCheck builds a configuration validity/change check.
@@ -366,45 +411,31 @@ func buildSqliteCheck(b base, entry map[string]any) (Check, string) {
 }
 
 // BuildInline builds a single check from an inline entry (type + fields), used
-// by inline rule conditions. It returns an error rather than a
-// warning so the caller can surface a malformed inline probe.
+// by inline rule conditions. Its *BuildError carries the same structured issue
+// and operator message as section construction.
 func BuildInline(name string, entry map[string]any, deps Deps) (Check, error) {
 	runner, client := buildDependencies(deps)
-	typ, b, warn := buildCheckBase(name, entry, deps)
-	if warn != "" {
-		return nil, errors.New(checkBuildMessage(name, warn))
+	built, issue := buildOne(name, entry, deps, runner, client)
+	if issue != nil {
+		return nil, &BuildError{Issue: *issue}
 	}
-	check, warn := buildCheck(typ, b, entry, runner, client, deps)
-	switch {
-	case warn != "":
-		return nil, errors.New(warn)
-	case check == nil:
-		// buildCheck already turns a silent nil into a warning, so this is
-		// unreachable — but BuildInline's caller runs the check straight away,
-		// and an error beats a nil dereference if that ever stops holding.
-		return nil, fmt.Errorf("check %q: type %q produced no check", name, typ)
-	}
-	return withSummary(check, entry), nil
-}
-
-// newBuildWarning fills the fields every construction warning shares.
-func newBuildWarning(deps Deps, name, text string, optional bool) BuildWarning {
-	return BuildWarning{Service: deps.Service, Check: name, Text: text, Optional: optional}
+	return built.Check, nil
 }
 
 func checkBuildMessage(name, detail string) string {
 	return fmt.Sprintf("check %q: %s", name, detail)
 }
 
-// buildCheckBase prepares the fields shared by regular and inline checks. The
-// callers differ only in how they present a malformed entry (warning or error).
-func buildCheckBase(name string, entry map[string]any, deps Deps) (string, base, string) {
+// buildCheckBase prepares the fields shared by regular and inline checks.
+func buildCheckBase(name string, entry map[string]any, deps Deps) (string, base, *buildFailure) {
 	typ := cfgval.AsString(entry[CheckKeyType])
 	timeout := deps.DefaultTimeout
 	if raw, present := entry[CheckKeyTimeout]; present {
 		timeout = cfgval.Duration(raw)
 		if timeout <= 0 {
-			return typ, base{}, positiveDurationMessage(CheckKeyTimeout)
+			return typ, base{}, &buildFailure{
+				kind: BuildIssueInvalidConfiguration, detail: positiveDurationMessage(CheckKeyTimeout),
+			}
 		}
 	}
 	reports := cfgval.AsString(entry[CheckKeyReports])
@@ -414,7 +445,7 @@ func buildCheckBase(name string, entry map[string]any, deps Deps) (string, base,
 		timeout:   timeout,
 		condition: ResolveCondition(typ, reports),
 		reports:   reports,
-	}, ""
+	}, nil
 }
 
 // positiveDurationMessage reports the shared validation text for a duration

@@ -534,8 +534,8 @@ func sectionRunner(tree map[string]any, deps checks.Deps, sample func(context.Co
 // runCheckSection builds and evaluates one resolved check section; the
 // execution shared by the preflight and verify runners.
 func runCheckSection(ctx context.Context, entries map[string]any, deps checks.Deps, sample func(context.Context) checks.MetricReader) checks.Outcome {
-	built, warnings := checks.BuildWithWarnings(entries, checkDepsForEval(ctx, deps, sample))
-	results := checks.BuildWarningResults(warnings)
+	built, issues := checks.BuildWithIssues(entries, checkDepsForEval(ctx, deps, sample))
+	results := checks.BuildIssueResults(issues)
 	results = append(results, checks.Run(ctx, built, 0)...)
 	return checks.Evaluate(results)
 }

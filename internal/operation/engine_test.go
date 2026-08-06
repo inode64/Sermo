@@ -223,7 +223,7 @@ func TestRestartOK(t *testing.T) {
 	}
 }
 
-func TestSectionRunnerBuildWarningBlocksRequiredPreflight(t *testing.T) {
+func TestSectionRunnerBuildIssueBlocksRequiredPreflight(t *testing.T) {
 	tree := map[string]any{
 		"preflight": map[string]any{
 			"cpu": map[string]any{"type": "metric", "name": "cpu", "op": ">", "value": "90"},
@@ -332,7 +332,7 @@ func TestSectionRunnerMetricSampleEnablesMetricPreflight(t *testing.T) {
 	}
 }
 
-func TestSectionRunnerOptionalBuildWarningDoesNotBlock(t *testing.T) {
+func TestSectionRunnerOptionalBuildIssueDoesNotBlock(t *testing.T) {
 	tree := map[string]any{
 		"preflight": map[string]any{
 			"cpu": map[string]any{"type": "metric", "name": "cpu", "op": ">", "value": "90", "optional": true},
