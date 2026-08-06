@@ -107,7 +107,7 @@ var amqpHeader = append([]byte(amqpSignature),
 )
 
 func (amqpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	c, err := newProbeTarget(cfg, defaultPortAMQP).openStream(ctx)
+	c, err := probeTargetFor(ctx, cfg, defaultPortAMQP).openStream(ctx)
 	if err != nil {
 		return Result{}, err
 	}

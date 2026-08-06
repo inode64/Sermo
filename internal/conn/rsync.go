@@ -19,7 +19,7 @@ func (rsyncProtocol) RequiresUser() bool { return false }
 const rsyncGreetingPrefix = "@RSYNCD:"
 
 func (rsyncProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	c, err := newProbeTarget(cfg, defaultPortRsync).openTCP(ctx)
+	c, err := probeTargetFor(ctx, cfg, defaultPortRsync).openTCP(ctx)
 	if err != nil {
 		return Result{}, err
 	}

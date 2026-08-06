@@ -42,7 +42,7 @@ func (nfsProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 // context deadline, matching the behavior required by NFS-family RPC probes.
 func probeRPCNull(ctx context.Context, cfg Config, defaultPort int, program, version uint32, programName string) (Result, error) {
 	xid := randXID32()
-	c, err := newProbeTarget(cfg, defaultPort).openTCP(ctx)
+	c, err := probeTargetFor(ctx, cfg, defaultPort).openTCP(ctx)
 	if err != nil {
 		return Result{}, err
 	}

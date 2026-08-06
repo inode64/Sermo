@@ -103,7 +103,7 @@ func (fpmProtocol) RequiresUser() bool { return false }
 // the check's status_path — pm.status_path in the pool config), it additionally
 // fetches the pool status page and exposes its metrics in Extra.
 func (fpmProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	target := newProbeTarget(cfg, defaultPortFPM)
+	target := probeTargetFor(ctx, cfg, defaultPortFPM)
 	c, err := target.openStream(ctx)
 	if err != nil {
 		return Result{}, err

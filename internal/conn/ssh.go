@@ -40,7 +40,7 @@ const (
 )
 
 func (sshProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	target := newProbeTarget(cfg, defaultPortSSH)
+	target := probeTargetFor(ctx, cfg, defaultPortSSH)
 	addr := target.address()
 
 	c, err := target.openTCP(ctx)
