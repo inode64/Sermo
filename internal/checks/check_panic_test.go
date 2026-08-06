@@ -10,6 +10,17 @@ type panicCheck struct{ base }
 
 func (panicCheck) Run(context.Context) Result { panic("boom") }
 
+type panicMetadataCheck struct{}
+
+func (panicMetadataCheck) Name() string               { return "metadata-fallback" }
+func (panicMetadataCheck) Run(context.Context) Result { panic("run") }
+func (panicMetadataCheck) resultMetadata() Result     { panic("metadata") }
+
+type panicNameCheck struct{}
+
+func (panicNameCheck) Name() string               { panic("name") }
+func (panicNameCheck) Run(context.Context) Result { panic("run") }
+
 // A panic in one check must fail only that check, never crash the process,
 // and the surrounding checks must still return their results in order.
 func TestRunRecoversPerCheckPanic(t *testing.T) {
@@ -50,5 +61,19 @@ func TestExecutePreservesPanickingCheckMetadata(t *testing.T) {
 	}
 	if result.OK || !result.Unavailable || !strings.Contains(result.Message, "boom") {
 		t.Fatalf("result = %+v, want unavailable panic observation", result)
+	}
+}
+
+func TestExecuteRecoversWhenMetadataPanics(t *testing.T) {
+	result := Execute(context.Background(), panicMetadataCheck{})
+	if result.Check != "metadata-fallback" || !result.Unavailable || !strings.Contains(result.Message, "run") {
+		t.Fatalf("result = %+v, want unavailable run panic with fallback name", result)
+	}
+}
+
+func TestExecuteRecoversWhenNamePanics(t *testing.T) {
+	result := Execute(context.Background(), panicNameCheck{})
+	if result.Check != "unknown" || !result.Unavailable || !strings.Contains(result.Message, "run") {
+		t.Fatalf("result = %+v, want unavailable run panic with unknown name", result)
 	}
 }
