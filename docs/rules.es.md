@@ -1063,8 +1063,10 @@ Protocolos, en el orden de la tabla de arriba:
   `on_change`, además de `dbus_interface`, `property` y `property_value` cuando
   se configuren.
   Usa `github.com/godbus/dbus/v5`. Con `interface`
-  y un `query` TCP, usa exactamente `tcp:host=…,port=…`; el resto de opciones de
-  transporte TCP de D-Bus se rechazan para no ignorar silenciosamente el enlace de salida.
+  y un `query` TCP, usa exactamente `tcp:host=…,port=…`; las direcciones
+  alternativas, `nonce-tcp` y el resto de opciones de transporte TCP de D-Bus se
+  rechazan para no ignorar silenciosamente el enlace de salida. Las alternativas
+  exclusivamente Unix siguen siendo locales y no necesitan enlace de interfaz.
 
   ```yaml
   checks:
