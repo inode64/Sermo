@@ -5,6 +5,8 @@ import (
 	"net"
 	"path/filepath"
 	"testing"
+
+	"sermo/internal/dockerctl"
 )
 
 func TestProbeTargetAddress(t *testing.T) {
@@ -97,5 +99,68 @@ func TestProbeTargetOpenTCP(t *testing.T) {
 func TestProbeTargetDialerUsesConfiguredInterface(t *testing.T) {
 	if d := newProbeTarget(Config{Interface: "eth0"}, 1234).dialer(); d.Control == nil {
 		t.Fatal("dialer Control is nil with an interface configured")
+	}
+}
+
+func TestResolveProtocolTarget(t *testing.T) {
+	tests := []struct {
+		name     string
+		protocol string
+		cfg      Config
+		want     Config
+	}{
+		{
+			name:     "network defaults",
+			protocol: ProtocolNameRedis,
+			want:     Config{Host: DefaultHost, Port: defaultPortRedis},
+		},
+		{
+			name:     "local socket default",
+			protocol: ProtocolNameDocker,
+			want:     Config{Host: DefaultHost, Port: dockerctl.DefaultPort, Socket: DefaultDockerSocket},
+		},
+		{
+			name:     "acpid socket default",
+			protocol: ProtocolNameACPID,
+			want:     Config{Host: DefaultHost, Socket: DefaultACPIDSocket},
+		},
+		{
+			name:     "fail2ban socket default",
+			protocol: ProtocolNameFail2ban,
+			want:     Config{Host: DefaultHost, Socket: DefaultFail2banSocket},
+		},
+		{
+			name:     "lvmpolld socket default",
+			protocol: ProtocolNameLVMPolld,
+			want:     Config{Host: DefaultHost, Socket: DefaultLVMPolldSocket},
+		},
+		{
+			name:     "libvirt socket default",
+			protocol: ProtocolNameLibvirt,
+			want:     Config{Host: DefaultHost, Port: defaultPortLibvirt, Socket: DefaultLibvirtSocket},
+		},
+		{
+			name:     "explicit host selects network",
+			protocol: ProtocolNameDocker,
+			cfg:      Config{Host: "docker.example"},
+			want:     Config{Host: "docker.example", Port: dockerctl.DefaultPort},
+		},
+		{
+			name:     "explicit target wins",
+			protocol: ProtocolNameLibvirt,
+			cfg:      Config{Host: "hypervisor.example", Port: 17000, Socket: "/run/custom.sock"},
+			want:     Config{Host: "hypervisor.example", Port: 17000, Socket: "/run/custom.sock"},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			protocol, ok := Lookup(test.protocol)
+			if !ok {
+				t.Fatalf("Lookup(%q) failed", test.protocol)
+			}
+			if got := Resolve(protocol, test.cfg); got.Host != test.want.Host || got.Port != test.want.Port || got.Socket != test.want.Socket {
+				t.Errorf("Resolve() = %+v, want %+v", got, test.want)
+			}
+		})
 	}
 }

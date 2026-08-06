@@ -194,9 +194,12 @@ func buildMongoCheck(b base, entry map[string]any) (Check, string) {
 // optional auth_source.
 func mongoConnConfig(entry map[string]any) conn.Config {
 	cfg := databaseConnectionConfig(entry)
-	cfg.Port = connectionPort(entry, conn.DefaultPort(conn.ProtocolNameMongoDB))
+	cfg.Port = connectionPort(entry, 0)
 	if as := cfgval.AsString(entry[CheckKeyAuthSource]); as != "" {
 		cfg.Params = map[string]string{conn.ParamKeyAuthSource: as}
+	}
+	if protocol, ok := conn.Lookup(conn.ProtocolNameMongoDB); ok {
+		cfg = conn.Resolve(protocol, cfg)
 	}
 	return cfg
 }
