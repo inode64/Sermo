@@ -33,6 +33,7 @@ const (
 	dbusTCPPrefix         = "tcp:"
 	dbusTCPHostKey        = "host"
 	dbusTCPPortKey        = "port"
+	dbusUnixPrefix        = "unix:"
 	dbusUnixPathPrefix    = "unix:path="
 )
 
@@ -299,16 +300,16 @@ func connectDBus(ctx context.Context, cfg Config, addr string) (*dbus.Conn, erro
 // is safety-significant: godbus dials internally, so a bound target is opened
 // first and handed to dbus.NewConn instead.
 func dialDBus(ctx context.Context, cfg Config, addr string) (*dbus.Conn, error) {
-	if cfg.Interface == "" || !strings.HasPrefix(addr, dbusTCPPrefix) {
+	tcpCfg, bindTCP, err := dbusBoundTCPConfig(cfg, addr)
+	if err != nil {
+		return nil, err
+	}
+	if !bindTCP {
 		conn, err := dbus.Dial(addr, dbus.WithContext(ctx))
 		if err != nil {
 			return nil, fmt.Errorf("dial D-Bus address %q: %w", addr, err)
 		}
 		return conn, nil
-	}
-	tcpCfg, err := dbusTCPConfig(cfg, addr)
-	if err != nil {
-		return nil, err
 	}
 	c, err := newProbeTarget(tcpCfg, defaultPortNone).openTCP(ctx)
 	if err != nil {
@@ -320,6 +321,38 @@ func dialDBus(ctx context.Context, cfg Config, addr string) (*dbus.Conn, error) 
 		return nil, fmt.Errorf("create D-Bus connection: %w", err)
 	}
 	return conn, nil
+}
+
+// dbusBoundTCPConfig identifies the one address form Sermo can dial through a
+// configured egress interface. Unix-only alternatives need no network binding;
+// every address that could fall back to another network transport is rejected
+// instead of letting godbus dial it outside SO_BINDTODEVICE.
+func dbusBoundTCPConfig(cfg Config, addr string) (Config, bool, error) {
+	if cfg.Interface == "" {
+		return Config{}, false, nil
+	}
+	addresses := strings.Split(addr, ";")
+	allUnix := true
+	for _, candidate := range addresses {
+		if !strings.HasPrefix(candidate, dbusUnixPrefix) {
+			allUnix = false
+			break
+		}
+	}
+	if allUnix {
+		return Config{}, false, nil
+	}
+	if len(addresses) != 1 {
+		return Config{}, false, fmt.Errorf("D-Bus address alternatives cannot be used with interface %q", cfg.Interface)
+	}
+	if !strings.HasPrefix(addr, dbusTCPPrefix) {
+		return Config{}, false, fmt.Errorf("D-Bus address transport cannot be bound to interface %q", cfg.Interface)
+	}
+	tcpCfg, err := dbusTCPConfig(cfg, addr)
+	if err != nil {
+		return Config{}, false, err
+	}
+	return tcpCfg, true, nil
 }
 
 // dbusTCPConfig parses the supported D-Bus TCP address form into a regular
