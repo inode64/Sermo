@@ -19,6 +19,20 @@ func (f fakeProto) DefaultPort() int                            { return 1234 }
 func (fakeProto) RequiresUser() bool                            { return true }
 func (fakeProto) Probe(context.Context, Config) (Result, error) { return Result{}, nil }
 
+type recordingProto struct {
+	fakeProto
+	config        Config
+	targetAddress string
+	commonContext bool
+}
+
+func (p *recordingProto) Probe(ctx context.Context, cfg Config) (Result, error) {
+	p.config = cfg
+	p.targetAddress = probeTargetFor(ctx, cfg, p.DefaultPort()).address()
+	_, p.commonContext = ctx.(probeContext)
+	return Result{}, nil
+}
+
 func TestRegistryLookupAndAlias(t *testing.T) {
 	reg, err := newRegistry([]protocolRegistration{{protocol: fakeProto{name: "demo"}, aliases: []string{"demo-alias"}}})
 	if err != nil {
@@ -33,6 +47,39 @@ func TestRegistryLookupAndAlias(t *testing.T) {
 	}
 	if _, ok := reg.lookup("nope"); ok {
 		t.Fatal("unknown name must not resolve")
+	}
+}
+
+func TestRegisteredProtocolUsesCommonExecutor(t *testing.T) {
+	implementation := &recordingProto{fakeProto: fakeProto{name: "demo"}}
+	reg, err := newRegistry([]protocolRegistration{{
+		protocol:      implementation,
+		aliases:       []string{"demo-alias"},
+		defaultSocket: "/run/demo.sock",
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	protocol, ok := reg.lookup("demo-alias")
+	if !ok {
+		t.Fatal("lookup demo-alias failed")
+	}
+	if _, err := protocol.Probe(context.Background(), Config{}); err != nil {
+		t.Fatal(err)
+	}
+
+	if !implementation.commonContext {
+		t.Fatal("registered probe did not receive the common probe context")
+	}
+	wantConfig := Config{Host: DefaultHost, Port: implementation.DefaultPort(), Socket: "/run/demo.sock"}
+	if implementation.config.Host != wantConfig.Host ||
+		implementation.config.Port != wantConfig.Port ||
+		implementation.config.Socket != wantConfig.Socket {
+		t.Errorf("probe config = %+v, want %+v", implementation.config, wantConfig)
+	}
+	if implementation.targetAddress != "127.0.0.1:1234" {
+		t.Errorf("prepared target address = %q, want %q", implementation.targetAddress, "127.0.0.1:1234")
 	}
 }
 
