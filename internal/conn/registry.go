@@ -1,6 +1,9 @@
 package conn
 
-import "fmt"
+import (
+	"context"
+	"fmt"
+)
 
 // protocolRegistration is one built-in protocol and the aliases that resolve
 // to it. Keeping every registration in one immutable table makes aliases and
@@ -81,6 +84,23 @@ type registry struct {
 	byCanonical map[string]protocolRegistration
 }
 
+// registeredProtocol is the runtime view of one immutable registration. It
+// delegates metadata to the wire implementation, while Probe always enters the
+// common executor before the implementation can perform I/O.
+type registeredProtocol struct {
+	registration protocolRegistration
+}
+
+func (p registeredProtocol) Name() string     { return p.registration.protocol.Name() }
+func (p registeredProtocol) DefaultPort() int { return p.registration.protocol.DefaultPort() }
+func (p registeredProtocol) RequiresUser() bool {
+	return p.registration.protocol.RequiresUser()
+}
+
+func (p registeredProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
+	return executeProbe(ctx, p.registration, cfg)
+}
+
 func newRegistry(registrations []protocolRegistration) (*registry, error) {
 	byName := make(map[string]Protocol, len(registrations))
 	byCanonical := make(map[string]protocolRegistration, len(registrations))
@@ -92,7 +112,8 @@ func newRegistry(registrations []protocolRegistration) (*registry, error) {
 		if name == "" {
 			return nil, fmt.Errorf("register connection protocol: empty canonical name")
 		}
-		if err := registerProtocolName(byName, name, registration.protocol); err != nil {
+		registered := registeredProtocol{registration: registration}
+		if err := registerProtocolName(byName, name, registered); err != nil {
 			return nil, err
 		}
 		byCanonical[name] = registration
@@ -100,7 +121,7 @@ func newRegistry(registrations []protocolRegistration) (*registry, error) {
 			if alias == "" {
 				return nil, fmt.Errorf("register connection protocol %q: empty alias", name)
 			}
-			if err := registerProtocolName(byName, alias, registration.protocol); err != nil {
+			if err := registerProtocolName(byName, alias, registered); err != nil {
 				return nil, err
 			}
 		}
@@ -149,8 +170,19 @@ func Resolve(protocol Protocol, cfg Config) Config {
 		return cfg
 	}
 	registration, registered := defaultRegistry.byCanonical[protocol.Name()]
-	if cfg.Socket == "" && cfg.Host == "" && registered {
-		cfg.Socket = registration.defaultSocket
+	if registered {
+		return resolveRegistration(registration, cfg)
+	}
+	return resolveProtocolTarget(protocol, "", cfg)
+}
+
+func resolveRegistration(registration protocolRegistration, cfg Config) Config {
+	return resolveProtocolTarget(registration.protocol, registration.defaultSocket, cfg)
+}
+
+func resolveProtocolTarget(protocol Protocol, defaultSocket string, cfg Config) Config {
+	if cfg.Socket == "" && cfg.Host == "" {
+		cfg.Socket = defaultSocket
 	}
 	if cfg.Host == "" {
 		cfg.Host = DefaultHost
