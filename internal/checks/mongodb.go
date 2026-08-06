@@ -198,8 +198,8 @@ func mongoConnConfig(entry map[string]any) conn.Config {
 	if as := cfgval.AsString(entry[CheckKeyAuthSource]); as != "" {
 		cfg.Params = map[string]string{conn.ParamKeyAuthSource: as}
 	}
-	if protocol, ok := conn.Lookup(conn.ProtocolNameMongoDB); ok {
-		cfg = conn.Resolve(protocol, cfg)
+	if _, resolved, ok := conn.Prepare(conn.ProtocolNameMongoDB, cfg); ok {
+		cfg = resolved
 	}
 	return cfg
 }

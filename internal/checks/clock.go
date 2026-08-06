@@ -134,11 +134,8 @@ func buildClockCheck(b base, entry map[string]any) (Check, string) {
 		if _, present := entry[CheckKeyServers]; present {
 			return nil, "clock check servers is only valid with source: " + ClockSourceNTP
 		}
-		host := cfgval.AsString(entry[CheckKeyHost])
-		if host == "" {
-			host = conn.DefaultHost
-		}
-		servers, socket = []string{host}, cfgval.AsString(entry[CheckKeySocket])
+		servers = []string{cfgval.AsString(entry[CheckKeyHost])}
+		socket = cfgval.AsString(entry[CheckKeySocket])
 	default:
 		return nil, "clock check source must be " + ClockSourceSummary
 	}
@@ -161,7 +158,7 @@ func buildClockCheck(b base, entry map[string]any) (Check, string) {
 			return nil, "clock check max_root_dispersion must be a positive duration"
 		}
 	}
-	port := conn.DefaultPort(source)
+	port := 0
 	if raw, present := entry[CheckKeyPort]; present {
 		n, ok := cfgval.Int(raw)
 		if !ok || n < cfgval.MinTCPPort || n > cfgval.MaxTCPPort {
@@ -173,9 +170,17 @@ func buildClockCheck(b base, entry map[string]any) (Check, string) {
 	if iwarn != "" {
 		return nil, "clock check: " + iwarn
 	}
-	proto, ok := conn.Lookup(source)
+	target := conn.Config{Port: port, Socket: socket}
+	if source == ClockSourceChrony {
+		target.Host = servers[0]
+	}
+	proto, target, ok := conn.Prepare(source, target)
 	if !ok {
 		return nil, "clock check requires the " + source + " protocol"
+	}
+	port = target.Port
+	if source == ClockSourceChrony {
+		servers[0], socket = target.Host, target.Socket
 	}
 	return clockCheck{
 		base:              b,

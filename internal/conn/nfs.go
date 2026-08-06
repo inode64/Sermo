@@ -37,6 +37,24 @@ func (nfsProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	return probeRPCNull(ctx, cfg, defaultPortNFS, nfsProg, nfsVers, strconv.Itoa(nfsProg))
 }
 
+// rpcNullProtocol describes daemons whose entire safe liveness exchange is an
+// ONC RPC NULL call. It keeps their registry metadata and identical Probe
+// procedure in one owner while each protocol file documents its daemon.
+type rpcNullProtocol struct {
+	name        string
+	defaultPort int
+	program     uint32
+	version     uint32
+}
+
+func (p rpcNullProtocol) Name() string     { return p.name }
+func (p rpcNullProtocol) DefaultPort() int { return p.defaultPort }
+func (rpcNullProtocol) RequiresUser() bool { return false }
+func (p rpcNullProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
+	programName := strconv.FormatUint(uint64(p.program), numericBaseDecimal)
+	return probeRPCNull(ctx, cfg, p.defaultPort, p.program, p.version, programName)
+}
+
 // probeRPCNull dials an ONC RPC service over TCP, sends a NULL procedure call,
 // and verifies its reply. It binds egress through cfg.Interface and applies the
 // context deadline, matching the behavior required by NFS-family RPC probes.

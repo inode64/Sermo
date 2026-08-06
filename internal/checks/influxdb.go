@@ -273,8 +273,8 @@ func buildInfluxCheck(b base, entry map[string]any) (Check, string) {
 func influxConnConfig(entry map[string]any) conn.Config {
 	cfg := baseConnectionConfig(entry)
 	cfg.Port = connectionPort(entry, 0)
-	if protocol, ok := conn.Lookup(conn.ProtocolNameInfluxDB); ok {
-		cfg = conn.Resolve(protocol, cfg)
+	if _, resolved, ok := conn.Prepare(conn.ProtocolNameInfluxDB, cfg); ok {
+		cfg = resolved
 	}
 	return cfg
 }

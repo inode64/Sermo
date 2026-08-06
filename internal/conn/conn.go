@@ -1,7 +1,8 @@
 // Package conn provides connection-protocol probes behind an immutable built-in
-// registry. Each protocol implements Protocol; the checks package looks a
-// protocol up by name to build a generic connection check. It is a leaf package:
-// it depends on neither checks nor config, so both can import it without a cycle.
+// registry. Lookup and Prepare return runtime wrappers that resolve target
+// defaults and enter one common executor before a private wire implementation
+// performs I/O. It is a leaf package: it depends on neither checks nor config,
+// so both can import it without a cycle.
 package conn
 
 import (
@@ -496,17 +497,18 @@ type Result struct {
 	Extra   map[string]string
 }
 
-// Protocol connects to a server over its wire protocol and verifies it responds.
+// Protocol describes and runs one registered connection probe. Values returned
+// by Lookup or Prepare always route Probe through the common executor.
 //
 // Every implementation must honor cfg.Interface (egress binding via
-// SO_BINDTODEVICE) by dialing through BindDialer — directly or via
-// probeBanner/dialDeadline/dialConn. When simplifying a probe with a Go module,
-// preserve interface binding: a codec-only library is ideal (keep the existing
-// dial, e.g. DNS with x/net/dnsmessage); a library that does its own I/O is only
-// acceptable if it takes a custom dialer routed through BindDialer (e.g. NTP via
-// beevik/ntp's Dialer callback). A library that dials internally with no such
-// hook must not be adopted — keep the hand-rolled probe (e.g. DHCP). See
-// AGENTS.md "Protocol probes: interface binding is mandatory".
+// SO_BINDTODEVICE) by obtaining the prepared target through probeTargetFor;
+// packet listeners use BindListenConfig. When simplifying a probe with a Go
+// module, preserve interface binding: a codec-only library is ideal (keep the
+// existing dial, e.g. DNS with x/net/dnsmessage); a library that does its own
+// I/O is only acceptable if it takes a custom dialer routed through BindDialer
+// (e.g. NTP via beevik/ntp's Dialer callback). A library that dials internally
+// with no such hook must not be adopted — keep the hand-rolled probe (e.g.
+// DHCP). See AGENTS.md "Protocol probes: interface binding is mandatory".
 type Protocol interface {
 	Name() string     // canonical type token, e.g. "mysql"
 	DefaultPort() int // used when the config omits a port
