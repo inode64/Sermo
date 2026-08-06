@@ -25,6 +25,7 @@ const (
 	dbusMaxBusNameLen     = 255
 	dbusMaxMemberLen      = 255
 	dbusMinBusNameParts   = 2
+	dbusGetID             = "org.freedesktop.DBus.GetId"
 	dbusGetNameOwner      = "org.freedesktop.DBus.GetNameOwner"
 	dbusIntrospect        = "org.freedesktop.DBus.Introspectable.Introspect"
 	dbusPeerPing          = "org.freedesktop.DBus.Peer.Ping"
@@ -122,7 +123,7 @@ func dbusProbe(ctx context.Context, cfg Config, addr string) (Result, error) {
 	defer func() { _ = conn.Close() }()
 
 	var busID string
-	if err := conn.BusObject().CallWithContext(ctx, "org.freedesktop.DBus.GetId", dbusReadOnlyCallFlags).Store(&busID); err != nil {
+	if err := conn.BusObject().CallWithContext(ctx, dbusGetID, dbusReadOnlyCallFlags).Store(&busID); err != nil {
 		return Result{}, probeErr(ProtocolNameDBus, stepDBusGetID, err)
 	}
 	extra := map[string]string{extraAddress: addr}
@@ -234,23 +235,23 @@ func dbusScalarString(value any) (string, error) {
 	case int:
 		return strconv.Itoa(typed), nil
 	case int8:
-		return strconv.FormatInt(int64(typed), 10), nil
+		return strconv.FormatInt(int64(typed), numericBaseDecimal), nil
 	case int16:
-		return strconv.FormatInt(int64(typed), 10), nil
+		return strconv.FormatInt(int64(typed), numericBaseDecimal), nil
 	case int32:
-		return strconv.FormatInt(int64(typed), 10), nil
+		return strconv.FormatInt(int64(typed), numericBaseDecimal), nil
 	case int64:
-		return strconv.FormatInt(typed, 10), nil
+		return strconv.FormatInt(typed, numericBaseDecimal), nil
 	case uint:
-		return strconv.FormatUint(uint64(typed), 10), nil
+		return strconv.FormatUint(uint64(typed), numericBaseDecimal), nil
 	case uint8:
-		return strconv.FormatUint(uint64(typed), 10), nil
+		return strconv.FormatUint(uint64(typed), numericBaseDecimal), nil
 	case uint16:
-		return strconv.FormatUint(uint64(typed), 10), nil
+		return strconv.FormatUint(uint64(typed), numericBaseDecimal), nil
 	case uint32:
-		return strconv.FormatUint(uint64(typed), 10), nil
+		return strconv.FormatUint(uint64(typed), numericBaseDecimal), nil
 	case uint64:
-		return strconv.FormatUint(typed, 10), nil
+		return strconv.FormatUint(typed, numericBaseDecimal), nil
 	case float32:
 		return strconv.FormatFloat(float64(typed), 'g', -1, 32), nil
 	case float64:
