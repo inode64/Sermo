@@ -56,7 +56,7 @@ func TestOomCounterUnavailable(t *testing.T) {
 
 func TestBuildOomCheckDefaultsToAnyKill(t *testing.T) {
 	// `check: {type: oom}` with no delta must build and default to > 0.
-	built, warns := Build(map[string]any{"o": map[string]any{"type": "oom"}}, Deps{OomSampler: scriptedOom(0, 1)})
+	built, warns := Build(map[string]any{"o": map[string]any{"type": "oom"}}, Deps{Samplers: Samplers{OomSampler: scriptedOom(0, 1)}})
 	if len(warns) != 0 {
 		t.Fatalf("unexpected warnings: %v", warns)
 	}

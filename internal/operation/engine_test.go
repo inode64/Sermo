@@ -660,8 +660,10 @@ func TestGuardClosureFailsSafeOnUnavailableSSHIdleCheck(t *testing.T) {
 	}
 	deps := checks.Deps{
 		DefaultTimeout: time.Second,
-		SSHIdleSampler: func(checks.SSHIdleConfig) (checks.SSHIdleSample, error) {
-			return checks.SSHIdleSample{}, errors.New("utmp unavailable")
+		Samplers: checks.Samplers{
+			SSHIdleSampler: func(checks.SSHIdleConfig) (checks.SSHIdleSample, error) {
+				return checks.SSHIdleSample{}, errors.New("utmp unavailable")
+			},
 		},
 	}
 	engine, _ := newInvalidTreeEngineWithCheckDeps(t, "db", "postgresql", tree, deps)
