@@ -30,9 +30,9 @@ func TestTerminalMultiplexerAdapterParsesSessions(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			name:   "tmux attached and detached",
+			name:   "tmux multiple clients and detached",
 			config: TerminalSessionConfig{Multiplexer: TerminalMultiplexerTmux, User: "deploy"},
-			output: "build\t1\t2\nops\t0\t1\n",
+			output: "build\t2\t2\nops\t0\t1\n",
 			want: []TerminalSession{
 				{Multiplexer: TerminalMultiplexerTmux, Name: "build", User: "deploy", State: TerminalSessionStateAttached, Windows: 2},
 				{Multiplexer: TerminalMultiplexerTmux, Name: "ops", User: "deploy", State: TerminalSessionStateDetached, Windows: 1},
