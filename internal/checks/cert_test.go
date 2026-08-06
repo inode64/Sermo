@@ -6,6 +6,7 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"errors"
 	"math/big"
 	"strings"
 	"testing"
@@ -100,6 +101,17 @@ func TestCertHealthyNoAlert(t *testing.T) {
 	}
 	if res.Data["days_left"].(int) < 58 {
 		t.Fatalf("days_left = %v", res.Data["days_left"])
+	}
+}
+
+func TestCertRemoteFailureIsQuietButUnavailable(t *testing.T) {
+	c := certWith(healthyCert())
+	c.sampler = func(context.Context, string, string, string, bool) (CertSample, error) {
+		return CertSample{}, errors.New("TLS handshake timeout")
+	}
+	res := c.Run(context.Background())
+	if !res.OK || !res.Unavailable {
+		t.Fatalf("remote failure = %+v, want quiet health result marked unavailable", res)
 	}
 }
 

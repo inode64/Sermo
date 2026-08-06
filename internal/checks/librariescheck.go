@@ -51,7 +51,10 @@ func (c librariesCheck) Run(ctx context.Context) Result {
 
 	ef, err := elf.Open(c.binary)
 	if err != nil {
-		return c.result(false, c.binary+": "+err.Error(), start)
+		if os.IsNotExist(err) {
+			return c.result(false, c.binary+": "+err.Error(), start)
+		}
+		return c.unavailableResult(c.binary+": "+err.Error(), start)
 	}
 	defer func() { _ = ef.Close() }()
 
@@ -75,7 +78,7 @@ func (c librariesCheck) Run(ctx context.Context) Result {
 
 	missing := resolveNeeded(ctx, needed, dirs, make(map[string]bool))
 	if err := ctx.Err(); err != nil {
-		return c.result(false, c.binary+": "+execx.ContextFailure(err, c.timeout), start)
+		return c.unavailableResult(c.binary+": "+execx.ContextFailure(err, c.timeout), start)
 	}
 	if len(missing) > 0 {
 		return c.result(false, c.binary+": missing shared libraries", start)

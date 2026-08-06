@@ -83,11 +83,12 @@ func TestBuildClockCheckValidationWarnings(t *testing.T) {
 
 func TestClockCheckRun(t *testing.T) {
 	tests := []struct {
-		name        string
-		check       clockCheck
-		wantOK      bool
-		wantServer  string
-		wantMessage string
+		name            string
+		check           clockCheck
+		wantOK          bool
+		wantUnavailable bool
+		wantServer      string
+		wantMessage     string
 	}{
 		{
 			name: "within offset",
@@ -138,8 +139,16 @@ func TestClockCheckRun(t *testing.T) {
 			check: testClockCheck([]string{"time.example"}, map[string]conn.Result{
 				"time.example": {Extra: map[string]string{DataKeyStratum: "2"}},
 			}, nil),
-			wantOK:      false,
-			wantMessage: "no usable ntp sample",
+			wantOK:          false,
+			wantUnavailable: true,
+			wantMessage:     "no usable ntp sample",
+		},
+		{
+			name:            "all probes fail",
+			check:           testClockCheck([]string{"time.example"}, nil, map[string]error{"time.example": errors.New("timeout")}),
+			wantOK:          false,
+			wantUnavailable: true,
+			wantMessage:     "no usable ntp sample",
 		},
 		{
 			// An unsynchronized source reports stratum 0 with an offset near
@@ -176,6 +185,9 @@ func TestClockCheckRun(t *testing.T) {
 			res := tt.check.Run(context.Background())
 			if res.OK != tt.wantOK {
 				t.Fatalf("OK = %v, want %v: %s", res.OK, tt.wantOK, res.Message)
+			}
+			if res.Unavailable != tt.wantUnavailable {
+				t.Fatalf("Unavailable = %v, want %v: %s", res.Unavailable, tt.wantUnavailable, res.Message)
 			}
 			if tt.wantMessage != "" && !strings.Contains(res.Message, tt.wantMessage) {
 				t.Fatalf("message = %q, want %q", res.Message, tt.wantMessage)
