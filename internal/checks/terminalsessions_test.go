@@ -42,7 +42,7 @@ func (waitingTerminalSessionRunner) RunUser(ctx context.Context, _ string, _ str
 	return execx.Result{ExitCode: execx.ExitCodeRunFailure}, ctx.Err()
 }
 
-func TestParseTerminalSessions(t *testing.T) {
+func TestTerminalMultiplexerAdapterParsesSessions(t *testing.T) {
 	tests := []struct {
 		name    string
 		config  TerminalSessionConfig
@@ -77,12 +77,16 @@ func TestParseTerminalSessions(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := parseTerminalSessions(tt.config, tt.output)
+			adapter, ok := terminalMultiplexerAdapterFor(tt.config.Multiplexer)
+			if !ok {
+				t.Fatalf("terminalMultiplexerAdapterFor(%q) not found", tt.config.Multiplexer)
+			}
+			got, err := adapter.parseSessions(tt.config.User, tt.output)
 			if (err != nil) != tt.wantErr {
-				t.Fatalf("parseTerminalSessions() error = %v, wantErr=%v", err, tt.wantErr)
+				t.Fatalf("parseSessions() error = %v, wantErr=%v", err, tt.wantErr)
 			}
 			if err == nil && !reflect.DeepEqual(got, tt.want) {
-				t.Fatalf("parseTerminalSessions() = %#v, want %#v", got, tt.want)
+				t.Fatalf("parseSessions() = %#v, want %#v", got, tt.want)
 			}
 		})
 	}
