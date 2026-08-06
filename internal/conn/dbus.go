@@ -2,7 +2,10 @@ package conn
 
 import (
 	"context"
+	"encoding/xml"
+	"errors"
 	"fmt"
+	"maps"
 	"strconv"
 	"strings"
 
@@ -17,12 +20,51 @@ const (
 	// dbusDefaultAddress is the well-known system bus address.
 	dbusDefaultAddress = "unix:path=/run/dbus/system_bus_socket"
 
-	dbusCallFlags      = 0
-	dbusFirstNameIndex = 0
-	dbusTCPPrefix      = "tcp:"
-	dbusTCPHostKey     = "host"
-	dbusTCPPortKey     = "port"
+	dbusReadOnlyCallFlags = dbus.FlagNoAutoStart
+	dbusFirstNameIndex    = 0
+	dbusMaxBusNameLen     = 255
+	dbusMaxMemberLen      = 255
+	dbusMinBusNameParts   = 2
+	dbusGetNameOwner      = "org.freedesktop.DBus.GetNameOwner"
+	dbusIntrospect        = "org.freedesktop.DBus.Introspectable.Introspect"
+	dbusPeerPing          = "org.freedesktop.DBus.Peer.Ping"
+	dbusPropertiesGet     = "org.freedesktop.DBus.Properties.Get"
+	dbusTCPPrefix         = "tcp:"
+	dbusTCPHostKey        = "host"
+	dbusTCPPortKey        = "port"
 )
+
+// D-Bus probe modes. Peer is the default named-service liveness probe;
+// introspect and property are the only additional calls because both are
+// standardized read-only operations.
+const (
+	DBusProbePeer       = "peer"
+	DBusProbeIntrospect = "introspect"
+	DBusProbeProperty   = "property"
+)
+
+// DBusTarget is the optional named object a D-Bus check probes. An empty target
+// means bus-only health. Interface maps to dbus_interface in YAML because the
+// generic interface field already controls network egress.
+type DBusTarget struct {
+	BusName    string
+	ObjectPath string
+	Probe      string
+	Interface  string
+	Property   string
+}
+
+type dbusIntrospection struct {
+	Interfaces []struct {
+		Name string `xml:"name,attr"`
+	} `xml:"interface"`
+}
+
+type dbusMethodCaller interface {
+	CallWithContext(ctx context.Context, method string, flags dbus.Flags, args ...any) *dbus.Call
+}
+
+type dbusObjectFunc func(string, dbus.ObjectPath) dbusMethodCaller
 
 // dbusProtocol probes a D-Bus daemon natively over its wire protocol using the
 // pure-Go github.com/godbus/dbus/v5 client. Connecting performs the SASL auth
@@ -42,6 +84,9 @@ func (dbusProtocol) DefaultPort() int   { return defaultPortNone }
 func (dbusProtocol) RequiresUser() bool { return false }
 
 func (dbusProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
+	if err := ValidateDBusTarget(dbusTargetFromConfig(cfg)); err != nil {
+		return Result{}, probeErr(ProtocolNameDBus, stepConfig, err)
+	}
 	return probeBusWithDeadline(ctx, cfg, dbusProbe)
 }
 
@@ -70,7 +115,7 @@ func dbusProbe(ctx context.Context, cfg Config, addr string) (Result, error) {
 	defer func() { _ = conn.Close() }()
 
 	var busID string
-	if err := conn.BusObject().CallWithContext(ctx, "org.freedesktop.DBus.GetId", dbusCallFlags).Store(&busID); err != nil {
+	if err := conn.BusObject().CallWithContext(ctx, "org.freedesktop.DBus.GetId", dbusReadOnlyCallFlags).Store(&busID); err != nil {
 		return Result{}, probeErr(ProtocolNameDBus, stepDBusGetID, err)
 	}
 	extra := map[string]string{extraAddress: addr}
@@ -80,7 +125,148 @@ func dbusProbe(ctx context.Context, cfg Config, addr string) (Result, error) {
 	if names := conn.Names(); len(names) > 0 {
 		extra[extraUniqueName] = names[dbusFirstNameIndex]
 	}
+	target := dbusTargetFromConfig(cfg)
+	if target.BusName != "" {
+		owner, observed, err := probeDBusService(ctx, conn.BusObject(), func(destination string, path dbus.ObjectPath) dbusMethodCaller {
+			return conn.Object(destination, path)
+		}, target)
+		if err != nil {
+			return Result{}, err
+		}
+		extra[ExtraKeyDBusBusName] = target.BusName
+		extra[ExtraKeyDBusObjectPath] = target.ObjectPath
+		extra[ExtraKeyDBusOwner] = owner
+		extra[ExtraKeyFingerprint] = owner
+		maps.Copy(extra, observed)
+	}
 	return Result{Extra: extra}, nil
+}
+
+func dbusTargetFromConfig(cfg Config) DBusTarget {
+	return DBusTarget{
+		BusName:    cfg.Params[ParamKeyDBusBusName],
+		ObjectPath: cfg.Params[ParamKeyDBusObjectPath],
+		Probe:      cfg.Params[ParamKeyDBusProbe],
+		Interface:  cfg.Params[ParamKeyDBusInterface],
+		Property:   cfg.Params[ParamKeyDBusProperty],
+	}
+}
+
+func probeDBusService(ctx context.Context, bus dbusMethodCaller, object dbusObjectFunc, target DBusTarget) (string, map[string]string, error) {
+	owner, err := dbusNameOwner(ctx, bus, target.BusName)
+	if err != nil {
+		return "", nil, probeErr(ProtocolNameDBus, stepDBusGetNameOwner, err)
+	}
+	observed, step, err := probeDBusObject(ctx, object(owner, dbus.ObjectPath(target.ObjectPath)), target)
+	if err != nil {
+		return "", nil, probeErr(ProtocolNameDBus, step, err)
+	}
+	return owner, observed, nil
+}
+
+func probeDBusObject(ctx context.Context, object dbusMethodCaller, target DBusTarget) (map[string]string, string, error) {
+	probe := target.Probe
+	if probe == "" {
+		probe = DBusProbePeer
+	}
+	observed := map[string]string{ExtraKeyDBusProbe: probe}
+	if target.Interface != "" {
+		observed[ExtraKeyDBusInterface] = target.Interface
+	}
+	switch probe {
+	case DBusProbePeer:
+		if err := object.CallWithContext(ctx, dbusPeerPing, dbusReadOnlyCallFlags).Store(); err != nil {
+			return nil, stepDBusPeerPing, fmt.Errorf("call %s: %w", dbusPeerPing, err)
+		}
+		return observed, stepDBusPeerPing, nil
+	case DBusProbeIntrospect:
+		var document string
+		if err := object.CallWithContext(ctx, dbusIntrospect, dbusReadOnlyCallFlags).Store(&document); err != nil {
+			return nil, stepDBusIntrospect, fmt.Errorf("call %s: %w", dbusIntrospect, err)
+		}
+		if err := requireDBusInterface(document, target.Interface); err != nil {
+			return nil, stepDBusIntrospect, err
+		}
+		return observed, stepDBusIntrospect, nil
+	case DBusProbeProperty:
+		var variant dbus.Variant
+		if err := object.CallWithContext(ctx, dbusPropertiesGet, dbusReadOnlyCallFlags, target.Interface, target.Property).Store(&variant); err != nil {
+			return nil, stepDBusPropertiesGet, fmt.Errorf("call %s: %w", dbusPropertiesGet, err)
+		}
+		value, err := dbusScalarString(variant.Value())
+		if err != nil {
+			return nil, stepDBusPropertiesGet, fmt.Errorf("read property %s.%s: %w", target.Interface, target.Property, err)
+		}
+		observed[ExtraKeyDBusProperty] = target.Property
+		observed[ExtraKeyDBusPropertyValue] = value
+		return observed, stepDBusPropertiesGet, nil
+	default:
+		return nil, stepConfig, fmt.Errorf("unsupported D-Bus probe %q", probe)
+	}
+}
+
+func requireDBusInterface(document, interfaceName string) error {
+	var node dbusIntrospection
+	if err := xml.Unmarshal([]byte(document), &node); err != nil {
+		return fmt.Errorf("parse D-Bus introspection XML: %w", err)
+	}
+	if interfaceName == "" {
+		return nil
+	}
+	for _, iface := range node.Interfaces {
+		if iface.Name == interfaceName {
+			return nil
+		}
+	}
+	return fmt.Errorf("D-Bus interface %q is not exported by the object", interfaceName)
+}
+
+func dbusScalarString(value any) (string, error) {
+	switch typed := value.(type) {
+	case string:
+		return typed, nil
+	case bool:
+		return strconv.FormatBool(typed), nil
+	case int:
+		return strconv.Itoa(typed), nil
+	case int8:
+		return strconv.FormatInt(int64(typed), 10), nil
+	case int16:
+		return strconv.FormatInt(int64(typed), 10), nil
+	case int32:
+		return strconv.FormatInt(int64(typed), 10), nil
+	case int64:
+		return strconv.FormatInt(typed, 10), nil
+	case uint:
+		return strconv.FormatUint(uint64(typed), 10), nil
+	case uint8:
+		return strconv.FormatUint(uint64(typed), 10), nil
+	case uint16:
+		return strconv.FormatUint(uint64(typed), 10), nil
+	case uint32:
+		return strconv.FormatUint(uint64(typed), 10), nil
+	case uint64:
+		return strconv.FormatUint(typed, 10), nil
+	case float32:
+		return strconv.FormatFloat(float64(typed), 'g', -1, 32), nil
+	case float64:
+		return strconv.FormatFloat(typed, 'g', -1, 64), nil
+	case dbus.ObjectPath:
+		return string(typed), nil
+	default:
+		return "", fmt.Errorf("D-Bus property type %T is not a supported scalar", value)
+	}
+}
+
+func dbusNameOwner(ctx context.Context, bus dbusMethodCaller, busName string) (string, error) {
+	var owner string
+	if err := bus.CallWithContext(ctx, dbusGetNameOwner, dbusReadOnlyCallFlags, busName).Store(&owner); err != nil {
+		return "", fmt.Errorf("get owner of D-Bus name %q: %w", busName, err)
+	}
+	if owner == "" {
+		return "", fmt.Errorf("D-Bus name %q has an empty owner", busName)
+	}
+	return owner, nil
 }
 
 // connectDBus establishes and completes the D-Bus auth/Hello handshake. The
@@ -181,3 +367,111 @@ func DBusAddress(socket, query string) string {
 	}
 	return dbusDefaultAddress
 }
+
+// ValidateDBusTarget validates the optional named-service target of a D-Bus
+// check. A bus-only check leaves the target empty; named targets use one of the
+// constrained read-only probe modes.
+func ValidateDBusTarget(target DBusTarget) error {
+	busName, objectPath := target.BusName, target.ObjectPath
+	switch {
+	case busName == "" && objectPath == "" && target.Probe == "" && target.Interface == "" && target.Property == "":
+		return nil
+	case busName == "":
+		return errors.New("bus_name is required when object_path is set")
+	case objectPath == "":
+		return errors.New("object_path is required when bus_name is set")
+	case !validDBusBusName(busName):
+		return fmt.Errorf("bus_name %q is not a valid well-known D-Bus name", busName)
+	case !dbus.ObjectPath(objectPath).IsValid():
+		return fmt.Errorf("object_path %q is not a valid D-Bus object path", objectPath)
+	}
+	probe := target.Probe
+	if probe == "" {
+		probe = DBusProbePeer
+	}
+	switch probe {
+	case DBusProbePeer:
+		if target.Interface != "" {
+			return errors.New("dbus_interface is not supported by the peer probe")
+		}
+		if target.Property != "" {
+			return errors.New("property is only supported by the property probe")
+		}
+	case DBusProbeIntrospect:
+		if target.Property != "" {
+			return errors.New("property is only supported by the property probe")
+		}
+	case DBusProbeProperty:
+		if target.Interface == "" {
+			return errors.New("dbus_interface is required by the property probe")
+		}
+		if target.Property == "" {
+			return errors.New("property is required by the property probe")
+		}
+	default:
+		return fmt.Errorf("probe must be %q, %q or %q", DBusProbePeer, DBusProbeIntrospect, DBusProbeProperty)
+	}
+	if target.Interface != "" && !validDBusInterface(target.Interface) {
+		return fmt.Errorf("dbus_interface %q is not a valid D-Bus interface", target.Interface)
+	}
+	if target.Property != "" && !validDBusMember(target.Property) {
+		return fmt.Errorf("property %q is not a valid D-Bus property", target.Property)
+	}
+	return nil
+}
+
+func validDBusInterface(name string) bool {
+	if name == "" || len(name) > dbusMaxBusNameLen {
+		return false
+	}
+	elements := strings.Split(name, ".")
+	if len(elements) < dbusMinBusNameParts {
+		return false
+	}
+	for _, element := range elements {
+		if !validDBusMember(element) {
+			return false
+		}
+	}
+	return true
+}
+
+func validDBusMember(name string) bool {
+	if name == "" || len(name) > dbusMaxMemberLen || (!isASCIIAlpha(name[0]) && name[0] != '_') {
+		return false
+	}
+	for i := 1; i < len(name); i++ {
+		if c := name[i]; !isASCIIAlpha(c) && !isASCIIDigit(c) && c != '_' {
+			return false
+		}
+	}
+	return true
+}
+
+func validDBusBusName(busName string) bool {
+	if busName == "" || len(busName) > dbusMaxBusNameLen || busName[0] == ':' {
+		return false
+	}
+	elements := strings.Split(busName, ".")
+	if len(elements) < dbusMinBusNameParts {
+		return false
+	}
+	for _, element := range elements {
+		if element == "" || isASCIIDigit(element[0]) {
+			return false
+		}
+		for i := range len(element) {
+			c := element[i]
+			if !isASCIIAlpha(c) && !isASCIIDigit(c) && c != '_' && c != '-' {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func isASCIIAlpha(c byte) bool {
+	return c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z'
+}
+
+func isASCIIDigit(c byte) bool { return c >= '0' && c <= '9' }

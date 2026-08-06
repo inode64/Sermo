@@ -1,0 +1,31 @@
+name: wpa-supplicant
+aliases:
+  - wpa_supplicant
+display_name: wpa_supplicant
+category: network
+description: WPA and IEEE 802.1X supplicant.
+service:
+  systemd:
+    - wpa_supplicant
+  openrc:
+    - wpa_supplicant
+apps:
+  - wpa-supplicant
+processes:
+  main:
+    exe: ${wpa_supplicant_binary}
+    user: root
+watches:
+  service:
+    check:
+      type: service
+      expect: active
+  dbus:
+    check:
+      type: dbus
+      bus_name: fi.w1.wpa_supplicant1
+      object_path: /fi/w1/wpa_supplicant1
+      probe: introspect
+      dbus_interface: fi.w1.wpa_supplicant1
+      timeout: 5s
+      verify: true

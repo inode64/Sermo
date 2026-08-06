@@ -577,12 +577,12 @@
     /* services (1 Service · 2 Category · 3 State · 4 Uptime · 5 CPU · 6 Memory ·
        7 FDs · 8 IO · 9 Last activity · 10 Actions): keep the operator-critical
        identity/state/activity/action columns and move metrics to expansion. */
-    .services-table th:nth-child(2), .services-table td:nth-child(2),
-    .services-table th:nth-child(4), .services-table td:nth-child(4),
-    .services-table th:nth-child(5), .services-table td:nth-child(5),
-    .services-table th:nth-child(6), .services-table td:nth-child(6),
-    .services-table th:nth-child(7), .services-table td:nth-child(7),
-    .services-table th:nth-child(8), .services-table td:nth-child(8) { display: none; }
+    .services-table > thead > tr > th:nth-child(2), .services-table > tbody > tr > td:nth-child(2),
+    .services-table > thead > tr > th:nth-child(4), .services-table > tbody > tr > td:nth-child(4),
+    .services-table > thead > tr > th:nth-child(5), .services-table > tbody > tr > td:nth-child(5),
+    .services-table > thead > tr > th:nth-child(6), .services-table > tbody > tr > td:nth-child(6),
+    .services-table > thead > tr > th:nth-child(7), .services-table > tbody > tr > td:nth-child(7),
+    .services-table > thead > tr > th:nth-child(8), .services-table > tbody > tr > td:nth-child(8) { display: none; }
     .services-table .svc-main {
       min-width: 0;
     }
@@ -660,7 +660,7 @@
       padding: .34rem .38rem;
     }
     /* services -> Service · State · Actions. */
-    .services-table th:nth-child(9), .services-table td:nth-child(9) { display: none; }
+    .services-table > thead > tr > th:nth-child(9), .services-table > tbody > tr > td:nth-child(9) { display: none; }
     .services-table td { white-space: normal; }
     .services-table .unit-cell, .services-table .event-cell, .apps-table .event-cell { max-width: 60vw; }
     /* watches -> Name · State · Actions; typed tables keep their leading live
@@ -685,6 +685,12 @@
        tall vertical stack (the default auto-fit drops to a single column once the
        12rem cell minimum no longer fits the phone viewport). */
     .runtime-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: .8rem; }
+    /* Expanded service tables must contribute no wide intrinsic minimum to the
+       outer services table: process, check and lock headings would otherwise
+       stretch its colspan row and move actions/dialogs outside the viewport. */
+    .service-detail table { table-layout: fixed; }
+    .service-detail th, .service-detail td { white-space: normal; overflow-wrap: anywhere; }
+    .ssh-session-table th:nth-child(3), .ssh-session-table td:nth-child(3) { display: none; }
     #app-footer .footer-version {
       margin-left: 0;
       flex-basis: 100%;

@@ -352,7 +352,23 @@ func configureConnProtocol(cfg *conn.Config, protoName string, entry map[string]
 	case conn.ProtocolNameLibvirt:
 		setLocalConnSocket(cfg, entry, conn.DefaultLibvirtSocket)
 		setConnParam(cfg, conn.ParamKeyDomain, cfgval.AsString(entry[CheckKeyDomain]))
-	case conn.ProtocolNameDBus, conn.ProtocolNameAvahi, conn.ProtocolNameLogin1:
+	case conn.ProtocolNameDBus:
+		cfg.Socket = conn.DBusAddress(cfgval.AsString(entry[CheckKeySocket]), cfgval.AsString(entry[CheckKeyQuery]))
+		setConnParam(cfg, conn.ParamKeyDBusBusName, cfgval.AsString(entry[CheckKeyBusName]))
+		setConnParam(cfg, conn.ParamKeyDBusObjectPath, cfgval.AsString(entry[CheckKeyObjectPath]))
+		setConnParam(cfg, conn.ParamKeyDBusProbe, cfgval.AsString(entry[CheckKeyDBusProbe]))
+		setConnParam(cfg, conn.ParamKeyDBusInterface, cfgval.AsString(entry[CheckKeyDBusInterface]))
+		setConnParam(cfg, conn.ParamKeyDBusProperty, cfgval.AsString(entry[CheckKeyDBusProperty]))
+		if err := conn.ValidateDBusTarget(conn.DBusTarget{
+			BusName:    cfg.Params[conn.ParamKeyDBusBusName],
+			ObjectPath: cfg.Params[conn.ParamKeyDBusObjectPath],
+			Probe:      cfg.Params[conn.ParamKeyDBusProbe],
+			Interface:  cfg.Params[conn.ParamKeyDBusInterface],
+			Property:   cfg.Params[conn.ParamKeyDBusProperty],
+		}); err != nil {
+			return fmt.Errorf("dbus check: %w", err)
+		}
+	case conn.ProtocolNameAvahi:
 		cfg.Socket = conn.DBusAddress(cfgval.AsString(entry[CheckKeySocket]), cfgval.AsString(entry[CheckKeyQuery]))
 	}
 	return nil
@@ -406,9 +422,13 @@ func setConnQuery(cfg *conn.Config, entry map[string]any, key string) {
 }
 
 func setConnParam(cfg *conn.Config, key, value string) {
-	if value != "" {
-		cfg.Params = map[string]string{key: value}
+	if value == "" {
+		return
 	}
+	if cfg.Params == nil {
+		cfg.Params = map[string]string{}
+	}
+	cfg.Params[key] = value
 }
 
 func setLocalConnSocket(cfg *conn.Config, entry map[string]any, socket string) {

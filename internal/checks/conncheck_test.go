@@ -504,6 +504,55 @@ func TestBuildDBusCheck(t *testing.T) {
 	if cc := built[0].Check.(connCheck); cc.cfg.Socket != "tcp:host=10.0.0.5,port=44444" {
 		t.Fatalf("query address = %q", cc.cfg.Socket)
 	}
+
+	// A named service carries both stable target fields without losing either
+	// one in the protocol params map.
+	built, warns = Build(map[string]any{
+		"libvirt-dbus": map[string]any{
+			"type":           "dbus",
+			"bus_name":       "org.libvirt",
+			"object_path":    "/org/libvirt",
+			"probe":          "property",
+			"dbus_interface": "org.libvirt.Connect",
+			"property":       "Version",
+		},
+	}, Deps{DefaultTimeout: time.Second})
+	if len(warns) != 0 || len(built) != 1 {
+		t.Fatalf("named dbus check should build: warns=%v", warns)
+	}
+	cc = built[0].Check.(connCheck)
+	if cc.cfg.Params[conn.ParamKeyDBusBusName] != "org.libvirt" ||
+		cc.cfg.Params[conn.ParamKeyDBusObjectPath] != "/org/libvirt" ||
+		cc.cfg.Params[conn.ParamKeyDBusProbe] != conn.DBusProbeProperty ||
+		cc.cfg.Params[conn.ParamKeyDBusInterface] != "org.libvirt.Connect" ||
+		cc.cfg.Params[conn.ParamKeyDBusProperty] != "Version" {
+		t.Fatalf("named dbus params = %v", cc.cfg.Params)
+	}
+}
+
+func TestBuildDBusCheckRejectsInvalidTarget(t *testing.T) {
+	tests := []struct {
+		name  string
+		entry map[string]any
+		want  string
+	}{
+		{name: "missing object path", entry: map[string]any{"type": "dbus", "bus_name": "org.libvirt"}, want: "object_path is required"},
+		{name: "missing bus name", entry: map[string]any{"type": "dbus", "object_path": "/org/libvirt"}, want: "bus_name is required"},
+		{name: "invalid bus name", entry: map[string]any{"type": "dbus", "bus_name": ":1.42", "object_path": "/org/libvirt"}, want: "not a valid well-known"},
+		{name: "invalid object path", entry: map[string]any{"type": "dbus", "bus_name": "org.libvirt", "object_path": "org/libvirt"}, want: "not a valid D-Bus object path"},
+		{name: "unknown probe", entry: map[string]any{"type": "dbus", "bus_name": "org.libvirt", "object_path": "/org/libvirt", "probe": "call"}, want: "probe must be"},
+		{name: "peer interface", entry: map[string]any{"type": "dbus", "bus_name": "org.libvirt", "object_path": "/org/libvirt", "dbus_interface": "org.libvirt.Connect"}, want: "dbus_interface is not supported"},
+		{name: "property missing interface", entry: map[string]any{"type": "dbus", "bus_name": "org.libvirt", "object_path": "/org/libvirt", "probe": "property", "property": "Version"}, want: "dbus_interface is required"},
+		{name: "property missing property", entry: map[string]any{"type": "dbus", "bus_name": "org.libvirt", "object_path": "/org/libvirt", "probe": "property", "dbus_interface": "org.libvirt.Connect"}, want: "property is required"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			built, warns := Build(map[string]any{"target": test.entry}, Deps{DefaultTimeout: time.Second})
+			if len(built) != 0 || len(warns) != 1 || !strings.Contains(warns[0], test.want) {
+				t.Fatalf("Build() = built %v warns %v, want %q", built, warns, test.want)
+			}
+		})
+	}
 }
 
 func TestBuildAvahiCheck(t *testing.T) {

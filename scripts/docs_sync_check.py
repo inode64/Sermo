@@ -69,7 +69,10 @@ def tracked(pattern: str) -> list[str]:
     out = subprocess.run(
         ["git", "ls-files", pattern], cwd=ROOT, capture_output=True, text=True, check=True
     )
-    return out.stdout.split()
+    # git ls-files keeps paths deleted in the working tree until the deletion is
+    # committed. The validation gate runs before commits, so only inspect source
+    # files that still exist in the checkout being validated.
+    return [path for path in out.stdout.split() if (ROOT / path).is_file()]
 
 
 def check_cited_paths() -> list[str]:

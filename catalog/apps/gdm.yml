@@ -1,0 +1,8 @@
+name: gdm
+display_name: "GNOME Display Manager"
+category: system
+variables:
+  binary: ${bindir}/gdm
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}", "--version"], timeout: 10s }

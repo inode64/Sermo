@@ -1347,6 +1347,44 @@ func TestValidateWatchPortRangeMatchesServices(t *testing.T) {
 		`watches.conn-high.check.port "99999" must be an integer in 1..65535`)
 }
 
+func TestValidateDBusWatchTarget(t *testing.T) {
+	assertNoWatchIssues(t, watchConfig("libvirt-dbus", map[string]any{
+		"type":           "dbus",
+		"bus_name":       "org.libvirt",
+		"object_path":    "/org/libvirt",
+		"probe":          "property",
+		"dbus_interface": "org.libvirt.Connect",
+		"property":       "Version",
+	}))
+
+	tests := []struct {
+		name  string
+		check map[string]any
+		want  string
+	}{
+		{name: "missing object path", check: map[string]any{"type": "dbus", "bus_name": "org.libvirt"}, want: "object_path is required"},
+		{name: "missing bus name", check: map[string]any{"type": "dbus", "object_path": "/org/libvirt"}, want: "bus_name is required"},
+		{name: "empty bus name", check: map[string]any{"type": "dbus", "bus_name": "", "object_path": "/org/libvirt"}, want: "bus_name must be a non-empty string"},
+		{name: "non-string path", check: map[string]any{"type": "dbus", "bus_name": "org.libvirt", "object_path": 42}, want: "object_path must be a non-empty string"},
+		{name: "invalid bus name", check: map[string]any{"type": "dbus", "bus_name": ":1.42", "object_path": "/org/libvirt"}, want: "not a valid well-known D-Bus name"},
+		{name: "invalid object path", check: map[string]any{"type": "dbus", "bus_name": "org.libvirt", "object_path": "org/libvirt"}, want: "not a valid D-Bus object path"},
+		{name: "empty probe", check: map[string]any{"type": "dbus", "bus_name": "org.libvirt", "object_path": "/org/libvirt", "probe": ""}, want: "probe must be a non-empty string"},
+		{name: "non-string interface", check: map[string]any{"type": "dbus", "bus_name": "org.libvirt", "object_path": "/org/libvirt", "probe": "introspect", "dbus_interface": 42}, want: "dbus_interface must be a non-empty string"},
+		{name: "unknown probe", check: map[string]any{"type": "dbus", "bus_name": "org.libvirt", "object_path": "/org/libvirt", "probe": "call"}, want: "probe must be"},
+		{name: "property missing interface", check: map[string]any{"type": "dbus", "bus_name": "org.libvirt", "object_path": "/org/libvirt", "probe": "property", "property": "Version"}, want: "dbus_interface is required"},
+		{name: "property missing property", check: map[string]any{"type": "dbus", "bus_name": "org.libvirt", "object_path": "/org/libvirt", "probe": "property", "dbus_interface": "org.libvirt.Connect"}, want: "property is required"},
+		{name: "field on another protocol", check: map[string]any{"type": "smtp", "bus_name": "org.libvirt"}, want: "bus_name is only supported for a dbus check"},
+		{name: "probe on another protocol", check: map[string]any{"type": "smtp", "probe": "peer"}, want: "probe is only supported for a dbus check"},
+		{name: "interface on another protocol", check: map[string]any{"type": "smtp", "dbus_interface": "org.libvirt.Connect"}, want: "dbus_interface is only supported for a dbus check"},
+		{name: "property on another protocol", check: map[string]any{"type": "smtp", "property": "Version"}, want: "property is only supported for a dbus check"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			assertWatchIssues(t, watchConfig("target", test.check), test.want)
+		})
+	}
+}
+
 func TestValidateFileProcessWatchRejectsEntryLevelWindow(t *testing.T) {
 	assertWatchIssues(t, map[string]any{
 		"watches": map[string]any{

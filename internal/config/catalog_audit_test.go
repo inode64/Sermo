@@ -121,6 +121,51 @@ func catalogWatchCheck(t *testing.T, body map[string]any, name string) map[strin
 	return nested(t, body, "watches", name, "check")
 }
 
+func TestCatalogDBusServiceProbesStayReadOnlyAndCheckOnly(t *testing.T) {
+	tests := []struct {
+		service, watch, probe, dbusInterface, property string
+	}{
+		{service: "systemd", watch: "manager", probe: "property", dbusInterface: "org.freedesktop.systemd1.Manager", property: "Version"},
+		{service: "networkmanager", watch: "dbus", probe: "property", dbusInterface: "org.freedesktop.NetworkManager", property: "State"},
+		{service: "firewalld", watch: "dbus", probe: "property", dbusInterface: "org.fedoraproject.FirewallD1", property: "state"},
+		{service: "tuned", watch: "dbus", probe: "introspect", dbusInterface: "com.redhat.tuned.control"},
+		{service: "bluetooth", watch: "dbus", probe: "introspect", dbusInterface: "org.bluez.AgentManager1"},
+		{service: "systemd-machined", watch: "dbus", probe: "introspect", dbusInterface: "org.freedesktop.machine1.Manager"},
+		{service: "systemd-networkd", watch: "dbus", probe: "property", dbusInterface: "org.freedesktop.network1.Manager", property: "OperationalState"},
+		{service: "systemd-resolved", watch: "dbus", probe: "introspect", dbusInterface: "org.freedesktop.resolve1.Manager"},
+		{service: "wpa-supplicant", watch: "dbus", probe: "introspect", dbusInterface: "fi.w1.wpa_supplicant1"},
+		{service: "tuned-ppd", watch: "active-profile", probe: "property", dbusInterface: "net.hadess.PowerProfiles", property: "ActiveProfile"},
+		{service: "iio-sensor-proxy", watch: "dbus", probe: "property", dbusInterface: "net.hadess.SensorProxy", property: "HasAmbientLight"},
+		{service: "accounts-daemon", watch: "version", probe: "property", dbusInterface: "org.freedesktop.Accounts", property: "DaemonVersion"},
+		{service: "colord", watch: "version", probe: "property", dbusInterface: "org.freedesktop.ColorManager", property: "DaemonVersion"},
+		{service: "bolt", watch: "dbus", probe: "property", dbusInterface: "org.freedesktop.bolt1.Manager", property: "Version"},
+		{service: "gdm", watch: "version", probe: "property", dbusInterface: "org.gnome.DisplayManager.Manager", property: "Version"},
+	}
+	root := repoRoot(t)
+	for _, test := range tests {
+		t.Run(test.service, func(t *testing.T) {
+			body := catalogDocByName(t, root, "services", test.service)
+			watch := nested(t, body, "watches", test.watch)
+			if _, present := watch["then"]; present {
+				t.Fatalf("catalog service %s D-Bus watch %s must remain check-only", test.service, test.watch)
+			}
+			check := catalogWatchCheck(t, body, test.watch)
+			if got := cfgval.String(check["type"]); got != "dbus" {
+				t.Fatalf("type = %q, want dbus", got)
+			}
+			if got := cfgval.String(check["probe"]); got != test.probe {
+				t.Fatalf("probe = %q, want %q", got, test.probe)
+			}
+			if got := cfgval.String(check["dbus_interface"]); got != test.dbusInterface {
+				t.Fatalf("dbus_interface = %q, want %q", got, test.dbusInterface)
+			}
+			if got := cfgval.String(check["property"]); got != test.property {
+				t.Fatalf("property = %q, want %q", got, test.property)
+			}
+		})
+	}
+}
+
 func TestCatalogServicesDoNotDeclareVersionsFrom(t *testing.T) {
 	walkCatalogDocs(t, filepath.Join(repoRoot(t), "catalog", "services"), func(path string, body map[string]any) {
 		versions, _ := body["versions"].(map[string]any)
@@ -1017,8 +1062,10 @@ func TestCatalogAppsDeclareVersionSource(t *testing.T) {
 	cfg := loadRepoCatalog(t)
 
 	noLocalVersion := map[string]string{
-		"libvirt-dbus": "upstream documents no version option for libvirt-dbus",
-		"udisks2":      "upstream documents no version option for udisksd or udisksctl",
+		"colord":           "colord has no version option; its D-Bus service exposes DaemonVersion",
+		"iio-sensor-proxy": "iio-sensor-proxy has no version option or version property",
+		"libvirt-dbus":     "upstream documents no version option for libvirt-dbus",
+		"udisks2":          "upstream documents no version option for udisksd or udisksctl",
 	}
 	for _, name := range cfg.CatalogNamesInCategory(CategoryApp) {
 		doc := cfg.Apps[name]

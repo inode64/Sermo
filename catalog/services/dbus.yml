@@ -33,6 +33,7 @@ watches:
     check:
       type: dbus
       timeout: 3s
+      verify: true
   alert-if-memory-high:
     check:
       type: metric

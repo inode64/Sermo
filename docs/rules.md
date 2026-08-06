@@ -113,8 +113,7 @@ Connection-protocol checks (MySQL, PostgreSQL, Redis, Docker, libvirt, etc.) are
 | `dhclient` / `dhcp-client` | a local DHCP client has UDP/68 bound in `/proc/net/udp` (see Database) |
 | `rspamd`      | an rspamd worker answers `GET /ping` with `pong` (see Database) |
 | `libvirt` / `libvirtd` | a libvirt daemon answers RPC; exposes VM counts (`domains.active`…), node capacity and a VM's state for `expect`/`on_change` (see Database) |
-| `dbus`        | a D-Bus daemon completes the auth/Hello handshake and answers `GetId` (see Database) |
-| `udisks2`     | UDisks2 is registered on the system bus and answers `Peer.Ping` on its Manager object (see Database) |
+| `dbus`        | a D-Bus daemon answers `GetId`; named objects support read-only peer, introspection and scalar-property probes without activation (see Database) |
 | `avahi` / `avahi-daemon` | the Avahi daemon answers `GetVersionString` over its D-Bus API (see Database) |
 | `syncthing`   | a Syncthing instance answers `/rest/noauth/health` with `{"status":"OK"}` (see Database) |
 | `docker`      | the Docker Engine answers `/info`, exposing container counts (running/paused/stopped), images and a container's state/health for `expect`/`on_change` (see Database) |
@@ -1030,13 +1029,29 @@ Protocols, in the order of the table above:
   ```
 - `dbus` — connects to a D-Bus daemon and completes its SASL auth +
   `org.freedesktop.DBus.Hello` handshake — which alone proves the bus is up — then
-  calls `org.freedesktop.DBus.GetId` to read the bus UUID. It runs no write
+  calls `org.freedesktop.DBus.GetId` to read the bus UUID. With both `bus_name`
+  and `object_path`, it also resolves the well-known name with `GetNameOwner`
+  and probes the returned unique owner. `probe` selects one of three constrained
+  read-only operations: `peer` (the default) calls
+  `org.freedesktop.DBus.Peer.Ping`; `introspect` parses
+  `org.freedesktop.DBus.Introspectable.Introspect` and, when `dbus_interface` is
+  set, requires that interface; `property` calls
+  `org.freedesktop.DBus.Properties.Get` and requires both `dbus_interface` and
+  `property`. Property values must be scalar (string, boolean, number or object
+  path); use `expect.property_value` to assert the observed value. Every call
+  sets `NO_AUTO_START`: a missing or wedged service fails without D-Bus
+  activating it, and a call cannot race onto a replacement owner. There is no
+  arbitrary-method mode. Omitting all target fields keeps the bus-only probe;
+  `bus_name` and `object_path` must otherwise be set together. It runs no write
   operation. **Target:** defaults to the system bus
   (`unix:path=/run/dbus/system_bus_socket`); set `socket` for a different
   socket path, or `query` for a full D-Bus address (`unix:abstract=…`,
   `tcp:host=…,port=…`). Socket-based, so there is no TCP port. No auth — access is
   governed by the socket's permissions. Result data: the bus id, address and the
-  connection's unique name. Uses `github.com/godbus/dbus/v5`. With `interface`
+  connection's unique name; a named-service probe also reports `bus_name`,
+  `object_path`, `probe`, its unique `owner` (the `on_change` fingerprint), and
+  any configured `dbus_interface`, `property` and `property_value`.
+  Uses `github.com/godbus/dbus/v5`. With `interface`
   and a TCP `query`, use exactly `tcp:host=…,port=…`; other D-Bus TCP transport
   options are rejected so Sermo never silently drops egress-interface binding.
 
@@ -1047,32 +1062,33 @@ Protocols, in the order of the table above:
     dbus-custom:
       type: dbus
       socket: /run/dbus/system_bus_socket   # or use `query` for a full address
-  ```
-- `login1` — verifies that `systemd-logind` owns `org.freedesktop.login1` on
-  the system D-Bus and answers `Peer.Ping` on `/org/freedesktop/login1`.
-  It uses `GetNameOwner`, which does not activate a missing service, so it
-  detects a stuck D-Bus activation without making it worse. Target options are
-  the same as `dbus`.
-- `udisks2` — the UDisks2 disk-management daemon on the system D-Bus bus. Connects
-  to the bus (SASL auth + Hello), verifies `org.freedesktop.UDisks2` has a name
-  owner, and calls `org.freedesktop.DBus.Peer.Ping` on
-  `/org/freedesktop/UDisks2/Manager` — proof the service is registered and
-  answering, not merely that `dbus-daemon` is up. **Target:** like `dbus`, defaults
-  to the system bus; set `socket` for a different bus socket or `query` for a full
-  D-Bus address. Socket-based, no TCP port, no auth. Result data: the D-Bus unique
-  name owning `org.freedesktop.UDisks2`. Uses `github.com/godbus/dbus/v5`. The
-  same `interface` + TCP `query` restriction as `dbus` applies.
-
-  ```yaml
-  checks:
+    login1:
+      type: dbus
+      bus_name: org.freedesktop.login1
+      object_path: /org/freedesktop/login1
     udisks2:
-      type: udisks2
-      timeout: 5s
+      type: dbus
+      bus_name: org.freedesktop.UDisks2
+      object_path: /org/freedesktop/UDisks2/Manager
+    libvirt-dbus:
+      type: dbus
+      bus_name: org.libvirt
+      object_path: /org/libvirt
+    gdm-version:
+      type: dbus
+      bus_name: org.gnome.DisplayManager
+      object_path: /org/gnome/DisplayManager/Manager
+      probe: property
+      dbus_interface: org.gnome.DisplayManager.Manager
+      property: Version
+      expect:
+        property_value: { op: "=~", value: "^[0-9]+\\." }
   ```
 - `avahi` (alias `avahi-daemon`) — the Avahi mDNS/DNS-SD (zeroconf) daemon, probed
   over its D-Bus API (`org.freedesktop.Avahi`). Connects to the system bus (SASL
-  auth + Hello) and calls `org.freedesktop.Avahi.Server.GetVersionString` — a reply
-  proves avahi-daemon is up and registered on the bus — reporting the `version`
+  auth + Hello), resolves Avahi's unique owner without activation, and calls
+  `org.freedesktop.Avahi.Server.GetVersionString` on that owner with
+  `NO_AUTO_START` — a reply proves avahi-daemon is up and registered on the bus — reporting the `version`
   (pair with `on_version_change`) and, best-effort, the `hostname` and server
   `state` (`running` when AVAHI_SERVER_RUNNING). **Target:** like `dbus`, defaults
   to the system bus; set `socket` for a different bus socket or `query` for a full

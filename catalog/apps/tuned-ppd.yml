@@ -1,0 +1,9 @@
+name: tuned-ppd
+display_name: "TuneD power-profiles-daemon compatibility service"
+category: system
+version_from: tuned
+variables:
+  binary: ${bindir}/tuned-ppd
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  health: { type: command, command: ["${binary}", "--help"], timeout: 10s }

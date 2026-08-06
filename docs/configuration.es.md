@@ -2173,6 +2173,15 @@ como un watch aquí, y las de recursos de host pueden igualmente usarse como
 entradas `watches:` solo-check de un service o como `checks:`/reglas explícitas
 (ver [Checks](rules.es.md#comprobaciones)).
 
+Una comprobación `dbus` sin destino verifica el propio bus. Para verificar un
+servicio con nombre, define a la vez `bus_name` y `object_path`; Sermo resuelve
+su propietario único con la autoactivación D-Bus deshabilitada. El valor por
+defecto `probe: peer` verifica vivacidad; `probe: introspect` puede exigir una
+`dbus_interface`, y `probe: property` lee una `property` escalar de la
+`dbus_interface` obligatoria. Estos campos funcionan sin cambios en watches de
+host y watches embebidos en services. Ver
+[la comprobación D-Bus](rules.es.md#protocolos-de-base-de-datos).
+
 Un watch dispara su hook con el resultado de **alerta** de la comprobación:
 umbral cruzado para comprobaciones de condición, **fallo** para comprobaciones
 de salud (`tcp`/`http`/`firewall_rules`/`cert`/…), de modo que p. ej. un watch

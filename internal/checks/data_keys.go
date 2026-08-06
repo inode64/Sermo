@@ -23,6 +23,16 @@ const (
 	DataKeyConnectedClients   = conn.ExtraKeyConnectedClients
 	DataKeyCurrentBytes       = "current_bytes"
 	DataKeyDaysLeft           = "days_left"
+	DataKeyDBusAddress        = conn.ExtraKeyDBusAddress
+	DataKeyDBusBusID          = conn.ExtraKeyDBusBusID
+	DataKeyDBusBusName        = conn.ExtraKeyDBusBusName
+	DataKeyDBusInterface      = conn.ExtraKeyDBusInterface
+	DataKeyDBusObjectPath     = conn.ExtraKeyDBusObjectPath
+	DataKeyDBusOwner          = conn.ExtraKeyDBusOwner
+	DataKeyDBusProbe          = conn.ExtraKeyDBusProbe
+	DataKeyDBusProperty       = conn.ExtraKeyDBusProperty
+	DataKeyDBusPropertyValue  = conn.ExtraKeyDBusPropertyValue
+	DataKeyDBusUniqueName     = conn.ExtraKeyDBusUniqueName
 	DataKeyDegraded           = fieldDegraded
 	DataKeyDegradedArrays     = "degraded_arrays"
 	DataKeyDevice             = CheckKeyDevice

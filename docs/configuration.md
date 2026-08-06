@@ -2101,6 +2101,14 @@ a watch here, and the host-resource ones can equally be used in a service's
 check-only `watches:` entries or explicit `checks:`/rules (see
 [Checks](rules.md#checks)).
 
+A `dbus` check without a target verifies the bus itself. To verify a named
+service, set both `bus_name` and `object_path`; Sermo resolves its unique owner
+with D-Bus auto-activation disabled. The default `probe: peer` checks liveness;
+`probe: introspect` can require a `dbus_interface`, and `probe: property` reads
+one scalar `property` from the required `dbus_interface`. These fields work
+unchanged in host watches and service-embedded watches. See
+[the D-Bus check](rules.md#database-protocols).
+
 A watch fires its hook on the check's **alert** outcome: threshold crossed for
 condition checks, **failure** for health checks
 (`tcp`/`http`/`firewall_rules`/`cert`/…), so e.g. an `http` watch alerts when

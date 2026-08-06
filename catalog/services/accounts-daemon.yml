@@ -1,0 +1,30 @@
+name: accounts-daemon
+aliases:
+  - accountsservice
+display_name: AccountsService
+category: system
+description: D-Bus service for querying and manipulating user account information.
+service:
+  systemd:
+    - accounts-daemon
+apps:
+  - accounts-daemon
+processes:
+  main:
+    exe: ${accounts_daemon_binary}
+    user: root
+watches:
+  service:
+    check:
+      type: service
+      expect: active
+  version:
+    check:
+      type: dbus
+      bus_name: org.freedesktop.Accounts
+      object_path: /org/freedesktop/Accounts
+      probe: property
+      dbus_interface: org.freedesktop.Accounts
+      property: DaemonVersion
+      timeout: 5s
+      verify: true

@@ -35,7 +35,6 @@ func TestProbeMetadata(t *testing.T) {
 		{[]string{"ipp", "cups"}, 631, false},
 		{[]string{"kafka"}, 9092, false},
 		{[]string{"ldap"}, 389, false},
-		{[]string{"login1"}, 0, false},
 		{[]string{"libvirt", "libvirtd"}, 16509, false},
 		{[]string{"lvmpolld"}, 0, false},
 		{[]string{"memcached", "memcache"}, 11211, false},
@@ -67,7 +66,6 @@ func TestProbeMetadata(t *testing.T) {
 		{[]string{"statd", "rpc.statd", "nsm", "nfs-statd"}, 662, false},
 		{[]string{"syncthing"}, 8384, false},
 		{[]string{"tftp"}, 69, false},
-		{[]string{"udisks2"}, 0, false},
 		{[]string{"unifi", "unifi-controller", "unifi-network"}, 8443, false},
 		{[]string{"varnish", "varnishadm"}, 6082, false},
 	}

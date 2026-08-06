@@ -10,19 +10,31 @@ service:
 apps:
   - libvirt-dbus
 variables:
-  user: root
+  user: libvirtdbus
+  legacy_user: root
 processes:
   main:
     exe: ${libvirt_dbus_binary}
     user: ${user}
+  legacy-root:
+    exe: ${libvirt_dbus_binary}
+    user: ${legacy_user}
 watches:
   service:
     check:
       type: service
       expect: active
+  bus:
+    check:
+      type: dbus
+      timeout: 3s
   restart-if-dbus-failed:
     check:
       type: dbus
+      bus_name: org.libvirt
+      object_path: /org/libvirt
+      requires:
+        - bus
       timeout: 5s
       verify: true
     for:

@@ -45,6 +45,18 @@ watches:
     check:
       type: service
       expect: active
+  dbus:
+    check:
+      type: dbus
+      bus_name: org.fedoraproject.FirewallD1
+      object_path: /org/fedoraproject/FirewallD1
+      probe: property
+      dbus_interface: org.fedoraproject.FirewallD1
+      property: state
+      expect:
+        property_value: RUNNING
+      timeout: 5s
+      verify: true
   restart-if-state-failed:
     check:
       type: command

@@ -27,11 +27,12 @@ exists. Nothing here is committed scope; pick items deliberately.
 
 ### D-Bus, storage and desktop
 
-- [x] D-Bus system bus health probe (`type: dbus` in `internal/conn`) and
-      `dbus` catalog service (service + native handshake check)
-- [x] UDisks2: native `udisks2` D-Bus probe on the catalog service (Manager
-      `Peer.Ping` + name-owner check); preflight `config` still pending
-- [x] `libvirt-dbus` catalog service (process match; no dedicated bus probe yet)
+- [x] Generic D-Bus bus and named-object health probe (`type: dbus`) with
+      constrained `peer`, `introspect` and scalar `property` modes, without
+      service auto-activation; available to host and service watches.
+- [x] Catalog coverage includes systemd managers, NetworkManager, firewalld,
+      TuneD, desktop/hardware services, systemd-logind, UDisks2, libvirt-dbus,
+      Polkit and UPower; UDisks2 preflight `config` remains pending.
 
 ### Observability
 

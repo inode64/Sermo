@@ -1,0 +1,28 @@
+name: tuned-ppd
+display_name: TuneD PPD compatibility service
+category: system
+description: TuneD implementation of the power-profiles-daemon D-Bus API.
+service:
+  systemd:
+    - tuned-ppd
+apps:
+  - tuned-ppd
+processes:
+  main:
+    cmd: (^|/)python[0-9.]* .*${tuned_ppd_binary}( |$)
+    user: root
+watches:
+  service:
+    check:
+      type: service
+      expect: active
+  active-profile:
+    check:
+      type: dbus
+      bus_name: net.hadess.PowerProfiles
+      object_path: /net/hadess/PowerProfiles
+      probe: property
+      dbus_interface: net.hadess.PowerProfiles
+      property: ActiveProfile
+      timeout: 5s
+      verify: true

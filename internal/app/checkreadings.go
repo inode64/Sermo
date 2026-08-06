@@ -8,6 +8,7 @@ import (
 
 	"sermo/internal/cfgval"
 	"sermo/internal/checks"
+	"sermo/internal/conn"
 	"sermo/internal/metrics"
 	"sermo/internal/units"
 	"sermo/internal/web"
@@ -25,10 +26,15 @@ const (
 	watchReadingLabelAllocated         = "Allocated"
 	watchReadingLabelAge               = "Age"
 	watchReadingLabelArrays            = "Arrays"
+	watchReadingLabelAddress           = "Address"
 	watchReadingLabelAvailable         = "Available"
 	watchReadingLabelAwait             = "Await"
 	watchReadingLabelBackend           = "Backend"
 	watchReadingLabelBaselineCount     = "Baseline count"
+	watchReadingLabelBusID             = "Bus ID"
+	watchReadingLabelBusName           = "Bus name"
+	watchReadingLabelDBusInterface     = "D-Bus interface"
+	watchReadingLabelDBusProbe         = "D-Bus probe"
 	watchReadingLabelChipFilter        = "Chip filter"
 	watchReadingLabelConfiguredPath    = "Configured path"
 	watchReadingLabelCount             = "Count"
@@ -76,6 +82,7 @@ const (
 	watchReadingLabelMode              = "Mode"
 	watchReadingLabelMountpoints       = "Mountpoints"
 	watchReadingLabelOOMKills          = "OOM kills"
+	watchReadingLabelObjectPath        = "Object path"
 	watchReadingLabelOldestIdle        = "Oldest idle"
 	watchReadingLabelOf                = "Of"
 	watchReadingLabelOwner             = "Owner"
@@ -84,6 +91,7 @@ const (
 	watchReadingLabelPIDs              = "PIDs"
 	watchReadingLabelPort              = "Port"
 	watchReadingLabelProcess           = "Process"
+	watchReadingLabelProperty          = "Property"
 	watchReadingLabelProtocol          = "Protocol"
 	watchReadingLabelRead              = "Read"
 	watchReadingLabelRecovering        = "Recovering"
@@ -108,6 +116,7 @@ const (
 	watchReadingLabelStratum           = "Stratum"
 	watchReadingLabelUsed              = "Used"
 	watchReadingLabelUsedBytes         = "Used bytes"
+	watchReadingLabelUniqueName        = "Unique name"
 	watchReadingLabelUtilization       = "Utilization"
 	watchReadingLabelUser              = "User"
 	watchReadingLabelValue             = "Value"
@@ -229,6 +238,8 @@ func checkReadings(checkType string, data map[string]any) []web.WatchReading {
 		return sizeCheckReadings(data)
 	case checks.CheckTypeTCP, checks.CheckTypePorts:
 		return connCheckReadings(data)
+	case conn.ProtocolNameDBus:
+		return dbusCheckReadings(data)
 	case checks.CheckTypeTCPConnections:
 		return tcpConnectionsCheckReadings(data)
 	case checks.CheckTypeSSHIdle:
@@ -547,6 +558,22 @@ func connCheckReadings(data map[string]any) []web.WatchReading {
 		addString(checks.DataKeyProtocol, watchReadingLabelProtocol).
 		addIntMetric(checks.DataKeyLatencyMS, watchReadingLabelLatency, metrics.MetricUnitMilliseconds).
 		readings()
+}
+
+func dbusCheckReadings(data map[string]any) []web.WatchReading {
+	out := connCheckReadings(data)
+	return append(out, readingsFrom(data).
+		addString(checks.DataKeyDBusAddress, watchReadingLabelAddress).
+		addString(checks.DataKeyDBusBusID, watchReadingLabelBusID).
+		addString(checks.DataKeyDBusUniqueName, watchReadingLabelUniqueName).
+		addString(checks.DataKeyDBusBusName, watchReadingLabelBusName).
+		addString(checks.DataKeyDBusObjectPath, watchReadingLabelObjectPath).
+		addString(checks.DataKeyDBusOwner, watchReadingLabelOwner).
+		addString(checks.DataKeyDBusProbe, watchReadingLabelDBusProbe).
+		addString(checks.DataKeyDBusInterface, watchReadingLabelDBusInterface).
+		addString(checks.DataKeyDBusProperty, watchReadingLabelProperty).
+		addString(checks.DataKeyDBusPropertyValue, watchReadingLabelValue).
+		readings()...)
 }
 
 func redisCheckReadings(data map[string]any) []web.WatchReading {

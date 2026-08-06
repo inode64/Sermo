@@ -496,6 +496,50 @@ func validateConnFields(prefix string, fields map[string]any, requireUser bool, 
 	validateConnChangeFlags(prefix, fields, add)
 }
 
+func validateDBusFields(prefix string, fields map[string]any, add addFunc) {
+	busName, busNameOK := fields[checks.CheckKeyBusName].(string)
+	objectPath, objectPathOK := fields[checks.CheckKeyObjectPath].(string)
+	probe, probeOK := fields[checks.CheckKeyDBusProbe].(string)
+	dbusInterface, interfaceOK := fields[checks.CheckKeyDBusInterface].(string)
+	property, propertyOK := fields[checks.CheckKeyDBusProperty].(string)
+	invalid := false
+	for _, field := range []struct {
+		key   string
+		value string
+		ok    bool
+	}{
+		{key: checks.CheckKeyBusName, value: busName, ok: busNameOK},
+		{key: checks.CheckKeyObjectPath, value: objectPath, ok: objectPathOK},
+		{key: checks.CheckKeyDBusProbe, value: probe, ok: probeOK},
+		{key: checks.CheckKeyDBusInterface, value: dbusInterface, ok: interfaceOK},
+		{key: checks.CheckKeyDBusProperty, value: property, ok: propertyOK},
+	} {
+		if _, present := fields[field.key]; present && (!field.ok || field.value == "") {
+			add("%s.%s must be a non-empty string", prefix, field.key)
+			invalid = true
+		}
+	}
+	if invalid {
+		return
+	}
+	if err := conn.ValidateDBusTarget(conn.DBusTarget{
+		BusName: busName, ObjectPath: objectPath, Probe: probe, Interface: dbusInterface, Property: property,
+	}); err != nil {
+		add("%s: %v", prefix, err)
+	}
+}
+
+func rejectDBusFields(prefix, typ string, fields map[string]any, add addFunc) {
+	for _, field := range []string{
+		checks.CheckKeyBusName, checks.CheckKeyObjectPath, checks.CheckKeyDBusProbe,
+		checks.CheckKeyDBusInterface, checks.CheckKeyDBusProperty,
+	} {
+		if _, present := fields[field]; present {
+			add("%s.%s is only supported for a dbus check, not %s", prefix, field, typ)
+		}
+	}
+}
+
 func validateConnPort(prefix string, fields map[string]any, add addFunc) {
 	// The same TCP port range walkScalars enforces on resolved services, so a
 	// connection check behaves identically as a host watch.
@@ -833,6 +877,11 @@ func validateSingleShotCheckFields(path, typ string, entry map[string]any, locks
 		if proto, isProto := conn.Lookup(typ); isProto {
 			validateConnFields(path, entry, proto.RequiresUser(), add)
 			validateInterfaceFields(path, entry, add)
+			if proto.Name() == conn.ProtocolNameDBus {
+				validateDBusFields(path, entry, add)
+			} else {
+				rejectDBusFields(path, typ, entry, add)
+			}
 			if proto.Name() == conn.ProtocolNameDNS {
 				if v, present := entry[checks.CheckKeyResolvconf]; present {
 					if _, ok := v.(bool); !ok {

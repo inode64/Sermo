@@ -1100,6 +1100,18 @@ only evidence that the service left its own runtime lock artifact; it does not
 block start/stop/restart/reload/resume and must not point under
 `<paths.runtime>/locks`, which is reserved for Sermo operation locks.
 
+### D-Bus service health
+
+Use an embedded `type: dbus` watch when a daemon owns a stable system-bus name.
+The catalog profiles for systemd managers, NetworkManager, firewalld, TuneD,
+GDM and several desktop/hardware daemons use the same check path as host
+watches. Prefer the default `peer` probe when the object implements it; use
+`introspect` to require a public interface, or `property` to read one stable
+scalar property. These probes disable D-Bus auto-activation and do not permit
+arbitrary method calls. Adding a check-only watch does not add remediation;
+attach a `then:` action only when that action has been reviewed independently.
+See [the D-Bus check reference](rules.md#database-protocols).
+
 ## Versioned services
 
 Some applications ship one binary per version and several can be installed at

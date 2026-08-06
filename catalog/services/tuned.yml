@@ -40,6 +40,15 @@ watches:
     check:
       type: service
       expect: active
+  dbus:
+    check:
+      type: dbus
+      bus_name: com.redhat.tuned
+      object_path: /Tuned
+      probe: introspect
+      dbus_interface: com.redhat.tuned.control
+      timeout: 5s
+      verify: true
   restart-if-active-failed:
     check:
       type: command

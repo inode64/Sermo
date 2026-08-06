@@ -1,0 +1,23 @@
+name: systemd-resolved
+aliases:
+  - resolved
+display_name: systemd-resolved
+category: network
+description: systemd network name resolution service.
+service:
+  systemd:
+    - systemd-resolved
+watches:
+  service:
+    check:
+      type: service
+      expect: active
+  dbus:
+    check:
+      type: dbus
+      bus_name: org.freedesktop.resolve1
+      object_path: /org/freedesktop/resolve1
+      probe: introspect
+      dbus_interface: org.freedesktop.resolve1.Manager
+      timeout: 5s
+      verify: true

@@ -75,6 +75,18 @@ func TestValidateServiceWatches(t *testing.T) {
 		t.Errorf("check-only process check should have no issues, got: %v", got)
 	}
 
+	// A D-Bus property probe uses exactly the same inline builder as a host watch.
+	if got := run(map[string]any{
+		"profile": map[string]any{
+			"check": map[string]any{
+				"type": "dbus", "bus_name": "net.hadess.PowerProfiles", "object_path": "/net/hadess/PowerProfiles",
+				"probe": "property", "dbus_interface": "net.hadess.PowerProfiles", "property": "ActiveProfile",
+			},
+		},
+	}); len(got) != 0 {
+		t.Errorf("check-only D-Bus property watch should have no issues, got: %v", got)
+	}
+
 	// A process_count watch is service-scoped here, unlike a host process watch.
 	if got := run(map[string]any{
 		"workers": map[string]any{
