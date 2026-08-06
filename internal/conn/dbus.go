@@ -44,14 +44,21 @@ const (
 )
 
 // DBusTarget is the optional named object a D-Bus check probes. An empty target
-// means bus-only health. Interface maps to dbus_interface in YAML because the
-// generic interface field already controls network egress.
+// means bus-only health. DBusInterface maps to dbus_interface in YAML; the
+// generic Config.Interface field controls network egress instead.
 type DBusTarget struct {
-	BusName    string
-	ObjectPath string
-	Probe      string
-	Interface  string
-	Property   string
+	BusName       string
+	ObjectPath    string
+	Probe         string
+	DBusInterface string
+	Property      string
+}
+
+func (target DBusTarget) probeMode() string {
+	if target.Probe == "" {
+		return DBusProbePeer
+	}
+	return target.Probe
 }
 
 type dbusIntrospection struct {
@@ -144,11 +151,11 @@ func dbusProbe(ctx context.Context, cfg Config, addr string) (Result, error) {
 
 func dbusTargetFromConfig(cfg Config) DBusTarget {
 	return DBusTarget{
-		BusName:    cfg.Params[ParamKeyDBusBusName],
-		ObjectPath: cfg.Params[ParamKeyDBusObjectPath],
-		Probe:      cfg.Params[ParamKeyDBusProbe],
-		Interface:  cfg.Params[ParamKeyDBusInterface],
-		Property:   cfg.Params[ParamKeyDBusProperty],
+		BusName:       cfg.Params[ParamKeyDBusBusName],
+		ObjectPath:    cfg.Params[ParamKeyDBusObjectPath],
+		Probe:         cfg.Params[ParamKeyDBusProbe],
+		DBusInterface: cfg.Params[ParamKeyDBusInterface],
+		Property:      cfg.Params[ParamKeyDBusProperty],
 	}
 }
 
@@ -165,13 +172,10 @@ func probeDBusService(ctx context.Context, bus dbusMethodCaller, object dbusObje
 }
 
 func probeDBusObject(ctx context.Context, object dbusMethodCaller, target DBusTarget) (map[string]string, string, error) {
-	probe := target.Probe
-	if probe == "" {
-		probe = DBusProbePeer
-	}
+	probe := target.probeMode()
 	observed := map[string]string{ExtraKeyDBusProbe: probe}
-	if target.Interface != "" {
-		observed[ExtraKeyDBusInterface] = target.Interface
+	if target.DBusInterface != "" {
+		observed[ExtraKeyDBusInterface] = target.DBusInterface
 	}
 	switch probe {
 	case DBusProbePeer:
@@ -184,18 +188,18 @@ func probeDBusObject(ctx context.Context, object dbusMethodCaller, target DBusTa
 		if err := object.CallWithContext(ctx, dbusIntrospect, dbusReadOnlyCallFlags).Store(&document); err != nil {
 			return nil, stepDBusIntrospect, fmt.Errorf("call %s: %w", dbusIntrospect, err)
 		}
-		if err := requireDBusInterface(document, target.Interface); err != nil {
+		if err := requireDBusInterface(document, target.DBusInterface); err != nil {
 			return nil, stepDBusIntrospect, err
 		}
 		return observed, stepDBusIntrospect, nil
 	case DBusProbeProperty:
 		var variant dbus.Variant
-		if err := object.CallWithContext(ctx, dbusPropertiesGet, dbusReadOnlyCallFlags, target.Interface, target.Property).Store(&variant); err != nil {
+		if err := object.CallWithContext(ctx, dbusPropertiesGet, dbusReadOnlyCallFlags, target.DBusInterface, target.Property).Store(&variant); err != nil {
 			return nil, stepDBusPropertiesGet, fmt.Errorf("call %s: %w", dbusPropertiesGet, err)
 		}
 		value, err := dbusScalarString(variant.Value())
 		if err != nil {
-			return nil, stepDBusPropertiesGet, fmt.Errorf("read property %s.%s: %w", target.Interface, target.Property, err)
+			return nil, stepDBusPropertiesGet, fmt.Errorf("read property %s.%s: %w", target.DBusInterface, target.Property, err)
 		}
 		observed[ExtraKeyDBusProperty] = target.Property
 		observed[ExtraKeyDBusPropertyValue] = value
@@ -374,7 +378,7 @@ func DBusAddress(socket, query string) string {
 func ValidateDBusTarget(target DBusTarget) error {
 	busName, objectPath := target.BusName, target.ObjectPath
 	switch {
-	case busName == "" && objectPath == "" && target.Probe == "" && target.Interface == "" && target.Property == "":
+	case busName == "" && objectPath == "" && target.Probe == "" && target.DBusInterface == "" && target.Property == "":
 		return nil
 	case busName == "":
 		return errors.New("bus_name is required when object_path is set")
@@ -385,13 +389,10 @@ func ValidateDBusTarget(target DBusTarget) error {
 	case !dbus.ObjectPath(objectPath).IsValid():
 		return fmt.Errorf("object_path %q is not a valid D-Bus object path", objectPath)
 	}
-	probe := target.Probe
-	if probe == "" {
-		probe = DBusProbePeer
-	}
+	probe := target.probeMode()
 	switch probe {
 	case DBusProbePeer:
-		if target.Interface != "" {
+		if target.DBusInterface != "" {
 			return errors.New("dbus_interface is not supported by the peer probe")
 		}
 		if target.Property != "" {
@@ -402,7 +403,7 @@ func ValidateDBusTarget(target DBusTarget) error {
 			return errors.New("property is only supported by the property probe")
 		}
 	case DBusProbeProperty:
-		if target.Interface == "" {
+		if target.DBusInterface == "" {
 			return errors.New("dbus_interface is required by the property probe")
 		}
 		if target.Property == "" {
@@ -411,8 +412,8 @@ func ValidateDBusTarget(target DBusTarget) error {
 	default:
 		return fmt.Errorf("probe must be %q, %q or %q", DBusProbePeer, DBusProbeIntrospect, DBusProbeProperty)
 	}
-	if target.Interface != "" && !validDBusInterface(target.Interface) {
-		return fmt.Errorf("dbus_interface %q is not a valid D-Bus interface", target.Interface)
+	if target.DBusInterface != "" && !validDBusInterface(target.DBusInterface) {
+		return fmt.Errorf("dbus_interface %q is not a valid D-Bus interface", target.DBusInterface)
 	}
 	if target.Property != "" && !validDBusMember(target.Property) {
 		return fmt.Errorf("property %q is not a valid D-Bus property", target.Property)
