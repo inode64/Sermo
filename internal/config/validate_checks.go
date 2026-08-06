@@ -655,7 +655,7 @@ func validateCheckSection(tree map[string]any, section, locksDir string, add add
 func validateCheckReporting(path string, entry map[string]any, add addFunc) {
 	if v, present := entry[checks.CheckKeyReports]; present && !checks.IsReportingMode(cfgval.String(v)) {
 		add("%s.%s %q must be one of %s", path, checks.CheckKeyReports, cfgval.String(v),
-			strings.Join(checks.ReportingModes, ", "))
+			strings.Join(checks.ReportingModes(), ", "))
 	}
 	// `unit:` is a display label for the check's scalar result, not an
 	// enumeration: a sql check reports whatever its query returns.
