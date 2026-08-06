@@ -43,8 +43,13 @@ const (
 	ReportsValue = "value"
 )
 
-// ReportingModes lists the values `reports:` accepts, for validation and docs.
-var ReportingModes = []string{ReportsHealth, ReportsState, ReportsCondition, ReportsValue}
+// reportingModes is the immutable package-owned catalog of values `reports:`
+// accepts. Consumers receive a copy through ReportingModes so they cannot alter
+// validation or registry invariants at runtime.
+var reportingModes = [...]string{ReportsHealth, ReportsState, ReportsCondition, ReportsValue}
+
+// ReportingModes returns the values `reports:` accepts, in display order.
+func ReportingModes() []string { return slices.Clone(reportingModes[:]) }
 
 // conditionByDefault reports whether a check of this type is alert-style unless
 // `reports:` says otherwise. The type only supplies the default: the same type
@@ -71,7 +76,7 @@ func ResolveCondition(typ, reports string) bool {
 }
 
 // IsReportingMode reports whether s names a supported `reports:` value.
-func IsReportingMode(s string) bool { return slices.Contains(ReportingModes, s) }
+func IsReportingMode(s string) bool { return slices.Contains(reportingModes[:], s) }
 
 // verdictlessModes are the reporting modes that assert nothing: they observe a
 // state or a number without judging it, so they never count toward health and
