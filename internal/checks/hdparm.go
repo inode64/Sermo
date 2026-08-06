@@ -38,14 +38,14 @@ func (c hdparmCheck) Run(ctx context.Context) Result {
 	res, runErr := c.runner.Run(ctx, hdparmCommand, hdparmArgs(c.device, want[fieldCached], want[fieldRead])...)
 	if res.ExitCode == execx.ExitCodeRunFailure {
 		msg := execx.OperatorFailureOr(runErr, res, c.timeout, execx.CommandDidNotStart)
-		return c.result(false, prefix+": "+msg, start)
+		return c.unavailableResult(prefix+": "+msg, start)
 	}
 	values, err := parseHdparm(res.Stdout)
 	if err != nil {
 		if s := output.FirstNonEmptyLine(res.Stderr); s != "" {
-			return c.result(false, prefix+": "+s, start)
+			return c.unavailableResult(prefix+": "+s, start)
 		}
-		return c.result(false, prefix+": "+err.Error(), start)
+		return c.unavailableResult(prefix+": "+err.Error(), start)
 	}
 
 	ok := levelPredsHold(c.preds, values)

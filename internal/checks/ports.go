@@ -61,7 +61,7 @@ func (c *portsCheck) Run(ctx context.Context) Result {
 
 	states := c.scan(ctx)
 	if err := ctx.Err(); err != nil {
-		return c.result(false, fmt.Sprintf("%s: %s", c.host, execx.ContextFailure(err, c.timeout)), start)
+		return c.unavailableResult(fmt.Sprintf("%s: %s", c.host, execx.ContextFailure(err, c.timeout)), start)
 	}
 	matchHolds := c.evaluateMatch(states)
 

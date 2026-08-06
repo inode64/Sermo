@@ -55,7 +55,7 @@ func (c *sizeCheck) Run(ctx context.Context) Result {
 
 	size, err := sampler(ctx, c.path, c.includeHidden)
 	if err != nil {
-		return c.result(false, fmt.Sprintf("size %s: %s", c.path, execx.ContextFailure(err, c.timeout)), start)
+		return c.unavailableResult(fmt.Sprintf("size %s: %s", c.path, execx.ContextFailure(err, c.timeout)), start)
 	}
 	now := clock()
 

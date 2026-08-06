@@ -30,12 +30,12 @@ func (c memoryCheck) Run(_ context.Context) Result {
 	sampler := samplerOr(c.sampler, defaultMemorySampler)
 	s, err := sampler()
 	if err != nil {
-		return c.result(false, "memory: "+err.Error(), start)
+		return c.unavailableResult("memory: "+err.Error(), start)
 	}
 	if s.TotalBytes == 0 {
 		// An unreadable/odd meminfo must never fire (the level check is an AND
 		// over known values), mirroring the swapless-host guard in swap.
-		return c.result(false, "memory: total size unknown", start)
+		return c.unavailableResult("memory: total size unknown", start)
 	}
 	avail := min(s.AvailableBytes, s.TotalBytes)
 	usedPct := float64(s.TotalBytes-avail) / float64(s.TotalBytes) * percentScale

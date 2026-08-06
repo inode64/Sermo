@@ -18,7 +18,10 @@ func (c binaryCheck) Run(_ context.Context) Result {
 	start := time.Now()
 	info, err := os.Stat(c.path)
 	if err != nil {
-		return c.result(false, c.path+" not found", start)
+		if os.IsNotExist(err) {
+			return c.result(false, c.path+" not found", start)
+		}
+		return c.unavailableResult(c.path+": "+err.Error(), start)
 	}
 	if info.IsDir() {
 		return c.result(false, c.path+" is a directory", start)

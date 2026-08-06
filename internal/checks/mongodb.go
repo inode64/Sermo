@@ -51,13 +51,13 @@ func (c mongoCheck) Run(ctx context.Context) Result {
 
 	client, err := conn.MongoConnect(ctx, c.cfg)
 	if err != nil {
-		return c.result(false, "mongodb: "+err.Error(), start)
+		return c.unavailableResult("mongodb: "+err.Error(), start)
 	}
 	defer func() { conn.MongoDisconnect(ctx, client) }()
 
 	result, err := c.scalar(ctx, client)
 	if err != nil {
-		return c.result(false, "mongodb: "+err.Error(), start)
+		return c.unavailableResult("mongodb: "+err.Error(), start)
 	}
 
 	return finishScalarCompare(c.base, "mongodb", result, c.op, c.value, start, map[string]any{

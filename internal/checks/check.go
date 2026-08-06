@@ -289,7 +289,7 @@ func runLevelCountCheck(b base, preds []levelPred, sample func() (count, limit u
 	start := time.Now()
 	count, limit, err := sample()
 	if err != nil {
-		return b.result(false, label+": "+err.Error(), start)
+		return b.unavailableResult(label+": "+err.Error(), start)
 	}
 	return levelCountResult(b, preds, label, unit, countField, count, limit, start)
 }
@@ -316,7 +316,7 @@ func runThresholdCheck(b base, op string, value float64, sample func() (uint64, 
 	start := time.Now()
 	v, ok := sample()
 	if !ok {
-		return b.result(false, unavailableMsg, start)
+		return b.unavailableResult(unavailableMsg, start)
 	}
 	met := compareFloat(float64(v), op, value)
 	res := b.result(met, message(v), start)

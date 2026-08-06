@@ -106,7 +106,7 @@ func (c *netCheck) Run(_ context.Context) Result {
 	sampler := keyedSamplerOr(c.sampler, defaultNetSampler)
 	s, err := sampler(c.iface)
 	if err != nil {
-		return c.result(false, fmt.Sprintf("net %s: %v", c.iface, err), start)
+		return c.unavailableResult(fmt.Sprintf("net %s: %v", c.iface, err), start)
 	}
 	data := map[string]any{DataKeyInterface: c.iface, DataKeyMetric: c.metric}
 

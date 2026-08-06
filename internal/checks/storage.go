@@ -57,7 +57,7 @@ func (c storageCheck) Run(_ context.Context) Result {
 	case c.mount.active:
 		if mountErr != nil {
 			data[DataKeyMountSampleError] = mountErr.Error()
-			res := c.result(false, "mount "+c.path+": "+mountErr.Error(), start)
+			res := c.unavailableResult("mount "+c.path+": "+mountErr.Error(), start)
 			res.Data = data
 			return res
 		}
@@ -90,7 +90,7 @@ func (c storageCheck) Run(_ context.Context) Result {
 	st, err := usage(c.path)
 	if err != nil {
 		data[DataKeySampleError] = err.Error()
-		res := c.result(false, fmt.Sprintf("statfs %s: %v", c.path, err), start)
+		res := c.unavailableResult(fmt.Sprintf("statfs %s: %v", c.path, err), start)
 		res.Data = data
 		return res
 	}

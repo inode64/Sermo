@@ -2,11 +2,13 @@ package rules
 
 import (
 	"context"
+	"errors"
 	"net"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"sermo/internal/checks"
 	"sermo/internal/emission"
@@ -110,6 +112,33 @@ func TestGuardFailsSafeOnInlineUnavailableCheck(t *testing.T) {
 	}
 	if blocked {
 		t.Fatal("unavailable inline check is an evaluation error, not a matched guard")
+	}
+}
+
+func TestGuardFailsSafeOnInlineSamplerFailure(t *testing.T) {
+	ev := &Evaluator{Deps: checks.Deps{
+		DefaultTimeout: time.Second,
+		MemorySampler: func() (checks.MemorySample, error) {
+			return checks.MemorySample{}, errors.New("read meminfo: permission denied")
+		},
+	}}
+	condition := map[string]any{"active": map[string]any{"memory": map[string]any{
+		"used_pct": map[string]any{"op": ">", "value": 90},
+	}}}
+	if active, err := ev.Eval(context.Background(), condition); err != nil || active {
+		t.Fatalf("normal unavailable condition = active:%v err:%v, want false without error", active, err)
+	}
+	blocked, _, err := Guard(context.Background(), []Rule{{
+		Name:   "block-restart-on-memory-pressure",
+		Type:   RuleGuard,
+		Blocks: []string{string(ActionRestart)},
+		If:     condition,
+	}}, string(ActionRestart), ev)
+	if err == nil {
+		t.Fatal("sampler failure in an inline guard must fail safe")
+	}
+	if blocked {
+		t.Fatal("unavailable sampler is an evaluation error, not a matched guard")
 	}
 }
 

@@ -22,7 +22,7 @@ func (c serviceCheck) Run(ctx context.Context) Result {
 
 	status, err := c.status(ctx)
 	if err != nil {
-		return c.result(false, fmt.Sprintf("status: %v", err), start)
+		return c.unavailableResult(fmt.Sprintf("status: %v", err), start)
 	}
 	ok := string(status) == c.expect
 	result := c.result(ok, fmt.Sprintf("status %s (want %s)", status, c.expect), start)

@@ -37,7 +37,7 @@ func (c configCheck) Run(ctx context.Context) Result {
 		res, err := runCheckCommand(ctx, c.runner, c.user, c.argv)
 		if res.ExitCode == execx.ExitCodeRunFailure {
 			msg := execx.OperatorFailureOr(err, res, c.timeout, execx.CommandDidNotStart)
-			return c.result(false, "config invalid: "+msg, start)
+			return c.unavailableResult("config unavailable: "+msg, start)
 		}
 		if res.ExitCode != execx.ExitCodeSuccess {
 			msg := "config invalid"

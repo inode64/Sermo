@@ -61,7 +61,9 @@ func (c commandCheck) Run(ctx context.Context) Result {
 	}
 	if res.ExitCode == execx.ExitCodeRunFailure {
 		msg := execx.OperatorFailureOr(err, res, c.timeout, execx.CommandDidNotStart)
-		return fail(msg)
+		r := fail(msg)
+		r.Unavailable = true
+		return r
 	}
 	if !ExitCodeExpected(res.ExitCode, c.expectExit) {
 		msg := fmt.Sprintf("exit %d (want %s)", res.ExitCode, ExpectExitText(c.expectExit))

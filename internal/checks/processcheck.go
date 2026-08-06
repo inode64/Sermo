@@ -23,7 +23,7 @@ type processCheck struct {
 func (c processCheck) Run(_ context.Context) Result {
 	start := time.Now()
 	if c.observe == nil && c.observeAny == nil {
-		return c.result(false, "process discovery unavailable", start)
+		return c.unavailableResult("process discovery unavailable", start)
 	}
 	state := c.observedState()
 	ok := state == c.expect

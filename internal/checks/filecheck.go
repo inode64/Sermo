@@ -21,7 +21,7 @@ func (c fileExistsCheck) Run(_ context.Context) Result {
 		if os.IsNotExist(err) {
 			return c.result(false, c.path+" does not exist", start)
 		}
-		return c.result(false, fmt.Sprintf("stat %s: %v", c.path, err), start)
+		return c.unavailableResult(fmt.Sprintf("stat %s: %v", c.path, err), start)
 	}
 	return c.result(true, c.path+" exists", start)
 }
@@ -40,7 +40,7 @@ func (c fileCheck) Run(_ context.Context) Result {
 		if os.IsNotExist(err) {
 			return c.result(false, c.path+" does not exist", start)
 		}
-		return c.result(false, fmt.Sprintf("stat %s: %v", c.path, err), start)
+		return c.unavailableResult(fmt.Sprintf("stat %s: %v", c.path, err), start)
 	}
 	if !info.Mode().IsRegular() {
 		return c.result(false, c.path+" is not a regular file", start)

@@ -35,7 +35,7 @@ type staleBinaryCheck struct {
 func (c staleBinaryCheck) Run(_ context.Context) Result {
 	start := time.Now()
 	if c.stale == nil {
-		return c.result(false, "process discovery unavailable", start)
+		return c.unavailableResult("process discovery unavailable", start)
 	}
 	stale := c.stale()
 	// Name the replaced binaries: the path is what tells the operator which

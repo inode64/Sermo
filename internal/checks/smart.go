@@ -42,14 +42,14 @@ func (c smartCheck) Run(ctx context.Context) Result {
 	res, runErr := c.runner.Run(ctx, smartctlCommand, smartctlArgs(c.device)...)
 	if res.ExitCode == execx.ExitCodeRunFailure {
 		msg := execx.OperatorFailureOr(runErr, res, c.timeout, execx.CommandDidNotStart)
-		return c.result(false, prefix+": "+msg, start)
+		return c.unavailableResult(prefix+": "+msg, start)
 	}
 	data, err := parseSmart(res.Stdout)
 	if err != nil {
 		if s := output.FirstNonEmptyLine(res.Stderr); s != "" {
-			return c.result(false, prefix+": "+s, start)
+			return c.unavailableResult(prefix+": "+s, start)
 		}
-		return c.result(false, prefix+": "+err.Error(), start)
+		return c.unavailableResult(prefix+": "+err.Error(), start)
 	}
 
 	ok := data.healthKnown && !data.passed // default alert condition: health FAILED
