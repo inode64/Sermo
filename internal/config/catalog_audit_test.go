@@ -125,7 +125,7 @@ func catalogWatchCheck(t *testing.T, body map[string]any, name string) map[strin
 }
 
 func TestCatalogDBusAdvancedProbesStayReadOnlyAndCheckOnly(t *testing.T) {
-	found := 0
+	found := make(map[string]struct{})
 	servicesDir := filepath.Join(repoRoot(t), "catalog", "services")
 	walkCatalogDocs(t, servicesDir, func(path string, body map[string]any) {
 		watches, _ := body["watches"].(map[string]any)
@@ -140,7 +140,7 @@ func TestCatalogDBusAdvancedProbesStayReadOnlyAndCheckOnly(t *testing.T) {
 			case "", conn.DBusProbePeer:
 				continue
 			case conn.DBusProbeIntrospect, conn.DBusProbeProperty:
-				found++
+				found[cfgval.String(body["name"])+"/"+name] = struct{}{}
 			default:
 				t.Errorf("%s D-Bus watch %s uses unsupported advanced probe %q", path, name, probe)
 				continue
@@ -153,8 +153,27 @@ func TestCatalogDBusAdvancedProbesStayReadOnlyAndCheckOnly(t *testing.T) {
 			}
 		}
 	})
-	if found == 0 {
-		t.Fatal("catalog has no advanced D-Bus probes to audit")
+	required := []string{
+		"accounts-daemon/version",
+		"bluetooth/dbus",
+		"bolt/dbus",
+		"colord/version",
+		"firewalld/dbus",
+		"gdm/version",
+		"iio-sensor-proxy/dbus",
+		"networkmanager/dbus",
+		"systemd-machined/dbus",
+		"systemd-networkd/dbus",
+		"systemd-resolved/dbus",
+		"systemd/manager",
+		"tuned-ppd/active-profile",
+		"tuned/dbus",
+		"wpa-supplicant/dbus",
+	}
+	for _, id := range required {
+		if _, present := found[id]; !present {
+			t.Errorf("catalog advanced D-Bus watch %s is missing or no longer advanced", id)
+		}
 	}
 }
 
