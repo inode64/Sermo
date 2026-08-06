@@ -77,33 +77,6 @@ type Samplers struct {
 	SSHIdleSampler       SSHIdleSamplerFunc
 }
 
-// ApplyTo returns deps with every sampler from s copied into it.
-func (s Samplers) ApplyTo(deps Deps) Deps {
-	deps.StorageUsage = s.StorageUsage
-	deps.NetSampler = s.NetSampler
-	deps.PingSampler = s.PingSampler
-	deps.SwapSampler = s.SwapSampler
-	deps.RouteSampler = s.RouteSampler
-	deps.LoadSampler = s.LoadSampler
-	deps.OomSampler = s.OomSampler
-	deps.FdsSampler = s.FdsSampler
-	deps.MemorySampler = s.MemorySampler
-	deps.PressureSampler = s.PressureSampler
-	deps.PidsSampler = s.PidsSampler
-	deps.DiskIOSampler = s.DiskIOSampler
-	deps.SensorSampler = s.SensorSampler
-	deps.RaidSampler = s.RaidSampler
-	deps.EdacSampler = s.EdacSampler
-	deps.MountSampler = s.MountSampler
-	deps.ConntrackSampler = s.ConntrackSampler
-	deps.FirewallRulesSampler = s.FirewallRulesSampler
-	deps.EntropySampler = s.EntropySampler
-	deps.ZombieSampler = s.ZombieSampler
-	deps.UsersSampler = s.UsersSampler
-	deps.SSHIdleSampler = s.SSHIdleSampler
-	return deps
-}
-
 // Deps are the host capabilities a built check set may need.
 type Deps struct {
 	Service        string
@@ -133,63 +106,7 @@ type Deps struct {
 	// or removed on disk, for `stale_binary` checks. It is read-only: such a
 	// process resolves no exe, so it is still never signalled.
 	StaleBinaries StaleBinariesFunc
-	// StorageUsage reports filesystem usage for `storage` checks. Nil uses statfs.
-	StorageUsage StorageUsageFunc
-	// NetSampler observes a network interface for `net` checks. Nil uses /sys.
-	NetSampler NetSamplerFunc
-	// PingSampler probes a host via ICMP for `icmp` checks. Nil uses native ICMP.
-	PingSampler PingSamplerFunc
-	// SwapSampler reads system swap for `swap` checks. Nil reads /proc.
-	SwapSampler SwapSamplerFunc
-	// RouteSampler lists the up default routes for `route` checks. Nil reads
-	// /proc/net/route and /proc/net/ipv6_route.
-	RouteSampler RouteSamplerFunc
-	// LoadSampler reads load averages for `load` checks. Nil reads /proc.
-	LoadSampler LoadSamplerFunc
-	// UsersSampler counts logged-in users for `users` checks. Nil reads utmp.
-	UsersSampler UsersSamplerFunc
-	// SSHIdleSampler observes interactive SSH terminals for `ssh_idle` checks.
-	// Nil reads utmp, terminal atimes and procfs directly.
-	SSHIdleSampler SSHIdleSamplerFunc
-	// OomSampler reads the cumulative OOM-kill counter for `oom` checks. Nil reads
-	// /proc/vmstat.
-	OomSampler OomSamplerFunc
-	// FdsSampler reads system file-descriptor usage for `fds` checks. Nil reads
-	// /proc/sys/fs/file-nr.
-	FdsSampler FdsSamplerFunc
-	// MemorySampler reads system RAM for `memory` checks. Nil reads /proc/meminfo.
-	MemorySampler MemorySamplerFunc
-	// PressureSampler reads kernel PSI for `pressure` checks. Nil reads
-	// /proc/pressure/<resource>.
-	PressureSampler PressureSamplerFunc
-	// PidsSampler reads the kernel PID table for `pids` checks. Nil reads
-	// /proc/loadavg and kernel.pid_max.
-	PidsSampler PidsSamplerFunc
-	// DiskIOSampler reads a block device's counters for `diskio` checks. Nil
-	// reads /proc/diskstats.
-	DiskIOSampler DiskIOSamplerFunc
-	// SensorSampler reads hardware sensors for `sensors` checks. Nil reads hwmon.
-	SensorSampler SensorSamplerFunc
-	// RaidSampler reads Linux md RAID state for `raid` checks. Nil reads
-	// /proc/mdstat.
-	RaidSampler RaidSamplerFunc
-	// EdacSampler reads EDAC memory-error counters for `edac` checks. Nil reads
-	// sysfs.
-	EdacSampler EdacSamplerFunc
-	// MountSampler reads the mount table for `storage` mount predicates and
-	// `autofs` checks. Nil reads /proc/mounts.
-	MountSampler MountSamplerFunc
-	// ConntrackSampler reads the netfilter conntrack table for `conntrack` checks.
-	// Nil reads /proc/sys/net/netfilter.
-	ConntrackSampler ConntrackSamplerFunc
-	// FirewallRulesSampler reads loaded nftables/iptables rules for
-	// `firewall_rules` checks. Nil runs nft/iptables-save through Runner.
-	FirewallRulesSampler FirewallRulesSamplerFunc
-	// EntropySampler reads the kernel entropy pool for `entropy` checks. Nil reads
-	// /proc/sys/kernel/random/entropy_avail.
-	EntropySampler EntropySamplerFunc
-	// ZombieSampler counts zombie processes for `zombies` checks. Nil scans /proc.
-	ZombieSampler ZombieSamplerFunc
+	Samplers
 	// CertSampler fetches a TLS endpoint's certificate for `cert` checks. Nil dials
 	// the host.
 	CertSampler CertSamplerFunc

@@ -41,5 +41,5 @@ func TestBuildUsersCheck(t *testing.T) {
 	// 3 users satisfies >= 3; a threshold-less users check is meaningless and warns.
 	assertBuildThresholdFires(t, "users",
 		map[string]any{"count": map[string]any{"op": ">=", "value": 3.0}},
-		Deps{UsersSampler: fakeUsers(3, nil)})
+		Deps{Samplers: Samplers{UsersSampler: fakeUsers(3, nil)}})
 }

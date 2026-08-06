@@ -24,7 +24,7 @@ func TestLevelChecks(t *testing.T) {
 			dataKey:     DataKeyAvail,
 			value:       120,
 			entry:       map[string]any{"type": "entropy", "avail": map[string]any{"op": "<", "value": 200}},
-			deps:        Deps{EntropySampler: func() (uint64, bool) { return 100, true }},
+			deps:        Deps{Samplers: Samplers{EntropySampler: func() (uint64, bool) { return 100, true }}},
 		},
 		{
 			name:        "zombies",
@@ -34,7 +34,7 @@ func TestLevelChecks(t *testing.T) {
 			dataKey:     DataKeyZombies,
 			value:       35,
 			entry:       map[string]any{"type": "zombies", "count": map[string]any{"op": ">", "value": 10}},
-			deps:        Deps{ZombieSampler: func() (uint64, bool) { return 50, true }},
+			deps:        Deps{Samplers: Samplers{ZombieSampler: func() (uint64, bool) { return 50, true }}},
 		},
 	}
 	for _, tc := range tests {

@@ -35,5 +35,5 @@ func TestFdsFreeClampsWhenAllocatedExceedsMax(t *testing.T) {
 
 func TestBuildFdsCheck(t *testing.T) {
 	assertBuildLimitCheck(t, "fds",
-		Deps{FdsSampler: fakeFds(FdsSample{Allocated: 8500, Max: 10000})})
+		Deps{Samplers: Samplers{FdsSampler: fakeFds(FdsSample{Allocated: 8500, Max: 10000})}})
 }

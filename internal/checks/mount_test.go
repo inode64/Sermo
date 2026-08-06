@@ -108,7 +108,7 @@ func TestBuildStorageMountCheck(t *testing.T) {
 	// Mount-only storage check (no space predicate) builds and runs.
 	built, warns := Build(map[string]any{
 		"data": map[string]any{"type": "storage", "path": "/data", "mounted": true},
-	}, Deps{MountSampler: fakeMounts(dataMount)})
+	}, Deps{Samplers: Samplers{MountSampler: fakeMounts(dataMount)}})
 	if len(warns) != 0 {
 		t.Fatalf("unexpected warnings: %v", warns)
 	}

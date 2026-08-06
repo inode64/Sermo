@@ -60,5 +60,5 @@ func TestBuildLoadCheck(t *testing.T) {
 	// load5 8/4 = 2.0 per core fires > 1.0; a predicate-less load check warns.
 	assertBuildThresholdFires(t, CheckTypeLoad,
 		map[string]any{CheckKeyPerCPU: true, fieldLoad5: map[string]any{CheckKeyOp: ">", CheckKeyValue: 1.0}},
-		Deps{LoadSampler: fakeLoad(LoadSample{Load5: 8, NumCPU: 4})})
+		Deps{Samplers: Samplers{LoadSampler: fakeLoad(LoadSample{Load5: 8, NumCPU: 4})}})
 }

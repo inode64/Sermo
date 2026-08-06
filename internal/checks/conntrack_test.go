@@ -34,5 +34,5 @@ func TestConntrackUnknownMaxNeverFires(t *testing.T) {
 
 func TestBuildConntrackCheck(t *testing.T) {
 	assertBuildLimitCheck(t, "conntrack",
-		Deps{ConntrackSampler: fakeConntrack(ConntrackSample{Count: 85000, Max: 100000})})
+		Deps{Samplers: Samplers{ConntrackSampler: fakeConntrack(ConntrackSample{Count: 85000, Max: 100000})}})
 }

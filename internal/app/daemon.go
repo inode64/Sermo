@@ -212,76 +212,17 @@ type Deps struct {
 	// PID, cutting discovery from O(services × processes) to O(processes).
 	// Optional: nil makes each discoverer read /proc directly.
 	ProcReader process.Reader
-	// SSHIdleSampler observes idle interactive SSH terminals. SSHSessionSampler
-	// presents the same terminal-aware evidence in the web UI and verifies a
-	// requested close. Both share a separate procfs cache because ordinary
-	// service discovery deliberately avoids reading tty_nr for every process.
-	// Optional nil values let checks build one-shot native samplers.
-	SSHIdleSampler    checks.SSHIdleSamplerFunc
+	// Samplers are the shared host probes used by checks, watches and web
+	// summaries. Service-specific dependencies stay on Deps itself.
+	checks.Samplers
+	// SSHSessionSampler presents terminal-aware evidence in the web UI and
+	// verifies a requested close. It shares a separate procfs cache with the
+	// embedded SSHIdleSampler because ordinary service discovery deliberately
+	// avoids reading tty_nr for every process.
 	SSHSessionSampler checks.SSHSessionSamplerFunc
 	// SSHSessionVerifier must obtain a fresh terminal/process snapshot for a
 	// close action. Optional nil uses an uncached native sampler.
 	SSHSessionVerifier checks.SSHSessionSamplerFunc
-	// StorageUsage reports filesystem usage for storage checks.
-	// Optional: nil uses statfs.
-	StorageUsage checks.StorageUsageFunc
-	// MountSampler reads the mount table for storage/autofs checks. Optional: nil
-	// reads /proc/mounts.
-	MountSampler checks.MountSamplerFunc
-	// NetSampler reads one interface for net checks and web watch summaries.
-	// Optional: nil reads net.Interfaces and /sys/class/net.
-	NetSampler checks.NetSamplerFunc
-	// PingSampler probes ICMP hosts for icmp checks and web watch summaries.
-	// Optional: nil uses native ICMP.
-	PingSampler checks.PingSamplerFunc
-	// SwapSampler reads system swap for swap checks and web watch summaries.
-	// Optional: nil reads /proc/meminfo and /proc/vmstat.
-	SwapSampler checks.SwapSamplerFunc
-	// LoadSampler reads load averages for load checks and web watch summaries.
-	// Optional: nil reads /proc.
-	LoadSampler checks.LoadSamplerFunc
-	// OomSampler reads the cumulative OOM-kill counter for checks and web watch
-	// summaries. Optional: nil reads /proc/vmstat.
-	OomSampler checks.OomSamplerFunc
-	// FdsSampler reads system file-descriptor usage for fds checks and web watch
-	// summaries. Optional: nil reads /proc/sys/fs/file-nr.
-	FdsSampler checks.FdsSamplerFunc
-	// MemorySampler reads system RAM for memory checks and web watch summaries.
-	// Optional: nil reads /proc/meminfo.
-	MemorySampler checks.MemorySamplerFunc
-	// PidsSampler reads the kernel PID table for checks and web watch summaries.
-	// Optional: nil reads /proc/loadavg and kernel.pid_max.
-	PidsSampler checks.PidsSamplerFunc
-	// DiskIOSampler reads block-device counters for diskio checks and web watch
-	// summaries. Optional: nil reads /proc/diskstats.
-	DiskIOSampler checks.DiskIOSamplerFunc
-	// SensorSampler reads hardware sensors for sensors checks and web watch
-	// summaries. Optional: nil reads hwmon.
-	SensorSampler checks.SensorSamplerFunc
-	// RaidSampler reads Linux md RAID state for raid checks and web watch
-	// summaries. Optional: nil reads /proc/mdstat.
-	RaidSampler checks.RaidSamplerFunc
-	// EdacSampler reads EDAC memory-error counters for edac checks and web watch
-	// summaries. Optional: nil reads sysfs.
-	EdacSampler checks.EdacSamplerFunc
-	// RouteSampler reads default routes for route checks and web watch summaries.
-	// Optional: nil reads /proc/net/route and /proc/net/ipv6_route.
-	RouteSampler checks.RouteSamplerFunc
-	// PressureSampler reads kernel PSI for pressure checks and web watch summaries.
-	// Optional: nil reads /proc/pressure/<resource>.
-	PressureSampler checks.PressureSamplerFunc
-	// ConntrackSampler reads the netfilter conntrack table for checks and web
-	// watch summaries. Optional: nil reads /proc/sys/net/netfilter.
-	ConntrackSampler checks.ConntrackSamplerFunc
-	// FirewallRulesSampler reads loaded packet-filter rules for checks.
-	// Optional: nil runs nft/iptables-save through ExecxRunner.
-	FirewallRulesSampler checks.FirewallRulesSamplerFunc
-	// EntropySampler reads kernel entropy for entropy checks and web watch
-	// summaries. Optional: nil reads /proc/sys/kernel/random/entropy_avail.
-	EntropySampler checks.EntropySamplerFunc
-	// ZombieSampler counts zombie processes for checks and web watch summaries.
-	// Optional: nil scans /proc.
-	ZombieSampler checks.ZombieSamplerFunc
 	// Notifiers are the configured delivery targets (email, …) addressable by name
 	// from a watch's `then.notify`. Optional: nil/empty means no notifications.
 	Notifiers map[string]notify.Notifier

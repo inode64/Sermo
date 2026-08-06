@@ -13,7 +13,7 @@ func memSampler(total, available uint64) MemorySamplerFunc {
 
 func buildMemory(t *testing.T, entry map[string]any, sampler MemorySamplerFunc) memoryCheck {
 	t.Helper()
-	return buildOneCheck(t, "mem", "memory", entry, Deps{DefaultTimeout: time.Second, MemorySampler: sampler}).(memoryCheck)
+	return buildOneCheck(t, "mem", "memory", entry, Deps{DefaultTimeout: time.Second, Samplers: Samplers{MemorySampler: sampler}}).(memoryCheck)
 }
 
 func TestMemoryCheckLevels(t *testing.T) {
