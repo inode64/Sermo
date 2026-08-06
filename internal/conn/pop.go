@@ -9,8 +9,6 @@ import (
 	"strings"
 )
 
-func init() { Register(popProtocol{}, protocolAliasPOP3) }
-
 // popProtocol probes a POP3 server natively (RFC 1939). With no user it is an
 // anonymous connectivity check (verify the server greets +OK). With a
 // user/password it performs USER/PASS authentication. TLS is implicit (POP3S)

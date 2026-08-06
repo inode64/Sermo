@@ -6,8 +6,6 @@ import (
 	"strings"
 )
 
-func init() { Register(avahiProtocol{}, protocolAliasAvahiDaemon) }
-
 // avahiServerRunning is AVAHI_SERVER_RUNNING (avahi-common/defs.h, the
 // AvahiServerState enum).
 const avahiServerRunning = 2

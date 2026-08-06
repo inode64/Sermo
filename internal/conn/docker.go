@@ -7,8 +7,6 @@ import (
 	"sermo/internal/dockerctl"
 )
 
-func init() { Register(dockerProtocol{}) }
-
 // DefaultDockerSocket is Docker Engine's local Unix API socket.
 const DefaultDockerSocket = dockerctl.DefaultSocket
 

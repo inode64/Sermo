@@ -1,8 +1,7 @@
-// Package conn provides connection-protocol probes behind a small registry.
-// Each protocol implements Protocol and
-// registers itself; the checks package looks a protocol up by name to build a
-// generic connection check. It is a leaf package: it depends on neither checks
-// nor config, so both can import it without a cycle.
+// Package conn provides connection-protocol probes behind an immutable built-in
+// registry. Each protocol implements Protocol; the checks package looks a
+// protocol up by name to build a generic connection check. It is a leaf package:
+// it depends on neither checks nor config, so both can import it without a cycle.
 package conn
 
 import (
@@ -15,7 +14,6 @@ import (
 	"io"
 	"strconv"
 	"strings"
-	"sync"
 
 	"sermo/internal/dockerctl"
 	"sermo/internal/httpx"
@@ -539,57 +537,6 @@ func ValidTLSValue(value string) bool {
 // (dial, http, ldap, mongodb, mysql, unifi).
 func NormalizeTLS(s string) string {
 	return netutil.NormalizeTLS(s)
-}
-
-// registry maps protocol names (canonical and aliases) to protocols.
-type registry struct {
-	mu     sync.RWMutex
-	byName map[string]Protocol
-}
-
-func newRegistry() *registry {
-	return &registry{byName: map[string]Protocol{}}
-}
-
-func (r *registry) register(p Protocol, aliases ...string) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.byName[p.Name()] = p
-	for _, a := range aliases {
-		r.byName[a] = p
-	}
-}
-
-//nolint:ireturn // A registry lookup must return the protocol interface registered by plugins.
-func (r *registry) lookup(name string) (Protocol, bool) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	p, ok := r.byName[name]
-	if !ok || p == nil {
-		return nil, false
-	}
-	return p, true
-}
-
-// defaultRegistry holds the protocols compiled into the binary.
-var defaultRegistry = newRegistry()
-
-// Register adds a protocol (and optional aliases) to the default registry.
-func Register(p Protocol, aliases ...string) { defaultRegistry.register(p, aliases...) }
-
-// Lookup returns the protocol registered under name (canonical or alias).
-//
-//nolint:ireturn // The public registry API returns the protocol interface selected at runtime.
-func Lookup(name string) (Protocol, bool) { return defaultRegistry.lookup(name) }
-
-// DefaultPort returns the registered protocol's default port, or 0 when name is
-// not registered.
-func DefaultPort(name string) int {
-	proto, ok := Lookup(name)
-	if !ok {
-		return defaultPortNone
-	}
-	return proto.DefaultPort()
 }
 
 // readCRLFLine reads one CRLF/LF-terminated line, trimmed — the line shape

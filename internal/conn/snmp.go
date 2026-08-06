@@ -12,8 +12,6 @@ import (
 	"sermo/internal/netutil"
 )
 
-func init() { Register(snmpProtocol{}) }
-
 // System MIB (SNMPv2-MIB, .1.3.6.1.2.1.1) OIDs queried for the health check.
 const (
 	oidSysDescr    = ".1.3.6.1.2.1.1.1.0"

@@ -14,8 +14,6 @@ import (
 	"sermo/internal/units"
 )
 
-func init() { Register(libvirtProtocol{}, protocolAliasLibvirtd) }
-
 // DefaultLibvirtSocket is libvirt's local daemon socket.
 const DefaultLibvirtSocket = "/run/libvirt/libvirt-sock"
 

@@ -4,8 +4,6 @@ import (
 	"context"
 )
 
-func init() { Register(glusterfsProtocol{}, protocolAliasGlusterd, protocolAliasGluster) }
-
 // GlusterFS handshake RPC program (rpc/rpc-lib protocol-common.h).
 const (
 	glusterHandshakeProg = 14398633

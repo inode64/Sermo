@@ -5,8 +5,6 @@ import (
 	"strings"
 )
 
-func init() { Register(spamdProtocol{}, protocolAliasSpamAssassin) }
-
 // spamdProtocol probes the SpamAssassin daemon (spamd) over the SPAMC/SPAMD
 // protocol. It sends a `PING` and verifies spamd answers `SPAMD/<v> 0 PONG` —
 // proof it is up and speaking the protocol. spamd listens on TCP (default 783)

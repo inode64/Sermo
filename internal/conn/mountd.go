@@ -5,8 +5,6 @@ import (
 	"strconv"
 )
 
-func init() { Register(mountdProtocol{}, protocolAliasRPCMountd, protocolAliasNFSMountd) }
-
 // MOUNT program number (RFC 1813 appendix I). Versions 1–3 are served; the NULL
 // procedure (0) exists in every version.
 const (

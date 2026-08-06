@@ -7,8 +7,6 @@ import (
 	"strings"
 )
 
-func init() { Register(rspamdProtocol{}) }
-
 // rspamdProtocol probes an rspamd worker natively: it sends a GET /ping over
 // HTTP and verifies the worker answers 200 with a "pong" body — the same
 // unauthenticated liveness endpoint every rspamd worker (controller, normal,

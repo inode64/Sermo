@@ -6,8 +6,6 @@ import (
 	"strings"
 )
 
-func init() { Register(rsyncProtocol{}, protocolAliasRsyncd) }
-
 // rsyncProtocol probes an rsync daemon natively. On connect, rsyncd sends an
 // "@RSYNCD: <version>" greeting; reading it verifies the daemon is up and
 // speaking the rsync protocol. No authentication (module access may need auth,

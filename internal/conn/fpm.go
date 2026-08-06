@@ -12,8 +12,6 @@ import (
 	"strings"
 )
 
-func init() { Register(fpmProtocol{}, protocolAliasPHPFPM) }
-
 // FastCGI record types and constants (FastCGI spec 1.0).
 const (
 	fcgiVersion1     = 1

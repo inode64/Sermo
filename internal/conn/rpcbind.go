@@ -7,8 +7,6 @@ import (
 	"strconv"
 )
 
-func init() { Register(rpcbindProtocol{}, protocolAliasPortmap, protocolAliasPortmapper) }
-
 // ONC RPC / portmapper constants (RFC 5531, RFC 1833).
 const (
 	rpcCall                = 0

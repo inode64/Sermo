@@ -7,8 +7,6 @@ import (
 	"io"
 )
 
-func init() { Register(smtpProtocol{}) }
-
 // smtpProtocol probes an SMTP server natively (RFC 5321). With no user it is an
 // anonymous connectivity check (greeting + EHLO). With a user/password it
 // performs AUTH PLAIN. TLS is implicit (SMTPS) when enabled — use port 465.

@@ -14,8 +14,6 @@ import (
 	"time"
 )
 
-func init() { Register(chronyProtocol{}, protocolAliasChronyd) }
-
 // DefaultChronySocket is chronyd's command socket on a stock install: the
 // default target of a clock watch's `then.makestep` action.
 const DefaultChronySocket = "/run/chrony/chronyd.sock"

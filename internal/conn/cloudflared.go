@@ -8,8 +8,6 @@ import (
 	"strconv"
 )
 
-func init() { Register(cloudflaredProtocol{}, protocolAliasCloudflareTunnel) }
-
 // cloudflaredProtocol probes a Cloudflare Tunnel daemon through its local
 // Prometheus metrics endpoint. The endpoint is exposed by cloudflared's
 // --metrics option and is commonly bound to 127.0.0.1:60123.

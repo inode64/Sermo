@@ -5,8 +5,6 @@ import (
 	"strings"
 )
 
-func init() { Register(asteriskProtocol{}, protocolAliasAMI) }
-
 // asteriskProtocol probes an Asterisk PBX via its Manager Interface (AMI). On
 // connect, AMI sends an "Asterisk Call Manager/<version>" greeting before any
 // login; reading it proves AMI is up and yields the manager version. No auth

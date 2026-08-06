@@ -6,8 +6,6 @@ import (
 	"net/http"
 )
 
-func init() { Register(prometheusProtocol{}, protocolAliasPrometheus) }
-
 // prometheusProtocol probes a Prometheus server via its HTTP API. It GETs
 // /api/v1/status/buildinfo and verifies a `success` status — reporting the server
 // version — falling back to /-/healthy (liveness only) on older servers or when

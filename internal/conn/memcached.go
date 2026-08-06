@@ -9,11 +9,6 @@ import (
 	"strings"
 )
 
-func init() {
-	// "memcache" is a common shorthand for the same daemon.
-	Register(memcachedProtocol{}, protocolAliasMemcache)
-}
-
 // memcachedProtocol probes a memcached server natively over its ASCII text
 // protocol — no external driver. A single `stats` command both proves the daemon
 // is up (it answers `STAT <key> <value>` lines terminated by `END`) and carries

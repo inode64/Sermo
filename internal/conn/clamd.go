@@ -5,8 +5,6 @@ import (
 	"strings"
 )
 
-func init() { Register(clamdProtocol{}, protocolAliasClamAV) }
-
 // clamdProtocol probes a ClamAV daemon (clamd) natively over its simple text
 // protocol. It sends the `VERSION` command (newline-prefixed form) and verifies
 // a `ClamAV <version>/…` reply — proof the daemon is up and speaking the clamd

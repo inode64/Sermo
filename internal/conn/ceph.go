@@ -6,8 +6,6 @@ import (
 	"io"
 )
 
-func init() { Register(cephProtocol{}, protocolAliasCephMon) }
-
 // cephProtocol probes a Ceph monitor over the Ceph messenger protocol. On
 // connect a Ceph daemon (mon/osd/mgr) sends a banner: "ceph v2\n" for messenger
 // v2 (default port 3300) or "ceph v027" for the legacy messenger v1 (port 6789).

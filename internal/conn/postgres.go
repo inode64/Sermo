@@ -10,10 +10,6 @@ import (
 	"github.com/lib/pq"
 )
 
-func init() {
-	Register(postgresProtocol{}, protocolAliasPostgreSQL)
-}
-
 // postgresProtocol probes a PostgreSQL server.
 type postgresProtocol struct{}
 

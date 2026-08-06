@@ -11,8 +11,6 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo/readpref"
 )
 
-func init() { Register(mongodbProtocol{}, protocolAliasMongo) }
-
 // mongoDisconnectTimeout bounds teardown after the operation context expires.
 const mongoDisconnectTimeout = 5 * time.Second
 

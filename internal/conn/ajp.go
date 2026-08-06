@@ -7,8 +7,6 @@ import (
 	"io"
 )
 
-func init() { Register(ajpProtocol{}) }
-
 // AJP13 ping/pong prefix codes.
 const (
 	ajpCPing      = 0x0A // web server -> container: are you alive?

@@ -11,8 +11,6 @@ import (
 	"sermo/internal/units"
 )
 
-func init() { Register(nfsProtocol{}, protocolAliasNFSServer, protocolAliasNFSD) }
-
 // NFS program number (RFC 1813). NFSv4 is TCP-only on 2049; v3 also serves UDP.
 const (
 	nfsProg = 100003

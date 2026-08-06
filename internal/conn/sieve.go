@@ -8,8 +8,6 @@ import (
 	"strings"
 )
 
-func init() { Register(sieveProtocol{}, protocolAliasManageSieve) }
-
 const (
 	sieveCapabilityImplementation = "IMPLEMENTATION"
 	sieveCapabilityMinParts       = 4

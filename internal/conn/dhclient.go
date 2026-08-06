@@ -15,8 +15,6 @@ import (
 	"sermo/internal/procnet"
 )
 
-func init() { Register(dhclientProtocol{}, protocolAliasDHClient) }
-
 const (
 	procUDPFormatBase               = 10
 	dhclientAnyInterface            = "any interface"

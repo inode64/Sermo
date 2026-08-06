@@ -12,11 +12,6 @@ import (
 	"github.com/go-sql-driver/mysql"
 )
 
-func init() {
-	// MariaDB speaks the MySQL wire protocol, so the same driver serves both.
-	Register(mysqlProtocol{}, protocolAliasMariaDB)
-}
-
 // mysqlProtocol probes a MySQL or MariaDB server. With no credentials it reads
 // the server's unauthenticated handshake greeting for a liveness + version
 // check; with a user/password it performs a full authenticated ping.

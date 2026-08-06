@@ -7,8 +7,6 @@ import (
 	"strconv"
 )
 
-func init() { Register(nntpProtocol{}, protocolAliasNNTPs) }
-
 // nntpProtocol probes an NNTP news server natively (RFC 3977). With no user it is
 // an anonymous connectivity check (verify the server greets 200/201). With a
 // user/password it performs AUTHINFO USER/PASS authentication (RFC 4643). TLS is

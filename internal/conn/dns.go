@@ -16,8 +16,6 @@ import (
 	"golang.org/x/net/dns/dnsmessage"
 )
 
-func init() { Register(dnsProtocol{}) }
-
 // dnsProtocol probes a DNS server natively: it sends an A query (over UDP) for a
 // configurable name (default "localhost") and verifies the server answers. A
 // NOERROR or NXDOMAIN reply means the server is up and speaking DNS; SERVFAIL,

@@ -9,8 +9,6 @@ import (
 	"strconv"
 )
 
-func init() { Register(tftpProtocol{}) }
-
 // TFTP opcodes (RFC 1350).
 const (
 	tftpRRQ   = 1

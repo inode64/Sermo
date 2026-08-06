@@ -11,8 +11,6 @@ import (
 	"strconv"
 )
 
-func init() { Register(dhcpProtocol{}, protocolAliasDHCPD) }
-
 // DHCP message format and option codes (RFC 2131 / RFC 2132).
 const (
 	dhcpOpBootRequest = 1
