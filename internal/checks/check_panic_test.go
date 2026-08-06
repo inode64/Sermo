@@ -32,3 +32,23 @@ func TestRunRecoversPerCheckPanic(t *testing.T) {
 		t.Fatalf("third check = %+v, want ok-after OK", results[2])
 	}
 }
+
+func TestExecutePreservesPanickingCheckMetadata(t *testing.T) {
+	check := withSummary(panicCheck{base: base{
+		name:      "boom",
+		service:   "database",
+		condition: true,
+		reports:   ReportsCondition,
+	}}, map[string]any{CheckKeySummary: "custom ${value}"})
+
+	result := Execute(context.Background(), check)
+	if result.Check != "boom" || result.Service != "database" {
+		t.Fatalf("result identity = %+v, want database/boom", result)
+	}
+	if !result.Condition || result.Reports != ReportsCondition {
+		t.Fatalf("result reporting metadata = %+v, want condition mode", result)
+	}
+	if result.OK || !result.Unavailable || !strings.Contains(result.Message, "boom") {
+		t.Fatalf("result = %+v, want unavailable panic observation", result)
+	}
+}

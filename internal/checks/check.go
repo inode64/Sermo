@@ -125,6 +125,37 @@ type Check interface {
 	Run(ctx context.Context) Result
 }
 
+// resultMetadataProvider exposes the fields common to every built check without
+// widening Check for test doubles and specialized callers outside this package.
+type resultMetadataProvider interface {
+	resultMetadata() Result
+}
+
+// Execute runs one check behind the package's panic barrier. All callers that
+// execute a built check directly use this entry point so a malformed host
+// response or checker defect becomes an unavailable observation instead of
+// escaping into the daemon scheduler.
+func Execute(ctx context.Context, check Check) (result Result) {
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			result = checkResultMetadata(check)
+			result.Unavailable = true
+			result.Message = fmt.Sprintf("check panicked: %v", recovered)
+		}
+	}()
+	return check.Run(ctx)
+}
+
+func checkResultMetadata(check Check) Result {
+	if check == nil {
+		return Result{Check: "unknown"}
+	}
+	if provider, ok := check.(resultMetadataProvider); ok {
+		return provider.resultMetadata()
+	}
+	return Result{Check: check.Name()}
+}
+
 // IsHealthType reports whether OK==true means the check is healthy. Host watches
 // invert these checks and fire on failure; condition-style checks fire on OK.
 func IsHealthType(typ string) bool {
@@ -161,21 +192,7 @@ func Run(ctx context.Context, built []Built, maxParallel int) []Result {
 				sem <- struct{}{}
 				defer func() { <-sem }()
 			}
-			// A check runs untrusted parsing (procfs layouts, command output,
-			// network replies); a panic in one check must fail only that check,
-			// never crash the daemon. Recover it into a failed result.
-			defer func() {
-				if r := recover(); r != nil {
-					results[i] = Result{
-						Check:       b.Check.Name(),
-						OK:          false,
-						Optional:    b.Optional,
-						Unavailable: true,
-						Message:     fmt.Sprintf("check panicked: %v", r),
-					}
-				}
-			}()
-			res := b.Check.Run(ctx)
+			res := Execute(ctx, b.Check)
 			// A check may mark its own result optional (a warning, e.g. an output
 			// pattern match graded `warning`); keep that, and the static flag also
 			// makes a check optional.
@@ -197,6 +214,15 @@ type base struct {
 }
 
 func (b base) Name() string { return b.name }
+
+func (b base) resultMetadata() Result {
+	return Result{
+		Service:   b.service,
+		Check:     b.name,
+		Condition: b.condition,
+		Reports:   b.reports,
+	}
+}
 
 // withTimeout derives the check's deadline from the caller's context.
 func (b base) withTimeout(ctx context.Context) (context.Context, context.CancelFunc) {
