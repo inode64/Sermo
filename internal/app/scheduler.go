@@ -165,8 +165,8 @@ func runCycler(ctx context.Context, c cycler, interval, offset time.Duration) {
 // runCycleGuarded runs one cycle with a panic barrier: an unrecovered panic in
 // any goroutine crashes the whole process, so a defect in one service's rules,
 // operation, hook or notify path must not take the daemon down for the entire
-// fleet. Recover it, log it, and let the next cycle proceed. (Checks recover
-// per-check separately in checks.Run.)
+// fleet. Recover it, log it, and let the next cycle proceed. Built checks
+// recover separately at their shared checks.Execute boundary.
 func runCycleGuarded(ctx context.Context, c cycler) {
 	defer func() {
 		if r := recover(); r != nil {
