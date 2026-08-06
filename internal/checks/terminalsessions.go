@@ -192,8 +192,9 @@ func (c terminalSessionsCheck) Run(ctx context.Context) Result {
 
 	sample, err := sampleTerminalSessions(ctx, c.runner, c.config)
 	if err != nil {
-		res := c.unavailableResult("terminal sessions: "+err.Error(), start)
-		res.Data = map[string]any{DataKeySampleError: err.Error()}
+		failure := execx.FormatContextOrError(err, c.timeout)
+		res := c.unavailableResult("terminal sessions: "+failure, start)
+		res.Data = map[string]any{DataKeySampleError: failure}
 		return res
 	}
 	attached, detached := terminalSessionCounts(sample.Sessions)
@@ -224,6 +225,12 @@ func sampleTerminalSessions(ctx context.Context, runner execx.Runner, config Ter
 	}
 	runner = execx.RunnerOrDefault(runner)
 	result, err := execx.RunUser(ctx, runner, execx.NoTimeout, config.User, config.Binary, adapter.args(config)...)
+	if result.ExitCode == execx.ExitCodeRunFailure {
+		if err == nil {
+			err = errors.New(execx.CommandDidNotStart)
+		}
+		return TerminalSessionSample{}, fmt.Errorf("list %s sessions for user %q: %w", config.Multiplexer, config.User, err)
+	}
 	output := strings.TrimSpace(result.Stdout + "\n" + result.Stderr)
 	if adapter.sessionsAbsent(output) {
 		return TerminalSessionSample{}, nil
