@@ -61,6 +61,12 @@ type TerminalSessionConfig struct {
 	Socket      string
 }
 
+type terminalMultiplexerAdapter struct {
+	args           func(TerminalSessionConfig) []string
+	sessionsAbsent func(string) bool
+	parseSessions  func(string, string) ([]TerminalSession, error)
+}
+
 // Validate confirms that a terminal-session query has an explicit, bounded
 // target. It is shared by the builder and test-only direct sampler use.
 func (c TerminalSessionConfig) Validate() error {
@@ -91,7 +97,27 @@ func (c TerminalSessionConfig) Validate() error {
 // IsTerminalMultiplexer reports whether name is a terminal multiplexer Sermo
 // can enumerate through its read-only client command.
 func IsTerminalMultiplexer(name string) bool {
-	return name == TerminalMultiplexerTmux || name == TerminalMultiplexerScreen
+	_, ok := terminalMultiplexerAdapterFor(name)
+	return ok
+}
+
+func terminalMultiplexerAdapterFor(name string) (terminalMultiplexerAdapter, bool) {
+	switch name {
+	case TerminalMultiplexerTmux:
+		return terminalMultiplexerAdapter{
+			args:           tmuxSessionArgs,
+			sessionsAbsent: tmuxSessionsAbsent,
+			parseSessions:  parseTmuxSessions,
+		}, true
+	case TerminalMultiplexerScreen:
+		return terminalMultiplexerAdapter{
+			args:           screenSessionArgs,
+			sessionsAbsent: screenSessionsAbsent,
+			parseSessions:  parseScreenSessionsResult,
+		}, true
+	default:
+		return terminalMultiplexerAdapter{}, false
+	}
 }
 
 // TerminalSessionsFromData restores terminal sessions from a result data map.
@@ -178,11 +204,14 @@ func sampleTerminalSessions(ctx context.Context, runner execx.Runner, config Ter
 	if err := config.Validate(); err != nil {
 		return TerminalSessionSample{}, err
 	}
+	adapter, ok := terminalMultiplexerAdapterFor(config.Multiplexer)
+	if !ok {
+		return TerminalSessionSample{}, fmt.Errorf("unsupported terminal multiplexer %q", config.Multiplexer)
+	}
 	runner = execx.RunnerOrDefault(runner)
-	args := terminalSessionArgs(config)
-	result, err := execx.RunUser(ctx, runner, execx.NoTimeout, config.User, config.Binary, args...)
+	result, err := execx.RunUser(ctx, runner, execx.NoTimeout, config.User, config.Binary, adapter.args(config)...)
 	output := strings.TrimSpace(result.Stdout + "\n" + result.Stderr)
-	if terminalSessionAbsent(config.Multiplexer, output) {
+	if adapter.sessionsAbsent(output) {
 		return TerminalSessionSample{}, nil
 	}
 	if err != nil {
@@ -191,46 +220,33 @@ func sampleTerminalSessions(ctx context.Context, runner execx.Runner, config Ter
 	if result.ExitCode != execx.ExitCodeSuccess {
 		return TerminalSessionSample{}, fmt.Errorf("list %s sessions for user %q: exit %d", config.Multiplexer, config.User, result.ExitCode)
 	}
-	sessions, err := parseTerminalSessions(config, result.Stdout)
+	sessions, err := adapter.parseSessions(config.User, result.Stdout)
 	if err != nil {
 		return TerminalSessionSample{}, err
 	}
 	return TerminalSessionSample{Sessions: sessions}, nil
 }
 
-func terminalSessionArgs(config TerminalSessionConfig) []string {
-	if config.Multiplexer == TerminalMultiplexerTmux {
-		args := make([]string, 0, tmuxSessionSocketArgumentSize+tmuxSessionListArgumentSize)
-		if config.Socket != "" {
-			args = append(args, "-S", config.Socket)
-		}
-		return append(args, "list-sessions", "-F", tmuxSessionFormat)
+func tmuxSessionArgs(config TerminalSessionConfig) []string {
+	args := make([]string, 0, tmuxSessionSocketArgumentSize+tmuxSessionListArgumentSize)
+	if config.Socket != "" {
+		args = append(args, "-S", config.Socket)
 	}
+	return append(args, "list-sessions", "-F", tmuxSessionFormat)
+}
+
+func screenSessionArgs(TerminalSessionConfig) []string {
 	return []string{"-ls"}
 }
 
-func terminalSessionAbsent(multiplexer, output string) bool {
+func tmuxSessionsAbsent(output string) bool {
 	output = strings.ToLower(output)
-	switch multiplexer {
-	case TerminalMultiplexerTmux:
-		return strings.Contains(output, "no server running on") ||
-			(strings.Contains(output, "error connecting to") && strings.Contains(output, "no such file or directory"))
-	case TerminalMultiplexerScreen:
-		return strings.Contains(output, "no sockets found in")
-	default:
-		return false
-	}
+	return strings.Contains(output, "no server running on") ||
+		(strings.Contains(output, "error connecting to") && strings.Contains(output, "no such file or directory"))
 }
 
-func parseTerminalSessions(config TerminalSessionConfig, output string) ([]TerminalSession, error) {
-	switch config.Multiplexer {
-	case TerminalMultiplexerTmux:
-		return parseTmuxSessions(config.User, output)
-	case TerminalMultiplexerScreen:
-		return parseScreenSessions(config.User, output), nil
-	default:
-		return nil, fmt.Errorf("unsupported terminal multiplexer %q", config.Multiplexer)
-	}
+func screenSessionsAbsent(output string) bool {
+	return strings.Contains(strings.ToLower(output), "no sockets found in")
 }
 
 func parseTmuxSessions(user, output string) ([]TerminalSession, error) {
@@ -277,6 +293,10 @@ func parseScreenSessions(user, output string) []TerminalSession {
 		sessions = append(sessions, TerminalSession{Multiplexer: TerminalMultiplexerScreen, Name: matches[1], User: user, State: state})
 	}
 	return sortedTerminalSessions(sessions)
+}
+
+func parseScreenSessionsResult(user, output string) ([]TerminalSession, error) {
+	return parseScreenSessions(user, output), nil
 }
 
 func sortedTerminalSessions(sessions []TerminalSession) []TerminalSession {
