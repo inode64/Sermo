@@ -262,7 +262,7 @@ func buildConnCheck(b base, proto conn.Protocol, entry map[string]any) (Check, s
 		return nil, protoName + " check requires a user"
 	}
 	cfg := databaseConnectionConfig(entry)
-	cfg.Port = connectionPort(entry, proto.DefaultPort())
+	cfg.Port = connectionPort(entry, 0)
 	cfg.Socket = cfgval.AsString(entry[CheckKeySocket])
 	cfg.User = user
 	cfg.Query = cfgval.AsString(entry[CheckKeyQuery])
@@ -271,6 +271,7 @@ func buildConnCheck(b base, proto conn.Protocol, entry map[string]any) (Check, s
 	if err := configureConnProtocol(&cfg, protoName, entry); err != nil {
 		return nil, err.Error()
 	}
+	cfg = conn.Resolve(proto, cfg)
 	c := connCheck{base: b, proto: proto, cfg: cfg, probe: proto.Probe}
 	// Optional response assertions: a mapping of field -> value | {op, value},
 	// compared against the probe Result (version / Extra) — works for any protocol.
@@ -305,9 +306,6 @@ func baseConnectionConfig(entry map[string]any) conn.Config {
 		Password: cfgval.AsString(entry[CheckKeyPassword]),
 		TLS:      tlsString(entry[CheckKeyTLS]),
 	}
-	if cfg.Host == "" {
-		cfg.Host = conn.DefaultHost
-	}
 	return cfg
 }
 
@@ -325,12 +323,6 @@ func connectionPort(entry map[string]any, defaultPort int) int {
 }
 
 func configureConnProtocol(cfg *conn.Config, protoName string, entry map[string]any) error {
-	if socket, ok := defaultConnSockets[protoName]; ok {
-		if cfg.Socket == "" {
-			cfg.Socket = socket
-		}
-		return nil
-	}
 	switch protoName {
 	case conn.ProtocolNameDNS:
 		return configureDNS(cfg, entry)
@@ -348,9 +340,7 @@ func configureConnProtocol(cfg *conn.Config, protoName string, entry map[string]
 		setConnQuery(cfg, entry, CheckKeyUPS)
 	case conn.ProtocolNameDocker:
 		setConnQuery(cfg, entry, CheckKeyContainer)
-		setLocalConnSocket(cfg, entry, conn.DefaultDockerSocket)
 	case conn.ProtocolNameLibvirt:
-		setLocalConnSocket(cfg, entry, conn.DefaultLibvirtSocket)
 		setConnParam(cfg, conn.ParamKeyDomain, cfgval.AsString(entry[CheckKeyDomain]))
 	case conn.ProtocolNameDBus:
 		cfg.Socket = conn.DBusAddress(cfgval.AsString(entry[CheckKeySocket]), cfgval.AsString(entry[CheckKeyQuery]))
@@ -388,12 +378,6 @@ func DBusTargetFromEntry(entry map[string]any) conn.DBusTarget {
 		DBusInterface: cfgval.AsString(entry[CheckKeyDBusInterface]),
 		Property:      cfgval.AsString(entry[CheckKeyDBusProperty]),
 	}
-}
-
-var defaultConnSockets = map[string]string{
-	conn.ProtocolNameACPID:    conn.DefaultACPIDSocket,
-	conn.ProtocolNameFail2ban: conn.DefaultFail2banSocket,
-	conn.ProtocolNameLVMPolld: conn.DefaultLVMPolldSocket,
 }
 
 func configureDNS(cfg *conn.Config, entry map[string]any) error {
@@ -445,12 +429,6 @@ func setConnParam(cfg *conn.Config, key, value string) {
 		cfg.Params = map[string]string{}
 	}
 	cfg.Params[key] = value
-}
-
-func setLocalConnSocket(cfg *conn.Config, entry map[string]any, socket string) {
-	if cfg.Socket == "" && cfgval.AsString(entry[CheckKeyHost]) == "" {
-		cfg.Socket = socket
-	}
 }
 
 // tlsString reads a tls field that may be a YAML bool (true/false) or a string

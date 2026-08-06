@@ -6,15 +6,16 @@ import "fmt"
 // to it. Keeping every registration in one immutable table makes aliases and
 // registry membership reviewable without relying on package init order.
 type protocolRegistration struct {
-	protocol Protocol
-	aliases  []string
+	protocol      Protocol
+	aliases       []string
+	defaultSocket string
 }
 
 // builtinProtocolRegistrations is the complete connection-protocol catalog.
 // Protocol implementations own their wire exchange and metadata methods; this
 // table is the single source of truth for membership and aliases.
 var builtinProtocolRegistrations = []protocolRegistration{
-	{protocol: acpidProtocol},
+	{protocol: acpidProtocol, defaultSocket: DefaultACPIDSocket},
 	{protocol: ajpProtocol{}},
 	{protocol: amqpProtocol{}, aliases: []string{protocolAliasRabbitMQ}},
 	{protocol: asteriskProtocol{}, aliases: []string{protocolAliasAMI}},
@@ -27,8 +28,8 @@ var builtinProtocolRegistrations = []protocolRegistration{
 	{protocol: dhclientProtocol{}, aliases: []string{protocolAliasDHClient}},
 	{protocol: dhcpProtocol{}, aliases: []string{protocolAliasDHCPD}},
 	{protocol: dnsProtocol{}},
-	{protocol: dockerProtocol{}},
-	{protocol: fail2banProtocol},
+	{protocol: dockerProtocol{}, defaultSocket: DefaultDockerSocket},
+	{protocol: fail2banProtocol, defaultSocket: DefaultFail2banSocket},
 	{protocol: fpmProtocol{}, aliases: []string{protocolAliasPHPFPM}},
 	{protocol: ftpProtocol{}},
 	{protocol: glusterfsProtocol{}, aliases: []string{protocolAliasGlusterd, protocolAliasGluster}},
@@ -38,8 +39,8 @@ var builtinProtocolRegistrations = []protocolRegistration{
 	{protocol: ippProtocol{}, aliases: []string{protocolAliasCUPS}},
 	{protocol: kafkaProtocol{}},
 	{protocol: ldapProtocol{}},
-	{protocol: libvirtProtocol{}, aliases: []string{protocolAliasLibvirtd}},
-	{protocol: lvmpolldProtocol{}},
+	{protocol: libvirtProtocol{}, aliases: []string{protocolAliasLibvirtd}, defaultSocket: DefaultLibvirtSocket},
+	{protocol: lvmpolldProtocol{}, defaultSocket: DefaultLVMPolldSocket},
 	{protocol: memcachedProtocol{}, aliases: []string{protocolAliasMemcache}},
 	{protocol: mongodbProtocol{}, aliases: []string{protocolAliasMongo}},
 	{protocol: mountdProtocol{}, aliases: []string{protocolAliasRPCMountd, protocolAliasNFSMountd}},
@@ -76,11 +77,13 @@ var builtinProtocolRegistrations = []protocolRegistration{
 // registry is an immutable name-to-protocol index. Registrations are complete
 // before the map is published, so lookups need no daemon-hot-path lock.
 type registry struct {
-	byName map[string]Protocol
+	byName      map[string]Protocol
+	byCanonical map[string]protocolRegistration
 }
 
 func newRegistry(registrations []protocolRegistration) (*registry, error) {
 	byName := make(map[string]Protocol, len(registrations))
+	byCanonical := make(map[string]protocolRegistration, len(registrations))
 	for _, registration := range registrations {
 		if registration.protocol == nil {
 			return nil, fmt.Errorf("register connection protocol: nil implementation")
@@ -92,6 +95,7 @@ func newRegistry(registrations []protocolRegistration) (*registry, error) {
 		if err := registerProtocolName(byName, name, registration.protocol); err != nil {
 			return nil, err
 		}
+		byCanonical[name] = registration
 		for _, alias := range registration.aliases {
 			if alias == "" {
 				return nil, fmt.Errorf("register connection protocol %q: empty alias", name)
@@ -101,7 +105,7 @@ func newRegistry(registrations []protocolRegistration) (*registry, error) {
 			}
 		}
 	}
-	return &registry{byName: byName}, nil
+	return &registry{byName: byName, byCanonical: byCanonical}, nil
 }
 
 func registerProtocolName(byName map[string]Protocol, name string, protocol Protocol) error {
@@ -136,6 +140,26 @@ var defaultRegistry = mustRegistry(builtinProtocolRegistrations)
 //
 //nolint:ireturn // The public registry API returns the protocol interface selected at runtime.
 func Lookup(name string) (Protocol, bool) { return defaultRegistry.lookup(name) }
+
+// Resolve applies one protocol's target defaults to cfg. An explicit socket,
+// host or port always wins; when neither socket nor host was selected, a
+// protocol with a well-known local socket prefers it over loopback TCP.
+func Resolve(protocol Protocol, cfg Config) Config {
+	if protocol == nil {
+		return cfg
+	}
+	registration, registered := defaultRegistry.byCanonical[protocol.Name()]
+	if cfg.Socket == "" && cfg.Host == "" && registered {
+		cfg.Socket = registration.defaultSocket
+	}
+	if cfg.Host == "" {
+		cfg.Host = DefaultHost
+	}
+	if cfg.Port == 0 {
+		cfg.Port = protocol.DefaultPort()
+	}
+	return cfg
+}
 
 // DefaultPort returns the registered protocol's default port, or 0 when name is
 // not registered.
