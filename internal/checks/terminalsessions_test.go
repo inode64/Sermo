@@ -131,16 +131,19 @@ func TestTerminalSessionsTreatsKnownEmptyClientOutputAsZero(t *testing.T) {
 	}
 }
 
-func TestTerminalSessionsCheckFailsClosedOnCommandTimeout(t *testing.T) {
+func TestTerminalSessionsCommandFailureCannotMasqueradeAsEmpty(t *testing.T) {
 	check := terminalSessionsCheck{
-		base:   base{name: "sessions", timeout: time.Millisecond},
+		base:   base{name: "sessions", timeout: time.Second},
 		preds:  []levelPred{{field: DataKeyCount, op: ">", value: 0}},
-		config: TerminalSessionConfig{Multiplexer: TerminalMultiplexerTmux, Binary: "/usr/bin/tmux", User: "deploy"},
-		runner: waitingTerminalSessionRunner{},
+		config: TerminalSessionConfig{Multiplexer: TerminalMultiplexerScreen, Binary: "/usr/bin/screen", User: "deploy"},
+		runner: &recordingUserRunner{
+			result: execx.Result{ExitCode: execx.ExitCodeRunFailure, Stderr: "No Sockets found in /run/screen/S-deploy."},
+			err:    errors.New("switch user failed"),
+		},
 	}
 	result := check.Run(context.Background())
-	if result.OK || !result.Unavailable {
-		t.Fatalf("timeout result = %+v, want unavailable failure", result)
+	if !result.Unavailable {
+		t.Fatalf("command failure result = %+v, want unavailable failure", result)
 	}
 }
 
