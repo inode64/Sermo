@@ -361,6 +361,7 @@ func (r fakeRunner) Run(context.Context, string, ...string) (execx.Result, error
 
 type recordingUserRunner struct {
 	result      execx.Result
+	err         error
 	user        string
 	name        string
 	args        []string
@@ -376,7 +377,7 @@ func (r *recordingUserRunner) RunUser(ctx context.Context, user, name string, ar
 	r.user = user
 	r.name = name
 	r.args = append([]string(nil), args...)
-	return r.result, nil
+	return r.result, r.err
 }
 
 // slowRunner never returns until its context is cancelled, so a check running
@@ -421,6 +422,15 @@ func TestCheckTimeoutMessage(t *testing.T) {
 				runner: slowRunner{},
 				device: "/dev/sda",
 				preds:  []levelPred{{field: "cached", op: "<", value: 100}},
+			},
+		},
+		{
+			name: "terminal sessions",
+			check: terminalSessionsCheck{
+				base:   base{name: "sessions", timeout: time.Millisecond},
+				preds:  []levelPred{{field: DataKeyCount, op: ">", value: 0}},
+				config: TerminalSessionConfig{Multiplexer: TerminalMultiplexerTmux, Binary: "/usr/bin/tmux", User: "deploy"},
+				runner: waitingTerminalSessionRunner{},
 			},
 		},
 	}
