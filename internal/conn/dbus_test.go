@@ -116,6 +116,44 @@ func TestDBusTCPConfig(t *testing.T) {
 	}
 }
 
+func TestDBusBoundTCPConfig(t *testing.T) {
+	tests := []struct {
+		name      string
+		cfg       Config
+		address   string
+		wantBound bool
+		wantErr   string
+	}{
+		{name: "no interface", address: "nonce-tcp:host=127.0.0.1,port=44444"},
+		{name: "unix", cfg: Config{Interface: "eth0"}, address: "unix:path=/run/dbus/system_bus_socket"},
+		{name: "unix alternatives", cfg: Config{Interface: "eth0"}, address: "unix:path=/run/dbus/a;unix:path=/run/dbus/b"},
+		{name: "tcp", cfg: Config{Interface: "eth0"}, address: "tcp:host=127.0.0.1,port=44444", wantBound: true},
+		{name: "unix TCP fallback", cfg: Config{Interface: "eth0"}, address: "unix:path=/run/dbus/missing;tcp:host=127.0.0.1,port=44444", wantErr: "alternatives"},
+		{name: "TCP unix fallback", cfg: Config{Interface: "eth0"}, address: "tcp:host=127.0.0.1,port=44444;unix:path=/run/dbus/system_bus_socket", wantErr: "alternatives"},
+		{name: "nonce TCP", cfg: Config{Interface: "eth0"}, address: "nonce-tcp:host=127.0.0.1,port=44444", wantErr: "cannot be bound"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got, bound, err := dbusBoundTCPConfig(test.cfg, test.address)
+			if test.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), test.wantErr) {
+					t.Fatalf("dbusBoundTCPConfig() error = %v, want %q", err, test.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("dbusBoundTCPConfig() error = %v", err)
+			}
+			if bound != test.wantBound {
+				t.Fatalf("dbusBoundTCPConfig() bound = %v, want %v", bound, test.wantBound)
+			}
+			if bound && (got.Host != "127.0.0.1" || got.Port != 44444 || got.Interface != "eth0") {
+				t.Fatalf("dbusBoundTCPConfig() = %+v", got)
+			}
+		})
+	}
+}
+
 func TestValidateDBusTarget(t *testing.T) {
 	tests := []struct {
 		name    string

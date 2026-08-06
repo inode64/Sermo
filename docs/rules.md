@@ -1052,8 +1052,10 @@ Protocols, in the order of the table above:
   `object_path`, `probe`, its unique `owner` (the `on_change` fingerprint), and
   any configured `dbus_interface`, `property` and `property_value`.
   Uses `github.com/godbus/dbus/v5`. With `interface`
-  and a TCP `query`, use exactly `tcp:host=…,port=…`; other D-Bus TCP transport
-  options are rejected so Sermo never silently drops egress-interface binding.
+  and a TCP `query`, use exactly `tcp:host=…,port=…`; address alternatives,
+  `nonce-tcp` and other D-Bus TCP transport options are rejected so Sermo never
+  silently drops egress-interface binding. Unix-only alternatives remain local
+  and therefore need no interface binding.
 
   ```yaml
   checks:
