@@ -85,6 +85,7 @@ const (
 	CheckKeyMaxStratum            = "max_stratum"
 	CheckKeyMethod                = "method"
 	CheckKeyMetric                = "metric"
+	CheckKeyMultiplexer           = "multiplexer"
 	CheckKeyMinRules              = "min_rules"
 	CheckKeyMounted               = "mounted"
 	CheckKeyName                  = "name"

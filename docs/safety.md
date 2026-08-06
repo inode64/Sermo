@@ -76,6 +76,10 @@ Any missing boundary, changed terminal or recycled PID is rejected. A successful
 close sends one `SIGTERM` to the per-session process; it never escalates to
 `SIGKILL`.
 
+The `terminal_sessions` check is observation-only. It runs a bounded,
+argv-only `tmux` or `screen` listing as the explicitly configured account;
+it never attaches, detaches, kills or otherwise controls a terminal session.
+
 A residual Sermo is not allowed to identify and kill is **reported, not killed**:
 a clean `orphan_processes` failure is safer than killing the wrong process.
 

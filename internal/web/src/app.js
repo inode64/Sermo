@@ -3713,6 +3713,23 @@ function renderSSHSessions(d) {
     </table>`;
 }
 
+function renderTerminalSessions(d) {
+  if (!d.terminal_sessions_supported) return nothing;
+  const sessions = d.terminal_sessions || [];
+  const rows = sessions.length
+    ? sessions.map((session) => tpl`<tr>
+      <td>${session.multiplexer || "—"}</td><td>${session.user || "—"}</td><td>${session.name || "—"}</td>
+      <td>${session.state || "unknown"}</td><td>${Number.isInteger(session.windows) ? fmtNum(session.windows, 0) : "—"}</td>
+    </tr>`)
+    : tpl`<tr><td colspan="5" class="muted">No terminal-multiplexer sessions.</td></tr>`;
+  return tpl`<h2>Terminal services</h2>
+    <table class="detail-compact-table terminal-session-table">
+      <caption class="visually-hidden">Current tmux and screen sessions</caption>
+      <thead><tr><th scope="col">Service</th><th scope="col">User</th><th scope="col">Session</th><th scope="col">State</th><th scope="col">Windows</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
 function renderServiceDetail(d) {
   const procs = d.processes || [];
   const procWarnings = d.process_warnings || [];
@@ -3881,6 +3898,7 @@ function renderServiceDetail(d) {
     ${graphs}
     ${processSection}
     ${renderSSHSessions(d)}
+    ${renderTerminalSessions(d)}
     <h2>Checks</h2>
     <table>
       <caption class="visually-hidden">Service checks</caption>

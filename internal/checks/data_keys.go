@@ -8,6 +8,7 @@ const (
 	DataKeyAllocated          = "allocated"
 	DataKeyAge                = "age"
 	DataKeyAddresses          = "addresses"
+	DataKeyAttached           = "attached"
 	DataKeyAvailablePct       = fieldAvailablePct
 	DataKeyArrays             = fieldArrays
 	DataKeyArray              = CheckKeyArray
@@ -34,6 +35,7 @@ const (
 	DataKeyDBusPropertyValue  = conn.ExtraKeyDBusPropertyValue
 	DataKeyDBusUniqueName     = conn.ExtraKeyDBusUniqueName
 	DataKeyDegraded           = fieldDegraded
+	DataKeyDetached           = "detached"
 	DataKeyDegradedArrays     = "degraded_arrays"
 	DataKeyDevice             = CheckKeyDevice
 	DataKeyDNSNames           = "dns_names"
@@ -137,6 +139,7 @@ const (
 	DataKeyRules              = CheckKeyRules
 	DataKeySampleError        = "sample_error"
 	DataKeyServer             = "server"
+	DataKeyTerminalSessions   = "terminal_sessions"
 	DataKeySerialNumber       = "serial_number"
 	DataKeySignatureAlgorithm = "signature_algorithm"
 	DataKeySize               = CheckKeySize

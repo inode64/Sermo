@@ -782,58 +782,59 @@ func validVariableName(name string) bool {
 type singleShotCheckValidator func(path string, entry map[string]any, locksDir string, add addFunc)
 
 var singleShotCheckValidators = map[string]singleShotCheckValidator{
-	checks.CheckTypeTCP:           validateTCPCheck,
-	checks.CheckTypeHTTP:          singleShotNoLock(validateHTTPFields),
-	checks.CheckTypePorts:         singleShotNoLock(validatePortsFields),
-	checks.CheckTypeCommand:       validateSingleShotCommand,
-	checks.CheckTypeClock:         singleShotNoLock(validateClockFields),
-	checks.CheckTypeService:       validateServiceCheck,
-	checks.CheckTypeProcess:       validateProcessCheck,
-	checks.CheckTypeStaleBinary:   singleShotNoLock(validateStaleBinaryCheck),
-	checks.CheckTypeFileExists:    validateFileExistsCheck,
-	checks.CheckTypeFile:          validateSingleShotFileCheck,
-	checks.CheckTypeLockfile:      validateLockfileCheck,
-	checks.CheckTypeBinary:        validateBinaryCheck,
-	checks.CheckTypePidfile:       validatePidfileCheck,
-	checks.CheckTypeSocket:        validateSocketCheck,
-	checks.CheckTypeLibraries:     validateLibrariesCheck,
-	checks.CheckTypeMetric:        validateSingleShotMetric,
-	checks.CheckTypeCount:         validateSingleShotCount,
-	checks.CheckTypeStorage:       singleShotNoLock(validateStorageFields),
-	checks.CheckTypeAutofs:        singleShotNoLock(validateAutofsFields),
-	checks.CheckTypeLoad:          singleShotNoLock(validateLoadFields),
-	checks.CheckTypeUsers:         singleShotThreshold(checks.UsersPredFields),
-	checks.CheckTypeSSHIdle:       validateSSHIdleCheck,
-	checks.CheckTypeProcessCount:  validateProcessCountCheck,
-	checks.CheckTypeHdparm:        singleShotNoLock(validateHdparmFields),
-	checks.CheckTypeSensors:       validateSensorsCheck,
-	checks.CheckTypeSmart:         singleShotNoLock(validateSmartFields),
-	checks.CheckTypeRAID:          validateRAIDCheck,
-	checks.CheckTypeLVM:           validateLVMCheck,
-	checks.CheckTypeEDAC:          singleShotThreshold(checks.EdacPredFields),
-	checks.CheckTypeConfig:        validateConfigCheck,
-	checks.CheckTypeFDS:           singleShotThreshold(checks.FdsPredFields),
-	checks.CheckTypeMemory:        singleShotThreshold(checks.MemoryPredFields),
-	checks.CheckTypePressure:      singleShotNoLock(validatePressureFields),
-	checks.CheckTypePIDs:          singleShotThreshold(checks.PidsPredFields),
-	checks.CheckTypeDiskIO:        singleShotNoLock(validateDiskIOFields),
-	checks.CheckTypeConntrack:     singleShotThreshold(checks.ConntrackPredFields),
-	checks.CheckTypeFirewallRules: singleShotNoLock(validateFirewallRulesFields),
-	checks.CheckTypeNet:           validateNetSingleShotCheck,
-	checks.CheckTypeICMP:          validateICMPSingleShotCheck,
-	checks.CheckTypeSwap:          validateSwapSingleShotCheck,
-	checks.CheckTypeRoute:         validateRouteCheck,
-	checks.CheckTypeEntropy:       singleShotThreshold(checks.EntropyPredFields),
-	checks.CheckTypeZombies:       singleShotThreshold(checks.ZombiePredFields),
-	checks.CheckTypeOOM:           singleShotNoLock(validateOomFields),
-	checks.CheckTypeCert:          singleShotNoLock(validateCertFields),
-	checks.CheckTypeSQLite:        validateSQLiteCheck,
-	checks.CheckTypeSQLite3:       validateSQLiteCheck,
-	checks.CheckTypeSQL:           singleShotNoLock(validateSQLFields),
-	checks.CheckTypeMongoDBQuery:  singleShotNoLock(validateMongoFields),
-	checks.CheckTypeInfluxDBQuery: singleShotNoLock(validateInfluxFields),
-	checks.CheckTypeSize:          singleShotNoLock(validateSizeFields),
-	checks.CheckTypeWebsocket:     singleShotNoLock(validateWebsocketFields),
+	checks.CheckTypeTCP:              validateTCPCheck,
+	checks.CheckTypeHTTP:             singleShotNoLock(validateHTTPFields),
+	checks.CheckTypePorts:            singleShotNoLock(validatePortsFields),
+	checks.CheckTypeCommand:          validateSingleShotCommand,
+	checks.CheckTypeClock:            singleShotNoLock(validateClockFields),
+	checks.CheckTypeService:          validateServiceCheck,
+	checks.CheckTypeProcess:          validateProcessCheck,
+	checks.CheckTypeStaleBinary:      singleShotNoLock(validateStaleBinaryCheck),
+	checks.CheckTypeFileExists:       validateFileExistsCheck,
+	checks.CheckTypeFile:             validateSingleShotFileCheck,
+	checks.CheckTypeLockfile:         validateLockfileCheck,
+	checks.CheckTypeBinary:           validateBinaryCheck,
+	checks.CheckTypePidfile:          validatePidfileCheck,
+	checks.CheckTypeSocket:           validateSocketCheck,
+	checks.CheckTypeLibraries:        validateLibrariesCheck,
+	checks.CheckTypeMetric:           validateSingleShotMetric,
+	checks.CheckTypeCount:            validateSingleShotCount,
+	checks.CheckTypeStorage:          singleShotNoLock(validateStorageFields),
+	checks.CheckTypeAutofs:           singleShotNoLock(validateAutofsFields),
+	checks.CheckTypeLoad:             singleShotNoLock(validateLoadFields),
+	checks.CheckTypeUsers:            singleShotThreshold(checks.UsersPredFields),
+	checks.CheckTypeSSHIdle:          validateSSHIdleCheck,
+	checks.CheckTypeTerminalSessions: validateTerminalSessionsCheck,
+	checks.CheckTypeProcessCount:     validateProcessCountCheck,
+	checks.CheckTypeHdparm:           singleShotNoLock(validateHdparmFields),
+	checks.CheckTypeSensors:          validateSensorsCheck,
+	checks.CheckTypeSmart:            singleShotNoLock(validateSmartFields),
+	checks.CheckTypeRAID:             validateRAIDCheck,
+	checks.CheckTypeLVM:              validateLVMCheck,
+	checks.CheckTypeEDAC:             singleShotThreshold(checks.EdacPredFields),
+	checks.CheckTypeConfig:           validateConfigCheck,
+	checks.CheckTypeFDS:              singleShotThreshold(checks.FdsPredFields),
+	checks.CheckTypeMemory:           singleShotThreshold(checks.MemoryPredFields),
+	checks.CheckTypePressure:         singleShotNoLock(validatePressureFields),
+	checks.CheckTypePIDs:             singleShotThreshold(checks.PidsPredFields),
+	checks.CheckTypeDiskIO:           singleShotNoLock(validateDiskIOFields),
+	checks.CheckTypeConntrack:        singleShotThreshold(checks.ConntrackPredFields),
+	checks.CheckTypeFirewallRules:    singleShotNoLock(validateFirewallRulesFields),
+	checks.CheckTypeNet:              validateNetSingleShotCheck,
+	checks.CheckTypeICMP:             validateICMPSingleShotCheck,
+	checks.CheckTypeSwap:             validateSwapSingleShotCheck,
+	checks.CheckTypeRoute:            validateRouteCheck,
+	checks.CheckTypeEntropy:          singleShotThreshold(checks.EntropyPredFields),
+	checks.CheckTypeZombies:          singleShotThreshold(checks.ZombiePredFields),
+	checks.CheckTypeOOM:              singleShotNoLock(validateOomFields),
+	checks.CheckTypeCert:             singleShotNoLock(validateCertFields),
+	checks.CheckTypeSQLite:           validateSQLiteCheck,
+	checks.CheckTypeSQLite3:          validateSQLiteCheck,
+	checks.CheckTypeSQL:              singleShotNoLock(validateSQLFields),
+	checks.CheckTypeMongoDBQuery:     singleShotNoLock(validateMongoFields),
+	checks.CheckTypeInfluxDBQuery:    singleShotNoLock(validateInfluxFields),
+	checks.CheckTypeSize:             singleShotNoLock(validateSizeFields),
+	checks.CheckTypeWebsocket:        singleShotNoLock(validateWebsocketFields),
 
 	checks.CheckTypeTCPConnections: validateTCPConnectionsCheck,
 }
@@ -911,6 +912,34 @@ func validateSSHIdleCheck(path string, entry map[string]any, _ string, add addFu
 	}
 	validateThresholdPreds(path, entry, checks.SSHIdlePredFields, add)
 	validateSSHProtectedProcesses(path, entry[checks.CheckKeyProtectedProcesses], add)
+}
+
+func validateTerminalSessionsCheck(path string, entry map[string]any, _ string, add addFunc) {
+	multiplexer := cfgval.String(entry[checks.CheckKeyMultiplexer])
+	if !checks.IsTerminalMultiplexer(multiplexer) {
+		add("%s.%s must be %s", path, checks.CheckKeyMultiplexer, checks.TerminalMultiplexerSummary)
+	}
+	binary := cfgval.String(entry[checks.CheckKeyBinary])
+	if binary == "" {
+		add("%s.%s is required for a terminal_sessions check", path, checks.CheckKeyBinary)
+	} else if !filepath.IsAbs(binary) {
+		add("%s.%s path %q must be absolute", path, checks.CheckKeyBinary, binary)
+	}
+	if cfgval.String(entry[checks.CheckKeyUser]) == "" {
+		add("%s.%s is required for a terminal_sessions check", path, checks.CheckKeyUser)
+	}
+	if socket, present := entry[checks.CheckKeySocket]; present {
+		socketPath := cfgval.String(socket)
+		switch {
+		case socketPath == "":
+			add("%s.%s must be a non-empty absolute path", path, checks.CheckKeySocket)
+		case multiplexer != checks.TerminalMultiplexerTmux:
+			add("%s.%s is only supported for tmux", path, checks.CheckKeySocket)
+		case !filepath.IsAbs(socketPath):
+			add("%s.%s path %q must be absolute", path, checks.CheckKeySocket, socketPath)
+		}
+	}
+	validateThresholdPreds(path, entry, checks.TerminalSessionPredFields, add)
 }
 
 func validateSSHProtectedProcesses(path string, raw any, add addFunc) {
