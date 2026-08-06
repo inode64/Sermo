@@ -10,27 +10,6 @@ import (
 	"sermo/internal/execx"
 )
 
-type terminalSessionRunner struct {
-	result      execx.Result
-	err         error
-	user        string
-	name        string
-	args        []string
-	hasDeadline bool
-}
-
-func (r *terminalSessionRunner) Run(context.Context, string, ...string) (execx.Result, error) {
-	return execx.Result{ExitCode: execx.ExitCodeRunFailure}, errors.New("Run must not be used")
-}
-
-func (r *terminalSessionRunner) RunUser(ctx context.Context, user, name string, args ...string) (execx.Result, error) {
-	_, r.hasDeadline = ctx.Deadline()
-	r.user = user
-	r.name = name
-	r.args = append([]string(nil), args...)
-	return r.result, r.err
-}
-
 type waitingTerminalSessionRunner struct{}
 
 func (waitingTerminalSessionRunner) Run(context.Context, string, ...string) (execx.Result, error) {
@@ -93,7 +72,7 @@ func TestTerminalMultiplexerAdapterParsesSessions(t *testing.T) {
 }
 
 func TestTerminalSessionsCheckRunsReadOnlyClientAsConfiguredUser(t *testing.T) {
-	runner := &terminalSessionRunner{result: execx.Result{ExitCode: execx.ExitCodeSuccess, Stdout: "ops\t1\t3\nbuild\t0\t1\n"}}
+	runner := &recordingUserRunner{result: execx.Result{ExitCode: execx.ExitCodeSuccess, Stdout: "ops\t1\t3\nbuild\t0\t1\n"}}
 	built, warnings := Build(map[string]any{
 		"sessions": map[string]any{
 			CheckKeyType:        CheckTypeTerminalSessions,
@@ -142,7 +121,7 @@ func TestTerminalSessionsTreatsKnownEmptyClientOutputAsZero(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			sample, err := sampleTerminalSessions(context.Background(), &terminalSessionRunner{result: tt.result}, tt.config)
+			sample, err := sampleTerminalSessions(context.Background(), &recordingUserRunner{result: tt.result}, tt.config)
 			if err != nil || len(sample.Sessions) != 0 {
 				t.Fatalf("sampleTerminalSessions() = %#v, %v; want empty success", sample, err)
 			}

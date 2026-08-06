@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"debug/elf"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -359,17 +360,19 @@ func (r fakeRunner) Run(context.Context, string, ...string) (execx.Result, error
 }
 
 type recordingUserRunner struct {
-	result execx.Result
-	user   string
-	name   string
-	args   []string
+	result      execx.Result
+	user        string
+	name        string
+	args        []string
+	hasDeadline bool
 }
 
 func (r *recordingUserRunner) Run(context.Context, string, ...string) (execx.Result, error) {
-	return execx.Result{ExitCode: -1}, nil
+	return execx.Result{ExitCode: execx.ExitCodeRunFailure}, errors.New("Run must not be used")
 }
 
-func (r *recordingUserRunner) RunUser(_ context.Context, user, name string, args ...string) (execx.Result, error) {
+func (r *recordingUserRunner) RunUser(ctx context.Context, user, name string, args ...string) (execx.Result, error) {
+	_, r.hasDeadline = ctx.Deadline()
 	r.user = user
 	r.name = name
 	r.args = append([]string(nil), args...)
