@@ -11,8 +11,6 @@ import (
 	"sermo/internal/netutil"
 )
 
-func init() { Register(ldapProtocol{}) }
-
 const (
 	defaultLDAPPort         = defaultPortLDAP
 	defaultLDAPProbeTimeout = 5 * time.Second

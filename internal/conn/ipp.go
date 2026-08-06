@@ -9,8 +9,6 @@ import (
 	"net/http"
 )
 
-func init() { Register(ippProtocol{}, protocolAliasCUPS) }
-
 // ippCUPSGetDefault is the CUPS-Get-Default operation id — a server-level IPP
 // operation needing only the charset/language attributes, so it works without a
 // printer URI.

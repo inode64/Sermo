@@ -9,8 +9,6 @@ import (
 	"strings"
 )
 
-func init() { Register(varnishProtocol{}, protocolAliasVarnishAdm) }
-
 const (
 	maxVarnishCLIBody       = 1 << 16
 	varnishStatusAuthNeeded = 107 // CLIS_AUTH

@@ -6,8 +6,6 @@ import (
 	"io"
 )
 
-func init() { Register(ftpProtocol{}) }
-
 // ftpProtocol probes an FTP server natively (RFC 959). With no credentials it is
 // an anonymous connectivity check (verify the server greets 220). With a
 // user/password it performs USER/PASS login; a password with no user logs in as

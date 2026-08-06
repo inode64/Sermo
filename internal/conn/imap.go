@@ -8,8 +8,6 @@ import (
 	"strings"
 )
 
-func init() { Register(imapProtocol{}) }
-
 const (
 	imapGreetingOKPrefix      = "* OK"
 	imapGreetingPreauthPrefix = "* PREAUTH"

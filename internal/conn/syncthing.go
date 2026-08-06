@@ -7,8 +7,6 @@ import (
 	"net/http"
 )
 
-func init() { Register(syncthingProtocol{}) }
-
 const (
 	syncthingHealthEndpoint  = "/rest/noauth/health"
 	syncthingHealthOK        = "OK"

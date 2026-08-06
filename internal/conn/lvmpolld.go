@@ -9,8 +9,6 @@ import (
 	"strings"
 )
 
-func init() { Register(lvmpolldProtocol{}) }
-
 // DefaultLVMPolldSocket is lvmpolld's well-known control socket.
 const DefaultLVMPolldSocket = "/run/lvm/lvmpolld.socket"
 

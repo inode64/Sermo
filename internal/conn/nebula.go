@@ -6,8 +6,6 @@ import (
 	"errors"
 )
 
-func init() { Register(nebulaProtocol{}, protocolAliasNebulaVPN) }
-
 // Nebula UDP control-protocol constants (slackhq/nebula `header` package). The
 // first byte packs the protocol version in the high nibble and the message type
 // in the low nibble; the header is 16 bytes, big-endian.
