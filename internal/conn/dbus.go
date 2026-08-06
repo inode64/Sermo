@@ -332,9 +332,16 @@ func dbusTCPConfig(cfg Config, addr string) (Config, error) {
 	var host string
 	port := defaultPortNone
 	for field := range strings.SplitSeq(strings.TrimPrefix(addr, dbusTCPPrefix), ",") {
-		key, value, ok := strings.Cut(field, "=")
-		if !ok || value == "" {
+		key, encodedValue, ok := strings.Cut(field, "=")
+		if !ok || encodedValue == "" {
 			return Config{}, fmt.Errorf("invalid D-Bus TCP address %q", addr)
+		}
+		value, err := dbus.UnescapeBusAddressValue(encodedValue)
+		if err != nil {
+			return Config{}, fmt.Errorf("invalid D-Bus TCP address value %q: %w", encodedValue, err)
+		}
+		if value == "" {
+			return Config{}, fmt.Errorf("invalid D-Bus TCP address value %q", encodedValue)
 		}
 		switch key {
 		case dbusTCPHostKey:

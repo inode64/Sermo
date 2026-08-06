@@ -57,6 +57,11 @@ func TestDBusTCPConfig(t *testing.T) {
 			want:    Config{Host: "10.0.0.5", Port: 44444, Interface: "eth0"},
 		},
 		{
+			name:    "escaped host and port",
+			address: "tcp:host=server%2eexample,port=%34%34%34%34%34",
+			want:    Config{Host: "server.example", Port: 44444, Interface: "eth0"},
+		},
+		{
 			name:    "minimum port",
 			address: fmt.Sprintf("tcp:host=10.0.0.5,port=%d", cfgval.MinTCPPort),
 			want:    Config{Host: "10.0.0.5", Port: cfgval.MinTCPPort, Interface: "eth0"},
@@ -84,6 +89,11 @@ func TestDBusTCPConfig(t *testing.T) {
 		{
 			name:    "unsupported option",
 			address: "tcp:host=10.0.0.5,port=44444,family=ipv4",
+			wantErr: true,
+		},
+		{
+			name:    "invalid escape",
+			address: "tcp:host=server%zz,port=44444",
 			wantErr: true,
 		},
 	}
