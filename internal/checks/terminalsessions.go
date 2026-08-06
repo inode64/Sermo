@@ -29,7 +29,9 @@ const (
 	// TerminalSessionStateUnknown reports a client state that could not be normalized.
 	TerminalSessionStateUnknown = "unknown"
 
-	tmuxSessionFormat = "#{session_name}\t#{session_attached}\t#{session_windows}"
+	tmuxSessionFormat               = "#{session_name}\t#{session_attached}\t#{session_windows}"
+	screenSessionStateMultiAttached = "multi, " + TerminalSessionStateAttached
+	screenSessionStateMultiDetached = "multi, " + TerminalSessionStateDetached
 )
 
 const (
@@ -296,9 +298,9 @@ func parseScreenSessions(user, output string) []TerminalSession {
 		}
 		state := TerminalSessionStateUnknown
 		switch strings.ToLower(strings.TrimSpace(matches[screenSessionStateMatch])) {
-		case TerminalSessionStateAttached:
+		case TerminalSessionStateAttached, screenSessionStateMultiAttached:
 			state = TerminalSessionStateAttached
-		case TerminalSessionStateDetached:
+		case TerminalSessionStateDetached, screenSessionStateMultiDetached:
 			state = TerminalSessionStateDetached
 		}
 		sessions = append(sessions, TerminalSession{Multiplexer: TerminalMultiplexerScreen, Name: matches[screenSessionNameMatch], User: user, State: state})
