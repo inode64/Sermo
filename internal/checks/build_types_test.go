@@ -1,6 +1,7 @@
 package checks
 
 import (
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -27,6 +28,67 @@ func TestBuiltinCheckSpecsAreUniqueAndBuildable(t *testing.T) {
 			if strings.Contains(warning, "unsupported type") {
 				t.Errorf("%s: not handled by buildCheck: %s", spec.info.Name, warning)
 			}
+		}
+	}
+}
+
+func TestCheckRegistryRejectsInvalidSpecs(t *testing.T) {
+	build := func(checkBuildInput) (Check, string) { return fakeCheck{}, "" }
+	tests := []struct {
+		name  string
+		specs []checkSpec
+	}{
+		{name: "empty name", specs: []checkSpec{{info: healthTypeInfo(""), build: build}}},
+		{name: "missing builder", specs: []checkSpec{{info: healthTypeInfo("probe")}}},
+		{name: "invalid reporting mode", specs: []checkSpec{{info: TypeInfo{Name: "probe", DefaultReports: "invalid"}, build: build}}},
+		{name: "duplicate type", specs: []checkSpec{
+			{info: healthTypeInfo("probe"), build: build},
+			{info: conditionTypeInfo("probe"), build: build},
+		}},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			defer func() {
+				if recover() == nil {
+					t.Fatal("mustIndexCheckSpecs did not reject invalid registry")
+				}
+			}()
+			mustIndexCheckSpecs(tc.specs)
+		})
+	}
+}
+
+func TestTypeInfosReturnsSortedCopy(t *testing.T) {
+	infos := TypeInfos()
+	names := make([]string, len(infos))
+	for i, info := range infos {
+		names[i] = info.Name
+	}
+	if !slices.IsSorted(names) {
+		t.Fatalf("type names are not sorted: %v", names)
+	}
+
+	infos[0].Name = "mutated"
+	if _, ok := TypeInfoFor("mutated"); ok {
+		t.Fatal("TypeInfos exposed mutable registry state")
+	}
+}
+
+func TestGraphMetricRegistryInvariants(t *testing.T) {
+	for checkType, declared := range graphMetrics {
+		if !IsSingleShotType(checkType) {
+			t.Errorf("graph metrics reference unknown check type %q", checkType)
+		}
+		seen := make(map[string]struct{}, len(declared))
+		for _, metric := range declared {
+			if metric.Key == "" {
+				t.Errorf("%q declares a graph metric with an empty key", checkType)
+			}
+			if _, duplicate := seen[metric.Key]; duplicate {
+				t.Errorf("%q declares graph metric %q more than once", checkType, metric.Key)
+			}
+			seen[metric.Key] = struct{}{}
 		}
 	}
 }

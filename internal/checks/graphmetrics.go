@@ -1,6 +1,10 @@
 package checks
 
-import "sermo/internal/metrics"
+import (
+	"slices"
+
+	"sermo/internal/metrics"
+)
 
 // GraphMetric describes a numeric field a check publishes in its Result.Data for
 // time-series graphing: the Data key, the unit shown in the UI, and how the
@@ -35,7 +39,7 @@ var graphMetrics = map[string][]GraphMetric{
 
 // GraphMetrics returns the graphable metrics declared for a check type, or nil
 // when the type publishes none.
-func GraphMetrics(checkType string) []GraphMetric { return graphMetrics[checkType] }
+func GraphMetrics(checkType string) []GraphMetric { return slices.Clone(graphMetrics[checkType]) }
 
 // DeclaredGraphMetrics returns the graphable metrics for one configured check:
 // the check type's static set, plus its own scalar result when the check

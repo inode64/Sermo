@@ -1045,4 +1045,10 @@ func TestDeclaredGraphMetrics(t *testing.T) {
 	if len(static) > 0 && GraphMetrics(CheckTypeSensors)[0].Key != static[0].Key {
 		t.Error("DeclaredGraphMetrics must not mutate the static per-type table")
 	}
+	if len(static) > 0 {
+		static[0].Key = "mutated"
+		if GraphMetrics(CheckTypeSensors)[0].Key == "mutated" {
+			t.Error("GraphMetrics exposed mutable registry state")
+		}
+	}
 }

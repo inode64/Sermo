@@ -877,9 +877,12 @@ func validateSingleShotCheckFields(path, typ string, entry map[string]any, locks
 		return false
 	}
 	validateInterfaceFields(path, entry, add)
-	if validate := singleShotCheckValidators[typ]; validate != nil {
-		validate(path, entry, locksDir, add)
+	validate := singleShotCheckValidators[typ]
+	if validate == nil {
+		add("%s type %q is unavailable because its field validator is not registered", path, typ)
+		return true
 	}
+	validate(path, entry, locksDir, add)
 	return true
 }
 
