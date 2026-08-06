@@ -9,8 +9,6 @@ import (
 	"strings"
 )
 
-func init() { Register(nutProtocol{}, protocolAliasUPS, protocolAliasUPSD) }
-
 const nutVarUPSStatus = "ups.status"
 
 const (

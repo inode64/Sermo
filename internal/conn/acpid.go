@@ -1,7 +1,5 @@
 package conn
 
-func init() { Register(acpidProtocol) }
-
 // DefaultACPIDSocket is acpid's well-known local event socket.
 const DefaultACPIDSocket = "/run/acpid.socket"
 

@@ -13,8 +13,6 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
-func init() { Register(sshProtocol{}) }
-
 // sshProtocol probes an SSH server using golang.org/x/crypto/ssh. With no
 // credentials it is an anonymous check: it completes the key exchange to capture
 // the server's host key (fingerprint + algorithm) and identification banner —

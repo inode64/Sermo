@@ -14,8 +14,6 @@ import (
 	"sermo/internal/cfgval"
 )
 
-func init() { Register(dbusProtocol{}) }
-
 const (
 	// dbusDefaultAddress is the well-known system bus address.
 	dbusDefaultAddress = "unix:path=/run/dbus/system_bus_socket"

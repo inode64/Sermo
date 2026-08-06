@@ -14,8 +14,6 @@ import (
 	"sermo/internal/netutil"
 )
 
-func init() { Register(ntpProtocol{}) }
-
 const (
 	ntpExtraKeyPrecisionSeconds = "precision_seconds"
 

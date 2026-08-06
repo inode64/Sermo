@@ -6,8 +6,6 @@ import (
 	"net/http"
 )
 
-func init() { Register(influxdbProtocol{}, protocolAliasInflux) }
-
 // influxdbProtocol probes an InfluxDB server via its HTTP API. It GETs /health
 // (InfluxDB 2.x and 1.8+) and verifies a JSON `status` of "pass" — reporting the
 // server `version` — falling back to /ping (all versions), which answers 204 with

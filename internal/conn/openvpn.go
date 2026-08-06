@@ -11,8 +11,6 @@ import (
 	"net"
 )
 
-func init() { Register(openvpnProtocol{}, protocolAliasOpenVPN) }
-
 // OpenVPN control-channel opcodes (src/openvpn/ssl_pkt.h). The first byte packs
 // the opcode in the high 5 bits and the key id in the low 3 (opcode = b>>3).
 const (

@@ -20,8 +20,10 @@ func (fakeProto) RequiresUser() bool                            { return true }
 func (fakeProto) Probe(context.Context, Config) (Result, error) { return Result{}, nil }
 
 func TestRegistryLookupAndAlias(t *testing.T) {
-	reg := newRegistry()
-	reg.register(fakeProto{name: "demo"}, "demo-alias")
+	reg, err := newRegistry([]protocolRegistration{{protocol: fakeProto{name: "demo"}, aliases: []string{"demo-alias"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	if p, ok := reg.lookup("demo"); !ok || p.Name() != "demo" {
 		t.Fatalf("lookup demo = %v/%v", p, ok)
@@ -31,6 +33,26 @@ func TestRegistryLookupAndAlias(t *testing.T) {
 	}
 	if _, ok := reg.lookup("nope"); ok {
 		t.Fatal("unknown name must not resolve")
+	}
+}
+
+func TestRegistryRejectsInvalidRegistrations(t *testing.T) {
+	tests := []struct {
+		name          string
+		registrations []protocolRegistration
+	}{
+		{name: "nil protocol", registrations: []protocolRegistration{{}}},
+		{name: "empty canonical name", registrations: []protocolRegistration{{protocol: fakeProto{}}}},
+		{name: "empty alias", registrations: []protocolRegistration{{protocol: fakeProto{name: "one"}, aliases: []string{""}}}},
+		{name: "duplicate canonical name", registrations: []protocolRegistration{{protocol: fakeProto{name: "one"}}, {protocol: fakeProto{name: "one"}}}},
+		{name: "alias collision", registrations: []protocolRegistration{{protocol: fakeProto{name: "one"}, aliases: []string{"shared"}}, {protocol: fakeProto{name: "two"}, aliases: []string{"shared"}}}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if _, err := newRegistry(test.registrations); err == nil {
+				t.Fatal("newRegistry() error = nil")
+			}
+		})
 	}
 }
 
@@ -57,9 +79,6 @@ func TestDocsRulesProtocolListMatchesRegistry(t *testing.T) {
 }
 
 func registeredProtocolsForDocs() map[string][]string {
-	defaultRegistry.mu.RLock()
-	defer defaultRegistry.mu.RUnlock()
-
 	out := map[string][]string{}
 	for name, proto := range defaultRegistry.byName {
 		canonical := proto.Name()

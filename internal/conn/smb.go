@@ -14,8 +14,6 @@ import (
 	"github.com/cloudsoda/go-smb2"
 )
 
-func init() { Register(smbProtocol{}, protocolAliasSamba, protocolAliasCIFS) }
-
 // smbProtocol probes an SMB/CIFS server (e.g. Samba). It first runs a native
 // SMB2 NEGOTIATE to learn the dialect, protocol family and whether signing is
 // required (the go-smb2 library does not expose these), which also proves the

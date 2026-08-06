@@ -303,7 +303,7 @@ type checkBuilder func(checkBuildInput) (Check, string)
 
 // builtinCheckSpecs is the central registry for built-in checks. It keeps
 // construction and static type capabilities together. Connection protocols
-// remain in conn's own registry because their types are extensible.
+// remain in conn's own registry because conn owns their catalog and aliases.
 var builtinCheckSpecs = []checkSpec{
 	{info: TypeInfo{Name: CheckTypeTCP, Health: true}, build: func(in checkBuildInput) (Check, string) { return buildTCPCheck(in.base, in.entry) }},
 	{info: TypeInfo{Name: CheckTypeTCPConnections}, build: func(in checkBuildInput) (Check, string) { return buildTCPConnectionsCheck(in.base, in.entry) }},

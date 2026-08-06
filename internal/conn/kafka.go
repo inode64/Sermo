@@ -10,8 +10,6 @@ import (
 	"sermo/internal/units"
 )
 
-func init() { Register(kafkaProtocol{}) }
-
 // kafkaProtocol probes a Kafka listener natively over the Kafka wire protocol —
 // no external client or shell tool. It sends an ApiVersions request (API key 18,
 // version 0), which a broker or a KRaft controller answers before any

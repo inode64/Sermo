@@ -9,8 +9,6 @@ import (
 	"strings"
 )
 
-func init() { Register(guacdProtocol{}, protocolAliasGuacamole) }
-
 const (
 	guacdDefaultProtocol = "vnc"
 	guacdSelectOp        = "select"

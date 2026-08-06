@@ -10,11 +10,6 @@ import (
 	"strings"
 )
 
-func init() {
-	// Valkey is a redis fork speaking the same RESP protocol.
-	Register(redisProtocol{}, protocolAliasValkey)
-}
-
 const (
 	redisCommandAuth         = "AUTH"
 	redisCommandInfo         = "INFO"

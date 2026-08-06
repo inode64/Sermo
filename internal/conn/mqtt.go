@@ -9,8 +9,6 @@ import (
 	"strconv"
 )
 
-func init() { Register(mqttProtocol{}) }
-
 const (
 	mqttClientID                          = "sermo-check"
 	mqttProtocolName                      = "MQTT"

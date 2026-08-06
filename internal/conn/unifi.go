@@ -7,8 +7,6 @@ import (
 	"net/http"
 )
 
-func init() { Register(unifiProtocol{}, protocolAliasUniFiController, protocolAliasUniFiNetwork) }
-
 const (
 	unifiRCOK           = "ok"
 	unifiStatusEndpoint = "/status"

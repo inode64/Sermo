@@ -9,10 +9,6 @@ import (
 	"strings"
 )
 
-func init() {
-	Register(openvswitchProtocol{}, protocolAliasOVS, protocolAliasOVSDB, protocolAliasOVSDBServer)
-}
-
 // openvswitchProtocol probes Open vSwitch's configuration database server
 // (ovsdb-server) over the OVSDB management protocol (RFC 7047), a JSON-RPC
 // dialogue. It issues a `list_dbs` request and verifies a JSON-RPC result

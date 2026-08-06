@@ -5,10 +5,6 @@ import (
 	"strconv"
 )
 
-func init() {
-	Register(statdProtocol{}, protocolAliasRPCStatd, protocolAliasNSM, protocolAliasNFSStatd)
-}
-
 // NSM (Network Status Monitor) program number (RFC 1813 appendix; statd). Only
 // version 1 exists; the NULL procedure (0) is always present.
 const (

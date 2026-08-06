@@ -7,8 +7,6 @@ import (
 	"fmt"
 )
 
-func init() { Register(rdpProtocol{}, protocolAliasMSWBTServer) }
-
 // RDP negotiation requested protocols (MS-RDPBCGR): standard RDP security, TLS
 // and CredSSP/NLA — advertising all lets the server pick and report its policy.
 const rdpRequestedProtocols = 0x00000003 // PROTOCOL_SSL | PROTOCOL_HYBRID

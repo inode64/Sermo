@@ -1,7 +1,5 @@
 package conn
 
-func init() { Register(fail2banProtocol) }
-
 // DefaultFail2banSocket is fail2ban-server's well-known control socket.
 const DefaultFail2banSocket = "/run/fail2ban/fail2ban.sock"
 
