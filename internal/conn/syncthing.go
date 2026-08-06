@@ -25,7 +25,7 @@ func (syncthingProtocol) DefaultPort() int   { return defaultPortSyncthing }
 func (syncthingProtocol) RequiresUser() bool { return false }
 
 func (syncthingProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	client, base := httpProbeBase(cfg, defaultPortSyncthing)
+	client, base := httpProbeBase(ctx, cfg, defaultPortSyncthing)
 
 	// 1. Unauthenticated health check — proves the daemon is up.
 	var health struct {

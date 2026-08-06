@@ -21,7 +21,7 @@ func (postgresProtocol) RequiresUser() bool { return true }
 // the server responds with a ping, and reads its version. The caller's context
 // bounds the whole probe.
 func (postgresProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	db, err := openPostgresDB(cfg)
+	db, err := openPostgresDB(ctx, cfg)
 	if err != nil {
 		return Result{}, err
 	}
@@ -37,8 +37,8 @@ func PostgresDSN(cfg Config) string { return buildPGDSN(cfg) }
 
 // openPostgresDB opens a PostgreSQL pool via lib/pq, routing TCP dials through
 // BindDialer when cfg.Interface is set so multihomed probes egress the right link.
-func openPostgresDB(cfg Config) (*sql.DB, error) {
-	connector, err := postgresConnector(cfg)
+func openPostgresDB(ctx context.Context, cfg Config) (*sql.DB, error) {
+	connector, err := postgresConnector(ctx, cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -48,13 +48,14 @@ func openPostgresDB(cfg Config) (*sql.DB, error) {
 // postgresConnector builds the lib/pq connector for cfg, routing TCP dials
 // through BindDialer when cfg.Interface is set. Tests also use it to verify
 // interface binding is wired without opening a connection.
-func postgresConnector(cfg Config) (*pq.Connector, error) {
-	connector, err := pq.NewConnector(buildPGDSN(cfg))
+func postgresConnector(ctx context.Context, cfg Config) (*pq.Connector, error) {
+	target := probeTargetFor(ctx, cfg, defaultPortPostgres)
+	connector, err := pq.NewConnector(buildPGDSNWithTarget(cfg, target))
 	if err != nil {
 		return nil, fmt.Errorf("postgres connector: %w", err)
 	}
 	if cfg.Interface != "" {
-		connector.Dialer(pqDialer(newProbeTarget(cfg, defaultPortPostgres)))
+		connector.Dialer(pqDialer(target))
 	}
 	return connector, nil
 }
@@ -62,10 +63,14 @@ func postgresConnector(cfg Config) (*pq.Connector, error) {
 // buildPGDSN renders a lib/pq connection URL from cfg. A URL (with
 // url.UserPassword) escapes special characters in the password correctly.
 func buildPGDSN(cfg Config) string {
+	return buildPGDSNWithTarget(cfg, newProbeTarget(cfg, defaultPortPostgres))
+}
+
+func buildPGDSNWithTarget(cfg Config, target probeTarget) string {
 	u := url.URL{
 		Scheme: ProtocolNamePostgres,
 		User:   url.UserPassword(cfg.User, cfg.Password),
-		Host:   newProbeTarget(cfg, defaultPortPostgres).address(),
+		Host:   target.address(),
 		Path:   "/" + cfg.Database,
 	}
 	q := url.Values{}

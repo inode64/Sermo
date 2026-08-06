@@ -31,16 +31,16 @@ func httpProbeClient(iface string, tlsConfig *tls.Config) *http.Client {
 // probes. Its client always preserves cfg.Interface through httpProbeClient;
 // TLS follows the normal probe policy (plaintext by default, or HTTPS with an
 // optional operator-selected skip-verify mode).
-func httpProbeBase(cfg Config, defaultPort int) (*http.Client, string) {
-	return httpProbeBaseWithTLSMode(cfg, defaultPort, NormalizeTLS(cfg.TLS))
+func httpProbeBase(ctx context.Context, cfg Config, defaultPort int) (*http.Client, string) {
+	return httpProbeBaseWithTLSMode(ctx, cfg, defaultPort, NormalizeTLS(cfg.TLS))
 }
 
 // httpProbeBaseWithTLSMode builds an HTTP probe target with an explicit TLS
 // policy. Most protocols use httpProbeBase and inherit cfg.TLS; protocols with
 // a documented policy (such as UniFi's self-signed HTTPS default) pass their
 // resolved mode here without duplicating host/port or interface binding.
-func httpProbeBaseWithTLSMode(cfg Config, defaultPort int, tlsMode string) (*http.Client, string) {
-	target := newProbeTarget(cfg, defaultPort)
+func httpProbeBaseWithTLSMode(ctx context.Context, cfg Config, defaultPort int, tlsMode string) (*http.Client, string) {
+	target := probeTargetFor(ctx, cfg, defaultPort)
 	host, _ := target.hostPort()
 	scheme := schemeHTTP
 	client := httpProbeClient(target.cfg.Interface, nil)

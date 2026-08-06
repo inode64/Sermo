@@ -52,8 +52,8 @@ func (libvirtProtocol) DefaultPort() int   { return defaultPortLibvirt }
 func (libvirtProtocol) RequiresUser() bool { return false }
 
 func (libvirtProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	mode, addr, uri := libvirtTransport(cfg)
-	target := newProbeTarget(cfg, defaultPortLibvirt)
+	target := probeTargetFor(ctx, cfg, defaultPortLibvirt)
+	mode, addr, uri := libvirtTransportWithTarget(cfg, target)
 	timeout := netutil.TimeoutFromContext(ctx, DefaultLibvirtTimeout)
 
 	var l *libvirt.Libvirt
@@ -171,6 +171,10 @@ func libvirtDomainState(s int32) string {
 // config: an explicit socket path, otherwise plain TCP to host:port. The connect
 // URI defaults to qemu:///system.
 func libvirtTransport(cfg Config) (mode, addr, uri string) {
+	return libvirtTransportWithTarget(cfg, newProbeTarget(cfg, defaultPortLibvirt))
+}
+
+func libvirtTransportWithTarget(cfg Config, target probeTarget) (mode, addr, uri string) {
 	uri = cfg.Query
 	if uri == "" {
 		uri = string(libvirt.QEMUSystem)
@@ -178,7 +182,7 @@ func libvirtTransport(cfg Config) (mode, addr, uri string) {
 	if cfg.Socket != "" {
 		return libvirtTransportSocket, cfg.Socket, uri
 	}
-	return networkTCP, newProbeTarget(cfg, defaultPortLibvirt).address(), uri
+	return networkTCP, target.address(), uri
 }
 
 // formatLibvirtVersion renders libvirt's packed version (major*1e6 + minor*1e3 +

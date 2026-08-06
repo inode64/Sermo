@@ -32,7 +32,7 @@ func (unifiProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	if NormalizeTLS(cfg.TLS) == ParamValueTrue {
 		tlsMode = ParamValueTrue
 	}
-	client, base := httpProbeBaseWithTLSMode(cfg, defaultPortUniFi, tlsMode)
+	client, base := httpProbeBaseWithTLSMode(ctx, cfg, defaultPortUniFi, tlsMode)
 	url := base + unifiStatusEndpoint
 	resp, err := getHTTPProbe(ctx, client, url, maxHTTPProbeBody)
 	if err != nil {

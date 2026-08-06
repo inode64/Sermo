@@ -63,7 +63,7 @@ func (openvpnProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	}
 
 	sid := openvpnSessionID()
-	c, err := newProbeTarget(cfg, defaultPortOpenVPN).openNetwork(ctx, transport)
+	c, err := probeTargetFor(ctx, cfg, defaultPortOpenVPN).openNetwork(ctx, transport)
 	if err != nil {
 		return Result{}, probeErr(ProtocolNameOpenVPN, stepDial, err)
 	}

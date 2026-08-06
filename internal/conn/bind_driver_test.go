@@ -18,7 +18,7 @@ func TestInterfaceBindingApplied(t *testing.T) {
 	}{
 		{"mongo", func(t *testing.T) {
 			t.Helper()
-			client, err := MongoConnect(Config{Host: "127.0.0.1", Interface: "eth0"})
+			client, err := MongoConnect(context.Background(), Config{Host: "127.0.0.1", Interface: "eth0"})
 			if err != nil {
 				t.Fatalf("MongoConnect: %v", err)
 			}
@@ -26,7 +26,7 @@ func TestInterfaceBindingApplied(t *testing.T) {
 		}},
 		{"postgres-connector", func(t *testing.T) {
 			t.Helper()
-			if _, err := postgresConnector(Config{User: "u", Interface: "eth0"}); err != nil {
+			if _, err := postgresConnector(context.Background(), Config{User: "u", Interface: "eth0"}); err != nil {
 				t.Fatalf("postgresConnector: %v", err)
 			}
 		}},
@@ -68,7 +68,7 @@ func TestInterfaceBindingApplied(t *testing.T) {
 		}},
 		{"http-probe-base", func(t *testing.T) {
 			t.Helper()
-			client, base := httpProbeBase(Config{Host: "probe.example", Port: 8443, TLS: tlsSkipVerify, Interface: "eth0"}, 8080)
+			client, base := httpProbeBase(context.Background(), Config{Host: "probe.example", Port: 8443, TLS: tlsSkipVerify, Interface: "eth0"}, 8080)
 			if base != "https://probe.example:8443" {
 				t.Fatalf("base = %q", base)
 			}
@@ -79,7 +79,7 @@ func TestInterfaceBindingApplied(t *testing.T) {
 		}},
 		{"http-probe-base-explicit-TLS", func(t *testing.T) {
 			t.Helper()
-			client, base := httpProbeBaseWithTLSMode(Config{Host: "probe.example", Interface: "eth0"}, 8080, tlsSkipVerify)
+			client, base := httpProbeBaseWithTLSMode(context.Background(), Config{Host: "probe.example", Interface: "eth0"}, 8080, tlsSkipVerify)
 			if base != "https://probe.example:8080" {
 				t.Fatalf("base = %q", base)
 			}

@@ -373,7 +373,7 @@ func probeLineCommand(ctx context.Context, cfg Config, defaultPort int, command 
 // deadline, sends request, and returns the first reply datagram (up to
 // bufBytes). The round-trip shared by the datagram probes (rpcbind, nebula).
 func exchangeUDP(ctx context.Context, cfg Config, defaultPort int, request []byte, bufBytes int) ([]byte, error) {
-	c, err := newProbeTarget(cfg, defaultPort).openUDP(ctx)
+	c, err := probeTargetFor(ctx, cfg, defaultPort).openUDP(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("open UDP exchange: %w", err)
 	}

@@ -99,7 +99,7 @@ func snmpVersionName(cfg Config) string {
 // when no user is set, otherwise v3 USM (authNoPriv with SHA when a password is
 // present, else noAuthNoPriv).
 func buildSNMPParams(ctx context.Context, cfg Config, timeout time.Duration) *g.GoSNMP {
-	target := newProbeTarget(cfg, defaultSNMPPort)
+	target := probeTargetFor(ctx, cfg, defaultSNMPPort)
 	host, port := target.hostPort()
 	p := &g.GoSNMP{
 		Target: host,

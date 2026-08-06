@@ -48,7 +48,7 @@ func (c influxCheck) Run(ctx context.Context) Result {
 	defer run.close()
 	start := run.start
 
-	client, base := conn.InfluxClient(c.cfg)
+	client, base := conn.InfluxClient(ctx, c.cfg)
 	result, isNull, err := c.queryScalar(ctx, client, base)
 	if err != nil {
 		return c.result(false, "influxdb: "+err.Error(), start)

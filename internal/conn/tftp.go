@@ -51,7 +51,7 @@ func (tftpProtocol) DefaultPort() int   { return defaultPortTFTP }
 func (tftpProtocol) RequiresUser() bool { return false }
 
 func (tftpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	server, err := net.ResolveUDPAddr(networkUDP, newProbeTarget(cfg, defaultPortTFTP).address())
+	server, err := net.ResolveUDPAddr(networkUDP, probeTargetFor(ctx, cfg, defaultPortTFTP).address())
 	if err != nil {
 		return Result{}, probeErr(ProtocolNameTFTP, stepResolveServer, err)
 	}

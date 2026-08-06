@@ -36,7 +36,7 @@ func (mysqlProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 		// afterwards), so dial without TLS regardless of cfg.TLS.
 		plain := cfg
 		plain.TLS = ""
-		c, err := newProbeTarget(plain, defaultPortMySQL).openStream(ctx)
+		c, err := probeTargetFor(ctx, plain, defaultPortMySQL).openStream(ctx)
 		if err != nil {
 			return Result{}, err
 		}
@@ -44,7 +44,7 @@ func (mysqlProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 		return mysqlGreeting(c)
 	}
 
-	db, err := sql.Open(ProtocolNameMySQL, buildDSN(cfg))
+	db, err := sql.Open(ProtocolNameMySQL, buildMySQLProbeDSN(ctx, cfg))
 	if err != nil {
 		return Result{}, probeErr(ProtocolNameMySQL, stepOpen, err)
 	}
@@ -123,7 +123,10 @@ func MySQLDSN(cfg Config) string { return buildDSN(cfg) }
 // buildMySQLConfig renders a go-sql-driver config from cfg. When cfg.Interface
 // is set, TCP dials egress through BindDialer (SO_BINDTODEVICE).
 func buildMySQLConfig(cfg Config) *mysql.Config {
-	target := newProbeTarget(cfg, defaultPortMySQL)
+	return buildMySQLConfigWithTarget(cfg, newProbeTarget(cfg, defaultPortMySQL))
+}
+
+func buildMySQLConfigWithTarget(cfg Config, target probeTarget) *mysql.Config {
 	c := mysql.NewConfig()
 	c.Net = networkTCP
 	c.Addr = target.address()
@@ -147,4 +150,8 @@ func buildMySQLConfig(cfg Config) *mysql.Config {
 // special characters in the password are escaped correctly.
 func buildDSN(cfg Config) string {
 	return buildMySQLConfig(cfg).FormatDSN()
+}
+
+func buildMySQLProbeDSN(ctx context.Context, cfg Config) string {
+	return buildMySQLConfigWithTarget(cfg, probeTargetFor(ctx, cfg, defaultPortMySQL)).FormatDSN()
 }

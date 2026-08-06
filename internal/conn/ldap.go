@@ -29,7 +29,7 @@ func (ldapProtocol) DefaultPort() int   { return defaultLDAPPort }
 func (ldapProtocol) RequiresUser() bool { return false }
 
 func (ldapProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	target := newProbeTarget(cfg, defaultLDAPPort)
+	target := probeTargetFor(ctx, cfg, defaultLDAPPort)
 	host, port := target.hostPort()
 	timeout := netutil.TimeoutFromContext(ctx, defaultLDAPProbeTimeout)
 
