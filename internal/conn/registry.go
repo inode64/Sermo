@@ -2,6 +2,7 @@ package conn
 
 import (
 	"context"
+	"errors"
 	"fmt"
 )
 
@@ -46,7 +47,7 @@ var builtinProtocolRegistrations = []protocolRegistration{
 	{protocol: lvmpolldProtocol{}, defaultSocket: DefaultLVMPolldSocket},
 	{protocol: memcachedProtocol{}, aliases: []string{protocolAliasMemcache}},
 	{protocol: mongodbProtocol{}, aliases: []string{protocolAliasMongo}},
-	{protocol: mountdProtocol{}, aliases: []string{protocolAliasRPCMountd, protocolAliasNFSMountd}},
+	{protocol: mountdProtocol, aliases: []string{protocolAliasRPCMountd, protocolAliasNFSMountd}},
 	{protocol: mqttProtocol{}},
 	{protocol: mysqlProtocol{}, aliases: []string{protocolAliasMariaDB}},
 	{protocol: nebulaProtocol{}, aliases: []string{protocolAliasNebulaVPN}},
@@ -70,7 +71,7 @@ var builtinProtocolRegistrations = []protocolRegistration{
 	{protocol: snmpProtocol{}},
 	{protocol: spamdProtocol{}, aliases: []string{protocolAliasSpamAssassin}},
 	{protocol: sshProtocol{}},
-	{protocol: statdProtocol{}, aliases: []string{protocolAliasRPCStatd, protocolAliasNSM, protocolAliasNFSStatd}},
+	{protocol: statdProtocol, aliases: []string{protocolAliasRPCStatd, protocolAliasNSM, protocolAliasNFSStatd}},
 	{protocol: syncthingProtocol{}},
 	{protocol: tftpProtocol{}},
 	{protocol: unifiProtocol{}, aliases: []string{protocolAliasUniFiController, protocolAliasUniFiNetwork}},
@@ -106,11 +107,11 @@ func newRegistry(registrations []protocolRegistration) (*registry, error) {
 	byCanonical := make(map[string]protocolRegistration, len(registrations))
 	for _, registration := range registrations {
 		if registration.protocol == nil {
-			return nil, fmt.Errorf("register connection protocol: nil implementation")
+			return nil, errors.New("register connection protocol: nil implementation")
 		}
 		name := registration.protocol.Name()
 		if name == "" {
-			return nil, fmt.Errorf("register connection protocol: empty canonical name")
+			return nil, errors.New("register connection protocol: empty canonical name")
 		}
 		registered := registeredProtocol{registration: registration}
 		if err := registerProtocolName(byName, name, registered); err != nil {
@@ -162,6 +163,19 @@ var defaultRegistry = mustRegistry(builtinProtocolRegistrations)
 //nolint:ireturn // The public registry API returns the protocol interface selected at runtime.
 func Lookup(name string) (Protocol, bool) { return defaultRegistry.lookup(name) }
 
+// Prepare returns the registered protocol selected by name together with a
+// config whose target defaults are resolved. The returned protocol always
+// enters the common executor when Probe is called.
+//
+//nolint:ireturn // Preparation returns the protocol interface selected at runtime.
+func Prepare(name string, cfg Config) (Protocol, Config, bool) {
+	protocol, ok := Lookup(name)
+	if !ok {
+		return nil, cfg, false
+	}
+	return protocol, Resolve(protocol, cfg), true
+}
+
 // Resolve applies one protocol's target defaults to cfg. An explicit socket,
 // host or port always wins; when neither socket nor host was selected, a
 // protocol with a well-known local socket prefers it over loopback TCP.
@@ -191,14 +205,4 @@ func resolveProtocolTarget(protocol Protocol, defaultSocket string, cfg Config) 
 		cfg.Port = protocol.DefaultPort()
 	}
 	return cfg
-}
-
-// DefaultPort returns the registered protocol's default port, or 0 when name is
-// not registered.
-func DefaultPort(name string) int {
-	protocol, ok := Lookup(name)
-	if !ok {
-		return defaultPortNone
-	}
-	return protocol.DefaultPort()
 }

@@ -1,10 +1,5 @@
 package conn
 
-import (
-	"context"
-	"strconv"
-)
-
 // NSM (Network Status Monitor) program number (RFC 1813 appendix; statd). Only
 // version 1 exists; the NULL procedure (0) is always present.
 const (
@@ -20,12 +15,9 @@ const (
 // with rpcbind — so set `port` to the daemon's configured port; it defaults to
 // 662, the conventional fixed statd port. No auth. Reuses the RPC helpers of the
 // rpcbind/nfs probes.
-type statdProtocol struct{}
-
-func (statdProtocol) Name() string       { return ProtocolNameStatd }
-func (statdProtocol) DefaultPort() int   { return defaultPortStatd }
-func (statdProtocol) RequiresUser() bool { return false }
-
-func (statdProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	return probeRPCNull(ctx, cfg, defaultPortStatd, statdProg, statdVers, strconv.Itoa(statdProg))
+var statdProtocol = rpcNullProtocol{
+	name:        ProtocolNameStatd,
+	defaultPort: defaultPortStatd,
+	program:     statdProg,
+	version:     statdVers,
 }

@@ -322,8 +322,25 @@ Every `internal/conn` protocol probe must honor `cfg.Interface` — the egress
 network interface (Linux `SO_BINDTODEVICE`), set on multi-homed hosts so a probe
 leaves through a specific link. The shared `BindDialer(cfg.Interface)` (and
 `BindListenConfig` for packet sockets) is the single mechanism; every probe dials
-through it, directly or via `probeBanner`/`dialDeadline`/`dialConn`. A probe that
-silently uses default routing is a bug.
+through it. A probe that silently uses default routing is a bug.
+
+All built-in protocols are declared once in
+`internal/conn/registry.go`, including aliases and well-known socket defaults.
+Do not add package `init` registration or duplicate target defaults in check
+builders. `Lookup`/`Prepare` return a registered wrapper whose `Probe` method
+enters `executeProbe`; that executor resolves the target and creates the common
+probe context exactly once. Transport helpers and library adapters obtain that
+prepared target through `probeTargetFor`. `internal/checks` continues to own
+check semantics such as interface match policy, latency/response assertions and
+change tracking; both service checks and host watches reach the same registered
+probe through their central builders.
+
+Only rebuild a target inside a protocol when its wire format selects a genuinely
+different endpoint. Document that decision at the call. Current examples are a
+TCP endpoint parsed from a full D-Bus address and MySQL's pre-TLS greeting. A
+chronyd Unix command socket is a separate transport exception: it is
+`SOCK_DGRAM` and must bind a named client socket, so it cannot use the common
+stream Unix dial.
 
 This constrains adopting a Go module to "simplify" a protocol. Decide by where the
 library does its I/O:

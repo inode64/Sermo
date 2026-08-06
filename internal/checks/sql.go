@@ -134,11 +134,9 @@ func buildSQLCheck(b base, entry map[string]any) (Check, string) {
 // the port to the engine's standard port (via the conn registry).
 func sqlConnConfig(engine string, entry map[string]any) conn.Config {
 	cfg := databaseConnectionConfig(entry)
-	if proto, ok := conn.Lookup(engine); ok {
-		cfg.Port = connectionPort(entry, 0)
-		cfg = conn.Resolve(proto, cfg)
-	} else {
-		cfg.Port = connectionPort(entry, cfg.Port)
+	cfg.Port = connectionPort(entry, 0)
+	if _, resolved, ok := conn.Prepare(engine, cfg); ok {
+		return resolved
 	}
 	return cfg
 }

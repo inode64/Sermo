@@ -18,6 +18,9 @@ func TestProbeMetadata(t *testing.T) {
 			if resolved.Name() != protocol.Name() {
 				t.Errorf("%s resolves to %q, want %q", name, resolved.Name(), protocol.Name())
 			}
+			if _, ok := resolved.(registeredProtocol); !ok {
+				t.Errorf("%s resolved to %T, want the common registered-protocol wrapper", name, resolved)
+			}
 			if resolved.DefaultPort() != protocol.DefaultPort() {
 				t.Errorf("%s default port = %d, want %d", name, resolved.DefaultPort(), protocol.DefaultPort())
 			}

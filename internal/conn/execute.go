@@ -2,31 +2,33 @@ package conn
 
 import "context"
 
-// probeContext is the common runtime state prepared once for every registered
-// protocol invocation. Embedding the caller context preserves cancellation and
-// deadlines while making the resolved config and bound target available to the
-// shared transport adapters.
-type probeContext struct {
-	context.Context
+// probeState is the common runtime state prepared once for every registered
+// protocol invocation and carried by a context derived from the caller. The
+// resolved config and bound target are then available to every transport
+// adapter without weakening cancellation or deadline propagation.
+type probeState struct {
 	config Config
 	target probeTarget
 }
 
-func newProbeContext(ctx context.Context, registration protocolRegistration, cfg Config) probeContext {
+type probeContextKey struct{}
+
+func newProbeContext(ctx context.Context, registration protocolRegistration, cfg Config) (context.Context, Config) {
 	cfg = resolveRegistration(registration, cfg)
-	return probeContext{
-		Context: ctx,
-		config:  cfg,
-		target:  newProbeTarget(cfg, registration.protocol.DefaultPort()),
+	state := probeState{
+		config: cfg,
+		target: newProbeTarget(cfg, registration.protocol.DefaultPort()),
 	}
+	return context.WithValue(ctx, probeContextKey{}, state), cfg
 }
 
 // executeProbe is the single runtime entry point for registered protocols.
 // Concrete Probe methods remain private wire implementations; callers receive
 // registeredProtocol from Lookup and therefore cannot bypass this preparation.
 func executeProbe(ctx context.Context, registration protocolRegistration, cfg Config) (Result, error) {
-	probe := newProbeContext(ctx, registration, cfg)
-	return registration.protocol.Probe(probe, probe.config)
+	ctx, cfg = newProbeContext(ctx, registration, cfg)
+	//nolint:wrapcheck // Wire implementations already provide protocol/step context; the executor must preserve their user-facing error unchanged.
+	return registration.protocol.Probe(ctx, cfg)
 }
 
 // probeTargetFor reuses the target prepared by executeProbe when a transport
@@ -34,9 +36,9 @@ func executeProbe(ctx context.Context, registration protocolRegistration, cfg Co
 // tests and protocol branches that deliberately alter transport settings keep
 // constructing the appropriate target locally.
 func probeTargetFor(ctx context.Context, cfg Config, defaultPort int) probeTarget {
-	if probe, ok := ctx.(probeContext); ok &&
-		probe.target.defaultPort == defaultPort && sameTransportConfig(probe.config, cfg) {
-		return probe.target
+	if state, ok := ctx.Value(probeContextKey{}).(probeState); ok &&
+		state.target.defaultPort == defaultPort && sameTransportConfig(state.config, cfg) {
+		return state.target
 	}
 	return newProbeTarget(cfg, defaultPort)
 }

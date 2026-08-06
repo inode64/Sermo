@@ -6,7 +6,7 @@ import (
 )
 
 func TestStatdProbeAgainstFakeServer(t *testing.T) {
-	assertProbeExtras(t, statdProtocol{}, rpcAcceptedTCPTestPort(t, 0),
+	assertProbeExtras(t, statdProtocol, rpcAcceptedTCPTestPort(t, 0),
 		map[string]string{"rpc_status": "success", "program": "100024"})
 }
 
@@ -19,5 +19,5 @@ func TestStatdProbeDenied(t *testing.T) {
 		binary.BigEndian.PutUint32(reply[8:], 1) // MSG_DENIED
 		return reply
 	})
-	assertProbeExtra(t, statdProtocol{}, port, "rpc_status", "denied")
+	assertProbeExtra(t, statdProtocol, port, "rpc_status", "denied")
 }

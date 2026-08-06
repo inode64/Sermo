@@ -29,7 +29,7 @@ type recordingProto struct {
 func (p *recordingProto) Probe(ctx context.Context, cfg Config) (Result, error) {
 	p.config = cfg
 	p.targetAddress = probeTargetFor(ctx, cfg, p.DefaultPort()).address()
-	_, p.commonContext = ctx.(probeContext)
+	_, p.commonContext = ctx.Value(probeContextKey{}).(probeState)
 	return Result{}, nil
 }
 
