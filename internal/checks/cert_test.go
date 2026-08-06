@@ -206,7 +206,7 @@ func TestBuildCertCheck(t *testing.T) {
 	// A healthy cert passes; a cert check without a host warns.
 	assertBuildThresholdFires(t, "cert",
 		map[string]any{"host": "api.example.com", "expires_in_days": 14, "on_algorithm_change": true},
-		Deps{CertSampler: fakeCert(healthyCert())})
+		Deps{Samplers: Samplers{CertSampler: fakeCert(healthyCert())}})
 }
 
 func TestCertCheckSource(t *testing.T) {
