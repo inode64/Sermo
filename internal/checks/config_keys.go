@@ -1,6 +1,9 @@
 package checks
 
-import "sermo/internal/netutil"
+import (
+	"sermo/internal/conn"
+	"sermo/internal/netutil"
+)
 
 // Check-entry YAML keys shared by builders, validators and web readers. These
 // names are part of Sermo's public configuration surface.
@@ -14,10 +17,11 @@ const (
 	CheckKeyBackend               = "backend"
 	CheckKeyBinary                = "binary"
 	CheckKeyBody                  = "body"
-	CheckKeyBusName               = "bus_name"
-	CheckKeyDBusInterface         = "dbus_interface"
-	CheckKeyDBusProbe             = "probe"
-	CheckKeyDBusProperty          = "property"
+	CheckKeyDBusBusName           = conn.ParamKeyDBusBusName
+	CheckKeyDBusInterface         = conn.ParamKeyDBusInterface
+	CheckKeyDBusObjectPath        = conn.ParamKeyDBusObjectPath
+	CheckKeyDBusProbe             = conn.ParamKeyDBusProbe
+	CheckKeyDBusProperty          = conn.ParamKeyDBusProperty
 	CheckKeyCertExpiresInDays     = "cert_expires_in_days"
 	CheckKeyCertOnAlgorithmChange = "cert_on_algorithm_change"
 	CheckKeyCertOnChange          = "cert_on_change"
@@ -94,7 +98,6 @@ const (
 	CheckKeyOp                    = "op"
 	CheckKeyOptional              = "optional"
 	CheckKeyOptions               = "options"
-	CheckKeyObjectPath            = "object_path"
 	CheckKeyOrg                   = "org"
 	CheckKeyOrigin                = "origin"
 	CheckKeyOwner                 = "owner"

@@ -555,6 +555,30 @@ func TestBuildDBusCheckRejectsInvalidTarget(t *testing.T) {
 	}
 }
 
+func TestDBusTargetEntrySchema(t *testing.T) {
+	wantFields := [5]string{"bus_name", "object_path", "probe", "dbus_interface", "property"}
+	if got := DBusTargetFields(); got != wantFields {
+		t.Fatalf("DBusTargetFields() = %v, want %v", got, wantFields)
+	}
+	entry := map[string]any{
+		CheckKeyDBusBusName:    "org.libvirt",
+		CheckKeyDBusObjectPath: "/org/libvirt",
+		CheckKeyDBusProbe:      conn.DBusProbeProperty,
+		CheckKeyDBusInterface:  "org.libvirt.Connect",
+		CheckKeyDBusProperty:   "Version",
+	}
+	wantTarget := conn.DBusTarget{
+		BusName:    "org.libvirt",
+		ObjectPath: "/org/libvirt",
+		Probe:      conn.DBusProbeProperty,
+		Interface:  "org.libvirt.Connect",
+		Property:   "Version",
+	}
+	if got := DBusTargetFromEntry(entry); got != wantTarget {
+		t.Fatalf("DBusTargetFromEntry() = %+v, want %+v", got, wantTarget)
+	}
+}
+
 func TestBuildAvahiCheck(t *testing.T) {
 	// No socket/query -> the system bus default address; default port 0; alias
 	// avahi-daemon resolves.
