@@ -58,7 +58,7 @@ const (
 // Probe opens the connection (TCP, TLS when configured) and runs the ApiVersions
 // handshake. The caller's context bounds it.
 func (kafkaProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	c, err := newProbeTarget(cfg, defaultPortKafka).openStream(ctx)
+	c, err := probeTargetFor(ctx, cfg, defaultPortKafka).openStream(ctx)
 	if err != nil {
 		return Result{}, err
 	}

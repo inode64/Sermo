@@ -33,7 +33,7 @@ func (varnishProtocol) DefaultPort() int   { return defaultPortVarnish }
 func (varnishProtocol) RequiresUser() bool { return false }
 
 func (varnishProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	c, err := newProbeTarget(cfg, defaultPortVarnish).openStream(ctx)
+	c, err := probeTargetFor(ctx, cfg, defaultPortVarnish).openStream(ctx)
 	if err != nil {
 		return Result{}, err
 	}
