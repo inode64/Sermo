@@ -41,6 +41,13 @@ type scriptedCheck struct {
 	calls   int
 }
 
+type panickingWatchCheck struct{}
+
+func (panickingWatchCheck) Name() string { return "panic-probe" }
+func (panickingWatchCheck) Run(context.Context) checks.Result {
+	panic("bad probe response")
+}
+
 func (c *scriptedCheck) Name() string { return "scripted" }
 func (c *scriptedCheck) Run(context.Context) checks.Result {
 	if c.calls >= len(c.results) {
@@ -82,6 +89,27 @@ func TestWatchPublishesResultSnapshot(t *testing.T) {
 	got := snapshots.Get("disk", checks.CheckTypeHdparm)
 	if len(got) != 1 || got[0].Data[checks.HdparmFieldRead] != 500.0 {
 		t.Fatalf("published snapshot = %+v, want hdparm reading", got)
+	}
+}
+
+func TestWatchPublishesUnavailableResultWhenCheckPanics(t *testing.T) {
+	var published checks.Result
+	w := &Watch{
+		Name:      "panic-watch",
+		CheckType: checks.CheckTypeCommand,
+		Check:     panickingWatchCheck{},
+		Publish: func(_, _ string, result checks.Result) {
+			published = result
+		},
+	}
+
+	w.RunCycle(context.Background())
+
+	if published.Check != "panic-probe" || !published.Unavailable {
+		t.Fatalf("published result = %+v, want unavailable panic result", published)
+	}
+	if !strings.Contains(published.Message, "bad probe response") {
+		t.Fatalf("published message = %q, want recovered panic", published.Message)
 	}
 }
 

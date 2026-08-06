@@ -46,6 +46,8 @@ func (c summaryCheck) Run(ctx context.Context) Result {
 	return ApplySummary(c.template, c.entry, c.Check.Run(ctx))
 }
 
+func (c summaryCheck) resultMetadata() Result { return checkResultMetadata(c.Check) }
+
 // ApplySummary replaces a result's message with a configured template. The
 // observed value is available as ${value}; any resolved check field is available
 // directly (${older_than}) or under ${check.<field>}; and result data is exposed
