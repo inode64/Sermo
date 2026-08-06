@@ -33,6 +33,7 @@ const (
 	dbusTCPPrefix         = "tcp:"
 	dbusTCPHostKey        = "host"
 	dbusTCPPortKey        = "port"
+	dbusUnixPathPrefix    = "unix:path="
 )
 
 // D-Bus probe modes. Peer is the default named-service liveness probe;
@@ -368,7 +369,7 @@ func DBusAddress(socket, query string) string {
 		return query
 	}
 	if socket != "" {
-		return "unix:path=" + socket
+		return dbusUnixPathPrefix + dbus.EscapeBusAddressValue(socket)
 	}
 	return dbusDefaultAddress
 }

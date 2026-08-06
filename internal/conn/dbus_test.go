@@ -34,6 +34,10 @@ func TestDBusAddress(t *testing.T) {
 	if got := DBusAddress("/run/dbus/system_bus_socket", ""); got != "unix:path=/run/dbus/system_bus_socket" {
 		t.Fatalf("socket wrap = %q", got)
 	}
+	// Socket paths are address values, so reserved bytes must be percent-escaped.
+	if got := DBusAddress("/run/dbus/bus,name%1", ""); got != "unix:path=/run/dbus/bus%2cname%251" {
+		t.Fatalf("escaped socket wrap = %q", got)
+	}
 	// Nothing set -> the system bus default.
 	if got := DBusAddress("", ""); got != dbusDefaultAddress {
 		t.Fatalf("default = %q, want %q", got, dbusDefaultAddress)
