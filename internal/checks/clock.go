@@ -229,7 +229,7 @@ func (c clockCheck) Run(ctx context.Context) Result {
 	if best != nil {
 		return c.clockResult(false, c.failureMessage(*best, bestFailure), *best, start)
 	}
-	return c.result(false, "clock: no usable "+c.source+" sample: "+strings.Join(failures, "; "), start)
+	return c.unavailableResult("clock: no usable "+c.source+" sample: "+strings.Join(failures, "; "), start)
 }
 
 func (c clockCheck) probeServer(ctx context.Context, server string) (clockSample, error) {

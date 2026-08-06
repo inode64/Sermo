@@ -35,6 +35,7 @@ func (c pidfileCheck) Run(_ context.Context) Result {
 		return c.result(false, "pidfile check has no path candidates", start)
 	}
 	var failures []string
+	unavailable := false
 	for _, path := range c.paths {
 		pid, err := process.ReadPidfile(path)
 		if err != nil {
@@ -42,6 +43,7 @@ func (c pidfileCheck) Run(_ context.Context) Result {
 				continue
 			}
 			failures = append(failures, fmt.Sprintf("%s: %v", path, err))
+			unavailable = true
 			continue
 		}
 		if !alive(pid) {
@@ -53,7 +55,11 @@ func (c pidfileCheck) Run(_ context.Context) Result {
 		return r
 	}
 	if len(failures) > 0 {
-		return c.result(false, strings.Join(failures, "; "), start)
+		message := strings.Join(failures, "; ")
+		if unavailable {
+			return c.unavailableResult(message, start)
+		}
+		return c.result(false, message, start)
 	}
 	if len(c.paths) == 1 {
 		path := c.paths[0]

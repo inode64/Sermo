@@ -706,6 +706,9 @@ func TestLibrariesCheckHonorsCanceledContext(t *testing.T) {
 	if res.OK {
 		t.Fatal("libraries check must fail when the context is already cancelled")
 	}
+	if !res.Unavailable {
+		t.Fatal("cancelled libraries check must be unavailable")
+	}
 	if !strings.Contains(res.Message, "cancelled") {
 		t.Fatalf("message = %q, want cancelled", res.Message)
 	}

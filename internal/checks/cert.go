@@ -165,11 +165,14 @@ func (c *certCheck) Run(ctx context.Context) Result {
 		// problem, so it is an alert (unlike a transient network error below).
 		data, err := os.ReadFile(c.path)
 		if err != nil {
-			return c.result(false, fmt.Sprintf("%s: %v", c.path, err), start)
+			if os.IsNotExist(err) {
+				return c.result(false, fmt.Sprintf("%s: %v", c.path, err), start)
+			}
+			return c.unavailableResult(fmt.Sprintf("%s: %v", c.path, err), start)
 		}
 		parsed, err := parseCertMaterial(data)
 		if err != nil {
-			return c.result(false, fmt.Sprintf("%s: %v", c.path, err), start)
+			return c.unavailableResult(fmt.Sprintf("%s: %v", c.path, err), start)
 		}
 		s = parsed
 	} else {
@@ -180,8 +183,11 @@ func (c *certCheck) Run(ctx context.Context) Result {
 		sampled, err := sampler(ctx, c.host, c.port, c.serverName, c.verify)
 		if err != nil {
 			// Cannot retrieve the certificate (network/TLS error): this probe is
-			// quiet here — use a tcp/http check for reachability.
-			return c.result(true, fmt.Sprintf("cert %s:%s: %v", c.host, c.port, err), start)
+			// quiet as a health alert — use a tcp/http check for reachability — but
+			// remains unavailable so a guard cannot authorize an operation from it.
+			res := c.result(true, fmt.Sprintf("cert %s:%s: %v", c.host, c.port, err), start)
+			res.Unavailable = true
+			return res
 		}
 		s = sampled
 	}

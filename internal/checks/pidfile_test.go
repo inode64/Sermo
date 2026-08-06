@@ -76,6 +76,14 @@ func TestPidfileCheckStaleFails(t *testing.T) {
 	}
 }
 
+func TestPidfileCheckReadFailureIsUnavailable(t *testing.T) {
+	c := pidfileCheck{base: base{name: "pid", timeout: time.Second}, paths: []string{t.TempDir()}, alive: func(int) bool { return true }}
+	res := c.Run(context.Background())
+	if res.OK || !res.Unavailable {
+		t.Fatalf("unreadable pidfile = %+v, want unavailable failure", res)
+	}
+}
+
 func TestPidfileCheckDefaultAliveSelf(t *testing.T) {
 	// With the default liveness probe, our own pid is alive and a huge pid is not.
 	c := pidfileCheck{base: base{name: "pid", timeout: time.Second}, paths: []string{writePid(t, "1")}}
