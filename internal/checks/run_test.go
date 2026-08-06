@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"runtime"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -123,6 +124,69 @@ func TestRunBoundedUsesFixedWorkerSet(t *testing.T) {
 	}
 	close(release)
 	<-done
+}
+
+type canceledRunCheck struct {
+	name             string
+	started          chan<- string
+	cancellationSeen chan<- struct{}
+	release          <-chan struct{}
+	calls            *atomic.Int64
+}
+
+func (c canceledRunCheck) Name() string { return c.name }
+func (c canceledRunCheck) Run(ctx context.Context) Result {
+	c.calls.Add(1)
+	c.started <- c.name
+	<-ctx.Done()
+	c.cancellationSeen <- struct{}{}
+	<-c.release
+	return Result{Check: c.name, Unavailable: true, Message: ctx.Err().Error()}
+}
+
+func TestRunBoundedDoesNotStartQueuedChecksAfterCancellation(t *testing.T) {
+	const checkCount = 5
+	ctx, cancel := context.WithCancel(context.Background())
+	started := make(chan string, checkCount)
+	cancellationSeen := make(chan struct{}, 1)
+	release := make(chan struct{})
+	var calls atomic.Int64
+	built := make([]Built, checkCount)
+	for i := range built {
+		built[i] = Built{
+			Check: canceledRunCheck{
+				name: fmt.Sprintf("check-%d", i), started: started,
+				cancellationSeen: cancellationSeen, release: release, calls: &calls,
+			},
+			Optional: i == checkCount-1,
+		}
+	}
+
+	done := make(chan []Result, 1)
+	go func() { done <- Run(ctx, built, 1) }()
+	if got := <-started; got != "check-0" {
+		t.Fatalf("first started check = %q, want check-0", got)
+	}
+	cancel()
+	<-cancellationSeen
+	close(release)
+	results := <-done
+
+	if got := calls.Load(); got != 1 {
+		t.Fatalf("started checks = %d, want only the running check", got)
+	}
+	for i, result := range results {
+		wantName := fmt.Sprintf("check-%d", i)
+		if result.Check != wantName || !result.Unavailable {
+			t.Fatalf("result[%d] = %+v, want unavailable %q", i, result, wantName)
+		}
+		if i > 0 && !strings.Contains(result.Message, "not started") {
+			t.Fatalf("result[%d] message = %q, want not-started reason", i, result.Message)
+		}
+	}
+	if !results[checkCount-1].Optional {
+		t.Fatal("not-started result lost the check's optional policy")
+	}
 }
 
 type benchmarkRunCheck struct{ name string }
