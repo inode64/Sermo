@@ -60,7 +60,6 @@ const (
 	ProtocolNameIPP         = "ipp"
 	ProtocolNameKafka       = "kafka"
 	ProtocolNameLDAP        = "ldap"
-	ProtocolNameLogin1      = "login1"
 	ProtocolNameLibvirt     = "libvirt"
 	ProtocolNameLVMPolld    = "lvmpolld"
 	ProtocolNameMemcached   = "memcached"
@@ -92,7 +91,6 @@ const (
 	ProtocolNameStatd       = "statd"
 	ProtocolNameSyncthing   = "syncthing"
 	ProtocolNameTFTP        = "tftp"
-	ProtocolNameUDisks2     = "udisks2"
 	ProtocolNameUniFi       = "unifi"
 	ProtocolNameVarnish     = "varnish"
 )
@@ -214,11 +212,16 @@ const (
 
 // Config.Params keys consumed by protocol probes.
 const (
-	ParamKeyAuthSource = "auth_source"
-	ParamKeyDomain     = "domain"
-	ParamKeyMAC        = "mac"
-	ParamKeyResolvconf = "resolvconf"
-	ParamKeyTransport  = "transport"
+	ParamKeyAuthSource     = "auth_source"
+	ParamKeyDBusBusName    = "bus_name"
+	ParamKeyDBusInterface  = "dbus_interface"
+	ParamKeyDBusObjectPath = "object_path"
+	ParamKeyDBusProbe      = "probe"
+	ParamKeyDBusProperty   = "property"
+	ParamKeyDomain         = "domain"
+	ParamKeyMAC            = "mac"
+	ParamKeyResolvconf     = "resolvconf"
+	ParamKeyTransport      = "transport"
 )
 
 // ParamValueTrue is the string form used for true boolean values in Config.Params.
@@ -420,6 +423,20 @@ const (
 	// extraSocket is the Result.Extra key carrying the unix socket path a probe
 	// connected to (acpid, fail2ban, lvmpolld).
 	extraSocket = "socket"
+)
+
+// D-Bus Result.Extra keys shared with config checks and Web UI readings.
+const (
+	ExtraKeyDBusAddress       = extraAddress
+	ExtraKeyDBusBusID         = extraBusID
+	ExtraKeyDBusBusName       = ParamKeyDBusBusName
+	ExtraKeyDBusInterface     = ParamKeyDBusInterface
+	ExtraKeyDBusObjectPath    = ParamKeyDBusObjectPath
+	ExtraKeyDBusOwner         = extraOwner
+	ExtraKeyDBusProbe         = ParamKeyDBusProbe
+	ExtraKeyDBusProperty      = ParamKeyDBusProperty
+	ExtraKeyDBusPropertyValue = "property_value"
+	ExtraKeyDBusUniqueName    = extraUniqueName
 )
 
 // ExtraKeySocket is the Result.Extra key carrying the Unix socket path a probe used.

@@ -23,9 +23,17 @@ watches:
     check:
       type: service
       expect: active
+  bus:
+    check:
+      type: dbus
+      timeout: 3s
   restart-if-udisks2-failed:
     check:
-      type: udisks2
+      type: dbus
+      bus_name: org.freedesktop.UDisks2
+      object_path: /org/freedesktop/UDisks2/Manager
+      requires:
+        - bus
       timeout: 5s
       verify: true
     for:

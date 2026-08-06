@@ -1,0 +1,10 @@
+name: iio-sensor-proxy
+display_name: "IIO Sensor Proxy"
+category: hardware
+variables:
+  binary:
+    - /usr/libexec/iio-sensor-proxy
+    - /usr/lib/iio-sensor-proxy
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  health: { type: command, command: ["${binary}", "--help"], timeout: 10s }

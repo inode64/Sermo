@@ -3706,7 +3706,7 @@ function renderSSHSessions(d) {
     </tr>`)
     : tpl`<tr><td colspan="5" class="muted">No interactive SSH sessions.</td></tr>`;
   return tpl`<h2>SSH sessions</h2>
-    <table class="detail-compact-table">
+    <table class="detail-compact-table ssh-session-table">
       <caption class="visually-hidden">Current interactive SSH sessions</caption>
       <thead><tr><th scope="col">User</th><th scope="col">Terminal</th><th scope="col">Session PID</th><th scope="col">Idle</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr></thead>
       <tbody>${rows}</tbody>

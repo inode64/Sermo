@@ -27,11 +27,13 @@ existe. Nada de lo que hay aquí es alcance comprometido; elige los elementos de
 
 ### D-Bus, almacenamiento y escritorio
 
-- [x] Sonda de salud del bus de sistema D-Bus (`type: dbus` en `internal/conn`) y
-      catalog service `dbus` (servicio + check de handshake nativo)
-- [x] UDisks2: sonda D-Bus nativa `udisks2` en el catalog service (Manager
-      `Peer.Ping` + comprobación de name-owner); preflight `config` aún pendiente
-- [x] catalog service `libvirt-dbus` (coincidencia de proceso; aún sin sonda de bus dedicada)
+- [x] Sonda genérica de salud del bus y de objetos D-Bus con nombre (`type:
+      dbus`) con modos limitados `peer`, `introspect` y `property` escalar, sin
+      autoactivar servicios; disponible para watches de host y de service.
+- [x] La cobertura de catálogo incluye gestores systemd, NetworkManager,
+      firewalld, TuneD, servicios de escritorio/hardware, systemd-logind,
+      UDisks2, libvirt-dbus, Polkit y UPower; el preflight `config` de UDisks2
+      sigue pendiente.
 
 ### Observabilidad
 

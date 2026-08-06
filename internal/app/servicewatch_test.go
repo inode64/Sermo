@@ -62,6 +62,26 @@ func TestServiceWatchesBuild(t *testing.T) {
 	}
 }
 
+func TestServiceWatchesBuildDBusPropertyProbe(t *testing.T) {
+	tree := map[string]any{
+		"watches": map[string]any{
+			"profile": map[string]any{
+				"check": map[string]any{
+					"type": "dbus", "bus_name": "net.hadess.PowerProfiles", "object_path": "/net/hadess/PowerProfiles",
+					"probe": "property", "dbus_interface": "net.hadess.PowerProfiles", "property": "ActiveProfile",
+				},
+			},
+		},
+	}
+	watches, warns := serviceWatches("power-profiles", tree, checks.Deps{DefaultTimeout: time.Second}, nil, monitorTestDeps(), time.Minute)
+	if len(warns) != 0 {
+		t.Fatalf("unexpected warnings: %v", warns)
+	}
+	if len(watches) != 1 || watches[0].Name != "power-profiles:profile" || watches[0].CheckType != "dbus" {
+		t.Fatalf("D-Bus service watches = %+v", watches)
+	}
+}
+
 // TestServiceWatchesProcessScoped proves a service watch runs with the service's
 // scoped check deps: the process_count check invokes the injected ProcessCount
 // closure with the watch's user, so it counts the service's processes only.

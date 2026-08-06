@@ -1112,6 +1112,19 @@ solo evidencia de que el servicio dejó su propio artefacto de lock de runtime; 
 bloquea start/stop/restart/reload/resume y no debe apuntar bajo
 `<paths.runtime>/locks`, que está reservado para los locks de operación de Sermo.
 
+### Salud de servicios D-Bus
+
+Usa un watch embebido `type: dbus` cuando un daemon posee un nombre estable en
+el bus del sistema. Los perfiles de catálogo de gestores systemd,
+NetworkManager, firewalld, TuneD, GDM y varios daemons de escritorio/hardware
+usan la misma ruta de comprobación que los watches de host. Prefiere la sonda
+`peer` por defecto cuando el objeto la implemente; usa `introspect` para exigir
+una interfaz pública, o `property` para leer una propiedad escalar estable.
+Estas sondas deshabilitan la autoactivación D-Bus y no permiten llamadas a
+métodos arbitrarios. Añadir un watch solo-check no añade remediación; adjunta
+una acción `then:` únicamente cuando esa acción se haya revisado de forma
+independiente. Consulta [la referencia de la comprobación D-Bus](rules.es.md#protocolos-de-base-de-datos).
+
 ## Servicios versionados
 
 Algunas aplicaciones envían un binary por versión y varias pueden estar instaladas a la

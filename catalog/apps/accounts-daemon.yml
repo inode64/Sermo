@@ -1,0 +1,10 @@
+name: accounts-daemon
+display_name: "AccountsService"
+category: system
+variables:
+  binary:
+    - /usr/libexec/accounts-daemon
+    - /usr/lib/accountsservice/accounts-daemon
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}", "--version"], timeout: 10s }

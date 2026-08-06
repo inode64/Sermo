@@ -1,0 +1,8 @@
+name: wpa-supplicant
+display_name: "wpa_supplicant"
+category: network
+variables:
+  binary: ${bindir}/wpa_supplicant
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}", "-v"], timeout: 10s }

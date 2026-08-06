@@ -1,0 +1,28 @@
+name: iio-sensor-proxy
+display_name: IIO Sensor Proxy
+category: hardware
+description: D-Bus proxy for accelerometer, ambient light and proximity sensors.
+service:
+  systemd:
+    - iio-sensor-proxy
+apps:
+  - iio-sensor-proxy
+processes:
+  main:
+    exe: ${iio_sensor_proxy_binary}
+    user: root
+watches:
+  service:
+    check:
+      type: service
+      expect: active
+  dbus:
+    check:
+      type: dbus
+      bus_name: net.hadess.SensorProxy
+      object_path: /net/hadess/SensorProxy
+      probe: property
+      dbus_interface: net.hadess.SensorProxy
+      property: HasAmbientLight
+      timeout: 5s
+      verify: true

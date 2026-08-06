@@ -31,9 +31,17 @@ watches:
     check:
       type: service
       expect: active
+  bus:
+    check:
+      type: dbus
+      timeout: 3s
   restart-if-dbus-failed:
     check:
       type: dbus
+      bus_name: org.freedesktop.PolicyKit1
+      object_path: /org/freedesktop/PolicyKit1/Authority
+      requires:
+        - bus
       timeout: 5s
       verify: true
     for:

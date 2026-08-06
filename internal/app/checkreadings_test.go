@@ -1,6 +1,11 @@
 package app
 
-import "testing"
+import (
+	"testing"
+
+	"sermo/internal/checks"
+	"sermo/internal/conn"
+)
 
 // TestCheckReadingsForAllTypes consolidates the former per-group checkReadings
 // tests: for each check type it builds the readings and asserts the formatted
@@ -99,6 +104,36 @@ func TestCheckReadingsForAllTypes(t *testing.T) {
 			typ:  "tcp",
 			data: map[string]any{"host": "127.0.0.1", "port": 443, "latency_ms": int64(12), "protocol": "tcp"},
 			want: map[string]string{"latency_ms": "12 ms"},
+		},
+		{
+			name: "dbus named service",
+			typ:  conn.ProtocolNameDBus,
+			data: map[string]any{
+				checks.DataKeyProtocol:          conn.ProtocolNameDBus,
+				checks.DataKeyDBusAddress:       "unix:path=/run/dbus/system_bus_socket",
+				checks.DataKeyDBusBusID:         "bus-id",
+				checks.DataKeyDBusUniqueName:    ":1.50",
+				checks.DataKeyDBusBusName:       "org.libvirt",
+				checks.DataKeyDBusObjectPath:    "/org/libvirt",
+				checks.DataKeyDBusOwner:         ":1.42",
+				checks.DataKeyDBusProbe:         conn.DBusProbeProperty,
+				checks.DataKeyDBusInterface:     "org.libvirt.Connect",
+				checks.DataKeyDBusProperty:      "Version",
+				checks.DataKeyDBusPropertyValue: "1002003",
+			},
+			want: map[string]string{
+				checks.DataKeyDBusAddress:       "unix:path=/run/dbus/system_bus_socket",
+				checks.DataKeyDBusBusID:         "bus-id",
+				checks.DataKeyDBusUniqueName:    ":1.50",
+				checks.DataKeyDBusBusName:       "org.libvirt",
+				checks.DataKeyDBusObjectPath:    "/org/libvirt",
+				checks.DataKeyDBusOwner:         ":1.42",
+				checks.DataKeyDBusProbe:         conn.DBusProbeProperty,
+				checks.DataKeyDBusInterface:     "org.libvirt.Connect",
+				checks.DataKeyDBusProperty:      "Version",
+				checks.DataKeyDBusPropertyValue: "1002003",
+			},
+			minCount: 11,
 		},
 		{
 			name: "tcp connections",

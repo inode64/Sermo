@@ -20,3 +20,14 @@ reload_on_change:
   paths:
     - /etc/systemd/system
     - /lib/systemd/system
+watches:
+  manager:
+    check:
+      type: dbus
+      bus_name: org.freedesktop.systemd1
+      object_path: /org/freedesktop/systemd1
+      probe: property
+      dbus_interface: org.freedesktop.systemd1.Manager
+      property: Version
+      timeout: 5s
+      verify: true

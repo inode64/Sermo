@@ -1,0 +1,28 @@
+name: colord
+display_name: colord
+category: hardware
+description: System service for managing colour profiles and devices.
+service:
+  systemd:
+    - colord
+apps:
+  - colord
+processes:
+  main:
+    exe: ${colord_binary}
+    user: colord
+watches:
+  service:
+    check:
+      type: service
+      expect: active
+  version:
+    check:
+      type: dbus
+      bus_name: org.freedesktop.ColorManager
+      object_path: /org/freedesktop/ColorManager
+      probe: property
+      dbus_interface: org.freedesktop.ColorManager
+      property: DaemonVersion
+      timeout: 5s
+      verify: true
