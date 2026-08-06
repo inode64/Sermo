@@ -50,7 +50,12 @@ var ReportingModes = []string{ReportsHealth, ReportsState, ReportsCondition, Rep
 // `reports:` says otherwise. The type only supplies the default: the same type
 // can be a health assertion in one service and a sensor in another, so the
 // check has the last word.
-func conditionByDefault(typ string) bool { return !IsHealthType(typ) }
+func conditionByDefault(typ string) bool {
+	if info, ok := TypeInfoFor(typ); ok {
+		return info.DefaultReports == ReportsCondition
+	}
+	return !IsHealthType(typ)
+}
 
 // ResolveCondition decides whether a check is alert-style: an explicit
 // `reports:` wins, otherwise the check type's default applies.
@@ -160,7 +165,7 @@ func checkResultMetadata(check Check) Result {
 // invert these checks and fire on failure; condition-style checks fire on OK.
 func IsHealthType(typ string) bool {
 	if info, ok := TypeInfoFor(typ); ok {
-		return info.Health
+		return info.DefaultReports == ReportsHealth
 	}
 	_, ok := conn.Lookup(typ)
 	return ok

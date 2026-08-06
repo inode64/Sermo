@@ -1,10 +1,32 @@
 package checks
 
+import (
+	"fmt"
+	"maps"
+	"slices"
+)
+
 // TypeInfo describes static capabilities of a built-in check type.
 type TypeInfo struct {
-	Name          string
-	Health        bool
-	ServiceScoped bool
+	Name           string
+	DefaultReports string
+	ServiceScoped  bool
+}
+
+func healthTypeInfo(name string) TypeInfo {
+	return TypeInfo{Name: name, DefaultReports: ReportsHealth}
+}
+
+func conditionTypeInfo(name string) TypeInfo {
+	return TypeInfo{Name: name, DefaultReports: ReportsCondition}
+}
+
+func serviceHealthTypeInfo(name string) TypeInfo {
+	return TypeInfo{Name: name, DefaultReports: ReportsHealth, ServiceScoped: true}
+}
+
+func serviceConditionTypeInfo(name string) TypeInfo {
+	return TypeInfo{Name: name, DefaultReports: ReportsCondition, ServiceScoped: true}
 }
 
 // checkSpec is the private source of truth for a built-in check's static
@@ -77,11 +99,23 @@ const (
 // CheckTypeTCPConnections counts established local TCP sockets on a port.
 const CheckTypeTCPConnections = "tcp_connections"
 
-var checkSpecByName = indexCheckSpecs(builtinCheckSpecs)
+var checkSpecByName = mustIndexCheckSpecs(builtinCheckSpecs)
 
-func indexCheckSpecs(specs []checkSpec) map[string]checkSpec {
+func mustIndexCheckSpecs(specs []checkSpec) map[string]checkSpec {
 	out := make(map[string]checkSpec, len(specs))
 	for _, spec := range specs {
+		if spec.info.Name == "" {
+			panic("built-in check has an empty type name")
+		}
+		if spec.build == nil {
+			panic(fmt.Sprintf("built-in check %q has no builder", spec.info.Name))
+		}
+		if !IsReportingMode(spec.info.DefaultReports) {
+			panic(fmt.Sprintf("built-in check %q has invalid default reporting mode %q", spec.info.Name, spec.info.DefaultReports))
+		}
+		if _, exists := out[spec.info.Name]; exists {
+			panic(fmt.Sprintf("duplicate built-in check type %q", spec.info.Name))
+		}
 		out[spec.info.Name] = spec
 	}
 	return out
@@ -91,6 +125,18 @@ func indexCheckSpecs(specs []checkSpec) map[string]checkSpec {
 func TypeInfoFor(typ string) (TypeInfo, bool) {
 	spec, ok := checkSpecByName[typ]
 	return spec.info, ok
+}
+
+// TypeInfos returns every built-in single-shot check type in name order. The
+// copy lets validators and tests verify registry parity without exposing the
+// mutable constructor registry.
+func TypeInfos() []TypeInfo {
+	names := slices.Sorted(maps.Keys(checkSpecByName))
+	infos := make([]TypeInfo, 0, len(names))
+	for _, name := range names {
+		infos = append(infos, checkSpecByName[name].info)
+	}
+	return infos
 }
 
 // IsSingleShotType reports whether typ is a built-in single-shot check type.
