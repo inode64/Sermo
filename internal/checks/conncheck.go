@@ -354,24 +354,40 @@ func configureConnProtocol(cfg *conn.Config, protoName string, entry map[string]
 		setConnParam(cfg, conn.ParamKeyDomain, cfgval.AsString(entry[CheckKeyDomain]))
 	case conn.ProtocolNameDBus:
 		cfg.Socket = conn.DBusAddress(cfgval.AsString(entry[CheckKeySocket]), cfgval.AsString(entry[CheckKeyQuery]))
-		setConnParam(cfg, conn.ParamKeyDBusBusName, cfgval.AsString(entry[CheckKeyBusName]))
-		setConnParam(cfg, conn.ParamKeyDBusObjectPath, cfgval.AsString(entry[CheckKeyObjectPath]))
-		setConnParam(cfg, conn.ParamKeyDBusProbe, cfgval.AsString(entry[CheckKeyDBusProbe]))
-		setConnParam(cfg, conn.ParamKeyDBusInterface, cfgval.AsString(entry[CheckKeyDBusInterface]))
-		setConnParam(cfg, conn.ParamKeyDBusProperty, cfgval.AsString(entry[CheckKeyDBusProperty]))
-		if err := conn.ValidateDBusTarget(conn.DBusTarget{
-			BusName:    cfg.Params[conn.ParamKeyDBusBusName],
-			ObjectPath: cfg.Params[conn.ParamKeyDBusObjectPath],
-			Probe:      cfg.Params[conn.ParamKeyDBusProbe],
-			Interface:  cfg.Params[conn.ParamKeyDBusInterface],
-			Property:   cfg.Params[conn.ParamKeyDBusProperty],
-		}); err != nil {
+		for _, field := range DBusTargetFields() {
+			setConnParam(cfg, field, cfgval.AsString(entry[field]))
+		}
+		if err := conn.ValidateDBusTarget(DBusTargetFromEntry(entry)); err != nil {
 			return fmt.Errorf("dbus check: %w", err)
 		}
 	case conn.ProtocolNameAvahi:
 		cfg.Socket = conn.DBusAddress(cfgval.AsString(entry[CheckKeySocket]), cfgval.AsString(entry[CheckKeyQuery]))
 	}
 	return nil
+}
+
+// DBusTargetFields returns the YAML fields that define a named D-Bus target.
+// It returns an array copy so callers cannot alter the canonical check schema.
+func DBusTargetFields() [5]string {
+	return [5]string{
+		CheckKeyDBusBusName,
+		CheckKeyDBusObjectPath,
+		CheckKeyDBusProbe,
+		CheckKeyDBusInterface,
+		CheckKeyDBusProperty,
+	}
+}
+
+// DBusTargetFromEntry reads the named D-Bus target from a check entry. Field
+// type errors remain the configuration validator's responsibility.
+func DBusTargetFromEntry(entry map[string]any) conn.DBusTarget {
+	return conn.DBusTarget{
+		BusName:    cfgval.AsString(entry[CheckKeyDBusBusName]),
+		ObjectPath: cfgval.AsString(entry[CheckKeyDBusObjectPath]),
+		Probe:      cfgval.AsString(entry[CheckKeyDBusProbe]),
+		Interface:  cfgval.AsString(entry[CheckKeyDBusInterface]),
+		Property:   cfgval.AsString(entry[CheckKeyDBusProperty]),
+	}
 }
 
 var defaultConnSockets = map[string]string{

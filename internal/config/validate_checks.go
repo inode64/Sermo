@@ -497,43 +497,23 @@ func validateConnFields(prefix string, fields map[string]any, requireUser bool, 
 }
 
 func validateDBusFields(prefix string, fields map[string]any, add addFunc) {
-	busName, busNameOK := fields[checks.CheckKeyBusName].(string)
-	objectPath, objectPathOK := fields[checks.CheckKeyObjectPath].(string)
-	probe, probeOK := fields[checks.CheckKeyDBusProbe].(string)
-	dbusInterface, interfaceOK := fields[checks.CheckKeyDBusInterface].(string)
-	property, propertyOK := fields[checks.CheckKeyDBusProperty].(string)
 	invalid := false
-	for _, field := range []struct {
-		key   string
-		value string
-		ok    bool
-	}{
-		{key: checks.CheckKeyBusName, value: busName, ok: busNameOK},
-		{key: checks.CheckKeyObjectPath, value: objectPath, ok: objectPathOK},
-		{key: checks.CheckKeyDBusProbe, value: probe, ok: probeOK},
-		{key: checks.CheckKeyDBusInterface, value: dbusInterface, ok: interfaceOK},
-		{key: checks.CheckKeyDBusProperty, value: property, ok: propertyOK},
-	} {
-		if _, present := fields[field.key]; present && (!field.ok || field.value == "") {
-			add("%s.%s must be a non-empty string", prefix, field.key)
+	for _, field := range checks.DBusTargetFields() {
+		if value, present := fields[field]; present && cfgval.AsString(value) == "" {
+			add("%s.%s must be a non-empty string", prefix, field)
 			invalid = true
 		}
 	}
 	if invalid {
 		return
 	}
-	if err := conn.ValidateDBusTarget(conn.DBusTarget{
-		BusName: busName, ObjectPath: objectPath, Probe: probe, Interface: dbusInterface, Property: property,
-	}); err != nil {
+	if err := conn.ValidateDBusTarget(checks.DBusTargetFromEntry(fields)); err != nil {
 		add("%s: %v", prefix, err)
 	}
 }
 
 func rejectDBusFields(prefix, typ string, fields map[string]any, add addFunc) {
-	for _, field := range []string{
-		checks.CheckKeyBusName, checks.CheckKeyObjectPath, checks.CheckKeyDBusProbe,
-		checks.CheckKeyDBusInterface, checks.CheckKeyDBusProperty,
-	} {
+	for _, field := range checks.DBusTargetFields() {
 		if _, present := fields[field]; present {
 			add("%s.%s is only supported for a dbus check, not %s", prefix, field, typ)
 		}
