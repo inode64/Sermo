@@ -26,7 +26,7 @@ func TestMongoRole(t *testing.T) {
 
 func TestMongoConnectBuilds(t *testing.T) {
 	// Connection is lazy: building a client with credentials and TLS must not error.
-	client, err := MongoConnect(Config{
+	client, err := MongoConnect(context.Background(), Config{
 		Host: "127.0.0.1", Port: 27017, User: "u", Password: "p",
 		Database: "app", TLS: "skip-verify", Params: map[string]string{"auth_source": "admin"},
 	})

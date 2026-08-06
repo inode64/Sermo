@@ -35,7 +35,7 @@ func (ntpProtocol) DefaultPort() int   { return defaultPortNTP }
 func (ntpProtocol) RequiresUser() bool { return false }
 
 func (ntpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	target := newProbeTarget(cfg, defaultPortNTP)
+	target := probeTargetFor(ctx, cfg, defaultPortNTP)
 	opt := ntp.QueryOptions{
 		Timeout: ntpTimeout(ctx),
 		// Route the UDP query through the shared dialer so interface binding works
