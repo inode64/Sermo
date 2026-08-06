@@ -10,7 +10,7 @@ import (
 
 func buildPressure(t *testing.T, entry map[string]any, sampler PressureSamplerFunc) pressureCheck {
 	t.Helper()
-	return buildOneCheck(t, "psi", "pressure", entry, Deps{DefaultTimeout: time.Second, PressureSampler: sampler}).(pressureCheck)
+	return buildOneCheck(t, "psi", "pressure", entry, Deps{DefaultTimeout: time.Second, Samplers: Samplers{PressureSampler: sampler}}).(pressureCheck)
 }
 
 func TestParsePressureFormat(t *testing.T) {

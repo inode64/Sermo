@@ -9,7 +9,7 @@ import (
 
 func buildPids(t *testing.T, entry map[string]any, sampler PidsSamplerFunc) pidsCheck {
 	t.Helper()
-	return buildOneCheck(t, "pids", "pids", entry, Deps{DefaultTimeout: time.Second, PidsSampler: sampler}).(pidsCheck)
+	return buildOneCheck(t, "pids", "pids", entry, Deps{DefaultTimeout: time.Second, Samplers: Samplers{PidsSampler: sampler}}).(pidsCheck)
 }
 
 func pidsSampler(threads, maxPids uint64) PidsSamplerFunc {

@@ -23,7 +23,7 @@ func buildDiskIO(t *testing.T, entry map[string]any, samples []DiskIOSample) *di
 		i++
 		return s, nil
 	}
-	built, warns := Build(map[string]any{"io": entry}, Deps{DefaultTimeout: time.Second, DiskIOSampler: sampler})
+	built, warns := Build(map[string]any{"io": entry}, Deps{DefaultTimeout: time.Second, Samplers: Samplers{DiskIOSampler: sampler}})
 	if len(warns) != 0 || len(built) != 1 {
 		t.Fatalf("diskio check should build: warns=%v", warns)
 	}

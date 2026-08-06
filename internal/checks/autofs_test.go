@@ -77,9 +77,9 @@ func TestBuildAutofsCheck(t *testing.T) {
 	// Default form builds and runs against the injected sampler.
 	built, warns := Build(map[string]any{
 		"am": map[string]any{"type": "autofs"},
-	}, Deps{DefaultTimeout: time.Second, MountSampler: mountSampler(
+	}, Deps{DefaultTimeout: time.Second, Samplers: Samplers{MountSampler: mountSampler(
 		Mount{MountPoint: "/net", FSType: "autofs"},
-	)})
+	)}})
 	if len(warns) != 0 || len(built) != 1 {
 		t.Fatalf("autofs check should build: warns=%v", warns)
 	}

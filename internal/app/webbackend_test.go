@@ -1366,13 +1366,15 @@ func snapshotOnlyBackend(t *testing.T, cfg *config.Config, snapshots *WatchSnaps
 	b, warns := NewWebBackend(t.Context(), cfg, Deps{
 		WatchSnapshots: snapshots,
 		Now:            func() time.Time { return now },
-		StorageUsage: func(string) (checks.StorageStats, error) {
-			t.Fatal("web storage view must not call statfs")
-			return checks.StorageStats{}, nil
-		},
-		MountSampler: func() ([]checks.Mount, error) {
-			t.Fatal("web storage view must not read mounts")
-			return nil, nil
+		Samplers: checks.Samplers{
+			StorageUsage: func(string) (checks.StorageStats, error) {
+				t.Fatal("web storage view must not call statfs")
+				return checks.StorageStats{}, nil
+			},
+			MountSampler: func() ([]checks.Mount, error) {
+				t.Fatal("web storage view must not read mounts")
+				return nil, nil
+			},
 		},
 	})
 	if len(warns) != 0 {

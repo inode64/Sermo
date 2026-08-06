@@ -132,7 +132,7 @@ func assertStorageBuildFires(t *testing.T, field, op string, value any, usage fu
 			field:  map[string]any{"op": op, "value": value},
 		},
 	}
-	built, warns := Build(section, Deps{StorageUsage: usage})
+	built, warns := Build(section, Deps{Samplers: Samplers{StorageUsage: usage}})
 	if len(warns) != 0 {
 		t.Fatalf("unexpected warnings: %v", warns)
 	}
@@ -161,7 +161,7 @@ func TestBuildStorageByteSizeCheckRejectsUnitless(t *testing.T) {
 			"free_bytes": map[string]any{"op": "<", "value": 10},
 		},
 	}
-	built, warns := Build(section, Deps{StorageUsage: fakeStorage(92, 8, 9<<30, 100<<30)})
+	built, warns := Build(section, Deps{Samplers: Samplers{StorageUsage: fakeStorage(92, 8, 9<<30, 100<<30)}})
 	if len(built) != 0 {
 		t.Fatalf("expected no built checks, got %d", len(built))
 	}
@@ -216,7 +216,7 @@ func TestBuildStorageInodeCheck(t *testing.T) {
 			"inodes_used_pct": map[string]any{"op": ">=", "value": 90},
 		},
 	}
-	built, warns := Build(section, Deps{StorageUsage: fakeStorageStats(StorageStats{TotalBytes: 1000, InodesTotal: 100, InodesFree: 5, InodesUsedPct: 95})})
+	built, warns := Build(section, Deps{Samplers: Samplers{StorageUsage: fakeStorageStats(StorageStats{TotalBytes: 1000, InodesTotal: 100, InodesFree: 5, InodesUsedPct: 95})}})
 	if len(warns) != 0 {
 		t.Fatalf("unexpected warnings: %v", warns)
 	}
