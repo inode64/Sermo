@@ -50,7 +50,7 @@ func (c routeCheck) Run(_ context.Context) Result {
 	sampler := keyedSamplerOr(c.sampler, defaultRouteSampler)
 	routes, err := sampler(c.family)
 	if err != nil {
-		return c.result(false, "route: "+err.Error(), start)
+		return c.unavailableResult("route: "+err.Error(), start)
 	}
 	matched := matchingRoutes(routes, c.iface)
 	ok := len(matched) > 0

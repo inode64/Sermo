@@ -58,7 +58,7 @@ func TestMemoryCheckGuards(t *testing.T) {
 	zero := buildMemory(t, map[string]any{
 		"used_pct": map[string]any{"op": ">=", "value": 1},
 	}, memSampler(0, 0))
-	if res := zero.Run(context.Background()); res.OK || !strings.Contains(res.Message, "unknown") {
+	if res := zero.Run(context.Background()); res.OK || !res.Unavailable || !strings.Contains(res.Message, "unknown") {
 		t.Fatalf("unknown total must never fire: %+v", res)
 	}
 

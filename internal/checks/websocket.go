@@ -81,6 +81,7 @@ func (c *websocketCheck) Run(ctx context.Context) Result {
 	})
 	if perr != nil {
 		r := c.result(false, chosenRes.Message, start)
+		r.Unavailable = chosenRes.Unavailable
 		r.Data = ifaceData(perIface)
 		return r
 	}
@@ -100,7 +101,7 @@ func (c *websocketCheck) handshake(ctx context.Context, iface string, start time
 	addr := net.JoinHostPort(c.host, c.port)
 	nc, err := conn.BindDialer(iface).DialContext(ctx, conn.TransportTCP, addr)
 	if err != nil {
-		return c.result(false, fmt.Sprintf("websocket %s: %v", netutil.RedactURL(c.rawURL), netutil.URLErrorCause(err)), start)
+		return c.unavailableResult(fmt.Sprintf("websocket %s: %v", netutil.RedactURL(c.rawURL), netutil.URLErrorCause(err)), start)
 	}
 	defer func() { _ = nc.Close() }()
 	if dl, ok := ctx.Deadline(); ok {
@@ -114,22 +115,22 @@ func (c *websocketCheck) handshake(ctx context.Context, iface string, start time
 		}
 		tlsConn := tls.Client(nc, tc)
 		if err := tlsConn.HandshakeContext(ctx); err != nil {
-			return c.result(false, fmt.Sprintf("websocket %s: TLS: %v", netutil.RedactURL(c.rawURL), netutil.URLErrorCause(err)), start)
+			return c.unavailableResult(fmt.Sprintf("websocket %s: TLS: %v", netutil.RedactURL(c.rawURL), netutil.URLErrorCause(err)), start)
 		}
 		nc = tlsConn
 	}
 
 	key, err := wsKey()
 	if err != nil {
-		return c.result(false, "websocket: "+err.Error(), start)
+		return c.unavailableResult("websocket: "+err.Error(), start)
 	}
 	if _, err := nc.Write([]byte(c.handshakeRequest(key))); err != nil {
-		return c.result(false, fmt.Sprintf("websocket %s: %v", netutil.RedactURL(c.rawURL), netutil.URLErrorCause(err)), start)
+		return c.unavailableResult(fmt.Sprintf("websocket %s: %v", netutil.RedactURL(c.rawURL), netutil.URLErrorCause(err)), start)
 	}
 
 	resp, err := http.ReadResponse(bufio.NewReader(nc), &http.Request{Method: http.MethodGet})
 	if err != nil {
-		return c.result(false, fmt.Sprintf("websocket %s: %v", netutil.RedactURL(c.rawURL), netutil.URLErrorCause(err)), start)
+		return c.unavailableResult(fmt.Sprintf("websocket %s: %v", netutil.RedactURL(c.rawURL), netutil.URLErrorCause(err)), start)
 	}
 	defer func() { _ = resp.Body.Close() }()
 

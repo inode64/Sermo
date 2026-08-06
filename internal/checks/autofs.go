@@ -40,7 +40,7 @@ func (c autofsCheck) Run(_ context.Context) Result {
 	sampler := samplerOr(c.sampler, defaultMountSampler)
 	mounts, err := sampler()
 	if err != nil {
-		return c.result(false, "autofs: "+err.Error(), start)
+		return c.unavailableResult("autofs: "+err.Error(), start)
 	}
 
 	var points []string

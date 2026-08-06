@@ -8,9 +8,10 @@ import (
 )
 
 type pathMatch struct {
-	message string
-	data    map[string]any
-	failure string
+	message     string
+	data        map[string]any
+	failure     string
+	unavailable bool
 }
 
 func firstMatchingPath(paths []string, predicate func(string, os.FileInfo) pathMatch, kindMsg string) pathMatch {
@@ -18,12 +19,14 @@ func firstMatchingPath(paths []string, predicate func(string, os.FileInfo) pathM
 		return pathMatch{failure: kindMsg + " check has no path candidates"}
 	}
 	var failures []string
+	unavailable := false
 	for _, path := range paths {
 		info, err := os.Stat(path)
 		if err != nil {
 			if os.IsNotExist(err) {
 				continue
 			}
+			unavailable = true
 			failures = append(failures, fmt.Sprintf("%s: %v", path, err))
 			continue
 		}
@@ -35,7 +38,7 @@ func firstMatchingPath(paths []string, predicate func(string, os.FileInfo) pathM
 		return match
 	}
 	if len(failures) > 0 {
-		return pathMatch{failure: strings.Join(failures, "; ")}
+		return pathMatch{failure: strings.Join(failures, "; "), unavailable: unavailable}
 	}
 	if len(paths) == 1 {
 		return pathMatch{failure: paths[0] + " does not exist"}
@@ -47,6 +50,9 @@ func pathMatchResult(b base, paths []string, predicate func(string, os.FileInfo)
 	start := time.Now()
 	match := firstMatchingPath(paths, predicate, kindMsg)
 	if match.failure != "" {
+		if match.unavailable {
+			return b.unavailableResult(match.failure, start)
+		}
 		return b.result(false, match.failure, start)
 	}
 	res := b.result(true, match.message, start)

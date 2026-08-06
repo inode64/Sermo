@@ -32,7 +32,7 @@ func (c tcpCheck) Run(ctx context.Context) Result {
 		return e
 	})
 	if err != nil {
-		r := c.result(false, fmt.Sprintf("dial %s: %v", addr, err), start)
+		r := c.unavailableResult(fmt.Sprintf("dial %s: %v", addr, err), start)
 		r.Data = ifaceData(perIface)
 		return r
 	}

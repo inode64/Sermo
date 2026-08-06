@@ -63,9 +63,7 @@ func (c pressureCheck) Run(_ context.Context) Result {
 	sampler := keyedSamplerOr(c.sampler, defaultPressureSampler)
 	s, err := sampler(c.resource)
 	if err != nil {
-		// A kernel without PSI (CONFIG_PSI=n) never fires, mirroring the
-		// conntrack-without-module behavior.
-		return c.result(false, "pressure "+c.resource+": "+err.Error(), start)
+		return c.unavailableResult("pressure "+c.resource+": "+err.Error(), start)
 	}
 	values := map[string]float64{
 		fieldSomeAvg10: s.Some.Avg10, fieldSomeAvg60: s.Some.Avg60, fieldSomeAvg300: s.Some.Avg300,

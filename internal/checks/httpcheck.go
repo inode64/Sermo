@@ -75,7 +75,7 @@ func (c *httpCheck) Run(ctx context.Context) Result {
 	}
 	req, err := http.NewRequestWithContext(ctx, c.method, c.url, body)
 	if err != nil {
-		return c.result(false, fmt.Sprintf("build request: %v", err), start)
+		return c.unavailableResult(fmt.Sprintf("build request: %v", err), start)
 	}
 	if c.contentType != "" {
 		req.Header.Set(httpHeaderContentType, c.contentType)
@@ -87,7 +87,7 @@ func (c *httpCheck) Run(ctx context.Context) Result {
 	resp, err := httpx.Do(client, req)
 	elapsed := time.Since(start)
 	if err != nil {
-		return c.result(false, fmt.Sprintf("%s %s: %v", c.method, netutil.RedactURL(c.url), netutil.URLErrorCause(err)), start)
+		return c.unavailableResult(fmt.Sprintf("%s %s: %v", c.method, netutil.RedactURL(c.url), netutil.URLErrorCause(err)), start)
 	}
 	defer func() { _ = resp.Body.Close() }()
 

@@ -74,7 +74,7 @@ func (c *icmpCheck) Run(_ context.Context) Result {
 	}
 	s, err := c.sample(sampler)
 	if err != nil {
-		return c.result(false, fmt.Sprintf("icmp %s: %v", c.host, err), start)
+		return c.unavailableResult(fmt.Sprintf("icmp %s: %v", c.host, err), start)
 	}
 	data := map[string]any{DataKeyHost: c.host, DataKeyMetric: c.metric}
 

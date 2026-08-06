@@ -35,10 +35,10 @@ func (c edacCheck) Run(_ context.Context) Result {
 	sampler := samplerOr(c.sampler, defaultEdacSampler)
 	st, err := sampler()
 	if err != nil {
-		return c.result(false, "edac: "+err.Error(), start)
+		return c.unavailableResult("edac: "+err.Error(), start)
 	}
 	if !st.Present {
-		return c.result(false, "edac: no EDAC controllers (ECC reporting unavailable)", start)
+		return c.unavailableResult("edac: no EDAC controllers (ECC reporting unavailable)", start)
 	}
 
 	values := map[string]float64{fieldCE: float64(st.CE), fieldUE: float64(st.UE)}
