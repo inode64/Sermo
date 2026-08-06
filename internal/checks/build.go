@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"slices"
 	"strconv"
+	"strings"
 	"time"
 
 	"sermo/internal/cfgval"
@@ -324,31 +325,32 @@ func buildCheck(typ string, b base, entry map[string]any, runner execx.Runner, c
 	}
 	if spec, ok := checkSpecByName[typ]; ok {
 		check, warn := spec.build(checkBuildInput{base: b, entry: entry, runner: runner, client: client, deps: deps})
-		switch {
-		case warn != "":
-			return nil, &buildFailure{kind: BuildIssueInvalidConfiguration, detail: warn}
-		case check == nil:
-			// A builder must return either a check or a warning. Turning a
-			// silent nil into an invariant issue keeps every caller's "no issue
-			// means a usable check" assumption true instead of merely intended.
-			return nil, &buildFailure{
-				kind:   BuildIssueBuilderInvariant,
-				detail: fmt.Sprintf("check type %q produced no check", typ),
-			}
-		default:
-			return check, nil
-		}
+		return checkBuildResult(typ, check, warn)
 	}
 	// A connection-protocol check (mysql, …) is owned by conn's extensible
 	// registry, so new protocols need no change in this builder.
 	if proto, ok := conn.Lookup(typ); ok {
 		check, warn := buildConnCheck(b, proto, entry)
-		if warn != "" {
-			return nil, &buildFailure{kind: BuildIssueInvalidConfiguration, detail: warn}
-		}
-		return check, nil
+		return checkBuildResult(typ, check, warn)
 	}
 	return nil, &buildFailure{kind: BuildIssueUnsupportedType, detail: fmt.Sprintf("unsupported type %q", typ)}
+}
+
+func checkBuildResult(typ string, check Check, warning string) (Check, *buildFailure) {
+	switch {
+	case warning != "":
+		return nil, &buildFailure{kind: BuildIssueInvalidConfiguration, detail: warning}
+	case check == nil:
+		// Every builder must return either a check or a warning. Keeping this
+		// invariant after both built-in and connection-protocol construction
+		// makes "no issue" mean a usable check for every caller.
+		return nil, &buildFailure{
+			kind:   BuildIssueBuilderInvariant,
+			detail: fmt.Sprintf("check type %q produced no check", typ),
+		}
+	default:
+		return check, nil
+	}
 }
 
 // buildConfigCheck builds a configuration validity/change check.
@@ -439,6 +441,13 @@ func buildCheckBase(name string, entry map[string]any, deps Deps) (string, base,
 		}
 	}
 	reports := cfgval.AsString(entry[CheckKeyReports])
+	if _, present := entry[CheckKeyReports]; present && !IsReportingMode(reports) {
+		return typ, base{}, &buildFailure{
+			kind: BuildIssueInvalidConfiguration,
+			detail: fmt.Sprintf("%s %q must be one of %s", CheckKeyReports, reports,
+				strings.Join(ReportingModes(), ", ")),
+		}
+	}
 	return typ, base{
 		name:      name,
 		service:   deps.Service,

@@ -139,6 +139,20 @@ func TestBuildAndInlineShareStructuredIssue(t *testing.T) {
 	}
 }
 
+func TestBuildAndInlineRejectInvalidReportingMode(t *testing.T) {
+	entry := map[string]any{"type": CheckTypeBinary, "path": "/x", "reports": "invalid"}
+	_, issues := BuildWithIssues(map[string]any{"bad": entry}, Deps{})
+	if len(issues) != 1 || issues[0].Kind != BuildIssueInvalidConfiguration || !strings.Contains(issues[0].Detail, "reports") {
+		t.Fatalf("issues = %+v, want invalid reporting configuration", issues)
+	}
+
+	_, err := BuildInline("bad", entry, Deps{})
+	var buildErr *BuildError
+	if !errors.As(err, &buildErr) || buildErr.Issue.Kind != BuildIssueInvalidConfiguration || buildErr.Issue.Detail != issues[0].Detail {
+		t.Fatalf("inline error = %+v, want same reporting issue as section build", buildErr)
+	}
+}
+
 func TestBuildIssueKinds(t *testing.T) {
 	tests := []struct {
 		name         string
