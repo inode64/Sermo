@@ -242,15 +242,36 @@ func runBounded(ctx context.Context, built []Built, results []Result, workers in
 		go func() {
 			defer wg.Done()
 			for i := range jobs {
+				if err := ctx.Err(); err != nil {
+					results[i] = checkNotStartedResult(built[i], err)
+					return
+				}
 				results[i] = executeBuilt(ctx, built[i])
 			}
 		}()
 	}
 	for i := range built {
-		jobs <- i
+		select {
+		case jobs <- i:
+		case <-ctx.Done():
+			close(jobs)
+			wg.Wait()
+			for pending := i; pending < len(built); pending++ {
+				results[pending] = checkNotStartedResult(built[pending], ctx.Err())
+			}
+			return
+		}
 	}
 	close(jobs)
 	wg.Wait()
+}
+
+func checkNotStartedResult(built Built, err error) Result {
+	result := checkResultMetadata(built.Check)
+	result.Optional = built.Optional
+	result.Unavailable = true
+	result.Message = fmt.Sprintf("check not started: %v", err)
+	return result
 }
 
 func executeBuilt(ctx context.Context, built Built) Result {
