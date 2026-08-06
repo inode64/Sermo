@@ -22,15 +22,27 @@ const (
 	TerminalMultiplexerScreen = "screen"
 	// TerminalMultiplexerSummary is the user-facing list of supported values.
 	TerminalMultiplexerSummary = TerminalMultiplexerTmux + " or " + TerminalMultiplexerScreen
+	// TerminalSessionStateAttached reports a session with at least one attached client.
+	TerminalSessionStateAttached = "attached"
+	// TerminalSessionStateDetached reports a session without an attached client.
+	TerminalSessionStateDetached = "detached"
+	// TerminalSessionStateUnknown reports a client state that could not be normalized.
+	TerminalSessionStateUnknown = "unknown"
 
-	terminalSessionStateAttached = "attached"
-	terminalSessionStateDetached = "detached"
-	terminalSessionStateUnknown  = "unknown"
+	tmuxSessionFormat = "#{session_name}\t#{session_attached}\t#{session_windows}"
+)
 
-	tmuxSessionFormat             = "#{session_name}\t#{session_attached}\t#{session_windows}"
-	tmuxSessionSocketArgumentSize = 2
-	tmuxSessionListArgumentSize   = 3
-	screenSessionMatchSize        = 3
+const (
+	tmuxSessionNameField = iota
+	tmuxSessionAttachedField
+	tmuxSessionWindowsField
+	tmuxSessionFieldCount
+)
+
+const (
+	screenSessionNameMatch  = 1
+	screenSessionStateMatch = 2
+	screenSessionMatchCount = screenSessionStateMatch + 1
 )
 
 var screenSessionLine = regexp.MustCompile(`^\s*(\d+\.\S+)\s+\(([^)]+)\)`)
@@ -147,19 +159,19 @@ func TerminalSessionsFromData(data map[string]any) []TerminalSession {
 }
 
 func terminalSessionFromMap(entry map[string]any) (TerminalSession, bool) {
-	multiplexer := cfgval.String(entry["multiplexer"])
-	name := cfgval.String(entry["name"])
-	user := cfgval.String(entry["user"])
-	state := cfgval.String(entry["state"])
+	multiplexer := cfgval.String(entry[CheckKeyMultiplexer])
+	name := cfgval.String(entry[CheckKeyName])
+	user := cfgval.String(entry[CheckKeyUser])
+	state := cfgval.String(entry[CheckKeyState])
 	if !IsTerminalMultiplexer(multiplexer) || name == "" || user == "" || !isTerminalSessionState(state) {
 		return TerminalSession{}, false
 	}
-	windows, _ := cfgval.Int(entry["windows"])
+	windows, _ := cfgval.Int(entry[DataKeyWindows])
 	return TerminalSession{Multiplexer: multiplexer, Name: name, User: user, State: state, Windows: max(windows, 0)}, true
 }
 
 func isTerminalSessionState(state string) bool {
-	return state == terminalSessionStateAttached || state == terminalSessionStateDetached || state == terminalSessionStateUnknown
+	return state == TerminalSessionStateAttached || state == TerminalSessionStateDetached || state == TerminalSessionStateUnknown
 }
 
 // terminalSessionsCheck compares a configured session count. It does not
@@ -228,11 +240,10 @@ func sampleTerminalSessions(ctx context.Context, runner execx.Runner, config Ter
 }
 
 func tmuxSessionArgs(config TerminalSessionConfig) []string {
-	args := make([]string, 0, tmuxSessionSocketArgumentSize+tmuxSessionListArgumentSize)
-	if config.Socket != "" {
-		args = append(args, "-S", config.Socket)
+	if config.Socket == "" {
+		return []string{"list-sessions", "-F", tmuxSessionFormat}
 	}
-	return append(args, "list-sessions", "-F", tmuxSessionFormat)
+	return []string{"-S", config.Socket, "list-sessions", "-F", tmuxSessionFormat}
 }
 
 func screenSessionArgs(TerminalSessionConfig) []string {
@@ -256,22 +267,22 @@ func parseTmuxSessions(user, output string) ([]TerminalSession, error) {
 	sessions := make([]TerminalSession, 0)
 	for line := range strings.SplitSeq(strings.TrimSpace(output), "\n") {
 		parts := strings.Split(line, "\t")
-		if len(parts) != 3 || strings.TrimSpace(parts[0]) == "" {
+		if len(parts) != tmuxSessionFieldCount || strings.TrimSpace(parts[tmuxSessionNameField]) == "" {
 			return nil, fmt.Errorf("parse tmux session line %q", line)
 		}
-		attached, err := strconv.ParseBool(strings.TrimSpace(parts[1]))
+		attached, err := strconv.ParseBool(strings.TrimSpace(parts[tmuxSessionAttachedField]))
 		if err != nil {
-			return nil, fmt.Errorf("parse tmux session attachment %q: %w", parts[1], err)
+			return nil, fmt.Errorf("parse tmux session attachment %q: %w", parts[tmuxSessionAttachedField], err)
 		}
-		windows, err := strconv.Atoi(strings.TrimSpace(parts[2]))
+		windows, err := strconv.Atoi(strings.TrimSpace(parts[tmuxSessionWindowsField]))
 		if err != nil || windows < 0 {
-			return nil, fmt.Errorf("parse tmux session window count %q", parts[2])
+			return nil, fmt.Errorf("parse tmux session window count %q", parts[tmuxSessionWindowsField])
 		}
-		state := terminalSessionStateDetached
+		state := TerminalSessionStateDetached
 		if attached {
-			state = terminalSessionStateAttached
+			state = TerminalSessionStateAttached
 		}
-		sessions = append(sessions, TerminalSession{Multiplexer: TerminalMultiplexerTmux, Name: strings.TrimSpace(parts[0]), User: user, State: state, Windows: windows})
+		sessions = append(sessions, TerminalSession{Multiplexer: TerminalMultiplexerTmux, Name: strings.TrimSpace(parts[tmuxSessionNameField]), User: user, State: state, Windows: windows})
 	}
 	return sortedTerminalSessions(sessions), nil
 }
@@ -280,17 +291,17 @@ func parseScreenSessions(user, output string) []TerminalSession {
 	sessions := make([]TerminalSession, 0)
 	for line := range strings.SplitSeq(output, "\n") {
 		matches := screenSessionLine.FindStringSubmatch(line)
-		if len(matches) != screenSessionMatchSize {
+		if len(matches) != screenSessionMatchCount {
 			continue
 		}
-		state := terminalSessionStateUnknown
-		switch strings.ToLower(strings.TrimSpace(matches[2])) {
-		case terminalSessionStateAttached:
-			state = terminalSessionStateAttached
-		case terminalSessionStateDetached:
-			state = terminalSessionStateDetached
+		state := TerminalSessionStateUnknown
+		switch strings.ToLower(strings.TrimSpace(matches[screenSessionStateMatch])) {
+		case TerminalSessionStateAttached:
+			state = TerminalSessionStateAttached
+		case TerminalSessionStateDetached:
+			state = TerminalSessionStateDetached
 		}
-		sessions = append(sessions, TerminalSession{Multiplexer: TerminalMultiplexerScreen, Name: matches[1], User: user, State: state})
+		sessions = append(sessions, TerminalSession{Multiplexer: TerminalMultiplexerScreen, Name: matches[screenSessionNameMatch], User: user, State: state})
 	}
 	return sortedTerminalSessions(sessions)
 }
@@ -312,9 +323,9 @@ func sortedTerminalSessions(sessions []TerminalSession) []TerminalSession {
 func terminalSessionCounts(sessions []TerminalSession) (attached, detached int) {
 	for _, session := range sessions {
 		switch session.State {
-		case terminalSessionStateAttached:
+		case TerminalSessionStateAttached:
 			attached++
-		case terminalSessionStateDetached:
+		case TerminalSessionStateDetached:
 			detached++
 		}
 	}

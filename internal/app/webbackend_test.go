@@ -204,8 +204,8 @@ func TestWebBackendShowsTerminalSessionsFromPublishedCheckData(t *testing.T) {
 			Check: "terminal-sessions",
 			OK:    true,
 			Data: map[string]any{checks.DataKeyTerminalSessions: []checks.TerminalSession{
-				{Multiplexer: checks.TerminalMultiplexerTmux, Name: "ops", User: "deploy", State: "attached", Windows: 2},
-				{Multiplexer: checks.TerminalMultiplexerScreen, Name: "120.backup", User: "backup", State: "detached"},
+				{Multiplexer: checks.TerminalMultiplexerTmux, Name: "ops", User: "deploy", State: checks.TerminalSessionStateAttached, Windows: 2},
+				{Multiplexer: checks.TerminalMultiplexerScreen, Name: "120.backup", User: "backup", State: checks.TerminalSessionStateDetached},
 			}},
 		},
 	}, map[string]bool{"terminal-sessions": true}, map[string]string{"terminal-sessions": checks.CheckTypeTerminalSessions})

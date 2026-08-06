@@ -170,6 +170,7 @@ const (
 	DataKeyVersionOld         = "version_old"
 	DataKeyVersionShort       = "version_short"
 	DataKeyWindow             = "window"
+	DataKeyWindows            = "windows"
 	DataKeyNumberFiles        = "number_files"
 	DataKeyZombies            = "zombies"
 )

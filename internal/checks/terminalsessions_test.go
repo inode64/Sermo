@@ -34,8 +34,8 @@ func TestTerminalMultiplexerAdapterParsesSessions(t *testing.T) {
 			config: TerminalSessionConfig{Multiplexer: TerminalMultiplexerTmux, User: "deploy"},
 			output: "build\t1\t2\nops\t0\t1\n",
 			want: []TerminalSession{
-				{Multiplexer: TerminalMultiplexerTmux, Name: "build", User: "deploy", State: terminalSessionStateAttached, Windows: 2},
-				{Multiplexer: TerminalMultiplexerTmux, Name: "ops", User: "deploy", State: terminalSessionStateDetached, Windows: 1},
+				{Multiplexer: TerminalMultiplexerTmux, Name: "build", User: "deploy", State: TerminalSessionStateAttached, Windows: 2},
+				{Multiplexer: TerminalMultiplexerTmux, Name: "ops", User: "deploy", State: TerminalSessionStateDetached, Windows: 1},
 			},
 		},
 		{
@@ -43,8 +43,8 @@ func TestTerminalMultiplexerAdapterParsesSessions(t *testing.T) {
 			config: TerminalSessionConfig{Multiplexer: TerminalMultiplexerScreen, User: "deploy"},
 			output: "There are screens on:\n\t120.ops\t(Detached)\n\t121.build\t(Attached)\n2 Sockets in /run/screen/S-deploy.\n",
 			want: []TerminalSession{
-				{Multiplexer: TerminalMultiplexerScreen, Name: "120.ops", User: "deploy", State: terminalSessionStateDetached},
-				{Multiplexer: TerminalMultiplexerScreen, Name: "121.build", User: "deploy", State: terminalSessionStateAttached},
+				{Multiplexer: TerminalMultiplexerScreen, Name: "120.ops", User: "deploy", State: TerminalSessionStateDetached},
+				{Multiplexer: TerminalMultiplexerScreen, Name: "121.build", User: "deploy", State: TerminalSessionStateAttached},
 			},
 		},
 		{
@@ -97,7 +97,7 @@ func TestTerminalSessionsCheckRunsReadOnlyClientAsConfiguredUser(t *testing.T) {
 		t.Fatalf("result data = %#v", result.Data)
 	}
 	sessions := TerminalSessionsFromData(result.Data)
-	if len(sessions) != 2 || sessions[0].Name != "build" || sessions[1].State != terminalSessionStateAttached {
+	if len(sessions) != 2 || sessions[0].Name != "build" || sessions[1].State != TerminalSessionStateAttached {
 		t.Fatalf("sessions = %#v, want sorted session data", sessions)
 	}
 }
@@ -144,13 +144,13 @@ func TestTerminalSessionsCheckFailsClosedOnCommandTimeout(t *testing.T) {
 
 func TestTerminalSessionsFromDataAcceptsJSONHydration(t *testing.T) {
 	sessions := TerminalSessionsFromData(map[string]any{DataKeyTerminalSessions: []any{
-		map[string]any{"multiplexer": "tmux", "name": "ops", "user": "deploy", "state": "attached", "windows": float64(2)},
-		map[string]any{"multiplexer": "screen", "name": "120.backup", "user": "backup", "state": "detached"},
-		map[string]any{"multiplexer": "unknown", "name": "skip", "user": "root", "state": "attached"},
+		map[string]any{CheckKeyMultiplexer: TerminalMultiplexerTmux, CheckKeyName: "ops", CheckKeyUser: "deploy", CheckKeyState: TerminalSessionStateAttached, DataKeyWindows: float64(2)},
+		map[string]any{CheckKeyMultiplexer: TerminalMultiplexerScreen, CheckKeyName: "120.backup", CheckKeyUser: "backup", CheckKeyState: TerminalSessionStateDetached},
+		map[string]any{CheckKeyMultiplexer: "unknown", CheckKeyName: "skip", CheckKeyUser: "root", CheckKeyState: TerminalSessionStateAttached},
 	}})
 	want := []TerminalSession{
-		{Multiplexer: TerminalMultiplexerTmux, Name: "ops", User: "deploy", State: terminalSessionStateAttached, Windows: 2},
-		{Multiplexer: TerminalMultiplexerScreen, Name: "120.backup", User: "backup", State: terminalSessionStateDetached},
+		{Multiplexer: TerminalMultiplexerTmux, Name: "ops", User: "deploy", State: TerminalSessionStateAttached, Windows: 2},
+		{Multiplexer: TerminalMultiplexerScreen, Name: "120.backup", User: "backup", State: TerminalSessionStateDetached},
 	}
 	if !reflect.DeepEqual(sessions, want) {
 		t.Fatalf("TerminalSessionsFromData() = %#v, want %#v", sessions, want)
