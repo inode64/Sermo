@@ -270,16 +270,16 @@ func parseTmuxSessions(user, output string) ([]TerminalSession, error) {
 		if len(parts) != tmuxSessionFieldCount || strings.TrimSpace(parts[tmuxSessionNameField]) == "" {
 			return nil, fmt.Errorf("parse tmux session line %q", line)
 		}
-		attached, err := strconv.ParseBool(strings.TrimSpace(parts[tmuxSessionAttachedField]))
-		if err != nil {
-			return nil, fmt.Errorf("parse tmux session attachment %q: %w", parts[tmuxSessionAttachedField], err)
+		attachedClients, err := strconv.Atoi(strings.TrimSpace(parts[tmuxSessionAttachedField]))
+		if err != nil || attachedClients < 0 {
+			return nil, fmt.Errorf("parse tmux session attached client count %q", parts[tmuxSessionAttachedField])
 		}
 		windows, err := strconv.Atoi(strings.TrimSpace(parts[tmuxSessionWindowsField]))
 		if err != nil || windows < 0 {
 			return nil, fmt.Errorf("parse tmux session window count %q", parts[tmuxSessionWindowsField])
 		}
 		state := TerminalSessionStateDetached
-		if attached {
+		if attachedClients > 0 {
 			state = TerminalSessionStateAttached
 		}
 		sessions = append(sessions, TerminalSession{Multiplexer: TerminalMultiplexerTmux, Name: strings.TrimSpace(parts[tmuxSessionNameField]), User: user, State: state, Windows: windows})
