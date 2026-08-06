@@ -27,6 +27,7 @@ const (
 	watchReadingLabelAge               = "Age"
 	watchReadingLabelArrays            = "Arrays"
 	watchReadingLabelAddress           = "Address"
+	watchReadingLabelAttached          = "Attached"
 	watchReadingLabelAvailable         = "Available"
 	watchReadingLabelAwait             = "Await"
 	watchReadingLabelBackend           = "Backend"
@@ -44,6 +45,7 @@ const (
 	watchReadingLabelDaysLeft          = "Days left"
 	watchReadingLabelDefaultRoutes     = "Default routes"
 	watchReadingLabelDegraded          = "Degraded"
+	watchReadingLabelDetached          = "Detached"
 	watchReadingLabelDegradedArrays    = "Degraded arrays"
 	watchReadingLabelDevice            = "Device"
 	watchReadingLabelDNSNames          = "DNS names"
@@ -244,6 +246,8 @@ func checkReadings(checkType string, data map[string]any) []web.WatchReading {
 		return tcpConnectionsCheckReadings(data)
 	case checks.CheckTypeSSHIdle:
 		return sshIdleCheckReadings(data)
+	case checks.CheckTypeTerminalSessions:
+		return terminalSessionsCheckReadings(data)
 	case checks.CheckTypeHTTP, checks.URLSchemeHTTPS:
 		return httpCheckReadings(data)
 	case checks.CheckTypeStorage, checks.CheckTypeSwap, checks.CheckTypeMemory, checks.CheckTypeLoad:
@@ -328,6 +332,15 @@ func tcpConnectionsCheckReadings(data map[string]any) []web.WatchReading {
 	return readingsFrom(data).
 		addInt(checks.DataKeyPort, watchReadingLabelPort).
 		addIntMetric(checks.DataKeyCount, watchReadingLabelConnections, metrics.MetricUnitConnections).
+		addString(checks.DataKeySampleError, watchReadingLabelError).
+		readings()
+}
+
+func terminalSessionsCheckReadings(data map[string]any) []web.WatchReading {
+	return readingsFrom(data).
+		addIntMetric(checks.DataKeyCount, watchReadingLabelCount, metrics.MetricUnitSessions).
+		addIntMetric(checks.DataKeyAttached, watchReadingLabelAttached, metrics.MetricUnitSessions).
+		addIntMetric(checks.DataKeyDetached, watchReadingLabelDetached, metrics.MetricUnitSessions).
 		addString(checks.DataKeySampleError, watchReadingLabelError).
 		readings()
 }

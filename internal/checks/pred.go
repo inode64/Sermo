@@ -187,6 +187,9 @@ var (
 	// configured protected sessions; protected_count is available to guards that
 	// must keep a named user or long-running terminal process connected.
 	SSHIdlePredFields = []string{DataKeyCount, DataKeyProtectedCount, DataKeyOldestIdleSeconds}
+	// TerminalSessionPredFields are the predicates of a terminal_sessions
+	// check. They count the sessions enumerated for its explicit user.
+	TerminalSessionPredFields = []string{DataKeyCount, DataKeyAttached, DataKeyDetached}
 	// ProcessCountPredFields is the single required predicate of a process_count check.
 	ProcessCountPredFields = []string{DataKeyCount}
 	// TCPConnectionsPredFields is the single required predicate of a tcp_connections check.

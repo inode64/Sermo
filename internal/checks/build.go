@@ -330,6 +330,9 @@ var builtinCheckSpecs = []checkSpec{
 	{info: TypeInfo{Name: CheckTypeLoad}, build: func(in checkBuildInput) (Check, string) { return buildLoadCheck(in.base, in.entry, in.deps) }},
 	{info: TypeInfo{Name: CheckTypeUsers}, build: func(in checkBuildInput) (Check, string) { return buildUsersCheck(in.base, in.entry, in.deps) }},
 	{info: TypeInfo{Name: CheckTypeSSHIdle}, build: func(in checkBuildInput) (Check, string) { return buildSSHIdleCheck(in.base, in.entry, in.deps) }},
+	{info: TypeInfo{Name: CheckTypeTerminalSessions}, build: func(in checkBuildInput) (Check, string) {
+		return buildTerminalSessionsCheck(in.base, in.entry, in.runner)
+	}},
 	{info: TypeInfo{Name: CheckTypeProcessCount}, build: func(in checkBuildInput) (Check, string) { return buildProcessCountCheck(in.base, in.entry, in.deps) }},
 	{info: TypeInfo{Name: CheckTypeHdparm}, build: func(in checkBuildInput) (Check, string) { return buildHdparmCheck(in.base, in.entry, in.runner) }},
 	{info: TypeInfo{Name: CheckTypeSensors}, build: func(in checkBuildInput) (Check, string) { return buildSensorsCheck(in.base, in.entry, in.deps) }},

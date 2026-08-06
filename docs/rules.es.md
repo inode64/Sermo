@@ -9,6 +9,7 @@
   - [Modo de reporte (reports)](#modo-de-reporte-reports)
   - [Conexiones TCP (tcp_connections)](#conexiones-tcp-tcp_connections)
   - [Inactividad de terminal SSH (ssh_idle)](#inactividad-de-terminal-ssh-ssh_idle)
+  - [Sesiones de terminal (terminal_sessions)](#sesiones-de-terminal-terminal_sessions)
   - [Ports](#ports)
   - [HTTP](#http)
   - [Cert](#cert)
@@ -47,6 +48,7 @@ Las comprobaciones de protocolo de conexión (MySQL, PostgreSQL, Redis, Docker, 
 | `tcp`         | una conexión TCP a `host:port` tiene éxito                          |
 | `tcp_connections` | el número de sockets TCP locales `ESTABLISHED` en `port` satisface `count {op, value}` |
 | `ssh_idle`    | terminales SSH interactivos inactivos durante `idle_for`, o sesiones de terminal protegidas, satisfacen el predicado de recuento configurado |
+| `terminal_sessions` | las sesiones de `tmux` o `screen` del usuario configurado satisfacen un predicado `count`/`attached`/`detached` |
 | `ports`       | un conjunto de puertos de `host` satisface una expectativa de abierto/cerrado (ver Ports)|
 | `http`        | la respuesta coincide con `expect_status` (y cabeceras/cuerpo/JSON opcionales, ver HTTP)|
 | `command`     | el comando termina con `expect_exit` (por defecto 0) y su salida coincide con `expect_stdout`/`expect_stderr` opcionales; un `user` opcional lo ejecuta como un usuario concreto del SO; `on_change` alerta cuando su salida cambia (p. ej. una versión), solo en forma de array |
@@ -547,6 +549,43 @@ terminal, la ascendencia de procesos, un ejecutable necesario por un filtro de
 protección o la resolución del propietario, el check queda no disponible; por
 tanto un guard deniega la operación en vez de asumir que no hay sesiones
 protegidas.
+
+### Sesiones de terminal (`terminal_sessions`)
+
+`terminal_sessions` lista las sesiones activas de un usuario configurado
+explícitamente mediante el cliente instalado de `tmux` o GNU `screen`. Es un
+check de estilo condición; usa `reports: state` para convertirlo en un sensor
+informativo activo/inactivo. El resultado expone el total `count` y las
+sesiones `attached` y `detached`. En el detalle de un servicio, la Web UI
+muestra cada sesión como servicio de terminal de solo lectura.
+
+```yaml
+watches:
+  sesiones-tmux:
+    check:
+      type: terminal_sessions
+      multiplexer: tmux       # tmux | screen
+      binary: /usr/bin/tmux   # ruta absoluta
+      user: deploy            # cuenta cuyo espacio de sesiones se consulta
+      count: { op: ">", value: 0 }
+      reports: state
+  sesiones-screen:
+    check:
+      type: terminal_sessions
+      multiplexer: screen
+      binary: /usr/bin/screen
+      user: backup
+      detached: { op: ">", value: 0 }
+      reports: state
+```
+
+Cada consulta se ejecuta con argv acotado como la cuenta configurada; el check
+no inspecciona nombres de proceso, no enumera usuarios no configurados, no se
+adjunta a una sesión ni envía señales. La respuesta normal sin servidor/sockets
+es una muestra vacía disponible. Un check `tmux` puede fijar un `socket:`
+absoluto para consultar un servidor no predeterminado; `screen` no admite
+`socket:`. Los errores de comando, permisos, timeout o salida malformada
+quedan no disponibles, nunca se informan como cero sesiones.
 
 ### Ports
 

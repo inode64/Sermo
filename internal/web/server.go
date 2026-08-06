@@ -827,6 +827,16 @@ type SSHSession struct {
 	CanClose    bool   `json:"can_close"`
 }
 
+// TerminalSession is one read-only tmux or screen session from a configured
+// terminal_sessions check.
+type TerminalSession struct {
+	Multiplexer string `json:"multiplexer"`
+	Name        string `json:"name"`
+	User        string `json:"user"`
+	State       string `json:"state"`
+	Windows     int    `json:"windows,omitempty"`
+}
+
 // ProcessTotals aggregates a service's whole discovered process tree — the
 // matched processes and their child/descendant processes — so the totals reflect
 // the service's workers and helpers, not just its main process.
@@ -894,17 +904,19 @@ type Lock struct {
 // Detail is a single service's view: its summary plus its checks.
 type Detail struct {
 	Service
-	Checks               []Check        `json:"checks"`
-	Locks                []Lock         `json:"locks,omitempty"`
-	LockWarnings         []string       `json:"lock_warnings,omitempty"`
-	NoResidentProcess    bool           `json:"no_resident_process,omitempty"`
-	ProcessWarnings      []string       `json:"process_warnings,omitempty"`
-	Processes            []Process      `json:"processes,omitempty"`
-	ProcessTotals        *ProcessTotals `json:"process_totals,omitempty"`
-	SSHSessionsSupported bool           `json:"ssh_sessions_supported,omitempty"`
-	SSHSessions          []SSHSession   `json:"ssh_sessions,omitempty"`
-	Remediation          *Remediation   `json:"remediation,omitempty"`
-	Rules                []RuleWindow   `json:"rules,omitempty"`
+	Checks                    []Check           `json:"checks"`
+	Locks                     []Lock            `json:"locks,omitempty"`
+	LockWarnings              []string          `json:"lock_warnings,omitempty"`
+	NoResidentProcess         bool              `json:"no_resident_process,omitempty"`
+	ProcessWarnings           []string          `json:"process_warnings,omitempty"`
+	Processes                 []Process         `json:"processes,omitempty"`
+	ProcessTotals             *ProcessTotals    `json:"process_totals,omitempty"`
+	SSHSessionsSupported      bool              `json:"ssh_sessions_supported,omitempty"`
+	SSHSessions               []SSHSession      `json:"ssh_sessions,omitempty"`
+	TerminalSessionsSupported bool              `json:"terminal_sessions_supported,omitempty"`
+	TerminalSessions          []TerminalSession `json:"terminal_sessions,omitempty"`
+	Remediation               *Remediation      `json:"remediation,omitempty"`
+	Rules                     []RuleWindow      `json:"rules,omitempty"`
 }
 
 // SeriesPoint is one availability bucket of the SLA history. Ratio is nil for a
