@@ -958,19 +958,35 @@ watches:
       host: 1.1.1.1
       query: example.com
       expect: { rcode: NOERROR, answers: { op: ">", value: 0 } }
-      # Other registered connection-protocol check types:
-      # acpid, ajp, amqp/rabbitmq, asterisk/ami, avahi, ceph/ceph-mon,
-      # chrony/chronyd, clamd/clamav,
-      # cloudflared/cloudflare-tunnel, dbus, dhclient/dhcp-client, dhcp, docker,
-      # fail2ban, fpm/php-fpm, ftp, glusterfs/glusterd/gluster, guacd/guacamole,
-      # imap, influxdb/influx, ipp/cups, kafka, ldap, libvirt/libvirtd, lvmpolld,
-      # memcached/memcache, mongodb/mongo, mountd/rpc.mountd/nfs-mountd, mqtt,
-      # nebula/nebula-vpn, nfs/nfs-server/nfsd, nntp/nntps, ntp, nut/ups/upsd,
-      # openvpn/ovpn, openvswitch/ovs/ovsdb/ovsdb-server, pop/pop3, postgres/postgresql,
-      # prometheus/prom, rdp/ms-wbt-server, redis/valkey, rpcbind/portmap/portmapper,
-      # rsync/rsyncd, rspamd, sieve/managesieve, smb/samba/cifs, smtp, snmp,
-      # spamd/spamassassin, ssh, statd/rpc.statd/nsm/nfs-statd, syncthing, tftp,
-      # unifi/unifi-controller/unifi-network, varnish/varnishadm.
+  dbus-libvirt:
+    check:
+      type: dbus
+      bus_name: org.libvirt
+      object_path: /org/libvirt
+      on_change: true
+  dbus-gdm-version:
+    check:
+      type: dbus
+      bus_name: org.gnome.DisplayManager
+      object_path: /org/gnome/DisplayManager/Manager
+      probe: property
+      dbus_interface: org.gnome.DisplayManager.Manager
+      property: Version
+      expect:
+        property_value: { op: "=~", value: "^[0-9]+\\." }
+        # Other registered connection-protocol check types:
+        # acpid, ajp, amqp/rabbitmq, asterisk/ami, avahi, ceph/ceph-mon,
+        # chrony/chronyd, clamd/clamav,
+        # cloudflared/cloudflare-tunnel, dbus, dhclient/dhcp-client, dhcp, docker,
+        # fail2ban, fpm/php-fpm, ftp, glusterfs/glusterd/gluster, guacd/guacamole,
+        # imap, influxdb/influx, ipp/cups, kafka, ldap, libvirt/libvirtd, lvmpolld,
+        # memcached/memcache, mongodb/mongo, mountd/rpc.mountd/nfs-mountd, mqtt,
+        # nebula/nebula-vpn, nfs/nfs-server/nfsd, nntp/nntps, ntp, nut/ups/upsd,
+        # openvpn/ovpn, openvswitch/ovs/ovsdb/ovsdb-server, pop/pop3, postgres/postgresql,
+        # prometheus/prom, rdp/ms-wbt-server, redis/valkey, rpcbind/portmap/portmapper,
+        # rsync/rsyncd, rspamd, sieve/managesieve, smb/samba/cifs, smtp, snmp,
+        # spamd/spamassassin, ssh, statd/rpc.statd/nsm/nfs-statd, syncthing, tftp,
+        # unifi/unifi-controller/unifi-network, varnish/varnishadm.
 
   worker-runaway:
     check: { type: process_count, count: { op: ">", value: 40 } }

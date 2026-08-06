@@ -47,6 +47,16 @@ watches:
         - status
       timeout: 10s
       verify: true
+  dbus:
+    check:
+      type: dbus
+      bus_name: org.freedesktop.NetworkManager
+      object_path: /org/freedesktop/NetworkManager
+      probe: property
+      dbus_interface: org.freedesktop.NetworkManager
+      property: State
+      timeout: 5s
+      verify: true
   restart-if-worker-thread-hot:
     check:
       type: metric

@@ -53,6 +53,24 @@ func TestBuildWatchesProcessKillAction(t *testing.T) {
 	}
 }
 
+func TestBuildWatchesDBusIntrospectionProbe(t *testing.T) {
+	cfg := cfgWithWatches(map[string]any{
+		"display-manager": map[string]any{
+			"check": map[string]any{
+				"type": "dbus", "bus_name": "org.gnome.DisplayManager", "object_path": "/org/gnome/DisplayManager/Manager",
+				"probe": "introspect", "dbus_interface": "org.gnome.DisplayManager.Manager",
+			},
+		},
+	})
+	watches, warns := BuildWatches(cfg, Deps{DefaultTimeout: time.Second}, time.Minute)
+	if len(warns) != 0 {
+		t.Fatalf("unexpected warnings: %v", warns)
+	}
+	if len(watches) != 1 || watches[0].Name != "display-manager" || watches[0].CheckType != "dbus" {
+		t.Fatalf("D-Bus host watches = %+v", watches)
+	}
+}
+
 func TestBuildWatchesProcessKillActionRejectsUnsafeSelector(t *testing.T) {
 	cfg := cfgWithWatches(map[string]any{
 		"kill-stale-sudo": map[string]any{

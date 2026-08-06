@@ -14,6 +14,11 @@ const avahiServerRunning = 2
 
 const avahiVersionPrefix = "avahi "
 
+const (
+	avahiBusName    = "org.freedesktop.Avahi"
+	avahiObjectPath = "/"
+)
+
 // avahiProtocol probes the Avahi mDNS/DNS-SD daemon natively over its D-Bus API
 // (org.freedesktop.Avahi) using the pure-Go godbus client. Connecting to the
 // system bus performs the SASL auth and Hello handshake; it then calls
@@ -42,23 +47,27 @@ func avahiProbe(ctx context.Context, cfg Config, addr string) (Result, error) {
 	}
 	defer func() { _ = conn.Close() }()
 
-	obj := conn.Object("org.freedesktop.Avahi", "/")
+	owner, err := dbusNameOwner(ctx, conn.BusObject(), avahiBusName)
+	if err != nil {
+		return Result{}, probeErr(ProtocolNameAvahi, stepDBusGetNameOwner, err)
+	}
+	obj := conn.Object(owner, avahiObjectPath)
 	var versionString string
-	if err := obj.CallWithContext(ctx, "org.freedesktop.Avahi.Server.GetVersionString", 0).Store(&versionString); err != nil {
+	if err := obj.CallWithContext(ctx, "org.freedesktop.Avahi.Server.GetVersionString", dbusReadOnlyCallFlags).Store(&versionString); err != nil {
 		return Result{}, probeErr(ProtocolNameAvahi, stepAvahiGetVersionString, err)
 	}
 
-	extra := map[string]string{}
+	extra := map[string]string{ExtraKeyDBusOwner: owner}
 	if versionString != "" {
 		extra[ExtraKeyVersionString] = versionString
 	}
 	// Best-effort extras: host name and server state.
 	var hostname string
-	if err := obj.CallWithContext(ctx, "org.freedesktop.Avahi.Server.GetHostName", 0).Store(&hostname); err == nil && hostname != "" {
+	if err := obj.CallWithContext(ctx, "org.freedesktop.Avahi.Server.GetHostName", dbusReadOnlyCallFlags).Store(&hostname); err == nil && hostname != "" {
 		extra[ExtraKeyHostname] = hostname
 	}
 	var state int32
-	if err := obj.CallWithContext(ctx, "org.freedesktop.Avahi.Server.GetState", 0).Store(&state); err == nil {
+	if err := obj.CallWithContext(ctx, "org.freedesktop.Avahi.Server.GetState", dbusReadOnlyCallFlags).Store(&state); err == nil {
 		extra[ExtraKeyState] = strconv.Itoa(int(state))
 		if state == avahiServerRunning {
 			extra[extraRunning] = strconv.FormatBool(true)

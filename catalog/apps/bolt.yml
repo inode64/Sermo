@@ -1,0 +1,10 @@
+name: bolt
+display_name: "bolt"
+category: hardware
+variables:
+  binary:
+    - /usr/libexec/boltd
+    - /usr/lib/boltd
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}", "--version"], timeout: 10s }

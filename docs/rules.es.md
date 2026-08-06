@@ -113,9 +113,7 @@ Las comprobaciones de protocolo de conexión (MySQL, PostgreSQL, Redis, Docker, 
 | `dhclient` / `dhcp-client` | un cliente DHCP local tiene UDP/68 ligado en `/proc/net/udp` (ver Base de datos) |
 | `rspamd`      | un worker rspamd responde a `GET /ping` con `pong` (ver Base de datos) |
 | `libvirt` / `libvirtd` | un daemon libvirt responde a RPC; expone recuentos de VM (`domains.active`…), capacidad del nodo y el estado de una VM para `expect`/`on_change` (ver Base de datos) |
-| `dbus`        | un daemon D-Bus completa el handshake de auth/Hello y responde a `GetId` (ver Base de datos) |
-| `login1`      | systemd-logind posee `org.freedesktop.login1` y responde a `Peer.Ping` sin activar un servicio ausente |
-| `udisks2`     | UDisks2 está registrado en el bus del sistema y responde a `Peer.Ping` en su objeto Manager (ver Base de datos) |
+| `dbus`        | un daemon D-Bus responde a `GetId`; los objetos con nombre admiten sondas de peer, introspección y propiedad escalar de solo lectura sin activación (ver Base de datos) |
 | `avahi` / `avahi-daemon` | el daemon Avahi responde a `GetVersionString` sobre su API D-Bus (ver Base de datos) |
 | `syncthing`   | una instancia Syncthing responde a `/rest/noauth/health` con `{"status":"OK"}` (ver Base de datos) |
 | `docker`      | el motor Docker responde a `/info`, exponiendo recuentos de contenedores (running/paused/stopped), imágenes y el estado/salud de un contenedor para `expect`/`on_change` (ver Base de datos) |
@@ -1039,13 +1037,32 @@ Protocolos, en el orden de la tabla de arriba:
   ```
 - `dbus` — se conecta a un daemon D-Bus y completa su handshake de auth SASL +
   `org.freedesktop.DBus.Hello` — que por sí solo prueba que el bus está activo — luego
-  llama a `org.freedesktop.DBus.GetId` para leer el UUID del bus. No ejecuta operación de
-  escritura. **Objetivo:** por defecto el bus del sistema
+  llama a `org.freedesktop.DBus.GetId` para leer el UUID del bus. Con `bus_name`
+  y `object_path` a la vez, también resuelve el nombre conocido mediante
+  `GetNameOwner` y sondea el propietario único devuelto. `probe` selecciona una
+  de tres operaciones limitadas y de solo lectura: `peer` (por defecto) llama a
+  `org.freedesktop.DBus.Peer.Ping`; `introspect` analiza
+  `org.freedesktop.DBus.Introspectable.Introspect` y, si se define
+  `dbus_interface`, exige esa interfaz; `property` llama a
+  `org.freedesktop.DBus.Properties.Get` y exige tanto `dbus_interface` como
+  `property`. El valor de la propiedad debe ser escalar (texto, booleano,
+  número u object path); usa `expect.property_value` para comprobar el valor
+  observado. Todas las llamadas llevan `NO_AUTO_START`: un servicio ausente o
+  bloqueado falla sin que D-Bus lo active, y la llamada no puede terminar en un
+  propietario sustituto por una carrera. No existe un modo para métodos
+  arbitrarios. Omitir todos los campos de destino conserva la sonda solo-bus;
+  en caso contrario `bus_name` y `object_path` deben definirse juntos. No
+  ejecuta operación de escritura.
+  **Objetivo:** por defecto el bus del sistema
   (`unix:path=/run/dbus/system_bus_socket`); establece `socket` para una ruta de socket
   distinta, o `query` para una dirección D-Bus completa (`unix:abstract=…`,
   `tcp:host=…,port=…`). Basado en socket, así que no hay puerto TCP. Sin auth — el acceso está
   gobernado por los permisos del socket. Datos del resultado: el id del bus, la dirección y el
-  nombre único de la conexión. Usa `github.com/godbus/dbus/v5`. Con `interface`
+  nombre único de la conexión; una sonda de servicio también informa de
+  `bus_name`, `object_path`, `probe` y su `owner` único, usado como huella de
+  `on_change`, además de `dbus_interface`, `property` y `property_value` cuando
+  se configuren.
+  Usa `github.com/godbus/dbus/v5`. Con `interface`
   y un `query` TCP, usa exactamente `tcp:host=…,port=…`; el resto de opciones de
   transporte TCP de D-Bus se rechazan para no ignorar silenciosamente el enlace de salida.
 
@@ -1056,26 +1073,32 @@ Protocolos, en el orden de la tabla de arriba:
     dbus-custom:
       type: dbus
       socket: /run/dbus/system_bus_socket   # or use `query` for a full address
-  ```
-- `udisks2` — el daemon de gestión de discos UDisks2 en el bus D-Bus del sistema. Se conecta
-  al bus (auth SASL + Hello), verifica que `org.freedesktop.UDisks2` tiene un
-  propietario de nombre, y llama a `org.freedesktop.DBus.Peer.Ping` en
-  `/org/freedesktop/UDisks2/Manager` — prueba de que el servicio está registrado y
-  respondiendo, no meramente que `dbus-daemon` está activo. **Objetivo:** como `dbus`, por defecto
-  el bus del sistema; establece `socket` para un socket de bus distinto o `query` para una dirección
-  D-Bus completa. Basado en socket, sin puerto TCP, sin auth. Datos del resultado: el nombre único de D-Bus
-  que posee `org.freedesktop.UDisks2`. Usa `github.com/godbus/dbus/v5`. Se aplica la
-  misma restricción de `interface` + `query` TCP que a `dbus`.
-
-  ```yaml
-  checks:
+    login1:
+      type: dbus
+      bus_name: org.freedesktop.login1
+      object_path: /org/freedesktop/login1
     udisks2:
-      type: udisks2
-      timeout: 5s
+      type: dbus
+      bus_name: org.freedesktop.UDisks2
+      object_path: /org/freedesktop/UDisks2/Manager
+    libvirt-dbus:
+      type: dbus
+      bus_name: org.libvirt
+      object_path: /org/libvirt
+    gdm-version:
+      type: dbus
+      bus_name: org.gnome.DisplayManager
+      object_path: /org/gnome/DisplayManager/Manager
+      probe: property
+      dbus_interface: org.gnome.DisplayManager.Manager
+      property: Version
+      expect:
+        property_value: { op: "=~", value: "^[0-9]+\\." }
   ```
 - `avahi` (alias `avahi-daemon`) — el daemon Avahi mDNS/DNS-SD (zeroconf), sondeado
   sobre su API D-Bus (`org.freedesktop.Avahi`). Se conecta al bus del sistema (auth SASL
-  + Hello) y llama a `org.freedesktop.Avahi.Server.GetVersionString` — una respuesta
+  + Hello), resuelve su propietario único sin activación y llama sobre él, con
+  `NO_AUTO_START`, a `org.freedesktop.Avahi.Server.GetVersionString` — una respuesta
   prueba que avahi-daemon está activo y registrado en el bus — reportando la `version`
   (combínalo con `on_version_change`) y, de mejor esfuerzo, el `hostname` y el `state`
   del servidor (`running` cuando AVAHI_SERVER_RUNNING). **Objetivo:** como `dbus`, por defecto

@@ -1,0 +1,23 @@
+name: systemd-machined
+aliases:
+  - machined
+display_name: systemd-machined
+category: virtualization
+description: systemd virtual machine and container registration service.
+service:
+  systemd:
+    - systemd-machined
+watches:
+  service:
+    check:
+      type: service
+      expect: active
+  dbus:
+    check:
+      type: dbus
+      bus_name: org.freedesktop.machine1
+      object_path: /org/freedesktop/machine1
+      probe: introspect
+      dbus_interface: org.freedesktop.machine1.Manager
+      timeout: 5s
+      verify: true

@@ -17,6 +17,15 @@ watches:
     check:
       type: service
       expect: active
+  dbus:
+    check:
+      type: dbus
+      bus_name: org.bluez
+      object_path: /org/bluez
+      probe: introspect
+      dbus_interface: org.bluez.AgentManager1
+      timeout: 5s
+      verify: true
   process:
     check:
       type: process

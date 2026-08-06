@@ -1,0 +1,24 @@
+name: systemd-networkd
+aliases:
+  - networkd
+display_name: systemd-networkd
+category: network
+description: systemd network configuration service.
+service:
+  systemd:
+    - systemd-networkd
+watches:
+  service:
+    check:
+      type: service
+      expect: active
+  dbus:
+    check:
+      type: dbus
+      bus_name: org.freedesktop.network1
+      object_path: /org/freedesktop/network1
+      probe: property
+      dbus_interface: org.freedesktop.network1.Manager
+      property: OperationalState
+      timeout: 5s
+      verify: true

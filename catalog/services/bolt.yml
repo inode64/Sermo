@@ -1,0 +1,28 @@
+name: bolt
+display_name: bolt
+category: hardware
+description: Thunderbolt device authorization service.
+service:
+  systemd:
+    - bolt
+apps:
+  - bolt
+processes:
+  main:
+    exe: ${bolt_binary}
+    user: root
+watches:
+  service:
+    check:
+      type: service
+      expect: active
+  dbus:
+    check:
+      type: dbus
+      bus_name: org.freedesktop.bolt
+      object_path: /org/freedesktop/bolt
+      probe: property
+      dbus_interface: org.freedesktop.bolt1.Manager
+      property: Version
+      timeout: 5s
+      verify: true
