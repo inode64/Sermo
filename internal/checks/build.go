@@ -74,6 +74,12 @@ type Samplers struct {
 	ZombieSampler        ZombieSamplerFunc
 	UsersSampler         UsersSamplerFunc
 	SSHIdleSampler       SSHIdleSamplerFunc
+	// CertSampler fetches a TLS endpoint's certificate for `cert` checks. Nil
+	// dials the host.
+	CertSampler CertSamplerFunc
+	// SizeSampler measures the byte size of a file or directory for `size`
+	// checks. Nil uses os.Stat (file) / a recursive walk (directory).
+	SizeSampler SizeSamplerFunc
 }
 
 // Deps are the host capabilities a built check set may need.
@@ -106,12 +112,6 @@ type Deps struct {
 	// process resolves no exe, so it is still never signalled.
 	StaleBinaries StaleBinariesFunc
 	Samplers
-	// CertSampler fetches a TLS endpoint's certificate for `cert` checks. Nil dials
-	// the host.
-	CertSampler CertSamplerFunc
-	// SizeSampler measures the byte size of a file or directory for `size` checks.
-	// Nil uses os.Stat (file) / a recursive walk (directory).
-	SizeSampler SizeSamplerFunc
 }
 
 // BuildIssueKind identifies why an unusable check entry could not be built.
