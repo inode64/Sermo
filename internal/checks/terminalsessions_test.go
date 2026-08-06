@@ -41,10 +41,12 @@ func TestTerminalMultiplexerAdapterParsesSessions(t *testing.T) {
 		{
 			name:   "screen states",
 			config: TerminalSessionConfig{Multiplexer: TerminalMultiplexerScreen, User: "deploy"},
-			output: "There are screens on:\n\t120.ops\t(Detached)\n\t121.build\t(Attached)\n2 Sockets in /run/screen/S-deploy.\n",
+			output: "There are screens on:\n\t120.ops\t(Detached)\n\t121.build\t(Attached)\n\t122.pair\t(Multi, attached)\n\t123.batch\t(Multi, detached)\n4 Sockets in /run/screen/S-deploy.\n",
 			want: []TerminalSession{
 				{Multiplexer: TerminalMultiplexerScreen, Name: "120.ops", User: "deploy", State: TerminalSessionStateDetached},
 				{Multiplexer: TerminalMultiplexerScreen, Name: "121.build", User: "deploy", State: TerminalSessionStateAttached},
+				{Multiplexer: TerminalMultiplexerScreen, Name: "122.pair", User: "deploy", State: TerminalSessionStateAttached},
+				{Multiplexer: TerminalMultiplexerScreen, Name: "123.batch", User: "deploy", State: TerminalSessionStateDetached},
 			},
 		},
 		{
