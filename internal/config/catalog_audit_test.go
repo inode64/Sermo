@@ -1,6 +1,7 @@
 package config
 
 import (
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -11,6 +12,8 @@ import (
 	"github.com/goccy/go-yaml"
 
 	"sermo/internal/cfgval"
+	"sermo/internal/checks"
+	"sermo/internal/conn"
 	"sermo/internal/rules"
 )
 
@@ -121,48 +124,37 @@ func catalogWatchCheck(t *testing.T, body map[string]any, name string) map[strin
 	return nested(t, body, "watches", name, "check")
 }
 
-func TestCatalogDBusServiceProbesStayReadOnlyAndCheckOnly(t *testing.T) {
-	tests := []struct {
-		service, watch, probe, dbusInterface, property string
-	}{
-		{service: "systemd", watch: "manager", probe: "property", dbusInterface: "org.freedesktop.systemd1.Manager", property: "Version"},
-		{service: "networkmanager", watch: "dbus", probe: "property", dbusInterface: "org.freedesktop.NetworkManager", property: "State"},
-		{service: "firewalld", watch: "dbus", probe: "property", dbusInterface: "org.fedoraproject.FirewallD1", property: "state"},
-		{service: "tuned", watch: "dbus", probe: "introspect", dbusInterface: "com.redhat.tuned.control"},
-		{service: "bluetooth", watch: "dbus", probe: "introspect", dbusInterface: "org.bluez.AgentManager1"},
-		{service: "systemd-machined", watch: "dbus", probe: "introspect", dbusInterface: "org.freedesktop.machine1.Manager"},
-		{service: "systemd-networkd", watch: "dbus", probe: "property", dbusInterface: "org.freedesktop.network1.Manager", property: "OperationalState"},
-		{service: "systemd-resolved", watch: "dbus", probe: "introspect", dbusInterface: "org.freedesktop.resolve1.Manager"},
-		{service: "wpa-supplicant", watch: "dbus", probe: "introspect", dbusInterface: "fi.w1.wpa_supplicant1"},
-		{service: "tuned-ppd", watch: "active-profile", probe: "property", dbusInterface: "net.hadess.PowerProfiles", property: "ActiveProfile"},
-		{service: "iio-sensor-proxy", watch: "dbus", probe: "property", dbusInterface: "net.hadess.SensorProxy", property: "HasAmbientLight"},
-		{service: "accounts-daemon", watch: "version", probe: "property", dbusInterface: "org.freedesktop.Accounts", property: "DaemonVersion"},
-		{service: "colord", watch: "version", probe: "property", dbusInterface: "org.freedesktop.ColorManager", property: "DaemonVersion"},
-		{service: "bolt", watch: "dbus", probe: "property", dbusInterface: "org.freedesktop.bolt1.Manager", property: "Version"},
-		{service: "gdm", watch: "version", probe: "property", dbusInterface: "org.gnome.DisplayManager.Manager", property: "Version"},
-	}
-	root := repoRoot(t)
-	for _, test := range tests {
-		t.Run(test.service, func(t *testing.T) {
-			body := catalogDocByName(t, root, "services", test.service)
-			watch := nested(t, body, "watches", test.watch)
-			if _, present := watch["then"]; present {
-				t.Fatalf("catalog service %s D-Bus watch %s must remain check-only", test.service, test.watch)
+func TestCatalogDBusAdvancedProbesStayReadOnlyAndCheckOnly(t *testing.T) {
+	found := 0
+	servicesDir := filepath.Join(repoRoot(t), "catalog", "services")
+	walkCatalogDocs(t, servicesDir, func(path string, body map[string]any) {
+		watches, _ := body["watches"].(map[string]any)
+		for _, name := range slices.Sorted(maps.Keys(watches)) {
+			watch, _ := watches[name].(map[string]any)
+			check, _ := watch["check"].(map[string]any)
+			if cfgval.String(check[checks.CheckKeyType]) != conn.ProtocolNameDBus {
+				continue
 			}
-			check := catalogWatchCheck(t, body, test.watch)
-			if got := cfgval.String(check["type"]); got != "dbus" {
-				t.Fatalf("type = %q, want dbus", got)
+			probe := cfgval.String(check[checks.CheckKeyDBusProbe])
+			switch probe {
+			case "", conn.DBusProbePeer:
+				continue
+			case conn.DBusProbeIntrospect, conn.DBusProbeProperty:
+				found++
+			default:
+				t.Errorf("%s D-Bus watch %s uses unsupported advanced probe %q", path, name, probe)
+				continue
 			}
-			if got := cfgval.String(check["probe"]); got != test.probe {
-				t.Fatalf("probe = %q, want %q", got, test.probe)
+			if _, present := watch[rules.RuleFieldThen]; present {
+				t.Errorf("%s D-Bus watch %s must remain check-only", path, name)
 			}
-			if got := cfgval.String(check["dbus_interface"]); got != test.dbusInterface {
-				t.Fatalf("dbus_interface = %q, want %q", got, test.dbusInterface)
+			if err := conn.ValidateDBusTarget(checks.DBusTargetFromEntry(check)); err != nil {
+				t.Errorf("%s D-Bus watch %s target: %v", path, name, err)
 			}
-			if got := cfgval.String(check["property"]); got != test.property {
-				t.Fatalf("property = %q, want %q", got, test.property)
-			}
-		})
+		}
+	})
+	if found == 0 {
+		t.Fatal("catalog has no advanced D-Bus probes to audit")
 	}
 }
 
