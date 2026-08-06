@@ -691,6 +691,7 @@
     .service-detail table { table-layout: fixed; }
     .service-detail th, .service-detail td { white-space: normal; overflow-wrap: anywhere; }
     .ssh-session-table th:nth-child(3), .ssh-session-table td:nth-child(3) { display: none; }
+    .terminal-session-table th:nth-child(5), .terminal-session-table td:nth-child(5) { display: none; }
     #app-footer .footer-version {
       margin-left: 0;
       flex-basis: 100%;

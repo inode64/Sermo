@@ -1,0 +1,9 @@
+name: screen
+display_name: screen
+category: terminal
+description: GNU terminal multiplexer.
+variables:
+  binary: ${bindir}/screen
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}", "--version"], timeout: 10s }

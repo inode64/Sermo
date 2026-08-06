@@ -481,6 +481,10 @@ func (b *WebBackend) Detail(ctx context.Context, name string) (web.Detail, bool)
 			d.SSHSessions = sshSessionsToWeb(sessions)
 		}
 	}
+	if terminalSessionsSupported(e) {
+		d.TerminalSessionsSupported = true
+		d.TerminalSessions = b.terminalSessions(e, snap)
+	}
 
 	if b.remediation != nil {
 		if rep, ok := b.remediation.Get(name); ok {

@@ -1692,6 +1692,10 @@ A service may also carry its own `watches:` block — per-service watches that c
 fire a hook/notification or compact `then.action`, and can use the service-scoped
 `service`/`metric`/`process_count` check types. See
 [Service watches](configuration.md#service-watches-scoped-to-a-service).
+Host-global checks such as `terminal_sessions` also work there: place a
+read-only `tmux` or `screen` check under the SSH service to show its
+configured users' terminal sessions in that service's Web UI detail. It does
+not create a systemd/OpenRC service or grant any terminal control action.
 
 ## Blocking operations while clients are connected
 

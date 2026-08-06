@@ -10,6 +10,7 @@
 - [Ports](#ports)
   - [TCP connections (tcp_connections)](#tcp-connections-tcp_connections)
   - [SSH terminal idle (ssh_idle)](#ssh-terminal-idle-ssh_idle)
+  - [Terminal sessions (terminal_sessions)](#terminal-sessions-terminal_sessions)
   - [HTTP](#http)
   - [Cert](#cert)
   - [Database connection (mysql / mariadb)](#database-connection-mysql--mariadb)
@@ -47,6 +48,7 @@ Connection-protocol checks (MySQL, PostgreSQL, Redis, Docker, libvirt, etc.) are
 | `tcp`         | a TCP connection to `host:port` succeeds                           |
 | `tcp_connections` | the number of local `ESTABLISHED` TCP sockets on `port` satisfies `count {op, value}` |
 | `ssh_idle`    | interactive SSH terminals idle for `idle_for`, or protected terminal sessions, satisfy their configured count predicate |
+| `terminal_sessions` | the configured user's `tmux` or `screen` sessions satisfy a `count`/`attached`/`detached` predicate |
 | `ports`       | a set of `host` ports satisfy an open/closed expectation (see Ports)|
 | `http`        | the response matches `expect_status` (and optional headers/body/JSON, see HTTP)|
 | `command`     | the command exits with `expect_exit` (default 0) and its output matches optional `expect_stdout`/`expect_stderr`; optional `user` runs it as a specific OS user; `on_change` alerts when its output changes (e.g. a version), array form only |
@@ -542,6 +544,43 @@ atime depends on the host's atime policy. If utmp, a terminal, process ancestry,
 an executable needed by a protection filter, or owner resolution cannot be read,
 the check is unavailable; a guard therefore denies the operation rather than
 assuming that no session is protected.
+
+### Terminal sessions (`terminal_sessions`)
+
+`terminal_sessions` lists the active sessions of one explicitly configured
+user through the installed `tmux` or GNU `screen` client. It is a
+condition-style check; use `reports: state` to make it an informational
+active/inactive sensor. The result exposes total `count`, `attached` and
+`detached` sessions. In a service detail, the Web UI shows the individual
+sessions as read-only terminal services.
+
+```yaml
+watches:
+  tmux-sessions:
+    check:
+      type: terminal_sessions
+      multiplexer: tmux       # tmux | screen
+      binary: /usr/bin/tmux   # absolute path
+      user: deploy            # account whose session namespace is queried
+      count: { op: ">", value: 0 }
+      reports: state
+  screen-sessions:
+    check:
+      type: terminal_sessions
+      multiplexer: screen
+      binary: /usr/bin/screen
+      user: backup
+      detached: { op: ">", value: 0 }
+      reports: state
+```
+
+All queries run as the configured account with a bounded argv-only command; the
+check does not inspect process names, enumerate unconfigured users, attach to a
+session, or send a signal. A normal no-server/no-socket reply is an empty,
+available sample. A `tmux` check may set an absolute `socket:` to query a
+non-default server socket; `screen` has no `socket:` option. Command,
+permission, timeout and malformed-output failures are unavailable rather than
+reported as zero sessions.
 
 ### Ports
 

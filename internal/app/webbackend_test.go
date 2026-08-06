@@ -197,6 +197,28 @@ func TestWebBackendShowsAttributedSSHSessionsAndHeaderSummary(t *testing.T) {
 	}
 }
 
+func TestWebBackendShowsTerminalSessionsFromPublishedCheckData(t *testing.T) {
+	snaps := NewSnapshots()
+	snaps.PublishWithCheckTypes("web", map[string]checks.Result{
+		"terminal-sessions": {
+			Check: "terminal-sessions",
+			OK:    true,
+			Data: map[string]any{checks.DataKeyTerminalSessions: []checks.TerminalSession{
+				{Multiplexer: checks.TerminalMultiplexerTmux, Name: "ops", User: "deploy", State: "attached", Windows: 2},
+				{Multiplexer: checks.TerminalMultiplexerScreen, Name: "120.backup", User: "backup", State: "detached"},
+			}},
+		},
+	}, map[string]bool{"terminal-sessions": true}, map[string]string{"terminal-sessions": checks.CheckTypeTerminalSessions})
+	b := webBackendWithEntry(snaps, []string{"terminal-sessions"}, map[string]string{"terminal-sessions": checks.CheckTypeTerminalSessions})
+	detail, ok := b.Detail(context.Background(), "web")
+	if !ok || !detail.TerminalSessionsSupported || len(detail.TerminalSessions) != 2 {
+		t.Fatalf("detail = %+v, ok=%v", detail, ok)
+	}
+	if detail.TerminalSessions[0].Multiplexer != checks.TerminalMultiplexerScreen || detail.TerminalSessions[0].Name != "120.backup" || detail.TerminalSessions[1].Windows != 2 {
+		t.Fatalf("terminal sessions = %+v, want sorted published sessions", detail.TerminalSessions)
+	}
+}
+
 // A condition check reports OK when its threshold is crossed, so the detail
 // view must expose availability, not the raw comparison: an under-threshold
 // sensor is healthy and has to read ok, not fail.
