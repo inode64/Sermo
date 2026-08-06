@@ -73,7 +73,7 @@ func TestPreflightFailsOnRequiredCheck(t *testing.T) {
 	}
 }
 
-func TestPreflightFailsOnRequiredBuildWarning(t *testing.T) {
+func TestPreflightFailsOnRequiredBuildIssue(t *testing.T) {
 	root := t.TempDir()
 	global := filepath.Join(root, "sermo.yml")
 	mustWrite(t, global, `
