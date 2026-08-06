@@ -568,11 +568,11 @@ func TestDBusTargetEntrySchema(t *testing.T) {
 		CheckKeyDBusProperty:   "Version",
 	}
 	wantTarget := conn.DBusTarget{
-		BusName:    "org.libvirt",
-		ObjectPath: "/org/libvirt",
-		Probe:      conn.DBusProbeProperty,
-		Interface:  "org.libvirt.Connect",
-		Property:   "Version",
+		BusName:       "org.libvirt",
+		ObjectPath:    "/org/libvirt",
+		Probe:         conn.DBusProbeProperty,
+		DBusInterface: "org.libvirt.Connect",
+		Property:      "Version",
 	}
 	if got := DBusTargetFromEntry(entry); got != wantTarget {
 		t.Fatalf("DBusTargetFromEntry() = %+v, want %+v", got, wantTarget)

@@ -382,11 +382,11 @@ func DBusTargetFields() [5]string {
 // type errors remain the configuration validator's responsibility.
 func DBusTargetFromEntry(entry map[string]any) conn.DBusTarget {
 	return conn.DBusTarget{
-		BusName:    cfgval.AsString(entry[CheckKeyDBusBusName]),
-		ObjectPath: cfgval.AsString(entry[CheckKeyDBusObjectPath]),
-		Probe:      cfgval.AsString(entry[CheckKeyDBusProbe]),
-		Interface:  cfgval.AsString(entry[CheckKeyDBusInterface]),
-		Property:   cfgval.AsString(entry[CheckKeyDBusProperty]),
+		BusName:       cfgval.AsString(entry[CheckKeyDBusBusName]),
+		ObjectPath:    cfgval.AsString(entry[CheckKeyDBusObjectPath]),
+		Probe:         cfgval.AsString(entry[CheckKeyDBusProbe]),
+		DBusInterface: cfgval.AsString(entry[CheckKeyDBusInterface]),
+		Property:      cfgval.AsString(entry[CheckKeyDBusProperty]),
 	}
 }
 

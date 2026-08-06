@@ -110,8 +110,8 @@ func TestValidateDBusTarget(t *testing.T) {
 	}{
 		{name: "bus only"},
 		{name: "named service", target: DBusTarget{BusName: "org.libvirt", ObjectPath: "/org/libvirt"}},
-		{name: "introspect", target: DBusTarget{BusName: "org.gnome.DisplayManager", ObjectPath: "/org/gnome/DisplayManager/Manager", Probe: DBusProbeIntrospect, Interface: "org.gnome.DisplayManager.Manager"}},
-		{name: "property", target: DBusTarget{BusName: "net.hadess.PowerProfiles", ObjectPath: "/net/hadess/PowerProfiles", Probe: DBusProbeProperty, Interface: "net.hadess.PowerProfiles", Property: "ActiveProfile"}},
+		{name: "introspect", target: DBusTarget{BusName: "org.gnome.DisplayManager", ObjectPath: "/org/gnome/DisplayManager/Manager", Probe: DBusProbeIntrospect, DBusInterface: "org.gnome.DisplayManager.Manager"}},
+		{name: "property", target: DBusTarget{BusName: "net.hadess.PowerProfiles", ObjectPath: "/net/hadess/PowerProfiles", Probe: DBusProbeProperty, DBusInterface: "net.hadess.PowerProfiles", Property: "ActiveProfile"}},
 		{name: "missing bus name", target: DBusTarget{ObjectPath: "/org/libvirt"}, wantErr: "bus_name is required"},
 		{name: "missing object path", target: DBusTarget{BusName: "org.libvirt"}, wantErr: "object_path is required"},
 		{name: "single component", target: DBusTarget{BusName: "libvirt", ObjectPath: "/org/libvirt"}, wantErr: "not a valid well-known"},
@@ -121,12 +121,12 @@ func TestValidateDBusTarget(t *testing.T) {
 		{name: "too long", target: DBusTarget{BusName: "org." + strings.Repeat("a", dbusMaxBusNameLen), ObjectPath: "/org/libvirt"}, wantErr: "not a valid well-known"},
 		{name: "invalid object path", target: DBusTarget{BusName: "org.libvirt", ObjectPath: "org/libvirt"}, wantErr: "not a valid D-Bus object path"},
 		{name: "unknown probe", target: DBusTarget{BusName: "org.libvirt", ObjectPath: "/org/libvirt", Probe: "call"}, wantErr: "probe must be"},
-		{name: "peer interface", target: DBusTarget{BusName: "org.libvirt", ObjectPath: "/org/libvirt", Interface: "org.libvirt.Connect"}, wantErr: "dbus_interface is not supported"},
+		{name: "peer interface", target: DBusTarget{BusName: "org.libvirt", ObjectPath: "/org/libvirt", DBusInterface: "org.libvirt.Connect"}, wantErr: "dbus_interface is not supported"},
 		{name: "introspect property", target: DBusTarget{BusName: "org.libvirt", ObjectPath: "/org/libvirt", Probe: DBusProbeIntrospect, Property: "State"}, wantErr: "property is only supported"},
 		{name: "property missing interface", target: DBusTarget{BusName: "org.libvirt", ObjectPath: "/org/libvirt", Probe: DBusProbeProperty, Property: "State"}, wantErr: "dbus_interface is required"},
-		{name: "property missing property", target: DBusTarget{BusName: "org.libvirt", ObjectPath: "/org/libvirt", Probe: DBusProbeProperty, Interface: "org.libvirt.Connect"}, wantErr: "property is required"},
-		{name: "invalid interface", target: DBusTarget{BusName: "org.libvirt", ObjectPath: "/org/libvirt", Probe: DBusProbeIntrospect, Interface: "org.libvirt-bad.Connect"}, wantErr: "not a valid D-Bus interface"},
-		{name: "invalid property", target: DBusTarget{BusName: "org.libvirt", ObjectPath: "/org/libvirt", Probe: DBusProbeProperty, Interface: "org.libvirt.Connect", Property: "1State"}, wantErr: "not a valid D-Bus property"},
+		{name: "property missing property", target: DBusTarget{BusName: "org.libvirt", ObjectPath: "/org/libvirt", Probe: DBusProbeProperty, DBusInterface: "org.libvirt.Connect"}, wantErr: "property is required"},
+		{name: "invalid interface", target: DBusTarget{BusName: "org.libvirt", ObjectPath: "/org/libvirt", Probe: DBusProbeIntrospect, DBusInterface: "org.libvirt-bad.Connect"}, wantErr: "not a valid D-Bus interface"},
+		{name: "invalid property", target: DBusTarget{BusName: "org.libvirt", ObjectPath: "/org/libvirt", Probe: DBusProbeProperty, DBusInterface: "org.libvirt.Connect", Property: "1State"}, wantErr: "not a valid D-Bus property"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -155,14 +155,14 @@ func TestProbeDBusServiceReadOnlyModes(t *testing.T) {
 	}{
 		{
 			name:       "introspect interface",
-			target:     DBusTarget{BusName: "org.gnome.DisplayManager", ObjectPath: "/org/gnome/DisplayManager/Manager", Probe: DBusProbeIntrospect, Interface: "org.gnome.DisplayManager.Manager"},
+			target:     DBusTarget{BusName: "org.gnome.DisplayManager", ObjectPath: "/org/gnome/DisplayManager/Manager", Probe: DBusProbeIntrospect, DBusInterface: "org.gnome.DisplayManager.Manager"},
 			body:       []any{`<node><interface name="org.gnome.DisplayManager.Manager"/></node>`},
 			wantMethod: dbusIntrospect,
 			wantExtra:  map[string]string{ExtraKeyDBusProbe: DBusProbeIntrospect, ExtraKeyDBusInterface: "org.gnome.DisplayManager.Manager"},
 		},
 		{
 			name:       "scalar property",
-			target:     DBusTarget{BusName: "net.hadess.PowerProfiles", ObjectPath: "/net/hadess/PowerProfiles", Probe: DBusProbeProperty, Interface: "net.hadess.PowerProfiles", Property: "ActiveProfile"},
+			target:     DBusTarget{BusName: "net.hadess.PowerProfiles", ObjectPath: "/net/hadess/PowerProfiles", Probe: DBusProbeProperty, DBusInterface: "net.hadess.PowerProfiles", Property: "ActiveProfile"},
 			body:       []any{dbus.MakeVariant("balanced")},
 			wantMethod: dbusPropertiesGet,
 			wantArgs:   []any{"net.hadess.PowerProfiles", "ActiveProfile"},
@@ -212,13 +212,13 @@ func TestProbeDBusServiceReadOnlyModeFailures(t *testing.T) {
 		},
 		{
 			name:    "missing interface",
-			target:  DBusTarget{BusName: "org.example.Service", ObjectPath: "/org/example/Service", Probe: DBusProbeIntrospect, Interface: "org.example.Missing"},
+			target:  DBusTarget{BusName: "org.example.Service", ObjectPath: "/org/example/Service", Probe: DBusProbeIntrospect, DBusInterface: "org.example.Missing"},
 			body:    []any{`<node><interface name="org.example.Service"/></node>`},
 			wantErr: "is not exported",
 		},
 		{
 			name:    "complex property",
-			target:  DBusTarget{BusName: "org.example.Service", ObjectPath: "/org/example/Service", Probe: DBusProbeProperty, Interface: "org.example.Service", Property: "Items"},
+			target:  DBusTarget{BusName: "org.example.Service", ObjectPath: "/org/example/Service", Probe: DBusProbeProperty, DBusInterface: "org.example.Service", Property: "Items"},
 			body:    []any{dbus.MakeVariant([]string{"one", "two"})},
 			wantErr: "is not a supported scalar",
 		},
