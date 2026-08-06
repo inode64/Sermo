@@ -1022,15 +1022,15 @@ func (a App) runPreflight(ctx context.Context, opts options) int {
 		Processes:      discoverer.ObserveState,
 		ProcessCount:   discoverer.CountMatching,
 	}
-	built, buildWarnings := checks.BuildWithWarnings(section, deps)
-	warnings := checks.BuildWarningStrings(buildWarnings)
+	built, buildIssues := checks.BuildWithIssues(section, deps)
+	warnings := checks.BuildIssueStrings(buildIssues)
 	for _, w := range warnings {
 		fmt.Fprintf(a.Stderr, cliWarningFormat, w)
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, app.PreflightDeadline(deps.DefaultTimeout))
 	defer cancel()
-	results := checks.BuildWarningResults(buildWarnings)
+	results := checks.BuildIssueResults(buildIssues)
 	results = append(results, checks.Run(ctx, built, 0)...)
 	outcome := checks.Evaluate(results)
 

@@ -2,6 +2,7 @@ package checks
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"regexp"
 	"strings"
@@ -63,27 +64,30 @@ func TestBuildServiceCheckNeedsStatus(t *testing.T) {
 	}
 }
 
-func TestBuildWithWarningsReturnsOutcomeResults(t *testing.T) {
+func TestBuildWithIssuesReturnsOutcomeResults(t *testing.T) {
 	section := map[string]any{
 		"metric":  map[string]any{"type": "metric", "name": "cpu", "op": ">", "value": "90"},
 		"process": map[string]any{"type": "process", "exe": "/usr/bin/app", "optional": true},
 	}
 
-	built, warnings := BuildWithWarnings(section, Deps{Service: "web", DefaultTimeout: time.Second})
-	if len(built) != 0 || len(warnings) != 2 {
-		t.Fatalf("built=%d warnings=%v, want no built checks and two warnings", len(built), warnings)
+	built, issues := BuildWithIssues(section, Deps{Service: "web", DefaultTimeout: time.Second})
+	if len(built) != 0 || len(issues) != 2 {
+		t.Fatalf("built=%d issues=%v, want no built checks and two issues", len(built), issues)
 	}
 
-	results := BuildWarningResults(warnings)
+	results := BuildIssueResults(issues)
 	out := Evaluate(results)
 	if out.OK {
-		t.Fatalf("required build warning must make outcome fail: %+v", out)
+		t.Fatalf("required build issue must make outcome fail: %+v", out)
 	}
-	if results[0].Service != "web" || results[0].Check != "metric" || results[0].Optional {
-		t.Fatalf("required warning result = %+v, want service/check and non-optional", results[0])
+	if results[0].Service != "web" || results[0].Check != "metric" || results[0].Optional || !results[0].Unavailable {
+		t.Fatalf("required issue result = %+v, want unavailable service/check result", results[0])
 	}
 	if results[1].Check != "process" || !results[1].Optional {
-		t.Fatalf("optional warning result = %+v, want optional process warning", results[1])
+		t.Fatalf("optional issue result = %+v, want optional process issue", results[1])
+	}
+	if issues[0].Type != CheckTypeMetric || issues[0].Kind != BuildIssueInvalidConfiguration {
+		t.Fatalf("metric issue = %+v, want typed invalid configuration", issues[0])
 	}
 }
 
@@ -115,18 +119,69 @@ func TestBuildTimeoutPerCheck(t *testing.T) {
 	}
 }
 
-func TestBuildAndInlineShareBaseWarning(t *testing.T) {
+func TestBuildAndInlineShareStructuredIssue(t *testing.T) {
 	entry := map[string]any{"type": CheckTypeBinary, "path": "/x", "timeout": "slow"}
-	_, warnings := BuildWithWarnings(map[string]any{"bad": entry}, Deps{})
-	if len(warnings) != 1 {
-		t.Fatalf("warnings = %v, want one warning", warnings)
+	_, issues := BuildWithIssues(map[string]any{"bad": entry}, Deps{})
+	if len(issues) != 1 {
+		t.Fatalf("issues = %v, want one issue", issues)
 	}
 	want := checkBuildMessage("bad", positiveDurationMessage(CheckKeyTimeout))
-	if warnings[0].Text != want {
-		t.Errorf("build warning = %q, want %q", warnings[0].Text, want)
+	if issues[0].String() != want || issues[0].Kind != BuildIssueInvalidConfiguration || issues[0].Type != CheckTypeBinary {
+		t.Errorf("build issue = %+v, want typed %q", issues[0], want)
 	}
-	if _, err := BuildInline("bad", entry, Deps{}); err == nil || err.Error() != want {
+	_, err := BuildInline("bad", entry, Deps{})
+	if err == nil || err.Error() != want {
 		t.Errorf("inline error = %v, want %q", err, want)
+	}
+	var buildErr *BuildError
+	if !errors.As(err, &buildErr) || buildErr.Issue.Kind != issues[0].Kind || buildErr.Issue.Type != issues[0].Type {
+		t.Errorf("inline issue = %+v, want same structured kind/type as section issue", buildErr)
+	}
+}
+
+func TestBuildIssueKinds(t *testing.T) {
+	tests := []struct {
+		name         string
+		entry        any
+		wantKind     BuildIssueKind
+		wantType     string
+		wantOptional bool
+	}{
+		{name: "invalid entry", entry: "not-a-map", wantKind: BuildIssueInvalidEntry},
+		{name: "invalid configuration", entry: map[string]any{"type": CheckTypeBinary}, wantKind: BuildIssueInvalidConfiguration, wantType: CheckTypeBinary},
+		{name: "unsupported type", entry: map[string]any{"type": "unknown-probe", "optional": true}, wantKind: BuildIssueUnsupportedType, wantType: "unknown-probe", wantOptional: true},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			_, issues := BuildWithIssues(map[string]any{"probe": tc.entry}, Deps{Service: "web"})
+			if len(issues) != 1 {
+				t.Fatalf("issues = %v, want one", issues)
+			}
+			issue := issues[0]
+			if issue.Service != "web" || issue.Check != "probe" || issue.Type != tc.wantType || issue.Kind != tc.wantKind || issue.Optional != tc.wantOptional {
+				t.Fatalf("issue = %+v, want kind=%q type=%q optional=%t", issue, tc.wantKind, tc.wantType, tc.wantOptional)
+			}
+			if result := issue.Result(); !result.Unavailable || result.Message != issue.String() {
+				t.Fatalf("issue result = %+v, want unavailable structured message", result)
+			}
+		})
+	}
+}
+
+func TestBuildIssueDetectsSilentNilBuilder(t *testing.T) {
+	const checkType = "test-silent-nil-builder"
+	checkSpecByName[checkType] = checkSpec{
+		info: conditionTypeInfo(checkType),
+		build: func(checkBuildInput) (Check, string) {
+			return nil, ""
+		},
+	}
+	defer delete(checkSpecByName, checkType)
+
+	_, issues := BuildWithIssues(map[string]any{"probe": map[string]any{"type": checkType}}, Deps{})
+	if len(issues) != 1 || issues[0].Kind != BuildIssueBuilderInvariant {
+		t.Fatalf("issues = %+v, want builder invariant", issues)
 	}
 }
 
