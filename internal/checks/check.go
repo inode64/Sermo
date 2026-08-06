@@ -178,30 +178,55 @@ type Built struct {
 // path; the daemon's global semaphore is a separate concern).
 func Run(ctx context.Context, built []Built, maxParallel int) []Result {
 	results := make([]Result, len(built))
-	var sem chan struct{}
-	if maxParallel > 0 {
-		sem = make(chan struct{}, maxParallel)
+	if len(built) == 0 {
+		return results
 	}
+	if maxParallel <= 0 {
+		runUnbounded(ctx, built, results)
+		return results
+	}
+	runBounded(ctx, built, results, min(maxParallel, len(built)))
+	return results
+}
 
+func runUnbounded(ctx context.Context, built []Built, results []Result) {
 	var wg sync.WaitGroup
-	for i, b := range built {
-		wg.Add(1)
-		go func(i int, b Built) {
+	wg.Add(len(built))
+	for i := range built {
+		go func() {
 			defer wg.Done()
-			if sem != nil {
-				sem <- struct{}{}
-				defer func() { <-sem }()
-			}
-			res := Execute(ctx, b.Check)
-			// A check may mark its own result optional (a warning, e.g. an output
-			// pattern match graded `warning`); keep that, and the static flag also
-			// makes a check optional.
-			res.Optional = res.Optional || b.Optional
-			results[i] = res
-		}(i, b)
+			results[i] = executeBuilt(ctx, built[i])
+		}()
 	}
 	wg.Wait()
-	return results
+}
+
+func runBounded(ctx context.Context, built []Built, results []Result, workers int) {
+	jobs := make(chan int)
+	var wg sync.WaitGroup
+	wg.Add(workers)
+	for range workers {
+		go func() {
+			defer wg.Done()
+			for i := range jobs {
+				results[i] = executeBuilt(ctx, built[i])
+			}
+		}()
+	}
+	for i := range built {
+		jobs <- i
+	}
+	close(jobs)
+	wg.Wait()
+}
+
+func executeBuilt(ctx context.Context, built Built) Result {
+	res := Execute(ctx, built.Check)
+	// A check may mark its own result optional (a warning, e.g. an output
+	// pattern match graded `warning`); keep that, and the static flag also makes
+	// a check optional.
+	res.Optional = res.Optional || built.Optional
+	return res
 }
 
 // base carries the fields every check shares and applies the per-check timeout.
