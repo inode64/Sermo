@@ -26,7 +26,7 @@ const (
 )
 
 func (influxdbProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	client, base := InfluxClient(cfg)
+	client, base := InfluxClient(ctx, cfg)
 
 	// /health (v2 / v1.8+) carries a status and version; when the endpoint is
 	// absent (older v1) the request is not "handled" and we fall back to /ping.
@@ -39,8 +39,8 @@ func (influxdbProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 // InfluxClient builds an HTTP client and base URL for an InfluxDB server from cfg
 // (host/port/tls — https when tls is set). Exported so the influxdb-query check
 // reuses the same transport and addressing as the connection check.
-func InfluxClient(cfg Config) (*http.Client, string) {
-	return httpProbeBase(cfg, defaultPortInfluxDB)
+func InfluxClient(ctx context.Context, cfg Config) (*http.Client, string) {
+	return httpProbeBase(ctx, cfg, defaultPortInfluxDB)
 }
 
 // influxHealth queries /health. handled is true when the result is conclusive (a
