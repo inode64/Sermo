@@ -34,7 +34,7 @@ func (c *oomCheck) Run(_ context.Context) Result {
 	sampler := okSamplerOr(c.sampler, defaultOomSampler)
 	count, ok := sampler()
 	if !ok {
-		return c.result(false, "oom: oom_kill counter unavailable", start)
+		return c.unavailableResult("oom: oom_kill counter unavailable", start)
 	}
 	if !c.primed {
 		c.primed, c.lastCount = true, count

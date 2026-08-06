@@ -45,7 +45,7 @@ func (c countCheck) Run(ctx context.Context) Result {
 
 	n, err := c.tally(ctx)
 	if err != nil {
-		return c.result(false, fmt.Sprintf("count %s: %s", c.path, execx.ContextFailure(err, c.timeout)), start)
+		return c.unavailableResult(fmt.Sprintf("count %s: %s", c.path, execx.ContextFailure(err, c.timeout)), start)
 	}
 	if c.deltaOp != "" {
 		return c.runDelta(n, start)

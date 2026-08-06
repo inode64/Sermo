@@ -60,7 +60,7 @@ func (c *swapCheck) Run(_ context.Context) Result {
 	sampler := samplerOr(c.sampler, defaultSwapSampler)
 	s, err := sampler()
 	if err != nil {
-		return c.result(false, "swap: "+err.Error(), start)
+		return c.unavailableResult("swap: "+err.Error(), start)
 	}
 	data := map[string]any{DataKeyMetric: c.metric, DataKeyTotalBytes: s.TotalBytes, DataKeyFreeBytes: s.FreeBytes}
 
@@ -74,7 +74,7 @@ func (c *swapCheck) Run(_ context.Context) Result {
 			return res
 		}
 		if s.FreeBytes > s.TotalBytes {
-			res := c.result(false, "swap: free bytes exceed total bytes", start)
+			res := c.unavailableResult("swap: free bytes exceed total bytes", start)
 			res.Data = data
 			return res
 		}

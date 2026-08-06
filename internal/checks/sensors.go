@@ -72,13 +72,13 @@ func (c sensorsCheck) Run(_ context.Context) Result {
 	sampler := samplerOr(c.sampler, defaultSensorSampler)
 	readings, err := sampler()
 	if err != nil {
-		return c.result(false, "sensors: "+err.Error(), start)
+		return c.unavailableResult("sensors: "+err.Error(), start)
 	}
 
 	summary := SummarizeSensors(readings, c.chip, c.label)
 	values := sensorValueMap(summary)
 	if len(values) == 0 {
-		return c.result(false, "sensors: no matching inputs", start)
+		return c.unavailableResult("sensors: no matching inputs", start)
 	}
 
 	ok := levelPredsHold(c.preds, values)

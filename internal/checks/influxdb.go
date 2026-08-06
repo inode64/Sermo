@@ -51,10 +51,10 @@ func (c influxCheck) Run(ctx context.Context) Result {
 	client, base := conn.InfluxClient(ctx, c.cfg)
 	result, isNull, err := c.queryScalar(ctx, client, base)
 	if err != nil {
-		return c.result(false, "influxdb: "+err.Error(), start)
+		return c.unavailableResult("influxdb: "+err.Error(), start)
 	}
 	if isNull {
-		return c.result(false, "influxdb: query returned no value", start)
+		return c.unavailableResult("influxdb: query returned no value", start)
 	}
 
 	data := map[string]any{

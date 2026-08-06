@@ -17,15 +17,15 @@ func TestMetricCheckRun(t *testing.T) {
 		return metricCheck{base: base{name: "m"}, scope: "service", metric: "cpu", op: ">", value: "50", source: s}
 	}
 
-	if mk(nil).Run(context.Background()).OK {
-		t.Error("nil source must not fire")
+	if res := mk(nil).Run(context.Background()); res.OK || !res.Unavailable {
+		t.Errorf("nil source must be unavailable without firing: %+v", res)
 	}
 	miss := mk(func(_, _ string) (metrics.Reading, bool) { return metrics.Reading{}, false })
-	if miss.Run(context.Background()).OK {
-		t.Error("an unavailable metric must not fire")
+	if res := miss.Run(context.Background()); res.OK || !res.Unavailable {
+		t.Errorf("a missing metric must be unavailable without firing: %+v", res)
 	}
-	if mk(src(false, 90)).Run(context.Background()).OK {
-		t.Error("a not-ready metric must not fire even when the threshold would hold")
+	if res := mk(src(false, 90)).Run(context.Background()); res.OK || !res.Unavailable {
+		t.Errorf("a not-ready metric must be unavailable without firing: %+v", res)
 	}
 	if !mk(src(true, 90)).Run(context.Background()).OK {
 		t.Error("a ready breach (90 > 50) should fire")
@@ -40,7 +40,7 @@ func TestMetricCheckRun(t *testing.T) {
 		res.Data[DataKeyUnit] != metrics.MetricUnitNone {
 		t.Fatalf("metric result data = %#v", res.Data)
 	}
-	if mk(src(true, 10)).Run(context.Background()).OK {
-		t.Error("a ready non-breach (10 > 50) must not fire")
+	if res := mk(src(true, 10)).Run(context.Background()); res.OK || res.Unavailable {
+		t.Errorf("a ready non-breach must be a valid false observation: %+v", res)
 	}
 }

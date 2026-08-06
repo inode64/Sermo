@@ -82,7 +82,7 @@ func (c *diskIOCheck) Run(_ context.Context) Result {
 
 	s, err := sampler(c.device)
 	if err != nil {
-		return c.result(false, "diskio "+c.device+": "+err.Error(), start)
+		return c.unavailableResult("diskio "+c.device+": "+err.Error(), start)
 	}
 	now := clock()
 	st := c.state

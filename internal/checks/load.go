@@ -36,13 +36,13 @@ func (c loadCheck) Run(_ context.Context) Result {
 	sampler := samplerOr(c.sampler, defaultLoadSampler)
 	s, err := sampler()
 	if err != nil {
-		return c.result(false, "load: "+err.Error(), start)
+		return c.unavailableResult("load: "+err.Error(), start)
 	}
 
 	values := map[string]float64{fieldLoad1: s.Load1, fieldLoad5: s.Load5, fieldLoad15: s.Load15}
 	if c.perCPU {
 		if s.NumCPU <= 0 {
-			return c.result(false, "load: cpu count unknown", start)
+			return c.unavailableResult("load: cpu count unknown", start)
 		}
 		for k, v := range values {
 			values[k] = v / float64(s.NumCPU)

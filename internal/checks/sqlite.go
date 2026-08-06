@@ -39,12 +39,15 @@ func (c sqliteCheck) Run(ctx context.Context) Result {
 	start := run.start
 
 	if _, err := os.Stat(c.path); err != nil {
-		return c.result(false, fmt.Sprintf("%s: %v", c.path, err), start)
+		if os.IsNotExist(err) {
+			return c.result(false, fmt.Sprintf("%s: %v", c.path, err), start)
+		}
+		return c.unavailableResult(fmt.Sprintf("%s: %v", c.path, err), start)
 	}
 
 	db, err := sql.Open(SQLEngineSQLite, sqliteReadOnlyDSN(c.path))
 	if err != nil {
-		return c.result(false, fmt.Sprintf("open %s: %v", c.path, err), start)
+		return c.unavailableResult(fmt.Sprintf("open %s: %v", c.path, err), start)
 	}
 	defer func() { _ = db.Close() }()
 
@@ -57,21 +60,21 @@ func (c sqliteCheck) Run(ctx context.Context) Result {
 	// detail instead of only the first line.
 	rows, err := db.QueryContext(ctx, pragma)
 	if err != nil {
-		return c.result(false, fmt.Sprintf("%s: %v", c.path, err), start)
+		return c.unavailableResult(fmt.Sprintf("%s: %v", c.path, err), start)
 	}
 	defer func() { _ = rows.Close() }()
 	var problems []string
 	for rows.Next() {
 		var line string
 		if err := rows.Scan(&line); err != nil {
-			return c.result(false, fmt.Sprintf("%s: %v", c.path, err), start)
+			return c.unavailableResult(fmt.Sprintf("%s: %v", c.path, err), start)
 		}
 		if line != sqliteIntegrityOK {
 			problems = append(problems, line)
 		}
 	}
 	if err := rows.Err(); err != nil {
-		return c.result(false, fmt.Sprintf("%s: %v", c.path, err), start)
+		return c.unavailableResult(fmt.Sprintf("%s: %v", c.path, err), start)
 	}
 	if len(problems) > 0 {
 		return c.result(false, fmt.Sprintf("%s: %s", c.path, strings.Join(problems, "; ")), start)

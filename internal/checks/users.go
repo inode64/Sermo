@@ -27,7 +27,7 @@ func (c usersCheck) Run(_ context.Context) Result {
 	sampler := samplerOr(c.sampler, defaultUsersSampler)
 	n, err := sampler()
 	if err != nil {
-		return c.result(false, "users: "+err.Error(), start)
+		return c.unavailableResult("users: "+err.Error(), start)
 	}
 	values := map[string]float64{DataKeyCount: float64(n)}
 	ok := levelPredsHold(c.preds, values)
