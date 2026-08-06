@@ -164,3 +164,27 @@ func TestResolveProtocolTarget(t *testing.T) {
 		})
 	}
 }
+
+func TestPrepareProtocol(t *testing.T) {
+	protocol, cfg, ok := Prepare(protocolAliasValkey, Config{})
+	if !ok {
+		t.Fatal("Prepare(valkey) failed")
+	}
+	if protocol.Name() != ProtocolNameRedis {
+		t.Errorf("protocol name = %q, want %q", protocol.Name(), ProtocolNameRedis)
+	}
+	want := Config{Host: DefaultHost, Port: defaultPortRedis}
+	if cfg.Host != want.Host || cfg.Port != want.Port || cfg.Socket != want.Socket {
+		t.Errorf("prepared config = %+v, want %+v", cfg, want)
+	}
+
+	input := Config{Host: "cache.example", Port: 6380}
+	_, cfg, ok = Prepare(ProtocolNameRedis, input)
+	if !ok || cfg.Host != input.Host || cfg.Port != input.Port {
+		t.Errorf("Prepare(redis, explicit target) = %+v/%v, want %+v/true", cfg, ok, input)
+	}
+
+	if protocol, cfg, ok = Prepare("missing", input); ok || protocol != nil || cfg.Host != input.Host || cfg.Port != input.Port {
+		t.Errorf("Prepare(missing) = %v/%+v/%v, want nil/input/false", protocol, cfg, ok)
+	}
+}

@@ -272,7 +272,7 @@ func buildConnCheck(b base, proto conn.Protocol, entry map[string]any) (Check, s
 		return nil, err.Error()
 	}
 	cfg = conn.Resolve(proto, cfg)
-	c := connCheck{base: b, proto: proto, cfg: cfg, probe: proto.Probe}
+	c := connCheck{base: b, proto: proto, cfg: cfg}
 	// Optional response assertions: a mapping of field -> value | {op, value},
 	// compared against the probe Result (version / Extra) — works for any protocol.
 	expect, ewarn := parseAssertionMap(entry[CheckKeyExpect], CheckKeyExpect)
