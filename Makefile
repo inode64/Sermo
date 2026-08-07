@@ -66,7 +66,7 @@ config_subst = sed -e 's|/usr/share/sermo|$(SERMO_DATADIR)|g' -e 's|/etc/sermo|$
 # Rewrite runtime/state dirs in the tmpfiles config.
 tmpfiles_subst = sed -e 's|/run/sermo|$(SERMO_RUNDIR)|g' -e 's|/var/lib/sermo|$(SERMO_STATEDIR)|g'
 
-.PHONY: all build test vet fmt fmt-check lint modules-check actions-lint race fuzz deadcode quality-report cover-gate custom-gcl scripts-lint semgrep yaml-fmt yaml-fmt-check yaml-lint yaml-validate markdown-check web web-check web-lint web-e2e validate check cover tidy clean \
+.PHONY: all build build-candidate-sermoctl test vet fmt fmt-check lint modules-check actions-lint race fuzz deadcode quality-report cover-gate custom-gcl scripts-lint scripts-test semgrep yaml-fmt yaml-fmt-check yaml-lint yaml-validate markdown-check web web-check web-lint web-e2e validate check cover tidy clean \
         install install-bin install-catalog install-examples install-config install-templates install-tmpfiles install-systemd install-openrc \
         uninstall
 
@@ -75,6 +75,12 @@ all: build
 build:
 	$(GO_BUILD_ENV) go build -trimpath -buildvcs=false -ldflags '$(GO_BUILD_LDFLAGS)' -o $(BIN)/sermoctl ./cmd/sermoctl
 	$(GO_BUILD_ENV) go build -trimpath -buildvcs=false -ldflags '$(GO_BUILD_LDFLAGS)' -o $(BIN)/sermod ./cmd/sermod
+
+# The fleet updater builds this second CLI with SERMO_DATADIR pointing at its
+# run-specific remote staging tree. It validates the candidate binary and
+# candidate catalog together before any live path is replaced.
+build-candidate-sermoctl:
+	$(GO_BUILD_ENV) go build -trimpath -buildvcs=false -ldflags '$(GO_BUILD_LDFLAGS)' -o $(BIN)/sermoctl-candidate ./cmd/sermoctl
 
 # YAML formatting and lint (yamlfmt via go install, yamllint via pip/pipx).
 YAMLFMT ?= yamlfmt
@@ -154,6 +160,10 @@ scripts-lint:
 	@echo "ruff check $(SCRIPT_PY)"
 	@$(LINT_PATH) $(RUFF) check $(SCRIPT_PY)
 
+scripts-test:
+	@echo "remote deployment tests"
+	@python3 -m unittest discover -s scripts/remote-deploy -p 'test_*.py'
+
 # Documentation that describes the code must keep describing the code: cited
 # source paths, identifiers named by skills, the linter roll-call, operator
 # config keys and EN/ES parity. Each check exists because that drift reached the
@@ -163,7 +173,7 @@ docs-sync:
 	@$(LINT_PATH) python3 scripts/docs_sync_check.py
 
 # Formatting and static analysis gates; make test and make check run this first.
-validate: modules-check lint actions-lint scripts-lint npm-audit yaml-validate markdown-check docs-sync web-e2e
+validate: modules-check lint actions-lint scripts-lint scripts-test npm-audit yaml-validate markdown-check docs-sync web-e2e
 
 # GO_TEST_FLAGS defaults to -shuffle=on so order-dependent tests surface
 # locally and in CI. Override for a stable order when debugging:

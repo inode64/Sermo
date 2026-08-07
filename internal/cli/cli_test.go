@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"sermo/internal/app"
 	"sermo/internal/config"
 	"sermo/internal/execx"
 	"sermo/internal/servicemgr"
@@ -266,6 +267,19 @@ func TestStatusCommandJSON(t *testing.T) {
 	}
 }
 
+func TestServiceStatusCommandsUseEngineCheckTimeout(t *testing.T) {
+	for _, command := range []string{commandStatus, commandIsActive} {
+		t.Run(command, func(t *testing.T) {
+			if got := defaultTimeout(command); got != app.DefaultEngineCheckTimeout {
+				t.Fatalf("defaultTimeout(%q) = %s, want %s", command, got, app.DefaultEngineCheckTimeout)
+			}
+		})
+	}
+	if got := defaultTimeout(commandBackend); got != defaultProbeCommandTimeout {
+		t.Fatalf("defaultTimeout(%q) = %s, want probe timeout %s", commandBackend, got, defaultProbeCommandTimeout)
+	}
+}
+
 func TestStatusCommandUsesResolvedConfiguredUnit(t *testing.T) {
 	root := t.TempDir()
 	catalogDir := filepath.Join(root, "catalog")
@@ -332,6 +346,7 @@ func writeFallbackUnitConfig(t *testing.T) string {
 paths:
   services: [`+filepath.Join(root, "services")+`]
   runtime: `+filepath.Join(root, "run")+`
+  state: `+filepath.Join(root, "state")+`
 defaults:
   policy: { cooldown: 5m }
 `)

@@ -226,3 +226,30 @@ func TestPersistentEventLogHydratesServiceEvents(t *testing.T) {
 		t.Fatalf("web service events = %+v ok=%v", webEvents, ok)
 	}
 }
+
+func TestWebBackendLastServiceEventReadsExternalPersistentWrite(t *testing.T) {
+	path := filepath.Join(t.TempDir(), state.Filename)
+	store, err := state.OpenContext(context.Background(), path)
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	defer store.Close()
+	log, err := NewPersistentEventLog(10, store, nil)
+	if err != nil {
+		t.Fatalf("NewPersistentEventLog: %v", err)
+	}
+	if _, err := store.RecordEvent(state.EventRecord{
+		Service: "web", Kind: eventKindAction, Action: string(rules.ActionStop), Status: eventStatusOK, Message: "stop ok",
+	}); err != nil {
+		t.Fatalf("external RecordEvent: %v", err)
+	}
+
+	b := &WebBackend{order: []string{"web"}, entries: map[string]*webEntry{"web": {}}, events: log}
+	last := b.lastServiceEvent("web")
+	if last == nil || last.Action != string(rules.ActionStop) || last.Status != eventStatusOK {
+		t.Fatalf("last service event = %+v", last)
+	}
+	if listed := b.lastServiceEvents()["web"]; listed == nil || listed.ID != last.ID {
+		t.Fatalf("listed service event = %+v, want ID %d", listed, last.ID)
+	}
+}

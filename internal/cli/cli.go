@@ -857,6 +857,12 @@ func (a App) defaultOperate(ctx context.Context, opts options, cfg *config.Confi
 	selectors, _ := process.ParseSelectors(resolved.Tree)
 	metricSample := app.MetricSampleForOperation(service, resolved.Tree, collector, discoverer, selectors)
 	libBaseline := map[string]string{}
+	eventStore, err := openStateStore(ctx, cfg)
+	if err != nil {
+		return operation.Result{}, fmt.Errorf("operation event store unavailable: %w", err)
+	}
+	defer func() { _ = eventStore.Close() }()
+	var eventErr error
 	engine := operation.New(operation.Config{
 		Service:          service,
 		Unit:             target.Unit,
@@ -871,6 +877,11 @@ func (a App) defaultOperate(ctx context.Context, opts options, cfg *config.Confi
 		MetricSample:     metricSample,
 		Changed:          app.ArtifactChangedFunc(libBaseline),
 		OperationTimeout: operation.ResolveTimeout(opts.timeout, resolved.Tree),
+		Emit: func(result operation.Result) { //nolint:contextcheck // Store was opened with ctx and binds it to SQL calls.
+			if _, err := eventStore.RecordEvent(app.OperationEventRecord(result)); err != nil {
+				eventErr = err
+			}
+		},
 	})
 
 	opTimeout := operation.ResolveTimeout(opts.timeout, resolved.Tree)
@@ -878,6 +889,9 @@ func (a App) defaultOperate(ctx context.Context, opts options, cfg *config.Confi
 	defer cancel()
 
 	result := engine.Do(opCtx, action)
+	if eventErr != nil {
+		return result, fmt.Errorf("record operation event: %w", eventErr)
+	}
 	if result.Message == "unknown action" && result.Status == operation.ResultFailed {
 		return operation.Result{}, fmt.Errorf("unknown action %q", action)
 	}
@@ -1381,6 +1395,11 @@ func defaultTimeout(command string) time.Duration {
 	switch command {
 	case commandStart, commandStop, commandRestart, commandReload, commandResume, commandMount, commandUmount, commandState:
 		return app.DefaultEngineOperationTimeout
+	case commandStatus, commandIsActive:
+		// Config loading and control-target resolution are part of a live service
+		// query. On large hosts they can legitimately exceed the short probe CLI
+		// budget before the init backend is reached.
+		return app.DefaultEngineCheckTimeout
 	case commandServices:
 		return defaultListCommandTimeout
 	default:

@@ -47,6 +47,20 @@ func TestOperationEventEmitter(t *testing.T) {
 	}
 }
 
+func TestOperationEventRecordUsesCanonicalResultMapping(t *testing.T) {
+	record := OperationEventRecord(operation.Result{
+		Service: "web",
+		Action:  string(rules.ActionRestart),
+		Status:  operation.ResultPostflightFailed,
+		Message: "tcp check failed",
+	})
+
+	if record.Service != "web" || record.Kind != eventKindError || record.Action != string(rules.ActionRestart) ||
+		record.Status != string(operation.ResultPostflightFailed) || record.Message != "tcp check failed" {
+		t.Fatalf("record = %+v", record)
+	}
+}
+
 func TestSlogEmitterLogsHookAtInfo(t *testing.T) {
 	var buf bytes.Buffer
 	logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelInfo}))

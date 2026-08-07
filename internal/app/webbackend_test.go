@@ -409,6 +409,40 @@ func TestWebBackendViewMonitorSource(t *testing.T) {
 	}
 }
 
+func TestWebBackendMonitorChangeInvalidatesCachedInitStatus(t *testing.T) {
+	t0 := time.Date(2026, 8, 6, 18, 48, 0, 0, time.UTC)
+	now := t0
+	store := newFakeStore()
+	store.now = func() time.Time { return now }
+	statuses := []servicemgr.Status{servicemgr.StatusActive, servicemgr.StatusInactive}
+	statusCalls := 0
+	e := &webEntry{status: func(context.Context) (servicemgr.Status, error) {
+		status := statuses[min(statusCalls, len(statuses)-1)]
+		statusCalls++
+		return status, nil
+	}}
+	b := &WebBackend{
+		now:     func() time.Time { return now },
+		entries: map[string]*webEntry{"web": e},
+		store:   store,
+	}
+
+	if first := b.view(context.Background(), "web", e); first.Status != string(servicemgr.StatusActive) {
+		t.Fatalf("first status = %q, want active", first.Status)
+	}
+	now = t0.Add(5 * time.Second)
+	if err := store.SetActive("web", false, state.SourceCLIManualStop); err != nil {
+		t.Fatalf("SetActive: %v", err)
+	}
+	stopped := b.view(context.Background(), "web", e)
+	if stopped.Status != string(servicemgr.StatusInactive) || stopped.State != TargetStateStopped {
+		t.Fatalf("stopped service = %+v", stopped)
+	}
+	if statusCalls != 2 {
+		t.Fatalf("status calls = %d, want cache invalidated once", statusCalls)
+	}
+}
+
 func TestWebBackendViewInterval(t *testing.T) {
 	b := &WebBackend{
 		order: []string{"web"},

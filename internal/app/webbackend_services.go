@@ -60,14 +60,26 @@ func (b *WebBackend) viewWithRuntime(ctx context.Context, name string, e *webEnt
 		svc.RemediationState = TargetStateDisabled
 		return svc
 	}
+	monitorChangedAt := time.Time{}
+	if active, source, changed, ok := b.monitorRecord(name); ok {
+		svc.Monitored, svc.MonitorSource, monitorChangedAt = active, source, changed
+		if !changed.IsZero() {
+			svc.MonitorChangedAt = changed.UTC().Format(time.RFC3339)
+		}
+	}
 	status, statusAt := e.backendStatusSnapshot(ctx, b.webNow())
+	// A sermoctl action runs in a separate process, so it cannot invalidate this
+	// backend's in-memory init-status cache directly. Its monitor-state transition
+	// is persisted after the operation; a newer change is therefore the bounded
+	// cross-process signal to refresh status before rendering the Web UI.
+	if monitorChangedAt.After(statusAt) {
+		e.invalidateStatusCache()
+		status, statusAt = e.backendStatusSnapshot(ctx, b.webNow())
+	}
 	status, statusAt = b.freshServiceCheckStatus(name, e, status, statusAt)
 	svc.Status = status
 	if !statusAt.IsZero() {
 		svc.StatusObservedAt = statusAt.UTC().Format(time.RFC3339)
-	}
-	if active, source, changed, ok := b.monitorView(name); ok {
-		svc.Monitored, svc.MonitorSource, svc.MonitorChangedAt = active, source, changed
 	}
 	failing, health := b.serviceCheckHealth(name, e, svc.Monitored)
 	warningReason := b.serviceWarningReason(name, e)

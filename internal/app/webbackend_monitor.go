@@ -12,18 +12,25 @@ import (
 // and watches share: active flag, source, and the RFC3339 change time ("" when
 // unknown). ok is false when there is no store or no record.
 func (b *WebBackend) monitorView(key string) (active bool, source, changedAt string, ok bool) {
-	if b.store == nil {
+	active, source, changed, ok := b.monitorRecord(key)
+	if !ok {
 		return false, "", "", false
+	}
+	if !changed.IsZero() {
+		changedAt = changed.UTC().Format(time.RFC3339)
+	}
+	return active, source, changedAt, true
+}
+
+func (b *WebBackend) monitorRecord(key string) (active bool, source string, changedAt time.Time, ok bool) {
+	if b.store == nil {
+		return false, "", time.Time{}, false
 	}
 	rec, found, err := b.store.MonitorState(key)
 	if err != nil || !found {
-		return false, "", "", false
+		return false, "", time.Time{}, false
 	}
-	changed := ""
-	if !rec.UpdatedAt.IsZero() {
-		changed = rec.UpdatedAt.UTC().Format(time.RFC3339)
-	}
-	return rec.Active, rec.Source, changed, true
+	return rec.Active, rec.Source, rec.UpdatedAt, true
 }
 
 // MonitoringStatus returns how many services are monitored versus paused.

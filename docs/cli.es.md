@@ -19,6 +19,11 @@ o con `--help` para ver el índice de comandos, y usa `sermoctl help COMMAND` o
 Los flags globales pueden colocarse antes o después del comando. Los flags
 específicos de cada comando se muestran con `sermoctl help COMMAND`.
 
+Sin `--timeout`, las consultas de servicio en vivo (`status` e `is-active`) usan
+el presupuesto de checks del motor de 10 segundos; las operaciones de servicio
+usan el presupuesto de operaciones de 90 segundos. Los demás comandos de probe
+cortos mantienen el presupuesto de CLI de 2 segundos.
+
 ## Flags del daemon sermod
 
 `sermod` es el daemon de monitorización de larga ejecución. Las unidades
@@ -172,6 +177,11 @@ ningún proceso, así que sus indicadores de runtime nunca se completan),
 `monitored` (activo, monitorizado y con observabilidad lista) y `failed`. Sin la vista del
 daemon, un servicio configurado activo y monitorizado cae a `collecting`; un
 servicio activo que no consta como monitorizado cae a `started`.
+
+Cada operación manual de servicio persiste exactamente un resultado en el
+registro compartido de eventos, por lo que `sermoctl events` y la WebUI muestran
+el mismo resultado de la acción. Sermoctl no inicia una operación si no puede
+abrir la base de datos de estado para registrar esa auditoría.
 
 **`sermoctl is-active` es diferente:** siempre sondea el backend de init
 (`active` / `inactive` / `paused`) para obtener el código de salida y la salida
