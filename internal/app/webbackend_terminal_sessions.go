@@ -38,6 +38,20 @@ type sshSessionIdentity struct {
 	terminal   string
 }
 
+const sessionMetricKeySeparator = "\x00"
+
+func sessionMetricKey(parts ...string) string {
+	return strings.Join(parts, sessionMetricKeySeparator)
+}
+
+func sshSessionMetricKey(session web.SSHSession) string {
+	return sessionMetricKey(web.SessionKindSSH, strconv.Itoa(session.PID), strconv.FormatUint(session.StartTicks, 10))
+}
+
+func terminalSessionMetricKey(session web.TerminalSession) string {
+	return sessionMetricKey(session.Multiplexer, session.Service, session.Check, session.Identity)
+}
+
 func terminalSessionSources(tree map[string]any) []terminalSessionSource {
 	entries, _ := tree[config.SectionChecks].(map[string]any)
 	result := make([]terminalSessionSource, 0)
@@ -130,7 +144,7 @@ func (b *WebBackend) attachSessionMetrics(inventory *web.SessionInventory) {
 	active := make(map[string]struct{}, len(inventory.SSH)+len(inventory.Terminal))
 	for i := range inventory.SSH {
 		session := &inventory.SSH[i]
-		key := "ssh:" + strconv.Itoa(session.PID) + ":" + strconv.FormatUint(session.StartTicks, 10)
+		key := sshSessionMetricKey(*session)
 		active[key] = struct{}{}
 		if pids := snapshot.treePIDs([]int{session.PID}); b.sessionMetricCollector != nil && len(pids) > 0 {
 			session.SessionUsage = sessionUsage(b.sessionMetricCollector.SampleService(key, pids))
@@ -138,7 +152,7 @@ func (b *WebBackend) attachSessionMetrics(inventory *web.SessionInventory) {
 	}
 	for i := range inventory.Terminal {
 		session := &inventory.Terminal[i]
-		key := session.Multiplexer + ":" + session.Service + ":" + session.Check + ":" + session.Identity
+		key := terminalSessionMetricKey(*session)
 		active[key] = struct{}{}
 		pids := snapshot.treePIDs(session.PIDs)
 		if b.sessionMetricCollector != nil && len(pids) > 0 {

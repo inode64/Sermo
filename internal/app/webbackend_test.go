@@ -297,6 +297,18 @@ func TestSessionUsageUsesServiceReadingSemantics(t *testing.T) {
 	}
 }
 
+func TestTerminalSessionMetricKeyKeepsComponentsDistinct(t *testing.T) {
+	left := terminalSessionMetricKey(web.TerminalSession{
+		Multiplexer: web.SessionKindTmux, Service: "shells:root", Check: "sessions", Identity: "$7:90",
+	})
+	right := terminalSessionMetricKey(web.TerminalSession{
+		Multiplexer: web.SessionKindTmux, Service: "shells", Check: "root:sessions", Identity: "$7:90",
+	})
+	if left == right {
+		t.Fatalf("different terminal sessions share metric key %q", left)
+	}
+}
+
 // A condition check reports OK when its threshold is crossed, so the detail
 // view must expose availability, not the raw comparison: an under-threshold
 // sensor is healthy and has to read ok, not fail.
