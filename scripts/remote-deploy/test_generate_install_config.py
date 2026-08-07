@@ -73,6 +73,29 @@ class EndpointGenerationTest(unittest.TestCase):
         checks = report["services"]["enabled"][0]["endpoint_checks"]
         self.assertEqual([item["active"] for item in checks], [False, False])
 
+    def test_active_service_filter_honors_os_selected_unit(self):
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        stage = Path(temp.name)
+        (stage / "init").write_text("systemd\n", encoding="utf-8")
+        (stage / "os-release").write_text('ID="ubuntu"\n', encoding="utf-8")
+        (stage / "active_units").write_text(
+            "smartmontools.service loaded active running smartd\n",
+            encoding="utf-8",
+        )
+        (stage / "services_all_json.out").write_text(
+            json.dumps({"services": [{"name": "smartd", "installed": True, "ok": True, "status": "ok"}]}),
+            encoding="utf-8",
+        )
+
+        docs = generator.load_catalog_services(default_options().catalog_services_dir)
+        active, failed, candidates, available = generator.active_service_filter(stage, docs)
+
+        self.assertTrue(available)
+        self.assertEqual(active, {"smartd"})
+        self.assertEqual(failed, set())
+        self.assertIn("smartmontools.service", candidates["smartd"])
+
     def test_accepts_dns_udp_and_explicit_ports_for_the_profile_process(self):
         temp = tempfile.TemporaryDirectory()
         self.addCleanup(temp.cleanup)

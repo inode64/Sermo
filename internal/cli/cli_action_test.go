@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -673,5 +674,80 @@ func TestDefaultOperateFallsBackToConfiguredServiceUnit(t *testing.T) {
 	}
 	if got := stderr.String(); !strings.Contains(got, "using legacy-daemon") {
 		t.Fatalf("stderr = %q, want fallback warning", got)
+	}
+}
+
+func TestDefaultOperatePersistsOneOperationEvent(t *testing.T) {
+	global := writeActionConfig(t)
+	cfg, err := config.Load(global)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resolved, errs := cfg.Resolve("web")
+	if len(errs) > 0 {
+		t.Fatalf("resolve: %v", errs)
+	}
+
+	var actions []string
+	app := App{
+		Detector: fakeBackendDetector{detection: servicemgr.Detection{Backend: servicemgr.BackendSystemd}},
+		NewManager: func(servicemgr.Backend) (servicemgr.Manager, error) {
+			return fakeManager{actions: &actions}, nil
+		},
+		Stdout: &bytes.Buffer{},
+		Stderr: &bytes.Buffer{},
+	}
+	result, err := app.defaultOperate(context.Background(), options{config: global}, cfg, resolved, "web", "restart")
+	if err != nil {
+		t.Fatalf("defaultOperate: %v", err)
+	}
+	if result.Status != operation.ResultOK {
+		t.Fatalf("result = %+v, want ok", result)
+	}
+
+	store := openTestStateStore(t, global)
+	defer func() { _ = store.Close() }()
+	events, err := store.RecentEvents(10)
+	if err != nil {
+		t.Fatalf("recent events: %v", err)
+	}
+	if len(events) != 1 {
+		t.Fatalf("events = %+v, want exactly one", events)
+	}
+	want := events[0]
+	if want.Service != "web" || want.Kind != "action" || want.Action != "restart" || want.Status != string(operation.ResultOK) {
+		t.Fatalf("event = %+v", want)
+	}
+}
+
+func TestDefaultOperateDoesNotActWithoutEventStore(t *testing.T) {
+	global := writeActionConfig(t)
+	cfg, err := config.Load(global)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resolved, errs := cfg.Resolve("web")
+	if len(errs) > 0 {
+		t.Fatalf("resolve: %v", errs)
+	}
+	if err := os.WriteFile(cfg.Global.StateDir(), []byte("not a directory"), 0o600); err != nil {
+		t.Fatalf("block state directory: %v", err)
+	}
+
+	var actions []string
+	app := App{
+		Detector: fakeBackendDetector{detection: servicemgr.Detection{Backend: servicemgr.BackendSystemd}},
+		NewManager: func(servicemgr.Backend) (servicemgr.Manager, error) {
+			return fakeManager{actions: &actions}, nil
+		},
+		Stdout: &bytes.Buffer{},
+		Stderr: &bytes.Buffer{},
+	}
+	_, err = app.defaultOperate(context.Background(), options{config: global}, cfg, resolved, "web", "restart")
+	if err == nil || !strings.Contains(err.Error(), "operation event store unavailable") {
+		t.Fatalf("defaultOperate error = %v", err)
+	}
+	if len(actions) != 0 {
+		t.Fatalf("actions = %v, want none", actions)
 	}
 }

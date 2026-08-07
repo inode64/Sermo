@@ -204,29 +204,32 @@ case "$config_backend" in
 	*) config_backend="" ;;
 esac
 
-payload_members="usr/bin/sermoctl usr/bin/sermod usr/share/sermo/catalog etc/sermo/templates/default-alert.yml"
+install_payload_members="usr/bin/sermoctl usr/bin/sermod usr/share/sermo/catalog etc/sermo/templates/default-alert.yml"
 : >"${out}/payload_skipped_members"
 if [ "$init" = "systemd" ]; then
 	if [ -d /etc/systemd/system ]; then
-		payload_members="${payload_members} etc/systemd/system/sermod.service"
+		install_payload_members="${install_payload_members} etc/systemd/system/sermod.service"
 	else
 		printf '%s\n' "etc/systemd/system/sermod.service: /etc/systemd/system missing" >>"${out}/payload_skipped_members"
 	fi
 	if [ -d /usr/lib/tmpfiles.d ]; then
-		payload_members="${payload_members} usr/lib/tmpfiles.d/sermo.conf"
+		install_payload_members="${install_payload_members} usr/lib/tmpfiles.d/sermo.conf"
 	else
 		printf '%s\n' "usr/lib/tmpfiles.d/sermo.conf: /usr/lib/tmpfiles.d missing" >>"${out}/payload_skipped_members"
 	fi
 elif [ "$init" = "openrc" ]; then
 	if [ -d /etc/init.d ]; then
-		payload_members="${payload_members} etc/init.d/sermod"
+		install_payload_members="${install_payload_members} etc/init.d/sermod"
 	else
 		printf '%s\n' "etc/init.d/sermod: /etc/init.d missing" >>"${out}/payload_skipped_members"
 	fi
 fi
-printf '%s\n' "$payload_members" >"${out}/payload_members"
+stage_payload_members="${install_payload_members} candidate/sermoctl"
+printf '%s\n' "$install_payload_members" >"${out}/payload_members"
+printf '%s\n' "$stage_payload_members" >"${out}/stage_payload_members"
 
-read -r -a _payload_members <<< "$payload_members"
+read -r -a _install_payload_members <<< "$install_payload_members"
+read -r -a _stage_payload_members <<< "$stage_payload_members"
 
 # Stage the payload and validate the live configuration with the CANDIDATE
 # sermoctl before anything on disk changes. A configuration the new binary
@@ -235,7 +238,7 @@ read -r -a _payload_members <<< "$payload_members"
 # old process for the next restart to trip over.
 stage="${work}/stage"
 mkdir -p "$stage"
-tar --no-same-owner -C "$stage" -xzf "$payload" "${_payload_members[@]}" >"${out}/payload_stage.out" 2>"${out}/payload_stage.err"
+tar --no-same-owner -C "$stage" -xzf "$payload" "${_stage_payload_members[@]}" >"${out}/payload_stage.out" 2>"${out}/payload_stage.err"
 stage_rc=$?
 printf '%s\n' "$stage_rc" >"${out}/payload_stage.rc"
 if [ "$stage_rc" -ne 0 ]; then
@@ -244,7 +247,8 @@ fi
 
 capture sermoctl_version "${stage}/usr/bin/sermoctl" --version
 capture sermod_version "${stage}/usr/bin/sermod" --version
-capture config_validate env SERMO_BACKEND="$config_backend" SERMO_INIT="$config_backend" "${stage}/usr/bin/sermoctl" --config /etc/sermo/sermo.yml config validate
+capture candidate_sermoctl_version "${stage}/candidate/sermoctl" --version
+capture config_validate env SERMO_BACKEND="$config_backend" SERMO_INIT="$config_backend" "${stage}/candidate/sermoctl" --config /etc/sermo/sermo.yml config validate
 if [ "$(cat "${out}/config_validate.rc" 2>/dev/null || echo 1)" != "0" ]; then
 	finish 30
 fi
@@ -258,7 +262,7 @@ if [ -d /usr/share/sermo/catalog ]; then
 	mv /usr/share/sermo/catalog "${work}/catalog.previous"
 fi
 
-tar --no-same-owner -C / -xzf "$payload" "${_payload_members[@]}" >"${out}/payload_extract.out" 2>"${out}/payload_extract.err"
+tar --no-same-owner -C / -xzf "$payload" "${_install_payload_members[@]}" >"${out}/payload_extract.out" 2>"${out}/payload_extract.err"
 extract_rc=$?
 printf '%s\n' "$extract_rc" >"${out}/payload_extract.rc"
 if [ "$extract_rc" -ne 0 ]; then

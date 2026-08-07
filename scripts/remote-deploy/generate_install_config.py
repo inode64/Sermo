@@ -160,10 +160,10 @@ PROTOCOL_CHECK_TYPES = {
     "cloudflared",
     "dbus", "dhclient", "dhcp", "fail2ban", "fpm", "ftp", "glusterfs", "guacd",
     "imap", "influxdb", "ipp", "kafka", "ldap", "libvirt", "lvmpolld",
-    "login1", "memcached", "mongodb", "mountd", "mqtt", "mysql", "nebula", "nfs", "nntp",
+    "memcached", "mongodb", "mountd", "mqtt", "mysql", "nebula", "nfs", "nntp",
     "ntp", "nut", "openvpn", "openvswitch", "pop", "postgres", "prometheus",
     "rdp", "redis", "rpcbind", "rspamd", "rsync", "sieve", "smb", "smtp",
-    "snmp", "spamd", "ssh", "statd", "syncthing", "tftp", "udisks2", "unifi",
+    "snmp", "spamd", "ssh", "statd", "syncthing", "tftp", "unifi",
     "varnish",
 }
 TCP_PROTOCOL = "tcp"
@@ -706,8 +706,56 @@ def catalog_doc_for_service(name: str, catalog_docs: list[dict]) -> tuple[dict |
     return None, {}
 
 
+def host_os_id(stage: Path) -> str:
+    """Return the host's os-release ID used by catalog ``os:`` selectors."""
+    for line in read_text(stage / "os-release").splitlines():
+        key, separator, value = line.partition("=")
+        if separator and key.strip() == "ID":
+            return value.strip().strip("\"'").lower()
+    return "linux"
+
+
+def merge_catalog_maps(base: dict, selected: dict) -> dict:
+    """Merge a selected catalog branch with the same map semantics as Sermo."""
+    merged = dict(base)
+    for key, value in selected.items():
+        current = merged.get(key)
+        if isinstance(current, dict) and isinstance(value, dict):
+            merged[key] = merge_catalog_maps(current, value)
+        else:
+            merged[key] = value
+    return merged
+
+
+def collapse_catalog_os(value: object, os_id: str) -> object:
+    """Collapse catalog ``os:`` selectors before inspecting host candidates."""
+    if isinstance(value, list):
+        return [collapse_catalog_os(item, os_id) for item in value]
+    if not isinstance(value, dict):
+        return value
+
+    selector = value.get("os") if isinstance(value.get("os"), dict) else None
+    collapsed = {
+        key: collapse_catalog_os(item, os_id)
+        for key, item in value.items()
+        if key != "os" or selector is None
+    }
+    if selector is None:
+        return collapsed
+    branch = selector.get(os_id, selector.get("default"))
+    if branch is None:
+        return collapsed
+    selected = collapse_catalog_os(branch, os_id)
+    if isinstance(selected, dict):
+        return merge_catalog_maps(collapsed, selected)
+    return collapsed if collapsed else selected
+
+
 def values_for_service(name: str, stage: Path, catalog_docs: list[dict]) -> tuple[dict | None, dict[str, str]]:
     doc, values = catalog_doc_for_service(name, catalog_docs)
+    if doc is not None:
+        selected = collapse_catalog_os(doc, host_os_id(stage))
+        doc = selected if isinstance(selected, dict) else doc
     merged = host_builtins(stage)
     # ${host}/${hostname} are fallbacks: an explicit profile variable always wins
     # (docs/services.md). Without this the hostname would override a profile that

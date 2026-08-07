@@ -130,6 +130,13 @@ fi
 mkdir -p /etc/sermo/services /etc/sermo/apps /etc/sermo/notifiers /etc/sermo/watches /etc/sermo/networks /etc/sermo/storages /etc/sermo/mounts /etc/sermo/templates
 mkdir -p /run/sermo /var/lib/sermo
 
+if [ -n "$backup" ] && [ -f "${backup}/credentials.env" ]; then
+	install -o 0 -g 0 -m 0600 "${backup}/credentials.env" /etc/sermo/credentials.env
+	printf 'yes\n' >"${out}/credentials_preserved"
+else
+	printf 'no\n' >"${out}/credentials_preserved"
+fi
+
 cat >/etc/sermo/sermo.yml <<YAML
 engine:
   backend: ${config_backend}

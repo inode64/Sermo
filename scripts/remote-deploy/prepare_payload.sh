@@ -3,6 +3,7 @@ set -eu
 
 run_root="${1:?run root required}"
 repo="${2:?repo required}"
+candidate_sermoctl="${3:-}"
 payload_root="${run_root}/payload-root"
 
 rm -rf "$payload_root"
@@ -22,6 +23,17 @@ install -m 0644 "${repo}/packaging/systemd/sermod.service" "${payload_root}/etc/
 install -m 0755 "${repo}/packaging/openrc/sermod" "${payload_root}/etc/init.d/sermod"
 install -m 0644 "${repo}/packaging/systemd/sermo.conf" "${payload_root}/usr/lib/tmpfiles.d/sermo.conf"
 
+candidate_member=()
+if [ -n "$candidate_sermoctl" ]; then
+	[ -x "$candidate_sermoctl" ] || {
+		echo "candidate sermoctl is not executable: ${candidate_sermoctl}" >&2
+		exit 64
+	}
+	mkdir -p "${payload_root}/candidate"
+	install -m 0755 "$candidate_sermoctl" "${payload_root}/candidate/sermoctl"
+	candidate_member=(candidate/sermoctl)
+fi
+
 tar -C "$payload_root" --owner=0 --group=0 --numeric-owner -czf "${run_root}/sermo-install-payload.tgz" \
 	usr/bin/sermoctl \
 	usr/bin/sermod \
@@ -29,5 +41,6 @@ tar -C "$payload_root" --owner=0 --group=0 --numeric-owner -czf "${run_root}/ser
 	etc/sermo/templates/default-alert.yml \
 	etc/systemd/system/sermod.service \
 	etc/init.d/sermod \
-	usr/lib/tmpfiles.d/sermo.conf
+	usr/lib/tmpfiles.d/sermo.conf \
+	"${candidate_member[@]}"
 printf '%s\n' "${run_root}/sermo-install-payload.tgz"

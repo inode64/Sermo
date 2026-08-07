@@ -225,10 +225,12 @@ func (b *WebBackend) lastServiceEvent(name string) *web.Event {
 	if b.events == nil {
 		return nil
 	}
-	event, ok := b.events.LastService(name)
-	if !ok {
-		return nil
+	for _, event := range b.events.Page(0, activitySummaryEventScanLimit) {
+		if event.Service != name {
+			continue
+		}
+		webEvent := loggedEventToWeb(event)
+		return &webEvent
 	}
-	webEvent := loggedEventToWeb(event)
-	return &webEvent
+	return nil
 }

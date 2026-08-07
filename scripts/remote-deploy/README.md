@@ -27,12 +27,15 @@ The remote scripts must run as root on the target host:
 - `remote_update_payload.sh` refreshes binaries/catalog on an already configured
   host. It stages the payload under its work directory and validates the current
   `/etc/sermo` with the **candidate** `sermoctl` and the detected init backend
-  *before* replacing anything on disk, so a configuration the new binary rejects
-  aborts with exit `30` and the host untouched. Only then does it install the
-  binaries and catalog, restart `sermod` and verify the local Web UI; if the
-  daemon never becomes ready, or the init backend is unsupported, it restores the
-  previous binaries and catalog, restarts, and exits `50` (`40` for the init
-  case). HTTP probes are bounded to
+  *before* replacing anything on disk. `update_fleet.sh` builds that validator
+  with its catalog path set to the same run-specific staging directory, so
+  validation always uses the candidate binary and candidate catalog together
+  rather than the host's older packaged catalog. A configuration the candidate
+  rejects aborts with exit `30` and the host untouched. Only then does the
+  updater install the binaries and catalog, restart `sermod` and verify the local
+  Web UI; if the daemon never becomes ready, or the init backend is unsupported,
+  it restores the previous binaries and catalog, restarts, and exits `50` (`40`
+  for the init case). HTTP probes are bounded to
   five seconds by default (`SERMO_HTTP_TIMEOUT_SECONDS`). After a successful
   update it deletes only its exact `/tmp/sermo-update-<run-id>` work directory
   and the uploaded `/tmp/sermo-*/<payload>.tgz`, freeing the payload and captured
@@ -95,7 +98,9 @@ hosts that do not have Sermo yet. Per host it runs `remote_stage.sh`, fetches
 the staged inventory, regenerates that host's configuration locally with
 `generate_install_config.py` and applies it with `remote_apply.sh`, which
 enables and starts `sermod` through the host's real init so the service survives
-a reboot.
+a reboot. When reinstalling an existing tree, `remote_stage.sh` keeps the dated
+backup and restores its `/etc/sermo/credentials.env` as `root:root` mode `0600`
+before generation, so the new config continues to use `web.password_file`.
 
 ```sh
 scripts/remote-deploy/install_fleet.sh --hosts new-hosts.txt
@@ -331,6 +336,8 @@ The generator prefers service config files such as
 sockets.
 
 For active catalog services, the generator also cross-checks every profile
+after applying the host's `os:` catalog selector, so distro-specific unit names
+such as Ubuntu's `smartmontools.service` are not omitted. It then checks every
 `tcp`, `http`, `dns` and `ports` watch against a listening socket owned by that
 service's process. A matching endpoint keeps the profile watch. Without that
 evidence the generated service explicitly disables that endpoint watch and

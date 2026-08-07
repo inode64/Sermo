@@ -39,7 +39,8 @@ options:
                     (backs up /etc/sermo to /etc/sermo.backup.<run-id> first)
   --run-root DIR    local working directory (default: mktemp under /tmp)
   --ssh-user USER   SSH user, must reach root on the target (default: root)
-  --skip-build      reuse existing bin/sermoctl and bin/sermod
+  --skip-build      reuse existing bin/sermoctl and bin/sermod; the staged
+                    candidate validator is always rebuilt for this run
   --dry-run         print the per-host plan without contacting any host
   -h, --help        show this help
 
@@ -127,6 +128,13 @@ if [ ! -x "${repo}/bin/sermoctl" ] || [ ! -x "${repo}/bin/sermod" ]; then
 	die "missing bin/sermoctl or bin/sermod (run without --skip-build)"
 fi
 
+candidate_datadir="/tmp/sermo-update-${run_id}/stage/usr/share/sermo"
+echo "building staged candidate validator (SERMO_DATADIR=${candidate_datadir})"
+(cd "$repo" && GOAMD64=v1 SERMO_DATADIR="$candidate_datadir" make build-candidate-sermoctl) \
+	|| die "candidate validator build failed"
+candidate_sermoctl="${repo}/bin/sermoctl-candidate"
+[ -x "$candidate_sermoctl" ] || die "missing candidate validator: ${candidate_sermoctl}"
+
 if [ -z "$run_root" ]; then
 	run_root="$(mktemp -d "/tmp/sermo-fleet-${run_id}.XXXX")" || die "mktemp failed"
 else
@@ -136,7 +144,8 @@ report="${run_root}/report.tsv"
 printf 'host\tphase\tstatus\tdetail\n' >"$report"
 
 echo "run root: ${run_root}"
-"${script_dir}/prepare_payload.sh" "$run_root" "$repo" >/dev/null || die "payload preparation failed"
+"${script_dir}/prepare_payload.sh" "$run_root" "$repo" "$candidate_sermoctl" >/dev/null \
+	|| die "payload preparation failed"
 payload_local="${run_root}/sermo-install-payload.tgz"
 
 run_ssh() {
