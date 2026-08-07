@@ -202,10 +202,12 @@ type WebBackend struct {
 	mountOperationsMu sync.Mutex
 	mountOperations   map[string]web.MountOperation
 
-	sshSessionsMu     sync.Mutex
-	sshSessionCache   map[string]cachedSSHSessions
-	sessionMetricsMu  sync.Mutex
-	sessionMetricKeys map[string]struct{}
+	sshSessionsMu         sync.Mutex
+	sshSessionCache       map[string]cachedSSHSessions
+	sessionMetricsMu      sync.Mutex
+	sessionMetricKeys     map[string]struct{}
+	terminalSourcesMu     sync.Mutex
+	closedTerminalSources map[string]time.Time
 }
 
 func (b *WebBackend) webNow() time.Time {
@@ -298,6 +300,7 @@ func NewWebBackend(ctx context.Context, cfg *config.Config, deps Deps) (*WebBack
 		slaCache:              map[string]cachedSLATimelines{},
 		probes:                map[string]time.Time{},
 		sessionMetricKeys:     map[string]struct{}{},
+		closedTerminalSources: map[string]time.Time{},
 	}
 	if deps.Collector != nil && deps.Collector.Reader != nil {
 		wb.sessionMetricCollector = metrics.New(deps.Collector.Reader)

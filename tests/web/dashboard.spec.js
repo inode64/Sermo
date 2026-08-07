@@ -31,6 +31,7 @@ const dashboard = {
     sources: [
       { kind: "ssh", service: "web", state: "available" },
       { kind: "tmux", service: "web", check: "tmux-root", user: "root", state: "available" },
+      { kind: "tmux", service: "web", check: "tmux-empty", user: "root", state: "available", can_close_empty: true },
       { kind: "screen", service: "web", check: "screen-root", user: "root", state: "available" },
     ],
     ssh: [{ service: "web", user: "root", terminal: "pts/11", pid: 96, start_ticks: 1234, idle_seconds: 120, can_close: true, memory_ready: true, rss: 1048576, cpu_ready: true, cpu: 1.5, io_ready: true, io_read: 1000, io_write: 250 }],
@@ -556,37 +557,30 @@ test("sessions panel shows metrics, sorts columns and closes verified SSH and tm
   expect(tmuxCloseRequest.searchParams.get("identity")).toBe("$7:90");
 });
 
-test("empty session sources use a red state and can be closed without a process action", async ({ page }) => {
-  await expect(page.locator('[data-sf="all"]')).toContainText("all 4");
+test("empty tmux sources use a red state and close the server through the API", async ({ page }) => {
+  let emptyCloseRequest = null;
+  await page.route("**/api/services/web/terminal-sessions/tmux-empty/close-empty", async (route) => {
+    emptyCloseRequest = new URL(route.request().url());
+    await route.fulfill({ json: { ok: true, message: "close empty terminal session source ok" } });
+  });
+
+  await expect(page.locator('[data-sf="all"]')).toContainText("all 5");
   await expect(page.locator('[data-sf="ssh"]')).toContainText("ssh 1");
   await expect(page.locator('[data-sf="tmux"]')).toContainText("tmux 2");
   await expect(page.locator('[data-sf="screen"]')).toBeHidden();
   await expect(page.locator("#session-rows")).toContainText("No active sessions");
-  const emptySource = page.locator("#session-rows tr", { hasText: "screen-root" });
+  const emptySource = page.locator("#session-rows tr", { hasText: "tmux-empty" });
   const emptySourceCells = emptySource.locator("td");
   await expect(emptySourceCells.nth(3)).toHaveText("empty");
   await expect(emptySourceCells.nth(3).locator(".target-state")).toHaveClass(/state-empty/);
   await expect(emptySourceCells.nth(5)).toHaveText("—");
   await expect(emptySourceCells.nth(7)).toHaveText("—");
+  await expect(page.locator("#session-rows tr", { hasText: "screen-root" }).getByRole("button", { name: "close" })).toHaveCount(0);
 
   await emptySource.getByRole("button", { name: "close" }).click();
-  await expect(page.locator("#simple-confirm-message")).toContainText("no active session to terminate");
+  await expect(page.locator("#simple-confirm-message")).toContainText("stops only the empty tmux server");
   await page.locator("#simple-confirm-ok").click();
-  await expect(emptySource).toBeHidden();
-
-  const active = JSON.parse(JSON.stringify(dashboard));
-  active.sessions.terminal.push({
-    service: "web", check: "screen-root", multiplexer: "screen", user: "root",
-    name: "120.ops", state: "detached", identity: "120:1200", can_close: true,
-  });
-  const activeDashboard = (route) => route.fulfill({ json: active });
-  await page.route("**/api/dashboard**", activeDashboard);
-  await page.locator("#refresh-now").click();
-  await expect(page.locator("#session-rows tr", { hasText: "120.ops" })).toBeVisible();
-
-  await page.unroute("**/api/dashboard**", activeDashboard);
-  await page.locator("#refresh-now").click();
-  await expect(page.locator("#session-rows tr", { hasText: "screen-root" })).toBeVisible();
+  await expect.poll(() => emptyCloseRequest && emptyCloseRequest.pathname).toBe("/api/services/web/terminal-sessions/tmux-empty/close-empty");
 });
 
 test("an unknown terminal session state is not shown as active", async ({ page }) => {

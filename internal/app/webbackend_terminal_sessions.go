@@ -52,6 +52,39 @@ func terminalSessionMetricKey(session web.TerminalSession) string {
 	return sessionMetricKey(session.Multiplexer, session.Service, session.Check, session.Identity)
 }
 
+func terminalSessionSourceKey(service, check string) string {
+	return sessionMetricKey("terminal-source", service, check)
+}
+
+func (b *WebBackend) terminalSourceClosedSince(service, check string, sampleAt time.Time) bool {
+	if b == nil {
+		return false
+	}
+	b.terminalSourcesMu.Lock()
+	defer b.terminalSourcesMu.Unlock()
+	closedAt, ok := b.closedTerminalSources[terminalSessionSourceKey(service, check)]
+	if !ok {
+		return false
+	}
+	if sampleAt.After(closedAt) {
+		delete(b.closedTerminalSources, terminalSessionSourceKey(service, check))
+		return false
+	}
+	return true
+}
+
+func (b *WebBackend) rememberClosedTerminalSource(service, check string) {
+	if b == nil {
+		return
+	}
+	b.terminalSourcesMu.Lock()
+	defer b.terminalSourcesMu.Unlock()
+	if b.closedTerminalSources == nil {
+		b.closedTerminalSources = map[string]time.Time{}
+	}
+	b.closedTerminalSources[terminalSessionSourceKey(service, check)] = b.webNow()
+}
+
 func terminalSessionSources(tree map[string]any) []terminalSessionSource {
 	entries, _ := tree[config.SectionChecks].(map[string]any)
 	result := make([]terminalSessionSource, 0)
@@ -254,6 +287,9 @@ func (b *WebBackend) appendTerminalSessions(result *web.SessionInventory, servic
 			result.Sources = append(result.Sources, source)
 			continue
 		}
+		if b.terminalSourceClosedSince(service, configured.check, snapshot.At) {
+			continue
+		}
 		if sampleError := cfgval.String(snapshot.Data[checks.DataKeySampleError]); sampleError != "" {
 			source.State = web.SessionSourceUnavailable
 			source.Message = sampleError
@@ -337,6 +373,9 @@ func (b *WebBackend) CloseEmptyTerminalSession(ctx context.Context, name, check 
 		return b.operateError(name, "close empty terminal session", serviceSubjectPrefix+name+" is disabled in configuration")
 	}
 	r := e.engine.CloseEmptyTerminalSession(ctx, operation.TerminalSessionSourceTarget{Check: check})
+	if r.OK() {
+		b.rememberClosedTerminalSource(name, check)
+	}
 	return webActionResultFrom(r, name, "close empty terminal session")
 }
 
