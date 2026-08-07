@@ -76,6 +76,16 @@ terminal, PID de sesión y ticks de inicio del proceso. Si falta esa frontera, e
 terminal cambió o el PID se recicló, se rechaza. Un cierre correcto envía un único `SIGTERM` al proceso de
 sesión; nunca escala a `SIGKILL`.
 
+El check `terminal_sessions` es de solo observación: ejecuta una lista limitada
+por argv de `tmux` o `screen` como la cuenta configurada explícitamente y no
+controla sesiones. El cierre manual independiente de un origen vacío solo está
+disponible para tmux con un socket explícito configurado. Comparte locks de
+operación y nombrados, guards, timeout y un único evento; vuelve a listar el
+origen exacto, exige un servidor vivo sin sesiones, ejecuta únicamente
+`tmux -S SOCKET kill-server` como el usuario configurado y confirma que el
+espacio desapareció. Nunca borra el socket directamente, y rechaza el cierre
+si el servidor ya no existe o apareció una sesión.
+
 Un residual que Sermo no tiene permitido identificar y matar se **reporta, no se mata**:
 un fallo limpio `orphan_processes` es más seguro que matar el proceso equivocado.
 

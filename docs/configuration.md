@@ -1073,6 +1073,10 @@ accepted operation cannot switch targets during a concurrent reload.
   — close one freshly revalidated tmux or screen session through its configured
   client. The operation requires the exact published generation identity and
   shares the service lock, guards, timeout and event path.
+- `POST /api/services/{name}/terminal-sessions/{check}/close-empty`
+  — close one freshly revalidated empty tmux server with an explicit configured
+  socket. The server must still have zero sessions; Sermo invokes tmux's exact
+  `kill-server` argv and verifies the namespace has disappeared.
 - `POST /api/watches/{name}/{action}` — watch action. `action` is
   `monitor`, `unmonitor`, `expand`, `probe`, `pause` or `resume`. `probe` is
   read-only and is available for LVM, RAID and SMART watches. `pause`/`resume`

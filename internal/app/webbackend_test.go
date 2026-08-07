@@ -329,6 +329,34 @@ func TestWebBackendMarksOnlyEmptyTmuxSocketsClosable(t *testing.T) {
 	}
 }
 
+func TestWebBackendHidesClosedTerminalSourceUntilNextSample(t *testing.T) {
+	closedAt := time.Unix(200, 0)
+	sampleAt := time.Unix(100, 0)
+	snaps := NewSnapshots()
+	snaps.now = func() time.Time { return sampleAt }
+	snaps.PublishWithCheckTypes("web", map[string]checks.Result{
+		"tmux-sessions": {Check: "tmux-sessions", OK: true, Data: map[string]any{checks.DataKeyPresent: true}},
+	}, map[string]bool{"tmux-sessions": true}, map[string]string{"tmux-sessions": checks.CheckTypeTerminalSessions})
+	b := webBackendWithEntry(snaps, []string{"tmux-sessions"}, map[string]string{"tmux-sessions": checks.CheckTypeTerminalSessions})
+	b.now = func() time.Time { return closedAt }
+	b.entries["web"].terminalSessions = []terminalSessionSource{{
+		check: "tmux-sessions", multiplexer: checks.TerminalMultiplexerTmux, user: "deploy", socket: "/tmp/tmux-1000/default",
+	}}
+	b.rememberClosedTerminalSource("web", "tmux-sessions")
+
+	if inventory := b.Sessions(context.Background()); len(inventory.Sources) != 0 {
+		t.Fatalf("stale session inventory = %+v, want closed source omitted", inventory)
+	}
+
+	sampleAt = closedAt.Add(time.Second)
+	snaps.PublishWithCheckTypes("web", map[string]checks.Result{
+		"tmux-sessions": {Check: "tmux-sessions", OK: true, Data: map[string]any{checks.DataKeyPresent: true}},
+	}, map[string]bool{"tmux-sessions": true}, map[string]string{"tmux-sessions": checks.CheckTypeTerminalSessions})
+	if inventory := b.Sessions(context.Background()); len(inventory.Sources) != 1 {
+		t.Fatalf("fresh session inventory = %+v, want recreated source", inventory)
+	}
+}
+
 func TestSessionUsageUsesServiceReadingSemantics(t *testing.T) {
 	sample := metrics.Snapshot{
 		metrics.MetricMemory:  {Absolute: 4096, Ready: true},

@@ -10,6 +10,7 @@ import {
   apiQueryWatch, apiReloadPath, notifierTestAPI,
   apiServicesPath, apiSessionsPath, apiStreamPath, apiWatchesPath, apiWhoamiPath, applicationEventsAPI,
   csrfPostOptions, dashboardAPI, daemonMetricsAPI, eventsAPI, eventsClearAPI,
+  emptyTerminalSessionCloseAPI,
   liveVerbosePath, lockReleaseAPI, mountAPI, mountBlockersAPI, panicAPI,
   readyVerbosePath, serviceAPI, serviceEventsAPI, serviceMetricsAPI,
   servicePreflightAPI, serviceRuntimeAPI, serviceSLAAPI, sshSessionCloseAPI, terminalSessionCloseAPI, stateCompactAPI, watchAPI,
@@ -1236,7 +1237,6 @@ let latestSessionInventory = {};
 let sessionQuery = "";
 let sessionFilter = filterAll;
 let sessionSort = { key: "", dir: 1 };
-let dismissedEmptySessionSources = new Set();
 let svcQuery = "";
 let svcStatus = filterAll; // all | disabled | stopped | started | starting | collecting | monitored | failed
 let svcCategory = filterAll;
@@ -1320,10 +1320,6 @@ const UI_STATE_KEY = "sermo-ui-state";
 const KEYBOARD_SHORTCUTS_KEY = "sermo-keyboard-shortcuts";
 const BROWSER_NOTIFY_KEY = "sermo-browser-notify";
 
-function restoredStringSet(value) {
-  return new Set(Array.isArray(value) ? value.filter((entry) => typeof entry === "string") : []);
-}
-
 function restoreUIState() {
   try {
     const raw = localStorage.getItem(UI_STATE_KEY);
@@ -1339,7 +1335,6 @@ function restoreUIState() {
     if (s.sessionSort && typeof s.sessionSort.key === "string") {
       sessionSort = { key: s.sessionSort.key, dir: s.sessionSort.dir === -1 ? -1 : 1 };
     }
-    dismissedEmptySessionSources = restoredStringSet(s.dismissedEmptySessionSources);
     if (s.splitServicePanels && typeof s.splitServicePanels === "object") {
       for (const [key, saved] of Object.entries(s.splitServicePanels)) {
         const panel = splitServicePanels[key];
@@ -1434,7 +1429,6 @@ function saveUIState() {
   try {
     localStorage.setItem(UI_STATE_KEY, JSON.stringify({
       svcQuery, svcStatus, svcCategory, svcGrouped, svcSort, sessionSort,
-      dismissedEmptySessionSources: [...dismissedEmptySessionSources],
       mountQuery, mountStatus, mountCategory, mountGrouped, mountSort,
       appQuery, appStatus, appSort, appGrouped,
       libraryQuery, libraryStatus, librarySort, libraryGrouped,
@@ -3758,16 +3752,12 @@ function sessionStateCell(state) {
   return stateBadgeLabel(badgeState, label);
 }
 
-function sessionSourceKey(source) {
-  return JSON.stringify([source.kind || "", source.service || "", source.check || "", source.user || ""]);
-}
-
 function emptySessionCloseButton(source) {
-  if (source.state !== sessionSourceAvailable) return nothing;
+  if (source.state !== sessionSourceAvailable || !source.can_close_empty) return nothing;
   if (!me.can_act) return tpl`<span class="muted">read-only</span>`;
   return tpl`<button class="danger-btn" data-empty-session-close="1"
-    data-empty-session-kind="${source.kind || ""}" data-empty-session-service="${source.service || ""}"
-    data-empty-session-check="${source.check || ""}" data-empty-session-user="${source.user || ""}">close</button>`;
+    data-empty-session-service="${source.service || ""}"
+    data-empty-session-check="${source.check || ""}">close</button>`;
 }
 
 function sourceHasSession(source, inventory) {
@@ -3803,7 +3793,6 @@ function sessionRows(inventory) {
   }));
   const emptySources = (inventory.sources || [])
     .filter((source) => !sourceHasSession(source, inventory))
-    .filter((source) => source.state !== sessionSourceAvailable || !dismissedEmptySessionSources.has(sessionSourceKey(source)))
     .map((source) => ({
     kind: source.kind || "", service: source.service || "", user: source.user || "",
     name: source.check || "—", state: source.state === sessionSourceAvailable ? sessionStateEmpty : source.state || targetStateCollecting,
@@ -3839,6 +3828,27 @@ const sessionSortKeys = {
 
 function setSessionSort(key) { toggleSort(sessionSort, key, renderSessions); }
 
+function sessionSortMissing(row, key) {
+  return (key === "idle" && !row.idleReady)
+    || (key === "cpu" && !row.cpuReady)
+    || (key === "memory" && !row.memoryReady)
+    || (key === "io" && !row.ioReady);
+}
+
+function sortSessionRows(rows) {
+  const value = sessionSortKeys[sessionSort.key];
+  if (!sessionSort.key || !value) return rows;
+  rows.sort((a, b) => {
+    const aMissing = sessionSortMissing(a, sessionSort.key);
+    const bMissing = sessionSortMissing(b, sessionSort.key);
+    if (aMissing !== bMissing) return aMissing ? 1 : -1;
+    const primary = compareSortValues(value(a), value(b)) * sessionSort.dir;
+    if (primary !== 0) return primary;
+    return compareSortValues(sessionSortKeys.session(a), sessionSortKeys.session(b));
+  });
+  return rows;
+}
+
 function sessionIdleCell(row) {
   return row.idleReady ? fmtDuration(row.idle) : tpl`<span class="muted">—</span>`;
 }
@@ -3860,17 +3870,8 @@ function sessionIOCell(row) {
   return tpl`<span title="read / write">${fmtBytesPerSecond(row.ioRead)} / ${fmtBytesPerSecond(row.ioWrite)}</span>`;
 }
 
-function reconcileDismissedEmptySessionSources(inventory) {
-  let changed = false;
-  for (const source of inventory.sources || []) {
-    if (sourceHasSession(source, inventory) && dismissedEmptySessionSources.delete(sessionSourceKey(source))) changed = true;
-  }
-  if (changed) saveUIState();
-}
-
 function renderSessions(inventory = latestSessionInventory) {
   latestSessionInventory = inventory || {};
-  reconcileDismissedEmptySessionSources(latestSessionInventory);
   const sources = latestSessionInventory.sources || [];
   setPanelVisible($("#sessions-section"), sources.length > 0);
   const rows = sessionRows(latestSessionInventory);
@@ -3879,7 +3880,7 @@ function renderSessions(inventory = latestSessionInventory) {
     if (sessionFilter !== filterAll && row.kind !== sessionFilter) return false;
     return !sessionQuery || [row.kind, row.service, row.user, row.name, row.state].join(" ").toLowerCase().includes(sessionQuery);
   });
-  sortedBy(filtered, sessionSort, sessionSortKeys, "session");
+  sortSessionRows(filtered);
   const body = $("#session-rows");
   if (body) {
     const content = filtered.length ? filtered.map((row) => tpl`<tr>
@@ -6609,24 +6610,29 @@ async function closeTerminalSession(service, check, multiplexer, session, user, 
   }
 }
 
-async function closeEmptySessionSource(kind, service, check, user) {
+async function closeEmptySessionSource(service, check) {
   const source = (latestSessionInventory.sources || []).find((candidate) =>
-    candidate.kind === kind && candidate.service === service && (candidate.check || "") === check && (candidate.user || "") === user);
-  if (!source || source.state !== sessionSourceAvailable || sourceHasSession(source, latestSessionInventory)) {
+    candidate.service === service && (candidate.check || "") === check);
+  if (!source || source.state !== sessionSourceAvailable || !source.can_close_empty || sourceHasSession(source, latestSessionInventory)) {
     setStatus("close empty session: source changed; refresh and try again", feedbackStatusErr);
     return;
   }
-  const label = `${kind} ${check || service}${user ? ` for ${user}` : ""}`;
+  const label = `tmux ${check || service}${source.user ? ` for ${source.user}` : ""}`;
   if (!(await promptConfirm({
     title: `Close empty ${label}?`,
-    message: "There is no active session to terminate. This closes only the empty row in this browser; it will return if a session becomes active.",
-    okLabel: "close empty row",
-    danger: false,
+    message: "This stops only the empty tmux server. tmux removes its socket; the action cannot be undone.",
+    okLabel: "close empty server",
+    danger: true,
   }))) return;
-  dismissedEmptySessionSources.add(sessionSourceKey(source));
-  saveUIState();
-  renderSessions();
-  setStatus(`closed empty ${label}`, feedbackStatusOK);
+  setStatus("");
+  try {
+    const res = await fetch(emptyTerminalSessionCloseAPI(service, check), targetPostOptions());
+    const body = await jsonOrThrow(res);
+    setStatus(`close empty ${label}: ${body.message || feedbackStatusOK}`, feedbackStatusOK);
+    load();
+  } catch (e) {
+    setStatus(`close empty ${label}: ${e.message}`, feedbackStatusErr);
+  }
 }
 
 async function actWatch(name, action) {
@@ -7897,8 +7903,7 @@ function initDelegatedHandlers() {
       el.dataset.terminalService || "", el.dataset.terminalCheck || "", el.dataset.terminalMultiplexer || "",
       el.dataset.terminalSession || "", el.dataset.terminalUser || "", el.dataset.terminalIdentity || "")],
     ["[data-empty-session-close]", (el) => closeEmptySessionSource(
-      el.dataset.emptySessionKind || "", el.dataset.emptySessionService || "",
-      el.dataset.emptySessionCheck || "", el.dataset.emptySessionUser || "")],
+      el.dataset.emptySessionService || "", el.dataset.emptySessionCheck || "")],
     ["[data-service-action][data-service]", (el) => act(el.dataset.service || "", el.dataset.serviceAction || "")],
     ["[data-watch-action][data-watch]", (el) => actWatch(el.dataset.watch || "", el.dataset.watchAction || "")],
     ["[data-mount-action][data-mount]", (el) => actMount(el.dataset.mount || "", el.dataset.mountAction || "")],

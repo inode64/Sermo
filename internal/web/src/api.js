@@ -112,5 +112,8 @@ export function terminalSessionCloseAPI(service, check, multiplexer, session, us
   });
   return serviceAPI(service, `/terminal-sessions/${encodeURIComponent(check)}/close?${query.toString()}`);
 }
+export function emptyTerminalSessionCloseAPI(service, check) {
+  return serviceAPI(service, `/terminal-sessions/${encodeURIComponent(check)}/close-empty`);
+}
 export function stateCompactAPI(query = "") { return `${apiStateCompactPath}${query}`; }
 export function watchAPI(name, suffix = "") { return apiEntityPath(apiWatchesPath, name, suffix); }
