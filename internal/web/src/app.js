@@ -225,6 +225,14 @@ const sessionStateActive = "active";
 const sessionStateAttached = "attached";
 const sessionStateDetached = "detached";
 const sessionStateUnknown = "unknown";
+const sessionStateBadges = {
+  [targetStateCollecting]: [targetStateCollecting, targetStateCollecting],
+  [sessionSourceUnavailable]: [targetStateFailed, sessionSourceUnavailable],
+  [sessionStateActive]: [targetStateActive, sessionStateActive],
+  [sessionStateAttached]: [targetStateRunning, sessionStateAttached],
+  [sessionStateDetached]: [targetStateStopped, sessionStateDetached],
+  [sessionStateUnknown]: [targetStateWarning, sessionStateUnknown],
+};
 // SLA strips colour by how much of a bucket was down, not by availability: a
 // 40-second outage inside a day-long bucket is 99.93% available, which any
 // availability threshold reads as healthy. These are the upper edges of the four
@@ -3729,11 +3737,8 @@ function terminalSessionCloseButton(session) {
 
 function sessionStateCell(state) {
   if (state === sessionSourceAvailable) return tpl`<span class="muted">empty</span>`;
-  if (state === targetStateCollecting) return tpl`<span class="target-state state-collecting">collecting</span>`;
-  if (state === sessionSourceUnavailable) return tpl`<span class="target-state state-failed">unavailable</span>`;
-  if (state === sessionStateAttached) return tpl`<span class="target-state state-running">attached</span>`;
-  if (state === sessionStateDetached) return tpl`<span class="target-state state-stopped">detached</span>`;
-  return tpl`<span class="target-state state-running">active</span>`;
+  const [badgeState, label] = sessionStateBadges[state] || [targetStateWarning, state || sessionStateUnknown];
+  return stateBadgeLabel(badgeState, label);
 }
 
 function sourceHasSession(source, inventory) {
