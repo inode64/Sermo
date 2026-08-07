@@ -337,7 +337,10 @@ func TestDashboardSnapshotEndpoint(t *testing.T) {
 func TestSessionsEndpoint(t *testing.T) {
 	b := &fakeBackend{sessions: SessionInventory{
 		Sources: []SessionSource{{Kind: SessionKindSSH, Service: "ssh", State: SessionSourceAvailable}},
-		SSH:     []SSHSession{{Service: "ssh", User: "deploy", Terminal: "pts/4", PID: 42}},
+		SSH: []SSHSession{{
+			Service: "ssh", User: "deploy", Terminal: "pts/4", PID: 42,
+			SessionUsage: SessionUsage{RSS: 4096, MemoryReady: true, CPU: 1.5, CPUReady: true},
+		}},
 	}}
 	rec := httptest.NewRecorder()
 	newServer(b).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, testAPIPath(apiSegmentSessions), nil))
@@ -348,7 +351,8 @@ func TestSessionsEndpoint(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
 		t.Fatalf("decode sessions: %v", err)
 	}
-	if len(got.Sources) != 1 || len(got.SSH) != 1 || got.SSH[0].Service != "ssh" {
+	if len(got.Sources) != 1 || len(got.SSH) != 1 || got.SSH[0].Service != "ssh" ||
+		got.SSH[0].RSS != 4096 || !got.SSH[0].MemoryReady || got.SSH[0].CPU != 1.5 || !got.SSH[0].CPUReady {
 		t.Fatalf("sessions = %+v", got)
 	}
 }

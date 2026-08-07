@@ -133,7 +133,7 @@ func (b *WebBackend) attachSessionMetrics(inventory *web.SessionInventory) {
 		key := "ssh:" + strconv.Itoa(session.PID) + ":" + strconv.FormatUint(session.StartTicks, 10)
 		active[key] = struct{}{}
 		if pids := snapshot.treePIDs([]int{session.PID}); b.sessionMetricCollector != nil && len(pids) > 0 {
-			attachWebSessionMetrics(b.sessionMetricCollector.SampleService(key, pids), session)
+			session.SessionUsage = sessionUsage(b.sessionMetricCollector.SampleService(key, pids))
 		}
 	}
 	for i := range inventory.Terminal {
@@ -142,7 +142,7 @@ func (b *WebBackend) attachSessionMetrics(inventory *web.SessionInventory) {
 		active[key] = struct{}{}
 		pids := snapshot.treePIDs(session.PIDs)
 		if b.sessionMetricCollector != nil && len(pids) > 0 {
-			attachWebTerminalSessionMetrics(b.sessionMetricCollector.SampleService(key, pids), session)
+			session.SessionUsage = sessionUsage(b.sessionMetricCollector.SampleService(key, pids))
 		}
 		attachTerminalSessionIdle(snapshot, session, b.webNow())
 	}
@@ -156,27 +156,21 @@ func (b *WebBackend) attachSessionMetrics(inventory *web.SessionInventory) {
 	b.sessionMetricKeys = active
 }
 
-func attachWebSessionMetrics(sample metrics.Snapshot, session *web.SSHSession) {
+func sessionUsage(sample metrics.Snapshot) web.SessionUsage {
+	result := web.SessionUsage{}
 	mem := sample[metrics.MetricMemory]
-	session.MemoryReady = mem.Ready
+	result.MemoryReady = mem.Ready
 	if mem.Ready {
-		session.RSS = int64(mem.Absolute)
+		result.RSS = int64(mem.Absolute)
 	}
 	cpu := sample[metrics.MetricCPU]
-	session.CPUReady, session.CPU = cpu.Ready, cpu.Percent
+	result.CPUReady, result.CPU = cpu.Ready, cpu.Percent
 	read, write := sample[metrics.MetricIORead], sample[metrics.MetricIOWrite]
-	session.IOReady = read.Ready && write.Ready
-	if session.IOReady {
-		session.IORead, session.IOWrite = read.Absolute, write.Absolute
+	result.IOReady = read.Ready && write.Ready
+	if result.IOReady {
+		result.IORead, result.IOWrite = read.Absolute, write.Absolute
 	}
-}
-
-func attachWebTerminalSessionMetrics(sample metrics.Snapshot, session *web.TerminalSession) {
-	proxy := web.SSHSession{}
-	attachWebSessionMetrics(sample, &proxy)
-	session.RSS, session.MemoryReady = proxy.RSS, proxy.MemoryReady
-	session.CPU, session.CPUReady = proxy.CPU, proxy.CPUReady
-	session.IORead, session.IOWrite, session.IOReady = proxy.IORead, proxy.IOWrite, proxy.IOReady
+	return result
 }
 
 func attachTerminalSessionIdle(snapshot sessionProcessSnapshot, session *web.TerminalSession, now time.Time) {
