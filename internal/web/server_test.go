@@ -1329,9 +1329,9 @@ func TestTerminalSessionCloseEndpointRequiresFullSessionIdentity(t *testing.T) {
 	h := newServer(b)
 	path := testServicePath("shells", apiSegmentTerminalSessions, "tmux-sessions", apiActionClose)
 	valid := testQueryParams(
-		apiQueryMultiplexer, "tmux", apiQuerySession, "ops", apiQueryUser, "deploy", apiQueryIdentity, "$7:90",
+		apiQueryMultiplexer, SessionKindTmux, apiQuerySession, "ops", apiQueryUser, "deploy", apiQueryIdentity, "$7:90",
 	)
-	for _, query := range []string{"", testQueryParams(apiQueryMultiplexer, "tmux", apiQuerySession, "ops"), testQueryParams(apiQueryMultiplexer, "other", apiQuerySession, "ops", apiQueryUser, "deploy", apiQueryIdentity, "$7:90")} {
+	for _, query := range []string{"", testQueryParams(apiQueryMultiplexer, SessionKindTmux, apiQuerySession, "ops"), testQueryParams(apiQueryMultiplexer, "other", apiQuerySession, "ops", apiQueryUser, "deploy", apiQueryIdentity, "$7:90")} {
 		rec := httptest.NewRecorder()
 		h.ServeHTTP(rec, postReq(testPathQuery(path, query)))
 		if rec.Code != http.StatusBadRequest {
