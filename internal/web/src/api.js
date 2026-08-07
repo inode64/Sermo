@@ -59,6 +59,9 @@ const apiSuffixRuntime = "/runtime";
 const apiSuffixSessions = "/sessions";
 const apiSuffixSLA = "/sla";
 const apiSuffixTest = "/test";
+const apiSuffixTerminalSessions = "/terminal-sessions";
+const apiActionClose = "close";
+const apiActionCloseEmpty = "close-empty";
 const apiQueryVerbose = "verbose";
 export const readyVerbosePath = `readyz?${apiQueryVerbose}`;
 export const liveVerbosePath = `livez?${apiQueryVerbose}`;
@@ -69,6 +72,10 @@ export function csrfPostOptions(headers = {}) {
 
 function apiEntityPath(base, name, suffix = "") {
   return `${base}/${encodeURIComponent(name)}${suffix}`;
+}
+
+function terminalSessionAPI(service, check, suffix) {
+  return serviceAPI(service, `${apiSuffixTerminalSessions}/${encodeURIComponent(check)}${suffix}`);
 }
 
 export function apiActionSuffix(action, query = "") { return `/${action}${query}`; }
@@ -110,10 +117,10 @@ export function terminalSessionCloseAPI(service, check, multiplexer, session, us
     [apiQueryMultiplexer]: multiplexer, [apiQuerySession]: session,
     [apiQueryUser]: user, [apiQueryIdentity]: identity,
   });
-  return serviceAPI(service, `/terminal-sessions/${encodeURIComponent(check)}/close?${query.toString()}`);
+  return terminalSessionAPI(service, check, `/${apiActionClose}?${query.toString()}`);
 }
 export function emptyTerminalSessionCloseAPI(service, check) {
-  return serviceAPI(service, `/terminal-sessions/${encodeURIComponent(check)}/close-empty`);
+  return terminalSessionAPI(service, check, `/${apiActionCloseEmpty}`);
 }
 export function stateCompactAPI(query = "") { return `${apiStateCompactPath}${query}`; }
 export function watchAPI(name, suffix = "") { return apiEntityPath(apiWatchesPath, name, suffix); }

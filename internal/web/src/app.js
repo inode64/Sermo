@@ -3768,27 +3768,29 @@ function sourceHasSession(source, inventory) {
     session.service === source.service && session.check === source.check);
 }
 
+function sessionUsageRow(session, idleReady) {
+  return {
+    idle: session.idle_seconds || 0, idleReady: !!idleReady,
+    cpu: session.cpu || 0, cpuReady: !!session.cpu_ready,
+    memory: session.rss || 0, memoryReady: !!session.memory_ready,
+    ioRead: session.io_read || 0, ioWrite: session.io_write || 0, ioReady: !!session.io_ready,
+    metricsExpected: true,
+  };
+}
+
 function sessionRows(inventory) {
   const ssh = (inventory.ssh || []).map((session) => ({
     kind: sessionKindSSH, service: session.service || "", user: session.user || "",
     name: session.terminal || "", state: sessionStateActive,
     detail: tpl`PID ${session.pid || "—"}`,
-    idle: session.idle_seconds || 0, idleReady: true,
-    cpu: session.cpu || 0, cpuReady: !!session.cpu_ready,
-    memory: session.rss || 0, memoryReady: !!session.memory_ready,
-    ioRead: session.io_read || 0, ioWrite: session.io_write || 0, ioReady: !!session.io_ready,
-    metricsExpected: true,
+    ...sessionUsageRow(session, true),
     action: sshSessionCloseButton(session.service || "", session),
   }));
   const terminal = (inventory.terminal || []).map((session) => ({
     kind: session.multiplexer || "", service: session.service || "", user: session.user || "",
     name: session.name || "", state: session.state || sessionStateUnknown,
     detail: Number.isInteger(session.windows) ? `${fmtNum(session.windows, 0)} window${session.windows === 1 ? "" : "s"}` : "—",
-    idle: session.idle_seconds || 0, idleReady: !!session.has_idle,
-    cpu: session.cpu || 0, cpuReady: !!session.cpu_ready,
-    memory: session.rss || 0, memoryReady: !!session.memory_ready,
-    ioRead: session.io_read || 0, ioWrite: session.io_write || 0, ioReady: !!session.io_ready,
-    metricsExpected: true,
+    ...sessionUsageRow(session, session.has_idle),
     action: terminalSessionCloseButton(session),
   }));
   const emptySources = (inventory.sources || [])
@@ -3825,14 +3827,18 @@ const sessionSortKeys = {
   memory: (row) => row.memoryReady ? row.memory : -1,
   io: (row) => row.ioReady ? row.ioRead + row.ioWrite : -1,
 };
+const sessionSortReadyKeys = {
+  idle: "idleReady",
+  cpu: "cpuReady",
+  memory: "memoryReady",
+  io: "ioReady",
+};
 
 function setSessionSort(key) { toggleSort(sessionSort, key, renderSessions); }
 
 function sessionSortMissing(row, key) {
-  return (key === "idle" && !row.idleReady)
-    || (key === "cpu" && !row.cpuReady)
-    || (key === "memory" && !row.memoryReady)
-    || (key === "io" && !row.ioReady);
+  const readyKey = sessionSortReadyKeys[key];
+  return !!readyKey && !row[readyKey];
 }
 
 function sortSessionRows(rows) {
@@ -6576,14 +6582,18 @@ async function closeSSHSession(name, pid, startTicks, terminal, user) {
     okLabel: "close session",
     danger: true,
   }))) return;
+  await postSessionClose(`close SSH session ${label}`, sshSessionCloseAPI(name, sessionPID, sessionStartTicks, terminal));
+}
+
+async function postSessionClose(statusLabel, endpoint) {
   setStatus("");
   try {
-    const res = await fetch(sshSessionCloseAPI(name, sessionPID, sessionStartTicks, terminal), targetPostOptions());
+    const res = await fetch(endpoint, targetPostOptions());
     const body = await jsonOrThrow(res);
-    setStatus(`close SSH session ${label}: ${body.message || feedbackStatusOK}`, feedbackStatusOK);
+    setStatus(`${statusLabel}: ${body.message || feedbackStatusOK}`, feedbackStatusOK);
     load();
   } catch (e) {
-    setStatus(`close SSH session ${label}: ${e.message}`, feedbackStatusErr);
+    setStatus(`${statusLabel}: ${e.message}`, feedbackStatusErr);
   }
 }
 
@@ -6599,15 +6609,7 @@ async function closeTerminalSession(service, check, multiplexer, session, user, 
     okLabel: "close session",
     danger: true,
   }))) return;
-  setStatus("");
-  try {
-    const res = await fetch(terminalSessionCloseAPI(service, check, multiplexer, session, user, identity), targetPostOptions());
-    const body = await jsonOrThrow(res);
-    setStatus(`close ${label}: ${body.message || feedbackStatusOK}`, feedbackStatusOK);
-    load();
-  } catch (e) {
-    setStatus(`close ${label}: ${e.message}`, feedbackStatusErr);
-  }
+  await postSessionClose(`close ${label}`, terminalSessionCloseAPI(service, check, multiplexer, session, user, identity));
 }
 
 async function closeEmptySessionSource(service, check) {
@@ -6624,15 +6626,7 @@ async function closeEmptySessionSource(service, check) {
     okLabel: "close empty server",
     danger: true,
   }))) return;
-  setStatus("");
-  try {
-    const res = await fetch(emptyTerminalSessionCloseAPI(service, check), targetPostOptions());
-    const body = await jsonOrThrow(res);
-    setStatus(`close empty ${label}: ${body.message || feedbackStatusOK}`, feedbackStatusOK);
-    load();
-  } catch (e) {
-    setStatus(`close empty ${label}: ${e.message}`, feedbackStatusErr);
-  }
+  await postSessionClose(`close empty ${label}`, emptyTerminalSessionCloseAPI(service, check));
 }
 
 async function actWatch(name, action) {
