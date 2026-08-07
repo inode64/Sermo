@@ -171,6 +171,7 @@
   .watch-probe { color: var(--warn); font-size: .85em; white-space: nowrap; }
   .watch-probe::before { content: ""; display: inline-block; width: .48em; height: .48em; margin-right: .3em; border-radius: 50%; background: currentColor; animation: beat 1.2s ease-in-out infinite; }
   .state-ok, .state-monitored { color: var(--ok); }
+  .state-empty { color: var(--crit); }
   .state-failed { color: var(--crit); }
   .state-failed::before { animation: beat 1.2s ease-in-out infinite; }
   .watch-sample-note { display: inline-flex; margin-top: .2rem; font-size: .82em; }

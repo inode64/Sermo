@@ -337,7 +337,10 @@ visible under `all` when it has no sessions, while collecting and sampling
 failures use distinct states. Attributable rows expose idle time and
 process-tree CPU, resident memory and read/write IO rates. An admin can confirm
 a close only when the backend can freshly revalidate the exact SSH or
-multiplexer session identity.
+multiplexer session identity. An empty successful source uses a red `empty`
+pill and has no process identity to close; its `close` button dismisses only
+that empty row in the current browser. No multiplexer command or signal runs,
+and the row returns after that source reports an active session.
 
 Open service expansions fetch and fully render fresh detail once per dashboard
 refresh; SLA, metric, runtime and event subrequests plus open watch/application
