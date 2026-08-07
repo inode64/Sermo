@@ -253,6 +253,32 @@ test("header separates console and SSH sessions", async ({ page }) => {
   await expect(page.locator("#statusbar")).toContainText("sessions (console/SSH): 0/3");
 });
 
+test("overview host tiles share percentage, capacity and severity rendering", async ({ page }) => {
+  const body = JSON.parse(JSON.stringify(dashboard));
+  body.host_metrics = [
+    { name: "total_cpu", percent: 12.5 },
+    { name: "total_memory", absolute: 536870912, total: 1073741824, percent: 50 },
+    { name: "total_swap", absolute: 805306368, total: 1073741824, percent: 75 },
+    { name: "load1", absolute: 3.25, total: 2, percent: 162.5 },
+  ];
+  await page.route("**/api/dashboard**", (route) => route.fulfill({ json: body }));
+  await page.locator("#refresh-now").click();
+
+  const cpu = page.locator("#overview .tile", { hasText: "Host CPU" });
+  const memory = page.locator("#overview .tile", { hasText: "Host memory" });
+  const swap = page.locator("#overview .tile", { hasText: "Host swap" });
+  const load = page.locator("#overview .tile", { hasText: "Load 1m" });
+  await expect(cpu).toContainText("12.5%");
+  await expect(memory).toContainText("50%");
+  await expect(memory).toContainText("512 MiB used · 512 MiB free");
+  await expect(swap).toContainText("75%");
+  await expect(swap).toHaveClass(/t-warn/);
+  await expect(load).toContainText("3.25");
+  await expect(load).toContainText("2 CPUs · 162.5%");
+  await expect(load).toHaveClass(/t-crit/);
+  await expect(page.locator("#tile-cpu-gauge, #tile-mem-gauge, #tile-swap-gauge, #tile-load-gauge")).toHaveCount(4);
+});
+
 test("section navigation wraps instead of scrolling sideways on compact screens", async ({ page }) => {
   const nav = page.locator("#section-nav");
   const layout = await nav.evaluate((element) => {

@@ -30,11 +30,11 @@ export default [
       // Complexity budgets, the JavaScript counterpart of gocyclo/gocognit/
       // maintidx on the Go side. The thresholds are the current ceiling, so they
       // are a no-regression gate rather than a cleanup backlog: nothing may get
-      // worse than app.js already is. Lower them as the outliers are split —
-      // renderOverview (complexity 121) and renderServiceDetail (183 lines) are
-      // the two worth attacking first.
-      complexity: ["error", 121],
-      "max-lines-per-function": ["error", { max: 183, skipBlankLines: true, skipComments: true }],
+      // worse than app.js already is. Lower them as the outliers are split;
+      // restoreUIState (complexity 80) and initStaticHandlers (146 lines) are
+      // the current ceilings.
+      complexity: ["error", 80],
+      "max-lines-per-function": ["error", { max: 146, skipBlankLines: true, skipComments: true }],
       "max-params": ["error", 8],
       "max-depth": ["error", 4],
       "max-nested-callbacks": ["error", 3],
