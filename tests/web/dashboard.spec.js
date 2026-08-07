@@ -505,6 +505,20 @@ test("session type filters hide types without active sessions", async ({ page })
   await expect(page.locator("#session-rows")).toContainText("No active sessions");
 });
 
+test("an unknown terminal session state is not shown as active", async ({ page }) => {
+  const body = JSON.parse(JSON.stringify(dashboard));
+  body.sessions.terminal.push({
+    service: "web", check: "tmux-root", multiplexer: "tmux", user: "root",
+    name: "pending", state: "unknown", identity: "$9:92", can_close: true,
+  });
+  await page.route("**/api/dashboard**", (route) => route.fulfill({ json: body }));
+  await page.locator("#refresh-now").click();
+
+  const state = page.locator("#session-rows tr", { hasText: "pending" }).locator("td").nth(3);
+  await expect(state).toHaveText("unknown");
+  await expect(state.locator(".target-state")).toHaveClass(/state-warning/);
+});
+
 test("a genuinely idle process reads 0% in both CPU columns", async ({ page }) => {
   // max_core carries omitempty, so a process at exactly 0% sends no field at all.
   // That must read the same as its CPU cell — "0%", a measured zero — not "—", which

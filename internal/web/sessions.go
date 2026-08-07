@@ -33,8 +33,8 @@ type SessionUsage struct {
 	IOReady     bool    `json:"io_ready"`
 }
 
-// TerminalSession is one read-only tmux or screen session from a configured
-// terminal_sessions check.
+// TerminalSession is one tmux or screen session from a configured
+// terminal_sessions check. CanClose requires an exact generation identity.
 type TerminalSession struct {
 	Service     string `json:"service"`
 	Check       string `json:"check"`
