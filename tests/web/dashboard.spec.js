@@ -169,6 +169,13 @@ async function mockAPI(page) {
       case "/api/libraries":
         body = libraries;
         break;
+      case "/api/stream":
+        await route.fulfill({
+          status: 200,
+          contentType: "text/event-stream",
+          body: "retry: 60000\n\n",
+        });
+        return;
       case "/api/events":
 		body = {
 		  events: [{ id: 1, time: "2026-07-10T12:00:00Z", service: "web", kind: "action", status: "ok", message: "started" }],
