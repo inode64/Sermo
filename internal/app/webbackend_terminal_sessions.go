@@ -283,11 +283,13 @@ func (b *WebBackend) appendTerminalSessions(result *web.SessionInventory, servic
 			continue
 		}
 		snapshot, ok := snapshots[configured.check]
-		if !ok || !b.serviceCheckSnapshotCurrent(entry, configured.check, snapshot) {
-			result.Sources = append(result.Sources, source)
+		// Keep a source closed until a newer daemon sample arrives, even when the
+		// old snapshot has aged out and would otherwise render as collecting.
+		if b.terminalSourceClosedSince(service, configured.check, snapshot.At) {
 			continue
 		}
-		if b.terminalSourceClosedSince(service, configured.check, snapshot.At) {
+		if !ok || !b.serviceCheckSnapshotCurrent(entry, configured.check, snapshot) {
+			result.Sources = append(result.Sources, source)
 			continue
 		}
 		if sampleError := cfgval.String(snapshot.Data[checks.DataKeySampleError]); sampleError != "" {
