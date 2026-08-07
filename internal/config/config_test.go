@@ -633,6 +633,9 @@ uses: tomcat
 	if _, ok := resolved.Tree["apps"]; ok {
 		t.Errorf("apps key should be consumed during resolution")
 	}
+	if !slices.Equal(resolved.Apps, []string{"java"}) {
+		t.Errorf("resolved apps = %v, want [java]", resolved.Apps)
+	}
 }
 
 func TestAppsLinkUsesCanonicalAppName(t *testing.T) {

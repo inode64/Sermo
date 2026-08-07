@@ -13,6 +13,7 @@ import (
 	"sermo/internal/cfgval"
 	"sermo/internal/execx"
 	"sermo/internal/metrics"
+	"sermo/internal/process"
 )
 
 const (
@@ -29,7 +30,7 @@ const (
 	// TerminalSessionStateUnknown reports a client state that could not be normalized.
 	TerminalSessionStateUnknown = "unknown"
 
-	tmuxSessionFormat               = "#{session_name}\t#{session_attached}\t#{session_windows}"
+	tmuxSessionFormat               = "#{session_name}\t#{session_attached}\t#{session_windows}\t#{session_activity}\t#{session_id}\t#{session_created}\t#{pane_pid}\t#{pane_tty}"
 	screenSessionStateMultiAttached = "multi, " + TerminalSessionStateAttached
 	screenSessionStateMultiDetached = "multi, " + TerminalSessionStateDetached
 )
@@ -38,6 +39,11 @@ const (
 	tmuxSessionNameField = iota
 	tmuxSessionAttachedField
 	tmuxSessionWindowsField
+	tmuxSessionActivityField
+	tmuxSessionIDField
+	tmuxSessionCreatedField
+	tmuxSessionPIDField
+	tmuxSessionTTYField
 	tmuxSessionFieldCount
 )
 
@@ -45,18 +51,24 @@ const (
 	screenSessionNameMatch  = 1
 	screenSessionStateMatch = 2
 	screenSessionMatchCount = screenSessionStateMatch + 1
+	screenSessionNameParts  = 2
 )
 
 var screenSessionLine = regexp.MustCompile(`^\s*(\d+\.\S+)\s+\(([^)]+)\)`)
 
 // TerminalSession is one tmux or screen session reported by its own client.
-// It is observational data only: Sermo does not use it to control a process.
+// Identity is a multiplexer-owned generation marker used to reject a stale
+// close request after a session name has been reused.
 type TerminalSession struct {
-	Multiplexer string `json:"multiplexer"`
-	Name        string `json:"name"`
-	User        string `json:"user"`
-	State       string `json:"state"`
-	Windows     int    `json:"windows,omitempty"`
+	Multiplexer  string `json:"multiplexer"`
+	Name         string `json:"name"`
+	User         string `json:"user"`
+	State        string `json:"state"`
+	Windows      int    `json:"windows,omitempty"`
+	ActivityUnix int64  `json:"activity_unix,omitempty"`
+	Identity     string `json:"identity,omitempty"`
+	PIDs         []int  `json:"pids,omitempty"`
+	TTY          string `json:"tty,omitempty"`
 }
 
 // TerminalSessionSample is the read-only result of one configured terminal
@@ -73,12 +85,16 @@ type TerminalSessionConfig struct {
 	Binary      string
 	User        string
 	Socket      string
+	// StartTicks is injectable for deterministic screen identity tests. Nil
+	// reads the kernel process generation from /proc.
+	StartTicks func(int) (uint64, bool)
 }
 
 type terminalMultiplexerAdapter struct {
 	args           func(TerminalSessionConfig) []string
+	closeArgs      func(TerminalSessionConfig, TerminalSession) []string
 	sessionsAbsent func(string) bool
-	parseSessions  func(string, string) ([]TerminalSession, error)
+	parseSessions  func(TerminalSessionConfig, string) ([]TerminalSession, error)
 }
 
 // Validate confirms that a terminal-session query has an explicit, bounded
@@ -120,12 +136,14 @@ func terminalMultiplexerAdapterFor(name string) (terminalMultiplexerAdapter, boo
 	case TerminalMultiplexerTmux:
 		return terminalMultiplexerAdapter{
 			args:           tmuxSessionArgs,
+			closeArgs:      tmuxSessionCloseArgs,
 			sessionsAbsent: tmuxSessionsAbsent,
 			parseSessions:  parseTmuxSessions,
 		}, true
 	case TerminalMultiplexerScreen:
 		return terminalMultiplexerAdapter{
 			args:           screenSessionArgs,
+			closeArgs:      screenSessionCloseArgs,
 			sessionsAbsent: screenSessionsAbsent,
 			parseSessions:  parseScreenSessionsResult,
 		}, true
@@ -169,7 +187,13 @@ func terminalSessionFromMap(entry map[string]any) (TerminalSession, bool) {
 		return TerminalSession{}, false
 	}
 	windows, _ := cfgval.Int(entry[DataKeyWindows])
-	return TerminalSession{Multiplexer: multiplexer, Name: name, User: user, State: state, Windows: max(windows, 0)}, true
+	activityUnix, _ := cfgval.Int(entry[DataKeyActivityUnix])
+	pids, _ := cfgval.IntList(entry[DataKeyPIDs])
+	return TerminalSession{
+		Multiplexer: multiplexer, Name: name, User: user, State: state, Windows: max(windows, 0),
+		ActivityUnix: int64(max(activityUnix, 0)), Identity: cfgval.String(entry[DataKeyIdentity]), PIDs: pids,
+		TTY: cfgval.String(entry[DataKeyTTY]),
+	}, true
 }
 
 func isTerminalSessionState(state string) bool {
@@ -241,7 +265,7 @@ func sampleTerminalSessions(ctx context.Context, runner execx.Runner, config Ter
 	if result.ExitCode != execx.ExitCodeSuccess {
 		return TerminalSessionSample{}, fmt.Errorf("list %s sessions for user %q: exit %d", config.Multiplexer, config.User, result.ExitCode)
 	}
-	sessions, err := adapter.parseSessions(config.User, result.Stdout)
+	sessions, err := adapter.parseSessions(config, result.Stdout)
 	if err != nil {
 		return TerminalSessionSample{}, err
 	}
@@ -259,6 +283,18 @@ func screenSessionArgs(TerminalSessionConfig) []string {
 	return []string{"-ls"}
 }
 
+func tmuxSessionCloseArgs(config TerminalSessionConfig, session TerminalSession) []string {
+	args := []string{"kill-session", "-t", "=" + session.Name}
+	if config.Socket == "" {
+		return args
+	}
+	return append([]string{"-S", config.Socket}, args...)
+}
+
+func screenSessionCloseArgs(_ TerminalSessionConfig, session TerminalSession) []string {
+	return []string{"-S", session.Name, "-X", "quit"}
+}
+
 func tmuxSessionsAbsent(output string) bool {
 	output = strings.ToLower(output)
 	return strings.Contains(output, "no server running on") ||
@@ -269,7 +305,7 @@ func screenSessionsAbsent(output string) bool {
 	return strings.Contains(strings.ToLower(output), "no sockets found in")
 }
 
-func parseTmuxSessions(user, output string) ([]TerminalSession, error) {
+func parseTmuxSessions(config TerminalSessionConfig, output string) ([]TerminalSession, error) {
 	if strings.TrimSpace(output) == "" {
 		return nil, nil
 	}
@@ -287,16 +323,36 @@ func parseTmuxSessions(user, output string) ([]TerminalSession, error) {
 		if err != nil || windows < 0 {
 			return nil, fmt.Errorf("parse tmux session window count %q", parts[tmuxSessionWindowsField])
 		}
+		activity, err := strconv.ParseInt(strings.TrimSpace(parts[tmuxSessionActivityField]), 10, 64)
+		if err != nil || activity < 0 {
+			return nil, fmt.Errorf("parse tmux session activity %q", parts[tmuxSessionActivityField])
+		}
+		created, err := strconv.ParseInt(strings.TrimSpace(parts[tmuxSessionCreatedField]), 10, 64)
+		if err != nil || created <= 0 {
+			return nil, fmt.Errorf("parse tmux session creation time %q", parts[tmuxSessionCreatedField])
+		}
+		pid, err := strconv.Atoi(strings.TrimSpace(parts[tmuxSessionPIDField]))
+		if err != nil || pid <= 0 {
+			return nil, fmt.Errorf("parse tmux session pane pid %q", parts[tmuxSessionPIDField])
+		}
+		sessionID := strings.TrimSpace(parts[tmuxSessionIDField])
+		if sessionID == "" {
+			return nil, errors.New("parse tmux session id")
+		}
 		state := TerminalSessionStateDetached
 		if attachedClients > 0 {
 			state = TerminalSessionStateAttached
 		}
-		sessions = append(sessions, TerminalSession{Multiplexer: TerminalMultiplexerTmux, Name: strings.TrimSpace(parts[tmuxSessionNameField]), User: user, State: state, Windows: windows})
+		sessions = append(sessions, TerminalSession{
+			Multiplexer: TerminalMultiplexerTmux, Name: strings.TrimSpace(parts[tmuxSessionNameField]), User: config.User,
+			State: state, Windows: windows, ActivityUnix: activity, Identity: sessionID + ":" + strconv.FormatInt(created, 10),
+			PIDs: []int{pid}, TTY: strings.TrimSpace(parts[tmuxSessionTTYField]),
+		})
 	}
 	return sortedTerminalSessions(sessions), nil
 }
 
-func parseScreenSessions(user, output string) []TerminalSession {
+func parseScreenSessions(config TerminalSessionConfig, output string) []TerminalSession {
 	sessions := make([]TerminalSession, 0)
 	for line := range strings.SplitSeq(output, "\n") {
 		matches := screenSessionLine.FindStringSubmatch(line)
@@ -310,13 +366,76 @@ func parseScreenSessions(user, output string) []TerminalSession {
 		case TerminalSessionStateDetached, screenSessionStateMultiDetached:
 			state = TerminalSessionStateDetached
 		}
-		sessions = append(sessions, TerminalSession{Multiplexer: TerminalMultiplexerScreen, Name: matches[screenSessionNameMatch], User: user, State: state})
+		name := matches[screenSessionNameMatch]
+		pid, _ := strconv.Atoi(strings.SplitN(name, ".", screenSessionNameParts)[0])
+		identity := ""
+		if pid > 0 {
+			startTicks := config.StartTicks
+			if startTicks == nil {
+				startTicks = process.StartTicks
+			}
+			if ticks, ok := startTicks(pid); ok {
+				identity = strconv.Itoa(pid) + ":" + strconv.FormatUint(ticks, 10)
+			}
+		}
+		sessions = append(sessions, TerminalSession{
+			Multiplexer: TerminalMultiplexerScreen, Name: name, User: config.User, State: state,
+			Identity: identity, PIDs: positivePID(pid),
+		})
 	}
 	return sortedTerminalSessions(sessions)
 }
 
-func parseScreenSessionsResult(user, output string) ([]TerminalSession, error) {
-	return parseScreenSessions(user, output), nil
+func parseScreenSessionsResult(config TerminalSessionConfig, output string) ([]TerminalSession, error) {
+	return parseScreenSessions(config, output), nil
+}
+
+func positivePID(pid int) []int {
+	if pid <= 0 {
+		return nil
+	}
+	return []int{pid}
+}
+
+// CloseTerminalSession re-lists one configured multiplexer namespace and
+// closes only an exact, unchanged session through that multiplexer's own
+// client. No shell or process signal is involved.
+func CloseTerminalSession(ctx context.Context, runner execx.Runner, config TerminalSessionConfig, want TerminalSession) error {
+	if want.Multiplexer != config.Multiplexer || want.User != config.User || want.Name == "" || want.Identity == "" {
+		return errors.New("invalid terminal session target")
+	}
+	sample, err := sampleTerminalSessions(ctx, runner, config)
+	if err != nil {
+		return fmt.Errorf("refresh %s session: %w", config.Multiplexer, err)
+	}
+	var current *TerminalSession
+	for i := range sample.Sessions {
+		if sample.Sessions[i].Name == want.Name && sample.Sessions[i].User == want.User {
+			current = &sample.Sessions[i]
+			break
+		}
+	}
+	if current == nil {
+		return errors.New("terminal session is no longer active; refresh and try again")
+	}
+	if current.Identity == "" || current.Identity != want.Identity {
+		return errors.New("terminal session changed; refresh and try again")
+	}
+	adapter, _ := terminalMultiplexerAdapterFor(config.Multiplexer)
+	result, err := execx.RunUser(ctx, execx.RunnerOrDefault(runner), execx.NoTimeout, config.User, config.Binary, adapter.closeArgs(config, *current)...)
+	if result.ExitCode == execx.ExitCodeRunFailure {
+		if err == nil {
+			err = errors.New(execx.CommandDidNotStart)
+		}
+		return fmt.Errorf("close %s session %q: %w", config.Multiplexer, want.Name, err)
+	}
+	if err != nil {
+		return fmt.Errorf("close %s session %q: %w", config.Multiplexer, want.Name, err)
+	}
+	if result.ExitCode != execx.ExitCodeSuccess {
+		return fmt.Errorf("close %s session %q: exit %d", config.Multiplexer, want.Name, result.ExitCode)
+	}
+	return nil
 }
 
 func sortedTerminalSessions(sessions []TerminalSession) []TerminalSession {

@@ -33,6 +33,17 @@ type fakeSLAReader struct {
 	series map[string][]state.SLAPoint
 }
 
+func TestNewWebBackendInitializesSharedTerminalReaderAtStartup(t *testing.T) {
+	collector := metrics.New(fakeSwapReader{total: 2048, used: 512})
+	b, warnings := NewWebBackend(t.Context(), &config.Config{}, Deps{Collector: collector, SystemFreshness: time.Second})
+	if len(warnings) != 0 {
+		t.Fatalf("warnings = %v", warnings)
+	}
+	if b.terminalProcessReader == nil || b.sshSessionSampler == nil || b.sessionMetricCollector == nil {
+		t.Fatalf("terminal startup deps = reader:%v ssh:%v metrics:%v", b.terminalProcessReader, b.sshSessionSampler, b.sessionMetricCollector)
+	}
+}
+
 func mustWebIdentityFilter(t *testing.T, exe, user string) process.IdentityFilter {
 	t.Helper()
 	filter, err := process.NewIdentityFilter(exe, user, "")
@@ -180,12 +191,12 @@ func TestWebBackendShowsAttributedSSHSessionsAndHeaderSummary(t *testing.T) {
 		},
 	}
 
-	detail, ok := b.Detail(context.Background(), "ssh")
-	if !ok || len(detail.SSHSessions) != 1 {
-		t.Fatalf("detail = %+v, ok=%v", detail, ok)
+	inventory := b.Sessions(context.Background())
+	if len(inventory.SSH) != 1 || len(inventory.Sources) != 1 || inventory.Sources[0].State != web.SessionSourceAvailable {
+		t.Fatalf("session inventory = %+v", inventory)
 	}
-	session := detail.SSHSessions[0]
-	if session.User != "root" || session.Terminal != "pts/11" || session.PID != 96 || !session.CanClose || session.IdleSeconds != 120 {
+	session := inventory.SSH[0]
+	if session.Service != "ssh" || session.User != "root" || session.Terminal != "pts/11" || session.PID != 96 || !session.CanClose || session.IdleSeconds != 120 {
 		t.Fatalf("SSH session = %+v", session)
 	}
 	info := b.DaemonInfo(context.Background())
@@ -197,25 +208,98 @@ func TestWebBackendShowsAttributedSSHSessionsAndHeaderSummary(t *testing.T) {
 	}
 }
 
+func TestSSHSessionFiltersUseResolvedAppsMetadata(t *testing.T) {
+	selectors := []process.Selector{
+		{Exe: "/usr/sbin/sshd", User: "root"},
+		{Exe: "/usr/sbin/sshd"},
+	}
+	filters := sshSessionFilters([]string{"ssh"}, selectors)
+	if len(filters) != 1 || filters[0].Exe != "/usr/sbin/sshd" || filters[0].User != "root" {
+		t.Fatalf("filters = %+v, want exact sshd/root identity", filters)
+	}
+	if filters := sshSessionFilters(nil, selectors); len(filters) != 0 {
+		t.Fatalf("filters without linked ssh app = %+v, want none", filters)
+	}
+}
+
 func TestWebBackendShowsTerminalSessionsFromPublishedCheckData(t *testing.T) {
 	snaps := NewSnapshots()
 	snaps.PublishWithCheckTypes("web", map[string]checks.Result{
-		"terminal-sessions": {
-			Check: "terminal-sessions",
+		"tmux-sessions": {
+			Check: "tmux-sessions",
 			OK:    true,
 			Data: map[string]any{checks.DataKeyTerminalSessions: []checks.TerminalSession{
-				{Multiplexer: checks.TerminalMultiplexerTmux, Name: "ops", User: "deploy", State: checks.TerminalSessionStateAttached, Windows: 2},
-				{Multiplexer: checks.TerminalMultiplexerScreen, Name: "120.backup", User: "backup", State: checks.TerminalSessionStateDetached},
+				{Multiplexer: checks.TerminalMultiplexerTmux, Name: "ops", User: "deploy", State: checks.TerminalSessionStateAttached, Windows: 2, ActivityUnix: 100, Identity: "$7:90", PIDs: []int{201}},
 			}},
 		},
-	}, map[string]bool{"terminal-sessions": true}, map[string]string{"terminal-sessions": checks.CheckTypeTerminalSessions})
-	b := webBackendWithEntry(snaps, []string{"terminal-sessions"}, map[string]string{"terminal-sessions": checks.CheckTypeTerminalSessions})
-	detail, ok := b.Detail(context.Background(), "web")
-	if !ok || !detail.TerminalSessionsSupported || len(detail.TerminalSessions) != 2 {
-		t.Fatalf("detail = %+v, ok=%v", detail, ok)
+		"screen-sessions": {
+			Check: "screen-sessions",
+			OK:    true,
+			Data: map[string]any{checks.DataKeyTerminalSessions: []checks.TerminalSession{
+				{Multiplexer: checks.TerminalMultiplexerScreen, Name: "120.backup", User: "backup", State: checks.TerminalSessionStateDetached, Identity: "120:1200", PIDs: []int{120}},
+			}},
+		},
+	}, map[string]bool{"tmux-sessions": true, "screen-sessions": true}, map[string]string{
+		"tmux-sessions": checks.CheckTypeTerminalSessions, "screen-sessions": checks.CheckTypeTerminalSessions,
+	})
+	b := webBackendWithEntry(snaps, []string{"screen-sessions", "tmux-sessions"}, map[string]string{
+		"screen-sessions": checks.CheckTypeTerminalSessions, "tmux-sessions": checks.CheckTypeTerminalSessions,
+	})
+	b.entries["web"].terminalSessions = []terminalSessionSource{
+		{check: "screen-sessions", multiplexer: checks.TerminalMultiplexerScreen, user: "backup"},
+		{check: "tmux-sessions", multiplexer: checks.TerminalMultiplexerTmux, user: "deploy"},
 	}
-	if detail.TerminalSessions[0].Multiplexer != checks.TerminalMultiplexerScreen || detail.TerminalSessions[0].Name != "120.backup" || detail.TerminalSessions[1].Windows != 2 {
-		t.Fatalf("terminal sessions = %+v, want sorted published sessions", detail.TerminalSessions)
+	b.now = func() time.Time { return time.Unix(160, 0) }
+	inventory := b.Sessions(context.Background())
+	if len(inventory.Sources) != 2 || len(inventory.Terminal) != 2 {
+		t.Fatalf("session inventory = %+v", inventory)
+	}
+	if inventory.Terminal[0].Multiplexer != checks.TerminalMultiplexerScreen || inventory.Terminal[0].Name != "120.backup" || inventory.Terminal[1].Windows != 2 {
+		t.Fatalf("terminal sessions = %+v, want sorted published sessions", inventory.Terminal)
+	}
+	if !inventory.Terminal[0].CanClose || !inventory.Terminal[1].CanClose || !inventory.Terminal[1].HasIdle || inventory.Terminal[1].IdleSeconds != 60 {
+		t.Fatalf("terminal session actions/idle = %+v", inventory.Terminal)
+	}
+}
+
+func TestWebBackendTerminalSessionSourcesExposeCollectingAndUnavailable(t *testing.T) {
+	snaps := NewSnapshots()
+	snaps.PublishWithCheckTypes("web", map[string]checks.Result{
+		"screen-sessions": {Check: "screen-sessions", OK: false, Data: map[string]any{checks.DataKeySampleError: "socket denied"}},
+	}, map[string]bool{"screen-sessions": true}, map[string]string{"screen-sessions": checks.CheckTypeTerminalSessions})
+	b := webBackendWithEntry(snaps, []string{"screen-sessions", "tmux-sessions"}, map[string]string{
+		"screen-sessions": checks.CheckTypeTerminalSessions, "tmux-sessions": checks.CheckTypeTerminalSessions,
+	})
+	b.entries["web"].terminalSessions = []terminalSessionSource{
+		{check: "screen-sessions", multiplexer: checks.TerminalMultiplexerScreen, user: "root"},
+		{check: "tmux-sessions", multiplexer: checks.TerminalMultiplexerTmux, user: "root"},
+	}
+
+	inventory := b.Sessions(context.Background())
+	if got := inventory.Sources[0]; got.State != web.SessionSourceUnavailable || got.Message != "socket denied" {
+		t.Fatalf("screen source = %+v", got)
+	}
+	if got := inventory.Sources[1]; got.State != web.SessionSourceCollecting || got.Message != "" {
+		t.Fatalf("tmux source = %+v", got)
+	}
+}
+
+func TestSessionMetricsUseServiceReadingSemantics(t *testing.T) {
+	sample := metrics.Snapshot{
+		metrics.MetricMemory:  {Absolute: 4096, Ready: true},
+		metrics.MetricCPU:     {Percent: 12.5, Ready: true},
+		metrics.MetricIORead:  {Absolute: 1000, Ready: true},
+		metrics.MetricIOWrite: {Absolute: 250, Ready: true},
+	}
+	ssh := web.SSHSession{}
+	attachWebSessionMetrics(sample, &ssh)
+	if !ssh.MemoryReady || ssh.RSS != 4096 || !ssh.CPUReady || ssh.CPU != 12.5 || !ssh.IOReady || ssh.IORead != 1000 || ssh.IOWrite != 250 {
+		t.Fatalf("SSH metrics = %+v", ssh)
+	}
+	terminal := web.TerminalSession{}
+	attachWebTerminalSessionMetrics(sample, &terminal)
+	if !terminal.MemoryReady || terminal.RSS != 4096 || !terminal.CPUReady || terminal.CPU != 12.5 || !terminal.IOReady {
+		t.Fatalf("terminal metrics = %+v", terminal)
 	}
 }
 

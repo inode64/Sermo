@@ -1014,6 +1014,10 @@ Read-only endpoints:
 - `GET /api/services/{name}` — service detail: latest checks, rolling SLA, named
   runtime locks, discovered processes, automatic remediation policy state and
   rule window progress.
+- `GET /api/sessions` — current SSH, tmux and screen sessions plus the state of
+  each configured session source. Rows expose idle time plus process-tree CPU,
+  resident memory and IO rates when attributable; tmux and screen inventory
+  still comes from published check samples rather than an HTTP-time client run.
 - `GET /api/services/{name}/sla?since=24h` — availability history at the
   resolution that window is stored at (see [Stored history
   resolution](#stored-history-resolution)); `since` is a duration, default 24h,
@@ -1063,6 +1067,12 @@ accepted operation cannot switch targets during a concurrent reload.
 - `POST /api/services/{name}/{action}` — service action. `action` is `monitor`,
   `unmonitor`, `start`, `stop`, `restart`, `reload` or `resume`;
   start/stop/restart/reload/resume go through the safe operation engine.
+- `POST /api/services/{name}/sessions/{pid}/close?start_ticks=TICKS&terminal=PTS`
+  — close one freshly revalidated SSH terminal with `SIGTERM`.
+- `POST /api/services/{name}/terminal-sessions/{check}/close?multiplexer=TYPE&session=NAME&user=USER&identity=IDENTITY`
+  — close one freshly revalidated tmux or screen session through its configured
+  client. The operation requires the exact published generation identity and
+  shares the service lock, guards, timeout and event path.
 - `POST /api/watches/{name}/{action}` — watch action. `action` is
   `monitor`, `unmonitor`, `expand`, `probe`, `pause` or `resume`. `probe` is
   read-only and is available for LVM, RAID and SMART watches. `pause`/`resume`

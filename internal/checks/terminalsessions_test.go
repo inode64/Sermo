@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -11,6 +12,25 @@ import (
 )
 
 type waitingTerminalSessionRunner struct{}
+
+type terminalSessionSequenceRunner struct {
+	results []execx.Result
+	calls   [][]string
+}
+
+func (r *terminalSessionSequenceRunner) Run(context.Context, string, ...string) (execx.Result, error) {
+	return execx.Result{ExitCode: execx.ExitCodeRunFailure}, errors.New("Run must not be used")
+}
+
+func (r *terminalSessionSequenceRunner) RunUser(_ context.Context, user, name string, args ...string) (execx.Result, error) {
+	r.calls = append(r.calls, append([]string{user, name}, args...))
+	if len(r.results) == 0 {
+		return execx.Result{ExitCode: execx.ExitCodeRunFailure}, errors.New("unexpected call")
+	}
+	result := r.results[0]
+	r.results = r.results[1:]
+	return result, nil
+}
 
 func (waitingTerminalSessionRunner) Run(context.Context, string, ...string) (execx.Result, error) {
 	return execx.Result{ExitCode: execx.ExitCodeRunFailure}, errors.New("Run must not be used")
@@ -32,21 +52,21 @@ func TestTerminalMultiplexerAdapterParsesSessions(t *testing.T) {
 		{
 			name:   "tmux multiple clients and detached",
 			config: TerminalSessionConfig{Multiplexer: TerminalMultiplexerTmux, User: "deploy"},
-			output: "build\t2\t2\nops\t0\t1\n",
+			output: "build\t2\t2\t100\t$1\t90\t201\t/dev/pts/1\nops\t0\t1\t200\t$2\t180\t202\t/dev/pts/2\n",
 			want: []TerminalSession{
-				{Multiplexer: TerminalMultiplexerTmux, Name: "build", User: "deploy", State: TerminalSessionStateAttached, Windows: 2},
-				{Multiplexer: TerminalMultiplexerTmux, Name: "ops", User: "deploy", State: TerminalSessionStateDetached, Windows: 1},
+				{Multiplexer: TerminalMultiplexerTmux, Name: "build", User: "deploy", State: TerminalSessionStateAttached, Windows: 2, ActivityUnix: 100, Identity: "$1:90", PIDs: []int{201}, TTY: "/dev/pts/1"},
+				{Multiplexer: TerminalMultiplexerTmux, Name: "ops", User: "deploy", State: TerminalSessionStateDetached, Windows: 1, ActivityUnix: 200, Identity: "$2:180", PIDs: []int{202}, TTY: "/dev/pts/2"},
 			},
 		},
 		{
 			name:   "screen states",
-			config: TerminalSessionConfig{Multiplexer: TerminalMultiplexerScreen, User: "deploy"},
+			config: TerminalSessionConfig{Multiplexer: TerminalMultiplexerScreen, User: "deploy", StartTicks: func(pid int) (uint64, bool) { return uint64(pid * 10), true }},
 			output: "There are screens on:\n\t120.ops\t(Detached)\n\t121.build\t(Attached)\n\t122.pair\t(Multi, attached)\n\t123.batch\t(Multi, detached)\n4 Sockets in /run/screen/S-deploy.\n",
 			want: []TerminalSession{
-				{Multiplexer: TerminalMultiplexerScreen, Name: "120.ops", User: "deploy", State: TerminalSessionStateDetached},
-				{Multiplexer: TerminalMultiplexerScreen, Name: "121.build", User: "deploy", State: TerminalSessionStateAttached},
-				{Multiplexer: TerminalMultiplexerScreen, Name: "122.pair", User: "deploy", State: TerminalSessionStateAttached},
-				{Multiplexer: TerminalMultiplexerScreen, Name: "123.batch", User: "deploy", State: TerminalSessionStateDetached},
+				{Multiplexer: TerminalMultiplexerScreen, Name: "120.ops", User: "deploy", State: TerminalSessionStateDetached, Identity: "120:1200", PIDs: []int{120}},
+				{Multiplexer: TerminalMultiplexerScreen, Name: "121.build", User: "deploy", State: TerminalSessionStateAttached, Identity: "121:1210", PIDs: []int{121}},
+				{Multiplexer: TerminalMultiplexerScreen, Name: "122.pair", User: "deploy", State: TerminalSessionStateAttached, Identity: "122:1220", PIDs: []int{122}},
+				{Multiplexer: TerminalMultiplexerScreen, Name: "123.batch", User: "deploy", State: TerminalSessionStateDetached, Identity: "123:1230", PIDs: []int{123}},
 			},
 		},
 		{
@@ -62,7 +82,7 @@ func TestTerminalMultiplexerAdapterParsesSessions(t *testing.T) {
 			if !ok {
 				t.Fatalf("terminalMultiplexerAdapterFor(%q) not found", tt.config.Multiplexer)
 			}
-			got, err := adapter.parseSessions(tt.config.User, tt.output)
+			got, err := adapter.parseSessions(tt.config, tt.output)
 			if (err != nil) != tt.wantErr {
 				t.Fatalf("parseSessions() error = %v, wantErr=%v", err, tt.wantErr)
 			}
@@ -74,7 +94,7 @@ func TestTerminalMultiplexerAdapterParsesSessions(t *testing.T) {
 }
 
 func TestTerminalSessionsCheckRunsReadOnlyClientAsConfiguredUser(t *testing.T) {
-	runner := &recordingUserRunner{result: execx.Result{ExitCode: execx.ExitCodeSuccess, Stdout: "ops\t1\t3\nbuild\t0\t1\n"}}
+	runner := &recordingUserRunner{result: execx.Result{ExitCode: execx.ExitCodeSuccess, Stdout: "ops\t1\t3\t100\t$1\t90\t201\t/dev/pts/1\nbuild\t0\t1\t200\t$2\t180\t202\t/dev/pts/2\n"}}
 	built, warnings := Build(map[string]any{
 		"sessions": map[string]any{
 			CheckKeyType:        CheckTypeTerminalSessions,
@@ -159,5 +179,62 @@ func TestTerminalSessionsFromDataAcceptsJSONHydration(t *testing.T) {
 	}
 	if !reflect.DeepEqual(sessions, want) {
 		t.Fatalf("TerminalSessionsFromData() = %#v, want %#v", sessions, want)
+	}
+}
+
+func TestCloseTerminalSessionRevalidatesIdentityBeforeExactTmuxClose(t *testing.T) {
+	line := "ops\t0\t1\t100\t$7\t90\t201\t/dev/pts/1\n"
+	runner := &terminalSessionSequenceRunner{results: []execx.Result{
+		{ExitCode: execx.ExitCodeSuccess, Stdout: line},
+		{ExitCode: execx.ExitCodeSuccess},
+	}}
+	config := TerminalSessionConfig{Multiplexer: TerminalMultiplexerTmux, Binary: "/usr/bin/tmux", User: "deploy", Socket: "/run/user/1000/tmux.sock"}
+	err := CloseTerminalSession(context.Background(), runner, config, TerminalSession{
+		Multiplexer: TerminalMultiplexerTmux, Name: "ops", User: "deploy", Identity: "$7:90",
+	})
+	if err != nil {
+		t.Fatalf("CloseTerminalSession() error = %v", err)
+	}
+	wantClose := []string{"deploy", "/usr/bin/tmux", "-S", "/run/user/1000/tmux.sock", "kill-session", "-t", "=ops"}
+	if len(runner.calls) != 2 || !reflect.DeepEqual(runner.calls[1], wantClose) {
+		t.Fatalf("calls = %#v, want exact close %#v", runner.calls, wantClose)
+	}
+}
+
+func TestCloseTerminalSessionRejectsChangedGenerationWithoutCloseCommand(t *testing.T) {
+	runner := &terminalSessionSequenceRunner{results: []execx.Result{{
+		ExitCode: execx.ExitCodeSuccess,
+		Stdout:   "ops\t0\t1\t100\t$8\t91\t201\t/dev/pts/1\n",
+	}}}
+	config := TerminalSessionConfig{Multiplexer: TerminalMultiplexerTmux, Binary: "/usr/bin/tmux", User: "deploy"}
+	err := CloseTerminalSession(context.Background(), runner, config, TerminalSession{
+		Multiplexer: TerminalMultiplexerTmux, Name: "ops", User: "deploy", Identity: "$7:90",
+	})
+	if err == nil || !strings.Contains(err.Error(), "changed") {
+		t.Fatalf("CloseTerminalSession() error = %v, want changed generation", err)
+	}
+	if len(runner.calls) != 1 {
+		t.Fatalf("calls = %#v, want list only", runner.calls)
+	}
+}
+
+func TestCloseTerminalSessionUsesExactScreenClientTarget(t *testing.T) {
+	runner := &terminalSessionSequenceRunner{results: []execx.Result{
+		{ExitCode: execx.ExitCodeSuccess, Stdout: "\t120.ops\t(Detached)\n"},
+		{ExitCode: execx.ExitCodeSuccess},
+	}}
+	config := TerminalSessionConfig{
+		Multiplexer: TerminalMultiplexerScreen, Binary: "/usr/bin/screen", User: "deploy",
+		StartTicks: func(pid int) (uint64, bool) { return uint64(pid * 10), true },
+	}
+	err := CloseTerminalSession(context.Background(), runner, config, TerminalSession{
+		Multiplexer: TerminalMultiplexerScreen, Name: "120.ops", User: "deploy", Identity: "120:1200",
+	})
+	if err != nil {
+		t.Fatalf("CloseTerminalSession() error = %v", err)
+	}
+	wantClose := []string{"deploy", "/usr/bin/screen", "-S", "120.ops", "-X", "quit"}
+	if len(runner.calls) != 2 || !reflect.DeepEqual(runner.calls[1], wantClose) {
+		t.Fatalf("calls = %#v, want exact close %#v", runner.calls, wantClose)
 	}
 }

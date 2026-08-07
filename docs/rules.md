@@ -551,8 +551,10 @@ assuming that no session is protected.
 user through the installed `tmux` or GNU `screen` client. It is a
 condition-style check; use `reports: state` to make it an informational
 active/inactive sensor. The result exposes total `count`, `attached` and
-`detached` sessions. In a service detail, the Web UI shows the individual
-sessions as read-only terminal services.
+`detached` sessions. The Web UI shows the individual sessions in its top-level
+Sessions panel, together with SSH sessions. An administrator may close one row;
+the action re-lists that configured namespace and requires the same session
+generation before invoking the multiplexer client's exact close command.
 
 ```yaml
 watches:
@@ -575,8 +577,8 @@ watches:
 ```
 
 All queries run as the configured account with a bounded argv-only command; the
-check does not inspect process names, enumerate unconfigured users, attach to a
-session, or send a signal. A normal no-server/no-socket reply is an empty,
+check itself does not inspect process names, enumerate unconfigured users,
+attach to a session, or send a signal. A normal no-server/no-socket reply is an empty,
 available sample. A `tmux` check may set an absolute `socket:` to query a
 non-default server socket; `screen` has no `socket:` option. Command,
 permission, timeout and malformed-output failures are unavailable rather than

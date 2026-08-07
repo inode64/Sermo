@@ -104,31 +104,32 @@ const (
 
 // API path segment names used by routing and access-log classification.
 const (
-	apiSegmentRoot         = "api"
-	apiSegmentActivity     = "activity"
-	apiSegmentApplications = "applications"
-	apiSegmentBlockers     = "blockers"
-	apiSegmentDashboard    = "dashboard"
-	apiSegmentDaemon       = "daemon"
-	apiSegmentEvents       = "events"
-	apiSegmentHost         = "host"
-	apiSegmentLibraries    = "libraries"
-	apiSegmentLocks        = "locks"
-	apiSegmentMetrics      = "metrics"
-	apiSegmentMonitoring   = "monitoring"
-	apiSegmentMounts       = "mounts"
-	apiSegmentNotifiers    = "notifiers"
-	apiSegmentPanic        = "panic"
-	apiSegmentPreflight    = "preflight"
-	apiSegmentReload       = "reload"
-	apiSegmentRuntime      = "runtime"
-	apiSegmentServices     = "services"
-	apiSegmentSessions     = "sessions"
-	apiSegmentSLA          = "sla"
-	apiSegmentState        = "state"
-	apiSegmentStream       = "stream"
-	apiSegmentWatches      = "watches"
-	apiSegmentWhoami       = "whoami"
+	apiSegmentRoot             = "api"
+	apiSegmentActivity         = "activity"
+	apiSegmentApplications     = "applications"
+	apiSegmentBlockers         = "blockers"
+	apiSegmentDashboard        = "dashboard"
+	apiSegmentDaemon           = "daemon"
+	apiSegmentEvents           = "events"
+	apiSegmentHost             = "host"
+	apiSegmentLibraries        = "libraries"
+	apiSegmentLocks            = "locks"
+	apiSegmentMetrics          = "metrics"
+	apiSegmentMonitoring       = "monitoring"
+	apiSegmentMounts           = "mounts"
+	apiSegmentNotifiers        = "notifiers"
+	apiSegmentPanic            = "panic"
+	apiSegmentPreflight        = "preflight"
+	apiSegmentReload           = "reload"
+	apiSegmentRuntime          = "runtime"
+	apiSegmentServices         = "services"
+	apiSegmentSessions         = "sessions"
+	apiSegmentTerminalSessions = "terminal-sessions"
+	apiSegmentSLA              = "sla"
+	apiSegmentState            = "state"
+	apiSegmentStream           = "stream"
+	apiSegmentWatches          = "watches"
+	apiSegmentWhoami           = "whoami"
 )
 
 // HTTP action names accepted by the dashboard API.
@@ -176,27 +177,31 @@ const (
 
 // API route variables and query parameter names.
 const (
-	apiParamAction     = "action"
-	apiParamName       = "name"
-	apiParamPID        = "pid"
-	apiParamService    = "service"
-	apiQueryBefore     = "before"
-	apiQueryBeforeID   = "before_id"
-	apiQueryCheck      = "check"
-	apiQueryForce      = "force"
-	apiQueryKind       = "kind"
-	apiQueryKill       = "kill"
-	apiQueryLazy       = "lazy"
-	apiQueryLimit      = "limit"
-	apiQueryMetric     = "metric"
-	apiQueryNoCascade  = "no_cascade"
-	apiQueryOnlyErrors = "only_errors"
-	apiQuerySince      = "since"
-	apiQueryStatus     = "status"
-	apiQueryStartTicks = "start_ticks"
-	apiQueryTerminal   = "terminal"
-	apiQueryVerbose    = "verbose"
-	apiQueryWatch      = "watch"
+	apiParamAction      = "action"
+	apiParamName        = "name"
+	apiParamPID         = "pid"
+	apiParamService     = "service"
+	apiQueryBefore      = "before"
+	apiQueryBeforeID    = "before_id"
+	apiQueryCheck       = "check"
+	apiQueryForce       = "force"
+	apiQueryKind        = "kind"
+	apiQueryKill        = "kill"
+	apiQueryLazy        = "lazy"
+	apiQueryLimit       = "limit"
+	apiQueryMetric      = "metric"
+	apiQueryNoCascade   = "no_cascade"
+	apiQueryOnlyErrors  = "only_errors"
+	apiQuerySince       = "since"
+	apiQueryStatus      = "status"
+	apiQueryStartTicks  = "start_ticks"
+	apiQueryTerminal    = "terminal"
+	apiQueryUser        = "user"
+	apiQueryMultiplexer = "multiplexer"
+	apiQuerySession     = "session"
+	apiQueryIdentity    = "identity"
+	apiQueryVerbose     = "verbose"
+	apiQueryWatch       = "watch"
 )
 
 const (
@@ -222,6 +227,7 @@ const (
 	apiPathPanic        = apiPathPrefix + apiSegmentPanic
 	apiPathReload       = apiPathPrefix + apiSegmentReload
 	apiPathServices     = apiPathPrefix + apiSegmentServices
+	apiPathSessions     = apiPathPrefix + apiSegmentSessions
 	apiPathState        = apiPathPrefix + apiSegmentState
 	apiPathStream       = apiPathPrefix + apiSegmentStream
 	apiPathWatches      = apiPathPrefix + apiSegmentWatches
@@ -229,43 +235,45 @@ const (
 )
 
 const (
-	routeIndex             = routeMethodGet + routePathRoot
-	routeLivez             = routeMethodGet + routePathLivez
-	routeReadyz            = routeMethodGet + routePathReadyz
-	routeAPIWhoami         = routeMethodGet + apiPathWhoami
-	routeAPIServices       = routeMethodGet + apiPathServices
-	routeAPIWatches        = routeMethodGet + apiPathWatches
-	routeAPIWatchAction    = routeMethodPost + apiPathWatches + "/" + routeVarName + "/" + routeVarAction
-	routeAPINotifiers      = routeMethodGet + apiPathNotifiers
-	routeAPINotifierTest   = routeMethodPost + apiPathNotifiers + "/" + routeVarName + "/" + apiActionTest
-	routeAPIApplications   = routeMethodGet + apiPathApplications
-	routeAPILibraries      = routeMethodGet + apiPathLibraries
-	routeAPIDashboard      = routeMethodGet + apiPathDashboard
-	routeAPIMounts         = routeMethodGet + apiPathMounts
-	routeAPIMountAction    = routeMethodPost + apiPathMounts + "/" + routeVarName + "/" + routeVarAction
-	routeAPIMountBlockers  = routeMethodGet + apiPathMounts + "/" + routeVarName + "/" + apiSegmentBlockers
-	routeAPIDaemon         = routeMethodGet + apiPathDaemon
-	routeAPIDaemonMetrics  = routeMethodGet + apiPathDaemon + "/" + apiSegmentMetrics
-	routeAPIHost           = routeMethodGet + apiPathHost
-	routeAPILocks          = routeMethodGet + apiPathLocks
-	routeAPILockRelease    = routeMethodPost + apiPathLocks + "/" + routeVarService + "/" + apiActionRelease
-	routeAPIActivity       = routeMethodGet + apiPathActivity
-	routeAPIMonitoring     = routeMethodGet + apiPathMonitoring
-	routeAPIDetail         = routeMethodGet + apiPathServices + "/" + routeVarName
-	routeAPISeries         = routeMethodGet + apiPathServices + "/" + routeVarName + "/" + apiSegmentSLA
-	routeAPIMetrics        = routeMethodGet + apiPathServices + "/" + routeVarName + "/" + apiSegmentMetrics
-	routeAPIServiceRuntime = routeMethodGet + apiPathServices + "/" + routeVarName + "/" + apiSegmentRuntime
-	routeAPIServiceEvents  = routeMethodGet + apiPathServices + "/" + routeVarName + "/" + apiSegmentEvents
-	routeAPIAppEvents      = routeMethodGet + apiPathApplications + "/" + routeVarName + "/" + apiSegmentEvents
-	routeAPIEvents         = routeMethodGet + apiPathEvents
-	routeAPIStream         = routeMethodGet + apiPathStream
-	routeAPIEventsClear    = routeMethodPost + apiPathEvents + "/" + apiActionClear
-	routeAPIStateCompact   = routeMethodPost + apiPathState + "/" + apiActionCompact
-	routeAPIPanic          = routeMethodPost + apiPathPanic + "/" + routeVarAction
-	routeAPIPreflight      = routeMethodPost + apiPathServices + "/" + routeVarName + "/" + apiSegmentPreflight
-	routeAPISessionClose   = routeMethodPost + apiPathServices + "/" + routeVarName + "/" + apiSegmentSessions + "/{" + apiParamPID + "}/" + apiActionClose
-	routeAPIAction         = routeMethodPost + apiPathServices + "/" + routeVarName + "/" + routeVarAction
-	routeAPIReload         = routeMethodPost + apiPathReload
+	routeIndex                   = routeMethodGet + routePathRoot
+	routeLivez                   = routeMethodGet + routePathLivez
+	routeReadyz                  = routeMethodGet + routePathReadyz
+	routeAPIWhoami               = routeMethodGet + apiPathWhoami
+	routeAPIServices             = routeMethodGet + apiPathServices
+	routeAPISessions             = routeMethodGet + apiPathSessions
+	routeAPIWatches              = routeMethodGet + apiPathWatches
+	routeAPIWatchAction          = routeMethodPost + apiPathWatches + "/" + routeVarName + "/" + routeVarAction
+	routeAPINotifiers            = routeMethodGet + apiPathNotifiers
+	routeAPINotifierTest         = routeMethodPost + apiPathNotifiers + "/" + routeVarName + "/" + apiActionTest
+	routeAPIApplications         = routeMethodGet + apiPathApplications
+	routeAPILibraries            = routeMethodGet + apiPathLibraries
+	routeAPIDashboard            = routeMethodGet + apiPathDashboard
+	routeAPIMounts               = routeMethodGet + apiPathMounts
+	routeAPIMountAction          = routeMethodPost + apiPathMounts + "/" + routeVarName + "/" + routeVarAction
+	routeAPIMountBlockers        = routeMethodGet + apiPathMounts + "/" + routeVarName + "/" + apiSegmentBlockers
+	routeAPIDaemon               = routeMethodGet + apiPathDaemon
+	routeAPIDaemonMetrics        = routeMethodGet + apiPathDaemon + "/" + apiSegmentMetrics
+	routeAPIHost                 = routeMethodGet + apiPathHost
+	routeAPILocks                = routeMethodGet + apiPathLocks
+	routeAPILockRelease          = routeMethodPost + apiPathLocks + "/" + routeVarService + "/" + apiActionRelease
+	routeAPIActivity             = routeMethodGet + apiPathActivity
+	routeAPIMonitoring           = routeMethodGet + apiPathMonitoring
+	routeAPIDetail               = routeMethodGet + apiPathServices + "/" + routeVarName
+	routeAPISeries               = routeMethodGet + apiPathServices + "/" + routeVarName + "/" + apiSegmentSLA
+	routeAPIMetrics              = routeMethodGet + apiPathServices + "/" + routeVarName + "/" + apiSegmentMetrics
+	routeAPIServiceRuntime       = routeMethodGet + apiPathServices + "/" + routeVarName + "/" + apiSegmentRuntime
+	routeAPIServiceEvents        = routeMethodGet + apiPathServices + "/" + routeVarName + "/" + apiSegmentEvents
+	routeAPIAppEvents            = routeMethodGet + apiPathApplications + "/" + routeVarName + "/" + apiSegmentEvents
+	routeAPIEvents               = routeMethodGet + apiPathEvents
+	routeAPIStream               = routeMethodGet + apiPathStream
+	routeAPIEventsClear          = routeMethodPost + apiPathEvents + "/" + apiActionClear
+	routeAPIStateCompact         = routeMethodPost + apiPathState + "/" + apiActionCompact
+	routeAPIPanic                = routeMethodPost + apiPathPanic + "/" + routeVarAction
+	routeAPIPreflight            = routeMethodPost + apiPathServices + "/" + routeVarName + "/" + apiSegmentPreflight
+	routeAPISessionClose         = routeMethodPost + apiPathServices + "/" + routeVarName + "/" + apiSegmentSessions + "/{" + apiParamPID + "}/" + apiActionClose
+	routeAPITerminalSessionClose = routeMethodPost + apiPathServices + "/" + routeVarName + "/" + apiSegmentTerminalSessions + "/{" + apiQueryCheck + "}/" + apiActionClose
+	routeAPIAction               = routeMethodPost + apiPathServices + "/" + routeVarName + "/" + routeVarAction
+	routeAPIReload               = routeMethodPost + apiPathReload
 )
 
 // Ad-hoc JSON keys used by small HTTP responses without a dedicated struct.
@@ -819,22 +827,75 @@ type Process struct {
 // SSH service. CanClose is true only when a per-session process boundary and
 // start-time identity were observed and can therefore be revalidated safely.
 type SSHSession struct {
-	User        string `json:"user"`
-	Terminal    string `json:"terminal"`
-	PID         int    `json:"pid,omitempty"`
-	StartTicks  uint64 `json:"start_ticks,omitempty"`
-	IdleSeconds int64  `json:"idle_seconds,omitempty"`
-	CanClose    bool   `json:"can_close"`
+	Service     string  `json:"service"`
+	User        string  `json:"user"`
+	Terminal    string  `json:"terminal"`
+	PID         int     `json:"pid,omitempty"`
+	StartTicks  uint64  `json:"start_ticks,omitempty"`
+	IdleSeconds int64   `json:"idle_seconds,omitempty"`
+	CanClose    bool    `json:"can_close"`
+	RSS         int64   `json:"rss,omitempty"`
+	MemoryReady bool    `json:"memory_ready"`
+	CPU         float64 `json:"cpu,omitempty"`
+	CPUReady    bool    `json:"cpu_ready"`
+	IORead      float64 `json:"io_read,omitempty"`
+	IOWrite     float64 `json:"io_write,omitempty"`
+	IOReady     bool    `json:"io_ready"`
 }
 
 // TerminalSession is one read-only tmux or screen session from a configured
 // terminal_sessions check.
 type TerminalSession struct {
-	Multiplexer string `json:"multiplexer"`
-	Name        string `json:"name"`
-	User        string `json:"user"`
-	State       string `json:"state"`
-	Windows     int    `json:"windows,omitempty"`
+	Service      string  `json:"service"`
+	Check        string  `json:"check"`
+	Multiplexer  string  `json:"multiplexer"`
+	Name         string  `json:"name"`
+	User         string  `json:"user"`
+	State        string  `json:"state"`
+	Windows      int     `json:"windows,omitempty"`
+	IdleSeconds  int64   `json:"idle_seconds,omitempty"`
+	HasIdle      bool    `json:"has_idle"`
+	RSS          int64   `json:"rss,omitempty"`
+	MemoryReady  bool    `json:"memory_ready"`
+	CPU          float64 `json:"cpu,omitempty"`
+	CPUReady     bool    `json:"cpu_ready"`
+	IORead       float64 `json:"io_read,omitempty"`
+	IOWrite      float64 `json:"io_write,omitempty"`
+	IOReady      bool    `json:"io_ready"`
+	Identity     string  `json:"identity,omitempty"`
+	CanClose     bool    `json:"can_close"`
+	PIDs         []int   `json:"-"`
+	ActivityUnix int64   `json:"-"`
+	TTY          string  `json:"-"`
+}
+
+const (
+	// SessionKindSSH identifies an interactive SSH terminal source.
+	SessionKindSSH = "ssh"
+	// SessionSourceAvailable means the source completed its latest sample.
+	SessionSourceAvailable = "available"
+	// SessionSourceCollecting means no current sample has been published yet.
+	SessionSourceCollecting = "collecting"
+	// SessionSourceUnavailable means the latest sample could not be collected.
+	SessionSourceUnavailable = "unavailable"
+)
+
+// SessionSource describes one configured SSH, tmux or screen inventory source,
+// including an explicit empty or unavailable state.
+type SessionSource struct {
+	Kind    string `json:"kind"`
+	Service string `json:"service"`
+	Check   string `json:"check,omitempty"`
+	User    string `json:"user,omitempty"`
+	State   string `json:"state"`
+	Message string `json:"message,omitempty"`
+}
+
+// SessionInventory is the dashboard-wide view of interactive sessions.
+type SessionInventory struct {
+	Sources  []SessionSource   `json:"sources"`
+	SSH      []SSHSession      `json:"ssh"`
+	Terminal []TerminalSession `json:"terminal"`
 }
 
 // ProcessTotals aggregates a service's whole discovered process tree — the
@@ -904,19 +965,15 @@ type Lock struct {
 // Detail is a single service's view: its summary plus its checks.
 type Detail struct {
 	Service
-	Checks                    []Check           `json:"checks"`
-	Locks                     []Lock            `json:"locks,omitempty"`
-	LockWarnings              []string          `json:"lock_warnings,omitempty"`
-	NoResidentProcess         bool              `json:"no_resident_process,omitempty"`
-	ProcessWarnings           []string          `json:"process_warnings,omitempty"`
-	Processes                 []Process         `json:"processes,omitempty"`
-	ProcessTotals             *ProcessTotals    `json:"process_totals,omitempty"`
-	SSHSessionsSupported      bool              `json:"ssh_sessions_supported,omitempty"`
-	SSHSessions               []SSHSession      `json:"ssh_sessions,omitempty"`
-	TerminalSessionsSupported bool              `json:"terminal_sessions_supported,omitempty"`
-	TerminalSessions          []TerminalSession `json:"terminal_sessions,omitempty"`
-	Remediation               *Remediation      `json:"remediation,omitempty"`
-	Rules                     []RuleWindow      `json:"rules,omitempty"`
+	Checks            []Check        `json:"checks"`
+	Locks             []Lock         `json:"locks,omitempty"`
+	LockWarnings      []string       `json:"lock_warnings,omitempty"`
+	NoResidentProcess bool           `json:"no_resident_process,omitempty"`
+	ProcessWarnings   []string       `json:"process_warnings,omitempty"`
+	Processes         []Process      `json:"processes,omitempty"`
+	ProcessTotals     *ProcessTotals `json:"process_totals,omitempty"`
+	Remediation       *Remediation   `json:"remediation,omitempty"`
+	Rules             []RuleWindow   `json:"rules,omitempty"`
 }
 
 // SeriesPoint is one availability bucket of the SLA history. Ratio is nil for a
@@ -1010,6 +1067,7 @@ type DashboardSnapshot struct {
 	Live          LiveReport       `json:"live"`
 	Monitoring    MonitoringStatus `json:"monitoring"`
 	HostMetrics   []HostMetric     `json:"host_metrics"`
+	Sessions      SessionInventory `json:"sessions"`
 }
 
 // ReadinessChecker reports whether the daemon has begun monitoring.
@@ -1136,6 +1194,8 @@ type Backend interface {
 	// CloseSSHSession gracefully closes one freshly verified terminal session
 	// owned by the named SSH service.
 	CloseSSHSession(ctx context.Context, name string, session SSHSession) ActionResult
+	// CloseTerminalSession closes one freshly verified tmux or screen session.
+	CloseTerminalSession(ctx context.Context, name string, session TerminalSession) ActionResult
 	// CompactState prunes persisted history older than before and vacuums the
 	// state database. Zero before selects the normal retention window.
 	CompactState(ctx context.Context, before time.Time) StateCompactResult
@@ -1262,6 +1322,10 @@ type dashboardSnapshotSource interface {
 	DashboardSnapshot(ctx context.Context, since time.Duration) DashboardSnapshot
 }
 
+type sessionInventorySource interface {
+	Sessions(ctx context.Context) SessionInventory
+}
+
 // backendGenerationSource exposes the active daemon configuration generation.
 // It is optional so standalone Backend implementations remain simple.
 type backendGenerationSource interface {
@@ -1289,6 +1353,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc(routeReadyz, s.handleReadyz)
 	mux.HandleFunc(routeAPIWhoami, s.handleWhoami)
 	mux.HandleFunc(routeAPIDashboard, s.handleDashboard)
+	mux.HandleFunc(routeAPISessions, s.handleSessions)
 	mux.HandleFunc(routeAPIServices, s.handleServices)
 	mux.HandleFunc(routeAPIWatches, s.handleWatches)
 	mux.HandleFunc(routeAPIWatchAction, s.handleWatchAction)
@@ -1319,6 +1384,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc(routeAPIPanic, s.handlePanic)
 	mux.HandleFunc(routeAPIPreflight, s.handlePreflight)
 	mux.HandleFunc(routeAPISessionClose, s.handleSSHSessionClose)
+	mux.HandleFunc(routeAPITerminalSessionClose, s.handleTerminalSessionClose)
 	mux.HandleFunc(routeAPIAction, s.handleAction)
 	mux.HandleFunc(routeAPIReload, s.handleReload)
 	return securityHeaders(s.withAccessLog(s.withAuth(mux)))
@@ -1576,6 +1642,11 @@ func CollectDashboardSnapshot(ctx context.Context, backend Backend, since time.D
 	run(func() { snapshot.Monitoring = backend.MonitoringStatus(ctx) })
 	run(func() { snapshot.HostMetrics = backend.HostMetrics(ctx) })
 	wg.Wait()
+	// DaemonInfo warms the shared SSH sampler cache above. Read sessions after
+	// the parallel batch so this aggregate does not race a duplicate host scan.
+	if source, ok := backend.(sessionInventorySource); ok {
+		snapshot.Sessions = source.Sessions(ctx)
+	}
 	return snapshot
 }
 
@@ -1699,6 +1770,15 @@ func (s *Server) handleMountBlockers(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleDaemon(w http.ResponseWriter, r *http.Request) {
 	s.readJSON(w, r, func(ctx context.Context, backend Backend) any { return backend.DaemonInfo(ctx) })
+}
+
+func (s *Server) handleSessions(w http.ResponseWriter, r *http.Request) {
+	s.readJSON(w, r, func(ctx context.Context, backend Backend) any {
+		if source, ok := backend.(sessionInventorySource); ok {
+			return source.Sessions(ctx)
+		}
+		return SessionInventory{}
+	})
 }
 
 func (s *Server) handleDaemonMetrics(w http.ResponseWriter, r *http.Request) {
@@ -2048,6 +2128,30 @@ func (s *Server) handleSSHSessionClose(w http.ResponseWriter, r *http.Request) {
 		StartTicks: startTicks,
 		Terminal:   terminal,
 	})
+	writeActionResult(w, res.OK, res)
+}
+
+// handleTerminalSessionClose accepts the opaque generation marker displayed
+// by the inventory. The backend re-lists the configured namespace and requires
+// that exact identity before invoking the multiplexer client.
+func (s *Server) handleTerminalSessionClose(w http.ResponseWriter, r *http.Request) {
+	backend, ok := s.mutationBackend(w, r)
+	if !ok {
+		return
+	}
+	session := TerminalSession{
+		Check: r.PathValue(apiQueryCheck), Multiplexer: r.URL.Query().Get(apiQueryMultiplexer),
+		Name: r.URL.Query().Get(apiQuerySession), User: r.URL.Query().Get(apiQueryUser),
+		Identity: r.URL.Query().Get(apiQueryIdentity),
+	}
+	if session.Check == "" || session.Name == "" || session.User == "" || session.Identity == "" ||
+		(session.Multiplexer != "tmux" && session.Multiplexer != "screen") {
+		writeError(w, http.StatusBadRequest, "invalid terminal session identity")
+		return
+	}
+	s.extendActionWriteDeadline(w)
+	//nolint:contextcheck // see operateContext
+	res := backend.CloseTerminalSession(s.operateContext(r), r.PathValue(apiParamName), session)
 	writeActionResult(w, res.OK, res)
 }
 

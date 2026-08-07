@@ -223,6 +223,9 @@ type Deps struct {
 	// SSHSessionVerifier must obtain a fresh terminal/process snapshot for a
 	// close action. Optional nil uses an uncached native sampler.
 	SSHSessionVerifier checks.SSHSessionSamplerFunc
+	// TerminalProcessReader is the shared terminal-aware /proc snapshot used to
+	// attribute tmux/screen process trees without another host-wide scan.
+	TerminalProcessReader process.Reader
 	// Notifiers are the configured delivery targets (email, …) addressable by name
 	// from a watch's `then.notify`. Optional: nil/empty means no notifications.
 	Notifiers map[string]notify.Notifier

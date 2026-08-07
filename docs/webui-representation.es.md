@@ -31,6 +31,7 @@ deterministas de la API.
 - [Panel de servicios](#panel-de-servicios)
 - [Paneles de contenedores y máquinas virtuales](#paneles-de-contenedores-y-máquinas-virtuales)
 - [Expansión de fila de servicio](#expansión-de-fila-de-servicio)
+- [Panel de sesiones](#panel-de-sesiones)
 - [Panel de aplicaciones instaladas](#panel-de-aplicaciones-instaladas)
 - [Panel de librerías instaladas](#panel-de-librerías-instaladas)
 - [Panel de unidades de montaje](#panel-de-unidades-de-montaje)
@@ -77,6 +78,7 @@ deterministas de la API.
 | Flujo de cambios | `GET /api/stream` | canal Server-Sent Events que empuja una señal `change` sin payload con cada evento del daemon; el dashboard refresca de inmediato. Solo añade refrescos: el sondeo programado mantiene siempre la cadencia elegida en la barra superior, porque nada se empuja cuando cambia una muestra de métricas y las lecturas de host, servicios y watches dependen de ese sondeo |
 | Disponibilidad | `GET /readyz?verbose` | `status:` del daemon en la barra superior (`starting` / `ok` / …) |
 | Servicios | `GET /api/services` | servicios de runtime configurados cargados por sermod (no el inventario de catálogo de `sermoctl services`); `status_observed_at` identifica la muestra real de estado de init que hay detrás de una fila cacheada; `operation_active` es true mientras el motor mantiene el lock de operación del servicio, de modo que una acción lanzada desde cualquier cliente, `sermoctl` o la remediación automática se ve en curso y sus botones de acción siguen deshabilitados |
+| Sesiones | `GET /api/sessions` | inventario global de SSH, tmux y screen; cada origen configurado informa `available`, `collecting` o `unavailable`, por lo que una muestra vacía correcta se distingue de la ausencia de datos; SSH usa la caché breve compartida del muestreador y tmux/screen solo leen muestras de `terminal_sessions` publicadas por el daemon |
 | Expansión de servicio | `GET /api/services/{name}` | checks, información del proceso, reglas |
 | Métricas de check del servicio | `GET /api/services/{name}/metrics?check=NAME[&metric=KEY]` | el detalle muestra la latencia cuando se omite `metric` y un gráfico por cada métrica numérica con nombre publicada por un check |
 | Métricas de runtime del servicio | `GET /api/services/{name}/runtime` | historial persistido de CPU/memoria/IO del servicio, de solo lectura y muestreado exclusivamente por ciclos del worker; `current` es la última muestra publicada y las lecturas del panel nunca repiten el descubrimiento de procesos |
@@ -161,6 +163,7 @@ con un cuerpo `{"ok": bool, "message": string}` para una acción atendida.
 | Acción de servicio | `POST /api/services/{name}/{action}[?no_cascade=1]` | `monitor`, `unmonitor`, `start`, `stop`, `restart`, `reload`, `resume`; `reload` se ofrece solo cuando el servicio informa `can_reload` desde soporte de reload del backend de init o desde un fallback `reload:` válido; `no_cascade` omite los objetivos de `also_apply` en start/stop/restart |
 | Preflight de servicio | `POST /api/services/{name}/preflight` | ejecuta los checks de preflight sin cambiar el estado del servicio |
 | Cerrar sesión SSH | `POST /api/services/{name}/sessions/{pid}/close?start_ticks=TICKS&terminal=PTS` | solo admin y con confirmación: cierre elegante de un terminal SSH mostrado; el backend redescubre el terminal, el ejecutable `sshd` configurado exacto y su usuario real, exige el mismo PID y ticks de inicio y solo envía `SIGTERM` |
+| Cerrar sesión de terminal | `POST /api/services/{name}/terminal-sessions/{check}/close?multiplexer=TYPE&session=NAME&user=USER&identity=IDENTITY` | solo admin y con confirmación: cierre de una sesión tmux/screen; el backend vuelve a listar el espacio configurado de usuario/socket, exige la misma identidad de generación y ejecuta únicamente el argv exacto de cierre del cliente |
 | Acción de watch | `POST /api/watches/{name}/{action}` | `monitor`, `unmonitor`, `expand`, `probe` (una muestra manual), más `pause`/`resume` de RAID, que ejecutan una operación de re-chequeo y verificación y requieren la cabecera `X-Sermo-Confirm` |
 | Prueba de notifier | `POST /api/notifiers/{name}/test` | envía una notificación de prueba por el notifier nombrado tras confirmación |
 | Acción de montaje | `POST /api/mounts/{name}/{action}[?force=1&lazy=1&kill=1]` | `mount`, `umount`, `alert`; `force=1` permite `umount -f`, `lazy=1` permite `umount -l` como último fallback y `kill=1` habilita señalización de blockers limitada por `kill_only_if`; `/` rechaza las rutas de desmontaje |
@@ -310,7 +313,6 @@ Compartida por los paneles Services, Containers y Virtual machines:
 | Datos generales | una cuadrícula sin encabezado, primera área de la expansión: nombre, estado, categoría, unidad/backend, uptime, intervalo, política, locks, último evento, próxima remediación, estado de remediación y totales del proceso; mientras la insignia de la fila sea `starting`, la expansión puede mostrar todavía el backend de init en bruto (`inactive`) y muestras de check en curso del ciclo de solo observación |
 | Gráficos | línea temporal de SLA a ancho completo seguida de gráficos de latencia, CPU, memoria e IO; cada servicio persiste su propia ventana temporal y check de latencia; los servicios `no_resident_process` muestran solo SLA porque no tienen runtime de procesos para graficar |
 | Procesos | tabla del árbol de procesos detectado a ancho completo, con los procesos hijos marcados en CMD y mantenidos bajo su padre; **Max core** sigue a CPU e informa del uso máximo que ese proceso hizo de un solo core —su hilo más ocupado—, cuyo tooltip indica si el daemon lo midió por hilo o lo acotó con la tasa del proceso; las advertencias de descubrimiento se listan encima, una por línea; se omite cuando `no_resident_process` es true |
-| Sesiones SSH | solo en un servicio SSH atribuido: usuario, terminal, PID de sesión y tiempo inactivo en vivo. Los administradores pueden confirmar **close** cuando exista un límite de sesión verificado; los invitados no tienen acción y una sesión no verificable se muestra pero no se puede cerrar |
 | Checks | checks configurados y resultado actual; la columna SLA lleva la misma banda de disponibilidad que dibuja la línea temporal de SLA de Gráficas, sobre la ventana en la que esté el selector de esa sección, así que un tramo sin observar se ve como hueco rayado en ambas en vez de como un porcentaje plano en una |
 | Locks con nombre | estado de los locks de runtime |
 | Reglas | estado de las reglas de remediación/alerta |
@@ -328,6 +330,21 @@ oculta porque la columna FDs no lleva el número de hilos. La cifra del hilo má
 ocupado no se repite en la cuadrícula: pertenece a un proceso, así que la tabla de
 procesos la lleva por fila (ver **Procesos** más abajo) en vez de flotar como un total
 que esconde de qué proceso viene.
+
+## Panel de sesiones
+
+El panel superior Sessions combina terminales SSH interactivas con los espacios
+de nombres configurados de tmux y GNU screen. La búsqueda cubre tipo, servicio,
+usuario y sesión; los botones de tipo seleccionan SSH, tmux o screen. La tabla
+muestra solo el usuario en la columna User y permite ordenar por tipo, usuario,
+sesión, estado, idle, CPU, memoria o IO. El filtro de un tipo se oculta cuando no
+hay sesiones activas de ese tipo, con el mismo comportamiento de filtros con
+recuento que los demás paneles. Un origen configurado permanece visible bajo
+`all` aunque no tenga sesiones, mientras que la espera de muestra y los errores
+de muestreo usan estados distintos. Las filas atribuibles muestran idle y CPU,
+memoria residente e IO de lectura/escritura del árbol de procesos. Un
+administrador solo puede confirmar un cierre cuando el backend vuelve a validar
+la identidad exacta de la sesión SSH o del multiplexor.
 
 Las expansiones abiertas de servicio obtienen y renderizan por completo detalle
 fresco una vez por refresco del dashboard; las subpeticiones de SLA, métricas,

@@ -86,6 +86,7 @@ type webEntry struct {
 	selectors         []process.Selector
 	processWarnings   []string
 	sshSessionFilters []process.IdentityFilter
+	terminalSessions  []terminalSessionSource
 	noResidentProcess bool
 	alsoApply         []string
 	canReload         bool
@@ -144,43 +145,45 @@ var _ stateMaintainer = (*state.Store)(nil)
 // the shared snapshots, and start/stop/restart/reload/resume through the same safe operation
 // engine the workers use.
 type WebBackend struct {
-	order             []string
-	entries           map[string]*webEntry
-	watchOrder        []string
-	watches           map[string]*webWatch
-	notifierOrder     []string
-	notifiers         map[string]*webNotifier
-	notifierRegistry  map[string]notify.Notifier
-	store             MonitorStore
-	operationSettling OperationSettlingStore
-	snapshots         *Snapshots
-	watchSnapshots    *WatchSnapshots
-	settling          *Settling
-	observability     *ObservabilityRegistry
-	sla               SLAReader
-	events            *EventLog
-	remediation       *RemediationRegistry
-	ruleWindows       *RuleWindowRegistry
-	cfg               *config.Config
-	hostType          *web.HostTypeInfo
-	measure           MeasurementReader
-	collector         *metrics.Collector
-	daemonMetrics     *DaemonMetricSampler
-	serviceMetrics    *ServiceMetricSampler
-	live              *LiveMetrics
-	mountSampler      checks.MountSamplerFunc
-	raidSampler       checks.RaidSamplerFunc
-	execRunner        execx.Runner
-	expander          VolumeExpander
-	userLookup        *process.UserLookup
-	mountUsers        func(string) ([]process.Process, error)
-	mountSignaler     process.Signaler
-	mountAlerter      MountUserAlerter
-	sshSessionSampler checks.SSHSessionSamplerFunc
-	emit              func(Event)
-	defaultTimeout    time.Duration
-	operationTimeout  time.Duration
-	now               func() time.Time
+	order                  []string
+	entries                map[string]*webEntry
+	watchOrder             []string
+	watches                map[string]*webWatch
+	notifierOrder          []string
+	notifiers              map[string]*webNotifier
+	notifierRegistry       map[string]notify.Notifier
+	store                  MonitorStore
+	operationSettling      OperationSettlingStore
+	snapshots              *Snapshots
+	watchSnapshots         *WatchSnapshots
+	settling               *Settling
+	observability          *ObservabilityRegistry
+	sla                    SLAReader
+	events                 *EventLog
+	remediation            *RemediationRegistry
+	ruleWindows            *RuleWindowRegistry
+	cfg                    *config.Config
+	hostType               *web.HostTypeInfo
+	measure                MeasurementReader
+	collector              *metrics.Collector
+	daemonMetrics          *DaemonMetricSampler
+	serviceMetrics         *ServiceMetricSampler
+	live                   *LiveMetrics
+	mountSampler           checks.MountSamplerFunc
+	raidSampler            checks.RaidSamplerFunc
+	execRunner             execx.Runner
+	expander               VolumeExpander
+	userLookup             *process.UserLookup
+	mountUsers             func(string) ([]process.Process, error)
+	mountSignaler          process.Signaler
+	mountAlerter           MountUserAlerter
+	sshSessionSampler      checks.SSHSessionSamplerFunc
+	terminalProcessReader  process.Reader
+	sessionMetricCollector *metrics.Collector
+	emit                   func(Event)
+	defaultTimeout         time.Duration
+	operationTimeout       time.Duration
+	now                    func() time.Time
 
 	probeMu sync.Mutex
 	probes  map[string]time.Time
@@ -199,8 +202,10 @@ type WebBackend struct {
 	mountOperationsMu sync.Mutex
 	mountOperations   map[string]web.MountOperation
 
-	sshSessionsMu   sync.Mutex
-	sshSessionCache map[string]cachedSSHSessions
+	sshSessionsMu     sync.Mutex
+	sshSessionCache   map[string]cachedSSHSessions
+	sessionMetricsMu  sync.Mutex
+	sessionMetricKeys map[string]struct{}
 }
 
 func (b *WebBackend) webNow() time.Time {
@@ -236,6 +241,16 @@ func NewWebBackend(ctx context.Context, cfg *config.Config, deps Deps) (*WebBack
 	if deps.UserLookup == nil {
 		deps.UserLookup = EngineUserLookup(cfg, deps.ExecxRunner)
 	}
+	terminalReader := deps.TerminalProcessReader
+	if terminalReader == nil {
+		terminalReader = process.NewCachingReader(process.OSReader{
+			LookupUserName: deps.UserLookup.Username, LookupGroupName: deps.UserLookup.GroupName, ReadTTY: true,
+		}, deps.SystemFreshness)
+	}
+	sshSessionSampler := deps.SSHSessionSampler
+	if sshSessionSampler == nil {
+		sshSessionSampler = checks.NewSSHSessionSampler(terminalReader, deps.UserLookup)
+	}
 	operationSettling := deps.OperationSettling
 	if operationSettling == nil {
 		if store, ok := deps.Monitor.(OperationSettlingStore); ok {
@@ -247,40 +262,48 @@ func NewWebBackend(ctx context.Context, cfg *config.Config, deps Deps) (*WebBack
 		daemonMetrics = NewDaemonMetricSampler(deps.Collector, deps.Now, deps.DaemonMetrics)
 	}
 	wb := &WebBackend{
-		entries:           map[string]*webEntry{},
-		watches:           map[string]*webWatch{},
-		notifiers:         map[string]*webNotifier{},
-		notifierRegistry:  deps.Notifiers,
-		store:             deps.Monitor,
-		operationSettling: operationSettling,
-		snapshots:         deps.Snapshots,
-		watchSnapshots:    deps.WatchSnapshots,
-		settling:          deps.Settling,
-		observability:     deps.Observability,
-		events:            deps.Events,
-		remediation:       deps.Remediation,
-		ruleWindows:       deps.RuleWindows,
-		cfg:               cfg,
-		hostType:          hostTypeInfo(),
-		collector:         deps.Collector,
-		daemonMetrics:     daemonMetrics,
-		serviceMetrics:    deps.ServiceMetrics,
-		live:              deps.Live,
-		mountSampler:      deps.MountSampler,
-		raidSampler:       deps.RaidSampler,
-		execRunner:        deps.ExecxRunner,
-		expander:          configuredVolumeExpander(deps),
-		userLookup:        deps.UserLookup,
-		mountUsers:        deps.MountDiscoverUsers,
-		mountSignaler:     deps.MountSignaler,
-		mountAlerter:      deps.MountUserAlerter,
-		sshSessionSampler: deps.SSHSessionSampler,
-		emit:              deps.Emit,
-		defaultTimeout:    deps.DefaultTimeout,
-		operationTimeout:  deps.OperationTimeout,
-		now:               deps.Now,
-		slaCache:          map[string]cachedSLATimelines{},
-		probes:            map[string]time.Time{},
+		entries:               map[string]*webEntry{},
+		watches:               map[string]*webWatch{},
+		notifiers:             map[string]*webNotifier{},
+		notifierRegistry:      deps.Notifiers,
+		store:                 deps.Monitor,
+		operationSettling:     operationSettling,
+		snapshots:             deps.Snapshots,
+		watchSnapshots:        deps.WatchSnapshots,
+		settling:              deps.Settling,
+		observability:         deps.Observability,
+		events:                deps.Events,
+		remediation:           deps.Remediation,
+		ruleWindows:           deps.RuleWindows,
+		cfg:                   cfg,
+		hostType:              hostTypeInfo(),
+		collector:             deps.Collector,
+		daemonMetrics:         daemonMetrics,
+		serviceMetrics:        deps.ServiceMetrics,
+		live:                  deps.Live,
+		mountSampler:          deps.MountSampler,
+		raidSampler:           deps.RaidSampler,
+		execRunner:            deps.ExecxRunner,
+		expander:              configuredVolumeExpander(deps),
+		userLookup:            deps.UserLookup,
+		mountUsers:            deps.MountDiscoverUsers,
+		mountSignaler:         deps.MountSignaler,
+		mountAlerter:          deps.MountUserAlerter,
+		sshSessionSampler:     sshSessionSampler,
+		terminalProcessReader: terminalReader,
+		emit:                  deps.Emit,
+		defaultTimeout:        deps.DefaultTimeout,
+		operationTimeout:      deps.OperationTimeout,
+		now:                   deps.Now,
+		slaCache:              map[string]cachedSLATimelines{},
+		probes:                map[string]time.Time{},
+		sessionMetricKeys:     map[string]struct{}{},
+	}
+	if deps.Collector != nil && deps.Collector.Reader != nil {
+		wb.sessionMetricCollector = metrics.New(deps.Collector.Reader)
+		if deps.Now != nil {
+			wb.sessionMetricCollector.Now = deps.Now
+		}
 	}
 	if wb.serviceMetrics == nil {
 		wb.serviceMetrics = NewServiceMetricSampler()
@@ -328,20 +351,21 @@ func (b *WebBackend) registerService(ctx context.Context, cfg *config.Config, na
 		iv = config.EngineInterval(cfg, config.DefaultEngineInterval)
 	}
 	entry := &webEntry{
-		displayName:    config.DisplayName(resolved.Tree, name),
-		category:       config.CategoryLabel(resolved.Tree, config.CategoryService),
-		unit:           target.Unit,
-		backend:        string(target.Backend),
-		interval:       iv,
-		dryRun:         config.DryRun(resolved.Tree),
-		policyCooldown: rules.ParsePolicy(resolved.Tree).Cooldown,
-		alsoApply:      config.CascadeTargets(resolved.Tree),
+		displayName:      config.DisplayName(resolved.Tree, name),
+		category:         config.CategoryLabel(resolved.Tree, config.CategoryService),
+		unit:             target.Unit,
+		backend:          string(target.Backend),
+		interval:         iv,
+		dryRun:           config.DryRun(resolved.Tree),
+		policyCooldown:   rules.ParsePolicy(resolved.Tree).Cooldown,
+		alsoApply:        config.CascadeTargets(resolved.Tree),
+		terminalSessions: terminalSessionSources(resolved.Tree),
 	}
 	if disabled {
 		entry.disabled = true
 		entry.noResidentProcess = noResidentProcess(resolved.Tree)
 	} else {
-		warnings = append(warnings, attachServiceRuntime(ctx, entry, name, resolved.Tree, target, deps)...)
+		warnings = append(warnings, attachServiceRuntime(ctx, entry, name, resolved.Tree, resolved.Apps, target, deps)...)
 	}
 	b.entries[name] = entry
 	b.order = append(b.order, name)
@@ -352,7 +376,7 @@ func (b *WebBackend) registerService(ctx context.Context, cfg *config.Config, na
 
 // attachServiceRuntime wires an enabled service's entry with its operation
 // engine, checks, process discovery, and reload capability.
-func attachServiceRuntime(ctx context.Context, entry *webEntry, name string, tree map[string]any, target control.Target, deps Deps) []string {
+func attachServiceRuntime(ctx context.Context, entry *webEntry, name string, tree map[string]any, apps []string, target control.Target, deps Deps) []string {
 	serviceDeps := deps
 	serviceDeps.Backend = target.Backend
 	serviceDeps.Manager = target.Manager
@@ -371,10 +395,14 @@ func attachServiceRuntime(ctx context.Context, entry *webEntry, name string, tre
 	entry.discoverer = discoverer
 	entry.selectors = selectors
 	entry.processWarnings = processWarnings
-	entry.sshSessionFilters = sshSessionFilters(tree, selectors)
+	entry.sshSessionFilters = sshSessionFilters(apps, selectors)
 	if len(entry.sshSessionFilters) > 0 {
 		engine.SessionVerifier = freshSSHSessionVerifier(deps, entry.sshSessionFilters)
 		engine.SessionSignaler = deps.SSHSessionSignaler
+		entry.engine = engine
+	}
+	if len(entry.terminalSessions) > 0 {
+		engine.TerminalSessionCloser = freshTerminalSessionCloser(deps.ExecxRunner, entry.terminalSessions)
 		entry.engine = engine
 	}
 	reloadCtx, cancel := context.WithTimeout(ctx, serviceInitQueryTimeout)

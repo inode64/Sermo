@@ -132,6 +132,17 @@ func New(reader Reader) *Collector {
 	}
 }
 
+// ForgetService drops rate baselines for a service-like sampling key. Dynamic
+// consumers such as interactive sessions call it when a target disappears so
+// short-lived identities cannot grow the collector maps without bound.
+func (c *Collector) ForgetService(service string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	delete(c.prevService, service)
+	delete(c.prevServiceProcs, service)
+	delete(c.prevServiceIO, service)
+}
+
 // SampleService computes the service-scope metrics over its discovered process
 // set — which includes the matched processes AND their descendants, so every
 // metric below sums across the whole tree (parent + children): memory (RSS sum,

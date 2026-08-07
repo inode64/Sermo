@@ -59,3 +59,23 @@ func TerminalInfo(devRoot, line string) (Terminal, error) {
 		AccessedAt: time.Unix(stat.Atim.Sec, stat.Atim.Nsec),
 	}, nil
 }
+
+// TerminalAccessedAt resolves a terminal device number to its last-input time.
+// Multiplexer sessions expose the device but not necessarily its pts path, so
+// this bounded /dev/pts lookup keeps idle attribution native and exact.
+func TerminalAccessedAt(devRoot string, device uint64) (time.Time, bool) {
+	entries, err := os.ReadDir(filepath.Join(devRoot, "pts"))
+	if err != nil {
+		return time.Time{}, false
+	}
+	for _, entry := range entries {
+		if entry.IsDir() || entry.Name() == "ptmx" {
+			continue
+		}
+		terminal, err := TerminalInfo(devRoot, filepath.Join("pts", entry.Name()))
+		if err == nil && terminal.Device == device {
+			return terminal.AccessedAt, true
+		}
+	}
+	return time.Time{}, false
+}

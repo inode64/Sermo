@@ -20,6 +20,7 @@ export const apiNotifiersPath = "api/notifiers";
 const apiPanicPath = "api/panic";
 export const apiReloadPath = "api/reload";
 export const apiServicesPath = "api/services";
+export const apiSessionsPath = "api/sessions";
 const apiStateCompactPath = "api/state/compact";
 export const apiStreamPath = "api/stream";
 export const apiWatchesPath = "api/watches";
@@ -41,6 +42,10 @@ export const apiQuerySince = "since";
 export const apiQueryStartTicks = "start_ticks";
 export const apiQueryStatus = "status";
 export const apiQueryTerminal = "terminal";
+export const apiQueryIdentity = "identity";
+export const apiQueryMultiplexer = "multiplexer";
+export const apiQuerySession = "session";
+export const apiQueryUser = "user";
 export const apiQueryWatch = "watch";
 
 const eventRecentLimit = "200";
@@ -99,6 +104,13 @@ export function serviceSLAAPI(name, since, check = "") {
 export function sshSessionCloseAPI(name, pid, startTicks, terminal) {
   const query = new URLSearchParams({ [apiQueryStartTicks]: String(startTicks), [apiQueryTerminal]: terminal });
   return serviceAPI(name, `${apiSuffixSessions}/${encodeURIComponent(pid)}/close?${query.toString()}`);
+}
+export function terminalSessionCloseAPI(service, check, multiplexer, session, user, identity) {
+  const query = new URLSearchParams({
+    [apiQueryMultiplexer]: multiplexer, [apiQuerySession]: session,
+    [apiQueryUser]: user, [apiQueryIdentity]: identity,
+  });
+  return serviceAPI(service, `/terminal-sessions/${encodeURIComponent(check)}/close?${query.toString()}`);
 }
 export function stateCompactAPI(query = "") { return `${apiStateCompactPath}${query}`; }
 export function watchAPI(name, suffix = "") { return apiEntityPath(apiWatchesPath, name, suffix); }
