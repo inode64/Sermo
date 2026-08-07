@@ -1112,8 +1112,9 @@ una recarga concurrente.
   ruta de evento del servicio.
 - `POST /api/services/{name}/terminal-sessions/{check}/close-empty`
   — cierra un servidor tmux vacío revalidado con socket explícito configurado.
-  Debe seguir sin sesiones; Sermo ejecuta el argv exacto `kill-server` de tmux y
-  comprueba que el espacio ha desaparecido.
+  Debe seguir sin sesiones; Sermo ejecuta el argv exacto `kill-server` de tmux,
+  comprueba que el espacio ha desaparecido y elimina solo un socket huérfano
+  que tmux haya dejado sin cambios.
 - `POST /api/watches/{name}/{action}` — acción de watch. `action` es
   `monitor`, `unmonitor`, `expand`, `probe`, `pause` o `resume`. `probe` es de
   solo lectura para watches LVM, RAID y SMART; `pause`/`resume` requieren el

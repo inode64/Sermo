@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
+	"os"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -447,13 +449,15 @@ func CloseTerminalSession(ctx context.Context, runner execx.Runner, config Termi
 }
 
 // CloseEmptyTmuxServer re-lists one explicitly configured tmux namespace and
-// closes its server only when it is still present and has no sessions. tmux
-// removes its own socket as part of kill-server; Sermo never unlinks a live
-// socket directly.
+// closes its server only when it is still present and has no sessions. Some
+// tmux versions leave a stale socket after kill-server, so Sermo removes it
+// only when it is the same socket observed before the close and the namespace
+// has subsequently been proven absent.
 func CloseEmptyTmuxServer(ctx context.Context, runner execx.Runner, config TerminalSessionConfig) error {
 	if config.Multiplexer != TerminalMultiplexerTmux || config.Socket == "" {
 		return errors.New("empty terminal source close requires a configured tmux socket")
 	}
+	socketBefore, _, _ := unixSocketInfo(config.Socket)
 	sample, err := sampleTerminalSessions(ctx, runner, config)
 	if err != nil {
 		return fmt.Errorf("refresh tmux server: %w", err)
@@ -483,6 +487,46 @@ func CloseEmptyTmuxServer(ctx context.Context, runner execx.Runner, config Termi
 	}
 	if verified.Present {
 		return errors.New("tmux server remains active after close")
+	}
+	if err := removeUnchangedUnixSocket(config.Socket, socketBefore); err != nil {
+		return fmt.Errorf("remove stale tmux socket: %w", err)
+	}
+	return nil
+}
+
+// unixSocketInfo returns lstat metadata only for an existing Unix socket.
+// Callers use it as a generation marker before a close operation, never as
+// permission to remove a newly created path.
+func unixSocketInfo(path string) (fs.FileInfo, bool, error) {
+	info, err := os.Lstat(path)
+	if err != nil {
+		return nil, false, fmt.Errorf("lstat socket %q: %w", path, err)
+	}
+	if info.Mode()&os.ModeSocket == 0 {
+		return nil, false, nil
+	}
+	return info, true, nil
+}
+
+// removeUnchangedUnixSocket removes a stale Unix socket only when it is the
+// exact inode recorded before tmux was closed. A later tmux server must bind a
+// new inode, so its socket is not removed by this cleanup.
+func removeUnchangedUnixSocket(path string, before fs.FileInfo) error {
+	if before == nil {
+		return nil
+	}
+	after, socket, err := unixSocketInfo(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if !socket || !os.SameFile(before, after) {
+		return nil
+	}
+	if err := os.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return fmt.Errorf("remove socket %q: %w", path, err)
 	}
 	return nil
 }

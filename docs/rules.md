@@ -558,9 +558,10 @@ generation before invoking the multiplexer client's exact close command.
 An explicitly socket-configured tmux server that is live but has zero sessions
 appears as `empty`; an administrator may close that server manually. Sermo
 re-lists it, refuses the action if a session appeared, then invokes tmux's
-`kill-server` command so tmux removes its own socket. A namespace that is no
-longer present is omitted from the Sessions panel; Sermo never unlinks its
-socket directly.
+`kill-server` command. If that tmux version leaves a stale socket, Sermo
+removes only the same socket inode it observed before the close and only after
+the namespace has disappeared. A namespace that is no longer present is
+omitted from the Sessions panel.
 
 ```yaml
 watches:

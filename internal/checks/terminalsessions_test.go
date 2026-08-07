@@ -3,6 +3,9 @@ package checks
 import (
 	"context"
 	"errors"
+	"net"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -255,6 +258,71 @@ func TestCloseEmptyTmuxServerRejectsUnsupportedSource(t *testing.T) {
 		if len(runner.calls) != 0 {
 			t.Fatalf("calls = %#v, want none", runner.calls)
 		}
+	}
+}
+
+func TestCloseEmptyTmuxServerRemovesUnchangedStaleSocket(t *testing.T) {
+	socket := filepath.Join(t.TempDir(), "tmux.socket")
+	makeStaleUnixSocket(t, socket)
+	runner := &terminalSessionSequenceRunner{results: []execx.Result{
+		{ExitCode: execx.ExitCodeSuccess},
+		{ExitCode: execx.ExitCodeSuccess},
+		{ExitCode: 1, Stderr: "no server running on " + socket},
+	}}
+	err := CloseEmptyTmuxServer(context.Background(), runner, TerminalSessionConfig{
+		Multiplexer: TerminalMultiplexerTmux, Binary: "/usr/bin/tmux", User: "deploy", Socket: socket,
+	})
+	if err != nil {
+		t.Fatalf("CloseEmptyTmuxServer() error = %v", err)
+	}
+	if _, err := os.Lstat(socket); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("Lstat(%q) error = %v, want stale socket removed", socket, err)
+	}
+}
+
+func TestRemoveUnchangedUnixSocket(t *testing.T) {
+	socket := filepath.Join(t.TempDir(), "tmux.socket")
+	makeStaleUnixSocket(t, socket)
+	before, socketPresent, err := unixSocketInfo(socket)
+	if err != nil || !socketPresent {
+		t.Fatalf("unixSocketInfo(%q) = %v, %v, %v; want socket", socket, before, socketPresent, err)
+	}
+	if err := removeUnchangedUnixSocket(socket, before); err != nil {
+		t.Fatalf("removeUnchangedUnixSocket() error = %v", err)
+	}
+	if _, err := os.Lstat(socket); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("Lstat(%q) error = %v, want not exist", socket, err)
+	}
+}
+
+func TestRemoveUnchangedUnixSocketKeepsReplacement(t *testing.T) {
+	socket := filepath.Join(t.TempDir(), "tmux.socket")
+	makeStaleUnixSocket(t, socket)
+	before, socketPresent, err := unixSocketInfo(socket)
+	if err != nil || !socketPresent {
+		t.Fatalf("unixSocketInfo(%q) = %v, %v, %v; want socket", socket, before, socketPresent, err)
+	}
+	if err := os.Remove(socket); err != nil {
+		t.Fatalf("Remove(%q) error = %v", socket, err)
+	}
+	makeStaleUnixSocket(t, socket)
+	if err := removeUnchangedUnixSocket(socket, before); err != nil {
+		t.Fatalf("removeUnchangedUnixSocket() error = %v", err)
+	}
+	if _, err := os.Lstat(socket); err != nil {
+		t.Fatalf("Lstat(%q) error = %v, want replacement retained", socket, err)
+	}
+}
+
+func makeStaleUnixSocket(t *testing.T, path string) {
+	t.Helper()
+	listener, err := net.ListenUnix("unix", &net.UnixAddr{Name: path, Net: "unix"})
+	if err != nil {
+		t.Fatalf("ListenUnix(%q) error = %v", path, err)
+	}
+	listener.SetUnlinkOnClose(false)
+	if err := listener.Close(); err != nil {
+		t.Fatalf("Close(%q) error = %v", path, err)
 	}
 }
 

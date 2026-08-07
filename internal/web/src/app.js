@@ -6620,7 +6620,7 @@ async function closeEmptySessionSource(service, check) {
   const label = `tmux ${check || service}${source.user ? ` for ${source.user}` : ""}`;
   if (!(await promptConfirm({
     title: `Close empty ${label}?`,
-    message: "This stops only the empty tmux server. tmux removes its socket; the action cannot be undone.",
+    message: "This stops only the empty tmux server and safely removes any stale socket it leaves behind. The action cannot be undone.",
     okLabel: "close empty server",
     danger: true,
   }))) return;
