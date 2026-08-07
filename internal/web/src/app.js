@@ -4250,7 +4250,7 @@ function watchStateRank(w) {
 function watchStateCell(w) {
   if (watchProbeRunning(w)) {
     const startedAt = w.probe.started_at;
-    return tpl`${stateBadgeLabel(targetStateCollecting, "checking")} <span class="watch-probe" data-probe-started-at="${startedAt}" role="status" aria-live="polite">· ${watchProbeElapsed(startedAt)}</span> <span class="muted">previously ${watchStateText(w)}</span>`;
+    return tpl`${stateBadgeLabel(targetStateCollecting, "checking")} <span class="watch-probe" data-probe-started-at="${startedAt}" role="status" aria-live="polite"></span> <span class="muted">previously ${watchStateText(w)}</span>`;
   }
   if (!w || !w.enabled || !w.monitored) return watchMonitoringCell(w);
   return stateBadge(watchStateText(w));
@@ -5105,6 +5105,9 @@ function renderWatchPanel(panelKey, watches) {
     ? renderWatchGroups(panel, list)
     : tpl`<tr><td colspan="${panel.cols || 9}" class="muted">${filtered ? panel.emptyFiltered : panel.empty}</td></tr>`;
   litRender(content, tbody);
+  // The elapsed probe timer owns this plain span's text. Keeping it outside a
+  // lit binding prevents the timer from deleting lit-html's part markers.
+  updateWatchProbeElapsed();
 }
 
 // ---- Installed applications ----------------------------------------------
