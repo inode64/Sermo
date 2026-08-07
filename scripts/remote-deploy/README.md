@@ -138,6 +138,17 @@ created on success.
 `remote_collect_inventory.sh` mirrors `remote_stage.sh`'s read-only evidence
 collection for already installed hosts — keep both in step.
 
+Both collectors also record active `tmux` and GNU `screen` namespaces. For
+`tmux`, evidence is one real `/tmp/tmux-<uid>/<socket>` socket whose owner maps
+to a local account; for `screen`, it is an owned socket below a known runtime
+root (`/run/screen`, `/var/run/screen` or GNU Screen's `/tmp/screen` fallback).
+When the SSH catalog service is generated, each discovered namespace becomes a
+read-only `terminal_sessions` service watch with an absolute binary, explicit
+user and, for `tmux`, absolute socket. The checks use `reports: state`, appear
+in the SSH service detail, and never attach to or control a terminal session.
+Installed multiplexers without an active, safely attributable namespace do not
+produce a check.
+
 ## Web credentials
 
 Both orchestrators take the admin password from `SERMO_WEB_PASSWORD` (default

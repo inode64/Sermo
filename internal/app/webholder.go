@@ -148,6 +148,11 @@ func (h *WebBackendHolder) Services(ctx context.Context) []web.Service {
 	return webCall(h, nil, func(b *WebBackend) []web.Service { return b.Services(ctx) })
 }
 
+// Sessions returns the interactive-session inventory from the active backend.
+func (h *WebBackendHolder) Sessions(ctx context.Context) web.SessionInventory {
+	return webCall(h, web.SessionInventory{}, func(b *WebBackend) web.SessionInventory { return b.Sessions(ctx) })
+}
+
 // Watches returns host-level and service-scoped watches from the active backend.
 func (h *WebBackendHolder) Watches(ctx context.Context) []web.Watch {
 	return webCall(h, nil, func(b *WebBackend) []web.Watch { return b.Watches(ctx) })
@@ -293,6 +298,14 @@ func (h *WebBackendHolder) Operate(ctx context.Context, name, action string, opt
 func (h *WebBackendHolder) CloseSSHSession(ctx context.Context, name string, session web.SSHSession) web.ActionResult {
 	return webCall(h, unavailableAction(), func(b *WebBackend) web.ActionResult {
 		return b.CloseSSHSession(ctx, name, session)
+	})
+}
+
+// CloseTerminalSession closes one revalidated tmux or screen session through
+// the active backend.
+func (h *WebBackendHolder) CloseTerminalSession(ctx context.Context, name string, session web.TerminalSession) web.ActionResult {
+	return webCall(h, unavailableAction(), func(b *WebBackend) web.ActionResult {
+		return b.CloseTerminalSession(ctx, name, session)
 	})
 }
 

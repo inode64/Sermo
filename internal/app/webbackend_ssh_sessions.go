@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"sermo/internal/cfgval"
 	"sermo/internal/checks"
 	"sermo/internal/operation"
 	"sermo/internal/process"
@@ -16,7 +15,6 @@ import (
 )
 
 const (
-	serviceAppsKey                 = "apps"
 	sshCatalogApp                  = "ssh"
 	interactiveSessionCacheTTL     = 5 * time.Second
 	sshSessionUnavailablePrefix    = "SSH session attribution unavailable: "
@@ -29,8 +27,8 @@ type cachedSSHSessions struct {
 	sample checks.SSHSessionSample
 }
 
-func sshSessionFilters(tree map[string]any, selectors []process.Selector) []process.IdentityFilter {
-	if !slices.Contains(cfgval.StringList(tree[serviceAppsKey]), sshCatalogApp) {
+func sshSessionFilters(apps []string, selectors []process.Selector) []process.IdentityFilter {
+	if !slices.Contains(apps, sshCatalogApp) {
 		return nil
 	}
 	filters := make([]process.IdentityFilter, 0, len(selectors))

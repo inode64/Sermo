@@ -92,6 +92,9 @@ type Engine struct {
 	// signalling it. Nil means this service does not offer session closing.
 	SessionVerifier func(ctx context.Context, target SessionTarget) error
 	SessionSignaler process.Signaler
+	// TerminalSessionCloser revalidates and closes one tmux/screen session
+	// through its configured client. It remains a manual-only operation.
+	TerminalSessionCloser func(ctx context.Context, target TerminalSessionTarget) error
 	// ReloadFunc reloads the service's config in place. When nil the engine falls
 	// back to Manager.Reload (the backend per-unit reload). A `reload:` block
 	// builds a richer closure: a native signal/command that either overrides the
@@ -128,15 +131,16 @@ type StopArtifacts struct {
 type CleanPath = config.CleanPath
 
 type plan struct {
-	action        string
-	preflight     bool
-	stop          bool
-	start         bool
-	nativeRestart bool
-	resume        bool
-	reload        bool
-	postflight    bool
-	closeSession  *SessionTarget
+	action               string
+	preflight            bool
+	stop                 bool
+	start                bool
+	nativeRestart        bool
+	resume               bool
+	reload               bool
+	postflight           bool
+	closeSession         *SessionTarget
+	closeTerminalSession *TerminalSessionTarget
 }
 
 // SessionTarget is a freshly displayed SSH terminal session. StartTicks binds
@@ -146,6 +150,16 @@ type SessionTarget struct {
 	PID        int
 	StartTicks uint64
 	Terminal   string
+}
+
+// TerminalSessionTarget identifies one exact multiplexer session generation
+// from a configured terminal_sessions check.
+type TerminalSessionTarget struct {
+	Check       string
+	Multiplexer string
+	Name        string
+	User        string
+	Identity    string
 }
 
 // Restart executes the configured restart strategy and verifies health. Staged
@@ -188,6 +202,12 @@ func (e Engine) Resume(ctx context.Context) Result {
 // there is no escalation to SIGKILL for an interactive user session.
 func (e Engine) CloseSession(ctx context.Context, target SessionTarget) Result {
 	return e.run(ctx, plan{action: actionCloseSession, closeSession: &target})
+}
+
+// CloseTerminalSession closes one operator-selected tmux or screen session
+// through the same lock, guard, timeout and event path as SSH session closes.
+func (e Engine) CloseTerminalSession(ctx context.Context, target TerminalSessionTarget) Result {
+	return e.run(ctx, plan{action: actionCloseSession, closeTerminalSession: &target})
 }
 
 // Do dispatches one action name to the matching operation, returning its Result.
@@ -257,6 +277,13 @@ func (e Engine) run(ctx context.Context, p plan) (result Result) {
 		result.Message = "close SSH session ok"
 		return result
 	}
+	if p.closeTerminalSession != nil {
+		if !e.closeTerminalSession(ctx, *p.closeTerminalSession, &result) {
+			return result
+		}
+		result.Message = "close terminal session ok"
+		return result
+	}
 
 	var stopped, systemdReactivated bool
 	if p.stop {
@@ -324,6 +351,25 @@ func (e Engine) closeSession(ctx context.Context, target SessionTarget, result *
 	if err := signaler.Signal(target.PID, syscall.SIGTERM); err != nil {
 		result.Status = ResultFailed
 		result.Message = "close SSH session: " + err.Error()
+		return false
+	}
+	return true
+}
+
+func (e Engine) closeTerminalSession(ctx context.Context, target TerminalSessionTarget, result *Result) bool {
+	if e.TerminalSessionCloser == nil {
+		result.Status = ResultFailed
+		result.Message = "terminal session close is unavailable for this service"
+		return false
+	}
+	if err := ctx.Err(); err != nil {
+		result.Status = ResultFailed
+		result.Message = "close terminal session: " + err.Error()
+		return false
+	}
+	if err := e.TerminalSessionCloser(ctx, target); err != nil {
+		result.Status = ResultFailed
+		result.Message = "close terminal session: " + err.Error()
 		return false
 	}
 	return true

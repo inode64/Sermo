@@ -334,7 +334,40 @@ ip -o -6 route show >"${out}/ip_route6" 2>/dev/null || true
 	[ -d /sys/class/hwmon ] && echo "hwmon=1" || echo "hwmon=0"
 	[ -d /sys/devices/system/edac/mc ] && echo "edac=1" || echo "edac=0"
 	[ -r /proc/mdstat ] && echo "mdstat=1" || echo "mdstat=0"
+	command -v tmux >/dev/null 2>&1 && echo "tmux=1" || echo "tmux=0"
+	command -v screen >/dev/null 2>&1 && echo "screen=1" || echo "screen=0"
 } >"${out}/features"
+
+{
+	tmux_binary="$(command -v tmux 2>/dev/null || true)"
+	if [ -n "$tmux_binary" ]; then
+		tmux_binary="$(readlink -f "$tmux_binary" 2>/dev/null || true)"
+		find /tmp -mindepth 2 -maxdepth 2 -type s -path '/tmp/tmux-*/*' -print 2>/dev/null \
+			| while IFS= read -r socket; do
+				uid="$(stat -c '%u' -- "$socket" 2>/dev/null || true)"
+				[ -n "$uid" ] || continue
+				[ "$(basename "$(dirname "$socket")")" = "tmux-${uid}" ] || continue
+				user="$(getent passwd "$uid" 2>/dev/null | awk -F: 'NR == 1 { print $1 }')"
+				[ -n "$user" ] || continue
+				printf 'tmux\t%s\t%s\t%s\n' "$user" "$tmux_binary" "$socket"
+			done
+	fi
+	screen_binary="$(command -v screen 2>/dev/null || true)"
+	if [ -n "$screen_binary" ]; then
+		screen_binary="$(readlink -f "$screen_binary" 2>/dev/null || true)"
+		for screen_root in /run/screen /var/run/screen /tmp/screen; do
+			[ -d "$screen_root" ] || continue
+			find "$screen_root" -mindepth 2 -maxdepth 2 -type s -print 2>/dev/null \
+				| while IFS= read -r socket; do
+					uid="$(stat -c '%u' -- "$socket" 2>/dev/null || true)"
+					[ -n "$uid" ] || continue
+					user="$(getent passwd "$uid" 2>/dev/null | awk -F: 'NR == 1 { print $1 }')"
+					[ -n "$user" ] || continue
+					printf 'screen\t%s\t%s\t\n' "$user" "$screen_binary"
+				done
+		done
+	fi
+} | sort -u >"${out}/terminal_sessions.tsv"
 
 if [ -d /etc/ssl ]; then
 	find /etc/ssl -maxdepth 1 -type f \( -name '*.crt' -o -name '*.cer' -o -name '*.pem' \) -print >"${out}/certs" 2>/dev/null || true

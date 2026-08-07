@@ -1597,6 +1597,55 @@ func TestCloseSessionNeverSignalsWhenVerificationRejectsIt(t *testing.T) {
 	}
 }
 
+func TestCloseTerminalSessionUsesOperationSafetyPath(t *testing.T) {
+	h := defaultHarness()
+	e := h.engine()
+	want := TerminalSessionTarget{Check: "tmux", Multiplexer: "tmux", Name: "ops", User: "deploy", Identity: "$7:90"}
+	closed := 0
+	e.TerminalSessionCloser = func(_ context.Context, target TerminalSessionTarget) error {
+		closed++
+		if target != want {
+			t.Fatalf("target = %+v, want %+v", target, want)
+		}
+		return nil
+	}
+
+	res := e.CloseTerminalSession(context.Background(), want)
+	if res.Status != ResultOK || res.Action != actionCloseSession || closed != 1 {
+		t.Fatalf("result = %+v closed=%d", res, closed)
+	}
+	if len(h.mgr.calls) != 0 {
+		t.Fatalf("manager calls = %v, terminal close must not restart the service", h.mgr.calls)
+	}
+	if len(h.emitted) != 1 || h.emitted[0].Action != actionCloseSession {
+		t.Fatalf("events = %+v, want one close-session event", h.emitted)
+	}
+}
+
+func TestCloseTerminalSessionFailsClosedWhenUnavailableOrRejected(t *testing.T) {
+	for _, tt := range []struct {
+		name   string
+		closer func(context.Context, TerminalSessionTarget) error
+		want   string
+	}{
+		{name: "unavailable", want: "unavailable"},
+		{name: "rejected", closer: func(context.Context, TerminalSessionTarget) error { return errors.New("session changed") }, want: "session changed"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			h := defaultHarness()
+			e := h.engine()
+			e.TerminalSessionCloser = tt.closer
+			res := e.CloseTerminalSession(context.Background(), TerminalSessionTarget{Check: "tmux", Multiplexer: "tmux", Name: "ops", User: "deploy", Identity: "$7:90"})
+			if res.Status != ResultFailed || !strings.Contains(res.Message, tt.want) {
+				t.Fatalf("result = %+v, want failure containing %q", res, tt.want)
+			}
+			if len(h.mgr.calls) != 0 {
+				t.Fatalf("manager calls = %v", h.mgr.calls)
+			}
+		})
+	}
+}
+
 type noopSignaler struct{}
 
 func (noopSignaler) Signal(int, syscall.Signal) error { return nil }

@@ -11,6 +11,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import yaml
+
 
 def generator_module():
     path = Path(__file__).with_name("generate_install_config.py")
@@ -72,6 +74,69 @@ class EndpointGenerationTest(unittest.TestCase):
         self.assertIn("  http:\n    enabled: false", body)
         checks = report["services"]["enabled"][0]["endpoint_checks"]
         self.assertEqual([item["active"] for item in checks], [False, False])
+
+    def test_adds_discovered_terminal_namespaces_to_ssh_service(self):
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        root = Path(temp.name)
+        stage = root / "stage" / "host" / "out"
+        stage.mkdir(parents=True)
+        (stage / "init").write_text("systemd\n", encoding="utf-8")
+        (stage / "active_units").write_text("ssh.service\n", encoding="utf-8")
+        (stage / "services_json.out").write_text(
+            json.dumps({"services": [{"name": "ssh", "installed": True, "ok": True, "status": "ok"}]}),
+            encoding="utf-8",
+        )
+        (stage / "terminal_sessions.tsv").write_text(
+            "tmux\troot\t/usr/bin/tmux\t/tmp/tmux-0/default\n"
+            "tmux\troot\t/usr/bin/tmux\t/tmp/tmux-0/demo\n"
+            "screen\tdeploy\t/usr/bin/screen\t\n",
+            encoding="utf-8",
+        )
+
+        report = generator.generate_for_host("host", stage, root / "configs", default_options())
+        body = yaml.safe_load((root / "configs/host/root/etc/sermo/services/ssh.yml").read_text(encoding="utf-8"))
+        terminal_checks = {
+            name: watch["check"]
+            for name, watch in body["watches"].items()
+            if watch.get("check", {}).get("type") == "terminal_sessions"
+        }
+
+        self.assertEqual(len(terminal_checks), 3)
+        self.assertEqual(
+            terminal_checks["terminal-tmux-root-default"]["socket"],
+            "/tmp/tmux-0/default",  # noqa: S108 -- fixture for tmux's real socket namespace.
+        )
+        self.assertEqual(terminal_checks["terminal-tmux-root-demo"]["reports"], "state")
+        self.assertNotIn("socket", terminal_checks["terminal-screen-deploy-sessions"])
+        self.assertEqual(len(report["terminal_sessions"]), 3)
+
+    def test_ignores_terminal_inventory_without_a_safe_namespace(self):
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        root = Path(temp.name)
+        stage = root / "stage" / "host" / "out"
+        stage.mkdir(parents=True)
+        (stage / "init").write_text("systemd\n", encoding="utf-8")
+        (stage / "active_units").write_text("ssh.service\n", encoding="utf-8")
+        (stage / "services_json.out").write_text(
+            json.dumps({"services": [{"name": "ssh", "installed": True, "ok": True, "status": "ok"}]}),
+            encoding="utf-8",
+        )
+        (stage / "terminal_sessions.tsv").write_text(
+            "tmux\troot\t/usr/bin/tmux\trelative.sock\n"
+            "unknown\troot\t/usr/bin/unknown\t/tmp/unknown.sock\n",
+            encoding="utf-8",
+        )
+
+        report = generator.generate_for_host("host", stage, root / "configs", default_options())
+        body = yaml.safe_load((root / "configs/host/root/etc/sermo/services/ssh.yml").read_text(encoding="utf-8"))
+
+        self.assertEqual(report["terminal_sessions"], [])
+        self.assertFalse(any(
+            watch.get("check", {}).get("type") == "terminal_sessions"
+            for watch in body.get("watches", {}).values()
+        ))
 
     def test_active_service_filter_honors_os_selected_unit(self):
         temp = tempfile.TemporaryDirectory()

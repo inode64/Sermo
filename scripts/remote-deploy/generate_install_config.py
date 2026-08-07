@@ -555,6 +555,50 @@ def parse_features(stage: Path) -> dict[str, str]:
     return features
 
 
+def parse_terminal_sessions(stage: Path) -> list[dict[str, str]]:
+    """Return safely attributed multiplexer namespaces from host inventory."""
+    sessions: list[dict[str, str]] = []
+    seen: set[tuple[str, str, str]] = set()
+    for line in read_text(stage / "terminal_sessions.tsv").splitlines():
+        fields = [field.strip() for field in line.split("\t")]
+        if len(fields) < 3:
+            continue
+        multiplexer, user, binary = fields[:3]
+        socket = fields[3] if len(fields) > 3 else ""
+        if multiplexer not in {"tmux", "screen"} or not user or not binary.startswith("/"):
+            continue
+        if multiplexer == "tmux" and not socket.startswith("/"):
+            continue
+        if multiplexer == "screen":
+            socket = ""
+        key = (multiplexer, user, socket)
+        if key in seen:
+            continue
+        seen.add(key)
+        sessions.append({"multiplexer": multiplexer, "user": user, "binary": binary, "socket": socket})
+    return sorted(sessions, key=lambda item: (item["multiplexer"], item["user"], item["socket"]))
+
+
+def terminal_session_watches(sessions: list[dict[str, str]]) -> dict[str, dict]:
+    """Build read-only service watches for discovered terminal namespaces."""
+    watches: dict[str, dict] = {}
+    for session in sessions:
+        suffix = Path(session["socket"]).name if session["socket"] else "sessions"
+        name = slug(f"terminal-{session['multiplexer']}-{session['user']}-{suffix}")
+        check = {
+            "type": "terminal_sessions",
+            "multiplexer": session["multiplexer"],
+            "binary": session["binary"],
+            "user": session["user"],
+            "count": {"op": ">", "value": 0},
+            "reports": "state",
+        }
+        if session["socket"]:
+            check["socket"] = session["socket"]
+        watches[name] = {"check": check}
+    return watches
+
+
 def parse_md_arrays(stage: Path) -> list[str]:
     """Return every Linux md array named by the staged /proc/mdstat sample."""
     names = {
@@ -1533,6 +1577,7 @@ def generate_for_host(host_slug: str, stage: Path, configs_dir: Path, options: G
         "services": {"enabled": [], "skipped": []},
         "containers": {"enabled": [], "skipped": []},
         "virtual_machines": {"enabled": [], "skipped": []},
+        "terminal_sessions": [],
         "watches": {},
         "filesystems": [],
         "raid_arrays": [],
@@ -1544,6 +1589,8 @@ def generate_for_host(host_slug: str, stage: Path, configs_dir: Path, options: G
     }
 
     generated_service_names: set[str] = set()
+    terminal_sessions = parse_terminal_sessions(stage)
+    terminal_watches = terminal_session_watches(terminal_sessions)
     services, skipped_services, failed_services = parse_services(stage, options)
     catalog_docs = load_catalog_services(options.catalog_services_dir)
     for svc in services:
@@ -1573,10 +1620,14 @@ dry_run: true
         process_override = service_process_override(stage, name)
         if process_override:
             body += process_override
-        if disabled_watches:
+        service_watches = {watch_name: {"enabled": False} for watch_name in sorted(disabled_watches)}
+        if name == "ssh":
+            service_watches.update(terminal_watches)
+            report["terminal_sessions"] = terminal_sessions
+        if service_watches:
             body += "watches:\n"
-            for watch_name in sorted(disabled_watches):
-                body += f"  {watch_name}:\n    enabled: false\n"
+            rendered_watches = yaml.safe_dump(service_watches, sort_keys=True, default_flow_style=False, indent=2)
+            body += "".join(f"  {line}\n" for line in rendered_watches.rstrip().splitlines())
         write_file(root, f"etc/sermo/services/{slug(name)}.yml", body)
         enabled = {"name": name, "status": svc.get("status", "")}
         if variable_overrides:

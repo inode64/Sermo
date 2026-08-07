@@ -456,6 +456,8 @@ func TestSourceLoadReportsPartialRefreshBeforeAdvancingFreshness(t *testing.T) {
 	text := string(src)
 	for _, needle := range []string{
 		`getJSONResult(apiServicesPath, null)`,
+		`getJSONResult(apiSessionsPath, null)`,
+		`snapshotResult(snapshot, "sessions", null)`,
 		`["watches", watchesResult]`,
 		`["applications", appsResult]`,
 		`["libraries", librariesResult]`,

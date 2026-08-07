@@ -238,6 +238,7 @@ func (m *Monitor) applyConfig(cfg *config.Config) {
 	}, m.deps.SystemFreshness)
 	m.deps.SSHIdleSampler = checks.NewSSHIdleSampler(terminalReader, m.deps.UserLookup)
 	m.deps.SSHSessionSampler = checks.NewSSHSessionSampler(terminalReader, m.deps.UserLookup)
+	m.deps.TerminalProcessReader = terminalReader
 	notifiers, warns := notify.Build(cfg.Notifiers(), notify.WithTemplateDir(cfg.Global.TemplateDir()))
 	m.deps.Notifiers = notifiers
 	m.deps.GlobalNotify = config.NotifyDefault(cfg.Global.Raw)

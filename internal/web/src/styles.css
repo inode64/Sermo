@@ -109,6 +109,8 @@
   .services-table .policy-cell { max-width: 11rem; }
   .services-table .actions { min-width: 7.5rem; max-width: 11rem; white-space: normal; }
   .mount-table { min-width: 64rem; font-size: .85rem; }
+  .sessions-table { min-width: 74rem; font-size: .85rem; font-variant-numeric: tabular-nums; }
+  .sessions-table th, .sessions-table td { overflow-wrap: anywhere; vertical-align: top; }
   .mount-table th, .mount-table td { vertical-align: top; }
   .mount-table .actions { min-width: 5.5rem; }
   .mount-table .mount-processes { min-width: 12rem; max-width: 24rem; }
@@ -257,9 +259,9 @@
   .panel-footnote { font-size: .8rem; }
   #act-last { flex: 1; min-width: 180px; }
   .panel-controls input { min-width: 13rem; }
-  #svc-filters button, #container-filters button, #vm-filters button, #storage-filters button, #watch-filters button, #network-filters button, #mount-filters button, #app-filters button, #library-filters button { border-color: transparent; background: transparent; color: var(--text-2); }
-  #svc-filters button:hover, #container-filters button:hover, #vm-filters button:hover, #storage-filters button:hover, #watch-filters button:hover, #network-filters button:hover, #mount-filters button:hover, #app-filters button:hover, #library-filters button:hover { background: var(--panel-2); color: var(--text); }
-  #svc-filters button.f-active, #container-filters button.f-active, #vm-filters button.f-active, #storage-filters button.f-active, #watch-filters button.f-active, #network-filters button.f-active, #mount-filters button.f-active, #app-filters button.f-active, #library-filters button.f-active { background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent); font-weight: 600; }
+  #svc-filters button, #session-filters button, #container-filters button, #vm-filters button, #storage-filters button, #watch-filters button, #network-filters button, #mount-filters button, #app-filters button, #library-filters button { border-color: transparent; background: transparent; color: var(--text-2); }
+  #svc-filters button:hover, #session-filters button:hover, #container-filters button:hover, #vm-filters button:hover, #storage-filters button:hover, #watch-filters button:hover, #network-filters button:hover, #mount-filters button:hover, #app-filters button:hover, #library-filters button:hover { background: var(--panel-2); color: var(--text); }
+  #svc-filters button.f-active, #session-filters button.f-active, #container-filters button.f-active, #vm-filters button.f-active, #storage-filters button.f-active, #watch-filters button.f-active, #network-filters button.f-active, #mount-filters button.f-active, #app-filters button.f-active, #library-filters button.f-active { background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent); font-weight: 600; }
   #err { min-height: 1.2rem; }
   #err.status-err { color: var(--crit); }
   #err.status-ok { color: var(--ok); }
@@ -560,7 +562,7 @@
        long tokens when needed — so every table shrinks to fit instead of
        forcing a page-wide sideways scroll, the documented intent of this
        breakpoint. Headers stay nowrap; their labels are short. */
-    .services-table td, .watch-table td, .apps-table td, .mount-table td,
+    .services-table td, .sessions-table td, .watch-table td, .apps-table td, .mount-table td,
     .events td, #notifiers-section td, #locks-section td {
       white-space: normal;
       overflow-wrap: anywhere;
@@ -590,6 +592,12 @@
       white-space: normal;
       overflow-wrap: anywhere;
     }
+    /* sessions: retain identity, state, idle and action at tablet widths; the
+       resource columns remain available on desktop and through sorting there. */
+    .sessions-table { min-width: 0; table-layout: fixed; }
+    .sessions-table th:nth-child(6), .sessions-table td:nth-child(6),
+    .sessions-table th:nth-child(7), .sessions-table td:nth-child(7),
+    .sessions-table th:nth-child(8), .sessions-table td:nth-child(8) { display: none; }
     /* watches: keep Name and the trailing Last activity · State · Actions.
        Type-specific tables also retain their leading live metric. */
     .watch-table th:not(:first-child):not(:nth-last-child(-n+3)),
@@ -653,6 +661,7 @@
     .panel-controls input { min-width: 8rem; flex: 1 1 auto; }
     #event-controls { display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; }
     .services-table th, .services-table td,
+    .sessions-table th, .sessions-table td,
     .watch-table th, .watch-table td,
     .mount-table th, .mount-table td,
     .apps-table th, .apps-table td,
@@ -662,6 +671,10 @@
     /* services -> Service · State · Actions. */
     .services-table > thead > tr > th:nth-child(9), .services-table > tbody > tr > td:nth-child(9) { display: none; }
     .services-table td { white-space: normal; }
+    /* sessions -> User · Session · Idle · Actions. Type remains available in
+       the filter controls, while attached/detached stays searchable. */
+    .sessions-table th:nth-child(1), .sessions-table td:nth-child(1),
+    .sessions-table th:nth-child(4), .sessions-table td:nth-child(4) { display: none; }
     .services-table .unit-cell, .services-table .event-cell, .apps-table .event-cell { max-width: 60vw; }
     /* watches -> Name · State · Actions; typed tables keep their leading live
        metric (its column stays sortable). Wide values wrap rather than scroll,
