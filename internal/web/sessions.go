@@ -56,6 +56,10 @@ type TerminalSession struct {
 const (
 	// SessionKindSSH identifies an interactive SSH terminal source.
 	SessionKindSSH = "ssh"
+	// SessionKindTmux identifies a tmux terminal-session source.
+	SessionKindTmux = "tmux"
+	// SessionKindScreen identifies a GNU screen terminal-session source.
+	SessionKindScreen = "screen"
 	// SessionSourceAvailable means the source completed its latest sample.
 	SessionSourceAvailable = "available"
 	// SessionSourceCollecting means no current sample has been published yet.
@@ -63,6 +67,10 @@ const (
 	// SessionSourceUnavailable means the latest sample could not be collected.
 	SessionSourceUnavailable = "unavailable"
 )
+
+func isTerminalSessionKind(kind string) bool {
+	return kind == SessionKindTmux || kind == SessionKindScreen
+}
 
 // SessionSource describes one configured SSH, tmux or screen inventory source,
 // including an explicit empty or unavailable state.
@@ -138,7 +146,7 @@ func (s *Server) handleTerminalSessionClose(w http.ResponseWriter, r *http.Reque
 		Identity: r.URL.Query().Get(apiQueryIdentity),
 	}
 	if session.Check == "" || session.Name == "" || session.User == "" || session.Identity == "" ||
-		(session.Multiplexer != "tmux" && session.Multiplexer != "screen") {
+		!isTerminalSessionKind(session.Multiplexer) {
 		writeError(w, http.StatusBadRequest, "invalid terminal session identity")
 		return
 	}
