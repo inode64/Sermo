@@ -284,22 +284,16 @@ func TestWebBackendTerminalSessionSourcesExposeCollectingAndUnavailable(t *testi
 	}
 }
 
-func TestSessionMetricsUseServiceReadingSemantics(t *testing.T) {
+func TestSessionUsageUsesServiceReadingSemantics(t *testing.T) {
 	sample := metrics.Snapshot{
 		metrics.MetricMemory:  {Absolute: 4096, Ready: true},
 		metrics.MetricCPU:     {Percent: 12.5, Ready: true},
 		metrics.MetricIORead:  {Absolute: 1000, Ready: true},
 		metrics.MetricIOWrite: {Absolute: 250, Ready: true},
 	}
-	ssh := web.SSHSession{}
-	attachWebSessionMetrics(sample, &ssh)
-	if !ssh.MemoryReady || ssh.RSS != 4096 || !ssh.CPUReady || ssh.CPU != 12.5 || !ssh.IOReady || ssh.IORead != 1000 || ssh.IOWrite != 250 {
-		t.Fatalf("SSH metrics = %+v", ssh)
-	}
-	terminal := web.TerminalSession{}
-	attachWebTerminalSessionMetrics(sample, &terminal)
-	if !terminal.MemoryReady || terminal.RSS != 4096 || !terminal.CPUReady || terminal.CPU != 12.5 || !terminal.IOReady {
-		t.Fatalf("terminal metrics = %+v", terminal)
+	usage := sessionUsage(sample)
+	if !usage.MemoryReady || usage.RSS != 4096 || !usage.CPUReady || usage.CPU != 12.5 || !usage.IOReady || usage.IORead != 1000 || usage.IOWrite != 250 {
+		t.Fatalf("session usage = %+v", usage)
 	}
 }
 
