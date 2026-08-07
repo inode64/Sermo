@@ -249,6 +249,11 @@ const usageCriticalPct = 95;
 const usageHighPct = 90;
 const usageWarnPct = 75;
 const loadWarnPct = 80;
+const overviewSwapCriticalPct = 90;
+const overviewSwapWarnPct = 70;
+const overviewDaemonPanel = "daemon-section";
+const overviewLoadingValue = "…";
+const overviewLoadingText = "loading…";
 const eventMessagePreviewChars = 160;
 const liveOpsTickMs = millisecondsPerSecond;
 const refreshAgeTickMs = millisecondsPerSecond;
@@ -3866,10 +3871,7 @@ function setSessionFilter(value) {
   renderSessions();
 }
 
-function renderServiceDetail(d) {
-  const procs = d.processes || [];
-  const procWarnings = d.process_warnings || [];
-  const noResidentProcess = !!d.no_resident_process;
+function serviceCheckRows(d) {
   const checkRows = (d.checks || []).map((c) => {
     const age = c.at ? tpl` <span class="muted">· ${fmtAge(c.at)}</span>` : nothing;
     const state = checkStateHTML(c, age);
@@ -3884,8 +3886,10 @@ function renderServiceDetail(d) {
       <td class="sla-cell">${checkSLAHTML(d.name, c)}</td>
       <td class="muted">${detailCell}</td></tr>`;
   });
-  const checks = checkRows.length ? checkRows : tpl`<tr><td colspan="5" class="muted">No checks.</td></tr>`;
+  return checkRows.length ? checkRows : tpl`<tr><td colspan="5" class="muted">No checks.</td></tr>`;
+}
 
+function serviceLockDetail(d) {
   const lockRowsArr = (d.locks || []).map((l) => {
     return tpl`<tr>
       <td>${lockName(l)}</td>
@@ -3898,19 +3902,29 @@ function renderServiceDetail(d) {
       <td>${lockReleaseButton(l)}</td>
     </tr>`;
   });
-  const lockRows = lockRowsArr.length ? lockRowsArr : tpl`<tr><td colspan="8" class="muted">No named runtime locks.</td></tr>`;
-  const lockWarns = (d.lock_warnings || []).map((w) =>
-    tpl`<div class="inactive detail-warn">warning: ${w}</div>`
-  );
+  return {
+    rows: lockRowsArr.length ? lockRowsArr : tpl`<tr><td colspan="8" class="muted">No named runtime locks.</td></tr>`,
+    warnings: (d.lock_warnings || []).map((warning) =>
+      tpl`<div class="inactive detail-warn">warning: ${warning}</div>`),
+  };
+}
 
-  const pt = d.process_totals || (noResidentProcess ? null : {
+function serviceProcessTotals(d, procs) {
+  return d.process_totals || {
     rss: procs.reduce((a, p) => a + (p.rss || 0), 0),
     io_read: procs.reduce((a, p) => a + (p.io_read || 0), 0),
     io_write: procs.reduce((a, p) => a + (p.io_write || 0), 0),
     fds: procs.reduce((a, p) => a + (p.fds || 0), 0),
     threads: procs.reduce((a, p) => a + (p.threads || 0), 0),
     count: procs.length,
-  });
+  };
+}
+
+function serviceProcessDetail(d) {
+  if (d.no_resident_process) return { general: nothing, section: nothing };
+  const procs = d.processes || [];
+  const procWarnings = d.process_warnings || [];
+  const totals = serviceProcessTotals(d, procs);
   // When the host RAM total is known, show each process's resident memory as a
   // share of host RAM (a compact bar).
   const hostMem = hostMemTotalBytes();
@@ -3936,7 +3950,19 @@ function renderServiceDetail(d) {
           ${procIoFdThreadCells(p)}
         </tr>`; })}</tbody></table>`
     : tpl`<div class="${procWarnings.length ? "bad" : "muted"}">${procWarnings.length ? "No processes discovered; check discovery warnings." : "No processes found."}</div>`;
+  const general = tpl`<div><span class="muted">Processes</span><br>${totals.count} process${totals.count === 1 ? "" : "es"}</div>
+    <div class="${colDupWide}"><span class="muted">CPU total</span><br>${totalsCpuCell(totals)}</div>
+    <div class="${colDupWide}"><span class="muted">Memory</span><br>${memoryInline(totals.rss)}</div>
+    <div class="${colDupWide}"><span class="muted">IO R/W</span><br>${ioRWInline(totals.io_read, totals.io_write)}</div>
+    <div><span class="muted">FDs / Threads</span><br>${fmtNum(totals.fds || 0, 0)} / ${fmtNum(totals.threads || 0, 0)}</div>`;
+  return {
+    general,
+    section: tpl`<h2>Processes</h2>${procWarns}${procTable}`,
+  };
+}
 
+function serviceGraphDetail(d) {
+  const noResidentProcess = !!d.no_resident_process;
   const measured = serviceMeasuredChecks(d);
   const checkMetrics = serviceCheckMetrics(d);
   const metricState = serviceMetricState(d.name);
@@ -3976,7 +4002,7 @@ function renderServiceDetail(d) {
     <div id="${serviceCheckMetricDomID(d.name, metric.check, metric.name, "summary")}" class="muted">loading…</div>
     <div id="${serviceCheckMetricDomID(d.name, metric.check, metric.name, "chart")}" class="muted chart-box"></div>
   </div>`);
-  const graphs = tpl`<h2>Graphs <span class="muted">${winButtons(metricWins, metricState.window, "setMetricWin", "Graph time window", d.name)}</span></h2>
+  return tpl`<h2>Graphs <span class="muted">${winButtons(metricWins, metricState.window, "setMetricWin", "Graph time window", d.name)}</span></h2>
     <div class="metric-grid">
       <div class="metric-panel metric-panel-wide">
         <div class="sla-chart-head">
@@ -3993,22 +4019,14 @@ function renderServiceDetail(d) {
       ${checkMetricPanels}
       ${runtimeGraphPanels}
     </div>`;
+}
 
-  const disabledNote = !d.enabled
-    ? tpl`<p class="muted bad">This service is disabled in configuration (enabled: false). Edit its YAML file and reload the daemon to activate it.</p>`
-    : nothing;
-  const processGeneral = noResidentProcess
-    ? nothing
-    : tpl`<div><span class="muted">Processes</span><br>${pt ? `${pt.count} process${pt.count === 1 ? "" : "es"}` : tpl`<span class="muted">—</span>`}</div>
-      <div class="${colDupWide}"><span class="muted">CPU total</span><br>${totalsCpuCell(pt)}</div>
-      <div class="${colDupWide}"><span class="muted">Memory</span><br>${memoryInline(pt && pt.rss)}</div>
-      <div class="${colDupWide}"><span class="muted">IO R/W</span><br>${ioRWInline(pt && pt.io_read, pt && pt.io_write)}</div>
-      <div><span class="muted">FDs / Threads</span><br>${pt ? `${fmtNum(pt.fds || 0, 0)} / ${fmtNum(pt.threads || 0, 0)}` : tpl`<span class="muted">—</span>`}</div>`;
+function serviceGeneralDetail(d, processGeneral) {
   // Name leads the grid: the row's own heading was dropped as a repeat of the
   // component, and an expansion scrolled away from its row otherwise has nothing
   // identifying it. Name and State stay put at every width for that reason; every
   // other field that also exists as a column is deduplicated — see colDupWide.
-  const general = tpl`<div class="runtime-grid">
+  return tpl`<div class="runtime-grid">
       <div><span class="muted">Name</span><br><b>${displayName(d)}</b></div>
       <div><span class="muted">State</span><br>${serviceStateCell(d)}</div>
       <div class="${colDupWide}"><span class="muted">Category</span><br>${categoryBadge(categoryOf(d, defaultCategoryService))}</div>
@@ -4024,15 +4042,20 @@ function renderServiceDetail(d) {
       <div><span class="muted">Remediation</span><br>${renderRemediation(d.remediation)}</div>
       ${processGeneral}
     </div>`;
-  const processSection = noResidentProcess
-    ? nothing
-    : tpl`<h2>Processes</h2>
-      ${procWarns}${procTable}`;
+}
+
+function renderServiceDetail(d) {
+  const checks = serviceCheckRows(d);
+  const locks = serviceLockDetail(d);
+  const processes = serviceProcessDetail(d);
+  const disabledNote = !d.enabled
+    ? tpl`<p class="muted bad">This service is disabled in configuration (enabled: false). Edit its YAML file and reload the daemon to activate it.</p>`
+    : nothing;
   return tpl`<div class="service-detail" data-service-detail="${d.name}">
     ${disabledNote}
-    ${general}
-    ${graphs}
-    ${processSection}
+    ${serviceGeneralDetail(d, processes.general)}
+    ${serviceGraphDetail(d)}
+    ${processes.section}
     <h2>Checks</h2>
     <table>
       <caption class="visually-hidden">Service checks</caption>
@@ -4042,7 +4065,7 @@ function renderServiceDetail(d) {
     <table>
       <caption class="visually-hidden">Service named locks</caption>
       <thead><tr><th scope="col">Name</th><th scope="col">State</th><th scope="col">TTL</th><th scope="col">Owner</th><th scope="col">Created</th><th scope="col">Blocks</th><th scope="col">Reason</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr></thead>
-      <tbody>${lockRows}</tbody></table>${lockWarns}
+      <tbody>${locks.rows}</tbody></table>${locks.warnings}
     <h2>Rules</h2>
     ${renderRules(d.rules)}
     <h2>Preflight ${servicePreflightButton(d)}</h2>
@@ -6028,11 +6051,16 @@ const overviewTile = (opts, defaultTarget) => tpl`
     ${opts.extra || nothing}
   </button>`;
 
-// passes the same burst snapshot into renderStatus — no extra requests here.
-function renderOverview(ctx) {
-  const band = $("#overview");
-  if (!band) return;
-  const { ready, live, mon, locks, hostMetrics } = ctx;
+// overviewInventory derives the shared counts once for all non-host tiles.
+// renderOverview receives the same burst snapshot as renderStatus, so none of
+// these helpers makes an extra request.
+function overviewInventory(ctx) {
+  const source = ctx || {};
+  const ready = source.ready || {};
+  const live = source.live || {};
+  const mon = source.mon || {};
+  const locks = source.locks || [];
+  const hostMetrics = source.hostMetrics || [];
   const svcs = allServices || [];
   const enabled = svcs.filter((s) => s.enabled);
   const failedSvcs = svcs.filter((s) => serviceDisplayState(s) === targetStateFailed);
@@ -6051,19 +6079,31 @@ function renderOverview(ctx) {
   const daemonStarting = ready && ready.status === daemonStatusStarting && ready.ready === false;
   const activeLocks = (locks || []).filter((l) => l.state === lockStateActive);
   const failedApps = (allApps || []).filter((a) => appStateText(a) === targetStateFailed);
+  return {
+    ready, live, mon, hostMetrics, enabled, failedSvcs, startingSvcs, collectingSvcs,
+    blindSvcs, activeSvcs, monitoredSvcs, watches, enabledWatches, failedWatches,
+    staleWatches, startingWatches, startingApps, daemonStarting, activeLocks, failedApps,
+  };
+}
+
+function overviewServiceTileOptions(data, defaultServiceTarget) {
+  const {
+    mon, enabled, failedSvcs, startingSvcs, collectingSvcs, blindSvcs, activeSvcs,
+    monitoredSvcs, watches, enabledWatches, failedWatches, staleWatches,
+    startingWatches, startingApps, daemonStarting, activeLocks, failedApps,
+  } = data;
   const alerts = failedSvcs.length + failedWatches.length + failedApps.length + activeLocks.length;
   const settling = daemonStarting || startingSvcs.length > 0 || startingWatches.length > 0 || startingApps.length > 0;
-  const servicesSettlingSub = () => settlingSub(startingSvcs.length, [
+  const servicesSettlingText = settlingSub(startingSvcs.length, [
     [daemonStarting, "daemon starting"],
     [startingWatches.length, `${startingWatches.length} watch starting`],
     [startingApps.length, `${startingApps.length} app starting`],
   ]);
-  const watchesSettlingSub = () => settlingSub(startingWatches.length, [
+  const watchesSettlingText = settlingSub(startingWatches.length, [
     [daemonStarting, "daemon starting"],
     [startingSvcs.length, `${startingSvcs.length} svc starting`],
     [startingApps.length, `${startingApps.length} app starting`],
   ]);
-  const defaultServiceTarget = defaultServicePanelTarget();
   const servicesTarget = firstMatch([
     [failedSvcs.length, "failed-services"],
     [startingSvcs.length || daemonStarting, "starting-services"],
@@ -6080,16 +6120,15 @@ function renderOverview(ctx) {
     [settling, "starting-services"],
   ], "watches-section");
 
-  const tile = (opts) => overviewTile(opts, defaultServiceTarget);
   const tiles = [];
   const servicesSub = firstMatch([
     [failedSvcs.length, `${failedSvcs.length} failed`],
-    [servicesSettlingSub(), servicesSettlingSub()],
+    [servicesSettlingText, servicesSettlingText],
     [collectingSvcs.length, `${collectingSvcs.length} collecting`],
     [blindSvcs.length, `${blindSvcs.length} without processes`],
     [enabled.length === 0, "none enabled"],
   ], "all active");
-  tiles.push(tile({
+  tiles.push({
     label: "Services active",
     value: tpl`${activeSvcs.length}<small> / ${enabled.length}</small>`,
     cls: firstMatch([
@@ -6101,23 +6140,24 @@ function renderOverview(ctx) {
     sub: servicesSub,
     target: servicesTarget,
     ariaLabel: tileAriaLabel("Services active", `${activeSvcs.length} of ${enabled.length}`, servicesSub, servicesTarget),
-  }));
+  });
   if (watches.length) {
-    const watchesSub = failedWatches.length
-      ? `${failedWatches.length} firing`
-      : (staleWatches.length ? `${staleWatches.length} stale`
-        : (watchesSettlingSub() || "quiet"));
+    const watchesSub = firstMatch([
+      [failedWatches.length, `${failedWatches.length} firing`],
+      [staleWatches.length, `${staleWatches.length} stale`],
+      [watchesSettlingText, watchesSettlingText],
+    ], "quiet");
     // A single predicate over the enabled set: subtracting the failed/stale
     // list lengths (which span all watches and can overlap) could go negative.
     const watchesUp = enabledWatches.filter((w) => watchStateText(w) !== targetStateFailed && !isWatchSampleStale(w)).length;
-    tiles.push(tile({
+    tiles.push({
       label: "Watches",
       value: tpl`${watchesUp}<small> / ${enabledWatches.length}</small>`,
       cls: failedWatches.length ? "t-crit" : (staleWatches.length ? "t-warn" : (settling ? "" : "t-ok")),
       sub: watchesSub,
       target: watchesTarget,
       ariaLabel: tileAriaLabel("Watches", `${watchesUp} of ${enabledWatches.length}`, watchesSub, watchesTarget),
-    }));
+    });
   }
   const alertsTarget = firstMatch([
     [failedSvcs.length, "failed-services"],
@@ -6131,14 +6171,14 @@ function renderOverview(ctx) {
   // Until the first complete snapshot (watches/apps still loading) the alert
   // total is incomplete, so show a neutral loading dash rather than a wrong
   // count that jumps a moment later.
-  tiles.push(tile({
+  tiles.push({
     label: "Alerts",
-    value: firstSnapshotDone ? String(alerts) : "…",
+    value: firstSnapshotDone ? String(alerts) : overviewLoadingValue,
     cls: !firstSnapshotDone ? "" : (alerts ? "t-crit" : "t-ok"),
-    sub: firstSnapshotDone ? alertsSub : "loading…",
+    sub: firstSnapshotDone ? alertsSub : overviewLoadingText,
     target: alertsTarget,
     ariaLabel: firstSnapshotDone ? tileAriaLabel("Alerts", String(alerts), alertsSub, alertsTarget) : "Alerts loading",
-  }));
+  });
   const monitoredTarget = firstMatch([
     [collectingSvcs.length && !failedSvcs.length, "collecting-services"],
     [settling && !failedSvcs.length, servicesTarget],
@@ -6147,11 +6187,11 @@ function renderOverview(ctx) {
   ], defaultServiceTarget);
   const monitoredSub = firstMatch([
     [collectingSvcs.length, `${collectingSvcs.length} collecting`],
-    [settling && !failedSvcs.length, servicesSettlingSub() || "settling"],
+    [settling && !failedSvcs.length, servicesSettlingText || "settling"],
     [blindSvcs.length, `${blindSvcs.length} without processes`],
   ], "");
   if (enabled.length || (mon && mon.total != null)) {
-    tiles.push(tile({
+    tiles.push({
       label: "Monitored",
       value: tpl`${monitoredSvcs.length}<small> / ${enabled.length}</small>`,
       cls: firstMatch([
@@ -6162,69 +6202,93 @@ function renderOverview(ctx) {
       sub: monitoredSub,
       target: monitoredTarget,
       ariaLabel: tileAriaLabel("Monitored", `${monitoredSvcs.length} of ${enabled.length}`, monitoredSub, monitoredTarget),
-    }));
+    });
   }
-  const cpu = (hostMetrics || []).find((m) => m.name === hostMetricTotalCPU);
-  const mem = (hostMetrics || []).find((m) => m.name === hostMetricTotalMemory);
-  const swap = (hostMetrics || []).find((m) => m.name === hostMetricTotalSwap);
-  const load = (hostMetrics || []).find((m) => m.name === hostMetricLoad1);
-  // usedFreeSub renders the volume-style "X used · Y free" line for a usage
-  // metric carrying its capacity (total bytes).
-  const usedFreeSub = (m) => m.total
-    ? `${fmtBytes(m.absolute || 0)} used · ${fmtBytes(Math.max(m.total - (m.absolute || 0), 0))} free`
-    : "";
+  return tiles;
+}
+
+// overviewUsedFreeSub renders the volume-style "X used · Y free" line for a
+// usage metric carrying its capacity (total bytes).
+function overviewUsedFreeSub(metric) {
+  if (!metric.total) return "";
+  const used = metric.absolute || 0;
+  return `${fmtBytes(used)} used · ${fmtBytes(Math.max(metric.total - used, 0))} free`;
+}
+
+function overviewSwapLevel(pct) {
+  if (pct >= overviewSwapCriticalPct) return "t-crit";
+  if (pct >= overviewSwapWarnPct) return "t-warn";
+  return "";
+}
+
+const overviewHostUsageDescriptors = [
+  { metric: hostMetricTotalCPU, gauge: metricNameCPU, label: "Host CPU" },
+  { metric: hostMetricTotalMemory, gauge: "mem", label: "Host memory", capacity: true },
+  { metric: hostMetricTotalSwap, gauge: "swap", label: "Host swap", capacity: true, requireTotal: true, level: overviewSwapLevel },
+];
+
+function overviewHostUsageTile(metric, descriptor, loading) {
+  const pct = pctClamp(metric.percent || 0);
+  const sub = descriptor.capacity ? overviewUsedFreeSub(metric) : "";
+  const gaugeId = tileGaugeId(descriptor.gauge);
+  const cls = !loading && descriptor.level ? descriptor.level(pct) : "";
+  return {
+    label: descriptor.label,
+    value: loading ? overviewLoadingValue : tpl`${fmtNum(pct, 2)}<small>${metricUnitPercent}</small>`,
+    sub: loading ? overviewLoadingText : sub,
+    cls,
+    extra: loading ? nothing : usageBar(pct, fmtPct(pct), gaugeId),
+    target: overviewDaemonPanel,
+    ariaLabel: loading
+      ? `${descriptor.label} loading`
+      : tileAriaLabel(descriptor.label, fmtPct(pct), sub, overviewDaemonPanel),
+    describedBy: loading ? nothing : gaugeId,
+  };
+}
+
+function overviewHostTileOptions(data) {
+  const metrics = new Map((data.hostMetrics || []).map((metric) => [metric.name, metric]));
+  const tiles = [];
   // Until the first complete snapshot the host readings may be missing or a
   // pre-sample zero, so show a neutral loading dash — same as the Alerts tile —
   // rather than a value that corrects a moment later.
   const loading = !firstSnapshotDone;
-  if (cpu) {
-    const p = pctClamp(cpu.percent || 0);
-    const gaugeId = tileGaugeId(metricNameCPU);
-    tiles.push(tile({
-      label: "Host CPU", value: loading ? "…" : tpl`${fmtNum(p, 2)}<small>${metricUnitPercent}</small>`, sub: loading ? "loading…" : "", extra: loading ? nothing : usageBar(p, fmtPct(p), gaugeId), target: "daemon-section",
-      ariaLabel: loading ? "Host CPU loading" : tileAriaLabel("Host CPU", fmtPct(p), "", "daemon-section"),
-      describedBy: loading ? nothing : gaugeId,
-    }));
+  for (const descriptor of overviewHostUsageDescriptors) {
+    const metric = metrics.get(descriptor.metric);
+    if (!metric || (descriptor.requireTotal && !metric.total)) continue;
+    tiles.push(overviewHostUsageTile(metric, descriptor, loading));
   }
-  if (mem) {
-    const p = pctClamp(mem.percent || 0);
-    const memSub = usedFreeSub(mem);
-    const gaugeId = tileGaugeId("mem");
-    tiles.push(tile({
-      label: "Host memory", value: loading ? "…" : tpl`${fmtNum(p, 2)}<small>${metricUnitPercent}</small>`, sub: loading ? "loading…" : memSub, extra: loading ? nothing : usageBar(p, fmtPct(p), gaugeId), target: "daemon-section",
-      ariaLabel: loading ? "Host memory loading" : tileAriaLabel("Host memory", fmtPct(p), memSub, "daemon-section"),
-      describedBy: loading ? nothing : gaugeId,
-    }));
-  }
-  if (swap && swap.total) {
-    const p = pctClamp(swap.percent || 0);
-    const swapSub = usedFreeSub(swap);
-    const gaugeId = tileGaugeId("swap");
-    tiles.push(tile({
-      label: "Host swap", value: loading ? "…" : tpl`${fmtNum(p, 2)}<small>${metricUnitPercent}</small>`, sub: loading ? "loading…" : swapSub, cls: loading ? "" : (p >= 90 ? "t-crit" : (p >= 70 ? "t-warn" : "")), extra: loading ? nothing : usageBar(p, fmtPct(p), gaugeId), target: "daemon-section",
-      ariaLabel: loading ? "Host swap loading" : tileAriaLabel("Host swap", fmtPct(p), swapSub, "daemon-section"),
-      describedBy: loading ? nothing : gaugeId,
-    }));
-  }
+  const load = metrics.get(hostMetricLoad1);
   if (load && load.absolute != null) {
     // load.total carries the logical CPU count and load.percent the saturation
     // (load1/CPUs), so the tile gets the same bar as cpu/mem/swap. >100% means
     // the run queue exceeds the cores.
     const hasCap = load.total > 0;
-    const p = hasCap ? pctClamp(load.percent || 0) : 0;
-    const loadSub = hasCap ? `${fmtNum(load.total, 0)} CPUs · ${fmtPct(load.percent)}` : (live && fmtDuration(live.uptime_seconds) ? `up ${fmtDuration(live.uptime_seconds)}` : "");
+    const pct = hasCap ? pctClamp(load.percent || 0) : 0;
+    const uptime = fmtDuration(data.live.uptime_seconds);
+    const loadSub = hasCap ? `${fmtNum(load.total, 0)} CPUs · ${fmtPct(load.percent)}` : (uptime ? `up ${uptime}` : "");
     const gaugeId = hasCap ? tileGaugeId("load") : nothing;
-    tiles.push(tile({
+    tiles.push({
       label: "Load 1m",
-      value: loading ? "…" : fmtNum(load.absolute, 2),
-      sub: loading ? "loading…" : loadSub,
-      cls: loading ? "" : (hasCap ? (p >= percentMax ? "t-crit" : (p >= loadWarnPct ? "t-warn" : "")) : ""),
-      extra: loading || !hasCap ? nothing : usageBar(p, fmtPct(p), gaugeId),
-      target: "daemon-section",
-      ariaLabel: loading ? "Load 1m loading" : tileAriaLabel("Load 1m", fmtNum(load.absolute, 2), loadSub, "daemon-section"),
+      value: loading ? overviewLoadingValue : fmtNum(load.absolute, 2),
+      sub: loading ? overviewLoadingText : loadSub,
+      cls: loading ? "" : (hasCap ? (pct >= percentMax ? "t-crit" : (pct >= loadWarnPct ? "t-warn" : "")) : ""),
+      extra: loading || !hasCap ? nothing : usageBar(pct, fmtPct(pct), gaugeId),
+      target: overviewDaemonPanel,
+      ariaLabel: loading ? "Load 1m loading" : tileAriaLabel("Load 1m", fmtNum(load.absolute, 2), loadSub, overviewDaemonPanel),
       describedBy: loading ? nothing : gaugeId,
-    }));
+    });
   }
+  return tiles;
+}
+
+function renderOverview(ctx) {
+  const band = $("#overview");
+  if (!band) return;
+  const data = overviewInventory(ctx);
+  const defaultTarget = defaultServicePanelTarget();
+  const options = [...overviewServiceTileOptions(data, defaultTarget), ...overviewHostTileOptions(data)];
+  const tiles = options.map((opts) => overviewTile(opts, defaultTarget));
   litRender(tiles, band);
 }
 
