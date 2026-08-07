@@ -403,6 +403,7 @@ func attachServiceRuntime(ctx context.Context, entry *webEntry, name string, tre
 	}
 	if len(entry.terminalSessions) > 0 {
 		engine.TerminalSessionCloser = freshTerminalSessionCloser(deps.ExecxRunner, entry.terminalSessions)
+		engine.EmptyTerminalSessionCloser = freshEmptyTerminalSessionCloser(deps.ExecxRunner, entry.terminalSessions)
 		entry.engine = engine
 	}
 	reloadCtx, cancel := context.WithTimeout(ctx, serviceInitQueryTimeout)

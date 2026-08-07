@@ -17,36 +17,37 @@ import (
 const testSeriesCheck = "http"
 
 type fakeBackend struct {
-	services               []Service
-	sessions               SessionInventory
-	applications           []Application
-	libraries              []Library
-	mounts                 []Mount
-	mountAction            MountActionResult
-	mountBlockers          MountBlockersResult
-	mountAlert             MountAlertResult
-	mountOperated          []string
-	operated               []string // "name/action"
-	sshSessionsClosed      []SSHSession
-	terminalSessionsClosed []TerminalSession
-	monitored              map[string]bool
-	watchMonitored         map[string]bool
-	panic                  bool
-	watchExpanded          []string
-	watchProbed            []string
-	raidControlled         []string
-	failOp                 bool
-	seriesSince            time.Duration
-	seriesCheck            string
-	eventQuery             EventQuery
-	metricCheck            string
-	metricSince            time.Duration
-	preflightCalled        string
-	events                 []Event
-	releasedLocks          []string
-	releaseOK              bool
-	notifierTested         string
-	notifierResult         ActionResult
+	services                    []Service
+	sessions                    SessionInventory
+	applications                []Application
+	libraries                   []Library
+	mounts                      []Mount
+	mountAction                 MountActionResult
+	mountBlockers               MountBlockersResult
+	mountAlert                  MountAlertResult
+	mountOperated               []string
+	operated                    []string // "name/action"
+	sshSessionsClosed           []SSHSession
+	terminalSessionsClosed      []TerminalSession
+	emptyTerminalSessionsClosed []string
+	monitored                   map[string]bool
+	watchMonitored              map[string]bool
+	panic                       bool
+	watchExpanded               []string
+	watchProbed                 []string
+	raidControlled              []string
+	failOp                      bool
+	seriesSince                 time.Duration
+	seriesCheck                 string
+	eventQuery                  EventQuery
+	metricCheck                 string
+	metricSince                 time.Duration
+	preflightCalled             string
+	events                      []Event
+	releasedLocks               []string
+	releaseOK                   bool
+	notifierTested              string
+	notifierResult              ActionResult
 }
 
 func (f *fakeBackend) Services(context.Context) []Service        { return f.services }
@@ -255,6 +256,13 @@ func (f *fakeBackend) CloseTerminalSession(_ context.Context, _ string, session 
 		return ActionResult{OK: false, Message: "close rejected"}
 	}
 	return ActionResult{OK: true, Message: "close terminal session ok"}
+}
+func (f *fakeBackend) CloseEmptyTerminalSession(_ context.Context, name, check string) ActionResult {
+	f.emptyTerminalSessionsClosed = append(f.emptyTerminalSessionsClosed, name+"/"+check)
+	if f.failOp {
+		return ActionResult{OK: false, Message: "close rejected"}
+	}
+	return ActionResult{OK: true, Message: "close empty terminal session source ok"}
 }
 func (f *fakeBackend) CompactState(_ context.Context, before time.Time) StateCompactResult {
 	return StateCompactResult{
@@ -1345,6 +1353,21 @@ func TestTerminalSessionCloseEndpointRequiresFullSessionIdentity(t *testing.T) {
 	}
 	if got := b.terminalSessionsClosed; len(got) != 1 || got[0].Check != "tmux-sessions" || got[0].Name != "ops" || got[0].Identity != "$7:90" {
 		t.Fatalf("closed terminal sessions = %+v", got)
+	}
+}
+
+func TestEmptyTerminalSessionCloseEndpointAcceptsConfiguredCheck(t *testing.T) {
+	b := &fakeBackend{}
+	h := newServer(b)
+	path := testServicePath("shells", apiSegmentTerminalSessions, "tmux-sessions", apiActionCloseEmpty)
+
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, postReq(path))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("close empty terminal session status = %d: %s", rec.Code, rec.Body.String())
+	}
+	if got := b.emptyTerminalSessionsClosed; len(got) != 1 || got[0] != "shells/tmux-sessions" {
+		t.Fatalf("closed empty terminal sessions = %+v", got)
 	}
 }
 

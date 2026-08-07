@@ -304,6 +304,31 @@ func TestWebBackendOmitsAbsentTerminalSessionSource(t *testing.T) {
 	}
 }
 
+func TestWebBackendMarksOnlyEmptyTmuxSocketsClosable(t *testing.T) {
+	snaps := NewSnapshots()
+	snaps.PublishWithCheckTypes("web", map[string]checks.Result{
+		"tmux-sessions":   {Check: "tmux-sessions", OK: true, Data: map[string]any{checks.DataKeyPresent: true}},
+		"screen-sessions": {Check: "screen-sessions", OK: true, Data: map[string]any{checks.DataKeyPresent: true}},
+	}, map[string]bool{"tmux-sessions": true, "screen-sessions": true}, map[string]string{
+		"tmux-sessions": checks.CheckTypeTerminalSessions, "screen-sessions": checks.CheckTypeTerminalSessions,
+	})
+	b := webBackendWithEntry(snaps, []string{"screen-sessions", "tmux-sessions"}, map[string]string{
+		"screen-sessions": checks.CheckTypeTerminalSessions, "tmux-sessions": checks.CheckTypeTerminalSessions,
+	})
+	b.entries["web"].terminalSessions = []terminalSessionSource{
+		{check: "screen-sessions", multiplexer: checks.TerminalMultiplexerScreen, user: "deploy"},
+		{check: "tmux-sessions", multiplexer: checks.TerminalMultiplexerTmux, user: "deploy", socket: "/tmp/tmux-1000/default"},
+	}
+
+	inventory := b.Sessions(context.Background())
+	if len(inventory.Sources) != 2 {
+		t.Fatalf("sources = %+v", inventory.Sources)
+	}
+	if inventory.Sources[0].CanCloseEmpty || !inventory.Sources[1].CanCloseEmpty {
+		t.Fatalf("source close capabilities = %+v", inventory.Sources)
+	}
+}
+
 func TestSessionUsageUsesServiceReadingSemantics(t *testing.T) {
 	sample := metrics.Snapshot{
 		metrics.MetricMemory:  {Absolute: 4096, Ready: true},

@@ -295,6 +295,10 @@ func tmuxSessionCloseArgs(config TerminalSessionConfig, session TerminalSession)
 	return append([]string{"-S", config.Socket}, args...)
 }
 
+func tmuxServerCloseArgs(config TerminalSessionConfig) []string {
+	return []string{"-S", config.Socket, "kill-server"}
+}
+
 func screenSessionCloseArgs(_ TerminalSessionConfig, session TerminalSession) []string {
 	return []string{"-S", session.Name, "-X", "quit"}
 }
@@ -438,6 +442,47 @@ func CloseTerminalSession(ctx context.Context, runner execx.Runner, config Termi
 	}
 	if result.ExitCode != execx.ExitCodeSuccess {
 		return fmt.Errorf("close %s session %q: exit %d", config.Multiplexer, want.Name, result.ExitCode)
+	}
+	return nil
+}
+
+// CloseEmptyTmuxServer re-lists one explicitly configured tmux namespace and
+// closes its server only when it is still present and has no sessions. tmux
+// removes its own socket as part of kill-server; Sermo never unlinks a live
+// socket directly.
+func CloseEmptyTmuxServer(ctx context.Context, runner execx.Runner, config TerminalSessionConfig) error {
+	if config.Multiplexer != TerminalMultiplexerTmux || config.Socket == "" {
+		return errors.New("empty terminal source close requires a configured tmux socket")
+	}
+	sample, err := sampleTerminalSessions(ctx, runner, config)
+	if err != nil {
+		return fmt.Errorf("refresh tmux server: %w", err)
+	}
+	if !sample.Present {
+		return errors.New("tmux server is no longer active; refresh and try again")
+	}
+	if len(sample.Sessions) != 0 {
+		return errors.New("tmux server has active sessions; refresh and try again")
+	}
+	result, err := execx.RunUser(ctx, execx.RunnerOrDefault(runner), execx.NoTimeout, config.User, config.Binary, tmuxServerCloseArgs(config)...)
+	if result.ExitCode == execx.ExitCodeRunFailure {
+		if err == nil {
+			err = errors.New(execx.CommandDidNotStart)
+		}
+		return fmt.Errorf("close empty tmux server: %w", err)
+	}
+	if err != nil {
+		return fmt.Errorf("close empty tmux server: %w", err)
+	}
+	if result.ExitCode != execx.ExitCodeSuccess {
+		return fmt.Errorf("close empty tmux server: exit %d", result.ExitCode)
+	}
+	verified, err := sampleTerminalSessions(ctx, runner, config)
+	if err != nil {
+		return fmt.Errorf("verify empty tmux server close: %w", err)
+	}
+	if verified.Present {
+		return errors.New("tmux server remains active after close")
 	}
 	return nil
 }
