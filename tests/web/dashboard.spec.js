@@ -556,12 +556,37 @@ test("sessions panel shows metrics, sorts columns and closes verified SSH and tm
   expect(tmuxCloseRequest.searchParams.get("identity")).toBe("$7:90");
 });
 
-test("session type filters hide types without active sessions", async ({ page }) => {
+test("empty session sources use a red state and can be closed without a process action", async ({ page }) => {
   await expect(page.locator('[data-sf="all"]')).toContainText("all 4");
   await expect(page.locator('[data-sf="ssh"]')).toContainText("ssh 1");
   await expect(page.locator('[data-sf="tmux"]')).toContainText("tmux 2");
   await expect(page.locator('[data-sf="screen"]')).toBeHidden();
   await expect(page.locator("#session-rows")).toContainText("No active sessions");
+  const emptySource = page.locator("#session-rows tr", { hasText: "screen-root" });
+  const emptySourceCells = emptySource.locator("td");
+  await expect(emptySourceCells.nth(3)).toHaveText("empty");
+  await expect(emptySourceCells.nth(3).locator(".target-state")).toHaveClass(/state-empty/);
+  await expect(emptySourceCells.nth(5)).toHaveText("—");
+  await expect(emptySourceCells.nth(7)).toHaveText("—");
+
+  await emptySource.getByRole("button", { name: "close" }).click();
+  await expect(page.locator("#simple-confirm-message")).toContainText("no active session to terminate");
+  await page.locator("#simple-confirm-ok").click();
+  await expect(emptySource).toBeHidden();
+
+  const active = JSON.parse(JSON.stringify(dashboard));
+  active.sessions.terminal.push({
+    service: "web", check: "screen-root", multiplexer: "screen", user: "root",
+    name: "120.ops", state: "detached", identity: "120:1200", can_close: true,
+  });
+  const activeDashboard = (route) => route.fulfill({ json: active });
+  await page.route("**/api/dashboard**", activeDashboard);
+  await page.locator("#refresh-now").click();
+  await expect(page.locator("#session-rows tr", { hasText: "120.ops" })).toBeVisible();
+
+  await page.unroute("**/api/dashboard**", activeDashboard);
+  await page.locator("#refresh-now").click();
+  await expect(page.locator("#session-rows tr", { hasText: "screen-root" })).toBeVisible();
 });
 
 test("an unknown terminal session state is not shown as active", async ({ page }) => {

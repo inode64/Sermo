@@ -344,7 +344,11 @@ recuento que los demás paneles. Un origen configurado permanece visible bajo
 de muestreo usan estados distintos. Las filas atribuibles muestran idle y CPU,
 memoria residente e IO de lectura/escritura del árbol de procesos. Un
 administrador solo puede confirmar un cierre cuando el backend vuelve a validar
-la identidad exacta de la sesión SSH o del multiplexor.
+la identidad exacta de la sesión SSH o del multiplexor. Un origen cuya muestra
+correcta está vacía usa una píldora roja `empty` y no tiene una identidad de
+proceso que cerrar; su botón `close` solo oculta esa fila vacía en el navegador
+actual. No ejecuta órdenes ni señales del multiplexor, y la fila reaparece
+después de que ese origen publique una sesión activa.
 
 Las expansiones abiertas de servicio obtienen y renderizan por completo detalle
 fresco una vez por refresco del dashboard; las subpeticiones de SLA, métricas,
