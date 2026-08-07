@@ -134,24 +134,25 @@ const (
 
 // HTTP action names accepted by the dashboard API.
 const (
-	apiActionStart     = string(rules.ActionStart)
-	apiActionStop      = string(rules.ActionStop)
-	apiActionRestart   = string(rules.ActionRestart)
-	apiActionReload    = string(rules.ActionReload)
-	apiActionResume    = string(rules.ActionResume)
-	apiActionMonitor   = "monitor"
-	apiActionUnmonitor = "unmonitor"
-	apiActionExpand    = "expand"
-	apiActionProbe     = "probe"
-	apiActionPause     = "pause"
-	apiActionPanicOn   = "on"
-	apiActionPanicOff  = "off"
-	apiActionRelease   = "release"
-	apiActionClear     = "clear"
-	apiActionCompact   = "compact"
-	apiActionAlert     = string(rules.ActionAlert)
-	apiActionTest      = "test"
-	apiActionClose     = "close"
+	apiActionStart      = string(rules.ActionStart)
+	apiActionStop       = string(rules.ActionStop)
+	apiActionRestart    = string(rules.ActionRestart)
+	apiActionReload     = string(rules.ActionReload)
+	apiActionResume     = string(rules.ActionResume)
+	apiActionMonitor    = "monitor"
+	apiActionUnmonitor  = "unmonitor"
+	apiActionExpand     = "expand"
+	apiActionProbe      = "probe"
+	apiActionPause      = "pause"
+	apiActionPanicOn    = "on"
+	apiActionPanicOff   = "off"
+	apiActionRelease    = "release"
+	apiActionClear      = "clear"
+	apiActionCompact    = "compact"
+	apiActionAlert      = string(rules.ActionAlert)
+	apiActionTest       = "test"
+	apiActionClose      = "close"
+	apiActionCloseEmpty = "close-empty"
 
 	queryBoolOne  = "1"
 	queryBoolTrue = "true"
@@ -235,45 +236,46 @@ const (
 )
 
 const (
-	routeIndex                   = routeMethodGet + routePathRoot
-	routeLivez                   = routeMethodGet + routePathLivez
-	routeReadyz                  = routeMethodGet + routePathReadyz
-	routeAPIWhoami               = routeMethodGet + apiPathWhoami
-	routeAPIServices             = routeMethodGet + apiPathServices
-	routeAPISessions             = routeMethodGet + apiPathSessions
-	routeAPIWatches              = routeMethodGet + apiPathWatches
-	routeAPIWatchAction          = routeMethodPost + apiPathWatches + "/" + routeVarName + "/" + routeVarAction
-	routeAPINotifiers            = routeMethodGet + apiPathNotifiers
-	routeAPINotifierTest         = routeMethodPost + apiPathNotifiers + "/" + routeVarName + "/" + apiActionTest
-	routeAPIApplications         = routeMethodGet + apiPathApplications
-	routeAPILibraries            = routeMethodGet + apiPathLibraries
-	routeAPIDashboard            = routeMethodGet + apiPathDashboard
-	routeAPIMounts               = routeMethodGet + apiPathMounts
-	routeAPIMountAction          = routeMethodPost + apiPathMounts + "/" + routeVarName + "/" + routeVarAction
-	routeAPIMountBlockers        = routeMethodGet + apiPathMounts + "/" + routeVarName + "/" + apiSegmentBlockers
-	routeAPIDaemon               = routeMethodGet + apiPathDaemon
-	routeAPIDaemonMetrics        = routeMethodGet + apiPathDaemon + "/" + apiSegmentMetrics
-	routeAPIHost                 = routeMethodGet + apiPathHost
-	routeAPILocks                = routeMethodGet + apiPathLocks
-	routeAPILockRelease          = routeMethodPost + apiPathLocks + "/" + routeVarService + "/" + apiActionRelease
-	routeAPIActivity             = routeMethodGet + apiPathActivity
-	routeAPIMonitoring           = routeMethodGet + apiPathMonitoring
-	routeAPIDetail               = routeMethodGet + apiPathServices + "/" + routeVarName
-	routeAPISeries               = routeMethodGet + apiPathServices + "/" + routeVarName + "/" + apiSegmentSLA
-	routeAPIMetrics              = routeMethodGet + apiPathServices + "/" + routeVarName + "/" + apiSegmentMetrics
-	routeAPIServiceRuntime       = routeMethodGet + apiPathServices + "/" + routeVarName + "/" + apiSegmentRuntime
-	routeAPIServiceEvents        = routeMethodGet + apiPathServices + "/" + routeVarName + "/" + apiSegmentEvents
-	routeAPIAppEvents            = routeMethodGet + apiPathApplications + "/" + routeVarName + "/" + apiSegmentEvents
-	routeAPIEvents               = routeMethodGet + apiPathEvents
-	routeAPIStream               = routeMethodGet + apiPathStream
-	routeAPIEventsClear          = routeMethodPost + apiPathEvents + "/" + apiActionClear
-	routeAPIStateCompact         = routeMethodPost + apiPathState + "/" + apiActionCompact
-	routeAPIPanic                = routeMethodPost + apiPathPanic + "/" + routeVarAction
-	routeAPIPreflight            = routeMethodPost + apiPathServices + "/" + routeVarName + "/" + apiSegmentPreflight
-	routeAPISessionClose         = routeMethodPost + apiPathServices + "/" + routeVarName + "/" + apiSegmentSessions + "/{" + apiParamPID + "}/" + apiActionClose
-	routeAPITerminalSessionClose = routeMethodPost + apiPathServices + "/" + routeVarName + "/" + apiSegmentTerminalSessions + "/{" + apiQueryCheck + "}/" + apiActionClose
-	routeAPIAction               = routeMethodPost + apiPathServices + "/" + routeVarName + "/" + routeVarAction
-	routeAPIReload               = routeMethodPost + apiPathReload
+	routeIndex                        = routeMethodGet + routePathRoot
+	routeLivez                        = routeMethodGet + routePathLivez
+	routeReadyz                       = routeMethodGet + routePathReadyz
+	routeAPIWhoami                    = routeMethodGet + apiPathWhoami
+	routeAPIServices                  = routeMethodGet + apiPathServices
+	routeAPISessions                  = routeMethodGet + apiPathSessions
+	routeAPIWatches                   = routeMethodGet + apiPathWatches
+	routeAPIWatchAction               = routeMethodPost + apiPathWatches + "/" + routeVarName + "/" + routeVarAction
+	routeAPINotifiers                 = routeMethodGet + apiPathNotifiers
+	routeAPINotifierTest              = routeMethodPost + apiPathNotifiers + "/" + routeVarName + "/" + apiActionTest
+	routeAPIApplications              = routeMethodGet + apiPathApplications
+	routeAPILibraries                 = routeMethodGet + apiPathLibraries
+	routeAPIDashboard                 = routeMethodGet + apiPathDashboard
+	routeAPIMounts                    = routeMethodGet + apiPathMounts
+	routeAPIMountAction               = routeMethodPost + apiPathMounts + "/" + routeVarName + "/" + routeVarAction
+	routeAPIMountBlockers             = routeMethodGet + apiPathMounts + "/" + routeVarName + "/" + apiSegmentBlockers
+	routeAPIDaemon                    = routeMethodGet + apiPathDaemon
+	routeAPIDaemonMetrics             = routeMethodGet + apiPathDaemon + "/" + apiSegmentMetrics
+	routeAPIHost                      = routeMethodGet + apiPathHost
+	routeAPILocks                     = routeMethodGet + apiPathLocks
+	routeAPILockRelease               = routeMethodPost + apiPathLocks + "/" + routeVarService + "/" + apiActionRelease
+	routeAPIActivity                  = routeMethodGet + apiPathActivity
+	routeAPIMonitoring                = routeMethodGet + apiPathMonitoring
+	routeAPIDetail                    = routeMethodGet + apiPathServices + "/" + routeVarName
+	routeAPISeries                    = routeMethodGet + apiPathServices + "/" + routeVarName + "/" + apiSegmentSLA
+	routeAPIMetrics                   = routeMethodGet + apiPathServices + "/" + routeVarName + "/" + apiSegmentMetrics
+	routeAPIServiceRuntime            = routeMethodGet + apiPathServices + "/" + routeVarName + "/" + apiSegmentRuntime
+	routeAPIServiceEvents             = routeMethodGet + apiPathServices + "/" + routeVarName + "/" + apiSegmentEvents
+	routeAPIAppEvents                 = routeMethodGet + apiPathApplications + "/" + routeVarName + "/" + apiSegmentEvents
+	routeAPIEvents                    = routeMethodGet + apiPathEvents
+	routeAPIStream                    = routeMethodGet + apiPathStream
+	routeAPIEventsClear               = routeMethodPost + apiPathEvents + "/" + apiActionClear
+	routeAPIStateCompact              = routeMethodPost + apiPathState + "/" + apiActionCompact
+	routeAPIPanic                     = routeMethodPost + apiPathPanic + "/" + routeVarAction
+	routeAPIPreflight                 = routeMethodPost + apiPathServices + "/" + routeVarName + "/" + apiSegmentPreflight
+	routeAPISessionClose              = routeMethodPost + apiPathServices + "/" + routeVarName + "/" + apiSegmentSessions + "/{" + apiParamPID + "}/" + apiActionClose
+	routeAPITerminalSessionClose      = routeMethodPost + apiPathServices + "/" + routeVarName + "/" + apiSegmentTerminalSessions + "/{" + apiQueryCheck + "}/" + apiActionClose
+	routeAPIEmptyTerminalSessionClose = routeMethodPost + apiPathServices + "/" + routeVarName + "/" + apiSegmentTerminalSessions + "/{" + apiQueryCheck + "}/" + apiActionCloseEmpty
+	routeAPIAction                    = routeMethodPost + apiPathServices + "/" + routeVarName + "/" + routeVarAction
+	routeAPIReload                    = routeMethodPost + apiPathReload
 )
 
 // Ad-hoc JSON keys used by small HTTP responses without a dedicated struct.
@@ -1121,6 +1123,8 @@ type Backend interface {
 	CloseSSHSession(ctx context.Context, name string, session SSHSession) ActionResult
 	// CloseTerminalSession closes one freshly verified tmux or screen session.
 	CloseTerminalSession(ctx context.Context, name string, session TerminalSession) ActionResult
+	// CloseEmptyTerminalSession closes one freshly verified empty tmux server.
+	CloseEmptyTerminalSession(ctx context.Context, name, check string) ActionResult
 	// CompactState prunes persisted history older than before and vacuums the
 	// state database. Zero before selects the normal retention window.
 	CompactState(ctx context.Context, before time.Time) StateCompactResult
@@ -1310,6 +1314,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc(routeAPIPreflight, s.handlePreflight)
 	mux.HandleFunc(routeAPISessionClose, s.handleSSHSessionClose)
 	mux.HandleFunc(routeAPITerminalSessionClose, s.handleTerminalSessionClose)
+	mux.HandleFunc(routeAPIEmptyTerminalSessionClose, s.handleEmptyTerminalSessionClose)
 	mux.HandleFunc(routeAPIAction, s.handleAction)
 	mux.HandleFunc(routeAPIReload, s.handleReload)
 	return securityHeaders(s.withAccessLog(s.withAuth(mux)))

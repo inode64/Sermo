@@ -75,12 +75,13 @@ func isTerminalSessionKind(kind string) bool {
 // SessionSource describes one configured SSH, tmux or screen inventory source,
 // including an explicit empty or unavailable state.
 type SessionSource struct {
-	Kind    string `json:"kind"`
-	Service string `json:"service"`
-	Check   string `json:"check,omitempty"`
-	User    string `json:"user,omitempty"`
-	State   string `json:"state"`
-	Message string `json:"message,omitempty"`
+	Kind          string `json:"kind"`
+	Service       string `json:"service"`
+	Check         string `json:"check,omitempty"`
+	User          string `json:"user,omitempty"`
+	State         string `json:"state"`
+	Message       string `json:"message,omitempty"`
+	CanCloseEmpty bool   `json:"can_close_empty"`
 }
 
 // SessionInventory is the dashboard-wide view of interactive sessions.
@@ -153,5 +154,23 @@ func (s *Server) handleTerminalSessionClose(w http.ResponseWriter, r *http.Reque
 	s.extendActionWriteDeadline(w)
 	//nolint:contextcheck // see operateContext
 	res := backend.CloseTerminalSession(s.operateContext(r), r.PathValue(apiParamName), session)
+	writeActionResult(w, res.OK, res)
+}
+
+// handleEmptyTerminalSessionClose closes one configured tmux server only after
+// the backend freshly proves that its namespace is present and has no sessions.
+func (s *Server) handleEmptyTerminalSessionClose(w http.ResponseWriter, r *http.Request) {
+	backend, ok := s.mutationBackend(w, r)
+	if !ok {
+		return
+	}
+	check := r.PathValue(apiQueryCheck)
+	if check == "" {
+		writeError(w, http.StatusBadRequest, "terminal session check is required")
+		return
+	}
+	s.extendActionWriteDeadline(w)
+	//nolint:contextcheck // see operateContext
+	res := backend.CloseEmptyTerminalSession(s.operateContext(r), r.PathValue(apiParamName), check)
 	writeActionResult(w, res.OK, res)
 }
