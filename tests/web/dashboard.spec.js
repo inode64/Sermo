@@ -766,6 +766,8 @@ test("monitor toggles send one request even on a double click", async ({ page })
 });
 
 test("monitor toggle stays guarded until the follow-up refresh lands", async ({ page }) => {
+  const pageErrors = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
   let posts = 0;
   await page.route("**/api/services/web/unmonitor", async (route) => {
     posts += 1;
@@ -786,6 +788,7 @@ test("monitor toggle stays guarded until the follow-up refresh lands", async ({ 
   await button.click({ force: true }).catch(() => {});
   await page.waitForTimeout(1200);
   expect(posts).toBe(1);
+  expect(pageErrors).toEqual([]);
 });
 
 test("a reload event paints the activity cell as info like the events table", async ({ page }) => {
