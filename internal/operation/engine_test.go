@@ -1646,6 +1646,58 @@ func TestCloseTerminalSessionFailsClosedWhenUnavailableOrRejected(t *testing.T) 
 	}
 }
 
+func TestCloseEmptyTerminalSessionUsesOperationSafetyPath(t *testing.T) {
+	h := defaultHarness()
+	e := h.engine()
+	closed := 0
+	e.EmptyTerminalSessionCloser = func(_ context.Context, target TerminalSessionSourceTarget) error {
+		closed++
+		if target != (TerminalSessionSourceTarget{Check: "tmux"}) {
+			t.Fatalf("target = %+v", target)
+		}
+		return nil
+	}
+
+	res := e.CloseEmptyTerminalSession(context.Background(), TerminalSessionSourceTarget{Check: "tmux"})
+	if res.Status != ResultOK || res.Action != actionCloseTerminalSource || closed != 1 {
+		t.Fatalf("result = %+v closed=%d", res, closed)
+	}
+	if len(h.mgr.calls) != 0 {
+		t.Fatalf("manager calls = %v, empty terminal close must not restart the service", h.mgr.calls)
+	}
+	if len(h.emitted) != 1 || h.emitted[0].Action != actionCloseTerminalSource {
+		t.Fatalf("events = %+v, want one close-terminal-source event", h.emitted)
+	}
+}
+
+func TestCloseEmptyTerminalSessionFailsClosedWhenUnavailableOrRejected(t *testing.T) {
+	for _, tt := range []struct {
+		name   string
+		closer func(context.Context, TerminalSessionSourceTarget) error
+		target TerminalSessionSourceTarget
+		want   string
+	}{
+		{name: "unavailable", target: TerminalSessionSourceTarget{Check: "tmux"}, want: "unavailable"},
+		{name: "invalid source", closer: func(context.Context, TerminalSessionSourceTarget) error { return nil }, want: "invalid terminal session source"},
+		{name: "rejected", closer: func(context.Context, TerminalSessionSourceTarget) error {
+			return errors.New("server has active sessions")
+		}, target: TerminalSessionSourceTarget{Check: "tmux"}, want: "server has active sessions"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			h := defaultHarness()
+			e := h.engine()
+			e.EmptyTerminalSessionCloser = tt.closer
+			res := e.CloseEmptyTerminalSession(context.Background(), tt.target)
+			if res.Status != ResultFailed || !strings.Contains(res.Message, tt.want) {
+				t.Fatalf("result = %+v, want failure containing %q", res, tt.want)
+			}
+			if len(h.mgr.calls) != 0 {
+				t.Fatalf("manager calls = %v", h.mgr.calls)
+			}
+		})
+	}
+}
+
 type noopSignaler struct{}
 
 func (noopSignaler) Signal(int, syscall.Signal) error { return nil }

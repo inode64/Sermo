@@ -31,6 +31,9 @@ const (
 	// interactive SSH terminal always requires an explicit web request and is
 	// never eligible for automatic remediation.
 	actionCloseSession = "close_session"
+	// actionCloseTerminalSource is intentionally not a rule action: closing an
+	// empty tmux server always requires an explicit web request.
+	actionCloseTerminalSource = "close_terminal_source"
 
 	// postflightMaxAttempts lets a daemon finish binding its ready socket after
 	// its init manager reports a successful start. The retries remain within the
@@ -95,6 +98,9 @@ type Engine struct {
 	// TerminalSessionCloser revalidates and closes one tmux/screen session
 	// through its configured client. It remains a manual-only operation.
 	TerminalSessionCloser func(ctx context.Context, target TerminalSessionTarget) error
+	// EmptyTerminalSessionCloser revalidates and closes one configured empty
+	// tmux server through its own client. It remains a manual-only operation.
+	EmptyTerminalSessionCloser func(ctx context.Context, target TerminalSessionSourceTarget) error
 	// ReloadFunc reloads the service's config in place. When nil the engine falls
 	// back to Manager.Reload (the backend per-unit reload). A `reload:` block
 	// builds a richer closure: a native signal/command that either overrides the
@@ -141,6 +147,7 @@ type plan struct {
 	postflight           bool
 	closeSession         *SessionTarget
 	closeTerminalSession *TerminalSessionTarget
+	closeTerminalSource  *TerminalSessionSourceTarget
 }
 
 // SessionTarget is a freshly displayed SSH terminal session. StartTicks binds
@@ -160,6 +167,13 @@ type TerminalSessionTarget struct {
 	Name        string
 	User        string
 	Identity    string
+}
+
+// TerminalSessionSourceTarget identifies one configured terminal_sessions
+// source. The source configuration remains server-side and is never accepted
+// from a browser request.
+type TerminalSessionSourceTarget struct {
+	Check string
 }
 
 // Restart executes the configured restart strategy and verifies health. Staged
@@ -208,6 +222,12 @@ func (e Engine) CloseSession(ctx context.Context, target SessionTarget) Result {
 // through the same lock, guard, timeout and event path as SSH session closes.
 func (e Engine) CloseTerminalSession(ctx context.Context, target TerminalSessionTarget) Result {
 	return e.run(ctx, plan{action: actionCloseSession, closeTerminalSession: &target})
+}
+
+// CloseEmptyTerminalSession closes one freshly revalidated empty tmux server
+// through the same lock, guard, timeout and event path as other manual closes.
+func (e Engine) CloseEmptyTerminalSession(ctx context.Context, target TerminalSessionSourceTarget) Result {
+	return e.run(ctx, plan{action: actionCloseTerminalSource, closeTerminalSource: &target})
 }
 
 // Do dispatches one action name to the matching operation, returning its Result.
@@ -282,6 +302,13 @@ func (e Engine) run(ctx context.Context, p plan) (result Result) {
 			return result
 		}
 		result.Message = "close terminal session ok"
+		return result
+	}
+	if p.closeTerminalSource != nil {
+		if !e.closeTerminalSource(ctx, *p.closeTerminalSource, &result) {
+			return result
+		}
+		result.Message = "close empty terminal session source ok"
 		return result
 	}
 
@@ -370,6 +397,30 @@ func (e Engine) closeTerminalSession(ctx context.Context, target TerminalSession
 	if err := e.TerminalSessionCloser(ctx, target); err != nil {
 		result.Status = ResultFailed
 		result.Message = "close terminal session: " + err.Error()
+		return false
+	}
+	return true
+}
+
+func (e Engine) closeTerminalSource(ctx context.Context, target TerminalSessionSourceTarget, result *Result) bool {
+	if e.EmptyTerminalSessionCloser == nil {
+		result.Status = ResultFailed
+		result.Message = "empty terminal session source close is unavailable for this service"
+		return false
+	}
+	if target.Check == "" {
+		result.Status = ResultFailed
+		result.Message = "close empty terminal session source: invalid terminal session source"
+		return false
+	}
+	if err := ctx.Err(); err != nil {
+		result.Status = ResultFailed
+		result.Message = "close empty terminal session source: " + err.Error()
+		return false
+	}
+	if err := e.EmptyTerminalSessionCloser(ctx, target); err != nil {
+		result.Status = ResultFailed
+		result.Message = "close empty terminal session source: " + err.Error()
 		return false
 	}
 	return true

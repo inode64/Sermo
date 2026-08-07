@@ -176,6 +176,88 @@ func TestTerminalSessionsCommandFailureCannotMasqueradeAsEmpty(t *testing.T) {
 	}
 }
 
+func TestCloseEmptyTmuxServer(t *testing.T) {
+	config := TerminalSessionConfig{
+		Multiplexer: TerminalMultiplexerTmux,
+		Binary:      "/usr/bin/tmux",
+		User:        "deploy",
+		Socket:      "/tmp/tmux-1000/default",
+	}
+	tests := []struct {
+		name      string
+		results   []execx.Result
+		wantErr   string
+		wantCalls [][]string
+	}{
+		{
+			name:    "closes only an empty live server",
+			results: []execx.Result{{ExitCode: execx.ExitCodeSuccess}, {ExitCode: execx.ExitCodeSuccess}, {ExitCode: 1, Stderr: "no server running on /tmp/tmux-1000/default"}},
+			wantCalls: [][]string{
+				{"deploy", "/usr/bin/tmux", "-S", "/tmp/tmux-1000/default", "list-sessions", "-F", tmuxSessionFormat},
+				{"deploy", "/usr/bin/tmux", "-S", "/tmp/tmux-1000/default", "kill-server"},
+				{"deploy", "/usr/bin/tmux", "-S", "/tmp/tmux-1000/default", "list-sessions", "-F", tmuxSessionFormat},
+			},
+		},
+		{
+			name:    "rejects an already absent server",
+			results: []execx.Result{{ExitCode: 1, Stderr: "no server running on /tmp/tmux-1000/default"}},
+			wantErr: "no longer active",
+			wantCalls: [][]string{
+				{"deploy", "/usr/bin/tmux", "-S", "/tmp/tmux-1000/default", "list-sessions", "-F", tmuxSessionFormat},
+			},
+		},
+		{
+			name:    "rejects a server that gained a session",
+			results: []execx.Result{{ExitCode: execx.ExitCodeSuccess, Stdout: "ops\t0\t1\t100\t$1\t90\t201\t/dev/pts/1\n"}},
+			wantErr: "has active sessions",
+			wantCalls: [][]string{
+				{"deploy", "/usr/bin/tmux", "-S", "/tmp/tmux-1000/default", "list-sessions", "-F", tmuxSessionFormat},
+			},
+		},
+		{
+			name:    "fails when tmux does not close the server",
+			results: []execx.Result{{ExitCode: execx.ExitCodeSuccess}, {ExitCode: execx.ExitCodeSuccess}, {ExitCode: execx.ExitCodeSuccess}},
+			wantErr: "remains active",
+			wantCalls: [][]string{
+				{"deploy", "/usr/bin/tmux", "-S", "/tmp/tmux-1000/default", "list-sessions", "-F", tmuxSessionFormat},
+				{"deploy", "/usr/bin/tmux", "-S", "/tmp/tmux-1000/default", "kill-server"},
+				{"deploy", "/usr/bin/tmux", "-S", "/tmp/tmux-1000/default", "list-sessions", "-F", tmuxSessionFormat},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			runner := &terminalSessionSequenceRunner{results: tt.results}
+			err := CloseEmptyTmuxServer(context.Background(), runner, config)
+			if (err != nil) != (tt.wantErr != "") {
+				t.Fatalf("CloseEmptyTmuxServer() error = %v, want %q", err, tt.wantErr)
+			}
+			if tt.wantErr != "" && !strings.Contains(err.Error(), tt.wantErr) {
+				t.Fatalf("CloseEmptyTmuxServer() error = %v, want %q", err, tt.wantErr)
+			}
+			if !reflect.DeepEqual(runner.calls, tt.wantCalls) {
+				t.Fatalf("calls = %#v, want %#v", runner.calls, tt.wantCalls)
+			}
+		})
+	}
+}
+
+func TestCloseEmptyTmuxServerRejectsUnsupportedSource(t *testing.T) {
+	for _, config := range []TerminalSessionConfig{
+		{Multiplexer: TerminalMultiplexerScreen, Binary: "/usr/bin/screen", User: "deploy"},
+		{Multiplexer: TerminalMultiplexerTmux, Binary: "/usr/bin/tmux", User: "deploy"},
+	} {
+		runner := &terminalSessionSequenceRunner{}
+		err := CloseEmptyTmuxServer(context.Background(), runner, config)
+		if err == nil || !strings.Contains(err.Error(), "configured tmux socket") {
+			t.Fatalf("CloseEmptyTmuxServer(%+v) error = %v", config, err)
+		}
+		if len(runner.calls) != 0 {
+			t.Fatalf("calls = %#v, want none", runner.calls)
+		}
+	}
+}
+
 func TestTerminalSessionsFromDataAcceptsJSONHydration(t *testing.T) {
 	sessions := TerminalSessionsFromData(map[string]any{DataKeyTerminalSessions: []any{
 		map[string]any{CheckKeyMultiplexer: TerminalMultiplexerTmux, CheckKeyName: "ops", CheckKeyUser: "deploy", CheckKeyState: TerminalSessionStateAttached, DataKeyWindows: float64(2)},

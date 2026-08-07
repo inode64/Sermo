@@ -264,8 +264,10 @@ func (b *WebBackend) appendTerminalSessions(result *web.SessionInventory, servic
 			continue
 		}
 		source.State = web.SessionSourceAvailable
+		sessions := checks.TerminalSessionsFromData(snapshot.Data)
+		source.CanCloseEmpty = configured.multiplexer == checks.TerminalMultiplexerTmux && configured.socket != "" && len(sessions) == 0
 		result.Sources = append(result.Sources, source)
-		for _, session := range checks.TerminalSessionsFromData(snapshot.Data) {
+		for _, session := range sessions {
 			result.Terminal = append(result.Terminal, web.TerminalSession{
 				Service: service, Check: configured.check, Multiplexer: session.Multiplexer,
 				Name: session.Name, User: session.User, State: session.State, Windows: session.Windows,
@@ -276,11 +278,16 @@ func (b *WebBackend) appendTerminalSessions(result *web.SessionInventory, servic
 	}
 }
 
-func freshTerminalSessionCloser(runner execx.Runner, sources []terminalSessionSource) func(context.Context, operation.TerminalSessionTarget) error {
+func terminalSessionSourcesByCheck(sources []terminalSessionSource) map[string]terminalSessionSource {
 	byCheck := make(map[string]terminalSessionSource, len(sources))
 	for _, source := range sources {
 		byCheck[source.check] = source
 	}
+	return byCheck
+}
+
+func freshTerminalSessionCloser(runner execx.Runner, sources []terminalSessionSource) func(context.Context, operation.TerminalSessionTarget) error {
+	byCheck := terminalSessionSourcesByCheck(sources)
 	return func(ctx context.Context, target operation.TerminalSessionTarget) error {
 		source, ok := byCheck[target.Check]
 		if !ok || source.multiplexer != target.Multiplexer || source.user != target.User {
@@ -289,6 +296,17 @@ func freshTerminalSessionCloser(runner execx.Runner, sources []terminalSessionSo
 		return checks.CloseTerminalSession(ctx, runner, source.config(), checks.TerminalSession{
 			Multiplexer: target.Multiplexer, Name: target.Name, User: target.User, Identity: target.Identity,
 		})
+	}
+}
+
+func freshEmptyTerminalSessionCloser(runner execx.Runner, sources []terminalSessionSource) func(context.Context, operation.TerminalSessionSourceTarget) error {
+	byCheck := terminalSessionSourcesByCheck(sources)
+	return func(ctx context.Context, target operation.TerminalSessionSourceTarget) error {
+		source, ok := byCheck[target.Check]
+		if !ok {
+			return errors.New("terminal session source changed; refresh and try again")
+		}
+		return checks.CloseEmptyTmuxServer(ctx, runner, source.config())
 	}
 }
 
@@ -306,6 +324,20 @@ func (b *WebBackend) CloseTerminalSession(ctx context.Context, name string, sess
 		Check: session.Check, Multiplexer: session.Multiplexer, Name: session.Name, User: session.User, Identity: session.Identity,
 	})
 	return webActionResultFrom(r, name, "close terminal session")
+}
+
+// CloseEmptyTerminalSession closes one configured empty tmux server through
+// the service operation engine. It never accepts a socket path from the caller.
+func (b *WebBackend) CloseEmptyTerminalSession(ctx context.Context, name, check string) web.ActionResult {
+	e := b.entries[name]
+	if e == nil {
+		return b.operateError(name, "close empty terminal session", unknownServiceMessage+name)
+	}
+	if e.disabled {
+		return b.operateError(name, "close empty terminal session", serviceSubjectPrefix+name+" is disabled in configuration")
+	}
+	r := e.engine.CloseEmptyTerminalSession(ctx, operation.TerminalSessionSourceTarget{Check: check})
+	return webActionResultFrom(r, name, "close empty terminal session")
 }
 
 func compareWebSSHSessions(a, b web.SSHSession) int {

@@ -309,6 +309,14 @@ func (h *WebBackendHolder) CloseTerminalSession(ctx context.Context, name string
 	})
 }
 
+// CloseEmptyTerminalSession closes one revalidated empty tmux server through
+// the active backend.
+func (h *WebBackendHolder) CloseEmptyTerminalSession(ctx context.Context, name, check string) web.ActionResult {
+	return webCall(h, unavailableAction(), func(b *WebBackend) web.ActionResult {
+		return b.CloseEmptyTerminalSession(ctx, name, check)
+	})
+}
+
 // CompactState prunes old persisted history through the active backend.
 func (h *WebBackendHolder) CompactState(ctx context.Context, before time.Time) web.StateCompactResult {
 	return webCall(h, web.StateCompactResult{OK: false, Message: webBackendUnavailableMessage},
