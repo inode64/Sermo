@@ -563,8 +563,10 @@ generación antes de invocar el comando exacto de cierre del cliente.
 Un servidor tmux configurado con socket explícito que está vivo pero no tiene
 sesiones aparece como `empty`; un administrador puede cerrarlo manualmente.
 Sermo lo vuelve a listar, rechaza la acción si apareció una sesión e invoca
-`kill-server` de tmux para que tmux elimine su propio socket. Un espacio que ya
-no existe se omite del panel Sesiones; Sermo nunca elimina su socket directamente.
+`kill-server` de tmux. Si esa versión de tmux deja un socket huérfano, Sermo
+elimina solo el mismo inode de socket observado antes del cierre y únicamente
+después de que el espacio haya desaparecido. Un espacio que ya no existe se
+omite del panel Sesiones.
 
 ```yaml
 watches:

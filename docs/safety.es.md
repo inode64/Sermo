@@ -83,8 +83,9 @@ disponible para tmux con un socket explícito configurado. Comparte locks de
 operación y nombrados, guards, timeout y un único evento; vuelve a listar el
 origen exacto, exige un servidor vivo sin sesiones, ejecuta únicamente
 `tmux -S SOCKET kill-server` como el usuario configurado y confirma que el
-espacio desapareció. Nunca borra el socket directamente, y rechaza el cierre
-si el servidor ya no existe o apareció una sesión.
+espacio desapareció. Si tmux deja un socket huérfano, elimina solo el mismo
+inode capturado antes del cierre tras esa verificación y conserva un socket
+recreado. Rechaza el cierre si el servidor ya no existe o apareció una sesión.
 
 Un residual que Sermo no tiene permitido identificar y matar se **reporta, no se mata**:
 un fallo limpio `orphan_processes` es más seguro que matar el proceso equivocado.
