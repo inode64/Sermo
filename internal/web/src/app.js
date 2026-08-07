@@ -214,7 +214,17 @@ const serviceStatusFilterStates = [
 const watchStatusFilterStates = [targetStateDisabled, targetStateOK, targetStateStarting, targetStateStale, targetStateTesting, targetStateRecovering, targetStateRebuilding, targetStateRepairing, targetStateMoving, targetStateMerging, targetStateFailed];
 const appStatusFilterStates = [targetStateOK, targetStateStarting, targetStateWarning, targetStateFailed];
 const mountStatusFilterStates = [mountStateActive, mountStateInactive];
-const sessionTypeFilterStates = ["ssh", "tmux", "screen"];
+const sessionKindSSH = "ssh";
+const sessionKindTmux = "tmux";
+const sessionKindScreen = "screen";
+const terminalSessionKinds = [sessionKindTmux, sessionKindScreen];
+const sessionTypeFilterStates = [sessionKindSSH, ...terminalSessionKinds];
+const sessionSourceAvailable = "available";
+const sessionSourceUnavailable = "unavailable";
+const sessionStateActive = "active";
+const sessionStateAttached = "attached";
+const sessionStateDetached = "detached";
+const sessionStateUnknown = "unknown";
 // SLA strips colour by how much of a bucket was down, not by availability: a
 // 40-second outage inside a day-long bucket is 99.93% available, which any
 // availability threshold reads as healthy. These are the upper edges of the four
@@ -3718,16 +3728,16 @@ function terminalSessionCloseButton(session) {
 }
 
 function sessionStateCell(state) {
-  if (state === "available") return tpl`<span class="muted">empty</span>`;
-  if (state === "collecting") return tpl`<span class="target-state state-collecting">collecting</span>`;
-  if (state === "unavailable") return tpl`<span class="target-state state-failed">unavailable</span>`;
-  if (state === "attached") return tpl`<span class="target-state state-running">attached</span>`;
-  if (state === "detached") return tpl`<span class="target-state state-stopped">detached</span>`;
+  if (state === sessionSourceAvailable) return tpl`<span class="muted">empty</span>`;
+  if (state === targetStateCollecting) return tpl`<span class="target-state state-collecting">collecting</span>`;
+  if (state === sessionSourceUnavailable) return tpl`<span class="target-state state-failed">unavailable</span>`;
+  if (state === sessionStateAttached) return tpl`<span class="target-state state-running">attached</span>`;
+  if (state === sessionStateDetached) return tpl`<span class="target-state state-stopped">detached</span>`;
   return tpl`<span class="target-state state-running">active</span>`;
 }
 
 function sourceHasSession(source, inventory) {
-  if (source.kind === "ssh") {
+  if (source.kind === sessionKindSSH) {
     return (inventory.ssh || []).some((session) => session.service === source.service);
   }
   return (inventory.terminal || []).some((session) =>
@@ -3736,8 +3746,8 @@ function sourceHasSession(source, inventory) {
 
 function sessionRows(inventory) {
   const ssh = (inventory.ssh || []).map((session) => ({
-    kind: "ssh", service: session.service || "", user: session.user || "",
-    name: session.terminal || "", state: "active",
+    kind: sessionKindSSH, service: session.service || "", user: session.user || "",
+    name: session.terminal || "", state: sessionStateActive,
     detail: tpl`PID ${session.pid || "—"}`,
     idle: session.idle_seconds || 0, idleReady: true,
     cpu: session.cpu || 0, cpuReady: !!session.cpu_ready,
@@ -3747,7 +3757,7 @@ function sessionRows(inventory) {
   }));
   const terminal = (inventory.terminal || []).map((session) => ({
     kind: session.multiplexer || "", service: session.service || "", user: session.user || "",
-    name: session.name || "", state: session.state || "unknown",
+    name: session.name || "", state: session.state || sessionStateUnknown,
     detail: Number.isInteger(session.windows) ? `${fmtNum(session.windows, 0)} window${session.windows === 1 ? "" : "s"}` : "—",
     idle: session.idle_seconds || 0, idleReady: !!session.has_idle,
     cpu: session.cpu || 0, cpuReady: !!session.cpu_ready,
@@ -3757,8 +3767,8 @@ function sessionRows(inventory) {
   }));
   const emptySources = (inventory.sources || []).filter((source) => !sourceHasSession(source, inventory)).map((source) => ({
     kind: source.kind || "", service: source.service || "", user: source.user || "",
-    name: source.check || "—", state: source.state || "collecting",
-    detail: source.message || (source.state === "available" ? "No active sessions" : "Waiting for a sample"),
+    name: source.check || "—", state: source.state || targetStateCollecting,
+    detail: source.message || (source.state === sessionSourceAvailable ? "No active sessions" : "Waiting for a sample"),
     idle: 0, idleReady: false, cpu: 0, cpuReady: false, memory: 0, memoryReady: false,
     ioRead: 0, ioWrite: 0, ioReady: false,
     action: nothing,
@@ -3768,7 +3778,7 @@ function sessionRows(inventory) {
 
 function sessionFilterCounts(inventory, rows) {
   const sessions = [
-    ...(inventory.ssh || []).map(() => ({ kind: "ssh" })),
+    ...(inventory.ssh || []).map(() => ({ kind: sessionKindSSH })),
     ...(inventory.terminal || []),
   ];
   const counts = stateCounts(sessions, (session) => session.multiplexer || session.kind, sessionTypeFilterStates);
@@ -6462,7 +6472,7 @@ async function closeSSHSession(name, pid, startTicks, terminal, user) {
 }
 
 async function closeTerminalSession(service, check, multiplexer, session, user, identity) {
-  if (!service || !check || !session || !user || !identity || !["tmux", "screen"].includes(multiplexer)) {
+  if (!service || !check || !session || !user || !identity || !terminalSessionKinds.includes(multiplexer)) {
     setStatus("close terminal session: invalid session identity; refresh and try again", feedbackStatusErr);
     return;
   }
