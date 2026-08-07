@@ -649,6 +649,9 @@ async function performLoad() {
     showPartialRefresh(failures);
     return;
   }
+  // The services failure already produced the more useful keep-last-list
+  // message in phase one. Do not clear it or mark this poll fully refreshed.
+  if (!servicesResult.ok) return;
   lastRefresh = Date.now();
   tickRefreshAge();
   clearStatusAfterRefresh();

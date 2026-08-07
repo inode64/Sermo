@@ -126,6 +126,19 @@ const libraries = [{
   binary: "/usr/lib64/libz.so", observed_at: "2026-07-10T12:00:00Z",
 }];
 
+const dashboardFallbackFields = Object.freeze({
+  "/api/services": "services",
+  "/api/sessions": "sessions",
+  "/api/mounts": "mounts",
+  "/api/notifiers": "notifiers",
+  "/api/daemon": "daemon",
+  "/api/daemon/metrics": "daemon_metrics",
+  "/api/locks": "locks",
+  "/api/activity": "activity",
+  "/api/monitoring": "monitoring",
+  "/api/host": "host_metrics",
+});
+
 function serviceDetail(name) {
   const service = services.find((item) => item.name === name);
   const namedMetrics = [{ name: "users", type: "users", ran: true, ok: true, message: "2 users", metrics: [{ name: "count", unit: "users" }] }];
@@ -149,6 +162,8 @@ function serviceDetail(name) {
 }
 
 async function mockAPI(page) {
+  await page.route("**/readyz**", (route) => route.fulfill({ json: dashboard.ready }));
+  await page.route("**/livez**", (route) => route.fulfill({ json: dashboard.live }));
   await page.route("**/api/**", async (route) => {
     const url = new URL(route.request().url());
     const path = url.pathname;
@@ -183,9 +198,11 @@ async function mockAPI(page) {
 		};
         break;
       default: {
+        const dashboardField = dashboardFallbackFields[path];
         const detailMatch = path.match(/^\/api\/services\/([^/]+)$/);
         const eventsMatch = path.match(/^\/api\/services\/([^/]+)\/events$/);
-        if (detailMatch) body = serviceDetail(decodeURIComponent(detailMatch[1]));
+        if (dashboardField) body = dashboard[dashboardField];
+        else if (detailMatch) body = serviceDetail(decodeURIComponent(detailMatch[1]));
         else if (eventsMatch) body = [];
         else if (path.endsWith("/sla")) {
           if (path.startsWith("/api/services/web/")) {
@@ -223,12 +240,21 @@ async function mockAPI(page) {
   });
 }
 
+const uncaughtPageErrors = new WeakMap();
+
 test.beforeEach(async ({ page }) => {
+  const errors = [];
+  uncaughtPageErrors.set(page, errors);
+  page.on("pageerror", (error) => errors.push(error.message));
   await mockAPI(page);
   await page.goto("/");
   await expect(page.locator("#svc-row-web")).toBeVisible();
   await expect(page.locator("#app-row-postgres")).toBeVisible();
   await expect(page.locator("#library-row-openssl")).toBeVisible();
+});
+
+test.afterEach(async ({ page }) => {
+  expect(uncaughtPageErrors.get(page) || [], "uncaught browser errors").toEqual([]);
 });
 
 test("dashboard passes axe and fits the viewport", async ({ page }) => {
@@ -692,8 +718,6 @@ test("libraries inventory is visible and searchable", async ({ page }) => {
 });
 
 test("application and library inventories filter, group, sort, and expand", async ({ page }) => {
-  const pageErrors = [];
-  page.on("pageerror", (error) => pageErrors.push(error.message));
   await page.locator("#app-category").selectOption("data");
   await expect(page.locator("#app-row-postgres")).toBeVisible();
   await expect(page.locator("#app-row-nginx")).toBeHidden();
@@ -728,15 +752,11 @@ test("application and library inventories filter, group, sort, and expand", asyn
   await expect(page.locator("#library-row-zlib")).toBeVisible();
   await page.locator('[data-library-sort="version"]').click();
   await expect(page.locator('[data-library-sort="version"]')).toHaveAttribute("aria-sort", "ascending");
-  expect(pageErrors).toEqual([]);
 });
 
 test("application deep links expand after its inventory renders", async ({ page }) => {
-  const pageErrors = [];
-  page.on("pageerror", (error) => pageErrors.push(error.message));
   await page.goto("/#app:postgres");
   await expect(page.locator('[id="exp-app:postgres"]')).toContainText("16.3");
-  expect(pageErrors).toEqual([]);
 });
 
 test("monitor toggles send one request even on a double click", async ({ page }) => {
@@ -766,8 +786,6 @@ test("monitor toggles send one request even on a double click", async ({ page })
 });
 
 test("monitor toggle stays guarded until the follow-up refresh lands", async ({ page }) => {
-  const pageErrors = [];
-  page.on("pageerror", (error) => pageErrors.push(error.message));
   let posts = 0;
   await page.route("**/api/services/web/unmonitor", async (route) => {
     posts += 1;
@@ -788,7 +806,6 @@ test("monitor toggle stays guarded until the follow-up refresh lands", async ({ 
   await button.click({ force: true }).catch(() => {});
   await page.waitForTimeout(1200);
   expect(posts).toBe(1);
-  expect(pageErrors).toEqual([]);
 });
 
 test("a reload event paints the activity cell as info like the events table", async ({ page }) => {
@@ -822,6 +839,8 @@ test("daemon metrics use decimal byte rates and grouped counts", async ({ page }
 test("the dashboard dims as disconnected when every endpoint fails", async ({ page }) => {
   const error = { status: 500, contentType: "application/json", body: JSON.stringify({ message: "down" }) };
   await page.route("**/api/**", (route) => route.fulfill(error));
+  await page.route("**/readyz**", (route) => route.fulfill(error));
+  await page.route("**/livez**", (route) => route.fulfill(error));
 
   await page.locator("#refresh-now").click();
   await expect(page.locator("body")).toHaveClass(/disconnected/);
