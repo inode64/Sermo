@@ -10,13 +10,20 @@ import (
 // SSH service. CanClose is true only when a per-session process boundary and
 // start-time identity were observed and can therefore be revalidated safely.
 type SSHSession struct {
-	Service     string  `json:"service"`
-	User        string  `json:"user"`
-	Terminal    string  `json:"terminal"`
-	PID         int     `json:"pid,omitempty"`
-	StartTicks  uint64  `json:"start_ticks,omitempty"`
-	IdleSeconds int64   `json:"idle_seconds,omitempty"`
-	CanClose    bool    `json:"can_close"`
+	Service     string `json:"service"`
+	User        string `json:"user"`
+	Terminal    string `json:"terminal"`
+	PID         int    `json:"pid,omitempty"`
+	StartTicks  uint64 `json:"start_ticks,omitempty"`
+	IdleSeconds int64  `json:"idle_seconds,omitempty"`
+	CanClose    bool   `json:"can_close"`
+	SessionUsage
+}
+
+// SessionUsage is the process-tree resource sample shared by SSH, tmux and
+// screen session rows. Ready fields distinguish measured zeroes from missing
+// samples.
+type SessionUsage struct {
 	RSS         int64   `json:"rss,omitempty"`
 	MemoryReady bool    `json:"memory_ready"`
 	CPU         float64 `json:"cpu,omitempty"`
@@ -29,27 +36,21 @@ type SSHSession struct {
 // TerminalSession is one read-only tmux or screen session from a configured
 // terminal_sessions check.
 type TerminalSession struct {
-	Service      string  `json:"service"`
-	Check        string  `json:"check"`
-	Multiplexer  string  `json:"multiplexer"`
-	Name         string  `json:"name"`
-	User         string  `json:"user"`
-	State        string  `json:"state"`
-	Windows      int     `json:"windows,omitempty"`
-	IdleSeconds  int64   `json:"idle_seconds,omitempty"`
-	HasIdle      bool    `json:"has_idle"`
-	RSS          int64   `json:"rss,omitempty"`
-	MemoryReady  bool    `json:"memory_ready"`
-	CPU          float64 `json:"cpu,omitempty"`
-	CPUReady     bool    `json:"cpu_ready"`
-	IORead       float64 `json:"io_read,omitempty"`
-	IOWrite      float64 `json:"io_write,omitempty"`
-	IOReady      bool    `json:"io_ready"`
-	Identity     string  `json:"identity,omitempty"`
-	CanClose     bool    `json:"can_close"`
-	PIDs         []int   `json:"-"`
-	ActivityUnix int64   `json:"-"`
-	TTY          string  `json:"-"`
+	Service     string `json:"service"`
+	Check       string `json:"check"`
+	Multiplexer string `json:"multiplexer"`
+	Name        string `json:"name"`
+	User        string `json:"user"`
+	State       string `json:"state"`
+	Windows     int    `json:"windows,omitempty"`
+	IdleSeconds int64  `json:"idle_seconds,omitempty"`
+	HasIdle     bool   `json:"has_idle"`
+	SessionUsage
+	Identity     string `json:"identity,omitempty"`
+	CanClose     bool   `json:"can_close"`
+	PIDs         []int  `json:"-"`
+	ActivityUnix int64  `json:"-"`
+	TTY          string `json:"-"`
 }
 
 const (
