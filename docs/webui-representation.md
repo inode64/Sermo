@@ -73,6 +73,7 @@ overflow and axe WCAG 2.2 AA rules against deterministic API fixtures.
 | Change stream | `GET /api/stream` | Server-Sent Events channel that pushes a payload-free `change` signal on every daemon event; the dashboard refetches immediately. It only adds refreshes: the scheduled poll always keeps the cadence chosen in the top bar, because nothing is pushed when a metric sample changes and host/service/watch readings depend on that poll |
 | Readiness | `GET /readyz?verbose` | daemon `status:` in the top bar (`starting` / `ok` / …) |
 | Services | `GET /api/services` | configured runtime services loaded by sermod (not `sermoctl services` catalog inventory); `status_observed_at` identifies the real init-status sample behind a cached row; `operation_active` is true while the engine holds the service's operation lock, so an action started from any client, `sermoctl` or automatic remediation shows as in progress and its action buttons stay disabled |
+| Sessions | `GET /api/sessions` | dashboard-wide SSH, tmux and screen inventory; each configured source reports `available`, `collecting` or `unavailable`, so an empty successful sample is distinct from missing data; SSH uses the shared short-lived sampler cache, while tmux/screen rows come only from daemon-published `terminal_sessions` samples |
 | Service expansion | `GET /api/services/{name}` | checks, process info, rules |
 | Service check metrics | `GET /api/services/{name}/metrics?check=NAME[&metric=KEY]` | the detail renders latency when `metric` is omitted and one graph for every named numeric metric published by a check |
 | Service runtime metrics | `GET /api/services/{name}/runtime` | read-only persisted service CPU/memory/IO history sampled exclusively by worker cycles; `current` is the latest published sample and dashboard reads never repeat process discovery |
@@ -151,6 +152,7 @@ with an `{"ok": bool, "message": string}` body for a handled action.
 | Service action | `POST /api/services/{name}/{action}[?no_cascade=1]` | `monitor`, `unmonitor`, `start`, `stop`, `restart`, `reload`, `resume`; `reload` is offered only when the service reports `can_reload` from init backend reload support or a valid `reload:` fallback; `no_cascade` skips `also_apply` targets on start/stop/restart |
 | Service preflight | `POST /api/services/{name}/preflight` | run preflight checks without changing service state |
 | Close SSH session | `POST /api/services/{name}/sessions/{pid}/close?start_ticks=TICKS&terminal=PTS` | admin-only, confirmation-required graceful close of one displayed SSH terminal; the backend re-discovers the terminal plus exact configured `sshd` executable and real user, then requires the same PID and start ticks before sending only `SIGTERM` |
+| Close terminal session | `POST /api/services/{name}/terminal-sessions/{check}/close?multiplexer=TYPE&session=NAME&user=USER&identity=IDENTITY` | admin-only, confirmation-required close of one tmux/screen session; the backend freshly lists the configured user/socket namespace, requires the same multiplexer generation identity and invokes only the client's exact session-close argv |
 | Watch action | `POST /api/watches/{name}/{action}` | `monitor`, `unmonitor`, `expand`, `probe` (one manual sample), plus RAID `pause`/`resume`, which run a check-and-verify operation and require the `X-Sermo-Confirm` header |
 | Notifier test | `POST /api/notifiers/{name}/test` | sends one test notification through the named notifier after confirmation |
 | Mount action | `POST /api/mounts/{name}/{action}[?force=1&lazy=1&kill=1]` | `mount`, `umount`, `alert`; `force=1` allows `umount -f`, `lazy=1` allows `umount -l` as the last fallback, and `kill=1` enables `kill_only_if`-gated blocker signalling for `umount`; `/` rejects unmount paths |
@@ -306,7 +308,6 @@ Shared by the Services, Containers and Virtual machines panels.
 | General data | an unheaded grid, first area of the expansion: name, state, category, unit/backend, uptime, interval, policy, locks, last event, next remediation, remediation state and process totals; while the row badge is `starting`, expansion may still show the raw init backend (`inactive`) and in-flight check samples from the observe-only cycle |
 | Graphs | full-width SLA timeline followed by latency, CPU, memory and IO charts; each service persists its own time window and latency check; `no_resident_process` services show only SLA because they have no process runtime to chart |
 | Processes | full-width detected process tree table, with child processes marked in CMD and kept under their parent; **Max core** follows CPU and reports the most a single core was used by that process — its busiest thread — whose tooltip says whether the daemon measured it per thread or bounded it by the process rate; discovery warnings are listed above it, one per line; omitted when `no_resident_process` is true |
-| SSH sessions | only on an attributed SSH service: live user, terminal, session PID and idle time. Admins can confirm **close** for a session with a verified boundary; guests have no action and an unverifiable session is displayed but cannot be closed |
 | Checks | configured checks and current result; the SLA column carries the same availability band the Graphs SLA timeline draws, on the window that section's selector is on, so an unobserved stretch reads as a hatched gap in both instead of a flat percentage in one |
 | Named locks | runtime lock state |
 | Rules | remediation/alert rule state |
@@ -323,6 +324,20 @@ loses nothing. Name and State stay at every width as the expansion's anchor, and
 count. The busiest-thread figure is not restated in the grid: it belongs to a
 process, so the process table carries it per row (see **Processes** below) instead of
 floating as a total that hides which process it came from.
+
+## Sessions panel
+
+The top-level Sessions panel combines interactive SSH terminals with configured
+tmux and GNU screen namespaces. Search covers type, service, user and session;
+type buttons select SSH, tmux or screen. The table shows only the user in its
+User column and can sort by type, user, session, state, idle, CPU, memory or IO.
+A type filter is hidden when that type has no active sessions, using the same
+counted-filter behavior as the other panels. A configured source remains
+visible under `all` when it has no sessions, while collecting and sampling
+failures use distinct states. Attributable rows expose idle time and
+process-tree CPU, resident memory and read/write IO rates. An admin can confirm
+a close only when the backend can freshly revalidate the exact SSH or
+multiplexer session identity.
 
 Open service expansions fetch and fully render fresh detail once per dashboard
 refresh; SLA, metric, runtime and event subrequests plus open watch/application

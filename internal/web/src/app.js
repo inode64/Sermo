@@ -8,11 +8,11 @@ import {
   apiQueryForce, apiQueryKill, apiQueryKind, apiQueryLazy, apiQueryLimit, apiQueryName, apiQueryNoCascade,
   apiQueryOnlyErrors, apiQueryService, apiQuerySince, apiQueryStatus,
   apiQueryWatch, apiReloadPath, notifierTestAPI,
-  apiServicesPath, apiStreamPath, apiWatchesPath, apiWhoamiPath, applicationEventsAPI,
+  apiServicesPath, apiSessionsPath, apiStreamPath, apiWatchesPath, apiWhoamiPath, applicationEventsAPI,
   csrfPostOptions, dashboardAPI, daemonMetricsAPI, eventsAPI, eventsClearAPI,
   liveVerbosePath, lockReleaseAPI, mountAPI, mountBlockersAPI, panicAPI,
   readyVerbosePath, serviceAPI, serviceEventsAPI, serviceMetricsAPI,
-  servicePreflightAPI, serviceRuntimeAPI, serviceSLAAPI, sshSessionCloseAPI, stateCompactAPI, watchAPI,
+  servicePreflightAPI, serviceRuntimeAPI, serviceSLAAPI, sshSessionCloseAPI, terminalSessionCloseAPI, stateCompactAPI, watchAPI,
 } from "./api.js";
 import {
   fmtAge, fmtBytes, fmtBytesPerSecond, fmtDuration, fmtMetricValue, fmtNum, fmtPct, fmtRemain,
@@ -214,6 +214,7 @@ const serviceStatusFilterStates = [
 const watchStatusFilterStates = [targetStateDisabled, targetStateOK, targetStateStarting, targetStateStale, targetStateTesting, targetStateRecovering, targetStateRebuilding, targetStateRepairing, targetStateMoving, targetStateMerging, targetStateFailed];
 const appStatusFilterStates = [targetStateOK, targetStateStarting, targetStateWarning, targetStateFailed];
 const mountStatusFilterStates = [mountStateActive, mountStateInactive];
+const sessionTypeFilterStates = ["ssh", "tmux", "screen"];
 // SLA strips colour by how much of a bucket was down, not by availability: a
 // 40-second outage inside a day-long bucket is 99.93% available, which any
 // availability threshold reads as healthy. These are the upper edges of the four
@@ -447,6 +448,7 @@ async function loadPrimaryDashboard() {
     const generation = Number(snapshot.generation) || aggregate.generation;
     return {
       servicesResult: snapshotResult(snapshot, "services", null),
+      sessionsResult: snapshotResult(snapshot, "sessions", null),
       mountsResult: snapshotResult(snapshot, "mounts", null),
       notifiersResult: snapshotResult(snapshot, "notifiers", null),
       daemonResult: snapshotResult(snapshot, "daemon", null),
@@ -465,6 +467,7 @@ async function loadPrimaryDashboard() {
 
   const results = await Promise.all([
     getJSONResult(apiServicesPath, null),
+    getJSONResult(apiSessionsPath, null),
     getJSONResult(apiMountsPath, null),
     getJSONResult(apiNotifiersPath, null),
     getJSONResult(apiDaemonPath, null),
@@ -476,11 +479,11 @@ async function loadPrimaryDashboard() {
     getJSONResult(apiMonitoringPath, {}),
     getJSONResult(apiHostPath, []),
   ]);
-  const [servicesResult, mountsResult, notifiersResult, daemonResult, daemonMetricsResult,
+  const [servicesResult, sessionsResult, mountsResult, notifiersResult, daemonResult, daemonMetricsResult,
     locksResult, activityResult, readyResult, liveResult, monResult,
     hostMetricsResult] = results;
   const { generation, mismatch: generationMismatch } = sharedBackendGeneration(results);
-  return { servicesResult, mountsResult, notifiersResult, daemonResult, daemonMetricsResult,
+  return { servicesResult, sessionsResult, mountsResult, notifiersResult, daemonResult, daemonMetricsResult,
     locksResult, activityResult, readyResult, liveResult, monResult,
     hostMetricsResult, generation, generationMismatch,
     // Derived from the same collection the endpoints live in, so adding a new
@@ -493,7 +496,7 @@ async function performLoad() {
   healthIconReady = false;
   let expandedServicesPromise = Promise.resolve(true);
   const sameLoad = () => seq === loadSeq;
-  const { servicesResult, mountsResult, notifiersResult, daemonResult,
+  const { servicesResult, sessionsResult, mountsResult, notifiersResult, daemonResult,
     daemonMetricsResult, locksResult, activityResult, readyResult, liveResult,
     monResult, hostMetricsResult, generation, generationMismatch,
     daemonReachable } = await loadPrimaryDashboard();
@@ -504,6 +507,7 @@ async function performLoad() {
   }
   dashboardGeneration = generation;
   const services = servicesResult.data;
+  const sessions = sessionsResult.data;
   const mounts = mountsResult.data;
   const notifiers = notifiersResult.data;
   const daemon = daemonResult.data;
@@ -540,6 +544,7 @@ async function performLoad() {
     showDisconnected();
   }
   if (mounts) renderMounts(mounts);
+  if (sessionsResult.ok) renderSessions(sessions);
   if (notifiers) renderNotifiers(notifiers);
   if (daemon) renderDaemon(daemon);
   if (daemonMetrics) renderDaemonMetrics(daemonMetrics);
@@ -607,7 +612,7 @@ async function performLoad() {
   if (!sameLoad()) return;
 
   const refreshResults = [
-    ["mounts", mountsResult], ["notifiers", notifiersResult], ["daemon", daemonResult],
+    ["sessions", sessionsResult], ["mounts", mountsResult], ["notifiers", notifiersResult], ["daemon", daemonResult],
     ["daemon metrics", daemonMetricsResult], ["locks", locksResult], ["activity", activityResult],
     ["readiness", readyResult], ["liveness", liveResult], ["monitoring", monResult],
     ["host metrics", hostMetricsResult], ["watches", watchesResult],
@@ -1198,6 +1203,10 @@ function nextRemediationCell(s) {
 // Service list state: latest fetched data plus the active search/status filter,
 // so typing or switching a filter re-renders from cache without a refetch.
 let allServices = [];
+let latestSessionInventory = {};
+let sessionQuery = "";
+let sessionFilter = filterAll;
+let sessionSort = { key: "", dir: 1 };
 let svcQuery = "";
 let svcStatus = filterAll; // all | disabled | stopped | started | starting | collecting | monitored | failed
 let svcCategory = filterAll;
@@ -1293,6 +1302,9 @@ function restoreUIState() {
     if (s.svcSort && typeof s.svcSort.key === "string") {
       svcSort = { key: s.svcSort.key, dir: s.svcSort.dir === -1 ? -1 : 1 };
     }
+    if (s.sessionSort && typeof s.sessionSort.key === "string") {
+      sessionSort = { key: s.sessionSort.key, dir: s.sessionSort.dir === -1 ? -1 : 1 };
+    }
     if (s.splitServicePanels && typeof s.splitServicePanels === "object") {
       for (const [key, saved] of Object.entries(s.splitServicePanels)) {
         const panel = splitServicePanels[key];
@@ -1386,7 +1398,7 @@ function restoreUIState() {
 function saveUIState() {
   try {
     localStorage.setItem(UI_STATE_KEY, JSON.stringify({
-      svcQuery, svcStatus, svcCategory, svcGrouped, svcSort,
+      svcQuery, svcStatus, svcCategory, svcGrouped, svcSort, sessionSort,
       mountQuery, mountStatus, mountCategory, mountGrouped, mountSort,
       appQuery, appStatus, appSort, appGrouped,
       libraryQuery, libraryStatus, librarySort, libraryGrouped,
@@ -2326,7 +2338,7 @@ function sortedBy(list, sort, sortKeys, fallbackKey) {
 
 function renderFilterButtonCounts(selector, counts) {
   document.querySelectorAll(`${selector} button`).forEach((b) => {
-    const key = b.dataset.f || b.dataset.cf || b.dataset.vf || b.dataset.wf || b.dataset.af || b.dataset.mf;
+    const key = b.dataset.f || b.dataset.cf || b.dataset.vf || b.dataset.wf || b.dataset.af || b.dataset.mf || b.dataset.sf;
     if (counts[key] === undefined) return;
     b.innerHTML = `${key} <span class="muted">${counts[key]}</span>`;
     // Keep the filter row compact by hiding states with no matches — except
@@ -3690,44 +3702,153 @@ function checkSLAHTML(service, c) {
   return tpl`<div id="${checkSLADomId(service, c.name)}" class="muted sla-check-strip">loading…</div>`;
 }
 
-function sshSessionCloseButton(d, session) {
+function sshSessionCloseButton(service, session) {
   if (!me.can_act) return tpl`<span class="muted">read-only</span>`;
   if (!session.can_close) return tpl`<span class="muted">unavailable</span>`;
-  return tpl`<button class="danger-btn" data-ssh-session-close="1" data-ssh-service="${d.name}" data-ssh-session-pid="${session.pid}" data-ssh-session-start-ticks="${session.start_ticks}" data-ssh-session-terminal="${session.terminal}" data-ssh-session-user="${session.user || ""}">close</button>`;
+  return tpl`<button class="danger-btn" data-ssh-session-close="1" data-ssh-service="${service}" data-ssh-session-pid="${session.pid}" data-ssh-session-start-ticks="${session.start_ticks}" data-ssh-session-terminal="${session.terminal}" data-ssh-session-user="${session.user || ""}">close</button>`;
 }
 
-function renderSSHSessions(d) {
-  if (!d.ssh_sessions_supported) return nothing;
-  const sessions = d.ssh_sessions || [];
-  const rows = sessions.length
-    ? sessions.map((session) => tpl`<tr>
-      <td>${session.user || "—"}</td><td>${session.terminal || "—"}</td><td>${session.pid || "—"}</td>
-      <td>${fmtDuration(session.idle_seconds)}</td><td>${sshSessionCloseButton(d, session)}</td>
-    </tr>`)
-    : tpl`<tr><td colspan="5" class="muted">No interactive SSH sessions.</td></tr>`;
-  return tpl`<h2>SSH sessions</h2>
-    <table class="detail-compact-table ssh-session-table">
-      <caption class="visually-hidden">Current interactive SSH sessions</caption>
-      <thead><tr><th scope="col">User</th><th scope="col">Terminal</th><th scope="col">Session PID</th><th scope="col">Idle</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr></thead>
-      <tbody>${rows}</tbody>
-    </table>`;
+function terminalSessionCloseButton(session) {
+  if (!me.can_act) return tpl`<span class="muted">read-only</span>`;
+  if (!session.can_close) return tpl`<span class="muted">unavailable</span>`;
+  return tpl`<button class="danger-btn" data-terminal-session-close="1"
+    data-terminal-service="${session.service || ""}" data-terminal-check="${session.check || ""}"
+    data-terminal-multiplexer="${session.multiplexer || ""}" data-terminal-session="${session.name || ""}"
+    data-terminal-user="${session.user || ""}" data-terminal-identity="${session.identity || ""}">close</button>`;
 }
 
-function renderTerminalSessions(d) {
-  if (!d.terminal_sessions_supported) return nothing;
-  const sessions = d.terminal_sessions || [];
-  const rows = sessions.length
-    ? sessions.map((session) => tpl`<tr>
-      <td>${session.multiplexer || "—"}</td><td>${session.user || "—"}</td><td>${session.name || "—"}</td>
-      <td>${session.state || "unknown"}</td><td>${Number.isInteger(session.windows) ? fmtNum(session.windows, 0) : "—"}</td>
-    </tr>`)
-    : tpl`<tr><td colspan="5" class="muted">No terminal-multiplexer sessions.</td></tr>`;
-  return tpl`<h2>Terminal services</h2>
-    <table class="detail-compact-table terminal-session-table">
-      <caption class="visually-hidden">Current tmux and screen sessions</caption>
-      <thead><tr><th scope="col">Service</th><th scope="col">User</th><th scope="col">Session</th><th scope="col">State</th><th scope="col">Windows</th></tr></thead>
-      <tbody>${rows}</tbody>
-    </table>`;
+function sessionStateCell(state) {
+  if (state === "available") return tpl`<span class="muted">empty</span>`;
+  if (state === "collecting") return tpl`<span class="target-state state-collecting">collecting</span>`;
+  if (state === "unavailable") return tpl`<span class="target-state state-failed">unavailable</span>`;
+  if (state === "attached") return tpl`<span class="target-state state-running">attached</span>`;
+  if (state === "detached") return tpl`<span class="target-state state-stopped">detached</span>`;
+  return tpl`<span class="target-state state-running">active</span>`;
+}
+
+function sourceHasSession(source, inventory) {
+  if (source.kind === "ssh") {
+    return (inventory.ssh || []).some((session) => session.service === source.service);
+  }
+  return (inventory.terminal || []).some((session) =>
+    session.service === source.service && session.check === source.check);
+}
+
+function sessionRows(inventory) {
+  const ssh = (inventory.ssh || []).map((session) => ({
+    kind: "ssh", service: session.service || "", user: session.user || "",
+    name: session.terminal || "", state: "active",
+    detail: tpl`PID ${session.pid || "—"}`,
+    idle: session.idle_seconds || 0, idleReady: true,
+    cpu: session.cpu || 0, cpuReady: !!session.cpu_ready,
+    memory: session.rss || 0, memoryReady: !!session.memory_ready,
+    ioRead: session.io_read || 0, ioWrite: session.io_write || 0, ioReady: !!session.io_ready,
+    action: sshSessionCloseButton(session.service || "", session),
+  }));
+  const terminal = (inventory.terminal || []).map((session) => ({
+    kind: session.multiplexer || "", service: session.service || "", user: session.user || "",
+    name: session.name || "", state: session.state || "unknown",
+    detail: Number.isInteger(session.windows) ? `${fmtNum(session.windows, 0)} window${session.windows === 1 ? "" : "s"}` : "—",
+    idle: session.idle_seconds || 0, idleReady: !!session.has_idle,
+    cpu: session.cpu || 0, cpuReady: !!session.cpu_ready,
+    memory: session.rss || 0, memoryReady: !!session.memory_ready,
+    ioRead: session.io_read || 0, ioWrite: session.io_write || 0, ioReady: !!session.io_ready,
+    action: terminalSessionCloseButton(session),
+  }));
+  const emptySources = (inventory.sources || []).filter((source) => !sourceHasSession(source, inventory)).map((source) => ({
+    kind: source.kind || "", service: source.service || "", user: source.user || "",
+    name: source.check || "—", state: source.state || "collecting",
+    detail: source.message || (source.state === "available" ? "No active sessions" : "Waiting for a sample"),
+    idle: 0, idleReady: false, cpu: 0, cpuReady: false, memory: 0, memoryReady: false,
+    ioRead: 0, ioWrite: 0, ioReady: false,
+    action: nothing,
+  }));
+  return [...ssh, ...terminal, ...emptySources];
+}
+
+function sessionFilterCounts(inventory, rows) {
+  const sessions = [
+    ...(inventory.ssh || []).map(() => ({ kind: "ssh" })),
+    ...(inventory.terminal || []),
+  ];
+  const counts = stateCounts(sessions, (session) => session.multiplexer || session.kind, sessionTypeFilterStates);
+  counts[filterAll] = rows.length;
+  return counts;
+}
+
+const sessionSortKeys = {
+  type: (row) => row.kind,
+  user: (row) => row.user,
+  session: (row) => row.name,
+  state: (row) => row.state,
+  idle: (row) => row.idleReady ? row.idle : -1,
+  cpu: (row) => row.cpuReady ? row.cpu : -1,
+  memory: (row) => row.memoryReady ? row.memory : -1,
+  io: (row) => row.ioReady ? row.ioRead + row.ioWrite : -1,
+};
+
+function setSessionSort(key) { toggleSort(sessionSort, key, renderSessions); }
+
+function sessionIdleCell(row) {
+  return row.idleReady ? fmtDuration(row.idle) : tpl`<span class="muted">—</span>`;
+}
+
+function sessionCPUCell(row) {
+  return row.cpuReady ? usageBarMini(pctClamp(row.cpu), fmtPct(row.cpu), `${fmtPct(row.cpu)} of host CPUs`) : tpl`<span class="muted">measuring…</span>`;
+}
+
+function sessionMemoryCell(row) {
+  return row.memoryReady ? memoryInline(row.memory) : tpl`<span class="muted">—</span>`;
+}
+
+function sessionIOCell(row) {
+  if (!row.ioReady) return tpl`<span class="muted">measuring…</span>`;
+  return tpl`<span title="read / write">${fmtBytesPerSecond(row.ioRead)} / ${fmtBytesPerSecond(row.ioWrite)}</span>`;
+}
+
+function renderSessions(inventory = latestSessionInventory) {
+  latestSessionInventory = inventory || {};
+  const sources = latestSessionInventory.sources || [];
+  setPanelVisible($("#sessions-section"), sources.length > 0);
+  const rows = sessionRows(latestSessionInventory);
+  renderFilterButtonCounts("#session-filters", sessionFilterCounts(latestSessionInventory, rows));
+  const filtered = rows.filter((row) => {
+    if (sessionFilter !== filterAll && row.kind !== sessionFilter) return false;
+    return !sessionQuery || [row.kind, row.service, row.user, row.name, row.state].join(" ").toLowerCase().includes(sessionQuery);
+  });
+  sortedBy(filtered, sessionSort, sessionSortKeys, "session");
+  const body = $("#session-rows");
+  if (body) {
+    const content = filtered.length ? filtered.map((row) => tpl`<tr>
+      <td>${row.kind || "—"}</td><td>${row.user || "—"}</td>
+      <td>${row.name || "—"}<br><span class="muted">${row.detail}</span></td><td>${sessionStateCell(row.state)}</td>
+      <td>${sessionIdleCell(row)}</td><td>${sessionCPUCell(row)}</td><td>${sessionMemoryCell(row)}</td>
+      <td>${sessionIOCell(row)}</td><td>${row.action}</td>
+    </tr>`) : tpl`<tr><td colspan="9" class="muted">No sessions match the filter.</td></tr>`;
+    litRender(content, body);
+  }
+  const activeCount = (latestSessionInventory.ssh || []).length + (latestSessionInventory.terminal || []).length;
+  const count = $("#sessions-count");
+  if (count) count.textContent = String(activeCount);
+  const filterCount = $("#session-filter-count");
+  if (filterCount) filterCount.textContent = `${filtered.length}/${rows.length}`;
+  updateSortIndicatorsFor("ssi", sessionSort, "#sessions-section .sessions-table th.sortable[data-session-sort]", "sessionSort");
+  updateSectionNav();
+}
+
+function setSessionQuery(value) {
+  sessionQuery = (value || "").trim().toLowerCase();
+  renderSessions();
+}
+
+function setSessionFilter(value) {
+  sessionFilter = value || filterAll;
+  document.querySelectorAll("#session-filters button").forEach((button) => {
+    const active = button.dataset.sf === sessionFilter;
+    button.classList.toggle("f-active", active);
+    button.setAttribute("aria-pressed", active ? domBoolTrue : domBoolFalse);
+  });
+  renderSessions();
 }
 
 function renderServiceDetail(d) {
@@ -3897,8 +4018,6 @@ function renderServiceDetail(d) {
     ${general}
     ${graphs}
     ${processSection}
-    ${renderSSHSessions(d)}
-    ${renderTerminalSessions(d)}
     <h2>Checks</h2>
     <table>
       <caption class="visually-hidden">Service checks</caption>
@@ -6342,6 +6461,29 @@ async function closeSSHSession(name, pid, startTicks, terminal, user) {
   }
 }
 
+async function closeTerminalSession(service, check, multiplexer, session, user, identity) {
+  if (!service || !check || !session || !user || !identity || !["tmux", "screen"].includes(multiplexer)) {
+    setStatus("close terminal session: invalid session identity; refresh and try again", feedbackStatusErr);
+    return;
+  }
+  const label = `${multiplexer} ${session} for ${user}`;
+  if (!(await promptConfirm({
+    title: `Close ${label}?`,
+    message: "This asks the multiplexer to close only that exact session. It cannot be undone.",
+    okLabel: "close session",
+    danger: true,
+  }))) return;
+  setStatus("");
+  try {
+    const res = await fetch(terminalSessionCloseAPI(service, check, multiplexer, session, user, identity), targetPostOptions());
+    const body = await jsonOrThrow(res);
+    setStatus(`close ${label}: ${body.message || feedbackStatusOK}`, feedbackStatusOK);
+    load();
+  } catch (e) {
+    setStatus(`close ${label}: ${e.message}`, feedbackStatusErr);
+  }
+}
+
 async function actWatch(name, action) {
   let headers = {};
   if (action === actionExpand && !(await confirmWatchExpand(name))) return;
@@ -7467,6 +7609,11 @@ function initStaticHandlers() {
 
   bindSearchBox($("#svc-search"), setSvcQuery);
   bindFilterButtons($("#svc-filters"), "f", setSvcStatus);
+  bindSearchBox($("#session-search"), setSessionQuery);
+  bindFilterButtons($("#session-filters"), "sf", setSessionFilter);
+  document.querySelectorAll("#sessions-section .sessions-table th.sortable[data-session-sort]").forEach((th) => {
+    bindSortHeader(th, () => setSessionSort(th.dataset.sessionSort || ""));
+  });
 
   const svcCategorySelect = $("#svc-category");
   if (svcCategorySelect) svcCategorySelect.addEventListener(domEventChange, () => setSvcCategory(svcCategorySelect.value));
@@ -7601,6 +7748,9 @@ function initDelegatedHandlers() {
     ["[data-ssh-session-close]", (el) => closeSSHSession(
       el.dataset.sshService || "", el.dataset.sshSessionPid || "", el.dataset.sshSessionStartTicks || "",
       el.dataset.sshSessionTerminal || "", el.dataset.sshSessionUser || "")],
+    ["[data-terminal-session-close]", (el) => closeTerminalSession(
+      el.dataset.terminalService || "", el.dataset.terminalCheck || "", el.dataset.terminalMultiplexer || "",
+      el.dataset.terminalSession || "", el.dataset.terminalUser || "", el.dataset.terminalIdentity || "")],
     ["[data-service-action][data-service]", (el) => act(el.dataset.service || "", el.dataset.serviceAction || "")],
     ["[data-watch-action][data-watch]", (el) => actWatch(el.dataset.watch || "", el.dataset.watchAction || "")],
     ["[data-mount-action][data-mount]", (el) => actMount(el.dataset.mount || "", el.dataset.mountAction || "")],
@@ -7786,6 +7936,7 @@ function setKeyboardShortcutsEnabled(enabled) {
 // search box joins the "/" shortcut without extending this list.
 function activeSearchBox() {
   const panels = [
+    ["#sessions-section", "#session-search"],
     ["#services-section", "#svc-search"],
     ["#containers-section", "#container-search"],
     ["#vms-section", "#vm-search"],

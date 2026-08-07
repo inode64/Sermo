@@ -1693,9 +1693,15 @@ fire a hook/notification or compact `then.action`, and can use the service-scope
 `service`/`metric`/`process_count` check types. See
 [Service watches](configuration.md#service-watches-scoped-to-a-service).
 Host-global checks such as `terminal_sessions` also work there: place a
-read-only `tmux` or `screen` check under the SSH service to show its
-configured users' terminal sessions in that service's Web UI detail. It does
-not create a systemd/OpenRC service or grant any terminal control action.
+`tmux` or `screen` check under the SSH service to show its
+configured users' terminal sessions in the Web UI Sessions panel. It does
+not create a systemd/OpenRC service. Administrators may close one exact
+displayed session; Sermo freshly revalidates its multiplexer-owned generation
+and uses the configured client as that user, without signalling a guessed PID.
+The remote deployment generator creates these checks for active multiplexer
+namespaces that its read-only inventory can attribute to a local user; named
+`tmux` sockets are kept separate, while inactive or unattributable namespaces
+are omitted.
 
 ## Blocking operations while clients are connected
 

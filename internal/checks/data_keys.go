@@ -158,6 +158,7 @@ const (
 	DataKeySynchronized       = "synchronized"
 	DataKeyThreshold          = CheckKeyThreshold
 	DataKeyTrigger            = "trigger"
+	DataKeyTTY                = "tty"
 	DataKeyTotal              = fieldTotal
 	DataKeyTotalBytes         = fieldTotalBytes
 	DataKeyType               = CheckKeyType
@@ -171,6 +172,8 @@ const (
 	DataKeyVersionShort       = "version_short"
 	DataKeyWindow             = "window"
 	DataKeyWindows            = "windows"
+	DataKeyActivityUnix       = "activity_unix"
+	DataKeyIdentity           = "identity"
 	DataKeyNumberFiles        = "number_files"
 	DataKeyZombies            = "zombies"
 )

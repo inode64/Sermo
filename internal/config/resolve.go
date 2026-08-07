@@ -18,10 +18,13 @@ const (
 	unknownServiceFormat = "unknown service %q"
 )
 
-// Resolved is a fully flattened, variable-expanded service definition.
+// Resolved is a fully flattened, variable-expanded service definition. Apps
+// records the catalog apps linked by the top-level document; the public apps
+// key remains consumed from Tree during resolution.
 type Resolved struct {
 	Name string
 	Tree map[string]any
+	Apps []string
 }
 
 // Resolve flattens a single service: it applies the defaults -> uses/clone ->
@@ -45,27 +48,28 @@ func (c *Config) resolveService(name string, pruneOptional bool) (Resolved, []st
 		merged = pruneEnableIfMap(merged, nil)
 	}
 
-	expanded, errs := c.resolveExpandedService(merged, canonicalName)
+	expanded, apps, errs := c.resolveExpandedService(merged, canonicalName)
 
-	return Resolved{Name: canonicalName, Tree: expanded}, errs
+	return Resolved{Name: canonicalName, Tree: expanded, Apps: apps}, errs
 }
 
 // resolveExpandedService applies the one canonical resolution pipeline after a
 // service tree has been merged. Keep post-expansion catalog sugar here so every
 // resolved service has the same normalized shape.
-func (c *Config) resolveExpandedService(merged map[string]any, name string) (map[string]any, []string) {
+func (c *Config) resolveExpandedService(merged map[string]any, name string) (map[string]any, []string, []string) {
 	errs := prepareExpansionInputs(merged)
 	vars, varErrs := c.expansionVariables(merged, name)
 	errs = append(errs, varErrs...)
 	expanded, expErrs := expandTree(merged, vars)
 	errs = append(errs, expErrs...)
+	apps := cfgval.StringList(expanded[keyApps])
 	errs = append(errs, c.expandRestartOnChange(expanded)...)
 	errs = append(errs, c.resolveChangedLibraries(expanded)...)
 	errs = append(errs, expandReloadOnChange(expanded)...)
 	errs = append(errs, c.expandApps(expanded)...)
 	errs = append(errs, expandStaleBinary(expanded)...)
 	errs = append(errs, c.expandServiceSugar(expanded)...)
-	return expanded, errs
+	return expanded, apps, errs
 }
 
 // expandServiceSugar runs the post-expansion desugar tail shared by
@@ -1414,12 +1418,13 @@ func (c *Config) resolveDocBody(doc *Document, name string, appChain []string) (
 	errs = append(errs, varErrs...)
 	expanded, expErrs := expandTree(body, vars)
 	errs = append(errs, expErrs...)
+	apps := cfgval.StringList(expanded[keyApps])
 	if doc.Kind == CategoryService {
 		errs = append(errs, c.expandRestartOnChange(expanded)...)
 	}
 	errs = append(errs, c.expandAppsChain(expanded, appChain)...)
 	errs = append(errs, c.expandServiceSugar(expanded)...)
-	return Resolved{Name: name, Tree: expanded}, errs
+	return Resolved{Name: name, Tree: expanded, Apps: apps}, errs
 }
 
 // mergedService returns the merged-but-unexpanded body for a service, following

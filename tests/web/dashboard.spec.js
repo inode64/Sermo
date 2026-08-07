@@ -27,6 +27,18 @@ const services = [
 const dashboard = {
   generation: 7,
   services,
+  sessions: {
+    sources: [
+      { kind: "ssh", service: "web", state: "available" },
+      { kind: "tmux", service: "web", check: "tmux-root", user: "root", state: "available" },
+      { kind: "screen", service: "web", check: "screen-root", user: "root", state: "available" },
+    ],
+    ssh: [{ service: "web", user: "root", terminal: "pts/11", pid: 96, start_ticks: 1234, idle_seconds: 120, can_close: true, memory_ready: true, rss: 1048576, cpu_ready: true, cpu: 1.5, io_ready: true, io_read: 1000, io_write: 250 }],
+    terminal: [
+      { service: "web", check: "tmux-root", multiplexer: "tmux", user: "root", name: "ops", state: "attached", windows: 2, idle_seconds: 300, has_idle: true, memory_ready: true, rss: 2097152, cpu_ready: true, cpu: 2.5, io_ready: true, io_read: 2000, io_write: 500, identity: "$7:90", can_close: true },
+      { service: "web", check: "tmux-root", multiplexer: "tmux", user: "root", name: "build", state: "detached", windows: 1, idle_seconds: 60, has_idle: true, memory_ready: true, rss: 524288, cpu_ready: true, cpu: 0, io_ready: true, io_read: 0, io_write: 0, identity: "$8:91", can_close: true },
+    ],
+  },
   mounts: [{
     name: "data.mount", display_name: "Data", category: "storage", path: "/data",
     mounted: true, state: "active", refcount: 1, blockers: [], can_umount: true,
@@ -447,31 +459,50 @@ test("the process table reports each process's busiest core beside its total", a
   await expect(detail.locator(".runtime-grid")).not.toContainText("core peak");
 });
 
-test("SSH service detail lists live sessions and closes one verified session", async ({ page }) => {
-  await page.route("**/api/services/web", async (route) => {
-    const body = serviceDetail("web");
-    body.ssh_sessions_supported = true;
-    body.ssh_sessions = [{ user: "root", terminal: "pts/11", pid: 96, start_ticks: 1234, idle_seconds: 120, can_close: true }];
-    await route.fulfill({ json: body });
-  });
+test("sessions panel shows metrics, sorts columns and closes verified SSH and tmux", async ({ page }) => {
   let closeRequest = null;
+  let tmuxCloseRequest = null;
   await page.route("**/api/services/web/sessions/96/close**", async (route) => {
     closeRequest = new URL(route.request().url());
     await route.fulfill({ json: { ok: true, message: "close SSH session ok" } });
   });
+  await page.route("**/api/services/web/terminal-sessions/tmux-root/close**", async (route) => {
+    tmuxCloseRequest = new URL(route.request().url());
+    await route.fulfill({ json: { ok: true, message: "close terminal session ok" } });
+  });
 
-  await page.locator("#svc-row-web .row-toggle").click();
-  const detail = page.locator('[data-service-detail="web"]');
-  const sessions = detail.getByRole("table", { name: "Current interactive SSH sessions" });
+  const sessions = page.getByRole("table", { name: "Current SSH, tmux and screen sessions" });
   await expect(sessions).toContainText("root");
   await expect(sessions).toContainText("pts/11");
   await expect(sessions).toContainText("120s");
+  await expect(sessions).toContainText("1 MiB");
+  await expect(sessions).toContainText("1 KB/s / 250 B/s");
+  await expect(sessions).toContainText("ops");
+  await expect(sessions).toContainText("screen-root");
+  await expect(sessions).toContainText("No active sessions");
 
-  await sessions.getByRole("button", { name: "close" }).click();
+  await sessions.locator('[data-ssh-session-close]').click();
   await expect(page.locator("#simple-confirm")).toBeVisible();
   await page.locator("#simple-confirm-ok").click();
   await expect.poll(() => closeRequest && closeRequest.searchParams.get("terminal")).toBe("pts/11");
   expect(closeRequest.searchParams.get("start_ticks")).toBe("1234");
+
+  await page.locator('[data-sf="tmux"]').click();
+  await sessions.getByRole("columnheader", { name: /Idle/ }).click();
+  await expect(sessions.locator("tbody tr").first()).toContainText("build");
+  await sessions.locator('[data-terminal-session="ops"]').click();
+  await expect(page.locator("#simple-confirm")).toBeVisible();
+  await page.locator("#simple-confirm-ok").click();
+  await expect.poll(() => tmuxCloseRequest && tmuxCloseRequest.searchParams.get("session")).toBe("ops");
+  expect(tmuxCloseRequest.searchParams.get("identity")).toBe("$7:90");
+});
+
+test("session type filters hide types without active sessions", async ({ page }) => {
+  await expect(page.locator('[data-sf="all"]')).toContainText("all 4");
+  await expect(page.locator('[data-sf="ssh"]')).toContainText("ssh 1");
+  await expect(page.locator('[data-sf="tmux"]')).toContainText("tmux 2");
+  await expect(page.locator('[data-sf="screen"]')).toBeHidden();
+  await expect(page.locator("#session-rows")).toContainText("No active sessions");
 });
 
 test("a genuinely idle process reads 0% in both CPU columns", async ({ page }) => {

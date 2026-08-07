@@ -17,39 +17,42 @@ import (
 const testSeriesCheck = "http"
 
 type fakeBackend struct {
-	services          []Service
-	applications      []Application
-	libraries         []Library
-	mounts            []Mount
-	mountAction       MountActionResult
-	mountBlockers     MountBlockersResult
-	mountAlert        MountAlertResult
-	mountOperated     []string
-	operated          []string // "name/action"
-	sshSessionsClosed []SSHSession
-	monitored         map[string]bool
-	watchMonitored    map[string]bool
-	panic             bool
-	watchExpanded     []string
-	watchProbed       []string
-	raidControlled    []string
-	failOp            bool
-	seriesSince       time.Duration
-	seriesCheck       string
-	eventQuery        EventQuery
-	metricCheck       string
-	metricSince       time.Duration
-	preflightCalled   string
-	events            []Event
-	releasedLocks     []string
-	releaseOK         bool
-	notifierTested    string
-	notifierResult    ActionResult
+	services               []Service
+	sessions               SessionInventory
+	applications           []Application
+	libraries              []Library
+	mounts                 []Mount
+	mountAction            MountActionResult
+	mountBlockers          MountBlockersResult
+	mountAlert             MountAlertResult
+	mountOperated          []string
+	operated               []string // "name/action"
+	sshSessionsClosed      []SSHSession
+	terminalSessionsClosed []TerminalSession
+	monitored              map[string]bool
+	watchMonitored         map[string]bool
+	panic                  bool
+	watchExpanded          []string
+	watchProbed            []string
+	raidControlled         []string
+	failOp                 bool
+	seriesSince            time.Duration
+	seriesCheck            string
+	eventQuery             EventQuery
+	metricCheck            string
+	metricSince            time.Duration
+	preflightCalled        string
+	events                 []Event
+	releasedLocks          []string
+	releaseOK              bool
+	notifierTested         string
+	notifierResult         ActionResult
 }
 
-func (f *fakeBackend) Services(context.Context) []Service   { return f.services }
-func (f *fakeBackend) Watches(context.Context) []Watch      { return nil }
-func (f *fakeBackend) Notifiers(context.Context) []Notifier { return nil }
+func (f *fakeBackend) Services(context.Context) []Service        { return f.services }
+func (f *fakeBackend) Sessions(context.Context) SessionInventory { return f.sessions }
+func (f *fakeBackend) Watches(context.Context) []Watch           { return nil }
+func (f *fakeBackend) Notifiers(context.Context) []Notifier      { return nil }
 func (f *fakeBackend) TestNotifier(_ context.Context, name string) ActionResult {
 	f.notifierTested = name
 	if f.notifierResult.Message != "" {
@@ -246,6 +249,13 @@ func (f *fakeBackend) CloseSSHSession(_ context.Context, _ string, session SSHSe
 	}
 	return ActionResult{OK: true, Message: "close SSH session ok"}
 }
+func (f *fakeBackend) CloseTerminalSession(_ context.Context, _ string, session TerminalSession) ActionResult {
+	f.terminalSessionsClosed = append(f.terminalSessionsClosed, session)
+	if f.failOp {
+		return ActionResult{OK: false, Message: "close rejected"}
+	}
+	return ActionResult{OK: true, Message: "close terminal session ok"}
+}
 func (f *fakeBackend) CompactState(_ context.Context, before time.Time) StateCompactResult {
 	return StateCompactResult{
 		OK:     true,
@@ -305,6 +315,7 @@ func TestDashboardSnapshotEndpoint(t *testing.T) {
 	b := &fakeBackend{
 		services: []Service{{Name: "web", State: "monitored"}},
 		mounts:   []Mount{{Name: "data", Path: "/data"}},
+		sessions: SessionInventory{SSH: []SSHSession{{Service: "ssh", User: "root", Terminal: "pts/1"}}},
 	}
 	rec := httptest.NewRecorder()
 	newServer(b).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, testAPIPath(apiSegmentDashboard), nil))
@@ -315,11 +326,30 @@ func TestDashboardSnapshotEndpoint(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
 		t.Fatalf("decode dashboard: %v", err)
 	}
-	if len(got.Services) != 1 || got.Services[0].Name != "web" || len(got.Mounts) != 1 {
+	if len(got.Services) != 1 || got.Services[0].Name != "web" || len(got.Mounts) != 1 || len(got.Sessions.SSH) != 1 {
 		t.Fatalf("dashboard inventory = %+v", got)
 	}
 	if !got.Ready.Ready || got.Ready.Services != 1 || got.Live.Services != 1 {
 		t.Fatalf("dashboard probes = ready:%+v live:%+v", got.Ready, got.Live)
+	}
+}
+
+func TestSessionsEndpoint(t *testing.T) {
+	b := &fakeBackend{sessions: SessionInventory{
+		Sources: []SessionSource{{Kind: SessionKindSSH, Service: "ssh", State: SessionSourceAvailable}},
+		SSH:     []SSHSession{{Service: "ssh", User: "deploy", Terminal: "pts/4", PID: 42}},
+	}}
+	rec := httptest.NewRecorder()
+	newServer(b).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, testAPIPath(apiSegmentSessions), nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("sessions status = %d body=%s", rec.Code, rec.Body.String())
+	}
+	var got SessionInventory
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode sessions: %v", err)
+	}
+	if len(got.Sources) != 1 || len(got.SSH) != 1 || got.SSH[0].Service != "ssh" {
+		t.Fatalf("sessions = %+v", got)
 	}
 }
 
@@ -1287,6 +1317,30 @@ func TestSSHSessionCloseEndpointRequiresFullSessionIdentity(t *testing.T) {
 	}
 	if got := b.sshSessionsClosed; len(got) != 1 || got[0].PID != 96 || got[0].StartTicks != 1234 || got[0].Terminal != "pts/11" {
 		t.Fatalf("closed sessions = %+v", got)
+	}
+}
+
+func TestTerminalSessionCloseEndpointRequiresFullSessionIdentity(t *testing.T) {
+	b := &fakeBackend{}
+	h := newServer(b)
+	path := testServicePath("shells", apiSegmentTerminalSessions, "tmux-sessions", apiActionClose)
+	valid := testQueryParams(
+		apiQueryMultiplexer, "tmux", apiQuerySession, "ops", apiQueryUser, "deploy", apiQueryIdentity, "$7:90",
+	)
+	for _, query := range []string{"", testQueryParams(apiQueryMultiplexer, "tmux", apiQuerySession, "ops"), testQueryParams(apiQueryMultiplexer, "other", apiQuerySession, "ops", apiQueryUser, "deploy", apiQueryIdentity, "$7:90")} {
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, postReq(testPathQuery(path, query)))
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("query %q status = %d, want 400", query, rec.Code)
+		}
+	}
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, postReq(testPathQuery(path, valid)))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("close terminal session status = %d: %s", rec.Code, rec.Body.String())
+	}
+	if got := b.terminalSessionsClosed; len(got) != 1 || got[0].Check != "tmux-sessions" || got[0].Name != "ops" || got[0].Identity != "$7:90" {
+		t.Fatalf("closed terminal sessions = %+v", got)
 	}
 }
 

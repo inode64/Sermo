@@ -38,6 +38,7 @@
 <div id="statusbar" aria-live="off"></div>
 <nav id="section-nav" aria-label="Dashboard sections">
   <a class="section-jump" href="#services-section" data-panel-target="services-section" data-count-source="services-count">Services <span class="nav-count" data-nav-count></span></a>
+  <a class="section-jump" href="#sessions-section" data-panel-target="sessions-section" data-count-source="sessions-count">Sessions <span class="nav-count" data-nav-count></span></a>
   <a class="section-jump" href="#containers-section" data-panel-target="containers-section" data-count-source="containers-count">Containers <span class="nav-count" data-nav-count></span></a>
   <a class="section-jump" href="#vms-section" data-panel-target="vms-section" data-count-source="vms-count">VMs <span class="nav-count" data-nav-count></span></a>
   <a class="section-jump" href="#storage-section" data-panel-target="storage-section" data-count-source="storage-count">Storage <span class="nav-count" data-nav-count></span></a>
@@ -66,6 +67,37 @@
 <div id="op-live" role="status" aria-live="polite" aria-atomic="true"></div>
 <!--__SERMO_WATCH_PANEL:storage__-->
 <!--__SERMO_WATCH_PANEL:lvm__-->
+
+<h2 class="visually-hidden">Sessions</h2>
+<details id="sessions-section" open class="panel panel-hidden">
+  <summary><span class="summary-title">Sessions <span id="sessions-count" class="muted"></span></span></summary>
+  <div id="session-controls" class="panel-controls">
+    <label for="session-search" class="visually-hidden">Filter sessions</label>
+    <input id="session-search" type="search" placeholder="filter sessions…  ( / )" aria-describedby="search-shortcut-hint">
+    <span id="session-filters" role="group" aria-label="Filter sessions by type">
+      <button data-sf="all" class="f-active" aria-pressed="true">all</button>
+      <button data-sf="ssh" aria-pressed="false">SSH</button>
+      <button data-sf="tmux" aria-pressed="false">tmux</button>
+      <button data-sf="screen" aria-pressed="false">screen</button>
+    </span>
+    <span id="session-filter-count" class="muted"></span>
+  </div>
+  <table class="sessions-table">
+    <caption class="visually-hidden">Current SSH, tmux and screen sessions</caption>
+    <thead><tr>
+      <th scope="col" class="sortable" data-session-sort="type">Type<span class="sort-ind" data-ssi="type"></span></th>
+      <th scope="col" class="sortable" data-session-sort="user">User<span class="sort-ind" data-ssi="user"></span></th>
+      <th scope="col" class="sortable" data-session-sort="session">Session<span class="sort-ind" data-ssi="session"></span></th>
+      <th scope="col" class="sortable" data-session-sort="state">State<span class="sort-ind" data-ssi="state"></span></th>
+      <th scope="col" class="sortable" data-session-sort="idle">Idle<span class="sort-ind" data-ssi="idle"></span></th>
+      <th scope="col" class="sortable" data-session-sort="cpu">CPU<span class="sort-ind" data-ssi="cpu"></span></th>
+      <th scope="col" class="sortable" data-session-sort="memory">Memory<span class="sort-ind" data-ssi="memory"></span></th>
+      <th scope="col" class="sortable" data-session-sort="io">IO R/W<span class="sort-ind" data-ssi="io"></span></th>
+      <th scope="col"><span class="visually-hidden">Actions</span></th>
+    </tr></thead>
+    <tbody id="session-rows"></tbody>
+  </table>
+</details>
 
 <h2 class="visually-hidden">Services</h2>
 <details id="services-section" open class="panel">
