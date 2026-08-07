@@ -72,9 +72,12 @@ type TerminalSession struct {
 }
 
 // TerminalSessionSample is the read-only result of one configured terminal
-// multiplexer query.
+// multiplexer query. Present distinguishes a live multiplexer namespace with
+// no sessions from an absent namespace, so the Web UI does not render stale
+// configured sources as empty sessions.
 type TerminalSessionSample struct {
 	Sessions []TerminalSession
+	Present  bool
 }
 
 // TerminalSessionConfig identifies the one terminal multiplexer namespace to
@@ -232,6 +235,7 @@ func (c terminalSessionsCheck) Run(ctx context.Context) Result {
 		DataKeyCount:            len(sample.Sessions),
 		DataKeyAttached:         attached,
 		DataKeyDetached:         detached,
+		DataKeyPresent:          sample.Present,
 		DataKeyTerminalSessions: sample.Sessions,
 		DataKeyValue:            float64(len(sample.Sessions)),
 		DataKeyUnit:             metrics.MetricUnitSessions,
@@ -257,7 +261,7 @@ func sampleTerminalSessions(ctx context.Context, runner execx.Runner, config Ter
 	}
 	output := strings.TrimSpace(result.Stdout + "\n" + result.Stderr)
 	if adapter.sessionsAbsent(output) {
-		return TerminalSessionSample{}, nil
+		return TerminalSessionSample{Present: false}, nil
 	}
 	if err != nil {
 		return TerminalSessionSample{}, fmt.Errorf("list %s sessions for user %q: %w", config.Multiplexer, config.User, err)
@@ -269,7 +273,7 @@ func sampleTerminalSessions(ctx context.Context, runner execx.Runner, config Ter
 	if err != nil {
 		return TerminalSessionSample{}, err
 	}
-	return TerminalSessionSample{Sessions: sessions}, nil
+	return TerminalSessionSample{Sessions: sessions, Present: true}, nil
 }
 
 func tmuxSessionArgs(config TerminalSessionConfig) []string {

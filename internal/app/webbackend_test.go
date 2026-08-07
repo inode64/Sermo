@@ -284,6 +284,26 @@ func TestWebBackendTerminalSessionSourcesExposeCollectingAndUnavailable(t *testi
 	}
 }
 
+func TestWebBackendOmitsAbsentTerminalSessionSource(t *testing.T) {
+	snaps := NewSnapshots()
+	snaps.PublishWithCheckTypes("web", map[string]checks.Result{
+		"tmux-sessions": {
+			Check: "tmux-sessions",
+			OK:    true,
+			Data:  map[string]any{checks.DataKeyPresent: false},
+		},
+	}, map[string]bool{"tmux-sessions": true}, map[string]string{"tmux-sessions": checks.CheckTypeTerminalSessions})
+	b := webBackendWithEntry(snaps, []string{"tmux-sessions"}, map[string]string{"tmux-sessions": checks.CheckTypeTerminalSessions})
+	b.entries["web"].terminalSessions = []terminalSessionSource{{
+		check: "tmux-sessions", multiplexer: checks.TerminalMultiplexerTmux, user: "deploy", socket: "/tmp/tmux-1000/default",
+	}}
+
+	inventory := b.Sessions(context.Background())
+	if len(inventory.Sources) != 0 || len(inventory.Terminal) != 0 {
+		t.Fatalf("session inventory = %+v, want no absent terminal source", inventory)
+	}
+}
+
 func TestSessionUsageUsesServiceReadingSemantics(t *testing.T) {
 	sample := metrics.Snapshot{
 		metrics.MetricMemory:  {Absolute: 4096, Ready: true},
