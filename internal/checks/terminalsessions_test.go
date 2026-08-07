@@ -115,7 +115,7 @@ func TestTerminalSessionsCheckRunsReadOnlyClientAsConfiguredUser(t *testing.T) {
 	if runner.user != "deploy" || runner.name != "/usr/bin/tmux" || !reflect.DeepEqual(runner.args, []string{"list-sessions", "-F", tmuxSessionFormat}) || !runner.hasDeadline {
 		t.Fatalf("RunUser(user=%q, name=%q, args=%v, deadline=%v), want configured tmux query", runner.user, runner.name, runner.args, runner.hasDeadline)
 	}
-	if result.Data[DataKeyCount] != 2 || result.Data[DataKeyAttached] != 1 || result.Data[DataKeyDetached] != 1 {
+	if result.Data[DataKeyCount] != 2 || result.Data[DataKeyAttached] != 1 || result.Data[DataKeyDetached] != 1 || result.Data[DataKeyPresent] != true {
 		t.Fatalf("result data = %#v", result.Data)
 	}
 	sessions := TerminalSessionsFromData(result.Data)
@@ -126,25 +126,34 @@ func TestTerminalSessionsCheckRunsReadOnlyClientAsConfiguredUser(t *testing.T) {
 
 func TestTerminalSessionsTreatsKnownEmptyClientOutputAsZero(t *testing.T) {
 	tests := []struct {
-		name   string
-		config TerminalSessionConfig
-		result execx.Result
+		name        string
+		config      TerminalSessionConfig
+		result      execx.Result
+		wantPresent bool
 	}{
 		{
-			name:   "tmux without server",
-			config: TerminalSessionConfig{Multiplexer: TerminalMultiplexerTmux, Binary: "/usr/bin/tmux", User: "deploy"},
-			result: execx.Result{ExitCode: 1, Stderr: "error connecting to /tmp/tmux-1000/default (No such file or directory)"},
+			name:        "tmux without server",
+			config:      TerminalSessionConfig{Multiplexer: TerminalMultiplexerTmux, Binary: "/usr/bin/tmux", User: "deploy"},
+			result:      execx.Result{ExitCode: 1, Stderr: "error connecting to /tmp/tmux-1000/default (No such file or directory)"},
+			wantPresent: false,
 		},
 		{
-			name:   "screen without sockets",
-			config: TerminalSessionConfig{Multiplexer: TerminalMultiplexerScreen, Binary: "/usr/bin/screen", User: "deploy"},
-			result: execx.Result{ExitCode: 1, Stdout: "No Sockets found in /run/screen/S-deploy."},
+			name:        "screen without sockets",
+			config:      TerminalSessionConfig{Multiplexer: TerminalMultiplexerScreen, Binary: "/usr/bin/screen", User: "deploy"},
+			result:      execx.Result{ExitCode: 1, Stdout: "No Sockets found in /run/screen/S-deploy."},
+			wantPresent: false,
+		},
+		{
+			name:        "live tmux server without sessions",
+			config:      TerminalSessionConfig{Multiplexer: TerminalMultiplexerTmux, Binary: "/usr/bin/tmux", User: "deploy"},
+			result:      execx.Result{ExitCode: execx.ExitCodeSuccess},
+			wantPresent: true,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			sample, err := sampleTerminalSessions(context.Background(), &recordingUserRunner{result: tt.result}, tt.config)
-			if err != nil || len(sample.Sessions) != 0 {
+			if err != nil || len(sample.Sessions) != 0 || sample.Present != tt.wantPresent {
 				t.Fatalf("sampleTerminalSessions() = %#v, %v; want empty success", sample, err)
 			}
 		})

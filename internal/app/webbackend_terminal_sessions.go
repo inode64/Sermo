@@ -260,6 +260,9 @@ func (b *WebBackend) appendTerminalSessions(result *web.SessionInventory, servic
 			result.Sources = append(result.Sources, source)
 			continue
 		}
+		if present, reported := snapshot.Data[checks.DataKeyPresent]; reported && !cfgval.Bool(present) {
+			continue
+		}
 		source.State = web.SessionSourceAvailable
 		result.Sources = append(result.Sources, source)
 		for _, session := range checks.TerminalSessionsFromData(snapshot.Data) {
