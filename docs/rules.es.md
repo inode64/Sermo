@@ -556,8 +556,15 @@ protegidas.
 explícitamente mediante el cliente instalado de `tmux` o GNU `screen`. Es un
 check de estilo condición; usa `reports: state` para convertirlo en un sensor
 informativo activo/inactivo. El resultado expone el total `count` y las
-sesiones `attached` y `detached`. En el detalle de un servicio, la Web UI
-muestra cada sesión como servicio de terminal de solo lectura.
+sesiones `attached` y `detached`. La Web UI muestra cada sesión en el panel
+superior Sesiones, junto con las sesiones SSH. Un administrador puede cerrar
+una fila: la acción vuelve a listar ese espacio configurado y exige la misma
+generación antes de invocar el comando exacto de cierre del cliente.
+Un servidor tmux configurado con socket explícito que está vivo pero no tiene
+sesiones aparece como `empty`; un administrador puede cerrarlo manualmente.
+Sermo lo vuelve a listar, rechaza la acción si apareció una sesión e invoca
+`kill-server` de tmux para que tmux elimine su propio socket. Un espacio que ya
+no existe se omite del panel Sesiones; Sermo nunca elimina su socket directamente.
 
 ```yaml
 watches:

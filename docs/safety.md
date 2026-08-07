@@ -79,6 +79,13 @@ close sends one `SIGTERM` to the per-session process; it never escalates to
 The `terminal_sessions` check is observation-only. It runs a bounded,
 argv-only `tmux` or `screen` listing as the explicitly configured account;
 it never attaches, detaches, kills or otherwise controls a terminal session.
+The separate manual close of an empty terminal source is available only for a
+tmux source with an explicit configured socket. It shares the operation and
+named locks, guards, timeout and one-event path; it re-lists the exact source,
+requires a live server with zero sessions, invokes only `tmux -S SOCKET
+kill-server` as the configured user, then verifies the namespace disappeared.
+It never removes the socket directly, and any missing server or newly active
+session rejects the operation.
 
 A residual Sermo is not allowed to identify and kill is **reported, not killed**:
 a clean `orphan_processes` failure is safer than killing the wrong process.

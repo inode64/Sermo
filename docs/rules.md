@@ -555,6 +555,12 @@ active/inactive sensor. The result exposes total `count`, `attached` and
 Sessions panel, together with SSH sessions. An administrator may close one row;
 the action re-lists that configured namespace and requires the same session
 generation before invoking the multiplexer client's exact close command.
+An explicitly socket-configured tmux server that is live but has zero sessions
+appears as `empty`; an administrator may close that server manually. Sermo
+re-lists it, refuses the action if a session appeared, then invokes tmux's
+`kill-server` command so tmux removes its own socket. A namespace that is no
+longer present is omitted from the Sessions panel; Sermo never unlinks its
+socket directly.
 
 ```yaml
 watches:

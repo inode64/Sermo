@@ -1104,6 +1104,16 @@ una recarga concurrente.
 - `POST /api/services/{name}/{action}` — acción de service. `action` es `monitor`,
   `unmonitor`, `start`, `stop`, `restart`, `reload` o `resume`;
   start/stop/restart/reload/resume pasan por el motor de operaciones seguras.
+- `POST /api/services/{name}/sessions/{pid}/close?start_ticks=TICKS&terminal=PTS`
+  — cierra un terminal SSH revalidado con `SIGTERM`.
+- `POST /api/services/{name}/terminal-sessions/{check}/close?multiplexer=TYPE&session=NAME&user=USER&identity=IDENTITY`
+  — cierra una sesión tmux o screen revalidada mediante su cliente configurado;
+  exige su identidad de generación publicada y comparte lock, guards, timeout y
+  ruta de evento del servicio.
+- `POST /api/services/{name}/terminal-sessions/{check}/close-empty`
+  — cierra un servidor tmux vacío revalidado con socket explícito configurado.
+  Debe seguir sin sesiones; Sermo ejecuta el argv exacto `kill-server` de tmux y
+  comprueba que el espacio ha desaparecido.
 - `POST /api/watches/{name}/{action}` — acción de watch. `action` es
   `monitor`, `unmonitor`, `expand`, `probe`, `pause` o `resume`. `probe` es de
   solo lectura para watches LVM, RAID y SMART; `pause`/`resume` requieren el
