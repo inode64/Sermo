@@ -119,6 +119,7 @@ func TestIntegrationRestartViaFakeSystemctl(t *testing.T) {
 paths:
   services: [ `+root+`/services ]
   runtime: `+root+`/run
+  state: `+root+`/state
 defaults:
   policy: { cooldown: 5m }
 `)
@@ -161,6 +162,7 @@ func TestIntegrationRestartBlockedByGuard(t *testing.T) {
 paths:
   services: [ `+root+`/services ]
   runtime: `+root+`/run
+  state: `+root+`/state
 defaults:
   policy: { cooldown: 5m }
 `)

@@ -10,6 +10,7 @@ import (
 	"sermo/internal/config"
 	"sermo/internal/operation"
 	"sermo/internal/rules"
+	"sermo/internal/state"
 )
 
 // Event records what a worker cycle did, for the operator-visible log.
@@ -154,6 +155,18 @@ func operationEventEmitter(emit func(Event)) func(operation.Result) {
 			Message: r.Message,
 		})
 	}
+}
+
+// OperationEventRecord converts one completed service operation into the
+// canonical persistent event shape shared by sermod, the Web UI and sermoctl.
+func OperationEventRecord(r operation.Result) state.EventRecord {
+	return eventRecordFromLogged(LoggedEvent{Event: Event{
+		Service: r.Service,
+		Kind:    eventKindForResult(r),
+		Action:  r.Action,
+		Status:  string(r.Status),
+		Message: r.Message,
+	}})
 }
 
 // eventKindForResult maps an operation result to the event-log kind. Successful
