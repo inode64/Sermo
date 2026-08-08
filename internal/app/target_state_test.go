@@ -39,6 +39,22 @@ func TestServiceState(t *testing.T) {
 		{name: "full observability outranks an empty tree", enabled: true, monitored: true, backendStatus: string(servicemgr.StatusActive), checkHealth: TargetStateOK, observed: true, ready: true, processesMissing: true, want: TargetStateMonitored},
 		{name: "startup settling still wins over an empty tree", enabled: true, monitored: true, backendStatus: string(servicemgr.StatusActive), checkHealth: TargetStateOK, observed: false, processesMissing: true, want: TargetStateStarting},
 		{name: "failed checks still win over an empty tree", enabled: true, monitored: true, backendStatus: string(servicemgr.StatusActive), checkHealth: checkHealthFailing, observed: true, processesMissing: true, want: TargetStateFailed},
+		// An unreadable backend status is not an outage. FireHOL's init script
+		// overrides `status` with its own report, so rc-service answers
+		// "unknown" for a service rc-status lists as started and whose every
+		// check passes; calling that failed invented an outage.
+		{name: "unknown backend status is not failed", enabled: true, monitored: true, backendStatus: string(servicemgr.StatusUnknown), checkHealth: TargetStateOK, observed: true, ready: true, want: TargetStateCollecting},
+		{name: "unknown backend status with trusted process reads active", enabled: true, monitored: true, backendStatus: string(servicemgr.StatusUnknown), checkHealth: TargetStateOK, observed: true, ready: true, processActive: true, want: TargetStateActive},
+		{name: "unknown backend status unmonitored stays stopped", enabled: true, monitored: false, backendStatus: string(servicemgr.StatusUnknown), observed: true, want: TargetStateStopped},
+		// Inactive stays failed: that is the backend answering, not declining.
+		{name: "inactive monitored still fails", enabled: true, monitored: true, backendStatus: string(servicemgr.StatusInactive), checkHealth: TargetStateOK, observed: true, ready: true, want: TargetStateFailed},
+		// Declining to answer must not swallow the checks' own verdict: an
+		// unreadable status plus a failing required check is still an outage.
+		{name: "unknown backend status with failing checks still fails", enabled: true, monitored: true, backendStatus: string(servicemgr.StatusUnknown), checkHealth: checkHealthFailing, observed: true, ready: true, want: TargetStateFailed},
+		{name: "unknown backend status with failing checks fails even with a live process", enabled: true, monitored: true, backendStatus: string(servicemgr.StatusUnknown), checkHealth: checkHealthFailing, observed: true, ready: true, processActive: true, want: TargetStateFailed},
+		{name: "unknown backend status with warning checks warns", enabled: true, monitored: true, backendStatus: string(servicemgr.StatusUnknown), checkHealth: checkHealthWarning, observed: true, ready: true, want: TargetStateWarning},
+		// Healthy checks under an unreadable status never claim "monitored".
+		{name: "unknown backend status never reads monitored", enabled: true, monitored: true, backendStatus: string(servicemgr.StatusUnknown), checkHealth: TargetStateOK, observed: true, ready: true, processesMissing: true, want: TargetStateCollecting},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

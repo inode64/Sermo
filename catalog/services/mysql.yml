@@ -36,8 +36,13 @@ preflight:
       - --help
       - --verbose
     timeout: 15s
+# The `mysql` unit is MariaDB's unit name too (Gentoo ships dev-db/mariadb with
+# /etc/init.d/mysql and /usr/sbin/mysqld), and MariaDB's packaged my.cnf writes
+# mariadb.pid. Accept both, exactly as mariadb.yml already accepts mysqld.pid:
+# either file, when it points at a live process, proves the same daemon.
 pidfile:
   - /run/mysqld/mysqld.pid
+  - /run/mysqld/mariadb.pid
 processes:
   mysqld:
     exe: ${mysql_binary}

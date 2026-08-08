@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -1391,6 +1392,11 @@ func (s *Store) RecordEvent(e EventRecord) (int64, error) {
 	return id, nil
 }
 
+// eventSelectPrefix is the column list every event_log read shares, so the two
+// queries below cannot drift out of step with scanEventRows.
+const eventSelectPrefix = `SELECT id, at, service, watch, app, kind, rule, action, status, message, output
+		   FROM event_log`
+
 // RecentEvents returns the newest persisted events first. limit <= 0 returns all
 // persisted events.
 func (s *Store) RecentEvents(limit int) ([]EventRecord, error) {
@@ -1403,8 +1409,7 @@ func (s *Store) RecentEventsBefore(beforeID int64, limit int) ([]EventRecord, er
 	if limit <= 0 {
 		limit = -1
 	}
-	query := `SELECT id, at, service, watch, app, kind, rule, action, status, message, output
-		   FROM event_log`
+	query := eventSelectPrefix
 	args := make([]any, 0, eventQueryMaxArgs)
 	if beforeID > 0 {
 		query += ` WHERE id < ?`
@@ -1417,7 +1422,48 @@ func (s *Store) RecentEventsBefore(beforeID int64, limit int) ([]EventRecord, er
 		return nil, fmt.Errorf("load recent events: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
+	return scanEventRows(rows)
+}
 
+// RecentEventsForColumn returns the newest persisted events for one target,
+// filtered on the event_log column naming that dimension ("service", "watch" or
+// "app"). It exists because the daemon's in-memory ring is not authoritative:
+// sermoctl runs a service operation in its own process and records the event
+// straight to this store, so a ring-only per-target view silently omits every
+// operator action until the daemon restarts and rehydrates. Callers pass a
+// column from eventTargetColumns; anything else is rejected rather than
+// interpolated into the query.
+func (s *Store) RecentEventsForColumn(column, name string, limit int) ([]EventRecord, error) {
+	if !slices.Contains(eventTargetColumns, column) {
+		return nil, fmt.Errorf("load recent events: unsupported event target column %q", column)
+	}
+	if limit <= 0 {
+		limit = -1
+	}
+	query := eventSelectPrefix + ` WHERE ` + column + ` = ? ORDER BY id DESC LIMIT ?;`
+	rows, err := s.reads().QueryContext(s.sqlCtx(), query, name, limit)
+	if err != nil {
+		return nil, fmt.Errorf("load recent events for %s %q: %w", column, name, err)
+	}
+	defer func() { _ = rows.Close() }()
+	return scanEventRows(rows)
+}
+
+// EventColumnService and EventColumnApp name the event_log dimension a
+// per-target query filters on. `watch` is deliberately absent: nothing reads
+// watch events per target today, and unlike these two it has no covering index,
+// so allowing it would ship a full table scan waiting for its first caller. Add
+// `event_log_watch_at_idx` alongside the entry before opening that door.
+const (
+	EventColumnService = "service"
+	EventColumnApp     = "app"
+)
+
+// eventTargetColumns is the allow-list RecentEventsForColumn validates against,
+// so no caller can reach the query builder with an arbitrary identifier.
+var eventTargetColumns = []string{EventColumnService, EventColumnApp}
+
+func scanEventRows(rows *sql.Rows) ([]EventRecord, error) {
 	var out []EventRecord
 	for rows.Next() {
 		var rec EventRecord

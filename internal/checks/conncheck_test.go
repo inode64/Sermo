@@ -888,3 +888,47 @@ func TestBuildUnknownTypeStillWarns(t *testing.T) {
 		t.Fatalf("unknown type should still warn, got %v", warns)
 	}
 }
+
+// An observation that carries no identity must neither report a change nor
+// overwrite the identity on record. A D-Bus name that is activatable but not
+// currently activated answers without an owner, so a service that starts and
+// stops on demand would otherwise alert on every transition.
+func TestConnCheckOnChangeIgnoresAnIdentitylessObservation(t *testing.T) {
+	fp := ""
+	c := connCheck{
+		base:  base{name: "dbus", timeout: time.Second},
+		proto: fakeProto{},
+		cfg:   conn.Config{Host: "h", Port: 0},
+		probe: func(context.Context, conn.Config) (conn.Result, error) {
+			return conn.Result{Extra: map[string]string{"fingerprint": fp}}, nil
+		},
+		onChange: true,
+		state:    &connState{},
+	}
+	// Two cycles with no owner at all: nothing to compare, nothing to report.
+	for i := range 2 {
+		if res := c.Run(context.Background()); !res.OK {
+			t.Fatalf("cycle %d: an unowned activatable name must stay ok: %q", i, res.Message)
+		}
+	}
+	// The service is activated: this is the first identity ever observed, so it
+	// becomes the baseline rather than a change against a phantom "" baseline.
+	fp = ":1.42"
+	if res := c.Run(context.Background()); !res.OK {
+		t.Fatalf("the first observed identity must prime, not alert: %q", res.Message)
+	}
+	// It goes idle again: still no change, and the baseline must survive.
+	fp = ""
+	if res := c.Run(context.Background()); !res.OK {
+		t.Fatalf("going unowned again must not alert: %q", res.Message)
+	}
+	// A genuinely different owner is still reported.
+	fp = ":1.99"
+	res := c.Run(context.Background())
+	if res.OK {
+		t.Fatal("a real owner change must still fail the check")
+	}
+	if res.Data["fingerprint_old"] != ":1.42" || res.Data["fingerprint"] != ":1.99" {
+		t.Fatalf("the retained baseline must be the last real identity: %v", res.Data)
+	}
+}

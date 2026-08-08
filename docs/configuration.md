@@ -2813,6 +2813,12 @@ thousands separator and dot as the decimal mark (`12,345.68`); durations and
 timestamps use the normal readable format. Unknown references remain visible,
 which makes a mistaken field name easy to identify.
 
+A check that could not observe at all keeps its own message: an unavailable
+result — an unreadable source, a timeout, a database that will not open — has no
+reading to summarise, so the probe's diagnostic is what reaches the dashboard
+instead of the template. Rendering the summary over it would both hide the cause
+and, since the observation produced no data, leave `${value}` on screen.
+
 ```yaml
 check:
   type: file

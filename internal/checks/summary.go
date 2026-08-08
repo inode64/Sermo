@@ -53,8 +53,14 @@ func (c summaryCheck) resultMetadata() Result { return checkResultMetadata(c.Che
 // directly (${older_than}) or under ${check.<field>}; and result data is exposed
 // as ${result.<field>}. Unknown references remain visible in the message so a
 // configuration mistake is not silently hidden.
+//
+// An unavailable result keeps its own message. A summary describes a reading,
+// and an unavailable result has none: the probe reports why it could not
+// observe, and that diagnostic is the only thing worth showing. Rendering the
+// template over it both hides the cause and — since the observation produced no
+// data — leaves ${value} standing in the operator's face.
 func ApplySummary(template string, entry map[string]any, result Result) Result {
-	if template == "" {
+	if template == "" || result.Unavailable {
 		return result
 	}
 	result.Message = summaryReference.ReplaceAllStringFunc(template, func(match string) string {
