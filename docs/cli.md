@@ -172,6 +172,14 @@ observability-ready) and `failed`. Without the daemon view, a
 configured active monitored service falls back to `collecting`; an active
 service that is not known to be monitored falls back to `started`.
 
+A backend status of `unknown` is not a verdict of "down" — an init script that
+replaces `status` with its own report, or a query that timed out, reads unknown
+while the service runs normally — so it never yields `failed` on its own. The
+service's own checks decide instead: a failing required check still reads
+`failed`, and healthy checks read `active` or `collecting` rather than
+`monitored`, because a backend that would not answer cannot underwrite the
+full-observability claim.
+
 Each manual service operation persists exactly one result in the shared event
 feed, so `sermoctl events` and the Web UI show the same action outcome. Sermoctl
 does not start an operation when the state database cannot be opened for that

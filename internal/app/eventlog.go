@@ -24,6 +24,10 @@ type EventStore interface {
 	RecordEvent(record state.EventRecord) (int64, error)
 	RecentEvents(limit int) ([]state.EventRecord, error)
 	RecentEventsBefore(beforeID int64, limit int) ([]state.EventRecord, error)
+	// RecentEventsForColumn returns one target's events, filtered on the
+	// event_log column naming that dimension (state.EventColumnService and
+	// friends).
+	RecentEventsForColumn(column, name string, limit int) ([]state.EventRecord, error)
 	PruneEvents(ctx context.Context, before time.Time) (int64, error)
 }
 
@@ -146,11 +150,48 @@ func (l *EventLog) exportEvent(e LoggedEvent) {
 // Recent returns up to limit events, newest first. A non-empty service filters to
 // that service's events (Event.Service); "" returns everything (including
 // host-watch events). limit <= 0 returns all retained events.
+//
+// A named service is read from the store first, exactly as Page does. The ring
+// is not authoritative for one target: sermoctl runs a service operation in its
+// own process and records the event straight to the store, so a ring-only read
+// omitted every operator action until a daemon restart rehydrated the ring —
+// while the global feed, which is store-backed, showed it all along.
 func (l *EventLog) Recent(service string, limit int) []LoggedEvent {
 	if l == nil {
 		return nil
 	}
-	return l.recentFiltered(func(e LoggedEvent) bool { return service == "" || e.Service == service }, limit)
+	if service != "" {
+		return l.recentForTarget(state.EventColumnService, service, limit,
+			func(e LoggedEvent) bool { return e.Service == service })
+	}
+	return l.recentFiltered(func(LoggedEvent) bool { return true }, limit)
+}
+
+// recentForTarget reads one target's events from the store, falling back to the
+// ring when there is no store or the query fails. The fallback keeps the view
+// working for stores that are absent (tests) or momentarily unreadable, at the
+// cost of the completeness the store provides.
+// The store is set once at construction and never replaced, so it is read
+// without the mutex here exactly as Page does.
+func (l *EventLog) recentForTarget(column, name string, limit int, match func(LoggedEvent) bool) []LoggedEvent {
+	if l.store == nil {
+		return l.recentFiltered(match, limit)
+	}
+	records, err := l.store.RecentEventsForColumn(column, name, limit)
+	if err != nil {
+		l.reportStoreError(err)
+		return l.recentFiltered(match, limit)
+	}
+	return loggedEventsFromRecords(records)
+}
+
+// loggedEventsFromRecords converts a store page into the log's own type.
+func loggedEventsFromRecords(records []state.EventRecord) []LoggedEvent {
+	out := make([]LoggedEvent, 0, len(records))
+	for i := range records {
+		out = append(out, loggedEventFromRecord(records[i]))
+	}
+	return out
 }
 
 // recentFiltered returns up to limit retained events matching match, newest
@@ -184,11 +225,7 @@ func (l *EventLog) Page(beforeID int64, limit int) []LoggedEvent {
 	if l.store != nil {
 		records, err := l.store.RecentEventsBefore(beforeID, limit)
 		if err == nil {
-			out := make([]LoggedEvent, 0, len(records))
-			for i := range records {
-				out = append(out, loggedEventFromRecord(records[i]))
-			}
-			return out
+			return loggedEventsFromRecords(records)
 		}
 		l.reportStoreError(err)
 	}
@@ -216,7 +253,8 @@ func (l *EventLog) RecentApp(app string, limit int) []LoggedEvent {
 	if l == nil || app == "" {
 		return nil
 	}
-	return l.recentFiltered(func(e LoggedEvent) bool { return e.App == app }, limit)
+	return l.recentForTarget(state.EventColumnApp, app, limit,
+		func(e LoggedEvent) bool { return e.App == app })
 }
 
 // LastService returns the newest retained event for service, if any.

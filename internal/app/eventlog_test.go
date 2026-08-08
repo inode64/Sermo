@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -251,5 +252,124 @@ func TestWebBackendLastServiceEventReadsExternalPersistentWrite(t *testing.T) {
 	}
 	if listed := b.lastServiceEvents()["web"]; listed == nil || listed.ID != last.ID {
 		t.Fatalf("listed service event = %+v, want ID %d", listed, last.ID)
+	}
+}
+
+// stubEventStore records what Append writes and can also hold rows that were
+// never appended through this log — the shape sermoctl produces when it runs an
+// operation in its own process and writes the audit row straight to the state
+// database.
+type stubEventStore struct {
+	rows    []state.EventRecord
+	nextID  int64
+	queries []string
+	failFor string
+}
+
+func (s *stubEventStore) RecordEvent(rec state.EventRecord) (int64, error) {
+	s.nextID++
+	rec.ID = s.nextID
+	s.rows = append(s.rows, rec)
+	return rec.ID, nil
+}
+
+func (s *stubEventStore) RecentEvents(limit int) ([]state.EventRecord, error) {
+	return s.RecentEventsBefore(0, limit)
+}
+
+func (s *stubEventStore) RecentEventsBefore(_ int64, limit int) ([]state.EventRecord, error) {
+	return s.newest(func(state.EventRecord) bool { return true }, limit), nil
+}
+
+func (s *stubEventStore) RecentEventsForColumn(column, name string, limit int) ([]state.EventRecord, error) {
+	s.queries = append(s.queries, column+"="+name)
+	if s.failFor == column {
+		return nil, errors.New("store unavailable")
+	}
+	return s.newest(func(r state.EventRecord) bool {
+		switch column {
+		case state.EventColumnService:
+			return r.Service == name
+		case state.EventColumnApp:
+			return r.App == name
+		default:
+			return r.Watch == name
+		}
+	}, limit), nil
+}
+
+func (s *stubEventStore) newest(match func(state.EventRecord) bool, limit int) []state.EventRecord {
+	var out []state.EventRecord
+	for i := len(s.rows) - 1; i >= 0; i-- {
+		if !match(s.rows[i]) {
+			continue
+		}
+		out = append(out, s.rows[i])
+		if limit > 0 && len(out) >= limit {
+			break
+		}
+	}
+	return out
+}
+
+func (s *stubEventStore) PruneEvents(context.Context, time.Time) (int64, error) { return 0, nil }
+
+// sermoctl performs a service operation in its own process and records the
+// audit row directly in the state database, so it never reaches the running
+// daemon's ring. A per-service read that consulted only the ring omitted every
+// operator action until a restart rehydrated it, while the global feed showed
+// them — the exact CLI/WebUI disagreement observed on 192.0.2.35.
+func TestRecentReadsOneServiceFromTheStoreNotTheRing(t *testing.T) {
+	store := &stubEventStore{}
+	l, err := NewPersistentEventLog(10, store, nil)
+	if err != nil {
+		t.Fatalf("NewPersistentEventLog: %v", err)
+	}
+	l.Add(Event{Service: "freshclam", Kind: eventKindError, Message: "older, through the daemon"})
+
+	// Written by another process: in the store, absent from this ring.
+	if _, err := store.RecordEvent(state.EventRecord{
+		At: time.Unix(100, 0), Service: "freshclam", Kind: eventKindAction,
+		Action: "restart", Status: eventStatusOK, Message: "restart ok",
+	}); err != nil {
+		t.Fatalf("RecordEvent: %v", err)
+	}
+
+	got := l.Recent("freshclam", 10)
+	if len(got) != 2 {
+		t.Fatalf("Recent(freshclam) = %d events, want 2 (ring miss means the store was not consulted)", len(got))
+	}
+	if got[0].Message != "restart ok" {
+		t.Fatalf("newest event = %q, want the operator action recorded outside this process", got[0].Message)
+	}
+}
+
+// The global feed keeps its existing ring semantics: only a named target is
+// read through the store.
+func TestRecentGlobalStillReadsTheRing(t *testing.T) {
+	store := &stubEventStore{}
+	l, _ := NewPersistentEventLog(10, store, nil)
+	l.Add(Event{Service: "a", Kind: eventKindError, Message: "one"})
+	if got := l.Recent("", 10); len(got) != 1 {
+		t.Fatalf("Recent(\"\") = %d events, want 1", len(got))
+	}
+	for _, q := range store.queries {
+		t.Fatalf("global read issued a per-target store query %q", q)
+	}
+}
+
+// An unreadable store must not blank the view: fall back to the ring.
+func TestRecentFallsBackToRingWhenStoreFails(t *testing.T) {
+	store := &stubEventStore{failFor: state.EventColumnService}
+	var storeErr error
+	l, _ := NewPersistentEventLog(10, store, func(err error) { storeErr = err })
+	l.Add(Event{Service: "freshclam", Kind: eventKindError, Message: "from the ring"})
+
+	got := l.Recent("freshclam", 10)
+	if len(got) != 1 || got[0].Message != "from the ring" {
+		t.Fatalf("Recent(freshclam) = %+v, want the ring fallback", got)
+	}
+	if storeErr == nil {
+		t.Fatal("store failure was not reported")
 	}
 }

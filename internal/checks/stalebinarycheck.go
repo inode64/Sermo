@@ -16,6 +16,11 @@ import (
 // removed on disk.
 type StaleBinariesFunc func() []process.StaleBinary
 
+// StaleBinaryRestartHint is the remedy for a replaced executable. Both this
+// check and the process check (whose exe selector stops matching such a
+// process) end with it, so the two never word the same fix differently.
+const StaleBinaryRestartHint = "restart to pick up the installed version"
+
 // staleBinaryCheck reports processes of this service still running a binary
 // that was replaced or removed on disk — a package upgrade without a restart.
 // It is a condition check: OK means nothing is stale, so a rule fires on it
@@ -43,8 +48,8 @@ func (c staleBinaryCheck) Run(_ context.Context) Result {
 	paths := staleBinaryPaths(stale)
 	message := "no replaced binaries"
 	if len(stale) > 0 {
-		message = fmt.Sprintf("%d process(es) run a replaced binary (%s); restart to pick up the installed version",
-			len(stale), strings.Join(paths, ", "))
+		message = fmt.Sprintf("%d process(es) run a replaced binary (%s); %s",
+			len(stale), strings.Join(paths, ", "), StaleBinaryRestartHint)
 	}
 
 	res := c.result(len(stale) == 0, message, start)

@@ -154,12 +154,19 @@ func (c connCheck) changed(res conn.Result) (problems []string, extra map[string
 
 	extra = make(map[string]any, connChangeExtraInitialCapacity)
 	if c.onChange {
-		fingerprint := res.Extra[conn.ExtraKeyFingerprint]
-		if c.state.primed && fingerprint != c.state.lastFingerprint {
-			problems = append(problems, fmt.Sprintf("fingerprint changed (%s -> %s)", c.state.lastFingerprint, fingerprint))
-			extra[DataKeyFingerprintOld] = c.state.lastFingerprint
+		// An observation that carries no identity cannot be compared as one, and
+		// must not overwrite the identity already on record. A D-Bus name that is
+		// activatable but not currently activated answers without an owner, so
+		// treating "" as an identity would report a change every time such a
+		// service started or stopped on demand — and again on the first real
+		// reading, against a baseline that was never observed.
+		if fingerprint := res.Extra[conn.ExtraKeyFingerprint]; fingerprint != "" {
+			if c.state.primed && c.state.lastFingerprint != "" && fingerprint != c.state.lastFingerprint {
+				problems = append(problems, fmt.Sprintf("fingerprint changed (%s -> %s)", c.state.lastFingerprint, fingerprint))
+				extra[DataKeyFingerprintOld] = c.state.lastFingerprint
+			}
+			c.state.lastFingerprint, extra[DataKeyFingerprint] = fingerprint, fingerprint
 		}
-		c.state.lastFingerprint, extra[DataKeyFingerprint] = fingerprint, fingerprint
 	}
 	if c.onVersionChange {
 		version := versionIdentity(res)

@@ -61,7 +61,7 @@ Las comprobaciones de protocolo de conexión (MySQL, PostgreSQL, Redis, Docker, 
 | `pidfile`     | un pidfile existe y referencia un proceso en ejecución — protégelo con `requires: [service]` de modo que un pidfile ausente/obsoleto sea un error solo mientras el servicio está activo |
 | `socket`      | existe un candidato a socket Unix — protégelo con `requires: [service]` para los sockets creados por el servicio |
 | `libraries`   | todas las bibliotecas compartidas DT_NEEDED del binario pueden resolverse (debug/elf nativo, sin ldd) |
-| `process`     | un proceso que coincide con `exe`/`user` está en `state` (running/zombie/absent)|
+| `process`     | un proceso que coincide con `exe`/`user` está en `state` (running/zombie/absent); una lectura `absent` nombra el binario reemplazado cuando eso la explica |
 | `metric`      | una métrica muestreada satisface `op value` (ver Metrics)                |
 | `count`       | el número de entradas en un directorio satisface `op value` (ver Count)|
 | `storage`     | se cumplen los predicados de espacio/inodos de un sistema de archivos (`*_pct` acepta `%`; `*_bytes` requiere K/M/G/T) |
@@ -423,6 +423,22 @@ apagado para uno inactivo— para que ninguno se confunda con el veredicto ok/fa
 Una comprobación `condition` sigue mostrando `ok` / `fail`, no
 `active` / `inactive`: a diferencia de un sensor de estado, su cara disparada sí
 es un problema y tiene que parecerlo.
+
+#### Los cambios de salud llegan solos al registro de eventos
+
+Un check requerido que empieza a fallar registra un evento `firing`, y uno
+`recovered` cuando vuelve a pasar, sin necesidad de ninguna regla. Antes los
+eventos de servicio solo venían de reglas, así que un check requerido sin nada
+asociado pasaba el servicio a `failed` en el panel y no escribía nada: la
+incidencia solo era visible para quien ya estuviera mirando ese servicio.
+
+El registro es por flanco sobre el valor observado, así que una condición que
+persiste se anota una vez y no en cada ciclo. Los checks opcionales, omitidos y
+sin veredicto (`state`/`value`) nunca lo generan, un resultado reutilizado de la
+caché por un `interval` propio no es una observación nueva, y un check que ya lee
+alguna regla se deja a esa regla para que una incidencia no se convierta en dos
+eventos. Estos eventos van solo al registro; las notificaciones siguen saliendo
+del `notify` de una regla.
 
 #### Graficar el valor de una comprobación (`unit`)
 
@@ -1097,8 +1113,14 @@ Protocolos, en el orden de la tabla de arriba:
   número u object path); usa `expect.property_value` para comprobar el valor
   observado. Todas las llamadas llevan `NO_AUTO_START`: un servicio ausente o
   bloqueado falla sin que D-Bus lo active, y la llamada no puede terminar en un
-  propietario sustituto por una carrera. No existe un modo para métodos
-  arbitrarios. Omitir todos los campos de destino conserva la sonda solo-bus;
+  propietario sustituto por una carrera. Como no se activa nada, un nombre sin
+  propietario actual se contrasta con
+  `org.freedesktop.DBus.ListActivatableNames` antes de contarlo como fallo: un
+  nombre activable está instalado y arranca bajo demanda —`systemd-networkd`
+  enruta perfectamente mientras `org.freedesktop.network1` sigue sin activar—,
+  así que el check pasa e informa `activatable`. Un nombre que no está ni en uso
+  ni es activable sí está ausente, y sigue fallando. No existe un modo para
+  métodos arbitrarios. Omitir todos los campos de destino conserva la sonda solo-bus;
   en caso contrario `bus_name` y `object_path` deben definirse juntos. No
   ejecuta operación de escritura.
   **Objetivo:** por defecto el bus del sistema
@@ -1109,7 +1131,8 @@ Protocolos, en el orden de la tabla de arriba:
   nombre único de la conexión; una sonda de servicio también informa de
   `bus_name`, `object_path`, `probe` y su `owner` único, usado como huella de
   `on_change`, además de `dbus_interface`, `property` y `property_value` cuando
-  se configuren.
+  se configuren. Un nombre que pasa por ser activable informa `activatable` en
+  lugar de `owner`.
   Usa `github.com/godbus/dbus/v5`. Con `interface`
   y un `query` TCP, usa exactamente `tcp:host=…,port=…`; las direcciones
   alternativas, `nonce-tcp` y el resto de opciones de transporte TCP de D-Bus se

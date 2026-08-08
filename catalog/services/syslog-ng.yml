@@ -11,6 +11,10 @@ restart_on_change:
       ${display_name} will restart after version change of ${change.app}: ${change.old_version} -> ${change.new_version}
 variables:
   config: /etc/syslog-ng/syslog-ng.conf
+  # `stats` is a syslog-ng-ctl subcommand, not a daemon argument: the daemon
+  # binary rejects it with "Excess number of arguments" (exit 1), which read as
+  # a permanently failing check on every host.
+  ctl_binary: ${bindir}/syslog-ng-ctl
 preflight:
   config:
     type: command
@@ -43,7 +47,7 @@ watches:
     check:
       type: command
       command:
-        - ${syslog_ng_binary}
+        - ${ctl_binary}
         - stats
       timeout: 10s
       optional: true

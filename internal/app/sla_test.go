@@ -2,10 +2,13 @@ package app
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"testing"
 	"time"
 
 	"sermo/internal/checks"
+	"sermo/internal/state"
 )
 
 type checkSLACapture struct {
@@ -130,5 +133,55 @@ func TestCheckSLARecorderSkipsStateSensors(t *testing.T) {
 	}
 	if len(got) != 1 || !got["http"] {
 		t.Fatalf("records = %+v, want only http recorded", store.records)
+	}
+}
+
+// failingBatchStore is an SLA store whose transaction always fails with a fixed
+// error, so RecordCycle's error reporting can be exercised directly.
+type failingBatchStore struct {
+	checkSLACapture
+	err error
+}
+
+func (f *failingBatchStore) WithBatch(context.Context, func(state.Batch) error) error { return f.err }
+
+// A stop or a reload cancels the cycle context mid-batch. That is the daemon
+// shutting down, not a storage fault, and writing an error event for it left
+// every in-flight service showing "record cycle: begin state batch: context
+// canceled" as its newest event for days after the restart.
+func TestRecordCycleDoesNotReportCancellationAsError(t *testing.T) {
+	tests := []struct {
+		name      string
+		err       error
+		wantEvent bool
+	}{
+		{name: "cancellation is silent", err: context.Canceled, wantEvent: false},
+		{name: "wrapped cancellation is silent", err: fmt.Errorf("begin state batch: %w", context.Canceled), wantEvent: false},
+		{name: "real storage failure still reports", err: errors.New("disk I/O error"), wantEvent: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			store := &failingBatchStore{err: tt.err}
+			var events []Event
+			writer := newCycleWriter(Deps{
+				SLA:  store,
+				Now:  func() time.Time { return time.Unix(0, 0) },
+				Emit: func(e Event) { events = append(events, e) },
+			}, "svc", nil)
+			if writer == nil {
+				t.Fatal("expected cycle writer")
+			}
+			writer.RecordCycle(context.Background(), cycleRecord{up: true, recordAvailability: true})
+
+			if tt.wantEvent {
+				if len(events) != 1 || events[0].Kind != eventKindError {
+					t.Fatalf("events = %+v, want one error event", events)
+				}
+				return
+			}
+			if len(events) != 0 {
+				t.Fatalf("events = %+v, want none for %v", events, tt.err)
+			}
+		})
 	}
 }

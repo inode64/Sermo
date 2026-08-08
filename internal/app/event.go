@@ -110,6 +110,9 @@ const (
 	eventMessageMonitoringPausedAfterStorageUmount = "monitoring paused after storage umount"
 	eventMessageMonitoringResumedAfterStorageMount = "monitoring resumed after storage mount"
 	eventMessageManualProbeStarted                 = "manual probe started"
+	// eventMessageCheckPrefix opens a check-health change message, which then
+	// carries the check's name and its own diagnostic.
+	eventMessageCheckPrefix = "check "
 )
 
 // Event field names are shared by structured logs and JSON event export.

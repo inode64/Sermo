@@ -61,7 +61,7 @@ Connection-protocol checks (MySQL, PostgreSQL, Redis, Docker, libvirt, etc.) are
 | `pidfile`     | a pidfile exists and references a running process — gate with `requires: [service]` so a missing/stale pidfile is an error only while the service is active |
 | `socket`      | one Unix socket candidate exists — gate with `requires: [service]` for sockets created by the service |
 | `libraries`   | all DT_NEEDED shared libraries of the binary can be resolved (native debug/elf, no ldd) |
-| `process`     | a process matching `exe`/`user` is in `state` (running/zombie/absent)|
+| `process`     | a process matching `exe`/`user` is in `state` (running/zombie/absent); an `absent` reading names a replaced binary when one explains it |
 | `metric`      | a sampled metric satisfies `op value` (see Metrics)                |
 | `count`       | the number of entries in a directory satisfies `op value` (see Count)|
 | `storage`     | a filesystem's space/inode predicates hold (`*_pct` accepts `%`; `*_bytes` requires K/M/G/T) |
@@ -417,6 +417,22 @@ check has the last word.
 The `state` and `value` modes record no availability, so their SLA column reads
 `n/a` rather than an empty series: there is no uptime to accumulate, and any
 windows recorded before the mode was declared are dropped instead of ageing out.
+
+#### Health changes reach the event log on their own
+
+A required check that starts failing records a `firing` event, and a `recovered`
+event when it passes again — without needing a rule. Service events used to come
+only from rules, so a required check with nothing bound to it moved the service
+to `failed` on the dashboard and wrote nothing at all: the outage was visible
+only to someone already looking at that service.
+
+The reporting is edge-triggered on the observed value, so a condition that
+persists is recorded once rather than every cycle. Optional, skipped and
+verdictless (`state`/`value`) checks never raise one, a result reused from the
+cache because of a per-check `interval` is not a fresh observation, and a check
+some rule already reads is left to that rule so one incident does not become two
+events. These events go to the event log only — notifications stay driven by a
+rule's `notify`.
 They keep their own colours — informative for a live state, muted for an idle
 one — so neither is mistaken for the ok/fail verdict.
 
@@ -1088,7 +1104,13 @@ Protocols, in the order of the table above:
   `property`. Property values must be scalar (string, boolean, number or object
   path); use `expect.property_value` to assert the observed value. Every call
   sets `NO_AUTO_START`: a missing or wedged service fails without D-Bus
-  activating it, and a call cannot race onto a replacement owner. There is no
+  activating it, and a call cannot race onto a replacement owner. Because
+  nothing is activated, a name with no current owner is checked against
+  `org.freedesktop.DBus.ListActivatableNames` before it counts as a failure: an
+  activatable name is installed and starts on demand — `systemd-networkd` routes
+  traffic perfectly while `org.freedesktop.network1` sits unactivated — so the
+  check passes and reports `activatable`. A name that is neither owned nor
+  activatable really is absent, and still fails. There is no
   arbitrary-method mode. Omitting all target fields keeps the bus-only probe;
   `bus_name` and `object_path` must otherwise be set together. It runs no write
   operation. **Target:** defaults to the system bus
@@ -1098,7 +1120,8 @@ Protocols, in the order of the table above:
   governed by the socket's permissions. Result data: the bus id, address and the
   connection's unique name; a named-service probe also reports `bus_name`,
   `object_path`, `probe`, its unique `owner` (the `on_change` fingerprint), and
-  any configured `dbus_interface`, `property` and `property_value`.
+  any configured `dbus_interface`, `property` and `property_value`. A name that
+  passed because it is activatable reports `activatable` instead of an `owner`.
   Uses `github.com/godbus/dbus/v5`. With `interface`
   and a TCP `query`, use exactly `tcp:host=…,port=…`; address alternatives,
   `nonce-tcp` and other D-Bus TCP transport options are rejected so Sermo never

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -25,14 +26,17 @@ const (
 	dbusMinBusNameParts   = 2
 	dbusGetID             = "org.freedesktop.DBus.GetId"
 	dbusGetNameOwner      = "org.freedesktop.DBus.GetNameOwner"
-	dbusIntrospect        = "org.freedesktop.DBus.Introspectable.Introspect"
-	dbusPeerPing          = "org.freedesktop.DBus.Peer.Ping"
-	dbusPropertiesGet     = "org.freedesktop.DBus.Properties.Get"
-	dbusTCPPrefix         = "tcp:"
-	dbusTCPHostKey        = "host"
-	dbusTCPPortKey        = "port"
-	dbusUnixPrefix        = "unix:"
-	dbusUnixPathPrefix    = "unix:path="
+	// dbusListActivatableNames names the services the bus can start on demand,
+	// which is how an unowned name is told apart from an absent one.
+	dbusListActivatableNames = "org.freedesktop.DBus.ListActivatableNames"
+	dbusIntrospect           = "org.freedesktop.DBus.Introspectable.Introspect"
+	dbusPeerPing             = "org.freedesktop.DBus.Peer.Ping"
+	dbusPropertiesGet        = "org.freedesktop.DBus.Properties.Get"
+	dbusTCPPrefix            = "tcp:"
+	dbusTCPHostKey           = "host"
+	dbusTCPPortKey           = "port"
+	dbusUnixPrefix           = "unix:"
+	dbusUnixPathPrefix       = "unix:path="
 )
 
 // D-Bus probe modes. Peer is the default named-service liveness probe;
@@ -163,6 +167,19 @@ func dbusTargetFromConfig(cfg Config) DBusTarget {
 func probeDBusService(ctx context.Context, bus dbusMethodCaller, object dbusObjectFunc, target DBusTarget) (string, map[string]string, error) {
 	owner, err := dbusNameOwner(ctx, bus, target.BusName)
 	if err != nil {
+		// No current owner is not the same as no service. A bus-activatable name
+		// is owned only once something calls it, and the probe deliberately sets
+		// FlagNoAutoStart so monitoring never starts anything: systemd-networkd
+		// routes traffic perfectly while org.freedesktop.network1 sits
+		// unactivated. Treat "activatable" as installed-and-on-demand rather
+		// than inventing an outage; a name that is neither owned nor activatable
+		// really is absent, and still fails.
+		if activatable, listErr := dbusNameActivatable(ctx, bus, target.BusName); listErr == nil && activatable {
+			return "", map[string]string{
+				ExtraKeyDBusProbe:       target.probeMode(),
+				ExtraKeyDBusActivatable: strconv.FormatBool(true),
+			}, nil
+		}
 		return "", nil, probeErr(ProtocolNameDBus, stepDBusGetNameOwner, err)
 	}
 	observed, step, err := probeDBusObject(ctx, object(owner, dbus.ObjectPath(target.ObjectPath)), target)
@@ -170,6 +187,17 @@ func probeDBusService(ctx context.Context, bus dbusMethodCaller, object dbusObje
 		return "", nil, probeErr(ProtocolNameDBus, step, err)
 	}
 	return owner, observed, nil
+}
+
+// dbusNameActivatable reports whether the bus can start busName on demand. A
+// failure to read the list is returned so the caller keeps the original
+// owner-lookup error rather than silently upgrading an absent name.
+func dbusNameActivatable(ctx context.Context, bus dbusMethodCaller, busName string) (bool, error) {
+	var names []string
+	if err := bus.CallWithContext(ctx, dbusListActivatableNames, dbusReadOnlyCallFlags).Store(&names); err != nil {
+		return false, fmt.Errorf("list activatable D-Bus names: %w", err)
+	}
+	return slices.Contains(names, busName), nil
 }
 
 func probeDBusObject(ctx context.Context, object dbusMethodCaller, target DBusTarget) (map[string]string, string, error) {

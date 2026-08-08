@@ -36,6 +36,7 @@ const (
 	watchReadingLabelBusName           = "Bus name"
 	watchReadingLabelDBusInterface     = "D-Bus interface"
 	watchReadingLabelDBusProbe         = "D-Bus probe"
+	watchReadingLabelDBusActivatable   = "Activatable"
 	watchReadingLabelChipFilter        = "Chip filter"
 	watchReadingLabelConfiguredPath    = "Configured path"
 	watchReadingLabelCount             = "Count"
@@ -582,6 +583,7 @@ func dbusCheckReadings(data map[string]any) []web.WatchReading {
 		addString(checks.DataKeyDBusBusName, watchReadingLabelBusName).
 		addString(checks.DataKeyDBusObjectPath, watchReadingLabelObjectPath).
 		addString(checks.DataKeyDBusOwner, watchReadingLabelOwner).
+		addString(checks.DataKeyDBusActivatable, watchReadingLabelDBusActivatable).
 		addString(checks.DataKeyDBusProbe, watchReadingLabelDBusProbe).
 		addString(checks.DataKeyDBusInterface, watchReadingLabelDBusInterface).
 		addString(checks.DataKeyDBusProperty, watchReadingLabelProperty).

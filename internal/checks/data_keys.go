@@ -24,6 +24,7 @@ const (
 	DataKeyConnectedClients   = conn.ExtraKeyConnectedClients
 	DataKeyCurrentBytes       = "current_bytes"
 	DataKeyDaysLeft           = "days_left"
+	DataKeyDBusActivatable    = conn.ExtraKeyDBusActivatable
 	DataKeyDBusAddress        = conn.ExtraKeyDBusAddress
 	DataKeyDBusBusID          = conn.ExtraKeyDBusBusID
 	DataKeyDBusBusName        = conn.ExtraKeyDBusBusName

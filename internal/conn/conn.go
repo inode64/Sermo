@@ -436,6 +436,10 @@ const (
 	ExtraKeyDBusProperty      = ParamKeyDBusProperty
 	ExtraKeyDBusPropertyValue = "property_value"
 	ExtraKeyDBusUniqueName    = extraUniqueName
+	// ExtraKeyDBusActivatable marks a name the bus can start on demand that had
+	// no owner when probed. The service is installed and reachable; it simply
+	// has not been activated, which is not an outage.
+	ExtraKeyDBusActivatable = "activatable"
 )
 
 // ExtraKeySocket is the Result.Extra key carrying the Unix socket path a probe used.

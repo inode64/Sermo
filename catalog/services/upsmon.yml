@@ -16,7 +16,12 @@ restart_on_change:
       ${display_name} will restart after version change of ${change.app}: ${change.old_version} -> ${change.new_version}
 variables:
   user: nut
-pidfile: /run/nut/upsmon.pid
+# NUT's PIDPATH is a build-time default, not a fixed path: packages that leave
+# STATEPATH unset write straight into /run. Accept both rather than reporting a
+# healthy daemon as pidfile-less.
+pidfile:
+  - /run/nut/upsmon.pid
+  - /run/upsmon.pid
 os:
   ubuntu:
     service:

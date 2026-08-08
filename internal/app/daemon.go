@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"maps"
 	"math"
@@ -905,6 +906,12 @@ func (w *cycleWriter) RecordMeasurement(r checks.Result) {
 // and service SLA after checks complete. A failed batch rolls back the entire
 // cycle and emits one best-effort error event; it never blocks rule evaluation
 // or remediation.
+//
+// Cancellation is the exception: a stop or a reload cancels the cycle context
+// mid-batch, which is the daemon shutting down cleanly, not a storage fault.
+// Recording it wrote one error event per in-flight service on every restart,
+// and because it is the newest event it became the service's last_event and sat
+// on the dashboard for days describing an outage that never happened.
 func (w *cycleWriter) RecordCycle(ctx context.Context, cycle cycleRecord) {
 	if w == nil {
 		return
@@ -921,7 +928,7 @@ func (w *cycleWriter) RecordCycle(ctx context.Context, cycle cycleRecord) {
 		_ = w.writeCycle(direct, cycle)
 		err = direct.err
 	}
-	if err != nil && w.emit != nil {
+	if err != nil && !errors.Is(err, context.Canceled) && w.emit != nil {
 		w.emit(Event{Service: w.name, Kind: eventKindError, Message: "record cycle: " + err.Error()})
 	}
 }

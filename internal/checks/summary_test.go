@@ -45,6 +45,38 @@ func TestSummaryCheckKeepsUnknownReferencesVisible(t *testing.T) {
 	}
 }
 
+// An unavailable observation has no reading to summarise, so the probe's own
+// diagnostic must survive. The exim tidy watches shipped a summary over an
+// sqlite check whose database does not exist on most hosts; every dashboard
+// showed "Exim callout DB has ${value} records" instead of the open error.
+func TestSummaryKeepsDiagnosticOfUnavailableResult(t *testing.T) {
+	base := Result{
+		Check:       "tidy-callout-db-if-large",
+		OK:          false,
+		Unavailable: true,
+		Message:     `sql sqlite: unable to open database file`,
+	}
+	result := ApplySummary("Exim callout DB has ${value} records (limit ${check.value})",
+		map[string]any{CheckKeyValue: 100}, base)
+	if result.Message != base.Message {
+		t.Fatalf("summary overwrote an unavailable diagnostic: got %q, want %q", result.Message, base.Message)
+	}
+	if !result.Unavailable {
+		t.Fatal("summary cleared Unavailable")
+	}
+}
+
+// The guard is scoped to unavailability alone: an ordinary failing result still
+// gets its configured summary, which is the whole point of the field.
+func TestSummaryStillAppliesToAvailableFailingResult(t *testing.T) {
+	result := ApplySummary("Exim callout DB has ${value} records (limit ${check.value})",
+		map[string]any{CheckKeyValue: 100},
+		Result{Check: "tidy", OK: false, Data: map[string]any{DataKeyValue: 4096}})
+	if want := "Exim callout DB has 4,096 records (limit 100)"; result.Message != want {
+		t.Fatalf("summary = %q, want %q", result.Message, want)
+	}
+}
+
 func TestFormatDisplayValueFormatsDecimalsAndThousands(t *testing.T) {
 	// Canonical convention on every surface: comma thousands, dot decimal.
 	if got, want := FormatDisplayValue(DataKeyValue, 12345.678), "12,345.68"; got != want {
