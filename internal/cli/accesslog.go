@@ -24,7 +24,7 @@ const (
 )
 
 // recordAccess appends one CLI access record when engine.access is configured.
-func (a App) recordAccess(cfg *config.Config, command, target, status, message string) {
+func (App) recordAccess(cfg *config.Config, command, target, status, message string) {
 	if cfg == nil {
 		return
 	}
