@@ -1519,7 +1519,7 @@ func (s *Server) Run(ctx context.Context) error {
 	return nil
 }
 
-func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
+func (*Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path != "/" {
 		http.NotFound(w, r)
 		return
@@ -2155,7 +2155,7 @@ func (s *Server) readJSON(w http.ResponseWriter, r *http.Request, read func(cont
 
 // writeBackendJSON marks a read response with the generation that produced its
 // body, so the browser can reject a response from another daemon reload.
-func (s *Server) writeBackendJSON(w http.ResponseWriter, status int, v any, generation uint64) {
+func (*Server) writeBackendJSON(w http.ResponseWriter, status int, v any, generation uint64) {
 	if generation > 0 {
 		w.Header().Set(headerSermoGeneration, strconv.FormatUint(generation, 10))
 	}

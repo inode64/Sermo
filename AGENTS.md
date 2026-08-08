@@ -718,17 +718,20 @@ Tool notes:
   `linters.settings.revive.rules` — there is no `revive.toml` and no standalone
   step. It used to be one, invoked without `-set_exit_status`, which meant it
   printed findings and never failed anything; do not reintroduce that shape.
-  The rule set is revive's default plus `unused-parameter`, `struct-tag`,
-  `import-shadowing`, `modifies-value-receiver`, `package-naming` (split out of
-  `var-naming` in revive v1.15), the concurrency rules `atomic`,
-  `waitgroup-by-value`, `datarace`, `range-val-address`, `range-val-in-closure`,
-  and a defect/redundancy set (`unconditional-recursion`, `identical-branches`,
-  `constant-logical-expr`, `bool-literal-in-expr`, `time-equal`, `string-of-int`,
-  `defer`, `duplicated-imports`, `redundant-import-alias`, `useless-break`,
+  The rule set is revive's default plus `unused-parameter`, `unused-receiver`,
+  `use-errors-new`, `get-return`, `struct-tag`, `import-shadowing`,
+  `modifies-value-receiver`, `package-naming` (split out of `var-naming` in
+  revive v1.15), the concurrency rules `atomic`, `waitgroup-by-value`,
+  `datarace`, `range-val-address`, `range-val-in-closure`, and a defect/redundancy
+  set (`unconditional-recursion`, `identical-branches`, `constant-logical-expr`,
+  `bool-literal-in-expr`, `time-equal`, `string-of-int`, `defer`,
+  `duplicated-imports`, `redundant-import-alias`, `useless-break`,
   `unnecessary-stmt`, `unnecessary-format`, `optimize-operands-order`,
   `early-return`, `use-any`, `comment-spacings`). Test files are out of scope via
-  the shared `_test\.go$` exclusion. Rename unused params to `_`; avoid locals
-  that shadow import names. Document new exported symbols — `exported` is on.
+  the shared `_test\.go$` exclusion. Rename unused params to `_`; omit unused
+  receiver names (`func (*T) M`, not `func (_ *T) M` — staticcheck ST1006).
+  Avoid locals that shadow import names. Document new exported symbols —
+  `exported` is on.
 - **`golangci-lint`** uses `.golangci.yml` (**v2 format** — the binary must be
   v2). That file is authoritative: **71 linters**, grouped here by what they ask
   of you. Consult it when in doubt — do not assume a linter is off because this
