@@ -208,7 +208,7 @@ func (m Manager) Stop(ctx context.Context, _ string) error {
 
 // Reload is not meaningful for a VM domain. Restart, SupportsReload and
 // ResetState come from the embedded servicemgr.ComposedRestart.
-func (m Manager) Reload(context.Context, string) error {
+func (Manager) Reload(context.Context, string) error {
 	return errors.New("reload is not supported for libvirt domains")
 }
 

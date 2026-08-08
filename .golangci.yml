@@ -344,6 +344,17 @@ linters:
         # rule; without it that coverage silently disappears.
         - name: package-naming
         - name: unused-parameter
+        # Same idea as unused-parameter for methods: an unused receiver is either
+        # dead surface or should omit the name (func (*T) M, not func (_ *T) M —
+        # staticcheck ST1006 rejects the underscore form). Stubs like Reload
+        # unsupported and pure Error() messages are the usual hits.
+        - name: unused-receiver
+        # Prefer errors.New over fmt.Errorf when there is no formatting verb;
+        # keeps error allocation cheap and the message static for aggregation.
+        - name: use-errors-new
+        # Functions named Get* are expected to return a value; flag pure side
+        # effect "getters" that yield nothing.
+        - name: get-return
         - name: struct-tag
         - name: import-shadowing
         - name: modifies-value-receiver

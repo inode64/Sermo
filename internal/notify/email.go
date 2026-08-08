@@ -67,7 +67,7 @@ type Email struct {
 func (e *Email) Name() string { return e.name }
 
 // Type returns the notifier type identifier.
-func (e *Email) Type() string { return TypeEmail }
+func (*Email) Type() string { return TypeEmail }
 
 // Send delivers the message over SMTP.
 func (e *Email) Send(ctx context.Context, msg Message) error {

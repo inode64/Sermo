@@ -22,7 +22,7 @@ type HeldError struct {
 	Lock    Lock
 }
 
-func (e *HeldError) Error() string { return "operation in progress" }
+func (*HeldError) Error() string { return "operation in progress" }
 
 // ownedLock is the owner-checked release shared by the operation and named
 // lockers: the file is removed only while it still carries this owner's

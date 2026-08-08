@@ -896,7 +896,7 @@ func (w *Worker) shouldNotifyRule(r rules.Rule, rising bool) bool {
 	return emission.ShouldRepeat(w.ruleEmission(r).Notify, rising)
 }
 
-func (w *Worker) evalRule(ctx context.Context, ev *rules.Evaluator, r rules.Rule, evals map[string]ruleEvalResult) (bool, error) {
+func (*Worker) evalRule(ctx context.Context, ev *rules.Evaluator, r rules.Rule, evals map[string]ruleEvalResult) (bool, error) {
 	if evals != nil {
 		if res, ok := evals[r.Name]; ok {
 			if ev != nil {
