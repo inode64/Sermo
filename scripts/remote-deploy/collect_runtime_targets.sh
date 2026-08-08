@@ -1,6 +1,14 @@
 #!/usr/bin/env bash
 set -u
 
+# Machine-stable tool output. libvirt (and other gettext-aware tools) translate
+# their output, so a Spanish host reports a running domain as "ejecutando" and
+# every consumer that matches the English word silently treats it as stopped.
+# Pin the locale for everything this collector parses.
+export LC_ALL=C
+export LANG=C
+export LANGUAGE=
+
 out="${1:-/tmp/sermo-runtime-targets}"
 mkdir -p "$out"
 

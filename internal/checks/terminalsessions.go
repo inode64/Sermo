@@ -508,9 +508,9 @@ func unixSocketInfo(path string) (fs.FileInfo, bool, error) {
 	return info, true, nil
 }
 
-// removeUnchangedUnixSocket removes a stale Unix socket only when it is the
-// exact inode recorded before tmux was closed. A later tmux server must bind a
-// new inode, so its socket is not removed by this cleanup.
+// removeUnchangedUnixSocket removes a stale Unix socket only when it is still
+// the generation recorded before tmux was closed. A later tmux server must
+// leave a different generation, so its socket is not removed by this cleanup.
 func removeUnchangedUnixSocket(path string, before fs.FileInfo) error {
 	if before == nil {
 		return nil
@@ -522,13 +522,24 @@ func removeUnchangedUnixSocket(path string, before fs.FileInfo) error {
 	if err != nil {
 		return err
 	}
-	if !socket || !os.SameFile(before, after) {
+	if !socket || !sameUnixSocketGeneration(before, after) {
 		return nil
 	}
 	if err := os.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return fmt.Errorf("remove socket %q: %w", path, err)
 	}
 	return nil
+}
+
+// sameUnixSocketGeneration reports whether after is still the socket captured
+// in before. os.SameFile alone is not enough: after unlink+recreate the kernel
+// may reuse the inode number (common on tmpfs under load), so a new server
+// would look identical. Matching ModTime rejects that recycled-inode case.
+func sameUnixSocketGeneration(before, after fs.FileInfo) bool {
+	if before == nil || after == nil || !os.SameFile(before, after) {
+		return false
+	}
+	return before.ModTime().Equal(after.ModTime())
 }
 
 func sortedTerminalSessions(sessions []TerminalSession) []TerminalSession {

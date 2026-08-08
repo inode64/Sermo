@@ -1096,3 +1096,40 @@ class EximHintsGenerationTest(unittest.TestCase):
             self.assertNotIn(watch_name, body)
         checks = report["services"]["enabled"][0]["exim_hints_checks"]
         self.assertEqual([item["active"] for item in checks], [True, True])
+
+
+class LibvirtDomainStateTest(unittest.TestCase):
+    """virsh translates its output. A Spanish host reported every running domain
+    as "ejecutando", which the running-check read as stopped — regenerating that
+    host's configuration would have deleted all nine of its VM watches."""
+
+    def parse(self, tsv: str):
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        stage = Path(temp.name)
+        (stage / "libvirt_domains.tsv").write_text(tsv, encoding="utf-8")
+        return generator.parse_libvirt_domains(stage)
+
+    def test_running_domain_is_generated(self):
+        domains, skipped = self.parse("/run/libvirt/virtqemud-sock\tqemu:///system\tkvm5\trunning\n")
+        self.assertEqual([d["domain"] for d in domains], ["kvm5"])
+        self.assertEqual(skipped, [])
+
+    def test_genuinely_stopped_domain_is_skipped_as_such(self):
+        domains, skipped = self.parse("/run/libvirt/virtqemud-sock\tqemu:///system\tkvm5\tshut off\n")
+        self.assertEqual(domains, [])
+        self.assertEqual(skipped[0]["reason"], "domain is not running")
+
+    def test_localized_state_is_reported_as_a_parse_failure(self):
+        # The exact string observed on 172.31.16.17.
+        domains, skipped = self.parse("/run/libvirt/virtqemud-sock\tqemu:///system\tkvm5\tejecutando\n")
+        self.assertEqual(domains, [])
+        self.assertIn("unrecognized domain state", skipped[0]["reason"])
+        self.assertIn("ejecutando", skipped[0]["reason"])
+
+    def test_collectors_pin_the_locale(self):
+        # The root cause: without LC_ALL=C the state string is translated.
+        root = Path(__file__).resolve().parent
+        for script in ("remote_collect_inventory.sh", "remote_stage.sh", "collect_runtime_targets.sh"):
+            body = (root / script).read_text(encoding="utf-8")
+            self.assertIn("export LC_ALL=C", body, f"{script} must pin the locale")

@@ -302,15 +302,62 @@ func TestRemoveUnchangedUnixSocketKeepsReplacement(t *testing.T) {
 	if err != nil || !socketPresent {
 		t.Fatalf("unixSocketInfo(%q) = %v, %v, %v; want socket", socket, before, socketPresent, err)
 	}
-	if err := os.Remove(socket); err != nil {
-		t.Fatalf("Remove(%q) error = %v", socket, err)
+	// Recreate until the path is a new generation. Prefer an inode reuse case
+	// (SameFile true, ModTime different) when the kernel offers one so the
+	// mtime half of sameUnixSocketGeneration is exercised; otherwise any
+	// replacement still must be retained.
+	var after os.FileInfo
+	for attempt := 0; attempt < 64; attempt++ {
+		if err := os.Remove(socket); err != nil && !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("Remove(%q) error = %v", socket, err)
+		}
+		// Burn an extra inode so reuse of before's number is more likely on
+		// tmpfs, matching the CI flake that only SameFile could not catch.
+		burn := filepath.Join(t.TempDir(), "burn.socket")
+		makeStaleUnixSocket(t, burn)
+		_ = os.Remove(burn)
+		makeStaleUnixSocket(t, socket)
+		var present bool
+		after, present, err = unixSocketInfo(socket)
+		if err != nil || !present {
+			t.Fatalf("unixSocketInfo(%q) = %v, %v, %v; want socket", socket, after, present, err)
+		}
+		if !before.ModTime().Equal(after.ModTime()) {
+			break
+		}
 	}
-	makeStaleUnixSocket(t, socket)
+	if before.ModTime().Equal(after.ModTime()) && os.SameFile(before, after) {
+		t.Fatal("could not create a distinct socket generation for the test")
+	}
 	if err := removeUnchangedUnixSocket(socket, before); err != nil {
 		t.Fatalf("removeUnchangedUnixSocket() error = %v", err)
 	}
 	if _, err := os.Lstat(socket); err != nil {
 		t.Fatalf("Lstat(%q) error = %v, want replacement retained", socket, err)
+	}
+}
+
+func TestSameUnixSocketGenerationRejectsRecycledInode(t *testing.T) {
+	// Synthetic: SameFile would pass on equal identity, but unequal mtime must
+	// still mean "not the same generation".
+	socket := filepath.Join(t.TempDir(), "tmux.socket")
+	makeStaleUnixSocket(t, socket)
+	before, ok, err := unixSocketInfo(socket)
+	if err != nil || !ok {
+		t.Fatalf("unixSocketInfo(%q) = %v, %v, %v; want socket", socket, before, ok, err)
+	}
+	if err := os.Chtimes(socket, before.ModTime().Add(-time.Second), before.ModTime().Add(-time.Second)); err != nil {
+		t.Fatalf("Chtimes(%q) error = %v", socket, err)
+	}
+	after, ok, err := unixSocketInfo(socket)
+	if err != nil || !ok {
+		t.Fatalf("unixSocketInfo(%q) = %v, %v, %v; want socket", socket, after, ok, err)
+	}
+	if !os.SameFile(before, after) {
+		t.Fatal("precondition: SameFile should hold after Chtimes on the same path")
+	}
+	if sameUnixSocketGeneration(before, after) {
+		t.Fatal("sameUnixSocketGeneration() = true, want false when mtime differs")
 	}
 }
 

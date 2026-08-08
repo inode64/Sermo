@@ -204,6 +204,23 @@ EXIM_HINTS_ABSENT = "absent"
 # enabled exactly as a host with no evidence at all does.
 EXIM_HINTS_UNKNOWN = "unknown"
 
+# The libvirt domain states virsh reports under LC_ALL=C. Anything outside this
+# set means the inventory was not parsed as expected — most likely a localized
+# virsh — and must be reported as such rather than mistaken for a stopped VM.
+LIBVIRT_DOMAIN_STATE_RUNNING = "running"
+LIBVIRT_DOMAIN_STATES = frozenset(
+    {
+        LIBVIRT_DOMAIN_STATE_RUNNING,
+        "idle",
+        "paused",
+        "in shutdown",
+        "shut off",
+        "crashed",
+        "pmsuspended",
+        "no state",
+    }
+)
+
 
 @dataclass(frozen=True)
 class GenerationOptions:
@@ -1580,10 +1597,17 @@ def parse_libvirt_domains(stage: Path) -> tuple[list[dict[str, str]], list[dict[
             "uri": uri,
             "socket": socket,
         }
-        if state.lower() == "running":
+        if state.lower() == LIBVIRT_DOMAIN_STATE_RUNNING:
             domains.append(item)
-        else:
+        elif state.lower() in LIBVIRT_DOMAIN_STATES:
             skipped.append(item | {"reason": "domain is not running"})
+        else:
+            # An unrecognized state is a parse failure, not a stopped VM. The
+            # collectors pin LC_ALL=C precisely because libvirt translates this
+            # string — a Spanish host reported "ejecutando" and every running
+            # domain looked stopped, which would have dropped the host's whole
+            # VM configuration on the next regeneration. Say so instead.
+            skipped.append(item | {"reason": f"unrecognized domain state {state!r}; VM configuration not generated"})
     return domains, skipped
 
 

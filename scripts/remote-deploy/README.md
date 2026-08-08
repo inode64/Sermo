@@ -138,6 +138,13 @@ created on success.
 `remote_collect_inventory.sh` mirrors `remote_stage.sh`'s read-only evidence
 collection for already installed hosts — keep both in step.
 
+All three collectors pin `LC_ALL=C`. Several of the tools they parse translate
+their output: a Spanish host's `virsh domstate` reports a running domain as
+`ejecutando`, which the running-domain filter read as stopped. Regenerating such
+a host's configuration would have dropped every one of its VM services. The
+generator now also reports an unrecognized domain state as a parse failure under
+`skipped_vms` instead of silently calling it stopped.
+
 Both collectors also record active `tmux` and GNU `screen` namespaces. For
 `tmux`, evidence is one real `/tmp/tmux-<uid>/<socket>` socket whose owner maps
 to a local account; for `screen`, it is an owned socket below a known runtime
