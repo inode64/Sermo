@@ -84,9 +84,11 @@ tmux source with an explicit configured socket. It shares the operation and
 named locks, guards, timeout and one-event path; it re-lists the exact source,
 requires a live server with zero sessions, invokes only `tmux -S SOCKET
 kill-server` as the configured user, then verifies the namespace disappeared.
-If tmux leaves a stale socket, it removes only the same inode captured before
-the close after that verification; a recreated socket is retained. Any missing
-server or newly active session rejects the operation.
+If tmux leaves a stale socket, it removes only the same socket generation
+captured before the close after that verification (inode identity plus mtime,
+so an inode recycled after unlink+recreate is not mistaken for the old socket);
+a recreated socket is retained. Any missing server or newly active session
+rejects the operation.
 
 A residual Sermo is not allowed to identify and kill is **reported, not killed**:
 a clean `orphan_processes` failure is safer than killing the wrong process.
