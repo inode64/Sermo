@@ -160,6 +160,30 @@ for pid in /proc/[0-9]*; do
 	printf '%s\t%s\t%s\t%s\n' "$datadir" "$role" "$slots" "$walsenders" >>"${out}/postgres_clusters"
 done
 
+# Exim hints-database backend, one line per hints file Sermo's tidy watches
+# query. Those watches run a SQLite query, but Exim only writes SQLite hints when
+# it was built for them; the usual build writes Berkeley DB or tdb into the same
+# paths. Probing the file magic here lets the generator disable a watch that
+# could never work instead of leaving it reporting an sqlite error forever.
+: >"${out}/exim_hints"
+for hints_db in /var/spool/exim/db/callout /var/spool/exim/db/retry; do
+	if [ ! -f "$hints_db" ]; then
+		printf '%s\t%s\n' "$hints_db" "absent" >>"${out}/exim_hints"
+		continue
+	fi
+	# "SQLite format 3" is the 15-byte magic every SQLite file opens with. A read
+	# that fails outright is reported as unknown, not as "other": absence of
+	# proof is not proof, and the generator must not disable a working watch
+	# because the file could not be opened.
+	if ! magic="$(dd if="$hints_db" bs=1 count=15 2>/dev/null)"; then
+		printf '%s\t%s\n' "$hints_db" "unknown" >>"${out}/exim_hints"
+	elif [ "$magic" = "SQLite format 3" ]; then
+		printf '%s\t%s\n' "$hints_db" "sqlite" >>"${out}/exim_hints"
+	else
+		printf '%s\t%s\n' "$hints_db" "other" >>"${out}/exim_hints"
+	fi
+done
+
 lsblk -J -O >"${out}/lsblk.json" 2>/dev/null || true
 lsblk -P -o NAME,KNAME,PATH,TYPE,FSTYPE,MOUNTPOINTS,RM,RO,TRAN,MODEL,SERIAL,SIZE,PKNAME >"${out}/lsblk.pairs" 2>/dev/null || true
 

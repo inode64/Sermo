@@ -2894,6 +2894,12 @@ y punto como marca decimal (`12,345.68`); las duraciones y marcas de tiempo usan
 el formato legible habitual. Las referencias desconocidas permanecen visibles
 para identificar errores de nombre.
 
+Un check que no ha podido observar conserva su propio mensaje: un resultado no
+disponible —un origen ilegible, un timeout, una base de datos que no abre— no
+tiene lectura que resumir, así que lo que llega al panel es el diagnóstico de la
+sonda y no la plantilla. Renderizar el `summary` encima ocultaría la causa y,
+como la observación no produjo datos, dejaría `${value}` a la vista.
+
 ```yaml
 check:
   type: file

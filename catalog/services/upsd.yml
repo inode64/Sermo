@@ -17,7 +17,12 @@ restart_on_change:
 variables:
   port: 3493
   user: nut
-pidfile: /run/nut/upsd.pid
+# NUT's PIDPATH is a build-time default, not a fixed path: packages that leave
+# STATEPATH unset write straight into /run. Accept both rather than reporting a
+# healthy daemon as pidfile-less.
+pidfile:
+  - /run/nut/upsd.pid
+  - /run/upsd.pid
 os:
   ubuntu:
     service:

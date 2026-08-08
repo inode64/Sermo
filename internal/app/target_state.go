@@ -58,13 +58,23 @@ func ServiceState(enabled, monitored bool, backendStatus, checkHealth string, ob
 		}
 		return TargetStateFailed
 	}
+	// "unknown" is the backend declining to answer, not an answer of "down": an
+	// init script that overrides `status` with its own report, or a query that
+	// timed out, reads unknown while the service runs normally. Reporting that
+	// as failed invents an outage out of a failed observation, so it is not a
+	// verdict — the service's own checks below decide instead. Every other
+	// inactive status *is* a verdict and still fails.
+	unknown := strings.EqualFold(backendStatus, string(servicemgr.StatusUnknown))
 	if !active {
-		if monitored {
+		// Unmonitored keeps reading "stopped": nothing alerts on it either way,
+		// and "started" would be just as unfounded.
+		if !monitored {
+			return TargetStateStopped
+		}
+		if !unknown {
 			return TargetStateFailed
 		}
-		return TargetStateStopped
-	}
-	if !monitored {
+	} else if !monitored {
 		return TargetStateStarted
 	}
 	switch checkHealth {
@@ -73,6 +83,14 @@ func ServiceState(enabled, monitored bool, backendStatus, checkHealth string, ob
 	case checkHealthWarning:
 		return TargetStateWarning
 	case checkHealthUnknown:
+		if processActive {
+			return TargetStateActive
+		}
+		return TargetStateCollecting
+	}
+	// Checks are healthy, but a backend that would not answer cannot underwrite
+	// the full-observability claim "monitored" makes.
+	if unknown {
 		if processActive {
 			return TargetStateActive
 		}

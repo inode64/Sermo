@@ -3,9 +3,12 @@ package checks
 import (
 	"context"
 	"fmt"
+	"slices"
+	"strings"
 	"time"
 
 	"sermo/internal/process"
+	"sermo/internal/strutil"
 )
 
 // processCheck passes when the observed state of processes matching its
@@ -18,6 +21,9 @@ type processCheck struct {
 	expect     string
 	observe    func(exe, user string) string
 	observeAny func(exes []string, user string) string
+	// stale reports the service's processes whose binary was replaced on disk.
+	// It exists to explain an "absent" reading rather than to change it.
+	stale StaleBinariesFunc
 }
 
 func (c processCheck) Run(_ context.Context) Result {
@@ -27,7 +33,37 @@ func (c processCheck) Run(_ context.Context) Result {
 	}
 	state := c.observedState()
 	ok := state == c.expect
-	return c.result(ok, fmt.Sprintf("state %s (want %s)", state, c.expect), start)
+	message := fmt.Sprintf("state %s (want %s)", state, c.expect)
+	// A process whose executable was replaced on disk resolves no exe, so an
+	// exact-exe selector stops matching it and the service merely *looks* like
+	// it has no process. Saying "absent" then sends the operator looking for a
+	// dead daemon that is in fact running the previous version — the reading
+	// stays a failure, but it has to say why.
+	if !ok && state == process.StateAbsent {
+		if replaced := c.replacedBinaries(); replaced != "" {
+			message += fmt.Sprintf("; %s was replaced on disk, so no process matches this executable; %s",
+				replaced, StaleBinaryRestartHint)
+		}
+	}
+	return c.result(ok, message, start)
+}
+
+// replacedBinaries names this service's replaced executables that one of this
+// check's selectors would have matched, or "" when none apply.
+func (c processCheck) replacedBinaries() string {
+	if c.stale == nil {
+		return ""
+	}
+	var matched []string
+	for _, s := range c.stale() {
+		if slices.Contains(c.exes, s.Path) {
+			matched = append(matched, s.Path)
+		}
+	}
+	if len(matched) == 0 {
+		return ""
+	}
+	return strings.Join(strutil.MergeUnique(nil, matched...), ", ")
 }
 
 func (c processCheck) observedState() string {

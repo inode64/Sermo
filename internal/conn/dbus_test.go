@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -335,5 +337,77 @@ func TestProbeDBusServiceFailures(t *testing.T) {
 				t.Fatalf("probeDBusService() error = %v, want %q", err, test.wantErr)
 			}
 		})
+	}
+}
+
+// scriptedDBusCaller answers each method from a script, so a probe that calls
+// GetNameOwner and then ListActivatableNames can be exercised end to end.
+type scriptedDBusCaller struct {
+	replies map[string]*dbus.Call
+	calls   []string
+}
+
+func (c *scriptedDBusCaller) CallWithContext(_ context.Context, method string, _ dbus.Flags, _ ...any) *dbus.Call {
+	c.calls = append(c.calls, method)
+	if reply, ok := c.replies[method]; ok {
+		return reply
+	}
+	return &dbus.Call{Err: errors.New("unexpected method " + method)}
+}
+
+// A bus-activatable name has no owner until something calls it, and the probe
+// sets FlagNoAutoStart so monitoring never starts anything. On 172.31.16.38
+// systemd-networkd was routable and online while org.freedesktop.network1 sat
+// unactivated, and Sermo reported the service as failed.
+func TestProbeDBusServiceAcceptsAnActivatableName(t *testing.T) {
+	bus := &scriptedDBusCaller{replies: map[string]*dbus.Call{
+		dbusGetNameOwner:         {Err: errors.New("Could not get owner of name 'org.freedesktop.network1': no such name")},
+		dbusListActivatableNames: {Body: []any{[]string{"org.freedesktop.systemd1", "org.freedesktop.network1"}}},
+	}}
+	owner, extra, err := probeDBusService(context.Background(), bus, func(string, dbus.ObjectPath) dbusMethodCaller {
+		t.Fatal("an unowned name must not be probed as an object")
+		return nil
+	}, DBusTarget{BusName: "org.freedesktop.network1", ObjectPath: "/org/freedesktop/network1"})
+	if err != nil {
+		t.Fatalf("probeDBusService() error = %v, want the activatable name accepted", err)
+	}
+	if owner != "" {
+		t.Fatalf("owner = %q, want empty for a name nothing has activated", owner)
+	}
+	if extra[ExtraKeyDBusActivatable] != strconv.FormatBool(true) {
+		t.Fatalf("extra[%q] = %q, want the activatable marker", ExtraKeyDBusActivatable, extra[ExtraKeyDBusActivatable])
+	}
+	if !slices.Contains(bus.calls, dbusListActivatableNames) {
+		t.Fatalf("calls = %v, want the activatable list consulted", bus.calls)
+	}
+}
+
+// A name that is neither owned nor activatable really is absent, and must keep
+// failing — the fix must not turn every missing service into a pass.
+func TestProbeDBusServiceStillFailsForAnAbsentName(t *testing.T) {
+	bus := &scriptedDBusCaller{replies: map[string]*dbus.Call{
+		dbusGetNameOwner:         {Err: errors.New("no such name")},
+		dbusListActivatableNames: {Body: []any{[]string{"org.freedesktop.systemd1"}}},
+	}}
+	_, _, err := probeDBusService(context.Background(), bus, func(string, dbus.ObjectPath) dbusMethodCaller {
+		return nil
+	}, DBusTarget{BusName: "com.example.Gone", ObjectPath: "/com/example/Gone"})
+	if err == nil {
+		t.Fatal("an absent, non-activatable name must fail")
+	}
+}
+
+// If the activatable list cannot be read, the original owner-lookup failure
+// stands rather than being silently upgraded to a pass.
+func TestProbeDBusServiceKeepsOwnerErrorWhenListFails(t *testing.T) {
+	bus := &scriptedDBusCaller{replies: map[string]*dbus.Call{
+		dbusGetNameOwner:         {Err: errors.New("no such name")},
+		dbusListActivatableNames: {Err: errors.New("access denied")},
+	}}
+	_, _, err := probeDBusService(context.Background(), bus, func(string, dbus.ObjectPath) dbusMethodCaller {
+		return nil
+	}, DBusTarget{BusName: "org.freedesktop.network1"})
+	if err == nil || !strings.Contains(err.Error(), "no such name") {
+		t.Fatalf("error = %v, want the original owner-lookup failure", err)
 	}
 }

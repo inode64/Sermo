@@ -720,7 +720,7 @@ func TestGentooCatalogPidfileOverrides(t *testing.T) {
 	if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	for _, name := range []string{"clamd", "mariadb"} {
+	for _, name := range []string{"clamd", "mariadb", "mysql", "upsd", "upsmon"} {
 		svc := "name: " + name + "\nuses: " + name + "\n"
 		if err := os.WriteFile(filepath.Join(enabled, name+".yml"), []byte(svc), 0o644); err != nil {
 			t.Fatal(err)
@@ -737,6 +737,14 @@ func TestGentooCatalogPidfileOverrides(t *testing.T) {
 	}{
 		{name: "clamd", want: []string{"/run/clamd.pid", "/run/clamav/clamd.pid"}},
 		{name: "mariadb", want: []string{"/run/mysqld/mariadb.pid", "/run/mysqld/mysqld.pid"}},
+		// The `mysql` unit is what Gentoo's dev-db/mariadb installs, and that
+		// MariaDB writes mariadb.pid. Without the second candidate the required
+		// pidfile check fails on a perfectly healthy database.
+		{name: "mysql", want: []string{"/run/mysqld/mysqld.pid", "/run/mysqld/mariadb.pid"}},
+		// NUT's PIDPATH is a build-time default; a package that leaves STATEPATH
+		// unset writes into /run instead of /run/nut.
+		{name: "upsd", want: []string{"/run/nut/upsd.pid", "/run/upsd.pid"}},
+		{name: "upsmon", want: []string{"/run/nut/upsmon.pid", "/run/upsmon.pid"}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -773,6 +781,69 @@ func TestCatalogAppsDoNotDeclareServiceProcessSelectors(t *testing.T) {
 		if len(found) > 0 {
 			t.Errorf("%s declares service process selector keys in catalog/apps: %s", path, strings.Join(found, ", "))
 		}
+	}
+}
+
+// TestSyslogNGCtlCheckUsesCtlBinary pins the `stats` probe to syslog-ng-ctl.
+// The daemon binary does not take subcommands: `syslog-ng stats` exits 1 with
+// "Excess number of arguments", so pointing the check at ${syslog_ng_binary}
+// makes it fail on every host that runs syslog-ng at all.
+func TestSyslogNGCtlCheckUsesCtlBinary(t *testing.T) {
+	root := repoRoot(t)
+	doc := catalogDocByName(t, root, "services", "syslog-ng")
+	ctl := nested(t, doc, "watches", "ctl", "check")
+	command := cfgval.StringList(ctl["command"])
+	if len(command) == 0 {
+		t.Fatalf("syslog-ng ctl check has no command: %v", ctl)
+	}
+	if command[0] == "${syslog_ng_binary}" {
+		t.Fatalf("syslog-ng ctl check runs the daemon binary %q; `stats` is a syslog-ng-ctl subcommand", command[0])
+	}
+	if command[0] != "${ctl_binary}" {
+		t.Fatalf("syslog-ng ctl command[0] = %q, want ${ctl_binary}", command[0])
+	}
+
+	dir := t.TempDir()
+	global := filepath.Join(dir, "sermo.yml")
+	body := "paths:\n  services: []\n" +
+		"defaults:\n  policy: { cooldown: 5m }\n"
+	if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := loadConfig(t, global, WithCatalogDirs(repoCatalogDir(root)))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	resolved, errs := cfg.ResolveCatalog(CategoryService, "syslog-ng")
+	if len(errs) > 0 {
+		t.Fatalf("ResolveCatalog(syslog-ng): %v", errs)
+	}
+	resolvedCtl := nested(t, resolved.Tree, "checks", "ctl")
+	got := cfgval.StringList(resolvedCtl["command"])
+	if len(got) < 2 || !strings.HasSuffix(got[0], "/syslog-ng-ctl") || got[1] != "stats" {
+		t.Fatalf("resolved syslog-ng ctl command = %q, want <path>/syslog-ng-ctl stats", got)
+	}
+}
+
+// TestNetworkManagerStatusGatedOnNmcli pins the nmcli gate. NetworkManager is
+// routinely active on hosts built without nmcli, where exec'ing it produced a
+// permanently failing "no such file or directory" check and pinned the service
+// to warning. The gate must be a verdictless sensor so absence is not a fault.
+func TestNetworkManagerStatusGatedOnNmcli(t *testing.T) {
+	root := repoRoot(t)
+	doc := catalogDocByName(t, root, "services", "networkmanager")
+
+	gate := nested(t, doc, "watches", "nmcli", "check")
+	if got := cfgval.String(gate[checks.CheckKeyType]); got != checks.CheckTypeBinary {
+		t.Fatalf("nmcli gate type = %q, want %q", got, checks.CheckTypeBinary)
+	}
+	if got := cfgval.String(gate[checks.CheckKeyReports]); got != checks.ReportsState {
+		t.Fatalf("nmcli gate reports = %q, want %q so a missing client is not a fault", got, checks.ReportsState)
+	}
+
+	status := nested(t, doc, "watches", "status", "check")
+	if got := cfgval.StringList(status[checks.CheckKeyRequires]); !slices.Equal(got, []string{"nmcli"}) {
+		t.Fatalf("status requires = %q, want [nmcli]", got)
 	}
 }
 

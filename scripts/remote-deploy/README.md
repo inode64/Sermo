@@ -377,6 +377,22 @@ A service whose unit has **failed** is generated with no endpoint gating at all:
 it has no listening sockets by definition, and gating it would disable exactly
 the checks that report the outage.
 
+Exim's `tidy-callout-db-if-large` and `tidy-retry-db-if-large` are gated from
+the hints databases themselves. Both run a SQLite query, but Exim writes SQLite
+hints only when it was built for them; the ordinary build leaves Berkeley DB or
+tdb at the same paths, where the query can only ever fail. The collectors record
+`exim_hints`, one tab-separated line per hints file:
+
+```
+<path> <sqlite|other|absent|unknown>
+```
+
+The generator keeps each watch only where its file really is SQLite, disables it
+otherwise, and records the decision per service under `exim_hints_checks` in
+`config-report.json`. A host staged before this fact was collected reports
+nothing, a file that could not be read reports `unknown`, and in both cases the
+unevaluated watch is left enabled rather than silently switched off.
+
 The PostgreSQL replication watches are gated the same way, from cluster facts
 instead of listening sockets. `remote_collect_inventory.sh` writes
 `postgres_clusters`, one tab-separated line per running postmaster:

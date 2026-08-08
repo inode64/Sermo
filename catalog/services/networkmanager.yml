@@ -37,6 +37,16 @@ watches:
     check:
       type: service
       expect: active
+  # nmcli is a separate build option, so NetworkManager is routinely active on a
+  # host that has no nmcli at all. Sense its presence instead of exec'ing it
+  # blindly: a state sensor asserts nothing, so an absent client is a fact about
+  # the host rather than a fault, and it gates the probe that needs it.
+  nmcli:
+    check:
+      type: binary
+      path: ${networkmanager_nmcli}
+      reports: state
+      optional: true
   status:
     check:
       type: command
@@ -47,6 +57,8 @@ watches:
         - status
       timeout: 10s
       verify: true
+      requires:
+        - nmcli
   dbus:
     check:
       type: dbus

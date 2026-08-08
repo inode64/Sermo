@@ -954,3 +954,145 @@ class WebCredentialBlockTest(unittest.TestCase):
         # The literal must not survive alongside the reference: two copies drift,
         # and this is the copy that lands in backups.
         self.assertNotIn(default_options().web_password, block)
+
+
+class EximHintsGenerationTest(unittest.TestCase):
+    """The tidy watches run a SQLite query, but Exim writes SQLite hints only
+    when built for them. On the measured fleet 101 of 112 watch instances could
+    never read their database — 43 absent, 33 with no tblblob table, 25 not a
+    SQLite file at all — so only a host whose hints really are SQLite should
+    carry them."""
+
+    def exim_doc(self):
+        docs = generator.load_catalog_services(default_options().catalog_services_dir)
+        doc, _ = generator.catalog_doc_for_service(generator.EXIM_CATALOG_SERVICE, docs)
+        self.assertIsNotNone(doc, "the exim catalog service must resolve")
+        return doc
+
+    def overrides(self, hints_evidence: str | None):
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        stage = Path(temp.name)
+        if hints_evidence is not None:
+            (stage / "exim_hints").write_text(hints_evidence, encoding="utf-8")
+        return generator.exim_hints_watch_overrides(stage, self.exim_doc())
+
+    def test_catalog_ships_every_gated_hints_watch(self):
+        # Locks the gate table against the catalog: a renamed watch would
+        # otherwise silently stop being gated and ship everywhere.
+        watches = self.exim_doc().get("watches", {})
+        for watch_name in generator.EXIM_HINTS_WATCHES:
+            self.assertIn(watch_name, watches)
+
+    def test_gate_probes_the_paths_the_catalog_actually_queries(self):
+        # The hints paths live in three places — this table, the catalog watch
+        # and the collectors' probe — and only the catalog can move them. Resolve
+        # the watch's own ${db_dir} and require the table to agree, so a catalog
+        # change cannot leave the gate probing a file nothing reads.
+        doc = self.exim_doc()
+        db_dir = str((doc.get("variables") or {})["db_dir"])
+        for watch_name, gated_path in generator.EXIM_HINTS_WATCHES.items():
+            check = doc["watches"][watch_name]["check"]
+            self.assertEqual(check.get("engine"), "sqlite", watch_name)
+            resolved = str(check["path"]).replace("${db_dir}", db_dir)
+            self.assertEqual(resolved, gated_path, watch_name)
+
+    def test_collectors_probe_every_gated_path(self):
+        # Both collectors are uploaded standalone, so each carries its own copy
+        # of the probe. A path added here must appear in both or the generator
+        # silently sees no evidence and leaves a broken watch enabled.
+        root = Path(__file__).resolve().parent
+        for script in ("remote_collect_inventory.sh", "remote_stage.sh"):
+            body = (root / script).read_text(encoding="utf-8")
+            self.assertIn("exim_hints", body, script)
+            for gated_path in generator.EXIM_HINTS_WATCHES.values():
+                self.assertIn(gated_path, body, f"{script} does not probe {gated_path}")
+
+    def test_sqlite_hints_keep_both_watches(self):
+        disabled, checks = self.overrides(
+            "/var/spool/exim/db/callout\tsqlite\n/var/spool/exim/db/retry\tsqlite\n"
+        )
+        self.assertEqual(disabled, set())
+        self.assertTrue(all(item["active"] for item in checks))
+
+    def test_berkeley_db_hints_disable_both_watches(self):
+        disabled, checks = self.overrides(
+            "/var/spool/exim/db/callout\tother\n/var/spool/exim/db/retry\tother\n"
+        )
+        self.assertEqual(disabled, set(generator.EXIM_HINTS_WATCHES))
+        reasons = {item["watch"]: item["reason"] for item in checks}
+        self.assertIn("is not a SQLite database", reasons["tidy-callout-db-if-large"])
+
+    def test_absent_hints_file_disables_its_watch_with_that_reason(self):
+        disabled, checks = self.overrides(
+            "/var/spool/exim/db/callout\tabsent\n/var/spool/exim/db/retry\tsqlite\n"
+        )
+        self.assertEqual(disabled, {"tidy-callout-db-if-large"})
+        reasons = {item["watch"]: item.get("reason") for item in checks}
+        self.assertIn("does not exist", reasons["tidy-callout-db-if-large"])
+        self.assertIsNone(reasons["tidy-retry-db-if-large"])
+
+    def test_unreadable_hints_file_leaves_its_watch_enabled(self):
+        # The collectors report "unknown" when the file could not be opened.
+        # Disabling on that would silence a working watch over a read error.
+        disabled, checks = self.overrides(
+            "/var/spool/exim/db/callout\tunknown\n/var/spool/exim/db/retry\tother\n"
+        )
+        self.assertEqual(disabled, {"tidy-retry-db-if-large"})
+        watched = {item["watch"] for item in checks}
+        self.assertNotIn("tidy-callout-db-if-large", watched)
+
+    def test_missing_evidence_leaves_the_watches_enabled(self):
+        # Absence of proof is not proof of absence: a host staged before this
+        # fact was collected must not have working watches switched off.
+        disabled, checks = self.overrides(None)
+        self.assertEqual(disabled, set())
+        self.assertEqual(checks, [])
+
+    def test_other_services_are_untouched(self):
+        disabled, checks = generator.exim_hints_watch_overrides(
+            Path("/nonexistent"), {"name": "nginx", "watches": {"http": {}}}
+        )
+        self.assertEqual(disabled, set())
+        self.assertEqual(checks, [])
+
+    def generate(self, hints_evidence: str):
+        """Drive the whole generator for an exim host and return its report plus
+        the emitted service YAML."""
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        root = Path(temp.name)
+        stage = root / "stage" / "host" / "out"
+        stage.mkdir(parents=True)
+        (stage / "init").write_text("systemd\n", encoding="utf-8")
+        (stage / "active_units").write_text("exim.service\n", encoding="utf-8")
+        (stage / "exim_hints").write_text(hints_evidence, encoding="utf-8")
+        (stage / "services_json.out").write_text(
+            json.dumps({"services": [{"name": "exim", "installed": True, "ok": True, "status": "ok"}]}),
+            encoding="utf-8",
+        )
+        report = generator.generate_for_host("host", stage, root / "configs", default_options())
+        body = (root / "configs/host/root/etc/sermo/services/exim.yml").read_text(encoding="utf-8")
+        return report, body
+
+    def test_generated_config_disables_the_watches_on_a_berkeley_db_host(self):
+        # End to end: the emitted YAML must actually carry the disable, not just
+        # the override helper's return value.
+        report, body = self.generate(
+            "/var/spool/exim/db/callout\tother\n/var/spool/exim/db/retry\tother\n"
+        )
+        self.assertIn("watches:", body)
+        for watch_name in generator.EXIM_HINTS_WATCHES:
+            self.assertIn(watch_name, body)
+        self.assertIn("enabled: false", body)
+        checks = report["services"]["enabled"][0]["exim_hints_checks"]
+        self.assertEqual([item["active"] for item in checks], [False, False])
+
+    def test_generated_config_keeps_the_watches_on_a_sqlite_host(self):
+        report, body = self.generate(
+            "/var/spool/exim/db/callout\tsqlite\n/var/spool/exim/db/retry\tsqlite\n"
+        )
+        for watch_name in generator.EXIM_HINTS_WATCHES:
+            self.assertNotIn(watch_name, body)
+        checks = report["services"]["enabled"][0]["exim_hints_checks"]
+        self.assertEqual([item["active"] for item in checks], [True, True])

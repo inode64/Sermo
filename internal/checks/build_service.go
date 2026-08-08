@@ -62,7 +62,10 @@ func buildProcessCheck(b base, entry map[string]any, deps Deps) (Check, string) 
 	if expect == "" {
 		expect = process.StateRunning
 	}
-	return processCheck{base: b, exes: exes, user: user, expect: expect, observe: deps.Processes, observeAny: deps.ProcessesAny}, ""
+	return processCheck{
+		base: b, exes: exes, user: user, expect: expect,
+		observe: deps.Processes, observeAny: deps.ProcessesAny, stale: deps.StaleBinaries,
+	}, ""
 }
 
 // buildStaleBinaryCheck builds a check reporting this service's processes whose

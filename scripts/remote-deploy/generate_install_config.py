@@ -187,6 +187,23 @@ POSTGRES_REPLICATION_REASONS = {
     "standby": "host is not a standby",
 }
 
+# Exim's tidy watches run a SQLite query against the hints databases, but Exim
+# writes SQLite hints only when it was built for them; the ordinary build puts
+# Berkeley DB or tdb at the same paths. Each watch names the hints file it reads,
+# resolved against the exim_hints inventory evidence, so a host whose hints are
+# not SQLite does not carry a watch that can only ever report an sqlite error.
+EXIM_CATALOG_SERVICE = "exim"
+EXIM_HINTS_WATCHES = {
+    "tidy-callout-db-if-large": "/var/spool/exim/db/callout",
+    "tidy-retry-db-if-large": "/var/spool/exim/db/retry",
+}
+EXIM_HINTS_SQLITE = "sqlite"
+EXIM_HINTS_ABSENT = "absent"
+# The collectors report "unknown" when the file could not be read at all. That is
+# absence of proof, not proof the hints are unusable, so it leaves the watch
+# enabled exactly as a host with no evidence at all does.
+EXIM_HINTS_UNKNOWN = "unknown"
+
 
 @dataclass(frozen=True)
 class GenerationOptions:
@@ -1442,6 +1459,58 @@ def replication_watch_overrides(stage: Path, doc: dict) -> tuple[set[str], list[
     return disabled, report
 
 
+def parse_exim_hints(stage: Path) -> dict[str, str]:
+    """Read the exim_hints inventory evidence: one line per hints file, tab
+    separated as <path> <sqlite|other|absent>."""
+    backends: dict[str, str] = {}
+    for line in read_text(stage / "exim_hints").splitlines():
+        fields = line.split("\t")
+        if len(fields) < 2 or not fields[0]:
+            continue
+        backends[fields[0]] = fields[1]
+    return backends
+
+
+def exim_hints_watch_overrides(stage: Path, doc: dict) -> tuple[set[str], list[dict[str, object]]]:
+    """Disable the Exim tidy watches whose hints database is not SQLite, so a
+    host running the ordinary Berkeley DB build does not carry a watch that can
+    only report `file is not a database`. Mirrors replication_watch_overrides: a
+    disabled set plus one audited report entry per watch.
+
+    Absence of evidence is not proof: a host staged before this fact was
+    collected reports nothing, and an unevaluated watch is left enabled rather
+    than silently switched off."""
+    disabled: set[str] = set()
+    report: list[dict[str, object]] = []
+    if str(doc.get("name") or "") != EXIM_CATALOG_SERVICE:
+        return disabled, report
+    watches = doc.get("watches", {})
+    if not isinstance(watches, dict):
+        return disabled, report
+    backends = parse_exim_hints(stage)
+    if not backends:
+        return disabled, report
+    for watch_name, hints_path in sorted(EXIM_HINTS_WATCHES.items()):
+        if watch_name not in watches:
+            continue
+        backend = backends.get(hints_path)
+        if backend is None or backend == EXIM_HINTS_UNKNOWN:
+            continue
+        active = backend == EXIM_HINTS_SQLITE
+        item: dict[str, object] = {"watch": watch_name, "hints": hints_path, "backend": backend, "active": active}
+        if active:
+            item["source"] = "exim hints inventory"
+        else:
+            disabled.add(watch_name)
+            item["reason"] = (
+                f"{hints_path} does not exist"
+                if backend == EXIM_HINTS_ABSENT
+                else f"{hints_path} is not a SQLite database"
+            )
+        report.append(item)
+    return disabled, report
+
+
 def docker_container_name(entry: dict) -> str:
     names = entry.get("Names")
     if isinstance(names, list):
@@ -1607,7 +1676,8 @@ def generate_for_host(host_slug: str, stage: Path, configs_dir: Path, options: G
         else:
             disabled_endpoint_watches, endpoint_checks = endpoint_watch_overrides(stage, doc or {}, effective_variables)
         disabled_replication_watches, replication_checks = replication_watch_overrides(stage, doc or {})
-        disabled_watches = disabled_endpoint_watches | disabled_replication_watches
+        disabled_hints_watches, exim_hints_checks = exim_hints_watch_overrides(stage, doc or {})
+        disabled_watches = disabled_endpoint_watches | disabled_replication_watches | disabled_hints_watches
         body = f"""name: {name}
 uses: {name}
 monitor: enabled
@@ -1639,6 +1709,8 @@ dry_run: true
             enabled["endpoint_checks"] = endpoint_checks
         if replication_checks:
             enabled["replication_checks"] = replication_checks
+        if exim_hints_checks:
+            enabled["exim_hints_checks"] = exim_hints_checks
         report["services"]["enabled"].append(enabled)
     report["services"]["skipped"] = skipped_services
 

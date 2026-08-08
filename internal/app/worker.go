@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"maps"
 	"os"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -58,6 +59,12 @@ type Worker struct {
 	// cycleFailOutput is this cycle's concatenated failing-check command output,
 	// attached to alert events so the operator sees why the rule fired.
 	cycleFailOutput string
+
+	// checkFailing remembers which required checks were failing at the end of the
+	// previous observed cycle, so a change of health is reported once instead of
+	// every cycle. Only checks that ran are updated, so a per-check interval does
+	// not read as a recovery.
+	checkFailing map[string]bool
 
 	// Checks produces this cycle's named-check cache.
 	Checks func(ctx context.Context, deps checks.Deps) map[string]checks.Result
@@ -228,6 +235,7 @@ func (w *Worker) RunCycle(ctx context.Context) {
 		return // first active cycle: publish data only, no rules or SLA side effects
 	}
 	at := now()
+	w.reportCheckHealthChanges(cache)
 	w.markObservabilityReady(at)
 	var resolveRef rules.RefResolver
 	if w.ResolveRefs != nil {
@@ -301,6 +309,92 @@ func (w *Worker) publishCycle(ctx context.Context, cache map[string]checks.Resul
 	if w.Publish != nil {
 		w.Publish(cache, w.cycleRan)
 	}
+}
+
+// reportCheckHealthChanges records one event each time a required check starts
+// or stops failing, for the checks no rule already speaks for.
+//
+// Service events are otherwise produced only by rules, so a required check with
+// no rule bound to it moved the dashboard to "failed" and wrote nothing at all:
+// the outage was visible only to someone already looking at that service. A
+// fleet audit found 17 services in exactly that state, including a smartd whose
+// unit had failed hours earlier with no trace in the event log.
+//
+// Checks a rule does reference are left alone. That rule already emits its own
+// alert and recovery with the operator's wording, and adding a second pair
+// would turn one incident into two events — the duplication this is meant to
+// avoid, not create.
+//
+// It is edge-triggered on the observed value, so a condition that persists is
+// reported once rather than every cycle, and it goes only to the event log —
+// notifiers stay driven by rule `notify` actions, so closing this blind spot
+// does not start paging anyone.
+func (w *Worker) reportCheckHealthChanges(cache map[string]checks.Result) {
+	if w.Emit == nil {
+		return
+	}
+	if w.checkFailing == nil {
+		w.checkFailing = map[string]bool{}
+	}
+	ruled := w.checksReportedByRules()
+	for _, name := range slices.Sorted(maps.Keys(cache)) {
+		if ruled[name] {
+			continue
+		}
+		result := cache[name]
+		// Only checks that ran this cycle carry a fresh observation: a cached
+		// result reused because of a per-check interval says nothing new, and a
+		// skipped or verdictless check asserts nothing at all. A nil cycleRan
+		// means the caller does not track it, which the gate logic also reads as
+		// "do not filter".
+		if (w.cycleRan != nil && !w.cycleRan[name]) || result.Skipped || result.Optional || result.Verdictless() {
+			continue
+		}
+		failing := !result.Healthy()
+		if failing == w.checkFailing[name] {
+			continue
+		}
+		w.checkFailing[name] = failing
+		kind := eventKindRecovered
+		if failing {
+			kind = eventKindFiring
+		}
+		w.emit(Event{Kind: kind, Message: checkHealthChangeMessage(name, result)})
+	}
+	// Forget checks the running configuration no longer produces, so a reload
+	// that drops a check cannot leave a stale "failing" memory that reports a
+	// recovery the next time the name comes back.
+	maps.DeleteFunc(w.checkFailing, func(name string, _ bool) bool { _, ok := cache[name]; return !ok })
+}
+
+// checksReportedByRules lists the check names some rule condition reads, so the
+// health reporter can stay out of their way. It walks the same and/or/not tree
+// the rule runtime does, and only named `check:` references count — an inline
+// metric belongs to no named check.
+func (w *Worker) checksReportedByRules() map[string]bool {
+	if len(w.Rules) == 0 {
+		return nil
+	}
+	out := map[string]bool{}
+	for i := range w.Rules {
+		var candidates []ruleCheckCandidate
+		collectRuleCheckCandidates(w.Rules[i].If, &candidates)
+		for _, c := range candidates {
+			if c.ref != "" {
+				out[c.ref] = true
+			}
+		}
+	}
+	return out
+}
+
+// checkHealthChangeMessage names the check and repeats its own message, which is
+// the part that says what is actually wrong.
+func checkHealthChangeMessage(name string, result checks.Result) string {
+	if result.Message == "" {
+		return eventMessageCheckPrefix + name
+	}
+	return eventMessageCheckPrefix + name + ": " + result.Message
 }
 
 func (w *Worker) completeObserveCycle(settleKey string, mode workerCycleMode) {
