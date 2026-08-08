@@ -307,7 +307,7 @@ func TestRemoveUnchangedUnixSocketKeepsReplacement(t *testing.T) {
 	// mtime half of sameUnixSocketGeneration is exercised; otherwise any
 	// replacement still must be retained.
 	var after os.FileInfo
-	for attempt := 0; attempt < 64; attempt++ {
+	for range 64 {
 		if err := os.Remove(socket); err != nil && !errors.Is(err, os.ErrNotExist) {
 			t.Fatalf("Remove(%q) error = %v", socket, err)
 		}
