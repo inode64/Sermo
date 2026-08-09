@@ -127,6 +127,12 @@ carry manual tweaks.
 
 ```sh
 scripts/remote-deploy/update_fleet.sh --with-config --hosts fleet.txt
+# Include installed but stopped service profiles for an explicit lifecycle test.
+# This does not enable or start those units by itself.
+scripts/remote-deploy/update_fleet.sh --with-config --include-inactive-installed-services --hosts fleet.txt
+# Restrict a lifecycle campaign to the explicitly authorized catalog services.
+scripts/remote-deploy/update_fleet.sh --with-config --include-inactive-installed-services \
+  --only-services acpid,rsync,snmpd,lm_sensors,lvm2-monitor,mdmonitor,smartd --hosts fleet.txt
 scripts/remote-deploy/update_fleet.sh --dry-run web1 web2   # plan only
 ```
 
@@ -135,6 +141,22 @@ orchestrator does not apply the first-four-host gate below), records and skips
 unreachable or unhealthy hosts, fetches failed hosts' `out.tar.gz` artifacts
 into its run root, and cleans up the exact remote staging directories it
 created on success.
+Every remote SSH command is bounded to 25 minutes by default; set
+`SERMO_REMOTE_COMMAND_TIMEOUT_SECONDS` to a positive number of seconds when a
+known-slow host needs a different ceiling. Each daemon-start phase has a
+separate `SERMO_READY_WAIT_SECONDS` limit of ten minutes by default, which
+covers hosts with a large generated service/watch tree; the individual local
+Web UI probes remain bounded by `SERMO_HTTP_TIMEOUT_SECONDS` (five seconds by
+default), so a stuck collector or Web endpoint is recorded and the next host
+continues.
+`--include-inactive-installed-services` is deliberately opt-in: it adds every
+installed catalog service to the generated Sermo configuration even if its init
+unit is stopped. It never changes the unit's enabled or active state; use it
+only when an operator needs Sermo to manage an explicitly authorized lifecycle
+test or inactive-service audit.
+`--only-services` narrows that generated catalog-service set to a comma-separated
+allow-list of canonical profile names; it is suitable for a bounded lifecycle
+campaign and does not change units outside that list.
 `remote_collect_inventory.sh` mirrors `remote_stage.sh`'s read-only evidence
 collection for already installed hosts — keep both in step.
 
@@ -158,8 +180,12 @@ produce a check.
 
 ## Web credentials
 
-Both orchestrators take the admin password from `SERMO_WEB_PASSWORD` (default
-`sermo-remote-admin`) and hand it to `generate_install_config.py`.
+The fresh-install orchestrator takes the admin password from
+`SERMO_WEB_PASSWORD` (default `sermo-remote-admin`) and hands it to
+`generate_install_config.py`. The update orchestrator requires the existing
+`/etc/sermo/credentials.env` on every selected host and refers to that file
+only: it never transports the password in SSH command arguments, generated
+configuration, backups or reports.
 
 Before generating, each host is probed for `/etc/sermo/credentials.env`. When it
 is there, the generated `sermo.yml` gets `password_file:` pointing at that file
@@ -172,8 +198,8 @@ preparation.
 During an update or config apply, the remote readiness and Web UI checks prefer
 the running daemon's owner-only `<paths.runtime>/web.token`. They therefore keep
 working when an existing host uses a rotated credential file or hashed web
-credentials; the orchestrator password remains the fallback for a first
-installation before a daemon token exists.
+credentials; the fresh-install password remains the fallback before a daemon
+token exists.
 
 `password` and `password_file` are mutually exclusive in `sermo.yml`; the
 generator emits exactly one of them.

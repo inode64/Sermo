@@ -2,6 +2,11 @@
 set -u
 
 web_password="${SERMO_WEB_PASSWORD:-sermo-remote-admin}"
+http_timeout_seconds="${SERMO_HTTP_TIMEOUT_SECONDS:-5}"
+
+case "$http_timeout_seconds" in
+	'' | *[!0-9]*) http_timeout_seconds=5 ;;
+esac
 
 web_runtime_dir() {
 	runtime_dir="/run/sermo"
@@ -40,7 +45,7 @@ web_admin_password() {
 http_get() {
 	url="$1"
 	admin_password="$(web_admin_password)"
-	curl -fsS -u "admin:${admin_password}" "$url"
+	curl --connect-timeout "$http_timeout_seconds" --max-time "$http_timeout_seconds" -fsS -u "admin:${admin_password}" "$url"
 }
 
 out="/tmp/sermo-final-check.out"

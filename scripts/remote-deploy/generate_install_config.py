@@ -237,6 +237,9 @@ class GenerationOptions:
     # one in sermo.yml is the one that ends up in backups and in a paste.
     # Defaulted so existing callers keep the embedded-password behaviour.
     web_password_file: str | None = None
+    # An empty selector retains the normal whole-host inventory. A non-empty
+    # selector confines generated catalog services to an explicit test scope.
+    service_names: frozenset[str] = frozenset()
 
 
 def read_text(path: Path) -> str:
@@ -924,6 +927,9 @@ def parse_services(stage: Path, options: GenerationOptions) -> tuple[list[dict],
     skipped: list[dict] = []
     for rep in reports:
         name = rep.get("name") or ""
+        if options.service_names and name not in options.service_names:
+            skipped.append({"name": name or rep.get("display_name", ""), "status": "outside service selector", "installed": bool(rep.get("installed")), "ok": bool(rep.get("ok"))})
+            continue
         monitorable = name in active_services or name in failed_services
         # A catalog service backed by a live or failed init unit is installed by
         # definition, even when its profile has no executable probe.  Examples
@@ -2291,6 +2297,11 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Generate every installed catalog service, even when its init unit is not active.",
     )
+    parser.add_argument(
+        "--only-services",
+        default="",
+        help="comma-separated canonical catalog service names to generate; empty keeps the whole host inventory",
+    )
     return parser.parse_args()
 
 
@@ -2309,6 +2320,7 @@ def main() -> int:
         hdparm_interval=args.hdparm_interval,
         active_services_only=not args.include_inactive_installed_services,
         catalog_services_dir=Path(args.catalog_services_dir),
+        service_names=frozenset(name for name in args.only_services.split(",") if name),
     )
 
     reports = []

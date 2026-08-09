@@ -3,11 +3,16 @@ set -euo pipefail
 
 run_id="${1:-}"
 payload="${2:-}"
+http_timeout_seconds="${SERMO_HTTP_TIMEOUT_SECONDS:-5}"
 
 if [ -z "$run_id" ] || [ -z "$payload" ]; then
 	echo "usage: $0 RUN_ID PAYLOAD_TGZ" >&2
 	exit 64
 fi
+
+case "$http_timeout_seconds" in
+	'' | *[!0-9]*) http_timeout_seconds=5 ;;
+esac
 
 work="/tmp/sermo-binary-catalog-${run_id}"
 out="${work}/out"
@@ -30,11 +35,11 @@ capture() {
 http_get() {
 	url="$1"
 	if command -v curl >/dev/null 2>&1; then
-		curl -fsS -u "admin:${web_password}" "$url"
+		curl --connect-timeout "$http_timeout_seconds" --max-time "$http_timeout_seconds" -fsS -u "admin:${web_password}" "$url"
 		return
 	fi
 	if command -v wget >/dev/null 2>&1; then
-		wget -qO- --auth-no-challenge --user=admin --password="$web_password" "$url"
+		wget -qO- -T "$http_timeout_seconds" -t 1 --auth-no-challenge --user=admin --password="$web_password" "$url"
 		return
 	fi
 	return 127

@@ -4,12 +4,17 @@ set -u
 run_id="${1:-}"
 config_tgz="${2:-}"
 web_password="${SERMO_WEB_PASSWORD:-sermo-remote-admin}"
-ready_wait_seconds="${SERMO_READY_WAIT_SECONDS:-240}"
+ready_wait_seconds="${SERMO_READY_WAIT_SECONDS:-600}"
+http_timeout_seconds="${SERMO_HTTP_TIMEOUT_SECONDS:-5}"
 
 if [ -z "$run_id" ] || [ -z "$config_tgz" ]; then
 	echo "usage: $0 RUN_ID CONFIG_TGZ" >&2
 	exit 64
 fi
+
+case "$http_timeout_seconds" in
+	'' | *[!0-9]*) http_timeout_seconds=5 ;;
+esac
 
 work="/tmp/sermo-apply-${run_id}"
 out="${work}/out"
@@ -97,11 +102,11 @@ http_get() {
 	url="$1"
 	admin_password="$(web_admin_password)"
 	if command -v curl >/dev/null 2>&1; then
-		curl -fsS -u "admin:${admin_password}" "$url"
+		curl --connect-timeout "$http_timeout_seconds" --max-time "$http_timeout_seconds" -fsS -u "admin:${admin_password}" "$url"
 		return $?
 	fi
 	if command -v wget >/dev/null 2>&1; then
-		wget -qO- --auth-no-challenge --user=admin --password="$admin_password" "$url"
+		wget -qO- -T "$http_timeout_seconds" -t 1 --auth-no-challenge --user=admin --password="$admin_password" "$url"
 		return $?
 	fi
 	return 127
@@ -181,7 +186,7 @@ fi
 
 case "$ready_wait_seconds" in
 	'' | *[!0-9]*)
-		ready_wait_seconds=240
+		ready_wait_seconds=600
 		;;
 esac
 

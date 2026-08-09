@@ -16,10 +16,14 @@ set -u
 script_dir="$(cd "$(dirname "$0")" && pwd)"
 repo="$(cd "${script_dir}/../.." && pwd)"
 
-web_password="${SERMO_WEB_PASSWORD:-sermo-remote-admin}"
 ssh_opts="${SERMO_SSH_OPTS:-}"
+remote_command_timeout_seconds="${SERMO_REMOTE_COMMAND_TIMEOUT_SECONDS:-1500}"
+ready_wait_seconds="${SERMO_READY_WAIT_SECONDS:-600}"
+credentials_file="/etc/sermo/credentials.env"
 ssh_user="root"
 with_config=0
+include_inactive_installed_services=0
+only_services=""
 skip_build=0
 dry_run=0
 run_root=""
@@ -37,6 +41,12 @@ options:
   --with-config     after the binary update: collect read-only inventory,
                     regenerate the host configuration locally and apply it
                     (backs up /etc/sermo to /etc/sermo.backup.<run-id> first)
+  --include-inactive-installed-services
+                    with --with-config, also generate installed catalog
+                    services whose init units are currently inactive
+  --only-services LIST
+                    with --with-config, generate only these canonical catalog
+                    service names (comma-separated)
   --run-root DIR    local working directory (default: mktemp under /tmp)
   --ssh-user USER   SSH user, must reach root on the target (default: root)
   --skip-build      reuse existing bin/sermoctl and bin/sermod; the staged
@@ -45,10 +55,12 @@ options:
   -h, --help        show this help
 
 environment:
-  SERMO_WEB_PASSWORD          admin password for Web UI verification and for
-                              regenerated configs (default: sermo-remote-admin)
   SERMO_SSH_OPTS              extra options for every ssh/scp invocation
-  SERMO_READY_WAIT_SECONDS    forwarded to the remote scripts
+  SERMO_REMOTE_COMMAND_TIMEOUT_SECONDS
+                              maximum duration of one remote SSH command
+                              (default: 1500)
+  SERMO_READY_WAIT_SECONDS    Web UI readiness limit per remote phase
+                              (default: 600)
 USAGE
 }
 
@@ -70,6 +82,12 @@ while [ $# -gt 0 ]; do
 			shift 2
 			;;
 		--with-config) with_config=1; shift ;;
+		--include-inactive-installed-services) include_inactive_installed_services=1; shift ;;
+		--only-services)
+			[ $# -ge 2 ] || die "--only-services requires a comma-separated list"
+			only_services="$2"
+			shift 2
+			;;
 		--run-root)
 			[ $# -ge 2 ] || die "--run-root requires a directory"
 			run_root="$2"
@@ -89,8 +107,13 @@ while [ $# -gt 0 ]; do
 done
 
 [ "${#hosts[@]}" -gt 0 ] || { usage >&2; exit 64; }
-case "$web_password" in
-	*"'"*) die "SERMO_WEB_PASSWORD must not contain single quotes" ;;
+case "$remote_command_timeout_seconds" in
+	'' | *[!0-9]*) die "SERMO_REMOTE_COMMAND_TIMEOUT_SECONDS must be a positive integer" ;;
+	0) die "SERMO_REMOTE_COMMAND_TIMEOUT_SECONDS must be greater than zero" ;;
+esac
+case "$ready_wait_seconds" in
+	'' | *[!0-9]*) die "SERMO_READY_WAIT_SECONDS must be a positive integer" ;;
+	0) die "SERMO_READY_WAIT_SECONDS must be greater than zero" ;;
 esac
 for host in "${hosts[@]}"; do
 	case "$host" in
@@ -114,6 +137,9 @@ if [ "$dry_run" = "1" ]; then
 		echo "  5. regenerate config locally (generate_install_config.py)"
 		echo "  6. back up /etc/sermo to /etc/sermo.backup.${run_id}"
 		echo "  7. apply config with remote_apply.sh ${run_id}"
+		if [ "$include_inactive_installed_services" = "1" ]; then
+			echo "     including installed catalog services with inactive init units"
+		fi
 	fi
 	echo "hosts:"
 	printf '  %s\n' "${hosts[@]}"
@@ -152,14 +178,15 @@ run_ssh() {
 	host="$1"
 	shift
 	# SERMO_SSH_OPTS is intentionally word-split; remote commands deliberately
-	# interpolate run_id/paths client-side.
+	# interpolate run_id/paths client-side. A local timeout also bounds read-only
+	# inventory commands whose remote utility may otherwise block indefinitely.
 	# shellcheck disable=SC2086,SC2029
-	ssh $ssh_opts "${ssh_user}@${host}" "$@"
+	timeout --foreground "${remote_command_timeout_seconds}s" ssh $ssh_opts "${ssh_user}@${host}" "$@"
 }
 
 run_scp() {
 	# shellcheck disable=SC2086
-	scp $ssh_opts -q "$@"
+	timeout --foreground "${remote_command_timeout_seconds}s" scp $ssh_opts -q "$@"
 }
 
 record() {
@@ -200,7 +227,7 @@ for host in "${hosts[@]}"; do
 		continue
 	fi
 
-	if ! run_ssh "$host" "env SERMO_WEB_PASSWORD='${web_password}' SERMO_READY_WAIT_SECONDS='${SERMO_READY_WAIT_SECONDS:-240}' bash ${remote_dir}/remote_update_payload.sh ${run_id} ${remote_dir}/${payload_name}"; then
+	if ! run_ssh "$host" "env SERMO_READY_WAIT_SECONDS='${ready_wait_seconds}' bash ${remote_dir}/remote_update_payload.sh ${run_id} ${remote_dir}/${payload_name}"; then
 		echo "  binary update failed; collecting artifacts and skipping" >&2
 		record "$host" "update" "failed" "remote_update_payload.sh non-zero"
 		fetch_failure_artifacts "$host" "/tmp/sermo-update-${run_id}/out.tar.gz"
@@ -225,18 +252,29 @@ for host in "${hosts[@]}"; do
 			failures=$((failures + 1))
 			continue
 		fi
-		# A host that already keeps its password in a credentials file keeps it:
-		# sermo.yml then references that file instead of carrying a second copy
-		# of the secret, which is the copy that ends up in backups.
-		cred_flag=()
-		if run_ssh "$host" "test -f /etc/sermo/credentials.env" 2>/dev/null; then
-			cred_flag=(--web-password-file /etc/sermo/credentials.env)
+		# Existing fleet members keep the credential file as the sole source of
+		# Web UI credentials. Do not place a password in an SSH argv, generated
+		# config archive, backup, report or local process list.
+		if ! run_ssh "$host" "test -r ${credentials_file}" 2>/dev/null; then
+			echo "  credentials file is missing; config not touched" >&2
+			record "$host" "credentials" "failed" "missing ${credentials_file}"
+			failures=$((failures + 1))
+			continue
+		fi
+		cred_flag=(--web-password-file "$credentials_file")
+		inactive_services_flag=()
+		if [ "$include_inactive_installed_services" = "1" ]; then
+			inactive_services_flag=(--include-inactive-installed-services)
+		fi
+		only_services_flag=()
+		if [ -n "$only_services" ]; then
+			only_services_flag=(--only-services "$only_services")
 		fi
 		if ! "${script_dir}/generate_install_config.py" \
 			--stage-root "$stage_root" \
 			--configs-root "${run_root}/configs" \
 			--report "${host_dir}/config-report.json" \
-			--web-password "$web_password" "${cred_flag[@]}" >/dev/null; then
+			"${cred_flag[@]}" "${inactive_services_flag[@]}" "${only_services_flag[@]}" >/dev/null; then
 			echo "  config generation failed; config not touched" >&2
 			record "$host" "generate" "failed" "generate_install_config.py non-zero"
 			failures=$((failures + 1))
@@ -250,7 +288,7 @@ for host in "${hosts[@]}"; do
 			continue
 		fi
 		if ! run_scp "$config_tgz" "${ssh_user}@${host}:${remote_dir}/sermo-config.tgz" \
-			|| ! run_ssh "$host" "cp -a /etc/sermo /etc/sermo.backup.${run_id} && env SERMO_WEB_PASSWORD='${web_password}' SERMO_READY_WAIT_SECONDS='${SERMO_READY_WAIT_SECONDS:-240}' bash ${remote_dir}/remote_apply.sh ${run_id} ${remote_dir}/sermo-config.tgz"; then
+			|| ! run_ssh "$host" "cp -a /etc/sermo /etc/sermo.backup.${run_id} && env SERMO_READY_WAIT_SECONDS='${ready_wait_seconds}' bash ${remote_dir}/remote_apply.sh ${run_id} ${remote_dir}/sermo-config.tgz"; then
 			echo "  config apply failed; /etc/sermo.backup.${run_id} kept on host" >&2
 			record "$host" "apply" "failed" "remote_apply.sh non-zero; backup /etc/sermo.backup.${run_id}"
 			fetch_failure_artifacts "$host" "/tmp/sermo-apply-${run_id}/out.tar.gz"

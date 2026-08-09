@@ -4,7 +4,7 @@ set -u
 run_id="${1:-}"
 payload="${2:-}"
 web_password="${SERMO_WEB_PASSWORD:-sermo-remote-admin}"
-ready_wait_seconds="${SERMO_READY_WAIT_SECONDS:-240}"
+ready_wait_seconds="${SERMO_READY_WAIT_SECONDS:-600}"
 http_timeout_seconds="${SERMO_HTTP_TIMEOUT_SECONDS:-5}"
 keep_remote_artifacts="${SERMO_KEEP_REMOTE_ARTIFACTS:-0}"
 
@@ -27,7 +27,7 @@ fi
 
 case "$ready_wait_seconds" in
 	'' | *[!0-9]*)
-		ready_wait_seconds=240
+		ready_wait_seconds=600
 		;;
 esac
 

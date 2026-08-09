@@ -267,13 +267,12 @@ for hints_db in /var/spool/exim/db/callout /var/spool/exim/db/retry; do
 		printf '%s\t%s\n' "$hints_db" "absent" >>"${out}/exim_hints"
 		continue
 	fi
-	# "SQLite format 3" is the 15-byte magic every SQLite file opens with. A read
-	# that fails outright is reported as unknown, not as "other": absence of
-	# proof is not proof, and the generator must not disable a working watch
-	# because the file could not be opened.
-	if ! magic="$(dd if="$hints_db" bs=1 count=15 2>/dev/null)"; then
+	# "SQLite format 3" is the 15-byte magic every SQLite file opens with. Read
+	# it as hex: Bash command substitutions discard NUL bytes from other database
+	# formats and would otherwise warn while the collector is only observing.
+	if ! magic_hex="$(LC_ALL=C od -An -N 15 -tx1 "$hints_db" 2>/dev/null)"; then
 		printf '%s\t%s\n' "$hints_db" "unknown" >>"${out}/exim_hints"
-	elif [ "$magic" = "SQLite format 3" ]; then
+	elif [ "${magic_hex//[[:space:]]/}" = "53514c69746520666f726d61742033" ]; then
 		printf '%s\t%s\n' "$hints_db" "sqlite" >>"${out}/exim_hints"
 	else
 		printf '%s\t%s\n' "$hints_db" "other" >>"${out}/exim_hints"

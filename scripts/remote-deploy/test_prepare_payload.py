@@ -13,7 +13,11 @@ from pathlib import Path
 SCRIPT_DIR = Path(__file__).resolve().parent
 PREPARE = SCRIPT_DIR / "prepare_payload.sh"
 REMOTE_UPDATE = SCRIPT_DIR / "remote_update_payload.sh"
+REMOTE_APPLY = SCRIPT_DIR / "remote_apply.sh"
+REMOTE_FINAL_CHECK = SCRIPT_DIR / "remote_final_check.sh"
+REMOTE_UPDATE_BINARY_CATALOG = SCRIPT_DIR / "remote_update_binary_catalog.sh"
 REMOTE_STAGE = SCRIPT_DIR / "remote_stage.sh"
+REMOTE_COLLECT = SCRIPT_DIR / "remote_collect_inventory.sh"
 UPDATE_FLEET = SCRIPT_DIR / "update_fleet.sh"
 
 
@@ -81,6 +85,63 @@ class PreparePayloadTest(unittest.TestCase):
         expected = '/tmp/sermo-update-${run_id}/stage/usr/share/sermo'  # noqa: S108
         self.assertIn(expected, update_fleet)
         self.assertIn("make build-candidate-sermoctl", update_fleet)
+
+    def test_update_fleet_exposes_inactive_service_generation(self) -> None:
+        """An explicit fleet run can include installed inactive service profiles."""
+        update_fleet = UPDATE_FLEET.read_text(encoding="utf-8")
+
+        self.assertIn("--include-inactive-installed-services", update_fleet)
+        self.assertIn("inactive_services_flag=(--include-inactive-installed-services)", update_fleet)
+        self.assertIn('"${inactive_services_flag[@]}"', update_fleet)
+
+    def test_update_fleet_passes_an_explicit_service_selector(self) -> None:
+        """A scoped lifecycle run must not generate unrelated catalog services."""
+        update_fleet = UPDATE_FLEET.read_text(encoding="utf-8")
+
+        self.assertIn("--only-services", update_fleet)
+        self.assertIn('only_services_flag=(--only-services "$only_services")', update_fleet)
+
+    def test_update_fleet_bounds_each_remote_transfer_and_command(self) -> None:
+        """A blocked collector or transfer must not hold the fleet run forever."""
+        update_fleet = UPDATE_FLEET.read_text(encoding="utf-8")
+
+        self.assertIn(
+            'remote_command_timeout_seconds="${SERMO_REMOTE_COMMAND_TIMEOUT_SECONDS:-1500}"',
+            update_fleet,
+        )
+        self.assertIn(
+            'timeout --foreground "${remote_command_timeout_seconds}s" ssh',
+            update_fleet,
+        )
+        self.assertIn(
+            'timeout --foreground "${remote_command_timeout_seconds}s" scp',
+            update_fleet,
+        )
+        self.assertIn('ready_wait_seconds="${SERMO_READY_WAIT_SECONDS:-600}"', update_fleet)
+
+    def test_update_fleet_uses_only_the_remote_credentials_file(self) -> None:
+        """A normal update must not put a Web password in SSH command arguments."""
+        update_fleet = UPDATE_FLEET.read_text(encoding="utf-8")
+
+        self.assertIn('credentials_file="/etc/sermo/credentials.env"', update_fleet)
+        self.assertIn('cred_flag=(--web-password-file "$credentials_file")', update_fleet)
+        self.assertNotIn("env SERMO_WEB_PASSWORD=", update_fleet)
+
+    def test_remote_web_verifiers_bound_each_http_request(self) -> None:
+        """A hung local Web UI must not make a deploy or final audit hang."""
+        for script in [REMOTE_APPLY, REMOTE_FINAL_CHECK, REMOTE_UPDATE_BINARY_CATALOG]:
+            body = script.read_text(encoding="utf-8")
+            self.assertIn('http_timeout_seconds="${SERMO_HTTP_TIMEOUT_SECONDS:-5}"', body)
+            self.assertIn('--connect-timeout "$http_timeout_seconds"', body)
+            self.assertIn('--max-time "$http_timeout_seconds"', body)
+
+    def test_exim_binary_magic_probe_does_not_use_a_nul_command_substitution(self) -> None:
+        """Non-SQLite database headers must not emit Bash's ignored-NUL warning."""
+        for script in [REMOTE_COLLECT, REMOTE_STAGE]:
+            body = script.read_text(encoding="utf-8")
+            self.assertIn('od -An -N 15 -tx1 "$hints_db"', body)
+            self.assertIn("53514c69746520666f726d61742033", body)
+            self.assertNotIn('magic="$(dd if="$hints_db" bs=1 count=15', body)
 
     def test_reinstall_preserves_web_credentials_from_backup(self) -> None:
         remote_stage = REMOTE_STAGE.read_text(encoding="utf-8")
