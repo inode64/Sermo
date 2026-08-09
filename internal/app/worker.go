@@ -276,8 +276,13 @@ func (w *Worker) prepareCycle(ctx context.Context, settleKey string, now func() 
 
 	// The init backend is inactive: complete startup observation without running
 	// checks so stopped services do not block daemon readiness or stay "starting".
+	// An operation's one observe-only cycle is complete too: retaining its marker
+	// would publish a permanent "starting" state for a rejected start/restart.
 	if mode.startup && w.Settling != nil {
 		w.Settling.MarkObserved(settleKey)
+	}
+	if mode.operation {
+		w.clearOperationSettling()
 	}
 	w.clearObservability()
 	return workerCycleMode{}, true

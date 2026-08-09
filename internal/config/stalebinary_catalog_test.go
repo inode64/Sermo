@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"sermo/internal/cfgval"
 	"sermo/internal/rules"
 )
 
@@ -52,6 +53,17 @@ func ruleActionTypes(t *testing.T, rule map[string]any) []string {
 		out = append(out, m[rules.RuleFieldType].(string))
 	}
 	return out
+}
+
+func TestCatalogSNMPDProtocolProbeIsOptional(t *testing.T) {
+	resolved := resolveCatalogService(t, "snmpd", "systemd")
+	port := nested(t, resolved.Tree, "checks", "port")
+	if got := cfgval.String(port["type"]); got != "snmp" {
+		t.Fatalf("snmpd port check type = %q, want snmp", got)
+	}
+	if !cfgval.Bool(port["optional"]) {
+		t.Fatal("snmpd protocol probe must be optional without configured SNMP credentials")
+	}
 }
 
 // The OVS services must never restart themselves over a replaced binary:

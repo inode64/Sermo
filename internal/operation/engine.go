@@ -472,8 +472,16 @@ func (e Engine) runBackendAction(ctx context.Context, result *Result, action str
 }
 
 func (e Engine) ensureServiceHealthy(ctx context.Context, result *Result, action string) bool {
-	if status, err := e.Manager.Status(ctx, e.Unit); err == nil && status.Status == servicemgr.StatusFailed {
+	status, err := e.Manager.Status(ctx, e.Unit)
+	if err != nil {
+		return true
+	}
+	if status.Status == servicemgr.StatusFailed {
 		result.Status, result.Message = ResultFailed, "service failed after "+action
+		return false
+	}
+	if (action == actionStart || action == actionRestart || action == actionResume) && status.Status != servicemgr.StatusActive {
+		result.Status, result.Message = ResultFailed, "service not active after "+action
 		return false
 	}
 	return true
@@ -484,9 +492,19 @@ func (e Engine) runPostflight(ctx context.Context, p plan, result *Result) bool 
 		return true
 	}
 	var out checks.Outcome
+	postflightReady := false
 	for attempt := range postflightMaxAttempts {
-		out = e.Postflight(ctx)
-		if out.OK {
+		if (p.start || p.nativeRestart || p.resume) && !e.ensureServiceHealthy(ctx, result, result.Action) {
+			return false
+		}
+		if !postflightReady {
+			out = e.Postflight(ctx)
+			postflightReady = out.OK
+		}
+		// A service may report active immediately after systemd accepts start and
+		// fail a moment later. Keep the bounded postflight window open so the
+		// returned operation result matches the backend's settled state.
+		if postflightReady && attempt+1 == postflightMaxAttempts {
 			result.Checks = append(result.Checks, out.Results...)
 			return true
 		}

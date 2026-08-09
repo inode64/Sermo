@@ -29,6 +29,12 @@ bases de datos, cachés y colas pueden llevar ajustes de `policy` locales más
 estrictos que los valores por defecto globales, con cooldowns más largos, rate
 limits y backoff para evitar bucles de reinicio.
 
+El perfil empaquetado de `snmpd` mantiene visible su sonda local de protocolo
+SNMP sin autenticación, pero la marca como opcional. Así, un agente restringido
+a gestores SNMP autenticados sigue sano cuando su comprobación del servicio init
+está activa; añada una comprobación SNMP autenticada específica del sitio cuando
+se requiera disponibilidad del protocolo.
+
 ## Contenido
 
 - [Categorías](#categorías)

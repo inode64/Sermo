@@ -655,7 +655,7 @@ func TestDefaultOperateFallsBackToConfiguredServiceUnit(t *testing.T) {
 		LoadConfig: config.Load,
 		Detector:   fakeBackendDetector{detection: servicemgr.Detection{Backend: servicemgr.BackendSystemd}},
 		NewManager: func(servicemgr.Backend) (servicemgr.Manager, error) {
-			return fakeManager{actions: &actions}, nil
+			return fakeManager{actions: &actions, status: servicemgr.ServiceStatus{Status: servicemgr.StatusActive}}, nil
 		},
 		Runner: statusUnitRunner{},
 		Stdout: &bytes.Buffer{},
@@ -692,7 +692,7 @@ func TestDefaultOperatePersistsOneOperationEvent(t *testing.T) {
 	app := App{
 		Detector: fakeBackendDetector{detection: servicemgr.Detection{Backend: servicemgr.BackendSystemd}},
 		NewManager: func(servicemgr.Backend) (servicemgr.Manager, error) {
-			return fakeManager{actions: &actions}, nil
+			return fakeManager{actions: &actions, status: servicemgr.ServiceStatus{Status: servicemgr.StatusActive}}, nil
 		},
 		Stdout: &bytes.Buffer{},
 		Stderr: &bytes.Buffer{},

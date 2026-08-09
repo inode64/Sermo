@@ -31,6 +31,10 @@ watches:
     check:
       type: snmp
       port: ${port}
+      # The daemon can intentionally restrict SNMP queries to authenticated
+      # managers. Keep the probe visible, but do not misreport a healthy init
+      # service as failed when no monitoring credentials were configured.
+      optional: true
   restart-if-worker-thread-hot:
     check:
       type: metric

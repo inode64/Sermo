@@ -241,7 +241,7 @@ func TestWorkerOperationSettlingObserveOnlySuppressesSideEffects(t *testing.T) {
 	}
 }
 
-func TestWorkerOperationSettlingWaitsForActiveBackend(t *testing.T) {
+func TestWorkerOperationSettlingConsumesInactiveObservation(t *testing.T) {
 	store := newFakeStore()
 	store.now = func() time.Time { return t0 }
 	if err := store.SetOperationSettling("web", "start", state.OperationSettlingSettling, state.SourceCLI); err != nil {
@@ -258,8 +258,13 @@ func TestWorkerOperationSettlingWaitsForActiveBackend(t *testing.T) {
 	if _, ok := h.eventOf(eventKindAlert); ok {
 		t.Fatal("inactive backend while settling must suppress alerts")
 	}
-	if _, found, _ := store.OperationSettling("web"); !found {
-		t.Fatal("settling marker must remain until the backend becomes active")
+	if _, found, _ := store.OperationSettling("web"); found {
+		t.Fatal("inactive backend observation must clear the settling marker")
+	}
+
+	w.RunCycle(context.Background())
+	if _, ok := h.eventOf(eventKindAlert); !ok {
+		t.Fatal("next cycle should alert when the backend remains inactive")
 	}
 }
 
