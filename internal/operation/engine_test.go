@@ -29,6 +29,8 @@ type fakeManager struct {
 	resumeErr        error
 	resetErr         error
 	status           servicemgr.Status
+	statusSteps      []servicemgr.Status
+	statusCalls      int
 	statusErr        error
 	calls            []string
 	errOn            map[string]error // per-call ("start <unit>"/"stop <unit>") error override
@@ -81,6 +83,11 @@ func (m *fakeManager) SupportsReload(_ context.Context, s string) (bool, error) 
 }
 
 func (m *fakeManager) Status(_ context.Context, s string) (servicemgr.ServiceStatus, error) {
+	if m.statusCalls < len(m.statusSteps) {
+		status := m.statusSteps[m.statusCalls]
+		m.statusCalls++
+		return servicemgr.ServiceStatus{Status: status}, m.statusErr
+	}
 	return servicemgr.ServiceStatus{Status: m.status}, m.statusErr
 }
 
@@ -1481,6 +1488,24 @@ func TestRestartServiceFailedAfterStart(t *testing.T) {
 	h.mgr.status = servicemgr.StatusFailed
 	if res := h.restart(t); res.Status != ResultFailed {
 		t.Fatalf("status = %q, want failed (service failed after start)", res.Status)
+	}
+}
+
+func TestRestartServiceInactiveAfterStart(t *testing.T) {
+	h := defaultHarness()
+	h.mgr.status = servicemgr.StatusInactive
+	res := h.restart(t)
+	if res.Status != ResultFailed || res.Message != "service not active after start" {
+		t.Fatalf("result = %+v, want inactive post-start failure", res)
+	}
+}
+
+func TestRestartServiceFailsDuringPostflightWindow(t *testing.T) {
+	h := defaultHarness()
+	h.mgr.statusSteps = []servicemgr.Status{servicemgr.StatusActive, servicemgr.StatusActive, servicemgr.StatusFailed}
+	res := h.restart(t)
+	if res.Status != ResultFailed || res.Message != "service failed after restart" {
+		t.Fatalf("result = %+v, want delayed backend failure", res)
 	}
 }
 

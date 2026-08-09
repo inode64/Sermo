@@ -29,6 +29,12 @@ services such as databases, caches and queues may carry stricter local `policy`
 settings than the global defaults, with longer cooldowns, rate limits and
 backoff to avoid restart loops.
 
+The packaged `snmpd` profile keeps its unauthenticated local SNMP protocol
+probe visible but marks it optional. An agent restricted to authenticated SNMP
+managers is therefore still healthy when its init-service check is active; add
+an authenticated site-specific SNMP check when protocol availability itself is
+required.
+
 ## Contents
 
 - [Categories](#categories)
