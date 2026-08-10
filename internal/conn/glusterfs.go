@@ -4,23 +4,14 @@ import (
 	"context"
 )
 
-// GlusterFS handshake RPC program (rpc/rpc-lib protocol-common.h).
-const (
-	glusterHandshakeProg = 14398633
-	glusterHandshakeVers = 2
-	glusterHandshakeName = "glusterfs-handshake"
-)
-
 // glusterfsProtocol probes a GlusterFS management daemon (glusterd) over the
-// GlusterFS RPC protocol: it sends an RPC NULL call to the handshake program on
-// TCP/24007 and verifies a well-formed RPC reply — proof that node's glusterd is
-// up and speaking RPC. No auth. Reuses the ONC RPC helpers (record marking over
-// TCP).
+// TCP management endpoint on port 24007. GlusterFS deliberately leaves the
+// RPC NULL actor in its handshake program unimplemented, so sending that
+// generic ONC RPC probe produces a false error in glusterd's log. A connection
+// is the only side-effect-free unauthenticated probe of that endpoint.
 //
-// This checks a single node. To alert when any node in a cluster is down,
-// configure one check per node (one `host` each); the failing node's check
-// fires. Cluster-wide peer status is not gathered (it needs authenticated
-// management RPC).
+// This checks only a single node. gluster_cluster is the separate local check
+// for authenticated, read-only cluster topology and healing status.
 type glusterfsProtocol struct{}
 
 func (glusterfsProtocol) Name() string       { return ProtocolNameGlusterFS }
@@ -28,5 +19,10 @@ func (glusterfsProtocol) DefaultPort() int   { return defaultPortGlusterFS }
 func (glusterfsProtocol) RequiresUser() bool { return false }
 
 func (glusterfsProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	return probeRPCNull(ctx, cfg, defaultPortGlusterFS, glusterHandshakeProg, glusterHandshakeVers, glusterHandshakeName)
+	c, err := probeTargetFor(ctx, cfg, defaultPortGlusterFS).openTCP(ctx)
+	if err != nil {
+		return Result{}, err
+	}
+	defer func() { _ = c.Close() }()
+	return Result{}, nil
 }

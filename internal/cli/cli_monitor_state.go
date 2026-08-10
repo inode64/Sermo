@@ -27,7 +27,7 @@ func (a App) serviceDisplayState(ctx context.Context, opts options, status servi
 	}
 	// The local fallback has no runtime samples at all, so it can never tell an
 	// empty process tree from one it has not sampled: never processesMissing.
-	return app.ServiceState(mon.Enabled, mon.Monitored(), string(status.Status), "", true, false, false, false)
+	return app.ServiceState(mon.Enabled, mon.Monitored(), string(status.Status), "", true, false, false, false, false)
 }
 
 // monitorView is the persisted monitoring metadata shown by status and monitor.

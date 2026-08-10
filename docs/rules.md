@@ -145,7 +145,8 @@ Connection-protocol checks (MySQL, PostgreSQL, Redis, Docker, libvirt, etc.) are
 | `kafka`       | a Kafka broker/controller answers an unauthenticated `ApiVersions` request; exposes the listener `role` (broker/controller) and `produce_api`/`vote_api` flags for `expect` (see Database) |
 | `varnish` / `varnishadm` | the Varnish management CLI answers with its banner/auth challenge (see Database) |
 | `ceph` / `ceph-mon` | a Ceph monitor sends its messenger `ceph v…` banner (see Database) |
-| `glusterfs` / `glusterd` / `gluster` | a GlusterFS node's glusterd answers an RPC NULL on 24007 (see Database) |
+| `glusterfs` / `glusterd` / `gluster` | a GlusterFS node accepts TCP connections to glusterd on 24007 (see Database) |
+| `gluster_cluster` | the local Gluster CLI verifies peer membership, volume/bricks/self-heal state and optional heal limits (see Database) |
 | `openvswitch` / `ovs` / `ovsdb` / `ovsdb-server` | ovsdb-server answers an OVSDB `list_dbs` JSON-RPC request (see Database) |
 | `sqlite` / `sqlite3` | a SQLite database file passes `PRAGMA integrity_check` (see SQLite) |
 | `sql`         | a SQL query's scalar result compares (`== != > >= < <= contains =~`) against a value (see SQL query) |
@@ -1324,9 +1325,10 @@ Protocols, in the order of the table above:
   software version). No auth.
 - `rpcbind` (aliases `portmap`, `portmapper`) — default port 111 (UDP). No auth.
   Sends an **ONC RPC NULL** call (RFC 5531/1833) to the portmapper program (100000
-  v2) and verifies a well-formed RPC reply — any reply (accepted or denied) proves
-  the daemon is up and speaking RPC; result data carries the `rpc_status`. The same
-  NULL-call probe backs the `nfs`/`mountd`/`statd`/`glusterfs` checks below.
+  v2) and verifies that the requested program is present: a successful reply or a
+  program-version mismatch passes, while an unavailable program, denied reply or
+  another acceptance status fails. Result data carries the `rpc_status`. The same
+  NULL-call probe backs the `nfs`/`mountd`/`statd` checks below.
 - `nfs` (aliases `nfs-server`, `nfsd`) — an ONC RPC NULL to the NFS program
   (100003) over TCP (record marking), like `rpcbind`; default port 2049. A
   version-mismatch reply (e.g. an NFSv4-only server answering a v3 NULL) still
@@ -1412,21 +1414,36 @@ Protocols, in the order of the table above:
   banner proves it is a Ceph endpoint. Result data: the `messenger` version
   (`v1`/`v2`). The banner precedes the authenticated handshake, so no credentials.
 - `glusterfs` (aliases `glusterd`, `gluster`) — default port 24007 (TCP, the
-  glusterd management daemon). No auth. An ONC RPC NULL to the GlusterFS handshake
-  program over TCP (record marking), like `rpcbind`; result data carries the
-  `rpc_status`. **This checks one node.** To alert when **any node** in a cluster
-  is down, configure one check per node (one `host` each) — the failing node's
-  check fires:
+  glusterd management daemon). No auth. The check only establishes a TCP
+  connection: GlusterFS deliberately leaves the RPC NULL actor in its handshake
+  program unimplemented, and calling it logs a false error in current glusterd
+  releases. This is a node liveness check; use `gluster_cluster` for the local
+  node's view of cluster health.
+- `gluster_cluster` — a local, read-only Gluster cluster check. It runs the
+  installed `gluster --mode=script --xml` client under the check timeout, using
+  the host's existing Gluster management credentials and trust configuration.
+  It never changes cluster state. Supply one or both of `peers` and `volumes`:
+  every configured peer must be present, connected and a cluster member; a
+  disconnected peer returned by Gluster also fails the check. Every configured
+  volume must exist, be started and have exactly its configured number of
+  `bricks` online. `self_heal: true` requires a running self-heal daemon;
+  `max_heal_entries` and `max_split_brain_entries` are optional non-negative
+  limits (use `0` to require no pending entries).
 
   ```yaml
-  checks:
-    gluster-n1: { type: glusterfs, host: 10.0.0.1 }
-    gluster-n2: { type: glusterfs, host: 10.0.0.2 }
-    gluster-n3: { type: glusterfs, host: 10.0.0.3 }
+  watches:
+    cluster:
+      interval: 2m
+      check:
+        type: gluster_cluster
+        peers: [node-b, node-c]
+        volumes:
+          images:
+            bricks: 3
+            self_heal: true
+            max_heal_entries: 0
+            max_split_brain_entries: 0
   ```
-
-  Cluster-wide peer status is not gathered in-protocol (it would need authenticated
-  GlusterD management RPC).
 - `openvswitch` (aliases `ovs`, `ovsdb`, `ovsdb-server`) — default port 6640 (TCP,
   the Open vSwitch configuration database server `ovsdb-server`), or a Unix socket
   via `socket` (commonly `/run/openvswitch/db.sock`); `tls` supported (SSL). No

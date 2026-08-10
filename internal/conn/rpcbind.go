@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"strconv"
 )
 
@@ -61,8 +62,8 @@ const (
 )
 
 // rpcbindProtocol probes rpcbind (the ONC RPC portmapper) natively: it sends an
-// RPC NULL call to the portmapper program (100000 v2) over UDP and verifies a
-// well-formed RPC reply — proof the daemon is up and speaking RPC. No auth.
+// RPC NULL call to the portmapper program (100000 v2) over UDP and verifies the
+// program is present. No auth.
 type rpcbindProtocol struct{}
 
 func (rpcbindProtocol) Name() string       { return ProtocolNameRPCBind }
@@ -77,7 +78,11 @@ func (rpcbindProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	}
 	status, err := parseRPCReply(reply, xid)
 	if err != nil {
-		return Result{}, err
+		return Result{}, probeErr(ProtocolNameRPCBind, stepRPCReply, err)
+	}
+	if !rpcTargetProgramStatusOK(status) {
+		return Result{}, probeErr(ProtocolNameRPCBind, stepRPCReply,
+			fmt.Errorf("expected program %d, got %s", portmapProg, status))
 	}
 	return Result{Extra: map[string]string{extraProgram: strconv.Itoa(portmapProg), extraRPCStatus: status}}, nil
 }
@@ -100,9 +105,7 @@ func buildRPCNull(xid, prog, vers uint32) []byte {
 	return b
 }
 
-// parseRPCReply validates an ONC RPC reply for xid and returns its status. Any
-// well-formed reply (accepted or denied) proves an RPC responder; only a
-// malformed message or an xid mismatch is an error.
+// parseRPCReply validates an ONC RPC reply for xid and returns its status.
 func parseRPCReply(b []byte, xid uint32) (string, error) {
 	if len(b) < rpcReplyMinBytes {
 		return "", errors.New("short RPC reply")
@@ -130,6 +133,13 @@ func parseRPCReply(b []byte, xid uint32) (string, error) {
 	}
 	off := rpcAcceptStatOffsetBase + verfLen
 	return rpcAcceptStatName(binary.BigEndian.Uint32(b[off : off+rpcWordBytes])), nil
+}
+
+// rpcTargetProgramStatusOK reports whether status proves the requested program
+// exists. A version mismatch still proves the endpoint serves the program; a
+// reply before program dispatch, or any other acceptance status, does not.
+func rpcTargetProgramStatusOK(status string) bool {
+	return status == rpcAcceptNameSuccess || status == rpcAcceptNameProgMismatch
 }
 
 // rpcAcceptStatNames names each RPC accept_stat code.

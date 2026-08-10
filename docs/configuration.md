@@ -709,6 +709,28 @@ A per-check `interval` **cannot be shorter than the resolution** and should be a
 **multiple** of it. If it isn't, the daemon rounds it to the nearest multiple
 (at least one cycle) and **logs a warning at startup** — it never fails to start.
 
+For a GlusterFS service, `gluster_cluster` is a local service watch that uses
+the already configured `gluster` client to check peer membership, volume and
+brick availability, self-heal daemons, and optional pending-heal limits. The
+remote deployment generator derives its expected peers and volumes from the
+host's read-only Gluster XML inventory; an explicit configuration follows the
+same shape. See [the check reference](rules.md#ports) for its full contract.
+
+```yaml
+watches:
+  cluster:
+    interval: 2m
+    check:
+      type: gluster_cluster
+      peers: [node-b, node-c]
+      volumes:
+        images:
+          bricks: 3
+          self_heal: true
+          max_heal_entries: 0
+          max_split_brain_entries: 0
+```
+
 ## Web UI
 
 The daemon can serve a small web dashboard to view services and watches.
@@ -1127,6 +1149,11 @@ service with fresh trusted process evidence may report `state: active` (process
 confirmed, not check health). Services still waiting for an `active` init
 backend complete settling on the first status probe (they surface as `failed`
 while inactive); checks and remediation wait until the backend is active.
+If the backend explicitly reports `failed` but Sermo has fresh evidence of an
+exact live process and every functional check passes, the aggregated service
+state is `warning`, not `failed`. The API still exposes `status: failed`: this
+is a workload that remains available while its init unit needs operator repair,
+and service operations continue to respect that backend state.
 
 Only **installed** catalog applications with an active app-monitor participate
 in that settling registry; catalog entries whose binary is not present are

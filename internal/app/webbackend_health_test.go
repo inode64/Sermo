@@ -81,6 +81,81 @@ func TestWebBackendViewCheckHealth(t *testing.T) {
 	}
 }
 
+func TestWebBackendFailedUnitWithHealthyLiveProcessWarns(t *testing.T) {
+	at := time.Date(2026, 8, 10, 11, 20, 0, 0, time.UTC)
+	snaps := NewSnapshots()
+	snaps.now = func() time.Time { return at }
+	snaps.Publish("glusterd", map[string]checks.Result{
+		"management": {Check: "management", OK: true},
+	}, map[string]bool{"management": true})
+	metrics := NewServiceMetricSampler()
+	metrics.Record("glusterd", web.ServiceRuntime{
+		At:        at.UTC().Format(time.RFC3339),
+		StartedAt: at.Add(-time.Minute).UTC().Format(time.RFC3339),
+		ProcessTotals: web.ProcessTotals{
+			Count: 1,
+		},
+	})
+	entry := &webEntry{
+		checkNames: []string{"management"},
+		interval:   time.Minute,
+		status:     func(context.Context) (servicemgr.Status, error) { return servicemgr.StatusFailed, nil },
+	}
+	b := &WebBackend{
+		order:          []string{"glusterd"},
+		entries:        map[string]*webEntry{"glusterd": entry},
+		snapshots:      snaps,
+		serviceMetrics: metrics,
+		now:            func() time.Time { return at },
+	}
+
+	svc := b.view(context.Background(), "glusterd", entry)
+	if svc.Status != string(servicemgr.StatusFailed) || svc.State != TargetStateWarning || svc.CheckHealth != checkHealthWarning || svc.WarningReason != warningReasonFailedUnitLiveProcess {
+		t.Fatalf("degraded service = %+v, want failed backend with healthy-live-process warning", svc)
+	}
+}
+
+func TestWebBackendGlusterClusterReadings(t *testing.T) {
+	at := time.Date(2026, 8, 10, 12, 0, 0, 0, time.UTC)
+	snaps := NewSnapshots()
+	snaps.now = func() time.Time { return at }
+	snaps.PublishWithCheckTypes("glusterd", map[string]checks.Result{
+		"cluster": {
+			Check: "cluster", OK: false,
+			Data: map[string]any{
+				checks.DataKeyGlusterPeersConnected: 1,
+				checks.DataKeyGlusterPeersExpected:  2,
+				checks.DataKeyGlusterBricksOnline:   5,
+				checks.DataKeyGlusterBricksExpected: 6,
+				checks.DataKeyGlusterIssues:         []string{"peer zeus is disconnected"},
+			},
+		},
+	}, map[string]bool{"cluster": true}, map[string]string{"cluster": checks.CheckTypeGlusterCluster})
+	entry := &webEntry{
+		checkNames:     []string{"cluster"},
+		checkTypes:     map[string]string{"cluster": checks.CheckTypeGlusterCluster},
+		checkIntervals: map[string]time.Duration{"cluster": time.Minute},
+		status:         func(context.Context) (servicemgr.Status, error) { return servicemgr.StatusActive, nil },
+	}
+	b := &WebBackend{
+		order:     []string{"glusterd"},
+		entries:   map[string]*webEntry{"glusterd": entry},
+		snapshots: snaps,
+		now:       func() time.Time { return at.Add(time.Second) },
+	}
+
+	detail, ok := b.Detail(context.Background(), "glusterd")
+	if !ok || len(detail.Checks) != 1 {
+		t.Fatalf("detail = %+v", detail)
+	}
+	readings := detail.Checks[0].Readings
+	if readingByField(readings, checks.DataKeyGlusterPeersConnected).Value != "1" ||
+		readingByField(readings, checks.DataKeyGlusterBricksOnline).Value != "5" ||
+		readingByField(readings, checks.DataKeyGlusterIssues).Value != "peer zeus is disconnected" {
+		t.Fatalf("gluster readings = %#v", readings)
+	}
+}
+
 func TestWebBackendServiceCheckSnapshotRequiresFreshMatchingType(t *testing.T) {
 	at := time.Date(2026, 7, 16, 18, 0, 0, 0, time.UTC)
 	snaps := NewSnapshots()

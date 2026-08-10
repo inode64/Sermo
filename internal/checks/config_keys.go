@@ -16,6 +16,7 @@ const (
 	CheckKeyAuthSource            = "auth_source"
 	CheckKeyBackend               = "backend"
 	CheckKeyBinary                = "binary"
+	CheckKeyBricks                = "bricks"
 	CheckKeyBody                  = "body"
 	CheckKeyDBusBusName           = conn.ParamKeyDBusBusName
 	CheckKeyDBusInterface         = conn.ParamKeyDBusInterface
@@ -83,6 +84,8 @@ const (
 	CheckKeyMaxOffset             = "max_offset"
 	CheckKeyMaxRootDispersion     = "max_root_dispersion"
 	CheckKeyMaxStratum            = "max_stratum"
+	CheckKeyMaxHealEntries        = "max_heal_entries"
+	CheckKeyMaxSplitBrainEntries  = "max_split_brain_entries"
 	CheckKeyMethod                = "method"
 	CheckKeyMetric                = "metric"
 	CheckKeyMultiplexer           = "multiplexer"
@@ -108,6 +111,7 @@ const (
 	CheckKeyPassword              = "password"
 	CheckKeyPerCPU                = "per_cpu"
 	CheckKeyPermissions           = "permissions"
+	CheckKeyPeers                 = "peers"
 	CheckKeyPipeline              = "pipeline"
 	CheckKeyPort                  = "port"
 	CheckKeyPorts                 = "ports"
@@ -137,6 +141,7 @@ const (
 	CheckKeyStatusPath            = "status_path"
 	CheckKeyStream                = "stream"
 	CheckKeySummary               = "summary"
+	CheckKeySelfHeal              = "self_heal"
 	CheckKeySubprotocol           = "subprotocol"
 	CheckKeyThreshold             = "threshold"
 	CheckKeyTimeout               = "timeout"
@@ -152,6 +157,7 @@ const (
 	CheckKeyValue                 = "value"
 	CheckKeyVerify                = "verify"
 	CheckKeyVersionMatch          = "version_match"
+	CheckKeyVolumes               = "volumes"
 	CheckKeyWithin                = "within"
 )
 
