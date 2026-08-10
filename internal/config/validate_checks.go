@@ -810,6 +810,7 @@ var singleShotCheckValidators = map[string]singleShotCheckValidator{
 	checks.CheckTypeSensors:          validateSensorsCheck,
 	checks.CheckTypeSmart:            singleShotNoLock(validateSmartFields),
 	checks.CheckTypeRAID:             validateRAIDCheck,
+	checks.CheckTypeGlusterCluster:   singleShotNoLock(validateGlusterClusterCheck),
 	checks.CheckTypeLVM:              validateLVMCheck,
 	checks.CheckTypeEDAC:             singleShotThreshold(checks.EdacPredFields),
 	checks.CheckTypeConfig:           validateConfigCheck,
@@ -837,6 +838,88 @@ var singleShotCheckValidators = map[string]singleShotCheckValidator{
 	checks.CheckTypeWebsocket:        singleShotNoLock(validateWebsocketFields),
 
 	checks.CheckTypeTCPConnections: validateTCPConnectionsCheck,
+}
+
+func validateGlusterClusterCheck(path string, entry map[string]any, add addFunc) {
+	hasPeers := validateGlusterPeers(path, entry[checks.CheckKeyPeers], add)
+	hasVolumes := validateGlusterVolumes(path, entry[checks.CheckKeyVolumes], add)
+	if !hasPeers && !hasVolumes {
+		add("%s requires %s and/or %s", path, checks.CheckKeyPeers, checks.CheckKeyVolumes)
+	}
+}
+
+func validateGlusterPeers(path string, raw any, add addFunc) bool {
+	if raw == nil {
+		return false
+	}
+	peers, err := cfgval.StrictStringArray(raw)
+	if err != nil || len(peers) == 0 {
+		add("%s.%s must be a non-empty list of names", path, checks.CheckKeyPeers)
+		return false
+	}
+	seen := make(map[string]struct{}, len(peers))
+	for _, peer := range peers {
+		peer = strings.TrimSpace(peer)
+		if peer == "" {
+			add("%s.%s must not contain empty names", path, checks.CheckKeyPeers)
+			continue
+		}
+		if _, exists := seen[peer]; exists {
+			add("%s.%s must not contain duplicate name %q", path, checks.CheckKeyPeers, peer)
+		}
+		seen[peer] = struct{}{}
+	}
+	return true
+}
+
+func validateGlusterVolumes(path string, raw any, add addFunc) bool {
+	if raw == nil {
+		return false
+	}
+	volumes, ok := raw.(map[string]any)
+	if !ok || len(volumes) == 0 {
+		add("%s.%s must be a non-empty mapping", path, checks.CheckKeyVolumes)
+		return false
+	}
+	for _, name := range slices.Sorted(maps.Keys(volumes)) {
+		volumePath := path + "." + checks.CheckKeyVolumes + "." + name
+		if !checks.IsGlusterVolumeName(name) {
+			add("%s volume name %q is unsafe", path+"."+checks.CheckKeyVolumes, name)
+		}
+		entry, ok := volumes[name].(map[string]any)
+		if !ok {
+			add(validationMappingFormat, volumePath)
+			continue
+		}
+		for _, key := range slices.Sorted(maps.Keys(entry)) {
+			if !checks.IsGlusterClusterVolumeField(key) {
+				add(validationNotSupportedFormat, volumePath+"."+key)
+			}
+		}
+		bricks, ok := cfgval.Int(entry[checks.CheckKeyBricks])
+		if !ok || bricks <= 0 {
+			add("%s.%s is required and must be a positive integer", volumePath, checks.CheckKeyBricks)
+		}
+		if selfHeal, present := entry[checks.CheckKeySelfHeal]; present {
+			if _, ok := selfHeal.(bool); !ok {
+				add(validationBooleanFormat, volumePath+"."+checks.CheckKeySelfHeal)
+			}
+		}
+		validateGlusterLimit(volumePath, entry, checks.CheckKeyMaxHealEntries, add)
+		validateGlusterLimit(volumePath, entry, checks.CheckKeyMaxSplitBrainEntries, add)
+	}
+	return true
+}
+
+func validateGlusterLimit(path string, entry map[string]any, key string, add addFunc) {
+	value, present := entry[key]
+	if !present {
+		return
+	}
+	limit, ok := cfgval.Int(value)
+	if !ok || limit < 0 {
+		add("%s.%s must be a non-negative integer", path, key)
+	}
 }
 
 func singleShotNoLock(validate func(string, map[string]any, addFunc)) singleShotCheckValidator {

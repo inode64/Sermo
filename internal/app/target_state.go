@@ -40,7 +40,7 @@ const (
 // to it, so runtime metrics will not arrive until the service definition or
 // the host changes. That is a monitoring blind spot to act on rather than a
 // cycle to wait out, so it settles on "warning" instead of "collecting".
-func ServiceState(enabled, monitored bool, backendStatus, checkHealth string, observed, observabilityReady, processActive, processesMissing bool) string {
+func ServiceState(enabled, monitored bool, backendStatus, checkHealth string, observed, observabilityReady, processActive, processesMissing, backendDegraded bool) string {
 	if !enabled {
 		return TargetStateDisabled
 	}
@@ -53,6 +53,13 @@ func ServiceState(enabled, monitored bool, backendStatus, checkHealth string, ob
 	active := strings.EqualFold(backendStatus, string(servicemgr.StatusActive))
 	failed := strings.EqualFold(backendStatus, string(servicemgr.StatusFailed))
 	if failed {
+		// The init manager's failure remains visible through Status, but a live
+		// exact process plus passing functional checks proves the workload is
+		// still serving. It is degraded rather than an outage; operations keep
+		// using the failed backend state and therefore retain their normal gates.
+		if backendDegraded {
+			return TargetStateWarning
+		}
 		if !monitored {
 			return TargetStateStopped
 		}

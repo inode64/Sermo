@@ -173,10 +173,17 @@ metadatos locales de monitorización, como antes. Los estados de servicio son:
 `starting` (asentamiento de arranque/operación), `collecting` (activo y
 monitorizado, pero las gráficas/indicadores aún no están completos), `warning`
 (activo y monitorizado con checks correctos, pero el daemon no le atribuye
-ningún proceso, así que sus indicadores de runtime nunca se completan),
-`monitored` (activo, monitorizado y con observabilidad lista) y `failed`. Sin la vista del
+ningún proceso, así que sus indicadores de runtime nunca se completan, o una
+unidad de init está fallida mientras un proceso exacto y sus comprobaciones
+funcionales siguen sanos), `monitored` (activo, monitorizado y con
+observabilidad lista) y `failed`. Sin la vista del
 daemon, un servicio configurado activo y monitorizado cae a `collecting`; un
 servicio activo que no consta como monitorizado cae a `started`.
+
+En el segundo caso de `warning`, la API conserva `status: failed`: las
+operaciones siguen el backend de init y mantienen sus locks, guards y preflight
+habituales. La advertencia solo evita presentar como caída de la aplicación una
+carga que continúa funcionando.
 
 Un estado de backend `unknown` no es un veredicto de «caído» —un script de init
 que sustituye `status` por su propio informe, o una consulta que agota el

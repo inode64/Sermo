@@ -734,6 +734,29 @@ ser un **múltiplo** de ella. Si no lo es, el daemon lo redondea al múltiplo m�
 (al menos un ciclo) y **registra una advertencia al arrancar** — nunca falla al
 arrancar.
 
+Para un service GlusterFS, `gluster_cluster` es una watch de service local que
+usa el cliente `gluster` ya configurado para comprobar pares, disponibilidad de
+volúmenes y bricks, daemons de self-heal y límites opcionales de curación
+pendiente. El generador de despliegue remoto deriva los pares y volúmenes
+esperados del inventario XML de Gluster de solo lectura del host; una
+configuración explícita sigue la misma forma. Consulta [la referencia de la
+comprobación](rules.es.md#ports) para su contrato completo.
+
+```yaml
+watches:
+  cluster:
+    interval: 2m
+    check:
+      type: gluster_cluster
+      peers: [node-b, node-c]
+      volumes:
+        images:
+          bricks: 3
+          self_heal: true
+          max_heal_entries: 0
+          max_split_brain_entries: 0
+```
+
 ## Interfaz web
 
 El daemon puede servir un pequeño panel web para ver services y watches. Los
@@ -1166,6 +1189,12 @@ salvo un service con evidencia de proceso confiable reciente, que puede reportar
 aún esperan un backend de init `active` completan el asentamiento en la primera
 sonda de estado (afloran como `failed` mientras están inactivos); las
 comprobaciones y la remediación esperan hasta que el backend está activo.
+Si el backend informa explícitamente `failed` pero Sermo tiene evidencia reciente
+de un proceso exacto vivo y todas las comprobaciones funcionales pasan, el estado
+agregado del servicio es `warning`, no `failed`. La API sigue exponiendo
+`status: failed`: la carga sigue disponible mientras su unidad de init necesita
+reparación del operador, y las operaciones de servicio continúan respetando ese
+estado del backend.
 
 Solo las aplicaciones del catálogo **instaladas** con un app-monitor activo
 participan en ese registro de asentamiento; las entradas del catálogo cuyo

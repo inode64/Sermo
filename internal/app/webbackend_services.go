@@ -54,7 +54,7 @@ func (b *WebBackend) viewWithRuntime(ctx context.Context, name string, e *webEnt
 	svc.LastEvent = lastEvent
 	if e.disabled {
 		svc.Status = TargetStateDisabled
-		svc.State = ServiceState(false, false, svc.Status, "", true, false, false, false)
+		svc.State = ServiceState(false, false, svc.Status, "", true, false, false, false, false)
 		svc.Monitored = false
 		svc.CheckHealth = ""
 		svc.RemediationState = TargetStateDisabled
@@ -83,7 +83,12 @@ func (b *WebBackend) viewWithRuntime(ctx context.Context, name string, e *webEnt
 	}
 	failing, health := b.serviceCheckHealth(name, e, svc.Monitored)
 	warningReason := b.serviceWarningReason(name, e)
-	if health == TargetStateOK && warningReason != "" {
+	processActive := b.serviceProcessActive(name, e)
+	backendDegraded := status == string(servicemgr.StatusFailed) && processActive && health == TargetStateOK
+	if backendDegraded {
+		warningReason = warningReasonFailedUnitLiveProcess
+		health = checkHealthWarning
+	} else if health == TargetStateOK && warningReason != "" {
 		health = checkHealthWarning
 	}
 	svc.CheckHealth = health
@@ -103,7 +108,7 @@ func (b *WebBackend) viewWithRuntime(ctx context.Context, name string, e *webEnt
 	observed := (b.settling == nil || b.settling.Observed(SettlingServiceKey(name))) && !b.operationSettlingPending(name)
 	svc.ObservabilityReady, svc.ObservabilityMissing = b.serviceObservability(name, e, svc.Status, svc.CheckHealth, svc.Monitored, observed)
 	svc.State = ServiceState(svc.Enabled, svc.Monitored, svc.Status, svc.CheckHealth, observed, svc.ObservabilityReady,
-		b.serviceProcessActive(name, e), onlyMissingProcesses(svc.ObservabilityMissing))
+		processActive, onlyMissingProcesses(svc.ObservabilityMissing), backendDegraded)
 	if len(e.alsoApply) > 0 {
 		svc.AlsoApply = slices.Clone(e.alsoApply)
 	}

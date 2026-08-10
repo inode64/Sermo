@@ -107,8 +107,9 @@ const targetStatePaused = "paused";
 const targetStateStopped = "stopped";
 const targetStateWarning = "warning";
 const targetStateStale = "stale";
-// Mirrors warningReasonStaleBinary in internal/app/metric_constants.go.
+// Mirrors warningReason* in internal/app/metric_constants.go.
 const warningReasonStaleBinary = "stale_binary";
+const warningReasonFailedUnitLiveProcess = "failed_unit_live_process";
 const watchSampleStateFresh = "fresh";
 const targetStateOK = "ok";
 const targetStateMonitored = "monitored";
@@ -1568,13 +1569,17 @@ function serviceStateBadge(s) {
     : "";
   const missing = (st === targetStateCollecting && indicators) ? `Collecting ${indicators}` : "";
   const staleBinary = st === targetStateWarning && s && s.warning_reason === warningReasonStaleBinary;
-  const blind = (st === targetStateWarning && indicators && !staleBinary)
+  const failedUnitLiveProcess = st === targetStateWarning && s && s.warning_reason === warningReasonFailedUnitLiveProcess;
+  const blind = (st === targetStateWarning && indicators && !staleBinary && !failedUnitLiveProcess)
     ? `The unit is active and its checks pass, but the daemon attributes no process to it, so ${indicators} stay unavailable`
+    : "";
+  const degraded = failedUnitLiveProcess
+    ? "The init unit is failed, but the verified service process and its functional checks are healthy"
     : "";
   const active = st === targetStateActive
     ? "Process confirmed; checks and runtime metrics are not available yet"
     : "";
-  const title = missing || blind || active;
+  const title = missing || blind || degraded || active;
   // Except for the stale-binary diagnostic, a warning carries a reason the
   // operator must act on. A tooltip is invisible until hovered — and never
   // reachable on a touch screen — so show that reason next to the badge.
@@ -1587,7 +1592,10 @@ function serviceStateBadge(s) {
 
 // serviceWarningReason phrases a warning cause the dashboard needs to expose.
 // The wording lives here, so the backend never has to agree on a sentence.
-function serviceWarningReason() {
+function serviceWarningReason(s) {
+  if (s && s.warning_reason === warningReasonFailedUnitLiveProcess) {
+    return "init unit failed; workload healthy";
+  }
   return "no process attributed";
 }
 
@@ -6119,8 +6127,9 @@ function overviewInventory(ctx) {
   const failedSvcs = svcs.filter((s) => serviceDisplayState(s) === targetStateFailed);
   const startingSvcs = svcs.filter((s) => serviceDisplayState(s) === targetStateStarting);
   const collectingSvcs = svcs.filter((s) => serviceDisplayState(s) === targetStateCollecting);
-  // Running, checks passing, but no attributable process tree: a blind spot.
-  const blindSvcs = svcs.filter((s) => serviceDisplayState(s) === targetStateWarning);
+  // Warning services need operator attention: either a process-attribution gap
+  // or a failed init unit whose verified workload remains healthy.
+  const warningSvcs = svcs.filter((s) => serviceDisplayState(s) === targetStateWarning);
   const activeSvcs = enabled.filter((s) => overviewActiveServiceStates.includes(serviceDisplayState(s)));
   const monitoredSvcs = enabled.filter((s) => serviceDisplayState(s) === targetStateMonitored);
   const watches = allWatches || [];
@@ -6134,14 +6143,14 @@ function overviewInventory(ctx) {
   const failedApps = (allApps || []).filter((a) => appStateText(a) === targetStateFailed);
   return {
     ready, live, mon, hostMetrics, enabled, failedSvcs, startingSvcs, collectingSvcs,
-    blindSvcs, activeSvcs, monitoredSvcs, watches, enabledWatches, failedWatches,
+    warningSvcs, activeSvcs, monitoredSvcs, watches, enabledWatches, failedWatches,
     staleWatches, startingWatches, startingApps, daemonStarting, activeLocks, failedApps,
   };
 }
 
 function overviewServiceTileOptions(data, defaultServiceTarget) {
   const {
-    mon, enabled, failedSvcs, startingSvcs, collectingSvcs, blindSvcs, activeSvcs,
+    mon, enabled, failedSvcs, startingSvcs, collectingSvcs, warningSvcs, activeSvcs,
     monitoredSvcs, watches, enabledWatches, failedWatches, staleWatches,
     startingWatches, startingApps, daemonStarting, activeLocks, failedApps,
   } = data;
@@ -6161,7 +6170,7 @@ function overviewServiceTileOptions(data, defaultServiceTarget) {
     [failedSvcs.length, "failed-services"],
     [startingSvcs.length || daemonStarting, "starting-services"],
     [collectingSvcs.length, "collecting-services"],
-    [blindSvcs.length, "warning-services"],
+    [warningSvcs.length, "warning-services"],
     [startingWatches.length, "starting-watches"],
     [startingApps.length, "starting-apps"],
   ], defaultServiceTarget);
@@ -6178,7 +6187,7 @@ function overviewServiceTileOptions(data, defaultServiceTarget) {
     [failedSvcs.length, `${failedSvcs.length} failed`],
     [servicesSettlingText, servicesSettlingText],
     [collectingSvcs.length, `${collectingSvcs.length} collecting`],
-    [blindSvcs.length, `${blindSvcs.length} without processes`],
+    [warningSvcs.length, `${warningSvcs.length} need attention`],
     [enabled.length === 0, "none enabled"],
   ], "all active");
   tiles.push({
@@ -6186,7 +6195,7 @@ function overviewServiceTileOptions(data, defaultServiceTarget) {
     value: tpl`${activeSvcs.length}<small> / ${enabled.length}</small>`,
     cls: firstMatch([
       [failedSvcs.length, "t-crit"],
-      [collectingSvcs.length || blindSvcs.length, "t-warn"],
+      [collectingSvcs.length || warningSvcs.length, "t-warn"],
       [settling, ""],
       [enabled.length, "t-ok"],
     ], ""),
@@ -6235,20 +6244,20 @@ function overviewServiceTileOptions(data, defaultServiceTarget) {
   const monitoredTarget = firstMatch([
     [collectingSvcs.length && !failedSvcs.length, "collecting-services"],
     [settling && !failedSvcs.length, servicesTarget],
-    [blindSvcs.length && !failedSvcs.length, "warning-services"],
+    [warningSvcs.length && !failedSvcs.length, "warning-services"],
     [monitoredSvcs.length, "monitored-services"],
   ], defaultServiceTarget);
   const monitoredSub = firstMatch([
     [collectingSvcs.length, `${collectingSvcs.length} collecting`],
     [settling && !failedSvcs.length, servicesSettlingText || "settling"],
-    [blindSvcs.length, `${blindSvcs.length} without processes`],
+    [warningSvcs.length, `${warningSvcs.length} need attention`],
   ], "");
   if (enabled.length || (mon && mon.total != null)) {
     tiles.push({
       label: "Monitored",
       value: tpl`${monitoredSvcs.length}<small> / ${enabled.length}</small>`,
       cls: firstMatch([
-        [collectingSvcs.length || blindSvcs.length, "t-warn"],
+        [collectingSvcs.length || warningSvcs.length, "t-warn"],
         [settling && !failedSvcs.length, ""],
         [enabled.length && monitoredSvcs.length === enabled.length, "t-ok"],
       ], ""),

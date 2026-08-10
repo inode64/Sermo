@@ -215,7 +215,7 @@ Renderizadas por `renderOverview` a partir del estado ya cargado, sin solicitude
 | Servicios activos | recuento / total para servicios en `started`, `collecting`, `warning` o `monitored`; crítico cuando algún servicio está `failed`, aviso mientras algún servicio está `collecting` o `warning`, neutral mientras algún objetivo se está asentando, en caso contrario activo; al hacer clic abre el filtro de servicios `failed`, `starting`, `collecting` o `warning` cuando corresponde |
 | Watches | recuento / total; crítico cuando algún watch está `failed`, neutral mientras algún objetivo se está asentando (el subtítulo nombra los watches, servicios o aplicaciones que están iniciando), en caso contrario silencioso; al hacer clic abre el filtro `starting`/`failed` correspondiente |
 | Alertas | recuento de servicios en fallo, watches disparados, aplicaciones instaladas en fallo y locks activos, con un desglose por tipo; al hacer clic dirige a `failed-services`, `failed-watches`, `failed-apps` o `locks-section` por orden de prioridad |
-| Monitorizado | servicios en estado `monitored` frente a servicios habilitados; aviso mientras haya servicios en `collecting` o `warning` (subtítulo `N without processes`), neutral con subtítulo de asentamiento durante el arranque, al hacer clic abre el filtro de servicio relevante |
+| Monitorizado | servicios en estado `monitored` frente a servicios habilitados; aviso mientras haya servicios en `collecting` o `warning` (el subtítulo nombra los que requieren atención), neutral con subtítulo de asentamiento durante el arranque, al hacer clic abre el filtro de servicio relevante |
 | Indicadores de host | memoria, carga, fds, pids, conntrack, etc. cuando están presentes |
 | Volúmenes | un indicador por cada watch de almacenamiento montado, crítico cuando su watch está disparado |
 
@@ -279,7 +279,7 @@ Columnas:
 | --- | --- |
 | Service | nombre para mostrar, con fallback al nombre, capitalizado |
 | Category | categoría YAML o fallback |
-| State | estado de servicio normalizado único: `disabled`, `stopped`, `started`, `starting`, `collecting`, `monitored`, `warning` o `failed`; `warning` marca un servicio activo con checks correctos cuyo árbol de procesos el daemon no consigue atribuir, y su tooltip nombra los indicadores que faltan |
+| State | estado de servicio normalizado único: `disabled`, `stopped`, `started`, `starting`, `collecting`, `monitored`, `warning` o `failed`; `warning` marca un servicio sano sin árbol de procesos atribuible o una carga con unidad de init fallida pero proceso vivo verificado y comprobaciones funcionales correctas; su razón en línea distingue los casos |
 | Uptime | antigüedad del proceso de servicio más antiguo descubierto, cuando está disponible |
 | CPU total | último uso de CPU de todo el árbol de procesos; vacío para servicios `no_resident_process` |
 | Memory | última memoria residente del árbol de procesos; vacío para servicios `no_resident_process` |

@@ -290,6 +290,9 @@ var builtinCheckSpecs = []checkSpec{
 	{info: conditionTypeInfo(CheckTypeSensors), build: func(in checkBuildInput) (Check, string) { return buildSensorsCheck(in.base, in.entry, in.deps) }},
 	{info: conditionTypeInfo(CheckTypeSmart), build: func(in checkBuildInput) (Check, string) { return buildSmartCheck(in.base, in.entry, in.runner) }},
 	{info: conditionTypeInfo(CheckTypeRAID), build: func(in checkBuildInput) (Check, string) { return buildRaidCheck(in.base, in.entry, in.deps) }},
+	{info: healthTypeInfo(CheckTypeGlusterCluster), build: func(in checkBuildInput) (Check, string) {
+		return buildGlusterClusterCheck(in.base, in.entry, in.runner)
+	}},
 	{info: healthTypeInfo(CheckTypeLVM), build: func(in checkBuildInput) (Check, string) { return buildLVMCheck(in.base, in.entry, in.runner) }},
 	{info: conditionTypeInfo(CheckTypeEDAC), build: func(in checkBuildInput) (Check, string) { return buildEdacCheck(in.base, in.entry, in.deps) }},
 	{info: healthTypeInfo(CheckTypeConfig), build: func(in checkBuildInput) (Check, string) { return buildConfigCheck(in.base, in.entry, in.runner) }},

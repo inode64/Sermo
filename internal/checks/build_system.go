@@ -159,6 +159,15 @@ func buildRaidCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 	}, ""
 }
 
+// buildGlusterClusterCheck builds a local GlusterFS cluster-health check.
+func buildGlusterClusterCheck(b base, entry map[string]any, runner execx.Runner) (Check, string) {
+	peers, volumes, err := parseGlusterClusterConfig(entry)
+	if err != nil {
+		return nil, "gluster_cluster check: " + err.Error()
+	}
+	return glusterClusterCheck{base: b, runner: execx.RunnerOrDefault(runner), peers: peers, volumes: volumes}, ""
+}
+
 func buildLVMCheck(b base, entry map[string]any, runner execx.Runner) (Check, string) {
 	preds, err := parseLevelPreds(entry, LVMPredFields)
 	if err != nil {

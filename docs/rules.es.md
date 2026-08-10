@@ -145,7 +145,8 @@ Las comprobaciones de protocolo de conexión (MySQL, PostgreSQL, Redis, Docker, 
 | `kafka`       | un broker/controlador Kafka responde a una petición `ApiVersions` no autenticada; expone el `role` del listener (broker/controller) y los flags `produce_api`/`vote_api` para `expect` (ver Base de datos) |
 | `varnish` / `varnishadm` | la CLI de gestión de Varnish responde con su banner/desafío de auth (ver Base de datos) |
 | `ceph` / `ceph-mon` | un monitor Ceph envía su banner messenger `ceph v…` (ver Base de datos) |
-| `glusterfs` / `glusterd` / `gluster` | el glusterd de un nodo GlusterFS responde a un RPC NULL en 24007 (ver Base de datos) |
+| `glusterfs` / `glusterd` / `gluster` | el glusterd de un nodo GlusterFS acepta conexiones TCP en 24007 (ver Base de datos) |
+| `gluster_cluster` | la CLI Gluster local verifica pares, volúmenes/bricks/self-heal y límites de curación opcionales (ver Base de datos) |
 | `openvswitch` / `ovs` / `ovsdb` / `ovsdb-server` | ovsdb-server responde a una petición JSON-RPC `list_dbs` de OVSDB (ver Base de datos) |
 | `sqlite` / `sqlite3` | un archivo de base de datos SQLite pasa `PRAGMA integrity_check` (ver SQLite) |
 | `sql`         | el resultado escalar de una consulta SQL se compara (`== != > >= < <= contains =~`) contra un valor (ver Consulta SQL) |
@@ -1335,9 +1336,11 @@ Protocolos, en el orden de la tabla de arriba:
   software lvm2). Sin auth.
 - `rpcbind` (alias `portmap`, `portmapper`) — puerto por defecto 111 (UDP). Sin auth.
   Envía una llamada **ONC RPC NULL** (RFC 5531/1833) al programa portmapper (100000
-  v2) y verifica una respuesta RPC bien formada — cualquier respuesta (aceptada o denegada) prueba
-  que el daemon está activo y hablando RPC; los datos del resultado llevan el `rpc_status`. La misma
-  sonda de llamada NULL respalda las comprobaciones `nfs`/`mountd`/`statd`/`glusterfs` de abajo.
+  v2) y verifica que el programa solicitado está presente: una respuesta exitosa o
+  un desajuste de versión del programa pasa, mientras que un programa no disponible,
+  una respuesta denegada u otro estado de aceptación falla. Los datos del resultado
+  llevan el `rpc_status`. La misma sonda de llamada NULL respalda las comprobaciones
+  `nfs`/`mountd`/`statd` de abajo.
 - `nfs` (alias `nfs-server`, `nfsd`) — un ONC RPC NULL al programa NFS
   (100003) sobre TCP (record marking), como `rpcbind`; puerto por defecto 2049. Una
   respuesta de desajuste de versión (p. ej. un servidor solo NFSv4 respondiendo a un NULL v3) todavía
@@ -1423,21 +1426,37 @@ Protocolos, en el orden de la tabla de arriba:
   prueba que es un endpoint Ceph. Datos del resultado: la versión `messenger`
   (`v1`/`v2`). El banner precede al handshake autenticado, así que sin credenciales.
 - `glusterfs` (alias `glusterd`, `gluster`) — puerto por defecto 24007 (TCP, el
-  daemon de gestión glusterd). Sin auth. Un ONC RPC NULL al programa de handshake de
-  GlusterFS sobre TCP (record marking), como `rpcbind`; los datos del resultado llevan el
-  `rpc_status`. **Esto comprueba un nodo.** Para alertar cuando **cualquier nodo** en un cluster
-  está caído, configura una comprobación por nodo (un `host` cada una) — la comprobación del nodo
-  fallido se dispara:
+  daemon de gestión glusterd). Sin auth. La comprobación solo establece una conexión
+  TCP: GlusterFS deja deliberadamente sin implementar el actor RPC NULL de su programa
+  de handshake, y llamarlo registra un falso error en versiones actuales de glusterd.
+  Es una comprobación de vivacidad de un nodo; usa `gluster_cluster` para la
+  vista local de la salud del cluster.
+- `gluster_cluster` — comprobación local y de solo lectura del cluster Gluster.
+  Ejecuta el cliente instalado `gluster --mode=script --xml` dentro del timeout
+  de la comprobación, con las credenciales y la confianza de gestión Gluster ya
+  configuradas en el host. Nunca altera el estado del cluster. Configura uno o
+  ambos de `peers` y `volumes`: cada par configurado debe estar presente,
+  conectado y ser miembro del cluster; un par desconectado que devuelva Gluster
+  también hace fallar la comprobación. Cada volumen configurado debe existir,
+  estar iniciado y tener exactamente sus `bricks` configurados en línea.
+  `self_heal: true` exige un daemon de self-heal en ejecución;
+  `max_heal_entries` y `max_split_brain_entries` son límites opcionales no
+  negativos (usa `0` para exigir que no haya entradas pendientes).
 
   ```yaml
-  checks:
-    gluster-n1: { type: glusterfs, host: 10.0.0.1 }
-    gluster-n2: { type: glusterfs, host: 10.0.0.2 }
-    gluster-n3: { type: glusterfs, host: 10.0.0.3 }
+  watches:
+    cluster:
+      interval: 2m
+      check:
+        type: gluster_cluster
+        peers: [node-b, node-c]
+        volumes:
+          images:
+            bricks: 3
+            self_heal: true
+            max_heal_entries: 0
+            max_split_brain_entries: 0
   ```
-
-  El estado de pares de todo el cluster no se recopila dentro del protocolo (necesitaría RPC de
-  gestión GlusterD autenticado).
 - `openvswitch` (alias `ovs`, `ovsdb`, `ovsdb-server`) — puerto por defecto 6640 (TCP,
   el servidor de base de datos de configuración de Open vSwitch `ovsdb-server`), o un socket Unix
   vía `socket` (comúnmente `/run/openvswitch/db.sock`); `tls` soportado (SSL). Sin
