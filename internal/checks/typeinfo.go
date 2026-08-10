@@ -69,6 +69,7 @@ const (
 	CheckTypeSensors          = "sensors"
 	CheckTypeSmart            = "smart"
 	CheckTypeRAID             = "raid"
+	CheckTypeGlusterCluster   = "gluster_cluster"
 	CheckTypeLVM              = "lvm"
 	CheckTypeEDAC             = "edac"
 	CheckTypeConfig           = "config"

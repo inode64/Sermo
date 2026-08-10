@@ -931,11 +931,6 @@ class FirewallWatchGenerationTest(unittest.TestCase):
                         report["skipped_watches"],
                     )
 
-
-if __name__ == "__main__":
-    unittest.main()
-
-
 class WebCredentialBlockTest(unittest.TestCase):
     """sermo.yml must not carry a second copy of a password the host already has."""
 
@@ -1133,3 +1128,87 @@ class LibvirtDomainStateTest(unittest.TestCase):
         for script in ("remote_collect_inventory.sh", "remote_stage.sh", "collect_runtime_targets.sh"):
             body = (root / script).read_text(encoding="utf-8")
             self.assertIn("export LC_ALL=C", body, f"{script} must pin the locale")
+
+
+class GlusterClusterGenerationTest(unittest.TestCase):
+    def stage(self):
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        root = Path(temp.name)
+        stage = root / "stage" / "host" / "out"
+        stage.mkdir(parents=True)
+        (stage / "init").write_text("systemd\n", encoding="utf-8")
+        (stage / "active_units").write_text("glusterd.service\n", encoding="utf-8")
+        (stage / "services_json.out").write_text(
+            json.dumps({"services": [{"name": "glusterd", "installed": True, "ok": True, "status": "ok"}]}),
+            encoding="utf-8",
+        )
+        return root, stage
+
+    @staticmethod
+    def write_xml(stage: Path, name: str, body: str):
+        (stage / f"{name}.rc").write_text("0\n", encoding="utf-8")
+        (stage / f"{name}.out").write_text(f"<cliOutput><opRet>0</opRet>{body}</cliOutput>", encoding="utf-8")
+
+    def write_healthy_evidence(self, stage: Path):
+        self.write_xml(
+            stage,
+            "gluster_peer_status",
+            "<peerStatus><peer><hostname>zeus</hostname></peer><peer><hostname>apolo</hostname></peer></peerStatus>",
+        )
+        self.write_xml(
+            stage,
+            "gluster_volume_info",
+            """<volInfo><volumes>
+<volume><name>images</name><brickCount>3</brickCount><options><option><name>cluster.self-heal-daemon</name><value>on</value></option></options></volume>
+<volume><name>images_raid5</name><brickCount>3</brickCount></volume>
+</volumes></volInfo>""",
+        )
+        self.write_xml(
+            stage,
+            "gluster_volume_status",
+            "<volStatus><volumes><volume><volName>images</volName></volume><volume><volName>images_raid5</volName><node><hostname>Self-heal Daemon</hostname></node></volume></volumes></volStatus>",
+        )
+
+    def test_generates_topology_check_from_successful_xml_evidence(self):
+        root, stage = self.stage()
+        self.write_healthy_evidence(stage)
+
+        report = generator.generate_for_host("host", stage, root / "configs", default_options())
+        body = yaml.safe_load((root / "configs/host/root/etc/sermo/services/glusterd.yml").read_text(encoding="utf-8"))
+        check = body["watches"]["cluster"]
+
+        self.assertEqual(check["interval"], generator.GLUSTER_CLUSTER_INTERVAL)
+        self.assertEqual(check["check"]["type"], "gluster_cluster")
+        self.assertEqual(check["check"]["peers"], ["apolo", "zeus"])
+        self.assertEqual(check["check"]["volumes"]["images"]["bricks"], 3)
+        self.assertTrue(check["check"]["volumes"]["images"]["self_heal"])
+        self.assertTrue(check["check"]["volumes"]["images_raid5"]["self_heal"])
+        self.assertEqual(check["check"]["volumes"]["images"]["max_heal_entries"], 0)
+        self.assertEqual(check["check"]["volumes"]["images_raid5"]["max_split_brain_entries"], 0)
+        entry = report["services"]["enabled"][0]["gluster_cluster"]
+        self.assertTrue(entry["active"])
+        self.assertEqual(entry["source"], "gluster CLI XML inventory")
+
+    def test_keeps_only_local_liveness_when_xml_evidence_is_missing(self):
+        root, stage = self.stage()
+
+        report = generator.generate_for_host("host", stage, root / "configs", default_options())
+        body = yaml.safe_load((root / "configs/host/root/etc/sermo/services/glusterd.yml").read_text(encoding="utf-8"))
+
+        self.assertNotIn("cluster", body.get("watches", {}))
+        entry = report["services"]["enabled"][0]["gluster_cluster"]
+        self.assertFalse(entry["active"])
+        self.assertIn("not collected", entry["reason"])
+
+    def test_collectors_capture_gluster_xml(self):
+        root = Path(__file__).resolve().parent
+        for script in ("remote_collect_inventory.sh", "remote_stage.sh"):
+            body = (root / script).read_text(encoding="utf-8")
+            self.assertIn("gluster --mode=script --xml peer status", body, script)
+            self.assertIn("gluster --mode=script --xml volume info", body, script)
+            self.assertIn("gluster --mode=script --xml volume status", body, script)
+
+
+if __name__ == "__main__":
+    unittest.main()

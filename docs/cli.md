@@ -167,10 +167,16 @@ before. Service states are: `disabled`, `stopped`, `started` (backend active but
 not monitored), `starting` (startup/operation settling), `collecting` (active
 and monitored, but graphs/indicators are not complete yet), `warning` (active
 and monitored with passing checks, but the daemon attributes no process to it,
-so its runtime indicators never complete), `monitored` (active, monitored and
-observability-ready) and `failed`. Without the daemon view, a
+so its runtime indicators never complete, or an init unit is failed while an
+exact process and its functional checks remain healthy), `monitored` (active,
+monitored and observability-ready) and `failed`. Without the daemon view, a
 configured active monitored service falls back to `collecting`; an active
 service that is not known to be monitored falls back to `started`.
+
+For the second warning case, `status` remains `failed` in the API: operations
+still follow the init backend and retain their normal locks, guards and
+preflight gates. The warning only prevents a working workload from being
+presented as an application outage.
 
 A backend status of `unknown` is not a verdict of "down" — an init script that
 replaces `status` with its own report, or a query that timed out, reads unknown

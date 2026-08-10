@@ -218,6 +218,15 @@ capture config_validate_base env SERMO_BACKEND="$config_backend" SERMO_INIT="$co
 capture services_json env SERMO_BACKEND="$config_backend" SERMO_INIT="$config_backend" /usr/bin/sermoctl --config /etc/sermo/sermo.yml --json services
 capture services_all_json env SERMO_BACKEND="$config_backend" SERMO_INIT="$config_backend" /usr/bin/sermoctl --config /etc/sermo/sermo.yml --json services all
 
+# Gluster's local CLI carries the authenticated management RPC. Its XML status
+# commands are read-only and let the generator build an explicit expected
+# cluster topology without scraping locale-dependent terminal tables.
+if command -v gluster >/dev/null 2>&1; then
+	capture gluster_peer_status gluster --mode=script --xml peer status
+	capture gluster_volume_info gluster --mode=script --xml volume info
+	capture gluster_volume_status gluster --mode=script --xml volume status
+fi
+
 findmnt -R -J >"${out}/findmnt.json" 2>/dev/null || true
 findmnt -R -P >"${out}/findmnt.pairs" 2>/dev/null || true
 mount >"${out}/mount" 2>/dev/null || true

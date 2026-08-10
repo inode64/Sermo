@@ -425,6 +425,14 @@ func TestCheckTimeoutMessage(t *testing.T) {
 			},
 		},
 		{
+			name: "gluster cluster",
+			check: glusterClusterCheck{
+				base:   base{name: "cluster", timeout: time.Millisecond},
+				runner: slowRunner{},
+				peers:  []string{"zeus"},
+			},
+		},
+		{
 			name: "terminal sessions",
 			check: terminalSessionsCheck{
 				base:   base{name: "sessions", timeout: time.Millisecond},

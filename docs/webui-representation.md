@@ -211,7 +211,7 @@ Rendered by `renderOverview` from already-loaded state, without extra requests.
 | Services active | count / total for services in `started`, `collecting`, `warning` or `monitored`; critical when any service is `failed`, warning while any service is `collecting` or `warning`, neutral while any target is settling, otherwise active; click opens the matching `failed`, `starting`, `collecting` or `warning` service filter when applicable |
 | Watches | count / total; critical when any watch is `failed`, neutral while any target is settling (subtitle names starting watches, services or apps), otherwise quiet; click opens the matching `starting`/`failed` filter |
 | Alerts | count of failing services, firing watches, failed installed apps and active locks, with a per-kind breakdown; click routes to `failed-services`, `failed-watches`, `failed-apps` or `locks-section` in priority order |
-| Monitored | services in state `monitored` vs enabled services; warning while services are `collecting` or `warning` (subtitle `N without processes`), neutral with settling subtitle during startup, click opens the relevant service filter |
+| Monitored | services in state `monitored` vs enabled services; warning while services are `collecting` or `warning` (subtitle names those needing attention), neutral with settling subtitle during startup, click opens the relevant service filter |
 | Host gauges | memory, load, fds, pids, conntrack, etc. when present |
 | Volumes | one gauge per mounted storage watch, crit when its watch is firing |
 
@@ -275,7 +275,7 @@ Columns:
 | --- | --- |
 | Service | display name, falling back to name, capitalized |
 | Category | YAML category or fallback |
-| State | single normalized service state: `disabled`, `stopped`, `started`, `starting`, `collecting`, `monitored`, `warning` or `failed`; `warning` marks an active service with passing checks whose process tree the daemon cannot attribute, and its tooltip names the missing indicators |
+| State | single normalized service state: `disabled`, `stopped`, `started`, `starting`, `collecting`, `monitored`, `warning` or `failed`; `warning` marks either a healthy service without an attributable process tree or a workload with a failed init unit but a verified live process and passing functional checks; its inline reason distinguishes the cases |
 | Uptime | age of the oldest discovered service process, when available |
 | CPU total | latest whole process-tree CPU usage; blank for `no_resident_process` services |
 | Memory | latest process-tree resident memory; blank for `no_resident_process` services |

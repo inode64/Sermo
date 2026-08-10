@@ -1,10 +1,12 @@
 package conn
 
 import (
+	"context"
 	"encoding/binary"
 	"io"
 	"net"
 	"strconv"
+	"strings"
 	"testing"
 )
 
@@ -113,4 +115,17 @@ func TestRpcbindProbeAgainstFakeServer(t *testing.T) {
 		return rpcAcceptedReply(binary.BigEndian.Uint32(req[0:4]), 0)
 	})
 	assertProbeExtra(t, rpcbindProtocol{}, port, "rpc_status", "success")
+}
+
+func TestRpcbindProbeRejectsUnavailableProgram(t *testing.T) {
+	port := serveUDPOnce(t, func(req []byte) []byte {
+		if len(req) < rpcWordBytes {
+			return nil
+		}
+		return rpcAcceptedReply(binary.BigEndian.Uint32(req[:rpcWordBytes]), rpcAcceptProgUnavail)
+	})
+	_, err := rpcbindProtocol{}.Probe(context.Background(), Config{Host: "127.0.0.1", Port: port})
+	if err == nil || !strings.Contains(err.Error(), "rpcbind RPC reply: expected program 100000, got prog_unavail") {
+		t.Fatalf("probe error = %v, want unavailable rpcbind program", err)
+	}
 }

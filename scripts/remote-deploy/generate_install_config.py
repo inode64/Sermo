@@ -27,6 +27,7 @@ import json
 import re
 import shutil
 import tarfile
+import xml.etree.ElementTree as xml
 from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -203,6 +204,17 @@ EXIM_HINTS_ABSENT = "absent"
 # absence of proof, not proof the hints are unusable, so it leaves the watch
 # enabled exactly as a host with no evidence at all does.
 EXIM_HINTS_UNKNOWN = "unknown"
+
+# The Gluster catalog profile remains portable and only checks local glusterd
+# liveness. The generator fills this site-specific expected topology from the
+# local CLI's read-only XML status output.
+GLUSTER_CATALOG_SERVICE = "glusterd"
+GLUSTER_CLUSTER_INTERVAL = "2m"
+GLUSTER_CLI_OUTPUT_TAG = "cliOutput"
+GLUSTER_CLI_SUCCESS = "0"
+GLUSTER_SELF_HEAL_OPTION = "cluster.self-heal-daemon"
+GLUSTER_SELF_HEAL_ENABLED = "on"
+GLUSTER_SELF_HEAL_DAEMON = "Self-heal Daemon"
 
 # The libvirt domain states virsh reports under LC_ALL=C. Anything outside this
 # set means the inventory was not parsed as expected — most likely a localized
@@ -1482,6 +1494,95 @@ def replication_watch_overrides(stage: Path, doc: dict) -> tuple[set[str], list[
     return disabled, report
 
 
+def gluster_xml_output(stage: Path, name: str) -> tuple[xml.Element | None, str]:
+    """Read one successful Gluster CLI XML response from staged evidence."""
+    label = "Gluster CLI " + name.removeprefix("gluster_").replace("_", " ")
+    rc = read_text(stage / f"{name}.rc").strip()
+    if rc == "":
+        return None, f"{label} evidence was not collected"
+    if rc != GLUSTER_CLI_SUCCESS:
+        return None, f"{label} exited {rc}"
+    try:
+        root = xml.fromstring(read_text(stage / f"{name}.out"))
+    except xml.ParseError:
+        return None, f"{label} returned invalid XML"
+    if root.tag != GLUSTER_CLI_OUTPUT_TAG:
+        return None, f"{label} returned an unexpected XML root"
+    if (root.findtext("opRet") or "").strip() != GLUSTER_CLI_SUCCESS:
+        detail = (root.findtext("opErrstr") or "no diagnostic output").strip()
+        return None, f"{label} failed: {detail}"
+    return root, ""
+
+
+def gluster_cluster_check(stage: Path, service_name: str) -> tuple[dict | None, dict | None]:
+    """Build the host-specific Gluster cluster check from local CLI evidence.
+
+    A missing or unsuccessful snapshot does not prove a cluster is unhealthy, so
+    it leaves the generic glusterd liveness profile in place and records why the
+    stronger topology assertion was not generated.
+    """
+    if service_name != GLUSTER_CATALOG_SERVICE:
+        return None, None
+    peers_root, reason = gluster_xml_output(stage, "gluster_peer_status")
+    if peers_root is None:
+        return None, {"active": False, "reason": reason}
+    volumes_root, reason = gluster_xml_output(stage, "gluster_volume_info")
+    if volumes_root is None:
+        return None, {"active": False, "reason": reason}
+    status_root, reason = gluster_xml_output(stage, "gluster_volume_status")
+    if status_root is None:
+        return None, {"active": False, "reason": reason}
+
+    peers = sorted({
+        (peer.findtext("hostname") or "").strip()
+        for peer in peers_root.findall("./peerStatus/peer")
+        if (peer.findtext("hostname") or "").strip()
+    })
+    statuses = {
+        (volume.findtext("volName") or "").strip(): volume
+        for volume in status_root.findall("./volStatus/volumes/volume")
+        if (volume.findtext("volName") or "").strip()
+    }
+    volumes: dict[str, dict[str, object]] = {}
+    for volume in volumes_root.findall("./volInfo/volumes/volume"):
+        name = (volume.findtext("name") or "").strip()
+        bricks_text = (volume.findtext("brickCount") or "").strip()
+        if not name or not bricks_text.isdigit() or int(bricks_text) <= 0:
+            continue
+        status = statuses.get(name)
+        if status is None:
+            return None, {"active": False, "reason": f"Gluster volume {name} has no runtime status"}
+        options = {
+            (option.findtext("name") or "").strip(): (option.findtext("value") or "").strip().lower()
+            for option in volume.findall("./options/option")
+        }
+        expected: dict[str, object] = {
+            "bricks": int(bricks_text),
+            "max_heal_entries": 0,
+            "max_split_brain_entries": 0,
+        }
+        has_self_heal_daemon = any(
+            (node.findtext("hostname") or "").strip() == GLUSTER_SELF_HEAL_DAEMON
+            for node in status.findall("./node")
+        )
+        if options.get(GLUSTER_SELF_HEAL_OPTION) == GLUSTER_SELF_HEAL_ENABLED or has_self_heal_daemon:
+            expected["self_heal"] = True
+        volumes[name] = expected
+    if not volumes:
+        return None, {"active": False, "reason": "Gluster CLI reported no valid volumes"}
+
+    check: dict[str, object] = {"type": "gluster_cluster", "volumes": dict(sorted(volumes.items()))}
+    if peers:
+        check["peers"] = peers
+    report = {
+        "active": True,
+        "source": "gluster CLI XML inventory",
+        "peers": peers,
+        "volumes": sorted(volumes),
+    }
+    return check, report
+
+
 def parse_exim_hints(stage: Path) -> dict[str, str]:
     """Read the exim_hints inventory evidence: one line per hints file, tab
     separated as <path> <sqlite|other|absent>."""
@@ -1708,6 +1809,7 @@ def generate_for_host(host_slug: str, stage: Path, configs_dir: Path, options: G
         disabled_replication_watches, replication_checks = replication_watch_overrides(stage, doc or {})
         disabled_hints_watches, exim_hints_checks = exim_hints_watch_overrides(stage, doc or {})
         disabled_watches = disabled_endpoint_watches | disabled_replication_watches | disabled_hints_watches
+        gluster_check, gluster_cluster_report = gluster_cluster_check(stage, name)
         body = f"""name: {name}
 uses: {name}
 monitor: enabled
@@ -1721,6 +1823,8 @@ dry_run: true
         if process_override:
             body += process_override
         service_watches = {watch_name: {"enabled": False} for watch_name in sorted(disabled_watches)}
+        if gluster_check is not None:
+            service_watches["cluster"] = {"interval": GLUSTER_CLUSTER_INTERVAL, "check": gluster_check}
         if name == "ssh":
             service_watches.update(terminal_watches)
             report["terminal_sessions"] = terminal_sessions
@@ -1741,6 +1845,8 @@ dry_run: true
             enabled["replication_checks"] = replication_checks
         if exim_hints_checks:
             enabled["exim_hints_checks"] = exim_hints_checks
+        if gluster_cluster_report is not None:
+            enabled["gluster_cluster"] = gluster_cluster_report
         report["services"]["enabled"].append(enabled)
     report["services"]["skipped"] = skipped_services
 

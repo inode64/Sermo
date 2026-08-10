@@ -87,6 +87,14 @@ capture config_validate_base env SERMO_BACKEND="$config_backend" SERMO_INIT="$co
 capture services_json env SERMO_BACKEND="$config_backend" SERMO_INIT="$config_backend" /usr/bin/sermoctl --config /etc/sermo/sermo.yml --json services
 capture services_all_json env SERMO_BACKEND="$config_backend" SERMO_INIT="$config_backend" /usr/bin/sermoctl --config /etc/sermo/sermo.yml --json services all
 
+# Keep this collector in step with remote_stage.sh. These Gluster CLI calls are
+# status-only and return stable XML for the generated cluster-health check.
+if command -v gluster >/dev/null 2>&1; then
+	capture gluster_peer_status gluster --mode=script --xml peer status
+	capture gluster_volume_info gluster --mode=script --xml volume info
+	capture gluster_volume_status gluster --mode=script --xml volume status
+fi
+
 findmnt -R -J >"${out}/findmnt.json" 2>/dev/null || true
 findmnt -R -P >"${out}/findmnt.pairs" 2>/dev/null || true
 mount >"${out}/mount" 2>/dev/null || true
