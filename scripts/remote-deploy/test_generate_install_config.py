@@ -1179,9 +1179,9 @@ class GlusterClusterGenerationTest(unittest.TestCase):
         check = body["watches"]["cluster"]
 
         self.assertEqual(check["interval"], generator.GLUSTER_CLUSTER_INTERVAL)
-        # Transient heals recover within one or two intervals, so the watch only
-        # counts a condition that persists; the entry limits stay strict at 0.
-        self.assertEqual(check["for"], {"cycles": generator.GLUSTER_CLUSTER_PERSIST_CYCLES})
+        # Optional: a transient heal is not an outage, so a breach is a warning
+        # rather than an unavailable data service. The limits stay strict at 0.
+        self.assertTrue(check["check"]["optional"])
         self.assertEqual(check["check"]["type"], "gluster_cluster")
         self.assertEqual(check["check"]["peers"], ["apolo", "zeus"])
         self.assertEqual(check["check"]["volumes"]["images"]["bricks"], 3)

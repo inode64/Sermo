@@ -210,13 +210,6 @@ EXIM_HINTS_UNKNOWN = "unknown"
 # local CLI's read-only XML status output.
 GLUSTER_CATALOG_SERVICE = "glusterd"
 GLUSTER_CLUSTER_INTERVAL = "2m"
-# Transient heals clear within one or two intervals. Every cluster-check alarm
-# observed over ten days on a live node recovered in 90-241s — including ones
-# reporting 26 and 34 pending entries — so requiring the condition to persist is
-# what separates a real backlog from ordinary replication traffic. A count
-# threshold cannot: it would have to sit above 34, and would then hide a small
-# sustained backlog. The entry limits stay at 0 for that reason.
-GLUSTER_CLUSTER_PERSIST_CYCLES = 3
 GLUSTER_CLI_OUTPUT_TAG = "cliOutput"
 GLUSTER_CLI_SUCCESS = "0"
 GLUSTER_SELF_HEAL_OPTION = "cluster.self-heal-daemon"
@@ -1588,7 +1581,16 @@ def gluster_cluster_check(stage: Path, service_name: str) -> tuple[dict | None, 
     if not volumes:
         return None, {"active": False, "reason": "Gluster CLI reported no valid volumes"}
 
-    check: dict[str, object] = {"type": "gluster_cluster", "volumes": dict(sorted(volumes.items()))}
+    # Optional: a breach stays visible as a warning instead of declaring the data
+    # service unavailable. Self-heal entries appear and clear constantly on a busy
+    # replicated volume — every alarm observed over ten days on a live node cleared
+    # within 90-241s — and a transient heal is not an outage. The entry limits stay
+    # strict at 0 so the signal itself is not weakened, only its verdict.
+    check: dict[str, object] = {
+        "type": "gluster_cluster",
+        "optional": True,
+        "volumes": dict(sorted(volumes.items())),
+    }
     if peers:
         check["peers"] = peers
     report = {
@@ -1841,11 +1843,7 @@ dry_run: true
             body += process_override
         service_watches = {watch_name: {"enabled": False} for watch_name in sorted(disabled_watches)}
         if gluster_check is not None:
-            service_watches["cluster"] = {
-                "interval": GLUSTER_CLUSTER_INTERVAL,
-                "for": {"cycles": GLUSTER_CLUSTER_PERSIST_CYCLES},
-                "check": gluster_check,
-            }
+            service_watches["cluster"] = {"interval": GLUSTER_CLUSTER_INTERVAL, "check": gluster_check}
         if name == "ssh":
             service_watches.update(terminal_watches)
             report["terminal_sessions"] = terminal_sessions
