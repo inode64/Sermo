@@ -146,7 +146,7 @@ Connection-protocol checks (MySQL, PostgreSQL, Redis, Docker, libvirt, etc.) are
 | `varnish` / `varnishadm` | the Varnish management CLI answers with its banner/auth challenge (see Database) |
 | `ceph` / `ceph-mon` | a Ceph monitor sends its messenger `ceph v…` banner (see Database) |
 | `glusterfs` / `glusterd` / `gluster` | a GlusterFS node accepts TCP connections to glusterd on 24007 (see Database) |
-| `gluster_cluster` | the local Gluster CLI verifies peer membership, volume/bricks/self-heal state and optional heal limits (see Database) |
+| `gluster_cluster` | the local Gluster CLI verifies peer membership, volume/bricks/self-heal state and optional heal limits (see Gluster cluster) |
 | `openvswitch` / `ovs` / `ovsdb` / `ovsdb-server` | ovsdb-server answers an OVSDB `list_dbs` JSON-RPC request (see Database) |
 | `sqlite` / `sqlite3` | a SQLite database file passes `PRAGMA integrity_check` (see SQLite) |
 | `sql`         | a SQL query's scalar result compares (`== != > >= < <= contains =~`) against a value (see SQL query) |
@@ -1419,31 +1419,6 @@ Protocols, in the order of the table above:
   program unimplemented, and calling it logs a false error in current glusterd
   releases. This is a node liveness check; use `gluster_cluster` for the local
   node's view of cluster health.
-- `gluster_cluster` — a local, read-only Gluster cluster check. It runs the
-  installed `gluster --mode=script --xml` client under the check timeout, using
-  the host's existing Gluster management credentials and trust configuration.
-  It never changes cluster state. Supply one or both of `peers` and `volumes`:
-  every configured peer must be present, connected and a cluster member; a
-  disconnected peer returned by Gluster also fails the check. Every configured
-  volume must exist, be started and have exactly its configured number of
-  `bricks` online. `self_heal: true` requires a running self-heal daemon;
-  `max_heal_entries` and `max_split_brain_entries` are optional non-negative
-  limits (use `0` to require no pending entries).
-
-  ```yaml
-  watches:
-    cluster:
-      interval: 2m
-      check:
-        type: gluster_cluster
-        peers: [node-b, node-c]
-        volumes:
-          images:
-            bricks: 3
-            self_heal: true
-            max_heal_entries: 0
-            max_split_brain_entries: 0
-  ```
 - `openvswitch` (aliases `ovs`, `ovsdb`, `ovsdb-server`) — default port 6640 (TCP,
   the Open vSwitch configuration database server `ovsdb-server`), or a Unix socket
   via `socket` (commonly `/run/openvswitch/db.sock`); `tls` supported (SSL). No
@@ -1470,6 +1445,46 @@ It passes (health-style, `OK == true`) when `PRAGMA integrity_check` reports
 reported corruption fails the check with the detail. The file is opened
 **read-only**, so the check never modifies it. `quick: true` runs
 `PRAGMA quick_check` (faster, skips some per-row checks) for large databases.
+
+### Gluster cluster (`gluster_cluster`)
+
+A `gluster_cluster` check is a **local, read-only** view of the node's own
+cluster state — not a network protocol, so it is documented here rather than in
+the protocol list. It runs the installed `gluster --mode=script --xml` client
+under the check timeout, using the host's existing Gluster management
+credentials and trust configuration, and never changes cluster state. Use
+`glusterfs` for a plain node-liveness probe of the management port.
+
+Supply one or both of `peers` and `volumes`: every configured peer must be
+present, connected and a cluster member, and a disconnected peer returned by
+Gluster also fails the check. Every configured volume must exist, be started and
+have exactly its configured number of `bricks` online. `self_heal: true` requires
+a running self-heal daemon; `max_heal_entries` and `max_split_brain_entries` are
+optional non-negative limits (use `0` to require no pending entries).
+
+```yaml
+watches:
+  cluster:
+    interval: 2m
+    check:
+      type: gluster_cluster
+      peers: [node-b, node-c]
+      volumes:
+        images:
+          bricks: 3
+          self_heal: true
+          max_heal_entries: 0
+          max_split_brain_entries: 0
+```
+
+The heal limits only apply to replicated volumes: `gluster volume heal` fails on
+a pure distribute volume, so declaring them for one makes the whole check report
+Unavailable.
+
+A brick that cannot answer a heal query — Gluster reports `-` instead of a count,
+usually for a disconnected one — is listed as its own issue naming the brick and
+the status Gluster gave for it. It never makes the check Unavailable: the peer,
+volume, brick and self-heal state already collected stays reported.
 
 ### SQL query (`sql`)
 

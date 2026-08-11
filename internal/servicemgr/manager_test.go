@@ -37,6 +37,7 @@ func TestSystemdManagerStatus(t *testing.T) {
 		{name: "inactive", result: execx.Result{Stdout: "inactive\n", ExitCode: 3}, runErr: errors.New("exit 3"), want: StatusInactive, wantUnit: "nginx.service"},
 		{name: "failed", result: execx.Result{Stdout: "failed\n", ExitCode: 3}, runErr: errors.New("exit 3"), want: StatusFailed, wantUnit: "nginx.service"},
 		{name: "activating", result: execx.Result{Stdout: "activating\n", ExitCode: 3}, runErr: errors.New("exit 3"), want: StatusUnknown, wantUnit: "nginx.service"},
+		{name: "deactivating", result: execx.Result{Stdout: "deactivating\n", ExitCode: 3}, runErr: errors.New("exit 3"), want: StatusUnknown, wantUnit: "nginx.service"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

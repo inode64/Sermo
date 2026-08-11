@@ -28,6 +28,14 @@ type Process struct {
 	Role    string   `json:"role,omitempty"`    // selector name, "main" for backend seeds, or "child" for tree members
 	Source  string   `json:"source"`            // backend | pidfile | command_match | child
 
+	// Delegated marks a process the service owns for observability but that
+	// Sermo must never signal: a workload descendant the init unit deliberately
+	// keeps alive across a daemon restart (GlusterFS bricks, container shims).
+	// It is resolved by identity rather than by role because a backend seed
+	// claims Role "main" for every PID in the unit's cgroup, before a command
+	// selector gets the chance to name one of them.
+	Delegated bool `json:"delegated,omitempty"`
+
 	// ExePrev is the path of a binary replaced or removed on disk while this
 	// process kept running — typically a package upgrade without a restart.
 	// Diagnostic only: ExeOK stays false, so the process matches no exe
@@ -61,6 +69,10 @@ const (
 	SelectorKeyUser = "user"
 	// SelectorKeyGroup is a process selector's real-group field.
 	SelectorKeyGroup = "group"
+	// SelectorKeyDelegated marks a selector's processes as owned by the service
+	// but never signallable: they are discovered and monitored, yet excluded from
+	// residual reporting and from every kill decision.
+	SelectorKeyDelegated = "delegated"
 )
 
 // Stop policy field keys parsed by process kill policy.
@@ -121,6 +133,9 @@ type Selector struct {
 	Cmd   string   // RE2 regex matched against the joined cmdline (argv)
 	User  string   // real UID owner
 	Group string   // real GID owner
+	// Delegated marks the matched processes as observability-only: never a
+	// residual, never signalled. See Process.Delegated.
+	Delegated bool
 
 	cmdRe   *regexp.Regexp // compiled Cmd, set by ParseSelectors; matches compiles lazily if empty
 	exePath string         // canonicalized Exe, set by ParseSelectors; matches canonicalizes lazily if empty

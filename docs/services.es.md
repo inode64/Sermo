@@ -788,9 +788,26 @@ restart_policy:
   por completo `stop_policy`, la limpieza de estado parado y el reporte de
   residuales.
 - `native` invoca un único `Restart` atómico en el backend systemd/OpenRC
-  seleccionado. No ejecuta la fase de stop, el reaper residual, la limpieza de
-  estado parado ni la reconciliación del estado de init de Sermo. Un error del
-  backend hace fallar la operación; Sermo nunca vuelve silenciosamente a staged.
+  seleccionado. Más allá de la reconciliación del init obsoleto que se describe
+  abajo, no ejecuta fase de stop, ni reaper residual, ni limpieza de estado
+  parado. Un error del backend hace fallar la operación; Sermo nunca vuelve
+  silenciosamente a staged.
+
+Ambos modos **reconcilian primero un estado de init obsoleto**. Cuando el backend
+reporta la unidad establemente `inactive` o `failed` mientras siguen vivos los
+procesos del propio servicio, el init ha perdido el rastro de un daemon en marcha
+— una unidad de systemd que se quedó sin `MainPID` es la vía habitual. Los
+estados `unknown` y transitorios no demuestran esa divergencia y nunca entran en
+el reaper. Ninguno de los dos modos se recupera solo de una divergencia real: un
+restart nativo pide al init que señalice un PID que ya no conoce, y el daemon de
+reemplazo choca después con el superviviente por su puerto, socket o lock. Por
+eso Sermo limpia antes esos supervivientes, bajo el `stop_policy` del propio
+servicio y excluyendo los procesos `delegated`, reconcilia el estado del init y
+solo entonces ejecuta el restart; el mensaje del resultado lo indica. No se
+señaliza nada que un stop no fuera a señalizar. Un error de consulta de estado,
+descubrimiento o reset del init devuelve `failed`, y cualquier superviviente
+devuelve `orphan_processes`; ambos resultados se detienen antes del restart del
+backend, así que Sermo nunca lanza un segundo daemon.
 
 `native` solo es válido para servicios gestionados por init; un servicio con
 `control:` (contenedor Docker o dominio libvirt) debe usar `staged`. Usa el modo
@@ -798,7 +815,9 @@ nativo cuando la unidad de init posea deliberadamente un árbol de procesos
 delegado cuyos descendientes de workload puedan sobrevivir al reinicio del daemon
 y, por tanto, no deban clasificarse como residuales de un stop fallido. Los
 perfiles empaquetados de `containerd` y Docker Engine lo usan para shims, proxies
-y workloads de contenedores. Los daemons multiproceso ordinarios conservan
+y workloads de contenedores, y el perfil de `glusterd` lo usa porque su unidad
+con `KillMode=process` mantiene deliberadamente sirviendo los bricks y el daemon
+de self-heal durante un reinicio. Los daemons multiproceso ordinarios conservan
 `staged`: el modo nativo no debe usarse solo para ocultar un servicio que no se
 detiene limpiamente.
 
@@ -879,8 +898,21 @@ processes:
 - `exe` — el `/proc/<pid>/exe` resuelto exacto (fail-safe; nunca cmdline).
 - `cmd` — una regex Go RE2 emparejada contra el **cmdline** del proceso (argv unido).
   Úsela para binarios compartidos (`java .*unifi`, `openvpn .*tun1\.conf`) cuando un
-  ejecutable sirve a varias instancias. El cmdline es spoofable, así que `cmd` solo
-  estrecha el descubrimiento; nunca autoriza por sí solo la señalización residual.
+  ejecutable sirve a varias instancias. El cmdline es spoofable, así que `cmd`
+  nunca autoriza por sí solo la señalización — un kill sigue exigiendo el exe
+  resuelto exacto **y** el UID real — pero sí estrecha la identidad que deriva
+  `force_kill: auto`, de modo que un daemon que comparte ejecutable con su propio
+  workload conserva esa distinción al señalizar residuales.
+- `delegated` — `true` marca procesos que el servicio posee pero que Sermo nunca
+  debe señalizar: un árbol de workload que la unidad de init mantiene vivo a
+  propósito al reiniciar el daemon (bricks y self-heal de GlusterFS, shims de
+  contenedor). Siguen visibles en monitorización, nunca cuentan como residuales
+  de un stop y no aportan autorización de kill. **La delegación se hereda por el
+  árbol de procesos**, porque un proceso de workload posee todo lo que lanza:
+  marcar una sesión SSH cubre la shell del usuario y cuanto esa shell ejecute,
+  nada de lo cual casaría un selector propio. Úselo cuando la unidad detiene solo
+  su proceso principal — `KillMode=process` de systemd — para que parar el daemon
+  no se lleve por delante su workload.
 - `user` / `group` — el UID / GID real propietario del proceso.
 
 No use un ejecutable auxiliar genérico compartido por varias unidades como
@@ -895,8 +927,9 @@ stop atrapar y matar más restos (un residual no matable permanece como
 
 Use `stop_policy.force_kill: auto` para que cada selector con `exe` exacto y
 `user` autorice limpiar ese mismo residual. Sermo mantiene unido cada par
-ejecutable/usuario, envía TERM, redescubre y solo después envía KILL al mismo
-superviviente verificado. Un selector con solo `cmd`, un ejecutable no resuelto
+ejecutable/usuario —más el `cmd` de ese selector, si declara uno—, envía TERM,
+redescubre y solo después envía KILL al mismo superviviente verificado. Un
+selector con solo `cmd`, un ejecutable no resuelto, un selector `delegated`
 o un proceso fuera de las identidades configuradas sigue siendo
 `orphan_processes` y el reinicio nunca inicia un segundo daemon.
 `force_kill: true` sigue requiriendo el selector explícito `kill_only_if`, útil

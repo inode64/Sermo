@@ -14,14 +14,17 @@ cualquier conmutador `security:` que intente desactivarlas.
    de operaciones comprueba `<runtime>/locks` automáticamente — no se necesita ninguna regla.
 4. **Nunca señalizar un residual no verificado.** `force_kill: auto` deriva
    autorización solo de selectores `processes:` con ejecutable exacto y usuario
-   real; `force_kill: false` desactiva la escalada.
+   real; un selector marcado `delegated: true` nunca se señaliza y no aporta
+   autorización alguna; `force_kill: false` desactiva la escalada.
 5. **Nunca matar por nombre de proceso.** Un kill requiere una coincidencia exacta en la
    ruta `/proc/<pid>/exe` resuelta **y** el UID real frente a un selector
    `kill_only_if` explícito o una identidad estricta emparejada de `processes:`.
-   Un regex `processes.<name>.cmd` puede acotar el descubrimiento de procesos
-   para binarios compartidos, pero el cmdline nunca autoriza un kill; un proceso
-   cuyo exe no se puede resolver (permisos, o un binario `(deleted)`) nunca se
-   mata — en su lugar se reporta como un residual.
+   Un regex `processes.<name>.cmd` acota tanto el descubrimiento como la
+   identidad emparejada para binarios compartidos, de modo que un daemon y sus
+   hijos de workload nunca colapsan en un mismo conjunto de kill; el cmdline solo
+   restringe y nunca autoriza un kill por sí mismo. Un proceso cuyo exe no se
+   puede resolver (permisos, o un binario `(deleted)`) nunca se mata — en su
+   lugar se reporta como un residual.
 6. **Nunca enviar señales terminadoras a PID 1 ni a procesos del kernel.**
    `SIGTERM`, `SIGKILL`, `SIGINT` y `SIGQUIT` se bloquean centralmente para PID 1
    y para kernel threads (`kthreadd`/hijos sin exe de userspace ni cmdline). Esto
@@ -46,6 +49,13 @@ pasa por el mismo motor:
 3. Ejecutar el preflight requerido (start/restart/reload/resume).
 4. Bloquear si algún guard bloquea la acción.
 5. Ejecutar la fase del gestor de servicios correspondiente a la acción:
+   - Antes de cualquiera de los dos modos de restart, un estado estable
+     `inactive`/`failed` del backend junto con procesos de servicio no delegados
+     supervivientes activa la reconciliación del init obsoleto bajo el
+     `stop_policy` normal. Los estados `unknown` y transitorios nunca entran en
+     el reaper. Los errores de consulta de estado, descubrimiento o reset
+     devuelven `failed`, y cualquier superviviente devuelve
+     `orphan_processes`; ninguna de esas rutas alcanza el restart del backend.
    - stop y restart con `restart_policy.mode: staged`: detener, esperar
      `graceful_timeout`, descubrir procesos residuales y aplicar la escalada de
      señales configurada. Un restart nunca inicia mientras queden residuales. La
@@ -53,11 +63,11 @@ pasa por el mismo motor:
      aislado tuvo éxito, todos los residuales están atribuidos por el backend a
      esa misma unidad y la unidad ya está `active`, Sermo acepta la reactivación
      del backend y no ejecuta un segundo start.
-   - restart con `restart_policy.mode: native`: invocar un único `Restart` acotado
-     del backend para la unidad principal. No hay fase de stop, descubrimiento de
-     residuales, escalada de señales, limpieza de artefactos parados ni reset del
-     estado de init de Sermo, y tampoco fallback staged. Las unidades
-     `also_service` auxiliares permanecen activas.
+   - restart con `restart_policy.mode: native`: tras el caso protegido de init
+     obsoleto anterior, invocar un único `Restart` acotado del backend para la
+     unidad principal. No hay una fase stop ordinaria de Sermo, limpieza de
+     artefactos parados ni fallback staged. Las unidades `also_service`
+     auxiliares permanecen activas.
    - `start`, `reload` y `resume`: ejecutar su acción acotada de backend existente.
 6. Tras un stop explícito limpio o la fase stop de un restart staged, reconciliar
    el estado registrado del init con la realidad — `systemctl reset-failed`

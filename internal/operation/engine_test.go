@@ -890,6 +890,28 @@ func TestNewInvalidProcessSelectorBlocksRestart(t *testing.T) {
 	}
 }
 
+func TestNewNonBooleanDelegatedSelectorBlocksRestart(t *testing.T) {
+	engine, mgr := newInvalidTreeEngine(t, "containerd", "containerd",
+		map[string]any{"processes": map[string]any{
+			"shim": map[string]any{
+				"exe":       "/usr/bin/containerd-shim",
+				"user":      "root",
+				"delegated": "true",
+			},
+		}})
+
+	res := engine.Restart(context.Background())
+	if res.Status != ResultFailed {
+		t.Fatalf("status = %q, want failed", res.Status)
+	}
+	if !strings.Contains(res.Message, "delegated must be a boolean") {
+		t.Fatalf("message = %q, want delegated boolean config error", res.Message)
+	}
+	if mgr.did("stop containerd") || mgr.did("start containerd") || mgr.did("restart containerd") {
+		t.Fatalf("invalid delegated selector reached backend action, calls=%v", mgr.calls)
+	}
+}
+
 // countingPIDReader counts how often the live process table is walked, so a test
 // can prove residual discovery bypasses the CachingReader's freshness window.
 type countingPIDReader struct {

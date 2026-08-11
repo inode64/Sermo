@@ -14,12 +14,15 @@ any `security:` toggle that tries to disable them.
    engine checks `<runtime>/locks` automatically — no rule needed.
 4. **Never signal an unverified residual.** `force_kill: auto` derives authority
    only from named `processes:` selectors with both an exact executable and real
-   user; `force_kill: false` disables escalation.
+   user; a selector marked `delegated: true` is never signalled and contributes
+   no authority at all; `force_kill: false` disables escalation.
 5. **Never kill by process name.** A kill requires an exact match on the
    resolved `/proc/<pid>/exe` path **and** the real UID against an explicit
    `kill_only_if` selector or one paired strict `processes:` identity. A
-   `processes.<name>.cmd` regex may narrow discovery for shared binaries, but
-   cmdline never authorizes a kill; a process whose exe cannot be resolved
+   `processes.<name>.cmd` regex narrows both discovery and the paired identity
+   for shared binaries, so a daemon and its workload children never collapse
+   into one kill set; cmdline only ever restricts and never authorizes a kill on
+   its own. A process whose exe cannot be resolved
    (permission, or a `(deleted)` binary) is never killed — it is reported as a
    residual instead.
 6. **Never send terminating signals to PID 1 or kernel threads.** `SIGTERM`,
@@ -46,6 +49,12 @@ runs through the same engine:
 3. Run required preflight (start/restart/reload/resume).
 4. Block if any guard blocks the action.
 5. Execute the action's service-manager phase:
+   - Before either restart mode, a stable backend `inactive`/`failed` state plus
+     surviving non-delegated service processes triggers stale-init
+     reconciliation under the normal stop policy. `unknown` and transitional
+     states never enter the reaper. Status-query, discovery or reset errors
+     return `failed`, and any survivor returns `orphan_processes`; neither path
+     reaches the backend restart.
    - `stop` and `restart_policy.mode: staged` restart: stop, wait
      `graceful_timeout`, discover residual processes and apply the configured
      signal escalation. A restart never starts while residuals remain. The
@@ -53,10 +62,10 @@ runs through the same engine:
      stop succeeded, every residual is backend-attributed to that same unit and
      the unit is already `active`, Sermo accepts the backend reactivation and
      does not issue a second start.
-   - `restart_policy.mode: native` restart: invoke one bounded backend `Restart`
-     for the primary unit. There is no Sermo stop phase, residual discovery,
-     signal escalation, stopped-artifact cleanup or init-state reset, and no
-     staged fallback. Auxiliary `also_service` units remain active.
+   - `restart_policy.mode: native` restart: after the guarded stale-init case
+     above, invoke one bounded backend `Restart` for the primary unit. There is
+     no ordinary Sermo stop phase, stopped-artifact cleanup or staged fallback.
+     Auxiliary `also_service` units remain active.
    - `start`, `reload` and `resume`: run their existing bounded backend action.
 6. After a clean explicit stop or staged-restart stop, reconcile the init's
    recorded state with reality — `systemctl reset-failed` (systemd) or

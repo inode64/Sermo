@@ -139,6 +139,7 @@ type CleanPath = config.CleanPath
 type plan struct {
 	action               string
 	preflight            bool
+	reconcile            bool
 	stop                 bool
 	start                bool
 	nativeRestart        bool
@@ -177,13 +178,14 @@ type TerminalSessionSourceTarget struct {
 }
 
 // Restart executes the configured restart strategy and verifies health. Staged
-// mode stops, clears residuals and starts; native mode delegates one atomic
-// restart to the init backend without running the residual reaper.
+// mode stops, clears residuals and starts; outside stale-init reconciliation,
+// native mode delegates one atomic restart to the init backend. Both modes first
+// reconcile an init state that has drifted from reality.
 func (e Engine) Restart(ctx context.Context) Result {
 	if e.RestartMode == config.RestartModeNative {
-		return e.run(ctx, plan{action: actionRestart, preflight: true, nativeRestart: true, postflight: true})
+		return e.run(ctx, plan{action: actionRestart, preflight: true, reconcile: true, nativeRestart: true, postflight: true})
 	}
-	return e.run(ctx, plan{action: actionRestart, preflight: true, stop: true, start: true, postflight: true})
+	return e.run(ctx, plan{action: actionRestart, preflight: true, reconcile: true, stop: true, start: true, postflight: true})
 }
 
 // Start runs preflight, starts the service and verifies health.
@@ -290,25 +292,12 @@ func (e Engine) run(ctx context.Context, p plan) (result Result) {
 	if !e.checkNamedLocks(&result) || !e.runPreflight(ctx, p, &result) || !e.checkGuards(ctx, p, &result) {
 		return result
 	}
-	if p.closeSession != nil {
-		if !e.closeSession(ctx, *p.closeSession, &result) {
-			return result
-		}
-		result.Message = "close SSH session ok"
+	if e.runCloseAction(ctx, p, &result) {
 		return result
 	}
-	if p.closeTerminalSession != nil {
-		if !e.closeTerminalSession(ctx, *p.closeTerminalSession, &result) {
-			return result
-		}
-		result.Message = "close terminal session ok"
-		return result
-	}
-	if p.closeTerminalSource != nil {
-		if !e.closeTerminalSource(ctx, *p.closeTerminalSource, &result) {
-			return result
-		}
-		result.Message = "close empty terminal session source ok"
+
+	reconciled, proceed := e.runReconciliation(ctx, p, &result)
+	if !proceed {
 		return result
 	}
 
@@ -338,6 +327,9 @@ func (e Engine) run(ctx context.Context, p plan) (result Result) {
 	}
 
 	result.Message = p.action + " ok"
+	if reconciled {
+		result.Message += " (reconciled stale init state)"
+	}
 	if systemdReactivated {
 		result.Message += " (systemd reactivated the same unit)"
 	}
@@ -348,6 +340,55 @@ func (e Engine) run(ctx context.Context, p plan) (result Result) {
 		result.Message += " (stale: " + strings.Join(staleWarn, "; ") + ")"
 	}
 	return result
+}
+
+// runCloseAction executes one manual session-close variant when the plan carries
+// one. Both successful and failed closes are terminal for the operation; the
+// caller's deferred event emission therefore remains the single audit path.
+func (e Engine) runCloseAction(ctx context.Context, p plan, result *Result) bool {
+	if p.closeSession != nil {
+		if e.closeSession(ctx, *p.closeSession, result) {
+			result.Message = "close SSH session ok"
+		}
+		return true
+	}
+	if p.closeTerminalSession != nil {
+		if e.closeTerminalSession(ctx, *p.closeTerminalSession, result) {
+			result.Message = "close terminal session ok"
+		}
+		return true
+	}
+	if p.closeTerminalSource != nil {
+		if e.closeTerminalSource(ctx, *p.closeTerminalSource, result) {
+			result.Message = "close empty terminal session source ok"
+		}
+		return true
+	}
+	return false
+}
+
+// runReconciliation applies the restart-only stale-init guard and translates
+// its outcome into the operation result. Keeping this phase-shaped helper next
+// to run makes the top-level operation sequence readable without duplicating the
+// fail-closed result contract.
+func (e Engine) runReconciliation(ctx context.Context, p plan, result *Result) (reconciled, proceed bool) {
+	if !p.reconcile {
+		return false, true
+	}
+	reconciled, remaining, err := e.reconcileInitState(ctx)
+	if err != nil {
+		result.Status = ResultFailed
+		result.Message = err.Error()
+		result.Processes = remaining
+		return false, false
+	}
+	if len(remaining) > 0 {
+		result.Status = ResultOrphanProcesses
+		result.Message = fmt.Sprintf("%d residual process(es) remain before restart", len(remaining))
+		result.Processes = remaining
+		return false, false
+	}
+	return reconciled, true
 }
 
 func (e Engine) closeSession(ctx context.Context, target SessionTarget, result *Result) bool {
@@ -547,9 +588,10 @@ func (e Engine) stopService(ctx context.Context, result *Result) (alsoStopErrs, 
 		result.Status, result.Message = ResultFailed, "operation timed out during graceful stop wait"
 		return alsoStopErrs, nil, false, false
 	}
-	remaining, systemdReactivated, err := e.clearResiduals(ctx, func(residuals []process.Process) bool {
+	residuals, err := e.clearResiduals(ctx, func(residuals []process.Process) bool {
 		return e.systemdReactivated(ctx, result.Action, residuals)
 	})
+	remaining, systemdReactivated := residuals.remaining, residuals.accepted
 	if err != nil {
 		result.Status, result.Message, result.Processes = ResultFailed, "process discovery: "+err.Error(), remaining
 		return alsoStopErrs, nil, false, false
@@ -784,12 +826,86 @@ func firstSymlinkAncestor(path string) (string, error) {
 	return "", nil
 }
 
+// nonDelegatedResiduals drops the processes a service declared delegated. They
+// belong to the service and stay visible in monitoring, but the init unit keeps
+// them alive on purpose across a daemon restart, so they are never a residual of
+// a stop and never a reaper target. When no process is delegated, the original
+// slice is returned without allocating.
+func nonDelegatedResiduals(procs []process.Process) []process.Process {
+	for i, proc := range procs {
+		if !proc.Delegated {
+			continue
+		}
+		kept := make([]process.Process, 0, len(procs)-1)
+		kept = append(kept, procs[:i]...)
+		for _, candidate := range procs[i+1:] {
+			if !candidate.Delegated {
+				kept = append(kept, candidate)
+			}
+		}
+		return kept
+	}
+	return procs
+}
+
+// residualOutcome is the result of one residual-handling pass. found preserves
+// whether the initial live discovery saw a non-delegated residual even when the
+// reaper cleared it; accepted records the narrow systemd-reactivation exception.
+// Keeping these facts together avoids ambiguous parallel return values and lets
+// reconciliation reuse the first authoritative discovery.
+type residualOutcome struct {
+	remaining []process.Process
+	found     bool
+	accepted  bool
+}
+
+// reconcileInitState clears an init state that has drifted from reality before a
+// restart acts on it: the backend reports the unit as not active while the
+// service's own processes are still running, so the init has lost track of a live
+// daemon. Neither restart mode recovers from that alone — a native restart asks
+// the init to signal a PID it no longer knows, and the replacement daemon then
+// collides with the survivor over its port, socket or lock; a staged restart only
+// gets there through the reaper.
+//
+// It signals nothing a stop would not have signalled: the same discovery, the
+// same stop_policy, and delegated processes excluded, so a workload tree the unit
+// deliberately keeps alive survives. Unknown and transitional backend states are
+// not proof of drift and never enter the reaper. A discovery/reset error or any
+// survivor fails closed before the restart can launch a second daemon.
+func (e Engine) reconcileInitState(ctx context.Context) (bool, []process.Process, error) {
+	if e.Discover == nil || e.Manager == nil {
+		return false, nil, nil
+	}
+	status, err := e.Manager.Status(ctx, e.Unit)
+	if err != nil {
+		return false, nil, fmt.Errorf("query init state before restart: %w", err)
+	}
+	if status.Status != servicemgr.StatusInactive && status.Status != servicemgr.StatusFailed {
+		return false, nil, nil
+	}
+	outcome, err := e.clearResiduals(ctx, nil)
+	if err != nil {
+		return false, outcome.remaining, fmt.Errorf("process discovery: %w", err)
+	}
+	if !outcome.found {
+		return false, nil, nil
+	}
+	if len(outcome.remaining) > 0 {
+		return false, outcome.remaining, nil
+	}
+	if err := e.Manager.ResetState(ctx, e.Unit); err != nil {
+		return false, nil, fmt.Errorf("reset init state before restart: %w", err)
+	}
+	return true, nil, nil
+}
+
 // clearResiduals discovers residual processes after a stop and applies signal
-// escalation, returning whatever remains. accept may acknowledge an already
-// reactivated backend-owned process set before the reaper can signal it.
-func (e Engine) clearResiduals(ctx context.Context, accept func([]process.Process) bool) ([]process.Process, bool, error) {
+// escalation, returning one outcome that preserves whether any were initially
+// found. accept may acknowledge an already reactivated backend-owned process set
+// before the reaper can signal it.
+func (e Engine) clearResiduals(ctx context.Context, accept func([]process.Process) bool) (residualOutcome, error) {
 	if e.Discover == nil {
-		return nil, false, nil
+		return residualOutcome{}, nil
 	}
 	var discoverErr error
 	discover := func() []process.Process {
@@ -797,26 +913,28 @@ func (e Engine) clearResiduals(ctx context.Context, accept func([]process.Proces
 		if err != nil && discoverErr == nil {
 			discoverErr = err
 		}
-		return procs
+		return nonDelegatedResiduals(procs)
 	}
 	residuals := discover()
+	outcome := residualOutcome{remaining: residuals, found: len(residuals) > 0}
 	if discoverErr != nil {
-		return residuals, false, discoverErr
+		return outcome, discoverErr
 	}
-	if len(residuals) == 0 {
-		return nil, false, nil
+	if !outcome.found {
+		return outcome, nil
 	}
 	if accept != nil && accept(residuals) {
-		return residuals, true, nil
+		outcome.accepted = true
+		return outcome, nil
 	}
 	reaper := e.Reaper
 	reaper.Rediscover = discover // re-evaluate identity each round
 	reaper.Sleep = e.Sleep
-	remaining := reaper.Reap(ctx, residuals, e.KillPolicy).Remaining
+	outcome.remaining = reaper.Reap(ctx, residuals, e.KillPolicy).Remaining
 	if discoverErr != nil {
-		return remaining, false, discoverErr
+		return outcome, discoverErr
 	}
-	return remaining, false, nil
+	return outcome, nil
 }
 
 func applyLockError(r *Result, err error) {

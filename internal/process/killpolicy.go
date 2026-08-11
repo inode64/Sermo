@@ -1,9 +1,12 @@
 package process
 
 import (
-	"sermo/internal/cfgval"
+	"regexp"
 	"sort"
+	"strings"
 	"time"
+
+	"sermo/internal/cfgval"
 )
 
 // KillSelector is a stop_policy.kill_only_if selector. A process is killable
@@ -18,9 +21,24 @@ type KillSelector struct {
 // killIdentity keeps an automatic residual-reaping identity paired. Keeping
 // user and exe together avoids authorizing the cross-product that a pair of
 // independent users/exe_any lists would create for multi-role services.
+//
+// cmd carries the selector's cmdline regex when it declared one. It can only
+// narrow the pair, never widen it: a process still has to match the exact
+// resolved exe and the real UID first, so a spoofed argv gains nothing. Without
+// it the derived authority would be broader than the selector that produced it,
+// and a daemon whose workload children re-exec the same binary (GlusterFS
+// bricks, for one) would authorize signalling those children.
 type killIdentity struct {
+	killIdentityKey
+	cmdRe *regexp.Regexp
+}
+
+// killIdentityKey is the comparable form of a killIdentity, used to deduplicate
+// pairs (a compiled regex is a pointer, so two equal patterns are not equal).
+type killIdentityKey struct {
 	user string
 	exe  string
+	cmd  string
 }
 
 // Configured reports whether the selector has the minimum fields required to
@@ -53,23 +71,31 @@ func EnableAutomaticReaping(policy KillPolicy, selectors []Selector) KillPolicy 
 	}
 
 	pairs := make([]killIdentity, 0, len(selectors))
-	seen := map[killIdentity]bool{}
+	seen := map[killIdentityKey]bool{}
 	for _, selector := range selectors {
-		if selector.Type != SelectorCommandMatch || selector.Exe == "" || selector.User == "" {
+		if !strictIdentity(&selector) {
 			continue
 		}
-		pair := killIdentity{user: selector.User, exe: selectorExePath(&selector)}
-		if seen[pair] {
+		// A delegated selector names processes the service owns but Sermo must
+		// never signal, so it contributes no authority at all.
+		if selector.Delegated {
 			continue
 		}
-		seen[pair] = true
-		pairs = append(pairs, pair)
+		key := killIdentityKey{user: selector.User, exe: selectorExePath(&selector), cmd: selector.Cmd}
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		pairs = append(pairs, killIdentity{killIdentityKey: key, cmdRe: selectorCmdRegexp(&selector)})
 	}
 	sort.Slice(pairs, func(i, j int) bool {
 		if pairs[i].user != pairs[j].user {
 			return pairs[i].user < pairs[j].user
 		}
-		return pairs[i].exe < pairs[j].exe
+		if pairs[i].exe != pairs[j].exe {
+			return pairs[i].exe < pairs[j].exe
+		}
+		return pairs[i].cmd < pairs[j].cmd
 	})
 	policy.KillOnlyIf.pairs = pairs
 	policy.ForceKill = len(pairs) > 0
@@ -78,13 +104,19 @@ func EnableAutomaticReaping(policy KillPolicy, selectors []Selector) KillPolicy 
 
 // Killable reports whether p may be signalled. It requires a resolved exe that
 // exactly matches an exe_any entry AND a real UID matching a users entry. A
-// process with an unresolvable exe is never killable, and an empty selector
-// (no users or no exe) matches nothing — both fail-safe.
+// process with an unresolvable exe is never killable, a delegated process is
+// never killable, and an empty selector (no users or no exe) matches nothing —
+// all fail-safe.
 func (s KillSelector) Killable(p Process, resolve UserResolver) bool {
 	if !s.Configured() {
 		return false
 	}
 	if protectedKillProcess(p) {
+		return false
+	}
+	// A delegated process is the service's workload, kept alive on purpose by an
+	// init unit that stops only its main process. It is reported, never signalled.
+	if p.Delegated {
 		return false
 	}
 	if !p.ExeOK {
@@ -100,9 +132,13 @@ func (s KillSelector) explicitMatches(p Process, resolve UserResolver) bool {
 func (s KillSelector) pairMatches(p Process, resolve UserResolver) bool {
 	for _, pair := range s.pairs {
 		uid, ok := resolve(pair.user)
-		if ok && uid == p.UID && pair.exe == p.Exe {
-			return true
+		if !ok || uid != p.UID || pair.exe != p.Exe {
+			continue
 		}
+		if pair.cmdRe != nil && !pair.cmdRe.MatchString(strings.Join(p.Cmdline, " ")) {
+			continue
+		}
+		return true
 	}
 	return false
 }

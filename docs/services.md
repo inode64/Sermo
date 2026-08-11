@@ -781,17 +781,34 @@ restart_policy:
   state reconciliation → `Start` flow. `stop_policy`, stopped-state cleanup and
   residual reporting apply in full.
 - `native` invokes one atomic `Restart` on the selected systemd/OpenRC backend.
-  It does not run Sermo's stop phase, residual reaper, stopped-state cleanup or
-  init-state reconciliation. A backend error fails the operation; Sermo never
-  falls back silently to staged restart.
+  Beyond the stale-init reconciliation described below, it runs no stop phase, no
+  residual reaper and no stopped-state cleanup. A backend error fails the
+  operation; Sermo never falls back silently to staged restart.
+
+Both modes first **reconcile a stale init state**. When the backend reports the
+unit as stably `inactive` or `failed` while the service's own processes are still
+running, the init has lost track of a live daemon — a systemd unit that dropped
+its `MainPID` is the usual way in. `unknown` and transitional states do not prove
+that divergence and never enter the reaper. Neither mode recovers from real drift
+alone: a native restart asks the init to signal a PID it no longer knows, and the
+replacement daemon then collides with the survivor over its port, socket or lock.
+Sermo therefore clears those survivors first, under the service's own
+`stop_policy` and with `delegated` processes excluded, reconciles the init state,
+and only then runs the restart; the result message reports it. Nothing is
+signalled that a stop would not have signalled. Status-query, discovery or
+init-reset errors return `failed`, and any survivor returns
+`orphan_processes`; both outcomes stop before the backend restart, so Sermo
+never launches a second daemon.
 
 `native` is valid only for init-managed services; a service with `control:`
 (Docker container or libvirt domain) must use `staged`. Use native mode when the
 init unit deliberately owns a delegated process tree whose workload descendants
 may survive a daemon restart and therefore must not be classified as failed-stop
 residuals. The packaged `containerd` and Docker Engine profiles use it for shims,
-proxies and container workloads. Ordinary multi-process daemons keep `staged`:
-native mode must not be used merely to hide a service that fails to stop cleanly.
+proxies and container workloads, and the `glusterd` profile uses it because its
+`KillMode=process` unit deliberately keeps the brick and self-heal processes
+serving across a restart. Ordinary multi-process daemons keep `staged`: native
+mode must not be used merely to hide a service that fails to stop cleanly.
 
 With `also_service`, native restart leaves auxiliary units active and restarts
 only the primary atomically; explicit `start`/`stop` and staged restart retain
@@ -870,8 +887,20 @@ processes:
 - `exe` — exact resolved `/proc/<pid>/exe` (fail-safe; never cmdline).
 - `cmd` — a Go RE2 regex matched against the process **cmdline** (argv joined).
   Use it for shared binaries (`java .*unifi`, `openvpn .*tun1\.conf`) when one
-  executable serves several instances. The cmdline is spoofable, so `cmd` only
-  narrows discovery; it never authorizes residual signaling by itself.
+  executable serves several instances. The cmdline is spoofable, so `cmd` never
+  authorizes signaling by itself — a kill still demands the exact resolved exe
+  **and** the real UID — but it does narrow the identity `force_kill: auto`
+  derives, so a daemon that shares its executable with its own workload keeps
+  that distinction when residuals are signalled.
+- `delegated` — `true` marks processes the service owns but Sermo must never
+  signal: a workload tree the init unit deliberately keeps alive across a daemon
+  restart (GlusterFS bricks and self-heal, container shims). They stay visible in
+  monitoring, are never counted as residuals of a stop, and contribute no kill
+  authority. **Delegation flows down the process tree**, because a workload
+  process owns whatever it spawns: marking an SSH session covers the user's shell
+  and everything that shell runs, none of which would match a selector of its own.
+  Use it when the unit stops only its main process — systemd `KillMode=process` —
+  so that stopping the daemon does not take its workload down with it.
 - `user` / `group` — the process real UID / GID owner.
 
 Do not use a generic helper executable shared by several units as a service
@@ -886,9 +915,10 @@ stop catch and kill more leftovers (an unkillable residual stays
 
 Set `stop_policy.force_kill: auto` to make every named selector that has both
 an exact `exe` and `user` authorize cleanup of that same residual identity.
-Sermo keeps each executable/user pair together, sends TERM, rediscovers, then
-sends KILL only to the same verified survivor. A selector with only `cmd`, an
-unresolved executable, or a process outside the configured identities remains
+Sermo keeps each executable/user pair together — plus that selector's `cmd`, when
+it declares one — sends TERM, rediscovers, then sends KILL only to the same
+verified survivor. A selector with only `cmd`, an unresolved executable, a
+`delegated` selector, or a process outside the configured identities remains
 an `orphan_processes` failure and the restart never starts a second daemon.
 `force_kill: true` still requires the explicit `kill_only_if` selector and is
 the appropriate override when the configured process identities are not the
