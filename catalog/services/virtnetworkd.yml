@@ -18,14 +18,22 @@ processes:
   main:
     exe: ${virtnetworkd_binary}
     user: root
+  # libvirt spawns one dnsmasq pair per virtual network and they keep serving DHCP
+  # and DNS to the guests across a daemon restart, exactly like a Gluster brick
+  # outlives glusterd. Delegated keeps them monitored while barring them from
+  # every kill decision: a stop must not take the guests' addressing down with
+  # the daemon, and an unsignallable survivor must not leave the restart parked
+  # in orphan_processes.
   dnsmasq-root:
     exe: ${virtnetworkd_dnsmasq_binary}
     cmd: /var/lib/libvirt/dnsmasq/
     user: root
+    delegated: true
   dnsmasq-nobody:
     exe: ${virtnetworkd_dnsmasq_binary}
     cmd: /var/lib/libvirt/dnsmasq/
     user: nobody
+    delegated: true
 policy:
   cooldown: 15m
   max_actions: 2

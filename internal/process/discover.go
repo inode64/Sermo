@@ -172,7 +172,7 @@ func (d Discoverer) markDelegated(selectors []Selector, found map[int]Process, i
 	// everything it spawns.
 	delegated := map[int]bool{}
 	for pid := range found {
-		if d.matchesAny(delegatedSelectors, idx.byPID[pid], resolve) {
+		if d.matchesAnyDelegated(delegatedSelectors, idx.byPID[pid], resolve) {
 			delegated[pid] = true
 		}
 	}
@@ -432,6 +432,28 @@ func pathUnder(p, dir string) bool {
 func (d Discoverer) matchesAny(selectors []Selector, id Identity, resolve UserResolver) bool {
 	for i := range selectors {
 		if d.matches(&selectors[i], id, resolve) {
+			return true
+		}
+	}
+	return false
+}
+
+// matchesAnyDelegated reports whether any delegated selector claims id. Unlike
+// matchesAny it also accepts a process whose binary was replaced on disk, matched
+// through ExePrev.
+//
+// That case is the one that matters most. An unresolvable exe already makes a
+// process unkillable, so declining to delegate it is the worst combination there
+// is: it stays a residual that nothing may ever signal, and every staged stop
+// therefore ends in orphan_processes with the service left stopped. Delegation
+// only ever removes authority — it can never make a process signallable — so
+// recognizing a stale-binary process here cannot widen what Sermo may signal.
+func (d Discoverer) matchesAnyDelegated(selectors []Selector, id Identity, resolve UserResolver) bool {
+	if d.matchesAny(selectors, id, resolve) {
+		return true
+	}
+	for i := range selectors {
+		if d.matchesDeletedExe(&selectors[i], id, resolve) {
 			return true
 		}
 	}

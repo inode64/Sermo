@@ -211,33 +211,48 @@ func evaluateGlusterVolumeStatus(name string, expectation glusterVolumeExpectati
 	}
 }
 
+// healQuery is one of the two heal views the check reads per volume. They differ
+// only in the CLI subcommand, the limit they honour, the total they feed and the
+// noun they report — everything else, including how a brick that gave no count is
+// surfaced, has to stay identical between them.
+type healQuery struct {
+	args  []string
+	limit *int
+	total *int
+	noun  string
+}
+
 func (c glusterClusterCheck) evaluateHeals(ctx context.Context, observation *glusterClusterObservation) error {
 	for _, name := range slices.Sorted(maps.Keys(c.volumes)) {
 		expectation := c.volumes[name]
-		if expectation.maxHealEntries != nil {
-			heal, err := c.command(ctx, "volume", "heal", name, "info")
-			if err != nil {
+		for _, query := range []healQuery{
+			{args: []string{"info"}, limit: expectation.maxHealEntries, total: &observation.healEntries, noun: "pending self-heal entries"},
+			{args: []string{"info", "split-brain"}, limit: expectation.maxSplitBrainEntries, total: &observation.splitBrainEntries, noun: "split-brain entries"},
+		} {
+			if err := c.evaluateHealQuery(ctx, name, query, observation); err != nil {
 				return err
 			}
-			entries, unreported := glusterHealEntries(heal.Heals)
-			observation.healEntries += entries
-			observation.issues = append(observation.issues, glusterUnreportedHealIssues(name, unreported)...)
-			if entries > *expectation.maxHealEntries {
-				observation.issues = append(observation.issues, fmt.Sprintf("volume %s has %d pending self-heal entries (limit %d)", name, entries, *expectation.maxHealEntries))
-			}
 		}
-		if expectation.maxSplitBrainEntries != nil {
-			splitBrain, err := c.command(ctx, "volume", "heal", name, "info", "split-brain")
-			if err != nil {
-				return err
-			}
-			entries, unreported := glusterHealEntries(splitBrain.Heals)
-			observation.splitBrainEntries += entries
-			observation.issues = append(observation.issues, glusterUnreportedHealIssues(name, unreported)...)
-			if entries > *expectation.maxSplitBrainEntries {
-				observation.issues = append(observation.issues, fmt.Sprintf("volume %s has %d split-brain entries (limit %d)", name, entries, *expectation.maxSplitBrainEntries))
-			}
-		}
+	}
+	return nil
+}
+
+// evaluateHealQuery runs one heal view for one volume, folding its entries into
+// the observation's total and reporting both the bricks that gave no count and a
+// breach of the configured limit. A volume that declares no limit is not queried.
+func (c glusterClusterCheck) evaluateHealQuery(ctx context.Context, volume string, query healQuery, observation *glusterClusterObservation) error {
+	if query.limit == nil {
+		return nil
+	}
+	out, err := c.command(ctx, append([]string{"volume", "heal", volume}, query.args...)...)
+	if err != nil {
+		return err
+	}
+	entries, unreported := glusterHealEntries(out.Heals)
+	*query.total += entries
+	observation.issues = append(observation.issues, glusterUnreportedHealIssues(volume, unreported)...)
+	if entries > *query.limit {
+		observation.issues = append(observation.issues, fmt.Sprintf("volume %s has %d %s (limit %d)", volume, entries, query.noun, *query.limit))
 	}
 	return nil
 }

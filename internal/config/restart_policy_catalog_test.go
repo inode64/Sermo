@@ -54,6 +54,30 @@ func TestDelegatedWorkloadCatalogUsesNativeRestart(t *testing.T) {
 	}
 }
 
+// virtnetworkd keeps the staged default, so it stays out of the native-restart
+// table above — but the same delegation rule applies. libvirt spawns one dnsmasq
+// pair per virtual network; they serve the guests' DHCP and DNS across a daemon
+// restart, and a package update routinely replaces their binary without one. An
+// undelegated pair is discovered as a residual, becomes unsignallable the moment
+// its exe stops resolving, and parks every restart in orphan_processes.
+func TestVirtnetworkdCatalogDelegatesItsDnsmasqPair(t *testing.T) {
+	t.Parallel()
+
+	byRole := catalogSelectorsByRole(t, "virtnetworkd")
+	for _, role := range []string{"dnsmasq-root", "dnsmasq-nobody"} {
+		selector, ok := byRole[role]
+		if !ok {
+			t.Fatalf("virtnetworkd declares no %q process role", role)
+		}
+		if !selector.Delegated {
+			t.Fatalf("virtnetworkd role %q must be delegated so a stop never signals the guests' addressing", role)
+		}
+	}
+	if byRole[process.RoleMain].Delegated {
+		t.Fatalf("virtnetworkd must keep its own daemon signallable")
+	}
+}
+
 func TestDockerCatalogKeepsSystemdSocketForExplicitStartStop(t *testing.T) {
 	t.Parallel()
 
