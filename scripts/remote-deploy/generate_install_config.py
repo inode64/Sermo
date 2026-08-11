@@ -210,11 +210,19 @@ EXIM_HINTS_UNKNOWN = "unknown"
 # local CLI's read-only XML status output.
 GLUSTER_CATALOG_SERVICE = "glusterd"
 GLUSTER_CLUSTER_INTERVAL = "2m"
+# Transient heals clear within one or two intervals. Every cluster-check alarm
+# observed over ten days on a live node recovered in 90-241s — including ones
+# reporting 26 and 34 pending entries — so requiring the condition to persist is
+# what separates a real backlog from ordinary replication traffic. A count
+# threshold cannot: it would have to sit above 34, and would then hide a small
+# sustained backlog. The entry limits stay at 0 for that reason.
+GLUSTER_CLUSTER_PERSIST_CYCLES = 3
 GLUSTER_CLI_OUTPUT_TAG = "cliOutput"
 GLUSTER_CLI_SUCCESS = "0"
 GLUSTER_SELF_HEAL_OPTION = "cluster.self-heal-daemon"
 GLUSTER_SELF_HEAL_ENABLED = "on"
 GLUSTER_SELF_HEAL_DAEMON = "Self-heal Daemon"
+GLUSTER_XML_FORBIDDEN_DECLARATIONS = ("<!DOCTYPE", "<!ENTITY")
 
 # The libvirt domain states virsh reports under LC_ALL=C. Anything outside this
 # set means the inventory was not parsed as expected — most likely a localized
@@ -1502,8 +1510,14 @@ def gluster_xml_output(stage: Path, name: str) -> tuple[xml.Element | None, str]
         return None, f"{label} evidence was not collected"
     if rc != GLUSTER_CLI_SUCCESS:
         return None, f"{label} exited {rc}"
+    body = read_text(stage / f"{name}.out")
+    upper_body = body.upper()
+    if any(declaration in upper_body for declaration in GLUSTER_XML_FORBIDDEN_DECLARATIONS):
+        return None, f"{label} returned unsafe XML declarations"
     try:
-        root = xml.fromstring(read_text(stage / f"{name}.out"))
+        # The staged file is local Gluster CLI output, and DTD/entity declarations
+        # are rejected above before the standard-library parser sees the body.
+        root = xml.fromstring(body)  # noqa: S314
     except xml.ParseError:
         return None, f"{label} returned invalid XML"
     if root.tag != GLUSTER_CLI_OUTPUT_TAG:
@@ -1556,17 +1570,20 @@ def gluster_cluster_check(stage: Path, service_name: str) -> tuple[dict | None, 
             (option.findtext("name") or "").strip(): (option.findtext("value") or "").strip().lower()
             for option in volume.findall("./options/option")
         }
-        expected: dict[str, object] = {
-            "bricks": int(bricks_text),
-            "max_heal_entries": 0,
-            "max_split_brain_entries": 0,
-        }
+        expected: dict[str, object] = {"bricks": int(bricks_text)}
         has_self_heal_daemon = any(
             (node.findtext("hostname") or "").strip() == GLUSTER_SELF_HEAL_DAEMON
             for node in status.findall("./node")
         )
         if options.get(GLUSTER_SELF_HEAL_OPTION) == GLUSTER_SELF_HEAL_ENABLED or has_self_heal_daemon:
             expected["self_heal"] = True
+            # Heal limits only for volumes that actually self-heal. `gluster
+            # volume heal <vol> info` fails on a pure distribute volume, and the
+            # check surfaces that failure as Unavailable for the whole host — so
+            # one distribute volume would blind peer, volume, brick and self-heal
+            # reporting everywhere.
+            expected["max_heal_entries"] = 0
+            expected["max_split_brain_entries"] = 0
         volumes[name] = expected
     if not volumes:
         return None, {"active": False, "reason": "Gluster CLI reported no valid volumes"}
@@ -1824,7 +1841,11 @@ dry_run: true
             body += process_override
         service_watches = {watch_name: {"enabled": False} for watch_name in sorted(disabled_watches)}
         if gluster_check is not None:
-            service_watches["cluster"] = {"interval": GLUSTER_CLUSTER_INTERVAL, "check": gluster_check}
+            service_watches["cluster"] = {
+                "interval": GLUSTER_CLUSTER_INTERVAL,
+                "for": {"cycles": GLUSTER_CLUSTER_PERSIST_CYCLES},
+                "check": gluster_check,
+            }
         if name == "ssh":
             service_watches.update(terminal_watches)
             report["terminal_sessions"] = terminal_sessions

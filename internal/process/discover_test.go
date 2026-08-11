@@ -505,6 +505,26 @@ func TestParseSelectors(t *testing.T) {
 	}
 }
 
+func TestParseSelectorsRejectsNonBooleanDelegated(t *testing.T) {
+	tree := map[string]any{
+		"processes": map[string]any{
+			"shim": map[string]any{
+				"exe":       "/opt/sermo-test/containerd-shim",
+				"user":      "root",
+				"delegated": "true",
+			},
+		},
+	}
+
+	selectors, warnings := ParseSelectors(tree)
+	if len(selectors) != 0 {
+		t.Fatalf("selectors = %+v, want malformed delegated selector dropped", selectors)
+	}
+	if len(warnings) != 1 || !strings.Contains(warnings[0], "delegated must be a boolean") {
+		t.Fatalf("warnings = %v, want delegated boolean warning", warnings)
+	}
+}
+
 func TestParseSelectorsPidfilesByRole(t *testing.T) {
 	tree := map[string]any{
 		"pidfiles": map[string]any{
@@ -579,5 +599,79 @@ func TestMatchesCmdAndGroup(t *testing.T) {
 	// a selector with neither exe nor cmd never matches.
 	if d.matches(&Selector{Type: "command_match", User: "u"}, id, d.ResolveUser) {
 		t.Fatal("user-only selector must never match")
+	}
+}
+
+// A delegated process owns everything it spawns: an SSH session owns the user's
+// shell and whatever that shell runs, and none of those match a selector of their
+// own. Without inheritance the tail of the tree counts as residuals of the stop,
+// and a staged restart never reaches its start phase while anyone is logged in.
+func TestDiscoverDelegationFlowsDownTheTree(t *testing.T) {
+	reader := fakeReader{ids: map[int]Identity{
+		10: {PID: 10, PPID: 1, UID: 0, User: "root", Exe: "/opt/sermo-test/sshd", ExeOK: true,
+			Cmdline: []string{"sshd:", "/opt/sermo-test/sshd", "-D", "[listener]"}},
+		11: {PID: 11, PPID: 10, UID: 0, User: "root", Exe: "/opt/sermo-test/sshd-session", ExeOK: true,
+			Cmdline: []string{"sshd-session:", "fran", "[priv]"}},
+		12: {PID: 12, PPID: 11, UID: 500, User: "fran", Exe: "/opt/sermo-test/sshd-session", ExeOK: true,
+			Cmdline: []string{"sshd-session:", "fran@pts/0"}},
+		13: {PID: 13, PPID: 12, UID: 500, User: "fran", Exe: "/bin/bash", ExeOK: true,
+			Cmdline: []string{"-bash"}},
+	}}
+	d := Discoverer{Reader: reader, ResolveUser: fakeUsers(map[string]uint32{"root": 0})}
+
+	procs, warns := d.Discover([]Selector{
+		{Name: "main", Type: SelectorCommandMatch, Exe: "/opt/sermo-test/sshd", User: "root"},
+		{Name: "session", Type: SelectorCommandMatch, Cmd: `^sshd(-session)?: [^ /]+(@| \[priv\])`, Delegated: true},
+	})
+	if len(warns) != 0 {
+		t.Fatalf("warnings = %v", warns)
+	}
+	byPID := map[int]Process{}
+	for _, proc := range procs {
+		byPID[proc.PID] = proc
+	}
+
+	listener, ok := byPID[10]
+	if !ok {
+		t.Fatal("the listener was not discovered")
+	}
+	if listener.Delegated {
+		t.Fatal("the listener must stay signallable; only its sessions are delegated")
+	}
+	for _, pid := range []int{11, 12, 13} {
+		proc, ok := byPID[pid]
+		if !ok {
+			t.Fatalf("pid %d was not discovered", pid)
+		}
+		if !proc.Delegated {
+			t.Fatalf("pid %d (%v) must inherit delegation from its session", pid, proc.Cmdline)
+		}
+	}
+}
+
+func TestDiscoverWithoutDelegatedSelectorsSkipsDelegationRematch(t *testing.T) {
+	reader := fakeReader{ids: map[int]Identity{
+		10: {
+			PID: 10, PPID: 1, UID: 0, User: "root",
+			Exe: "/opt/sermo-test/daemon", ExeOK: true,
+		},
+	}}
+	resolveCalls := 0
+	d := Discoverer{
+		Reader: reader,
+		ResolveUser: func(string) (uint32, bool) {
+			resolveCalls++
+			return 0, true
+		},
+	}
+
+	procs, warnings := d.Discover([]Selector{
+		{Name: RoleMain, Type: SelectorCommandMatch, Exe: "/opt/sermo-test/daemon", User: "root"},
+	})
+	if len(warnings) != 0 || len(procs) != 1 {
+		t.Fatalf("processes=%+v warnings=%v, want one process", procs, warnings)
+	}
+	if resolveCalls != 1 {
+		t.Fatalf("user resolutions = %d, want 1 without a delegated rematch", resolveCalls)
 	}
 }

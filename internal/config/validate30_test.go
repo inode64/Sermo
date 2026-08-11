@@ -1760,6 +1760,25 @@ processes:
 		"processes.badcmd.cmd is not a valid regex")
 }
 
+// delegated bars a process from every kill decision, so it must be a real
+// boolean: read leniently, a stray string would come back false and silently
+// re-expose the workload the flag exists to protect.
+func TestValidateProcessSelectorDelegatedMustBeBoolean(t *testing.T) {
+	assertServiceValidationTokens(t, `
+name: svc
+service: x
+processes:
+  shim: { exe: /usr/bin/containerd-shim, user: root, delegated: true }
+  main: { exe: /usr/bin/containerd, user: root, delegated: false }
+`, []string{"processes.shim", "processes.main"}, `
+name: svc
+service: x
+processes:
+  shim: { exe: /usr/bin/containerd-shim, user: root, delegated: "true" }
+`,
+		"processes.shim.delegated must be a boolean")
+}
+
 func TestValidateVersionsCurrentFromSpecs(t *testing.T) {
 	global := writeConfig(t, map[string]string{
 		"sermo.yml": baseGlobal,

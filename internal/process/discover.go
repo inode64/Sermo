@@ -139,11 +139,52 @@ func (d Discoverer) Discover(selectors []Selector) ([]Process, []string) {
 		add(snapshot[pid], RoleChild, sourceChild)
 	}
 
+	// 4. delegated marking. The helper keeps the common no-delegation case on a
+	// cheap fast path and owns the extra identity/tree work for the few services
+	// that need it.
+	d.markDelegated(selectors, found, idx, resolve)
+
 	result := make([]Process, 0, len(order))
 	for _, pid := range order {
 		result = append(result, found[pid])
 	}
 	return result, warnings
+}
+
+// markDelegated marks processes matched by delegated selectors and propagates
+// that ownership down their child trees. Most services declare no such selector,
+// so they return after one selector scan without extra process matching, maps or
+// tree traversal.
+func (d Discoverer) markDelegated(selectors []Selector, found map[int]Process, idx *snapshotIndex, resolve UserResolver) {
+	var delegatedSelectors []Selector
+	for _, selector := range selectors {
+		if selector.Delegated {
+			delegatedSelectors = append(delegatedSelectors, selector)
+		}
+	}
+	if len(delegatedSelectors) == 0 {
+		return
+	}
+
+	// Resolve by identity rather than by role: a backend seed labels every PID
+	// in the unit's cgroup Role "main" before command selectors name workload
+	// children. Delegation then flows down the tree because a workload owns
+	// everything it spawns.
+	delegated := map[int]bool{}
+	for pid := range found {
+		if d.matchesAny(delegatedSelectors, idx.byPID[pid], resolve) {
+			delegated[pid] = true
+		}
+	}
+	for _, pid := range descendants(idx.children, slices.Sorted(maps.Keys(delegated))) {
+		delegated[pid] = true
+	}
+	for pid := range delegated {
+		if proc, ok := found[pid]; ok {
+			proc.Delegated = true
+			found[pid] = proc
+		}
+	}
 }
 
 // StaleBinary reports one process still running a binary that was replaced or
@@ -411,7 +452,7 @@ func (d Discoverer) StrictMatchPID(pid int, selectors []Selector) (Process, bool
 	}
 	resolve := d.resolveUser()
 	for i := range selectors {
-		if selectors[i].Type != SelectorCommandMatch || selectors[i].Exe == "" || selectors[i].User == "" {
+		if !strictIdentity(&selectors[i]) {
 			continue
 		}
 		if d.matches(&selectors[i], id, resolve) {
@@ -423,8 +464,11 @@ func (d Discoverer) StrictMatchPID(pid int, selectors []Selector) (Process, bool
 
 // matches reports whether a process satisfies a command selector. Every
 // configured field is ANDed. Exe is matched by exact resolved /proc/<pid>/exe;
-// cmd is an explicit regex over argv used only to narrow discovery for shared
-// binaries, not to authorize signaling.
+// cmd is an explicit regex over argv that narrows a shared binary down to one
+// role. cmd never authorizes signaling on its own — a killable process must
+// still match the exact resolved exe and the real UID — but it does narrow the
+// identity derived by EnableAutomaticReaping, so a selector that distinguishes
+// a daemon from its workload children keeps that distinction when signalling.
 func (d Discoverer) matches(sel *Selector, id Identity, resolve UserResolver) bool {
 	// At least one process-shape matcher is required; a selector is never user/group-only
 	// (so a bare owner can never select unrelated processes).
@@ -449,6 +493,33 @@ func selectorExePath(sel *Selector) string {
 	return canonicalizePath(sel.Exe)
 }
 
+// strictIdentity reports whether a selector carries an identity strong enough to
+// authorize signalling: a command selector with both an exact executable and a
+// real user. Safety invariants 5 and 7 are stated in exactly those terms, so the
+// derived kill authority and the strict PID match share one definition of it
+// rather than restating the predicate apart from each other.
+func strictIdentity(sel *Selector) bool {
+	return sel.Type == SelectorCommandMatch && sel.Exe != "" && sel.User != ""
+}
+
+// selectorCmdRegexp returns the selector's compiled cmd regex, compiling lazily
+// when ParseSelectors did not and nil when the selector declares no cmd or the
+// pattern does not compile. A nil result means "this selector adds no cmd
+// constraint", so callers must treat it as no-match only where cmd was declared.
+func selectorCmdRegexp(sel *Selector) *regexp.Regexp {
+	if sel.Cmd == "" {
+		return nil
+	}
+	if sel.cmdRe != nil {
+		return sel.cmdRe
+	}
+	re, err := regexp.Compile(sel.Cmd)
+	if err != nil {
+		return nil
+	}
+	return re
+}
+
 // matchesDeletedExe reports whether sel would have matched id if id's binary had
 // not been replaced on disk: the deleted path is exactly the selector's exe and
 // every other field matches. It authorizes nothing — matches() still returns
@@ -469,14 +540,8 @@ func (d Discoverer) matchesDeletedExe(sel *Selector, id Identity, resolve UserRe
 // live and deleted-exe matchers.
 func (d Discoverer) matchesNonExe(sel *Selector, id Identity, resolve UserResolver) bool {
 	if sel.Cmd != "" {
-		re := sel.cmdRe
-		if re == nil {
-			var err error
-			if re, err = regexp.Compile(sel.Cmd); err != nil {
-				return false
-			}
-		}
-		if !re.MatchString(strings.Join(id.Cmdline, " ")) {
+		re := selectorCmdRegexp(sel)
+		if re == nil || !re.MatchString(strings.Join(id.Cmdline, " ")) {
 			return false
 		}
 	}
@@ -687,13 +752,23 @@ func ParseSelectors(tree map[string]any) ([]Selector, []string) {
 			warnings = append(warnings, fmt.Sprintf("process selector %q is not a mapping", name))
 			continue
 		}
+		delegated := false
+		if value, present := entry[SelectorKeyDelegated]; present {
+			var valid bool
+			delegated, valid = value.(bool)
+			if !valid {
+				warnings = append(warnings, fmt.Sprintf("process selector %q delegated must be a boolean", name))
+				continue
+			}
+		}
 		sel := Selector{
-			Name:  name,
-			Type:  SelectorCommandMatch,
-			Exe:   cfgval.AsString(entry[SelectorKeyExe]),
-			Cmd:   cfgval.AsString(entry[SelectorKeyCmd]),
-			User:  cfgval.AsString(entry[SelectorKeyUser]),
-			Group: cfgval.AsString(entry[SelectorKeyGroup]),
+			Name:      name,
+			Type:      SelectorCommandMatch,
+			Exe:       cfgval.AsString(entry[SelectorKeyExe]),
+			Cmd:       cfgval.AsString(entry[SelectorKeyCmd]),
+			User:      cfgval.AsString(entry[SelectorKeyUser]),
+			Group:     cfgval.AsString(entry[SelectorKeyGroup]),
+			Delegated: delegated,
 		}
 		if sel.Exe != "" {
 			sel.exePath = canonicalizePath(sel.Exe)

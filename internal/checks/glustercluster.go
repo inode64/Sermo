@@ -82,9 +82,13 @@ type glusterVolumeNodeXML struct {
 }
 
 type glusterHealBrickXML struct {
-	Name            string `xml:"name"`
-	Status          string `xml:"status"`
-	NumberOfEntries int    `xml:"numberOfEntries"`
+	Name   string `xml:"name"`
+	Status string `xml:"status"`
+	// NumberOfEntries stays a string on purpose. Gluster writes "-" instead of a
+	// count for a brick that cannot answer — a disconnected one, typically — and
+	// an int field fails the whole document's unmarshal on it, which would take
+	// the entire check Unavailable over a single unreachable brick.
+	NumberOfEntries string `xml:"numberOfEntries"`
 }
 
 func (c glusterClusterCheck) Run(ctx context.Context) Result {
@@ -179,11 +183,11 @@ func (c glusterClusterCheck) evaluateVolumes(volumes []glusterVolumeXML, statuse
 			observation.issues = append(observation.issues, "volume "+name+" has no runtime status")
 			continue
 		}
-		c.evaluateVolumeStatus(name, expectation, status.Nodes, observation)
+		evaluateGlusterVolumeStatus(name, expectation, status.Nodes, observation)
 	}
 }
 
-func (c glusterClusterCheck) evaluateVolumeStatus(name string, expectation glusterVolumeExpectation, nodes []glusterVolumeNodeXML, observation *glusterClusterObservation) {
+func evaluateGlusterVolumeStatus(name string, expectation glusterVolumeExpectation, nodes []glusterVolumeNodeXML, observation *glusterClusterObservation) {
 	selfHealFound := false
 	for _, node := range nodes {
 		if node.Hostname == glusterSelfHealDaemon {
@@ -215,8 +219,9 @@ func (c glusterClusterCheck) evaluateHeals(ctx context.Context, observation *glu
 			if err != nil {
 				return err
 			}
-			entries := glusterHealEntries(heal.Heals)
+			entries, unreported := glusterHealEntries(heal.Heals)
 			observation.healEntries += entries
+			observation.issues = append(observation.issues, glusterUnreportedHealIssues(name, unreported)...)
 			if entries > *expectation.maxHealEntries {
 				observation.issues = append(observation.issues, fmt.Sprintf("volume %s has %d pending self-heal entries (limit %d)", name, entries, *expectation.maxHealEntries))
 			}
@@ -226,8 +231,9 @@ func (c glusterClusterCheck) evaluateHeals(ctx context.Context, observation *glu
 			if err != nil {
 				return err
 			}
-			entries := glusterHealEntries(splitBrain.Heals)
+			entries, unreported := glusterHealEntries(splitBrain.Heals)
 			observation.splitBrainEntries += entries
+			observation.issues = append(observation.issues, glusterUnreportedHealIssues(name, unreported)...)
 			if entries > *expectation.maxSplitBrainEntries {
 				observation.issues = append(observation.issues, fmt.Sprintf("volume %s has %d split-brain entries (limit %d)", name, entries, *expectation.maxSplitBrainEntries))
 			}
@@ -236,12 +242,45 @@ func (c glusterClusterCheck) evaluateHeals(ctx context.Context, observation *glu
 	return nil
 }
 
-func glusterHealEntries(bricks []glusterHealBrickXML) int {
-	entries := 0
+// glusterHealEntries totals the heal entries a heal-info document reports and
+// names the bricks that could not report one. Gluster writes "-" for those,
+// which is a fact about that brick — not a reason to discard the peer, volume,
+// brick and self-heal state the check already collected.
+func glusterHealEntries(bricks []glusterHealBrickXML) (entries int, unreported []string) {
 	for _, brick := range bricks {
-		entries += brick.NumberOfEntries
+		count, err := strconv.Atoi(strings.TrimSpace(brick.NumberOfEntries))
+		if err != nil {
+			unreported = append(unreported, glusterHealBrickLabel(brick))
+			continue
+		}
+		entries += count
 	}
-	return entries
+	return entries, unreported
+}
+
+// glusterUnreportedHealIssues turns the bricks that gave no heal count into one
+// issue each. Both heal queries share the phrasing, and identical strings are
+// deduplicated later, so a brick silent in both queries is reported once.
+func glusterUnreportedHealIssues(volume string, unreported []string) []string {
+	issues := make([]string, 0, len(unreported))
+	for _, brick := range unreported {
+		issues = append(issues, "volume "+volume+" brick "+brick+" reported no heal count")
+	}
+	return issues
+}
+
+// glusterHealBrickLabel names one brick for an issue message, carrying the
+// status Gluster gave for it when there is one — that status is usually the
+// reason the count is missing.
+func glusterHealBrickLabel(brick glusterHealBrickXML) string {
+	name := strings.TrimSpace(brick.Name)
+	if name == "" {
+		name = "(unnamed brick)"
+	}
+	if status := strings.TrimSpace(brick.Status); status != "" {
+		return name + " (" + status + ")"
+	}
+	return name
 }
 
 func (c glusterClusterCheck) resultFor(observation glusterClusterObservation, start time.Time) Result {
@@ -354,39 +393,39 @@ func parseGlusterClusterConfig(entry map[string]any) ([]string, map[string]glust
 		return nil, nil, err
 	}
 	if len(peers) == 0 && len(volumes) == 0 {
-		return nil, nil, fmt.Errorf("requires peers and/or volumes")
+		return nil, nil, errors.New("requires peers and/or volumes")
 	}
 	return peers, volumes, nil
 }
 
 func parseGlusterPeers(raw any) ([]string, error) {
 	if raw == nil {
-		return nil, nil
+		return []string{}, nil
 	}
 	peers, err := cfgval.StrictStringArray(raw)
 	if err != nil || len(peers) == 0 {
-		return nil, fmt.Errorf("peers must be a non-empty list of names")
+		return nil, errors.New("peers must be a non-empty list of names")
 	}
 	for i := range peers {
 		peers[i] = strings.TrimSpace(peers[i])
 		if peers[i] == "" {
-			return nil, fmt.Errorf("peers must not contain empty names")
+			return nil, errors.New("peers must not contain empty names")
 		}
 	}
 	normalized := uniqueGlusterStrings(peers)
 	if len(normalized) != len(peers) {
-		return nil, fmt.Errorf("peers must not contain duplicate names")
+		return nil, errors.New("peers must not contain duplicate names")
 	}
 	return normalized, nil
 }
 
 func parseGlusterVolumes(raw any) (map[string]glusterVolumeExpectation, error) {
 	if raw == nil {
-		return nil, nil
+		return map[string]glusterVolumeExpectation{}, nil
 	}
 	entries, ok := raw.(map[string]any)
 	if !ok || len(entries) == 0 {
-		return nil, fmt.Errorf("volumes must be a non-empty mapping")
+		return nil, errors.New("volumes must be a non-empty mapping")
 	}
 	volumes := make(map[string]glusterVolumeExpectation, len(entries))
 	for _, name := range slices.Sorted(maps.Keys(entries)) {
@@ -414,12 +453,19 @@ func parseGlusterVolumes(raw any) (map[string]glusterVolumeExpectation, error) {
 			}
 			expectation.selfHeal = value
 		}
-		var err error
-		if expectation.maxHealEntries, err = parseGlusterLimit(name, CheckKeyMaxHealEntries, rawExpectation); err != nil {
+		maxHealEntries, hasMaxHealEntries, err := parseGlusterLimit(name, CheckKeyMaxHealEntries, rawExpectation)
+		if err != nil {
 			return nil, err
 		}
-		if expectation.maxSplitBrainEntries, err = parseGlusterLimit(name, CheckKeyMaxSplitBrainEntries, rawExpectation); err != nil {
+		if hasMaxHealEntries {
+			expectation.maxHealEntries = &maxHealEntries
+		}
+		maxSplitBrainEntries, hasMaxSplitBrainEntries, err := parseGlusterLimit(name, CheckKeyMaxSplitBrainEntries, rawExpectation)
+		if err != nil {
 			return nil, err
+		}
+		if hasMaxSplitBrainEntries {
+			expectation.maxSplitBrainEntries = &maxSplitBrainEntries
 		}
 		volumes[name] = expectation
 	}
@@ -437,16 +483,16 @@ func IsGlusterClusterVolumeField(key string) bool {
 	}
 }
 
-func parseGlusterLimit(volume, key string, entry map[string]any) (*int, error) {
+func parseGlusterLimit(volume, key string, entry map[string]any) (limit int, present bool, err error) {
 	raw, present := entry[key]
 	if !present {
-		return nil, nil
+		return 0, false, nil
 	}
 	limit, ok := cfgval.Int(raw)
 	if !ok || limit < 0 {
-		return nil, fmt.Errorf("volume %s %s must be a non-negative integer", volume, key)
+		return 0, true, fmt.Errorf("volume %s %s must be a non-negative integer", volume, key)
 	}
-	return &limit, nil
+	return limit, true, nil
 }
 
 // IsGlusterVolumeName reports whether name is safe to pass as one argv element

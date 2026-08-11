@@ -178,10 +178,11 @@ still follow the init backend and retain their normal locks, guards and
 preflight gates. The warning only prevents a working workload from being
 presented as an application outage.
 
-A backend status of `unknown` is not a verdict of "down" — an init script that
-replaces `status` with its own report, or a query that timed out, reads unknown
-while the service runs normally — so it never yields `failed` on its own. The
-service's own checks decide instead: a failing required check still reads
+A backend status of `unknown` is not a verdict of "down" — a transitional
+systemd state such as `activating`/`deactivating`, an init script that replaces
+`status` with its own report, or a query that timed out can read unknown while
+the service runs normally — so it never yields `failed` on its own. The service's
+own checks decide instead: a failing required check still reads
 `failed`, and healthy checks read `active` or `collecting` rather than
 `monitored`, because a backend that would not answer cannot underwrite the
 full-observability claim.

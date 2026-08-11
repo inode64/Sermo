@@ -1179,6 +1179,9 @@ class GlusterClusterGenerationTest(unittest.TestCase):
         check = body["watches"]["cluster"]
 
         self.assertEqual(check["interval"], generator.GLUSTER_CLUSTER_INTERVAL)
+        # Transient heals recover within one or two intervals, so the watch only
+        # counts a condition that persists; the entry limits stay strict at 0.
+        self.assertEqual(check["for"], {"cycles": generator.GLUSTER_CLUSTER_PERSIST_CYCLES})
         self.assertEqual(check["check"]["type"], "gluster_cluster")
         self.assertEqual(check["check"]["peers"], ["apolo", "zeus"])
         self.assertEqual(check["check"]["volumes"]["images"]["bricks"], 3)
@@ -1190,6 +1193,33 @@ class GlusterClusterGenerationTest(unittest.TestCase):
         self.assertTrue(entry["active"])
         self.assertEqual(entry["source"], "gluster CLI XML inventory")
 
+    def test_omits_heal_limits_for_volumes_without_self_heal(self):
+        """A distribute volume has no heal to report: `gluster volume heal` fails
+        on it, and that failure would leave the whole check Unavailable."""
+        root, stage = self.stage()
+        self.write_xml(stage, "gluster_peer_status", "<peerStatus><peer><hostname>zeus</hostname></peer></peerStatus>")
+        self.write_xml(
+            stage,
+            "gluster_volume_info",
+            """<volInfo><volumes>
+<volume><name>scratch</name><brickCount>2</brickCount></volume>
+</volumes></volInfo>""",
+        )
+        self.write_xml(
+            stage,
+            "gluster_volume_status",
+            "<volStatus><volumes><volume><volName>scratch</volName></volume></volumes></volStatus>",
+        )
+
+        generator.generate_for_host("host", stage, root / "configs", default_options())
+        body = yaml.safe_load((root / "configs/host/root/etc/sermo/services/glusterd.yml").read_text(encoding="utf-8"))
+        scratch = body["watches"]["cluster"]["check"]["volumes"]["scratch"]
+
+        self.assertEqual(scratch["bricks"], 2)
+        self.assertNotIn("self_heal", scratch)
+        self.assertNotIn("max_heal_entries", scratch)
+        self.assertNotIn("max_split_brain_entries", scratch)
+
     def test_keeps_only_local_liveness_when_xml_evidence_is_missing(self):
         root, stage = self.stage()
 
@@ -1200,6 +1230,21 @@ class GlusterClusterGenerationTest(unittest.TestCase):
         entry = report["services"]["enabled"][0]["gluster_cluster"]
         self.assertFalse(entry["active"])
         self.assertIn("not collected", entry["reason"])
+
+    def test_rejects_gluster_xml_with_entity_declarations(self):
+        root, stage = self.stage()
+        (stage / "gluster_peer_status.rc").write_text("0\n", encoding="utf-8")
+        (stage / "gluster_peer_status.out").write_text(
+            '<!DOCTYPE cliOutput [<!ENTITY xxe SYSTEM "file:///etc/passwd">]>'
+            "<cliOutput><opRet>0</opRet><peerStatus>&xxe;</peerStatus></cliOutput>",
+            encoding="utf-8",
+        )
+
+        report = generator.generate_for_host("host", stage, root / "configs", default_options())
+
+        entry = report["services"]["enabled"][0]["gluster_cluster"]
+        self.assertFalse(entry["active"])
+        self.assertIn("unsafe XML declarations", entry["reason"])
 
     def test_collectors_capture_gluster_xml(self):
         root = Path(__file__).resolve().parent
