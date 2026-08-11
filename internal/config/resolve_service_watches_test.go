@@ -372,3 +372,41 @@ func hasIssueSubstr(errs []string, sub string) bool {
 	}
 	return false
 }
+
+// A watch that declares no `then:` is promoted to a plain check and its entry is
+// removed, so no rule is generated for it. A `for:` window on such a watch is
+// therefore inert — only buildServiceWatchRule ever carries one, and that runs
+// solely on the `then:` path. `optional` behaves the opposite way: it lives
+// inside the check itself and survives the promotion, which is what keeps a
+// transient breach a warning instead of an unavailable service.
+func TestCheckOnlyWatchKeepsOptionalAndGeneratesNoRule(t *testing.T) {
+	tree, errs := resolveWatchService(t, `
+watches:
+  cluster:
+    interval: 2m
+    for:
+      cycles: 3
+    check:
+      type: gluster_cluster
+      optional: true
+      volumes:
+        images:
+          bricks: 2
+          self_heal: true
+          max_heal_entries: 0
+          max_split_brain_entries: 0
+`)
+	if len(errs) != 0 {
+		t.Fatalf("resolve errors = %v", errs)
+	}
+
+	check := nested(t, tree, "checks", "cluster")
+	if !cfgval.Bool(check["optional"]) {
+		t.Fatal("optional must survive the promotion; it is what keeps a transient breach a warning")
+	}
+	if ruleMap, ok := tree["rules"].(map[string]any); ok {
+		if _, exists := ruleMap["cluster"]; exists {
+			t.Fatal("a check-only watch generates no rule, so its for: window is inert; if that changed, revisit the window instead of relying on optional")
+		}
+	}
+}

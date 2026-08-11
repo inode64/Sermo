@@ -675,3 +675,53 @@ func TestDiscoverWithoutDelegatedSelectorsSkipsDelegationRematch(t *testing.T) {
 		t.Fatalf("user resolutions = %d, want 1 without a delegated rematch", resolveCalls)
 	}
 }
+
+// A package update that replaces a binary without restarting the daemon leaves
+// the process with an unresolvable exe, which already makes it unkillable. If
+// delegation also stopped recognizing it, the process would be a residual that
+// nothing may signal — and every staged stop would end in orphan_processes with
+// the service left stopped. Observed in production on libvirt's dnsmasq pair.
+func TestDiscoverDelegatesProcessWithReplacedBinary(t *testing.T) {
+	const exe = "/opt/sermo-test/dnsmasq"
+	reader := fakeReader{ids: map[int]Identity{
+		20: {PID: 20, PPID: 1, UID: 0, User: "root", Exe: "/opt/sermo-test/virtnetworkd", ExeOK: true,
+			Cmdline: []string{"/opt/sermo-test/virtnetworkd"}},
+		21: {PID: 21, PPID: 1, UID: 0, User: "root", ExeOK: false, ExePrev: exe,
+			Cmdline: []string{exe, "--conf-file=/var/lib/libvirt/dnsmasq/default.conf"}},
+	}}
+	d := Discoverer{
+		Reader:      reader,
+		BackendPIDs: func() []int { return []int{20, 21} },
+		ResolveUser: fakeUsers(map[string]uint32{"root": 0}),
+	}
+
+	procs, warns := d.Discover([]Selector{
+		{Name: "main", Type: SelectorCommandMatch, Exe: "/opt/sermo-test/virtnetworkd", User: "root"},
+		{Name: "dnsmasq", Type: SelectorCommandMatch, Exe: exe, Cmd: "/var/lib/libvirt/dnsmasq/", User: "root", Delegated: true},
+	})
+	if len(warns) != 0 {
+		t.Fatalf("warnings = %v", warns)
+	}
+	byPID := map[int]Process{}
+	for _, proc := range procs {
+		byPID[proc.PID] = proc
+	}
+
+	daemon, ok := byPID[20]
+	if !ok {
+		t.Fatal("the daemon was not discovered")
+	}
+	if daemon.Delegated {
+		t.Fatal("the daemon itself must stay signallable")
+	}
+	stale, ok := byPID[21]
+	if !ok {
+		t.Fatal("the process with the replaced binary was not discovered")
+	}
+	if stale.ExeOK {
+		t.Fatal("this case is only meaningful while the exe stays unresolvable")
+	}
+	if !stale.Delegated {
+		t.Fatal("a delegated selector must still claim its process after the binary was replaced")
+	}
+}
