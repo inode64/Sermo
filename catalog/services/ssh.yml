@@ -30,6 +30,17 @@ processes:
   main:
     exe: ${ssh_binary}
     user: ${user}
+  # Every SSH session hangs off the listener, and sshd's unit is KillMode=process
+  # so a stop deliberately leaves the connected ones alive. Match a session by its
+  # process title — `sshd-session: user@pts/0` or `sshd-session: user [priv]`, and
+  # the `sshd:` spelling before OpenSSH 9.8 — never the listener, whose title is
+  # `sshd: /usr/sbin/sshd -D [listener] …`. Delegation covers the rest of each
+  # session from there, down to the user's shell and whatever it runs. Without it
+  # the whole session tree counts as residuals of the stop, and a restart never
+  # reaches its start phase while anyone is logged in.
+  session:
+    cmd: '^sshd(-session)?: [^ /]+(@| \[priv\])'
+    delegated: true
 reload:
   signal: HUP
 watches:

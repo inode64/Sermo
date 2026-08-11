@@ -32,9 +32,13 @@ processes:
   main:
     exe: ${containerd_binary}
     user: ${user}
+  # A shim owns a running container and outlives a containerd restart on purpose.
+  # Delegated keeps it monitored while barring it from every kill decision, so
+  # neither a stop nor an init-state reconciliation can take containers down.
   shim:
     exe: ${containerd_shim_binary}
     user: ${user}
+    delegated: true
 restart_on_change:
   paths:
     - ${config}

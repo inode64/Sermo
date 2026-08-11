@@ -185,14 +185,14 @@ operaciones siguen el backend de init y mantienen sus locks, guards y preflight
 habituales. La advertencia solo evita presentar como caída de la aplicación una
 carga que continúa funcionando.
 
-Un estado de backend `unknown` no es un veredicto de «caído» —un script de init
-que sustituye `status` por su propio informe, o una consulta que agota el
-tiempo, se lee como unknown mientras el servicio funciona con normalidad—, así
-que por sí solo nunca produce `failed`. Deciden los checks del propio servicio:
-un check requerido que falla sigue leyéndose como `failed`, y con los checks
-correctos se lee `active` o `collecting` en lugar de `monitored`, porque un
-backend que no ha querido responder no puede respaldar la afirmación de
-observabilidad completa.
+Un estado de backend `unknown` no es un veredicto de «caído» —un estado
+transitorio de systemd como `activating`/`deactivating`, un script de init que
+sustituye `status` por su propio informe o una consulta que agota el tiempo puede
+leerse como unknown mientras el servicio funciona con normalidad—, así que por
+sí solo nunca produce `failed`. Deciden los checks del propio servicio: un check
+requerido que falla sigue leyéndose como `failed`, y con los checks correctos se
+lee `active` o `collecting` en lugar de `monitored`, porque un backend que no ha
+querido responder no puede respaldar la afirmación de observabilidad completa.
 
 Cada operación manual de servicio persiste exactamente un resultado en el
 registro compartido de eventos, por lo que `sermoctl events` y la WebUI muestran

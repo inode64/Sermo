@@ -4,6 +4,7 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -14,6 +15,7 @@ import (
 	"sermo/internal/cfgval"
 	"sermo/internal/checks"
 	"sermo/internal/conn"
+	"sermo/internal/process"
 	"sermo/internal/rules"
 )
 
@@ -71,6 +73,23 @@ func loadRepoCatalog(t *testing.T) *Config {
 		t.Fatalf("Load: %v", err)
 	}
 	return cfg
+}
+
+// catalogSelectorsByRole resolves one catalog service and returns its process
+// selectors keyed by role, the shape every assertion about process identity
+// needs: which role a profile declares, and what it may or may not signal.
+func catalogSelectorsByRole(t *testing.T, catalogService string) map[string]process.Selector {
+	t.Helper()
+	resolved := resolveCatalogService(t, catalogService, backendSystemd)
+	selectors, warnings := process.ParseSelectors(resolved.Tree)
+	if len(warnings) > 0 {
+		t.Fatalf("ParseSelectors(%s) warnings = %v", catalogService, warnings)
+	}
+	byRole := make(map[string]process.Selector, len(selectors))
+	for _, selector := range selectors {
+		byRole[selector.Name] = selector
+	}
+	return byRole
 }
 
 // walkCatalogDocs walks dir and calls fn with each YAML document's path and
@@ -356,23 +375,104 @@ func TestApacheCatalogRestartsOnHotWorkerThread(t *testing.T) {
 	}
 }
 
+// glusterd, its bricks and its self-heal daemon are all the same executable
+// running as root, so the profile has to separate them by cmdline: `main` is the
+// only role Sermo may ever stop, and the workload roles are delegated so a stop
+// neither counts nor signals them. The negative case carries as much weight as
+// the positive one — a brick's cmdline contains `glusterd-uuid`, which a careless
+// pattern would match, taking the node's storage down with the daemon.
+func TestGlusterdCatalogSeparatesDaemonFromDelegatedWorkload(t *testing.T) {
+	const (
+		daemonCmdline = "/usr/sbin/glusterd -p /run/glusterd.pid --log-level INFO"
+		brickCmdline  = "/usr/sbin/glusterfsd -s sirio --volfile-id images.sirio.srv-cluster-images " +
+			"--xlator-option *-posix.glusterd-uuid=70d985fe-711c-49d3-a1dd-dcfec248e3dc " +
+			"--process-name brick --brick-port 60759"
+		selfHealCmdline = "/usr/sbin/glusterfs -s localhost --volfile-id shd/images " +
+			"--process-name glustershd --client-pid=-6"
+	)
+
+	byRole := catalogSelectorsByRole(t, "glusterd")
+
+	main, ok := byRole[process.RoleMain]
+	if !ok {
+		t.Fatalf("glusterd declares no %q process role", process.RoleMain)
+	}
+	if main.Delegated {
+		t.Fatal("the management daemon must stay signallable; only its workload is delegated")
+	}
+	if main.Cmd == "" {
+		t.Fatal("main must narrow by cmd: exe and user alone cannot separate glusterd from its workload")
+	}
+	mainCmd := regexp.MustCompile(main.Cmd)
+	if !mainCmd.MatchString(daemonCmdline) {
+		t.Fatalf("main cmd %q does not match the management daemon", main.Cmd)
+	}
+
+	for role, cmdline := range map[string]string{"brick": brickCmdline, "selfheal": selfHealCmdline} {
+		if mainCmd.MatchString(cmdline) {
+			t.Fatalf("main cmd %q also matches the %s cmdline; a stop would signal the workload", main.Cmd, role)
+		}
+		selector, ok := byRole[role]
+		if !ok {
+			t.Fatalf("glusterd declares no %q process role", role)
+		}
+		if !selector.Delegated {
+			t.Fatalf("process role %q must be delegated so it is never signalled", role)
+		}
+		if !regexp.MustCompile(selector.Cmd).MatchString(cmdline) {
+			t.Fatalf("process role %q cmd %q does not match its own cmdline", role, selector.Cmd)
+		}
+	}
+}
+
+// sshd's unit is KillMode=process, so a stop leaves every connected session
+// alive. Those sessions are the service's own descendants, so unless the profile
+// declares them delegated they count as residuals and a restart never reaches its
+// start phase while anyone is logged in. The listener has to stay signallable
+// though, and its process title shares the `sshd: ` prefix — so the pattern is
+// only useful if it tells the two apart.
+func TestSSHCatalogDelegatesSessionsButNotTheListener(t *testing.T) {
+	const (
+		listenerTitle = "sshd: /usr/sbin/sshd -D -e [listener] 0 of 10-100 startups"
+		privsepTitle  = "sshd-session: fran [priv]"
+		sessionTitle  = "sshd-session: fran@pts/0"
+		legacyTitle   = "sshd: fran@pts/1"
+	)
+
+	byRole := catalogSelectorsByRole(t, "ssh")
+
+	main, ok := byRole[process.RoleMain]
+	if !ok {
+		t.Fatalf("ssh declares no %q process role", process.RoleMain)
+	}
+	if main.Delegated {
+		t.Fatal("the listener must stay signallable; only its sessions are delegated")
+	}
+	session, ok := byRole["session"]
+	if !ok {
+		t.Fatal("ssh declares no session process role")
+	}
+	if !session.Delegated {
+		t.Fatal("the session role must be delegated so a stop never signals a connected user")
+	}
+
+	title := regexp.MustCompile(session.Cmd)
+	if title.MatchString(listenerTitle) {
+		t.Fatalf("session cmd %q matches the listener; a stop could then never clean it up", session.Cmd)
+	}
+	for _, connected := range []string{privsepTitle, sessionTitle, legacyTitle} {
+		if !title.MatchString(connected) {
+			t.Fatalf("session cmd %q does not match %q", session.Cmd, connected)
+		}
+	}
+}
+
 // TestAllCatalogServicesDesugarInPreview locks that the catalog-preview path
 // (ResolveCatalog → resolveDocBody) runs the watch desugar like the daemon path,
 // so no rule-class watch survives unexpanded and remediation stays wired for
 // every catalog service reachable via the wizard/appinspect/web preview.
 func TestAllCatalogServicesDesugarInPreview(t *testing.T) {
-	root := repoRoot(t)
-	dir := t.TempDir()
-	global := filepath.Join(dir, "sermo.yml")
-	body := "paths:\n  services: []\n" +
-		"defaults:\n  policy: { cooldown: 5m }\n"
-	if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	cfg, err := loadConfig(t, global, WithCatalogDirs(repoCatalogDir(root)))
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
+	cfg := loadRepoCatalog(t)
 	for _, name := range cfg.CatalogServiceNames {
 		if strings.Contains(name, "%") {
 			continue // version templates materialize per instance elsewhere
@@ -803,17 +903,7 @@ func TestSyslogNGCtlCheckUsesCtlBinary(t *testing.T) {
 		t.Fatalf("syslog-ng ctl command[0] = %q, want ${ctl_binary}", command[0])
 	}
 
-	dir := t.TempDir()
-	global := filepath.Join(dir, "sermo.yml")
-	body := "paths:\n  services: []\n" +
-		"defaults:\n  policy: { cooldown: 5m }\n"
-	if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	cfg, err := loadConfig(t, global, WithCatalogDirs(repoCatalogDir(root)))
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
+	cfg := loadRepoCatalog(t)
 	resolved, errs := cfg.ResolveCatalog(CategoryService, "syslog-ng")
 	if len(errs) > 0 {
 		t.Fatalf("ResolveCatalog(syslog-ng): %v", errs)
@@ -865,17 +955,7 @@ func TestCatalogUnifiUsesMongodAppBinary(t *testing.T) {
 		t.Fatalf("unifi mongo exe = %q, want app variable ${mongod_binary}", got)
 	}
 
-	dir := t.TempDir()
-	global := filepath.Join(dir, "sermo.yml")
-	body := "paths:\n  services: []\n" +
-		"defaults:\n  policy: { cooldown: 5m }\n"
-	if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	cfg, err := loadConfig(t, global, WithCatalogDirs(repoCatalogDir(root)))
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
+	cfg := loadRepoCatalog(t)
 	resolved, errs := cfg.ResolveCatalog(CategoryService, "unifi")
 	if len(errs) > 0 {
 		t.Fatalf("ResolveCatalog(unifi): %v", errs)
@@ -902,17 +982,7 @@ func TestCatalogUnifiUsesMongodAppBinary(t *testing.T) {
 
 func TestNebulaMeshCatalogProfiles(t *testing.T) {
 	root := repoRoot(t)
-	dir := t.TempDir()
-	global := filepath.Join(dir, "sermo.yml")
-	body := "paths:\n  services: []\n" +
-		"defaults:\n  policy: { cooldown: 5m }\n"
-	if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	cfg, err := loadConfig(t, global, WithCatalogDirs(repoCatalogDir(root)))
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
+	cfg := loadRepoCatalog(t)
 
 	tests := []struct {
 		name          string
@@ -988,18 +1058,7 @@ func assertNebulaMeshCatalogProfile(t *testing.T, cfg *Config, root, name, app, 
 }
 
 func TestSMBCatalogUsesSMBDPidfile(t *testing.T) {
-	root := repoRoot(t)
-	dir := t.TempDir()
-	global := filepath.Join(dir, "sermo.yml")
-	body := "paths:\n  services: []\n" +
-		"defaults:\n  policy: { cooldown: 5m }\n"
-	if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	cfg, err := loadConfig(t, global, WithCatalogDirs(repoCatalogDir(root)))
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
+	cfg := loadRepoCatalog(t)
 	resolved, errs := cfg.ResolveCatalog(CategoryService, "smb")
 	if len(errs) > 0 {
 		t.Fatalf("ResolveCatalog(smb): %v", errs)
@@ -1028,18 +1087,7 @@ func TestSMBCatalogUsesSMBDPidfile(t *testing.T) {
 }
 
 func TestCockpitCatalogMonitorsSocketActivationUnit(t *testing.T) {
-	root := repoRoot(t)
-	dir := t.TempDir()
-	global := filepath.Join(dir, "sermo.yml")
-	body := "paths:\n  services: []\n" +
-		"defaults:\n  policy: { cooldown: 5m }\n"
-	if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	cfg, err := loadConfig(t, global, WithCatalogDirs(repoCatalogDir(root)))
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
+	cfg := loadRepoCatalog(t)
 	resolved, errs := cfg.ResolveCatalog(CategoryService, "cockpit")
 	if len(errs) > 0 {
 		t.Fatalf("ResolveCatalog(cockpit): %v", errs)
@@ -1072,18 +1120,7 @@ func TestCatalogServicesUseCanonicalServiceNames(t *testing.T) {
 	detectedOS = "gentoo"
 	defer func() { detectedOS = old }()
 
-	root := repoRoot(t)
-	dir := t.TempDir()
-	global := filepath.Join(dir, "sermo.yml")
-	body := "paths:\n  services: []\n" +
-		"defaults:\n  policy: { cooldown: 5m }\n"
-	if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	cfg, err := loadConfig(t, global, WithCatalogDirs(repoCatalogDir(root)))
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
+	cfg := loadRepoCatalog(t)
 
 	want := map[string][]string{
 		"automount":    {"autofs", "automount"},
@@ -1189,18 +1226,7 @@ func TestCatalogAppsDeclareHealthOrVersionSource(t *testing.T) {
 }
 
 func TestCatalogOptionalAppVersionsRequireHealth(t *testing.T) {
-	root := repoRoot(t)
-	dir := t.TempDir()
-	global := filepath.Join(dir, "sermo.yml")
-	body := "paths:\n  services: []\n" +
-		"defaults:\n  policy: { cooldown: 5m }\n"
-	if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	cfg, err := loadConfig(t, global, WithCatalogDirs(repoCatalogDir(root)))
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
+	cfg := loadRepoCatalog(t)
 
 	for _, name := range cfg.CatalogNamesInCategory(CategoryApp) {
 		doc := cfg.Apps[name]
@@ -1214,18 +1240,7 @@ func TestCatalogOptionalAppVersionsRequireHealth(t *testing.T) {
 }
 
 func TestCatalogAppsUseSharedVersionProviders(t *testing.T) {
-	root := repoRoot(t)
-	dir := t.TempDir()
-	global := filepath.Join(dir, "sermo.yml")
-	body := "paths:\n  services: []\n" +
-		"defaults:\n  policy: { cooldown: 5m }\n"
-	if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	cfg, err := loadConfig(t, global, WithCatalogDirs(repoCatalogDir(root)))
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
+	cfg := loadRepoCatalog(t)
 
 	sharedVersions := map[string]string{
 		"pmcd":          "pcp",
@@ -1257,18 +1272,7 @@ func TestCatalogAppsUseSharedVersionProviders(t *testing.T) {
 }
 
 func TestCatalogCupsUsesSingleCupsdApp(t *testing.T) {
-	root := repoRoot(t)
-	dir := t.TempDir()
-	global := filepath.Join(dir, "sermo.yml")
-	body := "paths:\n  services: []\n" +
-		"defaults:\n  policy: { cooldown: 5m }\n"
-	if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	cfg, err := loadConfig(t, global, WithCatalogDirs(repoCatalogDir(root)))
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
+	cfg := loadRepoCatalog(t)
 
 	resolved, errs := cfg.ResolveCatalog(CategoryService, "cups")
 	if len(errs) != 0 {
@@ -1304,17 +1308,7 @@ func TestCatalogCupsUsesSingleCupsdApp(t *testing.T) {
 
 func TestCatalogConfigPreflightsUseResolvedAppTools(t *testing.T) {
 	root := repoRoot(t)
-	dir := t.TempDir()
-	global := filepath.Join(dir, "sermo.yml")
-	body := "paths:\n  services: []\n" +
-		"defaults:\n  policy: { cooldown: 5m }\n"
-	if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	cfg, err := loadConfig(t, global, WithCatalogDirs(repoCatalogDir(root)))
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
+	cfg := loadRepoCatalog(t)
 
 	nebula := catalogDocByName(t, root, "services", "nebula-%i")
 	nebulaCommand := cfgval.StringList(nested(t, nebula, "preflight", "config")["command"])
@@ -1481,18 +1475,7 @@ func TestCatalogRAIDChecksAlertOnDegradedArrays(t *testing.T) {
 }
 
 func TestRequestedHostProfilesExist(t *testing.T) {
-	root := repoRoot(t)
-	dir := t.TempDir()
-	global := filepath.Join(dir, "sermo.yml")
-	body := "paths:\n  services: []\n" +
-		"defaults:\n  policy: { cooldown: 5m }\n"
-	if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	cfg, err := loadConfig(t, global, WithCatalogDirs(repoCatalogDir(root)))
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
+	cfg := loadRepoCatalog(t)
 
 	tests := []struct {
 		name        string
@@ -1672,18 +1655,7 @@ func TestCatalogNetworkManagerStatusIsAuxiliary(t *testing.T) {
 }
 
 func TestCatalogServiceProcessChecksUseLinkedAppBinaries(t *testing.T) {
-	root := repoRoot(t)
-	dir := t.TempDir()
-	global := filepath.Join(dir, "sermo.yml")
-	body := "paths:\n  services: []\n" +
-		"defaults:\n  policy: { cooldown: 5m }\n"
-	if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	cfg, err := loadConfig(t, global, WithCatalogDirs(repoCatalogDir(root)))
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
+	cfg := loadRepoCatalog(t)
 
 	tests := []struct {
 		name         string
@@ -1848,18 +1820,7 @@ func TestCatalogDaemonProcessChecksAreAuxiliary(t *testing.T) {
 }
 
 func TestCatalogForegroundPidfilesAreOptional(t *testing.T) {
-	root := repoRoot(t)
-	dir := t.TempDir()
-	global := filepath.Join(dir, "sermo.yml")
-	body := "paths:\n  services: []\n" +
-		"defaults:\n  policy: { cooldown: 5m }\n"
-	if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	cfg, err := loadConfig(t, global, WithCatalogDirs(repoCatalogDir(root)))
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
+	cfg := loadRepoCatalog(t)
 	for _, service := range []string{"rngd", "smartd"} {
 		resolved, errs := cfg.ResolveCatalog(CategoryService, service)
 		if len(errs) > 0 {
@@ -1874,18 +1835,7 @@ func TestCatalogForegroundPidfilesAreOptional(t *testing.T) {
 
 func assertCatalogUnixSocketHealth(t *testing.T, service, forbiddenCheck, socketPath string) {
 	t.Helper()
-	root := repoRoot(t)
-	dir := t.TempDir()
-	global := filepath.Join(dir, "sermo.yml")
-	body := "paths:\n  services: []\n" +
-		"defaults:\n  policy: { cooldown: 5m }\n"
-	if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	cfg, err := loadConfig(t, global, WithCatalogDirs(repoCatalogDir(root)))
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
+	cfg := loadRepoCatalog(t)
 	resolved, errs := cfg.ResolveCatalog(CategoryService, service)
 	if len(errs) > 0 {
 		t.Fatalf("ResolveCatalog(%s): %v", service, errs)
@@ -1946,18 +1896,7 @@ func TestCatalogVirtlogdUsesSocketHealth(t *testing.T) {
 }
 
 func TestCatalogServicesUseAppVariablesForBinaryRefs(t *testing.T) {
-	root := repoRoot(t)
-	dir := t.TempDir()
-	global := filepath.Join(dir, "sermo.yml")
-	body := "paths:\n  services: []\n" +
-		"defaults:\n  policy: { cooldown: 5m }\n"
-	if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	cfg, err := loadConfig(t, global, WithCatalogDirs(repoCatalogDir(root)))
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
+	cfg := loadRepoCatalog(t)
 
 	tests := []struct {
 		name              string
@@ -2058,17 +1997,7 @@ func TestCatalogServicesUseAppVariablesForBinaryRefs(t *testing.T) {
 
 func TestDatabaseCatalogServicesBlockRestartDuringBackup(t *testing.T) {
 	root := repoRoot(t)
-	dir := t.TempDir()
-	global := filepath.Join(dir, "sermo.yml")
-	body := "paths:\n  services: []\n" +
-		"defaults:\n  policy: { cooldown: 5m }\n"
-	if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	cfg, err := loadConfig(t, global, WithCatalogDirs(repoCatalogDir(root)))
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
+	cfg := loadRepoCatalog(t)
 
 	section := func(tree map[string]any, key string) map[string]any {
 		out, _ := tree[key].(map[string]any)
@@ -2446,18 +2375,7 @@ func assertRequiredWALGPreflight(t *testing.T, name string, preflight map[string
 }
 
 func TestCatalogServicesReuseLinkedAppBinaries(t *testing.T) {
-	root := repoRoot(t)
-	dir := t.TempDir()
-	global := filepath.Join(dir, "sermo.yml")
-	body := "paths:\n  services: []\n" +
-		"defaults:\n  policy: { cooldown: 5m }\n"
-	if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	cfg, err := loadConfig(t, global, WithCatalogDirs(repoCatalogDir(root)))
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
+	cfg := loadRepoCatalog(t)
 
 	for _, name := range cfg.CatalogServiceNames {
 		doc := cfg.CatalogServices[name]

@@ -297,17 +297,21 @@ func checkReadings(checkType string, data map[string]any) []web.WatchReading {
 }
 
 func glusterClusterCheckReadings(data map[string]any) []web.WatchReading {
-	rb := readingsFrom(data).
-		addInt(checks.DataKeyGlusterPeersConnected, watchReadingLabelGlusterPeersConnected).
-		addInt(checks.DataKeyGlusterPeersExpected, watchReadingLabelGlusterPeersExpected).
-		addInt(checks.DataKeyGlusterVolumesStarted, watchReadingLabelGlusterVolumesStarted).
-		addInt(checks.DataKeyGlusterVolumesExpected, watchReadingLabelGlusterVolumesExpected).
-		addInt(checks.DataKeyGlusterBricksOnline, watchReadingLabelGlusterBricksOnline).
-		addInt(checks.DataKeyGlusterBricksExpected, watchReadingLabelGlusterBricksExpected).
-		addInt(checks.DataKeyGlusterSelfHealOnline, watchReadingLabelGlusterSelfHealOnline).
-		addInt(checks.DataKeyGlusterSelfHealTotal, watchReadingLabelGlusterSelfHealTotal).
-		addInt(checks.DataKeyGlusterHealEntries, watchReadingLabelGlusterHealEntries).
-		addInt(checks.DataKeyGlusterSplitBrainEntries, watchReadingLabelGlusterSplitBrainEntries)
+	rb := readingsFrom(data)
+	for _, reading := range [...]struct{ field, label string }{
+		{checks.DataKeyGlusterPeersConnected, watchReadingLabelGlusterPeersConnected},
+		{checks.DataKeyGlusterPeersExpected, watchReadingLabelGlusterPeersExpected},
+		{checks.DataKeyGlusterVolumesStarted, watchReadingLabelGlusterVolumesStarted},
+		{checks.DataKeyGlusterVolumesExpected, watchReadingLabelGlusterVolumesExpected},
+		{checks.DataKeyGlusterBricksOnline, watchReadingLabelGlusterBricksOnline},
+		{checks.DataKeyGlusterBricksExpected, watchReadingLabelGlusterBricksExpected},
+		{checks.DataKeyGlusterSelfHealOnline, watchReadingLabelGlusterSelfHealOnline},
+		{checks.DataKeyGlusterSelfHealTotal, watchReadingLabelGlusterSelfHealTotal},
+		{checks.DataKeyGlusterHealEntries, watchReadingLabelGlusterHealEntries},
+		{checks.DataKeyGlusterSplitBrainEntries, watchReadingLabelGlusterSplitBrainEntries},
+	} {
+		rb.addInt(reading.field, reading.label)
+	}
 	if peers := readingStringList(data[checks.DataKeyGlusterPeersDisconnected]); len(peers) > 0 {
 		rb.add(checks.DataKeyGlusterPeersDisconnected, watchReadingLabelGlusterPeersDisconnected, strings.Join(peers, readingSummarySeparator))
 	}
@@ -318,8 +322,8 @@ func glusterClusterCheckReadings(data map[string]any) []web.WatchReading {
 }
 
 func readingStringList(value any) []string {
-	if strings, ok := value.([]string); ok {
-		return strings
+	if list, ok := value.([]string); ok {
+		return list
 	}
 	return cfgval.StringList(value)
 }

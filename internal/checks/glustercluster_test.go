@@ -140,6 +140,45 @@ func TestGlusterClusterCheckReportsTopologyFailures(t *testing.T) {
 	}
 }
 
+// Gluster writes "-" instead of a count for a brick that cannot answer. Parsed
+// into an int field that failed the whole document's unmarshal, so a single
+// unreachable brick took the entire check Unavailable — seen in production as
+// `parse XML: strconv.ParseInt: parsing "-": invalid syntax`, roughly twice an
+// hour. The brick must be reported and everything else still counted.
+func TestGlusterClusterCheckReportsBrickWithoutHealCount(t *testing.T) {
+	results := glusterClusterResults()
+	results["gluster --mode=script --xml volume heal images info"] = glusterXML(`
+<healInfo><bricks>
+  <brick><name>sirio:/bricks/images0</name><status>Connected</status><numberOfEntries>2</numberOfEntries></brick>
+  <brick><name>zeus:/bricks/images0</name><status>Transport endpoint is not connected</status><numberOfEntries>-</numberOfEntries></brick>
+</bricks></healInfo>`)
+	peers, volumes, err := parseGlusterClusterConfig(glusterClusterExpectation())
+	if err != nil {
+		t.Fatal(err)
+	}
+	check := glusterClusterCheck{
+		base:    base{name: "cluster", timeout: time.Second},
+		runner:  &glusterClusterRunner{results: results},
+		peers:   peers,
+		volumes: volumes,
+	}
+	result := check.Run(context.Background())
+
+	if result.Unavailable {
+		t.Fatalf("one brick without a heal count must not make the whole check unavailable: %+v", result)
+	}
+	if result.OK {
+		t.Fatalf("the brick that could not answer must be reported: %+v", result)
+	}
+	if !strings.Contains(result.Message, "zeus:/bricks/images0") ||
+		!strings.Contains(result.Message, "Transport endpoint is not connected") {
+		t.Fatalf("message must name the brick and why it could not answer: %q", result.Message)
+	}
+	if got := result.Data[DataKeyGlusterHealEntries]; got != 2 {
+		t.Fatalf("data[%s] = %v, want 2: the brick that did answer still counts", DataKeyGlusterHealEntries, got)
+	}
+}
+
 func TestGlusterClusterCheckCommandFailureIsUnavailable(t *testing.T) {
 	runner := &glusterClusterRunner{results: map[string]execx.Result{}, err: errors.New("gluster binary not found")}
 	result := (glusterClusterCheck{base: base{name: "cluster", timeout: time.Second}, runner: runner, peers: []string{"zeus"}}).Run(context.Background())

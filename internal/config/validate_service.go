@@ -32,6 +32,11 @@ const (
 		virt.ControlKeyHost + ", " +
 		virt.ControlKeyPort
 	controlSocketHostConflictMessage = "control must not set both socket and host"
+	processSelectorKeySummary        = process.SelectorKeyExe + ", " +
+		process.SelectorKeyCmd + ", " +
+		process.SelectorKeyUser + ", " +
+		process.SelectorKeyGroup + ", " +
+		process.SelectorKeyDelegated + " and " + keyEnableIf
 )
 
 var validMonitorModes = set(MonitorEnabled, MonitorDisabled, MonitorPrevious)
@@ -41,6 +46,7 @@ var validProcessSelectorKeys = set(
 	process.SelectorKeyCmd,
 	process.SelectorKeyUser,
 	process.SelectorKeyGroup,
+	process.SelectorKeyDelegated,
 	keyDelete,
 	keyEnableIf,
 )
@@ -239,7 +245,15 @@ func validateProcesses(tree map[string]any, add addFunc) {
 		}
 		for _, key := range slices.Sorted(maps.Keys(entry)) {
 			if _, ok := validProcessSelectorKeys[key]; !ok {
-				add("%s.%s is not supported; processes entries accept exe, cmd, user, group and enable_if", path, key)
+				add("%s.%s is not supported; processes entries accept %s", path, key, processSelectorKeySummary)
+			}
+		}
+		// delegated bars a process from every kill decision, so a value that is
+		// not a boolean must fail loudly: read leniently it would come back false
+		// and silently re-expose the workload it was meant to protect.
+		if raw, present := entry[process.SelectorKeyDelegated]; present {
+			if _, ok := raw.(bool); !ok {
+				add(validationBooleanFormat, processFieldPath(name, process.SelectorKeyDelegated))
 			}
 		}
 		exe, cmd := cfgval.String(entry[process.SelectorKeyExe]), cfgval.String(entry[process.SelectorKeyCmd])
@@ -489,6 +503,11 @@ func reloadSignalPidfileIdentity(tree map[string]any) (pidfile, identity bool) {
 	for _, raw := range procs {
 		entry, ok := raw.(map[string]any)
 		if !ok {
+			continue
+		}
+		// A delegated selector is never signalled, so it supplies no identity a
+		// reload signal could use.
+		if cfgval.Bool(entry[process.SelectorKeyDelegated]) {
 			continue
 		}
 		if cfgval.String(entry[process.SelectorKeyExe]) != "" && cfgval.String(entry[process.SelectorKeyUser]) != "" {
