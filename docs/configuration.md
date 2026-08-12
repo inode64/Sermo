@@ -3016,7 +3016,7 @@ watches:
       type: process
       name: myworker                  # exe basename (e.g. myworker) or full path
       user: www-data                  # optional: also match the owning user
-      for: 5m                         # optional: observed alive at least this long
+      for: 5m                         # optional: alive at least this long (process start time)
       cpu: { op: ">", value: 80 }     # optional: CPU % (rate)
       memory: { op: ">", value: 524288000 }   # optional: RSS bytes
       io: { op: ">", value: 10485760 }         # optional: read+write bytes/sec
@@ -3039,7 +3039,9 @@ hook per PID** — so a worker pool produces one hook per offending worker.
 **disappears** (and re-arms if it returns), so it never fires merely because the
 process is present. Set it alone for a pure liveness alert ("nginx is gone"), or
 alongside the presence conditions. With multiple matching PIDs it fires per exited
-PID.
+PID. A PID the kernel recycled between two cycles counts as a disappearance too:
+the number is still in the sample, but the start time proves another process is
+behind it, so the one that ended is reported gone.
 
 Hook extras: `SERMO_PID` (the matching pid), `SERMO_PROCESS` (the configured
 name), `SERMO_CHANGE` (`threshold` for a presence fire, `gone` for a
@@ -3047,8 +3049,14 @@ disappearance), `SERMO_USER` (if set), `SERMO_AGE_SECONDS`, `SERMO_MEMORY` (RSS
 bytes), and — once a rate is available — `SERMO_CPU` (percent) and `SERMO_IO`
 (bytes/sec).
 
-`for` is measured from when the daemon **first observed** the process, so a daemon
-restart resets it (the real elapsed-since-start is not tracked across restarts).
+`for` is measured from the **process's own start time** (`/proc/<pid>/stat` field
+22 against the boot time), not from when the daemon first saw it: a daemon
+restart does not reset it, and a process already older than `for` when it is
+first sampled fires as soon as the watch is evaluated — the settling cycle after
+startup only observes, so on the cycle after that, `then.kill` included. When the
+start time is unreadable the watch falls back to its first observation of that
+PID.
+
 `io` reads `/proc/<pid>/io`, which requires the daemon to have permission to read
 it (typically running as root); when it is unreadable the IO condition never fires.
 The optional `user:` filter is resolved through `engine.user_lookup`; numeric
@@ -3073,7 +3081,7 @@ watches:
       type: process
       name: /usr/bin/sudo
       user: root
-      for: 120m            # observed alive at least 120 minutes
+      for: 120m            # alive at least 120 minutes (process start time)
     then:
       kill:
         signal: TERM       # optional, default TERM; TERM or KILL

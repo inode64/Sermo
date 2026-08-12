@@ -8,6 +8,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"sermo/internal/process"
@@ -129,29 +130,68 @@ func cpuTicks(fields []string) (uint64, bool) {
 
 // ProcessStartTime reads field 22 of /proc/<pid>/stat and converts it to a wall
 // clock timestamp using the system boot time from /proc/stat.
-func (OSReader) ProcessStartTime(pid int) (time.Time, bool) {
+func (r OSReader) ProcessStartTime(pid int) (time.Time, bool) {
+	_, at, ok := r.ProcessStart(pid)
+	return at, ok
+}
+
+// ProcessStart reads a process's start time from a single /proc/<pid>/stat read,
+// as both raw clock ticks since boot and a wall clock timestamp.
+//
+// The two are not interchangeable. The wall clock value answers "how old is this
+// process", but it is re-derived from the boot time, which the kernel itself
+// re-derives from the wall clock — so a clock step (chronyd, and sermo's own
+// `then.makestep`) moves it for a process that never restarted. The tick count is
+// taken against the monotonic boot clock and never moves, so it is what callers
+// must compare to decide whether a PID still holds the same process.
+func (OSReader) ProcessStart(pid int) (uint64, time.Time, bool) {
 	startTicks, ok := process.StartTicks(pid)
 	if !ok {
-		return time.Time{}, false
+		return 0, time.Time{}, false
 	}
 	boot, ok := procBootTime()
 	if !ok {
-		return time.Time{}, false
+		return 0, time.Time{}, false
 	}
 	startSeconds := float64(startTicks) / LinuxClockTicks
 	whole := int64(startSeconds)
 	nsec := int64((startSeconds - float64(whole)) * float64(time.Second))
-	return time.Unix(boot+whole, nsec), true
+	return startTicks, time.Unix(boot+whole, nsec), true
 }
 
-// processStartTicks reads starttime (field 22, index 19 post-comm) from
-// /proc/<pid>/stat.
+// bootTimeCacheTTL bounds how long a `btime` reading is reused. Callers ask per
+// PID per cycle (the process watch, service runtime, restart notices), so within
+// one sampling pass this collapses N reads of a file that carries a line per CPU
+// into one. It is deliberately short rather than permanent: `btime` is
+// `wall_now - uptime`, so the kernel re-anchors it on every clock step, and a
+// permanently cached value would leave derived ages off by the whole step.
+const bootTimeCacheTTL = 5 * time.Second
+
+// bootTimeCache memoizes the `btime` field of /proc/stat for bootTimeCacheTTL.
+// Only a successful read is cached, so a transient failure does not pin the
+// daemon to a stale reading.
+var bootTimeCache struct {
+	sync.Mutex
+	sec    int64
+	readAt time.Time
+}
+
+// procBootTime returns the system boot time in seconds since the epoch.
 func procBootTime() (int64, bool) {
+	bootTimeCache.Lock()
+	defer bootTimeCache.Unlock()
+	if !bootTimeCache.readAt.IsZero() && time.Since(bootTimeCache.readAt) < bootTimeCacheTTL {
+		return bootTimeCache.sec, true
+	}
 	data, err := os.ReadFile(procPath(procFileStat))
 	if err != nil {
 		return 0, false
 	}
-	return procBootTimeValue(ScanUintField(string(data), procStatBootTimePrefix))
+	sec, ok := procBootTimeValue(ScanUintField(string(data), procStatBootTimePrefix))
+	if ok {
+		bootTimeCache.sec, bootTimeCache.readAt = sec, time.Now()
+	}
+	return sec, ok
 }
 
 func procBootTimeValue(sec uint64, ok bool) (int64, bool) {

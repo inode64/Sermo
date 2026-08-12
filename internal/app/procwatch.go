@@ -38,6 +38,15 @@ type ProcInfo struct {
 	RSS      uint64 // resident memory bytes
 	IOBytes  uint64 // cumulative read+write bytes (/proc/<pid>/io)
 	HasIO    bool   // false when /proc/<pid>/io was unreadable
+	// StartTime is when the process itself started (/proc/<pid>/stat field 22
+	// against the boot time), so `for` measures the process's own age rather than
+	// how long this daemon has watched it. Zero when it was unreadable.
+	StartTime time.Time
+	// StartTicks is the same start time in clock ticks since boot. It is taken
+	// against the monotonic boot clock, so unlike StartTime a clock step does not
+	// move it: it is the stable identity of the process behind this PID. Zero when
+	// it was unreadable.
+	StartTicks uint64
 }
 
 // ProcSampler lists the processes matching a selector and reads each one's
@@ -54,7 +63,7 @@ type ProcSampler interface {
 // empty set is invalid (rejected at build time). All present conditions must
 // hold for a PID to fire (AND).
 type procCond struct {
-	minAge   time.Duration // process must have been observed alive at least this long
+	minAge   time.Duration // process must have been alive at least this long (see procState.age)
 	cpuOp    string        // CPU% threshold ("" = none)
 	cpuValue float64
 	memOp    string // RSS-bytes threshold ("" = none)
@@ -75,15 +84,62 @@ func (c procCond) hasPresence() bool {
 	return c.minAge > 0 || c.cpuOp != "" || c.memOp != "" || c.ioOp != ""
 }
 
-// procState is the remembered per-PID data across cycles: when we first saw it
-// (for age), the previous CPU/IO counters (for rates), and the edge state.
+// procState is the remembered per-PID data across cycles: the process's own
+// start time and when we first saw it (both for age), the previous CPU/IO
+// counters (for rates), and the edge state.
 type procState struct {
-	firstSeen time.Time
-	prevCPU   uint64
-	prevIO    uint64
-	prevAt    time.Time
-	hadIO     bool
-	fired     bool // previous cycle's predicate, for edge detection
+	startTime  time.Time // the process's own start time; zero when unreadable
+	startTicks uint64    // the same instant in boot-clock ticks: the PID's identity
+	firstSeen  time.Time
+	prevCPU    uint64
+	prevIO     uint64
+	prevAt     time.Time
+	hadIO      bool
+	fired      bool // previous cycle's predicate, for edge detection
+}
+
+// age is how long the process has been alive: measured from its own start time
+// (/proc/<pid>/stat), falling back to the daemon's first observation only when
+// that is unreadable. Wall-clock steps backwards (NTP, a manual clock set) can
+// put "now" before the start time; report zero rather than a negative age.
+func (st *procState) age(now time.Time) time.Duration {
+	base := st.startTime
+	if base.IsZero() {
+		base = st.firstSeen
+	}
+	if d := now.Sub(base); d > 0 {
+		return d
+	}
+	return 0
+}
+
+// supersededBy reports whether this remembered state cannot be attributed to the
+// process currently holding the PID. The kernel recycles PIDs, and a PID replaced
+// between two cycles is never seen as gone, so without this check the successor
+// would inherit its predecessor's age, rate baseline and edge state.
+//
+// A sample that could not read the start time identifies nothing, so it never
+// supersedes anything — a transient /proc failure must not reset a healthy PID.
+// Every other mismatch does, including a state that has no identity yet: that
+// state was built from a sample which failed the same read, so there is no
+// evidence it belongs to this process either.
+//
+// It compares ticks rather than StartTime on purpose: StartTime is derived from
+// the boot time, which the kernel re-anchors on a clock step, so comparing it
+// would declare every tracked PID superseded the moment chronyd (or a `makestep`
+// watch) moves the clock — dropping the edge state of every one of them.
+func (st *procState) supersededBy(s ProcInfo) bool {
+	if s.StartTicks == 0 {
+		return false
+	}
+	return st.startTicks != s.StartTicks
+}
+
+// sameProcessAs reports whether two samples of one PID describe the same process.
+// A start time neither side could read proves nothing, so the answer is yes: the
+// caller then has only the name/user match, exactly as before start times existed.
+func (s ProcInfo) sameProcessAs(other ProcInfo) bool {
+	return s.StartTicks == 0 || other.StartTicks == 0 || s.StartTicks == other.StartTicks
 }
 
 const (
@@ -161,10 +217,26 @@ func (w *procWatcher) runCycle(ctx context.Context) {
 			return
 		}
 		seen[s.PID] = true
-		st, known := w.state[s.PID]
-		if !known {
+		st := w.state[s.PID]
+		if st != nil && st.supersededBy(s) {
+			// Another process now holds this PID. The one we tracked is gone even
+			// though the number is still in use, and the sweep below only sees PIDs
+			// absent from the sample — so report it here, before dropping its state.
+			w.fireGone(ctx, s.PID, st, t)
+			st = nil
+		}
+		if st == nil {
 			st = &procState{firstSeen: t}
 			w.state[s.PID] = st
+		}
+		// Adopt each start reading on the first sample that carries it: a transient
+		// /proc read failure must not pin this PID to the fallback age, nor leave it
+		// without the identity that detects PID reuse.
+		if st.startTime.IsZero() {
+			st.startTime = s.StartTime
+		}
+		if st.startTicks == 0 {
+			st.startTicks = s.StartTicks
 		}
 
 		fire, env, msg := w.evaluate(st, t, s)
@@ -191,21 +263,21 @@ func (w *procWatcher) runCycle(ctx context.Context) {
 		if ctx.Err() != nil {
 			return
 		}
-		st := w.state[pid]
-		if st != nil && w.cond.onGone && !observeOnlyCycle(ctx) {
-			env := map[string]string{
-				sermoEnvPID:        strconv.Itoa(pid),
-				sermoEnvProcess:    w.match.Name,
-				sermoEnvChange:     procChangeGone,
-				sermoEnvAgeSeconds: strconv.FormatInt(int64(t.Sub(st.firstSeen).Seconds()), envFormatBase),
-			}
-			if w.match.User != "" {
-				env[sermoEnvUser] = w.match.User
-			}
-			w.fire(ctx, ProcInfo{PID: pid}, fmt.Sprintf("%s pid %d is gone", w.match.Name, pid), env)
+		if st := w.state[pid]; st != nil {
+			w.fireGone(ctx, pid, st, t)
 		}
 		delete(w.state, pid)
 	}
+}
+
+// fireGone reports a tracked PID's disappearance, whether it vanished from the
+// sample or was replaced by another process holding the same number.
+func (w *procWatcher) fireGone(ctx context.Context, pid int, st *procState, t time.Time) {
+	if !w.cond.onGone || observeOnlyCycle(ctx) {
+		return
+	}
+	env := w.procEnv(pid, procChangeGone, st.age(t))
+	w.fire(ctx, ProcInfo{PID: pid}, fmt.Sprintf("%s pid %d is gone", w.match.Name, pid), env)
 }
 
 func (w *procWatcher) publishSnapshot(samples []ProcInfo, ok bool) {
@@ -277,22 +349,30 @@ func procSamplerFromDeps(deps Deps) ProcSampler {
 	return osProcSampler{userLookup: deps.UserLookup}
 }
 
-// evaluate computes whether a PID satisfies every configured condition this
-// cycle, returning the firing decision, the hook environment and a message.
-func (w *procWatcher) evaluate(st *procState, now time.Time, s ProcInfo) (bool, map[string]string, string) {
-	c := w.cond
-	age := now.Sub(st.firstSeen)
-
+// procEnv is the hook environment both firing paths share — a presence threshold
+// and a `gone` disappearance — so the identity and age they report cannot drift
+// apart. The presence path adds its own reading-derived variables on top.
+func (w *procWatcher) procEnv(pid int, change string, age time.Duration) map[string]string {
 	env := map[string]string{
-		sermoEnvPID:        strconv.Itoa(s.PID),
+		sermoEnvPID:        strconv.Itoa(pid),
 		sermoEnvProcess:    w.match.Name,
-		sermoEnvChange:     procChangeThreshold,
-		sermoEnvAgeSeconds: strconv.FormatInt(int64(age.Seconds()), envFormatBase),
-		sermoEnvMemory:     strconv.FormatUint(s.RSS, envFormatBase),
+		sermoEnvChange:     change,
+		sermoEnvAgeSeconds: envAgeSeconds(age),
 	}
 	if w.match.User != "" {
 		env[sermoEnvUser] = w.match.User
 	}
+	return env
+}
+
+// evaluate computes whether a PID satisfies every configured condition this
+// cycle, returning the firing decision, the hook environment and a message.
+func (w *procWatcher) evaluate(st *procState, now time.Time, s ProcInfo) (bool, map[string]string, string) {
+	c := w.cond
+	age := st.age(now)
+
+	env := w.procEnv(s.PID, procChangeThreshold, age)
+	env[sermoEnvMemory] = strconv.FormatUint(s.RSS, envFormatBase)
 
 	// A watch with only `gone` never fires on presence.
 	ok := c.hasPresence()
@@ -407,10 +487,13 @@ func (w *procWatcher) doKill(ctx context.Context, info ProcInfo, msg string) {
 		return
 	}
 	current, ok := w.matchingProcess(info.PID)
-	if !ok {
+	if !ok || !current.sameProcessAs(info) {
+		// Either the PID is gone, or the number now belongs to another process that
+		// happens to match this watch's name and user. Only the start time tells the
+		// two apart, and escalating on a namesake would SIGKILL an innocent process.
 		return
 	}
-	kill := w.reaper().Signal(ctx, []process.Process{current}, w.kill.selector, syscall.SIGKILL)
+	kill := w.reaper().Signal(ctx, []process.Process{current.asProcess()}, w.kill.selector, syscall.SIGKILL)
 	if !w.emitSignalResult(msg, syscall.SIGKILL, kill) {
 		return
 	}
@@ -420,7 +503,10 @@ func (w *procWatcher) doKill(ctx context.Context, info ProcInfo, msg string) {
 	if err := process.Wait(ctx, w.sleep, w.kill.killTimeout); err != nil {
 		return
 	}
-	if _, ok := w.matchingProcess(info.PID); ok {
+	// Same identity caveat as the escalation above: a namesake that took the PID
+	// is not our target surviving, and reporting it as one would raise a
+	// kill-failed for a process we never signalled.
+	if survivor, ok := w.matchingProcess(info.PID); ok && survivor.sameProcessAs(info) {
 		w.emitEvent(Event{Watch: w.name, Kind: eventKindKillFailed, Message: fmt.Sprintf("%s: pid %d survived SIGKILL", msg, info.PID)})
 	}
 }
@@ -452,24 +538,26 @@ func (w *procWatcher) emitSignalResult(msg string, sig syscall.Signal, result pr
 	return false
 }
 
-// matchingProcess re-samples the watch's selector and reports whether pid is
-// still among the matches — the identity re-check that defends the escalated
-// SIGKILL against PID reuse. A transient sampling failure fails safe (no kill).
-func (w *procWatcher) matchingProcess(pid int) (process.Process, bool) {
+// matchingProcess re-samples the watch's selector and returns pid's current
+// sample if it is still among the matches — the identity re-check that defends
+// the escalated SIGKILL against PID reuse. It answers on name and user alone, so
+// callers acting on the result must also compare the start time (see
+// sameProcessAs). A transient sampling failure fails safe (no kill).
+func (w *procWatcher) matchingProcess(pid int) (ProcInfo, bool) {
 	sampler := w.sampler
 	if sampler == nil {
 		sampler = osProcSampler{}
 	}
 	samples, ok := sampler.Sample(w.match)
 	if !ok {
-		return process.Process{}, false
+		return ProcInfo{}, false
 	}
 	for _, s := range samples {
 		if s.PID == pid {
-			return s.asProcess(), true
+			return s, true
 		}
 	}
-	return process.Process{}, false
+	return ProcInfo{}, false
 }
 
 func (s ProcInfo) asProcess() process.Process {
@@ -536,6 +624,9 @@ func (s osProcSampler) Sample(m ProcMatch) ([]ProcInfo, bool) {
 			continue
 		}
 		info := ProcInfo{PID: pid, User: id.User, UID: id.UID, Exe: id.Exe, ExeOK: id.ExeOK}
+		if ticks, at, ok := mr.ProcessStart(pid); ok {
+			info.StartTicks, info.StartTime = ticks, at
+		}
 		if v, ok := mr.ProcessCPU(pid); ok {
 			info.CPUTicks = v
 		}

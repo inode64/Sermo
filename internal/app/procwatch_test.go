@@ -63,6 +63,132 @@ func (h *procHarness) tick(w *procWatcher, advance time.Duration) {
 	w.runCycle(context.Background())
 }
 
+// TestProcWatchMinAgeUsesProcessStartTime pins that `for` measures the process's
+// own age: a process that was already older than the window when the daemon
+// first sampled it fires on that first cycle, instead of waiting another full
+// window as it did when the age was counted from the first observation.
+func TestProcWatchMinAgeUsesProcessStartTime(t *testing.T) {
+	now := time.Unix(1_000_000, 0)
+	cases := []struct {
+		name      string
+		startTime time.Time
+		wantFires int
+		wantAge   string
+	}{
+		{name: "older than window fires immediately", startTime: now.Add(-2 * time.Hour), wantFires: 1, wantAge: "7200"},
+		{name: "younger than window waits", startTime: now.Add(-time.Minute), wantFires: 0},
+		{name: "unreadable start time falls back to first sight", startTime: time.Time{}, wantFires: 0},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			h := &procHarness{clock: now}
+			s := &fakeProcSampler{cycles: [][]ProcInfo{{{PID: 42, StartTime: tc.startTime}}}}
+			w := h.watcher(procCond{minAge: 90 * time.Minute}, s)
+
+			h.tick(w, 0)
+
+			if len(h.fired) != tc.wantFires {
+				t.Fatalf("fired %d times, want %d", len(h.fired), tc.wantFires)
+			}
+			if tc.wantAge != "" && h.fired[0][sermoEnvAgeSeconds] != tc.wantAge {
+				t.Fatalf("SERMO_AGE_SECONDS = %q, want %q", h.fired[0][sermoEnvAgeSeconds], tc.wantAge)
+			}
+		})
+	}
+}
+
+// TestProcWatchStartTicksChangeResetsState pins PID reuse: a recycled PID that is
+// never seen as gone must not inherit its predecessor's age or edge state.
+func TestProcWatchStartTicksChangeResetsState(t *testing.T) {
+	now := time.Unix(1_000_000, 0)
+	old := ProcInfo{PID: 42, StartTicks: 500, StartTime: now.Add(-2 * time.Hour)}
+	reused := ProcInfo{PID: 42, StartTicks: 900, StartTime: now.Add(time.Second)}
+	h := &procHarness{clock: now}
+	s := &fakeProcSampler{cycles: [][]ProcInfo{{old}, {reused}, {reused}}}
+	w := h.watcher(procCond{minAge: 90 * time.Minute}, s)
+
+	h.tick(w, 0)              // the old process is over the window -> fires
+	h.tick(w, 30*time.Second) // the successor is seconds old -> must not stay fired
+	if len(h.fired) != 1 {
+		t.Fatalf("fired %d times, want 1", len(h.fired))
+	}
+	h.clock = h.clock.Add(2 * time.Hour) // the successor now crosses the window itself
+	w.runCycle(context.Background())
+	if len(h.fired) != 2 {
+		t.Fatalf("recycled PID fired %d times, want 2 (state must re-arm)", len(h.fired))
+	}
+}
+
+// TestProcWatchGoneFiresOnPIDReuse pins that a recycled PID still reports the
+// disappearance it hides: the number stays in the sample, so the sweep over
+// absent PIDs never sees it, yet the process the watch tracked is gone.
+func TestProcWatchGoneFiresOnPIDReuse(t *testing.T) {
+	now := time.Unix(1_000_000, 0)
+	old := ProcInfo{PID: 42, StartTicks: 500, StartTime: now.Add(-time.Hour)}
+	successor := ProcInfo{PID: 42, StartTicks: 900, StartTime: now}
+	h := &procHarness{clock: now}
+	s := &fakeProcSampler{cycles: [][]ProcInfo{{old}, {successor}}}
+	w := h.watcher(procCond{onGone: true}, s)
+
+	h.tick(w, 0)
+	h.tick(w, 30*time.Second)
+
+	if len(h.fired) != 1 {
+		t.Fatalf("fired %d times, want 1 gone for the replaced process", len(h.fired))
+	}
+	if got := h.fired[0][sermoEnvChange]; got != procChangeGone {
+		t.Fatalf("SERMO_CHANGE = %q, want %q", got, procChangeGone)
+	}
+	if got := h.fired[0][sermoEnvAgeSeconds]; got != "3630" {
+		t.Fatalf("SERMO_AGE_SECONDS = %q, want the replaced process's own lifetime %q", got, "3630")
+	}
+}
+
+// TestProcWatchClockStepKeepsProcessIdentity pins that a wall-clock step is not
+// mistaken for PID reuse. The boot time is re-derived from the wall clock, so a
+// step (chronyd, or a `makestep` watch) moves every process's derived start time
+// without any process restarting; identity comes from the boot-clock ticks, which
+// do not move, so the edge state must survive and the hook must not fire twice.
+func TestProcWatchClockStepKeepsProcessIdentity(t *testing.T) {
+	now := time.Unix(1_000_000, 0)
+	const step = 10 * time.Minute
+	before := ProcInfo{PID: 42, StartTicks: 500, StartTime: now.Add(-2 * time.Hour)}
+	after := ProcInfo{PID: 42, StartTicks: 500, StartTime: now.Add(-2*time.Hour + step)}
+	h := &procHarness{clock: now}
+	s := &fakeProcSampler{cycles: [][]ProcInfo{{before}, {after}, {after}}}
+	w := h.watcher(procCond{minAge: 90 * time.Minute}, s)
+
+	h.tick(w, 0)              // over the window -> fires once
+	h.tick(w, 30*time.Second) // clock steps; still over the window, same process
+	h.tick(w, 30*time.Second)
+
+	if len(h.fired) != 1 {
+		t.Fatalf("fired %d times, want 1 (a clock step is not PID reuse)", len(h.fired))
+	}
+}
+
+// TestProcWatchGoneAgeUsesProcessStartTime pins that the `gone` event reports the
+// process's own lifetime, not how long the daemon watched it.
+func TestProcWatchGoneAgeUsesProcessStartTime(t *testing.T) {
+	now := time.Unix(1_000_000, 0)
+	h := &procHarness{clock: now}
+	s := &fakeProcSampler{cycles: [][]ProcInfo{
+		{{PID: 42, StartTime: now.Add(-3 * time.Hour)}},
+		{},
+	}}
+	w := h.watcher(procCond{onGone: true}, s)
+
+	h.tick(w, 0)
+	h.tick(w, time.Minute)
+
+	if len(h.fired) != 1 {
+		t.Fatalf("gone fired %d times, want 1", len(h.fired))
+	}
+	if got := h.fired[0][sermoEnvAgeSeconds]; got != "10860" {
+		t.Fatalf("SERMO_AGE_SECONDS = %q, want %q", got, "10860")
+	}
+}
+
 func TestProcWatchMinAgeEdge(t *testing.T) {
 	h := &procHarness{clock: time.Unix(1_000_000, 0)}
 	s := &fakeProcSampler{cycles: [][]ProcInfo{

@@ -418,7 +418,7 @@ func (w *fileWatcher) olderThanMessage(path string, cur fileState) string {
 func (w *fileWatcher) olderThanExtra(cur fileState) map[string]string {
 	return map[string]string{
 		sermoEnvModifiedAt: cur.modifiedAt.UTC().Format(time.RFC3339),
-		sermoEnvAgeSeconds: strconv.FormatInt(int64(cur.age.Seconds()), envFormatBase),
+		sermoEnvAgeSeconds: envAgeSeconds(cur.age),
 		sermoEnvValue:      w.cond.olderThan.String(),
 	}
 }
