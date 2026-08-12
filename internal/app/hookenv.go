@@ -1,6 +1,11 @@
 package app
 
-import "sermo/internal/checks"
+import (
+	"strconv"
+	"time"
+
+	"sermo/internal/checks"
+)
 
 const (
 	sermoEnvPrefix = "SERMO_"
@@ -37,3 +42,11 @@ const (
 	fileModeFormat        = checks.FileModeFormat
 	fileOwnerFormat       = checks.FileOwnerFormat
 )
+
+// envAgeSeconds renders a duration as the whole seconds SERMO_AGE_SECONDS
+// carries. Every watch that reports an age emits this variable and addSummaryAge
+// parses it back, so the encoding belongs next to the key rather than restated
+// once per watch.
+func envAgeSeconds(d time.Duration) string {
+	return strconv.FormatInt(int64(d.Seconds()), envFormatBase)
+}

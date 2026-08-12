@@ -174,6 +174,57 @@ func TestProcWatchKillEscalateStopsWhenGone(t *testing.T) {
 	}
 }
 
+// TestProcWatchKillEscalateStopsWhenPIDRecycled pins the escalation's identity
+// re-check. The name/user re-sample alone cannot tell the signalled process from
+// a namesake that took its PID during the grace period — only the start time can,
+// and SIGKILLing the successor would kill an innocent process.
+func TestProcWatchKillEscalateStopsWhenPIDRecycled(t *testing.T) {
+	h := &procHarness{clock: time.Unix(1_000_000, 0)}
+	sig := &fakeSignaler{}
+	ks := &killSpec{signal: syscall.SIGTERM, escalate: true, termTimeout: 10 * time.Second}
+	target := killProcInfo()
+	target.StartTicks = 500
+	successor := killProcInfo() // same pid, name and user...
+	successor.StartTicks = 900  // ...but a different process behind the number
+	s := &fakeProcSampler{cycles: [][]ProcInfo{{target}, {successor}}}
+	w := killWatcher(h, ks, sig, s, false, false)
+	// Seed the identity too, or the first sample would supersede the seeded state
+	// and restart the age the kill condition depends on.
+	w.state[target.PID] = &procState{firstSeen: h.clock.Add(-time.Hour), startTicks: target.StartTicks}
+
+	w.runCycle(context.Background())
+
+	if len(sig.sent) != 1 || sig.sent[0].sig != syscall.SIGTERM {
+		t.Fatalf("want only SIGTERM when the PID is recycled during the grace period, got %v", sig.sent)
+	}
+}
+
+// TestProcWatchKillSurvivorCheckIgnoresRecycledPID pins the other half of the
+// identity re-check: after the SIGKILL grace, a namesake holding the number is
+// not our target surviving, and reporting it as one would raise a kill-failed
+// for a process the watch never signalled.
+func TestProcWatchKillSurvivorCheckIgnoresRecycledPID(t *testing.T) {
+	h := &procHarness{clock: time.Unix(1_000_000, 0)}
+	sig := &fakeSignaler{}
+	ks := &killSpec{signal: syscall.SIGTERM, escalate: true, termTimeout: 10 * time.Second, killTimeout: 5 * time.Second}
+	target := killProcInfo()
+	target.StartTicks = 500
+	successor := killProcInfo()
+	successor.StartTicks = 900
+	// Cycle sample, escalation re-check, then the post-SIGKILL survivor check.
+	s := &fakeProcSampler{cycles: [][]ProcInfo{{target}, {target}, {successor}}}
+	w := killWatcher(h, ks, sig, s, false, false)
+	w.state[target.PID] = &procState{firstSeen: h.clock.Add(-time.Hour), startTicks: target.StartTicks}
+
+	w.runCycle(context.Background())
+
+	for _, e := range killEvents(h.events) {
+		if e.Kind == eventKindKillFailed {
+			t.Fatalf("a recycled PID must not be reported as surviving SIGKILL: %v", e)
+		}
+	}
+}
+
 func TestProcWatchKillFailedEmitsEvent(t *testing.T) {
 	h := &procHarness{clock: time.Unix(1_000_000, 0)}
 	sig := &fakeSignaler{err: syscall.EPERM}
