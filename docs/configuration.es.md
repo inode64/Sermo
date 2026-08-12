@@ -3110,7 +3110,7 @@ watches:
       type: process
       name: myworker                  # exe basename (e.g. myworker) or full path
       user: www-data                  # optional: also match the owning user
-      for: 5m                         # optional: observed alive at least this long
+      for: 5m                         # optional: alive at least this long (process start time)
       cpu: { op: ">", value: 80 }     # optional: CPU % (rate)
       memory: { op: ">", value: 524288000 }   # optional: RSS bytes
       io: { op: ">", value: 10485760 }         # optional: read+write bytes/sec
@@ -3134,7 +3134,10 @@ produce un hook por worker infractor.
 visto **desaparece** (y se rearma si vuelve), de modo que nunca se dispara meramente
 porque el proceso está presente. Establécelo solo para una alerta pura de liveness
 ("nginx is gone"), o junto a las condiciones de presencia. Con múltiples PIDs
-coincidentes se dispara por PID salido.
+coincidentes se dispara por PID salido. Un PID que el kernel ha reciclado entre dos
+ciclos cuenta también como desaparición: el número sigue en la muestra, pero el
+tiempo de inicio demuestra que hay otro proceso detrás, así que el que terminó se
+reporta como ido.
 
 Hook extras: `SERMO_PID` (el pid coincidente), `SERMO_PROCESS` (el nombre configurado),
 `SERMO_CHANGE` (`threshold` para un disparo de presencia, `gone` para una desaparición),
@@ -3142,9 +3145,15 @@ Hook extras: `SERMO_PID` (el pid coincidente), `SERMO_PROCESS` (el nombre config
 una vez que una tasa está disponible — `SERMO_CPU` (porcentaje) y `SERMO_IO`
 (bytes/seg).
 
-`for` se mide desde cuando el daemon **observó por primera vez** el proceso, de modo que
-un reinicio del daemon lo restablece (el tiempo real transcurrido desde el inicio no se
-rastrea a través de reinicios). `io` lee `/proc/<pid>/io`, que requiere que el daemon
+`for` se mide desde el **inicio del propio proceso** (campo 22 de `/proc/<pid>/stat`
+contra el tiempo de arranque), no desde cuando el daemon lo vio por primera vez: un
+reinicio del daemon no lo restablece, y un proceso que ya es más viejo que `for`
+cuando se muestrea por primera vez se dispara en cuanto el watch se evalúa — el ciclo
+de asentamiento tras el arranque solo observa, así que en el siguiente, `then.kill`
+incluido. Cuando el tiempo de inicio es ilegible, el watch recurre a su primera
+observación de ese PID.
+
+`io` lee `/proc/<pid>/io`, que requiere que el daemon
 tenga permiso para leerlo (típicamente ejecutándose como root); cuando es ilegible la
 condición de IO nunca se dispara. El filtro opcional `user:` se resuelve a través de
 `engine.user_lookup`; los UIDs numéricos se aceptan y evitan la ambigüedad del servicio
@@ -3170,7 +3179,7 @@ watches:
       type: process
       name: /usr/bin/sudo
       user: root
-      for: 120m            # observado vivo al menos 120 minutos
+      for: 120m            # vivo al menos 120 minutos (inicio del proceso)
     then:
       kill:
         signal: TERM       # opcional, por defecto TERM; TERM o KILL

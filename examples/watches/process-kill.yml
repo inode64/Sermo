@@ -14,7 +14,7 @@ check:
   type: process
   name: /usr/bin/sudo  # exact resolved /proc/<pid>/exe path
   user: root  # required for then.kill; numeric UIDs are accepted
-  for: 120m  # observed alive at least 120 minutes
+  for: 120m  # alive at least 120 minutes, measured from the process start time
 then:
   kill:
     signal: TERM  # TERM (default) or KILL
