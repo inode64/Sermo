@@ -1,6 +1,6 @@
 module sermo
 
-go 1.26.5
+go 1.26.6
 
 require (
 	github.com/beevik/ntp v1.5.0
@@ -20,7 +20,7 @@ require (
 	github.com/wneessen/go-mail v0.8.1
 	go.mongodb.org/mongo-driver/v2 v2.8.0
 	golang.org/x/crypto v0.55.0
-	golang.org/x/net v0.57.0
+	golang.org/x/net v0.58.0
 	golang.org/x/sys v0.47.0
 	modernc.org/sqlite v1.56.0
 )
