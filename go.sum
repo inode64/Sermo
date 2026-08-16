@@ -13,8 +13,8 @@ github.com/cloudsoda/sddl v0.0.0-20250224235906-926454e91efc/go.mod h1:uvR42Hb/t
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
-github.com/digitalocean/go-libvirt v0.0.0-20260609165003-6254771e63a8 h1:R4zqGCPowg1bfJXFxsS122mzkivaMz+wPLxBsF9qsiY=
-github.com/digitalocean/go-libvirt v0.0.0-20260609165003-6254771e63a8/go.mod h1:qb0Ofa71d3oXARQf633h2tNaeBxLsVxuDp+jcsVO2+4=
+github.com/digitalocean/go-libvirt v0.0.0-20260814190004-1a83157e1858 h1:8xCFt73OddCD5WXxoYidJBWp3bJMC+CpE7Zwf5tcwk8=
+github.com/digitalocean/go-libvirt v0.0.0-20260814190004-1a83157e1858/go.mod h1:qb0Ofa71d3oXARQf633h2tNaeBxLsVxuDp+jcsVO2+4=
 github.com/dustin/go-humanize v1.0.1 h1:GzkhY7T5VNhEkwH0PVJgjz+fX1rhBrR7pRT3mDkpeCY=
 github.com/dustin/go-humanize v1.0.1/go.mod h1:Mu1zIs6XwVuF/gI1OepvI0qD18qycQx+mFykh5fBlto=
 github.com/evanw/esbuild v0.28.2 h1:A2uETn4jrQTcXaT/shwTDTYBxDjl7fV7nXmUrJxfA2w=
