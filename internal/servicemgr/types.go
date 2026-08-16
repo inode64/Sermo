@@ -52,6 +52,7 @@ const (
 	systemctlPropertyCanReload = "CanReload"
 	systemctlPropertyCGroup    = "ControlGroup"
 	systemctlPropertyExecStart = "ExecStart"
+	systemctlPropertyLoadState = "LoadState"
 	systemctlPropertyMainPID   = "MainPID"
 	systemctlPropertyPIDFile   = "PIDFile"
 )
@@ -75,6 +76,11 @@ const (
 	systemdStateRunning      = "running"
 	systemdStateDegraded     = "degraded"
 	systemdStateDeactivating = "deactivating"
+	// systemdLoadStateNotFound is what `systemctl show -p LoadState` reports for
+	// a unit systemd cannot find. `is-active` collapses that case into
+	// "inactive", so this is the only way to tell a missing unit from a stopped
+	// one.
+	systemdLoadStateNotFound = "not-found"
 	systemdValueYes          = "yes"
 )
 
