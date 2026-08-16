@@ -59,6 +59,52 @@ func TestSystemdManagerStatus(t *testing.T) {
 	}
 }
 
+// `systemctl is-active` prints "inactive" for a unit systemd cannot find, so a
+// misspelled or absent unit is otherwise reported as a permanent failure that
+// looks exactly like a real outage. LoadState is what separates the two.
+func TestSystemdManagerStatusSeparatesMissingUnitFromStopped(t *testing.T) {
+	const isActive = "systemctl is-active -- nginx.service"
+	const loadState = "systemctl show -p LoadState --value -- nginx.service"
+	inactive := runnerResult{result: execx.Result{Stdout: "inactive\n", ExitCode: 3}, err: errors.New("exit 3")}
+
+	for _, tc := range []struct {
+		name      string
+		loadState runnerResult
+		want      Status
+	}{
+		{"missing unit", runnerResult{result: execx.Result{Stdout: "not-found\n"}}, StatusUnknown},
+		{"stopped unit", runnerResult{result: execx.Result{Stdout: "loaded\n"}}, StatusInactive},
+		{"masked unit stays inactive", runnerResult{result: execx.Result{Stdout: "masked\n"}}, StatusInactive},
+		// An unreadable LoadState is not evidence of a missing unit.
+		{"unreadable load state", runnerResult{result: execx.Result{ExitCode: -1}, err: errors.New("boom")}, StatusInactive},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			runner := &multiResultRunner{results: map[string]runnerResult{isActive: inactive, loadState: tc.loadState}}
+			got, err := systemdManager{runner: runner}.Status(context.Background(), "nginx")
+			if err != nil {
+				t.Fatalf("Status() error = %v", err)
+			}
+			if got.Status != tc.want {
+				t.Errorf("Status = %q, want %q", got.Status, tc.want)
+			}
+		})
+	}
+}
+
+// An active reading must not pay for the LoadState confirmation: the daemon
+// queries every service every cycle and most services are running.
+func TestSystemdManagerStatusSkipsLoadStateWhenActive(t *testing.T) {
+	runner := &multiResultRunner{results: map[string]runnerResult{
+		"systemctl is-active -- nginx.service": {result: execx.Result{Stdout: "active\n"}},
+	}}
+	if _, err := (systemdManager{runner: runner}).Status(context.Background(), "nginx"); err != nil {
+		t.Fatalf("Status() error = %v", err)
+	}
+	if len(runner.calls) != 1 {
+		t.Fatalf("calls = %v, want only the is-active query", runner.calls)
+	}
+}
+
 func TestSystemdManagerStatusLaunchFailure(t *testing.T) {
 	m := systemdManager{runner: stubRunner{result: execx.Result{ExitCode: -1}, err: errors.New("not found")}}
 	if _, err := m.Status(context.Background(), "nginx"); err == nil {
