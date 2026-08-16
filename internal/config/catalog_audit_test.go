@@ -267,6 +267,16 @@ func TestRealCatalogAllServicesValidate(t *testing.T) {
 
 func validateAllCatalogServices(t *testing.T, catalogDir, backend string) {
 	t.Helper()
+	for _, issue := range Validate(loadAllCatalogServices(t, catalogDir, backend)) {
+		t.Errorf("catalog service fails validation: %s", issue)
+	}
+}
+
+// loadAllCatalogServices enables every instantiable catalog profile for backend
+// and returns the loaded config, so audits can inspect resolved trees instead of
+// each re-deriving the same fixture.
+func loadAllCatalogServices(t *testing.T, catalogDir, backend string) *Config {
+	t.Helper()
 	probeDir := t.TempDir()
 	emptyEnabled := filepath.Join(probeDir, "services")
 	if err := os.MkdirAll(emptyEnabled, 0o755); err != nil {
@@ -286,9 +296,7 @@ func validateAllCatalogServices(t *testing.T, catalogDir, backend string) {
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	for _, issue := range Validate(cfg) {
-		t.Errorf("catalog service fails validation: %s", issue)
-	}
+	return cfg
 }
 
 // writeServicesGlobal writes a minimal sermo.yml with the given backend and
@@ -2755,4 +2763,46 @@ func collectForbiddenKeys(node any, keyPath string, forbidden map[string]struct{
 func dirExists(path string) bool {
 	info, err := os.Stat(path)
 	return err == nil && info.IsDir()
+}
+
+// Generated alert text is built in Go, not through ${display_name}, so a field
+// that is a mapping rather than a scalar reaches the operator as a Go literal.
+// A profile naming its unit per init backend (`service: {systemd: [...],
+// openrc: [...]}`) and carrying no display_name did exactly that, shipping
+// "map[openrc:[rsyncd rsync] systemd:[rsync rsyncd]] is running a binary that
+// was replaced on disk" to the fleet. Assert no profile can regress into it.
+func TestRealCatalogGeneratedMessagesHaveNoGoLiterals(t *testing.T) {
+	root := repoRoot(t)
+	for _, backend := range []string{"systemd", "openrc"} {
+		t.Run(backend, func(t *testing.T) {
+			cfg := loadAllCatalogServices(t, repoCatalogDir(root), backend)
+			for _, name := range cfg.ServiceNames {
+				resolved, _ := cfg.Resolve(name)
+				for _, message := range generatedRuleMessages(resolved.Tree) {
+					if strings.Contains(message, "map[") || strings.Contains(message, "[]interface {}") {
+						t.Errorf("%s: generated message contains a Go literal: %q", name, message)
+					}
+				}
+			}
+		})
+	}
+}
+
+// generatedRuleMessages returns every alert message of every rule in a resolved
+// service tree.
+func generatedRuleMessages(tree map[string]any) []string {
+	section, _ := tree[rules.SectionRules].(map[string]any)
+	var out []string
+	for _, raw := range section {
+		rule, _ := raw.(map[string]any)
+		then, _ := rule[rules.RuleFieldThen].(map[string]any)
+		actions, _ := then[rules.RuleFieldActions].([]any)
+		for _, action := range actions {
+			entry, _ := action.(map[string]any)
+			if message, ok := entry[rules.RuleFieldMessage].(string); ok {
+				out = append(out, message)
+			}
+		}
+	}
+	return out
 }
