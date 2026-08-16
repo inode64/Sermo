@@ -162,3 +162,27 @@ func TestStaleBinaryMessageNamesServiceAndKeepsPlaceholder(t *testing.T) {
 		t.Fatalf("message must keep ${check.value}, got %q", got)
 	}
 }
+
+// A profile may name its unit per init backend (`service: {systemd: [...],
+// openrc: [...]}`). Coercing that mapping to a string yielded the Go map
+// literal, which reached operators verbatim as
+// "map[openrc:[rsyncd rsync] systemd:[rsync rsyncd]] is running a binary
+// that was replaced on disk".
+func TestStaleBinaryMessageNamesPerBackendServiceUnit(t *testing.T) {
+	tree := map[string]any{
+		ServiceKeyService: map[string]any{
+			"systemd": []any{"rsync", "rsyncd"},
+			"openrc":  []any{"rsyncd", "rsync"},
+		},
+		"processes": map[string]any{
+			"main": map[string]any{"exe": "/usr/bin/rsync", "user": "root"},
+		},
+	}
+	got := staleBinaryAlertMessage(tree)
+	if strings.Contains(got, "map[") {
+		t.Fatalf("message leaked a Go map literal: %q", got)
+	}
+	if !strings.HasPrefix(got, "rsync ") {
+		t.Fatalf("message must start with the primary unit name, got %q", got)
+	}
+}

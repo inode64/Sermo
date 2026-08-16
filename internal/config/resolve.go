@@ -1121,7 +1121,11 @@ func restartOnChangeDisplayName(tree map[string]any) string {
 	if name := cfgval.String(tree[keyName]); name != "" {
 		return name
 	}
-	if service := cfgval.String(tree[ServiceKeyService]); service != "" {
+	// `service:` may be a per-init mapping ({systemd: [...], openrc: [...]}).
+	// Coercing that with cfgval.String yields the Go map literal, which then
+	// travels verbatim into the operator-facing alert text. ServiceUnit picks
+	// the primary unit name for either shape.
+	if service := ServiceUnit(tree, ""); service != "" {
 		return service
 	}
 	return "service"
