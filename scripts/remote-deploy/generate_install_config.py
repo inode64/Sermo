@@ -61,8 +61,8 @@ PSEUDO_FS = {
 }
 
 # Filesystems that back a generated storage watch. Network ones are excluded by
-# NETWORK_FS before this set is consulted, and any other fuse.* mount is picked
-# up by the fallback in mount_is_local_storage, so neither belongs here.
+# is_network_fs before this set is consulted, and any other fuse.* mount is
+# picked up by the fallback in mount_is_local_storage, so neither belongs here.
 REAL_STORAGE_FS = {
     "bcachefs",
     "btrfs",
@@ -87,6 +87,12 @@ REAL_STORAGE_FS = {
 }
 
 NETWORK_FS = {"nfs", "nfs4", "cifs", "smb3", "fuse.sshfs", "sshfs", "ceph", "glusterfs"}
+# A FUSE network client is spelled two ways for the same mount: `glusterfs` in
+# fstab, `fuse.glusterfs` in findmnt. Matching the raw string alone let the
+# findmnt spelling fall through to the `fuse.*` local-storage fallback, so a
+# Gluster client mount was generated as a capacity watch with an `expand`
+# action that can never grow a remote volume.
+FUSE_FS_PREFIX = "fuse."
 NFS_FILESYSTEMS = {"nfs", "nfs4"}
 # fstab options that mean "this filesystem is deliberately not mounted at boot",
 # so an absent mount is the configured state rather than a fault to alert on.
@@ -205,6 +211,16 @@ EXIM_HINTS_ABSENT = "absent"
 # enabled exactly as a host with no evidence at all does.
 EXIM_HINTS_UNKNOWN = "unknown"
 
+# The init backends Sermo supports. Anything else staged in `init` is unknown, and
+# the generated configuration falls back to the daemon's own `auto` detection.
+INIT_BACKENDS = ("systemd", "openrc")
+
+# Docker restart policies that mean "keep this container running". A container
+# with one of them that exited non-zero is the container equivalent of a failed
+# init unit; `no` means nobody asked Docker to keep it alive.
+DOCKER_KEEP_ALIVE_POLICIES = ("always", "unless-stopped", "on-failure")
+DOCKER_NOT_RUNNING_REASON = "container is not running"
+
 # The Gluster catalog profile remains portable and only checks local glusterd
 # liveness. The generator fills this site-specific expected topology from the
 # local CLI's read-only XML status output.
@@ -216,6 +232,12 @@ GLUSTER_SELF_HEAL_OPTION = "cluster.self-heal-daemon"
 GLUSTER_SELF_HEAL_ENABLED = "on"
 GLUSTER_SELF_HEAL_DAEMON = "Self-heal Daemon"
 GLUSTER_XML_FORBIDDEN_DECLARATIONS = ("<!DOCTYPE", "<!ENTITY")
+# The thin arbiter of a replica 2 volume is a daemon of its own, on a host that
+# usually holds no brick. `gluster volume status` never lists it and
+# `volume info --xml` omits it, so the collectors stage the declaration from the
+# CLI text output together with the arbiter host's resolved address.
+GLUSTER_TA_CATALOG_SERVICE = "gluster-ta-volume"
+GLUSTER_TA_EVIDENCE = "gluster_thin_arbiters"
 
 # The libvirt domain states virsh reports under LC_ALL=C. Anything outside this
 # set means the inventory was not parsed as expected — most likely a localized
@@ -319,7 +341,7 @@ def write_file(root: Path, rel: str, body: str) -> None:
 
 
 def base_config(options: GenerationOptions, backend: str = "auto") -> str:
-    if backend not in {"systemd", "openrc"}:
+    if backend not in INIT_BACKENDS:
         backend = "auto"
     return f"""engine:
   backend: {backend}
@@ -490,6 +512,14 @@ def flatten_findmnt(nodes: list[dict] | None) -> list[dict]:
     return out
 
 
+def is_network_fs(fstype: str) -> bool:
+    """Report whether a filesystem type names a network client, in either the
+    fstab or the findmnt spelling. `glusterfs` and `fuse.glusterfs` are one
+    mount; both must classify the same way."""
+    fstype = (fstype or "").lower()
+    return fstype in NETWORK_FS or fstype.removeprefix(FUSE_FS_PREFIX) in NETWORK_FS
+
+
 def mount_is_local_storage(mount: dict) -> bool:
     target = mount.get("target") or ""
     fstype = (mount.get("fstype") or "").lower()
@@ -497,7 +527,7 @@ def mount_is_local_storage(mount: dict) -> bool:
         return False
     if target != ROOT_MOUNT_TARGET and any(target == prefix or target.startswith(prefix + "/") for prefix in SKIP_MOUNT_PREFIXES):
         return False
-    if fstype in PSEUDO_FS or fstype in NETWORK_FS:
+    if fstype in PSEUDO_FS or is_network_fs(fstype):
         return False
     if fstype in REAL_STORAGE_FS:
         return True
@@ -932,10 +962,22 @@ def active_service_filter(stage: Path, catalog_docs: list[dict]) -> tuple[set[st
     return active_services, failed_services, candidates_by_service, True
 
 
+def required_service_names(stage: Path) -> set[str]:
+    """Catalog services whose unit must be running on this host even when it is
+    not, so an installed-but-stopped daemon that something else depends on stays
+    monitored instead of disappearing from the configuration."""
+    required: set[str] = set()
+    thin_arbiter_local, _ = thin_arbiter_report(stage)
+    if thin_arbiter_local:
+        required.add(GLUSTER_TA_CATALOG_SERVICE)
+    return required
+
+
 def parse_services(stage: Path, options: GenerationOptions) -> tuple[list[dict], list[dict], set[str]]:
     reports = service_reports(stage)
     catalog_docs = load_catalog_services(options.catalog_services_dir)
     active_services, failed_services, candidates_by_service, active_inventory_ok = active_service_filter(stage, catalog_docs)
+    required = required_service_names(stage)
     services: list[dict] = []
     skipped: list[dict] = []
     for rep in reports:
@@ -950,7 +992,7 @@ def parse_services(stage: Path, options: GenerationOptions) -> tuple[list[dict],
         # would leave a failed unit without a Sermo recovery action.
         installed_ok = rep.get("installed") and rep.get("ok") and name
         available = bool(name) and (installed_ok or monitorable)
-        active_ok = not options.active_services_only or (active_inventory_ok and monitorable)
+        active_ok = not options.active_services_only or (active_inventory_ok and monitorable) or name in required
         if available and active_ok:
             services.append(rep)
         else:
@@ -1602,6 +1644,57 @@ def gluster_cluster_check(stage: Path, service_name: str) -> tuple[dict | None, 
     return check, report
 
 
+def host_global_addresses(stage: Path) -> set[str]:
+    """The host's own global unicast addresses, from the staged `ip -o addr` output."""
+    addresses: set[str] = set()
+    for name in ("ip_addr4", "ip_addr6"):
+        for line in read_text(stage / name).splitlines():
+            match = re.search(r"\binet6?\s+([^/\s]+)", line)
+            if match:
+                addresses.add(match.group(1))
+    return addresses
+
+
+def thin_arbiter_report(stage: Path) -> tuple[bool, list[dict[str, object]]]:
+    """Report the thin arbiters this host's volumes declare, and whether one of
+    them is this host.
+
+    A replica 2 volume with a thin arbiter has no split-brain protection while
+    that arbiter is down, and the arbiter is neither a brick nor a peer: nothing
+    in `gluster volume status` mentions it, so a volume whose arbiter was never
+    set up looks perfectly healthy. On the host that is the declared arbiter the
+    daemon must be running, so its catalog service is generated even when the
+    unit is currently inactive — the same reasoning that keeps a failed unit
+    monitorable rather than silently dropping it.
+    """
+    local = False
+    entries: list[dict[str, object]] = []
+    addresses = host_global_addresses(stage)
+    for line in read_text(stage / GLUSTER_TA_EVIDENCE).splitlines():
+        fields = line.split("\t")
+        if len(fields) < 4:
+            continue
+        volume, arbiter_host, arbiter_path, address = (field.strip() for field in fields[:4])
+        if not volume or not arbiter_host:
+            continue
+        item: dict[str, object] = {"volume": volume, "host": arbiter_host, "path": arbiter_path}
+        if address:
+            item["address"] = address
+        if address and address in addresses:
+            local = True
+            item["local"] = True
+            item["source"] = "Gluster thin-arbiter declaration for this host"
+        else:
+            item["local"] = False
+            item["reason"] = (
+                f"thin arbiter runs on {arbiter_host}"
+                if address
+                else f"thin arbiter host {arbiter_host} did not resolve on the target"
+            )
+        entries.append(item)
+    return local, entries
+
+
 def parse_exim_hints(stage: Path) -> dict[str, str]:
     """Read the exim_hints inventory evidence: one line per hints file, tab
     separated as <path> <sqlite|other|absent>."""
@@ -1670,6 +1763,43 @@ def docker_container_name(entry: dict) -> str:
     return raw_id[:12] if raw_id else ""
 
 
+def parse_docker_stopped(stage: Path) -> dict[str, tuple[str, str]]:
+    """Read the exit code and restart policy of every container that is not
+    running, one tab-separated line per container as
+    `<name> <status> <exit code> <restart policy>`."""
+    stopped: dict[str, tuple[str, str]] = {}
+    for line in read_text(stage / "docker_stopped.tsv").splitlines():
+        fields = line.split("\t")
+        if len(fields) < 4:
+            continue
+        name = fields[0].strip().lstrip("/")
+        if name:
+            stopped[name] = (fields[2].strip(), fields[3].strip().lower())
+    return stopped
+
+
+def docker_stopped_reason(evidence: tuple[str, str] | None) -> tuple[bool, str]:
+    """Decide whether a container that is not running is a fault worth monitoring.
+
+    This mirrors the rule the generator already applies to init units: a failed
+    unit is generated because it was asked to run and is not, while a merely
+    inactive one is the operator's intent. Docker states that intent as the
+    restart policy and the failure as a non-zero exit code. The container list
+    API reports neither — its `HostConfig` carries only `NetworkMode` — so
+    without the per-container evidence the container is left out exactly as
+    before rather than guessed at from the exit code alone: a one-off
+    `docker run` that failed is not a service outage.
+    """
+    if evidence is None:
+        return False, DOCKER_NOT_RUNNING_REASON
+    exit_code, policy = evidence
+    if policy not in DOCKER_KEEP_ALIVE_POLICIES:
+        return False, f"{DOCKER_NOT_RUNNING_REASON} (restart policy {policy or 'unset'})"
+    if exit_code in ("", "0"):
+        return False, f"container exited {exit_code or 'without a status'} (restart policy {policy})"
+    return True, f"restart policy {policy} and exit code {exit_code}"
+
+
 def parse_docker_containers(stage: Path) -> tuple[list[dict[str, str]], list[dict[str, str]]]:
     entries = read_json_list(stage / "docker_containers.json")
     if not entries:
@@ -1684,6 +1814,7 @@ def parse_docker_containers(stage: Path) -> tuple[list[dict[str, str]], list[dic
                 continue
             if isinstance(data, dict):
                 entries.append(data)
+    stopped = parse_docker_stopped(stage)
     containers: list[dict[str, str]] = []
     skipped: list[dict[str, str]] = []
     for entry in entries:
@@ -1700,8 +1831,12 @@ def parse_docker_containers(stage: Path) -> tuple[list[dict[str, str]], list[dic
         }
         if state == "running":
             containers.append(item)
+            continue
+        monitored, detail = docker_stopped_reason(stopped.get(name))
+        if monitored:
+            containers.append(item | {"source": detail})
         else:
-            skipped.append(item | {"reason": "container is not running"})
+            skipped.append(item | {"reason": detail})
     return containers, skipped
 
 
@@ -1787,7 +1922,7 @@ def generate_for_host(host_slug: str, stage: Path, configs_dir: Path, options: G
         shutil.rmtree(root)
     ensure_dirs(root)
     backend = read_text(stage / "init").strip()
-    config_backend = backend if backend in {"systemd", "openrc"} else "auto"
+    config_backend = backend if backend in INIT_BACKENDS else "auto"
     write_file(root, "etc/sermo/sermo.yml", base_config(options, config_backend))
 
     report = {
@@ -1803,6 +1938,7 @@ def generate_for_host(host_slug: str, stage: Path, configs_dir: Path, options: G
         "lvm_volumes": [],
         "mount_units": [],
         "nfs_endpoints": [],
+        "thin_arbiters": [],
         "skipped_watches": [],
         "config_tar": str(configs_dir / host_slug / "sermo-config.tgz"),
     }
@@ -1811,6 +1947,7 @@ def generate_for_host(host_slug: str, stage: Path, configs_dir: Path, options: G
     terminal_sessions = parse_terminal_sessions(stage)
     terminal_watches = terminal_session_watches(terminal_sessions)
     services, skipped_services, failed_services = parse_services(stage, options)
+    _, report["thin_arbiters"] = thin_arbiter_report(stage)
     catalog_docs = load_catalog_services(options.catalog_services_dir)
     for svc in services:
         name = svc["name"]
@@ -2049,14 +2186,14 @@ dry_run: true
             continue
         fstab = fstab_targets.get(target)
         fstype = (mount.get("fstype") or "").lower()
-        if not fstab or (fstype not in NETWORK_FS and fstab["fstype"] not in NETWORK_FS and target not in usb_targets):
+        if not fstab or (not is_network_fs(fstype) and not is_network_fs(fstab["fstype"]) and target not in usb_targets):
             continue
         add_mount_watch(fstab)
 
         add_nfs_endpoint(fstab)
 
     for fstab in fstab_entries:
-        if fstab["fstype"] in NETWORK_FS:
+        if is_network_fs(fstab["fstype"]):
             add_mount_watch(fstab)
         add_nfs_endpoint(fstab)
 
@@ -2235,6 +2372,25 @@ dry_run: true
         add_watch("watches", "watch-firewall-rules", simple_watch("watch-firewall-rules", "network", "1m", ["type: firewall_rules", "backend: auto", "min_rules: 1"], cycles=3))
     else:
         skip("firewall_rules", "no active supported firewall service")
+
+    # A failed unit with no catalog profile — a site-local backup job, a failed
+    # mount or timer — is invisible to service monitoring, which only covers the
+    # generated services. The backend is named explicitly so the check does not
+    # re-detect the init system on every cycle.
+    if backend in INIT_BACKENDS:
+        add_watch(
+            "watches",
+            "watch-failed-units",
+            simple_watch(
+                "watch-failed-units",
+                "system",
+                "1m",
+                ["type: failed_units", f"backend: {backend}", 'count: { op: ">", value: 0 }'],
+                cycles=2,
+            ),
+        )
+    else:
+        skip("failed_units", "no supported init backend detected")
 
     if " autofs " in read_text(stage / "proc_mounts"):
         add_watch("watches", "watch-autofs", simple_watch("watch-autofs", "storage", "1m", ["type: autofs"], cycles=3))

@@ -108,7 +108,11 @@ exit path), and release the operation lock (registered only after a successful
 acquire). Every later step may return early; cleanup never repeats per return,
 and a blocked, failed or panicking operation cannot leak the lock or skip its
 event. Result statuses: `ok`, `blocked`, `preflight_failed`,
-`postflight_failed`, `failed`, `orphan_processes`. The engine does not
+`postflight_failed`, `failed`, `orphan_processes`. A reload (SIGHUP) or shutdown
+cancels an in-flight operation, so the engine's bounded waits report
+`operation cancelled during <phase>` instead of a timeout: an interrupted action
+must not read as a slow service, and every `--with-config` deployment reloads the
+daemon. The engine does not
 implement cooldown itself — that gates the *decision* to act and runs in the
 daemon's rule evaluation before the engine is called, which is how manual and
 automatic actions share one engine while only automatic remediation is rate

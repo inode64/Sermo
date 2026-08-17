@@ -283,6 +283,34 @@ mount unit. Use
 `--include-inactive-installed-services` only for catalog audits where inactive
 installed profiles are intentionally desired.
 
+A container that is **not** running is generated when Docker was asked to keep it
+alive and it exited non-zero — the container equivalent of a failed unit. The
+container list API reports neither fact (its `HostConfig` carries only
+`NetworkMode`), so the collectors add `docker_stopped.tsv`, one line per
+non-running container as `<name> <status> <exit code> <restart policy>`. A
+restart policy of `always`, `unless-stopped` or `on-failure` with a non-zero exit
+is an outage; policy `no` is a one-off `docker run` and a zero exit is a
+completed or deliberately stopped container. Without that evidence — no docker
+CLI on the host, or a host staged before it was collected — the container is left
+out rather than guessed at from the exit code, since a failed one-off is not a
+service outage. Every decision is recorded under `containers` in
+`config-report.json`.
+
+A **thin arbiter** is generated as its own service on the host that serves it.
+The arbiter of a replica 2 volume is neither a brick nor a peer: `gluster volume
+status` never lists it and `volume info --xml` omits it, so a volume whose
+arbiter was never started reports a perfectly healthy topology while the clients
+log `Failed to lookup/create thin-arbiter id file` and the volume runs with no
+split-brain protection. The collectors therefore stage the declaration from
+`gluster volume info`'s text output, resolving the arbiter host on the target —
+that name is usually internal to the storage network. When it resolves to one of
+the host's own addresses, the `gluster-ta-volume` catalog service is generated
+even though its unit is currently inactive, which is the same reasoning that
+keeps a failed unit monitorable. The profile deliberately carries no endpoint
+probe: the packaged unit binds port `24007`, the port glusterd itself listens on,
+so a connect proves nothing wherever the two share a host. Each declaration,
+local or remote, is recorded under `thin_arbiters` in `config-report.json`.
+
 Every locally mounted, non-pseudo filesystem discovered from `findmnt` gets a
 safe `storage` check with `mounted: true` and the free-space threshold. This
 covers ext2/3/4, XFS, btrfs, vfat/exfat and the other local filesystem types in
@@ -297,6 +325,14 @@ staging inventory resolves the NFS source and records its route, so the generate
 probe binds to that egress interface when one is known. Every fstab-backed
 network filesystem also receives its `mounted: true` watch even when it is not
 currently listed by `findmnt`, so an already-failed mount remains visible.
+
+A FUSE network client is spelled two ways for the same mount — `glusterfs` in
+`/etc/fstab`, `fuse.glusterfs` in `findmnt` — and both classify as a network
+filesystem. Matching the raw string alone let the `findmnt` spelling fall through
+to the generic `fuse.*` local-storage rule, so a Gluster client mount was
+generated as a capacity watch carrying an `expand` action that can never grow a
+remote volume, and the watch kind flipped between hosts depending on whether the
+mount happened to be up when the host was staged.
 
 An entry mounted on demand rather than at boot — `noauto` or
 `x-systemd.automount` in its fstab options — gets **no** `mounted: true` watch:
@@ -316,6 +352,19 @@ Every generated configuration includes tier 1 of the three-tier clock-drift
 policy: an alert-only `watch-clock-drift`. It queries `time.cloudflare.com` and
 `pool.ntp.org` every five minutes and alerts after two consecutive samples whose
 wall-clock drift exceeds `1s`. It never corrects time.
+
+Every generated configuration includes `watch-failed-units`, an alert-only count
+of the init units the host reports as failed, naming them. Service monitoring only
+covers the generated services, so a unit with no catalog profile — a site-local
+backup job, a failed `.mount` or `.timer` — was invisible: on k2keu2
+`backup_kvm.service` had been failed for days and the host reported `degraded`
+while Sermo reported nothing. The watch names the host's real init backend rather
+than `auto`, so the check does not re-detect the init system every cycle, and it
+carries no remediation: restarting an arbitrary unit Sermo knows nothing about is
+not a safe action. A unit that *does* have a generated service is reported twice
+— once by its service check, once here — deliberately: the watch is the
+systemd-level view, and excluding the generated units would make a unit's failure
+invisible again the moment an operator unmonitors its service.
 
 `watch-firewall-rules` is generated only when the init inventory reports an
 active supported firewall manager (`firewalld`, `firehol`, `nftables`,

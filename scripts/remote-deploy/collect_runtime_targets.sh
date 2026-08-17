@@ -23,6 +23,24 @@ if [ -S /run/docker.sock ]; then
 	fi
 fi
 
+# Exit code and restart policy of every container that is not running, so the
+# generator can tell a failed service container from a one-off `docker run`
+# leftover. The container list API reports neither: its HostConfig carries only
+# NetworkMode. Enumerating and inspecting without a JSON parser needs the docker
+# CLI, so without it this stays empty and every non-running container is left
+# out, as before. Keep this block in step across the collectors.
+: >"${out}/docker_stopped.tsv"
+if [ -S /run/docker.sock ] && command -v docker >/dev/null 2>&1; then
+	docker --host unix:///run/docker.sock ps -aq --filter status=exited --filter status=dead \
+		2>>"${out}/docker_containers.err" \
+		| while IFS= read -r container_id; do
+			[ -n "$container_id" ] || continue
+			docker --host unix:///run/docker.sock inspect \
+				--format '{{.Name}}{{"\t"}}{{.State.Status}}{{"\t"}}{{.State.ExitCode}}{{"\t"}}{{.HostConfig.RestartPolicy.Name}}' \
+				"$container_id" 2>>"${out}/docker_containers.err" || true
+		done >"${out}/docker_stopped.tsv"
+fi
+
 : >"${out}/libvirt_domains.tsv"
 : >"${out}/libvirt_domains.err"
 if command -v virsh >/dev/null 2>&1; then

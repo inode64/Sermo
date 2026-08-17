@@ -210,6 +210,9 @@ var (
 	EntropyPredFields = []string{DataKeyAvail}
 	// ZombiePredFields is the single required predicate of a zombies check.
 	ZombiePredFields = []string{DataKeyCount}
+	// FailedUnitsPredFields is the single optional predicate of a failed_units
+	// check; absent, it defaults to firing on any failed unit.
+	FailedUnitsPredFields = []string{DataKeyCount}
 )
 
 // parseLevelPreds reads the {op, value} predicates present in entry among

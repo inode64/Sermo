@@ -1,0 +1,10 @@
+name: failed-units
+category: system
+# Alert on any init unit in a failed state, including the units with no catalog
+# profile that service monitoring cannot see (a site-local backup job, a failed
+# mount or timer). Reported only: restarting an arbitrary unit is not safe.
+monitor: disabled
+interval: 1m
+check: { type: failed_units, backend: auto, count: { op: ">", value: 0 } }
+then:
+  notify: [none]

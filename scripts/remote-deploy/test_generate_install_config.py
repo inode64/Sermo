@@ -303,6 +303,52 @@ class EndpointGenerationTest(unittest.TestCase):
             self.assertIn("type: storage", body)
             self.assertIn("mounted: true", body)
 
+    def test_fuse_network_client_mount_is_mount_only(self):
+        """findmnt spells a Gluster client mount `fuse.glusterfs` and fstab
+        spells it `glusterfs`. Both are the same network client, so it gets the
+        mount-only watch every network filesystem gets — never a capacity watch
+        with an `expand` action that cannot grow a remote volume."""
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        root = Path(temp.name)
+        stage = root / "stage" / "host" / "out"
+        stage.mkdir(parents=True)
+        (stage / "init").write_text("systemd\n", encoding="utf-8")
+        (stage / "active_units").write_text("", encoding="utf-8")
+        (stage / "findmnt.json").write_text(
+            json.dumps({"filesystems": [
+                {"target": "/", "fstype": "ext4"},
+                {"target": "/var/lib/libvirt/images.cluster", "fstype": "fuse.glusterfs"},
+            ]}),
+            encoding="utf-8",
+        )
+        (stage / "fstab").write_text(
+            "/dev/vda1 / ext4 defaults 0 1\n"
+            "localhost:/images /var/lib/libvirt/images.cluster glusterfs rw,noatime 0 2\n",
+            encoding="utf-8",
+        )
+        options = default_options()
+
+        report = generator.generate_for_host("host", stage, root / "configs", options)
+
+        generated = root / "configs/host/root/etc/sermo"
+        self.assertFalse((generated / "storages/storage-var-lib-libvirt-images-cluster.yml").exists())
+        mount_body = (generated / "mounts/mount-var-lib-libvirt-images-cluster.yml").read_text(encoding="utf-8")
+        self.assertIn("mounted: true", mount_body)
+        self.assertNotIn("expand:", mount_body)
+        self.assertNotIn("free_pct", mount_body)
+        self.assertEqual(report["filesystems"], [{"name": "storage-root", "path": "/", "fstype": "ext4"}])
+        self.assertEqual(
+            report["mount_units"],
+            [{
+                "name": "mount-var-lib-libvirt-images-cluster",
+                "path": "/var/lib/libvirt/images.cluster",
+                "source": "localhost:/images",
+                "fstype": "glusterfs",
+                "folder": "mounts",
+            }],
+        )
+
     def test_generates_nfs_endpoint_check_for_fstab_mount(self):
         temp = tempfile.TemporaryDirectory()
         self.addCleanup(temp.cleanup)
@@ -1130,6 +1176,107 @@ class LibvirtDomainStateTest(unittest.TestCase):
             self.assertIn("export LC_ALL=C", body, f"{script} must pin the locale")
 
 
+class FailedUnitsWatchGenerationTest(unittest.TestCase):
+    """A failed unit with no catalog profile is invisible to service monitoring.
+    Observed on k2keu2: `backup_kvm.service` had been failed for days, the host
+    reported `degraded`, and Sermo said nothing about either."""
+
+    def generate(self, init: str):
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        root = Path(temp.name)
+        stage = root / "stage" / "host" / "out"
+        stage.mkdir(parents=True)
+        (stage / "init").write_text(f"{init}\n", encoding="utf-8")
+        (stage / "active_units").write_text("", encoding="utf-8")
+        report = generator.generate_for_host("host", stage, root / "configs", default_options())
+        return root / "configs/host/root/etc/sermo", report
+
+    def test_names_the_hosts_backend(self):
+        for init in generator.INIT_BACKENDS:
+            with self.subTest(init=init):
+                generated, report = self.generate(init)
+                body = yaml.safe_load((generated / "watches/watch-failed-units.yml").read_text(encoding="utf-8"))
+                self.assertEqual(body["check"]["type"], "failed_units")
+                # Explicit backend: `auto` would re-detect the init system every cycle.
+                self.assertEqual(body["check"]["backend"], init)
+                self.assertEqual(body["check"]["count"], {"op": ">", "value": 0})
+                self.assertNotIn("then", body)
+                self.assertNotIn(
+                    {"kind": "failed_units", "reason": "no supported init backend detected"},
+                    report["skipped_watches"],
+                )
+
+    def test_unknown_init_is_recorded_instead(self):
+        generated, report = self.generate("unknown")
+
+        self.assertFalse((generated / "watches/watch-failed-units.yml").exists())
+        self.assertIn(
+            {"kind": "failed_units", "reason": "no supported init backend detected"},
+            report["skipped_watches"],
+        )
+
+
+class DockerStoppedContainerTest(unittest.TestCase):
+    """A container Docker was asked to keep running and that exited non-zero is
+    an outage, like a failed init unit. Observed on k2keu2: coreai-api-prod had
+    been down three days with exit 137 and regenerating the host dropped it from
+    the configuration, so nothing reported it any more."""
+
+    def parse(self, containers: list[dict], stopped: str):
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        stage = Path(temp.name)
+        (stage / "docker_containers.json").write_text(json.dumps(containers), encoding="utf-8")
+        (stage / "docker_stopped.tsv").write_text(stopped, encoding="utf-8")
+        return generator.parse_docker_containers(stage)
+
+    def test_running_container_needs_no_evidence(self):
+        containers, skipped = self.parse([{"Names": ["/api"], "State": "running"}], "")
+        self.assertEqual([c["container"] for c in containers], ["api"])
+        self.assertEqual(skipped, [])
+
+    def test_keep_alive_policy_with_failing_exit_is_generated(self):
+        containers, skipped = self.parse(
+            [{"Names": ["/coreai-api-prod"], "State": "exited", "Status": "Exited (137) 3 days ago"}],
+            "/coreai-api-prod\texited\t137\ton-failure\n",
+        )
+        self.assertEqual([c["container"] for c in containers], ["coreai-api-prod"])
+        self.assertEqual(containers[0]["source"], "restart policy on-failure and exit code 137")
+        self.assertEqual(skipped, [])
+
+    def test_one_off_container_that_failed_is_not_a_service(self):
+        # `docker run` leftover: exit 127, restart policy no.
+        containers, skipped = self.parse(
+            [{"Names": ["/hungry_hoover"], "State": "exited"}],
+            "/hungry_hoover\texited\t127\tno\n",
+        )
+        self.assertEqual(containers, [])
+        self.assertEqual(skipped[0]["reason"], "container is not running (restart policy no)")
+
+    def test_clean_exit_is_the_operators_intent(self):
+        containers, skipped = self.parse(
+            [{"Names": ["/blog-wordpress-1"], "State": "exited"}],
+            "/blog-wordpress-1\texited\t0\tunless-stopped\n",
+        )
+        self.assertEqual(containers, [])
+        self.assertEqual(skipped[0]["reason"], "container exited 0 (restart policy unless-stopped)")
+
+    def test_missing_evidence_leaves_the_container_out(self):
+        # A host staged before this fact was collected reports nothing, and the
+        # exit code alone cannot tell a service outage from a one-off failure.
+        containers, skipped = self.parse([{"Names": ["/api"], "State": "exited"}], "")
+        self.assertEqual(containers, [])
+        self.assertEqual(skipped[0]["reason"], "container is not running")
+
+    def test_collectors_capture_stopped_container_evidence(self):
+        root = Path(__file__).resolve().parent
+        for script in ("remote_collect_inventory.sh", "remote_stage.sh", "collect_runtime_targets.sh"):
+            body = (root / script).read_text(encoding="utf-8")
+            self.assertIn("docker_stopped.tsv", body, script)
+            self.assertIn("{{.HostConfig.RestartPolicy.Name}}", body, script)
+
+
 class GlusterClusterGenerationTest(unittest.TestCase):
     def stage(self):
         temp = tempfile.TemporaryDirectory()
@@ -1253,6 +1400,86 @@ class GlusterClusterGenerationTest(unittest.TestCase):
             self.assertIn("gluster --mode=script --xml peer status", body, script)
             self.assertIn("gluster --mode=script --xml volume info", body, script)
             self.assertIn("gluster --mode=script --xml volume status", body, script)
+
+
+class GlusterThinArbiterTest(unittest.TestCase):
+    """The thin arbiter of a replica 2 volume is neither a brick nor a peer, so a
+    volume whose arbiter was never started reports a perfectly healthy topology.
+    Observed on k2kca2: the volume declared it, the unit was disabled and dead,
+    and the clients logged `Failed to lookup/create thin-arbiter id file` every
+    few hours while Sermo reported glusterd ok on all three nodes."""
+
+    def stage(self, arbiters: str, addresses: str = "2: vrack6    inet 172.31.27.5/24 scope global vrack6\n"):
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        root = Path(temp.name)
+        stage = root / "stage" / "host" / "out"
+        stage.mkdir(parents=True)
+        (stage / "init").write_text("systemd\n", encoding="utf-8")
+        (stage / "active_units").write_text("glusterd.service\n", encoding="utf-8")
+        (stage / "services_json.out").write_text(
+            json.dumps({"services": [
+                {"name": "glusterd", "installed": True, "ok": True, "status": "ok"},
+                {"name": "gluster-ta-volume", "installed": True, "ok": True, "status": "ok"},
+            ]}),
+            encoding="utf-8",
+        )
+        (stage / "ip_addr4").write_text(addresses, encoding="utf-8")
+        (stage / generator.GLUSTER_TA_EVIDENCE).write_text(arbiters, encoding="utf-8")
+        return root, stage
+
+    def test_local_arbiter_generates_the_daemon_even_when_stopped(self):
+        root, stage = self.stage("images\tk2kca2.vrack6\t/srv/gluster-images\t172.31.27.5\n")
+
+        report = generator.generate_for_host("host", stage, root / "configs", default_options())
+
+        body = yaml.safe_load(
+            (root / "configs/host/root/etc/sermo/services/gluster-ta-volume.yml").read_text(encoding="utf-8")
+        )
+        self.assertEqual(body["uses"], generator.GLUSTER_TA_CATALOG_SERVICE)
+        self.assertEqual(
+            report["thin_arbiters"],
+            [{
+                "volume": "images",
+                "host": "k2kca2.vrack6",
+                "path": "/srv/gluster-images",
+                "address": "172.31.27.5",
+                "local": True,
+                "source": "Gluster thin-arbiter declaration for this host",
+            }],
+        )
+
+    def test_remote_arbiter_is_recorded_but_not_generated(self):
+        root, stage = self.stage("images\tk2kca2.vrack6\t/srv/gluster-images\t172.31.27.9\n")
+
+        report = generator.generate_for_host("host", stage, root / "configs", default_options())
+
+        self.assertFalse((root / "configs/host/root/etc/sermo/services/gluster-ta-volume.yml").exists())
+        self.assertFalse(report["thin_arbiters"][0]["local"])
+        self.assertEqual(report["thin_arbiters"][0]["reason"], "thin arbiter runs on k2kca2.vrack6")
+
+    def test_unresolved_arbiter_host_is_reported_as_such(self):
+        _, stage = self.stage("images\tk2kca2.vrack6\t/srv/gluster-images\t\n")
+
+        local, entries = generator.thin_arbiter_report(stage)
+
+        self.assertFalse(local)
+        self.assertEqual(entries[0]["reason"], "thin arbiter host k2kca2.vrack6 did not resolve on the target")
+        self.assertEqual(generator.required_service_names(stage), set())
+
+    def test_volume_without_a_thin_arbiter_requires_nothing(self):
+        _, stage = self.stage("")
+
+        self.assertEqual(generator.thin_arbiter_report(stage), (False, []))
+        self.assertEqual(generator.required_service_names(stage), set())
+
+    def test_collectors_capture_the_thin_arbiter_declaration(self):
+        root = Path(__file__).resolve().parent
+        for script in ("remote_collect_inventory.sh", "remote_stage.sh"):
+            body = (root / script).read_text(encoding="utf-8")
+            self.assertIn("gluster --mode=script volume info", body, script)
+            self.assertIn("Thin-arbiter-path", body, script)
+            self.assertIn(generator.GLUSTER_TA_EVIDENCE, body, script)
 
 
 if __name__ == "__main__":

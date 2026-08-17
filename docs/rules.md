@@ -23,6 +23,7 @@
   - [Clock drift (clock)](#clock-drift-clock)
   - [Default route (route)](#default-route-route)
   - [Firewall rules (firewall_rules)](#firewall-rules-firewall_rules)
+  - [Failed init units (failed_units)](#failed-init-units-failed_units)
   - [Disk throughput (hdparm)](#disk-throughput-hdparm)
   - [Hardware sensors](#hardware-sensors)
   - [Autofs](#autofs)
@@ -81,6 +82,7 @@ Connection-protocol checks (MySQL, PostgreSQL, Redis, Docker, libvirt, etc.) are
 | `diskio`      | a block device's per-cycle I/O rates (util_pct/read_bytes/write_bytes/await_ms) |
 | `conntrack`   | the netfilter conntrack table vs its max (used_pct/free/count)      |
 | `firewall_rules` | nftables/iptables has at least `min_rules` loaded rules (see Firewall rules) |
+| `failed_units` | the count of init units in a failed state satisfies `count {op, value}` (default `> 0`; see Failed init units) |
 | `route`       | an up default route exists, optionally egressing a given `interface` (see Default route)|
 | `clock`       | local wall-clock offset stays within `max_offset`, measured against the configured NTP `servers` or (`source: chrony`) the local chronyd |
 | `net`         | one interface metric (`metric: state\|speed\|errors\|address`) holds — single-metric form of the net watch |
@@ -1898,7 +1900,7 @@ Every type above is a **single-shot check** (`Check.Run → Result`) and is usab
 
 The host-resource checks (`storage`, `load`, `memory`, `pressure`, `fds`, `pids`,
 `diskio`, `hdparm`, `sensors`, `smart`, `raid`, `edac`, `conntrack`, `entropy`,
-`zombies`, `oom`, among others) are
+`zombies`, `oom`, `failed_units`, among others) are
 condition-style — `OK == true` means there is a problem — so in rules
 `active: {check: x}` fires on it, and as a watch the hook fires on it.
 The health checks (`tcp`, `ports`, `http`, `command`, `service`, `file_exists`,
@@ -2002,6 +2004,35 @@ checks:
 
 As a watch, it fires the hook when the firewall rules disappear. Hook extras:
 `SERMO_BACKEND`, `SERMO_RULES`, `SERMO_MIN_RULES`.
+
+### Failed init units (`failed_units`)
+
+The `failed_units` check counts the init units the host reports as failed and
+names them. It exists because service monitoring only covers *configured*
+services: a site-local unit with no catalog profile — a nightly backup job, say —
+is otherwise invisible, and so is a failed `.mount` or `.timer`. The listing is
+therefore not restricted to `.service`.
+
+```yaml
+watches:
+  watch-failed-units:
+    category: system
+    interval: 1m
+    check:
+      type: failed_units
+      backend: systemd     # optional: auto (default) | systemd | openrc
+      count: { op: ">", value: 0 }   # optional; this is the default
+```
+
+`backend: auto` detects the init system on every cycle, so a generated
+configuration names the host's real backend instead. On systemd the units come
+from `systemctl list-units --state=failed`; on OpenRC from the `crashed` services
+in `rc-status --all`.
+
+The check is condition-style and has **no remediation action**: restarting an
+arbitrary unit Sermo knows nothing about is not a safe action, so a failed unit
+is reported and left alone. Data keys are `backend`, `count` and `units` (the
+joined unit names), and the dashboard shows all three.
 
 ### Disk throughput (`hdparm`)
 

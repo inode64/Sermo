@@ -225,6 +225,29 @@ if command -v gluster >/dev/null 2>&1; then
 	capture gluster_peer_status gluster --mode=script --xml peer status
 	capture gluster_volume_info gluster --mode=script --xml volume info
 	capture gluster_volume_status gluster --mode=script --xml volume status
+	# The thin arbiter of a replica 2 volume is a daemon of its own, and neither
+	# `volume status` nor `volume info --xml` reports it — the declaration exists
+	# only in the text output. Its host is resolved here because that name is
+	# usually internal to the storage network and does not resolve from the
+	# workstation that generates the configuration. Keep in step across the
+	# collectors.
+	capture gluster_volume_info_text gluster --mode=script volume info
+	: >"${out}/gluster_thin_arbiters"
+	awk '
+		/^[[:space:]]*Volume Name:[[:space:]]/ { volume = $3 }
+		/^[[:space:]]*Thin-arbiter-path:[[:space:]]/ { print volume "\t" $2 }
+	' "${out}/gluster_volume_info_text.out" >"${out}/gluster_thin_arbiters.raw" 2>/dev/null || true
+	while IFS="$(printf '\t')" read -r volume arbiter; do
+		[ -n "$volume" ] && [ -n "$arbiter" ] || continue
+		arbiter_host="${arbiter%%:*}"
+		arbiter_path="${arbiter#*:}"
+		arbiter_address="$(getent ahostsv4 "$arbiter_host" 2>/dev/null | awk 'NR == 1 { print $1 }')"
+		if [ -z "$arbiter_address" ]; then
+			arbiter_address="$(getent ahostsv6 "$arbiter_host" 2>/dev/null | awk 'NR == 1 { print $1 }')"
+		fi
+		printf '%s\t%s\t%s\t%s\n' "$volume" "$arbiter_host" "$arbiter_path" "$arbiter_address" >>"${out}/gluster_thin_arbiters"
+	done <"${out}/gluster_thin_arbiters.raw"
+	rm -f "${out}/gluster_thin_arbiters.raw"
 fi
 
 findmnt -R -J >"${out}/findmnt.json" 2>/dev/null || true
@@ -435,6 +458,24 @@ if [ -S /run/docker.sock ]; then
 	elif command -v docker >/dev/null 2>&1; then
 		docker --host unix:///run/docker.sock ps -a --format '{{json .}}' >"${out}/docker_containers.jsonl" 2>"${out}/docker_containers.err" || true
 	fi
+fi
+
+# Exit code and restart policy of every container that is not running, so the
+# generator can tell a failed service container from a one-off `docker run`
+# leftover. The container list API reports neither: its HostConfig carries only
+# NetworkMode. Enumerating and inspecting without a JSON parser needs the docker
+# CLI, so without it this stays empty and every non-running container is left
+# out, as before. Keep this block in step across the collectors.
+: >"${out}/docker_stopped.tsv"
+if [ -S /run/docker.sock ] && command -v docker >/dev/null 2>&1; then
+	docker --host unix:///run/docker.sock ps -aq --filter status=exited --filter status=dead \
+		2>>"${out}/docker_containers.err" \
+		| while IFS= read -r container_id; do
+			[ -n "$container_id" ] || continue
+			docker --host unix:///run/docker.sock inspect \
+				--format '{{.Name}}{{"\t"}}{{.State.Status}}{{"\t"}}{{.State.ExitCode}}{{"\t"}}{{.HostConfig.RestartPolicy.Name}}' \
+				"$container_id" 2>>"${out}/docker_containers.err" || true
+		done >"${out}/docker_stopped.tsv"
 fi
 
 : >"${out}/libvirt_domains.tsv"

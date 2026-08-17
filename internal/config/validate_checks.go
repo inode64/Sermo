@@ -821,6 +821,7 @@ var singleShotCheckValidators = map[string]singleShotCheckValidator{
 	checks.CheckTypeDiskIO:           singleShotNoLock(validateDiskIOFields),
 	checks.CheckTypeConntrack:        singleShotThreshold(checks.ConntrackPredFields),
 	checks.CheckTypeFirewallRules:    singleShotNoLock(validateFirewallRulesFields),
+	checks.CheckTypeFailedUnits:      singleShotNoLock(validateFailedUnitsFields),
 	checks.CheckTypeNet:              validateNetSingleShotCheck,
 	checks.CheckTypeICMP:             validateICMPSingleShotCheck,
 	checks.CheckTypeSwap:             validateSwapSingleShotCheck,
@@ -1314,6 +1315,18 @@ func validateFirewallRulesFields(prefix string, fields map[string]any, add addFu
 		if !ok || n < 1 {
 			add("%s.min_rules must be a positive integer", prefix)
 		}
+	}
+}
+
+// validateFailedUnitsFields validates a failed_units check: an optional init
+// backend selector and an optional count predicate, which defaults to firing on
+// any failed unit.
+func validateFailedUnitsFields(prefix string, fields map[string]any, add addFunc) {
+	if _, err := servicemgr.ParseBackend(cfgval.String(fields[checks.CheckKeyBackend])); err != nil {
+		add("%s.backend must be %s", prefix, servicemgr.BackendInitSummary)
+	}
+	if _, present := fields[checks.CheckKeyCount]; present {
+		validateThresholdPreds(prefix, fields, checks.FailedUnitsPredFields, add)
 	}
 }
 

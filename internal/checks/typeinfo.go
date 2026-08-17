@@ -95,6 +95,7 @@ const (
 	CheckTypeSwap             = "swap"
 	CheckTypeRoute            = "route"
 	CheckTypeFirewallRules    = "firewall_rules"
+	CheckTypeFailedUnits      = "failed_units"
 )
 
 // CheckTypeTCPConnections counts established local TCP sockets on a port.
