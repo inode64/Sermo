@@ -27,6 +27,7 @@ type fakeBackend struct {
 	mountAlert                  MountAlertResult
 	mountOperated               []string
 	operated                    []string // "name/action"
+	reaped                      []string // service names passed to ReapStrays
 	sshSessionsClosed           []SSHSession
 	terminalSessionsClosed      []TerminalSession
 	emptyTerminalSessionsClosed []string
@@ -241,6 +242,14 @@ func (f *fakeBackend) Operate(_ context.Context, name, action string, opts Opera
 		return ActionResult{OK: false, Message: "blocked"}
 	}
 	return ActionResult{OK: true, Message: "ok"}
+}
+
+func (f *fakeBackend) ReapStrays(_ context.Context, name string) ActionResult {
+	f.reaped = append(f.reaped, name)
+	if f.failOp {
+		return ActionResult{OK: false, Message: "reap: 1 stray process(es) reported, none authorized by reap.kill_only_if"}
+	}
+	return ActionResult{OK: true, Message: "reap ok (signalled 1 of 1 stray process(es))"}
 }
 
 func (f *fakeBackend) CloseSSHSession(_ context.Context, _ string, session SSHSession) ActionResult {
@@ -1157,6 +1166,39 @@ func TestOperateActions(t *testing.T) {
 	want := []string{"web/" + apiActionStart, "web/" + apiActionStop, "web/" + apiActionRestart}
 	if strings.Join(b.operated, ",") != strings.Join(want, ",") {
 		t.Fatalf("operated = %v, want %v", b.operated, want)
+	}
+}
+
+// Reap is its own verb, not one of the operate actions: it signals processes the
+// service could not name and changes no unit state.
+func TestReapStraysAction(t *testing.T) {
+	b := &fakeBackend{}
+	rec := httptest.NewRecorder()
+	newServer(b).ServeHTTP(rec, postReq(testServicePath("web", apiActionReap)))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("reap = %d, want %d", rec.Code, http.StatusOK)
+	}
+	if len(b.reaped) != 1 || b.reaped[0] != "web" {
+		t.Fatalf("reaped = %v, want [web]", b.reaped)
+	}
+	if len(b.operated) != 0 {
+		t.Fatalf("reap must not go through Operate, got %v", b.operated)
+	}
+}
+
+// A refusal — no reap.kill_only_if declared, so nothing was authorized — is a
+// conflict, the same shape a blocked operation returns.
+func TestReapStraysRefusalIsAConflict(t *testing.T) {
+	b := &fakeBackend{failOp: true}
+	rec := httptest.NewRecorder()
+	newServer(b).ServeHTTP(rec, postReq(testServicePath("web", apiActionReap)))
+
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("refused reap = %d, want %d", rec.Code, http.StatusConflict)
+	}
+	if !strings.Contains(rec.Body.String(), "none authorized") {
+		t.Fatalf("body = %q, want the refusal reason", rec.Body.String())
 	}
 }
 

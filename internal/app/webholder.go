@@ -293,6 +293,12 @@ func (h *WebBackendHolder) Operate(ctx context.Context, name, action string, opt
 	return webCall(h, unavailableAction(), func(b *WebBackend) web.ActionResult { return b.Operate(ctx, name, action, opts) })
 }
 
+// ReapStrays clears a service's unaccounted-for processes through the active
+// backend.
+func (h *WebBackendHolder) ReapStrays(ctx context.Context, name string) web.ActionResult {
+	return webCall(h, unavailableAction(), func(b *WebBackend) web.ActionResult { return b.ReapStrays(ctx, name) })
+}
+
 // CloseSSHSession gracefully closes one revalidated SSH terminal through the
 // active backend.
 func (h *WebBackendHolder) CloseSSHSession(ctx context.Context, name string, session web.SSHSession) web.ActionResult {

@@ -718,6 +718,7 @@ func TestIndexDetailDedupesVisibleColumns(t *testing.T) {
 		{"Memory", "colDupWide"},
 		{"IO R/W", "colDupWide"},
 		{"Last event", "colDupPhone"},
+		{"Strays", "colDupPhone"},
 	} {
 		appJSMustContain(t, "deduplicated detail field",
 			`<div class="${`+field.cls+`}"><span class="muted">`+field.label+`</span>`)

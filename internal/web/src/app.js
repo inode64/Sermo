@@ -162,6 +162,7 @@ const actionProbe = "probe";
 const actionPause = "pause";
 const actionMonitor = "monitor";
 const actionReload = "reload";
+const actionReap = "reap";
 const actionRestart = "restart";
 const actionResume = "resume";
 const actionStart = "start";
@@ -1511,6 +1512,10 @@ const liveOps = new Map(); // operations started from this browser session, keye
 // actions are not tracked in liveOps, so this guards their buttons against a
 // double click until the reply (and the follow-up load) lands.
 const pendingMonitorToggles = new Set();
+// Reap requests in flight, keyed by service name. A reap is an engine operation
+// but not one of the tracked start/stop verbs, so liveOps does not cover it; this
+// keeps the button from firing twice until the reply and the follow-up load land.
+const pendingReaps = new Set();
 const liveMountOps = new Map(); // mount operations started from this browser session, keyed by mount name
 let liveOpsTimer = null;
 let latestLocks = [];
@@ -2436,6 +2441,7 @@ const svcSortKeys = {
   fds: (s) => numericSortValue(s && s.fds),
   io: (s) => numericSortValue(s && s.io_read) + numericSortValue(s && s.io_write),
   last: lastEventTime,
+  strays: (s) => serviceStrayCount(s),
 };
 // toggleSort flips the direction when the same column is re-selected, otherwise
 // selects the new column ascending, then re-renders. Shared by every sortable
@@ -2678,10 +2684,11 @@ function serviceRowParts(s, opts = {}) {
     <td>${serviceFDsCell(s)}</td>
     <td>${serviceIoCell(s)}</td>
     <td>${lastEventCell(s)}</td>
+    <td>${serviceStraysCell(s)}</td>
     <td class="actions">${actions}</td>
   </tr>`;
   const exp = open
-    ? tpl`<tr class="exp-row" id="exp-${key}" data-exp="${key}"><td colspan="10"></td></tr>`
+    ? tpl`<tr class="exp-row" id="exp-${key}" data-exp="${key}"><td colspan="11"></td></tr>`
     : null;
   return { main, exp };
 }
@@ -2760,11 +2767,11 @@ function renderPrimaryServices() {
   let content;
   if (!list.length) {
     content = source.length
-      ? tpl`<tr><td colspan="10" class="muted">No services match the filter.</td></tr>`
-      : tpl`<tr><td colspan="10" class="muted">No services.</td></tr>`;
+      ? tpl`<tr><td colspan="11" class="muted">No services match the filter.</td></tr>`
+      : tpl`<tr><td colspan="11" class="muted">No services.</td></tr>`;
   } else {
     content = svcGrouped
-      ? renderGroupedRows(list, svcCollapsedGroups, "svc", "svc", (s) => categoryOf(s, defaultCategoryService), 10, (s) => serviceRowHTML(s), svcSort.key === "category" ? svcSort.dir : 1)
+      ? renderGroupedRows(list, svcCollapsedGroups, "svc", "svc", (s) => categoryOf(s, defaultCategoryService), 11, (s) => serviceRowHTML(s), svcSort.key === "category" ? svcSort.dir : 1)
       : list.flatMap((s) => serviceRowHTML(s));
   }
   litRender(content, rows);
@@ -2800,9 +2807,9 @@ function renderSplitServicePanel(panelKey) {
   const filtered = servicePanelFilterActive(panel.query, panel.status);
   const content = list.length
     ? (panel.grouped
-      ? renderGroupedRows(list, panel.collapsedGroups, panelKey, "svc", (s) => categoryOf(s, defaultCategoryService), 10, (s) => serviceRowHTML(s, { showResume: true }), panel.sort.key === "category" ? panel.sort.dir : 1)
+      ? renderGroupedRows(list, panel.collapsedGroups, panelKey, "svc", (s) => categoryOf(s, defaultCategoryService), 11, (s) => serviceRowHTML(s, { showResume: true }), panel.sort.key === "category" ? panel.sort.dir : 1)
       : list.flatMap((s) => serviceRowHTML(s, { showResume: true })))
-    : tpl`<tr><td colspan="10" class="muted">${filtered ? panel.emptyFiltered : panel.empty}</td></tr>`;
+    : tpl`<tr><td colspan="11" class="muted">${filtered ? panel.emptyFiltered : panel.empty}</td></tr>`;
   litRender(content, rows);
 }
 
@@ -3271,6 +3278,35 @@ function ioRWInline(read, write) {
 function serviceIoCell(s) {
   if (serviceHasNoResidentProcess(s)) return tpl`<span class="muted">—</span>`;
   return ioRWInline(s && s.io_read, s && s.io_write);
+}
+
+function serviceStrayCount(s) {
+  return Number(s && s.strays) || 0;
+}
+
+const strayCountTitle = "processes in this service's control group that no configured selector claims; `sermoctl reap` lists them";
+
+// serviceStraysCell shows the count and, for an admin, the button that clears it.
+// A service with none reads as a dash like every other empty metric: the number is
+// only interesting when it is not zero.
+function serviceStraysCell(s) {
+  const n = serviceStrayCount(s);
+  if (!n) return tpl`<span class="muted">—</span>`;
+  const count = tpl`<span class="bad" title="${strayCountTitle}">${fmtNum(n, 0)}</span>`;
+  if (!me.can_act || !s.enabled) return count;
+  return tpl`${count} ${serviceReapButton(s)}`;
+}
+
+function serviceReapButton(s) {
+  const busy = serviceBusy(s);
+  const pending = pendingReaps.has(s.name);
+  const disabled = busy || pending;
+  const label = `Reap the ${serviceStrayCount(s)} unaccounted-for process(es) of ${displayName(s)}`;
+  // A disabled button must say why, through the same visually-hidden hint every
+  // other service action uses, so the reason reaches a screen reader too.
+  const reason = pending ? "reap in progress" : serviceActionDisabledReason(s, actionReap, busy);
+  const hintID = actionHintID("svc", s.name, actionReap);
+  return tpl`${actionHint(hintID, disabled, reason)}<button type="button" class="icon-btn danger-btn" data-service-reap="${s.name}" ?disabled=${disabled} title="${reason || label}" aria-label="${label}" aria-describedby="${actionDescribedBy(hintID, disabled, reason)}"><span aria-hidden="true">☠</span></button>`;
 }
 
 function slaWindowLabel(window) {
@@ -4104,6 +4140,7 @@ function serviceGeneralDetail(d, processGeneral) {
       <div><span class="muted">Policy</span><br>${policyCell(d)}</div>
       <div><span class="muted">Locks</span><br>${locksCell(d)}</div>
       <div class="${colDupPhone}"><span class="muted">Last event</span><br>${lastEventCell(d)}</div>
+      <div class="${colDupPhone}"><span class="muted">Strays</span><br>${serviceStraysCell(d)}</div>
       <div><span class="muted">Next remediation</span><br>${nextRemediationCell(d)}</div>
       <div><span class="muted">Remediation</span><br>${renderRemediation(d.remediation)}</div>
       ${processGeneral}
@@ -6614,6 +6651,43 @@ async function postSessionClose(statusLabel, endpoint) {
   }
 }
 
+// reapStrays clears the processes a service cannot account for. It is confirmed
+// like the session closes because it signals processes; the daemon decides which
+// ones, from the service's own reap.kill_only_if, so with none declared the reply
+// says nothing was authorized and nothing died.
+async function reapStrays(name) {
+  const svc = (allServices || []).find((s) => s && s.name === name);
+  const n = svc ? serviceStrayCount(svc) : 0;
+  if (!n) return;
+  const ok = await promptConfirm({
+    title: "Reap unaccounted-for processes",
+    message: `Signal the ${n} process(es) in ${displayName(svc)}'s control group that no selector claims? `
+      + "Only those matching the service's reap.kill_only_if are signalled; the rest are reported.",
+    okLabel: "reap",
+    danger: true,
+  });
+  if (!ok) return;
+  if (pendingReaps.has(name)) return;
+  pendingReaps.add(name);
+  try {
+    renderServices();
+    setStatus("");
+    const res = await fetch(serviceAPI(name, apiActionSuffix(actionReap)), targetPostOptions());
+    const body = await jsonOrThrow(res);
+    setStatus(`reap ${name}: ${body.message || feedbackStatusOK}`, feedbackStatusOK);
+  } catch (e) {
+    setStatus(`reap ${name}: ${e.message}`, feedbackStatusErr);
+  } finally {
+    // Hold the guard until the refresh lands, so the button cannot be pressed
+    // again against a count the dashboard has not re-read yet.
+    const refresh = load();
+    Promise.resolve(refresh).finally(() => {
+      pendingReaps.delete(name);
+      renderServices();
+    });
+  }
+}
+
 async function closeTerminalSession(service, check, multiplexer, session, user, identity) {
   if (!service || !check || !session || !user || !identity || !terminalSessionKinds.includes(multiplexer)) {
     setStatus("close terminal session: invalid session identity; refresh and try again", feedbackStatusErr);
@@ -7919,6 +7993,7 @@ function initDelegatedHandlers() {
     ["[data-watch-action][data-watch]", (el) => actWatch(el.dataset.watch || "", el.dataset.watchAction || "")],
     ["[data-mount-action][data-mount]", (el) => actMount(el.dataset.mount || "", el.dataset.mountAction || "")],
     ["[data-notifier-test]", (el) => testNotifier(el.dataset.notifierTest || "")],
+    ["[data-service-reap]", (el) => reapStrays(el.dataset.serviceReap || "")],
     ["[data-service-pin]", (el) => toggleServicePin(el.dataset.servicePin || "")],
     ["[data-service-expand]", (el) => toggleServiceExpansion(el.dataset.serviceExpand || "")],
     ["[data-service-open]", (el) => openServiceExpansion(el.dataset.serviceOpen || "", true)],

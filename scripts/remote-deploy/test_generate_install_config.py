@@ -508,6 +508,56 @@ class EndpointGenerationTest(unittest.TestCase):
             {"watch": "*", "active": True, "source": "unit failed; endpoint gating skipped"},
         ])
 
+    def test_systemd_only_service_is_skipped_on_openrc(self):
+        """lvm2-monitor and mdmonitor declare `service: {systemd: [...]}` only, but
+        their app probe finds lvm/mdadm installed on OpenRC hosts too. Generating
+        them there produced a service whose unit can never resolve, and every
+        daemon start logged "service is not available on openrc" for it."""
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        root = Path(temp.name)
+        stage = root / "stage" / "kvm9" / "out"
+        stage.mkdir(parents=True)
+        (stage / "init").write_text("openrc\n", encoding="utf-8")
+        (stage / "openrc_status_all").write_text(" acpid    [  started  ]\n", encoding="utf-8")
+        (stage / "services_all_json.out").write_text(
+            json.dumps(
+                {
+                    "services": [
+                        {"name": "lvm2-monitor", "installed": True, "ok": True, "status": "ok"},
+                        {"name": "acpid", "installed": True, "ok": True, "status": "ok"},
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        report = generator.generate_for_host("kvm9", stage, root / "configs", default_options())
+
+        services = root / "configs/kvm9/root/etc/sermo/services"
+        self.assertFalse((services / "lvm2-monitor.yml").exists())
+        skipped = {entry["name"]: entry["status"] for entry in report["services"]["skipped"]}
+        self.assertEqual(skipped.get("lvm2-monitor"), "catalog profile declares no unit for openrc")
+        # A backend-neutral profile is untouched by the filter.
+        self.assertTrue((services / "acpid.yml").exists())
+
+    def test_systemd_only_service_is_generated_on_systemd(self):
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        root = Path(temp.name)
+        stage = root / "stage" / "fr5" / "out"
+        stage.mkdir(parents=True)
+        (stage / "init").write_text("systemd\n", encoding="utf-8")
+        (stage / "active_units").write_text("lvm2-monitor.service\n", encoding="utf-8")
+        (stage / "services_all_json.out").write_text(
+            json.dumps({"services": [{"name": "lvm2-monitor", "installed": True, "ok": True, "status": "ok"}]}),
+            encoding="utf-8",
+        )
+
+        generator.generate_for_host("fr5", stage, root / "configs", default_options())
+
+        self.assertTrue((root / "configs/fr5/root/etc/sermo/services/lvm2-monitor.yml").exists())
+
     def test_openrc_crashed_units_are_monitorable(self):
         temp = tempfile.TemporaryDirectory()
         self.addCleanup(temp.cleanup)

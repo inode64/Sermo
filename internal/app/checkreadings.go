@@ -208,6 +208,26 @@ func (rb *readingBuilder) addInt(field, label string) *readingBuilder {
 	return rb
 }
 
+// addSignedInt appends the field's integer value with an explicit sign, the form a
+// growth reading needs: "+5" says the count rose, where "5" reads as a total.
+func (rb *readingBuilder) addSignedInt(field, label string) *readingBuilder {
+	if v, ok := cfgval.Int(rb.data[field]); ok {
+		rb.out = append(rb.out, web.WatchReading{Field: field, Label: label, Value: fmt.Sprintf("%+d", v)})
+	}
+	return rb
+}
+
+// addGrowthWindow appends the trio every sliding-window growth check publishes:
+// the baseline it grew from, the signed rise, and the span both cover. It is the
+// reading-side counterpart of the checks package's counterWindow, so the two
+// checks that measure growth render it identically.
+func (rb *readingBuilder) addGrowthWindow() *readingBuilder {
+	return rb.
+		addInt(checks.DataKeyBaselineCount, watchReadingLabelBaselineCount).
+		addSignedInt(checks.DataKeyGrowthCount, watchReadingLabelGrowth).
+		addString(checks.DataKeyWindow, watchReadingLabelWindow)
+}
+
 // addIntMetric appends the field's integer value with a unit suffix.
 func (rb *readingBuilder) addIntMetric(field, label, unit string) *readingBuilder {
 	if v, ok := cfgval.Int(rb.data[field]); ok {
@@ -252,7 +272,7 @@ var checkReadingsByType = map[string]func(map[string]any) []web.WatchReading{
 	checks.CheckTypeFileExists:       fileCheckReadings,
 	checks.CheckTypeProcess:          processCheckReadings,
 	checks.CheckTypeStaleBinary:      staleBinaryCheckReadings,
-	checks.CheckTypeStrays:           staleBinaryCheckReadings,
+	checks.CheckTypeStrays:           straysCheckReadings,
 	checks.CheckTypeSize:             sizeCheckReadings,
 	checks.CheckTypeTCP:              connCheckReadings,
 	checks.CheckTypePorts:            connCheckReadings,
@@ -519,16 +539,27 @@ func certCheckReadings(data map[string]any) []web.WatchReading {
 	return rb.addString(checks.DataKeyIssuer, watchReadingLabelIssuer).readings()
 }
 
+// straysCheckReadings shows how many processes the service cannot account for,
+// which ones, and — when a growth bound is configured — how fast they arrived.
+// The count is the reading that matters, so unlike stale_binary this cannot reuse
+// the path/pids-only renderer: a bare list of executables hides whether one
+// leftover is sitting there or fifty are piling up.
+func straysCheckReadings(data map[string]any) []web.WatchReading {
+	return readingsFrom(data).
+		addIntMetric(checks.DataKeyCount, watchReadingLabelCount, metrics.MetricUnitProcesses).
+		addGrowthWindow().
+		addString(checks.DataKeyPath, watchReadingLabelPath).
+		addString(checks.DataKeyPIDs, watchReadingLabelPIDs).
+		readings()
+}
+
 func countCheckReadings(data map[string]any) []web.WatchReading {
-	rb := readingsFrom(data).
+	return readingsFrom(data).
 		addString(checks.DataKeyPath, watchReadingLabelPath).
 		addString(checks.DataKeyOf, watchReadingLabelOf).
 		addInt(checks.DataKeyCount, watchReadingLabelCount).
-		addInt(checks.DataKeyBaselineCount, watchReadingLabelBaselineCount)
-	if v, ok := cfgval.Int(data[checks.DataKeyGrowthCount]); ok {
-		rb.add(checks.DataKeyGrowthCount, watchReadingLabelGrowth, fmt.Sprintf("%+d", v))
-	}
-	return rb.addString(checks.DataKeyWindow, watchReadingLabelWindow).readings()
+		addGrowthWindow().
+		readings()
 }
 
 // inotifyCheckReadings shows each limit with the uid that is closest to it, plus

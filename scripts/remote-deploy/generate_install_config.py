@@ -923,6 +923,24 @@ def service_unit_candidates(service_field: object, init: str, values: dict[str, 
     return list(dict.fromkeys(out))
 
 
+def service_supports_init(doc: dict | None, init: str, values: dict[str, str], name: str) -> bool:
+    """Whether this catalog service can name a unit on the host's init backend.
+
+    A profile that declares per-init units but lists none for this backend can
+    never resolve one here: lvm2-monitor and mdmonitor are systemd-only, yet their
+    app probe (lvm, mdadm) finds the binaries installed on an OpenRC host too, so
+    without this they were generated and every daemon start logged "service is not
+    available on openrc" forever. A profile with no `service:` field, or a bare
+    unit name, is backend-neutral and stays eligible.
+    """
+    if not doc:
+        return True
+    field = doc.get("service")
+    if not isinstance(field, dict):
+        return True
+    return bool(service_unit_candidates(field, init, values, name))
+
+
 def service_reports(stage: Path) -> list[dict]:
     """Return the complete catalog report, falling back for old inventories."""
     for name in ("services_all_json.out", "services_json.out"):
@@ -969,12 +987,22 @@ def parse_services(stage: Path, options: GenerationOptions, required: set[str]) 
     reports = service_reports(stage)
     catalog_docs = load_catalog_services(options.catalog_services_dir)
     active_services, failed_services, candidates_by_service, active_inventory_ok = active_service_filter(stage, catalog_docs)
+    init = read_text(stage / "init").strip()
     services: list[dict] = []
     skipped: list[dict] = []
     for rep in reports:
         name = rep.get("name") or ""
         if options.service_names and name not in options.service_names:
             skipped.append({"name": name or rep.get("display_name", ""), "status": "outside service selector", "installed": bool(rep.get("installed")), "ok": bool(rep.get("ok"))})
+            continue
+        doc, values = values_for_service(name, stage, catalog_docs)
+        if not service_supports_init(doc, init, values, name):
+            skipped.append({
+                "name": name or rep.get("display_name", ""),
+                "status": f"catalog profile declares no unit for {init}",
+                "installed": bool(rep.get("installed")),
+                "ok": bool(rep.get("ok")),
+            })
             continue
         monitorable = name in active_services or name in failed_services
         # A catalog service backed by a live or failed init unit is installed by
