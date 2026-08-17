@@ -623,8 +623,10 @@ config:
 # Per-service watches: no `then` means a normal service check (desugared to
 # checks.<name> for health/SLA/verify); a compact then.action desugars to
 # checks:+rules:; hook/notification entries stay scoped to THIS service.
-# process_count counts only the service PID tree; metric reads that tree from a
-# dedicated collector. Runtime watch entries are reported as "demo:<name>" and
+# process_count counts everything discovery attributes to the service (the init
+# unit's control group included, so strays count too — the `strays` check is what
+# names those); metric reads that same set from a dedicated collector. Runtime
+# watch entries are reported as "demo:<name>" and
 # pausable via `sermoctl watch unmonitor`.
 watches:
   # Check-level common fields: enabled, optional, interval, timeout, requires and

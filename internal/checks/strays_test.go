@@ -111,6 +111,20 @@ func TestStraysCheckNamesProcessesWithoutAResolvableExe(t *testing.T) {
 	}
 }
 
+// The count is graphed so a slow leak shows as a rising series; process_count
+// moves with legitimate load too, so this is the series that says "unexplained".
+func TestStraysCheckPublishesAGraphableCount(t *testing.T) {
+	declared := GraphMetrics(CheckTypeStrays)
+	if len(declared) != 1 || declared[0].Key != DataKeyCount {
+		t.Fatalf("graph metrics = %+v, want one on %q", declared, DataKeyCount)
+	}
+	c, _ := buildStraysCheck(base{name: straysCheckTestName}, straysDeps(stray(1, "/usr/bin/a")))
+	res := c.Run(context.Background())
+	if _, ok := res.Data[declared[0].Key]; !ok {
+		t.Fatalf("result data %v lacks the graphed key %q", res.Data, declared[0].Key)
+	}
+}
+
 func TestStraysCheckNeedsDiscovery(t *testing.T) {
 	if _, warn := buildStraysCheck(base{name: straysCheckTestName}, Deps{}); warn == "" {
 		t.Fatal("want a warning when process discovery is unavailable")

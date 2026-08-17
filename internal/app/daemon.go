@@ -613,10 +613,16 @@ func workerCheckRunner(worker *Worker, built []checks.Built, every map[string]in
 }
 
 // serviceWatchCheckDeps derives the check deps a service's embedded watches use
-// from the worker's deps. It scopes the process-counting closure to the
-// service's PID tree (its selector matches plus descendants) so a
-// process_count watch counts only the service's own processes, parent and
-// children — not unrelated host processes that share a user or exe.
+// from the worker's deps. It scopes the process-counting closure to everything
+// discovery attributes to the service, so a process_count watch counts the
+// service's own processes rather than unrelated host processes that share a user
+// or exe.
+//
+// That set is wider than the service's PID tree: Discover seeds from the init
+// backend first, so on systemd it is the unit's whole control group plus the
+// selector matches and their descendants. Strays are therefore counted here and
+// cannot be excluded — which is the point of the separate `strays` check, whose
+// whole job is to name the members this number silently absorbs.
 func serviceWatchCheckDeps(base checks.Deps, discoverer process.Discoverer, selectors []process.Selector) checks.Deps {
 	base.ProcessCount = func(user, exe, exeDir string) int {
 		return discoverer.CountInTree(selectors, user, exe, exeDir)
