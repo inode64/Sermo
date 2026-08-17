@@ -232,11 +232,11 @@ func ParseReapPolicy(tree map[string]any) (KillSelector, []string) {
 	}
 	koi, ok := block[ReapKeyKillOnlyIf].(map[string]any)
 	if !ok {
-		return selector, append(warnings, reapKillOnlyIfPath()+": must be a mapping with "+ReapKeyUsers+" and "+ReapKeyExeAny)
+		return selector, append(warnings, ReapKillOnlyIfPath+": must be a mapping with "+ReapKeyUsers+" and "+ReapKeyExeAny)
 	}
 	for _, key := range slices.Sorted(maps.Keys(koi)) {
 		if key != ReapKeyUsers && key != ReapKeyExeAny {
-			warnings = append(warnings, reapKillOnlyIfPath()+": "+key+" is not supported; it accepts "+ReapKeyUsers+" and "+ReapKeyExeAny)
+			warnings = append(warnings, ReapKillOnlyIfPath+": "+key+" is not supported; it accepts "+ReapKeyUsers+" and "+ReapKeyExeAny)
 		}
 	}
 	selector.Users = cfgval.StringList(koi[ReapKeyUsers])
@@ -244,12 +244,10 @@ func ParseReapPolicy(tree map[string]any) (KillSelector, []string) {
 	if !selector.Configured() {
 		// Return the empty selector, not the partial one: a half-written selector
 		// must authorize nothing rather than whatever half it does carry.
-		return KillSelector{}, append(warnings, reapKillOnlyIfPath()+": requires both "+ReapKeyUsers+" and "+ReapKeyExeAny)
+		return KillSelector{}, append(warnings, ReapKillOnlyIfPath+": requires both "+ReapKeyUsers+" and "+ReapKeyExeAny)
 	}
 	return selector, warnings
 }
-
-func reapKillOnlyIfPath() string { return SectionReap + "." + ReapKeyKillOnlyIf }
 
 func parseDuration(v any, field string, warnings *[]string) time.Duration {
 	s := cfgval.AsString(v)

@@ -242,6 +242,34 @@ func TestAdminFullAccess(t *testing.T) {
 	}
 }
 
+// Signalling processes from a browser must clear the same two gates as every other
+// mutation: the CSRF header and the admin role. Both are enforced before any
+// handler runs, so reap needs no gate of its own.
+func TestReapStraysNeedsAdminAndCSRF(t *testing.T) {
+	h := authServer(Auth{AdminCredentials: webcred.Plain("secret"), GuestCredentials: webcred.Plain("guestpw")})
+	path := testServicePath("web", apiActionReap)
+
+	rec := httptest.NewRecorder()
+	noCSRF := httptest.NewRequest(http.MethodPost, path, nil)
+	noCSRF.SetBasicAuth("admin", "secret")
+	h.ServeHTTP(rec, noCSRF)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("reap without the CSRF header = %d, want 403", rec.Code)
+	}
+
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, req(http.MethodPost, path, "guest", "guestpw"))
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("guest reap = %d, want 403", rec.Code)
+	}
+
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, req(http.MethodPost, path, "admin", "secret"))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("admin reap = %d, want 200", rec.Code)
+	}
+}
+
 func TestGuestIsReadOnly(t *testing.T) {
 	h := authServer(Auth{AdminCredentials: webcred.Plain("secret"), GuestCredentials: webcred.Plain("guestpw")})
 	// guest can read

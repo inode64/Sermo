@@ -80,12 +80,41 @@ func buildStaleBinaryCheck(b base, deps Deps) (Check, string) {
 }
 
 // buildStraysCheck builds a check reporting this service's control-group members
-// that no selector claims. Like stale_binary it takes no entry fields: what counts
-// as a stray follows from the service's own `processes:`/`pidfile:` declarations
-// and the init unit's control group, so there is nothing to configure per check.
-func buildStraysCheck(b base, deps Deps) (Check, string) {
+// that no selector claims. What counts as a stray follows from the service's own
+// `processes:`/`pidfile:` declarations and the init unit's control group, so the
+// only things configurable are the two bounds above which it fails.
+//
+// Both default to "any stray fails", which is what the injected instance uses.
+// `max_increase` needs `within` because growth is measured over wall-clock time,
+// not over cycles — see straysCheck.
+func buildStraysCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 	if deps.Strays == nil {
 		return nil, "strays check needs process discovery, unavailable here"
 	}
-	return straysCheck{base: b, strays: deps.Strays}, ""
+	check := straysCheck{base: b, strays: deps.Strays}
+	if raw, present := entry[CheckKeyMax]; present {
+		n, ok := cfgval.Int(raw)
+		if !ok || n < 0 {
+			return nil, "strays check max must be a non-negative integer"
+		}
+		check.max = float64(n)
+	}
+	raw, hasIncrease := entry[CheckKeyMaxIncrease]
+	if !hasIncrease {
+		if _, hasWindow := entry[CheckKeyWithin]; hasWindow {
+			return nil, "strays check within requires max_increase"
+		}
+		return check, ""
+	}
+	n, ok := cfgval.Int(raw)
+	if !ok || n < 1 {
+		return nil, "strays check max_increase must be a positive integer"
+	}
+	window := cfgval.Duration(entry[CheckKeyWithin])
+	if window <= 0 {
+		return nil, "strays check max_increase requires within as a positive duration"
+	}
+	check.maxIncrease, check.window = float64(n), window
+	check.state = &counterWindow{}
+	return check, ""
 }

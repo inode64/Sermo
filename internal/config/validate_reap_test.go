@@ -74,12 +74,9 @@ reap:
 `), `reap.kill_only_if.exe_any path "dbus-daemon" must be absolute`)
 }
 
-// The expected stray count is zero and the set follows from the service's own
-// selectors, so a threshold or a selector here would look meaningful and
-// silently do nothing.
-func TestValidateStraysCheckRejectsFieldsThatDoNothing(t *testing.T) {
-	for _, field := range []string{"exe: /usr/bin/x", "user: root", "op: '>'", "value: 3"} {
-		mustHave(t, validateService(t, `
+// straysCheckConfig builds a service declaring one strays check with extra fields.
+func straysCheckConfig(fields string) string {
+	return `
 name: svc
 service: x
 processes:
@@ -87,9 +84,43 @@ processes:
 checks:
   my-strays:
     type: strays
-    `+field+`
-`), "is not accepted; strays reports the service's control-group members")
+` + fields
+}
+
+// The set follows from the service's own selectors, so a selector here would look
+// meaningful and silently do nothing.
+func TestValidateStraysCheckRejectsSelectorFields(t *testing.T) {
+	for _, field := range []string{"    exe: /usr/bin/x", "    user: root", "    state: running"} {
+		mustHave(t, validateService(t, straysCheckConfig(field)),
+			"is not accepted; strays reports the service's control-group members")
 	}
+}
+
+// op/value are rejected on purpose: as a level predicate OK would mean "the
+// predicate holds", inverting `failed:` for this instance while the injected one
+// keeps it.
+func TestValidateStraysCheckRejectsLevelPredicates(t *testing.T) {
+	for _, field := range []string{"    op: '>'", "    value: 3"} {
+		mustHave(t, validateService(t, straysCheckConfig(field)),
+			"use max to raise the failing bound")
+	}
+}
+
+func TestValidateStraysCheckBounds(t *testing.T) {
+	mustNotHave(t, validateService(t, straysCheckConfig("    max: 5\n")), "my-strays")
+	mustNotHave(t, validateService(t, straysCheckConfig("    max_increase: 3\n    within: 10m\n")), "my-strays")
+
+	mustHave(t, validateService(t, straysCheckConfig("    max: -1\n")),
+		"checks.my-strays.max must be a non-negative integer")
+	mustHave(t, validateService(t, straysCheckConfig("    max_increase: 0\n    within: 10m\n")),
+		"checks.my-strays.max_increase must be a positive integer")
+	// Growth is measured over wall-clock time, so the span is not optional.
+	mustHave(t, validateService(t, straysCheckConfig("    max_increase: 3\n")),
+		"checks.my-strays.max_increase requires within")
+	mustHave(t, validateService(t, straysCheckConfig("    within: 10m\n")),
+		"checks.my-strays.within is only accepted with max_increase")
+	mustHave(t, validateService(t, straysCheckConfig("    max_increase: 3\n    within: nope\n")),
+		"checks.my-strays.within must be a valid positive duration")
 }
 
 func TestValidateEngineReapOwnStrays(t *testing.T) {

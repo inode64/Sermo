@@ -96,6 +96,7 @@ func (b *WebBackend) viewWithRuntime(ctx context.Context, name string, e *webEnt
 		svc.ChecksFailing = failing
 	}
 	svc.WarningReason = warningReason
+	svc.Strays = b.serviceStrayCount(name, e)
 	if !lockView.ready {
 		lockView.active = activeLockNames(b.cfg, name)
 		lockView.operationActive = operationActive(b.cfg, name)
@@ -214,19 +215,58 @@ func (b *WebBackend) serviceObservability(name string, e *webEntry, status, chec
 // the web request must not scan /proc — daemon cycles own the runtime evidence
 // and its freshness boundary.
 func (b *WebBackend) serviceWarningReason(name string, e *webEntry) string {
-	if e == nil || e.checkTypes == nil {
-		return ""
-	}
-	snap := b.snapshots.Get(name)
-	for check, typ := range e.checkTypes {
-		if typ != checks.CheckTypeStaleBinary {
-			continue
-		}
-		if cs, ok := snap[check]; ok && b.serviceCheckSnapshotCurrent(e, check, cs) && !cs.OK {
+	// Any failing one is the warning: a service may declare its own stale_binary
+	// check beside the injected one, and a replaced binary either check found is
+	// still a replaced binary.
+	for _, cs := range b.currentSnapshotsOfType(name, e, checks.CheckTypeStaleBinary) {
+		if !cs.OK {
 			return warningReasonStaleBinary
 		}
 	}
 	return ""
+}
+
+// currentSnapshotsOfType returns this service's checks of the given type whose
+// published snapshot is still current, in declaration order.
+//
+// Order is part of the contract: a service may declare several checks of one type
+// (the injected `strays` beside an operator's bounded instances, or a second
+// stale_binary check), so it walks checkNames rather than the checkTypes map —
+// ranging over a map would answer differently between requests. Each caller then
+// applies its own policy: the warning fires on any failing check, the stray count
+// takes the first, since every strays check counts the same set.
+func (b *WebBackend) currentSnapshotsOfType(name string, e *webEntry, checkType string) []CheckSnapshot {
+	if e == nil || e.checkTypes == nil || b.snapshots == nil {
+		return nil
+	}
+	snap := b.snapshots.Get(name)
+	var out []CheckSnapshot
+	for _, check := range e.checkNames {
+		if e.checkTypes[check] != checkType {
+			continue
+		}
+		if cs, ok := snap[check]; ok && b.serviceCheckSnapshotCurrent(e, check, cs) {
+			out = append(out, cs)
+		}
+	}
+	return out
+}
+
+// serviceStrayCount returns how many processes the service cannot account for,
+// read from the strays check's published snapshot. Like serviceWarningReason it
+// must not discover processes: the list endpoint renders every service on one
+// request, so a /proc walk per row would put the whole fleet's discovery on the
+// browser's critical path. Daemon cycles own that evidence.
+//
+// A service with no current strays snapshot reports 0, which the dashboard renders
+// as no column value at all — "not measured" and "nothing found" are told apart by
+// the check row in the detail, not by this number.
+func (b *WebBackend) serviceStrayCount(name string, e *webEntry) int {
+	for _, cs := range b.currentSnapshotsOfType(name, e, checks.CheckTypeStrays) {
+		n, _ := cfgval.Int(cs.Data[checks.DataKeyCount])
+		return n
+	}
+	return 0
 }
 
 // onlyMissingProcesses reports whether the empty process tree is the sole

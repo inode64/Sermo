@@ -310,6 +310,50 @@ func TestCheckReadingsForAllTypes(t *testing.T) {
 			want:     map[string]string{"raid_array_md0": "good · recovery 12.6%"},
 			minCount: 1,
 		},
+		{
+			// The growth trio both window checks share: a rise is signed, so the
+			// reading says "+3" rather than a bare total.
+			name: "count growth window",
+			typ:  checks.CheckTypeCount,
+			data: map[string]any{
+				checks.DataKeyPath: "/var/spool", checks.DataKeyOf: "file",
+				checks.DataKeyCount: 4, checks.DataKeyBaselineCount: 1,
+				checks.DataKeyGrowthCount: 3, checks.DataKeyWindow: "30m",
+			},
+			want: map[string]string{
+				checks.DataKeyCount: "4", checks.DataKeyBaselineCount: "1",
+				checks.DataKeyGrowthCount: "+3", checks.DataKeyWindow: "30m",
+			},
+			minCount: 6,
+		},
+		{
+			// A count that fell keeps its sign too, so the reading cannot read as
+			// growth.
+			name: "strays growth window and holders",
+			typ:  checks.CheckTypeStrays,
+			data: map[string]any{
+				checks.DataKeyCount: 2, checks.DataKeyBaselineCount: 6,
+				checks.DataKeyGrowthCount: -4, checks.DataKeyWindow: "10m",
+				checks.DataKeyPath: "/usr/bin/node", checks.DataKeyPIDs: "300,400",
+			},
+			want: map[string]string{
+				checks.DataKeyBaselineCount: "6", checks.DataKeyGrowthCount: "-4",
+				checks.DataKeyWindow: "10m", checks.DataKeyPath: "/usr/bin/node",
+				checks.DataKeyPIDs: "300,400",
+			},
+			minCount: 6,
+		},
+		{
+			// Without a growth bound the check publishes no window at all, and the
+			// trio must simply not appear rather than render zeros.
+			name: "strays without a growth bound",
+			typ:  checks.CheckTypeStrays,
+			data: map[string]any{checks.DataKeyCount: 3, checks.DataKeyPath: "/usr/bin/node"},
+			want: map[string]string{
+				checks.DataKeyBaselineCount: "", checks.DataKeyGrowthCount: "", checks.DataKeyWindow: "",
+			},
+			minCount: 2,
+		},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

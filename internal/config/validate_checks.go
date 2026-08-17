@@ -1094,15 +1094,43 @@ func validateStaleBinaryCheck(path string, entry map[string]any, add addFunc) {
 	}
 }
 
-// validateStraysCheck rejects selector fields and thresholds on a strays check.
-// What counts as a stray follows from the service's own selectors and its control
-// group, and the expected count is zero, so an exe, user, op or value here would
-// look meaningful and silently do nothing.
+// validateStraysCheck accepts only the two bounds a strays check understands.
+//
+// Selector fields are rejected because what counts as a stray follows from the
+// service's own selectors and its control group. `op`/`value` are rejected because
+// the bounds are deliberately not level predicates: in a level check OK means "the
+// predicate holds", which would invert `failed:` for a configured instance while
+// the injected one keeps it — the polarity trap that once made the generated
+// stale-binary rule fire on every healthy service.
 func validateStraysCheck(path string, entry map[string]any, add addFunc) {
-	for _, key := range []string{checks.CheckKeyExe, checks.CheckKeyExeAny, checks.CheckKeyUser, checks.CheckKeyState, checks.CheckKeyOp, checks.CheckKeyValue} {
+	for _, key := range []string{checks.CheckKeyExe, checks.CheckKeyExeAny, checks.CheckKeyUser, checks.CheckKeyState} {
 		if _, present := entry[key]; present {
-			add("%s.%s is not accepted; strays reports the service's control-group members that no selector claims, and the expected count is zero", path, key)
+			add("%s.%s is not accepted; strays reports the service's control-group members that no selector claims", path, key)
 		}
+	}
+	for _, key := range []string{checks.CheckKeyOp, checks.CheckKeyValue} {
+		if _, present := entry[key]; present {
+			add("%s.%s is not accepted; use %s to raise the failing bound (op/value would invert the check's polarity)", path, key, checks.CheckKeyMax)
+		}
+	}
+	if raw, present := entry[checks.CheckKeyMax]; present {
+		if n, ok := cfgval.Int(raw); !ok || n < 0 {
+			add("%s.%s must be a non-negative integer", path, checks.CheckKeyMax)
+		}
+	}
+	_, hasIncrease := entry[checks.CheckKeyMaxIncrease]
+	_, hasWindow := entry[checks.CheckKeyWithin]
+	if hasIncrease {
+		if n, ok := cfgval.Int(entry[checks.CheckKeyMaxIncrease]); !ok || n < 1 {
+			add("%s.%s must be a positive integer", path, checks.CheckKeyMaxIncrease)
+		}
+		if !hasWindow {
+			add("%s.%s requires %s, the wall-clock span the growth is measured over", path, checks.CheckKeyMaxIncrease, checks.CheckKeyWithin)
+		} else if !isPositiveDuration(cfgval.String(entry[checks.CheckKeyWithin])) {
+			add("%s.%s must be a valid positive duration", path, checks.CheckKeyWithin)
+		}
+	} else if hasWindow {
+		add("%s.%s is only accepted with %s", path, checks.CheckKeyWithin, checks.CheckKeyMaxIncrease)
 	}
 }
 

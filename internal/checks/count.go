@@ -6,7 +6,6 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"strconv"
 	"time"
 
 	"sermo/internal/execx"
@@ -26,16 +25,7 @@ type countCheck struct {
 	deltaValue    float64
 	window        time.Duration
 	clock         func() time.Time
-	state         *countState
-}
-
-type countSample struct {
-	t     time.Time
-	count int
-}
-
-type countState struct {
-	samples []countSample
+	state         *counterWindow
 }
 
 func (c countCheck) Run(ctx context.Context) Result {
@@ -57,7 +47,7 @@ func (c countCheck) Run(ctx context.Context) Result {
 		scope = "under"
 	}
 	res := c.result(ok, fmt.Sprintf("%d %s entries %s %s (want %s %s)",
-		n, c.kind, scope, c.path, c.op, strconv.FormatFloat(c.value, floatFormatFixed, floatPrecisionAuto, numericBits64)), start)
+		n, c.kind, scope, c.path, c.op, formatThreshold(c.value)), start)
 	res.Data = map[string]any{
 		DataKeyPath:           c.path,
 		DataKeyOf:             c.kind,
@@ -70,39 +60,28 @@ func (c countCheck) Run(ctx context.Context) Result {
 }
 
 func (c countCheck) runDelta(n int, start time.Time) Result {
-	clock := c.clock
-	if clock == nil {
-		clock = time.Now
-	}
-	st := c.state
-	if st == nil {
+	state := c.state
+	if state == nil {
 		// Defensive only: delta checks are always built with a shared state.
-		st = &countState{}
+		state = &counterWindow{}
 	}
-	now := clock()
-	cutoff := now.Add(-c.window)
-	st.samples = pruneWindow(st.samples, cutoff, func(s countSample) time.Time { return s.t })
-	st.samples = append(st.samples, countSample{t: now, count: n})
-
-	baseline := st.samples[0]
-	growth := n - baseline.count
+	growth, span := state.advance(windowClock(c.clock)(), n, c.window)
 	ok := growth > 0 && compareFloat(float64(growth), c.deltaOp, c.deltaValue)
 
 	scope := "in"
 	if c.recursive {
 		scope = "under"
 	}
-	span := now.Sub(baseline.t)
 	res := c.result(ok, fmt.Sprintf("%d %s entries %s %s (%+d in %s, want %s %s)",
 		n, c.kind, scope, c.path, growth, span.Round(time.Second),
-		c.deltaOp, strconv.FormatFloat(c.deltaValue, floatFormatFixed, floatPrecisionAuto, numericBits64)), start)
+		c.deltaOp, formatThreshold(c.deltaValue)), start)
 	res.Data = map[string]any{
 		DataKeyPath:           c.path,
 		DataKeyOf:             c.kind,
 		DataKeyRecursive:      c.recursive,
 		CheckKeyIncludeHidden: c.includeHidden,
 		DataKeyCount:          n,
-		DataKeyBaselineCount:  baseline.count,
+		DataKeyBaselineCount:  n - growth,
 		DataKeyGrowthCount:    growth,
 		DataKeyWindow:         c.window.String(),
 		DataKeyValue:          growth,

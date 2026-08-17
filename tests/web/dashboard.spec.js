@@ -20,7 +20,7 @@ const services = [
   {
     name: "stale", display_name: "Stale binary", category: "service", enabled: true,
     monitored: true, status: "active", state: "warning", warning_reason: "stale_binary",
-    uptime_seconds: 3600, status_observed_at: "2026-07-10T12:00:00Z",
+    uptime_seconds: 3600, status_observed_at: "2026-07-10T12:00:00Z", strays: 3,
   },
 ];
 
@@ -689,15 +689,16 @@ test("detail fields appear only where their table column is hidden", async ({ pa
   const pairs = [
     { label: "IO R/W", field: ".col-dup-1420", column: "io" },
     { label: "Last event", field: ".col-dup-640", column: "last" },
+    { label: "Strays", field: ".col-dup-640", column: "strays" },
   ];
   // One width per band of the responsive rules, with the columns each band still
   // shows spelled out. Asserting the expected column visibility rather than reading
   // it back is what makes the field assertion mean something: derived from the live
   // state, "column hidden so field visible" would hold with the CSS deleted.
   const bands = [
-    { width: 1600, shows: ["io", "last"] }, // full table
-    { width: 1200, shows: ["last"] }, // metric columns retired
-    { width: 500, shows: [] }, // Last activity retired too
+    { width: 1600, shows: ["io", "last", "strays"] }, // full table
+    { width: 1200, shows: ["last", "strays"] }, // metric columns retired
+    { width: 500, shows: [] }, // Last activity and Strays retired too
   ];
   for (const band of bands) {
     await page.setViewportSize({ width: band.width, height: 900 });
@@ -744,6 +745,58 @@ test("notifier test asks for confirmation and posts one named notifier", async (
   await expect(page.locator("#simple-confirm")).toBeVisible();
   await page.locator('[data-simple-result="true"]').click();
   expect((await request).headers()["x-sermo-generation"]).toBe("7");
+});
+
+test("a service with unaccounted-for processes offers a confirmed reap", async ({ page }) => {
+  // The count is only shown when it is not zero: a dash everywhere else would make
+  // three leaked processes indistinguishable from a healthy service at a glance.
+  await page.setViewportSize({ width: 1600, height: 900 });
+  const cell = page.locator("#svc-row-stale td").nth(9);
+  await expect(cell).toContainText("3");
+  await expect(page.locator("#svc-row-web td").nth(9)).toContainText("—");
+
+  const button = page.locator('[data-service-reap="stale"]');
+  await expect(button).toHaveAttribute("aria-label", /Reap the 3 unaccounted-for process/);
+  const request = page.waitForRequest((req) => req.method() === "POST"
+    && new URL(req.url()).pathname === "/api/services/stale/reap");
+  await button.click();
+  // Signalling processes is always confirmed, like closing a session.
+  await expect(page.locator("#simple-confirm")).toBeVisible();
+  await page.locator('[data-simple-result="true"]').click();
+  expect((await request).headers()["x-sermo-generation"]).toBe("7");
+  expect((await request).headers()["x-sermo-csrf"]).toBe("1");
+});
+
+test("declining the reap confirmation signals nothing", async ({ page }) => {
+  await page.setViewportSize({ width: 1600, height: 900 });
+  let posted = 0;
+  page.on("request", (req) => {
+    if (req.method() === "POST" && new URL(req.url()).pathname.endsWith("/reap")) posted += 1;
+  });
+  await page.locator('[data-service-reap="stale"]').click();
+  await expect(page.locator("#simple-confirm")).toBeVisible();
+  await page.locator('[data-simple-result="false"]').click();
+  await delay(100);
+  expect(posted).toBe(0);
+});
+
+test("the reap button is disabled while an operation holds the service", async ({ page }) => {
+  // A reap takes the same per-service operation lock as a restart, so offering it
+  // mid-operation would only earn a 409. The disabled reason must also reach a
+  // screen reader, through the same visually-hidden hint the other actions use.
+  await page.setViewportSize({ width: 1600, height: 900 });
+  await page.route("**/api/dashboard**", async (route) => {
+    const body = JSON.parse(JSON.stringify(dashboard));
+    body.services = body.services.map((s) => (s.name === "stale" ? { ...s, operation_active: true } : s));
+    await route.fulfill({ json: body });
+  });
+  await page.reload();
+
+  const button = page.locator('[data-service-reap="stale"]');
+  await expect(button).toBeDisabled();
+  const hintID = await button.getAttribute("aria-describedby");
+  expect(hintID).toBeTruthy();
+  await expect(page.locator(`#${hintID}`)).toHaveText("operation in progress");
 });
 
 test("libraries inventory is visible and searchable", async ({ page }) => {

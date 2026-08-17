@@ -1055,6 +1055,19 @@ reap:
     users: [root]
     exe_any: [/usr/bin/dbus-daemon]
 
+# Named checks for a service. The `strays` check is injected automatically (see
+# rules.alert-on-strays below); these two add the bounds a leak alert needs. `max`
+# and `max_increase` are bounds the check fails ABOVE, so OK keeps meaning healthy
+# and a rule keeps using `failed:` — op/value would invert that and are rejected.
+checks:
+  strays-high:
+    type: strays
+    max: 20  # a busy host parks a few in its cgroup; twenty is a leak
+  strays-growing:
+    type: strays
+    max_increase: 5
+    within: 30m  # five new ones in half an hour is a leak too
+
 policy:  # overrides defaults.policy for this catalog service
   cooldown: 10m
   max_actions: 5
@@ -1107,6 +1120,18 @@ rules:
     then:
       action: alert
       message: "demo accumulated ${check.value} unaccounted-for process(es)"
+  # A threshold and a sudden jump are separate checks (a check ANDs its bounds),
+  # ORed in one rule. `max`/`max_increase` are bounds the check fails ABOVE, so OK
+  # keeps meaning healthy and the rule keeps using `failed:`.
+  alert-on-stray-leak:
+    type: alert
+    if:
+      or:
+        - failed: { check: strays-high }
+        - failed: { check: strays-growing }
+    then:
+      action: alert
+      message: "demo: stray processes need attention"
   alert-host-pressure:
     type: alert  # system metrics may only alert
     notify: [team-slack]

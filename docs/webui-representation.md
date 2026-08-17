@@ -281,6 +281,7 @@ Columns:
 | Memory | latest process-tree resident memory; blank for `no_resident_process` services |
 | FDs | open file-descriptor count from the process tree; blank for `no_resident_process` services |
 | IO R/W | cumulative process-tree disk read/write bytes; blank for `no_resident_process` services |
+| Strays | count of control-group members no selector claims, from the `strays` check's published snapshot; a dash when there are none. Non-zero, it carries a reap button for admins — confirmed, and gated server-side by the service's own `reap.kill_only_if`. Retired below 640px, where the count and its button move into the expansion |
 | Actions | compact, individual state-aware icon buttons for start/stop, restart, reload, resume and monitor/unmonitor; reload is disabled when `can_reload` is false; the start/stop/restart confirm dialog offers **skip also_apply** when `also_apply` is set |
 | Pin | a per-row star toggle lifts hand-picked services to the top of the panel (and of their group), persisted locally with the rest of the UI state |
 

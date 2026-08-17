@@ -36,6 +36,7 @@ import (
 	"sermo/internal/logfile"
 	"sermo/internal/mountctl"
 	"sermo/internal/operation"
+	"sermo/internal/process"
 	"sermo/internal/rules"
 	"sermo/internal/state"
 )
@@ -134,13 +135,17 @@ const (
 
 // HTTP action names accepted by the dashboard API.
 const (
-	apiActionStart      = string(rules.ActionStart)
-	apiActionStop       = string(rules.ActionStop)
-	apiActionRestart    = string(rules.ActionRestart)
-	apiActionReload     = string(rules.ActionReload)
-	apiActionResume     = string(rules.ActionResume)
-	apiActionMonitor    = "monitor"
-	apiActionUnmonitor  = "unmonitor"
+	apiActionStart     = string(rules.ActionStart)
+	apiActionStop      = string(rules.ActionStop)
+	apiActionRestart   = string(rules.ActionRestart)
+	apiActionReload    = string(rules.ActionReload)
+	apiActionResume    = string(rules.ActionResume)
+	apiActionMonitor   = "monitor"
+	apiActionUnmonitor = "unmonitor"
+	// apiActionReap is deliberately absent from operateActions: it is not a rule
+	// action and does not change unit state, so it gets its own branch rather than
+	// joining the start/stop/restart set.
+	apiActionReap       = process.SectionReap
 	apiActionExpand     = "expand"
 	apiActionProbe      = "probe"
 	apiActionPause      = "pause"
@@ -319,7 +324,12 @@ type Service struct {
 	ObservabilityMissing []string `json:"observability_missing,omitempty"` // indicator groups still collecting
 	// WarningReason is a machine-readable cause behind the gap (e.g.
 	// "stale_binary"), for the dashboard to phrase. Empty when unknown.
-	WarningReason    string   `json:"warning_reason,omitempty"`
+	WarningReason string `json:"warning_reason,omitempty"`
+	// Strays counts the processes the init unit's control group holds that no
+	// configured selector claims, from the strays check's published snapshot. It is
+	// what the Strays column and the reap button read; 0 means either none found or
+	// no current sample, a distinction the detail's check row makes.
+	Strays           int      `json:"strays,omitempty"`
 	ActiveLocks      []string `json:"active_locks,omitempty"`      // named runtime locks blocking actions
 	OperationActive  bool     `json:"operation_active,omitempty"`  // true while the engine holds this service's operation lock: an action is running, whoever started it
 	PolicyCooldown   string   `json:"policy_cooldown,omitempty"`   // resolved automatic remediation cooldown
@@ -1122,6 +1132,10 @@ type Backend interface {
 	PruneEvents(ctx context.Context, before time.Time) int
 	// Operate runs start|stop|restart|reload|resume on a service through the safe engine.
 	Operate(ctx context.Context, name, action string, opts OperateOpts) ActionResult
+	// ReapStrays signals the service's stray processes, gated by its own
+	// reap.kill_only_if selector: with none declared it reports them and signals
+	// nothing. It changes no unit state.
+	ReapStrays(ctx context.Context, name string) ActionResult
 	// CloseSSHSession gracefully closes one freshly verified terminal session
 	// owned by the named SSH service.
 	CloseSSHSession(ctx context.Context, name string, session SSHSession) ActionResult
@@ -2035,6 +2049,10 @@ func (s *Server) handleAction(w http.ResponseWriter, r *http.Request) {
 		s.extendActionWriteDeadline(w)
 		opts := OperateOpts{NoCascade: queryBool(r, apiQueryNoCascade)}
 		res := backend.Operate(s.operateContext(r), name, action, opts) //nolint:contextcheck // see operateContext
+		writeActionResult(w, res.OK, res)
+	case action == apiActionReap:
+		s.extendActionWriteDeadline(w)
+		res := backend.ReapStrays(s.operateContext(r), name) //nolint:contextcheck // see operateContext
 		writeActionResult(w, res.OK, res)
 	case monitorActions[action]:
 		err := backend.SetMonitored(r.Context(), name, action == apiActionMonitor)

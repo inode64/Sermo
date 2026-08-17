@@ -669,8 +669,11 @@
     .events th, .events td {
       padding: .34rem .38rem;
     }
-    /* services -> Service · State · Actions. */
-    .services-table > thead > tr > th:nth-child(9), .services-table > tbody > tr > td:nth-child(9) { display: none; }
+    /* services -> Service · State · Actions. Strays (10) moves into the expansion
+       as a col-dup-640 field, so the count and its reap button stay reachable on a
+       phone without a tenth column. */
+    .services-table > thead > tr > th:nth-child(9), .services-table > tbody > tr > td:nth-child(9),
+    .services-table > thead > tr > th:nth-child(10), .services-table > tbody > tr > td:nth-child(10) { display: none; }
     .services-table td { white-space: normal; }
     /* sessions -> User · Session · Idle · Actions. Type remains available in
        the filter controls, while attached/detached stays searchable. */

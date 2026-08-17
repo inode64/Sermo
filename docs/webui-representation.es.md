@@ -285,6 +285,7 @@ Columnas:
 | Memory | última memoria residente del árbol de procesos; vacío para servicios `no_resident_process` |
 | FDs | recuento de descriptores de archivo abiertos del árbol de procesos; vacío para servicios `no_resident_process` |
 | IO R/W | bytes acumulados de lectura/escritura en disco del árbol de procesos; vacío para servicios `no_resident_process` |
+| Strays | cuenta de miembros del control group que ningún selector reclama, del snapshot publicado del check `strays`; un guion cuando no hay ninguno. Si no es cero lleva un botón de reap para administradores — confirmado, y controlado en el servidor por el `reap.kill_only_if` del propio servicio. Se retira por debajo de 640px, donde la cuenta y su botón pasan a la expansión |
 | Actions | botones icono compactos e individuales para start/stop, restart, reload, resume y monitor/unmonitor; reload se desactiva cuando `can_reload` es false; el diálogo de confirmación de start/stop/restart ofrece **skip also_apply** cuando `also_apply` está definido |
 | Fijar | una estrella por fila sube los servicios elegidos a lo alto del panel (y de su grupo), persistida localmente con el resto del estado de la UI |
 
