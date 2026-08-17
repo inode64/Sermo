@@ -37,6 +37,12 @@ cualquier conmutador `security:` que intente desactivarlas.
    exigiendo locks, preflight, guards, cualquier identidad de restart disponible,
    timeout y postflight; un `Restart` fallido del backend es una operación
    fallida, nunca un stop/start staged implícito.
+9. **Un proceso stray nunca se señaliza sin su propia autorización.** Un miembro
+   del control group que ningún selector reclama solo puede señalizarse con
+   `sermoctl reap --apply`, y solo a través del selector `reap.kill_only_if` del
+   propio servicio, comprobado por la misma barrera que cualquier otro kill.
+   Ninguna acción de regla puede hacer reap, y un servicio sin bloque `reap:`
+   reporta sus strays y no señaliza ninguno.
 
 ## El motor de operaciones
 
@@ -358,6 +364,100 @@ Los campos de `stop_policy` omitidos por un servicio de catálogo o servicio her
 5. El resultado es `ok` solo cuando no queda ningún residual — ya sea que el
    superviviente fuera deliberadamente perdonado o sobreviviera al SIGKILL, el resultado es
    `orphan_processes` y lista cada proceso restante.
+
+## Procesos stray y `reap`
+
+Un **stray** es un proceso que el backend de init atribuye al control group del
+servicio y que ningún selector configurado reclama (sin coincidencia de
+`processes:`, sin pidfile), que no es el proceso principal de la unidad y que no
+forma parte del árbol de procesos vivo de ese principal.
+
+La pertenencia al control group es la atribución del propio kernel, así que un
+stray sí pertenece al servicio — Sermo simplemente no puede decir qué es. Excluir
+el árbol del principal es lo que hace útil la etiqueta: los workers de un daemon
+son sus descendientes, así que una unidad sana no produce ningún stray, mientras
+que un proceso que llegó al control group sin una cadena de ascendencia hasta el
+principal fue reparentado a PID 1. Esa es la firma de un resto — una sonda que se
+demonizó, un hijo que el daemon nunca recogió, un superviviente de una
+encarnación anterior.
+
+Los strays aparecen en `sermoctl processes` como `stray=true`, en la tabla de
+procesos del dashboard con `stray` en la columna Role, y como el check inyectado
+`strays` (ver [configuration.es.md](configuration.es.md)). Nada más cambia: un
+stray se sigue descubriendo, sigue contando en los totales de procesos del servicio
+y sigue siendo un residual de un stop como cualquier otro proceso.
+
+### Un stop nunca hace reap
+
+`reap.kill_only_if` **no** se consulta durante un stop, así que un restart nunca
+limpia un stray. La fase de stop señaliza exactamente lo que autoriza
+`stop_policy`, y un stray que no puede identificar se reporta, no se mata.
+
+Que eso bloquee un restart depende del `KillMode` de la unidad:
+
+- `KillMode=control-group` (el valor por defecto de systemd): el stop se lleva el
+  control group entero, así que no sobrevive ningún stray para ser residual y nada
+  cambia.
+- `KillMode=process` / `none` (sshd, NetworkManager, los daemons de libvirt): los
+  supervivientes quedan. Los que reclama un selector `delegated: true` están
+  excluidos de los residuales por diseño; un stray no, así que termina la operación
+  en `orphan_processes` con el servicio parado.
+- `restart_policy: native`: el backend de init hace un restart atómico, así que no
+  hay fase de residuales en absoluto.
+
+En ese tercer caso el resultado nombra los strays y apunta al verbo que los limpia:
+
+```console
+$ sermoctl restart ssh
+ssh restart orphan_processes
+reason: 1 residual process(es) remain after stop (1 stray, unaccounted for by any
+  selector; `sermoctl reap` lists them and, with reap.kill_only_if declared, clears them)
+  residual pid=4711 exe=/usr/bin/tmux stray=true
+```
+
+El operador decide entonces: marcarlo `delegated: true` si la unidad lo mantiene
+vivo a propósito, añadir un selector si es un rol que Sermo debería conocer, o
+declarar `reap.kill_only_if` y limpiarlo. Que un stop hiciera reap por su cuenta
+significaría remediación automática matando procesos que Sermo no puede nombrar, que
+es el riesgo que este diseño rechaza.
+
+`sermoctl reap SERVICE` los lista e informa de cuántos se señalizarían. No toma
+ningún lock, no emite ningún evento y no toca nada.
+
+`sermoctl reap SERVICE --apply` los señaliza por la vía normal de operaciones
+—lock de operación, locks nombrados activos, guards, exactamente un evento— y no
+relaja ninguna invariante:
+
+- La autoridad viene solo del `reap.kill_only_if` del propio servicio, el mismo
+  selector emparejado `users` + `exe_any` que usa `stop_policy`, comprobado por la
+  misma barrera. Sin el bloque no hay nada autorizado, así que `--apply` reporta
+  cada stray y no señaliza ninguno.
+- Los procesos delegados, un exe irresoluble, PID 1 y los kernel threads se
+  rechazan exactamente igual que durante un stop.
+- La escalada es SIGTERM, `term_timeout`, redescubrir, SIGKILL, `kill_timeout`,
+  redescubrir, usando los tiempos del propio `stop_policy` del servicio y
+  releyendo `/proc` en vivo entre rondas.
+- El resultado es `ok` solo cuando no queda ningún stray; uno perdonado o
+  superviviente lo convierte en `orphan_processes` y lista lo que queda.
+
+Ninguna acción de regla puede hacer reap. Hacer reap significa terminar un proceso
+que Sermo no puede nombrar, y esa decisión se queda con el operador.
+
+### Higiene propia de sermod al arrancar
+
+sermod termina lo que encuentra en **su propio** control group de unidad de init
+al arrancar, antes de haber lanzado nada él mismo — así que cualquier cosa que
+haya ahí pertenece a una encarnación anterior que el sistema de init no limpió
+(`KillMode=process` o `KillMode=none`). Es la única excepción a «toda
+señalización de servicio pasa por el motor de operaciones», y es deliberadamente
+estrecha:
+
+- Solo el control group propio de sermod, y solo cuando ese grupo es una unidad
+  **service** de systemd. Arrancado desde un shell de login, sermod comparte su
+  scope con el shell del operador y con sshd, así que ahí no hace nada en absoluto.
+- Solo `SIGTERM`. Un resto que lo ignore se reporta y se deja en paz.
+- Un evento por proceso señalizado.
+- `engine.reap_own_strays: false` lo desactiva.
 
 ## Planificador y concurrencia
 

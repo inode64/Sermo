@@ -1217,6 +1217,56 @@ class FailedUnitsWatchGenerationTest(unittest.TestCase):
         )
 
 
+class InotifyWatchGenerationTest(unittest.TestCase):
+    """The per-user inotify limits are the exhaustion watch-fds cannot see: on
+    bk1 uid 0 held all 1024 instances while watch-fds reported 0.0%, because
+    fs.file-max is effectively unlimited there."""
+
+    def generate(self, features: str):
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        root = Path(temp.name)
+        stage = root / "stage" / "host" / "out"
+        stage.mkdir(parents=True)
+        (stage / "init").write_text("systemd\n", encoding="utf-8")
+        (stage / "active_units").write_text("", encoding="utf-8")
+        (stage / "features").write_text(features, encoding="utf-8")
+        report = generator.generate_for_host("host", stage, root / "configs", default_options())
+        return root / "configs/host/root/etc/sermo", report
+
+    def test_generated_when_the_sysctls_are_exposed(self):
+        generated, report = self.generate("inotify=1\n")
+
+        body = yaml.safe_load((generated / "watches/watch-inotify.yml").read_text(encoding="utf-8"))
+        self.assertEqual(body["check"]["type"], "inotify")
+        # One predicate on the worse of both limits: two prefixed predicates in a
+        # single check are ANDed and would have stayed silent on bk1.
+        self.assertEqual(body["check"]["used_pct"], {"op": ">=", "value": "80%"})
+        self.assertEqual(body["interval"], "1m")
+        self.assertEqual(body["for"], {"cycles": 3})
+        self.assertNotIn("then", body)
+        self.assertNotIn(
+            {"kind": "inotify", "reason": "inotify sysctls not exposed"},
+            report["skipped_watches"],
+        )
+
+    def test_skipped_without_the_sysctls(self):
+        generated, report = self.generate("inotify=0\n")
+
+        self.assertFalse((generated / "watches/watch-inotify.yml").exists())
+        self.assertIn(
+            {"kind": "inotify", "reason": "inotify sysctls not exposed"},
+            report["skipped_watches"],
+        )
+
+    def test_collectors_probe_the_inotify_sysctls(self):
+        root = Path(__file__).resolve().parent
+        for script in ("remote_collect_inventory.sh", "remote_stage.sh"):
+            body = (root / script).read_text(encoding="utf-8")
+            self.assertIn("/proc/sys/fs/inotify/max_user_instances", body, script)
+            self.assertIn('echo "inotify=1"', body, script)
+
+
 class DockerStoppedContainerTest(unittest.TestCase):
     """A container Docker was asked to keep running and that exited non-zero is
     an outage, like a failed init unit. Observed on k2keu2: coreai-api-prod had

@@ -77,6 +77,7 @@ sermoctl mount list
 
 sermoctl preflight SERVICE
 sermoctl processes SERVICE
+sermoctl reap SERVICE [--apply]        # lista los procesos stray del servicio; --apply señaliza los autorizados
 sermoctl locks SERVICE
 sermoctl monitor SERVICE
 sermoctl unmonitor SERVICE
@@ -281,6 +282,32 @@ La web UI usa la misma división: **Services** muestra los servicios de runtime
 configurados; **Applications** (`GET /api/applications`) y **Libraries**
 (`GET /api/libraries`) son los inventarios de catálogo instalados, alineados con
 `sermoctl apps` y `sermoctl libs`, no con `sermoctl services`.
+
+## Reap de procesos stray
+
+Un **stray** es un proceso que el backend de init atribuye al control group del
+servicio y que ningún selector `processes:` ni pidfile reclama, y que ya no
+depende del proceso principal de la unidad — una sonda que se demonizó, un hijo que
+el daemon nunca recogió, un superviviente de una encarnación anterior.
+`sermoctl processes SERVICE` los marca con `stray=true`, y el check inyectado
+`strays` los reporta en cada ciclo.
+
+Un stop nunca hace reap, así que un restart que un stray bloquee termina en
+`orphan_processes` y lo nombra; limpiarlo es el trabajo de este comando.
+
+`sermoctl reap SERVICE` es una vista previa: lista cada stray, informa de cuántos
+se señalizarían y no toca nada — sin lock de operación, sin evento.
+
+`sermoctl reap SERVICE --apply` los señaliza, controlado por el selector
+`reap.kill_only_if` del propio servicio. Sin ese bloque no hay nada autorizado, así
+que el comando reporta cada stray, no señaliza ninguno y sale con `75`. Si no, el
+código de salida sigue el mapeo habitual de operaciones: `0` cuando no queda ningún
+stray, `1` cuando uno fue perdonado o sobrevivió al SIGKILL (`orphan_processes`),
+`2` ante un fallo.
+
+`--apply` se rechaza en cualquier otro comando, y ninguna acción de regla puede
+hacer reap — ver [safety.es.md](safety.es.md) para el contrato completo y
+[services.es.md](services.es.md) para el bloque `reap:`.
 
 ## Códigos de salida
 

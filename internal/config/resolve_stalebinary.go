@@ -51,11 +51,11 @@ func expandStaleBinary(tree map[string]any) []string {
 		checks.CheckKeyType:    checks.CheckTypeStaleBinary,
 		checks.CheckKeyReports: checks.ReportsState,
 	}
-	if err := injectGenerated(tree, sectionChecks, staleBinaryCheckName, "check", checkEntry); err != "" {
+	if err := injectGenerated(tree, sectionChecks, staleBinaryCheckName, "check", checks.CheckTypeStaleBinary, checkEntry); err != "" {
 		return []string{err}
 	}
 	rule := staleBinaryRule(allowRestart, staleBinaryAlertMessage(tree))
-	if err := injectGenerated(tree, rules.SectionRules, staleBinaryRuleName, "rule", rule); err != "" {
+	if err := injectGenerated(tree, rules.SectionRules, staleBinaryRuleName, "rule", checks.CheckTypeStaleBinary, rule); err != "" {
 		return []string{err}
 	}
 	return nil
@@ -64,14 +64,15 @@ func expandStaleBinary(tree map[string]any) []string {
 // injectGenerated adds a generated entry to a named section, creating the
 // section when absent and refusing to shadow an entry the operator wrote. It
 // returns "" on success. The names it claims are reserved, so the refusal has
-// to say what is claiming them — the operator never asked for this entry.
-func injectGenerated(tree map[string]any, section, name, noun string, value any) string {
+// to say what is claiming them — the operator never asked for this entry, so
+// feature names which sugar is responsible.
+func injectGenerated(tree map[string]any, section, name, noun, feature string, value any) string {
 	entries, _ := tree[section].(map[string]any)
 	if entries == nil {
 		entries = map[string]any{}
 	}
 	if _, exists := entries[name]; exists {
-		return fmt.Sprintf("the injected stale_binary %s would overwrite %s %q; rename that %s", noun, noun, name, noun)
+		return fmt.Sprintf("the injected %s %s would overwrite %s %q; rename that %s", feature, noun, noun, name, noun)
 	}
 	entries[name] = value
 	tree[section] = entries

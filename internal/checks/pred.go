@@ -28,6 +28,16 @@ const (
 	fieldFreeBytes = "free_bytes"
 	// fieldFree is the "free slots" field of the count checks (fds, pids, conntrack).
 	fieldFree = "free"
+
+	// The inotify dimensions. Both kernel limits are charged per user, and level
+	// predicates are ANDed, so `used_pct` is the worse of the two utilisations:
+	// one predicate cannot then be blind to one limit.
+	fieldInstances        = "instances"
+	fieldInstancesUsedPct = "instances_used_pct"
+	fieldInstancesFree    = "instances_free"
+	fieldWatches          = "watches"
+	fieldWatchesUsedPct   = "watches_used_pct"
+	fieldWatchesFree      = "watches_free"
 	// fieldAvailablePct is the "% available" field of a memory check.
 	fieldAvailablePct = "available_pct"
 	// fieldAvailableBytes is the "available bytes" field of a memory check.
@@ -213,6 +223,13 @@ var (
 	// FailedUnitsPredFields is the single optional predicate of a failed_units
 	// check; absent, it defaults to firing on any failed unit.
 	FailedUnitsPredFields = []string{DataKeyCount}
+	// InotifyPredFields are the predicates of an inotify check: the headline
+	// used_pct (the worse of both limits) plus each dimension on its own.
+	InotifyPredFields = []string{
+		fieldUsedPct,
+		fieldInstances, fieldInstancesUsedPct, fieldInstancesFree,
+		fieldWatches, fieldWatchesUsedPct, fieldWatchesFree,
+	}
 )
 
 // parseLevelPreds reads the {op, value} predicates present in entry among

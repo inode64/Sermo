@@ -177,6 +177,16 @@ const (
 	DataKeyType               = CheckKeyType
 	DataKeyUnit               = "unit"
 	DataKeyUnits              = "units"
+	DataKeyUnreadable         = "unreadable"
+	DataKeyUsers              = "users"
+	DataKeyDimension          = "dimension"
+	DataKeyHolders            = "holders"
+	DataKeyInstances          = fieldInstances
+	DataKeyInstancesMax       = "instances_max"
+	DataKeyInstancesUID       = "instances_uid"
+	DataKeyWatches            = fieldWatches
+	DataKeyWatchesMax         = "watches_max"
+	DataKeyWatchesUID         = "watches_uid"
 	DataKeyUpdateIntervalSecs = "update_interval_seconds"
 	DataKeyUsedBytes          = fieldUsedBytes
 	DataKeyUsedPct            = fieldUsedPct

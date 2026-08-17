@@ -247,6 +247,8 @@ func watchConditionFields(check map[string]any) []string {
 		return checks.ZombiePredFields
 	case checks.CheckTypeFailedUnits:
 		return checks.FailedUnitsPredFields
+	case checks.CheckTypeInotify:
+		return checks.InotifyPredFields
 	case checks.CheckTypeOOM:
 		return []string{checks.CheckKeyDelta}
 	case checks.CheckTypeProcess:

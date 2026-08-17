@@ -2365,6 +2365,26 @@ dry_run: true
     else:
         skip("swap", "no active swap device")
 
+    # The per-user inotify limits: the exhaustion no other watch can see. On the
+    # host this was written for, uid 0 held all 1024 instances — no new user
+    # manager, no new session bus, systemd degraded — while watch-fds reported
+    # 0.0%, because fs.file-max is effectively unlimited there. `used_pct` is the
+    # worse of the two limits, so one predicate covers both.
+    if features.get("inotify") == "1":
+        add_watch(
+            "watches",
+            "watch-inotify",
+            simple_watch(
+                "watch-inotify",
+                "system",
+                "1m",
+                ["type: inotify", 'used_pct: { op: ">=", value: "80%" }'],
+                cycles=3,
+            ),
+        )
+    else:
+        skip("inotify", "inotify sysctls not exposed")
+
     if features.get("conntrack") == "1":
         add_watch("watches", "watch-conntrack", simple_watch("watch-conntrack", "network", "30s", ["type: conntrack", 'used_pct: { op: ">=", value: "80%" }']))
     else:

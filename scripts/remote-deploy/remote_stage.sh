@@ -398,6 +398,7 @@ ip -o -6 route show >"${out}/ip_route6" 2>/dev/null || true
 	[ -r /proc/pressure/memory ] && echo "pressure=1" || echo "pressure=0"
 	[ -r /proc/sys/fs/file-nr ] && echo "fds=1" || echo "fds=0"
 	[ -r /proc/sys/kernel/pid_max ] && echo "pids=1" || echo "pids=0"
+	[ -r /proc/sys/fs/inotify/max_user_instances ] && echo "inotify=1" || echo "inotify=0"
 	[ -r /proc/sys/kernel/random/entropy_avail ] && echo "entropy=1" || echo "entropy=0"
 	[ -r /proc/net/stat/nf_conntrack ] || [ -r /proc/sys/net/netfilter/nf_conntrack_count ] && echo "conntrack=1" || echo "conntrack=0"
 	[ -d /sys/class/hwmon ] && echo "hwmon=1" || echo "hwmon=0"

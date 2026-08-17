@@ -85,6 +85,9 @@ const (
 	eventActionPanicOff          = "panic-off"
 	eventActionReload            = string(rules.ActionReload)
 	eventActionNotifierTest      = "test"
+	// eventActionReapOwnStrays names sermod's own startup hygiene: the leftovers a
+	// previous incarnation left in the daemon's control group.
+	eventActionReapOwnStrays = config.EngineKeyReapOwnStrays
 )
 
 // Subject prefixes name the entity a warning, event message or monitor label is
