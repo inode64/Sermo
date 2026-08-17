@@ -119,6 +119,11 @@ const (
 	watchReadingLabelRules                    = "Rules"
 	watchReadingLabelSample                   = "Sample"
 	watchReadingLabelFailedUnits              = "Failed units"
+	watchReadingLabelInstances                = "Instances"
+	watchReadingLabelInstancesMax             = "Instances limit"
+	watchReadingLabelWatches                  = "Watches"
+	watchReadingLabelWatchesMax               = "Watches limit"
+	watchReadingLabelHolders                  = "Top holders"
 	watchReadingLabelServer                   = "Server"
 	watchReadingLabelSize                     = "Size"
 	watchReadingLabelSocket                   = "Socket"
@@ -231,72 +236,63 @@ func (rb *readingBuilder) addMetric(field, label string, decimals int, unit stri
 // readings returns the accumulated list.
 func (rb *readingBuilder) readings() []web.WatchReading { return rb.out }
 
+// checkReadingsByType dispatches the readings builders that need nothing but the
+// check's data. A table rather than a switch arm per type: the switch had grown
+// to 29 arms and past the complexity budget, and a new check type now costs an
+// entry instead of a branch. The builders that also need the check type itself,
+// and the two data-shape fallbacks, stay in checkReadings below.
+var checkReadingsByType = map[string]func(map[string]any) []web.WatchReading{
+	checks.CheckTypeCert:             certCheckReadings,
+	checks.CheckTypeClock:            clockCheckReadings,
+	checks.CheckTypeCount:            countCheckReadings,
+	checks.CheckTypeFirewallRules:    firewallCheckReadings,
+	checks.CheckTypeFailedUnits:      failedUnitsCheckReadings,
+	checks.CheckTypeInotify:          inotifyCheckReadings,
+	checks.CheckTypeFile:             fileCheckReadings,
+	checks.CheckTypeFileExists:       fileCheckReadings,
+	checks.CheckTypeProcess:          processCheckReadings,
+	checks.CheckTypeStaleBinary:      staleBinaryCheckReadings,
+	checks.CheckTypeStrays:           staleBinaryCheckReadings,
+	checks.CheckTypeSize:             sizeCheckReadings,
+	checks.CheckTypeTCP:              connCheckReadings,
+	checks.CheckTypePorts:            connCheckReadings,
+	conn.ProtocolNameDBus:            dbusCheckReadings,
+	checks.CheckTypeTCPConnections:   tcpConnectionsCheckReadings,
+	checks.CheckTypeSSHIdle:          sshIdleCheckReadings,
+	checks.CheckTypeTerminalSessions: terminalSessionsCheckReadings,
+	checks.CheckTypeHTTP:             httpCheckReadings,
+	checks.URLSchemeHTTPS:            httpCheckReadings,
+	checks.CheckTypePressure:         pressureCheckReadings,
+	checks.CheckTypeDiskIO:           diskioCheckReadings,
+	checks.CheckTypeRAID:             raidCheckReadings,
+	checks.CheckTypeGlusterCluster:   glusterClusterCheckReadings,
+	checks.CheckTypeLVM:              lvmCheckReadings,
+	checks.CheckTypeNet:              netCheckReadings,
+	checks.CheckTypeSQL:              scalarQueryCheckReadings,
+	checks.CheckTypeSensors:          sensorsCheckReadings,
+	checks.CheckTypeMetric:           metricValueCheckReadings,
+}
+
 func checkReadings(checkType string, data map[string]any) []web.WatchReading {
 	if len(data) == 0 {
 		return nil
 	}
+	if build := checkReadingsByType[checkType]; build != nil {
+		return build(data)
+	}
 	switch checkType {
-	case checks.CheckTypeCert:
-		return certCheckReadings(data)
-	case checks.CheckTypeClock:
-		return clockCheckReadings(data)
-	case checks.CheckTypeCount:
-		return countCheckReadings(data)
-	case checks.CheckTypeFirewallRules:
-		return firewallCheckReadings(data)
-	case checks.CheckTypeFailedUnits:
-		return failedUnitsCheckReadings(data)
-	case checks.CheckTypeFile, checks.CheckTypeFileExists:
-		return fileCheckReadings(data)
-	case checks.CheckTypeProcess:
-		return processCheckReadings(data)
-	case checks.CheckTypeStaleBinary:
-		return staleBinaryCheckReadings(data)
-	case checks.CheckTypeSize:
-		return sizeCheckReadings(data)
-	case checks.CheckTypeTCP, checks.CheckTypePorts:
-		return connCheckReadings(data)
-	case conn.ProtocolNameDBus:
-		return dbusCheckReadings(data)
-	case checks.CheckTypeTCPConnections:
-		return tcpConnectionsCheckReadings(data)
-	case checks.CheckTypeSSHIdle:
-		return sshIdleCheckReadings(data)
-	case checks.CheckTypeTerminalSessions:
-		return terminalSessionsCheckReadings(data)
-	case checks.CheckTypeHTTP, checks.URLSchemeHTTPS:
-		return httpCheckReadings(data)
 	case checks.CheckTypeStorage, checks.CheckTypeSwap, checks.CheckTypeMemory, checks.CheckTypeLoad:
 		return resourceCheckReadings(checkType, data)
-	case checks.CheckTypePressure:
-		return pressureCheckReadings(data)
-	case checks.CheckTypeDiskIO:
-		return diskioCheckReadings(data)
-	case checks.CheckTypeRAID:
-		return raidCheckReadings(data)
-	case checks.CheckTypeGlusterCluster:
-		return glusterClusterCheckReadings(data)
-	case checks.CheckTypeLVM:
-		return lvmCheckReadings(data)
-	case checks.CheckTypeNet:
-		return netCheckReadings(data)
-	case checks.CheckTypeSQL:
-		return scalarQueryCheckReadings(data)
-	case checks.CheckTypeSensors:
-		return sensorsCheckReadings(data)
 	case checks.CheckTypeHdparm, checks.CheckTypeSmart, checks.CheckTypeEDAC:
 		return metricCheckReadings(checkType, data)
-	case checks.CheckTypeMetric:
-		return metricValueCheckReadings(data)
-	default:
-		if _, ok := data[checks.DataKeyConnectedClients]; ok {
-			return redisCheckReadings(data)
-		}
-		if graphMetrics := checks.GraphMetrics(checkType); len(graphMetrics) > 0 {
-			return metricCheckReadings(checkType, data)
-		}
-		return nil
 	}
+	if _, ok := data[checks.DataKeyConnectedClients]; ok {
+		return redisCheckReadings(data)
+	}
+	if graphMetrics := checks.GraphMetrics(checkType); len(graphMetrics) > 0 {
+		return metricCheckReadings(checkType, data)
+	}
+	return nil
 }
 
 func glusterClusterCheckReadings(data map[string]any) []web.WatchReading {
@@ -535,6 +531,21 @@ func countCheckReadings(data map[string]any) []web.WatchReading {
 	return rb.addString(checks.DataKeyWindow, watchReadingLabelWindow).readings()
 }
 
+// inotifyCheckReadings shows each limit with the uid that is closest to it, plus
+// the processes holding the instances: on the host this check was written for,
+// "dbus-daemon (1005)" is the whole diagnosis. Both limits are charged per user,
+// so the uid is part of the reading, not decoration.
+func inotifyCheckReadings(data map[string]any) []web.WatchReading {
+	return readingsFrom(data).
+		addInt(checks.DataKeyInstances, watchReadingLabelInstances).
+		addInt(checks.DataKeyInstancesMax, watchReadingLabelInstancesMax).
+		addInt(checks.DataKeyInstancesUID, watchReadingLabelUser).
+		addInt(checks.DataKeyWatches, watchReadingLabelWatches).
+		addInt(checks.DataKeyWatchesMax, watchReadingLabelWatchesMax).
+		addString(checks.DataKeyHolders, watchReadingLabelHolders).
+		readings()
+}
+
 // failedUnitsCheckReadings shows the count with the unit names beside it: which
 // unit failed is the actionable half, and a unit with no catalog profile appears
 // nowhere else in the dashboard.
@@ -582,6 +593,10 @@ func processCheckReadings(data map[string]any) []web.WatchReading {
 // staleBinaryCheckReadings surfaces which binaries were replaced and which
 // processes still run them. Without this the check computes both and the
 // dashboard drops them, leaving the operator with only a count.
+//
+// The `strays` check shares it: both report a set of this service's processes by
+// executable and PID, and both are useless as a bare count — the operator needs
+// to know *what* is there.
 func staleBinaryCheckReadings(data map[string]any) []web.WatchReading {
 	return readingsFrom(data).
 		addString(checks.DataKeyPath, watchReadingLabelPath).

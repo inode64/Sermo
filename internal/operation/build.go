@@ -97,11 +97,16 @@ func New(c Config) Engine {
 	killPolicy, stopPolicyWarnings := process.ParseStopPolicy(tree)
 	selectors, selectorWarnings := process.ParseSelectors(tree)
 	killPolicy = process.EnableAutomaticReaping(killPolicy, selectors)
+	// A malformed `reap:` block is a config error like a malformed stop_policy:
+	// the block's only purpose is to authorize signalling, so running the service
+	// while half of that authorization was misread is not an option.
+	reapSelector, reapWarnings := process.ParseReapPolicy(tree)
 	hasCommandMatch := hasCommandMatchSelector(selectors)
 	restartMode, restartPolicyErr := config.ParseRestartMode(tree)
 	configErr := firstWarningError(
 		warningError(process.SectionStopPolicy, stopPolicyWarnings),
 		warningError(selectorWarningPrefix, selectorWarnings),
+		warningError(process.SectionReap, reapWarnings),
 		restartPolicyErr,
 		reloadConfigError(tree),
 	)
@@ -180,6 +185,7 @@ func New(c Config) Engine {
 		Discover:         discover,
 		Reaper:           reaper,
 		KillPolicy:       killPolicy,
+		ReapSelector:     reapSelector,
 		Sleep:            sleep,
 		OperationTimeout: ResolveTimeout(c.OperationTimeout, tree),
 		Emit:             c.Emit,

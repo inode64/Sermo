@@ -29,7 +29,7 @@ var commandGroups = []commandGroup{
 	},
 	{
 		Title:    "Safe Service Operations",
-		Commands: []string{commandStart, commandStop, commandRestart, commandReload, commandResume, commandMonitor, commandUnmonitor, commandPreflight, commandProcesses, commandLocks, commandLock},
+		Commands: []string{commandStart, commandStop, commandRestart, commandReload, commandResume, commandMonitor, commandUnmonitor, commandPreflight, commandProcesses, commandReap, commandLocks, commandLock},
 	},
 	{
 		Title:    "Mounts",
@@ -287,6 +287,31 @@ var commandUsages = []commandUsage{
 		},
 		Examples: []string{
 			"sermoctl processes nginx-main",
+		},
+	},
+	{
+		Name:    commandReap,
+		Summary: "List a service's stray processes and, with --apply, signal the authorized ones.",
+		Usage: []string{
+			"sermoctl reap SERVICE",
+			"sermoctl reap SERVICE --apply",
+		},
+		Flags: []string{
+			"--apply  signal the strays matching reap.kill_only_if; without it nothing is touched",
+			"--json   print the reap result as JSON",
+		},
+		Notes: []string{
+			"A stray is a process the init backend attributes to the service's control",
+			"group that no configured selector claims and that no longer hangs off the",
+			"unit's principal process: a probe that daemonized, a child never reaped, a",
+			"survivor of an earlier incarnation.",
+			"Without a reap.kill_only_if block the service authorizes nothing, so --apply",
+			"reports every stray and signals none. Delegated processes, an unresolvable",
+			"exe, PID 1 and kernel threads are never signalled.",
+		},
+		Examples: []string{
+			"sermoctl reap sermo",
+			"sermoctl reap sermo --apply",
 		},
 	},
 	{

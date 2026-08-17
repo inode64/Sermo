@@ -36,11 +36,42 @@ type Process struct {
 	// selector gets the chance to name one of them.
 	Delegated bool `json:"delegated,omitempty"`
 
+	// Stray marks a process the init backend attributes to the unit's control
+	// group that no configured selector claims and that no longer hangs off the
+	// unit's principal process — the signature of a leftover reparented to PID 1
+	// while still counted against the unit (a probe that daemonized, a child the
+	// daemon never reaped, a survivor of an earlier incarnation).
+	//
+	// It is resolved by identity for the same reason Delegated is: a backend seed
+	// labels every cgroup PID Role "main" before a command selector can name one.
+	// The label authorizes nothing on its own — only a service's own
+	// `reap.kill_only_if` can turn a stray into a signal target, through the same
+	// KillSelector that gates every other kill decision.
+	Stray bool `json:"stray,omitempty"`
+
 	// ExePrev is the path of a binary replaced or removed on disk while this
 	// process kept running — typically a package upgrade without a restart.
 	// Diagnostic only: ExeOK stays false, so the process matches no exe
 	// selector and is never signalled.
 	ExePrev string `json:"exe_previous,omitempty"`
+}
+
+// Strays keeps the processes the unit's control group attributes to the service
+// that no selector claims. It is the single definition of "which of these
+// processes are strays", shared by the reap operation, the `strays` check and
+// every report that names them.
+//
+// Delegated is re-checked here even though classification already excludes it: a
+// delegated workload must never become a reap target through a future change to
+// either side.
+func Strays(procs []Process) []Process {
+	var out []Process
+	for _, proc := range procs {
+		if proc.Stray && !proc.Delegated {
+			out = append(out, proc)
+		}
+	}
+	return out
 }
 
 // Selector kinds.
@@ -96,6 +127,22 @@ const (
 	StopPolicyKeyUsers = "users"
 	// StopPolicyKeyExeAny is stop_policy.kill_only_if.exe_any.
 	StopPolicyKeyExeAny = "exe_any"
+)
+
+// Reap policy field keys, the per-service authorization for signalling strays.
+// They deliberately reuse the stop_policy selector spelling — and its parsed
+// type — so there is one paired identity gate in the system rather than a second
+// vocabulary that could drift from it.
+const (
+	// SectionReap is the optional block authorizing `sermoctl reap` to signal a
+	// service's stray processes. Absent, strays are reported and never signalled.
+	SectionReap = "reap"
+	// ReapKeyKillOnlyIf is reap.kill_only_if.
+	ReapKeyKillOnlyIf = StopPolicyKeyKillOnlyIf
+	// ReapKeyUsers is reap.kill_only_if.users.
+	ReapKeyUsers = StopPolicyKeyUsers
+	// ReapKeyExeAny is reap.kill_only_if.exe_any.
+	ReapKeyExeAny = StopPolicyKeyExeAny
 )
 
 // Discovery source labels.

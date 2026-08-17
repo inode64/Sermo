@@ -52,6 +52,7 @@ required.
   - [also_apply — cascade to other services](#also_apply--cascade-to-other-services)
   - [processes: by executable or cmdline](#processes-by-executable-or-cmdline)
   - [Stopped-state invariants (stop_policy)](#stopped-state-invariants-stop_policy)
+  - [Unclaimed control-group members (reap)](#unclaimed-control-group-members-reap)
   - [pidfile: and pidfiles: shorthand (selectors + health checks)](#pidfile-and-pidfiles-shorthand-selectors--health-checks)
   - [socket: shorthand (gated health check)](#socket-shorthand-gated-health-check)
   - [lockfile: shorthand (gated health check)](#lockfile-shorthand-gated-health-check)
@@ -1026,6 +1027,43 @@ stop_policy:
   concrete (non-glob) path at least two levels deep and not the filesystem root or
   a shallow system directory (`/`, `/etc`, `/usr`, `/var`, `/var/lib`, …) — those
   are refused at validation time. A delete failure is a warning, not a failure.
+
+### Unclaimed control-group members (`reap`)
+
+The init backend attributes a whole control group to the service, so Sermo sees
+processes there that no `processes:` selector claims. When such a process is also
+outside the unit's principal process tree — reparented to PID 1 while still
+counted against the unit — it is a **stray**: a probe that daemonized, a child the
+daemon never reaped, a survivor of an earlier incarnation.
+
+Strays are always reported (`sermoctl processes` shows `stray=true`). The optional
+`reap:` block is what lets an operator clear them:
+
+```yaml
+reap:
+  kill_only_if:
+    users: [root]
+    exe_any: [/usr/bin/dbus-daemon]
+```
+
+- Without the block, `sermoctl reap SERVICE --apply` lists every stray and signals
+  none. Authorization is opt-in per service and is never inherited from
+  `defaults:`: one global selector would hand every service the same kill authority
+  over processes none of them can name.
+- `kill_only_if` is the same paired selector `stop_policy` uses and passes the same
+  gate — exact resolved `exe` **and** real UID; a delegated process never, an
+  unresolvable exe never, PID 1 and kernel threads never.
+- Unknown keys under `reap:` are rejected at validation time. A stray is reached by
+  control-group membership rather than by a selector that named it, so a typo must
+  not leave the action authorized by something you did not write.
+- No rule action can reap, and a stop never consults this block — a restart reports
+  a stray it cannot clear rather than killing it. See [safety.md](safety.md) for the
+  full contract and [cli.md](cli.md) for the command.
+
+Detection is separate from clearing: Sermo injects a `strays` check into every
+init-managed service that declares selectors, reporting the count and the
+executables without alerting. See
+[configuration.md](configuration.md#strays--processes-the-service-cannot-account-for).
 
 ### `pidfile:` and `pidfiles:` shorthand (selectors + health checks)
 

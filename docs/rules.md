@@ -24,6 +24,7 @@
   - [Default route (route)](#default-route-route)
   - [Firewall rules (firewall_rules)](#firewall-rules-firewall_rules)
   - [Failed init units (failed_units)](#failed-init-units-failed_units)
+  - [inotify limits (inotify)](#inotify-limits-inotify)
   - [Disk throughput (hdparm)](#disk-throughput-hdparm)
   - [Hardware sensors](#hardware-sensors)
   - [Autofs](#autofs)
@@ -83,6 +84,7 @@ Connection-protocol checks (MySQL, PostgreSQL, Redis, Docker, libvirt, etc.) are
 | `conntrack`   | the netfilter conntrack table vs its max (used_pct/free/count)      |
 | `firewall_rules` | nftables/iptables has at least `min_rules` loaded rules (see Firewall rules) |
 | `failed_units` | the count of init units in a failed state satisfies `count {op, value}` (default `> 0`; see Failed init units) |
+| `inotify` | the per-user inotify instance/watch limits satisfy their `{op, value}` predicates (see inotify limits) |
 | `route`       | an up default route exists, optionally egressing a given `interface` (see Default route)|
 | `clock`       | local wall-clock offset stays within `max_offset`, measured against the configured NTP `servers` or (`source: chrony`) the local chronyd |
 | `net`         | one interface metric (`metric: state\|speed\|errors\|address`) holds — single-metric form of the net watch |
@@ -1900,7 +1902,7 @@ Every type above is a **single-shot check** (`Check.Run → Result`) and is usab
 
 The host-resource checks (`storage`, `load`, `memory`, `pressure`, `fds`, `pids`,
 `diskio`, `hdparm`, `sensors`, `smart`, `raid`, `edac`, `conntrack`, `entropy`,
-`zombies`, `oom`, `failed_units`, among others) are
+`zombies`, `oom`, `failed_units`, `inotify`, among others) are
 condition-style — `OK == true` means there is a problem — so in rules
 `active: {check: x}` fires on it, and as a watch the hook fires on it.
 The health checks (`tcp`, `ports`, `http`, `command`, `service`, `file_exists`,
@@ -2033,6 +2035,59 @@ The check is condition-style and has **no remediation action**: restarting an
 arbitrary unit Sermo knows nothing about is not a safe action, so a failed unit
 is reported and left alone. Data keys are `backend`, `count` and `units` (the
 joined unit names), and the dashboard shows all three.
+
+### inotify limits (`inotify`)
+
+The `inotify` check reports the two per-user kernel limits,
+`fs.inotify.max_user_instances` and `fs.inotify.max_user_watches`, for the user
+closest to each of them.
+
+It exists because no other check can see this exhaustion. `fds` compares
+system-wide allocated descriptors against `fs.file-max`, which is effectively
+unlimited on a modern kernel, so a host whose uid 0 held all `1024` inotify
+instances — every new login failing to start a user manager, every new session bus
+failing to initialise inotify, `systemctl is-system-running` reporting `degraded`
+— still reported `fds` at `0.0%`.
+
+```yaml
+watches:
+  watch-inotify:
+    category: system
+    interval: 1m
+    check:
+      type: inotify
+      used_pct: { op: ">=", value: "80%" }   # the worse of both limits
+      # instances_used_pct / instances_free / instances
+      # watches_used_pct   / watches_free   / watches
+    for: { cycles: 3 }
+```
+
+**`used_pct` is the worse of the two utilisations**, and it is the field the
+generated watch uses. Level predicates are ANDed, so a check carrying both
+`instances_used_pct` and `watches_used_pct` would have stayed silent on the host
+above: `100%` of the instance limit and `0.7%` of the watch limit. The prefixed
+fields are there for an operator who knows which limit they care about — a build
+host that legitimately holds many watches can threshold `instances_used_pct`
+alone.
+
+Both limits are charged per user, so the check reports the **worst single user**
+per limit, and the two can be different users: root leaking instances while a
+desktop user holds every watch. An aggregate would report `120%` while nobody is
+anywhere near being denied an `inotify_init`.
+
+Counting instances costs one `readlink` per open descriptor. Counting watches is
+gated on a `watches`/`used_pct` predicate being present, and then costs one
+streamed `fdinfo` read per descriptor already known to be an inotify one — so it
+is proportional to inotify descriptors, not to all descriptors. Data keys are
+`instances`, `instances_max`, `instances_uid`, `watches`, `watches_max`,
+`watches_uid`, `dimension` (which limit is binding), `users`, `holders` (the
+process names holding the instances, which is usually the whole diagnosis) and
+`unreadable`.
+
+The check needs root: `/proc/<pid>/fd` is owner-only, so an unprivileged run
+counts only its own processes. Rather than report a reassuring `ok` from a partial
+walk, it reports how many fd tables were unreadable and marks the sample a lower
+bound.
 
 ### Disk throughput (`hdparm`)
 

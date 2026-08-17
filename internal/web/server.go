@@ -805,17 +805,21 @@ type Process struct {
 	// ExePrevious names the path of a binary replaced or removed on disk while
 	// this process kept running. Without it the dashboard can only render such
 	// a process as "unknown".
-	ExePrevious string   `json:"exe_previous,omitempty"`
-	Role        string   `json:"role,omitempty"`
-	Source      string   `json:"source"`
-	Cmdline     []string `json:"cmdline,omitempty"`
-	RSS         int64    `json:"rss,omitempty"`      // resident memory, bytes
-	IORead      int64    `json:"io_read,omitempty"`  // cumulative disk read, bytes
-	IOWrite     int64    `json:"io_write,omitempty"` // cumulative disk write, bytes
-	FDs         int64    `json:"fds,omitempty"`      // open file descriptors
-	Threads     int64    `json:"threads,omitempty"`  // thread count
-	CPU         float64  `json:"cpu,omitempty"`      // live CPU %, single-core normalized (100% = one core)
-	HasCPU      bool     `json:"has_cpu,omitempty"`  // true when a live CPU rate is available (distinguishes 0% from unknown)
+	ExePrevious string `json:"exe_previous,omitempty"`
+	Role        string `json:"role,omitempty"`
+	// Stray marks a control-group member no configured selector claims. Without it
+	// the dashboard shows the backend seed's role "main" and the process reads as
+	// the service's principal one.
+	Stray   bool     `json:"stray,omitempty"`
+	Source  string   `json:"source"`
+	Cmdline []string `json:"cmdline,omitempty"`
+	RSS     int64    `json:"rss,omitempty"`      // resident memory, bytes
+	IORead  int64    `json:"io_read,omitempty"`  // cumulative disk read, bytes
+	IOWrite int64    `json:"io_write,omitempty"` // cumulative disk write, bytes
+	FDs     int64    `json:"fds,omitempty"`      // open file descriptors
+	Threads int64    `json:"threads,omitempty"`  // thread count
+	CPU     float64  `json:"cpu,omitempty"`      // live CPU %, single-core normalized (100% = one core)
+	HasCPU  bool     `json:"has_cpu,omitempty"`  // true when a live CPU rate is available (distinguishes 0% from unknown)
 	// MaxCore is the most any single core was used on this process's behalf: its
 	// busiest thread, normalized so 100% is one saturated core. It never exceeds CPU,
 	// and equals it for a single-threaded process. MaxCoreExact is false when the

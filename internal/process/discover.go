@@ -21,6 +21,12 @@ type Discoverer struct {
 	ResolveGroup UserResolver // group-name -> GID (OSGroupResolver); for command_match group
 	// BackendPIDs reports backend-provided PIDs (systemd cgroup process set and
 	// MainPID), tried first. Optional.
+	//
+	// The first PID is the backend's principal process when it can name one
+	// (servicemgr puts systemd's MainPID ahead of the cgroup set; a container
+	// reports its init PID). Stray classification relies on that order, and its
+	// failure mode is safe: a backend that names no principal makes the first
+	// live cgroup member look like one, which only ever leaves a stray unlabelled.
 	BackendPIDs func() []int
 }
 
@@ -66,7 +72,6 @@ func (d Discoverer) Discover(selectors []Selector) ([]Process, []string) {
 	reader := d.reader()
 	resolve := d.resolveUser()
 
-	var warnings []string
 	backendPIDs := backendPIDSeeds(d.BackendPIDs)
 	if len(backendPIDs) == 0 && len(selectors) == 0 {
 		return nil, nil
@@ -86,42 +91,22 @@ func (d Discoverer) Discover(selectors []Selector) ([]Process, []string) {
 	}
 
 	// 0. backend-provided PIDs (systemd cgroup + MainPID).
+	// principal is the unit's own process as the backend names it: the first seed
+	// that is actually running. Stray classification needs it, and nothing else
+	// in Discover distinguishes it — every seed gets Role "main".
+	principal := 0
 	for _, pid := range backendPIDs {
 		if id, ok := snapshot[pid]; ok {
 			add(id, RoleMain, sourceBackend)
 			hasBackendProcess = true
+			if principal == 0 {
+				principal = pid
+			}
 		}
 	}
 
-	// 1. pidfiles. Candidate paths (e.g. per-OS variants) are tried in order; the
-	// first that points at a running process wins. Only when none do is the most
-	// relevant failure reported.
-	for i := range selectors {
-		sel := &selectors[i]
-		if sel.Type != SelectorPidfile {
-			continue
-		}
-		var lastWarn string
-		matched := false
-		for _, path := range sel.Paths {
-			pid, err := ReadPidfile(path)
-			if err != nil {
-				lastWarn = fmt.Sprintf("pidfile %q (%s): %v", path, sel.Name, err)
-				continue
-			}
-			id, ok := snapshot[pid]
-			if !ok {
-				lastWarn = fmt.Sprintf("pidfile %q (%s) references pid %d which is not running", path, sel.Name, pid)
-				continue
-			}
-			add(id, sel.Name, sourcePidfile)
-			matched = true
-			break
-		}
-		if !matched && lastWarn != "" && !hasBackendProcess {
-			warnings = append(warnings, lastWarn)
-		}
-	}
+	// 1. pidfiles.
+	pidfileClaimed, warnings := addPidfileSelectors(selectors, snapshot, add, hasBackendProcess)
 
 	// 2. command_match across the snapshot.
 	for _, pid := range idx.sorted {
@@ -144,11 +129,58 @@ func (d Discoverer) Discover(selectors []Selector) ([]Process, []string) {
 	// that need it.
 	d.markDelegated(selectors, found, idx, resolve)
 
+	// 5. stray marking, after delegation so a delegated workload is never also a
+	// stray. Only cgroup members outside the principal's tree are examined, which
+	// is nothing at all for a healthy unit.
+	d.markStrays(selectors, found, idx, resolve, principal, pidfileClaimed)
+
 	result := make([]Process, 0, len(order))
 	for _, pid := range order {
 		result = append(result, found[pid])
 	}
 	return result, warnings
+}
+
+// addPidfileSelectors resolves the pidfile selectors. Candidate paths (e.g.
+// per-OS variants) are tried in order; the first that points at a running
+// process wins, and only when none do is the most relevant failure reported —
+// and only when the backend named no process, which is stronger evidence than a
+// pidfile either way.
+//
+// The returned set records the live PIDs a pidfile named, whether or not add kept
+// the label: a backend seed wins the first write, so a daemon named by its own
+// pidfile would otherwise look unclaimed to stray classification.
+func addPidfileSelectors(selectors []Selector, snapshot map[int]Identity, add func(Identity, string, string), hasBackendProcess bool) (map[int]bool, []string) {
+	claimed := map[int]bool{}
+	var warnings []string
+	for i := range selectors {
+		sel := &selectors[i]
+		if sel.Type != SelectorPidfile {
+			continue
+		}
+		var lastWarn string
+		matched := false
+		for _, path := range sel.Paths {
+			pid, err := ReadPidfile(path)
+			if err != nil {
+				lastWarn = fmt.Sprintf("pidfile %q (%s): %v", path, sel.Name, err)
+				continue
+			}
+			id, ok := snapshot[pid]
+			if !ok {
+				lastWarn = fmt.Sprintf("pidfile %q (%s) references pid %d which is not running", path, sel.Name, pid)
+				continue
+			}
+			add(id, sel.Name, sourcePidfile)
+			claimed[pid] = true
+			matched = true
+			break
+		}
+		if !matched && lastWarn != "" && !hasBackendProcess {
+			warnings = append(warnings, lastWarn)
+		}
+	}
+	return claimed, warnings
 }
 
 // markDelegated marks processes matched by delegated selectors and propagates
@@ -170,9 +202,18 @@ func (d Discoverer) markDelegated(selectors []Selector, found map[int]Process, i
 	// in the unit's cgroup Role "main" before command selectors name workload
 	// children. Delegation then flows down the tree because a workload owns
 	// everything it spawns.
+	//
+	// claimedBy also accepts a process whose binary was replaced on disk, and that
+	// case is the one that matters most here. An unresolvable exe already makes a
+	// process unkillable, so declining to delegate it is the worst combination
+	// there is: it stays a residual that nothing may ever signal, and every staged
+	// stop therefore ends in orphan_processes with the service left stopped.
+	// Delegation only ever removes authority — it can never make a process
+	// signallable — so recognizing a stale-binary process here cannot widen what
+	// Sermo may signal.
 	delegated := map[int]bool{}
 	for pid := range found {
-		if d.matchesAnyDelegated(delegatedSelectors, idx.byPID[pid], resolve) {
+		if d.claimedBy(delegatedSelectors, idx.byPID[pid], resolve) {
 			delegated[pid] = true
 		}
 	}
@@ -184,6 +225,45 @@ func (d Discoverer) markDelegated(selectors []Selector, found map[int]Process, i
 			proc.Delegated = true
 			found[pid] = proc
 		}
+	}
+}
+
+// markStrays flags the cgroup members the init backend attributes to the unit
+// that nothing claims: not the principal process, not part of its live process
+// tree, named by no pidfile and matched by no command selector. Cgroup
+// membership is the kernel's own attribution, so these processes do belong to
+// the service even though Sermo cannot say what they are.
+//
+// Excluding the principal's tree is what makes the label mean something. A
+// daemon's workers are its descendants, so a healthy unit produces no strays at
+// all; a process that survived into the cgroup without an ancestry chain back to
+// the principal was reparented to PID 1, which is exactly the leftover an
+// operator needs to see. It also keeps the label from covering the daemon's own
+// workers on a service that declares no `processes:` block, where every selector
+// match is unavailable and reporting the whole cgroup would be noise.
+//
+// The label is descriptive only. Reaping a stray still requires the service's own
+// reap.kill_only_if selector and passes through KillSelector.Killable like every
+// other signal, so nothing here widens what Sermo may signal.
+func (d Discoverer) markStrays(selectors []Selector, found map[int]Process, idx *snapshotIndex, resolve UserResolver, principal int, pidfileClaimed map[int]bool) {
+	// No backend seed means no cgroup attribution to reason about: without one,
+	// every discovered process came from a selector that named it.
+	if principal <= 0 {
+		return
+	}
+	owned := map[int]bool{principal: true}
+	for _, pid := range descendants(idx.children, []int{principal}) {
+		owned[pid] = true
+	}
+	for pid, proc := range found {
+		if proc.Source != sourceBackend || proc.Delegated || owned[pid] || pidfileClaimed[pid] {
+			continue
+		}
+		if d.claimedBy(selectors, idx.byPID[pid], resolve) {
+			continue
+		}
+		proc.Stray = true
+		found[pid] = proc
 	}
 }
 
@@ -438,17 +518,16 @@ func (d Discoverer) matchesAny(selectors []Selector, id Identity, resolve UserRe
 	return false
 }
 
-// matchesAnyDelegated reports whether any delegated selector claims id. Unlike
-// matchesAny it also accepts a process whose binary was replaced on disk, matched
-// through ExePrev.
+// claimedBy reports whether any selector in the set names id. Unlike matchesAny
+// it also accepts a process whose binary was replaced on disk, matched through
+// ExePrev: such a process is still the one the selector was written for, it just
+// can no longer prove its identity. It authorizes nothing either way — matches()
+// stays false for it, so it is never selected and never signalled.
 //
-// That case is the one that matters most. An unresolvable exe already makes a
-// process unkillable, so declining to delegate it is the worst combination there
-// is: it stays a residual that nothing may ever signal, and every staged stop
-// therefore ends in orphan_processes with the service left stopped. Delegation
-// only ever removes authority — it can never make a process signallable — so
-// recognizing a stale-binary process here cannot widen what Sermo may signal.
-func (d Discoverer) matchesAnyDelegated(selectors []Selector, id Identity, resolve UserResolver) bool {
+// The two identity-resolved post-passes share this predicate so "a selector names
+// this process" cannot come to mean two different things: markDelegated removes
+// authority over what it claims, markStrays labels what it does not.
+func (d Discoverer) claimedBy(selectors []Selector, id Identity, resolve UserResolver) bool {
 	if d.matchesAny(selectors, id, resolve) {
 		return true
 	}

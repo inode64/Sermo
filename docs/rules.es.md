@@ -24,6 +24,7 @@
   - [Ruta por defecto (route)](#ruta-por-defecto-route)
   - [Reglas de firewall (firewall_rules)](#reglas-de-firewall-firewall_rules)
   - [Unidades de init fallidas (failed_units)](#unidades-de-init-fallidas-failed_units)
+  - [Límites de inotify (inotify)](#límites-de-inotify-inotify)
   - [Rendimiento de disco (hdparm)](#rendimiento-de-disco-hdparm)
   - [Sensores de hardware](#sensores-de-hardware)
   - [Autofs](#autofs)
@@ -83,6 +84,7 @@ Las comprobaciones de protocolo de conexión (MySQL, PostgreSQL, Redis, Docker, 
 | `conntrack`   | la tabla conntrack de netfilter frente a su máximo (used_pct/free/count)      |
 | `firewall_rules` | nftables/iptables tiene al menos `min_rules` reglas cargadas (ver Reglas de firewall) |
 | `failed_units` | el recuento de unidades de init en estado fallido cumple `count {op, value}` (por defecto `> 0`; ver Unidades de init fallidas) |
+| `inotify` | los límites de instancias/watches de inotify por usuario cumplen sus predicados `{op, value}` (ver Límites de inotify) |
 | `route`       | existe una ruta por defecto activa, opcionalmente saliendo por una `interface` dada (ver Ruta por defecto)|
 | `clock`       | el desfase del reloj local se mantiene dentro de `max_offset`, medido frente a los `servers` NTP configurados o (`source: chrony`) al chronyd local |
 | `net`         | una métrica de interfaz (`metric: state\|speed\|errors\|address`) se cumple — forma de métrica única del watch net |
@@ -1916,7 +1918,7 @@ Cada tipo de arriba es una **comprobación de un solo disparo** (`Check.Run → 
 
 Las comprobaciones de recursos del host (`storage`, `load`, `memory`, `pressure`, `fds`, `pids`,
 `diskio`, `hdparm`, `sensors`, `smart`, `raid`, `edac`, `conntrack`, `entropy`,
-`zombies`, `oom`, `failed_units`, entre otras) son de
+`zombies`, `oom`, `failed_units`, `inotify`, entre otras) son de
 estilo condición — `OK == true` significa que hay un problema — así que en reglas
 `active: {check: x}` se dispara sobre ella, y como watch el hook se dispara sobre ella.
 Las comprobaciones de salud (`tcp`, `ports`, `http`, `command`, `service`, `file_exists`,
@@ -2051,6 +2053,60 @@ La comprobación es de estilo condición y **no tiene acción de remediación**:
 reiniciar una unidad arbitraria que Sermo no conoce no es una acción segura, así que
 una unidad fallida se reporta y se deja intacta. Las claves de datos son `backend`,
 `count` y `units` (los nombres de unidad unidos), y el dashboard muestra las tres.
+
+### Límites de inotify (`inotify`)
+
+La comprobación `inotify` reporta los dos límites del kernel por usuario,
+`fs.inotify.max_user_instances` y `fs.inotify.max_user_watches`, para el usuario
+más cercano a cada uno.
+
+Existe porque ninguna otra comprobación puede ver este agotamiento. `fds` compara
+los descriptores asignados de todo el sistema contra `fs.file-max`, que en un
+kernel moderno es prácticamente ilimitado, así que un host cuyo uid 0 retenía las
+`1024` instancias de inotify — cada login fallando al arrancar su gestor de
+usuario, cada bus de sesión fallando al inicializar inotify, `systemctl
+is-system-running` reportando `degraded` — seguía reportando `fds` al `0.0%`.
+
+```yaml
+watches:
+  watch-inotify:
+    category: system
+    interval: 1m
+    check:
+      type: inotify
+      used_pct: { op: ">=", value: "80%" }   # el peor de los dos límites
+      # instances_used_pct / instances_free / instances
+      # watches_used_pct   / watches_free   / watches
+    for: { cycles: 3 }
+```
+
+**`used_pct` es la peor de las dos utilizaciones**, y es el campo que usa el watch
+generado. Los predicados de nivel se combinan con AND, así que una comprobación
+que llevara `instances_used_pct` y `watches_used_pct` a la vez se habría quedado
+callada en el host de arriba: `100%` del límite de instancias y `0.7%` del de
+watches. Los campos con prefijo están para quien sabe qué límite le importa — un
+host de compilación que legítimamente retiene muchos watches puede poner umbral
+solo a `instances_used_pct`.
+
+Ambos límites se cobran por usuario, así que la comprobación reporta el **peor
+usuario** de cada límite, y pueden ser usuarios distintos: root fugando
+instancias mientras un usuario de escritorio retiene todos los watches. Un
+agregado reportaría `120%` sin que nadie esté cerca de que le nieguen un
+`inotify_init`.
+
+Contar instancias cuesta un `readlink` por descriptor abierto. Contar watches
+está condicionado a que exista un predicado `watches`/`used_pct`, y entonces
+cuesta una lectura en flujo de `fdinfo` por cada descriptor que ya se sabe que es
+de inotify — o sea, proporcional a los descriptores inotify, no a todos. Las
+claves de datos son `instances`, `instances_max`, `instances_uid`, `watches`,
+`watches_max`, `watches_uid`, `dimension` (qué límite manda), `users`, `holders`
+(los nombres de proceso que retienen las instancias, que suele ser el diagnóstico
+completo) y `unreadable`.
+
+La comprobación necesita root: `/proc/<pid>/fd` solo lo lee su dueño, así que una
+ejecución sin privilegios solo cuenta sus propios procesos. En lugar de reportar
+un `ok` tranquilizador desde un recorrido parcial, informa de cuántas tablas de
+descriptores no pudo leer y marca la muestra como cota inferior.
 
 ### Rendimiento de disco (`hdparm`)
 

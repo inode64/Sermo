@@ -69,6 +69,8 @@ const (
 	stopPolicyPathFilesAbsent = sectionStopPolicy + "." + keyFilesAbsent
 	stopPolicyPathForceKill   = sectionStopPolicy + "." + keyForceKill
 	stopPolicyPathKillOnlyIf  = sectionStopPolicy + "." + keyKillOnlyIf
+
+	reapPathKillOnlyIf = sectionReap + "." + keyKillOnlyIf
 )
 
 func engineFieldPath(field string) string {

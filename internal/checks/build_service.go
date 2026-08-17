@@ -78,3 +78,14 @@ func buildStaleBinaryCheck(b base, deps Deps) (Check, string) {
 	}
 	return staleBinaryCheck{base: b, stale: deps.StaleBinaries}, ""
 }
+
+// buildStraysCheck builds a check reporting this service's control-group members
+// that no selector claims. Like stale_binary it takes no entry fields: what counts
+// as a stray follows from the service's own `processes:`/`pidfile:` declarations
+// and the init unit's control group, so there is nothing to configure per check.
+func buildStraysCheck(b base, deps Deps) (Check, string) {
+	if deps.Strays == nil {
+		return nil, "strays check needs process discovery, unavailable here"
+	}
+	return straysCheck{base: b, strays: deps.Strays}, ""
+}

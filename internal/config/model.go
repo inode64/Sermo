@@ -38,6 +38,12 @@ const (
 // invariants (pidfile/file cleanup) the engine enforces.
 const sectionStopPolicy = process.SectionStopPolicy
 
+// sectionReap is the per-service block authorizing `sermoctl reap` to signal the
+// service's stray processes. It is deliberately absent from perServiceDefaults:
+// a global default would hand every service the same kill authority over
+// processes none of them can name.
+const sectionReap = process.SectionReap
+
 // sectionPolicy is the remediation policy block; sectionRuleWindow is the
 // firing-window fallback block owned by the rules grammar.
 const (
@@ -108,6 +114,10 @@ const (
 	EngineKeyMaxParallelChecks = "max_parallel_checks"
 	// EngineKeyOperationTimeout is engine.operation_timeout.
 	EngineKeyOperationTimeout = "operation_timeout"
+	// EngineKeyReapOwnStrays is engine.reap_own_strays, the startup hygiene that
+	// terminates whatever a previous incarnation left in sermod's own init unit
+	// control group. Enabled unless set to false.
+	EngineKeyReapOwnStrays = "reap_own_strays"
 	// EngineKeyRetention1m is engine.retention_1m, the per-minute history window.
 	EngineKeyRetention1m = "retention_1m"
 	// EngineKeyRetention5m is engine.retention_5m, the 5-minute history window.

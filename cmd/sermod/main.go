@@ -109,6 +109,7 @@ const (
 	logFieldMode                  = "mode"
 	logFieldPath                  = "path"
 	logFieldPID                   = "pid"
+	logFieldProcesses             = "processes"
 	logFieldReason                = "reason"
 	logFieldRows                  = "rows"
 	logFieldScope                 = "scope"
@@ -312,6 +313,16 @@ func run(args []string) int {
 		ExecxRunner:          runner,
 		UserLookup:           userLookup,
 		Settling:             settling,
+	}
+
+	// Startup hygiene, before anything spawns a child of our own: whatever is left
+	// in sermod's control group at this point belongs to a previous incarnation the
+	// init system did not clean up (KillMode=process/none), and each survivor keeps
+	// holding its file descriptors, inotify instances and memory forever.
+	if app.ReapOwnStraysEnabled(cfg) {
+		if n := (app.SelfStrayHygiene{Emit: deps.Emit}).Run(); n > 0 {
+			logger.Warn("terminated leftovers from a previous sermod incarnation", logFieldProcesses, n)
+		}
 	}
 
 	collector := metrics.New(metrics.OSReader{})

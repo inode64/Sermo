@@ -72,6 +72,7 @@ type Samplers struct {
 	ConntrackSampler     ConntrackSamplerFunc
 	FirewallRulesSampler FirewallRulesSamplerFunc
 	FailedUnitsSampler   FailedUnitsSamplerFunc
+	InotifySampler       InotifySamplerFunc
 	EntropySampler       EntropySamplerFunc
 	ZombieSampler        ZombieSamplerFunc
 	UsersSampler         UsersSamplerFunc
@@ -113,6 +114,10 @@ type Deps struct {
 	// or removed on disk, for `stale_binary` checks. It is read-only: such a
 	// process resolves no exe, so it is still never signalled.
 	StaleBinaries StaleBinariesFunc
+	// Strays reports this service's control-group members that no selector
+	// claims, for `strays` checks. Read-only: reporting a stray authorizes
+	// nothing, and only `sermoctl reap --apply` can signal one.
+	Strays StraysFunc
 	Samplers
 }
 
@@ -275,6 +280,9 @@ var builtinCheckSpecs = []checkSpec{
 	// Condition, not health: OK means "nothing is stale", so a rule fires it
 	// with `active:` the same way it would an alert-style predicate.
 	{info: serviceConditionTypeInfo(CheckTypeStaleBinary), build: func(in checkBuildInput) (Check, string) { return buildStaleBinaryCheck(in.base, in.deps) }},
+	// Condition too, and for the same reason: OK means the service's control group
+	// holds nothing Sermo cannot account for.
+	{info: serviceConditionTypeInfo(CheckTypeStrays), build: func(in checkBuildInput) (Check, string) { return buildStraysCheck(in.base, in.deps) }},
 	{info: serviceConditionTypeInfo(CheckTypeMetric), build: func(in checkBuildInput) (Check, string) { return buildMetricCheck(in.base, in.entry, in.deps) }},
 	{info: healthTypeInfo(CheckTypeLibraries), build: func(in checkBuildInput) (Check, string) { return buildLibrariesCheck(in.base, in.entry) }},
 	{info: conditionTypeInfo(CheckTypeCount), build: func(in checkBuildInput) (Check, string) { return buildCountCheck(in.base, in.entry) }},
@@ -323,6 +331,9 @@ var builtinCheckSpecs = []checkSpec{
 	}},
 	{info: conditionTypeInfo(CheckTypeFailedUnits), build: func(in checkBuildInput) (Check, string) {
 		return buildFailedUnitsCheck(in.base, in.entry, in.runner, in.deps)
+	}},
+	{info: conditionTypeInfo(CheckTypeInotify), build: func(in checkBuildInput) (Check, string) {
+		return buildInotifyCheck(in.base, in.entry, in.deps)
 	}},
 }
 

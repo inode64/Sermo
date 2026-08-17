@@ -448,12 +448,16 @@ func runProbeCommand(ctx context.Context, runner execx.Runner, cmd probeCommand)
 	if timeout <= 0 {
 		timeout = probeTimeout
 	}
+	// Probe variants: a version/preflight command is an observation, so anything
+	// it leaves running is collected with its process group. `influxd version`
+	// autolaunches a D-Bus session daemon that otherwise survives for the life of
+	// the host, one leaked inotify instance per sampling round.
 	if cmd.user != "" {
 		//nolint:wrapcheck // execx returns the canonical command error consumed by OperatorFailure.
-		return execx.RunUser(ctx, runner, timeout, cmd.user, cmd.argv[0], cmd.argv[1:]...)
+		return execx.RunProbeUser(ctx, runner, timeout, cmd.user, cmd.argv[0], cmd.argv[1:]...)
 	}
 	//nolint:wrapcheck // execx returns the canonical command error consumed by OperatorFailure.
-	return execx.Run(ctx, runner, timeout, cmd.argv[0], cmd.argv[1:]...)
+	return execx.RunProbe(ctx, runner, timeout, cmd.argv[0], cmd.argv[1:]...)
 }
 
 // catalogPath returns the resolved binary or library file path for a catalog

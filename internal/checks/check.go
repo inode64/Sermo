@@ -429,14 +429,25 @@ func runThresholdCheck(b base, op string, value float64, sample func() (uint64, 
 	return res
 }
 
+// levelCountFields writes one count-vs-limit dimension's utilisation and free
+// headroom into values under the given field names, and reports the utilisation.
+// It owns the two rules the count-vs-limit checks share: an unknown limit (0)
+// omits both fields so a predicate on them cannot hold, and free is clamped so a
+// count momentarily above the limit cannot underflow the unsigned subtraction.
+// A multi-dimension check (inotify) calls it once per dimension.
+func levelCountFields(values map[string]float64, pctField, freeField string, count, limit uint64) float64 {
+	if limit == 0 {
+		return 0
+	}
+	usedPct := float64(count) / float64(limit) * percentScale
+	values[pctField] = usedPct
+	values[freeField] = float64(limit - min(count, limit))
+	return usedPct
+}
+
 func levelCountResult(b base, preds []levelPred, label, unit, countField string, count, limit uint64, start time.Time) Result {
 	values := map[string]float64{countField: float64(count)}
-	usedPct := 0.0
-	if limit > 0 {
-		usedPct = float64(count) / float64(limit) * percentScale
-		values[fieldUsedPct] = usedPct
-		values[fieldFree] = float64(limit - min(count, limit))
-	}
+	usedPct := levelCountFields(values, fieldUsedPct, fieldFree, count, limit)
 	res := b.result(levelPredsHold(preds, values), fmt.Sprintf("%s %d/%d %s (%.1f%%)", label, count, limit, unit, usedPct), start)
 	res.Data = map[string]any{countField: count, DataKeyMax: limit, fieldUsedPct: usedPct}
 	if limit > 0 {

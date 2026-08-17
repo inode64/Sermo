@@ -98,6 +98,7 @@ var validEngineKeys = set(
 	EngineKeyEvents,
 	EngineKeyMaxParallelChecks,
 	EngineKeyOperationTimeout,
+	EngineKeyReapOwnStrays,
 	EngineKeyRetention1m,
 	EngineKeyRetention5m,
 	EngineKeyRetention1h,
@@ -164,6 +165,11 @@ func validateGlobalEngine(cfg *Config, raw map[string]any, add addFunc) {
 	}
 	if v, present := engine[EngineKeyStartupDelay]; present && !isNonNegativeDuration(cfgval.String(v)) {
 		add("%s %q must be a valid non-negative duration (0 disables the wait)", enginePathStartupDelay, cfgval.String(v))
+	}
+	if v, present := engine[EngineKeyReapOwnStrays]; present {
+		if _, ok := v.(bool); !ok {
+			add(validationBooleanLiteralFormat, engineFieldPath(EngineKeyReapOwnStrays))
+		}
 	}
 	if mode := cfgval.String(engine[EngineKeyUserLookup]); !process.ValidUserLookupMode(mode) {
 		add(validationNotOneOfFormat, enginePathUserLookup, mode, userLookupModeSummary)
@@ -960,6 +966,7 @@ func validateResolved(name string, tree map[string]any, runtime string, notifier
 	validateProcesses(tree, add)
 	validatePidfiles(tree, add)
 	validateStopPolicy(tree, add)
+	validateReapPolicy(tree, add)
 	validateRestartPolicy(tree, add)
 	validateAllowDependencies(tree, add)
 	validatePolicyExtras(tree, add)

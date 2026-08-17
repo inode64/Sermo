@@ -37,6 +37,12 @@ any `security:` toggle that tries to disable them.
    requires locks, preflight, guards, any available restart identity, timeout
    and postflight; a failed backend `Restart` is a failed operation, never an
    implicit staged stop/start.
+9. **A stray process is never signalled without its own authorization.** A
+   control-group member that no selector claims can only be signalled by
+   `sermoctl reap --apply`, and only through the service's own
+   `reap.kill_only_if` selector, checked by the same gate as every other kill. No
+   rule action can reap, and a service with no `reap:` block reports its strays
+   and signals none.
 
 ## The operation engine
 
@@ -359,6 +365,98 @@ restart:
 5. The result is `ok` only when no residuals remain at all — whether the
    survivor was deliberately spared or outlived SIGKILL, the result is
    `orphan_processes` and lists every remaining process.
+
+## Stray processes and `reap`
+
+A **stray** is a process the init backend attributes to the service's control
+group that no configured selector claims (no `processes:` match, no pidfile), that
+is not the unit's principal process, and that is not part of that principal's live
+process tree.
+
+Control-group membership is the kernel's own attribution, so a stray does belong
+to the service — Sermo just cannot say what it is. Excluding the principal's tree
+is what makes the label useful: a daemon's workers are its descendants, so a
+healthy unit produces no strays at all, while a process that reached the control
+group without an ancestry chain back to the principal was reparented to PID 1.
+That is the signature of a leftover — a probe that daemonized, a child the daemon
+never reaped, a survivor of an earlier incarnation.
+
+Strays appear in `sermoctl processes` as `stray=true`, in the dashboard's process
+table with `stray` in the Role column, and as the injected `strays` check (see
+[configuration.md](configuration.md)). Nothing else changes: a stray is still
+discovered, still counted in the service's process totals, and still a residual of
+a stop like any other process.
+
+### A stop never reaps
+
+`reap.kill_only_if` is **not** consulted during a stop, so a restart never clears a
+stray. The stop phase signals exactly what `stop_policy` authorizes, and a stray it
+cannot identify is reported, not killed.
+
+Whether that blocks a restart depends on the unit's `KillMode`:
+
+- `KillMode=control-group` (the systemd default): the stop takes the whole control
+  group with it, so no stray survives to be a residual and nothing changes.
+- `KillMode=process` / `none` (sshd, NetworkManager, libvirt's daemons): survivors
+  remain. Those a `delegated: true` selector claims are excluded from residuals by
+  design; a stray is not, so it ends the operation in `orphan_processes` with the
+  service left stopped.
+- `restart_policy: native`: the init backend performs one atomic restart, so there
+  is no residual phase at all.
+
+In that third case the result names the strays and points at the verb that clears
+them:
+
+```console
+$ sermoctl restart ssh
+ssh restart orphan_processes
+reason: 1 residual process(es) remain after stop (1 stray, unaccounted for by any
+  selector; `sermoctl reap` lists them and, with reap.kill_only_if declared, clears them)
+  residual pid=4711 exe=/usr/bin/tmux stray=true
+```
+
+The operator then chooses: mark it `delegated: true` if the unit keeps it alive on
+purpose, add a selector if it is a role Sermo should know, or declare
+`reap.kill_only_if` and clear it. Making a stop reap on its own would mean
+automatic remediation killing processes Sermo cannot name, which is the risk this
+design refuses.
+
+`sermoctl reap SERVICE` lists them and reports how many would be signalled. It
+takes no lock, emits no event and touches nothing.
+
+`sermoctl reap SERVICE --apply` signals them through the normal operation path —
+operation lock, active named runtime locks, guards, exactly one event — and
+relaxes no invariant:
+
+- Authority comes only from the service's own `reap.kill_only_if`, the same paired
+  `users` + `exe_any` selector `stop_policy` uses, checked by the same gate.
+  Without the block nothing is authorized, so `--apply` reports every stray and
+  signals none.
+- Delegated processes, an unresolvable exe, PID 1 and kernel threads are refused
+  exactly as they are during a stop.
+- Escalation is SIGTERM, `term_timeout`, rediscover, SIGKILL, `kill_timeout`,
+  rediscover, using the service's own `stop_policy` timings and re-reading live
+  `/proc` between rounds.
+- The result is `ok` only when no stray remains; a spared or surviving one makes it
+  `orphan_processes` and lists what is left.
+
+No rule action can reap. Reaping means terminating a process Sermo cannot name,
+and that decision stays with the operator.
+
+### sermod's own startup hygiene
+
+sermod terminates whatever it finds in **its own** init unit control group when it
+starts, before it has spawned anything itself — so anything there belongs to a
+previous incarnation the init system did not clean up (`KillMode=process` or
+`KillMode=none`). This is the one exception to "all service signalling goes
+through the operation engine", and it is deliberately narrow:
+
+- Only sermod's own control group, and only when that group is a systemd
+  **service** unit. Started from a login shell sermod shares its scope with the
+  operator's shell and sshd, so it does nothing at all there.
+- `SIGTERM` only. A leftover that ignores it is reported and left alone.
+- One event per process signalled.
+- `engine.reap_own_strays: false` turns it off.
 
 ## Scheduler and concurrency
 

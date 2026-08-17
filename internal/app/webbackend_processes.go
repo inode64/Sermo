@@ -13,6 +13,7 @@ func processToWeb(p process.Process) web.Process {
 		Exe:         p.Exe,
 		ExeResolved: p.ExeOK,
 		Role:        p.Role,
+		Stray:       p.Stray,
 		Source:      p.Source,
 		Cmdline:     p.Cmdline,
 		ExePrevious: p.ExePrev,

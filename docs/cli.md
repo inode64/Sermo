@@ -76,6 +76,7 @@ sermoctl mount list
 
 sermoctl preflight SERVICE
 sermoctl processes SERVICE
+sermoctl reap SERVICE [--apply]        # list the service's stray processes; --apply signals the authorized ones
 sermoctl locks SERVICE
 sermoctl monitor SERVICE
 sermoctl unmonitor SERVICE
@@ -271,6 +272,30 @@ The web UI uses the same split: **Services** shows configured runtime services;
 **Applications** (`GET /api/applications`) and **Libraries**
 (`GET /api/libraries`) are installed catalog inventories, aligned with
 `sermoctl apps` and `sermoctl libs`, not `sermoctl services`.
+
+## Reaping stray processes
+
+A **stray** is a process the init backend attributes to the service's control
+group that no `processes:` selector or pidfile claims and that no longer hangs off
+the unit's principal process — a probe that daemonized, a child the daemon never
+reaped, a survivor of an earlier incarnation. `sermoctl processes SERVICE` flags
+them with `stray=true`, and the injected `strays` check reports them every cycle.
+
+A stop never reaps, so a restart that a stray blocks ends in `orphan_processes` and
+names it; clearing it is this command's job.
+
+`sermoctl reap SERVICE` is a preview: it lists every stray, reports how many would
+be signalled, and touches nothing — no operation lock, no event.
+
+`sermoctl reap SERVICE --apply` signals them, gated by the service's own
+`reap.kill_only_if` selector. With no such block nothing is authorized, so the
+command reports every stray, signals none and exits `75`. Otherwise the exit code
+follows the usual operation mapping: `0` when no stray remains, `1` when one was
+spared or outlived SIGKILL (`orphan_processes`), `2` on a failure.
+
+`--apply` is rejected by every other command, and no rule action can reap — see
+[safety.md](safety.md) for the whole contract and [services.md](services.md) for
+the `reap:` block.
 
 ## Exit codes
 

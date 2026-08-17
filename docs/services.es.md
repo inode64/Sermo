@@ -52,6 +52,7 @@ se requiera disponibilidad del protocolo.
   - [also_apply — cascada a otros servicios](#also_apply--cascada-a-otros-servicios)
   - [processes: por ejecutable o cmdline](#processes-por-ejecutable-o-cmdline)
   - [Invariantes de estado parado (stop_policy)](#invariantes-de-estado-parado-stop_policy)
+  - [Miembros del control group sin reclamar (reap)](#miembros-del-control-group-sin-reclamar-reap)
   - [Atajo pidfile: y pidfiles: (selectores + health checks)](#atajo-pidfile-y-pidfiles-selectores--health-checks)
   - [Atajo socket: (health check controlado)](#atajo-socket-health-check-controlado)
   - [Atajo lockfile: (health check controlado)](#atajo-lockfile-health-check-controlado)
@@ -1039,6 +1040,46 @@ stop_policy:
   path concreto (no-glob) de al menos dos niveles de profundidad y no la raíz del filesystem ni
   un directorio de sistema superficial (`/`, `/etc`, `/usr`, `/var`, `/var/lib`, …) — esos
   se rechazan en tiempo de validación. Un fallo de borrado es un warning, no un fallo.
+
+### Miembros del control group sin reclamar (`reap`)
+
+El backend de init atribuye un control group completo al servicio, así que Sermo ve
+ahí procesos que ningún selector `processes:` reclama. Cuando ese proceso está
+además fuera del árbol del proceso principal de la unidad —reparentado a PID 1
+mientras sigue contando contra la unidad— es un **stray**: una sonda que se
+demonizó, un hijo que el daemon nunca recogió, un superviviente de una encarnación
+anterior.
+
+Los strays siempre se reportan (`sermoctl processes` muestra `stray=true`). El
+bloque opcional `reap:` es lo que permite a un operador limpiarlos:
+
+```yaml
+reap:
+  kill_only_if:
+    users: [root]
+    exe_any: [/usr/bin/dbus-daemon]
+```
+
+- Sin el bloque, `sermoctl reap SERVICE --apply` lista cada stray y no señaliza
+  ninguno. La autorización es opt-in por servicio y nunca se hereda de
+  `defaults:`: un selector global daría a cada servicio la misma autoridad de kill
+  sobre procesos que ninguno de ellos puede nombrar.
+- `kill_only_if` es el mismo selector emparejado que usa `stop_policy` y pasa por la
+  misma barrera — exe resuelto exacto **y** UID real; un proceso delegado nunca, un
+  exe irresoluble nunca, PID 1 y los kernel threads nunca.
+- Las claves desconocidas bajo `reap:` se rechazan en validación. Un stray se
+  alcanza por pertenencia al control group y no por un selector que lo nombró, así
+  que un error de tecleo no debe dejar la acción autorizada por algo que no
+  escribiste.
+- Ninguna acción de regla puede hacer reap, y un stop nunca consulta este bloque —
+  un restart reporta un stray que no puede limpiar en vez de matarlo. Ver
+  [safety.es.md](safety.es.md) para el contrato completo y [cli.es.md](cli.es.md)
+  para el comando.
+
+La detección es independiente de la limpieza: Sermo inyecta un check `strays` en
+cada servicio gestionado por init que declare selectores, reportando la cuenta y los
+ejecutables sin alertar. Ver
+[configuration.es.md](configuration.es.md#strays--procesos-que-el-servicio-no-puede-justificar).
 
 ### Atajo `pidfile:` y `pidfiles:` (selectores + health checks)
 

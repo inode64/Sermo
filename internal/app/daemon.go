@@ -491,6 +491,9 @@ func buildWorker(ctx context.Context, name, unit string, tree map[string]any, de
 	checkDeps.StaleBinaries = func() []process.StaleBinary {
 		return discoverer.StaleBinariesIn(processesForCycle(), selectors)
 	}
+	// Strays come from the same memoized discovery: classification already ran
+	// inside Discover, so the check costs one slice filter per cycle.
+	checkDeps.Strays = func() []process.Process { return process.Strays(processesForCycle()) }
 	sampleMetrics := metricSampler(name, tree, collector, pidsForCycle)
 	liveSample := liveSampler(name, deps.LiveCollector, deps.Live, deps.ServiceMetrics, pidsForCycle, deps.Now)
 	if noResident {

@@ -1023,6 +1023,13 @@ checklist). Match the suite's existing style instead of inventing one.
     check execution across all services is bounded by
     `engine.max_parallel_checks` (a global pool). See `docs/safety.md`
     (scheduler and concurrency).
+17. A stray process — a control-group member no selector claims that no longer
+    hangs off the unit's principal process — is never signaled without the
+    service's own `reap.kill_only_if`, and then only by the manual
+    `sermoctl reap --apply`; no rule action can reap. The one exception is
+    sermod's startup hygiene for its own cgroup (`engine.reap_own_strays`):
+    SIGTERM only, its own systemd service unit only, one event per process
+    signalled. See `docs/safety.md` (stray processes).
 
 ## graphify
 

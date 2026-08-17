@@ -1,0 +1,12 @@
+name: inotify
+category: system
+# Alert before the per-user inotify limits run out. This is the exhaustion the
+# fds watch cannot see: fs.file-max is effectively unlimited on a modern kernel,
+# so a host holding all 1024 inotify instances still reports fds at 0.0% while no
+# new login can start a user manager. used_pct is the worse of the two limits.
+monitor: disabled
+interval: 1m
+check: { type: inotify, used_pct: { op: ">=", value: "80%" } }
+for: { cycles: 3 }
+then:
+  notify: [none]

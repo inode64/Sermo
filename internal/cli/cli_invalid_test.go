@@ -56,6 +56,8 @@ func TestCLIRejectsMalformedCommands(t *testing.T) {
 		{name: "preflight extra service", args: []string{"preflight", "web", "extra"}, want: "preflight takes exactly one service name"},
 		{name: "locks extra service", args: []string{"locks", "web", "extra"}, want: "locks takes exactly one service name"},
 		{name: "processes extra service", args: []string{"processes", "web", "extra"}, want: "processes takes exactly one service name"},
+		{name: "reap extra service", args: []string{"reap", "web", "extra"}, want: "reap takes exactly one service name"},
+		{name: "apply unsupported", args: []string{"restart", "--apply", "web"}, want: "--apply is only supported by reap"},
 		{name: "monitor extra service", args: []string{"monitor", "web", "extra"}, want: "monitor takes exactly one service name"},
 		{name: "unmonitor extra service", args: []string{"unmonitor", "web", "extra"}, want: "unmonitor takes exactly one service name"},
 		{name: "apps bad selector", args: []string{"apps", "installed"}, want: "apps accepts only optional `all`"},

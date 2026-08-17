@@ -1,7 +1,9 @@
 package process
 
 import (
+	"maps"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -202,6 +204,52 @@ func ParseStopPolicy(tree map[string]any) (KillPolicy, []string) {
 	}
 	return policy, warnings
 }
+
+// ParseReapPolicy extracts the resolved `reap:` block into the selector that
+// authorizes signalling the service's stray processes. An absent block yields an
+// unconfigured selector, which matches nothing: reaping a stray is opt-in per
+// service, and the fail-safe is to report the process and touch it.
+//
+// Unlike stop_policy it rejects unknown keys. A stray is reached by cgroup
+// membership rather than by a selector that named it, so a mistyped subkey would
+// silently hand the action a selector the operator did not write; the same typo
+// under stop_policy leaves the existing (narrower) authority in place.
+func ParseReapPolicy(tree map[string]any) (KillSelector, []string) {
+	var selector KillSelector
+	block, ok := tree[SectionReap].(map[string]any)
+	if !ok {
+		if _, present := tree[SectionReap]; present {
+			return selector, []string{SectionReap + ": must be a mapping with " + ReapKeyKillOnlyIf}
+		}
+		return selector, nil
+	}
+
+	var warnings []string
+	for _, key := range slices.Sorted(maps.Keys(block)) {
+		if key != ReapKeyKillOnlyIf {
+			warnings = append(warnings, SectionReap+": "+key+" is not supported; the block accepts "+ReapKeyKillOnlyIf)
+		}
+	}
+	koi, ok := block[ReapKeyKillOnlyIf].(map[string]any)
+	if !ok {
+		return selector, append(warnings, reapKillOnlyIfPath()+": must be a mapping with "+ReapKeyUsers+" and "+ReapKeyExeAny)
+	}
+	for _, key := range slices.Sorted(maps.Keys(koi)) {
+		if key != ReapKeyUsers && key != ReapKeyExeAny {
+			warnings = append(warnings, reapKillOnlyIfPath()+": "+key+" is not supported; it accepts "+ReapKeyUsers+" and "+ReapKeyExeAny)
+		}
+	}
+	selector.Users = cfgval.StringList(koi[ReapKeyUsers])
+	selector.ExeAny = cfgval.StringList(koi[ReapKeyExeAny])
+	if !selector.Configured() {
+		// Return the empty selector, not the partial one: a half-written selector
+		// must authorize nothing rather than whatever half it does carry.
+		return KillSelector{}, append(warnings, reapKillOnlyIfPath()+": requires both "+ReapKeyUsers+" and "+ReapKeyExeAny)
+	}
+	return selector, warnings
+}
+
+func reapKillOnlyIfPath() string { return SectionReap + "." + ReapKeyKillOnlyIf }
 
 func parseDuration(v any, field string, warnings *[]string) time.Duration {
 	s := cfgval.AsString(v)
