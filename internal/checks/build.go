@@ -282,7 +282,7 @@ var builtinCheckSpecs = []checkSpec{
 	{info: serviceConditionTypeInfo(CheckTypeStaleBinary), build: func(in checkBuildInput) (Check, string) { return buildStaleBinaryCheck(in.base, in.deps) }},
 	// Condition too, and for the same reason: OK means the service's control group
 	// holds nothing Sermo cannot account for.
-	{info: serviceConditionTypeInfo(CheckTypeStrays), build: func(in checkBuildInput) (Check, string) { return buildStraysCheck(in.base, in.deps) }},
+	{info: serviceConditionTypeInfo(CheckTypeStrays), build: func(in checkBuildInput) (Check, string) { return buildStraysCheck(in.base, in.entry, in.deps) }},
 	{info: serviceConditionTypeInfo(CheckTypeMetric), build: func(in checkBuildInput) (Check, string) { return buildMetricCheck(in.base, in.entry, in.deps) }},
 	{info: healthTypeInfo(CheckTypeLibraries), build: func(in checkBuildInput) (Check, string) { return buildLibrariesCheck(in.base, in.entry) }},
 	{info: conditionTypeInfo(CheckTypeCount), build: func(in checkBuildInput) (Check, string) { return buildCountCheck(in.base, in.entry) }},

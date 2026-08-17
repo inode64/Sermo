@@ -47,7 +47,7 @@ func buildCountCheck(b base, entry map[string]any) (Check, string) {
 			deltaValue:    val,
 			window:        window,
 			clock:         time.Now,
-			state:         &countState{},
+			state:         &counterWindow{},
 		}, ""
 	}
 	if cfgval.String(entry[CheckKeyWithin]) != "" {

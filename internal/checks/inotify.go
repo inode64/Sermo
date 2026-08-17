@@ -30,9 +30,6 @@ const (
 	// check timeout still applies to a host with thousands of processes.
 	inotifyCancelStride = 64
 	inotifyDimInstances = "instances"
-	// inotifyUnknownCommand stands in for a process whose comm could not be read,
-	// which happens when it exits between the fd walk and the name read.
-	inotifyUnknownCommand = "unknown"
 	// statusUIDEffectiveIndex is the effective uid's position in a
 	// /proc/<pid>/status "Uid:" line (real, effective, saved, filesystem). The
 	// kernel charges both inotify limits to the effective uid.
@@ -419,10 +416,10 @@ func parseStatusEffectiveUID(status string) (uint32, bool) {
 func readPIDCommand(pidPath string) string {
 	data, err := os.ReadFile(filepath.Join(pidPath, "comm")) //nolint:gosec // G304: a path under the configured procfs root
 	if err != nil {
-		return inotifyUnknownCommand
+		return unnamedProcess
 	}
 	if command := strings.TrimSpace(string(data)); command != "" {
 		return command
 	}
-	return inotifyUnknownCommand
+	return unnamedProcess
 }

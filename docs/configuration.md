@@ -1100,6 +1100,10 @@ accepted operation cannot switch targets during a concurrent reload.
 - `POST /api/services/{name}/{action}` — service action. `action` is `monitor`,
   `unmonitor`, `start`, `stop`, `restart`, `reload` or `resume`;
   start/stop/restart/reload/resume go through the safe operation engine.
+- `POST /api/services/{name}/reap` — signal the service's stray processes, gated
+  by its own `reap.kill_only_if`: with none declared the reply reports every stray
+  and nothing is signalled. Equivalent to `sermoctl reap SERVICE --apply`. It changes
+  no unit state, so it neither pauses monitoring nor opens a settling window.
 - `POST /api/services/{name}/sessions/{pid}/close?start_ticks=TICKS&terminal=PTS`
   — close one freshly revalidated SSH terminal with `SIGTERM`.
 - `POST /api/services/{name}/terminal-sessions/{check}/close?multiplexer=TYPE&session=NAME&user=USER&identity=IDENTITY`
@@ -3019,10 +3023,28 @@ no configured selector claims and that no longer hang off the unit's principal
 process — a probe that daemonized, a child the daemon never reaped, a survivor of
 an earlier incarnation. See [safety.md](safety.md) for the full definition.
 
-You do not write this check: Sermo injects it, named `strays`, into every
-init-managed service that declares `processes:` or `pidfile:`. It takes no fields
-— what counts as a stray follows from the service's own selectors and its control
-group — and no threshold, because the expected count is zero.
+Sermo injects it, named `strays`, into every init-managed service that declares
+`processes:` or `pidfile:`, with no fields: what counts as a stray follows from the
+service's own selectors and its control group, and the expected count is zero.
+
+Two optional bounds are accepted when you declare your own instance:
+
+| Field | Meaning |
+| --- | --- |
+| `max` | fail above this many strays (default `0`) |
+| `max_increase` + `within` | fail when the count grew by more than this over that wall-clock span |
+
+Both are **bounds above which the check fails**, so `OK` always means healthy and a
+rule keeps using `failed:`. That is why they are not `{op, value}` predicates: in a
+level check like `process_count`, OK means "the predicate holds", which would invert
+`failed:` for a configured instance while the injected one kept it. `op` and `value`
+are rejected at validation time for that reason.
+
+`max_increase` measures growth against the oldest sample still inside `within`, not
+against the previous cycle. A per-cycle delta is true for exactly one cycle, so a
+rule's `for:` window would silence it permanently; growth stays true for the whole
+span and composes with rule windows. A count that falls never reports negative
+growth.
 
 It reports **state**: the count and the executables appear in the dashboard and in
 `sermoctl status`, and never reduce service health or SLA. The daemon is serving;
@@ -3032,7 +3054,9 @@ Unlike `stale_binary`, **no rule is injected with it**. On real hosts the raw
 condition is dominated by workloads a profile has legitimately marked
 `delegated: true` (container shims, Gluster bricks, libvirt's `dnsmasq` pairs), so
 a fleet-wide alert would mostly report incomplete catalog coverage — and the remedy
-for that is a selector, not a reap. Alerting is therefore the operator's call:
+for that is a selector, not a reap. Alerting is therefore the operator's call.
+
+The injected check is enough for "tell me when anything is unaccounted for":
 
 ```yaml
 rules:
@@ -3043,6 +3067,42 @@ rules:
       action: alert
       message: "${display_name} accumulated ${check.value} unaccounted-for process(es)"
 ```
+
+For a threshold or a sudden jump, declare your own instances — one check per
+condition, since a check ANDs its bounds — and OR them in one rule:
+
+```yaml
+checks:
+  strays-high:
+    type: strays
+    max: 20                   # a busy host parks a few; twenty is a leak
+  strays-growing:
+    type: strays
+    max_increase: 5
+    within: 30m               # five new ones in half an hour is a leak too
+
+rules:
+  alert-on-stray-leak:
+    type: alert
+    notify: [ops-email]
+    if:
+      or:
+        - failed: { check: strays-high }
+        - failed: { check: strays-growing }
+    then:
+      action: alert
+      message: "${display_name}: stray processes need attention"
+```
+
+With a single check leaf the message can also name the numbers —
+`${check.value}` (the count, or the growth for a `max_increase` instance) and
+`${check.threshold}` (the bound). An `or:` of two checks leaves both empty, because
+Sermo cannot tell which leaf to describe; keep the numbers in per-check rules if you
+want them in the text.
+
+`notify:` follows the normal two-layer selection (rule-level, else the global
+`notify:` default), and `emission:` the normal repeat suppression — by default one
+alert per episode, on the rising edge.
 
 Services with an external `control:` backend (docker, libvirt) get no injected
 check: there the whole container or domain PID set is attributed to the service,

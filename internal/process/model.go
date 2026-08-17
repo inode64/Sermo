@@ -143,6 +143,10 @@ const (
 	ReapKeyUsers = StopPolicyKeyUsers
 	// ReapKeyExeAny is reap.kill_only_if.exe_any.
 	ReapKeyExeAny = StopPolicyKeyExeAny
+	// ReapKillOnlyIfPath is the dotted path of the authorization, for the operator
+	// messages that say where to declare it. One definition so the config warnings,
+	// the refused reap and the residual report cannot spell it three ways.
+	ReapKillOnlyIfPath = SectionReap + "." + ReapKeyKillOnlyIf
 )
 
 // Discovery source labels.

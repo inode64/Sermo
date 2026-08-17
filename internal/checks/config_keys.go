@@ -81,6 +81,8 @@ const (
 	CheckKeyLeaseFile             = "lease_file"
 	CheckKeyMAC                   = "mac"
 	CheckKeyMatch                 = "match"
+	CheckKeyMax                   = "max"
+	CheckKeyMaxIncrease           = "max_increase"
 	CheckKeyMaxOffset             = "max_offset"
 	CheckKeyMaxRootDispersion     = "max_root_dispersion"
 	CheckKeyMaxStratum            = "max_stratum"

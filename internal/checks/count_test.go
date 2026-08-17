@@ -77,7 +77,7 @@ func deltaCountOf(root string, now *time.Time, op string, value float64, window 
 		deltaValue: value,
 		window:     window,
 		clock:      func() time.Time { return *now },
-		state:      &countState{},
+		state:      &counterWindow{},
 	}
 }
 
@@ -227,8 +227,15 @@ func TestCountDeltaDecreaseDoesNotAlert(t *testing.T) {
 	_ = c.Run(context.Background())
 	now = now.Add(time.Minute)
 	removeCountFiles(t, root, "base", 3)
-	if res := c.Run(context.Background()); res.OK {
+	res := c.Run(context.Background())
+	if res.OK {
 		t.Fatalf("shrinking count must not alert even if the comparison would match: %s", res.Message)
+	}
+	// The published baseline must still be the count this window started from, and
+	// the growth the raw (negative) difference — the case where deriving one from
+	// the other could silently invert.
+	if res.Data[DataKeyBaselineCount] != 4 || res.Data[DataKeyGrowthCount] != -3 {
+		t.Fatalf("data = %+v, want baseline_count=4 growth_count=-3", res.Data)
 	}
 }
 

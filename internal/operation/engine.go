@@ -301,8 +301,8 @@ func (e Engine) reapStrays(ctx context.Context, result *Result) {
 		// The fail-safe: an undeclared or non-matching selector reports every stray
 		// and signals none. Blocked rather than failed — nothing went wrong, the
 		// service simply never authorized this.
-		result.Status, result.Message = ResultBlocked, fmt.Sprintf("%s: %d stray process(es) reported, none authorized by %s.%s",
-			actionReap, len(strays), process.SectionReap, process.ReapKeyKillOnlyIf)
+		result.Status, result.Message = ResultBlocked, fmt.Sprintf("%s: %d stray process(es) reported, none authorized by %s",
+			actionReap, len(strays), process.ReapKillOnlyIfPath)
 		return
 	}
 
@@ -569,8 +569,8 @@ func residualsRemain(remaining []process.Process, phase string) string {
 	if strays == 0 {
 		return message
 	}
-	return fmt.Sprintf("%s (%d stray, unaccounted for by any selector; `sermoctl %s` lists them and, with %s.%s declared, clears them)",
-		message, strays, actionReap, process.SectionReap, process.ReapKeyKillOnlyIf)
+	return fmt.Sprintf("%s (%d stray, unaccounted for by any selector; `sermoctl %s` lists them and, with %s declared, clears them)",
+		message, strays, actionReap, process.ReapKillOnlyIfPath)
 }
 
 func (e Engine) closeSession(ctx context.Context, target SessionTarget, result *Result) bool {
