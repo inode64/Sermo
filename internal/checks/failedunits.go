@@ -54,10 +54,15 @@ func (c failedUnitsCheck) Run(ctx context.Context) Result {
 	}
 	count := uint64(len(sample.Units))
 	// Name them: which unit failed is what tells the operator what broke, and a
-	// count alone would send them back to the host to find out.
+	// count alone would send them back to the host to find out. The same list
+	// serves the message and the dashboard reading.
+	named := strings.Join(sample.Units, ", ")
+	// Both branches key off the count, never off the joined text: a sampler that
+	// ever yields an unnamed unit must still report one failed unit rather than
+	// none.
 	message := "no failed units"
 	if count > 0 {
-		message = fmt.Sprintf("%d failed unit(s): %s", count, strings.Join(sample.Units, ", "))
+		message = fmt.Sprintf("%d failed unit(s): %s", count, named)
 	}
 	res := c.result(compareFloat(float64(count), c.op, c.value), message, start)
 	res.Data = map[string]any{
@@ -66,7 +71,7 @@ func (c failedUnitsCheck) Run(ctx context.Context) Result {
 		DataKeyValue:   count,
 	}
 	if count > 0 {
-		res.Data[DataKeyUnits] = strings.Join(sample.Units, ", ")
+		res.Data[DataKeyUnits] = named
 	}
 	return res
 }
