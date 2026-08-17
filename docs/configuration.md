@@ -2203,13 +2203,15 @@ declared **inside the service document**. Events are labelled
 `then.action` are desugared to `checks:` + `rules:`.
 
 What "inside a service" adds over a host watch is the service's **check
-context**, scoped to the service's **PID tree** (its matched processes plus their
-descendants — parent and children — derived from the service's `processes:`
-selectors / init identity):
+context**, scoped to **everything discovery attributes to the service**: on an
+init backend that reports them, the unit's whole control group, plus the
+`processes:`/`pidfile:` selector matches and their descendants. That set is wider
+than the main process's PID tree — a control-group member whose parent has exited
+is still in it (see [`strays`](#strays--processes-the-service-cannot-account-for)):
 
-- `process_count` counts only that tree, so it is immune to unrelated host
+- `process_count` counts only that set, so it is immune to unrelated host
   processes that share a user or exe. An optional `user`/`exe`/`exe_dir` narrows
-  *within* the tree.
+  *within* it.
 - `metric` (`cpu`, `cpu_thread`, `memory`, `io`, …) reads the **service scope**
   by default — the summed reading over that same tree — from a dedicated per-watch
   collector, so its rate deltas never collide with the engine's metric sampling.
@@ -3049,6 +3051,38 @@ so a process no selector names is ordinary rather than a leftover.
 Clearing a stray is a separate, manual step — `sermoctl reap SERVICE --apply`,
 gated by the service's own `reap.kill_only_if` (see [services.md](services.md)).
 No rule action can reap.
+
+#### Why this is not a process count
+
+A stray is, by construction, **the opposite of a child**: classification builds the
+principal's live tree and labels only what is *not* in it. A process reachable by
+walking PPID down from the main process is a worker; a control-group member whose
+PPID chain does not reach it was reparented to PID 1, which is what makes it a
+leftover. The two sets are disjoint.
+
+Every other instrument counts a superset and cannot separate them:
+
+| Instrument | Counts | Includes strays |
+| --- | --- | --- |
+| `process_count` in a service's `checks:` | host PIDs passing `user`/`exe`/`exe_dir` | only incidentally — it is host-wide |
+| `process_count` in a service's `watches:` | everything discovery attributes to the service | yes |
+| `process_count` metric (`scope: service`) | the same set, sampled per cycle | yes |
+| Dashboard process totals (count, memory, FDs, threads) | the same set | yes |
+| `strays` | that set minus the principal, its live tree, pidfile and selector matches, and delegated processes | it is only that |
+
+Two consequences worth knowing:
+
+- A leak **does** inflate the service's `process_count`, memory, FD and thread
+  figures, and that is correct — the resources really are consumed. What none of
+  those numbers can say is that the growth is unexplained, which is why they need a
+  per-service threshold and `strays` does not (its expected value is zero
+  everywhere).
+- Counting only true descendants would make the leak **invisible**: the leftover
+  left the tree the moment its parent exited. Sermo therefore has no
+  descendants-only counter at all.
+
+Both counts are graphed, so an accumulation shows up as a rising `strays` series
+beside a rising process count — the shape that distinguishes a leak from load.
 
 ### `process` — process by name
 

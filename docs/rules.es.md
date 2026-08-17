@@ -1914,7 +1914,7 @@ Cada tipo de arriba es una **comprobación de un solo disparo** (`Check.Run → 
 
 - entradas `watches:` solo-check de un servicio, o `checks:`/`preflight:` explícitos referenciados desde reglas,
 - un documento de **watch** de host (o entrada global `watches:`, disparando un hook) — ver [configuración](configuration.es.md#host-watches), y
-- el propio bloque `watches:` embebido de un servicio (entradas hook/notificación acotadas al servicio, o `then.action` compacto, incluidos los tipos `service`/`metric` y el `process_count` acotado por PIDs) — ver [Watches de servicio](configuration.es.md#watches-de-servicio-acotados-a-un-servicio).
+- el propio bloque `watches:` embebido de un servicio (entradas hook/notificación acotadas al servicio, o `then.action` compacto, incluidos los tipos `service`/`metric` y el `process_count` acotado al servicio, que cuenta todo lo que el descubrimiento le atribuye — el control group de la unidad de init incluido) — ver [Watches de servicio](configuration.es.md#watches-de-servicio-acotados-a-un-servicio).
 
 Las comprobaciones de recursos del host (`storage`, `load`, `memory`, `pressure`, `fds`, `pids`,
 `diskio`, `hdparm`, `sensors`, `smart`, `raid`, `edac`, `conntrack`, `entropy`,
