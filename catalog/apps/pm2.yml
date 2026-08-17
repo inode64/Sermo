@@ -4,6 +4,28 @@ category: system
 description: "Node.js process manager."
 variables:
   binary: ${bindir}/pm2
+  # PM2's own CLI cannot be used to read its version. Every invocation, `--version`
+  # included, starts PM2's God Daemon — verified on a real host: with no daemon
+  # running, `pm2 --version` leaves one behind, and it survives forever because it
+  # calls setsid(), escaping the process group execx collects after a probe. Since
+  # sermod samples installed catalog apps on a cadence, that put a ~68 MiB Node
+  # runtime in sermod's own control group for the life of the daemon (the same
+  # failure `influxd version` caused with a D-Bus session bus).
+  #
+  # So read the version from the package metadata instead: the module directory
+  # varies with the npm prefix and the distribution's lib/lib64 split, and a
+  # list-valued variable resolves to the first candidate that exists.
+  package_json:
+    - /usr/lib/node_modules/pm2/package.json
+    - /usr/lib64/node_modules/pm2/package.json
+    - /usr/local/lib/node_modules/pm2/package.json
+    - /usr/local/lib64/node_modules/pm2/package.json
+  node_binary: ${bindir}/node
 preflight:
   binary: { type: binary, path: "${binary}" }
-  version: { type: command, command: ["${binary}", "--version"], timeout: 10s }
+  # node is PM2's own runtime, so it is present wherever PM2 is; `-p` prints the
+  # expression's value and starts nothing.
+  version:
+    type: command
+    command: ["${node_binary}", "-p", "require('${package_json}').version"]
+    timeout: 10s
