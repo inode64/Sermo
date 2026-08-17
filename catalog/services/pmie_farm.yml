@@ -9,33 +9,20 @@ apps:
   - pmie_farm
 variables:
   user: pcp
-# Remediation policy for restart-if-inactive below. Same shape as the rest of the
-# PCP family (pmcd, pmlogger): rare, backed off, and capped per day.
-policy:
-  cooldown: 15m
-  max_actions: 2
-  max_actions_window: 1h
-  backoff:
-    initial: 15m
-    max: 1h
+# Deliberately alert-only, with no restart-if-inactive rule: the farm unit is
+# `disabled` and is driven by pmlogger.service through PartOf=/RequiredBy=, so
+# "not active" is as often the operator stopping that stack as a fault. Sermo
+# cannot tell the two apart — a rule's references are scoped to its own service,
+# so the condition cannot ask whether the primary is up — and restarting the farm
+# alone would resurrect it without its primary. A failed farm is reported by the
+# service check and by watch-failed-units; repairing it is a manual
+# `sermoctl restart`, which is what the safe operation path is for.
 watches:
   service:
     check:
       type: service
       expect: active
       verify: true
-  # Same reasoning as pmlogger_farm: the farm service supervises the non-primary
-  # pmies through pmpause and listens on nothing, so no endpoint check can drive
-  # its remediation. The unit ships Restart=always but systemd stops retrying for
-  # good once its start limit is hit, so this adds the rate-limited retry.
-  restart-if-inactive:
-    check:
-      type: service
-      expect: active
-    for:
-      cycles: 3
-    then:
-      action: restart
   alert-if-memory-high:
     check:
       type: metric

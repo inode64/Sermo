@@ -480,6 +480,12 @@ func failPhase(ctx context.Context, result *Result, timeoutMsg, errPrefix string
 	return false
 }
 
+// timeoutDuring and cancelledDuring are the two operator-facing wordings for an
+// operation the context ended in a named phase. One owner each, so a new phase
+// cannot invent a second spelling of either.
+func timeoutDuring(phase string) string   { return "operation timed out during " + phase }
+func cancelledDuring(phase string) string { return "operation cancelled during " + phase }
+
 // failWait marks result failed for a bounded wait the context ended, telling a
 // real deadline apart from a cancellation. A config reload (SIGHUP) or shutdown
 // cancels the operation context, and every `--with-config` deployment reloads the
@@ -488,9 +494,9 @@ func failPhase(ctx context.Context, result *Result, timeoutMsg, errPrefix string
 func failWait(ctx context.Context, result *Result, phase string) bool {
 	result.Status = ResultFailed
 	if timedOut(ctx) {
-		result.Message = "operation timed out during " + phase
+		result.Message = timeoutDuring(phase)
 	} else {
-		result.Message = "operation cancelled during " + phase
+		result.Message = cancelledDuring(phase)
 	}
 	return false
 }
@@ -522,7 +528,7 @@ func (e Engine) restartService(ctx context.Context, result *Result) bool {
 // safety gates and postflight remain in run, around this primitive.
 func (e Engine) runBackendAction(ctx context.Context, result *Result, action string, run func(context.Context) error) bool {
 	if err := run(ctx); err != nil {
-		return failPhase(ctx, result, "operation timed out during "+action, action+": ", err)
+		return failPhase(ctx, result, timeoutDuring(action), action+": ", err)
 	}
 	return e.ensureServiceHealthy(ctx, result, action)
 }
@@ -590,7 +596,7 @@ func (e Engine) startService(ctx context.Context, result *Result) bool {
 
 func (e Engine) stopService(ctx context.Context, result *Result) (alsoStopErrs, staleWarn []string, stopped, systemdReactivated bool) {
 	if err := e.Manager.Stop(ctx, e.Unit); err != nil {
-		_ = failPhase(ctx, result, "operation timed out during stop", "stop: ", err)
+		_ = failPhase(ctx, result, timeoutDuring("stop"), "stop: ", err)
 		return nil, nil, false, false
 	}
 	for _, unit := range slices.Backward(e.AlsoUnits) {
@@ -616,7 +622,7 @@ func (e Engine) stopService(ctx context.Context, result *Result) (alsoStopErrs, 
 		}
 		result.Processes = remaining
 		if timedOut(ctx) {
-			result.Status, result.Message = ResultFailed, "operation timed out during residual process handling"
+			result.Status, result.Message = ResultFailed, timeoutDuring("residual process handling")
 		} else {
 			result.Status, result.Message = ResultOrphanProcesses, fmt.Sprintf("%d residual process(es) remain after stop", len(remaining))
 		}
