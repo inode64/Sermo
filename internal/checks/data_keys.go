@@ -176,6 +176,7 @@ const (
 	DataKeyTotalBytes         = fieldTotalBytes
 	DataKeyType               = CheckKeyType
 	DataKeyUnit               = "unit"
+	DataKeyUnits              = "units"
 	DataKeyUpdateIntervalSecs = "update_interval_seconds"
 	DataKeyUsedBytes          = fieldUsedBytes
 	DataKeyUsedPct            = fieldUsedPct

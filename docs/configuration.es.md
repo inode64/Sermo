@@ -2204,7 +2204,7 @@ combinarse con `then.notify_interval`.
 **Las checks y los watches comparten los mismos tipos de comprobación.**
 Cualquier comprobación de un solo disparo — las de recursos de host de abajo
 (`storage`, `memory`, `pressure`, `load`, `fds`, `pids`, `conntrack`, `entropy`,
-`zombies`, `oom`, entre otras) *y* las comprobaciones de service (`tcp`, `tcp_connections`, `ssh_idle`,
+`zombies`, `oom`, `failed_units`, entre otras) *y* las comprobaciones de service (`tcp`, `tcp_connections`, `ssh_idle`,
 `ports`, `http`, `command`, `file_exists`, `file`, `lockfile`, `binary`,
 `pidfile`, `socket`, `libraries`, `config`, `autofs`, `route`, `clock`,
 `firewall_rules`, `cert`, `sqlite`/`sqlite3`, `websocket`, `count`, y las

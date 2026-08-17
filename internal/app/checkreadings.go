@@ -118,6 +118,7 @@ const (
 	watchReadingLabelRTT                      = "RTT"
 	watchReadingLabelRules                    = "Rules"
 	watchReadingLabelSample                   = "Sample"
+	watchReadingLabelFailedUnits              = "Failed units"
 	watchReadingLabelServer                   = "Server"
 	watchReadingLabelSize                     = "Size"
 	watchReadingLabelSocket                   = "Socket"
@@ -243,6 +244,8 @@ func checkReadings(checkType string, data map[string]any) []web.WatchReading {
 		return countCheckReadings(data)
 	case checks.CheckTypeFirewallRules:
 		return firewallCheckReadings(data)
+	case checks.CheckTypeFailedUnits:
+		return failedUnitsCheckReadings(data)
 	case checks.CheckTypeFile, checks.CheckTypeFileExists:
 		return fileCheckReadings(data)
 	case checks.CheckTypeProcess:
@@ -530,6 +533,17 @@ func countCheckReadings(data map[string]any) []web.WatchReading {
 		rb.add(checks.DataKeyGrowthCount, watchReadingLabelGrowth, fmt.Sprintf("%+d", v))
 	}
 	return rb.addString(checks.DataKeyWindow, watchReadingLabelWindow).readings()
+}
+
+// failedUnitsCheckReadings shows the count with the unit names beside it: which
+// unit failed is the actionable half, and a unit with no catalog profile appears
+// nowhere else in the dashboard.
+func failedUnitsCheckReadings(data map[string]any) []web.WatchReading {
+	return readingsFrom(data).
+		addString(checks.DataKeyBackend, watchReadingLabelBackend).
+		addInt(checks.DataKeyCount, watchReadingLabelCount).
+		addString(checks.DataKeyUnits, watchReadingLabelFailedUnits).
+		readings()
 }
 
 func firewallCheckReadings(data map[string]any) []web.WatchReading {

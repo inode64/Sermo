@@ -84,6 +84,15 @@ const (
 	systemdValueYes          = "yes"
 )
 
+// The failed-unit listing (ListFailedUnits). `--plain` drops the status bullet
+// systemd puts in front of a failed unit, but older versions print it anyway as
+// a field of its own, so the parser skips it too.
+const (
+	systemctlFlagStateFailed = "--state=failed"
+	systemctlFlagPlain       = "--plain"
+	systemdUnitStatusBullet  = "●"
+)
+
 const (
 	serviceOutputLineSeparator = "\n"
 	serviceOutputLineByte      = '\n'

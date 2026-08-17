@@ -1434,6 +1434,32 @@ func readingByField(readings []web.WatchReading, field string) web.WatchReading 
 	return web.WatchReading{}
 }
 
+func TestFailedUnitsWatchConditions(t *testing.T) {
+	// An explicit count is rendered generically; the default is spelled out here
+	// so a check that omits it still shows what fires.
+	generated := watchConditions(map[string]any{
+		checks.CheckKeyType:    checks.CheckTypeFailedUnits,
+		checks.CheckKeyBackend: "systemd",
+		checks.CheckKeyCount:   map[string]any{checks.CheckKeyOp: ">", checks.CheckKeyValue: 0},
+	}, nil)
+	want := []web.WatchCondition{
+		{Field: "count", Op: ">", Value: "0"},
+		{Field: "backend", Op: "==", Value: "systemd"},
+	}
+	if !slices.Equal(generated, want) {
+		t.Fatalf("generated conditions = %+v, want %+v", generated, want)
+	}
+
+	minimal := watchConditions(map[string]any{checks.CheckKeyType: checks.CheckTypeFailedUnits}, nil)
+	wantMinimal := []web.WatchCondition{
+		{Field: "backend", Op: "==", Value: "auto"},
+		{Field: "count", Op: ">", Value: "0"},
+	}
+	if !slices.Equal(minimal, wantMinimal) {
+		t.Fatalf("minimal conditions = %+v, want %+v", minimal, wantMinimal)
+	}
+}
+
 func TestWatchMetricConditionsComparisons(t *testing.T) {
 	conditions := watchMetricConditions(map[string]any{
 		"errors": map[string]any{

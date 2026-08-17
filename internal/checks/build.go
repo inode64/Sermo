@@ -71,6 +71,7 @@ type Samplers struct {
 	MountSampler         MountSamplerFunc
 	ConntrackSampler     ConntrackSamplerFunc
 	FirewallRulesSampler FirewallRulesSamplerFunc
+	FailedUnitsSampler   FailedUnitsSamplerFunc
 	EntropySampler       EntropySamplerFunc
 	ZombieSampler        ZombieSamplerFunc
 	UsersSampler         UsersSamplerFunc
@@ -319,6 +320,9 @@ var builtinCheckSpecs = []checkSpec{
 	{info: healthTypeInfo(CheckTypeRoute), build: func(in checkBuildInput) (Check, string) { return buildRouteCheck(in.base, in.entry, in.deps) }},
 	{info: healthTypeInfo(CheckTypeFirewallRules), build: func(in checkBuildInput) (Check, string) {
 		return buildFirewallRulesCheck(in.base, in.entry, in.runner, in.deps)
+	}},
+	{info: conditionTypeInfo(CheckTypeFailedUnits), build: func(in checkBuildInput) (Check, string) {
+		return buildFailedUnitsCheck(in.base, in.entry, in.runner, in.deps)
 	}},
 }
 

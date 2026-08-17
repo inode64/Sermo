@@ -94,6 +94,18 @@ func TestCheckReadingsForAllTypes(t *testing.T) {
 			want: map[string]string{"rules": "99"},
 		},
 		{
+			// Which unit failed is the actionable half: a unit with no catalog
+			// profile appears nowhere else in the dashboard.
+			name: "failed_units",
+			typ:  checks.CheckTypeFailedUnits,
+			data: map[string]any{
+				checks.DataKeyBackend: "systemd",
+				checks.DataKeyCount:   uint64(2),
+				checks.DataKeyUnits:   "backup_kvm.service, cleanup.timer",
+			},
+			want: map[string]string{"count": "2", "units": "backup_kvm.service, cleanup.timer"},
+		},
+		{
 			name: "file",
 			typ:  "file",
 			data: map[string]any{"path": "/etc/hosts", "size": int64(220), "age": "2d3h"},

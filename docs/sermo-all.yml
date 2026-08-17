@@ -331,6 +331,11 @@ watches:
     check: { type: firewall_rules, backend: auto, min_rules: 1 }
     then: { notify: [ops-email] }
 
+  failed-units:
+    monitor: disabled
+    check: { type: failed_units, backend: auto, count: { op: ">", value: 0 } }
+    then: { notify: [ops-email] }
+
   decommissioned-check:
     enabled: false  # omitted entirely from the running config (vs monitor: disabled)
     check: { type: file, path: /var/lib/decommissioned, existence: { on: delete } }

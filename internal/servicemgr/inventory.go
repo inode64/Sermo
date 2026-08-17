@@ -26,29 +26,83 @@ const (
 	openRCServiceNameIndex      = 0
 )
 
+// unitListing is one unit listing per init backend: the argv that produces it
+// and the parser for that backend's output. The two listings differ only in
+// those, so they share one runner.
+type unitListing struct {
+	state        Status
+	systemdArgs  []string
+	openRCArgs   []string
+	parseSystemd func(stdout string) []string
+	parseOpenRC  func(stdout string) []string
+}
+
+var (
+	activeUnitListing = unitListing{
+		state:        StatusActive,
+		systemdArgs:  []string{systemctlCmdListUnits, systemctlFlagTypeService, systemctlFlagStateActive, systemctlFlagNoLegend, systemctlFlagNoPager},
+		openRCArgs:   []string{openRCFlagAll},
+		parseSystemd: ParseSystemdActiveUnits,
+		parseOpenRC:  ParseOpenRCActiveUnits,
+	}
+	// Not restricted to `.service`: a failed mount, timer or socket unit is a
+	// fault too.
+	failedUnitListing = unitListing{
+		state:        StatusFailed,
+		systemdArgs:  []string{systemctlCmdListUnits, systemctlFlagStateFailed, systemctlFlagNoLegend, systemctlFlagPlain, systemctlFlagNoPager},
+		openRCArgs:   []string{openRCFlagAll},
+		parseSystemd: ParseSystemdFailedUnits,
+		parseOpenRC:  ParseOpenRCFailedUnits,
+	}
+)
+
 // ListActiveUnits returns active service units for the selected init backend.
 func ListActiveUnits(ctx context.Context, backend Backend, runner execx.Runner, timeout time.Duration) ([]string, error) {
+	return listUnits(ctx, backend, runner, timeout, activeUnitListing)
+}
+
+// ListFailedUnits returns the units the selected init backend reports as failed.
+//
+// It is the only view Sermo has of a unit with no catalog profile — a site-local
+// backup job, for instance — which is otherwise invisible to monitoring.
+func ListFailedUnits(ctx context.Context, backend Backend, runner execx.Runner, timeout time.Duration) ([]string, error) {
+	return listUnits(ctx, backend, runner, timeout, failedUnitListing)
+}
+
+func listUnits(ctx context.Context, backend Backend, runner execx.Runner, timeout time.Duration, listing unitListing) ([]string, error) {
 	runner = execx.RunnerOrDefault(runner)
+	var command string
+	var args []string
+	var parse func(string) []string
 	switch backend {
 	case BackendSystemd:
-		res, err := execx.Run(ctx, runner, timeout, cmdSystemctl, systemctlCmdListUnits, systemctlFlagTypeService, systemctlFlagStateActive, systemctlFlagNoLegend, systemctlFlagNoPager)
-		if err != nil && strings.TrimSpace(res.Stdout) == "" {
-			return nil, fmt.Errorf("list active systemd units: %w", err)
-		}
-		return ParseSystemdActiveUnits(res.Stdout), nil
+		command, args, parse = cmdSystemctl, listing.systemdArgs, listing.parseSystemd
 	case BackendOpenRC:
-		res, err := execx.Run(ctx, runner, timeout, cmdRcStatus, openRCFlagAll)
-		if err != nil && strings.TrimSpace(res.Stdout) == "" {
-			return nil, fmt.Errorf("list active openrc units: %w", err)
-		}
-		return ParseOpenRCActiveUnits(res.Stdout), nil
+		command, args, parse = cmdRcStatus, listing.openRCArgs, listing.parseOpenRC
 	default:
-		return nil, fmt.Errorf("no active-unit listing for backend %q", backend)
+		return nil, fmt.Errorf("no %s-unit listing for backend %q", listing.state, backend)
 	}
+	res, err := execx.Run(ctx, runner, timeout, command, args...)
+	if err != nil && strings.TrimSpace(res.Stdout) == "" {
+		return nil, fmt.Errorf("list %s %s units: %w", listing.state, backend, err)
+	}
+	return parse(res.Stdout), nil
 }
 
 // ParseSystemdActiveUnits extracts active .service units from systemctl output.
 func ParseSystemdActiveUnits(stdout string) []string {
+	return parseSystemdUnitNames(stdout, func(name string) bool {
+		return strings.HasSuffix(name, systemdServiceSuffix)
+	})
+}
+
+// ParseSystemdFailedUnits extracts every unit name from a `--state=failed`
+// listing, whatever its unit type.
+func ParseSystemdFailedUnits(stdout string) []string {
+	return parseSystemdUnitNames(stdout, func(string) bool { return true })
+}
+
+func parseSystemdUnitNames(stdout string, keep func(name string) bool) []string {
 	var out []string
 	sc := bufio.NewScanner(strings.NewReader(stdout))
 	for sc.Scan() {
@@ -56,8 +110,17 @@ func ParseSystemdActiveUnits(stdout string) []string {
 		if len(fields) <= systemdListUnitNameIndex || fields[systemdListUnitNameIndex] == systemdUnitHeader {
 			continue
 		}
-		if strings.HasSuffix(fields[systemdListUnitNameIndex], systemdServiceSuffix) {
-			out = append(out, fields[systemdListUnitNameIndex])
+		name := fields[systemdListUnitNameIndex]
+		// Older systemd prints the status bullet even with --plain, and it is a
+		// field of its own; the unit name is then the next one.
+		if name == systemdUnitStatusBullet {
+			if len(fields) <= systemdListUnitNameIndex+1 {
+				continue
+			}
+			name = fields[systemdListUnitNameIndex+1]
+		}
+		if keep(name) {
+			out = append(out, name)
 		}
 	}
 	return strutil.MergeUnique(nil, out...)
@@ -65,6 +128,17 @@ func ParseSystemdActiveUnits(stdout string) []string {
 
 // ParseOpenRCActiveUnits extracts started services from rc-status output.
 func ParseOpenRCActiveUnits(stdout string) []string {
+	return parseOpenRCUnits(stdout, openRCStartedService)
+}
+
+// ParseOpenRCFailedUnits extracts crashed services from rc-status output.
+// `crashed` is OpenRC's failure state: the service was started and its process
+// is gone.
+func ParseOpenRCFailedUnits(stdout string) []string {
+	return parseOpenRCUnits(stdout, openRCCrashedService)
+}
+
+func parseOpenRCUnits(stdout string, service func(line string) string) []string {
 	var out []string
 	inServiceRunlevel := false
 	sc := bufio.NewScanner(strings.NewReader(stdout))
@@ -77,8 +151,8 @@ func ParseOpenRCActiveUnits(stdout string) []string {
 		if !inServiceRunlevel {
 			continue
 		}
-		if service := openRCStartedService(line); service != "" {
-			out = append(out, service)
+		if name := service(line); name != "" {
+			out = append(out, name)
 		}
 	}
 	// A service can appear in more than one matched runlevel, and duplicates are
@@ -116,6 +190,19 @@ func openRCStartedService(line string) string {
 		strings.Contains(lower, openRCStateCrashed) {
 		return ""
 	}
+	return openRCServiceName(line)
+}
+
+func openRCCrashedService(line string) string {
+	if !strings.Contains(strings.ToLower(line), openRCStateCrashed) {
+		return ""
+	}
+	return openRCServiceName(line)
+}
+
+// openRCServiceName reads the service name from an rc-status line, which is the
+// first field before the bracketed state.
+func openRCServiceName(line string) string {
 	beforeState, _, _ := strings.Cut(line, "[")
 	fields := strings.Fields(beforeState)
 	if len(fields) <= openRCServiceNameIndex {

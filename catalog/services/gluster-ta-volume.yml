@@ -1,0 +1,73 @@
+name: gluster-ta-volume
+display_name: GlusterFS thin arbiter
+category: storage
+description: GlusterFS thin-arbiter daemon that keeps quorum for a replica 2 volume.
+# Systemd only: the thin-arbiter unit ships with the GlusterFS systemd packaging
+# and has no OpenRC counterpart.
+service:
+  systemd:
+    - gluster-ta-volume
+restart_policy:
+  mode: native
+apps:
+  - glusterd
+# The unit runs the shared Gluster daemon binary — sbin/glusterd, sbin/glusterfs
+# and sbin/glusterfsd are one executable — so exe and user alone cannot tell the
+# thin arbiter from glusterd, a brick or the self-heal daemon. The volfile id in
+# the command line is what names this role, and no other Gluster daemon uses it.
+processes:
+  main:
+    exe: ${glusterd_binary}
+    cmd: '--volfile-id ta(\s|$)'
+    user: root
+# Storage service: keep automatic remediation rare.
+policy:
+  cooldown: 15m
+  max_actions: 2
+  max_actions_window: 1h
+  backoff:
+    initial: 15m
+    max: 1h
+restart_on_change:
+  apps:
+    - glusterd
+  messages:
+    app: >-
+      ${display_name} will restart after version change of ${change.app}: ${change.old_version} -> ${change.new_version}
+watches:
+  # No endpoint probe: the packaged unit binds port 24007, the same port glusterd
+  # listens on, so a connect proves nothing about the arbiter wherever the two
+  # share a host. The unit state is the only unambiguous local evidence, and a
+  # replica 2 volume has no split-brain protection while it is down.
+  service:
+    check:
+      type: service
+      expect: active
+  alert-if-memory-high:
+    check:
+      type: metric
+      scope: service
+      name: memory
+      op: '>'
+      value: 30%
+      optional: true
+    for:
+      duration: 4m
+    then:
+      action: alert
+      message: >-
+        During ${rule.duration}, ${display_name} memory usage stayed above ${check.threshold} (current ${check.value})
+  alert-if-cpu-thread-high:
+    check:
+      type: metric
+      scope: service
+      name: cpu_thread
+      op: '>'
+      value: 90%
+      optional: true
+    for:
+      duration: 5m
+    then:
+      action: alert
+      message: >-
+        During ${rule.duration}, ${display_name} single-thread CPU usage stayed above ${check.threshold} (current ${check.value})
