@@ -2134,7 +2134,7 @@ be combined with `then.notify_interval`.
 
 **Checks and watches share the same check types.** Any single-shot check — the
 host-resource ones below (`storage`, `memory`, `pressure`, `load`, `fds`,
-`pids`, `conntrack`, `entropy`, `zombies`, `oom`, among others) *and* the
+`pids`, `conntrack`, `entropy`, `zombies`, `oom`, `failed_units`, among others) *and* the
 service checks (`tcp`, `tcp_connections`, `ssh_idle`, `terminal_sessions`, `ports`, `http`, `command`, `file_exists`, `file`,
 `lockfile`, `binary`, `pidfile`, `socket`, `libraries`, `config`, `autofs`,
 `route`, `clock`, `firewall_rules`, `cert`, `sqlite`/`sqlite3`, `websocket`,

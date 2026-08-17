@@ -10,6 +10,7 @@ import (
 	"sermo/internal/checks"
 	"sermo/internal/config"
 	"sermo/internal/metrics"
+	"sermo/internal/servicemgr"
 	"sermo/internal/web"
 )
 
@@ -136,6 +137,7 @@ var watchTypeConditionBuilders = map[string]func(map[string]any) []web.WatchCond
 	checks.CheckTypeProcess:       processWatchConditions,
 	checks.CheckTypeRoute:         routeWatchConditions,
 	checks.CheckTypeFirewallRules: firewallWatchConditions,
+	checks.CheckTypeFailedUnits:   failedUnitsWatchConditions,
 	checks.CheckTypeSize:          sizeWatchConditions,
 }
 
@@ -193,6 +195,25 @@ func firewallWatchConditions(check map[string]any) []web.WatchCondition {
 	}
 }
 
+// failedUnitsWatchConditions names the init backend the check asks for. The
+// count predicate is rendered generically; its default (> 0) is added here so a
+// check that omits it still shows what fires.
+func failedUnitsWatchConditions(check map[string]any) []web.WatchCondition {
+	out := []web.WatchCondition{{
+		Field: checks.DataKeyBackend,
+		Op:    cfgval.CompareOpEqual,
+		Value: conditionValueOr(cfgval.AsString(check[checks.CheckKeyBackend]), string(servicemgr.BackendAuto)),
+	}}
+	if _, present := check[checks.CheckKeyCount].(map[string]any); !present {
+		out = append(out, web.WatchCondition{
+			Field: checks.DataKeyCount,
+			Op:    cfgval.CompareOpGreater,
+			Value: watchFailedUnitsDefaultCount,
+		})
+	}
+	return out
+}
+
 func sizeWatchConditions(check map[string]any) []web.WatchCondition {
 	out := appendValue(nil, checks.DataKeyPath, cfgval.AsString(check[checks.CheckKeyPath]))
 	out = appendCompare(out, watchConditionFieldGrowth, cfgval.CompareOpGreaterEqual, cfgval.String(check[checks.CheckKeyGrowBy]))
@@ -231,6 +252,8 @@ func watchConditionFields(check map[string]any) []string {
 		return checks.EntropyPredFields
 	case checks.CheckTypeZombies:
 		return checks.ZombiePredFields
+	case checks.CheckTypeFailedUnits:
+		return checks.FailedUnitsPredFields
 	case checks.CheckTypeOOM:
 		return []string{checks.CheckKeyDelta}
 	case checks.CheckTypeProcess:

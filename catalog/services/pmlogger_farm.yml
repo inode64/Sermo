@@ -9,12 +9,36 @@ apps:
   - pmlogger_farm
 variables:
   user: pcp
+# Remediation policy for restart-if-inactive below. Same shape as the rest of the
+# PCP family (pmcd, pmlogger): rare, backed off, and capped per day.
+policy:
+  cooldown: 15m
+  max_actions: 2
+  max_actions_window: 1h
+  backoff:
+    initial: 15m
+    max: 1h
 watches:
   service:
     check:
       type: service
       expect: active
       verify: true
+  # The farm service supervises the non-primary pmloggers through pmpause and
+  # listens on nothing, so the endpoint-driven remediation that covers pmcd and
+  # pmlogger cannot apply here and a failed farm stayed reported-only. The unit
+  # ships Restart=always, so an automatic restart is what the vendor intends —
+  # but systemd gives up for good once its 5-starts-in-10s limit is hit, which
+  # is how one node's farm sat failed for nine days. This adds the rate-limited
+  # retry systemd lacks: one restart per cooldown, backed off, never a loop.
+  restart-if-inactive:
+    check:
+      type: service
+      expect: active
+    for:
+      cycles: 3
+    then:
+      action: restart
   alert-if-memory-high:
     check:
       type: metric

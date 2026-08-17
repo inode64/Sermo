@@ -108,7 +108,11 @@ ruta de salida), y liberar el lock de operación (registrado solo tras una adqui
 exitosa). Cualquier paso posterior puede retornar temprano; la limpieza nunca se repite por retorno,
 y una operación bloqueada, fallida o con panic no puede filtrar el lock ni omitir su
 evento. Estados de resultado: `ok`, `blocked`, `preflight_failed`,
-`postflight_failed`, `failed`, `orphan_processes`. El motor no
+`postflight_failed`, `failed`, `orphan_processes`. Un reload (SIGHUP) o un apagado
+cancela una operación en vuelo, así que las esperas acotadas del motor reportan
+`operation cancelled during <fase>` en lugar de un timeout: una acción interrumpida
+no debe leerse como un servicio lento, y todo despliegue con `--with-config`
+recarga el daemon. El motor no
 implementa el cooldown por sí mismo — eso controla la *decisión* de actuar y se ejecuta en la
 evaluación de reglas del daemon antes de invocar el motor, que es como las acciones manuales y
 automáticas comparten un único motor mientras solo la remediación automática está limitada por tasa.

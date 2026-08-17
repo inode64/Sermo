@@ -480,6 +480,21 @@ func failPhase(ctx context.Context, result *Result, timeoutMsg, errPrefix string
 	return false
 }
 
+// failWait marks result failed for a bounded wait the context ended, telling a
+// real deadline apart from a cancellation. A config reload (SIGHUP) or shutdown
+// cancels the operation context, and every `--with-config` deployment reloads the
+// daemon — so reporting that as a timeout sends the operator looking for a slow
+// service that does not exist. The phase names the wait in the operator's terms.
+func failWait(ctx context.Context, result *Result, phase string) bool {
+	result.Status = ResultFailed
+	if timedOut(ctx) {
+		result.Message = "operation timed out during " + phase
+	} else {
+		result.Message = "operation cancelled during " + phase
+	}
+	return false
+}
+
 func (e Engine) resumeService(ctx context.Context, result *Result) bool {
 	if e.ResumeFunc == nil {
 		result.Status, result.Message = ResultFailed, "resume: operation unsupported by backend"
@@ -554,8 +569,7 @@ func (e Engine) runPostflight(ctx context.Context, p plan, result *Result) bool 
 		}
 		if err := process.Wait(ctx, e.Sleep, postflightRetryInterval); err != nil {
 			result.Checks = append(result.Checks, out.Results...)
-			result.Status, result.Message = ResultFailed, "operation timed out during postflight"
-			return false
+			return failWait(ctx, result, "postflight")
 		}
 	}
 	result.Checks = append(result.Checks, out.Results...)
@@ -585,7 +599,7 @@ func (e Engine) stopService(ctx context.Context, result *Result) (alsoStopErrs, 
 		}
 	}
 	if err := process.Wait(ctx, e.Sleep, e.KillPolicy.GracefulTimeout); err != nil {
-		result.Status, result.Message = ResultFailed, "operation timed out during graceful stop wait"
+		_ = failWait(ctx, result, "graceful stop wait")
 		return alsoStopErrs, nil, false, false
 	}
 	residuals, err := e.clearResiduals(ctx, func(residuals []process.Process) bool {

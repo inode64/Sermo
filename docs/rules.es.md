@@ -23,6 +23,7 @@
   - [Deriva de reloj (clock)](#deriva-de-reloj-clock)
   - [Ruta por defecto (route)](#ruta-por-defecto-route)
   - [Reglas de firewall (firewall_rules)](#reglas-de-firewall-firewall_rules)
+  - [Unidades de init fallidas (failed_units)](#unidades-de-init-fallidas-failed_units)
   - [Rendimiento de disco (hdparm)](#rendimiento-de-disco-hdparm)
   - [Sensores de hardware](#sensores-de-hardware)
   - [Autofs](#autofs)
@@ -81,6 +82,7 @@ Las comprobaciones de protocolo de conexión (MySQL, PostgreSQL, Redis, Docker, 
 | `diskio`      | tasas de E/S por ciclo de un dispositivo de bloque (util_pct/read_bytes/write_bytes/await_ms) |
 | `conntrack`   | la tabla conntrack de netfilter frente a su máximo (used_pct/free/count)      |
 | `firewall_rules` | nftables/iptables tiene al menos `min_rules` reglas cargadas (ver Reglas de firewall) |
+| `failed_units` | el recuento de unidades de init en estado fallido cumple `count {op, value}` (por defecto `> 0`; ver Unidades de init fallidas) |
 | `route`       | existe una ruta por defecto activa, opcionalmente saliendo por una `interface` dada (ver Ruta por defecto)|
 | `clock`       | el desfase del reloj local se mantiene dentro de `max_offset`, medido frente a los `servers` NTP configurados o (`source: chrony`) al chronyd local |
 | `net`         | una métrica de interfaz (`metric: state\|speed\|errors\|address`) se cumple — forma de métrica única del watch net |
@@ -1914,7 +1916,7 @@ Cada tipo de arriba es una **comprobación de un solo disparo** (`Check.Run → 
 
 Las comprobaciones de recursos del host (`storage`, `load`, `memory`, `pressure`, `fds`, `pids`,
 `diskio`, `hdparm`, `sensors`, `smart`, `raid`, `edac`, `conntrack`, `entropy`,
-`zombies`, `oom`, entre otras) son de
+`zombies`, `oom`, `failed_units`, entre otras) son de
 estilo condición — `OK == true` significa que hay un problema — así que en reglas
 `active: {check: x}` se dispara sobre ella, y como watch el hook se dispara sobre ella.
 Las comprobaciones de salud (`tcp`, `ports`, `http`, `command`, `service`, `file_exists`,
@@ -2020,6 +2022,35 @@ checks:
 
 Como watch, dispara el hook cuando las reglas de firewall desaparecen. Extras del hook:
 `SERMO_BACKEND`, `SERMO_RULES`, `SERMO_MIN_RULES`.
+
+### Unidades de init fallidas (`failed_units`)
+
+La comprobación `failed_units` cuenta las unidades de init que el host reporta como
+fallidas y las nombra. Existe porque la monitorización de servicios solo cubre los
+servicios *configurados*: una unidad local del sitio sin perfil de catálogo — un
+backup nocturno, por ejemplo — es invisible de otro modo, igual que un `.mount` o un
+`.timer` fallido. Por eso el listado no se restringe a `.service`.
+
+```yaml
+watches:
+  watch-failed-units:
+    category: system
+    interval: 1m
+    check:
+      type: failed_units
+      backend: systemd     # opcional: auto (por defecto) | systemd | openrc
+      count: { op: ">", value: 0 }   # opcional; este es el valor por defecto
+```
+
+`backend: auto` detecta el sistema de init en cada ciclo, así que una configuración
+generada nombra el backend real del host en su lugar. En systemd las unidades vienen
+de `systemctl list-units --state=failed`; en OpenRC de los servicios `crashed` de
+`rc-status --all`.
+
+La comprobación es de estilo condición y **no tiene acción de remediación**:
+reiniciar una unidad arbitraria que Sermo no conoce no es una acción segura, así que
+una unidad fallida se reporta y se deja intacta. Las claves de datos son `backend`,
+`count` y `units` (los nombres de unidad unidos), y el dashboard muestra las tres.
 
 ### Rendimiento de disco (`hdparm`)
 
