@@ -1898,7 +1898,7 @@ Every type above is a **single-shot check** (`Check.Run → Result`) and is usab
 
 - a service's check-only `watches:` entries, or explicit `checks:`/`preflight:` referenced from rules,
 - a host **watch** document (or global `watches:` entry, firing a hook) — see [configuration](configuration.md#host-watches), and
-- a service's own embedded `watches:` block (hook/notification entries scoped to the service, or compact `then.action`, including the service-scoped `service`/`metric` types and the PID-tree-scoped `process_count`) — see [Service watches](configuration.md#service-watches-scoped-to-a-service).
+- a service's own embedded `watches:` block (hook/notification entries scoped to the service, or compact `then.action`, including the service-scoped `service`/`metric` types and the service-scoped `process_count`, which counts everything discovery attributes to the service — the init unit's control group included) — see [Service watches](configuration.md#service-watches-scoped-to-a-service).
 
 The host-resource checks (`storage`, `load`, `memory`, `pressure`, `fds`, `pids`,
 `diskio`, `hdparm`, `sensors`, `smart`, `raid`, `edac`, `conntrack`, `entropy`,

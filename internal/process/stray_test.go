@@ -184,6 +184,45 @@ func TestDiscoverStrayNeedsBackendAttribution(t *testing.T) {
 	}
 }
 
+// The claim the whole design rests on: strays and the principal's descendants are
+// disjoint sets. A count of children can therefore never be a count of strays, and
+// a deeper worker tree must not start producing them.
+func TestDiscoverStraysAreDisjointFromTheProcessTree(t *testing.T) {
+	// A three-level worker tree beside two reparented leftovers.
+	reader := fakeReader{ids: map[int]Identity{
+		100: {PID: 100, PPID: 1, UID: 0, Exe: "/usr/bin/daemon", ExeOK: true},
+		200: {PID: 200, PPID: 100, UID: 0, Exe: "/usr/bin/worker", ExeOK: true},
+		210: {PID: 210, PPID: 200, UID: 0, Exe: "/usr/bin/worker", ExeOK: true},
+		211: {PID: 211, PPID: 210, UID: 0, Exe: "/usr/bin/worker", ExeOK: true},
+		300: {PID: 300, PPID: 1, UID: 0, Exe: "/usr/bin/dbus-daemon", ExeOK: true},
+		400: {PID: 400, PPID: 1, UID: 0, Exe: "/usr/bin/dbus-daemon", ExeOK: true},
+	}}
+	d := strayDiscoverer(reader, 100, 200, 210, 211, 300, 400)
+	procs, _ := d.Discover(nil)
+
+	// Every discovered process is counted, workers and leftovers alike — that is
+	// what a process count reports and why it cannot separate the two.
+	if len(procs) != 6 {
+		t.Fatalf("discovered %d processes, want all 6", len(procs))
+	}
+	assertPIDs(t, "strays", strayPIDs(procs), []int{300, 400})
+
+	descendantsOfPrincipal := map[int]bool{}
+	for _, pid := range descendants(buildSnapshotIndex(reader.ids).children, []int{100}) {
+		descendantsOfPrincipal[pid] = true
+	}
+	for _, p := range procs {
+		if p.Stray && descendantsOfPrincipal[p.PID] {
+			t.Fatalf("pid %d is both a descendant of the principal and a stray", p.PID)
+		}
+	}
+	for _, pid := range []int{200, 210, 211} {
+		if !descendantsOfPrincipal[pid] {
+			t.Fatalf("pid %d should be a descendant of the principal", pid)
+		}
+	}
+}
+
 // The backend names the principal first. When it names none and the first live
 // cgroup member is a leftover, the classification loses that one — it must never
 // gain one, because only a stray can be reaped.

@@ -33,6 +33,11 @@ var graphMetrics = map[string][]GraphMetric{
 	CheckTypeSSHIdle:          {{Key: DataKeyCount, Unit: metrics.MetricUnitSessions, Label: "Idle sessions"}, {Key: DataKeyProtectedCount, Unit: metrics.MetricUnitSessions, Label: "Protected sessions"}},
 	CheckTypeTerminalSessions: {{Key: DataKeyCount, Unit: metrics.MetricUnitSessions, Label: "Sessions"}, {Key: DataKeyAttached, Unit: metrics.MetricUnitSessions, Label: "Attached"}, {Key: DataKeyDetached, Unit: metrics.MetricUnitSessions, Label: "Detached"}},
 	CheckTypeProcessCount:     {{Key: DataKeyCount, Unit: metrics.MetricUnitProcesses}},
+	// Strays graph for the reason the count exists at all: a leak is visible as
+	// accumulation over hours, not as one sample. The service's own process_count
+	// and memory series already move with a leak — but they move with legitimate
+	// load too, so only this series says the growth is unexplained.
+	CheckTypeStrays: {{Key: DataKeyCount, Unit: metrics.MetricUnitProcesses, Label: "Strays"}},
 
 	CheckTypeTCPConnections: {{Key: DataKeyCount, Unit: metrics.MetricUnitConnections, Label: "Connections"}},
 }

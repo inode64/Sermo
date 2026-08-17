@@ -2278,12 +2278,15 @@ host-watch (ventanas firing/recovered, hooks, notifiers, dry-run); las entradas
 con `then.action` se desugarizan a `checks:` + `rules:`.
 
 Lo que "dentro de un servicio" añade es el **contexto de comprobación** del
-servicio, acotado a su **árbol de PIDs** (los procesos que casan más sus
-descendientes — padre e hijos — derivados de los selectores `processes:` /
-identidad del init):
+servicio, acotado a **todo lo que el descubrimiento atribuye al servicio**: en un
+backend de init que los reporte, el control group completo de la unidad, más los
+selectores `processes:`/`pidfile:` que casan y sus descendientes. Ese conjunto es
+más amplio que el árbol de PIDs del proceso principal — un miembro del control
+group cuyo padre ya murió sigue dentro (ver
+[`strays`](#strays--procesos-que-el-servicio-no-puede-justificar)):
 
-- `process_count` cuenta solo ese árbol, inmune a procesos ajenos del host que
-  compartan usuario o exe. Un `user`/`exe`/`exe_dir` opcional afina *dentro* del árbol.
+- `process_count` cuenta solo ese conjunto, inmune a procesos ajenos del host que
+  compartan usuario o exe. Un `user`/`exe`/`exe_dir` opcional afina *dentro* de él.
 - `metric` (`cpu`, `cpu_thread`, `memory`, `io`, …) lee el **scope de servicio**
   por defecto — la lectura sumada sobre ese árbol — desde un collector dedicado
   por watch, así que sus deltas de rate nunca chocan con el muestreo del engine.
@@ -3147,6 +3150,40 @@ no un resto.
 Limpiar un stray es un paso aparte y manual — `sermoctl reap SERVICE --apply`,
 controlado por el `reap.kill_only_if` del propio servicio (ver
 [services.es.md](services.es.md)). Ninguna acción de regla puede hacer reap.
+
+#### Por qué esto no es un contador de procesos
+
+Un stray es, por construcción, **lo contrario de un hijo**: la clasificación
+construye el árbol vivo del principal y etiqueta solo lo que *no* está en él. Un
+proceso alcanzable caminando PPID hacia abajo desde el proceso principal es un
+worker; un miembro del control group cuya cadena de PPID no llega a él fue
+reparentado a PID 1, y eso es lo que lo convierte en un resto. Los dos conjuntos
+son disjuntos.
+
+Cualquier otro instrumento cuenta un superconjunto y no puede separarlos:
+
+| Instrumento | Cuenta | Incluye strays |
+| --- | --- | --- |
+| `process_count` en `checks:` de un servicio | PIDs del host que pasan `user`/`exe`/`exe_dir` | solo de refilón — es host-global |
+| `process_count` en `watches:` de un servicio | todo lo que el descubrimiento atribuye al servicio | sí |
+| métrica `process_count` (`scope: service`) | el mismo conjunto, muestreado por ciclo | sí |
+| Totales de procesos del dashboard (cuenta, memoria, FDs, hilos) | el mismo conjunto | sí |
+| `strays` | ese conjunto menos el principal, su árbol vivo, los pidfile y selectores que casan, y los delegados | es solo eso |
+
+Dos consecuencias que conviene conocer:
+
+- Una fuga **sí** infla el `process_count`, la memoria, los FDs y los hilos del
+  servicio, y eso es correcto — esos recursos se consumen de verdad. Lo que ninguna
+  de esas cifras puede decir es que el crecimiento sea inexplicable, y por eso
+  necesitan un umbral por servicio y `strays` no (su valor esperado es cero en
+  todos).
+- Contar solo descendientes reales haría la fuga **invisible**: el resto salió del
+  árbol en el momento en que su padre murió. Sermo no tiene, por tanto, ningún
+  contador de solo-descendientes.
+
+Ambas cuentas se grafican, así que una acumulación aparece como una serie `strays`
+subiendo junto a un contador de procesos subiendo — la forma que distingue una fuga
+de la carga.
 
 ### `process` — proceso por nombre
 
