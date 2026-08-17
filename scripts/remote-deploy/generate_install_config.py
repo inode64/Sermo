@@ -237,7 +237,6 @@ GLUSTER_XML_FORBIDDEN_DECLARATIONS = ("<!DOCTYPE", "<!ENTITY")
 # `volume info --xml` omits it, so the collectors stage the declaration from the
 # CLI text output together with the arbiter host's resolved address.
 GLUSTER_TA_CATALOG_SERVICE = "gluster-ta-volume"
-GLUSTER_TA_EVIDENCE = "gluster_thin_arbiters"
 
 # The libvirt domain states virsh reports under LC_ALL=C. Anything outside this
 # set means the inventory was not parsed as expected — most likely a localized
@@ -962,22 +961,14 @@ def active_service_filter(stage: Path, catalog_docs: list[dict]) -> tuple[set[st
     return active_services, failed_services, candidates_by_service, True
 
 
-def required_service_names(stage: Path) -> set[str]:
-    """Catalog services whose unit must be running on this host even when it is
-    not, so an installed-but-stopped daemon that something else depends on stays
+def parse_services(stage: Path, options: GenerationOptions, required: set[str]) -> tuple[list[dict], list[dict], set[str]]:
+    """Split the host's catalog services into generated and skipped. `required`
+    names the services whose unit must be running on this host even when it is
+    not, so an installed-but-stopped daemon something else depends on stays
     monitored instead of disappearing from the configuration."""
-    required: set[str] = set()
-    thin_arbiter_local, _ = thin_arbiter_report(stage)
-    if thin_arbiter_local:
-        required.add(GLUSTER_TA_CATALOG_SERVICE)
-    return required
-
-
-def parse_services(stage: Path, options: GenerationOptions) -> tuple[list[dict], list[dict], set[str]]:
     reports = service_reports(stage)
     catalog_docs = load_catalog_services(options.catalog_services_dir)
     active_services, failed_services, candidates_by_service, active_inventory_ok = active_service_filter(stage, catalog_docs)
-    required = required_service_names(stage)
     services: list[dict] = []
     skipped: list[dict] = []
     for rep in reports:
@@ -1645,7 +1636,16 @@ def gluster_cluster_check(stage: Path, service_name: str) -> tuple[dict | None, 
 
 
 def host_global_addresses(stage: Path) -> set[str]:
-    """The host's own global unicast addresses, from the staged `ip -o addr` output."""
+    """Every global unicast address the host answers on, from the staged
+    `ip -o addr` output.
+
+    Deliberately not built on parse_ipv4_interfaces: that one reads CIDR
+    interfaces for subnet membership and so requires a prefix glued to the
+    address, which skips a point-to-point link outright — `inet 172.31.25.123
+    peer 172.31.25.124/32` on a VPN tun device dropped the host's own tunnel
+    address. Here a bare address is exactly what must be matched, because it is
+    compared against a name the target resolved.
+    """
     addresses: set[str] = set()
     for name in ("ip_addr4", "ip_addr6"):
         for line in read_text(stage / name).splitlines():
@@ -1670,7 +1670,7 @@ def thin_arbiter_report(stage: Path) -> tuple[bool, list[dict[str, object]]]:
     local = False
     entries: list[dict[str, object]] = []
     addresses = host_global_addresses(stage)
-    for line in read_text(stage / GLUSTER_TA_EVIDENCE).splitlines():
+    for line in read_text(stage / "gluster_thin_arbiters").splitlines():
         fields = line.split("\t")
         if len(fields) < 4:
             continue
@@ -1946,8 +1946,11 @@ def generate_for_host(host_slug: str, stage: Path, configs_dir: Path, options: G
     generated_service_names: set[str] = set()
     terminal_sessions = parse_terminal_sessions(stage)
     terminal_watches = terminal_session_watches(terminal_sessions)
-    services, skipped_services, failed_services = parse_services(stage, options)
-    _, report["thin_arbiters"] = thin_arbiter_report(stage)
+    thin_arbiter_local, report["thin_arbiters"] = thin_arbiter_report(stage)
+    # A declared thin arbiter must be running on the host that serves it even when
+    # its unit is stopped — the same reasoning that keeps a failed unit monitorable.
+    required_services = {GLUSTER_TA_CATALOG_SERVICE} if thin_arbiter_local else set()
+    services, skipped_services, failed_services = parse_services(stage, options, required_services)
     catalog_docs = load_catalog_services(options.catalog_services_dir)
     for svc in services:
         name = svc["name"]

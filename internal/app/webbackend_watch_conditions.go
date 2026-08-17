@@ -199,19 +199,12 @@ func firewallWatchConditions(check map[string]any) []web.WatchCondition {
 // count predicate is rendered generically; its default (> 0) is added here so a
 // check that omits it still shows what fires.
 func failedUnitsWatchConditions(check map[string]any) []web.WatchCondition {
-	out := []web.WatchCondition{{
-		Field: checks.DataKeyBackend,
-		Op:    cfgval.CompareOpEqual,
-		Value: conditionValueOr(cfgval.AsString(check[checks.CheckKeyBackend]), string(servicemgr.BackendAuto)),
-	}}
-	if _, present := check[checks.CheckKeyCount].(map[string]any); !present {
-		out = append(out, web.WatchCondition{
-			Field: checks.DataKeyCount,
-			Op:    cfgval.CompareOpGreater,
-			Value: watchFailedUnitsDefaultCount,
-		})
+	backend := conditionValueOr(cfgval.AsString(check[checks.CheckKeyBackend]), string(servicemgr.BackendAuto))
+	out := appendCompare(nil, checks.DataKeyBackend, cfgval.CompareOpEqual, backend)
+	if _, present := check[checks.CheckKeyCount].(map[string]any); present {
+		return out
 	}
-	return out
+	return appendCompare(out, checks.DataKeyCount, cfgval.CompareOpGreater, watchFailedUnitsDefaultCount)
 }
 
 func sizeWatchConditions(check map[string]any) []web.WatchCondition {

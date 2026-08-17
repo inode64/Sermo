@@ -1425,7 +1425,7 @@ class GlusterThinArbiterTest(unittest.TestCase):
             encoding="utf-8",
         )
         (stage / "ip_addr4").write_text(addresses, encoding="utf-8")
-        (stage / generator.GLUSTER_TA_EVIDENCE).write_text(arbiters, encoding="utf-8")
+        (stage / "gluster_thin_arbiters").write_text(arbiters, encoding="utf-8")
         return root, stage
 
     def test_local_arbiter_generates_the_daemon_even_when_stopped(self):
@@ -1449,6 +1449,21 @@ class GlusterThinArbiterTest(unittest.TestCase):
             }],
         )
 
+    def test_point_to_point_address_still_identifies_this_host(self):
+        """`ip -o -4 addr` prints a VPN tun device as `inet <local> peer <remote>/32`,
+        with no prefix glued to the host's own address. Reading those addresses with
+        a CIDR parser skips the line outright, which classified an arbiter named by
+        its tunnel address as remote and generated no daemon for it."""
+        root, stage = self.stage(
+            "images\tk2kca2.vrack6\t/srv/gluster-images\t172.31.25.123\n",
+            addresses="38: tun1    inet 172.31.25.123 peer 172.31.25.124/32 scope global tun1\n",
+        )
+
+        report = generator.generate_for_host("host", stage, root / "configs", default_options())
+
+        self.assertTrue((root / "configs/host/root/etc/sermo/services/gluster-ta-volume.yml").exists())
+        self.assertTrue(report["thin_arbiters"][0]["local"])
+
     def test_remote_arbiter_is_recorded_but_not_generated(self):
         root, stage = self.stage("images\tk2kca2.vrack6\t/srv/gluster-images\t172.31.27.9\n")
 
@@ -1459,19 +1474,27 @@ class GlusterThinArbiterTest(unittest.TestCase):
         self.assertEqual(report["thin_arbiters"][0]["reason"], "thin arbiter runs on k2kca2.vrack6")
 
     def test_unresolved_arbiter_host_is_reported_as_such(self):
-        _, stage = self.stage("images\tk2kca2.vrack6\t/srv/gluster-images\t\n")
+        # Absence of proof is not proof: a host whose arbiter name does not resolve
+        # is recorded, not silently treated as the arbiter itself.
+        root, stage = self.stage("images\tk2kca2.vrack6\t/srv/gluster-images\t\n")
 
-        local, entries = generator.thin_arbiter_report(stage)
+        report = generator.generate_for_host("host", stage, root / "configs", default_options())
 
-        self.assertFalse(local)
-        self.assertEqual(entries[0]["reason"], "thin arbiter host k2kca2.vrack6 did not resolve on the target")
-        self.assertEqual(generator.required_service_names(stage), set())
+        self.assertFalse((root / "configs/host/root/etc/sermo/services/gluster-ta-volume.yml").exists())
+        self.assertFalse(report["thin_arbiters"][0]["local"])
+        self.assertEqual(
+            report["thin_arbiters"][0]["reason"],
+            "thin arbiter host k2kca2.vrack6 did not resolve on the target",
+        )
 
     def test_volume_without_a_thin_arbiter_requires_nothing(self):
-        _, stage = self.stage("")
+        root, stage = self.stage("")
+
+        report = generator.generate_for_host("host", stage, root / "configs", default_options())
 
         self.assertEqual(generator.thin_arbiter_report(stage), (False, []))
-        self.assertEqual(generator.required_service_names(stage), set())
+        self.assertEqual(report["thin_arbiters"], [])
+        self.assertFalse((root / "configs/host/root/etc/sermo/services/gluster-ta-volume.yml").exists())
 
     def test_collectors_capture_the_thin_arbiter_declaration(self):
         root = Path(__file__).resolve().parent
@@ -1479,7 +1502,7 @@ class GlusterThinArbiterTest(unittest.TestCase):
             body = (root / script).read_text(encoding="utf-8")
             self.assertIn("gluster --mode=script volume info", body, script)
             self.assertIn("Thin-arbiter-path", body, script)
-            self.assertIn(generator.GLUSTER_TA_EVIDENCE, body, script)
+            self.assertIn("gluster_thin_arbiters", body, script)
 
 
 if __name__ == "__main__":

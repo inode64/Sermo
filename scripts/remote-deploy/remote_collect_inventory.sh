@@ -43,6 +43,18 @@ capture() {
 	printf '%s\n' "$?" >"${out}/${name}.rc"
 }
 
+resolve_address() {
+	# First address for a host name, IPv4 preferred. The generator matches these
+	# against the host's own staged addresses, and both the NFS sources and the
+	# Gluster thin arbiter are usually named only inside the storage network.
+	local resolved
+	resolved="$(getent ahostsv4 "$1" 2>/dev/null | awk 'NR == 1 { print $1 }')"
+	if [ -z "$resolved" ]; then
+		resolved="$(getent ahostsv6 "$1" 2>/dev/null | awk 'NR == 1 { print $1 }')"
+	fi
+	printf '%s' "$resolved"
+}
+
 hostname -f >"${out}/hostname_fqdn" 2>/dev/null || hostname >"${out}/hostname_fqdn" 2>/dev/null || true
 hostname >"${out}/hostname" 2>/dev/null || true
 uname -a >"${out}/uname" 2>/dev/null || true
@@ -109,10 +121,7 @@ if command -v gluster >/dev/null 2>&1; then
 		[ -n "$volume" ] && [ -n "$arbiter" ] || continue
 		arbiter_host="${arbiter%%:*}"
 		arbiter_path="${arbiter#*:}"
-		arbiter_address="$(getent ahostsv4 "$arbiter_host" 2>/dev/null | awk 'NR == 1 { print $1 }')"
-		if [ -z "$arbiter_address" ]; then
-			arbiter_address="$(getent ahostsv6 "$arbiter_host" 2>/dev/null | awk 'NR == 1 { print $1 }')"
-		fi
+		arbiter_address="$(resolve_address "$arbiter_host")"
 		printf '%s\t%s\t%s\t%s\n' "$volume" "$arbiter_host" "$arbiter_path" "$arbiter_address" >>"${out}/gluster_thin_arbiters"
 	done <"${out}/gluster_thin_arbiters.raw"
 	rm -f "${out}/gluster_thin_arbiters.raw"
@@ -145,10 +154,7 @@ if [ -r /etc/fstab ]; then
 			*:/*) host="${source%%:/*}" ;;
 			*) continue ;;
 		esac
-		address="$(getent ahostsv4 "$host" 2>/dev/null | awk 'NR == 1 { print $1 }')"
-		if [ -z "$address" ]; then
-			address="$(getent ahostsv6 "$host" 2>/dev/null | awk 'NR == 1 { print $1 }')"
-		fi
+		address="$(resolve_address "$host")"
 		iface=""
 		if [ -n "$address" ]; then
 			iface="$(ip route get "$address" 2>/dev/null | awk '{ for (i = 1; i < NF; i++) if ($i == "dev") { print $(i + 1); exit } }')"
