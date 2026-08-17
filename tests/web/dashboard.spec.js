@@ -619,6 +619,25 @@ test("a genuinely idle process reads 0% in both CPU columns", async ({ page }) =
   await expect(cells.nth(5)).toContainText("0%");
 });
 
+test("a stray process is named as one instead of reading as the principal", async ({ page }) => {
+  // A stray carries the backend seed's role "main": the daemon labels every PID in
+  // the unit's control group that way before a selector can name one. Showing that
+  // role alone would say this is the service's principal process, which is the
+  // opposite of the truth — nothing in the configuration accounts for it.
+  await page.route("**/api/services/db", async (route) => {
+    const body = JSON.parse(JSON.stringify(serviceDetail("db")));
+    body.processes[0].stray = true;
+    await route.fulfill({ json: body });
+  });
+  await page.locator("#svc-row-db .row-toggle").click();
+
+  const cell = page.locator('[data-service-detail="db"]')
+    .getByRole("table", { name: "Service processes" })
+    .locator("tbody tr").first().locator("td").nth(3);
+  await expect(cell).toHaveText("stray");
+  await expect(cell.locator("[title]")).toHaveAttribute("title", /claimed by no process selector/);
+});
+
 test("an unmeasured busiest core is shown as a bound, not a reading", async ({ page }) => {
   // Below the daemon's thread-sampling floor there is no per-thread measurement, so
   // the process rate stands in as an upper bound and must be marked as one.

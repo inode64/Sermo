@@ -160,6 +160,49 @@ func validateStopPolicy(tree map[string]any, add addFunc) {
 	validateCleanOnStop(sp[keyCleanOnStop], add)
 }
 
+// validateReapPolicy checks the optional `reap:` block, the per-service
+// authorization `sermoctl reap` needs before it may signal a stray process. It
+// accepts exactly one key, kill_only_if, with the same paired users/exe_any
+// selector stop_policy uses.
+//
+// Unknown keys are rejected here, unlike under stop_policy: a stray is reached by
+// control-group membership rather than by a selector that named it, so a mistyped
+// subkey would leave the action running against a selector the operator did not
+// write. Absolute exe paths are required for the same reason the selector matches
+// on the resolved /proc/<pid>/exe — a relative path could never match, so it can
+// only be a mistake.
+func validateReapPolicy(tree map[string]any, add addFunc) {
+	raw, present := tree[sectionReap]
+	if !present {
+		return
+	}
+	block, ok := raw.(map[string]any)
+	if !ok {
+		add("%s must be a mapping with %s", sectionReap, keyKillOnlyIf)
+		return
+	}
+	for _, err := range unknownBlockKeys(sectionReap, block, set(keyKillOnlyIf)) {
+		add("%s", err)
+	}
+	koi, ok := block[keyKillOnlyIf].(map[string]any)
+	if !ok {
+		add("%s must be a mapping defining both %s and %s", reapPathKillOnlyIf, keyUsers, keyExeAny)
+		return
+	}
+	for _, err := range unknownBlockKeys(reapPathKillOnlyIf, koi, set(keyUsers, keyExeAny)) {
+		add("%s", err)
+	}
+	if !cfgval.IsNonEmptyStringList(koi[keyUsers]) || !cfgval.IsNonEmptyStringList(koi[keyExeAny]) {
+		add("%s must define both %s and %s, each non-empty", reapPathKillOnlyIf, keyUsers, keyExeAny)
+		return
+	}
+	for _, exe := range cfgval.StringList(koi[keyExeAny]) {
+		if !filepath.IsAbs(exe) {
+			add(validationPathAbsoluteFormat, reapPathKillOnlyIf+"."+keyExeAny, exe)
+		}
+	}
+}
+
 // protectedDirs are absolute paths that clean_on_stop must never delete
 // recursively (the filesystem root and shallow system directories).
 var protectedDirs = set("/", "/etc", "/usr", "/var", "/home", "/root", "/boot",

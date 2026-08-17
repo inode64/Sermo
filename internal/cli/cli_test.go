@@ -401,6 +401,7 @@ func TestSingleServiceCommandsRequireAService(t *testing.T) {
 		{command: commandStatus, want: "status requires a service name"},
 		{command: commandPreflight, want: "preflight requires a service name"},
 		{command: commandProcesses, want: "processes requires a service name"},
+		{command: commandReap, want: "reap requires a service name"},
 		{command: commandLocks, want: "locks requires a service name"},
 		{command: commandStop, want: "stop requires a service name"},
 		{

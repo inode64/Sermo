@@ -790,6 +790,7 @@ var singleShotCheckValidators = map[string]singleShotCheckValidator{
 	checks.CheckTypeService:          validateServiceCheck,
 	checks.CheckTypeProcess:          validateProcessCheck,
 	checks.CheckTypeStaleBinary:      singleShotNoLock(validateStaleBinaryCheck),
+	checks.CheckTypeStrays:           singleShotNoLock(validateStraysCheck),
 	checks.CheckTypeFileExists:       validateFileExistsCheck,
 	checks.CheckTypeFile:             validateSingleShotFileCheck,
 	checks.CheckTypeLockfile:         validateLockfileCheck,
@@ -822,6 +823,7 @@ var singleShotCheckValidators = map[string]singleShotCheckValidator{
 	checks.CheckTypeConntrack:        singleShotThreshold(checks.ConntrackPredFields),
 	checks.CheckTypeFirewallRules:    singleShotNoLock(validateFirewallRulesFields),
 	checks.CheckTypeFailedUnits:      singleShotNoLock(validateFailedUnitsFields),
+	checks.CheckTypeInotify:          singleShotThreshold(checks.InotifyPredFields),
 	checks.CheckTypeNet:              validateNetSingleShotCheck,
 	checks.CheckTypeICMP:             validateICMPSingleShotCheck,
 	checks.CheckTypeSwap:             validateSwapSingleShotCheck,
@@ -1088,6 +1090,18 @@ func validateStaleBinaryCheck(path string, entry map[string]any, add addFunc) {
 	for _, key := range []string{checks.CheckKeyExe, checks.CheckKeyExeAny, checks.CheckKeyUser, checks.CheckKeyState} {
 		if _, present := entry[key]; present {
 			add("%s.%s is not accepted; stale_binary inspects the service's own processes and pidfile selectors", path, key)
+		}
+	}
+}
+
+// validateStraysCheck rejects selector fields and thresholds on a strays check.
+// What counts as a stray follows from the service's own selectors and its control
+// group, and the expected count is zero, so an exe, user, op or value here would
+// look meaningful and silently do nothing.
+func validateStraysCheck(path string, entry map[string]any, add addFunc) {
+	for _, key := range []string{checks.CheckKeyExe, checks.CheckKeyExeAny, checks.CheckKeyUser, checks.CheckKeyState, checks.CheckKeyOp, checks.CheckKeyValue} {
+		if _, present := entry[key]; present {
+			add("%s.%s is not accepted; strays reports the service's control-group members that no selector claims, and the expected count is zero", path, key)
 		}
 	}
 }

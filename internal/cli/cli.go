@@ -57,6 +57,9 @@ const (
 	actionRestart = string(rules.ActionRestart)
 	actionReload  = string(rules.ActionReload)
 	actionResume  = string(rules.ActionResume)
+	// actionReap is not a rule action: a stray process is one Sermo cannot name,
+	// so clearing one is always an operator's decision, never a remediation.
+	actionReap = process.SectionReap
 )
 
 const (
@@ -96,6 +99,7 @@ const (
 
 const (
 	cliFlagSetName   = "sermoctl"
+	cliFlagApply     = "apply"
 	cliFlagBackend   = commandBackend
 	cliFlagBefore    = daemonAPIQueryBefore
 	cliFlagConfig    = commandConfig
@@ -227,6 +231,7 @@ type options struct {
 	force      bool // --force: allow umount -f during `sermoctl umount`
 	lazy       bool // --lazy: allow umount -l during `sermoctl umount`
 	kill       bool // --kill-blockers: allow policy-gated signalling during `sermoctl umount`
+	apply      bool // --apply: signal the authorized strays during `sermoctl reap` (without it, preview only)
 	help       bool
 	version    bool // --version / -V
 	timeout    time.Duration
@@ -401,6 +406,7 @@ var commandHandlers = map[string]commandHandler{
 	commandConfig:    func(a App, _ context.Context, opts options) int { return a.runConfig(opts) },
 	commandLocks:     func(a App, _ context.Context, opts options) int { return a.runLocks(opts) },
 	commandProcesses: App.runProcesses,
+	commandReap:      func(a App, ctx context.Context, opts options) int { return a.runAction(ctx, opts, opts.command) },
 	commandPreflight: App.runPreflight,
 	commandDaemon:    App.runDaemon,
 	commandNotifier:  App.runNotifier,
@@ -468,6 +474,11 @@ func (a App) prepareOptions(args []string) (options, int, bool) {
 	}
 	if opts.command != commandUmount && (opts.force || opts.lazy || opts.kill) {
 		return options{}, a.commandUsageError(opts.command, "--force, --lazy and --kill-blockers are only supported by umount"), true
+	}
+	// --apply is the only thing that lets a command signal a stray, so it must not
+	// be accepted anywhere it would be silently ignored.
+	if opts.command != commandReap && opts.apply {
+		return options{}, a.commandUsageError(opts.command, "--apply is only supported by "+commandReap), true
 	}
 	return opts, exitSuccess, false
 }
@@ -623,7 +634,7 @@ func (a App) runAction(ctx context.Context, opts options, action string) int {
 	if opts.json {
 		writeJSON(a.Stdout, result)
 	} else if !opts.quiet {
-		a.printOperation(result)
+		a.printOperation(opts, result)
 	}
 	return operationExit(result.Status)
 }
@@ -665,8 +676,9 @@ func (a App) requireReloadSupported(ctx context.Context, opts options, resolved 
 // result is returned and drives the exit code.
 func (a App) operateWithCascade(ctx context.Context, opts options, cfg *config.Config, resolved config.Resolved, service, action string, actionStore *state.Store) (operation.Result, error) {
 	targets := config.CascadeTargets(resolved.Tree)
-	// also_apply cascades only start/stop/restart, not reload/resume.
-	if opts.noCascade || action == actionReload || action == actionResume || len(targets) == 0 {
+	// also_apply cascades only start/stop/restart, not reload/resume — and never
+	// reap, which acts on the strays of the one service the operator named.
+	if opts.noCascade || action == actionReload || action == actionResume || action == actionReap || len(targets) == 0 {
 		a.beginManualOperationSettling(cfg, actionStore, service, action)
 		out, err := a.Operate(ctx, opts, cfg, resolved, service, action)
 		activeAfterPostflightFailure := a.activeAfterPostflightFailure(ctx, opts, cfg, resolved, service, action, out, err)
@@ -888,7 +900,7 @@ func (a App) defaultOperate(ctx context.Context, opts options, cfg *config.Confi
 	opCtx, cancel := context.WithTimeout(ctx, opTimeout)
 	defer cancel()
 
-	result := engine.Do(opCtx, action)
+	result := runEngineAction(opCtx, engine, opts, action)
 	if eventErr != nil {
 		return result, fmt.Errorf("record operation event: %w", eventErr)
 	}
@@ -898,7 +910,22 @@ func (a App) defaultOperate(ctx context.Context, opts options, cfg *config.Confi
 	return result, nil
 }
 
-func (a App) printOperation(r operation.Result) {
+// runEngineAction dispatches one CLI action on a built engine. Everything the
+// rule vocabulary knows goes through Engine.Do; reap does not, deliberately —
+// it is a manual-only verb with its own --apply gate, so it must be named here
+// rather than reachable from an action string a rule could produce.
+func runEngineAction(ctx context.Context, engine operation.Engine, opts options, action string) operation.Result {
+	if action == actionReap {
+		return engine.Reap(ctx, opts.apply)
+	}
+	return engine.Do(ctx, action)
+}
+
+func (a App) printOperation(opts options, r operation.Result) {
+	if r.Action == actionReap {
+		a.printReap(opts, r)
+		return
+	}
 	switch r.Status {
 	case operation.ResultOK:
 		fmt.Fprintf(a.Stdout, "%s %s ok\n", r.Service, r.Action)
@@ -926,7 +953,36 @@ func (a App) printOperation(r operation.Result) {
 	}
 	for _, p := range r.Processes {
 		key, value := processDisplayField(p)
-		fmt.Fprintf(a.Stdout, "  residual pid=%d %s=%s\n", p.PID, key, value)
+		// Flag the strays: an operator staring at "residual pid=… exe=…" would
+		// otherwise go looking for the selector that failed to cover it, and for a
+		// stray there is none to find.
+		stray := ""
+		if p.Stray {
+			stray = " stray=true"
+		}
+		fmt.Fprintf(a.Stdout, "  residual pid=%d %s=%s%s\n", p.PID, key, value, stray)
+	}
+}
+
+// printReap renders a reap. Its listed processes are strays, not residuals of a
+// stop, and without --apply nothing was touched — so it says so, and says how to
+// ask for it, instead of reading like a completed operation.
+func (a App) printReap(opts options, r operation.Result) {
+	if r.Status == operation.ResultBlocked {
+		fmt.Fprintf(a.Stdout, "BLOCKED %s %s\n", r.Service, r.Action)
+	} else {
+		fmt.Fprintf(a.Stdout, "%s %s %s\n", r.Service, r.Action, r.Status)
+	}
+	if r.Message != "" {
+		fmt.Fprintf(a.Stdout, "reason: %s\n", r.Message)
+	}
+	for _, p := range r.Processes {
+		key, value := processDisplayField(p)
+		fmt.Fprintf(a.Stdout, "  stray pid=%d user=%s %s=%s\n", p.PID, orUnknown(p.User), key, value)
+	}
+	if !opts.apply && len(r.Processes) > 0 {
+		fmt.Fprintf(a.Stdout, "nothing was signalled; run `sermoctl %s %s --%s` to signal the authorized strays\n",
+			commandReap, r.Service, cliFlagApply)
 	}
 }
 
@@ -1272,6 +1328,12 @@ func formatProcess(p process.Process) string {
 	line := fmt.Sprintf("pid=%d ppid=%d user=%s %s=%s source=%s", p.PID, p.PPID, orUnknown(p.User), key, value, p.Source)
 	if p.Role != "" {
 		line += " role=" + p.Role
+	}
+	// A stray carries the backend seed's role "main", which on its own reads as the
+	// service's principal process; the flag is what tells the operator that nothing
+	// in the configuration accounts for this process.
+	if p.Stray {
+		line += " stray=true"
 	}
 	return line
 }
@@ -2024,6 +2086,7 @@ func parseArgs(args []string) (options, error) {
 	fs.BoolVar(&opts.force, cliFlagForce, false, "")
 	fs.BoolVar(&opts.lazy, cliFlagLazy, false, "")
 	fs.BoolVar(&opts.kill, cliFlagKill, false, "")
+	fs.BoolVar(&opts.apply, cliFlagApply, false, "")
 	fs.BoolVar(&opts.series, cliFlagSeries, false, "")
 	fs.BoolVar(&opts.long, cliFlagLong, false, "")
 	fs.StringArrayVar(&notifyValues, cliFlagNotify, nil, "")

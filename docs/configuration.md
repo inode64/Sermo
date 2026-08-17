@@ -373,6 +373,7 @@ engine:
   startup_delay: 0            # grace period before the first cycle (0 disables)
   user_lookup: auto           # auto | native | getent | numeric
   user_lookup_timeout: 250ms  # per-getent lookup timeout; cached in-process
+  reap_own_strays: true       # SIGTERM leftovers of a previous sermod in its own cgroup at startup
   state_cache_size: 64M       # SQLite page cache for the state database
   retention_1m: 3h            # per-minute history (the 1h graphs)
   retention_5m: 30h           # 5-minute history (the 24h graphs)
@@ -504,6 +505,16 @@ it starts its first check cycle, giving the host time to finish booting so
 services that are still coming up are not flagged or remediated prematurely. The
 wait applies once, on startup, before any worker runs; a shutdown signal during
 the wait aborts cleanly without starting any worker. The default `0` disables it.
+
+`engine.reap_own_strays` is startup hygiene for sermod itself: on start, before it
+has spawned anything of its own, sermod sends `SIGTERM` to every process left in
+its **own** init unit control group. A unit configured `KillMode=process` or
+`KillMode=none` leaves the previous incarnation's children there, and each one
+keeps holding its descriptors, inotify instances and memory. It runs only when
+sermod's control group is a systemd **service** unit — never from a login shell,
+where it would share a scope with the operator's own shell — sends only `SIGTERM`,
+and emits one event per process signalled. It defaults to on; set it to `false` to
+turn it off. See [safety.md](safety.md).
 
 `engine.user_lookup` controls how Sermo turns user/group names into UID/GID
 values for runtime process identity:
@@ -2134,7 +2145,7 @@ be combined with `then.notify_interval`.
 
 **Checks and watches share the same check types.** Any single-shot check — the
 host-resource ones below (`storage`, `memory`, `pressure`, `load`, `fds`,
-`pids`, `conntrack`, `entropy`, `zombies`, `oom`, `failed_units`, among others) *and* the
+`pids`, `conntrack`, `entropy`, `zombies`, `oom`, `failed_units`, `inotify`, among others) *and* the
 service checks (`tcp`, `tcp_connections`, `ssh_idle`, `terminal_sessions`, `ports`, `http`, `command`, `file_exists`, `file`,
 `lockfile`, `binary`, `pidfile`, `socket`, `libraries`, `config`, `autofs`,
 `route`, `clock`, `firewall_rules`, `cert`, `sqlite`/`sqlite3`, `websocket`,
@@ -2999,6 +3010,46 @@ A process whose executable was replaced still resolves no exe, so it matches no
 `exe` selector and is never signalled — see [safety.md](safety.md). This check
 reports the condition; it does not relax that rule.
 
+### `strays` — processes the service cannot account for
+
+Service-scoped. Reports the members of the service's init unit control group that
+no configured selector claims and that no longer hang off the unit's principal
+process — a probe that daemonized, a child the daemon never reaped, a survivor of
+an earlier incarnation. See [safety.md](safety.md) for the full definition.
+
+You do not write this check: Sermo injects it, named `strays`, into every
+init-managed service that declares `processes:` or `pidfile:`. It takes no fields
+— what counts as a stray follows from the service's own selectors and its control
+group — and no threshold, because the expected count is zero.
+
+It reports **state**: the count and the executables appear in the dashboard and in
+`sermoctl status`, and never reduce service health or SLA. The daemon is serving;
+something merely accumulated beside it.
+
+Unlike `stale_binary`, **no rule is injected with it**. On real hosts the raw
+condition is dominated by workloads a profile has legitimately marked
+`delegated: true` (container shims, Gluster bricks, libvirt's `dnsmasq` pairs), so
+a fleet-wide alert would mostly report incomplete catalog coverage — and the remedy
+for that is a selector, not a reap. Alerting is therefore the operator's call:
+
+```yaml
+rules:
+  alert-on-strays:
+    if: { failed: { check: strays } }
+    for: { cycles: 3 }        # ignore a leftover that clears itself
+    then:
+      action: alert
+      message: "${display_name} accumulated ${check.value} unaccounted-for process(es)"
+```
+
+Services with an external `control:` backend (docker, libvirt) get no injected
+check: there the whole container or domain PID set is attributed to the service,
+so a process no selector names is ordinary rather than a leftover.
+
+Clearing a stray is a separate, manual step — `sermoctl reap SERVICE --apply`,
+gated by the service's own `reap.kill_only_if` (see [services.md](services.md)).
+No rule action can reap.
+
 ### `process` — process by name
 
 A `process` watch tracks the processes whose **name** matches (the resolved exe
@@ -3125,9 +3176,13 @@ Only target-safe parts of `defaults` merge into configured targets:
 for the inherited `config`/`version` permission flags. Engine-wide settings (`interval`,
 `max_parallel_checks`, `default_timeout`,
 `operation_timeout`, `artifact_interval`, `startup_delay`, `backend`, `user_lookup`,
-`user_lookup_timeout`, `state_cache_size`, the `retention_*` windows and
-`rollup_interval`, and `service_restart_notice`) are daemon configuration and
-never merge into a service.
+`user_lookup_timeout`, `reap_own_strays`, `state_cache_size`, the `retention_*`
+windows and `rollup_interval`, and `service_restart_notice`) are daemon
+configuration and never merge into a service.
+
+A service's `reap:` block is deliberately **not** a `defaults` key either: one
+global `kill_only_if` would hand every service the same kill authority over
+processes none of them can name.
 
 For service residual cleanup, `defaults.stop_policy.force_kill` accepts `false`,
 `true` or `auto`. `true` requires an explicit `kill_only_if` selector. `auto`

@@ -3191,6 +3191,14 @@ function processRows(procs) {
   return out;
 }
 
+function procRoleCell(p) {
+  // A stray carries the backend seed's role "main"; showing that alone would say
+  // this is the service's principal process, which is the opposite of the truth.
+  if (!p.stray) return p.role || "";
+  const title = "in the service's control group but claimed by no process selector, and not part of the principal process's tree; `sermoctl reap` lists it and, when the service declares reap.kill_only_if, signals it";
+  return tpl`<span class="inactive" title="${title}">stray</span>`;
+}
+
 function procTreeLabel(row) {
   const depth = Number(row.depth || 0);
   const p = row.p || {};
@@ -4001,7 +4009,7 @@ function serviceProcessDetail(d) {
           <td>${p.pid}</td>
           <td>${procTreeLabel(row)}</td>
           <td class="muted">${p.user || ""}</td>
-          <td class="muted">${p.role || ""}</td>
+          <td class="muted">${procRoleCell(p)}</td>
           ${procCpuCell(p)}
           ${procMaxCoreCell(p)}
           <td>${p.rss ? (hostMem > 0 ? usageBarMini(memPct(p.rss), fmtBytes(p.rss)) : fmtBytes(p.rss)) : '—'}</td>

@@ -388,6 +388,7 @@ engine:
   startup_delay: 0            # grace period before the first cycle (0 disables)
   user_lookup: auto           # auto | native | getent | numeric
   user_lookup_timeout: 250ms  # per-getent lookup timeout; cached in-process
+  reap_own_strays: true       # SIGTERM a los restos de un sermod anterior en su propio cgroup al arrancar
   state_cache_size: 64M       # SQLite page cache for the state database
   retention_1m: 3h            # historial por minuto (los gráficos de 1h)
   retention_5m: 30h           # historial de 5 minutos (los gráficos de 24h)
@@ -520,6 +521,17 @@ de modo que los services que aún están subiendo no se marquen ni remedien
 prematuramente. La espera se aplica una vez, al arrancar, antes de que ningún worker se
 ejecute; una señal de apagado durante la espera aborta limpiamente sin iniciar ningún
 worker. El valor por defecto `0` lo desactiva.
+
+`engine.reap_own_strays` es la higiene de arranque de sermod consigo mismo: al
+arrancar, antes de haber lanzado nada propio, sermod envía `SIGTERM` a cada proceso
+que quede en **su propio** control group de unidad de init. Una unidad configurada
+con `KillMode=process` o `KillMode=none` deja ahí los hijos de la encarnación
+anterior, y cada uno sigue reteniendo sus descriptores, instancias inotify y
+memoria. Solo se ejecuta cuando el control group de sermod es una unidad
+**service** de systemd — nunca desde un shell de login, donde compartiría scope con
+el propio shell del operador —, envía solo `SIGTERM` y emite un evento por proceso
+señalizado. Está activo por defecto; ponlo en `false` para desactivarlo. Ver
+[safety.es.md](safety.es.md).
 
 `engine.user_lookup` controla cómo Sermo convierte los nombres de usuario/grupo en
 valores UID/GID para la identidad de proceso en runtime:
@@ -2204,7 +2216,7 @@ combinarse con `then.notify_interval`.
 **Las checks y los watches comparten los mismos tipos de comprobación.**
 Cualquier comprobación de un solo disparo — las de recursos de host de abajo
 (`storage`, `memory`, `pressure`, `load`, `fds`, `pids`, `conntrack`, `entropy`,
-`zombies`, `oom`, `failed_units`, entre otras) *y* las comprobaciones de service (`tcp`, `tcp_connections`, `ssh_idle`,
+`zombies`, `oom`, `failed_units`, `inotify`, entre otras) *y* las comprobaciones de service (`tcp`, `tcp_connections`, `ssh_idle`,
 `ports`, `http`, `command`, `file_exists`, `file`, `lockfile`, `binary`,
 `pidfile`, `socket`, `libraries`, `config`, `autofs`, `route`, `clock`,
 `firewall_rules`, `cert`, `sqlite`/`sqlite3`, `websocket`, `count`, y las
@@ -3093,6 +3105,49 @@ casa con ningún selector `exe` y nunca recibe señales — ver
 [safety.es.md](safety.es.md). Este check reporta la condición; no relaja esa
 regla.
 
+### `strays` — procesos que el servicio no puede justificar
+
+De ámbito de servicio. Reporta los miembros del control group de la unidad de init
+del servicio que ningún selector configurado reclama y que ya no dependen del
+proceso principal de la unidad — una sonda que se demonizó, un hijo que el daemon
+nunca recogió, un superviviente de una encarnación anterior. Ver
+[safety.es.md](safety.es.md) para la definición completa.
+
+Este check no se escribe: Sermo lo inyecta, con el nombre `strays`, en cada
+servicio gestionado por init que declare `processes:` o `pidfile:`. No acepta
+campos —lo que cuenta como stray se deduce de los selectores del propio servicio y
+de su control group— ni umbral, porque la cuenta esperada es cero.
+
+Reporta **estado**: la cuenta y los ejecutables aparecen en el dashboard y en
+`sermoctl status`, y nunca reducen la salud del servicio ni su SLA. El daemon está
+sirviendo; simplemente algo se acumuló al lado.
+
+A diferencia de `stale_binary`, **no se inyecta ninguna regla con él**. En hosts
+reales la condición en bruto está dominada por workloads que un perfil marcó
+legítimamente como `delegated: true` (shims de contenedor, bricks de Gluster, los
+pares `dnsmasq` de libvirt), así que una alerta a nivel de flota reportaría sobre
+todo cobertura incompleta del catálogo — y el remedio para eso es un selector, no un
+reap. Alertar es por tanto decisión del operador:
+
+```yaml
+rules:
+  alert-on-strays:
+    if: { failed: { check: strays } }
+    for: { cycles: 3 }        # ignora un resto que se limpia solo
+    then:
+      action: alert
+      message: "${display_name} acumuló ${check.value} proceso(s) sin justificar"
+```
+
+Los servicios con un backend `control:` externo (docker, libvirt) no reciben el
+check inyectado: ahí se atribuye al servicio todo el conjunto de PIDs del
+contenedor o del dominio, así que un proceso que ningún selector nombra es normal y
+no un resto.
+
+Limpiar un stray es un paso aparte y manual — `sermoctl reap SERVICE --apply`,
+controlado por el `reap.kill_only_if` del propio servicio (ver
+[services.es.md](services.es.md)). Ninguna acción de regla puede hacer reap.
+
 ### `process` — proceso por nombre
 
 Un watch `process` rastrea los procesos cuyo **nombre** coincide (el basename del exe
@@ -3223,9 +3278,13 @@ configurados: `dry_run` aplica a services y watches; `stop_policy`, `policy` y
 `rule_window` aplican a services. Los ajustes de ámbito de motor (`interval`,
 `max_parallel_checks`, `default_timeout`,
 `operation_timeout`, `artifact_interval`, `startup_delay`, `backend`, `user_lookup`,
-`user_lookup_timeout`, `state_cache_size`, las ventanas `retention_*` y
-`rollup_interval` y `service_restart_notice`) son configuración del daemon y
-nunca se fusionan con un service.
+`user_lookup_timeout`, `reap_own_strays`, `state_cache_size`, las ventanas
+`retention_*` y `rollup_interval` y `service_restart_notice`) son configuración del
+daemon y nunca se fusionan con un service.
+
+El bloque `reap:` de un servicio tampoco es deliberadamente una clave de
+`defaults`: un `kill_only_if` global daría a cada servicio la misma autoridad de
+kill sobre procesos que ninguno de ellos puede nombrar.
 
 Para limpiar residuales de servicios, `defaults.stop_policy.force_kill` acepta
 `false`, `true` o `auto`. `true` requiere un selector `kill_only_if` explícito.

@@ -36,6 +36,7 @@ engine:
   startup_delay: 0  # grace before the first cycle after boot
   user_lookup: auto  # auto | native | getent | numeric
   user_lookup_timeout: 250ms  # per-getent lookup timeout; cached in-process
+  reap_own_strays: true  # at startup, SIGTERM whatever a previous sermod left in its own cgroup
   state_cache_size: 64M  # SQLite page cache for the state DB (K/M/G suffix)
   # Stored history, one archive per graph window. Each archive keeps the bucket
   # span that window actually draws, so the state DB stays bounded.
@@ -334,6 +335,11 @@ watches:
   failed-units:
     monitor: disabled
     check: { type: failed_units, backend: auto, count: { op: ">", value: 0 } }
+    then: { notify: [ops-email] }
+
+  inotify-limits:
+    monitor: disabled
+    check: { type: inotify, used_pct: { op: ">=", value: "80%" } }
     then: { notify: [ops-email] }
 
   decommissioned-check:
@@ -1038,6 +1044,15 @@ stop_policy:
     - /run/demo/*.tmp
     - { path: /var/cache/demo/runtime, recursive: true, }
 
+# Authorizes `sermoctl reap SERVICE --apply` to signal the service's stray
+# processes: control-group members no selector claims that no longer hang off the
+# unit's principal process. Without this block strays are reported and never
+# signalled; it is never inherited from defaults:.
+reap:
+  kill_only_if:
+    users: [root]
+    exe_any: [/usr/bin/dbus-daemon]
+
 policy:  # overrides defaults.policy for this catalog service
   cooldown: 10m
   max_actions: 5
@@ -1080,6 +1095,16 @@ rules:
     type: remediation
     if: { process: { exe: "${binary}", user: "${user}", state: absent } }
     then: { action: stop }
+  # The injected `strays` check reports control-group members no selector claims,
+  # but never alerts on its own: on most hosts the raw condition is a workload a
+  # profile marked `delegated: true`. Alerting is opt-in, per service.
+  alert-on-strays:
+    type: alert
+    if: { failed: { check: strays } }
+    for: { cycles: 3 }  # ignore a leftover that clears itself
+    then:
+      action: alert
+      message: "demo accumulated ${check.value} unaccounted-for process(es)"
   alert-host-pressure:
     type: alert  # system metrics may only alert
     notify: [team-slack]

@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 	"sync"
@@ -33,6 +34,12 @@ const (
 	commandRunTimeoutAfterFormat = commandRunErrorPrefix + "%s" + commandRunErrorSeparator + "timeout after %s: %w"
 	commandRunTimeoutFormat      = commandRunErrorPrefix + "%s" + commandRunErrorSeparator + "timeout: %w"
 	commandWaitDelay             = 2 * time.Second
+
+	// sessionBusAddressDisabled is a set-but-unusable D-Bus session address. Any
+	// value suppresses autolaunch; an unusable one also makes a tool that really
+	// wants the bus fail fast instead of running its own dbus-launch.
+	sessionBusAddressPrefix   = "DBUS_SESSION_BUS_ADDRESS="
+	sessionBusAddressDisabled = "disabled:"
 )
 
 // Result contains the observable result of an external command.
@@ -77,24 +84,29 @@ type UserRunner interface {
 type CommandRunner struct{}
 
 // Run executes name with args and captures stdout/stderr.
-func (CommandRunner) Run(ctx context.Context, name string, args ...string) (Result, error) {
-	start := time.Now()
-	//nolint:gosec // G204: argv comes from operator-configured checks/hooks via execx; no shell
-	cmd := exec.CommandContext(ctx, name, args...)
-	prepareCommandRuntime(cmd)
-	return runPrepared(ctx, cmd, start, name)
+func (r CommandRunner) Run(ctx context.Context, name string, args ...string) (Result, error) {
+	return r.run(ctx, "", name, args, false)
 }
 
 // RunUser executes name with args as user and captures stdout/stderr.
-func (CommandRunner) RunUser(ctx context.Context, user, name string, args ...string) (Result, error) {
+func (r CommandRunner) RunUser(ctx context.Context, user, name string, args ...string) (Result, error) {
+	return r.run(ctx, user, name, args, false)
+}
+
+// run is the one body behind Run/RunUser and their probe twins: an empty user
+// keeps the daemon's own identity, and reapGroup collects whatever the command
+// leaves running (see reapProcessGroup).
+func (CommandRunner) run(ctx context.Context, user, name string, args []string, reapGroup bool) (Result, error) {
 	start := time.Now()
 	//nolint:gosec // G204: argv comes from operator-configured checks/hooks via execx; no shell
 	cmd := exec.CommandContext(ctx, name, args...)
-	if err := prepareCommandUser(cmd, user); err != nil {
-		return Result{ExitCode: ExitCodeRunFailure, Duration: time.Since(start)}, err
+	if user != "" {
+		if err := prepareCommandUser(cmd, user); err != nil {
+			return Result{ExitCode: ExitCodeRunFailure, Duration: time.Since(start)}, err
+		}
 	}
 	prepareCommandRuntime(cmd)
-	return runPrepared(ctx, cmd, start, name)
+	return runPrepared(ctx, cmd, start, name, reapGroup)
 }
 
 // RunEnv is like Run, but allows providing a completely custom environment
@@ -108,22 +120,57 @@ func (CommandRunner) RunEnv(ctx context.Context, env []string, name string, args
 		cmd.Env = env
 	}
 	prepareCommandRuntime(cmd)
-	return runPrepared(ctx, cmd, start, name)
+	return runPrepared(ctx, cmd, start, name, false)
+}
+
+// RunProbe is Run for a read-only observation: after the command exits, the rest
+// of its process group is collected. See reapProcessGroup for why a probe must
+// not be allowed to leave a daemon behind.
+func (r CommandRunner) RunProbe(ctx context.Context, name string, args ...string) (Result, error) {
+	return r.run(ctx, "", name, args, true)
+}
+
+// RunProbeUser is RunProbe for a probe that must run as a specific OS user.
+func (r CommandRunner) RunProbeUser(ctx context.Context, user, name string, args ...string) (Result, error) {
+	return r.run(ctx, user, name, args, true)
 }
 
 func prepareCommandRuntime(cmd *exec.Cmd) {
 	prepareCommandProcessGroup(cmd)
+	cmd.Env = withSessionBusDisabled(cmd.Env)
 	cmd.Cancel = func() error {
 		return cancelCommandProcessGroup(cmd)
 	}
 	cmd.WaitDelay = commandWaitDelay
 }
 
+// withSessionBusDisabled pins DBUS_SESSION_BUS_ADDRESS so no command can
+// autolaunch a D-Bus session bus. A tool that wants one and finds the variable
+// unset starts its own `dbus-launch`, and that session daemon then outlives the
+// command for the life of the host, holding an inotify instance each time. None
+// of Sermo's commands need a session bus, and a set-but-unusable address makes
+// the attempt fail fast instead of leaking a daemon.
+//
+// A nil env means the command would have inherited this process's environment,
+// so it is materialized here to carry the override.
+func withSessionBusDisabled(env []string) []string {
+	if env == nil {
+		env = os.Environ()
+	}
+	out := make([]string, 0, len(env)+1)
+	for _, entry := range env {
+		if !strings.HasPrefix(entry, sessionBusAddressPrefix) {
+			out = append(out, entry)
+		}
+	}
+	return append(out, sessionBusAddressPrefix+sessionBusAddressDisabled)
+}
+
 // runPrepared executes a ready-to-run *exec.Cmd (with Stdout/Stderr and Env
 // already configured by the caller) and maps the result/error in the standard
 // execx way. It returns after the command context is cancelled even when a child
 // is stuck in uninterruptible kernel sleep and cannot be reaped immediately.
-func runPrepared(ctx context.Context, cmd *exec.Cmd, start time.Time, displayName string) (Result, error) {
+func runPrepared(ctx context.Context, cmd *exec.Cmd, start time.Time, displayName string, reapGroup bool) (Result, error) {
 	var stdout lockedBuffer
 	var stderr lockedBuffer
 	cmd.Stdout = &stdout
@@ -148,7 +195,12 @@ func runPrepared(ctx context.Context, cmd *exec.Cmd, start time.Time, displayNam
 		return result, fmt.Errorf(commandRunErrorFormat, displayName, err)
 	}
 
+	// Setpgid made the command its group's leader, so its pid is the group id.
+	pgid := cmd.Process.Pid
 	err := waitOrCancel(ctx, cmd)
+	if reapGroup {
+		reapProcessGroup(pgid)
+	}
 	result := Result{
 		Stdout:   stdout.String(),
 		Stderr:   stderr.String(),
@@ -304,6 +356,49 @@ func RunEnv(ctx context.Context, r Runner, env []string, timeout time.Duration, 
 		return er.RunEnv(ctx, env, name, args...)
 	}
 	return Result{}, fmt.Errorf("execx: runner does not support custom environment (got %T)", r)
+}
+
+// ProbeRunner is an optional interface implemented by runners that collect a
+// finished command's process group. Catalog version/preflight probes use it so an
+// observation cannot leave a daemon running on the host.
+type ProbeRunner interface {
+	Runner
+	RunProbe(ctx context.Context, name string, args ...string) (Result, error)
+	RunProbeUser(ctx context.Context, user, name string, args ...string) (Result, error)
+}
+
+// RunProbe is the fortified equivalent of Run for a catalog probe. Unlike
+// RunEnv it falls back to r.Run when the runner cannot collect process groups:
+// the collection is hardening, not a capability the caller's result depends on,
+// so a test fake stays usable.
+func RunProbe(ctx context.Context, r Runner, timeout time.Duration, name string, args ...string) (Result, error) {
+	ctx, cancel := deadline(ctx, timeout)
+	defer cancel()
+
+	if pr, ok := r.(ProbeRunner); ok {
+		//nolint:wrapcheck // CommandRunner already attaches the canonical command context; preserve injected runner errors for callers.
+		return pr.RunProbe(ctx, name, args...)
+	}
+	//nolint:wrapcheck // CommandRunner already attaches the canonical command context; preserve injected runner errors for callers.
+	return r.Run(ctx, name, args...)
+}
+
+// RunProbeUser is RunProbe for a probe that must execute as a specific OS user.
+// It falls back to the plain user run when the runner cannot collect process
+// groups, and fails closed when it cannot change users at all.
+func RunProbeUser(ctx context.Context, r Runner, timeout time.Duration, user, name string, args ...string) (Result, error) {
+	ctx, cancel := deadline(ctx, timeout)
+	defer cancel()
+
+	if pr, ok := r.(ProbeRunner); ok {
+		//nolint:wrapcheck // CommandRunner already attaches the canonical command context; preserve injected runner errors for callers.
+		return pr.RunProbeUser(ctx, user, name, args...)
+	}
+	if ur, ok := r.(UserRunner); ok {
+		//nolint:wrapcheck // CommandRunner already attaches the canonical command context; preserve injected runner errors for callers.
+		return ur.RunUser(ctx, user, name, args...)
+	}
+	return Result{ExitCode: ExitCodeRunFailure}, fmt.Errorf("execx: runner does not support user %q", user)
 }
 
 // IsContextErr reports whether err is a context cancellation or deadline.

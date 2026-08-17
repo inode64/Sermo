@@ -45,6 +45,14 @@ func EngineInt(cfg *config.Config, key string, fallback int) int {
 	return engineInt(cfg, key, fallback)
 }
 
+// EngineBoolDefaultTrue reads a boolean field from the engine block that is on
+// unless the operator explicitly turns it off. An absent or non-boolean value
+// keeps the feature enabled; validation is what rejects the non-boolean.
+func EngineBoolDefaultTrue(cfg *config.Config, key string) bool {
+	enabled, ok := engineValue(cfg, key).(bool)
+	return !ok || enabled
+}
+
 // EngineString reads a string field from the engine block ("" when unset).
 func EngineString(cfg *config.Config, key string) string {
 	return cfgval.AsString(engineValue(cfg, key))

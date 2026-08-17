@@ -126,6 +126,95 @@ func TestCommandRunnerTimeoutKillsProcessGroup(t *testing.T) {
 	}
 }
 
+// A probe that leaves a daemon behind is the bk1 incident in miniature:
+// `influxd version` autolaunched a D-Bus session daemon that survived every
+// probe, one leaked inotify instance per sampling round until uid 0 hit
+// fs.inotify.max_user_instances and the host could not start a user manager.
+func TestRunProbeCollectsSurvivingProcessGroup(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("process-group collection is linux-specific")
+	}
+	pidFile := filepath.Join(t.TempDir(), "daemon.pid")
+
+	// The probe exits immediately; the daemon it detached keeps running.
+	res, err := CommandRunner{}.RunProbe(context.Background(), "sh", "-c",
+		`sleep 30 >/dev/null 2>&1 </dev/null & printf '%s' "$!" > `+pidFile+`; echo version 1.2.3`)
+	if err != nil {
+		t.Fatalf("probe failed: %v (%+v)", err, res)
+	}
+	if got := strings.TrimSpace(res.Stdout); got != "version 1.2.3" {
+		t.Fatalf("stdout = %q, want the probe output", got)
+	}
+
+	data, err := os.ReadFile(pidFile)
+	if err != nil {
+		t.Fatalf("read daemon pid: %v", err)
+	}
+	pid, err := strconv.Atoi(strings.TrimSpace(string(data)))
+	if err != nil {
+		t.Fatalf("parse daemon pid %q: %v", data, err)
+	}
+	// The kill is asynchronous to the daemon's own exit; give it a moment.
+	for range 50 {
+		if !processStillExists(pid) {
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	_ = syscall.Kill(pid, syscall.SIGKILL)
+	t.Fatalf("daemon %d survived the probe", pid)
+}
+
+// Run must keep leaving background work alone: an operator hook may detach a
+// process on purpose, so only probes collect their group.
+func TestRunLeavesBackgroundWorkAlone(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("process-group collection is linux-specific")
+	}
+	pidFile := filepath.Join(t.TempDir(), "background.pid")
+
+	_, err := CommandRunner{}.Run(context.Background(), "sh", "-c",
+		`sleep 30 >/dev/null 2>&1 </dev/null & printf '%s' "$!" > `+pidFile)
+	if err != nil {
+		t.Fatalf("run failed: %v", err)
+	}
+	data, err := os.ReadFile(pidFile)
+	if err != nil {
+		t.Fatalf("read background pid: %v", err)
+	}
+	pid, err := strconv.Atoi(strings.TrimSpace(string(data)))
+	if err != nil {
+		t.Fatalf("parse background pid %q: %v", data, err)
+	}
+	defer func() { _ = syscall.Kill(pid, syscall.SIGKILL) }()
+	if !processStillExists(pid) {
+		t.Fatalf("background process %d was collected by a plain Run", pid)
+	}
+}
+
+// Every command carries a set-but-unusable session bus address, so no tool can
+// autolaunch its own bus daemon.
+func TestSessionBusAutolaunchIsDisabled(t *testing.T) {
+	res, err := CommandRunner{}.Run(context.Background(), "sh", "-c", `printf '%s' "$DBUS_SESSION_BUS_ADDRESS"`)
+	if err != nil {
+		t.Fatalf("run failed: %v", err)
+	}
+	if res.Stdout != sessionBusAddressDisabled {
+		t.Fatalf("DBUS_SESSION_BUS_ADDRESS = %q, want %q", res.Stdout, sessionBusAddressDisabled)
+	}
+
+	// A caller-supplied environment keeps its own variables and still gets the override.
+	res, err = CommandRunner{}.RunEnv(context.Background(),
+		[]string{"PATH=/bin:/usr/bin", "DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/0/bus", "KEEP=yes"},
+		"sh", "-c", `printf '%s|%s' "$DBUS_SESSION_BUS_ADDRESS" "$KEEP"`)
+	if err != nil {
+		t.Fatalf("run with env failed: %v", err)
+	}
+	if want := sessionBusAddressDisabled + "|yes"; res.Stdout != want {
+		t.Fatalf("stdout = %q, want %q", res.Stdout, want)
+	}
+}
+
 func TestCommandRunnerNotFound(t *testing.T) {
 	res, err := CommandRunner{}.Run(context.Background(), "sermo-no-such-command-xyz")
 	if err == nil {

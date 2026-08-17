@@ -55,6 +55,7 @@ const (
 	CheckTypeSocket           = "socket"
 	CheckTypeProcess          = "process"
 	CheckTypeStaleBinary      = "stale_binary"
+	CheckTypeStrays           = "strays"
 	CheckTypeMetric           = "metric"
 	CheckTypeLibraries        = "libraries"
 	CheckTypeCount            = "count"
@@ -96,6 +97,7 @@ const (
 	CheckTypeRoute            = "route"
 	CheckTypeFirewallRules    = "firewall_rules"
 	CheckTypeFailedUnits      = "failed_units"
+	CheckTypeInotify          = "inotify"
 )
 
 // CheckTypeTCPConnections counts established local TCP sockets on a port.
