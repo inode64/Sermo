@@ -47,12 +47,13 @@ any `security:` toggle that tries to disable them.
 ## The operation engine
 
 Every start/stop/restart/reload/resume — manual (`sermoctl`) or automatic (`sermod`) —
-runs through the same engine:
+runs through the same engine. The manual-only `repair` action uses that engine
+too, but is never eligible for automatic remediation:
 
 1. Acquire the internal operation lock (`<runtime>/ops/<service>.lock`); a live
    holder fails fast with exit `75` ("operation in progress").
 2. Block on any active named runtime lock.
-3. Run required preflight (start/restart/reload/resume).
+3. Run required preflight (start/restart/reload/resume/repair).
 4. Block if any guard blocks the action.
 5. Execute the action's service-manager phase:
    - Before either restart mode, a stable backend `inactive`/`failed` state plus
@@ -78,7 +79,14 @@ runs through the same engine:
    `rc-service … zap` (OpenRC). Best effort: it never fails a stop that already
    succeeded.
 7. Verify backend status where applicable and run required postflight for
-   start/restart/reload/resume.
+   start/restart/reload/resume/repair.
+
+`repair` is intentionally narrower than a general cleanup command. It first
+requires the init backend to report the service failed or inactive. It can then
+remove only a regular pidfile below `/run` whose exact PID is absent from
+`/proc`; a live PID, malformed file, symlink or non-runtime path fails closed.
+For a failed unit it also clears the init backend's failed marker through the
+same manager before the normal guarded start and postflight.
 
 The dashboard's **close SSH session** is a separate manual engine operation,
 never a rule action or automatic remediation. It takes the same operation and
@@ -198,7 +206,7 @@ Because the daemon runs as root:
   run their `argv` **as root** (never via a shell). Keep `/etc/sermo` writable
   only by root; anyone who can edit it can run code as root. Secrets belong in the
   environment (`${env:NAME}`), not in the file.
-- **The web UI** (when enabled) can start/stop/restart/reload/resume services and
+- **The web UI** (when enabled) can start/stop/restart/reload/resume/repair services and
   monitor/unmonitor targets as root, so it is hardened by default: it **binds to
   loopback** (`127.0.0.1`), supports
   **authentication** with a read-only guest role, requires the **`X-Sermo-Csrf`
@@ -231,7 +239,7 @@ check for a regular runtime artifact, like `socket:`, and does not block
 operations unless the operator also writes an explicit guard rule.
 
 The **internal operation lock** (`<paths.runtime>/ops/<service>.lock`)
-serializes start/stop/restart/reload/resume for one service. It is deliberately outside the
+serializes start/stop/restart/reload/resume/repair for one service. It is deliberately outside the
 named-lock namespace so it cannot collide with a user lock named `op`, is never
 listed as a named lock, and cannot be released by `sermoctl lock release`. A
 live holder makes a second operation fail fast with exit `75` ("operation in

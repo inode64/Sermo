@@ -19,6 +19,7 @@ const (
 	commandRestart   = actionRestart
 	commandReload    = actionReload
 	commandResume    = actionResume
+	commandRepair    = actionRepair
 	commandMonitor   = "monitor"
 	commandUnmonitor = "unmonitor"
 	commandPreflight = "preflight"

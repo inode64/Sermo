@@ -5,14 +5,13 @@ import (
 	"time"
 
 	"sermo/internal/operation"
-	"sermo/internal/rules"
 	"sermo/internal/state"
 )
 
 const operationSettlingMaxAge = 15 * time.Minute
 
 func beginOperationSettling(store OperationSettlingStore, service, action, source string) error {
-	if store == nil || !rules.ActionType(action).IsOperation() {
+	if store == nil || !operation.IsServiceAction(action) {
 		return nil
 	}
 	if err := store.SetOperationSettling(service, action, state.OperationSettlingRunning, source); err != nil {
@@ -27,11 +26,11 @@ func BeginOperationSettling(store OperationSettlingStore, service, action, sourc
 }
 
 func finishOperationSettling(store OperationSettlingStore, service, action, source string, result operation.Result, opErr error, activeAfterPostflightFailure bool) error {
-	if store == nil || !rules.ActionType(action).IsOperation() {
+	if store == nil || !operation.IsServiceAction(action) {
 		return nil
 	}
-	settleAfter := result.OK() || (activeAfterPostflightFailure && result.Status == operation.ResultPostflightFailed && rules.ActionType(action).CanRemainActiveAfterPostflightFailure())
-	if opErr == nil && settleAfter && rules.ActionType(action).SettlesAfter() {
+	settleAfter := result.OK() || (activeAfterPostflightFailure && result.Status == operation.ResultPostflightFailed && operation.CanRemainActiveAfterPostflightFailure(action))
+	if opErr == nil && settleAfter && operation.SettlesAfter(action) {
 		if err := store.SetOperationSettling(service, action, state.OperationSettlingSettling, source); err != nil {
 			return fmt.Errorf("mark post-operation settling for %s: %w", service, err)
 		}

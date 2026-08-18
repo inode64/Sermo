@@ -163,6 +163,7 @@ const actionPause = "pause";
 const actionMonitor = "monitor";
 const actionReload = "reload";
 const actionReap = "reap";
+const actionRepair = "repair";
 const actionRestart = "restart";
 const actionResume = "resume";
 const actionStart = "start";
@@ -193,11 +194,14 @@ const eventKindSuppressed = "suppressed";
 const eventStatusPreflightFailed = "preflight_failed";
 const eventStatusPostflightFailed = "postflight_failed";
 const eventStatusOrphanProcesses = "orphan_processes";
-const servicePreflightActions = [actionStart, actionStop, actionRestart];
-// The engine operations (mirrors operateActions in internal/web/server.go): the
+const servicePreflightActions = [actionStart, actionStop, actionRestart, actionRepair];
+// Only lifecycle actions that change the unit's running state propagate to
+// also_apply targets. Repair remains a deliberately one-service recovery.
+const serviceCascadeActions = [actionStart, actionStop, actionRestart];
+// The engine operations (mirrors operation.IsServiceAction in the API): the
 // actions that run through the operation pipeline, so they are the ones this
 // browser tracks in liveOps and the ones a named lock blocks.
-const serviceTrackedActions = [actionStart, actionStop, actionRestart, actionReload, actionResume];
+const serviceTrackedActions = [actionStart, actionStop, actionRestart, actionReload, actionResume, actionRepair];
 const activityCriticalStatuses = [targetStateFailed, mountStateError, eventStatusPreflightFailed, eventStatusPostflightFailed, eventStatusOrphanProcesses];
 const activityCriticalKinds = [mountStateError, eventKindHookFailed, eventKindNotifyFailed, eventKindExpandFailed, eventKindKillFailed, eventKindMakeStepFailed];
 const activityWarningKinds = [actionAlert, eventKindFiring, eventKindSuppressed, eventKindPanicSuppressed, eventKindNotifySuppressed, eventKindExpandSkipped, eventKindMakeStepSkipped];
@@ -338,6 +342,7 @@ const targetStateRanks = {
 };
 const operationActionStates = {
   [actionStart]: targetStateStarting,
+  [actionRepair]: targetStateStarting,
   [actionStop]: targetStateStopping,
   [actionRestart]: targetStateRestarting,
   [actionResume]: targetStateResuming,
@@ -363,7 +368,8 @@ function isShareableExpansionKey(key) {
   return isServiceExpansionKey(key) || isWatchExpansionKey(key) || isAppExpansionKey(key) || isLibraryExpansionKey(key);
 }
 function isServicePreflightAction(action) { return servicePreflightActions.includes(action); }
-function isDangerServiceAction(action) { return action === actionStop || action === actionRestart; }
+function isServiceCascadeAction(action) { return serviceCascadeActions.includes(action); }
+function isDangerServiceAction(action) { return action === actionStop || action === actionRestart || action === actionRepair; }
 
 // Action feedback must survive the dashboard refresh that almost every action
 // triggers: load() ends with a status clear, which used to wipe e.g.
@@ -2527,6 +2533,11 @@ function serviceLockedReason(s, action) {
   return `blocked by active lock${names.length === 1 ? "" : "s"}: ${names.join(", ")}`;
 }
 
+function serviceRepairAvailable(s) {
+  const st = (s.status || backendStatusUnknown).toLowerCase();
+  return st === targetStateFailed || st === backendStatusInactive;
+}
+
 function serviceActionDisabled(s, action, busy) {
   const st = (s.status || backendStatusUnknown).toLowerCase();
   const paused = st === targetStatePaused;
@@ -2535,6 +2546,8 @@ function serviceActionDisabled(s, action, busy) {
   switch (action) {
     case actionStart:
       return !!(busy || locked || st === backendStatusActive || paused);
+    case actionRepair:
+      return !!(busy || locked || !serviceRepairAvailable(s));
     case actionStop: return !!(busy || locked || stopped);
     case actionRestart: return !!(busy || locked);
     case actionResume: return !!(busy || locked || !paused);
@@ -2557,6 +2570,8 @@ function serviceActionDisabledReason(s, action, busy) {
       if (paused) return "service is paused";
       if (st === backendStatusActive) return "service is already running";
       return "";
+    case actionRepair:
+      return serviceRepairAvailable(s) ? "" : "repair is available only for a failed or inactive service";
     case actionStop: return stopped ? "service is already stopped" : "";
     case actionResume: return !paused ? "service is not paused" : "";
     case actionReload:
@@ -2581,6 +2596,9 @@ function actionDescribedBy(id, disabled, reason) {
 
 function servicePowerAction(s) {
   const st = (s.status || backendStatusUnknown).toLowerCase();
+  // A failed or inactive unit normally needs a guarded restart. Repair remains
+  // an explicit fallback for residual init/runtime state, never the default.
+  if (serviceRepairAvailable(s)) return actionRestart;
   return st === backendStatusActive || st === targetStatePaused ? actionStop : actionStart;
 }
 
@@ -2596,6 +2614,7 @@ function svcActionAriaLabel(s, action) {
   const name = displayName(s) || s.name || "";
   switch (action) {
     case actionStart: return `Start service ${name}`;
+    case actionRepair: return `Repair residual service state ${name}`;
     case actionStop: return `Stop service ${name}`;
     case actionRestart: return `Restart service ${name}`;
     case actionResume: return `Resume service ${name}`;
@@ -2609,6 +2628,7 @@ function svcActionAriaLabel(s, action) {
 function serviceActionGlyph(action) {
   switch (action) {
     case actionStart: return "▶";
+    case actionRepair: return "⚒";
     case actionStop: return "■";
     case actionRestart: return "↻";
     case actionResume: return "▶";
@@ -2660,10 +2680,11 @@ function serviceRowParts(s, opts = {}) {
       s.monitored
         ? serviceActionButton(s, actionUnmonitor, busy, true)
         : serviceActionButton(s, actionMonitor, busy, true),
+      serviceRepairAvailable(s) ? serviceActionButton(s, actionRepair, busy, true) : nothing,
     ];
     actions = me.can_act ? tpl`
         ${serviceActionButton(s, powerAction, busy, true, powerTitle)}
-        ${serviceActionButton(s, actionRestart, busy, true)}
+        ${powerAction !== actionRestart ? serviceActionButton(s, actionRestart, busy, true) : nothing}
         ${overflowActions}`
       : tpl`<span class="muted">read-only</span>`;
   }
@@ -6597,10 +6618,10 @@ function renderStatus(ctx) {
 async function act(name, action) {
   let noCascade = false;
   if (isServicePreflightAction(action) && !(await confirmAction(name, action))) return;
-  if (isServicePreflightAction(action)) {
+  if (isServiceCascadeAction(action)) {
     noCascade = confirmNoCascade;
-    confirmNoCascade = false;
   }
+  confirmNoCascade = false;
   const toggleKey = acquireMonitorToggle(expansionPrefixService, name, action);
   if (toggleKey === null) return;
   const tracked = isTrackedOperation(action);
@@ -7156,7 +7177,7 @@ async function confirmAction(name, action) {
     }
     syncConfirmPreflightButton(action);
     const alsoApply = (confirmCtx.detail?.also_apply || []);
-    const showCascade = alsoApply.length > 0 && isServicePreflightAction(action);
+    const showCascade = alsoApply.length > 0 && isServiceCascadeAction(action);
     if (cascadeWrap) cascadeWrap.classList.toggle("is-hidden", !showCascade);
     renderActionConfirm();
   } catch (e) {
@@ -7214,7 +7235,9 @@ function renderActionConfirm() {
     ? tpl`${fmtTimeTitled(ev.time)} · <span class="kind kind-${ev.kind}">${ev.kind || ""}</span> ${[ev.action, ev.status].filter(Boolean).join(" ")} <span class="muted">${ev.message || ""}</span>`
     : tpl`<span class="muted">none recorded</span>`;
   const preRows = pre ? tpl`<div class="confirm-preflight-block">${preflightRows(pre.checks || [])}</div>` : nothing;
-  const warning = ctx.action === actionRestart
+  const warning = ctx.action === actionRepair
+    ? "Repair is a manual recovery for a failed or inactive service. It removes only a proven-stale runtime pidfile, clears a failed init state and then uses the normal guarded start path."
+    : ctx.action === actionRestart
     ? "A safe restart stops the unit, verifies residual processes, then starts only if the stop phase is clean."
     : ctx.action === actionStart
       ? "Start will run through locks, guards and configured checks before the service is started."

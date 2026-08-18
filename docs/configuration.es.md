@@ -1137,8 +1137,13 @@ una recarga concurrente.
 - `POST /api/services/{name}/preflight` — ejecuta las mismas comprobaciones de preflight
   que `sermoctl preflight SERVICE`, sin iniciar ni detener nada.
 - `POST /api/services/{name}/{action}` — acción de service. `action` es `monitor`,
-  `unmonitor`, `start`, `stop`, `restart`, `reload` o `resume`;
+  `unmonitor`, `start`, `stop`, `restart`, `reload`, `resume` o `repair`;
   start/stop/restart/reload/resume pasan por el motor de operaciones seguras.
+  `repair` es solo manual: acepta únicamente un servicio failed/inactive, elimina
+  un pidfile regular bajo `/run` solo tras confirmar que su PID está muerto,
+  restablece el marcador de una unidad fallida mediante el gestor del backend y
+  continúa por el mismo arranque con guardas. Rechaza PID vivos, enlaces
+  simbólicos, pidfiles malformados y rutas fuera de `/run`.
 - `POST /api/services/{name}/reap` — señaliza los procesos stray del servicio,
   controlado por su propio `reap.kill_only_if`: sin él la respuesta reporta cada
   stray y no se señaliza ninguno. Equivalente a `sermoctl reap SERVICE --apply`. No

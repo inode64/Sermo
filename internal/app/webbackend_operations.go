@@ -62,7 +62,7 @@ func (b *WebBackend) operateError(name, action, msg string) web.ActionResult {
 	return web.ActionResult{OK: false, Message: msg}
 }
 
-// Operate runs a start/stop/restart/reload/resume action on a service.
+// Operate runs a start/stop/restart/reload/resume/repair action on a service.
 func (b *WebBackend) Operate(ctx context.Context, name, action string, opts web.OperateOpts) web.ActionResult {
 	e := b.entries[name]
 	if e == nil {
@@ -76,7 +76,7 @@ func (b *WebBackend) Operate(ctx context.Context, name, action string, opts web.
 	}
 
 	var r operation.Result
-	if opts.NoCascade || action == string(rules.ActionReload) || action == string(rules.ActionResume) || len(e.alsoApply) == 0 {
+	if opts.NoCascade || !operation.CascadesAlsoApply(action) || len(e.alsoApply) == 0 {
 		r = b.operationResultWithMonitor(ctx, name, action)
 	} else {
 		lookup := func(svc string) []string {
@@ -126,7 +126,7 @@ func (b *WebBackend) operationResultWithMonitor(ctx context.Context, name, actio
 }
 
 func (b *WebBackend) activeAfterPostflightFailure(ctx context.Context, name, action string, result operation.Result) bool {
-	if result.Status != operation.ResultPostflightFailed || !rules.ActionType(action).CanRemainActiveAfterPostflightFailure() {
+	if result.Status != operation.ResultPostflightFailed || !operation.CanRemainActiveAfterPostflightFailure(action) {
 		return false
 	}
 	e := b.entries[name]

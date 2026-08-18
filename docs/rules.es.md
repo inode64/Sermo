@@ -2457,6 +2457,12 @@ Esas operaciones usan el mismo motor de seguridad que las acciones manuales de C
 incluida la compuerta de identidad exacta de proceso para services activos antes de
 `restart`.
 
+`repair` se excluye deliberadamente de las acciones de regla. Solo está disponible
+para el operador mediante `sermoctl repair` y el dashboard, para un servicio
+failed o inactive cuyo estado residual de runtime o init necesita los pasos
+adicionales y seguros de recuperación; la remediación normal de un fallo usa
+`restart`.
+
 Las condiciones forman un árbol lógico con `and`/`or`/`not` y hojas:
 
 ```yaml

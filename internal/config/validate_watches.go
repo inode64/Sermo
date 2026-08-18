@@ -245,12 +245,8 @@ func validateServiceWatchType(name, typ, checkPath string, check map[string]any,
 // a guard (block) or an alert — rather than a fire-and-forget hook/notify/expand/kill
 // watch.
 func isRuleClassAction(action string) bool {
-	switch rules.ActionType(action) {
-	case rules.ActionRestart, rules.ActionStart, rules.ActionStop, rules.ActionReload,
-		rules.ActionResume, rules.ActionAlert, rules.ActionBlock:
-		return true
-	}
-	return false
+	typ := rules.ActionType(action)
+	return typ.IsOperation() || typ == rules.ActionAlert || typ == rules.ActionBlock
 }
 
 // validateWatchThenAction validates a unified service watch whose then declares a

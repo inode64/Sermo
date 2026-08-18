@@ -36,6 +36,22 @@ func TestSyncManualActionMonitoringPausesAndRestores(t *testing.T) {
 	}
 }
 
+func TestSyncManualActionMonitoringRestoresAfterRepair(t *testing.T) {
+	store := newFakeStore()
+	store.active["web"] = false
+	store.source["web"] = state.SourceCLIManualStop
+	result := operation.Result{Service: "web", Action: operation.ActionRepair, Status: operation.ResultOK}
+
+	change, err := SyncManualActionMonitoring(store, "web", operation.ActionRepair, result, state.SourceCLIManualStop, state.SourceCLI, false)
+
+	if err != nil {
+		t.Fatalf("repair sync: %v", err)
+	}
+	if !change.Changed || !change.Monitored || change.Action != eventActionMonitor {
+		t.Fatalf("repair change = %+v", change)
+	}
+}
+
 func TestSyncManualActionMonitoringPreservesExistingUnmonitor(t *testing.T) {
 	store := newFakeStore()
 	store.active["web"] = false

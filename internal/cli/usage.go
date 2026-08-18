@@ -29,7 +29,7 @@ var commandGroups = []commandGroup{
 	},
 	{
 		Title:    "Safe Service Operations",
-		Commands: []string{commandStart, commandStop, commandRestart, commandReload, commandResume, commandMonitor, commandUnmonitor, commandPreflight, commandProcesses, commandReap, commandLocks, commandLock},
+		Commands: []string{commandStart, commandStop, commandRestart, commandReload, commandResume, commandRepair, commandMonitor, commandUnmonitor, commandPreflight, commandProcesses, commandReap, commandLocks, commandLock},
 	},
 	{
 		Title:    "Mounts",
@@ -184,6 +184,20 @@ var commandUsages = []commandUsage{
 		},
 		Examples: []string{
 			"sermoctl stop postgres-main",
+		},
+	},
+	{
+		Name:    commandRepair,
+		Summary: "Repair a failed or inactive service through the safe operation engine.",
+		Usage: []string{
+			"sermoctl repair SERVICE",
+		},
+		Notes: []string{
+			"Repair is manual-only. It removes only a regular pidfile below /run when its exact PID is confirmed dead, resets a failed init-unit marker, then runs preflight, locks, guards and postflight before starting the service.",
+			"It refuses an active or unknown service, a live PID, a malformed pidfile, symlinks and any path outside /run.",
+		},
+		Examples: []string{
+			"sermoctl repair rabbitmq",
 		},
 	},
 	{

@@ -47,12 +47,13 @@ cualquier conmutador `security:` que intente desactivarlas.
 ## El motor de operaciones
 
 Cada start/stop/restart/reload/resume — manual (`sermoctl`) o automático (`sermod`) —
-pasa por el mismo motor:
+pasa por el mismo motor. La acción solo manual `repair` también usa ese motor,
+pero nunca puede ser una remediación automática:
 
 1. Adquirir el lock interno de operación (`<runtime>/ops/<service>.lock`); un titular
    vivo falla rápido con código de salida `75` ("operation in progress").
 2. Bloquear ante cualquier lock de runtime nombrado activo.
-3. Ejecutar el preflight requerido (start/restart/reload/resume).
+3. Ejecutar el preflight requerido (start/restart/reload/resume/repair).
 4. Bloquear si algún guard bloquea la acción.
 5. Ejecutar la fase del gestor de servicios correspondiente a la acción:
    - Antes de cualquiera de los dos modos de restart, un estado estable
@@ -80,7 +81,15 @@ pasa por el mismo motor:
    (systemd) o `rc-service … zap` (OpenRC). Best effort: nunca hace fallar un stop
    que ya tuvo éxito.
 7. Verificar el estado del backend cuando corresponda y ejecutar el postflight
-   requerido para start/restart/reload/resume.
+   requerido para start/restart/reload/resume/repair.
+
+`repair` es deliberadamente más limitado que una limpieza genérica. Primero
+exige que el backend de init informe el servicio como failed o inactive. Después
+solo puede eliminar un pidfile regular bajo `/run` cuyo PID exacto no exista en
+`/proc`; un PID vivo, fichero malformado, enlace simbólico o ruta fuera de
+`/run` falla de forma segura. Para una unidad failed también restablece el
+marcador de error del backend de init mediante el mismo gestor antes del
+arranque normal con guardas y postflight.
 
 El **close SSH session** del panel es una operación manual separada del motor,
 nunca una acción de regla ni remediación automática. Toma los mismos locks de
@@ -195,7 +204,7 @@ Dado que el daemon se ejecuta como root:
   ejecutan su `argv` **como root** (nunca mediante un shell). Mantén `/etc/sermo` escribible
   solo por root; cualquiera que pueda editarlo puede ejecutar código como root. Los secretos pertenecen al
   entorno (`${env:NAME}`), no al archivo.
-- **La interfaz web** (cuando está habilitada) puede start/stop/restart/reload/resume servicios y
+- **La interfaz web** (cuando está habilitada) puede start/stop/restart/reload/resume/repair servicios y
   monitor/unmonitor objetivos como root, así que está endurecida por defecto: **se enlaza a
   loopback** (`127.0.0.1`), soporta
   **autenticación** con un rol de invitado de solo lectura, requiere la cabecera **`X-Sermo-Csrf`**
@@ -228,7 +237,7 @@ controlado para un artefacto de runtime regular, como `socket:`, y no bloquea
 operaciones a menos que el operador también escriba una regla de guard explícita.
 
 El **lock interno de operación** (`<paths.runtime>/ops/<service>.lock`)
-serializa start/stop/restart/reload/resume para un servicio. Está deliberadamente fuera del
+serializa start/stop/restart/reload/resume/repair para un servicio. Está deliberadamente fuera del
 espacio de nombres de locks nombrados para que no pueda colisionar con un lock de usuario llamado `op`, nunca se
 lista como un lock nombrado, y no puede ser liberado por `sermoctl lock release`. Un
 titular vivo hace que una segunda operación falle rápido con código de salida `75` ("operation in
