@@ -889,6 +889,71 @@ class PostgresReplicationGenerationTest(unittest.TestCase):
             },
         )
 
+
+class ProcessPolicyGenerationTest(unittest.TestCase):
+    """Only reviewed PostgreSQL executables may enable a process policy."""
+
+    def generate(self, evidence: str):
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        root = Path(temp.name)
+        stage = root / "stage" / "host" / "out"
+        stage.mkdir(parents=True)
+        (stage / "init").write_text("systemd\n", encoding="utf-8")
+        (stage / "active_units").write_text("", encoding="utf-8")
+        (stage / "process_policy.tsv").write_text(evidence, encoding="utf-8")
+        report = generator.generate_for_host("host", stage, root / "configs", default_options())
+        policy_path = root / "configs/host/root/etc/sermo/watches/security-user-postgres.yml"
+        return report, policy_path
+
+    def test_generates_an_alert_only_policy_from_reviewed_postmaster_paths(self):
+        report, policy_path = self.generate(
+            "100\t110\tpostgres\tresolved\t/usr/lib/postgresql/18/bin/postgres\t\n"
+            "101\t110\tpostgres\tdeleted\t\t/usr/lib/postgresql/18/bin/postgres\n"
+            "102\t110\tpostgres\tresolved\t/tmp/postgres\t\n"
+            "103\t110\tpostgres\tresolved\t/usr/bin/bash\t\n"
+        )
+
+        policy = yaml.safe_load(policy_path.read_text(encoding="utf-8"))
+        self.assertEqual(policy["name"], "security-user-postgres")
+        self.assertEqual(policy["category"], "security")
+        self.assertTrue(policy["dry_run"])
+        self.assertNotIn("then", policy)
+        self.assertEqual(policy["check"]["type"], "process_policy")
+        self.assertEqual(policy["check"]["user"], "postgres")
+        self.assertEqual(
+            policy["check"]["allow"],
+            {"postgres-1": {"exe": "/usr/lib/postgresql/18/bin/postgres"}},
+        )
+        self.assertEqual(report["process_policies"][0]["processes"], 4)
+        self.assertEqual(
+            report["process_policies"][0]["deleted_executables"],
+            ["/usr/lib/postgresql/18/bin/postgres"],
+        )
+
+    def test_unreviewed_postgres_processes_do_not_enable_a_policy(self):
+        report, policy_path = self.generate(
+            "100\t110\tpostgres\tresolved\t/tmp/postgres\t\n"
+            "101\t110\tpostgres\tresolved\t/usr/bin/bash\t\n"
+        )
+
+        self.assertFalse(policy_path.exists())
+        self.assertEqual(report["process_policies"], [])
+        self.assertIn(
+            {"kind": "process_policy:postgres", "reason": "postgres has no reviewed postmaster executable path"},
+            report["skipped_watches"],
+        )
+
+    def test_collectors_keep_process_identity_evidence_credential_free(self):
+        for filename in ("remote_collect_inventory.sh", "remote_stage.sh"):
+            body = (Path(__file__).with_name(filename)).read_text(encoding="utf-8")
+            policy_start = body.index("# Execution-policy evidence")
+            policy_end = body.index("process_policy.tsv", policy_start)
+            policy_block = body[policy_start:policy_end]
+            self.assertIn('raw_exe="$(readlink "${pid}/exe"', policy_block)
+            self.assertNotIn("${pid}/cmdline", policy_block)
+
+
 class OomWatchGenerationTest(unittest.TestCase):
     """The OOM watch must fire on the first kill it sees."""
 

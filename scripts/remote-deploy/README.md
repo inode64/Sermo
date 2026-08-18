@@ -407,6 +407,16 @@ exited. The threshold is edge-triggered, so the crossing is reported once rather
 than every cycle, and again after a restart or a config reload, which re-arms the
 watcher's baseline.
 
+The collector also records credential-free process identity evidence
+(`process_policy.tsv`): PID, real UID/account and resolved, deleted or unresolved
+`/proc/<pid>/exe` path. It never stages command arguments. When it finds a running
+`postgres` account with a reviewed distribution postmaster path, the generator
+adds `security-user-postgres`: an alert-only `process_policy` watch with exact
+binary paths. It deliberately does not learn arbitrary binaries from the host,
+and it does not generate a policy for an account whose evidence is only
+unreviewed paths. A deleted or unresolved executable remains an alert at runtime
+until the operator resolves it; this generator never restarts PostgreSQL.
+
 For every md array discovered in the staged `/proc/mdstat`, the generator writes
 one individual `raid-<array>` watch. It watches degradation and exposes rebuild
 progress, while `sysfs_changes: true` tracks the array's member `state`,

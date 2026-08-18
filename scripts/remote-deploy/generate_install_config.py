@@ -158,6 +158,28 @@ NFS_ENDPOINT_TIMEOUT = "5s"
 ENDPOINT_CHECK_TYPES = {"dns", "http", "ports", "tcp"}
 EPMD_SERVICE_NAME = "epmd"
 RABBITMQ_USER = "rabbitmq"
+# The initial execution-policy profile is intentionally limited to PostgreSQL:
+# it has a narrowly identifiable service account and a single postmaster
+# executable family. More service users need an explicit reviewed profile; a
+# fleet inventory is not permission to allow every binary they run today.
+PROCESS_POLICY_POSTGRES_USER = "postgres"
+PROCESS_POLICY_POSTGRES_NAME = "security-user-postgres"
+PROCESS_POLICY_POSTGRES_DISPLAY_NAME = "PostgreSQL execution policy"
+PROCESS_POLICY_CATEGORY = "security"
+PROCESS_POLICY_CHECK_TYPE = "process_policy"
+PROCESS_POLICY_INTERVAL = "30s"
+PROCESS_POLICY_FACTS_FILE = "process_policy.tsv"
+PROCESS_POLICY_STATE_RESOLVED = "resolved"
+PROCESS_POLICY_STATE_DELETED = "deleted"
+PROCESS_POLICY_STATE_UNRESOLVED = "unresolved"
+PROCESS_POLICY_STATES = frozenset({
+    PROCESS_POLICY_STATE_RESOLVED,
+    PROCESS_POLICY_STATE_DELETED,
+    PROCESS_POLICY_STATE_UNRESOLVED,
+})
+PROCESS_POLICY_POSTGRES_PATH = re.compile(
+    r"^/(?:usr/lib64/postgresql-[0-9][^/]*/bin|usr/lib/postgresql/[0-9]+/bin)/postgres$"
+)
 # Every protocol probe registered in internal/conn. These dial a host:port just
 # like a `tcp` watch, so they need the same listening-socket evidence before a
 # generated service asserts them — otherwise a profile that probes ${host}
@@ -658,6 +680,90 @@ def parse_terminal_sessions(stage: Path) -> list[dict[str, str]]:
         seen.add(key)
         sessions.append({"multiplexer": multiplexer, "user": user, "binary": binary, "socket": socket})
     return sorted(sessions, key=lambda item: (item["multiplexer"], item["user"], item["socket"]))
+
+
+def parse_process_policy_facts(stage: Path) -> list[dict[str, str]]:
+    """Read the credential-free process identity evidence for policy profiles."""
+    facts: list[dict[str, str]] = []
+    for line in read_text(stage / PROCESS_POLICY_FACTS_FILE).splitlines():
+        fields = line.split("\t")
+        if len(fields) != 6:
+            continue
+        pid, uid, user, state, exe, exe_previous = fields
+        if not pid.isdecimal() or not uid.isdecimal() or not user:
+            continue
+        if state not in PROCESS_POLICY_STATES:
+            continue
+        if state == PROCESS_POLICY_STATE_RESOLVED and not exe.startswith("/"):
+            continue
+        if state == PROCESS_POLICY_STATE_DELETED and not exe_previous.startswith("/"):
+            continue
+        facts.append({
+            "pid": pid,
+            "uid": uid,
+            "user": user,
+            "state": state,
+            "exe": exe,
+            "exe_previous": exe_previous,
+        })
+    return facts
+
+
+def process_policy_executable(fact: dict[str, str]) -> str:
+    """Return a trusted-path candidate only for resolved or deleted evidence."""
+    if fact["state"] == PROCESS_POLICY_STATE_RESOLVED:
+        return fact["exe"]
+    if fact["state"] == PROCESS_POLICY_STATE_DELETED:
+        return fact["exe_previous"]
+    return ""
+
+
+def postgres_process_policy(stage: Path) -> tuple[dict | None, str]:
+    """Return a reviewed PostgreSQL allowlist, never a learned arbitrary one."""
+    facts = [fact for fact in parse_process_policy_facts(stage) if fact["user"] == PROCESS_POLICY_POSTGRES_USER]
+    if not facts:
+        return None, "postgres is not active"
+    executables: set[str] = set()
+    deleted: set[str] = set()
+    for fact in facts:
+        executable = process_policy_executable(fact)
+        if not executable or not PROCESS_POLICY_POSTGRES_PATH.fullmatch(executable):
+            continue
+        executables.add(executable)
+        if fact["state"] == PROCESS_POLICY_STATE_DELETED:
+            deleted.add(executable)
+    if not executables:
+        return None, "postgres has no reviewed postmaster executable path"
+    return {
+        "name": PROCESS_POLICY_POSTGRES_NAME,
+        "user": PROCESS_POLICY_POSTGRES_USER,
+        "processes": len(facts),
+        "allowlisted_executables": sorted(executables),
+        "deleted_executables": sorted(deleted),
+    }, ""
+
+
+def process_policy_watch(policy: dict) -> str:
+    """Render one alert-only host watch from a reviewed policy profile."""
+    allow = {
+        f"postgres-{index + 1}": {"exe": executable}
+        for index, executable in enumerate(policy["allowlisted_executables"])
+    }
+    check = {
+        "type": PROCESS_POLICY_CHECK_TYPE,
+        "user": policy["user"],
+        "allow": allow,
+    }
+    body = {
+        "name": policy["name"],
+        "display_name": PROCESS_POLICY_POSTGRES_DISPLAY_NAME,
+        "category": PROCESS_POLICY_CATEGORY,
+        "monitor": "enabled",
+        "dry_run": True,
+        "interval": PROCESS_POLICY_INTERVAL,
+        "check": check,
+    }
+    return yaml.safe_dump(body, sort_keys=False, default_flow_style=False).rstrip()
 
 
 def terminal_session_watches(sessions: list[dict[str, str]]) -> dict[str, dict]:
@@ -1994,6 +2100,7 @@ def generate_for_host(host_slug: str, stage: Path, configs_dir: Path, options: G
         "containers": {"enabled": [], "skipped": []},
         "virtual_machines": {"enabled": [], "skipped": []},
         "terminal_sessions": [],
+        "process_policies": [],
         "watches": {},
         "filesystems": [],
         "raid_arrays": [],
@@ -2112,6 +2219,13 @@ dry_run: true
 
     def skip(kind: str, reason: str) -> None:
         report["skipped_watches"].append({"kind": kind, "reason": reason})
+
+    postgres_policy, postgres_policy_skip = postgres_process_policy(stage)
+    if postgres_policy is None:
+        skip(f"{PROCESS_POLICY_CHECK_TYPE}:{PROCESS_POLICY_POSTGRES_USER}", postgres_policy_skip)
+    else:
+        add_watch("watches", postgres_policy["name"], process_policy_watch(postgres_policy))
+        report["process_policies"].append(postgres_policy)
 
     nfs_routes = parse_nfs_routes(read_text(stage / "nfs_routes"))
     nfs_endpoint_reports: dict[str, dict] = {}

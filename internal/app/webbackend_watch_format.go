@@ -34,14 +34,21 @@ func pluralSuffix(count int, singular string) string {
 }
 
 func processPIDList(samples []ProcInfo) string {
-	parts := make([]string, 0, min(len(samples), processPIDListLimit)+1)
-	for i, sample := range samples {
+	return limitedDisplayList(samples, func(sample ProcInfo) string { return strconv.Itoa(sample.PID) })
+}
+
+// limitedDisplayList keeps snapshot details bounded while making the omitted
+// count explicit. Process watches and process policies use the same limit so a
+// busy host cannot inflate an event, API response or dashboard row.
+func limitedDisplayList[T any](items []T, format func(T) string) string {
+	parts := make([]string, 0, min(len(items), processPIDListLimit)+1)
+	for i, item := range items {
 		if i >= processPIDListLimit {
 			break
 		}
-		parts = append(parts, strconv.Itoa(sample.PID))
+		parts = append(parts, format(item))
 	}
-	if extra := len(samples) - processPIDListLimit; extra > 0 {
+	if extra := len(items) - processPIDListLimit; extra > 0 {
 		parts = append(parts, fmt.Sprintf("+%d more", extra))
 	}
 	return strings.Join(parts, displayListSeparator)

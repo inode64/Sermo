@@ -298,6 +298,36 @@ if [ -r /etc/fstab ]; then
 		printf '%s\t%s\t%s\n' "$host" "$address" "$iface" >>"${out}/nfs_routes"
 	done < <(awk '$1 !~ /^#/ && ($3 == "nfs" || $3 == "nfs4") { print $1 }' /etc/fstab)
 fi
+
+# Execution-policy evidence is deliberately limited to real identity data: PID,
+# real UID/user and resolved executable state. Command lines often contain
+# credentials, so they stay out of the deployment archive; the daemon evaluates
+# an optional policy cmd constraint locally and never publishes it either.
+{
+	for pid in /proc/[0-9]*; do
+		[ -r "${pid}/status" ] || continue
+		uid="$(awk '/^Uid:/ { print $2; exit }' "${pid}/status" 2>/dev/null || true)"
+		[ -n "$uid" ] || continue
+		user="$(getent passwd "$uid" 2>/dev/null | awk -F: 'NR == 1 { print $1 }')"
+		[ -n "$user" ] || user="$uid"
+		raw_exe="$(readlink "${pid}/exe" 2>/dev/null || true)"
+		exe=""
+		exe_previous=""
+		case "$raw_exe" in
+			*" (deleted)")
+				state="deleted"
+				exe_previous="${raw_exe% (deleted)}"
+				;;
+			/*)
+				exe="$(readlink -f "${pid}/exe" 2>/dev/null || true)"
+				if [ -n "$exe" ]; then state="resolved"; else state="unresolved"; fi
+				;;
+			*) state="unresolved" ;;
+		esac
+		printf '%s\t%s\t%s\t%s\t%s\t%s\n' "${pid#/proc/}" "$uid" "$user" "$state" "$exe" "$exe_previous"
+	done
+} | sort -t "$(printf '\t')" -k3,3 -k1,1n >"${out}/process_policy.tsv"
+
 # Exim hints-database backend, one line per hints file Sermo's tidy watches
 # query. Those watches run a SQLite query, but Exim only writes SQLite hints when
 # it was built for them; the usual build writes Berkeley DB or tdb into the same

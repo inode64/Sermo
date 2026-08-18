@@ -4,6 +4,8 @@ import (
 	"maps"
 	"strings"
 	"testing"
+
+	"sermo/internal/checks"
 )
 
 // validateRawGlobal builds a minimal-but-valid global config (Validate always
@@ -92,6 +94,62 @@ func TestValidateWatchesGood(t *testing.T) {
 			},
 		},
 	})
+}
+
+func TestValidateProcessPolicyWatch(t *testing.T) {
+	valid := map[string]any{
+		"notifiers": map[string]any{"ops": map[string]any{"type": "wall"}},
+		"watches": map[string]any{
+			"postgres-policy": map[string]any{
+				"check": map[string]any{
+					"type": checks.CheckTypeProcessPolicy,
+					"user": "postgres",
+					"allow": map[string]any{
+						"postmaster": map[string]any{
+							"exe": "/usr/lib64/postgresql-18/bin/postgres",
+							"cmd": "^postgres -D /srv/postgres$",
+						},
+					},
+				},
+				"then": map[string]any{
+					"notify":          []any{"ops"},
+					"notify_interval": "5m",
+				},
+			},
+		},
+	}
+	assertNoWatchIssues(t, valid)
+
+	invalid := map[string]any{
+		"watches": map[string]any{
+			"postgres-policy": map[string]any{
+				"policy": map[string]any{"cooldown": "1m"},
+				"check": map[string]any{
+					"type": checks.CheckTypeProcessPolicy,
+					"allow": map[string]any{
+						"bad": map[string]any{
+							"exe":   "../postgres",
+							"cmd":   "postgres",
+							"extra": true,
+						},
+					},
+				},
+				"then": map[string]any{
+					"hook": map[string]any{"command": []any{"/bin/false"}},
+					"kill": map[string]any{},
+				},
+			},
+		},
+	}
+	assertWatchIssues(t, invalid,
+		"check.user is required for a process_policy check",
+		"check.allow.bad.exe must be a clean absolute resolved executable path",
+		"check.allow.bad.cmd must be anchored with ^ and $",
+		"check.allow.bad.extra is not supported",
+		"policy is not valid on an alert-only process_policy watch",
+		"then.hook is not valid on an alert-only process_policy watch",
+		"then.kill is not valid on an alert-only process_policy watch",
+	)
 }
 
 func TestValidateRaidNotifyOn(t *testing.T) {

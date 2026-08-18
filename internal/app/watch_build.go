@@ -94,6 +94,8 @@ func buildWatchEntry(name string, entry map[string]any, deps Deps, defaultInterv
 		return watchOrWarn(buildFileWatch(name, entry, checkEntry, deps, interval))(warnings)
 	case checks.CheckTypeProcess:
 		return watchOrWarn(buildProcWatch(name, entry, checkEntry, deps, interval))(warnings)
+	case checks.CheckTypeProcessPolicy:
+		return watchOrWarn(buildProcessPolicyWatch(name, entry, checkEntry, deps, interval))(warnings)
 	default:
 		return watchOrWarn(buildSingleWatch(name, entry, checkEntry, deps, interval))(warnings)
 	}
@@ -258,6 +260,8 @@ func unsupportedServiceWatchType(entry map[string]any) string {
 		return "net/icmp/swap watches are host-scoped; declare them under the global watches: section"
 	case checks.CheckTypeProcess:
 		return "the process watch matches host-wide (and can kill); use process_count or metric for service-scoped process monitoring, or declare a host watch"
+	case checks.CheckTypeProcessPolicy:
+		return "the process_policy watch audits a host-wide user account; declare it under the global watches: section"
 	}
 	return ""
 }
