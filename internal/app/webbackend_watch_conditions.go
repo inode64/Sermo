@@ -135,6 +135,7 @@ var watchTypeConditionBuilders = map[string]func(map[string]any) []web.WatchCond
 	checks.CheckTypeCount:         countWatchConditions,
 	checks.CheckTypeFile:          fileWatchConditions,
 	checks.CheckTypeProcess:       processWatchConditions,
+	checks.CheckTypeProcessPolicy: processPolicyWatchConditions,
 	checks.CheckTypeRoute:         routeWatchConditions,
 	checks.CheckTypeFirewallRules: firewallWatchConditions,
 	checks.CheckTypeFailedUnits:   failedUnitsWatchConditions,
@@ -177,6 +178,10 @@ func countWatchConditions(check map[string]any) []web.WatchCondition {
 func processWatchConditions(check map[string]any) []web.WatchCondition {
 	out := appendCompare(nil, checks.CheckKeyFor, cfgval.CompareOpGreaterEqual, cfgval.String(check[checks.CheckKeyFor]))
 	return appendEnabledFlag(out, check, checks.CheckKeyGone, checks.CheckKeyGone)
+}
+
+func processPolicyWatchConditions(check map[string]any) []web.WatchCondition {
+	return appendValue(nil, checks.CheckKeyUser, cfgval.AsString(check[checks.CheckKeyUser]))
 }
 
 func routeWatchConditions(check map[string]any) []web.WatchCondition {

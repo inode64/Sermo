@@ -43,6 +43,10 @@ cualquier conmutador `security:` que intente desactivarlas.
    propio servicio, comprobado por la misma barrera que cualquier otro kill.
    Ninguna acción de regla puede hacer reap, y un servicio sin bloque `reap:`
    reporta sus strays y no señaliza ninguno.
+10. **`process_policy` solo observa y alerta.** No tiene runner de operaciones,
+    backend de servicio ni ruta de señal. La validación permite únicamente
+    `then.notify` y `then.notify_interval`; una infracción de política no puede
+    reiniciar, reparar, matar ni cambiar de otro modo un proceso o servicio.
 
 ## El motor de operaciones
 

@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"maps"
 	"path/filepath"
+	"regexp"
 	"slices"
+	"strings"
 
 	"sermo/internal/cfgval"
 	"sermo/internal/checks"
@@ -71,6 +73,8 @@ func validateWatches(watches map[string]any, locksDir string, notifiers map[stri
 			validateFileCheck(name, check, entry, defaultNotify, add)
 		case checks.CheckTypeProcess:
 			validateProcessWatch(name, check, entry, defaultNotify, add)
+		case checks.CheckTypeProcessPolicy:
+			validateProcessPolicyWatch(name, check, entry, defaultNotify, add)
 		case "":
 			add(validationRequiredFormat, watchCheckFieldPath(name, checks.CheckKeyType))
 		default:
@@ -877,5 +881,83 @@ func validateProcessWatchKillSelector(name string, check, entry map[string]any, 
 	}
 	if cfgval.String(check[checks.CheckKeyUser]) == "" {
 		add("%s requires check.user", thenKillPath(watchPath(name)))
+	}
+}
+
+// validateProcessPolicyWatch validates the alert-only execution policy for one
+// real user. Every configured allow entry needs an exact absolute executable;
+// an optional cmd regex can only narrow that executable identity. The policy
+// never accepts a hook or native action, so a configuration mistake cannot turn
+// an observation watch into a process-control path.
+func validateProcessPolicyWatch(name string, check, entry map[string]any, defaultNotify []string, add func(string, ...any)) {
+	validateStatefulWatchEntry(name, checks.CheckTypeProcessPolicy, entry, add)
+	if cfgval.String(check[checks.CheckKeyUser]) == "" {
+		add("%s is required for a process_policy check", watchCheckFieldPath(name, checks.CheckKeyUser))
+	}
+	allows, ok := check[checks.CheckKeyAllow].(map[string]any)
+	if !ok || len(allows) == 0 {
+		add("%s is required and must be a non-empty mapping for a process_policy check", watchCheckFieldPath(name, checks.CheckKeyAllow))
+	} else {
+		for _, allowName := range slices.Sorted(maps.Keys(allows)) {
+			validateProcessPolicyAllow(name, allowName, allows[allowName], add)
+		}
+	}
+	if _, present := entry[sectionPolicy]; present {
+		add("%s is not valid on an alert-only process_policy watch", watchFieldPath(name, sectionPolicy))
+	}
+	validateAlertOnlyWatchThen(name, entry, defaultNotify, add)
+}
+
+func validateProcessPolicyAllow(name, allowName string, raw any, add func(string, ...any)) {
+	prefix := watchCheckFieldPath(name, checks.CheckKeyAllow) + "." + allowName
+	allow, ok := raw.(map[string]any)
+	if !ok {
+		add(validationMappingFormat, prefix)
+		return
+	}
+	for _, key := range slices.Sorted(maps.Keys(allow)) {
+		if key != checks.CheckKeyExe && key != process.SelectorKeyCmd {
+			add(validationNotSupportedFormat, prefix+"."+key)
+		}
+	}
+	exe := cfgval.String(allow[checks.CheckKeyExe])
+	if exe == "" {
+		add("%s.%s is required", prefix, checks.CheckKeyExe)
+	} else if !filepath.IsAbs(exe) || filepath.Clean(exe) != exe {
+		add("%s.%s must be a clean absolute resolved executable path", prefix, checks.CheckKeyExe)
+	}
+	if rawCmd, present := allow[process.SelectorKeyCmd]; present {
+		cmd, ok := rawCmd.(string)
+		if !ok || cmd == "" {
+			add("%s.%s must be a non-empty anchored RE2 expression", prefix, process.SelectorKeyCmd)
+			return
+		}
+		if !strings.HasPrefix(cmd, "^") || !strings.HasSuffix(cmd, "$") {
+			add("%s.%s must be anchored with ^ and $", prefix, process.SelectorKeyCmd)
+		}
+		if _, err := regexp.Compile(cmd); err != nil {
+			add("%s.%s is invalid: %v", prefix, process.SelectorKeyCmd, err)
+		}
+	}
+}
+
+// validateAlertOnlyWatchThen permits only notification delivery on an
+// execution-policy watch. Omitting then remains valid and records a dashboard
+// and event-log alert without running an external action.
+func validateAlertOnlyWatchThen(name string, entry map[string]any, defaultNotify []string, add func(string, ...any)) {
+	prefix := watchPath(name)
+	then, ok := watchThenMapping(prefix, entry, add)
+	if !ok {
+		return
+	}
+	for _, key := range slices.Sorted(maps.Keys(then)) {
+		if !IsAlertOnlyWatchThenKey(key) {
+			add("%s is not valid on an alert-only process_policy watch", thenFieldPath(prefix, key))
+		}
+	}
+	notify := cfgval.StringList(then[rules.RuleFieldNotify])
+	validateWatchNotifyInterval(prefix, then, false, notify, defaultNotify, add)
+	if len(then) == 0 {
+		add("%s requires notify or omit then for dashboard/event-log alerts", prefix+"."+rules.RuleFieldThen)
 	}
 }

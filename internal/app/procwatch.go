@@ -29,11 +29,18 @@ type ProcMatch struct {
 // ProcInfo is one matched process's current resource counters. CPU and IO are
 // cumulative; the watch derives rates from successive samples.
 type ProcInfo struct {
-	PID      int
-	User     string
-	UID      uint32
-	Exe      string
-	ExeOK    bool
+	PID   int
+	User  string
+	UID   uint32
+	Exe   string
+	ExeOK bool
+	// ExePrev identifies a process still running a replaced binary. It is
+	// diagnostic-only: like an unreadable executable, it never authorizes an
+	// executable match.
+	ExePrev string
+	// Cmdline is retained only for an explicit process-policy cmd constraint.
+	// It is never published to events, notifications or the Web UI.
+	Cmdline  []string
 	CPUTicks uint64 // accumulated CPU jiffies (utime+stime)
 	RSS      uint64 // resident memory bytes
 	IOBytes  uint64 // cumulative read+write bytes (/proc/<pid>/io)
@@ -562,11 +569,13 @@ func (w *procWatcher) matchingProcess(pid int) (ProcInfo, bool) {
 
 func (s ProcInfo) asProcess() process.Process {
 	return process.Process{
-		PID:   s.PID,
-		User:  s.User,
-		UID:   s.UID,
-		Exe:   s.Exe,
-		ExeOK: s.ExeOK,
+		PID:     s.PID,
+		User:    s.User,
+		UID:     s.UID,
+		Exe:     s.Exe,
+		ExeOK:   s.ExeOK,
+		ExePrev: s.ExePrev,
+		Cmdline: s.Cmdline,
 	}
 }
 
@@ -623,7 +632,10 @@ func (s osProcSampler) Sample(m ProcMatch) ([]ProcInfo, bool) {
 		if !ok || !procMatchesWithLookup(m, id, lookup) {
 			continue
 		}
-		info := ProcInfo{PID: pid, User: id.User, UID: id.UID, Exe: id.Exe, ExeOK: id.ExeOK}
+		info := ProcInfo{
+			PID: pid, User: id.User, UID: id.UID, Exe: id.Exe, ExeOK: id.ExeOK,
+			ExePrev: id.ExePrev, Cmdline: id.Cmdline,
+		}
 		if ticks, at, ok := mr.ProcessStart(pid); ok {
 			info.StartTicks, info.StartTime = ticks, at
 		}
