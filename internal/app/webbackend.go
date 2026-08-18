@@ -520,7 +520,7 @@ func newWebWatch(name string, entry map[string]any, globalNotify []string, defau
 		interval:      iv,
 		disabled:      cfgval.Disabled(entry),
 		monitorMode:   config.MonitorMode(entry),
-		fireOnFail:    checks.IsHealthType(ctype),
+		fireOnFail:    checks.IsHealthType(ctype) || ctype == checks.CheckTypeProcessPolicy,
 		hasHook:       hasHook,
 		hookCommand:   hookCommand,
 		notifiers:     notifierNames,

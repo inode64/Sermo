@@ -43,6 +43,10 @@ any `security:` toggle that tries to disable them.
    `reap.kill_only_if` selector, checked by the same gate as every other kill. No
    rule action can reap, and a service with no `reap:` block reports its strays
    and signals none.
+10. **`process_policy` only observes and alerts.** It has no operation runner,
+    service backend or signal path. Validation permits only `then.notify` and
+    `then.notify_interval`; a policy violation cannot restart, repair, kill or
+    otherwise alter a process or service.
 
 ## The operation engine
 

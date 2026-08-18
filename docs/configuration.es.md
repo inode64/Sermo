@@ -83,6 +83,7 @@ directorio equivocado. La configuración distribuida la omite.
   - [Resúmenes de checks](#resúmenes-de-checks)
   - [file — atributos y vigencia de archivos/directorios](#file--atributos-y-vigencia-de-archivosdirectorios)
   - [process — proceso por nombre](#process--proceso-por-nombre)
+  - [process_policy — política de ejecución de usuario solo alerta](#process_policy--política-de-ejecución-de-usuario-solo-alerta)
 - [Valores por defecto globales](#valores-por-defecto-globales)
 - [Orden de resolución](#orden-de-resolución)
 - [Reglas de fusión](#reglas-de-fusión)
@@ -1840,7 +1841,10 @@ ese intervalo transcurre. Solo afecta a la entrega, por lo que requiere destinos
 aplican a las watches de storage, las comprobaciones de service de un solo disparo y los
 watches de métrica `net`/`icmp`/`swap`. Los watches `file` y `process` tienen su propio
 modelo de notificación — un evento por ruta cambiada o pid coincidente — e ignoran
-`notify_interval`.
+`notify_interval`. Un watch `process_policy` registra una alerta por cada
+muestra cuyo PID no tenga un tiempo de inicio legible, porque no puede
+identificar con seguridad esa encarnación del PID; si se configura,
+`notify_interval` sigue espaciando la entrega a los notifiers de esas alertas.
 
 **Emisión de eventos/notificaciones.** Los eventos automáticos `firing`/`alert` y sus
 notificaciones usan `on_change` por defecto: emiten cuando un watch o regla entra en un
@@ -3318,6 +3322,54 @@ condición de IO nunca se dispara. El filtro opcional `user:` se resuelve a trav
 `engine.user_lookup`; los UIDs numéricos se aceptan y evitan la ambigüedad del servicio
 de identidad del host. La WebUI muestra las coincidencias actuales, los PIDs y los
 contadores agregados RSS/IO.
+
+### `process_policy` — política de ejecución de usuario solo alerta
+
+Un watch host `process_policy` audita **todos los procesos cuyo UID real
+pertenece a un usuario configurado**. Sirve para cuentas de servicio que solo
+deben ejecutar un conjunto pequeño y revisado de binarios: un proceso debe
+coincidir con una entrada de `allow` por ruta `exe` absoluta y exacta y, cuando
+se configura, por una expresión RE2 `cmd` anclada. Un ejecutable irresoluble o
+un destino `/proc/<pid>/exe` marcado `(deleted)` siempre es una infracción,
+incluso cuando su ruta anterior aparece en la allowlist.
+
+```yaml
+name: security-user-postgres
+display_name: PostgreSQL execution policy
+category: security
+monitor: enabled
+interval: 30s
+check:
+  type: process_policy
+  user: postgres
+  allow:
+    postgres-18:
+      exe: /usr/lib/postgresql/18/bin/postgres
+    postgres-17:
+      exe: /usr/lib/postgresql/17/bin/postgres
+      cmd: '^/usr/lib/postgresql/17/bin/postgres(?: |$)'
+then:                         # opcional; omítelo para alerta solo en panel/evento
+  notify: [security]
+  notify_interval: 15m
+```
+
+`allow` no puede estar vacío. Cada entrada con nombre admite solo `exe` y un
+`cmd` opcional: `exe` debe ser una ruta absoluta limpia y `cmd` debe compilar y
+empezar por `^` y terminar por `$`. Se rechazan un basename, glob o comando
+parcial. La línea de comandos se usa solo para acotar más una entrada permitida;
+nunca se copia a la WebUI, eventos, entorno de notificaciones ni inventario
+generado.
+
+Este check es deliberadamente de **solo alerta**. Su bloque `then:` solo puede
+contener `notify` y `notify_interval`; `hook`, `kill`, `expand`, `makestep` y un
+bloque `policy:` son inválidos. No puede reiniciar, señalizar, reparar ni cambiar
+de otro modo la cuenta vigilada. Las infracciones disparan una vez por encarnación
+de PID (PID más tiempo de inicio), y se rearman para un proceso nuevo que reutilice
+el mismo PID. Si no se puede leer el tiempo de inicio, Sermo registra un evento
+`firing` por cada muestra infractora actual para no suprimir un PID reutilizado;
+si se configura, `notify_interval` sigue espaciando la entrega a los notifiers.
+La WebUI muestra la cuenta, los conteos de coincidencias activas e infracciones,
+PIDs y un motivo seguro, pero no argumentos de comandos.
 
 #### `then.kill` — terminar el proceso coincidente
 

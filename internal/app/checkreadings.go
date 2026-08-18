@@ -106,6 +106,7 @@ const (
 	watchReadingLabelPIDs                     = "PIDs"
 	watchReadingLabelPort                     = "Port"
 	watchReadingLabelProcess                  = "Process"
+	watchReadingLabelProcesses                = "Active processes"
 	watchReadingLabelProperty                 = "Property"
 	watchReadingLabelProtocol                 = "Protocol"
 	watchReadingLabelRead                     = "Read"
@@ -141,6 +142,8 @@ const (
 	watchReadingLabelUtilization              = "Utilization"
 	watchReadingLabelUser                     = "User"
 	watchReadingLabelValue                    = "Value"
+	watchReadingLabelViolationCount           = "Policy violations"
+	watchReadingLabelViolations               = "Violations"
 	watchReadingLabelVGFree                   = "VG free"
 	watchReadingLabelVGFreePct                = "VG free %"
 	watchReadingLabelVGSize                   = "VG size"
@@ -271,6 +274,7 @@ var checkReadingsByType = map[string]func(map[string]any) []web.WatchReading{
 	checks.CheckTypeFile:             fileCheckReadings,
 	checks.CheckTypeFileExists:       fileCheckReadings,
 	checks.CheckTypeProcess:          processCheckReadings,
+	checks.CheckTypeProcessPolicy:    processPolicyCheckReadings,
 	checks.CheckTypeStaleBinary:      staleBinaryCheckReadings,
 	checks.CheckTypeStrays:           straysCheckReadings,
 	checks.CheckTypeSize:             sizeCheckReadings,
@@ -618,6 +622,16 @@ func processCheckReadings(data map[string]any) []web.WatchReading {
 		addIntMetric(watchReadingFieldRSS, watchReadingLabelRSS, metrics.MetricUnitBytes).
 		addInt(watchReadingFieldCPUTicks, watchReadingLabelCPUTicks).
 		addIntMetric(metrics.MetricIO, watchReadingLabelIO, metrics.MetricUnitBytes).
+		readings()
+}
+
+func processPolicyCheckReadings(data map[string]any) []web.WatchReading {
+	return readingsFrom(data).
+		addString(watchReadingFieldUser, watchReadingLabelUser).
+		addInt(watchReadingFieldMatches, watchReadingLabelProcesses).
+		addInt(checks.DataKeyViolationCount, watchReadingLabelViolationCount).
+		addString(checks.DataKeyPIDs, watchReadingLabelPIDs).
+		addString(checks.DataKeyViolations, watchReadingLabelViolations).
 		readings()
 }
 

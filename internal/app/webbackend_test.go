@@ -2441,6 +2441,53 @@ func TestWatchSnapshotsFeedProcessView(t *testing.T) {
 	}
 }
 
+func TestWatchSnapshotsFeedProcessPolicyView(t *testing.T) {
+	now := time.Unix(1_700_000_000, 0)
+	snapshots := NewWatchSnapshots()
+	snapshots.now = func() time.Time { return now }
+	b := &WebBackend{
+		watchOrder: []string{"postgres-policy"},
+		watches: map[string]*webWatch{
+			"postgres-policy": {
+				name:       "postgres-policy",
+				checkType:  checks.CheckTypeProcessPolicy,
+				interval:   time.Minute,
+				fireOnFail: true,
+				check: map[string]any{
+					checks.CheckKeyType: checks.CheckTypeProcessPolicy,
+					checks.CheckKeyUser: "postgres",
+				},
+			},
+		},
+		watchSnapshots: snapshots,
+		now:            func() time.Time { return now },
+	}
+
+	snapshots.Publish("postgres-policy", checks.CheckTypeProcessPolicy, checks.Result{
+		Check:   "postgres-policy",
+		OK:      false,
+		Message: "process policy user postgres: pid 42 executable is not allowlisted (/usr/bin/bash)",
+		Data: map[string]any{
+			watchReadingFieldUser:        "postgres",
+			watchReadingFieldMatches:     3,
+			checks.DataKeyViolationCount: 1,
+			checks.DataKeyPIDs:           "42",
+			checks.DataKeyViolations:     "pid 42: executable is not allowlisted (/usr/bin/bash)",
+		},
+	})
+
+	ws := b.Watches(context.Background())
+	if len(ws) != 1 || ws[0].State != TargetStateFailed || !ws[0].FireOnFail {
+		t.Fatalf("process policy watch = %+v, want failed health-style view", ws)
+	}
+	if got := readingByField(ws[0].Readings, checks.DataKeyViolationCount).Value; got != "1" {
+		t.Fatalf("policy violation reading = %q, want 1", got)
+	}
+	if condition := ws[0].Conditions; len(condition) != 1 || condition[0].Field != checks.CheckKeyUser || condition[0].Value != "postgres" {
+		t.Fatalf("policy conditions = %+v", condition)
+	}
+}
+
 // fakeEnvRunnerForWeb is used to inject a custom execx runner via Deps.ExecxRunner
 // and verify that hooks in watches built for the web backend receive the expected env.
 type fakeEnvRunnerForWeb struct {

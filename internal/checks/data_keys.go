@@ -194,6 +194,8 @@ const (
 	DataKeyVersion            = "version"
 	DataKeyVersionOld         = "version_old"
 	DataKeyVersionShort       = "version_short"
+	DataKeyViolationCount     = "violation_count"
+	DataKeyViolations         = "violations"
 	DataKeyWindow             = "window"
 	DataKeyWindows            = "windows"
 	DataKeyActivityUnix       = "activity_unix"

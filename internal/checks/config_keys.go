@@ -10,6 +10,7 @@ import (
 const (
 	CheckKeyAbsentOK              = "absent_ok"
 	CheckKeyAnalyze               = "analyze"
+	CheckKeyAllow                 = "allow"
 	CheckKeyArray                 = "array"
 	CheckKeyLogicalVolume         = "logical_volume"
 	CheckKeyVolumeGroup           = "volume_group"

@@ -31,6 +31,13 @@ const (
 	WatchThenKeyNotifyOn       = "notify_on"
 )
 
+// IsAlertOnlyWatchThenKey reports whether key is permitted on a watch that may
+// only record and deliver an alert. Keep this vocabulary shared by config
+// validation and runtime builders so an unchecked config cannot widen it.
+func IsAlertOnlyWatchThenKey(key string) bool {
+	return key == rules.RuleFieldNotify || key == WatchThenKeyNotifyInterval
+}
+
 // WatchMakeStepKeySocket addresses chronyd's command socket for a clock watch's
 // then.makestep action. It aliases the check key so `socket` has one spelling.
 const WatchMakeStepKeySocket = checks.CheckKeySocket

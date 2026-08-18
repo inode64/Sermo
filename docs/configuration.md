@@ -81,6 +81,7 @@ configuration omits it.
   - [Check summaries](#check-summaries)
   - [file — file/directory attributes and freshness](#file--filedirectory-attributes-and-freshness)
   - [process — process by name](#process--process-by-name)
+  - [process_policy — alert-only user execution policy](#process_policy--alert-only-user-execution-policy)
 - [Global defaults](#global-defaults)
 - [Resolution order](#resolution-order)
 - [Merge rules](#merge-rules)
@@ -1778,7 +1779,10 @@ only affects delivery, so it requires `notify` targets. Both the edge-triggered
 default and `notify_interval` apply to storage watches, the standard
 single-shot service checks, and the `net`/`icmp`/`swap` metric watches. The
 `file` and `process` watches have their own notification model — one event per
-changed path or matching pid — and ignore `notify_interval`.
+changed path or matching pid — and ignore `notify_interval`. A `process_policy`
+watch records an alert for every sample whose PID lacks a readable start time,
+because it cannot safely identify that PID incarnation; if configured,
+`notify_interval` still paces notifier delivery for those alerts.
 
 **Event/notification emission.** Automatic `firing`/`alert` events and their
 notifications default to `on_change`: emit when a watch or rule enters a firing
@@ -3212,6 +3216,52 @@ it (typically running as root); when it is unreadable the IO condition never fir
 The optional `user:` filter is resolved through `engine.user_lookup`; numeric
 UIDs are accepted and avoid host identity-service ambiguity. The WebUI shows
 current matches, PIDs and aggregate RSS/IO counters.
+
+### `process_policy` — alert-only user execution policy
+
+A `process_policy` host watch audits **every process whose real UID belongs to
+one configured user**. It is for service accounts that must execute a small,
+reviewed set of binaries: a process must match one `allow` entry with an exact,
+absolute `exe` path and, when configured, an anchored RE2 `cmd` expression.
+An unresolved executable or a `/proc/<pid>/exe` target marked `(deleted)` is
+always a violation, even when its previous path appears in the allowlist.
+
+```yaml
+name: security-user-postgres
+display_name: PostgreSQL execution policy
+category: security
+monitor: enabled
+interval: 30s
+check:
+  type: process_policy
+  user: postgres
+  allow:
+    postgres-18:
+      exe: /usr/lib/postgresql/18/bin/postgres
+    postgres-17:
+      exe: /usr/lib/postgresql/17/bin/postgres
+      cmd: '^/usr/lib/postgresql/17/bin/postgres(?: |$)'
+then:                         # optional; omit for dashboard/event-only alerting
+  notify: [security]
+  notify_interval: 15m
+```
+
+`allow` is non-empty. Each named entry accepts only `exe` and optional `cmd`:
+`exe` must be a clean absolute path, and `cmd` must compile and start with `^`
+and end with `$`. A basename, glob or partial command is rejected. The command
+line is used only to make an allow entry narrower; it is never copied into the
+WebUI, events, notification environment or generated inventory.
+
+This is intentionally an **alert-only** check. Its `then:` block may contain
+only `notify` and `notify_interval`; `hook`, `kill`, `expand`, `makestep` and a
+`policy:` block are invalid. It cannot restart, signal, repair or otherwise
+change the watched account. Violations fire once per PID incarnation (PID plus
+start time), re-arming for a new process that reuses the same PID. When the
+start time cannot be read, Sermo records a firing event for every current
+violating sample rather than risk suppressing a reused PID; `notify_interval`,
+when configured, still paces notifier delivery. The WebUI shows the account,
+active-match and violation counts, PIDs and a safe reason, but no command
+arguments.
 
 #### `then.kill` — terminate the matched process
 

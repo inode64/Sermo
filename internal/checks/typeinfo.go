@@ -103,6 +103,11 @@ const (
 // CheckTypeTCPConnections counts established local TCP sockets on a port.
 const CheckTypeTCPConnections = "tcp_connections"
 
+// CheckTypeProcessPolicy is a host-only, alert-only process execution policy
+// watch. It is built by internal/app rather than the single-shot registry
+// because it evaluates every process of one real user as a set.
+const CheckTypeProcessPolicy = "process_policy"
+
 var checkSpecByName = mustIndexCheckSpecs(builtinCheckSpecs)
 
 func mustIndexCheckSpecs(specs []checkSpec) map[string]checkSpec {
