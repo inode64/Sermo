@@ -1,6 +1,6 @@
 // Package web serves a small read-and-act dashboard for the daemon: it lists the
 // monitored services with their status and lets an operator monitor/unmonitor and
-// start/stop/restart/reload/resume them. It is deliberately minimal and depends on the daemon
+// start/stop/restart/reload/resume/repair them. It is deliberately minimal and depends on the daemon
 // only through the Backend interface, so it stays decoupled and testable.
 //
 // Access is optional HTTP Basic auth with admin (read+act) and guest (read-only)
@@ -140,11 +140,11 @@ const (
 	apiActionRestart   = string(rules.ActionRestart)
 	apiActionReload    = string(rules.ActionReload)
 	apiActionResume    = string(rules.ActionResume)
+	apiActionRepair    = operation.ActionRepair
 	apiActionMonitor   = "monitor"
 	apiActionUnmonitor = "unmonitor"
-	// apiActionReap is deliberately absent from operateActions: it is not a rule
-	// action and does not change unit state, so it gets its own branch rather than
-	// joining the start/stop/restart set.
+	// apiActionReap is deliberately not a service operation: it does not change
+	// unit state, so it gets its own branch rather than joining the engine path.
 	apiActionReap       = process.SectionReap
 	apiActionExpand     = "expand"
 	apiActionProbe      = "probe"
@@ -1130,7 +1130,7 @@ type Backend interface {
 	// PruneEvents removes events older than 'before' (or all if zero time).
 	// Intended for the `sermoctl events clear` command.
 	PruneEvents(ctx context.Context, before time.Time) int
-	// Operate runs start|stop|restart|reload|resume on a service through the safe engine.
+	// Operate runs start|stop|restart|reload|resume|repair on a service through the safe engine.
 	Operate(ctx context.Context, name, action string, opts OperateOpts) ActionResult
 	// ReapStrays signals the service's stray processes, gated by its own
 	// reap.kill_only_if selector: with none declared it reports them and signals
@@ -1180,14 +1180,7 @@ type Backend interface {
 	SetPanic(ctx context.Context, on bool) ActionResult
 }
 
-// operateActions, monitorActions and watchOperateActions are the action verbs the API accepts.
-var operateActions = map[string]bool{
-	apiActionStart:   true,
-	apiActionStop:    true,
-	apiActionRestart: true,
-	apiActionReload:  true,
-	apiActionResume:  true,
-}
+// monitorActions and watchOperateActions are the non-operation action verbs the API accepts.
 var monitorActions = map[string]bool{apiActionMonitor: true, apiActionUnmonitor: true}
 var watchOperateActions = map[string]bool{apiActionExpand: true, apiActionProbe: true, apiActionPause: true, apiActionResume: true}
 
@@ -2045,7 +2038,7 @@ func (s *Server) handleAction(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue(apiParamName)
 	action := r.PathValue(apiParamAction)
 	switch {
-	case operateActions[action]:
+	case operation.IsServiceAction(action):
 		s.extendActionWriteDeadline(w)
 		opts := OperateOpts{NoCascade: queryBool(r, apiQueryNoCascade)}
 		res := backend.Operate(s.operateContext(r), name, action, opts) //nolint:contextcheck // see operateContext

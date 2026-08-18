@@ -38,7 +38,7 @@ func SyncManualActionMonitoring(store MonitorStore, service, action string, resu
 			return ManualMonitorChange{}, nil
 		}
 		return syncMonitorPause(store, service, service, stopSource, eventMessageMonitoringPausedAfterManualStop)
-	case rules.ActionStart, rules.ActionRestart, rules.ActionResume:
+	case rules.ActionStart, rules.ActionRestart, rules.ActionResume, rules.ActionType(operation.ActionRepair):
 		if !result.OK() && !activeAfterPostflightFailure {
 			return ManualMonitorChange{}, nil
 		}

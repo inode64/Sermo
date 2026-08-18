@@ -1156,14 +1156,14 @@ func TestReleaseLockEndpoint(t *testing.T) {
 func TestOperateActions(t *testing.T) {
 	b := &fakeBackend{}
 	h := newServer(b)
-	for _, action := range []string{apiActionStart, apiActionStop, apiActionRestart} {
+	for _, action := range []string{apiActionStart, apiActionStop, apiActionRestart, apiActionRepair} {
 		rec := httptest.NewRecorder()
 		h.ServeHTTP(rec, postReq(testServicePath("web", action)))
 		if rec.Code != http.StatusOK {
 			t.Fatalf("%s = %d", action, rec.Code)
 		}
 	}
-	want := []string{"web/" + apiActionStart, "web/" + apiActionStop, "web/" + apiActionRestart}
+	want := []string{"web/" + apiActionStart, "web/" + apiActionStop, "web/" + apiActionRestart, "web/" + apiActionRepair}
 	if strings.Join(b.operated, ",") != strings.Join(want, ",") {
 		t.Fatalf("operated = %v, want %v", b.operated, want)
 	}

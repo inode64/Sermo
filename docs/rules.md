@@ -2437,6 +2437,11 @@ may carry one `action` or an `actions` list (e.g. alert + restart together).
 Those operations use the same safety engine as manual CLI/Web actions, including
 the active-service exact process identity gate before `restart`.
 
+`repair` is deliberately not a rule action. It is available only to an operator
+through `sermoctl repair` and the dashboard for a failed or inactive service
+whose residual runtime or init state needs the extra, guarded recovery steps;
+normal failure remediation uses `restart`.
+
 Conditions form a logical tree with `and`/`or`/`not` and leaves:
 
 ```yaml

@@ -421,6 +421,42 @@ test("global search opens a service and exposes individual actions", async ({ pa
   await expect(row.locator('[data-service-action="unmonitor"]')).toBeVisible();
 });
 
+test("failed services prioritize restart and keep repair as a manual fallback", async ({ page }) => {
+  await page.route("**/api/services/failed-repair", async (route) => {
+    await route.fulfill({ json: {
+      name: "failed-repair", display_name: "Failed repair", category: "service", enabled: true,
+      monitored: true, status: "failed", state: "failed", can_reload: false,
+      also_apply: ["db"], unit: "failed-repair.service", checks: [], processes: [], locks: [], rules: [], sla: [],
+    } });
+  });
+  await page.route("**/api/dashboard**", async (route) => {
+    const body = JSON.parse(JSON.stringify(dashboard));
+    body.services.push({
+      name: "failed-repair", display_name: "Failed repair", category: "service", enabled: true,
+      monitored: true, status: "failed", state: "failed", can_reload: false,
+      also_apply: ["db"],
+      status_observed_at: "2026-07-10T12:00:00Z",
+    });
+    await route.fulfill({ json: body });
+  });
+  await page.reload();
+
+  const row = page.locator("#svc-row-failed-repair");
+  const actions = row.locator("[data-service-action]");
+  const rendered = await actions.evaluateAll((buttons) => buttons.map((button) => button.dataset.serviceAction));
+  expect(rendered[0]).toBe("restart");
+  expect(rendered.filter((action) => action === "restart")).toHaveLength(1);
+  expect(rendered[rendered.length - 1]).toBe("repair");
+
+  const repair = row.locator('[data-service-action="repair"]');
+  await expect(repair).toHaveAttribute("aria-label", "Repair residual service state Failed repair");
+  await repair.click();
+  await expect(page.locator("#action-confirm")).toBeVisible();
+  await expect(page.locator("#confirm-body")).toContainText("manual recovery for a failed or inactive service");
+  await expect(page.locator("#confirm-no-cascade-wrap")).toBeHidden();
+  await page.keyboard.press("Escape");
+});
+
 test("service SLA renders a status-page bar strip with incidents", async ({ page }) => {
   await page.locator("#svc-row-web .row-toggle").click();
   const detail = page.locator('[data-service-detail="web"]');

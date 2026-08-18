@@ -79,3 +79,23 @@ func TestOperationSettlingLifecycle(t *testing.T) {
 		t.Fatal("inactive postflight restart should clear operation settling")
 	}
 }
+
+func TestRepairOperationSettlesLikeStart(t *testing.T) {
+	store := newFakeStore()
+	result := operation.Result{Service: "web", Action: operation.ActionRepair, Status: operation.ResultOK}
+
+	if err := beginOperationSettling(store, "web", operation.ActionRepair, state.SourceWeb); err != nil {
+		t.Fatalf("begin repair: %v", err)
+	}
+	rec, found, err := store.OperationSettling("web")
+	if err != nil || !found || rec.Phase != state.OperationSettlingRunning || rec.Action != operation.ActionRepair {
+		t.Fatalf("running repair settling = %+v found=%v err=%v", rec, found, err)
+	}
+	if err := finishOperationSettling(store, "web", operation.ActionRepair, state.SourceWeb, result, nil, false); err != nil {
+		t.Fatalf("finish repair: %v", err)
+	}
+	rec, found, err = store.OperationSettling("web")
+	if err != nil || !found || rec.Phase != state.OperationSettlingSettling || rec.Action != operation.ActionRepair {
+		t.Fatalf("settled repair = %+v found=%v err=%v", rec, found, err)
+	}
+}

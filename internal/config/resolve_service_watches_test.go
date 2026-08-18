@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"sermo/internal/cfgval"
+	"sermo/internal/rules"
 )
 
 // resolveWatchService loads a single-service config whose body is `body` and
@@ -332,6 +333,24 @@ func TestValidateUnifiedWatchActions(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			mustHave(t, validateService(t, base+tc.body), tc.want)
+		})
+	}
+}
+
+func TestValidateUnifiedWatchOperationActions(t *testing.T) {
+	base := "name: svc\nservice: x\npolicy: { cooldown: 5m }\n"
+	for _, action := range []rules.ActionType{
+		rules.ActionStart,
+		rules.ActionStop,
+		rules.ActionRestart,
+		rules.ActionReload,
+		rules.ActionResume,
+	} {
+		t.Run(string(action), func(t *testing.T) {
+			service := base + "watches:\n  w:\n    check: { type: tcp, host: 127.0.0.1, port: 80 }\n    then: { action: " + string(action) + " }\n"
+			if issues := validateService(t, service); len(issues) != 0 {
+				t.Fatalf("action %q issues = %v, want none", action, issues)
+			}
 		})
 	}
 }

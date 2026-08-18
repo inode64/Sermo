@@ -19,7 +19,8 @@ during a backup, kills a process that happens to share a binary name, or acts on
 a service whose config is broken and makes the outage worse. Sermo is built
 around the opposite principle — **prove it is safe, then act**:
 
-- **Guarded, never blind.** Every start/stop/restart/reload/resume runs through
+- **Guarded, never blind.** Every start/stop/restart/reload/resume, plus the
+  manual stale-pidfile repair path, runs through
   one operation engine that checks preflight, guards and runtime locks first. A
   blocked action does not run.
 - **Knows the real processes.** It discovers a service's actual PIDs from
@@ -113,7 +114,7 @@ code-anchored diagrams (operation pipeline, lock states, monitoring cycle).
 ## The two binaries
 
 - **`sermoctl`** — the operator CLI: status, safe start/stop/restart/reload/
-  resume, config validate, locks, processes, preflight, per-service
+  resume/repair, config validate, locks, processes, preflight, per-service
   availability/SLA, inventory and events. Read-only commands do not need root.
 - **`sermod`** — the daemon: one independent worker per service runs checks,
   evaluates rules and drives remediation through the same safe operation engine

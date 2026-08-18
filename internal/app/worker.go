@@ -716,14 +716,14 @@ func (w *Worker) emitDryRunRemediation(ctx context.Context, ev *rules.Evaluator,
 
 func (w *Worker) executeRemediation(ctx context.Context, now func() time.Time, firing firingRule, action string) {
 	operate := w.operateForRemediation
-	if w.Cascade != nil && (action == string(rules.ActionStart) || action == string(rules.ActionStop) || action == string(rules.ActionRestart)) {
+	if w.Cascade != nil && operation.CascadesAlsoApply(action) {
 		operate = w.Cascade
 	}
 	result := operate(ctx, action)
 	if result.RecordsRemediation() {
 		w.State.Record(now(), w.Policy)
 	}
-	if result.OK() && (action == string(rules.ActionRestart) || action == string(rules.ActionStart) || action == string(rules.ActionReload) || action == string(rules.ActionResume)) {
+	if result.OK() && rules.ActionType(action).SettlesAfter() {
 		w.acknowledgeChanges()
 	}
 	w.emit(Event{Kind: eventKindForResult(result), Rule: firing.Name, Action: action, Status: string(result.Status), Message: result.Message})

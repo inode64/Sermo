@@ -385,6 +385,23 @@ func TestCascadeTargetErrorDowngradesPrimary(t *testing.T) {
 	}
 }
 
+func TestRepairDoesNotCascadeAlsoApply(t *testing.T) {
+	global := writeCascadeConfig(t)
+	app := actionApp(operation.Result{}, nil, nil, nil)
+	var calls []string
+	app.Operate = func(_ context.Context, _ options, _ *config.Config, _ config.Resolved, service, action string) (operation.Result, error) {
+		calls = append(calls, action+" "+service)
+		return operation.Result{Service: service, Action: action, Status: operation.ResultOK}, nil
+	}
+
+	if code := app.Run(context.Background(), []string{"--config", global, commandRepair, "web"}); code != exitSuccess {
+		t.Fatalf("repair exit = %d, want %d", code, exitSuccess)
+	}
+	if got := strings.Join(calls, ", "); got != "repair web" {
+		t.Fatalf("repair calls = %q, want only the named service", got)
+	}
+}
+
 func TestCascadeBackupBlockNotifiesInteractiveUser(t *testing.T) {
 	global := writeCascadeConfig(t)
 	app := actionApp(operation.Result{}, nil, nil, nil)

@@ -57,6 +57,9 @@ const (
 	actionRestart = string(rules.ActionRestart)
 	actionReload  = string(rules.ActionReload)
 	actionResume  = string(rules.ActionResume)
+	// actionRepair is manual-only and clears only proven-stale runtime pidfiles
+	// before running the normal guarded start path.
+	actionRepair = operation.ActionRepair
 	// actionReap is not a rule action: a stray process is one Sermo cannot name,
 	// so clearing one is always an operator's decision, never a remediation.
 	actionReap = process.SectionReap
@@ -401,6 +404,7 @@ var commandHandlers = map[string]commandHandler{
 	commandStop:      func(a App, ctx context.Context, opts options) int { return a.runAction(ctx, opts, opts.command) },
 	commandRestart:   func(a App, ctx context.Context, opts options) int { return a.runAction(ctx, opts, opts.command) },
 	commandResume:    func(a App, ctx context.Context, opts options) int { return a.runAction(ctx, opts, opts.command) },
+	commandRepair:    func(a App, ctx context.Context, opts options) int { return a.runAction(ctx, opts, opts.command) },
 	commandMount:     App.runMount,
 	commandUmount:    App.runUmount,
 	commandConfig:    func(a App, _ context.Context, opts options) int { return a.runConfig(opts) },
@@ -579,7 +583,7 @@ func (a App) runIsActive(ctx context.Context, opts options) int {
 	return exitNotActive
 }
 
-// runAction performs a start/stop/restart/reload/resume through the safe operation engine
+// runAction performs a start/stop/restart/reload/resume/repair through the safe operation engine
 // : the resolved service is run under the internal operation lock,
 // active named runtime locks, required preflight, guards, residual-process
 // handling and postflight. Manual sermoctl actions are not rate limited, but are
@@ -676,14 +680,10 @@ func (a App) requireReloadSupported(ctx context.Context, opts options, resolved 
 // result is returned and drives the exit code.
 func (a App) operateWithCascade(ctx context.Context, opts options, cfg *config.Config, resolved config.Resolved, service, action string, actionStore *state.Store) (operation.Result, error) {
 	targets := config.CascadeTargets(resolved.Tree)
-	// also_apply cascades only start/stop/restart, not reload/resume — and never
-	// reap, which acts on the strays of the one service the operator named.
-	if opts.noCascade || action == actionReload || action == actionResume || action == actionReap || len(targets) == 0 {
-		a.beginManualOperationSettling(cfg, actionStore, service, action)
-		out, err := a.Operate(ctx, opts, cfg, resolved, service, action)
-		activeAfterPostflightFailure := a.activeAfterPostflightFailure(ctx, opts, cfg, resolved, service, action, out, err)
-		a.finishManualOperationSettling(cfg, actionStore, service, action, out, err, activeAfterPostflightFailure)
-		return out, err
+	// also_apply cascades only lifecycle actions that change running state. Manual
+	// repair and reap always act on the one service the operator named.
+	if opts.noCascade || !operation.CascadesAlsoApply(action) || len(targets) == 0 {
+		return a.operateWithManualState(ctx, opts, cfg, resolved, service, action, actionStore)
 	}
 	lookup := func(svc string) []string {
 		r, errs := cfg.Resolve(svc)
@@ -706,10 +706,7 @@ func (a App) operateWithCascade(ctx context.Context, opts options, cfg *config.C
 			}
 			res = r
 		}
-		a.beginManualOperationSettling(cfg, actionStore, svc, action)
-		out, err := a.Operate(ctx, opts, cfg, res, svc, action)
-		activeAfterPostflightFailure := a.activeAfterPostflightFailure(ctx, opts, cfg, res, svc, action, out, err)
-		a.finishManualOperationSettling(cfg, actionStore, svc, action, out, err, activeAfterPostflightFailure)
+		out, err := a.operateWithManualState(ctx, opts, cfg, res, svc, action, actionStore)
 		if svc == service {
 			primary, primaryErr = out, err
 			continue
@@ -730,6 +727,18 @@ func (a App) operateWithCascade(ctx context.Context, opts options, cfg *config.C
 		}
 	}
 	return app.DowngradePrimaryOnCascadeFailure(primary, cascadeFailed), primaryErr
+}
+
+// operateWithManualState runs one manual service action and records its
+// monitoring and settling transition. The direct and cascade paths share it so
+// every action, including manual-only repair, has identical post-operation
+// state handling.
+func (a App) operateWithManualState(ctx context.Context, opts options, cfg *config.Config, resolved config.Resolved, service, action string, actionStore *state.Store) (operation.Result, error) {
+	a.beginManualOperationSettling(cfg, actionStore, service, action)
+	result, err := a.Operate(ctx, opts, cfg, resolved, service, action)
+	activeAfterPostflightFailure := a.activeAfterPostflightFailure(ctx, opts, cfg, resolved, service, action, result, err)
+	a.finishManualOperationSettling(cfg, actionStore, service, action, result, err, activeAfterPostflightFailure)
+	return result, err
 }
 
 // openStateStore opens the persistent state store under paths.state. It passes
@@ -770,7 +779,7 @@ func withStateStoreErr(ctx context.Context, cfg *config.Config, fn func(*state.S
 }
 
 func (a App) openManualActionStore(ctx context.Context, cfg *config.Config, action string) *state.Store {
-	if !operationActionUsesState(action) {
+	if !operation.IsServiceAction(action) {
 		return nil
 	}
 	store, err := openStateStore(ctx, cfg)
@@ -780,11 +789,6 @@ func (a App) openManualActionStore(ctx context.Context, cfg *config.Config, acti
 	}
 	return store
 }
-
-func operationActionUsesState(action string) bool {
-	return action == actionStart || action == actionStop || action == actionRestart || action == actionReload || action == actionResume
-}
-
 func (a App) beginManualOperationSettling(cfg *config.Config, store *state.Store, service, action string) {
 	if store == nil {
 		return
@@ -813,7 +817,7 @@ func (a App) finishManualOperationSettling(cfg *config.Config, store *state.Stor
 }
 
 func (a App) activeAfterPostflightFailure(ctx context.Context, opts options, _ *config.Config, resolved config.Resolved, service, action string, result operation.Result, opErr error) bool {
-	if opErr != nil || result.Status != operation.ResultPostflightFailed || !rules.ActionType(action).CanRemainActiveAfterPostflightFailure() {
+	if opErr != nil || result.Status != operation.ResultPostflightFailed || !operation.CanRemainActiveAfterPostflightFailure(action) {
 		return false
 	}
 	if a.Detector == nil || a.NewManager == nil {
@@ -1455,7 +1459,7 @@ type statusJSON struct {
 // not given. Backend actions can legitimately take much longer than a probe.
 func defaultTimeout(command string) time.Duration {
 	switch command {
-	case commandStart, commandStop, commandRestart, commandReload, commandResume, commandMount, commandUmount, commandState:
+	case commandStart, commandStop, commandRestart, commandReload, commandResume, commandRepair, commandMount, commandUmount, commandState:
 		return app.DefaultEngineOperationTimeout
 	case commandStatus, commandIsActive:
 		// Config loading and control-target resolution are part of a live service

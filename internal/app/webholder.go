@@ -288,7 +288,7 @@ func (h *WebBackendHolder) PruneEvents(ctx context.Context, before time.Time) in
 	return webCall(h, 0, func(b *WebBackend) int { return b.PruneEvents(ctx, before) })
 }
 
-// Operate runs a start/stop/restart/reload/resume action through the active backend.
+// Operate runs a start/stop/restart/reload/resume/repair action through the active backend.
 func (h *WebBackendHolder) Operate(ctx context.Context, name, action string, opts web.OperateOpts) web.ActionResult {
 	return webCall(h, unavailableAction(), func(b *WebBackend) web.ActionResult { return b.Operate(ctx, name, action, opts) })
 }
