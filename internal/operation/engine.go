@@ -27,6 +27,10 @@ const (
 	actionRestart = string(rules.ActionRestart)
 	actionReload  = string(rules.ActionReload)
 	actionResume  = string(rules.ActionResume)
+	// ActionRepair is a manual-only recovery action. It never becomes a rule
+	// action: an operator must explicitly request removal of a proven-stale
+	// runtime pidfile before the normal guarded start path runs.
+	ActionRepair = "repair"
 	// actionCloseSession is intentionally not a rule action: closing an
 	// interactive SSH terminal always requires an explicit web request and is
 	// never eligible for automatic remediation.
@@ -119,10 +123,15 @@ type Engine struct {
 	// thing that can turn a stray process into a signal target. The zero value is
 	// unconfigured and matches nothing, so a service that declares no `reap:`
 	// block reports its strays and signals none of them.
-	ReapSelector     process.KillSelector
-	Sleep            func(time.Duration)
-	OperationTimeout time.Duration
-	Emit             func(Result)
+	ReapSelector process.KillSelector
+	// RepairStalePIDFiles removes only the proven-dead runtime pidfiles that
+	// prevent a failed or inactive service from starting. Build wires it from
+	// the service's declared pidfile selectors; keeping it injectable makes the
+	// engine's action ordering independently testable.
+	RepairStalePIDFiles func(context.Context) ([]string, error)
+	Sleep               func(time.Duration)
+	OperationTimeout    time.Duration
+	Emit                func(Result)
 }
 
 // StopArtifacts are the stopped-state invariants verified after a clean stop: the
@@ -159,6 +168,7 @@ type plan struct {
 	closeTerminalSession *TerminalSessionTarget
 	closeTerminalSource  *TerminalSessionSourceTarget
 	reap                 bool
+	repair               bool
 }
 
 // SessionTarget is a freshly displayed SSH terminal session. StartTicks binds
@@ -257,6 +267,13 @@ func (e Engine) Reap(ctx context.Context, apply bool) Result {
 		return e.previewReap()
 	}
 	return e.run(ctx, plan{action: actionReap, reap: true})
+}
+
+// Repair clears a proven-stale runtime pidfile, then starts a failed or inactive
+// service through the same preflight, locks, guards and postflight as Start.
+// It is deliberately manual-only; rules cannot dispatch this recovery action.
+func (e Engine) Repair(ctx context.Context) Result {
+	return e.run(ctx, plan{action: ActionRepair, preflight: true, repair: true, start: true, postflight: true})
 }
 
 // previewReap lists the strays and says which ones the service authorized,
@@ -408,6 +425,8 @@ func (e Engine) Do(ctx context.Context, action string) Result {
 		return e.Reload(ctx)
 	case actionResume:
 		return e.Resume(ctx)
+	case ActionRepair:
+		return e.Repair(ctx)
 	default:
 		return Result{Service: e.Service, Action: action, Status: ResultFailed, Message: "unknown action " + action}
 	}
@@ -422,6 +441,7 @@ func (e Engine) run(ctx context.Context, p plan) (result Result) {
 	// Stale stopped-state artifacts (pidfile/files still present after a clean
 	// stop); folded into the success message as a warning, like alsoStopErrs.
 	var staleWarn []string
+	var repairedPIDFiles []string
 
 	ctx, cancel := boundContext(ctx, e.OperationTimeout)
 	defer cancel()
@@ -458,6 +478,13 @@ func (e Engine) run(ctx context.Context, p plan) (result Result) {
 	if p.reap {
 		e.reapStrays(ctx, &result)
 		return result
+	}
+	if p.repair {
+		var repaired bool
+		repairedPIDFiles, repaired = e.runRepair(ctx, &result)
+		if !repaired {
+			return result
+		}
 	}
 
 	reconciled, proceed := e.runReconciliation(ctx, p, &result)
@@ -503,7 +530,29 @@ func (e Engine) run(ctx context.Context, p plan) (result Result) {
 	if len(staleWarn) > 0 {
 		result.Message += " (stale: " + strings.Join(staleWarn, "; ") + ")"
 	}
+	if len(repairedPIDFiles) > 0 {
+		result.Message += " (removed stale pidfile: " + strings.Join(repairedPIDFiles, ", ") + ")"
+	}
 	return result
+}
+
+// runRepair prepares a manual recovery before the normal start phase. It keeps
+// repair-specific failure wording out of the top-level operation state machine,
+// where the common lock, guard, preflight and postflight sequence remains easy
+// to audit.
+func (e Engine) runRepair(ctx context.Context, result *Result) ([]string, bool) {
+	if e.RepairStalePIDFiles == nil {
+		result.Status = ResultFailed
+		result.Message = "repair is unavailable for this service"
+		return nil, false
+	}
+	removed, err := e.RepairStalePIDFiles(ctx)
+	if err != nil {
+		result.Status = ResultFailed
+		result.Message = "repair: " + err.Error()
+		return nil, false
+	}
+	return removed, true
 }
 
 // runCloseAction executes one manual session-close variant when the plan carries

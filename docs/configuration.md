@@ -492,7 +492,7 @@ remediation is rate-limited by the mandatory per-service `policy` block
 `engine.operation_timeout`.
 
 `engine.operation_timeout` is the outer deadline for a safe
-start/stop/restart/reload/resume. The engine may raise it per service when the resolved
+start/stop/restart/reload/resume/repair. The engine may raise it per service when the resolved
 `stop_policy` needs longer (graceful stop plus signal escalation). The same
 limit applies to automatic remediation, `sermoctl` actions and web-initiated
 operations. When the web UI is enabled, `sermod` also sets the HTTP server's
@@ -745,7 +745,7 @@ watches:
 ## Web UI
 
 The daemon can serve a small web dashboard to view services and watches.
-Admins can monitor/unmonitor both, and can start/stop/restart/reload/resume services
+Admins can monitor/unmonitor both, and can start/stop/restart/reload/resume/repair services
 over the same safe operation engine the CLI uses.
 
 When an active service declares exact `processes:` identity (`exe` plus `user`),
@@ -807,7 +807,7 @@ Set passwords on the `web` block for HTTP Basic auth with two roles:
 ```yaml
 web:
   port: 9797
-  password: "s3cret"           # admin: read + actions (start/stop/restart/reload/resume, monitor/unmonitor)
+  password: "s3cret"           # admin: read + actions (start/stop/restart/reload/resume/repair, monitor/unmonitor)
   guest_password: "lookonly"   # optional: a read-only login
   guest: true                  # optional: allow anonymous read-only access
 ```
@@ -1098,8 +1098,13 @@ accepted operation cannot switch targets during a concurrent reload.
 - `POST /api/services/{name}/preflight` — run the same preflight checks as
   `sermoctl preflight SERVICE`, without starting or stopping anything.
 - `POST /api/services/{name}/{action}` — service action. `action` is `monitor`,
-  `unmonitor`, `start`, `stop`, `restart`, `reload` or `resume`;
-  start/stop/restart/reload/resume go through the safe operation engine.
+  `unmonitor`, `start`, `stop`, `restart`, `reload`, `resume` or `repair`;
+  start/stop/restart/reload/resume go through the safe operation engine. `repair`
+  is manual-only: it accepts only a failed/inactive service, removes a regular
+  pidfile under `/run` only after confirming its PID is dead, resets a failed
+  init-unit marker through the backend manager, then uses the same guarded start
+  path. It refuses live PIDs, symlinks, malformed pidfiles and paths outside
+  `/run`.
 - `POST /api/services/{name}/reap` — signal the service's stray processes, gated
   by its own `reap.kill_only_if`: with none declared the reply reports every stray
   and nothing is signalled. Equivalent to `sermoctl reap SERVICE --apply`. It changes

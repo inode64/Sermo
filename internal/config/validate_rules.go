@@ -336,13 +336,12 @@ func validateRuleGuardActions(path string, entry map[string]any, isGuard bool, b
 func validateRuleOperationActions(path, ruleType string, actions []valAction, add addFunc) bool {
 	hasOperation := false
 	for _, action := range actions {
-		switch rules.ActionType(action.typ) {
-		case rules.ActionRestart, rules.ActionStart, rules.ActionStop, rules.ActionReload, rules.ActionResume:
-			hasOperation = true
-			if ruleType != string(rules.RuleRemediation) {
-				add("%s only remediation rules may use action %s", path, action.typ)
-			}
-		case rules.ActionAlert, rules.ActionBlock:
+		if !rules.ActionType(action.typ).IsOperation() {
+			continue
+		}
+		hasOperation = true
+		if ruleType != string(rules.RuleRemediation) {
+			add("%s only remediation rules may use action %s", path, action.typ)
 		}
 	}
 	return hasOperation

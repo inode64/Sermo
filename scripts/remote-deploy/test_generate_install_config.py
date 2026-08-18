@@ -508,6 +508,58 @@ class EndpointGenerationTest(unittest.TestCase):
             {"watch": "*", "active": True, "source": "unit failed; endpoint gating skipped"},
         ])
 
+    def test_failed_epmd_owned_by_rabbitmq_is_not_a_separate_control_target(self):
+        """RabbitMQ's EPMD must not be repaired through a stale OpenRC unit."""
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        root = Path(temp.name)
+        stage = root / "stage" / "fr1" / "out"
+        stage.mkdir(parents=True)
+        (stage / "init").write_text("openrc\n", encoding="utf-8")
+        (stage / "openrc_status_all").write_text(" epmd    [  crashed  ]\n", encoding="utf-8")
+        (stage / "service_endpoint_hints").write_text(
+            "process epmd user rabbitmq exe /usr/lib64/erlang/erts/bin/epmd\n",
+            encoding="utf-8",
+        )
+        (stage / "services_all_json.out").write_text(
+            json.dumps({"services": [{"name": "epmd", "installed": True, "ok": True, "status": "ok"}]}),
+            encoding="utf-8",
+        )
+
+        report = generator.generate_for_host("fr1", stage, root / "configs", default_options())
+
+        self.assertFalse((root / "configs/fr1/root/etc/sermo/services/epmd.yml").exists())
+        self.assertEqual(report["services"]["skipped"], [
+            {
+                "name": "epmd",
+                "status": "failed epmd unit is owned by RabbitMQ; monitor and repair rabbitmq instead",
+                "installed": True,
+                "ok": True,
+            }
+        ])
+
+    def test_failed_epmd_with_its_own_owner_remains_repairable(self):
+        """A genuinely failed EPMD unit remains visible to the operator."""
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        root = Path(temp.name)
+        stage = root / "stage" / "fr1" / "out"
+        stage.mkdir(parents=True)
+        (stage / "init").write_text("openrc\n", encoding="utf-8")
+        (stage / "openrc_status_all").write_text(" epmd    [  crashed  ]\n", encoding="utf-8")
+        (stage / "service_endpoint_hints").write_text(
+            "process epmd user epmd exe /usr/lib64/erlang/erts/bin/epmd\n",
+            encoding="utf-8",
+        )
+        (stage / "services_all_json.out").write_text(
+            json.dumps({"services": [{"name": "epmd", "installed": True, "ok": True, "status": "ok"}]}),
+            encoding="utf-8",
+        )
+
+        generator.generate_for_host("fr1", stage, root / "configs", default_options())
+
+        self.assertTrue((root / "configs/fr1/root/etc/sermo/services/epmd.yml").exists())
+
     def test_systemd_only_service_is_skipped_on_openrc(self):
         """lvm2-monitor and mdmonitor declare `service: {systemd: [...]}` only, but
         their app probe finds lvm/mdadm installed on OpenRC hosts too. Generating

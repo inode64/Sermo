@@ -5,6 +5,10 @@
 # catalog or configuration. Safe to run on the whole fleet in one pass.
 set -u
 
+script_dir="$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)"
+# shellcheck disable=SC1091 # uploaded alongside this script by update_fleet.sh
+. "${script_dir}/remote_inventory_common.sh"
+
 # Machine-stable tool output. libvirt (and other gettext-aware tools) translate
 # their output, so a Spanish host reports a running domain as "ejecutando" and
 # every consumer that matches the English word silently treats it as stopped.
@@ -257,6 +261,7 @@ ip -o -6 route show >"${out}/ip_route6" 2>/dev/null || true
 	emit_process_hint cloudflared
 	emit_process_hint named
 	emit_process_hint mysqld_exporter
+	emit_epmd_process_hints
 
 	if [ -r /etc/cloudflared/config.yml ]; then
 		grep -nE "^[[:space:]]*metrics[[:space:]]*:" /etc/cloudflared/config.yml 2>/dev/null \

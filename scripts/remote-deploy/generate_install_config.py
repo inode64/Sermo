@@ -156,6 +156,8 @@ DEAD_LETTER_PATH = "/root/dead.letter"
 ROOT_MOUNT_TARGET = "/"
 NFS_ENDPOINT_TIMEOUT = "5s"
 ENDPOINT_CHECK_TYPES = {"dns", "http", "ports", "tcp"}
+EPMD_SERVICE_NAME = "epmd"
+RABBITMQ_USER = "rabbitmq"
 # Every protocol probe registered in internal/conn. These dial a host:port just
 # like a `tcp` watch, so they need the same listening-socket evidence before a
 # generated service asserts them — otherwise a profile that probes ${host}
@@ -1004,6 +1006,16 @@ def parse_services(stage: Path, options: GenerationOptions, required: set[str]) 
                 "ok": bool(rep.get("ok")),
             })
             continue
+        if failed_epmd_is_owned_by_rabbitmq(stage, name, failed_services):
+            skipped.append(
+                {
+                    "name": name,
+                    "status": "failed epmd unit is owned by RabbitMQ; monitor and repair rabbitmq instead",
+                    "installed": bool(rep.get("installed")),
+                    "ok": bool(rep.get("ok")),
+                }
+            )
+            continue
         monitorable = name in active_services or name in failed_services
         # A catalog service backed by a live or failed init unit is installed by
         # definition, even when its profile has no executable probe.  Examples
@@ -1253,13 +1265,35 @@ def parse_process_user_hint(hints: str, process: str) -> tuple[dict[str, str], s
     return None
 
 
-def parse_process_hint(hints: str, process: str) -> dict[str, str] | None:
+def parse_process_hints(hints: str, process: str) -> list[dict[str, str]]:
+    """Return every process-owner hint recorded for a process name."""
     pattern = re.compile(rf"^process {re.escape(process)} user ([^\s]+) exe (.+)$")
-    for line in hints.splitlines():
-        match = pattern.match(line.strip())
-        if match:
-            return {"user": match.group(1), "exe": match.group(2)}
-    return None
+    return [
+        {"user": match.group(1), "exe": match.group(2)}
+        for line in hints.splitlines()
+        if (match := pattern.match(line.strip()))
+    ]
+
+
+def parse_process_hint(hints: str, process: str) -> dict[str, str] | None:
+    hints_for_process = parse_process_hints(hints, process)
+    return hints_for_process[0] if hints_for_process else None
+
+
+def failed_epmd_is_owned_by_rabbitmq(stage: Path, name: str, failed_services: set[str]) -> bool:
+    """Whether a failed EPMD init unit would compete with RabbitMQ's EPMD.
+
+    RabbitMQ starts EPMD itself on several OpenRC distributions. Their separate
+    epmd init script can retain a stale pidfile and report ``crashed`` while the
+    RabbitMQ-owned EPMD is listening. Starting that unit is neither a repair nor
+    safe: it competes for the same listener and its stop action can kill the
+    broker's EPMD. Require positive evidence that every observed EPMD belongs
+    to RabbitMQ; an unowned or mixed-owner EPMD remains monitorable.
+    """
+    if name != EPMD_SERVICE_NAME or name not in failed_services:
+        return False
+    hints = parse_process_hints(read_text(stage / "service_endpoint_hints"), EPMD_SERVICE_NAME)
+    return bool(hints) and all(hint["user"] == RABBITMQ_USER for hint in hints)
 
 
 def service_process_override(stage: Path, name: str) -> str:

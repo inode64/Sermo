@@ -177,6 +177,7 @@ for host in "${hosts[@]}"; do
 
 	if ! run_scp "$payload_local" \
 		"${script_dir}/remote_stage.sh" \
+		"${script_dir}/remote_inventory_common.sh" \
 		"${script_dir}/remote_apply.sh" \
 		"${ssh_user}@${host}:${remote_dir}/"; then
 		echo "  upload failed; skipping" >&2

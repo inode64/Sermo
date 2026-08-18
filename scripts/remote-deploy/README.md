@@ -22,6 +22,9 @@ The remote scripts must run as root on the target host:
 
 - `remote_stage.sh` installs the payload, replaces stale packaged catalog files,
   writes a minimal `/etc/sermo/sermo.yml`, and collects read-only host inventory.
+- `remote_inventory_common.sh` contains read-only collectors shared by the
+  install and update inventories, including EPMD ownership hints used to avoid
+  competing with RabbitMQ-owned EPMD on OpenRC.
 - `remote_apply.sh` replaces generated config directories under `/etc/sermo`,
   validates the config, enables/restarts `sermod`, and verifies the local Web UI.
 - `remote_update_payload.sh` refreshes binaries/catalog on an already configured
@@ -271,7 +274,12 @@ changes type, mode, uid or gid.
 The generated config defaults to monitoring installed catalog services whose
 init unit is active **or failed** — a failed unit is installed, enabled and
 broken, so excluding it would blind the monitoring to precisely the services
-that need it — plus `dry_run: true`, Web UI on `0.0.0.0:9797`, storage
+that need it. The narrow exception is an OpenRC `epmd` unit reported as crashed
+when every observed EPMD process is owned by RabbitMQ: it is not generated as a
+separate control target because operating it could compete with RabbitMQ's EPMD;
+repair `rabbitmq` instead.
+
+The generated defaults also set `dry_run: true`, Web UI on `0.0.0.0:9797`, storage
 free-space threshold `< 5%`, expansion by `5G`, fstab-backed non-root storage
 mount units, running Docker containers, running libvirt/QEMU virtual machines,
 SMART every `24h` and hdparm every `6h`. The hdparm buffered-read floor follows
