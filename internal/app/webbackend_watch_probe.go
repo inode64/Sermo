@@ -148,7 +148,11 @@ func (b *WebBackend) ProbeWatch(ctx context.Context, name string) web.ActionResu
 	if b.watchSnapshots != nil {
 		b.watchSnapshots.Publish(name, w.checkType, result)
 	}
-	snap := CheckSnapshot{OK: result.OK, Condition: result.Condition, Optional: result.Optional, Skipped: result.Skipped, Unavailable: result.Unavailable, Message: result.Message, Data: result.Data}
+	snap := CheckSnapshot{
+		Observation: result.Observation(), OK: result.OK, Condition: result.Condition,
+		Optional: result.Optional, Skipped: result.Skipped, Unavailable: result.Unavailable,
+		Message: result.Message, Data: result.Data,
+	}
 	readings := watchSnapshotReadings(w.checkType, snap)
 	summary := watchSnapshotSummary(snap, readings)
 	ok := result.Healthy()

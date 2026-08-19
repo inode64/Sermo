@@ -211,7 +211,8 @@ func (w *Watch) runCheckCycle(ctx context.Context, res checks.Result, observeOnl
 // and, critically, out of automatic actions. It emits only on edges and stores
 // the edge state with the rest of the watch runtime record.
 func (w *Watch) updateAvailability(res checks.Result) bool {
-	if res.Unavailable {
+	observation := res.Observation()
+	if observation == checks.ObservationUnavailable {
 		if !w.unavailable {
 			w.unavailable = true
 			w.emit(Event{Watch: w.Name, Kind: eventKindError, Message: "check unavailable: " + res.Message})
@@ -222,10 +223,16 @@ func (w *Watch) updateAvailability(res checks.Result) bool {
 		w.unavailable = false
 		w.emit(Event{Watch: w.Name, Kind: eventKindRecovered, Message: "check available: " + res.Message})
 	}
+	if observation == checks.ObservationSkipped {
+		return true
+	}
 	return false
 }
 
 func (w *Watch) evaluateFiring(res checks.Result) (wasFiring, emitFiring, firing bool) {
+	// Actions consume the raw predicate just like rule conditions do. Observation
+	// owns availability, while FireOnFail remains the explicit mapping from this
+	// watch's predicate to its firing condition.
 	fired := res.OK
 	if w.FireOnFail {
 		fired = !res.OK

@@ -109,6 +109,73 @@ type Result struct {
 	Data        map[string]any `json:"data,omitempty"`
 }
 
+// ObservationState is the canonical interpretation of one check result. Raw OK
+// remains part of Result because rules consume the comparison itself, but every
+// health/event/UI consumer uses this state so condition polarity, unavailable
+// samples, skipped gates and verdictless sensors cannot be reinterpreted at each
+// layer.
+type ObservationState string
+
+const (
+	// ObservationHealthy is an available sample whose health assertion passes.
+	ObservationHealthy ObservationState = "healthy"
+	// ObservationFailing is an available sample whose health assertion fails.
+	ObservationFailing ObservationState = "failing"
+	// ObservationUnavailable means the check could not produce a trustworthy sample.
+	ObservationUnavailable ObservationState = "unavailable"
+	// ObservationSkipped means a gate deliberately suppressed this cycle's check.
+	ObservationSkipped ObservationState = "skipped"
+	// ObservationNeutral is a verdictless state/value sample.
+	ObservationNeutral ObservationState = "neutral"
+)
+
+// Valid reports whether state is one of the states Sermo can persist and
+// publish. The empty state is deliberately invalid: callers use it only as a
+// marker for snapshots written by an older daemon.
+func (s ObservationState) Valid() bool {
+	switch s {
+	case ObservationHealthy, ObservationFailing, ObservationUnavailable, ObservationSkipped, ObservationNeutral:
+		return true
+	default:
+		return false
+	}
+}
+
+// Healthy reports whether state leaves target availability healthy. Skipped and
+// neutral observations make no negative assertion, while unavailable fails
+// closed just like an explicit failing observation.
+func (s ObservationState) Healthy() bool {
+	return s != ObservationFailing && s != ObservationUnavailable
+}
+
+// AffectsHealth reports whether state is a real availability verdict. It keeps
+// skipped and verdictless observations out of health edges and action windows.
+func (s ObservationState) AffectsHealth() bool {
+	return s == ObservationHealthy || s == ObservationFailing || s == ObservationUnavailable
+}
+
+// Observation interprets the raw check comparison once. Ordering matters:
+// unavailable and skipped are transport/scheduler facts that override reporting
+// polarity, and verdictless checks deliberately carry no health verdict.
+func (r Result) Observation() ObservationState {
+	switch {
+	case r.Unavailable:
+		return ObservationUnavailable
+	case r.Skipped:
+		return ObservationSkipped
+	case r.Verdictless():
+		return ObservationNeutral
+	case r.Condition && r.OK:
+		return ObservationFailing
+	case r.Condition:
+		return ObservationHealthy
+	case r.OK:
+		return ObservationHealthy
+	default:
+		return ObservationFailing
+	}
+}
+
 // Verdictless reports whether this result passes no judgement, so it never
 // counts toward health and records no availability: a state sensor and a
 // measurement both observe without asserting. Rules still read OK directly, so
@@ -120,16 +187,7 @@ func (r Result) Verdictless() bool { return VerdictlessMode(r.Reports) }
 // (OK means the condition fired), so their availability is inverted. A state
 // sensor asserts nothing about availability and is never unhealthy.
 func (r Result) Healthy() bool {
-	if r.Unavailable {
-		return false
-	}
-	if r.Verdictless() {
-		return true
-	}
-	if r.Condition {
-		return !r.OK
-	}
-	return r.OK
+	return r.Observation().Healthy()
 }
 
 // Check is a single-shot probe.

@@ -178,7 +178,7 @@ func TestStoreCheckSnapshotsPersistAcrossReopen(t *testing.T) {
 	}
 	if err := first.SetServiceCheckSnapshots("web", map[string]CheckSnapshotRecord{
 		"http": {
-			CheckType: "http", OK: true, Message: "status 200", Data: map[string]any{"status": float64(200)}, Ran: true, At: at,
+			CheckType: "http", Observation: "healthy", OK: true, Message: "status 200", Data: map[string]any{"status": float64(200)}, Ran: true, At: at,
 		},
 		"stale": {
 			OK: false, Message: "old", Ran: true, At: at.Add(-time.Minute),
@@ -188,13 +188,13 @@ func TestStoreCheckSnapshotsPersistAcrossReopen(t *testing.T) {
 	}
 	if err := first.SetServiceCheckSnapshots("web", map[string]CheckSnapshotRecord{
 		"http": {
-			CheckType: "http", OK: true, Message: "status 200", Data: map[string]any{"status": float64(200)}, Ran: true, At: at,
+			CheckType: "http", Observation: "healthy", OK: true, Message: "status 200", Data: map[string]any{"status": float64(200)}, Ran: true, At: at,
 		},
 	}); err != nil {
 		t.Fatalf("SetServiceCheckSnapshots replace: %v", err)
 	}
 	if err := first.SetWatchCheckSnapshot("clock", "result", CheckSnapshotRecord{
-		CheckType: "clock", OK: false, Unavailable: true, Message: "offset 1200ms",
+		CheckType: "clock", Observation: "unavailable", OK: false, Unavailable: true, Message: "offset 1200ms",
 		Data: map[string]any{"offset_ms": float64(1200)}, Ran: true, At: at,
 	}); err != nil {
 		t.Fatalf("SetWatchCheckSnapshot: %v", err)
@@ -217,7 +217,7 @@ func TestStoreCheckSnapshotsPersistAcrossReopen(t *testing.T) {
 	if len(service) != 1 {
 		t.Fatalf("service snapshots = %+v, want only current row", service)
 	}
-	if got := service["http"]; got.CheckType != "http" || !got.OK || got.Message != "status 200" || got.Data["status"] != float64(200) || !got.Ran || !got.At.Equal(at) {
+	if got := service["http"]; got.CheckType != "http" || got.Observation != "healthy" || !got.OK || got.Message != "status 200" || got.Data["status"] != float64(200) || !got.Ran || !got.At.Equal(at) {
 		t.Fatalf("service snapshot did not round-trip: %+v", got)
 	}
 
@@ -226,21 +226,26 @@ func TestStoreCheckSnapshotsPersistAcrossReopen(t *testing.T) {
 		t.Fatalf("WatchCheckSnapshots: %v", err)
 	}
 	got := watchSnapshots["clock"]["result"]
-	if got.CheckType != "clock" || got.OK || !got.Unavailable || got.Message != "offset 1200ms" || got.Data["offset_ms"] != float64(1200) || !got.At.Equal(at) {
+	if got.CheckType != "clock" || got.Observation != "unavailable" || got.OK || !got.Unavailable || got.Message != "offset 1200ms" || got.Data["offset_ms"] != float64(1200) || !got.At.Equal(at) {
 		t.Fatalf("watch snapshot did not round-trip: %+v", got)
 	}
 }
 
-func TestStoreMigratesUnavailableColumns(t *testing.T) {
+func TestStoreMigratesSnapshotColumns(t *testing.T) {
 	path := filepath.Join(t.TempDir(), Filename)
 	first, err := OpenContext(context.Background(), path)
 	if err != nil {
 		t.Fatalf("open initial store: %v", err)
 	}
-	for _, table := range []string{"service_check_snapshot", "watch_check_snapshot", "watch_runtime_state"} {
-		if _, err := first.db.ExecContext(context.Background(), "ALTER TABLE "+table+" DROP COLUMN unavailable;"); err != nil {
-			t.Fatalf("remove %s.unavailable to simulate old store: %v", table, err)
+	for _, table := range []string{"service_check_snapshot", "watch_check_snapshot"} {
+		for _, column := range []string{"unavailable", "observation"} {
+			if _, err := first.db.ExecContext(context.Background(), "ALTER TABLE "+table+" DROP COLUMN "+column+";"); err != nil {
+				t.Fatalf("remove %s.%s to simulate old store: %v", table, column, err)
+			}
 		}
+	}
+	if _, err := first.db.ExecContext(context.Background(), "ALTER TABLE watch_runtime_state DROP COLUMN unavailable;"); err != nil {
+		t.Fatalf("remove watch_runtime_state.unavailable to simulate old store: %v", err)
 	}
 	if err := first.Close(); err != nil {
 		t.Fatalf("close old store: %v", err)
@@ -251,11 +256,14 @@ func TestStoreMigratesUnavailableColumns(t *testing.T) {
 		t.Fatalf("open migrated store: %v", err)
 	}
 	defer migrated.Close()
-	if err := migrated.SetWatchCheckSnapshot("clock", "result", CheckSnapshotRecord{Unavailable: true}); err != nil {
+	if err := migrated.SetWatchCheckSnapshot("clock", "result", CheckSnapshotRecord{Observation: "unavailable", Unavailable: true}); err != nil {
 		t.Fatalf("write migrated snapshot: %v", err)
 	}
 	if err := migrated.SetWatchRuntimeState("clock", "result", WatchRuntimeRecord{Unavailable: true}); err != nil {
 		t.Fatalf("write migrated runtime state: %v", err)
+	}
+	if got, err := migrated.WatchCheckSnapshots(); err != nil || got["clock"]["result"].Observation != "unavailable" {
+		t.Fatalf("migrated snapshot = %+v, err = %v", got, err)
 	}
 	if got, _, err := migrated.WatchRuntimeState("clock", "result"); err != nil || !got.Unavailable {
 		t.Fatalf("migrated runtime state = %+v, err = %v", got, err)
