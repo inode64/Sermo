@@ -1048,7 +1048,10 @@ checklist). Imita el estilo existente de la suite en lugar de inventar uno.
 
 ## graphify
 
-Este proyecto tiene un grafo de conocimiento en graphify-out/ con god nodes, estructura de comunidades y relaciones entre archivos.
+Este proyecto puede mantener un grafo de conocimiento local y generado en
+`graphify-out/` con god nodes, estructura de comunidades y relaciones entre
+archivos. El directorio completo está en gitignore: nunca fuerces sus ficheros
+generados dentro de un commit funcional.
 
 Cuando el usuario escriba `/graphify`, invoca la herramienta `skill` con `skill: "graphify"` antes de hacer cualquier otra cosa.
 
@@ -1057,16 +1060,16 @@ Reglas:
   `graphify-out/graph.json` exista. Usa `graphify path "<A>" "<B>"` para
   relaciones y `graphify explain "<concept>"` para conceptos enfocados. Estos
   devuelven un subgrafo acotado, normalmente mucho más pequeño que un grep crudo o un reporte completo.
-- Los archivos `graphify-out/` sucios son esperables tras hooks o actualizaciones incrementales;
-  los archivos de grafo sucios no son razón para saltar graphify. Solo salta graphify si la
-  tarea es sobre salida de grafo obsoleta o incorrecta, o el usuario dice explícitamente que no
-  lo use.
+- Si `graphify-out/graph.json` no existe o está obsoleto para la pregunta,
+  ejecuta `graphify update .` antes de consultar. Los cambios generados del
+  grafo permanecen locales y no forman parte del estado del repositorio ni de
+  la evidencia del commit.
 - Si `graphify-out/wiki/index.md` existe, úsalo para navegación amplia en lugar de
   navegación cruda de fuentes.
-- `graphify-out/GRAPH_REPORT.md` y `graphify-out/graph.html` son exports locales
-  (gitignored). No asumas que están presentes en el checkout; ejecuta
+- `graphify-out/GRAPH_REPORT.md` y `graphify-out/graph.html` son exports locales.
+  No asumas que están presentes en el checkout; ejecuta
   `graphify update .` cuando se necesite un reporte legible por humanos, o quédate con
   query/path/explain para trabajo de agente.
-- Después de modificar código, ejecuta `graphify update .` para mantener el grafo actualizado
-  (solo AST, sin coste de API). Las entradas de query principales (`graph.json`, `manifest.json`,
-  labels) pueden permanecer rastreadas.
+- Después de modificar código, ejecuta `graphify update .` cuando el trabajo
+  posterior necesite un grafo actualizado (solo AST, sin coste de API). No
+  añadas la salida al índice.

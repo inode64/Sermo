@@ -1043,7 +1043,10 @@ checklist). Match the suite's existing style instead of inventing one.
 
 ## graphify
 
-This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.
+This project can keep a local generated knowledge graph at `graphify-out/` with
+god nodes, community structure, and cross-file relationships. The complete
+directory is gitignored: never force-add its generated files to a functional
+commit.
 
 When the user types `/graphify`, invoke the `skill` tool with `skill: "graphify"` before doing anything else.
 
@@ -1052,16 +1055,14 @@ Rules:
   `graphify-out/graph.json` exists. Use `graphify path "<A>" "<B>"` for
   relationships and `graphify explain "<concept>"` for focused concepts. These
   return a scoped subgraph, usually much smaller than raw grep or a full report.
-- Dirty `graphify-out/` files are expected after hooks or incremental updates;
-  dirty graph files are not a reason to skip graphify. Only skip graphify if the
-  task is about stale or incorrect graph output, or the user explicitly says not
-  to use it.
+- If `graphify-out/graph.json` is absent or stale for the question, run
+  `graphify update .` before querying. Generated graph changes remain local and
+  are not part of repository status or commit evidence.
 - If `graphify-out/wiki/index.md` exists, use it for broad navigation instead of
   raw source browsing.
-- `graphify-out/GRAPH_REPORT.md` and `graphify-out/graph.html` are local exports
-  (gitignored). Do not assume they are present in the checkout; run
+- `graphify-out/GRAPH_REPORT.md` and `graphify-out/graph.html` are local exports.
+  Do not assume they are present in the checkout; run
   `graphify update .` when a human-readable report is needed, or stay with
   query/path/explain for agent work.
-- After modifying code, run `graphify update .` to keep the graph current
-  (AST-only, no API cost). Core query inputs (`graph.json`, `manifest.json`,
-  labels) may stay tracked.
+- After modifying code, run `graphify update .` when subsequent work needs a
+  current graph (AST-only, no API cost). Do not stage the output.
