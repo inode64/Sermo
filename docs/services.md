@@ -958,9 +958,14 @@ and the service may fail on its own. systemd's documentation warns that
 accepted here, in exchange for never taking down a service nobody asked to
 touch.
 
-Measured on a real host, `nfs-server` is the kind of unit this protects: it
-`ConsistsOf` `nfs-mountd` and `nfs-idmapd`, both of which Sermo tracks as
-services of their own, so an un-isolated restart of one would restart three.
+Measured on real hosts, `nfs-server` is the catalog exception that needs normal
+dependency propagation. It `ConsistsOf` `nfs-mountd` and `nfs-idmapd`; an
+isolated staged restart stops those companions but cannot pull the required
+mount daemon up again, leaving NFSv3 mount requests unavailable while the kernel
+NFS port remains healthy. The packaged `nfs` profile therefore sets
+`allow_dependencies: true`. The NFS profile itself is a no-resident-process
+service because its server runs in the kernel; the separate `rpc-mountd` profile
+owns process discovery and stale-binary reporting for the userspace daemon.
 
 Set the flag only on a service that is useless without the units it requires,
 and where you would rather it pull them up than fail:
@@ -970,9 +975,10 @@ name: some-service
 allow_dependencies: true
 ```
 
-No catalog service ships with it. `also_service:` is the explicit way to declare
-companion units Sermo should operate alongside a service — prefer that over
-relying on the init system's graph.
+Only the packaged `nfs` service ships with it because the init graph is part of
+that coordinating service's lifecycle. For ordinary companion units,
+`also_service:` is the explicit form and remains preferable to relying on the
+init system's graph.
 
 It inherits from global `defaults:` like `dry_run`, so a whole host can opt back
 in at once:

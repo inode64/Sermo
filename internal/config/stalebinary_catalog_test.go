@@ -176,7 +176,7 @@ func TestDefaultsRestartOnStaleBinaryOptsOutWholeHost(t *testing.T) {
 // Everything else keeps the restart, which is what was asked for: the veto is
 // OVS-only.
 func TestCatalogOtherServicesRestartOnStaleBinary(t *testing.T) {
-	for _, service := range []string{"nginx", "nfs", "mariadb"} {
+	for _, service := range []string{"nginx", "rpc-mountd", "mariadb"} {
 		t.Run(service, func(t *testing.T) {
 			rule := staleBinaryRuleOf(t, resolveCatalogService(t, service, "systemd"))
 			if got := rule[rules.RuleFieldType]; got != string(rules.RuleRemediation) {
@@ -187,6 +187,23 @@ func TestCatalogOtherServicesRestartOnStaleBinary(t *testing.T) {
 				t.Fatalf("want alert then restart, got %v", actions)
 			}
 		})
+	}
+}
+
+func TestCatalogNFSAllowsInitDependencies(t *testing.T) {
+	t.Parallel()
+
+	systemd := resolveCatalogService(t, "nfs", backendSystemd)
+	processes, ok := systemd.Tree[SectionProcesses].(map[string]any)
+	if !ok || len(processes) != 0 {
+		t.Fatalf("nfs processes = %v, want an explicit no-resident-process map", systemd.Tree[SectionProcesses])
+	}
+	if !AllowDependencies(systemd.Tree) {
+		t.Fatal("nfs systemd must allow init dependencies")
+	}
+	openrc := resolveCatalogService(t, "nfs", backendOpenRC)
+	if !AllowDependencies(openrc.Tree) {
+		t.Fatal("nfs openrc must preserve the resolved allow_dependencies policy")
 	}
 }
 
