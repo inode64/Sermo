@@ -319,8 +319,7 @@ func (b *WebBackend) serviceCheckHealth(name string, e *webEntry, monitored bool
 	return checkHealthSummaryCurrent(b.snapshots.Get(name), e.checkNames, monitored,
 		func(check string, snap CheckSnapshot) bool {
 			return b.serviceCheckSnapshotCurrent(e, check, snap)
-		},
-		func(check string) bool { return checks.VerdictlessMode(e.checkReports[check]) })
+		})
 }
 
 // serviceCheckSnapshotCurrent accepts only a result produced by the configured
@@ -442,9 +441,7 @@ func (b *WebBackend) operationSettlingPending(name string) bool {
 // set, filters snapshots to the ones the running config still declares; nil
 // keeps every snapshot.
 // checkHealthSummaryCurrent counts the checks that make a service unhealthy.
-// verdictless names the checks that assert nothing (`reports: state`/`value`);
-// it comes from configuration because the snapshot carries no reporting mode.
-func checkHealthSummaryCurrent(snap map[string]CheckSnapshot, checkNames []string, monitored bool, current func(string, CheckSnapshot) bool, verdictless func(string) bool) (failing int, health string) {
+func checkHealthSummaryCurrent(snap map[string]CheckSnapshot, checkNames []string, monitored bool, current func(string, CheckSnapshot) bool) (failing int, health string) {
 	if !monitored {
 		return 0, TargetStatePaused
 	}
@@ -461,7 +458,7 @@ func checkHealthSummaryCurrent(snap map[string]CheckSnapshot, checkNames []strin
 			continue
 		}
 		observed = true
-		if cs.Skipped || cs.Optional || (verdictless != nil && verdictless(name)) || cs.healthy() {
+		if cs.Optional || cs.healthy() {
 			continue
 		}
 		failing++

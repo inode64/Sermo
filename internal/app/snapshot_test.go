@@ -91,7 +91,7 @@ func TestPersistentSnapshotsHydrateAndStore(t *testing.T) {
 	store := &snapshotStoreFake{
 		service: map[string]map[string]state.CheckSnapshotRecord{
 			"web": {
-				"http": {CheckType: checks.CheckTypeHTTP, Observation: string(checks.ObservationUnavailable), OK: true, Unavailable: true, Message: "status unavailable", Data: map[string]any{"status": float64(200)}, Ran: true, At: t0},
+				"http": {CheckType: checks.CheckTypeHTTP, Observation: checks.ObservationUnavailable, OK: true, Unavailable: true, Message: "status unavailable", Data: map[string]any{"status": float64(200)}, Ran: true, At: t0},
 			},
 		},
 	}
@@ -113,7 +113,7 @@ func TestPersistentSnapshotsHydrateAndStore(t *testing.T) {
 	if len(service) != 1 {
 		t.Fatalf("stored service snapshots = %+v, want replaced current rows", service)
 	}
-	if got := service["tcp"]; got.Observation != string(checks.ObservationUnavailable) || got.OK || !got.Unavailable || got.Message != "connection refused" || got.Data["port"] != float64(443) || !got.At.Equal(t1) {
+	if got := service["tcp"]; got.Observation != checks.ObservationUnavailable || got.OK || !got.Unavailable || got.Message != "connection refused" || got.Data["port"] != float64(443) || !got.At.Equal(t1) {
 		t.Fatalf("stored snapshot = %+v", got)
 	}
 }
@@ -150,7 +150,7 @@ func TestPersistentWatchSnapshotsHydrateAndStore(t *testing.T) {
 		watch: map[string]map[string]state.CheckSnapshotRecord{
 			"clock": {
 				checks.DataKeyResult: {
-					CheckType: "clock", OK: false, Message: "offset 1200ms",
+					CheckType: "clock", Observation: checks.ObservationFailing, OK: false, Message: "offset 1200ms",
 					Data: map[string]any{"offset_ms": float64(1200)}, Ran: true, At: t0,
 				},
 			},

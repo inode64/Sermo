@@ -51,7 +51,7 @@ func TestObservationContractReachesPersistenceEventsAndWeb(t *testing.T) {
 			worker.RunCycle(context.Background())
 
 			persisted := store.service["demo"]["probe"]
-			if persisted.Observation != string(tt.observation) {
+			if persisted.Observation != tt.observation {
 				t.Fatalf("persisted observation = %q, want %q", persisted.Observation, tt.observation)
 			}
 			if len(events) != tt.wantEvents {

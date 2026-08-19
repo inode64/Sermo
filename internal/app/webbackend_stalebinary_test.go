@@ -18,7 +18,7 @@ func staleBinaryBackend(t *testing.T, ok bool) (*WebBackend, *webEntry) {
 	snaps := NewSnapshots()
 	snaps.now = func() time.Time { return at }
 	snaps.PublishWithCheckTypes("web",
-		map[string]checks.Result{"stale-binary": {Check: "stale-binary", OK: ok}},
+		map[string]checks.Result{"stale-binary": {Check: "stale-binary", OK: ok, Reports: checks.ReportsState}},
 		map[string]bool{"stale-binary": true},
 		map[string]string{"stale-binary": checks.CheckTypeStaleBinary})
 
