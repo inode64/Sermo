@@ -5,6 +5,11 @@ description: PolicyKit authorization service.
 service:
   systemd:
     - polkit
+restart_policy:
+  # D-Bus activation may immediately start polkit while an isolated staged stop
+  # is still settling, causing systemd to cancel that stop job. Its atomic
+  # restart replaces the daemon without exposing that activation race.
+  mode: native
 apps:
   - polkit
 restart_on_change:
