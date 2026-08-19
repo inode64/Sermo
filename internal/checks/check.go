@@ -130,8 +130,7 @@ const (
 )
 
 // Valid reports whether state is one of the states Sermo can persist and
-// publish. The empty state is deliberately invalid: callers use it only as a
-// marker for snapshots written by an older daemon.
+// publish. The empty state is deliberately invalid.
 func (s ObservationState) Valid() bool {
 	switch s {
 	case ObservationHealthy, ObservationFailing, ObservationUnavailable, ObservationSkipped, ObservationNeutral:
@@ -145,7 +144,7 @@ func (s ObservationState) Valid() bool {
 // neutral observations make no negative assertion, while unavailable fails
 // closed just like an explicit failing observation.
 func (s ObservationState) Healthy() bool {
-	return s != ObservationFailing && s != ObservationUnavailable
+	return s == ObservationHealthy || s == ObservationSkipped || s == ObservationNeutral
 }
 
 // AffectsHealth reports whether state is a real availability verdict. It keeps

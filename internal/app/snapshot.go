@@ -28,14 +28,7 @@ type CheckSnapshot struct {
 }
 
 func (c CheckSnapshot) healthy() bool {
-	if c.Observation.Valid() {
-		return c.Observation.Healthy()
-	}
-	// Compatibility with snapshot rows persisted before Observation existed.
-	return checks.Result{
-		OK: c.OK, Condition: c.Condition, Skipped: c.Skipped,
-		Unavailable: c.Unavailable,
-	}.Observation().Healthy()
+	return c.Observation.Healthy()
 }
 
 // Snapshots holds each service's most recent check results so the web UI can show
@@ -272,7 +265,7 @@ func serviceSnapshotRecords(snaps map[string]CheckSnapshot) map[string]state.Che
 
 func snapshotFromRecord(rec state.CheckSnapshotRecord) CheckSnapshot {
 	return CheckSnapshot{
-		CheckType: rec.CheckType, Observation: checks.ObservationState(rec.Observation),
+		CheckType: rec.CheckType, Observation: rec.Observation,
 		OK: rec.OK, Condition: rec.Condition, Optional: rec.Optional, Skipped: rec.Skipped, Unavailable: rec.Unavailable,
 		Message: rec.Message, Data: maps.Clone(rec.Data), Ran: rec.Ran, At: rec.At,
 	}
@@ -280,7 +273,7 @@ func snapshotFromRecord(rec state.CheckSnapshotRecord) CheckSnapshot {
 
 func snapshotRecord(snap CheckSnapshot) state.CheckSnapshotRecord {
 	return state.CheckSnapshotRecord{
-		CheckType: snap.CheckType, Observation: string(snap.Observation),
+		CheckType: snap.CheckType, Observation: snap.Observation,
 		OK: snap.OK, Condition: snap.Condition, Optional: snap.Optional, Skipped: snap.Skipped, Unavailable: snap.Unavailable,
 		Message: snap.Message, Data: maps.Clone(snap.Data), Ran: snap.Ran, At: snap.At,
 	}

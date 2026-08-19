@@ -26,6 +26,7 @@ import (
 	"sync"
 	"time"
 
+	"sermo/internal/checks"
 	"sermo/internal/units"
 
 	_ "modernc.org/sqlite" // registers the "sqlite" database/sql driver
@@ -164,13 +165,13 @@ var storageSchema = []string{
 		condition  INTEGER NOT NULL,
 		optional   INTEGER NOT NULL,
 		skipped    INTEGER NOT NULL,
-		unavailable INTEGER NOT NULL DEFAULT 0,
-		observation TEXT NOT NULL DEFAULT '',
+		unavailable INTEGER NOT NULL,
+		observation TEXT NOT NULL,
 		message    TEXT NOT NULL,
 		data       TEXT NOT NULL,
 		ran        INTEGER NOT NULL,
 		at         INTEGER NOT NULL,
-		check_type TEXT NOT NULL DEFAULT '',
+		check_type TEXT NOT NULL,
 		PRIMARY KEY (service, check_name)
 	);`,
 	// watch_check_snapshot stores the latest host-watch result per visible slot
@@ -184,8 +185,8 @@ var storageSchema = []string{
 		condition  INTEGER NOT NULL,
 		optional   INTEGER NOT NULL,
 		skipped    INTEGER NOT NULL,
-		unavailable INTEGER NOT NULL DEFAULT 0,
-		observation TEXT NOT NULL DEFAULT '',
+		unavailable INTEGER NOT NULL,
+		observation TEXT NOT NULL,
 		message    TEXT NOT NULL,
 		data       TEXT NOT NULL,
 		ran        INTEGER NOT NULL,
@@ -257,22 +258,6 @@ var storageSchema = []string{
 		res       INTEGER PRIMARY KEY,
 		watermark INTEGER NOT NULL
 	) WITHOUT ROWID;`,
-}
-
-type schemaColumn struct {
-	listSQL string
-	name    string
-	addSQL  string
-}
-
-// Columns added after the initial persistent-store release need an explicit
-// migration because CREATE TABLE IF NOT EXISTS does not update fleet databases.
-var storageColumns = []schemaColumn{
-	{listSQL: "PRAGMA table_info(service_check_snapshot);", name: "unavailable", addSQL: "ALTER TABLE service_check_snapshot ADD COLUMN unavailable INTEGER NOT NULL DEFAULT 0;"},
-	{listSQL: "PRAGMA table_info(watch_check_snapshot);", name: "unavailable", addSQL: "ALTER TABLE watch_check_snapshot ADD COLUMN unavailable INTEGER NOT NULL DEFAULT 0;"},
-	{listSQL: "PRAGMA table_info(service_check_snapshot);", name: "observation", addSQL: "ALTER TABLE service_check_snapshot ADD COLUMN observation TEXT NOT NULL DEFAULT '';"},
-	{listSQL: "PRAGMA table_info(watch_check_snapshot);", name: "observation", addSQL: "ALTER TABLE watch_check_snapshot ADD COLUMN observation TEXT NOT NULL DEFAULT '';"},
-	{listSQL: "PRAGMA table_info(watch_runtime_state);", name: "unavailable", addSQL: "ALTER TABLE watch_runtime_state ADD COLUMN unavailable INTEGER NOT NULL DEFAULT 0;"},
 }
 
 // Store is a handle to the persistent state database. It is safe for concurrent
@@ -541,52 +526,10 @@ func (s *Store) initializeSchema(ctx context.Context) error {
 			return fmt.Errorf("create state schema: %w", err)
 		}
 	}
-	for _, column := range storageColumns {
-		if err := ensureSchemaColumn(ctx, tx, column); err != nil {
-			_ = tx.Rollback()
-			return err
-		}
-	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit state schema: %w", err)
 	}
 	return nil
-}
-
-func ensureSchemaColumn(ctx context.Context, tx *sql.Tx, column schemaColumn) error {
-	found, err := schemaColumnExists(ctx, tx, column)
-	if err != nil {
-		return err
-	}
-	if found {
-		return nil
-	}
-	if _, err := tx.ExecContext(ctx, column.addSQL); err != nil {
-		return fmt.Errorf("add state schema column %s: %w", column.name, err)
-	}
-	return nil
-}
-
-func schemaColumnExists(ctx context.Context, tx *sql.Tx, column schemaColumn) (bool, error) {
-	rows, err := tx.QueryContext(ctx, column.listSQL)
-	if err != nil {
-		return false, fmt.Errorf("inspect state schema column %s: %w", column.name, err)
-	}
-	defer func() { _ = rows.Close() }()
-	found := false
-	for rows.Next() {
-		var cid, notNull, primaryKey int
-		var name, columnType string
-		var defaultValue any
-		if err := rows.Scan(&cid, &name, &columnType, &notNull, &defaultValue, &primaryKey); err != nil {
-			return false, fmt.Errorf("scan state schema column %s: %w", column.name, err)
-		}
-		found = found || name == column.name
-	}
-	if err := rows.Err(); err != nil {
-		return false, fmt.Errorf("inspect state schema rows for %s: %w", column.name, err)
-	}
-	return found, nil
 }
 
 // MonitorRecord is one persisted monitoring state row.
@@ -623,7 +566,7 @@ type ServiceRestartNoticeRecord struct {
 type CheckSnapshotRecord struct {
 	Name        string
 	CheckType   string
-	Observation string
+	Observation checks.ObservationState
 	OK          bool
 	Condition   bool
 	Optional    bool
@@ -804,6 +747,9 @@ func (s *Store) ServiceCheckSnapshots() (map[string]map[string]CheckSnapshotReco
 func (s *Store) SetServiceCheckSnapshots(service string, records map[string]CheckSnapshotRecord) error {
 	return replaceServiceRows(s, service, `DELETE FROM service_check_snapshot WHERE service = ?;`,
 		"service check snapshot", records, func(tx *sql.Tx, name string, rec CheckSnapshotRecord) error {
+			if err := validateCheckSnapshotObservation(rec.Observation); err != nil {
+				return fmt.Errorf("service check snapshot %s/%s: %w", service, name, err)
+			}
 			data, err := encodeSnapshotData(rec.Data)
 			if err != nil {
 				return err
@@ -913,18 +859,25 @@ func scanCheckSnapshotRow(rows *sql.Rows, label string) (string, string, CheckSn
 }
 
 func newCheckSnapshotRecord(name, checkType, observation string, ok, condition, optional, skipped, unavailable int, message, rawData string, ran int, at int64) (CheckSnapshotRecord, error) {
+	observationState := checks.ObservationState(observation)
+	if err := validateCheckSnapshotObservation(observationState); err != nil {
+		return CheckSnapshotRecord{}, fmt.Errorf("decode check snapshot %s: %w", name, err)
+	}
 	data, err := decodeSnapshotData(rawData)
 	if err != nil {
 		return CheckSnapshotRecord{}, err
 	}
 	return CheckSnapshotRecord{
-		Name: name, CheckType: checkType, Observation: observation, OK: intBool(ok), Condition: intBool(condition), Optional: intBool(optional),
+		Name: name, CheckType: checkType, Observation: observationState, OK: intBool(ok), Condition: intBool(condition), Optional: intBool(optional),
 		Skipped: intBool(skipped), Unavailable: intBool(unavailable), Message: message, Data: data, Ran: intBool(ran), At: unixNanoTime(at),
 	}, nil
 }
 
 // SetWatchCheckSnapshot upserts one host-watch snapshot slot.
 func (s *Store) SetWatchCheckSnapshot(watch, slot string, rec CheckSnapshotRecord) error {
+	if err := validateCheckSnapshotObservation(rec.Observation); err != nil {
+		return fmt.Errorf("watch check snapshot %s/%s: %w", watch, slot, err)
+	}
 	data, err := encodeSnapshotData(rec.Data)
 	if err != nil {
 		return err
@@ -959,9 +912,16 @@ func (s *Store) SetWatchCheckSnapshot(watch, slot string, rec CheckSnapshotRecor
 // tables from drifting when a snapshot column is added.
 func checkSnapshotArgs(rec CheckSnapshotRecord, data string, keys ...any) []any {
 	return append(keys,
-		rec.CheckType, rec.Observation, boolInt(rec.OK), boolInt(rec.Condition), boolInt(rec.Optional), boolInt(rec.Skipped),
+		rec.CheckType, string(rec.Observation), boolInt(rec.OK), boolInt(rec.Condition), boolInt(rec.Optional), boolInt(rec.Skipped),
 		boolInt(rec.Unavailable), rec.Message, data, boolInt(rec.Ran), timeUnixNano(rec.At),
 	)
+}
+
+func validateCheckSnapshotObservation(observation checks.ObservationState) error {
+	if !observation.Valid() {
+		return fmt.Errorf("invalid observation %q", observation)
+	}
+	return nil
 }
 
 func encodeSnapshotData(data map[string]any) (string, error) {

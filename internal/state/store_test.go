@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"sermo/internal/checks"
 )
 
 func TestStoreWithBatchCommitsTimeSeries(t *testing.T) {
@@ -178,23 +180,23 @@ func TestStoreCheckSnapshotsPersistAcrossReopen(t *testing.T) {
 	}
 	if err := first.SetServiceCheckSnapshots("web", map[string]CheckSnapshotRecord{
 		"http": {
-			CheckType: "http", Observation: "healthy", OK: true, Message: "status 200", Data: map[string]any{"status": float64(200)}, Ran: true, At: at,
+			CheckType: "http", Observation: checks.ObservationHealthy, OK: true, Message: "status 200", Data: map[string]any{"status": float64(200)}, Ran: true, At: at,
 		},
 		"stale": {
-			OK: false, Message: "old", Ran: true, At: at.Add(-time.Minute),
+			Observation: checks.ObservationFailing, OK: false, Message: "old", Ran: true, At: at.Add(-time.Minute),
 		},
 	}); err != nil {
 		t.Fatalf("SetServiceCheckSnapshots initial: %v", err)
 	}
 	if err := first.SetServiceCheckSnapshots("web", map[string]CheckSnapshotRecord{
 		"http": {
-			CheckType: "http", Observation: "healthy", OK: true, Message: "status 200", Data: map[string]any{"status": float64(200)}, Ran: true, At: at,
+			CheckType: "http", Observation: checks.ObservationHealthy, OK: true, Message: "status 200", Data: map[string]any{"status": float64(200)}, Ran: true, At: at,
 		},
 	}); err != nil {
 		t.Fatalf("SetServiceCheckSnapshots replace: %v", err)
 	}
 	if err := first.SetWatchCheckSnapshot("clock", "result", CheckSnapshotRecord{
-		CheckType: "clock", Observation: "unavailable", OK: false, Unavailable: true, Message: "offset 1200ms",
+		CheckType: "clock", Observation: checks.ObservationUnavailable, OK: false, Unavailable: true, Message: "offset 1200ms",
 		Data: map[string]any{"offset_ms": float64(1200)}, Ran: true, At: at,
 	}); err != nil {
 		t.Fatalf("SetWatchCheckSnapshot: %v", err)
@@ -217,7 +219,7 @@ func TestStoreCheckSnapshotsPersistAcrossReopen(t *testing.T) {
 	if len(service) != 1 {
 		t.Fatalf("service snapshots = %+v, want only current row", service)
 	}
-	if got := service["http"]; got.CheckType != "http" || got.Observation != "healthy" || !got.OK || got.Message != "status 200" || got.Data["status"] != float64(200) || !got.Ran || !got.At.Equal(at) {
+	if got := service["http"]; got.CheckType != "http" || got.Observation != checks.ObservationHealthy || !got.OK || got.Message != "status 200" || got.Data["status"] != float64(200) || !got.Ran || !got.At.Equal(at) {
 		t.Fatalf("service snapshot did not round-trip: %+v", got)
 	}
 
@@ -226,47 +228,33 @@ func TestStoreCheckSnapshotsPersistAcrossReopen(t *testing.T) {
 		t.Fatalf("WatchCheckSnapshots: %v", err)
 	}
 	got := watchSnapshots["clock"]["result"]
-	if got.CheckType != "clock" || got.Observation != "unavailable" || got.OK || !got.Unavailable || got.Message != "offset 1200ms" || got.Data["offset_ms"] != float64(1200) || !got.At.Equal(at) {
+	if got.CheckType != "clock" || got.Observation != checks.ObservationUnavailable || got.OK || !got.Unavailable || got.Message != "offset 1200ms" || got.Data["offset_ms"] != float64(1200) || !got.At.Equal(at) {
 		t.Fatalf("watch snapshot did not round-trip: %+v", got)
 	}
 }
 
-func TestStoreMigratesSnapshotColumns(t *testing.T) {
-	path := filepath.Join(t.TempDir(), Filename)
-	first, err := OpenContext(context.Background(), path)
-	if err != nil {
-		t.Fatalf("open initial store: %v", err)
+func TestStoreRejectsInvalidSnapshotObservation(t *testing.T) {
+	s := openTemp(t)
+	if err := s.SetServiceCheckSnapshots("web", map[string]CheckSnapshotRecord{"http": {OK: true}}); err == nil || !strings.Contains(err.Error(), "invalid observation") {
+		t.Fatalf("service snapshot error = %v, want invalid observation", err)
 	}
-	for _, table := range []string{"service_check_snapshot", "watch_check_snapshot"} {
-		for _, column := range []string{"unavailable", "observation"} {
-			if _, err := first.db.ExecContext(context.Background(), "ALTER TABLE "+table+" DROP COLUMN "+column+";"); err != nil {
-				t.Fatalf("remove %s.%s to simulate old store: %v", table, column, err)
-			}
-		}
+	if err := s.SetWatchCheckSnapshot("clock", "result", CheckSnapshotRecord{Skipped: true}); err == nil || !strings.Contains(err.Error(), "invalid observation") {
+		t.Fatalf("watch snapshot error = %v, want invalid observation", err)
 	}
-	if _, err := first.db.ExecContext(context.Background(), "ALTER TABLE watch_runtime_state DROP COLUMN unavailable;"); err != nil {
-		t.Fatalf("remove watch_runtime_state.unavailable to simulate old store: %v", err)
-	}
-	if err := first.Close(); err != nil {
-		t.Fatalf("close old store: %v", err)
-	}
+}
 
-	migrated, err := OpenContext(context.Background(), path)
-	if err != nil {
-		t.Fatalf("open migrated store: %v", err)
+func TestStoreRejectsPersistedInvalidSnapshotObservation(t *testing.T) {
+	s := openTemp(t)
+	if err := s.SetServiceCheckSnapshots("web", map[string]CheckSnapshotRecord{
+		"http": {CheckType: checks.CheckTypeHTTP, Observation: checks.ObservationHealthy, OK: true},
+	}); err != nil {
+		t.Fatalf("write valid snapshot: %v", err)
 	}
-	defer migrated.Close()
-	if err := migrated.SetWatchCheckSnapshot("clock", "result", CheckSnapshotRecord{Observation: "unavailable", Unavailable: true}); err != nil {
-		t.Fatalf("write migrated snapshot: %v", err)
+	if _, err := s.db.ExecContext(context.Background(), `UPDATE service_check_snapshot SET observation = 'invalid' WHERE service = 'web';`); err != nil {
+		t.Fatalf("corrupt snapshot observation: %v", err)
 	}
-	if err := migrated.SetWatchRuntimeState("clock", "result", WatchRuntimeRecord{Unavailable: true}); err != nil {
-		t.Fatalf("write migrated runtime state: %v", err)
-	}
-	if got, err := migrated.WatchCheckSnapshots(); err != nil || got["clock"]["result"].Observation != "unavailable" {
-		t.Fatalf("migrated snapshot = %+v, err = %v", got, err)
-	}
-	if got, _, err := migrated.WatchRuntimeState("clock", "result"); err != nil || !got.Unavailable {
-		t.Fatalf("migrated runtime state = %+v, err = %v", got, err)
+	if _, err := s.ServiceCheckSnapshots(); err == nil || !strings.Contains(err.Error(), `invalid observation "invalid"`) {
+		t.Fatalf("read snapshot error = %v, want invalid observation", err)
 	}
 }
 

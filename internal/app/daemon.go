@@ -587,7 +587,7 @@ func checkFailingFromSnapshots(snapshots *Snapshots, service string, checkTypes 
 	restored := map[string]bool{}
 	for name, snapshot := range snapshots.Get(service) {
 		checkType, configured := checkTypes[name]
-		if !configured || snapshot.CheckType != checkType || snapshot.Optional || snapshot.Skipped {
+		if !configured || snapshot.CheckType != checkType || snapshot.Optional || !snapshot.Observation.AffectsHealth() {
 			continue
 		}
 		restored[name] = !snapshot.healthy()
@@ -978,10 +978,11 @@ func (w *cycleWriter) writeCycle(records cycleRecords, cycle cycleRecord) error 
 			// A verdictless check has no availability to record: neither side of
 			// "a backup is running" is uptime, and a bare measurement asserts
 			// nothing at all, so neither gets an SLA series.
-			if !cycle.ran[check] || result.Skipped || result.Verdictless() {
+			observation := result.Observation()
+			if !cycle.ran[check] || !observation.AffectsHealth() {
 				continue
 			}
-			if err := records.RecordCheckSLA(w.name, check, result.Healthy(), w.now()); err != nil {
+			if err := records.RecordCheckSLA(w.name, check, observation.Healthy(), w.now()); err != nil {
 				return fmt.Errorf("record cycle check SLA for %s: %w", check, err)
 			}
 		}

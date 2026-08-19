@@ -999,6 +999,20 @@ func TestResultHealthyByReportingMode(t *testing.T) {
 	}
 }
 
+func TestObservationStateRejectsInvalidValue(t *testing.T) {
+	for _, observation := range []ObservationState{"", "unknown"} {
+		if observation.Valid() {
+			t.Errorf("ObservationState(%q).Valid() = true, want false", observation)
+		}
+		if observation.Healthy() {
+			t.Errorf("ObservationState(%q).Healthy() = true, want fail closed", observation)
+		}
+		if observation.AffectsHealth() {
+			t.Errorf("ObservationState(%q).AffectsHealth() = true, want false", observation)
+		}
+	}
+}
+
 func TestIsReportingMode(t *testing.T) {
 	for _, mode := range ReportingModes() {
 		if !IsReportingMode(mode) {

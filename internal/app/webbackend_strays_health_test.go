@@ -16,7 +16,7 @@ func straysHealthBackend(t *testing.T, reports string) *WebBackend {
 	snaps := NewSnapshots()
 	snaps.PublishWithCheckTypes("web", map[string]checks.Result{
 		"service": {Check: "service", OK: true},
-		"strays":  {Check: "strays", OK: false, Data: map[string]any{checks.DataKeyType: checks.CheckTypeStrays, checks.DataKeyCount: 3}},
+		"strays":  {Check: "strays", OK: false, Reports: reports, Data: map[string]any{checks.DataKeyType: checks.CheckTypeStrays, checks.DataKeyCount: 3}},
 	}, map[string]bool{"service": true, "strays": true}, types)
 
 	b := webBackendWithEntry(snaps, names, types)
