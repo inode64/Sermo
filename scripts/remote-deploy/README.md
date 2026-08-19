@@ -5,6 +5,22 @@ local build. They are intentionally small wrappers around Sermo's own binaries:
 stage read-only host inventory, generate one-file-per-target config, apply the
 config under `/etc/sermo`, start `sermod`, and verify the Web UI.
 
+Before changing init integration, run the read-only lifecycle prevalidation
+against the complete `.env.ssh` inventory:
+
+```sh
+scripts/remote-deploy/prevalidate_init_contracts.py --env .env.ssh
+```
+
+It continues after unreachable hosts, validates the installed Sermo
+configuration, detects systemd/OpenRC, and compares every standard
+`/etc/sermo/services` target reported by `sermoctl status` with the init
+manager's direct state and lifecycle metadata. Its TSV report contains host,
+unit and state information only; values from `.env.ssh`, configuration content
+and credentials are never copied into it. A non-zero exit means at least one
+host was unreachable or had a mismatch and must be explained before an init
+change is committed. Use repeatable `--host HOST` arguments for a focused rerun.
+
 Typical flow:
 
 ```sh
