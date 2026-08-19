@@ -12,6 +12,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -43,30 +44,14 @@ func selfSignedTLS(t *testing.T) tls.Certificate {
 }
 
 func TestHTTP3RoundTrip(t *testing.T) {
-	udp, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.ParseIP("127.0.0.1")})
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = udp.Close() }()
-
-	srv := &http3.Server{
-		TLSConfig: &tls.Config{Certificates: []tls.Certificate{selfSignedTLS(t)}, MinVersion: tls.VersionTLS13},
-		Handler: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte("ok"))
-		}),
-	}
-	go func() { _ = srv.Serve(udp) }()
-	defer func() { _ = srv.Close() }()
-
-	port := udp.LocalAddr().(*net.UDPAddr).Port
+	serverURL := startHTTP3TestServer(t)
 	tr := &http3.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}
 	defer func() { _ = tr.Close() }()
 
 	c := &httpCheck{
 		base:   base{name: "h3", timeout: 5 * time.Second},
 		client: &http.Client{Transport: tr},
-		url:    fmt.Sprintf("https://127.0.0.1:%d/", port),
+		url:    serverURL,
 		method: "GET",
 		expect: statusMatcher{codes: []int{200}},
 	}
@@ -77,6 +62,28 @@ func TestHTTP3RoundTrip(t *testing.T) {
 	if res.Data["protocol"] != "HTTP/3.0" {
 		t.Fatalf("protocol = %v, want HTTP/3.0", res.Data["protocol"])
 	}
+}
+
+func startHTTP3TestServer(t *testing.T) string {
+	t.Helper()
+	udp, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.ParseIP("127.0.0.1")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = udp.Close() })
+
+	srv := &http3.Server{
+		TLSConfig: &tls.Config{Certificates: []tls.Certificate{selfSignedTLS(t)}, MinVersion: tls.VersionTLS13},
+		Handler: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("ok"))
+		}),
+	}
+	go func() { _ = srv.Serve(udp) }()
+	t.Cleanup(func() { _ = srv.Close() })
+
+	port := udp.LocalAddr().(*net.UDPAddr).Port
+	return fmt.Sprintf("https://127.0.0.1:%d/", port)
 }
 
 func TestBuildHTTP3Client(t *testing.T) {
@@ -105,12 +112,63 @@ func TestBuildHTTP3Client(t *testing.T) {
 		t.Fatal("http3 with a proxy should warn")
 	}
 
-	// HTTP/3 bypasses the HTTP transport dialer, so it cannot honor interface
-	// binding that is mandatory for normal protocol probes.
-	if _, warns := Build(map[string]any{
-		"a": map[string]any{"type": "http", "url": "https://example.com/", "http3": true, "interface": "lo"},
-	}, Deps{DefaultTimeout: time.Second}); len(warns) == 0 {
-		t.Fatal("http3 with an interface should warn")
+	// HTTP/3 binds its UDP socket to the first configured interface.
+	bound, warns := Build(map[string]any{
+		"a": map[string]any{
+			"type": "http", "url": "https://example.com/", "http3": true,
+			"interface": "lo", "cert_verify": false,
+		},
+	}, Deps{DefaultTimeout: time.Second})
+	if len(warns) != 0 || len(bound) != 1 {
+		t.Fatalf("http3 check with interface should build: warns=%v", warns)
+	}
+	boundHTTP := bound[0].Check.(*httpCheck)
+	requestTransport := boundHTTP.client.Transport.(*http3.Transport)
+	if requestTransport.Dial == nil {
+		t.Fatal("HTTP/3 request transport must use the bound QUIC dialer")
+	}
+	certTransport := boundHTTP.certClient.Transport.(*http3.Transport)
+	if certTransport.Dial == nil {
+		t.Fatal("HTTP/3 certificate transport must use the bound QUIC dialer")
+	}
+}
+
+func TestHTTP3InterfaceFailureDoesNotFallBack(t *testing.T) {
+	built, warns := Build(map[string]any{
+		"a": map[string]any{
+			"type": "http", "url": startHTTP3TestServer(t), "http3": true,
+			"interface": "sermo-nonexistent0", "cert_verify": false,
+		},
+	}, Deps{DefaultTimeout: 2 * time.Second})
+	if len(warns) != 0 || len(built) != 1 {
+		t.Fatalf("http3 check with interface should build: warns=%v", warns)
+	}
+	if result := built[0].Check.Run(context.Background()); result.OK {
+		t.Fatal("HTTP/3 must fail instead of using the default route when interface binding fails")
+	}
+}
+
+func TestHTTPCertificateInterfaceFailureDoesNotFallBack(t *testing.T) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	built, warns := Build(map[string]any{
+		"a": map[string]any{
+			"type": "http", "url": server.URL,
+			"interface": "sermo-nonexistent0", "cert_verify": false,
+		},
+	}, Deps{DefaultTimeout: 2 * time.Second})
+	if len(warns) != 0 || len(built) != 1 {
+		t.Fatalf("certificate check with interface should build: warns=%v", warns)
+	}
+	result := built[0].Check.Run(context.Background())
+	if result.OK {
+		t.Fatal("certificate inspection must fail instead of using the default route when interface binding fails")
+	}
+	if !strings.Contains(result.Message, "sermo-nonexistent0") {
+		t.Fatalf("failure %q does not identify the rejected interface", result.Message)
 	}
 }
 

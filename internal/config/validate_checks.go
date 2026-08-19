@@ -201,9 +201,6 @@ func validateHTTPTransport(prefix string, fields map[string]any, add addFunc) {
 			if cfgval.String(fields[checks.CheckKeyProxy]) != "" {
 				add("%s.http3 and proxy are mutually exclusive", prefix)
 			}
-			if len(cfgval.StringList(fields[checks.CheckKeyInterface])) > 0 {
-				add("%s.http3 and interface are mutually exclusive", prefix)
-			}
 		}
 	}
 	if v, present := fields[checks.CheckKeyFollowRedirects]; present {

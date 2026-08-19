@@ -56,13 +56,14 @@ service: x
 checks:
   h3: { type: http, url: "https://h/", http3: true, proxy: "http://squid:3128" }
 `), "mutually exclusive")
-	// http3 + interface is rejected; the builder cannot bind HTTP/3 egress.
-	mustHave(t, validateService(t, `
+	// http3 + interface is valid; QUIC binds its UDP socket to the interface.
+	issues = validateService(t, `
 name: web
 service: x
 checks:
   h3: { type: http, url: "https://h/", http3: true, interface: eth0 }
-`), "http3 and interface are mutually exclusive")
+`)
+	mustNotHave(t, issues, "checks.h3")
 }
 
 func TestValidateHTTPFollowRedirectsIsBoolean(t *testing.T) {
