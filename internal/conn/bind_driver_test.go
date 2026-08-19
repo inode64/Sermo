@@ -7,11 +7,10 @@ import (
 	"time"
 )
 
-// TestInterfaceBindingApplied consolidates the former per-driver interface-binding
-// tests: each case sets Interface and asserts the corresponding driver/dialer/client
-// wires up the BindDialer control hook (or equivalent). Add a subtest when a new
-// driver gains interface binding.
-func TestInterfaceBindingApplied(t *testing.T) {
+// testExternalModuleInterfaceBinding consolidates the per-module
+// interface-binding checks used by TestExternalModuleTransportContract. Add a
+// subtest whenever a module gains a dialer/client adapter.
+func testExternalModuleInterfaceBinding(t *testing.T) {
 	cases := []struct {
 		name  string
 		check func(t *testing.T)
