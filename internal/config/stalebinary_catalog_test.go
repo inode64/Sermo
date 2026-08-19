@@ -66,6 +66,38 @@ func TestCatalogSNMPDProtocolProbeIsOptional(t *testing.T) {
 	}
 }
 
+func TestCatalogFcronBlocksStopAndRestartWithActiveJobs(t *testing.T) {
+	const guardName = "block-stop-restart-with-active-jobs"
+	resolved := resolveCatalogService(t, "fcron", "systemd")
+	check := nested(t, resolved.Tree, "checks", guardName)
+	if got := cfgval.String(check["type"]); got != "process_count" {
+		t.Fatalf("fcron active-jobs check type = %q, want process_count", got)
+	}
+	if got := cfgval.String(check["reports"]); got != "state" {
+		t.Fatalf("fcron active-jobs reports = %q, want state", got)
+	}
+	count := nested(t, check, "count")
+	if got := cfgval.String(count["op"]); got != ">" {
+		t.Fatalf("fcron active-jobs count op = %q, want >", got)
+	}
+	if got := cfgval.String(count["value"]); got != "1" {
+		t.Fatalf("fcron active-jobs count value = %q, want 1", got)
+	}
+
+	guard := nested(t, resolved.Tree, rules.SectionRules, guardName)
+	if got := guard[rules.RuleFieldType]; got != string(rules.RuleGuard) {
+		t.Fatalf("fcron active-jobs rule type = %v, want guard", got)
+	}
+	blocks := cfgval.StringList(guard[rules.RuleFieldBlocks])
+	if len(blocks) != 2 || blocks[0] != string(rules.ActionRestart) || blocks[1] != string(rules.ActionStop) {
+		t.Fatalf("fcron active-jobs blocks = %v, want [restart stop]", blocks)
+	}
+	condition := nested(t, guard, rules.RuleFieldIf, string(rules.ConditionActive))
+	if got := cfgval.String(condition[rules.FieldCheck]); got != guardName {
+		t.Fatalf("fcron active-jobs condition check = %q, want %q", got, guardName)
+	}
+}
+
 // The OVS services must never restart themselves over a replaced binary:
 // restarting the dataplane cuts the host off. They must still alert, so the
 // operator can schedule the restart by hand.

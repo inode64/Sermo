@@ -192,6 +192,23 @@ func TestRunLeavesBackgroundWorkAlone(t *testing.T) {
 	}
 }
 
+func TestRunAcceptsSuccessfulCommandWithInheritedOutputPipe(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell background-process behavior is Unix-specific")
+	}
+	start := time.Now()
+	res, err := CommandRunner{}.Run(context.Background(), "sh", "-c", "sleep 3 &")
+	if err != nil {
+		t.Fatalf("successful parent with inherited output pipe failed: %v (%+v)", err, res)
+	}
+	if res.ExitCode != ExitCodeSuccess {
+		t.Fatalf("exit code = %d, want %d", res.ExitCode, ExitCodeSuccess)
+	}
+	if elapsed := time.Since(start); elapsed >= 3*time.Second {
+		t.Fatalf("runner waited for background descendant: %v", elapsed)
+	}
+}
+
 // Every command carries a set-but-unusable session bus address, so no tool can
 // autolaunch its own bus daemon.
 func TestSessionBusAutolaunchIsDisabled(t *testing.T) {

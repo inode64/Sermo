@@ -302,7 +302,11 @@ func (d Discoverer) StaleBinariesIn(attributed []Process, selectors []Selector) 
 			out = append(out, StaleBinary{PID: p.PID, Path: p.ExePrev})
 		}
 	}
-	if !hasExeSelector(selectors) {
+	// A live backend attribution (notably a systemd cgroup) is authoritative.
+	// The global deleted-exe fallback exists for backends such as OpenRC that
+	// cannot name their processes; using it alongside a live cgroup would claim
+	// an unrelated orphan merely because its old path and user match a selector.
+	if hasBackendAttribution(attributed) || !hasExeSelector(selectors) {
 		return out
 	}
 
@@ -322,6 +326,15 @@ func (d Discoverer) StaleBinariesIn(attributed []Process, selectors []Selector) 
 		}
 	}
 	return out
+}
+
+func hasBackendAttribution(processes []Process) bool {
+	for _, proc := range processes {
+		if proc.Source == SourceBackend {
+			return true
+		}
+	}
+	return false
 }
 
 // StaleBinaries discovers the service's processes and reports the stale ones.

@@ -54,6 +54,19 @@ func TestDelegatedWorkloadCatalogUsesNativeRestart(t *testing.T) {
 	}
 }
 
+func TestPolkitCatalogUsesNativeRestartForDBusActivation(t *testing.T) {
+	t.Parallel()
+
+	resolved := resolveCatalogService(t, "polkit", backendSystemd)
+	got, err := ParseRestartMode(resolved.Tree)
+	if err != nil {
+		t.Fatalf("ParseRestartMode(polkit, systemd): %v", err)
+	}
+	if got != RestartModeNative {
+		t.Fatalf("ParseRestartMode(polkit, systemd) = %q, want %q", got, RestartModeNative)
+	}
+}
+
 // virtnetworkd keeps the staged default, so it stays out of the native-restart
 // table above — but the same delegation rule applies. libvirt spawns one dnsmasq
 // pair per virtual network; they serve the guests' DHCP and DNS across a daemon

@@ -74,6 +74,39 @@ func TestStaleBinariesReportsAttributed(t *testing.T) {
 	}
 }
 
+func TestStaleBinariesBackendAttributionExcludesForeignDeletedSelectorMatch(t *testing.T) {
+	d := Discoverer{
+		Reader: fakeReader{ids: map[int]Identity{
+			10: {PID: 10, UID: 301, Exe: "/usr/bin/squid", ExeOK: true},
+			20: {PID: 20, UID: 301, ExeOK: false, ExePrev: "/usr/libexec/squid/pinger"},
+		}},
+		ResolveUser: fakeUsers(map[string]uint32{"squid": 301}),
+		BackendPIDs: func() []int { return []int{10} },
+	}
+
+	selectors := []Selector{staleSelector("pinger", "/usr/libexec/squid/pinger", "squid")}
+	if stale := d.StaleBinaries(selectors); len(stale) != 0 {
+		t.Fatalf("foreign deleted selector match must not override backend attribution, got %v", stale)
+	}
+}
+
+func TestStaleBinariesReportsDeletedBackendMember(t *testing.T) {
+	d := Discoverer{
+		Reader: fakeReader{ids: map[int]Identity{
+			10: {PID: 10, UID: 301, Exe: "/usr/bin/squid", ExeOK: true},
+			20: {PID: 20, UID: 301, ExeOK: false, ExePrev: "/usr/libexec/squid/pinger"},
+		}},
+		ResolveUser: fakeUsers(map[string]uint32{"squid": 301}),
+		BackendPIDs: func() []int { return []int{10, 20} },
+	}
+
+	selectors := []Selector{staleSelector("pinger", "/usr/libexec/squid/pinger", "squid")}
+	stale := d.StaleBinaries(selectors)
+	if len(stale) != 1 || stale[0].PID != 20 || stale[0].Path != "/usr/libexec/squid/pinger" {
+		t.Fatalf("deleted cgroup member must remain visible, got %v", stale)
+	}
+}
+
 // TestStaleBinariesIgnoresHealthyAndForeign keeps the report scoped: a live
 // binary is not stale, and a deleted binary belonging to some other program is
 // not this service's problem.

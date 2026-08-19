@@ -818,7 +818,9 @@ y, por tanto, no deban clasificarse como residuales de un stop fallido. Los
 perfiles empaquetados de `containerd` y Docker Engine lo usan para shims, proxies
 y workloads de contenedores, y el perfil de `glusterd` lo usa porque su unidad
 con `KillMode=process` mantiene deliberadamente sirviendo los bricks y el daemon
-de self-heal durante un reinicio. Los daemons multiproceso ordinarios conservan
+de self-heal durante un reinicio. El perfil de `polkit`, exclusivo de systemd,
+también lo usa porque la activación D-Bus puede cancelar un stop aislado mientras
+inicia inmediatamente una nueva generación del daemon. Los daemons multiproceso ordinarios conservan
 `staged`: el modo nativo no debe usarse solo para ocultar un servicio que no se
 detiene limpiamente.
 
@@ -1787,6 +1789,11 @@ Un servicio también puede llevar su propio bloque `watches:` — watches por
 servicio que pueden disparar un hook/notificación o un `then.action` compacto,
 y pueden usar los tipos `service`/`metric` y el `process_count` acotado por PIDs. Véase
 [Watches de servicio](configuration.es.md#watches-de-servicio-acotados-a-un-servicio).
+
+El perfil empaquetado de `fcron` interpreta que hay un trabajo programado activo
+cuando el árbol del servicio contiene más de un proceso. Mientras se mantenga esa
+condición, su guard bloquea `restart` y `stop`, permitiendo que el trabajo termine
+antes de que el operador reintente la operación.
 
 ## Bloquear operaciones mientras hay clientes conectados
 

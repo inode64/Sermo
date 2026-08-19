@@ -3098,6 +3098,13 @@ servicio que declare `processes:` o `pidfile:`, junto con una regla que alerta y
 después reinicia. No acepta campos; los selectores que inspecciona son los del
 propio servicio.
 
+Cuando el backend de init aporta un conjunto vivo de procesos (por ejemplo, un
+cgroup de systemd), esa atribución es autoritativa: los procesos eliminados de
+otras partes del host no se asignan al servicio solo porque su ruta anterior y
+su usuario coincidan con un selector. El fallback por selector se mantiene
+cuando el backend no puede nombrar los procesos del servicio, como ocurre con
+muchos servicios OpenRC.
+
 Existe porque, de otro modo, la condición es invisible o engañosa. Un proceso
 identificado por el backend de init sigue corriendo con un ejecutable inservible
 y no se reporta nada; un proceso emparejado sólo por un selector `exe:` deja de

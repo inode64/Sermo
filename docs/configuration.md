@@ -3003,6 +3003,12 @@ service that declares `processes:` or `pidfile:`, together with a rule that
 alerts and then restarts. It takes no fields; the selectors it inspects are the
 service's own.
 
+When the init backend supplies a live process set (for example, a systemd
+cgroup), that attribution is authoritative: deleted processes elsewhere on the
+host are not assigned to the service merely because their former path and user
+match a selector. The selector fallback remains available when the backend
+cannot name the service's processes, as on many OpenRC services.
+
 It exists because the condition is otherwise invisible or misleading. A process
 identified through the init backend keeps running with an unusable executable
 and nothing is reported at all; a process matched only by an `exe:` selector
