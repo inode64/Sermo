@@ -435,9 +435,10 @@ func (b *WebBackend) operationSettlingPending(name string) bool {
 }
 
 // checkHealthSummaryCurrent reports required-check health for the service list.
-// It uses the same rule as SLA availability: a required, non-skipped check with
-// OK=false counts as failing; optional failures are ignored. Paused services are
-// "paused"; services with no observed checks yet are "unknown". current, when
+// It uses the same canonical observation as workers and SLA availability: only
+// a required failing or unavailable observation counts as failing; optional,
+// skipped and neutral observations are ignored. Paused services are "paused";
+// services with no observed checks yet are "unknown". current, when
 // set, filters snapshots to the ones the running config still declares; nil
 // keeps every snapshot.
 // checkHealthSummaryCurrent counts the checks that make a service unhealthy.
