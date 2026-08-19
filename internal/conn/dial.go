@@ -114,41 +114,6 @@ func (t probeTarget) openUDP(ctx context.Context) (net.Conn, error) {
 	return t.openNetwork(ctx, networkUDP)
 }
 
-// pqBindDialer adapts *net.Dialer to lib/pq's Dialer/DialerContext interfaces.
-type pqBindDialer struct {
-	*net.Dialer
-}
-
-func (d pqBindDialer) Dial(network, address string) (net.Conn, error) {
-	c, err := d.Dialer.Dial(network, address)
-	if err != nil {
-		return nil, wrapDialError(network, address, err)
-	}
-	return c, nil
-}
-
-func (d pqBindDialer) DialTimeout(network, address string, timeout time.Duration) (net.Conn, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
-	c, err := d.Dialer.DialContext(ctx, network, address)
-	if err != nil {
-		return nil, wrapDialError(network, address, err)
-	}
-	return c, nil
-}
-
-func (d pqBindDialer) DialContext(ctx context.Context, network, address string) (net.Conn, error) {
-	c, err := d.Dialer.DialContext(ctx, network, address)
-	if err != nil {
-		return nil, wrapDialError(network, address, err)
-	}
-	return c, nil
-}
-
-func pqDialer(target probeTarget) pqBindDialer {
-	return pqBindDialer{target.dialer()}
-}
-
 // probeBanner dials cfg (port defaulting to defaultPort), runs handshake on the
 // connection and closes it. It folds the dial / defer-close prologue that every
 // banner protocol's Probe repeats; the protocol supplies only its default port

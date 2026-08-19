@@ -15,8 +15,9 @@ import (
 type sqlCheck struct {
 	base
 	engine string
-	driver string // database/sql driver name: mysql | postgres | sqlite
+	driver string // database/sql driver name: mysql | pgx | sqlite
 	dsn    string
+	open   func(context.Context) (*sql.DB, error)
 	query  string
 	op     string
 	value  string
@@ -27,7 +28,13 @@ func (c sqlCheck) Run(ctx context.Context) Result {
 	defer run.close()
 	start := run.start
 
-	result, isNull, err := sqlScalar(ctx, c.driver, c.dsn, c.query)
+	db, err := c.openDB(ctx)
+	if err != nil {
+		return c.base.unavailableResult(fmt.Sprintf("sql %s: %v", c.engine, err), start)
+	}
+	defer func() { _ = db.Close() }()
+
+	result, isNull, err := sqlScalarDB(ctx, db, c.query)
 	if err != nil {
 		return c.base.unavailableResult(fmt.Sprintf("sql %s: %v", c.engine, err), start)
 	}
@@ -41,15 +48,16 @@ func (c sqlCheck) Run(ctx context.Context) Result {
 	})
 }
 
-// sqlScalar opens the database, runs query and returns the first column of the
-// first row as a string. The second return reports a NULL result.
-func sqlScalar(ctx context.Context, driver, dsn, query string) (string, bool, error) {
-	db, err := sql.Open(driver, dsn)
-	if err != nil {
-		return "", false, err
+func (c sqlCheck) openDB(ctx context.Context) (*sql.DB, error) {
+	if c.open != nil {
+		return c.open(ctx)
 	}
-	defer func() { _ = db.Close() }()
+	return sql.Open(c.driver, c.dsn)
+}
 
+// sqlScalarDB runs query and returns the first column of the first row as a
+// string. The second return reports a NULL result.
+func sqlScalarDB(ctx context.Context, db *sql.DB, query string) (string, bool, error) {
 	var raw any
 	if err := db.QueryRowContext(ctx, query).Scan(&raw); err != nil {
 		return "", false, err
@@ -61,7 +69,7 @@ func sqlScalar(ctx context.Context, driver, dsn, query string) (string, bool, er
 }
 
 // sqlValueString renders a scanned SQL value as a string. Drivers return numbers
-// as []byte (mysql), int64/float64 (sqlite/pq) or strings; captured text is
+// as []byte (mysql), int64/float64 (sqlite/pgx) or strings; captured text is
 // trimmed so values from queries are stable in messages, data and hook env.
 func sqlValueString(v any) string {
 	switch t := v.(type) {
@@ -82,7 +90,7 @@ func sqlEngineDriver(engine string) (string, bool) {
 	case SQLEngineMySQL, SQLEngineMariaDB:
 		return SQLEngineMySQL, true
 	case SQLEnginePostgres, SQLEnginePostgreSQL:
-		return SQLEnginePostgres, true
+		return conn.PostgresDriverName, true
 	case SQLEngineSQLite, SQLEngineSQLite3:
 		return SQLEngineSQLite, true
 	default:
@@ -109,6 +117,7 @@ func buildSQLCheck(b base, entry map[string]any) (Check, string) {
 	}
 
 	var dsn string
+	var open func(context.Context) (*sql.DB, error)
 	switch driver {
 	case SQLEngineSQLite:
 		path := cfgval.AsString(entry[CheckKeyPath])
@@ -123,11 +132,13 @@ func buildSQLCheck(b base, entry map[string]any) (Check, string) {
 		cfg := sqlConnConfig(engine, entry)
 		if driver == SQLEngineMySQL {
 			dsn = conn.MySQLDSN(cfg)
+			open = func(ctx context.Context) (*sql.DB, error) { return conn.OpenMySQLDB(ctx, cfg) }
 		} else {
 			dsn = conn.PostgresDSN(cfg)
+			open = func(ctx context.Context) (*sql.DB, error) { return conn.OpenPostgresDB(ctx, cfg) }
 		}
 	}
-	return sqlCheck{base: b, engine: engine, driver: driver, dsn: dsn, query: query, op: op, value: value}, ""
+	return sqlCheck{base: b, engine: engine, driver: driver, dsn: dsn, open: open, query: query, op: op, value: value}, ""
 }
 
 // sqlConnConfig builds a conn.Config for a mysql/postgres sql check, defaulting
