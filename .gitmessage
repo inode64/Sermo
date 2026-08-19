@@ -1,0 +1,13 @@
+agent: 
+
+Objective:
+# What concrete outcome does this commit deliver?
+
+Invariant:
+# What behavior or safety property must remain true?
+
+Evidence:
+# Which tests, checks, or runtime observations support the change?
+
+Limitations:
+# State known boundaries or write "None.".
