@@ -75,15 +75,10 @@ type Engine struct {
 	Service string // config service name
 	Unit    string // backend unit, passed to Manager
 	Backend string
-	// RestartMode selects staged Stop+Start or one atomic backend Restart call.
-	// The zero value preserves the staged default for directly-built Engines.
-	RestartMode config.RestartMode
-	// AlsoUnits are auxiliary init units (from `also_service`) acted on alongside
-	// the primary in wrap order: started before the primary (strict — a failure
-	// aborts before the primary starts) and stopped after it (best-effort). Empty
-	// for most services. A native restart leaves them active and restarts only the
-	// primary atomically.
-	AlsoUnits []string
+	// Lifecycle is the resolved service contract shared by monitoring and
+	// operations. Its zero value preserves staged restart with no auxiliaries for
+	// directly-built test engines.
+	Lifecycle config.ServiceLifecycle
 	// StopArtifacts are stopped-state invariants verified after a clean stop.
 	StopArtifacts StopArtifacts
 
@@ -202,7 +197,7 @@ type TerminalSessionSourceTarget struct {
 // native mode delegates one atomic restart to the init backend. Both modes first
 // reconcile an init state that has drifted from reality.
 func (e Engine) Restart(ctx context.Context) Result {
-	if e.RestartMode == config.RestartModeNative {
+	if e.Lifecycle.RestartMode == config.RestartModeNative {
 		return e.run(ctx, plan{action: actionRestart, preflight: true, reconcile: true, nativeRestart: true, postflight: true})
 	}
 	return e.run(ctx, plan{action: actionRestart, preflight: true, reconcile: true, stop: true, start: true, postflight: true})
@@ -815,7 +810,7 @@ func (e Engine) runPostflight(ctx context.Context, p plan, result *Result) bool 
 }
 
 func (e Engine) startService(ctx context.Context, result *Result) bool {
-	for _, unit := range e.AlsoUnits {
+	for _, unit := range e.Lifecycle.AuxiliaryUnits {
 		if err := e.Manager.Start(ctx, unit); err != nil {
 			return failPhase(ctx, result, "operation timed out starting also_service "+unit, "start "+unit+": ", err)
 		}
@@ -830,7 +825,7 @@ func (e Engine) stopService(ctx context.Context, result *Result) (alsoStopErrs, 
 		_ = failPhase(ctx, result, timeoutDuring("stop"), "stop: ", err)
 		return nil, nil, false, false
 	}
-	for _, unit := range slices.Backward(e.AlsoUnits) {
+	for _, unit := range slices.Backward(e.Lifecycle.AuxiliaryUnits) {
 		if err := e.Manager.Stop(ctx, unit); err != nil {
 			alsoStopErrs = append(alsoStopErrs, fmt.Sprintf("stop %s: %v", unit, err))
 		}

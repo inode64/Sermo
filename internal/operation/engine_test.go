@@ -1765,7 +1765,7 @@ func assertAlsoServiceWrapOrder(t *testing.T, alsoUnits, want []string) {
 	t.Helper()
 	h := defaultHarness()
 	e := h.engine()
-	e.AlsoUnits = alsoUnits
+	e.Lifecycle.AuxiliaryUnits = alsoUnits
 	if res := e.Restart(context.Background()); res.Status != ResultOK {
 		t.Fatalf("status = %q (%s)", res.Status, res.Message)
 	}
@@ -1802,7 +1802,7 @@ func TestAlsoServiceStartStrictAborts(t *testing.T) {
 	h := defaultHarness()
 	h.mgr.errOn = map[string]error{"start docker.socket": errors.New("socket down")}
 	e := h.engine()
-	e.AlsoUnits = []string{"docker.socket"}
+	e.Lifecycle.AuxiliaryUnits = []string{"docker.socket"}
 	res := e.Restart(context.Background())
 	if res.Status != ResultFailed {
 		t.Fatalf("a failing also_service start must fail the op, got %q", res.Status)
@@ -1816,7 +1816,7 @@ func TestAlsoServiceStopBestEffort(t *testing.T) {
 	h := defaultHarness()
 	h.mgr.errOn = map[string]error{"stop docker.socket": errors.New("socket stuck")}
 	e := h.engine()
-	e.AlsoUnits = []string{"docker.socket"}
+	e.Lifecycle.AuxiliaryUnits = []string{"docker.socket"}
 	res := e.Restart(context.Background())
 	if res.Status != ResultOK {
 		t.Fatalf("a failing also_service stop must not fail the op, got %q (%s)", res.Status, res.Message)
