@@ -17,7 +17,7 @@ import (
 
 func nativeRestartEngine(h *harness) Engine {
 	engine := h.engine()
-	engine.RestartMode = config.RestartModeNative
+	engine.Lifecycle.RestartMode = config.RestartModeNative
 	return engine
 }
 
@@ -227,7 +227,7 @@ func TestNativeRestartLeavesAuxiliaryInitUnitsActive(t *testing.T) {
 
 	h := defaultHarness()
 	engine := nativeRestartEngine(h)
-	engine.AlsoUnits = []string{"docker.socket"}
+	engine.Lifecycle.AuxiliaryUnits = []string{"docker.socket"}
 	res := engine.Restart(context.Background())
 
 	if res.Status != ResultOK {

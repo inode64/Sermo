@@ -38,7 +38,7 @@ type Config struct {
 	Service string
 	Unit    string
 	Backend string
-	Tree    map[string]any // resolved service config; New derives also_service units
+	Tree    map[string]any // resolved service config; New derives its lifecycle
 	//                        and the stop_policy invariants from it
 
 	Manager     Manager
@@ -89,10 +89,10 @@ func New(c Config) Engine {
 	}
 
 	tree := c.Tree
-	// Derive the also_service units and stop_policy invariants from the resolved
-	// tree here, consistent with how the kill policy/selectors below are parsed —
-	// callers pass only the Tree, not pre-parsed forms.
-	alsoUnits := config.AdditionalUnits(tree, c.Backend)
+	// Derive the lifecycle and stop_policy invariants from the resolved tree here,
+	// consistent with how the kill policy/selectors below are parsed — callers
+	// pass only the Tree, not parallel pre-parsed forms.
+	lifecycle, lifecycleErr := config.ResolveServiceLifecycle(tree, c.Backend)
 	stopArtifacts := stopArtifactsFromTree(tree)
 	killPolicy, stopPolicyWarnings := process.ParseStopPolicy(tree)
 	selectors, selectorWarnings := process.ParseSelectors(tree)
@@ -102,12 +102,11 @@ func New(c Config) Engine {
 	// while half of that authorization was misread is not an option.
 	reapSelector, reapWarnings := process.ParseReapPolicy(tree)
 	hasCommandMatch := hasCommandMatchSelector(selectors)
-	restartMode, restartPolicyErr := config.ParseRestartMode(tree)
 	configErr := firstWarningError(
 		warningError(process.SectionStopPolicy, stopPolicyWarnings),
 		warningError(selectorWarningPrefix, selectorWarnings),
 		warningError(process.SectionReap, reapWarnings),
-		restartPolicyErr,
+		lifecycleErr,
 		reloadConfigError(tree),
 	)
 
@@ -154,8 +153,7 @@ func New(c Config) Engine {
 		Service:       c.Service,
 		Unit:          c.Unit,
 		Backend:       c.Backend,
-		RestartMode:   restartMode,
-		AlsoUnits:     alsoUnits,
+		Lifecycle:     lifecycle,
 		StopArtifacts: stopArtifacts,
 		ConfigError:   configErr,
 		Manager:       c.Manager,
