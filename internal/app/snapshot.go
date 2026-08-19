@@ -15,6 +15,7 @@ import (
 // CheckSnapshot is the last observed result of one check, for the web detail view.
 type CheckSnapshot struct {
 	CheckType   string
+	Observation checks.ObservationState
 	OK          bool
 	Condition   bool
 	Optional    bool
@@ -27,13 +28,14 @@ type CheckSnapshot struct {
 }
 
 func (c CheckSnapshot) healthy() bool {
-	if c.Unavailable {
-		return false
+	if c.Observation.Valid() {
+		return c.Observation.Healthy()
 	}
-	if c.Condition {
-		return !c.OK
-	}
-	return c.OK
+	// Compatibility with snapshot rows persisted before Observation existed.
+	return checks.Result{
+		OK: c.OK, Condition: c.Condition, Skipped: c.Skipped,
+		Unavailable: c.Unavailable,
+	}.Observation().Healthy()
 }
 
 // Snapshots holds each service's most recent check results so the web UI can show
@@ -100,8 +102,8 @@ func (s *Snapshots) PublishWithCheckTypes(service string, cache map[string]check
 	m := make(map[string]CheckSnapshot, len(cache))
 	for name, r := range cache {
 		cs := CheckSnapshot{
-			CheckType: checkTypes[name],
-			OK:        r.OK, Condition: r.Condition, Optional: r.Optional, Skipped: r.Skipped, Unavailable: r.Unavailable, Message: r.Message,
+			CheckType: checkTypes[name], Observation: r.Observation(),
+			OK: r.OK, Condition: r.Condition, Optional: r.Optional, Skipped: r.Skipped, Unavailable: r.Unavailable, Message: r.Message,
 			Data: maps.Clone(r.Data), Ran: ran[name],
 		}
 		if ran[name] {
@@ -196,7 +198,8 @@ func (s *WatchSnapshots) Publish(watch, checkType string, r checks.Result) {
 	}
 	slot := watchResultSlot(r)
 	snap := CheckSnapshot{
-		OK: r.OK, Condition: r.Condition, Optional: r.Optional, Skipped: r.Skipped, Unavailable: r.Unavailable, Message: r.Message,
+		Observation: r.Observation(),
+		OK:          r.OK, Condition: r.Condition, Optional: r.Optional, Skipped: r.Skipped, Unavailable: r.Unavailable, Message: r.Message,
 		Data: maps.Clone(r.Data), Ran: true, At: now(),
 	}
 	s.mu.Lock()
@@ -269,14 +272,16 @@ func serviceSnapshotRecords(snaps map[string]CheckSnapshot) map[string]state.Che
 
 func snapshotFromRecord(rec state.CheckSnapshotRecord) CheckSnapshot {
 	return CheckSnapshot{
-		CheckType: rec.CheckType, OK: rec.OK, Condition: rec.Condition, Optional: rec.Optional, Skipped: rec.Skipped, Unavailable: rec.Unavailable,
+		CheckType: rec.CheckType, Observation: checks.ObservationState(rec.Observation),
+		OK: rec.OK, Condition: rec.Condition, Optional: rec.Optional, Skipped: rec.Skipped, Unavailable: rec.Unavailable,
 		Message: rec.Message, Data: maps.Clone(rec.Data), Ran: rec.Ran, At: rec.At,
 	}
 }
 
 func snapshotRecord(snap CheckSnapshot) state.CheckSnapshotRecord {
 	return state.CheckSnapshotRecord{
-		CheckType: snap.CheckType, OK: snap.OK, Condition: snap.Condition, Optional: snap.Optional, Skipped: snap.Skipped, Unavailable: snap.Unavailable,
+		CheckType: snap.CheckType, Observation: string(snap.Observation),
+		OK: snap.OK, Condition: snap.Condition, Optional: snap.Optional, Skipped: snap.Skipped, Unavailable: snap.Unavailable,
 		Message: snap.Message, Data: maps.Clone(snap.Data), Ran: snap.Ran, At: snap.At,
 	}
 }

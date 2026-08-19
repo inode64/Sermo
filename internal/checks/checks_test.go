@@ -971,22 +971,27 @@ func TestCommandCheckAnalyzeClean(t *testing.T) {
 // depends on.
 func TestResultHealthyByReportingMode(t *testing.T) {
 	for _, tc := range []struct {
-		name    string
-		result  Result
-		healthy bool
+		name        string
+		result      Result
+		observation ObservationState
+		healthy     bool
 	}{
-		{"health check passing", Result{OK: true}, true},
-		{"health check failing", Result{OK: false}, false},
-		{"condition under threshold", Result{OK: false, Condition: true}, true},
-		{"condition crossed", Result{OK: true, Condition: true}, false},
-		{"state sensor active", Result{OK: true, Reports: ReportsState}, true},
-		{"state sensor inactive", Result{OK: false, Reports: ReportsState}, true},
-		{"explicit health mode", Result{OK: false, Reports: ReportsHealth}, false},
-		{"health observation unavailable", Result{OK: false, Unavailable: true}, false},
-		{"condition observation unavailable", Result{OK: false, Condition: true, Unavailable: true}, false},
-		{"state observation unavailable", Result{OK: false, Reports: ReportsState, Unavailable: true}, false},
+		{"health check passing", Result{OK: true}, ObservationHealthy, true},
+		{"health check failing", Result{OK: false}, ObservationFailing, false},
+		{"condition under threshold", Result{OK: false, Condition: true}, ObservationHealthy, true},
+		{"condition crossed", Result{OK: true, Condition: true}, ObservationFailing, false},
+		{"state sensor active", Result{OK: true, Reports: ReportsState}, ObservationNeutral, true},
+		{"state sensor inactive", Result{OK: false, Reports: ReportsState}, ObservationNeutral, true},
+		{"explicit health mode", Result{OK: false, Reports: ReportsHealth}, ObservationFailing, false},
+		{"health observation unavailable", Result{OK: false, Unavailable: true}, ObservationUnavailable, false},
+		{"condition observation unavailable", Result{OK: false, Condition: true, Unavailable: true}, ObservationUnavailable, false},
+		{"state observation unavailable", Result{OK: false, Reports: ReportsState, Unavailable: true}, ObservationUnavailable, false},
+		{"skipped failure", Result{OK: false, Skipped: true}, ObservationSkipped, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			if got := tc.result.Observation(); got != tc.observation {
+				t.Errorf("Observation() = %q, want %q", got, tc.observation)
+			}
 			if got := tc.result.Healthy(); got != tc.healthy {
 				t.Errorf("Healthy() = %v, want %v", got, tc.healthy)
 			}

@@ -22,6 +22,9 @@ func TestSnapshotsRoundTrip(t *testing.T) {
 	if len(got) != 2 || !got["http"].OK || got["http"].Message != "status 200" {
 		t.Fatalf("unexpected snapshot: %+v", got)
 	}
+	if got["http"].Observation != checks.ObservationHealthy || got["warn"].Observation != checks.ObservationFailing {
+		t.Fatalf("snapshot observations = http:%q warn:%q", got["http"].Observation, got["warn"].Observation)
+	}
 	if got["warn"].OK || !got["warn"].Optional {
 		t.Fatalf("optional/failed not preserved: %+v", got["warn"])
 	}
@@ -88,7 +91,7 @@ func TestPersistentSnapshotsHydrateAndStore(t *testing.T) {
 	store := &snapshotStoreFake{
 		service: map[string]map[string]state.CheckSnapshotRecord{
 			"web": {
-				"http": {CheckType: checks.CheckTypeHTTP, OK: true, Unavailable: true, Message: "status unavailable", Data: map[string]any{"status": float64(200)}, Ran: true, At: t0},
+				"http": {CheckType: checks.CheckTypeHTTP, Observation: string(checks.ObservationUnavailable), OK: true, Unavailable: true, Message: "status unavailable", Data: map[string]any{"status": float64(200)}, Ran: true, At: t0},
 			},
 		},
 	}
@@ -96,7 +99,7 @@ func TestPersistentSnapshotsHydrateAndStore(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewPersistentSnapshots: %v", err)
 	}
-	if got := s.Get("web")["http"]; got.CheckType != checks.CheckTypeHTTP || !got.OK || !got.Unavailable || got.Message != "status unavailable" || got.Data["status"] != float64(200) || !got.At.Equal(t0) {
+	if got := s.Get("web")["http"]; got.CheckType != checks.CheckTypeHTTP || got.Observation != checks.ObservationUnavailable || !got.OK || !got.Unavailable || got.Message != "status unavailable" || got.Data["status"] != float64(200) || !got.At.Equal(t0) {
 		t.Fatalf("hydrated snapshot = %+v", got)
 	}
 
@@ -110,7 +113,7 @@ func TestPersistentSnapshotsHydrateAndStore(t *testing.T) {
 	if len(service) != 1 {
 		t.Fatalf("stored service snapshots = %+v, want replaced current rows", service)
 	}
-	if got := service["tcp"]; got.OK || !got.Unavailable || got.Message != "connection refused" || got.Data["port"] != float64(443) || !got.At.Equal(t1) {
+	if got := service["tcp"]; got.Observation != string(checks.ObservationUnavailable) || got.OK || !got.Unavailable || got.Message != "connection refused" || got.Data["port"] != float64(443) || !got.At.Equal(t1) {
 		t.Fatalf("stored snapshot = %+v", got)
 	}
 }
