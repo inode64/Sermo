@@ -6,38 +6,81 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"strconv"
-	"strings"
 	"testing"
+
+	"github.com/OpenPrinting/goipp"
 )
 
 func TestBuildIPPRequest(t *testing.T) {
-	req := buildIPPRequest(0x4001, 1)
-	// version 2.0, operation-id 0x4001, request-id 1, operation-attributes-tag 0x01.
-	if req[0] != 0x02 || req[1] != 0x00 {
-		t.Fatalf("version bytes = % x", req[:2])
+	payload, err := buildIPPRequest(goipp.OpCupsGetDefault, ippRequestIDDefault)
+	if err != nil {
+		t.Fatalf("buildIPPRequest(): %v", err)
 	}
-	if req[2] != 0x40 || req[3] != 0x01 {
-		t.Fatalf("operation-id = % x, want 4001", req[2:4])
+	var request goipp.Message
+	if err := request.DecodeBytes(payload); err != nil {
+		t.Fatalf("decode request: %v", err)
 	}
-	if req[8] != 0x01 {
-		t.Fatalf("operation-attributes-tag = %#x, want 0x01", req[8])
+	if request.Version != goipp.DefaultVersion {
+		t.Fatalf("version = %s, want %s", request.Version, goipp.DefaultVersion)
 	}
-	if req[len(req)-1] != 0x03 {
-		t.Fatalf("must end with end-of-attributes-tag 0x03, got %#x", req[len(req)-1])
+	if request.Code != goipp.Code(goipp.OpCupsGetDefault) {
+		t.Fatalf("operation = %#x, want %#x", request.Code, goipp.OpCupsGetDefault)
 	}
-	if !strings.Contains(string(req), "attributes-charset") || !strings.Contains(string(req), "utf-8") {
-		t.Fatalf("required attributes missing: %q", req)
+	if request.RequestID != ippRequestIDDefault {
+		t.Fatalf("request ID = %d, want %d", request.RequestID, ippRequestIDDefault)
+	}
+	wantAttributes := goipp.Attributes{
+		goipp.MakeAttr(ippAttrCharset, goipp.TagCharset, goipp.String(ippCharsetUTF8)),
+		goipp.MakeAttr(ippAttrNaturalLanguage, goipp.TagLanguage, goipp.String(ippLanguageEN)),
+	}
+	if !request.Operation.Equal(wantAttributes) {
+		t.Fatalf("operation attributes = %v, want %v", request.Operation, wantAttributes)
 	}
 }
 
 func TestParseIPPResponse(t *testing.T) {
-	// version 2.0, status 0x0000 (successful-ok), request-id 1.
-	ver, status, err := parseIPPResponse([]byte{0x02, 0x00, 0x00, 0x00, 0, 0, 0, 1, 0x03})
-	if err != nil || ver != "2.0" || status != 0x0000 {
-		t.Fatalf("ver=%q status=%#x err=%v", ver, status, err)
+	tests := []struct {
+		name        string
+		response    []byte
+		wantVersion string
+		wantStatus  uint16
+		wantErr     bool
+	}{
+		{
+			name:        "valid empty response",
+			response:    []byte{0x02, 0x00, 0x00, 0x00, 0, 0, 0, 1, 0x03},
+			wantVersion: "2.0",
+		},
+		{
+			name:        "valid error response",
+			response:    []byte{0x01, 0x01, 0x04, 0x01, 0, 0, 0, 1, 0x03},
+			wantVersion: "1.1",
+			wantStatus:  ippStatusClientUnauthorized,
+		},
+		{name: "short header", response: []byte{0x02, 0x00}, wantErr: true},
+		{name: "missing end delimiter", response: []byte{0x02, 0x00, 0x00, 0x00, 0, 0, 0, 1}, wantErr: true},
+		{
+			name:     "truncated attribute",
+			response: []byte{0x02, 0x00, 0x00, 0x00, 0, 0, 0, 1, 0x01, 0x47, 0, 4, 'n'},
+			wantErr:  true,
+		},
 	}
-	if _, _, err := parseIPPResponse([]byte{0x02, 0x00}); err == nil {
-		t.Fatal("a short IPP response must error")
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			version, status, err := parseIPPResponse(test.response)
+			if test.wantErr {
+				if err == nil {
+					t.Fatalf("parseIPPResponse() = version %q, status %#x; want error", version, status)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("parseIPPResponse(): %v", err)
+			}
+			if version != test.wantVersion || status != test.wantStatus {
+				t.Fatalf("parseIPPResponse() = version %q, status %#x; want %q, %#x", version, status, test.wantVersion, test.wantStatus)
+			}
+		})
 	}
 }
 
@@ -64,5 +107,8 @@ func TestIPPProbeAgainstFakeServer(t *testing.T) {
 	}
 	if res.Extra["ipp_status"] != "successful-ok" {
 		t.Fatalf("status = %q", res.Extra["ipp_status"])
+	}
+	if res.Version != "IPP/2.0" || res.Extra["ipp_version"] != "2.0" {
+		t.Fatalf("version = %q, extra version = %q", res.Version, res.Extra["ipp_version"])
 	}
 }
