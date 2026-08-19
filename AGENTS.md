@@ -93,8 +93,18 @@ level of integration.
 
    ```sh
    git add <changed-files>
-   git commit -m "agent: <concise description of the change>"
+   git commit -m "agent: <concise description of the change>" \
+     -m "Objective: <outcome>" \
+     -m "Invariant: <behavior or safety property preserved>" \
+     -m "Evidence: <tests and runtime validation>" \
+     -m "Limitations: <known boundary or None.>"
    ```
+
+   Every standard commit body records those four headings in that order. The
+   versioned `.githooks/commit-msg` hook enforces the contract without printing
+   message content; enable it once with `git config core.hooksPath .githooks`.
+   Git-generated merge/revert and `fixup!`/`squash!` messages are exempt. The
+   `.gitmessage` template provides the same structure for editor-driven commits.
 
 6. Merge only when the user explicitly asks for integration. Before merging,
    inspect the incoming commits and diff, resolve conflicts intentionally, and
