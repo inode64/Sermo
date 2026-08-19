@@ -103,14 +103,15 @@ func httpRequestBody(entry map[string]any) ([]byte, string, string) {
 	return nil, "", ""
 }
 
-// httpRequestClient configures the per-check transport. HTTP/3 always uses
-// QUIC, while proxy and interface routing use an HTTP transport dialer.
+// httpRequestClient configures the per-check transport. HTTP/3 uses QUIC;
+// every transport binds its underlying TCP or UDP socket when requested.
 func httpRequestClient(rawURL string, entry map[string]any, client *http.Client) (*http.Client, string) {
 	proxyURL, warn := parseProxyURL(entry)
 	if warn != "" {
 		return nil, warn
 	}
 	http3Enabled := cfgval.Bool(entry[CheckKeyHTTP3])
+	iface := firstHTTPInterface(entry)
 	if http3Enabled {
 		if u, err := url.Parse(rawURL); err != nil || u.Scheme != URLSchemeHTTPS {
 			return nil, "http check: http3 requires an https url"
@@ -118,20 +119,32 @@ func httpRequestClient(rawURL string, entry map[string]any, client *http.Client)
 		if proxyURL != nil {
 			return nil, "http check: http3 and proxy are mutually exclusive"
 		}
-		client = &http.Client{Transport: &http3.Transport{}}
+		client = http3Client(iface, nil)
 	} else if proxyURL != nil {
 		client = httpClientWithTransport(proxyURL, "")
 	}
 	// interface: egress the HTTP request (and any proxy connection) through a
 	// specific interface by binding the transport's dialer. The http client has
 	// one fixed transport, so it honors a single interface (the first listed).
-	if ifaces := parseInterfaces(entry[CheckKeyInterface]); len(ifaces) > 0 {
-		if http3Enabled {
-			return nil, "http check: http3 and interface are mutually exclusive"
-		}
-		return httpClientWithTransport(proxyURL, ifaces[0]), ""
+	if iface != "" && !http3Enabled {
+		return httpClientWithTransport(proxyURL, iface), ""
 	}
 	return client, ""
+}
+
+func firstHTTPInterface(entry map[string]any) string {
+	if ifaces := parseInterfaces(entry[CheckKeyInterface]); len(ifaces) > 0 {
+		return ifaces[0]
+	}
+	return ""
+}
+
+func http3Client(iface string, tlsConfig *tls.Config) *http.Client {
+	transport := &http3.Transport{TLSClientConfig: tlsConfig}
+	if iface != "" {
+		transport.Dial = conn.BindQUICDialer(iface)
+	}
+	return &http.Client{Transport: transport}
 }
 
 func httpClientWithTransport(proxyURL *url.URL, iface string) *http.Client {
@@ -310,15 +323,19 @@ func configureHTTPCert(hc *httpCheck, entry map[string]any, rawURL string) strin
 	if cfgval.Bool(entry[CheckKeyHTTP3]) {
 		// Read the leaf over QUIC too; http3 populates resp.TLS so the same
 		// certificate logic applies. TLS 1.3 is enforced by QUIC.
-		hc.certClient = &http.Client{Transport: &http3.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true, MinVersion: tls.VersionTLS13}, //nolint:gosec // G402: verification is off at the transport so the probe can inspect an invalid chain and report why; verifyCertChain then validates it explicitly.
-		}}
+		hc.certClient = http3Client(firstHTTPInterface(entry), &tls.Config{
+			InsecureSkipVerify: true, //nolint:gosec // G402: verification is off at the transport so the probe can inspect an invalid chain and report why; verifyCertChain then validates it explicitly.
+			MinVersion:         tls.VersionTLS13,
+		})
 		return ""
 	}
 	tr := httpx.CloneDefaultTransport()
 	tr.TLSClientConfig = &tls.Config{InsecureSkipVerify: true} //nolint:gosec // G402: verification is off at the transport so the probe can inspect an invalid chain and report why; verifyCertChain then validates it explicitly.
 	if pu, _ := parseProxyURL(entry); pu != nil {
 		tr.Proxy = http.ProxyURL(pu) // cert inspection also goes through the proxy (CONNECT for https)
+	}
+	if iface := firstHTTPInterface(entry); iface != "" {
+		tr.DialContext = conn.BindDialer(iface).DialContext
 	}
 	hc.certClient = &http.Client{Transport: tr}
 	return ""
