@@ -222,13 +222,14 @@ POSTGRES_REPLICATION_REASONS = {
 # writes SQLite hints only when it was built for them; the ordinary build puts
 # Berkeley DB or tdb at the same paths. Each watch names the hints file it reads,
 # resolved against the exim_hints inventory evidence, so a host whose hints are
-# not SQLite does not carry a watch that can only ever report an sqlite error.
+# is not compatible does not carry a watch that can only report an SQL error.
 EXIM_CATALOG_SERVICE = "exim"
 EXIM_HINTS_WATCHES = {
     "tidy-callout-db-if-large": "/var/spool/exim/db/callout",
     "tidy-retry-db-if-large": "/var/spool/exim/db/retry",
 }
 EXIM_HINTS_SQLITE = "sqlite"
+EXIM_HINTS_NO_TBLBLOB = "sqlite-no-tblblob"
 EXIM_HINTS_ABSENT = "absent"
 # The collectors report "unknown" when the file could not be read at all. That is
 # absence of proof, not proof the hints are unusable, so it leaves the watch
@@ -621,6 +622,16 @@ def truthy(value: object) -> bool:
     return str(value).lower() in {"1", "true", "yes"}
 
 
+def has_block_capacity(value: object) -> bool:
+    """Keep older inventories with no size evidence, but reject an explicit
+    zero-capacity device such as an empty USB card-reader slot."""
+    if value is None or value == "":
+        return True
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return value > 0
+    return re.fullmatch(r"0+(?:\.0+)?(?:[kmgtpe]i?)?b?", str(value).strip(), re.IGNORECASE) is None
+
+
 # Network block devices (NBD, DRBD) expose no SMART data: smartctl cannot
 # query them, so no smart watch must ever be generated for these disks.
 # They still get diskio watches — /proc/diskstats covers them fine.
@@ -638,7 +649,7 @@ def block_inventory(stage: Path) -> tuple[list[dict], set[str]]:
         ro = truthy(dev.get("ro"))
         tran = str(dev.get("tran") or "").lower()
         rm = truthy(dev.get("rm"))
-        if typ == "disk" and path and not ro and not name.startswith(("loop", "sr", "ram")):
+        if typ == "disk" and path and not ro and has_block_capacity(dev.get("size")) and not name.startswith(("loop", "sr", "ram")):
             disks.append({"name": name, "path": path, "tran": tran, "rm": rm, "rota": truthy(dev.get("rota"))})
         mounts = dev.get("mountpoints")
         if mounts is None and dev.get("mountpoint"):
@@ -1865,7 +1876,7 @@ def thin_arbiter_report(stage: Path) -> tuple[bool, list[dict[str, object]]]:
 
 def parse_exim_hints(stage: Path) -> dict[str, str]:
     """Read the exim_hints inventory evidence: one line per hints file, tab
-    separated as <path> <sqlite|other|absent>."""
+    separated as <path> <sqlite|sqlite-no-tblblob|other|absent|unknown>."""
     backends: dict[str, str] = {}
     for line in read_text(stage / "exim_hints").splitlines():
         fields = line.split("\t")
@@ -1876,10 +1887,10 @@ def parse_exim_hints(stage: Path) -> dict[str, str]:
 
 
 def exim_hints_watch_overrides(stage: Path, doc: dict) -> tuple[set[str], list[dict[str, object]]]:
-    """Disable the Exim tidy watches whose hints database is not SQLite, so a
-    host running the ordinary Berkeley DB build does not carry a watch that can
-    only report `file is not a database`. Mirrors replication_watch_overrides: a
-    disabled set plus one audited report entry per watch.
+    """Disable Exim tidy watches whose hints database cannot run their query.
+    This covers non-SQLite backends and SQLite files without Exim's tblblob
+    schema. Mirrors replication_watch_overrides: a disabled set plus one audited
+    report entry per watch.
 
     Absence of evidence is not proof: a host staged before this fact was
     collected reports nothing, and an unevaluated watch is left enabled rather
@@ -1906,11 +1917,12 @@ def exim_hints_watch_overrides(stage: Path, doc: dict) -> tuple[set[str], list[d
             item["source"] = "exim hints inventory"
         else:
             disabled.add(watch_name)
-            item["reason"] = (
-                f"{hints_path} does not exist"
-                if backend == EXIM_HINTS_ABSENT
-                else f"{hints_path} is not a SQLite database"
-            )
+            if backend == EXIM_HINTS_ABSENT:
+                item["reason"] = f"{hints_path} does not exist"
+            elif backend == EXIM_HINTS_NO_TBLBLOB:
+                item["reason"] = f"{hints_path} does not contain table tblblob"
+            else:
+                item["reason"] = f"{hints_path} is not a SQLite database"
         report.append(item)
     return disabled, report
 

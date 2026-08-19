@@ -24,17 +24,14 @@ func TestInterfaceBindingApplied(t *testing.T) {
 			}
 			MongoDisconnect(context.Background(), client)
 		}},
-		{"postgres-connector", func(t *testing.T) {
+		{"postgres-config", func(t *testing.T) {
 			t.Helper()
-			if _, err := postgresConnector(context.Background(), Config{User: "u", Interface: "eth0"}); err != nil {
-				t.Fatalf("postgresConnector: %v", err)
+			cfg, err := postgresConfig(context.Background(), Config{User: "u", Interface: "eth0"})
+			if err != nil {
+				t.Fatalf("postgresConfig: %v", err)
 			}
-		}},
-		{"pq-dialer", func(t *testing.T) {
-			t.Helper()
-			d := pqDialer(newProbeTarget(Config{Interface: "eth0"}, defaultPortPostgres))
-			if d.Dialer == nil || d.Dialer.Control == nil {
-				t.Fatal("pq dialer must use BindDialer when interface is set")
+			if cfg.DialFunc == nil {
+				t.Fatal("pgx config must use BindDialer when interface is set")
 			}
 		}},
 		{"mysql-config", func(t *testing.T) {

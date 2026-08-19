@@ -59,6 +59,88 @@ func TestRequiredCheckFailureIsReportedOnceAndRecovers(t *testing.T) {
 	}
 }
 
+// Persistent snapshots are the durable record of the last check-health edge.
+// Restoring them on daemon startup prevents a still-failing check from opening
+// a duplicate event while preserving the eventual recovery transition.
+func TestRestoredCheckFailureDoesNotRepeatFiringAndRecovers(t *testing.T) {
+	snapshots := NewSnapshots()
+	snapshots.PublishWithCheckTypes("web", map[string]checks.Result{
+		"service": {Check: "service", OK: false, Message: "status failed (want active)"},
+	}, map[string]bool{"service": true}, map[string]string{"service": "service"})
+
+	var events []Event
+	cycle := 0
+	w := &Worker{
+		Service:      "web",
+		checkFailing: checkFailingFromSnapshots(snapshots, "web", map[string]string{"service": "service"}),
+		Checks: func(context.Context, checks.Deps) map[string]checks.Result {
+			cycle++
+			return map[string]checks.Result{
+				"service": {
+					Check: "service", OK: cycle > 1,
+					Message: "status failed (want active)",
+				},
+			}
+		},
+		Emit: func(e Event) { events = append(events, e) },
+	}
+	w.RunCycle(context.Background())
+	w.RunCycle(context.Background())
+
+	if got := kinds(events); len(got) != 1 || got[0] != eventKindRecovered {
+		t.Fatalf("kinds = %v, want only [recovered]", got)
+	}
+}
+
+func TestCheckFailureRestoreRejectsStaleSnapshots(t *testing.T) {
+	tests := []struct {
+		name       string
+		result     checks.Result
+		storedType string
+		current    map[string]string
+		want       map[string]bool
+	}{
+		{
+			name: "matching failure", result: checks.Result{Check: "service", OK: false},
+			storedType: "service", current: map[string]string{"service": "service"},
+			want: map[string]bool{"service": true},
+		},
+		{
+			name: "matching health", result: checks.Result{Check: "service", OK: true},
+			storedType: "service", current: map[string]string{"service": "service"},
+			want: map[string]bool{"service": false},
+		},
+		{
+			name: "changed type", result: checks.Result{Check: "service", OK: false},
+			storedType: "service", current: map[string]string{"service": "process"},
+		},
+		{
+			name: "removed check", result: checks.Result{Check: "service", OK: false},
+			storedType: "service", current: map[string]string{},
+		},
+		{
+			name: "optional check", result: checks.Result{Check: "service", OK: false, Optional: true},
+			storedType: "service", current: map[string]string{"service": "service"},
+		},
+		{
+			name: "skipped check", result: checks.Result{Check: "service", OK: false, Skipped: true},
+			storedType: "service", current: map[string]string{"service": "service"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			snapshots := NewSnapshots()
+			snapshots.PublishWithCheckTypes("web", map[string]checks.Result{"service": tt.result},
+				map[string]bool{"service": true}, map[string]string{"service": tt.storedType})
+			got := checkFailingFromSnapshots(snapshots, "web", tt.current)
+			if len(got) != len(tt.want) || got["service"] != tt.want["service"] {
+				t.Fatalf("restored = %+v, want %+v", got, tt.want)
+			}
+		})
+	}
+}
+
 // Optional and verdictless checks assert nothing about availability, so neither
 // may raise a service event. `backup` (reports: state) is failing on 67 services
 // by design — a backup is idle almost always.

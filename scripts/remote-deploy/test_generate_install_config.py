@@ -1213,6 +1213,8 @@ class EximHintsGenerationTest(unittest.TestCase):
         for script in ("remote_collect_inventory.sh", "remote_stage.sh"):
             body = (root / script).read_text(encoding="utf-8")
             self.assertIn("exim_hints", body, script)
+            self.assertIn("sqlite_schema", body, script)
+            self.assertIn("tblblob", body, script)
             for gated_path in generator.EXIM_HINTS_WATCHES.values():
                 self.assertIn(gated_path, body, f"{script} does not probe {gated_path}")
 
@@ -1230,6 +1232,16 @@ class EximHintsGenerationTest(unittest.TestCase):
         self.assertEqual(disabled, set(generator.EXIM_HINTS_WATCHES))
         reasons = {item["watch"]: item["reason"] for item in checks}
         self.assertIn("is not a SQLite database", reasons["tidy-callout-db-if-large"])
+
+    def test_sqlite_without_tblblob_disables_its_watch(self):
+        disabled, checks = self.overrides(
+            "/var/spool/exim/db/callout\tsqlite-no-tblblob\n"
+            "/var/spool/exim/db/retry\tsqlite\n"
+        )
+        self.assertEqual(disabled, {"tidy-callout-db-if-large"})
+        reasons = {item["watch"]: item.get("reason") for item in checks}
+        self.assertIn("does not contain table tblblob", reasons["tidy-callout-db-if-large"])
+        self.assertIsNone(reasons["tidy-retry-db-if-large"])
 
     def test_absent_hints_file_disables_its_watch_with_that_reason(self):
         disabled, checks = self.overrides(
@@ -1432,6 +1444,66 @@ class InotifyWatchGenerationTest(unittest.TestCase):
             body = (root / script).read_text(encoding="utf-8")
             self.assertIn("/proc/sys/fs/inotify/max_user_instances", body, script)
             self.assertIn('echo "inotify=1"', body, script)
+
+
+class HardwareInventoryGenerationTest(unittest.TestCase):
+    def generate(self, *, features: str = "", disks: list[dict] | None = None):
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        root = Path(temp.name)
+        stage = root / "stage" / "host" / "out"
+        stage.mkdir(parents=True)
+        (stage / "init").write_text("systemd\n", encoding="utf-8")
+        (stage / "active_units").write_text("", encoding="utf-8")
+        (stage / "features").write_text(features, encoding="utf-8")
+        if disks is not None:
+            (stage / "lsblk.json").write_text(
+                json.dumps({"blockdevices": disks}), encoding="utf-8"
+            )
+        report = generator.generate_for_host(
+            "host", stage, root / "configs", default_options()
+        )
+        return root / "configs/host/root/etc/sermo", report
+
+    def test_edac_watch_requires_collected_controller(self):
+        generated, report = self.generate(features="edac=0\n")
+
+        self.assertFalse((generated / "watches/watch-edac.yml").exists())
+        self.assertIn(
+            {"kind": "edac", "reason": "EDAC controllers not exposed"},
+            report["skipped_watches"],
+        )
+
+    def test_collectors_require_a_numbered_edac_controller(self):
+        root = Path(__file__).resolve().parent
+        for script in ("remote_collect_inventory.sh", "remote_stage.sh"):
+            body = (root / script).read_text(encoding="utf-8")
+            self.assertIn("/sys/devices/system/edac/mc/mc[0-9]*", body, script)
+
+    def test_zero_capacity_disk_is_not_monitorable(self):
+        generated, report = self.generate(
+            features="hdparm=1\nsmartctl=1\n",
+            disks=[
+                {
+                    "name": "sdb",
+                    "type": "disk",
+                    "size": "0B",
+                    "rota": False,
+                    "tran": "usb",
+                    "rm": True,
+                    "ro": False,
+                }
+            ],
+        )
+
+        watches = generated / "watches"
+        self.assertFalse((watches / "diskio-sdb.yml").exists())
+        self.assertFalse((watches / "smart-sdb.yml").exists())
+        self.assertFalse((watches / "hdparm-sdb.yml").exists())
+        self.assertIn(
+            {"kind": "diskio/smart/hdparm", "reason": "no writable whole-disk block device discovered"},
+            report["skipped_watches"],
+        )
 
 
 class DockerStoppedContainerTest(unittest.TestCase):

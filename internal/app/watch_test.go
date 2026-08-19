@@ -113,6 +113,36 @@ func TestWatchPublishesUnavailableResultWhenCheckPanics(t *testing.T) {
 	}
 }
 
+func TestWatchUnavailableEmitsOneErrorAndNeverRunsActions(t *testing.T) {
+	check := &scriptedCheck{results: []checks.Result{
+		{Check: "http", Unavailable: true, Message: "request timed out"},
+		{Check: "http", Unavailable: true, Message: "request timed out"},
+		{Check: "http", OK: true, Message: "status 200"},
+	}}
+	var events []Event
+	var hooks int
+	w := &Watch{
+		Name: "http", CheckType: checks.CheckTypeHTTP, Check: check, FireOnFail: true,
+		Hook: HookSpec{Command: []string{"/bin/true"}},
+		Runner: HookRunnerFunc(func(context.Context, []string, map[string]string, time.Duration) error {
+			hooks++
+			return nil
+		}),
+		Emit: func(event Event) { events = append(events, event) },
+	}
+
+	w.RunCycle(context.Background())
+	w.RunCycle(context.Background())
+	w.RunCycle(context.Background())
+
+	if hooks != 0 {
+		t.Fatalf("unavailable watch ran %d hooks, want none", hooks)
+	}
+	if len(events) != 2 || events[0].Kind != eventKindError || events[1].Kind != eventKindRecovered {
+		t.Fatalf("events = %+v, want one error and one recovery", events)
+	}
+}
+
 func TestWatchFiresHookWhenConditionTrue(t *testing.T) {
 	var calls int
 	var env map[string]string
@@ -444,6 +474,34 @@ func TestWatchDoesNotRepeatEpisodeAfterRestart(t *testing.T) {
 
 	if len(secondNotifier.msgs) != 0 || countEvents(events, eventKindFiring) != 0 {
 		t.Fatalf("unchanged episode repeated after restart: notifications=%d events=%v", len(secondNotifier.msgs), events)
+	}
+}
+
+func TestWatchDoesNotRepeatUnavailableErrorAfterRestart(t *testing.T) {
+	store := openRuleStateStore(t)
+	unavailable := checks.Result{Check: "http", Unavailable: true, Message: "request timed out"}
+	var firstEvents []Event
+	first := &Watch{
+		Name: "http", CheckType: checks.CheckTypeHTTP,
+		Check:      &scriptedCheck{results: []checks.Result{unavailable}},
+		StateStore: store,
+		Emit:       func(event Event) { firstEvents = append(firstEvents, event) },
+	}
+	first.RunCycle(context.Background())
+	if countEvents(firstEvents, eventKindError) != 1 {
+		t.Fatalf("first unavailable events = %+v, want one error", firstEvents)
+	}
+
+	var secondEvents []Event
+	second := &Watch{
+		Name: "http", CheckType: checks.CheckTypeHTTP,
+		Check:      &scriptedCheck{results: []checks.Result{unavailable}},
+		StateStore: store,
+		Emit:       func(event Event) { secondEvents = append(secondEvents, event) },
+	}
+	second.RunCycle(context.Background())
+	if countEvents(secondEvents, eventKindError) != 0 {
+		t.Fatalf("unavailable error repeated after restart: %+v", secondEvents)
 	}
 }
 

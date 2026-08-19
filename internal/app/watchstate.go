@@ -28,6 +28,7 @@ func (w *Watch) loadRuntimeState() {
 		return
 	}
 	w.firing = rec.Firing
+	w.unavailable = rec.Unavailable
 	w.lastNotifyAt = rec.LastNotifyAt
 	w.state = *windowStateFromRecord(rec.Window)
 	if policy := remediationFromRecord(rec.Policy); policy != nil {
@@ -55,6 +56,7 @@ func (w *Watch) persistRuntimeState() {
 func (w *Watch) runtimeRecord() state.WatchRuntimeRecord {
 	rec := state.WatchRuntimeRecord{
 		Firing:       w.firing,
+		Unavailable:  w.unavailable,
 		LastNotifyAt: w.lastNotifyAt,
 		Policy:       remediationToRecord(&w.policyState),
 	}
@@ -110,6 +112,7 @@ func cloneWatchRuntimeRecord(rec state.WatchRuntimeRecord) state.WatchRuntimeRec
 
 func watchRuntimeRecordsEqual(a, b state.WatchRuntimeRecord) bool {
 	return a.Firing == b.Firing &&
+		a.Unavailable == b.Unavailable &&
 		a.LastNotifyAt.Equal(b.LastNotifyAt) &&
 		a.Window.Consecutive == b.Window.Consecutive &&
 		slices.Equal(a.Window.History, b.Window.History) &&

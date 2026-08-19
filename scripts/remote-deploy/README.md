@@ -285,9 +285,11 @@ mount units, running Docker containers, running libvirt/QEMU virtual machines,
 SMART every `24h` and hdparm every `6h`. The hdparm buffered-read floor follows
 the medium reported by `lsblk` — `20` MB/s for rotational disks, `100` MB/s for
 flash — because one shared floor either alerts on every healthy HDD or never
-fires on an SSD. LVM space and logged-in-user checks are
-disabled. The root filesystem retains its storage-capacity watch but is not a
-mount unit. Use
+fires on an SSD. Explicit zero-capacity whole disks (normally empty USB card
+reader slots) are omitted from diskio, SMART and hdparm monitoring. The EDAC
+watch likewise requires a numbered `mcN` controller, not only the empty EDAC
+sysfs directory. LVM space and logged-in-user checks are disabled. The root
+filesystem retains its storage-capacity watch but is not a mount unit. Use
 `--include-inactive-installed-services` only for catalog audits where inactive
 installed profiles are intentionally desired.
 
@@ -484,14 +486,15 @@ tdb at the same paths, where the query can only ever fail. The collectors record
 `exim_hints`, one tab-separated line per hints file:
 
 ```
-<path> <sqlite|other|absent|unknown>
+<path> <sqlite|sqlite-no-tblblob|other|absent|unknown>
 ```
 
-The generator keeps each watch only where its file really is SQLite, disables it
-otherwise, and records the decision per service under `exim_hints_checks` in
-`config-report.json`. A host staged before this fact was collected reports
-nothing, a file that could not be read reports `unknown`, and in both cases the
-unevaluated watch is left enabled rather than silently switched off.
+The generator keeps each watch only where its file is SQLite and contains the
+`tblblob` table queried by the watch. It disables incompatible files and records
+the decision per service under `exim_hints_checks` in `config-report.json`. A
+host staged before this fact was collected reports nothing; a file whose schema
+could not be inspected reports `unknown`. In both cases the unevaluated watch is
+left enabled rather than silently switched off.
 
 The PostgreSQL replication watches are gated the same way, from cluster facts
 instead of listening sockets. `remote_collect_inventory.sh` writes

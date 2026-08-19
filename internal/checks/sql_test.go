@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"sermo/internal/conn"
 )
 
 func TestSQLValueString(t *testing.T) {
@@ -118,16 +120,19 @@ func TestBuildSQLCheckWiring(t *testing.T) {
 	if !strings.Contains(cc.dsn, "@tcp(") {
 		t.Fatalf("mysql dsn = %q, want a go-sql-driver @tcp(...) DSN", cc.dsn)
 	}
+	if cc.open == nil {
+		t.Fatal("mysql sql check must retain its connector so interface binding is not lost")
+	}
 
-	// postgres engine resolves to the postgres driver.
+	// postgres engine resolves to the pgx database/sql driver.
 	built, _ = Build(map[string]any{
 		"q": map[string]any{
 			"type": "sql", "engine": "postgresql", "user": "u",
 			"query": "SELECT 1", "op": ">", "value": "0",
 		},
 	}, Deps{DefaultTimeout: time.Second})
-	if cc := built[0].Check.(sqlCheck); cc.driver != "postgres" || !strings.Contains(cc.dsn, "postgres://") {
-		t.Fatalf("driver = %q dsn = %q, want postgres driver and postgres:// DSN", cc.driver, cc.dsn)
+	if cc := built[0].Check.(sqlCheck); cc.driver != conn.PostgresDriverName || !strings.Contains(cc.dsn, "postgres://") || cc.open == nil {
+		t.Fatalf("driver = %q dsn = %q opener=%v, want bound pgx opener and postgres:// DSN", cc.driver, cc.dsn, cc.open != nil)
 	}
 
 	// assertSQLBuildWarns builds one sql check entry and asserts it warns.

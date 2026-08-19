@@ -238,11 +238,10 @@ done
 	done
 } | sort -t "$(printf '\t')" -k3,3 -k1,1n >"${out}/process_policy.tsv"
 
-# Exim hints-database backend, one line per hints file Sermo's tidy watches
-# query. Those watches run a SQLite query, but Exim only writes SQLite hints when
-# it was built for them; the usual build writes Berkeley DB or tdb into the same
-# paths. Probing the file magic here lets the generator disable a watch that
-# could never work instead of leaving it reporting an sqlite error forever.
+# Exim hints-database compatibility, one line per hints file Sermo's tidy
+# watches query. A valid SQLite header is insufficient: the watch also requires
+# Exim's tblblob table. Query sqlite_schema read-only so the generated watch is
+# enabled only when the exact prerequisite exists.
 : >"${out}/exim_hints"
 for hints_db in /var/spool/exim/db/callout /var/spool/exim/db/retry; do
 	if [ ! -f "$hints_db" ]; then
@@ -255,7 +254,17 @@ for hints_db in /var/spool/exim/db/callout /var/spool/exim/db/retry; do
 	if ! magic_hex="$(LC_ALL=C od -An -N 15 -tx1 "$hints_db" 2>/dev/null)"; then
 		printf '%s\t%s\n' "$hints_db" "unknown" >>"${out}/exim_hints"
 	elif [ "${magic_hex//[[:space:]]/}" = "53514c69746520666f726d61742033" ]; then
-		printf '%s\t%s\n' "$hints_db" "sqlite" >>"${out}/exim_hints"
+		if ! command -v sqlite3 >/dev/null 2>&1; then
+			backend="unknown"
+		elif ! schema_result="$(sqlite3 -readonly "$hints_db" \
+			"SELECT 1 FROM sqlite_schema WHERE type = 'table' AND name = 'tblblob' LIMIT 1;" 2>/dev/null)"; then
+			backend="unknown"
+		elif [ "$schema_result" = "1" ]; then
+			backend="sqlite"
+		else
+			backend="sqlite-no-tblblob"
+		fi
+		printf '%s\t%s\n' "$hints_db" "$backend" >>"${out}/exim_hints"
 	else
 		printf '%s\t%s\n' "$hints_db" "other" >>"${out}/exim_hints"
 	fi
@@ -347,7 +356,13 @@ ip -o -6 route show >"${out}/ip_route6" 2>/dev/null || true
 	[ -r /proc/sys/kernel/random/entropy_avail ] && echo "entropy=1" || echo "entropy=0"
 	[ -r /proc/net/stat/nf_conntrack ] || [ -r /proc/sys/net/netfilter/nf_conntrack_count ] && echo "conntrack=1" || echo "conntrack=0"
 	[ -d /sys/class/hwmon ] && echo "hwmon=1" || echo "hwmon=0"
-	[ -d /sys/devices/system/edac/mc ] && echo "edac=1" || echo "edac=0"
+	edac=0
+	for controller in /sys/devices/system/edac/mc/mc[0-9]*; do
+		[ -d "$controller" ] || continue
+		edac=1
+		break
+	done
+	echo "edac=${edac}"
 	[ -r /proc/mdstat ] && echo "mdstat=1" || echo "mdstat=0"
 	command -v tmux >/dev/null 2>&1 && echo "tmux=1" || echo "tmux=0"
 	command -v screen >/dev/null 2>&1 && echo "screen=1" || echo "screen=0"
