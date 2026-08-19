@@ -335,9 +335,10 @@ checks:
   redundant-link monitoring); **`all`** — it passes only if the probe succeeds
   through **every** listed interface (verify each path independently). The
   per-interface outcome is in the result data under `interfaces`.
-- **Mechanism.** For TCP/UDP it binds the socket with `SO_BINDTODEVICE`, forcing
-  egress through that interface regardless of the routing table; for `icmp` it
-  binds the probe to the interface's IPv4 (the `ping -I <addr>` mechanism).
+- **Mechanism.** For TCP/UDP — including HTTP/3's QUIC socket — it binds the
+  socket with `SO_BINDTODEVICE`, forcing egress through that interface
+  regardless of the routing table; for `icmp` it binds the probe to the
+  interface's IPv4 (the `ping -I <addr>` mechanism).
   **Linux only**, and `SO_BINDTODEVICE` needs `CAP_NET_RAW` (root) — if the
   interface does not exist or the daemon lacks privilege the check **fails** rather
   than silently using the wrong link.
@@ -759,6 +760,7 @@ checks:
     type: http
     url: "https://api.example.com/health"   # https only (QUIC is always TLS 1.3)
     http3: true
+    interface: eth1                         # bind the QUIC UDP socket
     expect_status: 200
     expect_latency: { op: "<", value: 300 }
 ```
@@ -770,7 +772,10 @@ request fail and **fires the check's alert/hook**, which is how you monitor that
 HTTP/3 stays available. The negotiated protocol is reported in result data as
 `protocol` (e.g. `HTTP/3.0`; for normal checks it is `HTTP/2.0` or `HTTP/1.1`).
 HTTP/3 requires an `https` URL and cannot be combined with `proxy` (both rejected
-at config validation). Uses `github.com/quic-go/quic-go` (pure Go).
+at config validation). It can be combined with `interface`; the standalone
+`http` check uses the first listed interface for both the request and certificate
+inspection, and fails rather than falling back to the default route if the UDP
+socket cannot be bound. Uses `github.com/quic-go/quic-go` (pure Go).
 
 ### Cert
 
