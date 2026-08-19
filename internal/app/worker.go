@@ -347,15 +347,16 @@ func (w *Worker) reportCheckHealthChanges(cache map[string]checks.Result) {
 			continue
 		}
 		result := cache[name]
+		observation := result.Observation()
 		// Only checks that ran this cycle carry a fresh observation: a cached
 		// result reused because of a per-check interval says nothing new, and a
 		// skipped or verdictless check asserts nothing at all. A nil cycleRan
 		// means the caller does not track it, which the gate logic also reads as
 		// "do not filter".
-		if (w.cycleRan != nil && !w.cycleRan[name]) || result.Skipped || result.Optional || result.Verdictless() {
+		if (w.cycleRan != nil && !w.cycleRan[name]) || result.Optional || !observation.AffectsHealth() {
 			continue
 		}
-		failing := !result.Healthy()
+		failing := !observation.Healthy()
 		if failing == w.checkFailing[name] {
 			continue
 		}
@@ -567,7 +568,7 @@ func (w *Worker) gateReason(gate CheckGate, cache map[string]checks.Result) stri
 // affect SLA. A service with no required checks is vacuously available.
 func requiredChecksOK(cache map[string]checks.Result) bool {
 	for _, r := range cache {
-		if !r.Optional && !r.Healthy() {
+		if !r.Optional && !r.Observation().Healthy() {
 			return false
 		}
 	}
@@ -581,7 +582,8 @@ func requiredChecksOK(cache map[string]checks.Result) bool {
 func failingChecksOutput(cache map[string]checks.Result) string {
 	names := make([]string, 0, len(cache))
 	for name, r := range cache {
-		if r.Optional || r.Skipped || r.Healthy() {
+		observation := r.Observation()
+		if r.Optional || !observation.AffectsHealth() || observation.Healthy() {
 			continue
 		}
 		if resultOutput(r) != "" {
