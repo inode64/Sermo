@@ -18,6 +18,11 @@ func httpProbeClient(iface string, tlsConfig *tls.Config) *http.Client {
 		return &http.Client{}
 	}
 	tr := httpx.CloneDefaultTransport()
+	// A probe client is created for one exchange and then discarded. Prevent its
+	// private transport from retaining an idle connection (and the transport
+	// goroutines that own it) until the keep-alive timeout. The default-client
+	// fast path above remains shared and keeps its normal pooling behavior.
+	tr.DisableKeepAlives = true
 	if iface != "" {
 		tr.DialContext = BindDialer(iface).DialContext
 	}
