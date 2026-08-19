@@ -3,37 +3,21 @@ package conn
 import (
 	"bytes"
 	"context"
-	"encoding/binary"
-	"errors"
 	"fmt"
 	"net/http"
+
+	"github.com/OpenPrinting/goipp"
 )
 
-// ippCUPSGetDefault is the CUPS-Get-Default operation id — a server-level IPP
-// operation needing only the charset/language attributes, so it works without a
-// printer URI.
 const (
-	ippContentType    = "application/ipp"
-	ippCUPSGetDefault = 0x4001
-	ippEndpointRoot   = "/"
-	ippExtraStatus    = "ipp_status"
-	ippExtraVersion   = "ipp_version"
-	ippVersionPrefix  = "IPP/"
+	ippEndpointRoot  = "/"
+	ippExtraStatus   = "ipp_status"
+	ippExtraVersion  = "ipp_version"
+	ippVersionPrefix = "IPP/"
 )
 
 const (
 	ippRequestIDDefault    = 1
-	ippResponseMinBytes    = 8
-	ippStatusOffset        = 2
-	ippStatusEndOffset     = 4
-	ippVersionMajor        = 2
-	ippVersionMinor        = 0
-	ippVersionMajorOffset  = 0
-	ippVersionMinorOffset  = 1
-	ippTagOperationAttrs   = 0x01
-	ippTagEndOfAttributes  = 0x03
-	ippTagCharset          = 0x47
-	ippTagNaturalLanguage  = 0x48
 	ippAttrCharset         = "attributes-charset"
 	ippAttrNaturalLanguage = "attributes-natural-language"
 	ippCharsetUTF8         = "utf-8"
@@ -63,11 +47,15 @@ func (ippProtocol) RequiresUser() bool { return false }
 func (ippProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	client, base := httpProbeBase(ctx, cfg, defaultPortIPP)
 	url := base + ippEndpointRoot
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(buildIPPRequest(ippCUPSGetDefault, ippRequestIDDefault)))
+	payload, err := buildIPPRequest(goipp.OpCupsGetDefault, ippRequestIDDefault)
 	if err != nil {
 		return Result{}, probeErr(ProtocolNameIPP, stepRequest, err)
 	}
-	req.Header.Set(httpHeaderContentType, ippContentType)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(payload))
+	if err != nil {
+		return Result{}, probeErr(ProtocolNameIPP, stepRequest, err)
+	}
+	req.Header.Set(httpHeaderContentType, goipp.ContentType)
 
 	resp, err := doHTTPProbe(client, req, maxHTTPProbeBody)
 	if err != nil {
@@ -89,38 +77,27 @@ func (ippProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	}, nil
 }
 
-// buildIPPRequest builds an IPP/2.0 request for op with the mandatory
-// attributes-charset and attributes-natural-language operation attributes.
-func buildIPPRequest(op uint16, requestID uint32) []byte {
-	var b bytes.Buffer
-	b.Write([]byte{ippVersionMajor, ippVersionMinor})
-	_ = binary.Write(&b, binary.BigEndian, op)
-	_ = binary.Write(&b, binary.BigEndian, requestID)
-	b.WriteByte(ippTagOperationAttrs)
-	writeIPPAttr(&b, ippTagCharset, ippAttrCharset, ippCharsetUTF8)
-	writeIPPAttr(&b, ippTagNaturalLanguage, ippAttrNaturalLanguage, ippLanguageEN)
-	b.WriteByte(ippTagEndOfAttributes)
-	return b.Bytes()
-}
-
-func writeIPPAttr(b *bytes.Buffer, valueTag byte, name, value string) {
-	b.WriteByte(valueTag)
-	// G115 twice below: IPP encodes both lengths as 16-bit fields, and every call
-	// site passes package constants, so neither can approach the limit.
-	_ = binary.Write(b, binary.BigEndian, uint16(len(name))) //nolint:gosec // G115: see above.
-	b.WriteString(name)
-	_ = binary.Write(b, binary.BigEndian, uint16(len(value))) //nolint:gosec // G115: see above.
-	b.WriteString(value)
-}
-
-// parseIPPResponse reads the IPP response header: version and status-code.
-func parseIPPResponse(b []byte) (version string, status uint16, err error) {
-	if len(b) < ippResponseMinBytes {
-		return "", 0, errors.New("short IPP response")
+// buildIPPRequest uses goipp only as the RFC 8010 codec. HTTP, interface
+// binding, TLS and response bounds remain owned by Sermo's probe transport.
+func buildIPPRequest(op goipp.Op, requestID uint32) ([]byte, error) {
+	message := goipp.NewRequest(goipp.DefaultVersion, op, requestID)
+	message.Operation.Add(goipp.MakeAttr(ippAttrCharset, goipp.TagCharset, goipp.String(ippCharsetUTF8)))
+	message.Operation.Add(goipp.MakeAttr(ippAttrNaturalLanguage, goipp.TagLanguage, goipp.String(ippLanguageEN)))
+	payload, err := message.EncodeBytes()
+	if err != nil {
+		return nil, fmt.Errorf("encode IPP request: %w", err)
 	}
-	version = fmt.Sprintf("%d.%d", b[ippVersionMajorOffset], b[ippVersionMinorOffset])
-	status = binary.BigEndian.Uint16(b[ippStatusOffset:ippStatusEndOffset])
-	return version, status, nil
+	return payload, nil
+}
+
+// parseIPPResponse validates the complete IPP message and returns the response
+// header fields exposed by the probe.
+func parseIPPResponse(b []byte) (version string, status uint16, err error) {
+	var message goipp.Message
+	if err := message.DecodeBytes(b); err != nil {
+		return "", 0, fmt.Errorf("decode IPP response: %w", err)
+	}
+	return message.Version.String(), uint16(message.Code), nil
 }
 
 // ippStatusNames maps a few common IPP status codes; others render as hex.

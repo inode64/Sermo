@@ -275,6 +275,7 @@ linters:
       # new direct dependency therefore gets an explicit quality-policy review.
       local-replace-directives: true
       allowed:
+        - module: github.com/OpenPrinting/goipp
         - module: github.com/beevik/ntp
         - module: github.com/cloudsoda/go-smb2
         - module: github.com/digitalocean/go-libvirt

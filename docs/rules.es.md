@@ -1024,7 +1024,9 @@ Protocolos, en el orden de la tabla de arriba:
 - `ipp` (alias `cups`) — puerto por defecto 631; `tls` soportado (IPPS). Sin auth. POSTea
   una petición IPP `CUPS-Get-Default` sobre HTTP y verifica una respuesta IPP válida —
   cualquier respuesta parseable prueba que cupsd está activo y hablando IPP. Datos del resultado: la
-  versión IPP y el estado. RFC 8010/8011.
+  versión IPP y el estado. La codificación y el parsing usan
+  `github.com/OpenPrinting/goipp`; Sermo conserva el transporte HTTP, el binding de
+  interfaz, TLS y los límites de respuesta. RFC 8010/8011.
 - `rsync` (alias `rsyncd`) — puerto por defecto 873 (TCP). Sin auth. Lee el saludo
   `@RSYNCD: <version>` del daemon rsync; recibirlo prueba que el daemon está activo.
   Los datos del resultado llevan la versión del protocolo.
