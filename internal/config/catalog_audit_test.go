@@ -1956,9 +1956,9 @@ func TestCatalogServicesUseAppVariablesForBinaryRefs(t *testing.T) {
 			preflight:    "rpc-idmapd-binary",
 		},
 		{
-			name:         "nfs mountd process uses app binary",
-			service:      "nfs",
-			path:         []any{"processes", "mountd", "exe"},
+			name:         "rpc mountd process uses app binary",
+			service:      "rpc-mountd",
+			path:         []any{"processes", "main", "exe"},
 			wantRaw:      "${rpc_mountd_binary}",
 			wantResolved: "/usr/bin/rpc.mountd",
 			preflight:    "rpc-mountd-binary",
