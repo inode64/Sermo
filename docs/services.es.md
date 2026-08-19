@@ -971,9 +971,16 @@ documentación de systemd advierte de que `ignore-dependencies` puede dejar el
 sistema inconsistente — es el precio que se acepta aquí a cambio de no tumbar
 nunca un servicio que nadie pidió tocar.
 
-Medido en un host real, `nfs-server` es justo el caso que esto protege:
-`ConsistsOf` `nfs-mountd` y `nfs-idmapd`, ambos monitorizados por Sermo como
-servicios propios, así que un reinicio sin aislar de uno reiniciaría tres.
+Medido en hosts reales, `nfs-server` es la excepción del catálogo que necesita
+la propagación normal de dependencias. Su `ConsistsOf` incluye `nfs-mountd` y
+`nfs-idmapd`; un reinicio staged aislado detiene esos acompañantes, pero no puede
+volver a levantar el daemon mount requerido, dejando sin servicio las peticiones
+mount de NFSv3 aunque el puerto NFS del kernel siga sano. Por ello, el perfil
+empaquetado `nfs` establece `allow_dependencies: true`.
+El propio perfil NFS es un servicio sin proceso residente porque su servidor se
+ejecuta en el kernel; el perfil separado `rpc-mountd` es el propietario del
+descubrimiento de procesos y del aviso de binario sustituido para el daemon de
+espacio de usuario.
 
 Pon el flag sólo en un servicio que no sirva de nada sin las unidades que
 necesita, y en el que prefieras que las levante a que falle:
@@ -983,9 +990,10 @@ name: algun-servicio
 allow_dependencies: true
 ```
 
-Ningún servicio del catálogo lo trae puesto. `also_service:` es la forma
-explícita de declarar unidades acompañantes que Sermo debe operar junto al
-servicio — es preferible a depender del grafo del init.
+Solo el servicio empaquetado `nfs` lo trae puesto porque el grafo del init forma
+parte del ciclo de vida de ese servicio coordinador. Para unidades acompañantes
+ordinarias, `also_service:` es la forma explícita y sigue siendo preferible a
+depender del grafo del init.
 
 Se hereda desde el `defaults:` global igual que `dry_run`, así que un host
 entero puede volver al comportamiento anterior de una vez:

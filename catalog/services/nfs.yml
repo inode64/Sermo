@@ -8,6 +8,10 @@ service:
     - nfs
   openrc:
     - nfs
+# nfs-server is a coordinating oneshot whose required userspace daemons are
+# managed by the init dependency graph. An isolated systemd restart stops its
+# BindsTo mount daemon but cannot pull it up again.
+allow_dependencies: true
 apps:
   - rpc-mountd
 restart_on_change:
@@ -19,10 +23,10 @@ restart_on_change:
 variables:
   host: 127.0.0.1
   port: 2049
-processes:
-  mountd:
-    exe: ${rpc_mountd_binary}
-    user: root
+# The primary NFS server lives in the kernel. rpc-mountd is owned by its own
+# catalog profile; treating it as the NFS primary would block recovery precisely
+# when the dependent service is absent.
+processes: { }
 watches:
   service:
     check:
