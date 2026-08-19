@@ -35,6 +35,19 @@ watches:
       requires:
         - service
       verify: true
+  block-stop-restart-with-active-jobs:
+    check:
+      type: process_count
+      count:
+        op: '>'
+        value: 1
+      reports: state
+    then:
+      action: block
+      blocks:
+        - restart
+        - stop
+      message: "${display_name} has active jobs; restart or stop denied"
   alert-if-memory-high:
     check:
       type: metric

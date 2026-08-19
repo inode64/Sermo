@@ -808,7 +808,9 @@ may survive a daemon restart and therefore must not be classified as failed-stop
 residuals. The packaged `containerd` and Docker Engine profiles use it for shims,
 proxies and container workloads, and the `glusterd` profile uses it because its
 `KillMode=process` unit deliberately keeps the brick and self-heal processes
-serving across a restart. Ordinary multi-process daemons keep `staged`: native
+serving across a restart. The systemd-only `polkit` profile also uses it because
+D-Bus activation can cancel an isolated stop while immediately starting a new
+daemon generation. Ordinary multi-process daemons keep `staged`: native
 mode must not be used merely to hide a service that fails to stop cleanly.
 
 With `also_service`, native restart leaves auxiliary units active and restarts
@@ -1776,6 +1778,11 @@ The remote deployment generator creates these checks for active multiplexer
 namespaces that its read-only inventory can attribute to a local user; named
 `tmux` sockets are kept separate, while inactive or unattributable namespaces
 are omitted.
+
+The packaged `fcron` profile treats more than one process in the service tree as
+an active scheduled job. While that condition is active, its guard blocks
+`restart` and `stop`, allowing the job to finish before an operator retries the
+operation.
 
 ## Blocking operations while clients are connected
 

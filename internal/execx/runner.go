@@ -198,6 +198,14 @@ func runPrepared(ctx context.Context, cmd *exec.Cmd, start time.Time, displayNam
 	// Setpgid made the command its group's leader, so its pid is the group id.
 	pgid := cmd.Process.Pid
 	err := waitOrCancel(ctx, cmd)
+	// A successful command may intentionally leave a background descendant that
+	// inherited stdout/stderr. os/exec closes those pipes after WaitDelay and
+	// returns ErrWaitDelay even though the command itself exited zero. Preserve
+	// that successful exit: callers act on the command, not on the lifetime of
+	// an unrelated descendant's inherited file descriptor.
+	if ctx.Err() == nil && errors.Is(err, exec.ErrWaitDelay) && cmd.ProcessState != nil && cmd.ProcessState.Success() {
+		err = nil
+	}
 	if reapGroup {
 		reapProcessGroup(pgid)
 	}
