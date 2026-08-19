@@ -335,9 +335,10 @@ checks:
   failover/enlace redundante); **`all`** — pasa solo si la sonda tiene éxito
   a través de **cada** interfaz listada (verificar cada ruta de forma independiente). El
   resultado por interfaz está en los datos del resultado bajo `interfaces`.
-- **Mecanismo.** Para TCP/UDP liga el socket con `SO_BINDTODEVICE`, forzando
-  la salida a través de esa interfaz sin importar la tabla de enrutamiento; para `icmp`
-  liga la sonda a la IPv4 de la interfaz (el mecanismo `ping -I <addr>`).
+- **Mecanismo.** Para TCP/UDP — incluido el socket QUIC de HTTP/3 — liga el
+  socket con `SO_BINDTODEVICE`, forzando la salida a través de esa interfaz sin
+  importar la tabla de enrutamiento; para `icmp` liga la sonda a la IPv4 de la
+  interfaz (el mecanismo `ping -I <addr>`).
   **Solo Linux**, y `SO_BINDTODEVICE` necesita `CAP_NET_RAW` (root) — si la
   interfaz no existe o el daemon carece de privilegio, la comprobación **falla** en lugar
   de usar silenciosamente el enlace equivocado.
@@ -766,6 +767,7 @@ checks:
     type: http
     url: "https://api.example.com/health"   # https only (QUIC is always TLS 1.3)
     http3: true
+    interface: eth1                         # liga el socket UDP de QUIC
     expect_status: 200
     expect_latency: { op: "<", value: 300 }
 ```
@@ -777,7 +779,11 @@ petición falle y **dispara la alerta/hook de la comprobación**, que es como mo
 HTTP/3 sigue disponible. El protocolo negociado se reporta en los datos del resultado como
 `protocol` (p. ej. `HTTP/3.0`; para comprobaciones normales es `HTTP/2.0` o `HTTP/1.1`).
 HTTP/3 requiere una URL `https` y no puede combinarse con `proxy` (ambos rechazados
-en la validación de configuración). Usa `github.com/quic-go/quic-go` (Go puro).
+en la validación de configuración). Puede combinarse con `interface`; la
+comprobación `http` independiente usa la primera interfaz listada tanto para la
+petición como para la inspección del certificado, y falla en lugar de recurrir a
+la ruta por defecto si no puede ligar el socket UDP. Usa
+`github.com/quic-go/quic-go` (Go puro).
 
 ### Cert
 

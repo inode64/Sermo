@@ -187,6 +187,7 @@ watches:
       type: http
       url: "https://example.com/health"
       http3: true
+      interface: eth1
       expect_status: 2xx
       cert_expires_in_days: 21
       cert_verify: true
