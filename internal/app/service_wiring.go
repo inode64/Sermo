@@ -123,8 +123,8 @@ func serviceProcessSelectors(ctx context.Context, tree map[string]any, deps Deps
 }
 
 func noResidentProcess(tree map[string]any) bool {
-	processes, ok := tree[config.SectionProcesses].(map[string]any)
-	return ok && len(processes) == 0 && len(cfgval.StringList(tree[config.ServiceKeyPidfile])) == 0
+	lifecycle, err := config.ResolveServiceLifecycle(tree, "")
+	return err == nil && lifecycle.ProcessMode == config.ServiceProcessNone
 }
 
 func serviceNoResidentProcess(tree map[string]any, selectors []process.Selector, backendPIDs func() []int) bool {
