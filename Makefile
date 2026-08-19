@@ -163,6 +163,7 @@ scripts-lint:
 scripts-test:
 	@echo "remote deployment tests"
 	@python3 -m unittest discover -s scripts/remote-deploy -p 'test_*.py'
+	@python3 scripts/test_check_commit_message.py
 
 # Documentation that describes the code must keep describing the code: cited
 # source paths, identifiers named by skills, the linter roll-call, operator
