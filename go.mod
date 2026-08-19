@@ -3,6 +3,7 @@ module sermo
 go 1.26.6
 
 require (
+	github.com/OpenPrinting/goipp v1.2.0
 	github.com/beevik/ntp v1.5.0
 	github.com/cloudsoda/go-smb2 v0.0.0-20260803221621-0b399b9d036c
 	github.com/digitalocean/go-libvirt v0.0.0-20260814190004-1a83157e1858
