@@ -2958,6 +2958,12 @@ tiene lectura que resumir, así que lo que llega al panel es el diagnóstico de 
 sonda y no la plantilla. Renderizar el `summary` encima ocultaría la causa y,
 como la observación no produjo datos, dejaría `${value}` a la vista.
 
+Las observaciones no disponibles se consideran no sanas, pero nunca satisfacen
+la condición de un watch ni ejecutan sus acciones. El watch emite un único evento
+`error` cuando la observación pasa a no disponible y un evento `recovered` cuando
+vuelve una muestra válida; este estado de flanco sobrevive a reinicios del daemon
+y recargas de configuración.
+
 ```yaml
 check:
   type: file

@@ -565,6 +565,7 @@ func buildWorker(ctx context.Context, name, unit string, tree map[string]any, de
 		Emit:                 deps.Emit,
 		windows:              windowStates,
 		libBaseline:          libBaseline,
+		checkFailing:         checkFailingFromSnapshots(deps.Snapshots, name, checkTypes),
 		artifactSamples:      deps.ArtifactSamples,
 
 		appVersionCmd:   appVersionCmds(tree),
@@ -577,6 +578,24 @@ func buildWorker(ctx context.Context, name, unit string, tree map[string]any, de
 	watches, watchWarnings := serviceWatches(name, tree, watchDeps, newMetricSource, deps, resolution)
 	warnings = append(warnings, watchWarnings...)
 	return worker, watches, warnings
+}
+
+// checkFailingFromSnapshots restores the last check-health edge after a daemon
+// restart. Snapshot type metadata ensures a same-named check from a changed
+// configuration does not inherit an unrelated state.
+func checkFailingFromSnapshots(snapshots *Snapshots, service string, checkTypes map[string]string) map[string]bool {
+	restored := map[string]bool{}
+	for name, snapshot := range snapshots.Get(service) {
+		checkType, configured := checkTypes[name]
+		if !configured || snapshot.CheckType != checkType || snapshot.Optional || snapshot.Skipped {
+			continue
+		}
+		restored[name] = !snapshot.healthy()
+	}
+	if len(restored) == 0 {
+		return nil
+	}
+	return restored
 }
 
 // workerCheckRunner returns the worker's per-cycle check runner. Each cycle it

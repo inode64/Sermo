@@ -14,18 +14,22 @@ import (
 
 // CheckSnapshot is the last observed result of one check, for the web detail view.
 type CheckSnapshot struct {
-	CheckType string
-	OK        bool
-	Condition bool
-	Optional  bool
-	Skipped   bool
-	Message   string
-	Data      map[string]any
-	Ran       bool // true when the check actually executed this cycle (not interval cache)
-	At        time.Time
+	CheckType   string
+	OK          bool
+	Condition   bool
+	Optional    bool
+	Skipped     bool
+	Unavailable bool
+	Message     string
+	Data        map[string]any
+	Ran         bool // true when the check actually executed this cycle (not interval cache)
+	At          time.Time
 }
 
 func (c CheckSnapshot) healthy() bool {
+	if c.Unavailable {
+		return false
+	}
 	if c.Condition {
 		return !c.OK
 	}
@@ -97,7 +101,7 @@ func (s *Snapshots) PublishWithCheckTypes(service string, cache map[string]check
 	for name, r := range cache {
 		cs := CheckSnapshot{
 			CheckType: checkTypes[name],
-			OK:        r.OK, Condition: r.Condition, Optional: r.Optional, Skipped: r.Skipped, Message: r.Message,
+			OK:        r.OK, Condition: r.Condition, Optional: r.Optional, Skipped: r.Skipped, Unavailable: r.Unavailable, Message: r.Message,
 			Data: maps.Clone(r.Data), Ran: ran[name],
 		}
 		if ran[name] {
@@ -192,7 +196,7 @@ func (s *WatchSnapshots) Publish(watch, checkType string, r checks.Result) {
 	}
 	slot := watchResultSlot(r)
 	snap := CheckSnapshot{
-		OK: r.OK, Condition: r.Condition, Optional: r.Optional, Skipped: r.Skipped, Message: r.Message,
+		OK: r.OK, Condition: r.Condition, Optional: r.Optional, Skipped: r.Skipped, Unavailable: r.Unavailable, Message: r.Message,
 		Data: maps.Clone(r.Data), Ran: true, At: now(),
 	}
 	s.mu.Lock()
@@ -265,14 +269,14 @@ func serviceSnapshotRecords(snaps map[string]CheckSnapshot) map[string]state.Che
 
 func snapshotFromRecord(rec state.CheckSnapshotRecord) CheckSnapshot {
 	return CheckSnapshot{
-		CheckType: rec.CheckType, OK: rec.OK, Condition: rec.Condition, Optional: rec.Optional, Skipped: rec.Skipped,
+		CheckType: rec.CheckType, OK: rec.OK, Condition: rec.Condition, Optional: rec.Optional, Skipped: rec.Skipped, Unavailable: rec.Unavailable,
 		Message: rec.Message, Data: maps.Clone(rec.Data), Ran: rec.Ran, At: rec.At,
 	}
 }
 
 func snapshotRecord(snap CheckSnapshot) state.CheckSnapshotRecord {
 	return state.CheckSnapshotRecord{
-		CheckType: snap.CheckType, OK: snap.OK, Condition: snap.Condition, Optional: snap.Optional, Skipped: snap.Skipped,
+		CheckType: snap.CheckType, OK: snap.OK, Condition: snap.Condition, Optional: snap.Optional, Skipped: snap.Skipped, Unavailable: snap.Unavailable,
 		Message: snap.Message, Data: maps.Clone(snap.Data), Ran: snap.Ran, At: snap.At,
 	}
 }

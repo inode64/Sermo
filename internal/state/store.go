@@ -164,6 +164,7 @@ var storageSchema = []string{
 		condition  INTEGER NOT NULL,
 		optional   INTEGER NOT NULL,
 		skipped    INTEGER NOT NULL,
+		unavailable INTEGER NOT NULL DEFAULT 0,
 		message    TEXT NOT NULL,
 		data       TEXT NOT NULL,
 		ran        INTEGER NOT NULL,
@@ -182,6 +183,7 @@ var storageSchema = []string{
 		condition  INTEGER NOT NULL,
 		optional   INTEGER NOT NULL,
 		skipped    INTEGER NOT NULL,
+		unavailable INTEGER NOT NULL DEFAULT 0,
 		message    TEXT NOT NULL,
 		data       TEXT NOT NULL,
 		ran        INTEGER NOT NULL,
@@ -195,6 +197,7 @@ var storageSchema = []string{
 		watch              TEXT NOT NULL,
 		slot               TEXT NOT NULL,
 		firing             INTEGER NOT NULL DEFAULT 0,
+		unavailable        INTEGER NOT NULL DEFAULT 0,
 		last_notify_at     INTEGER NOT NULL DEFAULT 0,
 		consecutive        INTEGER NOT NULL DEFAULT 0,
 		history            TEXT NOT NULL DEFAULT '[]',
@@ -252,6 +255,20 @@ var storageSchema = []string{
 		res       INTEGER PRIMARY KEY,
 		watermark INTEGER NOT NULL
 	) WITHOUT ROWID;`,
+}
+
+type schemaColumn struct {
+	listSQL string
+	name    string
+	addSQL  string
+}
+
+// Columns added after the initial persistent-store release need an explicit
+// migration because CREATE TABLE IF NOT EXISTS does not update fleet databases.
+var storageColumns = []schemaColumn{
+	{listSQL: "PRAGMA table_info(service_check_snapshot);", name: "unavailable", addSQL: "ALTER TABLE service_check_snapshot ADD COLUMN unavailable INTEGER NOT NULL DEFAULT 0;"},
+	{listSQL: "PRAGMA table_info(watch_check_snapshot);", name: "unavailable", addSQL: "ALTER TABLE watch_check_snapshot ADD COLUMN unavailable INTEGER NOT NULL DEFAULT 0;"},
+	{listSQL: "PRAGMA table_info(watch_runtime_state);", name: "unavailable", addSQL: "ALTER TABLE watch_runtime_state ADD COLUMN unavailable INTEGER NOT NULL DEFAULT 0;"},
 }
 
 // Store is a handle to the persistent state database. It is safe for concurrent
@@ -520,10 +537,52 @@ func (s *Store) initializeSchema(ctx context.Context) error {
 			return fmt.Errorf("create state schema: %w", err)
 		}
 	}
+	for _, column := range storageColumns {
+		if err := ensureSchemaColumn(ctx, tx, column); err != nil {
+			_ = tx.Rollback()
+			return err
+		}
+	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit state schema: %w", err)
 	}
 	return nil
+}
+
+func ensureSchemaColumn(ctx context.Context, tx *sql.Tx, column schemaColumn) error {
+	found, err := schemaColumnExists(ctx, tx, column)
+	if err != nil {
+		return err
+	}
+	if found {
+		return nil
+	}
+	if _, err := tx.ExecContext(ctx, column.addSQL); err != nil {
+		return fmt.Errorf("add state schema column %s: %w", column.name, err)
+	}
+	return nil
+}
+
+func schemaColumnExists(ctx context.Context, tx *sql.Tx, column schemaColumn) (bool, error) {
+	rows, err := tx.QueryContext(ctx, column.listSQL)
+	if err != nil {
+		return false, fmt.Errorf("inspect state schema column %s: %w", column.name, err)
+	}
+	defer func() { _ = rows.Close() }()
+	found := false
+	for rows.Next() {
+		var cid, notNull, primaryKey int
+		var name, columnType string
+		var defaultValue any
+		if err := rows.Scan(&cid, &name, &columnType, &notNull, &defaultValue, &primaryKey); err != nil {
+			return false, fmt.Errorf("scan state schema column %s: %w", column.name, err)
+		}
+		found = found || name == column.name
+	}
+	if err := rows.Err(); err != nil {
+		return false, fmt.Errorf("inspect state schema rows for %s: %w", column.name, err)
+	}
+	return found, nil
 }
 
 // MonitorRecord is one persisted monitoring state row.
@@ -558,16 +617,17 @@ type ServiceRestartNoticeRecord struct {
 // check name or host-watch slot; CheckType identifies the check that produced
 // the data so callers never decode a prior result as a new check type.
 type CheckSnapshotRecord struct {
-	Name      string
-	CheckType string
-	OK        bool
-	Condition bool
-	Optional  bool
-	Skipped   bool
-	Message   string
-	Data      map[string]any
-	Ran       bool
-	At        time.Time
+	Name        string
+	CheckType   string
+	OK          bool
+	Condition   bool
+	Optional    bool
+	Skipped     bool
+	Unavailable bool
+	Message     string
+	Data        map[string]any
+	Ran         bool
+	At          time.Time
 }
 
 // MonitorState returns a persisted monitoring row. found is false when the entry
@@ -729,7 +789,7 @@ func (s *Store) SetServiceRestartNotice(service string, record ServiceRestartNot
 // by service name and keyed by check name.
 func (s *Store) ServiceCheckSnapshots() (map[string]map[string]CheckSnapshotRecord, error) {
 	return s.groupedCheckSnapshots(
-		`SELECT service, check_name, check_type, ok, condition, optional, skipped, message, data, ran, at
+		`SELECT service, check_name, check_type, ok, condition, optional, skipped, unavailable, message, data, ran, at
 		   FROM service_check_snapshot ORDER BY service, check_name;`,
 		"service check snapshots",
 	)
@@ -745,8 +805,8 @@ func (s *Store) SetServiceCheckSnapshots(service string, records map[string]Chec
 			}
 			if _, err := tx.ExecContext(s.sqlCtx(),
 				`INSERT INTO service_check_snapshot
-				   (service, check_name, check_type, ok, condition, optional, skipped, message, data, ran, at)
-				 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
+				   (service, check_name, check_type, ok, condition, optional, skipped, unavailable, message, data, ran, at)
+				 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
 				checkSnapshotArgs(rec, data, service, name)...,
 			); err != nil {
 				return fmt.Errorf("insert service check snapshot %s/%s: %w", service, name, err)
@@ -790,7 +850,7 @@ func replaceServiceRows[T any](s *Store, service, deleteSQL, what string, record
 // watch name and keyed by the stable result slot.
 func (s *Store) WatchCheckSnapshots() (map[string]map[string]CheckSnapshotRecord, error) {
 	return s.groupedCheckSnapshots(
-		`SELECT watch, slot, check_type, ok, condition, optional, skipped, message, data, ran, at
+		`SELECT watch, slot, check_type, ok, condition, optional, skipped, unavailable, message, data, ran, at
 		   FROM watch_check_snapshot ORDER BY watch, slot;`,
 		"watch check snapshots",
 	)
@@ -826,33 +886,34 @@ func (s *Store) groupedCheckSnapshots(query, label string) (map[string]map[strin
 // table in scan errors.
 func scanCheckSnapshotRow(rows *sql.Rows, label string) (string, string, CheckSnapshotRecord, error) {
 	var (
-		group     string
-		slot      string
-		checkType string
-		ok        int
-		cond      int
-		optional  int
-		skipped   int
-		message   string
-		rawData   string
-		ran       int
-		at        int64
+		group       string
+		slot        string
+		checkType   string
+		ok          int
+		cond        int
+		optional    int
+		skipped     int
+		unavailable int
+		message     string
+		rawData     string
+		ran         int
+		at          int64
 	)
-	if err := rows.Scan(&group, &slot, &checkType, &ok, &cond, &optional, &skipped, &message, &rawData, &ran, &at); err != nil {
+	if err := rows.Scan(&group, &slot, &checkType, &ok, &cond, &optional, &skipped, &unavailable, &message, &rawData, &ran, &at); err != nil {
 		return "", "", CheckSnapshotRecord{}, fmt.Errorf("scan %s: %w", label, err)
 	}
-	record, err := newCheckSnapshotRecord(slot, checkType, ok, cond, optional, skipped, message, rawData, ran, at)
+	record, err := newCheckSnapshotRecord(slot, checkType, ok, cond, optional, skipped, unavailable, message, rawData, ran, at)
 	return group, slot, record, err
 }
 
-func newCheckSnapshotRecord(name, checkType string, ok, condition, optional, skipped int, message, rawData string, ran int, at int64) (CheckSnapshotRecord, error) {
+func newCheckSnapshotRecord(name, checkType string, ok, condition, optional, skipped, unavailable int, message, rawData string, ran int, at int64) (CheckSnapshotRecord, error) {
 	data, err := decodeSnapshotData(rawData)
 	if err != nil {
 		return CheckSnapshotRecord{}, err
 	}
 	return CheckSnapshotRecord{
 		Name: name, CheckType: checkType, OK: intBool(ok), Condition: intBool(condition), Optional: intBool(optional),
-		Skipped: intBool(skipped), Message: message, Data: data, Ran: intBool(ran), At: unixNanoTime(at),
+		Skipped: intBool(skipped), Unavailable: intBool(unavailable), Message: message, Data: data, Ran: intBool(ran), At: unixNanoTime(at),
 	}, nil
 }
 
@@ -864,14 +925,15 @@ func (s *Store) SetWatchCheckSnapshot(watch, slot string, rec CheckSnapshotRecor
 	}
 	_, err = s.exec(s.sqlCtx(),
 		`INSERT INTO watch_check_snapshot
-		   (watch, slot, check_type, ok, condition, optional, skipped, message, data, ran, at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		   (watch, slot, check_type, ok, condition, optional, skipped, unavailable, message, data, ran, at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		 ON CONFLICT(watch, slot) DO UPDATE SET
 		   check_type = excluded.check_type,
 		   ok         = excluded.ok,
 		   condition  = excluded.condition,
 		   optional   = excluded.optional,
 		   skipped    = excluded.skipped,
+		   unavailable = excluded.unavailable,
 		   message    = excluded.message,
 		   data       = excluded.data,
 		   ran        = excluded.ran,
@@ -891,7 +953,7 @@ func (s *Store) SetWatchCheckSnapshot(watch, slot string, rec CheckSnapshotRecor
 func checkSnapshotArgs(rec CheckSnapshotRecord, data string, keys ...any) []any {
 	return append(keys,
 		rec.CheckType, boolInt(rec.OK), boolInt(rec.Condition), boolInt(rec.Optional), boolInt(rec.Skipped),
-		rec.Message, data, boolInt(rec.Ran), timeUnixNano(rec.At),
+		boolInt(rec.Unavailable), rec.Message, data, boolInt(rec.Ran), timeUnixNano(rec.At),
 	)
 }
 
@@ -992,6 +1054,7 @@ type RuleWindowSample struct {
 // WatchRuntimeRecord is the durable control state for one watch result slot.
 type WatchRuntimeRecord struct {
 	Firing       bool
+	Unavailable  bool
 	LastNotifyAt time.Time
 	Window       RuleWindowRecord
 	Policy       RemediationRecord
@@ -1001,6 +1064,7 @@ type WatchRuntimeRecord struct {
 func (s *Store) WatchRuntimeState(watch, slot string) (WatchRuntimeRecord, bool, error) {
 	var (
 		firing             int
+		unavailable        int
 		lastNotifyAt       int64
 		consecutive        int
 		rawHistory         string
@@ -1013,13 +1077,13 @@ func (s *Store) WatchRuntimeState(watch, slot string) (WatchRuntimeRecord, bool,
 		clearConsecutive   int
 	)
 	err := s.reads().QueryRowContext(s.sqlCtx(),
-		`SELECT firing, last_notify_at, consecutive, history, true_since,
+		`SELECT firing, unavailable, last_notify_at, consecutive, history, true_since,
 		        timed_history, last_action_at, recent_actions, current_backoff_ns,
 		        clear_since, clear_consecutive
 		   FROM watch_runtime_state WHERE watch = ? AND slot = ?;`,
 		watch, slot,
 	).Scan(
-		&firing, &lastNotifyAt, &consecutive, &rawHistory, &trueSince,
+		&firing, &unavailable, &lastNotifyAt, &consecutive, &rawHistory, &trueSince,
 		&rawTimed, &lastActionAt, &rawRecentActions, &currentBackoffNano,
 		&clearSince, &clearConsecutive,
 	)
@@ -1044,6 +1108,7 @@ func (s *Store) WatchRuntimeState(watch, slot string) (WatchRuntimeRecord, bool,
 	}
 	return WatchRuntimeRecord{
 		Firing:       firing != 0,
+		Unavailable:  unavailable != 0,
 		LastNotifyAt: unixNanoTime(lastNotifyAt),
 		Window: RuleWindowRecord{
 			Consecutive:  consecutive,
@@ -1089,12 +1154,13 @@ func (s *Store) SetWatchRuntimeState(watch, slot string, rec WatchRuntimeRecord)
 	firing := boolInt(rec.Firing)
 	_, err = s.exec(s.sqlCtx(),
 		`INSERT INTO watch_runtime_state (
-		   watch, slot, firing, last_notify_at, consecutive, history, true_since,
+		   watch, slot, firing, unavailable, last_notify_at, consecutive, history, true_since,
 		   timed_history, last_action_at, recent_actions, current_backoff_ns,
 		   clear_since, clear_consecutive
-		 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		 ON CONFLICT(watch, slot) DO UPDATE SET
 		   firing             = excluded.firing,
+		   unavailable        = excluded.unavailable,
 		   last_notify_at      = excluded.last_notify_at,
 		   consecutive         = excluded.consecutive,
 		   history             = excluded.history,
@@ -1105,7 +1171,7 @@ func (s *Store) SetWatchRuntimeState(watch, slot string, rec WatchRuntimeRecord)
 		   current_backoff_ns  = excluded.current_backoff_ns,
 		   clear_since         = excluded.clear_since,
 		   clear_consecutive   = excluded.clear_consecutive;`,
-		watch, slot, firing, timeUnixNano(rec.LastNotifyAt), rec.Window.Consecutive,
+		watch, slot, firing, boolInt(rec.Unavailable), timeUnixNano(rec.LastNotifyAt), rec.Window.Consecutive,
 		string(history), timeUnixNano(rec.Window.TrueSince), timed,
 		timeUnixNano(rec.Policy.LastActionAt), recent, int64(rec.Policy.CurrentBackoff),
 		timeUnixNano(rec.Window.ClearSince), rec.Window.ClearConsecutive,
@@ -1117,7 +1183,7 @@ func (s *Store) SetWatchRuntimeState(watch, slot string, rec WatchRuntimeRecord)
 }
 
 func watchRuntimeRecordEmpty(rec WatchRuntimeRecord) bool {
-	return !rec.Firing && rec.LastNotifyAt.IsZero() &&
+	return !rec.Firing && !rec.Unavailable && rec.LastNotifyAt.IsZero() &&
 		rec.Window.Consecutive == 0 && len(rec.Window.History) == 0 &&
 		rec.Window.TrueSince.IsZero() && len(rec.Window.TimedHistory) == 0 &&
 		!rec.Window.Firing && rec.Window.ClearSince.IsZero() && rec.Window.ClearConsecutive == 0 &&

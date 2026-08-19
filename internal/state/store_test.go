@@ -194,7 +194,7 @@ func TestStoreCheckSnapshotsPersistAcrossReopen(t *testing.T) {
 		t.Fatalf("SetServiceCheckSnapshots replace: %v", err)
 	}
 	if err := first.SetWatchCheckSnapshot("clock", "result", CheckSnapshotRecord{
-		CheckType: "clock", OK: false, Message: "offset 1200ms",
+		CheckType: "clock", OK: false, Unavailable: true, Message: "offset 1200ms",
 		Data: map[string]any{"offset_ms": float64(1200)}, Ran: true, At: at,
 	}); err != nil {
 		t.Fatalf("SetWatchCheckSnapshot: %v", err)
@@ -226,8 +226,39 @@ func TestStoreCheckSnapshotsPersistAcrossReopen(t *testing.T) {
 		t.Fatalf("WatchCheckSnapshots: %v", err)
 	}
 	got := watchSnapshots["clock"]["result"]
-	if got.CheckType != "clock" || got.OK || got.Message != "offset 1200ms" || got.Data["offset_ms"] != float64(1200) || !got.At.Equal(at) {
+	if got.CheckType != "clock" || got.OK || !got.Unavailable || got.Message != "offset 1200ms" || got.Data["offset_ms"] != float64(1200) || !got.At.Equal(at) {
 		t.Fatalf("watch snapshot did not round-trip: %+v", got)
+	}
+}
+
+func TestStoreMigratesUnavailableColumns(t *testing.T) {
+	path := filepath.Join(t.TempDir(), Filename)
+	first, err := OpenContext(context.Background(), path)
+	if err != nil {
+		t.Fatalf("open initial store: %v", err)
+	}
+	for _, table := range []string{"service_check_snapshot", "watch_check_snapshot", "watch_runtime_state"} {
+		if _, err := first.db.ExecContext(context.Background(), "ALTER TABLE "+table+" DROP COLUMN unavailable;"); err != nil {
+			t.Fatalf("remove %s.unavailable to simulate old store: %v", table, err)
+		}
+	}
+	if err := first.Close(); err != nil {
+		t.Fatalf("close old store: %v", err)
+	}
+
+	migrated, err := OpenContext(context.Background(), path)
+	if err != nil {
+		t.Fatalf("open migrated store: %v", err)
+	}
+	defer migrated.Close()
+	if err := migrated.SetWatchCheckSnapshot("clock", "result", CheckSnapshotRecord{Unavailable: true}); err != nil {
+		t.Fatalf("write migrated snapshot: %v", err)
+	}
+	if err := migrated.SetWatchRuntimeState("clock", "result", WatchRuntimeRecord{Unavailable: true}); err != nil {
+		t.Fatalf("write migrated runtime state: %v", err)
+	}
+	if got, _, err := migrated.WatchRuntimeState("clock", "result"); err != nil || !got.Unavailable {
+		t.Fatalf("migrated runtime state = %+v, err = %v", got, err)
 	}
 }
 
@@ -370,6 +401,7 @@ func writePersistentStoreState(t *testing.T, store *Store, at time.Time) {
 	}
 	if err := store.SetWatchRuntimeState("storage-root", "metric:free", WatchRuntimeRecord{
 		Firing:       true,
+		Unavailable:  true,
 		LastNotifyAt: at.Add(-time.Minute),
 		Window: RuleWindowRecord{
 			Consecutive: 2,
@@ -446,7 +478,7 @@ func assertPersistedWatchRuntimeState(t *testing.T, store *Store, at time.Time) 
 	if err != nil || !found {
 		t.Fatalf("WatchRuntimeState after reopen: found=%v err=%v", found, err)
 	}
-	if !watch.Firing || !watch.LastNotifyAt.Equal(at.Add(-time.Minute)) ||
+	if !watch.Firing || !watch.Unavailable || !watch.LastNotifyAt.Equal(at.Add(-time.Minute)) ||
 		watch.Window.Consecutive != 2 || len(watch.Window.History) != 3 ||
 		!watch.Window.TrueSince.Equal(at.Add(-5*time.Minute)) ||
 		len(watch.Window.TimedHistory) != 1 ||

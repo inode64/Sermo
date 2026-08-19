@@ -142,6 +142,7 @@ type Watch struct {
 	stateLoaded    bool
 	stateRestored  bool
 	persistedState state.WatchRuntimeRecord
+	unavailable    bool
 }
 
 const watchEnvAssignSeparator = "="
@@ -186,6 +187,12 @@ func (w *Watch) runCustomCycle(ctx context.Context, observeOnly bool) {
 }
 
 func (w *Watch) runCheckCycle(ctx context.Context, res checks.Result, observeOnly bool) {
+	if w.updateAvailability(res) {
+		if observeOnly {
+			w.markSettled()
+		}
+		return
+	}
 	if observeOnly {
 		w.reconcileRestoredEpisode(res)
 		w.markSettled()
@@ -198,6 +205,24 @@ func (w *Watch) runCheckCycle(ctx context.Context, res checks.Result, observeOnl
 		return
 	}
 	w.dispatchFiringActions(ctx, res, wasFiring, emitFiring)
+}
+
+// updateAvailability keeps an unavailable observation out of condition windows
+// and, critically, out of automatic actions. It emits only on edges and stores
+// the edge state with the rest of the watch runtime record.
+func (w *Watch) updateAvailability(res checks.Result) bool {
+	if res.Unavailable {
+		if !w.unavailable {
+			w.unavailable = true
+			w.emit(Event{Watch: w.Name, Kind: eventKindError, Message: "check unavailable: " + res.Message})
+		}
+		return true
+	}
+	if w.unavailable {
+		w.unavailable = false
+		w.emit(Event{Watch: w.Name, Kind: eventKindRecovered, Message: "check available: " + res.Message})
+	}
+	return false
 }
 
 func (w *Watch) evaluateFiring(res checks.Result) (wasFiring, emitFiring, firing bool) {

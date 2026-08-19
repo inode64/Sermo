@@ -24,7 +24,8 @@ func TestCaptureAndApplyWorkerState(t *testing.T) {
 			ws.FiresAt(r, true, time.Now())
 			return map[string]*rules.WindowState{"restart-if-down": ws}
 		}(),
-		libBaseline: map[string]string{"/etc/app.conf": "1:2"},
+		libBaseline:  map[string]string{"/etc/app.conf": "1:2"},
+		checkFailing: map[string]bool{"service": true},
 	}
 	saved := captureWorkerState([]*Worker{old})
 
@@ -44,6 +45,13 @@ func TestCaptureAndApplyWorkerState(t *testing.T) {
 	if fresh.libBaseline["/etc/app.conf"] != "1:2" {
 		t.Fatalf("baseline = %+v", fresh.libBaseline)
 	}
+	if !fresh.checkFailing["service"] {
+		t.Fatalf("check health state = %+v, want service failing", fresh.checkFailing)
+	}
+	fresh.checkFailing["service"] = false
+	if !old.checkFailing["service"] {
+		t.Fatal("applying worker state reused the old check-health map")
+	}
 }
 
 func TestCaptureAndApplyWatchState(t *testing.T) {
@@ -55,6 +63,7 @@ func TestCaptureAndApplyWatchState(t *testing.T) {
 	old.state.FiresAt(r, true, time.Now())
 	old.state.FiresAt(r, true, time.Now())
 	old.firing = true
+	old.unavailable = true
 
 	saved := captureWatchState([]*Watch{old})
 	fresh := &Watch{Name: "load-high", Window: r}
@@ -62,6 +71,9 @@ func TestCaptureAndApplyWatchState(t *testing.T) {
 
 	if fresh.firing != true {
 		t.Fatalf("firing = %v, want preserved", fresh.firing)
+	}
+	if !fresh.unavailable {
+		t.Fatal("unavailable state was not preserved")
 	}
 	if fresh.state.ProgressAt(r, time.Now()) != "2/3" {
 		t.Fatalf("window progress = %q, want 2/3", fresh.state.ProgressAt(r, time.Now()))

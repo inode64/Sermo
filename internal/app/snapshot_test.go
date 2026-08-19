@@ -88,7 +88,7 @@ func TestPersistentSnapshotsHydrateAndStore(t *testing.T) {
 	store := &snapshotStoreFake{
 		service: map[string]map[string]state.CheckSnapshotRecord{
 			"web": {
-				"http": {CheckType: checks.CheckTypeHTTP, OK: true, Message: "status 200", Data: map[string]any{"status": float64(200)}, Ran: true, At: t0},
+				"http": {CheckType: checks.CheckTypeHTTP, OK: true, Unavailable: true, Message: "status unavailable", Data: map[string]any{"status": float64(200)}, Ran: true, At: t0},
 			},
 		},
 	}
@@ -96,21 +96,21 @@ func TestPersistentSnapshotsHydrateAndStore(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewPersistentSnapshots: %v", err)
 	}
-	if got := s.Get("web")["http"]; got.CheckType != checks.CheckTypeHTTP || !got.OK || got.Message != "status 200" || got.Data["status"] != float64(200) || !got.At.Equal(t0) {
+	if got := s.Get("web")["http"]; got.CheckType != checks.CheckTypeHTTP || !got.OK || !got.Unavailable || got.Message != "status unavailable" || got.Data["status"] != float64(200) || !got.At.Equal(t0) {
 		t.Fatalf("hydrated snapshot = %+v", got)
 	}
 
 	t1 := t0.Add(time.Minute)
 	s.now = func() time.Time { return t1 }
 	s.Publish("web", map[string]checks.Result{
-		"tcp": {Check: "tcp", OK: false, Message: "connection refused", Data: map[string]any{"port": float64(443)}},
+		"tcp": {Check: "tcp", OK: false, Unavailable: true, Message: "connection refused", Data: map[string]any{"port": float64(443)}},
 	}, map[string]bool{"tcp": true})
 
 	service := store.service["web"]
 	if len(service) != 1 {
 		t.Fatalf("stored service snapshots = %+v, want replaced current rows", service)
 	}
-	if got := service["tcp"]; got.OK || got.Message != "connection refused" || got.Data["port"] != float64(443) || !got.At.Equal(t1) {
+	if got := service["tcp"]; got.OK || !got.Unavailable || got.Message != "connection refused" || got.Data["port"] != float64(443) || !got.At.Equal(t1) {
 		t.Fatalf("stored snapshot = %+v", got)
 	}
 }
@@ -164,14 +164,15 @@ func TestPersistentWatchSnapshotsHydrateAndStore(t *testing.T) {
 	t1 := t0.Add(time.Minute)
 	s.now = func() time.Time { return t1 }
 	s.Publish("clock", "clock", checks.Result{
-		Check:   "clock",
-		OK:      true,
-		Message: "offset 4ms",
-		Data:    map[string]any{"offset_ms": float64(4)},
+		Check:       "clock",
+		OK:          true,
+		Unavailable: true,
+		Message:     "offset 4ms",
+		Data:        map[string]any{"offset_ms": float64(4)},
 	})
 
 	got := store.watch["clock"]["clock"]
-	if got.CheckType != "clock" || !got.OK || got.Message != "offset 4ms" || got.Data["offset_ms"] != float64(4) || !got.At.Equal(t1) {
+	if got.CheckType != "clock" || !got.OK || !got.Unavailable || got.Message != "offset 4ms" || got.Data["offset_ms"] != float64(4) || !got.At.Equal(t1) {
 		t.Fatalf("stored watch snapshot = %+v", got)
 	}
 }

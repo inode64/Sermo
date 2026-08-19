@@ -44,13 +44,24 @@ func (mysqlProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 		return mysqlGreeting(c)
 	}
 
-	db, err := sql.Open(ProtocolNameMySQL, buildMySQLProbeDSN(ctx, cfg))
+	db, err := OpenMySQLDB(ctx, cfg)
 	if err != nil {
 		return Result{}, probeErr(ProtocolNameMySQL, stepOpen, err)
 	}
 	defer func() { _ = db.Close() }()
 
 	return pingAndVersion(ctx, db, "SELECT VERSION()")
+}
+
+// OpenMySQLDB opens a MySQL pool whose connector retains the bound DialFunc;
+// formatting the config back to a DSN would discard that function.
+func OpenMySQLDB(ctx context.Context, cfg Config) (*sql.DB, error) {
+	target := probeTargetFor(ctx, cfg, defaultPortMySQL)
+	connector, err := mysql.NewConnector(buildMySQLConfigWithTarget(cfg, target))
+	if err != nil {
+		return nil, fmt.Errorf("mysql connector: %w", err)
+	}
+	return sql.OpenDB(connector), nil
 }
 
 // maxMySQLHandshake bounds the initial handshake packet we are willing to read,
@@ -150,8 +161,4 @@ func buildMySQLConfigWithTarget(cfg Config, target probeTarget) *mysql.Config {
 // special characters in the password are escaped correctly.
 func buildDSN(cfg Config) string {
 	return buildMySQLConfig(cfg).FormatDSN()
-}
-
-func buildMySQLProbeDSN(ctx context.Context, cfg Config) string {
-	return buildMySQLConfigWithTarget(cfg, probeTargetFor(ctx, cfg, defaultPortMySQL)).FormatDSN()
 }

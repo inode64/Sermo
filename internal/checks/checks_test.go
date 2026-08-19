@@ -982,6 +982,9 @@ func TestResultHealthyByReportingMode(t *testing.T) {
 		{"state sensor active", Result{OK: true, Reports: ReportsState}, true},
 		{"state sensor inactive", Result{OK: false, Reports: ReportsState}, true},
 		{"explicit health mode", Result{OK: false, Reports: ReportsHealth}, false},
+		{"health observation unavailable", Result{OK: false, Unavailable: true}, false},
+		{"condition observation unavailable", Result{OK: false, Condition: true, Unavailable: true}, false},
+		{"state observation unavailable", Result{OK: false, Reports: ReportsState, Unavailable: true}, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if got := tc.result.Healthy(); got != tc.healthy {

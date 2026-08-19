@@ -15,6 +15,7 @@ type watchSnapshot struct {
 	state          rules.WindowState
 	policyState    *rules.RemediationState
 	firing         bool
+	unavailable    bool
 	lastNotifyAt   time.Time
 	settled        bool
 	stateLoaded    bool
@@ -35,6 +36,7 @@ func captureWatchState(watches []*Watch) map[watchStateKey]watchSnapshot {
 		}
 		snap := watchSnapshot{
 			firing:         w.firing,
+			unavailable:    w.unavailable,
 			lastNotifyAt:   w.lastNotifyAt,
 			settled:        w.settled,
 			stateLoaded:    w.stateLoaded,
@@ -58,6 +60,7 @@ func applyWatchState(watches []*Watch, saved map[watchStateKey]watchSnapshot) {
 		}
 		w.state = snap.state
 		w.firing = snap.firing
+		w.unavailable = snap.unavailable
 		w.lastNotifyAt = snap.lastNotifyAt
 		w.settled = snap.settled
 		w.stateLoaded = snap.stateLoaded
@@ -71,10 +74,11 @@ func applyWatchState(watches []*Watch, saved map[watchStateKey]watchSnapshot) {
 
 // workerSnapshot preserves per-service runtime state across a config reload.
 type workerSnapshot struct {
-	cycle       int
-	remediation *rules.RemediationState
-	windows     map[string]*rules.WindowState
-	libBaseline map[string]string
+	cycle        int
+	remediation  *rules.RemediationState
+	windows      map[string]*rules.WindowState
+	libBaseline  map[string]string
+	checkFailing map[string]bool
 }
 
 func captureWorkerState(workers []*Worker) map[string]workerSnapshot {
@@ -92,6 +96,9 @@ func captureWorkerState(workers []*Worker) map[string]workerSnapshot {
 		}
 		if len(w.libBaseline) > 0 {
 			snap.libBaseline = maps.Clone(w.libBaseline)
+		}
+		if len(w.checkFailing) > 0 {
+			snap.checkFailing = maps.Clone(w.checkFailing)
 		}
 		out[w.Service] = snap
 	}
@@ -113,6 +120,9 @@ func applyWorkerState(workers []*Worker, saved map[string]workerSnapshot) {
 		}
 		if snap.libBaseline != nil {
 			w.libBaseline = snap.libBaseline
+		}
+		if snap.checkFailing != nil {
+			w.checkFailing = maps.Clone(snap.checkFailing)
 		}
 	}
 }

@@ -2872,6 +2872,11 @@ reading to summarise, so the probe's diagnostic is what reaches the dashboard
 instead of the template. Rendering the summary over it would both hide the cause
 and, since the observation produced no data, leave `${value}` on screen.
 
+Unavailable observations are unhealthy, but they never satisfy a watch
+condition and never run watch actions. The watch emits one `error` event when
+observation becomes unavailable and one `recovered` event when a valid sample
+returns; this edge state survives daemon restarts and configuration reloads.
+
 ```yaml
 check:
   type: file

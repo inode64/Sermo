@@ -884,7 +884,7 @@ Protocols, in the order of the table above:
   a result, see the **MongoDB query** check. Uses `go.mongodb.org/mongo-driver`.
 - `postgres` (alias `postgresql`) — default port 5432; `tls` supported, plus the
   PostgreSQL sslmodes (`disable`/`require`/`prefer`/`verify-ca`/`verify-full`).
-  Uses `github.com/lib/pq`.
+  Uses `github.com/jackc/pgx/v5`.
 - `redis` (alias `valkey`) — default port 6379; `tls` supported. `user` is
   **optional** (legacy `requirepass` uses a password only, or no auth at all); a
   password-only check sends `AUTH <password>`. Verifies `PING` → `PONG` over RESP

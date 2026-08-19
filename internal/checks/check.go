@@ -120,6 +120,9 @@ func (r Result) Verdictless() bool { return VerdictlessMode(r.Reports) }
 // (OK means the condition fired), so their availability is inverted. A state
 // sensor asserts nothing about availability and is never unhealthy.
 func (r Result) Healthy() bool {
+	if r.Unavailable {
+		return false
+	}
 	if r.Verdictless() {
 		return true
 	}
