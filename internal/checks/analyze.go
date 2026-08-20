@@ -18,14 +18,10 @@ const (
 	SevError                   // maps to a required failure
 )
 
-// Analyze severity names accepted in YAML and rendered in output.
-const (
-	AnalyzeSeverityError   = "error"
-	AnalyzeSeverityWarning = "warning"
-	AnalyzeSeverityOK      = "ok"
-	// AnalyzeSeveritySummary is the user-facing list of analysis severities.
-	AnalyzeSeveritySummary = AnalyzeSeverityError + ", " + AnalyzeSeverityWarning + " or " + AnalyzeSeverityOK
-)
+// AnalyzeSeveritySummary is the user-facing list of analysis severities. The
+// names themselves are the shared severity vocabulary (see severity.go), so a
+// rule grade and a check's own `severity:` are spelled the same way.
+const AnalyzeSeveritySummary = SeverityError + ", " + SeverityWarning + " or " + SeverityOK
 
 // Analyze stream identifiers accepted by command output analysis rules.
 const (
@@ -41,21 +37,21 @@ const (
 func (s Severity) String() string {
 	switch s {
 	case SevError:
-		return AnalyzeSeverityError
+		return SeverityError
 	case SevWarning:
-		return AnalyzeSeverityWarning
+		return SeverityWarning
 	default:
-		return AnalyzeSeverityOK
+		return SeverityOK
 	}
 }
 
 func parseSeverity(s string) (Severity, bool) {
 	switch s {
-	case AnalyzeSeverityError:
+	case SeverityError:
 		return SevError, true
-	case AnalyzeSeverityWarning:
+	case SeverityWarning:
 		return SevWarning, true
-	case AnalyzeSeverityOK:
+	case SeverityOK:
 		return SevOK, true
 	default:
 		return SevOK, false

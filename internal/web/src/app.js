@@ -194,6 +194,7 @@ const eventKindPanicSuppressed = "panic-suppressed";
 const eventKindRecovered = "recovered";
 const eventKindReload = "reload";
 const eventKindSuppressed = "suppressed";
+const eventKindWarning = "warning";
 const eventStatusPreflightFailed = "preflight_failed";
 const eventStatusPostflightFailed = "postflight_failed";
 const eventStatusOrphanProcesses = "orphan_processes";
@@ -207,7 +208,7 @@ const serviceCascadeActions = [actionStart, actionStop, actionRestart];
 const serviceTrackedActions = [actionStart, actionStop, actionRestart, actionReload, actionResume, actionRepair];
 const activityCriticalStatuses = [targetStateFailed, mountStateError, eventStatusPreflightFailed, eventStatusPostflightFailed, eventStatusOrphanProcesses];
 const activityCriticalKinds = [mountStateError, eventKindHookFailed, eventKindNotifyFailed, eventKindExpandFailed, eventKindKillFailed, eventKindMakeStepFailed];
-const activityWarningKinds = [actionAlert, eventKindFiring, eventKindSuppressed, eventKindPanicSuppressed, eventKindNotifySuppressed, eventKindExpandSkipped, eventKindMakeStepSkipped];
+const activityWarningKinds = [actionAlert, eventKindFiring, eventKindWarning, eventKindSuppressed, eventKindPanicSuppressed, eventKindNotifySuppressed, eventKindExpandSkipped, eventKindMakeStepSkipped];
 const activityOKKinds = [eventKindAction, eventKindCascade, eventKindHook, eventKindNotify, eventKindRecovered, actionExpand, eventKindKill, eventKindMakeStep];
 const activityInfoKinds = [eventKindDryRun, eventKindReload];
 const serviceStatusFilterStates = [
@@ -221,7 +222,7 @@ const serviceStatusFilterStates = [
   targetStateWarning,
   targetStateFailed,
 ];
-const watchStatusFilterStates = [targetStateDisabled, targetStateOK, targetStateStarting, targetStateStale, targetStateTesting, targetStateRecovering, targetStateRebuilding, targetStateRepairing, targetStateMoving, targetStateMerging, targetStateMissing, targetStateFailed];
+const watchStatusFilterStates = [targetStateDisabled, targetStateOK, targetStateStarting, targetStateWarning, targetStateStale, targetStateTesting, targetStateRecovering, targetStateRebuilding, targetStateRepairing, targetStateMoving, targetStateMerging, targetStateMissing, targetStateFailed];
 const appStatusFilterStates = [targetStateOK, targetStateStarting, targetStateWarning, targetStateFailed];
 const mountStatusFilterStates = [mountStateActive, mountStateInactive];
 const sessionKindSSH = "ssh";
@@ -1688,6 +1689,13 @@ function isWatchSampleStale(w) {
   return watchStateText(w) === targetStateStale;
 }
 
+// isWatchWarning marks a watch whose operator graded its failures advisories. It
+// still earns a place in the attention banner — a warning is worth seeing — but
+// at warning level, so it never turns the favicon critical.
+function isWatchWarning(w) {
+  return watchStateText(w) === targetStateWarning;
+}
+
 function openServiceStatusTarget(status) {
   const normalized = normalizeServiceStatusFilter(status);
   const surface = serviceSurfaceWithStatus(normalized);
@@ -1761,6 +1769,13 @@ function openPanelTarget(target) {
   if (target === "starting-watches") {
     openAllWatchPanels();
     setAllWatchStatuses(targetStateStarting);
+    const sec = $(getWatchPanel(watchPanelKeyHost).section);
+    sec && sec.scrollIntoView({ block: scrollBlockStart, behavior: scrollBehaviorSmooth });
+    return;
+  }
+  if (target === "warning-watches") {
+    openAllWatchPanels();
+    setAllWatchStatuses(targetStateWarning);
     const sec = $(getWatchPanel(watchPanelKeyHost).section);
     sec && sec.scrollIntoView({ block: scrollBlockStart, behavior: scrollBehaviorSmooth });
     return;
@@ -2077,6 +2092,15 @@ function renderAttention() {
       title: failingWatches.length === 1 ? "1 watch firing" : `${failingWatches.length} watches firing`,
       detail: failingWatches.slice(0, 4).map((w) => displayName(w) || w.name).join(", ") + (failingWatches.length > 4 ? ` and ${failingWatches.length - 4} more` : ""),
       target: "failed-watches",
+    });
+  }
+  const warningWatches = (allWatches || []).filter(isWatchWarning);
+  if (warningWatches.length) {
+    items.push({
+      level: healthStatusWarning,
+      title: warningWatches.length === 1 ? "1 watch warning" : `${warningWatches.length} watches warning`,
+      detail: warningWatches.slice(0, 4).map((w) => displayName(w) || w.name).join(", ") + (warningWatches.length > 4 ? ` and ${warningWatches.length - 4} more` : ""),
+      target: "warning-watches",
     });
   }
   const staleWatches = (allWatches || []).filter(isWatchSampleStale);
@@ -4333,7 +4357,8 @@ function watchReadings(w) {
 function readingText(reading) {
   if (!reading) return "";
   const label = reading.label || reading.field || "sample";
-  return reading.error ? `${label}: ${reading.error}` : `${label} ${reading.value || ""}`.trim();
+  const bad = reading.error || reading.warning;
+  return bad ? `${label}: ${bad}` : `${label} ${reading.value || ""}`.trim();
 }
 
 function watchMonitorHint(w) {
@@ -4705,9 +4730,13 @@ function renderWatchReadings(readings) {
   const cells = list.map((r) => {
     const label = r.label || r.field || "Sample";
     const longValue = ["issuer", "dns_names"].includes(r.field || "");
+    // An advisory reading uses the same amber the SMART/LVM health cell and the
+    // preflight "warn" row use, so one colour means one thing across the panel.
     const value = r.error
       ? tpl`<span class="watch-reading-value bad">${r.error}</span>`
-      : tpl`<b class="watch-reading-value">${r.value || "—"}</b>`;
+      : r.warning
+        ? tpl`<span class="watch-reading-value inactive">${r.warning}</span>`
+        : tpl`<b class="watch-reading-value">${r.value || "—"}</b>`;
     return tpl`<div class="watch-reading${longValue ? " watch-reading-long" : ""}"><span class="muted">${label}</span><br>${value}</div>`;
   });
   return tpl`<div class="watch-grid">${cells}</div>`;
@@ -4817,6 +4846,7 @@ function readingValue(w, field) {
   const r = ((w && w.readings) || []).find((x) => x && x.field === field);
   if (!r) return "—";
   if (r.error) return tpl`<span class="bad">${r.error}</span>`;
+  if (r.warning) return tpl`<span class="inactive">${r.warning}</span>`;
   return r.value != null && r.value !== "" ? r.value : "—";
 }
 
@@ -6149,6 +6179,7 @@ function panelTargetLabel(target) {
     case "monitored-services": return "service targets panel, monitored filter";
     case "failed-watches": return "watches panel, failed filter";
     case "starting-watches": return "watches panel, starting filter";
+    case "warning-watches": return "watches panel, warning filter";
     case "stale-watches": return "watches panel, stale filter";
     case "failed-apps": return "applications panel, failed filter";
     case "starting-apps": return "applications panel, starting filter";
@@ -6225,6 +6256,7 @@ function overviewInventory(ctx) {
   const watches = allWatches || [];
   const enabledWatches = watches.filter((w) => w && w.enabled);
   const failedWatches = watches.filter((w) => watchStateText(w) === targetStateFailed);
+  const warningWatches = watches.filter(isWatchWarning);
   const staleWatches = watches.filter(isWatchSampleStale);
   const startingWatches = watches.filter((w) => watchStateText(w) === targetStateStarting);
   const startingApps = (allApps || []).filter((a) => appStateText(a) === targetStateStarting);
@@ -6234,14 +6266,14 @@ function overviewInventory(ctx) {
   return {
     ready, live, mon, hostMetrics, enabled, failedSvcs, startingSvcs, collectingSvcs,
     warningSvcs, activeSvcs, monitoredSvcs, watches, enabledWatches, failedWatches,
-    staleWatches, startingWatches, startingApps, daemonStarting, activeLocks, failedApps,
+    warningWatches, staleWatches, startingWatches, startingApps, daemonStarting, activeLocks, failedApps,
   };
 }
 
 function overviewServiceTileOptions(data, defaultServiceTarget) {
   const {
     mon, enabled, failedSvcs, startingSvcs, collectingSvcs, warningSvcs, activeSvcs,
-    monitoredSvcs, watches, enabledWatches, failedWatches, staleWatches,
+    monitoredSvcs, watches, enabledWatches, failedWatches, warningWatches, staleWatches,
     startingWatches, startingApps, daemonStarting, activeLocks, failedApps,
   } = data;
   const alerts = failedSvcs.length + failedWatches.length + failedApps.length + activeLocks.length;
@@ -6266,6 +6298,7 @@ function overviewServiceTileOptions(data, defaultServiceTarget) {
   ], defaultServiceTarget);
   const watchesTarget = firstMatch([
     [failedWatches.length, "failed-watches"],
+    [warningWatches.length, "warning-watches"],
     [staleWatches.length, "stale-watches"],
     [startingWatches.length, "starting-watches"],
     [startingApps.length && !startingSvcs.length && !daemonStarting, "starting-apps"],
@@ -6296,16 +6329,17 @@ function overviewServiceTileOptions(data, defaultServiceTarget) {
   if (watches.length) {
     const watchesSub = firstMatch([
       [failedWatches.length, `${failedWatches.length} firing`],
+      [warningWatches.length, `${warningWatches.length} warning`],
       [staleWatches.length, `${staleWatches.length} stale`],
       [watchesSettlingText, watchesSettlingText],
     ], "quiet");
-    // A single predicate over the enabled set: subtracting the failed/stale
+    // A single predicate over the enabled set: subtracting the failed/warning/stale
     // list lengths (which span all watches and can overlap) could go negative.
-    const watchesUp = enabledWatches.filter((w) => watchStateText(w) !== targetStateFailed && !isWatchSampleStale(w)).length;
+    const watchesUp = enabledWatches.filter((w) => watchStateText(w) !== targetStateFailed && !isWatchWarning(w) && !isWatchSampleStale(w)).length;
     tiles.push({
       label: "Watches",
       value: tpl`${watchesUp}<small> / ${enabledWatches.length}</small>`,
-      cls: failedWatches.length ? "t-crit" : (staleWatches.length ? "t-warn" : (settling ? "" : "t-ok")),
+      cls: failedWatches.length ? "t-crit" : ((warningWatches.length || staleWatches.length) ? "t-warn" : (settling ? "" : "t-ok")),
       sub: watchesSub,
       target: watchesTarget,
       ariaLabel: tileAriaLabel("Watches", `${watchesUp} of ${enabledWatches.length}`, watchesSub, watchesTarget),

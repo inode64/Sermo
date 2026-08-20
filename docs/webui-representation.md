@@ -483,7 +483,7 @@ service detail.
 | Controls | search, type filter (per panel, see below), state filters, showing count |
 | Type filter | panel-specific `all ... types` plus the distinct values currently present in that panel; Storage filters by filesystem type (all its watches share one check type), Certificate watches by public-key algorithm; the selector is hidden when only one value exists |
 | Grouping | collapsible rows by the same panel-specific type used by the type filter |
-| State filters | all, disabled, ok, starting, failed |
+| State filters | all, disabled, ok, starting, warning, failed |
 | Search | display name, raw name, category, type, summary, interval, polarity, hook state/command, notifier names, expand/dry-run/monitoring state and conditions |
 | Sorting | every data column except Actions is sortable independently inside its check-type table; each table defaults to Name ascending |
 | Visibility | hidden when no watches are configured for that panel's subset |
@@ -525,7 +525,7 @@ Shared columns:
 | Name | display name, falling back to name, capitalized |
 | Last checked | latest completed daemon-cycle or manual sample |
 | Last activity | latest watch event, such as a manual probe, notification or remediation |
-| State | normalized watch state: `disabled` when config/monitor state excludes it from active checks, `starting` before the first monitored sample, `failed` for an active failure, otherwise `ok`; active device work takes precedence as `testing`, `recovering`, `rebuilding`, `repairing`, `moving` or `merging`, and a device that stopped answering as `missing`, which reads as a failure |
+| State | normalized watch state: `disabled` when config/monitor state excludes it from active checks, `starting` before the first monitored sample, `failed` for an active failure, `warning` for a failure the watch declared an advisory with `severity: warning` (amber row, kept out of the alert count), otherwise `ok`; active device work takes precedence as `testing`, `recovering`, `rebuilding`, `repairing`, `moving` or `merging`, and a device that stopped answering as `missing`, which reads as a failure |
 | Actions | supported primary action plus an overflow menu for monitor/unmonitor |
 
 While a manual `hdparm`, `lvm`, `raid` or `smart` sample is running, State shows
@@ -588,7 +588,8 @@ Editable notes:
   `?before=TIME` (positive duration or non-future RFC3339) to prune only older
   rows.
 - The `kind` filter covers the emitted event kinds: `action`, `suppressed`,
-  `panic-suppressed`, `alert`, `error`, `firing`, `recovered`, `dry-run`,
+  `panic-suppressed`, `alert`, `error`, `warning` (what an advisory watch raises
+  in place of `error` and `firing`), `firing`, `recovered`, `dry-run`,
   `reload` (a successful config reload of the running daemon),
   `hook`/`hook-failed`, `notify`/`notify-failed`/`notify-suppressed`,
   `expand`/`expand-skipped`/`expand-failed`, `kill`/`kill-failed`,

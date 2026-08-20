@@ -2552,6 +2552,20 @@ Las cuatro métricas y sus condiciones:
 Hook extras: `SERMO_INTERFACE`, `SERMO_METRIC`, y — para las métricas de cambio
 (`state`/`speed`/`address`) — `SERMO_OLD`/`SERMO_NEW`.
 
+`errors` es la métrica que conviene graduar con `severity: warning` (ver
+[Severidad](rules.es.md#severidad-severity)): un contador de errores que sube es
+una degradación que mirar, mientras que el enlace caído es la avería. Declarado
+por métrica, el enlace conserva su rojo y el contador se lee en ámbar:
+
+```yaml
+metrics:
+  state:
+    expect: down
+  errors:
+    severity: warning
+    delta: { op: ">", value: 100 }
+```
+
 ### `icmp` — host externo (ping)
 
 Un watch `icmp` monitoriza un **host externo** mediante eco ICMP (ping): alcanzabilidad y
@@ -2593,6 +2607,11 @@ Las dos métricas y sus condiciones:
 
 Hook extras: `SERMO_HOST`, `SERMO_METRIC`, y — para las métricas de cambio —
 `SERMO_OLD`/`SERMO_NEW`.
+
+`latency` es la métrica que conviene graduar con `severity: warning` (ver
+[Severidad](rules.es.md#severidad-severity)): un gateway lento es una
+degradación, mientras que uno inalcanzable es la avería que ya reporta su métrica
+`state`.
 
 ICMP requiere privilegios elevados: el daemon necesita la capacidad `CAP_NET_RAW` (o el
 sysctl `net.ipv4.ping_group_range` del host debe incluir el gid del daemon) para abrir un

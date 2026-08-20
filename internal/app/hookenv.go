@@ -16,6 +16,7 @@ const (
 	sermoEnvWatch      = sermoEnvPrefix + "WATCH"
 	sermoEnvCheckType  = sermoEnvPrefix + "CHECK_TYPE"
 	sermoEnvMessage    = sermoEnvPrefix + "MESSAGE"
+	sermoEnvSeverity   = sermoEnvPrefix + "SEVERITY"
 	sermoEnvPath       = sermoEnvPrefix + "PATH"
 	sermoEnvChange     = sermoEnvPrefix + "CHANGE"
 	sermoEnvOld        = sermoEnvPrefix + "OLD"

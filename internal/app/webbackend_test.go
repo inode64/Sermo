@@ -893,8 +893,8 @@ func TestWatchViewFailedIgnoresActivityBeforeMonitorChange(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := watchViewFailed(tt.watch); got != tt.wantFail {
-				t.Fatalf("watchViewFailed() = %v, want %v", got, tt.wantFail)
+			if got, _ := watchViewState(tt.watch); got != tt.wantFail {
+				t.Fatalf("watchViewState() failed = %v, want %v", got, tt.wantFail)
 			}
 		})
 	}

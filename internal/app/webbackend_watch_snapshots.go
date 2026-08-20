@@ -37,7 +37,7 @@ func (b *WebBackend) watchSnapshotView(w *webWatch, system metrics.Snapshot) (*w
 		if !b.watchSnapshotCurrent(w, snap) || !watchSnapshotMetricConfigured(w, snap) {
 			continue
 		}
-		rs := watchSnapshotReadings(w.checkType, snap)
+		rs := watchSnapshotReadings(w.checkType, w.severityFor(cfgval.String(snap.Data[checks.DataKeyMetric])), snap)
 		readings = append(readings, rs...)
 		if meter == nil {
 			meter = watchMeterFromSnapshot(w.checkType, snap.Data)
@@ -87,13 +87,33 @@ func watchSnapshotMetricConfigured(w *webWatch, snap CheckSnapshot) bool {
 	return ok
 }
 
-func watchSnapshotReadings(checkType string, snap CheckSnapshot) []web.WatchReading {
+// severityFor resolves how grave one published sample is, narrowing this watch's
+// own gravity by the metric block that produced it. A net watch can therefore
+// call its error counter an advisory while its link state stays an outage.
+func (w *webWatch) severityFor(metric string) string {
+	if w == nil {
+		return checks.SeverityError
+	}
+	declared := ""
+	if m, ok := w.metrics[metric].(map[string]any); ok {
+		declared = cfgval.AsString(m[checks.CheckKeySeverity])
+	}
+	return checks.ResolveSeverity(declared, w.severity)
+}
+
+func watchSnapshotReadings(checkType, severity string, snap CheckSnapshot) []web.WatchReading {
 	readings := checkReadings(checkType, snap.Data)
 	if len(readings) == 0 && snap.Message != "" {
 		readings = []web.WatchReading{{Field: watchReadingFieldResult, Label: watchReadingLabelResult, Value: snap.Message}}
 	}
 	if !snap.healthy() && snap.Message != "" {
-		readings = append([]web.WatchReading{{Field: watchReadingFieldError, Label: watchReadingLabelError, Error: snap.Message}}, readings...)
+		// An advisory reports through Warning, never Error: a non-empty Error is
+		// precisely what paints the row red.
+		bad := web.WatchReading{Field: watchReadingFieldError, Label: watchReadingLabelError, Error: snap.Message}
+		if checks.IsWarning(severity) {
+			bad = web.WatchReading{Field: watchReadingFieldWarning, Label: watchReadingLabelWarning, Warning: snap.Message}
+		}
+		readings = append([]web.WatchReading{bad}, readings...)
 	}
 	return readings
 }
@@ -105,6 +125,9 @@ func watchSnapshotSummary(snap CheckSnapshot, readings []web.WatchReading) strin
 	for _, r := range readings {
 		if r.Error != "" {
 			return r.Error
+		}
+		if r.Warning != "" {
+			return r.Warning
 		}
 		if r.Value != "" {
 			return r.Value

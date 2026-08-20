@@ -84,6 +84,10 @@ func TestSlogEmitterSeverityPerKind(t *testing.T) {
 		{eventKindExpandFailed, "level=ERROR"},
 		{eventKindKillFailed, "level=ERROR"},
 		{eventKindMakeStepFailed, "level=ERROR"},
+		{eventKindError, "level=ERROR"},
+		// An advisory is the one thing between an outage and routine traffic, and
+		// the only kind that belongs at warn level.
+		{eventKindWarning, "level=WARN"},
 		{eventKindExpand, "level=INFO"},
 		{eventKindMakeStep, "level=INFO"},
 		{eventKindMakeStepSkipped, "level=INFO"},

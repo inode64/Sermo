@@ -654,10 +654,23 @@ func validateCheckReporting(path string, entry map[string]any, add addFunc) {
 		add("%s.%s %q must be one of %s", path, checks.CheckKeyReports, cfgval.String(v),
 			strings.Join(checks.ReportingModes(), ", "))
 	}
+	validateSeverityField(path, entry, add)
 	// `unit:` is a display label for the check's scalar result, not an
 	// enumeration: a sql check reports whatever its query returns.
 	if v, present := entry[checks.CheckKeyUnit]; present && cfgval.String(v) == "" {
 		add("%s.%s must be a non-empty string naming the unit of the check's value", path, checks.CheckKeyUnit)
+	}
+}
+
+// validateSeverityField validates a `severity:` declaration wherever one is
+// allowed: a check entry, a watch entry, or one metric block. It is separate from
+// validateCheckReporting because the watch surface reaches it directly — a
+// watch's check block is validated per type, not through validateCheckSection —
+// and an unwired key would otherwise be accepted in silence.
+func validateSeverityField(path string, entry map[string]any, add addFunc) {
+	if v, present := entry[checks.CheckKeySeverity]; present && !checks.IsCheckSeverity(cfgval.String(v)) {
+		add("%s.%s %q must be one of %s", path, checks.CheckKeySeverity, cfgval.String(v),
+			strings.Join(checks.CheckSeverities(), ", "))
 	}
 }
 
@@ -705,7 +718,7 @@ func validateAnalyze(path string, entry map[string]any, add addFunc) {
 		}
 		seen[id] = true
 		switch cfgval.AsString(rm[checks.CheckKeySeverity]) {
-		case checks.AnalyzeSeverityError, checks.AnalyzeSeverityWarning, checks.AnalyzeSeverityOK:
+		case checks.SeverityError, checks.SeverityWarning, checks.SeverityOK:
 		default:
 			add("%s.analyze rule %q severity must be %s", path, id, checks.AnalyzeSeveritySummary)
 		}

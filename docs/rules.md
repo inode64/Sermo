@@ -7,6 +7,7 @@
   - [Egress interface (interface)](#egress-interface-interface)
   - [Check interdependencies (requires / skip_when_changed)](#check-interdependencies-requires--skip_when_changed)
   - [Reporting mode (reports)](#reporting-mode-reports)
+  - [Severity (severity)](#severity-severity)
 - [Ports](#ports)
   - [TCP connections (tcp_connections)](#tcp-connections-tcp_connections)
   - [SSH terminal idle (ssh_idle)](#ssh-terminal-idle-ssh_idle)
@@ -495,6 +496,58 @@ rules:
 Without it, such a check is a health assertion that fails whenever the state is
 absent — a permanent red `fail` and a 0% availability series for what is in fact
 the normal condition.
+
+### Severity (`severity`)
+
+`severity:` grades how serious a failure is. It never changes the verdict — the
+check fails exactly when it failed before — only how loudly that failure is
+reported.
+
+| value | dashboard | daemon log | aggregate health and SLA | actions |
+|---|---|---|---|---|
+| `error` (default) | red, state `failed` | `level=ERROR` | counted against the target | run |
+| `warning` | amber, state `warning` | `level=WARN` | excluded | run |
+
+A **warning still fires**: its `for:` window, its `then.hook`, its `then.notify`
+and its notification cadence are untouched, and the notification subject says
+`[sermo][warning]` so the advisory is obvious in mail or chat. What changes is
+that it stops competing for attention with a real outage: it does not turn the
+watch row red, does not raise the daemon's error count, does not hold against the
+service in the aggregate health badge, and records no SLA series.
+
+Nothing that gates an automatic action reads it. Rule guards (`active:`,
+`failed:`), remediation and start verification keep reading the check's raw
+outcome, so a warning can never be mistaken for a healthy target.
+
+It can be declared at three levels, and the narrowest one wins:
+
+```yaml
+name: net-enp1s0
+severity: warning                 # widest: the whole watch, and its default
+check:
+  type: net
+  interface: enp1s0
+  severity: error                 # narrower: this check and every metric under it
+metrics:
+  state:                          # inherits error — a link going down is an outage
+    expect: down
+    for: { cycles: 3 }
+  errors:
+    severity: warning             # narrowest: only this metric is an advisory
+    delta: { op: ">", value: 100 }
+    for: { cycles: 3 }
+```
+
+A service check declares it the same way, beside `reports:` and `timeout:`.
+`optional: true` remains the older, narrower spelling: it also keeps a failure
+out of the service's availability, but only inside a `checks:` section and
+without the amber state or the warn-level log.
+
+The measurements worth grading this way are the ones that **degrade** rather than
+break: `hdparm` throughput, `icmp` latency, and a `net` interface's error
+counters. A disk answering from standby is the clearest case — `hdparm -t` wakes
+it and times its spin-up, so it honestly reports a fraction of a MB/s for a disk
+that is perfectly healthy.
 
 ### TCP connections (`tcp_connections`)
 
@@ -2137,8 +2190,9 @@ spin-up eats the whole timing window, and the drive reports a single block in
 several seconds — a fraction of a MB/s, which hdparm prints as `kB/sec` instead
 of `MB/sec`. Sermo reads both spellings and always records MB/s, so that sample
 is a real, very low `read` and will cross a `read <` threshold. Point a
-throughput watch at disks that stay awake: a USB or backup drive that idles into
-standby otherwise alerts on its own power management rather than on wear.
+throughput watch at disks that stay awake, or grade it `severity: warning` (see
+[Severity](#severity-severity)) so the drive's own power management reads amber
+rather than red.
 
 ### Missing devices
 

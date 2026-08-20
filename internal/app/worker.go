@@ -564,11 +564,13 @@ func (w *Worker) gateReason(gate CheckGate, cache map[string]checks.Result) stri
 }
 
 // requiredChecksOK reports the service's availability this cycle: true unless a
-// required (non-optional) check failed. Optional checks are warnings and do not
-// affect SLA. A service with no required checks is vacuously available.
+// required check failed. A check declared an advisory — `severity: warning`, or
+// the `optional: true` that has always meant the same thing — is a warning and
+// does not affect availability or SLA. A service with no required checks is
+// vacuously available.
 func requiredChecksOK(cache map[string]checks.Result) bool {
 	for _, r := range cache {
-		if !r.Optional && !r.Observation().Healthy() {
+		if !r.Optional && !r.Warning() && !r.Observation().Healthy() {
 			return false
 		}
 	}
@@ -583,7 +585,7 @@ func failingChecksOutput(cache map[string]checks.Result) string {
 	names := make([]string, 0, len(cache))
 	for name, r := range cache {
 		observation := r.Observation()
-		if r.Optional || !observation.AffectsHealth() || observation.Healthy() {
+		if r.Optional || !r.CountsTowardHealth() || observation.Healthy() {
 			continue
 		}
 		if resultOutput(r) != "" {

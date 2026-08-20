@@ -99,7 +99,8 @@ func (b *WebBackend) applyWatchRuntimeView(view *web.Watch, w *webWatch, activit
 		view.SampleState = b.watchSampleState(w, checkedAt)
 	}
 	observed := b.settling == nil || b.settling.Observed(SettlingWatchKey(w.name))
-	view.State = WatchState(view.Enabled, view.Monitored, observed && watchViewFailed(*view), observed)
+	failed, warning := watchViewState(*view)
+	view.State = WatchState(view.Enabled, view.Monitored, observed && failed, observed && warning, observed)
 	if view.State == TargetStateOK {
 		switch view.SampleState {
 		case web.WatchSampleStateCollecting:
@@ -219,14 +220,25 @@ func (e *webEntry) invalidateStatusCache() {
 	e.statusMu.Unlock()
 }
 
-func watchViewFailed(w web.Watch) bool {
-	if WatchActivityFailed(w.LastActivityKind) && watchActivityCurrent(w.LastActivity, w.MonitorChangedAt) {
-		return true
+// watchViewState grades a watch row: an outage, an advisory, or neither. The two
+// signals are the last activity kind — an advisory watch records its own kind, so
+// this stays right per metric and across a restart — and the published readings,
+// where an advisory reports through Warning instead of Error.
+func watchViewState(w web.Watch) (failed, warning bool) {
+	current := watchActivityCurrent(w.LastActivity, w.MonitorChangedAt)
+	if WatchActivityFailed(w.LastActivityKind) && current {
+		return true, false
 	}
 	if watchStorageMountFailed(w) {
-		return true
+		return true, false
 	}
-	return (w.Storage != nil && (w.Storage.SampleError != "" || w.Storage.MountSampleError != "")) || watchReadingsFailed(w.Readings)
+	if w.Storage != nil && (w.Storage.SampleError != "" || w.Storage.MountSampleError != "") {
+		return true, false
+	}
+	if watchReadingsFailed(w.Readings) {
+		return true, false
+	}
+	return false, (w.LastActivityKind == eventKindWarning && current) || watchReadingsWarning(w.Readings)
 }
 
 func watchStorageMountFailed(w web.Watch) bool {
@@ -270,9 +282,18 @@ func watchReadingsFailed(readings []web.WatchReading) bool {
 	return false
 }
 
+func watchReadingsWarning(readings []web.WatchReading) bool {
+	for _, r := range readings {
+		if r.Warning != "" {
+			return true
+		}
+	}
+	return false
+}
+
 func isWatchActivityKind(kind string) bool {
 	switch kind {
-	case eventKindFiring, eventKindRecovered, eventKindDryRun, eventKindHook, eventKindNotify, eventKindHookFail, eventKindNotifyFail, eventKindExpand, eventKindExpandSkipped, eventKindExpandFailed, eventKindKill, eventKindKillFailed,
+	case eventKindFiring, eventKindWarning, eventKindRecovered, eventKindDryRun, eventKindHook, eventKindNotify, eventKindHookFail, eventKindNotifyFail, eventKindExpand, eventKindExpandSkipped, eventKindExpandFailed, eventKindKill, eventKindKillFailed,
 		eventKindMakeStep, eventKindMakeStepSkipped, eventKindMakeStepFailed:
 		return true
 	default:

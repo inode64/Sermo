@@ -12,6 +12,11 @@ const WatchKeyCheck = "check"
 // WatchKeyThen is the watch entry key containing actions for a firing condition.
 const WatchKeyThen = rules.RuleFieldThen
 
+// WatchKeySeverity grades how serious this watch's failures are. It aliases the
+// check key so `severity` has one spelling wherever it is declared: on the watch
+// entry, on its check block, or on one metric of a multi-metric watch.
+const WatchKeySeverity = checks.CheckKeySeverity
+
 // WatchKeyRAIDControl enables explicit manual reconstruction control for a
 // single RAID watch.
 const WatchKeyRAIDControl = "raid_control"

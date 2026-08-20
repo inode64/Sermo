@@ -6,6 +6,10 @@ category: storage
 # Switch `monitor: disabled` -> `enabled` once the device is correct.
 monitor: disabled
 interval: 12h
+# A disk reading slowly is degradation, not an outage — and a disk that answers
+# from standby measures its own spin-up. `warning` keeps it amber instead of red,
+# out of aggregate health and the SLA, and still notified.
+severity: warning
 check:
   type: hdparm
   device: /dev/sda  # EXAMPLE — use your real block device (e.g. /dev/nvme0)

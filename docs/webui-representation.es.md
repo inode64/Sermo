@@ -496,7 +496,7 @@ aparecen en el detalle del servicio.
 | Controles | búsqueda, filtro de tipo (por panel, ver abajo), filtros de estado, recuento mostrado |
 | Filtro de tipo | `all ... types` específico del panel más los valores distintos presentes actualmente en ese panel; Storage filtra por tipo de sistema de archivos (todos sus watches comparten un mismo tipo de check), Certificate watches por algoritmo de clave pública; el selector se oculta cuando solo hay un valor |
 | Agrupación | filas plegables por el mismo tipo específico del panel usado por el filtro de tipo |
-| Filtros de estado | all, disabled, ok, starting, failed |
+| Filtros de estado | all, disabled, ok, starting, warning, failed |
 | Búsqueda | display name, nombre crudo, categoría, tipo, resumen, intervalo, polaridad, estado/comando del hook, nombres de notifiers, estado de expand/dry-run/monitorización y condiciones |
 | Ordenación | cada columna de datos salvo Actions es ordenable de forma independiente dentro de su tabla de tipo; cada tabla empieza por Name ascendente |
 | Visibilidad | oculto cuando no hay watches configurados para el subconjunto de ese panel |
@@ -541,7 +541,7 @@ Columnas compartidas:
 | Name | nombre para mostrar, con fallback al nombre, capitalizado |
 | Last checked | última muestra completada por el ciclo del daemon o manual |
 | Last activity | último evento del watch, como un probe manual, notificación o remediación |
-| State | estado normalizado del watch: `disabled` cuando config/monitor state lo excluye de comprobaciones activas, `starting` antes de la primera muestra monitorizada, `failed` para un fallo activo y `ok` en el resto; el trabajo activo del dispositivo tiene prioridad como `testing`, `recovering`, `rebuilding`, `repairing`, `moving` o `merging`, y un dispositivo que dejó de responder como `missing`, que se lee como fallo |
+| State | estado normalizado del watch: `disabled` cuando config/monitor state lo excluye de comprobaciones activas, `starting` antes de la primera muestra monitorizada, `failed` para un fallo activo, `warning` para un fallo que el watch declaró aviso con `severity: warning` (fila ámbar, fuera del recuento de alertas) y `ok` en el resto; el trabajo activo del dispositivo tiene prioridad como `testing`, `recovering`, `rebuilding`, `repairing`, `moving` o `merging`, y un dispositivo que dejó de responder como `missing`, que se lee como fallo |
 | Actions | acción principal admitida y menú adicional para monitor/unmonitor |
 
 Mientras se ejecuta una muestra manual de `hdparm`, `lvm`, `raid` o `smart`,
@@ -607,7 +607,8 @@ Notas editables:
   `?before=TIME` (duración positiva o RFC3339 no futuro) para podar solo las
   filas más antiguas.
 - El filtro `kind` cubre los tipos de evento emitidos: `action`, `suppressed`,
-  `panic-suppressed`, `alert`, `error`, `firing`, `recovered`, `dry-run`,
+  `panic-suppressed`, `alert`, `error`, `warning` (lo que levanta un watch de
+  aviso en lugar de `error` y `firing`), `firing`, `recovered`, `dry-run`,
   `reload` (una recarga de configuración correcta del daemon en ejecución),
   `hook`/`hook-failed`, `notify`/`notify-failed`/`notify-suppressed`,
   `expand`/`expand-skipped`/`expand-failed`, `kill`/`kill-failed`,

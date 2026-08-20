@@ -42,6 +42,7 @@ func validateWatches(watches map[string]any, locksDir string, notifiers map[stri
 				add(validationBooleanFormat, watchFieldPath(name, keyDryRun))
 			}
 		}
+		validateSeverityField(prefix, entry, add)
 		validateEmission(entry, watchFieldPath(name, emission.Section), add)
 		validateNotifyRefs(name, entry, notifiers, add)
 		validateWindow(prefix, entry, add)
@@ -53,6 +54,10 @@ func validateWatches(watches map[string]any, locksDir string, notifiers map[stri
 			continue
 		}
 		validateCheckSummary(checkPath, check, add)
+		// A watch's check block never reaches validateCheckSection, so its
+		// severity is validated here — before the per-type switch, so net, icmp,
+		// swap, file and process are covered too.
+		validateSeverityField(checkPath, check, add)
 		typ := cfgval.String(check[checks.CheckKeyType])
 		validateRaidNotifyOn(name, typ, entry, notifiers, defaultNotify, add)
 		validateRAIDControl(name, typ, entry, check, add)
@@ -631,6 +636,7 @@ func validateMetricWatchEntries(name, typ string, entry map[string]any, defaultN
 			continue
 		}
 		validateCondition(prefix, key, metric, add)
+		validateSeverityField(prefix, metric, add)
 		validateEmission(metric, prefix+"."+emission.Section, add)
 		validateHookBlock(prefix, metric, watchNativeActions{}, defaultNotify, add)
 		validateWindow(prefix, metric, add)

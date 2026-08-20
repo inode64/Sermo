@@ -153,13 +153,18 @@ func (b *WebBackend) ProbeWatch(ctx context.Context, name string) web.ActionResu
 		Optional: result.Optional, Skipped: result.Skipped, Unavailable: result.Unavailable,
 		Message: result.Message, Data: result.Data,
 	}
-	readings := watchSnapshotReadings(w.checkType, snap)
+	severity := w.severityFor(cfgval.String(result.Data[checks.DataKeyMetric]))
+	readings := watchSnapshotReadings(w.checkType, severity, snap)
 	summary := watchSnapshotSummary(snap, readings)
 	ok := result.Healthy()
 	kind, status := eventKindAction, eventStatusOK
 	eventMessage := manualProbeCompletedMessage(summary, duration)
 	if !ok {
+		// A manual probe of an advisory watch reports the same way its cycle does.
 		kind, status = eventKindError, eventStatusFailed
+		if checks.IsWarning(severity) {
+			kind = eventKindWarning
+		}
 		eventMessage = manualProbeFailedMessage(summary, duration)
 	}
 	b.emitWatchMonitorEvent(name, eventActionProbe, kind, status, eventMessage)
