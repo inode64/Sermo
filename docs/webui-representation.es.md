@@ -520,6 +520,12 @@ activity es un evento.
 | `raid` | Name, array, tamaño, degradado, recuperando |
 | Otros tipos | Name y su valor vivo principal |
 
+La columna de salud maneja dos vocabularios y colorea ambos: el check `lvm`
+normaliza el suyo a `ok`/`error`, mientras que `smart` informa del veredicto de la
+unidad con las palabras de smartctl. `ok` y `PASSED` se ven en verde; `unknown`
+—una unidad que respondió sin veredicto— en ámbar; y todo lo demás, incluidos
+`FAILED` y `missing`, en rojo. Un check sin lectura de salud muestra una raya.
+
 Estas columnas leen las lecturas actuales publicadas por el último ciclo del
 daemon y rehidratadas desde estado persistente tras reiniciar el daemon. La edad
 de file es el valor ya formateado que usa `older_than`; un `summary` configurado

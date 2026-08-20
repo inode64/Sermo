@@ -506,6 +506,12 @@ latest completed daemon-cycle or manual sample, while Last activity is an event.
 | `raid` | Name, array, size, degraded, recovering |
 | Other types | Name and their primary live value |
 
+The health column carries two vocabularies and colours both: the `lvm` check
+normalises its own to `ok`/`error`, while `smart` reports the drive's verdict in
+smartctl's words. `ok` and `PASSED` read green, `unknown` — a drive that answered
+without a verdict — reads amber, and everything else, `FAILED` and `missing`
+included, reads red. A check with no health reading at all shows an em dash.
+
 Those columns read the current watch readings published by the latest daemon
 cycle and rehydrated from persistent state after a daemon restart. File age is
 the already formatted value used by `older_than`; SQL service checks expose their

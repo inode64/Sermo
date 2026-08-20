@@ -106,6 +106,23 @@ const watches = [{
   readings: [{ field: "device", label: "Device", value: "/dev/sda" }, { field: "device_state", label: "State", value: "testing" }],
   summary: "smart /dev/sda self-test", interval: "1d", status_observed_at: "2026-07-10T12:00:00Z",
 }, {
+  name: "smart-sdb", display_name: "Healthy disk health", category: "storage",
+  enabled: true, monitored: true, state: "ok", check_type: "smart", can_probe: true,
+  readings: [
+    { field: "device", label: "Device", value: "/dev/sdb" },
+    { field: "health", label: "Health", value: "PASSED" },
+    { field: "temperature", label: "temperature", value: "42 °C" },
+  ],
+  summary: "smart /dev/sdb health=PASSED", interval: "1d", status_observed_at: "2026-07-10T12:00:00Z",
+}, {
+  name: "smart-sdc", display_name: "Verdictless disk health", category: "storage",
+  enabled: true, monitored: true, state: "ok", check_type: "smart", can_probe: true,
+  readings: [
+    { field: "device", label: "Device", value: "/dev/sdc" },
+    { field: "health", label: "Health", value: "unknown" },
+  ],
+  summary: "smart /dev/sdc health=unknown", interval: "1d", status_observed_at: "2026-07-10T12:00:00Z",
+}, {
   name: "smart-sdz", display_name: "Dead disk health", category: "storage",
   enabled: true, monitored: true, state: "missing", check_type: "smart", can_probe: true,
   readings: [
@@ -418,6 +435,21 @@ test("a SMART self-test remains the device state after its start command returns
   await expect(row).toContainText("testing");
   await expect(row).not.toContainText("checking");
   await expect(row.locator(".state-testing")).toBeVisible();
+});
+
+test("SMART health is read in smartctl's own words, so a PASSED drive is not painted as failing", async ({ page }) => {
+  const row = page.locator("#wat-row-smart-sdb");
+  // The Health column is one of the ones the tablet-width rules in styles.css
+  // hide, so assert the class the cell maps its verdict to rather than its
+  // visibility: the colour is the point, and it is what a wide viewport shows.
+  await expect(row.locator(".ok")).toHaveText("PASSED");
+  await expect(row.locator(".bad")).toHaveCount(0);
+
+  // A drive that answered without a verdict is not a failing drive: it takes the
+  // same warning colour an unknown backend status does.
+  const verdictless = page.locator("#wat-row-smart-sdc");
+  await expect(verdictless.locator(".unknown")).toHaveText("unknown");
+  await expect(verdictless.locator(".bad")).toHaveCount(0);
 });
 
 test("a device that stopped answering reads as missing, not as a blank health cell", async ({ page }) => {

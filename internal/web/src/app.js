@@ -4918,11 +4918,28 @@ function storageUsageCell(w) {
 
 // storageRowHTML renders a Storage-panel row, surfacing the occupied-space bar,
 // filesystem and mount point in place of the generic type/summary columns.
-function lvmHealthCell(w) {
+// Health readings arrive in two vocabularies: the LVM check normalises its own
+// to ok/error, while the SMART check reports the drive's verdict in smartctl's
+// words (PASSED/FAILED) plus `unknown` for a drive that answered without one and
+// `missing` for one that did not answer at all. watchHealthCell maps both, so a
+// PASSED drive is not painted like a failing one and an absent verdict is not
+// mistaken for a bad one.
+const healthValuesOK = new Set([healthStatusOK, "passed"]);
+const healthValueUnknown = "unknown";
+
+function watchHealthCell(w) {
   const health = readingRaw(w, "health");
   if (!health) return tpl`<span class="muted">—</span>`;
-  const cls = health === healthStatusOK ? healthStatusOK : "bad";
+  const cls = healthCellClass(health.toLowerCase());
   return tpl`<span class="${cls}">${health}</span>`;
+}
+
+function healthCellClass(health) {
+  if (healthValuesOK.has(health)) return healthStatusOK;
+  // A verdict the drive never gave is not a failing verdict: it reads as the
+  // same warning an unknown backend status does.
+  if (health === healthValueUnknown) return healthValueUnknown;
+  return "bad";
 }
 
 function watchPrimaryMetricText(w) {
@@ -4944,7 +4961,7 @@ function watchPrimaryMetricText(w) {
 function watchPrimaryMetric(w) {
   const type = String((w && w.check_type) || "").toLowerCase();
   if (type === "storage") return storageUsageCell(w);
-  if (type === "lvm") return lvmHealthCell(w);
+  if (type === "lvm") return watchHealthCell(w);
   const text = watchPrimaryMetricText(w);
   return text ? tpl`${text}` : tpl`<span class="muted">—</span>`;
 }
@@ -5024,7 +5041,7 @@ const watchTypeProfiles = {
   lvm: {
     label: "LVM",
     columns: [
-      { key: "health", label: "Health", cell: lvmHealthCell, sort: (w) => readingRaw(w, "health").toLowerCase() },
+      { key: "health", label: "Health", cell: watchHealthCell, sort: (w) => readingRaw(w, "health").toLowerCase() },
       textReadingColumn("volume_group", "VG"),
       textReadingColumn("logical_volume", "LV"),
       numericReadingColumn("vg_size_bytes", "VG size"),
@@ -5036,7 +5053,7 @@ const watchTypeProfiles = {
     label: "SMART",
     columns: [
       textReadingColumn("device", "Device"),
-      { key: "health", label: "Health", cell: lvmHealthCell, sort: (w) => readingRaw(w, "health").toLowerCase() },
+      { key: "health", label: "Health", cell: watchHealthCell, sort: (w) => readingRaw(w, "health").toLowerCase() },
       numericReadingColumn("temperature", "Temperature"),
       numericReadingColumn("wear", "Wear"),
       numericReadingColumn("power_on_hours", "Power-on time"),
