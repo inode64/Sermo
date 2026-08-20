@@ -53,7 +53,7 @@ func (b *WebBackend) watchView(w *webWatch, system metrics.Snapshot, activity wa
 		HasHook: w.hasHook, HookCommand: slices.Clone(w.hookCommand), Notifiers: slices.Clone(w.notifiers),
 		NotifierCount: w.notifierCount, DryRun: w.dryRun, Conditions: watchConditions(w.check, w.metrics),
 		Storage: storage, Swap: swap, Meter: meter, Readings: readings,
-		CanProbe:       !w.disabled && !w.serviceScoped && manualProbeCheckType(w.checkType),
+		CanProbe:       !w.disabled && !w.serviceScoped && ManualProbeCheckType(w.checkType),
 		CanControlRAID: !w.disabled && w.raidControl, RAIDArray: cfgval.String(w.check[checks.CheckKeyArray]),
 	}
 	b.applyWatchRuntimeView(&view, w, activity)

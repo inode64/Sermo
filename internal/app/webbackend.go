@@ -189,7 +189,10 @@ type WebBackend struct {
 	emit                   func(Event)
 	defaultTimeout         time.Duration
 	operationTimeout       time.Duration
-	now                    func() time.Time
+	// diskIOWindow overrides how long a manual disk I/O probe watches the
+	// counters. Zero uses defaultDiskIOProbeWindow; tests shorten it.
+	diskIOWindow time.Duration
+	now          func() time.Time
 
 	probeMu sync.Mutex
 	probes  map[string]time.Time
