@@ -75,16 +75,19 @@ func directiveValue(data []byte, key string) (string, bool) {
 	return "", false
 }
 
-// confdValue returns the value of a shell-style KEY="val" assignment (the
-// /etc/conf.d/<service> convention), with surrounding quotes stripped. ok=false
-// when the file is unreadable or the key is absent.
-func confdValue(path, key string) (string, bool) {
+// configKeyValue returns the value of a KEY="val" assignment or an empty value
+// for a bare KEY feature flag. Surrounding quotes are stripped. ok=false when
+// the file is unreadable or the key is absent.
+func configKeyValue(path, key string) (string, bool) {
 	data, err := os.ReadFile(path) //nolint:gosec // G304: OpenRC conf.d path from catalog service unit
 	if err != nil {
 		return "", false
 	}
 	for line := range strings.SplitSeq(string(data), configLineSeparator) {
 		line = strings.TrimSpace(line)
+		if line == key {
+			return "", true
+		}
 		rest, ok := strings.CutPrefix(line, key+confdAssignSep)
 		if !ok {
 			continue

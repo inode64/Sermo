@@ -176,7 +176,7 @@ func enableIfHolds(spec any) bool {
 	if file == "" || key == "" {
 		return false
 	}
-	val, ok := confdValue(file, key)
+	val, ok := configKeyValue(file, key)
 	if !ok {
 		return false
 	}

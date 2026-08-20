@@ -1523,6 +1523,15 @@ de que se poden, de modo que los typos en definiciones de proceso/check opcional
 `enable_if` intencionalmente no está soportado bajo `rules`, `policy`, `guards` u
 otras secciones que afecten a la seguridad.
 
+El lector de configuración acepta asignaciones `clave=valor` y flags sin valor
+`clave`. Use `equals: ""` para hacer match con un flag sin valor. El perfil
+empaquetado de `dnsmasq` añade su check DHCP solo cuando `/etc/dnsmasq.conf`
+contiene `dhcp-range=...`, y su check TFTP solo cuando ese fichero contiene
+`enable-tftp`. Si esas directivas viven bajo `/etc/dnsmasq.d`, sobrescriba
+`watches.dhcp.enable_if.file` o `watches.tftp.enable_if.file` en el servicio
+configurado. Sobrescriba `dhcp_host`/`dhcp_port` o
+`tftp_host`/`tftp_port`/`tftp_query` cuando el endpoint local sea distinto.
+
 ### Variables leídas desde un fichero de config (`from_file`)
 
 Una variable puede tomar su valor de un fichero de config en lugar de un literal, útil cuando

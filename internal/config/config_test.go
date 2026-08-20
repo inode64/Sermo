@@ -6062,6 +6062,82 @@ defaults: { policy: { cooldown: 5m } }
 	}
 }
 
+// TestEnableIfPrunesByBareConfigFlag covers config formats such as dnsmasq's,
+// where an optional feature is enabled by a bare directive with no value.
+func TestEnableIfPrunesByBareConfigFlag(t *testing.T) {
+	root := t.TempDir()
+	catalogDir := filepath.Join(root, "catalog", "services")
+	servicesDir := filepath.Join(root, "services")
+	if err := os.MkdirAll(catalogDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(servicesDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	tests := []struct {
+		name       string
+		configBody string
+		wantTFTP   bool
+	}{
+		{name: "bare flag", configBody: "enable-tftp\n", wantTFTP: true},
+		{name: "commented flag", configBody: "#enable-tftp\n", wantTFTP: false},
+		{name: "missing flag", configBody: "port=53\n", wantTFTP: false},
+	}
+	for _, tt := range tests {
+		configPath := filepath.Join(root, tt.name+".conf")
+		if err := os.WriteFile(configPath, []byte(tt.configBody), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		catalogName := strings.ReplaceAll(tt.name, " ", "-")
+		body := fmt.Sprintf(`
+name: %s
+service: %s
+checks:
+  tftp:
+    type: tftp
+    host: 127.0.0.1
+    enable_if: { file: %q, key: enable-tftp, equals: "" }
+`, catalogName, catalogName, configPath)
+		if err := os.WriteFile(filepath.Join(catalogDir, catalogName+".yml"), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		serviceName := "my-" + catalogName
+		serviceBody := fmt.Sprintf("name: %s\nuses: %s\n", serviceName, catalogName)
+		if err := os.WriteFile(filepath.Join(servicesDir, serviceName+".yml"), []byte(serviceBody), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	global := filepath.Join(root, "sermo.yml")
+	if err := os.WriteFile(global, fmt.Appendf(nil, `
+engine: { backend: auto }
+paths: { services: [ %s ], runtime: /run/sermo }
+defaults: { policy: { cooldown: 5m } }
+`, servicesDir), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(global, WithCatalogDirs(filepath.Dir(catalogDir)))
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			catalogName := strings.ReplaceAll(tt.name, " ", "-")
+			resolved, errs := cfg.Resolve("my-" + catalogName)
+			if len(errs) != 0 {
+				t.Fatalf("Resolve() errors = %v", errs)
+			}
+			checks, _ := resolved.Tree["checks"].(map[string]any)
+			_, gotTFTP := checks["tftp"]
+			if gotTFTP != tt.wantTFTP {
+				t.Errorf("tftp check present = %v, want %v", gotTFTP, tt.wantTFTP)
+			}
+		})
+	}
+}
+
 // TestMultiTokenDiscoveryRequireGate covers `versions.require`: an instance
 // discovered from config (php-fpm pools, tomcat envs) is materialized only when
 // its required binary also exists, so a stray config directory whose runtime is

@@ -1500,6 +1500,15 @@ they are pruned, so typos in optional process/check definitions are reported.
 `enable_if` is intentionally not supported under `rules`, `policy`, `guards` or
 other safety-affecting sections.
 
+The config reader accepts `key=value` assignments and bare `key` feature flags.
+Use `equals: ""` to match a bare flag. The packaged `dnsmasq` profile uses this
+to add its DHCP check only when `/etc/dnsmasq.conf` has `dhcp-range=...`, and its
+TFTP check only when that file has `enable-tftp`. If those directives live in a
+file under `/etc/dnsmasq.d`, override the corresponding
+`watches.dhcp.enable_if.file` or `watches.tftp.enable_if.file` in the configured
+service. Override `dhcp_host`/`dhcp_port` or
+`tftp_host`/`tftp_port`/`tftp_query` when the local endpoint differs.
+
 ### Variables read from a config file (`from_file`)
 
 A variable may take its value from a config file instead of a literal, useful when
