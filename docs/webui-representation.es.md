@@ -544,7 +544,7 @@ Columnas compartidas:
 | State | estado normalizado del watch: `disabled` cuando config/monitor state lo excluye de comprobaciones activas, `starting` antes de la primera muestra monitorizada, `failed` para un fallo activo, `warning` para un fallo que el watch declaró aviso con `severity: warning` (fila ámbar, fuera del recuento de alertas) y `ok` en el resto; el trabajo activo del dispositivo tiene prioridad como `testing`, `recovering`, `rebuilding`, `repairing`, `moving` o `merging`, y un dispositivo que dejó de responder como `missing`, que se lee como fallo |
 | Actions | acción principal admitida y menú adicional para monitor/unmonitor |
 
-Mientras se ejecuta una muestra manual de `hdparm`, `lvm`, `raid` o `smart`,
+Mientras se ejecuta una muestra manual de `diskio`, `hdparm`, `lvm`, `raid` o `smart`,
 State muestra la etiqueta ámbar **checking**, el tiempo transcurrido y el estado
 de salud previo. La acción queda desactivada hasta terminar. Events registra el
 inicio y el resultado final con su duración. La UI sólo muestra porcentaje cuando

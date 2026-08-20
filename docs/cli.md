@@ -215,7 +215,7 @@ state is independent of its service's, so `unmonitor` on a service never pauses
 its watches.
 
 `sermoctl watch probe WATCH` asks the running daemon to run one fresh sample for
-a host `hdparm`, `lvm`, `raid` or `smart` watch and prints the resulting
+a host `diskio`, `hdparm`, `lvm`, `raid` or `smart` watch and prints the resulting
 readings when available (for LVM this includes health, VG, LV, VG free and
 reasons). The first three are read-only samples. A `smart` probe starts the
 device's short SMART self-test with `smartctl --test=short DEVICE`; success means
