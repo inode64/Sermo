@@ -549,7 +549,9 @@ State muestra la etiqueta ámbar **checking**, el tiempo transcurrido y el estad
 de salud previo. La acción queda desactivada hasta terminar. Events registra el
 inicio y el resultado final con su duración. La UI sólo muestra porcentaje cuando
 el check aporta progreso real; una sonda sin esa fuente usa el contador de tiempo
-en vez de un porcentaje inventado.
+en vez de un porcentaje inventado. La sonda se acota con el `timeout:` del propio
+check, el mismo presupuesto que usa su ciclo programado, y sólo recurre a
+`engine.default_timeout` para un check que no declare ninguno.
 
 Interval, polaridad (dispara en fallo / en umbral), hook y notifiers no son
 columnas de la tabla; viven en la rejilla de config de la expansión de fila y
