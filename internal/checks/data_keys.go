@@ -38,6 +38,7 @@ const (
 	DataKeyDegraded                 = fieldDegraded
 	DataKeyDetached                 = "detached"
 	DataKeyDegradedArrays           = "degraded_arrays"
+	DataKeyBus                      = "bus"
 	DataKeyDevice                   = CheckKeyDevice
 	DataKeyDNSNames                 = "dns_names"
 	DataKeyDatabase                 = CheckKeyDatabase

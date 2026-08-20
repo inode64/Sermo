@@ -58,6 +58,7 @@ const (
 	watchReadingLabelWarning                  = "Warning"
 	watchReadingLabelReadTotal                = "Read total"
 	watchReadingLabelWriteTotal               = "Written total"
+	watchReadingLabelBus                      = "Bus"
 	watchReadingLabelExpires                  = "Expires"
 	watchReadingLabelFamily                   = "Family"
 	watchReadingLabelFree                     = "Free"
@@ -790,6 +791,7 @@ func diskioCheckReadings(data map[string]any) []web.WatchReading {
 	// reads for its state column.
 	rb := readingsFrom(data).
 		addString(checks.DataKeyDevice, watchReadingLabelDevice).
+		addString(checks.DataKeyBus, watchReadingLabelBus).
 		addString(checks.DataKeyDeviceState, watchReadingLabelState)
 	for _, field := range []struct {
 		key, label, unit string
@@ -822,6 +824,7 @@ func sensorsCheckReadings(data map[string]any) []web.WatchReading {
 func metricCheckReadings(checkType string, data map[string]any) []web.WatchReading {
 	rb := readingsFrom(data).
 		addString(checks.DataKeyDevice, watchReadingLabelDevice).
+		addString(checks.DataKeyBus, watchReadingLabelBus).
 		addString(checks.DataKeyResult, watchReadingLabelResult).
 		addString(checks.DataKeyDeviceState, watchReadingLabelState).
 		addString(checks.DataKeyHealth, watchReadingLabelHealth)

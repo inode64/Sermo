@@ -5064,6 +5064,7 @@ const watchTypeProfiles = {
     label: "Disk speed",
     columns: [
       textReadingColumn("device", "Device"),
+      textReadingColumn("bus", "Bus"),
       numericReadingColumn("read", "Buffered read"),
       numericReadingColumn("cached", "Cached read"),
     ],
@@ -5083,6 +5084,7 @@ const watchTypeProfiles = {
     label: "SMART",
     columns: [
       textReadingColumn("device", "Device"),
+      textReadingColumn("bus", "Bus"),
       { key: "health", label: "Health", cell: watchHealthCell, sort: (w) => readingRaw(w, "health").toLowerCase() },
       numericReadingColumn("temperature", "Temperature"),
       numericReadingColumn("wear", "Wear"),
@@ -5096,6 +5098,7 @@ const watchTypeProfiles = {
     label: "Disk I/O",
     columns: [
       textReadingColumn("device", "Device"),
+      textReadingColumn("bus", "Bus"),
       numericReadingColumn("util_pct", "Utilization"),
       numericReadingColumn("read_bytes", "Read"),
       numericReadingColumn("write_bytes", "Write"),
