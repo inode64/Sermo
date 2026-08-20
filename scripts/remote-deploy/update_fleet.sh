@@ -228,14 +228,23 @@ for host in "${hosts[@]}"; do
 		continue
 	fi
 
-	if ! run_ssh "$host" "env SERMO_READY_WAIT_SECONDS='${ready_wait_seconds}' bash ${remote_dir}/remote_update_payload.sh ${run_id} ${remote_dir}/${payload_name}"; then
+	update_log="${host_dir}/update.log"
+	# tee keeps the remote progress live while retaining it for the report; the
+	# pipeline's own status is tee's, so the update's status comes from
+	# PIPESTATUS or a failing host would be recorded as a success.
+	run_ssh "$host" "env SERMO_READY_WAIT_SECONDS='${ready_wait_seconds}' bash ${remote_dir}/remote_update_payload.sh ${run_id} ${remote_dir}/${payload_name}" \
+		| tee "$update_log" | grep -v '^SUMMARY	'
+	if [ "${PIPESTATUS[0]}" -ne 0 ]; then
 		echo "  binary update failed; collecting artifacts and skipping" >&2
 		record "$host" "update" "failed" "remote_update_payload.sh non-zero"
 		fetch_failure_artifacts "$host" "/tmp/sermo-update-${run_id}/out.tar.gz"
 		failures=$((failures + 1))
 		continue
 	fi
-	record "$host" "update" "ok" "binaries and catalog refreshed"
+	# The remote updater reports what it actually did; carry its one machine
+	# readable line into the report so a successful host is more than "ok".
+	update_detail="$(sed -n 's/^SUMMARY\t//p' "$update_log" | tail -1)"
+	record "$host" "update" "ok" "${update_detail:-binaries and catalog refreshed}"
 
 	if [ "$with_config" = "1" ]; then
 		if ! run_ssh "$host" "bash ${remote_dir}/remote_collect_inventory.sh ${run_id}" >/dev/null; then

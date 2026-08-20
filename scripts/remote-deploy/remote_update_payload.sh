@@ -56,6 +56,39 @@ capture() {
 	printf '%s\n' "$?" >"${out}/${name}.rc"
 }
 
+# version_of reads the version line a captured `--version` run produced. Every
+# binary prints "sermo <version>" first, so the second field is the version.
+version_of() {
+	awk 'NR == 1 { print $2; exit }' "${out}/$1.out" 2>/dev/null
+}
+
+# print_summary reports what this update actually did. The evidence is collected
+# either way; without this it was packed only when something went wrong, so a
+# successful update said "ok" and threw the rest away — leaving the operator to
+# ssh in and ask the host what it now runs.
+print_summary() {
+	previous="$(version_of installed_sermod_version)"
+	current="$(version_of sermod_version)"
+	# grep -c prints its count and still exits non-zero when that count is zero,
+	# so the count is read on its own and defaulted only when there is no file.
+	skipped="$(grep -c . "${out}/payload_skipped_members" 2>/dev/null)"
+	[ -n "$skipped" ] || skipped=0
+	protected="unchanged"
+	[ "$(cat "${out}/protected_path_metadata.rc" 2>/dev/null || echo 1)" = "0" ] || protected="CHANGED"
+
+	echo "  init            ${init}"
+	echo "  version         ${previous:-unknown} -> ${current:-unknown}"
+	echo "  config          validated by the candidate binary before install"
+	echo "  daemon          live after $(cat "${out}/livez_waited_seconds" 2>/dev/null || echo '?')s, ready after $(cat "${out}/readyz_waited_seconds" 2>/dev/null || echo '?')s"
+	echo "  dashboard       /api/dashboard and the Web UI answered"
+	echo "  protected paths ${protected}"
+	[ "$skipped" = "0" ] || echo "  payload skipped ${skipped} member(s): $(tr '\n' ' ' <"${out}/payload_skipped_members")"
+	# The one line the local orchestrator parses into its per-host report.
+	printf 'SUMMARY\t%s -> %s, ready in %ss, protected paths %s\n' \
+		"${previous:-unknown}" "${current:-unknown}" \
+		"$(cat "${out}/readyz_waited_seconds" 2>/dev/null || echo '?')" "$protected"
+}
+
 protected_paths="/ /etc /usr /usr/lib /etc/systemd /usr/lib/tmpfiles.d /etc/init.d /usr/share"
 
 snapshot_protected_paths() {
@@ -116,6 +149,12 @@ finish() {
 	date -Is >"${out}/finished_at" 2>/dev/null || true
 	if ! verify_protected_paths; then
 		rc=70
+	fi
+	# After the verdict, never before it: the summary reports that check, and
+	# reading its result while it was still unwritten made every clean update
+	# claim its protected paths had changed.
+	if [ "$rc" -eq 0 ]; then
+		print_summary
 	fi
 	if [ "$rc" -ne 0 ] || [ "$keep_remote_artifacts" = "1" ]; then
 		tar -C "$work" -czf "${work}/out.tar.gz" out >/dev/null 2>&1 || true
@@ -245,6 +284,7 @@ if [ "$stage_rc" -ne 0 ]; then
 	finish 20
 fi
 
+capture installed_sermod_version sermod --version
 capture sermoctl_version "${stage}/usr/bin/sermoctl" --version
 capture sermod_version "${stage}/usr/bin/sermod" --version
 capture candidate_sermoctl_version "${stage}/candidate/sermoctl" --version
