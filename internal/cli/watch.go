@@ -78,7 +78,7 @@ func (a App) runWatchProbe(ctx context.Context, opts options) int {
 	}
 	checkEntry, _ := entry[config.WatchKeyCheck].(map[string]any)
 	typ := fmt.Sprint(checkEntry[checks.CheckKeyType])
-	if typ != checks.CheckTypeHdparm && typ != checks.CheckTypeLVM && typ != checks.CheckTypeRAID && typ != checks.CheckTypeSmart {
+	if !app.ManualProbeCheckType(typ) {
 		return a.fail(opts, fmt.Sprintf("watch %q (%s) does not support manual probing", opts.args[1], typ))
 	}
 	result, err := a.ProbeDaemonWatch(ctx, opts, opts.args[1])
@@ -118,6 +118,10 @@ func (a App) probeDaemonWatch(ctx context.Context, opts options, watch string) (
 		return daemonWatchProbe{}, fmt.Errorf("build probe request: %w", err)
 	}
 	req.Header.Set(daemonWebCSRFHeader, daemonWebCSRFValue)
+	// A probe is a mutation, so it must name the generation it was aimed at.
+	if generation := a.daemonWebGeneration(ctx, cfg, base); generation != "" {
+		req.Header.Set(daemonWebGenerationHeader, generation)
+	}
 	a.applyDaemonWebAuth(req, cfg)
 	client := &http.Client{Timeout: daemonWebClientTimeout}
 	resp, err := httpx.Do(client, req)

@@ -177,6 +177,46 @@ paths:
 	}
 }
 
+// The daemon rejects a mutation that does not name the generation it was aimed
+// at, so every CLI probe answered 428 and no manual probe ever ran. The client
+// must read the generation before it writes.
+func TestProbeDaemonWatchSendsTheBackendGeneration(t *testing.T) {
+	const generation = "7"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set(daemonWebGenerationHeader, generation)
+		if r.Method == http.MethodGet && r.URL.Path == "/api/watches" {
+			writeDaemonAPITestJSON(w, []daemonWatchDetail{})
+			return
+		}
+		if r.Method != http.MethodPost || r.URL.Path != "/api/watches/diskio-sdd/probe" {
+			http.NotFound(w, r)
+			return
+		}
+		if got := r.Header.Get(daemonWebGenerationHeader); got != generation {
+			http.Error(w, "X-Sermo-Generation header is required", http.StatusPreconditionRequired)
+			return
+		}
+		writeDaemonAPITestJSON(w, daemonWatchProbe{OK: true, Message: "diskio sdd util 0.0%"})
+	}))
+	defer srv.Close()
+
+	_, global, cfg := daemonAPITestConfig(t, srv.URL, `
+web:
+  address: HOST
+  port: PORT
+paths:
+  watches: [WATCHES]
+`)
+	app := App{LoadConfig: func(string, ...config.Option) (*config.Config, error) { return cfg, nil }}
+	result, err := app.probeDaemonWatch(context.Background(), options{config: global}, "diskio-sdd")
+	if err != nil {
+		t.Fatalf("probe failed: %v", err)
+	}
+	if !result.OK {
+		t.Fatalf("probe result = %+v, want ok", result)
+	}
+}
+
 func TestFetchDaemonApplicationStatesHTTP(t *testing.T) {
 	srv := daemonAPIStub("/api/applications", []map[string]string{{"name": "git", "state": "starting"}})
 	defer srv.Close()
