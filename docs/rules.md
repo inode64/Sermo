@@ -26,6 +26,7 @@
   - [Failed init units (failed_units)](#failed-init-units-failed_units)
   - [inotify limits (inotify)](#inotify-limits-inotify)
   - [Disk throughput (hdparm)](#disk-throughput-hdparm)
+  - [Missing devices](#missing-devices)
   - [Hardware sensors](#hardware-sensors)
   - [Autofs](#autofs)
   - [Count](#count)
@@ -2131,6 +2132,26 @@ time series and graphed** in the service detail (web UI) so you can spot **gradu
 degradation** of a drive over time. (This per-check named-metric graphing is
 generic: any check that publishes numeric `Result.Data` fields can opt in.)
 
+### Missing devices
+
+`smart`, `hdparm` and `diskio` address a block device by name, and a disk that
+dies rarely disappears: it keeps its `/dev` node and its `/proc/diskstats` row
+and simply stops answering. Left alone, each check reads that as good news —
+`smartctl` returns a report with no verdict, `hdparm` an unreadable timing,
+`diskio` a window with no I/O — so a dead drive would show as healthy.
+
+All three therefore classify the device before they classify the reading. When
+`smartctl` reports it could not open or identify the drive, or sysfs no longer
+sizes the device (`/sys/class/block/<device>/size` gone or `0`), the check
+publishes **`missing`**: an *unavailable* observation, never a passing one. The
+dashboard shows `missing` as the watch state and health, and the row reads as a
+failure. `diskio` consults sysfs only for a window that moved nothing at all, so
+a disk carrying traffic never pays for the lookup.
+
+A `missing` device is unavailable, not firing, so — like every unavailable
+observation — it never triggers automatic actions. It is reported through the
+watch's `error` event and the dashboard.
+
 ### Hardware sensors
 
 Physical-health checks are **condition-style**: predicates are alerting
@@ -2156,7 +2177,9 @@ detail so gradual degradation is visible.
   and root). With no predicate it alerts when the overall SMART verdict is
   **FAILED**; predicates add `temperature` (°C), `reallocated` (sector count, an
   HDD failure sign), `wear` (SSD/NVMe percentage used) and `power_on_hours`.
-  Complements `hdparm` (throughput) with failure prediction.
+  Complements `hdparm` (throughput) with failure prediction. A drive `smartctl`
+  cannot open or identify is reported **missing** and unavailable — see
+  [Missing devices](#missing-devices).
 
   ```yaml
   checks:

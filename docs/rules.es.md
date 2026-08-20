@@ -26,6 +26,7 @@
   - [Unidades de init fallidas (failed_units)](#unidades-de-init-fallidas-failed_units)
   - [Límites de inotify (inotify)](#límites-de-inotify-inotify)
   - [Rendimiento de disco (hdparm)](#rendimiento-de-disco-hdparm)
+  - [Dispositivos ausentes](#dispositivos-ausentes)
   - [Sensores de hardware](#sensores-de-hardware)
   - [Autofs](#autofs)
   - [Count](#count)
@@ -2151,6 +2152,27 @@ serie temporal y se grafican** en el detalle del servicio (web UI) para que pued
 gradual** de una unidad con el tiempo. (Este graficado de métricas con nombre por comprobación es
 genérico: cualquier comprobación que publique campos numéricos `Result.Data` puede optar por él.)
 
+### Dispositivos ausentes
+
+`smart`, `hdparm` y `diskio` direccionan un dispositivo de bloque por nombre, y
+un disco que muere rara vez desaparece: conserva su nodo `/dev` y su fila en
+`/proc/diskstats`, y simplemente deja de responder. Por sí solo, cada check
+leería eso como una buena noticia — `smartctl` devuelve un informe sin veredicto,
+`hdparm` una medición ilegible, `diskio` una ventana sin E/S — de modo que una
+unidad muerta aparecería como sana.
+
+Por eso los tres clasifican el dispositivo antes que la lectura. Cuando
+`smartctl` informa de que no pudo abrir ni identificar la unidad, o sysfs ya no
+le da tamaño (`/sys/class/block/<device>/size` ausente o `0`), el check publica
+**`missing`**: una observación *no disponible*, nunca una correcta. El panel
+muestra `missing` como estado y salud del watch, y la fila se lee como fallo.
+`diskio` consulta sysfs sólo en una ventana que no movió nada, así que un disco
+con tráfico nunca paga la consulta.
+
+Un dispositivo `missing` está no disponible, no disparando, así que — como toda
+observación no disponible — nunca activa acciones automáticas. Se informa a
+través del evento `error` del watch y del panel.
+
 ### Sensores de hardware
 
 Las comprobaciones de salud física son de **estilo condición**: los predicados son condiciones de
@@ -2176,7 +2198,9 @@ servicio de modo que la degradación gradual es visible.
   y root). Sin predicado alerta cuando el veredicto SMART general es
   **FAILED**; los predicados añaden `temperature` (°C), `reallocated` (recuento de sectores, un
   signo de fallo de HDD), `wear` (porcentaje usado de SSD/NVMe) y `power_on_hours`.
-  Complementa `hdparm` (rendimiento) con predicción de fallos.
+  Complementa `hdparm` (rendimiento) con predicción de fallos. Una unidad que
+  `smartctl` no puede abrir ni identificar se informa como **missing** y no
+  disponible — ver [Dispositivos ausentes](#dispositivos-ausentes).
 
   ```yaml
   checks:

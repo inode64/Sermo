@@ -99,10 +99,11 @@ func TestHdparmThresholds(t *testing.T) {
 
 func TestHdparmCheckError(t *testing.T) {
 	c := hdparmCheck{
-		base:   base{name: "d", timeout: time.Second},
-		runner: fakeRunner{execx.Result{Stderr: "/dev/sda: Permission denied\n", ExitCode: 1}},
-		device: "/dev/sda",
-		preds:  []levelPred{{"read", "<", 100}},
+		base:       base{name: "d", timeout: time.Second},
+		runner:     fakeRunner{execx.Result{Stderr: "/dev/sda: Permission denied\n", ExitCode: 1}},
+		device:     "/dev/sda",
+		preds:      []levelPred{{"read", "<", 100}},
+		deviceSize: livingDeviceSize,
 	}
 	res := c.Run(context.Background())
 	if res.OK {
@@ -123,5 +124,46 @@ func TestParseHdparmPreds(t *testing.T) {
 	}
 	if _, errs := requireLevelPreds(map[string]any{"cached": map[string]any{"op": "=>", "value": 1}}, HdparmPredFields, "hdparm check"); errs == "" {
 		t.Error("an invalid op must error")
+	}
+}
+
+// hdparmDeviceGone is what hdparm prints for a disk that dropped off its bus:
+// the timing line carries an error where its MB/sec rate belongs.
+const hdparmDeviceGone = "/dev/sda:\n Timing buffered disk reads: read() hit EOF - device too small\n"
+
+func TestHdparmCheckReportsMissingDevice(t *testing.T) {
+	c := hdparmCheck{
+		base:       base{name: "d", timeout: time.Second},
+		runner:     fakeRunner{execx.Result{Stdout: hdparmDeviceGone, ExitCode: 5}},
+		device:     "/dev/sda",
+		preds:      []levelPred{{fieldRead, "<", 20}},
+		deviceSize: func(string) (uint64, error) { return 0, nil },
+	}
+	res := c.Run(context.Background())
+	if !res.Unavailable {
+		t.Errorf("Unavailable = false, want true: a device with no capacity is not a healthy sample")
+	}
+	if got := res.Data[DataKeyDeviceState]; got != DeviceStateMissing {
+		t.Errorf("device state = %v, want %q", got, DeviceStateMissing)
+	}
+	if !strings.Contains(res.Message, DeviceStateMissing) {
+		t.Errorf("message = %q, want it to say the device is missing", res.Message)
+	}
+}
+
+func TestHdparmCheckKeepsToolErrorWhenDevicePresent(t *testing.T) {
+	c := hdparmCheck{
+		base:       base{name: "d", timeout: time.Second},
+		runner:     fakeRunner{execx.Result{Stdout: hdparmDeviceGone, ExitCode: 5}},
+		device:     "/dev/sda",
+		preds:      []levelPred{{fieldRead, "<", 20}},
+		deviceSize: livingDeviceSize,
+	}
+	res := c.Run(context.Background())
+	if !res.Unavailable {
+		t.Errorf("Unavailable = false, want true: an unparseable report is still no sample")
+	}
+	if got := res.Data[DataKeyDeviceState]; got == DeviceStateMissing {
+		t.Errorf("device state = %v, want no missing marker for a device sysfs still sizes", got)
 	}
 }

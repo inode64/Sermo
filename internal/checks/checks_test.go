@@ -351,6 +351,10 @@ func TestParseStatusMatcher(t *testing.T) {
 	}
 }
 
+// livingDeviceSize pins the sysfs capacity lookup the device-addressing checks
+// make, so a test never depends on which disks the machine running it has.
+func livingDeviceSize(string) (uint64, error) { return livingDeviceSectors, nil }
+
 type fakeRunner struct {
 	result execx.Result
 }
@@ -418,10 +422,11 @@ func TestCheckTimeoutMessage(t *testing.T) {
 		{
 			name: "hdparm",
 			check: hdparmCheck{
-				base:   base{name: "hd", timeout: time.Millisecond},
-				runner: slowRunner{},
-				device: "/dev/sda",
-				preds:  []levelPred{{field: "cached", op: "<", value: 100}},
+				base:       base{name: "hd", timeout: time.Millisecond},
+				runner:     slowRunner{},
+				device:     "/dev/sda",
+				preds:      []levelPred{{field: "cached", op: "<", value: 100}},
+				deviceSize: livingDeviceSize,
 			},
 		},
 		{

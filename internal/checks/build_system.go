@@ -110,7 +110,7 @@ func buildProcessCountCheck(b base, entry map[string]any, deps Deps) (Check, str
 }
 
 // buildHdparmCheck builds a disk-throughput check (hdparm -t/-T).
-func buildHdparmCheck(b base, entry map[string]any, runner execx.Runner) (Check, string) {
+func buildHdparmCheck(b base, entry map[string]any, runner execx.Runner, size BlockDeviceSizeFunc) (Check, string) {
 	device := cfgval.AsString(entry[CheckKeyDevice])
 	if device == "" {
 		return nil, "hdparm check requires a device"
@@ -119,7 +119,7 @@ func buildHdparmCheck(b base, entry map[string]any, runner execx.Runner) (Check,
 	if errs != "" {
 		return nil, errs
 	}
-	return hdparmCheck{base: b, runner: runner, device: device, preds: preds}, ""
+	return hdparmCheck{base: b, runner: runner, device: device, preds: preds, deviceSize: size}, ""
 }
 
 // buildSensorsCheck builds a hardware-sensor check (hwmon temp/fan/voltage).
@@ -222,7 +222,7 @@ func buildDiskIOCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 	if errs != "" {
 		return nil, errs
 	}
-	return &diskIOCheck{base: b, device: device, preds: preds, sampler: deps.DiskIOSampler, state: &diskIOState{}}, ""
+	return &diskIOCheck{base: b, device: device, preds: preds, sampler: deps.DiskIOSampler, deviceSize: deps.BlockDeviceSizer, state: &diskIOState{}}, ""
 }
 
 // buildPressureCheck builds a kernel PSI stall check.

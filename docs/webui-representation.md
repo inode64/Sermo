@@ -519,7 +519,7 @@ Shared columns:
 | Name | display name, falling back to name, capitalized |
 | Last checked | latest completed daemon-cycle or manual sample |
 | Last activity | latest watch event, such as a manual probe, notification or remediation |
-| State | normalized watch state: `disabled` when config/monitor state excludes it from active checks, `starting` before the first monitored sample, `failed` for an active failure, otherwise `ok`; active device work takes precedence as `testing`, `recovering`, `rebuilding`, `repairing`, `moving` or `merging` |
+| State | normalized watch state: `disabled` when config/monitor state excludes it from active checks, `starting` before the first monitored sample, `failed` for an active failure, otherwise `ok`; active device work takes precedence as `testing`, `recovering`, `rebuilding`, `repairing`, `moving` or `merging`, and a device that stopped answering as `missing`, which reads as a failure |
 | Actions | supported primary action plus an overflow menu for monitor/unmonitor |
 
 While a manual `hdparm`, `lvm`, `raid` or `smart` sample is running, State shows

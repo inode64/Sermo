@@ -105,6 +105,16 @@ const watches = [{
   enabled: true, monitored: true, state: "testing", check_type: "smart", can_probe: true,
   readings: [{ field: "device", label: "Device", value: "/dev/sda" }, { field: "device_state", label: "State", value: "testing" }],
   summary: "smart /dev/sda self-test", interval: "1d", status_observed_at: "2026-07-10T12:00:00Z",
+}, {
+  name: "smart-sdz", display_name: "Dead disk health", category: "storage",
+  enabled: true, monitored: true, state: "missing", check_type: "smart", can_probe: true,
+  readings: [
+    { field: "error", label: "Error", error: "smart /dev/sdz: device missing" },
+    { field: "device", label: "Device", value: "/dev/sdz" },
+    { field: "device_state", label: "State", value: "missing" },
+    { field: "health", label: "Health", value: "missing" },
+  ],
+  summary: "smart /dev/sdz: device missing", interval: "1d", status_observed_at: "2026-07-10T12:00:00Z",
 }];
 
 const applications = [{
@@ -408,6 +418,19 @@ test("a SMART self-test remains the device state after its start command returns
   await expect(row).toContainText("testing");
   await expect(row).not.toContainText("checking");
   await expect(row.locator(".state-testing")).toBeVisible();
+});
+
+test("a device that stopped answering reads as missing, not as a blank health cell", async ({ page }) => {
+  const row = page.locator("#wat-row-smart-sdz");
+  await expect(row.locator(".state-missing")).toBeVisible();
+  await expect(row.locator(".state-missing")).toHaveText("missing");
+  // The health column must name the fault instead of falling back to the em
+  // dash a check with no reading shows. The temperature, wear and power-on
+  // columns keep theirs: a dead drive genuinely reports no numbers.
+  await expect(row.locator(".bad")).toHaveText("missing");
+  // A missing device is a failure, so the row carries the same highlight a
+  // failing watch does.
+  await expect(row).toHaveClass(/row-failing/);
 });
 
 test("global search opens a service and exposes individual actions", async ({ page }) => {

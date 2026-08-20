@@ -120,6 +120,9 @@ const targetStateRebuilding = "rebuilding";
 const targetStateRepairing = "repairing";
 const targetStateMoving = "moving";
 const targetStateMerging = "merging";
+// The one device state that is a fault rather than an operation in progress:
+// the check's device stopped answering, so its readings are gone, not pending.
+const targetStateMissing = "missing";
 const targetStateFailed = "failed";
 const targetStateStarting = "starting";
 const targetStateStopping = "stopping";
@@ -218,7 +221,7 @@ const serviceStatusFilterStates = [
   targetStateWarning,
   targetStateFailed,
 ];
-const watchStatusFilterStates = [targetStateDisabled, targetStateOK, targetStateStarting, targetStateStale, targetStateTesting, targetStateRecovering, targetStateRebuilding, targetStateRepairing, targetStateMoving, targetStateMerging, targetStateFailed];
+const watchStatusFilterStates = [targetStateDisabled, targetStateOK, targetStateStarting, targetStateStale, targetStateTesting, targetStateRecovering, targetStateRebuilding, targetStateRepairing, targetStateMoving, targetStateMerging, targetStateMissing, targetStateFailed];
 const appStatusFilterStates = [targetStateOK, targetStateStarting, targetStateWarning, targetStateFailed];
 const mountStatusFilterStates = [mountStateActive, mountStateInactive];
 const sessionKindSSH = "ssh";
@@ -307,6 +310,7 @@ const targetStateClasses = {
   [targetStateRepairing]: "state-repairing",
   [targetStateMoving]: "state-moving",
   [targetStateMerging]: "state-merging",
+  [targetStateMissing]: "state-missing",
   [targetStateFailed]: "state-failed",
   [sessionStateEmpty]: "state-empty",
   [targetStateStarting]: "state-starting",
@@ -330,6 +334,7 @@ const targetStateRanks = {
   [targetStateActive]: 4,
   [targetStateMonitored]: 5,
   [targetStateFailed]: 7,
+  [targetStateMissing]: 7,
   [targetStateRunning]: 2,
   [targetStatePaused]: 3,
   [targetStateOK]: 5,
@@ -1676,7 +1681,7 @@ function isServiceAttention(s) {
 }
 function isWatchAttention(w) {
   const st = watchStateText(w);
-  return st === targetStateFailed;
+  return st === targetStateFailed || st === targetStateMissing;
 }
 
 function isWatchSampleStale(w) {
@@ -4866,10 +4871,12 @@ function watchActionsCell(w) {
 }
 
 // watchRowClass mirrors the service/app row highlight: a firing watch (state
-// "failed") paints the row red, a warning amber, matching serviceRowParts so
-// certificate and every other watch type follow the same visual line.
+// "failed") or one whose device went missing paints the row red, a warning
+// amber, matching serviceRowParts so certificate and every other watch type
+// follow the same visual line.
 function watchRowClass(state) {
-  return state === targetStateFailed ? "row-failing" : (state === targetStateWarning || state === targetStateStale ? "row-warning" : "");
+  const failing = state === targetStateFailed || state === targetStateMissing;
+  return failing ? "row-failing" : (state === targetStateWarning || state === targetStateStale ? "row-warning" : "");
 }
 
 // watchExpansionRow returns the inline expansion row when open. Its colspan must

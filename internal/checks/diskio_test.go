@@ -2,6 +2,7 @@ package checks
 
 import (
 	"context"
+	"errors"
 	"os"
 	"strings"
 	"testing"
@@ -23,7 +24,10 @@ func buildDiskIO(t *testing.T, entry map[string]any, samples []DiskIOSample) *di
 		i++
 		return s, nil
 	}
-	built, warns := Build(map[string]any{"io": entry}, Deps{DefaultTimeout: time.Second, Samplers: Samplers{DiskIOSampler: sampler}})
+	built, warns := Build(map[string]any{"io": entry}, Deps{
+		DefaultTimeout: time.Second,
+		Samplers:       Samplers{DiskIOSampler: sampler, BlockDeviceSizer: livingDeviceSize},
+	})
 	if len(warns) != 0 || len(built) != 1 {
 		t.Fatalf("diskio check should build: warns=%v", warns)
 	}
@@ -185,5 +189,73 @@ func TestCalculateDiskIORatesSubMillisecondWindow(t *testing.T) {
 	// A full second is fine.
 	if _, ok := CalculateDiskIORates(prev, cur, time.Second); !ok {
 		t.Fatal("a one-second window must yield ok=true")
+	}
+}
+
+// livingDeviceSectors is the capacity livingDeviceSize reports, for the cases
+// that need the number rather than the sampler.
+const livingDeviceSectors = 3907029168
+
+// diskIOWithSize builds a diskio check with an injected sampler and sysfs sizer,
+// on the deterministic 10s clock the other diskio tests use.
+func diskIOWithSize(sampler DiskIOSamplerFunc, sectors uint64, sampleErr error) *diskIOCheck {
+	now := time.Unix(1_000_000, 0)
+	return &diskIOCheck{
+		base:    base{name: "io", timeout: time.Second},
+		device:  "sda",
+		sampler: sampler,
+		deviceSize: func(string) (uint64, error) {
+			return sectors, sampleErr
+		},
+		state: &diskIOState{},
+		clock: func() time.Time {
+			now = now.Add(10 * time.Second)
+			return now
+		},
+	}
+}
+
+func TestDiskIOCheckReportsMissingDevice(t *testing.T) {
+	idle := func(string) (DiskIOSample, error) { return DiskIOSample{}, nil }
+	gone := func(string) (DiskIOSample, error) {
+		return DiskIOSample{}, errors.New(`device "sda" not in /proc/diskstats`)
+	}
+
+	for _, tc := range []struct {
+		name    string
+		sampler DiskIOSamplerFunc
+		cycles  int
+	}{
+		// The row vanished from /proc/diskstats altogether.
+		{name: "no diskstats row", sampler: gone, cycles: 1},
+		// The row lingers and simply stops counting, which on its own is
+		// indistinguishable from an idle disk.
+		{name: "row stops counting", sampler: idle, cycles: 2},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c := diskIOWithSize(tc.sampler, 0, nil)
+			var res Result
+			for range tc.cycles {
+				res = c.Run(context.Background())
+			}
+			if !res.Unavailable {
+				t.Errorf("Unavailable = false, want true: a dead disk is not an idle disk")
+			}
+			if got := res.Data[DataKeyDeviceState]; got != DeviceStateMissing {
+				t.Errorf("device state = %v, want %q", got, DeviceStateMissing)
+			}
+		})
+	}
+}
+
+func TestDiskIOCheckKeepsIdleDeviceHealthy(t *testing.T) {
+	c := diskIOWithSize(func(string) (DiskIOSample, error) { return DiskIOSample{}, nil }, livingDeviceSectors, nil)
+	c.Run(context.Background())
+	res := c.Run(context.Background())
+	if res.Unavailable {
+		t.Errorf("Unavailable = true, want false: an idle disk sysfs still sizes is present")
+	}
+	if got := res.Data[DataKeyDeviceState]; got == DeviceStateMissing {
+		t.Errorf("device state = %v, want no missing marker for an idle but present disk", got)
 	}
 }
