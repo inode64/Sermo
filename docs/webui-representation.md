@@ -498,10 +498,10 @@ latest completed daemon-cycle or manual sample, while Last activity is an event.
 | `storage` | Name, Usage, Filesystem, Mount point; filters by filesystem when more than one is present |
 | `file` | Name, Path, current age, configured age limit; a configured check `summary` replaces the age and limit columns with Summary |
 | `net` | Name, interface, link, speed, errors |
-| `hdparm` | Name, device, buffered read, cached read |
+| `hdparm` | Name, device, bus, buffered read, cached read |
 | `lvm` | Name, health, VG, LV, VG size, VG free, reasons |
-| `smart` | Name, device, health, temperature, wear, reallocated sectors, formatted power-on time |
-| `diskio` | Name, device, utilization, read, write, await, read total, written total (cumulative since boot, so an idle disk is distinguishable from one nothing ever touches) |
+| `smart` | Name, device, bus, health, temperature, wear, reallocated sectors, formatted power-on time |
+| `diskio` | Name, device, bus, utilization, read, write, await, read total, written total (cumulative since boot, so an idle disk is distinguishable from one nothing ever touches) |
 | `cert` | Name, source, days left, expiry, issuer |
 | `raid` | Name, array, size, degraded, recovering |
 | Other types | Name and their primary live value |

@@ -512,10 +512,10 @@ activity es un evento.
 | `storage` | Name, Usage, Filesystem, Mount point; filtra por filesystem si hay más de uno |
 | `file` | Name, Path, edad actual, límite de edad configurado |
 | `net` | Name, interfaz, enlace, velocidad, errores |
-| `hdparm` | Name, dispositivo, lectura buffered, lectura cached |
+| `hdparm` | Name, dispositivo, bus, lectura buffered, lectura cached |
 | `lvm` | Name, salud, VG, LV, tamaño de VG, libre en VG, motivos |
-| `smart` | Name, dispositivo, salud, temperatura, desgaste, sectores reasignados, tiempo encendido formateado |
-| `diskio` | Name, dispositivo, utilización, lectura, escritura, await, leído total, escrito total (acumulados desde el arranque, para distinguir un disco ocioso de uno que nadie toca nunca) |
+| `smart` | Name, dispositivo, bus, salud, temperatura, desgaste, sectores reasignados, tiempo encendido formateado |
+| `diskio` | Name, dispositivo, bus, utilización, lectura, escritura, await, leído total, escrito total (acumulados desde el arranque, para distinguir un disco ocioso de uno que nadie toca nunca) |
 | `cert` | Name, origen, días restantes, caducidad, emisor |
 | `raid` | Name, array, tamaño, degradado, recuperando |
 | Otros tipos | Name y su valor vivo principal |

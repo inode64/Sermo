@@ -2196,6 +2196,12 @@ rather than red.
 
 ### Missing devices
 
+`smart`, `hdparm` and `diskio` publish the transport their device sits on —
+`sata`, `usb`, `nvme`, `scsi`, `virtio`, `mmc` or `virtual` — read from the sysfs
+path the kernel links the device to. It explains behaviour the numbers alone do
+not: a USB disk parks itself, so it answers a throughput benchmark with its own
+spin-up rather than with its media speed.
+
 `smart`, `hdparm` and `diskio` address a block device by name, and a disk that
 dies rarely disappears: it keeps its `/dev` node and its `/proc/diskstats` row
 and simply stops answering. Left alone, each check reads that as good news —

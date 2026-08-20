@@ -32,6 +32,7 @@ type hdparmCheck struct {
 	device     string
 	preds      []levelPred
 	deviceSize BlockDeviceSizeFunc
+	deviceBus  BlockDeviceBusFunc
 }
 
 func (c hdparmCheck) Run(ctx context.Context) Result {
@@ -63,7 +64,7 @@ func (c hdparmCheck) Run(ctx context.Context) Result {
 	ok := levelPredsHold(c.preds, values)
 
 	r := c.result(ok, hdparmMessage(c.device, values), start)
-	r.Data = HdparmResultData(c.device, values)
+	r.Data = withDeviceBus(HdparmResultData(c.device, values), c.deviceBus, c.device)
 	return r
 }
 

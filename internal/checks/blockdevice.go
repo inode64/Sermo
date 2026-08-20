@@ -29,6 +29,100 @@ const deviceMissingReason = "device " + DeviceStateMissing
 // kernel exposes no such device at all.
 type BlockDeviceSizeFunc func(device string) (uint64, error)
 
+// Block device transports, as the kernel's own device path spells them. They
+// explain behaviour the numbers alone do not: a USB disk parks itself and answers
+// a benchmark with its own spin-up, and a virtual device has no bus at all.
+const (
+	BusSATA    = "sata"
+	BusUSB     = "usb"
+	BusNVMe    = "nvme"
+	BusSCSI    = "scsi"
+	BusVirtio  = "virtio"
+	BusMMC     = "mmc"
+	BusVirtual = "virtual"
+)
+
+// BlockDeviceBusFunc reports the transport a block device sits on, or "" when
+// the kernel does not say. Injected for tests; the default reads sysfs.
+type BlockDeviceBusFunc func(device string) string
+
+// busMarkers maps a device-path component to the transport it proves, in the
+// order they must be tested: a USB disk's path carries the scsi host and target
+// its bridge emulates, so the outer bus has to win over the inner one.
+var busMarkers = []struct {
+	prefix string
+	bus    string
+}{
+	{"virtual", BusVirtual},
+	{"nvme", BusNVMe},
+	{"usb", BusUSB},
+	{"ata", BusSATA},
+	{"virtio", BusVirtio},
+	{"mmc", BusMMC},
+	{"host", BusSCSI},
+}
+
+// defaultBlockDeviceBus classifies a device by the sysfs path the kernel links
+// it to. The link target is read, never followed: it already names every bus the
+// device hangs off, and reading it touches one entry rather than walking the
+// tree. An unknown or unreadable device reports "", which every caller renders
+// as no answer rather than inventing one.
+func defaultBlockDeviceBus(device string) string {
+	name := blockDeviceName(device)
+	if name == "" {
+		return ""
+	}
+	target, err := os.Readlink(filepath.Join(sysBlockPath, name))
+	if err != nil {
+		return ""
+	}
+	return busFromDevicePath(target)
+}
+
+// busFromDevicePath names the transport a kernel device path proves. Order is
+// the whole design: a USB disk's path also carries the scsi host and target its
+// bridge emulates, so the outer bus is tested before the inner one.
+func busFromDevicePath(target string) string {
+	for _, marker := range busMarkers {
+		for part := range strings.SplitSeq(target, string(filepath.Separator)) {
+			if busComponent(part, marker.prefix) {
+				return marker.bus
+			}
+		}
+	}
+	return ""
+}
+
+// withDeviceBus records the transport a device sits on alongside its readings.
+// It is a property of the device rather than of the sample, so it is resolved
+// here — one readlink per cycle — instead of on every dashboard poll.
+func withDeviceBus(data map[string]any, bus BlockDeviceBusFunc, device string) map[string]any {
+	resolve := bus
+	if resolve == nil {
+		resolve = defaultBlockDeviceBus
+	}
+	if name := resolve(device); name != "" {
+		data[DataKeyBus] = name
+	}
+	return data
+}
+
+// busComponent reports whether one device-path component names this bus: the
+// bare word ("nvme", "virtual") or the word with its instance number ("usb4",
+// "ata1"). Matching a bare prefix would let "atatest" pass for SATA.
+func busComponent(part, prefix string) bool {
+	rest, ok := strings.CutPrefix(part, prefix)
+	if !ok {
+		return false
+	}
+	for _, r := range rest {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
+}
+
 // blockDeviceMissing reports whether the kernel no longer backs device with any
 // capacity. Presence of the /dev node proves nothing: a disk that drops off its
 // bus keeps both its node and its /proc/diskstats row, and only sysfs drops the
