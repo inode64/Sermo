@@ -11,7 +11,15 @@ import (
 	"sermo/internal/output"
 )
 
-const hdparmCommand = CheckTypeHdparm
+const (
+	hdparmCommand = CheckTypeHdparm
+	// hdparmRateSuffix is the tail hdparm's two rate units share; the byte scale
+	// is the single character in front of it.
+	hdparmRateSuffix = "B/sec"
+	// hdparmKilobytesPerMegabyte mirrors hdparm's own MB->kB conversion, so a
+	// kB/sec line reads back as the MB/s the predicates and the graph use.
+	hdparmKilobytesPerMegabyte = 1024
+)
 
 // hdparmCheck compares configured hdparm timing rates with thresholds. It is
 // condition-style: OK means every predicate holds. Only timings used by
@@ -82,20 +90,19 @@ func hdparmArgs(device string, wantCached, wantRead bool) []string {
 	return append(args, device)
 }
 
-// parseHdparm extracts the MB/sec rate from hdparm's timing lines: the
+// parseHdparm extracts the rate from hdparm's timing lines as MB/s: the
 // "cached reads" line is `cached`, "buffered disk reads" is `read`. The rate is
-// always the number after "=" and before "MB/sec" (the leading "N MB/GB in …" is
-// the amount transferred, not the rate).
+// always the number after the last "=" (the leading "N MB/GB in …" is the
+// amount transferred, not the rate).
 func parseHdparm(out string) (map[string]float64, error) {
 	values := map[string]float64{}
 	for line := range strings.SplitSeq(out, checkLineSeparator) {
 		eq := strings.LastIndex(line, "=")
-		unit := strings.Index(line, "MB/sec")
-		if eq < 0 || unit < 0 || unit < eq {
+		if eq < 0 {
 			continue
 		}
-		v, err := strconv.ParseFloat(strings.TrimSpace(line[eq+1:unit]), numericBits64)
-		if err != nil {
+		v, ok := parseHdparmRate(line[eq+1:])
+		if !ok {
 			continue
 		}
 		switch {
@@ -109,6 +116,31 @@ func parseHdparm(out string) (map[string]float64, error) {
 		return nil, errors.New("no timing in output")
 	}
 	return values, nil
+}
+
+// parseHdparmRate reads one timing line's rate tail — "  113.07 MB/sec" — as
+// MB/s. hdparm drops to kB/sec below 1 MB/s, which is exactly what a disk
+// answering from standby reports because its whole timing window went on
+// spinning up: a slow sample, not the absent one "no timing in output" claims.
+func parseHdparmRate(tail string) (float64, bool) {
+	unit := strings.Index(tail, hdparmRateSuffix)
+	if unit < 1 {
+		return 0, false
+	}
+	var scale float64
+	switch tail[unit-1] {
+	case 'M':
+		scale = 1
+	case 'k':
+		scale = 1.0 / hdparmKilobytesPerMegabyte
+	default:
+		return 0, false
+	}
+	v, err := strconv.ParseFloat(strings.TrimSpace(tail[:unit-1]), numericBits64)
+	if err != nil {
+		return 0, false
+	}
+	return v * scale, true
 }
 
 // hdparmMessage renders the measured rates in a stable order.

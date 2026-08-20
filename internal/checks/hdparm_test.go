@@ -32,6 +32,23 @@ func TestParseHdparm(t *testing.T) {
 	}
 }
 
+// A disk answering from standby spends the whole timing window spinning up, so
+// hdparm reports the one block it managed in kB/sec. That is a real — very slow
+// — sample and must not read as no timing at all.
+func TestParseHdparmKilobyteRate(t *testing.T) {
+	v, err := parseHdparm("/dev/sdd:\n Timing buffered disk reads:   2 MB in  4.84 seconds = 423.46 kB/sec\n")
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if want := 423.46 / 1024; v["read"] != want {
+		t.Fatalf("read = %v, want %v MB/s", v["read"], want)
+	}
+	// The rate must stay in MB/s so a threshold cannot compare kB against MB.
+	if v["read"] >= 1 {
+		t.Errorf("read = %v, want a sub-1 MB/s rate", v["read"])
+	}
+}
+
 // recordingRunner captures the argv it was asked to run and returns a fixed
 // stdout, so a test can assert which hdparm flags were used.
 type recordingRunner struct {

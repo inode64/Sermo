@@ -2152,6 +2152,15 @@ serie temporal y se grafican** en el detalle del servicio (web UI) para que pued
 gradual** de una unidad con el tiempo. (Este graficado de métricas con nombre por comprobación es
 genérico: cualquier comprobación que publique campos numéricos `Result.Data` puede optar por él.)
 
+Un disco que ha **parado sus platos** no se puede medir. `hdparm -t` lo despierta,
+el arranque se come toda la ventana de medición y la unidad reporta un único
+bloque en varios segundos — una fracción de MB/s, que hdparm imprime como
+`kB/sec` en lugar de `MB/sec`. Sermo lee ambas formas y siempre registra MB/s,
+así que esa muestra es un `read` real, muy bajo, y cruzará un umbral `read <`.
+Apunta un watch de rendimiento a discos que permanezcan despiertos: si no, una
+unidad USB o de copia de seguridad que entra en standby por inactividad alerta
+por su propia gestión de energía, no por desgaste.
+
 ### Dispositivos ausentes
 
 `smart`, `hdparm` y `diskio` direccionan un dispositivo de bloque por nombre, y
