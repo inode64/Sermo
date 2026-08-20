@@ -102,9 +102,9 @@ grep "^PASS .*${SRC_BASE}\\.${TARGET}\"" "$SCRATCH/mutant-cycle-${CYCLE}-after.l
 bash scripts/run-make-check-audited.sh | tee "$SCRATCH/make-check-cycle-${CYCLE}.log"
 git status --short --branch | tee "$SCRATCH/git-status-cycle-${CYCLE}.log"
 git add "$TEST"
-MSG="agent: test($(basename "$PKG_DIR")): kill mutant .${TARGET} ${SRC_BASE}"
+MSG="test($(basename "$PKG_DIR")): kill mutant .${TARGET} ${SRC_BASE}"
 if [[ "$CYCLE" == "3" && "$SRC_BASE" == "cfgval.go" && "$TARGET" == "19" ]]; then
-	MSG="agent: test(cfgval): pin mutant .14 FormatFloat + kill .19 StringArray nil"
+	MSG="test(cfgval): pin mutant .14 FormatFloat + kill .19 StringArray nil"
 fi
 git commit -m "$MSG"
 echo "committed cycle $CYCLE target .${TARGET}"

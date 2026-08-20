@@ -1,4 +1,6 @@
-agent: 
+# Subject: <type>(<optional scope>): <concise imperative summary>
+# Types: feat, fix, refactor, test, docs, build, chore, ci, perf
+# Example: feat(dns): add dnsmasq DHCP and TFTP support
 
 Objective:
 # What concrete outcome does this commit deliver?
