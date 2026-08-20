@@ -3,10 +3,13 @@ package cli
 import (
 	"bytes"
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"sermo/internal/checks"
 )
 
 func TestWatchStatus(t *testing.T) {
@@ -62,6 +65,42 @@ func TestWatchStatus(t *testing.T) {
 				t.Fatalf("stdout = %q, want %q", got, tc.want)
 			}
 		})
+	}
+}
+
+// A probe of a watch graded an advisory is not a failure. The daemon still
+// answers 409 — the condition did fire — but announcing that as "FAIL" would
+// contradict the amber the same result gets in the dashboard.
+func TestWatchProbeRendersAnAdvisoryAsAWarning(t *testing.T) {
+	root := t.TempDir()
+	watches := filepath.Join(root, "watches")
+	if err := os.Mkdir(watches, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	global := filepath.Join(root, "sermo.yml")
+	mustWrite(t, global, "paths:\n  watches: ["+watches+"]\ndefaults:\n  policy: { cooldown: 5m }\n")
+	mustWrite(t, filepath.Join(watches, "hdparm-sdd.yml"),
+		"name: hdparm-sdd\nseverity: warning\ncheck:\n  type: hdparm\n  device: /dev/sdd\n  read: { op: \"<\", value: 20 }\n")
+
+	var stdout bytes.Buffer
+	app := App{Env: func(string) string { return "" }, Stdout: &stdout, Stderr: &bytes.Buffer{}}
+	app.ProbeDaemonWatch = func(context.Context, options, string) (daemonWatchProbe, error) {
+		return daemonWatchProbe{
+			Message:  "hdparm /dev/sdd read=0.4 MB/s",
+			Severity: checks.SeverityWarning,
+			Readings: []daemonWatchReading{{Field: "warning", Label: "Warning", Warning: "hdparm /dev/sdd read=0.4 MB/s"}},
+		}, errors.New("probe failed (409): hdparm /dev/sdd read=0.4 MB/s")
+	}
+	app.Run(context.Background(), []string{"--config", global, "watch", "probe", "hdparm-sdd"})
+	out := stdout.String()
+	if !strings.HasPrefix(out, cliTextWarn+" watch hdparm-sdd:") {
+		t.Fatalf("stdout = %q, want it to lead with %s", out, cliTextWarn)
+	}
+	if strings.Contains(out, cliTextFail) {
+		t.Errorf("stdout = %q, want no %s for an advisory", out, cliTextFail)
+	}
+	if !strings.Contains(out, "Warning: hdparm /dev/sdd read=0.4 MB/s") {
+		t.Errorf("stdout = %q, want the advisory reading", out)
 	}
 }
 

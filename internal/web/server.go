@@ -731,6 +731,10 @@ type ActionResult struct {
 	OK       bool           `json:"ok"`
 	Message  string         `json:"message,omitempty"`
 	Readings []WatchReading `json:"readings,omitempty"`
+	// Severity grades a rejected outcome for the client that renders it. A watch
+	// declared an advisory reports "warning" here, so a manual probe of one is
+	// not announced as a failure while the dashboard shows it amber.
+	Severity string `json:"severity,omitempty"`
 }
 
 // OperateOpts controls optional service-operation behavior from the web API.
