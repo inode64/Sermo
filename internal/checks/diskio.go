@@ -72,6 +72,7 @@ type diskIOCheck struct {
 	preds      []levelPred
 	sampler    DiskIOSamplerFunc
 	deviceSize BlockDeviceSizeFunc
+	deviceBus  BlockDeviceBusFunc
 	clock      func() time.Time
 	state      *diskIOState
 }
@@ -117,7 +118,7 @@ func (c *diskIOCheck) Run(_ context.Context) Result {
 
 	res := c.result(ok, fmt.Sprintf("diskio %s util %.1f%% read %s write %s await %.1fms",
 		c.device, rates.UtilPct, formatSummaryBytesPerSecond(rates.ReadBytes), formatSummaryBytesPerSecond(rates.WriteBytes), rates.AwaitMs), start)
-	res.Data = DiskIOResultData(c.device, rates, s)
+	res.Data = withDeviceBus(DiskIOResultData(c.device, rates, s), c.deviceBus, c.device)
 	res.Data[DataKeyValue] = firstPredValue(c.preds, values, rates.UtilPct)
 	return res
 }

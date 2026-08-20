@@ -110,6 +110,7 @@ const watches = [{
   enabled: true, monitored: true, state: "ok", check_type: "diskio",
   readings: [
     { field: "device", label: "Device", value: "sdd" },
+    { field: "bus", label: "Bus", value: "usb" },
     { field: "util_pct", label: "Utilization", value: "0%" },
     { field: "read_bytes", label: "Read", value: "0 B/s" },
     { field: "write_bytes", label: "Write", value: "0 B/s" },
@@ -424,6 +425,8 @@ test("an idle disk still reports what it has ever moved", async ({ page }) => {
   // The cumulative totals are what tell the two apart.
   await expect(row).toContainText("12.8 GB");
   await expect(row).toContainText("57 KB");
+  // And the bus explains why this one sleeps in the first place.
+  await expect(row).toContainText("usb");
 });
 
 test("stale watch samples are visible and filterable", async ({ page }) => {

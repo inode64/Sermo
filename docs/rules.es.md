@@ -2218,6 +2218,13 @@ gestión de energía de la unidad se lea en ámbar y no en rojo.
 
 ### Dispositivos ausentes
 
+`smart`, `hdparm` y `diskio` publican el transporte en el que está su dispositivo
+— `sata`, `usb`, `nvme`, `scsi`, `virtio`, `mmc` o `virtual` —, leído de la ruta
+sysfs a la que el kernel enlaza el dispositivo. Explica comportamientos que los
+números por sí solos no explican: un disco USB aparca sus cabezas, así que
+responde a un benchmark de rendimiento con su propio arranque en vez de con la
+velocidad de su medio.
+
 `smart`, `hdparm` y `diskio` direccionan un dispositivo de bloque por nombre, y
 un disco que muere rara vez desaparece: conserva su nodo `/dev` y su fila en
 `/proc/diskstats`, y simplemente deja de responder. Por sí solo, cada check

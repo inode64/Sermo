@@ -110,7 +110,7 @@ func buildProcessCountCheck(b base, entry map[string]any, deps Deps) (Check, str
 }
 
 // buildHdparmCheck builds a disk-throughput check (hdparm -t/-T).
-func buildHdparmCheck(b base, entry map[string]any, runner execx.Runner, size BlockDeviceSizeFunc) (Check, string) {
+func buildHdparmCheck(b base, entry map[string]any, runner execx.Runner, size BlockDeviceSizeFunc, bus BlockDeviceBusFunc) (Check, string) {
 	device := cfgval.AsString(entry[CheckKeyDevice])
 	if device == "" {
 		return nil, "hdparm check requires a device"
@@ -119,7 +119,7 @@ func buildHdparmCheck(b base, entry map[string]any, runner execx.Runner, size Bl
 	if errs != "" {
 		return nil, errs
 	}
-	return hdparmCheck{base: b, runner: runner, device: device, preds: preds, deviceSize: size}, ""
+	return hdparmCheck{base: b, runner: runner, device: device, preds: preds, deviceSize: size, deviceBus: bus}, ""
 }
 
 // buildSensorsCheck builds a hardware-sensor check (hwmon temp/fan/voltage).
@@ -132,7 +132,7 @@ func buildSensorsCheck(b base, entry map[string]any, deps Deps) (Check, string) 
 }
 
 // buildSmartCheck builds a drive SMART-health check (smartctl).
-func buildSmartCheck(b base, entry map[string]any, runner execx.Runner) (Check, string) {
+func buildSmartCheck(b base, entry map[string]any, runner execx.Runner, bus BlockDeviceBusFunc) (Check, string) {
 	device := cfgval.AsString(entry[CheckKeyDevice])
 	if device == "" {
 		return nil, "smart check requires a device"
@@ -141,7 +141,7 @@ func buildSmartCheck(b base, entry map[string]any, runner execx.Runner) (Check, 
 	if err != nil {
 		return nil, "smart check: " + err.Error()
 	}
-	return smartCheck{base: b, runner: runner, device: device, preds: preds}, ""
+	return smartCheck{base: b, runner: runner, device: device, preds: preds, deviceBus: bus}, ""
 }
 
 // buildRaidCheck builds a Linux md software-RAID health check.
@@ -222,7 +222,7 @@ func buildDiskIOCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 	if errs != "" {
 		return nil, errs
 	}
-	return &diskIOCheck{base: b, device: device, preds: preds, sampler: deps.DiskIOSampler, deviceSize: deps.BlockDeviceSizer, state: &diskIOState{}}, ""
+	return &diskIOCheck{base: b, device: device, preds: preds, sampler: deps.DiskIOSampler, deviceSize: deps.BlockDeviceSizer, deviceBus: deps.BlockDeviceBus, state: &diskIOState{}}, ""
 }
 
 // buildPressureCheck builds a kernel PSI stall check.

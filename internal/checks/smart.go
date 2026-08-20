@@ -44,9 +44,10 @@ const (
 // sample. Needs smartmontools (and root).
 type smartCheck struct {
 	base
-	runner execx.Runner
-	device string
-	preds  []levelPred
+	runner    execx.Runner
+	device    string
+	preds     []levelPred
+	deviceBus BlockDeviceBusFunc
 }
 
 func (c smartCheck) Run(ctx context.Context) Result {
@@ -93,7 +94,7 @@ func (c smartCheck) Run(ctx context.Context) Result {
 		}
 	}
 	r := c.result(ok, prefix+" health="+health, start)
-	r.Data = SmartResultData(c.device, health, data.selfTestRunning, data.values)
+	r.Data = withDeviceBus(SmartResultData(c.device, health, data.selfTestRunning, data.values), c.deviceBus, c.device)
 	return r
 }
 
