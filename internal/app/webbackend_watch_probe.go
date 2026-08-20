@@ -35,7 +35,7 @@ func (b *WebBackend) probeWatchResult(ctx context.Context, w *webWatch) (checks.
 	if err != nil {
 		return checks.Result{}, fmt.Errorf("build check: %w", err)
 	}
-	probeCtx, cancel := b.probeContext(ctx)
+	probeCtx, cancel := b.probeContext(ctx, w.check)
 	defer cancel()
 	return check.Run(probeCtx), nil
 }
@@ -45,9 +45,9 @@ func (b *WebBackend) startSmartShortTest(ctx context.Context, w *webWatch) (chec
 	if device == "" {
 		return checks.Result{}, errors.New("smart check requires a device")
 	}
-	probeCtx, cancel := b.probeContext(ctx)
+	probeCtx, cancel := b.probeContext(ctx, w.check)
 	defer cancel()
-	if err := checks.StartSmartShortTest(probeCtx, b.execRunner, device, b.probeTimeout()); err != nil {
+	if err := checks.StartSmartShortTest(probeCtx, b.execRunner, device, b.probeTimeout(w.check)); err != nil {
 		return checks.Result{}, fmt.Errorf("start SMART short self-test on %s: %w", device, err)
 	}
 	message := fmt.Sprintf("smart %s short self-test started", device)
@@ -67,7 +67,17 @@ func watchErrorReadings(message string) []web.WatchReading {
 	return []web.WatchReading{{Field: watchReadingFieldSample, Label: watchReadingLabelSample, Error: message}}
 }
 
-func (b *WebBackend) probeTimeout() time.Duration {
+// probeTimeout bounds one manual probe. The check's own `timeout:` is the budget
+// the operator declared for exactly this work, so it wins here as it does in the
+// daemon cycle; engine.default_timeout is only the fallback for a check that
+// declares none. Taking the smaller of the two used to cancel a slow probe early
+// and then report the configured deadline, so a `timeout: 30s` hdparm watch
+// failed at ten seconds claiming thirty — and every manual probe of a spinning
+// disk failed while its scheduled cycle succeeded.
+func (b *WebBackend) probeTimeout(check map[string]any) time.Duration {
+	if timeout := cfgval.Duration(check[checks.CheckKeyTimeout]); timeout > 0 {
+		return timeout
+	}
 	timeout := b.defaultTimeout
 	if timeout <= 0 {
 		timeout = b.operationTimeout
@@ -75,8 +85,8 @@ func (b *WebBackend) probeTimeout() time.Duration {
 	return timeout
 }
 
-func (b *WebBackend) probeContext(parent context.Context) (context.Context, context.CancelFunc) {
-	timeout := b.probeTimeout()
+func (b *WebBackend) probeContext(parent context.Context, check map[string]any) (context.Context, context.CancelFunc) {
+	timeout := b.probeTimeout(check)
 	if timeout <= 0 {
 		return context.WithCancel(parent)
 	}
