@@ -204,16 +204,19 @@ func (b *WebBackend) ProbeWatch(ctx context.Context, name string) web.ActionResu
 	ok := result.Healthy()
 	kind, status := eventKindAction, eventStatusOK
 	eventMessage := manualProbeCompletedMessage(summary, duration)
+	graded := ""
 	if !ok {
-		// A manual probe of an advisory watch reports the same way its cycle does.
+		// A manual probe of an advisory watch reports the same way its cycle does,
+		// and says so to its caller: announcing it as a failure would contradict
+		// the amber the same result gets everywhere else.
 		kind, status = eventKindError, eventStatusFailed
 		if checks.IsWarning(severity) {
-			kind = eventKindWarning
+			kind, graded = eventKindWarning, severity
 		}
 		eventMessage = manualProbeFailedMessage(summary, duration)
 	}
 	b.emitWatchMonitorEvent(name, eventActionProbe, kind, status, eventMessage)
-	return web.ActionResult{OK: ok, Message: summary, Readings: readings}
+	return web.ActionResult{OK: ok, Message: summary, Readings: readings, Severity: graded}
 }
 
 // ManualProbeCheckType reports whether a watch of this check type answers a
