@@ -36,6 +36,17 @@ func TestWatchStatus(t *testing.T) {
 			args:     []string{"watch", "status", "raid-md0"},
 			want:     "raid-md0 state=failed\n  Rebuild progress: 12.6%",
 		},
+		{
+			// An advisory reports its reason through Warning rather than Error;
+			// printing only Error left the operator an empty labelled row.
+			name: "advisory reading",
+			detail: daemonWatchDetail{State: "warning", Readings: []daemonWatchReading{
+				{Field: "warning", Label: "Warning", Warning: "hdparm /dev/sdd read=0.4 MB/s"},
+			}},
+			detailOK: true,
+			args:     []string{"watch", "status", "hdparm-sdd"},
+			want:     "hdparm-sdd state=warning\n  Warning: hdparm /dev/sdd read=0.4 MB/s",
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var stdout bytes.Buffer

@@ -22,6 +22,10 @@ type daemonWatchReading struct {
 	Label string `json:"label"`
 	Value string `json:"value"`
 	Error string `json:"error"`
+	// Warning carries the same bad news as Error for a watch graded an advisory
+	// (`severity: warning`). It is a separate field on the wire so the dashboard
+	// can colour it amber; here both simply become the reading's text.
+	Warning string `json:"warning"`
 }
 
 type daemonWatchDetail struct {
@@ -90,7 +94,7 @@ func (a App) runWatchProbe(ctx context.Context, opts options) int {
 		}
 		fmt.Fprintf(a.Stdout, "%s watch %s: %s\n", status, opts.args[1], result.Message)
 		for _, reading := range result.Readings {
-			printWatchReading(a.Stdout, reading.Field, reading.Label, reading.Value, reading.Error)
+			printWatchReading(a.Stdout, reading)
 		}
 	}
 	if result.OK {
@@ -281,17 +285,23 @@ func (a App) runWatchStatus(ctx context.Context, opts options) int {
 		fmt.Fprintf(a.Stdout, "  Last checked: %s\n", detail.LastCheckedAt)
 	}
 	for _, reading := range detail.Readings {
-		printWatchReading(a.Stdout, reading.Field, reading.Label, reading.Value, reading.Error)
+		printWatchReading(a.Stdout, reading)
 	}
 	return exitSuccess
 }
 
-func printWatchReading(out io.Writer, field, label, value, errText string) {
+func printWatchReading(out io.Writer, reading daemonWatchReading) {
+	label := reading.Label
 	if label == "" {
-		label = field
+		label = reading.Field
 	}
-	if errText != "" {
-		value = errText
+	// A reading reports either a value or the reason it has none; an advisory
+	// puts that reason in Warning rather than Error, and both read the same here.
+	value := reading.Value
+	for _, bad := range []string{reading.Error, reading.Warning} {
+		if bad != "" {
+			value = bad
+		}
 	}
 	if label != "" && value != "" {
 		fmt.Fprintf(out, "  %s: %s\n", label, value)
