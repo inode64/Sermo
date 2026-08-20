@@ -75,11 +75,15 @@ const (
 )
 
 const (
-	daemonProcessName            = "sermod"
-	daemonWebSchemeHTTP          = checks.URLSchemeHTTP
-	daemonWebAuthUserPrefix      = "admin:"
-	daemonWebCSRFHeader          = "X-Sermo-Csrf"
-	daemonWebCSRFValue           = "1"
+	daemonProcessName       = "sermod"
+	daemonWebSchemeHTTP     = checks.URLSchemeHTTP
+	daemonWebAuthUserPrefix = "admin:"
+	daemonWebCSRFHeader     = "X-Sermo-Csrf"
+	daemonWebCSRFValue      = "1"
+	// daemonWebGenerationHeader names the backend generation a mutation is aimed
+	// at. The daemon rejects a mutation that does not name one, so a client must
+	// read the current generation before it writes.
+	daemonWebGenerationHeader    = "X-Sermo-Generation"
 	daemonWebHeaderAuthorization = httpx.HeaderAuthorization
 	daemonWebBasicAuthPrefix     = "Basic "
 	// daemonWebLocalhostName is the hostname that always resolves to loopback
@@ -1702,6 +1706,12 @@ func (a App) daemonWebRequest(ctx context.Context, opts options, method, what st
 	}
 	if csrf {
 		req.Header.Set(daemonWebCSRFHeader, daemonWebCSRFValue)
+		// A mutation must name the generation it was aimed at, so a reload cannot
+		// swap the target's identity underneath it. Read it first: without the
+		// header the daemon answers 428 and the mutation never runs.
+		if generation := a.daemonWebGeneration(ctx, cfg, base); generation != "" {
+			req.Header.Set(daemonWebGenerationHeader, generation)
+		}
 	}
 	// If the config declares an admin password, send Basic auth (any user + pw).
 	a.applyDaemonWebAuth(req, cfg)
@@ -1712,6 +1722,26 @@ func (a App) daemonWebRequest(ctx context.Context, opts options, method, what st
 		return nil, fmt.Errorf("talking to daemon web UI: %w (is sermod running with web.port set?)", err)
 	}
 	return resp, nil
+}
+
+// daemonWebGeneration reads the daemon's current backend generation, which every
+// response carries. An empty answer means the daemon is not tracking generations
+// (or could not be reached), and the caller sends no header — which is exactly
+// what the daemon expects in that case.
+func (a App) daemonWebGeneration(ctx context.Context, cfg *config.Config, base string) string {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+daemonAPIPathWatches, http.NoBody)
+	if err != nil {
+		return ""
+	}
+	a.applyDaemonWebAuth(req, cfg)
+	client := &http.Client{Timeout: daemonWebClientTimeout}
+	resp, err := httpx.Do(client, req)
+	if err != nil {
+		return ""
+	}
+	defer func() { _ = resp.Body.Close() }()
+	_, _ = io.Copy(io.Discard, resp.Body)
+	return strings.TrimSpace(resp.Header.Get(daemonWebGenerationHeader))
 }
 
 func (a App) pruneDaemonEvents(ctx context.Context, opts options, before time.Time) (int, error) {
