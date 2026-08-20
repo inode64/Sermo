@@ -93,12 +93,17 @@ level of integration.
 
    ```sh
    git add <changed-files>
-   git commit -m "agent: <concise description of the change>" \
+   git commit -m "<type>(<optional-scope>): <concise description>" \
      -m "Objective: <outcome>" \
      -m "Invariant: <behavior or safety property preserved>" \
      -m "Evidence: <tests and runtime validation>" \
      -m "Limitations: <known boundary or None.>"
    ```
+
+   Use a change-oriented subject regardless of whether the author is a person
+   or an automated agent. Choose `feat`, `fix`, `refactor`, `test`, `docs`,
+   `build`, `chore`, `ci` or `perf`; add a scope only when it makes the subject
+   clearer. Do not identify the author with an `agent:` prefix.
 
    Every standard commit body records those four headings in that order. The
    versioned `.githooks/commit-msg` hook enforces the contract without printing
