@@ -2132,6 +2132,14 @@ time series and graphed** in the service detail (web UI) so you can spot **gradu
 degradation** of a drive over time. (This per-check named-metric graphing is
 generic: any check that publishes numeric `Result.Data` fields can opt in.)
 
+A disk that has **spun down** cannot be benchmarked. `hdparm -t` wakes it, the
+spin-up eats the whole timing window, and the drive reports a single block in
+several seconds — a fraction of a MB/s, which hdparm prints as `kB/sec` instead
+of `MB/sec`. Sermo reads both spellings and always records MB/s, so that sample
+is a real, very low `read` and will cross a `read <` threshold. Point a
+throughput watch at disks that stay awake: a USB or backup drive that idles into
+standby otherwise alerts on its own power management rather than on wear.
+
 ### Missing devices
 
 `smart`, `hdparm` and `diskio` address a block device by name, and a disk that
