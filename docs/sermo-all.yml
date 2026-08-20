@@ -778,7 +778,9 @@ watches:
   load:
     check: { type: load, per_cpu: true, load1: { op: ">", value: 2 } }
   hdparm:
-    check: { type: hdparm, device: /dev/sda, read: { op: "<", value: 100 }, cached: { op: "<", value: 5000 } }
+    # severity: warning grades a failure an advisory — amber, not red, out of
+    # aggregate health and the SLA, still notified.
+    check: { type: hdparm, device: /dev/sda, severity: warning, read: { op: "<", value: 100 }, cached: { op: "<", value: 5000 } }
   sensors:
     check:
       type: sensors
@@ -932,6 +934,7 @@ watches:
       type: net
       interface: eth0
       metric: errors
+      severity: warning
       delta: { op: ">", value: 100 }
       counters: [rx_errors, tx_errors]
   net-address:

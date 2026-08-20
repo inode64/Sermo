@@ -73,6 +73,7 @@ func TestWatchState(t *testing.T) {
 		enabled   bool
 		monitored bool
 		failed    bool
+		warning   bool
 		observed  bool
 		want      string
 	}{
@@ -82,10 +83,15 @@ func TestWatchState(t *testing.T) {
 		{name: "unmonitored failed", enabled: true, monitored: false, failed: true, observed: true, want: TargetStateDisabled},
 		{name: "ok", enabled: true, monitored: true, observed: true, want: TargetStateOK},
 		{name: "failed", enabled: true, monitored: true, failed: true, observed: true, want: TargetStateFailed},
+		{name: "warning", enabled: true, monitored: true, warning: true, observed: true, want: TargetStateWarning},
+		// An outage outranks an advisory: a net watch whose error counter warns
+		// while its link is down must read failed, not warning.
+		{name: "failed outranks warning", enabled: true, monitored: true, failed: true, warning: true, observed: true, want: TargetStateFailed},
+		{name: "unmonitored warning", enabled: true, monitored: false, warning: true, observed: true, want: TargetStateDisabled},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := WatchState(tt.enabled, tt.monitored, tt.failed, tt.observed); got != tt.want {
+			if got := WatchState(tt.enabled, tt.monitored, tt.failed, tt.warning, tt.observed); got != tt.want {
 				t.Fatalf("WatchState() = %q, want %q", got, tt.want)
 			}
 		})

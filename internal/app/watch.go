@@ -88,7 +88,13 @@ type Watch struct {
 	Emission emission.Policy
 	// DryRun keeps watch evaluation and firing events active, but reports the
 	// configured actions without executing hook, non-console notify or expand side effects.
-	DryRun   bool
+	DryRun bool
+	// Severity is how grave this watch's failures are: checks.SeverityError (the
+	// default) or checks.SeverityWarning, which reports the same verdict as an
+	// advisory instead of an outage. It changes reporting only — the window, the
+	// actions and the notifications are unchanged — so nothing that gates an
+	// automatic action can read a warning as healthy.
+	Severity string
 	Interval time.Duration
 	Now      func() time.Time
 	Emit     func(Event)
@@ -215,7 +221,7 @@ func (w *Watch) updateAvailability(res checks.Result) bool {
 	if observation == checks.ObservationUnavailable {
 		if !w.unavailable {
 			w.unavailable = true
-			w.emit(Event{Watch: w.Name, Kind: eventKindError, Message: "check unavailable: " + res.Message})
+			w.emit(Event{Watch: w.Name, Kind: w.eventKind(eventKindError), Message: "check unavailable: " + res.Message})
 		}
 		return true
 	}
@@ -227,6 +233,19 @@ func (w *Watch) updateAvailability(res checks.Result) bool {
 		return true
 	}
 	return false
+}
+
+// eventKind names the event this watch raises for its own bad news. An advisory
+// raises the warning kind in place of both "error" and "firing": the kind is the
+// one severity channel that survives a daemon restart, because it is what the
+// event log stores, and it is per metric, because each metric of a net/icmp watch
+// is its own Watch with its own severity. So a sleeping disk that cannot be timed
+// and a link's error counter stop looking like a dead disk and a dead link.
+func (w *Watch) eventKind(grave string) string {
+	if w.IsWarning() {
+		return eventKindWarning
+	}
+	return grave
 }
 
 func (w *Watch) evaluateFiring(res checks.Result) (wasFiring, emitFiring, firing bool) {
@@ -262,7 +281,7 @@ func (w *Watch) recover(res checks.Result) {
 
 func (w *Watch) dispatchFiringActions(ctx context.Context, res checks.Result, wasFiring, emitFiring bool) {
 	if emitFiring {
-		w.emit(Event{Watch: w.Name, Kind: eventKindFiring, Message: res.Message, Output: resultOutput(res)})
+		w.emit(Event{Watch: w.Name, Kind: w.eventKind(eventKindFiring), Message: res.Message, Output: resultOutput(res)})
 	}
 	env := hookEnv(w.Name, w.CheckType, res)
 	if w.DryRun {
@@ -440,6 +459,10 @@ func raidTransitionMessage(transition checks.RaidTransition) string {
 		return raidSubjectPrefix + transition.Array + " changed"
 	}
 }
+
+// IsWarning reports whether this watch's failures are advisories rather than
+// outages.
+func (w *Watch) IsWarning() bool { return checks.IsWarning(w.Severity) }
 
 func (w *Watch) publish(res checks.Result) {
 	if w.Publish != nil {
@@ -715,14 +738,24 @@ func watchMessage(name, message string, env map[string]string) notify.Message {
 		body.WriteString(k + watchEnvAssignSeparator + env[k] + appLineSeparator)
 	}
 	return notify.Message{
-		Subject: fmt.Sprintf("[sermo] %s: %s", name, message),
+		Subject: watchSubject(name, message, env[sermoEnvSeverity]),
 		Body:    body.String(),
 		Fields:  env,
 	}
 }
 
+// watchSubject renders the notification subject. An advisory says so in the
+// subject line, which is the one string an operator reads in mail or chat before
+// deciding whether to get up; an error keeps the unmarked form it always had.
+func watchSubject(name, message, severity string) string {
+	if checks.IsWarning(severity) {
+		return fmt.Sprintf("[sermo][%s] %s: %s", checks.SeverityWarning, name, message)
+	}
+	return fmt.Sprintf("[sermo] %s: %s", name, message)
+}
+
 // hookEnv builds the SERMO_* environment for a hook. Beyond the always-present
-// SERMO_WATCH/CHECK_TYPE/MESSAGE, every Result.Data key is exported as
+// SERMO_WATCH/CHECK_TYPE/MESSAGE/SEVERITY, every Result.Data key is exported as
 // SERMO_<UPPER_KEY> (non-alphanumerics become "_") so any check's metadata
 // reaches the hook without per-type code.
 func hookEnv(name, checkType string, res checks.Result) map[string]string {
@@ -730,6 +763,7 @@ func hookEnv(name, checkType string, res checks.Result) map[string]string {
 		sermoEnvWatch:     name,
 		sermoEnvCheckType: checkType,
 		sermoEnvMessage:   output.Trim(res.Message),
+		sermoEnvSeverity:  checks.ResolveSeverity(res.Severity, ""),
 	}
 	for k, v := range res.Data {
 		env[sermoEnvPrefix+envKey(k)] = output.Trim(cfgval.String(v))

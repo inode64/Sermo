@@ -471,12 +471,21 @@ func buildCheckBase(name string, entry map[string]any, deps Deps) (string, base,
 				strings.Join(ReportingModes(), ", ")),
 		}
 	}
+	severity := cfgval.AsString(entry[CheckKeySeverity])
+	if _, present := entry[CheckKeySeverity]; present && !IsCheckSeverity(severity) {
+		return typ, base{}, &buildFailure{
+			kind: BuildIssueInvalidConfiguration,
+			detail: fmt.Sprintf("%s %q must be one of %s", CheckKeySeverity, severity,
+				strings.Join(CheckSeverities(), ", ")),
+		}
+	}
 	return typ, base{
 		name:      name,
 		service:   deps.Service,
 		timeout:   timeout,
 		condition: ResolveCondition(typ, reports),
 		reports:   reports,
+		severity:  severity,
 	}, nil
 }
 

@@ -801,6 +801,41 @@ class EndpointGenerationTest(unittest.TestCase):
             (watches / "hdparm-sdb.yml").read_text(encoding="utf-8"),
         )
 
+    def test_degrading_measurements_are_graded_advisories(self):
+        """A slow disk, a climbing error counter and a slow gateway degrade; they
+        do not break. Grading them warnings keeps red for real outages, while the
+        link and reachability metrics beside them stay errors."""
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        root = Path(temp.name)
+        stage = root / "stage" / "host" / "out"
+        stage.mkdir(parents=True)
+        (stage / "init").write_text("systemd\n", encoding="utf-8")
+        (stage / "active_units").write_text("", encoding="utf-8")
+        (stage / "features").write_text("hdparm=1\n", encoding="utf-8")
+        (stage / "lsblk.json").write_text(
+            json.dumps({"blockdevices": [{"name": "sda", "type": "disk", "rota": True, "tran": "ata", "ro": False}]}),
+            encoding="utf-8",
+        )
+        (stage / "ip_link").write_text(
+            "2: eth0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 state UP\n", encoding="utf-8"
+        )
+        (stage / "ip_route4").write_text("default via 192.0.2.1 dev eth0\n", encoding="utf-8")
+
+        generator.generate_for_host("host", stage, root / "configs", default_options())
+
+        etc = root / "configs/host/root/etc/sermo"
+        advisory = f"severity: {generator.SEVERITY_WARNING}"
+        self.assertIn(advisory, (etc / "watches/hdparm-sda.yml").read_text(encoding="utf-8"))
+
+        net = (etc / "networks/net-eth0.yml").read_text(encoding="utf-8")
+        self.assertIn(advisory, net.split("errors:")[1].split("speed:")[0])
+        self.assertNotIn(advisory, net.split("state:")[1].split("errors:")[0])
+
+        icmp = (etc / "networks/icmp-gw-eth0.yml").read_text(encoding="utf-8")
+        self.assertIn(advisory, icmp.split("latency:")[1])
+        self.assertNotIn(advisory, icmp.split("state:")[1].split("latency:")[0])
+
     def test_generates_geoip_summary_when_database_directory_exists(self):
         temp = tempfile.TemporaryDirectory()
         self.addCleanup(temp.cleanup)

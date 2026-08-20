@@ -36,6 +36,7 @@ const (
 	eventKindAction           = "action"
 	eventKindAlert            = string(rules.ActionAlert)
 	eventKindError            = "error"
+	eventKindWarning          = checks.SeverityWarning
 	eventKindHook             = config.WatchThenKeyHook
 	eventKindNotify           = rules.RuleFieldNotify
 	eventKindDryRun           = "dry-run"
@@ -218,6 +219,10 @@ func SlogEmitter(logger *slog.Logger) func(Event) {
 		switch e.Kind {
 		case eventKindError, eventKindHookFail, eventKindNotifyFail, eventKindExpandFailed, eventKindKillFailed, eventKindMakeStepFailed:
 			logger.Error(daemonName, attrs...)
+		// An advisory is the one thing between an outage and routine traffic, so
+		// it is the one thing that belongs at warn level.
+		case eventKindWarning:
+			logger.Warn(daemonName, attrs...)
 		case eventKindAction, eventKindAlert, eventKindSuppressed, eventKindFiring, eventKindRecovered, eventKindDryRun, eventKindHook, eventKindNotify, eventKindCascade,
 			eventKindExpand, eventKindExpandSkipped, eventKindKill, eventKindReload, eventKindPanicSuppressed, eventKindNotifySuppressed,
 			eventKindMakeStep, eventKindMakeStepSkipped:

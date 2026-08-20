@@ -107,6 +107,55 @@ func TestCheckSLARecorderOnlyRecordsRanNonSkippedChecks(t *testing.T) {
 	}
 }
 
+// An advisory records no SLA series either: a warning is something to look at,
+// not downtime to hold against the service. A warning that is *not* failing has
+// nothing to grade, so its healthy sample still counts.
+func TestCheckSLARecorderSkipsFailingAdvisories(t *testing.T) {
+	store := &checkSLACapture{}
+	writer := newCycleWriter(Deps{
+		SLA: store,
+		Now: func() time.Time { return time.Unix(0, 0) },
+	}, "svc", nil)
+	writer.RecordCycle(context.Background(), cycleRecord{
+		cache: map[string]checks.Result{
+			"disk-speed": {Check: "disk-speed", OK: false, Severity: checks.SeverityWarning},
+			"disk-ok":    {Check: "disk-ok", OK: true, Severity: checks.SeverityWarning},
+			"http":       {Check: "http", OK: false},
+		},
+		ran:                map[string]bool{"disk-speed": true, "disk-ok": true, "http": true},
+		up:                 true,
+		recordAvailability: true,
+	})
+
+	got := map[string]bool{}
+	for _, r := range store.records {
+		got[r.check] = r.up
+	}
+	if _, recorded := got["disk-speed"]; recorded {
+		t.Errorf("records = %+v, want no series for a failing advisory", store.records)
+	}
+	if up, recorded := got["disk-ok"]; !recorded || !up {
+		t.Errorf("records = %+v, want a healthy advisory still recorded up", store.records)
+	}
+	if up, recorded := got["http"]; !recorded || up {
+		t.Errorf("records = %+v, want http recorded down", store.records)
+	}
+}
+
+// A failing advisory must not take the service down with it, exactly as a
+// declared-optional check never has.
+func TestRequiredChecksOKIgnoresAdvisories(t *testing.T) {
+	if !requiredChecksOK(map[string]checks.Result{
+		"http":       {OK: true},
+		"disk-speed": {OK: false, Severity: checks.SeverityWarning},
+	}) {
+		t.Error("a failing advisory took the service down, want availability unaffected")
+	}
+	if requiredChecksOK(map[string]checks.Result{"http": {OK: false, Severity: checks.SeverityError}}) {
+		t.Error("a failing error-severity check left the service up")
+	}
+}
+
 // A state sensor gets no SLA series at all. Recording it would be a permanent
 // 0% (a backup is idle almost always) or, once availability stops being the
 // raw flag, a meaningless 100% — neither is uptime.

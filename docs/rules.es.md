@@ -7,6 +7,7 @@
   - [Interfaz de salida (interface)](#interfaz-de-salida-interface)
   - [Interdependencias de comprobaciones (requires / skip_when_changed)](#interdependencias-de-comprobaciones-requires--skip_when_changed)
   - [Modo de reporte (reports)](#modo-de-reporte-reports)
+  - [Severidad (severity)](#severidad-severity)
   - [Conexiones TCP (tcp_connections)](#conexiones-tcp-tcp_connections)
   - [Inactividad de terminal SSH (ssh_idle)](#inactividad-de-terminal-ssh-ssh_idle)
   - [Sesiones de terminal (terminal_sessions)](#sesiones-de-terminal-terminal_sessions)
@@ -497,6 +498,60 @@ rules:
 Sin esto, una comprobación así es una aserción de salud que falla siempre que el
 estado está ausente: un `fail` rojo permanente y una serie de disponibilidad al
 0 % para lo que en realidad es la condición normal.
+
+### Severidad (`severity`)
+
+`severity:` gradúa la gravedad de un fallo. Nunca cambia el veredicto — la
+comprobación falla exactamente cuando fallaba antes —, sólo cambia con cuánto
+ruido se reporta ese fallo.
+
+| valor | panel | log del demonio | salud agregada y SLA | acciones |
+|---|---|---|---|---|
+| `error` (por defecto) | rojo, estado `failed` | `level=ERROR` | cuenta contra el objetivo | se ejecutan |
+| `warning` | ámbar, estado `warning` | `level=WARN` | excluido | se ejecutan |
+
+Un **aviso sigue disparando**: su ventana `for:`, su `then.hook`, su
+`then.notify` y su cadencia de notificación quedan intactos, y el asunto de la
+notificación dice `[sermo][warning]` para que el aviso se distinga en el correo o
+en el chat. Lo que cambia es que deja de competir por la atención con una avería
+real: no pone roja la fila del watch, no eleva el recuento de errores del
+demonio, no cuenta contra el servicio en la insignia de salud agregada y no
+registra serie de SLA.
+
+Nada que controle una acción automática lo lee. Los guards de regla (`active:`,
+`failed:`), la remediación y la verificación de arranque siguen leyendo el
+resultado crudo de la comprobación, así que un aviso jamás puede confundirse con
+un objetivo sano.
+
+Se puede declarar en tres niveles, y gana el más específico:
+
+```yaml
+name: net-enp1s0
+severity: warning                 # el más amplio: todo el watch, y su defecto
+check:
+  type: net
+  interface: enp1s0
+  severity: error                 # más estrecho: esta comprobación y sus métricas
+metrics:
+  state:                          # hereda error — un enlace caído es una avería
+    expect: down
+    for: { cycles: 3 }
+  errors:
+    severity: warning             # el más específico: sólo esta métrica
+    delta: { op: ">", value: 100 }
+    for: { cycles: 3 }
+```
+
+Una comprobación de servicio lo declara igual, junto a `reports:` y `timeout:`.
+`optional: true` sigue siendo la grafía anterior y más estrecha: también mantiene
+un fallo fuera de la disponibilidad del servicio, pero sólo dentro de una sección
+`checks:` y sin el estado ámbar ni el log a nivel warn.
+
+Las medidas que conviene graduar así son las que **se degradan** en vez de
+romperse: el rendimiento de `hdparm`, la latencia de `icmp` y los contadores de
+error de una interfaz `net`. Un disco que contesta desde standby es el caso más
+claro: `hdparm -t` lo despierta y cronometra su arranque, así que reporta con
+toda honestidad una fracción de MB/s para un disco perfectamente sano.
 
 ### Conexiones TCP (`tcp_connections`)
 
@@ -2157,9 +2212,9 @@ el arranque se come toda la ventana de medición y la unidad reporta un único
 bloque en varios segundos — una fracción de MB/s, que hdparm imprime como
 `kB/sec` en lugar de `MB/sec`. Sermo lee ambas formas y siempre registra MB/s,
 así que esa muestra es un `read` real, muy bajo, y cruzará un umbral `read <`.
-Apunta un watch de rendimiento a discos que permanezcan despiertos: si no, una
-unidad USB o de copia de seguridad que entra en standby por inactividad alerta
-por su propia gestión de energía, no por desgaste.
+Apunta un watch de rendimiento a discos que permanezcan despiertos, o gradúalo
+con `severity: warning` (ver [Severidad](#severidad-severity)) para que la propia
+gestión de energía de la unidad se lea en ámbar y no en rojo.
 
 ### Dispositivos ausentes
 

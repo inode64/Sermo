@@ -540,6 +540,10 @@ type WatchReading struct {
 	Label string `json:"label,omitempty"`
 	Value string `json:"value,omitempty"`
 	Error string `json:"error,omitempty"`
+	// Warning carries the same bad news as Error for a watch its operator graded
+	// an advisory. The two are separate fields because Error is what turns the
+	// dashboard row red, and the whole point of a warning is that it must not.
+	Warning string `json:"warning,omitempty"`
 }
 
 // WatchExpand is the configured manual/automatic storage growth action.

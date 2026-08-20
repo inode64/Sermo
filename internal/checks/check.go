@@ -98,7 +98,12 @@ type Result struct {
 	// the target is well. Derived from the check type.
 	Condition bool `json:"-"`
 	// Reports is the declared reporting mode; empty means ReportsHealth.
-	Reports  string `json:"-"`
+	Reports string `json:"-"`
+	// Severity is how grave a failure of this check is; empty means
+	// SeverityError. It never changes the verdict — Observation() owns that — only
+	// how loudly the verdict is reported, so a guard can never read a warning as
+	// healthy.
+	Severity string `json:"-"`
 	Optional bool   `json:"optional,omitempty"`
 	Skipped  bool   `json:"skipped,omitempty"` // gated off this cycle (requires/skip_when_changed)
 	// Unavailable marks a failed observation that a guard must treat as unsafe
@@ -173,6 +178,23 @@ func (r Result) Observation() ObservationState {
 	default:
 		return ObservationFailing
 	}
+}
+
+// Warning reports whether this result is a failure its subject declared an
+// advisory: a bad or unobservable sample worth showing and not worth waking
+// anyone. Severity grades a failure — it never invents one and never cancels
+// one, so a healthy, skipped or verdictless result is never a warning.
+func (r Result) Warning() bool {
+	return !r.Observation().Healthy() && IsWarning(r.Severity)
+}
+
+// CountsTowardHealth reports whether this result may move aggregate health or
+// the SLA. It is the single gate those consumers use: Observation says whether
+// there is a verdict at all, severity says whether that verdict is grave enough
+// to hold against the target. Availability guards deliberately do not consult
+// it — they keep reading Observation, so a warning can never read as healthy.
+func (r Result) CountsTowardHealth() bool {
+	return r.Observation().AffectsHealth() && !r.Warning()
 }
 
 // Verdictless reports whether this result passes no judgement, so it never
@@ -350,6 +372,7 @@ type base struct {
 	timeout   time.Duration
 	condition bool
 	reports   string
+	severity  string
 }
 
 func (b base) Name() string { return b.name }
@@ -360,6 +383,7 @@ func (b base) resultMetadata() Result {
 		Check:     b.name,
 		Condition: b.condition,
 		Reports:   b.reports,
+		Severity:  b.severity,
 	}
 }
 
@@ -395,6 +419,7 @@ func (b base) result(ok bool, message string, start time.Time) Result {
 		OK:        ok,
 		Condition: b.condition,
 		Reports:   b.reports,
+		Severity:  b.severity,
 		Message:   message,
 		Latency:   time.Since(start),
 	}

@@ -55,6 +55,7 @@ const (
 	watchReadingLabelEntries                  = "Entries"
 	watchReadingLabelError                    = "Error"
 	watchReadingLabelErrorsTotal              = "Errors total"
+	watchReadingLabelWarning                  = "Warning"
 	watchReadingLabelExpires                  = "Expires"
 	watchReadingLabelFamily                   = "Family"
 	watchReadingLabelFree                     = "Free"

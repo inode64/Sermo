@@ -127,6 +127,11 @@ SKIP_IFACE_PREFIXES = (
 HDPARM_READ_FLOOR_ROTATIONAL = 20
 HDPARM_READ_FLOOR_SOLID_STATE = 100
 
+# Sermo's `severity:` value that grades a failing check an advisory: amber in the
+# dashboard, warn in the daemon log, out of aggregate health and the SLA, and
+# still notified. Measurements that degrade rather than break use it.
+SEVERITY_WARNING = "warning"
+
 GEOIP_DATABASE_DIRECTORY = "/usr/share/GeoIP"
 GEOIP_DATABASE_OLDER_THAN = "480h"
 # chronyd's Unix command socket, the only channel that can command a clock step.
@@ -2682,7 +2687,11 @@ dry_run: true
                     f"hdparm-{slug(disk_name)}",
                     "storage",
                     options.hdparm_interval,
-                    ["type: hdparm", f"device: {yaml_quote(disk_path)}", "timeout: 30s", f'read: {{ op: "<", value: {read_floor} }}'],
+                    # A disk that reads slowly is degradation, not an outage — and a
+                    # USB or backup disk answering from standby measures its own
+                    # spin-up. Grade it an advisory so it reads amber, not red.
+                    ["type: hdparm", f"device: {yaml_quote(disk_path)}", "timeout: 30s",
+                     f"severity: {SEVERITY_WARNING}", f'read: {{ op: "<", value: {read_floor} }}'],
                     cycles=2,
                 ),
             )
@@ -2709,7 +2718,9 @@ dry_run: true
                 ["type: net", f"interface: {yaml_quote(iface)}"],
                 [
                     ("state", ["expect: down", "for: { cycles: 3 }", "then: { notify: [none] }"]),
-                    ("errors", ['delta: { op: ">", value: 100 }', "for: { cycles: 3 }", "then: { notify: [none] }"]),
+                    # An error counter climbing is worth seeing; the link going
+                    # down is the outage. Only the counter is an advisory.
+                    ("errors", [f"severity: {SEVERITY_WARNING}", 'delta: { op: ">", value: 100 }', "for: { cycles: 3 }", "then: { notify: [none] }"]),
                 ] + (
                     [("address", ["expect: absent", "for: { cycles: 3 }", "then: { notify: [none] }"])]
                     if iface in addressed_interfaces
@@ -2735,7 +2746,9 @@ dry_run: true
                     ["type: icmp", f"host: {yaml_quote(route['via'])}", "count: 3"],
                     [
                         ("state", ["expect: down", "for: { cycles: 3 }", "then: { notify: [none] }"]),
-                        ("latency", ['threshold: { op: ">", value: 100 }', "for: { cycles: 3 }", "then: { notify: [none] }"]),
+                        # A slow gateway is an advisory; an unreachable one stays
+                        # the outage its state metric reports.
+                        ("latency", [f"severity: {SEVERITY_WARNING}", 'threshold: { op: ">", value: 100 }', "for: { cycles: 3 }", "then: { notify: [none] }"]),
                     ],
                 ),
             )
