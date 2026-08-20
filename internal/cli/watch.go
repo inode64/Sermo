@@ -39,6 +39,10 @@ type daemonWatchProbe struct {
 	OK       bool                 `json:"ok"`
 	Message  string               `json:"message"`
 	Readings []daemonWatchReading `json:"readings"`
+	// Severity is "warning" when the watch graded its own failures advisories.
+	// The daemon still answers 409 — the condition did fire — but the operator is
+	// told it is an advisory rather than a failure.
+	Severity string `json:"severity"`
 }
 
 const watchCommandTargetArgCount = 2
@@ -82,14 +86,18 @@ func (a App) runWatchProbe(ctx context.Context, opts options) int {
 		return a.fail(opts, fmt.Sprintf("watch %q (%s) does not support manual probing", opts.args[1], typ))
 	}
 	result, err := a.ProbeDaemonWatch(ctx, opts, opts.args[1])
-	if err != nil {
+	advisory := checks.IsWarning(result.Severity)
+	if err != nil && !advisory {
 		return a.fail(opts, "watch probe: "+err.Error())
 	}
 	if opts.json {
-		writeJSON(a.Stdout, map[string]any{cliJSONKeyWatch: opts.args[1], cliJSONKeyOK: result.OK, cliJSONKeyMessage: result.Message, "readings": result.Readings})
+		writeJSON(a.Stdout, map[string]any{cliJSONKeyWatch: opts.args[1], cliJSONKeyOK: result.OK, cliJSONKeyMessage: result.Message, "readings": result.Readings, checks.CheckKeySeverity: result.Severity})
 	} else {
 		status := cliTextOK
-		if !result.OK {
+		switch {
+		case advisory:
+			status = cliTextWarn
+		case !result.OK:
 			status = cliTextFail
 		}
 		fmt.Fprintf(a.Stdout, "%s watch %s: %s\n", status, opts.args[1], result.Message)
