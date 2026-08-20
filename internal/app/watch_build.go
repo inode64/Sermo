@@ -272,7 +272,8 @@ func unsupportedServiceWatchType(entry map[string]any) string {
 // Health checks fire the hook on failure; condition checks on OK (threshold met).
 func buildSingleWatch(name string, entry, checkEntry map[string]any, deps Deps, interval time.Duration) (*Watch, string) {
 	typ := cfgval.AsString(checkEntry[checks.CheckKeyType])
-	check, err := checks.BuildInline(name, checkEntry, watchInlineDeps(deps))
+	severity := watchSeverity(entry, checkEntry)
+	check, err := checks.BuildInline(name, withSeverity(checkEntry, severity), watchInlineDeps(deps))
 	if err != nil {
 		return nil, watchSubjectPrefix + name + ": " + err.Error()
 	}
@@ -293,6 +294,7 @@ func buildSingleWatch(name string, entry, checkEntry map[string]any, deps Deps, 
 		actions:   actions,
 		emission:  emission.Merge(entry[emission.Section], deps.GlobalEmission),
 		dryRun:    config.DryRun(entry),
+		severity:  severity,
 		interval:  interval,
 	}, deps)
 	if actions.expand != nil || actions.makeStep != nil {
@@ -365,6 +367,10 @@ func buildMetricWatches(name string, entry, checkEntry map[string]any, deps Deps
 		// base check fields win
 		maps.Copy(ce, checkEntry)
 		ce[checks.CheckKeyMetric] = key
+		// Severity is the one key the base check must not win: the point of
+		// declaring it per metric is to overrule the watch for this metric alone.
+		severity := watchSeverity(entry, checkEntry, mEntry)
+		ce[checks.CheckKeySeverity] = severity
 
 		check, err := checks.BuildInline(name, ce, watchInlineDeps(deps))
 		if err != nil {
@@ -386,11 +392,36 @@ func buildMetricWatches(name string, entry, checkEntry map[string]any, deps Deps
 			actions:   actions,
 			emission:  emission.Merge(mEntry[emission.Section], emission.Merge(entry[emission.Section], deps.GlobalEmission)),
 			dryRun:    config.DryRun(entry),
+			severity:  severity,
 			interval:  interval,
 			stateSlot: checks.DataKeyMetric + ":" + key,
 		}, deps))
 	}
 	return out, warns
+}
+
+// watchSeverity resolves how grave this watch's failures are. Trees are given
+// broadest first — watch entry, check block, metric block — and the narrowest
+// declaration wins, so a `net` watch can call its error counter an advisory while
+// its link state stays an outage. A chain that declares nothing is an error, which
+// leaves every existing watch exactly as it is.
+func watchSeverity(trees ...map[string]any) string {
+	declared := ""
+	for _, tree := range trees {
+		if s := cfgval.AsString(tree[checks.CheckKeySeverity]); checks.IsCheckSeverity(s) {
+			declared = s
+		}
+	}
+	return checks.ResolveSeverity(declared, "")
+}
+
+// withSeverity copies entry with the resolved severity written in, so the check
+// builder reads one already-layered value and the shared config tree is never
+// mutated.
+func withSeverity(entry map[string]any, severity string) map[string]any {
+	out := maps.Clone(entry)
+	out[checks.CheckKeySeverity] = severity
+	return out
 }
 
 type checkWatchSpec struct {
@@ -401,6 +432,7 @@ type checkWatchSpec struct {
 	actions   watchActions
 	emission  emission.Policy
 	dryRun    bool
+	severity  string
 	interval  time.Duration
 	stateSlot string
 }
@@ -424,6 +456,7 @@ func newCheckWatch(spec checkWatchSpec, deps Deps) *Watch {
 		NotifyInterval:    spec.actions.notifyInterval,
 		Emission:          spec.emission,
 		DryRun:            spec.dryRun,
+		Severity:          spec.severity,
 		Runner:            OSHookRunner{Runner: deps.ExecxRunner},
 		Interval:          spec.interval,
 		IsPaused:          monitorPaused(deps.Monitor, watchMonitorKey(spec.name)),
@@ -541,6 +574,7 @@ func newStatefulWatch(name, checkType string, entry map[string]any, deps Deps, i
 		InPanic:   deps.Panic.Active,
 		Settling:  deps.Settling,
 		DryRun:    config.DryRun(entry),
+		Severity:  watchSeverity(entry),
 		Now:       deps.Now,
 		Emit:      deps.Emit,
 		Cycle:     cycle,

@@ -101,6 +101,11 @@ const watches = [{
   probe: { state: "running", started_at: "2026-07-10T12:00:00Z" },
   summary: "hdparm /dev/sda", interval: "6h", status_observed_at: "2026-07-10T12:00:00Z",
 }, {
+  name: "hdparm-sdd", display_name: "Backup disk speed", category: "storage",
+  enabled: true, monitored: true, state: "warning", check_type: "hdparm",
+  readings: [{ field: "warning", label: "Warning", warning: "hdparm /dev/sdd read=0.4 MB/s" }],
+  summary: "hdparm /dev/sdd read=0.4 MB/s", interval: "6h", status_observed_at: "2026-07-10T12:00:00Z",
+}, {
   name: "smart-sda", display_name: "Disk health", category: "storage",
   enabled: true, monitored: true, state: "testing", check_type: "smart", can_probe: true,
   readings: [{ field: "device", label: "Device", value: "/dev/sda" }, { field: "device_state", label: "State", value: "testing" }],
@@ -383,6 +388,19 @@ test("a running manual probe keeps health visible and disables a duplicate", asy
   await expect(probe).toHaveAttribute("aria-describedby", "wat-hdparm-sda-probe-hint");
   await expect(page.locator("#wat-hdparm-sda-probe-hint")).toHaveText("manual probe is already running");
   await expect(row.locator("[data-probe-started-at]")).toBeVisible();
+});
+
+test("an advisory watch reads amber and never red", async ({ page }) => {
+  const row = page.locator("#wat-row-hdparm-sdd");
+  await expect(row).toHaveClass(/row-warning/);
+  // The whole point of the severity grade: a warning must never borrow the
+  // colour an outage owns.
+  await expect(row).not.toHaveClass(/row-failing/);
+  await expect(row.locator(".state-warning")).toHaveText("warning");
+
+  await page.locator('[data-wf="warning"]').click();
+  await expect(row).toBeVisible();
+  await expect(page.locator("#wat-row-hdparm-sda")).toBeHidden();
 });
 
 test("stale watch samples are visible and filterable", async ({ page }) => {

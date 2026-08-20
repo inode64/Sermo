@@ -167,7 +167,7 @@ func storageTreeFromWatch(name string, entry map[string]any) (map[string]any, []
 	}
 	path := cfgval.String(check[checks.CheckKeyPath])
 	tree := map[string]any{keyPath: path}
-	for _, key := range []string{keyDisplayName, keyDescription, keyCategory, keyDryRun, keyMonitor, keyInterval, keyMount} {
+	for _, key := range []string{keyDisplayName, keyDescription, keyCategory, keyDryRun, keyMonitor, keyInterval, keyMount, WatchKeySeverity} {
 		if v, present := entry[key]; present {
 			tree[key] = deepCopy(v)
 		}

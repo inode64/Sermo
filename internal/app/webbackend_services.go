@@ -316,7 +316,7 @@ func (b *WebBackend) serviceCheckHealth(name string, e *webEntry, monitored bool
 	if e == nil {
 		return 0, checkHealthUnknown
 	}
-	return checkHealthSummaryCurrent(b.snapshots.Get(name), e.checkNames, monitored,
+	return checkHealthSummaryCurrent(b.snapshots.Get(name), e.checkNames, e.checkSeverities, monitored,
 		func(check string, snap CheckSnapshot) bool {
 			return b.serviceCheckSnapshotCurrent(e, check, snap)
 		})
@@ -435,13 +435,19 @@ func (b *WebBackend) operationSettlingPending(name string) bool {
 
 // checkHealthSummaryCurrent reports required-check health for the service list.
 // It uses the same canonical observation as workers and SLA availability: only
-// a required failing or unavailable observation counts as failing; optional,
-// skipped and neutral observations are ignored. Paused services are "paused";
-// services with no observed checks yet are "unknown". current, when
-// set, filters snapshots to the ones the running config still declares; nil
-// keeps every snapshot.
-// checkHealthSummaryCurrent counts the checks that make a service unhealthy.
-func checkHealthSummaryCurrent(snap map[string]CheckSnapshot, checkNames []string, monitored bool, current func(string, CheckSnapshot) bool) (failing int, health string) {
+// a required failing or unavailable observation counts as failing; skipped and
+// neutral observations are ignored. Paused services are "paused"; services with
+// no observed checks yet are "unknown". current, when set, filters snapshots to
+// the ones the running config still declares; nil keeps every snapshot.
+//
+// A failing check the operator graded an advisory — `severity: warning`, or the
+// `optional: true` that has always meant the same thing — is not counted as
+// failing, but it no longer vanishes either: with no real failure beside it the
+// service reads "warning", which is the difference between a quiet degradation
+// and a clean bill of health. severities maps a check name to its declared
+// `severity:` and is read from live configuration, so a snapshot restored from
+// an earlier run is graded correctly on the first cycle.
+func checkHealthSummaryCurrent(snap map[string]CheckSnapshot, checkNames []string, severities map[string]string, monitored bool, current func(string, CheckSnapshot) bool) (failing int, health string) {
 	if !monitored {
 		return 0, TargetStatePaused
 	}
@@ -452,13 +458,18 @@ func checkHealthSummaryCurrent(snap map[string]CheckSnapshot, checkNames []strin
 		return 0, checkHealthUnknown
 	}
 	observed := false
+	warning := 0
 	for _, name := range checkNames {
 		cs, seen := snap[name]
 		if !seen || (current != nil && !current(name, cs)) {
 			continue
 		}
 		observed = true
-		if cs.Optional || cs.healthy() {
+		if cs.healthy() {
+			continue
+		}
+		if cs.Optional || checks.IsWarning(severities[name]) {
+			warning++
 			continue
 		}
 		failing++
@@ -468,6 +479,9 @@ func checkHealthSummaryCurrent(snap map[string]CheckSnapshot, checkNames []strin
 	}
 	if failing > 0 {
 		return failing, checkHealthFailing
+	}
+	if warning > 0 {
+		return 0, checkHealthWarning
 	}
 	return 0, TargetStateOK
 }

@@ -47,6 +47,7 @@ const (
 const (
 	backendStatusError        = "error"
 	watchReadingFieldError    = "error"
+	watchReadingFieldWarning  = checks.SeverityWarning
 	watchReadingFieldCPUTicks = "cpu_ticks"
 	watchReadingFieldMatches  = "matches"
 	watchReadingFieldProcess  = checks.CheckTypeProcess
@@ -81,6 +82,7 @@ type webEntry struct {
 	checkTypes        map[string]string // check name -> type
 	checkReports      map[string]string // check name -> `reports:` mode, when declared
 	checkUnits        map[string]string // check name -> `unit:` for its scalar result, when declared
+	checkSeverities   map[string]string // check name -> `severity:`, when declared
 	checkIntervals    map[string]time.Duration
 	discoverer        process.Discoverer
 	selectors         []process.Selector
@@ -114,8 +116,12 @@ type webWatch struct {
 	notifierCount int
 	check         map[string]any
 	metrics       map[string]any
-	expand        *ExpandSpec
-	raidControl   bool
+	// severity is the watch entry's own gravity layered with its check block. A
+	// metric block narrows it further; severityFor applies that last step, so the
+	// dashboard resolves the same chain the daemon builder does.
+	severity    string
+	expand      *ExpandSpec
+	raidControl bool
 	// serviceScoped marks a watch declared inside a service's `watches:` section
 	// (named "<service>:<watch>"). It is listed and controllable like any watch,
 	// but does not support manual host-watch probes.
@@ -394,6 +400,7 @@ func attachServiceRuntime(ctx context.Context, entry *webEntry, name string, tre
 	entry.checkTypes = types
 	entry.checkReports = checkReportingModes(tree)
 	entry.checkUnits = checkDeclaredUnits(tree)
+	entry.checkSeverities = checkDeclaredSeverities(tree)
 	entry.checkIntervals = intervals
 	entry.discoverer = discoverer
 	entry.selectors = selectors
@@ -528,6 +535,7 @@ func newWebWatch(name string, entry map[string]any, globalNotify []string, defau
 		notifierCount: len(notifierNames),
 		check:         checkMap(entry),
 		metrics:       metricsMap(entry),
+		severity:      watchSeverity(entry, checkMap(entry)),
 		expand:        expand,
 		raidControl:   raidControl,
 		serviceScoped: serviceScoped,
@@ -569,6 +577,14 @@ func checkDeclaredUnits(tree map[string]any) map[string]string {
 
 func checkReportingModes(tree map[string]any) map[string]string {
 	return checkStringField(tree, checks.CheckKeyReports)
+}
+
+// checkDeclaredSeverities maps each check that declares `severity:` to its value,
+// read from configuration for the same reason the reporting mode is: it is a
+// static declaration, so sourcing it here keeps a restored snapshot graded
+// correctly on the first cycle instead of red until the check next runs.
+func checkDeclaredSeverities(tree map[string]any) map[string]string {
+	return checkStringField(tree, checks.CheckKeySeverity)
 }
 
 // checkStringField collects one string field per configured check. Both callers

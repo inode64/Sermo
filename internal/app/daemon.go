@@ -977,9 +977,11 @@ func (w *cycleWriter) writeCycle(records cycleRecords, cycle cycleRecord) error 
 		for check, result := range cycle.cache {
 			// A verdictless check has no availability to record: neither side of
 			// "a backup is running" is uptime, and a bare measurement asserts
-			// nothing at all, so neither gets an SLA series.
+			// nothing at all, so neither gets an SLA series. Nor does an advisory:
+			// a warning is a thing to look at, not downtime to hold against the
+			// service.
 			observation := result.Observation()
-			if !cycle.ran[check] || !observation.AffectsHealth() {
+			if !cycle.ran[check] || !result.CountsTowardHealth() {
 				continue
 			}
 			if err := records.RecordCheckSLA(w.name, check, observation.Healthy(), w.now()); err != nil {
