@@ -514,8 +514,8 @@ activity es un evento.
 | `net` | Name, interfaz, enlace, velocidad, errores |
 | `hdparm` | Name, dispositivo, lectura buffered, lectura cached |
 | `lvm` | Name, salud, VG, LV, tamaño de VG, libre en VG, motivos |
-| `smart` | Name, dispositivo, salud, temperatura, desgaste, tiempo encendido formateado |
-| `diskio` | Name, dispositivo, utilización, lectura, escritura, await |
+| `smart` | Name, dispositivo, salud, temperatura, desgaste, sectores reasignados, tiempo encendido formateado |
+| `diskio` | Name, dispositivo, utilización, lectura, escritura, await, leído total, escrito total (acumulados desde el arranque, para distinguir un disco ocioso de uno que nadie toca nunca) |
 | `cert` | Name, origen, días restantes, caducidad, emisor |
 | `raid` | Name, array, tamaño, degradado, recuperando |
 | Otros tipos | Name y su valor vivo principal |

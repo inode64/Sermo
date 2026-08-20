@@ -82,7 +82,7 @@ Connection-protocol checks (MySQL, PostgreSQL, Redis, Docker, libvirt, etc.) are
 | `pressure`    | kernel PSI stall time for cpu/memory/io (`some_*`/`full_*` avg10/60/300) |
 | `fds`         | system file descriptors vs `fs.file-max` (used_pct/free/allocated)  |
 | `pids`        | the kernel PID table vs `kernel.pid_max` (used_pct/free/count)      |
-| `diskio`      | a block device's per-cycle I/O rates (util_pct/read_bytes/write_bytes/await_ms) |
+| `diskio`      | a block device's per-cycle I/O rates (util_pct/read_bytes/write_bytes/await_ms), plus cumulative read/written totals as readings |
 | `conntrack`   | the netfilter conntrack table vs its max (used_pct/free/count)      |
 | `firewall_rules` | nftables/iptables has at least `min_rules` loaded rules (see Firewall rules) |
 | `failed_units` | the count of init units in a failed state satisfies `count {op, value}` (default `> 0`; see Failed init units) |

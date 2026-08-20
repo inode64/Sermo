@@ -56,6 +56,8 @@ const (
 	watchReadingLabelError                    = "Error"
 	watchReadingLabelErrorsTotal              = "Errors total"
 	watchReadingLabelWarning                  = "Warning"
+	watchReadingLabelReadTotal                = "Read total"
+	watchReadingLabelWriteTotal               = "Written total"
 	watchReadingLabelExpires                  = "Expires"
 	watchReadingLabelFamily                   = "Family"
 	watchReadingLabelFree                     = "Free"
@@ -797,6 +799,10 @@ func diskioCheckReadings(data map[string]any) []web.WatchReading {
 		{checks.DiskIOFieldReadBytes, watchReadingLabelRead, metrics.MetricUnitBytesPerSecond, 0},
 		{checks.DiskIOFieldWriteBytes, watchReadingLabelWrite, metrics.MetricUnitBytesPerSecond, 0},
 		{checks.DiskIOFieldAwaitMs, watchReadingLabelAwait, metrics.MetricUnitMilliseconds, 1},
+		// Cumulative totals close the question a window of zeroes leaves open:
+		// whether the device is merely idle or has never been used at all.
+		{checks.DiskIOFieldReadTotalBytes, watchReadingLabelReadTotal, metrics.MetricUnitBytes, 0},
+		{checks.DiskIOFieldWriteTotalBytes, watchReadingLabelWriteTotal, metrics.MetricUnitBytes, 0},
 	} {
 		rb.addMetric(field.key, field.label, field.decimals, field.unit)
 	}

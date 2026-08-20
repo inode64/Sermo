@@ -500,8 +500,8 @@ latest completed daemon-cycle or manual sample, while Last activity is an event.
 | `net` | Name, interface, link, speed, errors |
 | `hdparm` | Name, device, buffered read, cached read |
 | `lvm` | Name, health, VG, LV, VG size, VG free, reasons |
-| `smart` | Name, device, health, temperature, wear, formatted power-on time |
-| `diskio` | Name, device, utilization, read, write, await |
+| `smart` | Name, device, health, temperature, wear, reallocated sectors, formatted power-on time |
+| `diskio` | Name, device, utilization, read, write, await, read total, written total (cumulative since boot, so an idle disk is distinguishable from one nothing ever touches) |
 | `cert` | Name, source, days left, expiry, issuer |
 | `raid` | Name, array, size, degraded, recovering |
 | Other types | Name and their primary live value |
