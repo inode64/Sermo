@@ -14,6 +14,7 @@ no trates los elementos TODO ausentes como huecos accidentales en el código.
 - [Configuration structure changes](#configuration-structure-changes)
 - [Runtime paths](#runtime-paths)
 - [Configuration file granularity](#configuration-file-granularity)
+- [Catalog service scope](#catalog-service-scope)
 - [Catalog init and reload fallback verification](#catalog-init-and-reload-fallback-verification)
 - [Service operations](#service-operations)
 - [Native by default](#native-by-default)
@@ -273,6 +274,26 @@ compila con `SERMO_DATADIR=$PWD make build` y luego usa `examples/sermo-dev.yml`
 (`paths.*` relativos al árbol `examples/` incluido). El catálogo empaquetado no
 es un ajuste de `paths.*`; viene del directorio de catálogo compilado en el
 binario. `examples/sermo.yml` apunta intencionadamente a ubicaciones instaladas.
+
+## Catalog service scope
+
+Los checks de un servicio describen **ese servicio**, no lo que observa. El caso
+fácil de equivocar es un demonio de monitorización: `mdmonitor` está sano cuando
+el monitor de mdadm se está ejecutando, aunque los arrays que vigila estén
+degradados. Meter el sujeto observado entre los checks del demonio hace que el
+servicio se lea `failed` por un fallo que no ha causado, oculta cuál de los dos
+está realmente roto y —como un check requerido que falla cuenta como caída—
+escribe la indisponibilidad del sujeto en el archivo de disponibilidad *del
+servicio*.
+
+El estado del host va en un host watch, donde se informa una sola vez y con el
+nombre de lo que es. `smartd` es la referencia: sus checks son `service`,
+`process` y memoria, mientras que la salud de las unidades vive en los watches
+`smart-*` generados. Pon un check de ámbito host dentro de un servicio sólo
+cuando ese check sea de verdad una afirmación sobre el proceso del servicio; si
+únicamente tiene que seguir visible en la fila del servicio, declara
+`reports: state` o `reports: value` para que no afirme nada y quede fuera de la
+salud y del SLA.
 
 ## Catalog init and reload fallback verification
 

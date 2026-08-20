@@ -1466,20 +1466,44 @@ func TestCatalogNamedDNSCheckIsHostOverrideFriendly(t *testing.T) {
 	}
 }
 
-func TestCatalogRAIDChecksAlertOnDegradedArrays(t *testing.T) {
-	root := repoRoot(t)
-	for _, name := range []string{"mdadm", "mdmonitor"} {
-		t.Run(name, func(t *testing.T) {
-			body := catalogDocByName(t, root, "services", name)
-			degraded := nested(t, catalogWatchCheck(t, body, "raid"), "degraded")
-			if got := cfgval.String(degraded["op"]); got != ">" {
-				t.Fatalf("%s raid degraded op = %q, want >", name, got)
+// hostHardwareCheckTypes observe the machine, not the process being monitored.
+// They belong in host watches, where the generated configuration already places
+// them once per device or array.
+var hostHardwareCheckTypes = []string{
+	checks.CheckTypeRAID,
+	checks.CheckTypeSmart,
+	checks.CheckTypeSensors,
+	checks.CheckTypeEDAC,
+	checks.CheckTypeDiskIO,
+	checks.CheckTypeHdparm,
+}
+
+// TestCatalogServicesDoNotJudgeTheirSubject pins the "Catalog service scope"
+// rule in AGENTS.md: a service's checks describe that service, not what it
+// observes. It replaces an audit that pinned the degraded-array predicate of a
+// raid check inside mdadm/mdmonitor — a monitoring daemon that carries its
+// subject's verdict reads failed for a fault it did not cause, hides which of
+// the two is broken, and writes the subject's outage into its own availability
+// archive. A host-hardware check may still appear in a service when it asserts
+// nothing (reports: state/value).
+func TestCatalogServicesDoNotJudgeTheirSubject(t *testing.T) {
+	servicesDir := filepath.Join(repoRoot(t), "catalog", "services")
+	walkCatalogDocs(t, servicesDir, func(path string, body map[string]any) {
+		watches, _ := body["watches"].(map[string]any)
+		for _, name := range slices.Sorted(maps.Keys(watches)) {
+			watch, _ := watches[name].(map[string]any)
+			check, _ := watch["check"].(map[string]any)
+			checkType := cfgval.String(check[checks.CheckKeyType])
+			if !slices.Contains(hostHardwareCheckTypes, checkType) {
+				continue
 			}
-			if got := cfgval.String(degraded["value"]); got != "0" {
-				t.Fatalf("%s raid degraded value = %q, want 0", name, got)
+			if checks.VerdictlessMode(cfgval.String(check[checks.CheckKeyReports])) {
+				continue
 			}
-		})
-	}
+			t.Errorf("%s: watch %q judges host hardware (%s) as service health; move it to a host watch or declare reports: state/value",
+				filepath.Base(path), name, checkType)
+		}
+	})
 }
 
 func TestRequestedHostProfilesExist(t *testing.T) {

@@ -14,6 +14,7 @@ do not treat missing TODO items as accidental gaps in the code.
 - [Configuration structure changes](#configuration-structure-changes)
 - [Runtime paths](#runtime-paths)
 - [Configuration file granularity](#configuration-file-granularity)
+- [Catalog service scope](#catalog-service-scope)
 - [Catalog init and reload fallback verification](#catalog-init-and-reload-fallback-verification)
 - [Service operations](#service-operations)
 - [Native by default](#native-by-default)
@@ -272,6 +273,24 @@ build with `SERMO_DATADIR=$PWD make build`, then use `examples/sermo-dev.yml`
 (relative `paths.*` into the bundled `examples/` tree). The packaged catalog is
 not a `paths.*` setting; it comes from the catalog directory compiled into the
 binary. `examples/sermo.yml` intentionally targets installed locations.
+
+## Catalog service scope
+
+A service's checks describe **that service**, not what it observes. A monitoring
+daemon is the easy case to get wrong: `mdmonitor` is healthy when the mdadm
+monitor is running, even while the arrays it watches are degraded. Folding the
+observed subject into the daemon's checks makes the service read `failed` for a
+fault it did not cause, hides which of the two is actually broken, and — because
+a failing required check counts as downtime — writes the subject's outage into
+the *service's* availability archive.
+
+Host state belongs in a host watch, where it is reported once and named for what
+it is. `smartd` is the reference: its checks are `service`, `process` and memory,
+while drive health lives in the generated `smart-*` watches. Put a host-scoped
+check inside a service only when that check is genuinely an assertion about the
+service process; if it merely needs to stay visible on the service row, declare
+`reports: state` or `reports: value` so it asserts nothing and stays out of health
+and SLA.
 
 ## Catalog init and reload fallback verification
 
