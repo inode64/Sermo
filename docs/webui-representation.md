@@ -528,7 +528,7 @@ Shared columns:
 | State | normalized watch state: `disabled` when config/monitor state excludes it from active checks, `starting` before the first monitored sample, `failed` for an active failure, `warning` for a failure the watch declared an advisory with `severity: warning` (amber row, kept out of the alert count), otherwise `ok`; active device work takes precedence as `testing`, `recovering`, `rebuilding`, `repairing`, `moving` or `merging`, and a device that stopped answering as `missing`, which reads as a failure |
 | Actions | supported primary action plus an overflow menu for monitor/unmonitor |
 
-While a manual `hdparm`, `lvm`, `raid` or `smart` sample is running, State shows
+While a manual `diskio`, `hdparm`, `lvm`, `raid` or `smart` sample is running, State shows
 an amber **checking** badge, its elapsed time and the previous health state.
 The action is disabled until completion. The Events feed records both the start
 and the final result with its elapsed time. The UI shows a percentage only where

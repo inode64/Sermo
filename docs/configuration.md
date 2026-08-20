@@ -1123,7 +1123,7 @@ accepted operation cannot switch targets during a concurrent reload.
   an unchanged stale socket left by tmux.
 - `POST /api/watches/{name}/{action}` — watch action. `action` is
   `monitor`, `unmonitor`, `expand`, `probe`, `pause` or `resume`. `probe` is
-  read-only and is available for LVM, RAID and SMART watches. `pause`/`resume`
+  read-only and is available for diskio, LVM, RAID, SMART and hdparm watches. `pause`/`resume`
   require the RAID control block below.
 - `POST /api/locks/{service}/release?name=NAME` — release an inactive
   stale/expired named runtime lock; active locks are refused.
@@ -2190,8 +2190,10 @@ When the Web UI is enabled, `GET /api/watches` renders watch readings from the
 latest daemon watch cycle; it does not start its own command, network, SQL,
 firewall, count, disk I/O, `hdparm` or `smart` probes on each dashboard poll.
 The Web UI and `sermoctl watch probe` can request one explicit sample for
-configured `hdparm`, `lvm`, `raid` and `smart` host watches. `hdparm`, `lvm` and
-`raid` are read-only samples; a manual `smart` probe instead starts the device's
+configured `diskio`, `hdparm`, `lvm`, `raid` and `smart` host watches. `diskio`,
+`hdparm`, `lvm` and `raid` are read-only samples — a `diskio` probe reads the
+counters twice around a short pause, because its rates are the delta between two
+readings and a single one would only be a baseline; a manual `smart` probe instead starts the device's
 short self-test with `smartctl --test=short DEVICE`. Its successful command
 acknowledgement means the self-test was scheduled, not that the drive is
 healthy; scheduled SMART cycles continue to read health and attributes with

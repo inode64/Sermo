@@ -1163,7 +1163,7 @@ una recarga concurrente.
   que tmux haya dejado sin cambios.
 - `POST /api/watches/{name}/{action}` — acción de watch. `action` es
   `monitor`, `unmonitor`, `expand`, `probe`, `pause` o `resume`. `probe` es de
-  solo lectura para watches LVM, RAID y SMART; `pause`/`resume` requieren el
+  solo lectura para watches diskio, LVM, RAID, SMART y hdparm; `pause`/`resume` requieren el
   bloque RAID siguiente.
 - `POST /api/locks/{service}/release?name=NAME` — libera un lock de runtime con nombre
   inactivo obsoleto/expirado; los locks activos se rechazan.
@@ -2266,8 +2266,10 @@ comandos, red, SQL, firewall, count, disk I/O, `hdparm` o `smart` en cada poll
 del dashboard.
 
 La Web UI y `sermoctl watch probe` pueden solicitar una muestra explícita para
-los watches de host `hdparm`, `lvm`, `raid` y `smart` configurados. `hdparm`,
-`lvm` y `raid` son muestras de solo lectura; una sonda manual de `smart`, en
+los watches de host `diskio`, `hdparm`, `lvm`, `raid` y `smart` configurados.
+`diskio`, `hdparm`, `lvm` y `raid` son muestras de solo lectura — una sonda
+`diskio` lee los contadores dos veces con una pausa breve, porque sus tasas son
+la diferencia entre dos lecturas y una sola sería sólo una línea base; una sonda manual de `smart`, en
 cambio, inicia el self-test corto del dispositivo con `smartctl --test=short
 DEVICE`. Que el comando se confirme con éxito significa que el self-test quedó
 programado, no que la unidad esté sana; los ciclos SMART programados siguen

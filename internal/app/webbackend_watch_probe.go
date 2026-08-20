@@ -37,7 +37,38 @@ func (b *WebBackend) probeWatchResult(ctx context.Context, w *webWatch) (checks.
 	}
 	probeCtx, cancel := b.probeContext(ctx, w.check)
 	defer cancel()
+	if w.checkType == checks.CheckTypeDiskIO {
+		return b.probeDiskIORates(probeCtx, check)
+	}
 	return check.Run(probeCtx), nil
+}
+
+// probeDiskIORates opens the window a disk I/O sample needs. Its rates are the
+// delta between two readings of cumulative counters, so a single run only
+// baselines and reports "diskio <device> baseline" with no rates at all — which
+// is why a manual probe of one used to answer nothing. Sampling twice around a
+// bounded pause gives the operator a real window. The check instance is the
+// standalone one built for this probe, so the scheduler's own baseline is
+// untouched, and an idle disk honestly reports zeroes rather than silence.
+func (b *WebBackend) probeDiskIORates(ctx context.Context, check checks.Check) (checks.Result, error) {
+	if baseline := check.Run(ctx); baseline.Unavailable {
+		return baseline, nil
+	}
+	select {
+	case <-ctx.Done():
+		return checks.Result{}, fmt.Errorf("sample disk I/O rate window: %w", ctx.Err())
+	case <-time.After(b.diskIOProbeWindow()):
+	}
+	return check.Run(ctx), nil
+}
+
+// diskIOProbeWindow is how long a manual disk I/O probe watches the counters:
+// long enough for a busy device to register, short enough to answer a click.
+func (b *WebBackend) diskIOProbeWindow() time.Duration {
+	if b.diskIOWindow > 0 {
+		return b.diskIOWindow
+	}
+	return defaultDiskIOProbeWindow
 }
 
 func (b *WebBackend) startSmartShortTest(ctx context.Context, w *webWatch) (checks.Result, error) {
@@ -62,6 +93,10 @@ func (b *WebBackend) startSmartShortTest(ctx context.Context, w *webWatch) (chec
 		},
 	}, nil
 }
+
+// defaultDiskIOProbeWindow is the rate window a manual disk I/O probe opens when
+// the backend declares none.
+const defaultDiskIOProbeWindow = 2 * time.Second
 
 func watchErrorReadings(message string) []web.WatchReading {
 	return []web.WatchReading{{Field: watchReadingFieldSample, Label: watchReadingLabelSample, Error: message}}
@@ -139,7 +174,7 @@ func (b *WebBackend) ProbeWatch(ctx context.Context, name string) web.ActionResu
 	if w == nil {
 		return web.ActionResult{Message: fmt.Sprintf(unknownWatchMessageFmt, name)}
 	}
-	if w.disabled || w.serviceScoped || !manualProbeCheckType(w.checkType) {
+	if w.disabled || w.serviceScoped || !ManualProbeCheckType(w.checkType) {
 		return web.ActionResult{Message: fmt.Sprintf("watch %q does not support manual probing", name)}
 	}
 	startedAt, started := b.beginWatchProbe(name)
@@ -181,9 +216,13 @@ func (b *WebBackend) ProbeWatch(ctx context.Context, name string) web.ActionResu
 	return web.ActionResult{OK: ok, Message: summary, Readings: readings}
 }
 
-func manualProbeCheckType(checkType string) bool {
+// ManualProbeCheckType reports whether a watch of this check type answers a
+// manual probe. It is exported because sermoctl gates the same command on the
+// same list: two copies would drift, and the operator would be told a probe is
+// unsupported by one and rejected by the other.
+func ManualProbeCheckType(checkType string) bool {
 	switch checkType {
-	case checks.CheckTypeHdparm, checks.CheckTypeLVM, checks.CheckTypeRAID, checks.CheckTypeSmart:
+	case checks.CheckTypeHdparm, checks.CheckTypeLVM, checks.CheckTypeRAID, checks.CheckTypeSmart, checks.CheckTypeDiskIO:
 		return true
 	default:
 		return false
