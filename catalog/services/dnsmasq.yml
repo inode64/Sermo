@@ -14,6 +14,11 @@ variables:
   port: 53
   config: /etc/dnsmasq.conf
   query: localhost
+  dhcp_host: 127.0.0.1
+  dhcp_port: 67
+  tftp_host: 127.0.0.1
+  tftp_port: 69
+  tftp_query: sermo-tftp-check
 preflight:
   config:
     type: command
@@ -56,4 +61,25 @@ watches:
       host: ${host}
       port: ${port}
       query: ${query}
+      timeout: 3s
+  dhcp:
+    enable_if:
+      file: /etc/dnsmasq.conf
+      key: dhcp-range
+      matches: .+
+    check:
+      type: dhcp
+      host: ${dhcp_host}
+      port: ${dhcp_port}
+      timeout: 3s
+  tftp:
+    enable_if:
+      file: /etc/dnsmasq.conf
+      key: enable-tftp
+      matches: .*
+    check:
+      type: tftp
+      host: ${tftp_host}
+      port: ${tftp_port}
+      query: ${tftp_query}
       timeout: 3s

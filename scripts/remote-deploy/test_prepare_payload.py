@@ -135,6 +135,17 @@ class PreparePayloadTest(unittest.TestCase):
             self.assertIn('--connect-timeout "$http_timeout_seconds"', body)
             self.assertIn('--max-time "$http_timeout_seconds"', body)
 
+    def test_remote_apply_waits_for_readiness_and_valid_web_apis(self) -> None:
+        """Config apply succeeds only after readiness and supported APIs pass."""
+        body = REMOTE_APPLY.read_text(encoding="utf-8")
+
+        self.assertIn('livez_waited_seconds', body)
+        self.assertIn('readyz_waited_seconds', body)
+        self.assertIn('if [ "$livez_rc" -ne 0 ] || [ "$readyz_rc" -ne 0 ]', body)
+        self.assertIn("for api in services watches mounts; do", body)
+        self.assertIn("/api/${api}", body)
+        self.assertNotIn("/api/status", body)
+
     def test_exim_binary_magic_probe_does_not_use_a_nul_command_substitution(self) -> None:
         """Non-SQLite database headers must not emit Bash's ignored-NUL warning."""
         for script in [REMOTE_COLLECT, REMOTE_STAGE]:

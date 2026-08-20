@@ -1591,6 +1591,21 @@ def listener_matches(target: tuple[set[str], str, str], listener: dict[str, obje
     return listener_serves_endpoint(target, listener) and bool(listener_processes & processes)
 
 
+def protocol_listener_matches(
+    target: tuple[set[str], str, str], listener: dict[str, object], processes: set[str]
+) -> bool:
+    """Match a protocol listener to its profile when ss attributes an owner.
+
+    Kernel and unprivileged inventory can omit process attribution, so an empty
+    owner set remains usable evidence. A listener explicitly owned by another
+    daemon must not make an optional protocol check look enabled for this one.
+    """
+    if not listener_serves_endpoint(target, listener):
+        return False
+    listener_processes = set(listener["processes"])
+    return not listener_processes or bool(listener_processes & processes)
+
+
 def listener_serves_endpoint(target: tuple[set[str], str, str], listener: dict[str, object]) -> bool:
     """Whether something is listening on the probed protocol/host/port.
 
@@ -1627,15 +1642,15 @@ def endpoint_watch_overrides(stage: Path, doc: dict, variables: dict[str, str]) 
             protocol_targets = protocol_endpoint_target(check, variables)
             if protocol_targets is None:
                 continue
-            targets, reason, require_process = protocol_targets, "", False
+            targets, reason, matcher = protocol_targets, "", protocol_listener_matches
         elif check_type in ENDPOINT_CHECK_TYPES:
             targets, reason = endpoint_target(check_type, check, variables)
-            require_process = True
+            matcher = listener_matches
         else:
             continue
         active = bool(targets) and all(
             any(
-                listener_matches(target, listener, processes) if require_process else listener_serves_endpoint(target, listener)
+                matcher(target, listener, processes)
                 for listener in listeners
             )
             for target in targets

@@ -181,6 +181,49 @@ class EndpointGenerationTest(unittest.TestCase):
         self.assertEqual(disabled, set())
         self.assertEqual([item["active"] for item in checks], [True, True])
 
+    def test_protocol_listener_must_belong_to_profile_when_attributed(self):
+        doc = {
+            "name": "dnsmasq",
+            "apps": ["dnsmasq"],
+            "watches": {"dhcp": {"check": {"type": "dhcp", "host": "127.0.0.1", "port": 67}}},
+        }
+        tests = (
+            (
+                "profile process",
+                'socket udp UNCONN 0 0 0.0.0.0:67 0.0.0.0:* users:(("dnsmasq",pid=1,fd=6))\n',
+                set(),
+            ),
+            (
+                "other process",
+                'socket udp UNCONN 0 0 0.0.0.0:67 0.0.0.0:* users:(("dhcpd",pid=1,fd=6))\n',
+                {"dhcp"},
+            ),
+            ("unattributed kernel socket", "socket udp UNCONN 0 0 0.0.0.0:67 0.0.0.0:*\n", set()),
+        )
+        for name, hints, want_disabled in tests:
+            with self.subTest(name=name):
+                temp = tempfile.TemporaryDirectory()
+                self.addCleanup(temp.cleanup)
+                stage = Path(temp.name)
+                (stage / "service_endpoint_hints").write_text(hints, encoding="utf-8")
+                disabled, checks = generator.endpoint_watch_overrides(stage, doc, {})
+                self.assertEqual(disabled, want_disabled)
+                self.assertEqual(checks[0]["active"], not want_disabled)
+
+    def test_dnsmasq_profile_gates_optional_dhcp_and_tftp_watches(self):
+        docs = generator.load_catalog_services(default_options().catalog_services_dir)
+        doc, _ = generator.catalog_doc_for_service("dnsmasq", docs)
+        self.assertIsNotNone(doc)
+        watches = doc.get("watches", {})
+        for watch_name, config_key, check_type in (
+            ("dhcp", "dhcp-range", "dhcp"),
+            ("tftp", "enable-tftp", "tftp"),
+        ):
+            self.assertIn(watch_name, watches)
+            self.assertEqual(watches[watch_name]["enable_if"]["key"], config_key)
+            self.assertEqual(watches[watch_name]["check"]["type"], check_type)
+        self.assertEqual(watches["tftp"]["enable_if"]["matches"], ".*")
+
     def test_lvm_space_watches_are_not_generated(self):
         temp = tempfile.TemporaryDirectory()
         self.addCleanup(temp.cleanup)

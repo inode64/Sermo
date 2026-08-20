@@ -190,21 +190,39 @@ case "$ready_wait_seconds" in
 		;;
 esac
 
-ready_rc=1
-ready_waited=0
-while [ "$ready_waited" -lt "$ready_wait_seconds" ]; do
+started_at="$(date +%s)"
+deadline=$((started_at + ready_wait_seconds))
+
+livez_rc=1
+while [ "$(date +%s)" -lt "$deadline" ]; do
 	if http_get "http://127.0.0.1:9797/livez?verbose" >"${out}/livez.out" 2>"${out}/livez.err"; then
-		ready_rc=0
+		livez_rc=0
 		break
 	fi
-	ready_waited=$((ready_waited + 1))
 	sleep 1
 done
-printf '%s\n' "$ready_rc" >"${out}/livez.rc"
-http_get "http://127.0.0.1:9797/readyz?verbose" >"${out}/readyz.out" 2>"${out}/readyz.err"
-printf '%s\n' "$?" >"${out}/readyz.rc"
-http_get "http://127.0.0.1:9797/api/status" >"${out}/api_status.out" 2>"${out}/api_status.err"
-printf '%s\n' "$?" >"${out}/api_status.rc"
+livez_waited=$(($(date +%s) - started_at))
+printf '%s\n' "$livez_rc" >"${out}/livez.rc"
+printf '%s\n' "$livez_waited" >"${out}/livez_waited_seconds"
+
+readyz_rc=1
+while [ "$(date +%s)" -lt "$deadline" ]; do
+	if http_get "http://127.0.0.1:9797/readyz?verbose" >"${out}/readyz.out" 2>"${out}/readyz.err"; then
+		readyz_rc=0
+		break
+	fi
+	sleep 1
+done
+readyz_waited=$(($(date +%s) - started_at))
+printf '%s\n' "$readyz_rc" >"${out}/readyz.rc"
+printf '%s\n' "$readyz_waited" >"${out}/readyz_waited_seconds"
+
+http_get "http://127.0.0.1:9797/" >"${out}/web_html.out" 2>"${out}/web_html.err"
+printf '%s\n' "$?" >"${out}/web_html.rc"
+for api in services watches mounts; do
+	http_get "http://127.0.0.1:9797/api/${api}" >"${out}/api_${api}.out" 2>"${out}/api_${api}.err"
+	printf '%s\n' "$?" >"${out}/api_${api}.rc"
+done
 
 if command -v ss >/dev/null 2>&1; then
 	ss -ltnp 'sport = :9797' >"${out}/port9797_after" 2>&1 || true
@@ -212,4 +230,12 @@ elif command -v netstat >/dev/null 2>&1; then
 	netstat -ltnp >"${out}/port9797_after" 2>&1 || true
 fi
 
-finish "$ready_rc"
+if [ "$livez_rc" -ne 0 ] || [ "$readyz_rc" -ne 0 ] \
+	|| [ "$(cat "${out}/web_html.rc")" != "0" ] \
+	|| [ "$(cat "${out}/api_services.rc")" != "0" ] \
+	|| [ "$(cat "${out}/api_watches.rc")" != "0" ] \
+	|| [ "$(cat "${out}/api_mounts.rc")" != "0" ]; then
+	finish 50
+fi
+
+finish 0
