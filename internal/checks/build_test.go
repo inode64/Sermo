@@ -552,7 +552,7 @@ func TestBuildMetricCheckOpRequired(t *testing.T) {
 
 func TestBuildHdparmCheckDeviceRequired(t *testing.T) {
 	assertRequiredField(t,
-		func(e map[string]any) (Check, string) { return buildHdparmCheck(base{}, e, nil) },
+		func(e map[string]any) (Check, string) { return buildHdparmCheck(base{}, e, nil, nil) },
 		map[string]any{},
 		map[string]any{"device": "/dev/sda", "read": map[string]any{"op": "<", "value": 1}},
 		"requires a device")

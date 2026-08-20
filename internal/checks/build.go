@@ -53,18 +53,21 @@ type MetricReader func(scope, name string) (metrics.Reading, bool)
 // dependency bundle: service-specific capabilities such as Status, Metrics,
 // Processes and pidfile fallback PIDs stay on Deps.
 type Samplers struct {
-	StorageUsage         StorageUsageFunc
-	NetSampler           NetSamplerFunc
-	PingSampler          PingSamplerFunc
-	SwapSampler          SwapSamplerFunc
-	RouteSampler         RouteSamplerFunc
-	LoadSampler          LoadSamplerFunc
-	OomSampler           OomSamplerFunc
-	FdsSampler           FdsSamplerFunc
-	MemorySampler        MemorySamplerFunc
-	PressureSampler      PressureSamplerFunc
-	PidsSampler          PidsSamplerFunc
-	DiskIOSampler        DiskIOSamplerFunc
+	StorageUsage    StorageUsageFunc
+	NetSampler      NetSamplerFunc
+	PingSampler     PingSamplerFunc
+	SwapSampler     SwapSamplerFunc
+	RouteSampler    RouteSamplerFunc
+	LoadSampler     LoadSamplerFunc
+	OomSampler      OomSamplerFunc
+	FdsSampler      FdsSamplerFunc
+	MemorySampler   MemorySamplerFunc
+	PressureSampler PressureSamplerFunc
+	PidsSampler     PidsSamplerFunc
+	DiskIOSampler   DiskIOSamplerFunc
+	// BlockDeviceSizer reports a block device's sysfs capacity for the checks
+	// that address one (diskio, hdparm). Nil reads /sys/class/block.
+	BlockDeviceSizer     BlockDeviceSizeFunc
 	SensorSampler        SensorSamplerFunc
 	RaidSampler          RaidSamplerFunc
 	EdacSampler          EdacSamplerFunc
@@ -295,7 +298,9 @@ var builtinCheckSpecs = []checkSpec{
 		return buildTerminalSessionsCheck(in.base, in.entry, in.runner)
 	}},
 	{info: conditionTypeInfo(CheckTypeProcessCount), build: func(in checkBuildInput) (Check, string) { return buildProcessCountCheck(in.base, in.entry, in.deps) }},
-	{info: conditionTypeInfo(CheckTypeHdparm), build: func(in checkBuildInput) (Check, string) { return buildHdparmCheck(in.base, in.entry, in.runner) }},
+	{info: conditionTypeInfo(CheckTypeHdparm), build: func(in checkBuildInput) (Check, string) {
+		return buildHdparmCheck(in.base, in.entry, in.runner, in.deps.BlockDeviceSizer)
+	}},
 	{info: conditionTypeInfo(CheckTypeSensors), build: func(in checkBuildInput) (Check, string) { return buildSensorsCheck(in.base, in.entry, in.deps) }},
 	{info: conditionTypeInfo(CheckTypeSmart), build: func(in checkBuildInput) (Check, string) { return buildSmartCheck(in.base, in.entry, in.runner) }},
 	{info: conditionTypeInfo(CheckTypeRAID), build: func(in checkBuildInput) (Check, string) { return buildRaidCheck(in.base, in.entry, in.deps) }},

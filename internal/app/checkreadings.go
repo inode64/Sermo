@@ -782,7 +782,12 @@ func pressureCheckReadings(data map[string]any) []web.WatchReading {
 // diskioCheckReadings formats rates with the same precision as the check's own
 // summary message: whole bytes per second, tenths of a millisecond for await.
 func diskioCheckReadings(data map[string]any) []web.WatchReading {
-	rb := readingsFrom(data).addString(checks.DataKeyDevice, watchReadingLabelDevice)
+	// The device state carries the "missing" marker a dead disk publishes in
+	// place of its rates, so it must survive into the readings the dashboard
+	// reads for its state column.
+	rb := readingsFrom(data).
+		addString(checks.DataKeyDevice, watchReadingLabelDevice).
+		addString(checks.DataKeyDeviceState, watchReadingLabelState)
 	for _, field := range []struct {
 		key, label, unit string
 		decimals         int

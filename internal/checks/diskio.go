@@ -63,13 +63,17 @@ type diskIOState struct {
 
 // diskIOCheck is a stateful level check for per-cycle /proc/diskstats deltas.
 // The first cycle only baselines; one watch ticks sequentially, so no lock.
+// A disk that fell off its bus keeps its /proc/diskstats row and simply stops
+// counting, which is indistinguishable from an idle disk here, so a window with
+// no I/O at all is confirmed against sysfs before it is reported as idle.
 type diskIOCheck struct {
 	base
-	device  string
-	preds   []levelPred
-	sampler DiskIOSamplerFunc
-	clock   func() time.Time
-	state   *diskIOState
+	device     string
+	preds      []levelPred
+	sampler    DiskIOSamplerFunc
+	deviceSize BlockDeviceSizeFunc
+	clock      func() time.Time
+	state      *diskIOState
 }
 
 func (c *diskIOCheck) Run(_ context.Context) Result {
@@ -80,9 +84,10 @@ func (c *diskIOCheck) Run(_ context.Context) Result {
 		clock = time.Now
 	}
 
+	prefix := CheckTypeDiskIO + " " + c.device
 	s, err := sampler(c.device)
 	if err != nil {
-		return c.unavailableResult("diskio "+c.device+": "+err.Error(), start)
+		return c.deviceFailureResult(c.deviceSize, prefix, c.device, err.Error(), start)
 	}
 	now := clock()
 	st := c.state
@@ -94,6 +99,12 @@ func (c *diskIOCheck) Run(_ context.Context) Result {
 
 	rates, _ := CalculateDiskIORates(st.last, s, elapsed)
 	st.t, st.last = now, s
+
+	// Only a window that moved nothing at all can be a dead device, so a disk
+	// carrying traffic never pays for the sysfs lookup.
+	if diskIORatesIdle(rates) && blockDeviceMissing(c.deviceSize, c.device) {
+		return c.missingDeviceResult(prefix, c.device, start)
+	}
 
 	values := map[string]float64{
 		fieldUtilPct:    rates.UtilPct,
@@ -109,6 +120,13 @@ func (c *diskIOCheck) Run(_ context.Context) Result {
 	res.Data = DiskIOResultData(c.device, rates)
 	res.Data[DataKeyValue] = firstPredValue(c.preds, values, rates.UtilPct)
 	return res
+}
+
+// diskIORatesIdle reports a window in which the device completed no work. The
+// rates derive from integer counter deltas, so an untouched device yields
+// exactly zero rather than a rounded value.
+func diskIORatesIdle(rates DiskIORates) bool {
+	return rates.UtilPct == 0 && rates.ReadBytes == 0 && rates.WriteBytes == 0
 }
 
 // DiskIOResultData is the persisted reading data for one disk I/O rate window,

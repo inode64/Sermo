@@ -1,7 +1,10 @@
 package checks
 
-// Device-reported activity states exposed by SMART, md RAID and LVM watches.
-// They describe an in-progress device operation, not a health verdict.
+// Device-reported states exposed by SMART, md RAID and LVM watches. All but
+// DeviceStateMissing describe an in-progress device operation, not a health
+// verdict. DeviceStateMissing is the exception: it reports that the device the
+// check addresses no longer answers, so it always accompanies an unavailable
+// observation and reads as a failure in the dashboard.
 const (
 	DeviceStateTesting    = "testing"
 	DeviceStateRecovering = "recovering"
@@ -9,4 +12,5 @@ const (
 	DeviceStateRepairing  = "repairing"
 	DeviceStateMoving     = "moving"
 	DeviceStateMerging    = "merging"
+	DeviceStateMissing    = "missing"
 )
