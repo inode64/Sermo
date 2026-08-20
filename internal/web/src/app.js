@@ -5086,6 +5086,9 @@ const watchTypeProfiles = {
       { key: "health", label: "Health", cell: watchHealthCell, sort: (w) => readingRaw(w, "health").toLowerCase() },
       numericReadingColumn("temperature", "Temperature"),
       numericReadingColumn("wear", "Wear"),
+      // A drive that has started remapping sectors is spending its spare pool;
+      // the count is the earliest number that moves before a verdict flips.
+      numericReadingColumn("reallocated", "Reallocated"),
       numericReadingColumn("power_on_hours", "Power-on time"),
     ],
   },
@@ -5097,6 +5100,10 @@ const watchTypeProfiles = {
       numericReadingColumn("read_bytes", "Read"),
       numericReadingColumn("write_bytes", "Write"),
       numericReadingColumn("await_ms", "Await"),
+      // Totals since boot. A window of zeroes is the same for a disk that is idle
+      // right now and one nothing ever touches; these tell the two apart.
+      numericReadingColumn("read_total_bytes", "Read total"),
+      numericReadingColumn("write_total_bytes", "Written total"),
     ],
   },
   cert: {

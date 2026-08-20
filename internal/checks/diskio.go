@@ -117,7 +117,7 @@ func (c *diskIOCheck) Run(_ context.Context) Result {
 
 	res := c.result(ok, fmt.Sprintf("diskio %s util %.1f%% read %s write %s await %.1fms",
 		c.device, rates.UtilPct, formatSummaryBytesPerSecond(rates.ReadBytes), formatSummaryBytesPerSecond(rates.WriteBytes), rates.AwaitMs), start)
-	res.Data = DiskIOResultData(c.device, rates)
+	res.Data = DiskIOResultData(c.device, rates, s)
 	res.Data[DataKeyValue] = firstPredValue(c.preds, values, rates.UtilPct)
 	return res
 }
@@ -130,14 +130,19 @@ func diskIORatesIdle(rates DiskIORates) bool {
 }
 
 // DiskIOResultData is the persisted reading data for one disk I/O rate window,
-// shared by the check cycle and the snapshot-backed watch view.
-func DiskIOResultData(device string, rates DiskIORates) map[string]any {
+// shared by the check cycle and the snapshot-backed watch view. The cumulative
+// totals ride along with the rates because a window of zeroes says nothing on its
+// own: an idle disk and a disk nothing has ever touched look identical until you
+// can see what it has moved since boot.
+func DiskIOResultData(device string, rates DiskIORates, total DiskIOSample) map[string]any {
 	return map[string]any{
-		DataKeyDevice:   device,
-		fieldUtilPct:    rates.UtilPct,
-		fieldReadBytes:  rates.ReadBytes,
-		fieldWriteBytes: rates.WriteBytes,
-		fieldAwaitMs:    rates.AwaitMs,
+		DataKeyDevice:        device,
+		fieldUtilPct:         rates.UtilPct,
+		fieldReadBytes:       rates.ReadBytes,
+		fieldWriteBytes:      rates.WriteBytes,
+		fieldAwaitMs:         rates.AwaitMs,
+		fieldReadTotalBytes:  float64(total.SectorsRead) * diskIOSectorBytes,
+		fieldWriteTotalBytes: float64(total.SectorsWritten) * diskIOSectorBytes,
 	}
 }
 

@@ -82,7 +82,7 @@ Las comprobaciones de protocolo de conexión (MySQL, PostgreSQL, Redis, Docker, 
 | `pressure`    | tiempo de bloqueo PSI del kernel para cpu/memory/io (`some_*`/`full_*` avg10/60/300) |
 | `fds`         | descriptores de archivo del sistema frente a `fs.file-max` (used_pct/free/allocated)  |
 | `pids`        | la tabla PID del kernel frente a `kernel.pid_max` (used_pct/free/count)      |
-| `diskio`      | tasas de E/S por ciclo de un dispositivo de bloque (util_pct/read_bytes/write_bytes/await_ms) |
+| `diskio`      | tasas de E/S por ciclo de un dispositivo de bloque (util_pct/read_bytes/write_bytes/await_ms), más los totales leído/escrito acumulados como lecturas |
 | `conntrack`   | la tabla conntrack de netfilter frente a su máximo (used_pct/free/count)      |
 | `firewall_rules` | nftables/iptables tiene al menos `min_rules` reglas cargadas (ver Reglas de firewall) |
 | `failed_units` | el recuento de unidades de init en estado fallido cumple `count {op, value}` (por defecto `> 0`; ver Unidades de init fallidas) |

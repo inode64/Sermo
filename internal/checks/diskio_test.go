@@ -259,3 +259,29 @@ func TestDiskIOCheckKeepsIdleDeviceHealthy(t *testing.T) {
 		t.Errorf("device state = %v, want no missing marker for an idle but present disk", got)
 	}
 }
+
+// A window of zeroes is the same for a disk that happens to be idle right now and
+// one nothing has ever touched. The cumulative totals are what tell them apart,
+// so they ride along with every rate sample.
+func TestDiskIOCheckPublishesCumulativeTotals(t *testing.T) {
+	const (
+		sectorsRead    = 25210
+		sectorsWritten = 112
+	)
+	// Both samples carry the same counters: the rate window is empty, which is
+	// exactly the case the totals exist for.
+	idle := DiskIOSample{SectorsRead: sectorsRead, SectorsWritten: sectorsWritten}
+	c := diskIOWithSize(func(string) (DiskIOSample, error) { return idle, nil }, livingDeviceSectors, nil)
+	c.Run(context.Background())
+	res := c.Run(context.Background())
+
+	if got := res.Data[DiskIOFieldReadBytes]; got != 0.0 {
+		t.Fatalf("read rate = %v, want an empty window", got)
+	}
+	if got, want := res.Data[DiskIOFieldReadTotalBytes], float64(sectorsRead*diskIOSectorBytes); got != want {
+		t.Errorf("read total = %v, want %v: the disk has been read even though it is idle now", got, want)
+	}
+	if got, want := res.Data[DiskIOFieldWriteTotalBytes], float64(sectorsWritten*diskIOSectorBytes); got != want {
+		t.Errorf("written total = %v, want %v", got, want)
+	}
+}

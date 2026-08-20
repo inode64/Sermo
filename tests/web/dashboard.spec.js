@@ -106,6 +106,19 @@ const watches = [{
   readings: [{ field: "warning", label: "Warning", warning: "hdparm /dev/sdd read=0.4 MB/s" }],
   summary: "hdparm /dev/sdd read=0.4 MB/s", interval: "6h", status_observed_at: "2026-07-10T12:00:00Z",
 }, {
+  name: "diskio-sdd", display_name: "Backup disk I/O", category: "storage",
+  enabled: true, monitored: true, state: "ok", check_type: "diskio",
+  readings: [
+    { field: "device", label: "Device", value: "sdd" },
+    { field: "util_pct", label: "Utilization", value: "0%" },
+    { field: "read_bytes", label: "Read", value: "0 B/s" },
+    { field: "write_bytes", label: "Write", value: "0 B/s" },
+    { field: "await_ms", label: "Await", value: "0.0 ms" },
+    { field: "read_total_bytes", label: "Read total", value: "12.8 GB" },
+    { field: "write_total_bytes", label: "Written total", value: "57 KB" },
+  ],
+  summary: "diskio sdd idle", interval: "30s", status_observed_at: "2026-07-10T12:00:00Z",
+}, {
   name: "smart-sda", display_name: "Disk health", category: "storage",
   enabled: true, monitored: true, state: "testing", check_type: "smart", can_probe: true,
   readings: [{ field: "device", label: "Device", value: "/dev/sda" }, { field: "device_state", label: "State", value: "testing" }],
@@ -401,6 +414,16 @@ test("an advisory watch reads amber and never red", async ({ page }) => {
   await page.locator('[data-wf="warning"]').click();
   await expect(row).toBeVisible();
   await expect(page.locator("#wat-row-hdparm-sda")).toBeHidden();
+});
+
+test("an idle disk still reports what it has ever moved", async ({ page }) => {
+  const row = page.locator("#wat-row-diskio-sdd");
+  // The rate columns are all zero — that is honest, and on its own it is also
+  // indistinguishable from a disk nothing ever touches.
+  await expect(row).toContainText("0 B/s");
+  // The cumulative totals are what tell the two apart.
+  await expect(row).toContainText("12.8 GB");
+  await expect(row).toContainText("57 KB");
 });
 
 test("stale watch samples are visible and filterable", async ({ page }) => {
