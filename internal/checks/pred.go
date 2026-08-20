@@ -47,10 +47,12 @@ const (
 	fieldLoad5  = "load5"
 	fieldLoad15 = "load15"
 	// diskio per-cycle rate fields.
-	fieldUtilPct    = "util_pct"
-	fieldReadBytes  = "read_bytes"
-	fieldWriteBytes = "write_bytes"
-	fieldAwaitMs    = "await_ms"
+	fieldUtilPct         = "util_pct"
+	fieldReadBytes       = "read_bytes"
+	fieldWriteBytes      = "write_bytes"
+	fieldAwaitMs         = "await_ms"
+	fieldReadTotalBytes  = "read_total_bytes"
+	fieldWriteTotalBytes = "write_total_bytes"
 	// pressure (PSI) stall-percentage fields for the some/full lines.
 	fieldSomeAvg10  = "some_avg10"
 	fieldSomeAvg60  = "some_avg60"
@@ -123,6 +125,16 @@ const DiskIOFieldWriteBytes = fieldWriteBytes
 
 // DiskIOFieldAwaitMs is the public disk await-time predicate/data field.
 const DiskIOFieldAwaitMs = fieldAwaitMs
+
+// DiskIOFieldReadTotalBytes and DiskIOFieldWriteTotalBytes are the cumulative
+// bytes the kernel has counted for the device since boot. They are readings, not
+// predicate fields: a rate window says what the disk is doing now, and these say
+// whether it has ever been used at all — which is the difference between an idle
+// disk and a disk nothing ever touches.
+const (
+	DiskIOFieldReadTotalBytes  = fieldReadTotalBytes
+	DiskIOFieldWriteTotalBytes = fieldWriteTotalBytes
+)
 
 // PressureFieldSomeAvg10 is the public PSI `some avg10` predicate/data field.
 const PressureFieldSomeAvg10 = fieldSomeAvg10
