@@ -2666,3 +2666,41 @@ func TestWebBackendDetailOmitsSLAForVerdictlessChecks(t *testing.T) {
 		}
 	}
 }
+
+// TestWebBackendMissingDevicePublishesMissingState pins the whole chain the
+// operator sees when a disk stops answering: the check's unavailable result must
+// reach the dashboard as the "missing" watch state, a health reading of the same
+// name — not a blank cell — and an error carrying the message.
+func TestWebBackendMissingDevicePublishesMissingState(t *testing.T) {
+	cfg := cfgWithWatches(map[string]any{
+		"smart-sda": map[string]any{
+			"check": map[string]any{"type": checks.CheckTypeSmart, "device": "/dev/sda"},
+		},
+	})
+	now := time.Unix(1000, 0)
+	snapshots := NewWatchSnapshots()
+	snapshots.now = func() time.Time { return now }
+	snapshots.Publish("smart-sda", checks.CheckTypeSmart, checks.Result{
+		Check:       "smart-sda",
+		Condition:   true,
+		Unavailable: true,
+		Message:     "smart /dev/sda: device missing",
+		Data:        checks.MissingDeviceResultData("/dev/sda"),
+	})
+	b := snapshotOnlyBackend(t, cfg, snapshots, now)
+
+	watches := b.Watches(context.Background())
+	if len(watches) != 1 {
+		t.Fatalf("got %d watches, want 1: %+v", len(watches), watches)
+	}
+	w := watches[0]
+	if w.State != checks.DeviceStateMissing {
+		t.Errorf("state = %q, want %q", w.State, checks.DeviceStateMissing)
+	}
+	if got := readingByField(w.Readings, checks.DataKeyHealth).Value; got != checks.DeviceStateMissing {
+		t.Errorf("health reading = %q, want %q — a blank cell hides the dead disk", got, checks.DeviceStateMissing)
+	}
+	if got := readingByField(w.Readings, watchReadingFieldError).Error; got != w.Summary {
+		t.Errorf("error reading = %q, want the summary %q", got, w.Summary)
+	}
+}

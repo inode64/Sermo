@@ -15,12 +15,15 @@ const hdparmCommand = CheckTypeHdparm
 
 // hdparmCheck compares configured hdparm timing rates with thresholds. It is
 // condition-style: OK means every predicate holds. Only timings used by
-// predicates are run; hdparm -t needs root and adds device I/O.
+// predicates are run; hdparm -t needs root and adds device I/O. hdparm reports
+// a drive that fell off its bus as an unreadable timing rather than a named
+// error, so a failed run asks sysfs whether the device still exists at all.
 type hdparmCheck struct {
 	base
-	runner execx.Runner
-	device string
-	preds  []levelPred
+	runner     execx.Runner
+	device     string
+	preds      []levelPred
+	deviceSize BlockDeviceSizeFunc
 }
 
 func (c hdparmCheck) Run(ctx context.Context) Result {
@@ -38,14 +41,15 @@ func (c hdparmCheck) Run(ctx context.Context) Result {
 	res, runErr := c.runner.Run(ctx, hdparmCommand, hdparmArgs(c.device, want[fieldCached], want[fieldRead])...)
 	if res.ExitCode == execx.ExitCodeRunFailure {
 		msg := execx.OperatorFailureOr(runErr, res, c.timeout, execx.CommandDidNotStart)
-		return c.unavailableResult(prefix+": "+msg, start)
+		return c.deviceFailureResult(c.deviceSize, prefix, c.device, msg, start)
 	}
 	values, err := parseHdparm(res.Stdout)
 	if err != nil {
-		if s := output.FirstNonEmptyLine(res.Stderr); s != "" {
-			return c.unavailableResult(prefix+": "+s, start)
+		msg := err.Error()
+		if line := output.FirstNonEmptyLine(res.Stderr); line != "" {
+			msg = line
 		}
-		return c.unavailableResult(prefix+": "+err.Error(), start)
+		return c.deviceFailureResult(c.deviceSize, prefix, c.device, msg, start)
 	}
 
 	ok := levelPredsHold(c.preds, values)

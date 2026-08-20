@@ -18,6 +18,20 @@ const (
 	smartHealthUnknown = "unknown"
 	smartHealthPassed  = "PASSED"
 	smartHealthFailed  = "FAILED"
+	// smartFailureUnknown stands in when smartctl produced no sample and named
+	// no reason, so the operator still gets a message instead of a blank one.
+	smartFailureUnknown = "smartctl produced no usable report"
+	// smartMessageSeverityError is the severity smartctl stamps on the messages
+	// that explain why a report carries no reading.
+	smartMessageSeverityError = "error"
+)
+
+// smartctl exit-status bits, from smartctl(8) RETURN VALUES. Only these two mean
+// smartctl produced no reading at all; every higher bit is a SMART verdict
+// carried by an otherwise valid report and must not void the sample.
+const (
+	smartExitCommandLine = 1 << 0 // command line did not parse
+	smartExitDeviceOpen  = 1 << 1 // open failed, or no IDENTIFY DEVICE answer
 )
 
 // smartCheck reads a drive's SMART health and attributes via `smartctl -j`. With
@@ -25,7 +39,9 @@ const (
 // predicates on `temperature` (°C), `reallocated` (sectors), `wear` (SSD/NVMe
 // percentage used) and `power_on_hours` override/augment that. The numeric
 // attributes are recorded over time, so a rising reallocated-sector or wear count
-// (a failing/aging drive) is visible on the graph. Needs smartmontools (and root).
+// (a failing/aging drive) is visible on the graph. A device smartctl cannot open
+// or identify is reported missing and unavailable, never as a verdictless
+// sample. Needs smartmontools (and root).
 type smartCheck struct {
 	base
 	runner execx.Runner
@@ -50,6 +66,17 @@ func (c smartCheck) Run(ctx context.Context) Result {
 			return c.unavailableResult(prefix+": "+s, start)
 		}
 		return c.unavailableResult(prefix+": "+err.Error(), start)
+	}
+
+	// smartctl still emits well-formed JSON when it could not sample the drive:
+	// the report carries an error message and an exit status in place of a
+	// verdict. Reading only the verdict would turn a drive that fell off its bus
+	// into a healthy, verdictless sample, so the envelope is classified first.
+	if data.deviceUnreadable {
+		return c.missingDeviceResult(prefix, c.device, start)
+	}
+	if data.usageError {
+		return c.unavailableResult(prefix+": "+smartctlFailure(data.failure, res.Stderr), start)
 	}
 
 	ok := data.healthKnown && !data.passed // default alert condition: health FAILED
@@ -119,7 +146,14 @@ type smartData struct {
 	passed          bool
 	healthKnown     bool
 	selfTestRunning bool
-	values          map[string]float64 // temperature, reallocated, wear, power_on_hours
+	// deviceUnreadable means smartctl could not open the device or it returned
+	// no identification — the drive is gone, not merely unhealthy.
+	deviceUnreadable bool
+	// usageError means smartctl rejected the command line Sermo built for it.
+	usageError bool
+	// failure is smartctl's own first error-severity message, when it gave one.
+	failure string
+	values  map[string]float64 // temperature, reallocated, wear, power_on_hours
 }
 
 // parseSmart extracts the health verdict and the graphable attributes from
@@ -129,6 +163,10 @@ func parseSmart(out string) (smartData, error) {
 		return smartData{}, errors.New("no smartctl output")
 	}
 	var j struct {
+		Smartctl struct {
+			ExitStatus *int              `json:"exit_status"`
+			Messages   []smartctlMessage `json:"messages"`
+		} `json:"smartctl"`
 		SmartStatus *struct {
 			Passed bool `json:"passed"`
 		} `json:"smart_status"`
@@ -162,7 +200,11 @@ func parseSmart(out string) (smartData, error) {
 		return smartData{}, fmt.Errorf("invalid smartctl JSON: %w", err)
 	}
 
-	d := smartData{values: map[string]float64{}}
+	d := smartData{values: map[string]float64{}, failure: smartctlErrorMessage(j.Smartctl.Messages)}
+	if status := j.Smartctl.ExitStatus; status != nil {
+		d.deviceUnreadable = *status&smartExitDeviceOpen != 0
+		d.usageError = *status&smartExitCommandLine != 0
+	}
 	if j.SmartStatus != nil {
 		d.passed, d.healthKnown = j.SmartStatus.Passed, true
 	}
@@ -192,4 +234,34 @@ func smartSelfTestRunning(value *int, status string) bool {
 		return true
 	}
 	return strings.Contains(strings.ToLower(status), "in progress")
+}
+
+// smartctlMessage is one diagnostic line smartctl attaches to a JSON report.
+type smartctlMessage struct {
+	String   string `json:"string"`
+	Severity string `json:"severity"`
+}
+
+// smartctlErrorMessage returns smartctl's first error-severity message. It is
+// the operator-facing reason a report carries no reading ("Smartctl open device:
+// /dev/sda failed: INQUIRY failed"), which stderr does not repeat under -j.
+func smartctlErrorMessage(messages []smartctlMessage) string {
+	for _, m := range messages {
+		if strings.EqualFold(m.Severity, smartMessageSeverityError) {
+			return m.String
+		}
+	}
+	return ""
+}
+
+// smartctlFailure picks the most specific description of a smartctl run that
+// produced no sample: its own JSON message first, then its stderr.
+func smartctlFailure(reported, stderr string) string {
+	if reported != "" {
+		return reported
+	}
+	if line := output.FirstNonEmptyLine(stderr); line != "" {
+		return line
+	}
+	return smartFailureUnknown
 }

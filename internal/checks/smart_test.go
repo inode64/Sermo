@@ -138,3 +138,35 @@ func (r *recordingSmartRunner) Run(_ context.Context, name string, args ...strin
 	r.args = append([]string(nil), args...)
 	return r.result, nil
 }
+
+// smartDeviceGone is smartctl's JSON envelope for a drive that fell off its bus:
+// well-formed output with no smart_status and exit-status bit 1 set. Captured
+// from a SATA disk that stopped answering INQUIRY while its /dev node lived on.
+const smartDeviceGone = `{
+  "smartctl": {
+    "messages": [
+      { "string": "Smartctl open device: /dev/sda failed: INQUIRY failed", "severity": "error" }
+    ],
+    "exit_status": 2
+  },
+  "local_time": { "time_t": 1787231441 }
+}`
+
+func TestSmartCheckReportsMissingDevice(t *testing.T) {
+	res := smartWith(smartDeviceGone).Run(context.Background())
+	if !res.Unavailable {
+		t.Errorf("Unavailable = false, want true: a device smartctl cannot open is not a healthy sample")
+	}
+	if got := res.Observation(); got != ObservationUnavailable {
+		t.Errorf("Observation() = %q, want %q", got, ObservationUnavailable)
+	}
+	if got := res.Data[DataKeyDeviceState]; got != DeviceStateMissing {
+		t.Errorf("device state = %v, want %q", got, DeviceStateMissing)
+	}
+	if got := res.Data[DataKeyHealth]; got != DeviceStateMissing {
+		t.Errorf("health = %v, want %q", got, DeviceStateMissing)
+	}
+	if !strings.Contains(res.Message, "/dev/sda") || !strings.Contains(res.Message, DeviceStateMissing) {
+		t.Errorf("message = %q, want it to name the device and say it is missing", res.Message)
+	}
+}
