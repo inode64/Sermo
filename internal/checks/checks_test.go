@@ -355,6 +355,19 @@ func TestParseStatusMatcher(t *testing.T) {
 // make, so a test never depends on which disks the machine running it has.
 func livingDeviceSize(string) (uint64, error) { return livingDeviceSectors, nil }
 
+// testDeviceIdentity pins the sysfs identity lookup for the same reason: without
+// it a failed sample would report whatever drive the machine running the test
+// happens to have at that device node.
+func testDeviceIdentity(string) BlockDeviceIdentity {
+	return BlockDeviceIdentity{Model: "TEST DISK", Serial: "SN0", Firmware: "FW0"}
+}
+
+// livingDeviceProbe is the sysfs pair every device-addressing check consults
+// once its own tool failed.
+func livingDeviceProbe() deviceProbe {
+	return deviceProbe{size: livingDeviceSize, identity: testDeviceIdentity}
+}
+
 type fakeRunner struct {
 	result execx.Result
 }
@@ -413,20 +426,23 @@ func TestCheckTimeoutMessage(t *testing.T) {
 		},
 		{
 			name: "smart",
-			check: smartCheck{
-				base:   base{name: "sm", timeout: time.Millisecond},
-				runner: slowRunner{},
-				device: "/dev/sda",
+			check: &smartCheck{
+				base:           base{name: "sm", timeout: time.Millisecond},
+				runner:         slowRunner{},
+				device:         "/dev/sda",
+				deviceIdentity: testDeviceIdentity,
+				last:           &lastSample{},
 			},
 		},
 		{
 			name: "hdparm",
-			check: hdparmCheck{
-				base:       base{name: "hd", timeout: time.Millisecond},
-				runner:     slowRunner{},
-				device:     "/dev/sda",
-				preds:      []levelPred{{field: "cached", op: "<", value: 100}},
-				deviceSize: livingDeviceSize,
+			check: &hdparmCheck{
+				base:   base{name: "hd", timeout: time.Millisecond},
+				runner: slowRunner{},
+				device: "/dev/sda",
+				preds:  []levelPred{{field: "cached", op: "<", value: 100}},
+				probe:  livingDeviceProbe(),
+				last:   &lastSample{},
 			},
 		},
 		{

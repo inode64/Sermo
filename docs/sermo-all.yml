@@ -795,6 +795,9 @@ watches:
       device: /dev/sda
       temperature: { op: ">", value: 50 }
       reallocated: { op: ">", value: 0 }  # reallocated sectors
+      pending_sectors: { op: ">", value: 0 }  # unreadable sectors awaiting reallocation
+      crc_errors: { op: ">", value: 0 }  # link errors: suspect the cable
+      media_errors: { op: ">", value: 0 }  # NVMe media errors
       wear: { op: ">", value: 90 }  # SSD wear-level %
       power_on_hours: { op: ">", value: 50000 }
   raid:

@@ -100,7 +100,7 @@ func TestHdparmThresholds(t *testing.T) {
 	pred := []levelPred{{"read", "<", 100}} // alert condition: read below 100 MB/s
 
 	// Degraded: read=50 < 100 -> the alert condition holds -> OK (fires as a watch).
-	c := hdparmCheck{base: base{name: "d", timeout: time.Second}, runner: fakeRunner{execx.Result{Stdout: degraded}}, device: "/dev/sda", preds: pred}
+	c := &hdparmCheck{base: base{name: "d", timeout: time.Second}, runner: fakeRunner{execx.Result{Stdout: degraded}}, device: "/dev/sda", preds: pred, last: &lastSample{}}
 	if res := c.Run(context.Background()); !res.OK {
 		t.Errorf("read 50 < 100 should meet the alert condition: %s", res.Message)
 	} else if res.Data["read"] != 50.0 {
@@ -108,19 +108,20 @@ func TestHdparmThresholds(t *testing.T) {
 	}
 
 	// Healthy: read=200, not below 100 -> condition not met.
-	c = hdparmCheck{base: base{name: "d", timeout: time.Second}, runner: fakeRunner{execx.Result{Stdout: healthy}}, device: "/dev/sda", preds: pred}
+	c = &hdparmCheck{base: base{name: "d", timeout: time.Second}, runner: fakeRunner{execx.Result{Stdout: healthy}}, device: "/dev/sda", preds: pred, last: &lastSample{}}
 	if res := c.Run(context.Background()); res.OK {
 		t.Error("read 200 must not meet the read<100 alert condition")
 	}
 }
 
 func TestHdparmCheckError(t *testing.T) {
-	c := hdparmCheck{
-		base:       base{name: "d", timeout: time.Second},
-		runner:     fakeRunner{execx.Result{Stderr: "/dev/sda: Permission denied\n", ExitCode: 1}},
-		device:     "/dev/sda",
-		preds:      []levelPred{{"read", "<", 100}},
-		deviceSize: livingDeviceSize,
+	c := &hdparmCheck{
+		base:   base{name: "d", timeout: time.Second},
+		runner: fakeRunner{execx.Result{Stderr: "/dev/sda: Permission denied\n", ExitCode: 1}},
+		device: "/dev/sda",
+		preds:  []levelPred{{"read", "<", 100}},
+		probe:  livingDeviceProbe(),
+		last:   &lastSample{},
 	}
 	res := c.Run(context.Background())
 	if res.OK {
@@ -149,12 +150,13 @@ func TestParseHdparmPreds(t *testing.T) {
 const hdparmDeviceGone = "/dev/sda:\n Timing buffered disk reads: read() hit EOF - device too small\n"
 
 func TestHdparmCheckReportsMissingDevice(t *testing.T) {
-	c := hdparmCheck{
-		base:       base{name: "d", timeout: time.Second},
-		runner:     fakeRunner{execx.Result{Stdout: hdparmDeviceGone, ExitCode: 5}},
-		device:     "/dev/sda",
-		preds:      []levelPred{{fieldRead, "<", 20}},
-		deviceSize: func(string) (uint64, error) { return 0, nil },
+	c := &hdparmCheck{
+		base:   base{name: "d", timeout: time.Second},
+		runner: fakeRunner{execx.Result{Stdout: hdparmDeviceGone, ExitCode: 5}},
+		device: "/dev/sda",
+		preds:  []levelPred{{fieldRead, "<", 20}},
+		probe:  deviceProbe{size: func(string) (uint64, error) { return 0, nil }, identity: testDeviceIdentity},
+		last:   &lastSample{},
 	}
 	res := c.Run(context.Background())
 	if !res.Unavailable {
@@ -169,12 +171,13 @@ func TestHdparmCheckReportsMissingDevice(t *testing.T) {
 }
 
 func TestHdparmCheckKeepsToolErrorWhenDevicePresent(t *testing.T) {
-	c := hdparmCheck{
-		base:       base{name: "d", timeout: time.Second},
-		runner:     fakeRunner{execx.Result{Stdout: hdparmDeviceGone, ExitCode: 5}},
-		device:     "/dev/sda",
-		preds:      []levelPred{{fieldRead, "<", 20}},
-		deviceSize: livingDeviceSize,
+	c := &hdparmCheck{
+		base:   base{name: "d", timeout: time.Second},
+		runner: fakeRunner{execx.Result{Stdout: hdparmDeviceGone, ExitCode: 5}},
+		device: "/dev/sda",
+		preds:  []levelPred{{fieldRead, "<", 20}},
+		probe:  livingDeviceProbe(),
+		last:   &lastSample{},
 	}
 	res := c.Run(context.Background())
 	if !res.Unavailable {
@@ -182,5 +185,33 @@ func TestHdparmCheckKeepsToolErrorWhenDevicePresent(t *testing.T) {
 	}
 	if got := res.Data[DataKeyDeviceState]; got == DeviceStateMissing {
 		t.Errorf("device state = %v, want no missing marker for a device sysfs still sizes", got)
+	}
+}
+
+func TestHdparmCheckKeepsLastKnownRatesOfAMissingDevice(t *testing.T) {
+	runner := &scriptedRunner{results: []execx.Result{
+		{Stdout: " Timing buffered disk reads: 500 MB in 3.00 seconds = 200.00 MB/sec\n"},
+		{Stdout: hdparmDeviceGone, ExitCode: 5},
+	}}
+	c := &hdparmCheck{
+		base:   base{name: "d", timeout: time.Second},
+		runner: runner,
+		device: "/dev/sda",
+		preds:  []levelPred{{fieldRead, "<", 20}},
+		probe:  deviceProbe{size: func(string) (uint64, error) { return 0, nil }, identity: testDeviceIdentity},
+		last:   &lastSample{},
+	}
+	if res := c.Run(context.Background()); res.Unavailable {
+		t.Fatalf("first timing must succeed: %s", res.Message)
+	}
+	res := c.Run(context.Background())
+	if got := res.Data[DataKeyDeviceState]; got != DeviceStateMissing {
+		t.Fatalf("device state = %v, want %q", got, DeviceStateMissing)
+	}
+	if got := res.Data[LastSampleKey(fieldRead)]; got != 200.0 {
+		t.Errorf("Data[%s] = %v, want the rate the disk last managed", LastSampleKey(fieldRead), got)
+	}
+	if got := res.Data[DataKeyModel]; got != "TEST DISK" {
+		t.Errorf("Data[%s] = %v, want the model sysfs still publishes", DataKeyModel, got)
 	}
 }

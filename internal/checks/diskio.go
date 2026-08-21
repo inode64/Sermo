@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	diskIOSectorBytes = 512
+	diskIOSectorBytes = blockSectorBytes
 
 	diskStatsMinFields            = 13
 	diskStatsDeviceFieldIndex     = 2
@@ -68,13 +68,14 @@ type diskIOState struct {
 // no I/O at all is confirmed against sysfs before it is reported as idle.
 type diskIOCheck struct {
 	base
-	device     string
-	preds      []levelPred
-	sampler    DiskIOSamplerFunc
-	deviceSize BlockDeviceSizeFunc
-	deviceBus  BlockDeviceBusFunc
-	clock      func() time.Time
-	state      *diskIOState
+	device    string
+	preds     []levelPred
+	sampler   DiskIOSamplerFunc
+	deviceBus BlockDeviceBusFunc
+	probe     deviceProbe
+	clock     func() time.Time
+	state     *diskIOState
+	last      *lastSample
 }
 
 func (c *diskIOCheck) Run(_ context.Context) Result {
@@ -88,7 +89,9 @@ func (c *diskIOCheck) Run(_ context.Context) Result {
 	prefix := CheckTypeDiskIO + " " + c.device
 	s, err := sampler(c.device)
 	if err != nil {
-		return c.deviceFailureResult(c.deviceSize, prefix, c.device, err.Error(), start)
+		r := c.deviceFailureResult(c.probe, prefix, c.device, err.Error(), start)
+		r.Data = c.last.into(r.Data, start)
+		return r
 	}
 	now := clock()
 	st := c.state
@@ -103,8 +106,10 @@ func (c *diskIOCheck) Run(_ context.Context) Result {
 
 	// Only a window that moved nothing at all can be a dead device, so a disk
 	// carrying traffic never pays for the sysfs lookup.
-	if diskIORatesIdle(rates) && blockDeviceMissing(c.deviceSize, c.device) {
-		return c.missingDeviceResult(prefix, c.device, start)
+	if diskIORatesIdle(rates) && blockDeviceMissing(c.probe.size, c.device) {
+		r := c.missingDeviceResult(c.probe.identity, prefix, c.device, start)
+		r.Data = c.last.into(r.Data, start)
+		return r
 	}
 
 	values := map[string]float64{
@@ -116,6 +121,7 @@ func (c *diskIOCheck) Run(_ context.Context) Result {
 
 	ok := levelPredsHold(c.preds, values)
 
+	c.last.record("", values, start)
 	res := c.result(ok, fmt.Sprintf("diskio %s util %.1f%% read %s write %s await %.1fms",
 		c.device, rates.UtilPct, formatSummaryBytesPerSecond(rates.ReadBytes), formatSummaryBytesPerSecond(rates.WriteBytes), rates.AwaitMs), start)
 	res.Data = withDeviceBus(DiskIOResultData(c.device, rates, s), c.deviceBus, c.device)

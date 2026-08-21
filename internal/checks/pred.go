@@ -71,11 +71,19 @@ const (
 	fieldDegraded   = "degraded"
 	fieldRecovering = "recovering"
 	fieldArrays     = "arrays"
-	// smart attribute fields.
-	fieldTemperature  = "temperature"
-	fieldReallocated  = "reallocated"
-	fieldWear         = "wear"
-	fieldPowerOnHours = "power_on_hours"
+	// smart attribute fields. Pending sectors are the ones the drive could not
+	// read and has not managed to reallocate yet — the count that rises before
+	// reallocated does — and CRC errors count corrupted transfers on the link,
+	// which blames the cable rather than the media. media_errors is the NVMe
+	// counterpart of reallocated: NVMe drives publish no attribute table.
+	fieldTemperature    = "temperature"
+	fieldReallocated    = "reallocated"
+	fieldPendingSectors = "pending_sectors"
+	fieldCRCErrors      = "crc_errors"
+	fieldMediaErrors    = "media_errors"
+	fieldWear           = "wear"
+	fieldPowerOnHours   = "power_on_hours"
+	fieldPowerCycles    = "power_cycles"
 	// edac ECC error-count fields (correctable / uncorrectable).
 	fieldCE = "ce"
 	fieldUE = "ue"
@@ -166,6 +174,15 @@ const SmartFieldTemperature = fieldTemperature
 // SmartFieldReallocated is the public SMART reallocated-sector predicate/data field.
 const SmartFieldReallocated = fieldReallocated
 
+// SmartFieldPendingSectors is the public SMART pending-sector predicate/data field.
+const SmartFieldPendingSectors = fieldPendingSectors
+
+// SmartFieldCRCErrors is the public SMART link CRC-error predicate/data field.
+const SmartFieldCRCErrors = fieldCRCErrors
+
+// SmartFieldMediaErrors is the public NVMe media-error predicate/data field.
+const SmartFieldMediaErrors = fieldMediaErrors
+
 // SmartFieldWear is the public SMART wear predicate/data field.
 const SmartFieldWear = fieldWear
 
@@ -221,7 +238,10 @@ var (
 	// HdparmPredFields are the predicates of an hdparm check.
 	HdparmPredFields = []string{HdparmFieldRead, HdparmFieldCached}
 	// SmartPredFields are the optional attribute predicates of a smart check.
-	SmartPredFields = []string{SmartFieldTemperature, SmartFieldReallocated, SmartFieldWear, SmartFieldPowerOnHours}
+	SmartPredFields = []string{
+		SmartFieldTemperature, SmartFieldReallocated, SmartFieldPendingSectors,
+		SmartFieldCRCErrors, SmartFieldMediaErrors, SmartFieldWear, SmartFieldPowerOnHours,
+	}
 	// RaidPredFields are the optional predicates of a raid check.
 	RaidPredFields = []string{fieldDegraded, fieldRecovering, fieldArrays}
 	// LVMPredFields are capacity predicates for an LVM logical volume or volume group.

@@ -70,7 +70,11 @@ type Samplers struct {
 	BlockDeviceSizer BlockDeviceSizeFunc
 	// BlockDeviceBus reports the transport a block device sits on, for the checks
 	// that address one (diskio, hdparm, smart). Nil reads /sys/class/block.
-	BlockDeviceBus       BlockDeviceBusFunc
+	BlockDeviceBus BlockDeviceBusFunc
+	// BlockDeviceIdentity reports what the kernel says a block device is, for the
+	// checks that address one and have to name a drive their own tool can no
+	// longer reach. Nil reads /sys/class/block.
+	BlockDeviceIdentity  BlockDeviceIdentityFunc
 	SensorSampler        SensorSamplerFunc
 	RaidSampler          RaidSamplerFunc
 	EdacSampler          EdacSamplerFunc
@@ -302,11 +306,11 @@ var builtinCheckSpecs = []checkSpec{
 	}},
 	{info: conditionTypeInfo(CheckTypeProcessCount), build: func(in checkBuildInput) (Check, string) { return buildProcessCountCheck(in.base, in.entry, in.deps) }},
 	{info: conditionTypeInfo(CheckTypeHdparm), build: func(in checkBuildInput) (Check, string) {
-		return buildHdparmCheck(in.base, in.entry, in.runner, in.deps.BlockDeviceSizer, in.deps.BlockDeviceBus)
+		return buildHdparmCheck(in.base, in.entry, in.runner, in.deps)
 	}},
 	{info: conditionTypeInfo(CheckTypeSensors), build: func(in checkBuildInput) (Check, string) { return buildSensorsCheck(in.base, in.entry, in.deps) }},
 	{info: conditionTypeInfo(CheckTypeSmart), build: func(in checkBuildInput) (Check, string) {
-		return buildSmartCheck(in.base, in.entry, in.runner, in.deps.BlockDeviceBus)
+		return buildSmartCheck(in.base, in.entry, in.runner, in.deps)
 	}},
 	{info: conditionTypeInfo(CheckTypeRAID), build: func(in checkBuildInput) (Check, string) { return buildRaidCheck(in.base, in.entry, in.deps) }},
 	{info: healthTypeInfo(CheckTypeGlusterCluster), build: func(in checkBuildInput) (Check, string) {

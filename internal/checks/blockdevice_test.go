@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -118,6 +120,57 @@ func TestDefaultBlockDeviceBusRejectsNonDeviceName(t *testing.T) {
 	for _, device := range []string{"", "../../etc", "by-id/wwn-0x5000", "."} {
 		if got := defaultBlockDeviceBus(device); got != "" {
 			t.Errorf("defaultBlockDeviceBus(%q) = %q, want no answer", device, got)
+		}
+	}
+}
+
+func TestSysDeviceModel(t *testing.T) {
+	for _, tc := range []struct {
+		name, vendor, model, want string
+	}{
+		{"libata placeholder vendor is dropped", "ATA", "WDC WD20EFRX-68E", "WDC WD20EFRX-68E"},
+		{"a real SCSI vendor names the drive", "SEAGATE", "ST4000NM0023", "SEAGATE ST4000NM0023"},
+		{"nvme publishes the model alone", "", "Samsung SSD 980 500GB", "Samsung SSD 980 500GB"},
+		{"a vendor with no model still identifies something", "SEAGATE", "", "SEAGATE"},
+		{"nothing known reports nothing", "", "", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := sysDeviceModel(tc.vendor, tc.model); got != tc.want {
+				t.Errorf("sysDeviceModel(%q, %q) = %q, want %q", tc.vendor, tc.model, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestWithDeviceIdentityOmitsWhatIsNotKnown(t *testing.T) {
+	data := withDeviceIdentity(map[string]any{DataKeyDevice: "/dev/sda"}, BlockDeviceIdentity{Model: "TEST DISK"})
+	if data[DataKeyModel] != "TEST DISK" {
+		t.Errorf("Data[%s] = %v, want the known model", DataKeyModel, data[DataKeyModel])
+	}
+	for _, key := range []string{DataKeySerialNumber, DataKeyFirmware, DataKeyWWN, DataKeyRotationRate, DataKeyCapacityBytes} {
+		if _, ok := data[key]; ok {
+			t.Errorf("Data[%s] is present, want an unknown field omitted rather than blank", key)
+		}
+	}
+}
+
+func TestSysDeviceRotation(t *testing.T) {
+	dir := t.TempDir()
+	if got := sysDeviceRotation(dir); got != "" {
+		t.Errorf("rotation = %q, want nothing when the kernel publishes no flag", got)
+	}
+	for _, tc := range []struct{ flag, want string }{
+		{"1", rotationRotational},
+		{"0", rotationSolidState},
+		// The flag is one byte plus a newline; trimming is what makes it match.
+		{"1\n", rotationRotational},
+	} {
+		path := filepath.Join(dir, sysQueueRotationalFile)
+		if err := os.WriteFile(path, []byte(tc.flag), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if got := sysDeviceRotation(dir); got != tc.want {
+			t.Errorf("rotation for flag %q = %q, want %q", tc.flag, got, tc.want)
 		}
 	}
 }

@@ -17,6 +17,7 @@ const (
 	DataKeyBackend                  = CheckKeyBackend
 	DataKeyBaselineCount            = "baseline_count"
 	DataKeyBaselineBytes            = "baseline_bytes"
+	DataKeyCapacityBytes            = "capacity_bytes"
 	DataKeyChanged                  = "changed"
 	DataKeyChip                     = CheckKeyChip
 	DataKeyClockFailure             = "clock_failure"
@@ -44,6 +45,7 @@ const (
 	DataKeyDatabase                 = CheckKeyDatabase
 	DataKeyEngine                   = CheckKeyEngine
 	DataKeyFamily                   = "family"
+	DataKeyFirmware                 = "firmware"
 	DataKeyFingerprint              = "fingerprint"
 	DataKeyFingerprintOld           = "fingerprint_old"
 	DataKeyFrequencyPPM             = "frequency_ppm"
@@ -99,6 +101,7 @@ const (
 	DataKeyMetric                   = fieldMetric
 	DataKeyMinRules                 = CheckKeyMinRules
 	DataKeyMode                     = "mode"
+	DataKeyModel                    = "model"
 	DataKeyMountSampleError         = "mount_sample_error"
 	DataKeyModifiedAt               = "modified_at"
 	DataKeyMounted                  = CheckKeyMounted
@@ -125,6 +128,7 @@ const (
 	DataKeyPID                = "pid"
 	DataKeyPIDs               = "pids"
 	DataKeyPort               = fieldPort
+	DataKeyPowerCycles        = "power_cycles"
 	DataKeyPresent            = "present"
 	DataKeyProtectedCount     = "protected_count"
 	DataKeyProgressPct        = "progress_pct"
@@ -149,11 +153,13 @@ const (
 	DataKeyRMSOffsetSeconds   = "rms_offset_seconds"
 	DataKeyRootDelayMS        = "root_delay_ms"
 	DataKeyRootDispersionMS   = "root_dispersion_ms"
+	DataKeyRotationRate       = "rotation_rate"
 	DataKeyRoutes             = "routes"
 	DataKeyRules              = CheckKeyRules
 	DataKeySampleError        = "sample_error"
 	DataKeyServer             = "server"
 	DataKeyTerminalSessions   = "terminal_sessions"
+	DataKeySelfTest           = "self_test"
 	DataKeySerialNumber       = "serial_number"
 	DataKeySignatureAlgorithm = "signature_algorithm"
 	DataKeySize               = CheckKeySize
@@ -197,6 +203,7 @@ const (
 	DataKeyVersionShort       = "version_short"
 	DataKeyViolationCount     = "violation_count"
 	DataKeyViolations         = "violations"
+	DataKeyWWN                = "wwn"
 	DataKeyWindow             = "window"
 	DataKeyWindows            = "windows"
 	DataKeyActivityUnix       = "activity_unix"

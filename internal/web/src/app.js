@@ -120,8 +120,10 @@ const targetStateRebuilding = "rebuilding";
 const targetStateRepairing = "repairing";
 const targetStateMoving = "moving";
 const targetStateMerging = "merging";
-// The one device state that is a fault rather than an operation in progress:
-// the check's device stopped answering, so its readings are gone, not pending.
+// The one device state that is a fault rather than an operation in progress: the
+// check's device stopped answering, so its live readings are gone, not pending.
+// The row still carries what the drive is (model, serial, firmware) and what it
+// last reported, marked "(last)" so neither reads as a current sample.
 const targetStateMissing = "missing";
 const targetStateFailed = "failed";
 const targetStateStarting = "starting";

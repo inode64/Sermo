@@ -242,6 +242,40 @@ func TestCheckReadingsForAllTypes(t *testing.T) {
 			want: map[string]string{"power_on_hours": "16mo 20d"},
 		},
 		{
+			name: "smart names the drive it sampled",
+			typ:  "smart",
+			data: map[string]any{
+				"device": "/dev/sdb", "health": "PASSED",
+				"model": "WDC WD20EFRX-68EUZN0", "serial_number": "WD-WCC4M4SZ375K",
+				"firmware": "82.00A82", "wwn": "0x50014ee2636af963",
+				"capacity_bytes": uint64(2000398934016), "temperature": float64(41),
+				"pending_sectors": float64(3), "crc_errors": float64(7),
+				"power_cycles": 137, "self_test": "Completed without error at 3468 h",
+			},
+			want: map[string]string{
+				"model": "WDC WD20EFRX-68EUZN0", "serial_number": "WD-WCC4M4SZ375K",
+				"firmware": "82.00A82", "wwn": "0x50014ee2636af963",
+				"capacity_bytes": "1.82 TiB", "pending_sectors": "3", "crc_errors": "7",
+				"power_cycles": "137", "self_test": "Completed without error at 3468 h",
+			},
+		},
+		{
+			// A drive that stopped answering still reports what it is and what it
+			// last said; the retained rows are labelled so they cannot be read as
+			// a current sample.
+			name: "smart keeps the last known readings of a missing drive",
+			typ:  "smart",
+			data: map[string]any{
+				"device": "/dev/sda", "health": "missing", "device_state": "missing",
+				"model": "WDC WD20EFRX-68E", "last_health": "PASSED",
+				"last_seen_seconds": float64(7200), "last_temperature": float64(41),
+			},
+			want: map[string]string{
+				"model": "WDC WD20EFRX-68E", "last_seen_seconds": "2h",
+				"last_health": "PASSED", "last_temperature": "41 °C",
+			},
+		},
+		{
 			name: "sql exposes observed scalar and condition",
 			typ:  "sql",
 			data: map[string]any{"result": "51", "op": ">", "threshold": "50"},
