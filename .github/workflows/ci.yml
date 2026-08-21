@@ -131,6 +131,46 @@ jobs:
             exit 1
           fi
 
+  # TEMPORARY probe: the race job has been externally canceled sixty to ninety
+  # seconds in on eleven straight runs — no OOM (the dmesg watcher stayed
+  # silent), no test failure, and the same tree race-tests green in 75s on a
+  # cold cache pinned to four cores locally. This job runs the identical
+  # command on a VM that starts after the fuzz job completes, when the other
+  # jobs are dead or done: if it survives in isolation the killer is
+  # environmental, if it dies the same way the workload itself is being
+  # targeted. Remove once the answer is in.
+  race-delayed:
+    name: race detector (delayed probe)
+    runs-on: ubuntu-latest
+    needs: fuzz
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: make race (delayed)
+        run: |
+          set -o pipefail
+          sleep 90
+          sudo dmesg -wT 2>/dev/null | grep --line-buffered -iE "out of memory|oom-kill|killed process" | while IFS= read -r line; do
+            echo "::warning title=kernel::$line"
+          done &
+          echo "::notice title=phase::delayed race started $(free -m | grep '^Mem:')"
+          phase_stream() (
+            while IFS= read -r line; do
+              echo "$line"
+              case $line in
+                "go test"*|"ok "*|FAIL*|"--- FAIL"*|WARNING*)
+                  echo "::notice title=phase::$line" ;;
+              esac
+            done
+          )
+          if ! make race 2>&1 | tee /tmp/race.log | phase_stream; then
+            echo "::error title=make race (delayed)::$(tail -c 700 /tmp/race.log | tr '\n' ' ')"
+            exit 1
+          fi
+
   # Runs on every event, not just the weekly cron. The seven targets parse
   # operator-supplied YAML and the process selectors that decide what may be
   # signalled, so a crash here is a crash on a malformed config file — worth
