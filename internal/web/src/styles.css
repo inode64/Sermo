@@ -261,7 +261,6 @@
   #daemon-metric-windows { font-weight: 400; }
   .daemon-path { font-size: .8rem; }
   .daemon-metrics-section { margin-top: .75rem; }
-  .daemon-metrics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1rem; margin-top: .5rem; }
   .panel-footnote { font-size: .8rem; }
   #act-last { flex: 1; min-width: 180px; }
   .panel-controls input { min-width: 13rem; }
