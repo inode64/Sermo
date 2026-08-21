@@ -1324,6 +1324,33 @@ func TestCatalogConfigPreflightsUseResolvedAppTools(t *testing.T) {
 		t.Fatalf("nebula config command = %v, want app binary token first", nebulaCommand)
 	}
 
+	// cloudflared's config preflight is gated: `tunnel ingress validate` only
+	// validates locally declared ingress rules, so it fails on a remotely-managed
+	// tunnel whose config.yml carries just a token — and a failed preflight blocks
+	// the restart. The gate prunes the entry on any host without the file, this
+	// one included, so assert the token form from the raw document the way the
+	// instanced nebula profile is asserted, plus the gate that has to track the
+	// `config` variable it validates.
+	cloudflared := catalogDocByName(t, root, "services", "cloudflared")
+	cloudflaredConfig := nested(t, cloudflared, "preflight", "config")
+	cloudflaredCommand := cfgval.StringList(cloudflaredConfig["command"])
+	if len(cloudflaredCommand) == 0 || cloudflaredCommand[0] != "${cloudflared_binary}" {
+		t.Fatalf("cloudflared config command = %v, want app binary token first", cloudflaredCommand)
+	}
+	if joined := strings.Join(cloudflaredCommand, " "); !strings.Contains(joined, "tunnel ingress validate") {
+		t.Fatalf("cloudflared config command = %v, want the ingress validation subcommand", cloudflaredCommand)
+	}
+	cloudflaredGate := nested(t, cloudflaredConfig, "enable_if")
+	if got := cfgval.String(cloudflaredGate["key"]); got != "ingress" {
+		t.Fatalf("cloudflared config preflight gate key = %q, want ingress", got)
+	}
+	// enable_if is evaluated before ${var} expansion, so the gate repeats the
+	// literal default of `config` and must not drift from it.
+	wantGateFile := cfgval.String(nested(t, cloudflared, "variables")["config"])
+	if got := cfgval.String(cloudflaredGate["file"]); got != wantGateFile {
+		t.Fatalf("cloudflared config preflight gate file = %q, want the config variable default %q", got, wantGateFile)
+	}
+
 	// wantBase lists the acceptable resolved-tool basenames. The catalog binary
 	// lists span several standard directories (and ${bindir} expands them
 	// further), and an app may legitimately resolve to a fallback binary present
@@ -1385,13 +1412,6 @@ func TestCatalogConfigPreflightsUseResolvedAppTools(t *testing.T) {
 			toolArgIndex: 0,
 			wantBase:     []string{"influxd"},
 			wantContains: []string{"config", "validate", "--config"},
-		},
-		{
-			service:      "cloudflared",
-			appToolCheck: "cloudflared-binary",
-			toolArgIndex: 3,
-			wantBase:     []string{"cloudflared"},
-			wantContains: []string{"tunnel", "validate"},
 		},
 		{
 			service:      "mysql",
