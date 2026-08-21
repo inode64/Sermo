@@ -94,6 +94,11 @@ const (
 	watchReadingLabelKeyBits                  = "Key bits"
 	watchReadingLabelKeyType                  = "Key type"
 	watchReadingLabelKind                     = "Kind"
+	watchReadingLabelMAC                      = "MAC"
+	watchReadingLabelDriver                   = "Driver"
+	watchReadingLabelMTU                      = "MTU"
+	watchReadingLabelDuplex                   = "Duplex"
+	watchReadingLabelLinkChanges              = "Link changes"
 	watchReadingLabelLabelFilter              = "Label filter"
 	watchReadingLabelLatency                  = "Latency"
 	watchReadingLabelLoad                     = "Load"
@@ -437,6 +442,7 @@ func netCheckReadings(data map[string]any) []web.WatchReading {
 	if iface := cfgval.String(data[checks.DataKeyInterface]); iface != "" {
 		out = append(out, web.WatchReading{Field: checks.DataKeyInterface, Label: watchReadingLabelInterface, Value: iface})
 	}
+	out = append(out, netIdentityReadings(data)...)
 	metric := cfgval.String(data[checks.DataKeyMetric])
 	value := cfgval.String(data[checks.DataKeyValue])
 	switch metric {
@@ -462,6 +468,23 @@ func netCheckReadings(data map[string]any) []web.WatchReading {
 		}
 	}
 	return out
+}
+
+// netIdentityReadings names the interface behind a net sample: which card, which
+// driver, which slot. Identity outlives the sample — the port a cable is plugged
+// into is the same port whether the link is up or the interface has vanished
+// entirely — so these rows are the ones that survive into a failed observation,
+// the same way a disk's serial number does.
+func netIdentityReadings(data map[string]any) []web.WatchReading {
+	return readingsFrom(data).
+		addString(checks.DataKeyMAC, watchReadingLabelMAC).
+		addString(checks.DataKeyDriver, watchReadingLabelDriver).
+		addString(checks.DataKeyBus, watchReadingLabelBus).
+		addString(checks.DataKeyKind, watchReadingLabelKind).
+		addString(checks.DataKeyDuplex, watchReadingLabelDuplex).
+		addInt(checks.DataKeyMTU, watchReadingLabelMTU).
+		addInt(checks.DataKeyCarrierChanges, watchReadingLabelLinkChanges).
+		readings()
 }
 
 // scalarQueryCheckReadings exposes the scalar observed by a query check and

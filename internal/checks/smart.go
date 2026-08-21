@@ -153,7 +153,7 @@ func (c *smartCheck) unreadableResult(message string, start time.Time) Result {
 // about the drive: the identity sysfs keeps publishing after the device stops
 // answering, and the newest readings this check managed to take.
 func (c *smartCheck) withLastKnown(data map[string]any, start time.Time) map[string]any {
-	data = withDeviceIdentity(data, resolveDeviceIdentity(c.deviceIdentity, c.device))
+	data = withIdentity(data, resolveDeviceIdentity(c.deviceIdentity, c.device))
 	return c.last.into(data, start)
 }
 
@@ -173,7 +173,7 @@ func SmartResultData(device, health string, sample SmartSample) map[string]any {
 	for k, v := range sample.values {
 		data[k] = v
 	}
-	return withDeviceIdentity(data, sample.identity)
+	return withIdentity(data, sample.identity)
 }
 
 func smartctlArgs(device string) []string {

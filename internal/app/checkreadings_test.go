@@ -426,3 +426,59 @@ func TestCertCheckReadingsOmitSubjectAndEndWithIssuer(t *testing.T) {
 		t.Fatalf("last reading = %+v, want issuer Test CA (%+v)", last, readings)
 	}
 }
+
+// TestNetCheckReadingsNameTheInterface pins that a net row says which card it
+// is, not just which name the operator typed — the same reason a disk row
+// carries a serial number.
+func TestNetCheckReadingsNameTheInterface(t *testing.T) {
+	readings := checkReadings(checks.CheckTypeNet, map[string]any{
+		checks.DataKeyInterface:      "eth0",
+		checks.DataKeyMetric:         checks.NetMetricState,
+		checks.DataKeyValue:          "up",
+		checks.DataKeyMAC:            "34:5a:60:00:1c:92",
+		checks.DataKeyDriver:         "ice",
+		checks.DataKeyBus:            "0000:0a:00.0",
+		checks.DataKeyDuplex:         "full",
+		checks.DataKeyMTU:            uint64(1500),
+		checks.DataKeyCarrierChanges: uint64(7),
+	})
+	got := map[string]string{}
+	for _, r := range readings {
+		got[r.Label] = r.Value
+	}
+	for label, want := range map[string]string{
+		"Interface": "eth0", "MAC": "34:5a:60:00:1c:92", "Driver": "ice",
+		"Bus": "0000:0a:00.0", "Duplex": "full", "MTU": "1500", "Link changes": "7",
+		"State": "up",
+	} {
+		if got[label] != want {
+			t.Errorf("reading %q = %q, want %q (all: %v)", label, got[label], want, got)
+		}
+	}
+}
+
+// TestNetCheckReadingsOmitWhatAnInterfaceDoesNotHave keeps a bridge from
+// reporting an empty driver, which would read as a driver that failed to load.
+func TestNetCheckReadingsOmitWhatAnInterfaceDoesNotHave(t *testing.T) {
+	readings := checkReadings(checks.CheckTypeNet, map[string]any{
+		checks.DataKeyInterface: "docker0",
+		checks.DataKeyMetric:    checks.NetMetricState,
+		checks.DataKeyMAC:       "8a:fe:a7:f7:5a:a0",
+		checks.DataKeyKind:      "bridge",
+		checks.DataKeyMTU:       uint64(1500),
+	})
+	for _, r := range readings {
+		if r.Label == "Driver" || r.Label == "Bus" || r.Label == "Duplex" {
+			t.Errorf("a bridge published %q = %q", r.Label, r.Value)
+		}
+	}
+	var kind string
+	for _, r := range readings {
+		if r.Label == "Kind" {
+			kind = r.Value
+		}
+	}
+	if kind != "bridge" {
+		t.Errorf("kind = %q, want bridge", kind)
+	}
+}
