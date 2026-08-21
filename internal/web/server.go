@@ -516,6 +516,10 @@ type Watch struct {
 	LastCheckedAt     string            `json:"last_checked_at,omitempty"` // RFC3339 of latest completed check sample
 	SampleState       string            `json:"sample_state,omitempty"`    // collecting | fresh | stale
 	Probe             *WatchProbe       `json:"probe,omitempty"`           // current manual probe, if one is running
+	// SLA is populated only for a watch whose check asserts availability, so the
+	// dashboard shows the same rolling windows a service does. A condition watch
+	// keeps none: its threshold being met is not downtime.
+	SLA []SLAWindow `json:"sla,omitempty"`
 }
 
 // WatchProbe reports a manual host-watch probe currently running in the daemon.

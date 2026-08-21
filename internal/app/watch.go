@@ -102,6 +102,11 @@ type Watch struct {
 	// intentionally best-effort: watch actions and alerts must not depend on the
 	// dashboard cache.
 	Publish func(watch, checkType string, result checks.Result)
+	// RecordAvailability persists one availability sample, for the watches whose
+	// verdict is an availability statement (see checks.RecordsAvailability). Nil
+	// disables it, and it is best-effort for the same reason Publish is: a full
+	// disk must not stop a link-down alert from firing.
+	RecordAvailability func(up bool, at time.Time)
 	// StateStore persists this watch's episode and pacing state. StateSlot
 	// distinguishes multiple result streams exposed under the same watch name.
 	StateStore WatchStateStore
@@ -204,6 +209,7 @@ func (w *Watch) runCheckCycle(ctx context.Context, res checks.Result, observeOnl
 		w.markSettled()
 		return
 	}
+	w.recordAvailabilitySample(res)
 	w.dispatchRaidTransitions(ctx, res)
 	w.dispatchLVMTransition(ctx, res)
 	wasFiring, emitFiring, firing := w.evaluateFiring(res)
@@ -785,4 +791,23 @@ func envKey(k string) string {
 		}
 	}
 	return b.String()
+}
+
+// recordAvailabilitySample persists one point of this watch's availability
+// series, for the check types whose verdict is an availability statement.
+//
+// It sits after the unavailable and observe-only gates on purpose, so the three
+// things that are not downtime never enter the series: a check that could not
+// run at all, a startup cycle that only observed, and — through
+// CountsTowardHealth — a verdictless or advisory result. A watch reporting
+// `reports: state` is a sensor, and one marked `severity: warning` is an
+// advisory; neither is an outage, exactly as in a service.
+func (w *Watch) recordAvailabilitySample(res checks.Result) {
+	if w.RecordAvailability == nil || !checks.RecordsAvailability(w.CheckType, res.Data) {
+		return
+	}
+	if !res.CountsTowardHealth() {
+		return
+	}
+	w.RecordAvailability(res.Observation().Healthy(), w.clock())
 }

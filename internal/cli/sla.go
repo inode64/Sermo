@@ -3,9 +3,11 @@ package cli
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
+	"sermo/internal/app"
 	"sermo/internal/config"
 	"sermo/internal/metrics"
 	"sermo/internal/state"
@@ -15,6 +17,11 @@ import (
 const defaultSLASeriesWindow = state.DefaultSeriesWindow
 
 const cliTextNotAvailable = "n/a"
+
+// cliUnknownSLATargetFormat names both places an availability series can come
+// from, so a typo does not read as "this service does not exist" when the
+// operator meant a watch.
+const cliUnknownSLATargetFormat = "unknown service or availability watch %q"
 
 // runSLA reports per-service availability over rolling windows (hour..year),
 // computed from the per-cycle samples the daemon records. `sla` reports every
@@ -26,7 +33,7 @@ const cliTextNotAvailable = "n/a"
 // form turns daemon downtime or missing data into observed downtime.
 func (a App) runSLA(ctx context.Context, opts options) int {
 	if len(opts.args) > 1 {
-		return a.commandUsageError(commandSLA, "sla accepts at most one service name")
+		return a.commandUsageError(commandSLA, "sla accepts at most one service or watch name")
 	}
 	cfg, code := a.loadConfig(opts)
 	if cfg == nil {
@@ -49,7 +56,7 @@ func (a App) runSLA(ctx context.Context, opts options) int {
 func runWindowsReport[V any](ctx context.Context, a App, opts options, cfg *config.Config,
 	report func(*state.Store, string, time.Time) ([]V, error),
 	writeJSON, writeTable func([]serviceWindows[V])) int {
-	services, code := a.slaServices(opts, cfg)
+	targets, code := a.slaTargets(opts, cfg)
 	if code != exitSuccess {
 		return code
 	}
@@ -58,13 +65,13 @@ func runWindowsReport[V any](ctx context.Context, a App, opts options, cfg *conf
 		return a.fail(opts, fmt.Sprintf("sla failed: %v", err))
 	}, func(store *state.Store) int {
 		now := time.Now()
-		reports := make([]serviceWindows[V], 0, len(services))
-		for _, name := range services {
-			values, err := report(store, name, now)
+		reports := make([]serviceWindows[V], 0, len(targets))
+		for _, target := range targets {
+			values, err := report(store, target.key, now)
 			if err != nil {
-				return a.fail(opts, fmt.Sprintf("sla %s failed: %v", name, err))
+				return a.fail(opts, fmt.Sprintf("sla %s failed: %v", target.name, err))
 			}
-			reports = append(reports, serviceWindows[V]{Service: name, Windows: values})
+			reports = append(reports, serviceWindows[V]{Service: target.name, Windows: values})
 		}
 
 		if opts.json {
@@ -76,29 +83,56 @@ func runWindowsReport[V any](ctx context.Context, a App, opts options, cfg *conf
 	})
 }
 
-func (a App) slaServices(opts options, cfg *config.Config) ([]string, int) {
-	if service := opts.service(); service != "" {
-		canonical, ok := cfg.CanonicalServiceName(service)
-		if !ok {
-			return nil, a.fail(opts, fmt.Sprintf(cliUnknownServiceFormat, service))
+// slaTarget is one thing an availability series is kept for. name is what the
+// operator types and reads; key is how the series is keyed in the store, which
+// for a host watch carries the "watch:" namespace so a watch and a service of
+// the same name never share a series.
+type slaTarget struct {
+	name string
+	key  string
+}
+
+// slaTargets resolves the targets to report: one named on the command line, or
+// every configured service plus every host watch whose check asserts
+// availability. A name is looked up as a service first, so an existing service
+// name never changes meaning.
+func (a App) slaTargets(opts options, cfg *config.Config) ([]slaTarget, int) {
+	if name := opts.service(); name != "" {
+		if canonical, ok := cfg.CanonicalServiceName(name); ok {
+			return []slaTarget{{name: canonical, key: canonical}}, exitSuccess
 		}
-		return []string{canonical}, exitSuccess
+		if slices.Contains(cfg.AvailabilityWatchNames(), name) {
+			return []slaTarget{{name: name, key: app.WatchMonitorKey(name)}}, exitSuccess
+		}
+		return nil, a.fail(opts, fmt.Sprintf(cliUnknownSLATargetFormat, name))
 	}
-	return sortedUnique(cfg.Services), exitSuccess
+	services := sortedUnique(cfg.Services)
+	targets := make([]slaTarget, 0, len(services))
+	for _, service := range services {
+		targets = append(targets, slaTarget{name: service, key: service})
+	}
+	for _, watch := range cfg.AvailabilityWatchNames() {
+		targets = append(targets, slaTarget{name: watch, key: app.WatchMonitorKey(watch)})
+	}
+	return targets, exitSuccess
 }
 
 // runSLASeries emits one service's stored per-minute availability series, the
 // data a future graph plots.
 func (a App) runSLASeries(ctx context.Context, opts options, cfg *config.Config) int {
-	service := opts.service()
-	if service == "" {
-		return a.commandUsageError(commandSLA, "sla --series requires a service name")
+	if opts.service() == "" {
+		return a.commandUsageError(commandSLA, "sla --series requires a service or watch name")
 	}
-	canonical, ok := cfg.CanonicalServiceName(service)
-	if !ok {
-		return a.fail(opts, fmt.Sprintf(cliUnknownServiceFormat, service))
+	targets, code := a.slaTargets(opts, cfg)
+	if code != exitSuccess {
+		return code
 	}
-	service = canonical
+	// A named lookup resolves to exactly one target or fails above; the guard
+	// keeps that an assertion rather than an assumption.
+	if len(targets) != 1 {
+		return a.fail(opts, fmt.Sprintf(cliUnknownSLATargetFormat, opts.service()))
+	}
+	target := targets[0]
 
 	window := opts.since
 	if window <= 0 {
@@ -109,15 +143,15 @@ func (a App) runSLASeries(ctx context.Context, opts options, cfg *config.Config)
 		return a.fail(opts, fmt.Sprintf("sla failed: %v", err))
 	}, func(store *state.Store) int {
 		now := time.Now()
-		points, err := store.SLASeries(service, now.Add(-window), now)
+		points, err := store.SLASeries(target.key, now.Add(-window), now)
 		if err != nil {
-			return a.fail(opts, fmt.Sprintf("sla %s failed: %v", service, err))
+			return a.fail(opts, fmt.Sprintf("sla %s failed: %v", target.name, err))
 		}
 
 		if opts.json {
-			a.writeSLASeriesJSON(service, window, points)
+			a.writeSLASeriesJSON(target.name, window, points)
 		} else {
-			a.writeSLASeriesTable(service, points, store.SeriesResolution(now.Add(-window), now))
+			a.writeSLASeriesTable(target.name, points, store.SeriesResolution(now.Add(-window), now))
 		}
 		return exitSuccess
 	})
@@ -166,14 +200,15 @@ func (a App) writeSLATable(reports []serviceWindows[state.SLAValue]) {
 	writeSLAWindowTable(a, reports, formatSLA)
 }
 
-// writeSLAWindowTable renders one SERVICE + per-SLA-window availability table.
+// writeSLAWindowTable renders one TARGET + per-SLA-window availability table.
+// A target is a configured service or an availability host watch.
 func writeSLAWindowTable[V any](a App, reports []serviceWindows[V], format func(V) string) {
 	if len(reports) == 0 {
-		fmt.Fprintln(a.Stdout, "no services")
+		fmt.Fprintln(a.Stdout, "no targets")
 		return
 	}
 	cols := make([]string, 0, len(state.SLAWindows)+1)
-	cols = append(cols, "SERVICE")
+	cols = append(cols, "TARGET")
 	for _, window := range state.SLAWindows {
 		cols = append(cols, strings.ToUpper(window.Name))
 	}
