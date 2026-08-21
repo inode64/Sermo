@@ -58,7 +58,19 @@ jobs:
       - name: Install browser test runtime
         run: npx playwright install --with-deps chromium
       - run: make build
-      - run: make check
+      # On failure, surface the tail of the gate's output as annotations: job
+      # logs need repository auth to read, annotations do not, so the failure
+      # is diagnosable from the run page and the public API alike.
+      - name: make check
+        run: |
+          set -o pipefail
+          if ! make check 2>&1 | tee /tmp/check.log; then
+            grep -E "FAIL|Error [0-9]|error:" /tmp/check.log | tail -n 5 | while IFS= read -r line; do
+              echo "::error title=make check::$line"
+            done
+            echo "::error title=make check (tail)::$(tail -c 700 /tmp/check.log | tr '\n' ' ')"
+            exit 1
+          fi
       # Advisory: unreachable-function report. Reflection and build tags cause
       # false positives, so this never fails the build — triage by hand.
       - name: deadcode (advisory)
@@ -78,7 +90,16 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
-      - run: make race
+      - name: make race
+        run: |
+          set -o pipefail
+          if ! make race 2>&1 | tee /tmp/race.log; then
+            grep -E "FAIL|DATA RACE|Error [0-9]|error:" /tmp/race.log | tail -n 5 | while IFS= read -r line; do
+              echo "::error title=make race::$line"
+            done
+            echo "::error title=make race (tail)::$(tail -c 700 /tmp/race.log | tr '\n' ' ')"
+            exit 1
+          fi
 
   # Runs on every event, not just the weekly cron. The seven targets parse
   # operator-supplied YAML and the process selectors that decide what may be
