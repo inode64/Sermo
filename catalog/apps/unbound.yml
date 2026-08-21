@@ -1,0 +1,13 @@
+name: unbound
+display_name: "Unbound"
+category: network
+description: "Unbound validating, recursive and caching DNS resolver."
+variables:
+  binary: ${bindir}/unbound
+  checkconf: ${bindir}/unbound-checkconf
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  checkconf: { type: binary, path: "${checkconf}" }
+  # `unbound -V` prints "Version N.N.N" on stdout and exits 0; the rest of the
+  # output is the configure line and linked libraries. Verified against 1.25.2.
+  version: { type: command, command: ["${binary}", "-V"], timeout: 10s }

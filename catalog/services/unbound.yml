@@ -1,0 +1,116 @@
+name: unbound
+display_name: Unbound
+category: network
+description: Unbound validating, recursive and caching DNS resolver.
+service:
+  systemd:
+    - unbound
+  openrc:
+    - unbound
+apps:
+  - unbound
+variables:
+  host: 127.0.0.1
+  port: 53
+  user: unbound
+  config: /etc/unbound/unbound.conf
+  query: localhost
+preflight:
+  config:
+    type: command
+    command:
+      - ${unbound_checkconf}
+      - ${config}
+    timeout: 30s
+    analyze:
+      use:
+        - common
+restart_on_change:
+  libraries:
+    - glibc
+    - openssl
+    - libevent
+    - systemd-libs
+  apps:
+    - unbound
+  messages:
+    app: >-
+      ${display_name} will restart after version change of ${change.app}: ${change.old_version} -> ${change.new_version}
+    library: >-
+      ${display_name} will restart after library change: ${change.library} (${change.path})
+# SIGHUP re-reads the configuration, which is what both init backends already
+# run: the systemd unit ships `ExecReload=kill -HUP $MAINPID` and the OpenRC
+# script defines `reload()`. No `reload:` block, so neither backend needs a
+# native fallback.
+reload_on_change:
+  paths:
+    - ${config}
+    - /etc/unbound/local.d
+    - /etc/unbound/views.d
+    - /etc/unbound/unbound.conf.d
+config_files:
+  - ${config}
+  - /etc/unbound/local.d
+  - /etc/unbound/views.d
+  - /etc/unbound/unbound.conf.d
+# OpenRC starts unbound daemonized and it writes this pidfile; the systemd unit
+# runs `unbound -d -p` in the foreground, where `-p` means no pidfile at all and
+# the check passes from the backend's own PID. Optional so the systemd side is
+# never made unhealthy by a leftover file.
+pidfile:
+  path: /run/unbound.pid
+  optional: true
+processes:
+  main:
+    exe: ${unbound_binary}
+    user: ${user}
+watches:
+  service:
+    check:
+      type: service
+      expect: active
+  process:
+    check:
+      type: process
+      exe: ${unbound_binary}
+      user: ${user}
+      state: running
+      optional: true
+      requires:
+        - service
+  dns:
+    check:
+      type: dns
+      host: ${host}
+      port: ${port}
+      query: ${query}
+      timeout: 3s
+      verify: true
+  alert-if-memory-high:
+    check:
+      type: metric
+      scope: service
+      name: memory
+      op: '>'
+      value: 30%
+      optional: true
+    for:
+      duration: 4m
+    then:
+      action: alert
+      message: >-
+        During ${rule.duration}, ${display_name} memory usage stayed above ${check.threshold} (current ${check.value})
+  alert-if-cpu-thread-high:
+    check:
+      type: metric
+      scope: service
+      name: cpu_thread
+      op: '>'
+      value: 90%
+      optional: true
+    for:
+      duration: 5m
+    then:
+      action: alert
+      message: >-
+        During ${rule.duration}, ${display_name} single-thread CPU usage stayed above ${check.threshold} (current ${check.value})
