@@ -1,0 +1,51 @@
+name: arpwatch
+display_name: arpwatch
+category: security
+description: arpwatch ARP monitor, which records ethernet/IP pairings on a link and reports new or changed ones.
+service:
+  systemd:
+    - arpwatch
+  openrc:
+    - arpwatch
+apps:
+  - arpwatch
+variables:
+  user: root
+restart_on_change:
+  libraries:
+    - glibc
+    - libpcap
+  apps:
+    - arpwatch
+  messages:
+    app: >-
+      ${display_name} will restart after version change of ${change.app}: ${change.old_version} -> ${change.new_version}
+    library: >-
+      ${display_name} will restart after library change: ${change.library} (${change.path})
+# The daemon writes its own pidfile only when started with -P, which every init
+# script does but a hand-started arpwatch need not, so its absence is not a fault.
+pidfile:
+  path: /run/arpwatch.pid
+  optional: true
+processes:
+  main:
+    exe: ${arpwatch_binary}
+    user: ${user}
+# arpwatch is a monitoring daemon, so these checks assert that *arpwatch* is
+# running — never what it observes. A new or changed ethernet/IP pairing on the
+# network is arpwatch's finding, not an arpwatch fault: folding it in here would
+# make the service read failed for something it did not cause and write the
+# network's noise into arpwatch's own availability archive. It reports its
+# findings by mail, the way it is designed to.
+watches:
+  service:
+    check:
+      type: service
+      expect: active
+      verify: true
+  process:
+    check:
+      type: process
+      exe: ${arpwatch_binary}
+      user: ${user}
+      state: running
