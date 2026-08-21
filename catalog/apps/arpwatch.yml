@@ -1,0 +1,13 @@
+name: arpwatch
+display_name: "arpwatch"
+category: security
+description: "arpwatch ethernet/IP address pairing monitor."
+variables:
+  binary: ${bindir}/arpwatch
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  # arpwatch has no --version. `-V` prints "Version N.N" and then its usage, on
+  # stderr, and exits 1 — so the non-zero status is expected rather than a
+  # failure, and the version reader already falls back to stderr when stdout is
+  # empty. Verified against arpwatch 3.8.
+  version: { type: command, command: ["${binary}", "-V"], timeout: 10s, expect_exit: [0, 1] }
