@@ -36,6 +36,9 @@ const (
 	MetricUnitVolt = "V"
 	// MetricUnitHours is the canonical UI/API unit for hour counters.
 	MetricUnitHours = "h"
+	// MetricUnitSeconds is the canonical UI/API unit for second-scale durations
+	// and offsets — a clock's drift, a session's idle age.
+	MetricUnitSeconds = "s"
 	// MetricUnitUsers is the canonical UI/API unit for user counts.
 	MetricUnitUsers = "users"
 	// MetricUnitProcesses is the canonical UI/API unit for process counts.

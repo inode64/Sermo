@@ -59,6 +59,9 @@ func (f *fakeBackend) Watches(context.Context) []Watch           { return nil }
 // handler test can tell the answered case from the refused one.
 const testAvailabilityWatch = "net-eth0"
 
+// testWatchMetric is the one numeric series the fake watch publishes.
+const testWatchMetric = "used_pct"
+
 func (f *fakeBackend) Notifiers(context.Context) []Notifier { return nil }
 func (f *fakeBackend) TestNotifier(_ context.Context, name string) ActionResult {
 	f.notifierTested = name
@@ -164,6 +167,17 @@ func (f *fakeBackend) WatchSeries(_ context.Context, name string, since time.Dur
 	f.seriesSince = since
 	r := 1.0
 	return []SeriesPoint{{Start: "2026-06-07T10:00:00Z", Ratio: &r, Up: 3, Total: 3}}, true
+}
+
+// WatchMetrics answers for the one metric the fake watch publishes and refuses
+// anything else, which is the distinction the handler carries to the API.
+func (f *fakeBackend) WatchMetrics(_ context.Context, name, metric string, since time.Duration) (MetricSeries, bool) {
+	if name != testAvailabilityWatch || metric != testWatchMetric {
+		return MetricSeries{}, false
+	}
+	f.seriesSince = since
+	return MetricSeries{Check: "net", Metric: metric, Since: since.String(), Unit: "%",
+		Points: []MetricPoint{{Start: "2026-06-07T10:00:00Z", N: 1, Avg: 12, Min: 12, Max: 12}}}, true
 }
 
 func (f *fakeBackend) EventPage(_ context.Context, query EventQuery) EventPage {
@@ -846,6 +860,53 @@ func TestSLASeries(t *testing.T) {
 	}
 	if len(body.Points) != 1 || body.Points[0].Total != 2 {
 		t.Fatalf("unexpected points: %+v", body.Points)
+	}
+}
+
+// TestWatchMetricsSeries covers the route a host watch's numeric panel reads: one
+// ?metric= names the series, since ?check= would be meaningless for a target that
+// has exactly one check.
+func TestWatchMetricsSeries(t *testing.T) {
+	rec := httptest.NewRecorder()
+	newServer(&fakeBackend{}).ServeHTTP(rec, httptest.NewRequest(
+		http.MethodGet,
+		testPathQuery(testWatchPath(testAvailabilityWatch, apiSegmentMetrics),
+			testQueryParams(apiQueryMetric, testWatchMetric, apiQuerySince, "168h")),
+		nil,
+	))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("watch metrics status %d: %s", rec.Code, rec.Body.String())
+	}
+	var body MetricSeries
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if body.Metric != testWatchMetric || len(body.Points) != 1 {
+		t.Fatalf("unexpected series: %+v", body)
+	}
+}
+
+// TestWatchMetricsRefusals pins the two ways the route says no: a metric this
+// watch does not publish is a 404, and no ?metric= at all is a bad request rather
+// than a silent pick of whichever series exists.
+func TestWatchMetricsRefusals(t *testing.T) {
+	h := newServer(&fakeBackend{})
+	for _, tc := range []struct {
+		name  string
+		query string
+		want  int
+	}{
+		{"unpublished metric", testQueryParam(apiQueryMetric, "not_published"), http.StatusNotFound},
+		{"no metric", testQueryParam(apiQuerySince, "24h"), http.StatusBadRequest},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet,
+				testPathQuery(testWatchPath(testAvailabilityWatch, apiSegmentMetrics), tc.query), nil))
+			if rec.Code != tc.want {
+				t.Fatalf("status %d, want %d: %s", rec.Code, tc.want, rec.Body.String())
+			}
+		})
 	}
 }
 

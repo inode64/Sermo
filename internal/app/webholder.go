@@ -256,6 +256,12 @@ func (h *WebBackendHolder) WatchSeries(ctx context.Context, name string, since t
 	return webCallOK(h, nil, func(b *WebBackend) ([]web.SeriesPoint, bool) { return b.WatchSeries(ctx, name, since) })
 }
 
+// WatchMetrics returns one of a host watch's metric series from the active backend.
+func (h *WebBackendHolder) WatchMetrics(ctx context.Context, name, metric string, since time.Duration) (web.MetricSeries, bool) {
+	return webCallOK(h, web.MetricSeries{},
+		func(b *WebBackend) (web.MetricSeries, bool) { return b.WatchMetrics(ctx, name, metric, since) })
+}
+
 // Metrics returns a check's metric series from the active backend.
 func (h *WebBackendHolder) Metrics(ctx context.Context, name, check, metric string, since time.Duration) (web.MetricSeries, bool) {
 	return webCallOK(h, web.MetricSeries{},

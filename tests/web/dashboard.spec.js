@@ -68,6 +68,7 @@ const watches = [{
 }, {
   name: "net-wan", display_name: "WAN", category: "network",
   enabled: true, monitored: true, state: "ok", check_type: "net", keeps_sla: true,
+  metrics: [{ name: "used_pct", unit: "%" }],
   summary: "wan state up", interval: "30s", status_observed_at: "2026-07-10T12:00:00Z",
 }, {
   name: "icmp-gateway", display_name: "Gateway", category: "network",
@@ -266,6 +267,18 @@ async function mockAPI(page) {
               ];
             body = { since: url.searchParams.get("since"), points };
           } else body = { since: url.searchParams.get("since"), points: [] };
+        }
+        else if (path.startsWith("/api/watches/") && path.endsWith("/metrics")) {
+          const now = Date.now();
+          body = {
+            check: "net", metric: url.searchParams.get("metric"),
+            since: url.searchParams.get("since"), unit: "%",
+            summary: { count: 2, avg: 12, min: 8, max: 16 },
+            points: [
+              { start: new Date(now - 20 * 60 * 1000).toISOString(), n: 1, avg: 8, min: 8, max: 8 },
+              { start: new Date(now - 5 * 60 * 1000).toISOString(), n: 1, avg: 16, min: 16, max: 16 },
+            ],
+          };
         }
         else if (path.endsWith("/metrics")) {
           if (url.searchParams.get("metric") === "count") {
@@ -598,6 +611,35 @@ test("check SLA uses the service series endpoint and hatches unobserved time", a
   // bar before it must stay hatched rather than inherit the window's ratio.
   expect(await cell.locator(".sla-bar-seg.sla-gap").count()).toBeGreaterThan(0);
   await expect(cell.locator(".sla-count")).toHaveText("40/40");
+});
+
+// A host watch that publishes a numeric reading graphs it with the panel a
+// service check's metric gets — same markup, same window selector, same chart.
+// Only the request differs: a watch has one check, so ?metric= alone names the
+// series. Its Graphs window is separate from its Availability one, because the
+// two read different series.
+test("a watch graphs its numeric reading with the service metric panel", async ({ page }) => {
+  const series = page.waitForRequest((request) => {
+    const url = new URL(request.url());
+    return url.pathname === "/api/watches/net-wan/metrics" && url.searchParams.get("metric") === "used_pct";
+  });
+  await page.locator("#wat-row-net-wan .row-toggle").click();
+  await series;
+
+  const panel = page.locator('[id="exp-wat:net-wan"] [data-watch-metric="used_pct"]');
+  await expect(panel).toContainText("used pct");
+  await expect(panel).toContainText("avg 12%");
+  await expect(panel.locator("svg")).toBeVisible();
+
+  const weekly = page.waitForRequest((request) => {
+    const url = new URL(request.url());
+    return url.pathname === "/api/watches/net-wan/metrics" && url.searchParams.get("since") === "168h";
+  });
+  await page.locator('[id="exp-wat:net-wan"] [data-window-kind="setWatchMetricWin"][data-window-value="168h"]').click();
+  await weekly;
+  // Moving the graphs window must not drag the availability panel with it.
+  await expect(page.locator('[id="exp-wat:net-wan"] [data-window-kind="setSLAWin"][data-window-value="168h"]'))
+    .toHaveAttribute("aria-pressed", "false");
 });
 
 // An application and a host watch draw availability with the service's own

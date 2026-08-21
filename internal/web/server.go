@@ -167,6 +167,7 @@ const (
 
 const (
 	apiErrorCheckQueryRequired       = "check query parameter is required"
+	apiErrorMetricQueryRequired      = "metric query parameter is required"
 	apiErrorEncodeResponse           = "failed to encode response"
 	apiErrorGenerationInvalid        = "invalid X-Sermo-Generation header"
 	apiErrorGenerationMissing        = "X-Sermo-Generation header is required"
@@ -179,6 +180,7 @@ const (
 	apiErrorUnknownService           = "unknown service"
 	apiErrorUnknownServiceOrCheck    = "unknown service or check"
 	apiErrorUnknownAvailWatch        = "unknown watch or watch without availability"
+	apiErrorUnknownWatchMetric       = "unknown watch or metric it does not publish"
 	apiMessageReloadRequested        = "reload requested"
 )
 
@@ -251,6 +253,7 @@ const (
 	routeAPIWatches                   = routeMethodGet + apiPathWatches
 	routeAPIWatchAction               = routeMethodPost + apiPathWatches + "/" + routeVarName + "/" + routeVarAction
 	routeAPIWatchSeries               = routeMethodGet + apiPathWatches + "/" + routeVarName + "/" + apiSegmentSLA
+	routeAPIWatchMetrics              = routeMethodGet + apiPathWatches + "/" + routeVarName + "/" + apiSegmentMetrics
 	routeAPINotifiers                 = routeMethodGet + apiPathNotifiers
 	routeAPINotifierTest              = routeMethodPost + apiPathNotifiers + "/" + routeVarName + "/" + apiActionTest
 	routeAPIApplications              = routeMethodGet + apiPathApplications
@@ -528,6 +531,10 @@ type Watch struct {
 	// draws it the same SLA section a service gets. A condition watch keeps none:
 	// its threshold being met is not downtime.
 	KeepsSLA bool `json:"keeps_sla,omitempty"`
+	// Metrics are the numeric series this watch's check publishes, each read from
+	// /api/watches/{name}/metrics?metric=NAME and drawn with the panel a service
+	// check's metric gets. A watch has exactly one check, so nothing here names it.
+	Metrics []CheckMetric `json:"metrics,omitempty"`
 }
 
 // WatchProbe reports a manual host-watch probe currently running in the daemon.
@@ -1101,6 +1108,9 @@ type Backend interface {
 	MountBlockers(ctx context.Context, name string) MountBlockersResult
 	// AlertMountUsers sends a console alert to users blocking a mount unit.
 	AlertMountUsers(ctx context.Context, name string) MountAlertResult
+	// WatchMetrics returns one numeric series a host watch's check publishes; ok
+	// is false for an unknown or disabled watch and for an unpublished metric.
+	WatchMetrics(ctx context.Context, name, metric string, since time.Duration) (MetricSeries, bool)
 	// Detail returns one service's checks and SLA; ok is false for unknown names.
 	Detail(ctx context.Context, name string) (Detail, bool)
 	// Series returns a service's per-minute availability history over since, or
@@ -1296,6 +1306,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc(routeAPIWatches, s.handleWatches)
 	mux.HandleFunc(routeAPIWatchAction, s.handleWatchAction)
 	mux.HandleFunc(routeAPIWatchSeries, s.handleWatchSeries)
+	mux.HandleFunc(routeAPIWatchMetrics, s.handleWatchMetrics)
 	mux.HandleFunc(routeAPINotifiers, s.handleNotifiers)
 	mux.HandleFunc(routeAPINotifierTest, s.handleNotifierTest)
 	mux.HandleFunc(routeAPIApplications, s.handleApplications)
@@ -1840,6 +1851,25 @@ func (s *Server) handleWatchSeries(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.writeBackendJSON(w, http.StatusOK, map[string]any{apiJSONKeySince: since.String(), apiJSONKeyPoints: points}, generation)
+}
+
+// handleWatchMetrics serves one numeric series a host watch's check publishes.
+// A watch has exactly one check, so there is no ?check= to name: ?metric= alone
+// selects the series, and a metric the check does not publish is a 404 rather
+// than an empty series that would read as a measured flat line.
+func (s *Server) handleWatchMetrics(w http.ResponseWriter, r *http.Request) {
+	metric := r.URL.Query().Get(apiQueryMetric)
+	if metric == "" {
+		writeError(w, http.StatusBadRequest, apiErrorMetricQueryRequired)
+		return
+	}
+	backend, generation := s.backendRead()
+	res, ok := backend.WatchMetrics(r.Context(), r.PathValue(apiParamName), metric, s.seriesSince(r))
+	if !ok {
+		writeError(w, http.StatusNotFound, apiErrorUnknownWatchMetric)
+		return
+	}
+	s.writeBackendJSON(w, http.StatusOK, res, generation)
 }
 
 func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
