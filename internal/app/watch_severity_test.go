@@ -261,12 +261,12 @@ func TestWatchAdvisoryReadingsAndRowState(t *testing.T) {
 		Message: "hdparm /dev/sdd: no timing in output",
 	}
 
-	grave := watchSnapshotReadings(checks.CheckTypeHdparm, checks.SeverityError, snap)
+	grave := watchSnapshotReadings(checks.CheckTypeHdparm, checks.SeverityError, snap, false)
 	if !watchReadingsFailed(grave) || watchReadingsWarning(grave) {
 		t.Fatalf("error-severity readings = %+v, want an Error entry", grave)
 	}
 
-	advisory := watchSnapshotReadings(checks.CheckTypeHdparm, checks.SeverityWarning, snap)
+	advisory := watchSnapshotReadings(checks.CheckTypeHdparm, checks.SeverityWarning, snap, false)
 	if watchReadingsFailed(advisory) {
 		t.Fatalf("advisory readings = %+v, want no Error entry: Error is what turns the row red", advisory)
 	}
