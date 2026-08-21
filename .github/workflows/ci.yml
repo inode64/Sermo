@@ -64,7 +64,24 @@ jobs:
       - name: make check
         run: |
           set -o pipefail
-          if ! make check 2>&1 | tee /tmp/check.log; then
+          # Workflow commands stream to the API as they print, so if the runner
+          # dies mid-gate the annotations still say which phase it died in and
+          # whether the kernel OOM killer fired. Both jobs have been dying by
+          # external SIGTERM with nothing readable.
+          sudo dmesg -wT 2>/dev/null | grep --line-buffered -iE "out of memory|oom-kill|killed process" | while IFS= read -r line; do
+            echo "::warning title=kernel::$line"
+          done &
+          echo "::notice title=phase::check started $(free -m | grep '^Mem:')"
+          phase_stream() (
+            while IFS= read -r line; do
+              echo "$line"
+              case $line in
+                "go vet"*|"go fix"*|staticcheck*|custom-gcl*|govulncheck*|semgrep*|shellcheck*|cover-gate*|"ok "*|FAIL*|"--- FAIL"*)
+                  echo "::notice title=phase::$line" ;;
+              esac
+            done
+          )
+          if ! make check 2>&1 | tee /tmp/check.log | phase_stream; then
             grep -E "FAIL|Error [0-9]|error:" /tmp/check.log | tail -n 5 | while IFS= read -r line; do
               echo "::error title=make check::$line"
             done
@@ -91,17 +108,22 @@ jobs:
           go-version-file: go.mod
           cache: true
       - name: make race
-        # -p=2 bounds concurrent package compilation. On a cold build cache —
-        # every run after go.sum moves, since setup-go restores on its exact
-        # hash — compiling the whole tree race-instrumented at full parallelism
-        # (modernc's libc among it) has been killing the runner about a minute
-        # in, which Actions reports as "The operation was canceled". Warm-cache
-        # runs never recompile, so the ceiling costs them nothing.
-        env:
-          GOFLAGS: -p=2
         run: |
           set -o pipefail
-          if ! make race 2>&1 | tee /tmp/race.log; then
+          sudo dmesg -wT 2>/dev/null | grep --line-buffered -iE "out of memory|oom-kill|killed process" | while IFS= read -r line; do
+            echo "::warning title=kernel::$line"
+          done &
+          echo "::notice title=phase::race started $(free -m | grep '^Mem:')"
+          phase_stream() (
+            while IFS= read -r line; do
+              echo "$line"
+              case $line in
+                "go test"*|"ok "*|FAIL*|"--- FAIL"*|WARNING*)
+                  echo "::notice title=phase::$line" ;;
+              esac
+            done
+          )
+          if ! make race 2>&1 | tee /tmp/race.log | phase_stream; then
             grep -E "FAIL|DATA RACE|Error [0-9]|error:" /tmp/race.log | tail -n 5 | while IFS= read -r line; do
               echo "::error title=make race::$line"
             done
