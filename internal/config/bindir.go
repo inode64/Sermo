@@ -20,10 +20,17 @@ var binDirSearch = []string{"/usr/bin", "/usr/sbin", "/usr/local/bin", "/usr/loc
 // across binDirSearch. It runs at load time, after bakeBuiltins and before
 // version-template materialization and validation, so downstream code only ever
 // sees concrete absolute paths.
+// expandBindirDocument expands ${bindir} across one document. It is shared by the
+// load-time pass over c.docs and by the local-override pass, whose documents are
+// not in c.docs and so must be expanded explicitly.
+func expandBindirDocument(doc *Document) {
+	expandBindirVariables(doc.Body)
+	expandBindirVersionPaths(doc.Body)
+}
+
 func (c *Config) expandBindir() {
 	for _, doc := range c.docs {
-		expandBindirVariables(doc.Body)
-		expandBindirVersionPaths(doc.Body)
+		expandBindirDocument(doc)
 	}
 	if c.Global.Raw != nil {
 		if defaults, ok := c.Global.Raw[sectionDefaults].(map[string]any); ok {

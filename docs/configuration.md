@@ -85,6 +85,7 @@ configuration omits it.
 - [Global defaults](#global-defaults)
 - [Resolution order](#resolution-order)
 - [Merge rules](#merge-rules)
+- [Per-host overrides (&lt;dir&gt;.local)](#per-host-overrides-dirlocal)
 - [Binary resource variables](#binary-resource-variables)
   - [${bindir} search prefix](#bindir-search-prefix)
 - [Variables](#variables)
@@ -117,6 +118,7 @@ normalized to `/run`, must be documented as explicit exceptions at the owner.
 /etc/sermo/storages/*.yml storage watch documents
 /etc/sermo/mounts/*.yml   fstab-backed storage mount watch documents
 /etc/sermo/templates/*.yml notification templates
+/etc/sermo/<dir>.local/*.yml per-host overrides a deployment never overwrites
 ```
 
 The configurable directories Sermo reads come from `paths` in the global config:
@@ -3443,6 +3445,53 @@ variable and have every `${var}` reference resolve to the new value.
   are maps keyed by name, so a child can override one field of one entry.
 - Disable an inherited entry with `enabled: false`; delete it with
   `delete: true`.
+
+## Per-host overrides (`<dir>.local`)
+
+Every directory in `paths.services`, `paths.apps`, `paths.notifiers` and
+`paths.watches` may have a sibling `<dir>.local`. Sermo loads it when it exists —
+`services.local`, `apps.local`, `notifiers.local`, `watches.local`,
+`networks.local`, `storages.local`, `mounts.local` — and folds each document onto
+the one of the same `name:`:
+
+```yaml
+# /etc/sermo/services.local/prometheus.yml — this host moves a lot of data
+name: prometheus
+watches:
+  alert-if-io-high:
+    check: { value: 838860800 }
+```
+
+The layer exists because a fleet's servers do not share one workload. Packaged
+thresholds are chosen to be true everywhere, which on any individual host makes
+some of them wrong; `<dir>.local` is where that host says so, once, without
+editing a generated file.
+
+It is discovered from the layout rather than registered in `paths`, and that is
+deliberate: `sermo.yml` is regenerated wholesale by the deployment scripts, so an
+override registered there would be de-registered by exactly the event this layer
+exists to survive. Listing a `.local` directory in `paths` is rejected.
+
+- **A document merges onto its base when one exists, otherwise it is loaded as an
+  ordinary document.** One rule: `watches.local` can retune a generated watch and
+  can add a host-only one.
+- **The [merge rules](#merge-rules) above apply unchanged** — maps merge
+  recursively, scalars and lists overwrite, `enabled: false` disables an
+  inherited entry and `delete: true` removes it.
+- **The override sits above the host document**, so the order is
+  `defaults < catalog < host document < host override`.
+- **It is taken unexpanded**, like `uses`/`clone`. Redefining one variable
+  therefore reaches every `${var}` that reads it in the base document.
+- **The merged result is fully validated.** An override cannot bypass an
+  invariant, and `sermoctl config validate` names the `.local` file in its
+  diagnostics.
+- **One override per name.** The four classified watch directories share a single
+  namespace, so a watch may be overridden from any of their `.local` siblings —
+  but only from one.
+- **`templates.local` is the exception**: a template is a whole file with no named
+  entries to merge, so `templates.local/<name>.yml` shadows the packaged template
+  entirely rather than merging into it.
+
 
 Worked examples (cloning, disabling, multiple instances) live in
 [services](services.md#cloning). Catalog templates for installed

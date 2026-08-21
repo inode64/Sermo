@@ -87,6 +87,7 @@ directorio equivocado. La configuración distribuida la omite.
 - [Valores por defecto globales](#valores-por-defecto-globales)
 - [Orden de resolución](#orden-de-resolución)
 - [Reglas de fusión](#reglas-de-fusión)
+- [Overrides por host (&lt;dir&gt;.local)](#overrides-por-host-dirlocal)
 - [Variables de recurso de binario](#variables-de-recurso-de-binario)
   - [Prefijo de búsqueda ${bindir}](#prefijo-de-búsqueda-bindir)
 - [Variables](#variables)
@@ -120,6 +121,7 @@ excepciones explícitas en el propietario.
 /etc/sermo/storages/*.yml storage watch documents
 /etc/sermo/mounts/*.yml   fstab-backed storage mount watch documents
 /etc/sermo/templates/*.yml notification templates
+/etc/sermo/<dir>.local/*.yml per-host overrides a deployment never overwrites
 ```
 
 Los directorios configurables que Sermo lee provienen de `paths` en la configuración global:
@@ -3557,6 +3559,54 @@ variable y hacer que cada referencia `${var}` se resuelva al nuevo valor.
   entrada.
 - Deshabilita una entrada heredada con `enabled: false`; elimínala con
   `delete: true`.
+
+## Overrides por host (`<dir>.local`)
+
+Cada directorio de `paths.services`, `paths.apps`, `paths.notifiers` y
+`paths.watches` puede tener un hermano `<dir>.local`. Sermo lo carga si existe —
+`services.local`, `apps.local`, `notifiers.local`, `watches.local`,
+`networks.local`, `storages.local`, `mounts.local` — y funde cada documento sobre
+el que tiene el mismo `name:`:
+
+```yaml
+# /etc/sermo/services.local/prometheus.yml — este host mueve muchos datos
+name: prometheus
+watches:
+  alert-if-io-high:
+    check: { value: 838860800 }
+```
+
+La capa existe porque los servidores de una flota no comparten una sola carga.
+Los umbrales empaquetados se eligen para ser ciertos en todas partes, lo que en
+cualquier host concreto hace que algunos sean falsos; `<dir>.local` es donde ese
+host lo dice, una vez, sin editar un fichero generado.
+
+Se descubre a partir de la disposición de directorios en lugar de registrarse en
+`paths`, y es deliberado: los scripts de despliegue regeneran `sermo.yml`
+entero, así que un override registrado allí quedaría desregistrado justo por el
+evento del que esta capa debe sobrevivir. Listar un directorio `.local` en
+`paths` se rechaza.
+
+- **Un documento se funde sobre su base si existe; si no, se carga como un
+  documento normal.** Una sola regla: `watches.local` puede reajustar una
+  vigilancia generada y puede añadir una propia del host.
+- **Las [reglas de fusión](#reglas-de-fusión) de arriba se aplican sin cambios** —
+  los mapas se fusionan recursivamente, los escalares y las listas sobrescriben,
+  `enabled: false` deshabilita una entrada heredada y `delete: true` la elimina.
+- **El override queda por encima del documento del host**, de modo que el orden es
+  `defaults < catálogo < documento del host < override del host`.
+- **Se toma sin expandir**, igual que `uses`/`clone`. Redefinir una variable
+  alcanza por tanto cada `${var}` que la lee en el documento base.
+- **El resultado fusionado se valida completo.** Un override no puede saltarse un
+  invariante, y `sermoctl config validate` nombra el fichero `.local` en sus
+  diagnósticos.
+- **Un override por nombre.** Los cuatro directorios de vigilancias clasificadas
+  comparten un único espacio de nombres, así que una vigilancia puede
+  sobrescribirse desde cualquiera de sus hermanos `.local` — pero solo desde uno.
+- **`templates.local` es la excepción**: una plantilla es un fichero entero sin
+  entradas con nombre que fusionar, así que `templates.local/<name>.yml` eclipsa
+  la plantilla empaquetada por completo en vez de fundirse con ella.
+
 
 Los ejemplos trabajados (clonación, deshabilitación, múltiples instancias) viven
 en [services](services.es.md#clonado). Las plantillas de catálogo para

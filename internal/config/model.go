@@ -515,6 +515,9 @@ type Document struct {
 	Body                 map[string]any
 	TemplateBaseName     string
 	TemplateCurrentLabel bool
+	// LocalOverride is the `<dir>.local` file that adjusted this document, so
+	// diagnostics can name the file an operator actually edited.
+	LocalOverride string
 }
 
 // registryKey is the namespace a document is indexed and de-duplicated under.
@@ -556,6 +559,10 @@ type Config struct {
 	materializedNameCollisions []materializedNameCollision
 	validationIssues           []Issue
 	serviceUnits               map[string][]string
+	// localOverrides records which `<dir>.local` file owns a watch or notifier
+	// name. Those live in Global.Raw rather than in a Document, so the
+	// one-override-per-name rule needs its own ledger.
+	localOverrides map[string]string
 
 	// Load order per registry, for stable reporting.
 	CatalogServiceNames []string
