@@ -27,6 +27,7 @@ export const apiWatchesPath = "api/watches";
 export const apiWhoamiPath = "api/whoami";
 
 const apiQueryCheck = "check";
+const apiQueryMetric = "metric";
 export const apiQueryBefore = "before";
 export const apiQueryBeforeID = "before_id";
 export const apiQueryForce = "force";
@@ -125,3 +126,7 @@ export function emptyTerminalSessionCloseAPI(service, check) {
 export function stateCompactAPI(query = "") { return `${apiStateCompactPath}${query}`; }
 export function watchAPI(name, suffix = "") { return apiEntityPath(apiWatchesPath, name, suffix); }
 export function watchSLAAPI(name, since) { return watchAPI(name, apiSinceSuffix(apiSuffixSLA, since)); }
+// A watch has exactly one check, so its metric series is named by ?metric= alone.
+export function watchMetricsAPI(name, metric, since) {
+  return watchAPI(name, `${apiSinceSuffix(apiSuffixMetrics, since)}&${apiQueryMetric}=${encodeURIComponent(metric)}`);
+}

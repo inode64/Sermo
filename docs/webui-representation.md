@@ -80,6 +80,7 @@ overflow and axe WCAG 2.2 AA rules against deterministic API fixtures.
 | Service SLA | `GET /api/services/{name}/sla[?check=NAME]` | availability history for the service detail SLA timeline, for the expansion of an application that maps to this service, and for API clients, at the resolution that window is stored at; `check` scopes it to one of the service's checks, which is where the checks table reads its strip from, so both scopes share one series path and one window selector; a check that reports no verdict serves no points; observed-SLA ratios count only monitored minutes, so unmeasured time is a gap, not downtime; each point also carries `down_buckets`, the one-minute buckets inside it that saw a failure |
 | Service events | `GET /api/services/{name}/events` | per-service event feed |
 | Watches | `GET /api/watches` | host-level and service-scoped watches; `scope` distinguishes them and service watch names use `service:watch` |
+| Watch metrics | `GET /api/watches/{name}/metrics?metric=NAME` | one numeric series a host watch's check publishes, in the shape the service metrics route serves, so both are drawn by the same panel; a watch has exactly one check, so `metric` alone names the series and there is no `check` parameter; an unpublished metric answers 404 rather than an empty series that would read as a measured flat line |
 | Watch SLA | `GET /api/watches/{name}/sla` | the same availability history the service SLA route serves, for a host watch whose check asserts availability; the two share one series path so a watch's uptime is computed exactly as a service's; a watch that keeps none answers 404 rather than an empty series that would read as measured uptime |
 | Applications | `GET /api/applications` | installed catalog apps; `observed_at` remains fixed while the version/status inventory is served from cache |
 | Libraries | `GET /api/libraries` | installed catalog libraries; `observed_at` remains fixed while the file/version inventory is served from cache |
@@ -569,6 +570,8 @@ Row expansion:
 | --- | --- |
 | Config | type, category, interval, fires (on fail / on threshold), state, monitor flag, hook, notifiers, dry run |
 | Readings | current host readings, then check conditions and thresholds |
+| Graphs | one chart per numeric series the check publishes, drawn by the panel a service check's metric gets, on its own `1h/24h/7d/30d/1y` window; absent when the check publishes no number |
+| Availability | the service SLA section, when the check asserts availability; its window is separate from the Graphs one, because the two read different series |
 | Activity | recent watch events |
 | Expand | storage expansion action when configured |
 

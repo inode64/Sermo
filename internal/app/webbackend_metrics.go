@@ -133,21 +133,52 @@ func (b *WebBackend) Metrics(_ context.Context, name, check, metric string, sinc
 		return out, true
 	}
 
-	unit := checks.GraphMetricUnit(checkType, metric)
-	if unit == "" {
+	// The declared unit, not just the type's static set: a check that publishes a
+	// scalar under its own `unit:` is offered as a graph in the payload, so
+	// refusing it here would leave a panel that can only report a failure.
+	unit, published := checks.DeclaredGraphMetricUnit(checkType, entry.checkUnits[check], metric)
+	if !published {
 		return web.MetricSeries{}, false
 	}
+	return b.metricSeries(name, check, metric, unit, since, now), true
+}
+
+// WatchMetrics returns one numeric series a host watch's check publishes, in the
+// shape the service metrics route serves so the dashboard draws both with the
+// same panel. ok is false for an unknown or disabled watch and for a metric its
+// check does not publish.
+//
+// A watch has exactly one check, so its type names the series the way a service's
+// check name does, and the series is keyed by WatchMonitorKey — the same
+// "watch:<name>" spelling availability uses, so a watch and a service of the same
+// name never share a series.
+func (b *WebBackend) WatchMetrics(_ context.Context, name, metric string, since time.Duration) (web.MetricSeries, bool) {
+	w := b.watches[name]
+	if w == nil || w.disabled || metric == "" {
+		return web.MetricSeries{}, false
+	}
+	unit, published := checks.DeclaredGraphMetricUnit(w.checkType, w.checkUnit, metric)
+	if !published {
+		return web.MetricSeries{}, false
+	}
+	return b.metricSeries(WatchMonitorKey(name), w.checkType, metric, unit, since, b.webNow()), true
+}
+
+// metricSeries reads one named metric series and renders it as the wire shape.
+// Services and host watches differ only in the key they are stored under and in
+// what names the check, so they share everything from the read down.
+func (b *WebBackend) metricSeries(key, check, metric, unit string, since time.Duration, now time.Time) web.MetricSeries {
 	out := web.MetricSeries{Check: check, Metric: metric, Since: since.String(), Unit: unit}
 	if b.measure == nil {
-		return out, true
+		return out
 	}
-	if summary, err := b.measure.MetricSummary(name, check, metric, since, now); err == nil {
+	if summary, err := b.measure.MetricSummary(key, check, metric, since, now); err == nil {
 		out.Summary = metricSummary(summary)
 	}
-	if points, err := b.measure.MetricSeries(name, check, metric, now.Add(-since), now); err == nil {
+	if points, err := b.measure.MetricSeries(key, check, metric, now.Add(-since), now); err == nil {
 		out.Points = measurementPoints(points)
 	}
-	return out, true
+	return out
 }
 
 func measurementPoints(points []state.MeasurementPoint) []web.MetricPoint {
