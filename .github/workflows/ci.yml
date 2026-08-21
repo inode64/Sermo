@@ -139,6 +139,15 @@ jobs:
   # jobs are dead or done: if it survives in isolation the killer is
   # environmental, if it dies the same way the workload itself is being
   # targeted. Remove once the answer is in.
+  # TEMPORARY probe, round two. In isolation the race job dies exactly like it
+  # does in company: canceled ~80s in, before any package completes, kernel
+  # dmesg silent, 12GB free. The remaining suspect that fits every fact is
+  # systemd-oomd, which kills on memory *pressure*, logs to the journal rather
+  # than dmesg, and does not exist on the developer machine where the same
+  # command passes cold in 75 seconds. This round watches the journal, samples
+  # memory and PSI every ten seconds, and runs the tree in six-package chunks —
+  # which both names the chunk that dies and, if the pressure theory holds,
+  # doubles as the workaround. Remove once the answer is in.
   race-delayed:
     name: race detector (delayed probe)
     runs-on: ubuntu-latest
@@ -149,27 +158,36 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
-      - name: make race (delayed)
+      - name: make race (chunked probe)
         run: |
           set -o pipefail
-          sleep 90
-          sudo dmesg -wT 2>/dev/null | grep --line-buffered -iE "out of memory|oom-kill|killed process" | while IFS= read -r line; do
-            echo "::warning title=kernel::$line"
+          sleep 60
+          sudo journalctl -f -o cat 2>/dev/null | grep --line-buffered -iE "oom|memory pressure|killed" | while IFS= read -r line; do
+            echo "::warning title=journal::$line"
           done &
-          echo "::notice title=phase::delayed race started $(free -m | grep '^Mem:')"
+          while true; do
+            echo "::notice title=mem::$(free -m | grep '^Mem:') | $(head -1 /proc/pressure/memory 2>/dev/null)"
+            sleep 10
+          done &
+          systemctl is-active systemd-oomd 2>/dev/null | while IFS= read -r line; do echo "::notice title=oomd::$line"; done
+          oomctl 2>/dev/null | head -20 | while IFS= read -r line; do echo "::notice title=oomctl::$line"; done
           phase_stream() (
             while IFS= read -r line; do
               echo "$line"
               case $line in
-                "go test"*|"ok "*|FAIL*|"--- FAIL"*|WARNING*)
-                  echo "::notice title=phase::$line" ;;
+                "ok "*|FAIL*|"--- FAIL"*|WARNING*) echo "::notice title=phase::$line" ;;
               esac
             done
           )
-          if ! make race 2>&1 | tee /tmp/race.log | phase_stream; then
-            echo "::error title=make race (delayed)::$(tail -c 700 /tmp/race.log | tr '\n' ' ')"
-            exit 1
-          fi
+          go list ./cmd/... ./internal/... > /tmp/pkgs
+          split -l 6 /tmp/pkgs /tmp/chunk.
+          for f in /tmp/chunk.*; do
+            echo "::notice title=chunk::$(tr '\n' ' ' < "$f" | head -c 200)"
+            if ! xargs -a "$f" go test -race -count=1 -shuffle=on 2>&1 | tee -a /tmp/race.log | phase_stream; then
+              echo "::error title=chunked race::$(tail -c 600 /tmp/race.log | tr '\n' ' ')"
+              exit 1
+            fi
+          done
 
   # Runs on every event, not just the weekly cron. The seven targets parse
   # operator-supplied YAML and the process selectors that decide what may be
