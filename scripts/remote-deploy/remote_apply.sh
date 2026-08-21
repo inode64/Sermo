@@ -137,8 +137,12 @@ case "$config_backend" in
 	*) config_backend="" ;;
 esac
 
+# The generated directories are replaced wholesale. Their `.local` siblings are
+# deliberately absent from this list: they carry the operator's per-host tuning,
+# which exists precisely to survive a regeneration.
 rm -rf /etc/sermo/services /etc/sermo/apps /etc/sermo/notifiers /etc/sermo/watches /etc/sermo/networks /etc/sermo/storages /etc/sermo/mounts
 mkdir -p /etc/sermo/services /etc/sermo/apps /etc/sermo/notifiers /etc/sermo/watches /etc/sermo/networks /etc/sermo/storages /etc/sermo/mounts /etc/sermo/templates
+mkdir -p /etc/sermo/services.local /etc/sermo/apps.local /etc/sermo/notifiers.local /etc/sermo/watches.local /etc/sermo/networks.local /etc/sermo/storages.local /etc/sermo/mounts.local /etc/sermo/templates.local
 tar --no-same-owner -C / -xzf "$config_tgz" >"${out}/config_extract.out" 2>"${out}/config_extract.err"
 extract_rc=$?
 printf '%s\n' "$extract_rc" >"${out}/config_extract.rc"

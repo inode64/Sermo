@@ -344,9 +344,11 @@ install-examples:
 
 # Install the global config (kept if one already exists) and create the
 # configured directories for services, host-specific apps, notifier fragments
-# and classified watch documents.
+# and classified watch documents — each with its `.local` sibling, the per-host
+# override layer a deployment never overwrites.
 install-config:
 	$(call install_dirs,$(DESTDIR)$(SERMO_CONFDIR)/services $(DESTDIR)$(SERMO_CONFDIR)/apps $(DESTDIR)$(SERMO_CONFDIR)/notifiers $(DESTDIR)$(SERMO_CONFDIR)/storages $(DESTDIR)$(SERMO_CONFDIR)/networks $(DESTDIR)$(SERMO_CONFDIR)/mounts $(DESTDIR)$(SERMO_CONFDIR)/watches)
+	$(call install_dirs,$(DESTDIR)$(SERMO_CONFDIR)/services.local $(DESTDIR)$(SERMO_CONFDIR)/apps.local $(DESTDIR)$(SERMO_CONFDIR)/notifiers.local $(DESTDIR)$(SERMO_CONFDIR)/storages.local $(DESTDIR)$(SERMO_CONFDIR)/networks.local $(DESTDIR)$(SERMO_CONFDIR)/mounts.local $(DESTDIR)$(SERMO_CONFDIR)/watches.local $(DESTDIR)$(SERMO_CONFDIR)/templates.local)
 	@if [ -f "$(DESTDIR)$(SERMO_CONFDIR)/sermo.yml" ]; then \
 		echo "  keeping existing $(DESTDIR)$(SERMO_CONFDIR)/sermo.yml"; \
 	else \

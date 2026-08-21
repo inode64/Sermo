@@ -160,6 +160,25 @@ class PreparePayloadTest(unittest.TestCase):
         self.assertIn("/etc/sermo/credentials.env", remote_stage)
         self.assertIn("-m 0600", remote_stage)
 
+    def test_apply_never_deletes_the_per_host_override_layer(self) -> None:
+        """`.local` carries the operator's tuning; a regeneration must keep it."""
+        remote_apply = REMOTE_APPLY.read_text(encoding="utf-8")
+        wipe = next(
+            line for line in remote_apply.splitlines()
+            if line.startswith("rm -rf /etc/sermo/")
+        )
+        self.assertNotIn(".local", wipe)
+        for name in ["services", "apps", "notifiers", "watches", "networks", "storages", "mounts"]:
+            self.assertIn(f"/etc/sermo/{name}.local", remote_apply)
+
+    def test_reinstall_restores_the_per_host_override_layer(self) -> None:
+        """remote_stage moves the whole tree aside, so it must restore it."""
+        remote_stage = REMOTE_STAGE.read_text(encoding="utf-8")
+        self.assertIn("local_overrides_preserved", remote_stage)
+        self.assertIn('src="${backup}/$(basename "$dir")"', remote_stage)
+        # templates are operator content too, and the same `mv` destroyed them.
+        self.assertIn("/etc/sermo/templates.local /etc/sermo/templates", remote_stage)
+
 
 if __name__ == "__main__":
     os.environ.setdefault("TZ", "UTC")

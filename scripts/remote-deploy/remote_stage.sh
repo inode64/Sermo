@@ -152,6 +152,7 @@ if [ "$extract_rc" -ne 0 ]; then
 fi
 
 mkdir -p /etc/sermo/services /etc/sermo/apps /etc/sermo/notifiers /etc/sermo/watches /etc/sermo/networks /etc/sermo/storages /etc/sermo/mounts /etc/sermo/templates
+mkdir -p /etc/sermo/services.local /etc/sermo/apps.local /etc/sermo/notifiers.local /etc/sermo/watches.local /etc/sermo/networks.local /etc/sermo/storages.local /etc/sermo/mounts.local /etc/sermo/templates.local
 mkdir -p /run/sermo /var/lib/sermo
 
 if [ -n "$backup" ] && [ -f "${backup}/credentials.env" ]; then
@@ -160,6 +161,21 @@ if [ -n "$backup" ] && [ -f "${backup}/credentials.env" ]; then
 else
 	printf 'no\n' >"${out}/credentials_preserved"
 fi
+
+# A reinstall moves the whole tree aside, so unlike remote_apply.sh it has to
+# restore the per-host layer explicitly. `templates` is restored for the same
+# reason: an operator's notification template is not generated content either.
+local_preserved=no
+if [ -n "$backup" ]; then
+	for dir in /etc/sermo/services.local /etc/sermo/apps.local /etc/sermo/notifiers.local /etc/sermo/watches.local /etc/sermo/networks.local /etc/sermo/storages.local /etc/sermo/mounts.local /etc/sermo/templates.local /etc/sermo/templates; do
+		src="${backup}/$(basename "$dir")"
+		[ -d "$src" ] || continue
+		if find "$src" -mindepth 1 -print -quit | grep -q .; then
+			cp -a "${src}/." "$dir/" && local_preserved=yes
+		fi
+	done
+fi
+printf '%s\n' "$local_preserved" >"${out}/local_overrides_preserved"
 
 cat >/etc/sermo/sermo.yml <<YAML
 engine:

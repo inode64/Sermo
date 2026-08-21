@@ -349,17 +349,24 @@ def slug(value: str, max_len: int = 72) -> str:
     return value[:max_len].strip("-") or "target"
 
 
+CONFIG_DIRS = [
+    "etc/sermo/services",
+    "etc/sermo/apps",
+    "etc/sermo/notifiers",
+    "etc/sermo/watches",
+    "etc/sermo/networks",
+    "etc/sermo/storages",
+    "etc/sermo/mounts",
+    "etc/sermo/templates",
+]
+
+
 def ensure_dirs(root: Path) -> None:
-    for rel in [
-        "etc/sermo/services",
-        "etc/sermo/apps",
-        "etc/sermo/notifiers",
-        "etc/sermo/watches",
-        "etc/sermo/networks",
-        "etc/sermo/storages",
-        "etc/sermo/mounts",
-        "etc/sermo/templates",
-    ]:
+    # The `.local` siblings are created but never written to: they are the
+    # operator's per-host layer, and the remote scripts keep them across a
+    # regeneration. tar_config only archives regular files, so an empty
+    # directory never becomes an archive member and cannot overwrite the layer.
+    for rel in CONFIG_DIRS + [f"{rel}.local" for rel in CONFIG_DIRS]:
         (root / rel).mkdir(parents=True, exist_ok=True)
 
 

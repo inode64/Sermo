@@ -197,6 +197,28 @@ in the SSH service detail, and never attach to or control a terminal session.
 Installed multiplexers without an active, safely attributable namespace do not
 produce a check.
 
+## Per-host overrides that survive regeneration
+
+Every generated config directory may have a `<dir>.local` sibling —
+`/etc/sermo/services.local`, `storages.local`, and so on. Sermo loads them and
+merges each document onto the generated one of the same name, so a host tunes a
+packaged threshold once and keeps it:
+
+```yaml
+# /etc/sermo/services.local/prometheus.yml
+name: prometheus
+watches:
+  alert-if-io-high:
+    check: { value: 838860800 }
+```
+
+`remote_apply.sh` deliberately leaves those directories out of its `rm -rf`, and
+`remote_stage.sh` — which moves the whole tree aside on a reinstall — restores
+them from the backup alongside `credentials.env` and `templates/`. The layer is
+discovered from the directory layout, not from `paths` in `sermo.yml`, precisely
+so that regenerating `sermo.yml` cannot de-register it. See
+[docs/configuration.md](../../docs/configuration.md#per-host-overrides-dirlocal).
+
 ## Web credentials
 
 The fresh-install orchestrator takes the admin password from
