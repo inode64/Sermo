@@ -1,0 +1,7 @@
+name: libpcap
+display_name: "libpcap"
+description: "Packet capture library; a change triggers a restart of dependent services"
+variables:
+  binary: "/usr/lib64/libpcap.so.1"
+preflight:
+  file: { type: file, path: "${binary}" }
