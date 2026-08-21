@@ -288,7 +288,7 @@ func (rb *readingBuilder) addMetric(field, label string, decimals int, unit stri
 // graph recorder uses.
 func (rb *readingBuilder) addMetrics(list []checks.GraphMetric) *readingBuilder {
 	for _, m := range list {
-		if v, ok := numericData(rb.data[m.Key]); ok {
+		if v, ok := checks.NumericData(rb.data[m.Key]); ok {
 			rb.add(m.Key, watchReadingMetricLabel(m), watchReadingGraphMetricValue(m, v))
 		}
 	}
@@ -319,7 +319,7 @@ func (rb *readingBuilder) addLastKnown(list []checks.GraphMetric) *readingBuilde
 	rb.add(checks.DataKeyLastHealth, watchReadingLabelHealth+watchReadingLastSuffix, cfgval.String(rb.data[checks.DataKeyLastHealth]))
 	for _, m := range list {
 		key := checks.LastSampleKey(m.Key)
-		if v, ok := numericData(rb.data[key]); ok {
+		if v, ok := checks.NumericData(rb.data[key]); ok {
 			rb.add(key, watchReadingMetricLabel(m)+watchReadingLastSuffix, watchReadingGraphMetricValue(m, v))
 		}
 	}
