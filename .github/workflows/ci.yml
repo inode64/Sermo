@@ -91,6 +91,14 @@ jobs:
           go-version-file: go.mod
           cache: true
       - name: make race
+        # -p=2 bounds concurrent package compilation. On a cold build cache —
+        # every run after go.sum moves, since setup-go restores on its exact
+        # hash — compiling the whole tree race-instrumented at full parallelism
+        # (modernc's libc among it) has been killing the runner about a minute
+        # in, which Actions reports as "The operation was canceled". Warm-cache
+        # runs never recompile, so the ceiling costs them nothing.
+        env:
+          GOFLAGS: -p=2
         run: |
           set -o pipefail
           if ! make race 2>&1 | tee /tmp/race.log; then
