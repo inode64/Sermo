@@ -79,6 +79,11 @@ const (
 	DataKeyIssuer                   = "issuer"
 	DataKeyKeyBits                  = "key_bits"
 	DataKeyKind                     = "kind"
+	DataKeyCarrierChanges           = "carrier_changes"
+	DataKeyDriver                   = "driver"
+	DataKeyDuplex                   = "duplex"
+	DataKeyMAC                      = "mac"
+	DataKeyMTU                      = "mtu"
 	DataKeyLabel                    = CheckKeyLabel
 	DataKeyLanguage                 = CheckKeyLanguage
 	DataKeyLastOffsetSeconds        = "last_offset_seconds"

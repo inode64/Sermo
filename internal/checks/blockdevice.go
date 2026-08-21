@@ -182,7 +182,7 @@ func blockDeviceName(device string) string {
 // health and state columns instead of leaving them blank.
 func (b base) missingDeviceResult(identity BlockDeviceIdentityFunc, prefix, device string, start time.Time) Result {
 	res := b.unavailableResult(prefix+": "+deviceMissingReason, start)
-	res.Data = withDeviceIdentity(MissingDeviceResultData(device), resolveDeviceIdentity(identity, device))
+	res.Data = withIdentity(MissingDeviceResultData(device), resolveDeviceIdentity(identity, device))
 	return res
 }
 
@@ -195,7 +195,7 @@ func (b base) deviceFailureResult(probe deviceProbe, prefix, device, reason stri
 		return b.missingDeviceResult(probe.identity, prefix, device, start)
 	}
 	res := b.unavailableResult(prefix+": "+reason, start)
-	res.Data = withDeviceIdentity(map[string]any{DataKeyDevice: device}, resolveDeviceIdentity(probe.identity, device))
+	res.Data = withIdentity(map[string]any{DataKeyDevice: device}, resolveDeviceIdentity(probe.identity, device))
 	return res
 }
 
@@ -346,26 +346,17 @@ func sysDeviceAttr(dir, file string) string {
 	return strings.TrimSpace(string(data))
 }
 
-// withDeviceIdentity records what the kernel says the device is alongside its
-// readings. Identity is a property of the hardware rather than of the sample, so
-// it stays true — and stays worth publishing — when the drive stops answering.
-func withDeviceIdentity(data map[string]any, identity BlockDeviceIdentity) map[string]any {
-	if data == nil {
-		data = map[string]any{}
-	}
-	for _, field := range [...]struct{ key, value string }{
-		{DataKeyModel, identity.Model},
-		{DataKeySerialNumber, identity.Serial},
-		{DataKeyFirmware, identity.Firmware},
-		{DataKeyWWN, identity.WWN},
-		{DataKeyRotationRate, identity.Rotation},
-	} {
-		if field.value != "" {
-			data[field.key] = field.value
+// identityData maps a drive's identity onto its result keys. Identity is a
+// property of the hardware rather than of the sample, so it stays true — and
+// stays worth publishing — when the drive stops answering.
+func (id BlockDeviceIdentity) identityData() ([]identityField, []identityNumber) {
+	return []identityField{
+			{DataKeyModel, id.Model},
+			{DataKeySerialNumber, id.Serial},
+			{DataKeyFirmware, id.Firmware},
+			{DataKeyWWN, id.WWN},
+			{DataKeyRotationRate, id.Rotation},
+		}, []identityNumber{
+			{DataKeyCapacityBytes, id.CapacityBytes},
 		}
-	}
-	if identity.CapacityBytes > 0 {
-		data[DataKeyCapacityBytes] = identity.CapacityBytes
-	}
-	return data
 }

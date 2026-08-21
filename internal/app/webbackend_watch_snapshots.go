@@ -49,7 +49,32 @@ func (b *WebBackend) watchSnapshotView(w *webWatch, system metrics.Snapshot) (*w
 	if meter == nil {
 		meter = watchMeter(w.checkType, system)
 	}
-	return meter, readings, strings.Join(summaries, readingSummarySeparator)
+	return meter, dedupeWatchReadings(readings), strings.Join(summaries, readingSummarySeparator)
+}
+
+// dedupeWatchReadings drops the repeats a multi-metric watch produces. Every
+// metric of a net watch samples the same interface, so each of them carries the
+// same context rows — the interface name, its MAC, its driver, its slot — and
+// the dashboard would otherwise print that whole block once per metric.
+//
+// Only value rows collapse. An error or a warning row is a report about one
+// metric, so two metrics failing at once are two distinct findings even though
+// they share a field name, and collapsing them would hide one of them.
+func dedupeWatchReadings(readings []web.WatchReading) []web.WatchReading {
+	seen := make(map[string]bool, len(readings))
+	out := make([]web.WatchReading, 0, len(readings))
+	for _, r := range readings {
+		if r.Error != "" || r.Warning != "" {
+			out = append(out, r)
+			continue
+		}
+		if seen[r.Field] {
+			continue
+		}
+		seen[r.Field] = true
+		out = append(out, r)
+	}
+	return out
 }
 
 func (b *WebBackend) watchSnapshotCurrent(w *webWatch, snap CheckSnapshot) bool {

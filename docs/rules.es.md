@@ -2292,6 +2292,21 @@ Esa memoria pertenece al check en ejecución, así que está vacía tras reinici
 daemon: Sermo informa sólo de muestras que realmente tomó. La identidad sobrevive
 al reinicio porque quien la recuerda es el kernel, no Sermo.
 
+**Una interfaz de red es la excepción que confirma la regla.** A diferencia de un
+disco, que conserva su nodo `/dev` y su identidad en sysfs tras quedarse mudo, una
+interfaz que se retira o se renombra se lleva consigo todo su directorio
+`/sys/class/net`, así que no queda nada que leer. Por eso un check `net` recuerda
+la identidad que observó por última vez y la informa: `mac`, `driver`, `bus` (la
+dirección del dispositivo en su árbol de bus, que es lo que distingue un puerto de
+una tarjeta multipuerto), `mtu`, `duplex` y — para una interfaz virtual, que no
+tiene driver que nombrar — `kind`, el `bridge`/`vlan`/`bond`/`veth` que el kernel
+dice que es. Una muestra viva lleva las mismas filas más `carrier_changes`, la
+cuenta que el kernel hace de cada transición de enlace desde que la interfaz
+apareció: un enlace que ahora está arriba pero ha oscilado doscientas veces no es
+la misma situación que uno que lleva arriba desde el arranque, y un check que
+muestrea una vez por ciclo no puede ver las oscilaciones entre sus propias
+muestras.
+
 ### Sensores de hardware
 
 Las comprobaciones de salud física son de **estilo condición**: los predicados son condiciones de

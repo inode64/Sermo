@@ -2263,6 +2263,21 @@ That memory belongs to the running check, so it is empty after a daemon restart:
 Sermo reports only samples it actually took. Identity survives a restart because
 the kernel, not Sermo, is the one remembering it.
 
+**A network interface is the exception that proves the rule.** Unlike a disk,
+which keeps its `/dev` node and its sysfs identity after it goes quiet, an
+interface that is removed or renamed takes its whole `/sys/class/net` directory
+with it, so there is nothing left to read. A `net` check therefore remembers the
+identity it last observed and reports that: `mac`, `driver`, `bus` (the device's
+address in its bus tree, which is what distinguishes one port of a multi-port
+card), `mtu`, `duplex` and — for a virtual interface, which has no driver to
+name — `kind`, the `bridge`/`vlan`/`bond`/`veth` the kernel calls it. A live
+sample carries the same rows plus `carrier_changes`, the kernel's count of every
+link transition since the interface appeared: a link that is up now but has
+flapped two hundred times is not the same situation as one that has been up since
+boot, and a check sampling once a cycle cannot see the flaps between its own
+samples.
+
+
 ### Hardware sensors
 
 Physical-health checks are **condition-style**: predicates are alerting
