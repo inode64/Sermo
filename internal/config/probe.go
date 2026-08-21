@@ -14,6 +14,7 @@ const (
 	directiveValueIndex = 1
 	directiveMinFields  = directiveValueIndex + 1
 	confdAssignSep      = "="
+	yamlAssignSep       = ":"
 	confdQuoteTrimSet   = `"'`
 	configLineSeparator = "\n"
 
@@ -75,9 +76,16 @@ func directiveValue(data []byte, key string) (string, bool) {
 	return "", false
 }
 
-// configKeyValue returns the value of a KEY="val" assignment or an empty value
-// for a bare KEY feature flag. Surrounding quotes are stripped. ok=false when
-// the file is unreadable or the key is absent.
+// configAssignSeps are the assignment forms configKeyValue accepts after a key,
+// in the two shapes host config files actually use: an OpenRC/dnsmasq
+// `KEY="val"` and a YAML block-mapping `key: val`. A key alone on the line is a
+// bare feature flag and is handled before these.
+var configAssignSeps = []string{confdAssignSep, yamlAssignSep}
+
+// configKeyValue returns the value of a KEY="val" or `key: val` assignment, or
+// an empty value for a bare KEY feature flag (which a YAML `key:` opening a
+// nested block also is). Surrounding quotes are stripped. ok=false when the file
+// is unreadable or the key is absent.
 func configKeyValue(path, key string) (string, bool) {
 	data, err := os.ReadFile(path) //nolint:gosec // G304: OpenRC conf.d path from catalog service unit
 	if err != nil {
@@ -88,11 +96,11 @@ func configKeyValue(path, key string) (string, bool) {
 		if line == key {
 			return "", true
 		}
-		rest, ok := strings.CutPrefix(line, key+confdAssignSep)
-		if !ok {
-			continue
+		for _, sep := range configAssignSeps {
+			if rest, ok := strings.CutPrefix(line, key+sep); ok {
+				return strings.Trim(strings.TrimSpace(rest), confdQuoteTrimSet), true
+			}
 		}
-		return strings.Trim(strings.TrimSpace(rest), confdQuoteTrimSet), true
 	}
 	return "", false
 }
