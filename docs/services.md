@@ -1500,7 +1500,8 @@ they are pruned, so typos in optional process/check definitions are reported.
 `enable_if` is intentionally not supported under `rules`, `policy`, `guards` or
 other safety-affecting sections.
 
-The config reader accepts `key=value` assignments and bare `key` feature flags.
+The config reader accepts `key=value` assignments, YAML `key: value` block
+mappings and bare `key` feature flags.
 Use `equals: ""` to match a bare flag. The packaged `dnsmasq` profile uses this
 to add its DHCP check only when `/etc/dnsmasq.conf` has `dhcp-range=...`, and its
 TFTP check only when that file has `enable-tftp`. If those directives live in a
@@ -1508,6 +1509,12 @@ file under `/etc/dnsmasq.d`, override the corresponding
 `watches.dhcp.enable_if.file` or `watches.tftp.enable_if.file` in the configured
 service. Override `dhcp_host`/`dhcp_port` or
 `tftp_host`/`tftp_port`/`tftp_query` when the local endpoint differs.
+
+The packaged `cloudflared` profile is the YAML case: `cloudflared tunnel ingress
+validate` only validates locally declared ingress rules, so it fails on a
+remotely-managed tunnel whose `config.yml` carries just a `token:` — and a failed
+preflight blocks every operation, restart included. Its config preflight is
+therefore gated on `ingress` being present in the file.
 
 ### Variables read from a config file (`from_file`)
 

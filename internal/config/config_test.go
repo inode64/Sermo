@@ -6062,6 +6062,87 @@ defaults: { policy: { cooldown: 5m } }
 	}
 }
 
+// TestEnableIfReadsYAMLBlockKey covers config formats such as cloudflared's,
+// where the gate key is a YAML block mapping rather than an OpenRC assignment.
+// The packaged cloudflared profile depends on it: `tunnel ingress validate`
+// fails on a remotely-managed tunnel that declares no ingress, and a failed
+// preflight blocks the restart, so the check must be pruned there and kept where
+// ingress really is declared.
+func TestEnableIfReadsYAMLBlockKey(t *testing.T) {
+	root := t.TempDir()
+	catalogDir := filepath.Join(root, "catalog", "services")
+	servicesDir := filepath.Join(root, "services")
+	if err := os.MkdirAll(catalogDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(servicesDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	tests := []struct {
+		name        string
+		configBody  string
+		wantIngress bool
+	}{
+		{name: "block key", configBody: "ingress:\n  - service: http_status:404\n", wantIngress: true},
+		{name: "inline value", configBody: "ingress: []\n", wantIngress: true},
+		{name: "token tunnel", configBody: "token: abc\nmetrics: 127.0.0.1:60123\n", wantIngress: false},
+		{name: "commented key", configBody: "#ingress:\n", wantIngress: false},
+	}
+	for _, tt := range tests {
+		configPath := filepath.Join(root, strings.ReplaceAll(tt.name, " ", "-")+".yml")
+		if err := os.WriteFile(configPath, []byte(tt.configBody), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		catalogName := strings.ReplaceAll(tt.name, " ", "-")
+		body := fmt.Sprintf(`
+name: %s
+service: %s
+preflight:
+  config:
+    enable_if: { file: %q, key: ingress, matches: ".*" }
+    type: command
+    command: ["/bin/true"]
+`, catalogName, catalogName, configPath)
+		if err := os.WriteFile(filepath.Join(catalogDir, catalogName+".yml"), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		serviceName := "my-" + catalogName
+		serviceBody := fmt.Sprintf("name: %s\nuses: %s\n", serviceName, catalogName)
+		if err := os.WriteFile(filepath.Join(servicesDir, serviceName+".yml"), []byte(serviceBody), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	global := filepath.Join(root, "sermo.yml")
+	if err := os.WriteFile(global, fmt.Appendf(nil, `
+engine: { backend: auto }
+paths: { services: [ %s ], runtime: /run/sermo }
+defaults: { policy: { cooldown: 5m } }
+`, servicesDir), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(global, WithCatalogDirs(filepath.Dir(catalogDir)))
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			catalogName := strings.ReplaceAll(tt.name, " ", "-")
+			resolved, errs := cfg.Resolve("my-" + catalogName)
+			if len(errs) != 0 {
+				t.Fatalf("Resolve() errors = %v", errs)
+			}
+			preflight, _ := resolved.Tree["preflight"].(map[string]any)
+			_, gotIngress := preflight["config"]
+			if gotIngress != tt.wantIngress {
+				t.Errorf("preflight config present = %v, want %v", gotIngress, tt.wantIngress)
+			}
+		})
+	}
+}
+
 // TestEnableIfPrunesByBareConfigFlag covers config formats such as dnsmasq's,
 // where an optional feature is enabled by a bare directive with no value.
 func TestEnableIfPrunesByBareConfigFlag(t *testing.T) {

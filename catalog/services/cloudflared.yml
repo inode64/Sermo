@@ -25,13 +25,29 @@ config_files:
   - ${config}
 preflight:
   config:
+    # `tunnel ingress validate` validates locally declared ingress rules and
+    # nothing else, so on a remotely-managed tunnel — whose config.yml carries a
+    # `token:` and no ingress at all, the rules living in Cloudflare's dashboard —
+    # it exits 1 with "The config file doesn't contain any ingress rules". A
+    # failed preflight blocks every operation, so that turned a healthy tunnel
+    # into one Sermo could not restart. Gate the check on the config actually
+    # declaring ingress; a missing file or absent key prunes it, which is the
+    # same fail-safe the previous `test ! -e` shell guard provided, natively.
+    # `enable_if` is evaluated before ${var} expansion, so `file` must repeat the
+    # literal default of `config`; a host that moves the file overrides
+    # `preflight.config.enable_if.file` alongside `config`.
+    enable_if:
+      file: /etc/cloudflared/config.yml
+      key: ingress
+      matches: .*
     type: command
     command:
-      - sh
-      - -c
-      - test ! -e "$1" || exec "$0" --config "$1" tunnel ingress validate
       - ${cloudflared_binary}
+      - --config
       - ${config}
+      - tunnel
+      - ingress
+      - validate
     timeout: 30s
 processes:
   main:
