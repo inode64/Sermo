@@ -1871,6 +1871,42 @@ func TestCatalogDaemonProcessChecksAreAuxiliary(t *testing.T) {
 	}
 }
 
+// TestCatalogCandidatePathsCoverPackagedLayouts pins the two catalog paths that
+// have to name what a host really runs. Both were found by restarting the
+// services on a live Gentoo host, and both failed the same way: the catalog
+// named one packaged layout and the host used another. A resolved tree collapses
+// a candidate list to whichever path exists there, which is host-dependent, so
+// the invariant is asserted on the raw documents.
+func TestCatalogCandidatePathsCoverPackagedLayouts(t *testing.T) {
+	root := repoRoot(t)
+
+	// /usr/bin/grafana is a shell wrapper and the kernel reports the real binary
+	// under /usr/share/grafana/bin as the process exe. With only the wrapper as a
+	// candidate the service's exact exe selector matches nothing, and the
+	// operation engine refuses to act on a service it cannot identify — the
+	// restart is blocked, not merely unmonitored.
+	grafana := cfgval.StringList(nested(t, catalogDocByName(t, root, "apps", "grafana"), "variables")["binary"])
+	if len(grafana) < 2 || grafana[0] != "/usr/share/grafana/bin/grafana" {
+		t.Fatalf("grafana app binary candidates = %v, want the real binary first", grafana)
+	}
+	if !slices.Contains(grafana, "${bindir}/grafana") {
+		t.Fatalf("grafana app binary candidates = %v, want the ${bindir} fallback kept", grafana)
+	}
+
+	// A config preflight naming an absent file fails, and a failed preflight
+	// blocks every operation, so each packaged location has to be a candidate.
+	loki := cfgval.StringList(nested(t, catalogDocByName(t, root, "services", "loki"), "variables")["config"])
+	for _, want := range []string{
+		"/etc/loki/config.yml",             // Grafana's own deb/rpm
+		"/etc/loki/loki-local-config.yaml", // Gentoo's unit default for LOKI_CONF
+		"/etc/loki/local-config.yaml",      // upstream tarball and container image
+	} {
+		if !slices.Contains(loki, want) {
+			t.Fatalf("loki config candidates = %v, want %q", loki, want)
+		}
+	}
+}
+
 func TestCatalogForegroundPidfilesAreOptional(t *testing.T) {
 	cfg := loadRepoCatalog(t)
 	for _, service := range []string{"rngd", "smartd"} {
