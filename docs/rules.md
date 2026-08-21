@@ -28,6 +28,7 @@
   - [inotify limits (inotify)](#inotify-limits-inotify)
   - [Disk throughput (hdparm)](#disk-throughput-hdparm)
   - [Missing devices](#missing-devices)
+  - [What a device that stopped answering still reports](#what-a-device-that-stopped-answering-still-reports)
   - [Hardware sensors](#hardware-sensors)
   - [Autofs](#autofs)
   - [Count](#count)
@@ -75,7 +76,7 @@ Connection-protocol checks (MySQL, PostgreSQL, Redis, Docker, libvirt, etc.) are
 | `process_count` | the number of processes (host-wide, or filtered by `user`/`exe`/`exe_dir`) satisfies `count {op, value}`|
 | `hdparm`      | a disk's `hdparm` read throughput crosses a threshold (`read`/`cached` MB/s) (see Disk throughput)|
 | `sensors`     | hwmon hardware sensors cross a threshold (`temp` °C / `fan` RPM / `voltage` V) (see Hardware sensors)|
-| `smart`       | a drive's SMART health/attributes (failed verdict, `reallocated`, `wear`, `temperature`) (see Hardware sensors)|
+| `smart`       | a drive's SMART health/attributes and identity (failed verdict, `reallocated`, `pending_sectors`, `crc_errors`, `media_errors`, `wear`, `temperature`) (see Hardware sensors)|
 | `raid`        | a Linux md software-RAID array is degraded/recovering (`degraded`/`recovering`/`arrays`) (see Hardware sensors)|
 | `edac`        | ECC memory errors from EDAC (`ce` correctable / `ue` uncorrectable) (see Hardware sensors)|
 | `memory`      | system RAM vs the kernel's MemAvailable (used_pct/available_pct/available_bytes) |
@@ -2214,11 +2215,40 @@ sizes the device (`/sys/class/block/<device>/size` gone or `0`), the check
 publishes **`missing`**: an *unavailable* observation, never a passing one. The
 dashboard shows `missing` as the watch state and health, and the row reads as a
 failure. `diskio` consults sysfs only for a window that moved nothing at all, so
-a disk carrying traffic never pays for the lookup.
+a disk carrying traffic never pays for the lookup. The row is not left otherwise
+blank: see [What a device that stopped answering still
+reports](#what-a-device-that-stopped-answering-still-reports).
 
 A `missing` device is unavailable, not firing, so — like every unavailable
 observation — it never triggers automatic actions. It is reported through the
 watch's `error` event and the dashboard.
+
+### What a device that stopped answering still reports
+
+An unavailable sample is the moment an operator most needs to know *which* disk
+this is, so `smart`, `hdparm` and `diskio` do not fall back to the word
+`missing` alone.
+
+**Identity** comes from sysfs, which keeps publishing what the kernel learned
+from the drive's last successful identification long after the drive stops
+answering: `model`, `serial_number`, `firmware`, `wwn` (the World Wide Name, as
+`/dev/disk/by-id` spells it) and `rotation_rate`, the medium the drive uses.
+`capacity_bytes` is the exception — sysfs sizes a dead device at 0 — so it is
+reported only while the device is still sized. A
+`smart` sample that *did* reach the drive uses smartctl's own richer answer
+instead, which is where a full serial number comes from: sysfs truncates a SATA
+model to 16 characters and publishes no serial for it at all.
+
+**Last known readings** come from the check's own memory of the newest sample
+the device answered: `last_health` and one `last_<field>` per reading, dated by
+`last_seen_seconds`. They are deliberately published under their own keys and
+labelled `(last)` in the dashboard, never under the live key, because the
+recorder graphs every numeric a result carries — republishing a dead drive's
+final temperature as `temperature` would draw a flat line at it forever.
+
+That memory belongs to the running check, so it is empty after a daemon restart:
+Sermo reports only samples it actually took. Identity survives a restart because
+the kernel, not Sermo, is the one remembering it.
 
 ### Hardware sensors
 
@@ -2241,13 +2271,28 @@ detail so gradual degradation is visible.
       fan: { op: "<", value: 400 }   # optional: alert on a stalled fan
   ```
 
-- **`smart`** — a drive's **SMART** health via `smartctl -j` (needs smartmontools
-  and root). With no predicate it alerts when the overall SMART verdict is
-  **FAILED**; predicates add `temperature` (°C), `reallocated` (sector count, an
-  HDD failure sign), `wear` (SSD/NVMe percentage used) and `power_on_hours`.
-  Complements `hdparm` (throughput) with failure prediction. A drive `smartctl`
-  cannot open or identify is reported **missing** and unavailable — see
-  [Missing devices](#missing-devices).
+- **`smart`** — a drive's **SMART** health via
+  `smartctl -i -H -A -c -l selftest -j` (needs smartmontools and root). With no
+  predicate it alerts when the overall SMART verdict is **FAILED**; predicates
+  add `temperature` (°C), `reallocated` (sector count, an HDD failure sign),
+  `pending_sectors` (sectors the drive could not read and has not managed to
+  reallocate — the count that rises *before* `reallocated` does), `crc_errors`
+  (corrupted transfers on the link itself, which blames the cable or the
+  backplane rather than the media), `media_errors` (the NVMe counterpart of
+  `reallocated`: NVMe drives publish no attribute table), `wear` (SSD/NVMe
+  percentage used) and `power_on_hours`. Complements `hdparm` (throughput) with
+  failure prediction.
+
+  Every sample also carries what the drive **is** — `model`, `serial_number`,
+  `firmware`, `wwn`, `capacity_bytes` and `rotation_rate` — plus `power_cycles`
+  and `self_test`, the drive's own verdict on the last self-test it ran and the
+  lifetime hour it ran at. Those name the disk an operator has to pull out of a
+  bay, which a device node does not. `rotation_rate` is the drive's own figure
+  (`7200 rpm`, or `SSD` for flash); an NVMe drive reports none, so the kernel's
+  coarser answer (`rotational` or `SSD`) stands in. It is what makes the rest of
+  the readings mean something: `wear` is the number that matters on flash,
+  `reallocated` on platters. A drive `smartctl` cannot open or identify is reported
+  **missing** and unavailable — see [Missing devices](#missing-devices).
 
   ```yaml
   checks:
@@ -2255,8 +2300,10 @@ detail so gradual degradation is visible.
       type: smart
       device: /dev/nvme0
       interval: 1h
-      reallocated: { op: ">", value: 0 }   # any reallocated sector
-      wear: { op: ">", value: 90 }         # SSD/NVMe nearly worn out
+      reallocated: { op: ">", value: 0 }       # any reallocated sector
+      pending_sectors: { op: ">", value: 0 }   # unreadable sectors awaiting reallocation
+      crc_errors: { op: ">", value: 0 }        # link errors: suspect the cable
+      wear: { op: ">", value: 90 }             # SSD/NVMe nearly worn out
   ```
 
 - **`raid`** — Linux **md software-RAID** from `/proc/mdstat` and read-only

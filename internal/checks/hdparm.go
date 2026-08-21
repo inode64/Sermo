@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"sermo/internal/execx"
 	"sermo/internal/output"
@@ -28,14 +29,15 @@ const (
 // error, so a failed run asks sysfs whether the device still exists at all.
 type hdparmCheck struct {
 	base
-	runner     execx.Runner
-	device     string
-	preds      []levelPred
-	deviceSize BlockDeviceSizeFunc
-	deviceBus  BlockDeviceBusFunc
+	runner    execx.Runner
+	device    string
+	preds     []levelPred
+	deviceBus BlockDeviceBusFunc
+	probe     deviceProbe
+	last      *lastSample
 }
 
-func (c hdparmCheck) Run(ctx context.Context) Result {
+func (c *hdparmCheck) Run(ctx context.Context) Result {
 	ctx, run := c.begin(ctx)
 	defer run.close()
 	start := run.start
@@ -50,7 +52,7 @@ func (c hdparmCheck) Run(ctx context.Context) Result {
 	res, runErr := c.runner.Run(ctx, hdparmCommand, hdparmArgs(c.device, want[fieldCached], want[fieldRead])...)
 	if res.ExitCode == execx.ExitCodeRunFailure {
 		msg := execx.OperatorFailureOr(runErr, res, c.timeout, execx.CommandDidNotStart)
-		return c.deviceFailureResult(c.deviceSize, prefix, c.device, msg, start)
+		return c.failedProbe(prefix, msg, start)
 	}
 	values, err := parseHdparm(res.Stdout)
 	if err != nil {
@@ -58,13 +60,23 @@ func (c hdparmCheck) Run(ctx context.Context) Result {
 		if line := output.FirstNonEmptyLine(res.Stderr); line != "" {
 			msg = line
 		}
-		return c.deviceFailureResult(c.deviceSize, prefix, c.device, msg, start)
+		return c.failedProbe(prefix, msg, start)
 	}
 
 	ok := levelPredsHold(c.preds, values)
 
+	c.last.record("", values, start)
 	r := c.result(ok, hdparmMessage(c.device, values), start)
 	r.Data = withDeviceBus(HdparmResultData(c.device, values), c.deviceBus, c.device)
+	return r
+}
+
+// failedProbe reports a timing hdparm could not take. It keeps the drive's
+// identity and its last measured rates in the reading data, so a disk that stops
+// answering still says which disk it was and how fast it last ran.
+func (c *hdparmCheck) failedProbe(prefix, reason string, start time.Time) Result {
+	r := c.deviceFailureResult(c.probe, prefix, c.device, reason, start)
+	r.Data = c.last.into(r.Data, start)
 	return r
 }
 

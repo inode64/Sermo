@@ -514,7 +514,7 @@ activity es un evento.
 | `net` | Name, interfaz, enlace, velocidad, errores |
 | `hdparm` | Name, dispositivo, bus, lectura buffered, lectura cached |
 | `lvm` | Name, salud, VG, LV, tamaño de VG, libre en VG, motivos |
-| `smart` | Name, dispositivo, bus, salud, temperatura, desgaste, sectores reasignados, tiempo encendido formateado |
+| `smart` | Name, dispositivo, bus, salud, modelo, número de serie, firmware, WWN, medio, capacidad, temperatura, sectores reasignados/pendientes, errores CRC de enlace y de medio, desgaste, tiempo encendido formateado, ciclos de encendido, último autotest |
 | `diskio` | Name, dispositivo, bus, utilización, lectura, escritura, await, leído total, escrito total (acumulados desde el arranque, para distinguir un disco ocioso de uno que nadie toca nunca) |
 | `cert` | Name, origen, días restantes, caducidad, emisor |
 | `raid` | Name, array, tamaño, degradado, recuperando |
@@ -525,6 +525,14 @@ normaliza el suyo a `ok`/`error`, mientras que `smart` informa del veredicto de 
 unidad con las palabras de smartctl. `ok` y `PASSED` se ven en verde; `unknown`
 —una unidad que respondió sin veredicto— en ámbar; y todo lo demás, incluidos
 `FAILED` y `missing`, en rojo. Un check sin lectura de salud muestra una raya.
+
+Un dispositivo que dejó de responder conserva las filas que siguen siendo
+ciertas: la identidad de la unidad, leída de sysfs, y las lecturas que llegó a
+dar, cada una etiquetada `(last)` y fechada por una fila `Last seen`, de modo que
+un valor histórico nunca pueda leerse como actual. Las últimas lecturas conocidas
+viven en la memoria del check en ejecución, así que no están tras reiniciar el
+daemon; la identidad, que recuerda el kernel, sí. Ver [Dispositivos
+ausentes](rules.md#dispositivos-ausentes).
 
 Estas columnas leen las lecturas actuales publicadas por el último ciclo del
 daemon y rehidratadas desde estado persistente tras reiniciar el daemon. La edad

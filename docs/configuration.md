@@ -2196,8 +2196,8 @@ counters twice around a short pause, because its rates are the delta between two
 readings and a single one would only be a baseline; a manual `smart` probe instead starts the device's
 short self-test with `smartctl --test=short DEVICE`. Its successful command
 acknowledgement means the self-test was scheduled, not that the drive is
-healthy; scheduled SMART cycles continue to read health and attributes with
-`smartctl -H -A -c -j`.
+healthy; scheduled SMART cycles continue to read the drive's identity, health,
+attributes and self-test log with `smartctl -i -H -A -c -l selftest -j`.
 
 While a self-test is in progress, the shared Web/CLI state is `testing`; later
 daemon samples clear it when the device reports that the test ended. RAID and

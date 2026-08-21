@@ -25,9 +25,17 @@ const voltageReadingDecimals = 2
 // Result.Data under Key — the recorder, store and web graph it generically, so
 // this is reusable by any check (and service).
 var graphMetrics = map[string][]GraphMetric{
-	CheckTypeHdparm:           {{Key: fieldRead, Unit: metrics.MetricUnitMegabytesPerSecond, Decimals: 1}, {Key: fieldCached, Unit: metrics.MetricUnitMegabytesPerSecond, Decimals: 1}},
-	CheckTypeSensors:          {{Key: sensorTemp, Unit: metrics.MetricUnitCelsius, Label: "Hottest temp", Decimals: 1}, {Key: sensorFan, Unit: metrics.MetricUnitRPM, Label: "Slowest fan"}, {Key: sensorVoltage, Unit: metrics.MetricUnitVolt, Label: "Lowest voltage", Decimals: voltageReadingDecimals}},
-	CheckTypeSmart:            {{Key: fieldTemperature, Unit: metrics.MetricUnitCelsius}, {Key: fieldReallocated, Unit: metrics.MetricUnitNone}, {Key: fieldWear, Unit: metrics.MetricUnitPercent}, {Key: fieldPowerOnHours, Unit: metrics.MetricUnitHours}},
+	CheckTypeHdparm:  {{Key: fieldRead, Unit: metrics.MetricUnitMegabytesPerSecond, Decimals: 1}, {Key: fieldCached, Unit: metrics.MetricUnitMegabytesPerSecond, Decimals: 1}},
+	CheckTypeSensors: {{Key: sensorTemp, Unit: metrics.MetricUnitCelsius, Label: "Hottest temp", Decimals: 1}, {Key: sensorFan, Unit: metrics.MetricUnitRPM, Label: "Slowest fan"}, {Key: sensorVoltage, Unit: metrics.MetricUnitVolt, Label: "Lowest voltage", Decimals: voltageReadingDecimals}},
+	CheckTypeSmart: {
+		{Key: fieldTemperature, Unit: metrics.MetricUnitCelsius, Label: "Temperature"},
+		{Key: fieldReallocated, Unit: metrics.MetricUnitNone, Label: "Reallocated sectors"},
+		{Key: fieldPendingSectors, Unit: metrics.MetricUnitNone, Label: "Pending sectors"},
+		{Key: fieldCRCErrors, Unit: metrics.MetricUnitNone, Label: "Link CRC errors"},
+		{Key: fieldMediaErrors, Unit: metrics.MetricUnitNone, Label: "Media errors"},
+		{Key: fieldWear, Unit: metrics.MetricUnitPercent, Label: "Wear"},
+		{Key: fieldPowerOnHours, Unit: metrics.MetricUnitHours, Label: "Power-on time"},
+	},
 	CheckTypeEDAC:             {{Key: fieldCE, Unit: metrics.MetricUnitNone, Label: "Correctable"}, {Key: fieldUE, Unit: metrics.MetricUnitNone, Label: "Uncorrectable"}},
 	CheckTypeUsers:            {{Key: DataKeyCount, Unit: metrics.MetricUnitUsers}},
 	CheckTypeSSHIdle:          {{Key: DataKeyCount, Unit: metrics.MetricUnitSessions, Label: "Idle sessions"}, {Key: DataKeyProtectedCount, Unit: metrics.MetricUnitSessions, Label: "Protected sessions"}},
