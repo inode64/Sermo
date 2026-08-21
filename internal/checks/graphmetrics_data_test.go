@@ -93,7 +93,7 @@ func TestGraphMetricsAreWrittenIntoResultData(t *testing.T) {
 					t.Errorf("%s declares graph metric %q but its result carries no such field: %v", tc.typ, m.Key, res.Data)
 					continue
 				}
-				if _, numeric := graphMetricNumber(raw); !numeric {
+				if _, numeric := NumericData(raw); !numeric {
 					t.Errorf("%s graph metric %q is %T (%v), which the recorder cannot graph", tc.typ, m.Key, raw, raw)
 				}
 			}
@@ -104,25 +104,6 @@ func TestGraphMetricsAreWrittenIntoResultData(t *testing.T) {
 // pred builds one {op, value} predicate entry, the shape every level check reads.
 func pred(op string, value any) map[string]any {
 	return map[string]any{"op": op, "value": value}
-}
-
-// graphMetricNumber mirrors the recorder's numericData: the kinds of number a
-// check may put in Result.Data and the recorder can persist.
-func graphMetricNumber(v any) (float64, bool) {
-	switch t := v.(type) {
-	case float64:
-		return t, true
-	case int:
-		return float64(t), true
-	case int64:
-		return float64(t), true
-	case uint64:
-		return float64(t), true
-	case uint:
-		return float64(t), true
-	default:
-		return 0, false
-	}
 }
 
 // TestDeclaredGraphMetricUnitSeparatesUnitFromExistence pins the distinction the

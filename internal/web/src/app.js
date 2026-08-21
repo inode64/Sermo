@@ -3558,11 +3558,11 @@ function watchMetricDomID(watch, metric, suffix) {
 function renderWatchMetricsSection(w) {
   const list = (w && w.metrics) || [];
   if (!list.length) return nothing;
-  const win = serviceMetricState(watchMetricsWindowKey(w.name)).window;
   const panels = list.map((metric) => tpl`<div class="metric-panel" data-watch-metric="${metric.name}">
     ${metricPanelBody(watchMetricDomID(w.name, metric.name, "summary"), watchMetricDomID(w.name, metric.name, "chart"),
       watchMetricLabel(metric))}
   </div>`);
+  const win = serviceMetricState(watchMetricsWindowKey(w.name)).window;
   return tpl`<h2>Graphs <span class="muted">${winButtons(metricWins, win, "setWatchMetricWin", "Graph time window", w.name)}</span></h2>
     <div class="metric-grid">${panels}</div>`;
 }
@@ -3583,13 +3583,7 @@ function loadWatchMetrics(w, generation = dashboardGeneration) {
     watchMetricDomID(w.name, metric.name, "summary"), watchMetricDomID(w.name, metric.name, "chart"),
     generation,
     (win) => watchMetricsAPI(w.name, metric.name, win),
-    (body, win) => {
-      const unit = body.unit || metric.unit || "";
-      return {
-        summary: metricSeriesSummary({ ...body, unit }),
-        chart: drawMetricChart(body.points || [], unit, win, `${watchMetricLabel(metric)} chart`),
-      };
-    },
+    (body, win) => metricPanelContent(body, metric.unit, win, `${watchMetricLabel(metric)} chart`),
     watchMetricLabel(metric)))).then((results) => results.every(Boolean));
 }
 
@@ -3598,11 +3592,10 @@ function loadWatchMetrics(w, generation = dashboardGeneration) {
 // threshold against uptime wants to move one without moving the other.
 function setWatchMetricWin(win, watch) {
   if (!watch) return;
-  serviceMetricState(watchMetricsWindowKey(watch)).window = win;
-  saveUIState();
-  syncWindowButtons("setWatchMetricWin", win, watch);
-  const w = (allWatches || []).find((item) => item && item.name === watch);
-  if (w) loadWatchMetrics(w);
+  applyWindowChoice(watchMetricsWindowKey(watch), "setWatchMetricWin", watch, win, () => {
+    const w = (allWatches || []).find((item) => item && item.name === watch);
+    if (w) loadWatchMetrics(w);
+  });
 }
 
 function renderSLASection(key) {
@@ -3628,10 +3621,7 @@ function loadSLAPanel(key, generation = dashboardGeneration) {
 // detail's selector is setMetricWin: it moves the whole detail, not this panel.
 function setSLAWin(win, key) {
   if (!key) return;
-  serviceMetricState(key).window = win;
-  saveUIState();
-  syncWindowButtons("setSLAWin", win, key);
-  loadSLAPanel(key);
+  applyWindowChoice(key, "setSLAWin", key, win, () => loadSLAPanel(key));
 }
 
 // loadCheckSLA fills one check's SLA cell from the same endpoint and window
@@ -4129,15 +4119,31 @@ function runtimeMetricPanels(idFor) {
 // into that same pair. Every graph panel in the dashboard is filled through them,
 // so a failure is announced the same way everywhere instead of each loader
 // choosing its own wording and its own severity class.
-function paintMetricPanel(summaryID, chartID, summaryHTML, chartHTML) {
+function paintMetricPanel(summaryID, chartID, painted) {
   const summary = document.getElementById(summaryID);
   const chart = document.getElementById(chartID);
-  if (summary) summary.innerHTML = summaryHTML;
-  if (chart) chart.innerHTML = chartHTML;
+  if (summary) summary.innerHTML = painted.summary;
+  if (chart) chart.innerHTML = painted.chart;
 }
 
 function failMetricPanel(summaryID, chartID, what, err) {
-  paintMetricPanel(summaryID, chartID, `<span class="bad">Failed to load ${esc(what)}: ${esc(err.message)}</span>`, "");
+  paintMetricPanel(summaryID, chartID,
+    { summary: `<span class="bad">Failed to load ${esc(what)}: ${esc(err.message)}</span>`, chart: "" });
+}
+
+// metricPanelContent turns one measured series into what a panel shows: its
+// summary line and its chart, both on the unit the series carries, falling back
+// to the caller's when the payload names none. Latency, named check metrics,
+// service runtime, daemon runtime and watch metrics all paint through it, so a
+// series can never be summarised in one unit and plotted in another — which is
+// exactly what the latency panel used to do.
+function metricPanelContent(series, fallbackUnit, win, chartLabel) {
+  const s = series || {};
+  const unit = s.unit || fallbackUnit || "";
+  return {
+    summary: metricSeriesSummary({ ...s, unit }),
+    chart: drawMetricChart(s.points || [], unit, win, chartLabel),
+  };
 }
 
 // loadMetricPanel fills one summary-plus-chart panel: it finds the pair, runs the
@@ -4148,10 +4154,7 @@ function failMetricPanel(summaryID, chartID, what, err) {
 function loadMetricPanel(windowKey, summaryID, chartID, generation, url, content, what) {
   if (!document.getElementById(summaryID) || !document.getElementById(chartID)) return Promise.resolve(true);
   return loadServiceWindowGraph(windowKey, generation, url,
-    (body, win) => {
-      const painted = content(body, win);
-      paintMetricPanel(summaryID, chartID, painted.summary, painted.chart);
-    },
+    (body, win) => paintMetricPanel(summaryID, chartID, content(body, win)),
     (e) => failMetricPanel(summaryID, chartID, what, e));
 }
 
@@ -4169,7 +4172,6 @@ function serviceGraphDetail(d) {
   const noResidentProcess = !!d.no_resident_process;
   const measured = serviceMeasuredChecks(d);
   const checkMetrics = serviceCheckMetrics(d);
-  const metricState = serviceMetricState(d.name);
   // One latency graph per measured check (health, port, service, …) instead of a
   // single chart switched by buttons; these lead the graph grid.
   const latencyPanels = noResidentProcess
@@ -4190,7 +4192,8 @@ function serviceGraphDetail(d) {
     ${metricPanelBody(serviceCheckMetricDomID(d.name, metric.check, metric.name, "summary"),
       serviceCheckMetricDomID(d.name, metric.check, metric.name, "chart"), serviceCheckMetricLabel(metric))}
   </div>`);
-  return tpl`<h2>Graphs <span class="muted">${winButtons(metricWins, metricState.window, "setMetricWin", "Graph time window", d.name)}</span></h2>
+  const win = serviceMetricState(d.name).window;
+  return tpl`<h2>Graphs <span class="muted">${winButtons(metricWins, win, "setMetricWin", "Graph time window", d.name)}</span></h2>
     <div class="metric-grid">
       ${slaChartPanel(d.name)}
       ${latencyPanels}
@@ -7472,14 +7475,25 @@ const windowMs = {
 const metricTypes = ["tcp", "http", "ports", "service"];
 const metricWins = [["1h", "1h"], ["24h", "24h"], ["7d", "168h"], ["30d", "720h"], ["1y", "8760h"]];
 
+// applyWindowChoice records a time-window pick and puts it into effect: the
+// stored window for that target, the persisted UI state, the pressed state of the
+// buttons that offered it, and a reload of whatever the window governs. Every
+// selector goes through it, so none can persist a choice its buttons do not show,
+// or repaint without remembering.
+function applyWindowChoice(stateKey, buttonKind, target, win, reload) {
+  serviceMetricState(stateKey).window = win;
+  saveUIState();
+  syncWindowButtons(buttonKind, win, target);
+  reload();
+}
+
 function setMetricWin(win, service) {
   if (!service) return;
-  serviceMetricState(service).window = win;
-  saveUIState();
-  syncWindowButtons("setMetricWin", win, service);
-  const detail = expDetailCache[serviceExpansionKey(service)];
-  if (detail) refreshServiceGraphs(detail);
-  else loadExpansionFor(serviceExpansionKey(service));
+  applyWindowChoice(service, "setMetricWin", service, win, () => {
+    const detail = expDetailCache[serviceExpansionKey(service)];
+    if (detail) refreshServiceGraphs(detail);
+    else loadExpansionFor(serviceExpansionKey(service));
+  });
 }
 function setDaemonMetricWin(win) {
   daemonMetricWindow = win;
@@ -7527,15 +7541,7 @@ function loadLatencyCheck(name, check, generation = dashboardGeneration) {
   return loadMetricPanel(name, serviceLatencyDomID(name, check, "summary"), serviceLatencyDomID(name, check, "chart"),
     generation,
     (win) => serviceMetricsAPI(name, check, win),
-    (body, win) => {
-      // The unit travels with the series; latency used to assume milliseconds in
-      // its summary while passing body.unit to its own chart.
-      const unit = body.unit || metricUnitMilliseconds;
-      return {
-        summary: metricSeriesSummary({ ...body, unit }),
-        chart: drawMetricChart(body.points || [], unit, win, `Service latency chart (${check})`),
-      };
-    },
+    (body, win) => metricPanelContent(body, metricUnitMilliseconds, win, `Service latency chart (${check})`),
     `latency (${check})`);
 }
 
@@ -7545,13 +7551,7 @@ function loadCheckMetric(name, metric, generation = dashboardGeneration) {
     serviceCheckMetricDomID(name, metric.check, metric.name, "chart"),
     generation,
     (win) => serviceMetricsAPI(name, metric.check, win, metric.name),
-    (body, win) => {
-      const unit = body.unit || metric.unit || "";
-      return {
-        summary: metricSeriesSummary({ ...body, unit }),
-        chart: drawMetricChart(body.points || [], unit, win, `${serviceCheckMetricLabel(metric)} chart`),
-      };
-    },
+    (body, win) => metricPanelContent(body, metric.unit, win, `${serviceCheckMetricLabel(metric)} chart`),
     serviceCheckMetricLabel(metric));
 }
 
@@ -7563,11 +7563,7 @@ function loadServiceRuntimeMetrics(name, generation = dashboardGeneration) {
   return loadServiceWindowGraph(name, generation,
     (win) => serviceRuntimeAPI(name, win),
     (body, win) => runtimeMetricDefs.forEach(({ key, label, unit }) => {
-      const series = body[key] || {};
-      const seriesUnit = series.unit || unit || "";
-      paintMetricPanel(...ids(key),
-        metricSeriesSummary({ ...series, unit: seriesUnit }),
-        drawMetricChart(series.points || [], seriesUnit, win, `${label} runtime metric chart`));
+      paintMetricPanel(...ids(key), metricPanelContent(body[key], unit, win, `${label} runtime metric chart`));
     }),
     (e) => runtimeMetricDefs.forEach(({ key, label }) => failMetricPanel(...ids(key), `${label} runtime metrics`, e)));
 }
@@ -7606,11 +7602,8 @@ function renderDaemonMetrics(body) {
   const grid = $("#daemon-metric-grid");
   if (grid) litRender(runtimeMetricPanels(daemonMetricDomID), grid);
   runtimeMetricDefs.forEach(({ key, unit, chartLabel }) => {
-    const series = body[key] || {};
-    const seriesUnit = series.unit || unit || "";
     paintMetricPanel(daemonMetricDomID(key, "summary"), daemonMetricDomID(key, "chart"),
-      metricSeriesSummary({ ...series, unit: seriesUnit }),
-      drawMetricChart(series.points || [], seriesUnit, daemonMetricWindow, chartLabel));
+      metricPanelContent(body[key], unit, daemonMetricWindow, chartLabel));
   });
 }
 

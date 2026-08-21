@@ -611,17 +611,17 @@ func TestSourceFormatsEveryMetricSummaryThroughOneHelper(t *testing.T) {
 	if strings.Contains(text, "fmtNum(s.avg, 2)") {
 		t.Error("a metric summary hand-formats its average again instead of using fmtMetricValue")
 	}
-	for _, needle := range []string{
-		"summary: metricSeriesSummary({ ...body, unit }),",
-		"metricSeriesSummary({ ...series, unit: seriesUnit })",
-	} {
-		if !strings.Contains(text, needle) {
-			t.Errorf("source missing single-summary-formatter marker %q", needle)
-		}
+	if !strings.Contains(text, "function metricPanelContent(series, fallbackUnit, win, chartLabel) {") {
+		t.Error("source missing metricPanelContent, the one place a series becomes a summary and a chart")
 	}
-	// Latency, named check metrics, service runtime and the daemon panel.
-	if n := strings.Count(text, "metricSeriesSummary("); n < 5 {
-		t.Errorf("metricSeriesSummary has %d mentions, want its definition plus four callers", n)
+	// Definition plus the single call inside metricPanelContent. Every panel — a
+	// latency check, a named check metric, service and daemon runtime, a watch
+	// metric — reaches both through it, so a series cannot be summarised in one
+	// unit and plotted in another.
+	for _, fn := range []string{"metricSeriesSummary(", "drawMetricChart("} {
+		if n := strings.Count(text, fn); n != 2 {
+			t.Errorf("%s appears %d times, want 2 (defined once, called once from metricPanelContent)", fn, n)
+		}
 	}
 }
 
@@ -661,7 +661,8 @@ func TestSourceBuildsRuntimeMetricPanelsFromOneList(t *testing.T) {
 func TestSourceLoadsEveryGraphPanelThroughOneProtocol(t *testing.T) {
 	appJSMustContain(t, "shared panel loader",
 		"function loadMetricPanel(windowKey, summaryID, chartID, generation, url, content, what) {",
-		"function paintMetricPanel(summaryID, chartID, summaryHTML, chartHTML) {",
+		"function paintMetricPanel(summaryID, chartID, painted) {",
+		"function metricPanelContent(series, fallbackUnit, win, chartLabel) {",
 		"function failMetricPanel(summaryID, chartID, what, err) {",
 	)
 	src, err := os.ReadFile("src/app.js")

@@ -1175,11 +1175,9 @@ func watchMetricRecorder(deps Deps, name, checkType, unit string) func(map[strin
 	}
 	key := WatchMonitorKey(name)
 	return func(data map[string]any, at time.Time) {
-		for _, metric := range graphs {
-			if value, ok := numericData(data[metric.Key]); ok {
-				_ = recorder.RecordMetric(key, checkType, metric.Key, value, at)
-			}
-		}
+		eachGraphMetricSample(graphs, data, func(metric string, value float64) {
+			_ = recorder.RecordMetric(key, checkType, metric, value, at)
+		})
 	}
 }
 
