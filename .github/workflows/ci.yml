@@ -169,8 +169,7 @@ jobs:
             echo "::notice title=mem::$(free -m | grep '^Mem:') | $(head -1 /proc/pressure/memory 2>/dev/null)"
             sleep 10
           done &
-          systemctl is-active systemd-oomd 2>/dev/null | while IFS= read -r line; do echo "::notice title=oomd::$line"; done
-          oomctl 2>/dev/null | head -20 | while IFS= read -r line; do echo "::notice title=oomctl::$line"; done
+          echo "::notice title=oomd::$(systemctl is-active systemd-oomd 2>/dev/null || true)"
           phase_stream() (
             while IFS= read -r line; do
               echo "$line"
