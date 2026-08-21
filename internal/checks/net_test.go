@@ -3,8 +3,10 @@ package checks
 import (
 	"context"
 	"errors"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -219,10 +221,17 @@ func TestSysfsIfaceUp(t *testing.T) {
 // writeNetSysfs builds one /sys/class/net/<iface> tree from a map of relative
 // paths to contents. A value starting with "->" becomes a symlink, which is how
 // sysfs spells the device and driver bindings.
+//
+// Paths are created in sorted order, so a parent is always made before anything
+// nested under it: a path is a prefix of its own children and therefore sorts
+// ahead of them. Map order would not be — writing "device/driver" first makes
+// "device" a real directory, and the "device" symlink then fails as already
+// existing, on whichever runs the map iterated that way.
 func writeNetSysfs(t *testing.T, root, iface string, files map[string]string) {
 	t.Helper()
 	dir := filepath.Join(root, iface)
-	for rel, content := range files {
+	for _, rel := range slices.Sorted(maps.Keys(files)) {
+		content := files[rel]
 		path := filepath.Join(dir, rel)
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 			t.Fatal(err)
