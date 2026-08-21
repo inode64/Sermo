@@ -31,7 +31,11 @@ func TestBindQUICDialer(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = listener.Close() })
 
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	// Generous deadline: the handshake completes in milliseconds when healthy
+	// and Accept returns the moment it does, so the margin costs nothing on the
+	// pass path — while a 2s ceiling flaked under the race detector on a busy
+	// runner, where scheduler starvation alone can eat most of it.
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	accepted := make(chan error, 1)
 	go func() {
@@ -51,11 +55,16 @@ func TestBindQUICDialer(t *testing.T) {
 	if err != nil {
 		t.Fatalf("dial QUIC: %v", err)
 	}
+	// Wait for the server to accept before closing the client: the dial returns
+	// on the client's view of the handshake, and an immediate CONNECTION_CLOSE
+	// can reach the listener before Accept drains its queue, which discards the
+	// connection and leaves Accept blocking until the deadline.
+	if err := <-accepted; err != nil {
+		_ = clientConn.CloseWithError(0, "test aborted")
+		t.Fatalf("accept QUIC: %v", err)
+	}
 	if err := clientConn.CloseWithError(0, "test complete"); err != nil {
 		t.Fatalf("close client connection: %v", err)
-	}
-	if err := <-accepted; err != nil {
-		t.Fatalf("accept QUIC: %v", err)
 	}
 }
 
