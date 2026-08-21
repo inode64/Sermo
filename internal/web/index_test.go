@@ -612,12 +612,16 @@ func TestSourceFormatsEveryMetricSummaryThroughOneHelper(t *testing.T) {
 		t.Error("a metric summary hand-formats its average again instead of using fmtMetricValue")
 	}
 	for _, needle := range []string{
-		"summary.innerHTML = metricSeriesSummary({ ...body, unit });",
-		"if (summary) summary.innerHTML = metricSeriesSummary({ ...(series || {}), unit });",
+		"summary: metricSeriesSummary({ ...body, unit }),",
+		"metricSeriesSummary({ ...series, unit: seriesUnit })",
 	} {
 		if !strings.Contains(text, needle) {
 			t.Errorf("source missing single-summary-formatter marker %q", needle)
 		}
+	}
+	// Latency, named check metrics, service runtime and the daemon panel.
+	if n := strings.Count(text, "metricSeriesSummary("); n < 5 {
+		t.Errorf("metricSeriesSummary has %d mentions, want its definition plus four callers", n)
 	}
 }
 
@@ -645,6 +649,29 @@ func TestSourceBuildsRuntimeMetricPanelsFromOneList(t *testing.T) {
 	// metricSeriesSummary is the only producer of a metric average.
 	if n := strings.Count(string(src), "avg <b>"); n != 1 {
 		t.Errorf("a metric average is formatted in %d places, want 1", n)
+	}
+}
+
+// TestSourceLoadsEveryGraphPanelThroughOneProtocol pins that a summary-plus-chart
+// panel is filled by loadMetricPanel and not by its own copy of the fetch
+// protocol. Four loaders each carried that copy — find the pair of elements, bail
+// if either is missing, run the window protocol, paint, and on failure write a
+// message of its own wording and severity into the summary. The protocol is where
+// the staleness rules live, so a copy is a place they can be got wrong.
+func TestSourceLoadsEveryGraphPanelThroughOneProtocol(t *testing.T) {
+	appJSMustContain(t, "shared panel loader",
+		"function loadMetricPanel(windowKey, summaryID, chartID, generation, url, content, what) {",
+		"function paintMetricPanel(summaryID, chartID, summaryHTML, chartHTML) {",
+		"function failMetricPanel(summaryID, chartID, what, err) {",
+	)
+	src, err := os.ReadFile("src/app.js")
+	if err != nil {
+		t.Fatalf("read src/app.js: %v", err)
+	}
+	// Its definition, loadMetricPanel, the runtime loader that fills three panels
+	// from one request, and the per-check SLA cell, which has no summary line.
+	if n := strings.Count(string(src), "loadServiceWindowGraph("); n != 4 {
+		t.Errorf("loadServiceWindowGraph has %d mentions, want its definition plus three callers", n)
 	}
 }
 
