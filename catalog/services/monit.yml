@@ -102,7 +102,12 @@ watches:
       scope: service
       name: io
       op: '>'
-      value: 901
+      # 100 MB/s. The shipped thresholds used to be one host's live samples
+      # (451 B/s for ssh, 32 MB/s for ceph-osd), so nearly every service alerted
+      # on normal work. `io` is a rate in B/s and has no percentage form, so one
+      # deliberately generous ceiling is the closest a packaged default gets to
+      # true everywhere; a storage-plane host raises it in services.local/.
+      value: 104857600
       optional: true
     for:
       duration: 5m

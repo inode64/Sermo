@@ -14,7 +14,14 @@ restart_on_change:
 variables:
   host: 127.0.0.1
   port: 25
-  tls_port: 465
+  config: /etc/exim/exim.conf
+  # Implicit TLS ("SMTPS") is optional in Exim and off by default: the daemon
+  # only wraps a port in TLS on connect when tls_on_connect_ports names it. Read
+  # the port the host really configured instead of assuming 465.
+  tls_port:
+    from_file: ${config}
+    pattern: (?m)^\s*tls_on_connect_ports\s*[=:]\s*(\d+)
+    default: 465
   user: mail
   spool_dir: /var/spool/exim
   db_dir: /var/spool/exim/db
@@ -55,6 +62,18 @@ watches:
       port: ${port}
       timeout: 3s
   cert:
+    # A cert check opens a TLS connection, so it can only see a port that
+    # terminates TLS on connect. An Exim with `daemon_smtp_ports = 25` and no
+    # tls_on_connect_ports offers STARTTLS on 25 and listens nowhere else, so
+    # probing 465 failed forever on a perfectly healthy server. Gate the check on
+    # the host actually configuring implicit TLS; a missing file or an absent key
+    # prunes it, the same fail-safe cloudflared's ingress gate uses. `enable_if`
+    # is evaluated before ${var} expansion, so `file` repeats the literal default
+    # of `config`; a host that moves exim.conf overrides both.
+    enable_if:
+      file: /etc/exim/exim.conf
+      key: tls_on_connect_ports
+      matches: '[0-9]'
     check:
       type: cert
       optional: true
@@ -178,7 +197,12 @@ watches:
       scope: service
       name: io
       op: '>'
-      value: 531848
+      # 100 MB/s. The shipped thresholds used to be one host's live samples
+      # (451 B/s for ssh, 32 MB/s for ceph-osd), so nearly every service alerted
+      # on normal work. `io` is a rate in B/s and has no percentage form, so one
+      # deliberately generous ceiling is the closest a packaged default gets to
+      # true everywhere; a storage-plane host raises it in services.local/.
+      value: 104857600
       optional: true
     for:
       duration: 5m
