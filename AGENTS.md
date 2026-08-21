@@ -376,6 +376,15 @@ chronyd Unix command socket is a separate transport exception: it is
 `SOCK_DGRAM` and must bind a named client socket, so it cannot use the common
 stream Unix dial.
 
+The DHCP per-interface probe is the other transport exception, and the only one
+that pins a link *without* `SO_BINDTODEVICE`: it sets the egress link per
+datagram with `IP_PKTINFO` and filters replies by the link they arrived on. The
+invariant is preserved — egress never falls back to default routing — but the
+device bind had to go, because a DHCP server on the same host answers with a
+broadcast the kernel loops back, and that copy does not carry the LAN device the
+socket filter matches on, so a device-bound socket never receives the offer. Any
+probe that must receive a locally generated broadcast has the same constraint.
+
 This constrains adopting a Go module to "simplify" a protocol. Decide by where the
 library does its I/O:
 

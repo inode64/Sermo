@@ -1091,9 +1091,20 @@ Protocols, in the order of the table above:
   anonymous locally-administered MAC by default; set `mac` to use a fixed address
   (e.g. a server that only answers reserved clients). Result data: the offered IP,
   server id, subnet mask and lease time. **Requires elevated privileges** to bind
-  the DHCP client port 68 (and `CAP_NET_RAW` for the per-interface bind), like the
-  `icmp` check; the host should not run a competing DHCP client on that interface.
-  RFC 2131.
+  the DHCP client port 68, like the `icmp` check; the host should not run a
+  competing DHCP client on that interface. RFC 2131.
+
+  Unlike the other probes, the per-interface mode pins the link with `IP_PKTINFO`
+  per datagram instead of binding the socket to the device, and filters replies by
+  the link they arrived on. That is what lets it check a DHCP server running on
+  **this same host**: such a server answers with a broadcast the kernel loops
+  back, and the looped-back copy does not carry the LAN device
+  `SO_BINDTODEVICE` matches on, so a device-bound socket never sees the offer and
+  the probe times out while the server answers every cycle. Egress is pinned just
+  as strictly either way. Note the loopback caveat for the **unicast** mode: a
+  server on this host will not answer a request aimed at `127.0.0.1`, or at the
+  host's own LAN address, because the packet reaches it over `lo`, where it has no
+  address pool — use the per-interface mode for a local server.
 
   ```yaml
   checks:

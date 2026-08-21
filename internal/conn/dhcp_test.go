@@ -119,3 +119,52 @@ func TestParseDHCPOffer(t *testing.T) {
 		t.Fatal("expected an error for a short reply")
 	}
 }
+
+func TestDHCPReplyMatches(t *testing.T) {
+	mac, err := dhcpClientMAC("02:00:53:45:52:01")
+	if err != nil {
+		t.Fatal(err)
+	}
+	const xid = 0xDEADBEEF
+	offer := buildDHCPDiscover(xid, mac)
+	offer[dhcpOpOffset] = dhcpOpBootReply
+
+	if !dhcpReplyMatches(offer, xid) {
+		t.Error("a BOOTREPLY carrying our xid is the answer we are waiting for")
+	}
+	// Port 68 carries every client's traffic: another client's reply, and the
+	// echo of our own request, must both be read past rather than accepted.
+	if dhcpReplyMatches(offer, xid+1) {
+		t.Error("a reply for another transaction must not be accepted")
+	}
+	request := buildDHCPDiscover(xid, mac)
+	if dhcpReplyMatches(request, xid) {
+		t.Error("a BOOTREQUEST is not a reply")
+	}
+	if dhcpReplyMatches(offer[:dhcpXIDEndOffset-1], xid) {
+		t.Error("a datagram too short to carry an xid must not be read past its end")
+	}
+}
+
+// A DHCP server on this same host answers with a broadcast the kernel loops
+// back. The reply must be accepted when it is attributed to the link the probe
+// was aimed at, which is exactly what SO_BINDTODEVICE failed to do.
+func TestDHCPFromInterface(t *testing.T) {
+	const eth1, br0 = 3, 7
+	for _, tc := range []struct {
+		name          string
+		ingress, want int
+		accept        bool
+	}{
+		{"reply from the link we probed", br0, br0, true},
+		{"reply from another link", eth1, br0, false},
+		{"a unicast probe names no link and accepts any", eth1, 0, true},
+		{"an unattributed reply is accepted rather than lost", 0, br0, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := dhcpFromInterface(tc.ingress, tc.want); got != tc.accept {
+				t.Errorf("dhcpFromInterface(%d, %d) = %v, want %v", tc.ingress, tc.want, got, tc.accept)
+			}
+		})
+	}
+}
