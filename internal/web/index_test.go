@@ -596,6 +596,31 @@ func TestSourceMetricChartRendersZeroValuedSeries(t *testing.T) {
 	}
 }
 
+// TestSourceFormatsEveryMetricSummaryThroughOneHelper pins "one type, one
+// formatter" for a measured series: latency, named check metrics and service
+// runtime metrics all render avg/min/max through metricSeriesSummary, which
+// formats through fmtMetricValue. The latency panel used to hand-format with
+// fmtNum and a literal unit, so the same number read "12.34 ms" in the summary
+// line and "12.34ms" in that same panel's chart axis and tooltips.
+func TestSourceFormatsEveryMetricSummaryThroughOneHelper(t *testing.T) {
+	src, err := os.ReadFile("src/app.js")
+	if err != nil {
+		t.Fatalf("read src/app.js: %v", err)
+	}
+	text := string(src)
+	if strings.Contains(text, "fmtNum(s.avg, 2)") {
+		t.Error("a metric summary hand-formats its average again instead of using fmtMetricValue")
+	}
+	for _, needle := range []string{
+		"summary.innerHTML = metricSeriesSummary({ ...body, unit });",
+		"if (summary) summary.innerHTML = metricSeriesSummary({ ...(series || {}), unit });",
+	} {
+		if !strings.Contains(text, needle) {
+			t.Errorf("source missing single-summary-formatter marker %q", needle)
+		}
+	}
+}
+
 func TestSourceKeepsMetricSelectionPerService(t *testing.T) {
 	src, err := os.ReadFile("src/app.js")
 	if err != nil {
