@@ -13,7 +13,7 @@ import {
   emptyTerminalSessionCloseAPI,
   liveVerbosePath, lockReleaseAPI, mountAPI, mountBlockersAPI, panicAPI,
   readyVerbosePath, serviceAPI, serviceEventsAPI, serviceMetricsAPI,
-  servicePreflightAPI, serviceRuntimeAPI, serviceSLAAPI, sshSessionCloseAPI, terminalSessionCloseAPI, stateCompactAPI, watchAPI,
+  servicePreflightAPI, serviceRuntimeAPI, serviceSLAAPI, sshSessionCloseAPI, terminalSessionCloseAPI, stateCompactAPI, watchAPI, watchSLAAPI,
 } from "./api.js";
 import {
   fmtAge, fmtBytes, fmtBytesPerSecond, fmtDuration, fmtMetricValue, fmtNum, fmtPct, fmtRemain,
@@ -3110,7 +3110,10 @@ function renderWatchExpansionInto(key, events) {
     (events || []).filter((e) => e.watch === name));
   expCache[key] = html;
   const target = expansionCell(key);
-  if (target) litRender(html, target);
+  if (target) {
+    litRender(html, target);
+    loadWatchSLA(name);
+  }
 }
 
 const expLoading = new Map(); // key -> shared in-flight detail fetch
@@ -5674,14 +5677,61 @@ function renderArtifactRow(item, panel) {
 
 // renderWatchExpansion shows a watch's config summary and its recent
 // activity (hooks/notifies fired), reusing the inline expansion mechanism.
-// renderWatchSLA shows a watch's rolling availability, reusing the same band the
-// services and applications draw. Only a watch whose check asserts availability
-// carries one; a condition watch has no `sla` and renders nothing rather than an
-// empty block, because a threshold being met is not downtime.
-function renderWatchSLA(sla) {
-  const wins = (sla || []).filter(Boolean);
-  if (!wins.length) return nothing;
-  return tpl`<div class="watch-sla"><span class="muted">Availability</span>${renderSLAWindows(wins)}</div>`;
+// watchWindowKey namespaces a watch's selected time window in the same per-target
+// map the service graphs use, so the two cannot collide when a watch and a
+// service share a name.
+function watchWindowKey(name) { return expansionPrefixWatch + name; }
+
+// renderWatchSLASection draws the availability section for a watch whose check
+// asserts one, using the service detail's own markup, window selector and chart.
+// Sharing them is the point: a watch's availability must read exactly like a
+// service's, and a second presentation of the same number would be one more
+// thing to keep in step.
+function renderWatchSLASection(w) {
+  if (!w || !w.keeps_sla) return nothing;
+  const win = serviceMetricState(watchWindowKey(w.name)).window;
+  return tpl`<h2>Availability <span class="muted">${winButtons(metricWins, win, "setWatchWin", "Availability time window", w.name)}</span></h2>
+    <div class="metric-grid">
+      <div class="metric-panel metric-panel-wide">
+        <div class="sla-chart-head">
+          <span class="metric-title">SLA timeline</span>
+          <span id="${detailDomId(watchWindowKey(w.name), "sla-summary")}" class="muted">loading...</span>
+        </div>
+        <div class="sla-panel">
+          <div class="sla-chart-panel">
+            <div id="${detailDomId(watchWindowKey(w.name), "sla-chart")}" class="muted chart-box-wide"></div>
+          </div>
+        </div>
+      </div>
+    </div>`;
+}
+
+// loadWatchSLA fills a watch's availability section through the same fetch
+// protocol, summary and chart the service panel uses.
+function loadWatchSLA(name, generation = dashboardGeneration) {
+  const key = watchWindowKey(name);
+  const summary = document.getElementById(detailDomId(key, "sla-summary"));
+  const chart = document.getElementById(detailDomId(key, "sla-chart"));
+  if (!summary || !chart) return Promise.resolve(true);
+  return loadServiceWindowGraph(key, generation,
+    (win) => watchSLAAPI(name, win),
+    (body, win) => {
+      const points = body.points || [];
+      summary.innerHTML = slaTimelineSummary(points);
+      chart.innerHTML = drawSLAChart(points, win);
+    },
+    (e) => {
+      summary.innerHTML = `<span class="bad">Failed to load SLA: ${esc(e.message)}</span>`;
+      chart.innerHTML = "";
+    });
+}
+
+function setWatchWin(win, watch) {
+  if (!watch) return;
+  serviceMetricState(watchWindowKey(watch)).window = win;
+  saveUIState();
+  syncWindowButtons("setWatchWin", win, watch);
+  loadWatchSLA(watch);
 }
 
 function renderWatchExpansion(w, events) {
@@ -5710,7 +5760,7 @@ function renderWatchExpansion(w, events) {
     <div><span class="muted">Notifies</span><br>${notifiers}</div>
     <div><span class="muted">Dry run</span><br><b>${w.dry_run ? "yes" : "no"}</b></div>
   </div>`;
-  const live = tpl`${renderStorageWatch(w.storage)}${renderMeterWatch(w.meter)}${renderWatchReadings(w.readings)}${renderWatchSLA(w.sla)}`;
+  const live = tpl`${renderStorageWatch(w.storage)}${renderMeterWatch(w.meter)}${renderWatchReadings(w.readings)}${renderWatchSLASection(w)}`;
   const conditions = renderConditionRows(w.conditions || []);
   if (!events || !events.length) return tpl`${cfg}${live}${conditions}<div class="muted">No recent activity.</div>`;
   const rows = events.slice(0, 50).map((e) => {
@@ -8107,6 +8157,9 @@ function initDelegatedHandlers() {
       switch (el.dataset.windowKind) {
         case "setMetricWin":
           setMetricWin(val, el.dataset.windowService || "");
+          break;
+        case "setWatchWin":
+          setWatchWin(val, el.dataset.windowService || "");
           break;
         case "setDaemonMetricWin":
           setDaemonMetricWin(val);
