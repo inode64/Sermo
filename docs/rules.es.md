@@ -83,7 +83,7 @@ Las comprobaciones de protocolo de conexión (MySQL, PostgreSQL, Redis, Docker, 
 | `memory`      | RAM del sistema frente a MemAvailable del kernel (used_pct/available_pct/available_bytes) |
 | `pressure`    | tiempo de bloqueo PSI del kernel para cpu/memory/io (`some_*`/`full_*` avg10/60/300) |
 | `fds`         | descriptores de archivo del sistema frente a `fs.file-max` (used_pct/free/allocated)  |
-| `pids`        | la tabla PID del kernel frente a `kernel.pid_max` (used_pct/free/count)      |
+| `pids`        | la tabla PID del kernel frente al más estrecho de `kernel.pid_max` y `kernel.threads-max` (used_pct/free/count) |
 | `diskio`      | tasas de E/S por ciclo de un dispositivo de bloque (util_pct/read_bytes/write_bytes/await_ms), más los totales leído/escrito acumulados como lecturas |
 | `conntrack`   | la tabla conntrack de netfilter frente a su máximo (used_pct/free/count)      |
 | `firewall_rules` | nftables/iptables tiene al menos `min_rules` reglas cargadas (ver Reglas de firewall) |
@@ -2165,6 +2165,12 @@ kernel limit)`, o `(limit unknown)` — y omite `used_pct`, `free` y el propio t
 en vez de reportarlos como cero. El recuento es lo que lleva su escalar, el panel
 lo muestra como valor en lugar de como indicador, y no se graba ninguna serie
 plana de `0%`.
+
+Un techo, además, tiene que ser el que ata. `pids` cuenta hilos, y los limitan
+tanto `kernel.pid_max` como `kernel.threads-max`; mide contra el menor. Dividir
+solo por `pid_max` reporta el más flojo de los dos — en un host con `pid_max`
+4194304 y `threads-max` 1027204 eso subestima el uso cuatro veces, así que una
+tabla llena a un cuarto se lee como llena a un dieciseisavo.
 
 La consecuencia conviene decirla claramente: **un umbral sobre `used_pct` no puede
 dispararse en un host así**. Nunca pudo — solo que antes parecía verde en vez de

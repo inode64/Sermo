@@ -83,7 +83,7 @@ Connection-protocol checks (MySQL, PostgreSQL, Redis, Docker, libvirt, etc.) are
 | `memory`      | system RAM vs the kernel's MemAvailable (used_pct/available_pct/available_bytes) |
 | `pressure`    | kernel PSI stall time for cpu/memory/io (`some_*`/`full_*` avg10/60/300) |
 | `fds`         | system file descriptors vs `fs.file-max` (used_pct/free/allocated)  |
-| `pids`        | the kernel PID table vs `kernel.pid_max` (used_pct/free/count)      |
+| `pids`        | the kernel PID table vs the tighter of `kernel.pid_max` and `kernel.threads-max` (used_pct/free/count) |
 | `diskio`      | a block device's per-cycle I/O rates (util_pct/read_bytes/write_bytes/await_ms), plus cumulative read/written totals as readings |
 | `conntrack`   | the netfilter conntrack table vs its max (used_pct/free/count)      |
 | `firewall_rules` | nftables/iptables has at least `min_rules` loaded rules (see Firewall rules) |
@@ -2141,6 +2141,12 @@ limit)`, or `(limit unknown)` — and omits `used_pct`, `free` and the ceiling
 itself rather than reporting them as zero. The count is what its scalar carries,
 the panel shows it as a value instead of a gauge, and no flat `0%` series is
 recorded.
+
+A ceiling also has to be the one that binds. `pids` counts threads, and both
+`kernel.pid_max` and `kernel.threads-max` cap them; it measures against the
+smaller. Dividing by `pid_max` alone reports whichever is looser — on a host with
+`pid_max` 4194304 and `threads-max` 1027204 that understates utilisation fourfold,
+so a table a quarter full reads as one-sixteenth full.
 
 The consequence is worth stating plainly: **a `used_pct` threshold cannot fire on
 such a host**. It never could — it just used to look green rather than say so. To

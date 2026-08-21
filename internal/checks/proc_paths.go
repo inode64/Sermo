@@ -11,6 +11,7 @@ const (
 	procPidMaxPath       = "/proc/sys/kernel/pid_max"
 	procPressureRootPath = "/proc/pressure"
 	procRootPath         = "/proc"
+	procThreadsMaxPath   = "/proc/sys/kernel/threads-max"
 	procVMStatPath       = "/proc/vmstat"
 	sysBlockPath         = "/sys/class/block"
 	sysEDACPath          = "/sys/devices/system/edac"
