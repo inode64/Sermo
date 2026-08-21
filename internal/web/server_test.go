@@ -54,7 +54,12 @@ type fakeBackend struct {
 func (f *fakeBackend) Services(context.Context) []Service        { return f.services }
 func (f *fakeBackend) Sessions(context.Context) SessionInventory { return f.sessions }
 func (f *fakeBackend) Watches(context.Context) []Watch           { return nil }
-func (f *fakeBackend) Notifiers(context.Context) []Notifier      { return nil }
+
+// testAvailabilityWatch is the only watch the fake keeps a series for, so a
+// handler test can tell the answered case from the refused one.
+const testAvailabilityWatch = "net-eth0"
+
+func (f *fakeBackend) Notifiers(context.Context) []Notifier { return nil }
 func (f *fakeBackend) TestNotifier(_ context.Context, name string) ActionResult {
 	f.notifierTested = name
 	if f.notifierResult.Message != "" {
@@ -149,6 +154,18 @@ func (f *fakeBackend) Series(_ context.Context, name, check string, since time.D
 	}
 	return nil, false
 }
+
+// WatchSeries answers for a watch that keeps availability, and refuses one that
+// does not, which is the distinction the handler has to carry to the API.
+func (f *fakeBackend) WatchSeries(_ context.Context, name string, since time.Duration) ([]SeriesPoint, bool) {
+	if name != testAvailabilityWatch {
+		return nil, false
+	}
+	f.seriesSince = since
+	r := 1.0
+	return []SeriesPoint{{Start: "2026-06-07T10:00:00Z", Ratio: &r, Up: 3, Total: 3}}, true
+}
+
 func (f *fakeBackend) EventPage(_ context.Context, query EventQuery) EventPage {
 	f.eventQuery = query
 	events := f.events

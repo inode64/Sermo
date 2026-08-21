@@ -31,13 +31,35 @@ func (b *WebBackend) Series(_ context.Context, name, check string, since time.Du
 			return []web.SeriesPoint{}, true
 		}
 	}
+	return b.availabilitySeries(name, check, since), true
+}
+
+// WatchSeries returns a host watch's per-minute availability history over since,
+// in the same shape the service series uses so the dashboard renders both
+// through one path. ok is false for an unknown watch and for one whose check
+// asserts no availability — a condition watch has no uptime to serve, and
+// withholding it here rather than only hiding it keeps the API from implying a
+// figure the check never claimed.
+func (b *WebBackend) WatchSeries(_ context.Context, name string, since time.Duration) ([]web.SeriesPoint, bool) {
+	w := b.watches[name]
+	if w == nil || w.disabled || !watchRecordsAvailability(w) {
+		return nil, false
+	}
+	return b.availabilitySeries(WatchMonitorKey(name), "", since), true
+}
+
+// availabilitySeries reads one availability series and renders it as the wire
+// shape. Services, their checks and host watches differ only in the key they are
+// stored under, so they share everything from the read down — which is what
+// keeps them reporting gaps and ratios identically.
+func (b *WebBackend) availabilitySeries(key, check string, since time.Duration) []web.SeriesPoint {
 	if b.sla == nil {
-		return []web.SeriesPoint{}, true
+		return []web.SeriesPoint{}
 	}
 	now := b.webNow()
-	points, err := b.slaSeries(name, check, now.Add(-since), now)
+	points, err := b.slaSeries(key, check, now.Add(-since), now)
 	if err != nil {
-		return []web.SeriesPoint{}, true
+		return []web.SeriesPoint{}
 	}
 	out := make([]web.SeriesPoint, 0, len(points))
 	for _, point := range points {
@@ -49,7 +71,7 @@ func (b *WebBackend) Series(_ context.Context, name, check string, since time.Du
 			Ratio:       slaRatio(point.Up, point.Total, true),
 		})
 	}
-	return out, true
+	return out
 }
 
 // slaSeries reads the service-level series, or one check's when check is set.

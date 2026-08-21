@@ -124,3 +124,4 @@ export function emptyTerminalSessionCloseAPI(service, check) {
 }
 export function stateCompactAPI(query = "") { return `${apiStateCompactPath}${query}`; }
 export function watchAPI(name, suffix = "") { return apiEntityPath(apiWatchesPath, name, suffix); }
+export function watchSLAAPI(name, since) { return watchAPI(name, apiSinceSuffix(apiSuffixSLA, since)); }
