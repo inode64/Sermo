@@ -25,6 +25,7 @@
   - [Default route (route)](#default-route-route)
   - [Firewall rules (firewall_rules)](#firewall-rules-firewall_rules)
   - [Failed init units (failed_units)](#failed-init-units-failed_units)
+  - [An unreachable ceiling is not a ceiling](#an-unreachable-ceiling-is-not-a-ceiling)
   - [inotify limits (inotify)](#inotify-limits-inotify)
   - [Disk throughput (hdparm)](#disk-throughput-hdparm)
   - [Missing devices](#missing-devices)
@@ -2127,6 +2128,32 @@ arbitrary unit Sermo knows nothing about is not a safe action, so a failed unit
 is reported and left alone. Data keys are `backend`, `count` and `units` (the
 joined unit names), and the dashboard shows all three.
 
+### An unreachable ceiling is not a ceiling
+
+`fds`, `pids` and `conntrack` measure a count against a kernel ceiling. Two
+kernels give them nothing to measure against: one that reports no ceiling, and
+one that reports an unreachable one — `fs.file-max` reads `9223372036854775807`
+on a host that lifts the cap, and 879116 descriptors of that is `0.0%`.
+
+Neither is a denominator, so neither produces a percentage. The check publishes
+its count and says why the rest is missing — `fds 879116 allocated (no kernel
+limit)`, or `(limit unknown)` — and omits `used_pct`, `free` and the ceiling
+itself rather than reporting them as zero. The count is what its scalar carries,
+the panel shows it as a value instead of a gauge, and no flat `0%` series is
+recorded.
+
+The consequence is worth stating plainly: **a `used_pct` threshold cannot fire on
+such a host**. It never could — it just used to look green rather than say so. To
+watch descriptors there, write the threshold against the count:
+
+```yaml
+watches:
+  watch-fds:
+    check:
+      type: fds
+      allocated: { op: ">", value: 2000000 }   # a count, not a share of nothing
+```
+
 ### inotify limits (`inotify`)
 
 The `inotify` check reports the two per-user kernel limits,
@@ -2138,7 +2165,8 @@ system-wide allocated descriptors against `fs.file-max`, which is effectively
 unlimited on a modern kernel, so a host whose uid 0 held all `1024` inotify
 instances — every new login failing to start a user manager, every new session bus
 failing to initialise inotify, `systemctl is-system-running` reporting `degraded`
-— still reported `fds` at `0.0%`.
+— showed nothing at all in `fds`. It no longer reports that as `0.0%`; see
+[An unreachable ceiling is not a ceiling](#an-unreachable-ceiling-is-not-a-ceiling).
 
 ```yaml
 watches:

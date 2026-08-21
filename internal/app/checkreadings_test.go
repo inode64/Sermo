@@ -20,10 +20,18 @@ func TestMeterChecksDoNotRepeatTheirGaugeAsReadings(t *testing.T) {
 		checks.DataKeyAllocated: uint64(2048), checks.DataKeyCount: uint64(1821),
 		checks.DataKeyMax: uint64(65536), checks.DataKeyUsedPct: 3.1,
 	}
+	// The same sample without a ceiling: no percentage, so no gauge, so the count
+	// has to read out as a value instead of vanishing.
+	unbounded := map[string]any{checks.DataKeyAllocated: uint64(879116), checks.DataKeyCount: uint64(1821)}
 	for _, typ := range []string{checks.CheckTypeFDS, checks.CheckTypePIDs, checks.CheckTypeConntrack} {
 		t.Run(typ+" gauge only", func(t *testing.T) {
 			if got := checkReadings(typ, gauged); len(got) != 0 {
 				t.Fatalf("%s repeats its meter as %d readings: %+v", typ, len(got), got)
+			}
+		})
+		t.Run(typ+" reads out when unbounded", func(t *testing.T) {
+			if got := checkReadings(typ, unbounded); len(got) == 0 {
+				t.Fatalf("%s has no gauge without a ceiling, so its count must read out", typ)
 			}
 		})
 	}

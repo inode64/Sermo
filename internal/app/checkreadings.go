@@ -380,11 +380,8 @@ var checkReadingsByType = map[string]func(map[string]any) []web.WatchReading{
 	checks.CheckTypeMetric:           metricValueCheckReadings,
 }
 
-// countMeterCheckTypes are the count-vs-limit checks the watch panel already
-// presents as a usage gauge. The meter states the count, the limit and the
-// utilisation, which is everything their result carries, so the generic metric
-// rows would repeat the gauge immediately below it. Their graph metrics exist for
-// the history panel, not for a second reading of the current sample.
+// countMeterCheckTypes are the count-vs-limit checks the watch panel presents as
+// a usage gauge when the kernel gives them a ceiling to gauge against.
 //
 // memory and load are deliberately absent: they render a meter too, but reach
 // resourceCheckReadings above, whose rows say more than their gauge does.
@@ -392,6 +389,21 @@ var countMeterCheckTypes = map[string]bool{
 	checks.CheckTypeFDS:       true,
 	checks.CheckTypePIDs:      true,
 	checks.CheckTypeConntrack: true,
+}
+
+// gaugedCountSample reports whether this sample is one the panel draws as a
+// gauge. When it is, the meter already states the count, the ceiling and the
+// utilisation, so metric rows below would repeat it word for word — their graph
+// metrics are for the history panel, not for a second reading of the current
+// sample. When the kernel reports no usable ceiling the check publishes no
+// percentage, there is no gauge, and the count has to read out as a value or it
+// appears nowhere at all.
+func gaugedCountSample(checkType string, data map[string]any) bool {
+	if !countMeterCheckTypes[checkType] {
+		return false
+	}
+	_, gauged := data[checks.DataKeyUsedPct]
+	return gauged
 }
 
 func checkReadings(checkType string, data map[string]any) []web.WatchReading {
@@ -410,7 +422,7 @@ func checkReadings(checkType string, data map[string]any) []web.WatchReading {
 	if _, ok := data[checks.DataKeyConnectedClients]; ok {
 		return redisCheckReadings(data)
 	}
-	if graphMetrics := checks.GraphMetrics(checkType); len(graphMetrics) > 0 && !countMeterCheckTypes[checkType] {
+	if graphMetrics := checks.GraphMetrics(checkType); len(graphMetrics) > 0 && !gaugedCountSample(checkType, data) {
 		return metricCheckReadings(checkType, data)
 	}
 	return nil
