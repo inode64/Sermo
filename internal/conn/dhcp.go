@@ -182,6 +182,23 @@ func buildDHCPDiscover(xid uint32, mac net.HardwareAddr) []byte {
 	return msg
 }
 
+// dhcpReplyMatches reports whether a datagram read from port 68 is the BOOTREPLY
+// this exchange is waiting for. Port 68 carries every client's traffic, so a
+// datagram that is not ours is skipped rather than treated as an answer.
+func dhcpReplyMatches(buf []byte, xid uint32) bool {
+	return len(buf) >= dhcpXIDEndOffset && buf[dhcpOpOffset] == dhcpOpBootReply &&
+		binary.BigEndian.Uint32(buf[dhcpXIDOffset:dhcpXIDEndOffset]) == xid
+}
+
+// dhcpFromInterface reports whether a reply that ingressed on `ingress` belongs
+// to the link a per-interface probe was aimed at. A unicast probe (want 0)
+// accepts any link. A reply the kernel did not attribute to one (ingress 0) is
+// accepted rather than dropped: egress was already pinned to the requested link,
+// so discarding an unattributed answer would only turn a working probe silent.
+func dhcpFromInterface(ingress, want int) bool {
+	return want == 0 || ingress == 0 || ingress == want
+}
+
 // dhcpOfferInfo is what a parsed DHCPOFFER carries.
 type dhcpOfferInfo struct {
 	offeredIP    string

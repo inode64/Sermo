@@ -1102,9 +1102,22 @@ Protocolos, en el orden de la tabla de arriba:
   anónima y de administración local por defecto; establece `mac` para usar una dirección fija
   (p. ej. un servidor que solo responde a clientes reservados). Datos del resultado: la IP ofrecida, el
   server id, la máscara de subred y el tiempo de lease. **Requiere privilegios elevados** para ligar
-  el puerto 68 del cliente DHCP (y `CAP_NET_RAW` para el bind por interfaz), como la
+  el puerto 68 del cliente DHCP, como la
   comprobación `icmp`; el host no debería ejecutar un cliente DHCP competidor en esa interfaz.
   RFC 2131.
+
+  A diferencia del resto de sondas, el modo por interfaz fija el enlace con
+  `IP_PKTINFO` en cada datagrama en lugar de ligar el socket al dispositivo, y
+  filtra las respuestas por el enlace por el que entran. Eso es lo que permite
+  comprobar un servidor DHCP que corre en **este mismo host**: ese servidor
+  responde con un broadcast que el kernel devuelve por loopback, y esa copia no
+  lleva el dispositivo LAN con el que casa `SO_BINDTODEVICE`, así que un socket
+  ligado al dispositivo no ve nunca la oferta y la sonda expira mientras el
+  servidor contesta en cada ciclo. La salida queda fijada igual de estrictamente
+  en ambos casos. Ojo al matiz de loopback del modo **unicast**: un servidor en
+  este host no responderá a una petición dirigida a `127.0.0.1`, ni a la propia
+  dirección LAN del host, porque el paquete le llega por `lo`, donde no tiene
+  pool de direcciones — para un servidor local, usar el modo por interfaz.
 
   ```yaml
   checks:
