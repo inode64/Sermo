@@ -89,8 +89,16 @@ func ValidTemplateName(name string) bool {
 	return true
 }
 
+// LocalDirSuffix names the per-host override sibling of the template directory.
+// Unlike the document directories, whose overrides merge field by field, a
+// template is a whole file: `<dir>.local/<name>.yml` shadows `<dir>/<name>.yml`
+// entirely. There are no named entries inside a template to merge.
+const LocalDirSuffix = ".local"
+
 // LoadTemplate loads a named template from dir. Template names are mapped to
-// `<name>.yml` and cannot contain path separators.
+// `<name>.yml` and cannot contain path separators. A `<dir>.local` sibling takes
+// precedence, so a host can replace one packaged template without its edit being
+// overwritten by the next deployment.
 func LoadTemplate(dir, name string) (*Template, error) {
 	if dir == "" {
 		return nil, errors.New("template directory is required")
@@ -99,6 +107,9 @@ func LoadTemplate(dir, name string) (*Template, error) {
 		return nil, fmt.Errorf("invalid template name %q", name)
 	}
 	path := filepath.Join(dir, name+templateFileSuffix)
+	if local := filepath.Join(filepath.Clean(dir)+LocalDirSuffix, name+templateFileSuffix); fileExists(local) {
+		path = local
+	}
 	data, err := os.ReadFile(filepath.Clean(path))
 	if err != nil {
 		return nil, fmt.Errorf("read template %s: %w", path, err)
@@ -203,4 +214,14 @@ func (n *templatedNotifier) Send(ctx context.Context, msg Message) error {
 		return fmt.Errorf("send through notifier %s: %w", n.inner.Name(), err)
 	}
 	return nil
+}
+
+// fileExists reports whether path is a readable regular file, so a directory or
+// a dangling entry never shadows a packaged template.
+func fileExists(path string) bool {
+	info, err := os.Stat(filepath.Clean(path))
+	if err != nil || info == nil {
+		return false
+	}
+	return info.Mode().IsRegular()
 }

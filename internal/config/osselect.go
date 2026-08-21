@@ -60,17 +60,28 @@ func osReleaseID() string {
 // OS (or a `default` branch), merges it into the surrounding map, and discards the
 // rest. It works at any depth — service, checks, processes, policy, ... — and runs
 // at load, before resolution.
+// collapseDocumentOS collapses every `os:` selector in one document's body. It
+// is shared by the load-time pass over c.docs and by the local-override pass,
+// whose documents are deliberately not in c.docs but must be prepared the same
+// way before they merge.
+func collapseDocumentOS(doc *Document) error {
+	body, err := collapseOS(doc.Body, detectedOS)
+	if err != nil {
+		return fmt.Errorf("collapse os selector in %s: %w", doc.Path, err)
+	}
+	selected, ok := body.(map[string]any)
+	if !ok {
+		return fmt.Errorf("collapse os selector in %s: document must resolve to a mapping", doc.Path)
+	}
+	doc.Body = selected
+	return nil
+}
+
 func (c *Config) applyOSSelectors() error {
 	for _, doc := range c.docs {
-		body, err := collapseOS(doc.Body, detectedOS)
-		if err != nil {
-			return fmt.Errorf("collapse os selector in %s: %w", doc.Path, err)
+		if err := collapseDocumentOS(doc); err != nil {
+			return err
 		}
-		selected, ok := body.(map[string]any)
-		if !ok {
-			return fmt.Errorf("collapse os selector in %s: document must resolve to a mapping", doc.Path)
-		}
-		doc.Body = selected
 	}
 	// The global document (defaults, watches, …) lives in Global.Raw, not c.docs,
 	// so collapse os: selectors there too.

@@ -260,7 +260,10 @@ duplicate aliases for the same pidfile or socket.
 Use one YAML file per target — a single document of one kind per file, never
 several targets grouped together. A document's kind is derived from where it
 lives (catalog subdir / `paths.services` / `paths.watches`), so a top-level
-`kind:` is optional and omitted. Watch documents under any directory listed in
+`kind:` is optional and omitted. That rule also covers the per-host override
+layer: a `<dir>.local` sibling inherits the kind of the directory it adjusts, and
+its documents merge onto the same-named base — see
+[docs/configuration.md](docs/configuration.md#per-host-overrides-dirlocal). Watch documents under any directory listed in
 `paths.watches` use top-level `name:` plus the watch fields; notifier fragments
 still use a top-level `notifiers:` map, but that map must contain exactly one
 named entry. Use classified watch directories such as `watches/`, `networks/`,

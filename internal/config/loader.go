@@ -164,6 +164,11 @@ func Load(globalPath string, opts ...Option) (*Config, error) {
 	cfg.bakeBuiltins()
 	cfg.expandBindir()
 	cfg.materializeVersionTemplates(loadCtx)
+	// Last, so an override wins over a collapsed `os:` branch and targets the
+	// materialized version instance rather than the template it came from.
+	if err := cfg.applyLocalOverrides(servicePaths, appPaths, notifierPaths, watchPaths); err != nil {
+		return nil, err
+	}
 	return cfg, nil
 }
 
@@ -562,28 +567,47 @@ func configDirEntries(dir, label string) (names, subdirs []string, err error) {
 	return names, subdirs, nil
 }
 
-func (c *Config) mergeWatchDocument(doc *Document) error {
+// watchEntryFromDocument validates a watch document's shape and returns the
+// entry that belongs under Global.Raw["watches"]. It is shared by the base pass,
+// which refuses a duplicate name, and by the local-override pass, which merges
+// onto an existing entry instead.
+func watchEntryFromDocument(doc *Document) (map[string]any, error) {
 	if _, present := doc.Body[pathKeyWatches]; present {
-		return fmt.Errorf("%s: watch documents use top-level name/check fields, not a watches map", doc.Path)
+		return nil, fmt.Errorf("%s: watch documents use top-level name/check fields, not a watches map", doc.Path)
 	}
 	if declared := cfgval.String(doc.Body[keyKind]); declared != "" && declared != kindWatch {
-		return fmt.Errorf("%s: located under a watches directory but declares kind: %s", doc.Path, declared)
+		return nil, fmt.Errorf("%s: located under a watches directory but declares kind: %s", doc.Path, declared)
 	}
 	if doc.Name == "" {
-		return fmt.Errorf("%s: watch documents must define name", doc.Path)
+		return nil, fmt.Errorf("%s: watch documents must define name", doc.Path)
 	}
 	if !validDocumentName(doc.Name) {
-		return fmt.Errorf("%s: watch name %q must be a simple name without path separators", doc.Path, doc.Name)
+		return nil, fmt.Errorf("%s: watch name %q must be a simple name without path separators", doc.Path, doc.Name)
 	}
 	entry := cloneMap(doc.Body)
 	delete(entry, keyKind)
 	delete(entry, keyName)
 	expandEnvTree(entry)
+	return entry, nil
+}
 
+// watchRegistry returns the mutable watches map under Global.Raw, creating it on
+// first use.
+func (c *Config) watchRegistry() map[string]any {
 	dst, _ := c.Global.Raw[pathKeyWatches].(map[string]any)
 	if dst == nil {
 		dst = map[string]any{}
+		c.Global.Raw[pathKeyWatches] = dst
 	}
+	return dst
+}
+
+func (c *Config) mergeWatchDocument(doc *Document) error {
+	entry, err := watchEntryFromDocument(doc)
+	if err != nil {
+		return err
+	}
+	dst := c.watchRegistry()
 	if _, exists := dst[doc.Name]; exists {
 		return fmt.Errorf("%s: watch %q is already defined", doc.Path, doc.Name)
 	}
@@ -613,10 +637,7 @@ func (c *Config) mergeNotifierMap(doc *Document) (bool, error) {
 	if len(entries) != 1 {
 		return true, fmt.Errorf("%s: %s fragments must contain exactly one entry", doc.Path, pathKeyNotifiers)
 	}
-	dst, _ := c.Global.Raw[pathKeyNotifiers].(map[string]any)
-	if dst == nil {
-		dst = map[string]any{}
-	}
+	dst := c.notifierRegistry()
 	for name, entry := range entries {
 		if _, exists := dst[name]; exists {
 			return true, fmt.Errorf("%s: notifier %q is already defined", doc.Path, name)
@@ -625,6 +646,17 @@ func (c *Config) mergeNotifierMap(doc *Document) (bool, error) {
 	}
 	c.Global.Raw[pathKeyNotifiers] = dst
 	return true, nil
+}
+
+// notifierRegistry returns the mutable notifiers map under Global.Raw, creating
+// it on first use.
+func (c *Config) notifierRegistry() map[string]any {
+	dst, _ := c.Global.Raw[pathKeyNotifiers].(map[string]any)
+	if dst == nil {
+		dst = map[string]any{}
+		c.Global.Raw[pathKeyNotifiers] = dst
+	}
+	return dst
 }
 
 func loadDocument(path string) (*Document, error) {

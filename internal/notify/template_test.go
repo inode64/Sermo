@@ -2,6 +2,8 @@ package notify
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -81,5 +83,58 @@ func TestValidTemplateNameRejectsPathTraversal(t *testing.T) {
 		if !ValidTemplateName(name) {
 			t.Fatalf("name %q should be valid", name)
 		}
+	}
+}
+
+// TestLoadTemplateLocalOverrideShadowsPackaged covers the per-host template
+// layer: unlike the document directories, whose overrides merge field by field,
+// a template is replaced whole because it has no named entries to merge.
+func TestLoadTemplateLocalOverrideShadowsPackaged(t *testing.T) {
+	root := t.TempDir()
+	base := filepath.Join(root, "templates")
+	local := base + LocalDirSuffix
+	for _, dir := range []string{base, local} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write := func(dir, body string) {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(dir, "alert.yml"), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	renderedSubject := func() string {
+		t.Helper()
+		tmpl, err := LoadTemplate(base, "alert")
+		if err != nil {
+			t.Fatalf("LoadTemplate() error = %v", err)
+		}
+		rendered, err := tmpl.Render(Message{Subject: "ignored", Body: "ignored"})
+		if err != nil {
+			t.Fatalf("Render() error = %v", err)
+		}
+		return rendered.Subject
+	}
+
+	write(base, "subject: packaged\nbody: packaged body\n")
+	if got := renderedSubject(); got != "packaged" {
+		t.Fatalf("subject = %q, want the packaged template before any override", got)
+	}
+
+	write(local, "subject: host\nbody: host body\n")
+	if got := renderedSubject(); got != "host" {
+		t.Fatalf("subject = %q, want the .local override to shadow the packaged template", got)
+	}
+
+	// A directory of that name must not shadow a real template.
+	if err := os.Remove(filepath.Join(local, "alert.yml")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(local, "alert.yml"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if got := renderedSubject(); got != "packaged" {
+		t.Fatalf("subject = %q, want a non-regular override entry to be ignored", got)
 	}
 }

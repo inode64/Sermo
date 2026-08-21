@@ -285,8 +285,17 @@ func validateGlobalPaths(cfg *Config, raw map[string]any, add addFunc) {
 		pathKeyServices: cfg.Global.Services, pathKeyWatches: cfg.Global.Watches,
 	} {
 		for _, dir := range dirs {
-			if dir != "" && !filepath.IsAbs(dir) {
+			if dir == "" {
+				continue
+			}
+			if !filepath.IsAbs(dir) {
 				add("%s entry %q must be an absolute directory", pathsFieldPath(name), dir)
+			}
+			// A `<dir>.local` sibling is discovered from the layout of the
+			// directory it adjusts. Listing one here would load it twice, the
+			// second time as a base directory whose duplicate names are fatal.
+			if isLocalOverrideDir(dir) {
+				add("%s entry %q is a per-host override directory; it is loaded from its base directory and must not be listed", pathsFieldPath(name), dir)
 			}
 		}
 	}
@@ -992,8 +1001,14 @@ func documentScope(doc *Document) string {
 	if kind == "" {
 		kind = "document"
 	}
+	scope := fmt.Sprintf("%s %s", kind, filepath.Base(doc.Path))
 	if doc.Name != "" {
-		return kind + " " + doc.Name
+		scope = kind + " " + doc.Name
 	}
-	return fmt.Sprintf("%s %s", kind, filepath.Base(doc.Path))
+	// Name the file the operator actually edited: a finding in a merged document
+	// is as likely to come from the override as from the generated base.
+	if doc.LocalOverride != "" {
+		scope += " (override " + doc.LocalOverride + ")"
+	}
+	return scope
 }

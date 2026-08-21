@@ -65,6 +65,9 @@ engine:
   # diagnostics: /var/log/sermo/diagnostics.log
   # diagnostics_interval: 1h
 
+# Each of these directories may have a `<dir>.local` sibling. Sermo loads it when
+# it exists and merges its documents onto the same-named base, which is where a
+# host tunes a packaged threshold without the next deployment overwriting it.
 paths:
   # Directory entries are non-recursive by default. Use
   # `{ path: /some/dir, recursive: true }` for nested *.yml files.
