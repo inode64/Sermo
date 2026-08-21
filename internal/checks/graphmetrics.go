@@ -135,6 +135,32 @@ var graphMetrics = map[string][]GraphMetric{
 	},
 }
 
+// NumericData coerces one Result.Data value to a float64, reporting whether it
+// was a number at all.
+//
+// Deliberately not cfgval.Float: that one also parses a numeric string, because a
+// configured threshold may arrive from YAML as text. A result field is written by
+// the check itself, so a string there is a label — a device name, a state — and
+// reading "3" out of one would graph a word. Both the recorder and the reading
+// rows select fields through this, so what is graphed and what is displayed can
+// never disagree about which fields are numbers.
+func NumericData(v any) (float64, bool) {
+	switch t := v.(type) {
+	case float64:
+		return t, true
+	case int:
+		return float64(t), true
+	case int64:
+		return float64(t), true
+	case uint64:
+		return float64(t), true
+	case uint:
+		return float64(t), true
+	default:
+		return 0, false
+	}
+}
+
 // GraphMetrics returns the graphable metrics declared for a check type, or nil
 // when the type publishes none.
 func GraphMetrics(checkType string) []GraphMetric { return slices.Clone(graphMetrics[checkType]) }

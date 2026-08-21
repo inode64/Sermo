@@ -916,14 +916,19 @@ func (w *cycleWriter) RecordMeasurement(r checks.Result) {
 			at:    at,
 		})
 	}
-	for _, metric := range w.graphable[r.Check] {
-		if value, ok := numericData(r.Data[metric.Key]); ok {
-			w.records = append(w.records, cycleMeasurement{
-				check:  r.Check,
-				metric: metric.Key,
-				value:  value,
-				at:     at,
-			})
+	eachGraphMetricSample(w.graphable[r.Check], r.Data, func(metric string, value float64) {
+		w.records = append(w.records, cycleMeasurement{check: r.Check, metric: metric, value: value, at: at})
+	})
+}
+
+// eachGraphMetricSample calls emit for every declared metric the result actually
+// carries as a number. A service persists through the cycle batch and a host
+// watch straight through the store, but they must select the same fields from the
+// same declaration, so the selection lives here rather than in each sink.
+func eachGraphMetricSample(graphs []checks.GraphMetric, data map[string]any, emit func(metric string, value float64)) {
+	for _, metric := range graphs {
+		if value, ok := checks.NumericData(data[metric.Key]); ok {
+			emit(metric.Key, value)
 		}
 	}
 }
@@ -1011,25 +1016,6 @@ func graphableCheckMetrics(tree map[string]any) map[string][]checks.GraphMetric 
 		}
 	}
 	return out
-}
-
-// numericData coerces a Result.Data value to a float64 (the recorder only graphs
-// numeric fields).
-func numericData(v any) (float64, bool) {
-	switch t := v.(type) {
-	case float64:
-		return t, true
-	case int:
-		return float64(t), true
-	case int64:
-		return float64(t), true
-	case uint64:
-		return float64(t), true
-	case uint:
-		return float64(t), true
-	default:
-		return 0, false
-	}
 }
 
 // parseCheckGates reads each check's `requires` and `skip_when_changed` fields

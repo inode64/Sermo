@@ -306,10 +306,23 @@ func (b *WebBackend) checkView(cn string, e *webEntry, snap map[string]CheckSnap
 	if seen && !cs.At.IsZero() {
 		ch.At = cs.At.UTC().Format(time.RFC3339)
 	}
-	for _, m := range checks.DeclaredGraphMetrics(e.checkTypes[cn], e.checkUnits[cn]) {
-		ch.Metrics = append(ch.Metrics, web.CheckMetric{Name: m.Key, Unit: m.Unit})
-	}
+	ch.Metrics = webCheckMetrics(e.checkTypes[cn], e.checkUnits[cn])
 	return ch
+}
+
+// webCheckMetrics is the payload form of one check's declared graph metrics. A
+// service check and a host watch both advertise through it, so what a panel is
+// offered can never differ from what the recorder was told to persist.
+func webCheckMetrics(checkType, unit string) []web.CheckMetric {
+	declared := checks.DeclaredGraphMetrics(checkType, unit)
+	if len(declared) == 0 {
+		return nil
+	}
+	out := make([]web.CheckMetric, 0, len(declared))
+	for _, m := range declared {
+		out = append(out, web.CheckMetric{Name: m.Key, Unit: m.Unit})
+	}
+	return out
 }
 
 func (b *WebBackend) serviceCheckHealth(name string, e *webEntry, monitored bool) (int, string) {
