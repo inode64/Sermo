@@ -621,6 +621,33 @@ func TestSourceFormatsEveryMetricSummaryThroughOneHelper(t *testing.T) {
 	}
 }
 
+// TestSourceBuildsRuntimeMetricPanelsFromOneList pins that the CPU/memory/IO trio
+// is written once. The service detail and the daemon panel both render
+// runtimeMetricPanels over runtimeMetricDefs, instead of three hand-written copies
+// each — the daemon's in a dialect of its own, with no titles and no per-chart
+// summary. The hand-written copies had already drifted: a panel titled "Memory"
+// carried a summary line that said "memory".
+func TestSourceBuildsRuntimeMetricPanelsFromOneList(t *testing.T) {
+	appJSMustContain(t, "shared runtime metric panels",
+		"function runtimeMetricPanels(idFor) {",
+		"runtimeMetricPanels((key, suffix) => serviceRuntimeMetricDomID(d.name, key, suffix))",
+		"litRender(runtimeMetricPanels(daemonMetricDomID), grid)",
+	)
+	src, err := os.ReadFile("src/app.js")
+	if err != nil {
+		t.Fatalf("read src/app.js: %v", err)
+	}
+	// metricPanelBody, the SLA panel's own heading and the "no latency checks"
+	// placeholder. A fourth means a panel was hand-written again.
+	if n := strings.Count(string(src), `class="metric-title"`); n != 3 {
+		t.Errorf("metric-title is emitted from %d places, want 3", n)
+	}
+	// metricSeriesSummary is the only producer of a metric average.
+	if n := strings.Count(string(src), "avg <b>"); n != 1 {
+		t.Errorf("a metric average is formatted in %d places, want 1", n)
+	}
+}
+
 func TestSourceKeepsMetricSelectionPerService(t *testing.T) {
 	src, err := os.ReadFile("src/app.js")
 	if err != nil {

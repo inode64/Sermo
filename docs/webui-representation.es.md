@@ -665,7 +665,7 @@ Section id: `daemon-section`
 | Engine | Interval, Max parallel checks, Max parallel ops, Default timeout, Operation timeout, Startup delay |
 | Runtime | Started, Uptime, Go version, Ready |
 | Contadores de proceso | PID, CPU en vivo, memoria, IO, FDs, threads |
-| Métricas de proceso | gráficos de CPU, memoria e IO con ventanas 1h/24h/7d/30d/1y |
+| Métricas de proceso | los mismos paneles de CPU, memoria e IO que el detalle de un servicio muestra para su propio runtime — una caja titulada cada uno, con su resumen avg/min/max y su gráfica — sobre una ventana 1h/24h/7d/30d/1y |
 
 Notas editables:
 

@@ -358,7 +358,7 @@ const operationActionStates = {
 };
 const runtimeMetricDefs = [
   { key: metricNameCPU, label: "CPU", unit: metricUnitPercent, chartLabel: "Daemon CPU metric chart" },
-  { key: metricNameMemory, label: "memory", unit: metricUnitBytes, chartLabel: "Daemon memory metric chart" },
+  { key: metricNameMemory, label: "Memory", unit: metricUnitBytes, chartLabel: "Daemon memory metric chart" },
   { key: metricNameIO, label: "IO", unit: metricUnitBytesPerSecond, chartLabel: "Daemon IO metric chart" },
 ];
 
@@ -4043,6 +4043,37 @@ function serviceProcessDetail(d) {
   };
 }
 
+// metricPanelBody is what every graph panel of a detail grid holds: its title, a
+// summary line and a chart box, addressed by one id pair. The wrapper stays with
+// the caller because that is the part that genuinely differs — a latency or named
+// metric panel names on it the check it belongs to, for tests and selectors.
+function metricPanelBody(summaryID, chartID, title) {
+  return tpl`<div class="metric-title">${title}</div>
+    <div id="${summaryID}" class="muted">loading…</div>
+    <div id="${chartID}" class="muted chart-box"></div>`;
+}
+
+// runtimeMetricPanels is the CPU/memory/IO trio, built from the one list that
+// already defines those three metrics everywhere else (runtimeMetricDefs). The
+// service detail and the daemon panel both render it, so process metrics look the
+// same in both places instead of the daemon keeping an untitled variant of its
+// own. idFor(key, suffix) names the pair of elements each panel is filled through.
+function runtimeMetricPanels(idFor) {
+  return runtimeMetricDefs.map(({ key, label }) => tpl`<div class="metric-panel">
+    ${metricPanelBody(idFor(key, "summary"), idFor(key, "chart"), label)}
+  </div>`);
+}
+
+// serviceRuntimeMetricDomID names one service runtime panel's summary or chart.
+function serviceRuntimeMetricDomID(service, key, suffix) {
+  return detailDomId(service, `runtime-${key}-${suffix}`);
+}
+
+// daemonMetricDomID names one daemon process-metric panel's summary or chart.
+function daemonMetricDomID(key, suffix) {
+  return `daemon-${key}-${suffix}`;
+}
+
 function serviceGraphDetail(d) {
   const noResidentProcess = !!d.no_resident_process;
   const measured = serviceMeasuredChecks(d);
@@ -4054,9 +4085,8 @@ function serviceGraphDetail(d) {
     ? []
     : measured.length
     ? measured.map((c) => tpl`<div class="metric-panel" data-latency-check="${c.name}">
-        <div class="metric-title">Latency <span class="muted">${c.name}</span></div>
-        <div id="${serviceLatencyDomID(d.name, c.name, "summary")}" class="muted">loading…</div>
-        <div id="${serviceLatencyDomID(d.name, c.name, "chart")}" class="muted chart-box"></div>
+        ${metricPanelBody(serviceLatencyDomID(d.name, c.name, "summary"), serviceLatencyDomID(d.name, c.name, "chart"),
+          tpl`Latency <span class="muted">${c.name}</span>`)}
       </div>`)
     : [tpl`<div class="metric-panel">
         <div class="metric-title">Latency</div>
@@ -4064,25 +4094,10 @@ function serviceGraphDetail(d) {
       </div>`];
   const runtimeGraphPanels = noResidentProcess
     ? nothing
-    : tpl`<div class="metric-panel">
-        <div class="metric-title">CPU</div>
-        <div id="${detailDomId(d.name, "runtime-cpu-summary")}" class="muted">loading…</div>
-        <div id="${detailDomId(d.name, "runtime-cpu-chart")}" class="muted chart-box"></div>
-      </div>
-      <div class="metric-panel">
-        <div class="metric-title">Memory</div>
-        <div id="${detailDomId(d.name, "runtime-memory-summary")}" class="muted">loading…</div>
-        <div id="${detailDomId(d.name, "runtime-memory-chart")}" class="muted chart-box"></div>
-      </div>
-      <div class="metric-panel">
-        <div class="metric-title">IO</div>
-        <div id="${detailDomId(d.name, "runtime-io-summary")}" class="muted">loading…</div>
-        <div id="${detailDomId(d.name, "runtime-io-chart")}" class="muted chart-box"></div>
-      </div>`;
+    : runtimeMetricPanels((key, suffix) => serviceRuntimeMetricDomID(d.name, key, suffix));
   const checkMetricPanels = checkMetrics.map((metric) => tpl`<div class="metric-panel" data-service-metric-check="${metric.check}" data-service-metric-name="${metric.name}">
-    <div class="metric-title">${serviceCheckMetricLabel(metric)}</div>
-    <div id="${serviceCheckMetricDomID(d.name, metric.check, metric.name, "summary")}" class="muted">loading…</div>
-    <div id="${serviceCheckMetricDomID(d.name, metric.check, metric.name, "chart")}" class="muted chart-box"></div>
+    ${metricPanelBody(serviceCheckMetricDomID(d.name, metric.check, metric.name, "summary"),
+      serviceCheckMetricDomID(d.name, metric.check, metric.name, "chart"), serviceCheckMetricLabel(metric))}
   </div>`);
   return tpl`<h2>Graphs <span class="muted">${winButtons(metricWins, metricState.window, "setMetricWin", "Graph time window", d.name)}</span></h2>
     <div class="metric-grid">
@@ -7504,23 +7519,19 @@ function renderDaemonMetrics(body) {
 
   const win = $("#daemon-metric-windows");
   if (win) litRender(winButtons(metricWins, daemonMetricWindow, "setDaemonMetricWin", "Daemon metrics time window"), win);
-  const summary = $("#daemon-metric-summary");
-  if (summary) {
-    summary.innerHTML = runtimeMetricDefs.map(({ key, label }) =>
-      daemonMetricSummary(body[key], label)).join(" &middot; ");
-  }
+  // The daemon's process metrics are the same three a service's runtime panels
+  // show, so they are the same panels: one titled box each, with its own summary
+  // line, instead of a combined strip above three untitled charts.
+  const grid = $("#daemon-metric-grid");
+  if (grid) litRender(runtimeMetricPanels(daemonMetricDomID), grid);
   runtimeMetricDefs.forEach(({ key, unit, chartLabel }) => {
-    const el = $(`#daemon-${key}-chart`);
     const series = body[key] || {};
-    if (el) el.innerHTML = drawMetricChart(series.points || [], series.unit || unit, daemonMetricWindow, chartLabel);
+    const summary = document.getElementById(daemonMetricDomID(key, "summary"));
+    const chart = document.getElementById(daemonMetricDomID(key, "chart"));
+    const seriesUnit = series.unit || unit;
+    if (summary) summary.innerHTML = metricSeriesSummary({ ...series, unit: seriesUnit });
+    if (chart) chart.innerHTML = drawMetricChart(series.points || [], seriesUnit, daemonMetricWindow, chartLabel);
   });
-}
-
-function daemonMetricSummary(series, label) {
-  const s = (series && series.summary) || {};
-  const unit = (series && series.unit) || "";
-  if (!s.count) return `${esc(label)} <span class="muted">no data</span>`;
-  return `${esc(label)} avg <b>${esc(fmtMetricValue(s.avg, unit))}</b>`;
 }
 
 const chartDataTableMaxRows = 30;
