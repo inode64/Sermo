@@ -270,7 +270,7 @@ if command -v gluster >/dev/null 2>&1; then
 		/^[[:space:]]*Thin-arbiter-path:[[:space:]]/ { print volume "\t" $2 }
 	' "${out}/gluster_volume_info_text.out" >"${out}/gluster_thin_arbiters.raw" 2>/dev/null || true
 	while IFS="$(printf '\t')" read -r volume arbiter; do
-		[ -n "$volume" ] && [ -n "$arbiter" ] || continue
+		if [ -z "$volume" ] || [ -z "$arbiter" ]; then continue; fi
 		arbiter_host="${arbiter%%:*}"
 		arbiter_path="${arbiter#*:}"
 		arbiter_address="$(resolve_address "$arbiter_host")"
