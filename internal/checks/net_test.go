@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -212,5 +213,156 @@ func TestSysfsIfaceUp(t *testing.T) {
 	// IFF_UP clear is never up.
 	if sysfsIfaceUp(mk("0x0\n", NetStateUp+"\n")) {
 		t.Error("IFF_UP clear must be down")
+	}
+}
+
+// writeNetSysfs builds one /sys/class/net/<iface> tree from a map of relative
+// paths to contents. A value starting with "->" becomes a symlink, which is how
+// sysfs spells the device and driver bindings.
+func writeNetSysfs(t *testing.T, root, iface string, files map[string]string) {
+	t.Helper()
+	dir := filepath.Join(root, iface)
+	for rel, content := range files {
+		path := filepath.Join(dir, rel)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if target, ok := strings.CutPrefix(content, "->"); ok {
+			if err := os.MkdirAll(filepath.Join(root, target), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Symlink(filepath.Join(root, target), path); err != nil {
+				t.Fatal(err)
+			}
+			continue
+		}
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+// TestNetIdentityFromSysfsPhysicalPort is a verbatim capture of eth0 on
+// k2keu3.intranet: an Intel E810 port on the `ice` driver.
+func TestNetIdentityFromSysfsPhysicalPort(t *testing.T) {
+	root := t.TempDir()
+	writeNetSysfs(t, root, "eth0", map[string]string{
+		"address":       "34:5a:60:00:1c:92\n",
+		"mtu":           "1500\n",
+		"duplex":        "full\n",
+		"device":        "->devices/0000:0a:00.0",
+		"device/driver": "->bus/pci/drivers/ice",
+		"uevent":        "INTERFACE=eth0\nIFINDEX=2\n",
+	})
+	got := netIdentityFromSysfs("eth0", root)
+	want := NetIdentity{MAC: "34:5a:60:00:1c:92", Driver: "ice", Bus: "0000:0a:00.0", MTU: 1500, Duplex: "full"}
+	if got != want {
+		t.Fatalf("identity = %+v, want %+v", got, want)
+	}
+}
+
+// TestNetIdentityFromSysfsVirtualBridge is docker0 on the same host: no device
+// link at all, so no driver and no bus, and the kind comes from uevent. Its
+// duplex reads `unknown`, which is a word the kernel uses for "not applicable"
+// and must not be published as a fact.
+func TestNetIdentityFromSysfsVirtualBridge(t *testing.T) {
+	root := t.TempDir()
+	writeNetSysfs(t, root, "docker0", map[string]string{
+		"address": "8a:fe:a7:f7:5a:a0\n",
+		"mtu":     "1500\n",
+		"duplex":  "unknown\n",
+		"uevent":  "DEVTYPE=bridge\nINTERFACE=docker0\n",
+	})
+	got := netIdentityFromSysfs("docker0", root)
+	want := NetIdentity{MAC: "8a:fe:a7:f7:5a:a0", Kind: "bridge", MTU: 1500}
+	if got != want {
+		t.Fatalf("identity = %+v, want %+v", got, want)
+	}
+}
+
+// TestNetIdentityFromSysfsAbsentInterface keeps a vanished interface from
+// inventing an identity out of missing files.
+func TestNetIdentityFromSysfsAbsentInterface(t *testing.T) {
+	if got := netIdentityFromSysfs("eth9", t.TempDir()); !got.empty() {
+		t.Fatalf("identity = %+v, want empty for an interface with no sysfs directory", got)
+	}
+}
+
+// TestNetCheckPublishesIdentityAndFlaps pins that a live sample carries what the
+// interface is beside what it measured, including the kernel's link-transition
+// count — a link that is up now but has flapped is not the same as one that has
+// been up since boot, and a per-cycle sample cannot see between its own samples.
+func TestNetCheckPublishesIdentityAndFlaps(t *testing.T) {
+	identity := NetIdentity{MAC: "34:5a:60:00:1c:92", Driver: "ice", Bus: "0000:0a:00.0", MTU: 1500, Duplex: "full"}
+	c := &netCheck{
+		base: base{name: "net-eth0"}, iface: "eth0", metric: NetMetricState, expect: NetStateUp,
+		sampler: func(string) (NetSample, error) {
+			return NetSample{State: NetStateUp, Identity: identity, CarrierChanges: 7, CarrierChangesKnown: true}, nil
+		},
+	}
+	res := c.Run(t.Context())
+	if !res.OK {
+		t.Fatalf("state check failed: %s", res.Message)
+	}
+	for key, want := range map[string]any{
+		DataKeyMAC: "34:5a:60:00:1c:92", DataKeyDriver: "ice", DataKeyBus: "0000:0a:00.0",
+		DataKeyDuplex: "full", DataKeyMTU: uint64(1500), DataKeyCarrierChanges: uint64(7),
+	} {
+		if got := res.Data[key]; got != want {
+			t.Errorf("data[%s] = %v (%T), want %v", key, got, got, want)
+		}
+	}
+	if _, present := res.Data[DataKeyKind]; present {
+		t.Errorf("a physical port published a kind: %v", res.Data[DataKeyKind])
+	}
+}
+
+// TestNetCheckNamesAVanishedInterface is the whole point of retaining identity.
+// Unlike a disk, which keeps its /dev node and its sysfs identity after it goes
+// quiet, a removed interface takes its sysfs directory with it — so without
+// memory a failed sample can only say the name the operator already typed.
+func TestNetCheckNamesAVanishedInterface(t *testing.T) {
+	identity := NetIdentity{MAC: "34:5a:60:00:1c:93", Driver: "ice", Bus: "0000:0a:00.1", MTU: 1500}
+	present := true
+	c := &netCheck{
+		base: base{name: "net-eth1"}, iface: "eth1", metric: NetMetricState, expect: NetStateUp,
+		sampler: func(string) (NetSample, error) {
+			if !present {
+				return NetSample{}, errors.New("no such network interface")
+			}
+			return NetSample{State: NetStateUp, Identity: identity}, nil
+		},
+	}
+	if res := c.Run(t.Context()); !res.OK {
+		t.Fatalf("first sample failed: %s", res.Message)
+	}
+
+	present = false
+	res := c.Run(t.Context())
+	if !res.Unavailable {
+		t.Fatalf("a missing interface must be unavailable, got %+v", res)
+	}
+	if got := res.Data[DataKeyMAC]; got != "34:5a:60:00:1c:93" {
+		t.Errorf("data[mac] = %v, want the identity the interface had while it existed", got)
+	}
+	if got := res.Data[DataKeyBus]; got != "0000:0a:00.1" {
+		t.Errorf("data[bus] = %v, want the retained bus address", got)
+	}
+}
+
+// TestNetCheckInventsNoIdentityBeforeItObservedOne keeps the memory honest: a
+// check that never saw the interface reports nothing about it, which is what a
+// daemon restart leaves behind.
+func TestNetCheckInventsNoIdentityBeforeItObservedOne(t *testing.T) {
+	c := &netCheck{
+		base: base{name: "net-eth9"}, iface: "eth9", metric: NetMetricState, expect: NetStateUp,
+		sampler:  func(string) (NetSample, error) { return NetSample{}, errors.New("no such network interface") },
+		identity: func(string) NetIdentity { return NetIdentity{} },
+	}
+	res := c.Run(t.Context())
+	for _, key := range []string{DataKeyMAC, DataKeyDriver, DataKeyBus, DataKeyMTU} {
+		if v, present := res.Data[key]; present {
+			t.Errorf("data[%s] = %v, want nothing before the interface was ever observed", key, v)
+		}
 	}
 }

@@ -143,7 +143,7 @@ func TestSysDeviceModel(t *testing.T) {
 }
 
 func TestWithDeviceIdentityOmitsWhatIsNotKnown(t *testing.T) {
-	data := withDeviceIdentity(map[string]any{DataKeyDevice: "/dev/sda"}, BlockDeviceIdentity{Model: "TEST DISK"})
+	data := withIdentity(map[string]any{DataKeyDevice: "/dev/sda"}, BlockDeviceIdentity{Model: "TEST DISK"})
 	if data[DataKeyModel] != "TEST DISK" {
 		t.Errorf("Data[%s] = %v, want the known model", DataKeyModel, data[DataKeyModel])
 	}
