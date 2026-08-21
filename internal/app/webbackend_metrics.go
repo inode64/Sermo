@@ -74,6 +74,17 @@ func (b *WebBackend) availabilitySeries(key, check string, since time.Duration) 
 	return out
 }
 
+// slaRatio returns up/total as an optional ratio: nil when the bucket is unknown
+// or nothing was observed (total 0), which renders as a gap rather than as a
+// measured zero.
+func slaRatio(up, total int64, known bool) *float64 {
+	if !known || total <= 0 {
+		return nil
+	}
+	ratio := float64(up) / float64(total)
+	return &ratio
+}
+
 // slaSeries reads the service-level series, or one check's when check is set.
 // This is the only place the two scopes diverge; everything above and below it
 // is shared, which is what keeps them reporting gaps identically.

@@ -476,16 +476,27 @@ func TestSourceLoadReportsPartialRefreshBeforeAdvancingFreshness(t *testing.T) {
 	}
 }
 
-func TestSourceRendersBackendCacheObservationTimes(t *testing.T) {
-	// The SLA timeline is the surviving cache-observation surface: its segment
-	// timestamps stay anchored to the backend's observed_at instead of sliding
-	// on the browser clock. (The per-row "sampled … ago" captions were removed;
-	// service/app rows no longer render their observed_at.)
-	appJSMustContain(t, "cache-observation",
-		"w.observed_at",
-		"renderSLATimeline(segs, w.window, w.observed_at)",
-		"const sampledMs = Date.parse(observedAt)",
+// TestSourceDrawsEveryAvailabilityPanelThroughOneRenderer pins the reuse the
+// dashboard depends on: a service detail, a host watch and an application all
+// draw availability with the same panel, the same 1h..1y selector and the same
+// loader. A second renderer is precisely what once let an application present
+// the same figure as a selector-less band that read nothing like the service's.
+func TestSourceDrawsEveryAvailabilityPanelThroughOneRenderer(t *testing.T) {
+	appJSMustContain(t, "shared availability panel",
+		"${slaChartPanel(d.name)}",
+		"${w.keeps_sla ? renderSLASection(watchSLAKey(w.name)) : nothing}",
+		"${a.keeps_sla ? renderSLASection(appSLAKey(a.name)) : nothing}",
+		`winButtons(metricWins, win, "setSLAWin", "Availability time window", key)`,
 	)
+	src, err := os.ReadFile("src/app.js")
+	if err != nil {
+		t.Fatalf("read src/app.js: %v", err)
+	}
+	// Its definition plus loadSLAPanel's single call. A third occurrence means a
+	// surface started drawing its own availability chart again.
+	if n := strings.Count(string(src), "drawSLAChart("); n != 2 {
+		t.Errorf("drawSLAChart appears %d times, want 2 (defined once, called once from loadSLAPanel)", n)
+	}
 }
 
 func TestSourceFullyRefreshesExpandedServicesEveryDashboardPoll(t *testing.T) {
@@ -833,7 +844,7 @@ func TestIndexAccessibilityBundle(t *testing.T) {
 		"chart-data",
 		"Chart data",
 		"lock is still active",
-		"SLA timeline data",
+		"SLA chart data",
 		"preflight not available for this action",
 		"service is disabled in configuration",
 		"Confirm:",

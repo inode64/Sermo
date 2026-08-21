@@ -560,19 +560,25 @@ panels is a hard requirement, not a preference.
 **Reuse the concept's full owner, not the nearest lookalike.** When a concept
 already has a presentation somewhere, a new surface showing that same concept
 adopts *that* presentation whole — its markup, its loader, its API shape and its
-controls, the time-window selector included. Several concepts here ship both a
-rich panel and a compact summary of themselves (availability is the worked
-example: the service detail's sectioned SLA panel with its `1h/24h/7d/30d/1y`
-selector, and the dense `renderSLAWindows` band an application card uses). The
-compact one is a summary *of* the panel, never a substitute *for* it: reaching
-for it because it is fewer lines produces a second, thinner presentation of a
-number the operator already knows how to read one way, and now has to learn
-twice. Extend the shared owner when the new surface needs something the old one
-lacks; if reuse means threading one extra parameter or splitting a helper in
-two, do that rather than write a parallel path. The test before adding any
-rendering, loading or formatting code is "which existing function already
-answers this, and why can it not answer it here" — and the answer has to be a
-real obstacle, not that finding it takes longer than retyping it.
+controls, the time-window selector included. Availability is the worked example:
+`slaChartPanel` is the panel, `loadSLAPanel` fills it and `renderSLASection` adds
+the heading and the `1h/24h/7d/30d/1y` selector, and the service detail, a host
+watch and an application all draw through exactly those — differing only in the
+series `slaPanelAPI` asks for. The dashboard once carried a second, denser
+availability band beside them, so the same number read one way in a service
+detail and another way two clicks later in an application card, which had no
+window selector at all. That band was deleted rather than kept in step. A compact
+summary is a summary *of* a panel, never a substitute *for* it: reaching for one
+because it is fewer lines produces a second, thinner presentation of a number the
+operator already knows how to read one way, and now has to learn twice. Extend
+the shared owner when the new surface needs something the old one lacks; if reuse
+means threading one extra parameter or splitting a helper in two, do that rather
+than write a parallel path. The test before adding any rendering, loading or
+formatting code is "which existing function already answers this, and why can it
+not answer it here" — and the answer has to be a real obstacle, not that finding
+it takes longer than retyping it.
+`TestSourceDrawsEveryAvailabilityPanelThroughOneRenderer` pins the availability
+case: a second caller of `drawSLAChart` fails the gate.
 
 Concretely, every data panel is a `<details id="{name}-section">` with a
 `<summary>`, an optional flex `#{name}-controls` row (search + filters + count)
@@ -614,14 +620,18 @@ The visual layer is a token-driven design system (June 2026 redesign):
 - **Status pills.** `.target-state` renders states as tinted pills with a
   colored dot (`::before`, `currentColor`); `state-failed` pulses. New states
   only need a `state-<name>` color class.
-- **SLA timeline strip.** `renderSLATimeline(segments, window)` renders a
-  contiguous status-page availability band — one `.sla-seg` cell per equal
-  sub-span (oldest left), hatched `.sla-gap` where no cycle was observed.
-  `renderSLAWindows` uses it for every rolling SLA window; the per-segment
-  `{up, total, down_buckets}` records come from the backend
-  (`SLAWindow.Segments`) — `total: 0` is the gap signal and the availability ratio
-  is derived client-side. Reuse it anywhere a compact availability history is
-  needed.
+- **SLA timeline strip.** `slaStrip(points, win)` renders a contiguous
+  status-page availability band — one `.sla-bar-seg` cell per equal sub-span
+  (oldest left), hatched `.sla-gap` before the first observation, carrying the
+  last observed state across unsampled sub-spans so a continuously-up target
+  does not read as striped. `drawSLAChart` wraps it with the axis, the incident
+  list and the data table for an SLA panel; `drawCheckSLAStrip` wraps it with the
+  window ratio for a check's cell. Both consume the per-bucket
+  `{up, total, down_buckets}` points of `.../sla?since=` — `total: 0` is the gap
+  signal and the availability ratio is derived client-side. There is one panel
+  around it: `slaChartPanel` for the markup, `loadSLAPanel` for the fetch and
+  `renderSLASection` when the surface's only graph is this one. Reuse those
+  rather than drawing availability a second way.
   Cells are banded by `slaDownBand(slaDownPct(up, total))` — five severity levels
   over the share of the sub-span that was **down**, green only at exactly zero —
   not by an availability threshold. Stored history keeps one bucket span per

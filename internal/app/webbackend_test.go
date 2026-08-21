@@ -69,20 +69,6 @@ func (f fakeSLAReader) CheckSLASeries(service, check string, _, _ time.Time) ([]
 	return f.series[service+"\x00"+check], nil
 }
 
-func (f fakeSLAReader) SLATimelines(service string, _ time.Time) ([]state.SLAWindowTimeline, error) {
-	return slaValuesToTimelines(f.service[service]), nil
-}
-
-// slaValuesToTimelines reuses the fake's window totals as timelines without
-// segments, so existing SLA ratio assertions hold against the timeline path.
-func slaValuesToTimelines(vals []state.SLAValue) []state.SLAWindowTimeline {
-	out := make([]state.SLAWindowTimeline, 0, len(vals))
-	for _, v := range vals {
-		out = append(out, state.SLAWindowTimeline{Window: v.Window, Up: v.Up, Total: v.Total})
-	}
-	return out
-}
-
 func TestWebBackendEventsNilLog(t *testing.T) {
 	b := &WebBackend{
 		entries: map[string]*webEntry{"web": {}},
@@ -496,12 +482,13 @@ func TestWebBackendSeriesScopesToServiceOrCheck(t *testing.T) {
 	}
 }
 
-func TestWebBackendApplicationsIncludeServiceSLA(t *testing.T) {
+// TestWebBackendApplicationsMarkServiceSLA pins which applications the dashboard
+// draws an availability section for: only one that maps to a monitored service,
+// whose series it then reads from that service's own endpoint. An application
+// with no service behind it has no availability to show.
+func TestWebBackendApplicationsMarkServiceSLA(t *testing.T) {
 	b := &WebBackend{
 		entries: map[string]*webEntry{"nginx": {}},
-		sla: fakeSLAReader{
-			service: map[string][]state.SLAValue{"nginx": {{Window: "day", Up: 99, Total: 100}}},
-		},
 		applications: catalogInventoryCache{list: func(context.Context) []web.CatalogItem {
 			return []web.Application{{Name: "nginx", Status: appinspect.StatusOK}, {Name: "orphan", Status: appinspect.StatusOK}}
 		}},
@@ -511,11 +498,11 @@ func TestWebBackendApplicationsIncludeServiceSLA(t *testing.T) {
 	if len(apps) != 2 {
 		t.Fatalf("apps = %+v", apps)
 	}
-	if len(apps[0].SLA) != 1 || apps[0].SLA[0].Ratio == nil || *apps[0].SLA[0].Ratio != 0.99 {
-		t.Fatalf("nginx SLA = %+v, want 99%%", apps[0].SLA)
+	if !apps[0].KeepsSLA {
+		t.Fatal("nginx maps to a monitored service, so it must keep an SLA section")
 	}
-	if len(apps[1].SLA) != 0 {
-		t.Fatalf("orphan SLA = %+v, want none", apps[1].SLA)
+	if apps[1].KeepsSLA {
+		t.Fatalf("orphan maps to no service, so it must keep none")
 	}
 }
 

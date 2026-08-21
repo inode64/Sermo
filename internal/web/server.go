@@ -448,21 +448,27 @@ type MountAlertResult struct {
 // library. It mirrors the sermoctl `apps` and `libs` reports so every surface
 // agrees about versions, locations and inspection status.
 type CatalogItem struct {
-	Name          string      `json:"name"`
-	DisplayName   string      `json:"display_name"`
-	Category      string      `json:"category,omitempty"`
-	Binary        string      `json:"binary"`                   // resolved binary path (file location)
-	Permissions   string      `json:"permissions,omitempty"`    // binary mode, e.g. "-rwxr-xr-x (0755)"
-	User          string      `json:"user,omitempty"`           // owner username of the binary
-	Group         string      `json:"group,omitempty"`          // owner group of the binary
-	Version       string      `json:"version"`                  // raw first line of the version command
-	VersionShort  string      `json:"version_short"`            // numeric version, at most the patchlevel
-	VersionSource string      `json:"version_source,omitempty"` // app whose version probe supplied this version
-	Status        string      `json:"status"`                   // ok, or an error description
-	State         string      `json:"state,omitempty"`          // starting | ok | failed | warning
-	ObservedAt    string      `json:"observed_at,omitempty"`    // RFC3339 when version/status probes actually ran
-	SLA           []SLAWindow `json:"sla,omitempty"`            // populated when an application maps to a monitored service
-	LastEvent     *Event      `json:"last_event,omitempty"`     // populated with the newest retained application event
+	Name          string `json:"name"`
+	DisplayName   string `json:"display_name"`
+	Category      string `json:"category,omitempty"`
+	Binary        string `json:"binary"`                   // resolved binary path (file location)
+	Permissions   string `json:"permissions,omitempty"`    // binary mode, e.g. "-rwxr-xr-x (0755)"
+	User          string `json:"user,omitempty"`           // owner username of the binary
+	Group         string `json:"group,omitempty"`          // owner group of the binary
+	Version       string `json:"version"`                  // raw first line of the version command
+	VersionShort  string `json:"version_short"`            // numeric version, at most the patchlevel
+	VersionSource string `json:"version_source,omitempty"` // app whose version probe supplied this version
+	Status        string `json:"status"`                   // ok, or an error description
+	State         string `json:"state,omitempty"`          // starting | ok | failed | warning
+	ObservedAt    string `json:"observed_at,omitempty"`    // RFC3339 when version/status probes actually ran
+	LastEvent     *Event `json:"last_event,omitempty"`     // populated with the newest retained application event
+
+	// KeepsSLA marks an application that maps to a monitored service, so the
+	// dashboard draws it that service's SLA section — the same panel, selector
+	// and series the service detail shows. An application's availability is the
+	// service's; it is fetched from the service's own endpoint rather than
+	// carried here, so the figure has exactly one producer.
+	KeepsSLA bool `json:"keeps_sla,omitempty"`
 }
 
 // Application is an installed catalog application returned by the dashboard.
@@ -790,32 +796,6 @@ type Check struct {
 	// /api/services/{name}/sla?check=NAME, on the window its selector is on, the
 	// same endpoint and window the service-level timeline uses.
 	Metrics []CheckMetric `json:"metrics,omitempty"`
-}
-
-// SLAWindow is one rolling availability window. Ratio is nil when the window has
-// no data. Segments is the window split into equal sub-spans (oldest first);
-// each entry is its availability ratio in [0,1], or nil for a gap.
-type SLAWindow struct {
-	Window string   `json:"window"`
-	Ratio  *float64 `json:"ratio"`
-	Up     int64    `json:"up"`
-	Total  int64    `json:"total"`
-	// DownBuckets is how many one-minute buckets in the window saw a failed cycle.
-	// It survives consolidation, so a window whose ratio rounds to 100% can still
-	// be reported as having had incidents, and they can still be counted.
-	DownBuckets int64        `json:"down_buckets"`
-	Segments    []SLASegment `json:"segments,omitempty"`
-	ObservedAt  string       `json:"observed_at,omitempty"` // RFC3339 when this rolling window was calculated
-}
-
-// SLASegment is one equal sub-span of a window's timeline strip. Total 0 marks a
-// sub-span where nothing was observed (a gap, rendered distinctly from downtime).
-// The availability ratio is not carried: the client derives it from Up/Total, which
-// it needs anyway to compute how much of the sub-span was down.
-type SLASegment struct {
-	Up          int64 `json:"up"`
-	Total       int64 `json:"total"`
-	DownBuckets int64 `json:"down_buckets"`
 }
 
 // Process is a discovered process belonging to a service (parity with

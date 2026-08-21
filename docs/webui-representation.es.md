@@ -82,7 +82,7 @@ deterministas de la API.
 | Expansión de servicio | `GET /api/services/{name}` | checks, información del proceso, reglas |
 | Métricas de check del servicio | `GET /api/services/{name}/metrics?check=NAME[&metric=KEY]` | el detalle muestra la latencia cuando se omite `metric` y un gráfico por cada métrica numérica con nombre publicada por un check |
 | Métricas de runtime del servicio | `GET /api/services/{name}/runtime` | historial persistido de CPU/memoria/IO del servicio, de solo lectura y muestreado exclusivamente por ciclos del worker; `current` es la última muestra publicada y las lecturas del panel nunca repiten el descubrimiento de procesos |
-| SLA del servicio | `GET /api/services/{name}/sla[?check=NAME]` | historial de disponibilidad para la línea temporal de SLA del detalle del servicio y los clientes de la API, a la resolución a la que esa ventana está almacenada; `check` lo acota a uno de los checks del servicio, que es de donde la tabla de checks saca su tira, así que ambos ámbitos comparten una sola serie y un solo selector de ventana; un check que no emite veredicto no sirve puntos; los ratios de SLA observado cuentan solo minutos monitorizados, así que el tiempo sin mediciones es un hueco, no caída; cada punto lleva además `down_buckets`, los buckets de un minuto dentro de él que vieron un fallo |
+| SLA del servicio | `GET /api/services/{name}/sla[?check=NAME]` | historial de disponibilidad para la línea temporal de SLA del detalle del servicio, para la expansión de una aplicación que mapea a este servicio y para los clientes de la API, a la resolución a la que esa ventana está almacenada; `check` lo acota a uno de los checks del servicio, que es de donde la tabla de checks saca su tira, así que ambos ámbitos comparten una sola serie y un solo selector de ventana; un check que no emite veredicto no sirve puntos; los ratios de SLA observado cuentan solo minutos monitorizados, así que el tiempo sin mediciones es un hueco, no caída; cada punto lleva además `down_buckets`, los buckets de un minuto dentro de él que vieron un fallo |
 | Eventos del servicio | `GET /api/services/{name}/events` | feed de eventos por servicio |
 | Watches | `GET /api/watches` | watches de host y de service; `scope` los distingue y los nombres de watch de service usan `service:watch` |
 | SLA de watch | `GET /api/watches/{name}/sla` | el mismo historial de disponibilidad que sirve la ruta de SLA de servicio, para una vigilancia de host cuya comprobación afirma disponibilidad; ambas comparten una sola ruta de serie, así que el uptime de una vigilancia se calcula exactamente igual que el de un servicio; una vigilancia que no guarda ninguna responde 404 en vez de una serie vacía que se leería como uptime medido |
@@ -98,10 +98,10 @@ deterministas de la API.
 | Actividad reciente | `GET /api/activity` | resumen de eventos recientes |
 | Recuentos de monitorización | `GET /api/monitoring` | recuentos de servicios monitorizados frente a pausados |
 
-Las cachés de estado de init, inspección de aplicaciones y líneas temporales de
-SLA exponen sus horas de muestra reales, y las marcas de los segmentos SLA
-permanecen ancladas a `observed_at`, en lugar de avanzar con el reloj del
-navegador mientras están cacheadas.
+Las cachés de estado de init e inspección de aplicaciones exponen sus horas de
+muestra reales. La disponibilidad no se cachea así en absoluto: cada panel pide
+la ventana en la que está y cada punto lleva el inicio de su propio bucket, así
+que nada avanza con el reloj del navegador.
 Los refrescos son single-flight: las recargas automáticas, manuales y posteriores
 a una acción nunca se ejecutan a la vez, y el siguiente intervalo automático
 empieza cuando termina el refresco anterior.
@@ -133,13 +133,18 @@ breve de un corte de medio día. Una celda sin ninguna observación sigue siendo
 `.sla-gap` rayado, distinto de ambos: un hueco es tiempo sin monitorizar, no una
 caída.
 
-Una vigilancia de host cuya comprobación afirma disponibilidad recibe **la propia
-sección de SLA del detalle de servicio**, no una segunda presentación de ella: el
-mismo selector de ventana `1h / 24h / 7d / 30d / 1y`, la misma línea de resumen y
-la misma línea temporal de `drawSLAChart`, leyendo de
-`GET /api/watches/{name}/sla?since=`. Una vigilancia de condición reporta
-`keeps_sla: false` y no dibuja sección alguna, porque alcanzar un umbral no es
-downtime.
+La disponibilidad la dibuja exactamente un panel dondequiera que aparezca. Una
+vigilancia de host cuya comprobación afirma disponibilidad, y una aplicación que
+mapea a un servicio monitorizado, reciben cada una **la propia sección de SLA del
+detalle de servicio** — el mismo selector de ventana `1h / 24h / 7d / 30d / 1y`,
+la misma línea de resumen y la misma línea temporal de `drawSLAChart` — y no una
+segunda presentación, más pequeña, del mismo número. Solo cambia la serie: una
+vigilancia lee `GET /api/watches/{name}/sla?since=`, una aplicación lee la de su
+servicio, `GET /api/services/{name}/sla?since=`, porque su disponibilidad *es* la
+de ese servicio. Una vigilancia de condición reporta `keeps_sla: false`, igual
+que una aplicación sin servicio monitorizado detrás, y ninguna dibuja sección
+alguna — alcanzar un umbral no es downtime, y un binario sin instalar no tiene
+uptime.
 
 El color nunca es el único portador de esto (WCAG 2.2 1.4.1): el `title` y el
 `aria-label` de cada celda indican la disponibilidad, la fracción caída y cuántos
@@ -409,6 +414,7 @@ Expansión de fila:
 | User | propietario del binario |
 | Group | grupo del binario |
 | Status | estado de inspección de la aplicación |
+| Availability | la sección de SLA del servicio, cuando `keeps_sla` marca una aplicación que mapea a un servicio monitorizado; ausente en caso contrario |
 
 Estado vacío:
 
