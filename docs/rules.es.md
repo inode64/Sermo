@@ -545,8 +545,11 @@ metrics:
 
 Una comprobación de servicio lo declara igual, junto a `reports:` y `timeout:`.
 `optional: true` sigue siendo la grafía anterior y más estrecha: también mantiene
-un fallo fuera de la disponibilidad del servicio, pero sólo dentro de una sección
-`checks:` y sin el estado ámbar ni el log a nivel warn.
+un fallo fuera de la disponibilidad del servicio, y no emite log a nivel warn,
+pero sólo dentro de una sección `checks:`. **No** deja al servicio fuera del
+estado ámbar: una comprobación opcional que falla sigue dejando el servicio en
+`warning`, que es lo que hace visible un umbral mal ajustado en vez de tragarlo
+en silencio.
 
 Las medidas que conviene graduar así son las que **se degradan** en vez de
 romperse: el rendimiento de `hdparm`, la latencia de `icmp` y los contadores de
@@ -2556,6 +2559,19 @@ necesita una métrica con una forma de porcentaje (`memory`, `swap`, `cpu`,
 `swap`/`memory`/`total_memory`/`total_swap` también tienen una forma de bytes absoluta); un número desnudo necesita una forma absoluta (todo lo demás, incluyendo
 `io*`/`fds`/`threads`, que son solo absolutos). Leer la I/O o el recuento de fd de otro proceso
 requiere privilegio, así que esos suman solo los procesos que el daemon puede leer.
+
+Como `io*`/`fds`/`threads` no tienen forma de porcentaje, un umbral empaquetado
+para ellos no puede normalizarse al host como sí lo hacen `memory` y
+`cpu_thread`, y una métrica con ámbito de servicio suma **todos** los procesos
+que el descubrimiento atribuye al servicio, miembros del control group incluidos.
+Un valor por defecto del catálogo es por tanto un techo deliberadamente generoso
+y no un número ajustado, y el host que necesite otro lo dice en `services.local/`
+(ver [overrides por host](configuration.es.md#overrides-por-host-dirlocal)).
+Cuando el control group contiene carga que el daemon no posee — los ayudantes por
+dominio de un hipervisor, los contenedores de un runtime — un recuento absoluto
+sumado describe esa carga y no al daemon, así que el catálogo no incluye tal
+vigilancia y el agotamiento a nivel de host se alerta desde una vigilancia de
+host.
 
 ## Reglas
 

@@ -7,6 +7,7 @@ import dataclasses
 import importlib.util
 import json
 import sys
+import tarfile
 import tempfile
 import unittest
 from pathlib import Path
@@ -63,17 +64,25 @@ class EndpointGenerationTest(unittest.TestCase):
 
     def test_keeps_http_and_tcp_watches_with_associated_listener(self):
         report, body = self.generate('socket tcp LISTEN 0 511 0.0.0.0:80 0.0.0.0:* users:(("nginx",pid=1,fd=6))\n')
-        self.assertNotIn("watches:", body)
-        checks = report["services"]["enabled"][0]["endpoint_checks"]
-        self.assertEqual([item["active"] for item in checks], [True, True])
+        checks = {item["watch"]: item["active"] for item in report["services"]["enabled"][0]["endpoint_checks"]}
+        self.assertTrue(checks["port"])
+        self.assertTrue(checks["http"])
+        # nginx also ships a cert watch on 443. Nothing listens there in this
+        # fixture, so it is gated off — a TLS probe against a port with no
+        # listener can only ever fail.
+        self.assertFalse(checks["cert"])
+        self.assertIn("  cert:\n    enabled: false", body)
+        self.assertNotIn("  port:\n    enabled: false", body)
+        self.assertNotIn("  http:\n    enabled: false", body)
 
     def test_disables_endpoint_watches_without_associated_listener(self):
         report, body = self.generate('socket tcp LISTEN 0 511 0.0.0.0:80 0.0.0.0:* users:(("other",pid=1,fd=6))\n')
         self.assertIn("watches:\n", body)
         self.assertIn("  port:\n    enabled: false", body)
         self.assertIn("  http:\n    enabled: false", body)
+        self.assertIn("  cert:\n    enabled: false", body)
         checks = report["services"]["enabled"][0]["endpoint_checks"]
-        self.assertEqual([item["active"] for item in checks], [False, False])
+        self.assertEqual([item["active"] for item in checks], [False, False, False])
 
     def test_adds_discovered_terminal_namespaces_to_ssh_service(self):
         temp = tempfile.TemporaryDirectory()
@@ -180,6 +189,50 @@ class EndpointGenerationTest(unittest.TestCase):
         disabled, checks = generator.endpoint_watch_overrides(stage, doc, {})
         self.assertEqual(disabled, set())
         self.assertEqual([item["active"] for item in checks], [True, True])
+
+    def test_cert_watch_is_gated_on_a_real_tls_listener(self):
+        """A config-file gate cannot see exim's .ifdef macros; a listener can.
+
+        On a live host exim.conf set `tls_on_connect_ports = 465` inside an
+        `.ifdef SEGURIDAD` the host did not define, so the option read as
+        configured while exim listened only on 25 and the cert probe failed
+        forever.
+        """
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        stage = Path(temp.name)
+        (stage / "service_endpoint_hints").write_text(
+            'socket tcp LISTEN 0 50 0.0.0.0:25 0.0.0.0:* users:(("exim",pid=1,fd=4))\n',
+            encoding="utf-8",
+        )
+        doc = {
+            "name": "exim",
+            "watches": {
+                "smtp": {"check": {"type": "tcp", "host": "127.0.0.1", "port": 25}},
+                "cert": {"check": {"type": "cert", "host": "127.0.0.1", "port": 465}},
+            },
+        }
+        disabled, report = generator.endpoint_watch_overrides(stage, doc, {})
+        self.assertEqual(disabled, {"cert"})
+        active = {item["watch"]: item["active"] for item in report}
+        self.assertTrue(active["smtp"])
+        self.assertFalse(active["cert"])
+
+    def test_cert_watch_stays_where_the_tls_port_really_listens(self):
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        stage = Path(temp.name)
+        (stage / "service_endpoint_hints").write_text(
+            'socket tcp LISTEN 0 50 0.0.0.0:465 0.0.0.0:* users:(("exim",pid=1,fd=5))\n',
+            encoding="utf-8",
+        )
+        doc = {
+            "name": "exim",
+            "watches": {"cert": {"check": {"type": "cert", "host": "127.0.0.1", "port": 465}}},
+        }
+        disabled, report = generator.endpoint_watch_overrides(stage, doc, {})
+        self.assertEqual(disabled, set())
+        self.assertTrue(report[0]["active"])
 
     def test_protocol_listener_must_belong_to_profile_when_attributed(self):
         doc = {
@@ -1871,6 +1924,31 @@ class GlusterThinArbiterTest(unittest.TestCase):
             self.assertIn("Thin-arbiter-path", body, script)
             self.assertIn("gluster_thin_arbiters", body, script)
 
+
+
+class LocalOverrideSkeletonTest(unittest.TestCase):
+    """The generator creates the per-host layer but never writes into it."""
+
+    def test_ensure_dirs_creates_local_siblings(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            generator.ensure_dirs(root)
+            for rel in generator.CONFIG_DIRS:
+                self.assertTrue((root / rel).is_dir(), rel)
+                self.assertTrue((root / f"{rel}.local").is_dir(), f"{rel}.local")
+
+    def test_config_archive_never_carries_a_local_member(self) -> None:
+        """A directory member would let a regeneration overwrite the layer."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "root"
+            generator.ensure_dirs(root)
+            generator.write_file(root, "etc/sermo/services/demo.yml", "name: demo\n")
+            archive = Path(tmp) / "sermo-config.tgz"
+            generator.tar_config(root, archive)
+            with tarfile.open(archive) as tar:
+                names = tar.getnames()
+            self.assertIn("etc/sermo/services/demo.yml", names)
+            self.assertFalse([n for n in names if ".local" in n], names)
 
 if __name__ == "__main__":
     unittest.main()

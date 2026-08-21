@@ -160,7 +160,12 @@ FIREWALL_SERVICE_UNITS = frozenset(
 DEAD_LETTER_PATH = "/root/dead.letter"
 ROOT_MOUNT_TARGET = "/"
 NFS_ENDPOINT_TIMEOUT = "5s"
-ENDPOINT_CHECK_TYPES = {"dns", "http", "ports", "tcp"}
+# `cert` belongs here because it is structurally a TCP dial: it opens a TLS
+# connection to host:port and can only see a port that terminates TLS on
+# connect. Gating it on a real listener catches what a config-file gate
+# cannot — an exim.conf that sets tls_on_connect_ports inside an .ifdef the
+# host does not define reads as configured but listens on nothing.
+ENDPOINT_CHECK_TYPES = {"cert", "dns", "http", "ports", "tcp"}
 EPMD_SERVICE_NAME = "epmd"
 RABBITMQ_USER = "rabbitmq"
 # The initial execution-policy profile is intentionally limited to PostgreSQL:
@@ -1568,10 +1573,10 @@ def endpoint_target(check_type: str, check: dict, variables: dict[str, str]) -> 
         if not port.isdigit():
             return [], "invalid DNS port"
         return [({TCP_PROTOCOL, UDP_PROTOCOL}, host, port)], ""
-    if check_type == "tcp":
+    if check_type in {"tcp", "cert"}:
         port = substitute_variables(check.get("port", variables.get("port", "")), variables)
         if not port.isdigit():
-            return [], "invalid TCP port"
+            return [], f"invalid {check_type.upper()} port"
         return [({TCP_PROTOCOL}, host, port)], ""
     values = substitute_variables(check.get("ports", ""), variables)
     ports = [item.strip() for item in values.split(",") if item.strip()]
