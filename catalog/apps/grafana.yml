@@ -2,7 +2,15 @@ name: grafana
 display_name: "Grafana"
 category: observability
 variables:
-  binary: ${bindir}/grafana
+  # /usr/bin/grafana is a shell wrapper — in Grafana's own packages and in
+  # Gentoo's — that execs the real binary under /usr/share/grafana/bin. The
+  # kernel reports that target as the process exe, so an exact `exe` selector
+  # naming the wrapper matches nothing, and the operation engine then refuses to
+  # act on a service whose active processes it cannot identify. Name the real
+  # binary first and keep the ${bindir} candidates for layouts that ship it there.
+  binary:
+    - /usr/share/grafana/bin/grafana
+    - ${bindir}/grafana
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}", "--version"], timeout: 10s }

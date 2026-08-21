@@ -19,7 +19,16 @@ variables:
   user: loki
   host: 127.0.0.1
   port: 3100
-  config: /etc/loki/config.yml
+  # Packaged config locations differ: Grafana's own deb/rpm ship
+  # /etc/loki/config.yml, Gentoo's unit defaults LOKI_CONF to
+  # /etc/loki/loki-local-config.yaml, and the upstream tarball and container image
+  # use /etc/loki/local-config.yaml. Resolve to whichever is installed — a config
+  # preflight naming an absent file fails, and a failed preflight blocks every
+  # operation, restart included.
+  config:
+    - /etc/loki/config.yml
+    - /etc/loki/loki-local-config.yaml
+    - /etc/loki/local-config.yaml
 config_files:
   - ${config}
 preflight:
