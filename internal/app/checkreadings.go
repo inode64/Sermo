@@ -1,6 +1,7 @@
 package app
 
 import (
+	"cmp"
 	"fmt"
 	"strconv"
 	"strings"
@@ -42,6 +43,7 @@ const (
 	watchReadingLabelCount                    = "Count"
 	watchReadingLabelConnections              = "Connections"
 	watchReadingLabelCPUTicks                 = "CPU ticks"
+	watchReadingLabelCapacity                 = "Capacity"
 	watchReadingLabelCurrentSize              = "Current size"
 	watchReadingLabelDaysLeft                 = "Days left"
 	watchReadingLabelDefaultRoutes            = "Default routes"
@@ -61,6 +63,7 @@ const (
 	watchReadingLabelBus                      = "Bus"
 	watchReadingLabelExpires                  = "Expires"
 	watchReadingLabelFamily                   = "Family"
+	watchReadingLabelFirmware                 = "Firmware"
 	watchReadingLabelFree                     = "Free"
 	watchReadingLabelFreeBytes                = "Free bytes"
 	watchReadingLabelFullAvg10                = "Full avg10"
@@ -99,6 +102,7 @@ const (
 	watchReadingLabelModifiedAt               = "Modified at"
 	watchReadingLabelMinRules                 = "Min rules"
 	watchReadingLabelMode                     = "Mode"
+	watchReadingLabelModel                    = "Model"
 	watchReadingLabelMountpoints              = "Mountpoints"
 	watchReadingLabelOOMKills                 = "OOM kills"
 	watchReadingLabelObjectPath               = "Object path"
@@ -109,6 +113,8 @@ const (
 	watchReadingLabelPaths                    = "Paths"
 	watchReadingLabelPIDs                     = "PIDs"
 	watchReadingLabelPort                     = "Port"
+	watchReadingLabelPowerCycles              = "Power cycles"
+	watchReadingLabelProgress                 = "Progress"
 	watchReadingLabelProcess                  = "Process"
 	watchReadingLabelProcesses                = "Active processes"
 	watchReadingLabelProperty                 = "Property"
@@ -120,9 +126,13 @@ const (
 	watchReadingLabelResult                   = "Result"
 	watchReadingLabelReasons                  = "Reasons"
 	watchReadingLabelRSS                      = "RSS total"
+	watchReadingLabelRotation                 = "Medium"
 	watchReadingLabelRTT                      = "RTT"
 	watchReadingLabelRules                    = "Rules"
 	watchReadingLabelSample                   = "Sample"
+	watchReadingLabelSelfTest                 = "Last self-test"
+	watchReadingLabelSerialNumber             = "Serial"
+	watchReadingLabelLastSeen                 = "Last seen"
 	watchReadingLabelFailedUnits              = "Failed units"
 	watchReadingLabelInstances                = "Instances"
 	watchReadingLabelInstancesMax             = "Instances limit"
@@ -153,6 +163,7 @@ const (
 	watchReadingLabelVGSize                   = "VG size"
 	watchReadingLabelVGUsed                   = "VG used"
 	watchReadingLabelVolumeGroup              = "VG"
+	watchReadingLabelWWN                      = "WWN"
 	watchReadingLabelWindow                   = "Window"
 	watchReadingLabelWrite                    = "Write"
 	watchReadingLabelZombies                  = "Zombies"
@@ -180,6 +191,11 @@ const (
 	// oscillator correction and skew in.
 	watchReadingUnitPPM     = "ppm"
 	maxWatchReadingDuration = time.Duration(1<<63 - 1)
+
+	// watchReadingLastSuffix marks a row as the newest value the device answered
+	// with rather than a current measurement. A dead disk's last temperature is
+	// worth showing; showing it as *the* temperature would not be.
+	watchReadingLastSuffix = " (last)"
 )
 
 // readingBuilder accumulates the WatchReading list a *CheckReadings builder
@@ -260,6 +276,63 @@ func (rb *readingBuilder) addMetric(field, label string, decimals int, unit stri
 	return rb
 }
 
+// addMetrics appends one row per declared metric the data carries, formatted
+// with that metric's own unit and precision. numericData (not a bare float64
+// assertion) so integer-valued metrics still render — count checks such as
+// users/process_count store their DataKeyCount as an int, the same coercion the
+// graph recorder uses.
+func (rb *readingBuilder) addMetrics(list []checks.GraphMetric) *readingBuilder {
+	for _, m := range list {
+		if v, ok := numericData(rb.data[m.Key]); ok {
+			rb.add(m.Key, watchReadingMetricLabel(m), watchReadingGraphMetricValue(m, v))
+		}
+	}
+	return rb
+}
+
+// addDeviceIdentity appends what the kernel or the drive's own report says the
+// device is. Identity outlives the sample — a disk that stops answering is still
+// the disk whose serial number is printed on its label — so these rows are the
+// ones that survive into a failed observation.
+func (rb *readingBuilder) addDeviceIdentity() *readingBuilder {
+	return rb.
+		addString(checks.DataKeyModel, watchReadingLabelModel).
+		addString(checks.DataKeySerialNumber, watchReadingLabelSerialNumber).
+		addString(checks.DataKeyFirmware, watchReadingLabelFirmware).
+		addString(checks.DataKeyWWN, watchReadingLabelWWN).
+		addString(checks.DataKeyRotationRate, watchReadingLabelRotation).
+		addBytes(checks.DataKeyCapacityBytes, watchReadingLabelCapacity)
+}
+
+// addLastKnown appends the readings a device answered with before it stopped
+// answering, marked as historical and dated. The check publishes them under
+// their own keys precisely so they can never be mistaken for a live sample.
+func (rb *readingBuilder) addLastKnown(list []checks.GraphMetric) *readingBuilder {
+	if v, ok := cfgval.Float(rb.data[checks.DataKeyLastSeenSeconds]); ok && v > 0 && v <= float64(maxWatchReadingDuration)/float64(time.Second) {
+		rb.add(checks.DataKeyLastSeenSeconds, watchReadingLabelLastSeen, units.HumanizeDuration(time.Duration(v*float64(time.Second))))
+	}
+	rb.add(checks.DataKeyLastHealth, watchReadingLabelHealth+watchReadingLastSuffix, cfgval.String(rb.data[checks.DataKeyLastHealth]))
+	for _, m := range list {
+		key := checks.LastSampleKey(m.Key)
+		if v, ok := numericData(rb.data[key]); ok {
+			rb.add(key, watchReadingMetricLabel(m)+watchReadingLastSuffix, watchReadingGraphMetricValue(m, v))
+		}
+	}
+	return rb
+}
+
+// watchReadingMetricLabel names a metric row, falling back to the data key.
+func watchReadingMetricLabel(m checks.GraphMetric) string { return cmp.Or(m.Label, m.Key) }
+
+// watchReadingGraphMetricValue renders one metric with its unit. An hour count
+// reads as a duration ("2y 4mo") rather than as five digits of hours.
+func watchReadingGraphMetricValue(m checks.GraphMetric, v float64) string {
+	if m.Unit == metrics.MetricUnitHours && v >= 0 && v <= float64(maxWatchReadingDuration)/float64(time.Hour) {
+		return units.HumanizeDuration(time.Duration(v * float64(time.Hour)))
+	}
+	return watchReadingMetricValue(v, m.Decimals, m.Unit)
+}
+
 // readings returns the accumulated list.
 func (rb *readingBuilder) readings() []web.WatchReading { return rb.out }
 
@@ -292,6 +365,7 @@ var checkReadingsByType = map[string]func(map[string]any) []web.WatchReading{
 	checks.URLSchemeHTTPS:            httpCheckReadings,
 	checks.CheckTypePressure:         pressureCheckReadings,
 	checks.CheckTypeDiskIO:           diskioCheckReadings,
+	checks.CheckTypeSmart:            smartCheckReadings,
 	checks.CheckTypeRAID:             raidCheckReadings,
 	checks.CheckTypeGlusterCluster:   glusterClusterCheckReadings,
 	checks.CheckTypeLVM:              lvmCheckReadings,
@@ -311,7 +385,7 @@ func checkReadings(checkType string, data map[string]any) []web.WatchReading {
 	switch checkType {
 	case checks.CheckTypeStorage, checks.CheckTypeSwap, checks.CheckTypeMemory, checks.CheckTypeLoad:
 		return resourceCheckReadings(checkType, data)
-	case checks.CheckTypeHdparm, checks.CheckTypeSmart, checks.CheckTypeEDAC:
+	case checks.CheckTypeHdparm, checks.CheckTypeEDAC:
 		return metricCheckReadings(checkType, data)
 	}
 	if _, ok := data[checks.DataKeyConnectedClients]; ok {
@@ -465,7 +539,7 @@ func raidCheckReadings(data map[string]any) []web.WatchReading {
 func deviceProgressReadings(data map[string]any) *readingBuilder {
 	return readingsFrom(data).
 		addString(checks.DataKeyDeviceState, watchReadingLabelState).
-		addMetric(checks.DataKeyProgressPct, "Progress", watchReadingProgressDecimals, metrics.MetricUnitPercent)
+		addMetric(checks.DataKeyProgressPct, watchReadingLabelProgress, watchReadingProgressDecimals, metrics.MetricUnitPercent)
 }
 
 func raidArrayReading(detail checks.RaidArrayStatus) string {
@@ -789,26 +863,26 @@ func diskioCheckReadings(data map[string]any) []web.WatchReading {
 	// The device state carries the "missing" marker a dead disk publishes in
 	// place of its rates, so it must survive into the readings the dashboard
 	// reads for its state column.
-	rb := readingsFrom(data).
+	return readingsFrom(data).
 		addString(checks.DataKeyDevice, watchReadingLabelDevice).
 		addString(checks.DataKeyBus, watchReadingLabelBus).
-		addString(checks.DataKeyDeviceState, watchReadingLabelState)
-	for _, field := range []struct {
-		key, label, unit string
-		decimals         int
-	}{
-		{checks.DiskIOFieldUtilPct, watchReadingLabelUtilization, metrics.MetricUnitPercent, watchReadingDefaultMetricDecimals},
-		{checks.DiskIOFieldReadBytes, watchReadingLabelRead, metrics.MetricUnitBytesPerSecond, 0},
-		{checks.DiskIOFieldWriteBytes, watchReadingLabelWrite, metrics.MetricUnitBytesPerSecond, 0},
-		{checks.DiskIOFieldAwaitMs, watchReadingLabelAwait, metrics.MetricUnitMilliseconds, 1},
-		// Cumulative totals close the question a window of zeroes leaves open:
-		// whether the device is merely idle or has never been used at all.
-		{checks.DiskIOFieldReadTotalBytes, watchReadingLabelReadTotal, metrics.MetricUnitBytes, 0},
-		{checks.DiskIOFieldWriteTotalBytes, watchReadingLabelWriteTotal, metrics.MetricUnitBytes, 0},
-	} {
-		rb.addMetric(field.key, field.label, field.decimals, field.unit)
-	}
-	return rb.readings()
+		addString(checks.DataKeyDeviceState, watchReadingLabelState).
+		addDeviceIdentity().
+		addMetrics(diskIOReadingMetrics).
+		addLastKnown(diskIOReadingMetrics).
+		readings()
+}
+
+// diskIOReadingMetrics are the rate and total rows a disk I/O sample renders.
+// The cumulative totals close the question a window of zeroes leaves open:
+// whether the device is merely idle or has never been used at all.
+var diskIOReadingMetrics = []checks.GraphMetric{
+	{Key: checks.DiskIOFieldUtilPct, Label: watchReadingLabelUtilization, Unit: metrics.MetricUnitPercent, Decimals: watchReadingDefaultMetricDecimals},
+	{Key: checks.DiskIOFieldReadBytes, Label: watchReadingLabelRead, Unit: metrics.MetricUnitBytesPerSecond},
+	{Key: checks.DiskIOFieldWriteBytes, Label: watchReadingLabelWrite, Unit: metrics.MetricUnitBytesPerSecond},
+	{Key: checks.DiskIOFieldAwaitMs, Label: watchReadingLabelAwait, Unit: metrics.MetricUnitMilliseconds, Decimals: 1},
+	{Key: checks.DiskIOFieldReadTotalBytes, Label: watchReadingLabelReadTotal, Unit: metrics.MetricUnitBytes},
+	{Key: checks.DiskIOFieldWriteTotalBytes, Label: watchReadingLabelWriteTotal, Unit: metrics.MetricUnitBytes},
 }
 
 // sensorsCheckReadings prepends the matching-input count and the configured
@@ -822,31 +896,40 @@ func sensorsCheckReadings(data map[string]any) []web.WatchReading {
 }
 
 func metricCheckReadings(checkType string, data map[string]any) []web.WatchReading {
-	rb := readingsFrom(data).
+	graphMetrics := checks.GraphMetrics(checkType)
+	return readingsFrom(data).
 		addString(checks.DataKeyDevice, watchReadingLabelDevice).
 		addString(checks.DataKeyBus, watchReadingLabelBus).
 		addString(checks.DataKeyResult, watchReadingLabelResult).
 		addString(checks.DataKeyDeviceState, watchReadingLabelState).
-		addString(checks.DataKeyHealth, watchReadingLabelHealth)
-	for _, m := range checks.GraphMetrics(checkType) {
-		// numericData (not a bare float64 assertion) so integer-valued metrics
-		// still render — count checks such as users/process_count store their
-		// DataKeyCount as an int, the same coercion the graph recorder uses.
-		v, ok := numericData(data[m.Key])
-		if !ok {
-			continue
-		}
-		value := watchReadingMetricValue(v, m.Decimals, m.Unit)
-		if m.Unit == metrics.MetricUnitHours && v >= 0 && v <= float64(maxWatchReadingDuration)/float64(time.Hour) {
-			value = units.HumanizeDuration(time.Duration(v * float64(time.Hour)))
-		}
-		label := m.Label
-		if label == "" {
-			label = m.Key
-		}
-		rb.add(m.Key, label, value)
-	}
-	return rb.readings()
+		addString(checks.DataKeyHealth, watchReadingLabelHealth).
+		addDeviceIdentity().
+		addMetrics(graphMetrics).
+		addLastKnown(graphMetrics).
+		readings()
+}
+
+// smartCheckReadings renders one drive's SMART report: what the disk is, what
+// its health verdict and attributes say, and — when smartctl could not reach it
+// — what it last said before it went quiet. Identity comes first among the
+// static rows because a failed drive's first question is which one to pull.
+func smartCheckReadings(data map[string]any) []web.WatchReading {
+	graphMetrics := checks.GraphMetrics(checks.CheckTypeSmart)
+	return readingsFrom(data).
+		addString(checks.DataKeyDevice, watchReadingLabelDevice).
+		addString(checks.DataKeyBus, watchReadingLabelBus).
+		// A manual probe starts a self-test rather than sampling one, and says so
+		// through DataKeyResult; the scheduled cycle never sets it.
+		addString(checks.DataKeyResult, watchReadingLabelResult).
+		addString(checks.DataKeyDeviceState, watchReadingLabelState).
+		addMetric(checks.DataKeyProgressPct, watchReadingLabelProgress, watchReadingProgressDecimals, metrics.MetricUnitPercent).
+		addString(checks.DataKeyHealth, watchReadingLabelHealth).
+		addDeviceIdentity().
+		addMetrics(graphMetrics).
+		addInt(checks.DataKeyPowerCycles, watchReadingLabelPowerCycles).
+		addString(checks.DataKeySelfTest, watchReadingLabelSelfTest).
+		addLastKnown(graphMetrics).
+		readings()
 }
 
 // metricValueCheckReadings surfaces the value a `metric` check observed and

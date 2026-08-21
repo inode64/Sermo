@@ -28,6 +28,7 @@
   - [Límites de inotify (inotify)](#límites-de-inotify-inotify)
   - [Rendimiento de disco (hdparm)](#rendimiento-de-disco-hdparm)
   - [Dispositivos ausentes](#dispositivos-ausentes)
+  - [Qué informa un dispositivo que dejó de responder](#qué-informa-un-dispositivo-que-dejó-de-responder)
   - [Sensores de hardware](#sensores-de-hardware)
   - [Autofs](#autofs)
   - [Count](#count)
@@ -75,7 +76,7 @@ Las comprobaciones de protocolo de conexión (MySQL, PostgreSQL, Redis, Docker, 
 | `process_count` | el número de procesos (de todo el host, o filtrado por `user`/`exe`/`exe_dir`) satisface `count {op, value}`|
 | `hdparm`      | el rendimiento de lectura `hdparm` de un disco cruza un umbral (`read`/`cached` MB/s) (ver Rendimiento de disco)|
 | `sensors`     | los sensores de hardware hwmon cruzan un umbral (`temp` °C / `fan` RPM / `voltage` V) (ver Sensores de hardware)|
-| `smart`       | la salud/atributos SMART de una unidad (veredicto fallido, `reallocated`, `wear`, `temperature`) (ver Sensores de hardware)|
+| `smart`       | la salud/atributos e identidad SMART de una unidad (veredicto fallido, `reallocated`, `pending_sectors`, `crc_errors`, `media_errors`, `wear`, `temperature`) (ver Sensores de hardware)|
 | `raid`        | un array RAID por software md de Linux está degradado/recuperándose (`degraded`/`recovering`/`arrays`) (ver Sensores de hardware)|
 | `edac`        | errores de memoria ECC desde EDAC (`ce` corregibles / `ue` no corregibles) (ver Sensores de hardware)|
 | `memory`      | RAM del sistema frente a MemAvailable del kernel (used_pct/available_pct/available_bytes) |
@@ -2238,11 +2239,42 @@ le da tamaño (`/sys/class/block/<device>/size` ausente o `0`), el check publica
 **`missing`**: una observación *no disponible*, nunca una correcta. El panel
 muestra `missing` como estado y salud del watch, y la fila se lee como fallo.
 `diskio` consulta sysfs sólo en una ventana que no movió nada, así que un disco
-con tráfico nunca paga la consulta.
+con tráfico nunca paga la consulta. La fila no se queda por lo demás vacía: ver
+[Qué informa un dispositivo que dejó de
+responder](#qué-informa-un-dispositivo-que-dejó-de-responder).
 
 Un dispositivo `missing` está no disponible, no disparando, así que — como toda
 observación no disponible — nunca activa acciones automáticas. Se informa a
 través del evento `error` del watch y del panel.
+
+### Qué informa un dispositivo que dejó de responder
+
+Una muestra no disponible es justo el momento en que un operador más necesita
+saber *qué* disco es, así que `smart`, `hdparm` y `diskio` no se limitan a la
+palabra `missing`.
+
+La **identidad** viene de sysfs, que sigue publicando lo que el kernel aprendió
+de la última identificación correcta de la unidad mucho después de que ésta deje
+de responder: `model`, `serial_number`, `firmware`, `wwn` (el World Wide Name,
+tal como lo escribe `/dev/disk/by-id`) y `rotation_rate`, el medio que usa la
+unidad. `capacity_bytes` es la excepción — sysfs da tamaño 0 a un dispositivo
+muerto —, así que sólo se informa mientras el dispositivo siga teniendo tamaño.
+Una muestra `smart` que *sí* alcanzó la unidad
+usa en su lugar la respuesta más rica de smartctl, de donde sale el número de
+serie completo: sysfs trunca el modelo SATA a 16 caracteres y no publica número
+de serie para él.
+
+Las **últimas lecturas conocidas** vienen de la memoria del propio check sobre la
+muestra más reciente que el dispositivo respondió: `last_health` y un
+`last_<campo>` por lectura, fechados por `last_seen_seconds`. Se publican
+deliberadamente bajo claves propias y etiquetadas `(last)` en el panel, nunca
+bajo la clave viva, porque el registrador grafica todo número que lleve un
+resultado: republicar la temperatura final de una unidad muerta como
+`temperature` dibujaría una línea plana en ese valor para siempre.
+
+Esa memoria pertenece al check en ejecución, así que está vacía tras reiniciar el
+daemon: Sermo informa sólo de muestras que realmente tomó. La identidad sobrevive
+al reinicio porque quien la recuerda es el kernel, no Sermo.
 
 ### Sensores de hardware
 
@@ -2265,13 +2297,30 @@ servicio de modo que la degradación gradual es visible.
       fan: { op: "<", value: 400 }   # optional: alert on a stalled fan
   ```
 
-- **`smart`** — la salud **SMART** de una unidad vía `smartctl -j` (necesita smartmontools
-  y root). Sin predicado alerta cuando el veredicto SMART general es
-  **FAILED**; los predicados añaden `temperature` (°C), `reallocated` (recuento de sectores, un
-  signo de fallo de HDD), `wear` (porcentaje usado de SSD/NVMe) y `power_on_hours`.
-  Complementa `hdparm` (rendimiento) con predicción de fallos. Una unidad que
-  `smartctl` no puede abrir ni identificar se informa como **missing** y no
-  disponible — ver [Dispositivos ausentes](#dispositivos-ausentes).
+- **`smart`** — la salud **SMART** de una unidad vía
+  `smartctl -i -H -A -c -l selftest -j` (necesita smartmontools y root). Sin
+  predicado alerta cuando el veredicto SMART general es **FAILED**; los
+  predicados añaden `temperature` (°C), `reallocated` (recuento de sectores, un
+  signo de fallo de HDD), `pending_sectors` (sectores que la unidad no pudo leer
+  y aún no ha logrado reasignar — el recuento que sube *antes* que
+  `reallocated`), `crc_errors` (transferencias corruptas en el propio enlace, que
+  culpan al cable o al backplane y no al medio), `media_errors` (el equivalente
+  NVMe de `reallocated`: las unidades NVMe no publican tabla de atributos),
+  `wear` (porcentaje usado de SSD/NVMe) y `power_on_hours`. Complementa `hdparm`
+  (rendimiento) con predicción de fallos.
+
+  Cada muestra lleva además **qué es** la unidad — `model`, `serial_number`,
+  `firmware`, `wwn`, `capacity_bytes` y `rotation_rate` —, más `power_cycles` y
+  `self_test`, el veredicto de la propia unidad sobre el último autotest que
+  ejecutó y la hora de vida a la que lo hizo. Eso identifica el disco que un
+  operador tiene que sacar de la bahía, cosa que un nodo de dispositivo no hace.
+  `rotation_rate` es la cifra de la propia unidad (`7200 rpm`, o `SSD` para
+  flash); una unidad NVMe no informa ninguna, así que la sustituye la respuesta
+  más gruesa del kernel (`rotational` o `SSD`). Es lo que da sentido al resto de
+  lecturas: en flash el número que importa es `wear`, en platos `reallocated`.
+  Una unidad que `smartctl`
+  no puede abrir ni identificar se informa como **missing** y no disponible — ver
+  [Dispositivos ausentes](#dispositivos-ausentes).
 
   ```yaml
   checks:
@@ -2279,8 +2328,10 @@ servicio de modo que la degradación gradual es visible.
       type: smart
       device: /dev/nvme0
       interval: 1h
-      reallocated: { op: ">", value: 0 }   # any reallocated sector
-      wear: { op: ">", value: 90 }         # SSD/NVMe nearly worn out
+      reallocated: { op: ">", value: 0 }       # any reallocated sector
+      pending_sectors: { op: ">", value: 0 }   # unreadable sectors awaiting reallocation
+      crc_errors: { op: ">", value: 0 }        # link errors: suspect the cable
+      wear: { op: ">", value: 90 }             # SSD/NVMe nearly worn out
   ```
 
 - **`raid`** — **RAID por software md** de Linux desde `/proc/mdstat` y datos de

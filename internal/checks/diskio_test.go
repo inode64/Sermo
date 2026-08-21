@@ -204,10 +204,12 @@ func diskIOWithSize(sampler DiskIOSamplerFunc, sectors uint64, sampleErr error) 
 		base:    base{name: "io", timeout: time.Second},
 		device:  "sda",
 		sampler: sampler,
-		deviceSize: func(string) (uint64, error) {
-			return sectors, sampleErr
+		probe: deviceProbe{
+			size:     func(string) (uint64, error) { return sectors, sampleErr },
+			identity: testDeviceIdentity,
 		},
 		state: &diskIOState{},
+		last:  &lastSample{},
 		clock: func() time.Time {
 			now = now.Add(10 * time.Second)
 			return now

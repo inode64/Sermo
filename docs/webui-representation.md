@@ -500,7 +500,7 @@ latest completed daemon-cycle or manual sample, while Last activity is an event.
 | `net` | Name, interface, link, speed, errors |
 | `hdparm` | Name, device, bus, buffered read, cached read |
 | `lvm` | Name, health, VG, LV, VG size, VG free, reasons |
-| `smart` | Name, device, bus, health, temperature, wear, reallocated sectors, formatted power-on time |
+| `smart` | Name, device, bus, health, model, serial, firmware, WWN, medium, capacity, temperature, reallocated/pending sectors, link CRC and media errors, wear, formatted power-on time, power cycles, last self-test |
 | `diskio` | Name, device, bus, utilization, read, write, await, read total, written total (cumulative since boot, so an idle disk is distinguishable from one nothing ever touches) |
 | `cert` | Name, source, days left, expiry, issuer |
 | `raid` | Name, array, size, degraded, recovering |
@@ -511,6 +511,13 @@ normalises its own to `ok`/`error`, while `smart` reports the drive's verdict in
 smartctl's words. `ok` and `PASSED` read green, `unknown` — a drive that answered
 without a verdict — reads amber, and everything else, `FAILED` and `missing`
 included, reads red. A check with no health reading at all shows an em dash.
+
+A device that stopped answering keeps the rows that still hold: the drive's
+identity, read from sysfs, and the readings it last managed, each labelled
+`(last)` and dated by a `Last seen` row, so a historical value can never be read
+as a current one. The last-known readings live in the running check's memory, so
+they are absent after a daemon restart; the identity, which the kernel remembers,
+is not. See [Missing devices](rules.md#missing-devices).
 
 Those columns read the current watch readings published by the latest daemon
 cycle and rehydrated from persistent state after a daemon restart. File age is

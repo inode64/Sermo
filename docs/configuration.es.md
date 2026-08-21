@@ -2273,7 +2273,8 @@ la diferencia entre dos lecturas y una sola sería sólo una línea base; una so
 cambio, inicia el self-test corto del dispositivo con `smartctl --test=short
 DEVICE`. Que el comando se confirme con éxito significa que el self-test quedó
 programado, no que la unidad esté sana; los ciclos SMART programados siguen
-leyendo salud y atributos con `smartctl -H -A -c -j`. Mientras un self-test está
+leyendo la identidad, la salud, los atributos y el registro de autotests de la
+unidad con `smartctl -i -H -A -c -l selftest -j`. Mientras un self-test está
 en curso, el estado compartido Web/CLI es `testing`; muestras posteriores del
 daemon lo limpian cuando el dispositivo informa de que el test terminó. Los
 watches de RAID y LVM muestran igualmente el trabajo del dispositivo como
