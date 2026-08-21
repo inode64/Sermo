@@ -438,6 +438,7 @@
   .sla-bar-seg.sla-gap { background: repeating-linear-gradient(45deg, var(--line-2) 0 2px, transparent 2px 4px); }
   .sla-bars-axis { display: flex; justify-content: space-between; color: var(--text-2); font-size: .72rem; margin-top: .18rem; font-variant-numeric: tabular-nums; }
   .sla-incident-list { display: flex; flex-wrap: wrap; gap: .28rem .35rem; align-items: center; margin-top: .28rem; font-size: .82rem; font-variant-numeric: tabular-nums; }
+  .count-holder { display: inline-flex; align-items: baseline; gap: .3rem; border: 1px solid var(--line); border-radius: 999px; padding: .05rem .5rem; }
   .sla-incident { color: var(--crit); border: 1px solid color-mix(in srgb, var(--crit) 35%, var(--line)); background: color-mix(in srgb, var(--crit) 8%, transparent); border-radius: 999px; padding: .05rem .42rem; }
   .sla-count { color: var(--text-2); }
   .sla-pct { text-align: right; font-weight: 650; }

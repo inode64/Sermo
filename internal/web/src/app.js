@@ -3543,6 +3543,45 @@ function slaChartPanel(key) {
 // watchMetricDomID names one watch metric panel's summary or chart. It is
 // namespaced by the watch prefix like every other per-watch DOM id, so a watch
 // and a service that publish the same metric never collide.
+// hostCountHolders maps a host-wide count watch to the per-service field that
+// composes it. The host number says how many; only this says who — and both come
+// from data the dashboard already has, so naming the holders costs no request.
+const hostCountHolders = {
+  fds: { field: "fds", noun: "descriptors" },
+  pids: { field: "threads", noun: "threads" },
+};
+
+// holdersTopCount is how many services a holder list names before folding the
+// rest into a remainder. A leak is almost always one service, so the top few
+// answer the question and a longer list would bury the answer it gives.
+const holdersTopCount = 5;
+
+// renderCountHoldersSection names the services that make up a host-wide count.
+// A host with 879072 descriptors tells an operator nothing to act on; the same
+// host with "libvirtd 872172 (99%)" names the thing to look at. The figures are
+// the ones the service table already shows in its own column, and each name opens
+// that service, so this adds an answer rather than another reading of the count.
+function renderCountHoldersSection(w) {
+  const holder = hostCountHolders[w && w.check_type];
+  if (!holder) return nothing;
+  const held = (allServices || [])
+    .map((s) => ({ name: s.name, n: Number(s[holder.field]) || 0 }))
+    .filter((s) => s.n > 0)
+    .sort((a, b) => b.n - a.n);
+  if (!held.length) return nothing;
+  const total = held.reduce((sum, s) => sum + s.n, 0);
+  const shown = held.slice(0, holdersTopCount);
+  const rest = held.length - shown.length;
+  const rows = shown.map((s) => tpl`<span class="count-holder">
+    <button type="button" class="name row-toggle" data-service-open="${s.name}" aria-label="Open service ${s.name}">${s.name}</button>
+    <b>${fmtNum(s.n, 0)}</b> <span class="muted">${fmtPct(s.n / total * percentScale)}</span>
+  </span>`);
+  const more = rest > 0 ? tpl`<span class="muted">+${rest} more</span>` : nothing;
+  return tpl`<h3 class="expansion-heading">Held by</h3>
+    <div class="sla-incident-list">${rows}${more}</div>
+    <div class="muted">${fmtNum(total, 0)} ${holder.noun} attributed to monitored services.</div>`;
+}
+
 // watchMetricsWindowKey namespaces the window of a watch's Graphs section, apart
 // from the one its Availability section keeps: the two read different series, and
 // an operator comparing a threshold against uptime moves one without the other.
@@ -5756,7 +5795,7 @@ function renderWatchExpansion(w, events) {
     <div><span class="muted">Notifies</span><br>${notifiers}</div>
     <div><span class="muted">Dry run</span><br><b>${w.dry_run ? "yes" : "no"}</b></div>
   </div>`;
-  const live = tpl`${renderStorageWatch(w.storage)}${renderMeterWatch(w.meter)}${renderWatchReadings(w.readings)}${renderWatchMetricsSection(w)}${w.keeps_sla ? renderSLASection(watchSLAKey(w.name)) : nothing}`;
+  const live = tpl`${renderStorageWatch(w.storage)}${renderMeterWatch(w.meter)}${renderWatchReadings(w.readings)}${renderCountHoldersSection(w)}${renderWatchMetricsSection(w)}${w.keeps_sla ? renderSLASection(watchSLAKey(w.name)) : nothing}`;
   const conditions = renderConditionRows(w.conditions || []);
   if (!events || !events.length) return tpl`${cfg}${live}${conditions}<div class="muted">No recent activity.</div>`;
   const rows = events.slice(0, 50).map((e) => {

@@ -9,11 +9,11 @@ const services = [
   {
     name: "web", display_name: "Web server", category: "service", enabled: true,
     monitored: true, status: "active", state: "active", can_reload: true,
-    uptime_seconds: 7200, status_observed_at: "2026-07-10T12:00:00Z",
+    uptime_seconds: 7200, status_observed_at: "2026-07-10T12:00:00Z", fds: 4096,
   },
   {
     name: "db", display_name: "Database", category: "service", enabled: true,
-    monitored: true, status: "active", state: "started", can_reload: true,
+    monitored: true, status: "active", state: "started", can_reload: true, fds: 512,
     uptime_seconds: 10800, status_observed_at: "2026-07-10T12:00:00Z",
     last_event: { time: "2026-07-10T11:59:00Z", kind: "reload", message: "config reloaded" },
   },
@@ -65,6 +65,12 @@ const watches = [{
   scope: "service",
   enabled: true, monitored: true, state: "ok", check_type: "process",
   summary: "2 processes", interval: "1m", status_observed_at: "2026-07-10T12:00:00Z",
+}, {
+  name: "host-fds", display_name: "File descriptors", category: "system",
+  enabled: true, monitored: true, state: "ok", check_type: "fds",
+  summary: "fds 879072 allocated (no kernel limit)", interval: "1m",
+  status_observed_at: "2026-07-10T12:00:00Z",
+  readings: [{ field: "allocated", label: "Allocated", value: "879072" }],
 }, {
   name: "net-wan", display_name: "WAN", category: "network",
   enabled: true, monitored: true, state: "ok", check_type: "net", keeps_sla: true,
@@ -611,6 +617,21 @@ test("check SLA uses the service series endpoint and hatches unobserved time", a
   // bar before it must stay hatched rather than inherit the window's ratio.
   expect(await cell.locator(".sla-bar-seg.sla-gap").count()).toBeGreaterThan(0);
   await expect(cell.locator(".sla-count")).toHaveText("40/40");
+});
+
+// A host-wide count says how many; only the per-service breakdown says who. The
+// figures come from the service list the dashboard already holds, so the section
+// costs no request, and each name opens that service rather than just printing it.
+test("an fds watch names the services holding the descriptors", async ({ page }) => {
+  await page.locator("#wat-row-host-fds .row-toggle").click();
+  const held = page.locator('[id="exp-wat:host-fds"] .count-holder');
+  await expect(held.first()).toContainText("web");
+  // web holds 4096 of the 4608 attributed to services.
+  await expect(held.first()).toContainText("88.89%");
+  await expect(page.locator('[id="exp-wat:host-fds"]')).toContainText("Held by");
+
+  await held.first().locator("button").click();
+  await expect(page.locator('[data-service-detail="web"]')).toBeVisible();
 });
 
 // A host watch that publishes a numeric reading graphs it with the panel a

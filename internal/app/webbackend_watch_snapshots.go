@@ -37,10 +37,11 @@ func (b *WebBackend) watchSnapshotView(w *webWatch, system metrics.Snapshot) (*w
 		if !b.watchSnapshotCurrent(w, snap) || !watchSnapshotMetricConfigured(w, snap) {
 			continue
 		}
-		rs := watchSnapshotReadings(w.checkType, w.severityFor(cfgval.String(snap.Data[checks.DataKeyMetric])), snap)
+		snapMeter := watchMeterFromSnapshot(w.checkType, snap.Data)
+		rs := watchSnapshotReadings(w.checkType, w.severityFor(cfgval.String(snap.Data[checks.DataKeyMetric])), snap, snapMeter != nil)
 		readings = append(readings, rs...)
 		if meter == nil {
-			meter = watchMeterFromSnapshot(w.checkType, snap.Data)
+			meter = snapMeter
 		}
 		if summary := watchSnapshotSummary(snap, rs); summary != "" {
 			summaries = append(summaries, summary)
@@ -126,9 +127,17 @@ func (w *webWatch) severityFor(metric string) string {
 	return checks.ResolveSeverity(declared, w.severity)
 }
 
-func watchSnapshotReadings(checkType, severity string, snap CheckSnapshot) []web.WatchReading {
+// watchSnapshotReadings turns one snapshot into the rows its expansion shows.
+//
+// gauged says a meter will be drawn from this same snapshot. When one is, the
+// result line is not repeated below it: the gauge already states the count, the
+// ceiling and the utilisation, and the row above the expansion carries the same
+// sentence as its summary. An expansion earns its space by adding to the row, not
+// by restating it. A failure is never suppressed — that is not a repetition of
+// the gauge, it is the thing the gauge cannot say.
+func watchSnapshotReadings(checkType, severity string, snap CheckSnapshot, gauged bool) []web.WatchReading {
 	readings := checkReadings(checkType, snap.Data)
-	if len(readings) == 0 && snap.Message != "" {
+	if len(readings) == 0 && snap.Message != "" && !gauged {
 		readings = []web.WatchReading{{Field: watchReadingFieldResult, Label: watchReadingLabelResult, Value: snap.Message}}
 	}
 	if !snap.healthy() && snap.Message != "" {
