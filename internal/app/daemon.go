@@ -495,7 +495,7 @@ func buildWorker(ctx context.Context, name, unit string, tree map[string]any, de
 	// inside Discover, so the check costs one slice filter per cycle.
 	checkDeps.Strays = func() []process.Process { return process.Strays(processesForCycle()) }
 	sampleMetrics := metricSampler(name, tree, collector, pidsForCycle)
-	liveSample := liveSampler(name, deps.LiveCollector, deps.Live, deps.ServiceMetrics, pidsForCycle, deps.Now)
+	liveSample := liveSampler(name, deps.LiveCollector, deps.Live, deps.ServiceMetrics, processesForCycle, deps.Now)
 	if noResident {
 		liveSample = nil
 	}
@@ -1221,19 +1221,20 @@ func processPIDs(procs []process.Process) []int {
 // collector (deps.LiveCollector) so CPU rate deltas never collide with the
 // engine's metric sampling. Returns nil when no live/runtime destination is
 // wired.
-func liveSampler(service string, lc *metrics.Collector, live *LiveMetrics, serviceMetrics *ServiceMetricSampler, pids func() []int, now func() time.Time) func(context.Context) {
+func liveSampler(service string, lc *metrics.Collector, live *LiveMetrics, serviceMetrics *ServiceMetricSampler, procs func() []process.Process, now func() time.Time) func(context.Context) {
 	if lc == nil || (live == nil && serviceMetrics == nil) {
 		return nil
 	}
-	if pids == nil {
-		pids = func() []int { return nil }
+	if procs == nil {
+		procs = func() []process.Process { return nil }
 	}
 	if now == nil {
 		now = time.Now
 	}
 	return func(ctx context.Context) {
 		at := now()
-		pidList := pids()
+		procList := procs()
+		pidList := processPIDs(procList)
 		sc := lc.SampleServiceCPU(service, pidList)
 		sl := ServiceLive{
 			CPU:                 sc.CPU.Percent,
@@ -1259,7 +1260,7 @@ func liveSampler(service string, lc *metrics.Collector, live *LiveMetrics, servi
 			cur.CPUThread = sc.CPUThread.Percent
 			cur.HasCPU = true
 		}
-		if started, ok := oldestPIDStart(pidList, lc.Reader, at); ok {
+		if started, ok := serviceStartTime(procList, lc.Reader, at); ok {
 			cur.StartedAt, cur.Uptime, cur.UptimeSeconds = serviceRuntimeUptime(started, at)
 		}
 		serviceMetrics.record(ctx, service, cur)

@@ -309,7 +309,7 @@ func (b *WebBackend) probeServiceRuntime(name string, e *webEntry) web.ServiceRu
 		attachLiveTotals(totals, b.live, name)
 		cur.ProcessTotals = *totals
 	}
-	if started, ok := oldestProcessStart(procs, b.runtimeMetricReader(), now); ok {
+	if started, ok := serviceStartTime(procs, b.runtimeMetricReader(), now); ok {
 		cur.StartedAt, cur.Uptime, cur.UptimeSeconds = serviceRuntimeUptime(started, now)
 	}
 	return cur
@@ -326,13 +326,24 @@ type processStartReader interface {
 	ProcessStartTime(pid int) (time.Time, bool)
 }
 
-func oldestPIDStart(pids []int, r metrics.Reader, now time.Time) (time.Time, bool) {
-	if len(pids) == 0 {
-		return time.Time{}, false
-	}
-	procs := make([]process.Process, len(pids))
-	for i, pid := range pids {
-		procs[i] = process.Process{PID: pid}
+// serviceStartTime reports when the service itself started. It reads the
+// principal process — the backend's MainPID, a main pidfile, or a selector
+// explicitly named "main" — and only falls back to the oldest attributed process
+// when there is no unambiguous principal.
+//
+// The distinction is not cosmetic. A service's control group legitimately holds
+// workload the daemon does not own, and that workload routinely outlives a
+// restart: libvirtd's per-domain virtiofsd helpers had been running 74 days on a
+// host whose libvirtd had just been restarted, and the oldest member reported
+// that 74 days as libvirtd's uptime. selectPrimaryProcess already carries this
+// rule for restart notices; uptime now reads the same identity.
+func serviceStartTime(procs []process.Process, r metrics.Reader, now time.Time) (time.Time, bool) {
+	if sr, ok := r.(processStartReader); ok {
+		if principal, found := selectPrimaryProcess(procs); found {
+			if started, ok := sr.ProcessStartTime(principal.PID); ok && !started.IsZero() && !started.After(now) {
+				return started, true
+			}
+		}
 	}
 	return oldestProcessStart(procs, r, now)
 }

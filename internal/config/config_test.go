@@ -6062,6 +6062,89 @@ defaults: { policy: { cooldown: 5m } }
 	}
 }
 
+// TestEnableIfReadsSpacedAssignment covers config formats such as exim.conf's,
+// which pad the separator: `tls_on_connect_ports = 465`. Without it no gate can
+// be expressed against an exim option at all. The unpadded forms are asserted
+// alongside, because the padding skip must be a strict widening.
+func TestEnableIfReadsSpacedAssignment(t *testing.T) {
+	root := t.TempDir()
+	catalogDir := filepath.Join(root, "catalog", "services")
+	servicesDir := filepath.Join(root, "services")
+	for _, dir := range []string{catalogDir, servicesDir} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	tests := []struct {
+		name       string
+		configBody string
+		wantGated  bool
+	}{
+		{name: "spaced", configBody: "tls_on_connect_ports = 465\n", wantGated: true},
+		{name: "unpadded", configBody: "tls_on_connect_ports=465\n", wantGated: true},
+		{name: "tabs", configBody: "tls_on_connect_ports\t=\t465\n", wantGated: true},
+		{name: "spaced yaml", configBody: "tls_on_connect_ports : 465\n", wantGated: true},
+		{name: "empty value", configBody: "tls_on_connect_ports =\n", wantGated: false},
+		{name: "commented", configBody: "# tls_on_connect_ports = 465\n", wantGated: false},
+		{name: "absent", configBody: "daemon_smtp_ports = 25\n", wantGated: false},
+		{name: "prefix collision", configBody: "tls_on_connect_ports_extra = 465\n", wantGated: false},
+	}
+	for _, tt := range tests {
+		configPath := filepath.Join(root, strings.ReplaceAll(tt.name, " ", "-")+".conf")
+		if err := os.WriteFile(configPath, []byte(tt.configBody), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		catalogName := strings.ReplaceAll(tt.name, " ", "-")
+		body := fmt.Sprintf(`
+name: %s
+service: %s
+checks:
+  cert:
+    enable_if: { file: %q, key: tls_on_connect_ports, matches: "[0-9]" }
+    type: tcp
+    host: 127.0.0.1
+    port: 465
+`, catalogName, catalogName, configPath)
+		if err := os.WriteFile(filepath.Join(catalogDir, catalogName+".yml"), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		serviceName := "my-" + catalogName
+		serviceBody := fmt.Sprintf("name: %s\nuses: %s\n", serviceName, catalogName)
+		if err := os.WriteFile(filepath.Join(servicesDir, serviceName+".yml"), []byte(serviceBody), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	global := filepath.Join(root, "sermo.yml")
+	if err := os.WriteFile(global, fmt.Appendf(nil, `
+engine: { backend: auto }
+paths: { services: [ %s ], runtime: /run/sermo }
+defaults: { policy: { cooldown: 5m } }
+`, servicesDir), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(global, WithCatalogDirs(filepath.Dir(catalogDir)))
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			catalogName := strings.ReplaceAll(tt.name, " ", "-")
+			resolved, errs := cfg.Resolve("my-" + catalogName)
+			if len(errs) != 0 {
+				t.Fatalf("Resolve() errors = %v", errs)
+			}
+			checks, _ := resolved.Tree["checks"].(map[string]any)
+			_, gotGated := checks["cert"]
+			if gotGated != tt.wantGated {
+				t.Errorf("cert check present = %v, want %v", gotGated, tt.wantGated)
+			}
+		})
+	}
+}
+
 // TestEnableIfReadsYAMLBlockKey covers config formats such as cloudflared's,
 // where the gate key is a YAML block mapping rather than an OpenRC assignment.
 // The packaged cloudflared profile depends on it: `tunnel ingress validate`

@@ -541,8 +541,10 @@ metrics:
 
 A service check declares it the same way, beside `reports:` and `timeout:`.
 `optional: true` remains the older, narrower spelling: it also keeps a failure
-out of the service's availability, but only inside a `checks:` section and
-without the amber state or the warn-level log.
+out of the service's availability, and it emits no warn-level log, but only
+inside a `checks:` section. It does **not** keep the service out of the amber
+state — an optional check that fails still reads the service `warning`, which is
+what makes a mistuned threshold visible instead of silently swallowed.
 
 The measurements worth grading this way are the ones that **degrade** rather than
 break: `hdparm` throughput, `icmp` latency, and a `net` interface's error
@@ -2527,6 +2529,18 @@ threshold needs a metric with a percentage form (`memory`, `swap`, `cpu`,
 `swap`/`memory`/`total_memory`/`total_swap` also have an absolute byte form); a bare number needs an absolute form (everything else, including
 `io*`/`fds`/`threads`, which are absolute only). Reading another process's I/O or fd count
 requires privilege, so those sum only the processes the daemon can read.
+
+Because `io*`/`fds`/`threads` have no percentage form, a packaged threshold for
+them cannot be normalized to the host the way `memory` and `cpu_thread` are, and
+a service-scoped metric sums **every** process discovery attributes to the
+service, control-group members included. A catalog default is therefore a
+deliberately generous ceiling rather than a tuned number, and the host that needs
+a different one says so in `services.local/` (see
+[per-host overrides](configuration.md#per-host-overrides-dirlocal)). Where the
+control group holds workload the daemon does not own — a hypervisor's per-domain
+helpers, a container runtime's containers — a summed absolute count describes
+that workload rather than the daemon, so the catalog ships no such watch and
+host-wide exhaustion is alerted from a host watch instead.
 
 ## Rules
 

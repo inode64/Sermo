@@ -31,21 +31,15 @@ watches:
       cycles: 3
     then:
       action: restart
-  alert-if-fds-high:
-    check:
-      type: metric
-      scope: service
-      name: fds
-      op: '>'
-      value: 50000
-      optional: true
-    within:
-      cycles: 10
-      min_matches: 3
-    then:
-      action: alert
-      message: >-
-        During ${rule.duration}, ${display_name} file descriptor usage stayed above ${check.threshold} (current ${check.value})
+  # No fds watch: this service's control group legitimately holds workload the
+  # daemon does not own — libvirt's per-domain virtiofsd/swtpm helpers, Docker's
+  # containers and shims, glusterd's bricks — and a service-scoped metric sums
+  # every process discovery attributes to the service, control-group members
+  # included. RLIMIT_NOFILE is charged per process, so one summed count against
+  # one constant asserts something about the workload rather than about the
+  # daemon: on a live host libvirtd held 42 descriptors of its own against a
+  # >50k sum. The per-service fd series stays on the detail graphs; alert on a
+  # host watch for host-wide exhaustion.
   alert-if-memory-high:
     check:
       type: metric

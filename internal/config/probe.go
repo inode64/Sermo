@@ -15,6 +15,10 @@ const (
 	directiveMinFields  = directiveValueIndex + 1
 	confdAssignSep      = "="
 	yamlAssignSep       = ":"
+	// confdAssignPadding is what a host config file may put between a key and its
+	// assignment separator. Exim writes `key = value`; OpenRC and YAML write no
+	// padding at all.
+	confdAssignPadding  = " \t"
 	confdQuoteTrimSet   = `"'`
 	configLineSeparator = "\n"
 
@@ -82,10 +86,13 @@ func directiveValue(data []byte, key string) (string, bool) {
 // bare feature flag and is handled before these.
 var configAssignSeps = []string{confdAssignSep, yamlAssignSep}
 
-// configKeyValue returns the value of a KEY="val" or `key: val` assignment, or
-// an empty value for a bare KEY feature flag (which a YAML `key:` opening a
-// nested block also is). Surrounding quotes are stripped. ok=false when the file
-// is unreadable or the key is absent.
+// configKeyValue returns the value of a KEY="val", `key: val` or `key = val`
+// assignment, or an empty value for a bare KEY feature flag (which a YAML `key:`
+// opening a nested block also is). Optional spaces or tabs may sit between the
+// key and its separator, which is how exim.conf writes its options. Surrounding
+// quotes are stripped; a trailing comment is not, so prefer `matches:` over
+// `equals:` on a file that writes them. ok=false when the file is unreadable or
+// the key is absent.
 func configKeyValue(path, key string) (string, bool) {
 	data, err := os.ReadFile(path) //nolint:gosec // G304: OpenRC conf.d path from catalog service unit
 	if err != nil {
@@ -96,9 +103,17 @@ func configKeyValue(path, key string) (string, bool) {
 		if line == key {
 			return "", true
 		}
+		rest, cut := strings.CutPrefix(line, key)
+		if !cut {
+			continue
+		}
+		// Skip padding only after the key matched at line start, so a longer key
+		// that merely shares a prefix (`portable=1` against `port`) still needs a
+		// separator right where the key ends and cannot match.
+		rest = strings.TrimLeft(rest, confdAssignPadding)
 		for _, sep := range configAssignSeps {
-			if rest, ok := strings.CutPrefix(line, key+sep); ok {
-				return strings.Trim(strings.TrimSpace(rest), confdQuoteTrimSet), true
+			if value, ok := strings.CutPrefix(rest, sep); ok {
+				return strings.Trim(strings.TrimSpace(value), confdQuoteTrimSet), true
 			}
 		}
 	}

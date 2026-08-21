@@ -1877,6 +1877,76 @@ func TestCatalogDaemonProcessChecksAreAuxiliary(t *testing.T) {
 // named one packaged layout and the host used another. A resolved tree collapses
 // a candidate list to whichever path exists there, which is host-dependent, so
 // the invariant is asserted on the raw documents.
+// TestCatalogEximCertGatedOnImplicitTLS pins the gate that stopped a healthy
+// Exim reading warning forever. Asserted on the raw document because a resolved
+// tree prunes the gate on any host without /etc/exim/exim.conf, this one
+// included.
+func TestCatalogEximCertGatedOnImplicitTLS(t *testing.T) {
+	root := repoRoot(t)
+	exim := catalogDocByName(t, root, "services", "exim")
+	gate := nested(t, exim, "watches", "cert", "enable_if")
+	if got := cfgval.String(gate["key"]); got != "tls_on_connect_ports" {
+		t.Fatalf("exim cert gate key = %q, want tls_on_connect_ports", got)
+	}
+	// enable_if is evaluated before ${var} expansion, so the gate repeats the
+	// literal default of `config` and must not drift from it.
+	wantFile := cfgval.String(nested(t, exim, "variables")["config"])
+	if got := cfgval.String(gate["file"]); got != wantFile {
+		t.Fatalf("exim cert gate file = %q, want the config variable default %q", got, wantFile)
+	}
+	port := nested(t, exim, "variables", "tls_port")
+	if got := cfgval.String(port["from_file"]); got != "${config}" {
+		t.Fatalf("exim tls_port from_file = %q, want ${config}", got)
+	}
+	if got := cfgval.String(port["default"]); got != "465" {
+		t.Fatalf("exim tls_port default = %q, want 465", got)
+	}
+}
+
+// TestCatalogServiceIOAlertsShareOneCeiling stops the sampled-telemetry
+// thresholds coming back. They were one host's live readings — 451 B/s for ssh
+// against 32 MB/s for ceph-osd — so nearly every service alerted on normal work.
+func TestCatalogServiceIOAlertsShareOneCeiling(t *testing.T) {
+	const ceiling = "104857600"
+	walkCatalogDocs(t, filepath.Join(repoRoot(t), "catalog", "services"), func(path string, body map[string]any) {
+		watches, _ := body["watches"].(map[string]any)
+		for name, raw := range watches {
+			entry, ok := raw.(map[string]any)
+			if !ok {
+				continue
+			}
+			check, _ := entry["check"].(map[string]any)
+			if cfgval.String(check["name"]) != "io" || cfgval.String(check["scope"]) != "service" {
+				continue
+			}
+			if got := cfgval.String(check["value"]); got != ceiling {
+				t.Errorf("%s watch %s: io threshold = %q, want the shared ceiling %s", path, name, got, ceiling)
+			}
+		}
+	})
+}
+
+// TestCatalogDelegatedWorkloadServicesDoNotSumFDs keeps a summed fd count out of
+// the services whose control group holds workload the daemon does not own, where
+// the sum describes the workload rather than the daemon.
+func TestCatalogDelegatedWorkloadServicesDoNotSumFDs(t *testing.T) {
+	root := repoRoot(t)
+	for _, service := range []string{"libvirtd", "virtnetworkd", "docker", "containerd"} {
+		body := catalogDocByName(t, root, "services", service)
+		watches, _ := body["watches"].(map[string]any)
+		for name, raw := range watches {
+			entry, ok := raw.(map[string]any)
+			if !ok {
+				continue
+			}
+			check, _ := entry["check"].(map[string]any)
+			if cfgval.String(check["name"]) == "fds" && cfgval.String(check["scope"]) == "service" {
+				t.Errorf("%s: watch %s sums fds over a control group holding delegated workload", service, name)
+			}
+		}
+	}
+}
+
 func TestCatalogCandidatePathsCoverPackagedLayouts(t *testing.T) {
 	root := repoRoot(t)
 
