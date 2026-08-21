@@ -3547,20 +3547,13 @@ function renderSLASection(key) {
 // windowed graph shares. The three surfaces differ only in the request
 // slaPanelAPI builds, so their panels cannot drift apart in what they draw.
 function loadSLAPanel(key, generation = dashboardGeneration) {
-  const summary = document.getElementById(detailDomId(key, "sla-summary"));
-  const chart = document.getElementById(detailDomId(key, "sla-chart"));
-  if (!summary || !chart) return Promise.resolve(true);
-  return loadServiceWindowGraph(key, generation,
+  return loadMetricPanel(key, detailDomId(key, "sla-summary"), detailDomId(key, "sla-chart"), generation,
     (win) => slaPanelAPI(key, win),
     (body, win) => {
       const points = body.points || [];
-      summary.innerHTML = slaTimelineSummary(points);
-      chart.innerHTML = drawSLAChart(points, win);
+      return { summary: slaTimelineSummary(points), chart: drawSLAChart(points, win) };
     },
-    (e) => {
-      summary.innerHTML = `<span class="bad">Failed to load SLA: ${esc(e.message)}</span>`;
-      chart.innerHTML = "";
-    });
+    "SLA");
 }
 
 // setSLAWin switches the window of a standalone Availability section. A service
@@ -4062,6 +4055,36 @@ function runtimeMetricPanels(idFor) {
   return runtimeMetricDefs.map(({ key, label }) => tpl`<div class="metric-panel">
     ${metricPanelBody(idFor(key, "summary"), idFor(key, "chart"), label)}
   </div>`);
+}
+
+// paintMetricPanel writes one panel's two elements, and failMetricPanel reports
+// into that same pair. Every graph panel in the dashboard is filled through them,
+// so a failure is announced the same way everywhere instead of each loader
+// choosing its own wording and its own severity class.
+function paintMetricPanel(summaryID, chartID, summaryHTML, chartHTML) {
+  const summary = document.getElementById(summaryID);
+  const chart = document.getElementById(chartID);
+  if (summary) summary.innerHTML = summaryHTML;
+  if (chart) chart.innerHTML = chartHTML;
+}
+
+function failMetricPanel(summaryID, chartID, what, err) {
+  paintMetricPanel(summaryID, chartID, `<span class="bad">Failed to load ${esc(what)}: ${esc(err.message)}</span>`, "");
+}
+
+// loadMetricPanel fills one summary-plus-chart panel: it finds the pair, runs the
+// window protocol every graph shares and paints what content(body, win) returns as
+// {summary, chart}. The panels differ only in the request they make and the two
+// strings they produce, so they cannot drift apart in how they handle a stale
+// response, a missing element or a failure.
+function loadMetricPanel(windowKey, summaryID, chartID, generation, url, content, what) {
+  if (!document.getElementById(summaryID) || !document.getElementById(chartID)) return Promise.resolve(true);
+  return loadServiceWindowGraph(windowKey, generation, url,
+    (body, win) => {
+      const painted = content(body, win);
+      paintMetricPanel(summaryID, chartID, painted.summary, painted.chart);
+    },
+    (e) => failMetricPanel(summaryID, chartID, what, e));
 }
 
 // serviceRuntimeMetricDomID names one service runtime panel's summary or chart.
@@ -7433,62 +7456,52 @@ function metricSeriesSummary(series) {
 }
 
 function loadLatencyCheck(name, check, generation = dashboardGeneration) {
-  const summary = document.getElementById(serviceLatencyDomID(name, check, "summary"));
-  const chart = document.getElementById(serviceLatencyDomID(name, check, "chart"));
-  if (!summary || !chart) return Promise.resolve(true);
-  return loadServiceWindowGraph(name, generation,
+  return loadMetricPanel(name, serviceLatencyDomID(name, check, "summary"), serviceLatencyDomID(name, check, "chart"),
+    generation,
     (win) => serviceMetricsAPI(name, check, win),
     (body, win) => {
       // The unit travels with the series; latency used to assume milliseconds in
       // its summary while passing body.unit to its own chart.
       const unit = body.unit || metricUnitMilliseconds;
-      summary.innerHTML = metricSeriesSummary({ ...body, unit });
-      chart.innerHTML = drawMetricChart(body.points || [], unit, win, `Service latency chart (${check})`);
+      return {
+        summary: metricSeriesSummary({ ...body, unit }),
+        chart: drawMetricChart(body.points || [], unit, win, `Service latency chart (${check})`),
+      };
     },
-    (e) => {
-      summary.innerHTML = `<span class="muted">Failed to load latency (${esc(check)}): ${esc(e.message)}</span>`;
-      chart.innerHTML = "";
-    });
+    `latency (${check})`);
 }
 
 function loadCheckMetric(name, metric, generation = dashboardGeneration) {
-  const summary = document.getElementById(serviceCheckMetricDomID(name, metric.check, metric.name, "summary"));
-  const chart = document.getElementById(serviceCheckMetricDomID(name, metric.check, metric.name, "chart"));
-  if (!summary || !chart) return Promise.resolve(true);
-  return loadServiceWindowGraph(name, generation,
+  return loadMetricPanel(name,
+    serviceCheckMetricDomID(name, metric.check, metric.name, "summary"),
+    serviceCheckMetricDomID(name, metric.check, metric.name, "chart"),
+    generation,
     (win) => serviceMetricsAPI(name, metric.check, win, metric.name),
     (body, win) => {
       const unit = body.unit || metric.unit || "";
-      summary.innerHTML = metricSeriesSummary({ ...body, unit });
-      chart.innerHTML = drawMetricChart(body.points || [], unit, win, `${serviceCheckMetricLabel(metric)} chart`);
+      return {
+        summary: metricSeriesSummary({ ...body, unit }),
+        chart: drawMetricChart(body.points || [], unit, win, `${serviceCheckMetricLabel(metric)} chart`),
+      };
     },
-    (e) => {
-      summary.innerHTML = `<span class="muted">Failed to load ${esc(serviceCheckMetricLabel(metric))}: ${esc(e.message)}</span>`;
-      chart.innerHTML = "";
-    });
+    serviceCheckMetricLabel(metric));
 }
 
+// loadServiceRuntimeMetrics is the one loader that does not fit loadMetricPanel:
+// a single request fills all three runtime panels. It paints and fails through the
+// same two helpers, so the panels still report identically to every other one.
 function loadServiceRuntimeMetrics(name, generation = dashboardGeneration) {
-  const setAll = (msg) => runtimeMetricDefs.forEach(({ key }) => {
-    const summary = document.getElementById(detailDomId(name, `runtime-${key}-summary`));
-    const chart = document.getElementById(detailDomId(name, `runtime-${key}-chart`));
-    if (summary) summary.innerHTML = `<span class="muted">${esc(msg)}</span>`;
-    if (chart) chart.innerHTML = "";
-  });
+  const ids = (key) => [serviceRuntimeMetricDomID(name, key, "summary"), serviceRuntimeMetricDomID(name, key, "chart")];
   return loadServiceWindowGraph(name, generation,
     (win) => serviceRuntimeAPI(name, win),
     (body, win) => runtimeMetricDefs.forEach(({ key, label, unit }) => {
-      renderServiceRuntimeMetric(name, key, body[key], label, unit, win);
+      const series = body[key] || {};
+      const seriesUnit = series.unit || unit || "";
+      paintMetricPanel(...ids(key),
+        metricSeriesSummary({ ...series, unit: seriesUnit }),
+        drawMetricChart(series.points || [], seriesUnit, win, `${label} runtime metric chart`));
     }),
-    (e) => setAll("Failed to load runtime metrics: " + e.message));
-}
-
-function renderServiceRuntimeMetric(name, suffix, series, label, fallbackUnit, win) {
-  const summary = document.getElementById(detailDomId(name, `runtime-${suffix}-summary`));
-  const chart = document.getElementById(detailDomId(name, `runtime-${suffix}-chart`));
-  const unit = (series && series.unit) || fallbackUnit || "";
-  if (summary) summary.innerHTML = metricSeriesSummary({ ...(series || {}), unit });
-  if (chart) chart.innerHTML = drawMetricChart((series || {}).points || [], unit, win, `${label} runtime metric chart`);
+    (e) => runtimeMetricDefs.forEach(({ key, label }) => failMetricPanel(...ids(key), `${label} runtime metrics`, e)));
 }
 
 async function loadDaemonMetrics() {
@@ -7526,11 +7539,10 @@ function renderDaemonMetrics(body) {
   if (grid) litRender(runtimeMetricPanels(daemonMetricDomID), grid);
   runtimeMetricDefs.forEach(({ key, unit, chartLabel }) => {
     const series = body[key] || {};
-    const summary = document.getElementById(daemonMetricDomID(key, "summary"));
-    const chart = document.getElementById(daemonMetricDomID(key, "chart"));
-    const seriesUnit = series.unit || unit;
-    if (summary) summary.innerHTML = metricSeriesSummary({ ...series, unit: seriesUnit });
-    if (chart) chart.innerHTML = drawMetricChart(series.points || [], seriesUnit, daemonMetricWindow, chartLabel);
+    const seriesUnit = series.unit || unit || "";
+    paintMetricPanel(daemonMetricDomID(key, "summary"), daemonMetricDomID(key, "chart"),
+      metricSeriesSummary({ ...series, unit: seriesUnit }),
+      drawMetricChart(series.points || [], seriesUnit, daemonMetricWindow, chartLabel));
   });
 }
 
