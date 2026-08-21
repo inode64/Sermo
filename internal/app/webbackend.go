@@ -200,9 +200,6 @@ type WebBackend struct {
 	applications catalogInventoryCache
 	libraries    catalogInventoryCache
 
-	slaCacheMu sync.Mutex
-	slaCache   map[string]cachedSLATimelines
-
 	mountUsageMu     sync.Mutex
 	mountUsageAt     time.Time
 	mountUsage       map[string][]process.Process
@@ -306,7 +303,6 @@ func NewWebBackend(ctx context.Context, cfg *config.Config, deps Deps) (*WebBack
 		defaultTimeout:        deps.DefaultTimeout,
 		operationTimeout:      deps.OperationTimeout,
 		now:                   deps.Now,
-		slaCache:              map[string]cachedSLATimelines{},
 		probes:                map[string]time.Time{},
 		sessionMetricKeys:     map[string]struct{}{},
 		closedTerminalSources: map[string]time.Time{},

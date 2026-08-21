@@ -535,19 +535,26 @@ paneles es un requisito duro, no una preferencia.
 Cuando un concepto ya tiene una presentación en algún sitio, una superficie nueva
 que muestre ese mismo concepto adopta *esa* presentación entera — su marcado, su
 cargador, su forma de API y sus controles, incluido el selector de ventana
-temporal. Varios conceptos aquí traen a la vez un panel rico y un resumen
-compacto de sí mismos (la disponibilidad es el ejemplo trabajado: el panel de SLA
-por secciones del detalle de servicio con su selector `1h/24h/7d/30d/1y`, y la
-banda densa de `renderSLAWindows` que usa la tarjeta de una aplicación). El
-compacto es un resumen *del* panel, nunca un sustituto *para* él: echar mano de él
-porque son menos líneas produce una segunda presentación, más pobre, de un número
-que el operador ya sabe leer de una manera y ahora tiene que aprender dos veces.
-Extiende el propietario compartido cuando la superficie nueva necesite algo que
-el viejo no tenga; si reutilizar implica pasar un parámetro más o partir un helper
-en dos, hazlo en vez de escribir un camino paralelo. La prueba antes de añadir
-cualquier código de renderizado, carga o formateo es "qué función existente
-responde ya a esto, y por qué no puede responder aquí" — y la respuesta tiene que
-ser un obstáculo real, no que encontrarla lleve más tiempo que reescribirla.
+temporal. La disponibilidad es el ejemplo trabajado: `slaChartPanel` es el panel,
+`loadSLAPanel` lo rellena y `renderSLASection` añade el encabezado y el selector
+`1h/24h/7d/30d/1y`, y el detalle de servicio, un host watch y una aplicación
+dibujan a través de exactamente eso — difiriendo solo en la serie que pide
+`slaPanelAPI`. El panel llevó en su día una segunda banda de disponibilidad más
+densa al lado, así que el mismo número se leía de una manera en el detalle de un
+servicio y de otra dos clics después en la tarjeta de una aplicación, que no
+tenía selector de ventana alguno. Esa banda se borró en vez de mantenerse al día.
+Un resumen compacto es un resumen *del* panel, nunca un sustituto *para* él:
+echar mano de él porque son menos líneas produce una segunda presentación, más
+pobre, de un número que el operador ya sabe leer de una manera y ahora tiene que
+aprender dos veces. Extiende el propietario compartido cuando la superficie nueva
+necesite algo que el viejo no tenga; si reutilizar implica pasar un parámetro más
+o partir un helper en dos, hazlo en vez de escribir un camino paralelo. La prueba
+antes de añadir cualquier código de renderizado, carga o formateo es "qué función
+existente responde ya a esto, y por qué no puede responder aquí" — y la respuesta
+tiene que ser un obstáculo real, no que encontrarla lleve más tiempo que
+reescribirla.
+`TestSourceDrawsEveryAvailabilityPanelThroughOneRenderer` fija el caso de la
+disponibilidad: un segundo llamador de `drawSLAChart` tumba la gate.
 
 Concretamente, cada panel de datos es un `<details id="{name}-section">` con un
 `<summary>`, una fila flex opcional `#{name}-controls` (búsqueda + filtros + contador)
@@ -590,14 +597,19 @@ La capa visual es un sistema de diseño basado en tokens (rediseño de junio de 
 - **Status pills.** `.target-state` renderiza los estados como pills tintadas con un
   punto coloreado (`::before`, `currentColor`); `state-failed` pulsa. Los nuevos estados
   solo necesitan una clase de color `state-<name>`.
-- **SLA timeline strip.** `renderSLATimeline(segments, window)` renderiza una
-  banda contigua de disponibilidad estilo status-page — una celda `.sla-seg` por sub-span
-  igual (más antiguo a la izquierda), rayada `.sla-gap` donde no se observó ciclo.
-  `renderSLAWindows` la usa para cada ventana de SLA rodante; los registros
-  `{up, total, down_buckets}` por segmento vienen del backend
-  (`SLAWindow.Segments`) — `total: 0` es la señal de hueco y el ratio de
-  disponibilidad se deriva en el cliente. Reutilízala donde se necesite un
-  historial de disponibilidad compacto.
+- **SLA timeline strip.** `slaStrip(points, win)` renderiza una banda contigua
+  de disponibilidad estilo status-page — una celda `.sla-bar-seg` por sub-span
+  igual (más antiguo a la izquierda), rayada `.sla-gap` antes de la primera
+  observación, arrastrando el último estado observado por los sub-spans sin
+  muestra para que un objetivo continuamente arriba no se lea a rayas.
+  `drawSLAChart` la envuelve con el eje, la lista de incidentes y la tabla de
+  datos para un panel de SLA; `drawCheckSLAStrip` la envuelve con el ratio de la
+  ventana para la celda de un check. Ambas consumen los puntos por bucket
+  `{up, total, down_buckets}` de `.../sla?since=` — `total: 0` es la señal de
+  hueco y el ratio de disponibilidad se deriva en el cliente. Hay un solo panel a
+  su alrededor: `slaChartPanel` para el marcado, `loadSLAPanel` para el fetch y
+  `renderSLASection` cuando la única gráfica de la superficie es esta.
+  Reutilízalos en vez de dibujar la disponibilidad de una segunda forma.
   Las celdas se agrupan en bandas con `slaDownBand(slaDownPct(up, total))` — cinco
   niveles de severidad sobre la fracción del sub-span que estuvo **caída**, verde
   solo en exactamente cero — no con un umbral de disponibilidad. El historial

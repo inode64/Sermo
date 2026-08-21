@@ -66,16 +66,14 @@ type SLARecorder interface {
 	RecordCheckSLA(service, check string, up bool, at time.Time) error
 }
 
-// SLAReader reports a service's availability for the web detail view: the rolling
-// windows and the per-minute history series. Implemented by internal/state.Store.
+// SLAReader reports availability for the CLI report and the web: the rolling
+// window totals and the history series a timeline is drawn from. Implemented by
+// internal/state.Store.
 type SLAReader interface {
 	SLAReport(service string, now time.Time) ([]state.SLAValue, error)
 	SLASeries(service string, from, to time.Time) ([]state.SLAPoint, error)
 	CheckSLAReport(service, check string, now time.Time) ([]state.SLAValue, error)
 	CheckSLASeries(service, check string, from, to time.Time) ([]state.SLAPoint, error)
-	// SLATimelines has no check-scoped counterpart: the rolling windows are a
-	// service-level view, and a check's availability is read as a series.
-	SLATimelines(service string, now time.Time) ([]state.SLAWindowTimeline, error)
 }
 
 // MeasurementRecorder persists per-check observations per observed cycle: the

@@ -67,7 +67,7 @@ const watches = [{
   summary: "2 processes", interval: "1m", status_observed_at: "2026-07-10T12:00:00Z",
 }, {
   name: "net-wan", display_name: "WAN", category: "network",
-  enabled: true, monitored: true, state: "ok", check_type: "net",
+  enabled: true, monitored: true, state: "ok", check_type: "net", keeps_sla: true,
   summary: "wan state up", interval: "30s", status_observed_at: "2026-07-10T12:00:00Z",
 }, {
   name: "icmp-gateway", display_name: "Gateway", category: "network",
@@ -156,7 +156,7 @@ const watches = [{
 const applications = [{
   name: "nginx", display_name: "Nginx", category: "web", state: "ok",
   status: "ok", version: "1.28.0", version_short: "1.28.0",
-  observed_at: "2026-07-10T12:00:00Z",
+  observed_at: "2026-07-10T12:00:00Z", keeps_sla: true,
 }, {
   name: "postgres", display_name: "PostgreSQL", category: "data", state: "failed",
   status: "error: exit 1", version: "16.3", version_short: "16.3",
@@ -252,7 +252,8 @@ async function mockAPI(page) {
         else if (detailMatch) body = serviceDetail(decodeURIComponent(detailMatch[1]));
         else if (eventsMatch) body = [];
         else if (path.endsWith("/sla")) {
-          if (path.startsWith("/api/services/web/")) {
+          if (path.startsWith("/api/services/web/") || path.startsWith("/api/services/nginx/")
+            || path.startsWith("/api/watches/net-wan/")) {
             const now = Date.now();
             // A check's series is scoped with ?check= and is deliberately
             // distinct from the service's, so the strip cannot be passing by
@@ -597,6 +598,37 @@ test("check SLA uses the service series endpoint and hatches unobserved time", a
   // bar before it must stay hatched rather than inherit the window's ratio.
   expect(await cell.locator(".sla-bar-seg.sla-gap").count()).toBeGreaterThan(0);
   await expect(cell.locator(".sla-count")).toHaveText("40/40");
+});
+
+// An application and a host watch draw availability with the service's own
+// panel: the same band, the same 1h..1y selector, the same request protocol.
+// Only the series differs — an application reads the service it maps to, a watch
+// reads its own — which is what a separate, hand-rolled band used to obscure.
+test("application and watch availability reuse the service SLA panel", async ({ page }) => {
+  const appSeries = page.waitForRequest((request) => new URL(request.url()).pathname === "/api/services/nginx/sla");
+  await page.locator("#app-row-nginx .row-toggle").click();
+  await appSeries;
+  const appPanel = page.locator('[id="exp-app:nginx"]');
+  await expect(appPanel.locator("h2")).toContainText("Availability");
+  await expect(appPanel.locator(".sla-chart-panel .sla-bar-seg")).toHaveCount(90);
+  await expect(appPanel.locator('[data-window-kind="setSLAWin"]')).toHaveCount(5);
+
+  // The selector refetches on the window it names, exactly as a service's does.
+  const weekSeries = page.waitForRequest((request) => {
+    const url = new URL(request.url());
+    return url.pathname === "/api/services/nginx/sla" && url.searchParams.get("since") === "168h";
+  });
+  await appPanel.locator('[data-window-kind="setSLAWin"][data-window-value="168h"]').click();
+  await weekSeries;
+
+  const watchSeries = page.waitForRequest((request) => new URL(request.url()).pathname === "/api/watches/net-wan/sla");
+  await page.locator("#wat-row-net-wan .row-toggle").click();
+  await watchSeries;
+  await expect(page.locator('[id="exp-wat:net-wan"] .sla-chart-panel .sla-bar-seg')).toHaveCount(90);
+
+  // An application behind no monitored service has no availability to show.
+  await page.locator("#app-row-postgres .row-toggle").click();
+  await expect(page.locator('[id="exp-app:postgres"] .sla-chart-panel')).toHaveCount(0);
 });
 
 test("service detail graphs named check metrics and reports fetch failures", async ({ page }) => {

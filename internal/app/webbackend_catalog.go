@@ -119,16 +119,17 @@ func applicationStateFromReport(r appinspect.Report) string {
 	return TargetStateWarning
 }
 
+// withApplicationSLA marks each application that maps to a monitored service.
+// Its availability is that service's, so the dashboard draws it with the
+// service's own SLA panel and fetches it from the service's own endpoint; the
+// flag says only that there is one to fetch.
 func (b *WebBackend) withApplicationSLA(apps []web.Application) []web.Application {
 	if len(apps) == 0 {
 		return apps
 	}
 	out := slices.Clone(apps)
-	now := b.webNow()
 	for i := range out {
-		if b.entries[out[i].Name] != nil {
-			out[i].SLA = b.serviceSLAWindows(out[i].Name, now)
-		}
+		out[i].KeepsSLA = b.entries[out[i].Name] != nil
 	}
 	return out
 }
