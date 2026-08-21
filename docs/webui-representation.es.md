@@ -48,7 +48,9 @@ deterministas de la API.
 
 - La interfaz web es un único documento embebido: `internal/web/index.html`.
 - Los paneles de datos son tarjetas `<details>`. La página se desplaza como un todo; no añadas
-  barras de desplazamiento locales por panel.
+  barras de desplazamiento locales por panel. Ningún ancho hace que la página se
+  desplace lateralmente: las celdas anchas se envuelven o truncan en vez de
+  ensanchar su tabla.
 - Todo panel de datos lleva `class="panel"` (los estilos compartidos, como el
   atenuado de desconexión, apuntan a esa clase y no a una lista de ids). Los
   `<details>` de paneles de watches llevan además `data-panel="<clave>"` con el

@@ -200,7 +200,10 @@ function serviceDetail(name) {
     ...service,
     unit: `${name}.service`,
     interval: "30s",
-    checks: [{ name: "latency", type: "http", ran: true, ok: true, message: "status 200" }, ...namedMetrics],
+    checks: [{
+      name: "latency", type: "http", ran: true, ok: true,
+      message: "status 200 from https://internal-gateway.example.intranet:8443/healthz/deep?include=downstream,queue,storage&trace=verbose-diagnostic-identifier-0123456789",
+    }, ...namedMetrics],
     processes: [{
       pid: name === "web" ? 101 : 202, cmdline: [name], user: "root", role: "main", rss: 1048576,
       // 96.25% spread over threads, of which the busiest held 61.5% of one core:
@@ -609,7 +612,7 @@ test("check SLA uses the service series endpoint and hatches unobserved time", a
   const checkCellMinWidth = await cell.evaluate((strip) => getComputedStyle(strip.parentElement).minWidth);
   const expectedCheckCellMinWidth = await cell.evaluate((strip) => {
     const rem = parseFloat(getComputedStyle(document.documentElement).fontSize);
-    return Math.min(32 * rem, strip.ownerDocument.defaultView.innerWidth * 0.45);
+    return Math.min(24 * rem, strip.ownerDocument.defaultView.innerWidth * 0.30);
   });
   expect(parseFloat(checkBandHeight)).toBeCloseTo(parseFloat(serviceBandHeight), 1);
   expect(parseFloat(checkCellMinWidth)).toBeCloseTo(expectedCheckCellMinWidth, 1);
@@ -632,6 +635,29 @@ test("an fds watch names the services holding the descriptors", async ({ page })
 
   await held.first().locator("button").click();
   await expect(page.locator('[data-service-detail="web"]')).toBeVisible();
+});
+
+// The page never scrolls sideways: not on a phone, not on a tablet, not on a
+// laptop, and not while a row carries a warning reason, a long unbroken
+// diagnostic or an expanded detail. A wide cell wraps instead of widening the
+// table — the alternative is the whole dashboard deforming exactly when a
+// service fails, which is when it is being read.
+test("no viewport lets the page scroll sideways", async ({ page }) => {
+  for (const [width, height] of [[1440, 900], [1366, 768], [834, 1112], [412, 915]]) {
+    await page.setViewportSize({ width, height });
+    await page.locator("#svc-row-web .row-toggle").click();
+    await expect(page.locator('[data-service-detail="web"]')).toBeVisible();
+    await page.locator("#wat-row-net-wan .row-toggle").click();
+    await expect(page.locator('[id="exp-wat:net-wan"]')).toBeVisible();
+    const overflow = await page.evaluate(() => {
+      const doc = document.documentElement;
+      return doc.scrollWidth - doc.clientWidth;
+    });
+    expect(overflow, `${width}x${height} overflows by ${overflow}px`).toBe(0);
+    // close them again so the next width re-measures a fresh expansion
+    await page.locator("#svc-row-web .row-toggle").click();
+    await page.locator("#wat-row-net-wan .row-toggle").click();
+  }
 });
 
 // A host watch that publishes a numeric reading graphs it with the panel a
