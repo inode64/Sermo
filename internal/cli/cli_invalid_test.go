@@ -80,7 +80,7 @@ func TestCLIRejectsMalformedCommands(t *testing.T) {
 		{name: "activity extra", args: []string{"activity", "clear", "extra"}, want: "activity clear accepts only optional --before TIME"},
 		{name: "activity bad subcommand", args: []string{"activity", "list"}, want: "activity supports only"},
 		{name: "config validate service arg", args: []string{"config", "validate", "web"}, want: "config validate takes no service name"},
-		{name: "sla extra", args: []string{"sla", "web", "extra"}, want: "sla accepts at most one service name"},
+		{name: "sla extra", args: []string{"sla", "web", "extra"}, want: "sla accepts at most one service or watch name"},
 		{name: "state compact extra", args: []string{"state", "compact", "extra"}, want: "state supports only"},
 
 		{name: "wizard extra", args: []string{"wizard", "service", "extra"}, want: "wizard accepts at most one assistant name"},

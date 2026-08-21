@@ -445,29 +445,30 @@ func newCheckWatch(spec checkWatchSpec, deps Deps) *Watch {
 		spec.window.Clear = deps.GlobalClear
 	}
 	return &Watch{
-		Name:              spec.name,
-		CheckType:         spec.checkType,
-		Check:             spec.check,
-		Window:            spec.window,
-		Hook:              spec.actions.hook,
-		Notifiers:         resolveNotifiers(spec.actions.effectiveNames, deps.Notifiers),
-		RaidNotifyEvents:  spec.actions.raidNotifyEvents,
-		LVMNotifyOnChange: spec.actions.lvmNotifyOnChange,
-		NotifyInterval:    spec.actions.notifyInterval,
-		Emission:          spec.emission,
-		DryRun:            spec.dryRun,
-		Severity:          spec.severity,
-		Runner:            OSHookRunner{Runner: deps.ExecxRunner},
-		Interval:          spec.interval,
-		IsPaused:          monitorPaused(deps.Monitor, watchMonitorKey(spec.name)),
-		InPanic:           deps.Panic.Active,
-		Settling:          deps.Settling,
-		FireOnFail:        checks.IsHealthType(spec.checkType),
-		Now:               deps.Now,
-		Emit:              deps.Emit,
-		Publish:           publishWatchSnapshots(deps.WatchSnapshots),
-		StateStore:        deps.WatchState,
-		StateSlot:         spec.stateSlot,
+		Name:               spec.name,
+		CheckType:          spec.checkType,
+		Check:              spec.check,
+		Window:             spec.window,
+		Hook:               spec.actions.hook,
+		Notifiers:          resolveNotifiers(spec.actions.effectiveNames, deps.Notifiers),
+		RaidNotifyEvents:   spec.actions.raidNotifyEvents,
+		LVMNotifyOnChange:  spec.actions.lvmNotifyOnChange,
+		NotifyInterval:     spec.actions.notifyInterval,
+		Emission:           spec.emission,
+		DryRun:             spec.dryRun,
+		Severity:           spec.severity,
+		Runner:             OSHookRunner{Runner: deps.ExecxRunner},
+		Interval:           spec.interval,
+		IsPaused:           monitorPaused(deps.Monitor, watchMonitorKey(spec.name)),
+		InPanic:            deps.Panic.Active,
+		Settling:           deps.Settling,
+		FireOnFail:         checks.IsHealthType(spec.checkType),
+		Now:                deps.Now,
+		Emit:               deps.Emit,
+		Publish:            publishWatchSnapshots(deps.WatchSnapshots),
+		RecordAvailability: watchAvailabilityRecorder(deps, spec.name),
+		StateStore:         deps.WatchState,
+		StateSlot:          spec.stateSlot,
 	}
 }
 
@@ -1128,6 +1129,23 @@ func monitorWatch(name, checkType string, check checks.Check, notifierNames []st
 		Emit:       deps.Emit,
 		Publish:    publishWatchSnapshots(deps.WatchSnapshots),
 		StateStore: deps.WatchState,
+	}
+}
+
+// watchAvailabilityRecorder returns the availability sink for one watch, or nil
+// when the daemon has no SLA store.
+//
+// The series is keyed by WatchMonitorKey, the same "watch:<name>" spelling the
+// persisted monitor state already uses, so a watch and a service of the same
+// name never share a series and no schema change is needed to hold both. Errors
+// are swallowed on purpose: a full disk must not stop a link-down alert.
+func watchAvailabilityRecorder(deps Deps, name string) func(bool, time.Time) {
+	if deps.SLA == nil {
+		return nil
+	}
+	key := WatchMonitorKey(name)
+	return func(up bool, at time.Time) {
+		_ = deps.SLA.RecordSLA(key, up, at)
 	}
 }
 

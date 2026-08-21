@@ -124,6 +124,11 @@ The band says how much of the cell was affected, which is what separates a brief
 blip from a half-day outage. A cell with no observation at all stays a hatched
 `.sla-gap`, distinct from both — a gap is unmonitored time, not downtime.
 
+The same strip is drawn in three places: the service detail, an application card,
+and the expanded row of a host watch whose check asserts availability. A
+condition watch has no `sla` in its payload and renders no band at all, rather
+than an empty one, because a threshold being met is not downtime.
+
 Colour is never the only carrier of this (WCAG 2.2 1.4.1): each cell's `title` and
 `aria-label` state the availability, the down share and how many one-minute buckets
 inside it saw a failure, and the visually-hidden data table beside each strip

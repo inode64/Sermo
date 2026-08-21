@@ -132,6 +132,12 @@ breve de un corte de medio día. Una celda sin ninguna observación sigue siendo
 `.sla-gap` rayado, distinto de ambos: un hueco es tiempo sin monitorizar, no una
 caída.
 
+La misma banda se dibuja en tres sitios: el detalle del servicio, la tarjeta de
+una aplicación y la fila expandida de una vigilancia de host cuya comprobación
+afirma disponibilidad. Una vigilancia de condición no lleva `sla` en su payload y
+no dibuja banda alguna, en vez de una vacía, porque alcanzar un umbral no es
+downtime.
+
 El color nunca es el único portador de esto (WCAG 2.2 1.4.1): el `title` y el
 `aria-label` de cada celda indican la disponibilidad, la fracción caída y cuántos
 buckets de un minuto dentro de ella vieron un fallo, y la tabla de datos oculta
