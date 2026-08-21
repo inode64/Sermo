@@ -7405,6 +7405,18 @@ async function loadMetrics(name, measured, generation = dashboardGeneration) {
   return results.every(Boolean);
 }
 
+// metricSeriesSummary is the one summary line a measured series gets: average,
+// minimum and maximum, each through fmtMetricValue so the figures read exactly as
+// the chart's own axis and tooltips do. Latency, named check metrics and service
+// runtime metrics all use it — the panel's title already says which metric it is,
+// so the line carries only the numbers.
+function metricSeriesSummary(series) {
+  const summary = (series && series.summary) || {};
+  const unit = (series && series.unit) || "";
+  if (!summary.count) return '<span class="muted">No data yet for this window.</span>';
+  return `avg <b>${esc(fmtMetricValue(summary.avg, unit))}</b> · min ${esc(fmtMetricValue(summary.min, unit))} · max ${esc(fmtMetricValue(summary.max, unit))}`;
+}
+
 function loadLatencyCheck(name, check, generation = dashboardGeneration) {
   const summary = document.getElementById(serviceLatencyDomID(name, check, "summary"));
   const chart = document.getElementById(serviceLatencyDomID(name, check, "chart"));
@@ -7412,23 +7424,16 @@ function loadLatencyCheck(name, check, generation = dashboardGeneration) {
   return loadServiceWindowGraph(name, generation,
     (win) => serviceMetricsAPI(name, check, win),
     (body, win) => {
-      const s = body.summary || {};
-      summary.innerHTML = s.count
-        ? `avg <b>${fmtNum(s.avg, 2)}</b> ${metricUnitMilliseconds} &middot; min ${fmtNum(s.min, 2)} &middot; max ${fmtNum(s.max, 2)}`
-        : '<span class="muted">No latency data yet for this window.</span>';
-      chart.innerHTML = drawMetricChart(body.points || [], body.unit || metricUnitMilliseconds, win, `Service latency chart (${check})`);
+      // The unit travels with the series; latency used to assume milliseconds in
+      // its summary while passing body.unit to its own chart.
+      const unit = body.unit || metricUnitMilliseconds;
+      summary.innerHTML = metricSeriesSummary({ ...body, unit });
+      chart.innerHTML = drawMetricChart(body.points || [], unit, win, `Service latency chart (${check})`);
     },
     (e) => {
       summary.innerHTML = `<span class="muted">Failed to load latency (${esc(check)}): ${esc(e.message)}</span>`;
       chart.innerHTML = "";
     });
-}
-
-function metricSeriesSummary(series) {
-  const summary = (series && series.summary) || {};
-  const unit = (series && series.unit) || "";
-  if (!summary.count) return '<span class="muted">No data yet for this window.</span>';
-  return `avg <b>${esc(fmtMetricValue(summary.avg, unit))}</b> · min ${esc(fmtMetricValue(summary.min, unit))} · max ${esc(fmtMetricValue(summary.max, unit))}`;
 }
 
 function loadCheckMetric(name, metric, generation = dashboardGeneration) {
@@ -7467,7 +7472,7 @@ function renderServiceRuntimeMetric(name, suffix, series, label, fallbackUnit, w
   const summary = document.getElementById(detailDomId(name, `runtime-${suffix}-summary`));
   const chart = document.getElementById(detailDomId(name, `runtime-${suffix}-chart`));
   const unit = (series && series.unit) || fallbackUnit || "";
-  if (summary) summary.innerHTML = daemonMetricSummary(series, label);
+  if (summary) summary.innerHTML = metricSeriesSummary({ ...(series || {}), unit });
   if (chart) chart.innerHTML = drawMetricChart((series || {}).points || [], unit, win, `${label} runtime metric chart`);
 }
 
