@@ -14,6 +14,7 @@ package checks
 import (
 	"context"
 	"fmt"
+	"math"
 	"slices"
 	"sync"
 	"time"
@@ -520,8 +521,24 @@ func runThresholdCheck(b base, op string, value float64, sample func() (uint64, 
 // omits both fields so a predicate on them cannot hold, and free is clamped so a
 // count momentarily above the limit cannot underflow the unsigned subtraction.
 // A multi-dimension check (inotify) calls it once per dimension.
+// unlimitedCountMax is the kernel's "no limit" sentinel for a count ceiling:
+// fs.file-max reads LONG_MAX on a host that lifts the cap entirely.
+const unlimitedCountMax = uint64(math.MaxInt64)
+
+// countLimitUsable reports whether a sampled ceiling can carry a percentage.
+//
+// Zero means the kernel reported no ceiling at all; LONG_MAX or above means it
+// reported an unreachable one. Neither is a denominator. Against a ceiling
+// nothing can reach every utilisation rounds to zero, so a gauge built on it
+// could only ever say "plenty of headroom" and a threshold written against it
+// could never hold — a watch that looks green because it cannot speak. Where
+// there is no usable ceiling the count itself is the reading.
+func countLimitUsable(limit uint64) bool {
+	return limit > 0 && limit < unlimitedCountMax
+}
+
 func levelCountFields(values map[string]float64, pctField, freeField string, count, limit uint64) float64 {
-	if limit == 0 {
+	if !countLimitUsable(limit) {
 		return 0
 	}
 	usedPct := float64(count) / float64(limit) * percentScale
@@ -533,11 +550,34 @@ func levelCountFields(values map[string]float64, pctField, freeField string, cou
 func levelCountResult(b base, preds []levelPred, label, unit, countField string, count, limit uint64, start time.Time) Result {
 	values := map[string]float64{countField: float64(count)}
 	usedPct := levelCountFields(values, fieldUsedPct, fieldFree, count, limit)
-	res := b.result(levelPredsHold(preds, values), fmt.Sprintf("%s %d/%d %s (%.1f%%)", label, count, limit, unit, usedPct), start)
-	res.Data = map[string]any{countField: count, DataKeyMax: limit, fieldUsedPct: usedPct}
-	if limit > 0 {
+	res := b.result(levelPredsHold(preds, values), levelCountMessage(label, unit, count, limit, usedPct), start)
+	// Without a usable ceiling the percentage, the headroom and the ceiling
+	// itself are absent rather than zero. Reporting 0% would read as an idle
+	// resource, gauge it against a number nothing can reach, and record a series
+	// of flat zeros. The count is what the check has to say, so it is what the
+	// scalar carries too.
+	res.Data = map[string]any{countField: count}
+	fallback := float64(count)
+	if countLimitUsable(limit) {
+		res.Data[DataKeyMax] = limit
+		res.Data[fieldUsedPct] = usedPct
 		res.Data[fieldFree] = limit - min(count, limit)
+		fallback = usedPct
 	}
-	res.Data[DataKeyValue] = firstPredValue(preds, values, usedPct)
+	res.Data[DataKeyValue] = firstPredValue(preds, values, fallback)
 	return res
+}
+
+// levelCountMessage words one count-vs-limit sample, naming why a percentage is
+// missing when it is: an unreported ceiling and an unreachable one are different
+// facts about the host, and "0%" states neither.
+func levelCountMessage(label, unit string, count, limit uint64, usedPct float64) string {
+	switch {
+	case limit == 0:
+		return fmt.Sprintf("%s %d %s (limit unknown)", label, count, unit)
+	case limit >= unlimitedCountMax:
+		return fmt.Sprintf("%s %d %s (no kernel limit)", label, count, unit)
+	default:
+		return fmt.Sprintf("%s %d/%d %s (%.1f%%)", label, count, limit, unit, usedPct)
+	}
 }

@@ -134,3 +134,51 @@ func TestDeclaredGraphMetricUnitSeparatesUnitFromExistence(t *testing.T) {
 		})
 	}
 }
+
+// TestUnreachableCountLimitIsNotALimit pins what a count-vs-limit check reports
+// when the kernel gives it no ceiling to measure against: fs.file-max reads
+// LONG_MAX on a host that lifts the cap, and 879116 of 9223372036854775807 is
+// 0.0% — a gauge that could only ever say "plenty of headroom" and a used_pct
+// threshold that could never hold. The count becomes the reading instead.
+func TestUnreachableCountLimitIsNotALimit(t *testing.T) {
+	const allocated = uint64(879116)
+	for _, tc := range []struct {
+		name    string
+		limit   uint64
+		message string
+	}{
+		{"no kernel limit", unlimitedCountMax, "fds 879116 allocated (no kernel limit)"},
+		{"unreported limit", 0, "fds 879116 allocated (limit unknown)"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			res := levelCountResult(base{name: "fds"}, []levelPred{{fieldUsedPct, ">=", 80}},
+				"fds", "allocated", DataKeyAllocated, allocated, tc.limit, time.Now())
+			if res.Message != tc.message {
+				t.Errorf("message = %q, want %q", res.Message, tc.message)
+			}
+			for _, absent := range []string{fieldUsedPct, fieldFree, DataKeyMax} {
+				if v, ok := res.Data[absent]; ok {
+					t.Errorf("%s = %v, want absent: an unreachable ceiling is not a measurement", absent, v)
+				}
+			}
+			if res.Data[DataKeyAllocated] != allocated {
+				t.Errorf("allocated = %v, want %d", res.Data[DataKeyAllocated], allocated)
+			}
+			// The scalar is the count, not a percentage of nothing.
+			if res.Data[DataKeyValue] != float64(allocated) {
+				t.Errorf("value = %v, want the count %d", res.Data[DataKeyValue], allocated)
+			}
+			if res.OK {
+				t.Error("a used_pct predicate must not hold when there is no percentage")
+			}
+		})
+	}
+
+	// A real ceiling still gauges, still reports a percentage, and the scalar is
+	// that percentage.
+	res := levelCountResult(base{name: "conntrack"}, []levelPred{{fieldUsedPct, ">=", 80}},
+		"conntrack", "entries", DataKeyCount, 131072, 262144, time.Now())
+	if res.Data[fieldUsedPct] != 50.0 || res.Data[DataKeyMax] != uint64(262144) || res.Data[DataKeyValue] != 50.0 {
+		t.Fatalf("bounded sample = %+v", res.Data)
+	}
+}

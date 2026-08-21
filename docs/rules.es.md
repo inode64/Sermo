@@ -25,6 +25,7 @@
   - [Ruta por defecto (route)](#ruta-por-defecto-route)
   - [Reglas de firewall (firewall_rules)](#reglas-de-firewall-firewall_rules)
   - [Unidades de init fallidas (failed_units)](#unidades-de-init-fallidas-failed_units)
+  - [Un techo inalcanzable no es un techo](#un-techo-inalcanzable-no-es-un-techo)
   - [Límites de inotify (inotify)](#límites-de-inotify-inotify)
   - [Rendimiento de disco (hdparm)](#rendimiento-de-disco-hdparm)
   - [Dispositivos ausentes](#dispositivos-ausentes)
@@ -2151,6 +2152,32 @@ reiniciar una unidad arbitraria que Sermo no conoce no es una acción segura, as
 una unidad fallida se reporta y se deja intacta. Las claves de datos son `backend`,
 `count` y `units` (los nombres de unidad unidos), y el dashboard muestra las tres.
 
+### Un techo inalcanzable no es un techo
+
+`fds`, `pids` y `conntrack` miden un recuento contra un techo del kernel. Dos
+kernels no les dan nada contra lo que medir: uno que no reporta techo alguno y
+otro que reporta uno inalcanzable — `fs.file-max` marca `9223372036854775807` en
+un host que levanta el tope, y 879116 descriptores de eso es el `0.0%`.
+
+Ninguno es un denominador, así que ninguno produce porcentaje. La comprobación
+publica su recuento y dice por qué falta el resto — `fds 879116 allocated (no
+kernel limit)`, o `(limit unknown)` — y omite `used_pct`, `free` y el propio techo
+en vez de reportarlos como cero. El recuento es lo que lleva su escalar, el panel
+lo muestra como valor en lugar de como indicador, y no se graba ninguna serie
+plana de `0%`.
+
+La consecuencia conviene decirla claramente: **un umbral sobre `used_pct` no puede
+dispararse en un host así**. Nunca pudo — solo que antes parecía verde en vez de
+decirlo. Para vigilar descriptores ahí, escribe el umbral contra el recuento:
+
+```yaml
+watches:
+  watch-fds:
+    check:
+      type: fds
+      allocated: { op: ">", value: 2000000 }   # un recuento, no una parte de nada
+```
+
 ### Límites de inotify (`inotify`)
 
 La comprobación `inotify` reporta los dos límites del kernel por usuario,
@@ -2162,7 +2189,9 @@ los descriptores asignados de todo el sistema contra `fs.file-max`, que en un
 kernel moderno es prácticamente ilimitado, así que un host cuyo uid 0 retenía las
 `1024` instancias de inotify — cada login fallando al arrancar su gestor de
 usuario, cada bus de sesión fallando al inicializar inotify, `systemctl
-is-system-running` reportando `degraded` — seguía reportando `fds` al `0.0%`.
+is-system-running` reportando `degraded` — no mostraba nada en `fds`. Ya no lo
+reporta como `0.0%`; ver
+[Un techo inalcanzable no es un techo](#un-techo-inalcanzable-no-es-un-techo).
 
 ```yaml
 watches:
