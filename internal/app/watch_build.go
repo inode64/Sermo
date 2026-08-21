@@ -289,6 +289,7 @@ func buildSingleWatch(name string, entry, checkEntry map[string]any, deps Deps, 
 	w := newCheckWatch(checkWatchSpec{
 		name:      name,
 		checkType: typ,
+		unit:      cfgval.AsString(checkEntry[checks.CheckKeyUnit]),
 		check:     check,
 		window:    rules.ParseWindowRule(entry),
 		actions:   actions,
@@ -387,6 +388,7 @@ func buildMetricWatches(name string, entry, checkEntry map[string]any, deps Deps
 		out = append(out, newCheckWatch(checkWatchSpec{
 			name:      name,
 			checkType: cfgval.AsString(checkEntry[checks.CheckKeyType]),
+			unit:      cfgval.AsString(checkEntry[checks.CheckKeyUnit]),
 			check:     check,
 			window:    rules.ParseWindowRule(mEntry),
 			actions:   actions,
@@ -427,6 +429,9 @@ func withSeverity(entry map[string]any, severity string) map[string]any {
 type checkWatchSpec struct {
 	name      string
 	checkType string
+	// unit is the check block's `unit:`, which names the scalar the check
+	// publishes under `value` — the one metric whose unit cannot be static.
+	unit      string
 	check     checks.Check
 	window    rules.Rule
 	actions   watchActions
@@ -467,6 +472,7 @@ func newCheckWatch(spec checkWatchSpec, deps Deps) *Watch {
 		Emit:               deps.Emit,
 		Publish:            publishWatchSnapshots(deps.WatchSnapshots),
 		RecordAvailability: watchAvailabilityRecorder(deps, spec.name),
+		RecordMetrics:      watchMetricRecorder(deps, spec.name, spec.checkType, spec.unit),
 		StateStore:         deps.WatchState,
 		StateSlot:          spec.stateSlot,
 	}
@@ -1146,6 +1152,34 @@ func watchAvailabilityRecorder(deps Deps, name string) func(bool, time.Time) {
 	key := WatchMonitorKey(name)
 	return func(up bool, at time.Time) {
 		_ = deps.SLA.RecordSLA(key, up, at)
+	}
+}
+
+// watchMetricRecorder returns the numeric-series sink for one watch, or nil when
+// the daemon persists no measurements or the watch's check publishes no graphable
+// number.
+//
+// Series are keyed by WatchMonitorKey like availability, so a watch and a service
+// of the same name never share one. A watch has exactly one check, so its type
+// names the series the way a service's check name does. Errors are swallowed on
+// the same grounds availability swallows them: a full disk must not stop a
+// threshold from firing.
+func watchMetricRecorder(deps Deps, name, checkType, unit string) func(map[string]any, time.Time) {
+	recorder, ok := deps.SLA.(MeasurementRecorder)
+	if !ok || recorder == nil {
+		return nil
+	}
+	graphs := checks.DeclaredGraphMetrics(checkType, unit)
+	if len(graphs) == 0 {
+		return nil
+	}
+	key := WatchMonitorKey(name)
+	return func(data map[string]any, at time.Time) {
+		for _, metric := range graphs {
+			if value, ok := numericData(data[metric.Key]); ok {
+				_ = recorder.RecordMetric(key, checkType, metric.Key, value, at)
+			}
+		}
 	}
 }
 

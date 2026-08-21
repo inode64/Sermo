@@ -107,6 +107,10 @@ type Watch struct {
 	// disables it, and it is best-effort for the same reason Publish is: a full
 	// disk must not stop a link-down alert from firing.
 	RecordAvailability func(up bool, at time.Time)
+
+	// RecordMetrics persists this watch's numeric readings, for the check types
+	// that publish any. nil disables metric recording.
+	RecordMetrics func(data map[string]any, at time.Time)
 	// StateStore persists this watch's episode and pacing state. StateSlot
 	// distinguishes multiple result streams exposed under the same watch name.
 	StateStore WatchStateStore
@@ -204,6 +208,7 @@ func (w *Watch) runCheckCycle(ctx context.Context, res checks.Result, observeOnl
 		}
 		return
 	}
+	w.recordMetricSamples(res)
 	if observeOnly {
 		w.reconcileRestoredEpisode(res)
 		w.markSettled()
@@ -810,4 +815,20 @@ func (w *Watch) recordAvailabilitySample(res checks.Result) {
 		return
 	}
 	w.RecordAvailability(res.Observation().Healthy(), w.clock())
+}
+
+// recordMetricSamples persists one point of each numeric series this watch's
+// check publishes.
+//
+// Unlike availability it sits before the observe-only gate and applies no verdict
+// test, because a measurement is not a verdict: a settling cycle measured the
+// host just as truthfully as a live one, a `reports: state` sensor exists to be
+// read rather than judged, and an advisory's number is the reason it is advisory.
+// Only a check that could not run has nothing to record, and the caller has
+// already returned for that.
+func (w *Watch) recordMetricSamples(res checks.Result) {
+	if w.RecordMetrics == nil || len(res.Data) == 0 {
+		return
+	}
+	w.RecordMetrics(res.Data, w.clock())
 }

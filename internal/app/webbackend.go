@@ -101,10 +101,13 @@ type webEntry struct {
 
 // webWatch is a configured host-level or service-scoped watch for UI visibility.
 type webWatch struct {
-	name          string
-	displayName   string
-	category      string
-	checkType     string
+	name        string
+	displayName string
+	category    string
+	checkType   string
+	// checkUnit is the check block's `unit:`, the unit of the scalar it publishes
+	// under `value`. It names that series exactly as a service check's does.
+	checkUnit     string
 	interval      time.Duration
 	disabled      bool
 	monitorMode   string
@@ -523,6 +526,7 @@ func newWebWatch(name string, entry map[string]any, globalNotify []string, defau
 		displayName:   config.DisplayName(entry, name),
 		category:      config.CategoryLabel(entry, watchCategoryFallback),
 		checkType:     ctype,
+		checkUnit:     cfgval.AsString(checkMap(entry)[checks.CheckKeyUnit]),
 		interval:      iv,
 		disabled:      cfgval.Disabled(entry),
 		monitorMode:   config.MonitorMode(entry),

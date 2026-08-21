@@ -13,7 +13,8 @@ import {
   emptyTerminalSessionCloseAPI,
   liveVerbosePath, lockReleaseAPI, mountAPI, mountBlockersAPI, panicAPI,
   readyVerbosePath, serviceAPI, serviceEventsAPI, serviceMetricsAPI,
-  servicePreflightAPI, serviceRuntimeAPI, serviceSLAAPI, sshSessionCloseAPI, terminalSessionCloseAPI, stateCompactAPI, watchAPI, watchSLAAPI,
+  servicePreflightAPI, serviceRuntimeAPI, serviceSLAAPI, sshSessionCloseAPI, terminalSessionCloseAPI, stateCompactAPI, watchAPI,
+  watchMetricsAPI, watchSLAAPI,
 } from "./api.js";
 import {
   fmtAge, fmtBytes, fmtBytesPerSecond, fmtDuration, fmtMetricValue, fmtNum, fmtPct, fmtRemain,
@@ -3112,7 +3113,9 @@ function renderWatchExpansionInto(key, events) {
   const target = expansionCell(key);
   if (target) {
     litRender(html, target);
+    const w = (allWatches || []).find((item) => item && item.name === name);
     loadSLAPanel(watchSLAKey(name));
+    if (w) loadWatchMetrics(w);
   }
 }
 
@@ -3537,6 +3540,71 @@ function slaChartPanel(key) {
 // graph is this one: heading, window selector and panel. The service detail does
 // not use it — its selector moves every graph it shows at once, so it places
 // slaChartPanel in its own grid under the Graphs heading instead.
+// watchMetricDomID names one watch metric panel's summary or chart. It is
+// namespaced by the watch prefix like every other per-watch DOM id, so a watch
+// and a service that publish the same metric never collide.
+// watchMetricsWindowKey namespaces the window of a watch's Graphs section, apart
+// from the one its Availability section keeps: the two read different series, and
+// an operator comparing a threshold against uptime moves one without the other.
+function watchMetricsWindowKey(name) { return `${expansionPrefixWatch}graphs:${name}`; }
+
+function watchMetricDomID(watch, metric, suffix) {
+  return detailDomId(watchSLAKey(watch), `metric-${detailDomKey(metric)}-${suffix}`);
+}
+
+// renderWatchMetricsSection draws a watch's numeric readings as graphs, with the
+// panel, selector and chart a service check's metric gets. The two differ only in
+// the series they request: a watch has one check, so ?metric= alone names it.
+function renderWatchMetricsSection(w) {
+  const list = (w && w.metrics) || [];
+  if (!list.length) return nothing;
+  const win = serviceMetricState(watchMetricsWindowKey(w.name)).window;
+  const panels = list.map((metric) => tpl`<div class="metric-panel" data-watch-metric="${metric.name}">
+    ${metricPanelBody(watchMetricDomID(w.name, metric.name, "summary"), watchMetricDomID(w.name, metric.name, "chart"),
+      watchMetricLabel(metric))}
+  </div>`);
+  return tpl`<h2>Graphs <span class="muted">${winButtons(metricWins, win, "setWatchMetricWin", "Graph time window", w.name)}</span></h2>
+    <div class="metric-grid">${panels}</div>`;
+}
+
+// watchMetricLabel titles a watch metric panel. The check publishes the field
+// name; the unit rides in the chart and the summary, so the title stays the name.
+function watchMetricLabel(metric) {
+  return String(metric.name || "").replace(/_/g, " ");
+}
+
+// loadWatchMetrics fills every panel of a watch's Graphs section through the one
+// panel loader, exactly as a service detail fills its check metrics.
+function loadWatchMetrics(w, generation = dashboardGeneration) {
+  const list = (w && w.metrics) || [];
+  if (!list.length) return Promise.resolve(true);
+  const key = watchMetricsWindowKey(w.name);
+  return Promise.all(list.map((metric) => loadMetricPanel(key,
+    watchMetricDomID(w.name, metric.name, "summary"), watchMetricDomID(w.name, metric.name, "chart"),
+    generation,
+    (win) => watchMetricsAPI(w.name, metric.name, win),
+    (body, win) => {
+      const unit = body.unit || metric.unit || "";
+      return {
+        summary: metricSeriesSummary({ ...body, unit }),
+        chart: drawMetricChart(body.points || [], unit, win, `${watchMetricLabel(metric)} chart`),
+      };
+    },
+    watchMetricLabel(metric)))).then((results) => results.every(Boolean));
+}
+
+// setWatchMetricWin moves a watch's graph window. Its availability section keeps
+// its own selector: the two read different series and an operator comparing a
+// threshold against uptime wants to move one without moving the other.
+function setWatchMetricWin(win, watch) {
+  if (!watch) return;
+  serviceMetricState(watchMetricsWindowKey(watch)).window = win;
+  saveUIState();
+  syncWindowButtons("setWatchMetricWin", win, watch);
+  const w = (allWatches || []).find((item) => item && item.name === watch);
+  if (w) loadWatchMetrics(w);
+}
+
 function renderSLASection(key) {
   const win = serviceMetricState(key).window;
   return tpl`<h2>Availability <span class="muted">${winButtons(metricWins, win, "setSLAWin", "Availability time window", key)}</span></h2>
@@ -5681,7 +5749,7 @@ function renderWatchExpansion(w, events) {
     <div><span class="muted">Notifies</span><br>${notifiers}</div>
     <div><span class="muted">Dry run</span><br><b>${w.dry_run ? "yes" : "no"}</b></div>
   </div>`;
-  const live = tpl`${renderStorageWatch(w.storage)}${renderMeterWatch(w.meter)}${renderWatchReadings(w.readings)}${w.keeps_sla ? renderSLASection(watchSLAKey(w.name)) : nothing}`;
+  const live = tpl`${renderStorageWatch(w.storage)}${renderMeterWatch(w.meter)}${renderWatchReadings(w.readings)}${renderWatchMetricsSection(w)}${w.keeps_sla ? renderSLASection(watchSLAKey(w.name)) : nothing}`;
   const conditions = renderConditionRows(w.conditions || []);
   if (!events || !events.length) return tpl`${cfg}${live}${conditions}<div class="muted">No recent activity.</div>`;
   const rows = events.slice(0, 50).map((e) => {
@@ -8071,6 +8139,9 @@ function initDelegatedHandlers() {
           break;
         case "setSLAWin":
           setSLAWin(val, el.dataset.windowService || "");
+          break;
+        case "setWatchMetricWin":
+          setWatchMetricWin(val, el.dataset.windowService || "");
           break;
         case "setDaemonMetricWin":
           setDaemonMetricWin(val);

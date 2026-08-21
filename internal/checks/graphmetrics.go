@@ -20,13 +20,28 @@ type GraphMetric struct {
 // enough to spot a rail sagging.
 const voltageReadingDecimals = 2
 
+const (
+	// tenthsDecimals is the precision of a percentage or a rate: a tenth is the
+	// finest step worth reading off a utilisation figure.
+	tenthsDecimals = 1
+	// hundredthsDecimals is the precision of a load average and a stall share,
+	// where the interesting movement happens below a tenth.
+	hundredthsDecimals = 2
+	// millisecondDecimals keeps a clock offset readable to the millisecond, the
+	// scale at which NTP drift is worth seeing.
+	millisecondDecimals = 3
+
+	// graphMetricLabelUsed is the share-in-use label every capacity check carries.
+	graphMetricLabelUsed = "Used"
+)
+
 // graphMetrics maps a check type to the metrics it records over time. Giving a
 // check graphs is just adding an entry here and writing the numeric value into
 // Result.Data under Key — the recorder, store and web graph it generically, so
 // this is reusable by any check (and service).
 var graphMetrics = map[string][]GraphMetric{
-	CheckTypeHdparm:  {{Key: fieldRead, Unit: metrics.MetricUnitMegabytesPerSecond, Decimals: 1}, {Key: fieldCached, Unit: metrics.MetricUnitMegabytesPerSecond, Decimals: 1}},
-	CheckTypeSensors: {{Key: sensorTemp, Unit: metrics.MetricUnitCelsius, Label: "Hottest temp", Decimals: 1}, {Key: sensorFan, Unit: metrics.MetricUnitRPM, Label: "Slowest fan"}, {Key: sensorVoltage, Unit: metrics.MetricUnitVolt, Label: "Lowest voltage", Decimals: voltageReadingDecimals}},
+	CheckTypeHdparm:  {{Key: fieldRead, Unit: metrics.MetricUnitMegabytesPerSecond, Decimals: tenthsDecimals}, {Key: fieldCached, Unit: metrics.MetricUnitMegabytesPerSecond, Decimals: tenthsDecimals}},
+	CheckTypeSensors: {{Key: sensorTemp, Unit: metrics.MetricUnitCelsius, Label: "Hottest temp", Decimals: tenthsDecimals}, {Key: sensorFan, Unit: metrics.MetricUnitRPM, Label: "Slowest fan"}, {Key: sensorVoltage, Unit: metrics.MetricUnitVolt, Label: "Lowest voltage", Decimals: voltageReadingDecimals}},
 	CheckTypeSmart: {
 		{Key: fieldTemperature, Unit: metrics.MetricUnitCelsius, Label: "Temperature"},
 		{Key: fieldReallocated, Unit: metrics.MetricUnitNone, Label: "Reallocated sectors"},
@@ -48,6 +63,76 @@ var graphMetrics = map[string][]GraphMetric{
 	CheckTypeStrays: {{Key: DataKeyCount, Unit: metrics.MetricUnitProcesses, Label: "Strays"}},
 
 	CheckTypeTCPConnections: {{Key: DataKeyCount, Unit: metrics.MetricUnitConnections, Label: "Connections"}},
+
+	// The level checks: the figures an operator writes thresholds against. A check
+	// that computes a number every cycle and compares it to a limit is exactly a
+	// check whose number is worth a graph — the limit says when to look, the graph
+	// says what led there, and both read from the same Result.Data field.
+	//
+	// Only fields the check actually writes into Data are listed, and complements
+	// are deliberately left out: free_pct is a hundred minus used_pct, a total is a
+	// constant, and the 60s/300s pressure averages are running means of the 10s
+	// one. Graphing those would add panels without adding anything to read.
+	CheckTypeStorage: {
+		{Key: DataKeyUsedPct, Unit: metrics.MetricUnitPercent, Label: graphMetricLabelUsed, Decimals: tenthsDecimals},
+		{Key: DataKeyUsedBytes, Unit: metrics.MetricUnitBytes, Label: "Used bytes"},
+		{Key: DataKeyInodesUsedPct, Unit: metrics.MetricUnitPercent, Label: "Inodes used", Decimals: tenthsDecimals},
+	},
+	CheckTypeSwap: {{Key: DataKeyUsedPct, Unit: metrics.MetricUnitPercent, Label: graphMetricLabelUsed, Decimals: tenthsDecimals}},
+	CheckTypeMemory: {
+		{Key: DataKeyUsedPct, Unit: metrics.MetricUnitPercent, Label: graphMetricLabelUsed, Decimals: tenthsDecimals},
+		{Key: DataKeyAvailableBytes, Unit: metrics.MetricUnitBytes, Label: "Available"},
+	},
+	CheckTypeLoad: {
+		{Key: DataKeyLoad1, Unit: metrics.MetricUnitNone, Label: "Load 1m", Decimals: hundredthsDecimals},
+		{Key: DataKeyLoad5, Unit: metrics.MetricUnitNone, Label: "Load 5m", Decimals: hundredthsDecimals},
+		{Key: DataKeyLoad15, Unit: metrics.MetricUnitNone, Label: "Load 15m", Decimals: hundredthsDecimals},
+	},
+	CheckTypePressure: {
+		{Key: PressureFieldSomeAvg10, Unit: metrics.MetricUnitPercent, Label: "Some stalled", Decimals: hundredthsDecimals},
+		{Key: PressureFieldFullAvg10, Unit: metrics.MetricUnitPercent, Label: "Fully stalled", Decimals: hundredthsDecimals},
+	},
+	CheckTypeDiskIO: {
+		{Key: DiskIOFieldUtilPct, Unit: metrics.MetricUnitPercent, Label: "Utilisation", Decimals: tenthsDecimals},
+		{Key: DiskIOFieldReadBytes, Unit: metrics.MetricUnitBytesPerSecond, Label: "Read"},
+		{Key: DiskIOFieldWriteBytes, Unit: metrics.MetricUnitBytesPerSecond, Label: "Write"},
+		{Key: DiskIOFieldAwaitMs, Unit: metrics.MetricUnitMilliseconds, Label: "Await", Decimals: hundredthsDecimals},
+	},
+	CheckTypeFDS: {
+		{Key: DataKeyAllocated, Unit: metrics.MetricUnitNone, Label: "Allocated"},
+		{Key: DataKeyUsedPct, Unit: metrics.MetricUnitPercent, Label: graphMetricLabelUsed, Decimals: tenthsDecimals},
+	},
+	CheckTypePIDs: {
+		{Key: DataKeyCount, Unit: metrics.MetricUnitProcesses, Label: "In use"},
+		{Key: DataKeyUsedPct, Unit: metrics.MetricUnitPercent, Label: graphMetricLabelUsed, Decimals: tenthsDecimals},
+	},
+	CheckTypeConntrack: {
+		{Key: DataKeyCount, Unit: metrics.MetricUnitConnections, Label: "Entries"},
+		{Key: DataKeyUsedPct, Unit: metrics.MetricUnitPercent, Label: graphMetricLabelUsed, Decimals: tenthsDecimals},
+	},
+	CheckTypeInotify: {
+		{Key: DataKeyUsedPct, Unit: metrics.MetricUnitPercent, Label: graphMetricLabelUsed, Decimals: tenthsDecimals},
+		{Key: DataKeyInstances, Unit: metrics.MetricUnitNone, Label: "Instances"},
+	},
+	CheckTypeEntropy:       {{Key: DataKeyAvail, Unit: metrics.MetricUnitBits, Label: "Available"}},
+	CheckTypeZombies:       {{Key: DataKeyZombies, Unit: metrics.MetricUnitProcesses, Label: "Zombies"}},
+	CheckTypeFailedUnits:   {{Key: DataKeyCount, Unit: metrics.MetricUnitNone, Label: "Failed units"}},
+	CheckTypeCount:         {{Key: DataKeyCount, Unit: metrics.MetricUnitNone, Label: "Count"}},
+	CheckTypeAutofs:        {{Key: DataKeyCount, Unit: metrics.MetricUnitNone, Label: "Mount points"}},
+	CheckTypeFirewallRules: {{Key: DataKeyRules, Unit: metrics.MetricUnitNone, Label: "Rules"}},
+	CheckTypeSize:          {{Key: DataKeyCurrentBytes, Unit: metrics.MetricUnitBytes, Label: "Size"}},
+	// Signed, not the absolute offset the check compares: a clock that runs fast
+	// and one that runs slow are different faults, and the sign is what says which.
+	CheckTypeClock: {{Key: DataKeyOffsetSeconds, Unit: metrics.MetricUnitSeconds, Label: "Offset", Decimals: millisecondDecimals}},
+	CheckTypeRAID: {
+		{Key: DataKeyDegraded, Unit: metrics.MetricUnitNone, Label: "Degraded arrays"},
+		{Key: DataKeyRecovering, Unit: metrics.MetricUnitNone, Label: "Recovering arrays"},
+	},
+	CheckTypeLVM: {
+		{Key: DataKeyLVMFreePct, Unit: metrics.MetricUnitPercent, Label: "Free", Decimals: tenthsDecimals},
+		{Key: DataKeyLVMThinDataPct, Unit: metrics.MetricUnitPercent, Label: "Thin data used", Decimals: tenthsDecimals},
+		{Key: DataKeyLVMThinMetadataPct, Unit: metrics.MetricUnitPercent, Label: "Thin metadata used", Decimals: tenthsDecimals},
+	},
 }
 
 // GraphMetrics returns the graphable metrics declared for a check type, or nil
@@ -64,19 +149,31 @@ func DeclaredGraphMetrics(checkType, unit string) []GraphMetric {
 	if unit == "" {
 		return byType
 	}
-	declared := GraphMetric{Key: DataKeyValue, Unit: unit, Label: graphMetricValueLabel, Decimals: 1}
+	declared := GraphMetric{Key: DataKeyValue, Unit: unit, Label: graphMetricValueLabel, Decimals: tenthsDecimals}
 	return append(append(make([]GraphMetric, 0, len(byType)+1), byType...), declared)
 }
 
 // graphMetricValueLabel names the scalar a check publishes under `unit:`.
 const graphMetricValueLabel = "Value"
 
-// GraphMetricUnit returns the unit for a check type's metric key, or "".
-func GraphMetricUnit(checkType, key string) string {
+// DeclaredGraphMetricUnit returns the unit of one metric of one configured check,
+// and whether that check publishes it at all.
+//
+// The two answers are separate because a unit may legitimately be empty: a bare
+// count graphs as a number with no suffix. Folding them together — treating "" as
+// "no such metric" — refused every unitless series the payload offered, so a
+// SMART reallocated-sector count, a load average and a firewall rule count all
+// showed a panel that could only report a failure.
+func DeclaredGraphMetricUnit(checkType, declaredUnit, key string) (string, bool) {
 	for _, m := range graphMetrics[checkType] {
 		if m.Key == key {
-			return m.Unit
+			return m.Unit, true
 		}
 	}
-	return ""
+	// The scalar a check publishes under its own `unit:`; without one the check
+	// declares no value metric, so there is nothing to serve.
+	if key == DataKeyValue && declaredUnit != "" {
+		return declaredUnit, true
+	}
+	return "", false
 }

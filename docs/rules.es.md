@@ -449,6 +449,22 @@ alguna regla se deja a esa regla para que una incidencia no se convierta en dos
 eventos. Estos eventos van solo al registro; las notificaciones siguen saliendo
 del `notify` de una regla.
 
+#### Graficar los números de una comprobación
+
+Una comprobación que calcula una cifra en cada ciclo y la compara con un límite
+tiene una cifra que merece gráfica: el límite dice cuándo mirar y la gráfica dice
+qué llevó hasta ahí. Por eso toda comprobación de nivel grafica los números que ya
+publica — `storage` sus porcentajes de uso e inodos, `load` sus tres medias,
+`diskio` su utilización, caudal y espera, y lo suyo `memory`, `swap`, `fds`,
+`pids`, `conntrack`, `pressure`, `inotify`, `entropy`, `zombies`, `raid`, `lvm`,
+`count`, `autofs`, `failed_units`, `firewall_rules`, `size` y `clock` — sin
+configuración alguna.
+
+Esto vale para una **vigilancia de host** igual que para un check de servicio: la
+expansión de la vigilancia dibuja el mismo panel con el mismo selector de ventana,
+leyendo `GET /api/watches/{name}/metrics?metric=NAME`. Una vigilancia tiene una
+sola comprobación, así que el nombre de la métrica basta para identificar la serie.
+
 #### Graficar el valor de una comprobación (`unit`)
 
 La mayoría de tipos declaran sus métricas graficables de forma estática, pero

@@ -448,6 +448,22 @@ one — so neither is mistaken for the ok/fail verdict.
 A `condition` check still reads `ok` / `fail`, not `active` / `inactive`: unlike
 a state sensor, its firing side really is a problem and has to look like one.
 
+#### Graphing a check's numbers
+
+A check that computes a figure every cycle and compares it against a limit has a
+figure worth plotting: the limit says when to look, and the graph says what led
+there. Every level check therefore graphs the numbers it already publishes —
+`storage` its used and inode percentages, `load` its three averages, `diskio` its
+utilisation, throughput and await, `memory`, `swap`, `fds`, `pids`, `conntrack`,
+`pressure`, `inotify`, `entropy`, `zombies`, `raid`, `lvm`, `count`, `autofs`,
+`failed_units`, `firewall_rules`, `size` and `clock` theirs — with no
+configuration at all.
+
+This applies to a **host watch** exactly as it does to a service check: the watch
+expansion draws the same panel on the same window selector, reading
+`GET /api/watches/{name}/metrics?metric=NAME`. A watch has one check, so the
+metric name alone identifies the series.
+
 #### Graphing a check's value (`unit`)
 
 Most check types declare their graphable metrics statically, but some cannot: a
