@@ -46,7 +46,8 @@ overflow and axe WCAG 2.2 AA rules against deterministic API fixtures.
 
 - The Web UI is one embedded document: `internal/web/index.html`.
 - Data panels are `<details>` cards. The page scrolls as a whole; do not add
-  panel-local scrollbars.
+  panel-local scrollbars. No width makes the page scroll sideways: wide cells
+  wrap or truncate instead of widening their table.
 - Every data panel carries `class="panel"` (shared styling such as the
   disconnected dimming targets that class, not an id list). Watch panel
   `<details>` also carry `data-panel="<key>"` naming their entry in the

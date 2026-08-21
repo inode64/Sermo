@@ -584,7 +584,17 @@ Concretely, every data panel is a `<details id="{name}-section">` with a
 `<summary>`, an optional flex `#{name}-controls` row (search + filters + count)
 and a bare `<table class="{name}-table">` placed directly inside the `<details>`.
 Do not wrap data tables in scroll containers; the page scrolls as a whole
-instead of trapping a panel in its own scrollbar. When you introduce a genuinely
+instead of trapping a panel in its own scrollbar. The complement is that **no
+width may make the page scroll sideways**: content fits the viewport, so a wide
+cell wraps (`white-space: normal; overflow-wrap: anywhere`) or truncates instead
+of widening its table — a fixed table min-width plus nowrap cells deforms the
+whole dashboard exactly when a service fails, which is when it is being read.
+Grid column minimums are written `minmax(min(Xrem, 100%), 1fr)` so a track can
+never demand more than its container, and width caps on truncated text use
+container-relative units, not `vw`, which ignores how far into the page the cell
+already sits. The e2e test "no viewport lets the page scroll sideways" pins this
+at phone, tablet, laptop and desktop widths with expansions open and a hostile
+unbroken diagnostic in the fixture. When you introduce a genuinely
 new pattern, document it here so the next change can follow it.
 
 When adding a host watch/check with useful runtime data, wire its Web UI

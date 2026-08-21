@@ -560,7 +560,18 @@ Concretamente, cada panel de datos es un `<details id="{name}-section">` con un
 `<summary>`, una fila flex opcional `#{name}-controls` (búsqueda + filtros + contador)
 y una `<table class="{name}-table">` desnuda colocada directamente dentro del `<details>`.
 No envuelvas las tablas de datos en contenedores de scroll; la página hace scroll como un todo
-en lugar de atrapar un panel en su propia barra de scroll. Cuando introduzcas un patrón
+en lugar de atrapar un panel en su propia barra de scroll. El complemento es que
+**ningún ancho puede hacer que la página haga scroll lateral**: el contenido cabe
+en el viewport, así que una celda ancha se envuelve (`white-space: normal;
+overflow-wrap: anywhere`) o se trunca en vez de ensanchar su tabla — un min-width
+fijo de tabla más celdas nowrap deforma el dashboard entero justo cuando un
+servicio falla, que es cuando se está leyendo. Los mínimos de columna de grid se
+escriben `minmax(min(Xrem, 100%), 1fr)` para que una pista nunca exija más que su
+contenedor, y los topes de ancho del texto truncado usan unidades relativas al
+contenedor, no `vw`, que ignora cuánto se adentra ya la celda en la página. El
+test e2e "no viewport lets the page scroll sideways" fija esto en anchos de
+móvil, tablet, portátil y escritorio con expansiones abiertas y un diagnóstico
+hostil sin cortes en el fixture. Cuando introduzcas un patrón
 genuinamente nuevo, documéntalo aquí para que el siguiente cambio pueda seguirlo.
 
 Cuando añadas un host watch/check con datos útiles en runtime, cablea su ruta de Web UI

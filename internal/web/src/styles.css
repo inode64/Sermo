@@ -93,7 +93,11 @@
   th { font-weight: 600; }
   thead th { font-size: .72rem; text-transform: uppercase; letter-spacing: .05em; color: var(--text-2); }
   tbody tr:last-child td { border-bottom: 0; }
-  .services-table { min-width: 86rem; font-size: .82rem; line-height: 1.3; font-variant-numeric: tabular-nums; }
+  /* The table fits the viewport at every width: a wide cell wraps instead of
+     widening the table, because a fixed min-width plus nowrap cells is exactly
+     what made the whole page scroll sideways whenever a service picked up a
+     warning reason or a long name mid-incident. */
+  .services-table { width: 100%; font-size: .82rem; line-height: 1.3; font-variant-numeric: tabular-nums; }
   .services-table th, .services-table td { padding: .34rem .5rem; vertical-align: top; }
   .services-table th { white-space: nowrap; }
   .services-table thead th, .watch-table thead th, .apps-table thead th,
@@ -102,7 +106,15 @@
   th.sortable { cursor: pointer; }
   th.sortable:hover { color: var(--text); }
   .sort-ind { font-size: .7rem; color: var(--accent); }
-  .services-table td { white-space: nowrap; }
+  .services-table td { white-space: normal; overflow-wrap: anywhere; }
+  /* The metric columns (Uptime · CPU · Memory · FDs · IO) hold short tabular
+     values; wrapping those mid-number helps nothing, and below 1420px they are
+     hidden entirely. */
+  @media (min-width: 1421px) {
+    .services-table td:nth-child(4), .services-table td:nth-child(5),
+    .services-table td:nth-child(6), .services-table td:nth-child(7),
+    .services-table td:nth-child(8) { white-space: nowrap; }
+  }
   .services-table .svc-main { display: flex; align-items: baseline; gap: .25rem; min-width: 11rem; font-weight: 500; }
   .services-table .unit-cell { max-width: 15rem; overflow: hidden; text-overflow: ellipsis; }
   .services-table .event-cell, .apps-table .event-cell { max-width: 15rem; overflow: hidden; text-overflow: ellipsis; }
@@ -280,9 +292,9 @@
   .win-btn-active { background: color-mix(in srgb, var(--text-2) 20%, transparent); }
   .muted { color: var(--text-2); font-size: .85rem; }
   td.status-cell { font-weight: 600; }
-  .truncate { display: inline-block; max-width: min(38rem, 48vw); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
+  .truncate { display: inline-block; max-width: min(28rem, 34vw); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
   .process-cmd { font-family: var(--mono); font-size: .82em; }
-  .check-message { max-width: min(42rem, 54vw); }
+  .check-message { max-width: none; white-space: normal; overflow-wrap: anywhere; }
   .name { cursor: pointer; text-decoration: none; border-bottom: 1px dotted var(--text-2); color: inherit; }
   .name:hover { color: var(--accent); border-bottom-color: var(--accent); }
 
@@ -411,7 +423,7 @@
   .proc-tree { display: inline-flex; align-items: center; gap: .28rem; min-width: 0; padding-left: calc(var(--proc-depth, 0) * .9rem); }
   .proc-branch { flex: 0 0 auto; color: var(--text-2); font-family: var(--mono); font-size: .9em; letter-spacing: 0; }
   .proc-branch::before { content: "└─"; }
-  .proc-tree-child .process-cmd { max-width: min(36rem, 44vw); }
+  .proc-tree-child .process-cmd { max-width: min(26rem, 30vw); }
   .runtime-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); gap: .45rem 1rem; margin: .25rem 0 .75rem; font-size: .9rem; }
   .runtime-grid > div { min-width: 0; overflow-wrap: anywhere; }
   /* General data fields that restate a .services-table column: hidden while that
@@ -444,7 +456,7 @@
   .sla-pct { text-align: right; font-weight: 650; }
   /* A per-check SLA has 90 sub-spans like the service timeline, so its column
      needs enough width to keep individual bars perceptible on desktop. */
-  .sla-cell { min-width: min(32rem, 45vw); }
+  .sla-cell { min-width: min(24rem, 30vw); }
   .sla-cell-foot { display: flex; justify-content: space-between; gap: .4rem; margin-top: .16rem; font-size: .76rem; font-variant-numeric: tabular-nums; }
   .metric-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .8rem 1.15rem; margin: .25rem 0 .8rem; }
   .metric-panel { min-width: 0; }
@@ -536,7 +548,7 @@
   .usagebar-label { position: relative; z-index: 1; font-size: .68rem; font-weight: 700; line-height: 1; color: var(--text); text-shadow: 0 1px 0 var(--panel), 0 -1px 0 var(--panel), 1px 0 0 var(--panel), -1px 0 0 var(--panel); }
   .usagebar.usagebar-sm { width: 5.5rem; height: .85rem; }
   .usagebar.usagebar-sm .usagebar-label { font-size: .58rem; }
-  .watch-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); gap: .35rem 1rem; margin: .2rem 0 .65rem; font-size: .9rem; }
+  .watch-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(13rem, 100%), 1fr)); gap: .35rem 1rem; margin: .2rem 0 .65rem; font-size: .9rem; }
   .watch-grid div { min-width: 0; overflow-wrap: anywhere; }
 
   /* ---- responsive: narrow desktop, tablet & phone ---------------------------
@@ -605,6 +617,13 @@
     .mount-table .mount-usage-item, .mount-table .mount-usage-extra { white-space: normal; }
   }
   @media (max-width: 1024px) {
+    /* processes (1 PID · 2 CMD · 3 User · 4 Role · 5 CPU · 6 Max core · 7 Mem ·
+       8 IO r/w · 9 FDs · 10 Threads): ten columns of fixed-width bars cannot fit
+       a tablet; keep identity plus CPU and memory, as the services table does. */
+    .detail-compact-table th:nth-child(6), .detail-compact-table td:nth-child(6),
+    .detail-compact-table th:nth-child(8), .detail-compact-table td:nth-child(8),
+    .detail-compact-table th:nth-child(9), .detail-compact-table td:nth-child(9),
+    .detail-compact-table th:nth-child(10), .detail-compact-table td:nth-child(10) { display: none; }
     /* On touch screens a horizontally scrolling rail hides most sections behind
        a sideways swipe. Wrap the pills onto as many rows as needed so every
        section (Services, VMs, Apps, …) is visible without scrolling the sticky
@@ -622,6 +641,8 @@
   }
   @media (max-width: 760px) { .metric-grid { grid-template-columns: 1fr; } }
   @media (max-width: 640px) {
+    .detail-compact-table th:nth-child(3), .detail-compact-table td:nth-child(3),
+    .detail-compact-table th:nth-child(4), .detail-compact-table td:nth-child(4) { display: none; }
     body { padding: 0 .7rem 1rem; }
     #topbar { padding: .7rem .7rem .5rem; margin: 0 -.7rem .35rem; }
     /* Shrink the sticky header on phones: drop the title's descriptive suffix
