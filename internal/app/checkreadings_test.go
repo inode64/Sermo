@@ -10,6 +10,39 @@ import (
 // TestCheckReadingsForAllTypes consolidates the former per-group checkReadings
 // tests: for each check type it builds the readings and asserts the formatted
 // field values (and, for cert, a minimum reading count).
+// TestMeterChecksDoNotRepeatTheirGaugeAsReadings pins which side of the split a
+// numeric check falls on once its type declares graph metrics. A count-vs-limit
+// check the panel draws as a gauge must add no rows: the meter already states the
+// count, the limit and the utilisation. One with no gauge must add them, because
+// otherwise its current sample appears nowhere at all.
+func TestMeterChecksDoNotRepeatTheirGaugeAsReadings(t *testing.T) {
+	gauged := map[string]any{
+		checks.DataKeyAllocated: uint64(2048), checks.DataKeyCount: uint64(1821),
+		checks.DataKeyMax: uint64(65536), checks.DataKeyUsedPct: 3.1,
+	}
+	for _, typ := range []string{checks.CheckTypeFDS, checks.CheckTypePIDs, checks.CheckTypeConntrack} {
+		t.Run(typ+" gauge only", func(t *testing.T) {
+			if got := checkReadings(typ, gauged); len(got) != 0 {
+				t.Fatalf("%s repeats its meter as %d readings: %+v", typ, len(got), got)
+			}
+		})
+	}
+	for _, tc := range []struct {
+		typ  string
+		data map[string]any
+	}{
+		{checks.CheckTypeEntropy, map[string]any{checks.DataKeyAvail: uint64(256)}},
+		{checks.CheckTypeZombies, map[string]any{checks.DataKeyZombies: uint64(3)}},
+		{checks.CheckTypeAutofs, map[string]any{checks.DataKeyCount: 1}},
+	} {
+		t.Run(tc.typ+" reads out", func(t *testing.T) {
+			if got := checkReadings(tc.typ, tc.data); len(got) == 0 {
+				t.Fatalf("%s has no gauge, so its sample must show as a reading", tc.typ)
+			}
+		})
+	}
+}
+
 func TestCheckReadingsForAllTypes(t *testing.T) {
 	cases := []struct {
 		name     string

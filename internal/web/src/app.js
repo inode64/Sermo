@@ -3546,7 +3546,11 @@ function slaChartPanel(key) {
 // watchMetricsWindowKey namespaces the window of a watch's Graphs section, apart
 // from the one its Availability section keeps: the two read different series, and
 // an operator comparing a threshold against uptime moves one without the other.
-function watchMetricsWindowKey(name) { return `${expansionPrefixWatch}graphs:${name}`; }
+//
+// Its prefix is deliberately not the "wat:" expansion one. slaPanelAPI decodes a
+// panel key by that prefix, so a key beginning with it would decode to a watch
+// named "graphs:<name>" if this ever reached an availability path.
+function watchMetricsWindowKey(name) { return `watgraphs:${name}`; }
 
 function watchMetricDomID(watch, metric, suffix) {
   return detailDomId(watchSLAKey(watch), `metric-${detailDomKey(metric)}-${suffix}`);
