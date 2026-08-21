@@ -557,6 +557,23 @@ already solves the same problem and copy its structure, classes and styling
 exactly** — do not invent a parallel way to do the same thing. Cohesion across
 panels is a hard requirement, not a preference.
 
+**Reuse the concept's full owner, not the nearest lookalike.** When a concept
+already has a presentation somewhere, a new surface showing that same concept
+adopts *that* presentation whole — its markup, its loader, its API shape and its
+controls, the time-window selector included. Several concepts here ship both a
+rich panel and a compact summary of themselves (availability is the worked
+example: the service detail's sectioned SLA panel with its `1h/24h/7d/30d/1y`
+selector, and the dense `renderSLAWindows` band an application card uses). The
+compact one is a summary *of* the panel, never a substitute *for* it: reaching
+for it because it is fewer lines produces a second, thinner presentation of a
+number the operator already knows how to read one way, and now has to learn
+twice. Extend the shared owner when the new surface needs something the old one
+lacks; if reuse means threading one extra parameter or splitting a helper in
+two, do that rather than write a parallel path. The test before adding any
+rendering, loading or formatting code is "which existing function already
+answers this, and why can it not answer it here" — and the answer has to be a
+real obstacle, not that finding it takes longer than retyping it.
+
 Concretely, every data panel is a `<details id="{name}-section">` with a
 `<summary>`, an optional flex `#{name}-controls` row (search + filters + count)
 and a bare `<table class="{name}-table">` placed directly inside the `<details>`.

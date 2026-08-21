@@ -85,6 +85,7 @@ deterministas de la API.
 | SLA del servicio | `GET /api/services/{name}/sla[?check=NAME]` | historial de disponibilidad para la línea temporal de SLA del detalle del servicio y los clientes de la API, a la resolución a la que esa ventana está almacenada; `check` lo acota a uno de los checks del servicio, que es de donde la tabla de checks saca su tira, así que ambos ámbitos comparten una sola serie y un solo selector de ventana; un check que no emite veredicto no sirve puntos; los ratios de SLA observado cuentan solo minutos monitorizados, así que el tiempo sin mediciones es un hueco, no caída; cada punto lleva además `down_buckets`, los buckets de un minuto dentro de él que vieron un fallo |
 | Eventos del servicio | `GET /api/services/{name}/events` | feed de eventos por servicio |
 | Watches | `GET /api/watches` | watches de host y de service; `scope` los distingue y los nombres de watch de service usan `service:watch` |
+| SLA de watch | `GET /api/watches/{name}/sla` | el mismo historial de disponibilidad que sirve la ruta de SLA de servicio, para una vigilancia de host cuya comprobación afirma disponibilidad; ambas comparten una sola ruta de serie, así que el uptime de una vigilancia se calcula exactamente igual que el de un servicio; una vigilancia que no guarda ninguna responde 404 en vez de una serie vacía que se leería como uptime medido |
 | Aplicaciones | `GET /api/applications` | aplicaciones de catálogo instaladas; `observed_at` permanece fijo mientras el inventario de versión/estado se sirve desde caché |
 | Librerías | `GET /api/libraries` | librerías de catálogo instaladas; `observed_at` permanece fijo mientras el inventario de fichero/versión se sirve desde caché |
 | Unidades de montaje | `GET /api/mounts` | watches de storage con `mount:` respaldadas por fstab |
@@ -132,10 +133,12 @@ breve de un corte de medio día. Una celda sin ninguna observación sigue siendo
 `.sla-gap` rayado, distinto de ambos: un hueco es tiempo sin monitorizar, no una
 caída.
 
-La misma banda se dibuja en tres sitios: el detalle del servicio, la tarjeta de
-una aplicación y la fila expandida de una vigilancia de host cuya comprobación
-afirma disponibilidad. Una vigilancia de condición no lleva `sla` en su payload y
-no dibuja banda alguna, en vez de una vacía, porque alcanzar un umbral no es
+Una vigilancia de host cuya comprobación afirma disponibilidad recibe **la propia
+sección de SLA del detalle de servicio**, no una segunda presentación de ella: el
+mismo selector de ventana `1h / 24h / 7d / 30d / 1y`, la misma línea de resumen y
+la misma línea temporal de `drawSLAChart`, leyendo de
+`GET /api/watches/{name}/sla?since=`. Una vigilancia de condición reporta
+`keeps_sla: false` y no dibuja sección alguna, porque alcanzar un umbral no es
 downtime.
 
 El color nunca es el único portador de esto (WCAG 2.2 1.4.1): el `title` y el

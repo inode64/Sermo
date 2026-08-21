@@ -98,7 +98,7 @@ func (b *WebBackend) applyWatchRuntimeView(view *web.Watch, w *webWatch, activit
 	if view.Enabled && view.Monitored {
 		view.SampleState = b.watchSampleState(w, checkedAt)
 	}
-	view.SLA = b.watchSLAWindows(w)
+	view.KeepsSLA = !w.disabled && watchRecordsAvailability(w)
 	observed := b.settling == nil || b.settling.Observed(SettlingWatchKey(w.name))
 	failed, warning := watchViewState(*view)
 	view.State = WatchState(view.Enabled, view.Monitored, observed && failed, observed && warning, observed)
@@ -340,18 +340,6 @@ func watchSummary(w *webWatch, storage *web.StorageWatchInfo, liveSummary string
 		parts = append(parts, watchConditionText(c))
 	}
 	return strings.Join(parts, displayListSeparator)
-}
-
-// watchSLAWindows reports the rolling availability windows of a watch whose
-// check asserts availability, reusing the service reader against the watch's own
-// "watch:<name>" series key. A condition watch gets none: its threshold being
-// met is a thing to look at, not downtime, so offering a percentage would read
-// like uptime while meaning something else.
-func (b *WebBackend) watchSLAWindows(w *webWatch) []web.SLAWindow {
-	if w == nil || w.disabled || !watchRecordsAvailability(w) {
-		return nil
-	}
-	return b.serviceSLAWindows(WatchMonitorKey(w.name), b.webNow())
 }
 
 // watchRecordsAvailability reports whether this watch keeps an availability

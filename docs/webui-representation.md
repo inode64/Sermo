@@ -80,6 +80,7 @@ overflow and axe WCAG 2.2 AA rules against deterministic API fixtures.
 | Service SLA | `GET /api/services/{name}/sla[?check=NAME]` | availability history for the service detail SLA timeline and API clients, at the resolution that window is stored at; `check` scopes it to one of the service's checks, which is where the checks table reads its strip from, so both scopes share one series path and one window selector; a check that reports no verdict serves no points; observed-SLA ratios count only monitored minutes, so unmeasured time is a gap, not downtime; each point also carries `down_buckets`, the one-minute buckets inside it that saw a failure |
 | Service events | `GET /api/services/{name}/events` | per-service event feed |
 | Watches | `GET /api/watches` | host-level and service-scoped watches; `scope` distinguishes them and service watch names use `service:watch` |
+| Watch SLA | `GET /api/watches/{name}/sla` | the same availability history the service SLA route serves, for a host watch whose check asserts availability; the two share one series path so a watch's uptime is computed exactly as a service's; a watch that keeps none answers 404 rather than an empty series that would read as measured uptime |
 | Applications | `GET /api/applications` | installed catalog apps; `observed_at` remains fixed while the version/status inventory is served from cache |
 | Libraries | `GET /api/libraries` | installed catalog libraries; `observed_at` remains fixed while the file/version inventory is served from cache |
 | Mount units | `GET /api/mounts` | storage watches with `mount:` backed by fstab |
@@ -124,10 +125,12 @@ The band says how much of the cell was affected, which is what separates a brief
 blip from a half-day outage. A cell with no observation at all stays a hatched
 `.sla-gap`, distinct from both — a gap is unmonitored time, not downtime.
 
-The same strip is drawn in three places: the service detail, an application card,
-and the expanded row of a host watch whose check asserts availability. A
-condition watch has no `sla` in its payload and renders no band at all, rather
-than an empty one, because a threshold being met is not downtime.
+A host watch whose check asserts availability gets the **service detail's own SLA
+section**, not a second presentation of it: the same `1h / 24h / 7d / 30d / 1y`
+window selector, the same summary line and the same `drawSLAChart` timeline,
+reading `GET /api/watches/{name}/sla?since=`. A condition watch reports
+`keeps_sla: false` and renders no section at all, because a threshold being met is
+not downtime.
 
 Colour is never the only carrier of this (WCAG 2.2 1.4.1): each cell's `title` and
 `aria-label` state the availability, the down share and how many one-minute buckets

@@ -178,6 +178,7 @@ const (
 	apiErrorUnknownMountActionPrefix = "unknown mount action "
 	apiErrorUnknownService           = "unknown service"
 	apiErrorUnknownServiceOrCheck    = "unknown service or check"
+	apiErrorUnknownAvailWatch        = "unknown watch or watch without availability"
 	apiMessageReloadRequested        = "reload requested"
 )
 
@@ -249,6 +250,7 @@ const (
 	routeAPISessions                  = routeMethodGet + apiPathSessions
 	routeAPIWatches                   = routeMethodGet + apiPathWatches
 	routeAPIWatchAction               = routeMethodPost + apiPathWatches + "/" + routeVarName + "/" + routeVarAction
+	routeAPIWatchSeries               = routeMethodGet + apiPathWatches + "/" + routeVarName + "/" + apiSegmentSLA
 	routeAPINotifiers                 = routeMethodGet + apiPathNotifiers
 	routeAPINotifierTest              = routeMethodPost + apiPathNotifiers + "/" + routeVarName + "/" + apiActionTest
 	routeAPIApplications              = routeMethodGet + apiPathApplications
@@ -516,10 +518,10 @@ type Watch struct {
 	LastCheckedAt     string            `json:"last_checked_at,omitempty"` // RFC3339 of latest completed check sample
 	SampleState       string            `json:"sample_state,omitempty"`    // collecting | fresh | stale
 	Probe             *WatchProbe       `json:"probe,omitempty"`           // current manual probe, if one is running
-	// SLA is populated only for a watch whose check asserts availability, so the
-	// dashboard shows the same rolling windows a service does. A condition watch
-	// keeps none: its threshold being met is not downtime.
-	SLA []SLAWindow `json:"sla,omitempty"`
+	// KeepsSLA marks a watch whose check asserts availability, so the dashboard
+	// draws it the same SLA section a service gets. A condition watch keeps none:
+	// its threshold being met is not downtime.
+	KeepsSLA bool `json:"keeps_sla,omitempty"`
 }
 
 // WatchProbe reports a manual host-watch probe currently running in the daemon.
@@ -1125,6 +1127,10 @@ type Backend interface {
 	// one of its checks' when check is non-empty; ok is false for unknown names
 	// and for a check the service does not define.
 	Series(ctx context.Context, name, check string, since time.Duration) ([]SeriesPoint, bool)
+	// WatchSeries returns a host watch's per-minute availability history over
+	// since; ok is false for an unknown watch and for one whose check asserts no
+	// availability, which therefore has no uptime to serve.
+	WatchSeries(ctx context.Context, name string, since time.Duration) ([]SeriesPoint, bool)
 	// Metrics returns a check's latency summary and per-minute history over since;
 	// ok is false for unknown service names.
 	Metrics(ctx context.Context, name, check, metric string, since time.Duration) (MetricSeries, bool)
@@ -1309,6 +1315,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc(routeAPIServices, s.handleServices)
 	mux.HandleFunc(routeAPIWatches, s.handleWatches)
 	mux.HandleFunc(routeAPIWatchAction, s.handleWatchAction)
+	mux.HandleFunc(routeAPIWatchSeries, s.handleWatchSeries)
 	mux.HandleFunc(routeAPINotifiers, s.handleNotifiers)
 	mux.HandleFunc(routeAPINotifierTest, s.handleNotifierTest)
 	mux.HandleFunc(routeAPIApplications, s.handleApplications)
@@ -1836,6 +1843,20 @@ func (s *Server) handleSeries(w http.ResponseWriter, r *http.Request) {
 			notFound = apiErrorUnknownServiceOrCheck
 		}
 		writeError(w, http.StatusNotFound, notFound)
+		return
+	}
+	s.writeBackendJSON(w, http.StatusOK, map[string]any{apiJSONKeySince: since.String(), apiJSONKeyPoints: points}, generation)
+}
+
+// handleWatchSeries serves a host watch's availability series through the same
+// envelope and window query the service series uses, so the dashboard reads both
+// with one loader.
+func (s *Server) handleWatchSeries(w http.ResponseWriter, r *http.Request) {
+	since := s.seriesSince(r)
+	backend, generation := s.backendRead()
+	points, ok := backend.WatchSeries(r.Context(), r.PathValue(apiParamName), since)
+	if !ok {
+		writeError(w, http.StatusNotFound, apiErrorUnknownAvailWatch)
 		return
 	}
 	s.writeBackendJSON(w, http.StatusOK, map[string]any{apiJSONKeySince: since.String(), apiJSONKeyPoints: points}, generation)

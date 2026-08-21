@@ -531,6 +531,24 @@ ya resuelve el mismo problema y copia su estructura, clases y estilo
 exactamente** — no inventes una forma paralela de hacer lo mismo. La cohesión entre
 paneles es un requisito duro, no una preferencia.
 
+**Reutiliza el propietario completo del concepto, no el parecido más cercano.**
+Cuando un concepto ya tiene una presentación en algún sitio, una superficie nueva
+que muestre ese mismo concepto adopta *esa* presentación entera — su marcado, su
+cargador, su forma de API y sus controles, incluido el selector de ventana
+temporal. Varios conceptos aquí traen a la vez un panel rico y un resumen
+compacto de sí mismos (la disponibilidad es el ejemplo trabajado: el panel de SLA
+por secciones del detalle de servicio con su selector `1h/24h/7d/30d/1y`, y la
+banda densa de `renderSLAWindows` que usa la tarjeta de una aplicación). El
+compacto es un resumen *del* panel, nunca un sustituto *para* él: echar mano de él
+porque son menos líneas produce una segunda presentación, más pobre, de un número
+que el operador ya sabe leer de una manera y ahora tiene que aprender dos veces.
+Extiende el propietario compartido cuando la superficie nueva necesite algo que
+el viejo no tenga; si reutilizar implica pasar un parámetro más o partir un helper
+en dos, hazlo en vez de escribir un camino paralelo. La prueba antes de añadir
+cualquier código de renderizado, carga o formateo es "qué función existente
+responde ya a esto, y por qué no puede responder aquí" — y la respuesta tiene que
+ser un obstáculo real, no que encontrarla lleve más tiempo que reescribirla.
+
 Concretamente, cada panel de datos es un `<details id="{name}-section">` con un
 `<summary>`, una fila flex opcional `#{name}-controls` (búsqueda + filtros + contador)
 y una `<table class="{name}-table">` desnuda colocada directamente dentro del `<details>`.
