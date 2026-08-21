@@ -9,7 +9,6 @@ import (
 	"sermo/internal/process"
 	"sermo/internal/rules"
 	"sermo/internal/servicemgr"
-	"sermo/internal/state"
 	"sermo/internal/web"
 )
 
@@ -224,34 +223,6 @@ func TestEventLogLastServiceAndWatchIndexes(t *testing.T) {
 	}
 }
 
-func TestWebBackendSLATimelineCache(t *testing.T) {
-	now := time.Date(2026, 6, 16, 12, 0, 0, 0, time.UTC)
-	calls := 0
-	b := &WebBackend{
-		sla:      perfSLAReader{calls: &calls},
-		slaCache: map[string]cachedSLATimelines{},
-	}
-	first := b.serviceSLAWindows("web", now)
-	second := b.serviceSLAWindows("web", now.Add(10*time.Second))
-	if calls != 1 {
-		t.Fatalf("SLATimelines called %d times, want 1", calls)
-	}
-	if len(first) != len(second) || first[0].Window != second[0].Window {
-		t.Fatalf("cached windows differ: %+v vs %+v", first, second)
-	}
-	wantObservedAt := now.Format(time.RFC3339)
-	if first[0].ObservedAt != wantObservedAt || second[0].ObservedAt != wantObservedAt {
-		t.Fatalf("cached observed_at = %q then %q, want %q", first[0].ObservedAt, second[0].ObservedAt, wantObservedAt)
-	}
-	refreshed := b.serviceSLAWindows("web", now.Add(slaTimelineCacheTTL))
-	if calls != 2 {
-		t.Fatalf("after TTL SLATimelines called %d times, want 2", calls)
-	}
-	if refreshed[0].ObservedAt != now.Add(slaTimelineCacheTTL).Format(time.RFC3339) {
-		t.Fatalf("refreshed observed_at = %q", refreshed[0].ObservedAt)
-	}
-}
-
 type countingProcReader struct {
 	calls *int
 }
@@ -263,23 +234,4 @@ func (r countingProcReader) PIDs() ([]int, error) {
 
 func (r countingProcReader) Identity(int) (process.Identity, bool) {
 	return process.Identity{}, false
-}
-
-type perfSLAReader struct {
-	calls *int
-}
-
-func (f perfSLAReader) SLAReport(string, time.Time) ([]state.SLAValue, error) { return nil, nil }
-func (f perfSLAReader) SLASeries(string, time.Time, time.Time) ([]state.SLAPoint, error) {
-	return nil, nil
-}
-func (f perfSLAReader) CheckSLAReport(string, string, time.Time) ([]state.SLAValue, error) {
-	return nil, nil
-}
-func (f perfSLAReader) CheckSLASeries(string, string, time.Time, time.Time) ([]state.SLAPoint, error) {
-	return nil, nil
-}
-func (f perfSLAReader) SLATimelines(string, time.Time) ([]state.SLAWindowTimeline, error) {
-	*f.calls++
-	return []state.SLAWindowTimeline{{Window: "hour", Up: 1, Total: 1}}, nil
 }

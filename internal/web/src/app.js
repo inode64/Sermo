@@ -3112,7 +3112,7 @@ function renderWatchExpansionInto(key, events) {
   const target = expansionCell(key);
   if (target) {
     litRender(html, target);
-    loadWatchSLA(name);
+    loadSLAPanel(watchSLAKey(name));
   }
 }
 
@@ -3364,17 +3364,6 @@ function serviceReapButton(s) {
   return tpl`${actionHint(hintID, disabled, reason)}<button type="button" class="icon-btn danger-btn" data-service-reap="${s.name}" ?disabled=${disabled} title="${reason || label}" aria-label="${label}" aria-describedby="${actionDescribedBy(hintID, disabled, reason)}"><span aria-hidden="true">☠</span></button>`;
 }
 
-function slaWindowLabel(window) {
-  switch (window) {
-    case "hour": return "1h";
-    case "day": return "1d";
-    case "week": return "7d";
-    case "month": return "30d";
-    case "year": return "1y";
-    default: return window || "?";
-  }
-}
-
 // slaDownPct is the share of a bucket's observed cycles that failed, in percent,
 // or null when nothing was observed (a gap).
 function slaDownPct(up, total) {
@@ -3409,133 +3398,12 @@ function slaAffectedText(down, downBuckets) {
   return `${fmtPct(down)} down${affected}`;
 }
 
-function renderSLAWindows(wins, compact) {
-  wins = wins || [];
-  if (!wins.length) return tpl`<span class="muted">No SLA data yet.</span>`;
-  const rows = wins.map((w) => {
-    const pct = w.ratio == null ? null : Number(w.ratio) * percentScale;
-    const label = slaWindowLabel(w.window);
-    const pctText = pct == null ? "—" : fmtPct(pct);
-    const count = `${Number(w.up || 0)}/${Number(w.total || 0)}`;
-    const down = slaDownPct(w.up, w.total);
-    const title = `${label} · ${pctText} · ${count} · ${slaAffectedText(down, w.down_buckets)}`;
-    // (B) When a target is sampled far less often than the window has segments
-    // (a check every few hours vs the hour's 5-min sub-spans), most segments
-    // carry no sample and the strip would be mostly hatched. Below half-measured
-    // fall back to the single availability bar, which states the window's ratio
-    // without implying per-sub-span measurements that never happened.
-    const segs = Array.isArray(w.segments) ? w.segments : [];
-    const measured = segs.reduce((c, s) => c + (s && Number(s.total) > 0 ? 1 : 0), 0);
-    const track = segs.length && measured * 2 >= segs.length
-      ? renderSLATimeline(segs, w.window, w.observed_at)
-      : renderSLAFill(pct, down, w.down_buckets);
-    return tpl`<div class="sla-window" title="${title}">
-      <span class="sla-label">${label}</span>
-      ${track}
-      <span class="sla-pct">${pctText}</span>
-      <span class="sla-count">${count}</span>
-    </div>`;
-  });
-  return tpl`<div class="sla-windows${compact ? " sla-compact" : ""}">${rows}</div>`;
-}
-
-// renderSLAFill is the single availability bar used when a window has too few
-// measured sub-spans to draw a timeline.
-function renderSLAFill(pct, down, downBuckets) {
-  const width = pct == null ? 0 : pctClamp(pct);
-  const label = pct == null
-    ? "No SLA data"
-    : `${fmtPct(pct)} available, ${slaAffectedText(down, downBuckets)}`;
-  const classes = ["sla-fill", pct == null ? "sla-empty" : "", slaDownBand(down)].filter(Boolean).join(" ");
-  return tpl`<span class="sla-bar" aria-label="${label}"><span class="${classes}" style="--sla-pct:${width.toFixed(2)}%"></span></span>`;
-}
-
-// slaSegmentCell reduces one wire segment to what the strip renders: availability,
-// the share of the sub-span that was down, and how many one-minute buckets in it
-// failed. null means nothing was observed (a gap) — total 0 is the gap signal, so
-// the ratio does not need to travel on the wire.
-function slaSegmentCell(seg) {
-  const total = seg == null ? 0 : Number(seg.total) || 0;
-  if (total <= 0) return null;
-  const up = Number(seg.up) || 0;
-  return {
-    pct: (up / total) * percentScale,
-    down: slaDownPct(up, total),
-    downBuckets: Number(seg.down_buckets) || 0,
-  };
-}
-
 // slaSegmentBounds is the wall-clock range of segment idx of n covering spanMs and
 // ending at endMs.
 function slaSegmentBounds(idx, n, spanMs, endMs) {
   const start = endMs - spanMs + (idx / n) * spanMs;
   const end = endMs - spanMs + ((idx + 1) / n) * spanMs;
   return `${fmtTime(start)} – ${fmtTime(end)}`;
-}
-
-function slaTimelineEndMs(observedAt) {
-  const sampledMs = Date.parse(observedAt);
-  return Number.isFinite(sampledMs) ? sampledMs : Date.now();
-}
-
-// slaTimelineDataRows is the visually-hidden table beside the band: the same
-// per-sub-span figures as text, so the colour is not the only carrier (WCAG 2.2
-// 1.4.1). It consumes the cells the band already derived rather than walking the
-// segments a second time.
-function slaTimelineDataRows(cells) {
-  if (!cells.length) return nothing;
-  return cells.slice(Math.max(0, cells.length - chartDataTableMaxRows)).map(({ cell, held, when }) => {
-    if (cell == null) return tpl`<tr><td>${when}</td><td>${slaNoData}</td><td>${slaNoData}</td></tr>`;
-    // A held sub-span was not measured; the band marks it in its aria-label, so the
-    // table must too rather than presenting the carried value as observed.
-    const suffix = held ? " (held)" : "";
-    return tpl`<tr><td>${when}</td><td>${fmtPct(cell.pct) + suffix}</td><td>${slaAffectedText(cell.down, cell.downBuckets) + suffix}</td></tr>`;
-  });
-}
-
-// renderSLATimeline draws the contiguous status-page style availability band: one
-// cell per equal sub-span (oldest left), hatched where nothing was observed.
-//
-// Cells are banded by how much of the sub-span was down, so a coarse sub-span
-// containing a brief failure cannot render as healthy; the figure is repeated in
-// each cell's title and aria-label and in the data table beside it.
-function renderSLATimeline(segments, window, observedAt) {
-  const n = segments.length;
-  const spanMs = slaWindowSpanMs(window);
-  const endMs = slaTimelineEndMs(observedAt);
-  // A sub-span with no sample inherits the last observed state (a service checked
-  // every few minutes was up between checks too), so a continuously-monitored
-  // target reads as continuous instead of striped with sampling gaps. Only leading
-  // sub-spans before the first-ever sample stay hatched (genuinely unknown).
-  let lastCell = null;
-  const cells = segments.map((seg, i) => {
-    let cell = slaSegmentCell(seg);
-    let held = false;
-    if (cell != null) lastCell = cell;
-    else if (lastCell != null) { cell = lastCell; held = true; }
-    return { cell, held, when: slaSegmentBounds(i, n, spanMs, endMs) };
-  });
-  const band = cells.map(({ cell, held, when }) => {
-    if (cell == null) {
-      return tpl`<span class="sla-seg sla-gap" title="${when + " · " + slaNoData}" aria-label="${when}: ${slaNoData}"></span>`;
-    }
-    const pctText = fmtPct(cell.pct);
-    const affected = slaAffectedText(cell.down, cell.downBuckets);
-    const heldNote = held ? " · held (last observed, not re-measured this sub-span)" : "";
-    return tpl`<span class="sla-seg ${slaDownBand(cell.down)}" title="${when + " · " + pctText + " · " + affected + heldNote}" aria-label="${when}: ${pctText} available, ${affected}${held ? " (held)" : ""}"></span>`;
-  });
-  return tpl`<table class="chart-data visually-hidden"><caption>SLA timeline data</caption><thead><tr><th scope="col">Period</th><th scope="col">Availability</th><th scope="col">Affected</th></tr></thead><tbody>${slaTimelineDataRows(cells)}</tbody></table><span class="sla-timeline" role="img" aria-label="SLA availability timeline">${band}</span>`;
-}
-
-function slaWindowSpanMs(window) {
-  switch (window) {
-    case "hour": return millisecondsPerHour;
-    case "day": return millisecondsPerDay;
-    case "week": return rollingWeekDays * millisecondsPerDay;
-    case "month": return rollingMonthDays * millisecondsPerDay;
-    case "year": return rollingYearDays * millisecondsPerDay;
-    default: return millisecondsPerDay;
-  }
 }
 
 function slaPointPct(p) {
@@ -3631,12 +3499,59 @@ async function loadServiceWindowGraph(name, generation, url, render, fail) {
   }
 }
 
-function loadServiceSLA(name, generation = dashboardGeneration) {
-  const summary = document.getElementById(detailDomId(name, "sla-summary"));
-  const chart = document.getElementById(detailDomId(name, "sla-chart"));
+// An availability panel is addressed by a key that names both its stored window
+// and its DOM ids. A service uses its own name; a watch and an application take
+// the prefixes their expansion keys already use, so a service, a watch and an
+// application that happen to share a name never share a panel.
+function watchSLAKey(name) { return expansionKey(expansionPrefixWatch, name); }
+function appSLAKey(name) { return expansionKey(expansionPrefixApp, name); }
+
+// slaPanelAPI builds one panel's request from its key. A watch reads its own
+// series; an application has none of its own and reads the series of the service
+// it maps to, which is where its availability comes from in the first place.
+function slaPanelAPI(key, win) {
+  if (isWatchExpansionKey(key)) return watchSLAAPI(expansionName(key, expansionPrefixWatch), win);
+  if (isAppExpansionKey(key)) return serviceSLAAPI(expansionName(key, expansionPrefixApp), win);
+  return serviceSLAAPI(key, win);
+}
+
+// slaChartPanel is the SLA timeline panel itself — one markup, whether it stands
+// alone in a watch or application expansion or sits beside the other graphs of a
+// service detail. Availability must read the same wherever it is shown, and a
+// second rendering of the same figure would be one more thing to keep in step.
+function slaChartPanel(key) {
+  return tpl`<div class="metric-panel metric-panel-wide">
+    <div class="sla-chart-head">
+      <span class="metric-title">SLA timeline</span>
+      <span id="${detailDomId(key, "sla-summary")}" class="muted">loading...</span>
+    </div>
+    <div class="sla-panel">
+      <div class="sla-chart-panel">
+        <div id="${detailDomId(key, "sla-chart")}" class="muted chart-box-wide"></div>
+      </div>
+    </div>
+  </div>`;
+}
+
+// renderSLASection is the whole Availability section for a surface whose only
+// graph is this one: heading, window selector and panel. The service detail does
+// not use it — its selector moves every graph it shows at once, so it places
+// slaChartPanel in its own grid under the Graphs heading instead.
+function renderSLASection(key) {
+  const win = serviceMetricState(key).window;
+  return tpl`<h2>Availability <span class="muted">${winButtons(metricWins, win, "setSLAWin", "Availability time window", key)}</span></h2>
+    <div class="metric-grid">${slaChartPanel(key)}</div>`;
+}
+
+// loadSLAPanel fills one availability panel through the fetch protocol every
+// windowed graph shares. The three surfaces differ only in the request
+// slaPanelAPI builds, so their panels cannot drift apart in what they draw.
+function loadSLAPanel(key, generation = dashboardGeneration) {
+  const summary = document.getElementById(detailDomId(key, "sla-summary"));
+  const chart = document.getElementById(detailDomId(key, "sla-chart"));
   if (!summary || !chart) return Promise.resolve(true);
-  return loadServiceWindowGraph(name, generation,
-    (win) => serviceSLAAPI(name, win),
+  return loadServiceWindowGraph(key, generation,
+    (win) => slaPanelAPI(key, win),
     (body, win) => {
       const points = body.points || [];
       summary.innerHTML = slaTimelineSummary(points);
@@ -3646,6 +3561,16 @@ function loadServiceSLA(name, generation = dashboardGeneration) {
       summary.innerHTML = `<span class="bad">Failed to load SLA: ${esc(e.message)}</span>`;
       chart.innerHTML = "";
     });
+}
+
+// setSLAWin switches the window of a standalone Availability section. A service
+// detail's selector is setMetricWin: it moves the whole detail, not this panel.
+function setSLAWin(win, key) {
+  if (!key) return;
+  serviceMetricState(key).window = win;
+  saveUIState();
+  syncWindowButtons("setSLAWin", win, key);
+  loadSLAPanel(key);
 }
 
 // loadCheckSLA fills one check's SLA cell from the same endpoint and window
@@ -4161,17 +4086,7 @@ function serviceGraphDetail(d) {
   </div>`);
   return tpl`<h2>Graphs <span class="muted">${winButtons(metricWins, metricState.window, "setMetricWin", "Graph time window", d.name)}</span></h2>
     <div class="metric-grid">
-      <div class="metric-panel metric-panel-wide">
-        <div class="sla-chart-head">
-          <span class="metric-title">SLA timeline</span>
-          <span id="${detailDomId(d.name, "sla-summary")}" class="muted">loading...</span>
-        </div>
-        <div class="sla-panel">
-          <div class="sla-chart-panel">
-            <div id="${detailDomId(d.name, "sla-chart")}" class="muted chart-box-wide"></div>
-          </div>
-        </div>
-      </div>
+      ${slaChartPanel(d.name)}
       ${latencyPanels}
       ${checkMetricPanels}
       ${runtimeGraphPanels}
@@ -4245,7 +4160,7 @@ async function refreshServiceGraphs(d, generation = dashboardGeneration) {
   const measured = serviceMeasuredChecks(d);
   const checkMetrics = serviceCheckMetrics(d);
   syncWindowButtons("setMetricWin", serviceMetricState(d.name).window, d.name);
-  const pending = [loadServiceSLA(d.name, generation)];
+  const pending = [loadSLAPanel(d.name, generation)];
   pending.push(...serviceSLAChecks(d).map((c) => loadCheckSLA(d.name, c.name, generation)));
   pending.push(...checkMetrics.map((metric) => loadCheckMetric(d.name, metric, generation)));
   if (!d.no_resident_process) {
@@ -5441,7 +5356,7 @@ function renderApps(apps) {
   renderArtifactPanel(appArtifactPanel, apps);
 }
 
-function renderArtifactExpansionDetails(artifact, surface, extra = nothing) {
+function renderArtifactExpansionDetails(artifact, surface) {
   const bin = artifact.binary ? tpl`<code>${artifact.binary}</code>` : tpl`<span class="muted">unknown</span>`;
   const perm = artifact.permissions ? tpl`<code>${artifact.permissions}</code>` : tpl`<span class="muted">—</span>`;
   const usr = artifact.user || tpl`<span class="muted">—</span>`;
@@ -5461,21 +5376,38 @@ function renderArtifactExpansionDetails(artifact, surface, extra = nothing) {
     <div><span class="muted">User</span><br>${usr}</div>
     <div><span class="muted">Group</span><br>${grp}</div>
     <div><span class="muted">Status</span><br>${status}</div>
-    ${extra}
   </div>`;
 }
 
 // renderAppExpansion shows one application's full version, binary location and
-// permissions, reusing the watch-grid layout.
+// permissions, reusing the watch-grid layout. An application that maps to a
+// monitored service also carries that service's Availability section: the figure
+// is the service's own, so it is drawn by the panel that owns it rather than
+// restated in a second, smaller form.
 function renderAppExpansion(a) {
   const eventsId = detailDomId(a.name, "app-events");
-  const sla = tpl`<div class="app-sla"><span class="muted">SLA</span><br>${renderSLAWindows(a.sla, true)}</div>`;
-  return tpl`${renderArtifactExpansionDetails(a, "app", sla)}
+  return tpl`${renderArtifactExpansionDetails(a, "app")}
+  ${a.keeps_sla ? renderSLASection(appSLAKey(a.name)) : nothing}
   <h3 class="expansion-heading">Recent events</h3>
   <table class="events">
     <caption class="visually-hidden">Recent application events</caption>
     <thead><tr><th scope="col">Time</th><th scope="col">Kind</th><th scope="col">Message</th></tr></thead>
     <tbody id="${eventsId}"></tbody></table>`;
+}
+
+// loadAppSLA fills an expanded application's availability panel, memoized per
+// dashboard generation. An application expansion is part of the rows template, so
+// every artifact render repaints and refills it; the poll that triggered the
+// render then awaits this same request instead of issuing a second one. A window
+// change calls loadSLAPanel directly, so picking 7d always refetches.
+const appSLALoads = new Map();
+function loadAppSLA(name, generation = dashboardGeneration) {
+  const loadingKey = `${generation}:${name}`;
+  if (appSLALoads.has(loadingKey)) return appSLALoads.get(loadingKey);
+  const pending = loadSLAPanel(appSLAKey(name), generation)
+    .finally(() => appSLALoads.delete(loadingKey));
+  appSLALoads.set(loadingKey, pending);
+  return pending;
 }
 
 // loadAppEvents fills an expanded application's "Recent events" table with its
@@ -5495,10 +5427,14 @@ function loadAppEvents(name, generation = dashboardGeneration) {
 
 async function refreshExpandedApplications(generation = dashboardGeneration) {
   if (document.hidden) return true;
-  const names = (allApps || [])
-    .filter((app) => expanded.has(appExpansionKey(app.name)))
-    .map((app) => app.name);
-  const results = await Promise.all(names.map((name) => loadAppEvents(name, generation)));
+  const open = (allApps || []).filter((app) => expanded.has(appExpansionKey(app.name)));
+  const results = await Promise.all(open.flatMap((app) => {
+    // The availability panel plots the service's own series, so it goes stale on
+    // the same poll the events do and is refreshed with them.
+    const pending = [loadAppEvents(app.name, generation)];
+    if (app.keeps_sla) pending.push(loadAppSLA(app.name, generation));
+    return pending;
+  }));
   return results.every(Boolean);
 }
 
@@ -5577,7 +5513,11 @@ const appArtifactPanel = {
   renderExpansion: renderAppExpansion,
   extraCell: lastEventCell,
   loadExpanded: (items) => {
-    items.forEach((app) => { if (expanded.has(appExpansionKey(app.name))) loadAppEvents(app.name); });
+    items.forEach((app) => {
+      if (!expanded.has(appExpansionKey(app.name))) return;
+      loadAppEvents(app.name);
+      if (app.keeps_sla) loadAppSLA(app.name);
+    });
   },
 };
 
@@ -5677,63 +5617,6 @@ function renderArtifactRow(item, panel) {
 
 // renderWatchExpansion shows a watch's config summary and its recent
 // activity (hooks/notifies fired), reusing the inline expansion mechanism.
-// watchWindowKey namespaces a watch's selected time window in the same per-target
-// map the service graphs use, so the two cannot collide when a watch and a
-// service share a name.
-function watchWindowKey(name) { return expansionPrefixWatch + name; }
-
-// renderWatchSLASection draws the availability section for a watch whose check
-// asserts one, using the service detail's own markup, window selector and chart.
-// Sharing them is the point: a watch's availability must read exactly like a
-// service's, and a second presentation of the same number would be one more
-// thing to keep in step.
-function renderWatchSLASection(w) {
-  if (!w || !w.keeps_sla) return nothing;
-  const win = serviceMetricState(watchWindowKey(w.name)).window;
-  return tpl`<h2>Availability <span class="muted">${winButtons(metricWins, win, "setWatchWin", "Availability time window", w.name)}</span></h2>
-    <div class="metric-grid">
-      <div class="metric-panel metric-panel-wide">
-        <div class="sla-chart-head">
-          <span class="metric-title">SLA timeline</span>
-          <span id="${detailDomId(watchWindowKey(w.name), "sla-summary")}" class="muted">loading...</span>
-        </div>
-        <div class="sla-panel">
-          <div class="sla-chart-panel">
-            <div id="${detailDomId(watchWindowKey(w.name), "sla-chart")}" class="muted chart-box-wide"></div>
-          </div>
-        </div>
-      </div>
-    </div>`;
-}
-
-// loadWatchSLA fills a watch's availability section through the same fetch
-// protocol, summary and chart the service panel uses.
-function loadWatchSLA(name, generation = dashboardGeneration) {
-  const key = watchWindowKey(name);
-  const summary = document.getElementById(detailDomId(key, "sla-summary"));
-  const chart = document.getElementById(detailDomId(key, "sla-chart"));
-  if (!summary || !chart) return Promise.resolve(true);
-  return loadServiceWindowGraph(key, generation,
-    (win) => watchSLAAPI(name, win),
-    (body, win) => {
-      const points = body.points || [];
-      summary.innerHTML = slaTimelineSummary(points);
-      chart.innerHTML = drawSLAChart(points, win);
-    },
-    (e) => {
-      summary.innerHTML = `<span class="bad">Failed to load SLA: ${esc(e.message)}</span>`;
-      chart.innerHTML = "";
-    });
-}
-
-function setWatchWin(win, watch) {
-  if (!watch) return;
-  serviceMetricState(watchWindowKey(watch)).window = win;
-  saveUIState();
-  syncWindowButtons("setWatchWin", win, watch);
-  loadWatchSLA(watch);
-}
-
 function renderWatchExpansion(w, events) {
   w = w || {};
   const mode = watchMonitorMode(w);
@@ -5760,7 +5643,7 @@ function renderWatchExpansion(w, events) {
     <div><span class="muted">Notifies</span><br>${notifiers}</div>
     <div><span class="muted">Dry run</span><br><b>${w.dry_run ? "yes" : "no"}</b></div>
   </div>`;
-  const live = tpl`${renderStorageWatch(w.storage)}${renderMeterWatch(w.meter)}${renderWatchReadings(w.readings)}${renderWatchSLASection(w)}`;
+  const live = tpl`${renderStorageWatch(w.storage)}${renderMeterWatch(w.meter)}${renderWatchReadings(w.readings)}${w.keeps_sla ? renderSLASection(watchSLAKey(w.name)) : nothing}`;
   const conditions = renderConditionRows(w.conditions || []);
   if (!events || !events.length) return tpl`${cfg}${live}${conditions}<div class="muted">No recent activity.</div>`;
   const rows = events.slice(0, 50).map((e) => {
@@ -8158,8 +8041,8 @@ function initDelegatedHandlers() {
         case "setMetricWin":
           setMetricWin(val, el.dataset.windowService || "");
           break;
-        case "setWatchWin":
-          setWatchWin(val, el.dataset.windowService || "");
+        case "setSLAWin":
+          setSLAWin(val, el.dataset.windowService || "");
           break;
         case "setDaemonMetricWin":
           setDaemonMetricWin(val);

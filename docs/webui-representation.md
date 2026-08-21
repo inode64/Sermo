@@ -77,7 +77,7 @@ overflow and axe WCAG 2.2 AA rules against deterministic API fixtures.
 | Service expansion | `GET /api/services/{name}` | checks, process info, rules |
 | Service check metrics | `GET /api/services/{name}/metrics?check=NAME[&metric=KEY]` | the detail renders latency when `metric` is omitted and one graph for every named numeric metric published by a check |
 | Service runtime metrics | `GET /api/services/{name}/runtime` | read-only persisted service CPU/memory/IO history sampled exclusively by worker cycles; `current` is the latest published sample and dashboard reads never repeat process discovery |
-| Service SLA | `GET /api/services/{name}/sla[?check=NAME]` | availability history for the service detail SLA timeline and API clients, at the resolution that window is stored at; `check` scopes it to one of the service's checks, which is where the checks table reads its strip from, so both scopes share one series path and one window selector; a check that reports no verdict serves no points; observed-SLA ratios count only monitored minutes, so unmeasured time is a gap, not downtime; each point also carries `down_buckets`, the one-minute buckets inside it that saw a failure |
+| Service SLA | `GET /api/services/{name}/sla[?check=NAME]` | availability history for the service detail SLA timeline, for the expansion of an application that maps to this service, and for API clients, at the resolution that window is stored at; `check` scopes it to one of the service's checks, which is where the checks table reads its strip from, so both scopes share one series path and one window selector; a check that reports no verdict serves no points; observed-SLA ratios count only monitored minutes, so unmeasured time is a gap, not downtime; each point also carries `down_buckets`, the one-minute buckets inside it that saw a failure |
 | Service events | `GET /api/services/{name}/events` | per-service event feed |
 | Watches | `GET /api/watches` | host-level and service-scoped watches; `scope` distinguishes them and service watch names use `service:watch` |
 | Watch SLA | `GET /api/watches/{name}/sla` | the same availability history the service SLA route serves, for a host watch whose check asserts availability; the two share one series path so a watch's uptime is computed exactly as a service's; a watch that keeps none answers 404 rather than an empty series that would read as measured uptime |
@@ -93,9 +93,10 @@ overflow and axe WCAG 2.2 AA rules against deterministic API fixtures.
 | Activity summary | `GET /api/activity` | internal recent-event rollup used for dashboard attention indicators |
 | Monitoring counts | `GET /api/monitoring` | monitored vs paused service counts |
 
-Init status, application inspection and SLA timeline caches expose their actual
-sample times, and SLA segment timestamps stay anchored to `observed_at` instead
-of sliding forward on the browser clock while cached.
+Init status and application inspection caches expose their actual sample times.
+Availability is not cached this way at all: each panel requests the window it is
+on, and every point carries its own bucket start, so nothing slides forward on
+the browser clock.
 Dashboard refreshes are single-flight: automatic, manual and post-action reloads
 never execute concurrently, and the next automatic delay starts after the prior
 refresh completes.
@@ -125,12 +126,17 @@ The band says how much of the cell was affected, which is what separates a brief
 blip from a half-day outage. A cell with no observation at all stays a hatched
 `.sla-gap`, distinct from both — a gap is unmonitored time, not downtime.
 
-A host watch whose check asserts availability gets the **service detail's own SLA
-section**, not a second presentation of it: the same `1h / 24h / 7d / 30d / 1y`
-window selector, the same summary line and the same `drawSLAChart` timeline,
-reading `GET /api/watches/{name}/sla?since=`. A condition watch reports
-`keeps_sla: false` and renders no section at all, because a threshold being met is
-not downtime.
+Availability is drawn by exactly one panel wherever it appears. A host watch
+whose check asserts availability, and an application that maps to a monitored
+service, each get the **service detail's own SLA section** — the same
+`1h / 24h / 7d / 30d / 1y` window selector, the same summary line and the same
+`drawSLAChart` timeline — and not a second, smaller presentation of the same
+number. Only the series differs: a watch reads
+`GET /api/watches/{name}/sla?since=`, an application reads its service's
+`GET /api/services/{name}/sla?since=`, because its availability *is* that
+service's. A condition watch reports `keeps_sla: false`, as does an application
+behind no monitored service, and neither renders a section at all — a threshold
+being met is not downtime, and an uninstalled binary has no uptime.
 
 Colour is never the only carrier of this (WCAG 2.2 1.4.1): each cell's `title` and
 `aria-label` state the availability, the down share and how many one-minute buckets
@@ -399,6 +405,7 @@ Row expansion:
 | User | binary owner |
 | Group | binary group |
 | Status | app inspection status |
+| Availability | the service SLA section, when `keeps_sla` marks an application that maps to a monitored service; absent otherwise |
 
 Empty state:
 
