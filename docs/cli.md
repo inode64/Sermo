@@ -96,8 +96,8 @@ sermoctl apps [all] [--long]                                  # catalog apps (se
 sermoctl libs [all] [--long]
 sermoctl patterns
 
-sermoctl sla [SERVICE]                  # service availability windows (all services, or one)
-sermoctl sla --series SERVICE [--since DURATION]  # per-minute series; --since default 24h
+sermoctl sla [TARGET]                   # availability windows for every service and availability watch, or one
+sermoctl sla --series TARGET [--since DURATION]   # per-minute series; --since default 24h
 
 sermoctl events [SERVICE] [--limit N]   # list recent events (global or for SERVICE)
 sermoctl events clear [--before TIME]   # omit TIME to clear all; TIME may be non-future RFC3339 or positive duration
@@ -120,8 +120,20 @@ sermoctl wizard service|docker|vm|mount|volume|net|uplink
 `sermoctl sla` is observed check availability: it only counts monitored daemon
 cycles. A window with no observed cycles reads `n/a`, not downtime — daemon
 downtime or missing data never becomes observed downtime. `sermoctl sla --series
-SERVICE` emits that service's stored per-minute availability series (the raw data
+TARGET` emits that target's stored per-minute availability series (the raw data
 a graph is built from).
+
+A target is a configured service **or** a host watch whose check asserts
+availability — `tcp`, `ports`, `http`, `route`, the `state` metric of `net` and
+`icmp`, and the endpoint form of `cert`. Those are the checks whose failing half
+is genuinely something not answering; a `cert` check reading a file on disk is a
+certificate nearing expiry, which is a condition, not a host being unreachable. A condition watch keeps no series: a filesystem crossing 90% used
+is a threshold being met, not an outage, and reporting it as availability would
+give a percentage that reads like uptime while meaning something else. The same
+exclusions the services already apply carry over — a verdictless watch
+(`reports: state`) is a sensor and an advisory (`severity: warning`) is a thing
+to look at, so neither is downtime. A name is resolved as a service first, so an
+existing service name never changes meaning.
 
 Examples:
 
@@ -266,7 +278,7 @@ matching names in the global config tree).
 | Which catalog apps / libs / pattern sets exist? | `sermoctl apps`, `sermoctl libs`, `sermoctl patterns` |
 | Which services are enabled in *my* config right now? | YAML under `paths.services`, or the web UI **Services** panel (`GET /api/services`) |
 | One configured service's live state | `sermoctl status SERVICE`, `sermoctl is-active SERVICE` |
-| Availability history for configured services | `sermoctl sla [SERVICE]` |
+| Availability history for services and availability watches | `sermoctl sla [TARGET]` |
 
 The web UI uses the same split: **Services** shows configured runtime services;
 **Applications** (`GET /api/applications`) and **Libraries**

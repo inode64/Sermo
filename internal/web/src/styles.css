@@ -457,6 +457,9 @@
   .sla-compact .sla-bar, .sla-compact .sla-timeline { height: .48rem; }
   .sla-compact .sla-count { display: none; }
   .app-sla { grid-column: 1 / -1; }
+  /* The watch expansion stacks blocks rather than gridding them, so the
+     availability band only needs the label spacing its siblings use. */
+  .watch-sla { margin: .25rem 0 .8rem; }
   .metric-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .8rem 1.15rem; margin: .25rem 0 .8rem; }
   .metric-panel { min-width: 0; }
   .metric-panel-wide { grid-column: 1 / -1; }

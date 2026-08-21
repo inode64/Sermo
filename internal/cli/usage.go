@@ -557,18 +557,19 @@ var commandUsages = []commandUsage{
 	},
 	{
 		Name:    commandSLA,
-		Summary: "Report observed SLA or a per-minute availability series.",
+		Summary: "Report observed SLA for a service or availability watch, or a per-minute series.",
 		Usage: []string{
-			"sermoctl sla [SERVICE]",
-			"sermoctl sla --series SERVICE [--since DURATION]",
+			"sermoctl sla [TARGET]",
+			"sermoctl sla --series TARGET [--since DURATION]",
 		},
 		Flags: []string{
-			"--series           print observed per-minute series for one service",
+			"--series           print observed per-minute series for one target",
 			"--since DURATION   series lookback; default is 24h",
 		},
 		Examples: []string{
 			"sermoctl sla",
 			"sermoctl sla apache-main",
+			"sermoctl sla net-eth0",
 			"sermoctl sla --series apache-main --since 168h",
 		},
 	},

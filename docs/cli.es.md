@@ -97,8 +97,8 @@ sermoctl apps [all] [--long]                                  # catalog apps (se
 sermoctl libs [all] [--long]
 sermoctl patterns
 
-sermoctl sla [SERVICE]                  # service availability windows (all services, or one)
-sermoctl sla --series SERVICE [--since DURATION]  # per-minute series; --since default 24h
+sermoctl sla [TARGET]                   # availability windows for every service and availability watch, or one
+sermoctl sla --series TARGET [--since DURATION]   # per-minute series; --since default 24h
 
 sermoctl events [SERVICE] [--limit N]   # list recent events (global or for SERVICE)
 sermoctl events clear [--before TIME]   # omit TIME to clear all; TIME may be non-future RFC3339 or positive duration
@@ -121,9 +121,23 @@ sermoctl wizard service|docker|vm|mount|volume|net|uplink
 `sermoctl sla` es disponibilidad observada por comprobaciones: solo cuenta los
 ciclos monitorizados del daemon. Una ventana sin ciclos observados lee `n/a`, no
 downtime — el tiempo caído del daemon o los datos ausentes nunca se convierten en
-downtime observado. `sermoctl sla --series SERVICE` emite la serie por minuto
-almacenada de ese servicio (los datos crudos con los que se construye una
+downtime observado. `sermoctl sla --series TARGET` emite la serie por minuto
+almacenada de ese objetivo (los datos crudos con los que se construye una
 gráfica).
+
+Un objetivo es un servicio configurado **o** una vigilancia de host cuya
+comprobación afirma disponibilidad — `tcp`, `ports`, `http`, `route`, la métrica
+`state` de `net` e `icmp`, y la forma de endpoint de `cert`. Son las
+comprobaciones cuya mitad fallida es de verdad algo que no responde; un `cert`
+que lee un fichero en disco es un certificado próximo a caducar, que es una
+condición, no un host inalcanzable. Una vigilancia de condición no guarda serie:
+un sistema de ficheros que cruza el 90% usado es un umbral alcanzado, no una
+caída, e informarlo como disponibilidad daría un porcentaje que se lee como
+uptime pero significa otra cosa. Se arrastran las mismas exclusiones que ya
+aplican los servicios — una vigilancia sin veredicto (`reports: state`) es un
+sensor y una consultiva (`severity: warning`) es algo que mirar, así que ninguna
+es downtime. Un nombre se resuelve primero como servicio, de modo que el nombre
+de un servicio existente nunca cambia de significado.
 
 Ejemplos:
 
@@ -276,7 +290,7 @@ nombres coincidentes en el árbol de config global).
 | ¿Qué apps / libs / conjuntos de patrones de catálogo existen? | `sermoctl apps`, `sermoctl libs`, `sermoctl patterns` |
 | ¿Qué servicios están habilitados en *mi* config ahora mismo? | YAML bajo `paths.services`, o el panel **Services** de la web UI (`GET /api/services`) |
 | Estado en vivo de un servicio configurado | `sermoctl status SERVICE`, `sermoctl is-active SERVICE` |
-| Historial de disponibilidad de los servicios configurados | `sermoctl sla [SERVICE]` |
+| Historial de disponibilidad de servicios y vigilancias de disponibilidad | `sermoctl sla [TARGET]` |
 
 La web UI usa la misma división: **Services** muestra los servicios de runtime
 configurados; **Applications** (`GET /api/applications`) y **Libraries**

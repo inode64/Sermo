@@ -160,6 +160,44 @@ func (c *Config) StorageWatchNames() []string {
 	return out
 }
 
+// AvailabilityWatchNames returns configured host watches whose check asserts
+// availability, so an availability series is a meaningful thing to keep for
+// them. It is the watch counterpart of the configured service list.
+func (c *Config) AvailabilityWatchNames() []string {
+	if c == nil {
+		return nil
+	}
+	watches, _ := c.ResolveWatches()
+	out := make([]string, 0, len(watches))
+	for _, name := range slices.Sorted(maps.Keys(watches)) {
+		if watchRecordsAvailability(watches[name]) {
+			out = append(out, name)
+		}
+	}
+	return out
+}
+
+// watchRecordsAvailability reports whether a watch document keeps an
+// availability series. A multi-metric watch (net/icmp) declares its metrics in a
+// sibling `metrics:` map rather than on the check, and the daemon expands it
+// into one watch per metric, so the document counts when *any* of its metrics is
+// the availability one.
+func watchRecordsAvailability(raw any) bool {
+	entry, _ := raw.(map[string]any)
+	check, _ := entry[WatchKeyCheck].(map[string]any)
+	checkType := cfgval.String(check[checks.CheckKeyType])
+	if checks.RecordsAvailability(checkType, check) {
+		return true
+	}
+	metrics, _ := entry[SectionMetrics].(map[string]any)
+	for metric := range metrics {
+		if checks.RecordsAvailability(checkType, map[string]any{checks.DataKeyMetric: metric}) {
+			return true
+		}
+	}
+	return false
+}
+
 func storageTreeFromWatch(name string, entry map[string]any) (map[string]any, []string) {
 	check, _ := entry[WatchKeyCheck].(map[string]any)
 	if cfgval.String(check[checks.CheckKeyType]) != checks.CheckTypeStorage {

@@ -5674,6 +5674,16 @@ function renderArtifactRow(item, panel) {
 
 // renderWatchExpansion shows a watch's config summary and its recent
 // activity (hooks/notifies fired), reusing the inline expansion mechanism.
+// renderWatchSLA shows a watch's rolling availability, reusing the same band the
+// services and applications draw. Only a watch whose check asserts availability
+// carries one; a condition watch has no `sla` and renders nothing rather than an
+// empty block, because a threshold being met is not downtime.
+function renderWatchSLA(sla) {
+  const wins = (sla || []).filter(Boolean);
+  if (!wins.length) return nothing;
+  return tpl`<div class="watch-sla"><span class="muted">Availability</span>${renderSLAWindows(wins)}</div>`;
+}
+
 function renderWatchExpansion(w, events) {
   w = w || {};
   const mode = watchMonitorMode(w);
@@ -5700,7 +5710,7 @@ function renderWatchExpansion(w, events) {
     <div><span class="muted">Notifies</span><br>${notifiers}</div>
     <div><span class="muted">Dry run</span><br><b>${w.dry_run ? "yes" : "no"}</b></div>
   </div>`;
-  const live = tpl`${renderStorageWatch(w.storage)}${renderMeterWatch(w.meter)}${renderWatchReadings(w.readings)}`;
+  const live = tpl`${renderStorageWatch(w.storage)}${renderMeterWatch(w.meter)}${renderWatchReadings(w.readings)}${renderWatchSLA(w.sla)}`;
   const conditions = renderConditionRows(w.conditions || []);
   if (!events || !events.length) return tpl`${cfg}${live}${conditions}<div class="muted">No recent activity.</div>`;
   const rows = events.slice(0, 50).map((e) => {
