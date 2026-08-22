@@ -188,7 +188,7 @@ GO_TEST_FLAGS ?= -shuffle=on
 
 test: validate
 	go test $(GO_TEST_FLAGS) $(GO_PACKAGES)
-	go test $(GO_TEST_FLAGS) -C $(WEB_BUILD_DIR) .
+	go test -C $(WEB_BUILD_DIR) $(GO_TEST_FLAGS) .
 
 vet:
 	go vet $(GO_PACKAGES)
