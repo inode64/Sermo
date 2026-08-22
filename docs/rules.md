@@ -92,7 +92,6 @@ Connection-protocol checks (MySQL, PostgreSQL, Redis, Docker, libvirt, etc.) are
 | `net`         | one interface metric (`metric: state\|speed\|errors\|address`) holds — single-metric form of the net watch |
 | `icmp`        | one ping metric (`metric: state\|latency`) against `host`, optionally bound to an `interface` |
 | `swap`        | one swap metric (`metric: usage\|io`) holds — single-metric form of the swap watch |
-| `entropy`     | available kernel entropy satisfies `avail {op, value}`              |
 | `zombies`     | the count of zombie processes satisfies `count {op, value}`         |
 | `oom`         | the kernel OOM-kill count rose by `delta {op, value}` since last cycle|
 | `cert`        | a TLS certificate is expiring/invalid, or its algorithm/issuer changed (see Cert)|
@@ -454,7 +453,7 @@ figure worth plotting: the limit says when to look, and the graph says what led
 there. Every level check therefore graphs the numbers it already publishes —
 `storage` its used and inode percentages, `load` its three averages, `diskio` its
 utilisation, throughput and await, `memory`, `swap`, `fds`, `pids`, `conntrack`,
-`pressure`, `inotify`, `entropy`, `zombies`, `raid`, `lvm`, `count`,
+`pressure`, `inotify`, `zombies`, `raid`, `lvm`, `count`,
 `failed_units`, `firewall_rules`, `size` and `clock` theirs — with no
 configuration at all.
 
@@ -2060,7 +2059,7 @@ Every type above is a **single-shot check** (`Check.Run → Result`) and is usab
 - a service's own embedded `watches:` block (hook/notification entries scoped to the service, or compact `then.action`, including the service-scoped `service`/`metric` types and the service-scoped `process_count`, which counts everything discovery attributes to the service — the init unit's control group included) — see [Service watches](configuration.md#service-watches-scoped-to-a-service).
 
 The host-resource checks (`storage`, `load`, `memory`, `pressure`, `fds`, `pids`,
-`diskio`, `hdparm`, `sensors`, `smart`, `raid`, `edac`, `conntrack`, `entropy`,
+`diskio`, `hdparm`, `sensors`, `smart`, `raid`, `edac`, `conntrack`,
 `zombies`, `oom`, `failed_units`, `inotify`, among others) are
 condition-style — `OK == true` means there is a problem — so in rules
 `active: {check: x}` fires on it, and as a watch the hook fires on it.

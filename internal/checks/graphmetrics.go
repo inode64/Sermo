@@ -124,7 +124,6 @@ var graphMetrics = map[string][]GraphMetric{
 		{Key: DataKeyUsedPct, Unit: metrics.MetricUnitPercent, Label: graphMetricLabelUsed, Decimals: tenthsDecimals},
 		{Key: DataKeyInstances, Unit: metrics.MetricUnitNone, Label: "Instances"},
 	},
-	CheckTypeEntropy:       {{Key: DataKeyAvail, Unit: metrics.MetricUnitBits, Label: "Available"}},
 	CheckTypeZombies:       {{Key: DataKeyZombies, Unit: metrics.MetricUnitProcesses, Label: "Zombies"}},
 	CheckTypeFailedUnits:   {{Key: DataKeyCount, Unit: metrics.MetricUnitNone, Label: "Failed units"}},
 	CheckTypeCount:         {{Key: DataKeyCount, Unit: metrics.MetricUnitNone, Label: "Count"}},

@@ -916,7 +916,6 @@ var singleShotCheckValidators = map[string]singleShotCheckValidator{
 	checks.CheckTypeICMP:             validateICMPSingleShotCheck,
 	checks.CheckTypeSwap:             validateSwapSingleShotCheck,
 	checks.CheckTypeRoute:            validateRouteCheck,
-	checks.CheckTypeEntropy:          singleShotThreshold(checks.EntropyPredFields),
 	checks.CheckTypeZombies:          singleShotThreshold(checks.ZombiePredFields),
 	checks.CheckTypeOOM:              singleShotNoLock(validateOomFields),
 	checks.CheckTypeCert:             singleShotNoLock(validateCertFields),

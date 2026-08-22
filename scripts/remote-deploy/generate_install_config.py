@@ -2443,7 +2443,6 @@ dry_run: true
         ("watch-memory", "system", "30s", ["type: memory", 'available_pct: { op: "<", value: "10%" }']),
         ("watch-fds", "system", "30s", ["type: fds", 'used_pct: { op: ">=", value: "80%" }']),
         ("watch-pids", "system", "30s", ["type: pids", 'used_pct: { op: ">=", value: "80%" }']),
-        ("watch-entropy", "system", "30s", ["type: entropy", 'avail: { op: "<", value: 256 }']),
         ("watch-zombies", "system", "30s", ["type: zombies", 'count: { op: ">", value: 0 }']),
     ]
     for name, category, interval, check_lines in generic_watches:

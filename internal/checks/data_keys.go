@@ -12,7 +12,6 @@ const (
 	DataKeyAvailablePct             = fieldAvailablePct
 	DataKeyArrays                   = fieldArrays
 	DataKeyArray                    = CheckKeyArray
-	DataKeyAvail                    = "avail"
 	DataKeyAvailableBytes           = fieldAvailableBytes
 	DataKeyBackend                  = CheckKeyBackend
 	DataKeyBaselineCount            = "baseline_count"

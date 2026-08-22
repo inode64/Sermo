@@ -6,7 +6,7 @@
 // Service checks/preflight support tcp, ports, http, command, service,
 // file_exists, file, lockfile, binary, process, metric (via the daemon's stateful collector),
 // libraries, count, and host-resource probes (storage, load, fds, conntrack,
-// firewall_rules, entropy, zombies, oom, cert). The multi-target watch types
+// firewall_rules, zombies, oom, cert). The multi-target watch types
 // (net, icmp, swap and file) are also usable in single-metric/single-shot form.
 // See buildCheck and TypeInfo for the shared dispatch/validation vocabulary.
 package checks
@@ -456,7 +456,7 @@ func samplerOr[T any](s, def func() (T, error)) func() (T, error) {
 }
 
 // okSamplerOr is samplerOr for the samplers that report availability with a
-// bool instead of an error (entropy, oom, zombies).
+// bool instead of an error (oom, zombies).
 func okSamplerOr[T any](s, def func() (T, bool)) func() (T, bool) {
 	if s == nil {
 		return def
@@ -500,8 +500,8 @@ func runSampledLevelCount[S any](b base, preds []levelPred, sample func() (S, er
 }
 
 // runThresholdCheck samples one gauge and compares it against the configured
-// threshold — the shared Run body of the single-value level checks (entropy,
-// zombies). unavailableMsg is the failure message when the sampler reports no
+// threshold — the shared Run body of the single-value level checks (zombies,
+// oom). unavailableMsg is the failure message when the sampler reports no
 // reading; message renders the sampled value for the result.
 func runThresholdCheck(b base, op string, value float64, sample func() (uint64, bool), unavailableMsg string, message func(uint64) string, dataKey string) Result {
 	start := time.Now()
