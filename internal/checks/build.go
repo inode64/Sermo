@@ -83,7 +83,6 @@ type Samplers struct {
 	FirewallRulesSampler FirewallRulesSamplerFunc
 	FailedUnitsSampler   FailedUnitsSamplerFunc
 	InotifySampler       InotifySamplerFunc
-	EntropySampler       EntropySamplerFunc
 	ZombieSampler        ZombieSamplerFunc
 	UsersSampler         UsersSamplerFunc
 	SSHIdleSampler       SSHIdleSamplerFunc
@@ -324,7 +323,6 @@ var builtinCheckSpecs = []checkSpec{
 	{info: conditionTypeInfo(CheckTypePIDs), build: func(in checkBuildInput) (Check, string) { return buildPidsCheck(in.base, in.entry, in.deps) }},
 	{info: conditionTypeInfo(CheckTypeDiskIO), build: func(in checkBuildInput) (Check, string) { return buildDiskIOCheck(in.base, in.entry, in.deps) }},
 	{info: conditionTypeInfo(CheckTypeConntrack), build: func(in checkBuildInput) (Check, string) { return buildConntrackCheck(in.base, in.entry, in.deps) }},
-	{info: conditionTypeInfo(CheckTypeEntropy), build: func(in checkBuildInput) (Check, string) { return buildEntropyCheck(in.base, in.entry, in.deps) }},
 	{info: conditionTypeInfo(CheckTypeZombies), build: func(in checkBuildInput) (Check, string) { return buildZombieCheck(in.base, in.entry, in.deps) }},
 	{info: conditionTypeInfo(CheckTypeOOM), build: func(in checkBuildInput) (Check, string) { return buildOomCheck(in.base, in.entry, in.deps) }},
 	{info: healthTypeInfo(CheckTypeCert), build: func(in checkBuildInput) (Check, string) { return buildCertCheck(in.base, in.entry, in.deps) }},

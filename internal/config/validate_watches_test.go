@@ -863,18 +863,6 @@ func TestValidateCertWatch(t *testing.T) {
 		"watches.c.check requires a host or a path")
 }
 
-func TestValidateEntropyWatch(t *testing.T) {
-	assertNoWatchIssues(t, watchConfig("entropy", map[string]any{"type": "entropy", "avail": map[string]any{"op": "<", "value": 200}}))
-
-	assertWatchIssues(t, watchConfigs(map[string]any{
-		"no-avail": map[string]any{"type": "entropy"},
-		"bad-op":   map[string]any{"type": "entropy", "avail": map[string]any{"op": "=<", "value": "x"}},
-	}),
-		"watches.no-avail.check requires at least one of avail",
-		"watches.bad-op.check.avail has an invalid op",
-		"watches.bad-op.check.avail value \"x\" must be numeric")
-}
-
 func TestValidateStorageMountWatch(t *testing.T) {
 	// A storage watch can carry a mount condition (mount + space in one entry).
 	assertNoWatchIssues(t, watchConfig("data-mount", map[string]any{"type": "storage", "path": "/data", "mounted": true}))

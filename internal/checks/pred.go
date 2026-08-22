@@ -248,8 +248,6 @@ var (
 	LVMPredFields = []string{DataKeyLVMFreePct, DataKeyLVMThinDataPct, DataKeyLVMThinMetadataPct}
 	// EdacPredFields are the optional predicates of an edac check.
 	EdacPredFields = []string{fieldCE, fieldUE}
-	// EntropyPredFields is the single required predicate of an entropy check.
-	EntropyPredFields = []string{DataKeyAvail}
 	// ZombiePredFields is the single required predicate of a zombies check.
 	ZombiePredFields = []string{DataKeyCount}
 	// FailedUnitsPredFields is the single optional predicate of a failed_units

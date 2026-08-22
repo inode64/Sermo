@@ -78,7 +78,6 @@ directorio equivocado. La configuración distribuida la omite.
   - [pids — tabla de PID del kernel](#pids--tabla-de-pid-del-kernel)
   - [conntrack — tabla de conexiones de netfilter](#conntrack--tabla-de-conexiones-de-netfilter)
   - [firewall_rules — reglas de firewall cargadas](#firewall_rules--reglas-de-firewall-cargadas)
-  - [entropy — pool de entropía del kernel](#entropy--pool-de-entropía-del-kernel)
   - [zombies — procesos difuntos](#zombies--procesos-difuntos)
   - [Resúmenes de checks](#resúmenes-de-checks)
   - [file — atributos y vigencia de archivos/directorios](#file--atributos-y-vigencia-de-archivosdirectorios)
@@ -2037,7 +2036,7 @@ Estas convenciones mantienen cortas las secciones por tipo a continuación:
   también soportan `user` para ejecutar el argv como un usuario del SO específico; los
   comandos de hook no.
 - **Modelo de evaluación.** Una **comprobación de nivel** (`storage`, `memory`,
-  `pressure`, `load`, `fds`, `pids`, `conntrack`, `entropy`, `zombies`, swap `usage`) se
+  `pressure`, `load`, `fds`, `pids`, `conntrack`, `zombies`, swap `usage`) se
   dispara cuando **todos los predicados presentes se cumplen**
   — un predicado es `{op, value}` con el conjunto de operadores `>= > <= < == !=`;
   declara al menos uno, y añade `for: { cycles: N }` o `for: { duration: 6m }` para
@@ -2232,7 +2231,7 @@ combinarse con `then.notify_interval`.
 
 **Las checks y los watches comparten los mismos tipos de comprobación.**
 Cualquier comprobación de un solo disparo — las de recursos de host de abajo
-(`storage`, `memory`, `pressure`, `load`, `fds`, `pids`, `conntrack`, `entropy`,
+(`storage`, `memory`, `pressure`, `load`, `fds`, `pids`, `conntrack`,
 `zombies`, `oom`, `failed_units`, `inotify`, entre otras) *y* las comprobaciones de service (`tcp`, `tcp_connections`, `ssh_idle`,
 `ports`, `http`, `command`, `file_exists`, `file`, `lockfile`, `binary`,
 `pidfile`, `socket`, `libraries`, `config`, `route`, `clock`,
@@ -2925,23 +2924,6 @@ watches:
 
 `backend` es `auto`, `nftables` o `iptables`. Hook extras:
 `SERMO_BACKEND`, `SERMO_RULES`, `SERMO_MIN_RULES`.
-
-### `entropy` — pool de entropía del kernel
-
-Un watch `entropy` comprueba la entropía disponible del kernel (bits) de
-`/proc/sys/kernel/random/entropy_avail` contra un umbral. La baja entropía hace que las
-lecturas de `/dev/random` se bloqueen y ralentiza la criptografía y los handshakes TLS —
-más visible en VMs y hosts headless/embebidos sin un RNG por hardware.
-
-```yaml
-check:                                   # in a watch body like `load` above
-  type: entropy
-  avail: { op: "<", value: 200 }         # fire when available entropy drops below 200 bits
-```
-
-El único predicado `avail: {op, value}` es requerido; la forma usual es
-`avail < N`. Hook extras: `SERMO_AVAIL` (el mismo valor que `SERMO_VALUE`, bits
-disponibles).
 
 ### `zombies` — procesos difuntos
 

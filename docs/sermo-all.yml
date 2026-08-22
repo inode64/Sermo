@@ -431,10 +431,6 @@ watches:
     monitor: disabled
     check: { type: conntrack, used_pct: { op: ">=", value: "80%" } }
     then: { notify: [ops-email] }
-  entropy:
-    monitor: disabled
-    check: { type: entropy, avail: { op: "<", value: 256 } }
-    then: { notify: [ops-email] }
   zombies:
     monitor: disabled
     check: { type: zombies, count: { op: ">", value: 0 } }
@@ -822,8 +818,6 @@ watches:
     check: { type: diskio, device: nvme0n1, util_pct: { op: ">", value: "80%" } }
   conntrack:
     check: { type: conntrack, used_pct: { op: ">", value: "80%" } }
-  entropy:
-    check: { type: entropy, avail: { op: "<", value: 256 } }
   zombies:
     check: { type: zombies, count: { op: ">", value: 0 } }
   oom:

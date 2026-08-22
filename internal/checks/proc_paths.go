@@ -2,7 +2,6 @@ package checks
 
 const (
 	procDiskstatsPath    = "/proc/diskstats"
-	procEntropyAvailPath = "/proc/sys/kernel/random/entropy_avail"
 	procFileNRPath       = "/proc/sys/fs/file-nr"
 	procLoadavgPath      = "/proc/loadavg"
 	procMDStatPath       = "/proc/mdstat"
