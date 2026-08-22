@@ -68,6 +68,7 @@ Las comprobaciones de protocolo de conexión (MySQL, PostgreSQL, Redis, Docker, 
 | `socket`      | existe un candidato a socket Unix — protégelo con `requires: [service]` para los sockets creados por el servicio |
 | `libraries`   | todas las bibliotecas compartidas DT_NEEDED del binario pueden resolverse (debug/elf nativo, sin ldd) |
 | `process`     | un proceso que coincide con `exe`/`user` está en `state` (running/zombie/absent); una lectura `absent` nombra el binario reemplazado cuando eso la explica |
+| `process_policy` | todos los procesos de una cuenta de usuario satisfacen la política allow/deny (solo alerta; ver configuration.md) |
 | `metric`      | una métrica muestreada satisface `op value` (ver Metrics)                |
 | `count`       | el número de entradas en un directorio satisface `op value` (ver Count)|
 | `storage`     | se cumplen los predicados de espacio/inodos de un sistema de archivos (`*_pct` acepta `%`; `*_bytes` requiere K/M/G/T) |
@@ -78,6 +79,9 @@ Las comprobaciones de protocolo de conexión (MySQL, PostgreSQL, Redis, Docker, 
 | `sensors`     | los sensores de hardware hwmon cruzan un umbral (`temp` °C / `fan` RPM / `voltage` V) (ver Sensores de hardware)|
 | `smart`       | la salud/atributos e identidad SMART de una unidad (veredicto fallido, `reallocated`, `pending_sectors`, `crc_errors`, `media_errors`, `wear`, `temperature`) (ver Sensores de hardware)|
 | `raid`        | un array RAID por software md de Linux está degradado/recuperándose (`degraded`/`recovering`/`arrays`) (ver Sensores de hardware)|
+| `lvm`         | todos los volume groups y volúmenes lógicos LVM reportan sanos (ver Sensores de hardware) |
+| `stale_binary` | ningún proceso atribuido ejecuta un binario reemplazado en disco desde que arrancó (inyectado por servicio; también declarable) |
+| `strays`      | el control group de la unidad init no contiene procesos fuera de los selectores configurados (inyectado por servicio; también declarable) |
 | `edac`        | errores de memoria ECC desde EDAC (`ce` corregibles / `ue` no corregibles) (ver Sensores de hardware)|
 | `memory`      | RAM del sistema frente a MemAvailable del kernel (used_pct/available_pct/available_bytes) |
 | `pressure`    | tiempo de bloqueo PSI del kernel para cpu/memory/io (`some_*`/`full_*` avg10/60/300) |

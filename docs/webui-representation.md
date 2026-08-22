@@ -524,6 +524,23 @@ latest completed daemon-cycle or manual sample, while Last activity is an event.
 | `cert` | Name, source, days left, expiry, issuer |
 | `raid` | Name, array, size, degraded, recovering |
 | `replication` | Name, source, IO thread, SQL thread, behind |
+| `clock` | Name, offset, stratum |
+| `conntrack` | Name, in use, ceiling, usage (read from the live meter) |
+| `failed_units` | Name, failed count, unit names |
+| `fds` | Name, allocated |
+| `firewall_rules` | Name, rules, min rules |
+| `icmp` | Name, latency |
+| `inotify` | Name, instances, watches |
+| `load` | Name, load |
+| `memory` | Name, used %, available |
+| `nfs` | Name, result |
+| `oom` | Name, OOM kills |
+| `pids` | Name, in use, ceiling, usage (read from the live meter) |
+| `pressure` | Name, resource, some avg60, full avg60 |
+| `process_policy` | Name, user, active processes, violations |
+| `route` | Name, family, interface, gateway |
+| `swap` | Name, used %, used bytes, free bytes |
+| `zombies` | Name, zombie count |
 | Other types | Name and their primary live value |
 
 The health column carries two vocabularies and colours both: the `lvm` check

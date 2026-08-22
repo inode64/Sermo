@@ -46,7 +46,7 @@ directorio equivocado. La configuración distribuida la omite.
 - [Disposición](#disposición)
 - [Storage y unidades de montaje](#storage-y-unidades-de-montaje)
 - [Ajustes del motor](#ajustes-del-motor)
-  - [Intervalo por service](#intervalo-por-service)
+  - [Intervalo por servicio](#intervalo-por-servicio)
   - [Botones de operador (buttons:)](#botones-de-operador-buttons)
   - [Intervalo por comprobación](#intervalo-por-comprobación)
 - [Interfaz web](#interfaz-web)
@@ -698,7 +698,7 @@ Si ni el backend de init ni un fallback válido `reload.command`/`reload.signal`
 pueden recargar el service, `sermoctl reload <service>` se rechaza antes de
 ejecutarse.
 
-### Intervalo por service
+### Intervalo por servicio
 
 `engine.interval` establece el valor por defecto para cada service. Un service puede
 sustituirlo con su propio `interval` de nivel superior, de modo que los services baratos
