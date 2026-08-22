@@ -2,6 +2,12 @@ name: sqlite3
 display_name: "SQLite library"
 description: "SQLite embedded database library; a change triggers a restart of dependent services"
 variables:
-  binary: "/usr/lib64/libsqlite3.so.0"
+  binary:
+    - "/usr/lib64/libsqlite3.so.0"
+    - "/lib64/libsqlite3.so.0"
+    - "/usr/lib/*-linux-gnu*/libsqlite3.so.0"
+    - "/lib/*-linux-gnu*/libsqlite3.so.0"
+    - "/usr/lib/libsqlite3.so.0"
+    - "/lib/libsqlite3.so.0"
 preflight:
   file: { type: file, path: "${binary}" }
