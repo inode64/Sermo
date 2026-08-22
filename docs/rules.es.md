@@ -453,14 +453,14 @@ es un problema y tiene que parecerlo.
 
 Un check requerido que empieza a fallar registra un evento `firing`, y uno
 `recovered` cuando vuelve a pasar, sin necesidad de ninguna regla. Antes los
-eventos de servicio solo venían de reglas, así que un check requerido sin nada
+eventos de servicio solo venían de reglas, así que una comprobación requerida sin nada
 asociado pasaba el servicio a `failed` en el panel y no escribía nada: la
 incidencia solo era visible para quien ya estuviera mirando ese servicio.
 
 El registro es por flanco sobre el valor observado, así que una condición que
 persiste se anota una vez y no en cada ciclo. Los checks opcionales, omitidos y
 sin veredicto (`state`/`value`) nunca lo generan, un resultado reutilizado de la
-caché por un `interval` propio no es una observación nueva, y un check que ya lee
+caché por un `interval` propio no es una observación nueva, y una comprobación que ya lee
 alguna regla se deja a esa regla para que una incidencia no se convierta en dos
 eventos. Estos eventos van solo al registro; las notificaciones siguen saliendo
 del `notify` de una regla.
@@ -474,9 +474,9 @@ publica sin configuración alguna — `storage` sus porcentajes de uso e inodos,
 `load` sus tres medias, `diskio` su utilización, caudal y espera, y así el
 resto: la sección de cada tipo más abajo nombra sus series.
 
-Esto vale para una **vigilancia de host** igual que para un check de servicio: la
-expansión de la vigilancia dibuja el mismo panel con el mismo selector de ventana,
-leyendo `GET /api/watches/{name}/metrics?metric=NAME`. Una vigilancia tiene una
+Esto vale para un **watch de host** igual que para una comprobación de servicio: la
+expansión del watch dibuja el mismo panel con el mismo selector de ventana,
+leyendo `GET /api/watches/{name}/metrics?metric=NAME`. Un watch tiene una
 sola comprobación, así que el nombre de la métrica basta para identificar la serie.
 
 #### Las métricas de estado se dibujan como bandas (`bands`)
@@ -532,13 +532,13 @@ deja de grabarse: un estado se dibuja como banda o como línea, nunca ambas. Los
 nombres de check no pueden contener `:`; la serie de banda se clava como
 `check:metric`.
 
-#### Optar una vigilancia a disponibilidad (`sla`)
+#### Optar un watch a disponibilidad (`sla`)
 
 El conjunto de disponibilidad es estrecho a propósito — que un umbral dispare no
 es una caída — pero el operador que escribió el umbral puede saber más: una
 deriva de reloj, un firewall sin reglas o un sistema de ficheros desmontado *es*
 una caída para lo que dependa de ellos. `sla: true` en el bloque check de una
-vigilancia graba su veredicto como serie de disponibilidad y le da el panel de
+watch graba su veredicto como serie de disponibilidad y le da el panel de
 Availability; `sla: false` silencia un tipo que grabaría por defecto. Las
 puertas de veredicto siguen aplicando: un sensor `reports:` o un aviso
 `severity: warning` nunca entra en la serie.
@@ -681,14 +681,14 @@ El mismo check sirve para umbrales de conexiones en SSH, HTTP y otros servicios
 TCP. Configúralo en el host propietario del puerto de escucha; un puerto
 reutilizado no puede atribuirse a un único servicio.
 
-Si no se puede leer `/proc`, el check no está disponible en vez de informar cero.
+Si no se puede leer `/proc`, la comprobación no está disponible en vez de informar cero.
 Cuando un guard lo referencia, Sermo deniega la operación de forma conservadora.
 Fija un `interval` adecuado al usarlo como watch de larga duración; un guard
 vuelve a ejecutar su check justo antes de una operación.
 
 ### Inactividad de terminal SSH (`ssh_idle`)
 
-`ssh_idle` es un check de condición para Linux que observa **terminales SSH
+`ssh_idle` es una comprobación de condición para Linux que observa **terminales SSH
 interactivos**. Lee utmp, el tiempo de acceso de entrada del terminal y la
 ascendencia de procesos de ese TTY. `sshd_exe` es obligatorio y debe nombrar el
 ejecutable `sshd` resuelto exacto; así un pseudoterminal local no se confunde con
@@ -730,7 +730,7 @@ SFTP/scp sin terminal y las conexiones que solo reenvían puertos quedan fuera a
 propósito; usa `tcp_connections` para conexiones de transporte. El atime del
 terminal depende de la política de atime del host. Si no se pueden leer utmp, un
 terminal, la ascendencia de procesos, un ejecutable necesario por un filtro de
-protección o la resolución del propietario, el check queda no disponible; por
+protección o la resolución del propietario, la comprobación queda no disponible; por
 tanto un guard deniega la operación en vez de asumir que no hay sesiones
 protegidas.
 
@@ -772,7 +772,7 @@ watches:
       reports: state
 ```
 
-Cada consulta se ejecuta con argv acotado como la cuenta configurada; el check
+Cada consulta se ejecuta con argv acotado como la cuenta configurada; la comprobación
 no inspecciona nombres de proceso, no enumera usuarios no configurados, no se
 adjunta a una sesión ni envía señales. La respuesta normal sin servidor/sockets
 es una muestra vacía disponible. Un check `tmux` puede fijar un `socket:`
@@ -1306,7 +1306,7 @@ Protocolos, en el orden de la tabla de arriba:
   `org.freedesktop.DBus.ListActivatableNames` antes de contarlo como fallo: un
   nombre activable está instalado y arranca bajo demanda —`systemd-networkd`
   enruta perfectamente mientras `org.freedesktop.network1` sigue sin activar—,
-  así que el check pasa e informa `activatable`. Un nombre que no está ni en uso
+  así que la comprobación pasa e informa `activatable`. Un nombre que no está ni en uso
   ni es activable sí está ausente, y sigue fallando. No existe un modo para
   métodos arbitrarios. Omitir todos los campos de destino conserva la sonda solo-bus;
   en caso contrario `bus_name` y `object_path` deben definirse juntos. No
@@ -2094,7 +2094,7 @@ Para corregir la deriva en lugar de solo informarla, un host con chrony puede ll
 [`then.makestep`](configuration.es.md#thenmakestep--corrección-forzosa-del-reloj-watch-de-clock).
 ntpd y systemd-timesyncd no exponen ninguna orden de salto, así que los servicios de
 catálogo `ntpd` y `systemd-timesyncd` fuerzan la corrección **reiniciando el demonio**,
-por la ruta de operación segura. Esa ruta se dispara ante cualquier fallo del check —
+por la ruta de operación segura. Esa ruta se dispara ante cualquier fallo de la comprobación —
 incluido un servidor NTP inalcanzable — y por eso se distribuye con dos servidores y una
 ventana de 15 minutos.
 
@@ -2424,14 +2424,14 @@ velocidad de su medio.
 
 `smart`, `hdparm` y `diskio` direccionan un dispositivo de bloque por nombre, y
 un disco que muere rara vez desaparece: conserva su nodo `/dev` y su fila en
-`/proc/diskstats`, y simplemente deja de responder. Por sí solo, cada check
+`/proc/diskstats`, y simplemente deja de responder. Por sí solo, cada comprobación
 leería eso como una buena noticia — `smartctl` devuelve un informe sin veredicto,
 `hdparm` una medición ilegible, `diskio` una ventana sin E/S — de modo que una
 unidad muerta aparecería como sana.
 
 Por eso los tres clasifican el dispositivo antes que la lectura. Cuando
 `smartctl` informa de que no pudo abrir ni identificar la unidad, o sysfs ya no
-le da tamaño (`/sys/class/block/<device>/size` ausente o `0`), el check publica
+le da tamaño (`/sys/class/block/<device>/size` ausente o `0`), la comprobación publica
 **`missing`**: una observación *no disponible*, nunca una correcta. El panel
 muestra `missing` como estado y salud del watch, y la fila se lee como fallo.
 `diskio` consulta sysfs sólo en una ventana que no movió nada, así que un disco
@@ -2468,14 +2468,14 @@ bajo la clave viva, porque el registrador grafica todo número que lleve un
 resultado: republicar la temperatura final de una unidad muerta como
 `temperature` dibujaría una línea plana en ese valor para siempre.
 
-Esa memoria pertenece al check en ejecución, así que está vacía tras reiniciar el
+Esa memoria pertenece a la comprobación en ejecución, así que está vacía tras reiniciar el
 daemon: Sermo informa sólo de muestras que realmente tomó. La identidad sobrevive
 al reinicio porque quien la recuerda es el kernel, no Sermo.
 
 **Una interfaz de red es la excepción que confirma la regla.** A diferencia de un
 disco, que conserva su nodo `/dev` y su identidad en sysfs tras quedarse mudo, una
 interfaz que se retira o se renombra se lleva consigo todo su directorio
-`/sys/class/net`, así que no queda nada que leer. Por eso un check `net` recuerda
+`/sys/class/net`, así que no queda nada que leer. Por eso una comprobación `net` recuerda
 la identidad que observó por última vez y la informa: `mac`, `driver`, `bus` (la
 dirección del dispositivo en su árbol de bus, que es lo que distingue un puerto de
 una tarjeta multipuerto), `mtu`, `duplex` y — para una interfaz virtual, que no
@@ -2483,7 +2483,7 @@ tiene driver que nombrar — `kind`, el `bridge`/`vlan`/`bond`/`veth` que el ker
 dice que es. Una muestra viva lleva las mismas filas más `carrier_changes`, la
 cuenta que el kernel hace de cada transición de enlace desde que la interfaz
 apareció: un enlace que ahora está arriba pero ha oscilado doscientas veces no es
-la misma situación que uno que lleva arriba desde el arranque, y un check que
+la misma situación que una que lleva arriba desde el arranque, y una comprobación que
 muestrea una vez por ciclo no puede ver las oscilaciones entre sus propias
 muestras.
 
@@ -2733,7 +2733,7 @@ y no un número ajustado, y el host que necesite otro lo dice en `services.local
 Cuando el control group contiene carga que el daemon no posee — los ayudantes por
 dominio de un hipervisor, los contenedores de un runtime — un recuento absoluto
 sumado describe esa carga y no al daemon, así que el catálogo no incluye tal
-vigilancia y el agotamiento a nivel de host se alerta desde una vigilancia de
+watch y el agotamiento a nivel de host se alerta desde un watch de
 host.
 
 ## Reglas
@@ -2927,12 +2927,12 @@ El motor de operaciones evalúa este guard inmediatamente antes de las acciones
 manuales y automáticas. Un check de conexiones no disponible deniega la acción
 en vez de tratar un error de observación como un conjunto vacío de conexiones.
 
-Esta regla de fallo en cerrado se aplica a todos los checks: un timeout, una
+Esta regla de fallo en cerrado se aplica a todas las comprobaciones: un timeout, una
 fuente ilegible, una muestra malformada o una fuente de métricas ausente es una
 observación no disponible, no una condición falsa válida. Una muestra válida
 que simplemente no cumple su predicado sigue siendo un resultado falso normal.
 
-Para MySQL/MariaDB y PostgreSQL, usa un check `sql` de solo lectura que cuente
+Para MySQL/MariaDB y PostgreSQL, usa una comprobación `sql` de solo lectura que cuente
 las sesiones de aplicación que quieres preservar; es más exacto que los sockets
 y requiere una cuenta de monitorización que pueda ver otras sesiones. Redis/Valkey
 ya expone `connected_clients` en su check `redis`, y Memcached expone
@@ -3063,8 +3063,8 @@ watches:
         WAL for a replication slot (limit ${check.threshold} MiB)
 ```
 
-Como un check `sql` informa «no ok» cuando falla la propia conexión, una base de
-datos caída nunca dispara la alerta de umbral: ese caso se cubre con un check de
+Como una comprobación `sql` informa «no ok» cuando falla la propia conexión, una base de
+datos caída nunca dispara la alerta de umbral: ese caso se cubre con una comprobación de
 conexión aparte (`type: postgres`, `type: mysql`, …), no relajando la consulta.
 
 ## Política de remediación

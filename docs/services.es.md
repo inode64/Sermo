@@ -417,7 +417,7 @@ disparan hooks en lugar de recargar una unidad.
 ## Dependencias de app (`apps`)
 
 Un servicio puede enlazar una o más **apps** de `catalog/apps` (java, openssl,
-perl, …). Una app posee los checks de **binary**, **health** y **version** de la herramienta.
+perl, …). Una app posee las comprobaciones de **binary**, **health** y **version** de la herramienta.
 Enlácelas con `apps:`:
 
 ```yaml
@@ -425,7 +425,7 @@ Enlácelas con `apps:`:
 apps: [java, "tomcat-${version}"]
 ```
 
-En la resolución, los checks de preflight de cada app enlazada se inyectan en el
+En la resolución, las comprobaciones de preflight de cada app enlazada se inyectan en el
 preflight del servicio bajo claves con namespace por el nombre de la app (`<app>-<check>`), llevando
 el path `variables.binary` propio de la app, la sonda de health y el comando de versión. Enlace una
 app solo cuando la propia operación del servicio la necesite. Por ejemplo,
@@ -434,7 +434,7 @@ una operación de backup, que informa de su propio error si falta el binario.
 Del mismo modo, el `winbindd` de Samba debe estar en un proceso/watch protegido
 por `enable_if`, no en `apps`, porque depende de la configuración del host.
 
-Cuando un servicio enlaza varias apps obligatorias, los checks de cada una se
+Cuando un servicio enlaza varias apps obligatorias, las comprobaciones de cada una se
 mantienen distintos:
 
 ```yaml
@@ -447,7 +447,7 @@ preflight:
 Las variables de app también están disponibles para el servicio. Siempre se exponen con un
 prefijo normalizado del nombre de la app (`${java_binary}`, `${php_fpm_binary}`, ...). Si el
 servicio enlaza exactamente una app, esas variables están adicionalmente disponibles sin
-el prefijo como valores por defecto, de modo que los checks específicos del servicio pueden usar `${binary}` mientras la
+el prefijo como valores por defecto, de modo que las comprobaciones específicas del servicio pueden usar `${binary}` mientras la
 app conserva la propiedad del path real. Las entradas `variables:` locales en el servicio de catálogo
 o en el servicio configurado sobrescriben cualquiera de las formas; cuando se enlazan varias apps,
 use los nombres con prefijo.
@@ -713,7 +713,7 @@ autorizada solo por `stop_policy.kill_only_if`.
 `sermoctl wizard vm` puede generar esta forma de servicio a partir de dominios
 detectados a través del socket libvirt local. Sondea tanto
 `/run/libvirt/libvirt-sock` como `/run/libvirt/virtqemud-sock` y escribe el
-socket que realmente usó en el servicio y el check generados.
+socket que realmente usó en el servicio y la comprobación generada.
 
 ### `control: docker` — contenedores Docker
 
@@ -742,7 +742,7 @@ watches:
 `socket` ni `host`, el control usa `/run/docker.sock`; establezca `socket` para otro
 socket local, o establezca `host` y opcionalmente `port`/`tls` para un endpoint TCP de
 la Docker API. `control.interface` no está soportado para control; el egress ligado a
-interface sigue disponible en los checks de Docker.
+interface sigue disponible en las comprobaciones de Docker.
 
 El motor de operación seguro no cambia: locks, guards, preflight, postflight,
 timeouts de operación y política de remediación siguen aplicando. Las acciones primitivas son
@@ -1086,7 +1086,7 @@ reap:
   [safety.es.md](safety.es.md) para el contrato completo y [cli.es.md](cli.es.md)
   para el comando.
 
-La detección es independiente de la limpieza: Sermo inyecta un check `strays` en
+La detección es independiente de la limpieza: Sermo inyecta una comprobación `strays` en
 cada servicio gestionado por init que declare selectores, reportando la cuenta y los
 ejecutables sin alertar. Ver
 [configuration.es.md](configuration.es.md#strays--procesos-que-el-servicio-no-puede-justificar).
@@ -1134,7 +1134,7 @@ de servicios lo notara); un servicio legítimamente parado se omite, no se
 alarma.
 
 Un check ya llamado `pidfile` se respeta, de modo que un servicio de catálogo
-que necesite un check personalizado todavía puede deletrearlo. Las entradas
+que necesite una comprobación personalizada todavía puede deletrearlo. Las entradas
 `processes:` públicas se mantienen limitadas a selectores `exe`/`cmd` con
 `user`/`group` opcionales; no ponga `pidfile` bajo `processes:`. El path del
 atajo puede referenciar variables (p. ej. `pidfile: "${pidfile}"`) y acepta un
@@ -1184,8 +1184,8 @@ socket: { path: "${socket}", optional: true }
 En la resolución esto crea un health check `socket` controlado por `requires: [service]`
 y elimina la clave de nivel superior. Como `pidfile:`, `socket:` acepta un path escalar,
 una lista de candidatos, o `{path: ..., optional: true}`. Úselo para sockets de runtime
-propiedad del servicio; los checks de protocolo como `redis`, `dbus` o `libvirt` siguen
-usando su propio campo `socket` dentro del cuerpo del check.
+propiedad del servicio; las comprobaciones de protocolo como `redis`, `dbus` o `libvirt` siguen
+usando su propio campo `socket` dentro del cuerpo de la comprobación.
 
 ### Atajo `lockfile:` (health check controlado)
 
@@ -1267,7 +1267,7 @@ servicios de catálogo, ponga los mismos tokens en `service:` para que el servic
 desde la unidad que está realmente activa en el backend de init seleccionado.
 
 `variables.binary` puede ser un string o una lista de candidatos. Úselo cuando el
-path versionado es también el ejecutable de runtime que los checks de preflight y versión
+path versionado es también el ejecutable de runtime que las comprobaciones de preflight y versión
 deberían sondear. Para plantillas de app y librería que descubren desde `versions.from` y
 no declaran `variables.binary`, el documento materializado vincula
 `${binary}` al path que coincidió; mantenga `versions.from` para fuentes de descubrimiento
@@ -1719,7 +1719,7 @@ variables:
 ```
 
 Clone copia el origen **antes** de la expansión de variables, de modo que sobrescribir solo la
-variable `port` es suficiente — cada check que referencia `${port}` resuelve al
+variable `port` es suficiente — cada comprobación que referencia `${port}` resuelve al
 nuevo valor. Las cadenas de clone resuelven transitivamente; los ciclos se rechazan.
 
 ## Múltiples instancias de una aplicación
@@ -1835,7 +1835,7 @@ cuenta sockets TCP del canal de control en lugar de usuarios autenticados. Consu
 ## Watches de replicación de PostgreSQL
 
 El servicio de catálogo `postgres` incluye cinco sensores de replicación
-construidos sobre el check `sql`: `alert-if-replication-slot-backlog`,
+construidos sobre la comprobación `sql`: `alert-if-replication-slot-backlog`,
 `alert-if-logical-slot-unconfirmed`, `alert-if-replication-slot-inactive`,
 `alert-if-replication-replay-lag` y `alert-if-standby-replay-delay`. Se ajustan
 con estas variables:
@@ -1849,7 +1849,7 @@ con estas variables:
 | `replay_lag_mib` | `256` | enviado pero no aplicado por la réplica más rezagada, en MiB |
 | `standby_delay_seconds` | `300` | cuánto puede retrasarse un standby, en segundos |
 
-Los umbrales son números simples porque un check `sql` compara numéricamente y no
+Los umbrales son números simples porque una comprobación `sql` compara numéricamente y no
 admite sufijos de tamaño, así que las consultas devuelven MiB y segundos
 directamente. Conviene fijarlos muy por encima del ruido en reposo: un primario
 sano ya retiene unos 16 MiB (un segmento WAL) porque el `restart_lsn` de un slot
@@ -1893,7 +1893,7 @@ genéricos, pero los **nombres reservados** son consumidos por features:
   vacío.
 
 Cualquier otra entrada es solo informativa. Una ejecución puede afirmar su resultado, de la misma
-forma que un hook de watch o un check `command` lo hace: `expect_exit` (por defecto 0, o una lista
+forma que un hook de watch o una comprobación `command` lo hace: `expect_exit` (por defecto 0, o una lista
 como `[0, 1]`) y matchers opcionales `expect_stdout`/`expect_stderr` — un
 substring o una comparación `{op, value}` (`== != > >= < <= contains =~`).
 Los comandos reservados también pueden establecer `user` (nombre de usuario o UID numérico) para ejecutar el

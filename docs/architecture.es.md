@@ -84,7 +84,7 @@ la config de usuario se combinan en tres etapas: **Load** (registra todos los
 documentos), **applyOSSelectors** (colapsa los bloques `os:` según el SO
 detectado) y **Resolve** (fusiona defaults + catálogo + override de usuario,
 expande variables y secciones). El resultado es un `Resolved.Tree` plano que
-consumen el gestor de init, los checks, las rules y el descubrimiento de
+consumen el gestor de init, las comprobaciones, las rules y el descubrimiento de
 procesos.
 
 ```mermaid
@@ -118,7 +118,7 @@ flowchart LR
 **Composición:** un *service* enlaza *apps* con `apps: [..]` (fusiona su preflight
 y variables), y puede enlazar reinicios a cambios de librerías o versiones de app con
 `restart_on_change.libraries` / `restart_on_change.apps`; los *patterns* se referencian
-en `checks.*.analyze.use: [..]` para parsear la salida de los checks.
+en `checks.*.analyze.use: [..]` para parsear la salida de las comprobaciones.
 
 **Selectores de SO:** `collapseOS` resuelve `os: { ubuntu: {...}, debian: {...},
 default: {...} }` a cualquier profundidad. Ejemplo: en Ubuntu, la unidad systemd
