@@ -2,12 +2,10 @@ package app
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"time"
 
 	"sermo/internal/checks"
-	"sermo/internal/locks"
 )
 
 const replicationControlLockPrefix = "replication-"
@@ -17,20 +15,9 @@ const replicationControlLockPrefix = "replication-"
 // post-start verification to the checks package. It mirrors ControlRAID: an
 // explicitly requested operator action, never autonomous remediation.
 func ControlReplicationStart(ctx context.Context, runtimeDir, watch string, entry map[string]any, timeout time.Duration) checks.ReplicationControlResult {
-	if timeout <= 0 {
-		timeout = DefaultEngineOperationTimeout
-	}
-	opCtx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
-	locker := configureOperationLocker(runtimeDir, nil)
-	handle, err := locker.Acquire(replicationControlLockPrefix+watch, timeout)
-	if err != nil {
-		if _, held := errors.AsType[*locks.HeldError](err); held {
-			return checks.ReplicationControlResult{Message: fmt.Sprintf("replication watch %q already has an operation in progress", watch)}
-		}
-		return checks.ReplicationControlResult{Message: fmt.Sprintf("lock replication watch %q: %v", watch, err)}
-	}
-	defer func() { _ = handle.Release() }()
-
-	return checks.StartReplication(opCtx, entry)
+	ok, message := runLockedControl(ctx, runtimeDir, replicationControlLockPrefix+watch, fmt.Sprintf("replication watch %q", watch), timeout, func(opCtx context.Context) (bool, string) {
+		result := checks.StartReplication(opCtx, entry)
+		return result.OK, result.Message
+	})
+	return checks.ReplicationControlResult{OK: ok, Message: message}
 }
