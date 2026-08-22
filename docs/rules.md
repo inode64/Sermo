@@ -68,6 +68,7 @@ Connection-protocol checks (MySQL, PostgreSQL, Redis, Docker, libvirt, etc.) are
 | `socket`      | one Unix socket candidate exists — gate with `requires: [service]` for sockets created by the service |
 | `libraries`   | all DT_NEEDED shared libraries of the binary can be resolved (native debug/elf, no ldd) |
 | `process`     | a process matching `exe`/`user` is in `state` (running/zombie/absent); an `absent` reading names a replaced binary when one explains it |
+| `process_policy` | every process of a user account satisfies the allow/deny policy (alert-only; see configuration.md) |
 | `metric`      | a sampled metric satisfies `op value` (see Metrics)                |
 | `count`       | the number of entries in a directory satisfies `op value` (see Count)|
 | `storage`     | a filesystem's space/inode predicates hold (`*_pct` accepts `%`; `*_bytes` requires K/M/G/T) |
@@ -78,6 +79,9 @@ Connection-protocol checks (MySQL, PostgreSQL, Redis, Docker, libvirt, etc.) are
 | `sensors`     | hwmon hardware sensors cross a threshold (`temp` °C / `fan` RPM / `voltage` V) (see Hardware sensors)|
 | `smart`       | a drive's SMART health/attributes and identity (failed verdict, `reallocated`, `pending_sectors`, `crc_errors`, `media_errors`, `wear`, `temperature`) (see Hardware sensors)|
 | `raid`        | a Linux md software-RAID array is degraded/recovering (`degraded`/`recovering`/`arrays`) (see Hardware sensors)|
+| `lvm`         | every LVM volume group and logical volume reports healthy (see Hardware sensors) |
+| `stale_binary` | no attributed process runs a binary replaced on disk since it started (service-injected; also available explicitly) |
+| `strays`      | the init unit's control group holds no process outside the configured selectors (service-injected; also available explicitly) |
 | `edac`        | ECC memory errors from EDAC (`ce` correctable / `ue` uncorrectable) (see Hardware sensors)|
 | `memory`      | system RAM vs the kernel's MemAvailable (used_pct/available_pct/available_bytes) |
 | `pressure`    | kernel PSI stall time for cpu/memory/io (`some_*`/`full_*` avg10/60/300) |

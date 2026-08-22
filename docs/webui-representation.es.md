@@ -538,6 +538,23 @@ activity es un evento.
 | `cert` | Name, origen, días restantes, caducidad, emisor |
 | `raid` | Name, array, tamaño, degradado, recuperando |
 | `replication` | Name, origen, hilo IO, hilo SQL, retraso |
+| `clock` | Name, offset, stratum |
+| `conntrack` | Name, en uso, techo, uso (leídos del medidor en vivo) |
+| `failed_units` | Name, conteo de fallidas, nombres de unidades |
+| `fds` | Name, asignados |
+| `firewall_rules` | Name, reglas, reglas mínimas |
+| `icmp` | Name, latencia |
+| `inotify` | Name, instancias, watches |
+| `load` | Name, carga |
+| `memory` | Name, usado %, disponible |
+| `nfs` | Name, resultado |
+| `oom` | Name, OOM kills |
+| `pids` | Name, en uso, techo, uso (leídos del medidor en vivo) |
+| `pressure` | Name, recurso, some avg60, full avg60 |
+| `process_policy` | Name, usuario, procesos activos, violaciones |
+| `route` | Name, familia, interfaz, gateway |
+| `swap` | Name, usado %, bytes usados, bytes libres |
+| `zombies` | Name, conteo de zombies |
 | Otros tipos | Name y su valor vivo principal |
 
 La columna de salud maneja dos vocabularios y colorea ambos: el check `lvm`
