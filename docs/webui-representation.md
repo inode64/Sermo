@@ -356,9 +356,13 @@ failures use distinct states. Attributable rows expose idle time and
 process-tree CPU, resident memory and read/write IO rates. An admin can confirm
 a close only when the backend can freshly revalidate the exact SSH or
 multiplexer session identity. An empty successful source uses a red `empty`
-pill and has no process identity to close; its `close` button dismisses only
-that empty row in the current browser. No multiplexer command or signal runs,
-and the row returns after that source reports an active session.
+pill. Two closes exist and they are not the same thing: a present, empty tmux
+server with a configured socket is a real process, so its `close` kills the
+server through the API behind confirmation; every other available-but-empty
+source — the ssh source above all — has no process identity to close, and its
+`close` only dismisses the row in the current browser. No command or signal
+runs for a dismissal, the choice persists with the rest of the UI state, and
+the row returns the moment that source reports an active session again.
 
 Open service expansions fetch and fully render fresh detail once per dashboard
 refresh; SLA, metric, runtime and event subrequests plus open watch/application
