@@ -4,9 +4,9 @@
 Every check here was written to catch a drift that actually reached the
 repository, and that no other tool in the gate can see: a document naming a
 source file that was deleted, a skill naming a Go identifier that does not
-exist, AGENTS.md advertising half the linters .golangci.yml enables, a
-validated configuration key documented nowhere, and the two language versions
-disagreeing on a number.
+exist, agent guidance losing its executable quality sources, a validated
+configuration key documented nowhere, and the two language versions disagreeing
+on a number.
 """
 
 from __future__ import annotations
@@ -104,21 +104,16 @@ def check_skill_identifiers() -> list[str]:
     return problems
 
 
-def check_linter_rollcall() -> list[str]:
-    """AGENTS.md must name every linter .golangci.yml enables."""
-    config = read(".golangci.yml").split("  settings:")[0]
-    enabled = set(re.findall(r"^    - ([a-z0-9_]+)", config, re.M))
+def check_agent_quality_sources() -> list[str]:
+    """Agent guidance must point to executable quality sources instead of copying them."""
+    required = ("`Makefile`", "`.golangci.yml`", "`make check`")
     problems = []
-    for doc, following in (
-        ("AGENTS.md", "- **`make npm-audit`**"),
-        ("AGENTS.es.md", "- **`make npm-audit`**"),
-    ):
+    for doc in ("AGENTS.md", "AGENTS.es.md"):
         text = read(doc)
-        section = text[text.index("- **`golangci-lint`**") : text.index(following)]
-        named = set(re.findall(r"`([a-z0-9_]+)`", section))
         problems.extend(
-            f"{doc}: does not name enabled linter {missing}"
-            for missing in sorted(enabled - named)
+            f"{doc}: does not point to executable quality source {source}"
+            for source in required
+            if source not in text
         )
     return problems
 
@@ -190,7 +185,7 @@ def check_language_parity() -> list[str]:
 CHECKS = (
     ("cited paths exist", check_cited_paths),
     ("skill identifiers exist", check_skill_identifiers),
-    ("linter roll-call is complete", check_linter_rollcall),
+    ("agent quality sources are linked", check_agent_quality_sources),
     ("configuration keys are documented", check_config_keys),
     ("language versions agree", check_language_parity),
     ("language pairs are complete", check_language_pairs_complete),
