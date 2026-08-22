@@ -807,20 +807,21 @@ function clearEventFilters() {
   loadEvents();
 }
 
+// toggleAdminControls is the one owner of the admin-hidden rule: the listed
+// controls exist only for operators who can act.
+function toggleAdminControls(...selectors) {
+  selectors.forEach((selector) => {
+    const el = $(selector);
+    if (el) el.classList.toggle("admin-hidden", !me.can_act);
+  });
+}
+
 function updateEventAdminControls() {
-  const show = !!me.can_act;
-  const btn = $("#event-clear");
-  const before = $("#event-before");
-  if (btn) btn.classList.toggle("admin-hidden", !show);
-  if (before) before.classList.toggle("admin-hidden", !show);
+  toggleAdminControls("#event-clear", "#event-before");
 }
 
 function updateStateCompactControls() {
-  const show = !!me.can_act;
-  const btn = $("#state-compact-btn");
-  const before = $("#state-before");
-  if (btn) btn.classList.toggle("admin-hidden", !show);
-  if (before) before.classList.toggle("admin-hidden", !show);
+  toggleAdminControls("#state-compact-btn", "#state-before");
 }
 
 // ---- Panic mode ----
@@ -829,8 +830,7 @@ let panicResolve = null;
 
 // updatePanicControls shows the footer button only to operators who can act.
 function updatePanicControls() {
-  const btn = $("#panic-btn");
-  if (btn) btn.classList.toggle("admin-hidden", !me.can_act);
+  toggleAdminControls("#panic-btn");
 }
 
 // updatePanicView reflects the current panic state in the button, banner and
@@ -1722,8 +1722,13 @@ function openServiceStatusTarget(status) {
   if (sec) {
     setPanelVisible(sec, true);
     sec.open = true;
-    sec.scrollIntoView({ block: scrollBlockStart, behavior: scrollBehaviorSmooth });
+    scrollToSection(sec);
   }
+}
+
+// scrollToSection is the one spelling of "bring this panel into view".
+function scrollToSection(el) {
+  el && el.scrollIntoView({ block: scrollBlockStart, behavior: scrollBehaviorSmooth });
 }
 
 function openPanelTarget(target) {
@@ -1752,14 +1757,14 @@ function openPanelTarget(target) {
     const sec = $("#apps-section");
     if (sec) sec.open = true;
     setAppStatus(targetStateFailed);
-    sec && sec.scrollIntoView({ block: scrollBlockStart, behavior: scrollBehaviorSmooth });
+    scrollToSection(sec);
     return;
   }
   if (target === "starting-apps") {
     const sec = $("#apps-section");
     if (sec) sec.open = true;
     setAppStatus(targetStateStarting);
-    sec && sec.scrollIntoView({ block: scrollBlockStart, behavior: scrollBehaviorSmooth });
+    scrollToSection(sec);
     return;
   }
   if (target === "failed-watches") {
@@ -1776,34 +1781,24 @@ function openPanelTarget(target) {
         break;
       }
     }
-    dest && dest.scrollIntoView({ block: scrollBlockStart, behavior: scrollBehaviorSmooth });
+    scrollToSection(dest);
     return;
   }
-  if (target === "starting-watches") {
+  const watchStatusTargets = {
+    "starting-watches": targetStateStarting,
+    "warning-watches": targetStateWarning,
+    "stale-watches": targetStateStale,
+  };
+  if (watchStatusTargets[target]) {
     openAllWatchPanels();
-    setAllWatchStatuses(targetStateStarting);
-    const sec = $(getWatchPanel(watchPanelKeyHost).section);
-    sec && sec.scrollIntoView({ block: scrollBlockStart, behavior: scrollBehaviorSmooth });
-    return;
-  }
-  if (target === "warning-watches") {
-    openAllWatchPanels();
-    setAllWatchStatuses(targetStateWarning);
-    const sec = $(getWatchPanel(watchPanelKeyHost).section);
-    sec && sec.scrollIntoView({ block: scrollBlockStart, behavior: scrollBehaviorSmooth });
-    return;
-  }
-  if (target === "stale-watches") {
-    openAllWatchPanels();
-    setAllWatchStatuses(targetStateStale);
-    const sec = $(getWatchPanel(watchPanelKeyHost).section);
-    sec && sec.scrollIntoView({ block: scrollBlockStart, behavior: scrollBehaviorSmooth });
+    setAllWatchStatuses(watchStatusTargets[target]);
+    scrollToSection($(getWatchPanel(watchPanelKeyHost).section));
     return;
   }
   const el = $("#" + target);
   if (!el) return;
   if (el.tagName === "DETAILS") el.open = true;
-  el.scrollIntoView({ block: scrollBlockStart, behavior: scrollBehaviorSmooth });
+  scrollToSection(el);
 }
 
 function globalTargetValue(kind, name) {
@@ -6340,13 +6335,17 @@ function renderNotifiers(notifiers) {
   updateSectionNav();
 }
 
+// setTextOrDash fills one element's text, dashing absent values; shared by the
+// Daemon info panel's static and runtime halves.
+function setTextOrDash(id, val) {
+  const el = $(id);
+  if (el) el.textContent = val || "—";
+}
+
 function renderDaemon(info) {
   if (!info) return;
   rememberDashboardHostname(info.hostname);
-  const set = (id, val) => {
-    const el = $(id);
-    if (el) el.textContent = val || "—";
-  };
+  const set = setTextOrDash;
   const hostType = hostTypeDisplay(info.host_type);
   set("#daemon-backend", info.backend);
   set("#daemon-host-type", hostType.label);
@@ -6998,7 +6997,7 @@ function renderStatus(ctx) {
     updateSectionNav();
 
     // Also populate the runtime part of the Daemon info panel
-    const set = (id, val) => { const el = $(id); if (el) el.textContent = val || "—"; };
+    const set = setTextOrDash;
     if (live.started_at) set("#daemon-started", live.started_at);
     set("#daemon-uptime", fmtDuration(live.uptime_seconds));
     if (live.go) set("#daemon-go", live.go);
