@@ -30,6 +30,7 @@ const dashboard = {
   sessions: {
     sources: [
       { kind: "ssh", service: "web", state: "available" },
+      { kind: "ssh", service: "db", state: "available" },
       { kind: "tmux", service: "web", check: "tmux-root", user: "root", state: "available" },
       { kind: "tmux", service: "web", check: "tmux-empty", user: "root", state: "available", can_close_empty: true },
       { kind: "screen", service: "web", check: "screen-root", user: "root", state: "available" },
@@ -703,6 +704,20 @@ test("events default to the last day and state readings colour by health", async
   await expect(exp.locator(".watch-reading-value.inactive")).toHaveText("recovering");
 });
 
+// An available-but-empty ssh source has no process to close, only a row to stop
+// looking at: its close dismisses the row in this browser without touching the
+// network, and the choice survives a re-render. The tmux empty-server close
+// (which really kills a process, behind confirmation) is covered separately.
+test("an empty ssh source row can be dismissed locally", async ({ page }) => {
+  const row = page.locator("#session-rows tr", { hasText: "No active sessions" }).filter({ hasText: "ssh" });
+  await expect(row).toHaveCount(1);
+  let closeCalls = 0;
+  page.on("request", (request) => { if (request.url().includes("close")) closeCalls++; });
+  await row.locator("[data-empty-session-dismiss]").click();
+  await expect(row).toHaveCount(0);
+  expect(closeCalls).toBe(0);
+});
+
 // A boolean state renders as an SLA-style band, never a line chart: a line
 // through 0/1 draws slopes that never happened. The band reuses the service SLA
 // panel wholesale, a warning-severity band caps its failing colour at amber, and
@@ -894,7 +909,7 @@ test("empty tmux sources use a red state and close the server through the API", 
     await route.fulfill({ json: { ok: true, message: "close empty terminal session source ok" } });
   });
 
-  await expect(page.locator('[data-sf="all"]')).toContainText("all 5");
+  await expect(page.locator('[data-sf="all"]')).toContainText("all 6");
   await expect(page.locator('[data-sf="ssh"]')).toContainText("ssh 1");
   await expect(page.locator('[data-sf="tmux"]')).toContainText("tmux 2");
   await expect(page.locator('[data-sf="screen"]')).toBeHidden();
@@ -905,7 +920,11 @@ test("empty tmux sources use a red state and close the server through the API", 
   await expect(emptySourceCells.nth(3).locator(".target-state")).toHaveClass(/state-empty/);
   await expect(emptySourceCells.nth(5)).toHaveText("—");
   await expect(emptySourceCells.nth(7)).toHaveText("—");
-  await expect(page.locator("#session-rows tr", { hasText: "screen-root" }).getByRole("button", { name: "close" })).toHaveCount(0);
+  // screen-root is empty but has no configured socket: no server to kill, so
+  // no API close — only the local dismiss every empty row now carries.
+  const screenRow = page.locator("#session-rows tr", { hasText: "screen-root" });
+  await expect(screenRow.locator("[data-empty-session-close]")).toHaveCount(0);
+  await expect(screenRow.locator("[data-empty-session-dismiss]")).toHaveCount(1);
 
   await emptySource.getByRole("button", { name: "close" }).click();
   await expect(page.locator("#simple-confirm-message")).toContainText("stops only the empty tmux server");

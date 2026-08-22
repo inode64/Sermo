@@ -1421,6 +1421,7 @@ function restoreUIState() {
     if (Array.isArray(s.appCollapsedGroups)) appCollapsedGroups = new Set(s.appCollapsedGroups);
     if (Array.isArray(s.libraryCollapsedGroups)) libraryCollapsedGroups = new Set(s.libraryCollapsedGroups);
     if (Array.isArray(s.mountCollapsedGroups)) mountCollapsedGroups = new Set(s.mountCollapsedGroups);
+    if (Array.isArray(s.dismissedEmptySources)) dismissedEmptySources = new Set(s.dismissedEmptySources);
     if (s.eventFilters && typeof s.eventFilters === "object") restoreEventFilters(s.eventFilters);
   } catch (_) {}
 }
@@ -1462,6 +1463,7 @@ function saveUIState() {
       expanded: [...expanded],
       svcCollapsedGroups: [...svcCollapsedGroups],
       svcPinned: [...svcPinned],
+      dismissedEmptySources: [...dismissedEmptySources],
       appCollapsedGroups: [...appCollapsedGroups],
       libraryCollapsedGroups: [...libraryCollapsedGroups],
       mountCollapsedGroups: [...mountCollapsedGroups],
@@ -3929,12 +3931,41 @@ function sessionStateCell(state) {
   return stateBadgeLabel(badgeState, label);
 }
 
+// dismissedEmptySources hides empty source rows this browser chose to close.
+// Purely local: nothing runs and nothing is signalled, which is why the button
+// exists at all — an available-but-empty ssh source has no process to close,
+// only a row to stop looking at. A dismissal clears the moment the source
+// reports a session again, so the row returns exactly when there is something
+// to see. Persisted with the rest of the UI state.
+let dismissedEmptySources = new Set();
+
+function emptySourceKey(source) {
+  return `${source.kind || ""}:${source.service || ""}:${source.check || ""}`;
+}
+
+function dismissEmptySessionSource(kind, service, check) {
+  dismissedEmptySources.add(`${kind}:${service}:${check}`);
+  saveUIState();
+  renderSessions();
+}
+
 function emptySessionCloseButton(source) {
-  if (source.state !== sessionSourceAvailable || !source.can_close_empty) return nothing;
-  if (!me.can_act) return tpl`<span class="muted">read-only</span>`;
-  return tpl`<button class="danger-btn" data-empty-session-close="1"
+  if (source.state !== sessionSourceAvailable) return nothing;
+  if (source.can_close_empty) {
+    // A present, empty tmux server with a configured socket is a real process:
+    // this close kills it through the API, behind confirmation.
+    if (!me.can_act) return tpl`<span class="muted">read-only</span>`;
+    return tpl`<button class="danger-btn" data-empty-session-close="1"
+      data-empty-session-service="${source.service || ""}"
+      data-empty-session-check="${source.check || ""}">close</button>`;
+  }
+  // Everything else that is available-but-empty — the ssh source above all —
+  // has no process identity to close; this close only dismisses the row here.
+  return tpl`<button class="icon-btn" data-empty-session-dismiss="1"
+    data-empty-session-kind="${source.kind || ""}"
     data-empty-session-service="${source.service || ""}"
-    data-empty-session-check="${source.check || ""}">close</button>`;
+    data-empty-session-check="${source.check || ""}"
+    title="Hide this empty row in this browser; it returns when a session appears">close</button>`;
 }
 
 function sourceHasSession(source, inventory) {
@@ -3970,8 +4001,14 @@ function sessionRows(inventory) {
     ...sessionUsageRow(session, session.has_idle),
     action: terminalSessionCloseButton(session),
   }));
+  // A source that reports sessions again sheds its dismissal, so the next
+  // empty stretch renders a fresh row rather than inheriting an old choice.
+  (inventory.sources || []).forEach((source) => {
+    if (sourceHasSession(source, inventory)) dismissedEmptySources.delete(emptySourceKey(source));
+  });
   const emptySources = (inventory.sources || [])
     .filter((source) => !sourceHasSession(source, inventory))
+    .filter((source) => source.state !== sessionSourceAvailable || !dismissedEmptySources.has(emptySourceKey(source)))
     .map((source) => ({
     kind: source.kind || "", service: source.service || "", user: source.user || "",
     name: source.check || "—", state: source.state === sessionSourceAvailable ? sessionStateEmpty : source.state || targetStateCollecting,
@@ -8216,6 +8253,8 @@ function initDelegatedHandlers() {
       el.dataset.terminalSession || "", el.dataset.terminalUser || "", el.dataset.terminalIdentity || "")],
     ["[data-empty-session-close]", (el) => closeEmptySessionSource(
       el.dataset.emptySessionService || "", el.dataset.emptySessionCheck || "")],
+    ["[data-empty-session-dismiss]", (el) => dismissEmptySessionSource(
+      el.dataset.emptySessionKind || "", el.dataset.emptySessionService || "", el.dataset.emptySessionCheck || "")],
     ["[data-service-action][data-service]", (el) => act(el.dataset.service || "", el.dataset.serviceAction || "")],
     ["[data-watch-action][data-watch]", (el) => actWatch(el.dataset.watch || "", el.dataset.watchAction || "")],
     ["[data-mount-action][data-mount]", (el) => actMount(el.dataset.mount || "", el.dataset.mountAction || "")],
