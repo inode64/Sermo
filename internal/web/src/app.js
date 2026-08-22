@@ -2845,16 +2845,9 @@ function renderPrimaryServices() {
   const total = source.length;
   const section = $("#services-section");
   const rows = $("#rows");
-  setPanelVisible(section, total > 0);
   const headCount = $("#services-count");
-  if (headCount) headCount.textContent = total ? `(${total})` : "";
+  if (!panelShell({ section, tbody: rows, count: headCount, filterCount: $("#svc-count"), total })) return;
   if (!rows) return;
-  if (!total) {
-    litRender(nothing, rows);
-    const cnt = $("#svc-count");
-    if (cnt) cnt.textContent = "";
-    return;
-  }
   svcCategory = syncCategorySelect("#svc-category", source, defaultCategoryService, svcCategory);
   renderFilterCounts(source);
   const list = source.filter(serviceMatches);
@@ -2888,14 +2881,8 @@ function renderSplitServicePanel(panelKey) {
   const rows = $(panel.rows);
   const headCount = $(panel.count);
   const cnt = $(panel.filterCount);
-  setPanelVisible(section, total > 0);
-  if (headCount) headCount.textContent = total ? `(${total})` : "";
+  if (!panelShell({ section, tbody: rows, count: headCount, filterCount: cnt, total })) return;
   if (!rows) return;
-  if (!total) {
-    litRender(nothing, rows);
-    if (cnt) cnt.textContent = "";
-    return;
-  }
   renderFilterButtonCounts(panel.filters, serviceStatusCounts(source));
   syncSplitServicePanelControls(panelKey);
   const list = source.filter((s) => splitServiceMatches(s, panel));
@@ -5567,15 +5554,7 @@ function renderWatchPanel(panelKey, watches) {
   const outerHead = section.querySelector(".watch-table > thead");
   if (outerHead) outerHead.hidden = true;
   const total = (watches || []).length;
-  if (total === 0) {
-    setPanelVisible(section, false);
-    if (cnt) cnt.textContent = "";
-    if (filterCount) filterCount.textContent = "";
-    litRender(nothing, tbody);
-    return;
-  }
-  setPanelVisible(section, true);
-  if (cnt) cnt.textContent = `(${total})`;
+  if (!panelShell({ section, tbody, count: cnt, filterCount, total })) return;
   renderWatchFilterCounts(panelKey, watches);
   panel.type = syncWatchTypeSelect(panelKey, watches);
   syncWatchFilterActive(panelKey);
@@ -5944,15 +5923,7 @@ function renderArtifactPanel(panel, items) {
   if (!section || !tbody) return;
   const inventory = panel.items();
   const total = inventory.length;
-  if (total === 0) {
-    setPanelVisible(section, false);
-    if (count) count.textContent = "";
-    if (filterCount) filterCount.textContent = "";
-    updateSectionNav();
-    return;
-  }
-  setPanelVisible(section, true);
-  if (count) count.textContent = `(${total})`;
+  if (!panelShell({ section, count, filterCount, total, onEmpty: updateSectionNav })) return;
   panel.setCategory(syncCategorySelect(panel.categorySelect, inventory, panel.surface, panel.category()));
   panel.renderFilterCounts();
   const list = inventory.filter(panel.matches);
@@ -6252,15 +6223,7 @@ function renderMounts(mounts) {
   const filterCount = $("#mount-filter-count");
   if (!section || !tbody) return;
   const total = (allMounts || []).length;
-  if (total === 0) {
-    setPanelVisible(section, false);
-    if (cnt) cnt.textContent = "";
-    if (filterCount) filterCount.textContent = "";
-    updateSectionNav();
-    return;
-  }
-  setPanelVisible(section, true);
-  if (cnt) cnt.textContent = `(${total})`;
+  if (!panelShell({ section, count: cnt, filterCount, total, onEmpty: updateSectionNav })) return;
   mountCategory = syncMountCategorySelect();
   renderMountFilterCounts();
   const list = (allMounts || []).filter(mountMatches);
@@ -6307,19 +6270,32 @@ function mountUmountDisabledReason(m) {
   return m.umount_disabled_reason || "root filesystem cannot be unmounted";
 }
 
+// panelShell applies the contract every list panel follows at its edges: an
+// empty panel hides its section and clears the counters (and the body, when
+// the caller owns one through lit); a populated one shows the section and
+// prints "(total)". Returns true when the caller should render content.
+// onEmpty carries the one legitimate per-panel extra (updateSectionNav for
+// panels the section nav lists).
+function panelShell({ section, tbody, count, filterCount, total, onEmpty }) {
+  if (!total) {
+    setPanelVisible(section, false);
+    if (count) count.textContent = "";
+    if (filterCount) filterCount.textContent = "";
+    if (tbody) litRender(nothing, tbody);
+    if (onEmpty) onEmpty();
+    return false;
+  }
+  setPanelVisible(section, true);
+  if (count) count.textContent = `(${total})`;
+  return true;
+}
+
 function renderNotifiers(notifiers) {
   const section = $("#notifiers-section");
   const tbody = $("#notifier-rows");
   const cnt = $("#notifiers-count");
   if (!section || !tbody) return;
-  if (!notifiers || notifiers.length === 0) {
-    setPanelVisible(section, false);
-    if (cnt) cnt.textContent = "";
-    updateSectionNav();
-    return;
-  }
-  setPanelVisible(section, true);
-  if (cnt) cnt.textContent = `(${notifiers.length})`;
+  if (!panelShell({ section, count: cnt, total: (notifiers || []).length, onEmpty: updateSectionNav })) return;
   const rows = notifiers.map((n) => {
     const enabled = n.enabled !== false;
     const state = enabled ? "enabled" : "disabled";
