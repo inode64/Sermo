@@ -205,7 +205,13 @@ func raidResultData(st RaidStatus, array string, detail RaidArrayStatus, present
 	data[DataKeyDegraded] = boolFloat(detail.Degraded)
 	data[DataKeyRecovering] = boolFloat(detail.Recovering)
 	data[DataKeyRaidOperation] = detail.Operation
-	data[DataKeyRaidMismatchCount] = detail.MismatchCount
+	// Numeric when the kernel reports a number, so the mismatch series can be
+	// graphed; the raw string survives only when it is not a count at all.
+	if n, err := strconv.ParseUint(detail.MismatchCount, 10, 64); err == nil {
+		data[DataKeyRaidMismatchCount] = n
+	} else {
+		data[DataKeyRaidMismatchCount] = detail.MismatchCount
+	}
 	data[DataKeyTotalBytes] = detail.SizeBytes
 	if detail.HasProgress {
 		data[DataKeyRaidProgressPct] = detail.ProgressPct

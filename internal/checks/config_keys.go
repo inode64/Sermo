@@ -137,6 +137,7 @@ const (
 	CheckKeyServers               = "servers"
 	CheckKeySeverity              = "severity"
 	CheckKeySkipWhenChanged       = "skip_when_changed"
+	CheckKeySLA                   = "sla"
 	CheckKeySize                  = "size"
 	CheckKeySocket                = "socket"
 	CheckKeySSHDExe               = "sshd_exe"

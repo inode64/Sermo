@@ -75,6 +75,8 @@ const colDupPhone = "col-dup col-dup-640";
 // same string, different vocabulary.
 const watchPanelKeyHost = "host";
 const eventDetailLimit = "50";
+// eventRangeAll is the events range selector's explicit "any time" value.
+const eventRangeAll = "all";
 const eventContextLimit = "1";
 const queryBoolOne = "1";
 const storageBoolTrue = "1";
@@ -740,7 +742,9 @@ async function loadEvents(seq = 0, append = false, generation = dashboardGenerat
     add("event-watch", apiQueryWatch);
     add("event-kind", apiQueryKind);
     add("event-status", apiQueryStatus);
-    add("event-range", apiQuerySince);
+    // "all" is the explicit any-time choice and sends no window at all.
+    const range = ($("#event-range") || {}).value || "";
+    if (range && range !== eventRangeAll) params.set(apiQuerySince, range);
     // An absolute "from" narrows the server fetch too: the API's since only
     // takes durations, so send now-from and let the exact bounds filter
     // client-side in renderGlobalEvents.
@@ -1417,29 +1421,34 @@ function restoreUIState() {
     if (Array.isArray(s.appCollapsedGroups)) appCollapsedGroups = new Set(s.appCollapsedGroups);
     if (Array.isArray(s.libraryCollapsedGroups)) libraryCollapsedGroups = new Set(s.libraryCollapsedGroups);
     if (Array.isArray(s.mountCollapsedGroups)) mountCollapsedGroups = new Set(s.mountCollapsedGroups);
-    if (s.eventFilters && typeof s.eventFilters === "object") {
-      const ef = s.eventFilters;
-      const setVal = (id, v) => {
-        const el = $(id);
-        if (!el || typeof v !== "string") return;
-        if (el.tagName === "SELECT" && v && ![...el.options].some((option) => option.value === v)) {
-          el.add(new Option(v, v));
-        }
-        el.value = v;
-      };
-      setVal("#event-service", ef.service);
-      setVal("#event-watch", ef.watch);
-      setVal("#event-kind", ef.kind);
-      setVal("#event-status", ef.status);
-      setVal("#event-range", ef.range);
-      setVal("#event-from", ef.from);
-      setVal("#event-to", ef.to);
-      const err = $("#event-errors");
-      if (err && typeof ef.onlyErrors === "boolean") err.checked = ef.onlyErrors;
-      const grp = $("#event-group");
-      if (grp && typeof ef.group === "boolean") grp.checked = ef.group;
-    }
+    if (s.eventFilters && typeof s.eventFilters === "object") restoreEventFilters(s.eventFilters);
   } catch (_) {}
+}
+
+// restoreEventFilters reapplies the events panel's saved controls. Kept out of
+// restoreUIState both for its size and for one rule of its own: a legacy saved
+// range of "" predates the named any-time value, so it leaves the markup
+// default (24h) instead of restoring an empty selection.
+function restoreEventFilters(ef) {
+  const setVal = (id, v) => {
+    const el = $(id);
+    if (!el || typeof v !== "string") return;
+    if (el.tagName === "SELECT" && v && ![...el.options].some((option) => option.value === v)) {
+      el.add(new Option(v, v));
+    }
+    el.value = v;
+  };
+  setVal("#event-service", ef.service);
+  setVal("#event-watch", ef.watch);
+  setVal("#event-kind", ef.kind);
+  setVal("#event-status", ef.status);
+  if (ef.range) setVal("#event-range", ef.range);
+  setVal("#event-from", ef.from);
+  setVal("#event-to", ef.to);
+  const err = $("#event-errors");
+  if (err && typeof ef.onlyErrors === "boolean") err.checked = ef.onlyErrors;
+  const grp = $("#event-group");
+  if (grp && typeof ef.group === "boolean") grp.checked = ef.group;
 }
 
 function saveUIState() {
@@ -4856,7 +4865,9 @@ function renderWatchReadings(readings) {
       ? tpl`<span class="watch-reading-value bad">${r.error}</span>`
       : r.warning
         ? tpl`<span class="watch-reading-value inactive">${r.warning}</span>`
-        : tpl`<b class="watch-reading-value">${r.value || "—"}</b>`;
+        : r.good
+          ? tpl`<b class="watch-reading-value good">${r.value || "—"}</b>`
+          : tpl`<b class="watch-reading-value">${r.value || "—"}</b>`;
     return tpl`<div class="watch-reading${longValue ? " watch-reading-long" : ""}"><span class="muted">${label}</span><br>${value}</div>`;
   });
   return tpl`<div class="watch-grid">${cells}</div>`;

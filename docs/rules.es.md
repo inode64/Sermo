@@ -519,6 +519,25 @@ deja de grabarse: un estado se dibuja como banda o como línea, nunca ambas. Los
 nombres de check no pueden contener `:`; la serie de banda se clava como
 `check:metric`.
 
+#### Optar una vigilancia a disponibilidad (`sla`)
+
+El conjunto de disponibilidad es estrecho a propósito — que un umbral dispare no
+es una caída — pero el operador que escribió el umbral puede saber más: una
+deriva de reloj, un firewall sin reglas o un sistema de ficheros desmontado *es*
+una caída para lo que dependa de ellos. `sla: true` en el bloque check de una
+vigilancia graba su veredicto como serie de disponibilidad y le da el panel de
+Availability; `sla: false` silencia un tipo que grabaría por defecto. Las
+puertas de veredicto siguen aplicando: un sensor `reports:` o un aviso
+`severity: warning` nunca entra en la serie.
+
+```yaml
+watches:
+  watch-clock-drift:
+    check: { type: clock, max_offset: 100ms, sla: true }
+  storage-mnt-backup:
+    check: { type: storage, path: /mnt/backup, used_pct: { op: ">=", value: "90%" }, sla: true }
+```
+
 #### Graficar el valor de una comprobación (`unit`)
 
 La mayoría de tipos declaran sus métricas graficables de forma estática, pero

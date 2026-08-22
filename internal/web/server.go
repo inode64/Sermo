@@ -564,6 +564,10 @@ type WatchReading struct {
 	// an advisory. The two are separate fields because Error is what turns the
 	// dashboard row red, and the whole point of a warning is that it must not.
 	Warning string `json:"warning,omitempty"`
+	// Good marks an explicitly healthy state reading — "none degraded", "idle" —
+	// rendered green, so a state row answers at a glance instead of printing the
+	// number that encodes it.
+	Good bool `json:"good,omitempty"`
 }
 
 // WatchExpand is the configured manual/automatic storage growth action.

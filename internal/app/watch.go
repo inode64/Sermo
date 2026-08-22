@@ -111,6 +111,12 @@ type Watch struct {
 	// RecordMetrics persists this watch's numeric readings, for the check types
 	// that publish any. nil disables metric recording.
 	RecordMetrics func(data map[string]any, at time.Time)
+
+	// ForceSLA records this watch's verdict as an availability series even
+	// though its check type is not in the availability set: the operator's
+	// `sla: true`. The verdict gates below still apply — a verdictless or
+	// advisory result never enters the series.
+	ForceSLA bool
 	// StateStore persists this watch's episode and pacing state. StateSlot
 	// distinguishes multiple result streams exposed under the same watch name.
 	StateStore WatchStateStore
@@ -808,7 +814,10 @@ func envKey(k string) string {
 // `reports: state` is a sensor, and one marked `severity: warning` is an
 // advisory; neither is an outage, exactly as in a service.
 func (w *Watch) recordAvailabilitySample(res checks.Result) {
-	if w.RecordAvailability == nil || !checks.RecordsAvailability(w.CheckType, res.Data) {
+	if w.RecordAvailability == nil {
+		return
+	}
+	if !w.ForceSLA && !checks.RecordsAvailability(w.CheckType, res.Data) {
 		return
 	}
 	if !res.CountsTowardHealth() {

@@ -78,6 +78,7 @@ const (
 	DataKeyInterfaces               = "interfaces"
 	DataKeyIssuer                   = "issuer"
 	DataKeyKeyBits                  = "key_bits"
+	DataKeyKills                    = "kills"
 	DataKeyKind                     = "kind"
 	DataKeyCarrierChanges           = "carrier_changes"
 	DataKeyDriver                   = "driver"

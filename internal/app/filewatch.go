@@ -207,9 +207,11 @@ func (w *fileWatcher) publishSnapshot(current map[string]fileState) {
 		return
 	}
 	if len(current) == 0 {
-		message := "file watch: no configured path found"
+		// Name the path: "no watched path exists" says what happened, the path
+		// says to what, and the column is where the operator reads it.
+		message := firstFileWatchPath(w.paths) + ": not found"
 		if w.absentOK {
-			message = "file watch: no watched path exists"
+			message = firstFileWatchPath(w.paths) + ": absent (ok)"
 		}
 		result := checks.Result{
 			Check:   w.name,

@@ -102,7 +102,7 @@ func (b *WebBackend) applyWatchRuntimeView(view *web.Watch, w *webWatch, activit
 	// The same declaration the recorder persists from, so a watch never offers a
 	// panel for a series nothing is writing.
 	if !w.disabled {
-		view.Metrics = webCheckMetrics(w.checkType, w.checkUnit, w.bands)
+		view.Metrics = webCheckMetrics(w.graphs, w.bands)
 	}
 	observed := b.settling == nil || b.settling.Observed(SettlingWatchKey(w.name))
 	failed, warning := watchViewState(*view)
@@ -352,6 +352,11 @@ func watchSummary(w *webWatch, storage *web.StorageWatchInfo, liveSummary string
 // daemon expands it into one watch per metric, so it counts when any of them is
 // the availability metric.
 func watchRecordsAvailability(w *webWatch) bool {
+	// The operator's `sla:` boolean outranks the type default in both
+	// directions: it is the same override the recorder honours.
+	if value, declared := checks.SLAOverride(w.check); declared {
+		return value
+	}
 	if checks.RecordsAvailability(w.checkType, w.check) {
 		return true
 	}

@@ -47,6 +47,22 @@ func isEndpointProbe(data map[string]any) bool {
 	return host != ""
 }
 
+// SLAOverride reads a check entry's `sla:` boolean: the operator's own call on
+// whether this watch's verdict is an availability series. declared reports
+// whether the entry says anything at all; absent, the availabilityTypes default
+// decides. It exists because the default set is deliberately narrow — a
+// threshold firing is not downtime — but the operator who wrote the threshold
+// may know better: a clock offset breach or an unmounted filesystem is downtime
+// for whoever depends on it, and that judgement belongs in the YAML, not here.
+func SLAOverride(entry map[string]any) (value, declared bool) {
+	raw, present := entry[CheckKeySLA]
+	if !present {
+		return false, false
+	}
+	b, ok := raw.(bool)
+	return b && ok, ok
+}
+
 // RecordsAvailability reports whether one result should contribute to an
 // availability series. data is the result's own data map — or, for the callers
 // deciding whether a *configured* check keeps a series at all, its check entry,
