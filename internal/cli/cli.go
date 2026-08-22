@@ -884,16 +884,20 @@ func (a App) defaultOperate(ctx context.Context, opts options, cfg *config.Confi
 	defer func() { _ = eventStore.Close() }()
 	var eventErr error
 	engine := operation.New(operation.Config{
-		Service:          service,
-		Unit:             target.Unit,
-		Backend:          string(target.Backend),
-		Tree:             resolved.Tree,
-		Manager:          target.Manager,
-		Locker:           &locker,
-		Scanner:          locks.NewScanner(locks.RuntimeLocksDir(runtime)),
-		Discoverer:       discoverer,
-		ResolveUser:      discoverer.ResolveUser,
-		CheckDeps:        checks.Deps{DefaultTimeout: engineDefaultTimeout(cfg), Runner: a.Runner, Processes: discoverer.ObserveState, ProcessesAny: discoverer.ObserveAnyState, ProcessCount: discoverer.CountMatching},
+		Service:     service,
+		Unit:        target.Unit,
+		Backend:     string(target.Backend),
+		Tree:        resolved.Tree,
+		Manager:     target.Manager,
+		Locker:      &locker,
+		Scanner:     locks.NewScanner(locks.RuntimeLocksDir(runtime)),
+		Discoverer:  discoverer,
+		ResolveUser: discoverer.ResolveUser,
+		CheckDeps: checks.Deps{
+			DefaultTimeout: engineDefaultTimeout(cfg), Runner: a.Runner,
+			Processes: discoverer.ObserveState, ProcessesAny: discoverer.ObserveAnyState,
+			ProcessCount: app.ServiceScopedProcessCount(ctx, resolved.Tree, a.Runner, target.Backend, target.Unit, discoverer),
+		},
 		MetricSample:     metricSample,
 		Changed:          app.ArtifactChangedFunc(libBaseline),
 		OperationTimeout: operation.ResolveTimeout(opts.timeout, resolved.Tree),
@@ -1093,12 +1097,13 @@ func (a App) runPreflight(ctx context.Context, opts options) int {
 
 	section, _ := resolved.Tree[config.SectionPreflight].(map[string]any)
 	discoverer := process.NewDiscovererWithUserLookup(app.EngineUserLookup(cfg, a.Runner))
+	unit := config.ServiceUnit(resolved.Tree, service)
 	deps := checks.Deps{
 		Service:        service,
 		DefaultTimeout: engineDefaultTimeout(cfg),
-		Status:         a.statusFunc(opts, resolved.Tree, config.ServiceUnit(resolved.Tree, service)),
+		Status:         a.statusFunc(opts, resolved.Tree, unit),
 		Processes:      discoverer.ObserveState,
-		ProcessCount:   discoverer.CountMatching,
+		ProcessCount:   app.ServiceScopedProcessCount(ctx, resolved.Tree, a.Runner, opts.backend, unit, discoverer),
 	}
 	built, buildIssues := checks.BuildWithIssues(section, deps)
 	warnings := checks.BuildIssueStrings(buildIssues)

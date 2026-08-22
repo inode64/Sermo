@@ -7,6 +7,7 @@ import (
 	"sermo/internal/cfgval"
 	"sermo/internal/checks"
 	"sermo/internal/config"
+	"sermo/internal/execx"
 	"sermo/internal/locks"
 	"sermo/internal/metrics"
 	"sermo/internal/operation"
@@ -59,9 +60,15 @@ func serviceRuntime(ctx context.Context, name, unit string, tree map[string]any,
 			}
 			return st.Status, nil
 		},
-		Processes:           discoverer.ObserveState,
-		ProcessesAny:        discoverer.ObserveAnyState,
-		ProcessCount:        discoverer.CountMatching,
+		Processes:    discoverer.ObserveState,
+		ProcessesAny: discoverer.ObserveAnyState,
+		// Service scope, not host scope: a process_count check inside a service
+		// counts what discovery attributes to that service (docs promise exactly
+		// this). The host-wide CountMatching here made a filterless catalog check
+		// count every process on the host once the service died — 362 "active
+		// jobs" for a crashed fcron — which latched its own block action and made
+		// the service unrepairable through Sermo.
+		ProcessCount:        func(user, exe, exeDir string) int { return discoverer.CountInTree(selectors, user, exe, exeDir) },
 		PidfileFallbackPIDs: pidfileFallbackPIDs(ctx, deps, unit, backendPIDs),
 		StaleBinaries:       func() []process.StaleBinary { return discoverer.StaleBinaries(selectors) },
 		Strays: func() []process.Process {
@@ -109,6 +116,19 @@ func serviceBackendPIDs(ctx context.Context, deps Deps, unit string) func() []in
 		return nil
 	}
 	return servicemgr.BackendPIDsFuncWithRunner(ctx, deps.Backend, unit, deps.ExecxRunner, nil)
+}
+
+// ServiceScopedProcessCount returns the process_count dependency for one
+// service's own checks, shared by the daemon and the CLI so both paths judge
+// the same set: what discovery attributes to the service (selector matches plus
+// descendants), never the whole host. The distinction is load-bearing for the
+// catalog's filterless block checks — host scope turned "fcron has active
+// jobs" into a count of every process on the host once the service died.
+func ServiceScopedProcessCount(ctx context.Context, tree map[string]any, runner execx.Runner, backend servicemgr.Backend, unit string, discoverer process.Discoverer) func(user, exe, exeDir string) int {
+	selectors, _ := serviceProcessSelectors(ctx, tree, Deps{ExecxRunner: runner, Backend: backend}, unit)
+	return func(user, exe, exeDir string) int {
+		return discoverer.CountInTree(selectors, user, exe, exeDir)
+	}
 }
 
 // serviceProcessSelectors returns the process selectors a service should use
