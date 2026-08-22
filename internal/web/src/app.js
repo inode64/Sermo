@@ -2519,8 +2519,12 @@ function sortAriaValue(sort, key) {
   return sort.dir > 0 ? "ascending" : "descending";
 }
 
-function updateSortIndicatorsFor(attr, sort, headerSelector, headerKey) {
-  document.querySelectorAll(`.sort-ind[data-${attr}]`).forEach((el) => {
+// updateSortIndicatorsFor is the one owner of the sort arrow (▲/▼) and
+// aria-sort refresh. scope, when given, confines the indicator query to one
+// panel's section so per-panel sorts (the watch panels) cannot repaint each
+// other's arrows.
+function updateSortIndicatorsFor(attr, sort, headerSelector, headerKey, scope = "") {
+  document.querySelectorAll(`${scope} .sort-ind[data-${attr}]`.trim()).forEach((el) => {
     el.textContent = el.dataset[attr] === sort.key ? (sort.dir > 0 ? " ▲" : " ▼") : "";
   });
   if (!headerSelector || !headerKey) return;
@@ -4784,12 +4788,7 @@ function setWatchSort(panelKey, key) { toggleSort(getWatchPanel(panelKey).sort, 
 
 function updateWatchSortIndicators(panelKey) {
   const panel = getWatchPanel(panelKey);
-  document.querySelectorAll(`${panel.section} .sort-ind[data-wi]`).forEach((el) => {
-    el.textContent = el.dataset.wi === panel.sort.key ? (panel.sort.dir > 0 ? " ▲" : " ▼") : "";
-  });
-  document.querySelectorAll(`${panel.section} th.sortable[data-watch-sort]`).forEach((th) => {
-    th.setAttribute("aria-sort", sortAriaValue(panel.sort, th.dataset.watchSort || ""));
-  });
+  updateSortIndicatorsFor("wi", panel.sort, `${panel.section} th.sortable[data-watch-sort]`, "watchSort", panel.section);
 }
 
 function watchPanelKeyFor(_watch) {
