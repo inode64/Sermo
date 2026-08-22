@@ -49,122 +49,122 @@ El conjunto completo de tipos de comprobación de un solo disparo está definido
 
 Las comprobaciones de protocolo de conexión (MySQL, PostgreSQL, Redis, Docker, libvirt, etc.) se registran por su nombre de protocolo con alias comunes (p. ej. `mysql`/`mariadb`, `fpm`/`php-fpm`).
 
-| type          | pasa cuando                                                        |
-|---------------|--------------------------------------------------------------------|
-| `tcp`         | una conexión TCP a `host:port` tiene éxito                          |
-| `tcp_connections` | el número de sockets TCP locales `ESTABLISHED` en `port` satisface `count {op, value}` |
-| `ssh_idle`    | terminales SSH interactivos inactivos durante `idle_for`, o sesiones de terminal protegidas, satisfacen el predicado de recuento configurado |
-| `terminal_sessions` | las sesiones de `tmux` o `screen` del usuario configurado satisfacen un predicado `count`/`attached`/`detached` |
-| `ports`       | un conjunto de puertos de `host` satisface una expectativa de abierto/cerrado (ver Ports)|
-| `http`        | la respuesta coincide con `expect_status` (y cabeceras/cuerpo/JSON opcionales, ver HTTP)|
-| `command`     | el comando termina con `expect_exit` (por defecto 0) y su salida coincide con `expect_stdout`/`expect_stderr` opcionales; un `user` opcional lo ejecuta como un usuario concreto del SO; `on_change` alerta cuando su salida cambia (p. ej. una versión), solo en forma de array |
-| `config`      | un comando de prueba de configuración (`apachectl configtest`, `nginx -t`, …) pasa, y (con `on_change`) el `path` de configuración no ha cambiado (ver Condiciones de salud del servicio)|
-| `service`     | el estado del backend es igual a `expect` (active/inactive/paused/failed/unknown)|
-| `file_exists` | existe un archivo de bandera/bloqueo ajeno (nunca bajo `<runtime>/locks`)     |
-| `file`        | una ruta existe y es un archivo regular                                |
-| `lockfile`    | existe un candidato a archivo de bloqueo regular creado por el servicio — protégelo con `requires: [service]`; no bloquea operaciones |
-| `binary`      | una ruta existe y es ejecutable                                    |
-| `pidfile`     | un pidfile existe y referencia un proceso en ejecución — protégelo con `requires: [service]` de modo que un pidfile ausente/obsoleto sea un error solo mientras el servicio está activo |
-| `socket`      | existe un candidato a socket Unix — protégelo con `requires: [service]` para los sockets creados por el servicio |
-| `libraries`   | todas las bibliotecas compartidas DT_NEEDED del binario pueden resolverse (debug/elf nativo, sin ldd) |
-| `process`     | un proceso que coincide con `exe`/`user` está en `state` (running/zombie/absent); una lectura `absent` nombra el binario reemplazado cuando eso la explica |
-| `process_policy` | todos los procesos de una cuenta de usuario satisfacen la política allow/deny (solo alerta; ver configuration.md) |
-| `metric`      | una métrica muestreada satisface `op value` (ver Metrics)                |
-| `count`       | el número de entradas en un directorio satisface `op value` (ver Count)|
-| `storage`     | se cumplen los predicados de espacio/inodos de un sistema de archivos (`*_pct` acepta `%`; `*_bytes` requiere K/M/G/T) |
-| `load`        | se cumple un umbral de carga media (load1/load5/load15, opcional per_cpu)|
-| `users`       | el número de usuarios conectados (desde utmp) satisface `count {op, value}`|
-| `process_count` | el número de procesos (de todo el host, o filtrado por `user`/`exe`/`exe_dir`) satisface `count {op, value}`|
-| `hdparm`      | el rendimiento de lectura `hdparm` de un disco cruza un umbral (`read`/`cached` MB/s) (ver Rendimiento de disco)|
-| `sensors`     | los sensores de hardware hwmon cruzan un umbral (`temp` °C / `fan` RPM / `voltage` V) (ver Sensores de hardware)|
-| `smart`       | la salud/atributos e identidad SMART de una unidad (veredicto fallido, `reallocated`, `pending_sectors`, `crc_errors`, `media_errors`, `wear`, `temperature`) (ver Sensores de hardware)|
-| `raid`        | un array RAID por software md de Linux está degradado/recuperándose (`degraded`/`recovering`/`arrays`) (ver Sensores de hardware)|
-| `lvm`         | todos los volume groups y volúmenes lógicos LVM reportan sanos (ver Sensores de hardware) |
-| `stale_binary` | ningún proceso atribuido ejecuta un binario reemplazado en disco desde que arrancó (inyectado por servicio; también declarable) |
-| `strays`      | el control group de la unidad init no contiene procesos fuera de los selectores configurados (inyectado por servicio; también declarable) |
-| `edac`        | errores de memoria ECC desde EDAC (`ce` corregibles / `ue` no corregibles) (ver Sensores de hardware)|
-| `memory`      | RAM del sistema frente a MemAvailable del kernel (used_pct/available_pct/available_bytes) |
-| `pressure`    | tiempo de bloqueo PSI del kernel para cpu/memory/io (`some_*`/`full_*` avg10/60/300) |
-| `fds`         | descriptores de archivo del sistema frente a `fs.file-max` (used_pct/free/allocated)  |
-| `pids`        | la tabla PID del kernel frente al más estrecho de `kernel.pid_max` y `kernel.threads-max` (used_pct/free/count) |
-| `diskio`      | tasas de E/S por ciclo de un dispositivo de bloque (util_pct/read_bytes/write_bytes/await_ms), más los totales leído/escrito acumulados como lecturas |
-| `conntrack`   | la tabla conntrack de netfilter frente a su máximo (used_pct/free/count)      |
-| `firewall_rules` | nftables/iptables tiene al menos `min_rules` reglas cargadas (ver Reglas de firewall) |
-| `failed_units` | el recuento de unidades de init en estado fallido cumple `count {op, value}` (por defecto `> 0`; ver Unidades de init fallidas) |
-| `inotify` | los límites de instancias/watches de inotify por usuario cumplen sus predicados `{op, value}` (ver Límites de inotify) |
-| `route`       | existe una ruta por defecto activa, opcionalmente saliendo por una `interface` dada (ver Ruta por defecto)|
-| `clock`       | el desfase del reloj local se mantiene dentro de `max_offset`, medido frente a los `servers` NTP configurados o (`source: chrony`) al chronyd local |
-| `net`         | una métrica de interfaz (`metric: state\|speed\|errors\|address`) se cumple — forma de métrica única del watch net |
-| `icmp`        | una métrica de ping (`metric: state\|latency`) contra `host`, opcionalmente ligada a una `interface` |
-| `swap`        | una métrica de swap (`metric: usage\|io`) se cumple — forma de métrica única del watch swap |
-| `zombies`     | el número de procesos zombi satisface `count {op, value}`         |
-| `oom`         | el contador de OOM-kill del kernel subió en `delta {op, value}` desde el último ciclo|
-| `cert`        | un certificado TLS está caducando/inválido, o su algoritmo/emisor cambió (ver Cert)|
-| `mysql` / `mariadb` | un servidor MySQL/MariaDB responde: sin credenciales lee el saludo del handshake (vivacidad + versión); con un usuario/contraseña autentica y hace ping (ver Base de datos) |
-| `mongodb` / `mongo` | una conexión a un servidor MongoDB autentica, hace ping e informa de su versión y del `role` del replica-set para `expect`/`on_change` (ver Base de datos) |
-| `postgres` / `postgresql` | una conexión a un servidor PostgreSQL autentica y responde (ver Base de datos) |
-| `redis` / `valkey` | una conexión a un servidor Redis/Valkey autentica y responde a PING; expone role, replicación, persistencia y memoria desde INFO para `expect` (ver Base de datos) |
-| `memcached` / `memcache` | un servidor memcached responde a `stats`; expone versión, conexiones, hits/misses, items, bytes y desalojos para `expect` (ver Base de datos) |
-| `imap`        | un servidor IMAP saluda con OK (anónimo) y, con credenciales, LOGIN tiene éxito (ver Base de datos) |
-| `pop` / `pop3` | un servidor POP3 saluda con +OK (anónimo) y, con credenciales, USER/PASS tiene éxito (ver Base de datos) |
-| `smtp`        | un servidor SMTP saluda con 220 + EHLO (anónimo) y, con credenciales, AUTH PLAIN tiene éxito (ver Base de datos) |
-| `nntp` / `nntps` | un servidor NNTP saluda con 200/201 (anónimo) y, con credenciales, AUTHINFO USER/PASS tiene éxito (ver Base de datos) |
-| `ftp`         | un servidor FTP saluda con 220 (anónimo) y, con credenciales, el login USER/PASS tiene éxito (ver Base de datos) |
-| `ssh`         | un servidor SSH completa el intercambio de claves (anónimo: clave de host + banner); con credenciales, el login tiene éxito; `on_change` alerta sobre cambios de la clave de host (ver Base de datos) |
-| `fpm` / `php-fpm` | un pool PHP-FPM responde a un `/ping` FastCGI con `pong`; un `status_path` opcional expone métricas del pool para `expect` (socket Unix o TCP, ver Base de datos) |
-| `dns`         | un servidor DNS responde a una consulta (NOERROR/NXDOMAIN) para `query` (ver Base de datos) |
-| `ntp`         | un servidor NTP responde con una hora sincronizada (modo servidor, estrato 1–15); expone leap, precisión, retardo/dispersión raíz y reference id para `expect` (ver Base de datos) |
-| `chrony` / `chronyd` | el chronyd local responde en su puerto de mando; expone el seguimiento (estrato, desfase, leap, skew, frecuencia) y los recuentos de fuentes para `expect` — usa esta, no `ntp`, para un chrony cliente que no sirve NTP (ver Base de datos) |
-| `snmp`        | un agente SNMP responde a un GET del sistema (comunidad v2c o usuario/contraseña v3); expone sys name/contact/location/uptime para `expect`; `on_change` alerta sobre cambios de la identidad del dispositivo (ver Base de datos) |
-| `tftp`        | un servidor TFTP responde a un RRQ con un paquete válido (DATA o ERROR) (ver Base de datos) |
-| `ldap`        | un directorio LDAP acepta un bind anónimo, o un bind simple con credenciales (ver Base de datos) |
-| `ajp`         | un conector AJP13 (p. ej. el 8009 de Tomcat) responde a un CPing con CPong (ver Base de datos) |
-| `ipp` / `cups` | un servidor IPP (CUPS/cupsd) responde a una petición IPP con una respuesta válida (ver Base de datos) |
-| `rsync` / `rsyncd` | un daemon rsync envía su saludo `@RSYNCD:` (ver Base de datos) |
-| `dhcp` / `dhcpd` | un servidor DHCP responde a un DHCPDISCOVER con un DHCPOFFER (ver Base de datos) |
-| `dhclient` / `dhcp-client` | un cliente DHCP local tiene UDP/68 ligado en `/proc/net/udp` (ver Base de datos) |
-| `rspamd`      | un worker rspamd responde a `GET /ping` con `pong` (ver Base de datos) |
-| `libvirt` / `libvirtd` | un daemon libvirt responde a RPC; expone recuentos de VM (`domains.active`…), capacidad del nodo y el estado de una VM para `expect`/`on_change` (ver Base de datos) |
-| `dbus`        | un daemon D-Bus responde a `GetId`; los objetos con nombre admiten sondas de peer, introspección y propiedad escalar de solo lectura sin activación (ver Base de datos) |
-| `avahi` / `avahi-daemon` | el daemon Avahi responde a `GetVersionString` sobre su API D-Bus (ver Base de datos) |
-| `syncthing`   | una instancia Syncthing responde a `/rest/noauth/health` con `{"status":"OK"}` (ver Base de datos) |
-| `docker`      | el motor Docker responde a `/info`, exponiendo recuentos de contenedores (running/paused/stopped), imágenes y el estado/salud de un contenedor para `expect`/`on_change` (ver Base de datos) |
-| `unifi` / `unifi-controller` / `unifi-network` | un controlador UniFi Network responde a `GET /status` con `meta.rc == "ok"` en 8443 (ver Base de datos) |
-| `influxdb` / `influx` | un servidor InfluxDB responde a `/health` (o `/ping`) e informa de su versión en 8086 (ver Base de datos) |
-| `prometheus` / `prom` | un servidor Prometheus responde a `/api/v1/status/buildinfo` (o `/-/healthy`) en 9090 (ver Base de datos) |
-| `cloudflared` / `cloudflare-tunnel` | un daemon Cloudflare Tunnel responde a `/metrics` en 60123 con métricas `cloudflared_` (ver Base de datos) |
-| `clamd` / `clamav` | un daemon ClamAV responde a `VERSION` con la versión de su motor (ver Base de datos) |
-| `spamd` / `spamassassin` | el daemon SpamAssassin responde a `PING` con `PONG` (ver Base de datos) |
-| `nut` / `ups` / `upsd` | el upsd de NUT responde a `VER`; un UPS expone sus variables (estado, carga/autonomía de batería, carga, voltajes) para `expect`/`on_change` (ver Base de datos) |
-| `smb` / `samba` / `cifs` | un servidor SMB/CIFS negocia (y, con credenciales, autentica) (ver Base de datos) |
-| `acpid`       | el daemon de eventos ACPI acepta una conexión en su socket Unix (ver Base de datos) |
-| `fail2ban`    | fail2ban-server acepta una conexión en su socket de control (ver Base de datos) |
-| `lvmpolld`    | el daemon de poll de LVM responde a una petición `hello` con `OK` sobre su socket (ver Base de datos) |
-| `rpcbind` / `portmap` / `portmapper` | el portmapper RPC responde a una llamada RPC NULL (ver Base de datos) |
-| `nfs` / `nfs-server` / `nfsd` | un servidor NFS responde a una llamada RPC NULL en 2049 (ver Base de datos) |
-| `mountd` / `rpc.mountd` / `nfs-mountd` | el daemon de montaje NFS responde a una llamada RPC NULL a MOUNT (100005) (ver Base de datos) |
-| `statd` / `rpc.statd` / `nsm` / `nfs-statd` | el monitor de estado NFS responde a una llamada RPC NULL a NSM (100024) (ver Base de datos) |
-| `nebula` / `nebula-vpn` | un nodo mesh-VPN Nebula responde a un paquete de túnel desconocido con un `recv_error` en 4242/udp (ver Base de datos) |
-| `openvpn` / `ovpn` | un servidor OpenVPN responde a un hard-reset-client con un hard-reset-server en 1194 (ver Base de datos) |
-| `rdp` / `ms-wbt-server` | un servidor de Escritorio Remoto responde a la negociación de conexión X.224 (ver Base de datos) |
-| `guacd` / `guacamole` | el daemon proxy de Guacamole responde a un `select` con una instrucción Guacamole (ver Base de datos) |
-| `asterisk` / `ami` | una PBX Asterisk envía su saludo AMI `Asterisk Call Manager/<version>` (ver Base de datos) |
-| `sieve` / `managesieve` | un servidor ManageSieve envía su saludo de capacidades terminado en `OK` (ver Base de datos) |
-| `mqtt`        | un broker MQTT acepta un CONNECT (código de retorno CONNACK 0) (ver Base de datos) |
-| `amqp` / `rabbitmq` | un broker AMQP 0-9-1 envía un saludo Connection.Start válido (ver Base de datos) |
-| `kafka`       | un broker/controlador Kafka responde a una petición `ApiVersions` no autenticada; expone el `role` del listener (broker/controller) y los flags `produce_api`/`vote_api` para `expect` (ver Base de datos) |
-| `varnish` / `varnishadm` | la CLI de gestión de Varnish responde con su banner/desafío de auth (ver Base de datos) |
-| `ceph` / `ceph-mon` | un monitor Ceph envía su banner messenger `ceph v…` (ver Base de datos) |
-| `glusterfs` / `glusterd` / `gluster` | el glusterd de un nodo GlusterFS acepta conexiones TCP en 24007 (ver Base de datos) |
-| `gluster_cluster` | la CLI Gluster local verifica pares, volúmenes/bricks/self-heal y límites de curación opcionales (ver Cluster Gluster) |
-| `openvswitch` / `ovs` / `ovsdb` / `ovsdb-server` | ovsdb-server responde a una petición JSON-RPC `list_dbs` de OVSDB (ver Base de datos) |
-| `sqlite` / `sqlite3` | un archivo de base de datos SQLite pasa `PRAGMA integrity_check` (ver SQLite) |
-| `replication` | la replicación MySQL/MariaDB está sana: ambos hilos de réplica corren, retraso opcionalmente acotado (ver Replicación) |
-| `sql`         | el resultado escalar de una consulta SQL se compara (`== != > >= < <= contains =~`) contra un valor (ver Consulta SQL) |
-| `mongodb-query` | un recuento de documentos / agregación / resultado de comando de MongoDB se compara contra un valor (ver Consulta MongoDB) |
-| `influxdb-query` | el resultado escalar de una consulta InfluxQL (1.x) o Flux (2.x) se compara contra un valor (ver Consulta InfluxDB) |
-| `size`        | un archivo/directorio crece al menos `grow_by` dentro de `within` (crecimiento descontrolado) (ver Crecimiento de tamaño) |
-| `websocket` | un endpoint WebSocket completa el handshake de apertura de RFC 6455 (ver WebSocket) |
+| type          | estilo | pasa cuando                                                        |
+|---------------|-----------|--------------------------------------------------------------------|
+| `tcp`         | salud | una conexión TCP a `host:port` tiene éxito                          |
+| `tcp_connections` | condición | el número de sockets TCP locales `ESTABLISHED` en `port` satisface `count {op, value}` |
+| `ssh_idle`    | condición | terminales SSH interactivos inactivos durante `idle_for`, o sesiones de terminal protegidas, satisfacen el predicado de recuento configurado |
+| `terminal_sessions` | condición | las sesiones de `tmux` o `screen` del usuario configurado satisfacen un predicado `count`/`attached`/`detached` |
+| `ports`       | salud | un conjunto de puertos de `host` satisface una expectativa de abierto/cerrado (ver Ports)|
+| `http`        | salud | la respuesta coincide con `expect_status` (y cabeceras/cuerpo/JSON opcionales, ver HTTP)|
+| `command`     | salud | el comando termina con `expect_exit` (por defecto 0) y su salida coincide con `expect_stdout`/`expect_stderr` opcionales; un `user` opcional lo ejecuta como un usuario concreto del SO; `on_change` alerta cuando su salida cambia (p. ej. una versión), solo en forma de array |
+| `config`      | salud | un comando de prueba de configuración (`apachectl configtest`, `nginx -t`, …) pasa, y (con `on_change`) el `path` de configuración no ha cambiado (ver Condiciones de salud del servicio)|
+| `service`     | salud | el estado del backend es igual a `expect` (active/inactive/paused/failed/unknown)|
+| `file_exists` | salud | existe un archivo de bandera/bloqueo ajeno (nunca bajo `<runtime>/locks`)     |
+| `file`        | salud | una ruta existe y es un archivo regular                                |
+| `lockfile`    | salud | existe un candidato a archivo de bloqueo regular creado por el servicio — protégelo con `requires: [service]`; no bloquea operaciones |
+| `binary`      | salud | una ruta existe y es ejecutable                                    |
+| `pidfile`     | salud | un pidfile existe y referencia un proceso en ejecución — protégelo con `requires: [service]` de modo que un pidfile ausente/obsoleto sea un error solo mientras el servicio está activo |
+| `socket`      | salud | existe un candidato a socket Unix — protégelo con `requires: [service]` para los sockets creados por el servicio |
+| `libraries`   | salud | todas las bibliotecas compartidas DT_NEEDED del binario pueden resolverse (debug/elf nativo, sin ldd) |
+| `process`     | salud | un proceso que coincide con `exe`/`user` está en `state` (running/zombie/absent); una lectura `absent` nombra el binario reemplazado cuando eso la explica |
+| `process_policy` | salud | todos los procesos de una cuenta de usuario satisfacen la política allow/deny (solo alerta; ver configuration.md) |
+| `metric`      | condición | una métrica muestreada satisface `op value` (ver Metrics)                |
+| `count`       | condición | el número de entradas en un directorio satisface `op value` (ver Count)|
+| `storage`     | condición | se cumplen los predicados de espacio/inodos de un sistema de archivos (`*_pct` acepta `%`; `*_bytes` requiere K/M/G/T) |
+| `load`        | condición | se cumple un umbral de carga media (load1/load5/load15, opcional per_cpu)|
+| `users`       | condición | el número de usuarios conectados (desde utmp) satisface `count {op, value}`|
+| `process_count` | condición | el número de procesos (de todo el host, o filtrado por `user`/`exe`/`exe_dir`) satisface `count {op, value}`|
+| `hdparm`      | condición | el rendimiento de lectura `hdparm` de un disco cruza un umbral (`read`/`cached` MB/s) (ver Rendimiento de disco)|
+| `sensors`     | condición | los sensores de hardware hwmon cruzan un umbral (`temp` °C / `fan` RPM / `voltage` V) (ver Sensores de hardware)|
+| `smart`       | condición | la salud/atributos e identidad SMART de una unidad (veredicto fallido, `reallocated`, `pending_sectors`, `crc_errors`, `media_errors`, `wear`, `temperature`) (ver Sensores de hardware)|
+| `raid`        | condición | un array RAID por software md de Linux está degradado/recuperándose (`degraded`/`recovering`/`arrays`) (ver Sensores de hardware)|
+| `lvm`         | salud | todos los volume groups y volúmenes lógicos LVM reportan sanos (ver Sensores de hardware) |
+| `stale_binary` | condición | ningún proceso atribuido ejecuta un binario reemplazado en disco desde que arrancó (inyectado por servicio; también declarable) |
+| `strays`      | condición | el control group de la unidad init no contiene procesos fuera de los selectores configurados (inyectado por servicio; también declarable) |
+| `edac`        | condición | errores de memoria ECC desde EDAC (`ce` corregibles / `ue` no corregibles) (ver Sensores de hardware)|
+| `memory`      | condición | RAM del sistema frente a MemAvailable del kernel (used_pct/available_pct/available_bytes) |
+| `pressure`    | condición | tiempo de bloqueo PSI del kernel para cpu/memory/io (`some_*`/`full_*` avg10/60/300) |
+| `fds`         | condición | descriptores de archivo del sistema frente a `fs.file-max` (used_pct/free/allocated)  |
+| `pids`        | condición | la tabla PID del kernel frente al más estrecho de `kernel.pid_max` y `kernel.threads-max` (used_pct/free/count) |
+| `diskio`      | condición | tasas de E/S por ciclo de un dispositivo de bloque (util_pct/read_bytes/write_bytes/await_ms), más los totales leído/escrito acumulados como lecturas |
+| `conntrack`   | condición | la tabla conntrack de netfilter frente a su máximo (used_pct/free/count)      |
+| `firewall_rules` | salud | nftables/iptables tiene al menos `min_rules` reglas cargadas (ver Reglas de firewall) |
+| `failed_units` | condición | el recuento de unidades de init en estado fallido cumple `count {op, value}` (por defecto `> 0`; ver Unidades de init fallidas) |
+| `inotify` | condición | los límites de instancias/watches de inotify por usuario cumplen sus predicados `{op, value}` (ver Límites de inotify) |
+| `route`       | salud | existe una ruta por defecto activa, opcionalmente saliendo por una `interface` dada (ver Ruta por defecto)|
+| `clock`       | salud | el desfase del reloj local se mantiene dentro de `max_offset`, medido frente a los `servers` NTP configurados o (`source: chrony`) al chronyd local |
+| `net`         | condición | una métrica de interfaz (`metric: state\|speed\|errors\|address`) se cumple — forma de métrica única del watch net |
+| `icmp`        | condición | una métrica de ping (`metric: state\|latency`) contra `host`, opcionalmente ligada a una `interface` |
+| `swap`        | condición | una métrica de swap (`metric: usage\|io`) se cumple — forma de métrica única del watch swap |
+| `zombies`     | condición | el número de procesos zombi satisface `count {op, value}`         |
+| `oom`         | condición | el contador de OOM-kill del kernel subió en `delta {op, value}` desde el último ciclo|
+| `cert`        | salud | un certificado TLS está caducando/inválido, o su algoritmo/emisor cambió (ver Cert)|
+| `mysql` / `mariadb` | salud | un servidor MySQL/MariaDB responde: sin credenciales lee el saludo del handshake (vivacidad + versión); con un usuario/contraseña autentica y hace ping (ver Base de datos) |
+| `mongodb` / `mongo` | salud | una conexión a un servidor MongoDB autentica, hace ping e informa de su versión y del `role` del replica-set para `expect`/`on_change` (ver Base de datos) |
+| `postgres` / `postgresql` | salud | una conexión a un servidor PostgreSQL autentica y responde (ver Base de datos) |
+| `redis` / `valkey` | salud | una conexión a un servidor Redis/Valkey autentica y responde a PING; expone role, replicación, persistencia y memoria desde INFO para `expect` (ver Base de datos) |
+| `memcached` / `memcache` | salud | un servidor memcached responde a `stats`; expone versión, conexiones, hits/misses, items, bytes y desalojos para `expect` (ver Base de datos) |
+| `imap`        | salud | un servidor IMAP saluda con OK (anónimo) y, con credenciales, LOGIN tiene éxito (ver Base de datos) |
+| `pop` / `pop3` | salud | un servidor POP3 saluda con +OK (anónimo) y, con credenciales, USER/PASS tiene éxito (ver Base de datos) |
+| `smtp`        | salud | un servidor SMTP saluda con 220 + EHLO (anónimo) y, con credenciales, AUTH PLAIN tiene éxito (ver Base de datos) |
+| `nntp` / `nntps` | salud | un servidor NNTP saluda con 200/201 (anónimo) y, con credenciales, AUTHINFO USER/PASS tiene éxito (ver Base de datos) |
+| `ftp`         | salud | un servidor FTP saluda con 220 (anónimo) y, con credenciales, el login USER/PASS tiene éxito (ver Base de datos) |
+| `ssh`         | salud | un servidor SSH completa el intercambio de claves (anónimo: clave de host + banner); con credenciales, el login tiene éxito; `on_change` alerta sobre cambios de la clave de host (ver Base de datos) |
+| `fpm` / `php-fpm` | salud | un pool PHP-FPM responde a un `/ping` FastCGI con `pong`; un `status_path` opcional expone métricas del pool para `expect` (socket Unix o TCP, ver Base de datos) |
+| `dns`         | salud | un servidor DNS responde a una consulta (NOERROR/NXDOMAIN) para `query` (ver Base de datos) |
+| `ntp`         | salud | un servidor NTP responde con una hora sincronizada (modo servidor, estrato 1–15); expone leap, precisión, retardo/dispersión raíz y reference id para `expect` (ver Base de datos) |
+| `chrony` / `chronyd` | salud | el chronyd local responde en su puerto de mando; expone el seguimiento (estrato, desfase, leap, skew, frecuencia) y los recuentos de fuentes para `expect` — usa esta, no `ntp`, para un chrony cliente que no sirve NTP (ver Base de datos) |
+| `snmp`        | salud | un agente SNMP responde a un GET del sistema (comunidad v2c o usuario/contraseña v3); expone sys name/contact/location/uptime para `expect`; `on_change` alerta sobre cambios de la identidad del dispositivo (ver Base de datos) |
+| `tftp`        | salud | un servidor TFTP responde a un RRQ con un paquete válido (DATA o ERROR) (ver Base de datos) |
+| `ldap`        | salud | un directorio LDAP acepta un bind anónimo, o un bind simple con credenciales (ver Base de datos) |
+| `ajp`         | salud | un conector AJP13 (p. ej. el 8009 de Tomcat) responde a un CPing con CPong (ver Base de datos) |
+| `ipp` / `cups` | salud | un servidor IPP (CUPS/cupsd) responde a una petición IPP con una respuesta válida (ver Base de datos) |
+| `rsync` / `rsyncd` | salud | un daemon rsync envía su saludo `@RSYNCD:` (ver Base de datos) |
+| `dhcp` / `dhcpd` | salud | un servidor DHCP responde a un DHCPDISCOVER con un DHCPOFFER (ver Base de datos) |
+| `dhclient` / `dhcp-client` | salud | un cliente DHCP local tiene UDP/68 ligado en `/proc/net/udp` (ver Base de datos) |
+| `rspamd`      | salud | un worker rspamd responde a `GET /ping` con `pong` (ver Base de datos) |
+| `libvirt` / `libvirtd` | salud | un daemon libvirt responde a RPC; expone recuentos de VM (`domains.active`…), capacidad del nodo y el estado de una VM para `expect`/`on_change` (ver Base de datos) |
+| `dbus`        | salud | un daemon D-Bus responde a `GetId`; los objetos con nombre admiten sondas de peer, introspección y propiedad escalar de solo lectura sin activación (ver Base de datos) |
+| `avahi` / `avahi-daemon` | salud | el daemon Avahi responde a `GetVersionString` sobre su API D-Bus (ver Base de datos) |
+| `syncthing`   | salud | una instancia Syncthing responde a `/rest/noauth/health` con `{"status":"OK"}` (ver Base de datos) |
+| `docker`      | salud | el motor Docker responde a `/info`, exponiendo recuentos de contenedores (running/paused/stopped), imágenes y el estado/salud de un contenedor para `expect`/`on_change` (ver Base de datos) |
+| `unifi` / `unifi-controller` / `unifi-network` | salud | un controlador UniFi Network responde a `GET /status` con `meta.rc == "ok"` en 8443 (ver Base de datos) |
+| `influxdb` / `influx` | salud | un servidor InfluxDB responde a `/health` (o `/ping`) e informa de su versión en 8086 (ver Base de datos) |
+| `prometheus` / `prom` | salud | un servidor Prometheus responde a `/api/v1/status/buildinfo` (o `/-/healthy`) en 9090 (ver Base de datos) |
+| `cloudflared` / `cloudflare-tunnel` | salud | un daemon Cloudflare Tunnel responde a `/metrics` en 60123 con métricas `cloudflared_` (ver Base de datos) |
+| `clamd` / `clamav` | salud | un daemon ClamAV responde a `VERSION` con la versión de su motor (ver Base de datos) |
+| `spamd` / `spamassassin` | salud | el daemon SpamAssassin responde a `PING` con `PONG` (ver Base de datos) |
+| `nut` / `ups` / `upsd` | salud | el upsd de NUT responde a `VER`; un UPS expone sus variables (estado, carga/autonomía de batería, carga, voltajes) para `expect`/`on_change` (ver Base de datos) |
+| `smb` / `samba` / `cifs` | salud | un servidor SMB/CIFS negocia (y, con credenciales, autentica) (ver Base de datos) |
+| `acpid`       | salud | el daemon de eventos ACPI acepta una conexión en su socket Unix (ver Base de datos) |
+| `fail2ban`    | salud | fail2ban-server acepta una conexión en su socket de control (ver Base de datos) |
+| `lvmpolld`    | salud | el daemon de poll de LVM responde a una petición `hello` con `OK` sobre su socket (ver Base de datos) |
+| `rpcbind` / `portmap` / `portmapper` | salud | el portmapper RPC responde a una llamada RPC NULL (ver Base de datos) |
+| `nfs` / `nfs-server` / `nfsd` | salud | un servidor NFS responde a una llamada RPC NULL en 2049 (ver Base de datos) |
+| `mountd` / `rpc.mountd` / `nfs-mountd` | salud | el daemon de montaje NFS responde a una llamada RPC NULL a MOUNT (100005) (ver Base de datos) |
+| `statd` / `rpc.statd` / `nsm` / `nfs-statd` | salud | el monitor de estado NFS responde a una llamada RPC NULL a NSM (100024) (ver Base de datos) |
+| `nebula` / `nebula-vpn` | salud | un nodo mesh-VPN Nebula responde a un paquete de túnel desconocido con un `recv_error` en 4242/udp (ver Base de datos) |
+| `openvpn` / `ovpn` | salud | un servidor OpenVPN responde a un hard-reset-client con un hard-reset-server en 1194 (ver Base de datos) |
+| `rdp` / `ms-wbt-server` | salud | un servidor de Escritorio Remoto responde a la negociación de conexión X.224 (ver Base de datos) |
+| `guacd` / `guacamole` | salud | el daemon proxy de Guacamole responde a un `select` con una instrucción Guacamole (ver Base de datos) |
+| `asterisk` / `ami` | salud | una PBX Asterisk envía su saludo AMI `Asterisk Call Manager/<version>` (ver Base de datos) |
+| `sieve` / `managesieve` | salud | un servidor ManageSieve envía su saludo de capacidades terminado en `OK` (ver Base de datos) |
+| `mqtt`        | salud | un broker MQTT acepta un CONNECT (código de retorno CONNACK 0) (ver Base de datos) |
+| `amqp` / `rabbitmq` | salud | un broker AMQP 0-9-1 envía un saludo Connection.Start válido (ver Base de datos) |
+| `kafka`       | salud | un broker/controlador Kafka responde a una petición `ApiVersions` no autenticada; expone el `role` del listener (broker/controller) y los flags `produce_api`/`vote_api` para `expect` (ver Base de datos) |
+| `varnish` / `varnishadm` | salud | la CLI de gestión de Varnish responde con su banner/desafío de auth (ver Base de datos) |
+| `ceph` / `ceph-mon` | salud | un monitor Ceph envía su banner messenger `ceph v…` (ver Base de datos) |
+| `glusterfs` / `glusterd` / `gluster` | salud | el glusterd de un nodo GlusterFS acepta conexiones TCP en 24007 (ver Base de datos) |
+| `gluster_cluster` | salud | la CLI Gluster local verifica pares, volúmenes/bricks/self-heal y límites de curación opcionales (ver Cluster Gluster) |
+| `openvswitch` / `ovs` / `ovsdb` / `ovsdb-server` | salud | ovsdb-server responde a una petición JSON-RPC `list_dbs` de OVSDB (ver Base de datos) |
+| `sqlite` / `sqlite3` | salud | un archivo de base de datos SQLite pasa `PRAGMA integrity_check` (ver SQLite) |
+| `replication` | salud | la replicación MySQL/MariaDB está sana: ambos hilos de réplica corren, retraso opcionalmente acotado (ver Replicación) |
+| `sql`         | condición | el resultado escalar de una consulta SQL se compara (`== != > >= < <= contains =~`) contra un valor (ver Consulta SQL) |
+| `mongodb-query` | condición | un recuento de documentos / agregación / resultado de comando de MongoDB se compara contra un valor (ver Consulta MongoDB) |
+| `influxdb-query` | condición | el resultado escalar de una consulta InfluxQL (1.x) o Flux (2.x) se compara contra un valor (ver Consulta InfluxDB) |
+| `size`        | condición | un archivo/directorio crece al menos `grow_by` dentro de `within` (crecimiento descontrolado) (ver Crecimiento de tamaño) |
+| `websocket` | salud | un endpoint WebSocket completa el handshake de apertura de RFC 6455 (ver WebSocket) |
 
 La comprobación `storage` también verifica el **montaje** de su `path` — ver
 [storage y unidades de montaje](configuration.es.md#storage-y-unidades-de-montaje).
@@ -470,11 +470,9 @@ del `notify` de una regla.
 Una comprobación que calcula una cifra en cada ciclo y la compara con un límite
 tiene una cifra que merece gráfica: el límite dice cuándo mirar y la gráfica dice
 qué llevó hasta ahí. Por eso toda comprobación de nivel grafica los números que ya
-publica — `storage` sus porcentajes de uso e inodos, `load` sus tres medias,
-`diskio` su utilización, caudal y espera, y lo suyo `memory`, `swap`, `fds`,
-`pids`, `conntrack`, `pressure`, `inotify`, `zombies`, `raid`, `lvm`,
-`count`, `failed_units`, `firewall_rules`, `size` y `clock` — sin
-configuración alguna.
+publica sin configuración alguna — `storage` sus porcentajes de uso e inodos,
+`load` sus tres medias, `diskio` su utilización, caudal y espera, y así el
+resto: la sección de cada tipo más abajo nombra sus series.
 
 Esto vale para una **vigilancia de host** igual que para un check de servicio: la
 expansión de la vigilancia dibuja el mismo panel con el mismo selector de ventana,
@@ -2149,17 +2147,13 @@ Cada tipo de arriba es una **comprobación de un solo disparo** (`Check.Run → 
 - un documento de **watch** de host (o entrada global `watches:`, disparando un hook) — ver [configuración](configuration.es.md#host-watches), y
 - el propio bloque `watches:` embebido de un servicio (entradas hook/notificación acotadas al servicio, o `then.action` compacto, incluidos los tipos `service`/`metric` y el `process_count` acotado al servicio, que cuenta todo lo que el descubrimiento le atribuye — el control group de la unidad de init incluido) — ver [Watches de servicio](configuration.es.md#watches-de-servicio-acotados-a-un-servicio).
 
-Las comprobaciones de recursos del host (`storage`, `load`, `memory`, `pressure`, `fds`, `pids`,
-`diskio`, `hdparm`, `sensors`, `smart`, `raid`, `edac`, `conntrack`,
-`zombies`, `oom`, `failed_units`, `inotify`, entre otras) son de
-estilo condición — `OK == true` significa que hay un problema — así que en reglas
-`active: {check: x}` se dispara sobre ella, y como watch el hook se dispara sobre ella.
-Las comprobaciones de salud (`tcp`, `ports`, `http`, `command`, `service`, `file_exists`,
-`file`, `lockfile`, `binary`, `pidfile`, `socket`, `process`, `libraries`, `config`,
-`route`, `clock`, `firewall_rules`, `cert`, `replication`, `sqlite`/`sqlite3`,
-`websocket`, y comprobaciones de protocolo de conexión como `mysql`/`smtp`) son lo
-opuesto (`OK == true` es sano), así que como watch disparan el hook sobre
-**fallo**.
+Cada tipo de comprobación es de uno de dos estilos — la columna **estilo** de la
+tabla de tipos de arriba es la autoridad, anclada al código por test. En una
+comprobación de **condición**, `OK == true` significa que hay un problema (un
+umbral cruzado, un conteo excedido), así que en reglas `active: {check: x}` se
+dispara sobre ella y como watch el hook se dispara sobre ella. Una comprobación
+de **salud** es lo opuesto (`OK == true` es sano), así que como watch dispara el
+hook sobre **fallo**; toda comprobación de protocolo de conexión es de salud.
 
 ### Sensores de flanco: una ventana `for:` los silencia
 
