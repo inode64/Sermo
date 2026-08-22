@@ -168,6 +168,7 @@ const actionAlert = "alert";
 const actionExpand = "expand";
 const actionProbe = "probe";
 const actionPause = "pause";
+const actionReplicationStart = "replication-start";
 const actionMonitor = "monitor";
 const actionReload = "reload";
 const actionReap = "reap";
@@ -4922,6 +4923,7 @@ function watchActionDisabled(w, action) {
     case actionProbe: return !w.can_probe || watchProbeRunning(w);
     case actionPause: return !w.can_control_raid;
     case actionResume: return !w.can_control_raid;
+    case actionReplicationStart: return !w.can_control_replication;
     default: return false;
   }
 }
@@ -4944,6 +4946,8 @@ function watchActionDisabledReason(w, action) {
     case actionPause:
     case actionResume:
       return w.can_control_raid ? "" : "RAID control is not configured";
+    case actionReplicationStart:
+      return w.can_control_replication ? "" : "replication control is not configured";
     default: return "";
   }
 }
@@ -4969,6 +4973,7 @@ function watchActionAriaLabel(w, action) {
     case actionProbe: return `Probe watch ${name}`;
     case actionPause: return `Pause RAID reconstruction for watch ${name}`;
     case actionResume: return `Resume RAID reconstruction for watch ${name}`;
+    case actionReplicationStart: return `Start replication for watch ${name}`;
     case actionMonitor: return `Monitor watch ${name}`;
     case actionUnmonitor: return `Unmonitor watch ${name}`;
     default: return `${action} watch ${name}`;
@@ -5020,6 +5025,9 @@ function watchActionsCell(w) {
   const raidButtons = (w.can_control_raid && me.can_act && w.enabled)
     ? tpl`${watchActionButton(w, actionPause, "pause RAID")} ${watchActionButton(w, actionResume, "resume RAID")}`
     : nothing;
+  const replicationBtn = (w.can_control_replication && me.can_act && w.enabled)
+    ? watchActionButton(w, actionReplicationStart, "start replication")
+    : nothing;
   const expandBtn = (w.expand && Number(w.expand.by_bytes) > 0 && me.can_act && w.enabled)
     ? watchActionButton(w, actionExpand, `${actionExpand} ${fmtBytes(w.expand.by_bytes)}`)
     : nothing;
@@ -5032,7 +5040,7 @@ function watchActionsCell(w) {
       : tpl`<span class="muted">read-only</span>`);
   const actions = !w.enabled
     ? tpl`<span class="muted">disabled in config</span>`
-    : tpl`${probeBtn} ${raidButtons} ${expandBtn} ${monitorBtn}`;
+    : tpl`${probeBtn} ${raidButtons} ${replicationBtn} ${expandBtn} ${monitorBtn}`;
   return tpl`<td class="actions">${actions}</td>`;
 }
 
@@ -5386,6 +5394,15 @@ const watchTypeProfiles = {
   zombies: {
     label: "Zombies",
     columns: [numericReadingColumn("zombies", "Zombies")],
+  },
+  replication: {
+    label: "Replication",
+    columns: [
+      textReadingColumn("source_host", "Source"),
+      { key: "io_stopped", label: "IO thread", cell: (w) => readingValue(w, "io_stopped"), sort: (w) => readingRaw(w, "io_stopped") },
+      { key: "sql_stopped", label: "SQL thread", cell: (w) => readingValue(w, "sql_stopped"), sort: (w) => readingRaw(w, "sql_stopped") },
+      numericReadingColumn("behind_seconds", "Behind"),
+    ],
   },
 };
 
@@ -7103,6 +7120,7 @@ async function actWatch(name, action) {
     headers = { [apiHeaderConfirm]: w.raid_array || "" };
   }
   if (action === actionResume && !(await confirmWatchRAIDResume(name))) return;
+  if (action === actionReplicationStart && !(await confirmWatchReplicationStart(name))) return;
   const toggleKey = acquireMonitorToggle(expansionPrefixWatch, name, action);
   if (toggleKey === null) return;
   try {
@@ -7169,6 +7187,15 @@ function finishWatchProbe(name) {
 async function confirmWatchRAIDPause(name, array) {
   if (!(await promptConfirm({ title: `Pause RAID reconstruction for ${name}?`, message: `Pause the active reconstruction on ${array || name}. This delays redundancy recovery.`, okLabel: "Continue", danger: true }))) return false;
   return promptConfirm({ title: "Confirm RAID pause", message: `Confirm pausing reconstruction for ${array || name}.`, okLabel: "Pause reconstruction", danger: true });
+}
+
+function confirmWatchReplicationStart(name) {
+  return promptConfirm({
+    title: `Start replication for ${name}?`,
+    message: "Runs START REPLICA on the server, exactly as the manual repair would, and verifies both threads afterwards. It cannot skip or discard replication events.",
+    okLabel: "Start replication",
+    danger: true,
+  });
 }
 
 function confirmWatchRAIDResume(name) {

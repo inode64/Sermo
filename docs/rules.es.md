@@ -16,6 +16,7 @@
   - [Cert](#cert)
   - [Conexión a base de datos (mysql / mariadb)](#conexión-a-base-de-datos-mysql--mariadb)
   - [Integridad SQLite (sqlite / sqlite3)](#integridad-sqlite-sqlite--sqlite3)
+  - [Replicación (replication)](#replicación-replication)
   - [Consulta SQL (sql)](#consulta-sql-sql)
   - [Consulta MongoDB (mongodb-query)](#consulta-mongodb-mongodb-query)
   - [Consulta InfluxDB (influxdb-query)](#consulta-influxdb-influxdb-query)
@@ -154,6 +155,7 @@ Las comprobaciones de protocolo de conexión (MySQL, PostgreSQL, Redis, Docker, 
 | `gluster_cluster` | la CLI Gluster local verifica pares, volúmenes/bricks/self-heal y límites de curación opcionales (ver Cluster Gluster) |
 | `openvswitch` / `ovs` / `ovsdb` / `ovsdb-server` | ovsdb-server responde a una petición JSON-RPC `list_dbs` de OVSDB (ver Base de datos) |
 | `sqlite` / `sqlite3` | un archivo de base de datos SQLite pasa `PRAGMA integrity_check` (ver SQLite) |
+| `replication` | la replicación MySQL/MariaDB está sana: ambos hilos de réplica corren, retraso opcionalmente acotado (ver Replicación) |
 | `sql`         | el resultado escalar de una consulta SQL se compara (`== != > >= < <= contains =~`) contra un valor (ver Consulta SQL) |
 | `mongodb-query` | un recuento de documentos / agregación / resultado de comando de MongoDB se compara contra un valor (ver Consulta MongoDB) |
 | `influxdb-query` | el resultado escalar de una consulta InfluxQL (1.x) o Flux (2.x) se compara contra un valor (ver Consulta InfluxDB) |
@@ -1672,6 +1674,54 @@ incidencia propia, nombrando el brick y el estado que dio Gluster. Nunca deja la
 comprobación en Unavailable: el estado de pares, volúmenes, bricks y self-heal ya
 recogido se sigue reportando.
 
+### Replicación (`replication`)
+
+Una comprobación `replication` vigila la replicación de MySQL/MariaDB — ante
+todo una pareja master-master — a través de las propias filas de estado del
+servidor. Es una comprobación de **salud** (`OK == true` significa que toda
+conexión vigilada replica): ambos hilos de réplica deben estar en `Yes`, y el
+retraso puede llevar un límite explícito `behind`. La consulta de estado se
+intenta del vocabulario más nuevo al más viejo (`SHOW ALL SLAVES STATUS`,
+`SHOW REPLICA STATUS`, `SHOW SLAVE STATUS`), de modo que una misma comprobación
+cubre MariaDB, MySQL 8 y servidores más antiguos, respondan con la grafía de
+columnas que respondan.
+
+```yaml
+watches:
+  db-replication:
+    category: database
+    interval: 1m
+    check:
+      type: replication
+      engine: mariadb              # mysql | mariadb (por defecto mariadb; mismo protocolo)
+      host: 127.0.0.1              # mismos campos de conexión que las comprobaciones mysql
+      user: root
+      password: "${env:SERMO_MYSQL_PASSWORD}"
+      behind: { op: "<", value: 60 }   # opcional: falla cuando el retraso rompe este límite
+      # connection: primary        # opcional: acota a una conexión multi-source de MariaDB
+    replication_control:
+      start: true                  # ofrece la reparación manual START REPLICA en el dashboard
+```
+
+- Sin **`connection`**, toda conexión de replicación que el servidor reporte
+  debe estar sana; el retraso publicado es el **peor** entre conexiones. Con
+  `connection:`, solo se juzga esa conexión multi-source de MariaDB (o canal de
+  MySQL), y un nombre desconocido hace fallar la comprobación nombrándolo.
+- **Los estados de hilo** se publican como `io_stopped`/`sql_stopped` (0 ok / 1
+  parado) y se renderizan como **bandas** estilo SLA; el retraso se grafica como
+  `behind_seconds`. El mensaje y la lectura de un hilo parado citan el propio
+  `Last_IO_Error`/`Last_SQL_Error` del servidor — el texto sobre el que actúa un
+  DBA. Un hilo IO en estado `Connecting` no está replicando y no pasa.
+- **`replication_control.start: true`** ofrece la reparación manual en el
+  dashboard: Sermo revalida el estado en vivo, ejecuta `START REPLICA` (o la
+  grafía antigua del motor, o la forma con nombre de conexión de MariaDB)
+  exactamente como lo haría el proceso manual, y relee el estado hasta que ambos
+  hilos corren. Es una acción de administrador pedida explícitamente y tras
+  confirmación — nunca autónoma — y no puede saltarse ni descartar eventos de
+  replicación.
+- Un servidor sin replicación configurada hace fallar la comprobación: declarar
+  el watch afirma que la replicación existe.
+
 ### Consulta SQL (`sql`)
 
 Una comprobación `sql` ejecuta una consulta contra una base de datos y compara su **resultado escalar**
@@ -2090,7 +2140,7 @@ estilo condición — `OK == true` significa que hay un problema — así que en
 `active: {check: x}` se dispara sobre ella, y como watch el hook se dispara sobre ella.
 Las comprobaciones de salud (`tcp`, `ports`, `http`, `command`, `service`, `file_exists`,
 `file`, `lockfile`, `binary`, `pidfile`, `socket`, `process`, `libraries`, `config`,
-`route`, `clock`, `firewall_rules`, `cert`, `sqlite`/`sqlite3`,
+`route`, `clock`, `firewall_rules`, `cert`, `replication`, `sqlite`/`sqlite3`,
 `websocket`, y comprobaciones de protocolo de conexión como `mysql`/`smtp`) son lo
 opuesto (`OK == true` es sano), así que como watch disparan el hook sobre
 **fallo**.

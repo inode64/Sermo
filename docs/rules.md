@@ -16,6 +16,7 @@
   - [Cert](#cert)
   - [Database connection (mysql / mariadb)](#database-connection-mysql--mariadb)
   - [SQLite integrity (sqlite / sqlite3)](#sqlite-integrity-sqlite--sqlite3)
+  - [Replication (replication)](#replication-replication)
   - [SQL query (sql)](#sql-query-sql)
   - [MongoDB query (mongodb-query)](#mongodb-query-mongodb-query)
   - [InfluxDB query (influxdb-query)](#influxdb-query-influxdb-query)
@@ -154,6 +155,7 @@ Connection-protocol checks (MySQL, PostgreSQL, Redis, Docker, libvirt, etc.) are
 | `gluster_cluster` | the local Gluster CLI verifies peer membership, volume/bricks/self-heal state and optional heal limits (see Gluster cluster) |
 | `openvswitch` / `ovs` / `ovsdb` / `ovsdb-server` | ovsdb-server answers an OVSDB `list_dbs` JSON-RPC request (see Database) |
 | `sqlite` / `sqlite3` | a SQLite database file passes `PRAGMA integrity_check` (see SQLite) |
+| `replication` | MySQL/MariaDB replication is healthy: both replica threads run, lag optionally bounded (see Replication) |
 | `sql`         | a SQL query's scalar result compares (`== != > >= < <= contains =~`) against a value (see SQL query) |
 | `mongodb-query` | a MongoDB document count / aggregation / command result compares against a value (see MongoDB query) |
 | `influxdb-query` | an InfluxQL (1.x) or Flux (2.x) query's scalar result compares against a value (see InfluxDB query) |
@@ -1648,6 +1650,51 @@ usually for a disconnected one — is listed as its own issue naming the brick a
 the status Gluster gave for it. It never makes the check Unavailable: the peer,
 volume, brick and self-heal state already collected stays reported.
 
+### Replication (`replication`)
+
+A `replication` check watches MySQL/MariaDB replication — a master-master pair
+above all — through the server's own status rows. It is a **health** check
+(`OK == true` means every watched connection replicates): both replica threads
+must be `Yes`, and the lag may carry an explicit `behind` bound. The status
+query is tried newest-vocabulary-first (`SHOW ALL SLAVES STATUS`,
+`SHOW REPLICA STATUS`, `SHOW SLAVE STATUS`), so one check covers MariaDB,
+MySQL 8 and older servers, whichever column spelling they answer with.
+
+```yaml
+watches:
+  db-replication:
+    category: database
+    interval: 1m
+    check:
+      type: replication
+      engine: mariadb              # mysql | mariadb (default mariadb; same wire protocol)
+      host: 127.0.0.1              # same connection fields as the mysql checks
+      user: root
+      password: "${env:SERMO_MYSQL_PASSWORD}"
+      behind: { op: "<", value: 60 }   # optional: fail when the lag breaks this bound
+      # connection: primary        # optional: scope to one MariaDB multi-source connection
+    replication_control:
+      start: true                  # offer the manual START REPLICA repair in the dashboard
+```
+
+- With **no `connection`**, every replication connection the server reports must
+  be healthy; the published lag is the **worst** across connections. With
+  `connection:`, only that MariaDB multi-source connection (or MySQL channel) is
+  judged, and an unknown name fails the check by name.
+- **Thread states** publish as `io_stopped`/`sql_stopped` (0 ok / 1 stopped) and
+  render as SLA-style **bands**; the lag graphs as `behind_seconds`. A stopped
+  thread's message and reading quote the server's own `Last_IO_Error`/
+  `Last_SQL_Error` — the text a DBA acts on. An IO thread in `Connecting` state
+  is not replicating and does not pass.
+- **`replication_control.start: true`** offers the manual repair in the
+  dashboard: Sermo revalidates live status, runs `START REPLICA` (or the
+  engine's older spelling, or the MariaDB named-connection form) exactly as the
+  manual process would, then re-reads status until both threads run. It is an
+  explicitly requested admin action behind confirmation — never autonomous —
+  and it cannot skip or discard replication events.
+- A server with no replication configured fails the check: declaring the watch
+  asserts replication exists.
+
 ### SQL query (`sql`)
 
 A `sql` check runs a query against a database and compares its **scalar result**
@@ -2065,7 +2112,7 @@ condition-style — `OK == true` means there is a problem — so in rules
 `active: {check: x}` fires on it, and as a watch the hook fires on it.
 The health checks (`tcp`, `ports`, `http`, `command`, `service`, `file_exists`,
 `file`, `lockfile`, `binary`, `pidfile`, `socket`, `process`, `libraries`, `config`,
-`route`, `clock`, `firewall_rules`, `cert`, `sqlite`/`sqlite3`,
+`route`, `clock`, `firewall_rules`, `cert`, `replication`, `sqlite`/`sqlite3`,
 `websocket`, and connection-protocol checks such as `mysql`/`smtp`) are the
 opposite (`OK == true` is healthy), so as a watch they fire the hook on
 **failure**.

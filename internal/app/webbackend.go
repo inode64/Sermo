@@ -128,9 +128,10 @@ type webWatch struct {
 	// severity is the watch entry's own gravity layered with its check block. A
 	// metric block narrows it further; severityFor applies that last step, so the
 	// dashboard resolves the same chain the daemon builder does.
-	severity    string
-	expand      *ExpandSpec
-	raidControl bool
+	severity           string
+	expand             *ExpandSpec
+	raidControl        bool
+	replicationControl bool
 	// serviceScoped marks a watch declared inside a service's `watches:` section
 	// (named "<service>:<watch>"). It is listed and controllable like any watch,
 	// but does not support manual host-watch probes.
@@ -515,6 +516,10 @@ func newWebWatch(name string, entry map[string]any, globalNotify []string, defau
 	if raidControlConfig, ok := entry[config.WatchKeyRAIDControl].(map[string]any); ok {
 		raidControl = cfgval.Bool(raidControlConfig[config.RAIDControlKeyPauseResume])
 	}
+	replicationControl := false
+	if controlConfig, ok := entry[config.WatchKeyReplicationControl].(map[string]any); ok {
+		replicationControl = cfgval.Bool(controlConfig[config.ReplicationControlKeyStart])
+	}
 	if then, ok := entry[rules.RuleFieldThen].(map[string]any); ok {
 		if h, ok := then[config.WatchThenKeyHook].(map[string]any); ok && len(h) > 0 {
 			if cmd := h[config.WatchHookKeyCommand]; cmd != nil {
@@ -530,28 +535,29 @@ func newWebWatch(name string, entry map[string]any, globalNotify []string, defau
 		}
 	}
 	return &webWatch{
-		name:          name,
-		displayName:   config.DisplayName(entry, name),
-		category:      config.CategoryLabel(entry, watchCategoryFallback),
-		checkType:     ctype,
-		checkUnit:     cfgval.AsString(checkMap(entry)[checks.CheckKeyUnit]),
-		bands:         checks.DeclaredBandMetrics(ctype, checkMap(entry)),
-		graphs:        resolveWatchGraphs(ctype, checkMap(entry), metricsMap(entry)),
-		interval:      iv,
-		disabled:      cfgval.Disabled(entry),
-		monitorMode:   config.MonitorMode(entry),
-		fireOnFail:    checks.IsHealthType(ctype) || ctype == checks.CheckTypeProcessPolicy,
-		hasHook:       hasHook,
-		hookCommand:   hookCommand,
-		notifiers:     notifierNames,
-		dryRun:        config.DryRun(entry),
-		notifierCount: len(notifierNames),
-		check:         checkMap(entry),
-		metrics:       metricsMap(entry),
-		severity:      watchSeverity(entry, checkMap(entry)),
-		expand:        expand,
-		raidControl:   raidControl,
-		serviceScoped: serviceScoped,
+		name:               name,
+		displayName:        config.DisplayName(entry, name),
+		category:           config.CategoryLabel(entry, watchCategoryFallback),
+		checkType:          ctype,
+		checkUnit:          cfgval.AsString(checkMap(entry)[checks.CheckKeyUnit]),
+		bands:              checks.DeclaredBandMetrics(ctype, checkMap(entry)),
+		graphs:             resolveWatchGraphs(ctype, checkMap(entry), metricsMap(entry)),
+		interval:           iv,
+		disabled:           cfgval.Disabled(entry),
+		monitorMode:        config.MonitorMode(entry),
+		fireOnFail:         checks.IsHealthType(ctype) || ctype == checks.CheckTypeProcessPolicy,
+		hasHook:            hasHook,
+		hookCommand:        hookCommand,
+		notifiers:          notifierNames,
+		dryRun:             config.DryRun(entry),
+		notifierCount:      len(notifierNames),
+		check:              checkMap(entry),
+		metrics:            metricsMap(entry),
+		severity:           watchSeverity(entry, checkMap(entry)),
+		expand:             expand,
+		raidControl:        raidControl,
+		replicationControl: replicationControl,
+		serviceScoped:      serviceScoped,
 	}, warn
 }
 

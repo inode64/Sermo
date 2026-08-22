@@ -41,6 +41,8 @@ const (
 	CheckKeyCount                 = "count"
 	CheckKeyCounters              = "counters"
 	CheckKeyDatabase              = "database"
+	CheckKeyConnection            = "connection"
+	CheckKeyBehind                = "behind"
 	CheckKeyDefault               = "default"
 	CheckKeyDelta                 = "delta"
 	CheckKeyDevice                = "device"

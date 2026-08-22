@@ -170,7 +170,7 @@ with an `{"ok": bool, "message": string}` body for a handled action.
 | Close SSH session | `POST /api/services/{name}/sessions/{pid}/close?start_ticks=TICKS&terminal=PTS` | admin-only, confirmation-required graceful close of one displayed SSH terminal; the backend re-discovers the terminal plus exact configured `sshd` executable and real user, then requires the same PID and start ticks before sending only `SIGTERM` |
 | Close terminal session | `POST /api/services/{name}/terminal-sessions/{check}/close?multiplexer=TYPE&session=NAME&user=USER&identity=IDENTITY` | admin-only, confirmation-required close of one tmux/screen session; the backend freshly lists the configured user/socket namespace, requires the same multiplexer generation identity and invokes only the client's exact session-close argv |
 | Close empty tmux server | `POST /api/services/{name}/terminal-sessions/{check}/close-empty` | admin-only, confirmation-required close available only for a present, empty tmux source with an explicit configured socket; the backend revalidates it is still empty, runs tmux's exact `kill-server` argv, verifies the namespace is gone and removes only the unchanged stale socket it may leave |
-| Watch action | `POST /api/watches/{name}/{action}` | `monitor`, `unmonitor`, `expand`, `probe` (one manual sample), plus RAID `pause`/`resume`, which run a check-and-verify operation and require the `X-Sermo-Confirm` header |
+| Watch action | `POST /api/watches/{name}/{action}` | `monitor`, `unmonitor`, `expand`, `probe` (one manual sample), RAID `pause`/`resume` (check-and-verify, `X-Sermo-Confirm` header required), and `replication-start` for a `replication` watch with `replication_control.start: true` — Sermo revalidates live status, runs `START REPLICA` exactly as the manual repair would and verifies both threads afterwards, behind confirmation |
 | Notifier test | `POST /api/notifiers/{name}/test` | sends one test notification through the named notifier after confirmation |
 | Mount action | `POST /api/mounts/{name}/{action}[?force=1&lazy=1&kill=1]` | `mount`, `umount`, `alert`; `force=1` allows `umount -f`, `lazy=1` allows `umount -l` as the last fallback, and `kill=1` enables `kill_only_if`-gated blocker signalling for `umount`; `/` rejects unmount paths |
 | Mount blockers | `GET /api/mounts/{name}/blockers` | read-only fresh blocker scan for one mount unit; guests get command lines redacted like `GET /api/mounts` |
@@ -522,6 +522,7 @@ latest completed daemon-cycle or manual sample, while Last activity is an event.
 | `diskio` | Name, device, bus, utilization, read, write, await, read total, written total (cumulative since boot, so an idle disk is distinguishable from one nothing ever touches) |
 | `cert` | Name, source, days left, expiry, issuer |
 | `raid` | Name, array, size, degraded, recovering |
+| `replication` | Name, source, IO thread, SQL thread, behind |
 | Other types | Name and their primary live value |
 
 The health column carries two vocabularies and colours both: the `lvm` check

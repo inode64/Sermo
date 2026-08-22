@@ -329,6 +329,7 @@ var builtinCheckSpecs = []checkSpec{
 	{info: healthTypeInfo(CheckTypeSQLite), build: func(in checkBuildInput) (Check, string) { return buildSqliteCheck(in.base, in.entry) }},
 	{info: healthTypeInfo(CheckTypeSQLite3), build: func(in checkBuildInput) (Check, string) { return buildSqliteCheck(in.base, in.entry) }},
 	{info: conditionTypeInfo(CheckTypeSQL), build: func(in checkBuildInput) (Check, string) { return buildSQLCheck(in.base, in.entry) }},
+	{info: healthTypeInfo(CheckTypeReplication), build: func(in checkBuildInput) (Check, string) { return buildReplicationCheck(in.base, in.entry) }},
 	{info: conditionTypeInfo(CheckTypeMongoDBQuery), build: func(in checkBuildInput) (Check, string) { return buildMongoCheck(in.base, in.entry) }},
 	{info: conditionTypeInfo(CheckTypeInfluxDBQuery), build: func(in checkBuildInput) (Check, string) { return buildInfluxCheck(in.base, in.entry) }},
 	{info: conditionTypeInfo(CheckTypeSize), build: func(in checkBuildInput) (Check, string) { return buildSizeCheck(in.base, in.entry, in.deps) }},

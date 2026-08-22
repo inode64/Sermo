@@ -39,6 +39,10 @@ func (m BandMetric) OKFor(v float64) bool {
 // read, so what is persisted, what is served and what is drawn cannot disagree.
 // A key listed here must be a numeric field the check writes into Result.Data.
 var bandMetrics = map[string][]BandMetric{
+	CheckTypeReplication: {
+		{Key: DataKeyIOStopped, Label: "IO thread", OK: BandPred{Op: cfgval.CompareOpEqual, Value: 0}, Severity: SeverityError},
+		{Key: DataKeySQLStopped, Label: "SQL thread", OK: BandPred{Op: cfgval.CompareOpEqual, Value: 0}, Severity: SeverityError},
+	},
 	CheckTypeRAID: {
 		{Key: DataKeyDegraded, Label: "Degraded arrays",
 			OK: BandPred{Op: cfgval.CompareOpEqual, Value: 0}, Severity: SeverityError},

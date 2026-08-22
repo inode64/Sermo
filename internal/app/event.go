@@ -80,6 +80,7 @@ const (
 	eventActionProbe             = "probe"
 	eventActionRAIDPause         = "pause"
 	eventActionRAIDResume        = "resume"
+	eventActionReplicationStart  = "replication-start"
 	eventActionReleaseLock       = "release-lock"
 	eventActionOperationSettling = "operation-settling"
 	eventActionPanicOn           = "panic-on"

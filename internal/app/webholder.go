@@ -376,3 +376,8 @@ func (h *WebBackendHolder) ProbeWatch(ctx context.Context, name string) web.Acti
 func (h *WebBackendHolder) ControlRAID(ctx context.Context, name, action, confirmation string) web.ActionResult {
 	return webCall(h, unavailableAction(), func(b *WebBackend) web.ActionResult { return b.ControlRAID(ctx, name, action, confirmation) })
 }
+
+// ControlReplication starts a stopped replica through the active backend.
+func (h *WebBackendHolder) ControlReplication(ctx context.Context, name string) web.ActionResult {
+	return webCall(h, unavailableAction(), func(b *WebBackend) web.ActionResult { return b.ControlReplication(ctx, name) })
+}

@@ -207,6 +207,26 @@ func (b *WebBackend) CompactState(ctx context.Context, before time.Time) web.Sta
 	}
 }
 
+// ControlReplication starts the stopped replica threads of a configured
+// replication watch. Start is resume-like — it can only set a stopped thread
+// running — so it needs no confirmation token beyond the client dialog.
+func (b *WebBackend) ControlReplication(ctx context.Context, name string) web.ActionResult {
+	w := b.watches[name]
+	if w == nil {
+		return web.ActionResult{Message: fmt.Sprintf(unknownWatchMessageFmt, name)}
+	}
+	if w.disabled || !w.replicationControl || w.checkType != checks.CheckTypeReplication {
+		return web.ActionResult{Message: fmt.Sprintf("watch %q has no replication start control configured", name)}
+	}
+	result := ControlReplicationStart(ctx, b.cfg.Global.RuntimeDir(), name, w.check, b.operationTimeout)
+	kind, status := eventKindAction, eventStatusOK
+	if !result.OK {
+		kind, status = eventKindError, eventStatusFailed
+	}
+	b.emitWatchMonitorEvent(name, eventActionReplicationStart, kind, status, result.Message)
+	return web.ActionResult{OK: result.OK, Message: result.Message}
+}
+
 // ControlRAID pauses or resumes a configured md reconstruction. Pause requires
 // the array name in confirmation; the browser obtains it only after its second
 // confirmation prompt and the backend independently validates it again.
