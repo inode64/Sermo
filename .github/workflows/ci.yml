@@ -179,7 +179,7 @@ jobs:
             done
           )
           go list ./cmd/... ./internal/... > /tmp/pkgs
-          split -l 6 /tmp/pkgs /tmp/chunk.
+          split -l 1 /tmp/pkgs /tmp/chunk.
           for f in /tmp/chunk.*; do
             echo "::notice title=chunk::$(tr '\n' ' ' < "$f" | head -c 200)"
             if ! xargs -a "$f" go test -race -count=1 -shuffle=on 2>&1 | tee -a /tmp/race.log | phase_stream; then
