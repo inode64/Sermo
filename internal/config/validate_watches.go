@@ -67,6 +67,7 @@ func validateWatches(watches map[string]any, locksDir string, notifiers map[stri
 		}
 		validateRaidNotifyOn(name, typ, entry, notifiers, defaultNotify, add)
 		validateRAIDControl(name, typ, entry, check, add)
+		validateReplicationControl(name, typ, entry, add)
 		validateWatchMountBlock(name, typ, entry, add)
 		switch typ {
 		case checks.CheckTypeStorage:
@@ -128,6 +129,35 @@ func validateRAIDControl(name, typ string, entry, check map[string]any, add addF
 		add("%s.%s is required", prefix, RAIDControlKeyPauseResume)
 	} else if _, ok := value.(bool); !ok {
 		add(validationBooleanFormat, prefix+"."+RAIDControlKeyPauseResume)
+	}
+}
+
+// validateReplicationControl accepts replication_control only on a replication
+// watch, with exactly the boolean start key.
+func validateReplicationControl(name, typ string, entry map[string]any, add addFunc) {
+	prefix := watchFieldPath(name, WatchKeyReplicationControl)
+	value, present := entry[WatchKeyReplicationControl]
+	if !present {
+		return
+	}
+	control, ok := value.(map[string]any)
+	if !ok {
+		add(validationMappingFormat, prefix)
+		return
+	}
+	if typ != checks.CheckTypeReplication {
+		add("%s is only valid on a replication watch", prefix)
+		return
+	}
+	for key := range control {
+		if key != ReplicationControlKeyStart {
+			add("%s.%s is not supported", prefix, key)
+		}
+	}
+	if value, found := control[ReplicationControlKeyStart]; !found {
+		add("%s.%s is required", prefix, ReplicationControlKeyStart)
+	} else if _, ok := value.(bool); !ok {
+		add(validationBooleanFormat, prefix+"."+ReplicationControlKeyStart)
 	}
 }
 
