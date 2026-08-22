@@ -492,8 +492,17 @@ func TestSourceDrawsEveryAvailabilityPanelThroughOneRenderer(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read src/app.js: %v", err)
 	}
+	// A state band draws through the same owner: its panels render only via
+	// slaChartPanel and load only via loadSLAPanel, with a warning-severity band
+	// capping its failing colour at amber inside slaStrip itself.
+	appJSMustContain(t, "state band through the one renderer",
+		"slaChartPanel(watchBandKey(w.name, metric.name)",
+		"slaChartPanel(svcBandKey(d.name, metric.check, metric.name)",
+		"const band = opts.warn && cell.down > 0 ? \"sla-down-low\" : slaDownBand(cell.down);",
+	)
 	// Its definition plus loadSLAPanel's single call. A third occurrence means a
-	// surface started drawing its own availability chart again.
+	// surface started drawing its own availability chart again — the band panels
+	// included, which reach it only through loadSLAPanel.
 	if n := strings.Count(string(src), "drawSLAChart("); n != 2 {
 		t.Errorf("drawSLAChart appears %d times, want 2 (defined once, called once from loadSLAPanel)", n)
 	}

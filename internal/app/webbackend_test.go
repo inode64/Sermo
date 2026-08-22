@@ -469,15 +469,15 @@ func TestWebBackendSeriesScopesToServiceOrCheck(t *testing.T) {
 		t.Fatalf("checks = %+v, want one", detail.Checks)
 	}
 
-	points, ok := b.Series(context.Background(), "web", "", time.Hour)
+	points, ok := b.Series(context.Background(), "web", "", "", time.Hour)
 	if !ok || len(points) != 1 || points[0].Total != 10 {
 		t.Fatalf("service series = %+v ok=%v, want the service point", points, ok)
 	}
-	points, ok = b.Series(context.Background(), "web", "http", time.Hour)
+	points, ok = b.Series(context.Background(), "web", "http", "", time.Hour)
 	if !ok || len(points) != 1 || points[0].Total != 4 {
 		t.Fatalf("check series = %+v ok=%v, want the check point", points, ok)
 	}
-	if _, ok := b.Series(context.Background(), "web", "absent", time.Hour); ok {
+	if _, ok := b.Series(context.Background(), "web", "absent", "", time.Hour); ok {
 		t.Fatal("a check the service does not define must not resolve")
 	}
 }
@@ -2640,7 +2640,7 @@ func TestWebBackendDetailOmitsSLAForVerdictlessChecks(t *testing.T) {
 		t.Fatal("detail not found")
 	}
 	for _, c := range detail.Checks {
-		points, ok := b.Series(context.Background(), "web", c.Name, time.Hour)
+		points, ok := b.Series(context.Background(), "web", c.Name, "", time.Hour)
 		if !ok {
 			t.Errorf("check %q has no series", c.Name)
 			continue

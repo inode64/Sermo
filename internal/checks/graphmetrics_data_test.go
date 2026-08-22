@@ -61,9 +61,6 @@ func TestGraphMetricsAreWrittenIntoResultData(t *testing.T) {
 		{CheckTypeZombies, map[string]any{"count": pred(">", 5)}, Deps{DefaultTimeout: second, Samplers: Samplers{
 			ZombieSampler: func() (uint64, bool) { return 2, true },
 		}}},
-		{CheckTypeRAID, map[string]any{"degraded": pred(">", 0)}, Deps{DefaultTimeout: second, Samplers: Samplers{
-			RaidSampler: func() (RaidStatus, error) { return RaidStatus{Arrays: 2, Degraded: 1, Recovering: 1}, nil },
-		}}},
 		{CheckTypeFirewallRules, map[string]any{"backend": "nft", "min_rules": 2}, Deps{DefaultTimeout: second, Samplers: Samplers{
 			FirewallRulesSampler: func(context.Context, string, execx.Runner) (FirewallRulesSample, error) {
 				return FirewallRulesSample{Backend: FirewallBackendNftables, Rules: 17}, nil

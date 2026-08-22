@@ -86,7 +86,13 @@ type fileWatcher struct {
 	runner    HookRunner
 	emit      func(Event)
 	publish   func(string, string, checks.Result)
-	now       func() time.Time
+	// recordBand persists one per-cycle state sample of the size threshold:
+	// true while no watched path breaches it (an absent path counting whatever
+	// absentOK says). nil disables recording. Level-triggered on purpose, where
+	// the hook is edge-triggered: the band answers "when was it breached", the
+	// hook answers "tell me the moment it happens".
+	recordBand func(ok bool, at time.Time)
+	now        func() time.Time
 
 	baseline    map[string]fileState
 	numberFiles int
@@ -103,6 +109,10 @@ func (w *fileWatcher) runCycle(ctx context.Context) {
 	current := w.scan(now)
 	w.numberFiles = fileWatchNumberFiles(current)
 	defer w.publishSnapshot(current)
+	// The sample reads the fresh scan, never the baseline: observe-only cycles
+	// rewrite the baseline's breached flag to preserve edge detection, and a
+	// state series must report the level the scan actually saw.
+	w.recordBandSample(current, now)
 
 	paths := make([]string, 0, len(current))
 	for p := range current {
@@ -168,6 +178,28 @@ func (w *fileWatcher) runCycle(ctx context.Context) {
 		}
 		delete(w.baseline, p)
 	}
+}
+
+// recordBandSample persists this cycle's size-threshold state. With no size
+// predicate there is no band; with no watched path the state is what absentOK
+// declares absence to mean — an explicit sample either way, never a gap, so a
+// dead-letter file that stays absent draws an unbroken OK band rather than
+// unmonitored hatching.
+func (w *fileWatcher) recordBandSample(current map[string]fileState, at time.Time) {
+	if w.recordBand == nil || w.cond.sizeOp == "" {
+		return
+	}
+	ok := w.absentOK
+	if len(current) > 0 {
+		ok = true
+		for _, st := range current {
+			if st.breached {
+				ok = false
+				break
+			}
+		}
+	}
+	w.recordBand(ok, at)
 }
 
 func (w *fileWatcher) publishSnapshot(current map[string]fileState) {

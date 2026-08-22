@@ -306,21 +306,26 @@ func (b *WebBackend) checkView(cn string, e *webEntry, snap map[string]CheckSnap
 	if seen && !cs.At.IsZero() {
 		ch.At = cs.At.UTC().Format(time.RFC3339)
 	}
-	ch.Metrics = webCheckMetrics(e.checkTypes[cn], e.checkUnits[cn])
+	ch.Metrics = webCheckMetrics(e.checkTypes[cn], e.checkUnits[cn], e.checkBands[cn])
 	return ch
 }
 
-// webCheckMetrics is the payload form of one check's declared graph metrics. A
-// service check and a host watch both advertise through it, so what a panel is
-// offered can never differ from what the recorder was told to persist.
-func webCheckMetrics(checkType, unit string) []web.CheckMetric {
-	declared := checks.DeclaredGraphMetrics(checkType, unit)
-	if len(declared) == 0 {
+// webCheckMetrics is the payload form of one check's declared graph metrics and
+// state bands. A service check and a host watch both advertise through it, so
+// what a panel is offered can never differ from what the recorder was told to
+// persist — banded keys leave the line list here exactly as they leave the
+// value recorder.
+func webCheckMetrics(checkType, unit string, bands []checks.BandMetric) []web.CheckMetric {
+	declared := withoutBandKeys(checks.DeclaredGraphMetrics(checkType, unit), checks.BandKeys(bands))
+	if len(declared) == 0 && len(bands) == 0 {
 		return nil
 	}
-	out := make([]web.CheckMetric, 0, len(declared))
+	out := make([]web.CheckMetric, 0, len(declared)+len(bands))
 	for _, m := range declared {
 		out = append(out, web.CheckMetric{Name: m.Key, Unit: m.Unit})
+	}
+	for _, b := range bands {
+		out = append(out, web.CheckMetric{Name: b.Key, Band: true, Severity: b.Severity, Label: b.Label})
 	}
 	return out
 }

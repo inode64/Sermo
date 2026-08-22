@@ -514,3 +514,33 @@ func TestDisabled(t *testing.T) {
 		}
 	}
 }
+
+// TestInvertCompareOp pins that inversion is exact negation over the whole
+// comparison vocabulary: for every op and any pair of values, a op b and
+// a inverted(op) b disagree. A state band derives its OK-predicate from a
+// check's firing predicate through this, so a drift here would make a band
+// call the same moment both fine and failing.
+func TestInvertCompareOp(t *testing.T) {
+	ops := []string{
+		CompareOpGreaterEqual, CompareOpGreater, CompareOpLessEqual,
+		CompareOpLess, CompareOpEqual, CompareOpNotEqual,
+	}
+	pairs := [][2]float64{{0, 0}, {1, 0}, {0, 1}, {-3, 2.5}, {2.5, 2.5}}
+	for _, op := range ops {
+		inverted := InvertCompareOp(op)
+		if !IsCompareOp(inverted) {
+			t.Fatalf("InvertCompareOp(%q) = %q, not a comparison operator", op, inverted)
+		}
+		if InvertCompareOp(inverted) != op {
+			t.Fatalf("inversion of %q is not an involution: got %q back", op, InvertCompareOp(inverted))
+		}
+		for _, pair := range pairs {
+			if CompareFloat(pair[0], op, pair[1]) == CompareFloat(pair[0], inverted, pair[1]) {
+				t.Fatalf("%v %s %v and its inversion %q agree; they must always disagree", pair[0], op, pair[1], inverted)
+			}
+		}
+	}
+	if got := InvertCompareOp("~~"); got != "" {
+		t.Fatalf("InvertCompareOp(unknown) = %q, want empty", got)
+	}
+}

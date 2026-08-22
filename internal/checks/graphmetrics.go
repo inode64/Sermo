@@ -124,10 +124,6 @@ var graphMetrics = map[string][]GraphMetric{
 	// Signed, not the absolute offset the check compares: a clock that runs fast
 	// and one that runs slow are different faults, and the sign is what says which.
 	CheckTypeClock: {{Key: DataKeyOffsetSeconds, Unit: metrics.MetricUnitSeconds, Label: "Offset", Decimals: millisecondDecimals}},
-	CheckTypeRAID: {
-		{Key: DataKeyDegraded, Unit: metrics.MetricUnitNone, Label: "Degraded arrays"},
-		{Key: DataKeyRecovering, Unit: metrics.MetricUnitNone, Label: "Recovering arrays"},
-	},
 	CheckTypeLVM: {
 		{Key: DataKeyLVMFreePct, Unit: metrics.MetricUnitPercent, Label: "Free", Decimals: tenthsDecimals},
 		{Key: DataKeyLVMThinDataPct, Unit: metrics.MetricUnitPercent, Label: "Thin data used", Decimals: tenthsDecimals},
@@ -181,6 +177,17 @@ func DeclaredGraphMetrics(checkType, unit string) []GraphMetric {
 
 // graphMetricValueLabel names the scalar a check publishes under `unit:`.
 const graphMetricValueLabel = "Value"
+
+// DeclaredGraphMetricKey reports whether key is a graph metric the check type
+// declares statically — the set a `bands:` block may convert to a state band.
+func DeclaredGraphMetricKey(checkType, key string) bool {
+	for _, m := range graphMetrics[checkType] {
+		if m.Key == key {
+			return true
+		}
+	}
+	return false
+}
 
 // DeclaredGraphMetricUnit returns the unit of one metric of one configured check,
 // and whether that check publishes it at all.

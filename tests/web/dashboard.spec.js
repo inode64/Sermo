@@ -66,6 +66,19 @@ const watches = [{
   enabled: true, monitored: true, state: "ok", check_type: "process",
   summary: "2 processes", interval: "1m", status_observed_at: "2026-07-10T12:00:00Z",
 }, {
+  name: "raid-md9", display_name: "RAID md9", category: "storage",
+  enabled: true, monitored: true, state: "ok", check_type: "raid",
+  summary: "raid md9 healthy", interval: "1m", status_observed_at: "2026-07-10T12:00:00Z",
+  metrics: [
+    { name: "degraded", band: true, severity: "error", label: "Degraded arrays" },
+    { name: "recovering", band: true, severity: "warning", label: "Recovering arrays" },
+  ],
+}, {
+  name: "dead-letter", display_name: "Dead letter", category: "files",
+  enabled: true, monitored: true, state: "ok", check_type: "file",
+  summary: "size threshold clear", interval: "5m", status_observed_at: "2026-07-10T12:00:00Z",
+  metrics: [{ name: "size", band: true, severity: "error", label: "Size threshold" }],
+}, {
   name: "host-fds", display_name: "File descriptors", category: "system",
   enabled: true, monitored: true, state: "ok", check_type: "fds",
   summary: "fds 879072 allocated (no kernel limit)", interval: "1m",
@@ -261,6 +274,19 @@ async function mockAPI(page) {
         if (dashboardField) body = dashboard[dashboardField];
         else if (detailMatch) body = serviceDetail(decodeURIComponent(detailMatch[1]));
         else if (eventsMatch) body = [];
+        else if (path.endsWith("/sla") && url.searchParams.get("metric")) {
+          const now = Date.now();
+          // recovering shows one failing bucket so the amber clamp is testable;
+          // every other band reads fully OK.
+          const failing = url.searchParams.get("metric") === "recovering";
+          body = {
+            since: url.searchParams.get("since"),
+            points: [
+              { start: new Date(now - 30 * 60 * 1000).toISOString(), up: 60, total: 60, down_buckets: 0 },
+              { start: new Date(now - 5 * 60 * 1000).toISOString(), up: failing ? 20 : 60, total: 60, down_buckets: failing ? 3 : 0 },
+            ],
+          };
+        }
         else if (path.endsWith("/sla")) {
           if (path.startsWith("/api/services/web/") || path.startsWith("/api/services/nginx/")
             || path.startsWith("/api/watches/net-wan/")) {
@@ -406,7 +432,9 @@ test("single-choice filters stay hidden", async ({ page }) => {
 });
 
 test("inventory panels group by their meaningful type", async ({ page }) => {
-  await expect(page.locator("#watch-rows .group-row")).toHaveCount(3);
+  // Storage (raid-md9) · Network · System · service-scoped: grouping follows
+  // the check-type family, not the category label.
+  await expect(page.locator("#watch-rows .group-row")).toHaveCount(4);
   await expect(page.locator("#wat-row-process-queue .watch-scope")).toHaveText("service");
   // Host scope is the panel default and is not repeated after every name.
   await expect(page.locator("#wat-row-storage-data .watch-scope")).toHaveCount(0);
@@ -658,6 +686,37 @@ test("no viewport lets the page scroll sideways", async ({ page }) => {
     await page.locator("#svc-row-web .row-toggle").click();
     await page.locator("#wat-row-net-wan .row-toggle").click();
   }
+});
+
+// A boolean state renders as an SLA-style band, never a line chart: a line
+// through 0/1 draws slopes that never happened. The band reuses the service SLA
+// panel wholesale, a warning-severity band caps its failing colour at amber, and
+// a file watch — which keeps no availability at all — still gets its size band.
+test("state metrics render as bands, amber for warnings", async ({ page }) => {
+  const degradedSeries = page.waitForRequest((request) => {
+    const url = new URL(request.url());
+    return url.pathname === "/api/watches/raid-md9/sla" && url.searchParams.get("metric") === "degraded";
+  });
+  await page.locator("#wat-row-raid-md9 .row-toggle").click();
+  await degradedSeries;
+  const exp = page.locator('[id="exp-wat:raid-md9"]');
+  const degraded = exp.locator('[data-band-metric="degraded"]');
+  await expect(degraded).toContainText("Degraded arrays");
+  await expect(degraded.locator(".sla-bars .sla-bar-seg").first()).toBeVisible();
+  // no line chart for a band metric, and no metric row addressed by the line id
+  await expect(exp.locator('[data-watch-metric="degraded"]')).toHaveCount(0);
+  await expect(degraded.locator("svg")).toHaveCount(0);
+
+  // recovering: the failing bucket wears amber, never the red-scale classes
+  const recovering = exp.locator('[data-band-metric="recovering"]');
+  await expect(recovering.locator(".sla-bar-seg.sla-down-low").first()).toBeVisible();
+  await expect(recovering.locator(".sla-bar-seg.sla-down-mid, .sla-bar-seg.sla-down-high, .sla-bar-seg.sla-down-full")).toHaveCount(0);
+
+  // the file watch has no Availability section, yet its size band renders
+  await page.locator("#wat-row-dead-letter .row-toggle").click();
+  const dead = page.locator('[id="exp-wat:dead-letter"]');
+  await expect(dead.locator('[data-band-metric="size"] .sla-bars')).toBeVisible();
+  await expect(dead.getByRole("heading", { name: "Availability" })).toHaveCount(0);
 });
 
 // A host watch that publishes a numeric reading graphs it with the panel a

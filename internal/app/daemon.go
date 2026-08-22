@@ -878,7 +878,18 @@ type cycleWriter struct {
 	batch        stateBatchStore
 	measured     map[string]bool
 	graphable    map[string][]checks.GraphMetric
+	bands        map[string][]checks.BandMetric
 	records      []cycleMeasurement
+	bandSamples  []cycleBandSample
+}
+
+// cycleBandSample is one staged state sample: which check's band, and whether
+// its OK predicate held this cycle.
+type cycleBandSample struct {
+	check  string
+	metric string
+	ok     bool
+	at     time.Time
 }
 
 func newCycleWriter(deps Deps, name string, tree map[string]any) *cycleWriter {
@@ -895,6 +906,7 @@ func newCycleWriter(deps Deps, name string, tree map[string]any) *cycleWriter {
 		w.measured = measuredCheckNames(tree)
 		w.graphable = graphableCheckMetrics(tree)
 	}
+	w.bands = bandCheckMetrics(tree)
 	if batch, ok := deps.SLA.(stateBatchStore); ok {
 		w.batch = batch
 	}
@@ -905,10 +917,18 @@ func newCycleWriter(deps Deps, name string, tree map[string]any) *cycleWriter {
 // observation timestamp from completion so batching changes commits, not the
 // archive bucket assigned to a result.
 func (w *cycleWriter) RecordMeasurement(r checks.Result) {
-	if w == nil || w.measurements == nil {
+	if w == nil {
 		return
 	}
 	at := w.now()
+	// Band samples need only the SLA store this writer's existence guarantees;
+	// the measurement store below gates the value series alone.
+	eachBandSample(w.bands[r.Check], r.Data, func(metric string, ok bool) {
+		w.bandSamples = append(w.bandSamples, cycleBandSample{check: r.Check, metric: metric, ok: ok, at: at})
+	})
+	if w.measurements == nil {
+		return
+	}
 	if w.measured[r.Check] {
 		w.records = append(w.records, cycleMeasurement{
 			check: r.Check,
@@ -933,6 +953,28 @@ func eachGraphMetricSample(graphs []checks.GraphMetric, data map[string]any, emi
 	}
 }
 
+// eachBandSample calls emit for every declared band whose state the result
+// actually carries as a number, with the value already judged against the
+// band's OK predicate. Watches and service checks both select through it, the
+// same single-rule arrangement eachGraphMetricSample gives the value series.
+func eachBandSample(bands []checks.BandMetric, data map[string]any, emit func(metric string, ok bool)) {
+	for _, band := range bands {
+		if value, ok := checks.NumericData(data[band.Key]); ok {
+			emit(band.Key, band.OKFor(value))
+		}
+	}
+}
+
+// bandSeriesName keys one service check's band series: the check name plus the
+// metric, joined by a separator config validation keeps out of check names so
+// the composite can never collide with a real check.
+func bandSeriesName(check, metric string) string {
+	return check + bandSeriesSeparator + metric
+}
+
+// bandSeriesSeparator joins a check name and a band metric into one series key.
+const bandSeriesSeparator = ":"
+
 // RecordCycle writes the staged measurements plus, for observed cycles, check
 // and service SLA after checks complete. A failed batch rolls back the entire
 // cycle and emits one best-effort error event; it never blocks rule evaluation
@@ -947,7 +989,7 @@ func (w *cycleWriter) RecordCycle(ctx context.Context, cycle cycleRecord) {
 	if w == nil {
 		return
 	}
-	defer func() { w.records = w.records[:0] }()
+	defer func() { w.records, w.bandSamples = w.records[:0], w.bandSamples[:0] }()
 
 	var err error
 	if w.batch != nil {
@@ -976,6 +1018,14 @@ func (w *cycleWriter) writeCycle(records cycleRecords, cycle cycleRecord) error 
 			return fmt.Errorf("record cycle measurement for %s: %w", sample.check, err)
 		}
 	}
+	// Band samples sit beside the measurements, outside the availability gate:
+	// a state sample is a measurement of the host, not a verdict about the
+	// service, so a settling cycle records it just as truthfully as a live one.
+	for _, sample := range w.bandSamples {
+		if err := records.RecordCheckSLA(w.name, bandSeriesName(sample.check, sample.metric), sample.ok, sample.at); err != nil {
+			return fmt.Errorf("record cycle band for %s: %w", sample.check, err)
+		}
+	}
 	if cycle.recordAvailability {
 		for check, result := range cycle.cache {
 			// A verdictless check has no availability to record: neither side of
@@ -1000,7 +1050,9 @@ func (w *cycleWriter) writeCycle(records cycleRecords, cycle cycleRecord) error 
 
 // graphableCheckMetrics maps each configured check name to the named metrics its
 // type publishes (checks.GraphMetrics), for the recorder to persist from
-// Result.Data. Empty when no configured check declares graphable metrics.
+// Result.Data — minus the keys the check has banded, because a state draws as a
+// band or as a line and never both. Empty when no configured check declares
+// graphable metrics.
 func graphableCheckMetrics(tree map[string]any) map[string][]checks.GraphMetric {
 	section, _ := tree[config.SectionChecks].(map[string]any)
 	out := map[string][]checks.GraphMetric{}
@@ -1011,8 +1063,28 @@ func graphableCheckMetrics(tree map[string]any) map[string][]checks.GraphMetric 
 		}
 		typ, _ := m[checks.CheckKeyType].(string)
 		unit := cfgval.AsString(m[checks.CheckKeyUnit])
-		if g := checks.DeclaredGraphMetrics(typ, unit); len(g) > 0 {
-			out[cn] = g
+		graphs := withoutBandKeys(checks.DeclaredGraphMetrics(typ, unit),
+			checks.BandKeys(checks.DeclaredBandMetrics(typ, m)))
+		if len(graphs) > 0 {
+			out[cn] = graphs
+		}
+	}
+	return out
+}
+
+// bandCheckMetrics maps each configured check name to its resolved band
+// metrics, the state series the recorder persists per cycle.
+func bandCheckMetrics(tree map[string]any) map[string][]checks.BandMetric {
+	section, _ := tree[config.SectionChecks].(map[string]any)
+	out := map[string][]checks.BandMetric{}
+	for cn, raw := range section {
+		m, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		typ, _ := m[checks.CheckKeyType].(string)
+		if bands := checks.DeclaredBandMetrics(typ, m); len(bands) > 0 {
+			out[cn] = bands
 		}
 	}
 	return out

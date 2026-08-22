@@ -105,9 +105,10 @@ export function serviceMetricsAPI(name, check, since, metric = "") {
 }
 export function servicePreflightAPI(name) { return serviceAPI(name, apiSuffixPreflight); }
 export function serviceRuntimeAPI(name, since) { return serviceAPI(name, apiSinceSuffix(apiSuffixRuntime, since)); }
-export function serviceSLAAPI(name, since, check = "") {
+export function serviceSLAAPI(name, since, check = "", metric = "") {
   const checkQuery = check ? `&${apiQueryCheck}=${encodeURIComponent(check)}` : "";
-  return serviceAPI(name, `${apiSinceSuffix(apiSuffixSLA, since)}${checkQuery}`);
+  const metricQuery = metric ? `&${apiQueryMetric}=${encodeURIComponent(metric)}` : "";
+  return serviceAPI(name, `${apiSinceSuffix(apiSuffixSLA, since)}${checkQuery}${metricQuery}`);
 }
 export function sshSessionCloseAPI(name, pid, startTicks, terminal) {
   const query = new URLSearchParams({ [apiQueryStartTicks]: String(startTicks), [apiQueryTerminal]: terminal });
@@ -125,7 +126,10 @@ export function emptyTerminalSessionCloseAPI(service, check) {
 }
 export function stateCompactAPI(query = "") { return `${apiStateCompactPath}${query}`; }
 export function watchAPI(name, suffix = "") { return apiEntityPath(apiWatchesPath, name, suffix); }
-export function watchSLAAPI(name, since) { return watchAPI(name, apiSinceSuffix(apiSuffixSLA, since)); }
+export function watchSLAAPI(name, since, metric = "") {
+  const metricQuery = metric ? `&${apiQueryMetric}=${encodeURIComponent(metric)}` : "";
+  return watchAPI(name, `${apiSinceSuffix(apiSuffixSLA, since)}${metricQuery}`);
+}
 // A watch has exactly one check, so its metric series is named by ?metric= alone.
 export function watchMetricsAPI(name, metric, since) {
   return watchAPI(name, `${apiSinceSuffix(apiSuffixMetrics, since)}&${apiQueryMetric}=${encodeURIComponent(metric)}`);

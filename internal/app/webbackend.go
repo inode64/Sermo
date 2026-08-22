@@ -78,11 +78,12 @@ type webEntry struct {
 	policyCooldown    time.Duration
 	engine            operation.Engine
 	status            func(context.Context) (servicemgr.Status, error)
-	checkNames        []string          // sorted
-	checkTypes        map[string]string // check name -> type
-	checkReports      map[string]string // check name -> `reports:` mode, when declared
-	checkUnits        map[string]string // check name -> `unit:` for its scalar result, when declared
-	checkSeverities   map[string]string // check name -> `severity:`, when declared
+	checkNames        []string                       // sorted
+	checkTypes        map[string]string              // check name -> type
+	checkReports      map[string]string              // check name -> `reports:` mode, when declared
+	checkUnits        map[string]string              // check name -> `unit:` for its scalar result, when declared
+	checkBands        map[string][]checks.BandMetric // check name -> resolved state bands
+	checkSeverities   map[string]string              // check name -> `severity:`, when declared
 	checkIntervals    map[string]time.Duration
 	discoverer        process.Discoverer
 	selectors         []process.Selector
@@ -107,7 +108,10 @@ type webWatch struct {
 	checkType   string
 	// checkUnit is the check block's `unit:`, the unit of the scalar it publishes
 	// under `value`. It names that series exactly as a service check's does.
-	checkUnit     string
+	checkUnit string
+	// bands are the check's resolved state metrics, the same declaration the
+	// recorder persists from.
+	bands         []checks.BandMetric
 	interval      time.Duration
 	disabled      bool
 	monitorMode   string
@@ -402,6 +406,7 @@ func attachServiceRuntime(ctx context.Context, entry *webEntry, name string, tre
 	entry.checkTypes = types
 	entry.checkReports = checkReportingModes(tree)
 	entry.checkUnits = checkDeclaredUnits(tree)
+	entry.checkBands = bandCheckMetrics(tree)
 	entry.checkSeverities = checkDeclaredSeverities(tree)
 	entry.checkIntervals = intervals
 	entry.discoverer = discoverer
@@ -527,6 +532,7 @@ func newWebWatch(name string, entry map[string]any, globalNotify []string, defau
 		category:      config.CategoryLabel(entry, watchCategoryFallback),
 		checkType:     ctype,
 		checkUnit:     cfgval.AsString(checkMap(entry)[checks.CheckKeyUnit]),
+		bands:         checks.DeclaredBandMetrics(ctype, checkMap(entry)),
 		interval:      iv,
 		disabled:      cfgval.Disabled(entry),
 		monitorMode:   config.MonitorMode(entry),
