@@ -704,18 +704,16 @@ test("events default to the last day and state readings colour by health", async
   await expect(exp.locator(".watch-reading-value.inactive")).toHaveText("recovering");
 });
 
-// An available-but-empty ssh source has no process to close, only a row to stop
-// looking at: its close dismisses the row in this browser without touching the
-// network, and the choice survives a re-render. The tmux empty-server close
-// (which really kills a process, behind confirmation) is covered separately.
-test("an empty ssh source row can be dismissed locally", async ({ page }) => {
-  const row = page.locator("#session-rows tr", { hasText: "No active sessions" }).filter({ hasText: "ssh" });
-  await expect(row).toHaveCount(1);
-  let closeCalls = 0;
-  page.on("request", (request) => { if (request.url().includes("close")) closeCalls++; });
-  await row.locator("[data-empty-session-dismiss]").click();
-  await expect(row).toHaveCount(0);
-  expect(closeCalls).toBe(0);
+// An available source with nobody connected has nothing to say and nothing to
+// close, so it renders no row at all. Its ssh sessions live under a different
+// source key, so the web ssh session surviving proves the filter matched the
+// empty db source, not the kind. The tmux empty-server row (a real process an
+// admin can kill) is covered separately.
+test("an available ssh source with no sessions renders no row", async ({ page }) => {
+  await expect(page.locator("#session-rows tr", { hasText: "pts/11" })).toHaveCount(1);
+  const empty = page.locator("#session-rows tr", { hasText: "No active sessions" });
+  await expect(empty).toHaveCount(1);
+  await expect(empty).toContainText("tmux");
 });
 
 // A boolean state renders as an SLA-style band, never a line chart: a line
@@ -883,7 +881,7 @@ test("sessions panel shows metrics, sorts columns and closes verified SSH and tm
   await expect(sessions).toContainText("1 MiB");
   await expect(sessions).toContainText("1 KB/s / 250 B/s");
   await expect(sessions).toContainText("ops");
-  await expect(sessions).toContainText("screen-root");
+  await expect(sessions).not.toContainText("screen-root");
   await expect(sessions).toContainText("No active sessions");
 
   await sessions.locator('[data-ssh-session-close]').click();
@@ -909,7 +907,7 @@ test("empty tmux sources use a red state and close the server through the API", 
     await route.fulfill({ json: { ok: true, message: "close empty terminal session source ok" } });
   });
 
-  await expect(page.locator('[data-sf="all"]')).toContainText("all 6");
+  await expect(page.locator('[data-sf="all"]')).toContainText("all 4");
   await expect(page.locator('[data-sf="ssh"]')).toContainText("ssh 1");
   await expect(page.locator('[data-sf="tmux"]')).toContainText("tmux 2");
   await expect(page.locator('[data-sf="screen"]')).toBeHidden();
@@ -920,11 +918,9 @@ test("empty tmux sources use a red state and close the server through the API", 
   await expect(emptySourceCells.nth(3).locator(".target-state")).toHaveClass(/state-empty/);
   await expect(emptySourceCells.nth(5)).toHaveText("—");
   await expect(emptySourceCells.nth(7)).toHaveText("—");
-  // screen-root is empty but has no configured socket: no server to kill, so
-  // no API close — only the local dismiss every empty row now carries.
-  const screenRow = page.locator("#session-rows tr", { hasText: "screen-root" });
-  await expect(screenRow.locator("[data-empty-session-close]")).toHaveCount(0);
-  await expect(screenRow.locator("[data-empty-session-dismiss]")).toHaveCount(1);
+  // screen-root is empty but has no configured socket: no server to kill and
+  // nothing to say, so it renders no row at all.
+  await expect(page.locator("#session-rows tr", { hasText: "screen-root" })).toHaveCount(0);
 
   await emptySource.getByRole("button", { name: "close" }).click();
   await expect(page.locator("#simple-confirm-message")).toContainText("stops only the empty tmux server");
