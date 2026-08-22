@@ -19,11 +19,15 @@ func (c fileExistsCheck) Run(_ context.Context) Result {
 	start := time.Now()
 	if _, err := os.Stat(c.path); err != nil {
 		if os.IsNotExist(err) {
-			return c.result(false, c.path+" does not exist", start)
+			res := c.result(false, c.path+" does not exist", start)
+			res.Data = map[string]any{DataKeyPath: c.path}
+			return res
 		}
 		return c.unavailableResult(fmt.Sprintf("stat %s: %v", c.path, err), start)
 	}
-	return c.result(true, c.path+" exists", start)
+	res := c.result(true, c.path+" exists", start)
+	res.Data = map[string]any{DataKeyPath: c.path}
+	return res
 }
 
 // fileCheck passes when a path exists and is a regular file.
@@ -38,18 +42,26 @@ func (c fileCheck) Run(_ context.Context) Result {
 	info, err := os.Stat(c.path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return c.result(false, c.path+" does not exist", start)
+			return c.pathResult(false, c.path+" does not exist", start)
 		}
 		return c.unavailableResult(fmt.Sprintf("stat %s: %v", c.path, err), start)
 	}
 	if !info.Mode().IsRegular() {
-		return c.result(false, c.path+" is not a regular file", start)
+		return c.pathResult(false, c.path+" is not a regular file", start)
 	}
 	if c.nonEmpty && info.Size() == 0 {
-		return c.result(false, c.path+" is empty", start)
+		return c.pathResult(false, c.path+" is empty", start)
 	}
 	res := c.result(true, c.path+" is a regular file", start)
 	res.Data = FileResultData(c.path, info)
+	return res
+}
+
+// pathResult is result with the path as reading data: a failing verdict still
+// says which path it judged, so the dashboard column is never blank.
+func (c fileCheck) pathResult(ok bool, msg string, start time.Time) Result {
+	res := c.result(ok, msg, start)
+	res.Data = map[string]any{DataKeyPath: c.path}
 	return res
 }
 

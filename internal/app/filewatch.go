@@ -213,11 +213,15 @@ func (w *fileWatcher) publishSnapshot(current map[string]fileState) {
 		if w.absentOK {
 			message = firstFileWatchPath(w.paths) + ": absent (ok)"
 		}
+		data := map[string]any{checks.DataKeyPaths: w.paths}
+		if len(w.paths) == 1 {
+			data[checks.DataKeyPath] = w.paths[0]
+		}
 		result := checks.Result{
 			Check:   w.name,
 			OK:      w.absentOK,
 			Message: message,
-			Data:    map[string]any{checks.DataKeyPaths: w.paths},
+			Data:    data,
 		}
 		w.publish(w.name, checks.CheckTypeFile, checks.ApplySummary(w.summary, w.check, result))
 		return

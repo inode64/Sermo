@@ -645,8 +645,16 @@ func TestFileExistsAndBinaryChecks(t *testing.T) {
 	if res := (fileExistsCheck{base: base{name: "f"}, path: flag}).Run(context.Background()); !res.OK {
 		t.Errorf("existing file should pass")
 	}
-	if res := (fileExistsCheck{base: base{name: "f"}, path: filepath.Join(dir, "absent")}).Run(context.Background()); res.OK {
+	absent := filepath.Join(dir, "absent")
+	if res := (fileExistsCheck{base: base{name: "f"}, path: absent}).Run(context.Background()); res.OK {
 		t.Errorf("absent file should fail")
+	} else if res.Data[DataKeyPath] != absent {
+		t.Errorf("absent file_exists data path = %v, want %s", res.Data[DataKeyPath], absent)
+	}
+	if res := (fileCheck{base: base{name: "file"}, path: absent}).Run(context.Background()); res.OK {
+		t.Errorf("absent file should fail a file check")
+	} else if res.Data[DataKeyPath] != absent {
+		t.Errorf("absent file data path = %v, want %s", res.Data[DataKeyPath], absent)
 	}
 	if res := (fileCheck{base: base{name: "file"}, path: flag}).Run(context.Background()); !res.OK {
 		t.Errorf("regular file should pass")
