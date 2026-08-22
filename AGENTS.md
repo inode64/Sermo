@@ -501,7 +501,8 @@ the runtime registry both consume `watch-panels.json`; add or change repetitive
 watch panel IDs, columns, controls and copy there, while executable matching and
 row-render behavior stays in `watchPanelBehaviors` in `src/app.js`.
 `make web` runs the in-process esbuild build
-(`internal/web/build`, the Go API — no Node/npm) to bundle + minify them into
+(`internal/web/build`, a nested module so esbuild is not a `sermod` dependency,
+the Go API — no Node/npm) to bundle + minify them into
 `internal/web/index.html`, leaving the `{{CSP_NONCE}}`/`{{VERSION}}` placeholders
 for the server to fill per request. **After editing anything under
 `internal/web/src/`, run `make web` and commit the regenerated `index.html`.**
