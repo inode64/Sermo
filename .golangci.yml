@@ -51,7 +51,7 @@ linters:
     - govet  # see settings.govet: enable-all minus fieldalignment/shadow
     - gomoddirectives  # reject unexpected replace/exclude/retract directives
     - gomodguard_v2  # direct dependencies must be approved below
-    - interfacebloat  # interfaces with too many methods (web.Backend excluded below)
+    - interfacebloat  # interfaces with too many methods (web.Backend has //nolint)
     - iface  # unused / duplicated interface declarations
     - ireturn  # return-concrete; factories/registries excluded below
     - iotamixing  # reject mixed iota and explicit constant declarations
@@ -69,7 +69,7 @@ linters:
     - nilerr
     - nilnil  # nil values paired with nil errors must be explicitly justified
     - nilnesserr  # err checked nil but a different err value returned
-    - noctx  # blocking I/O must use *Context APIs; conn/ and *_test.go excluded
+    - noctx  # blocking I/O must use *Context APIs; off in *_test.go, on in conn/
     - nosprintfhostport  # host:port construction must preserve IPv6 correctness
     - nolintlint  # //nolint: directives must name a linter and stay justified
     - perfsprint  # avoid needless fmt allocations (errors.New, strconv, concatenation)
@@ -93,7 +93,7 @@ linters:
     - usetesting  # prefer testing.T cleanup-aware helpers
     - wastedassign
     - whitespace  # leading/trailing blank lines inside a block
-    - wrapcheck  # ON in core; OFF in checks/ + conn/ probe packages (see exclusions)
+    - wrapcheck  # ON in core and conn/; OFF only in listed checks/ files (see exclusions)
   settings:
     custom:
       # NilAway runs as a module plugin because golangci-lint does not ship it
@@ -229,8 +229,9 @@ linters:
           sizeThreshold: 256
           skipTestFuncs: true
     forbidigo:
-      # Production anti-patterns. Entry-point mains (cmd/, web/build) and tests
-      # are excluded below; intentional control-flow panics in assist stay allowed.
+      # Production anti-patterns. Tests are path-excluded below; cmd/ and
+      # web/build keep documented //nolint:forbidigo at os.Exit. Intentional
+      # control-flow panics in assist stay allowed.
       analyze-types: true
       forbid:
         - pattern: ^fmt\.Print.*$
@@ -266,7 +267,7 @@ linters:
       # supply-chain changes and must not appear as incidental go.mod edits.
       exclude-forbidden: true
       go-debug-forbidden: true
-      go-version-pattern: '^1\.26\.6$'
+      go-version-pattern: '^1\.26\.7$'
       ignore-forbidden: true
       tool-forbidden: true
       toolchain-forbidden: true
@@ -567,10 +568,10 @@ linters:
 
       # wrapcheck zone policy (same idea as ireturn):
       #   ON  — operation, rules, config, state, app, cli, process, web, locks,
-      #         managers, notify, assist, cmd, and probes whose errors already
-      #         carry context.
-      #   OFF — check and conn sources that deliberately turn transport I/O
-      #         into Result/check messages. Expand those with contextual %w.
+      #         managers, notify, assist, cmd, conn/, and probes whose errors
+      #         already carry context.
+      #   OFF — only the listed internal/checks/* sources that still turn raw
+      #         transport I/O into Result/check messages. Expand those with %w.
       - linters:
           - wrapcheck
         path: '^internal/checks/(commandcheck|conntrack|diskio|edac|fds|firewall_nftables|firewall_nftables_other|icmp|influxdb|meminfo|mongodb|mount|net|pids|pressure|raid|route|route_family_other|sensors|sql|storage|tcpcheck|users|websocket)\.go$'

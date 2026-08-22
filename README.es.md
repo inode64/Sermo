@@ -161,7 +161,7 @@ make build      # produces bin/sermoctl and bin/sermod
 make test       # run the test suite
 ```
 
-Requiere Go 1.26.5+. Dependencias de runtime: `systemctl` o `rc-service` en el host.
+Requiere Go 1.26.7+. Dependencias de runtime: `systemctl` o `rc-service` en el host.
 
 **`sermod` se ejecuta como root.** Gestiona servicios que pertenecen a distintos usuarios y
 accede a áreas privilegiadas (control de servicios, envío de señales a procesos de otros usuarios,
