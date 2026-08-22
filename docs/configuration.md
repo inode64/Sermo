@@ -1704,6 +1704,11 @@ never replays old requests.
 
 ## Host watches
 
+The sections below document each type's **watch form** — cadence, `for:`
+windows, actions. The check semantics themselves (fields, verdicts, result
+data) are documented once per type in [Checks](rules.md#checks); where a type
+appears in both documents, rules.md is the reference and this page points to it.
+
 `watches` monitor host-level resources independently of any service and run a
 **hook** (a local command) and/or send **notifications** (to named `notifiers`)
 when a threshold is crossed. They are daemon configuration; a global `watches`
@@ -2560,74 +2565,25 @@ to open a raw ICMP socket. This iteration is **IPv4-only**.
 
 ### `clock` — wall-clock drift
 
-A `clock` watch checks this host's wall-clock offset against external NTP servers.
-It is meant for hosts that may not run a local NTP daemon: Sermo sends client NTP
-queries itself, raises the alert when drift is outside policy, and leaves the correction to a
-watch action ([`then.makestep`](#thenmakestep--forced-clock-correction-clock-watch)
-on a chrony host) or to your hook script.
+A `clock` watch checks this host's wall-clock offset against NTP servers (or a
+local chronyd via `source: chrony`) and leaves correction to a watch action —
+[`then.makestep`](#thenmakestep--forced-clock-correction-clock-watch) on a
+chrony host, or your hook script. The check's full reference — fields,
+thresholds, the chrony source, result data and hook extras — lives in
+[Clock drift](rules.md#clock-drift-clock); everything there applies unchanged
+when the check backs a watch like this:
 
 ```yaml
 watches:
   clock-drift:
-    monitor: disabled
     interval: 5m
     check:
       type: clock
-      servers:
-        - time.cloudflare.com
-        - pool.ntp.org
+      servers: [time.cloudflare.com, pool.ntp.org]
       max_offset: 2s
-      max_stratum: 4              # optional, default 15
-      max_root_dispersion: 250ms  # optional
-      timeout: 3s
     for: { cycles: 2 }
-    then:
-      notify: [ops-email]
-      hook:
-        command: [/usr/local/sbin/sermo-sync-clock.sh]
-        timeout: 2m
-        expect_exit: 0
+    then: { notify: [ops-email] }
 ```
-
-`servers` and `max_offset` are required. Optional `interface` /
-`interface_match` bind the NTP request through specific links, matching the other
-network checks. Hooks receive `SERMO_SERVER`, `SERMO_OFFSET_SECONDS`,
-`SERMO_OFFSET_ABS_SECONDS`, `SERMO_STRATUM`, `SERMO_ROOT_DISPERSION_MS` and the
-other returned NTP fields, so the script can decide what to run — though on a
-chrony host `then.makestep` corrects the clock natively, with no script.
-
-On a host that already runs chrony, set `source: chrony` instead: Sermo reads the
-local chronyd over its command protocol rather than sending its own NTP queries,
-which is the only option when chrony runs as a client and therefore serves no NTP
-on port 123 to probe.
-
-```yaml
-watches:
-  chrony-drift:
-    interval: 5m
-    check:
-      type: clock
-      source: chrony
-      host: 127.0.0.1       # optional, the default
-      port: 323             # optional, chronyd's command port
-      # socket: /run/chrony/chronyd.sock   # instead of host/port
-      max_offset: 100ms
-      max_stratum: 4
-      max_root_dispersion: 200ms
-      unit: s
-      timeout: 3s
-```
-
-`servers` is rejected with `source: chrony`, and `host`/`port`/`socket` name the
-local daemon instead. With `socket:` the result reports `socket` in place of
-`server` and `port`, so a hook receives `SERMO_SOCKET` and no
-`SERMO_SERVER`/`SERMO_PORT`. Hooks then also receive `SERMO_SYNCHRONIZED`,
-`SERMO_SKEW_PPM`, `SERMO_FREQUENCY_PPM`, `SERMO_RMS_OFFSET_SECONDS`,
-`SERMO_REFERENCE_AGE_SECONDS` and `SERMO_SOURCES_ONLINE`, so a script can tell a
-clock that is merely drifting from one whose sources have gone away. An
-`interface` pin does not apply when `socket:` is used — a Unix socket has no
-egress link. To assert individual fields rather than a drift threshold, use the
-[`chrony` check type](rules.md) with `expect:`.
 
 ### `swap` — system swap
 
@@ -2844,18 +2800,9 @@ check never fires. Hook extras: `SERMO_COUNT`, `SERMO_MAX`, `SERMO_USED_PCT`,
 ### `firewall_rules` — loaded firewall rules
 
 Use `firewall_rules` for firewall loaders such as FireHOL that exit after
-installing rules. It is a health check: as a watch it fires when the loaded
-nftables/iptables rule count drops below `min_rules` (default `1`).
-
-```yaml
-watches:
-  firewall:
-    check: { type: firewall_rules, backend: auto, min_rules: 1 }
-    then: { hook: { command: [/usr/local/bin/firewall-missing.sh] } }
-```
-
-`backend` is `auto`, `nftables` or `iptables`. Hook extras:
-`SERMO_BACKEND`, `SERMO_RULES`, `SERMO_MIN_RULES`.
+installing rules: as a watch it fires when the loaded nftables/iptables rule
+count drops below `min_rules` (default `1`). Fields, backends and hook extras
+are documented once in [Firewall rules](rules.md#firewall-rules-firewall_rules).
 
 ### `zombies` — defunct processes
 
