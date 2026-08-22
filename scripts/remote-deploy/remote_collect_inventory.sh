@@ -342,6 +342,22 @@ ip -o -6 route show >"${out}/ip_route6" 2>/dev/null || true
 	fi
 } >"${out}/service_endpoint_hints" 2>/dev/null || true
 
+# One line per OpenVPN instance config: <name> <client|server> <port-or-dash>.
+# generate_install_config.py uses this to drop the local endpoint probe on
+# client instances, which dial out and never listen locally.
+{
+	for conf in /etc/openvpn/*.conf; do
+		[ -f "$conf" ] || continue
+		inst="$(basename "$conf" .conf)"
+		mode="server"
+		if grep -Eq '^[[:space:]]*client([[:space:]]|$)' "$conf"; then
+			mode="client"
+		fi
+		port="$(grep -E '^[[:space:]]*l?port[[:space:]]+[0-9]+' "$conf" | head -n1 | grep -oE '[0-9]+' | head -n1)"
+		printf '%s\t%s\t%s\n' "$inst" "$mode" "${port:--}"
+	done
+} >"${out}/openvpn_instances" 2>/dev/null || true
+
 {
 	command -v hdparm >/dev/null 2>&1 && echo "hdparm=1" || echo "hdparm=0"
 	command -v smartctl >/dev/null 2>&1 && echo "smartctl=1" || echo "smartctl=0"

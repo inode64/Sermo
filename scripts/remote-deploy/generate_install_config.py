@@ -1693,6 +1693,55 @@ def endpoint_watch_overrides(stage: Path, doc: dict, variables: dict[str, str]) 
             item["reason"] = reason or "no associated listening socket for configured endpoint"
         report.append(item)
     return disabled, report
+OPENVPN_CATALOG_SERVICE = "openvpn%s%i"
+
+
+def parse_openvpn_instances(stage: Path) -> dict[str, dict[str, str]]:
+    """Read the openvpn_instances inventory evidence: one line per config as
+    <instance> <client|server> <port-or-dash>, tab separated."""
+    instances: dict[str, dict[str, str]] = {}
+    for line in read_text(stage / "openvpn_instances").splitlines():
+        fields = line.split("\t")
+        if len(fields) < 3 or not fields[0]:
+            continue
+        instances[fields[0]] = {"mode": fields[1], "port": fields[2]}
+    return instances
+
+
+def openvpn_watch_overrides(stage: Path, name: str, doc: dict) -> tuple[set[str], list[dict[str, object]]]:
+    """Disable the local endpoint probe of an OpenVPN client instance: a client
+    dials out, nothing listens locally, so the openvpn protocol probe can never
+    pass and would pin the service amber forever. A client that still declares
+    a port/lport directive keeps the probe (it really binds), and missing
+    evidence keeps every watch enabled — never disable what cannot be proven.
+    Mirrors endpoint_watch_overrides: a disabled set plus audited report rows."""
+    disabled: set[str] = set()
+    report: list[dict[str, object]] = []
+    if str(doc.get("name") or "") != OPENVPN_CATALOG_SERVICE:
+        return disabled, report
+    watches = doc.get("watches", {})
+    if not isinstance(watches, dict):
+        return disabled, report
+    instances = parse_openvpn_instances(stage)
+    instance = next((i for i in instances if name == f"openvpn{i}"), "")
+    info = instances.get(instance)
+    if not info:
+        return disabled, report
+    client_without_listener = info["mode"] == "client" and info["port"] == "-"
+    for watch_name, raw_watch in sorted(watches.items()):
+        check = raw_watch.get("check") if isinstance(raw_watch, dict) else None
+        if not isinstance(check, dict) or str(check.get("type") or "") != "openvpn":
+            continue
+        item: dict[str, object] = {"watch": str(watch_name), "type": "openvpn", "active": not client_without_listener}
+        if client_without_listener:
+            disabled.add(str(watch_name))
+            item["reason"] = "openvpn client instance: dials out, no local listener to probe"
+        else:
+            item["source"] = "openvpn instance inventory"
+        report.append(item)
+    return disabled, report
+
+
 def parse_postgres_clusters(stage: Path) -> list[dict[str, object]]:
     """Read the postgres_clusters inventory evidence: one line per postmaster,
     tab separated as <datadir> <primary|standby> <slots> <walsenders>."""
@@ -2193,7 +2242,8 @@ def generate_for_host(host_slug: str, stage: Path, configs_dir: Path, options: G
             disabled_endpoint_watches, endpoint_checks = endpoint_watch_overrides(stage, doc or {}, effective_variables)
         disabled_replication_watches, replication_checks = replication_watch_overrides(stage, doc or {})
         disabled_hints_watches, exim_hints_checks = exim_hints_watch_overrides(stage, doc or {})
-        disabled_watches = disabled_endpoint_watches | disabled_replication_watches | disabled_hints_watches
+        disabled_openvpn_watches, openvpn_checks = openvpn_watch_overrides(stage, name, doc or {})
+        disabled_watches = disabled_endpoint_watches | disabled_replication_watches | disabled_hints_watches | disabled_openvpn_watches
         gluster_check, gluster_cluster_report = gluster_cluster_check(stage, name)
         body = f"""name: {name}
 uses: {name}
@@ -2230,6 +2280,8 @@ dry_run: true
             enabled["replication_checks"] = replication_checks
         if exim_hints_checks:
             enabled["exim_hints_checks"] = exim_hints_checks
+        if openvpn_checks:
+            enabled["openvpn_checks"] = openvpn_checks
         if gluster_cluster_report is not None:
             enabled["gluster_cluster"] = gluster_cluster_report
         report["services"]["enabled"].append(enabled)

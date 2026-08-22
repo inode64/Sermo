@@ -905,6 +905,62 @@ class EndpointGenerationTest(unittest.TestCase):
         body = (root / "configs/host/root/etc/sermo/watches/geoip-database-freshness.yml").read_text(encoding="utf-8")
         self.assertIn('summary: "GeoIP ${value} is older than ${older_than} in ${number_files} files"', body)
 
+class OpenVPNClientGateTest(unittest.TestCase):
+    """A client instance dials out — its local openvpn probe can never pass —
+    while a server (or a client that binds lport) keeps the probe, and missing
+    evidence never disables anything."""
+
+    def openvpn_doc(self):
+        docs = generator.load_catalog_services(default_options().catalog_services_dir)
+        doc, _ = generator.catalog_doc_for_service("openvpntun1", docs)
+        self.assertIsNotNone(doc, "the openvpn catalog template must resolve")
+        return doc
+
+    def overrides(self, evidence: str | None, name: str = "openvpntun1"):
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        stage = Path(temp.name)
+        if evidence is not None:
+            (stage / "openvpn_instances").write_text(evidence, encoding="utf-8")
+        return generator.openvpn_watch_overrides(stage, name, self.openvpn_doc())
+
+    def test_client_without_listener_drops_the_probe(self):
+        disabled, checks = self.overrides("tun1\tclient\t-\n")
+        self.assertEqual(disabled, {"port"})
+        item = next(c for c in checks if c["watch"] == "port")
+        self.assertFalse(item["active"])
+        self.assertIn("no local listener", item["reason"])
+
+    def test_server_keeps_the_probe(self):
+        disabled, checks = self.overrides("tun1\tserver\t1194\n")
+        self.assertEqual(disabled, set())
+        item = next(c for c in checks if c["watch"] == "port")
+        self.assertTrue(item["active"])
+
+    def test_client_that_binds_a_port_keeps_the_probe(self):
+        disabled, _ = self.overrides("tun1\tclient\t4501\n")
+        self.assertEqual(disabled, set())
+
+    def test_missing_evidence_disables_nothing(self):
+        disabled, checks = self.overrides(None)
+        self.assertEqual(disabled, set())
+        self.assertEqual(checks, [])
+
+    def test_other_instances_evidence_is_ignored(self):
+        disabled, checks = self.overrides("tun9\tclient\t-\n")
+        self.assertEqual(disabled, set())
+        self.assertEqual(checks, [])
+
+    def test_non_openvpn_service_is_untouched(self):
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        stage = Path(temp.name)
+        (stage / "openvpn_instances").write_text("tun1\tclient\t-\n", encoding="utf-8")
+        disabled, checks = generator.openvpn_watch_overrides(stage, "nginx", {"name": "nginx", "watches": {"http": {}}})
+        self.assertEqual(disabled, set())
+        self.assertEqual(checks, [])
+
+
 class PostgresReplicationGenerationTest(unittest.TestCase):
     """The replication watches must reach only nodes whose cluster facts can
     make them fire. The scenarios mirror the measured fleet: a primary with two
