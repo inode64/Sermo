@@ -219,12 +219,19 @@ func (b *WebBackend) ControlReplication(ctx context.Context, name string) web.Ac
 		return web.ActionResult{Message: fmt.Sprintf("watch %q has no replication start control configured", name)}
 	}
 	result := ControlReplicationStart(ctx, b.cfg.Global.RuntimeDir(), name, w.check, b.operationTimeout)
+	return b.finishWatchControl(name, eventActionReplicationStart, result.OK, result.Message)
+}
+
+// finishWatchControl records a manual watch control's outcome as an event —
+// action/ok on success, error/failed otherwise — and returns it as the API
+// result, so every control reports the same way.
+func (b *WebBackend) finishWatchControl(name, action string, ok bool, message string) web.ActionResult {
 	kind, status := eventKindAction, eventStatusOK
-	if !result.OK {
+	if !ok {
 		kind, status = eventKindError, eventStatusFailed
 	}
-	b.emitWatchMonitorEvent(name, eventActionReplicationStart, kind, status, result.Message)
-	return web.ActionResult{OK: result.OK, Message: result.Message}
+	b.emitWatchMonitorEvent(name, action, kind, status, message)
+	return web.ActionResult{OK: ok, Message: message}
 }
 
 // ControlRAID pauses or resumes a configured md reconstruction. Pause requires
@@ -248,14 +255,9 @@ func (b *WebBackend) ControlRAID(ctx context.Context, name, action, confirmation
 		return web.ActionResult{Message: msg}
 	}
 	result := ControlRAID(ctx, b.cfg.Global.RuntimeDir(), array, action, b.operationTimeout)
-	kind, status := eventKindAction, eventStatusOK
-	if !result.OK {
-		kind, status = eventKindError, eventStatusFailed
-	}
 	eventAction := eventActionRAIDPause
 	if action == RaidControlResume {
 		eventAction = eventActionRAIDResume
 	}
-	b.emitWatchMonitorEvent(name, eventAction, kind, status, result.Message)
-	return web.ActionResult{OK: result.OK, Message: result.Message}
+	return b.finishWatchControl(name, eventAction, result.OK, result.Message)
 }
