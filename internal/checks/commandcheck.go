@@ -119,7 +119,9 @@ func (c commandCheck) Run(ctx context.Context) Result {
 				data = map[string]any{}
 			}
 			data[DataKeyValue] = v
-			r.Message = fmt.Sprintf("%s: %s", output.Trim(res.Stdout), r.Message)
+			// Only the first line joins the message: a verbose command with a
+			// unit must not bloat every event with its whole stdout.
+			r.Message = fmt.Sprintf("%s: %s", output.FirstNonEmptyLine(res.Stdout), r.Message)
 		}
 	}
 	if len(data) > 0 {
