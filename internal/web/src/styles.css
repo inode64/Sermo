@@ -527,6 +527,7 @@
   .watch-reading { min-width: 0; }
   .watch-reading-long { grid-column: 1 / -1; }
   .watch-reading-value { overflow-wrap: anywhere; word-break: break-word; white-space: normal; }
+  .watch-reading-value.good { color: var(--ok); }
   .usagebar { --usage-pct: 0%; --usage-color: var(--ok); position: relative; display: inline-grid; place-items: center; width: 10.5rem; height: 1.05rem; background: var(--line); border: 1px solid var(--line-2); border-radius: 999px; overflow: hidden; vertical-align: middle; }
   .usagebar-fill { position: absolute; left: 0; top: 0; bottom: 0; width: var(--usage-pct); min-width: .18rem; transition: width .2s ease, background-color .2s ease; background: var(--usage-color); }
   .usagebar-fill::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, #fff5, #fff0 48%, #0001); }

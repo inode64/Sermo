@@ -522,6 +522,15 @@ watches:
 
 
 def controlled_vm_service(name: str, display_name: str, domain: str, uri: str, socket: str) -> str:
+    # The qemu process advertises its domain on its own command line
+    # (-name guest=<domain>,debug-threads=on), which is the one stable handle
+    # across restarts — the systemd scope name embeds a changing domain id. A
+    # cmd selector attributes it, so the VM row gets uptime, CPU, memory, FDs
+    # and IO and the runtime graphs like any attributed service. delegated
+    # keeps the guest out of every kill decision: sermo observes qemu, it
+    # never signals it — lifecycle stays with libvirt.
+    # Single-quoted in YAML: a double-quoted scalar treats \S as an escape.
+    cmd_pattern = "'^\\S*qemu-system\\S* -name guest=" + re.escape(domain).replace("'", "''") + ",.*$'"
     return f"""name: {name}
 display_name: {yaml_quote(display_name)}
 category: virtual-machine
@@ -532,6 +541,10 @@ control:
   uri: {yaml_quote(uri)}
   domain: {yaml_quote(domain)}
   socket: {yaml_quote(socket)}
+processes:
+  main:
+    cmd: {cmd_pattern}
+    delegated: true
 watches:
   vm:
     check:

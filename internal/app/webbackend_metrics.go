@@ -164,14 +164,24 @@ func (b *WebBackend) Metrics(_ context.Context, name, check, metric string, sinc
 		return out, true
 	}
 
-	// The declared unit, not just the type's static set: a check that publishes a
-	// scalar under its own `unit:` is offered as a graph in the payload, so
-	// refusing it here would leave a panel that can only report a failure.
-	unit, published := checks.DeclaredGraphMetricUnit(checkType, entry.checkUnits[check], metric)
+	// The resolved set, not the type's static one: the same resolution the
+	// recorder and the payload use, so a metric the panel is offered is served
+	// and a banded or out-of-scope one is refused.
+	unit, published := resolvedGraphUnit(entry.checkGraphs[check], metric)
 	if !published {
 		return web.MetricSeries{}, false
 	}
 	return b.metricSeries(name, check, metric, unit, since, now), true
+}
+
+// resolvedGraphUnit looks metric up in a check's resolved line metrics.
+func resolvedGraphUnit(graphs []checks.GraphMetric, metric string) (string, bool) {
+	for _, m := range graphs {
+		if m.Key == metric {
+			return m.Unit, true
+		}
+	}
+	return "", false
 }
 
 // WatchMetrics returns one numeric series a host watch's check publishes, in the
@@ -188,7 +198,7 @@ func (b *WebBackend) WatchMetrics(_ context.Context, name, metric string, since 
 	if w == nil || w.disabled || metric == "" {
 		return web.MetricSeries{}, false
 	}
-	unit, published := checks.DeclaredGraphMetricUnit(w.checkType, w.checkUnit, metric)
+	unit, published := resolvedGraphUnit(w.graphs, metric)
 	if !published {
 		return web.MetricSeries{}, false
 	}

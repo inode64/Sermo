@@ -3,6 +3,7 @@ package checks
 import (
 	"slices"
 
+	"sermo/internal/cfgval"
 	"sermo/internal/metrics"
 )
 
@@ -63,6 +64,15 @@ var graphMetrics = map[string][]GraphMetric{
 	CheckTypeStrays: {{Key: DataKeyCount, Unit: metrics.MetricUnitProcesses, Label: "Strays"}},
 
 	CheckTypeTCPConnections: {{Key: DataKeyCount, Unit: metrics.MetricUnitConnections, Label: "Connections"}},
+	// The OOM killer's per-cycle kill count: a spike names the moment memory ran
+	// out, which the level alert alone timestamps but cannot shape.
+	CheckTypeOOM: {{Key: DataKeyKills, Unit: metrics.MetricUnitNone, Label: "OOM kills"}},
+	// One round-trip sample per cycle of an icmp latency watch; the state form
+	// publishes no latency and is scoped out per entry below.
+	CheckTypeICMP: {{Key: DataKeyLatencyMS, Unit: metrics.MetricUnitMilliseconds, Label: "Latency", Decimals: hundredthsDecimals}},
+	// The one raid number that is a magnitude rather than a state: the kernel's
+	// mismatch_cnt after a check/repair pass.
+	CheckTypeRAID: {{Key: DataKeyRaidMismatchCount, Unit: metrics.MetricUnitNone, Label: "Mismatch count"}},
 
 	// The level checks: the figures an operator writes thresholds against. A check
 	// that computes a number every cycle and compares it to a limit is exactly a
@@ -178,6 +188,41 @@ func DeclaredGraphMetrics(checkType, unit string) []GraphMetric {
 // graphMetricValueLabel names the scalar a check publishes under `unit:`.
 const graphMetricValueLabel = "Value"
 
+// graphMetricEntryScope narrows types whose metrics exist only in some of their
+// configured forms: an icmp watch measures latency only when its `metric:` says
+// so, and advertising the panel on a state watch would offer a series nothing
+// writes. Keyed by metric key; absent means the metric always applies.
+var graphMetricEntryScope = map[string]map[string]func(entry map[string]any) bool{
+	CheckTypeICMP: {
+		DataKeyLatencyMS: func(entry map[string]any) bool {
+			return cfgval.AsString(entry[CheckKeyMetric]) == IcmpMetricLatency
+		},
+	},
+}
+
+// ResolvedGraphMetrics is the line-metric set of one configured check: the
+// type's declared metrics plus its `unit:` scalar, scoped by the entry's own
+// form and minus the keys the check has banded — a state draws as a band or a
+// line, never both. The recorder, the payload and the read gates all resolve
+// through this one function, so what is persisted, offered and served cannot
+// disagree.
+func ResolvedGraphMetrics(checkType, unit string, entry map[string]any) []GraphMetric {
+	declared := DeclaredGraphMetrics(checkType, unit)
+	banded := BandKeys(DeclaredBandMetrics(checkType, entry))
+	scope := graphMetricEntryScope[checkType]
+	out := declared[:0:0]
+	for _, m := range declared {
+		if banded[m.Key] {
+			continue
+		}
+		if gate, scoped := scope[m.Key]; scoped && !gate(entry) {
+			continue
+		}
+		out = append(out, m)
+	}
+	return out
+}
+
 // DeclaredGraphMetricKey reports whether key is a graph metric the check type
 // declares statically — the set a `bands:` block may convert to a state band.
 func DeclaredGraphMetricKey(checkType, key string) bool {
@@ -187,26 +232,4 @@ func DeclaredGraphMetricKey(checkType, key string) bool {
 		}
 	}
 	return false
-}
-
-// DeclaredGraphMetricUnit returns the unit of one metric of one configured check,
-// and whether that check publishes it at all.
-//
-// The two answers are separate because a unit may legitimately be empty: a bare
-// count graphs as a number with no suffix. Folding them together — treating "" as
-// "no such metric" — refused every unitless series the payload offered, so a
-// SMART reallocated-sector count, a load average and a firewall rule count all
-// showed a panel that could only report a failure.
-func DeclaredGraphMetricUnit(checkType, declaredUnit, key string) (string, bool) {
-	for _, m := range graphMetrics[checkType] {
-		if m.Key == key {
-			return m.Unit, true
-		}
-	}
-	// The scalar a check publishes under its own `unit:`; without one the check
-	// declares no value metric, so there is nothing to serve.
-	if key == DataKeyValue && declaredUnit != "" {
-		return declaredUnit, true
-	}
-	return "", false
 }

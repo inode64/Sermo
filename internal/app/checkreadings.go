@@ -228,6 +228,35 @@ func (rb *readingBuilder) addString(field, label string) *readingBuilder {
 	return rb.add(field, label, cfgval.String(rb.data[field]))
 }
 
+// addGood appends an explicitly healthy state reading, rendered green.
+func (rb *readingBuilder) addGood(field, label, value string) *readingBuilder {
+	if value != "" {
+		rb.out = append(rb.out, web.WatchReading{Field: field, Label: label, Value: value, Good: true})
+	}
+	return rb
+}
+
+// addState renders a boolean state field as words instead of its number: the
+// green okText at zero, otherwise badText through the severity the caller
+// names — Error turns the row red, Warning keeps it amber.
+func (rb *readingBuilder) addState(field, label, okText, badText string, warn bool) *readingBuilder {
+	v, ok := cfgval.Float(rb.data[field])
+	if !ok {
+		return rb
+	}
+	if v == 0 {
+		return rb.addGood(field, label, okText)
+	}
+	reading := web.WatchReading{Field: field, Label: label}
+	if warn {
+		reading.Warning = badText
+	} else {
+		reading.Error = badText
+	}
+	rb.out = append(rb.out, reading)
+	return rb
+}
+
 // addInt appends the field's integer value when present.
 func (rb *readingBuilder) addInt(field, label string) *readingBuilder {
 	if v, ok := cfgval.Int(rb.data[field]); ok {
@@ -375,6 +404,7 @@ var checkReadingsByType = map[string]func(map[string]any) []web.WatchReading{
 	checks.CheckTypeGlusterCluster:   glusterClusterCheckReadings,
 	checks.CheckTypeLVM:              lvmCheckReadings,
 	checks.CheckTypeNet:              netCheckReadings,
+	checks.CheckTypeRoute:            routeCheckReadings,
 	checks.CheckTypeSQL:              scalarQueryCheckReadings,
 	checks.CheckTypeSensors:          sensorsCheckReadings,
 	checks.CheckTypeMetric:           metricValueCheckReadings,
@@ -426,6 +456,20 @@ func checkReadings(checkType string, data map[string]any) []web.WatchReading {
 		return metricCheckReadings(checkType, data)
 	}
 	return nil
+}
+
+// routeCheckReadings shows what the route check actually matched: the address
+// family, the egress interface and gateway of the matched default route, and
+// how many routes the table held. Hop counts do not exist in a routing table,
+// so the gateway is as far as "where does it go" can honestly reach.
+func routeCheckReadings(data map[string]any) []web.WatchReading {
+	return readingsFrom(data).
+		addString(checks.DataKeyFamily, "Family").
+		addString(checks.DataKeyInterface, "Interface").
+		addString(checks.DataKeyGateway, "Gateway").
+		addInt(checks.DataKeyRoutes, "Routes in table").
+		addInt(checks.DataKeyValue, "Matched").
+		readings()
 }
 
 func glusterClusterCheckReadings(data map[string]any) []web.WatchReading {
@@ -564,11 +608,20 @@ func lvmCheckReadings(data map[string]any) []web.WatchReading {
 		readings()
 }
 
+// raidStateText words a raid count field: "degraded" for the single-array
+// form's 0/1, "N degraded" for the host-wide count.
+func raidStateText(data map[string]any, field, word string) string {
+	if v, ok := cfgval.Float(data[field]); ok && v > 1 {
+		return fmt.Sprintf("%d %s", int(v), word)
+	}
+	return word
+}
+
 func raidCheckReadings(data map[string]any) []web.WatchReading {
 	rb := deviceProgressReadings(data).
 		addString(checks.DataKeyArrays, watchReadingLabelArrays).
-		addString(checks.DataKeyDegraded, watchReadingLabelDegraded).
-		addString(checks.DataKeyRecovering, watchReadingLabelRecovering).
+		addState(checks.DataKeyDegraded, watchReadingLabelDegraded, "none", raidStateText(data, checks.DataKeyDegraded, "degraded"), false).
+		addState(checks.DataKeyRecovering, watchReadingLabelRecovering, "idle", "recovering", true).
 		addString(checks.DataKeyDegradedArrays, watchReadingLabelDegradedArrays).
 		addString(checks.DataKeyArray, "Array").
 		addString(checks.DataKeyRaidOperation, "Operation").

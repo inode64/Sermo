@@ -91,7 +91,7 @@ overflow and axe WCAG 2.2 AA rules against deterministic API fixtures.
 | Daemon process metrics | `GET /api/daemon/metrics` | read-only persisted sermod CPU/memory/IO history sampled by the daemon independently of dashboard clients |
 | Host metrics | `GET /api/host` | current host CPU, memory and load values |
 | Locks | `GET /api/locks` | named runtime locks |
-| Events | `GET /api/events` | cursor page of service/watch activity; supports `limit`, `service`, `watch`, `kind`, `status`, `only_errors` |
+| Events | `GET /api/events` | cursor page of service/watch activity; supports `limit`, `since`, `service`, `watch`, `kind`, `status`, `only_errors`; the dashboard's range selector defaults to the last 24 hours, with "any time" an explicit choice |
 | Activity summary | `GET /api/activity` | internal recent-event rollup used for dashboard attention indicators |
 | Monitoring counts | `GET /api/monitoring` | monitored vs paused service counts |
 

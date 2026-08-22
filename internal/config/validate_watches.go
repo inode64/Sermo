@@ -60,6 +60,11 @@ func validateWatches(watches map[string]any, locksDir string, notifiers map[stri
 		validateSeverityField(checkPath, check, add)
 		typ := cfgval.String(check[checks.CheckKeyType])
 		validateCheckBands(checkPath, typ, check, add)
+		if v, present := check[checks.CheckKeySLA]; present {
+			if _, isBool := v.(bool); !isBool {
+				add(validationBooleanFormat, checkPath+"."+checks.CheckKeySLA)
+			}
+		}
 		validateRaidNotifyOn(name, typ, entry, notifiers, defaultNotify, add)
 		validateRAIDControl(name, typ, entry, check, add)
 		validateWatchMountBlock(name, typ, entry, add)
