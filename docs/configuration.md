@@ -1991,8 +1991,9 @@ These conventions keep the per-type sections below short:
   The same `expect_exit` / `expect_stdout` / `expect_stderr` fields work on a
   `command` check (see [Checks](rules.md#checks)). Command checks also support
   `user` to run the argv as a specific OS user; hook commands do not.
-- **Evaluation model.** A **level check** (`storage`, `memory`, `pressure`,
-  `load`, `fds`, `pids`, `conntrack`, `zombies`, swap `usage`) fires
+- **Evaluation model.** A **level check** (any condition-style type with
+  numeric predicates — see the type table's style column in
+  [Checks](rules.md#checks)) fires
   when **every present predicate holds**
   — a predicate is `{op, value}` with the operator set `>= > <= < == !=`; declare
   at least one, and add `for: { cycles: N }` or `for: { duration: 6m }` to
@@ -2180,16 +2181,12 @@ For an `lvm` watch, `then.notify_on: [on_change]` notifies only when its
 effective health changes between `ok` and `error`, including recovery. It cannot
 be combined with `then.notify_interval`.
 
-**Checks and watches share the same check types.** Any single-shot check — the
-host-resource ones below (`storage`, `memory`, `pressure`, `load`, `fds`,
-`pids`, `conntrack`, `zombies`, `oom`, `failed_units`, `inotify`, among others) *and* the
-service checks (`tcp`, `tcp_connections`, `ssh_idle`, `terminal_sessions`, `ports`, `http`, `command`, `file_exists`, `file`,
-`lockfile`, `binary`, `pidfile`, `socket`, `libraries`, `config`,
-`route`, `clock`, `firewall_rules`, `cert`, `sqlite`/`sqlite3`, `websocket`,
-`count`, and connection-protocol checks such as `mysql`/`smtp`) — can be used as
-a watch here, and the host-resource ones can equally be used in a service's
-check-only `watches:` entries or explicit `checks:`/rules (see
-[Checks](rules.md#checks)).
+**Checks and watches share the same check types.** Any single-shot check —
+host-resource and service checks alike, the full set is the type table in
+[Checks](rules.md#checks) — can be used as a watch here, and the host-resource
+ones can equally be used in a service's check-only `watches:` entries or
+explicit `checks:`/rules. Only the multi-metric watch forms (`net`/`icmp`/`swap`
+metric blocks) and the stateful `file`/`process` watches are watch-specific.
 
 A `dbus` check without a target verifies the bus itself. To verify a named
 service, set both `bus_name` and `object_path`; Sermo resolves its unique owner
