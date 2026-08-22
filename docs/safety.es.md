@@ -231,7 +231,7 @@ Dos mecanismos de bloqueo complementarios protegen las operaciones:
    bloquea automáticamente ante cualquiera activo; no se necesita ninguna regla. Creados por
    `sermoctl lock` (envolver un comando), `lock acquire` / `lock release`
    (véase [cli.es.md](cli.es.md)).
-2. **Checks de lock externos controlados por un guard** — un check (`file_exists`,
+2. **Checks de lock externos controlados por un guard** — una comprobación (`file_exists`,
    `process`, …) sobre una señal que Sermo *no* posee: un proceso de backup, un
    archivo de flag externo. Nunca apuntes tal check bajo `<paths.runtime>/locks` —
    eso duplica el mecanismo 1.
@@ -338,7 +338,7 @@ Las decisiones de kill dependen de cómo se leen los hechos del proceso, así qu
   se resuelve a una ruta `(deleted)` (binario reemplazado por una actualización), el proceso
   no coincide con ningún selector de exe — se reporta como un residual con exe desconocido y
   nunca se señaliza. Sermo sí registra *qué* ruta ocupaba el binario borrado, para
-  que el check `stale_binary` pueda nombrarla, pero eso es sólo diagnóstico: ese
+  que la comprobación `stale_binary` pueda nombrarla, pero eso es sólo diagnóstico: ese
   proceso sigue sin resolver exe, no coincide con nada y nunca se señaliza. No
   hagas que una ruta borrada autorice emparejamiento ni kill.
 - **PID 1 y los kernel threads están protegidos** frente a señales terminadoras
@@ -395,7 +395,7 @@ demonizó, un hijo que el daemon nunca recogió, un superviviente de una
 encarnación anterior.
 
 Los strays aparecen en `sermoctl processes` como `stray=true`, en la tabla de
-procesos del dashboard con `stray` en la columna Role, y como el check inyectado
+procesos del dashboard con `stray` en la columna Role, y como la comprobación inyectada
 `strays` (ver [configuration.es.md](configuration.es.md)). Nada más cambia: un
 stray se sigue descubriendo, sigue contando en los totales de procesos del servicio
 y sigue siendo un residual de un stop como cualquier otro proceso.
