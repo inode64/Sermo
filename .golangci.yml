@@ -83,6 +83,7 @@ linters:
     - loggercheck  # log key/value pairs must match the logger API
     - makezero  # prevent append from discarding an already allocated slice length
     - sqlclosecheck  # SQL cursors/statements must be closed on every path
+    - tagliatelle  # own wire formats stay snake_case (json/yaml); foreign decoders excluded below
     - testableexamples  # examples must provide verifiable output
     - thelper  # t.Helper() in table-driven check callbacks and fakes
     - tparallel  # detect unsafe uses of t.Parallel
@@ -406,6 +407,14 @@ linters:
       # message defeats log aggregation, and mixed key casing defeats querying.
       static-msg: true
       key-naming-case: snake
+    tagliatelle:
+      # The dashboard API and config surfaces already use snake_case tags
+      # tree-wide (measured: the only violations are the two foreign-format
+      # decoders excluded below); this pins the convention for new fields.
+      case:
+        rules:
+          json: snake
+          yaml: snake
     usestdlibvars:
       # All off by default. tls-signature-scheme stays off: its only hit is
       # `keyAlgorithmEd25519 = "Ed25519"` in a const block, and the suggested
@@ -449,6 +458,19 @@ linters:
   #   decorder, grouper, gosmopolitan — measured at 0, but their default
   #                  configurations assert almost nothing; enabling them would
   #                  document intent the code does not actually depend on.
+  #   tagalign (0) — aligns/sorts multi-key struct tags, but production structs
+  #                  carry single tags, so it asserts nothing here (see decorder).
+  #   importas (0 without config) / goheader (no header policy) — both assert
+  #                  only what their config declares, and this repo declares none.
+  #   arangolint, clickhouselint, ginkgolinter, promlinter, protogetter,
+  #   spancheck, testifylint, zerologlint — their frameworks (ArangoDB,
+  #                  ClickHouse, Ginkgo, Prometheus, protobuf, OpenTelemetry,
+  #                  testify, zerolog) are not dependencies of this module.
+  #   paralleltest, testpackage — test-file-only linters; the gate scopes new
+  #                  analyzers to production code.
+  #   gomodguard / wsl / exhaustruct_v5 — superseded or already rejected in the
+  #                  versions listed above (gomodguard_v2 is enabled; wsl_v5 and
+  #                  exhaustruct are rejected on measured churn).
   exclusions:
     generated: strict
     warn-unused: true
@@ -537,6 +559,7 @@ linters:
           - loggercheck
           - makezero
           - sqlclosecheck
+          - tagliatelle
           - unconvert
           - unparam
           - usestdlibvars
@@ -556,6 +579,23 @@ linters:
       - linters:
           - gochecknoinits
         path: '^internal/conn/'
+
+      # Decoders of foreign wire formats mirror the remote side's key spelling:
+      # PHP-FPM's status JSON uses space-separated keys and Docker's API uses
+      # PascalCase. Renaming those tags would break the decode, so the snake
+      # convention cannot apply to them.
+      - linters:
+          - tagliatelle
+        path: '^internal/conn/fpm\.go$'
+      - linters:
+          - tagliatelle
+        path: '^internal/dockerctl/client\.go$'
+      # The dashboard bundler serializes template descriptors for the
+      # JavaScript side, whose identifiers are camelCase by that language's
+      # convention; these tags name JS properties, not Sermo wire fields.
+      - linters:
+          - tagliatelle
+        path: '^internal/web/build/main\.go$'
 
 
       # Store binds ctx at OpenContext; *Context SQL uses Store.sqlCtx(). The

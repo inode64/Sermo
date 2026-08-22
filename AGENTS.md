@@ -815,7 +815,7 @@ Tool notes:
   - *API shape and architecture:*
     `asciicheck`, `depguard`, `errname`, `gochecknoinits`, `godoclint`,
     `gomoddirectives`, `gomodguard_v2`, `iface`, `inamedparam`, `interfacebloat`, `iotamixing`,
-    `ireturn`, `musttag`, `predeclared`, `wrapcheck`
+    `ireturn`, `musttag`, `predeclared`, `tagliatelle`, `wrapcheck`
   - *Idiom and modernization:*
     `dogsled`, `dupword`, `exptostd`, `gocheckcompilerdirectives`, `gocritic`,
     `godot`, `godox`, `goprintffuncname`, `intrange`, `loggercheck`, `mirror`,
