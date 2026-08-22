@@ -1766,6 +1766,12 @@ reproduce solicitudes antiguas.
 
 ## Host watches
 
+Las secciones de abajo documentan la **forma de watch** de cada tipo —
+cadencia, ventanas `for:`, acciones. La semántica de la comprobación en sí
+(campos, veredictos, datos del resultado) se documenta una sola vez por tipo en
+[Checks](rules.es.md#comprobaciones); cuando un tipo aparece en ambos
+documentos, rules.es.md es la referencia y esta página apunta a ella.
+
 Los `watches` monitorizan recursos a nivel de host independientemente de cualquier
 service y ejecutan un **hook** (un comando local) y/o envían **notificaciones** (a
 `notifiers` con nombre) cuando se cruza un umbral. Son configuración del daemon; nunca se
@@ -2646,75 +2652,25 @@ socket ICMP raw. Esta iteración es **solo-IPv4**.
 
 ### `clock` — deriva del reloj
 
-Un watch `clock` comprueba el desfase del reloj local frente a servidores NTP externos.
-Está pensado para hosts que pueden no ejecutar un daemon NTP local: Sermo envía consultas
-NTP de cliente por sí mismo, dispara la alerta cuando la deriva sale de la política, y deja
-la corrección a una acción del watch
-([`then.makestep`](#thenmakestep--corrección-forzosa-del-reloj-watch-de-clock) en un host
-con chrony) o a tu script de hook.
+Un watch `clock` comprueba el desfase del reloj de este host contra servidores
+NTP (o un chronyd local vía `source: chrony`) y deja la corrección a una acción
+del watch — [`then.makestep`](#thenmakestep--corrección-forzosa-del-reloj-watch-de-clock)
+en un host con chrony, o tu script de hook. La referencia completa de la
+comprobación — campos, umbrales, la fuente chrony, datos del resultado y extras
+de hook — vive en [Deriva de reloj](rules.es.md#deriva-de-reloj-clock); todo lo
+de allí aplica sin cambios cuando la comprobación respalda un watch como este:
 
 ```yaml
 watches:
   clock-drift:
-    monitor: disabled
     interval: 5m
     check:
       type: clock
-      servers:
-        - time.cloudflare.com
-        - pool.ntp.org
+      servers: [time.cloudflare.com, pool.ntp.org]
       max_offset: 2s
-      max_stratum: 4              # optional, default 15
-      max_root_dispersion: 250ms  # optional
-      timeout: 3s
     for: { cycles: 2 }
-    then:
-      notify: [ops-email]
-      hook:
-        command: [/usr/local/sbin/sermo-sync-clock.sh]
-        timeout: 2m
-        expect_exit: 0
+    then: { notify: [ops-email] }
 ```
-
-`servers` y `max_offset` son obligatorios. Los campos opcionales `interface` /
-`interface_match` ligan la petición NTP a enlaces concretos, igual que las demás
-comprobaciones de red. Los hooks reciben `SERMO_SERVER`, `SERMO_OFFSET_SECONDS`,
-`SERMO_OFFSET_ABS_SECONDS`, `SERMO_STRATUM`, `SERMO_ROOT_DISPERSION_MS` y el resto de
-campos NTP devueltos, de modo que el script puede decidir qué ejecutar — aunque en un
-host con chrony `then.makestep` corrige el reloj de forma nativa, sin script.
-
-En un host que ya ejecuta chrony, usa `source: chrony` en su lugar: Sermo lee el
-chronyd local mediante su protocolo de mando en vez de enviar sus propias consultas
-NTP, que es la única opción cuando chrony funciona como cliente y por tanto no sirve
-NTP en el puerto 123 que sondear.
-
-```yaml
-watches:
-  chrony-drift:
-    interval: 5m
-    check:
-      type: clock
-      source: chrony
-      host: 127.0.0.1       # opcional, el valor por defecto
-      port: 323             # opcional, el puerto de mando de chronyd
-      # socket: /run/chrony/chronyd.sock   # en lugar de host/port
-      max_offset: 100ms
-      max_stratum: 4
-      max_root_dispersion: 200ms
-      unit: s
-      timeout: 3s
-```
-
-`servers` se rechaza con `source: chrony`, y `host`/`port`/`socket` nombran al demonio
-local en su lugar. Con `socket:` el resultado informa de `socket` en lugar de
-`server` y `port`, así que un hook recibe `SERMO_SOCKET` y ningún
-`SERMO_SERVER`/`SERMO_PORT`. Los hooks reciben además `SERMO_SYNCHRONIZED`, `SERMO_SKEW_PPM`,
-`SERMO_FREQUENCY_PPM`, `SERMO_RMS_OFFSET_SECONDS`, `SERMO_REFERENCE_AGE_SECONDS` y
-`SERMO_SOURCES_ONLINE`, de modo que un script puede distinguir un reloj que
-simplemente deriva de uno cuyas fuentes han desaparecido. Un pin de `interface` no
-aplica cuando se usa `socket:` — un socket Unix no tiene enlace de salida. Para
-afirmar campos concretos en lugar de un umbral de deriva, usa el
-[tipo de comprobación `chrony`](rules.es.md) con `expect:`.
 
 ### `swap` — swap del sistema
 
@@ -2933,19 +2889,11 @@ nunca se dispara. Hook extras: `SERMO_COUNT`, `SERMO_MAX`, `SERMO_USED_PCT`,
 
 ### `firewall_rules` — reglas de firewall cargadas
 
-Usa `firewall_rules` para cargadores de firewall como FireHOL que salen tras instalar las
-reglas. Es una comprobación de salud: como watch se dispara cuando el recuento de reglas
+Usa `firewall_rules` para cargadores de firewall como FireHOL que terminan tras
+instalar las reglas: como watch dispara cuando el conteo de reglas
 nftables/iptables cargadas cae por debajo de `min_rules` (por defecto `1`).
-
-```yaml
-watches:
-  firewall:
-    check: { type: firewall_rules, backend: auto, min_rules: 1 }
-    then: { hook: { command: [/usr/local/bin/firewall-missing.sh] } }
-```
-
-`backend` es `auto`, `nftables` o `iptables`. Hook extras:
-`SERMO_BACKEND`, `SERMO_RULES`, `SERMO_MIN_RULES`.
+Campos, backends y extras de hook están documentados una sola vez en
+[Reglas de firewall](rules.es.md#reglas-de-firewall-firewall_rules).
 
 ### `zombies` — procesos difuntos
 
