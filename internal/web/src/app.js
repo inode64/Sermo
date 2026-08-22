@@ -771,9 +771,8 @@ async function loadEvents(seq = 0, append = false, generation = dashboardGenerat
     }
     if ($("#event-errors") && $("#event-errors").checked) params.set(apiQueryOnlyErrors, queryBoolOne);
     if (append && eventNextBeforeID > 0) params.set(apiQueryBeforeID, String(eventNextBeforeID));
-    const res = await fetch(eventsAPI(params));
-    if (generationMismatch(res, generation)) {
-      if (!seq) load();
+    const { stale, res } = await fetchPinned(eventsAPI(params), generation, { reload: !seq });
+    if (stale) {
       return { ok: false, generationMismatch: true };
     }
     if (!res.ok) return { ok: false };
@@ -3047,11 +3046,8 @@ async function refreshExpandedWatches(generation = dashboardGeneration) {
   const keys = [...expanded].filter(isWatchExpansionKey);
   if (!keys.length) return true;
   try {
-    const res = await fetch(apiEventsRecentPath);
-    if (generationMismatch(res, generation)) {
-      load();
-      return false;
-    }
+    const { stale, res } = await fetchPinned(apiEventsRecentPath, generation);
+    if (stale) return false;
     if (!res.ok) return false;
     const page = await res.json();
     const events = eventPageEvents(page);
@@ -3179,11 +3175,8 @@ function loadExpansionFor(key, generation = dashboardGeneration) {
     if (cell && !expCache[key]) litRender(tpl`<span class="muted">loading…</span>`, cell);
     if (isServiceExpansionKey(key)) {
       const name = expansionName(key, expansionPrefixService);
-      const res = await fetch(serviceAPI(name));
-      if (generationMismatch(res, generation)) {
-        load();
-        return false;
-      }
+      const { stale, res } = await fetchPinned(serviceAPI(name), generation);
+      if (stale) return false;
       if (!res.ok) return false;
       const detailData = await res.json();
       expDetailCache[key] = detailData;
@@ -3193,11 +3186,8 @@ function loadExpansionFor(key, generation = dashboardGeneration) {
       if (target) litRender(html, target);
       return hydrateServiceDetail(detailData, generation);
     } else if (isWatchExpansionKey(key)) {
-      const res = await fetch(apiEventsRecentPath);
-      if (generationMismatch(res, generation)) {
-        load();
-        return false;
-      }
+      const { stale, res } = await fetchPinned(apiEventsRecentPath, generation);
+      if (stale) return false;
       const page = res.ok ? await res.json() : {};
       const events = eventPageEvents(page);
       renderWatchExpansionInto(key, events);
@@ -3535,11 +3525,8 @@ async function loadServiceWindowGraph(name, generation, url, render, fail) {
   const win = serviceMetricState(name).window;
   const windowChanged = () => serviceMetricState(name).window !== win;
   try {
-    const res = await fetch(url(win));
-    if (generationMismatch(res, generation)) {
-      load();
-      return false;
-    }
+    const { stale, res } = await fetchPinned(url(win), generation);
+    if (stale) return false;
     if (!res.ok) throw new Error("HTTP " + res.status);
     const body = await res.json();
     if (windowChanged()) return true;
@@ -6843,6 +6830,20 @@ function responseGeneration(res) {
   return Number.isSafeInteger(generation) && generation > 0 ? generation : 0;
 }
 
+// fetchPinned fetches one dashboard sub-resource pinned to a configuration
+// generation: a response from another generation triggers the full reload
+// (unless the caller suppresses it) and reports stale, so no panel ever mixes
+// two configurations. Callers keep their own ok/body policy — some tolerate an
+// HTTP error, some throw — but the generation contract has exactly one owner.
+async function fetchPinned(url, generation, { reload = true } = {}) {
+  const res = await fetch(url);
+  if (generationMismatch(res, generation)) {
+    if (reload) load();
+    return { stale: true, res };
+  }
+  return { stale: false, res };
+}
+
 function generationMismatch(res, expectedGeneration) {
   const actualGeneration = responseGeneration(res);
   return !!(expectedGeneration && actualGeneration && actualGeneration !== expectedGeneration);
@@ -7743,11 +7744,8 @@ async function loadEventRows(targetID, url, generation = dashboardGeneration) {
   if (!target) return true;
   renderEventsLoading(target);
   try {
-    const res = await fetch(url);
-    if (generationMismatch(res, generation)) {
-      load();
-      return false;
-    }
+    const { stale, res } = await fetchPinned(url, generation);
+    if (stale) return false;
     if (!res.ok) throw new Error("HTTP " + res.status);
     litRender(eventRows(await res.json(), false), target);
     return true;
