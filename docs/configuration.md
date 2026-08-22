@@ -3521,9 +3521,24 @@ The resource preflight entry narrows `${binary}` to the first candidate matching
 the declared type. `binary` requires a regular executable file; `file` requires
 a regular file; `lockfile` requires a regular file; `pidfile` requires a
 regular file; `socket` requires a Unix socket. If none currently matches, Sermo
-keeps the first non-empty candidate so the runtime preflight reports the bad
-path explicitly instead of expanding to an empty string. Paths must be absolute
-after templating.
+keeps the first literal candidate — or the first candidate outright when every
+one is a pattern — so the runtime preflight reports the bad path explicitly
+instead of expanding to an empty string. Paths must be absolute after
+templating.
+
+A candidate may be a glob pattern (it contains `*`, `?` or `[`). A pattern
+resolves to its lexically first match — with a resource preflight, its first
+match of the declared type — so one rung covers every layout of a family
+instead of naming each one. The library catalog leans on this for multi-arch
+distributions:
+
+```yaml
+variables:
+  binary:
+    - /usr/lib64/libz.so.1                 # Gentoo, Fedora, RHEL, SUSE, Arch
+    - "/usr/lib/*-linux-gnu*/libz.so.1"    # Debian/Ubuntu multi-arch triplets
+    - /usr/lib/libz.so.1                   # Alpine and plain-lib layouts
+```
 
 ### `${bindir}` search prefix
 

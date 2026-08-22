@@ -2,7 +2,13 @@ name: glibc
 display_name: "GNU C Library"
 description: "Standard C library (libc); a change triggers a restart of dependent services"
 variables:
-  binary: "/lib64/libc.so.6"
+  binary:
+    - "/lib64/libc.so.6"
+    - "/usr/lib64/libc.so.6"
+    - "/usr/lib/*-linux-gnu*/libc.so.6"
+    - "/lib/*-linux-gnu*/libc.so.6"
+    - "/usr/lib/libc.so.6"
+    - "/lib/libc.so.6"
 preflight:
   file: { type: file, path: "${binary}" }
   # Clean version string (e.g. "glibc 2.42") vs. running the .so, which prints a
