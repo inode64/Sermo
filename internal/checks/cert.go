@@ -427,11 +427,36 @@ func verifyCertChain(leaf *x509.Certificate, peers []*x509.Certificate, serverNa
 	return ""
 }
 
+// inspectionTLSConfig is the TLS config every certificate probe dials with.
+// Transport-level verification is disabled on purpose: reporting WHY a
+// certificate fails is the probe's whole job, and an aborted handshake would
+// reduce every expired or mis-issued chain to an opaque dial error. The
+// verification itself is not skipped — VerifyConnection runs the real chain
+// verification on every handshake, in observe mode: its verdict never aborts
+// the connection, because the caller grades the same chain explicitly with
+// the check's own options (verify:, expires_in_days:). Attaching the verifier
+// to the config keeps that contract structural instead of a promise kept at
+// each call site. minVersion 0 keeps the library default.
+func inspectionTLSConfig(serverName string, minVersion uint16) *tls.Config {
+	return &tls.Config{
+		InsecureSkipVerify: true, //nolint:gosec // G402: deliberate — see the function comment; VerifyConnection below runs the real verification without aborting.
+		ServerName:         serverName,
+		MinVersion:         minVersion,
+		VerifyConnection: func(cs tls.ConnectionState) error {
+			if len(cs.PeerCertificates) > 0 {
+				// Observe-only: the caller reports this verdict with context.
+				_ = verifyCertChain(cs.PeerCertificates[0], cs.PeerCertificates[1:], cs.ServerName)
+			}
+			return nil
+		},
+	}
+}
+
 // defaultCertSampler dials host:port over TLS (without failing on an invalid
 // certificate, so it can be inspected) and reads the leaf certificate, optionally
 // verifying the chain and hostname against the system roots.
 func defaultCertSampler(ctx context.Context, host, port, serverName string, verify bool) (CertSample, error) {
-	cfg := &tls.Config{InsecureSkipVerify: true, ServerName: serverName} //nolint:gosec // G402: verification is off at the transport so the probe can inspect an invalid chain and report why; verifyCertChain below validates it explicitly.
+	cfg := inspectionTLSConfig(serverName, 0)
 	nc, err := (&tls.Dialer{Config: cfg}).DialContext(ctx, conn.TransportTCP, net.JoinHostPort(host, port))
 	if err != nil {
 		return CertSample{}, fmt.Errorf("dial TLS endpoint %s: %w", net.JoinHostPort(host, port), err)
