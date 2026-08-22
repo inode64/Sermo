@@ -2,6 +2,7 @@ package app
 
 import (
 	"errors"
+	"os"
 	"strings"
 	"syscall"
 	"testing"
@@ -48,6 +49,38 @@ func namedIdentity(exes map[int]string) func(int) (process.Identity, bool) {
 			return process.Identity{}, false
 		}
 		return process.Identity{PID: pid, Exe: exe, ExeOK: true}, true
+	}
+}
+
+// TestSelfStrayHygieneRefusesAForeignUnit pins the guard that keeps the hygiene
+// inside sermod's own unit. Run in a service cgroup named for something else — a
+// CI agent, a container supervisor, a systemd-run wrapper — every sibling PID
+// belongs to that something else, and this exact scenario SIGTERMed GitHub's
+// runner agent from inside the test suite, killing the machine mid-job eleven
+// runs straight.
+func TestSelfStrayHygieneRefusesAForeignUnit(t *testing.T) {
+	signaler := &selfReapSignaler{}
+	foreign := func(path string) ([]byte, error) {
+		files := map[string]string{
+			"/proc/self/cgroup": "0::/system.slice/actions.runner.host.service" + "\n",
+			"/sys/fs/cgroup/system.slice/actions.runner.host.service/cgroup.procs": "4242" + "\n" + "5000" + "\n" + "5001" + "\n",
+		}
+		if content, ok := files[path]; ok {
+			return []byte(content), nil
+		}
+		return nil, os.ErrNotExist
+	}
+	hygiene := SelfStrayHygiene{
+		ReadFile: foreign,
+		Self:     4242,
+		Signaler: signaler,
+		Emit:     func(Event) { t.Fatal("a foreign unit must emit nothing") },
+	}
+	if n := hygiene.Run(); n != 0 {
+		t.Fatalf("signalled %d processes of a foreign unit, want none", n)
+	}
+	if len(signaler.calls) != 0 {
+		t.Fatalf("signals = %+v, want none: those processes belong to the foreign unit", signaler.calls)
 	}
 }
 

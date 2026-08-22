@@ -464,8 +464,11 @@ previous incarnation the init system did not clean up (`KillMode=process` or
 through the operation engine", and it is deliberately narrow:
 
 - Only sermod's own control group, and only when that group is a systemd
-  **service** unit. Started from a login shell sermod shares its scope with the
-  operator's shell and sshd, so it does nothing at all there.
+  **service** unit whose name is sermod's own. Started from a login shell sermod
+  shares its scope with the operator's shell and sshd; run inside a unit named
+  for something else — a CI agent's service, a container supervisor, a
+  systemd-run wrapper — the neighbouring processes belong to that something
+  else. In both cases it does nothing at all.
 - `SIGTERM` only. A leftover that ignores it is reported and left alone.
 - One event per process signalled.
 - `engine.reap_own_strays: false` turns it off.

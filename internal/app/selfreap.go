@@ -3,6 +3,7 @@ package app
 import (
 	"fmt"
 	"os"
+	"strings"
 	"syscall"
 
 	"sermo/internal/config"
@@ -26,6 +27,15 @@ import (
 // signalled, and nothing at all unless the cgroup is a systemd service unit —
 // started from a login shell sermod shares its scope with the operator's shell
 // and sshd, so SelfUnitCgroupPIDs answers "no" there rather than guessing.
+//
+// Being a service unit is necessary but not sufficient: the unit must also be
+// *sermod's own*. Run inside a unit named for something else — a CI agent's
+// service, a container supervisor, a systemd-run wrapper — the processes
+// sharing the cgroup belong to that something else, and "in my cgroup and not
+// me" attributes its workers to us. That is not hypothetical: the daemon's own
+// test suite boots run() inside GitHub's runner service, where this hygiene
+// SIGTERMed the runner agent and took the whole machine down with it. A unit
+// whose name does not start with the daemon's own is therefore left untouched.
 type SelfStrayHygiene struct {
 	// ReadFile reads /proc/self/cgroup and the cgroup's process list; nil uses
 	// os.ReadFile.
@@ -54,7 +64,7 @@ func ReapOwnStraysEnabled(cfg *config.Config) bool {
 // running inside a systemd service unit control group.
 func (h SelfStrayHygiene) Run() int {
 	pids, unit, ok := servicemgr.SelfUnitCgroupPIDs(h.ReadFile)
-	if !ok {
+	if !ok || !strings.HasPrefix(unit, daemonName) {
 		return 0
 	}
 	self := h.Self

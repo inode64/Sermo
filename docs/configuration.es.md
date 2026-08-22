@@ -531,9 +531,10 @@ que quede en **su propio** control group de unidad de init. Una unidad configura
 con `KillMode=process` o `KillMode=none` deja ahí los hijos de la encarnación
 anterior, y cada uno sigue reteniendo sus descriptores, instancias inotify y
 memoria. Solo se ejecuta cuando el control group de sermod es una unidad
-**service** de systemd — nunca desde un shell de login, donde compartiría scope con
-el propio shell del operador —, envía solo `SIGTERM` y emite un evento por proceso
-señalizado. Está activo por defecto; ponlo en `false` para desactivarlo. Ver
+**service** de systemd con el nombre del propio sermod — nunca desde un shell de
+login, donde compartiría scope con el propio shell del operador, y nunca dentro de
+una unidad que pertenezca a otra cosa —, envía solo `SIGTERM` y emite un evento por
+proceso señalizado. Está activo por defecto; ponlo en `false` para desactivarlo. Ver
 [safety.es.md](safety.es.md).
 
 `engine.user_lookup` controla cómo Sermo convierte los nombres de usuario/grupo en
