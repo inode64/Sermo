@@ -48,6 +48,7 @@ start verification (verify: true checks)
 process discovery
 safe restart behavior
 systemd/OpenRC detection
+wizards
 troubleshooting
 ```
 
