@@ -1048,44 +1048,41 @@ func (w *cycleWriter) writeCycle(records cycleRecords, cycle cycleRecord) error 
 	return nil
 }
 
+// checkSectionMetrics walks a service's checks: section once and maps each
+// check name to whatever its resolver declares, keeping only non-empty
+// declarations. The one walk shared by the line-metric and band-metric maps,
+// so the two recorders can never disagree on which checks they saw.
+func checkSectionMetrics[T any](tree map[string]any, resolve func(typ string, entry map[string]any) []T) map[string][]T {
+	section, _ := tree[config.SectionChecks].(map[string]any)
+	out := map[string][]T{}
+	for cn, raw := range section {
+		m, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		typ, _ := m[checks.CheckKeyType].(string)
+		if declared := resolve(typ, m); len(declared) > 0 {
+			out[cn] = declared
+		}
+	}
+	return out
+}
+
 // graphableCheckMetrics maps each configured check name to the named metrics its
 // type publishes (checks.GraphMetrics), for the recorder to persist from
 // Result.Data — minus the keys the check has banded, because a state draws as a
 // band or as a line and never both. Empty when no configured check declares
 // graphable metrics.
 func graphableCheckMetrics(tree map[string]any) map[string][]checks.GraphMetric {
-	section, _ := tree[config.SectionChecks].(map[string]any)
-	out := map[string][]checks.GraphMetric{}
-	for cn, raw := range section {
-		m, ok := raw.(map[string]any)
-		if !ok {
-			continue
-		}
-		typ, _ := m[checks.CheckKeyType].(string)
-		unit := cfgval.AsString(m[checks.CheckKeyUnit])
-		if graphs := checks.ResolvedGraphMetrics(typ, unit, m); len(graphs) > 0 {
-			out[cn] = graphs
-		}
-	}
-	return out
+	return checkSectionMetrics(tree, func(typ string, entry map[string]any) []checks.GraphMetric {
+		return checks.ResolvedGraphMetrics(typ, cfgval.AsString(entry[checks.CheckKeyUnit]), entry)
+	})
 }
 
 // bandCheckMetrics maps each configured check name to its resolved band
 // metrics, the state series the recorder persists per cycle.
 func bandCheckMetrics(tree map[string]any) map[string][]checks.BandMetric {
-	section, _ := tree[config.SectionChecks].(map[string]any)
-	out := map[string][]checks.BandMetric{}
-	for cn, raw := range section {
-		m, ok := raw.(map[string]any)
-		if !ok {
-			continue
-		}
-		typ, _ := m[checks.CheckKeyType].(string)
-		if bands := checks.DeclaredBandMetrics(typ, m); len(bands) > 0 {
-			out[cn] = bands
-		}
-	}
-	return out
+	return checkSectionMetrics(tree, checks.DeclaredBandMetrics)
 }
 
 // parseCheckGates reads each check's `requires` and `skip_when_changed` fields
