@@ -1534,15 +1534,13 @@ function applyUIStateToControls() {
 restoreUIState();
 
 let allEvents = [];
-// Prototype-free: both are indexed by an expansion key that ultimately comes
-// from location.hash. Every write today is behind a "svc:"/"wat:"/"app:" prefix
-// filter, so the key can never be exactly __proto__ and pollution is already
-// unreachable — but that safety lives in the callers, and a future one that
-// forgets the filter would reach Object.prototype through the assignment. A
-// null prototype removes the possibility here instead of relying on the guard
-// being repeated correctly at every call site.
-let expCache = Object.create(null);       // last rendered expansion HTML per key (avoids flicker)
-let expDetailCache = Object.create(null); // last /api/services/{name} JSON per svc expansion key
+// Maps, not objects: both are indexed by an expansion key that ultimately
+// comes from location.hash, and writing an attacker-shaped key into an object
+// property is the prototype-pollution pattern. The previous null-prototype
+// hardening was equivalent in effect, but a Map removes the property-write
+// entirely (and is what static analysis can verify).
+const expCache = new Map();       // last rendered expansion HTML per key (avoids flicker)
+const expDetailCache = new Map(); // last /api/services/{name} JSON per svc expansion key
 const expCellCache = new Map(); // live detail cells preserved across outer table renders
 let eventExpanded = new Set();
 const liveOps = new Map(); // operations started from this browser session, keyed by service
@@ -2945,8 +2943,8 @@ function scheduleHashExpansion(key) {
 function toggleExpand(key) {
   if (expanded.has(key)) {
     expanded.delete(key);
-    delete expCache[key];
-    delete expDetailCache[key];
+    expCache.delete(key);
+    expDetailCache.delete(key);
     expCellCache.delete(key);
     if (location.hash === "#" + key) history.replaceState(null, "", location.pathname + location.search);
   } else {
@@ -3004,11 +3002,11 @@ function reassertExpansions() {
       expCellCache.delete(k);
       return;
     }
-    if (!expCache[k]) {
+    if (!expCache.has(k)) {
       loadExpansionFor(k, dashboardGeneration);
       return;
     }
-    if (cell) litRender(expCache[k], cell);
+    if (cell) litRender(expCache.get(k), cell);
   });
 }
 
@@ -3022,7 +3020,7 @@ async function refreshExpandedServices(opts = {}) {
   if (opts.metricsOnly) {
     expanded.forEach((k) => {
       if (!isServiceExpansionKey(k)) return;
-      const detail = expDetailCache[k];
+      const detail = expDetailCache.get(k);
       if (detail) hydrateServiceDetail(detail, opts.generation || dashboardGeneration);
     });
     return true;
@@ -3150,7 +3148,7 @@ function renderWatchExpansionInto(key, events) {
   const name = expansionName(key, expansionPrefixWatch);
   const html = renderWatchExpansion((allWatches || []).find((x) => x.name === name),
     (events || []).filter((e) => e.watch === name));
-  expCache[key] = html;
+  expCache.set(key, html);
   const target = expansionCell(key);
   if (target) {
     litRender(html, target);
@@ -3176,16 +3174,16 @@ const expLoading = new Map(); // key -> shared in-flight detail fetch
 function loadExpansionFor(key, generation = dashboardGeneration) {
   return sharedLoad(expLoading, `${generation}:${key}`, () => (async () => {
     const cell = expansionCell(key);
-    if (cell && !expCache[key]) litRender(tpl`<span class="muted">loading…</span>`, cell);
+    if (cell && !expCache.has(key)) litRender(tpl`<span class="muted">loading…</span>`, cell);
     if (isServiceExpansionKey(key)) {
       const name = expansionName(key, expansionPrefixService);
       const { stale, res } = await fetchPinned(serviceAPI(name), generation);
       if (stale) return false;
       if (!res.ok) return false;
       const detailData = await res.json();
-      expDetailCache[key] = detailData;
+      expDetailCache.set(key, detailData);
       const html = renderServiceDetail(detailData);
-      expCache[key] = html;
+      expCache.set(key, html);
       const target = expansionCell(key);
       if (target) litRender(html, target);
       return hydrateServiceDetail(detailData, generation);
@@ -7754,7 +7752,7 @@ function applyWindowChoice(stateKey, buttonKind, target, win, reload) {
 function setMetricWin(win, service) {
   if (!service) return;
   applyWindowChoice(service, "setMetricWin", service, win, () => {
-    const detail = expDetailCache[serviceExpansionKey(service)];
+    const detail = expDetailCache.get(serviceExpansionKey(service));
     if (detail) refreshServiceGraphs(detail);
     else loadExpansionFor(serviceExpansionKey(service));
   });
