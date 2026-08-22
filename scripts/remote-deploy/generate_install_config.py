@@ -1693,6 +1693,7 @@ def endpoint_watch_overrides(stage: Path, doc: dict, variables: dict[str, str]) 
             item["reason"] = reason or "no associated listening socket for configured endpoint"
         report.append(item)
     return disabled, report
+CLAMAV_DATABASE_OLDER_THAN = "48h"
 OPENVPN_CATALOG_SERVICE = "openvpn%s%i"
 
 
@@ -2832,6 +2833,28 @@ dry_run: true
         add_watch("watches", name, simple_watch(name, "security", "6h", ["type: cert", f"path: {yaml_quote(path)}", "expires_in_days: 14", "on_algorithm_change: true"], cycles=1))
     if not certs:
         skip("cert", "no immediate certificate file under /etc/ssl")
+
+    clamav_database = read_text(stage / "clamav_database").strip()
+    if clamav_database:
+        add_watch(
+            "watches",
+            "clamav-db-freshness",
+            simple_watch(
+                "clamav-db-freshness",
+                "security",
+                "6h",
+                [
+                    "type: file",
+                    "paths:",
+                    f"  - {yaml_quote(clamav_database)}",
+                    f"older_than: {CLAMAV_DATABASE_OLDER_THAN}",
+                    'summary: "ClamAV signatures are ${value} old (limit ${older_than})"',
+                ],
+                cycles=1,
+            ),
+        )
+    else:
+        skip("clamav-db-freshness", "no ClamAV signature database discovered")
 
     geoip_directory = read_text(stage / "geoip_directory").strip()
     if geoip_directory == GEOIP_DATABASE_DIRECTORY:

@@ -358,6 +358,18 @@ ip -o -6 route show >"${out}/ip_route6" 2>/dev/null || true
 	done
 } >"${out}/openvpn_instances" 2>/dev/null || true
 
+# Newest ClamAV signature database, when one exists: sermo watches its age so
+# stale signatures alert no matter how updates run (freshclam daemon, cron,
+# fangfrisch).
+{
+	for db in /var/lib/clamav/daily.cld /var/lib/clamav/daily.cvd; do
+		if [ -f "$db" ]; then
+			printf '%s\n' "$db"
+			break
+		fi
+	done
+} >"${out}/clamav_database" 2>/dev/null || true
+
 {
 	command -v hdparm >/dev/null 2>&1 && echo "hdparm=1" || echo "hdparm=0"
 	command -v smartctl >/dev/null 2>&1 && echo "smartctl=1" || echo "smartctl=0"

@@ -117,6 +117,20 @@ nivel de integración.
    inspecciona los commits y el diff entrantes, resuelve los conflictos intencionadamente, y
    vuelve a ejecutar los checks relevantes después del merge.
 
+**Hosts de la flota y reparación manual**
+La flota corre con `dry_run: true` mientras el proyecto está en fase de pruebas:
+el daemon nunca remedia por su cuenta. Ese flag **no** limita a un agente al que
+el usuario apunta a un host. Cuando el usuario pide pruebas o reparación allí,
+usa el propio Sermo como herramienta — `sermoctl start/stop/restart/repair`,
+acciones del dashboard, botones de operador — exactamente como lo haría un
+operador; las acciones manuales se ejecutan de verdad con independencia de
+`dry_run`. En ese host, todo servicio o watch en `failed` es trabajo pendiente:
+repáralo a través de Sermo, investiga la causa raíz (un check roto, un bug de
+paquete, una config generada errónea) y corrígela para que Sermo refleje la
+realidad — salvo que sea un falso positivo o el usuario diga lo contrario.
+Reparar a través de Sermo es el núcleo del producto; si Sermo no puede reparar,
+eso ya es un bug que corregir.
+
 **Prohibiciones**
 - No sobrescribas, reviertas, reinicies ni descartes los cambios del usuario a menos que el usuario
   pida explícitamente esa acción destructiva exacta.
