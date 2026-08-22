@@ -26,8 +26,6 @@ type telegramOptions struct {
 // `token` is the bot token (kept inside the API URL, never surfaced) and
 // `chat_id` the numeric chat or `@channel` target. Optional `parse_mode`,
 // `silent` and `message_thread_id` tune the sendMessage delivery.
-//
-//nolint:unparam // name is fixed by the shared builders registry signature; every notifier builder takes it.
 func buildTelegram(name string, entry map[string]any) (Notifier, error) {
 	token := cfgval.String(entry[KeyToken])
 	if token == "" {
