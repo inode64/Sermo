@@ -280,7 +280,6 @@ linters:
         - module: github.com/beevik/ntp
         - module: github.com/cloudsoda/go-smb2
         - module: github.com/digitalocean/go-libvirt
-        - module: github.com/evanw/esbuild
         - module: github.com/go-ldap/ldap/v3
         - module: github.com/go-sql-driver/mysql
         - module: github.com/goccy/go-yaml

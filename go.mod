@@ -7,7 +7,6 @@ require (
 	github.com/beevik/ntp v1.5.0
 	github.com/cloudsoda/go-smb2 v0.0.0-20260803221621-0b399b9d036c
 	github.com/digitalocean/go-libvirt v0.0.0-20260814190004-1a83157e1858
-	github.com/evanw/esbuild v0.28.2
 	github.com/go-ldap/ldap/v3 v3.4.14
 	github.com/go-sql-driver/mysql v1.10.0
 	github.com/goccy/go-yaml v1.19.2

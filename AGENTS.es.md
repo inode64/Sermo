@@ -481,7 +481,8 @@ el registro de runtime consumen ambos `watch-panels.json`; añade o cambia IDs, 
 controles y copy repetitivos de watch panels ahí, mientras que el matching de ejecutables
 y el comportamiento de render de filas se queda en `watchPanelBehaviors` en `src/app.js`.
 `make web` ejecuta el build de esbuild in-process
-(`internal/web/build`, la API de Go — sin Node/npm) para bundlear + minificar en
+(`internal/web/build`, un módulo anidado para que esbuild no sea dependencia de
+`sermod`, la API de Go — sin Node/npm) para bundlear + minificar en
 `internal/web/index.html`, dejando los placeholders `{{CSP_NONCE}}`/`{{VERSION}}`
 para que el servidor los rellene por request. **Después de editar cualquier cosa bajo
 `internal/web/src/`, ejecuta `make web` y committea el `index.html` regenerado.**
