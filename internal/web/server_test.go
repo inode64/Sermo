@@ -62,6 +62,12 @@ const testAvailabilityWatch = "net-eth0"
 // testWatchMetric is the one numeric series the fake watch publishes.
 const testWatchMetric = "used_pct"
 
+// testBandWatch keeps the fake's one state band (a raid-like condition watch),
+// and testBandMetric names it on both the watch and the service check.
+const testBandWatch = "raid-md0"
+
+const testBandMetric = "degraded"
+
 func (f *fakeBackend) Notifiers(context.Context) []Notifier { return nil }
 func (f *fakeBackend) TestNotifier(_ context.Context, name string) ActionResult {
 	f.notifierTested = name
@@ -139,7 +145,16 @@ func (f *fakeBackend) Detail(_ context.Context, name string) (Detail, bool) {
 	}
 	return Detail{}, false
 }
-func (f *fakeBackend) Series(_ context.Context, name, check string, since time.Duration) ([]SeriesPoint, bool) {
+func (f *fakeBackend) Series(_ context.Context, name, check, metric string, since time.Duration) ([]SeriesPoint, bool) {
+	// The one band the fake declares, so the handler's served and refused
+	// paths are both exercised.
+	if metric != "" {
+		if name != "web" || check != testSeriesCheck || metric != testBandMetric {
+			return nil, false
+		}
+		f.seriesSince, f.seriesCheck = since, check+":"+metric
+		return []SeriesPoint{{Start: "2026-06-07T10:00:00Z", Up: 5, Total: 6}}, true
+	}
 	if check != "" && check != testSeriesCheck {
 		return nil, false
 	}
@@ -160,7 +175,14 @@ func (f *fakeBackend) Series(_ context.Context, name, check string, since time.D
 
 // WatchSeries answers for a watch that keeps availability, and refuses one that
 // does not, which is the distinction the handler has to carry to the API.
-func (f *fakeBackend) WatchSeries(_ context.Context, name string, since time.Duration) ([]SeriesPoint, bool) {
+func (f *fakeBackend) WatchSeries(_ context.Context, name, metric string, since time.Duration) ([]SeriesPoint, bool) {
+	if metric != "" {
+		if name != testBandWatch || metric != testBandMetric {
+			return nil, false
+		}
+		f.seriesSince = since
+		return []SeriesPoint{{Start: "2026-06-07T10:00:00Z", Up: 11, Total: 12}}, true
+	}
 	if name != testAvailabilityWatch {
 		return nil, false
 	}
@@ -860,6 +882,34 @@ func TestSLASeries(t *testing.T) {
 	}
 	if len(body.Points) != 1 || body.Points[0].Total != 2 {
 		t.Fatalf("unexpected points: %+v", body.Points)
+	}
+}
+
+// TestBandSeriesRoutes covers ?metric= on both SLA routes: a declared band
+// serves the same envelope availability does, and an undeclared one is a 404
+// with the band's own wording rather than a series nothing records.
+func TestBandSeriesRoutes(t *testing.T) {
+	h := newServer(&fakeBackend{services: []Service{{Name: "web"}}})
+	for _, tc := range []struct {
+		name string
+		path string
+		want int
+	}{
+		{"watch band serves", testPathQuery(testWatchPath(testBandWatch, apiSegmentSLA), testQueryParams(apiQueryMetric, testBandMetric, apiQuerySince, "24h")), http.StatusOK},
+		{"watch band undeclared", testPathQuery(testWatchPath(testBandWatch, apiSegmentSLA), testQueryParam(apiQueryMetric, "ghost")), http.StatusNotFound},
+		{"service band serves", testPathQuery(testServicePath("web", apiSegmentSLA), testQueryParams(apiQueryCheck, testSeriesCheck, apiQueryMetric, testBandMetric)), http.StatusOK},
+		{"service band without its check", testPathQuery(testServicePath("web", apiSegmentSLA), testQueryParam(apiQueryMetric, testBandMetric)), http.StatusNotFound},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, tc.path, nil))
+			if rec.Code != tc.want {
+				t.Fatalf("status %d, want %d: %s", rec.Code, tc.want, rec.Body.String())
+			}
+			if tc.want == http.StatusNotFound && !strings.Contains(rec.Body.String(), "state band") {
+				t.Fatalf("refusal must name the band, got %s", rec.Body.String())
+			}
+		})
 	}
 }
 

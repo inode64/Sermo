@@ -25,6 +25,9 @@ const (
 // with nothing to say does not fail in the first place.
 var checkSeverities = [...]string{SeverityError, SeverityWarning}
 
+// CheckSeveritySummary names the accepted per-check severities for error text.
+const CheckSeveritySummary = SeverityError + " or " + SeverityWarning
+
 // CheckSeverities returns the values a check's `severity:` accepts, in display
 // order.
 func CheckSeverities() []string { return slices.Clone(checkSeverities[:]) }

@@ -466,6 +466,59 @@ expansión de la vigilancia dibuja el mismo panel con el mismo selector de venta
 leyendo `GET /api/watches/{name}/metrics?metric=NAME`. Una vigilancia tiene una
 sola comprobación, así que el nombre de la métrica basta para identificar la serie.
 
+#### Las métricas de estado se dibujan como bandas (`bands`)
+
+Algunos números de una comprobación son estados, no magnitudes: `degraded` y
+`recovering` del RAID valen 0 o 1, y el tamaño de un dead-letter solo importa
+como "por encima del umbral o no". Una gráfica de línea sobre un booleano dibuja
+pendientes que nunca ocurrieron, así que estos se muestran como una **banda tipo
+disponibilidad** — la misma tira, panel y selector de ventana que usa la línea
+temporal de SLA de un servicio — verde mientras se cumple el predicado OK,
+afectada mientras no. La gravedad gradúa el color del fallo: una banda `error`
+se lee en rojo con la escala habitual, una `warning` se limita al ámbar, porque
+un array reconstruyéndose es algo a vigilar, no una caída.
+
+El daemon graba una muestra de estado por ciclo (`up`/`down` bajo la clave de la
+propia comprobación) y el panel la lee de `/api/.../sla?metric=NOMBRE`. Los
+estados booleanos conocidos vienen en banda de fábrica — `raid` trae `degraded`
+(error) y `recovering` (warning) — y un watch `file` con predicado `size:`
+deriva su banda automáticamente como la negación de ese predicado, contando una
+ruta ausente como diga `absent_ok`. Así que estos dos no necesitan
+**configuración alguna**:
+
+```yaml
+watches:
+  raid-md126:
+    check: { type: raid, array: md126 }          # dos bandas, cero YAML
+  watch-dead-letter:
+    check:
+      type: file
+      paths: [/root/dead.letter]
+      size: { op: ">", value: 0 }                # banda = size <= 0, ausente ok
+      absent_ok: true
+```
+
+El bloque `bands:` lo ajusta o amplía, en cualquier bloque check de servicio o
+watch:
+
+```yaml
+    check:
+      type: raid
+      bands:
+        degraded: { severity: warning }          # ok por defecto, degradado a ámbar
+        recovering: false                        # quita una banda por defecto
+    check:
+      type: load
+      bands:
+        load1: { ok: { op: "<", value: 8 }, severity: warning }  # línea -> banda
+```
+
+Una métrica de gráfica convertida a banda debe declarar su predicado `ok:` — no
+existe un valor por defecto para una métrica arbitraria — y su serie de valores
+deja de grabarse: un estado se dibuja como banda o como línea, nunca ambas. Los
+nombres de check no pueden contener `:`; la serie de banda se clava como
+`check:metric`.
+
 #### Graficar el valor de una comprobación (`unit`)
 
 La mayoría de tipos declaran sus métricas graficables de forma estática, pero

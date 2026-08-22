@@ -602,6 +602,12 @@ func validateCheckSection(tree map[string]any, section, locksDir string, add add
 	}
 	for _, name := range slices.Sorted(maps.Keys(entries)) {
 		path := section + "." + name
+		// A check's state bands are persisted under "<check>:<metric>", so the
+		// separator must never appear in a check's own name or two checks could
+		// share a series.
+		if strings.Contains(name, ":") {
+			add("%s: check names must not contain ':'", path)
+		}
 		entry, ok := entries[name].(map[string]any)
 		if !ok {
 			add(validationMappingFormat, path)
@@ -639,9 +645,54 @@ func validateCheckSection(tree map[string]any, section, locksDir string, add add
 				add("%s.verify is only valid on a health check (tcp/http/service/command/cert/…); %q is a condition check whose OK does not confirm a successful start", path, typ)
 			}
 		}
+		validateCheckBands(path, typ, entry, add)
 		if !validateSingleShotCheckFields(path, typ, entry, locksDir, add) {
 			add("%s has unknown type %q", path, typ)
 			continue
+		}
+	}
+}
+
+// validateCheckBands validates a check's `bands:` block: which numeric states
+// render as availability-style bands instead of line charts. Each key must be a
+// state the type can band — a registry default, a declared graph metric of the
+// type, or the file watch's size threshold — and each entry is either `false`
+// (disable a default) or a mapping of `ok: {op, value}` and/or `severity:`.
+// A graph metric converted to a band must supply its `ok:` predicate: no
+// default exists for an arbitrary metric, and a band whose OK never holds would
+// record permanent downtime.
+func validateCheckBands(path, typ string, entry map[string]any, add func(string, ...any)) {
+	raw, present := entry[checks.CheckKeyBands]
+	if !present {
+		return
+	}
+	block, ok := raw.(map[string]any)
+	if !ok {
+		add(validationMappingFormat, path+"."+checks.CheckKeyBands)
+		return
+	}
+	defaults := checks.BandKeys(checks.DeclaredBandMetrics(typ, map[string]any{
+		checks.CheckKeySize: entry[checks.CheckKeySize],
+	}))
+	for _, key := range slices.Sorted(maps.Keys(block)) {
+		bandPath := path + "." + checks.CheckKeyBands + "." + key
+		graphed := checks.DeclaredGraphMetricKey(typ, key)
+		if !defaults[key] && !graphed {
+			add("%s: %q is not a state %s publishes", bandPath, key, typ)
+			continue
+		}
+		value := block[key]
+		if _, isBool := value.(bool); isBool {
+			continue
+		}
+		override, isMap := value.(map[string]any)
+		if !isMap {
+			add("%s must be a mapping or false", bandPath)
+			continue
+		}
+		hasOK := validateBandOverride(bandPath, override, add)
+		if graphed && !defaults[key] && !hasOK {
+			add("%s converts a graph metric to a band and must declare ok: {op, value}", bandPath)
 		}
 	}
 }
@@ -660,6 +711,34 @@ func validateCheckReporting(path string, entry map[string]any, add addFunc) {
 	if v, present := entry[checks.CheckKeyUnit]; present && cfgval.String(v) == "" {
 		add("%s.%s must be a non-empty string naming the unit of the check's value", path, checks.CheckKeyUnit)
 	}
+}
+
+// validateBandOverride validates one band entry's `ok:` and `severity:` fields
+// and reports whether a usable OK predicate was declared.
+func validateBandOverride(bandPath string, override map[string]any, add func(string, ...any)) bool {
+	hasOK := false
+	if pred, present := override[checks.CheckKeyOK]; present {
+		predMap, isMap := pred.(map[string]any)
+		if !isMap {
+			add("%s.ok must be a mapping {op, value}", bandPath)
+		} else {
+			op := cfgval.AsString(predMap[checks.CheckKeyOp])
+			if !cfgval.IsCompareOp(op) {
+				add("%s.ok has invalid op %q (%s)", bandPath, op, cfgval.CompareOpSummary)
+			}
+			if _, numeric := cfgval.Float(predMap[checks.CheckKeyValue]); !numeric {
+				add("%s.ok value must be numeric", bandPath)
+			} else if cfgval.IsCompareOp(op) {
+				hasOK = true
+			}
+		}
+	}
+	if severity, present := override[checks.CheckKeySeverity]; present {
+		if s := cfgval.AsString(severity); !checks.IsCheckSeverity(s) {
+			add("%s.severity %q must be %s", bandPath, s, checks.CheckSeveritySummary)
+		}
+	}
+	return hasOK
 }
 
 // validateSeverityField validates a `severity:` declaration wherever one is

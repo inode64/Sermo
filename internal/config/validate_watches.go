@@ -59,6 +59,7 @@ func validateWatches(watches map[string]any, locksDir string, notifiers map[stri
 		// swap, file and process are covered too.
 		validateSeverityField(checkPath, check, add)
 		typ := cfgval.String(check[checks.CheckKeyType])
+		validateCheckBands(checkPath, typ, check, add)
 		validateRaidNotifyOn(name, typ, entry, notifiers, defaultNotify, add)
 		validateRAIDControl(name, typ, entry, check, add)
 		validateWatchMountBlock(name, typ, entry, add)

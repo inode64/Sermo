@@ -465,6 +465,56 @@ expansion draws the same panel on the same window selector, reading
 `GET /api/watches/{name}/metrics?metric=NAME`. A watch has one check, so the
 metric name alone identifies the series.
 
+#### State metrics render as bands (`bands`)
+
+Some of a check's numbers are states, not magnitudes: RAID's `degraded` and
+`recovering` are 0 or 1, and a dead-letter file's size matters only as "over the
+threshold or not". A line chart through a boolean draws slopes that never
+happened, so these render as an **availability-style band** instead — the same
+strip, panel and window selector a service's SLA timeline uses — green while the
+OK predicate holds, affected while it does not. Severity grades the failing
+colour: an `error` band reads red on the usual down-share scale, a `warning`
+band caps at amber, because an array rebuilding is a thing to watch, not an
+outage.
+
+The daemon records one state sample per cycle (`up`/`down` under the check's own
+key), and the dashboard reads it from `/api/.../sla?metric=NAME`. Known boolean
+states come banded out of the box — `raid` ships `degraded` (error) and
+`recovering` (warning) — and a `file` watch with a `size:` predicate derives its
+band automatically as that predicate's negation, an absent path counting
+whatever `absent_ok` says. So both of these need **no configuration at all**:
+
+```yaml
+watches:
+  raid-md126:
+    check: { type: raid, array: md126 }          # two bands, zero YAML
+  watch-dead-letter:
+    check:
+      type: file
+      paths: [/root/dead.letter]
+      size: { op: ">", value: 0 }                # band = size <= 0, absent ok
+      absent_ok: true
+```
+
+The `bands:` block adjusts or extends that, on any check or watch check block:
+
+```yaml
+    check:
+      type: raid
+      bands:
+        degraded: { severity: warning }          # keep the default ok, demote to amber
+        recovering: false                        # drop a default band
+    check:
+      type: load
+      bands:
+        load1: { ok: { op: "<", value: 8 }, severity: warning }  # line chart -> band
+```
+
+A graph metric converted to a band must declare its `ok:` predicate — no default
+exists for an arbitrary metric — and its value series stops being recorded: a
+state draws as a band or as a line, never both. Check names may not contain `:`;
+the band series is keyed `check:metric`.
+
 #### Graphing a check's value (`unit`)
 
 Most check types declare their graphable metrics statically, but some cannot: a

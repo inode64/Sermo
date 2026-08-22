@@ -181,6 +181,7 @@ const (
 	apiErrorUnknownServiceOrCheck    = "unknown service or check"
 	apiErrorUnknownAvailWatch        = "unknown watch or watch without availability"
 	apiErrorUnknownWatchMetric       = "unknown watch or metric it does not publish"
+	apiErrorUnknownCheckBand         = "unknown target or state band it does not declare"
 	apiMessageReloadRequested        = "reload requested"
 )
 
@@ -964,6 +965,12 @@ type MetricSeries struct {
 type CheckMetric struct {
 	Name string `json:"name"`
 	Unit string `json:"unit"`
+	// Band marks a state metric: drawn as an availability-style band from
+	// /api/.../sla?metric=NAME, never as a line chart. Severity grades its
+	// failing colour (error red, warning amber) and Label titles the panel.
+	Band     bool   `json:"band,omitempty"`
+	Severity string `json:"severity,omitempty"`
+	Label    string `json:"label,omitempty"`
 }
 
 // ReadyReport is the /readyz readiness probe payload.
@@ -1116,11 +1123,11 @@ type Backend interface {
 	// Series returns a service's per-minute availability history over since, or
 	// one of its checks' when check is non-empty; ok is false for unknown names
 	// and for a check the service does not define.
-	Series(ctx context.Context, name, check string, since time.Duration) ([]SeriesPoint, bool)
+	Series(ctx context.Context, name, check, metric string, since time.Duration) ([]SeriesPoint, bool)
 	// WatchSeries returns a host watch's per-minute availability history over
 	// since; ok is false for an unknown watch and for one whose check asserts no
 	// availability, which therefore has no uptime to serve.
-	WatchSeries(ctx context.Context, name string, since time.Duration) ([]SeriesPoint, bool)
+	WatchSeries(ctx context.Context, name, metric string, since time.Duration) ([]SeriesPoint, bool)
 	// Metrics returns a check's latency summary and per-minute history over since;
 	// ok is false for unknown service names.
 	Metrics(ctx context.Context, name, check, metric string, since time.Duration) (MetricSeries, bool)
@@ -1826,11 +1833,15 @@ func (s *Server) seriesSince(r *http.Request) time.Duration {
 func (s *Server) handleSeries(w http.ResponseWriter, r *http.Request) {
 	since := s.seriesSince(r)
 	check := r.URL.Query().Get(apiQueryCheck)
+	metric := r.URL.Query().Get(apiQueryMetric)
 	backend, generation := s.backendRead()
-	points, ok := backend.Series(r.Context(), r.PathValue(apiParamName), check, since)
+	points, ok := backend.Series(r.Context(), r.PathValue(apiParamName), check, metric, since)
 	if !ok {
 		notFound := apiErrorUnknownService
-		if check != "" {
+		switch {
+		case metric != "":
+			notFound = apiErrorUnknownCheckBand
+		case check != "":
 			notFound = apiErrorUnknownServiceOrCheck
 		}
 		writeError(w, http.StatusNotFound, notFound)
@@ -1839,15 +1850,20 @@ func (s *Server) handleSeries(w http.ResponseWriter, r *http.Request) {
 	s.writeBackendJSON(w, http.StatusOK, map[string]any{apiJSONKeySince: since.String(), apiJSONKeyPoints: points}, generation)
 }
 
-// handleWatchSeries serves a host watch's availability series through the same
-// envelope and window query the service series uses, so the dashboard reads both
-// with one loader.
+// handleWatchSeries serves a host watch's availability series — or, with
+// ?metric=, one of its state bands — through the same envelope and window query
+// the service series uses, so the dashboard reads both with one loader.
 func (s *Server) handleWatchSeries(w http.ResponseWriter, r *http.Request) {
 	since := s.seriesSince(r)
+	metric := r.URL.Query().Get(apiQueryMetric)
 	backend, generation := s.backendRead()
-	points, ok := backend.WatchSeries(r.Context(), r.PathValue(apiParamName), since)
+	points, ok := backend.WatchSeries(r.Context(), r.PathValue(apiParamName), metric, since)
 	if !ok {
-		writeError(w, http.StatusNotFound, apiErrorUnknownAvailWatch)
+		notFound := apiErrorUnknownAvailWatch
+		if metric != "" {
+			notFound = apiErrorUnknownCheckBand
+		}
+		writeError(w, http.StatusNotFound, notFound)
 		return
 	}
 	s.writeBackendJSON(w, http.StatusOK, map[string]any{apiJSONKeySince: since.String(), apiJSONKeyPoints: points}, generation)
