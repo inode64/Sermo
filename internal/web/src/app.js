@@ -2665,33 +2665,37 @@ function groupToggleAriaLabel(category, count, collapsed) {
   return `${collapsed ? "Expand" : "Collapse"} ${category} group (${count} items)`;
 }
 
+// actionMeta is the one vocabulary of action buttons: the glyph and, per
+// surface, the accessible label. A surface without an entry falls back to
+// "<action> <surface> <name>", so a new action renders before it is named
+// here — it just reads generically until it is.
+const actionMeta = {
+  [actionStart]: { glyph: "▶", service: (n) => `Start service ${n}` },
+  [actionRepair]: { glyph: "⚒", service: (n) => `Repair residual service state ${n}` },
+  [actionStop]: { glyph: "■", service: (n) => `Stop service ${n}` },
+  [actionRestart]: { glyph: "↻", service: (n) => `Restart service ${n}` },
+  [actionResume]: { glyph: "▶", service: (n) => `Resume service ${n}`, watch: (n) => `Resume RAID reconstruction for watch ${n}` },
+  [actionReload]: { glyph: "⟳", service: (n) => `Reload service ${n}` },
+  [actionMonitor]: { glyph: "◉", service: (n) => `Monitor service ${n}`, watch: (n) => `Monitor watch ${n}` },
+  [actionUnmonitor]: { glyph: "⊘", service: (n) => `Unmonitor service ${n}`, watch: (n) => `Unmonitor watch ${n}` },
+  [actionExpand]: { watch: (n) => `Expand storage for watch ${n}` },
+  [actionProbe]: { watch: (n) => `Probe watch ${n}` },
+  [actionPause]: { watch: (n) => `Pause RAID reconstruction for watch ${n}` },
+  [actionReplicationStart]: { watch: (n) => `Start replication for watch ${n}` },
+};
+
+function actionAriaLabel(surface, target, action) {
+  const name = displayName(target) || target.name || "";
+  const label = (actionMeta[action] || {})[surface];
+  return label ? label(name) : `${action} ${surface} ${name}`;
+}
+
 function svcActionAriaLabel(s, action) {
-  const name = displayName(s) || s.name || "";
-  switch (action) {
-    case actionStart: return `Start service ${name}`;
-    case actionRepair: return `Repair residual service state ${name}`;
-    case actionStop: return `Stop service ${name}`;
-    case actionRestart: return `Restart service ${name}`;
-    case actionResume: return `Resume service ${name}`;
-    case actionReload: return `Reload service ${name}`;
-    case actionMonitor: return `Monitor service ${name}`;
-    case actionUnmonitor: return `Unmonitor service ${name}`;
-    default: return `${action} service ${name}`;
-  }
+  return actionAriaLabel("service", s, action);
 }
 
 function serviceActionGlyph(action) {
-  switch (action) {
-    case actionStart: return "▶";
-    case actionRepair: return "⚒";
-    case actionStop: return "■";
-    case actionRestart: return "↻";
-    case actionResume: return "▶";
-    case actionReload: return "⟳";
-    case actionMonitor: return "◉";
-    case actionUnmonitor: return "⊘";
-    default: return "";
-  }
+  return (actionMeta[action] || {}).glyph || "";
 }
 
 // serviceCustomButtons renders the service's configured operator buttons:
@@ -4985,17 +4989,7 @@ function watchActionButton(w, action, content, compact = false) {
 }
 
 function watchActionAriaLabel(w, action) {
-  const name = displayName(w) || w.name || "";
-  switch (action) {
-    case actionExpand: return `Expand storage for watch ${name}`;
-    case actionProbe: return `Probe watch ${name}`;
-    case actionPause: return `Pause RAID reconstruction for watch ${name}`;
-    case actionResume: return `Resume RAID reconstruction for watch ${name}`;
-    case actionReplicationStart: return `Start replication for watch ${name}`;
-    case actionMonitor: return `Monitor watch ${name}`;
-    case actionUnmonitor: return `Unmonitor watch ${name}`;
-    default: return `${action} watch ${name}`;
-  }
+  return actionAriaLabel("watch", w, action);
 }
 
 // readingValue returns the formatted value of a named live reading (as shipped
