@@ -50,6 +50,10 @@ install_dirs = @set -e; for d in $(1); do \
 	fi; \
 done
 
+# Nested module for the dashboard bundler. esbuild is a tool dependency of
+# this package only; sermod embeds the committed index.html and never links it.
+WEB_BUILD_DIR := internal/web/build
+
 # Developer tools: Go binaries in ~/go/bin; pip/pipx user scripts in ~/.local/bin.
 LINT_PATH = PATH="$(HOME)/go/bin:$(HOME)/.local/bin:$(PATH)"
 # staticcheck/golangci-lint write analyzer caches. Keep the default outside
@@ -117,16 +121,17 @@ markdown-check:
 	@git ls-files -z -- '*.md' | $(LINT_PATH) xargs -0 -r $(MARKDOWNLINT) --config .markdownlint.yml
 
 # Regenerate the embedded dashboard (internal/web/index.html) from its sources
-# in internal/web/src using esbuild's Go API (in-process, no Node/npm). Run this
-# after editing anything under internal/web/src and commit the result.
+# in internal/web/src using esbuild's Go API (in-process, no Node/npm). esbuild
+# lives in the nested WEB_BUILD_DIR module so sermod/sermoctl never require it.
+# Run this after editing anything under internal/web/src and commit the result.
 web:
-	go run ./internal/web/build
+	go run -C $(WEB_BUILD_DIR) . -src ../src -out ../index.html
 
 # Fail if the committed internal/web/index.html is out of date with its sources.
 # Modeled on fmt-check; runs in CI via validate so a stale bundle can't land.
 web-check:
 	@tmp="$$(mktemp)"; \
-	go run ./internal/web/build -out "$$tmp"; \
+	go run -C $(WEB_BUILD_DIR) . -src ../src -out "$$tmp"; \
 	if ! cmp -s "$$tmp" internal/web/index.html; then \
 		rm -f "$$tmp"; \
 		echo "internal/web/index.html is stale; run 'make web' and commit the result"; \
@@ -183,9 +188,11 @@ GO_TEST_FLAGS ?= -shuffle=on
 
 test: validate
 	go test $(GO_TEST_FLAGS) $(GO_PACKAGES)
+	go test $(GO_TEST_FLAGS) -C $(WEB_BUILD_DIR) .
 
 vet:
 	go vet $(GO_PACKAGES)
+	go vet -C $(WEB_BUILD_DIR) .
 
 fmt:
 	gofmt -w internal cmd
@@ -228,6 +235,10 @@ lint: fmt-check $(CUSTOM_GCL)
 	@$(LINT_CACHE_ENV) govulncheck $(GO_PACKAGES)
 	@echo "deadcode -test $(GO_PACKAGES)"
 	@$(LINT_PATH) deadcode -test $(GO_PACKAGES)
+	@echo "web-build nested module (vet, staticcheck, custom-gcl, govulncheck)"
+	@go vet -C $(WEB_BUILD_DIR) .
+	@go fix -C $(WEB_BUILD_DIR) -diff .
+	@$(LINT_CACHE_ENV) sh -c 'cd $(WEB_BUILD_DIR) && staticcheck -checks=all . && govulncheck . && "$(CURDIR)/$(CUSTOM_GCL)" run --disable=gomodguard_v2 .'
 	@$(MAKE) --no-print-directory semgrep
 
 # Repository invariants that no generic Go linter can express: depguard bounds
@@ -248,6 +259,8 @@ semgrep:
 modules-check:
 	@go mod verify
 	@go mod tidy -diff
+	@go -C $(WEB_BUILD_DIR) mod verify
+	@go -C $(WEB_BUILD_DIR) mod tidy -diff
 
 # Validate GitHub Actions syntax, expressions, action inputs, and unsafe shell use.
 actions-lint:
