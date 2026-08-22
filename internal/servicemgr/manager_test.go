@@ -462,3 +462,26 @@ func TestManagerEmptyZeroExitNotError(t *testing.T) {
 		})
 	}
 }
+
+// OpenRC exits non-zero when a starting service is held in `inactive` awaiting
+// its readiness callback (openvpn until the tunnel is up). That is a running
+// daemon, not a failure: the action succeeds and status verification owns
+// convergence. Any other non-zero start still errors.
+func TestOpenrcStartAcceptsStartedButInactive(t *testing.T) {
+	inactive := stubRunner{
+		result: execx.Result{ExitCode: 1, Stderr: " * WARNING: openvpn.tun1 has started, but is inactive"},
+		err:    errors.New("exit status 1"),
+	}
+	m := openrcManager{runner: inactive}
+	if err := m.Start(context.Background(), "openvpn.tun1"); err != nil {
+		t.Fatalf("started-but-inactive must be a successful submission, got %v", err)
+	}
+	failed := stubRunner{
+		result: execx.Result{ExitCode: 1, Stderr: " * ERROR: openvpn.tun1 failed to start"},
+		err:    errors.New("exit status 1"),
+	}
+	m = openrcManager{runner: failed}
+	if err := m.Start(context.Background(), "openvpn.tun1"); err == nil {
+		t.Fatal("a genuinely failed start must still error")
+	}
+}

@@ -1,7 +1,9 @@
 package process
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
 	"maps"
 	"os"
 	"path/filepath"
@@ -163,12 +165,19 @@ func addPidfileSelectors(selectors []Selector, snapshot map[int]Identity, add fu
 		for _, path := range sel.Paths {
 			pid, err := ReadPidfile(path)
 			if err != nil {
-				lastWarn = fmt.Sprintf("pidfile %q (%s): %v", path, sel.Name, err)
+				if errors.Is(err, fs.ErrNotExist) {
+					// A missing pidfile is a proven absence, not an uncertainty:
+					// after a stop it is the expected healthy state. The stable
+					// suffix lets UncertainWarnings tell the two apart.
+					lastWarn = fmt.Sprintf("pidfile %q (%s)%s", path, sel.Name, pidfileAbsentSuffix)
+				} else {
+					lastWarn = fmt.Sprintf("pidfile %q (%s): %v", path, sel.Name, err)
+				}
 				continue
 			}
 			id, ok := snapshot[pid]
 			if !ok {
-				lastWarn = fmt.Sprintf("pidfile %q (%s) references pid %d which is not running", path, sel.Name, pid)
+				lastWarn = fmt.Sprintf("pidfile %q (%s) references pid %d%s", path, sel.Name, pid, pidfileNotRunningSuffix)
 				continue
 			}
 			add(id, sel.Name, sourcePidfile)
@@ -790,6 +799,31 @@ func readSnapshot(reader Reader) (map[int]Identity, error) {
 		}
 	}
 	return snapshot, nil
+}
+
+// Discovery warning fragments shared by the producers above and the
+// UncertainWarnings classifier, so the two can never drift apart.
+const (
+	pidfileAbsentSuffix     = " is absent"
+	pidfileNotRunningSuffix = " which is not running"
+)
+
+// UncertainWarnings filters discovery warnings down to the ones that state an
+// uncertainty — an unreadable pidfile, an unresolvable user — and drops the
+// proven absences (a pidfile that does not exist, or one naming a PID that is
+// not running). An operation may safely proceed on a proven absence: after a
+// stop it is the expected state, and aborting a restart on it left the very
+// service the operator asked to repair stopped. Anything uncertain still
+// blocks, because signalling on top of it could target the wrong processes.
+func UncertainWarnings(warnings []string) []string {
+	var out []string
+	for _, w := range warnings {
+		if strings.HasSuffix(w, pidfileAbsentSuffix) || strings.HasSuffix(w, pidfileNotRunningSuffix) {
+			continue
+		}
+		out = append(out, w)
+	}
+	return out
 }
 
 // ReadPidfile reads the first PID line from a pidfile. Most pidfiles contain

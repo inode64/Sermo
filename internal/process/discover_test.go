@@ -725,3 +725,31 @@ func TestDiscoverDelegatesProcessWithReplacedBinary(t *testing.T) {
 		t.Fatal("a delegated selector must still claim its process after the binary was replaced")
 	}
 }
+
+// Discovery warnings split into proven absences (safe to operate on) and
+// genuine uncertainty (must block operations); the producer suffixes and the
+// classifier must agree.
+func TestUncertainWarningsDropsProvenAbsences(t *testing.T) {
+	warnings := []string{
+		`pidfile "/run/x.pid" (pidfile) is absent`,
+		`pidfile "/run/y.pid" (pidfile) references pid 42 which is not running`,
+		`pidfile "/run/z.pid" (pidfile): read pidfile /run/z.pid: permission denied`,
+	}
+	got := UncertainWarnings(warnings)
+	if len(got) != 1 || got[0] != warnings[2] {
+		t.Fatalf("UncertainWarnings = %v, want only the unreadable pidfile", got)
+	}
+}
+
+// The producer really emits the stable absence suffix for a missing pidfile,
+// so the classifier can never drift from it.
+func TestAbsentPidfileWarningCarriesTheStableSuffix(t *testing.T) {
+	d := NewDiscovererWithUserLookup(nil)
+	_, warnings := d.Discover([]Selector{{Type: SelectorPidfile, Name: "pidfile", Paths: []string{"/nonexistent/dir/x.pid"}}})
+	if len(warnings) != 1 || !strings.HasSuffix(warnings[0], " is absent") {
+		t.Fatalf("warnings = %v, want one warning with the absence suffix", warnings)
+	}
+	if len(UncertainWarnings(warnings)) != 0 {
+		t.Fatalf("a missing pidfile must classify as proven absence: %v", warnings)
+	}
+}

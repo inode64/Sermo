@@ -122,6 +122,10 @@ func New(c Config) Engine {
 			inv.Invalidate()
 		}
 		procs, warnings := c.Discoverer.Discover(selectors)
+		// Proven absences (missing pidfile, pidfile naming a dead PID) are the
+		// expected state after a stop; only genuine uncertainty may abort the
+		// operation, or a routine restart strands the service stopped.
+		warnings = process.UncertainWarnings(warnings)
 		if len(warnings) > 0 && !hasCommandMatch {
 			return procs, warningError(runtimeDiscoveryWarningPrefix, warnings)
 		}
