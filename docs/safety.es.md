@@ -466,8 +466,11 @@ señalización de servicio pasa por el motor de operaciones», y es deliberadame
 estrecha:
 
 - Solo el control group propio de sermod, y solo cuando ese grupo es una unidad
-  **service** de systemd. Arrancado desde un shell de login, sermod comparte su
-  scope con el shell del operador y con sshd, así que ahí no hace nada en absoluto.
+  **service** de systemd cuyo nombre es el del propio sermod. Arrancado desde un
+  shell de login, sermod comparte su scope con el shell del operador y con sshd;
+  ejecutado dentro de una unidad con nombre ajeno — el servicio de un agente de
+  CI, un supervisor de contenedores, un envoltorio de systemd-run — los procesos
+  vecinos pertenecen a ese otro. En ambos casos no hace nada en absoluto.
 - Solo `SIGTERM`. Un resto que lo ignore se reporta y se deja en paz.
 - Un evento por proceso señalizado.
 - `engine.reap_own_strays: false` lo desactiva.
