@@ -235,8 +235,6 @@ func watchConditionFields(check map[string]any) []string {
 		return checks.PidsPredFields
 	case checks.CheckTypeConntrack:
 		return checks.ConntrackPredFields
-	case checks.CheckTypeEntropy:
-		return checks.EntropyPredFields
 	case checks.CheckTypeZombies:
 		return checks.ZombiePredFields
 	case checks.CheckTypeFailedUnits:

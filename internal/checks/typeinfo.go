@@ -79,7 +79,6 @@ const (
 	CheckTypePIDs             = "pids"
 	CheckTypeDiskIO           = "diskio"
 	CheckTypeConntrack        = "conntrack"
-	CheckTypeEntropy          = "entropy"
 	CheckTypeZombies          = "zombies"
 	CheckTypeOOM              = "oom"
 	CheckTypeCert             = "cert"

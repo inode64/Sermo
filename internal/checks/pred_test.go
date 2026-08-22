@@ -48,12 +48,12 @@ func TestParseLevelPredGrammar(t *testing.T) {
 
 func TestRequireSingleLevelPred(t *testing.T) {
 	pred, errs := requireSingleLevelPred(map[string]any{
-		DataKeyAvail: map[string]any{CheckKeyOp: "<", CheckKeyValue: 200},
-	}, EntropyPredFields, "entropy check")
+		DataKeyCount: map[string]any{CheckKeyOp: ">", CheckKeyValue: 20},
+	}, ZombiePredFields, "zombies check")
 	if errs != "" {
 		t.Fatalf("requireSingleLevelPred warning = %q", errs)
 	}
-	if pred.field != DataKeyAvail || pred.op != "<" || pred.value != 200 {
+	if pred.field != DataKeyCount || pred.op != ">" || pred.value != 20 {
 		t.Fatalf("requireSingleLevelPred = %+v", pred)
 	}
 	if _, errs := requireSingleLevelPred(map[string]any{}, ZombiePredFields, "zombies check"); errs == "" {

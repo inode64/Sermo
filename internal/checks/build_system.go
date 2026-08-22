@@ -19,7 +19,7 @@ func buildLevelCheck(entry map[string]any, fields []string, label string, build 
 }
 
 // buildSingleLevelCheck is buildLevelCheck for the checks whose field list holds
-// exactly one predicate (entropy, zombies).
+// exactly one predicate (zombies).
 func buildSingleLevelCheck(entry map[string]any, fields []string, label string, build func(levelPred) Check) (Check, string) {
 	pred, errs := requireSingleLevelPred(entry, fields, label)
 	if errs != "" {
@@ -254,13 +254,6 @@ func buildPressureCheck(b base, entry map[string]any, deps Deps) (Check, string)
 func buildConntrackCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 	return buildLevelCheck(entry, ConntrackPredFields, "conntrack check", func(preds []levelPred) Check {
 		return conntrackCheck{base: b, preds: preds, sampler: deps.ConntrackSampler}
-	})
-}
-
-// buildEntropyCheck builds an available-entropy check.
-func buildEntropyCheck(b base, entry map[string]any, deps Deps) (Check, string) {
-	return buildSingleLevelCheck(entry, EntropyPredFields, "entropy check", func(pred levelPred) Check {
-		return entropyCheck{base: b, op: pred.op, value: pred.value, sampler: deps.EntropySampler}
 	})
 }
 

@@ -55,9 +55,6 @@ func TestGraphMetricsAreWrittenIntoResultData(t *testing.T) {
 		{CheckTypeConntrack, map[string]any{"used_pct": pred(">", "90%")}, Deps{DefaultTimeout: second, Samplers: Samplers{
 			ConntrackSampler: func() (ConntrackSample, error) { return ConntrackSample{Count: 1200, Max: 262144}, nil },
 		}}},
-		{CheckTypeEntropy, map[string]any{"avail": pred("<", 200)}, Deps{DefaultTimeout: second, Samplers: Samplers{
-			EntropySampler: func() (uint64, bool) { return 3072, true },
-		}}},
 		{CheckTypeZombies, map[string]any{"count": pred(">", 5)}, Deps{DefaultTimeout: second, Samplers: Samplers{
 			ZombieSampler: func() (uint64, bool) { return 2, true },
 		}}},

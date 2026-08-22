@@ -17,16 +17,6 @@ func TestLevelChecks(t *testing.T) {
 		deps        Deps
 	}{
 		{
-			name:        "entropy",
-			firing:      entropyCheck{base: base{name: "e"}, op: "<", value: 200, sampler: func() (uint64, bool) { return 120, true }},
-			healthy:     entropyCheck{base: base{name: "e"}, op: "<", value: 200, sampler: func() (uint64, bool) { return 3000, true }},
-			unavailable: entropyCheck{base: base{name: "e"}, op: "<", value: 200, sampler: func() (uint64, bool) { return 0, false }},
-			dataKey:     DataKeyAvail,
-			value:       120,
-			entry:       map[string]any{"type": "entropy", "avail": map[string]any{"op": "<", "value": 200}},
-			deps:        Deps{Samplers: Samplers{EntropySampler: func() (uint64, bool) { return 100, true }}},
-		},
-		{
 			name:        "zombies",
 			firing:      zombieCheck{base: base{name: "z"}, op: ">", value: 20, sampler: func() (uint64, bool) { return 35, true }},
 			healthy:     zombieCheck{base: base{name: "z"}, op: ">", value: 20, sampler: func() (uint64, bool) { return 3, true }},

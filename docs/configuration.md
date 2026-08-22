@@ -76,7 +76,6 @@ configuration omits it.
   - [pids — kernel PID table](#pids--kernel-pid-table)
   - [conntrack — netfilter connection table](#conntrack--netfilter-connection-table)
   - [firewall_rules — loaded firewall rules](#firewall_rules--loaded-firewall-rules)
-  - [entropy — kernel entropy pool](#entropy--kernel-entropy-pool)
   - [zombies — defunct processes](#zombies--defunct-processes)
   - [Check summaries](#check-summaries)
   - [file — file/directory attributes and freshness](#file--filedirectory-attributes-and-freshness)
@@ -1970,7 +1969,7 @@ These conventions keep the per-type sections below short:
   `command` check (see [Checks](rules.md#checks)). Command checks also support
   `user` to run the argv as a specific OS user; hook commands do not.
 - **Evaluation model.** A **level check** (`storage`, `memory`, `pressure`,
-  `load`, `fds`, `pids`, `conntrack`, `entropy`, `zombies`, swap `usage`) fires
+  `load`, `fds`, `pids`, `conntrack`, `zombies`, swap `usage`) fires
   when **every present predicate holds**
   — a predicate is `{op, value}` with the operator set `>= > <= < == !=`; declare
   at least one, and add `for: { cycles: N }` or `for: { duration: 6m }` to
@@ -2160,7 +2159,7 @@ be combined with `then.notify_interval`.
 
 **Checks and watches share the same check types.** Any single-shot check — the
 host-resource ones below (`storage`, `memory`, `pressure`, `load`, `fds`,
-`pids`, `conntrack`, `entropy`, `zombies`, `oom`, `failed_units`, `inotify`, among others) *and* the
+`pids`, `conntrack`, `zombies`, `oom`, `failed_units`, `inotify`, among others) *and* the
 service checks (`tcp`, `tcp_connections`, `ssh_idle`, `terminal_sessions`, `ports`, `http`, `command`, `file_exists`, `file`,
 `lockfile`, `binary`, `pidfile`, `socket`, `libraries`, `config`,
 `route`, `clock`, `firewall_rules`, `cert`, `sqlite`/`sqlite3`, `websocket`,
@@ -2837,23 +2836,6 @@ watches:
 
 `backend` is `auto`, `nftables` or `iptables`. Hook extras:
 `SERMO_BACKEND`, `SERMO_RULES`, `SERMO_MIN_RULES`.
-
-### `entropy` — kernel entropy pool
-
-An `entropy` watch checks the available kernel entropy (bits) from
-`/proc/sys/kernel/random/entropy_avail` against a threshold. Low entropy makes
-`/dev/random` reads block and slows crypto and TLS handshakes — most visible on
-VMs and headless/embedded hosts without a hardware RNG.
-
-```yaml
-check:                                   # in a watch body like `load` above
-  type: entropy
-  avail: { op: "<", value: 200 }         # fire when available entropy drops below 200 bits
-```
-
-The single `avail: {op, value}` predicate is required; the usual form is
-`avail < N`. Hook extras: `SERMO_AVAIL` (the same value as `SERMO_VALUE`, bits
-available).
 
 ### `zombies` — defunct processes
 

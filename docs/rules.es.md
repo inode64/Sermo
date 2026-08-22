@@ -92,7 +92,6 @@ Las comprobaciones de protocolo de conexión (MySQL, PostgreSQL, Redis, Docker, 
 | `net`         | una métrica de interfaz (`metric: state\|speed\|errors\|address`) se cumple — forma de métrica única del watch net |
 | `icmp`        | una métrica de ping (`metric: state\|latency`) contra `host`, opcionalmente ligada a una `interface` |
 | `swap`        | una métrica de swap (`metric: usage\|io`) se cumple — forma de métrica única del watch swap |
-| `entropy`     | la entropía del kernel disponible satisface `avail {op, value}`              |
 | `zombies`     | el número de procesos zombi satisface `count {op, value}`         |
 | `oom`         | el contador de OOM-kill del kernel subió en `delta {op, value}` desde el último ciclo|
 | `cert`        | un certificado TLS está caducando/inválido, o su algoritmo/emisor cambió (ver Cert)|
@@ -455,7 +454,7 @@ tiene una cifra que merece gráfica: el límite dice cuándo mirar y la gráfica
 qué llevó hasta ahí. Por eso toda comprobación de nivel grafica los números que ya
 publica — `storage` sus porcentajes de uso e inodos, `load` sus tres medias,
 `diskio` su utilización, caudal y espera, y lo suyo `memory`, `swap`, `fds`,
-`pids`, `conntrack`, `pressure`, `inotify`, `entropy`, `zombies`, `raid`, `lvm`,
+`pids`, `conntrack`, `pressure`, `inotify`, `zombies`, `raid`, `lvm`,
 `count`, `failed_units`, `firewall_rules`, `size` y `clock` — sin
 configuración alguna.
 
@@ -2085,7 +2084,7 @@ Cada tipo de arriba es una **comprobación de un solo disparo** (`Check.Run → 
 - el propio bloque `watches:` embebido de un servicio (entradas hook/notificación acotadas al servicio, o `then.action` compacto, incluidos los tipos `service`/`metric` y el `process_count` acotado al servicio, que cuenta todo lo que el descubrimiento le atribuye — el control group de la unidad de init incluido) — ver [Watches de servicio](configuration.es.md#watches-de-servicio-acotados-a-un-servicio).
 
 Las comprobaciones de recursos del host (`storage`, `load`, `memory`, `pressure`, `fds`, `pids`,
-`diskio`, `hdparm`, `sensors`, `smart`, `raid`, `edac`, `conntrack`, `entropy`,
+`diskio`, `hdparm`, `sensors`, `smart`, `raid`, `edac`, `conntrack`,
 `zombies`, `oom`, `failed_units`, `inotify`, entre otras) son de
 estilo condición — `OK == true` significa que hay un problema — así que en reglas
 `active: {check: x}` se dispara sobre ella, y como watch el hook se dispara sobre ella.

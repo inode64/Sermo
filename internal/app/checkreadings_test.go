@@ -39,7 +39,6 @@ func TestMeterChecksDoNotRepeatTheirGaugeAsReadings(t *testing.T) {
 		typ  string
 		data map[string]any
 	}{
-		{checks.CheckTypeEntropy, map[string]any{checks.DataKeyAvail: uint64(256)}},
 		{checks.CheckTypeZombies, map[string]any{checks.DataKeyZombies: uint64(3)}},
 	} {
 		t.Run(tc.typ+" reads out", func(t *testing.T) {
