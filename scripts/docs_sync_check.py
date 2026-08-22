@@ -105,7 +105,7 @@ def check_skill_identifiers() -> list[str]:
 def check_linter_rollcall() -> list[str]:
     """AGENTS.md must name every linter .golangci.yml enables."""
     config = read(".golangci.yml").split("  settings:")[0]
-    enabled = set(re.findall(r"^    - ([a-z0-9]+)", config, re.M))
+    enabled = set(re.findall(r"^    - ([a-z0-9_]+)", config, re.M))
     problems = []
     for doc, following in (
         ("AGENTS.md", "- **`make npm-audit`**"),
@@ -113,7 +113,7 @@ def check_linter_rollcall() -> list[str]:
     ):
         text = read(doc)
         section = text[text.index("- **`golangci-lint`**") : text.index(following)]
-        named = set(re.findall(r"`([a-z0-9]+)`", section))
+        named = set(re.findall(r"`([a-z0-9_]+)`", section))
         problems.extend(
             f"{doc}: does not name enabled linter {missing}"
             for missing in sorted(enabled - named)

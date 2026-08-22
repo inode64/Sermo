@@ -57,7 +57,7 @@ func VersionCommandEntry(tree map[string]any, key string) map[string]any {
 // shortVersionRE captures the first dotted numeric version in a raw version
 // line: a `major.minor` with an optional `.patch`. The first capture group is
 // the normalized value; the surrounding match may include a non-version prefix
-// character so formats such as `go1.26.2` still parse while suffixes and extra
+// character so formats such as `test1.26.2` still parse while suffixes and extra
 // build components are left out.
 var shortVersionRE = regexp.MustCompile(`(?:^|[^0-9.])(\d+\.\d+(?:\.\d+)?)`)
 
