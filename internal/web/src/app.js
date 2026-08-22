@@ -5158,6 +5158,36 @@ function typedReadingCell(w, field) {
   return readingValue(w, field);
 }
 
+function meterColumn(key, label, format) {
+  return {
+    key, label,
+    cell: (w) => {
+      const value = w.meter && w.meter[key];
+      return value == null ? tpl`<span class="muted">—</span>` : tpl`${format(value)}`;
+    },
+    sort: (w) => numericSortValue(w.meter && w.meter[key]),
+  };
+}
+
+// meterUsageColumns are the count-vs-ceiling columns of pids and conntrack,
+// whose live sample lives on the meter rather than in readings.
+const meterUsageColumns = [
+  meterColumn("count", "In use", (v) => fmtNum(v, 0)),
+  meterColumn("max", "Ceiling", (v) => fmtNum(v, 0)),
+  meterColumn("used_pct", "Usage", fmtPct),
+];
+
+function swapColumn(key, label, format) {
+  return {
+    key, label,
+    cell: (w) => {
+      const value = w.swap && w.swap[key];
+      return value == null ? tpl`<span class="muted">—</span>` : tpl`${format(value)}`;
+    },
+    sort: (w) => numericSortValue(w.swap && w.swap[key]),
+  };
+}
+
 function textReadingColumn(key, label) {
   return { key, label, cell: (w) => typedReadingCell(w, key), sort: (w) => readingRaw(w, key).toLowerCase() };
 }
@@ -5183,6 +5213,7 @@ const watchTypeProfiles = {
     label: "File checks",
     columns: [
       textReadingColumn("path", "Path"),
+      numericReadingColumn("size", "Size"),
       { key: "age", label: "Current age", cell: (w) => typedReadingCell(w, "age"), sort: (w) => parseDurationSeconds(readingRaw(w, "age")) },
       { key: "older_than", label: "Limit", cell: (w) => watchConditionValue(w, "older_than"), sort: (w) => parseDurationSeconds(watchConditionValue(w, "older_than")) },
     ],
@@ -5262,6 +5293,99 @@ const watchTypeProfiles = {
       numericReadingColumn("degraded", "Degraded"),
       numericReadingColumn("recovering", "Recovering"),
     ],
+  },
+  clock: {
+    label: "Clock",
+    columns: [
+      numericReadingColumn("offset_seconds", "Offset"),
+      numericReadingColumn("stratum", "Stratum"),
+    ],
+  },
+  conntrack: { label: "Conntrack", columns: meterUsageColumns },
+  failed_units: {
+    label: "Failed units",
+    columns: [
+      numericReadingColumn("count", "Failed"),
+      textReadingColumn("units", "Units"),
+    ],
+  },
+  fds: {
+    label: "File descriptors",
+    columns: [numericReadingColumn("allocated", "Allocated")],
+  },
+  firewall_rules: {
+    label: "Firewall rules",
+    columns: [
+      numericReadingColumn("rules", "Rules"),
+      numericReadingColumn("min_rules", "Min rules"),
+    ],
+  },
+  icmp: {
+    label: "ICMP",
+    columns: [numericReadingColumn("latency_ms", "Latency")],
+  },
+  inotify: {
+    label: "Inotify",
+    columns: [
+      numericReadingColumn("instances", "Instances"),
+      numericReadingColumn("watches", "Watches"),
+    ],
+  },
+  load: {
+    label: "Load",
+    columns: [numericReadingColumn("value", "Load")],
+  },
+  memory: {
+    label: "Memory",
+    columns: [
+      numericReadingColumn("used_pct", "Used"),
+      numericReadingColumn("available_bytes", "Available"),
+    ],
+  },
+  nfs: {
+    label: "NFS",
+    columns: [textReadingColumn("result", "Result")],
+  },
+  oom: {
+    label: "OOM",
+    columns: [numericReadingColumn("kills", "OOM kills")],
+  },
+  pids: { label: "PIDs", columns: meterUsageColumns },
+  pressure: {
+    label: "Pressure",
+    columns: [
+      textReadingColumn("resource", "Resource"),
+      numericReadingColumn("some_avg60", "Some avg60"),
+      numericReadingColumn("full_avg60", "Full avg60"),
+    ],
+  },
+  process_policy: {
+    label: "Process policies",
+    columns: [
+      textReadingColumn("user", "User"),
+      numericReadingColumn("matches", "Processes"),
+      numericReadingColumn("violation_count", "Violations"),
+    ],
+  },
+  route: {
+    label: "Routes",
+    columns: [
+      textReadingColumn("family", "Family"),
+      textReadingColumn("interface", "Interface"),
+      textReadingColumn("gateway", "Gateway"),
+    ],
+  },
+  swap: {
+    label: "Swap",
+    columns: [
+      swapColumn("used_pct", "Used", fmtPct),
+      swapColumn("used_bytes", "Used bytes", fmtBytes),
+      swapColumn("free_bytes", "Free bytes", fmtBytes),
+    ],
+  },
+  zombies: {
+    label: "Zombies",
+    columns: [numericReadingColumn("zombies", "Zombies")],
   },
 };
 
