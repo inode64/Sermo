@@ -700,10 +700,25 @@ function redirectToLogin(res) {
 
 // jsonOrThrow parses a POST response as JSON (tolerating an empty body) and throws
 // with the server message (or HTTP status) when the request or its result failed.
-async function jsonOrThrow(res) {
+// actionResult is the one parser of action responses: the login redirect is
+// handled first, the body parses leniently (an empty or non-JSON reply is an
+// empty object, never a second error hiding the first), and failure is derived
+// from the HTTP status and the body's own ok flag. Callers that need the body
+// even on failure (probe readings, mount blockers) read it from here;
+// jsonOrThrow stays the throwing form for callers that do not.
+async function actionResult(res) {
   if (redirectToLogin(res)) throw new Error("authentication required");
   const body = await res.json().catch(() => ({}));
-  if (!res.ok || body.ok === false) throw new Error(body.message || ("HTTP " + res.status));
+  return { body, failed: !res.ok || body.ok === false, status: res.status };
+}
+
+function actionError(body, status) {
+  return new Error(body.message || ("HTTP " + status));
+}
+
+async function jsonOrThrow(res) {
+  const { body, failed, status } = await actionResult(res);
+  if (failed) throw actionError(body, status);
   return body;
 }
 
@@ -2697,11 +2712,10 @@ async function pressServiceButton(name, button) {
   }))) return;
   setStatus("");
   try {
-    const res = await fetch(serviceButtonAPI(name, button), targetPostOptions());
-    const body = await res.json().catch(() => ({}));
-    setStatus(body.message || (res.ok ? `${label}: ok` : `${label}: failed`), !res.ok || body.ok === false);
+    const body = await jsonOrThrow(await fetch(serviceButtonAPI(name, button), targetPostOptions()));
+    setStatus(body.message || `${label}: ok`, feedbackStatusOK);
   } catch (err) {
-    setStatus(`${label}: ${err}`, true);
+    setStatus(`${label}: ${err.message || err}`, feedbackStatusErr);
   }
   scheduleRefresh();
 }
@@ -7160,15 +7174,14 @@ async function actWatch(name, action) {
     setStatus("");
     if (action === actionProbe) beginWatchProbe(name);
     const res = await fetch(watchAPI(name, apiActionSuffix(action)), targetPostOptions(headers));
-    const body = await res.json().catch(() => ({}));
-    const failed = !res.ok || body.ok === false;
+    const { body, failed, status } = await actionResult(res);
     if (action === actionProbe) {
       applyWatchProbeResult(name, body, failed);
       setStatus(`${action} watch ${name}: ${body.message || (failed ? "failed" : feedbackStatusOK)}`, failed ? feedbackStatusErr : feedbackStatusOK);
       return; // the finally below triggers the refresh
     }
     if (failed) {
-      throw new Error(body.message || ("HTTP " + res.status));
+      throw actionError(body, status);
     }
     setStatus(`${action} watch ${name}: ${body.message || feedbackStatusOK}`, feedbackStatusOK);
   } catch (e) {
@@ -7423,10 +7436,10 @@ async function actMount(name, action) {
   if (tracked) startMountOperation(name, action);
   try {
     const res = await fetch(mountAPI(name, apiActionSuffix(postAction, query)), targetPostOptions());
-    const body = await res.json().catch(() => ({}));
-    if (!res.ok || body.ok === false) {
+    const { body, failed, status } = await actionResult(res);
+    if (failed) {
       const blockers = body.blockers && body.blockers.length ? `; blockers: ${mountBlockerSummary(body.blockers)}` : "";
-      throw new Error((body.message || ("HTTP " + res.status)) + blockers);
+      throw new Error(actionError(body, status).message + blockers);
     }
     setStatus(`${action} ${name}: ${body.message || feedbackStatusOK}`, feedbackStatusOK);
   } catch (e) {
