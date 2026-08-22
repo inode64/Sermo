@@ -49,122 +49,122 @@ The complete set of single-shot check types is defined centrally. Tests lock tha
 
 Connection-protocol checks (MySQL, PostgreSQL, Redis, Docker, libvirt, etc.) are registered by their protocol name with common aliases (e.g. `mysql`/`mariadb`, `fpm`/`php-fpm`).
 
-| type          | passes when                                                        |
-|---------------|--------------------------------------------------------------------|
-| `tcp`         | a TCP connection to `host:port` succeeds                           |
-| `tcp_connections` | the number of local `ESTABLISHED` TCP sockets on `port` satisfies `count {op, value}` |
-| `ssh_idle`    | interactive SSH terminals idle for `idle_for`, or protected terminal sessions, satisfy their configured count predicate |
-| `terminal_sessions` | the configured user's `tmux` or `screen` sessions satisfy a `count`/`attached`/`detached` predicate |
-| `ports`       | a set of `host` ports satisfy an open/closed expectation (see Ports)|
-| `http`        | the response matches `expect_status` (and optional headers/body/JSON, see HTTP)|
-| `command`     | the command exits with `expect_exit` (default 0) and its output matches optional `expect_stdout`/`expect_stderr`; optional `user` runs it as a specific OS user; `on_change` alerts when its output changes (e.g. a version), array form only |
-| `config`      | a config-test command (`apachectl configtest`, `nginx -t`, …) passes, and (with `on_change`) the config `path` is unchanged (see Service health conditions)|
-| `service`     | the backend status equals `expect` (active/inactive/paused/failed/unknown)|
-| `file_exists` | a foreign flag/lock file exists (never under `<runtime>/locks`)     |
-| `file`        | a path exists and is a regular file                                |
-| `lockfile`    | one service-created regular lockfile candidate exists — gate with `requires: [service]`; it does not block operations |
-| `binary`      | a path exists and is executable                                    |
-| `pidfile`     | a pidfile exists and references a running process — gate with `requires: [service]` so a missing/stale pidfile is an error only while the service is active |
-| `socket`      | one Unix socket candidate exists — gate with `requires: [service]` for sockets created by the service |
-| `libraries`   | all DT_NEEDED shared libraries of the binary can be resolved (native debug/elf, no ldd) |
-| `process`     | a process matching `exe`/`user` is in `state` (running/zombie/absent); an `absent` reading names a replaced binary when one explains it |
-| `process_policy` | every process of a user account satisfies the allow/deny policy (alert-only; see configuration.md) |
-| `metric`      | a sampled metric satisfies `op value` (see Metrics)                |
-| `count`       | the number of entries in a directory satisfies `op value` (see Count)|
-| `storage`     | a filesystem's space/inode predicates hold (`*_pct` accepts `%`; `*_bytes` requires K/M/G/T) |
-| `load`        | a load-average threshold holds (load1/load5/load15, optional per_cpu)|
-| `users`       | the count of logged-in users (from utmp) satisfies `count {op, value}`|
-| `process_count` | the number of processes (host-wide, or filtered by `user`/`exe`/`exe_dir`) satisfies `count {op, value}`|
-| `hdparm`      | a disk's `hdparm` read throughput crosses a threshold (`read`/`cached` MB/s) (see Disk throughput)|
-| `sensors`     | hwmon hardware sensors cross a threshold (`temp` °C / `fan` RPM / `voltage` V) (see Hardware sensors)|
-| `smart`       | a drive's SMART health/attributes and identity (failed verdict, `reallocated`, `pending_sectors`, `crc_errors`, `media_errors`, `wear`, `temperature`) (see Hardware sensors)|
-| `raid`        | a Linux md software-RAID array is degraded/recovering (`degraded`/`recovering`/`arrays`) (see Hardware sensors)|
-| `lvm`         | every LVM volume group and logical volume reports healthy (see Hardware sensors) |
-| `stale_binary` | no attributed process runs a binary replaced on disk since it started (service-injected; also available explicitly) |
-| `strays`      | the init unit's control group holds no process outside the configured selectors (service-injected; also available explicitly) |
-| `edac`        | ECC memory errors from EDAC (`ce` correctable / `ue` uncorrectable) (see Hardware sensors)|
-| `memory`      | system RAM vs the kernel's MemAvailable (used_pct/available_pct/available_bytes) |
-| `pressure`    | kernel PSI stall time for cpu/memory/io (`some_*`/`full_*` avg10/60/300) |
-| `fds`         | system file descriptors vs `fs.file-max` (used_pct/free/allocated)  |
-| `pids`        | the kernel PID table vs the tighter of `kernel.pid_max` and `kernel.threads-max` (used_pct/free/count) |
-| `diskio`      | a block device's per-cycle I/O rates (util_pct/read_bytes/write_bytes/await_ms), plus cumulative read/written totals as readings |
-| `conntrack`   | the netfilter conntrack table vs its max (used_pct/free/count)      |
-| `firewall_rules` | nftables/iptables has at least `min_rules` loaded rules (see Firewall rules) |
-| `failed_units` | the count of init units in a failed state satisfies `count {op, value}` (default `> 0`; see Failed init units) |
-| `inotify` | the per-user inotify instance/watch limits satisfy their `{op, value}` predicates (see inotify limits) |
-| `route`       | an up default route exists, optionally egressing a given `interface` (see Default route)|
-| `clock`       | local wall-clock offset stays within `max_offset`, measured against the configured NTP `servers` or (`source: chrony`) the local chronyd |
-| `net`         | one interface metric (`metric: state\|speed\|errors\|address`) holds — single-metric form of the net watch |
-| `icmp`        | one ping metric (`metric: state\|latency`) against `host`, optionally bound to an `interface` |
-| `swap`        | one swap metric (`metric: usage\|io`) holds — single-metric form of the swap watch |
-| `zombies`     | the count of zombie processes satisfies `count {op, value}`         |
-| `oom`         | the kernel OOM-kill count rose by `delta {op, value}` since last cycle|
-| `cert`        | a TLS certificate is expiring/invalid, or its algorithm/issuer changed (see Cert)|
-| `mysql` / `mariadb` | a MySQL/MariaDB server answers: with no credentials it reads the handshake greeting (liveness + version); with a user/password it authenticates and pings (see Database) |
-| `mongodb` / `mongo` | a connection to a MongoDB server authenticates, pings and reports its version and replica-set `role` for `expect`/`on_change` (see Database) |
-| `postgres` / `postgresql` | a connection to a PostgreSQL server authenticates and responds (see Database) |
-| `redis` / `valkey` | a connection to a Redis/Valkey server authenticates and answers PING; exposes role, replication, persistence and memory from INFO for `expect` (see Database) |
-| `memcached` / `memcache` | a memcached server answers `stats`; exposes version, connections, hits/misses, items, bytes and evictions for `expect` (see Database) |
-| `imap`        | an IMAP server greets OK (anonymous) and, with credentials, LOGIN succeeds (see Database) |
-| `pop` / `pop3` | a POP3 server greets +OK (anonymous) and, with credentials, USER/PASS succeeds (see Database) |
-| `smtp`        | an SMTP server greets 220 + EHLO (anonymous) and, with credentials, AUTH PLAIN succeeds (see Database) |
-| `nntp` / `nntps` | an NNTP server greets 200/201 (anonymous) and, with credentials, AUTHINFO USER/PASS succeeds (see Database) |
-| `ftp`         | an FTP server greets 220 (anonymous) and, with credentials, USER/PASS login succeeds (see Database) |
-| `ssh`         | an SSH server completes key exchange (anonymous: host key + banner); with credentials, login succeeds; `on_change` alerts on host-key change (see Database) |
-| `fpm` / `php-fpm` | a PHP-FPM pool answers a FastCGI `/ping` with `pong`; an optional `status_path` exposes pool metrics for `expect` (Unix socket or TCP, see Database) |
-| `dns`         | a DNS server answers a query (NOERROR/NXDOMAIN) for `query` (see Database) |
-| `ntp`         | an NTP server answers with a synchronized time (server mode, stratum 1–15); exposes leap, precision, root delay/dispersion and reference id for `expect` (see Database) |
-| `chrony` / `chronyd` | the local chronyd answers on its command port; exposes tracking (stratum, offset, leap, skew, frequency) and source counts for `expect` — use this, not `ntp`, for a chrony client that serves no NTP (see Database) |
-| `snmp`        | an SNMP agent answers a system GET (v2c community or v3 user/password); exposes sys name/contact/location/uptime for `expect`; `on_change` alerts on device-identity change (see Database) |
-| `tftp`        | a TFTP server answers an RRQ with a valid packet (DATA or ERROR) (see Database) |
-| `ldap`        | an LDAP directory accepts an anonymous bind, or a simple bind with credentials (see Database) |
-| `ajp`         | an AJP13 connector (e.g. Tomcat's 8009) answers a CPing with CPong (see Database) |
-| `ipp` / `cups` | an IPP server (CUPS/cupsd) answers an IPP request with a valid response (see Database) |
-| `rsync` / `rsyncd` | an rsync daemon sends its `@RSYNCD:` greeting (see Database) |
-| `dhcp` / `dhcpd` | a DHCP server answers a DHCPDISCOVER with a DHCPOFFER (see Database) |
-| `dhclient` / `dhcp-client` | a local DHCP client has UDP/68 bound in `/proc/net/udp` (see Database) |
-| `rspamd`      | an rspamd worker answers `GET /ping` with `pong` (see Database) |
-| `libvirt` / `libvirtd` | a libvirt daemon answers RPC; exposes VM counts (`domains.active`…), node capacity and a VM's state for `expect`/`on_change` (see Database) |
-| `dbus`        | a D-Bus daemon answers `GetId`; named objects support read-only peer, introspection and scalar-property probes without activation (see Database) |
-| `avahi` / `avahi-daemon` | the Avahi daemon answers `GetVersionString` over its D-Bus API (see Database) |
-| `syncthing`   | a Syncthing instance answers `/rest/noauth/health` with `{"status":"OK"}` (see Database) |
-| `docker`      | the Docker Engine answers `/info`, exposing container counts (running/paused/stopped), images and a container's state/health for `expect`/`on_change` (see Database) |
-| `unifi` / `unifi-controller` / `unifi-network` | a UniFi Network controller answers `GET /status` with `meta.rc == "ok"` on 8443 (see Database) |
-| `influxdb` / `influx` | an InfluxDB server answers `/health` (or `/ping`) and reports its version on 8086 (see Database) |
-| `prometheus` / `prom` | a Prometheus server answers `/api/v1/status/buildinfo` (or `/-/healthy`) on 9090 (see Database) |
-| `cloudflared` / `cloudflare-tunnel` | a Cloudflare Tunnel daemon answers `/metrics` on 60123 with `cloudflared_` metrics (see Database) |
-| `clamd` / `clamav` | a ClamAV daemon answers `VERSION` with its engine version (see Database) |
-| `spamd` / `spamassassin` | the SpamAssassin daemon answers `PING` with `PONG` (see Database) |
-| `nut` / `ups` / `upsd` | NUT's upsd answers `VER`; a UPS exposes its variables (status, battery charge/runtime, load, voltages) for `expect`/`on_change` (see Database) |
-| `smb` / `samba` / `cifs` | an SMB/CIFS server negotiates (and, with credentials, authenticates) (see Database) |
-| `acpid`       | the ACPI event daemon accepts a connection on its Unix socket (see Database) |
-| `fail2ban`    | fail2ban-server accepts a connection on its control socket (see Database) |
-| `lvmpolld`    | LVM's poll daemon answers a `hello` request with `OK` over its socket (see Database) |
-| `rpcbind` / `portmap` / `portmapper` | the RPC portmapper answers an RPC NULL call (see Database) |
-| `nfs` / `nfs-server` / `nfsd` | an NFS server answers an RPC NULL call on 2049 (see Database) |
-| `mountd` / `rpc.mountd` / `nfs-mountd` | the NFS mount daemon answers an RPC NULL call to MOUNT (100005) (see Database) |
-| `statd` / `rpc.statd` / `nsm` / `nfs-statd` | the NFS status monitor answers an RPC NULL call to NSM (100024) (see Database) |
-| `nebula` / `nebula-vpn` | a Nebula mesh-VPN node answers an unknown-tunnel packet with a `recv_error` on 4242/udp (see Database) |
-| `openvpn` / `ovpn` | an OpenVPN server answers a hard-reset-client with a hard-reset-server on 1194 (see Database) |
-| `rdp` / `ms-wbt-server` | a Remote Desktop server answers the X.224 connection negotiation (see Database) |
-| `guacd` / `guacamole` | the Guacamole proxy daemon answers a `select` with a Guacamole instruction (see Database) |
-| `asterisk` / `ami` | an Asterisk PBX sends its AMI `Asterisk Call Manager/<version>` greeting (see Database) |
-| `sieve` / `managesieve` | a ManageSieve server sends its capability greeting ending in `OK` (see Database) |
-| `mqtt`        | an MQTT broker accepts a CONNECT (CONNACK return code 0) (see Database) |
-| `amqp` / `rabbitmq` | an AMQP 0-9-1 broker sends a valid Connection.Start greeting (see Database) |
-| `kafka`       | a Kafka broker/controller answers an unauthenticated `ApiVersions` request; exposes the listener `role` (broker/controller) and `produce_api`/`vote_api` flags for `expect` (see Database) |
-| `varnish` / `varnishadm` | the Varnish management CLI answers with its banner/auth challenge (see Database) |
-| `ceph` / `ceph-mon` | a Ceph monitor sends its messenger `ceph v…` banner (see Database) |
-| `glusterfs` / `glusterd` / `gluster` | a GlusterFS node accepts TCP connections to glusterd on 24007 (see Database) |
-| `gluster_cluster` | the local Gluster CLI verifies peer membership, volume/bricks/self-heal state and optional heal limits (see Gluster cluster) |
-| `openvswitch` / `ovs` / `ovsdb` / `ovsdb-server` | ovsdb-server answers an OVSDB `list_dbs` JSON-RPC request (see Database) |
-| `sqlite` / `sqlite3` | a SQLite database file passes `PRAGMA integrity_check` (see SQLite) |
-| `replication` | MySQL/MariaDB replication is healthy: both replica threads run, lag optionally bounded (see Replication) |
-| `sql`         | a SQL query's scalar result compares (`== != > >= < <= contains =~`) against a value (see SQL query) |
-| `mongodb-query` | a MongoDB document count / aggregation / command result compares against a value (see MongoDB query) |
-| `influxdb-query` | an InfluxQL (1.x) or Flux (2.x) query's scalar result compares against a value (see InfluxDB query) |
-| `size`        | a file/directory grows by at least `grow_by` within `within` (runaway growth) (see Size growth) |
-| `websocket` | a WebSocket endpoint completes the RFC 6455 opening handshake (see WebSocket) |
+| type          | style | passes when                                                        |
+|---------------|-----------|--------------------------------------------------------------------|
+| `tcp`         | health | a TCP connection to `host:port` succeeds                           |
+| `tcp_connections` | condition | the number of local `ESTABLISHED` TCP sockets on `port` satisfies `count {op, value}` |
+| `ssh_idle`    | condition | interactive SSH terminals idle for `idle_for`, or protected terminal sessions, satisfy their configured count predicate |
+| `terminal_sessions` | condition | the configured user's `tmux` or `screen` sessions satisfy a `count`/`attached`/`detached` predicate |
+| `ports`       | health | a set of `host` ports satisfy an open/closed expectation (see Ports)|
+| `http`        | health | the response matches `expect_status` (and optional headers/body/JSON, see HTTP)|
+| `command`     | health | the command exits with `expect_exit` (default 0) and its output matches optional `expect_stdout`/`expect_stderr`; optional `user` runs it as a specific OS user; `on_change` alerts when its output changes (e.g. a version), array form only |
+| `config`      | health | a config-test command (`apachectl configtest`, `nginx -t`, …) passes, and (with `on_change`) the config `path` is unchanged (see Service health conditions)|
+| `service`     | health | the backend status equals `expect` (active/inactive/paused/failed/unknown)|
+| `file_exists` | health | a foreign flag/lock file exists (never under `<runtime>/locks`)     |
+| `file`        | health | a path exists and is a regular file                                |
+| `lockfile`    | health | one service-created regular lockfile candidate exists — gate with `requires: [service]`; it does not block operations |
+| `binary`      | health | a path exists and is executable                                    |
+| `pidfile`     | health | a pidfile exists and references a running process — gate with `requires: [service]` so a missing/stale pidfile is an error only while the service is active |
+| `socket`      | health | one Unix socket candidate exists — gate with `requires: [service]` for sockets created by the service |
+| `libraries`   | health | all DT_NEEDED shared libraries of the binary can be resolved (native debug/elf, no ldd) |
+| `process`     | health | a process matching `exe`/`user` is in `state` (running/zombie/absent); an `absent` reading names a replaced binary when one explains it |
+| `process_policy` | health | every process of a user account satisfies the allow/deny policy (alert-only; see configuration.md) |
+| `metric`      | condition | a sampled metric satisfies `op value` (see Metrics)                |
+| `count`       | condition | the number of entries in a directory satisfies `op value` (see Count)|
+| `storage`     | condition | a filesystem's space/inode predicates hold (`*_pct` accepts `%`; `*_bytes` requires K/M/G/T) |
+| `load`        | condition | a load-average threshold holds (load1/load5/load15, optional per_cpu)|
+| `users`       | condition | the count of logged-in users (from utmp) satisfies `count {op, value}`|
+| `process_count` | condition | the number of processes (host-wide, or filtered by `user`/`exe`/`exe_dir`) satisfies `count {op, value}`|
+| `hdparm`      | condition | a disk's `hdparm` read throughput crosses a threshold (`read`/`cached` MB/s) (see Disk throughput)|
+| `sensors`     | condition | hwmon hardware sensors cross a threshold (`temp` °C / `fan` RPM / `voltage` V) (see Hardware sensors)|
+| `smart`       | condition | a drive's SMART health/attributes and identity (failed verdict, `reallocated`, `pending_sectors`, `crc_errors`, `media_errors`, `wear`, `temperature`) (see Hardware sensors)|
+| `raid`        | condition | a Linux md software-RAID array is degraded/recovering (`degraded`/`recovering`/`arrays`) (see Hardware sensors)|
+| `lvm`         | health | every LVM volume group and logical volume reports healthy (see Hardware sensors) |
+| `stale_binary` | condition | no attributed process runs a binary replaced on disk since it started (service-injected; also available explicitly) |
+| `strays`      | condition | the init unit's control group holds no process outside the configured selectors (service-injected; also available explicitly) |
+| `edac`        | condition | ECC memory errors from EDAC (`ce` correctable / `ue` uncorrectable) (see Hardware sensors)|
+| `memory`      | condition | system RAM vs the kernel's MemAvailable (used_pct/available_pct/available_bytes) |
+| `pressure`    | condition | kernel PSI stall time for cpu/memory/io (`some_*`/`full_*` avg10/60/300) |
+| `fds`         | condition | system file descriptors vs `fs.file-max` (used_pct/free/allocated)  |
+| `pids`        | condition | the kernel PID table vs the tighter of `kernel.pid_max` and `kernel.threads-max` (used_pct/free/count) |
+| `diskio`      | condition | a block device's per-cycle I/O rates (util_pct/read_bytes/write_bytes/await_ms), plus cumulative read/written totals as readings |
+| `conntrack`   | condition | the netfilter conntrack table vs its max (used_pct/free/count)      |
+| `firewall_rules` | health | nftables/iptables has at least `min_rules` loaded rules (see Firewall rules) |
+| `failed_units` | condition | the count of init units in a failed state satisfies `count {op, value}` (default `> 0`; see Failed init units) |
+| `inotify` | condition | the per-user inotify instance/watch limits satisfy their `{op, value}` predicates (see inotify limits) |
+| `route`       | health | an up default route exists, optionally egressing a given `interface` (see Default route)|
+| `clock`       | health | local wall-clock offset stays within `max_offset`, measured against the configured NTP `servers` or (`source: chrony`) the local chronyd |
+| `net`         | condition | one interface metric (`metric: state\|speed\|errors\|address`) holds — single-metric form of the net watch |
+| `icmp`        | condition | one ping metric (`metric: state\|latency`) against `host`, optionally bound to an `interface` |
+| `swap`        | condition | one swap metric (`metric: usage\|io`) holds — single-metric form of the swap watch |
+| `zombies`     | condition | the count of zombie processes satisfies `count {op, value}`         |
+| `oom`         | condition | the kernel OOM-kill count rose by `delta {op, value}` since last cycle|
+| `cert`        | health | a TLS certificate is expiring/invalid, or its algorithm/issuer changed (see Cert)|
+| `mysql` / `mariadb` | health | a MySQL/MariaDB server answers: with no credentials it reads the handshake greeting (liveness + version); with a user/password it authenticates and pings (see Database) |
+| `mongodb` / `mongo` | health | a connection to a MongoDB server authenticates, pings and reports its version and replica-set `role` for `expect`/`on_change` (see Database) |
+| `postgres` / `postgresql` | health | a connection to a PostgreSQL server authenticates and responds (see Database) |
+| `redis` / `valkey` | health | a connection to a Redis/Valkey server authenticates and answers PING; exposes role, replication, persistence and memory from INFO for `expect` (see Database) |
+| `memcached` / `memcache` | health | a memcached server answers `stats`; exposes version, connections, hits/misses, items, bytes and evictions for `expect` (see Database) |
+| `imap`        | health | an IMAP server greets OK (anonymous) and, with credentials, LOGIN succeeds (see Database) |
+| `pop` / `pop3` | health | a POP3 server greets +OK (anonymous) and, with credentials, USER/PASS succeeds (see Database) |
+| `smtp`        | health | an SMTP server greets 220 + EHLO (anonymous) and, with credentials, AUTH PLAIN succeeds (see Database) |
+| `nntp` / `nntps` | health | an NNTP server greets 200/201 (anonymous) and, with credentials, AUTHINFO USER/PASS succeeds (see Database) |
+| `ftp`         | health | an FTP server greets 220 (anonymous) and, with credentials, USER/PASS login succeeds (see Database) |
+| `ssh`         | health | an SSH server completes key exchange (anonymous: host key + banner); with credentials, login succeeds; `on_change` alerts on host-key change (see Database) |
+| `fpm` / `php-fpm` | health | a PHP-FPM pool answers a FastCGI `/ping` with `pong`; an optional `status_path` exposes pool metrics for `expect` (Unix socket or TCP, see Database) |
+| `dns`         | health | a DNS server answers a query (NOERROR/NXDOMAIN) for `query` (see Database) |
+| `ntp`         | health | an NTP server answers with a synchronized time (server mode, stratum 1–15); exposes leap, precision, root delay/dispersion and reference id for `expect` (see Database) |
+| `chrony` / `chronyd` | health | the local chronyd answers on its command port; exposes tracking (stratum, offset, leap, skew, frequency) and source counts for `expect` — use this, not `ntp`, for a chrony client that serves no NTP (see Database) |
+| `snmp`        | health | an SNMP agent answers a system GET (v2c community or v3 user/password); exposes sys name/contact/location/uptime for `expect`; `on_change` alerts on device-identity change (see Database) |
+| `tftp`        | health | a TFTP server answers an RRQ with a valid packet (DATA or ERROR) (see Database) |
+| `ldap`        | health | an LDAP directory accepts an anonymous bind, or a simple bind with credentials (see Database) |
+| `ajp`         | health | an AJP13 connector (e.g. Tomcat's 8009) answers a CPing with CPong (see Database) |
+| `ipp` / `cups` | health | an IPP server (CUPS/cupsd) answers an IPP request with a valid response (see Database) |
+| `rsync` / `rsyncd` | health | an rsync daemon sends its `@RSYNCD:` greeting (see Database) |
+| `dhcp` / `dhcpd` | health | a DHCP server answers a DHCPDISCOVER with a DHCPOFFER (see Database) |
+| `dhclient` / `dhcp-client` | health | a local DHCP client has UDP/68 bound in `/proc/net/udp` (see Database) |
+| `rspamd`      | health | an rspamd worker answers `GET /ping` with `pong` (see Database) |
+| `libvirt` / `libvirtd` | health | a libvirt daemon answers RPC; exposes VM counts (`domains.active`…), node capacity and a VM's state for `expect`/`on_change` (see Database) |
+| `dbus`        | health | a D-Bus daemon answers `GetId`; named objects support read-only peer, introspection and scalar-property probes without activation (see Database) |
+| `avahi` / `avahi-daemon` | health | the Avahi daemon answers `GetVersionString` over its D-Bus API (see Database) |
+| `syncthing`   | health | a Syncthing instance answers `/rest/noauth/health` with `{"status":"OK"}` (see Database) |
+| `docker`      | health | the Docker Engine answers `/info`, exposing container counts (running/paused/stopped), images and a container's state/health for `expect`/`on_change` (see Database) |
+| `unifi` / `unifi-controller` / `unifi-network` | health | a UniFi Network controller answers `GET /status` with `meta.rc == "ok"` on 8443 (see Database) |
+| `influxdb` / `influx` | health | an InfluxDB server answers `/health` (or `/ping`) and reports its version on 8086 (see Database) |
+| `prometheus` / `prom` | health | a Prometheus server answers `/api/v1/status/buildinfo` (or `/-/healthy`) on 9090 (see Database) |
+| `cloudflared` / `cloudflare-tunnel` | health | a Cloudflare Tunnel daemon answers `/metrics` on 60123 with `cloudflared_` metrics (see Database) |
+| `clamd` / `clamav` | health | a ClamAV daemon answers `VERSION` with its engine version (see Database) |
+| `spamd` / `spamassassin` | health | the SpamAssassin daemon answers `PING` with `PONG` (see Database) |
+| `nut` / `ups` / `upsd` | health | NUT's upsd answers `VER`; a UPS exposes its variables (status, battery charge/runtime, load, voltages) for `expect`/`on_change` (see Database) |
+| `smb` / `samba` / `cifs` | health | an SMB/CIFS server negotiates (and, with credentials, authenticates) (see Database) |
+| `acpid`       | health | the ACPI event daemon accepts a connection on its Unix socket (see Database) |
+| `fail2ban`    | health | fail2ban-server accepts a connection on its control socket (see Database) |
+| `lvmpolld`    | health | LVM's poll daemon answers a `hello` request with `OK` over its socket (see Database) |
+| `rpcbind` / `portmap` / `portmapper` | health | the RPC portmapper answers an RPC NULL call (see Database) |
+| `nfs` / `nfs-server` / `nfsd` | health | an NFS server answers an RPC NULL call on 2049 (see Database) |
+| `mountd` / `rpc.mountd` / `nfs-mountd` | health | the NFS mount daemon answers an RPC NULL call to MOUNT (100005) (see Database) |
+| `statd` / `rpc.statd` / `nsm` / `nfs-statd` | health | the NFS status monitor answers an RPC NULL call to NSM (100024) (see Database) |
+| `nebula` / `nebula-vpn` | health | a Nebula mesh-VPN node answers an unknown-tunnel packet with a `recv_error` on 4242/udp (see Database) |
+| `openvpn` / `ovpn` | health | an OpenVPN server answers a hard-reset-client with a hard-reset-server on 1194 (see Database) |
+| `rdp` / `ms-wbt-server` | health | a Remote Desktop server answers the X.224 connection negotiation (see Database) |
+| `guacd` / `guacamole` | health | the Guacamole proxy daemon answers a `select` with a Guacamole instruction (see Database) |
+| `asterisk` / `ami` | health | an Asterisk PBX sends its AMI `Asterisk Call Manager/<version>` greeting (see Database) |
+| `sieve` / `managesieve` | health | a ManageSieve server sends its capability greeting ending in `OK` (see Database) |
+| `mqtt`        | health | an MQTT broker accepts a CONNECT (CONNACK return code 0) (see Database) |
+| `amqp` / `rabbitmq` | health | an AMQP 0-9-1 broker sends a valid Connection.Start greeting (see Database) |
+| `kafka`       | health | a Kafka broker/controller answers an unauthenticated `ApiVersions` request; exposes the listener `role` (broker/controller) and `produce_api`/`vote_api` flags for `expect` (see Database) |
+| `varnish` / `varnishadm` | health | the Varnish management CLI answers with its banner/auth challenge (see Database) |
+| `ceph` / `ceph-mon` | health | a Ceph monitor sends its messenger `ceph v…` banner (see Database) |
+| `glusterfs` / `glusterd` / `gluster` | health | a GlusterFS node accepts TCP connections to glusterd on 24007 (see Database) |
+| `gluster_cluster` | health | the local Gluster CLI verifies peer membership, volume/bricks/self-heal state and optional heal limits (see Gluster cluster) |
+| `openvswitch` / `ovs` / `ovsdb` / `ovsdb-server` | health | ovsdb-server answers an OVSDB `list_dbs` JSON-RPC request (see Database) |
+| `sqlite` / `sqlite3` | health | a SQLite database file passes `PRAGMA integrity_check` (see SQLite) |
+| `replication` | health | MySQL/MariaDB replication is healthy: both replica threads run, lag optionally bounded (see Replication) |
+| `sql`         | condition | a SQL query's scalar result compares (`== != > >= < <= contains =~`) against a value (see SQL query) |
+| `mongodb-query` | condition | a MongoDB document count / aggregation / command result compares against a value (see MongoDB query) |
+| `influxdb-query` | condition | an InfluxQL (1.x) or Flux (2.x) query's scalar result compares against a value (see InfluxDB query) |
+| `size`        | condition | a file/directory grows by at least `grow_by` within `within` (runaway growth) (see Size growth) |
+| `websocket` | health | a WebSocket endpoint completes the RFC 6455 opening handshake (see WebSocket) |
 
 The `storage` check also verifies the **mount** of its `path` — see
 [storage and mount units](configuration.md#storage-and-mount-units).
@@ -467,12 +467,10 @@ a state sensor, its firing side really is a problem and has to look like one.
 
 A check that computes a figure every cycle and compares it against a limit has a
 figure worth plotting: the limit says when to look, and the graph says what led
-there. Every level check therefore graphs the numbers it already publishes —
-`storage` its used and inode percentages, `load` its three averages, `diskio` its
-utilisation, throughput and await, `memory`, `swap`, `fds`, `pids`, `conntrack`,
-`pressure`, `inotify`, `zombies`, `raid`, `lvm`, `count`,
-`failed_units`, `firewall_rules`, `size` and `clock` theirs — with no
-configuration at all.
+there. Every level check therefore graphs the numbers it already publishes with
+no configuration at all — `storage` its used and inode percentages, `load` its
+three averages, `diskio` its utilisation, throughput and await, and so on: each
+type's own section below names its series.
 
 This applies to a **host watch** exactly as it does to a service check: the watch
 expansion draws the same panel on the same window selector, reading
@@ -2120,17 +2118,13 @@ Every type above is a **single-shot check** (`Check.Run → Result`) and is usab
 - a host **watch** document (or global `watches:` entry, firing a hook) — see [configuration](configuration.md#host-watches), and
 - a service's own embedded `watches:` block (hook/notification entries scoped to the service, or compact `then.action`, including the service-scoped `service`/`metric` types and the service-scoped `process_count`, which counts everything discovery attributes to the service — the init unit's control group included) — see [Service watches](configuration.md#service-watches-scoped-to-a-service).
 
-The host-resource checks (`storage`, `load`, `memory`, `pressure`, `fds`, `pids`,
-`diskio`, `hdparm`, `sensors`, `smart`, `raid`, `edac`, `conntrack`,
-`zombies`, `oom`, `failed_units`, `inotify`, among others) are
-condition-style — `OK == true` means there is a problem — so in rules
-`active: {check: x}` fires on it, and as a watch the hook fires on it.
-The health checks (`tcp`, `ports`, `http`, `command`, `service`, `file_exists`,
-`file`, `lockfile`, `binary`, `pidfile`, `socket`, `process`, `libraries`, `config`,
-`route`, `clock`, `firewall_rules`, `cert`, `replication`, `sqlite`/`sqlite3`,
-`websocket`, and connection-protocol checks such as `mysql`/`smtp`) are the
-opposite (`OK == true` is healthy), so as a watch they fire the hook on
-**failure**.
+Every check type is one of two styles — the **style** column of the type table
+above is the authority, locked to the code by test. A **condition** check's
+`OK == true` means there is a problem (a threshold crossed, a count exceeded),
+so in rules `active: {check: x}` fires on it and as a watch the hook fires on
+it. A **health** check is the opposite (`OK == true` is healthy), so as a watch
+it fires the hook on **failure**; every connection-protocol check is
+health-style.
 
 ### Edge sensors: a `for:` window suppresses them
 

@@ -2059,8 +2059,9 @@ Estas convenciones mantienen cortas las secciones por tipo a continuación:
   comprobación `command` (ver [Checks](rules.es.md#comprobaciones)). Las comprobaciones de comando
   también soportan `user` para ejecutar el argv como un usuario del SO específico; los
   comandos de hook no.
-- **Modelo de evaluación.** Una **comprobación de nivel** (`storage`, `memory`,
-  `pressure`, `load`, `fds`, `pids`, `conntrack`, `zombies`, swap `usage`) se
+- **Modelo de evaluación.** Una **comprobación de nivel** (cualquier tipo de
+  estilo condición con predicados numéricos — ver la columna estilo de la tabla
+  de tipos en [Checks](rules.es.md#comprobaciones)) se
   dispara cuando **todos los predicados presentes se cumplen**
   — un predicado es `{op, value}` con el conjunto de operadores `>= > <= < == !=`;
   declara al menos uno, y añade `for: { cycles: N }` o `for: { duration: 6m }` para
@@ -2254,16 +2255,13 @@ efectiva cambia entre `ok` y `error`, incluida la recuperación. No puede
 combinarse con `then.notify_interval`.
 
 **Las checks y los watches comparten los mismos tipos de comprobación.**
-Cualquier comprobación de un solo disparo — las de recursos de host de abajo
-(`storage`, `memory`, `pressure`, `load`, `fds`, `pids`, `conntrack`,
-`zombies`, `oom`, `failed_units`, `inotify`, entre otras) *y* las comprobaciones de service (`tcp`, `tcp_connections`, `ssh_idle`,
-`ports`, `http`, `command`, `file_exists`, `file`, `lockfile`, `binary`,
-`pidfile`, `socket`, `libraries`, `config`, `route`, `clock`,
-`firewall_rules`, `cert`, `sqlite`/`sqlite3`, `websocket`, `count`, y las
-comprobaciones de protocolo de conexión como `mysql`/`smtp`) — pueden usarse
-como un watch aquí, y las de recursos de host pueden igualmente usarse como
-entradas `watches:` solo-check de un service o como `checks:`/reglas explícitas
-(ver [Checks](rules.es.md#comprobaciones)).
+Cualquier comprobación de un solo disparo — de recursos de host o de servicio
+por igual, el conjunto completo es la tabla de tipos de
+[Checks](rules.es.md#comprobaciones) — puede usarse como un watch aquí, y las de
+recursos de host pueden igualmente usarse como entradas `watches:` solo-check de
+un service o como `checks:`/reglas explícitas. Solo las formas multi-métrica
+(bloques `metrics:` de `net`/`icmp`/`swap`) y los watches con estado
+`file`/`process` son exclusivos de watch.
 
 Una comprobación `dbus` sin destino verifica el propio bus. Para verificar un
 servicio con nombre, define a la vez `bus_name` y `object_path`; Sermo resuelve

@@ -3,6 +3,7 @@ package checks
 import (
 	"os"
 	"regexp"
+	"strings"
 	"testing"
 )
 
@@ -18,22 +19,33 @@ func TestRulesDocTableCoversEveryBuiltinCheckType(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read docs/rules.md: %v", err)
 	}
-	rowPattern := regexp.MustCompile(`(?m)^\|([^|]+)\|`)
+	rowPattern := regexp.MustCompile(`(?m)^\|([^|]+)\|([^|]+)\|`)
 	namePattern := regexp.MustCompile("`([a-z0-9_-]+)`")
-	documented := map[string]bool{}
+	documented := map[string]string{}
 	for _, row := range rowPattern.FindAllStringSubmatch(string(data), -1) {
+		style := strings.TrimSpace(row[2])
 		for _, name := range namePattern.FindAllStringSubmatch(row[1], -1) {
-			documented[name[1]] = true
+			documented[name[1]] = style
 		}
 	}
 	// Watch-only forms: built by watch_build's dispatch, not builtinCheckSpecs.
-	required := []string{CheckTypeProcessPolicy}
+	// process_policy fires on violations like the health family does.
+	required := map[string]bool{CheckTypeProcessPolicy: true}
 	for _, spec := range builtinCheckSpecs {
-		required = append(required, spec.info.Name)
+		required[spec.info.Name] = spec.info.DefaultReports == ReportsHealth
 	}
-	for _, name := range required {
-		if !documented[name] {
+	for name, health := range required {
+		style, ok := documented[name]
+		if !ok {
 			t.Errorf("docs/rules.md check-type table is missing a row for %q", name)
+			continue
+		}
+		want := "condition"
+		if health {
+			want = "health"
+		}
+		if style != want {
+			t.Errorf("docs/rules.md style for %q = %q, want %q (from the registry)", name, style, want)
 		}
 	}
 }
