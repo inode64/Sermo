@@ -358,20 +358,16 @@ usuario y sesión; los botones de tipo seleccionan SSH, tmux o screen. La tabla
 muestra solo el usuario en la columna User y permite ordenar por tipo, usuario,
 sesión, estado, idle, CPU, memoria o IO. El filtro de un tipo se oculta cuando no
 hay sesiones activas de ese tipo, con el mismo comportamiento de filtros con
-recuento que los demás paneles. Un origen configurado permanece visible bajo
-`all` aunque no tenga sesiones, mientras que la espera de muestra y los errores
-de muestreo usan estados distintos. Las filas atribuibles muestran idle y CPU,
+recuento que los demás paneles. Un origen sin sesiones solo gana fila
+cuando tiene algo que decir: la espera de muestra y los errores de muestreo se
+renderizan con sus estados distintos, y un servidor tmux presente y vacío con
+socket configurado se renderiza con una píldora roja `empty` y un `close` que
+mata el servidor por la API tras confirmación. Un origen disponible sin nadie
+conectado — el de ssh ante todo — no dice nada y no renderiza fila; aparece en
+cuanto publique una sesión activa. Las filas atribuibles muestran idle y CPU,
 memoria residente e IO de lectura/escritura del árbol de procesos. Un
 administrador solo puede confirmar un cierre cuando el backend vuelve a validar
-la identidad exacta de la sesión SSH o del multiplexor. Un origen cuya muestra
-correcta está vacía usa una píldora roja `empty`. Existen dos cierres y no son
-lo mismo: un servidor tmux presente y vacío con socket configurado es un proceso
-real, así que su `close` mata el servidor por la API tras confirmación;
-cualquier otro origen disponible-pero-vacío — el de ssh ante todo — no tiene
-identidad de proceso que cerrar, y su `close` solo oculta la fila en el
-navegador actual. En un descarte no se ejecuta orden ni señal alguna, la
-elección persiste con el resto del estado de la interfaz, y la fila reaparece
-en cuanto ese origen publique de nuevo una sesión activa.
+la identidad exacta de la sesión SSH o del multiplexor.
 
 Las expansiones abiertas de servicio obtienen y renderizan por completo detalle
 fresco una vez por refresco del dashboard; las subpeticiones de SLA, métricas,
