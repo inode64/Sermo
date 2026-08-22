@@ -150,6 +150,8 @@ const (
 	apiActionProbe            = "probe"
 	apiActionPause            = "pause"
 	apiActionReplicationStart = "replication-start"
+	apiSegmentButton          = "button"
+	apiParamButton            = "button"
 	apiActionPanicOn          = "on"
 	apiActionPanicOff         = "off"
 	apiActionRelease          = "release"
@@ -274,6 +276,7 @@ const (
 	routeAPIDetail                    = routeMethodGet + apiPathServices + "/" + routeVarName
 	routeAPISeries                    = routeMethodGet + apiPathServices + "/" + routeVarName + "/" + apiSegmentSLA
 	routeAPIMetrics                   = routeMethodGet + apiPathServices + "/" + routeVarName + "/" + apiSegmentMetrics
+	routeAPIServiceButton             = routeMethodPost + apiPathServices + "/" + routeVarName + "/" + apiSegmentButton + "/{" + apiParamButton + "}"
 	routeAPIServiceRuntime            = routeMethodGet + apiPathServices + "/" + routeVarName + "/" + apiSegmentRuntime
 	routeAPIServiceEvents             = routeMethodGet + apiPathServices + "/" + routeVarName + "/" + apiSegmentEvents
 	routeAPIAppEvents                 = routeMethodGet + apiPathApplications + "/" + routeVarName + "/" + apiSegmentEvents
@@ -307,6 +310,13 @@ const (
 	apiStatusOKLine         = apiStatusOK + "\n"
 )
 
+// ServiceButton is one configured operator button of a service: the name the
+// API route uses and the label the dashboard shows.
+type ServiceButton struct {
+	Name  string `json:"name"`
+	Label string `json:"label"`
+}
+
 // Service is the web view of one configured service. Services with `enabled: false`
 // in their configuration are still listed (with Enabled=false) so operators can
 // see the full fleet and know what to activate by editing config + reloading.
@@ -336,14 +346,17 @@ type Service struct {
 	// configured selector claims, from the strays check's published snapshot. It is
 	// what the Strays column and the reap button read; 0 means either none found or
 	// no current sample, a distinction the detail's check row makes.
-	Strays           int      `json:"strays,omitempty"`
-	ActiveLocks      []string `json:"active_locks,omitempty"`      // named runtime locks blocking actions
-	OperationActive  bool     `json:"operation_active,omitempty"`  // true while the engine holds this service's operation lock: an action is running, whoever started it
-	PolicyCooldown   string   `json:"policy_cooldown,omitempty"`   // resolved automatic remediation cooldown
-	RemediationState string   `json:"remediation_state,omitempty"` // eligible | cooldown | rate limit | paused | pending | disabled
-	NextEligibleAt   string   `json:"next_eligible_at,omitempty"`  // RFC3339 when automatic remediation is next eligible
-	CanReload        bool     `json:"can_reload"`                  // true when init or native reload support is available
-	LastEvent        *Event   `json:"last_event,omitempty"`        // newest service event, when retained
+	Strays int `json:"strays,omitempty"`
+	// Buttons are the service's configured operator buttons: explicit admin
+	// commands offered in the dashboard, run exactly as configured.
+	Buttons          []ServiceButton `json:"buttons,omitempty"`
+	ActiveLocks      []string        `json:"active_locks,omitempty"`      // named runtime locks blocking actions
+	OperationActive  bool            `json:"operation_active,omitempty"`  // true while the engine holds this service's operation lock: an action is running, whoever started it
+	PolicyCooldown   string          `json:"policy_cooldown,omitempty"`   // resolved automatic remediation cooldown
+	RemediationState string          `json:"remediation_state,omitempty"` // eligible | cooldown | rate limit | paused | pending | disabled
+	NextEligibleAt   string          `json:"next_eligible_at,omitempty"`  // RFC3339 when automatic remediation is next eligible
+	CanReload        bool            `json:"can_reload"`                  // true when init or native reload support is available
+	LastEvent        *Event          `json:"last_event,omitempty"`        // newest service event, when retained
 
 	// Current process-tree runtime summary. These fields intentionally mirror
 	// ProcessTotals so the service list and detail expansion use the same
@@ -1184,6 +1197,8 @@ type Backend interface {
 	ControlRAID(ctx context.Context, name, action, confirmation string) ActionResult
 	// ControlReplication starts a stopped replica for a replication watch.
 	ControlReplication(ctx context.Context, name string) ActionResult
+	// ServiceButton runs one configured operator button of a service.
+	ServiceButton(ctx context.Context, service, button string) ActionResult
 	// DaemonInfo returns engine settings and basic daemon configuration.
 	DaemonInfo(ctx context.Context) DaemonInfo
 	// DaemonMetrics returns current and historical resource usage for sermod.
@@ -1341,6 +1356,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc(routeAPIDetail, s.handleDetail)
 	mux.HandleFunc(routeAPISeries, s.handleSeries)
 	mux.HandleFunc(routeAPIMetrics, s.handleMetrics)
+	mux.HandleFunc(routeAPIServiceButton, s.handleServiceButton)
 	mux.HandleFunc(routeAPIServiceRuntime, s.handleServiceRuntime)
 	mux.HandleFunc(routeAPIServiceEvents, s.handleServiceEvents)
 	mux.HandleFunc(routeAPIAppEvents, s.handleApplicationEvents)
@@ -2126,6 +2142,19 @@ func (s *Server) handleAction(w http.ResponseWriter, r *http.Request) {
 	default:
 		writeError(w, http.StatusBadRequest, apiErrorUnknownActionPrefix+action)
 	}
+}
+
+// handleServiceButton runs one configured operator button. Buttons are
+// explicit admin commands, so the route shares the mutation gates (admin,
+// CSRF, generation) with every other action.
+func (s *Server) handleServiceButton(w http.ResponseWriter, r *http.Request) {
+	backend, ok := s.mutationBackend(w, r)
+	if !ok {
+		return
+	}
+	s.extendActionWriteDeadline(w)
+	res := backend.ServiceButton(s.operateContext(r), r.PathValue(apiParamName), r.PathValue(apiParamButton)) //nolint:contextcheck // see operateContext
+	writeActionResult(w, res.OK, res)
 }
 
 func (s *Server) handleWatchAction(w http.ResponseWriter, r *http.Request) {

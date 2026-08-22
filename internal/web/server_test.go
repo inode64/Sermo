@@ -38,6 +38,7 @@ type fakeBackend struct {
 	watchProbed                 []string
 	raidControlled              []string
 	replicationStarted          []string
+	buttonsPressed              []string
 	failOp                      bool
 	seriesSince                 time.Duration
 	seriesCheck                 string
@@ -368,6 +369,10 @@ func (f *fakeBackend) ControlRAID(_ context.Context, name, action, confirmation 
 func (f *fakeBackend) ControlReplication(_ context.Context, name string) ActionResult {
 	f.replicationStarted = append(f.replicationStarted, name)
 	return ActionResult{OK: true, Message: "replication started"}
+}
+func (f *fakeBackend) ServiceButton(_ context.Context, service, button string) ActionResult {
+	f.buttonsPressed = append(f.buttonsPressed, service+"/"+button)
+	return ActionResult{OK: true, Message: "button ok"}
 }
 func (f *fakeBackend) Preflight(_ context.Context, name string) (PreflightResult, bool) {
 	for _, s := range f.services {
@@ -1449,6 +1454,21 @@ func TestWatchReplicationStartAction(t *testing.T) {
 	}
 	if got := b.raidControlled; len(got) != 0 {
 		t.Fatalf("replication start must not reach ControlRAID: %v", got)
+	}
+}
+
+// A configured operator button rides its own route with the shared mutation
+// gates and reaches the backend with both the service and the button name.
+func TestServiceButtonRoute(t *testing.T) {
+	b := &fakeBackend{}
+	h := newServer(b)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, postReq("/api/services/exim/button/flush-queue"))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("code=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if got := b.buttonsPressed; len(got) != 1 || got[0] != "exim/flush-queue" {
+		t.Fatalf("buttons pressed = %v", got)
 	}
 }
 

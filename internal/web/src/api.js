@@ -80,6 +80,7 @@ function terminalSessionAPI(service, check, suffix) {
 }
 
 export function apiActionSuffix(action, query = "") { return `/${action}${query}`; }
+export function serviceButtonAPI(name, button) { return serviceAPI(name, `/button/${encodeURIComponent(button)}`); }
 function apiLimitSuffix(base, limit) { return `${base}?${apiQueryLimit}=${limit}`; }
 function apiSinceSuffix(base, since) { return `${base}?${apiQuerySince}=${since}`; }
 

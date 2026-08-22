@@ -41,6 +41,16 @@ preflight:
       - -bV
     timeout: 10s
 pidfile: /run/exim.pid
+# Operator buttons: explicit admin commands the dashboard offers for this
+# service. `exim -qff` forces an immediate delivery attempt for every queued
+# message, frozen ones included — the manual "flush the queue now".
+buttons:
+  flush-queue:
+    label: "Flush queue"
+    command:
+      - ${exim_binary}
+      - -qff
+    timeout: 5m
 processes:
   main:
     exe: ${exim_binary}
@@ -61,6 +71,17 @@ watches:
       type: smtp
       port: ${port}
       timeout: 3s
+  # `exim -bpc` prints the number of queued messages; `unit:` turns that number
+  # into the check's `value` series, so the service carries a queue-depth graph.
+  queue:
+    interval: 1m
+    check:
+      type: command
+      command:
+        - ${exim_binary}
+        - -bpc
+      unit: messages
+      timeout: 15s
   cert:
     # A cert check opens a TLS connection, so it can only see a port that
     # terminates TLS on connect. An Exim with `daemon_smtp_ports = 25` and no
