@@ -1,8 +1,10 @@
 package config
 
 import (
+	"cmp"
 	"maps"
 	"os"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
@@ -102,9 +104,27 @@ func selectResourcePath(typ string, raw any) (selected string, ok bool) {
 	if len(candidates) == 0 {
 		return "", false
 	}
+	var firstAny string
 	for _, candidate := range candidates {
 		path := expandEnvString(candidate)
 		if path == "" {
+			continue
+		}
+		if firstAny == "" {
+			firstAny = path
+		}
+		// A glob candidate offers whatever it matches, lexically first; the
+		// fallback prefers a literal, whose failure message names a real path.
+		if strings.ContainsAny(path, globMetaChars) {
+			matches, err := filepath.Glob(path)
+			if err != nil {
+				continue
+			}
+			for _, match := range matches {
+				if resourceCandidateMatches(typ, match) {
+					return match, true
+				}
+			}
 			continue
 		}
 		if selected == "" {
@@ -114,7 +134,7 @@ func selectResourcePath(typ string, raw any) (selected string, ok bool) {
 			return path, true
 		}
 	}
-	return selected, true
+	return cmp.Or(selected, firstAny), true
 }
 
 func resourceCandidateMatches(typ, path string) bool {

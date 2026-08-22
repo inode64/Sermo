@@ -2,6 +2,12 @@ name: lzma
 display_name: "liblzma (xz)"
 description: "XZ/LZMA compression library; a change triggers a restart of dependent services"
 variables:
-  binary: "/usr/lib64/liblzma.so.5"
+  binary:
+    - "/usr/lib64/liblzma.so.5"
+    - "/lib64/liblzma.so.5"
+    - "/usr/lib/*-linux-gnu*/liblzma.so.5"
+    - "/lib/*-linux-gnu*/liblzma.so.5"
+    - "/usr/lib/liblzma.so.5"
+    - "/lib/liblzma.so.5"
 preflight:
   file: { type: file, path: "${binary}" }

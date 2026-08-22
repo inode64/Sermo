@@ -3639,9 +3639,24 @@ La entrada de preflight de recurso reduce `${binary}` al primer candidato que co
 con el tipo declarado. `binary` requiere un archivo ejecutable regular; `file` requiere
 un archivo regular; `lockfile` requiere un archivo regular; `pidfile` requiere un archivo
 regular; `socket` requiere un socket Unix. Si ninguno coincide actualmente, Sermo
-mantiene el primer candidato no vacío de modo que el preflight de runtime reporte la ruta
-incorrecta explícitamente en lugar de expandirse a una cadena vacía. Las rutas deben ser
+mantiene el primer candidato literal — o el primer candidato sin más cuando todos
+son patrones — de modo que el preflight de runtime reporte la ruta incorrecta
+explícitamente en lugar de expandirse a una cadena vacía. Las rutas deben ser
 absolutas tras el templating.
+
+Un candidato puede ser un patrón glob (contiene `*`, `?` o `[`). Un patrón se
+resuelve a su primer match léxico — con un preflight de recurso, a su primer
+match del tipo declarado — de modo que un peldaño cubre todos los layouts de una
+familia en lugar de nombrar cada uno. El catálogo de librerías se apoya en esto
+para las distribuciones multi-arch:
+
+```yaml
+variables:
+  binary:
+    - /usr/lib64/libz.so.1                 # Gentoo, Fedora, RHEL, SUSE, Arch
+    - "/usr/lib/*-linux-gnu*/libz.so.1"    # Debian/Ubuntu multi-arch triplets
+    - /usr/lib/libz.so.1                   # Alpine and plain-lib layouts
+```
 
 ### Prefijo de búsqueda `${bindir}`
 

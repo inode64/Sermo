@@ -2,6 +2,12 @@ name: systemd-libs
 display_name: "systemd libraries"
 description: "systemd shared library (libsystemd); a change triggers a restart of dependent services"
 variables:
-  binary: "/usr/lib64/libsystemd.so.0"
+  binary:
+    - "/usr/lib64/libsystemd.so.0"
+    - "/lib64/libsystemd.so.0"
+    - "/usr/lib/*-linux-gnu*/libsystemd.so.0"
+    - "/lib/*-linux-gnu*/libsystemd.so.0"
+    - "/usr/lib/libsystemd.so.0"
+    - "/lib/libsystemd.so.0"
 preflight:
   file: { type: file, path: "${binary}" }

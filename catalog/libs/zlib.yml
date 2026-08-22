@@ -2,6 +2,12 @@ name: zlib
 display_name: "zlib"
 description: "zlib compression library; a change triggers a restart of dependent services"
 variables:
-  binary: "/usr/lib64/libz.so.1"
+  binary:
+    - "/usr/lib64/libz.so.1"
+    - "/lib64/libz.so.1"
+    - "/usr/lib/*-linux-gnu*/libz.so.1"
+    - "/lib/*-linux-gnu*/libz.so.1"
+    - "/usr/lib/libz.so.1"
+    - "/lib/libz.so.1"
 preflight:
   file: { type: file, path: "${binary}" }
