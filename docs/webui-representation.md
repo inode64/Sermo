@@ -350,19 +350,16 @@ tmux and GNU screen namespaces. Search covers type, service, user and session;
 type buttons select SSH, tmux or screen. The table shows only the user in its
 User column and can sort by type, user, session, state, idle, CPU, memory or IO.
 A type filter is hidden when that type has no active sessions, using the same
-counted-filter behavior as the other panels. A configured source remains
-visible under `all` when it has no sessions, while collecting and sampling
-failures use distinct states. Attributable rows expose idle time and
+counted-filter behavior as the other panels. A sessionless source earns a row only
+when it has something to say: collecting and sampling failures render with
+their distinct states, and a present, empty tmux server with a configured
+socket renders with a red `empty` pill and a `close` that kills the server
+through the API behind confirmation. An available source with nobody connected
+— the ssh source above all — says nothing and renders no row; it appears the
+moment it reports an active session. Attributable rows expose idle time and
 process-tree CPU, resident memory and read/write IO rates. An admin can confirm
 a close only when the backend can freshly revalidate the exact SSH or
-multiplexer session identity. An empty successful source uses a red `empty`
-pill. Two closes exist and they are not the same thing: a present, empty tmux
-server with a configured socket is a real process, so its `close` kills the
-server through the API behind confirmation; every other available-but-empty
-source — the ssh source above all — has no process identity to close, and its
-`close` only dismisses the row in the current browser. No command or signal
-runs for a dismissal, the choice persists with the rest of the UI state, and
-the row returns the moment that source reports an active session again.
+multiplexer session identity.
 
 Open service expansions fetch and fully render fresh detail once per dashboard
 refresh; SLA, metric, runtime and event subrequests plus open watch/application
