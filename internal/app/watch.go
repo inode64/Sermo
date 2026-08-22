@@ -135,6 +135,11 @@ type Watch struct {
 	// Stateful multi-target watches (e.g. the file watch) use it to fire one hook
 	// per detected change within a cycle, which the one-Result model cannot express.
 	Cycle func(ctx context.Context)
+	// RecoverHook runs once on the failed-to-ok edge — when a firing watch stops
+	// firing — with the same env contract as Hook plus SERMO_EVENT=recovered.
+	// It shares the DryRun and panic gates: a dry-run watch reports it, a
+	// panicking one suppresses it, and it never runs while the watch is healthy.
+	RecoverHook HookSpec
 	// FireOnFail inverts the trigger: the hook fires when the check is NOT OK,
 	// instead of when it is. Health checks (tcp/http/…) are healthy at OK==true, so
 	// as a watch they alert on failure; condition checks (storage/load/…) alert at
@@ -223,7 +228,7 @@ func (w *Watch) runCheckCycle(ctx context.Context, res checks.Result, observeOnl
 	w.recordAvailabilitySample(res)
 	w.dispatchRaidTransitions(ctx, res)
 	w.dispatchLVMTransition(ctx, res)
-	wasFiring, emitFiring, firing := w.evaluateFiring(res)
+	wasFiring, emitFiring, firing := w.evaluateFiring(ctx, res)
 	if !firing {
 		return
 	}
@@ -265,7 +270,7 @@ func (w *Watch) eventKind(grave string) string {
 	return grave
 }
 
-func (w *Watch) evaluateFiring(res checks.Result) (wasFiring, emitFiring, firing bool) {
+func (w *Watch) evaluateFiring(ctx context.Context, res checks.Result) (wasFiring, emitFiring, firing bool) {
 	// Actions consume the raw predicate just like rule conditions do. Observation
 	// owns availability, while FireOnFail remains the explicit mapping from this
 	// watch's predicate to its firing condition.
@@ -274,7 +279,7 @@ func (w *Watch) evaluateFiring(res checks.Result) (wasFiring, emitFiring, firing
 		fired = !res.OK
 	}
 	if !w.state.FiresAt(w.Window, fired, w.clock()) {
-		w.recover(res)
+		w.recover(ctx, res)
 		return false, false, false
 	}
 	wasFiring = w.firing
@@ -287,13 +292,37 @@ func (w *Watch) evaluateFiring(res checks.Result) (wasFiring, emitFiring, firing
 	return wasFiring, w.shouldEmitFiring(wasFiring), true
 }
 
-func (w *Watch) recover(res checks.Result) {
+func (w *Watch) recover(ctx context.Context, res checks.Result) {
 	if !w.firing {
 		return
 	}
 	w.firing = false
 	w.lastNotifyAt = time.Time{}
 	w.emit(Event{Watch: w.Name, Kind: eventKindRecovered, Message: res.Message})
+	w.runRecoverHook(ctx, res)
+}
+
+// runRecoverHook executes the recovery-edge hook, honoring the same dry-run and
+// panic gates the firing-side actions honor.
+func (w *Watch) runRecoverHook(ctx context.Context, res checks.Result) {
+	if len(w.RecoverHook.Command) == 0 {
+		return
+	}
+	if w.DryRun {
+		w.emit(Event{Watch: w.Name, Kind: eventKindDryRun, Message: "dry-run: recover hook " + strings.Join(w.RecoverHook.Command, " ")})
+		return
+	}
+	if w.InPanic != nil && w.InPanic() {
+		w.emit(Event{Watch: w.Name, Kind: eventKindPanicSuppressed, Message: "panic mode: recover hook suppressed"})
+		return
+	}
+	env := hookEnv(w.Name, w.CheckType, res)
+	env[sermoEnvEvent] = eventKindRecovered
+	if err := w.RecoverHook.Run(ctx, defaultHookRunner(w.Runner), env); err != nil {
+		w.emit(Event{Watch: w.Name, Kind: eventKindHookFail, Message: "recover hook: " + err.Error()})
+		return
+	}
+	w.emit(Event{Watch: w.Name, Kind: eventKindHook, Message: "recover hook: " + res.Message})
 }
 
 func (w *Watch) dispatchFiringActions(ctx context.Context, res checks.Result, wasFiring, emitFiring bool) {

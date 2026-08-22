@@ -38,6 +38,7 @@ const (
 // Watch then-block keys shared by validation, builders and web projections.
 const (
 	WatchThenKeyHook           = "hook"
+	WatchThenKeyRecoverHook    = "recover_hook"
 	WatchThenKeyExpand         = "expand"
 	WatchThenKeyKill           = "kill"
 	WatchThenKeyMakeStep       = "makestep"

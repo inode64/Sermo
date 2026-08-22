@@ -47,6 +47,7 @@ directorio equivocado. La configuración distribuida la omite.
 - [Storage y unidades de montaje](#storage-y-unidades-de-montaje)
 - [Ajustes del motor](#ajustes-del-motor)
   - [Intervalo por service](#intervalo-por-service)
+  - [Botones de operador (buttons:)](#botones-de-operador-buttons)
   - [Intervalo por comprobación](#intervalo-por-comprobación)
 - [Interfaz web](#interfaz-web)
   - [Autenticación](#autenticación)
@@ -719,6 +720,29 @@ propios ciclos de ese service; las ventanas de duración usan el tiempo de reloj
 transcurrido entre esos ciclos observados. Los arranques de workers aún se reparten a lo
 largo de un intervalo global, de modo que una flota de services no sondee toda en el
 mismo tick.
+
+### Botones de operador (`buttons:`)
+
+Un servicio puede declarar **botones de operador**: comandos con nombre que el
+dashboard ofrece como acciones explícitas de administrador junto a los verbos
+integrados. Pulsar uno confirma, ejecuta exactamente el argv configurado (nunca
+un shell) acotado por su timeout, registra un evento de acción con el resultado
+y muestra la primera línea de salida del comando. Los botones son manuales por
+definición, así que `dry_run` no los limita — pulsarlo es el operador actuando,
+no el daemon decidiendo.
+
+```yaml
+buttons:
+  flush-queue:
+    label: "Flush queue"          # texto del botón; por defecto el nombre de la entrada
+    command: [/usr/sbin/exim, -qff]
+    timeout: 5m                    # opcional; por defecto el timeout de operación
+```
+
+Los nombres de botón usan minúsculas, dígitos, `-` y `_` (viajan en la ruta de
+la API). Solo el nombre y la etiqueta llegan al navegador; el comando se queda
+en el servidor, solo-admin, tras las mismas puertas CSRF y de generación que
+cualquier acción.
 
 ### Intervalo por comprobación
 
