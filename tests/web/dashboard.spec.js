@@ -10,6 +10,7 @@ const services = [
     name: "web", display_name: "Web server", category: "service", enabled: true,
     monitored: true, status: "active", state: "active", can_reload: true,
     uptime_seconds: 7200, status_observed_at: "2026-07-10T12:00:00Z", fds: 4096,
+    buttons: [{ name: "flush-queue", label: "Flush queue" }],
   },
   {
     name: "db", display_name: "Database", category: "service", enabled: true,
@@ -743,6 +744,21 @@ test("an available ssh source with no sessions renders no row", async ({ page })
   const empty = page.locator("#session-rows tr", { hasText: "No active sessions" });
   await expect(empty).toHaveCount(1);
   await expect(empty).toContainText("tmux");
+});
+
+// A configured operator button renders with its label, confirms, and posts to
+// its own route; the command never reaches the browser.
+test("a service operator button confirms and posts its route", async ({ page }) => {
+  let buttonURL = null;
+  await page.route("**/api/services/web/button/flush-queue", async (route) => {
+    buttonURL = new URL(route.request().url());
+    await route.fulfill({ json: { ok: true, message: "Flush queue: ok" } });
+  });
+  const row = page.locator("#svc-row-web");
+  await row.getByRole("button", { name: /Flush queue/ }).click();
+  await expect(page.locator("#simple-confirm-message")).toContainText("Flush queue");
+  await page.locator("#simple-confirm-ok").click();
+  await expect.poll(() => buttonURL && buttonURL.pathname).toBe("/api/services/web/button/flush-queue");
 });
 
 // The manual replication start is the DBA's repair executed by Sermo: the

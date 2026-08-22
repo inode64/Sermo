@@ -381,3 +381,8 @@ func (h *WebBackendHolder) ControlRAID(ctx context.Context, name, action, confir
 func (h *WebBackendHolder) ControlReplication(ctx context.Context, name string) web.ActionResult {
 	return webCall(h, unavailableAction(), func(b *WebBackend) web.ActionResult { return b.ControlReplication(ctx, name) })
 }
+
+// ServiceButton runs one configured operator button through the active backend.
+func (h *WebBackendHolder) ServiceButton(ctx context.Context, service, button string) web.ActionResult {
+	return webCall(h, unavailableAction(), func(b *WebBackend) web.ActionResult { return b.ServiceButton(ctx, service, button) })
+}

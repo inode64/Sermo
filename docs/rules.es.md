@@ -191,9 +191,21 @@ argv directamente, nunca a través de un shell; el proceso del daemon/CLI debe t
 para cambiar de usuario (normalmente ejecutándose como root), y un usuario no resuelto o un
 runner no soportado hace fallar la comprobación en modo cerrado.
 
+Con un `unit:`, el primer token numérico del stdout del comando se publica como
+la serie `value` de la comprobación en esa unidad — `exim -bpc` se convierte en
+una gráfica de profundidad de cola con dos líneas de YAML. Una salida sin número
+inicial simplemente no graba muestra (un hueco), nunca un fallo; el código de
+salida y los matchers siguen siendo el veredicto.
+
 Los mismos campos `expect_exit` / `expect_stdout` / `expect_stderr` están disponibles
 en un hook de watch (`then.hook`) para validar el resultado del comando del hook, pero
-`then.hook` no usa `user`.
+`then.hook` no usa `user`. Un watch de comprobación única puede declarar además
+`then.recover_hook` con la misma forma: se ejecuta **una vez en el flanco de
+failed a ok** — cuando un watch que disparaba deja de disparar — nunca estando
+sano y nunca por cada ciclo sano, con el mismo entorno que `then.hook` más
+`SERMO_EVENT=recovered`. Dry-run lo reporta en lugar de ejecutarlo, y el modo
+pánico lo suprime. Los watches con estado `file`/`process` disparan por
+path/PID y no lo aceptan.
 
 #### Calificación de la salida con `analyze:` (conjuntos de patrones)
 

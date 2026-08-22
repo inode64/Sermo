@@ -44,6 +44,7 @@ func (b *WebBackend) viewWithRuntime(ctx context.Context, name string, e *webEnt
 		Monitored:         true, // no recorded state defaults to monitored
 		CanReload:         e.canReload,
 		NoResidentProcess: e.noResidentProcess,
+		Buttons:           serviceButtonViews(e.buttons),
 	}
 	if e.interval > 0 {
 		svc.Interval = units.HumanizeDuration(e.interval)

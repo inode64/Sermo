@@ -42,6 +42,12 @@ type commandCheck struct {
 	// (major/minor/patch), with a raw-line fallback when no version is parseable.
 	changeLevel int
 	state       *cmdState
+	// numeric marks a check whose entry declares a `unit:`: the first numeric
+	// token of stdout publishes as DataKeyValue, feeding the `value` graph
+	// series DeclaredGraphMetrics offers for any check with a unit. Output that
+	// carries no leading number simply publishes no sample (a graph gap), never
+	// a failure — the command's exit code and matchers stay the verdict.
+	numeric bool
 }
 
 func (c commandCheck) Run(ctx context.Context) Result {
@@ -106,10 +112,34 @@ func (c commandCheck) Run(ctx context.Context) Result {
 		c.state.last, c.state.lastRaw, c.state.primed = key, raw, true
 	}
 	r := c.result(true, fmt.Sprintf("exit %d (want %s)", res.ExitCode, ExpectExitText(c.expectExit)), start)
-	if data := c.exportData(res.Stdout, res.Stderr); len(data) > 0 {
+	data := c.exportData(res.Stdout, res.Stderr)
+	if c.numeric {
+		if v, ok := firstNumericToken(res.Stdout); ok {
+			if data == nil {
+				data = map[string]any{}
+			}
+			data[DataKeyValue] = v
+			r.Message = fmt.Sprintf("%s: %s", output.Trim(res.Stdout), r.Message)
+		}
+	}
+	if len(data) > 0 {
 		r.Data = data
 	}
 	return r
+}
+
+// firstNumericToken parses the first whitespace-separated token of a command's
+// stdout as a float. `exim -bpc` prints "17"; a wrapped tool may prefix it.
+func firstNumericToken(stdout string) (float64, bool) {
+	fields := strings.Fields(stdout)
+	if len(fields) == 0 {
+		return 0, false
+	}
+	v, err := strconv.ParseFloat(fields[0], 64)
+	if err != nil {
+		return 0, false
+	}
+	return v, true
 }
 
 // changeKey turns a trimmed command output into the value on_change compares

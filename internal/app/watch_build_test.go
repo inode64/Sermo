@@ -792,6 +792,79 @@ func TestWatchFireOnFailInvertsTrigger(t *testing.T) {
 	}
 }
 
+// The recover hook runs exactly once, on the failed-to-ok edge — not while
+// failing, not on later healthy cycles, and with SERMO_EVENT=recovered so the
+// command can tell which edge invoked it.
+func TestWatchRecoverHookFiresOnceOnRecovery(t *testing.T) {
+	var recovered int32
+	var gotEvent string
+	runner := HookRunnerFunc(func(_ context.Context, cmd []string, env map[string]string, _ time.Duration) error {
+		if len(cmd) > 0 && cmd[0] == "/bin/recover" {
+			atomic.AddInt32(&recovered, 1)
+			gotEvent = env["SERMO_EVENT"]
+		}
+		return nil
+	})
+	w := &Watch{
+		Name:        "health",
+		Check:       stubCheck{name: "tcp", ok: false},
+		FireOnFail:  true,
+		Runner:      runner,
+		Hook:        HookSpec{Command: []string{"/bin/true"}},
+		RecoverHook: HookSpec{Command: []string{"/bin/recover"}},
+	}
+	w.RunCycle(context.Background())
+	if atomic.LoadInt32(&recovered) != 0 {
+		t.Fatalf("recover hook must not run while firing, ran=%d", recovered)
+	}
+	w.Check = stubCheck{name: "tcp", ok: true}
+	w.RunCycle(context.Background())
+	if atomic.LoadInt32(&recovered) != 1 {
+		t.Fatalf("recover hook must run once on the failed-to-ok edge, ran=%d", recovered)
+	}
+	if gotEvent != "recovered" {
+		t.Fatalf("SERMO_EVENT = %q, want recovered", gotEvent)
+	}
+	w.RunCycle(context.Background())
+	if atomic.LoadInt32(&recovered) != 1 {
+		t.Fatalf("recover hook must not repeat on later healthy cycles, ran=%d", recovered)
+	}
+}
+
+// Dry-run reports the recover hook instead of executing it.
+func TestWatchRecoverHookDryRun(t *testing.T) {
+	var ran int32
+	runner := HookRunnerFunc(func(context.Context, []string, map[string]string, time.Duration) error {
+		atomic.AddInt32(&ran, 1)
+		return nil
+	})
+	var events []Event
+	w := &Watch{
+		Name:        "health",
+		Check:       stubCheck{name: "tcp", ok: false},
+		FireOnFail:  true,
+		DryRun:      true,
+		Runner:      runner,
+		Emit:        func(e Event) { events = append(events, e) },
+		RecoverHook: HookSpec{Command: []string{"/bin/recover"}},
+	}
+	w.RunCycle(context.Background())
+	w.Check = stubCheck{name: "tcp", ok: true}
+	w.RunCycle(context.Background())
+	if atomic.LoadInt32(&ran) != 0 {
+		t.Fatalf("dry-run must not execute the recover hook, ran=%d", ran)
+	}
+	found := false
+	for _, e := range events {
+		if e.Kind == eventKindDryRun && strings.Contains(e.Message, "recover hook") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("dry-run recovery must report the suppressed hook, events=%+v", events)
+	}
+}
+
 func TestBuildWatchesWarnsOnBadCheck(t *testing.T) {
 	cfg := cfgWithWatches(map[string]any{
 		"bad": map[string]any{

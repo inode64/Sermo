@@ -45,6 +45,7 @@ configuration omits it.
 - [Storage and mount units](#storage-and-mount-units)
 - [Engine settings](#engine-settings)
   - [Per-service interval](#per-service-interval)
+  - [Operator buttons (buttons:)](#operator-buttons-buttons)
   - [Per-check interval](#per-check-interval)
 - [Web UI](#web-ui)
   - [Authentication](#authentication)
@@ -694,6 +695,28 @@ Window counts (`for`/`within` with `cycles`) are therefore counted in that
 service's own cycles; duration windows use wall-clock elapsed time between those
 observed cycles. Worker starts are still spread across one global interval so a
 fleet of services does not all probe on the same tick.
+
+### Operator buttons (`buttons:`)
+
+A service may declare **operator buttons**: named commands the dashboard offers
+as explicit admin actions next to the built-in verbs. Pressing one confirms,
+runs the exact configured argv (never a shell) bounded by its timeout, records
+an action event with the outcome, and shows the command's first output line.
+Buttons are manual by definition, so `dry_run` does not gate them — pressing
+one is the operator acting, not the daemon deciding.
+
+```yaml
+buttons:
+  flush-queue:
+    label: "Flush queue"          # button text; defaults to the entry name
+    command: [/usr/sbin/exim, -qff]
+    timeout: 5m                    # optional; defaults to the operation timeout
+```
+
+Button names use lowercase letters, digits, `-` and `_` (they ride the API
+path). Only the name and label reach the browser; the command stays
+server-side, admin-only, behind the same CSRF and generation gates as every
+action.
 
 ### Per-check interval
 

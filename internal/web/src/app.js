@@ -12,7 +12,7 @@ import {
   csrfPostOptions, dashboardAPI, daemonMetricsAPI, eventsAPI, eventsClearAPI,
   emptyTerminalSessionCloseAPI,
   liveVerbosePath, lockReleaseAPI, mountAPI, mountBlockersAPI, panicAPI,
-  readyVerbosePath, serviceAPI, serviceEventsAPI, serviceMetricsAPI,
+  readyVerbosePath, serviceAPI, serviceButtonAPI, serviceEventsAPI, serviceMetricsAPI,
   servicePreflightAPI, serviceRuntimeAPI, serviceSLAAPI, sshSessionCloseAPI, terminalSessionCloseAPI, stateCompactAPI, watchAPI,
   watchMetricsAPI, watchSLAAPI,
 } from "./api.js";
@@ -2681,6 +2681,36 @@ function serviceActionGlyph(action) {
   }
 }
 
+// serviceCustomButtons renders the service's configured operator buttons:
+// labeled admin commands defined in the service's buttons: block. They confirm
+// like every state-changing action; the command itself stays server-side.
+function serviceCustomButtons(s, busy) {
+  return (s.buttons || []).map((b) => tpl`<button ?disabled=${!!busy}
+    data-service="${s.name}" data-service-button="${b.name}"
+    title="${b.label}" aria-label="${b.label} (${displayName(s)})">${b.label}</button>`);
+}
+
+async function pressServiceButton(name, button) {
+  const s = (allServices || []).find((item) => item && item.name === name) || {};
+  const meta = (s.buttons || []).find((b) => b && b.name === button) || {};
+  const label = meta.label || button;
+  if (!(await promptConfirm({
+    title: `${label}?`,
+    message: `Run the configured "${label}" command for ${displayName(s) || name} now?`,
+    okLabel: label,
+    danger: true,
+  }))) return;
+  setStatus("");
+  try {
+    const res = await fetch(serviceButtonAPI(name, button), targetPostOptions());
+    const body = await res.json().catch(() => ({}));
+    setStatus(body.message || (res.ok ? `${label}: ok` : `${label}: failed`), !res.ok || body.ok === false);
+  } catch (err) {
+    setStatus(`${label}: ${err}`, true);
+  }
+  scheduleRefresh();
+}
+
 function serviceActionButton(s, action, busy, compact = false, title = "") {
   const label = svcActionAriaLabel(s, action);
   const glyph = compact ? serviceActionGlyph(action) : "";
@@ -2723,6 +2753,7 @@ function serviceRowParts(s, opts = {}) {
         ? serviceActionButton(s, actionUnmonitor, busy, true)
         : serviceActionButton(s, actionMonitor, busy, true),
       serviceRepairAvailable(s) ? serviceActionButton(s, actionRepair, busy, true) : nothing,
+      ...serviceCustomButtons(s, busy),
     ];
     actions = me.can_act ? tpl`
         ${serviceActionButton(s, powerAction, busy, true, powerTitle)}
@@ -8373,6 +8404,7 @@ function initDelegatedHandlers() {
     ["[data-empty-session-close]", (el) => closeEmptySessionSource(
       el.dataset.emptySessionService || "", el.dataset.emptySessionCheck || "")],
     ["[data-service-action][data-service]", (el) => act(el.dataset.service || "", el.dataset.serviceAction || "")],
+    ["[data-service-button][data-service]", (el) => pressServiceButton(el.dataset.service || "", el.dataset.serviceButton || "")],
     ["[data-watch-action][data-watch]", (el) => actWatch(el.dataset.watch || "", el.dataset.watchAction || "")],
     ["[data-mount-action][data-mount]", (el) => actMount(el.dataset.mount || "", el.dataset.mountAction || "")],
     ["[data-notifier-test]", (el) => testNotifier(el.dataset.notifierTest || "")],

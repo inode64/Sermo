@@ -52,6 +52,7 @@ const (
 	sectionClearWindow = rules.SectionClearWindow
 	sectionControl     = "control"
 	sectionCommands    = "commands"
+	sectionButtons     = "buttons"
 	sectionReload      = "reload"
 )
 
@@ -88,6 +89,17 @@ const (
 
 // SectionWatches is the global or service embedded watches block.
 const SectionWatches = sectionWatches
+
+// SectionButtons is the per-service operator-button block: named commands the
+// dashboard offers as explicit admin actions.
+const SectionButtons = sectionButtons
+
+// Button entry keys.
+const (
+	ButtonKeyLabel   = "label"
+	ButtonKeyCommand = "command"
+	ButtonKeyTimeout = "timeout"
+)
 
 // SectionPaths is the top-level paths configuration block.
 const SectionPaths = sectionPaths

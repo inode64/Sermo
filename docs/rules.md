@@ -191,9 +191,20 @@ argv directly, never through a shell; the daemon/CLI process must have permissio
 to switch user (normally by running as root), and an unresolved user or unsupported
 runner fails the check closed.
 
+With a `unit:`, the first numeric token of the command's stdout publishes as
+the check's `value` series in that unit — `exim -bpc` becomes a queue-depth
+graph with two lines of YAML. Output with no leading number simply records no
+sample (a gap), never a failure; the exit code and matchers stay the verdict.
+
 The same `expect_exit` / `expect_stdout` / `expect_stderr` fields are available
 on a watch hook (`then.hook`) to validate the hook command's result, but
-`then.hook` does not use `user`.
+`then.hook` does not use `user`. A single-check watch may also declare
+`then.recover_hook` with the same shape: it runs **once on the failed-to-ok
+edge** — when a firing watch stops firing — never while healthy and never per
+healthy cycle, with the same environment as `then.hook` plus
+`SERMO_EVENT=recovered`. Dry-run reports it instead of executing it, and panic
+mode suppresses it. The stateful `file`/`process` watches fire per path/PID and
+do not accept it.
 
 #### Grading output with `analyze:` (pattern sets)
 

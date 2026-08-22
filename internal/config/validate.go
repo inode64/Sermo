@@ -984,6 +984,7 @@ func validateResolved(name string, tree map[string]any, runtime string, notifier
 	validateAlsoService(tree, add)
 	validateCascade(name, tree, services, add)
 	validateCommands(tree, add)
+	validateButtons(tree, add)
 	validateReload(tree, backend, add)
 	validateRuleWindow(tree, add)
 	validateClearWindowSection(tree, add)

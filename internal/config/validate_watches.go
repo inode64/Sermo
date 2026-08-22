@@ -74,7 +74,7 @@ func validateWatches(watches map[string]any, locksDir string, notifiers map[stri
 			// The one single-shot type with its own case: a storage watch may carry
 			// a then.expand action, so its hook block allows expand.
 			validateStorageFields(checkPath, check, add)
-			validateHookBlock(prefix, entry, watchNativeActions{expand: true}, defaultNotify, add)
+			validateHookBlock(prefix, entry, watchNativeActions{expand: true, recoverHook: true}, defaultNotify, add)
 		case checks.CheckTypeNet:
 			validateNetCheck(name, check, entry, defaultNotify, add)
 		case checks.CheckTypeICMP:
@@ -94,7 +94,7 @@ func validateWatches(watches map[string]any, locksDir string, notifiers map[stri
 			// a host watch: validate its fields with the same per-type validators a
 			// checks: section uses and require a hook (section: unified checks).
 			if validateWatchableCheck(checkPath, typ, check, locksDir, add) {
-				validateHookBlock(prefix, entry, watchNativeActions{makeStep: typ == checks.CheckTypeClock}, defaultNotify, add)
+				validateHookBlock(prefix, entry, watchNativeActions{makeStep: typ == checks.CheckTypeClock, recoverHook: true}, defaultNotify, add)
 			} else {
 				add(validationValueNotSupportedFormat, watchCheckFieldPath(name, checks.CheckKeyType), typ)
 			}
@@ -243,7 +243,7 @@ func validateServiceWatch(name string, entry map[string]any, locksDir string, no
 		validateWatchThenAction(prefix, action, then, add)
 		return
 	}
-	validateHookBlock(prefix, entry, watchNativeActions{expand: typ == checks.CheckTypeStorage, makeStep: typ == checks.CheckTypeClock}, defaultNotify, add)
+	validateHookBlock(prefix, entry, watchNativeActions{expand: typ == checks.CheckTypeStorage, makeStep: typ == checks.CheckTypeClock, recoverHook: true}, defaultNotify, add)
 }
 
 func validateServiceWatchEntry(name string, entry map[string]any, notifiers map[string]struct{}, add addFunc) {
@@ -403,6 +403,9 @@ type watchNativeActions struct {
 	expand   bool
 	kill     bool
 	makeStep bool
+	// recoverHook admits then.recover_hook: only single-check watches carry the
+	// failed-to-ok edge it runs on.
+	recoverHook bool
 }
 
 // validateHookBlock validates a `then` action block: a hook and/or a notify list
@@ -417,6 +420,11 @@ func validateHookBlock(prefix string, block map[string]any, allow watchNativeAct
 	}
 	validateWatchThenKeys(prefix, then, add)
 	hook, hasHook := then[WatchThenKeyHook].(map[string]any)
+	recoverHook, hasRecoverHook := then[WatchThenKeyRecoverHook].(map[string]any)
+	if _, present := then[WatchThenKeyRecoverHook]; present && !allow.recoverHook {
+		add("%s is only supported on single-check watches", thenFieldPath(prefix, WatchThenKeyRecoverHook))
+		hasRecoverHook = false
+	}
 	notify := cfgval.StringList(then[rules.RuleFieldNotify])
 	_, hasNotifyOn := then[WatchThenKeyNotifyOn]
 	validateWatchNotifyInterval(prefix, then, hasNotifyOn, notify, defaultNotify, add)
@@ -427,11 +435,26 @@ func validateHookBlock(prefix string, block map[string]any, allow watchNativeAct
 	// deliberate monitor-only watch (state in the dashboard and events, no
 	// delivery). A present `then` that selects nothing is rejected. Omitting the
 	// `then` key entirely is another supported way to get alert-only behavior.
-	if !hasHook && !hasNotifyOn && !HasEffectiveNotifyAction(notify, defaultNotify) && !hasExpand && !hasKill && !hasMakeStep && !NotifyOptedOut(notify) {
+	if !hasHook && !hasRecoverHook && !hasNotifyOn && !HasEffectiveNotifyAction(notify, defaultNotify) && !hasExpand && !hasKill && !hasMakeStep && !NotifyOptedOut(notify) {
 		add("%s requires a hook, notify, kill, expand and/or makestep", prefix+"."+rules.RuleFieldThen)
 		return
 	}
 	validateWatchHookAction(prefix, hook, hasHook, add)
+	validateWatchRecoverHookAction(prefix, recoverHook, hasRecoverHook, add)
+}
+
+// validateWatchRecoverHookAction validates then.recover_hook with the same
+// shape rules as then.hook.
+func validateWatchRecoverHookAction(prefix string, hook map[string]any, hasHook bool, add func(string, ...any)) {
+	if !hasHook {
+		return
+	}
+	path := thenFieldPath(prefix, WatchThenKeyRecoverHook)
+	if !cfgval.IsNonEmptyStringArray(hook[WatchHookKeyCommand]) {
+		add("%s must be a non-empty array", path+"."+WatchHookKeyCommand)
+	}
+	validatePositiveDurationField(hook, WatchHookKeyTimeout, path+"."+WatchHookKeyTimeout, add)
+	validateCommandExpectations(path, hook, add)
 }
 
 func watchThenMapping(prefix string, block map[string]any, add func(string, ...any)) (map[string]any, bool) {
@@ -450,7 +473,7 @@ func watchThenMapping(prefix string, block map[string]any, add func(string, ...a
 }
 
 func validateWatchThenKeys(prefix string, then map[string]any, add func(string, ...any)) {
-	allowed := set(WatchThenKeyHook, rules.RuleFieldNotify, WatchThenKeyNotifyInterval, WatchThenKeyNotifyOn, WatchThenKeyExpand, WatchThenKeyKill, WatchThenKeyMakeStep)
+	allowed := set(WatchThenKeyHook, WatchThenKeyRecoverHook, rules.RuleFieldNotify, WatchThenKeyNotifyInterval, WatchThenKeyNotifyOn, WatchThenKeyExpand, WatchThenKeyKill, WatchThenKeyMakeStep)
 	for _, key := range slices.Sorted(maps.Keys(then)) {
 		if _, ok := allowed[key]; !ok {
 			add(validationNotSupportedFormat, thenFieldPath(prefix, key))

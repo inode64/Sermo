@@ -678,3 +678,44 @@ func validateCascade(name string, tree map[string]any, services map[string]struc
 		}
 	}
 }
+
+// buttonName confines a button key to what can ride a URL path segment and a
+// DOM attribute without escaping ambiguity.
+var buttonName = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]*$`)
+
+// validateButtons validates the per-service operator-button block: each entry
+// is a named command the dashboard offers as an explicit admin action, so the
+// name must be URL-safe, the command a non-empty argv array and the timeout,
+// when given, a positive duration.
+func validateButtons(tree map[string]any, add addFunc) {
+	raw, present := tree[sectionButtons]
+	if !present {
+		return
+	}
+	section, ok := raw.(map[string]any)
+	if !ok {
+		add(validationMappingFormat, sectionButtons)
+		return
+	}
+	for _, name := range slices.Sorted(maps.Keys(section)) {
+		path := sectionButtons + "." + name
+		if !buttonName.MatchString(name) {
+			add("%s: button names use lowercase letters, digits, '-' and '_'", path)
+		}
+		entry, ok := section[name].(map[string]any)
+		if !ok {
+			add(validationMappingFormat, path)
+			continue
+		}
+		for _, err := range unknownBlockKeys(path, entry, set(ButtonKeyLabel, ButtonKeyCommand, ButtonKeyTimeout)) {
+			add("%s", err)
+		}
+		if !cfgval.IsNonEmptyStringArray(entry[ButtonKeyCommand]) {
+			add("%s.%s must be a non-empty array", path, ButtonKeyCommand)
+		}
+		if v, present := entry[ButtonKeyLabel]; present && cfgval.String(v) == "" {
+			add("%s.%s must be a non-empty string", path, ButtonKeyLabel)
+		}
+		validatePositiveDurationField(entry, ButtonKeyTimeout, path+"."+ButtonKeyTimeout, add)
+	}
+}

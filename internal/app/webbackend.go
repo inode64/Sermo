@@ -86,6 +86,7 @@ type webEntry struct {
 	checkGraphs       map[string][]checks.GraphMetric // check name -> resolved line metrics
 	checkSeverities   map[string]string               // check name -> `severity:`, when declared
 	checkIntervals    map[string]time.Duration
+	buttons           []serviceButton
 	discoverer        process.Discoverer
 	selectors         []process.Selector
 	processWarnings   []string
@@ -378,6 +379,7 @@ func (b *WebBackend) registerService(ctx context.Context, cfg *config.Config, na
 		policyCooldown:   rules.ParsePolicy(resolved.Tree).Cooldown,
 		alsoApply:        config.CascadeTargets(resolved.Tree),
 		terminalSessions: terminalSessionSources(resolved.Tree),
+		buttons:          serviceButtons(resolved.Tree),
 	}
 	if disabled {
 		entry.disabled = true

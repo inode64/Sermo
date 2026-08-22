@@ -41,6 +41,7 @@ func buildCommandCheck(b base, entry map[string]any, runner execx.Runner) (Check
 		return nil, "command check " + warn
 	}
 	c := commandCheck{base: b, runner: runner, argv: argv, user: cfgval.String(entry[CheckKeyUser]), expectExit: expect, stdout: stdout, stderr: stderr, version: version, exports: exports, analyzer: analyzer}
+	c.numeric = cfgval.AsString(entry[CheckKeyUnit]) != ""
 	if c.onChange = cfgval.Bool(entry[CheckKeyOnChange]); c.onChange {
 		c.changeLevel, _ = cfgval.Int(entry[CheckKeyChangeLevel])
 		c.state = &cmdState{}

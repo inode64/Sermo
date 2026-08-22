@@ -278,10 +278,11 @@ func buildSingleWatch(name string, entry, checkEntry map[string]any, deps Deps, 
 		return nil, watchSubjectPrefix + name + ": " + err.Error()
 	}
 	actions, err := resolveWatchActions(entry, deps, watchActionOptions{
-		checkType:     typ,
-		parseExpand:   true,
-		parseMakeStep: true,
-		emptyMessage:  "then requires a hook, notify, expand and/or makestep",
+		checkType:        typ,
+		parseExpand:      true,
+		parseMakeStep:    true,
+		parseRecoverHook: true,
+		emptyMessage:     "then requires a hook, notify, expand and/or makestep",
 	})
 	if err != nil {
 		return nil, watchSubjectPrefix + name + ": " + err.Error()
@@ -383,7 +384,8 @@ func buildMetricWatches(name string, entry, checkEntry map[string]any, deps Deps
 			continue
 		}
 		actions, err := resolveWatchActions(mEntry, deps, watchActionOptions{
-			emptyMessage: "then requires a hook and/or notify",
+			parseRecoverHook: true,
+			emptyMessage:     "then requires a hook and/or notify",
 		})
 		if err != nil {
 			warns = append(warns, watchSubjectPrefix+name+".metrics."+key+": "+err.Error())
@@ -475,6 +477,7 @@ func newCheckWatch(spec checkWatchSpec, deps Deps) *Watch {
 		Check:              spec.check,
 		Window:             spec.window,
 		Hook:               spec.actions.hook,
+		RecoverHook:        spec.actions.recoverHook,
 		Notifiers:          resolveNotifiers(spec.actions.effectiveNames, deps.Notifiers),
 		RaidNotifyEvents:   spec.actions.raidNotifyEvents,
 		LVMNotifyOnChange:  spec.actions.lvmNotifyOnChange,
@@ -760,31 +763,45 @@ func thenMap(entry map[string]any) (map[string]any, error) {
 // requiring that at least one is present. The caller enforces action presence
 // after applying the global notify default. It errors only on a malformed hook.
 func parseActions(then map[string]any) (HookSpec, []string, error) {
-	var hook HookSpec
-	if h, ok := then[config.WatchThenKeyHook].(map[string]any); ok {
-		cmd := cfgval.StringArray(h[config.WatchHookKeyCommand])
-		if len(cmd) == 0 {
-			return HookSpec{}, nil, errors.New("hook requires a non-empty command")
-		}
-		hook = HookSpec{Command: cmd, Timeout: cfgval.Duration(h[config.WatchHookKeyTimeout])}
-		if v, ok := cfgval.IntList(h[config.WatchHookKeyExpectExit]); ok {
-			hook.ExpectExit = v
-		}
-		stdout, warn := checks.ParseOutputMatcher(h[config.WatchHookKeyExpectStdout])
-		if warn != "" {
-			return HookSpec{}, nil, fmt.Errorf("hook expect_stdout %s", warn)
-		}
-		stderr, warn := checks.ParseOutputMatcher(h[config.WatchHookKeyExpectStderr])
-		if warn != "" {
-			return HookSpec{}, nil, fmt.Errorf("hook expect_stderr %s", warn)
-		}
-		hook.Stdout, hook.Stderr = stdout, stderr
+	hook, err := parseHookMap(then, config.WatchThenKeyHook)
+	if err != nil {
+		return HookSpec{}, nil, err
 	}
 	return hook, cfgval.StringList(then[rules.RuleFieldNotify]), nil
 }
 
+// parseHookMap reads one hook-shaped block (`then.hook` or `then.recover_hook`)
+// into a HookSpec; an absent key parses to the zero spec.
+func parseHookMap(then map[string]any, key string) (HookSpec, error) {
+	h, ok := then[key].(map[string]any)
+	if !ok {
+		return HookSpec{}, nil
+	}
+	cmd := cfgval.StringArray(h[config.WatchHookKeyCommand])
+	if len(cmd) == 0 {
+		return HookSpec{}, errors.New(key + " requires a non-empty command")
+	}
+	hook := HookSpec{Command: cmd, Timeout: cfgval.Duration(h[config.WatchHookKeyTimeout])}
+	if v, ok := cfgval.IntList(h[config.WatchHookKeyExpectExit]); ok {
+		hook.ExpectExit = v
+	}
+	stdout, warn := checks.ParseOutputMatcher(h[config.WatchHookKeyExpectStdout])
+	if warn != "" {
+		return HookSpec{}, fmt.Errorf("%s expect_stdout %s", key, warn)
+	}
+	stderr, warn := checks.ParseOutputMatcher(h[config.WatchHookKeyExpectStderr])
+	if warn != "" {
+		return HookSpec{}, fmt.Errorf("%s expect_stderr %s", key, warn)
+	}
+	hook.Stdout, hook.Stderr = stdout, stderr
+	return hook, nil
+}
+
 type watchActions struct {
-	hook              HookSpec
+	hook HookSpec
+	// recoverHook runs once on the failed-to-ok edge — when a firing watch
+	// stops firing — never while healthy and never per healthy cycle.
+	recoverHook       HookSpec
 	effectiveNames    []string
 	raidNotifyEvents  map[string]bool
 	lvmNotifyOnChange bool
@@ -799,7 +816,11 @@ type watchActionOptions struct {
 	parseExpand   bool
 	parseKill     bool
 	parseMakeStep bool
-	emptyMessage  string
+	// parseRecoverHook admits then.recover_hook: only the single-check watch
+	// shapes wire the recovery edge; the stateful file/process watches fire one
+	// hook per path/PID and have no single recovered state to hang it on.
+	parseRecoverHook bool
+	emptyMessage     string
 }
 
 func resolveWatchActions(entry map[string]any, deps Deps, opts watchActionOptions) (watchActions, error) {
@@ -809,6 +830,13 @@ func resolveWatchActions(entry map[string]any, deps Deps, opts watchActionOption
 	}
 	if thenBlock == nil {
 		return watchActions{}, nil
+	}
+	recoverHook, err := parseHookMap(thenBlock, config.WatchThenKeyRecoverHook)
+	if err != nil {
+		return watchActions{}, err
+	}
+	if len(recoverHook.Command) > 0 && !opts.parseRecoverHook {
+		return watchActions{}, errors.New("then.recover_hook is not supported on this watch type")
 	}
 	effectiveNames := effectiveNotify(names, deps.GlobalNotify)
 	raidNotifyEvents, err := parseRaidNotifyEvents(thenBlock)
@@ -842,11 +870,12 @@ func resolveWatchActions(entry map[string]any, deps Deps, opts watchActionOption
 			return watchActions{}, err
 		}
 	}
-	if !hasWatchAction(hook, names, effectiveNames, expand) && kill == nil && makeStep == nil {
+	if !hasWatchAction(hook, names, effectiveNames, expand) && kill == nil && makeStep == nil && len(recoverHook.Command) == 0 {
 		return watchActions{}, errors.New(opts.emptyMessage)
 	}
 	return watchActions{
 		hook:              hook,
+		recoverHook:       recoverHook,
 		effectiveNames:    effectiveNames,
 		raidNotifyEvents:  raidNotifyEvents,
 		lvmNotifyOnChange: lvmNotifyOnChange,
