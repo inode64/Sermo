@@ -526,10 +526,78 @@ func (s *Store) initializeSchema(ctx context.Context) error {
 			return fmt.Errorf("create state schema: %w", err)
 		}
 	}
+	if err := ensureSnapshotColumns(ctx, tx); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit state schema: %w", err)
 	}
 	return nil
+}
+
+// snapshotColumnMigrations are the additive columns the snapshot cache tables
+// have grown since their first shipped shape. CREATE TABLE IF NOT EXISTS never
+// alters an existing table, so a database created before a column existed keeps
+// failing every insert forever unless the column is added here — which is
+// exactly what happened when `observation` shipped without this list: every
+// snapshot persist on a pre-existing database logged "has no column named
+// observation" until the daemon was pointed at a fresh file. The defaults make
+// old rows readable; they are overwritten on the next cycle anyway, because
+// these tables cache current state, not history.
+var snapshotColumnMigrations = []struct {
+	table  string
+	column string
+	decl   string
+}{
+	{"service_check_snapshot", "check_type", "check_type TEXT NOT NULL DEFAULT ''"},
+	{"service_check_snapshot", "unavailable", "unavailable INTEGER NOT NULL DEFAULT 0"},
+	{"service_check_snapshot", "observation", "observation TEXT NOT NULL DEFAULT ''"},
+	{"watch_check_snapshot", "check_type", "check_type TEXT NOT NULL DEFAULT ''"},
+	{"watch_check_snapshot", "unavailable", "unavailable INTEGER NOT NULL DEFAULT 0"},
+	{"watch_check_snapshot", "observation", "observation TEXT NOT NULL DEFAULT ''"},
+}
+
+// ensureSnapshotColumns adds any missing cache-table columns to a database
+// created under an older schema.
+func ensureSnapshotColumns(ctx context.Context, tx *sql.Tx) error {
+	for _, m := range snapshotColumnMigrations {
+		present, err := columnExists(ctx, tx, m.table, m.column)
+		if err != nil {
+			return err
+		}
+		if present {
+			continue
+		}
+		if _, err := tx.ExecContext(ctx, "ALTER TABLE "+m.table+" ADD COLUMN "+m.decl); err != nil {
+			return fmt.Errorf("add %s.%s: %w", m.table, m.column, err)
+		}
+	}
+	return nil
+}
+
+func columnExists(ctx context.Context, tx *sql.Tx, table, column string) (bool, error) {
+	rows, err := tx.QueryContext(ctx, "PRAGMA table_info("+table+")")
+	if err != nil {
+		return false, fmt.Errorf("inspect %s: %w", table, err)
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var cid int
+		var name, ctype string
+		var notNull, pk int
+		var dflt any
+		if err := rows.Scan(&cid, &name, &ctype, &notNull, &dflt, &pk); err != nil {
+			return false, fmt.Errorf("scan %s columns: %w", table, err)
+		}
+		if name == column {
+			return true, nil
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return false, fmt.Errorf("iterate %s columns: %w", table, err)
+	}
+	return false, nil
 }
 
 // MonitorRecord is one persisted monitoring state row.
