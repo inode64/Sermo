@@ -297,7 +297,6 @@ var builtinCheckSpecs = []checkSpec{
 	{info: healthTypeInfo(CheckTypeLibraries), build: func(in checkBuildInput) (Check, string) { return buildLibrariesCheck(in.base, in.entry) }},
 	{info: conditionTypeInfo(CheckTypeCount), build: func(in checkBuildInput) (Check, string) { return buildCountCheck(in.base, in.entry) }},
 	{info: conditionTypeInfo(CheckTypeStorage), build: func(in checkBuildInput) (Check, string) { return buildStorageCheck(in.base, in.entry, in.deps) }},
-	{info: healthTypeInfo(CheckTypeAutofs), build: func(in checkBuildInput) (Check, string) { return buildAutofsCheck(in.base, in.entry, in.deps) }},
 	{info: conditionTypeInfo(CheckTypeLoad), build: func(in checkBuildInput) (Check, string) { return buildLoadCheck(in.base, in.entry, in.deps) }},
 	{info: conditionTypeInfo(CheckTypeUsers), build: func(in checkBuildInput) (Check, string) { return buildUsersCheck(in.base, in.entry, in.deps) }},
 	{info: conditionTypeInfo(CheckTypeSSHIdle), build: func(in checkBuildInput) (Check, string) { return buildSSHIdleCheck(in.base, in.entry, in.deps) }},

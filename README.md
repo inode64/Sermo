@@ -44,8 +44,8 @@ around the opposite principle — **prove it is safe, then act**:
   and WebSocket endpoints, TLS certificate expiry, database connectivity and
   queries (MySQL/MariaDB, MongoDB, InfluxDB, SQLite integrity, arbitrary SQL),
   egress interface, default route, firewall rules, clock drift, file/dir size
-  growth, disk throughput (`hdparm`), hardware sensors, autofs mounts, and
-  process/count metrics.
+  growth, disk throughput (`hdparm`), hardware sensors, and process/count
+  metrics.
 - **Check interdependencies** (`requires` / `skip_when_changed`) so a probe is
   only run when its prerequisites hold.
 - **Host watches** — monitor resources that aren't services (mounts, RAID

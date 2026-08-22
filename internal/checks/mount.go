@@ -8,6 +8,9 @@ import (
 	"sermo/internal/mounts"
 )
 
+// FSTypeAutofs identifies autofs placeholder mounts in the mount table.
+const FSTypeAutofs = "autofs"
+
 const (
 	procMountsMinFields       = 4
 	procMountsDeviceIndex     = 0
