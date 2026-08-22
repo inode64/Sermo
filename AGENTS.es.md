@@ -497,8 +497,8 @@ Go: `complexity`, `max-lines-per-function`, `max-params`, `max-depth` y
 `max-nested-callbacks`. Están fijados en el techo actual, así que bloquean
 regresiones en vez de exigir una limpieza: una función nueva no puede ser peor
 que la peor que ya existe. Baja un umbral cada vez que partas un caso extremo —
-`renderOverview` (complejidad 121) y `renderServiceDetail` (183 líneas) son los
-dos primeros candidatos.
+`restoreUIState` (complejidad 80) y `initStaticHandlers` (146 líneas) son los
+techos actuales.
 
 **El renderizado usa lit-html.** Construye markup con `tpl\`...\`` (el tag `html`,
 importado con alias `tpl`) y renderiza en un contenedor con `litRender(...)` (el
@@ -666,7 +666,7 @@ script-src sigue siendo nonce-strict (ver `securityHeaders` en
 
 El wizard interactivo (`sermoctl wizard`, `internal/assist`) sigue **un
 flujo de preguntas canónico para cada asistente, presente y futuro** — documentado
-en [docs/wizards.md](docs/wizards.md). Léelo antes de añadir o cambiar un
+en [docs/wizards.es.md](docs/wizards.es.md). Léelo antes de añadir o cambiar un
 wizard; los invariantes de abajo no deben derivar por asistente.
 
 Dirige cada selección a través de los helpers `Prompt` compartidos — nunca hagas a mano una
@@ -686,7 +686,7 @@ notifiers configurados** — el wizard nunca se bloquea en la pregunta de notifi
 solo-monitor** con una nota de una línea; nunca debe volver a preguntar ni abortar (ver
 `chooseNotifiers` en `internal/assist/notify.go`). El paso final previsualiza lo que
 se escribirá, confirma, y ofrece eliminar archivos gestionados cuyo target ya
-no se detecta. Mantén `docs/wizards.md`, `docs/configuration.es.md` y esta
+no se detecta. Mantén `docs/wizards.es.md`, `docs/configuration.es.md` y esta
 sección en step cuando algo de esto cambie.
 
 ## Catalog: instanced systemd services
@@ -954,8 +954,9 @@ Notas de herramientas:
 - **`make docs-sync`** contrasta la documentación con el código que describe:
   toda ruta citada existe, todo identificador Go nombrado por una skill existe,
   AGENTS.md nombra todos los linters que habilita `.golangci.yml`, toda clave de
-  configuración escribible por el operador aparece en `docs/`, y las parejas
-  EN/ES coinciden en titulares y en todas las cifras. Cada comprobación se
+  configuración escribible por el operador aparece en `docs/`, las parejas
+  EN/ES coinciden en titulares y en todas las cifras, y cada documento emparejado
+  existe en ambos idiomas. Cada comprobación se
   añadió después de que esa deriva concreta llegara al repositorio; ninguna otra
   herramienta del gate la ve. Añade una cuando encuentres una clase nueva de
   deriva entre documentación y código.
