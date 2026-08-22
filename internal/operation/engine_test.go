@@ -1069,7 +1069,46 @@ func TestNewAutomaticResidualReapingClearsBeforeRestart(t *testing.T) {
 	}
 }
 
-func TestNewRuntimeDiscoveryWarningWithoutCommandMatchBlocksRestart(t *testing.T) {
+// OpenRC answers `inactive` while a starting service waits for its readiness
+// callback; the settle window must ride that out and succeed once the backend
+// reports active — and still fail, with the settled verdict, when it never does.
+func TestStartSettlesThroughTransientInactive(t *testing.T) {
+	dir := t.TempDir()
+	locker := locks.NewOperationLocker(locks.RuntimeOpsDir(dir))
+	mgr := &fakeManager{
+		statusSteps: []servicemgr.Status{servicemgr.StatusInactive, servicemgr.StatusInactive, servicemgr.StatusInactive},
+		status:      servicemgr.StatusActive,
+	}
+	engine := New(Config{
+		Service: "openvpntun1", Unit: "openvpn.tun1", Backend: "openrc",
+		Tree:    map[string]any{},
+		Manager: mgr, Locker: &locker,
+		Scanner: locks.NewScanner(locks.RuntimeLocksDir(dir)),
+		Sleep:   func(time.Duration) {},
+	})
+	res := engine.Start(context.Background())
+	if res.Status != ResultOK {
+		t.Fatalf("status = %q (%s), want ok after the backend settles active", res.Status, res.Message)
+	}
+
+	never := &fakeManager{status: servicemgr.StatusInactive}
+	engine2 := New(Config{
+		Service: "openvpntun1", Unit: "openvpn.tun1", Backend: "openrc",
+		Tree:    map[string]any{},
+		Manager: never, Locker: &locker,
+		Scanner: locks.NewScanner(locks.RuntimeLocksDir(dir)),
+		Sleep:   func(time.Duration) {},
+	})
+	res2 := engine2.Start(context.Background())
+	if res2.Status != ResultFailed || !strings.Contains(res2.Message, "not active after start") {
+		t.Fatalf("never-settling start = %q (%s), want the settled failure", res2.Status, res2.Message)
+	}
+}
+
+// A missing pidfile is a proven absence — after a stop it is the expected
+// state — so it must not abort the restart; that abort used to strand the
+// very service the operator asked to repair stopped (openvpn on kvm9).
+func TestRuntimeDiscoveryAbsentPidfileDoesNotBlockRestart(t *testing.T) {
 	dir := t.TempDir()
 	locker := locks.NewOperationLocker(locks.RuntimeOpsDir(dir))
 	mgr := &fakeManager{status: servicemgr.StatusActive}
@@ -1079,6 +1118,40 @@ func TestNewRuntimeDiscoveryWarningWithoutCommandMatchBlocksRestart(t *testing.T
 		Backend: "systemd",
 		Tree: map[string]any{
 			"pidfile": filepath.Join(dir, "missing.pid"),
+		},
+		Manager:    mgr,
+		Locker:     &locker,
+		Scanner:    locks.NewScanner(locks.RuntimeLocksDir(dir)),
+		Discoverer: process.NewDiscovererWithUserLookup(nil),
+		Sleep:      func(time.Duration) {},
+	})
+
+	res := engine.Restart(context.Background())
+	if res.Status != ResultOK {
+		t.Fatalf("status = %q (%s), want ok: a proven-absent pidfile must not block repair", res.Status, res.Message)
+	}
+	if !mgr.did("start mysqld") {
+		t.Error("restart must reach start when the only discovery finding is a proven absence")
+	}
+}
+
+// A pidfile that exists but cannot be read as one (here: a directory) is a
+// genuine uncertainty, and signalling on top of it could target the wrong
+// processes — that still blocks, exactly as before.
+func TestRuntimeDiscoveryUncertaintyBlocksRestart(t *testing.T) {
+	dir := t.TempDir()
+	unreadable := filepath.Join(dir, "pid.d")
+	if err := os.Mkdir(unreadable, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	locker := locks.NewOperationLocker(locks.RuntimeOpsDir(dir))
+	mgr := &fakeManager{status: servicemgr.StatusActive}
+	engine := New(Config{
+		Service: "mysql-main",
+		Unit:    "mysqld",
+		Backend: "systemd",
+		Tree: map[string]any{
+			"pidfile": unreadable,
 		},
 		Manager:    mgr,
 		Locker:     &locker,

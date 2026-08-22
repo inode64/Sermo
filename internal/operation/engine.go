@@ -750,29 +750,51 @@ func (e Engine) restartService(ctx context.Context, result *Result) bool {
 }
 
 // runBackendAction centralizes the result contract shared by backend actions:
-// timeout-aware errors followed by a failed-unit status check. Higher-level
-// safety gates and postflight remain in run, around this primitive.
+// timeout-aware errors followed by a settle-aware status check. Higher-level
+// safety gates and postflight remain in run, around this primitive. The check
+// retries within the same bounded window postflight uses, because a backend
+// can accept a start and report the settled state a moment later — OpenRC
+// answers `inactive` until a starting service's readiness callback runs.
 func (e Engine) runBackendAction(ctx context.Context, result *Result, action string, run func(context.Context) error) bool {
 	if err := run(ctx); err != nil {
 		return failPhase(ctx, result, timeoutDuring(action), action+": ", err)
 	}
-	return e.ensureServiceHealthy(ctx, result, action)
+	for attempt := range postflightMaxAttempts {
+		final := attempt+1 == postflightMaxAttempts
+		healthy, settled := e.ensureServiceHealthy(ctx, result, action, final)
+		if settled {
+			return healthy
+		}
+		if err := process.Wait(ctx, e.Sleep, postflightRetryInterval); err != nil {
+			return failWait(ctx, result, action+" settle wait")
+		}
+	}
+	return false
 }
 
-func (e Engine) ensureServiceHealthy(ctx context.Context, result *Result, action string) bool {
+// ensureServiceHealthy judges the backend state after a start-like action.
+// final marks the last postflight attempt: until then a not-yet-active status
+// only reports settling=false so the bounded window keeps waiting — OpenRC
+// holds a starting service in `inactive` until its readiness callback runs,
+// and failing on that instant verdict aborted restarts of services that were
+// coming up fine. A failed status still fails fast on every attempt.
+func (e Engine) ensureServiceHealthy(ctx context.Context, result *Result, action string, final bool) (healthy, settled bool) {
 	status, err := e.Manager.Status(ctx, e.Unit)
 	if err != nil {
-		return true
+		return true, true
 	}
 	if status.Status == servicemgr.StatusFailed {
 		result.Status, result.Message = ResultFailed, "service failed after "+action
-		return false
+		return false, true
 	}
 	if (action == actionStart || action == actionRestart || action == actionResume) && status.Status != servicemgr.StatusActive {
+		if !final {
+			return false, false
+		}
 		result.Status, result.Message = ResultFailed, "service not active after "+action
-		return false
+		return false, true
 	}
-	return true
+	return true, true
 }
 
 func (e Engine) runPostflight(ctx context.Context, p plan, result *Result) bool {
@@ -782,8 +804,16 @@ func (e Engine) runPostflight(ctx context.Context, p plan, result *Result) bool 
 	var out checks.Outcome
 	postflightReady := false
 	for attempt := range postflightMaxAttempts {
-		if (p.start || p.nativeRestart || p.resume) && !e.ensureServiceHealthy(ctx, result, result.Action) {
-			return false
+		if p.start || p.nativeRestart || p.resume {
+			healthy, settled := e.ensureServiceHealthy(ctx, result, result.Action, attempt+1 == postflightMaxAttempts)
+			if settled && !healthy {
+				return false
+			}
+			if !settled {
+				// Not active yet: spend this attempt on the settle wait below
+				// instead of judging checks against a still-starting service.
+				postflightReady = false
+			}
 		}
 		if !postflightReady {
 			out = e.Postflight(ctx)

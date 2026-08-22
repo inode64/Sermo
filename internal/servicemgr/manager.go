@@ -17,6 +17,9 @@ import (
 const (
 	cgroupRoot               = "/sys/fs/cgroup"
 	openrcExitStatusInactive = 3
+	// openRCStartedInactive is rc-service's wording for "running, readiness
+	// callback pending" — a started service, not a failed one.
+	openRCStartedInactive = "has started, but is inactive"
 )
 
 // ServiceStatus is the resolved status of a single service on a backend.
@@ -412,6 +415,15 @@ func (m openrcManager) action(ctx context.Context, verb, service string) error {
 	args = append(args, service, verb)
 	result, err := m.runner.Run(ctx, cmdRcService, args...)
 	if err != nil {
+		// OpenRC holds a service that used mark_service_inactive in `inactive`
+		// until its readiness callback promotes it, and rc-service start exits
+		// non-zero with this warning while that is pending. The daemon IS
+		// running — openvpn brings its tunnel up seconds later — so this is a
+		// successful submission; the engine's settle-aware status verification
+		// owns convergence, and a service that never settles still fails there.
+		if strings.Contains(result.Stdout+result.Stderr, openRCStartedInactive) {
+			return nil
+		}
 		return actionError(fmt.Sprintf("%s %s %s", cmdRcService, service, verb), result, err)
 	}
 	return nil
