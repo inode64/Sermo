@@ -182,7 +182,7 @@ con un cuerpo `{"ok": bool, "message": string}` para una acción atendida.
 | Cerrar sesión SSH | `POST /api/services/{name}/sessions/{pid}/close?start_ticks=TICKS&terminal=PTS` | solo admin y con confirmación: cierre elegante de un terminal SSH mostrado; el backend redescubre el terminal, el ejecutable `sshd` configurado exacto y su usuario real, exige el mismo PID y ticks de inicio y solo envía `SIGTERM` |
 | Cerrar sesión de terminal | `POST /api/services/{name}/terminal-sessions/{check}/close?multiplexer=TYPE&session=NAME&user=USER&identity=IDENTITY` | solo admin y con confirmación: cierre de una sesión tmux/screen; el backend vuelve a listar el espacio configurado de usuario/socket, exige la misma identidad de generación y ejecuta únicamente el argv exacto de cierre del cliente |
 | Cerrar servidor tmux vacío | `POST /api/services/{name}/terminal-sessions/{check}/close-empty` | solo admin y con confirmación; solo aparece para un origen tmux presente, vacío y con socket explícito configurado. El backend confirma que sigue vacío, ejecuta el argv exacto `kill-server` de tmux, verifica que el espacio desapareció y elimina solo el socket huérfano sin cambios que pueda quedar |
-| Acción de watch | `POST /api/watches/{name}/{action}` | `monitor`, `unmonitor`, `expand`, `probe` (una muestra manual), más `pause`/`resume` de RAID, que ejecutan una operación de re-chequeo y verificación y requieren la cabecera `X-Sermo-Confirm` |
+| Acción de watch | `POST /api/watches/{name}/{action}` | `monitor`, `unmonitor`, `expand`, `probe` (una muestra manual), `pause`/`resume` de RAID (re-chequeo y verificación, cabecera `X-Sermo-Confirm` requerida), y `replication-start` para un watch `replication` con `replication_control.start: true` — Sermo revalida el estado en vivo, ejecuta `START REPLICA` exactamente como la reparación manual y verifica ambos hilos después, tras confirmación |
 | Prueba de notifier | `POST /api/notifiers/{name}/test` | envía una notificación de prueba por el notifier nombrado tras confirmación |
 | Acción de montaje | `POST /api/mounts/{name}/{action}[?force=1&lazy=1&kill=1]` | `mount`, `umount`, `alert`; `force=1` permite `umount -f`, `lazy=1` permite `umount -l` como último fallback y `kill=1` habilita señalización de blockers limitada por `kill_only_if`; `/` rechaza las rutas de desmontaje |
 | Blockers de montaje | `GET /api/mounts/{name}/blockers` | escaneo read-only fresco de blockers de una unidad de montaje; a los guests se les redactan las líneas de comando como en `GET /api/mounts` |
@@ -536,6 +536,7 @@ activity es un evento.
 | `diskio` | Name, dispositivo, bus, utilización, lectura, escritura, await, leído total, escrito total (acumulados desde el arranque, para distinguir un disco ocioso de uno que nadie toca nunca) |
 | `cert` | Name, origen, días restantes, caducidad, emisor |
 | `raid` | Name, array, tamaño, degradado, recuperando |
+| `replication` | Name, origen, hilo IO, hilo SQL, retraso |
 | Otros tipos | Name y su valor vivo principal |
 
 La columna de salud maneja dos vocabularios y colorea ambos: el check `lvm`

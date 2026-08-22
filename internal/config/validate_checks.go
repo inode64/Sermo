@@ -922,6 +922,7 @@ var singleShotCheckValidators = map[string]singleShotCheckValidator{
 	checks.CheckTypeSQLite:           validateSQLiteCheck,
 	checks.CheckTypeSQLite3:          validateSQLiteCheck,
 	checks.CheckTypeSQL:              singleShotNoLock(validateSQLFields),
+	checks.CheckTypeReplication:      singleShotNoLock(validateReplicationFields),
 	checks.CheckTypeMongoDBQuery:     singleShotNoLock(validateMongoFields),
 	checks.CheckTypeInfluxDBQuery:    singleShotNoLock(validateInfluxFields),
 	checks.CheckTypeSize:             singleShotNoLock(validateSizeFields),
@@ -1612,6 +1613,30 @@ func validateSQLFields(prefix string, fields map[string]any, add addFunc) {
 		requireCheckField(prefix, checks.CheckKeyPath, "a sqlite sql check", fields, add)
 	case checks.SQLEngineMySQL, checks.SQLEngineMariaDB, checks.SQLEnginePostgres, checks.SQLEnginePostgreSQL:
 		requireCheckField(prefix, checks.CheckKeyUser, "a "+engine+" sql check", fields, add)
+	}
+}
+
+// validateReplicationFields validates a replication check: a mysql/mariadb
+// engine (defaulting to mariadb), a required user, and optional connection
+// scope and behind {op, value} lag bound.
+func validateReplicationFields(prefix string, fields map[string]any, add addFunc) {
+	if engine := cfgval.String(fields[checks.CheckKeyEngine]); engine != "" &&
+		engine != checks.SQLEngineMySQL && engine != checks.SQLEngineMariaDB {
+		add("%s.engine must be mysql or mariadb for a replication check", prefix)
+	}
+	requireCheckField(prefix, checks.CheckKeyUser, "a replication check", fields, add)
+	behind, ok := fields[checks.CheckKeyBehind].(map[string]any)
+	if !ok {
+		if _, present := fields[checks.CheckKeyBehind]; present {
+			add("%s.behind must be a {op, value} mapping", prefix)
+		}
+		return
+	}
+	if op := cfgval.String(behind[checks.CheckKeyOp]); !cfgval.IsCompareOp(op) {
+		add("%s.behind.op %q is not one of %s", prefix, op, cfgval.CompareOpSummary)
+	}
+	if !isNumeric(cfgval.String(behind[checks.CheckKeyValue])) {
+		add("%s.behind.value must be numeric", prefix)
 	}
 }
 

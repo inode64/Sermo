@@ -72,7 +72,8 @@ var graphMetrics = map[string][]GraphMetric{
 	CheckTypeICMP: {{Key: DataKeyLatencyMS, Unit: metrics.MetricUnitMilliseconds, Label: "Latency", Decimals: hundredthsDecimals}},
 	// The one raid number that is a magnitude rather than a state: the kernel's
 	// mismatch_cnt after a check/repair pass.
-	CheckTypeRAID: {{Key: DataKeyRaidMismatchCount, Unit: metrics.MetricUnitNone, Label: "Mismatch count"}},
+	CheckTypeRAID:        {{Key: DataKeyRaidMismatchCount, Unit: metrics.MetricUnitNone, Label: "Mismatch count"}},
+	CheckTypeReplication: {{Key: DataKeyBehindSeconds, Unit: metrics.MetricUnitSeconds, Label: "Behind source"}},
 
 	// The level checks: the figures an operator writes thresholds against. A check
 	// that computes a number every cycle and compares it to a limit is exactly a

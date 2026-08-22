@@ -145,19 +145,20 @@ const (
 	apiActionUnmonitor = "unmonitor"
 	// apiActionReap is deliberately not a service operation: it does not change
 	// unit state, so it gets its own branch rather than joining the engine path.
-	apiActionReap       = process.SectionReap
-	apiActionExpand     = "expand"
-	apiActionProbe      = "probe"
-	apiActionPause      = "pause"
-	apiActionPanicOn    = "on"
-	apiActionPanicOff   = "off"
-	apiActionRelease    = "release"
-	apiActionClear      = "clear"
-	apiActionCompact    = "compact"
-	apiActionAlert      = string(rules.ActionAlert)
-	apiActionTest       = "test"
-	apiActionClose      = "close"
-	apiActionCloseEmpty = "close-empty"
+	apiActionReap             = process.SectionReap
+	apiActionExpand           = "expand"
+	apiActionProbe            = "probe"
+	apiActionPause            = "pause"
+	apiActionReplicationStart = "replication-start"
+	apiActionPanicOn          = "on"
+	apiActionPanicOff         = "off"
+	apiActionRelease          = "release"
+	apiActionClear            = "clear"
+	apiActionCompact          = "compact"
+	apiActionAlert            = string(rules.ActionAlert)
+	apiActionTest             = "test"
+	apiActionClose            = "close"
+	apiActionCloseEmpty       = "close-empty"
 
 	queryBoolOne  = "1"
 	queryBoolTrue = "true"
@@ -523,11 +524,14 @@ type Watch struct {
 	CanProbe          bool              `json:"can_probe,omitempty"`
 	CanControlRAID    bool              `json:"can_control_raid,omitempty"`
 	RAIDArray         string            `json:"raid_array,omitempty"`
-	LastActivity      string            `json:"last_activity,omitempty"` // RFC3339 of last watch activity, if any
-	LastActivityKind  string            `json:"last_activity_kind,omitempty"`
-	LastCheckedAt     string            `json:"last_checked_at,omitempty"` // RFC3339 of latest completed check sample
-	SampleState       string            `json:"sample_state,omitempty"`    // collecting | fresh | stale
-	Probe             *WatchProbe       `json:"probe,omitempty"`           // current manual probe, if one is running
+	// CanControlReplication marks a replication watch whose manual start
+	// control is configured and startable by an admin.
+	CanControlReplication bool        `json:"can_control_replication,omitempty"`
+	LastActivity          string      `json:"last_activity,omitempty"` // RFC3339 of last watch activity, if any
+	LastActivityKind      string      `json:"last_activity_kind,omitempty"`
+	LastCheckedAt         string      `json:"last_checked_at,omitempty"` // RFC3339 of latest completed check sample
+	SampleState           string      `json:"sample_state,omitempty"`    // collecting | fresh | stale
+	Probe                 *WatchProbe `json:"probe,omitempty"`           // current manual probe, if one is running
 	// KeepsSLA marks a watch whose check asserts availability, so the dashboard
 	// draws it the same SLA section a service gets. A condition watch keeps none:
 	// its threshold being met is not downtime.
@@ -1178,6 +1182,8 @@ type Backend interface {
 	ProbeWatch(ctx context.Context, name string) ActionResult
 	// ControlRAID pauses or resumes a configured RAID reconstruction.
 	ControlRAID(ctx context.Context, name, action, confirmation string) ActionResult
+	// ControlReplication starts a stopped replica for a replication watch.
+	ControlReplication(ctx context.Context, name string) ActionResult
 	// DaemonInfo returns engine settings and basic daemon configuration.
 	DaemonInfo(ctx context.Context) DaemonInfo
 	// DaemonMetrics returns current and historical resource usage for sermod.
@@ -1201,7 +1207,7 @@ type Backend interface {
 
 // monitorActions and watchOperateActions are the non-operation action verbs the API accepts.
 var monitorActions = map[string]bool{apiActionMonitor: true, apiActionUnmonitor: true}
-var watchOperateActions = map[string]bool{apiActionExpand: true, apiActionProbe: true, apiActionPause: true, apiActionResume: true}
+var watchOperateActions = map[string]bool{apiActionExpand: true, apiActionProbe: true, apiActionPause: true, apiActionResume: true, apiActionReplicationStart: true}
 
 // defaultOperationTimeout matches operation.DefaultOperationTimeout when sermod
 // does not set OperationTimeout on the server.
@@ -2137,6 +2143,8 @@ func (s *Server) handleWatchAction(w http.ResponseWriter, r *http.Request) {
 			res = backend.ExpandWatch(s.operateContext(r), name) //nolint:contextcheck // see operateContext
 		case apiActionProbe:
 			res = backend.ProbeWatch(s.operateContext(r), name) //nolint:contextcheck // see operateContext
+		case apiActionReplicationStart:
+			res = backend.ControlReplication(s.operateContext(r), name) //nolint:contextcheck // see operateContext
 		default:
 			res = backend.ControlRAID(s.operateContext(r), name, action, r.Header.Get(headerSermoConfirm)) //nolint:contextcheck // see operateContext
 		}

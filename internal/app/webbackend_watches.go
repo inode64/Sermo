@@ -55,6 +55,7 @@ func (b *WebBackend) watchView(w *webWatch, system metrics.Snapshot, activity wa
 		Storage: storage, Swap: swap, Meter: meter, Readings: readings,
 		CanProbe:       !w.disabled && !w.serviceScoped && ManualProbeCheckType(w.checkType),
 		CanControlRAID: !w.disabled && w.raidControl, RAIDArray: cfgval.String(w.check[checks.CheckKeyArray]),
+		CanControlReplication: !w.disabled && w.replicationControl && w.checkType == checks.CheckTypeReplication,
 	}
 	b.applyWatchRuntimeView(&view, w, activity)
 	return view

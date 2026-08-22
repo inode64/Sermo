@@ -146,6 +146,9 @@ const (
 	watchReadingLabelHolders                  = "Top holders"
 	watchReadingLabelServer                   = "Server"
 	watchReadingLabelSize                     = "Size"
+	watchReadingLabelIOThread                 = "IO thread"
+	watchReadingLabelSQLThread                = "SQL thread"
+	watchReadingLabelBehind                   = "Behind"
 	watchReadingLabelSocket                   = "Socket"
 	watchReadingLabelSomeAvg10                = "Some avg10"
 	watchReadingLabelSomeAvg60                = "Some avg60"
@@ -401,6 +404,7 @@ var checkReadingsByType = map[string]func(map[string]any) []web.WatchReading{
 	checks.CheckTypeDiskIO:           diskioCheckReadings,
 	checks.CheckTypeSmart:            smartCheckReadings,
 	checks.CheckTypeRAID:             raidCheckReadings,
+	checks.CheckTypeReplication:      replicationCheckReadings,
 	checks.CheckTypeGlusterCluster:   glusterClusterCheckReadings,
 	checks.CheckTypeLVM:              lvmCheckReadings,
 	checks.CheckTypeNet:              netCheckReadings,
@@ -615,6 +619,31 @@ func raidStateText(data map[string]any, field, word string) string {
 		return fmt.Sprintf("%d %s", int(v), word)
 	}
 	return word
+}
+
+// replicationCheckReadings shows what a DBA asks first: where the data comes
+// from, whether both threads run (with the server's own last error when not),
+// and how far behind the replica is.
+func replicationCheckReadings(data map[string]any) []web.WatchReading {
+	return readingsFrom(data).
+		addString(checks.DataKeySourceHost, watchReadingLabelSource).
+		addString(checks.DataKeyConnections, watchReadingLabelConnections).
+		addState(checks.DataKeyIOStopped, watchReadingLabelIOThread, "running",
+			replicationStopText(data, checks.DataKeyLastIOError), false).
+		addState(checks.DataKeySQLStopped, watchReadingLabelSQLThread, "running",
+			replicationStopText(data, checks.DataKeyLastSQLError), false).
+		addMetric(checks.DataKeyBehindSeconds, watchReadingLabelBehind, watchReadingWholeDecimals, metrics.MetricUnitSeconds).
+		readings()
+}
+
+// replicationStopText is the red cell for a stopped thread: the word plus the
+// server's last error, which is the actionable half.
+func replicationStopText(data map[string]any, errKey string) string {
+	text := "stopped"
+	if errText := cfgval.String(data[errKey]); errText != "" {
+		text += ": " + errText
+	}
+	return text
 }
 
 func raidCheckReadings(data map[string]any) []web.WatchReading {
