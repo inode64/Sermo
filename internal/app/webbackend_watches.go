@@ -102,7 +102,7 @@ func (b *WebBackend) applyWatchRuntimeView(view *web.Watch, w *webWatch, activit
 	// The same declaration the recorder persists from, so a watch never offers a
 	// panel for a series nothing is writing.
 	if !w.disabled {
-		view.Metrics = webCheckMetrics(w.checkType, w.checkUnit)
+		view.Metrics = webCheckMetrics(w.checkType, w.checkUnit, w.bands)
 	}
 	observed := b.settling == nil || b.settling.Observed(SettlingWatchKey(w.name))
 	failed, warning := watchViewState(*view)

@@ -416,6 +416,30 @@ func CompareFloat(a float64, op string, b float64) bool {
 	}
 }
 
+// InvertCompareOp returns the operator whose truth is the exact negation of
+// op's: `a op b` is false precisely when `a InvertCompareOp(op) b` is true.
+// It turns a firing predicate into its OK-predicate — the shape a state band
+// needs when a check declares when to fire and the band needs when it is fine.
+// An unknown op inverts to "", which IsCompareOp rejects.
+func InvertCompareOp(op string) string {
+	switch op {
+	case CompareOpGreaterEqual:
+		return CompareOpLess
+	case CompareOpGreater:
+		return CompareOpLessEqual
+	case CompareOpLessEqual:
+		return CompareOpGreater
+	case CompareOpLess:
+		return CompareOpGreaterEqual
+	case CompareOpEqual:
+		return CompareOpNotEqual
+	case CompareOpNotEqual:
+		return CompareOpEqual
+	default:
+		return ""
+	}
+}
+
 // IsCompareOp reports whether op is one of the comparison operators every
 // {op, value} threshold accepts (>= > <= < == !=). Shared by config validation
 // and the runtime check builders so the threshold grammar cannot drift between

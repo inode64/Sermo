@@ -246,14 +246,16 @@ func (h *WebBackendHolder) Detail(ctx context.Context, name string) (web.Detail,
 	return webCallOK(h, web.Detail{}, func(b *WebBackend) (web.Detail, bool) { return b.Detail(ctx, name) })
 }
 
-// Series returns a service's (or one check's) SLA series from the active backend.
-func (h *WebBackendHolder) Series(ctx context.Context, name, check string, since time.Duration) ([]web.SeriesPoint, bool) {
-	return webCallOK(h, nil, func(b *WebBackend) ([]web.SeriesPoint, bool) { return b.Series(ctx, name, check, since) })
+// Series returns a service's (or one check's, or one band's) SLA series from
+// the active backend.
+func (h *WebBackendHolder) Series(ctx context.Context, name, check, metric string, since time.Duration) ([]web.SeriesPoint, bool) {
+	return webCallOK(h, nil, func(b *WebBackend) ([]web.SeriesPoint, bool) { return b.Series(ctx, name, check, metric, since) })
 }
 
-// WatchSeries returns a host watch's availability series from the active backend.
-func (h *WebBackendHolder) WatchSeries(ctx context.Context, name string, since time.Duration) ([]web.SeriesPoint, bool) {
-	return webCallOK(h, nil, func(b *WebBackend) ([]web.SeriesPoint, bool) { return b.WatchSeries(ctx, name, since) })
+// WatchSeries returns a host watch's availability or band series from the
+// active backend.
+func (h *WebBackendHolder) WatchSeries(ctx context.Context, name, metric string, since time.Duration) ([]web.SeriesPoint, bool) {
+	return webCallOK(h, nil, func(b *WebBackend) ([]web.SeriesPoint, bool) { return b.WatchSeries(ctx, name, metric, since) })
 }
 
 // WatchMetrics returns one of a host watch's metric series from the active backend.

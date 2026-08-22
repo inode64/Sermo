@@ -3509,23 +3509,47 @@ async function loadServiceWindowGraph(name, generation, url, render, fail) {
 function watchSLAKey(name) { return expansionKey(expansionPrefixWatch, name); }
 function appSLAKey(name) { return expansionKey(expansionPrefixApp, name); }
 
+// Band panel keys. A state band is one metric of one target, so its key carries
+// both; the metric is split off metric-last (lastIndexOf) because watch names
+// may themselves contain ":" (service-scoped watches), while band metric keys
+// never do. Prefixes deliberately distinct from every expansion prefix.
+const bandKeyPrefixWatch = "watband:";
+const bandKeyPrefixService = "svcband:";
+function watchBandKey(name, metric) { return `${bandKeyPrefixWatch}${name}:${metric}`; }
+function svcBandKey(service, check, metric) { return `${bandKeyPrefixService}${service}:${check}:${metric}`; }
+function splitBandKey(rest) {
+  const cut = rest.lastIndexOf(":");
+  return [rest.slice(0, cut), rest.slice(cut + 1)];
+}
+
 // slaPanelAPI builds one panel's request from its key. A watch reads its own
 // series; an application has none of its own and reads the series of the service
 // it maps to, which is where its availability comes from in the first place.
 function slaPanelAPI(key, win) {
   if (isWatchExpansionKey(key)) return watchSLAAPI(expansionName(key, expansionPrefixWatch), win);
   if (isAppExpansionKey(key)) return serviceSLAAPI(expansionName(key, expansionPrefixApp), win);
+  if (key.startsWith(bandKeyPrefixWatch)) {
+    const [name, metric] = splitBandKey(key.slice(bandKeyPrefixWatch.length));
+    return watchSLAAPI(name, win, metric);
+  }
+  if (key.startsWith(bandKeyPrefixService)) {
+    const [target, metric] = splitBandKey(key.slice(bandKeyPrefixService.length));
+    const cut = target.indexOf(":");
+    return serviceSLAAPI(target.slice(0, cut), win, target.slice(cut + 1), metric);
+  }
   return serviceSLAAPI(key, win);
 }
 
 // slaChartPanel is the SLA timeline panel itself — one markup, whether it stands
-// alone in a watch or application expansion or sits beside the other graphs of a
-// service detail. Availability must read the same wherever it is shown, and a
-// second rendering of the same figure would be one more thing to keep in step.
-function slaChartPanel(key) {
-  return tpl`<div class="metric-panel metric-panel-wide">
+// alone in a watch or application expansion, sits beside the other graphs of a
+// service detail, or carries a state band. Availability and state must read the
+// same wherever they are shown, and a second rendering of the same figure would
+// be one more thing to keep in step. opts.title renames the head for a band
+// panel; opts.tag stamps data-band-metric for selectors and tests.
+function slaChartPanel(key, opts = {}) {
+  return tpl`<div class="metric-panel metric-panel-wide" data-band-metric="${opts.tag || nothing}">
     <div class="sla-chart-head">
-      <span class="metric-title">SLA timeline</span>
+      <span class="metric-title">${opts.title || "SLA timeline"}</span>
       <span id="${detailDomId(key, "sla-summary")}" class="muted">loading...</span>
     </div>
     <div class="sla-panel">
@@ -3598,10 +3622,15 @@ function watchMetricDomID(watch, metric, suffix) {
 // renderWatchMetricsSection draws a watch's numeric readings as graphs, with the
 // panel, selector and chart a service check's metric gets. The two differ only in
 // the series they request: a watch has one check, so ?metric= alone names it.
+// A state band renders through the availability panel instead of a line chart —
+// a line through a boolean draws slopes that never happened — on the same Graphs
+// window selector.
 function renderWatchMetricsSection(w) {
   const list = (w && w.metrics) || [];
   if (!list.length) return nothing;
-  const panels = list.map((metric) => tpl`<div class="metric-panel" data-watch-metric="${metric.name}">
+  const panels = list.map((metric) => metric.band
+    ? slaChartPanel(watchBandKey(w.name, metric.name), { title: metric.label || watchMetricLabel(metric), tag: metric.name })
+    : tpl`<div class="metric-panel" data-watch-metric="${metric.name}">
     ${metricPanelBody(watchMetricDomID(w.name, metric.name, "summary"), watchMetricDomID(w.name, metric.name, "chart"),
       watchMetricLabel(metric))}
   </div>`);
@@ -3622,12 +3651,15 @@ function loadWatchMetrics(w, generation = dashboardGeneration) {
   const list = (w && w.metrics) || [];
   if (!list.length) return Promise.resolve(true);
   const key = watchMetricsWindowKey(w.name);
-  return Promise.all(list.map((metric) => loadMetricPanel(key,
-    watchMetricDomID(w.name, metric.name, "summary"), watchMetricDomID(w.name, metric.name, "chart"),
-    generation,
-    (win) => watchMetricsAPI(w.name, metric.name, win),
-    (body, win) => metricPanelContent(body, metric.unit, win, `${watchMetricLabel(metric)} chart`),
-    watchMetricLabel(metric)))).then((results) => results.every(Boolean));
+  return Promise.all(list.map((metric) => metric.band
+    ? loadSLAPanel(watchBandKey(w.name, metric.name), generation,
+      { windowKey: key, warn: metric.severity === targetStateWarning })
+    : loadMetricPanel(key,
+      watchMetricDomID(w.name, metric.name, "summary"), watchMetricDomID(w.name, metric.name, "chart"),
+      generation,
+      (win) => watchMetricsAPI(w.name, metric.name, win),
+      (body, win) => metricPanelContent(body, metric.unit, win, `${watchMetricLabel(metric)} chart`),
+      watchMetricLabel(metric)))).then((results) => results.every(Boolean));
 }
 
 // setWatchMetricWin moves a watch's graph window. Its availability section keeps
@@ -3647,15 +3679,18 @@ function renderSLASection(key) {
     <div class="metric-grid">${slaChartPanel(key)}</div>`;
 }
 
-// loadSLAPanel fills one availability panel through the fetch protocol every
-// windowed graph shares. The three surfaces differ only in the request
+// loadSLAPanel fills one availability or state-band panel through the fetch
+// protocol every windowed graph shares. The surfaces differ only in the request
 // slaPanelAPI builds, so their panels cannot drift apart in what they draw.
-function loadSLAPanel(key, generation = dashboardGeneration) {
-  return loadMetricPanel(key, detailDomId(key, "sla-summary"), detailDomId(key, "sla-chart"), generation,
+// opts.windowKey lets a band panel follow another selector's window (a watch's
+// Graphs selector moves its bands too); opts.warn caps the failing colour at
+// amber for warning-severity bands.
+function loadSLAPanel(key, generation = dashboardGeneration, opts = {}) {
+  return loadMetricPanel(opts.windowKey || key, detailDomId(key, "sla-summary"), detailDomId(key, "sla-chart"), generation,
     (win) => slaPanelAPI(key, win),
     (body, win) => {
       const points = body.points || [];
-      return { summary: slaTimelineSummary(points), chart: drawSLAChart(points, win) };
+      return { summary: slaTimelineSummary(points), chart: drawSLAChart(points, win, opts) };
     },
     "SLA");
 }
@@ -3685,7 +3720,7 @@ function loadCheckSLA(service, check, generation = dashboardGeneration) {
 //
 // Both scopes render through here so a check can never present a window as a
 // flat availability figure while the service shows the same window's gaps.
-function slaStrip(points, win) {
+function slaStrip(points, win, opts = {}) {
   const cols = slaBarCount;
   const span = windowMs[win || defaultMetricWindow] || millisecondsPerDay;
   const endMs = Date.now();
@@ -3722,7 +3757,11 @@ function slaStrip(points, win) {
     const tip = held
       ? `${when} · ${pctText} · held (no sample this sub-span)`
       : `${when} · ${pctText} · ${b.up}/${b.total} · ${affected}`;
-    return `<span class="sla-bar-seg ${slaDownBand(cell.down)}" title="${esc(tip)}" aria-label="${esc(when)}: ${esc(pctText)} available, ${esc(affected)}${held ? " (held)" : ""}"></span>`;
+    // A warning-severity state band caps its failing colour at amber
+    // (sla-down-low is the warn token): a RAID array rebuilding is a thing to
+    // watch, not an outage, and red is reserved for the bands that mean one.
+    const band = opts.warn && cell.down > 0 ? "sla-down-low" : slaDownBand(cell.down);
+    return `<span class="sla-bar-seg ${band}" title="${esc(tip)}" aria-label="${esc(when)}: ${esc(pctText)} available, ${esc(affected)}${held ? " (held)" : ""}"></span>`;
   }).join("");
   const incidents = slaIncidentPoints(points, startMs, endMs);
   const affectedMinutes = slaAffectedMinutes(incidents);
@@ -3736,8 +3775,8 @@ function slaStrip(points, win) {
 
 // drawSLAChart renders the service detail SLA panel: the shared band plus its
 // axis, screen-reader table and incident list.
-function drawSLAChart(points, win) {
-  const strip = slaStrip(points, win);
+function drawSLAChart(points, win, opts = {}) {
+  const strip = slaStrip(points, win, opts);
   if (strip == null) return slaNoWindowData;
   return `${slaChartDataTable(strip.observed)}${strip.band}` +
     `<div class="sla-bars-axis"><span>${esc(fmtTime(strip.startMs))}</span><span>now</span></div>` +
@@ -3795,6 +3834,9 @@ function serviceCheckMetrics(d) {
     check: check.name,
     name: metric.name,
     unit: metric.unit,
+    band: !!metric.band,
+    severity: metric.severity || "",
+    label: metric.label || "",
   })));
 }
 
@@ -4231,7 +4273,10 @@ function serviceGraphDetail(d) {
   const runtimeGraphPanels = noResidentProcess
     ? nothing
     : runtimeMetricPanels((key, suffix) => serviceRuntimeMetricDomID(d.name, key, suffix));
-  const checkMetricPanels = checkMetrics.map((metric) => tpl`<div class="metric-panel" data-service-metric-check="${metric.check}" data-service-metric-name="${metric.name}">
+  const checkMetricPanels = checkMetrics.map((metric) => metric.band
+    ? slaChartPanel(svcBandKey(d.name, metric.check, metric.name),
+      { title: metric.label || serviceCheckMetricLabel(metric), tag: metric.name })
+    : tpl`<div class="metric-panel" data-service-metric-check="${metric.check}" data-service-metric-name="${metric.name}">
     ${metricPanelBody(serviceCheckMetricDomID(d.name, metric.check, metric.name, "summary"),
       serviceCheckMetricDomID(d.name, metric.check, metric.name, "chart"), serviceCheckMetricLabel(metric))}
   </div>`);
@@ -4314,7 +4359,10 @@ async function refreshServiceGraphs(d, generation = dashboardGeneration) {
   syncWindowButtons("setMetricWin", serviceMetricState(d.name).window, d.name);
   const pending = [loadSLAPanel(d.name, generation)];
   pending.push(...serviceSLAChecks(d).map((c) => loadCheckSLA(d.name, c.name, generation)));
-  pending.push(...checkMetrics.map((metric) => loadCheckMetric(d.name, metric, generation)));
+  pending.push(...checkMetrics.map((metric) => metric.band
+    ? loadSLAPanel(svcBandKey(d.name, metric.check, metric.name), generation,
+      { windowKey: d.name, warn: metric.severity === targetStateWarning })
+    : loadCheckMetric(d.name, metric, generation)));
   if (!d.no_resident_process) {
     if (measured.length) pending.push(loadMetrics(d.name, measured, generation));
     pending.push(loadServiceRuntimeMetrics(d.name, generation));

@@ -290,6 +290,7 @@ func buildSingleWatch(name string, entry, checkEntry map[string]any, deps Deps, 
 		name:      name,
 		checkType: typ,
 		unit:      cfgval.AsString(checkEntry[checks.CheckKeyUnit]),
+		bands:     checks.DeclaredBandMetrics(typ, checkEntry),
 		check:     check,
 		window:    rules.ParseWindowRule(entry),
 		actions:   actions,
@@ -389,6 +390,7 @@ func buildMetricWatches(name string, entry, checkEntry map[string]any, deps Deps
 			name:      name,
 			checkType: cfgval.AsString(checkEntry[checks.CheckKeyType]),
 			unit:      cfgval.AsString(checkEntry[checks.CheckKeyUnit]),
+			bands:     checks.DeclaredBandMetrics(cfgval.AsString(checkEntry[checks.CheckKeyType]), checkEntry),
 			check:     check,
 			window:    rules.ParseWindowRule(mEntry),
 			actions:   actions,
@@ -431,7 +433,11 @@ type checkWatchSpec struct {
 	checkType string
 	// unit is the check block's `unit:`, which names the scalar the check
 	// publishes under `value` — the one metric whose unit cannot be static.
-	unit      string
+	unit string
+	// bands are the check's state metrics, resolved from the registry and the
+	// check's own `bands:` block. They record as per-cycle OK samples rather
+	// than values, and their keys leave the line-metric set.
+	bands     []checks.BandMetric
 	check     checks.Check
 	window    rules.Rule
 	actions   watchActions
@@ -472,7 +478,7 @@ func newCheckWatch(spec checkWatchSpec, deps Deps) *Watch {
 		Emit:               deps.Emit,
 		Publish:            publishWatchSnapshots(deps.WatchSnapshots),
 		RecordAvailability: watchAvailabilityRecorder(deps, spec.name),
-		RecordMetrics:      watchMetricRecorder(deps, spec.name, spec.checkType, spec.unit),
+		RecordMetrics:      watchMetricRecorder(deps, spec.name, spec.checkType, spec.unit, spec.bands),
 		StateStore:         deps.WatchState,
 		StateSlot:          spec.stateSlot,
 	}
@@ -512,6 +518,7 @@ func buildFileWatch(name string, entry, checkEntry map[string]any, deps Deps, in
 		runner:        OSHookRunner{Runner: deps.ExecxRunner},
 		emit:          deps.Emit,
 		publish:       publishWatchSnapshots(deps.WatchSnapshots),
+		recordBand:    fileBandRecorder(deps, name, checkEntry),
 		now:           deps.Now,
 	}
 	return newStatefulWatch(name, checks.CheckTypeFile, entry, deps, interval, fw.runCycle), ""
@@ -1155,6 +1162,25 @@ func watchAvailabilityRecorder(deps Deps, name string) func(bool, time.Time) {
 	}
 }
 
+// fileBandRecorder returns the state-series sink for a file watch's size
+// threshold, or nil when the daemon persists nothing or the watch derives no
+// band (no size predicate). Keyed exactly like a check watch's bands, so the
+// read path is the same code.
+func fileBandRecorder(deps Deps, name string, checkEntry map[string]any) func(bool, time.Time) {
+	if deps.SLA == nil {
+		return nil
+	}
+	bands := checks.DeclaredBandMetrics(checks.CheckTypeFile, checkEntry)
+	if len(bands) == 0 {
+		return nil
+	}
+	key := WatchMonitorKey(name)
+	metric := bands[0].Key
+	return func(ok bool, at time.Time) {
+		_ = deps.SLA.RecordCheckSLA(key, metric, ok, at)
+	}
+}
+
 // watchMetricRecorder returns the numeric-series sink for one watch, or nil when
 // the daemon persists no measurements or the watch's check publishes no graphable
 // number.
@@ -1164,13 +1190,16 @@ func watchAvailabilityRecorder(deps Deps, name string) func(bool, time.Time) {
 // names the series the way a service's check name does. Errors are swallowed on
 // the same grounds availability swallows them: a full disk must not stop a
 // threshold from firing.
-func watchMetricRecorder(deps Deps, name, checkType, unit string) func(map[string]any, time.Time) {
-	recorder, ok := deps.SLA.(MeasurementRecorder)
-	if !ok || recorder == nil {
-		return nil
+func watchMetricRecorder(deps Deps, name, checkType, unit string, bands []checks.BandMetric) func(map[string]any, time.Time) {
+	recorder, _ := deps.SLA.(MeasurementRecorder)
+	graphs := withoutBandKeys(checks.DeclaredGraphMetrics(checkType, unit), checks.BandKeys(bands))
+	if recorder == nil {
+		graphs = nil
 	}
-	graphs := checks.DeclaredGraphMetrics(checkType, unit)
-	if len(graphs) == 0 {
+	if deps.SLA == nil {
+		bands = nil
+	}
+	if len(graphs) == 0 && len(bands) == 0 {
 		return nil
 	}
 	key := WatchMonitorKey(name)
@@ -1178,7 +1207,27 @@ func watchMetricRecorder(deps Deps, name, checkType, unit string) func(map[strin
 		eachGraphMetricSample(graphs, data, func(metric string, value float64) {
 			_ = recorder.RecordMetric(key, checkType, metric, value, at)
 		})
+		// A band records the state, not the value: one OK sample per cycle,
+		// keyed like a service check's SLA so the read path is the same code.
+		eachBandSample(bands, data, func(metric string, ok bool) {
+			_ = deps.SLA.RecordCheckSLA(key, metric, ok, at)
+		})
 	}
+}
+
+// withoutBandKeys drops the graph metrics a check has banded: a state is drawn
+// as a band or as a line, never both, so the value series simply stops.
+func withoutBandKeys(graphs []checks.GraphMetric, banded map[string]bool) []checks.GraphMetric {
+	if len(banded) == 0 {
+		return graphs
+	}
+	out := graphs[:0]
+	for _, g := range graphs {
+		if !banded[g.Key] {
+			out = append(out, g)
+		}
+	}
+	return out
 }
 
 func publishWatchSnapshots(s *WatchSnapshots) func(string, string, checks.Result) {

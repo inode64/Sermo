@@ -11,13 +11,20 @@ import (
 	"sermo/internal/web"
 )
 
-// Series returns a service's SLA availability series over the window, or one of
-// its checks' when check is non-empty. Both scopes share this one path so the
-// service and check timelines cannot drift apart in how they report gaps.
-func (b *WebBackend) Series(_ context.Context, name, check string, since time.Duration) ([]web.SeriesPoint, bool) {
+// Series returns a service's SLA availability series over the window; one of
+// its checks' when check is non-empty; or one check's state-band series when
+// metric names a declared band. All three share this one path so the timelines
+// cannot drift apart in how they report gaps.
+func (b *WebBackend) Series(_ context.Context, name, check, metric string, since time.Duration) ([]web.SeriesPoint, bool) {
 	entry := b.entries[name]
 	if entry == nil {
 		return nil, false
+	}
+	if metric != "" {
+		if check == "" || !checkBandDeclared(entry.checkBands[check], metric) {
+			return nil, false
+		}
+		return b.availabilitySeries(name, bandSeriesName(check, metric), since), true
 	}
 	if check != "" {
 		if _, ok := entry.checkTypes[check]; !ok {
@@ -34,18 +41,42 @@ func (b *WebBackend) Series(_ context.Context, name, check string, since time.Du
 	return b.availabilitySeries(name, check, since), true
 }
 
-// WatchSeries returns a host watch's per-minute availability history over since,
-// in the same shape the service series uses so the dashboard renders both
-// through one path. ok is false for an unknown watch and for one whose check
-// asserts no availability — a condition watch has no uptime to serve, and
-// withholding it here rather than only hiding it keeps the API from implying a
-// figure the check never claimed.
-func (b *WebBackend) WatchSeries(_ context.Context, name string, since time.Duration) ([]web.SeriesPoint, bool) {
+// WatchSeries returns a host watch's per-minute availability history over
+// since, or one of its state bands' when metric names a declared band, in the
+// same shape the service series uses so the dashboard renders both through one
+// path. ok is false for an unknown watch, for an availability request on a
+// watch whose check asserts none — a condition watch has no uptime to serve,
+// and withholding it here rather than only hiding it keeps the API from
+// implying a figure the check never claimed — and for an undeclared band.
+//
+// The band branch deliberately does not require availability: a file watch
+// keeps no uptime at all, and its size band is exactly the series it does keep.
+func (b *WebBackend) WatchSeries(_ context.Context, name, metric string, since time.Duration) ([]web.SeriesPoint, bool) {
 	w := b.watches[name]
-	if w == nil || w.disabled || !watchRecordsAvailability(w) {
+	if w == nil || w.disabled {
+		return nil, false
+	}
+	if metric != "" {
+		if !checkBandDeclared(w.bands, metric) {
+			return nil, false
+		}
+		return b.availabilitySeries(WatchMonitorKey(name), metric, since), true
+	}
+	if !watchRecordsAvailability(w) {
 		return nil, false
 	}
 	return b.availabilitySeries(WatchMonitorKey(name), "", since), true
+}
+
+// checkBandDeclared reports whether metric is one of the check's declared state
+// bands — the gate that keeps the API from serving a series nothing records.
+func checkBandDeclared(bands []checks.BandMetric, metric string) bool {
+	for _, b := range bands {
+		if b.Key == metric {
+			return true
+		}
+	}
+	return false
 }
 
 // availabilitySeries reads one availability series and renders it as the wire
