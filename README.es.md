@@ -48,8 +48,8 @@ actuar**:
   conectividad y consultas de bases de datos (MySQL/MariaDB, MongoDB, InfluxDB,
   integridad SQLite, SQL arbitrario), interfaz de salida, ruta por defecto,
   reglas de firewall, deriva de reloj, crecimiento de tamaño de ficheros/dirs,
-  rendimiento de disco (`hdparm`), sensores de hardware, montajes autofs y
-  métricas de proceso/conteo.
+  rendimiento de disco (`hdparm`), sensores de hardware y métricas de
+  proceso/conteo.
 - **Interdependencias entre checks** (`requires` / `skip_when_changed`) para que
   un probe solo se ejecute cuando se cumplen sus prerrequisitos.
 - **Host watches** — vigilan recursos que no son servicios (montajes, arrays

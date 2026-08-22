@@ -131,7 +131,6 @@ func conditionValueOr(value, fallback string) string {
 
 var watchTypeConditionBuilders = map[string]func(map[string]any) []web.WatchCondition{
 	checks.CheckTypeRAID:          raidWatchConditions,
-	checks.CheckTypeAutofs:        autofsWatchConditions,
 	checks.CheckTypeCount:         countWatchConditions,
 	checks.CheckTypeFile:          fileWatchConditions,
 	checks.CheckTypeProcess:       processWatchConditions,
@@ -145,16 +144,6 @@ var watchTypeConditionBuilders = map[string]func(map[string]any) []web.WatchCond
 func raidWatchConditions(check map[string]any) []web.WatchCondition {
 	out := appendValue(nil, checks.DataKeyArray, cfgval.AsString(check[checks.CheckKeyArray]))
 	return appendEnabledFlag(out, check, checks.CheckKeySysfsChanges, checks.CheckKeySysfsChanges)
-}
-
-func autofsWatchConditions(check map[string]any) []web.WatchCondition {
-	if path := cfgval.AsString(check[checks.CheckKeyPath]); path != "" {
-		return []web.WatchCondition{{Field: checks.DataKeyPath, Op: cfgval.CompareOpEqual, Value: path}}
-	}
-	if _, ok := check[checks.CheckKeyCount].(map[string]any); !ok {
-		return []web.WatchCondition{{Field: checks.DataKeyCount, Op: cfgval.CompareOpGreaterEqual, Value: watchConditionDefaultMinimum}}
-	}
-	return nil
 }
 
 func countWatchConditions(check map[string]any) []web.WatchCondition {
@@ -272,8 +261,6 @@ func watchConditionFields(check map[string]any) []string {
 		return checks.LVMPredFields
 	case checks.CheckTypeEDAC:
 		return checks.EdacPredFields
-	case checks.CheckTypeAutofs:
-		return []string{checks.CheckKeyCount}
 	default:
 		return nil
 	}

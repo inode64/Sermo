@@ -890,7 +890,6 @@ var singleShotCheckValidators = map[string]singleShotCheckValidator{
 	checks.CheckTypeMetric:           validateSingleShotMetric,
 	checks.CheckTypeCount:            validateSingleShotCount,
 	checks.CheckTypeStorage:          singleShotNoLock(validateStorageFields),
-	checks.CheckTypeAutofs:           singleShotNoLock(validateAutofsFields),
 	checks.CheckTypeLoad:             singleShotNoLock(validateLoadFields),
 	checks.CheckTypeUsers:            singleShotThreshold(checks.UsersPredFields),
 	checks.CheckTypeSSHIdle:          validateSSHIdleCheck,
@@ -1478,25 +1477,6 @@ func validateWebsocketFields(prefix string, fields map[string]any, add addFunc) 
 	case checks.URLSchemeWS, checks.URLSchemeWSS, checks.URLSchemeHTTP, checks.URLSchemeHTTPS:
 	default:
 		add("%s.url scheme must be %s", prefix, checks.WebsocketURLSchemeSummary)
-	}
-}
-
-// validateAutofsFields validates an autofs check: an optional count {op, value}
-// predicate, mutually exclusive with path.
-func validateAutofsFields(prefix string, fields map[string]any, add addFunc) {
-	count, hasCount := fields[checks.CheckKeyCount].(map[string]any)
-	if !hasCount {
-		return
-	}
-	if cfgval.String(fields[checks.CheckKeyPath]) != "" {
-		add("%s: path and count are mutually exclusive", prefix)
-	}
-	op := cfgval.String(count[checks.CheckKeyOp])
-	if !cfgval.IsCompareOp(op) {
-		add("%s.count.op %q is not one of %s", prefix, op, cfgval.CompareOpSummary)
-	}
-	if !isNumeric(cfgval.String(count[checks.CheckKeyValue])) {
-		add("%s.count.value must be numeric", prefix)
 	}
 }
 

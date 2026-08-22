@@ -228,10 +228,6 @@ func hasIssueContaining(issues []Issue, substr string) bool {
 func TestValidateWatchesSingleShotParity(t *testing.T) {
 	assertNoWatchIssues(t, map[string]any{
 		"watches": map[string]any{
-			"automount": map[string]any{
-				"check": map[string]any{"type": "autofs"},
-				"then":  map[string]any{"hook": map[string]any{"command": []any{"/usr/local/bin/autofs.sh"}}},
-			},
 			"sqlite": map[string]any{
 				"check": map[string]any{"type": "sqlite", "path": "/var/lib/app/app.db"},
 				"then":  map[string]any{"hook": map[string]any{"command": []any{"/usr/local/bin/sqlite.sh"}}},

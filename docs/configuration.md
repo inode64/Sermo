@@ -2162,7 +2162,7 @@ be combined with `then.notify_interval`.
 host-resource ones below (`storage`, `memory`, `pressure`, `load`, `fds`,
 `pids`, `conntrack`, `entropy`, `zombies`, `oom`, `failed_units`, `inotify`, among others) *and* the
 service checks (`tcp`, `tcp_connections`, `ssh_idle`, `terminal_sessions`, `ports`, `http`, `command`, `file_exists`, `file`,
-`lockfile`, `binary`, `pidfile`, `socket`, `libraries`, `config`, `autofs`,
+`lockfile`, `binary`, `pidfile`, `socket`, `libraries`, `config`,
 `route`, `clock`, `firewall_rules`, `cert`, `sqlite`/`sqlite3`, `websocket`,
 `count`, and connection-protocol checks such as `mysql`/`smtp`) — can be used as
 a watch here, and the host-resource ones can equally be used in a service's

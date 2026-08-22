@@ -60,7 +60,6 @@ const (
 	CheckTypeLibraries        = "libraries"
 	CheckTypeCount            = "count"
 	CheckTypeStorage          = "storage"
-	CheckTypeAutofs           = "autofs"
 	CheckTypeLoad             = "load"
 	CheckTypeUsers            = "users"
 	CheckTypeSSHIdle          = "ssh_idle"

@@ -738,8 +738,8 @@ func TestBuildWatchesServiceCheckAsWatch(t *testing.T) {
 			"check": map[string]any{"type": "websocket", "url": "ws://127.0.0.1/ws"},
 			"then":  map[string]any{"hook": map[string]any{"command": []any{"/z.sh"}}},
 		},
-		"automount": map[string]any{
-			"check": map[string]any{"type": "autofs"},
+		"gateway": map[string]any{
+			"check": map[string]any{"type": "route"},
 			"then":  map[string]any{"hook": map[string]any{"command": []any{"/a.sh"}}},
 		},
 	})
@@ -754,7 +754,7 @@ func TestBuildWatchesServiceCheckAsWatch(t *testing.T) {
 	if h := byName["health"]; h == nil || !h.FireOnFail {
 		t.Fatalf("a tcp (health) watch should fire on failure: %+v", h)
 	}
-	for _, name := range []string{"ws", "automount"} {
+	for _, name := range []string{"ws", "gateway"} {
 		if h := byName[name]; h == nil || !h.FireOnFail {
 			t.Fatalf("%s health watch should fire on failure: %+v", name, h)
 		}

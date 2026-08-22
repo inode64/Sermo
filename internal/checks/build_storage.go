@@ -87,27 +87,6 @@ func buildStorageCheck(b base, entry map[string]any, deps Deps) (Check, string) 
 	return storageCheck{base: b, path: path, preds: preds, usage: deps.StorageUsage, mount: mount, mountSampler: deps.MountSampler}, ""
 }
 
-// buildAutofsCheck builds an autofs automounter check.
-func buildAutofsCheck(b base, entry map[string]any, deps Deps) (Check, string) {
-	path := cfgval.AsString(entry[CheckKeyPath])
-	op, value := "", 0.0
-	if m, ok := entry[CheckKeyCount].(map[string]any); ok {
-		op = cfgval.AsString(m[CheckKeyOp])
-		if !cfgval.IsCompareOp(op) {
-			return nil, "autofs check count has an invalid op (>=, >, <=, <, ==, !=)"
-		}
-		v, err := strconv.ParseFloat(cfgval.String(m[CheckKeyValue]), numericBits64)
-		if err != nil {
-			return nil, "autofs check count value must be numeric"
-		}
-		value = v
-	}
-	if path != "" && op != "" {
-		return nil, "autofs check: path and count are mutually exclusive"
-	}
-	return autofsCheck{base: b, path: path, op: op, value: value, sampler: deps.MountSampler}, ""
-}
-
 // buildSizeCheck builds a path-growth check over a time window.
 func buildSizeCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 	path, errs := requireCheckPath(entry, CheckTypeSize)

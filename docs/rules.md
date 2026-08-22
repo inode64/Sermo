@@ -31,7 +31,6 @@
   - [Missing devices](#missing-devices)
   - [What a device that stopped answering still reports](#what-a-device-that-stopped-answering-still-reports)
   - [Hardware sensors](#hardware-sensors)
-  - [Autofs](#autofs)
   - [Count](#count)
 - [Metrics](#metrics)
 - [Rules](#rules)
@@ -71,7 +70,6 @@ Connection-protocol checks (MySQL, PostgreSQL, Redis, Docker, libvirt, etc.) are
 | `metric`      | a sampled metric satisfies `op value` (see Metrics)                |
 | `count`       | the number of entries in a directory satisfies `op value` (see Count)|
 | `storage`     | a filesystem's space/inode predicates hold (`*_pct` accepts `%`; `*_bytes` requires K/M/G/T) |
-| `autofs`      | the autofs automounter is active (autofs mountpoints present — `path`/`count`) (see Autofs)|
 | `load`        | a load-average threshold holds (load1/load5/load15, optional per_cpu)|
 | `users`       | the count of logged-in users (from utmp) satisfies `count {op, value}`|
 | `process_count` | the number of processes (host-wide, or filtered by `user`/`exe`/`exe_dir`) satisfies `count {op, value}`|
@@ -456,7 +454,7 @@ figure worth plotting: the limit says when to look, and the graph says what led
 there. Every level check therefore graphs the numbers it already publishes —
 `storage` its used and inode percentages, `load` its three averages, `diskio` its
 utilisation, throughput and await, `memory`, `swap`, `fds`, `pids`, `conntrack`,
-`pressure`, `inotify`, `entropy`, `zombies`, `raid`, `lvm`, `count`, `autofs`,
+`pressure`, `inotify`, `entropy`, `zombies`, `raid`, `lvm`, `count`,
 `failed_units`, `firewall_rules`, `size` and `clock` theirs — with no
 configuration at all.
 
@@ -2068,7 +2066,7 @@ condition-style — `OK == true` means there is a problem — so in rules
 `active: {check: x}` fires on it, and as a watch the hook fires on it.
 The health checks (`tcp`, `ports`, `http`, `command`, `service`, `file_exists`,
 `file`, `lockfile`, `binary`, `pidfile`, `socket`, `process`, `libraries`, `config`,
-`autofs`, `route`, `clock`, `firewall_rules`, `cert`, `sqlite`/`sqlite3`,
+`route`, `clock`, `firewall_rules`, `cert`, `sqlite`/`sqlite3`,
 `websocket`, and connection-protocol checks such as `mysql`/`smtp`) are the
 opposite (`OK == true` is healthy), so as a watch they fire the hook on
 **failure**.
@@ -2514,38 +2512,6 @@ detail so gradual degradation is visible.
       type: edac
       ce: { op: ">", value: 100 }          # also alert on many correctable errors
   ```
-
-### Autofs
-
-The `autofs` check verifies the autofs **automounter** (`automount`) is active.
-autofs has no socket or port — the daemon talks to the kernel over an internal
-pipe — so the liveness signal is the **mount table**: while `automount` runs it
-maintains its configured map roots as `autofs`-type mountpoints in
-`/proc/mounts` (they disappear when the daemon stops). Unlike `storage`/`count`,
-this is a **health** check: it passes (OK) when the automounter is active as
-configured, and fails when it is not.
-
-```yaml
-checks:
-  automounter:
-    type: autofs                  # with no path/count: require >= 1 autofs mountpoint
-  home-automount:
-    type: autofs
-    path: /home                   # require this exact autofs mountpoint to be active
-  all-maps:
-    type: autofs
-    count: { op: ">=", value: 3 } # require at least 3 autofs mountpoints
-```
-
-- With **no `path` and no `count`**, the check passes when at least one autofs
-  mountpoint is present (the automounter is running with maps).
-- **`path`** requires that exact mountpoint to be an active autofs mount.
-- **`count` `{op, value}`** compares the number of autofs mountpoints (`op` is one
-  of `>=, >, <=, <, ==, !=`). `path` and `count` are mutually exclusive.
-- Result data carries the `count` of autofs mountpoints and the comma-joined
-  `mountpoints`. On-demand mounts triggered by access appear under these roots as
-  their real filesystem (e.g. `nfs`), not as `autofs`, so they are not counted —
-  the check tracks the map roots, i.e. that the automounter itself is up.
 
 ### Count
 

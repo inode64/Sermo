@@ -2235,7 +2235,7 @@ Cualquier comprobación de un solo disparo — las de recursos de host de abajo
 (`storage`, `memory`, `pressure`, `load`, `fds`, `pids`, `conntrack`, `entropy`,
 `zombies`, `oom`, `failed_units`, `inotify`, entre otras) *y* las comprobaciones de service (`tcp`, `tcp_connections`, `ssh_idle`,
 `ports`, `http`, `command`, `file_exists`, `file`, `lockfile`, `binary`,
-`pidfile`, `socket`, `libraries`, `config`, `autofs`, `route`, `clock`,
+`pidfile`, `socket`, `libraries`, `config`, `route`, `clock`,
 `firewall_rules`, `cert`, `sqlite`/`sqlite3`, `websocket`, `count`, y las
 comprobaciones de protocolo de conexión como `mysql`/`smtp`) — pueden usarse
 como un watch aquí, y las de recursos de host pueden igualmente usarse como

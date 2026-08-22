@@ -1139,11 +1139,11 @@ func TestWebBackendLibrariesInspectInstalledCatalogFiles(t *testing.T) {
 
 func TestWebBackendWatchPolarityUsesSharedHealthTypes(t *testing.T) {
 	cfg := cfgWithWatches(map[string]any{
-		"autofs": map[string]any{"check": map[string]any{"type": "autofs"}},
-		"count":  map[string]any{"check": map[string]any{"type": "count"}},
-		"mysql":  map[string]any{"check": map[string]any{"type": "mysql"}},
-		"ports":  map[string]any{"check": map[string]any{"type": "ports"}},
-		"ws":     map[string]any{"check": map[string]any{"type": "websocket"}},
+		"count":   map[string]any{"check": map[string]any{"type": "count"}},
+		"gateway": map[string]any{"check": map[string]any{"type": "route"}},
+		"mysql":   map[string]any{"check": map[string]any{"type": "mysql"}},
+		"ports":   map[string]any{"check": map[string]any{"type": "ports"}},
+		"ws":      map[string]any{"check": map[string]any{"type": "websocket"}},
 	})
 
 	b, warns := NewWebBackend(t.Context(), cfg, Deps{})
@@ -1154,7 +1154,7 @@ func TestWebBackendWatchPolarityUsesSharedHealthTypes(t *testing.T) {
 	for _, w := range b.Watches(context.Background()) {
 		got[w.Name] = w.FireOnFail
 	}
-	for _, name := range []string{"autofs", "mysql", "ports", "ws"} {
+	for _, name := range []string{"gateway", "mysql", "ports", "ws"} {
 		if !got[name] {
 			t.Fatalf("%s watch should be health-style: %v", name, got)
 		}

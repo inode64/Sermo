@@ -30,7 +30,6 @@ const (
 )
 
 const (
-	watchConditionDefaultMinimum = "1"
 	watchConditionDefaultDelta   = "0"
 	watchFailedUnitsDefaultCount = "0"
 	watchDefaultLockName         = "(default)"

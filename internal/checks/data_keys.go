@@ -112,7 +112,6 @@ const (
 	DataKeyModifiedAt               = "modified_at"
 	DataKeyMounted                  = CheckKeyMounted
 	DataKeyMountPoint               = "mount_point"
-	DataKeyMountpoints              = "mountpoints"
 	DataKeyNew                      = fieldNew
 	DataKeyNumCPU                   = "num_cpu"
 	DataKeyNotAfter                 = "not_after"

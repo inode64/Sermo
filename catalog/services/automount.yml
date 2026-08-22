@@ -21,6 +21,3 @@ watches:
     check:
       type: service
       expect: active
-  autofs:
-    check:
-      type: autofs
