@@ -34,7 +34,7 @@ func TestWatchMetricRecorderRecordsBandsNotValues(t *testing.T) {
 	store := &bandSLACapture{}
 	entry := map[string]any{checks.CheckKeyType: checks.CheckTypeRAID, checks.CheckKeyArray: "md0"}
 	bands := checks.DeclaredBandMetrics(checks.CheckTypeRAID, entry)
-	record := watchMetricRecorder(Deps{SLA: store}, "raid-md0", checks.CheckTypeRAID, "", bands)
+	record := watchMetricRecorder(Deps{SLA: store}, "raid-md0", checks.CheckTypeRAID, nil, bands)
 	if record == nil {
 		t.Fatal("a banded watch must get a recorder even though it has no line metrics")
 	}
@@ -65,7 +65,7 @@ func TestWatchMetricRecorderRecordsBandsNotValues(t *testing.T) {
 // gets no recorder rather than a panic.
 func TestWatchMetricRecorderNilStore(t *testing.T) {
 	bands := checks.DeclaredBandMetrics(checks.CheckTypeRAID, map[string]any{})
-	if record := watchMetricRecorder(Deps{}, "raid-md0", checks.CheckTypeRAID, "", bands); record != nil {
+	if record := watchMetricRecorder(Deps{}, "raid-md0", checks.CheckTypeRAID, nil, bands); record != nil {
 		t.Fatal("no store, no recorder")
 	}
 }
@@ -197,19 +197,88 @@ func TestSeriesServesCheckBands(t *testing.T) {
 // offered for a series nothing writes.
 func TestWebCheckMetricsAdvertisesBands(t *testing.T) {
 	raidBands := checks.DeclaredBandMetrics(checks.CheckTypeRAID, map[string]any{})
-	got := webCheckMetrics(checks.CheckTypeRAID, "", raidBands)
-	if len(got) != 2 {
-		t.Fatalf("raid metrics = %+v, want its two bands and no lines", got)
+	raidGraphs := checks.ResolvedGraphMetrics(checks.CheckTypeRAID, "", map[string]any{})
+	got := webCheckMetrics(raidGraphs, raidBands)
+	// Two bands plus the one genuine magnitude raid keeps as a line: mismatch_cnt.
+	if len(got) != 3 {
+		t.Fatalf("raid metrics = %+v, want two bands and the mismatch line", got)
 	}
+	lines := 0
 	for _, m := range got {
 		if !m.Band {
-			t.Fatalf("%q advertised as a line metric; raid states are bands", m.Name)
+			lines++
+			if m.Name != checks.DataKeyRaidMismatchCount {
+				t.Fatalf("%q advertised as a line metric; raid's only line is mismatch_cnt", m.Name)
+			}
 		}
 	}
+	if lines != 1 {
+		t.Fatalf("raid lines = %d, want exactly the mismatch series", lines)
+	}
+	bandsOnly := got[:0:0]
+	for _, m := range got {
+		if m.Band {
+			bandsOnly = append(bandsOnly, m)
+		}
+	}
+	got = bandsOnly
 	if got[0].Name != checks.DataKeyDegraded || got[0].Severity != checks.SeverityError || got[0].Label == "" {
 		t.Fatalf("degraded = %+v, want error severity and a label", got[0])
 	}
 	if got[1].Severity != checks.SeverityWarning {
 		t.Fatalf("recovering = %+v, want warning severity", got[1])
+	}
+}
+
+// TestSLAOverrideForcesAndSilences pins the `sla:` boolean in both directions:
+// true records a condition watch's verdict as availability and shows the panel,
+// false silences a type that would record by default.
+func TestSLAOverrideForcesAndSilences(t *testing.T) {
+	clock := map[string]any{checks.CheckKeyType: checks.CheckTypeClock, checks.CheckKeySLA: true}
+	if !watchRecordsAvailability(&webWatch{checkType: checks.CheckTypeClock, check: clock}) {
+		t.Fatal("sla: true must keep the availability panel on a clock watch")
+	}
+	tcp := map[string]any{checks.CheckKeyType: checks.CheckTypeTCP, checks.CheckKeySLA: false}
+	if watchRecordsAvailability(&webWatch{checkType: checks.CheckTypeTCP, check: tcp}) {
+		t.Fatal("sla: false must silence even an availability type")
+	}
+	// The recorder side: ForceSLA lets a non-availability verdict through.
+	var got []bool
+	w := &Watch{
+		CheckType:          checks.CheckTypeClock,
+		ForceSLA:           true,
+		RecordAvailability: func(up bool, _ time.Time) { got = append(got, up) },
+	}
+	w.recordAvailabilitySample(checks.Result{OK: true})
+	if len(got) != 1 || !got[0] {
+		t.Fatalf("samples = %v, want one up sample through the override", got)
+	}
+	w.ForceSLA = false
+	w.recordAvailabilitySample(checks.Result{OK: true})
+	if len(got) != 1 {
+		t.Fatalf("samples = %v, want no sample without the override on a non-availability type", got)
+	}
+}
+
+// TestResolveWatchGraphsCoversMetricExpansions pins the expansion form: an icmp
+// watch whose latency lives in a metrics: block still advertises the latency
+// series, and a state-only icmp watch does not.
+func TestResolveWatchGraphsCoversMetricExpansions(t *testing.T) {
+	base := map[string]any{checks.CheckKeyType: checks.CheckTypeICMP, "host": "10.0.0.1"}
+	both := resolveWatchGraphs(checks.CheckTypeICMP, base, map[string]any{"state": map[string]any{}, "latency": map[string]any{}})
+	found := false
+	for _, g := range both {
+		if g.Key == checks.DataKeyLatencyMS {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("graphs = %+v, want the latency series through the expansion", both)
+	}
+	stateOnly := resolveWatchGraphs(checks.CheckTypeICMP, base, map[string]any{"state": map[string]any{}})
+	for _, g := range stateOnly {
+		if g.Key == checks.DataKeyLatencyMS {
+			t.Fatalf("a state-only icmp watch must not offer latency: %+v", stateOnly)
+		}
 	}
 }

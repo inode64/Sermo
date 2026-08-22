@@ -103,32 +103,49 @@ func pred(op string, value any) map[string]any {
 	return map[string]any{"op": op, "value": value}
 }
 
-// TestDeclaredGraphMetricUnitSeparatesUnitFromExistence pins the distinction the
-// API depends on: a unitless metric is a real series, not a missing one. Folding
-// the two together refused every bare count the payload offered — a load average,
-// a SMART sector count, a firewall rule count — leaving panels that could only
-// ever report a failure.
-func TestDeclaredGraphMetricUnitSeparatesUnitFromExistence(t *testing.T) {
-	for _, tc := range []struct {
-		name        string
-		checkType   string
-		declared    string
-		key         string
-		wantUnit    string
-		wantPublish bool
-	}{
-		{"unitless count is published", CheckTypeLoad, "", DataKeyLoad1, "", true},
-		{"unit carried when the type has one", CheckTypeStorage, "", DataKeyUsedPct, "%", true},
-		{"unknown key is not published", CheckTypeLoad, "", "not_a_field", "", false},
-		{"declared scalar unit", CheckTypeSQL, "MiB", DataKeyValue, "MiB", true},
-		{"scalar without a declared unit is not published", CheckTypeSQL, "", DataKeyValue, "", false},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			unit, published := DeclaredGraphMetricUnit(tc.checkType, tc.declared, tc.key)
-			if unit != tc.wantUnit || published != tc.wantPublish {
-				t.Fatalf("= (%q, %v), want (%q, %v)", unit, published, tc.wantUnit, tc.wantPublish)
+// TestResolvedGraphMetricsSeparatesUnitFromExistence pins the distinction the
+// API depends on, now through the one resolver every consumer shares: a
+// unitless metric is a real series, a declared `unit:` scalar appears as
+// `value`, an icmp state watch resolves no latency series, and a banded key
+// leaves the line set.
+func TestResolvedGraphMetricsSeparatesUnitFromExistence(t *testing.T) {
+	find := func(list []GraphMetric, key string) (GraphMetric, bool) {
+		for _, m := range list {
+			if m.Key == key {
+				return m, true
 			}
-		})
+		}
+		return GraphMetric{}, false
+	}
+	load := ResolvedGraphMetrics(CheckTypeLoad, "", map[string]any{})
+	if m, ok := find(load, DataKeyLoad1); !ok || m.Unit != "" {
+		t.Fatalf("load1 = %+v ok=%v, want a published unitless series", m, ok)
+	}
+	if _, ok := find(load, "not_a_field"); ok {
+		t.Fatal("an unknown key must not resolve")
+	}
+	sql := ResolvedGraphMetrics(CheckTypeSQL, "MiB", map[string]any{})
+	if m, ok := find(sql, DataKeyValue); !ok || m.Unit != "MiB" {
+		t.Fatalf("declared scalar = %+v ok=%v, want the MiB value series", m, ok)
+	}
+	latency := ResolvedGraphMetrics(CheckTypeICMP, "", map[string]any{CheckKeyMetric: IcmpMetricLatency})
+	if _, ok := find(latency, DataKeyLatencyMS); !ok {
+		t.Fatal("an icmp latency watch must resolve its latency series")
+	}
+	state := ResolvedGraphMetrics(CheckTypeICMP, "", map[string]any{CheckKeyMetric: "state"})
+	if _, ok := find(state, DataKeyLatencyMS); ok {
+		t.Fatal("an icmp state watch publishes no latency; the panel must not be offered")
+	}
+	banded := ResolvedGraphMetrics(CheckTypeLoad, "", map[string]any{
+		CheckKeyBands: map[string]any{
+			DataKeyLoad1: map[string]any{
+				CheckKeyOK:       map[string]any{CheckKeyOp: "<", CheckKeyValue: 8},
+				CheckKeySeverity: SeverityWarning,
+			},
+		},
+	})
+	if _, ok := find(banded, DataKeyLoad1); ok {
+		t.Fatal("a banded key must leave the line set")
 	}
 }
 

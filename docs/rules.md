@@ -515,6 +515,25 @@ exists for an arbitrary metric — and its value series stops being recorded: a
 state draws as a band or as a line, never both. Check names may not contain `:`;
 the band series is keyed `check:metric`.
 
+#### Opting a watch into availability (`sla`)
+
+The availability set is deliberately narrow — a threshold firing is not downtime
+— but the operator who wrote the threshold may know better: a clock offset
+breach, a firewall with its rules gone, or an unmounted filesystem *is* downtime
+for whatever depends on it. `sla: true` on a watch's check block records its
+verdict as an availability series and gives it the Availability panel; `sla:
+false` silences a type that would record by default. The verdict gates still
+apply: a `reports:` sensor or a `severity: warning` advisory never enters the
+series.
+
+```yaml
+watches:
+  watch-clock-drift:
+    check: { type: clock, max_offset: 100ms, sla: true }
+  storage-mnt-backup:
+    check: { type: storage, path: /mnt/backup, used_pct: { op: ">=", value: "90%" }, sla: true }
+```
+
 #### Graphing a check's value (`unit`)
 
 Most check types declare their graphable metrics statically, but some cannot: a

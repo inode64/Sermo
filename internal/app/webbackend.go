@@ -78,12 +78,13 @@ type webEntry struct {
 	policyCooldown    time.Duration
 	engine            operation.Engine
 	status            func(context.Context) (servicemgr.Status, error)
-	checkNames        []string                       // sorted
-	checkTypes        map[string]string              // check name -> type
-	checkReports      map[string]string              // check name -> `reports:` mode, when declared
-	checkUnits        map[string]string              // check name -> `unit:` for its scalar result, when declared
-	checkBands        map[string][]checks.BandMetric // check name -> resolved state bands
-	checkSeverities   map[string]string              // check name -> `severity:`, when declared
+	checkNames        []string                        // sorted
+	checkTypes        map[string]string               // check name -> type
+	checkReports      map[string]string               // check name -> `reports:` mode, when declared
+	checkUnits        map[string]string               // check name -> `unit:` for its scalar result, when declared
+	checkBands        map[string][]checks.BandMetric  // check name -> resolved state bands
+	checkGraphs       map[string][]checks.GraphMetric // check name -> resolved line metrics
+	checkSeverities   map[string]string               // check name -> `severity:`, when declared
 	checkIntervals    map[string]time.Duration
 	discoverer        process.Discoverer
 	selectors         []process.Selector
@@ -109,9 +110,10 @@ type webWatch struct {
 	// checkUnit is the check block's `unit:`, the unit of the scalar it publishes
 	// under `value`. It names that series exactly as a service check's does.
 	checkUnit string
-	// bands are the check's resolved state metrics, the same declaration the
-	// recorder persists from.
+	// bands and graphs are the check's resolved state and line metrics, the
+	// same resolution the recorder persists from.
 	bands         []checks.BandMetric
+	graphs        []checks.GraphMetric
 	interval      time.Duration
 	disabled      bool
 	monitorMode   string
@@ -407,6 +409,7 @@ func attachServiceRuntime(ctx context.Context, entry *webEntry, name string, tre
 	entry.checkReports = checkReportingModes(tree)
 	entry.checkUnits = checkDeclaredUnits(tree)
 	entry.checkBands = bandCheckMetrics(tree)
+	entry.checkGraphs = graphableCheckMetrics(tree)
 	entry.checkSeverities = checkDeclaredSeverities(tree)
 	entry.checkIntervals = intervals
 	entry.discoverer = discoverer
@@ -533,6 +536,7 @@ func newWebWatch(name string, entry map[string]any, globalNotify []string, defau
 		checkType:     ctype,
 		checkUnit:     cfgval.AsString(checkMap(entry)[checks.CheckKeyUnit]),
 		bands:         checks.DeclaredBandMetrics(ctype, checkMap(entry)),
+		graphs:        resolveWatchGraphs(ctype, checkMap(entry), metricsMap(entry)),
 		interval:      iv,
 		disabled:      cfgval.Disabled(entry),
 		monitorMode:   config.MonitorMode(entry),
@@ -549,6 +553,32 @@ func newWebWatch(name string, entry map[string]any, globalNotify []string, defau
 		raidControl:   raidControl,
 		serviceScoped: serviceScoped,
 	}, warn
+}
+
+// resolveWatchGraphs is the payload's line-metric resolution for one watch,
+// including the `metrics:` expansion form: each expansion runs the base check
+// with its own `metric:` key injected, so the watch's series are the union of
+// what each expansion resolves — exactly what the per-expansion recorders
+// persist under the shared watch key.
+func resolveWatchGraphs(ctype string, check, metricBlocks map[string]any) []checks.GraphMetric {
+	unit := cfgval.AsString(check[checks.CheckKeyUnit])
+	out := checks.ResolvedGraphMetrics(ctype, unit, check)
+	seen := map[string]bool{}
+	for _, m := range out {
+		seen[m.Key] = true
+	}
+	for metric := range metricBlocks {
+		composed := make(map[string]any, len(check)+1)
+		maps.Copy(composed, check)
+		composed[checks.CheckKeyMetric] = metric
+		for _, g := range checks.ResolvedGraphMetrics(ctype, unit, composed) {
+			if !seen[g.Key] {
+				seen[g.Key] = true
+				out = append(out, g)
+			}
+		}
+	}
+	return out
 }
 
 // checkCatalog returns a service's check names (sorted), types and effective

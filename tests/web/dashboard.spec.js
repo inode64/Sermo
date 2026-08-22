@@ -73,6 +73,10 @@ const watches = [{
     { name: "degraded", band: true, severity: "error", label: "Degraded arrays" },
     { name: "recovering", band: true, severity: "warning", label: "Recovering arrays" },
   ],
+  readings: [
+    { field: "degraded", label: "Degraded", value: "none", good: true },
+    { field: "recovering", label: "Recovering", warning: "recovering" },
+  ],
 }, {
   name: "dead-letter", display_name: "Dead letter", category: "files",
   enabled: true, monitored: true, state: "ok", check_type: "file",
@@ -686,6 +690,17 @@ test("no viewport lets the page scroll sideways", async ({ page }) => {
     await page.locator("#svc-row-web .row-toggle").click();
     await page.locator("#wat-row-net-wan .row-toggle").click();
   }
+});
+
+// The events feed opens on the last 24 hours, and an explicitly healthy state
+// reading renders green — "none degraded" answers at a glance where a 0 only
+// encodes it.
+test("events default to the last day and state readings colour by health", async ({ page }) => {
+  await expect(page.locator("#event-range")).toHaveValue("24h");
+  await page.locator("#wat-row-raid-md9 .row-toggle").click();
+  const exp = page.locator('[id="exp-wat:raid-md9"]');
+  await expect(exp.locator(".watch-reading-value.good")).toHaveText("none");
+  await expect(exp.locator(".watch-reading-value.inactive")).toHaveText("recovering");
 });
 
 // A boolean state renders as an SLA-style band, never a line chart: a line

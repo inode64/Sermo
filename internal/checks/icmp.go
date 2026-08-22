@@ -100,6 +100,7 @@ func (c *icmpCheck) Run(_ context.Context) Result {
 		}
 		if c.hasThreshold {
 			data[DataKeyValue] = s.RTTms
+			data[DataKeyLatencyMS] = s.RTTms
 			met := compareFloat(s.RTTms, c.op, c.value)
 			res := c.result(met, fmt.Sprintf("%s rtt %.1fms %s %.1f", c.host, s.RTTms, c.op, c.value), start)
 			res.Data = data

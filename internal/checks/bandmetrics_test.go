@@ -12,8 +12,9 @@ import (
 // and recovering are state bands now, and no longer graph metrics — the two
 // presentations of one state must never coexist.
 func TestRaidBandsReplaceItsLineCharts(t *testing.T) {
-	if g := GraphMetrics(CheckTypeRAID); len(g) != 0 {
-		t.Fatalf("raid still declares graph metrics %+v; its states are bands", g)
+	// The one raid line left is mismatch_cnt — a magnitude, not a state.
+	if g := GraphMetrics(CheckTypeRAID); len(g) != 1 || g[0].Key != DataKeyRaidMismatchCount {
+		t.Fatalf("raid graph metrics = %+v, want only the mismatch series", g)
 	}
 	bands := DeclaredBandMetrics(CheckTypeRAID, map[string]any{})
 	if len(bands) != 2 {

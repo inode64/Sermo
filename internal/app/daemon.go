@@ -1063,9 +1063,7 @@ func graphableCheckMetrics(tree map[string]any) map[string][]checks.GraphMetric 
 		}
 		typ, _ := m[checks.CheckKeyType].(string)
 		unit := cfgval.AsString(m[checks.CheckKeyUnit])
-		graphs := withoutBandKeys(checks.DeclaredGraphMetrics(typ, unit),
-			checks.BandKeys(checks.DeclaredBandMetrics(typ, m)))
-		if len(graphs) > 0 {
+		if graphs := checks.ResolvedGraphMetrics(typ, unit, m); len(graphs) > 0 {
 			out[cn] = graphs
 		}
 	}
