@@ -2850,7 +2850,7 @@ dry_run: true
                     f"older_than: {CLAMAV_DATABASE_OLDER_THAN}",
                     'summary: "ClamAV signatures are ${value} old (limit ${older_than})"',
                 ],
-                cycles=1,
+                cycles=0,
             ),
         )
     else:

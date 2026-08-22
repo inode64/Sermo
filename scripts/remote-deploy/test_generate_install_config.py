@@ -905,6 +905,34 @@ class EndpointGenerationTest(unittest.TestCase):
         body = (root / "configs/host/root/etc/sermo/watches/geoip-database-freshness.yml").read_text(encoding="utf-8")
         self.assertIn('summary: "GeoIP ${value} is older than ${older_than} in ${number_files} files"', body)
 
+class ClamavFreshnessWatchTest(unittest.TestCase):
+    """The signature-age watch is a stateful file watch: it must carry no for:
+    window (file watches reject it — shipping one stopped sermod on reload) and
+    only appear where a database exists."""
+
+    def generate(self, evidence: str | None):
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        root = Path(temp.name)
+        stage = root / "stage" / "host" / "out"
+        stage.mkdir(parents=True)
+        if evidence is not None:
+            (stage / "clamav_database").write_text(evidence, encoding="utf-8")
+        generator.generate_for_host("host", stage, root / "configs", default_options())
+        return root / "configs/host/root/etc/sermo/watches/clamav-db-freshness.yml"
+
+    def test_database_present_emits_a_file_watch_without_for(self):
+        path = self.generate("/var/lib/clamav/daily.cld\n")
+        body = path.read_text(encoding="utf-8")
+        self.assertIn("type: file", body)
+        self.assertIn("older_than: 48h", body)
+        self.assertNotIn("for:", body)
+
+    def test_no_database_skips_the_watch(self):
+        path = self.generate(None)
+        self.assertFalse(path.exists())
+
+
 class OpenVPNClientGateTest(unittest.TestCase):
     """A client instance dials out — its local openvpn probe can never pass —
     while a server (or a client that binds lport) keeps the probe, and missing
