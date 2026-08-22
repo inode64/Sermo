@@ -48,9 +48,11 @@ LANG_PAIRS = [
     ("docs/safety.md", "docs/safety.es.md"),
     ("docs/services.md", "docs/services.es.md"),
     ("docs/webui-representation.md", "docs/webui-representation.es.md"),
+    ("docs/wizards.md", "docs/wizards.es.md"),
     ("AGENTS.md", "AGENTS.es.md"),
     ("README.md", "README.es.md"),
     ("TODO.md", "TODO.es.md"),
+    ("CLAUDE.md", "CLAUDE.es.md"),
 ]
 
 
@@ -140,6 +142,27 @@ def check_config_keys() -> list[str]:
     ]
 
 
+def check_language_pairs_complete() -> list[str]:
+    """Every user/agent document with an EN/ES twin must be in LANG_PAIRS, and the twin must exist."""
+    documented = dict(LANG_PAIRS)
+    expected = [
+        (f"docs/{path.name}", f"docs/{path.stem}.es.md")
+        for path in sorted(ROOT.glob("docs/*.md"))
+        if not path.name.endswith(".es.md")
+    ]
+    expected.extend(
+        (name, name.replace(".md", ".es.md"))
+        for name in ("AGENTS.md", "README.md", "TODO.md", "CLAUDE.md")
+    )
+    problems = []
+    for en, es in expected:
+        if documented.get(en) != es:
+            problems.append(f"{en}: missing from LANG_PAIRS (expected {es})")
+        elif not (ROOT / es).is_file():
+            problems.append(f"{en}: paired file {es} does not exist")
+    return problems
+
+
 def check_language_parity() -> list[str]:
     """The two language versions must agree on headings and on every number."""
     problems = []
@@ -170,6 +193,7 @@ CHECKS = (
     ("linter roll-call is complete", check_linter_rollcall),
     ("configuration keys are documented", check_config_keys),
     ("language versions agree", check_language_parity),
+    ("language pairs are complete", check_language_pairs_complete),
 )
 
 

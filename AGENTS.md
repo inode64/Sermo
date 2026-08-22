@@ -516,9 +516,8 @@ counterpart of `gocyclo`/`gocognit`/`maintidx` on the Go side: `complexity`,
 `max-lines-per-function`, `max-params`, `max-depth` and `max-nested-callbacks`.
 They are pinned at the current ceiling, so they block regressions rather than
 demanding a cleanup: a new function may not be worse than the worst one already
-there. Lower a threshold whenever you split an outlier — `renderOverview`
-(complexity 121) and `renderServiceDetail` (183 lines) are the two worth
-attacking first.
+there. Lower a threshold whenever you split an outlier — `restoreUIState`
+(complexity 80) and `initStaticHandlers` (146 lines) are the current ceilings.
 
 **Rendering uses lit-html.** Build markup with `tpl\`...\`` (the `html` tag,
 imported aliased as `tpl`) and render into a container with `litRender(...)` (the
@@ -959,8 +958,9 @@ Tool notes:
 - **`make docs-sync`** checks the documentation against the code it describes:
   every source path a document cites exists, every Go identifier a skill names
   exists, AGENTS.md names every linter `.golangci.yml` enables, every
-  operator-writable config key appears in `docs/`, and the EN/ES pairs agree on
-  headings and on every number. Each check was added after that exact drift
+  operator-writable config key appears in `docs/`, the EN/ES pairs agree on
+  headings and on every number, and every paired document exists in both
+  languages. Each check was added after that exact drift
   reached the repository; no other tool in the gate can see it. Add a check
   there when you find a new class of doc/code drift.
 - **`make npm-audit`** is the JavaScript counterpart of `govulncheck`: it fails

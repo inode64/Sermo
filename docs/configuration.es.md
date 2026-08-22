@@ -1795,7 +1795,7 @@ fusionan con un service.
 > asistente pregunta a las entradas monitorizadas por el estado de monitor
 > (`enabled`/`disabled`/`previous`) y un intervalo de comprobación opcional; los archivos
 > de montaje no son entradas monitorizadas, por lo que el asistente de mount omite esas
-> preguntas. Consulta [wizards](wizards.md) para el flujo completo.
+> preguntas. Consulta [wizards](wizards.es.md) para el flujo completo.
 
 El bloque `then` de un watch (cuando está presente) declara las acciones tomadas cuando
 se dispara — un `hook`, una lista `notify`, un `expand` (solo storage), un `makestep`
