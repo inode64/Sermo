@@ -82,13 +82,13 @@ deterministas de la API.
 | Servicios | `GET /api/services` | servicios de runtime configurados cargados por sermod (no el inventario de catálogo de `sermoctl services`); `status_observed_at` identifica la muestra real de estado de init que hay detrás de una fila cacheada; `operation_active` es true mientras el motor mantiene el lock de operación del servicio, de modo que una acción lanzada desde cualquier cliente, `sermoctl` o la remediación automática se ve en curso y sus botones de acción siguen deshabilitados |
 | Sesiones | `GET /api/sessions` | inventario global de SSH, tmux y screen; cada origen configurado presente informa `available`, `collecting` o `unavailable`; un servidor tmux disponible sin sesiones aparece como `empty`, mientras que un espacio tmux/screen ausente se omite; SSH usa la caché breve compartida del muestreador y tmux/screen solo leen muestras de `terminal_sessions` publicadas por el daemon |
 | Expansión de servicio | `GET /api/services/{name}` | checks, información del proceso, reglas |
-| Métricas de check del servicio | `GET /api/services/{name}/metrics?check=NAME[&metric=KEY]` | el detalle muestra la latencia cuando se omite `metric` y un gráfico por cada métrica numérica con nombre publicada por un check |
+| Métricas de check del servicio | `GET /api/services/{name}/metrics?check=NAME[&metric=KEY]` | el detalle muestra la latencia cuando se omite `metric` y un gráfico por cada métrica numérica con nombre publicada por una comprobación |
 | Métricas de runtime del servicio | `GET /api/services/{name}/runtime` | historial persistido de CPU/memoria/IO del servicio, de solo lectura y muestreado exclusivamente por ciclos del worker; `current` es la última muestra publicada y las lecturas del panel nunca repiten el descubrimiento de procesos |
-| SLA del servicio | `GET /api/services/{name}/sla[?check=NAME][&metric=NAME]` | historial de disponibilidad para la línea temporal de SLA del detalle del servicio, para la expansión de una aplicación que mapea a este servicio y para los clientes de la API, a la resolución a la que esa ventana está almacenada; `check` lo acota a uno de los checks del servicio, que es de donde la tabla de checks saca su tira, así que ambos ámbitos comparten una sola serie y un solo selector de ventana; un check que no emite veredicto no sirve puntos; los ratios de SLA observado cuentan solo minutos monitorizados, así que el tiempo sin mediciones es un hueco, no caída; cada punto lleva además `down_buckets`, los buckets de un minuto dentro de él que vieron un fallo |
+| SLA del servicio | `GET /api/services/{name}/sla[?check=NAME][&metric=NAME]` | historial de disponibilidad para la línea temporal de SLA del detalle del servicio, para la expansión de una aplicación que mapea a este servicio y para los clientes de la API, a la resolución a la que esa ventana está almacenada; `check` lo acota a una de las comprobaciones del servicio, que es de donde la tabla de comprobaciones saca su tira, así que ambos ámbitos comparten una sola serie y un solo selector de ventana; una comprobación que no emite veredicto no sirve puntos; los ratios de SLA observado cuentan solo minutos monitorizados, así que el tiempo sin mediciones es un hueco, no caída; cada punto lleva además `down_buckets`, los buckets de un minuto dentro de él que vieron un fallo |
 | Eventos del servicio | `GET /api/services/{name}/events` | feed de eventos por servicio |
 | Watches | `GET /api/watches` | watches de host y de service; `scope` los distingue y los nombres de watch de service usan `service:watch` |
-| Métricas de watch | `GET /api/watches/{name}/metrics?metric=NAME` | una serie numérica que publica la comprobación de una vigilancia de host, con la forma que sirve la ruta de métricas de servicio, así que ambas las dibuja el mismo panel; una vigilancia tiene exactamente una comprobación, así que `metric` basta para nombrar la serie y no hay parámetro `check`; una métrica no publicada responde 404 en vez de una serie vacía que se leería como una línea plana medida |
-| SLA de watch | `GET /api/watches/{name}/sla[?metric=NOMBRE]` | el mismo historial de disponibilidad que sirve la ruta de SLA de servicio, para una vigilancia de host cuya comprobación afirma disponibilidad; ambas comparten una sola ruta de serie, así que el uptime de una vigilancia se calcula exactamente igual que el de un servicio; una vigilancia que no guarda ninguna responde 404 en vez de una serie vacía que se leería como uptime medido; `metric` selecciona en su lugar una de las bandas de estado de la comprobación — servida incluso en una vigilancia sin disponibilidad alguna, y 404 para una banda que la comprobación no declara |
+| Métricas de watch | `GET /api/watches/{name}/metrics?metric=NAME` | una serie numérica que publica la comprobación de un watch de host, con la forma que sirve la ruta de métricas de servicio, así que ambas las dibuja el mismo panel; un watch tiene exactamente una comprobación, así que `metric` basta para nombrar la serie y no hay parámetro `check`; una métrica no publicada responde 404 en vez de una serie vacía que se leería como una línea plana medida |
+| SLA de watch | `GET /api/watches/{name}/sla[?metric=NOMBRE]` | el mismo historial de disponibilidad que sirve la ruta de SLA de servicio, para un watch de host cuya comprobación afirma disponibilidad; ambas comparten una sola ruta de serie, así que el uptime de un watch se calcula exactamente igual que el de un servicio; un watch que no guarda ninguno responde 404 en vez de una serie vacía que se leería como uptime medido; `metric` selecciona en su lugar una de las bandas de estado de la comprobación — servida incluso en un watch sin disponibilidad alguna, y 404 para una banda que la comprobación no declara |
 | Aplicaciones | `GET /api/applications` | aplicaciones de catálogo instaladas; `observed_at` permanece fijo mientras el inventario de versión/estado se sirve desde caché |
 | Librerías | `GET /api/libraries` | librerías de catálogo instaladas; `observed_at` permanece fijo mientras el inventario de fichero/versión se sirve desde caché |
 | Unidades de montaje | `GET /api/mounts` | watches de storage con `mount:` respaldadas por fstab |
@@ -137,14 +137,14 @@ breve de un corte de medio día. Una celda sin ninguna observación sigue siendo
 caída.
 
 La disponibilidad la dibuja exactamente un panel dondequiera que aparezca. Una
-vigilancia de host cuya comprobación afirma disponibilidad, y una aplicación que
+watch de host cuya comprobación afirma disponibilidad, y una aplicación que
 mapea a un servicio monitorizado, reciben cada una **la propia sección de SLA del
 detalle de servicio** — el mismo selector de ventana `1h / 24h / 7d / 30d / 1y`,
 la misma línea de resumen y la misma línea temporal de `drawSLAChart` — y no una
 segunda presentación, más pequeña, del mismo número. Solo cambia la serie: una
-vigilancia lee `GET /api/watches/{name}/sla?since=`, una aplicación lee la de su
+watch lee `GET /api/watches/{name}/sla?since=`, una aplicación lee la de su
 servicio, `GET /api/services/{name}/sla?since=`, porque su disponibilidad *es* la
-de ese servicio. Una vigilancia de condición reporta `keeps_sla: false`, igual
+de ese servicio. Un watch de condición reporta `keeps_sla: false`, igual
 que una aplicación sin servicio monitorizado detrás, y ninguna dibuja sección
 alguna — alcanzar un umbral no es downtime, y un binario sin instalar no tiene
 uptime.
@@ -178,7 +178,7 @@ con un cuerpo `{"ok": bool, "message": string}` para una acción atendida.
 | Área | Endpoint | Notas |
 | --- | --- | --- |
 | Acción de servicio | `POST /api/services/{name}/{action}[?no_cascade=1]` | `monitor`, `unmonitor`, `start`, `stop`, `restart`, `reload`, `resume`, `repair`; `restart` es la acción principal para servicios failed/inactive, mientras `repair` es una alternativa secundaria solo manual que usa la recuperación segura de pidfile obsoleto y estado fallido de init antes de arrancar; `reload` se ofrece solo cuando el servicio informa `can_reload` desde soporte de reload del backend de init o desde un fallback `reload:` válido; `no_cascade` omite los objetivos de `also_apply` en start/stop/restart |
-| Preflight de servicio | `POST /api/services/{name}/preflight` | ejecuta los checks de preflight sin cambiar el estado del servicio |
+| Preflight de servicio | `POST /api/services/{name}/preflight` | ejecuta las comprobaciones de preflight sin cambiar el estado del servicio |
 | Cerrar sesión SSH | `POST /api/services/{name}/sessions/{pid}/close?start_ticks=TICKS&terminal=PTS` | solo admin y con confirmación: cierre elegante de un terminal SSH mostrado; el backend redescubre el terminal, el ejecutable `sshd` configurado exacto y su usuario real, exige el mismo PID y ticks de inicio y solo envía `SIGTERM` |
 | Cerrar sesión de terminal | `POST /api/services/{name}/terminal-sessions/{check}/close?multiplexer=TYPE&session=NAME&user=USER&identity=IDENTITY` | solo admin y con confirmación: cierre de una sesión tmux/screen; el backend vuelve a listar el espacio configurado de usuario/socket, exige la misma identidad de generación y ejecuta únicamente el argv exacto de cierre del cliente |
 | Cerrar servidor tmux vacío | `POST /api/services/{name}/terminal-sessions/{check}/close-empty` | solo admin y con confirmación; solo aparece para un origen tmux presente, vacío y con socket explícito configurado. El backend confirma que sigue vacío, ejecuta el argv exacto `kill-server` de tmux, verifica que el espacio desapareció y elimina solo el socket huérfano sin cambios que pueda quedar |
@@ -303,7 +303,7 @@ Columnas:
 | Memory | última memoria residente del árbol de procesos; vacío para servicios `no_resident_process` |
 | FDs | recuento de descriptores de archivo abiertos del árbol de procesos; vacío para servicios `no_resident_process` |
 | IO R/W | bytes acumulados de lectura/escritura en disco del árbol de procesos; vacío para servicios `no_resident_process` |
-| Strays | cuenta de miembros del control group que ningún selector reclama, del snapshot publicado del check `strays`; un guion cuando no hay ninguno. Si no es cero lleva un botón de reap para administradores — confirmado, y controlado en el servidor por el `reap.kill_only_if` del propio servicio. Se retira por debajo de 640px, donde la cuenta y su botón pasan a la expansión |
+| Strays | cuenta de miembros del control group que ningún selector reclama, del snapshot publicado de la comprobación `strays`; un guion cuando no hay ninguno. Si no es cero lleva un botón de reap para administradores — confirmado, y controlado en el servidor por el `reap.kill_only_if` del propio servicio. Se retira por debajo de 640px, donde la cuenta y su botón pasan a la expansión |
 | Actions | botones icono compactos e individuales para start/stop, restart, reload, resume y monitor/unmonitor; reload se desactiva cuando `can_reload` es false; el diálogo de confirmación de start/stop/restart ofrece **skip also_apply** cuando `also_apply` está definido |
 | Fijar | una estrella por fila sube los servicios elegidos a lo alto del panel (y de su grupo), persistida localmente con el resto del estado de la UI |
 
@@ -557,7 +557,7 @@ activity es un evento.
 | `zombies` | Name, conteo de zombies |
 | Otros tipos | Name y su valor vivo principal |
 
-La columna de salud maneja dos vocabularios y colorea ambos: el check `lvm`
+La columna de salud maneja dos vocabularios y colorea ambos: la comprobación `lvm`
 normaliza el suyo a `ok`/`error`, mientras que `smart` informa del veredicto de la
 unidad con las palabras de smartctl. `ok` y `PASSED` se ven en verde; `unknown`
 —una unidad que respondió sin veredicto— en ámbar; y todo lo demás, incluidos
@@ -567,14 +567,14 @@ Un dispositivo que dejó de responder conserva las filas que siguen siendo
 ciertas: la identidad de la unidad, leída de sysfs, y las lecturas que llegó a
 dar, cada una etiquetada `(last)` y fechada por una fila `Last seen`, de modo que
 un valor histórico nunca pueda leerse como actual. Las últimas lecturas conocidas
-viven en la memoria del check en ejecución, así que no están tras reiniciar el
+viven en la memoria de la comprobación en ejecución, así que no están tras reiniciar el
 daemon; la identidad, que recuerda el kernel, sí. Ver [Dispositivos
 ausentes](rules.md#dispositivos-ausentes).
 
 Estas columnas leen las lecturas actuales publicadas por el último ciclo del
 daemon y rehidratadas desde estado persistente tras reiniciar el daemon. La edad
 de file es el valor ya formateado que usa `older_than`; un `summary` configurado
-del check sustituye las columnas de edad y límite por Summary; las comprobaciones SQL de
+de la comprobación sustituye las columnas de edad y límite por Summary; las comprobaciones SQL de
 servicio exponen el escalar observado como `Value` y la comparación efectiva
 como `Condition`, por lo que un resultado como `51 > 50` se ve sin analizar el
 texto de eventos.
@@ -593,10 +593,10 @@ Mientras se ejecuta una muestra manual de `diskio`, `hdparm`, `lvm`, `raid` o `s
 State muestra la etiqueta ámbar **checking**, el tiempo transcurrido y el estado
 de salud previo. La acción queda desactivada hasta terminar. Events registra el
 inicio y el resultado final con su duración. La UI sólo muestra porcentaje cuando
-el check aporta progreso real; una sonda sin esa fuente usa el contador de tiempo
+la comprobación aporta progreso real; una sonda sin esa fuente usa el contador de tiempo
 en vez de un porcentaje inventado. La sonda se acota con el `timeout:` del propio
 check, el mismo presupuesto que usa su ciclo programado, y sólo recurre a
-`engine.default_timeout` para un check que no declare ninguno.
+`engine.default_timeout` para una comprobación que no declare ninguno.
 
 Interval, polaridad (dispara en fallo / en umbral), hook y notifiers no son
 columnas de la tabla; viven en la rejilla de config de la expansión de fila y
@@ -607,8 +607,8 @@ Expansión de fila:
 | Área | Contenido |
 | --- | --- |
 | Config | tipo, categoría, intervalo, dispara (en fallo / en umbral), estado, flag de monitorización, hook, notifiers, dry run |
-| Readings | lecturas actuales del host, seguidas de las condiciones y umbrales del check |
-| Graphs | una gráfica por serie numérica que publica la comprobación, dibujada con el panel que recibe la métrica de un check de servicio, sobre su propia ventana `1h/24h/7d/30d/1y`; una métrica de estado se dibuja como banda tipo disponibilidad en vez de línea, limitada a ámbar cuando su gravedad es warning; ausente cuando la comprobación no publica ningún número |
+| Readings | lecturas actuales del host, seguidas de las condiciones y umbrales de la comprobación |
+| Graphs | una gráfica por serie numérica que publica la comprobación, dibujada con el panel que recibe la métrica de una comprobación de servicio, sobre su propia ventana `1h/24h/7d/30d/1y`; una métrica de estado se dibuja como banda tipo disponibilidad en vez de línea, limitada a ámbar cuando su gravedad es warning; ausente cuando la comprobación no publica ningún número |
 | Availability | la sección de SLA del servicio, cuando la comprobación afirma disponibilidad; su ventana es independiente de la de Graphs, porque leen series distintas |
 | Activity | eventos recientes del watch |
 | Expand | acción de expansión de almacenamiento cuando está configurada |

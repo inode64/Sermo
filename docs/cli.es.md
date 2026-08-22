@@ -125,16 +125,16 @@ downtime observado. `sermoctl sla --series TARGET` emite la serie por minuto
 almacenada de ese objetivo (los datos crudos con los que se construye una
 gráfica).
 
-Un objetivo es un servicio configurado **o** una vigilancia de host cuya
+Un objetivo es un servicio configurado **o** un watch de host cuya
 comprobación afirma disponibilidad — `tcp`, `ports`, `http`, `route`, la métrica
 `state` de `net` e `icmp`, y la forma de endpoint de `cert`. Son las
 comprobaciones cuya mitad fallida es de verdad algo que no responde; un `cert`
 que lee un fichero en disco es un certificado próximo a caducar, que es una
-condición, no un host inalcanzable. Una vigilancia de condición no guarda serie:
+condición, no un host inalcanzable. Un watch de condición no guarda serie:
 un sistema de ficheros que cruza el 90% usado es un umbral alcanzado, no una
 caída, e informarlo como disponibilidad daría un porcentaje que se lee como
 uptime pero significa otra cosa. Se arrastran las mismas exclusiones que ya
-aplican los servicios — una vigilancia sin veredicto (`reports: state`) es un
+aplican los servicios — un watch sin veredicto (`reports: state`) es un
 sensor y una consultiva (`severity: warning`) es algo que mirar, así que ninguna
 es downtime. Un nombre se resuelve primero como servicio, de modo que el nombre
 de un servicio existente nunca cambia de significado.
@@ -204,8 +204,8 @@ Un estado de backend `unknown` no es un veredicto de «caído» —un estado
 transitorio de systemd como `activating`/`deactivating`, un script de init que
 sustituye `status` por su propio informe o una consulta que agota el tiempo puede
 leerse como unknown mientras el servicio funciona con normalidad—, así que por
-sí solo nunca produce `failed`. Deciden los checks del propio servicio: un check
-requerido que falla sigue leyéndose como `failed`, y con los checks correctos se
+sí solo nunca produce `failed`. Deciden las comprobaciones del propio servicio: una comprobación
+requerido que falla sigue leyéndose como `failed`, y con las comprobaciones correctas se
 lee `active` o `collecting` en lugar de `monitored`, porque un backend que no ha
 querido responder no puede respaldar la afirmación de observabilidad completa.
 
@@ -290,7 +290,7 @@ nombres coincidentes en el árbol de config global).
 | ¿Qué apps / libs / conjuntos de patrones de catálogo existen? | `sermoctl apps`, `sermoctl libs`, `sermoctl patterns` |
 | ¿Qué servicios están habilitados en *mi* config ahora mismo? | YAML bajo `paths.services`, o el panel **Services** de la web UI (`GET /api/services`) |
 | Estado en vivo de un servicio configurado | `sermoctl status SERVICE`, `sermoctl is-active SERVICE` |
-| Historial de disponibilidad de servicios y vigilancias de disponibilidad | `sermoctl sla [TARGET]` |
+| Historial de disponibilidad de servicios y watches de disponibilidad | `sermoctl sla [TARGET]` |
 
 La web UI usa la misma división: **Services** muestra los servicios de runtime
 configurados; **Applications** (`GET /api/applications`) y **Libraries**
@@ -303,7 +303,7 @@ Un **stray** es un proceso que el backend de init atribuye al control group del
 servicio y que ningún selector `processes:` ni pidfile reclama, y que ya no
 depende del proceso principal de la unidad — una sonda que se demonizó, un hijo que
 el daemon nunca recogió, un superviviente de una encarnación anterior.
-`sermoctl processes SERVICE` los marca con `stray=true`, y el check inyectado
+`sermoctl processes SERVICE` los marca con `stray=true`, y la comprobación inyectada
 `strays` los reporta en cada ciclo.
 
 Un stop nunca hace reap, así que un restart que un stray bloquee termina en

@@ -2207,7 +2207,7 @@ watches:
 Esa ruta pasa por el **motor de operaciones seguro** — locks, guards, preflight y el
 `policy.cooldown` del servicio — igual que un `sermoctl restart` manual. Merece la
 pena conocer dos diferencias con `then.makestep`: reinicia el demonio en lugar de
-saltar el reloj en el sitio, y una regla se dispara ante *cualquier* fallo del check,
+saltar el reloj en el sitio, y una regla se dispara ante *cualquier* fallo de la comprobación,
 así que un servidor NTP inalcanzable puede activarla. De ahí los dos servidores y la
 ventana larga; apunta `servers:` a tus propios hosts NTP.
 
@@ -2357,7 +2357,7 @@ panel Watches de la Web UI y responde a
 
 El `then` de un watch de servicio puede declarar una **`action`** en lugar del
 `hook`/`expand`/`kill`/`makestep` fire-and-forget, de modo que una entrada `watches:` expresa
-un check **y** su remediación/guard/alerta juntos:
+una comprobación **y** su remediación/guard/alerta juntos:
 
 - `action: restart | start | stop | reload | resume` — una **remediación** que
   recorre el motor de operación (lock de servicio, guards, cooldown/backoff/rate-limit,
@@ -2368,7 +2368,7 @@ un check **y** su remediación/guard/alerta juntos:
 - `action: alert` con `message` y `notify` opcional — una **alerta**.
 
 Esa entrada se **desugariza** al `checks:` + `rules:` equivalente, por lo que es
-exactamente igual que escribir ese check + regla a mano y hereda cada barrera de
+exactamente igual que escribir esa comprobación + regla a mano y hereda cada barrera de
 seguridad (incluida la regla de que una métrica `scope: system` nunca puede
 disparar una acción de servicio). Su `message` soporta los placeholders runtime
 de regla documentados en [rules](rules.es.md), incluidos `${rule.duration}`,
@@ -2378,18 +2378,18 @@ resultado es una regla, no un notificador del runtime de watches,
 `then.notify_interval` no está soportado con
 `then.action`. El `check:` siempre va **embebido** (`check: { type: http, … }`) y
 se genera como check con el nombre del watch. Dos watches que embeban el mismo
-endpoint lo sondean dos veces. Si una remediación necesita reutilizar un check de
+endpoint lo sondean dos veces. Si una remediación necesita reutilizar una comprobación de
 salud/`verify: true` compartido sin una segunda sonda, escribe explícitamente la
 forma clásica `checks:` + `rules:`.
 
-La polaridad de la condición sigue al check: uno de **salud** (tcp/http/service/…)
+La polaridad de la condición sigue a la comprobación: una de **salud** (tcp/http/service/…)
 dispara al **fallar**; uno de **condición** (metric/storage/load/…) dispara cuando
-se cumple su **umbral** (marca un check de condición embebido `optional: true` para
+se cumple su **umbral** (marca una comprobación de condición embebida `optional: true` para
 que no afecte a la disponibilidad/SLA del servicio).
 
 Un watch de servicio sin `then` es una entrada solo-check: al resolver se convierte
 en `checks.<watch>` y participa en salud/SLA/verificación post-operación igual que
-un check escrito a mano. Un watch con `then` es **o** una operación/alerta
+una comprobación escrita a mano. Un watch con `then` es **o** una operación/alerta
 (`then.action`) **o** un efecto fire-and-forget (`hook`/`expand`/`kill`) — no
 ambos. Las secciones clásicas `checks:` + `rules:` siguen siendo válidas para
 compartición escrita a mano, pero los perfiles de catálogo usan `watches:` con
@@ -2971,9 +2971,9 @@ mensaje normal del checker en el panel web, eventos emitidos, notificaciones y
 `SERMO_MESSAGE` de los hooks. Sin `summary`, Sermo mantiene el mensaje y la
 presentación específicos actuales del checker.
 
-`summary` se renderiza después de ejecutar el check. `${value}` es el valor
+`summary` se renderiza después de ejecutar la comprobación. `${value}` es el valor
 observado usado por la comparación, `${trigger}` es el disparador activo cuando
-el checker lo expone, y cada campo resuelto del check puede referenciarse de
+el checker lo expone, y cada campo resuelto de la comprobación puede referenciarse de
 forma directa o mediante `${check.<campo>}`. Los datos del resultado también
 están disponibles como `${result.<campo>}`. Los números siguen la convención
 canónica descrita en [rules.es.md](rules.es.md) — coma como separador de millares
@@ -3005,7 +3005,7 @@ check:
 Para un archivo regular no recursivo, `${number_files}` es `1`; para un
 directorio recursivo, es el número de archivos regulares explorados. Las
 variables normales de configuración se resuelven antes de renderizar el resumen,
-por lo que los checks de servicio pueden combinar valores de ejecución y
+por lo que las comprobaciones de servicio pueden combinar valores de ejecución y
 variables del servicio:
 
 Los summaries de métricas conservan la unidad: los valores en bytes se muestran
@@ -3184,9 +3184,9 @@ Al declarar tu propia instancia se aceptan dos cotas opcionales:
 | `max` | falla por encima de esta cantidad de strays (por defecto `0`) |
 | `max_increase` + `within` | falla cuando la cuenta creció más que esto en ese intervalo de reloj |
 
-Ambas son **cotas por encima de las cuales el check falla**, así que `OK` siempre
+Ambas son **cotas por encima de las cuales la comprobación falla**, así que `OK` siempre
 significa sano y una regla sigue usando `failed:`. Por eso no son predicados
-`{op, value}`: en un check de nivel como `process_count`, OK significa «el predicado
+`{op, value}`: en una comprobación de nivel como `process_count`, OK significa «el predicado
 se cumple», lo que invertiría `failed:` en una instancia configurada mientras la
 inyectada lo mantiene. `op` y `value` se rechazan en validación por ese motivo.
 
@@ -3220,7 +3220,7 @@ rules:
 ```
 
 Para un umbral o un salto repentino, declara tus propias instancias —una por
-condición, ya que un check hace AND de sus cotas— y únelas con un OR en una regla:
+condición, ya que una comprobación hace AND de sus cotas— y únelas con un OR en una regla:
 
 ```yaml
 checks:
@@ -3594,7 +3594,7 @@ evento del que esta capa debe sobrevivir. Listar un directorio `.local` en
 
 - **Un documento se funde sobre su base si existe; si no, se carga como un
   documento normal.** Una sola regla: `watches.local` puede reajustar una
-  vigilancia generada y puede añadir una propia del host.
+  watch generado y puede añadir uno propio del host.
 - **Las [reglas de fusión](#reglas-de-fusión) de arriba se aplican sin cambios** —
   los mapas se fusionan recursivamente, los escalares y las listas sobrescriben,
   `enabled: false` deshabilita una entrada heredada y `delete: true` la elimina.
@@ -3605,8 +3605,8 @@ evento del que esta capa debe sobrevivir. Listar un directorio `.local` en
 - **El resultado fusionado se valida completo.** Un override no puede saltarse un
   invariante, y `sermoctl config validate` nombra el fichero `.local` en sus
   diagnósticos.
-- **Un override por nombre.** Los cuatro directorios de vigilancias clasificadas
-  comparten un único espacio de nombres, así que una vigilancia puede
+- **Un override por nombre.** Los cuatro directorios de watches clasificados
+  comparten un único espacio de nombres, así que un watch puede
   sobrescribirse desde cualquiera de sus hermanos `.local` — pero solo desde uno.
 - **`templates.local` es la excepción**: una plantilla es un fichero entero sin
   entradas con nombre que fusionar, así que `templates.local/<name>.yml` eclipsa
