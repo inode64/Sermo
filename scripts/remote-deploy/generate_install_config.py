@@ -2648,11 +2648,6 @@ dry_run: true
     else:
         skip("failed_units", "no supported init backend detected")
 
-    if " autofs " in read_text(stage / "proc_mounts"):
-        add_watch("watches", "watch-autofs", simple_watch("watch-autofs", "storage", "1m", ["type: autofs"], cycles=3))
-    else:
-        skip("autofs", "no autofs mountpoint discovered")
-
     raid_arrays = parse_md_arrays(stage)
     if raid_arrays:
         for array in raid_arrays:

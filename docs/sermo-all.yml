@@ -770,11 +770,6 @@ watches:
       type: storage
       path: /var/log
       used_bytes: { op: ">", value: 10G }
-  autofs:
-    check:
-      type: autofs
-      count: { op: ">=", value: 1 }
-      optional: true
   load:
     check: { type: load, per_cpu: true, load1: { op: ">", value: 2 } }
   hdparm:

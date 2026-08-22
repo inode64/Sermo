@@ -31,7 +31,6 @@
   - [Dispositivos ausentes](#dispositivos-ausentes)
   - [Qué informa un dispositivo que dejó de responder](#qué-informa-un-dispositivo-que-dejó-de-responder)
   - [Sensores de hardware](#sensores-de-hardware)
-  - [Autofs](#autofs)
   - [Count](#count)
 - [Métricas](#métricas)
 - [Reglas](#reglas)
@@ -71,7 +70,6 @@ Las comprobaciones de protocolo de conexión (MySQL, PostgreSQL, Redis, Docker, 
 | `metric`      | una métrica muestreada satisface `op value` (ver Metrics)                |
 | `count`       | el número de entradas en un directorio satisface `op value` (ver Count)|
 | `storage`     | se cumplen los predicados de espacio/inodos de un sistema de archivos (`*_pct` acepta `%`; `*_bytes` requiere K/M/G/T) |
-| `autofs`      | el automounter autofs está activo (puntos de montaje autofs presentes — `path`/`count`) (ver Autofs)|
 | `load`        | se cumple un umbral de carga media (load1/load5/load15, opcional per_cpu)|
 | `users`       | el número de usuarios conectados (desde utmp) satisface `count {op, value}`|
 | `process_count` | el número de procesos (de todo el host, o filtrado por `user`/`exe`/`exe_dir`) satisface `count {op, value}`|
@@ -458,7 +456,7 @@ qué llevó hasta ahí. Por eso toda comprobación de nivel grafica los números
 publica — `storage` sus porcentajes de uso e inodos, `load` sus tres medias,
 `diskio` su utilización, caudal y espera, y lo suyo `memory`, `swap`, `fds`,
 `pids`, `conntrack`, `pressure`, `inotify`, `entropy`, `zombies`, `raid`, `lvm`,
-`count`, `autofs`, `failed_units`, `firewall_rules`, `size` y `clock` — sin
+`count`, `failed_units`, `firewall_rules`, `size` y `clock` — sin
 configuración alguna.
 
 Esto vale para una **vigilancia de host** igual que para un check de servicio: la
@@ -2093,7 +2091,7 @@ estilo condición — `OK == true` significa que hay un problema — así que en
 `active: {check: x}` se dispara sobre ella, y como watch el hook se dispara sobre ella.
 Las comprobaciones de salud (`tcp`, `ports`, `http`, `command`, `service`, `file_exists`,
 `file`, `lockfile`, `binary`, `pidfile`, `socket`, `process`, `libraries`, `config`,
-`autofs`, `route`, `clock`, `firewall_rules`, `cert`, `sqlite`/`sqlite3`,
+`route`, `clock`, `firewall_rules`, `cert`, `sqlite`/`sqlite3`,
 `websocket`, y comprobaciones de protocolo de conexión como `mysql`/`smtp`) son lo
 opuesto (`OK == true` es sano), así que como watch disparan el hook sobre
 **fallo**.
@@ -2547,38 +2545,6 @@ servicio de modo que la degradación gradual es visible.
       type: edac
       ce: { op: ">", value: 100 }          # also alert on many correctable errors
   ```
-
-### Autofs
-
-La comprobación `autofs` verifica que el **automounter** autofs (`automount`) está activo.
-autofs no tiene socket ni puerto — el daemon habla con el kernel sobre un pipe
-interno — así que la señal de vivacidad es la **tabla de montaje**: mientras `automount` se ejecuta
-mantiene sus raíces de mapa configuradas como puntos de montaje de tipo `autofs` en
-`/proc/mounts` (desaparecen cuando el daemon se detiene). A diferencia de `storage`/`count`,
-esta es una comprobación de **salud**: pasa (OK) cuando el automounter está activo como se
-configuró, y falla cuando no lo está.
-
-```yaml
-checks:
-  automounter:
-    type: autofs                  # with no path/count: require >= 1 autofs mountpoint
-  home-automount:
-    type: autofs
-    path: /home                   # require this exact autofs mountpoint to be active
-  all-maps:
-    type: autofs
-    count: { op: ">=", value: 3 } # require at least 3 autofs mountpoints
-```
-
-- Con **ningún `path` y ningún `count`**, la comprobación pasa cuando al menos un punto de montaje
-  autofs está presente (el automounter está ejecutándose con mapas).
-- **`path`** requiere que ese punto de montaje exacto sea un montaje autofs activo.
-- **`count` `{op, value}`** compara el número de puntos de montaje autofs (`op` es uno
-  de `>=, >, <=, <, ==, !=`). `path` y `count` son mutuamente exclusivos.
-- Los datos del resultado llevan el `count` de puntos de montaje autofs y los `mountpoints`
-  unidos por comas. Los montajes bajo demanda disparados por acceso aparecen bajo estas raíces como
-  su sistema de archivos real (p. ej. `nfs`), no como `autofs`, así que no se cuentan —
-  la comprobación rastrea las raíces de mapa, es decir, que el propio automounter está activo.
 
 ### Count
 
