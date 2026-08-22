@@ -80,26 +80,31 @@ nivel de integración.
                      # y `make web-check`
    ```
 
-   `make check` es el único comando que cubre todo. Ejecutar `go test
-   ./...` y/o `go vet` solos **no** es suficiente: se salta `make lint`
-   (staticcheck/golangci/govulncheck/semgrep) y `make yaml-validate`
-   (yaml-fmt-check/yaml-lint), `make markdown-check` y `make web-check`, que
-   detectan problemas que el toolchain de Go no detecta. Si solo tocaste YAML,
-   `make yaml-validate` es el mínimo; si solo tocaste Markdown, `make
-   markdown-check` es el mínimo; para cualquier cambio de Go, ejecuta `make
-   check`. Corrige cada problema reportado antes de reportar la tarea como hecha.
+   `make check` es el único comando de cierre (`vet` + `validate` + tests +
+   cover-gate). `validate` ya ejecuta `make lint`, scripts, YAML, markdown y
+   web, así que **no** lances también `go build`, `make lint` o `go test ./...`
+   como segundo cierre. `go test` / `go vet` solos se saltan lint, YAML, markdown
+   y web y pierden problemas reales. Si solo tocaste YAML, `make yaml-validate`
+   es el mínimo; si solo tocaste Markdown, `make markdown-check` es el mínimo;
+   para cualquier cambio de Go, ejecuta `make check`. Corrige cada problema
+   reportado antes de reportar la tarea como hecha.
 
 5. Haz commit cuando el usuario pida un commit, pida hacer merge a la rama principal,
    o la tarea incluya explícitamente el commit como parte del entregable:
 
    ```sh
    git add <changed-files>
-   git commit -m "agent: <descripción concisa del cambio>" \
+   git commit -m "<type>(<optional-scope>): <descripción concisa>" \
      -m "Objective: <resultado>" \
      -m "Invariant: <comportamiento o propiedad de seguridad preservada>" \
      -m "Evidence: <pruebas y validación en ejecución>" \
      -m "Limitations: <límite conocido o None.>"
    ```
+
+   El asunto describe el cambio, sea el autor una persona o un agente. Elige
+   `feat`, `fix`, `refactor`, `test`, `docs`, `build`, `chore`, `ci` o `perf`;
+   añade un scope solo cuando aclare el asunto. No identifiques al autor con un
+   prefijo `agent:`.
 
    El cuerpo de cada commit estándar registra esos cuatro encabezados y en ese
    orden. El hook versionado `.githooks/commit-msg` aplica el contrato sin
@@ -452,30 +457,18 @@ latencia de monitorización, la responsividad web y el timing de remediación.
 
 ## Small-change checklist
 
-Antes de finalizar cualquier cambio de código:
+Antes de finalizar cualquier cambio de código, sigue las secciones que este
+fichero ya posee en vez de una segunda copia de esas reglas:
 
-- **Disciplina de Git (agentes de IA):** Inspecciona `git status --short --branch` antes de
-  editar, preserva los cambios de usuario no relacionados, haz commit solo cuando se solicite o cuando
-  la tarea incluya el commit, y nunca hagas push a menos que se pida explícitamente.
-- Busca el owner existente con `rg` antes de añadir un nuevo helper o switch.
-- Trata el prompt, ejemplo o fixture que falla como una señal de caso de uso: busca
-  conceptos y superficies equivalentes antes de finalizar, y evita arreglar solo la
-  muestra literal a menos que el comportamiento sea intencionadamente específico de esa muestra.
-- Mantén el patch cerca de ese owner; evita refactors no relacionados.
-- Preserva los nombres de campo públicos de YAML, JSON, CLI y web a menos que el cambio sea
-  explícitamente una migración.
-- Añade o mueve tests cuando se encuentre un bug o comportamiento ambiguo.
-- **Gate de validación — ejecuta `make check` antes de tratar cualquier cambio como completo**
-  (el paso 4 del AI workflow lo detalla). `make check` = vet + tests completos, y
-  ejecuta transitivamente `make lint` (fmt-check, staticcheck, golangci-lint,
-  govulncheck, semgrep), `make yaml-validate` (yaml-fmt-check + yaml-lint),
-  `make markdown-check` y `make web-check`. Nunca sustituyas con un simple
-  `go test ./...` / `go vet`: esos se saltan lint, yaml-lint, markdown y checks
-  web y pierden problemas reales (p. ej. reglas de stutter/comment de revive).
-  Corrige cada hallazgo antes de reportar como hecho.
-- Para cambios de cara al daemon, comprueba el coste en runtime en el ciclo de estado estable
-  y evita escaneos repetidos, llamadas bloqueantes o asignaciones evitables en rutas calientes.
-- Actualiza docs y ejemplos en el mismo cambio cuando el comportamiento cambie.
+- Git, validación (`make check`) y política de commit/push: [AI / agent workflow](#ai--agent-workflow--standard-git-commits). No añadas una batería paralela de `go build` / `make lint` / `go test`.
+- Busca con `rg` y extiende el owner existente: [Reuse and shared behavior](#reuse-and-shared-behavior).
+- Coste del ciclo del daemon: [Daemon performance discipline](#daemon-performance-discipline).
+- Comportamiento visible al usuario: [Documentation lockstep](#documentation-lockstep).
+
+Mantén el patch cerca de ese owner; evita refactors no relacionados. Preserva los
+nombres de campo públicos de YAML, JSON, CLI y web a menos que el cambio sea
+explícitamente una migración. Añade o mueve tests cuando se encuentre un bug o
+comportamiento ambiguo.
 
 ## Web UI cohesion
 
@@ -721,22 +714,17 @@ Mantén `docs/services.es.md` (tabla de variables incorporadas) en step cuando a
 
 ## Go quality gates
 
-Dos reglas, una batería:
+Dos reglas:
 
 - **Cada archivo Go debe estar limpio de `gofmt` y `goimports` después de cualquier
   modificación.** Un hook `PostToolUse` de Claude Code (`.claude/settings.json`) ejecuta
   `gofmt -w` en cada `.go` editado; fuera de Claude Code, usa `make fmt` (o
   `gofmt` + `goimports` en `internal` y `cmd`).
-- **Cada cambio debe pasar la batería completa antes de hacer commit** (las herramientas
-  analizan el módulo completo y son demasiado lentas por edición). `make test` y `make check`
-  siempre ejecutan `fmt-check` y `make lint` primero vía el target `validate`; el
-  Makefile encuentra las herramientas instaladas por Go en `~/go/bin` y da a las cachés de análisis
-  estático un fallback escribible para agentes no interactivos:
-
-```sh
-go build ./...                    # must pass
-make check                      # vet, fmt-check, lint, yaml-validate, go test ./...
-```
+- **Cierra con `make check`**, el gate del [AI / agent workflow](#ai--agent-workflow--standard-git-commits)
+  paso 4. Ya ejecuta `validate` y luego tests y cover-gate. No antepongas
+  `go build ./...` ni un segundo `make lint` / `go test`. El Makefile encuentra
+  las herramientas de Go en `~/go/bin` y da a las cachés de analizadores un
+  fallback escribible para agentes no interactivos.
 
 Toolchain de YAML (instalar una vez):
 
@@ -782,7 +770,8 @@ Notas de herramientas:
   `linters.settings.revive.rules`: no hay `revive.toml` ni paso aparte. Antes lo
   había, invocado sin `-set_exit_status`, así que imprimía hallazgos y no hacía
   fallar nada; no reintroduzcas esa forma. El conjunto es el de por defecto más
-  `unused-parameter`, `struct-tag`, `import-shadowing`, `modifies-value-receiver`,
+  `unused-parameter`, `unused-receiver`, `use-errors-new`, `get-return`,
+  `struct-tag`, `import-shadowing`, `modifies-value-receiver`,
   `package-naming` (separada de `var-naming` en revive v1.15), las reglas de
   concurrencia `atomic`, `waitgroup-by-value`, `datarace`, `range-val-address`,
   `range-val-in-closure`, y un grupo de defectos/redundancia
@@ -791,11 +780,12 @@ Notas de herramientas:
   `duplicated-imports`, `redundant-import-alias`, `useless-break`,
   `unnecessary-stmt`, `unnecessary-format`, `optimize-operands-order`,
   `early-return`, `use-any`, `comment-spacings`). Los tests quedan fuera por la
-  exclusión compartida `_test\.go$`. Renombra parámetros no usados a `_`; evita
-  locales que sombreen nombres de import. Documenta los nuevos símbolos
+  exclusión compartida `_test\.go$`. Renombra parámetros no usados a `_`; omite
+  nombres de receptor no usados (`func (*T) M`, no `func (_ *T) M` — staticcheck ST1006).
+  Evita locales que sombreen nombres de import. Documenta los nuevos símbolos
   exportados — la regla `exported` está activa.
 - **`golangci-lint`** usa `.golangci.yml` (**formato v2** — el binario debe ser
-  v2). Ese fichero manda: **71 linters**, agrupados aquí por lo que te exigen.
+  v2). Ese fichero manda: **79 linters**, agrupados aquí por lo que te exigen.
   Consúltalo ante la duda — no des por hecho que un linter está apagado porque
   este resumen sea más corto que la config.
 
@@ -811,7 +801,7 @@ Notas de herramientas:
     `recvcheck`, `rowserrcheck`, `sqlclosecheck`, `unqueryvet`, `wastedassign`
   - *Forma de la API y arquitectura:*
     `asciicheck`, `depguard`, `errname`, `gochecknoinits`, `godoclint`,
-    `gomoddirectives`, `gomodguard`, `iface`, `inamedparam`, `interfacebloat`, `iotamixing`,
+    `gomoddirectives`, `gomodguard_v2`, `iface`, `inamedparam`, `interfacebloat`, `iotamixing`,
     `ireturn`, `musttag`, `predeclared`, `wrapcheck`
   - *Idioma y modernización:*
     `dogsled`, `dupword`, `exptostd`, `gocheckcompilerdirectives`, `gocritic`,
@@ -828,7 +818,7 @@ Notas de herramientas:
   `thelper`, `tparallel` y `usetesting` sí corren ahí; `gocognit`/`gocyclo`
   usan un presupuesto de 30 y `maintidx` un mínimo de 20; `gocritic` ejecuta
   todos los checks salvo `hugeParam` y `unnamedResult`, y `govet` todos los
-  analizadores salvo `fieldalignment` y `shadow`; `gomodguard` permite solo
+  analizadores salvo `fieldalignment` y `shadow`; `gomodguard_v2` permite solo
   dependencias de producción directas revisadas; `nolintlint` exige supresiones
   específicas, explicadas y aún necesarias; `loggercheck` exige claves string
   estructuradas de slog y rechaza logging de tipo printf; `dupword` y
@@ -836,8 +826,9 @@ Notas de herramientas:
   como exhaustivo);
   `forbidigo` prohíbe `fmt.Print*`, `log.(Print|Fatal|Panic)*` de la stdlib,
   `os.Exit`, `time.Sleep` y `http.DefaultClient` en paquetes de producción
-  (tests, entrypoints `cmd/` e `internal/web/build` están excluidos);
-  `interfacebloat` excluye `internal/web/server.go`; `depguard` impone las
+  (apagado en tests; `cmd/` e `internal/web/build` mantienen `//nolint:forbidigo`
+  documentado en `os.Exit`); la interfaz `Backend` del dashboard en
+  `internal/web/server.go` lleva `//nolint:interfacebloat`; `depguard` impone las
   fronteras de import (checks/conn/rules/config no importan `operation`;
   `rules/` de producción no importa `execx`); políticas por zona de
   `wrapcheck` e `ireturn` (ambos ON en el core, OFF solo donde el diseño
@@ -863,7 +854,7 @@ Notas de herramientas:
     (watch/hook/runtime), registro assist y factorías de managers. Las demás
     fronteras intencionales de interfaz usan una supresión local justificada.
 
-  `noctx` está desactivado en `internal/conn/` y `*_test.go`; `goconst` exige
+  `noctx` está desactivado en `*_test.go` y activo en `internal/conn/`; `goconst` exige
   cuatro apariciones antes de pedir una constante.
 
   `govet` y `gocritic` corren con **todos** sus analizadores/checks activos,
@@ -943,7 +934,7 @@ Notas de herramientas:
   deja de hacer falta: `G204` (comandos del operador vía `execx`), `G304` (rutas
   bajo `/proc`, `paths.runtime`, fstab, dirs de config), escrituras `0644`
   intencionales, lecturas acotadas `args[i]`, `G118` de contexto de shutdown, y
-  `G115` en los encoders de ancho fijo `fpm`, `ipp`, `kafka`, `mqtt`, `nfs`,
+  `G115` en los encoders de ancho fijo `fpm`, `kafka`, `mqtt`, `nfs`,
   `openvpn`, `rdp`, `smb`, `snmp` — cada uno nombra el ancho de campo que hace
   del truncamiento la codificación. No uses nunca el `#nosec` propio de gosec:
   `nolintlint` no lo ve, así que sería una supresión sin validar. Nombra siempre
@@ -977,10 +968,11 @@ Notas de herramientas:
 - **`make scripts-lint`** ejecuta `shellcheck` en `scripts/*.sh` y
   `scripts/remote-deploy/*.sh`, y luego `ruff check` en los helpers Python bajo
   `scripts/`. Forma parte de `validate`/`check`.
-- **`make deadcode`** (advisory, fuera de `lint`/`check`) imprime un informe de
-  funciones inalcanzables vía `golang.org/x/tools/cmd/deadcode`. La reflexión y
-  los build tags producen falsos positivos — tría los hallazgos a mano antes de
-  borrar nada.
+- **`make deadcode`** vuelve a ejecutar el mismo `deadcode -test` bloqueante que
+  ya corre dentro de `make lint` (debe seguir en cero). Úsalo para una pasada
+  focalizada; no lo trates como un gate advisory más débil, y no lo lances otra
+  vez después de `make check`. La reflexión y los build tags siguen produciendo
+  falsos positivos — tría esos a mano antes de borrar nada.
 - **`make cover-gate`** (parte de `make check`) impone un suelo de cobertura de
   statements sin regresión en paquetes de safety vía `scripts/cover_gate.py`:
   `operation` ≥ 88%, `process` ≥ 75%, `locks` ≥ 75%, `rules` ≥ 80%,

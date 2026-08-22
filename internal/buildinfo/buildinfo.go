@@ -55,10 +55,7 @@ func Short() string {
 	return version
 }
 
-// String returns a multi-line, human-readable version banner, e.g.:
-//
-//	sermo 1.2.0 (a1b2c3d4e5f6, 2026-06-08T10:00:00Z)
-//	  go1.26.3, linux/amd64
+// String returns a multi-line, human-readable version banner.
 func String() string {
 	version, revision, date := resolve()
 

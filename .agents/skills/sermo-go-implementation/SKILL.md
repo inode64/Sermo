@@ -109,24 +109,39 @@ internal/buildinfo    build/version metadata
 internal/cfgval       typed config value parsing and validation helpers
 internal/checks       check implementations and central check builders
 internal/cli          sermoctl command implementations
+internal/cliutil      pflag/CLI error normalisation shared by commands
 internal/config       YAML model, catalog loading, services/watches/clones, merge, render, variables, validation
 internal/conn         protocol probes used by connection checks
 internal/control      daemon control socket/client helpers
+internal/ctxutil      small context helpers
 internal/diag         diagnostics assembly
 internal/dockerctl    Docker control helpers
+internal/emission     shared emission/formatting helpers
 internal/execx        command runner
+internal/httpx        HTTP client with timeout (never http.DefaultClient)
 internal/locks        runtime locks and external lock checks
+internal/logfile      append-only log file writer
 internal/metrics      CPU/memory/process collectors and time-series helpers
 internal/mountctl     mount/umount operation helpers
+internal/mounts       mount table parsing
+internal/netutil      network address helpers
 internal/notify       notifier implementations
 internal/operation    safe start/stop/restart/reload/resume workflows shared by sermod and sermoctl
+internal/output       operator-facing CLI output helpers
 internal/process      process discovery, identity matching and signaling
+internal/procnet      /proc/net socket table parsing
 internal/rules        rule engine, windows and remediation state
 internal/servicemgr   systemd/OpenRC abstraction
 internal/state        persisted daemon state and migrations
+internal/strutil      small string helpers
+internal/telegramapi  Telegram Bot API types and parse_mode
+internal/telegrambot  inbound Telegram command dispatch
+internal/units        duration/byte humanization shared with the web UI
+internal/utmp         Linux utmp/wtmp session parsing
 internal/virt         virtualization control helpers
 internal/volume       volume/storage expansion helpers
 internal/web          web API contracts and embedded UI server
+internal/webcred      web credential loading
 ```
 
 ## Test requirements
