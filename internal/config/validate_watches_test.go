@@ -863,6 +863,46 @@ func TestValidateCertWatch(t *testing.T) {
 		"watches.c.check requires a host or a path")
 }
 
+func TestValidateReplicationWatch(t *testing.T) {
+	assertNoWatchIssues(t, watchConfigs(map[string]any{
+		"db-replication": map[string]any{
+			"type": "replication", "user": "root",
+			"behind": map[string]any{"op": "<", "value": 300},
+		},
+	}))
+	assertWatchIssues(t, watchConfigs(map[string]any{
+		"no-user": map[string]any{"type": "replication"},
+		"bad-eng": map[string]any{"type": "replication", "user": "root", "engine": "postgres"},
+		"bad-lag": map[string]any{"type": "replication", "user": "root", "behind": map[string]any{"op": "<>", "value": "x"}},
+	}),
+		"watches.no-user.check.user is required for a replication check",
+		"watches.bad-eng.check.engine must be mysql or mariadb for a replication check",
+		"watches.bad-lag.check.behind.op \"<>\" is not one of",
+		"watches.bad-lag.check.behind.value must be numeric")
+}
+
+func TestValidateReplicationControlBlock(t *testing.T) {
+	good := map[string]any{
+		"check":               map[string]any{"type": "replication", "user": "root"},
+		"replication_control": map[string]any{"start": true},
+	}
+	assertNoWatchIssues(t, map[string]any{"watches": map[string]any{"db-replication": good}})
+
+	assertWatchIssues(t, map[string]any{"watches": map[string]any{
+		"on-raid": map[string]any{
+			"check":               map[string]any{"type": "raid"},
+			"replication_control": map[string]any{"start": true},
+		},
+		"bad-key": map[string]any{
+			"check":               map[string]any{"type": "replication", "user": "root"},
+			"replication_control": map[string]any{"stop": true},
+		},
+	}},
+		"watches.on-raid.replication_control is only valid on a replication watch",
+		"watches.bad-key.replication_control.stop is not supported",
+		"watches.bad-key.replication_control.start is required")
+}
+
 func TestValidateStorageMountWatch(t *testing.T) {
 	// A storage watch can carry a mount condition (mount + space in one entry).
 	assertNoWatchIssues(t, watchConfig("data-mount", map[string]any{"type": "storage", "path": "/data", "mounted": true}))
