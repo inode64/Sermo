@@ -925,16 +925,10 @@ func resourceCheckReadings(checkType string, data map[string]any) []web.WatchRea
 		addBytes(checks.DataKeyUsedBytes, watchReadingLabelUsedBytes).
 		addBytes(checks.DataKeyFreeBytes, watchReadingLabelFreeBytes).
 		addBytes(checks.DataKeyAvailableBytes, watchReadingLabelAvailable)
-	label := watchReadingLabelValue
-	switch checkType {
-	case checks.CheckTypeLoad:
-		label = watchReadingLabelLoad
-	case checks.CheckTypeMemory:
-		label = watchReadingLabelUsed
-	case checks.CheckTypeSwap:
-		label = watchReadingLabelFree
+	if checkType == checks.CheckTypeLoad {
+		rb.addMetric(checks.DataKeyValue, watchReadingLabelLoad, watchReadingDefaultMetricDecimals, "")
 	}
-	return rb.addMetric(checks.DataKeyValue, label, watchReadingDefaultMetricDecimals, "").readings()
+	return rb.readings()
 }
 
 // pressureFieldLabels maps PSI data fields to their dashboard labels.

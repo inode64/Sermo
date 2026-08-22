@@ -658,6 +658,18 @@ test("check SLA uses the service series endpoint and hatches unobserved time", a
 // A host-wide count says how many; only the per-service breakdown says who. The
 // figures come from the service list the dashboard already holds, so the section
 // costs no request, and each name opens that service rather than just printing it.
+// A watch sub-table names the column after the number it shows: fds reads
+// "Allocated" with the live count, never a generic "Value" header pointing at
+// whatever reading happened to come first.
+test("the fds watch table names its column Allocated", async ({ page }) => {
+  const row = page.locator("#wat-row-host-fds");
+  await expect(row).toContainText("879072");
+  const fdsHeader = page.locator('th[data-watch-type-sort-type="fds"][data-watch-type-sort="allocated"]');
+  await expect(fdsHeader.first()).toBeVisible();
+  await expect(fdsHeader.first()).toHaveText("Allocated");
+  await expect(page.locator('th[data-watch-type-sort-type="fds"][data-watch-type-sort="value"]')).toHaveCount(0);
+});
+
 test("an fds watch names the services holding the descriptors", async ({ page }) => {
   await page.locator("#wat-row-host-fds .row-toggle").click();
   const held = page.locator('[id="exp-wat:host-fds"] .count-holder');
