@@ -22,13 +22,17 @@ restart_on_change:
       ${display_name} will restart after version change of ${change.app}: ${change.old_version} -> ${change.new_version}
 variables:
   config: /etc/nebula/${instance}.yml
+  # The first static_host_map entry names the lighthouse the handshake probe
+  # dials. YAML admits it as an inline flow list or a block sequence, quoted or
+  # not — the patterns accept every form (the flow-only, quoted-only original
+  # silently fell back to 127.0.0.1:4242 on block-style configs).
   host:
     from_file: ${config}
-    pattern: (?m)^\s*static_host_map:\s*\n\s*(?:"[^"]+"|[^:\n]+)\s*:\s*\[\s*"\[?([^"\]]+)\]?:(?:\d+)"
+    pattern: (?m)^\s*static_host_map:\s*\n\s*(?:"[^"]+"|[^:\n]+)\s*:\s*(?:\[\s*"?|\n\s*-\s*"?)\[?([^"\]\n]+)\]?:\d+
     default: 127.0.0.1
   port:
     from_file: ${config}
-    pattern: (?m)^\s*static_host_map:\s*\n\s*(?:"[^"]+"|[^:\n]+)\s*:\s*\[\s*"[^"]+:(\d+)"
+    pattern: (?m)^\s*static_host_map:\s*\n\s*(?:"[^"]+"|[^:\n]+)\s*:\s*(?:\[\s*"?|\n\s*-\s*"?)[^"\n]*:(\d+)
     default: 4242
   user: root
 config_files:

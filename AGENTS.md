@@ -122,6 +122,19 @@ level of integration.
 - Do not push to `origin` unless the user explicitly asks for a push or PR.
 - Do not leave the repository in a partially staged state without explaining it.
 
+**Fleet hosts and manual repair**
+The fleet runs with `dry_run: true` while the project is in its testing phase:
+the daemon never remediates on its own. That flag does **not** restrain an
+agent the user pointed at a host. When the user asks for testing or repair
+there, use Sermo itself as the tool — `sermoctl start/stop/restart/repair`,
+dashboard actions, operator buttons — exactly as an operator would; manual
+actions execute for real regardless of `dry_run`. On such a host, every
+`failed` service or watch is work to finish: repair it through Sermo,
+investigate the root cause (a broken check, a package bug, a wrong generated
+config) and fix it so Sermo reports reality — unless it is a false positive or
+the user says to leave it. Repairing through Sermo is the core of the product;
+if Sermo cannot repair, that is itself a bug to fix.
+
 **Relationship to the rest of AGENTS.md**
 This workflow is part of the "Small-change checklist". Every implementation
 should start by inspecting repository state and finish with either a clean,
