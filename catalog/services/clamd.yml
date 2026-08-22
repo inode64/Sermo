@@ -17,9 +17,16 @@ restart_on_change:
       ${display_name} will restart after version change of ${change.app}: ${change.old_version} -> ${change.new_version}
 variables:
   user: root
-  # clamd's LocalSocket path is deployment-specific; this default matches the
-  # common /run/clamav/clamd.ctl. Override on an instance for other layouts.
-  clamd_socket: /run/clamav/clamd.ctl
+  config:
+    - /etc/clamav/clamd.conf
+    - /etc/clamd.conf
+  # clamd's LocalSocket path is deployment-specific (Gentoo ships clamd.sock,
+  # Debian clamd.ctl): read the daemon's own config instead of guessing, with
+  # the Debian convention as the last-resort default.
+  clamd_socket:
+    from_file: ${config}
+    pattern: (?m)^\s*LocalSocket\s+(\S+)
+    default: /run/clamav/clamd.ctl
 pidfile:
   - /run/clamd.pid
   - /run/clamav/clamd.pid
