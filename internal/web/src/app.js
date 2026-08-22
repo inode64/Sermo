@@ -3152,12 +3152,21 @@ function renderWatchExpansionInto(key, events) {
   }
 }
 
+// sharedLoad deduplicates concurrent loads of one resource: while a load for
+// this key is in flight every caller shares its promise, and the slot clears
+// when it settles so the next refresh fetches fresh. One owner for the idiom
+// the expansion, app-SLA and app-events loaders each hand-rolled.
+function sharedLoad(inflight, loadingKey, start) {
+  if (inflight.has(loadingKey)) return inflight.get(loadingKey);
+  const pending = start().finally(() => inflight.delete(loadingKey));
+  inflight.set(loadingKey, pending);
+  return pending;
+}
+
 const expLoading = new Map(); // key -> shared in-flight detail fetch
 
 function loadExpansionFor(key, generation = dashboardGeneration) {
-  const loadingKey = `${generation}:${key}`;
-  if (expLoading.has(loadingKey)) return expLoading.get(loadingKey);
-  const pending = (async () => {
+  return sharedLoad(expLoading, `${generation}:${key}`, () => (async () => {
     const cell = expansionCell(key);
     if (cell && !expCache[key]) litRender(tpl`<span class="muted">loading…</span>`, cell);
     if (isServiceExpansionKey(key)) {
@@ -3181,11 +3190,7 @@ function loadExpansionFor(key, generation = dashboardGeneration) {
       return res.ok;
     }
     return true;
-  })().catch(() => false).finally(() => {
-    expLoading.delete(loadingKey);
-  });
-  expLoading.set(loadingKey, pending);
-  return pending;
+  })().catch(() => false));
 }
 
 // bucketize folds time-series points into cols buckets covering the last span
@@ -5765,27 +5770,18 @@ function renderAppExpansion(a) {
 // change calls loadSLAPanel directly, so picking 7d always refetches.
 const appSLALoads = new Map();
 function loadAppSLA(name, generation = dashboardGeneration) {
-  const loadingKey = `${generation}:${name}`;
-  if (appSLALoads.has(loadingKey)) return appSLALoads.get(loadingKey);
-  const pending = loadSLAPanel(appSLAKey(name), generation)
-    .finally(() => appSLALoads.delete(loadingKey));
-  appSLALoads.set(loadingKey, pending);
-  return pending;
+  return sharedLoad(appSLALoads, `${generation}:${name}`, () => loadSLAPanel(appSLAKey(name), generation));
 }
 
 // loadAppEvents fills an expanded application's "Recent events" table with its
 // monitoring history (errors/recoveries), mirroring loadServiceEvents.
 const appEventLoads = new Map();
 function loadAppEvents(name, generation = dashboardGeneration) {
-  const loadingKey = `${generation}:${name}`;
-  if (appEventLoads.has(loadingKey)) return appEventLoads.get(loadingKey);
-  const pending = loadEventRows(
+  return sharedLoad(appEventLoads, `${generation}:${name}`, () => loadEventRows(
     detailDomId(name, "app-events"),
     applicationEventsAPI(name, eventDetailLimit),
     generation,
-  ).finally(() => appEventLoads.delete(loadingKey));
-  appEventLoads.set(loadingKey, pending);
-  return pending;
+  ));
 }
 
 async function refreshExpandedApplications(generation = dashboardGeneration) {
