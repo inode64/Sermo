@@ -79,6 +79,23 @@ const watches = [{
     { field: "recovering", label: "Recovering", warning: "recovering" },
   ],
 }, {
+  name: "db-replication", display_name: "DB replication", category: "database",
+  enabled: true, monitored: true, state: "ok", check_type: "replication",
+  can_control_replication: true,
+  summary: "replication ok: io and sql running, 0s behind (source 172.31.27.30)",
+  interval: "1m", status_observed_at: "2026-07-10T12:00:00Z",
+  metrics: [
+    { name: "io_stopped", band: true, severity: "error", label: "IO thread" },
+    { name: "sql_stopped", band: true, severity: "error", label: "SQL thread" },
+    { name: "behind_seconds", unit: "s" },
+  ],
+  readings: [
+    { field: "source_host", label: "Source", value: "172.31.27.30" },
+    { field: "io_stopped", label: "IO thread", value: "running", good: true },
+    { field: "sql_stopped", label: "SQL thread", value: "running", good: true },
+    { field: "behind_seconds", label: "Behind", value: "0 s" },
+  ],
+}, {
   name: "dead-letter", display_name: "Dead letter", category: "files",
   enabled: true, monitored: true, state: "ok", check_type: "file",
   summary: "size threshold clear", interval: "5m", status_observed_at: "2026-07-10T12:00:00Z",
@@ -726,6 +743,22 @@ test("an available ssh source with no sessions renders no row", async ({ page })
   const empty = page.locator("#session-rows tr", { hasText: "No active sessions" });
   await expect(empty).toHaveCount(1);
   await expect(empty).toContainText("tmux");
+});
+
+// The manual replication start is the DBA's repair executed by Sermo: the
+// button explains what runs, confirms, and posts the replication-start action.
+test("a replication watch offers its manual start behind confirmation", async ({ page }) => {
+  let startURL = null;
+  await page.route("**/api/watches/db-replication/replication-start", async (route) => {
+    startURL = new URL(route.request().url());
+    await route.fulfill({ json: { ok: true, message: "replication started" } });
+  });
+  const row = page.locator("#wat-row-db-replication");
+  await expect(row).toContainText("172.31.27.30");
+  await row.getByRole("button", { name: /Start replication/ }).click();
+  await expect(page.locator("#simple-confirm-message")).toContainText("START REPLICA");
+  await page.locator("#simple-confirm-ok").click();
+  await expect.poll(() => startURL && startURL.pathname).toBe("/api/watches/db-replication/replication-start");
 });
 
 // A boolean state renders as an SLA-style band, never a line chart: a line

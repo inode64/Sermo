@@ -131,6 +131,7 @@ func conditionValueOr(value, fallback string) string {
 
 var watchTypeConditionBuilders = map[string]func(map[string]any) []web.WatchCondition{
 	checks.CheckTypeRAID:          raidWatchConditions,
+	checks.CheckTypeReplication:   replicationWatchConditions,
 	checks.CheckTypeCount:         countWatchConditions,
 	checks.CheckTypeFile:          fileWatchConditions,
 	checks.CheckTypeProcess:       processWatchConditions,
@@ -139,6 +140,21 @@ var watchTypeConditionBuilders = map[string]func(map[string]any) []web.WatchCond
 	checks.CheckTypeFirewallRules: firewallWatchConditions,
 	checks.CheckTypeFailedUnits:   failedUnitsWatchConditions,
 	checks.CheckTypeSize:          sizeWatchConditions,
+}
+
+func replicationWatchConditions(check map[string]any) []web.WatchCondition {
+	out := []web.WatchCondition{
+		{Field: checks.DataKeyIOStopped, Op: cfgval.CompareOpEqual, Value: "0"},
+		{Field: checks.DataKeySQLStopped, Op: cfgval.CompareOpEqual, Value: "0"},
+	}
+	if behind, ok := check[checks.CheckKeyBehind].(map[string]any); ok {
+		out = append(out, web.WatchCondition{
+			Field: checks.DataKeyBehindSeconds,
+			Op:    cfgval.AsString(behind[checks.CheckKeyOp]),
+			Value: cfgval.String(behind[checks.CheckKeyValue]),
+		})
+	}
+	return out
 }
 
 func raidWatchConditions(check map[string]any) []web.WatchCondition {

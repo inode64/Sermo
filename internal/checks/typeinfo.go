@@ -85,6 +85,7 @@ const (
 	CheckTypeSQLite           = "sqlite"
 	CheckTypeSQLite3          = "sqlite3"
 	CheckTypeSQL              = "sql"
+	CheckTypeReplication      = "replication"
 	CheckTypeMongoDBQuery     = "mongodb-query"
 	CheckTypeInfluxDBQuery    = "influxdb-query"
 	CheckTypeSize             = "size"

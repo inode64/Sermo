@@ -26,6 +26,15 @@ const (
 	RAIDControlKeyPauseResume = "pause_resume"
 )
 
+// WatchKeyReplicationControl enables the explicit manual replication start for
+// a single replication watch.
+const WatchKeyReplicationControl = "replication_control"
+
+// Replication control keys configure the manual start capability.
+const (
+	ReplicationControlKeyStart = "start"
+)
+
 // Watch then-block keys shared by validation, builders and web projections.
 const (
 	WatchThenKeyHook           = "hook"

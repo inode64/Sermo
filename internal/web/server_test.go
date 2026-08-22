@@ -37,6 +37,7 @@ type fakeBackend struct {
 	watchExpanded               []string
 	watchProbed                 []string
 	raidControlled              []string
+	replicationStarted          []string
 	failOp                      bool
 	seriesSince                 time.Duration
 	seriesCheck                 string
@@ -363,6 +364,10 @@ func (f *fakeBackend) ProbeWatch(_ context.Context, name string) ActionResult {
 func (f *fakeBackend) ControlRAID(_ context.Context, name, action, confirmation string) ActionResult {
 	f.raidControlled = append(f.raidControlled, name+"/"+action+"/"+confirmation)
 	return ActionResult{OK: true, Message: "controlled"}
+}
+func (f *fakeBackend) ControlReplication(_ context.Context, name string) ActionResult {
+	f.replicationStarted = append(f.replicationStarted, name)
+	return ActionResult{OK: true, Message: "replication started"}
 }
 func (f *fakeBackend) Preflight(_ context.Context, name string) (PreflightResult, bool) {
 	for _, s := range f.services {
@@ -1426,6 +1431,24 @@ func TestWatchProbeAndRAIDActions(t *testing.T) {
 	}
 	if got := b.raidControlled; len(got) != 2 || got[0] != "raid-md0/pause/md0" || got[1] != "raid-md0/resume/" {
 		t.Fatalf("RAID controls = %v", got)
+	}
+}
+
+// The manual replication start rides the same watch-action route family and
+// reaches its own backend method, not the RAID fallthrough.
+func TestWatchReplicationStartAction(t *testing.T) {
+	b := &fakeBackend{}
+	h := newServer(b)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, postReq(testWatchPath("db-replication", apiActionReplicationStart)))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("code=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if got := b.replicationStarted; len(got) != 1 || got[0] != "db-replication" {
+		t.Fatalf("replication starts = %v", got)
+	}
+	if got := b.raidControlled; len(got) != 0 {
+		t.Fatalf("replication start must not reach ControlRAID: %v", got)
 	}
 }
 

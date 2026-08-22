@@ -43,6 +43,13 @@ const (
 	DataKeyDNSNames                 = "dns_names"
 	DataKeyDatabase                 = CheckKeyDatabase
 	DataKeyEngine                   = CheckKeyEngine
+	DataKeyIOStopped                = "io_stopped"
+	DataKeySQLStopped               = "sql_stopped"
+	DataKeyBehindSeconds            = "behind_seconds"
+	DataKeySourceHost               = "source_host"
+	DataKeyLastIOError              = "last_io_error"
+	DataKeyLastSQLError             = "last_sql_error"
+	DataKeyConnections              = "connections"
 	DataKeyFamily                   = "family"
 	DataKeyFirmware                 = "firmware"
 	DataKeyFingerprint              = "fingerprint"
