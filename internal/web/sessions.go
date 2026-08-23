@@ -10,13 +10,14 @@ import (
 // SSH service. CanClose is true only when a per-session process boundary and
 // start-time identity were observed and can therefore be revalidated safely.
 type SSHSession struct {
-	Service     string `json:"service"`
-	User        string `json:"user"`
-	Terminal    string `json:"terminal"`
-	PID         int    `json:"pid,omitempty"`
-	StartTicks  uint64 `json:"start_ticks,omitempty"`
-	IdleSeconds int64  `json:"idle_seconds,omitempty"`
-	CanClose    bool   `json:"can_close"`
+	Service         string `json:"service"`
+	User            string `json:"user"`
+	Terminal        string `json:"terminal"`
+	PID             int    `json:"pid,omitempty"`
+	StartTicks      uint64 `json:"start_ticks,omitempty"`
+	IdleSeconds     int64  `json:"idle_seconds,omitempty"`
+	CanClose        bool   `json:"can_close"`
+	ManagedByLogind bool   `json:"managed_by_logind,omitempty"`
 	SessionUsage
 }
 
@@ -48,7 +49,7 @@ type TerminalSession struct {
 	SessionUsage
 	Identity     string `json:"identity,omitempty"`
 	CanClose     bool   `json:"can_close"`
-	PIDs         []int  `json:"-"`
+	PIDs         []int  `json:"pids,omitempty"`
 	ActivityUnix int64  `json:"-"`
 	TTY          string `json:"-"`
 }
@@ -88,12 +89,17 @@ type SessionSource struct {
 	CanCloseEmpty bool           `json:"can_close_empty"`
 }
 
-// SessionIssue is one terminal that remains visible but cannot be attributed
-// or offered for a close action safely.
+// SessionIssue is one terminal whose SSH process ancestry cannot be attributed.
+// A systemd host may still offer a login1-managed close after independently
+// verifying the exact remote session identity.
 type SessionIssue struct {
-	User     string `json:"user"`
-	Terminal string `json:"terminal"`
-	Message  string `json:"message"`
+	User            string `json:"user"`
+	Terminal        string `json:"terminal"`
+	Message         string `json:"message"`
+	PID             int    `json:"pid,omitempty"`
+	StartTicks      uint64 `json:"start_ticks,omitempty"`
+	CanClose        bool   `json:"can_close"`
+	ManagedByLogind bool   `json:"managed_by_logind,omitempty"`
 }
 
 // SessionInventory is the dashboard-wide view of interactive sessions.
@@ -113,8 +119,9 @@ func (s *Server) handleSessions(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleSSHSessionClose accepts only a fully identified session displayed by a
-// preceding detail read. The backend re-discovers it immediately before SIGTERM
-// so these request values never authorize a stale or recycled PID on their own.
+// preceding detail read. The backend re-discovers either its trusted SSH process
+// boundary or its exact login1 session immediately before closing, so these
+// request values never authorize a stale or recycled PID on their own.
 func (s *Server) handleSSHSessionClose(w http.ResponseWriter, r *http.Request) {
 	backend, ok := s.mutationBackend(w, r)
 	if !ok {
@@ -135,12 +142,21 @@ func (s *Server) handleSSHSessionClose(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "SSH session terminal is required")
 		return
 	}
+	managedByLogind := false
+	if value := r.URL.Query().Get(apiQueryManagedByLogind); value != "" {
+		managedByLogind, err = strconv.ParseBool(value)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "invalid managed_by_logind value")
+			return
+		}
+	}
 	s.extendActionWriteDeadline(w)
 	//nolint:contextcheck // see operateContext
 	res := backend.CloseSSHSession(s.operateContext(r), r.PathValue(apiParamName), SSHSession{
-		PID:        pid,
-		StartTicks: startTicks,
-		Terminal:   terminal,
+		PID:             pid,
+		StartTicks:      startTicks,
+		Terminal:        terminal,
+		ManagedByLogind: managedByLogind,
 	})
 	writeActionResult(w, res.OK, res)
 }

@@ -66,13 +66,18 @@ type SSHSession struct {
 	Idle       time.Duration
 }
 
-// SSHSessionIssue is one login terminal that the inventory could not attribute
-// to a configured sshd identity safely. It is display-only and never carries a
-// PID or start time that could authorize a close action.
+// SSHSessionIssue is one remote login terminal that the inventory could not
+// attribute to a configured sshd identity safely. PID and StartTicks describe
+// its utmp leader only when that exact process generation is visible; they
+// never authorize direct signalling and may only be used for independent
+// session-manager verification.
 type SSHSessionIssue struct {
-	User     string
-	Terminal string
-	Message  string
+	User       string
+	Terminal   string
+	Message    string
+	PID        int
+	StartTicks uint64
+	Remote     bool
 }
 
 // SSHSessionSample separates local console terminals from interactive SSH
@@ -338,30 +343,30 @@ func sampleSSHSessions(sessions []utmp.Session, snapshot map[int]process.Identit
 		seen[session.Line] = true
 		info, err := terminal(session.Line)
 		if err != nil {
-			addSSHSessionIssue(&sample, session, fmt.Sprintf("terminal metadata unavailable: %v", err))
+			addSSHSessionIssue(&sample, session, snapshot, fmt.Sprintf("terminal metadata unavailable: %v", err))
 			continue
 		}
 		if info.Device == 0 {
-			addSSHSessionIssue(&sample, session, "terminal has no device identity")
+			addSSHSessionIssue(&sample, session, snapshot, "terminal has no device identity")
 			continue
 		}
 		processes := terminalProcesses(snapshot, info.Device)
 		if len(processes) == 0 {
-			addSSHSessionIssue(&sample, session, "terminal has no visible processes")
+			addSSHSessionIssue(&sample, session, snapshot, "terminal has no visible processes")
 			continue
 		}
 		ssh, target, unknown, err := terminalSSH(processes, snapshot, sshdFilters, resolveUser)
 		if err != nil {
-			addSSHSessionIssue(&sample, session, fmt.Sprintf("sshd identity verification failed: %v", err))
+			addSSHSessionIssue(&sample, session, snapshot, fmt.Sprintf("sshd identity verification failed: %v", err))
 			continue
 		}
 		if unknown {
-			addSSHSessionIssue(&sample, session, sshSessionIssueMessage(processes, snapshot))
+			addSSHSessionIssue(&sample, session, snapshot, sshSessionIssueMessage(processes, snapshot))
 			continue
 		}
 		if !ssh {
 			if session.Host != "" {
-				addSSHSessionIssue(&sample, session, "no configured sshd identity in the live process ancestry")
+				addSSHSessionIssue(&sample, session, snapshot, "no configured sshd identity in the live process ancestry")
 				continue
 			}
 			sample.Console++
@@ -378,8 +383,15 @@ func sampleSSHSessions(sessions []utmp.Session, snapshot map[int]process.Identit
 	return sample, nil
 }
 
-func addSSHSessionIssue(s *SSHSessionSample, session utmp.Session, message string) {
-	s.Issues = append(s.Issues, SSHSessionIssue{User: session.User, Terminal: session.Line, Message: message})
+func addSSHSessionIssue(s *SSHSessionSample, session utmp.Session, snapshot map[int]process.Identity, message string) {
+	issue := SSHSessionIssue{User: session.User, Terminal: session.Line, Message: message, Remote: session.Host != ""}
+	if issue.Remote && session.PID > 0 {
+		if identity, ok := snapshot[session.PID]; ok && identity.StartTicksOK && identity.StartTicks > 0 {
+			issue.PID = session.PID
+			issue.StartTicks = identity.StartTicks
+		}
+	}
+	s.Issues = append(s.Issues, issue)
 }
 
 func sshSessionIssueMessage(processes []process.Identity, snapshot map[int]process.Identity) string {

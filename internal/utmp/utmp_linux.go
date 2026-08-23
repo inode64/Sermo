@@ -7,17 +7,20 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"strings"
 )
 
 // Linux utmp record layout (struct utmp): a fixed 384-byte record whose first
 // uint16 is the entry type; USER_PROCESS (7) marks an interactive login. The
-// ut_line (terminal) and ut_user (name) fields are fixed-width NUL-padded
-// C strings at the offsets below.
+// ut_pid leader and the fixed-width NUL-padded terminal/user fields use the
+// offsets below.
 const (
 	recordSize        = 384
 	userProcess       = 7
+	pidOffset         = 4
+	pidSize           = 4
 	lineOffset        = 8
 	lineSize          = 32
 	userOffset        = 44
@@ -74,13 +77,18 @@ func parse(data []byte) []Session {
 		if nativeEndian.Uint16(rec[:2]) != userProcess {
 			continue
 		}
+		pidBits := nativeEndian.Uint32(rec[pidOffset : pidOffset+pidSize])
+		pid := 0
+		if pidBits <= math.MaxInt32 {
+			pid = int(pidBits)
+		}
 		line := cString(rec[lineOffset : lineOffset+lineSize])
 		user := cString(rec[userOffset : userOffset+userSize])
 		host := cString(rec[hostOffset : hostOffset+hostSize])
 		if line == "" || user == "" {
 			continue
 		}
-		out = append(out, Session{User: user, Line: line, Host: host})
+		out = append(out, Session{PID: pid, User: user, Line: line, Host: host})
 	}
 	return out
 }

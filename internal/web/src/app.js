@@ -3940,7 +3940,7 @@ function checkSLAHTML(service, c) {
 function sshSessionCloseButton(service, session) {
   if (!me.can_act) return tpl`<span class="muted">read-only</span>`;
   if (!session.can_close) return tpl`<span class="muted">unavailable</span>`;
-  return tpl`<button class="danger-btn" data-ssh-session-close="1" data-ssh-service="${service}" data-ssh-session-pid="${session.pid}" data-ssh-session-start-ticks="${session.start_ticks}" data-ssh-session-terminal="${session.terminal}" data-ssh-session-user="${session.user || ""}">close</button>`;
+  return tpl`<button class="danger-btn" data-ssh-session-close="1" data-ssh-service="${service}" data-ssh-session-pid="${session.pid}" data-ssh-session-start-ticks="${session.start_ticks}" data-ssh-session-terminal="${session.terminal}" data-ssh-session-user="${session.user || ""}" data-ssh-session-managed="${!!session.managed_by_logind}">close</button>`;
 }
 
 function terminalSessionCloseButton(session) {
@@ -3986,25 +3986,26 @@ function sessionUsageRow(session, idleReady) {
 function sessionRows(inventory) {
   const ssh = (inventory.ssh || []).map((session) => ({
     kind: sessionKindSSH, service: session.service || "", user: session.user || "",
-    name: session.terminal || "", state: sessionStateActive,
-    detail: tpl`PID ${session.pid || "—"}`,
+    name: session.terminal || "", pid: session.pid || 0, pidSort: session.pid || 0, state: sessionStateActive,
+    detail: nothing,
     ...sessionUsageRow(session, true),
     action: sshSessionCloseButton(session.service || "", session),
   }));
   const terminal = (inventory.terminal || []).map((session) => ({
     kind: session.multiplexer || "", service: session.service || "", user: session.user || "",
-    name: session.name || "", state: session.state || sessionStateUnknown,
+    name: session.name || "", pid: (session.pids || []).join(", "), pidSort: (session.pids || [0])[0] || 0,
+    state: session.state || sessionStateUnknown,
     detail: Number.isInteger(session.windows) ? `${fmtNum(session.windows, 0)} window${session.windows === 1 ? "" : "s"}` : "—",
     ...sessionUsageRow(session, session.has_idle),
     action: terminalSessionCloseButton(session),
   }));
   const issues = (inventory.sources || []).flatMap((source) => (source.issues || []).map((issue) => ({
     kind: source.kind || "", service: source.service || "", user: issue.user || source.user || "",
-    name: issue.terminal || source.check || "—", state: sessionSourceUnavailable,
+    name: issue.terminal || source.check || "—", pid: issue.pid || 0, pidSort: issue.pid || 0, state: sessionSourceUnavailable,
     detail: issue.message || source.message || "Session attribution unavailable",
     idle: 0, idleReady: false, cpu: 0, cpuReady: false, memory: 0, memoryReady: false,
     ioRead: 0, ioWrite: 0, ioReady: false, metricsExpected: false,
-    action: nothing,
+    action: sshSessionCloseButton(source.service || "", issue),
   })));
   // A sessionless source earns a row only when it has something to say: an
   // unavailable or collecting source is a problem or a wait worth seeing, and
@@ -4016,7 +4017,8 @@ function sessionRows(inventory) {
     .filter((source) => source.state !== sessionSourceAvailable || source.can_close_empty)
     .map((source) => ({
     kind: source.kind || "", service: source.service || "", user: source.user || "",
-    name: source.check || "—", state: source.state === sessionSourceAvailable ? sessionStateEmpty : source.state || targetStateCollecting,
+    name: source.check || "—", pid: 0, pidSort: 0,
+    state: source.state === sessionSourceAvailable ? sessionStateEmpty : source.state || targetStateCollecting,
     detail: source.message || (source.state === sessionSourceAvailable ? "No active sessions" : "Waiting for a sample"),
     idle: 0, idleReady: false, cpu: 0, cpuReady: false, memory: 0, memoryReady: false,
     ioRead: 0, ioWrite: 0, ioReady: false,
@@ -4040,6 +4042,7 @@ const sessionSortKeys = {
   type: (row) => row.kind,
   user: (row) => row.user,
   session: (row) => row.name,
+  pid: (row) => row.pidSort,
   state: (row) => row.state,
   idle: (row) => row.idleReady ? row.idle : -1,
   cpu: (row) => row.cpuReady ? row.cpu : -1,
@@ -4103,17 +4106,18 @@ function renderSessions(inventory = latestSessionInventory) {
   renderFilterButtonCounts("#session-filters", sessionFilterCounts(latestSessionInventory, rows));
   const filtered = rows.filter((row) => {
     if (sessionFilter !== filterAll && row.kind !== sessionFilter) return false;
-    return !sessionQuery || [row.kind, row.service, row.user, row.name, row.state].join(" ").toLowerCase().includes(sessionQuery);
+    return !sessionQuery || [row.kind, row.service, row.user, row.name, row.pid, row.state].join(" ").toLowerCase().includes(sessionQuery);
   });
   sortSessionRows(filtered);
   const body = $("#session-rows");
   if (body) {
     const content = filtered.length ? filtered.map((row) => tpl`<tr>
       <td>${row.kind || "—"}</td><td>${row.user || "—"}</td>
-      <td>${row.name || "—"}<br><span class="muted">${row.detail}</span></td><td>${sessionStateCell(row.state)}</td>
+      <td>${row.name || "—"}${row.detail ? tpl`<br><span class="muted">${row.detail}</span>` : nothing}</td>
+      <td class="mono">${row.pid || "—"}</td><td>${sessionStateCell(row.state)}</td>
       <td>${sessionIdleCell(row)}</td><td>${sessionCPUCell(row)}</td><td>${sessionMemoryCell(row)}</td>
       <td>${sessionIOCell(row)}</td><td>${row.action}</td>
-    </tr>`) : tpl`<tr><td colspan="9" class="muted">No sessions match the filter.</td></tr>`;
+    </tr>`) : tpl`<tr><td colspan="10" class="muted">No sessions match the filter.</td></tr>`;
     litRender(content, body);
   }
   const activeCount = (latestSessionInventory.ssh || []).length + (latestSessionInventory.terminal || []).length;
@@ -7032,7 +7036,7 @@ async function act(name, action) {
   }
 }
 
-async function closeSSHSession(name, pid, startTicks, terminal, user) {
+async function closeSSHSession(name, pid, startTicks, terminal, user, managedByLogind) {
   const sessionPID = Number(pid);
   const sessionStartTicks = Number(startTicks);
   if (!name || !terminal || !Number.isSafeInteger(sessionPID) || sessionPID <= 0 || !Number.isSafeInteger(sessionStartTicks) || sessionStartTicks <= 0) {
@@ -7042,11 +7046,13 @@ async function closeSSHSession(name, pid, startTicks, terminal, user) {
   const label = `${user || "unknown user"} on ${terminal}`;
   if (!(await promptConfirm({
     title: `Close SSH session for ${label}?`,
-    message: "This gracefully ends that one SSH terminal. It does not restart the SSH service and cannot be undone.",
+    message: managedByLogind
+      ? "This asks systemd-logind to revalidate and terminate that exact remote SSH login. It does not restart the SSH service and cannot be undone."
+      : "This gracefully ends that one SSH terminal. It does not restart the SSH service and cannot be undone.",
     okLabel: "close session",
     danger: true,
   }))) return;
-  await postSessionClose(`close SSH session ${label}`, sshSessionCloseAPI(name, sessionPID, sessionStartTicks, terminal));
+  await postSessionClose(`close SSH session ${label}`, sshSessionCloseAPI(name, sessionPID, sessionStartTicks, terminal, managedByLogind));
 }
 
 async function postSessionClose(statusLabel, endpoint) {
@@ -8381,7 +8387,8 @@ function initDelegatedHandlers() {
     ["[data-panel-target]", (el) => openPanelTarget(el.dataset.panelTarget || "")],
     ["[data-ssh-session-close]", (el) => closeSSHSession(
       el.dataset.sshService || "", el.dataset.sshSessionPid || "", el.dataset.sshSessionStartTicks || "",
-      el.dataset.sshSessionTerminal || "", el.dataset.sshSessionUser || "")],
+      el.dataset.sshSessionTerminal || "", el.dataset.sshSessionUser || "",
+      el.dataset.sshSessionManaged === domBoolTrue)],
     ["[data-terminal-session-close]", (el) => closeTerminalSession(
       el.dataset.terminalService || "", el.dataset.terminalCheck || "", el.dataset.terminalMultiplexer || "",
       el.dataset.terminalSession || "", el.dataset.terminalUser || "", el.dataset.terminalIdentity || "")],

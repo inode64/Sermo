@@ -188,6 +188,9 @@ const (
 	apiMessageReloadRequested        = "reload requested"
 )
 
+// Managed login1 close is an optional safety mode on the ordinary session route.
+const apiQueryManagedByLogind = "managed_by_logind"
+
 // API route variables and query parameter names.
 const (
 	apiParamAction      = "action"

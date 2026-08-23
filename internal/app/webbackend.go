@@ -13,6 +13,7 @@ import (
 	"sermo/internal/config"
 	"sermo/internal/control"
 	"sermo/internal/execx"
+	"sermo/internal/logind"
 	"sermo/internal/metrics"
 	"sermo/internal/notify"
 	"sermo/internal/operation"
@@ -422,6 +423,17 @@ func attachServiceRuntime(ctx context.Context, entry *webEntry, name string, tre
 	if len(entry.sshSessionFilters) > 0 {
 		engine.SessionVerifier = freshSSHSessionVerifier(deps, entry.sshSessionFilters)
 		engine.SessionSignaler = deps.SSHSessionSignaler
+		if target.Backend == servicemgr.BackendSystemd {
+			engine.ManagedSessionCloser = deps.ManagedSSHSessionCloser
+			if engine.ManagedSessionCloser == nil {
+				client := logind.NewClient()
+				engine.ManagedSessionCloser = func(ctx context.Context, target operation.SessionTarget) error {
+					return client.CloseRemoteSSHSession(ctx, logind.Target{
+						PID: target.PID, StartTicks: target.StartTicks, Terminal: target.Terminal,
+					})
+				}
+			}
+		}
 		entry.engine = engine
 	}
 	if len(entry.terminalSessions) > 0 {
