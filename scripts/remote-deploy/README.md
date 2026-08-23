@@ -160,6 +160,12 @@ orchestrator does not apply the first-four-host gate below), records and skips
 unreachable or unhealthy hosts, fetches failed hosts' `out.tar.gz` artifacts
 into its run root, and cleans up the exact remote staging directories it
 created on success.
+For a large fleet, several `update_fleet.sh` instances may run concurrently on
+**disjoint** host sets: build once with a fixed `SERMO_RUN_ID`, then start each
+instance with the same `SERMO_RUN_ID` plus `--skip-build --reuse-candidate` so
+no instance rebuilds `bin/sermoctl-candidate` (its compiled-in staging catalog
+path embeds the run id). Never share one run id across instances that could
+touch the same host.
 Every remote SSH command is bounded to 25 minutes by default; set
 `SERMO_REMOTE_COMMAND_TIMEOUT_SECONDS` to a positive number of seconds when a
 known-slow host needs a different ceiling. Each daemon-start phase has a
@@ -285,6 +291,17 @@ locally before redeploying every host already touched.
   `mount.umount.allow_lazy: false` and `allow_sigkill: false` keys from existing
   YAML. It rejects non-false values, validates with the candidate binary and
   restores `/etc/sermo` if validation fails.
+- `remote_normalize_retired_watch_types.sh` removes only whole host-watch files
+  whose `check.type` was retired (`autofs`, `entropy`) from the standard watch
+  directories and their `.local` siblings. It stages the update payload's
+  candidate `sermoctl` and catalog under the same `/tmp/sermo-update-<run-id>/stage`
+  path the updater uses, validates the remaining configuration with that
+  candidate and restores `/etc/sermo` if validation fails. `update_fleet.sh
+  --normalize-retired-watch-types` runs it per host between payload upload and
+  the binary update, recording and skipping the host when normalization fails.
+  Hosts configured before those check types were retired fail candidate
+  validation with `check.type "autofs" is not supported`, which blocks the
+  update exactly like the retired engine keys.
 - `remote_update_network_watches.sh` refreshes only `/etc/sermo/networks` from
   a generated payload. It rejects any other archive member, validates the
   retained configuration, restarts `sermod`, and restores the prior network

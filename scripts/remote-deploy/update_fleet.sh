@@ -25,6 +25,8 @@ with_config=0
 include_inactive_installed_services=0
 only_services=""
 skip_build=0
+reuse_candidate=0
+normalize_retired_watch_types=0
 dry_run=0
 run_root=""
 hosts=()
@@ -51,10 +53,22 @@ options:
   --ssh-user USER   SSH user, must reach root on the target (default: root)
   --skip-build      reuse existing bin/sermoctl and bin/sermod; the staged
                     candidate validator is always rebuilt for this run
+  --reuse-candidate reuse the existing bin/sermoctl-candidate; requires
+                    SERMO_RUN_ID so the candidate's compiled-in staging
+                    catalog path matches this run
+  --normalize-retired-watch-types
+                    before the binary update, remove retired-check-type watch
+                    files (autofs, entropy) from /etc/sermo with
+                    remote_normalize_retired_watch_types.sh; the host is
+                    restored and skipped when normalization fails
   --dry-run         print the per-host plan without contacting any host
   -h, --help        show this help
 
 environment:
+  SERMO_RUN_ID                run identifier override (default: upd-<timestamp>);
+                              parallel instances on disjoint host sets share one
+                              run id and pre-built payload via --skip-build
+                              --reuse-candidate
   SERMO_SSH_OPTS              extra options for every ssh/scp invocation
   SERMO_REMOTE_COMMAND_TIMEOUT_SECONDS
                               maximum duration of one remote SSH command
@@ -99,6 +113,8 @@ while [ $# -gt 0 ]; do
 			shift 2
 			;;
 		--skip-build) skip_build=1; shift ;;
+		--reuse-candidate) reuse_candidate=1; shift ;;
+		--normalize-retired-watch-types) normalize_retired_watch_types=1; shift ;;
 		--dry-run) dry_run=1; shift ;;
 		-h | --help) usage; exit 0 ;;
 		-*) die "unknown option: $1" ;;
@@ -121,7 +137,13 @@ for host in "${hosts[@]}"; do
 	esac
 done
 
-run_id="upd-$(date +%Y%m%d-%H%M%S)"
+run_id="${SERMO_RUN_ID:-upd-$(date +%Y%m%d-%H%M%S)}"
+case "$run_id" in
+	*[!a-zA-Z0-9._-]* | '') die "SERMO_RUN_ID must be non-empty and use only [a-zA-Z0-9._-]" ;;
+esac
+if [ "$reuse_candidate" = "1" ] && [ -z "${SERMO_RUN_ID:-}" ]; then
+	die "--reuse-candidate requires SERMO_RUN_ID (the candidate is compiled for one run id)"
+fi
 remote_dir="/tmp/sermo-${run_id}"
 payload_name="sermo-install-payload.tgz"
 
@@ -131,6 +153,9 @@ if [ "$dry_run" = "1" ]; then
 	echo "plan per host (${ssh_user}@HOST):"
 	echo "  1. preflight: ssh reachable, ${remote_dir} creatable, /tmp space"
 	echo "  2. upload payload + remote scripts to ${remote_dir}"
+	if [ "$normalize_retired_watch_types" = "1" ]; then
+		echo "  2b. run remote_normalize_retired_watch_types.sh ${run_id} (removes retired autofs/entropy watch files)"
+	fi
 	echo "  3. run remote_update_payload.sh ${run_id} ${remote_dir}/${payload_name}"
 	if [ "$with_config" = "1" ]; then
 		echo "  4. run remote_collect_inventory.sh ${run_id} (read-only)"
@@ -155,10 +180,14 @@ if [ ! -x "${repo}/bin/sermoctl" ] || [ ! -x "${repo}/bin/sermod" ]; then
 fi
 
 candidate_datadir="/tmp/sermo-update-${run_id}/stage/usr/share/sermo"
-echo "building staged candidate validator (SERMO_DATADIR=${candidate_datadir})"
-(cd "$repo" && GOAMD64=v1 SERMO_DATADIR="$candidate_datadir" make build-candidate-sermoctl) \
-	|| die "candidate validator build failed"
 candidate_sermoctl="${repo}/bin/sermoctl-candidate"
+if [ "$reuse_candidate" = "1" ]; then
+	echo "reusing staged candidate validator for run id ${run_id}"
+else
+	echo "building staged candidate validator (SERMO_DATADIR=${candidate_datadir})"
+	(cd "$repo" && GOAMD64=v1 SERMO_DATADIR="$candidate_datadir" make build-candidate-sermoctl) \
+		|| die "candidate validator build failed"
+fi
 [ -x "$candidate_sermoctl" ] || die "missing candidate validator: ${candidate_sermoctl}"
 
 if [ -z "$run_root" ]; then
@@ -220,12 +249,26 @@ for host in "${hosts[@]}"; do
 		"${script_dir}/remote_update_payload.sh" \
 		"${script_dir}/remote_collect_inventory.sh" \
 		"${script_dir}/remote_inventory_common.sh" \
+		"${script_dir}/remote_normalize_retired_watch_types.sh" \
 		"${script_dir}/remote_apply.sh" \
 		"${ssh_user}@${host}:${remote_dir}/"; then
 		echo "  upload failed; skipping" >&2
 		record "$host" "upload" "failed" "scp payload/scripts"
 		failures=$((failures + 1))
 		continue
+	fi
+
+	if [ "$normalize_retired_watch_types" = "1" ]; then
+		normalize_log="${host_dir}/normalize.log"
+		if ! run_ssh "$host" "bash ${remote_dir}/remote_normalize_retired_watch_types.sh ${run_id} ${remote_dir}/${payload_name}" \
+			>"$normalize_log" 2>&1; then
+			echo "  retired-watch normalization failed; host left restored and skipped" >&2
+			record "$host" "normalize" "failed" "remote_normalize_retired_watch_types.sh non-zero"
+			fetch_failure_artifacts "$host" "/tmp/sermo-update-${run_id}/normalize-out"
+			failures=$((failures + 1))
+			continue
+		fi
+		record "$host" "normalize" "ok" "retired watch types removed or none present"
 	fi
 
 	update_log="${host_dir}/update.log"
