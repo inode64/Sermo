@@ -1717,6 +1717,46 @@ func TestCloseSessionNeverSignalsWhenVerificationRejectsIt(t *testing.T) {
 	}
 }
 
+func TestCloseManagedSessionUsesManagerWithoutSignalling(t *testing.T) {
+	h := defaultHarness()
+	e := h.engine()
+	signaler := &recordingSignaler{}
+	e.SessionSignaler = signaler
+	want := SessionTarget{PID: 96, StartTicks: 1234, Terminal: "pts/11", ManagedByLogind: true}
+	closed := 0
+	e.ManagedSessionCloser = func(_ context.Context, target SessionTarget) error {
+		closed++
+		if target != want {
+			t.Fatalf("target = %+v, want %+v", target, want)
+		}
+		return nil
+	}
+
+	res := e.CloseSession(context.Background(), want)
+	if res.Status != ResultOK || closed != 1 {
+		t.Fatalf("result = %+v closed=%d", res, closed)
+	}
+	if len(signaler.calls) != 0 {
+		t.Fatalf("signals = %v, managed session must not be signalled directly", signaler.calls)
+	}
+}
+
+func TestCloseManagedSessionFailsClosedWhenManagerRejectsIt(t *testing.T) {
+	h := defaultHarness()
+	e := h.engine()
+	signaler := &recordingSignaler{}
+	e.SessionSignaler = signaler
+	e.ManagedSessionCloser = func(context.Context, SessionTarget) error { return errors.New("login session changed") }
+
+	res := e.CloseSession(context.Background(), SessionTarget{PID: 96, StartTicks: 1234, Terminal: "pts/11", ManagedByLogind: true})
+	if res.Status != ResultFailed || !strings.Contains(res.Message, "login session changed") {
+		t.Fatalf("result = %+v", res)
+	}
+	if len(signaler.calls) != 0 {
+		t.Fatalf("signals = %v, want none", signaler.calls)
+	}
+}
+
 func TestCloseTerminalSessionUsesOperationSafetyPath(t *testing.T) {
 	h := defaultHarness()
 	e := h.engine()

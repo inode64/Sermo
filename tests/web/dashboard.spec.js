@@ -33,7 +33,7 @@ const dashboard = {
       {
         kind: "ssh", service: "web", state: "partial",
         message: "1 terminal(s) could not be attributed safely",
-        issues: [{ user: "root", terminal: "pts/0", message: "executable /usr/lib/sshd-session was replaced" }],
+        issues: [{ user: "root", terminal: "pts/0", pid: 95, start_ticks: 1200, can_close: true, managed_by_logind: true, message: "executable /usr/lib/sshd-session was replaced" }],
       },
       { kind: "ssh", service: "db", state: "available" },
       { kind: "tmux", service: "web", check: "tmux-root", user: "root", state: "available" },
@@ -42,8 +42,8 @@ const dashboard = {
     ],
     ssh: [{ service: "web", user: "root", terminal: "pts/11", pid: 96, start_ticks: 1234, idle_seconds: 120, can_close: true, memory_ready: true, rss: 1048576, cpu_ready: true, cpu: 1.5, io_ready: true, io_read: 1000, io_write: 250 }],
     terminal: [
-      { service: "web", check: "tmux-root", multiplexer: "tmux", user: "root", name: "ops", state: "attached", windows: 2, idle_seconds: 300, has_idle: true, memory_ready: true, rss: 2097152, cpu_ready: true, cpu: 2.5, io_ready: true, io_read: 2000, io_write: 500, identity: "$7:90", can_close: true },
-      { service: "web", check: "tmux-root", multiplexer: "tmux", user: "root", name: "build", state: "detached", windows: 1, idle_seconds: 60, has_idle: true, memory_ready: true, rss: 524288, cpu_ready: true, cpu: 0, io_ready: true, io_read: 0, io_write: 0, identity: "$8:91", can_close: true },
+      { service: "web", check: "tmux-root", multiplexer: "tmux", user: "root", name: "ops", pids: [201], state: "attached", windows: 2, idle_seconds: 300, has_idle: true, memory_ready: true, rss: 2097152, cpu_ready: true, cpu: 2.5, io_ready: true, io_read: 2000, io_write: 500, identity: "$7:90", can_close: true },
+      { service: "web", check: "tmux-root", multiplexer: "tmux", user: "root", name: "build", pids: [202, 203], state: "detached", windows: 1, idle_seconds: 60, has_idle: true, memory_ready: true, rss: 524288, cpu_ready: true, cpu: 0, io_ready: true, io_read: 0, io_write: 0, identity: "$8:91", can_close: true },
     ],
   },
   mounts: [{
@@ -101,6 +101,14 @@ const watches = [{
     { field: "behind_seconds", label: "Behind", value: "0 s" },
   ],
 }, {
+  name: "geoip-database-freshness", display_name: "GeoIP database freshness", category: "files",
+  enabled: true, monitored: true, state: "ok", check_type: "file", summary_configured: true,
+  readings: [
+    { field: "path", label: "Path", value: "/usr/share/GeoIP" },
+    { field: "age", label: "Age", value: "8mo 1d" },
+  ],
+  summary: "GeoIP databases are current", interval: "12h", status_observed_at: "2026-07-10T12:00:00Z",
+}, {
   name: "dead-letter", display_name: "Dead letter", category: "files",
   enabled: true, monitored: true, state: "ok", check_type: "file",
   summary: "size threshold clear", interval: "5m", status_observed_at: "2026-07-10T12:00:00Z",
@@ -115,6 +123,14 @@ const watches = [{
   name: "net-wan", display_name: "WAN", category: "network",
   enabled: true, monitored: true, state: "ok", check_type: "net", keeps_sla: true,
   metrics: [{ name: "used_pct", unit: "%" }],
+  readings: [
+    { field: "interface", label: "Interface", value: "eth0" },
+    { field: "driver", label: "Driver", value: "ice" },
+    { field: "speed", label: "Speed", value: "25000 Mbps" },
+    { field: "addresses", label: "Addresses", value: "192.0.2.10, 2001:db8::10" },
+    { field: "state", label: "State", value: "up" },
+    { field: "errors", label: "Errors total", value: "0 (total 0)" },
+  ],
   summary: "wan state up", interval: "30s", status_observed_at: "2026-07-10T12:00:00Z",
 }, {
   name: "icmp-gateway", display_name: "Gateway", category: "network",
@@ -176,9 +192,11 @@ const watches = [{
   enabled: true, monitored: true, state: "ok", check_type: "smart", can_probe: true,
   readings: [
     { field: "device", label: "Device", value: "/dev/sdb" },
+    { field: "bus", label: "Bus", value: "nvme" },
     { field: "health", label: "Health", value: "PASSED" },
     { field: "temperature", label: "temperature", value: "42 °C" },
   ],
+  metrics: [{ name: "temperature", unit: "°C" }],
   summary: "smart /dev/sdb health=PASSED", interval: "1d", status_observed_at: "2026-07-10T12:00:00Z",
 }, {
   name: "smart-sdc", display_name: "Verdictless disk health", category: "storage",
@@ -574,6 +592,20 @@ test("SMART health is read in smartctl's own words, so a PASSED drive is not pai
   await expect(verdictless.locator(".bad")).toHaveCount(0);
 });
 
+test("a SMART device graphs only the indicators it publishes", async ({ page }) => {
+  const series = page.waitForRequest((request) => {
+    const url = new URL(request.url());
+    return url.pathname === "/api/watches/smart-sdb/metrics" && url.searchParams.get("metric") === "temperature";
+  });
+  await page.locator("#wat-row-smart-sdb .row-toggle").click();
+  await series;
+
+  const detail = page.locator('[id="exp-wat:smart-sdb"]');
+  await expect(detail.locator('[data-watch-metric="temperature"]')).toBeVisible();
+  await expect(detail.locator("[data-watch-metric]")).toHaveCount(1);
+  await expect(detail).not.toContainText("No data yet for this window.");
+});
+
 test("a device that stopped answering reads as missing, not as a blank health cell", async ({ page }) => {
   const row = page.locator("#wat-row-smart-sdz");
   await expect(row.locator(".state-missing")).toBeVisible();
@@ -690,6 +722,31 @@ test("the fds watch table names its column Allocated", async ({ page }) => {
   await expect(fdsHeader.first()).toBeVisible();
   await expect(fdsHeader.first()).toHaveText("Allocated");
   await expect(page.locator('th[data-watch-type-sort-type="fds"][data-watch-type-sort="value"]')).toHaveCount(0);
+});
+
+test("diagnostic watch columns keep freshness, network identity, and SMART interface visible", async ({ page }) => {
+  const geoip = page.locator("#wat-row-geoip-database-freshness");
+  const network = page.locator("#wat-row-net-wan");
+  const smart = page.locator("#wat-row-smart-sdb");
+
+  await expect(page.locator('th[data-watch-type-sort-type="file-summary"][data-watch-type-sort="age"]')).toHaveText("Age");
+  await expect(geoip).toContainText("8mo 1d");
+  await expect(page.locator('th[data-watch-type-sort-type="net"][data-watch-type-sort="driver"]')).toHaveText("Driver");
+  await expect(page.locator('th[data-watch-type-sort-type="net"][data-watch-type-sort="speed"]')).toHaveText("Speed");
+  await expect(page.locator('th[data-watch-type-sort-type="net"][data-watch-type-sort="addresses"]')).toHaveText("IP");
+  await expect(network).toContainText("ice");
+  await expect(network).toContainText("25000 Mbps");
+  await expect(network).toContainText("192.0.2.10, 2001:db8::10");
+  await expect(page.locator('th[data-watch-type-sort-type="smart"][data-watch-type-sort="bus"]')).toHaveText("Interface");
+  await expect(smart).toContainText("nvme");
+
+  if ((page.viewportSize() || {}).width > 1024) {
+    await expect(geoip.locator('[data-watch-type-column="age"]')).toBeVisible();
+    await expect(network.locator('[data-watch-type-column="driver"]')).toBeVisible();
+    await expect(network.locator('[data-watch-type-column="speed"]')).toBeVisible();
+    await expect(network.locator('[data-watch-type-column="addresses"]')).toBeVisible();
+    await expect(smart.locator('[data-watch-type-column="bus"]')).toBeVisible();
+  }
 });
 
 test("an fds watch names the services holding the descriptors", async ({ page }) => {
@@ -929,10 +986,15 @@ test("the process table reports each process's busiest core beside its total", a
 
 test("sessions panel shows metrics, sorts columns and closes verified SSH and tmux", async ({ page }) => {
   let closeRequest = null;
+  let managedCloseRequest = null;
   let tmuxCloseRequest = null;
   await page.route("**/api/services/web/sessions/96/close**", async (route) => {
     closeRequest = new URL(route.request().url());
     await route.fulfill({ json: { ok: true, message: "close SSH session ok" } });
+  });
+  await page.route("**/api/services/web/sessions/95/close**", async (route) => {
+    managedCloseRequest = new URL(route.request().url());
+    await route.fulfill({ json: { ok: true, message: "close managed SSH session ok" } });
   });
   await page.route("**/api/services/web/terminal-sessions/tmux-root/close**", async (route) => {
     tmuxCloseRequest = new URL(route.request().url());
@@ -944,7 +1006,12 @@ test("sessions panel shows metrics, sorts columns and closes verified SSH and tm
   await expect(sessions).toContainText("pts/11");
   await expect(sessions).toContainText("pts/0");
   await expect(sessions).toContainText("executable /usr/lib/sshd-session was replaced");
-  await expect(sessions.locator("tr", { hasText: "pts/0" }).locator('[data-ssh-session-close]')).toHaveCount(0);
+  const unavailableRow = sessions.locator("tr", { hasText: "pts/0" });
+  const verifiedRow = sessions.locator("tr", { hasText: "pts/11" });
+  await expect(unavailableRow.locator("td").nth(3)).toHaveText("95");
+  await expect(unavailableRow.locator('[data-ssh-session-close]')).toHaveCount(1);
+  await expect(verifiedRow.locator("td").nth(2)).not.toContainText("PID 96");
+  await expect(verifiedRow.locator("td").nth(3)).toHaveText("96");
   await expect(sessions).toContainText("120s");
   await expect(sessions).toContainText("1 MiB");
   await expect(sessions).toContainText("1 KB/s / 250 B/s");
@@ -952,11 +1019,19 @@ test("sessions panel shows metrics, sorts columns and closes verified SSH and tm
   await expect(sessions).not.toContainText("screen-root");
   await expect(sessions).toContainText("No active sessions");
 
-  await sessions.locator('[data-ssh-session-close]').click();
+  await verifiedRow.locator('[data-ssh-session-close]').click();
   await expect(page.locator("#simple-confirm")).toBeVisible();
   await page.locator("#simple-confirm-ok").click();
   await expect.poll(() => closeRequest && closeRequest.searchParams.get("terminal")).toBe("pts/11");
   expect(closeRequest.searchParams.get("start_ticks")).toBe("1234");
+  expect(closeRequest.searchParams.has("managed_by_logind")).toBe(false);
+
+  await unavailableRow.locator('[data-ssh-session-close]').click();
+  await expect(page.locator("#simple-confirm-message")).toContainText("systemd-logind");
+  await page.locator("#simple-confirm-ok").click();
+  await expect.poll(() => managedCloseRequest && managedCloseRequest.searchParams.get("managed_by_logind")).toBe("true");
+  expect(managedCloseRequest.searchParams.get("terminal")).toBe("pts/0");
+  expect(managedCloseRequest.searchParams.get("start_ticks")).toBe("1200");
 
   await page.locator('[data-sf="tmux"]').click();
   await sessions.getByRole("columnheader", { name: /Idle/ }).click();
@@ -982,10 +1057,10 @@ test("empty tmux sources use a red state and close the server through the API", 
   await expect(page.locator("#session-rows")).toContainText("No active sessions");
   const emptySource = page.locator("#session-rows tr", { hasText: "tmux-empty" });
   const emptySourceCells = emptySource.locator("td");
-  await expect(emptySourceCells.nth(3)).toHaveText("empty");
-  await expect(emptySourceCells.nth(3).locator(".target-state")).toHaveClass(/state-empty/);
-  await expect(emptySourceCells.nth(5)).toHaveText("—");
-  await expect(emptySourceCells.nth(7)).toHaveText("—");
+  await expect(emptySourceCells.nth(4)).toHaveText("empty");
+  await expect(emptySourceCells.nth(4).locator(".target-state")).toHaveClass(/state-empty/);
+  await expect(emptySourceCells.nth(6)).toHaveText("—");
+  await expect(emptySourceCells.nth(8)).toHaveText("—");
   // screen-root is empty but has no configured socket: no server to kill and
   // nothing to say, so it renders no row at all.
   await expect(page.locator("#session-rows tr", { hasText: "screen-root" })).toHaveCount(0);
@@ -1005,7 +1080,7 @@ test("an unknown terminal session state is not shown as active", async ({ page }
   await page.route("**/api/dashboard**", (route) => route.fulfill({ json: body }));
   await page.locator("#refresh-now").click();
 
-  const state = page.locator("#session-rows tr", { hasText: "pending" }).locator("td").nth(3);
+  const state = page.locator("#session-rows tr", { hasText: "pending" }).locator("td").nth(4);
   await expect(state).toHaveText("unknown");
   await expect(state.locator(".target-state")).toHaveClass(/state-warning/);
 });

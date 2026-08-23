@@ -296,6 +296,9 @@ type Deps struct {
 	// SSHSessionSignaler sends the single SIGTERM used to close a freshly
 	// revalidated interactive SSH session. Optional: nil uses process.OSSignaler.
 	SSHSessionSignaler process.Signaler
+	// ManagedSSHSessionCloser terminates an exact systemd-logind SSH session.
+	// Optional: nil uses the native login1 D-Bus client on systemd services.
+	ManagedSSHSessionCloser func(context.Context, operation.SessionTarget) error
 	// MountUserAlerter sends a console alert to users blocking a web mount
 	// operation. Optional: nil uses the native tty notifier.
 	MountUserAlerter MountUserAlerter

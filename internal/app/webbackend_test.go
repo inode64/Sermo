@@ -17,6 +17,7 @@ import (
 	"sermo/internal/execx"
 	"sermo/internal/metrics"
 	"sermo/internal/notify"
+	"sermo/internal/operation"
 	"sermo/internal/process"
 	"sermo/internal/rules"
 	"sermo/internal/servicemgr"
@@ -208,16 +209,48 @@ func TestSSHSessionFiltersUseResolvedAppsMetadata(t *testing.T) {
 	}
 }
 
+func TestManagedSSHSessionCloserMatchesBackendCapability(t *testing.T) {
+	target := operation.SessionTarget{PID: 95, StartTicks: 1200, Terminal: "pts/0"}
+	called := false
+	injected := func(_ context.Context, got operation.SessionTarget) error {
+		called = true
+		if got != target {
+			t.Fatalf("target = %+v, want %+v", got, target)
+		}
+		return nil
+	}
+	deps := Deps{ManagedSSHSessionCloser: injected}
+	if closer := managedSSHSessionCloser(deps, servicemgr.BackendOpenRC); closer != nil {
+		t.Fatal("OpenRC managed SSH session closer is available, want nil")
+	}
+	closer := managedSSHSessionCloser(deps, servicemgr.BackendSystemd)
+	if closer == nil {
+		t.Fatal("systemd managed SSH session closer is nil")
+	}
+	if err := closer(t.Context(), target); err != nil {
+		t.Fatalf("close managed SSH session: %v", err)
+	}
+	if !called {
+		t.Fatal("injected managed SSH session closer was not called")
+	}
+	if closer := managedSSHSessionCloser(Deps{}, servicemgr.BackendSystemd); closer == nil {
+		t.Fatal("default systemd managed SSH session closer is nil")
+	}
+}
+
 func TestWebBackendKeepsVerifiedSSHSessionsWithPartialSource(t *testing.T) {
 	b := &WebBackend{
 		order: []string{"ssh"},
 		entries: map[string]*webEntry{"ssh": {
 			sshSessionFilters: []process.IdentityFilter{mustWebIdentityFilter(t, "/usr/sbin/sshd", "root")},
+			engine: operation.Engine{ManagedSessionCloser: func(context.Context, operation.SessionTarget) error {
+				return nil
+			}},
 		}},
 		sshSessionSampler: func(checks.SSHSessionConfig) (checks.SSHSessionSample, error) {
 			return checks.SSHSessionSample{
 				SSH:    []checks.SSHSession{{User: "root", Terminal: "pts/1", PID: 96, StartTicks: 1234}},
-				Issues: []checks.SSHSessionIssue{{User: "root", Terminal: "pts/0", Message: "executable /usr/lib/sshd-session was replaced"}},
+				Issues: []checks.SSHSessionIssue{{User: "root", Terminal: "pts/0", Message: "executable /usr/lib/sshd-session was replaced", PID: 95, StartTicks: 1200, Remote: true}},
 			}, nil
 		},
 	}
@@ -226,11 +259,17 @@ func TestWebBackendKeepsVerifiedSSHSessionsWithPartialSource(t *testing.T) {
 	if len(inventory.SSH) != 1 || len(inventory.Sources) != 1 {
 		t.Fatalf("inventory = %+v", inventory)
 	}
-	if source := inventory.Sources[0]; source.State != web.SessionSourcePartial || len(source.Issues) != 1 || source.Issues[0].Terminal != "pts/0" {
+	if source := inventory.Sources[0]; source.State != web.SessionSourcePartial || len(source.Issues) != 1 || source.Issues[0].Terminal != "pts/0" || source.Issues[0].PID != 95 || !source.Issues[0].CanClose || !source.Issues[0].ManagedByLogind {
 		t.Fatalf("source = %+v, want partial source with pts/0 issue", source)
 	}
 	if info := b.DaemonInfo(context.Background()); info.Sessions != nil {
 		t.Fatalf("partial session summary = %+v, want omitted", info.Sessions)
+	}
+	b.entries["ssh"].engine.ManagedSessionCloser = nil
+	inventory = b.Sessions(context.Background())
+	issue := inventory.Sources[0].Issues[0]
+	if issue.CanClose || issue.ManagedByLogind {
+		t.Fatalf("issue without managed closer = %+v, want no close capability", issue)
 	}
 }
 
@@ -266,7 +305,7 @@ func TestWebBackendShowsTerminalSessionsFromPublishedCheckData(t *testing.T) {
 	if len(inventory.Sources) != 2 || len(inventory.Terminal) != 2 {
 		t.Fatalf("session inventory = %+v", inventory)
 	}
-	if inventory.Terminal[0].Multiplexer != checks.TerminalMultiplexerScreen || inventory.Terminal[0].Name != "120.backup" || inventory.Terminal[1].Windows != 2 {
+	if inventory.Terminal[0].Multiplexer != checks.TerminalMultiplexerScreen || inventory.Terminal[0].Name != "120.backup" || inventory.Terminal[1].Windows != 2 || !slices.Equal(inventory.Terminal[0].PIDs, []int{120}) || !slices.Equal(inventory.Terminal[1].PIDs, []int{201}) {
 		t.Fatalf("terminal sessions = %+v, want sorted published sessions", inventory.Terminal)
 	}
 	if !inventory.Terminal[0].CanClose || !inventory.Terminal[1].CanClose || !inventory.Terminal[1].HasIdle || inventory.Terminal[1].IdleSeconds != 60 {
@@ -2715,5 +2754,78 @@ func TestWebBackendMissingDevicePublishesMissingState(t *testing.T) {
 	}
 	if got := readingByField(w.Readings, watchReadingFieldError).Error; got != w.Summary {
 		t.Errorf("error reading = %q, want the summary %q", got, w.Summary)
+	}
+}
+
+func TestWebCheckMetricsUsesSmartDeviceCapabilities(t *testing.T) {
+	graphs := checks.ResolvedGraphMetrics(checks.CheckTypeSmart, "", map[string]any{})
+	readings := []web.WatchReading{
+		{Field: checks.SmartFieldTemperature, Value: "41 °C"},
+		{Field: checks.LastSampleKey(checks.SmartFieldPowerOnHours), Value: "16mo 20d"},
+	}
+
+	got := webCheckMetricsForReadings(checks.CheckTypeSmart, graphs, nil, readings)
+	if len(got) != 2 {
+		t.Fatalf("SMART metrics = %+v, want only the two device-supported metrics", got)
+	}
+	if got[0].Name != checks.SmartFieldTemperature || got[1].Name != checks.SmartFieldPowerOnHours {
+		t.Fatalf("SMART metrics = %+v, want temperature and last-known power-on time", got)
+	}
+
+	users := checks.ResolvedGraphMetrics(checks.CheckTypeUsers, "", map[string]any{})
+	if fixed := webCheckMetricsForReadings(checks.CheckTypeUsers, users, nil, nil); len(fixed) != len(users) {
+		t.Fatalf("fixed-schema metrics = %+v, want all declared metrics", fixed)
+	}
+}
+
+func TestWebBackendSmartWatchAdvertisesOnlyObservedMetrics(t *testing.T) {
+	cfg := cfgWithWatches(map[string]any{
+		"smart-sda": map[string]any{
+			"check": map[string]any{"type": checks.CheckTypeSmart, "device": "/dev/sda"},
+		},
+	})
+	now := time.Unix(1000, 0)
+	snapshots := NewWatchSnapshots()
+	snapshots.now = func() time.Time { return now }
+	snapshots.Publish("smart-sda", checks.CheckTypeSmart, checks.Result{
+		Check:   "smart-sda",
+		OK:      true,
+		Message: "smart /dev/sda health=PASSED",
+		Data: map[string]any{
+			checks.SmartFieldTemperature: 41.0,
+		},
+	})
+	b := snapshotOnlyBackend(t, cfg, snapshots, now)
+
+	watches := b.Watches(context.Background())
+	if len(watches) != 1 {
+		t.Fatalf("got %d watches, want 1: %+v", len(watches), watches)
+	}
+	if got := watches[0].Metrics; len(got) != 1 || got[0].Name != checks.SmartFieldTemperature {
+		t.Fatalf("SMART metrics = %+v, want only temperature", got)
+	}
+}
+
+func TestWebBackendSmartServiceCheckAdvertisesOnlyObservedMetrics(t *testing.T) {
+	now := time.Unix(1000, 0)
+	snapshots := NewSnapshots()
+	snapshots.now = func() time.Time { return now }
+	snapshots.PublishWithCheckTypes("web", map[string]checks.Result{
+		"disk": {
+			Check: "disk",
+			OK:    true,
+			Data:  map[string]any{checks.SmartFieldTemperature: 41.0},
+		},
+	}, map[string]bool{"disk": true}, map[string]string{"disk": checks.CheckTypeSmart})
+	b := webBackendWithEntry(snapshots, []string{"disk"}, map[string]string{"disk": checks.CheckTypeSmart})
+	b.now = func() time.Time { return now }
+	b.entries["web"].interval = time.Minute
+	b.entries["web"].checkGraphs = map[string][]checks.GraphMetric{
+		"disk": checks.ResolvedGraphMetrics(checks.CheckTypeSmart, "", map[string]any{}),
+	}
+
+	got := b.checkView("disk", b.entries["web"], snapshots.Get("web"))
+	if len(got.Metrics) != 1 || got.Metrics[0].Name != checks.SmartFieldTemperature {
+		t.Fatalf("SMART service metrics = %+v, want only temperature", got.Metrics)
 	}
 }

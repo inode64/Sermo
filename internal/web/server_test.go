@@ -1527,6 +1527,7 @@ func TestSSHSessionCloseEndpointRequiresFullSessionIdentity(t *testing.T) {
 		testQueryParam(apiQueryStartTicks, "1234"),
 		testQueryParam(apiQueryTerminal, "pts/11"),
 		testQueryParams(apiQueryStartTicks, "zero", apiQueryTerminal, "pts/11"),
+		testQueryParams(apiQueryStartTicks, "1234", apiQueryTerminal, "pts/11", apiQueryManagedByLogind, "maybe"),
 	} {
 		rec := httptest.NewRecorder()
 		h.ServeHTTP(rec, postReq(testPathQuery(path, query)))
@@ -1542,6 +1543,14 @@ func TestSSHSessionCloseEndpointRequiresFullSessionIdentity(t *testing.T) {
 	}
 	if got := b.sshSessionsClosed; len(got) != 1 || got[0].PID != 96 || got[0].StartTicks != 1234 || got[0].Terminal != "pts/11" {
 		t.Fatalf("closed sessions = %+v", got)
+	}
+
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, postReq(testPathQuery(path, testQueryParams(
+		apiQueryStartTicks, "1234", apiQueryTerminal, "pts/11", apiQueryManagedByLogind, "true",
+	))))
+	if rec.Code != http.StatusOK || len(b.sshSessionsClosed) != 2 || !b.sshSessionsClosed[1].ManagedByLogind {
+		t.Fatalf("managed close status=%d sessions=%+v", rec.Code, b.sshSessionsClosed)
 	}
 }
 

@@ -422,6 +422,7 @@ func attachServiceRuntime(ctx context.Context, entry *webEntry, name string, tre
 	if len(entry.sshSessionFilters) > 0 {
 		engine.SessionVerifier = freshSSHSessionVerifier(deps, entry.sshSessionFilters)
 		engine.SessionSignaler = deps.SSHSessionSignaler
+		engine.ManagedSessionCloser = managedSSHSessionCloser(deps, target.Backend)
 		entry.engine = engine
 	}
 	if len(entry.terminalSessions) > 0 {

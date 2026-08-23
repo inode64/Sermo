@@ -307,14 +307,40 @@ func (b *WebBackend) checkView(cn string, e *webEntry, snap map[string]CheckSnap
 	if seen && !cs.At.IsZero() {
 		ch.At = cs.At.UTC().Format(time.RFC3339)
 	}
-	ch.Metrics = webCheckMetrics(e.checkGraphs[cn], e.checkBands[cn])
+	ch.Metrics = webCheckMetricsForReadings(ch.Type, e.checkGraphs[cn], e.checkBands[cn], ch.Readings)
 	return ch
+}
+
+// webCheckMetricsForReadings narrows device-dependent SMART metrics to the
+// attributes this drive has actually published. SMART's graph declaration is
+// the union of ATA and NVMe attributes, while an individual device normally
+// implements only a subset. Retained last-sample readings still prove support
+// after a device becomes unavailable, so its historical graph remains useful.
+// Fixed-schema checks keep advertising their resolved metrics before the first
+// sample; an empty history window is different from an unsupported attribute.
+func webCheckMetricsForReadings(checkType string, graphs []checks.GraphMetric, bands []checks.BandMetric, readings []web.WatchReading) []web.CheckMetric {
+	if checkType != checks.CheckTypeSmart || len(graphs) == 0 {
+		return webCheckMetrics(graphs, bands)
+	}
+	fields := make(map[string]struct{}, len(readings))
+	for _, reading := range readings {
+		fields[reading.Field] = struct{}{}
+	}
+	supported := make([]checks.GraphMetric, 0, len(graphs))
+	for _, graph := range graphs {
+		_, current := fields[graph.Key]
+		_, retained := fields[checks.LastSampleKey(graph.Key)]
+		if current || retained {
+			supported = append(supported, graph)
+		}
+	}
+	return webCheckMetrics(supported, bands)
 }
 
 // webCheckMetrics is the payload form of one check's resolved line metrics and
 // state bands. A service check and a host watch both advertise through it, and
-// both hand it the lists the recorder itself resolved, so what a panel is
-// offered can never differ from what is being persisted.
+// both hand it the lists the recorder itself resolved. Capability-dependent
+// checks narrow the line list through webCheckMetricsForReadings first.
 func webCheckMetrics(graphs []checks.GraphMetric, bands []checks.BandMetric) []web.CheckMetric {
 	if len(graphs) == 0 && len(bands) == 0 {
 		return nil
