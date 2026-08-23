@@ -141,19 +141,25 @@ func TestSampleSSHSessionsSeparatesConsoleAndSSH(t *testing.T) {
 	}
 }
 
-func TestSampleSSHSessionsFailsClosedForUnknownTerminalAncestry(t *testing.T) {
+func TestSampleSSHSessionsReportsUnknownTerminalAncestry(t *testing.T) {
 	now := time.Date(2026, time.August, 5, 12, 0, 0, 0, time.UTC)
-	_, err := sampleSSHSessions(
+	sample, err := sampleSSHSessions(
 		[]utmp.Session{{User: "root", Line: "pts/0"}},
 		map[int]process.Identity{sshShellPID: {PID: sshShellPID, PPID: sshdPID, TTY: testTTY, TTYOK: true, Exe: "/bin/bash", ExeOK: true}},
 		testSSHTerminal(now), now, mustSSHDFilters(t), testSSHLookup().ResolveUser,
 	)
-	if err == nil {
-		t.Fatal("sampleSSHSessions accepted an incomplete SSH ancestry")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(sample.SSH) != 0 || sample.Console != 0 || len(sample.Issues) != 1 {
+		t.Fatalf("sample = %+v, want one unavailable terminal issue", sample)
+	}
+	if got := sample.Issues[0]; got.Terminal != "pts/0" || got.User != "root" || got.Message != "no configured sshd identity in the live process ancestry" {
+		t.Fatalf("issue = %+v", got)
 	}
 }
 
-func TestSampleSSHSessionsFailsClosedForSSHDWithAnotherUser(t *testing.T) {
+func TestSampleSSHSessionsReportsSSHDWithAnotherUser(t *testing.T) {
 	now := time.Date(2026, time.August, 5, 12, 0, 0, 0, time.UTC)
 	filter, err := process.NewIdentityFilter("/opt/sermo-test/sshd", "0", "")
 	if err != nil {
@@ -163,12 +169,71 @@ func TestSampleSSHSessionsFailsClosedForSSHDWithAnotherUser(t *testing.T) {
 	listener := snapshot[sshdPID]
 	listener.UID = 1
 	snapshot[sshdPID] = listener
-	_, err = sampleSSHSessions(
+	sample, err := sampleSSHSessions(
 		[]utmp.Session{{User: "root", Line: "pts/0"}}, snapshot, testSSHTerminal(now), now,
 		[]process.IdentityFilter{filter}, testSSHLookup().ResolveUser,
 	)
-	if err == nil {
-		t.Fatal("sampleSSHSessions accepted sshd with a different real UID")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(sample.Issues) != 1 || len(sample.SSH) != 0 {
+		t.Fatalf("sample = %+v, want unsafe ancestry issue", sample)
+	}
+}
+
+func TestSampleSSHSessionsKeepsVerifiedSessionBesideReplacedBinary(t *testing.T) {
+	now := time.Date(2026, time.August, 5, 12, 0, 0, 0, time.UTC)
+	const (
+		staleTTY      = testTTY + 1
+		stalePeerPID  = sshPeerPID + 10
+		staleShellPID = sshShellPID + 10
+	)
+	snapshot := sshSnapshot(
+		process.Identity{PID: sshPrivPID, PPID: sshdPID, Exe: "/usr/lib/sshd-session", ExeOK: true},
+		process.Identity{PID: sshPeerPID, PPID: sshPrivPID, Exe: "/usr/lib/sshd-session", ExeOK: true, StartTicks: 1234, StartTicksOK: true},
+		process.Identity{PID: stalePeerPID, PPID: 1, ExeOK: false, ExePrev: "/usr/lib/sshd-session"},
+		process.Identity{PID: staleShellPID, PPID: stalePeerPID, UID: testUserID, Exe: "/bin/bash", ExeOK: true, TTY: staleTTY, TTYOK: true},
+	)
+	snapshot[sshShellPID] = process.Identity{PID: sshShellPID, PPID: sshPeerPID, UID: testUserID, Exe: "/bin/bash", ExeOK: true, TTY: testTTY, TTYOK: true}
+	terminal := func(line string) (utmp.Terminal, error) {
+		switch line {
+		case "pts/0":
+			return utmp.Terminal{Device: testTTY, AccessedAt: now.Add(-time.Minute)}, nil
+		case "pts/1":
+			return utmp.Terminal{Device: staleTTY, AccessedAt: now.Add(-time.Hour)}, nil
+		default:
+			return utmp.Terminal{}, errors.New("unknown terminal")
+		}
+	}
+	sample, err := sampleSSHSessions([]utmp.Session{
+		{User: "root", Line: "pts/0", Host: "192.0.2.10"},
+		{User: "root", Line: "pts/1", Host: "192.0.2.11"},
+	}, snapshot, terminal, now, mustSSHDFilters(t), testSSHLookup().ResolveUser)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(sample.SSH) != 1 || sample.SSH[0].Terminal != "pts/0" || len(sample.Issues) != 1 {
+		t.Fatalf("sample = %+v, want verified pts/0 plus unavailable pts/1", sample)
+	}
+	if got := sample.Issues[0]; got.Terminal != "pts/1" || got.Message != "executable /usr/lib/sshd-session was replaced" {
+		t.Fatalf("issue = %+v", got)
+	}
+}
+
+func TestSampleSSHSessionsDoesNotCountPreservedRemoteTerminalAsConsole(t *testing.T) {
+	now := time.Date(2026, time.August, 5, 12, 0, 0, 0, time.UTC)
+	snapshot := map[int]process.Identity{
+		sshShellPID: {PID: sshShellPID, PPID: 1, UID: testUserID, Exe: "/bin/bash", ExeOK: true, TTY: testTTY, TTYOK: true},
+	}
+	sample, err := sampleSSHSessions(
+		[]utmp.Session{{User: "root", Line: "pts/0", Host: "192.0.2.10"}}, snapshot,
+		testSSHTerminal(now), now, mustSSHDFilters(t), testSSHLookup().ResolveUser,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sample.Console != 0 || len(sample.Issues) != 1 {
+		t.Fatalf("sample = %+v, want preserved remote terminal issue rather than console", sample)
 	}
 }
 

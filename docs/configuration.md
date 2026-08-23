@@ -1073,8 +1073,11 @@ Read-only endpoints:
   runtime locks, discovered processes, automatic remediation policy state and
   rule window progress.
 - `GET /api/sessions` — current SSH, tmux and screen sessions plus the state of
-  each configured session source. Rows expose idle time plus process-tree CPU,
-  resident memory and IO rates when attributable; tmux and screen inventory
+  each configured session source. A `partial` SSH source keeps every exactly
+  verified session and reports each terminal whose `sshd` ancestry cannot be
+  verified as an unavailable issue without a close action; it never turns that
+  terminal into a local-console count. Rows expose idle time plus process-tree
+  CPU, resident memory and IO rates when attributable; tmux and screen inventory
   still comes from published check samples rather than an HTTP-time client run.
 - `GET /api/services/{name}/sla?since=24h` — availability history at the
   resolution that window is stored at (see [Stored history

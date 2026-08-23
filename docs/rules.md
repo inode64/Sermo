@@ -722,6 +722,11 @@ an executable needed by a protection filter, or owner resolution cannot be read,
 the check is unavailable; a guard therefore denies the operation rather than
 assuming that no session is protected.
 
+This fail-closed check behavior is independent from the dashboard inventory.
+The dashboard may show a source as `partial`, retaining exactly verified SSH
+rows while exposing each unverifiable terminal as an unavailable, non-actionable
+issue. Such a terminal is not counted as a local console session.
+
 ### Terminal sessions (`terminal_sessions`)
 
 `terminal_sessions` lists the active sessions of one explicitly configured

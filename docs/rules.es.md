@@ -734,6 +734,11 @@ protección o la resolución del propietario, la comprobación queda no disponib
 tanto un guard deniega la operación en vez de asumir que no hay sesiones
 protegidas.
 
+Este comportamiento de cierre seguro del check es independiente del inventario
+del panel. El panel puede mostrar un origen `partial`: conserva las filas SSH
+verificadas exactamente y expone cada terminal no verificable como una incidencia
+no disponible y sin acción. Ese terminal no se cuenta como sesión de consola local.
+
 ### Sesiones de terminal (`terminal_sessions`)
 
 `terminal_sessions` lista las sesiones activas de un usuario configurado

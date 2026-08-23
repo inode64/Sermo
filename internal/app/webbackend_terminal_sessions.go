@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"errors"
+	"fmt"
 	"maps"
 	"slices"
 	"strconv"
@@ -253,6 +254,16 @@ func (b *WebBackend) appendSSHSessions(result *web.SessionInventory, seen map[ss
 		source.Message = err.Error()
 		result.Sources = append(result.Sources, source)
 		return
+	}
+	if len(sessions.Issues) > 0 {
+		source.State = web.SessionSourcePartial
+		source.Message = fmt.Sprintf("%d terminal(s) could not be attributed safely", len(sessions.Issues))
+		source.Issues = make([]web.SessionIssue, 0, len(sessions.Issues))
+		for _, issue := range sessions.Issues {
+			source.Issues = append(source.Issues, web.SessionIssue{
+				User: issue.User, Terminal: issue.Terminal, Message: issue.Message,
+			})
+		}
 	}
 	result.Sources = append(result.Sources, source)
 	for _, session := range sshSessionsToWeb(sessions) {
