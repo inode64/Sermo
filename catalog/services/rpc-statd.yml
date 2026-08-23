@@ -22,6 +22,12 @@ processes:
   main:
     exe: ${rpc_statd_binary}
     user: ${user}
+  # rpc.statd only drops to ${user} when the init options request it; stock
+  # Gentoo OpenRC keeps it as root, and with just the dropped-privileges
+  # selector the restart identity guard blocked every operation there.
+  main-root:
+    exe: ${rpc_statd_binary}
+    user: root
 watches:
   service:
     check:

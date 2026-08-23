@@ -6364,6 +6364,101 @@ defaults: { policy: { cooldown: 5m } }
 	}
 }
 
+// TestEnableIfInitScopesProcessSelector covers `enable_if: {init: ...}`: an
+// exact supervisor selector that only exists under one init backend (Gentoo's
+// supervise-daemon runs salt-minion under OpenRC only). Leaving it in place on
+// systemd made the restart identity guard block every operation on a unit whose
+// only live processes are the shared Python interpreter.
+func TestEnableIfInitScopesProcessSelector(t *testing.T) {
+	const serviceBody = `
+name: minion
+service: minion
+processes:
+  main:
+    cmd: (^|[[:space:]])/usr/bin/minion([[:space:]]|$)
+    user: root
+  supervisor:
+    exe: /usr/bin/supervise-daemon
+    user: root
+    enable_if: { init: openrc }
+`
+	for _, tc := range []struct {
+		init           string
+		wantSupervisor bool
+	}{
+		{init: "openrc", wantSupervisor: true},
+		{init: "systemd", wantSupervisor: false},
+	} {
+		t.Run(tc.init, func(t *testing.T) {
+			oldInit := detectedInit
+			detectedInit = tc.init
+			defer func() { detectedInit = oldInit }()
+
+			global := writeConfig(t, map[string]string{
+				"sermo.yml":           baseGlobal,
+				"services/minion.yml": serviceBody,
+			})
+			cfg, err := loadConfig(t, global)
+			if err != nil {
+				t.Fatalf("Load() error = %v", err)
+			}
+			if issues := Validate(cfg); len(issues) != 0 {
+				t.Fatalf("Validate() issues = %v", issues)
+			}
+			resolved, errs := cfg.Resolve("minion")
+			if len(errs) != 0 {
+				t.Fatalf("Resolve() errors = %v", errs)
+			}
+			procs := nested(t, resolved.Tree, "processes")
+			sup, ok := procs["supervisor"]
+			if ok != tc.wantSupervisor {
+				t.Fatalf("supervisor present = %v, want %v", ok, tc.wantSupervisor)
+			}
+			if _, ok := procs["main"]; !ok {
+				t.Error("main selector must always survive")
+			}
+			if tc.wantSupervisor {
+				if _, has := sup.(map[string]any)["enable_if"]; has {
+					t.Error("enable_if must be stripped from a surviving branch")
+				}
+			}
+		})
+	}
+}
+
+func TestEnableIfInitValidation(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		spec    string
+		wantSub string
+	}{
+		{name: "unknown backend", spec: `{ init: launchd }`, wantSub: "init must be systemd or openrc"},
+		{name: "mixed with file", spec: `{ init: openrc, file: /etc/conf.d/x, key: k, equals: "" }`, wantSub: "init excludes"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			global := writeConfig(t, map[string]string{
+				"sermo.yml": baseGlobal,
+				"services/minion.yml": fmt.Sprintf(`
+name: minion
+service: minion
+processes:
+  supervisor:
+    exe: /usr/bin/supervise-daemon
+    user: root
+    enable_if: %s
+`, tc.spec),
+			})
+			cfg, err := loadConfig(t, global)
+			if err != nil {
+				t.Fatalf("Load() error = %v", err)
+			}
+			if !hasIssue(Validate(cfg), tc.wantSub) {
+				t.Fatalf("Validate() missing issue containing %q; got %v", tc.wantSub, Validate(cfg))
+			}
+		})
+	}
+}
+
 // TestMultiTokenDiscoveryRequireGate covers `versions.require`: an instance
 // discovered from config (php-fpm pools, tomcat envs) is materialized only when
 // its required binary also exists, so a stray config directory whose runtime is

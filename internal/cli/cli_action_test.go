@@ -768,3 +768,46 @@ func TestDefaultOperateDoesNotActWithoutEventStore(t *testing.T) {
 		t.Fatalf("actions = %v, want none", actions)
 	}
 }
+
+type flakyRecorder struct {
+	failures int
+	calls    int
+	records  []state.EventRecord
+}
+
+func (f *flakyRecorder) RecordEvent(e state.EventRecord) (int64, error) {
+	f.calls++
+	if f.calls <= f.failures {
+		return 0, errors.New("database is locked (5) (SQLITE_BUSY)")
+	}
+	f.records = append(f.records, e)
+	return int64(f.calls), nil
+}
+
+// TestRecordManualActionEventRetriesThroughContention covers the loaded-host
+// case where sermod holds the SQLite writer lock longer than one busy-timeout
+// window: the manual audit write must retry instead of failing the completed
+// operation on the first SQLITE_BUSY.
+func TestRecordManualActionEventRetriesThroughContention(t *testing.T) {
+	rec := &flakyRecorder{failures: 2}
+	err := recordManualActionEvent(context.Background(), rec, state.EventRecord{Service: "acpid", Action: "stop"})
+	if err != nil {
+		t.Fatalf("recordManualActionEvent() error = %v, want nil after retries", err)
+	}
+	if rec.calls != 3 || len(rec.records) != 1 {
+		t.Fatalf("calls = %d, records = %d; want 3 calls and 1 record", rec.calls, len(rec.records))
+	}
+}
+
+func TestRecordManualActionEventStopsOnCancelledContext(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	rec := &flakyRecorder{failures: 1000}
+	err := recordManualActionEvent(ctx, rec, state.EventRecord{Service: "acpid", Action: "stop"})
+	if err == nil {
+		t.Fatal("recordManualActionEvent() = nil, want error when the context is cancelled")
+	}
+	if rec.calls != 1 {
+		t.Fatalf("calls = %d, want exactly one attempt under a cancelled context", rec.calls)
+	}
+}

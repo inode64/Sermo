@@ -112,7 +112,7 @@ func serviceBackendPIDs(ctx context.Context, deps Deps, unit string) func() []in
 	if deps.BackendPIDs != nil {
 		return deps.BackendPIDs
 	}
-	if deps.Backend == servicemgr.BackendLibvirt || deps.Backend == servicemgr.BackendDocker {
+	if deps.Backend == servicemgr.BackendLibvirt || deps.Backend == servicemgr.BackendLibvirtNetwork || deps.Backend == servicemgr.BackendDocker {
 		return nil
 	}
 	return servicemgr.BackendPIDsFuncWithRunner(ctx, deps.Backend, unit, deps.ExecxRunner, nil)

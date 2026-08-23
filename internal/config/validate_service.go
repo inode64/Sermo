@@ -17,7 +17,7 @@ import (
 )
 
 const (
-	controlTypeSummary      = virt.ControlType + ", " + dockerctl.ControlType
+	controlTypeSummary      = virt.ControlType + ", " + virt.NetworkControlType + ", " + dockerctl.ControlType
 	dockerControlKeySummary = dockerctl.ControlKeyType + ", " +
 		dockerctl.ControlKeySocket + ", " +
 		dockerctl.ControlKeyHost + ", " +
@@ -29,6 +29,14 @@ const (
 		virt.ControlKeyDomain + ", " +
 		virt.ControlKeyUUID + ", " +
 		virt.ControlKeySocket + ", " +
+		virt.ControlKeyHost + ", " +
+		virt.ControlKeyPort
+	libvirtNetworkControlKeySummary = virt.ControlKeyType + ", " +
+		virt.ControlKeyURI + ", " +
+		virt.ControlKeyNetwork + ", " +
+		virt.ControlKeySocket + ", " +
+		virt.ControlKeyGuardSocket + ", " +
+		virt.ControlKeyGuardURI + ", " +
 		virt.ControlKeyHost + ", " +
 		virt.ControlKeyPort
 	controlSocketHostConflictMessage = "control must not set both socket and host"
@@ -406,6 +414,9 @@ func validateControl(tree map[string]any, add addFunc) {
 	case virt.ControlType:
 		validateControlKeys(control, set(virt.ControlKeyType, virt.ControlKeyURI, virt.ControlKeyDomain, virt.ControlKeyUUID, virt.ControlKeySocket, virt.ControlKeyHost, virt.ControlKeyPort), libvirtControlKeySummary, add)
 		validateLibvirtControl(control, add)
+	case virt.NetworkControlType:
+		validateControlKeys(control, set(virt.ControlKeyType, virt.ControlKeyURI, virt.ControlKeyNetwork, virt.ControlKeySocket, virt.ControlKeyGuardSocket, virt.ControlKeyGuardURI, virt.ControlKeyHost, virt.ControlKeyPort), libvirtNetworkControlKeySummary, add)
+		validateLibvirtNetworkControl(control, add)
 	case dockerctl.ControlType:
 		validateControlKeys(control, set(dockerctl.ControlKeyType, dockerctl.ControlKeySocket, dockerctl.ControlKeyHost, dockerctl.ControlKeyPort, dockerctl.ControlKeyTLS, dockerctl.ControlKeyContainer), dockerControlKeySummary, add)
 		validateDockerControl(control, add)
@@ -456,6 +467,23 @@ func validateLibvirtControl(control map[string]any, add addFunc) {
 		if _, err := virt.ParseUUID(uuid); err != nil {
 			add("%s %q must be a canonical UUID or 32 hex digits", controlPathUUID, uuid)
 		}
+	}
+	validateControlSocketHostPort(control, virt.ControlKeySocket, virt.ControlKeyHost, virt.ControlKeyPort,
+		virt.ValidSocketPath, virt.ValidHostPort, add)
+}
+
+func validateLibvirtNetworkControl(control map[string]any, add addFunc) {
+	if network := cfgval.String(control[virt.ControlKeyNetwork]); network == "" {
+		add("%s is required for %s", controlPathNetwork, virt.NetworkControlType)
+	}
+	if uri := cfgval.String(control[virt.ControlKeyURI]); uri != "" && strings.TrimSpace(uri) == "" {
+		add("%s must not be blank", controlPathURI)
+	}
+	if socket := cfgval.String(control[virt.ControlKeyGuardSocket]); !virt.ValidSocketPath(socket) {
+		add("%s %q must be an absolute path", SectionControl+"."+virt.ControlKeyGuardSocket, socket)
+	}
+	if cfgval.String(control[virt.ControlKeyGuardSocket]) != "" && cfgval.String(control[virt.ControlKeyHost]) != "" {
+		add(controlSocketHostConflictMessage)
 	}
 	validateControlSocketHostPort(control, virt.ControlKeySocket, virt.ControlKeyHost, virt.ControlKeyPort,
 		virt.ValidSocketPath, virt.ValidHostPort, add)
