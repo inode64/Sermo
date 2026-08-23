@@ -47,6 +47,11 @@ any `security:` toggle that tries to disable them.
     service backend or signal path. Validation permits only `then.notify` and
     `then.notify_interval`; a policy violation cannot restart, repair, kill or
     otherwise alter a process or service.
+11. **A libvirt virtual network with live guest interfaces is never
+    destroyed.** `control: libvirt-network` stop/restart verifies every
+    non-shut-off domain (paused included — its taps stay attached) against the
+    network name and its bridge; any attachment, or any guest that cannot be
+    verified, blocks the destroy. No configuration option relaxes this.
 
 ## The operation engine
 

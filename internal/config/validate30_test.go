@@ -265,6 +265,37 @@ control:
 `), "must not set both socket and host")
 }
 
+func TestValidateLibvirtNetworkControl(t *testing.T) {
+	valid := validateService(t, `
+name: libvirt-net-default
+control:
+  type: libvirt-network
+  network: default
+  socket: /run/libvirt/virtnetworkd-sock
+`)
+	mustNotHave(t, valid, "control")
+
+	mustHave(t, validateService(t, `
+name: svc
+control: { type: libvirt-network }
+`), "control.network is required")
+	mustHave(t, validateService(t, `
+name: svc
+control:
+  type: libvirt-network
+  network: default
+  domain: vm01
+`), "control key")
+	mustHave(t, validateService(t, `
+name: svc
+control:
+  type: libvirt-network
+  network: default
+  socket: /run/libvirt/libvirt-sock
+  host: 127.0.0.1
+`), "must not set both socket and host")
+}
+
 func TestValidateDockerControl(t *testing.T) {
 	valid := validateService(t, `
 name: svc

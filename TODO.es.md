@@ -94,6 +94,18 @@ una CLI configtest, `mosquitto`, `supervisord`, `udisks2`, `pm2`, etc. (`redis` 
 
 ## Engine y configuración
 
+- [ ] Stop manual frente a unidades con activación: tras `sermoctl stop`, una
+      unidad activada por socket/D-Bus/path (rpcbind, node_exporter detrás de un
+      scraper de Prometheus, polkit, avahi/acpid en Ubuntu) es rearrancada por su
+      disparador en segundos; la monitorización queda pausada y el panel muestra
+      `stopped` con la unidad corriendo hasta que un operador la reanuda.
+      Opciones: reanudar la monitorización automáticamente cuando el backend
+      vuelva a reportar la unidad activa tras un stop manual, y/o que el perfil
+      de catálogo declare las unidades de activación (`also_service: foo.socket`)
+      para que el stop tumbe también el disparador. Observado en toda la flota en
+      la campaña de ciclo de vida del 2026-08-23; cada resultado de Sermo fue
+      honesto (stop rc 1 / repair rechazado "service is active"), así que es UX,
+      no corrección.
 - [ ] Prioridades de servicio: `priority` configurable por servicio (entero o nivel
       con nombre), validación y valores por defecto; usar en el orden de remediación
       cuando varios servicios encolan acciones en el mismo ciclo; exponer en `sermoctl

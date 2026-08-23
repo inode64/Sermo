@@ -883,6 +883,9 @@ func (a App) defaultOperate(ctx context.Context, opts options, cfg *config.Confi
 	}
 	defer func() { _ = eventStore.Close() }()
 	var eventErr error
+	recordResult := func(result operation.Result) error {
+		return recordManualActionEvent(ctx, eventStore, app.OperationEventRecord(result))
+	}
 	engine := operation.New(operation.Config{
 		Service:     service,
 		Unit:        target.Unit,
@@ -902,7 +905,7 @@ func (a App) defaultOperate(ctx context.Context, opts options, cfg *config.Confi
 		Changed:          app.ArtifactChangedFunc(libBaseline),
 		OperationTimeout: operation.ResolveTimeout(opts.timeout, resolved.Tree),
 		Emit: func(result operation.Result) { //nolint:contextcheck // Store was opened with ctx and binds it to SQL calls.
-			if _, err := eventStore.RecordEvent(app.OperationEventRecord(result)); err != nil {
+			if err := recordResult(result); err != nil {
 				eventErr = err
 			}
 		},
@@ -914,12 +917,53 @@ func (a App) defaultOperate(ctx context.Context, opts options, cfg *config.Confi
 
 	result := runEngineAction(opCtx, engine, opts, action)
 	if eventErr != nil {
-		return result, fmt.Errorf("record operation event: %w", eventErr)
+		// The action already ran (or was blocked); losing its audit record is
+		// still a failure, but the outcome must not be masked by it.
+		return result, fmt.Errorf("%s applied with result %q, but its audit event could not be recorded: %w",
+			action, result.Status, eventErr)
 	}
 	if result.Message == "unknown action" && result.Status == operation.ResultFailed {
 		return operation.Result{}, fmt.Errorf("unknown action %q", action)
 	}
 	return result, nil
+}
+
+// Manual operations share the state database with a running sermod; on a
+// loaded host the daemon's write transactions can hold the SQLite writer lock
+// beyond one busy-timeout window, and a single failed insert used to turn a
+// completed operation into a bare "database is locked" error. The audit write
+// therefore retries inside a bounded window; each attempt already waits the
+// store's own busy timeout.
+const (
+	manualAuditRetryWindow = 30 * time.Second
+	manualAuditRetryPause  = 2 * time.Second
+)
+
+// manualActionRecorder is the slice of the state store the manual audit path
+// needs; it keeps the retry logic testable without a real database.
+type manualActionRecorder interface {
+	RecordEvent(state.EventRecord) (int64, error)
+}
+
+// recordManualActionEvent writes one manual operation's audit record, retrying
+// through transient contention with the daemon. Persistent failure is still an
+// error: an executed action without its auditable outcome must fail loudly.
+func recordManualActionEvent(ctx context.Context, store manualActionRecorder, rec state.EventRecord) error {
+	deadline := time.Now().Add(manualAuditRetryWindow)
+	for {
+		_, err := store.RecordEvent(rec)
+		if err == nil {
+			return nil
+		}
+		if ctx.Err() != nil || time.Now().After(deadline) {
+			return err
+		}
+		select {
+		case <-ctx.Done():
+			return err
+		case <-time.After(manualAuditRetryPause):
+		}
+	}
 }
 
 // runEngineAction dispatches one CLI action on a built engine. Everything the

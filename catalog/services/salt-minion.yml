@@ -24,6 +24,10 @@ os:
     # OpenRC runs Salt under supervise-daemon.  Its own pidfile is the only
     # strict identity Sermo may signal if OpenRC leaves a stale supervisor
     # behind; the Python minion and logger children remain discovery-only.
+    # On Gentoo running systemd there is no supervisor at all, so the exact
+    # selector is init-scoped: leaving it in place would make the restart
+    # identity guard block every operation on a unit whose only processes
+    # are the shared Python interpreter.
     pidfile:
       - /run/supervisor-salt-minion.pid
       - /run/salt-minion.pid
@@ -32,6 +36,8 @@ os:
         exe: /usr/bin/supervise-daemon
         cmd: ^supervise-daemon salt-minion --start([[:space:]]|$)
         user: root
+        enable_if:
+          init: openrc
     stop_policy:
       force_kill: auto
       term_timeout: 5s

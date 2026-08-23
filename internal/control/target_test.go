@@ -9,6 +9,7 @@ import (
 	"sermo/internal/dockerctl"
 	"sermo/internal/execx"
 	"sermo/internal/servicemgr"
+	"sermo/internal/virt"
 )
 
 func TestResolveDockerControl(t *testing.T) {
@@ -196,3 +197,29 @@ func (noKnownUnitsProbe) CommandExists(string) bool { return false }
 func (noKnownUnitsProbe) PathExists(string) bool { return false }
 
 func (noKnownUnitsProbe) ReadFile(string) ([]byte, error) { return nil, errors.New("not found") }
+
+func TestResolveLibvirtNetworkControl(t *testing.T) {
+	target, err := Resolve(context.Background(), "libvirt-net-default", map[string]any{
+		config.SectionControl: map[string]any{
+			virt.ControlKeyType:    virt.NetworkControlType,
+			virt.ControlKeyNetwork: "default",
+		},
+	}, servicemgr.BackendSystemd, nil, servicemgr.UnitResolver{})
+	if err != nil {
+		t.Fatalf("Resolve() error = %v", err)
+	}
+	if target.Unit != "default" || target.Backend != servicemgr.BackendLibvirtNetwork || target.Manager == nil {
+		t.Fatalf("Resolve() = %+v, want libvirt-network/default target", target)
+	}
+}
+
+func TestResolveLibvirtNetworkControlRequiresNetwork(t *testing.T) {
+	_, err := Resolve(context.Background(), "svc", map[string]any{
+		config.SectionControl: map[string]any{
+			virt.ControlKeyType: virt.NetworkControlType,
+		},
+	}, servicemgr.BackendSystemd, nil, servicemgr.UnitResolver{})
+	if err == nil {
+		t.Fatal("Resolve() = nil error, want required-network error")
+	}
+}
