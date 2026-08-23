@@ -33,6 +33,7 @@ watches:
       type: dbus
       bus_name: org.libvirt
       object_path: /org/libvirt
+      require_owner: true
       requires:
         - bus
       timeout: 5s

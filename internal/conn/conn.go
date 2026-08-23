@@ -211,16 +211,17 @@ const (
 
 // Config.Params keys consumed by protocol probes.
 const (
-	ParamKeyAuthSource     = "auth_source"
-	ParamKeyDBusBusName    = "bus_name"
-	ParamKeyDBusInterface  = "dbus_interface"
-	ParamKeyDBusObjectPath = "object_path"
-	ParamKeyDBusProbe      = "probe"
-	ParamKeyDBusProperty   = "property"
-	ParamKeyDomain         = "domain"
-	ParamKeyMAC            = "mac"
-	ParamKeyResolvconf     = "resolvconf"
-	ParamKeyTransport      = "transport"
+	ParamKeyAuthSource       = "auth_source"
+	ParamKeyDBusBusName      = "bus_name"
+	ParamKeyDBusInterface    = "dbus_interface"
+	ParamKeyDBusObjectPath   = "object_path"
+	ParamKeyDBusProbe        = "probe"
+	ParamKeyDBusProperty     = "property"
+	ParamKeyDBusRequireOwner = "require_owner"
+	ParamKeyDomain           = "domain"
+	ParamKeyMAC              = "mac"
+	ParamKeyResolvconf       = "resolvconf"
+	ParamKeyTransport        = "transport"
 )
 
 // ParamValueTrue is the string form used for true boolean values in Config.Params.

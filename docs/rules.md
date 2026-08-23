@@ -1281,14 +1281,18 @@ Protocols, in the order of the table above:
   `org.freedesktop.DBus.Properties.Get` and requires both `dbus_interface` and
   `property`. Property values must be scalar (string, boolean, number or object
   path); use `expect.property_value` to assert the observed value. Every call
-  sets `NO_AUTO_START`: a missing or wedged service fails without D-Bus
-  activating it, and a call cannot race onto a replacement owner. Because
-  nothing is activated, a name with no current owner is checked against
+  sets `NO_AUTO_START`, so monitoring never activates a service and a call
+  cannot race onto a replacement owner. By default, a name with no current
+  owner is checked against
   `org.freedesktop.DBus.ListActivatableNames` before it counts as a failure: an
   activatable name is installed and starts on demand — `systemd-networkd` routes
   traffic perfectly while `org.freedesktop.network1` sits unactivated — so the
-  check passes and reports `activatable`. A name that is neither owned nor
-  activatable really is absent, and still fails. There is no
+  check passes and reports `activatable`. Set `require_owner: true` for a
+  resident daemon: `GetNameOwner` must then return a unique owner, and a merely
+  activatable name fails. This detects a unit that remains active after losing
+  its D-Bus connection. A name that is neither owned nor activatable really is
+  absent, and still fails. `require_owner` is a boolean and requires the same
+  `bus_name` plus `object_path` target. There is no
   arbitrary-method mode. Omitting all target fields keeps the bus-only probe;
   `bus_name` and `object_path` must otherwise be set together. It runs no write
   operation. **Target:** defaults to the system bus
@@ -1317,18 +1321,22 @@ Protocols, in the order of the table above:
       type: dbus
       bus_name: org.freedesktop.login1
       object_path: /org/freedesktop/login1
+      require_owner: true
     udisks2:
       type: dbus
       bus_name: org.freedesktop.UDisks2
       object_path: /org/freedesktop/UDisks2/Manager
+      require_owner: true
     libvirt-dbus:
       type: dbus
       bus_name: org.libvirt
       object_path: /org/libvirt
+      require_owner: true
     gdm-version:
       type: dbus
       bus_name: org.gnome.DisplayManager
       object_path: /org/gnome/DisplayManager/Manager
+      require_owner: true
       probe: property
       dbus_interface: org.gnome.DisplayManager.Manager
       property: Version

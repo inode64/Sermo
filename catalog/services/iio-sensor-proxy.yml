@@ -21,6 +21,7 @@ watches:
       type: dbus
       bus_name: net.hadess.SensorProxy
       object_path: /net/hadess/SensorProxy
+      require_owner: true
       probe: property
       dbus_interface: net.hadess.SensorProxy
       property: HasAmbientLight

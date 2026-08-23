@@ -982,12 +982,14 @@ watches:
       type: dbus
       bus_name: org.libvirt
       object_path: /org/libvirt
+      require_owner: true
       on_change: true
   dbus-gdm-version:
     check:
       type: dbus
       bus_name: org.gnome.DisplayManager
       object_path: /org/gnome/DisplayManager/Manager
+      require_owner: true
       probe: property
       dbus_interface: org.gnome.DisplayManager.Manager
       property: Version

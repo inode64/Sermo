@@ -1299,15 +1299,20 @@ Protocolos, en el orden de la tabla de arriba:
   `org.freedesktop.DBus.Properties.Get` y exige tanto `dbus_interface` como
   `property`. El valor de la propiedad debe ser escalar (texto, booleano,
   número u object path); usa `expect.property_value` para comprobar el valor
-  observado. Todas las llamadas llevan `NO_AUTO_START`: un servicio ausente o
-  bloqueado falla sin que D-Bus lo active, y la llamada no puede terminar en un
-  propietario sustituto por una carrera. Como no se activa nada, un nombre sin
-  propietario actual se contrasta con
+  observado. Todas las llamadas llevan `NO_AUTO_START`, por lo que la
+  monitorización nunca activa un servicio y la llamada no puede terminar en un
+  propietario sustituto por una carrera. Por defecto, un nombre sin propietario
+  actual se contrasta con
   `org.freedesktop.DBus.ListActivatableNames` antes de contarlo como fallo: un
   nombre activable está instalado y arranca bajo demanda —`systemd-networkd`
   enruta perfectamente mientras `org.freedesktop.network1` sigue sin activar—,
-  así que la comprobación pasa e informa `activatable`. Un nombre que no está ni en uso
-  ni es activable sí está ausente, y sigue fallando. No existe un modo para
+  así que la comprobación pasa e informa `activatable`. Define
+  `require_owner: true` para un daemon residente: `GetNameOwner` debe devolver
+  entonces un propietario único y un nombre meramente activable falla. Esto
+  detecta una unidad que sigue activa después de perder su conexión D-Bus. Un
+  nombre que no está ni en uso ni es activable sí está ausente, y sigue fallando.
+  `require_owner` es booleano y exige el mismo destino `bus_name` más
+  `object_path`. No existe un modo para
   métodos arbitrarios. Omitir todos los campos de destino conserva la sonda solo-bus;
   en caso contrario `bus_name` y `object_path` deben definirse juntos. No
   ejecuta operación de escritura.
@@ -1338,18 +1343,22 @@ Protocolos, en el orden de la tabla de arriba:
       type: dbus
       bus_name: org.freedesktop.login1
       object_path: /org/freedesktop/login1
+      require_owner: true
     udisks2:
       type: dbus
       bus_name: org.freedesktop.UDisks2
       object_path: /org/freedesktop/UDisks2/Manager
+      require_owner: true
     libvirt-dbus:
       type: dbus
       bus_name: org.libvirt
       object_path: /org/libvirt
+      require_owner: true
     gdm-version:
       type: dbus
       bus_name: org.gnome.DisplayManager
       object_path: /org/gnome/DisplayManager/Manager
+      require_owner: true
       probe: property
       dbus_interface: org.gnome.DisplayManager.Manager
       property: Version

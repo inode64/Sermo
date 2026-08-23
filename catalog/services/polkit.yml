@@ -45,6 +45,7 @@ watches:
       type: dbus
       bus_name: org.freedesktop.PolicyKit1
       object_path: /org/freedesktop/PolicyKit1/Authority
+      require_owner: true
       requires:
         - bus
       timeout: 5s

@@ -50,6 +50,7 @@ watches:
       type: dbus
       bus_name: org.fedoraproject.FirewallD1
       object_path: /org/fedoraproject/FirewallD1
+      require_owner: true
       probe: property
       dbus_interface: org.fedoraproject.FirewallD1
       property: state

@@ -166,6 +166,8 @@ func TestValidateDBusTarget(t *testing.T) {
 		{name: "named service", target: DBusTarget{BusName: "org.libvirt", ObjectPath: "/org/libvirt"}},
 		{name: "introspect", target: DBusTarget{BusName: "org.gnome.DisplayManager", ObjectPath: "/org/gnome/DisplayManager/Manager", Probe: DBusProbeIntrospect, DBusInterface: "org.gnome.DisplayManager.Manager"}},
 		{name: "property", target: DBusTarget{BusName: "net.hadess.PowerProfiles", ObjectPath: "/net/hadess/PowerProfiles", Probe: DBusProbeProperty, DBusInterface: "net.hadess.PowerProfiles", Property: "ActiveProfile"}},
+		{name: "owner required", target: DBusTarget{BusName: "org.libvirt", ObjectPath: "/org/libvirt", RequireOwner: true}},
+		{name: "owner required without target", target: DBusTarget{RequireOwner: true}, wantErr: "bus_name is required when require_owner is set"},
 		{name: "missing bus name", target: DBusTarget{ObjectPath: "/org/libvirt"}, wantErr: "bus_name is required"},
 		{name: "missing object path", target: DBusTarget{BusName: "org.libvirt"}, wantErr: "object_path is required"},
 		{name: "single component", target: DBusTarget{BusName: "libvirt", ObjectPath: "/org/libvirt"}, wantErr: "not a valid well-known"},
@@ -379,6 +381,26 @@ func TestProbeDBusServiceAcceptsAnActivatableName(t *testing.T) {
 	}
 	if !slices.Contains(bus.calls, dbusListActivatableNames) {
 		t.Fatalf("calls = %v, want the activatable list consulted", bus.calls)
+	}
+}
+
+// A resident daemon must not be reported healthy merely because its name can
+// be activated. This reproduces systemd-logind remaining active but losing its
+// org.freedesktop.login1 owner after the system bus was restarted.
+func TestProbeDBusServiceRequiresOwner(t *testing.T) {
+	bus := &scriptedDBusCaller{replies: map[string]*dbus.Call{
+		dbusGetNameOwner:         {Err: errors.New("Could not get owner of name 'org.freedesktop.login1': no such name")},
+		dbusListActivatableNames: {Body: []any{[]string{"org.freedesktop.login1"}}},
+	}}
+	_, _, err := probeDBusService(context.Background(), bus, func(string, dbus.ObjectPath) dbusMethodCaller {
+		t.Fatal("an unowned name must not be probed as an object")
+		return nil
+	}, DBusTarget{BusName: "org.freedesktop.login1", ObjectPath: "/org/freedesktop/login1", RequireOwner: true})
+	if err == nil || !strings.Contains(err.Error(), "owner required") {
+		t.Fatalf("probeDBusService() error = %v, want required-owner failure", err)
+	}
+	if slices.Contains(bus.calls, dbusListActivatableNames) {
+		t.Fatalf("calls = %v, strict owner mode must not accept activatable names", bus.calls)
 	}
 }
 

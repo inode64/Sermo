@@ -515,6 +515,7 @@ func TestBuildDBusCheck(t *testing.T) {
 			"probe":          "property",
 			"dbus_interface": "org.libvirt.Connect",
 			"property":       "Version",
+			"require_owner":  true,
 		},
 	}, Deps{DefaultTimeout: time.Second})
 	if len(warns) != 0 || len(built) != 1 {
@@ -525,7 +526,8 @@ func TestBuildDBusCheck(t *testing.T) {
 		cc.cfg.Params[conn.ParamKeyDBusObjectPath] != "/org/libvirt" ||
 		cc.cfg.Params[conn.ParamKeyDBusProbe] != conn.DBusProbeProperty ||
 		cc.cfg.Params[conn.ParamKeyDBusInterface] != "org.libvirt.Connect" ||
-		cc.cfg.Params[conn.ParamKeyDBusProperty] != "Version" {
+		cc.cfg.Params[conn.ParamKeyDBusProperty] != "Version" ||
+		cc.cfg.Params[conn.ParamKeyDBusRequireOwner] != conn.ParamValueTrue {
 		t.Fatalf("named dbus params = %v", cc.cfg.Params)
 	}
 }
@@ -544,6 +546,7 @@ func TestBuildDBusCheckRejectsInvalidTarget(t *testing.T) {
 		{name: "peer interface", entry: map[string]any{"type": "dbus", "bus_name": "org.libvirt", "object_path": "/org/libvirt", "dbus_interface": "org.libvirt.Connect"}, want: "dbus_interface is not supported"},
 		{name: "property missing interface", entry: map[string]any{"type": "dbus", "bus_name": "org.libvirt", "object_path": "/org/libvirt", "probe": "property", "property": "Version"}, want: "dbus_interface is required"},
 		{name: "property missing property", entry: map[string]any{"type": "dbus", "bus_name": "org.libvirt", "object_path": "/org/libvirt", "probe": "property", "dbus_interface": "org.libvirt.Connect"}, want: "property is required"},
+		{name: "owner required without target", entry: map[string]any{"type": "dbus", "require_owner": true}, want: "bus_name is required when require_owner is set"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -557,15 +560,16 @@ func TestBuildDBusCheckRejectsInvalidTarget(t *testing.T) {
 
 func TestDBusTargetEntrySchema(t *testing.T) {
 	wantFields := [5]string{"bus_name", "object_path", "probe", "dbus_interface", "property"}
-	if got := DBusTargetFields(); got != wantFields {
-		t.Fatalf("DBusTargetFields() = %v, want %v", got, wantFields)
+	if got := DBusTargetStringFields(); got != wantFields {
+		t.Fatalf("DBusTargetStringFields() = %v, want %v", got, wantFields)
 	}
 	entry := map[string]any{
-		CheckKeyDBusBusName:    "org.libvirt",
-		CheckKeyDBusObjectPath: "/org/libvirt",
-		CheckKeyDBusProbe:      conn.DBusProbeProperty,
-		CheckKeyDBusInterface:  "org.libvirt.Connect",
-		CheckKeyDBusProperty:   "Version",
+		CheckKeyDBusBusName:      "org.libvirt",
+		CheckKeyDBusObjectPath:   "/org/libvirt",
+		CheckKeyDBusProbe:        conn.DBusProbeProperty,
+		CheckKeyDBusInterface:    "org.libvirt.Connect",
+		CheckKeyDBusProperty:     "Version",
+		CheckKeyDBusRequireOwner: true,
 	}
 	wantTarget := conn.DBusTarget{
 		BusName:       "org.libvirt",
@@ -573,6 +577,7 @@ func TestDBusTargetEntrySchema(t *testing.T) {
 		Probe:         conn.DBusProbeProperty,
 		DBusInterface: "org.libvirt.Connect",
 		Property:      "Version",
+		RequireOwner:  true,
 	}
 	if got := DBusTargetFromEntry(entry); got != wantTarget {
 		t.Fatalf("DBusTargetFromEntry() = %+v, want %+v", got, wantTarget)

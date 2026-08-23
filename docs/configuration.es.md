@@ -2274,8 +2274,10 @@ servicio con nombre, define a la vez `bus_name` y `object_path`; Sermo resuelve
 su propietario único con la autoactivación D-Bus deshabilitada. El valor por
 defecto `probe: peer` verifica vivacidad; `probe: introspect` puede exigir una
 `dbus_interface`, y `probe: property` lee una `property` escalar de la
-`dbus_interface` obligatoria. Estos campos funcionan sin cambios en watches de
-host y watches embebidos en services. Ver
+`dbus_interface` obligatoria. Un nombre sin propietario pero activable pasa por
+defecto; define `require_owner: true` para un daemon residente, de modo que
+perder su propietario D-Bus sea un fallo aunque su unidad siga activa. Estos
+campos funcionan sin cambios en watches de host y watches embebidos en services. Ver
 [la comprobación D-Bus](rules.es.md#protocolos-de-base-de-datos).
 
 Un watch dispara su hook con el resultado de **alerta** de la comprobación:
