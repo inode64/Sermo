@@ -715,6 +715,71 @@ detectados a través del socket libvirt local. Sondea tanto
 `/run/libvirt/libvirt-sock` como `/run/libvirt/virtqemud-sock` y escribe el
 socket que realmente usó en el servicio y la comprobación generada.
 
+### `control: libvirt-network` — redes virtuales libvirt
+
+Un servicio puede controlar una **red virtual** libvirt (territorio de
+`virsh net-start` / `net-destroy`) en lugar de un dominio:
+
+```yaml
+name: libvirt-net-default
+category: virtual-network
+control:
+  type: libvirt-network
+  uri: network:///system
+  network: default
+  socket: /run/libvirt/virtnetworkd-sock
+  guard_socket: /run/libvirt/virtqemud-sock
+
+processes:
+  dnsmasq-root:
+    exe: /usr/bin/dnsmasq
+    cmd: '--conf-file=/var/lib/libvirt/dnsmasq/default\.conf([[:space:]]|$)'
+    user: root
+    delegated: true
+```
+
+`control.network` es el nombre de la red libvirt. El RPC de red va por
+`socket`/`uri` (por defecto `/run/libvirt/libvirt-sock` y `network:///system`,
+que el libvirtd monolítico también acepta); el guard de guests conectados
+necesita las APIs de **dominio**, que en libvirt modular viven en otro daemon,
+así que marca `guard_socket`/`guard_uri` (por defecto: el socket de red y
+`qemu:///system`). `host`/`port` seleccionan un endpoint TCP exactamente como
+`control: libvirt`, compartido por ambas sesiones.
+
+El motor seguro de operaciones no cambia: locks, guards, preflight, timeouts de
+operación y política de remediación siguen aplicando. Las acciones primitivas
+son operaciones de red de libvirt:
+
+- `start` inicia la red definida (`NetworkCreate`).
+- `stop` destruye la red (`NetworkDestroy`) — pero **se niega de forma
+  inapelable mientras algún guest vivo tenga una interfaz en la red**
+  (coincidencia por nombre de red origen o por el puente de la red, contando
+  también guests pausados: sus taps siguen conectados). Destruir esa red corta
+  la conectividad de los guests y los taps no se reconectan en el siguiente
+  arranque. Ninguna opción de configuración relaja este guard, y un guest no
+  verificable bloquea la destrucción en lugar de omitirse.
+- `restart` sigue siendo el flujo seguro stop+start de Sermo, así que hereda el
+  guard.
+- `reload` y `resume` no están soportados para redes virtuales.
+
+El estado de la red mapea activa → `active` e inactiva → `stopped`/`failed`
+siguiendo la semántica de monitorización habitual.
+
+Por qué gestionar redes: libvirt lanza una pareja de dnsmasq por red NAT, y esa
+pareja sobrevive deliberadamente a los reinicios del daemon (ver el perfil
+empaquetado de `virtnetworkd`, donde es `delegated`). Tras una actualización
+del paquete dnsmasq esos procesos siguen ejecutando el binario reemplazado y
+solo un reinicio de la **red** los renueva — la red generada es el único
+objetivo cuyo hallazgo `stale-binary` un restart arregla de verdad. Atribuya la
+pareja con selectores `delegated: true` como en el ejemplo: Sermo la observa,
+libvirt es dueño de su ciclo de vida.
+
+El instalador de flota genera un servicio por cada **red activa con IP propia
+de libvirt** (la forma que lanza dnsmasq); las redes en modo bridge se
+registran como omitidas porque un restart no renueva nada en ellas, y un host
+sin socket de APIs de dominio también se omite — sin él el guard no podría
+verificar guests, y un objetivo de destrucción no verificable no debe existir.
+
 ### `control: docker` — contenedores Docker
 
 Un servicio puede ser controlado como un contenedor Docker en lugar de una unidad systemd/OpenRC:

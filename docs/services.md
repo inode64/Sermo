@@ -708,6 +708,69 @@ detected through the local libvirt socket. It probes both
 `/run/libvirt/libvirt-sock` and `/run/libvirt/virtqemud-sock` and writes the
 socket it actually used into the generated service and check.
 
+### `control: libvirt-network` — libvirt virtual networks
+
+A service can control one libvirt **virtual network** (`virsh net-start` /
+`net-destroy` territory) instead of a domain:
+
+```yaml
+name: libvirt-net-default
+category: virtual-network
+control:
+  type: libvirt-network
+  uri: network:///system
+  network: default
+  socket: /run/libvirt/virtnetworkd-sock
+  guard_socket: /run/libvirt/virtqemud-sock
+
+processes:
+  dnsmasq-root:
+    exe: /usr/bin/dnsmasq
+    cmd: '--conf-file=/var/lib/libvirt/dnsmasq/default\.conf([[:space:]]|$)'
+    user: root
+    delegated: true
+```
+
+`control.network` is the libvirt network name. Network RPC runs over
+`socket`/`uri` (defaults `/run/libvirt/libvirt-sock` and `network:///system`,
+which monolithic libvirtd accepts too); the guest-attachment guard below needs
+**domain** APIs, which on modular libvirt live on a different daemon, so it
+dials `guard_socket`/`guard_uri` (defaults: the network socket and
+`qemu:///system`). `host`/`port` select a TCP endpoint exactly like
+`control: libvirt`, shared by both sessions.
+
+The safe operation engine is unchanged: locks, guards, preflight, operation
+timeouts and remediation policy still apply. The primitive actions are libvirt
+network operations:
+
+- `start` starts the defined network (`NetworkCreate`).
+- `stop` destroys the network (`NetworkDestroy`) — but **hard-refuses while any
+  live guest has an interface on the network** (matched by source network name
+  or by the network's bridge, and counting paused guests: their taps stay
+  attached). Destroying such a network cuts guest connectivity and the taps do
+  not reattach on the next start. No configuration option relaxes this guard,
+  and an unverifiable guest blocks the destroy rather than being skipped.
+- `restart` is still Sermo's safe stop+start flow, so it inherits the guard.
+- `reload` and `resume` are unsupported for virtual networks.
+
+Network state maps active → `active` and inactive → `stopped`/`failed`
+following the usual monitoring semantics.
+
+Why manage networks at all: libvirt spawns one dnsmasq pair per NAT network,
+and that pair deliberately survives daemon restarts (see the packaged
+`virtnetworkd` profile, where it is `delegated`). After a dnsmasq package
+upgrade those processes keep running the replaced binary and only a
+**network** restart renews them — so the generated network service is the one
+target whose `stale-binary` finding a restart genuinely fixes. Attribute the
+pair with `delegated: true` selectors like the example above: Sermo observes
+it, libvirt owns its lifecycle.
+
+The fleet installer generates one such service per **active network with a
+libvirt-owned IP** (the shape that spawns dnsmasq); bridge-mode networks are
+recorded as skipped because a restart renews nothing on them, and a host with
+no domain-API socket is skipped too — without one the attachment guard could
+not verify guests, and an unverifiable destroy target must not exist.
+
 ### `control: docker` — Docker containers
 
 A service can be controlled as one Docker container instead of a systemd/OpenRC
