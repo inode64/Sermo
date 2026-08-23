@@ -1734,6 +1734,7 @@ def endpoint_watch_overrides(stage: Path, doc: dict, variables: dict[str, str]) 
     return disabled, report
 CLAMAV_DATABASE_OLDER_THAN = "48h"
 OPENVPN_CATALOG_SERVICE = "openvpn%s%i"
+OPENVPN_CLIENT_CATALOG_SERVICE = "openvpn-client-%i"
 
 
 def parse_openvpn_instances(stage: Path) -> dict[str, dict[str, str]]:
@@ -1757,13 +1758,17 @@ def openvpn_watch_overrides(stage: Path, name: str, doc: dict) -> tuple[set[str]
     Mirrors endpoint_watch_overrides: a disabled set plus audited report rows."""
     disabled: set[str] = set()
     report: list[dict[str, object]] = []
-    if str(doc.get("name") or "") != OPENVPN_CATALOG_SERVICE:
+    catalog_name = str(doc.get("name") or "")
+    if catalog_name not in {OPENVPN_CATALOG_SERVICE, OPENVPN_CLIENT_CATALOG_SERVICE}:
         return disabled, report
     watches = doc.get("watches", {})
     if not isinstance(watches, dict):
         return disabled, report
     instances = parse_openvpn_instances(stage)
-    instance = next((i for i in instances if name == f"openvpn{i}"), "")
+    if catalog_name == OPENVPN_CLIENT_CATALOG_SERVICE:
+        instance = next((i for i in instances if name == f"openvpn-client-{i}"), "")
+    else:
+        instance = next((i for i in instances if name == f"openvpn{i}"), "")
     info = instances.get(instance)
     if not info:
         return disabled, report

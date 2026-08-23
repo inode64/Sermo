@@ -944,6 +944,12 @@ class OpenVPNClientGateTest(unittest.TestCase):
         self.assertIsNotNone(doc, "the openvpn catalog template must resolve")
         return doc
 
+    def systemd_client_doc(self):
+        docs = generator.load_catalog_services(default_options().catalog_services_dir)
+        doc, _ = generator.catalog_doc_for_service("openvpn-client-tun1", docs)
+        self.assertIsNotNone(doc, "the systemd openvpn client template must resolve")
+        return doc
+
     def overrides(self, evidence: str | None, name: str = "openvpntun1"):
         temp = tempfile.TemporaryDirectory()
         self.addCleanup(temp.cleanup)
@@ -958,6 +964,20 @@ class OpenVPNClientGateTest(unittest.TestCase):
         item = next(c for c in checks if c["watch"] == "port")
         self.assertFalse(item["active"])
         self.assertIn("no local listener", item["reason"])
+
+    def test_systemd_client_without_listener_drops_the_probe(self):
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        stage = Path(temp.name)
+        (stage / "openvpn_instances").write_text("tun1\tclient\t-\n", encoding="utf-8")
+        disabled, checks = generator.openvpn_watch_overrides(
+            stage,
+            "openvpn-client-tun1",
+            self.systemd_client_doc(),
+        )
+        self.assertEqual(disabled, {"port"})
+        item = next(c for c in checks if c["watch"] == "port")
+        self.assertFalse(item["active"])
 
     def test_server_keeps_the_probe(self):
         disabled, checks = self.overrides("tun1\tserver\t1194\n")
