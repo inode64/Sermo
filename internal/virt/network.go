@@ -143,7 +143,11 @@ func NewNetworkManager(spec NetworkSpec) NetworkManager {
 
 // Status returns the normalized state of the managed network.
 func (m NetworkManager) Status(ctx context.Context, service string) (servicemgr.ServiceStatus, error) {
-	status, err := runWithNetwork(ctx, m, func(c NetworkClient, net libvirt.Network) (servicemgr.Status, error) {
+	status, err := runWithSession(ctx, m.Spec.URI, m.sessionClient(m.Spec.Socket), func(c NetworkClient) (servicemgr.Status, error) {
+		net, err := lookupNetwork(c, m.Spec.Network)
+		if err != nil {
+			return "", err
+		}
 		active, err := c.NetworkIsActive(net)
 		if err != nil {
 			return "", fmt.Errorf("network %q state: %w", m.Spec.Network, err)
@@ -176,7 +180,11 @@ func (m NetworkManager) Start(ctx context.Context, _ string) error {
 // The attachment check runs over the guard session (domain APIs), which on
 // modular libvirt is a different daemon than the network session.
 func (m NetworkManager) Stop(ctx context.Context, _ string) error {
-	bridge, err := runWithNetwork(ctx, m, func(c NetworkClient, net libvirt.Network) (string, error) {
+	bridge, err := runWithSession(ctx, m.Spec.URI, m.sessionClient(m.Spec.Socket), func(c NetworkClient) (string, error) {
+		net, err := lookupNetwork(c, m.Spec.Network)
+		if err != nil {
+			return "", err
+		}
 		xmlDesc, err := c.NetworkGetXMLDesc(net, 0)
 		if err != nil {
 			return "", fmt.Errorf("network %q xml: %w", m.Spec.Network, err)
@@ -213,7 +221,11 @@ func (NetworkManager) Resume(context.Context, string) error {
 }
 
 func (m NetworkManager) networkAction(ctx context.Context, action string, fn func(NetworkClient, libvirt.Network) error) error {
-	_, err := runWithNetwork(ctx, m, func(c NetworkClient, net libvirt.Network) (struct{}, error) {
+	_, err := runWithSession(ctx, m.Spec.URI, m.sessionClient(m.Spec.Socket), func(c NetworkClient) (struct{}, error) {
+		net, err := lookupNetwork(c, m.Spec.Network)
+		if err != nil {
+			return struct{}{}, err
+		}
 		if err := fn(c, net); err != nil {
 			return struct{}{}, fmt.Errorf("%s network %q: %w", action, m.Spec.Network, err)
 		}
@@ -222,15 +234,12 @@ func (m NetworkManager) networkAction(ctx context.Context, action string, fn fun
 	return err
 }
 
-func runWithNetwork[T any](ctx context.Context, m NetworkManager, fn func(NetworkClient, libvirt.Network) (T, error)) (T, error) {
-	return runWithSession(ctx, m.Spec.URI, m.sessionClient(m.Spec.Socket), func(c NetworkClient) (T, error) {
-		net, err := c.NetworkLookupByName(m.Spec.Network)
-		if err != nil {
-			var zero T
-			return zero, fmt.Errorf("network %q: %w", m.Spec.Network, err)
-		}
-		return fn(c, net)
-	})
+func lookupNetwork(c NetworkClient, name string) (libvirt.Network, error) {
+	net, err := c.NetworkLookupByName(name)
+	if err != nil {
+		return libvirt.Network{}, fmt.Errorf("network %q: %w", name, err)
+	}
+	return net, nil
 }
 
 func (m NetworkManager) sessionClient(socket string) func(time.Duration) (NetworkClient, error) {

@@ -904,7 +904,7 @@ func (a App) defaultOperate(ctx context.Context, opts options, cfg *config.Confi
 		MetricSample:     metricSample,
 		Changed:          app.ArtifactChangedFunc(libBaseline),
 		OperationTimeout: operation.ResolveTimeout(opts.timeout, resolved.Tree),
-		Emit: func(result operation.Result) { //nolint:contextcheck // Store was opened with ctx and binds it to SQL calls.
+		Emit: func(result operation.Result) {
 			if err := recordResult(result); err != nil {
 				eventErr = err
 			}
@@ -942,7 +942,7 @@ const (
 // manualActionRecorder is the slice of the state store the manual audit path
 // needs; it keeps the retry logic testable without a real database.
 type manualActionRecorder interface {
-	RecordEvent(state.EventRecord) (int64, error)
+	RecordEvent(record state.EventRecord) (int64, error)
 }
 
 // recordManualActionEvent writes one manual operation's audit record, retrying
@@ -956,11 +956,11 @@ func recordManualActionEvent(ctx context.Context, store manualActionRecorder, re
 			return nil
 		}
 		if ctx.Err() != nil || time.Now().After(deadline) {
-			return err
+			return fmt.Errorf("record manual action event after retries: %w", err)
 		}
 		select {
 		case <-ctx.Done():
-			return err
+			return fmt.Errorf("record manual action event after retries: %w", err)
 		case <-time.After(manualAuditRetryPause):
 		}
 	}

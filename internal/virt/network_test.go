@@ -3,6 +3,7 @@ package virt
 import (
 	"context"
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -267,10 +268,5 @@ func TestNetworkSpecFromTree(t *testing.T) {
 }
 
 func slicesContains(calls []string, want string) bool {
-	for _, c := range calls {
-		if c == want {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(calls, want)
 }
