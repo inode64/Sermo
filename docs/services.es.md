@@ -1523,6 +1523,25 @@ de que se poden, de modo que los typos en definiciones de proceso/check opcional
 `enable_if` intencionalmente no está soportado bajo `rules`, `policy`, `guards` u
 otras secciones que afecten a la seguridad.
 
+En lugar del predicado sobre fichero de configuración, `enable_if` puede nombrar
+el backend de init al que pertenece la entrada: `enable_if: { init: openrc }`
+(o `systemd`) mantiene la entrada solo cuando ese backend está activo, y excluye
+la forma `file`/`key`. Úselo para componentes que solo existen bajo un sistema
+de init. El perfil empaquetado de `salt-minion` limita así su selector Gentoo de
+`supervise-daemon`: bajo OpenRC el supervisor es la única identidad estricta que
+Sermo puede señalizar, mientras que en Gentoo con systemd no existe supervisor
+alguno, y un selector exacto que nunca puede coincidir con un proceso vivo haría
+que el guard de identidad de restart bloquease todas las operaciones sobre la
+unidad:
+
+```yaml
+processes:
+  supervisor:
+    exe: /usr/bin/supervise-daemon
+    user: root
+    enable_if: { init: openrc }
+```
+
 El lector de configuración acepta asignaciones `clave=valor`, bloques YAML
 `clave: valor` y flags sin valor `clave`. Use `equals: ""` para hacer match con un flag sin valor. El perfil
 empaquetado de `dnsmasq` añade su check DHCP solo cuando `/etc/dnsmasq.conf`

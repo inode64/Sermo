@@ -19,13 +19,14 @@ const (
 	keyEnableIfContains = "contains"
 	keyEnableIfEquals   = "equals"
 	keyEnableIfMatches  = "matches"
+	keyEnableIfInit     = "init"
 
 	enableIfPredicateSummary = keyEnableIfContains + ", " + keyEnableIfEquals + " or " + keyEnableIfMatches
 )
 
 var (
 	enableIfSections = set(sectionChecks, sectionPreflight, sectionProcesses, sectionWatches)
-	enableIfKeys     = set(keyEnableIfFile, keyEnableIfKey, keyEnableIfContains, keyEnableIfEquals, keyEnableIfMatches)
+	enableIfKeys     = set(keyEnableIfFile, keyEnableIfKey, keyEnableIfContains, keyEnableIfEquals, keyEnableIfMatches, keyEnableIfInit)
 )
 
 func pruneEnableIf(v any, path []string) any {
@@ -116,8 +117,12 @@ func validateEnableIfSpec(path string, spec any, add addFunc) {
 	}
 	for key := range m {
 		if _, ok := enableIfKeys[key]; !ok {
-			add("%s.%s is not supported; enable_if accepts file, key and one of %s", path, key, enableIfPredicateSummary)
+			add("%s.%s is not supported; enable_if accepts init, or file, key and one of %s", path, key, enableIfPredicateSummary)
 		}
+	}
+	if _, has := m[keyEnableIfInit]; has {
+		validateEnableIfInit(path, m, add)
+		return
 	}
 	file := cfgval.String(m[keyEnableIfFile])
 	if file == "" {
@@ -130,6 +135,22 @@ func validateEnableIfSpec(path string, spec any, add addFunc) {
 	}
 	if predicates := validateEnableIfPredicates(path, m, add); predicates != 1 {
 		add("%s must define exactly one of %s", path, enableIfPredicateSummary)
+	}
+}
+
+// validateEnableIfInit checks the init-backend form: `enable_if: {init: openrc}`
+// keeps the entry only on that init system. The form is exclusive — mixing it
+// with the config-file predicate would leave the intended condition ambiguous.
+func validateEnableIfInit(path string, m map[string]any, add addFunc) {
+	for key := range m {
+		if key != keyEnableIfInit {
+			add("%s.init excludes %s; enable_if is either {init: ...} or a file predicate", path, key)
+		}
+	}
+	switch cfgval.String(m[keyEnableIfInit]) {
+	case backendSystemd, backendOpenRC:
+	default:
+		add("%s.init must be %s or %s", path, backendSystemd, backendOpenRC)
 	}
 }
 
@@ -156,10 +177,11 @@ func validateEnableIfPredicates(path string, m map[string]any, add addFunc) int 
 	return predicates
 }
 
-// enableIfHolds evaluates an enable_if predicate against a distro config file.
-// It is fail-safe: a malformed spec, an unreadable file, or an absent key all
-// yield false, so an optional component stays disabled unless explicitly turned
-// on. Predicates: `contains` (substring), `equals` (exact), `matches` (regex).
+// enableIfHolds evaluates an enable_if predicate against a distro config file
+// or the active init backend. It is fail-safe: a malformed spec, an unreadable
+// file, or an absent key all yield false, so an optional component stays
+// disabled unless explicitly turned on. Predicates: `contains` (substring),
+// `equals` (exact), `matches` (regex), or `init` (active backend).
 func enableIfHolds(spec any) bool {
 	m, ok := spec.(map[string]any)
 	if !ok {
@@ -171,6 +193,9 @@ func enableIfHolds(spec any) bool {
 	})
 	if !valid {
 		return false
+	}
+	if want, has := m[keyEnableIfInit]; has {
+		return cfgval.String(want) == detectedInit
 	}
 	file, key := cfgval.String(m[keyEnableIfFile]), cfgval.String(m[keyEnableIfKey])
 	if file == "" || key == "" {
