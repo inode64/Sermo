@@ -100,10 +100,10 @@ func (b *WebBackend) applyWatchRuntimeView(view *web.Watch, w *webWatch, activit
 		view.SampleState = b.watchSampleState(w, checkedAt)
 	}
 	view.KeepsSLA = !w.disabled && watchRecordsAvailability(w)
-	// The same declaration the recorder persists from, so a watch never offers a
-	// panel for a series nothing is writing.
+	// Start from the same declaration the recorder persists from, then narrow a
+	// device-dependent check to the attributes this device actually publishes.
 	if !w.disabled {
-		view.Metrics = webCheckMetrics(w.graphs, w.bands)
+		view.Metrics = webCheckMetricsForReadings(w.checkType, w.graphs, w.bands, view.Readings)
 	}
 	observed := b.settling == nil || b.settling.Observed(SettlingWatchKey(w.name))
 	failed, warning := watchViewState(*view)
