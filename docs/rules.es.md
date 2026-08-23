@@ -737,7 +737,10 @@ protegidas.
 Este comportamiento de cierre seguro del check es independiente del inventario
 del panel. El panel puede mostrar un origen `partial`: conserva las filas SSH
 verificadas exactamente y expone cada terminal no verificable como una incidencia
-no disponible y sin acción. Ese terminal no se cuenta como sesión de consola local.
+no disponible. En systemd, una incidencia remota con líder utmp vivo solo puede
+cerrarse mediante la identidad de sesión revalidada independientemente por
+login1; Sermo nunca señaliza directamente ese PID incierto. Ese terminal no se
+cuenta como sesión de consola local.
 
 ### Sesiones de terminal (`terminal_sessions`)
 

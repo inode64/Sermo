@@ -724,8 +724,10 @@ assuming that no session is protected.
 
 This fail-closed check behavior is independent from the dashboard inventory.
 The dashboard may show a source as `partial`, retaining exactly verified SSH
-rows while exposing each unverifiable terminal as an unavailable, non-actionable
-issue. Such a terminal is not counted as a local console session.
+rows while exposing each unverifiable terminal as an unavailable issue. On
+systemd, a remote issue with a live utmp leader can be closed only through
+login1's independently revalidated session identity; Sermo never signals that
+uncertain PID directly. Such a terminal is not counted as a local console session.
 
 ### Terminal sessions (`terminal_sessions`)
 

@@ -521,3 +521,19 @@ func TestNetCheckReadingsOmitWhatAnInterfaceDoesNotHave(t *testing.T) {
 		t.Errorf("kind = %q, want bridge", kind)
 	}
 }
+
+func TestNetCheckReadingsPublishAssignedAddresses(t *testing.T) {
+	readings := checkReadings(checks.CheckTypeNet, map[string]any{
+		checks.DataKeyInterface: "eth0",
+		checks.DataKeyMetric:    checks.NetMetricAddress,
+		checks.DataKeyValue:     2,
+		checks.DataKeyAddresses: []string{"192.0.2.10", "2001:db8::10"},
+	})
+
+	if got := readingByField(readings, checks.DataKeyAddresses).Value; got != "192.0.2.10, 2001:db8::10" {
+		t.Fatalf("assigned addresses = %q, want both IP addresses (%+v)", got, readings)
+	}
+	if got := readingByField(readings, checks.NetMetricAddress); got.Value != "2" || got.Label != "Address count" {
+		t.Fatalf("address count = %+v, want an explicitly labelled count", got)
+	}
+}

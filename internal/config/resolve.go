@@ -45,7 +45,7 @@ func (c *Config) resolveService(name string, pruneOptional bool) (Resolved, []st
 		return Resolved{Name: name}, []string{err.Error()}
 	}
 	if pruneOptional {
-		merged = pruneEnableIfMap(merged, nil)
+		merged = pruneEnableIfMap(merged, nil, effectiveBackend(c))
 	}
 
 	expanded, apps, errs := c.resolveExpandedService(merged, canonicalName)
@@ -1455,7 +1455,7 @@ func (c *Config) resolveDoc(doc *Document, name string) (Resolved, []string) {
 // detect a cyclic apps: linkage instead of recursing into a stack overflow.
 func (c *Config) resolveDocBody(doc *Document, name string, appChain []string) (Resolved, []string) {
 	body := stripMeta(doc.Body)
-	body = pruneEnableIfMap(body, nil)
+	body = pruneEnableIfMap(body, nil, effectiveBackend(c))
 	errs := prepareExpansionInputs(body)
 	vars, varErrs := c.expansionVariables(body, name)
 	errs = append(errs, varErrs...)

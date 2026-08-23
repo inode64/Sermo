@@ -1075,10 +1075,13 @@ Read-only endpoints:
 - `GET /api/sessions` — current SSH, tmux and screen sessions plus the state of
   each configured session source. A `partial` SSH source keeps every exactly
   verified session and reports each terminal whose `sshd` ancestry cannot be
-  verified as an unavailable issue without a close action; it never turns that
-  terminal into a local-console count. Rows expose idle time plus process-tree
-  CPU, resident memory and IO rates when attributable; tmux and screen inventory
-  still comes from published check samples rather than an HTTP-time client run.
+  verified as an unavailable issue; it never turns that terminal into a
+  local-console count. On systemd, a remote issue with a live utmp leader may be
+  closed through login1 after exact session revalidation; no uncertain PID is
+  signalled. Rows expose PID separately from the session text, plus idle time
+  and process-tree CPU, resident memory and IO rates when attributable; tmux and
+  screen inventory still comes from published check samples rather than an
+  HTTP-time client run.
 - `GET /api/services/{name}/sla?since=24h` — availability history at the
   resolution that window is stored at (see [Stored history
   resolution](#stored-history-resolution)); `since` is a duration, default 24h,

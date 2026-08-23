@@ -3,10 +3,8 @@ package app
 import (
 	"context"
 	"errors"
-	"fmt"
 	"maps"
 	"slices"
-	"strconv"
 	"strings"
 	"time"
 
@@ -33,20 +31,10 @@ func (s terminalSessionSource) config() checks.TerminalSessionConfig {
 	return checks.TerminalSessionConfig{Multiplexer: s.multiplexer, Binary: s.binary, User: s.user, Socket: s.socket}
 }
 
-type sshSessionIdentity struct {
-	pid        int
-	startTicks uint64
-	terminal   string
-}
-
 const sessionMetricKeySeparator = "\x00"
 
 func sessionMetricKey(parts ...string) string {
 	return strings.Join(parts, sessionMetricKeySeparator)
-}
-
-func sshSessionMetricKey(session web.SSHSession) string {
-	return sessionMetricKey(web.SessionKindSSH, strconv.Itoa(session.PID), strconv.FormatUint(session.StartTicks, 10))
 }
 
 func terminalSessionMetricKey(session web.TerminalSession) string {
@@ -240,40 +228,6 @@ func attachTerminalSessionIdle(snapshot sessionProcessSnapshot, session *web.Ter
 	if !latest.IsZero() {
 		session.IdleSeconds = max(int64(now.Sub(latest).Seconds()), 0)
 		session.HasIdle = true
-	}
-}
-
-func (b *WebBackend) appendSSHSessions(result *web.SessionInventory, seen map[sshSessionIdentity]struct{}, service string, entry *webEntry) {
-	if len(entry.sshSessionFilters) == 0 {
-		return
-	}
-	source := web.SessionSource{Kind: web.SessionKindSSH, Service: service, State: web.SessionSourceAvailable}
-	sessions, err := b.sshSessions(entry.sshSessionFilters)
-	if err != nil {
-		source.State = web.SessionSourceUnavailable
-		source.Message = err.Error()
-		result.Sources = append(result.Sources, source)
-		return
-	}
-	if len(sessions.Issues) > 0 {
-		source.State = web.SessionSourcePartial
-		source.Message = fmt.Sprintf("%d terminal(s) could not be attributed safely", len(sessions.Issues))
-		source.Issues = make([]web.SessionIssue, 0, len(sessions.Issues))
-		for _, issue := range sessions.Issues {
-			source.Issues = append(source.Issues, web.SessionIssue{
-				User: issue.User, Terminal: issue.Terminal, Message: issue.Message,
-			})
-		}
-	}
-	result.Sources = append(result.Sources, source)
-	for _, session := range sshSessionsToWeb(sessions) {
-		key := sshSessionIdentity{pid: session.PID, startTicks: session.StartTicks, terminal: session.Terminal}
-		if _, ok := seen[key]; ok {
-			continue
-		}
-		seen[key] = struct{}{}
-		session.Service = service
-		result.SSH = append(result.SSH, session)
 	}
 }
 

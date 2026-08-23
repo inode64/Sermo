@@ -121,7 +121,7 @@
   .services-table .policy-cell { max-width: 11rem; }
   .services-table .actions { min-width: 7.5rem; max-width: 11rem; white-space: normal; }
   .mount-table { min-width: 64rem; font-size: .85rem; }
-  .sessions-table { min-width: 74rem; font-size: .85rem; font-variant-numeric: tabular-nums; }
+  .sessions-table { min-width: 78rem; font-size: .85rem; font-variant-numeric: tabular-nums; }
   .sessions-table th, .sessions-table td { overflow-wrap: anywhere; vertical-align: top; }
   .mount-table th, .mount-table td { vertical-align: top; }
   .mount-table .actions { min-width: 5.5rem; }
@@ -601,9 +601,10 @@
     /* sessions: retain identity, state, idle and action at tablet widths; the
        resource columns remain available on desktop and through sorting there. */
     .sessions-table { min-width: 0; table-layout: fixed; }
-    .sessions-table th:nth-child(6), .sessions-table td:nth-child(6),
+    /* Preserve identity (session + PID) while hiding expensive metrics. */
     .sessions-table th:nth-child(7), .sessions-table td:nth-child(7),
-    .sessions-table th:nth-child(8), .sessions-table td:nth-child(8) { display: none; }
+    .sessions-table th:nth-child(8), .sessions-table td:nth-child(8),
+    .sessions-table th:nth-child(9), .sessions-table td:nth-child(9) { display: none; }
     /* watches: keep Name and the trailing Last activity · State · Actions.
        Type-specific tables also retain their leading live metric. */
     .watch-table th:not(:first-child):not(:nth-last-child(-n+3)),
@@ -616,6 +617,17 @@
        table shrinks to the viewport instead of overflowing. */
     .mount-table .mount-processes, .mount-table .mount-users { min-width: 0; max-width: none; }
     .mount-table .mount-usage-item, .mount-table .mount-usage-extra { white-space: normal; }
+  }
+
+  /* Keep the compact desktop diagnosis columns visible. They are deliberately
+     marked by semantic field key rather than nth-child so adding another table
+     column cannot make the responsive rule point at the wrong reading. */
+  @media (min-width: 901px) and (max-width: 1420px) {
+    .watch-table.watch-type-table :is(th, td)[data-watch-type-column="age"],
+    .watch-table.watch-type-table :is(th, td)[data-watch-type-column="driver"],
+    .watch-table.watch-type-table :is(th, td)[data-watch-type-column="speed"],
+    .watch-table.watch-type-table :is(th, td)[data-watch-type-column="addresses"],
+    .watch-table.watch-type-table :is(th, td)[data-watch-type-column="bus"] { display: table-cell; }
   }
   @media (max-width: 1024px) {
     /* processes (1 PID · 2 CMD · 3 User · 4 Role · 5 CPU · 6 Max core · 7 Mem ·
@@ -692,7 +704,7 @@
     /* sessions -> User · Session · Idle · Actions. Type remains available in
        the filter controls, while attached/detached stays searchable. */
     .sessions-table th:nth-child(1), .sessions-table td:nth-child(1),
-    .sessions-table th:nth-child(4), .sessions-table td:nth-child(4) { display: none; }
+    .sessions-table th:nth-child(5), .sessions-table td:nth-child(5) { display: none; }
     .services-table .unit-cell, .services-table .event-cell, .apps-table .event-cell { max-width: 60vw; }
     /* watches -> Name · State · Actions; typed tables keep their leading live
        metric (its column stays sortable). Wide values wrap rather than scroll,

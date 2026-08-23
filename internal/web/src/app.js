@@ -3940,7 +3940,7 @@ function checkSLAHTML(service, c) {
 function sshSessionCloseButton(service, session) {
   if (!me.can_act) return tpl`<span class="muted">read-only</span>`;
   if (!session.can_close) return tpl`<span class="muted">unavailable</span>`;
-  return tpl`<button class="danger-btn" data-ssh-session-close="1" data-ssh-service="${service}" data-ssh-session-pid="${session.pid}" data-ssh-session-start-ticks="${session.start_ticks}" data-ssh-session-terminal="${session.terminal}" data-ssh-session-user="${session.user || ""}">close</button>`;
+  return tpl`<button class="danger-btn" data-ssh-session-close="1" data-ssh-service="${service}" data-ssh-session-pid="${session.pid}" data-ssh-session-start-ticks="${session.start_ticks}" data-ssh-session-terminal="${session.terminal}" data-ssh-session-user="${session.user || ""}" data-ssh-session-managed="${!!session.managed_by_logind}">close</button>`;
 }
 
 function terminalSessionCloseButton(session) {
@@ -3983,28 +3983,38 @@ function sessionUsageRow(session, idleReady) {
   };
 }
 
+function unmeasuredSessionUsageRow() {
+  return {
+    idle: 0, idleReady: false,
+    cpu: 0, cpuReady: false,
+    memory: 0, memoryReady: false,
+    ioRead: 0, ioWrite: 0, ioReady: false,
+    metricsExpected: false,
+  };
+}
+
 function sessionRows(inventory) {
   const ssh = (inventory.ssh || []).map((session) => ({
     kind: sessionKindSSH, service: session.service || "", user: session.user || "",
-    name: session.terminal || "", state: sessionStateActive,
-    detail: tpl`PID ${session.pid || "—"}`,
+    name: session.terminal || "", pid: session.pid || 0, pidSort: session.pid || 0, state: sessionStateActive,
+    detail: nothing,
     ...sessionUsageRow(session, true),
     action: sshSessionCloseButton(session.service || "", session),
   }));
   const terminal = (inventory.terminal || []).map((session) => ({
     kind: session.multiplexer || "", service: session.service || "", user: session.user || "",
-    name: session.name || "", state: session.state || sessionStateUnknown,
+    name: session.name || "", pid: (session.pids || []).join(", "), pidSort: (session.pids || [0])[0] || 0,
+    state: session.state || sessionStateUnknown,
     detail: Number.isInteger(session.windows) ? `${fmtNum(session.windows, 0)} window${session.windows === 1 ? "" : "s"}` : "—",
     ...sessionUsageRow(session, session.has_idle),
     action: terminalSessionCloseButton(session),
   }));
   const issues = (inventory.sources || []).flatMap((source) => (source.issues || []).map((issue) => ({
     kind: source.kind || "", service: source.service || "", user: issue.user || source.user || "",
-    name: issue.terminal || source.check || "—", state: sessionSourceUnavailable,
+    name: issue.terminal || source.check || "—", pid: issue.pid || 0, pidSort: issue.pid || 0, state: sessionSourceUnavailable,
     detail: issue.message || source.message || "Session attribution unavailable",
-    idle: 0, idleReady: false, cpu: 0, cpuReady: false, memory: 0, memoryReady: false,
-    ioRead: 0, ioWrite: 0, ioReady: false, metricsExpected: false,
-    action: nothing,
+    ...unmeasuredSessionUsageRow(),
+    action: sshSessionCloseButton(source.service || "", issue),
   })));
   // A sessionless source earns a row only when it has something to say: an
   // unavailable or collecting source is a problem or a wait worth seeing, and
@@ -4016,11 +4026,10 @@ function sessionRows(inventory) {
     .filter((source) => source.state !== sessionSourceAvailable || source.can_close_empty)
     .map((source) => ({
     kind: source.kind || "", service: source.service || "", user: source.user || "",
-    name: source.check || "—", state: source.state === sessionSourceAvailable ? sessionStateEmpty : source.state || targetStateCollecting,
+    name: source.check || "—", pid: 0, pidSort: 0,
+    state: source.state === sessionSourceAvailable ? sessionStateEmpty : source.state || targetStateCollecting,
     detail: source.message || (source.state === sessionSourceAvailable ? "No active sessions" : "Waiting for a sample"),
-    idle: 0, idleReady: false, cpu: 0, cpuReady: false, memory: 0, memoryReady: false,
-    ioRead: 0, ioWrite: 0, ioReady: false,
-    metricsExpected: false,
+    ...unmeasuredSessionUsageRow(),
     action: emptySessionCloseButton(source),
   }));
   return [...ssh, ...terminal, ...issues, ...emptySources];
@@ -4040,6 +4049,7 @@ const sessionSortKeys = {
   type: (row) => row.kind,
   user: (row) => row.user,
   session: (row) => row.name,
+  pid: (row) => row.pidSort,
   state: (row) => row.state,
   idle: (row) => row.idleReady ? row.idle : -1,
   cpu: (row) => row.cpuReady ? row.cpu : -1,
@@ -4103,17 +4113,18 @@ function renderSessions(inventory = latestSessionInventory) {
   renderFilterButtonCounts("#session-filters", sessionFilterCounts(latestSessionInventory, rows));
   const filtered = rows.filter((row) => {
     if (sessionFilter !== filterAll && row.kind !== sessionFilter) return false;
-    return !sessionQuery || [row.kind, row.service, row.user, row.name, row.state].join(" ").toLowerCase().includes(sessionQuery);
+    return !sessionQuery || [row.kind, row.service, row.user, row.name, row.pid, row.state].join(" ").toLowerCase().includes(sessionQuery);
   });
   sortSessionRows(filtered);
   const body = $("#session-rows");
   if (body) {
     const content = filtered.length ? filtered.map((row) => tpl`<tr>
       <td>${row.kind || "—"}</td><td>${row.user || "—"}</td>
-      <td>${row.name || "—"}<br><span class="muted">${row.detail}</span></td><td>${sessionStateCell(row.state)}</td>
+      <td>${row.name || "—"}${row.detail ? tpl`<br><span class="muted">${row.detail}</span>` : nothing}</td>
+      <td class="mono">${row.pid || "—"}</td><td>${sessionStateCell(row.state)}</td>
       <td>${sessionIdleCell(row)}</td><td>${sessionCPUCell(row)}</td><td>${sessionMemoryCell(row)}</td>
       <td>${sessionIOCell(row)}</td><td>${row.action}</td>
-    </tr>`) : tpl`<tr><td colspan="9" class="muted">No sessions match the filter.</td></tr>`;
+    </tr>`) : tpl`<tr><td colspan="10" class="muted">No sessions match the filter.</td></tr>`;
     litRender(content, body);
   }
   const activeCount = (latestSessionInventory.ssh || []).length + (latestSessionInventory.terminal || []).length;
@@ -5225,6 +5236,13 @@ function numericReadingColumn(key, label) {
   return { key, label, cell: (w) => typedReadingCell(w, key), sort: (w) => readingSortValue(w, key) };
 }
 
+const fileAgeColumn = {
+  key: "age",
+  label: "Age",
+  cell: (w) => typedReadingCell(w, "age"),
+  sort: (w) => parseDurationSeconds(readingRaw(w, "age")),
+};
+
 // watchTypeProfiles is the single presentation owner for every host-watch
 // subtype. A profile owns its useful live columns, sortable values and optional
 // subtype filter; generic summaries are deliberately not used in this view.
@@ -5243,7 +5261,7 @@ const watchTypeProfiles = {
     columns: [
       textReadingColumn("path", "Path"),
       numericReadingColumn("size", "Size"),
-      { key: "age", label: "Current age", cell: (w) => typedReadingCell(w, "age"), sort: (w) => parseDurationSeconds(readingRaw(w, "age")) },
+      fileAgeColumn,
       { key: "older_than", label: "Limit", cell: (w) => watchConditionValue(w, "older_than"), sort: (w) => parseDurationSeconds(watchConditionValue(w, "older_than")) },
     ],
   },
@@ -5251,8 +5269,10 @@ const watchTypeProfiles = {
     label: "Network interfaces",
     columns: [
       textReadingColumn("interface", "Interface"),
-      textReadingColumn("state", "Link"),
+      textReadingColumn("driver", "Driver"),
       numericReadingColumn("speed", "Speed"),
+      textReadingColumn("addresses", "IP"),
+      textReadingColumn("state", "Link"),
       numericReadingColumn("errors", "Errors"),
     ],
   },
@@ -5280,7 +5300,7 @@ const watchTypeProfiles = {
     label: "SMART",
     columns: [
       textReadingColumn("device", "Device"),
-      textReadingColumn("bus", "Bus"),
+      textReadingColumn("bus", "Interface"),
       { key: "health", label: "Health", cell: watchHealthCell, sort: (w) => readingRaw(w, "health").toLowerCase() },
       numericReadingColumn("temperature", "Temperature"),
       numericReadingColumn("wear", "Wear"),
@@ -5433,6 +5453,7 @@ function watchTypeProfile(type) {
       label: "File summaries",
       columns: [
         textReadingColumn("path", "Path"),
+        fileAgeColumn,
         { key: "summary", label: "Summary", cell: (w) => w.summary || "—", sort: (w) => w.summary || "" },
       ],
     };
@@ -5507,7 +5528,7 @@ function watchTypeFilterControl(panel, type, watches, profile) {
 
 function typedWatchRowHTML(w, profile) {
   const colCount = profile.columns.length + 5;
-  const parts = watchRowParts(w, profile.columns.map((column) => tpl`<td>${column.cell(w)}</td>`), colCount);
+  const parts = watchRowParts(w, profile.columns.map((column) => tpl`<td data-watch-type-column="${column.key}">${column.cell(w)}</td>`), colCount);
   return parts.expRow ? [parts.row, parts.expRow] : [parts.row];
 }
 
@@ -5521,7 +5542,7 @@ function renderWatchTypeTable(panel, type, watches) {
     <div class="watch-type-heading"><h3>${watchTypeLabel(type)} <span class="muted">(${watches.length})</span></h3>${watchTypeFilterControl(panel, type, watches, profile)}</div>
     <table class="watch-table watch-type-table">
       <thead><tr>${columns.map((column) => column.key
-        ? tpl`<th scope="col" class="sortable" tabindex="0" data-watch-type-sort-panel="${panel.key}" data-watch-type-sort-type="${type}" data-watch-type-sort="${column.key}" aria-sort="${sortAriaValue(sort, column.key)}">${column.label}<span class="sort-ind" data-watch-type-sort-ind="${type}:${column.key}">${sort.key === column.key ? (sort.dir > 0 ? " ▲" : " ▼") : ""}</span></th>`
+        ? tpl`<th scope="col" class="sortable" tabindex="0" data-watch-type-column="${column.key}" data-watch-type-sort-panel="${panel.key}" data-watch-type-sort-type="${type}" data-watch-type-sort="${column.key}" aria-sort="${sortAriaValue(sort, column.key)}">${column.label}<span class="sort-ind" data-watch-type-sort-ind="${type}:${column.key}">${sort.key === column.key ? (sort.dir > 0 ? " ▲" : " ▼") : ""}</span></th>`
         : tpl`<th scope="col">${column.label}</th>`)}</tr></thead>
       <tbody>${rows.length ? rows : tpl`<tr><td colspan="${columns.length}" class="muted">No ${watchTypeLabel(type).toLowerCase()} watches match this filter.</td></tr>`}</tbody>
     </table>
@@ -7032,7 +7053,7 @@ async function act(name, action) {
   }
 }
 
-async function closeSSHSession(name, pid, startTicks, terminal, user) {
+async function closeSSHSession(name, pid, startTicks, terminal, user, managedByLogind) {
   const sessionPID = Number(pid);
   const sessionStartTicks = Number(startTicks);
   if (!name || !terminal || !Number.isSafeInteger(sessionPID) || sessionPID <= 0 || !Number.isSafeInteger(sessionStartTicks) || sessionStartTicks <= 0) {
@@ -7042,11 +7063,13 @@ async function closeSSHSession(name, pid, startTicks, terminal, user) {
   const label = `${user || "unknown user"} on ${terminal}`;
   if (!(await promptConfirm({
     title: `Close SSH session for ${label}?`,
-    message: "This gracefully ends that one SSH terminal. It does not restart the SSH service and cannot be undone.",
+    message: managedByLogind
+      ? "This asks systemd-logind to revalidate and terminate that exact remote SSH login. It does not restart the SSH service and cannot be undone."
+      : "This gracefully ends that one SSH terminal. It does not restart the SSH service and cannot be undone.",
     okLabel: "close session",
     danger: true,
   }))) return;
-  await postSessionClose(`close SSH session ${label}`, sshSessionCloseAPI(name, sessionPID, sessionStartTicks, terminal));
+  await postSessionClose(`close SSH session ${label}`, sshSessionCloseAPI(name, sessionPID, sessionStartTicks, terminal, managedByLogind));
 }
 
 async function postSessionClose(statusLabel, endpoint) {
@@ -8381,7 +8404,8 @@ function initDelegatedHandlers() {
     ["[data-panel-target]", (el) => openPanelTarget(el.dataset.panelTarget || "")],
     ["[data-ssh-session-close]", (el) => closeSSHSession(
       el.dataset.sshService || "", el.dataset.sshSessionPid || "", el.dataset.sshSessionStartTicks || "",
-      el.dataset.sshSessionTerminal || "", el.dataset.sshSessionUser || "")],
+      el.dataset.sshSessionTerminal || "", el.dataset.sshSessionUser || "",
+      el.dataset.sshSessionManaged === domBoolTrue)],
     ["[data-terminal-session-close]", (el) => closeTerminalSession(
       el.dataset.terminalService || "", el.dataset.terminalCheck || "", el.dataset.terminalMultiplexer || "",
       el.dataset.terminalSession || "", el.dataset.terminalUser || "", el.dataset.terminalIdentity || "")],

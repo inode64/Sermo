@@ -80,7 +80,7 @@ deterministas de la API.
 | Flujo de cambios | `GET /api/stream` | canal Server-Sent Events que empuja una señal `change` sin payload con cada evento del daemon; el dashboard refresca de inmediato. Solo añade refrescos: el sondeo programado mantiene siempre la cadencia elegida en la barra superior, porque nada se empuja cuando cambia una muestra de métricas y las lecturas de host, servicios y watches dependen de ese sondeo |
 | Disponibilidad | `GET /readyz?verbose` | `status:` del daemon en la barra superior (`starting` / `ok` / …) |
 | Servicios | `GET /api/services` | servicios de runtime configurados cargados por sermod (no el inventario de catálogo de `sermoctl services`); `status_observed_at` identifica la muestra real de estado de init que hay detrás de una fila cacheada; `operation_active` es true mientras el motor mantiene el lock de operación del servicio, de modo que una acción lanzada desde cualquier cliente, `sermoctl` o la remediación automática se ve en curso y sus botones de acción siguen deshabilitados |
-| Sesiones | `GET /api/sessions` | inventario global de SSH, tmux y screen; cada origen configurado presente informa `available`, `partial`, `collecting` o `unavailable`; un origen SSH parcial incluye sus sesiones verificadas y filas de incidencia no disponibles, sin acción, para los terminales que no pudieron atribuirse de forma segura; un servidor tmux disponible sin sesiones aparece como `empty`, mientras que un espacio tmux/screen ausente se omite; SSH usa la caché breve compartida del muestreador y tmux/screen solo leen muestras de `terminal_sessions` publicadas por el daemon |
+| Sesiones | `GET /api/sessions` | inventario global de SSH, tmux y screen; cada origen configurado presente informa `available`, `partial`, `collecting` o `unavailable`; un origen SSH parcial incluye sesiones verificadas y filas de incidencia no disponibles para terminales que no pudieron atribuirse con seguridad; en systemd, una incidencia remota con líder utmp vivo puede ofrecer un cierre gestionado por login1; un servidor tmux disponible sin sesiones aparece como `empty`, mientras que un espacio tmux/screen ausente se omite; SSH usa la caché breve compartida del muestreador y tmux/screen solo leen muestras de `terminal_sessions` publicadas por el daemon |
 | Expansión de servicio | `GET /api/services/{name}` | checks, información del proceso, reglas |
 | Métricas de check del servicio | `GET /api/services/{name}/metrics?check=NAME[&metric=KEY]` | el detalle muestra la latencia cuando se omite `metric` y un gráfico por cada métrica numérica con nombre publicada por una comprobación |
 | Métricas de runtime del servicio | `GET /api/services/{name}/runtime` | historial persistido de CPU/memoria/IO del servicio, de solo lectura y muestreado exclusivamente por ciclos del worker; `current` es la última muestra publicada y las lecturas del panel nunca repiten el descubrimiento de procesos |
@@ -179,7 +179,7 @@ con un cuerpo `{"ok": bool, "message": string}` para una acción atendida.
 | --- | --- | --- |
 | Acción de servicio | `POST /api/services/{name}/{action}[?no_cascade=1]` | `monitor`, `unmonitor`, `start`, `stop`, `restart`, `reload`, `resume`, `repair`; `restart` es la acción principal para servicios failed/inactive, mientras `repair` es una alternativa secundaria solo manual que usa la recuperación segura de pidfile obsoleto y estado fallido de init antes de arrancar; `reload` se ofrece solo cuando el servicio informa `can_reload` desde soporte de reload del backend de init o desde un fallback `reload:` válido; `no_cascade` omite los objetivos de `also_apply` en start/stop/restart |
 | Preflight de servicio | `POST /api/services/{name}/preflight` | ejecuta las comprobaciones de preflight sin cambiar el estado del servicio |
-| Cerrar sesión SSH | `POST /api/services/{name}/sessions/{pid}/close?start_ticks=TICKS&terminal=PTS` | solo admin y con confirmación: cierre elegante de un terminal SSH verificado; las filas de incidencia no disponibles nunca ofrecen esta acción; el backend redescubre el terminal, el ejecutable `sshd` configurado exacto y su usuario real, exige el mismo PID y ticks de inicio y solo envía `SIGTERM` |
+| Cerrar sesión SSH | `POST /api/services/{name}/sessions/{pid}/close?start_ticks=TICKS&terminal=PTS[&managed_by_logind=true]` | solo admin y con confirmación. Las filas SSH verificadas redescubren el ejecutable `sshd` configurado exacto, usuario real, terminal, PID y ticks de inicio antes de un único `SIGTERM`. Una fila remota no disponible, solo en systemd, puede pedir la variante gestionada, que revalida la generación del proceso y el ID, PID líder, terminal, `Remote=true` y `Service=sshd` exactos de login1 antes de `TerminateSession`; nunca señaliza el PID incierto |
 | Cerrar sesión de terminal | `POST /api/services/{name}/terminal-sessions/{check}/close?multiplexer=TYPE&session=NAME&user=USER&identity=IDENTITY` | solo admin y con confirmación: cierre de una sesión tmux/screen; el backend vuelve a listar el espacio configurado de usuario/socket, exige la misma identidad de generación y ejecuta únicamente el argv exacto de cierre del cliente |
 | Cerrar servidor tmux vacío | `POST /api/services/{name}/terminal-sessions/{check}/close-empty` | solo admin y con confirmación; solo aparece para un origen tmux presente, vacío y con socket explícito configurado. El backend confirma que sigue vacío, ejecuta el argv exacto `kill-server` de tmux, verifica que el espacio desapareció y elimina solo el socket huérfano sin cambios que pueda quedar |
 | Botón de operador | `POST /api/services/{name}/button/{button}` | solo-admin, tras confirmación; ejecuta el comando `buttons:` configurado del servicio exactamente como está escrito, acotado por su timeout, y registra un evento de acción con el resultado |
@@ -357,7 +357,8 @@ El panel superior Sessions combina terminales SSH interactivas con los espacios
 de nombres configurados de tmux y GNU screen. La búsqueda cubre tipo, servicio,
 usuario y sesión; los botones de tipo seleccionan SSH, tmux o screen. La tabla
 muestra solo el usuario en la columna User y permite ordenar por tipo, usuario,
-sesión, estado, idle, CPU, memoria o IO. El filtro de un tipo se oculta cuando no
+sesión, PID, estado, idle, CPU, memoria o IO. El PID ocupa su propia columna y
+no forma parte del texto de Sesión. El filtro de un tipo se oculta cuando no
 hay sesiones activas de ese tipo, con el mismo comportamiento de filtros con
 recuento que los demás paneles. Un origen sin sesiones solo gana fila
 cuando tiene algo que decir: la espera de muestra y los errores de muestreo se
@@ -368,7 +369,7 @@ conectado — el de ssh ante todo — no dice nada y no renderiza fila; aparece 
 cuanto publique una sesión activa. Las filas atribuibles muestran idle y CPU,
 memoria residente e IO de lectura/escritura del árbol de procesos. Un
 administrador solo puede confirmar un cierre cuando el backend vuelve a validar
-la identidad exacta de la sesión SSH o del multiplexor.
+la identidad exacta de la sesión SSH, de systemd-login1 o del multiplexor.
 
 Las expansiones abiertas de servicio obtienen y renderizan por completo detalle
 fresco una vez por refresco del dashboard; las subpeticiones de SLA, métricas,
@@ -529,11 +530,11 @@ activity es un evento.
 | Tipo de check | Columnas específicas |
 | --- | --- |
 | `storage` | Name, Usage, Filesystem, Mount point; filtra por filesystem si hay más de uno |
-| `file` | Name, Path, edad actual, límite de edad configurado |
-| `net` | Name, interfaz, enlace, velocidad, errores |
+| `file` | Name, Path, edad, límite de edad configurado; si el check configura `summary`, conserva Age y sustituye el límite por Summary |
+| `net` | Name, interfaz, driver, velocidad, direcciones IP asignadas, enlace, errores |
 | `hdparm` | Name, dispositivo, bus, lectura buffered, lectura cached |
 | `lvm` | Name, salud, VG, LV, tamaño de VG, libre en VG, motivos |
-| `smart` | Name, dispositivo, bus, salud, modelo, número de serie, firmware, WWN, medio, capacidad, temperatura, sectores reasignados/pendientes, errores CRC de enlace y de medio, desgaste, tiempo encendido formateado, ciclos de encendido, último autotest |
+| `smart` | Name, dispositivo, interfaz (bus del kernel), salud, temperatura, desgaste, sectores reasignados y tiempo encendido formateado; el desplegable incluye el resto de lecturas de identidad, salud y autotest |
 | `diskio` | Name, dispositivo, bus, utilización, lectura, escritura, await, leído total, escrito total (acumulados desde el arranque, para distinguir un disco ocioso de uno que nadie toca nunca) |
 | `cert` | Name, origen, días restantes, caducidad, emisor |
 | `raid` | Name, array, tamaño, degradado, recuperando |
@@ -608,7 +609,7 @@ Expansión de fila:
 | --- | --- |
 | Config | tipo, categoría, intervalo, dispara (en fallo / en umbral), estado, flag de monitorización, hook, notifiers, dry run |
 | Readings | lecturas actuales del host, seguidas de las condiciones y umbrales de la comprobación |
-| Graphs | una gráfica por serie numérica que publica la comprobación, dibujada con el panel que recibe la métrica de una comprobación de servicio, sobre su propia ventana `1h/24h/7d/30d/1y`; una métrica de estado se dibuja como banda tipo disponibilidad en vez de línea, limitada a ámbar cuando su gravedad es warning; ausente cuando la comprobación no publica ningún número |
+| Graphs | una gráfica por serie numérica que publica la comprobación, dibujada con el panel que recibe la métrica de una comprobación de servicio, sobre su propia ventana `1h/24h/7d/30d/1y`; una métrica de estado se dibuja como banda tipo disponibilidad en vez de línea, limitada a ámbar cuando su gravedad es warning; ausente cuando la comprobación no publica ningún número; SMART reduce la unión de métricas ATA/NVMe a los atributos observados para ese dispositivo (incluidos los últimos atributos conocidos conservados), por lo que un indicador no compatible no crea ni panel ni aviso de falta de datos |
 | Availability | la sección de SLA del servicio, cuando la comprobación afirma disponibilidad; su ventana es independiente de la de Graphs, porque leen series distintas |
 | Activity | eventos recientes del watch |
 | Expand | acción de expansión de almacenamiento cuando está configurada |

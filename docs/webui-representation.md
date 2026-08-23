@@ -74,7 +74,7 @@ overflow and axe WCAG 2.2 AA rules against deterministic API fixtures.
 | Change stream | `GET /api/stream` | Server-Sent Events channel that pushes a payload-free `change` signal on every daemon event; the dashboard refetches immediately. It only adds refreshes: the scheduled poll always keeps the cadence chosen in the top bar, because nothing is pushed when a metric sample changes and host/service/watch readings depend on that poll |
 | Readiness | `GET /readyz?verbose` | daemon `status:` in the top bar (`starting` / `ok` / …) |
 | Services | `GET /api/services` | configured runtime services loaded by sermod (not `sermoctl services` catalog inventory); `status_observed_at` identifies the real init-status sample behind a cached row; `operation_active` is true while the engine holds the service's operation lock, so an action started from any client, `sermoctl` or automatic remediation shows as in progress and its action buttons stay disabled |
-| Sessions | `GET /api/sessions` | dashboard-wide SSH, tmux and screen inventory; each present configured source reports `available`, `partial`, `collecting` or `unavailable`; a partial SSH source includes its verified sessions plus unavailable issue rows for terminals that could not be attributed safely, with no action; an available tmux server with zero sessions is `empty`, while an absent tmux/screen namespace is omitted; SSH uses the shared short-lived sampler cache, while tmux/screen rows come only from daemon-published `terminal_sessions` samples |
+| Sessions | `GET /api/sessions` | dashboard-wide SSH, tmux and screen inventory; each present configured source reports `available`, `partial`, `collecting` or `unavailable`; a partial SSH source includes verified sessions plus unavailable issue rows for terminals that could not be attributed safely; on systemd, a remote issue with a live utmp leader may expose a login1-managed close; an available tmux server with zero sessions is `empty`, while an absent tmux/screen namespace is omitted; SSH uses the shared short-lived sampler cache, while tmux/screen rows come only from daemon-published `terminal_sessions` samples |
 | Service expansion | `GET /api/services/{name}` | checks, process info, rules |
 | Service check metrics | `GET /api/services/{name}/metrics?check=NAME[&metric=KEY]` | the detail renders latency when `metric` is omitted and one graph for every named numeric metric published by a check |
 | Service runtime metrics | `GET /api/services/{name}/runtime` | read-only persisted service CPU/memory/IO history sampled exclusively by worker cycles; `current` is the latest published sample and dashboard reads never repeat process discovery |
@@ -167,7 +167,7 @@ with an `{"ok": bool, "message": string}` body for a handled action.
 | --- | --- | --- |
 | Service action | `POST /api/services/{name}/{action}[?no_cascade=1]` | `monitor`, `unmonitor`, `start`, `stop`, `restart`, `reload`, `resume`, `repair`; `restart` is the primary action for failed/inactive services, while `repair` is a manual-only secondary fallback that uses the guarded stale-pidfile and failed-init-state recovery path before starting; `reload` is offered only when the service reports `can_reload` from init backend reload support or a valid `reload:` fallback; `no_cascade` skips `also_apply` targets on start/stop/restart |
 | Service preflight | `POST /api/services/{name}/preflight` | run preflight checks without changing service state |
-| Close SSH session | `POST /api/services/{name}/sessions/{pid}/close?start_ticks=TICKS&terminal=PTS` | admin-only, confirmation-required graceful close of one verified SSH terminal; unavailable issue rows never expose this action; the backend re-discovers the terminal plus exact configured `sshd` executable and real user, then requires the same PID and start ticks before sending only `SIGTERM` |
+| Close SSH session | `POST /api/services/{name}/sessions/{pid}/close?start_ticks=TICKS&terminal=PTS[&managed_by_logind=true]` | admin-only and confirmation-required. Verified SSH rows re-discover the exact configured `sshd` executable, real user, terminal, PID and start ticks before sending one `SIGTERM`. A systemd-only unavailable remote row may instead request the managed variant, which revalidates unchanged process generation plus exact login1 ID, leader PID, terminal, `Remote=true` and `Service=sshd` before `TerminateSession`; it never signals the uncertain PID |
 | Close terminal session | `POST /api/services/{name}/terminal-sessions/{check}/close?multiplexer=TYPE&session=NAME&user=USER&identity=IDENTITY` | admin-only, confirmation-required close of one tmux/screen session; the backend freshly lists the configured user/socket namespace, requires the same multiplexer generation identity and invokes only the client's exact session-close argv |
 | Close empty tmux server | `POST /api/services/{name}/terminal-sessions/{check}/close-empty` | admin-only, confirmation-required close available only for a present, empty tmux source with an explicit configured socket; the backend revalidates it is still empty, runs tmux's exact `kill-server` argv, verifies the namespace is gone and removes only the unchanged stale socket it may leave |
 | Operator button | `POST /api/services/{name}/button/{button}` | admin-only, behind confirmation; runs the service's configured `buttons:` command exactly as written, bounded by its timeout, and records an action event with the outcome |
@@ -347,9 +347,10 @@ floating as a total that hides which process it came from.
 ## Sessions panel
 
 The top-level Sessions panel combines interactive SSH terminals with configured
-tmux and GNU screen namespaces. Search covers type, service, user and session;
+tmux and GNU screen namespaces. Search covers type, service, user, session and PID;
 type buttons select SSH, tmux or screen. The table shows only the user in its
-User column and can sort by type, user, session, state, idle, CPU, memory or IO.
+User column, keeps PID in its own column rather than the Session text, and can
+sort by type, user, session, PID, state, idle, CPU, memory or IO.
 A type filter is hidden when that type has no active sessions, using the same
 counted-filter behavior as the other panels. A sessionless source earns a row only
 when it has something to say: collecting and sampling failures render with
@@ -359,8 +360,8 @@ through the API behind confirmation. An available source with nobody connected
 — the ssh source above all — says nothing and renders no row; it appears the
 moment it reports an active session. Attributable rows expose idle time and
 process-tree CPU, resident memory and read/write IO rates. An admin can confirm
-a close only when the backend can freshly revalidate the exact SSH or
-multiplexer session identity.
+a close only when the backend can freshly revalidate the exact SSH,
+systemd-login1 or multiplexer session identity.
 
 Open service expansions fetch and fully render fresh detail once per dashboard
 refresh; SLA, metric, runtime and event subrequests plus open watch/application
@@ -515,11 +516,11 @@ latest completed daemon-cycle or manual sample, while Last activity is an event.
 | Check type | Type-specific columns |
 | --- | --- |
 | `storage` | Name, Usage, Filesystem, Mount point; filters by filesystem when more than one is present |
-| `file` | Name, Path, current age, configured age limit; a configured check `summary` replaces the age and limit columns with Summary |
-| `net` | Name, interface, link, speed, errors |
+| `file` | Name, Path, age, configured age limit; a configured check `summary` keeps Age and replaces the limit with Summary |
+| `net` | Name, interface, driver, speed, assigned IP addresses, link, errors |
 | `hdparm` | Name, device, bus, buffered read, cached read |
 | `lvm` | Name, health, VG, LV, VG size, VG free, reasons |
-| `smart` | Name, device, bus, health, model, serial, firmware, WWN, medium, capacity, temperature, reallocated/pending sectors, link CRC and media errors, wear, formatted power-on time, power cycles, last self-test |
+| `smart` | Name, device, interface (kernel bus), health, temperature, wear, reallocated sectors, formatted power-on time; the expansion includes the remaining identity, health and self-test readings |
 | `diskio` | Name, device, bus, utilization, read, write, await, read total, written total (cumulative since boot, so an idle disk is distinguishable from one nothing ever touches) |
 | `cert` | Name, source, days left, expiry, issuer |
 | `raid` | Name, array, size, degraded, recovering |
@@ -592,7 +593,7 @@ Row expansion:
 | Config | type, category, interval, fires (on fail / on threshold), state, monitor flag, hook, notifiers, dry run |
 | Readings | current host readings, then check conditions and thresholds |
 | Held by | for a host-wide count (`fds`, `pids`), the services that make it up — each with its share, each opening that service — from the per-service figures the service table already carries; the host number says how many, this says who |
-| Graphs | one chart per numeric series the check publishes, drawn by the panel a service check's metric gets, on its own `1h/24h/7d/30d/1y` window; a state metric renders as an availability-style band instead of a line chart, amber-capped when its severity is warning; absent when the check publishes no number |
+| Graphs | one chart per numeric series the check publishes, drawn by the panel a service check's metric gets, on its own `1h/24h/7d/30d/1y` window; a state metric renders as an availability-style band instead of a line chart, amber-capped when its severity is warning; absent when the check publishes no number; SMART narrows the union of ATA/NVMe metrics to attributes observed for that device (including retained last-known attributes), so unsupported indicators create neither a panel nor an empty-data notice |
 | Availability | the service SLA section, when the check asserts availability; its window is separate from the Graphs one, because the two read different series |
 | Activity | recent watch events |
 | Expand | storage expansion action when configured |

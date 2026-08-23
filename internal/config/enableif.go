@@ -29,13 +29,13 @@ var (
 	enableIfKeys     = set(keyEnableIfFile, keyEnableIfKey, keyEnableIfContains, keyEnableIfEquals, keyEnableIfMatches, keyEnableIfInit)
 )
 
-func pruneEnableIf(v any, path []string) any {
+func pruneEnableIf(v any, path []string, backend string) any {
 	switch t := v.(type) {
 	case map[string]any:
-		return pruneEnableIfMap(t, path)
+		return pruneEnableIfMap(t, path, backend)
 	case []any:
 		for i := range t {
-			t[i] = pruneEnableIf(t[i], path)
+			t[i] = pruneEnableIf(t[i], path, backend)
 		}
 		return t
 	default:
@@ -43,26 +43,26 @@ func pruneEnableIf(v any, path []string) any {
 	}
 }
 
-func pruneEnableIfMap(tree map[string]any, path []string) map[string]any {
+func pruneEnableIfMap(tree map[string]any, path []string, backend string) map[string]any {
 	out := make(map[string]any, len(tree))
 	for key, value := range tree {
 		childPath := appendPath(path, key)
 		if child, ok := value.(map[string]any); ok {
 			if spec, has := child[keyEnableIf]; has {
 				if !enableIfAllowedAt(childPath) {
-					out[key] = pruneEnableIfMap(child, childPath)
+					out[key] = pruneEnableIfMap(child, childPath, backend)
 					continue
 				}
-				if !enableIfHolds(spec) {
+				if !enableIfHolds(spec, backend) {
 					continue // predicate failed: drop the optional branch
 				}
 				child = cloneMap(child)
 				delete(child, keyEnableIf)
-				out[key] = pruneEnableIfMap(child, childPath)
+				out[key] = pruneEnableIfMap(child, childPath, backend)
 				continue
 			}
 		}
-		out[key] = pruneEnableIf(value, childPath)
+		out[key] = pruneEnableIf(value, childPath, backend)
 	}
 	return out
 }
@@ -182,7 +182,7 @@ func validateEnableIfPredicates(path string, m map[string]any, add addFunc) int 
 // file, or an absent key all yield false, so an optional component stays
 // disabled unless explicitly turned on. Predicates: `contains` (substring),
 // `equals` (exact), `matches` (regex), or `init` (active backend).
-func enableIfHolds(spec any) bool {
+func enableIfHolds(spec any, backend string) bool {
 	m, ok := spec.(map[string]any)
 	if !ok {
 		return false
@@ -195,7 +195,7 @@ func enableIfHolds(spec any) bool {
 		return false
 	}
 	if want, has := m[keyEnableIfInit]; has {
-		return cfgval.String(want) == detectedInit
+		return cfgval.String(want) == backend
 	}
 	file, key := cfgval.String(m[keyEnableIfFile]), cfgval.String(m[keyEnableIfKey])
 	if file == "" || key == "" {
