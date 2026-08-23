@@ -15,13 +15,21 @@ variables:
   user: squid
 preflight:
   config:
+    # `-k parse` validates the configuration from the files alone; `-k check`
+    # signals the running daemon, so with squid stopped it exits 1 and the
+    # preflight blocks exactly the start/repair that needs it.
     type: command
     command:
       - ${squid_binary}
       - -k
-      - check
+      - parse
     timeout: 30s
 pidfile: /run/squid.pid
+# Squid honours shutdown_lifetime (30s by default) before exiting, so a stop
+# bounded by the global 30s graceful window reads busy proxies as residual
+# processes while they are still draining client connections.
+stop_policy:
+  graceful_timeout: 65s
 processes:
   main:
     exe: ${squid_binary}
