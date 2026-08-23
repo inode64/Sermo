@@ -609,7 +609,7 @@ Expansión de fila:
 | --- | --- |
 | Config | tipo, categoría, intervalo, dispara (en fallo / en umbral), estado, flag de monitorización, hook, notifiers, dry run |
 | Readings | lecturas actuales del host, seguidas de las condiciones y umbrales de la comprobación |
-| Graphs | una gráfica por serie numérica que publica la comprobación, dibujada con el panel que recibe la métrica de una comprobación de servicio, sobre su propia ventana `1h/24h/7d/30d/1y`; una métrica de estado se dibuja como banda tipo disponibilidad en vez de línea, limitada a ámbar cuando su gravedad es warning; ausente cuando la comprobación no publica ningún número |
+| Graphs | una gráfica por serie numérica que publica la comprobación, dibujada con el panel que recibe la métrica de una comprobación de servicio, sobre su propia ventana `1h/24h/7d/30d/1y`; una métrica de estado se dibuja como banda tipo disponibilidad en vez de línea, limitada a ámbar cuando su gravedad es warning; ausente cuando la comprobación no publica ningún número; SMART reduce la unión de métricas ATA/NVMe a los atributos observados para ese dispositivo (incluidos los últimos atributos conocidos conservados), por lo que un indicador no compatible no crea ni panel ni aviso de falta de datos |
 | Availability | la sección de SLA del servicio, cuando la comprobación afirma disponibilidad; su ventana es independiente de la de Graphs, porque leen series distintas |
 | Activity | eventos recientes del watch |
 | Expand | acción de expansión de almacenamiento cuando está configurada |

@@ -2756,3 +2756,76 @@ func TestWebBackendMissingDevicePublishesMissingState(t *testing.T) {
 		t.Errorf("error reading = %q, want the summary %q", got, w.Summary)
 	}
 }
+
+func TestWebCheckMetricsUsesSmartDeviceCapabilities(t *testing.T) {
+	graphs := checks.ResolvedGraphMetrics(checks.CheckTypeSmart, "", map[string]any{})
+	readings := []web.WatchReading{
+		{Field: checks.SmartFieldTemperature, Value: "41 °C"},
+		{Field: checks.LastSampleKey(checks.SmartFieldPowerOnHours), Value: "16mo 20d"},
+	}
+
+	got := webCheckMetricsForReadings(checks.CheckTypeSmart, graphs, nil, readings)
+	if len(got) != 2 {
+		t.Fatalf("SMART metrics = %+v, want only the two device-supported metrics", got)
+	}
+	if got[0].Name != checks.SmartFieldTemperature || got[1].Name != checks.SmartFieldPowerOnHours {
+		t.Fatalf("SMART metrics = %+v, want temperature and last-known power-on time", got)
+	}
+
+	users := checks.ResolvedGraphMetrics(checks.CheckTypeUsers, "", map[string]any{})
+	if fixed := webCheckMetricsForReadings(checks.CheckTypeUsers, users, nil, nil); len(fixed) != len(users) {
+		t.Fatalf("fixed-schema metrics = %+v, want all declared metrics", fixed)
+	}
+}
+
+func TestWebBackendSmartWatchAdvertisesOnlyObservedMetrics(t *testing.T) {
+	cfg := cfgWithWatches(map[string]any{
+		"smart-sda": map[string]any{
+			"check": map[string]any{"type": checks.CheckTypeSmart, "device": "/dev/sda"},
+		},
+	})
+	now := time.Unix(1000, 0)
+	snapshots := NewWatchSnapshots()
+	snapshots.now = func() time.Time { return now }
+	snapshots.Publish("smart-sda", checks.CheckTypeSmart, checks.Result{
+		Check:   "smart-sda",
+		OK:      true,
+		Message: "smart /dev/sda health=PASSED",
+		Data: map[string]any{
+			checks.SmartFieldTemperature: 41.0,
+		},
+	})
+	b := snapshotOnlyBackend(t, cfg, snapshots, now)
+
+	watches := b.Watches(context.Background())
+	if len(watches) != 1 {
+		t.Fatalf("got %d watches, want 1: %+v", len(watches), watches)
+	}
+	if got := watches[0].Metrics; len(got) != 1 || got[0].Name != checks.SmartFieldTemperature {
+		t.Fatalf("SMART metrics = %+v, want only temperature", got)
+	}
+}
+
+func TestWebBackendSmartServiceCheckAdvertisesOnlyObservedMetrics(t *testing.T) {
+	now := time.Unix(1000, 0)
+	snapshots := NewSnapshots()
+	snapshots.now = func() time.Time { return now }
+	snapshots.PublishWithCheckTypes("web", map[string]checks.Result{
+		"disk": {
+			Check: "disk",
+			OK:    true,
+			Data:  map[string]any{checks.SmartFieldTemperature: 41.0},
+		},
+	}, map[string]bool{"disk": true}, map[string]string{"disk": checks.CheckTypeSmart})
+	b := webBackendWithEntry(snapshots, []string{"disk"}, map[string]string{"disk": checks.CheckTypeSmart})
+	b.now = func() time.Time { return now }
+	b.entries["web"].interval = time.Minute
+	b.entries["web"].checkGraphs = map[string][]checks.GraphMetric{
+		"disk": checks.ResolvedGraphMetrics(checks.CheckTypeSmart, "", map[string]any{}),
+	}
+
+	got := b.checkView("disk", b.entries["web"], snapshots.Get("web"))
+	if len(got.Metrics) != 1 || got.Metrics[0].Name != checks.SmartFieldTemperature {
+		t.Fatalf("SMART service metrics = %+v, want only temperature", got.Metrics)
+	}
+}

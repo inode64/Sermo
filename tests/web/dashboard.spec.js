@@ -196,6 +196,7 @@ const watches = [{
     { field: "health", label: "Health", value: "PASSED" },
     { field: "temperature", label: "temperature", value: "42 °C" },
   ],
+  metrics: [{ name: "temperature", unit: "°C" }],
   summary: "smart /dev/sdb health=PASSED", interval: "1d", status_observed_at: "2026-07-10T12:00:00Z",
 }, {
   name: "smart-sdc", display_name: "Verdictless disk health", category: "storage",
@@ -589,6 +590,20 @@ test("SMART health is read in smartctl's own words, so a PASSED drive is not pai
   const verdictless = page.locator("#wat-row-smart-sdc");
   await expect(verdictless.locator(".unknown")).toHaveText("unknown");
   await expect(verdictless.locator(".bad")).toHaveCount(0);
+});
+
+test("a SMART device graphs only the indicators it publishes", async ({ page }) => {
+  const series = page.waitForRequest((request) => {
+    const url = new URL(request.url());
+    return url.pathname === "/api/watches/smart-sdb/metrics" && url.searchParams.get("metric") === "temperature";
+  });
+  await page.locator("#wat-row-smart-sdb .row-toggle").click();
+  await series;
+
+  const detail = page.locator('[id="exp-wat:smart-sdb"]');
+  await expect(detail.locator('[data-watch-metric="temperature"]')).toBeVisible();
+  await expect(detail.locator("[data-watch-metric]")).toHaveCount(1);
+  await expect(detail).not.toContainText("No data yet for this window.");
 });
 
 test("a device that stopped answering reads as missing, not as a blank health cell", async ({ page }) => {

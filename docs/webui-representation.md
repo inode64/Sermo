@@ -593,7 +593,7 @@ Row expansion:
 | Config | type, category, interval, fires (on fail / on threshold), state, monitor flag, hook, notifiers, dry run |
 | Readings | current host readings, then check conditions and thresholds |
 | Held by | for a host-wide count (`fds`, `pids`), the services that make it up — each with its share, each opening that service — from the per-service figures the service table already carries; the host number says how many, this says who |
-| Graphs | one chart per numeric series the check publishes, drawn by the panel a service check's metric gets, on its own `1h/24h/7d/30d/1y` window; a state metric renders as an availability-style band instead of a line chart, amber-capped when its severity is warning; absent when the check publishes no number |
+| Graphs | one chart per numeric series the check publishes, drawn by the panel a service check's metric gets, on its own `1h/24h/7d/30d/1y` window; a state metric renders as an availability-style band instead of a line chart, amber-capped when its severity is warning; absent when the check publishes no number; SMART narrows the union of ATA/NVMe metrics to attributes observed for that device (including retained last-known attributes), so unsupported indicators create neither a panel nor an empty-data notice |
 | Availability | the service SLA section, when the check asserts availability; its window is separate from the Graphs one, because the two read different series |
 | Activity | recent watch events |
 | Expand | storage expansion action when configured |
