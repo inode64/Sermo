@@ -47,11 +47,13 @@ watches:
     check:
       type: service
       expect: active
-  port:
-    check:
-      type: dhcp
-      optional: true
-      port: ${port}
+  # No same-host dhcp probe: ISC dhcpd receives only via raw/LPF sockets on
+  # physical interfaces (its UDP 0.0.0.0:67 socket is send-only) and emits
+  # OFFERs through LPF, invisible to a local UDP socket — verified empirically
+  # in loopback-unicast and interface-broadcast modes with a static
+  # reservation's MAC. The optional probe therefore warned forever on every
+  # dhcpd host. The dhcp check type remains available for host watches probing
+  # a REMOTE dhcpd, where the wire round-trip is real.
   alert-if-memory-high:
     check:
       type: metric
