@@ -26,6 +26,13 @@ processes:
   main:
     exe: ${ntpd_binary}
     user: ${user}
+  # Without `-u ntp:ntp` in the init options ntpd keeps running as root
+  # (Gentoo's stock NTPD_OPTS="-g"). Both identities are exact; declaring only
+  # the dropped-privileges one made the restart identity guard block every
+  # operation on hosts whose ntpd runs as root.
+  main-root:
+    exe: ${ntpd_binary}
+    user: root
 watches:
   service:
     check:
