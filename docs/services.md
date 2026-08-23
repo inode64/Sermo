@@ -1500,6 +1500,24 @@ they are pruned, so typos in optional process/check definitions are reported.
 `enable_if` is intentionally not supported under `rules`, `policy`, `guards` or
 other safety-affecting sections.
 
+Instead of a config-file predicate, `enable_if` may name the init backend the
+entry belongs to: `enable_if: { init: openrc }` (or `systemd`) keeps the entry
+only when that backend is active, and excludes the `file`/`key` predicate form.
+Use it for components that exist under one init system only. The packaged
+`salt-minion` profile gates its Gentoo `supervise-daemon` selector this way:
+under OpenRC the supervisor is the one strict identity Sermo may signal, while
+on Gentoo running systemd no supervisor exists, and an exact selector that can
+never match a live process would make the restart identity guard block every
+operation on the unit:
+
+```yaml
+processes:
+  supervisor:
+    exe: /usr/bin/supervise-daemon
+    user: root
+    enable_if: { init: openrc }
+```
+
 The config reader accepts `key=value` assignments, YAML `key: value` block
 mappings and bare `key` feature flags.
 Use `equals: ""` to match a bare flag. The packaged `dnsmasq` profile uses this
