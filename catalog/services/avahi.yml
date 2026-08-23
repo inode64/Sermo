@@ -11,6 +11,16 @@ service:
     - avahi-daemon
 apps:
   - avahi
+# Identity for residual detection: on OpenRC a failed `avahi-daemon --kill`
+# can leave the daemon running while the init script reports stopped; without
+# a pidfile and an exact selector Sermo cannot see or report that survivor,
+# so a stop read as clean while the old daemon kept the D-Bus name and the
+# next start failed with "Daemon already running".
+pidfile: /run/avahi-daemon/pid
+processes:
+  main:
+    exe: ${avahi_binary}
+    user: avahi
 restart_on_change:
   apps:
     - avahi

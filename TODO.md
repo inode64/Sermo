@@ -93,6 +93,17 @@ a configtest CLI, `mosquitto`, `supervisord`, `udisks2`, `pm2`, etc. (`redis` /
 
 ## Engine and config
 
+- [ ] Manual stop vs. activation-driven units: after `sermoctl stop`, a
+      socket/D-Bus/path-activated unit (rpcbind, node_exporter behind a
+      Prometheus scraper, polkit, Ubuntu's avahi/acpid) is restarted by its
+      trigger within seconds; monitoring stays paused, so the dashboard shows
+      `stopped` while the unit runs until an operator resumes it. Options:
+      resume monitoring automatically when the backend reports the unit active
+      again after a manual stop, and/or let a catalog profile declare the
+      activation units (`also_service: foo.socket`) so stop takes the trigger
+      down with the service. Observed fleet-wide in the 2026-08-23 lifecycle
+      campaign; every Sermo result was honest (stop rc 1 / repair refused
+      "service is active"), so this is UX, not correctness.
 - [ ] Service priorities: configurable per-service `priority` (integer or named
       tier), validation and defaults; use in remediation ordering when multiple
       services queue actions in the same cycle; expose in `sermoctl services`

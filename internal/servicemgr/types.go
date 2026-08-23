@@ -14,7 +14,10 @@ const (
 	BackendSystemd Backend = "systemd"
 	BackendOpenRC  Backend = "openrc"
 	BackendLibvirt Backend = "libvirt"
-	BackendDocker  Backend = "docker"
+	// BackendLibvirtNetwork controls a libvirt virtual network (net-start /
+	// net-destroy), not a domain.
+	BackendLibvirtNetwork Backend = "libvirt-network"
+	BackendDocker         Backend = "docker"
 	// BackendInitSummary is the user-facing list of selectable init backends.
 	BackendInitSummary = string(BackendAuto) + ", " + string(BackendSystemd) + " or " + string(BackendOpenRC)
 )

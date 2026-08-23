@@ -270,6 +270,17 @@ func lookupDomain(c Client, spec Spec) (libvirt.Domain, error) {
 }
 
 func runWithClient[T any](ctx context.Context, m Manager, fn func(Client) (T, error)) (T, error) {
+	return runWithSession(ctx, m.Spec.URI, m.client, fn)
+}
+
+// rpcSession is the connect/disconnect surface shared by every libvirt client
+// interface; *libvirt.Libvirt and the test fakes satisfy it.
+type rpcSession interface {
+	ConnectToURI(uri libvirt.ConnectURI) error
+	Disconnect() error
+}
+
+func runWithSession[C rpcSession, T any](ctx context.Context, uri string, newClient func(time.Duration) (C, error), fn func(C) (T, error)) (T, error) {
 	type out struct {
 		value T
 		err   error
@@ -277,12 +288,12 @@ func runWithClient[T any](ctx context.Context, m Manager, fn func(Client) (T, er
 	ch := make(chan out, 1)
 	timeout := netutil.TimeoutFromContext(ctx, conn.DefaultLibvirtTimeout)
 	go func() {
-		client, err := m.client(timeout)
+		client, err := newClient(timeout)
 		if err != nil {
 			ch <- out{err: err}
 			return
 		}
-		if err := client.ConnectToURI(libvirt.ConnectURI(m.Spec.URI)); err != nil {
+		if err := client.ConnectToURI(libvirt.ConnectURI(uri)); err != nil {
 			ch <- out{err: err}
 			return
 		}
@@ -319,20 +330,25 @@ func (m Manager) client(timeout time.Duration) (Client, error) {
 	if m.NewClient != nil {
 		return m.NewClient(m.Spec, timeout)
 	}
-	if m.Spec.Host != "" {
-		return libvirt.NewWithDialer(dialers.NewRemote(m.Spec.Host,
-			dialers.UsePort(strconv.Itoa(m.Spec.Port)),
+	return newLibvirtRPC(m.Spec.Socket, m.Spec.Host, m.Spec.Port, timeout), nil
+}
+
+// newLibvirtRPC builds the RPC client for a local socket or a remote
+// host:port; shared by the domain and network managers.
+func newLibvirtRPC(socket, host string, port int, timeout time.Duration) *libvirt.Libvirt {
+	if host != "" {
+		return libvirt.NewWithDialer(dialers.NewRemote(host,
+			dialers.UsePort(strconv.Itoa(port)),
 			dialers.WithRemoteTimeout(timeout),
-		)), nil
+		))
 	}
-	socket := m.Spec.Socket
 	if socket == "" {
 		socket = DefaultSocket
 	}
 	return libvirt.NewWithDialer(dialers.NewLocal(
 		dialers.WithSocket(filepath.Clean(socket)),
 		dialers.WithLocalTimeout(timeout),
-	)), nil
+	))
 }
 
 func statusFromDomainState(state libvirt.DomainState) servicemgr.Status {

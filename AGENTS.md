@@ -1,1139 +1,333 @@
 # Sermo — project conventions
 
-This file describes **current** behavior, invariants and agent workflow. Planned or
-unimplemented features (access/event logs, `exec` rule actions, service
-priorities, extra notifier sinks, cluster mode, …) live in [TODO.md](TODO.md) —
-do not treat missing TODO items as accidental gaps in the code.
+This file contains repository-specific decisions for agents. It is not a second
+user manual or a copy of executable configuration. Use these sources of truth:
 
-## Contents
+- current behavior: code and tests;
+- public behavior and configuration: `docs/` and validated examples;
+- planned behavior: [TODO.md](TODO.md);
+- validation commands: `Makefile` and CI workflows;
+- Go analyzer policy: `.golangci.yml`, `.custom-gcl.yml` and `.semgrep/`;
+- Web UI behavior: `internal/web/src/`, its tests and
+  [docs/webui-representation.md](docs/webui-representation.md);
+- operational safety: `internal/operation`, `internal/process`,
+  `internal/locks` and [docs/safety.md](docs/safety.md).
 
-- [AI / agent workflow — standard git commits](#ai--agent-workflow--standard-git-commits)
-- [Reuse and shared behavior](#reuse-and-shared-behavior)
-- [Constants and repeated values](#constants-and-repeated-values)
-- [Naming and terminology](#naming-and-terminology)
-- [Configuration structure changes](#configuration-structure-changes)
-- [Runtime paths](#runtime-paths)
-- [Configuration file granularity](#configuration-file-granularity)
-- [Catalog service scope](#catalog-service-scope)
-- [Catalog init and reload fallback verification](#catalog-init-and-reload-fallback-verification)
-- [Service operations](#service-operations)
-- [Native by default](#native-by-default)
-- [Protocol probes: interface binding is mandatory](#protocol-probes-interface-binding-is-mandatory)
-- [Documentation lockstep](#documentation-lockstep)
-- [Documentation scope and style](#documentation-scope-and-style)
-- [Central builders](#central-builders)
-- [Timeout discipline](#timeout-discipline)
-- [Daemon performance discipline](#daemon-performance-discipline)
-- [Small-change checklist](#small-change-checklist)
-- [Web UI cohesion](#web-ui-cohesion)
-- [Wizard option selection](#wizard-option-selection)
-- [Catalog: instanced systemd services](#catalog-instanced-systemd-services)
-- [Go quality gates](#go-quality-gates)
-- [Testing](#testing)
-- [Security and safety invariants](#security-and-safety-invariants)
-- [graphify](#graphify)
+If prose and implementation disagree, report the mismatch, establish the
+intended behavior from the request and executable evidence, then update every
+affected source in the same change. Do not preserve a contradiction by treating
+this file as more authoritative than the code it describes.
 
 ## AI / agent workflow — standard git commits
 
-AI agents, sub-agents, assistant sessions and automated coding processes use the
-same normal Git workflow as a human contributor in the current repository
-checkout. Keep the process simple: inspect status, make the requested edits,
-run the relevant checks, then commit or merge only when the user asked for that
-level of integration.
+Before editing, run:
 
-**Goals**
-- Keep one visible source of truth in the repository checkout the user is using.
-- Avoid hidden integration queues and extra cleanup steps.
-- Make every change easy to inspect with normal `git status`, `git diff` and
-  `git log`.
-- Preserve user edits and unrelated local state.
+```sh
+git status --short --branch
+```
 
-**Mandatory workflow**
+Work in the current checkout unless the user asks for a branch. Preserve all
+unrelated tracked and untracked changes. Search with `rg`, extend the existing
+owner, add focused tests, and keep the patch scoped.
 
-1. Before editing, inspect the current branch and working directory state:
+Run targeted checks while developing. Finish with the smallest complete gate:
 
-   ```sh
-   git status --short --branch
-   ```
+| Change | Required finish command |
+|---|---|
+| Markdown only | `make markdown-check` |
+| YAML only | `make yaml-validate` |
+| Go, scripts, Web UI, build files or mixed changes | `make check` |
 
-2. Work directly in the current checkout unless the user explicitly asks for a
-   separate branch. If the current branch is not appropriate for the task, ask
-   or create a normal local branch with a clear name before changing files.
+`make check` is the single full gate; the `Makefile` owns its current phases.
+Do not duplicate it with a second `go build`, `make lint` or `go test` pass.
+After editing `internal/web/src/`, run `make web` before the finish gate and keep
+the regenerated `internal/web/index.html` in the patch.
 
-3. Preserve unrelated changes. If files already have user edits, read and work
-   with them instead of reverting or overwriting them. Leave unrelated untracked
-   files alone.
+Commit only when the user asks for a commit, merge or equivalent integration.
+Use:
 
-4. Keep edits scoped to the request and the ownership boundaries in this
-   document. Run targeted tests while developing, and the **full validation gate
-   before treating any code or YAML change as finished** (see below) — not just
-   before committing.
+```text
+<type>(<optional-scope>): <concise description>
 
-   **Validation gate (run before finishing a task, every time):**
+Objective: <outcome>
+Invariant: <behavior or safety property preserved>
+Evidence: <checks and runtime validation actually run>
+Limitations: <known boundary or None.>
+```
 
-   ```sh
-   make check        # vet + full test suite; transitively runs `make validate`,
-                     # i.e. `make lint` (fmt-check, go fix -diff, staticcheck,
-                     # golangci-lint, govulncheck, semgrep), `make scripts-lint`
-                     # (shellcheck + ruff), `make yaml-validate`
-                     # (yaml-fmt-check + yaml-lint), `make markdown-check`
-                     # and `make web-check`
-   ```
+Valid types are `feat`, `fix`, `refactor`, `test`, `docs`, `build`, `chore`,
+`ci` and `perf`. Do not identify an agent as author. Do not push or merge unless
+the user explicitly asks, and never leave unexplained partial staging.
 
-   `make check` is the single finish command (`vet` + `validate` + tests +
-   cover-gate). `validate` already runs `make lint`, scripts, YAML, markdown and
-   web gates, so do **not** also run `go build`, `make lint` or `go test ./...`
-   as a second finish step. `go test` / `go vet` alone skip lint, YAML, markdown
-   and web and miss real issues. If you only touched YAML, `make yaml-validate`
-   is the minimum; if you only touched Markdown, `make markdown-check` is the
-   minimum; for any Go change, run `make check`. Fix every reported issue before
-   reporting the task done.
-
-5. Commit when the user asks for a commit, asks to merge into the main branch,
-   or the task explicitly includes committing as part of the deliverable:
-
-   ```sh
-   git add <changed-files>
-   git commit -m "<type>(<optional-scope>): <concise description>" \
-     -m "Objective: <outcome>" \
-     -m "Invariant: <behavior or safety property preserved>" \
-     -m "Evidence: <tests and runtime validation>" \
-     -m "Limitations: <known boundary or None.>"
-   ```
-
-   Use a change-oriented subject regardless of whether the author is a person
-   or an automated agent. Choose `feat`, `fix`, `refactor`, `test`, `docs`,
-   `build`, `chore`, `ci` or `perf`; add a scope only when it makes the subject
-   clearer. Do not identify the author with an `agent:` prefix.
-
-   Every standard commit body records those four headings in that order. The
-   versioned `.githooks/commit-msg` hook enforces the contract without printing
-   message content; enable it once with `git config core.hooksPath .githooks`.
-   Git-generated merge/revert and `fixup!`/`squash!` messages are exempt. The
-   `.gitmessage` template provides the same structure for editor-driven commits.
-
-6. Merge only when the user explicitly asks for integration. Before merging,
-   inspect the incoming commits and diff, resolve conflicts intentionally, and
-   re-run the relevant checks after the merge.
-
-**Prohibitions**
-- Do not overwrite, revert, reset or discard user changes unless the user
-  explicitly asks for that exact destructive action.
-- Do not push to `origin` unless the user explicitly asks for a push or PR.
-- Do not leave the repository in a partially staged state without explaining it.
-
-**Fleet hosts and manual repair**
-The fleet runs with `dry_run: true` while the project is in its testing phase:
-the daemon never remediates on its own. That flag does **not** restrain an
-agent the user pointed at a host. When the user asks for testing or repair
-there, use Sermo itself as the tool — `sermoctl start/stop/restart/repair`,
-dashboard actions, operator buttons — exactly as an operator would; manual
-actions execute for real regardless of `dry_run`. On such a host, every
-`failed` service or watch is work to finish: repair it through Sermo,
-investigate the root cause (a broken check, a package bug, a wrong generated
-config) and fix it so Sermo reports reality — unless it is a false positive or
-the user says to leave it. Repairing through Sermo is the core of the product;
-if Sermo cannot repair, that is itself a bug to fix.
-
-**Relationship to the rest of AGENTS.md**
-This workflow is part of the "Small-change checklist". Every implementation
-should start by inspecting repository state and finish with either a clean,
-tested commit or a clearly reported working-directory state.
+For fleet work, follow the `sermo-remote-testing` skill and its staged-host
+workflow. An operator action is real even when daemon remediation is configured
+with `dry_run: true`; use Sermo's CLI or dashboard action path and investigate
+any failure Sermo cannot safely repair.
 
 ## Reuse and shared behavior
 
-Default to the smallest change that preserves the current design. Before adding
-a helper, parser, validator, runner, builder or web/backend adapter, look for
-existing code that already solves the same problem and extend it when the
-ownership boundary stays clear. Do not duplicate validation, parsing,
-comparison, notification, monitoring or action-dispatch logic across `sermod`,
-`sermoctl`, web, watches and services.
+Treat an example or failing test as evidence of an invariant, not the whole
+scope. Search equivalent CLI, daemon, web, service and watch paths before adding
+logic. Prefer, in order: reuse the owner unchanged, extend that owner, add a
+small private helper beside it, then add a shared package only when ownership
+crosses package boundaries.
 
-Use this order of preference:
-
-1. Reuse an existing type, helper, builder or command path unchanged.
-2. Extend the existing owner when the new behavior belongs to the same concept.
-3. Add a small private helper next to the owner when it removes real duplication.
-4. Add a new package or abstraction only when behavior is shared across package
-   boundaries and the existing owners are the wrong place for it.
-
-Do not introduce a second way to express the same concept just because the new
-call site is slightly different. If the new behavior needs a different path,
-document why at the dispatch or validation point.
-
-Treat the user's example, failing test, catalog entry, UI panel, service profile
-or local bug report as evidence of a use case, not as the full scope of the
-change. The use case is the behavior or invariant implied by that example across
-equivalent code paths, target types and user-facing surfaces. After implementing
-a function, type, helper, parser, builder or logic for one example, search for
-the same concept elsewhere and decide whether the behavior should apply there
-too. If it should, extend the existing owner in the same change; if it should
-not, document the limitation at the decision point and, when user-visible, in
-the docs.
-
-When a new check, option, monitor flag, notification behavior or web action is
-generally useful to both host `watches:` and services, implement it for
-both surfaces in the same change unless there is a documented reason not to. If
-the feature intentionally applies only to one surface, document that limitation
-where the dispatch/validation decision lives and in the user docs (see
-Documentation lockstep).
+Do not create a second parser, validator, monitor, notification path or action
+dispatcher for the same concept. A generally useful check, option or behavior
+belongs on both services and host watches unless an owner-level limitation is
+documented in code and user docs.
 
 ## Constants and repeated values
 
-Avoid magic literals in production code. Before adding a numeric or string
-literal, look for an existing constant, typed enum, configuration value or
-owner-level helper and reuse it, especially when editing a `switch`, map, slice
-or array that already uses constants for the same concept.
-
-Create or reuse constants for values that appear more than three times, and for
-concept-bearing values even when they appear fewer times: states, kinds,
-categories, modes, backend names, file suffixes, config/YAML keys, protocol
-names, metric units, timeout/interval defaults, thresholds, math/physical
-conversion factors and similar calculations. Prefer existing public typed
-constants from the owning package over duplicating string constants locally.
-
-Do not hide one-off literals, test fixture data, realistic YAML examples or
-local error text behind constants unless it improves correctness or removes real
-duplication.
+Reuse typed constants and enums from the owning package. Name concept-bearing
+values such as states, kinds, config keys, protocols, units, defaults, timeouts
+and thresholds even when they occur only once. Create a constant for ordinary
+repetition when it appears more than three times. Do not hide fixture data or a
+one-off error message behind a constant without a correctness benefit.
 
 ## Naming and terminology
 
-Names are vocabulary. Use exactly the same name for a given concept across
-variables, parameters, comments, struct fields and docs.
-
-This is the naming counterpart of "Reuse and shared behavior". Before choosing
-a name, look at the structs that already model the concept (e.g. `config.Service`,
-`process.Selector`, `app.Event`). When in doubt, treat the field name from the
-public struct or API as the single canonical term. Avoid near-synonyms such as
-target/service, limit/max/cap or notify/notifier unless the code already
-uses them for distinct concepts.
-
-The one sanctioned exception is a Go builtin collision: a lowercase local or
-parameter must not be named `max`, `min`, `cap`, `len`, etc. (the
-`redefines-builtin-id` lint forbids it). The canonical term still names the
-exported field and JSON (`Max`, `json:"max"`), and the lowercase local takes a
-documented alias — `limit` for `max`. So the kernel-maximum concept is `Max` /
-`"max"` in structs and on the wire, and `limit` in function locals (see
-`levelCountResult` in `internal/checks/check.go` and `countMeter` in
-`internal/app/webbackend.go`). Do not "fix" those `limit` locals back to `max`.
+Use the public model field as the canonical vocabulary across code, comments,
+JSON, YAML and docs. Do not introduce near-synonyms for an existing concept.
+When a canonical term collides with a Go builtin, keep the public name and use
+the established local alias; for example, `Max` / `"max"` uses `limit` in a
+local variable.
 
 ## Configuration structure changes
 
-When Sermo's own public configuration structure changes, break compatibility by
-default and keep one canonical spelling in code, docs, examples and tests. Do
-not preserve old aliases, dual parsers, deprecated fields, migration-only
-validators, compatibility comments, fixtures or tests for removed Sermo config
-parameters unless the user explicitly asks for compatibility, or the old spelling
-is still a current external compatibility requirement or safety invariant.
+For Sermo-owned configuration, prefer one canonical shape and remove the old
+shape from parsing, validation, examples, docs and tests in the same change.
+Compatibility requires an explicit user request or an external compatibility
+or safety requirement. Do not add fixtures that keep retired field names alive.
 
-Before applying a new structure, state the intended scope to the user: which YAML
-shape is being replaced, which structs/builders/validators are being removed or
-rewritten, which docs/examples change, and what operators will need to update.
-After the change is accepted or requested, remove the previous structure in the
-same change: runtime parsing, validation, examples, reference docs, agent
-guidance and tests must not keep the old form alive. Document exceptions
-explicitly at the owner. Examples of valid exceptions are Linux/init
-compatibility such as `/var/run` metadata normalized to `/run`, hard safety
-invariants such as deriving lock directories from `paths.runtime`, and
-**catalog/services sugar** that desugars during resolution into the canonical
-shape (never a second runtime parser): `reload_on_change` and
-`restart_on_change` in catalog profiles and service trees expand to remediation
-rules in `internal/config/resolve.go` and are removed from the resolved tree.
-Do not add new dual parsers or migration shims for retired parameters; new sugar
-must follow the same one-way desugar pattern and be documented in
-`docs/services.md`.
-
-Do not add regression tests that feed a removed YAML field, alias or spelling
-just to assert that it is rejected. Those fixtures keep the retired vocabulary
-alive. Test the current canonical shape and, when strict validation needs
-coverage, use generic unknown fields/types rather than old configuration names.
+Catalog sugar is allowed only when resolution desugars it into the canonical
+runtime tree and removes the sugar. Document new sugar in
+[docs/services.md](docs/services.md).
 
 ## Runtime paths
 
-Use `/run` for volatile runtime artifacts in catalog profiles, generated
-configuration, examples and docs: pidfiles, sockets, OpenRC runtime metadata,
-Sermo runtime directories and locks. Do not write new `/var/run` paths in Sermo
-configuration. Modern Linux systems expose `/var/run` as a compatibility
-symlink to `/run`, and older init scripts, service managers or packaged configs
-may still report that spelling. Sermo must keep normalizing those host-provided
-paths; this is Linux/init compatibility, not an obsolete Sermo configuration
-shape to remove.
-
-When systemd, OpenRC or a host file reports a pidfile or socket under
-`/var/run`, normalize it to the equivalent `/run/...` path before writing it to a
-catalog service, generated service config or documentation example.
-
-Before adding any new runtime path, check whether the path or one of its parent
-directories is a symlink (`readlink -f <path>` or `namei -l <path>`). Register
-the canonical target path, not the symlink spelling, so the catalog does not grow
-duplicate aliases for the same pidfile or socket.
+Write volatile paths under `/run`, including pidfiles, sockets and locks.
+Normalize host-reported `/var/run/...` paths to `/run/...`; this Linux
+compatibility is not a second Sermo config spelling. Resolve symlinks before
+adding a catalog or generated path so aliases do not become duplicate targets.
 
 ## Configuration file granularity
 
-Use one YAML file per target — a single document of one kind per file, never
-several targets grouped together. A document's kind is derived from where it
-lives (catalog subdir / `paths.services` / `paths.watches`), so a top-level
-`kind:` is optional and omitted. That rule also covers the per-host override
-layer: a `<dir>.local` sibling inherits the kind of the directory it adjusts, and
-its documents merge onto the same-named base — see
-[docs/configuration.md](docs/configuration.md#per-host-overrides-dirlocal). Watch documents under any directory listed in
-`paths.watches` use top-level `name:` plus the watch fields; notifier fragments
-still use a top-level `notifiers:` map, but that map must contain exactly one
-named entry. Use classified watch directories such as `watches/`, `networks/`,
-`storages/` and `mounts/` by listing them all under `paths.watches`. The only
-exception is a clearly labeled reference bundle such as `docs/sermo-all.yml`,
-which groups examples so the full schema can be validated in one place.
+Use one YAML document of one target kind per file. Kind comes from the catalog
+subdirectory or configured services/watches directory, so omit redundant
+`kind:` fields. A notifier fragment is the narrow exception: its top-level
+`notifiers:` map contains exactly one named entry. Reference bundles such as
+`docs/sermo-all.yml` may group schema examples.
 
-For source-tree development and validation without installing under `/etc/sermo`,
-build with `SERMO_DATADIR=$PWD make build`, then use `examples/sermo-dev.yml`
-(relative `paths.*` into the bundled `examples/` tree). The packaged catalog is
-not a `paths.*` setting; it comes from the catalog directory compiled into the
-binary. `examples/sermo.yml` intentionally targets installed locations.
+Classified watch directories (`watches/`, `networks/`, `storages/`, `mounts/`)
+must all be listed under `paths.watches`; each `.local` sibling is the per-host
+override layer. For source-tree validation, build with
+`SERMO_DATADIR=$PWD make build` and use `examples/sermo-dev.yml`.
 
 ## Catalog service scope
 
-A service's checks describe **that service**, not what it observes. A monitoring
-daemon is the easy case to get wrong: `mdmonitor` is healthy when the mdadm
-monitor is running, even while the arrays it watches are degraded. Folding the
-observed subject into the daemon's checks makes the service read `failed` for a
-fault it did not cause, hides which of the two is actually broken, and — because
-a failing required check counts as downtime — writes the subject's outage into
-the *service's* availability archive.
-
-Host state belongs in a host watch, where it is reported once and named for what
-it is. `smartd` is the reference: its checks are `service`, `process` and memory,
-while drive health lives in the generated `smart-*` watches. Put a host-scoped
-check inside a service only when that check is genuinely an assertion about the
-service process; if it merely needs to stay visible on the service row, declare
-`reports: state` or `reports: value` so it asserts nothing and stays out of health
-and SLA.
+A service check describes the service process. State of a host resource the
+service observes belongs in a host watch; use `reports: state` or
+`reports: value` only when observed data must remain visible without affecting
+service health or availability. `smartd` and its generated drive watches are
+the reference model.
 
 ## Catalog init and reload fallback verification
 
-When adding or changing a catalog service that depends on init metadata or defines
-`reload.signal`, verify every init backend in its `service:` map and every
-fallback Sermo may use. Do not validate only the distro where the profile was
-first written.
+For catalog changes involving init metadata or `reload.signal`, verify every
+declared systemd/OpenRC backend and every fallback. An OpenRC signal fallback
+requires a canonical pidfile plus an exact `exe` and `user` process selector;
+otherwise use an argv `reload.command` or the backend's native reload.
 
-For OpenRC, inspect the real packaged `/etc/init.d/<unit>` and matching
-`/etc/conf.d/<unit>` for `reload()`, `pidfile`, `command`, `command_user`,
-`start-stop-daemon --pidfile`, supervisor settings and any `*_PIDFILE` variables.
-For systemd, inspect the unit and `systemctl show` metadata (`CanReload`,
-`MainPID`, `PIDFile`, `User`). Normalize any reported `/var/run` paths to
-canonical `/run` paths before writing catalog YAML.
-
-Any OpenRC-capable `reload.signal` must have a canonical `pidfile:` candidate
-and a `processes:` selector with exact `exe` and `user`, so the
-pidfile PID can be verified before Sermo signals it. If init scripts differ by
-distro, encode the real candidates with a path list or `os:` branch. If a backend
-has no trustworthy pidfile and exact identity selector, use `reload.command` or
-rely on the backend's own reload path instead of shipping an unsafe signal
-fallback.
-
-Before finishing such a change, run the real catalog validation for both
-backends:
+Run the focused catalog contract before the finish gate:
 
 ```sh
 go test ./internal/config -run 'TestRealCatalog(AllServicesValidate|ReloadServicesResolve)$' -count=1
 ```
 
+The complete operator procedure lives in [docs/services.md](docs/services.md).
+
 ## Service operations
 
-Application-level start, stop, restart, reload, resume or signal actions on a service
-must go through the shared `internal/operation` package and its engine. Do not
-call backends directly, do not send signals from `app/` or `cli/`, and do not
-bypass locks, guards, preflight or policy. The operation path is the single
-source of truth for safe service control.
-
-The narrow exceptions are the backend/process implementations that provide the
-primitive operation APIs, and tests/fakes that prove those primitives work. Keep
-those primitives small, injectable and covered by tests.
+All application-level start, stop, restart, reload, resume and signal actions
+go through `internal/operation`. CLI, daemon and web code must not call service
+backends or signal processes directly. Primitive backend/process
+implementations and their fakes are the only narrow exceptions.
 
 ## Native by default
 
-Avoid external commands whenever practical; prefer the Go standard library or a
-Go-module alternative, unless the entry explicitly requires a third-party library
-or command. When an external command is genuinely required (`systemctl`,
-`rc-service`, user `command` checks, hooks, …), production code must not
-call `os/exec` directly: it goes through an injectable `execx` runner with a
-context and an explicit timeout, invoking an argv directly — never a shell.
-`execx` and tests/fakes are the only exceptions.
+Prefer the Go standard library or a Go module. Required external commands use
+the injectable `execx` runner, argv arrays, a context and an explicit timeout;
+production code does not use a shell or call `os/exec` directly.
 
-The one production exception is `sermoctl lock … -- COMMAND`: `lock wrap` runs
-the operator-provided argv with inherited stdin/stdout/stderr so the wrapped
-process behaves like a normal shell foreground job; it uses `exec.CommandContext`
-directly in `internal/cli/lock.go` (no `execx`, no engine timeout — the wrapped
-command owns its own lifetime). Do not route other CLI or daemon paths through
-this shortcut.
+The sole product exception is `sermoctl lock … -- COMMAND`, which intentionally
+runs the operator's foreground argv with inherited standard streams. Do not
+generalize that exception.
 
 ## Protocol probes: interface binding is mandatory
 
-Every `internal/conn` protocol probe must honor `cfg.Interface` — the egress
-network interface (Linux `SO_BINDTODEVICE`), set on multi-homed hosts so a probe
-leaves through a specific link. The shared `BindDialer(cfg.Interface)` (and
-`BindListenConfig` for packet sockets) is the single mechanism; every probe dials
-through it. A probe that silently uses default routing is a bug.
+Every `internal/conn` protocol probe honors `cfg.Interface`. Built-ins and
+aliases are registered in `internal/conn/registry.go`; registered probes enter
+the shared executor once and obtain the prepared target through the existing
+helpers. Do not add package-init registration or duplicate endpoint defaults.
 
-All built-in protocols are declared once in
-`internal/conn/registry.go`, including aliases and well-known socket defaults.
-Do not add package `init` registration or duplicate target defaults in check
-builders. `Lookup`/`Prepare` return a registered wrapper whose `Probe` method
-enters `executeProbe`; that executor resolves the target and creates the common
-probe context exactly once. Transport helpers and library adapters obtain that
-prepared target through `probeTargetFor`. `internal/checks` continues to own
-check semantics such as interface match policy, latency/response assertions and
-change tracking; both service checks and host watches reach the same registered
-probe through their central builders.
+Stream probes dial through `BindDialer`; packet listeners use
+`BindListenConfig`. A library is acceptable only if it is codec-only or accepts
+Sermo's dialer/connection. Reject libraries that perform unhookable internal
+I/O, because default routing would violate the interface invariant.
 
-Only rebuild a target inside a protocol when its wire format selects a genuinely
-different endpoint. Document that decision at the call. Current examples are a
-TCP endpoint parsed from a full D-Bus address and MySQL's pre-TLS greeting. A
-chronyd Unix command socket is a separate transport exception: it is
-`SOCK_DGRAM` and must bind a named client socket, so it cannot use the common
-stream Unix dial.
-
-The DHCP per-interface probe is the other transport exception, and the only one
-that pins a link *without* `SO_BINDTODEVICE`: it sets the egress link per
-datagram with `IP_PKTINFO` and filters replies by the link they arrived on. The
-invariant is preserved — egress never falls back to default routing — but the
-device bind had to go, because a DHCP server on the same host answers with a
-broadcast the kernel loops back, and that copy does not carry the LAN device the
-socket filter matches on, so a device-bound socket never receives the offer. Any
-probe that must receive a locally generated broadcast has the same constraint.
-
-This constrains adopting a Go module to "simplify" a protocol. Decide by where the
-library does its I/O:
-
-1. **Codec-only library (no I/O)** — preferred. Keep dialing through `BindDialer`
-   and hand the bytes to the library to build/parse. Interface binding is
-   untouched. Example: DNS uses `golang.org/x/net/dns/dnsmessage` purely as a wire
-   codec over the existing UDP dial.
-2. **Library that does its own I/O but accepts a custom dialer or connection** —
-   acceptable. Route its dialing through `BindDialer` via the library's hook so
-   binding is preserved. Example: NTP uses `github.com/beevik/ntp` through its
-   `QueryOptions.Dialer` callback, which dials with `BindDialer(cfg.Interface)`.
-3. **Library that dials internally and cannot accept a custom dialer/connection**
-   — do NOT adopt it: it would bypass `SO_BINDTODEVICE` and break interface
-   binding. Keep the hand-rolled probe (and its transport) instead. This is why
-   the DHCP probe keeps its own raw-socket transport (`dhcp_linux.go`) rather than
-   switching to a full DHCP client library, even though a module exists.
-
-In short: interface binding wins over code reduction. A module is only worth
-adopting when binding survives — otherwise our own code stays. Record the reason
-at the probe when a migration is intentionally not done.
+Keep documented transport exceptions local: chronyd's Unix datagram client and
+DHCP's per-datagram `IP_PKTINFO` path. A protocol may rebuild an endpoint only
+when its wire format genuinely selects a different target, with the reason
+documented at that call.
 
 ## Documentation lockstep
 
-When you change configuration, add a check type, notifier, rule action or
-observable behavior, update the corresponding documentation, catalog examples
-(when generally useful) and `docs/configuration.md`, `docs/rules.md` and the
-service docs in the same change. Keep `examples/sermo.yml` comments current. Code
-and docs must evolve together.
+Update user docs, both language versions and useful examples whenever public
+configuration, CLI, checks, rules, notifiers, safety or observable behavior
+changes. `docs/configuration.md`, `docs/rules.md`, `docs/services.md` and
+`examples/sermo.yml` are owners, not a mandatory list for unrelated changes.
 
-When a user request, implementation finding or runtime behavior contradicts the
-current documentation, call out the mismatch explicitly before treating either
-side as authoritative. If the user accepts the requested behavior or the change
-is implemented, update the conflicting documentation in the same patch; do not
-leave docs describing the old behavior.
+When new behavior is planned rather than implemented, put it in `TODO.md`; do
+not describe it here as current behavior.
 
 ## Documentation scope and style
 
-Document only what is required for one of these reasons:
-
-- User-facing behavior, configuration, CLI, safety policy or operational
-  workflow changed and must stay in lockstep with the code.
-- A lint rule or analyzer requires the documentation or justification, such as
-  exported Go symbols, `//nolint` rationale or a security exception.
-- The requirement, invariant or exception is necessary to use, maintain or
-  review the code safely.
-
-Keep documentation direct. Prefer the shortest accurate explanation, link to an
-existing source of truth instead of repeating it, and remove redundant prose when
-editing nearby text. Do not document obvious implementation steps just to narrate
-the code.
+Write for Linux administrators: direct explanations, realistic YAML,
+copy-pasteable commands and explicit safety notes. Document public behavior,
+required maintenance rationale and non-obvious safety exceptions. Link to the
+owner instead of copying long implementation inventories or tool settings.
 
 ## Central builders
 
-New check types, watch kinds, notifiers and rule actions start in the central
-builder functions (`internal/checks/build.go`, `internal/app/watch_build.go`,
-`internal/notify/`, rule builders, etc.). Do not duplicate construction logic
-or add ad-hoc cases across packages. If no central builder exists yet, create
-one at the owning package instead of scattering switch cases through callers.
+Add checks, watches, notifiers and rule actions through the owning central
+builder or registry. Extend `internal/checks/build.go`,
+`internal/app/watch_build.go`, `internal/notify` or the rule builders instead of
+scattering construction switches through callers.
 
-**Notifiers** are typed, pluggable transports: register a builder in
-`internal/notify` keyed by `type` (`email`, `slack`, `teams`, …). Call sites
-reference notifiers by name only; adding a transport must not require changes
-outside `internal/notify` and the user docs (`docs/configuration.md`).
+Notifier call sites reference configured names only; a new transport is built
+and registered inside `internal/notify` plus its user documentation.
 
 ## Timeout discipline
 
-Every blocking operation (commands, network, database, I/O, etc.) must be
-bounded by a timeout taken from engine configuration (via `app.EngineDuration`
-or `cfgval`) or a named, documented constant. Magic duration literals in
-application logic are forbidden. Short literals are acceptable in tests when
-they bound the test itself rather than production behavior.
+Every blocking command, network, database or file operation has a timeout from
+engine configuration or a named constant. Tests may use short literals to bound
+the test itself. Never add an unbounded production wait.
 
 ## Daemon performance discipline
 
-Treat every code path that runs inside `sermod` as performance-sensitive:
-workers, checks, watches, rule evaluation, process discovery, metrics sampling,
-state persistence, web-backend refreshes and reload/rebuild paths all affect the
-long-running daemon. Optimize these paths for speed and bounded resource use
-before adding convenience work. Prefer cached or shared samples over repeated
-host scans in the same cycle, avoid avoidable allocations and sorting in hot
-loops, keep blocking work out of scheduler-critical sections, and make expensive
-operations explicit, rate-limited or interval-bound.
-
-When a new feature adds daemon-cycle work, review its cost at normal fleet scale
-and add tests or benchmarks when the cost is non-obvious. A small inefficiency in
-one service/watch can be multiplied by every configured target and degrade
-monitoring latency, web responsiveness and remediation timing.
+Treat every daemon-cycle path as hot. Reuse samples within a cycle, avoid
+repeated host scans, unnecessary allocation/sorting and blocking work in
+scheduler-critical sections. Make expensive work explicit and interval-bound;
+add a benchmark when fleet-scale cost is not obvious.
 
 ## Small-change checklist
 
-Before finishing any code change, follow the sections this file already owns
-instead of a second copy of those rules:
-
-- Git, validation (`make check`) and commit/push policy: [AI / agent workflow](#ai--agent-workflow--standard-git-commits). Do not add a parallel `go build` / `make lint` / `go test` gauntlet.
-- Search with `rg` and extend the existing owner: [Reuse and shared behavior](#reuse-and-shared-behavior).
-- Daemon-cycle cost: [Daemon performance discipline](#daemon-performance-discipline).
-- User-visible behavior: [Documentation lockstep](#documentation-lockstep).
-
-Keep the patch close to that owner; avoid unrelated refactors. Preserve public
-YAML, JSON, CLI and web field names unless the change is explicitly a
-migration. Add or move tests when a bug or ambiguous behavior is found.
+- Inspect Git state and preserve unrelated changes.
+- Search for the existing owner and equivalent surfaces.
+- Keep public names stable unless the task is an explicit migration.
+- Add or update focused tests and user docs.
+- Review timeout, daemon cost and safety impact.
+- Run the required finish gate and report the working-tree state.
 
 ## Web UI cohesion
 
-**Sources live in `internal/web/src/`; `internal/web/index.html` is a generated,
-committed artifact — never edit it by hand.** The dashboard is authored as a
-shell (`src/index.html`), `src/styles.css`, shared watch-panel descriptors
-(`src/watch-panels.json`), and ES modules (`src/app.js`, `src/api.js`,
-`src/format.js` and the vendored `src/vendor/lit-html.js`). The Go builder and
-the runtime registry both consume `watch-panels.json`; add or change repetitive
-watch panel IDs, columns, controls and copy there, while executable matching and
-row-render behavior stays in `watchPanelBehaviors` in `src/app.js`.
-`make web` runs the in-process esbuild build
-(`internal/web/build`, a nested module so esbuild is not a `sermod` dependency,
-the Go API — no Node/npm) to bundle + minify them into
-`internal/web/index.html`, leaving the `{{CSP_NONCE}}`/`{{VERSION}}` placeholders
-for the server to fill per request. **After editing anything under
-`internal/web/src/`, run `make web` and commit the regenerated `index.html`.**
-`make web-check` (wired into `validate`/`check`/CI, modeled on `fmt-check`) fails
-if the committed file is stale. `make web-e2e` serves that committed bundle with
-deterministic mocked APIs and runs the desktop/mobile Playwright flows plus axe
-WCAG 2.2 AA checks; it is also part of `validate`/`check`/CI. Install its browser
-once with `npx playwright install chromium` (CI uses `--with-deps`).
+Sources live in `internal/web/src/`; `internal/web/index.html` is generated and
+committed. Repetitive watch-panel metadata belongs in
+`internal/web/src/watch-panels.json`; executable behavior stays in the existing
+JavaScript owners. Run `make web` after any source edit.
 
-The dashboard modules carry complexity budgets in `eslint.config.mjs`, the
-counterpart of `gocyclo`/`gocognit`/`maintidx` on the Go side: `complexity`,
-`max-lines-per-function`, `max-params`, `max-depth` and `max-nested-callbacks`.
-They are pinned at the current ceiling, so they block regressions rather than
-demanding a cleanup: a new function may not be worse than the worst one already
-there. Lower a threshold whenever you split an outlier — `restoreUIState`
-(complexity 80) and `initStaticHandlers` (146 lines) are the current ceilings.
+Rendering uses lit-html templates and full-list reconciliation. Compose nested
+templates, let bindings escape values, and keep interaction in the delegated
+`data-*` click path rather than inline or lit event handlers. String-built SVG
+may write only to its dedicated container. Preserve the server's existing CSP
+contract.
 
-**Rendering uses lit-html.** Build markup with `tpl\`...\`` (the `html` tag,
-imported aliased as `tpl`) and render into a container with `litRender(...)` (the
-`render` export). lit-html escapes text/attribute bindings, so do **not** wrap
-interpolations in `esc()` inside a template, and never embed a bare HTML string
-in a `tpl` template (it renders as visible escaped text); compose with nested
-templates and use `nothing` to omit a binding/attribute. lit-html diffs the DOM
-in place, so there is no manual row-patching layer — render the full list and let
-it reconcile. Leaf builders (`stateBadge`, `serviceStateBadge`, `categoryBadge`,
-`usageBar`/`usageBarMini`, SLA helpers) and the event/service/watch/app/overview
-row builders return `TemplateResult`s; SVG chart builders (`drawSLAChart`,
-`drawMetricChart`) stay string-based and are assigned to their own container via
-`innerHTML`. Interaction stays wired through the global delegated click handler
-reading `data-*` attributes (`closestFrom`), **not** lit `@event` bindings — this
-keeps the no-inline-handler CSP posture (`server_test.go` asserts it).
-
-`internal/web/index_test.go` parses the generated HTML structurally with
-`golang.org/x/net/html` (server contract, CSP hygiene, shell anchors) rather than
-matching JS source strings, so it survives minification and renames.
-
-**Before adding or changing any UI element, find the existing element that
-already solves the same problem and copy its structure, classes and styling
-exactly** — do not invent a parallel way to do the same thing. Cohesion across
-panels is a hard requirement, not a preference.
-
-**Reuse the concept's full owner, not the nearest lookalike.** When a concept
-already has a presentation somewhere, a new surface showing that same concept
-adopts *that* presentation whole — its markup, its loader, its API shape and its
-controls, the time-window selector included. Availability is the worked example:
-`slaChartPanel` is the panel, `loadSLAPanel` fills it and `renderSLASection` adds
-the heading and the `1h/24h/7d/30d/1y` selector, and the service detail, a host
-watch and an application all draw through exactly those — differing only in the
-series `slaPanelAPI` asks for. The dashboard once carried a second, denser
-availability band beside them, so the same number read one way in a service
-detail and another way two clicks later in an application card, which had no
-window selector at all. That band was deleted rather than kept in step. A compact
-summary is a summary *of* a panel, never a substitute *for* it: reaching for one
-because it is fewer lines produces a second, thinner presentation of a number the
-operator already knows how to read one way, and now has to learn twice. Extend
-the shared owner when the new surface needs something the old one lacks; if reuse
-means threading one extra parameter or splitting a helper in two, do that rather
-than write a parallel path. The test before adding any rendering, loading or
-formatting code is "which existing function already answers this, and why can it
-not answer it here" — and the answer has to be a real obstacle, not that finding
-it takes longer than retyping it.
-`TestSourceDrawsEveryAvailabilityPanelThroughOneRenderer` pins the availability
-case: a second caller of `drawSLAChart` fails the gate.
-
-Concretely, every data panel is a `<details id="{name}-section">` with a
-`<summary>`, an optional flex `#{name}-controls` row (search + filters + count)
-and a bare `<table class="{name}-table">` placed directly inside the `<details>`.
-Do not wrap data tables in scroll containers; the page scrolls as a whole
-instead of trapping a panel in its own scrollbar. The complement is that **no
-width may make the page scroll sideways**: content fits the viewport, so a wide
-cell wraps (`white-space: normal; overflow-wrap: anywhere`) or truncates instead
-of widening its table — a fixed table min-width plus nowrap cells deforms the
-whole dashboard exactly when a service fails, which is when it is being read.
-Grid column minimums are written `minmax(min(Xrem, 100%), 1fr)` so a track can
-never demand more than its container, and width caps on truncated text use
-container-relative units, not `vw`, which ignores how far into the page the cell
-already sits. The e2e test "no viewport lets the page scroll sideways" pins this
-at phone, tablet, laptop and desktop widths with expansions open and a hostile
-unbroken diagnostic in the fixture. When you introduce a genuinely
-new pattern, document it here so the next change can follow it.
-
-When adding a host watch/check with useful runtime data, wire its Web UI
-`Watch.Meter` or `Watch.Readings` path in `internal/app/webbackend.go` and add
-a `webbackend` regression test; do not leave it visible only as static config or
-configured conditions. Stateful watches (`file`, `process`, rate-based probes,
-…) must expose the live sample the daemon already computes, not just the YAML
-thresholds.
-
-The visual layer is a token-driven design system (June 2026 redesign):
-
-- **Design tokens.** All colors/radii/shadows come from CSS custom properties on
-  `:root` (`--bg`, `--panel`, `--text`, `--line`, `--ok`, `--warn`, `--crit`,
-  `--info`, …) with a `prefers-color-scheme: dark` override block. Never
-  hardcode a color in new CSS — use the tokens, deriving tints with
-  `color-mix(in srgb, var(--x) N%, transparent)`. (JS-emitted inline SVG fills
-  keep the GitHub-ish literal palette, which reads on both schemes.)
-- **Enforced, not just documented.** `make web-lint` runs `stylelint` over
-  `internal/web/src/*.css` with `.stylelintrc.json`: the token rule above is a
-  linter rule, so a literal colour in `color`, `background*`, `border-*-color`,
-  `outline-color`, `fill` or `stroke` fails the gate. Following `.golangci.yml`,
-  the config enables only rules that catch defects — no formatting opinions, so
-  the compact one-line declarations stay as they are. A colour inside a
-  `linear-gradient()` is not reached by the rule; keep those to the documented
-  literal palette.
-- **Panel cards.** Every `<details>` section (plus `#locks-section` and
-  `#detail`) is styled as a card automatically — rounded border, shadow, the
-  `<summary>` as header. A new section needs no extra classes.
-- **Overview tiles.** The `#overview` band under the topbar is the at-a-glance
-  layer: `renderOverview` (called from `renderStatus`, no extra requests)
-  emits `<button class="tile" data-panel-target=…>` per vital sign, with
-  `t-ok`/`t-warn`/`t-crit` accents and optional `usageBar` gauges.
-- **Status pills.** `.target-state` renders states as tinted pills with a
-  colored dot (`::before`, `currentColor`); `state-failed` pulses. New states
-  only need a `state-<name>` color class.
-- **SLA timeline strip.** `slaStrip(points, win)` renders a contiguous
-  status-page availability band — one `.sla-bar-seg` cell per equal sub-span
-  (oldest left), hatched `.sla-gap` before the first observation, carrying the
-  last observed state across unsampled sub-spans so a continuously-up target
-  does not read as striped. `drawSLAChart` wraps it with the axis, the incident
-  list and the data table for an SLA panel; `drawCheckSLAStrip` wraps it with the
-  window ratio for a check's cell. Both consume the per-bucket
-  `{up, total, down_buckets}` points of `.../sla?since=` — `total: 0` is the gap
-  signal and the availability ratio is derived client-side. There is one panel
-  around it: `slaChartPanel` for the markup, `loadSLAPanel` for the fetch and
-  `renderSLASection` when the surface's only graph is this one. Reuse those
-  rather than drawing availability a second way.
-  Cells are banded by `slaDownBand(slaDownPct(up, total))` — five severity levels
-  over the share of the sub-span that was **down**, green only at exactly zero —
-  not by an availability threshold. Stored history keeps one bucket span per
-  window, so a wide window's cell covers hours or a day and a short outage inside
-  it is >99% available; an availability threshold would render it healthy. Do not
-  reintroduce one. The band names a class and `styles.css` holds the colour
-  (`.sla-down-none` … `.sla-down-full`, mirroring the `.usagebar.usage-*` bands),
-  so the scale stays under the token linter and a cell costs no
-  `getComputedStyle`. Colour is not the sole indicator: `title`, `aria-label` and
-  the visually-hidden data table repeat the down share and the affected minute
-  count (`down_buckets`). See
-  [docs/webui-representation.md](docs/webui-representation.md#sla-timeline-strip).
-- **Value formatting (one type → one formatter).** A given kind of value must
-  render identically everywhere; never hand-format with bare `toFixed`, string
-  concatenation or a raw `${value}`. Each type has a single canonical helper —
-  route every user-facing reading through it (this is what keeps "2.1%" from
-  appearing elsewhere as "2.14%" or "234.5678 B/s"):
-  - **Numbers** → `fmtNum(n, max=2)` (the base formatter; ≤`max` decimals,
-    trailing zeros stripped, `—` when non-finite). Every other helper builds on it.
-  - **Percentages** → `fmtPct(n)` (`fmtNum(n,2)+"%"`). Includes CPU%, memory %,
-    saturation, SLA % — tiles, bars and detail readings all use it.
-  - **Bytes (sizes)** → `fmtBytes(n)` — IEC binary units, base 1024 (`KiB`,
-    `MiB`, …). **Byte rates** → `fmtBytesPerSecond(n)` — SI decimal units,
-    base 1000 (`KB/s`, `MB/s`, …); the daemon's `formatSummaryBytes`/
-    `formatSummaryBytesPerSecond` mirror the same split. Unit-tagged time
-    series route through `fmtMetricValue(v, unit)` (`bytes`, `B/s`, `%`, `ms`,
-    default).
-  - **Durations** → `fmtDuration` (hysteresis ladder mirrored by the daemon's
-    `units.HumanizeDuration`; parity pinned by `tests/web/format.spec.js` and
-    `internal/units/testdata/duration_cases.json`); **relative time** →
-    `fmtRemain`/`fmtUntilShort`/`fmtAge`/`fmtSince`; **absolute timestamps** →
-    `fmtTime`.
-  - **Gauges** → `usageBar` (full-width host gauge), `usageBarMini` (dense table
-    cells), `cpuBarMini` (single-core-normalized CPU). Clamp with `pctClamp`.
-  Bare `toFixed` is reserved for **geometry only** — SVG path coordinates and CSS
-  bar widths (`--usage-pct`, `--sla-pct`) keep their own fixed precision. When a
-  value needs a representation no helper covers, add or extend a helper next to
-  the others rather than formatting inline at the call site. See the `fmtNum`
-  banner comment in `internal/web/src/format.js`.
-
-**CSP and inline styles:** `style-src` deliberately carries `'unsafe-inline'`
-**without** a nonce — per CSP2, a nonce in the list makes browsers ignore
-`'unsafe-inline'` and silently strip every generated `style="…"` attribute
-(section hiding, gauge widths). Do not "harden" style-src back to a nonce;
-script-src remains nonce-strict (see `securityHeaders` in
-`internal/web/server.go`).
+Before adding a visual, loader, formatter or control, find the existing
+presentation of that concept and reuse it whole. Use the established panel,
+responsive-table and design-token patterns; do not introduce literal CSS colors
+or horizontal page overflow. Web changes must pass the existing desktop/mobile
+and WCAG 2.2 AA checks. Detailed UI contracts live in
+[docs/webui-representation.md](docs/webui-representation.md).
 
 ## Wizard option selection
 
-The interactive wizard (`sermoctl wizard`, `internal/assist`) follows **one
-canonical question flow for every assistant, present and future** — documented
-in [docs/wizards.md](docs/wizards.md). Read it before adding or changing a
-wizard; the invariants below must not drift per assistant.
+All assistants follow [docs/wizards.md](docs/wizards.md). Use shared `Prompt`
+helpers, detected targets and the canonical monitor/interval flow; never invent
+a separate prompt parser or ask for a target name that detection can provide.
 
-Drive every selection through the shared `Prompt` helpers — never hand-roll a
-bespoke question. Multi-selects use `Prompt.MultiChoose` (item numbers, the
-keyword `all`, or an option's name); menus with reserved picks use
-`Prompt.MultiChooseKeyword`. Show detected targets to pick from — **never ask
-the operator to invent a name**. Yes/no questions go through `Prompt.Confirm`,
-which **forces an explicit answer** (an empty line re-prompts; it does not take
-a default). Monitor state and interval come from the shared
-`Prompt.AskMonitoring` and are injected into every generated entry.
-
-Reuse one consistent **all / none / default** vocabulary: `all` selects
-everything; `none` opts out (monitor-only, `notify: [none]`); `default` inherits
-the global notify. `none` and `default` are **always selectable, even with zero
-notifiers configured** — the wizard never blocks on the notifier question. When
-`default` has nothing to inherit (no global notify) it **degrades to
-monitor-only** with a one-line note; it must never re-ask or abort (see
-`chooseNotifiers` in `internal/assist/notify.go`). The final step previews what
-will be written, confirms, and offers to delete managed files whose target is no
-longer detected. Keep `docs/wizards.md`, `docs/configuration.md` and this
-section in step when any of this changes.
+Preserve the shared `all` / `none` / `default` notifier vocabulary. `none` and
+`default` remain selectable with no configured notifier, and an empty inherited
+default degrades to monitor-only. Preview and confirm generated files, and offer
+cleanup only for targets proven absent by detection.
 
 ## Catalog: instanced systemd services
 
-When a catalog service targets a systemd **instance** unit (`unit@instance`), do
-not invent a hand-typed `${id}` variable the operator must remember to set —
-derive the instance from code, reusing existing machinery:
-
-- **Single instance keyed by host** (e.g. `ceph-mon@node1`, `ceph-mds@node1`):
-  use the built-in `${hostname}` (the short hostname) — `service:
-  "ceph-mon@${hostname}"`. It resolves with zero per-service config; an explicit
-  `hostname` variable or `SERMO_HOSTNAME` overrides it. `${hostname}` is the short
-  form, distinct from `${host}` (the bind-address fallback) — see `docs/services.md`.
-- **Numeric multi-instance** (e.g. one OSD per device, `ceph-osd@0..N`): make the
-  app a `%n` template (`name: ceph-osd%n`) with `versions: { from:
-  "/var/lib/ceph/osd/ceph-${n}" }`, then make the catalog service a matching `%n` template
-  that links `apps: ["ceph-osd${n}"]`. `internal/config/versions.go` globs the
-  app discovery path on the host and materializes one concrete catalog service per
-  discovered id, with `${n}` baked into `service: "ceph-osd@${n}"`. Honest
-  limitation: this auto-discovers catalog service *definitions*; the operator still
-  enables one service per instance (Sermo monitors services, not catalog
-  services).
-
-Keep `docs/services.md` (built-in variable table) in step when adding a built-in.
+Reuse version/instance materialization instead of asking operators for ad-hoc
+variables. Use `${hostname}` for a host-keyed instance and `%n` / `${n}` for
+discovered numeric instances. Catalog templates materialize definitions; the
+operator still enables concrete services. Keep the built-in variable and
+template rules in [docs/services.md](docs/services.md) current.
 
 ## Go quality gates
 
-Two rules:
+Write idiomatic Go that passes the configured gate without new suppressions.
+`make check` is the finish command, `make lint` is the focused analyzer command,
+and `.golangci.yml` is the complete linter and exclusion source of truth. Do not
+copy its roll-call or current thresholds into prose.
 
-- **Every Go file must be `gofmt`- and `goimports`-clean after any modification.**
-  A Claude Code `PostToolUse` hook (`.claude/settings.json`) runs `gofmt -w` on
-  every edited `.go` file; editing outside Claude Code, run `make fmt` yourself
-  (editor format-on-save, or `gofmt` + `goimports` on `internal` and `cmd`).
-- **Finish with `make check`**, the gate in [AI / agent workflow](#ai--agent-workflow--standard-git-commits)
-  step 4. It already runs `validate` then tests and cover-gate. Do not prepend
-  `go build ./...` or a second `make lint` / `go test`. The Makefile finds
-  Go-installed tools in `~/go/bin` and gives analyzer caches a writable fallback
-  for non-interactive agents.
+Use `.custom-gcl.yml` for the custom golangci-lint build and `.semgrep/` for
+repository call-boundary rules. A Semgrep rule ships with positive and negative
+fixtures. A necessary `//nolint` names the exact analyzer and explains the
+design reason; never weaken a gate or broaden an exclusion to land a change.
 
-YAML toolchain (install once):
-
-```sh
-go install github.com/google/yamlfmt/cmd/yamlfmt@v0.21.0
-pip install yamllint            # or pipx install yamllint
-make yaml-fmt                   # format tracked YAML (catalog, examples, docs, …)
-make yaml-validate              # yamlfmt -lint + yamllint (also runs via make validate)
-```
-
-Markdown toolchain (install once):
-
-```sh
-npm ci
-make markdown-check             # tracked Markdown hygiene (also runs via make validate)
-```
-
-Catalog and example YAML use **indented block sequences** (`proxy_binary:` then `  - path`
-on the next line), configured in `.yamlfmt` with `indentless_arrays: false`.
-`yamllint` mirrors that with `indent-sequences: consistent`. Inline flow maps use spaced
-braces (`{ type: binary, path: "${binary}" }`); `make yaml-fmt` runs `yamlfmt` then
-`scripts/normalize_yaml_flow.py` because yamlfmt drops those interior spaces. Inline
-comments are padded with two spaces (`pad_line_comments: 2` in `.yamlfmt`).
-
-Tool notes:
-
-- **`make lint`** is the canonical Go analyzer entrypoint. Do not hand-prefix
-  `PATH` or call the analyzer binaries one by one unless you are debugging the
-  lint target itself. `govulncheck` may need network access to refresh the
-  vulnerability DB; a network/DNS failure there is an environment issue, not a
-  code finding. Lint also runs **NilAway** (`go.uber.org/nilaway`) over the whole
-  tree, production files only; it is at zero nil-flow findings and must stay
-  there. NilAway is a golangci-lint *module plugin*, not a stock linter, so the
-  gate runs `bin/custom-gcl` — a bespoke binary built from `.custom-gcl.yml`.
-  Plain `golangci-lint run` aborts with `plugin "nilaway" not found` against our
-  config; that is expected, use `make lint`. `make custom-gcl` rebuilds the
-  binary, and `make lint` does it automatically when `.custom-gcl.yml` changes.
-- **`go fix -diff ./...`** runs as part of `make lint`: the Go 1.26 modernizers
-  must propose no changes. If it fails, run `go fix ./...` and review the
-  rewrite instead of silencing it.
-- **`revive`** now runs *inside* golangci-lint, configured under
-  `linters.settings.revive.rules` — there is no `revive.toml` and no standalone
-  step. It used to be one, invoked without `-set_exit_status`, which meant it
-  printed findings and never failed anything; do not reintroduce that shape.
-  The rule set is revive's default plus `unused-parameter`, `unused-receiver`,
-  `use-errors-new`, `get-return`, `struct-tag`, `import-shadowing`,
-  `modifies-value-receiver`, `package-naming` (split out of `var-naming` in
-  revive v1.15), the concurrency rules `atomic`, `waitgroup-by-value`,
-  `datarace`, `range-val-address`, `range-val-in-closure`, and a defect/redundancy
-  set (`unconditional-recursion`, `identical-branches`, `constant-logical-expr`,
-  `bool-literal-in-expr`, `time-equal`, `string-of-int`, `defer`,
-  `duplicated-imports`, `redundant-import-alias`, `useless-break`,
-  `unnecessary-stmt`, `unnecessary-format`, `optimize-operands-order`,
-  `early-return`, `use-any`, `comment-spacings`). Test files are out of scope via
-  the shared `_test\.go$` exclusion. Rename unused params to `_`; omit unused
-  receiver names (`func (*T) M`, not `func (_ *T) M` — staticcheck ST1006).
-  Avoid locals that shadow import names. Document new exported symbols —
-  `exported` is on.
-- **`golangci-lint`** uses `.golangci.yml` (**v2 format** — the binary must be
-  v2). That file is authoritative: **79 linters**, grouped here by what they ask
-  of you. Consult it when in doubt — do not assume a linter is off because this
-  summary is shorter than the config.
-
-  - *Budgets that shape how you write code:*
-    `dupl`, `gocognit`, `goconst`, `gocyclo`, `maintidx`, `mnd`, `perfsprint`,
-    `prealloc`, `unparam`
-  - *Correctness and safety:*
-    `asasalint`, `bidichk`, `bodyclose`, `canonicalheader`, `contextcheck`,
-    `copyloopvar`, `durationcheck`, `errcheck`, `errchkjson`, `errorlint`,
-    `exhaustive`, `fatcontext`, `forbidigo`, `forcetypeassert`, `gochecksumtype`,
-    `gosec`, `govet`, `ineffassign`, `makezero`, `nilaway`, `nilerr`,
-    `nilnesserr`, `nilnil`, `noctx`, `nosprintfhostport`, `reassign`,
-    `recvcheck`, `rowserrcheck`, `sqlclosecheck`, `unqueryvet`, `wastedassign`
-  - *API shape and architecture:*
-    `asciicheck`, `depguard`, `errname`, `gochecknoinits`, `godoclint`,
-    `gomoddirectives`, `gomodguard_v2`, `iface`, `inamedparam`, `interfacebloat`, `iotamixing`,
-    `ireturn`, `musttag`, `predeclared`, `tagliatelle`, `wrapcheck`
-  - *Idiom and modernization:*
-    `dogsled`, `dupword`, `exptostd`, `gocheckcompilerdirectives`, `gocritic`,
-    `godot`, `godox`, `goprintffuncname`, `intrange`, `loggercheck`, `mirror`,
-    `misspell`, `modernize`, `nakedret`, `nolintlint`, `revive`, `sloglint`,
-    `unconvert`, `usestdlibvars`, `whitespace`
-  - *Tests:*
-    `testableexamples`, `thelper`, `tparallel`, `usetesting`
-
-  Project-specific caveats, all encoded in `.golangci.yml`: `dupl` runs at a
-  threshold of 60 tokens rather than the default 150, and is off in
-  `*_test.go`; production linters are off in `*_test.go` so fixtures can stay
-  focused, while `nolintlint`, `testableexamples`, `thelper`, `tparallel` and
-  `usetesting` still run there; `gocognit`/`gocyclo` use a budget of 30 and
-  `maintidx` a floor of 20; `gocritic` runs every check but `hugeParam` and
-  `unnamedResult`, and `govet` every analyzer but `fieldalignment` and
-  `shadow`; `gomodguard_v2` permits only reviewed direct production
-  dependencies; `nolintlint` requires specific, explained and still-needed
-  suppressions; `loggercheck` requires structured slog string keys and rejects
-  printf-like logging; `dupword` and `exhaustive` are off in `*_test.go` (and a
-  `default:` arm counts as exhaustive);
-  `forbidigo` bans `fmt.Print*`, stdlib `log.(Print|Fatal|Panic)*`, `os.Exit`,
-  `time.Sleep` and `http.DefaultClient` in production packages (off in tests;
-  `cmd/` and `internal/web/build` keep documented `//nolint:forbidigo` at
-  `os.Exit`); the dashboard `Backend` interface in `internal/web/server.go`
-  carries `//nolint:interfacebloat`; `depguard` enforces the import boundaries
-  (checks/conn/rules/config must not import `operation`; production `rules/`
-  must not import `execx`); zone policies for `wrapcheck` and `ireturn` (both
-  stay on for core, off only where design forces noise):
-
-  - **`wrapcheck` ON:** operation, rules, config, state, app, cli, process, web,
-    locks, managers, notify, assist, cmd, and probes with contextual errors.
-    **OFF:** only the `internal/checks/*` sources that still turn raw transport
-    failures into Result/check messages; expand each with contextual `%w`
-    before enabling it. `internal/conn` is fully gated — it carries no
-    wrapcheck exclusion. There, a probe wraps
-    through `probeErr(proto, step, err)` (`dial.go`) — one wording,
-    `"<proto> <step>: <cause>"`, with `proto` the `ProtocolName*` constant and
-    `step` the exchange in the operator's terms. Do **not** wrap the dial
-    helpers (`dialDeadline`, `dialTCPDeadline`, …): they already report
-    `dial <network> <addr>`, so a second "dial" only stutters, and being
-    same-package they never trip wrapcheck. Helpers that return something other
-    than `Result` (frame codecs, `io.Reader` adapters) are not probes: give them
-    their own contextual `%w`, and never wrap an `io.Reader.Read`, which must
-    keep returning `io.EOF` unwrapped.
-  - **`ireturn` ON:** operation, rules, config, state, the conn registry, web,
-    CLI and the rest of the tree. **OFF:** checks/notify builders, app
-    watch/hook/runtime seams, the assist registry and manager factories. Other
-    intentional interface boundaries use a local, explained suppression.
-
-  `noctx` is off in `*_test.go` and on in `internal/conn/`; `goconst` wants four
-  occurrences before a shared constant is due.
-
-  `govet` and `gocritic` run with **every** analyzer/check enabled, minus a
-  short measured exclusion list: `fieldalignment` (struct-layout ordering) and
-  `shadow` (flags the idiomatic `if err := f(); err != nil` redeclaration) for
-  govet; `hugeParam` and `unnamedResult` for gocritic, both of which fight the
-  value semantics and named results this codebase uses on purpose. Everything
-  else — `nilness`, `unusedwrite`, `sortslice`, `waitgroup`, `atomicalign`,
-  `deepequalerrors`, `reflectvaluecompare` and the whole gocritic diagnostic
-  set — is gated at zero findings. Do not narrow those lists to avoid a fix.
-  `govet` must stay in `linters.enable`: with `default: none`, its settings block
-  alone runs nothing, and the linter was silently inert until that was fixed.
-
-  Also gated at zero, and cheap to keep there: `godot` (declaration comments end
-  in a period), `godox` (no TODO/FIXME left in code — pending work belongs in
-  `TODO.md`) and `nakedret`. Like every other quality linter, they are scoped to
-  production by the `_test\.go$` exclusion rule; add new ones there too.
-
-  **NilAway** rollout is complete: it is configured under
-  `linters.settings.custom.nilaway` in `.golangci.yml` and runs over
-  `GO_PACKAGES`, so every production package is gated at zero potential nil
-  panics. Test files are excluded by NilAway's own `exclude-test-files` flag —
-  they carry ~57 findings (fakes with nil fields, fixtures indexed without
-  guards) that say nothing about shipped code. Do not swap that flag for a
-  `_test\.go$` exclusion rule, and do not narrow `include-pkgs` to land a
-  change: fix the flow and re-check with `make lint`. There is no separate
-  NilAway target or package list — one config, one run. Prefer making nil
-  unrepresentable (value-typed map buckets, `make`+`maps.Copy` instead of
-  `maps.Clone` before a write, `httpx.Do` instead of `client.Do`) over adding a
-  guard that can never fire. `deadcode -test` is part of `make lint` and must
-  stay at zero.
-
-  Production `database/sql` in `internal/state` uses `*Context` methods with
-  `sqlCtx()` (ctx from `OpenContext` / `context.Background()` via `Open`).
-  `contextcheck` is off in four store-touching CLI files (`monitor`, `panic`,
-  `sla`, `cli_monitor_state`) because the linter does not trace embedded store
-  context. It is **on** in `internal/state/` itself: that exclusion suppressed
-  nothing and was removed. Every suppression here is measured — before widening
-  one, check `warn-unused` output, which names exclusions that skip zero issues.
-
-  **Write new code that already passes. A `//nolint` in new code is a design
-  smell, not a formality.** When a gate fires on something you just wrote, the
-  first move is to change the code so the finding does not arise; reach for a
-  suppression only once you can say why the design cannot avoid it. The
-  difference shows up in the comment: "this truncation *is* the wire encoding"
-  earns its keep, "the linter is being fussy" does not.
-
-  **A new `.semgrep/rules/` rule ships with its fixture, or it does not ship.**
-  `make semgrep` runs `semgrep --test` before the scan: `.semgrep/tests/sermo.go`
-  marks the line each rule must flag with `// ruleid: <id>` and a nearby line it
-  must *not* flag with `// ok: <id>`, and the target exits non-zero when a rule
-  stops agreeing with either. Write both annotations. A rule with no fixture
-  cannot be distinguished from a rule that matches nothing, and this repository
-  has shipped that failure twice already — `govet` with a settings block but no
-  `enable`, and `revive` invoked without `-set_exit_status`. The `ok:` line is
-  the half people skip and the half that catches over-broad patterns.
-
-  Most findings on new code have a structural answer. `ireturn`: return a
-  concrete type, or write through a pointer the caller owns instead of returning
-  a bare interface — see `applyDependencyOptions` in `internal/control/target.go`,
-  which sets `Target.Manager` rather than returning a `servicemgr.Manager`.
-  `wrapcheck`: wrap with `%w` at the boundary that owns the context.
-  `nilaway`: make nil unrepresentable (value-typed map buckets, `make`+`maps.Copy`
-  rather than `maps.Clone` before a write). `mnd`: name the number, or drop the
-  capacity hint that made you want to. `dupl`: one parameterized helper instead
-  of two near-copies. Inherited suppressions are a separate matter — this rule is
-  about code added in the same change.
-
-  **gosec has no config-level exceptions left.** Every by-design case is
-  suppressed at the call site with `//nolint:gosec` plus a justifying comment,
-  so `nolintlint` (`allow-unused: false`, `require-explanation`,
-  `require-specific`) fails the build when one stops being necessary: `G204`
-  (operator-configured commands via `execx`), `G304` (paths under `/proc`,
-  `paths.runtime`, fstab, config dirs), intentional `0644` writes, bounded
-  `args[i]` reads, shutdown-context `G118`, and `G115` in the fixed-width wire
-  encoders `fpm`, `kafka`, `mqtt`, `nfs`, `openvpn`, `rdp`, `smb`, `snmp`
-  — each of those names the field width that makes the truncation the encoding.
-  Never use gosec's own `#nosec`: `nolintlint` cannot see it, so it would be an
-  unvalidated suppression. Always name the rule ID in the comment (`// G402: …`)
-  — `nolintlint` only enforces that *some* explanation exists, so the ID is what
-  makes a suppression auditable. The three `G402` (transport verification off so
-  a cert probe can inspect and report a broken chain; `verifyCertChain` then
-  validates it) and the two SHA-1 ones (`G401`/`G505`, mandated by RFC 6455 for
-  `Sec-WebSocket-Accept`) are the security-sensitive ones — review them first. `forbidigo` follows the same rule — the entry-point
-  `os.Exit` calls and the engine's injectable `Sleep` seam carry
-  `//nolint:forbidigo`, and no path is exempt.
-
-  `errcheck` excludes `fmt.Fprint`/`Fprintf`/`Fprintln`: CLI and daemon operator
-  output must not fail the command path when stdout/stderr is a broken pipe.
-  Other ignored returns (notably `Close` on defers) use explicit `_ = …Close()`.
-- **`make docs-sync`** checks the documentation against the code it describes:
-  every source path a document cites exists, every Go identifier a skill names
-  exists, AGENTS.md names every linter `.golangci.yml` enables, every
-  operator-writable config key appears in `docs/`, the EN/ES pairs agree on
-  headings and on every number, and every paired document exists in both
-  languages. Each check was added after that exact drift
-  reached the repository; no other tool in the gate can see it. Add a check
-  there when you find a new class of doc/code drift.
-- **`make npm-audit`** is the JavaScript counterpart of `govulncheck`: it fails
-  the gate on a `high` or `critical` advisory anywhere in the npm tree,
-  dev dependencies included — they run in CI and on developer machines, so a
-  build-time tool is still an attack surface. Resolve findings by updating the
-  lockfile (`npm audit fix --package-lock-only`) rather than lowering the level.
-- **`make scripts-lint`** runs `shellcheck` on `scripts/*.sh` and
-  `scripts/remote-deploy/*.sh`, then `ruff check` on the tracked Python helpers
-  under `scripts/`. It is part of `validate`/`check`.
-- **`make deadcode`** reruns the same blocking `deadcode -test` step already
-  inside `make lint` (stay at zero). Use it for a focused rerun; do not treat it
-  as a weaker advisory gate, and do not run it again after `make check`.
-  Reflection and build tags still cause false positives — triage those by hand
-  before deleting anything.
-- **`make cover-gate`** (part of `make check`) enforces a no-regression
-  statement-coverage floor on safety packages via `scripts/cover_gate.py`:
-  `operation` ≥ 88%, `process` ≥ 75%, `locks` ≥ 75%, `rules` ≥ 80%,
-  `config` ≥ 85%. Floors sit a few points under the measured baseline. Raise
-  them when a package's coverage climbs and stays there; never lower them to
-  land a change that deletes tests.
-- **`make fuzz`** runs bounded fuzz targets for untrusted config and safety
-  parsers (`FuzzLoadGlobal`, `FuzzLoadDocument`, `FuzzParseSelectors`,
-  `FuzzParseStopPolicy`, `FuzzParseSignal`, `FuzzParseKillSignal`,
-  `FuzzParseRules`). CI runs them on every push and pull request with a short
-  `FUZZ_TIME`, in parallel with `build & check` so the wall clock does not
-  move; the weekly cron and manual runs use a longer one.
+The `Makefile` owns YAML, Markdown, script, dependency, web, vulnerability and
+coverage phases. Fix findings at their source; do not replace the gate with a
+handwritten subset.
 
 ## Testing
 
-Tests are part of the change, not an afterthought (see the small-change
-checklist). Match the suite's existing style instead of inventing one.
+Match the owning package's existing test style. Prefer table-driven subtests,
+existing fakes, injectable seams and temporary directories. Tests must not
+operate real services, signal host processes or depend on ambient `/etc`,
+`/proc`, network or init state.
 
-- **`make test` / `make race` / `make cover` shuffle by default**
-  (`GO_TEST_FLAGS=-shuffle=on`) so order-dependent tests fail locally and in
-  CI. Disable for a stable order when debugging: `make test GO_TEST_FLAGS=`.
-- **Inject the seam; never touch the host from logic under test.** Every probe
-  that reads the system takes an injectable function or interface, so tests run
-  without real `/proc`, sockets or services: the `*SamplerFunc` fields and the
-  `Deps` samplers on checks (`FdsSamplerFunc`, `MemorySamplerFunc`, …), the
-  `metrics.Reader` interface, `execx.Runner`, `process.Signaler`, and the web
-  `Backend` interface. Add a seam in the same shape when you add a probe.
-- **Reuse the existing fakes** — `fakeReader` (metrics), `fakeRunner`/
-  `scriptRunner` (servicemgr), `fakeFds`/`fakeConntrack` (checks), `fakeBackend`
-  (web). Copy their shape; do not add a mocking framework.
-- **Table-driven subtests.** Express variants as a slice of cases driven by
-  `t.Run(tc.name, …)`, the dominant pattern across the suite.
-- **One function per case is boilerplate — fold a family into one table.** When
-  several test functions differ only in their inputs (one `Test<X>Registered`
-  per probe asserting port/user, one `Test<X>TimeoutMessage` per sampler), they
-  belong in a single table-driven test with one row per case: same coverage,
-  less noise, and one obvious place to add the next case. Extend the existing
-  consolidated tests — `TestProbeMetadata` (conn), `TestInterfaceBindingApplied`
-  (conn), `TestSampleTimeouts` (checks) — instead of adding sibling functions.
-- **Pin every input that changes the result, or it fails on a different host.**
-  A test that reads ambient state passes on your box and breaks on CI. Pin the
-  OS with `detectedOS = "gentoo"` (or `SERMO_OS`) *before* `config.Load` when
-  assertions depend on `os:` selectors; inject `LoadConfig` (or pass `--config`)
-  so a command never reads the default `/etc/sermo/sermo.yml`; and when logic
-  touches `/proc`/loopback, install a fake prober (see the lock tests'
-  `fakeAliveProber`) rather than `t.Skip` — a skipped test is not a passing test.
-- **Before deleting a "redundant" test, prove the stricter assertion survives.**
-  A narrow test can pin a distinction a table case hides: a `slices.Equal(got,
-  nil)` row treats `nil` and `[]string{}` as equal, so a dedicated `got != nil`
-  check is *not* redundant. Confirm the precise behaviour is still asserted
-  elsewhere before removing the test.
-- **Split pure logic out of I/O so it is testable directly** (e.g.
-  `parseMeminfoKB`, `parseOSReleasePrettyName`, `levelCountResult`). This serves
-  the reuse rule too.
-- **Prompt-driven flows** (`internal/assist`) abort on truncated input via
-  `assist.Recover(&err)`; drive them with a scripted `strings.NewReader` and
-  assert the result, as the wizard tests do.
-- Short magic durations are fine in tests when they bound the test itself, not
-  production behavior (see Timeout discipline).
+Cover the success, invalid/unsafe input, blocked and timeout/error paths relevant
+to the change. Preserve distinctions such as nil versus empty values when they
+are part of the contract. Use targeted tests during development and the workflow
+finish gate before reporting completion.
 
 ## Security and safety invariants
 
-1. Never kill processes by name only.
-2. Never use `SIGKILL` unless the catalog service or service definition explicitly allows it.
-3. A `SIGKILL` policy must include a restrictive `kill_only_if` clause.
-4. Process matching must validate at least `exe` and `user`; prefer `pidfile` or `cgroup` as additional evidence. `exe` is the resolved `/proc/<pid>/exe` path matched exactly (never argv[0]/cmdline, never a substring); an unresolvable `exe` never matches. See `docs/safety.md` (process identity).
-5. Never start, stop, restart, reload or resume a service when a matching guard
-   blocks the action.
-6. Never start, restart, reload or resume when required preflight checks fail.
-7. Never perform service actions without a timeout.
-8. Never enter a restart loop. Automatic remediation must honor the resolved
-   per-service `policy` block; `policy.cooldown` is mandatory and positive after
-   config resolution, with optional max_actions/backoff; see `docs/rules.md`
-   (remediation policy). Cooldown is decided by the daemon's rule evaluation
-   before the shared engine runs. Manual operator commands are exempt from
-   cooldown but still subject to locks, guards and preflight. The native mutating watch actions
-   that grow or correct the host are policy-gated the same way: `then.makestep` (a forced clock
-   step) requires a positive `policy.cooldown` at validation and again at build.
-9. Always log whether an action was executed or blocked, and why. Today that
-   means daemon events (`action`, `blocked`, `dry-run`, `suppressed`, …) via the
-   in-process event log (web UI / `sermoctl activity`) and explicit CLI status
-   output for manual operations. Append-only `access.log` / `event.log` export
-   is future work ([TODO.md](TODO.md)); do not bypass the existing event/CLI
-   paths while adding those sinks.
-10. Database services must default to conservative stop policies.
-11. Auto-remediation must use the same safe operation path as manual `sermoctl` commands.
-12. Only residuals that exactly match `kill_only_if` are ever signaled; a residual
-    that does not match (or has an unresolvable exe) is reported, never killed. Any
-    remaining residual makes the result `orphan_processes`, and a failed stop must
-    not automatically start the service unless policy explicitly allows it.
-13. Remediation must trigger on service-scoped metrics only. A system-wide metric
-    (total memory, total CPU, load) must never drive start, stop, restart, reload
-    or resume for an individual service; it may only drive an alert.
-14. Rule conditions are read-only predicates, evaluated at most once per cycle. A
-    condition must never mutate system state; mutation belongs to actions.
-15. Locks are acquired atomically (O_CREAT|O_EXCL) and bounded by a TTL. A lock is
-    honored only while active; an expired lock, or one whose owner PID is dead
-    (checked via owner_start_ticks to survive PID reuse), is stale and must be
-    reclaimed through a logged path, never silently overwritten. Named runtime
-    lock files use `<service>[.<name>].lock` under `<paths.runtime>/locks`
-    (default `/run/sermo/locks`), managed by the `sermoctl lock` commands
-    (wrap / acquire / release). The internal operation lock uses the
-    separate path `<paths.runtime>/ops/<service>.lock` so it cannot collide with
-    a user lock named `op`. `paths.locks` and `/etc/sermo/locks.d` have no
-    semantics. See `docs/safety.md` (locks).
-16. The scheduler runs one independent worker per service; a long operation
-    (a multi-minute restart) on one service must never block monitoring of
-    another. Never serialize all services through a single loop. Each service
-    runs at most one operation at a time (the per-service operation lock), and
-    restart storms are prevented by the mandatory per-service remediation
-    `policy` (cooldown/backoff), not by a global operation cap. Concurrent
-    check execution across all services is bounded by
-    `engine.max_parallel_checks` (a global pool). See `docs/safety.md`
-    (scheduler and concurrency).
-17. A stray process — a control-group member no selector claims that no longer
-    hangs off the unit's principal process — is never signaled without the
-    service's own `reap.kill_only_if`, and then only by the manual
-    `sermoctl reap --apply`; no rule action can reap. The one exception is
-    sermod's startup hygiene for its own cgroup (`engine.reap_own_strays`):
-    SIGTERM only, its own systemd service unit only, one event per process
-    signalled. See `docs/safety.md` (stray processes).
+The detailed policy and operator behavior live in
+[docs/safety.md](docs/safety.md). Every change must preserve these hard
+boundaries:
+
+- service actions use `internal/operation`, an explicit timeout, operation
+  locks, guards and required preflight;
+- automatic remediation uses the same path, requires a positive resolved
+  cooldown and never triggers from a system-scoped metric;
+- process authorization never uses name, basename, argv or cmdline alone;
+  signalable processes require exact resolved `exe` and `user` identity;
+- `SIGKILL` requires explicit `force_kill` plus restrictive `kill_only_if`;
+- unmatched residuals are reported as orphans and block a following start;
+- conditions are read-only and mutation belongs to actions;
+- named locks and operation locks remain separate, atomically acquired,
+  TTL-bounded and auditable when reclaimed;
+- each executed or blocked action records one auditable outcome;
+- one slow service must not block monitoring of another, while shared check
+  concurrency remains bounded.
+
+Database catalog profiles stay conservative. No config option may disable a
+hard invariant.
 
 ## graphify
 
-This project can keep a local generated knowledge graph at `graphify-out/` with
-god nodes, community structure, and cross-file relationships. The complete
-directory is gitignored: never force-add its generated files to a functional
-commit.
+`graphify-out/` is a local, gitignored knowledge graph. For codebase questions,
+query an existing `graphify-out/graph.json` before broad source traversal. Use
+`graphify query`, `graphify path` or `graphify explain` as appropriate and verify
+important findings in the owning files.
 
-When the user types `/graphify`, invoke the `skill` tool with `skill: "graphify"` before doing anything else.
-
-Rules:
-- For codebase questions, first run `graphify query "<question>"` when
-  `graphify-out/graph.json` exists. Use `graphify path "<A>" "<B>"` for
-  relationships and `graphify explain "<concept>"` for focused concepts. These
-  return a scoped subgraph, usually much smaller than raw grep or a full report.
-- If `graphify-out/graph.json` is absent or stale for the question, run
-  `graphify update .` before querying. Generated graph changes remain local and
-  are not part of repository status or commit evidence.
-- If `graphify-out/wiki/index.md` exists, use it for broad navigation instead of
-  raw source browsing.
-- `graphify-out/GRAPH_REPORT.md` and `graphify-out/graph.html` are local exports.
-  Do not assume they are present in the checkout; run
-  `graphify update .` when a human-readable report is needed, or stay with
-  query/path/explain for agent work.
-- After modifying code, run `graphify update .` when subsequent work needs a
-  current graph (AST-only, no API cost). Do not stage the output.
+Update or rebuild the graph only when it is absent or stale for the task. Never
+stage generated graph output, and do not run an update after a change unless
+subsequent work needs a current graph.
