@@ -11,6 +11,8 @@ import (
 	"testing"
 	"time"
 
+	sqlite3 "modernc.org/sqlite/lib"
+
 	"sermo/internal/config"
 	"sermo/internal/execx"
 	"sermo/internal/operation"
@@ -773,16 +775,25 @@ type flakyRecorder struct {
 	failures int
 	calls    int
 	records  []state.EventRecord
+	err      error
 }
 
 func (f *flakyRecorder) RecordEvent(e state.EventRecord) (int64, error) {
 	f.calls++
 	if f.calls <= f.failures {
-		return 0, errors.New("database is locked (5) (SQLITE_BUSY)")
+		if f.err != nil {
+			return 0, f.err
+		}
+		return 0, sqliteTestError(sqlite3.SQLITE_BUSY)
 	}
 	f.records = append(f.records, e)
 	return int64(f.calls), nil
 }
+
+type sqliteTestError int
+
+func (e sqliteTestError) Error() string { return "sqlite test error" }
+func (e sqliteTestError) Code() int     { return int(e) }
 
 // TestRecordManualActionEventRetriesThroughContention covers the loaded-host
 // case where sermod holds the SQLite writer lock longer than one busy-timeout
@@ -809,5 +820,16 @@ func TestRecordManualActionEventStopsOnCancelledContext(t *testing.T) {
 	}
 	if rec.calls != 1 {
 		t.Fatalf("calls = %d, want exactly one attempt under a cancelled context", rec.calls)
+	}
+}
+
+func TestRecordManualActionEventDoesNotRetryPermanentFailure(t *testing.T) {
+	rec := &flakyRecorder{failures: 1000, err: sqliteTestError(sqlite3.SQLITE_READONLY)}
+	err := recordManualActionEvent(context.Background(), rec, state.EventRecord{Service: "acpid", Action: "stop"})
+	if err == nil {
+		t.Fatal("recordManualActionEvent() = nil, want permanent error")
+	}
+	if rec.calls != 1 {
+		t.Fatalf("calls = %d, want exactly one attempt for a permanent error", rec.calls)
 	}
 }

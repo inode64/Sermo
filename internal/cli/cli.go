@@ -955,6 +955,9 @@ func recordManualActionEvent(ctx context.Context, store manualActionRecorder, re
 		if err == nil {
 			return nil
 		}
+		if !state.IsSQLiteContention(err) {
+			return fmt.Errorf("record manual action event: %w", err)
+		}
 		if ctx.Err() != nil || time.Now().After(deadline) {
 			return fmt.Errorf("record manual action event after retries: %w", err)
 		}
