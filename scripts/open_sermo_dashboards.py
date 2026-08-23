@@ -89,6 +89,9 @@ def chrome_command(chrome: str, profile: Path, extension: Path, urls: list[str])
     """Build a Chrome command whose arguments never contain the password."""
     return [
         chrome,
+        f"--user-data-dir={profile}",
+        f"--disable-extensions-except={extension}",
+        f"--load-extension={extension}",
         "--new-window",
         *urls,
     ]

@@ -49,5 +49,8 @@ class DashboardBrowserTest(unittest.TestCase):
             ["http://172.31.16.1:9797/"],
         )
 
+        self.assertIn("--user-data-dir=test-profile", command)
+        self.assertIn("--disable-extensions-except=test-extension", command)
+        self.assertIn("--load-extension=test-extension", command)
         self.assertNotIn("test-password", command)
         self.assertNotIn("@", command[-1])
