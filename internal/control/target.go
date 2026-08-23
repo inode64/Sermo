@@ -16,7 +16,7 @@ import (
 
 const (
 	controlKeyType     = config.EntryKeyType
-	controlTypeSummary = virt.ControlType + ", " + dockerctl.ControlType
+	controlTypeSummary = virt.ControlType + ", " + virt.NetworkControlType + ", " + dockerctl.ControlType
 )
 
 // Target is the manager/unit pair the operation path should use for a service.
@@ -71,6 +71,16 @@ func resolveControlledTarget(ctx context.Context, typ string, tree map[string]an
 			Unit:    spec.Domain,
 			Backend: servicemgr.BackendLibvirt,
 			Manager: virt.NewManager(spec),
+		}, nil
+	case virt.NetworkControlType:
+		spec, _, err := virt.NetworkSpecFromTree(tree)
+		if err != nil {
+			return Target{}, fmt.Errorf("resolve libvirt network control: %w", err)
+		}
+		return Target{
+			Unit:    spec.Network,
+			Backend: servicemgr.BackendLibvirtNetwork,
+			Manager: virt.NewNetworkManager(spec),
 		}, nil
 	case dockerctl.ControlType:
 		spec, _, err := dockerctl.SpecFromTree(tree)
