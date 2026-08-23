@@ -969,7 +969,7 @@ class OpenVPNClientGateTest(unittest.TestCase):
         temp = tempfile.TemporaryDirectory()
         self.addCleanup(temp.cleanup)
         stage = Path(temp.name)
-        (stage / "openvpn_instances").write_text("tun1\tclient\t-\n", encoding="utf-8")
+        (stage / "openvpn_instances").write_text("client/tun1\tclient\t-\n", encoding="utf-8")
         disabled, checks = generator.openvpn_watch_overrides(
             stage,
             "openvpn-client-tun1",
@@ -978,6 +978,15 @@ class OpenVPNClientGateTest(unittest.TestCase):
         self.assertEqual(disabled, {"port"})
         item = next(c for c in checks if c["watch"] == "port")
         self.assertFalse(item["active"])
+
+    def test_collectors_include_systemd_instance_directories(self):
+        root = Path(__file__).resolve().parent
+        for script in ("remote_collect_inventory.sh", "remote_stage.sh"):
+            body = (root / script).read_text(encoding="utf-8")
+            self.assertIn("/etc/openvpn/client/*.conf", body, script)
+            self.assertIn("/etc/openvpn/server/*.conf", body, script)
+            self.assertIn('inst="client/${inst}"', body, script)
+            self.assertIn('inst="server/${inst}"', body, script)
 
     def test_server_keeps_the_probe(self):
         disabled, checks = self.overrides("tun1\tserver\t1194\n")

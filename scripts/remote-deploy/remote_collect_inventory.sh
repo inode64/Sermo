@@ -342,18 +342,23 @@ ip -o -6 route show >"${out}/ip_route6" 2>/dev/null || true
 	fi
 } >"${out}/service_endpoint_hints" 2>/dev/null || true
 
-# One line per OpenVPN instance config: <name> <client|server> <port-or-dash>.
+# One line per OpenVPN instance config: <relative-name> <client|server> <port-or-dash>.
 # generate_install_config.py uses this to drop the local endpoint probe on
 # client instances, which dial out and never listen locally.
 {
-	for conf in /etc/openvpn/*.conf; do
+	for conf in /etc/openvpn/*.conf /etc/openvpn/client/*.conf /etc/openvpn/server/*.conf; do
 		[ -f "$conf" ] || continue
 		inst="$(basename "$conf" .conf)"
-		mode="server"
-		if grep -Eq '^[[:space:]]*client([[:space:]]|$)' "$conf"; then
-			mode="client"
-		fi
+		case "$conf" in
+			/etc/openvpn/client/*) inst="client/${inst}"; mode="client" ;;
+			/etc/openvpn/server/*) inst="server/${inst}"; mode="server" ;;
+			*)
+				mode="server"
+				grep -Eq '^[[:space:]]*client([[:space:]]|$)' "$conf" && mode="client"
+				;;
+		esac
 		port="$(grep -E '^[[:space:]]*l?port[[:space:]]+[0-9]+' "$conf" | head -n1 | grep -oE '[0-9]+' | head -n1)"
+		grep -Eq '^[[:space:]]*nobind([[:space:]]|$)' "$conf" && port=""
 		printf '%s\t%s\t%s\n' "$inst" "$mode" "${port:--}"
 	done
 } >"${out}/openvpn_instances" 2>/dev/null || true

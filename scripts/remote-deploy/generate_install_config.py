@@ -1766,7 +1766,14 @@ def openvpn_watch_overrides(stage: Path, name: str, doc: dict) -> tuple[set[str]
         return disabled, report
     instances = parse_openvpn_instances(stage)
     if catalog_name == OPENVPN_CLIENT_CATALOG_SERVICE:
-        instance = next((i for i in instances if name == f"openvpn-client-{i}"), "")
+        instance = next(
+            (
+                i
+                for i in instances
+                if i.startswith("client/") and name == f"openvpn-client-{i.removeprefix('client/')}"
+            ),
+            "",
+        )
     else:
         instance = next((i for i in instances if name == f"openvpn{i}"), "")
     info = instances.get(instance)
