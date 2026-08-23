@@ -1437,6 +1437,7 @@ func TestValidateDBusWatchTarget(t *testing.T) {
 		"probe":          "property",
 		"dbus_interface": "org.libvirt.Connect",
 		"property":       "Version",
+		"require_owner":  true,
 	}))
 
 	tests := []struct {
@@ -1455,10 +1456,13 @@ func TestValidateDBusWatchTarget(t *testing.T) {
 		{name: "unknown probe", check: map[string]any{"type": "dbus", "bus_name": "org.libvirt", "object_path": "/org/libvirt", "probe": "call"}, want: "probe must be"},
 		{name: "property missing interface", check: map[string]any{"type": "dbus", "bus_name": "org.libvirt", "object_path": "/org/libvirt", "probe": "property", "property": "Version"}, want: "dbus_interface is required"},
 		{name: "property missing property", check: map[string]any{"type": "dbus", "bus_name": "org.libvirt", "object_path": "/org/libvirt", "probe": "property", "dbus_interface": "org.libvirt.Connect"}, want: "property is required"},
+		{name: "owner required without target", check: map[string]any{"type": "dbus", "require_owner": true}, want: "bus_name is required when require_owner is set"},
+		{name: "owner required not boolean", check: map[string]any{"type": "dbus", "bus_name": "org.libvirt", "object_path": "/org/libvirt", "require_owner": "yes"}, want: "require_owner must be a boolean"},
 		{name: "field on another protocol", check: map[string]any{"type": "smtp", "bus_name": "org.libvirt"}, want: "bus_name is only supported for a dbus check"},
 		{name: "probe on another protocol", check: map[string]any{"type": "smtp", "probe": "peer"}, want: "probe is only supported for a dbus check"},
 		{name: "interface on another protocol", check: map[string]any{"type": "smtp", "dbus_interface": "org.libvirt.Connect"}, want: "dbus_interface is only supported for a dbus check"},
 		{name: "property on another protocol", check: map[string]any{"type": "smtp", "property": "Version"}, want: "property is only supported for a dbus check"},
+		{name: "owner required on another protocol", check: map[string]any{"type": "smtp", "require_owner": true}, want: "require_owner is only supported for a dbus check"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

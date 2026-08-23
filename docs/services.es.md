@@ -1210,7 +1210,9 @@ NetworkManager, firewalld, TuneD, GDM y varios daemons de escritorio/hardware
 usan la misma ruta de comprobación que los watches de host. Prefiere la sonda
 `peer` por defecto cuando el objeto la implemente; usa `introspect` para exigir
 una interfaz pública, o `property` para leer una propiedad escalar estable.
-Estas sondas deshabilitan la autoactivación D-Bus y no permiten llamadas a
+Define `require_owner: true` para estos daemons residentes, de modo que una
+unidad activa que haya perdido su registro D-Bus falle en lugar de pasar por ser
+meramente activable. Estas sondas deshabilitan la autoactivación D-Bus y no permiten llamadas a
 métodos arbitrarios. Añadir un watch solo-check no añade remediación; adjunta
 una acción `then:` únicamente cuando esa acción se haya revisado de forma
 independiente. Consulta [la referencia de la comprobación D-Bus](rules.es.md#protocolos-de-base-de-datos).

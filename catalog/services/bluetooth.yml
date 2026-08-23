@@ -22,6 +22,7 @@ watches:
       type: dbus
       bus_name: org.bluez
       object_path: /org/bluez
+      require_owner: true
       probe: introspect
       dbus_interface: org.bluez.AgentManager1
       timeout: 5s

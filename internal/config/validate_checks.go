@@ -495,7 +495,7 @@ func validateConnFields(prefix string, fields map[string]any, requireUser bool, 
 
 func validateDBusFields(prefix string, fields map[string]any, add addFunc) {
 	invalid := false
-	for _, field := range checks.DBusTargetFields() {
+	for _, field := range checks.DBusTargetStringFields() {
 		if value, present := fields[field]; present && cfgval.AsString(value) == "" {
 			add("%s.%s must be a non-empty string", prefix, field)
 			invalid = true
@@ -504,16 +504,25 @@ func validateDBusFields(prefix string, fields map[string]any, add addFunc) {
 	if invalid {
 		return
 	}
+	if value, present := fields[checks.CheckKeyDBusRequireOwner]; present {
+		if _, ok := value.(bool); !ok {
+			add(validationBooleanFormat, prefix+"."+checks.CheckKeyDBusRequireOwner)
+			return
+		}
+	}
 	if err := conn.ValidateDBusTarget(checks.DBusTargetFromEntry(fields)); err != nil {
 		add("%s: %v", prefix, err)
 	}
 }
 
 func rejectDBusFields(prefix, typ string, fields map[string]any, add addFunc) {
-	for _, field := range checks.DBusTargetFields() {
+	for _, field := range checks.DBusTargetStringFields() {
 		if _, present := fields[field]; present {
 			add("%s.%s is only supported for a dbus check, not %s", prefix, field, typ)
 		}
+	}
+	if _, present := fields[checks.CheckKeyDBusRequireOwner]; present {
+		add("%s.%s is only supported for a dbus check, not %s", prefix, checks.CheckKeyDBusRequireOwner, typ)
 	}
 }
 

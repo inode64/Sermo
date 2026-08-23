@@ -17,6 +17,7 @@ watches:
       type: dbus
       bus_name: org.freedesktop.machine1
       object_path: /org/freedesktop/machine1
+      require_owner: true
       probe: introspect
       dbus_interface: org.freedesktop.machine1.Manager
       timeout: 5s

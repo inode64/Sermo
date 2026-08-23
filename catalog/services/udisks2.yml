@@ -32,6 +32,7 @@ watches:
       type: dbus
       bus_name: org.freedesktop.UDisks2
       object_path: /org/freedesktop/UDisks2/Manager
+      require_owner: true
       requires:
         - bus
       timeout: 5s

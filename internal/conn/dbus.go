@@ -57,6 +57,7 @@ type DBusTarget struct {
 	Probe         string
 	DBusInterface string
 	Property      string
+	RequireOwner  bool
 }
 
 func (target DBusTarget) probeMode() string {
@@ -161,12 +162,17 @@ func dbusTargetFromConfig(cfg Config) DBusTarget {
 		Probe:         cfg.Params[ParamKeyDBusProbe],
 		DBusInterface: cfg.Params[ParamKeyDBusInterface],
 		Property:      cfg.Params[ParamKeyDBusProperty],
+		RequireOwner:  cfg.Params[ParamKeyDBusRequireOwner] == ParamValueTrue,
 	}
 }
 
 func probeDBusService(ctx context.Context, bus dbusMethodCaller, object dbusObjectFunc, target DBusTarget) (string, map[string]string, error) {
 	owner, err := dbusNameOwner(ctx, bus, target.BusName)
 	if err != nil {
+		if target.RequireOwner {
+			return "", nil, probeErr(ProtocolNameDBus, stepDBusGetNameOwner,
+				fmt.Errorf("owner required for D-Bus name %q: %w", target.BusName, err))
+		}
 		// No current owner is not the same as no service. A bus-activatable name
 		// is owned only once something calls it, and the probe deliberately sets
 		// FlagNoAutoStart so monitoring never starts anything: systemd-networkd
@@ -449,8 +455,10 @@ func DBusAddress(socket, query string) string {
 func ValidateDBusTarget(target DBusTarget) error {
 	busName, objectPath := target.BusName, target.ObjectPath
 	switch {
-	case busName == "" && objectPath == "" && target.Probe == "" && target.DBusInterface == "" && target.Property == "":
+	case busName == "" && objectPath == "" && target.Probe == "" && target.DBusInterface == "" && target.Property == "" && !target.RequireOwner:
 		return nil
+	case busName == "" && target.RequireOwner:
+		return errors.New("bus_name is required when require_owner is set")
 	case busName == "":
 		return errors.New("bus_name is required when object_path is set")
 	case objectPath == "":

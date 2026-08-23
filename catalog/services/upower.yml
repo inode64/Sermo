@@ -40,6 +40,7 @@ watches:
       type: dbus
       bus_name: org.freedesktop.UPower
       object_path: /org/freedesktop/UPower
+      require_owner: true
       requires:
         - bus
       timeout: 5s

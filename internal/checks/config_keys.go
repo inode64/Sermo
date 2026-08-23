@@ -25,6 +25,7 @@ const (
 	CheckKeyDBusObjectPath        = conn.ParamKeyDBusObjectPath
 	CheckKeyDBusProbe             = conn.ParamKeyDBusProbe
 	CheckKeyDBusProperty          = conn.ParamKeyDBusProperty
+	CheckKeyDBusRequireOwner      = conn.ParamKeyDBusRequireOwner
 	CheckKeyCertExpiresInDays     = "cert_expires_in_days"
 	CheckKeyCertOnAlgorithmChange = "cert_on_algorithm_change"
 	CheckKeyCertOnChange          = "cert_on_change"

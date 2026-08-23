@@ -21,6 +21,7 @@ watches:
       type: dbus
       bus_name: org.freedesktop.bolt
       object_path: /org/freedesktop/bolt
+      require_owner: true
       probe: property
       dbus_interface: org.freedesktop.bolt1.Manager
       property: Version

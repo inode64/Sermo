@@ -45,6 +45,7 @@ watches:
       type: dbus
       bus_name: com.redhat.tuned
       object_path: /Tuned
+      require_owner: true
       probe: introspect
       dbus_interface: com.redhat.tuned.control
       timeout: 5s

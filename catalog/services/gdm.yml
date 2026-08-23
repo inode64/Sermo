@@ -22,6 +22,7 @@ watches:
       type: dbus
       bus_name: org.gnome.DisplayManager
       object_path: /org/gnome/DisplayManager/Manager
+      require_owner: true
       probe: property
       dbus_interface: org.gnome.DisplayManager.Manager
       property: Version

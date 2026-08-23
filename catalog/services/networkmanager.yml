@@ -64,6 +64,7 @@ watches:
       type: dbus
       bus_name: org.freedesktop.NetworkManager
       object_path: /org/freedesktop/NetworkManager
+      require_owner: true
       probe: property
       dbus_interface: org.freedesktop.NetworkManager
       property: State
