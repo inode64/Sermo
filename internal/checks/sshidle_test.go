@@ -191,7 +191,7 @@ func TestSampleSSHSessionsKeepsVerifiedSessionBesideReplacedBinary(t *testing.T)
 	snapshot := sshSnapshot(
 		process.Identity{PID: sshPrivPID, PPID: sshdPID, Exe: "/usr/lib/sshd-session", ExeOK: true},
 		process.Identity{PID: sshPeerPID, PPID: sshPrivPID, Exe: "/usr/lib/sshd-session", ExeOK: true, StartTicks: 1234, StartTicksOK: true},
-		process.Identity{PID: stalePeerPID, PPID: 1, ExeOK: false, ExePrev: "/usr/lib/sshd-session"},
+		process.Identity{PID: stalePeerPID, PPID: 1, ExeOK: false, ExePrev: "/usr/lib/sshd-session", StartTicks: 5678, StartTicksOK: true},
 		process.Identity{PID: staleShellPID, PPID: stalePeerPID, UID: testUserID, Exe: "/bin/bash", ExeOK: true, TTY: staleTTY, TTYOK: true},
 	)
 	snapshot[sshShellPID] = process.Identity{PID: sshShellPID, PPID: sshPeerPID, UID: testUserID, Exe: "/bin/bash", ExeOK: true, TTY: testTTY, TTYOK: true}
@@ -207,7 +207,7 @@ func TestSampleSSHSessionsKeepsVerifiedSessionBesideReplacedBinary(t *testing.T)
 	}
 	sample, err := sampleSSHSessions([]utmp.Session{
 		{User: "root", Line: "pts/0", Host: "192.0.2.10"},
-		{User: "root", Line: "pts/1", Host: "192.0.2.11"},
+		{PID: stalePeerPID, User: "root", Line: "pts/1", Host: "192.0.2.11"},
 	}, snapshot, terminal, now, mustSSHDFilters(t), testSSHLookup().ResolveUser)
 	if err != nil {
 		t.Fatal(err)
@@ -215,7 +215,7 @@ func TestSampleSSHSessionsKeepsVerifiedSessionBesideReplacedBinary(t *testing.T)
 	if len(sample.SSH) != 1 || sample.SSH[0].Terminal != "pts/0" || len(sample.Issues) != 1 {
 		t.Fatalf("sample = %+v, want verified pts/0 plus unavailable pts/1", sample)
 	}
-	if got := sample.Issues[0]; got.Terminal != "pts/1" || got.Message != "executable /usr/lib/sshd-session was replaced" {
+	if got := sample.Issues[0]; got.Terminal != "pts/1" || got.Message != "executable /usr/lib/sshd-session was replaced" || got.PID != stalePeerPID || got.StartTicks != 5678 || !got.Remote {
 		t.Fatalf("issue = %+v", got)
 	}
 }

@@ -4,10 +4,11 @@
 // binary record parsing lives in one place.
 package utmp
 
-// Session is one active login session: the user, terminal line (for example
-// "pts/0" or "tty1") and the remote host recorded by login accounting. Host
-// is empty for local sessions.
+// Session is one active login session: its leader PID, user, terminal line (for
+// example "pts/0" or "tty1") and remote host recorded by login accounting.
+// Host is empty for local sessions.
 type Session struct {
+	PID  int
 	User string
 	Line string
 	Host string

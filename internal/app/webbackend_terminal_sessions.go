@@ -17,6 +17,7 @@ import (
 	"sermo/internal/metrics"
 	"sermo/internal/operation"
 	"sermo/internal/process"
+	"sermo/internal/servicemgr"
 	"sermo/internal/utmp"
 	"sermo/internal/web"
 )
@@ -260,8 +261,10 @@ func (b *WebBackend) appendSSHSessions(result *web.SessionInventory, seen map[ss
 		source.Message = fmt.Sprintf("%d terminal(s) could not be attributed safely", len(sessions.Issues))
 		source.Issues = make([]web.SessionIssue, 0, len(sessions.Issues))
 		for _, issue := range sessions.Issues {
+			canClose := entry.backend == string(servicemgr.BackendSystemd) && issue.Remote && issue.PID > 0 && issue.StartTicks > 0
 			source.Issues = append(source.Issues, web.SessionIssue{
 				User: issue.User, Terminal: issue.Terminal, Message: issue.Message,
+				PID: issue.PID, StartTicks: issue.StartTicks, CanClose: canClose, ManagedByLogind: canClose,
 			})
 		}
 	}

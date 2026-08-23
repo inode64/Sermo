@@ -165,9 +165,10 @@ func sshSessionsToWeb(sample checks.SSHSessionSample) []web.SSHSession {
 	return result
 }
 
-// CloseSSHSession sends only a graceful SIGTERM through the service operation
-// engine. The engine calls its fresh verifier immediately before signalling, so
-// this request cannot close a terminal merely because its old PID was reused.
+// CloseSSHSession uses the service operation engine. A verified SSH boundary is
+// freshly checked before SIGTERM; an unavailable-ancestry row can select only
+// the login1 closer, which independently verifies the exact managed session.
+// Neither path trusts a displayed PID after it has been reused.
 func (b *WebBackend) CloseSSHSession(ctx context.Context, name string, session web.SSHSession) web.ActionResult {
 	e := b.entries[name]
 	if e == nil {
@@ -180,9 +181,10 @@ func (b *WebBackend) CloseSSHSession(ctx context.Context, name string, session w
 		return b.operateError(name, "close SSH session", serviceSubjectPrefix+name+" "+sshSessionUnsupportedMessage)
 	}
 	r := e.engine.CloseSession(ctx, operation.SessionTarget{
-		PID:        session.PID,
-		StartTicks: session.StartTicks,
-		Terminal:   session.Terminal,
+		PID:             session.PID,
+		StartTicks:      session.StartTicks,
+		Terminal:        session.Terminal,
+		ManagedByLogind: session.ManagedByLogind,
 	})
 	return webActionResultFrom(r, name, "close SSH session")
 }

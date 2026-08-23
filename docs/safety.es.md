@@ -111,7 +111,11 @@ terminal, PID de sesión y ticks de inicio del proceso. Si falta esa frontera, e
 terminal cambió o el PID se recicló, se rechaza. Un cierre correcto envía un único `SIGTERM` al proceso de
 sesión; nunca escala a `SIGKILL`.
 Un terminal SSH cuya ascendencia no puede verificarse sigue visible como
-incidencia no disponible, pero no ofrece acción de cierre ni aporta PID a la API.
+incidencia no disponible. En systemd, una incidencia remota con un líder utmp
+vivo también expone su PID y un cierre gestionado por login1. Esa vía no envía
+señales al proceso incierto: justo antes de `TerminateSession` exige los ticks
+de inicio sin cambios y un ID de sesión login1, PID líder, terminal,
+`Remote=true` y `Service=sshd` exactos. Las demás incidencias siguen sin acción.
 
 El check `terminal_sessions` es de solo observación: ejecuta una lista limitada
 por argv de `tmux` o `screen` como la cuenta configurada explícitamente y no

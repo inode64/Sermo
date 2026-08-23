@@ -41,6 +41,7 @@ export const apiQueryOnlyErrors = "only_errors";
 export const apiQueryService = "service";
 export const apiQuerySince = "since";
 export const apiQueryStartTicks = "start_ticks";
+export const apiQueryManagedByLogind = "managed_by_logind";
 export const apiQueryStatus = "status";
 export const apiQueryTerminal = "terminal";
 export const apiQueryIdentity = "identity";
@@ -111,8 +112,9 @@ export function serviceSLAAPI(name, since, check = "", metric = "") {
   const metricQuery = metric ? `&${apiQueryMetric}=${encodeURIComponent(metric)}` : "";
   return serviceAPI(name, `${apiSinceSuffix(apiSuffixSLA, since)}${checkQuery}${metricQuery}`);
 }
-export function sshSessionCloseAPI(name, pid, startTicks, terminal) {
+export function sshSessionCloseAPI(name, pid, startTicks, terminal, managedByLogind = false) {
   const query = new URLSearchParams({ [apiQueryStartTicks]: String(startTicks), [apiQueryTerminal]: terminal });
+  if (managedByLogind) query.set(apiQueryManagedByLogind, "true");
   return serviceAPI(name, `${apiSuffixSessions}/${encodeURIComponent(pid)}/close?${query.toString()}`);
 }
 export function terminalSessionCloseAPI(service, check, multiplexer, session, user, identity) {
