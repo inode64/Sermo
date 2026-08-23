@@ -491,6 +491,49 @@ if command -v virsh >/dev/null 2>&1; then
 	fi
 fi
 
+: >"${out}/libvirt_networks.tsv"
+if command -v virsh >/dev/null 2>&1; then
+	# Two sessions: network RPC prefers the modular network daemon's socket,
+	# and the guest-attachment guard needs a domain-API socket (virtqemud or
+	# monolithic libvirtd) — on modular hosts they are different daemons.
+	network_socket=""
+	if [ -S /run/libvirt/virtnetworkd-sock ]; then
+		network_socket="/run/libvirt/virtnetworkd-sock"
+	elif [ -S /run/libvirt/libvirt-sock ]; then
+		network_socket="/run/libvirt/libvirt-sock"
+	fi
+	network_guard_socket=""
+	if [ -S /run/libvirt/libvirt-sock ]; then
+		network_guard_socket="/run/libvirt/libvirt-sock"
+	elif [ -S /run/libvirt/virtqemud-sock ]; then
+		network_guard_socket="/run/libvirt/virtqemud-sock"
+	fi
+	if [ -n "$network_socket" ]; then
+		virsh -q -c qemu:///system net-list --all --name >"${out}/libvirt_network_names" 2>"${out}/libvirt_networks.err" || true
+		while IFS= read -r network; do
+			[ -n "$network" ] || continue
+			network_xml="$(virsh -q -c qemu:///system net-dumpxml "$network" 2>/dev/null || true)"
+			network_state="inactive"
+			virsh -q -c qemu:///system net-info "$network" 2>/dev/null | grep -q '^Active:.*yes' && network_state="active"
+			network_bridge="$(printf '%s' "$network_xml" | sed -n "s/.*<bridge name='\([^']*\)'.*/\1/p" | head -n 1)"
+			network_has_ip="no"
+			printf '%s' "$network_xml" | grep -q '<ip ' && network_has_ip="yes"
+			# The exe of the network's live dnsmasq pair, so the generated
+			# service can attribute it; a replaced binary reports its old path.
+			network_dnsmasq=""
+			for network_pid in $(pgrep -f "dnsmasq.*--conf-file=/var/lib/libvirt/dnsmasq/${network}.conf" 2>/dev/null); do
+				network_exe="$(readlink "/proc/${network_pid}/exe" 2>/dev/null || true)"
+				network_exe="${network_exe% (deleted)}"
+				if [ -n "$network_exe" ]; then
+					network_dnsmasq="$network_exe"
+					break
+				fi
+			done
+			printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$network_socket" "network:///system" "$network" "$network_state" "$network_bridge" "$network_has_ip" "$network_dnsmasq" "$network_guard_socket"
+		done <"${out}/libvirt_network_names" >"${out}/libvirt_networks.tsv"
+	fi
+fi
+
 date -Is >"${out}/finished_at" 2>/dev/null || true
 tar -C "$work" -czf "${work}/out.tar.gz" out >/dev/null 2>&1 || {
 	echo "failed to archive inventory output" >&2

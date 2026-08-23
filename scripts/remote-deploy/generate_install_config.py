@@ -558,6 +558,45 @@ watches:
 """
 
 
+def controlled_network_service(name: str, network: str, uri: str, socket: str, guard_socket: str, dnsmasq_exe: str) -> str:
+    # A libvirt virtual network is generated as its own control target so an
+    # operator can renew its dnsmasq pair (left running a replaced binary after
+    # a package upgrade) through Sermo's safe operation path: the network
+    # manager hard-refuses to destroy a network with live guest interfaces
+    # attached, so a restart is only ever a no-guest operation. The dnsmasq
+    # pair is delegated — Sermo observes it (stale-binary reporting lands on
+    # the one target whose restart genuinely renews it) and never signals it;
+    # lifecycle stays with libvirt.
+    body = f"""name: {name}
+display_name: {yaml_quote("libvirt network " + network)}
+category: virtual-network
+monitor: enabled
+dry_run: true
+control:
+  type: libvirt-network
+  uri: {yaml_quote(uri)}
+  network: {yaml_quote(network)}
+  socket: {yaml_quote(socket)}
+  guard_socket: {yaml_quote(guard_socket)}
+"""
+    if dnsmasq_exe:
+        conf = "/var/lib/libvirt/dnsmasq/" + network + ".conf"
+        cmd_pattern = "'--conf-file=" + re.escape(conf).replace("'", "''") + "([[:space:]]|$)'"
+        body += f"""processes:
+  dnsmasq-root:
+    exe: {yaml_quote(dnsmasq_exe)}
+    cmd: {cmd_pattern}
+    user: root
+    delegated: true
+  dnsmasq-nobody:
+    exe: {yaml_quote(dnsmasq_exe)}
+    cmd: {cmd_pattern}
+    user: nobody
+    delegated: true
+"""
+    return body
+
+
 def flatten_findmnt(nodes: list[dict] | None) -> list[dict]:
     out: list[dict] = []
     for node in nodes or []:
@@ -2147,6 +2186,47 @@ def parse_libvirt_domains(stage: Path) -> tuple[list[dict[str, str]], list[dict[
     return domains, skipped
 
 
+def parse_libvirt_networks(stage: Path) -> tuple[list[dict[str, str]], list[dict[str, str]]]:
+    """Split the host's libvirt virtual networks into generated and skipped.
+    Only an active network with a libvirt-owned IP (the shape that spawns a
+    dnsmasq pair) becomes a control target; bridge-mode networks own nothing a
+    restart could renew, and destroying their libvirt object would only break
+    the next guest start that references it."""
+    networks: list[dict[str, str]] = []
+    skipped: list[dict[str, str]] = []
+    for line in read_text(stage / "libvirt_networks.tsv").splitlines():
+        fields = line.split("\t")
+        if len(fields) < 6:
+            continue
+        socket, uri, network, state, bridge, has_ip = (field.strip() for field in fields[:6])
+        dnsmasq_exe = fields[6].strip() if len(fields) > 6 else ""
+        guard_socket = fields[7].strip() if len(fields) > 7 else ""
+        if not socket or not uri or not network:
+            continue
+        item = {
+            "name": f"libvirt-net-{slug(network)}",
+            "network": network,
+            "status": state.lower(),
+            "bridge": bridge,
+            "uri": uri,
+            "socket": socket,
+            "guard_socket": guard_socket,
+            "dnsmasq_exe": dnsmasq_exe,
+        }
+        if state.lower() != "active":
+            skipped.append(item | {"reason": "network is not active"})
+        elif has_ip != "yes":
+            skipped.append(item | {"reason": "bridge-mode network without a libvirt-owned IP; a restart renews nothing"})
+        elif not guard_socket:
+            # The guard that blocks destroying a network with attached guests
+            # needs a domain-API socket; without one an unverifiable destroy
+            # target must not exist at all.
+            skipped.append(item | {"reason": "no domain-API socket; guest attachment cannot be verified"})
+        else:
+            networks.append(item)
+    return networks, skipped
+
+
 def has_active_swap(stage: Path) -> bool:
     for line in read_text(stage / "proc_swaps").splitlines():
         line = line.strip()
@@ -2206,6 +2286,7 @@ def generate_for_host(host_slug: str, stage: Path, configs_dir: Path, options: G
         "services": {"enabled": [], "skipped": []},
         "containers": {"enabled": [], "skipped": []},
         "virtual_machines": {"enabled": [], "skipped": []},
+        "libvirt_networks": {"enabled": [], "skipped": []},
         "terminal_sessions": [],
         "process_policies": [],
         "watches": {},
@@ -2321,6 +2402,23 @@ dry_run: true
         )
         report["virtual_machines"]["enabled"].append(vm)
     report["virtual_machines"]["skipped"] = skipped_virtual_machines
+
+    libvirt_networks, skipped_libvirt_networks = parse_libvirt_networks(stage)
+    for net in libvirt_networks:
+        name = net["name"]
+        if name in generated_service_names:
+            skipped = dict(net)
+            skipped["reason"] = "generated service name already exists"
+            skipped_libvirt_networks.append(skipped)
+            continue
+        generated_service_names.add(name)
+        write_file(
+            root,
+            f"etc/sermo/services/{slug(name)}.yml",
+            controlled_network_service(name, net["network"], net["uri"], net["socket"], net["guard_socket"], net["dnsmasq_exe"]),
+        )
+        report["libvirt_networks"]["enabled"].append(net)
+    report["libvirt_networks"]["skipped"] = skipped_libvirt_networks
 
     def add_watch(folder: str, name: str, body: str) -> None:
         write_file(root, f"etc/sermo/{folder}/{slug(name)}.yml", body)

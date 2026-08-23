@@ -361,6 +361,17 @@ out rather than guessed at from the exit code, since a failed one-off is not a
 service outage. Every decision is recorded under `containers` in
 `config-report.json`.
 
+Each **active libvirt virtual network with a libvirt-owned IP** (the shape
+that spawns a dnsmasq pair) is generated as its own `control: libvirt-network`
+service, with the pair attributed through `delegated` selectors. That is the
+one target whose `stale-binary` finding a restart genuinely fixes: the pair
+survives `virtnetworkd` restarts by design, so after a dnsmasq upgrade only a
+network restart renews it. The manager hard-refuses to destroy a network with
+live guest interfaces attached (see [docs/safety.md](../../docs/safety.md)),
+so the generated `dry_run: true` service is safe to expose. Bridge-mode
+networks and inactive networks are recorded as skipped under
+`libvirt_networks` in `config-report.json`.
+
 A **thin arbiter** is generated as its own service on the host that serves it.
 The arbiter of a replica 2 volume is neither a brick nor a peer: `gluster volume
 status` never lists it and `volume info --xml` omits it, so a volume whose

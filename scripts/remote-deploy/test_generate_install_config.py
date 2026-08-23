@@ -1570,6 +1570,77 @@ class LibvirtDomainStateTest(unittest.TestCase):
             self.assertIn("export LC_ALL=C", body, f"{script} must pin the locale")
 
 
+class LibvirtNetworkGenerationTest(unittest.TestCase):
+    """An active NAT network's dnsmasq pair keeps running a replaced binary
+    across virtnetworkd restarts; only a network-level restart renews it, so
+    the network is generated as its own guarded control target."""
+
+    def parse(self, tsv: str):
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        stage = Path(temp.name)
+        (stage / "libvirt_networks.tsv").write_text(tsv, encoding="utf-8")
+        return generator.parse_libvirt_networks(stage)
+
+    def test_active_nat_network_is_generated(self):
+        networks, skipped = self.parse(
+            "/run/libvirt/virtnetworkd-sock\tnetwork:///system\tdefault\tactive\tvirbr0\tyes\t/usr/bin/dnsmasq\t/run/libvirt/virtqemud-sock\n")
+        self.assertEqual([n["network"] for n in networks], ["default"])
+        self.assertEqual(networks[0]["name"], "libvirt-net-default")
+        self.assertEqual(networks[0]["dnsmasq_exe"], "/usr/bin/dnsmasq")
+        self.assertEqual(networks[0]["guard_socket"], "/run/libvirt/virtqemud-sock")
+        self.assertEqual(skipped, [])
+
+    def test_bridge_mode_network_is_skipped(self):
+        networks, skipped = self.parse(
+            "/run/libvirt/virtnetworkd-sock\tnetwork:///system\tinternet\tactive\tvbr0\tno\t\t/run/libvirt/virtqemud-sock\n")
+        self.assertEqual(networks, [])
+        self.assertIn("bridge-mode", skipped[0]["reason"])
+
+    def test_inactive_network_is_skipped(self):
+        networks, skipped = self.parse(
+            "/run/libvirt/virtnetworkd-sock\tnetwork:///system\tdefault\tinactive\tvirbr0\tyes\t\t/run/libvirt/virtqemud-sock\n")
+        self.assertEqual(networks, [])
+        self.assertEqual(skipped[0]["reason"], "network is not active")
+
+    def test_missing_guard_socket_is_skipped_fail_safe(self):
+        # Without a domain-API socket the attachment guard could not verify
+        # guests; the destroy-capable target must not be generated.
+        networks, skipped = self.parse(
+            "/run/libvirt/virtnetworkd-sock\tnetwork:///system\tdefault\tactive\tvirbr0\tyes\t/usr/bin/dnsmasq\t\n")
+        self.assertEqual(networks, [])
+        self.assertIn("guest attachment cannot be verified", skipped[0]["reason"])
+
+    def test_generated_service_document_shape(self):
+        body = generator.controlled_network_service(
+            "libvirt-net-default", "default", "network:///system",
+            "/run/libvirt/virtnetworkd-sock", "/run/libvirt/virtqemud-sock", "/usr/bin/dnsmasq")
+        doc = yaml.safe_load(body)
+        self.assertEqual(doc["control"]["type"], "libvirt-network")
+        self.assertEqual(doc["control"]["network"], "default")
+        self.assertEqual(doc["control"]["uri"], "network:///system")
+        self.assertEqual(doc["control"]["guard_socket"], "/run/libvirt/virtqemud-sock")
+        self.assertTrue(doc["dry_run"])
+        for role in ("dnsmasq-root", "dnsmasq-nobody"):
+            selector = doc["processes"][role]
+            self.assertEqual(selector["exe"], "/usr/bin/dnsmasq")
+            self.assertTrue(selector["delegated"])
+            self.assertIn("/var/lib/libvirt/dnsmasq/default", selector["cmd"])
+
+    def test_without_dnsmasq_evidence_no_selectors_are_invented(self):
+        body = generator.controlled_network_service(
+            "libvirt-net-default", "default", "network:///system",
+            "/run/libvirt/virtnetworkd-sock", "/run/libvirt/virtqemud-sock", "")
+        doc = yaml.safe_load(body)
+        self.assertNotIn("processes", doc)
+
+    def test_collectors_capture_networks(self):
+        root = Path(__file__).resolve().parent
+        for script in ("remote_collect_inventory.sh", "remote_stage.sh"):
+            body = (root / script).read_text(encoding="utf-8")
+            self.assertIn("libvirt_networks.tsv", body, f"{script} must collect libvirt networks")
+
+
 class FailedUnitsWatchGenerationTest(unittest.TestCase):
     """A failed unit with no catalog profile is invisible to service monitoring.
     Observed on k2keu2: `backup_kvm.service` had been failed for days, the host
