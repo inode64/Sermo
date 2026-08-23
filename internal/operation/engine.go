@@ -98,6 +98,9 @@ type Engine struct {
 	// signalling it. Nil means this service does not offer session closing.
 	SessionVerifier func(ctx context.Context, target SessionTarget) error
 	SessionSignaler process.Signaler
+	// ManagedSessionCloser revalidates and terminates one exact login-manager
+	// session. It never falls through to direct PID signalling.
+	ManagedSessionCloser func(ctx context.Context, target SessionTarget) error
 	// TerminalSessionCloser revalidates and closes one tmux/screen session
 	// through its configured client. It remains a manual-only operation.
 	TerminalSessionCloser func(ctx context.Context, target TerminalSessionTarget) error
@@ -168,11 +171,13 @@ type plan struct {
 
 // SessionTarget is a freshly displayed SSH terminal session. StartTicks binds
 // its PID to one process generation so a PID that has exited and been reused is
-// rejected before it can be signalled.
+// rejected before it can be closed. ManagedByLogind selects the independently
+// verified systemd-logind path and never authorizes direct signalling.
 type SessionTarget struct {
-	PID        int
-	StartTicks uint64
-	Terminal   string
+	PID             int
+	StartTicks      uint64
+	Terminal        string
+	ManagedByLogind bool
 }
 
 // TerminalSessionTarget identifies one exact multiplexer session generation
@@ -229,8 +234,9 @@ func (e Engine) Resume(ctx context.Context) Result {
 // CloseSession gracefully terminates one operator-selected SSH session. It
 // shares the service operation lock, named locks, guards, timeout and event
 // path with normal service actions, but deliberately skips service pre/post
-// flight because the SSH daemon itself remains running. It sends only SIGTERM;
-// there is no escalation to SIGKILL for an interactive user session.
+// flight because the SSH daemon itself remains running. Direct process closes
+// send only SIGTERM; managed closes use the independently verified login manager.
+// Neither path escalates to SIGKILL for an interactive user session.
 func (e Engine) CloseSession(ctx context.Context, target SessionTarget) Result {
 	return e.run(ctx, plan{action: actionCloseSession, closeSession: &target})
 }
@@ -618,6 +624,13 @@ func residualsRemain(remaining []process.Process, phase string) string {
 }
 
 func (e Engine) closeSession(ctx context.Context, target SessionTarget, result *Result) bool {
+	if target.ManagedByLogind {
+		var closer func(context.Context) error
+		if e.ManagedSessionCloser != nil {
+			closer = func(ctx context.Context) error { return e.ManagedSessionCloser(ctx, target) }
+		}
+		return runSessionCloser(ctx, result, closer, "managed SSH session close is unavailable for this service", "close SSH session: ")
+	}
 	if e.SessionVerifier == nil {
 		result.Status = ResultFailed
 		result.Message = "SSH session close is unavailable for this service"
@@ -651,19 +664,27 @@ func (e Engine) closeSession(ctx context.Context, target SessionTarget, result *
 }
 
 func (e Engine) closeTerminalSession(ctx context.Context, target TerminalSessionTarget, result *Result) bool {
-	if e.TerminalSessionCloser == nil {
+	var closer func(context.Context) error
+	if e.TerminalSessionCloser != nil {
+		closer = func(ctx context.Context) error { return e.TerminalSessionCloser(ctx, target) }
+	}
+	return runSessionCloser(ctx, result, closer, "terminal session close is unavailable for this service", "close terminal session: ")
+}
+
+func runSessionCloser(ctx context.Context, result *Result, closer func(context.Context) error, unavailable, errorPrefix string) bool {
+	if closer == nil {
 		result.Status = ResultFailed
-		result.Message = "terminal session close is unavailable for this service"
+		result.Message = unavailable
 		return false
 	}
 	if err := ctx.Err(); err != nil {
 		result.Status = ResultFailed
-		result.Message = "close terminal session: " + err.Error()
+		result.Message = errorPrefix + err.Error()
 		return false
 	}
-	if err := e.TerminalSessionCloser(ctx, target); err != nil {
+	if err := closer(ctx); err != nil {
 		result.Status = ResultFailed
-		result.Message = "close terminal session: " + err.Error()
+		result.Message = errorPrefix + err.Error()
 		return false
 	}
 	return true

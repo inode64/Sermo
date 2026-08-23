@@ -33,7 +33,7 @@ const dashboard = {
       {
         kind: "ssh", service: "web", state: "partial",
         message: "1 terminal(s) could not be attributed safely",
-        issues: [{ user: "root", terminal: "pts/0", message: "executable /usr/lib/sshd-session was replaced" }],
+        issues: [{ user: "root", terminal: "pts/0", pid: 95, start_ticks: 1200, can_close: true, managed_by_logind: true, message: "executable /usr/lib/sshd-session was replaced" }],
       },
       { kind: "ssh", service: "db", state: "available" },
       { kind: "tmux", service: "web", check: "tmux-root", user: "root", state: "available" },
@@ -42,8 +42,8 @@ const dashboard = {
     ],
     ssh: [{ service: "web", user: "root", terminal: "pts/11", pid: 96, start_ticks: 1234, idle_seconds: 120, can_close: true, memory_ready: true, rss: 1048576, cpu_ready: true, cpu: 1.5, io_ready: true, io_read: 1000, io_write: 250 }],
     terminal: [
-      { service: "web", check: "tmux-root", multiplexer: "tmux", user: "root", name: "ops", state: "attached", windows: 2, idle_seconds: 300, has_idle: true, memory_ready: true, rss: 2097152, cpu_ready: true, cpu: 2.5, io_ready: true, io_read: 2000, io_write: 500, identity: "$7:90", can_close: true },
-      { service: "web", check: "tmux-root", multiplexer: "tmux", user: "root", name: "build", state: "detached", windows: 1, idle_seconds: 60, has_idle: true, memory_ready: true, rss: 524288, cpu_ready: true, cpu: 0, io_ready: true, io_read: 0, io_write: 0, identity: "$8:91", can_close: true },
+      { service: "web", check: "tmux-root", multiplexer: "tmux", user: "root", name: "ops", pids: [201], state: "attached", windows: 2, idle_seconds: 300, has_idle: true, memory_ready: true, rss: 2097152, cpu_ready: true, cpu: 2.5, io_ready: true, io_read: 2000, io_write: 500, identity: "$7:90", can_close: true },
+      { service: "web", check: "tmux-root", multiplexer: "tmux", user: "root", name: "build", pids: [202, 203], state: "detached", windows: 1, idle_seconds: 60, has_idle: true, memory_ready: true, rss: 524288, cpu_ready: true, cpu: 0, io_ready: true, io_read: 0, io_write: 0, identity: "$8:91", can_close: true },
     ],
   },
   mounts: [{
@@ -929,10 +929,15 @@ test("the process table reports each process's busiest core beside its total", a
 
 test("sessions panel shows metrics, sorts columns and closes verified SSH and tmux", async ({ page }) => {
   let closeRequest = null;
+  let managedCloseRequest = null;
   let tmuxCloseRequest = null;
   await page.route("**/api/services/web/sessions/96/close**", async (route) => {
     closeRequest = new URL(route.request().url());
     await route.fulfill({ json: { ok: true, message: "close SSH session ok" } });
+  });
+  await page.route("**/api/services/web/sessions/95/close**", async (route) => {
+    managedCloseRequest = new URL(route.request().url());
+    await route.fulfill({ json: { ok: true, message: "close managed SSH session ok" } });
   });
   await page.route("**/api/services/web/terminal-sessions/tmux-root/close**", async (route) => {
     tmuxCloseRequest = new URL(route.request().url());
@@ -944,7 +949,12 @@ test("sessions panel shows metrics, sorts columns and closes verified SSH and tm
   await expect(sessions).toContainText("pts/11");
   await expect(sessions).toContainText("pts/0");
   await expect(sessions).toContainText("executable /usr/lib/sshd-session was replaced");
-  await expect(sessions.locator("tr", { hasText: "pts/0" }).locator('[data-ssh-session-close]')).toHaveCount(0);
+  const unavailableRow = sessions.locator("tr", { hasText: "pts/0" });
+  const verifiedRow = sessions.locator("tr", { hasText: "pts/11" });
+  await expect(unavailableRow.locator("td").nth(3)).toHaveText("95");
+  await expect(unavailableRow.locator('[data-ssh-session-close]')).toHaveCount(1);
+  await expect(verifiedRow.locator("td").nth(2)).not.toContainText("PID 96");
+  await expect(verifiedRow.locator("td").nth(3)).toHaveText("96");
   await expect(sessions).toContainText("120s");
   await expect(sessions).toContainText("1 MiB");
   await expect(sessions).toContainText("1 KB/s / 250 B/s");
@@ -952,11 +962,19 @@ test("sessions panel shows metrics, sorts columns and closes verified SSH and tm
   await expect(sessions).not.toContainText("screen-root");
   await expect(sessions).toContainText("No active sessions");
 
-  await sessions.locator('[data-ssh-session-close]').click();
+  await verifiedRow.locator('[data-ssh-session-close]').click();
   await expect(page.locator("#simple-confirm")).toBeVisible();
   await page.locator("#simple-confirm-ok").click();
   await expect.poll(() => closeRequest && closeRequest.searchParams.get("terminal")).toBe("pts/11");
   expect(closeRequest.searchParams.get("start_ticks")).toBe("1234");
+  expect(closeRequest.searchParams.has("managed_by_logind")).toBe(false);
+
+  await unavailableRow.locator('[data-ssh-session-close]').click();
+  await expect(page.locator("#simple-confirm-message")).toContainText("systemd-logind");
+  await page.locator("#simple-confirm-ok").click();
+  await expect.poll(() => managedCloseRequest && managedCloseRequest.searchParams.get("managed_by_logind")).toBe("true");
+  expect(managedCloseRequest.searchParams.get("terminal")).toBe("pts/0");
+  expect(managedCloseRequest.searchParams.get("start_ticks")).toBe("1200");
 
   await page.locator('[data-sf="tmux"]').click();
   await sessions.getByRole("columnheader", { name: /Idle/ }).click();
@@ -982,10 +1000,10 @@ test("empty tmux sources use a red state and close the server through the API", 
   await expect(page.locator("#session-rows")).toContainText("No active sessions");
   const emptySource = page.locator("#session-rows tr", { hasText: "tmux-empty" });
   const emptySourceCells = emptySource.locator("td");
-  await expect(emptySourceCells.nth(3)).toHaveText("empty");
-  await expect(emptySourceCells.nth(3).locator(".target-state")).toHaveClass(/state-empty/);
-  await expect(emptySourceCells.nth(5)).toHaveText("—");
-  await expect(emptySourceCells.nth(7)).toHaveText("—");
+  await expect(emptySourceCells.nth(4)).toHaveText("empty");
+  await expect(emptySourceCells.nth(4).locator(".target-state")).toHaveClass(/state-empty/);
+  await expect(emptySourceCells.nth(6)).toHaveText("—");
+  await expect(emptySourceCells.nth(8)).toHaveText("—");
   // screen-root is empty but has no configured socket: no server to kill and
   // nothing to say, so it renders no row at all.
   await expect(page.locator("#session-rows tr", { hasText: "screen-root" })).toHaveCount(0);
@@ -1005,7 +1023,7 @@ test("an unknown terminal session state is not shown as active", async ({ page }
   await page.route("**/api/dashboard**", (route) => route.fulfill({ json: body }));
   await page.locator("#refresh-now").click();
 
-  const state = page.locator("#session-rows tr", { hasText: "pending" }).locator("td").nth(3);
+  const state = page.locator("#session-rows tr", { hasText: "pending" }).locator("td").nth(4);
   await expect(state).toHaveText("unknown");
   await expect(state.locator(".target-state")).toHaveClass(/state-warning/);
 });

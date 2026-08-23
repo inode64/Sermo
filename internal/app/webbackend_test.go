@@ -213,11 +213,12 @@ func TestWebBackendKeepsVerifiedSSHSessionsWithPartialSource(t *testing.T) {
 		order: []string{"ssh"},
 		entries: map[string]*webEntry{"ssh": {
 			sshSessionFilters: []process.IdentityFilter{mustWebIdentityFilter(t, "/usr/sbin/sshd", "root")},
+			backend:           string(servicemgr.BackendSystemd),
 		}},
 		sshSessionSampler: func(checks.SSHSessionConfig) (checks.SSHSessionSample, error) {
 			return checks.SSHSessionSample{
 				SSH:    []checks.SSHSession{{User: "root", Terminal: "pts/1", PID: 96, StartTicks: 1234}},
-				Issues: []checks.SSHSessionIssue{{User: "root", Terminal: "pts/0", Message: "executable /usr/lib/sshd-session was replaced"}},
+				Issues: []checks.SSHSessionIssue{{User: "root", Terminal: "pts/0", Message: "executable /usr/lib/sshd-session was replaced", PID: 95, StartTicks: 1200, Remote: true}},
 			}, nil
 		},
 	}
@@ -226,7 +227,7 @@ func TestWebBackendKeepsVerifiedSSHSessionsWithPartialSource(t *testing.T) {
 	if len(inventory.SSH) != 1 || len(inventory.Sources) != 1 {
 		t.Fatalf("inventory = %+v", inventory)
 	}
-	if source := inventory.Sources[0]; source.State != web.SessionSourcePartial || len(source.Issues) != 1 || source.Issues[0].Terminal != "pts/0" {
+	if source := inventory.Sources[0]; source.State != web.SessionSourcePartial || len(source.Issues) != 1 || source.Issues[0].Terminal != "pts/0" || source.Issues[0].PID != 95 || !source.Issues[0].CanClose || !source.Issues[0].ManagedByLogind {
 		t.Fatalf("source = %+v, want partial source with pts/0 issue", source)
 	}
 	if info := b.DaemonInfo(context.Background()); info.Sessions != nil {
@@ -266,7 +267,7 @@ func TestWebBackendShowsTerminalSessionsFromPublishedCheckData(t *testing.T) {
 	if len(inventory.Sources) != 2 || len(inventory.Terminal) != 2 {
 		t.Fatalf("session inventory = %+v", inventory)
 	}
-	if inventory.Terminal[0].Multiplexer != checks.TerminalMultiplexerScreen || inventory.Terminal[0].Name != "120.backup" || inventory.Terminal[1].Windows != 2 {
+	if inventory.Terminal[0].Multiplexer != checks.TerminalMultiplexerScreen || inventory.Terminal[0].Name != "120.backup" || inventory.Terminal[1].Windows != 2 || !slices.Equal(inventory.Terminal[0].PIDs, []int{120}) || !slices.Equal(inventory.Terminal[1].PIDs, []int{201}) {
 		t.Fatalf("terminal sessions = %+v, want sorted published sessions", inventory.Terminal)
 	}
 	if !inventory.Terminal[0].CanClose || !inventory.Terminal[1].CanClose || !inventory.Terminal[1].HasIdle || inventory.Terminal[1].IdleSeconds != 60 {
