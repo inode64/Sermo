@@ -351,8 +351,11 @@ func configureConnProtocol(cfg *conn.Config, protoName string, entry map[string]
 		setConnParam(cfg, conn.ParamKeyDomain, cfgval.AsString(entry[CheckKeyDomain]))
 	case conn.ProtocolNameDBus:
 		cfg.Socket = conn.DBusAddress(cfgval.AsString(entry[CheckKeySocket]), cfgval.AsString(entry[CheckKeyQuery]))
-		for _, field := range DBusTargetFields() {
+		for _, field := range DBusTargetStringFields() {
 			setConnParam(cfg, field, cfgval.AsString(entry[field]))
+		}
+		if cfgval.Bool(entry[CheckKeyDBusRequireOwner]) {
+			setConnParam(cfg, conn.ParamKeyDBusRequireOwner, conn.ParamValueTrue)
 		}
 		if err := conn.ValidateDBusTarget(DBusTargetFromEntry(entry)); err != nil {
 			return fmt.Errorf("dbus check: %w", err)
@@ -363,9 +366,11 @@ func configureConnProtocol(cfg *conn.Config, protoName string, entry map[string]
 	return nil
 }
 
-// DBusTargetFields returns the YAML fields that define a named D-Bus target.
-// It returns an array copy so callers cannot alter the canonical check schema.
-func DBusTargetFields() [5]string {
+// DBusTargetStringFields returns the string-valued YAML fields that define a
+// named D-Bus target. It returns an array copy so callers cannot alter the
+// canonical check schema. require_owner is validated and copied separately as
+// a boolean.
+func DBusTargetStringFields() [5]string {
 	return [5]string{
 		CheckKeyDBusBusName,
 		CheckKeyDBusObjectPath,
@@ -384,6 +389,7 @@ func DBusTargetFromEntry(entry map[string]any) conn.DBusTarget {
 		Probe:         cfgval.AsString(entry[CheckKeyDBusProbe]),
 		DBusInterface: cfgval.AsString(entry[CheckKeyDBusInterface]),
 		Property:      cfgval.AsString(entry[CheckKeyDBusProperty]),
+		RequireOwner:  cfgval.Bool(entry[CheckKeyDBusRequireOwner]),
 	}
 }
 

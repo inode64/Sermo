@@ -21,6 +21,7 @@ watches:
       type: dbus
       bus_name: org.freedesktop.ColorManager
       object_path: /org/freedesktop/ColorManager
+      require_owner: true
       probe: property
       dbus_interface: org.freedesktop.ColorManager
       property: DaemonVersion

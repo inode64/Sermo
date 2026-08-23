@@ -23,6 +23,7 @@ watches:
       type: dbus
       bus_name: org.freedesktop.Accounts
       object_path: /org/freedesktop/Accounts
+      require_owner: true
       probe: property
       dbus_interface: org.freedesktop.Accounts
       property: DaemonVersion

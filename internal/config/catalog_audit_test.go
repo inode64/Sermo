@@ -196,6 +196,41 @@ func TestCatalogDBusAdvancedProbesStayReadOnlyAndCheckOnly(t *testing.T) {
 	}
 }
 
+// Resident catalog services must own their configured well-known D-Bus name.
+// Accepting a merely activatable name hid systemd-logind after a bus restart:
+// the unit stayed active while login1 had no owner and could not create session
+// scopes. Generic host watches may intentionally keep the default activatable
+// behavior, but catalog service health must assert the running daemon.
+func TestCatalogNamedDBusServicesRequireOwner(t *testing.T) {
+	walkCatalogDocs(t, filepath.Join(repoRoot(t), "catalog", "services"), func(path string, body map[string]any) {
+		watches, _ := body["watches"].(map[string]any)
+		for name, raw := range watches {
+			watch, _ := raw.(map[string]any)
+			check, _ := watch["check"].(map[string]any)
+			if cfgval.String(check[checks.CheckKeyType]) != conn.ProtocolNameDBus ||
+				cfgval.String(check[checks.CheckKeyDBusBusName]) == "" {
+				continue
+			}
+			if !cfgval.Bool(check[checks.CheckKeyDBusRequireOwner]) {
+				t.Errorf("%s D-Bus watch %s must require the running service to own %s", path, name,
+					cfgval.String(check[checks.CheckKeyDBusBusName]))
+			}
+			then, _ := watch[rules.RuleFieldThen].(map[string]any)
+			if cfgval.String(then[rules.RuleFieldAction]) != string(rules.ActionRestart) {
+				continue
+			}
+			if !slices.Contains(cfgval.StringList(check[checks.CheckKeyRequires]), "bus") {
+				t.Errorf("%s D-Bus restart watch %s must require the bus-only check", path, name)
+			}
+			window, _ := watch[rules.RuleFieldFor].(map[string]any)
+			cycles, _ := cfgval.Int(window[rules.WindowKeyCycles])
+			if cycles < 3 {
+				t.Errorf("%s D-Bus restart watch %s must wait at least 3 cycles", path, name)
+			}
+		}
+	})
+}
+
 func TestCatalogServicesDoNotDeclareVersionsFrom(t *testing.T) {
 	walkCatalogDocs(t, filepath.Join(repoRoot(t), "catalog", "services"), func(path string, body map[string]any) {
 		versions, _ := body["versions"].(map[string]any)

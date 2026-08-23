@@ -2197,8 +2197,11 @@ A `dbus` check without a target verifies the bus itself. To verify a named
 service, set both `bus_name` and `object_path`; Sermo resolves its unique owner
 with D-Bus auto-activation disabled. The default `probe: peer` checks liveness;
 `probe: introspect` can require a `dbus_interface`, and `probe: property` reads
-one scalar `property` from the required `dbus_interface`. These fields work
-unchanged in host watches and service-embedded watches. See
+one scalar `property` from the required `dbus_interface`. An unowned but
+activatable name passes by default; set `require_owner: true` for a resident
+daemon so losing its D-Bus owner is a failure even while its unit remains
+active. These fields work unchanged in host watches and service-embedded
+watches. See
 [the D-Bus check](rules.md#database-protocols).
 
 A watch fires its hook on the check's **alert** outcome: threshold crossed for

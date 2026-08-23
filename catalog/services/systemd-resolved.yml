@@ -17,6 +17,7 @@ watches:
       type: dbus
       bus_name: org.freedesktop.resolve1
       object_path: /org/freedesktop/resolve1
+      require_owner: true
       probe: introspect
       dbus_interface: org.freedesktop.resolve1.Manager
       timeout: 5s

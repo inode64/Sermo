@@ -25,6 +25,7 @@ watches:
       type: dbus
       bus_name: fi.w1.wpa_supplicant1
       object_path: /fi/w1/wpa_supplicant1
+      require_owner: true
       probe: introspect
       dbus_interface: fi.w1.wpa_supplicant1
       timeout: 5s
