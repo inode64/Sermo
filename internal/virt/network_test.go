@@ -146,6 +146,7 @@ func TestNetworkManagerStopRefusesAttachedGuests(t *testing.T) {
 		{name: "running on network", state: libvirt.DomainRunning, xml: domOnNetworkXML},
 		{name: "running on bridge", state: libvirt.DomainRunning, xml: domOnBridgeXML},
 		{name: "paused on network", state: libvirt.DomainPaused, xml: domOnNetworkXML},
+		{name: "unknown state on network", state: libvirt.DomainNostate, xml: domOnNetworkXML},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			client := &fakeNetworkClient{
@@ -206,19 +207,30 @@ func TestNetworkManagerStopDestroysIdleNetwork(t *testing.T) {
 // cannot be read the bridge attachment cannot be proven absent, so the destroy
 // must not run.
 func TestNetworkManagerStopFailsClosedOnUnverifiableGuests(t *testing.T) {
-	client := &fakeNetworkClient{
-		netXML:  testNetXML,
-		xmlErr:  errors.New("xml unavailable"),
-		domains: []libvirt.Domain{{Name: "kvm1"}},
-		states:  map[string]libvirt.DomainState{"kvm1": libvirt.DomainRunning},
-		domXML:  map[string]string{"kvm1": domElsewhereXML},
-	}
-	err := networkManagerWith(client).Stop(context.Background(), "libvirt-net-default")
-	if err == nil {
-		t.Fatal("Stop() = nil, want fail-closed error")
-	}
-	if slicesContains(client.calls, "net-destroy") {
-		t.Fatalf("calls = %v: destroy ran without verification", client.calls)
+	for _, tc := range []struct {
+		name   string
+		netXML string
+		xmlErr error
+	}{
+		{name: "read error", netXML: testNetXML, xmlErr: errors.New("xml unavailable")},
+		{name: "invalid xml", netXML: "<network><bridge"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			client := &fakeNetworkClient{
+				netXML:  tc.netXML,
+				xmlErr:  tc.xmlErr,
+				domains: []libvirt.Domain{{Name: "kvm1"}},
+				states:  map[string]libvirt.DomainState{"kvm1": libvirt.DomainRunning},
+				domXML:  map[string]string{"kvm1": domElsewhereXML},
+			}
+			err := networkManagerWith(client).Stop(context.Background(), "libvirt-net-default")
+			if err == nil {
+				t.Fatal("Stop() = nil, want fail-closed error")
+			}
+			if slicesContains(client.calls, "net-destroy") {
+				t.Fatalf("calls = %v: destroy ran without verification", client.calls)
+			}
+		})
 	}
 }
 
