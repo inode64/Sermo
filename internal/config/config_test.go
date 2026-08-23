@@ -6383,19 +6383,26 @@ processes:
     enable_if: { init: openrc }
 `
 	for _, tc := range []struct {
-		init           string
+		name           string
+		detectedInit   string
+		backend        string
+		envBackend     string
 		wantSupervisor bool
 	}{
-		{init: "openrc", wantSupervisor: true},
-		{init: "systemd", wantSupervisor: false},
+		{name: "detected openrc", detectedInit: "openrc", backend: "auto", wantSupervisor: true},
+		{name: "detected systemd", detectedInit: "systemd", backend: "auto", wantSupervisor: false},
+		{name: "configured openrc overrides detection", detectedInit: "systemd", backend: "openrc", wantSupervisor: true},
+		{name: "configured systemd overrides detection", detectedInit: "openrc", backend: "systemd", wantSupervisor: false},
+		{name: "environment overrides config", detectedInit: "systemd", backend: "systemd", envBackend: "openrc", wantSupervisor: true},
 	} {
-		t.Run(tc.init, func(t *testing.T) {
+		t.Run(tc.name, func(t *testing.T) {
 			oldInit := detectedInit
-			detectedInit = tc.init
+			detectedInit = tc.detectedInit
 			defer func() { detectedInit = oldInit }()
+			t.Setenv(EnvBackendOverride, tc.envBackend)
 
 			global := writeConfig(t, map[string]string{
-				"sermo.yml":           baseGlobal,
+				"sermo.yml":           strings.Replace(baseGlobal, "backend: auto", "backend: "+tc.backend, 1),
 				"services/minion.yml": serviceBody,
 			})
 			cfg, err := loadConfig(t, global)
