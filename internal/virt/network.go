@@ -189,7 +189,11 @@ func (m NetworkManager) Stop(ctx context.Context, _ string) error {
 		if err != nil {
 			return "", fmt.Errorf("network %q xml: %w", m.Spec.Network, err)
 		}
-		return networkBridgeName(xmlDesc), nil
+		bridge, err := networkBridgeName(xmlDesc)
+		if err != nil {
+			return "", fmt.Errorf("network %q xml: %w", m.Spec.Network, err)
+		}
+		return bridge, nil
 	})
 	if err != nil {
 		return err
@@ -256,7 +260,7 @@ func (m NetworkManager) sessionClient(socket string) func(time.Duration) (Networ
 // keeps its interfaces attached, so pausing never makes a destroy safe.
 func domainHoldsInterfaces(state libvirt.DomainState) bool {
 	switch state {
-	case libvirt.DomainShutoff, libvirt.DomainNostate, libvirt.DomainCrashed:
+	case libvirt.DomainShutoff, libvirt.DomainCrashed:
 		return false
 	default:
 		return true
@@ -300,13 +304,14 @@ type networkBridgeXML struct {
 }
 
 // networkBridgeName extracts the network's bridge device from its XML; ""
-// when the network declares none.
-func networkBridgeName(desc string) string {
+// when the network declares none. Invalid XML is not equivalent to no bridge:
+// callers use this identity to prove that no live guest is attached.
+func networkBridgeName(desc string) (string, error) {
 	var parsed networkBridgeXML
 	if err := xml.Unmarshal([]byte(desc), &parsed); err != nil {
-		return ""
+		return "", fmt.Errorf("parse network description: %w", err)
 	}
-	return parsed.Bridge.Name
+	return parsed.Bridge.Name, nil
 }
 
 type domainInterfacesXML struct {
