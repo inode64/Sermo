@@ -618,6 +618,17 @@
     .mount-table .mount-processes, .mount-table .mount-users { min-width: 0; max-width: none; }
     .mount-table .mount-usage-item, .mount-table .mount-usage-extra { white-space: normal; }
   }
+
+  /* Keep the compact desktop diagnosis columns visible. They are deliberately
+     marked by semantic field key rather than nth-child so adding another table
+     column cannot make the responsive rule point at the wrong reading. */
+  @media (min-width: 901px) and (max-width: 1420px) {
+    .watch-table.watch-type-table :is(th, td)[data-watch-type-column="age"],
+    .watch-table.watch-type-table :is(th, td)[data-watch-type-column="driver"],
+    .watch-table.watch-type-table :is(th, td)[data-watch-type-column="speed"],
+    .watch-table.watch-type-table :is(th, td)[data-watch-type-column="addresses"],
+    .watch-table.watch-type-table :is(th, td)[data-watch-type-column="bus"] { display: table-cell; }
+  }
   @media (max-width: 1024px) {
     /* processes (1 PID · 2 CMD · 3 User · 4 Role · 5 CPU · 6 Max core · 7 Mem ·
        8 IO r/w · 9 FDs · 10 Threads): ten columns of fixed-width bars cannot fit
