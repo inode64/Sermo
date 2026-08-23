@@ -16,6 +16,12 @@ command_background="yes"
 pidfile="/run/sermod.pid"
 retry="${SERMOD_RETRY:-TERM/30/KILL/5}"
 
+# Without this, OpenRC never exposes the reload() below: the systemd unit had
+# ExecReload from day one while every OpenRC host answered `rc-service sermod
+# reload` with "unknown function".
+extra_started_commands="reload"
+description_reload="Validate and atomically swap the monitoring configuration"
+
 # Capture daemon output to a log file.
 output_log="/var/log/sermod.log"
 error_log="/var/log/sermod.log"
