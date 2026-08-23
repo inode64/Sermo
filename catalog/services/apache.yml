@@ -28,11 +28,19 @@ variables:
   health_path: /
 preflight:
   config:
+    # The bare binary does not see the distro's extra defines (Gentoo's
+    # APACHE2_OPTS, Debian's envvars), so `-t` rejects directives from
+    # conditionally loaded modules (H2CopyFiles under -D HTTP2) and blocks the
+    # start of a service whose real configuration is valid. The ctl wrapper
+    # loads those options first.
     type: command
     command:
-      - ${apache_binary}
-      - -t
-    timeout: 10s
+      os:
+        gentoo: [/usr/sbin/apache2ctl, configtest]
+        debian: [/usr/sbin/apache2ctl, configtest]
+        ubuntu: [/usr/sbin/apache2ctl, configtest]
+        default: ["${apache_binary}", -t]
+    timeout: 30s
     analyze:
       use:
         - web
