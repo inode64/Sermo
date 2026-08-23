@@ -47,6 +47,12 @@ cualquier conmutador `security:` que intente desactivarlas.
     backend de servicio ni ruta de señal. La validación permite únicamente
     `then.notify` y `then.notify_interval`; una infracción de política no puede
     reiniciar, reparar, matar ni cambiar de otro modo un proceso o servicio.
+11. **Una red virtual libvirt con interfaces de guests vivas nunca se
+    destruye.** El stop/restart de `control: libvirt-network` verifica cada
+    dominio no apagado (incluidos los pausados — sus taps siguen conectados)
+    contra el nombre de la red y su puente; cualquier conexión, o cualquier
+    guest no verificable, bloquea la destrucción. Ninguna opción de
+    configuración lo relaja.
 
 ## El motor de operaciones
 

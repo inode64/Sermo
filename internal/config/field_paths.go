@@ -52,6 +52,7 @@ const (
 
 	controlPathContainer = SectionControl + "." + dockerctl.ControlKeyContainer
 	controlPathDomain    = SectionControl + "." + virt.ControlKeyDomain
+	controlPathNetwork   = SectionControl + "." + virt.ControlKeyNetwork
 	controlPathHost      = SectionControl + "." + virt.ControlKeyHost
 	controlPathPort      = SectionControl + "." + virt.ControlKeyPort
 	controlPathSocket    = SectionControl + "." + virt.ControlKeySocket
