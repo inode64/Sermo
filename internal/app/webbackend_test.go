@@ -17,6 +17,7 @@ import (
 	"sermo/internal/execx"
 	"sermo/internal/metrics"
 	"sermo/internal/notify"
+	"sermo/internal/operation"
 	"sermo/internal/process"
 	"sermo/internal/rules"
 	"sermo/internal/servicemgr"
@@ -208,12 +209,43 @@ func TestSSHSessionFiltersUseResolvedAppsMetadata(t *testing.T) {
 	}
 }
 
+func TestManagedSSHSessionCloserMatchesBackendCapability(t *testing.T) {
+	target := operation.SessionTarget{PID: 95, StartTicks: 1200, Terminal: "pts/0"}
+	called := false
+	injected := func(_ context.Context, got operation.SessionTarget) error {
+		called = true
+		if got != target {
+			t.Fatalf("target = %+v, want %+v", got, target)
+		}
+		return nil
+	}
+	deps := Deps{ManagedSSHSessionCloser: injected}
+	if closer := managedSSHSessionCloser(deps, servicemgr.BackendOpenRC); closer != nil {
+		t.Fatal("OpenRC managed SSH session closer is available, want nil")
+	}
+	closer := managedSSHSessionCloser(deps, servicemgr.BackendSystemd)
+	if closer == nil {
+		t.Fatal("systemd managed SSH session closer is nil")
+	}
+	if err := closer(t.Context(), target); err != nil {
+		t.Fatalf("close managed SSH session: %v", err)
+	}
+	if !called {
+		t.Fatal("injected managed SSH session closer was not called")
+	}
+	if closer := managedSSHSessionCloser(Deps{}, servicemgr.BackendSystemd); closer == nil {
+		t.Fatal("default systemd managed SSH session closer is nil")
+	}
+}
+
 func TestWebBackendKeepsVerifiedSSHSessionsWithPartialSource(t *testing.T) {
 	b := &WebBackend{
 		order: []string{"ssh"},
 		entries: map[string]*webEntry{"ssh": {
 			sshSessionFilters: []process.IdentityFilter{mustWebIdentityFilter(t, "/usr/sbin/sshd", "root")},
-			backend:           string(servicemgr.BackendSystemd),
+			engine: operation.Engine{ManagedSessionCloser: func(context.Context, operation.SessionTarget) error {
+				return nil
+			}},
 		}},
 		sshSessionSampler: func(checks.SSHSessionConfig) (checks.SSHSessionSample, error) {
 			return checks.SSHSessionSample{
@@ -232,6 +264,12 @@ func TestWebBackendKeepsVerifiedSSHSessionsWithPartialSource(t *testing.T) {
 	}
 	if info := b.DaemonInfo(context.Background()); info.Sessions != nil {
 		t.Fatalf("partial session summary = %+v, want omitted", info.Sessions)
+	}
+	b.entries["ssh"].engine.ManagedSessionCloser = nil
+	inventory = b.Sessions(context.Background())
+	issue := inventory.Sources[0].Issues[0]
+	if issue.CanClose || issue.ManagedByLogind {
+		t.Fatalf("issue without managed closer = %+v, want no close capability", issue)
 	}
 }
 
