@@ -516,11 +516,11 @@ latest completed daemon-cycle or manual sample, while Last activity is an event.
 | Check type | Type-specific columns |
 | --- | --- |
 | `storage` | Name, Usage, Filesystem, Mount point; filters by filesystem when more than one is present |
-| `file` | Name, Path, current age, configured age limit; a configured check `summary` replaces the age and limit columns with Summary |
-| `net` | Name, interface, link, speed, errors |
+| `file` | Name, Path, age, configured age limit; a configured check `summary` keeps Age and replaces the limit with Summary |
+| `net` | Name, interface, driver, speed, assigned IP addresses, link, errors |
 | `hdparm` | Name, device, bus, buffered read, cached read |
 | `lvm` | Name, health, VG, LV, VG size, VG free, reasons |
-| `smart` | Name, device, bus, health, model, serial, firmware, WWN, medium, capacity, temperature, reallocated/pending sectors, link CRC and media errors, wear, formatted power-on time, power cycles, last self-test |
+| `smart` | Name, device, interface (kernel bus), health, temperature, wear, reallocated sectors, formatted power-on time; the expansion includes the remaining identity, health and self-test readings |
 | `diskio` | Name, device, bus, utilization, read, write, await, read total, written total (cumulative since boot, so an idle disk is distinguishable from one nothing ever touches) |
 | `cert` | Name, source, days left, expiry, issuer |
 | `raid` | Name, array, size, degraded, recovering |

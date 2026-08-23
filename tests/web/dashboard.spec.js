@@ -101,6 +101,14 @@ const watches = [{
     { field: "behind_seconds", label: "Behind", value: "0 s" },
   ],
 }, {
+  name: "geoip-database-freshness", display_name: "GeoIP database freshness", category: "files",
+  enabled: true, monitored: true, state: "ok", check_type: "file", summary_configured: true,
+  readings: [
+    { field: "path", label: "Path", value: "/usr/share/GeoIP" },
+    { field: "age", label: "Age", value: "8mo 1d" },
+  ],
+  summary: "GeoIP databases are current", interval: "12h", status_observed_at: "2026-07-10T12:00:00Z",
+}, {
   name: "dead-letter", display_name: "Dead letter", category: "files",
   enabled: true, monitored: true, state: "ok", check_type: "file",
   summary: "size threshold clear", interval: "5m", status_observed_at: "2026-07-10T12:00:00Z",
@@ -115,6 +123,14 @@ const watches = [{
   name: "net-wan", display_name: "WAN", category: "network",
   enabled: true, monitored: true, state: "ok", check_type: "net", keeps_sla: true,
   metrics: [{ name: "used_pct", unit: "%" }],
+  readings: [
+    { field: "interface", label: "Interface", value: "eth0" },
+    { field: "driver", label: "Driver", value: "ice" },
+    { field: "speed", label: "Speed", value: "25000 Mbps" },
+    { field: "addresses", label: "Addresses", value: "192.0.2.10, 2001:db8::10" },
+    { field: "state", label: "State", value: "up" },
+    { field: "errors", label: "Errors total", value: "0 (total 0)" },
+  ],
   summary: "wan state up", interval: "30s", status_observed_at: "2026-07-10T12:00:00Z",
 }, {
   name: "icmp-gateway", display_name: "Gateway", category: "network",
@@ -176,6 +192,7 @@ const watches = [{
   enabled: true, monitored: true, state: "ok", check_type: "smart", can_probe: true,
   readings: [
     { field: "device", label: "Device", value: "/dev/sdb" },
+    { field: "bus", label: "Bus", value: "nvme" },
     { field: "health", label: "Health", value: "PASSED" },
     { field: "temperature", label: "temperature", value: "42 °C" },
   ],
@@ -690,6 +707,31 @@ test("the fds watch table names its column Allocated", async ({ page }) => {
   await expect(fdsHeader.first()).toBeVisible();
   await expect(fdsHeader.first()).toHaveText("Allocated");
   await expect(page.locator('th[data-watch-type-sort-type="fds"][data-watch-type-sort="value"]')).toHaveCount(0);
+});
+
+test("diagnostic watch columns keep freshness, network identity, and SMART interface visible", async ({ page }) => {
+  const geoip = page.locator("#wat-row-geoip-database-freshness");
+  const network = page.locator("#wat-row-net-wan");
+  const smart = page.locator("#wat-row-smart-sdb");
+
+  await expect(page.locator('th[data-watch-type-sort-type="file-summary"][data-watch-type-sort="age"]')).toHaveText("Age");
+  await expect(geoip).toContainText("8mo 1d");
+  await expect(page.locator('th[data-watch-type-sort-type="net"][data-watch-type-sort="driver"]')).toHaveText("Driver");
+  await expect(page.locator('th[data-watch-type-sort-type="net"][data-watch-type-sort="speed"]')).toHaveText("Speed");
+  await expect(page.locator('th[data-watch-type-sort-type="net"][data-watch-type-sort="addresses"]')).toHaveText("IP");
+  await expect(network).toContainText("ice");
+  await expect(network).toContainText("25000 Mbps");
+  await expect(network).toContainText("192.0.2.10, 2001:db8::10");
+  await expect(page.locator('th[data-watch-type-sort-type="smart"][data-watch-type-sort="bus"]')).toHaveText("Interface");
+  await expect(smart).toContainText("nvme");
+
+  if ((page.viewportSize() || {}).width > 1024) {
+    await expect(geoip.locator('[data-watch-type-column="age"]')).toBeVisible();
+    await expect(network.locator('[data-watch-type-column="driver"]')).toBeVisible();
+    await expect(network.locator('[data-watch-type-column="speed"]')).toBeVisible();
+    await expect(network.locator('[data-watch-type-column="addresses"]')).toBeVisible();
+    await expect(smart.locator('[data-watch-type-column="bus"]')).toBeVisible();
+  }
 });
 
 test("an fds watch names the services holding the descriptors", async ({ page }) => {

@@ -24,6 +24,7 @@ const (
 	watchReadingProgressDecimals      = 1
 
 	watchReadingLabelAddresses                = "Addresses"
+	watchReadingLabelAddressCount             = "Address count"
 	watchReadingLabelAllocated                = "Allocated"
 	watchReadingLabelAge                      = "Age"
 	watchReadingLabelArrays                   = "Arrays"
@@ -517,6 +518,13 @@ func netCheckReadings(data map[string]any) []web.WatchReading {
 		out = append(out, web.WatchReading{Field: checks.DataKeyInterface, Label: watchReadingLabelInterface, Value: iface})
 	}
 	out = append(out, netIdentityReadings(data)...)
+	if addresses := readingStringList(data[checks.DataKeyAddresses]); len(addresses) > 0 {
+		out = append(out, web.WatchReading{
+			Field: checks.DataKeyAddresses,
+			Label: watchReadingLabelAddresses,
+			Value: strings.Join(addresses, displayListSeparator),
+		})
+	}
 	metric := cfgval.String(data[checks.DataKeyMetric])
 	value := cfgval.String(data[checks.DataKeyValue])
 	switch metric {
@@ -538,7 +546,7 @@ func netCheckReadings(data map[string]any) []web.WatchReading {
 		}
 	case checks.NetMetricAddress:
 		if value != "" {
-			out = append(out, web.WatchReading{Field: checks.NetMetricAddress, Label: watchReadingLabelAddresses, Value: value})
+			out = append(out, web.WatchReading{Field: checks.NetMetricAddress, Label: watchReadingLabelAddressCount, Value: value})
 		}
 	}
 	return out

@@ -530,11 +530,11 @@ activity es un evento.
 | Tipo de check | Columnas específicas |
 | --- | --- |
 | `storage` | Name, Usage, Filesystem, Mount point; filtra por filesystem si hay más de uno |
-| `file` | Name, Path, edad actual, límite de edad configurado |
-| `net` | Name, interfaz, enlace, velocidad, errores |
+| `file` | Name, Path, edad, límite de edad configurado; si el check configura `summary`, conserva Age y sustituye el límite por Summary |
+| `net` | Name, interfaz, driver, velocidad, direcciones IP asignadas, enlace, errores |
 | `hdparm` | Name, dispositivo, bus, lectura buffered, lectura cached |
 | `lvm` | Name, salud, VG, LV, tamaño de VG, libre en VG, motivos |
-| `smart` | Name, dispositivo, bus, salud, modelo, número de serie, firmware, WWN, medio, capacidad, temperatura, sectores reasignados/pendientes, errores CRC de enlace y de medio, desgaste, tiempo encendido formateado, ciclos de encendido, último autotest |
+| `smart` | Name, dispositivo, interfaz (bus del kernel), salud, temperatura, desgaste, sectores reasignados y tiempo encendido formateado; el desplegable incluye el resto de lecturas de identidad, salud y autotest |
 | `diskio` | Name, dispositivo, bus, utilización, lectura, escritura, await, leído total, escrito total (acumulados desde el arranque, para distinguir un disco ocioso de uno que nadie toca nunca) |
 | `cert` | Name, origen, días restantes, caducidad, emisor |
 | `raid` | Name, array, tamaño, degradado, recuperando |

@@ -5236,6 +5236,13 @@ function numericReadingColumn(key, label) {
   return { key, label, cell: (w) => typedReadingCell(w, key), sort: (w) => readingSortValue(w, key) };
 }
 
+const fileAgeColumn = {
+  key: "age",
+  label: "Age",
+  cell: (w) => typedReadingCell(w, "age"),
+  sort: (w) => parseDurationSeconds(readingRaw(w, "age")),
+};
+
 // watchTypeProfiles is the single presentation owner for every host-watch
 // subtype. A profile owns its useful live columns, sortable values and optional
 // subtype filter; generic summaries are deliberately not used in this view.
@@ -5254,7 +5261,7 @@ const watchTypeProfiles = {
     columns: [
       textReadingColumn("path", "Path"),
       numericReadingColumn("size", "Size"),
-      { key: "age", label: "Current age", cell: (w) => typedReadingCell(w, "age"), sort: (w) => parseDurationSeconds(readingRaw(w, "age")) },
+      fileAgeColumn,
       { key: "older_than", label: "Limit", cell: (w) => watchConditionValue(w, "older_than"), sort: (w) => parseDurationSeconds(watchConditionValue(w, "older_than")) },
     ],
   },
@@ -5262,8 +5269,10 @@ const watchTypeProfiles = {
     label: "Network interfaces",
     columns: [
       textReadingColumn("interface", "Interface"),
-      textReadingColumn("state", "Link"),
+      textReadingColumn("driver", "Driver"),
       numericReadingColumn("speed", "Speed"),
+      textReadingColumn("addresses", "IP"),
+      textReadingColumn("state", "Link"),
       numericReadingColumn("errors", "Errors"),
     ],
   },
@@ -5291,7 +5300,7 @@ const watchTypeProfiles = {
     label: "SMART",
     columns: [
       textReadingColumn("device", "Device"),
-      textReadingColumn("bus", "Bus"),
+      textReadingColumn("bus", "Interface"),
       { key: "health", label: "Health", cell: watchHealthCell, sort: (w) => readingRaw(w, "health").toLowerCase() },
       numericReadingColumn("temperature", "Temperature"),
       numericReadingColumn("wear", "Wear"),
@@ -5444,6 +5453,7 @@ function watchTypeProfile(type) {
       label: "File summaries",
       columns: [
         textReadingColumn("path", "Path"),
+        fileAgeColumn,
         { key: "summary", label: "Summary", cell: (w) => w.summary || "—", sort: (w) => w.summary || "" },
       ],
     };
@@ -5518,7 +5528,7 @@ function watchTypeFilterControl(panel, type, watches, profile) {
 
 function typedWatchRowHTML(w, profile) {
   const colCount = profile.columns.length + 5;
-  const parts = watchRowParts(w, profile.columns.map((column) => tpl`<td>${column.cell(w)}</td>`), colCount);
+  const parts = watchRowParts(w, profile.columns.map((column) => tpl`<td data-watch-type-column="${column.key}">${column.cell(w)}</td>`), colCount);
   return parts.expRow ? [parts.row, parts.expRow] : [parts.row];
 }
 
@@ -5532,7 +5542,7 @@ function renderWatchTypeTable(panel, type, watches) {
     <div class="watch-type-heading"><h3>${watchTypeLabel(type)} <span class="muted">(${watches.length})</span></h3>${watchTypeFilterControl(panel, type, watches, profile)}</div>
     <table class="watch-table watch-type-table">
       <thead><tr>${columns.map((column) => column.key
-        ? tpl`<th scope="col" class="sortable" tabindex="0" data-watch-type-sort-panel="${panel.key}" data-watch-type-sort-type="${type}" data-watch-type-sort="${column.key}" aria-sort="${sortAriaValue(sort, column.key)}">${column.label}<span class="sort-ind" data-watch-type-sort-ind="${type}:${column.key}">${sort.key === column.key ? (sort.dir > 0 ? " ▲" : " ▼") : ""}</span></th>`
+        ? tpl`<th scope="col" class="sortable" tabindex="0" data-watch-type-column="${column.key}" data-watch-type-sort-panel="${panel.key}" data-watch-type-sort-type="${type}" data-watch-type-sort="${column.key}" aria-sort="${sortAriaValue(sort, column.key)}">${column.label}<span class="sort-ind" data-watch-type-sort-ind="${type}:${column.key}">${sort.key === column.key ? (sort.dir > 0 ? " ▲" : " ▼") : ""}</span></th>`
         : tpl`<th scope="col">${column.label}</th>`)}</tr></thead>
       <tbody>${rows.length ? rows : tpl`<tr><td colspan="${columns.length}" class="muted">No ${watchTypeLabel(type).toLowerCase()} watches match this filter.</td></tr>`}</tbody>
     </table>
