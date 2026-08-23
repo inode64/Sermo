@@ -238,6 +238,7 @@ const terminalSessionKinds = [sessionKindTmux, sessionKindScreen];
 const sessionTypeFilterStates = [sessionKindSSH, ...terminalSessionKinds];
 const sessionSourceAvailable = "available";
 const sessionSourceUnavailable = "unavailable";
+const sessionSourcePartial = "partial";
 const sessionStateActive = "active";
 const sessionStateAttached = "attached";
 const sessionStateDetached = "detached";
@@ -246,6 +247,7 @@ const sessionStateUnknown = "unknown";
 const sessionStateBadges = {
   [targetStateCollecting]: [targetStateCollecting, targetStateCollecting],
   [sessionSourceUnavailable]: [targetStateFailed, sessionSourceUnavailable],
+  [sessionSourcePartial]: [targetStateWarning, sessionSourcePartial],
   [sessionStateActive]: [targetStateActive, sessionStateActive],
   [sessionStateAttached]: [targetStateRunning, sessionStateAttached],
   [sessionStateDetached]: [targetStateStopped, sessionStateDetached],
@@ -3996,11 +3998,20 @@ function sessionRows(inventory) {
     ...sessionUsageRow(session, session.has_idle),
     action: terminalSessionCloseButton(session),
   }));
+  const issues = (inventory.sources || []).flatMap((source) => (source.issues || []).map((issue) => ({
+    kind: source.kind || "", service: source.service || "", user: issue.user || source.user || "",
+    name: issue.terminal || source.check || "—", state: sessionSourceUnavailable,
+    detail: issue.message || source.message || "Session attribution unavailable",
+    idle: 0, idleReady: false, cpu: 0, cpuReady: false, memory: 0, memoryReady: false,
+    ioRead: 0, ioWrite: 0, ioReady: false, metricsExpected: false,
+    action: nothing,
+  })));
   // A sessionless source earns a row only when it has something to say: an
   // unavailable or collecting source is a problem or a wait worth seeing, and
   // an empty tmux server with a socket is a process an admin can close. An
   // available ssh or screen source with nobody connected says nothing — no row.
   const emptySources = (inventory.sources || [])
+    .filter((source) => !(source.issues || []).length)
     .filter((source) => !sourceHasSession(source, inventory))
     .filter((source) => source.state !== sessionSourceAvailable || source.can_close_empty)
     .map((source) => ({
@@ -4012,7 +4023,7 @@ function sessionRows(inventory) {
     metricsExpected: false,
     action: emptySessionCloseButton(source),
   }));
-  return [...ssh, ...terminal, ...emptySources];
+  return [...ssh, ...terminal, ...issues, ...emptySources];
 }
 
 function sessionFilterCounts(inventory, rows) {

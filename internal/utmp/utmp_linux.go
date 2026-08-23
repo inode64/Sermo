@@ -22,6 +22,8 @@ const (
 	lineSize          = 32
 	userOffset        = 44
 	userSize          = 32
+	hostOffset        = 76
+	hostSize          = 256
 	utmpRunPath       = "/run/utmp"
 	utmpLegacyRunPath = "/var/run/utmp"
 )
@@ -74,10 +76,11 @@ func parse(data []byte) []Session {
 		}
 		line := cString(rec[lineOffset : lineOffset+lineSize])
 		user := cString(rec[userOffset : userOffset+userSize])
+		host := cString(rec[hostOffset : hostOffset+hostSize])
 		if line == "" || user == "" {
 			continue
 		}
-		out = append(out, Session{User: user, Line: line})
+		out = append(out, Session{User: user, Line: line, Host: host})
 	}
 	return out
 }

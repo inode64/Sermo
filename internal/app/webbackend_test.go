@@ -208,6 +208,32 @@ func TestSSHSessionFiltersUseResolvedAppsMetadata(t *testing.T) {
 	}
 }
 
+func TestWebBackendKeepsVerifiedSSHSessionsWithPartialSource(t *testing.T) {
+	b := &WebBackend{
+		order: []string{"ssh"},
+		entries: map[string]*webEntry{"ssh": {
+			sshSessionFilters: []process.IdentityFilter{mustWebIdentityFilter(t, "/usr/sbin/sshd", "root")},
+		}},
+		sshSessionSampler: func(checks.SSHSessionConfig) (checks.SSHSessionSample, error) {
+			return checks.SSHSessionSample{
+				SSH:    []checks.SSHSession{{User: "root", Terminal: "pts/1", PID: 96, StartTicks: 1234}},
+				Issues: []checks.SSHSessionIssue{{User: "root", Terminal: "pts/0", Message: "executable /usr/lib/sshd-session was replaced"}},
+			}, nil
+		},
+	}
+
+	inventory := b.Sessions(context.Background())
+	if len(inventory.SSH) != 1 || len(inventory.Sources) != 1 {
+		t.Fatalf("inventory = %+v", inventory)
+	}
+	if source := inventory.Sources[0]; source.State != web.SessionSourcePartial || len(source.Issues) != 1 || source.Issues[0].Terminal != "pts/0" {
+		t.Fatalf("source = %+v, want partial source with pts/0 issue", source)
+	}
+	if info := b.DaemonInfo(context.Background()); info.Sessions != nil {
+		t.Fatalf("partial session summary = %+v, want omitted", info.Sessions)
+	}
+}
+
 func TestWebBackendShowsTerminalSessionsFromPublishedCheckData(t *testing.T) {
 	snaps := NewSnapshots()
 	snaps.PublishWithCheckTypes("web", map[string]checks.Result{

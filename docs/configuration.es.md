@@ -1113,6 +1113,13 @@ Endpoints de solo lectura:
 - `GET /api/services/{name}` — detalle del service: últimas comprobaciones, SLA móvil,
   locks de runtime con nombre, procesos descubiertos, estado de la política de
   remediación automática y progreso de la ventana de reglas.
+- `GET /api/sessions` — sesiones SSH, tmux y screen actuales y estado de cada
+  origen configurado. Un origen SSH `partial` conserva cada sesión verificada
+  exactamente e informa cada terminal cuya ascendencia `sshd` no puede verificar
+  como incidencia no disponible sin acción de cierre; nunca lo suma como consola
+  local. Las filas exponen inactividad y, cuando son atribuibles, CPU, memoria
+  residente y tasas de IO del árbol de procesos; el inventario tmux y screen
+  sigue procediendo de muestras publicadas, no de ejecutar un cliente al leer HTTP.
 - `GET /api/services/{name}/sla?since=24h` — historial de disponibilidad a la resolución
   a la que esa ventana está almacenada (ver [Resolución del historial
   almacenado](#resolución-del-historial-almacenado)); `since` es una duración, por

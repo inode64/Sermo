@@ -66,6 +66,9 @@ const (
 	SessionSourceCollecting = "collecting"
 	// SessionSourceUnavailable means the latest sample could not be collected.
 	SessionSourceUnavailable = "unavailable"
+	// SessionSourcePartial means verified sessions were collected while one or
+	// more terminals could not be attributed safely.
+	SessionSourcePartial = "partial"
 )
 
 func isTerminalSessionKind(kind string) bool {
@@ -75,13 +78,22 @@ func isTerminalSessionKind(kind string) bool {
 // SessionSource describes one configured SSH, tmux or screen inventory source,
 // including an explicit empty or unavailable state.
 type SessionSource struct {
-	Kind          string `json:"kind"`
-	Service       string `json:"service"`
-	Check         string `json:"check,omitempty"`
-	User          string `json:"user,omitempty"`
-	State         string `json:"state"`
-	Message       string `json:"message,omitempty"`
-	CanCloseEmpty bool   `json:"can_close_empty"`
+	Kind          string         `json:"kind"`
+	Service       string         `json:"service"`
+	Check         string         `json:"check,omitempty"`
+	User          string         `json:"user,omitempty"`
+	State         string         `json:"state"`
+	Message       string         `json:"message,omitempty"`
+	Issues        []SessionIssue `json:"issues,omitempty"`
+	CanCloseEmpty bool           `json:"can_close_empty"`
+}
+
+// SessionIssue is one terminal that remains visible but cannot be attributed
+// or offered for a close action safely.
+type SessionIssue struct {
+	User     string `json:"user"`
+	Terminal string `json:"terminal"`
+	Message  string `json:"message"`
 }
 
 // SessionInventory is the dashboard-wide view of interactive sessions.

@@ -104,6 +104,8 @@ ejecutable `sshd` configurado exacto y su usuario real, y exige el mismo
 terminal, PID de sesión y ticks de inicio del proceso. Si falta esa frontera, el
 terminal cambió o el PID se recicló, se rechaza. Un cierre correcto envía un único `SIGTERM` al proceso de
 sesión; nunca escala a `SIGKILL`.
+Un terminal SSH cuya ascendencia no puede verificarse sigue visible como
+incidencia no disponible, pero no ofrece acción de cierre ni aporta PID a la API.
 
 El check `terminal_sessions` es de solo observación: ejecuta una lista limitada
 por argv de `tmux` o `screen` como la cuenta configurada explícitamente y no

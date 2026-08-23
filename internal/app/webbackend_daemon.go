@@ -15,7 +15,7 @@ import (
 func (b *WebBackend) DaemonInfo(_ context.Context) web.DaemonInfo {
 	info := web.DaemonInfo{}
 	info.ActiveUsers = notify.ActiveUserCount()
-	if sample, err := b.sshSessions(b.allSSHSessionFilters()); err == nil {
+	if sample, err := b.sshSessions(b.allSSHSessionFilters()); err == nil && len(sample.Issues) == 0 {
 		info.Sessions = &web.SessionSummary{Console: sample.Console, SSH: len(sample.SSH)}
 	}
 
