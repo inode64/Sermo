@@ -4,11 +4,13 @@
 // binary record parsing lives in one place.
 package utmp
 
-// Session is one active login session: the user and its terminal line
-// (e.g. "pts/0", "tty1").
+// Session is one active login session: the user, terminal line (for example
+// "pts/0" or "tty1") and the remote host recorded by login accounting. Host
+// is empty for local sessions.
 type Session struct {
 	User string
 	Line string
+	Host string
 }
 
 // DistinctUsers counts the unique, non-empty user names across sessions. It is

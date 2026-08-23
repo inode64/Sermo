@@ -102,6 +102,8 @@ process start ticks.
 Any missing boundary, changed terminal or recycled PID is rejected. A successful
 close sends one `SIGTERM` to the per-session process; it never escalates to
 `SIGKILL`.
+An SSH terminal whose ancestry cannot be verified remains visible as an
+unavailable issue, but has no close action and contributes no PID to the API.
 
 The `terminal_sessions` check is observation-only. It runs a bounded,
 argv-only `tmux` or `screen` listing as the explicitly configured account;

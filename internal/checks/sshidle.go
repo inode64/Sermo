@@ -66,12 +66,22 @@ type SSHSession struct {
 	Idle       time.Duration
 }
 
+// SSHSessionIssue is one login terminal that the inventory could not attribute
+// to a configured sshd identity safely. It is display-only and never carries a
+// PID or start time that could authorize a close action.
+type SSHSessionIssue struct {
+	User     string
+	Terminal string
+	Message  string
+}
+
 // SSHSessionSample separates local console terminals from interactive SSH
-// terminals. A collection fails closed when a logged-in terminal cannot be
-// attributed from its live process ancestry.
+// terminals. Issues retain terminals whose live ancestry cannot be attributed
+// safely without hiding the verified sessions collected in the same sample.
 type SSHSessionSample struct {
 	Console int
 	SSH     []SSHSession
+	Issues  []SSHSessionIssue
 }
 
 // SSHSessionConfig identifies the trusted sshd processes for one service.
@@ -328,23 +338,32 @@ func sampleSSHSessions(sessions []utmp.Session, snapshot map[int]process.Identit
 		seen[session.Line] = true
 		info, err := terminal(session.Line)
 		if err != nil {
-			return SSHSessionSample{}, fmt.Errorf("terminal %s: %w", session.Line, err)
+			addSSHSessionIssue(&sample, session, fmt.Sprintf("terminal metadata unavailable: %v", err))
+			continue
 		}
 		if info.Device == 0 {
-			return SSHSessionSample{}, fmt.Errorf("terminal %s has no device", session.Line)
+			addSSHSessionIssue(&sample, session, "terminal has no device identity")
+			continue
 		}
 		processes := terminalProcesses(snapshot, info.Device)
 		if len(processes) == 0 {
-			return SSHSessionSample{}, fmt.Errorf("terminal %s has no visible processes", session.Line)
+			addSSHSessionIssue(&sample, session, "terminal has no visible processes")
+			continue
 		}
 		ssh, target, unknown, err := terminalSSH(processes, snapshot, sshdFilters, resolveUser)
 		if err != nil {
-			return SSHSessionSample{}, fmt.Errorf("attribute terminal %s to sshd: %w", session.Line, err)
+			addSSHSessionIssue(&sample, session, fmt.Sprintf("sshd identity verification failed: %v", err))
+			continue
 		}
 		if unknown {
-			return SSHSessionSample{}, fmt.Errorf("cannot attribute terminal %s to sshd", session.Line)
+			addSSHSessionIssue(&sample, session, sshSessionIssueMessage(processes, snapshot))
+			continue
 		}
 		if !ssh {
+			if session.Host != "" {
+				addSSHSessionIssue(&sample, session, "no configured sshd identity in the live process ancestry")
+				continue
+			}
 			sample.Console++
 			continue
 		}
@@ -357,6 +376,35 @@ func sampleSSHSessions(sessions []utmp.Session, snapshot map[int]process.Identit
 		})
 	}
 	return sample, nil
+}
+
+func addSSHSessionIssue(s *SSHSessionSample, session utmp.Session, message string) {
+	s.Issues = append(s.Issues, SSHSessionIssue{User: session.User, Terminal: session.Line, Message: message})
+}
+
+func sshSessionIssueMessage(processes []process.Identity, snapshot map[int]process.Identity) string {
+	seen := make(map[int]bool)
+	queue := slices.Clone(processes)
+	for len(queue) > 0 {
+		id := queue[0]
+		queue = queue[1:]
+		if id.PID <= 0 || seen[id.PID] {
+			continue
+		}
+		seen[id.PID] = true
+		if id.ExePrev != "" {
+			return "executable " + id.ExePrev + " was replaced"
+		}
+		if !id.ExeOK {
+			return "a process executable in the live ancestry is unreadable"
+		}
+		if id.PPID > 1 {
+			if parent, ok := snapshot[id.PPID]; ok {
+				queue = append(queue, parent)
+			}
+		}
+	}
+	return "no configured sshd identity in the live process ancestry"
 }
 
 func terminalProcesses(snapshot map[int]process.Identity, device uint64) []process.Identity {

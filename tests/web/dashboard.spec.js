@@ -30,7 +30,11 @@ const dashboard = {
   services,
   sessions: {
     sources: [
-      { kind: "ssh", service: "web", state: "available" },
+      {
+        kind: "ssh", service: "web", state: "partial",
+        message: "1 terminal(s) could not be attributed safely",
+        issues: [{ user: "root", terminal: "pts/0", message: "executable /usr/lib/sshd-session was replaced" }],
+      },
       { kind: "ssh", service: "db", state: "available" },
       { kind: "tmux", service: "web", check: "tmux-root", user: "root", state: "available" },
       { kind: "tmux", service: "web", check: "tmux-empty", user: "root", state: "available", can_close_empty: true },
@@ -938,6 +942,9 @@ test("sessions panel shows metrics, sorts columns and closes verified SSH and tm
   const sessions = page.getByRole("table", { name: "Current SSH, tmux and screen sessions" });
   await expect(sessions).toContainText("root");
   await expect(sessions).toContainText("pts/11");
+  await expect(sessions).toContainText("pts/0");
+  await expect(sessions).toContainText("executable /usr/lib/sshd-session was replaced");
+  await expect(sessions.locator("tr", { hasText: "pts/0" }).locator('[data-ssh-session-close]')).toHaveCount(0);
   await expect(sessions).toContainText("120s");
   await expect(sessions).toContainText("1 MiB");
   await expect(sessions).toContainText("1 KB/s / 250 B/s");
@@ -968,7 +975,7 @@ test("empty tmux sources use a red state and close the server through the API", 
     await route.fulfill({ json: { ok: true, message: "close empty terminal session source ok" } });
   });
 
-  await expect(page.locator('[data-sf="all"]')).toContainText("all 4");
+  await expect(page.locator('[data-sf="all"]')).toContainText("all 5");
   await expect(page.locator('[data-sf="ssh"]')).toContainText("ssh 1");
   await expect(page.locator('[data-sf="tmux"]')).toContainText("tmux 2");
   await expect(page.locator('[data-sf="screen"]')).toBeHidden();

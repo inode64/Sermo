@@ -76,6 +76,7 @@ func (b *WebBackend) allSSHSessionFilters() []process.IdentityFilter {
 
 func cloneSSHSessionSample(sample checks.SSHSessionSample) checks.SSHSessionSample {
 	sample.SSH = slices.Clone(sample.SSH)
+	sample.Issues = slices.Clone(sample.Issues)
 	return sample
 }
 
