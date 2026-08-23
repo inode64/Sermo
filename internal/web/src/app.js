@@ -3983,6 +3983,16 @@ function sessionUsageRow(session, idleReady) {
   };
 }
 
+function unmeasuredSessionUsageRow() {
+  return {
+    idle: 0, idleReady: false,
+    cpu: 0, cpuReady: false,
+    memory: 0, memoryReady: false,
+    ioRead: 0, ioWrite: 0, ioReady: false,
+    metricsExpected: false,
+  };
+}
+
 function sessionRows(inventory) {
   const ssh = (inventory.ssh || []).map((session) => ({
     kind: sessionKindSSH, service: session.service || "", user: session.user || "",
@@ -4003,8 +4013,7 @@ function sessionRows(inventory) {
     kind: source.kind || "", service: source.service || "", user: issue.user || source.user || "",
     name: issue.terminal || source.check || "—", pid: issue.pid || 0, pidSort: issue.pid || 0, state: sessionSourceUnavailable,
     detail: issue.message || source.message || "Session attribution unavailable",
-    idle: 0, idleReady: false, cpu: 0, cpuReady: false, memory: 0, memoryReady: false,
-    ioRead: 0, ioWrite: 0, ioReady: false, metricsExpected: false,
+    ...unmeasuredSessionUsageRow(),
     action: sshSessionCloseButton(source.service || "", issue),
   })));
   // A sessionless source earns a row only when it has something to say: an
@@ -4020,9 +4029,7 @@ function sessionRows(inventory) {
     name: source.check || "—", pid: 0, pidSort: 0,
     state: source.state === sessionSourceAvailable ? sessionStateEmpty : source.state || targetStateCollecting,
     detail: source.message || (source.state === sessionSourceAvailable ? "No active sessions" : "Waiting for a sample"),
-    idle: 0, idleReady: false, cpu: 0, cpuReady: false, memory: 0, memoryReady: false,
-    ioRead: 0, ioWrite: 0, ioReady: false,
-    metricsExpected: false,
+    ...unmeasuredSessionUsageRow(),
     action: emptySessionCloseButton(source),
   }));
   return [...ssh, ...terminal, ...issues, ...emptySources];
