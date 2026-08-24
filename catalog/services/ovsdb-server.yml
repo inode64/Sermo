@@ -1,6 +1,10 @@
 name: ovsdb-server
 display_name: Open vSwitch Database Server
 category: virtualization
+variables:
+  database: /var/lib/openvswitch/conf.db
+  socket: /run/openvswitch/db.sock
+  schema: /usr/share/openvswitch/vswitch.ovsschema
 # vswitchd loses its connection to the configuration database on restart and can
 # flap or drop bridge config, so a replaced binary is alerted and notified but
 # never restarted automatically. This governs that trigger only — a manual
@@ -13,6 +17,8 @@ service:
     - ovsdb-server
 apps:
   - ovsdb-server
+  - ovsdb-client
+  - ovsdb-tool
 restart_on_change:
   apps:
     - ovsdb-server
@@ -31,8 +37,32 @@ watches:
   openvswitch:
     check:
       type: openvswitch
-      socket: /run/openvswitch/db.sock
+      socket: ${socket}
       timeout: 3s
+  # ovsdb-client compares the schema served by the live database with the
+  # packaged schema without converting or otherwise modifying either one.
+  schema-current:
+    interval: 10m
+    check:
+      type: command
+      command:
+        - ${ovsdb_client_binary}
+        - needs-conversion
+        - "unix:${socket}"
+        - ${schema}
+      expect_stdout: { op: "==", value: "no" }
+      timeout: 10s
+  # show-log parses every record without modifying the database and supports
+  # standalone, active-backup and clustered OVSDB file formats.
+  database-integrity:
+    interval: 24h
+    check:
+      type: command
+      command:
+        - ${ovsdb_tool_binary}
+        - show-log
+        - ${database}
+      timeout: 2m
   alert-if-memory-high:
     check:
       type: metric

@@ -157,7 +157,7 @@ Connection-protocol checks (MySQL, PostgreSQL, Redis, Docker, libvirt, etc.) are
 | `ceph` / `ceph-mon` | health | a Ceph monitor sends its messenger `ceph v…` banner (see Database) |
 | `glusterfs` / `glusterd` / `gluster` | health | a GlusterFS node accepts TCP connections to glusterd on 24007 (see Database) |
 | `gluster_cluster` | health | the local Gluster CLI verifies peer membership, volume/bricks/self-heal state and optional heal limits (see Gluster cluster) |
-| `openvswitch` / `ovs` / `ovsdb` / `ovsdb-server` | health | ovsdb-server answers an OVSDB `list_dbs` JSON-RPC request (see Database) |
+| `openvswitch` / `ovs` / `ovsdb` / `ovsdb-server` | health | ovsdb-server serves a readable `Open_vSwitch` database over OVSDB JSON-RPC (see Database) |
 | `sqlite` / `sqlite3` | health | a SQLite database file passes `PRAGMA integrity_check` (see SQLite) |
 | `replication` | health | MySQL/MariaDB replication is healthy: both replica threads run, lag optionally bounded (see Replication) |
 | `sql`         | condition | a SQL query's scalar result compares (`== != > >= < <= contains =~`) against a value (see SQL query) |
@@ -1614,10 +1614,22 @@ Protocols, in the order of the table above:
 - `openvswitch` (aliases `ovs`, `ovsdb`, `ovsdb-server`) — default port 6640 (TCP,
   the Open vSwitch configuration database server `ovsdb-server`), or a Unix socket
   via `socket` (commonly `/run/openvswitch/db.sock`); `tls` supported (SSL). No
-  auth. Issues an OVSDB (RFC 7047) `list_dbs` JSON-RPC request and verifies a result
-  listing the served databases — result data carries the `databases` list. When the
-  `Open_vSwitch` database is present it follows up with a `transact` select reading
-  `ovs_version`, reported as the `version`.
+  auth. Issues an OVSDB (RFC 7047) `list_dbs` JSON-RPC request, requires the
+  `Open_vSwitch` database, then uses a `transact` select to require its readable
+  root row. Its optional `ovs_version` is reported as the `version` when populated;
+  result data also carries the `databases` list. The `ovsdb-server` catalog profile additionally runs the
+  read-only `ovsdb-client needs-conversion` check every 10 minutes. It passes only
+  when the live database schema matches the installed
+  `/usr/share/openvswitch/vswitch.ovsschema` (output `no`); `yes` or a client error
+  reports the schema watch unhealthy without converting the database. A separate
+  daily `database-integrity` watch runs the read-only `ovsdb-tool show-log` over
+  `/var/lib/openvswitch/conf.db` (override the profile's `database` variable when the
+  file lives elsewhere). It parses every log record and works with standalone,
+  active-backup and clustered files; an unreadable, truncated or malformed log
+  fails the watch. For a clustered deployment, an operator may additionally run
+  `ovsdb-tool check-cluster DB...` with copies from the different cluster members
+  to check self-consistency and cross-consistency; Sermo does not infer or collect
+  those remote files.
 
 ### SQLite integrity (`sqlite` / `sqlite3`)
 

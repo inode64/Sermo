@@ -11,11 +11,12 @@ import (
 
 // openvswitchProtocol probes Open vSwitch's configuration database server
 // (ovsdb-server) over the OVSDB management protocol (RFC 7047), a JSON-RPC
-// dialogue. It issues a `list_dbs` request and verifies a JSON-RPC result
-// listing the served databases — proof ovsdb-server is up and speaking OVSDB.
-// When the `Open_vSwitch` database is present it follows up with a `transact`
-// select reading `ovs_version` from the Open_vSwitch table, reported as the
-// version. ovsdb-server listens on a Unix socket (set `socket`, commonly
+// dialogue. It issues a `list_dbs` request and requires the `Open_vSwitch`
+// database, then follows up with a `transact` select that must read its root row
+// from the Open_vSwitch table. This proves the intended database is served and
+// readable, rather than merely proving that an OVSDB endpoint is listening. The
+// optional `ovs_version` is reported when populated. ovsdb-server listens on a
+// Unix socket (set `socket`, commonly
 // /run/openvswitch/db.sock) or TCP (default port 6640); `tls` enables SSL.
 // No auth.
 type openvswitchProtocol struct{}
@@ -67,11 +68,12 @@ func (openvswitchProtocol) Probe(ctx context.Context, cfg Config) (Result, error
 		extra[extraDatabases] = strings.Join(dbs, ",")
 	}
 
-	// When the Open_vSwitch database is present, read ovs_version for version
-	// tracking. A best-effort step: an empty/absent value leaves Version unset.
-	version := ""
-	if slices.Contains(dbs, ovsdbDatabaseOpenVSwitch) {
-		version = ovsdbVersion(enc, dec)
+	if !slices.Contains(dbs, ovsdbDatabaseOpenVSwitch) {
+		return Result{}, fmt.Errorf("ovsdb does not serve %s database", ovsdbDatabaseOpenVSwitch)
+	}
+	version, err := ovsdbVersion(enc, dec)
+	if err != nil {
+		return Result{}, err
 	}
 	return Result{Version: version, Extra: extra}, nil
 }
@@ -120,9 +122,9 @@ func ovsdbCall(enc *json.Encoder, dec *json.Decoder, id, method string, params [
 }
 
 // ovsdbVersion reads ovs_version from the Open_vSwitch table via a transact
-// select. It returns "" on any error or when the column is unset (OVSDB renders
-// an absent optional column as a set, which does not unmarshal into a string).
-func ovsdbVersion(enc *json.Encoder, dec *json.Decoder) string {
+// select. A missing row, operation error or malformed optional value means the
+// database is not readable enough to satisfy the health check.
+func ovsdbVersion(enc *json.Encoder, dec *json.Decoder) (string, error) {
 	params := []any{ovsdbDatabaseOpenVSwitch, map[string]any{
 		ovsdbFieldOp:      ovsdbOpSelect,
 		ovsdbFieldTable:   ovsdbTableOpenVSwitch,
@@ -130,19 +132,51 @@ func ovsdbVersion(enc *json.Encoder, dec *json.Decoder) string {
 		ovsdbFieldColumns: []string{ovsdbColumnVersion},
 	}}
 	var result []struct {
-		Rows []struct {
+		Error   string `json:"error"`
+		Details string `json:"details"`
+		Rows    []struct {
 			OvsVersion json.RawMessage `json:"ovs_version"`
 		} `json:"rows"`
 	}
 	if err := ovsdbCall(enc, dec, ovsdbIDTransact, ovsdbMethodTransact, params, &result); err != nil {
-		return ""
+		return "", err
 	}
-	if len(result) == 0 || len(result[ovsdbFirstResultIndex].Rows) == 0 {
-		return ""
+	if len(result) == 0 {
+		return "", errors.New("ovsdb transact returned no operation result")
 	}
-	var v string
-	if json.Unmarshal(result[ovsdbFirstResultIndex].Rows[ovsdbFirstRowIndex].OvsVersion, &v) == nil {
-		return v
+	operation := result[ovsdbFirstResultIndex]
+	if operation.Error != "" {
+		detail := operation.Error
+		if operation.Details != "" {
+			detail += ": " + operation.Details
+		}
+		return "", fmt.Errorf("ovsdb transact operation failed: %s", detail)
 	}
-	return ""
+	if len(operation.Rows) == 0 {
+		return "", errors.New("ovsdb Open_vSwitch table did not return its root row")
+	}
+	version, err := decodeOVSDBOptionalString(operation.Rows[ovsdbFirstRowIndex].OvsVersion)
+	if err != nil {
+		return "", fmt.Errorf("decode ovsdb ovs_version: %w", err)
+	}
+	return version, nil
+}
+
+// decodeOVSDBOptionalString accepts either the scalar encoding used for a
+// present optional string or ["set", []] for an absent value (RFC 7047).
+func decodeOVSDBOptionalString(raw json.RawMessage) (string, error) {
+	var value string
+	if err := json.Unmarshal(raw, &value); err == nil {
+		return value, nil
+	}
+	var set []json.RawMessage
+	if err := json.Unmarshal(raw, &set); err != nil || len(set) != 2 {
+		return "", errors.New("expected a string or an empty OVSDB set")
+	}
+	var tag string
+	var values []json.RawMessage
+	if json.Unmarshal(set[0], &tag) != nil || tag != "set" || json.Unmarshal(set[1], &values) != nil || len(values) != 0 {
+		return "", errors.New("expected a string or an empty OVSDB set")
+	}
+	return "", nil
 }

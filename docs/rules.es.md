@@ -157,7 +157,7 @@ Las comprobaciones de protocolo de conexión (MySQL, PostgreSQL, Redis, Docker, 
 | `ceph` / `ceph-mon` | salud | un monitor Ceph envía su banner messenger `ceph v…` (ver Base de datos) |
 | `glusterfs` / `glusterd` / `gluster` | salud | el glusterd de un nodo GlusterFS acepta conexiones TCP en 24007 (ver Base de datos) |
 | `gluster_cluster` | salud | la CLI Gluster local verifica pares, volúmenes/bricks/self-heal y límites de curación opcionales (ver Cluster Gluster) |
-| `openvswitch` / `ovs` / `ovsdb` / `ovsdb-server` | salud | ovsdb-server responde a una petición JSON-RPC `list_dbs` de OVSDB (ver Base de datos) |
+| `openvswitch` / `ovs` / `ovsdb` / `ovsdb-server` | salud | ovsdb-server sirve una base `Open_vSwitch` legible mediante OVSDB JSON-RPC (ver Base de datos) |
 | `sqlite` / `sqlite3` | salud | un archivo de base de datos SQLite pasa `PRAGMA integrity_check` (ver SQLite) |
 | `replication` | salud | la replicación MySQL/MariaDB está sana: ambos hilos de réplica corren, retraso opcionalmente acotado (ver Replicación) |
 | `sql`         | condición | el resultado escalar de una consulta SQL se compara (`== != > >= < <= contains =~`) contra un valor (ver Consulta SQL) |
@@ -1638,10 +1638,23 @@ Protocolos, en el orden de la tabla de arriba:
 - `openvswitch` (alias `ovs`, `ovsdb`, `ovsdb-server`) — puerto por defecto 6640 (TCP,
   el servidor de base de datos de configuración de Open vSwitch `ovsdb-server`), o un socket Unix
   vía `socket` (comúnmente `/run/openvswitch/db.sock`); `tls` soportado (SSL). Sin
-  auth. Emite una petición JSON-RPC `list_dbs` de OVSDB (RFC 7047) y verifica un resultado
-  que lista las bases de datos servidas — los datos del resultado llevan la lista `databases`. Cuando la
-  base de datos `Open_vSwitch` está presente le sigue con un `transact` select leyendo
-  `ovs_version`, reportado como la `version`.
+  auth. Emite una petición JSON-RPC `list_dbs` de OVSDB (RFC 7047), exige la base
+  `Open_vSwitch` y después usa un `transact` select que debe devolver su fila raíz
+  legible. El `ovs_version` opcional se reporta como la `version` cuando está
+  poblado; los datos del resultado también llevan la lista `databases`. El perfil de catálogo
+  `ovsdb-server` ejecuta además cada 10 minutos la comprobación de solo lectura
+  `ovsdb-client needs-conversion`. Solo pasa cuando el esquema de la base en
+  ejecución coincide con `/usr/share/openvswitch/vswitch.ovsschema` instalado
+  (salida `no`); `yes` o un error del cliente marcan el watch de esquema como no
+  saludable sin convertir la base de datos. Un watch `database-integrity`
+  separado ejecuta diariamente `ovsdb-tool show-log`, en modo solo lectura, sobre
+  `/var/lib/openvswitch/conf.db` (sobrescribe la variable `database` del perfil si el
+  fichero está en otra ruta). Analiza todos los registros y funciona con ficheros
+  standalone, active-backup y clustered; un log ilegible, truncado o malformado
+  hace fallar el watch. En un despliegue clustered, el operador puede ejecutar
+  adicionalmente `ovsdb-tool check-cluster DB...` con copias de los distintos
+  miembros para comprobar la coherencia interna y cruzada; Sermo no infiere ni
+  recopila esos ficheros remotos.
 
 ### Integridad SQLite (`sqlite` / `sqlite3`)
 
