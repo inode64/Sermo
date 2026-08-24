@@ -19,8 +19,7 @@ jobs:
       fail-fast: false
       matrix:
         # python covers scripts/: cover_gate.py and docs_sync_check.py gate the
-        # build, and remote-deploy/ runs as root over SSH on the fleet. It was
-        # the only supported language in the tree that nothing analysed.
+        # build, so these project tools receive the same analysis as Go and JS.
         language: [go, javascript-typescript, python]
     steps:
       - uses: actions/checkout@v7

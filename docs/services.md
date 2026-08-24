@@ -1930,10 +1930,9 @@ backends — the aggregate then collapses to `0` and the lag watches never fire,
 silently. `pg_replication_slots` is readable by any role, so the slot watches
 are unaffected.
 
-These watches only make sense where replication actually happens.
-`scripts/remote-deploy/generate_install_config.py` disables the ones a host
-cannot satisfy from the `postgres_clusters` inventory evidence — see
-[the remote-deploy README](../scripts/remote-deploy/README.md).
+These watches only make sense where replication actually happens. Enable only
+the watches that match the PostgreSQL role and replication features on that
+host.
 
 ## Auxiliary commands
 
