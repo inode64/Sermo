@@ -4,6 +4,11 @@
 // binary record parsing lives in one place.
 package utmp
 
+import "time"
+
+// DevRoot is the canonical Linux device root used to resolve terminal lines.
+const DevRoot = "/dev"
+
 // Session is one active login session: its leader PID, user, terminal line (for
 // example "pts/0" or "tty1") and remote host recorded by login accounting.
 // Host is empty for local sessions.
@@ -12,6 +17,12 @@ type Session struct {
 	User string
 	Line string
 	Host string
+}
+
+// Terminal is the kernel identity and last input time of a login terminal.
+type Terminal struct {
+	Device     uint64
+	AccessedAt time.Time
 }
 
 // DistinctUsers counts the unique, non-empty user names across sessions. It is
@@ -24,4 +35,14 @@ func DistinctUsers(sessions []Session) int {
 		}
 	}
 	return len(users)
+}
+
+// DistinctUserCount reports the number of distinct users with an active login
+// session in the system utmp database.
+func DistinctUserCount() (int, error) {
+	sessions, err := Sessions()
+	if err != nil {
+		return 0, err
+	}
+	return DistinctUsers(sessions), nil
 }

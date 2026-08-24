@@ -11,12 +11,6 @@ import (
 	"time"
 )
 
-// Terminal is the kernel identity and last input time of a login terminal.
-type Terminal struct {
-	Device     uint64
-	AccessedAt time.Time
-}
-
 // TTYPath resolves a utmp terminal line below devRoot without permitting an
 // absolute path or traversal outside that root.
 func TTYPath(devRoot, line string) (string, bool) {
