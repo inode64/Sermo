@@ -2489,6 +2489,79 @@ func TestRedisCatalogAlertsOnPersistenceFailure(t *testing.T) {
 	}
 }
 
+func TestOVSDBServerCatalogChecksLiveDatabaseSchemaAndIntegrity(t *testing.T) {
+	body := catalogDocByName(t, repoRoot(t), "services", "ovsdb-server")
+
+	if apps := cfgval.StringList(body["apps"]); !slices.Equal(apps, []string{"ovsdb-server", "ovsdb-client", "ovsdb-tool"}) {
+		t.Fatalf("ovsdb-server apps = %v, want ovsdb-server, ovsdb-client and ovsdb-tool", apps)
+	}
+	variables := nested(t, body, "variables")
+	if got := cfgval.String(variables["socket"]); got != "/run/openvswitch/db.sock" {
+		t.Fatalf("ovsdb-server socket = %q, want /run/openvswitch/db.sock", got)
+	}
+	if got := cfgval.String(variables["schema"]); got != "/usr/share/openvswitch/vswitch.ovsschema" {
+		t.Fatalf("ovsdb-server schema = %q, want packaged vswitch.ovsschema", got)
+	}
+	if got := cfgval.String(variables["database"]); got != "/var/lib/openvswitch/conf.db" {
+		t.Fatalf("ovsdb-server database = %q, want /var/lib/openvswitch/conf.db", got)
+	}
+
+	live := catalogWatchCheck(t, body, "openvswitch")
+	if got := cfgval.String(live["type"]); got != "openvswitch" {
+		t.Fatalf("ovsdb-server live database check type = %q, want openvswitch", got)
+	}
+	if got := cfgval.String(live["socket"]); got != "${socket}" {
+		t.Fatalf("ovsdb-server live database socket = %q, want ${socket}", got)
+	}
+
+	current := catalogWatchCheck(t, body, "schema-current")
+	if got := cfgval.String(current["type"]); got != "command" {
+		t.Fatalf("ovsdb-server schema check type = %q, want command", got)
+	}
+	wantCommand := []string{
+		"${ovsdb_client_binary}",
+		"needs-conversion",
+		"unix:${socket}",
+		"${schema}",
+	}
+	if got := cfgval.StringList(current["command"]); !slices.Equal(got, wantCommand) {
+		t.Fatalf("ovsdb-server schema command = %v, want %v", got, wantCommand)
+	}
+	if got := cfgval.String(nested(t, current, "expect_stdout")["op"]); got != "==" {
+		t.Fatalf("ovsdb-server schema stdout op = %q, want ==", got)
+	}
+	if got := cfgval.String(nested(t, current, "expect_stdout")["value"]); got != "no" {
+		t.Fatalf("ovsdb-server schema stdout value = %q, want no", got)
+	}
+	if got := cfgval.String(current["timeout"]); got != "10s" {
+		t.Fatalf("ovsdb-server schema timeout = %q, want 10s", got)
+	}
+
+	integrityWatch := nested(t, body, "watches", "database-integrity")
+	if got := cfgval.String(integrityWatch["interval"]); got != "24h" {
+		t.Fatalf("ovsdb-server integrity interval = %q, want 24h", got)
+	}
+	integrity := nested(t, integrityWatch, "check")
+	if got := cfgval.String(integrity["type"]); got != "command" {
+		t.Fatalf("ovsdb-server integrity check type = %q, want command", got)
+	}
+	wantIntegrityCommand := []string{"${ovsdb_tool_binary}", "show-log", "${database}"}
+	if got := cfgval.StringList(integrity["command"]); !slices.Equal(got, wantIntegrityCommand) {
+		t.Fatalf("ovsdb-server integrity command = %v, want %v", got, wantIntegrityCommand)
+	}
+	if got := cfgval.String(integrity["timeout"]); got != "2m" {
+		t.Fatalf("ovsdb-server integrity timeout = %q, want 2m", got)
+	}
+
+	tool := catalogDocByName(t, repoRoot(t), "apps", "ovsdb-tool")
+	if got := cfgval.String(nested(t, tool, "variables")["binary"]); got != "${bindir}/ovsdb-tool" {
+		t.Fatalf("ovsdb-tool binary = %q, want ${bindir}/ovsdb-tool", got)
+	}
+	if command := cfgval.StringList(nested(t, tool, "preflight", "version")["command"]); !slices.Equal(command, []string{"${binary}", "--version"}) {
+		t.Fatalf("ovsdb-tool version command = %v, want ovsdb-tool --version", command)
+	}
+}
+
 func TestWALGBackupAppsResolveRequiredBinaryPreflight(t *testing.T) {
 	root := repoRoot(t)
 	dir := t.TempDir()

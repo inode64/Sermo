@@ -1,0 +1,8 @@
+name: ovsdb-tool
+display_name: Open vSwitch Database Tool
+category: virtualization
+variables:
+  binary: ${bindir}/ovsdb-tool
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}", "--version"], timeout: 10s }
