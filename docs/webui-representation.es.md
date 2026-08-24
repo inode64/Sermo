@@ -535,6 +535,7 @@ activity es un evento.
 | `hdparm` | Name, dispositivo, bus, lectura buffered, lectura cached |
 | `lvm` | Name, salud, VG, LV, tamaño de VG, libre en VG, motivos |
 | `smart` | Name, dispositivo, interfaz (bus del kernel), salud, temperatura, desgaste, sectores reasignados y tiempo encendido formateado; el desplegable incluye el resto de lecturas de identidad, salud y autotest |
+| `storcli` / `ssacli` | Name, salud, recuentos de volúmenes y discos, progreso de reconstrucción, temperatura máxima, errores de medio y alertas SMART; el desplegable muestra una lectura de ancho completo separada para cada controladora, caché, volumen virtual y disco físico, con identidad, capacidad, RAM/caché de controladora, dispositivo Linux, nivel/operación RAID, temperatura/errores por disco y veredicto SMART de la controladora |
 | `diskio` | Name, dispositivo, bus, utilización, lectura, escritura, await, leído total, escrito total (acumulados desde el arranque, para distinguir un disco ocioso de uno que nadie toca nunca) |
 | `cert` | Name, origen, días restantes, caducidad, emisor |
 | `raid` | Name, array, tamaño, degradado, recuperando |

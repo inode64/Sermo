@@ -1339,7 +1339,8 @@ banda mín–máx. Los datos están en
 `GET /api/services/{name}/metrics?check=NAME&since=DURATION` como `{summary:{count,
 avg,min,max}, points:[{start,n,avg,min,max}], unit:"ms"}`. Añade `metric=KEY` para leer
 una métrica numérica con nombre para comprobaciones que publican una, como `hdparm`
-`read`/`cached`, `sensors` `temp`/`fan`/`voltage`, `smart` `temperature`/`wear` o
+`read`/`cached`, `sensors` `temp`/`fan`/`voltage`, `smart` `temperature`/`wear`,
+`storcli`/`ssacli` `temperature`/`raid_progress_pct`/contadores de errores de hardware o
 `edac` `ce`/`ue`; en ese caso `unit` es la unidad de la métrica en lugar de `ms`.
 Las mediciones siguen la misma escalera de archivos que las muestras de SLA
 ([Resolución del historial almacenado](#resolución-del-historial-almacenado)), así que el

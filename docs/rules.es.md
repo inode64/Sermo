@@ -78,6 +78,8 @@ Las comprobaciones de protocolo de conexión (MySQL, PostgreSQL, Redis, Docker, 
 | `hdparm`      | condición | el rendimiento de lectura `hdparm` de un disco cruza un umbral (`read`/`cached` MB/s) (ver Rendimiento de disco)|
 | `sensors`     | condición | los sensores de hardware hwmon cruzan un umbral (`temp` °C / `fan` RPM / `voltage` V) (ver Sensores de hardware)|
 | `smart`       | condición | la salud/atributos e identidad SMART de una unidad (veredicto fallido, `reallocated`, `pending_sectors`, `crc_errors`, `media_errors`, `wear`, `temperature`) (ver Sensores de hardware)|
+| `storcli`     | salud | salud de controladora MegaRAID, enclosure, volúmenes/discos, protección de caché, SMART/errores y temperatura mediante StorCLI (ver Sensores de hardware)|
+| `ssacli`      | salud | salud de controladora HPE Smart Array, volúmenes/discos, caché, batería/condensador, SMART/errores de medio y temperatura mediante SSA CLI (ver Sensores de hardware)|
 | `raid`        | condición | un array RAID por software md de Linux está degradado/recuperándose (`degraded`/`recovering`/`arrays`) (ver Sensores de hardware)|
 | `lvm`         | salud | todos los volume groups y volúmenes lógicos LVM reportan sanos (ver Sensores de hardware) |
 | `stale_binary` | condición | ningún proceso atribuido ejecuta un binario reemplazado en disco desde que arrancó (inyectado por servicio; también declarable) |
@@ -2574,6 +2576,46 @@ servicio de modo que la degradación gradual es visible.
       crc_errors: { op: ">", value: 0 }        # link errors: suspect the cable
       wear: { op: ">", value: 90 }             # SSD/NVMe nearly worn out
   ```
+
+- **`storcli` / `ssacli`** — salud de RAID hardware en modo de solo lectura.
+  Son watches de host, no checks del proceso de un servicio: las utilidades no
+  son daemons y la controladora pertenece al host. `binary` debe ser una ruta
+  absoluta a un ejecutable. StorCLI consulta en JSON controladora/enclosure,
+  discos físicos y volúmenes virtuales; SSA CLI ejecuta
+  `ctrl all show config detail`. Sermo alerta ante controladoras,
+  arrays/volúmenes, discos, enclosures, caché o batería/condensador no sanos;
+  caché offline conservada, modo seguro o necesidad de apagado; errores de
+  medio irrecuperables, de memoria, otros o predictivos; alertas/desgaste SMART;
+  volúmenes inconsistentes o inaccesibles; e inicializaciones o reconstrucciones
+  incompletas. Cada controladora, caché, volumen virtual y disco físico se
+  expone como una lectura propia. La controladora incluye modelo, firmware y
+  RAM/caché integrada; el volumen incluye nivel RAID, capacidad, dispositivo
+  Linux, política de caché y operación activa; el disco incluye bahía, estado,
+  capacidad, tipo/interfaz, modelo, serie, firmware, temperatura, contadores de
+  error y el veredicto SMART del disco físico obtenido por la controladora. El
+  progreso de reconstrucción se asocia al volumen o disco afectado y también se
+  publica como `raid_progress_pct`. `temperature` alerta opcionalmente por la temperatura máxima de
+  controladora, módulo de protección de caché o disco. Los recuentos, motivos y
+  temperatura máxima se exponen como lecturas, y se grafica el historial de
+  temperatura, errores y progreso. No añadas un watch `smart` al dispositivo
+  del sistema operativo que representa uno de estos volúmenes virtuales:
+  smartctl ve el volumen lógico, mientras este watch de controladora es la fuente
+  de verdad para sus discos miembros.
+
+  ```yaml
+  checks:
+    controller:
+      type: storcli                 # usa ssacli para HPE Smart Array
+      binary: /usr/bin/storcli64
+      timeout: 2m
+      temperature: { op: ">", value: 70 }
+  ```
+
+  Sermo nunca invoca comandos de configuración, reconstrucción, patrol read ni
+  escritura. La generación para la flota solo crea el watch después de que la
+  utilidad instalada responda a una consulta de controladora de solo lectura;
+  así, un paquete de otro fabricante sin controladora compatible no crea un
+  watch permanentemente no disponible.
 
 - **`raid`** — **RAID por software md** de Linux desde `/proc/mdstat` y datos de
   sólo lectura de `/sys/block/md*/md` (nativo). Sin predicado alerta cuando

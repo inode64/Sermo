@@ -521,6 +521,7 @@ latest completed daemon-cycle or manual sample, while Last activity is an event.
 | `hdparm` | Name, device, bus, buffered read, cached read |
 | `lvm` | Name, health, VG, LV, VG size, VG free, reasons |
 | `smart` | Name, device, interface (kernel bus), health, temperature, wear, reallocated sectors, formatted power-on time; the expansion includes the remaining identity, health and self-test readings |
+| `storcli` / `ssacli` | Name, health, volume and drive counts, rebuild progress, maximum temperature, media-error and SMART-alert counts; the expansion has a separate full-width reading for every controller, cache, virtual volume and physical drive, including identity, capacity, controller RAM/cache, Linux volume device, RAID level/operation, per-drive temperature/errors and controller SMART verdict |
 | `diskio` | Name, device, bus, utilization, read, write, await, read total, written total (cumulative since boot, so an idle disk is distinguishable from one nothing ever touches) |
 | `cert` | Name, source, days left, expiry, issuer |
 | `raid` | Name, array, size, degraded, recovering |

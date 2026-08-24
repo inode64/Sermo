@@ -1,0 +1,9 @@
+name: ssacli
+display_name: HPE Smart Storage Administrator CLI
+category: storage
+description: HPE Smart Array controller, logical-drive and physical-drive status utility.
+variables:
+  binary: ${bindir}/ssacli
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}", "version"], timeout: 30s }

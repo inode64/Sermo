@@ -791,6 +791,18 @@ watches:
       media_errors: { op: ">", value: 0 }  # NVMe media errors
       wear: { op: ">", value: 90 }  # SSD wear-level %
       power_on_hours: { op: ">", value: 50000 }
+  storcli:
+    check:
+      type: storcli
+      binary: /usr/bin/storcli64
+      timeout: 2m
+      temperature: { op: ">", value: 70 }
+  ssacli:
+    check:
+      type: ssacli
+      binary: /usr/bin/ssacli
+      timeout: 2m
+      temperature: { op: ">", value: 70 }
   raid:
     check:
       type: raid

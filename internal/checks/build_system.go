@@ -1,6 +1,8 @@
 package checks
 
 import (
+	"path/filepath"
+
 	"sermo/internal/cfgval"
 	"sermo/internal/execx"
 )
@@ -162,6 +164,23 @@ func buildRaidCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 		sampler:      deps.RaidSampler,
 		array:        cfgval.String(entry[CheckKeyArray]),
 		sysfsChanges: cfgval.Bool(entry[CheckKeySysfsChanges]),
+	}, ""
+}
+
+// buildHardwareRAIDCheck builds a read-only StorCLI or SSA CLI host hardware
+// check. An absolute binary keeps the daemon independent of PATH and lets fleet
+// discovery select vendor installations outside the usual bindir.
+func buildHardwareRAIDCheck(b base, entry map[string]any, runner execx.Runner, tool string) (Check, string) {
+	binary := cfgval.String(entry[CheckKeyBinary])
+	if !filepath.IsAbs(binary) {
+		return nil, tool + " check requires an absolute binary path"
+	}
+	preds, err := parseLevelPreds(entry, HardwareRAIDPredFields)
+	if err != nil {
+		return nil, tool + " check: " + err.Error()
+	}
+	return hardwareRAIDCheck{
+		base: b, runner: execx.RunnerOrDefault(runner), binary: binary, tool: tool, preds: preds,
 	}, ""
 }
 

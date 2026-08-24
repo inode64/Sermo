@@ -1526,6 +1526,8 @@ func TestCatalogNamedDNSCheckIsHostOverrideFriendly(t *testing.T) {
 // them once per device or array.
 var hostHardwareCheckTypes = []string{
 	checks.CheckTypeRAID,
+	checks.CheckTypeStorCLI,
+	checks.CheckTypeSSACLI,
 	checks.CheckTypeSmart,
 	checks.CheckTypeSensors,
 	checks.CheckTypeEDAC,

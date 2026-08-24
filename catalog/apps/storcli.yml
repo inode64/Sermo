@@ -1,0 +1,9 @@
+name: storcli
+display_name: Broadcom StorCLI
+category: storage
+description: Broadcom/LSI MegaRAID controller, virtual-drive and physical-drive status utility.
+variables:
+  binary: ${bindir}/storcli64
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}", "-v"], timeout: 30s }

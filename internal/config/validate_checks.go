@@ -908,6 +908,8 @@ var singleShotCheckValidators = map[string]singleShotCheckValidator{
 	checks.CheckTypeSensors:          validateSensorsCheck,
 	checks.CheckTypeSmart:            singleShotNoLock(validateSmartFields),
 	checks.CheckTypeRAID:             validateRAIDCheck,
+	checks.CheckTypeStorCLI:          validateHardwareRAIDCheck,
+	checks.CheckTypeSSACLI:           validateHardwareRAIDCheck,
 	checks.CheckTypeGlusterCluster:   singleShotNoLock(validateGlusterClusterCheck),
 	checks.CheckTypeLVM:              validateLVMCheck,
 	checks.CheckTypeEDAC:             singleShotThreshold(checks.EdacPredFields),
@@ -1338,6 +1340,17 @@ func validateRAIDCheck(path string, entry map[string]any, _ string, add addFunc)
 	if array, present := entry[checks.CheckKeyArray]; present && cfgval.String(array) == "" {
 		add("%s.%s must be a non-empty string", path, checks.CheckKeyArray)
 	}
+}
+
+func validateHardwareRAIDCheck(path string, entry map[string]any, _ string, add addFunc) {
+	binary := cfgval.String(entry[checks.CheckKeyBinary])
+	switch {
+	case binary == "":
+		add("%s.%s is required for a hardware RAID check", path, checks.CheckKeyBinary)
+	case !filepath.IsAbs(binary):
+		add("%s.%s path %q must be absolute", path, checks.CheckKeyBinary, binary)
+	}
+	validatePresentThresholds(path, entry, checks.HardwareRAIDPredFields, add)
 }
 
 func validateLVMCheck(path string, entry map[string]any, _ string, add addFunc) {

@@ -1285,7 +1285,8 @@ maximum** plus a line (average over time) with a min–max band. The data is at
 `GET /api/services/{name}/metrics?check=NAME&since=DURATION` as `{summary:{count,
 avg,min,max}, points:[{start,n,avg,min,max}], unit:"ms"}`. Add `metric=KEY` to
 read a named numeric metric for checks that publish one, such as `hdparm`
-`read`/`cached`, `sensors` `temp`/`fan`/`voltage`, `smart` `temperature`/`wear`
+`read`/`cached`, `sensors` `temp`/`fan`/`voltage`, `smart` `temperature`/`wear`,
+`storcli`/`ssacli` `temperature`/`raid_progress_pct`/hardware-error counters
 or `edac` `ce`/`ue`; in that case `unit` is the metric's unit instead of `ms`.
 Measurements follow the same archive ladder as the SLA samples ([Stored history
 resolution](#stored-history-resolution)), so the minimum and maximum of a spike

@@ -2,6 +2,7 @@ package app
 
 import (
 	"cmp"
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
@@ -404,6 +405,8 @@ var checkReadingsByType = map[string]func(map[string]any) []web.WatchReading{
 	checks.CheckTypePressure:         pressureCheckReadings,
 	checks.CheckTypeDiskIO:           diskioCheckReadings,
 	checks.CheckTypeSmart:            smartCheckReadings,
+	checks.CheckTypeStorCLI:          hardwareRAIDCheckReadings,
+	checks.CheckTypeSSACLI:           hardwareRAIDCheckReadings,
 	checks.CheckTypeRAID:             raidCheckReadings,
 	checks.CheckTypeReplication:      replicationCheckReadings,
 	checks.CheckTypeGlusterCluster:   glusterClusterCheckReadings,
@@ -1040,6 +1043,205 @@ func metricCheckReadings(checkType string, data map[string]any) []web.WatchReadi
 		addMetrics(graphMetrics).
 		addLastKnown(graphMetrics).
 		readings()
+}
+
+func hardwareRAIDCheckReadings(data map[string]any) []web.WatchReading {
+	rb := readingsFrom(data).
+		addString(checks.DataKeyHealth, watchReadingLabelHealth).
+		addInt(checks.DataKeyHardwareRAIDControllers, "Controllers").
+		addInt(checks.DataKeyHardwareRAIDVolumes, "Volumes").
+		addInt(checks.DataKeyHardwareRAIDDrives, "Drives").
+		addInt(checks.DataKeyHardwareRAIDEnclosures, "Enclosures").
+		addInt(checks.DataKeyHardwareRAIDCaches, "Caches").
+		addInt(checks.DataKeyHardwareRAIDBatteries, "Batteries/capacitors").
+		addMetric(checks.SmartFieldTemperature, "Maximum temperature", watchReadingDefaultMetricDecimals, metrics.MetricUnitCelsius).
+		addInt(checks.DataKeyHardwareRAIDMediaErrors, "Media errors").
+		addInt(checks.DataKeyHardwareRAIDOtherErrors, "Other errors").
+		addInt(checks.DataKeyHardwareRAIDPredictiveFailures, "Predictive failures").
+		addInt(checks.DataKeyHardwareRAIDSMARTAlerts, "SMART alerts").
+		addInt(checks.DataKeyHardwareRAIDCorrectableErrors, "Correctable errors").
+		addInt(checks.DataKeyHardwareRAIDUncorrectableErrors, "Uncorrectable errors")
+	if operation := cfgval.String(data[checks.DataKeyRaidOperation]); operation != "" {
+		rb.add(checks.DataKeyRaidOperation, "RAID operation", operation)
+	}
+	rb.addMetric(checks.DataKeyRaidProgressPct, "RAID progress", watchReadingProgressDecimals, metrics.MetricUnitPercent)
+	if issues := readingStringList(data[checks.DataKeyHardwareRAIDIssues]); len(issues) > 0 {
+		rb.add(checks.DataKeyHardwareRAIDIssues, "Issues", strings.Join(issues, readingSummarySeparator))
+	}
+	readings := rb.readings()
+	for _, detail := range hardwareRAIDControllerDetails(data[checks.DataKeyHardwareRAIDControllerDetails]) {
+		readings = append(readings, web.WatchReading{
+			Field: hardwareRAIDReadingField("controller", detail.ID), Label: "Controller " + detail.ID,
+			Value: hardwareRAIDControllerReading(detail),
+		})
+	}
+	for _, detail := range hardwareRAIDCacheDetails(data[checks.DataKeyHardwareRAIDCacheDetails]) {
+		readings = append(readings, web.WatchReading{
+			Field: hardwareRAIDReadingField("cache", detail.ID), Label: "Cache " + detail.ID,
+			Value: hardwareRAIDCacheReading(detail),
+		})
+	}
+	for _, detail := range hardwareRAIDVolumeDetails(data[checks.DataKeyHardwareRAIDVolumeDetails]) {
+		readings = append(readings, web.WatchReading{
+			Field: hardwareRAIDReadingField("volume", detail.ID), Label: "Volume " + detail.ID,
+			Value: hardwareRAIDVolumeReading(detail),
+		})
+	}
+	for _, detail := range hardwareRAIDDriveDetails(data[checks.DataKeyHardwareRAIDDriveDetails]) {
+		readings = append(readings, web.WatchReading{
+			Field: hardwareRAIDReadingField("drive", detail.ID), Label: "Drive " + detail.ID,
+			Value: hardwareRAIDDriveReading(detail),
+		})
+	}
+	return readings
+}
+
+func hardwareRAIDControllerReading(detail checks.HardwareRAIDControllerStatus) string {
+	return hardwareRAIDReadingParts(
+		detail.State, detail.Model,
+		hardwareRAIDBytesPart("memory", detail.MemoryBytes),
+		hardwareRAIDBytesPart("cache", detail.CacheBytes),
+		hardwareRAIDTextPart("firmware", detail.Firmware),
+		hardwareRAIDTextPart("serial", detail.SerialNumber),
+		detail.Interface, detail.Driver,
+		hardwareRAIDTemperaturePart(detail.Temperature),
+	)
+}
+
+func hardwareRAIDCacheReading(detail checks.HardwareRAIDCacheStatus) string {
+	return hardwareRAIDReadingParts(
+		detail.State, detail.Model,
+		hardwareRAIDBytesPart("size", detail.SizeBytes),
+		hardwareRAIDBytesPart("available", detail.AvailableBytes),
+		detail.Protection,
+		hardwareRAIDTemperaturePart(detail.Temperature),
+	)
+}
+
+func hardwareRAIDVolumeReading(detail checks.HardwareRAIDVolumeStatus) string {
+	operation := detail.Operation
+	if detail.HasProgress {
+		operation = fmt.Sprintf("%s %.1f%%", operation, detail.ProgressPct)
+	}
+	return hardwareRAIDReadingParts(
+		detail.State, detail.RAIDLevel,
+		hardwareRAIDBytesPart("size", detail.SizeBytes),
+		hardwareRAIDTextPart("device", detail.OSDevice),
+		hardwareRAIDTextPart("name", detail.Name),
+		hardwareRAIDTextPart("access", detail.Access),
+		hardwareRAIDTextPart("cache", detail.CachePolicy),
+		operation,
+	)
+}
+
+func hardwareRAIDDriveReading(detail checks.HardwareRAIDDriveStatus) string {
+	smart := "controller SMART OK"
+	if detail.SMARTAlert {
+		smart = "controller SMART alert"
+	}
+	operation := detail.Operation
+	if detail.HasProgress {
+		operation = fmt.Sprintf("%s %.1f%%", operation, detail.ProgressPct)
+	}
+	return hardwareRAIDReadingParts(
+		detail.State, detail.MediaType, detail.Interface,
+		hardwareRAIDBytesPart("size", detail.SizeBytes),
+		detail.Model,
+		hardwareRAIDTextPart("serial", detail.SerialNumber),
+		hardwareRAIDTextPart("firmware", detail.Firmware),
+		hardwareRAIDTemperaturePart(detail.Temperature), smart,
+		fmt.Sprintf("media errors %d", detail.MediaErrors),
+		fmt.Sprintf("other errors %d", detail.OtherErrors),
+		fmt.Sprintf("predictive failures %d", detail.PredictiveFailures),
+		operation,
+	)
+}
+
+func hardwareRAIDReadingParts(parts ...string) string {
+	out := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if part = strings.TrimSpace(part); part != "" {
+			out = append(out, part)
+		}
+	}
+	return strings.Join(out, readingSummarySeparator)
+}
+
+func hardwareRAIDBytesPart(label string, value uint64) string {
+	if value == 0 {
+		return ""
+	}
+	return label + " " + checks.HumanizeSignedBytes(uintToInt64(value))
+}
+
+func hardwareRAIDTextPart(label, value string) string {
+	if strings.TrimSpace(value) == "" {
+		return ""
+	}
+	return label + " " + strings.TrimSpace(value)
+}
+
+func hardwareRAIDTemperaturePart(value float64) string {
+	if value == 0 {
+		return ""
+	}
+	return watchReadingMetricValue(value, watchReadingDefaultMetricDecimals, metrics.MetricUnitCelsius)
+}
+
+func hardwareRAIDReadingField(kind, id string) string {
+	var field strings.Builder
+	field.WriteString("raid_")
+	field.WriteString(kind)
+	field.WriteByte('_')
+	previousUnderscore := false
+	for _, char := range strings.ToLower(id) {
+		if (char >= 'a' && char <= 'z') || (char >= '0' && char <= '9') {
+			field.WriteRune(char)
+			previousUnderscore = false
+		} else if !previousUnderscore {
+			field.WriteByte('_')
+			previousUnderscore = true
+		}
+	}
+	return strings.TrimSuffix(field.String(), "_")
+}
+
+func hardwareRAIDControllerDetails(value any) []checks.HardwareRAIDControllerStatus {
+	return hardwareRAIDDetails[checks.HardwareRAIDControllerStatus](value)
+}
+
+func hardwareRAIDCacheDetails(value any) []checks.HardwareRAIDCacheStatus {
+	return hardwareRAIDDetails[checks.HardwareRAIDCacheStatus](value)
+}
+
+func hardwareRAIDVolumeDetails(value any) []checks.HardwareRAIDVolumeStatus {
+	return hardwareRAIDDetails[checks.HardwareRAIDVolumeStatus](value)
+}
+
+func hardwareRAIDDriveDetails(value any) []checks.HardwareRAIDDriveStatus {
+	return hardwareRAIDDetails[checks.HardwareRAIDDriveStatus](value)
+}
+
+// hardwareRAIDDetails accepts both a live typed slice and the []any/map form a
+// persisted snapshot has after JSON hydration. The owning checks structs remain
+// the sole schema; JSON only restores that schema instead of duplicating a
+// field-by-field parser in the Web adapter.
+func hardwareRAIDDetails[T any](value any) []T {
+	if typed, ok := value.([]T); ok {
+		return typed
+	}
+	if value == nil {
+		return nil
+	}
+	raw, err := json.Marshal(value)
+	if err != nil {
+		return nil
+	}
+	var details []T
+	if json.Unmarshal(raw, &details) != nil {
+		return nil
+	}
+	return details
 }
 
 // smartCheckReadings renders one drive's SMART report: what the disk is, what

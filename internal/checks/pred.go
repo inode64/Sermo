@@ -244,6 +244,9 @@ var (
 	}
 	// RaidPredFields are the optional predicates of a raid check.
 	RaidPredFields = []string{fieldDegraded, fieldRecovering, fieldArrays}
+	// HardwareRAIDPredFields are the optional controller/drive temperature
+	// predicates shared by the StorCLI and SSA CLI checks.
+	HardwareRAIDPredFields = []string{SmartFieldTemperature}
 	// LVMPredFields are capacity predicates for an LVM logical volume or volume group.
 	LVMPredFields = []string{DataKeyLVMFreePct, DataKeyLVMThinDataPct, DataKeyLVMThinMetadataPct}
 	// EdacPredFields are the optional predicates of an edac check.
