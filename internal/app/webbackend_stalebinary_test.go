@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"sermo/internal/checks"
+	"sermo/internal/config"
 	"sermo/internal/servicemgr"
 )
 
@@ -40,33 +41,33 @@ func staleBinaryBackend(t *testing.T, ok bool) (*WebBackend, *webEntry) {
 
 // The reason must come from the check the worker published. This is the whole
 // point of the rewrite: the render path no longer discovers processes.
-func TestServiceWarningReasonFromPublishedCheck(t *testing.T) {
+func TestServiceStateReasonFromPublishedCheck(t *testing.T) {
 	b, entry := staleBinaryBackend(t, false)
-	if got := b.serviceWarningReason("web", entry); got != warningReasonStaleBinary {
-		t.Fatalf("want %q, got %q", warningReasonStaleBinary, got)
+	if got := b.serviceStateReason("web", entry); got != stateReasonStaleBinary {
+		t.Fatalf("want %q, got %q", stateReasonStaleBinary, got)
 	}
 }
 
-func TestServiceWarningReasonEmptyWhenCheckPasses(t *testing.T) {
+func TestServiceStateReasonEmptyWhenCheckPasses(t *testing.T) {
 	b, entry := staleBinaryBackend(t, true)
-	if got := b.serviceWarningReason("web", entry); got != "" {
+	if got := b.serviceStateReason("web", entry); got != "" {
 		t.Fatalf("a passing check must report no reason, got %q", got)
 	}
 }
 
 // Before the check has ever run there is no snapshot, and the dashboard falls
 // back to the generic wording rather than claiming a cause it cannot support.
-func TestServiceWarningReasonEmptyWithoutSnapshot(t *testing.T) {
+func TestServiceStateReasonEmptyWithoutSnapshot(t *testing.T) {
 	b, entry := staleBinaryBackend(t, false)
 	b.snapshots = NewSnapshots() // nothing published yet
-	if got := b.serviceWarningReason("web", entry); got != "" {
+	if got := b.serviceStateReason("web", entry); got != "" {
 		t.Fatalf("want no reason without a snapshot, got %q", got)
 	}
 }
 
 // A service with no stale-binary check (no process selectors) must not be
 // mistaken for one whose check passed.
-func TestServiceWarningReasonIgnoresOtherCheckTypes(t *testing.T) {
+func TestServiceStateReasonIgnoresOtherCheckTypes(t *testing.T) {
 	snaps := NewSnapshots()
 	snaps.PublishWithCheckTypes("web",
 		map[string]checks.Result{"probe": {Check: "probe", OK: false}},
@@ -78,29 +79,64 @@ func TestServiceWarningReasonIgnoresOtherCheckTypes(t *testing.T) {
 	}
 	b := &WebBackend{order: []string{"web"}, entries: map[string]*webEntry{"web": entry}, snapshots: snaps}
 
-	if got := b.serviceWarningReason("web", entry); got != "" {
+	if got := b.serviceStateReason("web", entry); got != "" {
 		t.Fatalf("a failing unrelated check must not report a stale binary, got %q", got)
 	}
 }
 
-func TestServiceWarningReasonNilSafe(t *testing.T) {
+func TestServiceStateReasonNilSafe(t *testing.T) {
 	b, _ := staleBinaryBackend(t, false)
-	if got := b.serviceWarningReason("web", nil); got != "" {
+	if got := b.serviceStateReason("web", nil); got != "" {
 		t.Fatalf("want no reason for a nil entry, got %q", got)
 	}
 }
 
-func TestWebBackendStaleBinaryUsesWarningWithoutFailingHealth(t *testing.T) {
+func TestWebBackendStaleBinaryRequiresRestartWithoutFailingHealth(t *testing.T) {
 	b, entry := staleBinaryBackend(t, false)
 	svc := b.view(context.Background(), "web", entry)
-	if svc.State != TargetStateWarning || svc.CheckHealth != checkHealthWarning || svc.ChecksFailing != 0 || svc.WarningReason != warningReasonStaleBinary {
-		t.Fatalf("stale binary service = %+v, want warning without failed health", svc)
+	if svc.State != TargetStateRestartRequired || svc.CheckHealth != checkHealthWarning || svc.ChecksFailing != 0 || svc.StateReason != stateReasonStaleBinary {
+		t.Fatalf("stale binary service = %+v, want restart required without failed health", svc)
 	}
 
 	b, entry = staleBinaryBackend(t, true)
 	svc = b.view(context.Background(), "web", entry)
-	if svc.State != TargetStateMonitored || svc.CheckHealth != TargetStateOK || svc.WarningReason != "" {
+	if svc.State != TargetStateMonitored || svc.CheckHealth != TargetStateOK || svc.StateReason != "" {
 		t.Fatalf("fresh binary service = %+v, want monitored healthy", svc)
+	}
+}
+
+func TestWebBackendConfigurationWarningOutranksRestartRequired(t *testing.T) {
+	at := time.Date(2026, 8, 3, 21, 0, 0, 0, time.UTC)
+	names := []string{config.ConfigurationCheckName, "stale-binary"}
+	types := map[string]string{
+		config.ConfigurationCheckName: checks.CheckTypeCommand,
+		"stale-binary":                checks.CheckTypeStaleBinary,
+	}
+	snaps := NewSnapshots()
+	snaps.now = func() time.Time { return at }
+	snaps.PublishWithCheckTypes("web", map[string]checks.Result{
+		config.ConfigurationCheckName: {Check: config.ConfigurationCheckName, OK: false, Severity: checks.SeverityWarning},
+		"stale-binary":                {Check: "stale-binary", OK: false, Reports: checks.ReportsState},
+	}, map[string]bool{config.ConfigurationCheckName: true, "stale-binary": true}, types)
+	entry := &webEntry{
+		checkNames:      names,
+		checkTypes:      types,
+		checkReports:    map[string]string{"stale-binary": checks.ReportsState},
+		checkSeverities: map[string]string{config.ConfigurationCheckName: checks.SeverityWarning},
+		checkIntervals:  map[string]time.Duration{config.ConfigurationCheckName: time.Minute, "stale-binary": time.Minute},
+		interval:        time.Minute,
+		status:          func(context.Context) (servicemgr.Status, error) { return servicemgr.StatusActive, nil },
+	}
+	b := &WebBackend{
+		order:     []string{"web"},
+		entries:   map[string]*webEntry{"web": entry},
+		snapshots: snaps,
+		now:       func() time.Time { return at },
+	}
+
+	svc := b.view(context.Background(), "web", entry)
+	if svc.State != TargetStateWarning || svc.StateReason != stateReasonConfigurationInvalid || svc.ChecksFailing != 0 {
+		t.Fatalf("invalid configuration with stale binary = %+v, want configuration warning precedence", svc)
 	}
 }
 

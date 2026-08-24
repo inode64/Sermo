@@ -20,7 +20,7 @@ const services = [
   },
   {
     name: "stale", display_name: "Stale binary", category: "service", enabled: true,
-    monitored: true, status: "active", state: "warning", warning_reason: "stale_binary",
+    monitored: true, status: "active", state: "restart_required", state_reason: "stale_binary",
     uptime_seconds: 3600, status_observed_at: "2026-07-10T12:00:00Z", strays: 3,
   },
 ];
@@ -536,17 +536,31 @@ test("stale watch samples are visible and filterable", async ({ page }) => {
   await expect(page.locator("#wat-row-net-wan")).toBeHidden();
 });
 
-test("stale binary keeps its warning state without a restart hint", async ({ page }) => {
+test("stale binary has a distinct restart-required state and visible reason", async ({ page }) => {
   const row = page.locator("#svc-row-stale");
   const state = row.locator("td").nth(2);
-  await expect(state).toHaveText("warning");
-  await expect(state.locator(".state-reason")).toHaveCount(0);
-  await expect(state).not.toContainText("binary replaced on disk");
+  await expect(state).toContainText("restart required");
+  await expect(state.locator(".state-reason")).toHaveText("binary replaced on disk");
+  await expect(row).toHaveClass(/row-warning/);
 
   await row.locator(".row-toggle").click();
   const detail = page.locator('[data-service-detail="stale"]');
-  await expect(detail.locator(".runtime-grid .state-reason")).toHaveCount(0);
-  await expect(detail).not.toContainText("binary replaced on disk");
+  await expect(detail.locator(".runtime-grid .state-reason")).toHaveText("binary replaced on disk");
+});
+
+test("invalid application configuration stays a visible warning", async ({ page }) => {
+  const body = JSON.parse(JSON.stringify(dashboard));
+  const service = body.services.find((item) => item.name === "db");
+  service.state = "warning";
+  service.state_reason = "configuration_invalid";
+  service.check_health = "warning";
+  await page.route("**/api/dashboard**", (route) => route.fulfill({ json: body }));
+  await page.locator("#refresh-now").click();
+
+  const row = page.locator("#svc-row-db");
+  await expect(row).toHaveClass(/row-warning/);
+  await expect(row.locator("td").nth(2)).toContainText("warning");
+  await expect(row.locator(".state-reason")).toHaveText("configuration invalid");
 });
 
 test("paused monitoring is distinct from disabled configuration", async ({ page }) => {

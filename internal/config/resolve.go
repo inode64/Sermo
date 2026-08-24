@@ -67,6 +67,7 @@ func (c *Config) resolveExpandedService(merged map[string]any, name string) (map
 	errs = append(errs, c.resolveChangedLibraries(expanded)...)
 	errs = append(errs, expandReloadOnChange(expanded)...)
 	errs = append(errs, c.expandApps(expanded)...)
+	errs = append(errs, expandConfigurationCheck(expanded)...)
 	errs = append(errs, expandStaleBinary(expanded)...)
 	errs = append(errs, expandStrays(expanded)...)
 	errs = append(errs, c.expandServiceSugar(expanded)...)
@@ -399,8 +400,10 @@ func serviceArtifactPathValue(paths []string) any {
 // Check-only service watches are processed before they desugar into `checks:`.
 func (c *Config) expandAnalyze(tree map[string]any) []string {
 	var errs []string
-	if checkSection, ok := tree[sectionChecks].(map[string]any); ok {
-		errs = append(errs, c.expandAnalyzeSection(sectionChecks, checkSection)...)
+	for _, section := range []string{sectionChecks, sectionPreflight} {
+		if entries, ok := tree[section].(map[string]any); ok {
+			errs = append(errs, c.expandAnalyzeSection(section, entries)...)
+		}
 	}
 
 	watches, ok := tree[sectionWatches].(map[string]any)

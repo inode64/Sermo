@@ -9,18 +9,19 @@ import (
 // Operator-facing target states and monitor-filter values shown by sermoctl and
 // the web dashboard.
 const (
-	TargetStateDisabled   = "disabled"
-	TargetStateActive     = "active"
-	TargetStateStarted    = "started"
-	TargetStatePaused     = "paused"
-	TargetStateStopped    = "stopped"
-	TargetStateStarting   = "starting"
-	TargetStateCollecting = "collecting"
-	TargetStateOK         = "ok"
-	TargetStateMonitored  = "monitored"
-	TargetStateFailed     = "failed"
-	TargetStateWarning    = "warning"
-	TargetStateStale      = "stale"
+	TargetStateDisabled        = "disabled"
+	TargetStateActive          = "active"
+	TargetStateStarted         = "started"
+	TargetStatePaused          = "paused"
+	TargetStateStopped         = "stopped"
+	TargetStateStarting        = "starting"
+	TargetStateCollecting      = "collecting"
+	TargetStateOK              = "ok"
+	TargetStateMonitored       = "monitored"
+	TargetStateRestartRequired = "restart_required"
+	TargetStateFailed          = "failed"
+	TargetStateWarning         = "warning"
+	TargetStateStale           = "stale"
 )
 
 const (

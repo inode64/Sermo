@@ -124,7 +124,7 @@ func TestWebBackendFailedUnitWithHealthyLiveProcessWarns(t *testing.T) {
 	}
 
 	svc := b.view(context.Background(), "glusterd", entry)
-	if svc.Status != string(servicemgr.StatusFailed) || svc.State != TargetStateWarning || svc.CheckHealth != checkHealthWarning || svc.WarningReason != warningReasonFailedUnitLiveProcess {
+	if svc.Status != string(servicemgr.StatusFailed) || svc.State != TargetStateWarning || svc.CheckHealth != checkHealthWarning || svc.StateReason != stateReasonFailedUnitLiveProcess {
 		t.Fatalf("degraded service = %+v, want failed backend with healthy-live-process warning", svc)
 	}
 }

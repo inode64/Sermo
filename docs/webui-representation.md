@@ -225,10 +225,10 @@ Rendered by `renderOverview` from already-loaded state, without extra requests.
 
 | Tile kind | Current content |
 | --- | --- |
-| Services active | count / total for services in `started`, `collecting`, `warning` or `monitored`; critical when any service is `failed`, warning while any service is `collecting` or `warning`, neutral while any target is settling, otherwise active; click opens the matching `failed`, `starting`, `collecting` or `warning` service filter when applicable |
+| Services active | count / total for services in `started`, `collecting`, `warning`, `restart_required` or `monitored`; critical when any service is `failed`, warning while any service is `collecting`, `warning` or `restart_required`, neutral while any target is settling, otherwise active; click opens the matching service filter when applicable |
 | Watches | count / total; critical when any watch is `failed`, neutral while any target is settling (subtitle names starting watches, services or apps), otherwise quiet; click opens the matching `starting`/`failed` filter |
 | Alerts | count of failing services, firing watches, failed installed apps and active locks, with a per-kind breakdown; click routes to `failed-services`, `failed-watches`, `failed-apps` or `locks-section` in priority order |
-| Monitored | services in state `monitored` vs enabled services; warning while services are `collecting` or `warning` (subtitle names those needing attention), neutral with settling subtitle during startup, click opens the relevant service filter |
+| Monitored | services in state `monitored` or `restart_required` vs enabled services; warning while services are `collecting`, `warning` or `restart_required` (subtitle names those needing attention), neutral with settling subtitle during startup, click opens the relevant service filter |
 | Host gauges | memory, load, fds, pids, conntrack, etc. when present |
 | Volumes | one gauge per mounted storage watch, crit when its watch is firing |
 
@@ -282,7 +282,7 @@ services`, which inventories **catalog** service profiles under
 | Title | `Services` plus total count |
 | Title icons | group by category, collapse/expand all groups |
 | Controls | search, category select, status filters, showing count |
-| Status filters | all, disabled, stopped, started, starting, collecting, monitored, warning, failed |
+| Status filters | all, disabled, stopped, started, starting, collecting, monitored, restart required, warning, failed |
 | Sorting | Service, Category, State |
 | Grouping | category group rows, collapsible |
 
@@ -292,7 +292,7 @@ Columns:
 | --- | --- |
 | Service | display name, falling back to name, capitalized |
 | Category | YAML category or fallback |
-| State | single normalized service state: `disabled`, `stopped`, `started`, `starting`, `collecting`, `monitored`, `warning` or `failed`; `warning` marks either a healthy service without an attributable process tree or a workload with a failed init unit but a verified live process and passing functional checks; its inline reason distinguishes the cases |
+| State | single normalized service state: `disabled`, `stopped`, `started`, `starting`, `collecting`, `monitored`, `restart_required`, `warning` or `failed`; `restart_required` means the observed service is available but runs a binary replaced on disk; `warning` covers an invalid application configuration, a healthy service without an attributable process tree, or a workload with a failed init unit but a verified live process and passing functional checks; visible inline text and `state_reason` distinguish the cases |
 | Uptime | age of the oldest discovered service process, when available |
 | CPU total | latest whole process-tree CPU usage; blank for `no_resident_process` services |
 | Memory | latest process-tree resident memory; blank for `no_resident_process` services |

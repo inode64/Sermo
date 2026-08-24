@@ -342,9 +342,9 @@ type Service struct {
 	ChecksFailing        int      `json:"checks_failing,omitempty"`        // required checks currently failing
 	ObservabilityReady   bool     `json:"observability_ready"`             // true when monitored service has fresh visible indicators
 	ObservabilityMissing []string `json:"observability_missing,omitempty"` // indicator groups still collecting
-	// WarningReason is a machine-readable cause behind the gap (e.g.
-	// "stale_binary"), for the dashboard to phrase. Empty when unknown.
-	WarningReason string `json:"warning_reason,omitempty"`
+	// StateReason is a machine-readable cause behind an operator-facing state
+	// (for example "stale_binary"), for clients to phrase. Empty when unknown.
+	StateReason string `json:"state_reason,omitempty"`
 	// Strays counts the processes the init unit's control group holds that no
 	// configured selector claims, from the strays check's published snapshot. It is
 	// what the Strays column and the reap button read; 0 means either none found or

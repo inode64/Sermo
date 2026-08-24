@@ -20,13 +20,15 @@ const (
 	observabilityMissingProcesses = "service processes"
 )
 
-// warningReason* are machine-readable causes behind a service warning. They are
+// stateReason* are machine-readable causes behind an operator-facing service
+// state. They are
 // tokens, not prose: the dashboard owns the wording, so it can be reworded or
 // translated without the backend and the frontend having to agree on a
 // sentence. The observability_missing list stays a set of indicator names.
 const (
-	warningReasonStaleBinary           = "stale_binary"
-	warningReasonFailedUnitLiveProcess = "failed_unit_live_process"
+	stateReasonConfigurationInvalid  = "configuration_invalid"
+	stateReasonStaleBinary           = "stale_binary"
+	stateReasonFailedUnitLiveProcess = "failed_unit_live_process"
 )
 
 const (

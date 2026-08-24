@@ -1104,9 +1104,9 @@ Endpoints de solo lectura:
   endpoints individuales siguientes siguen disponibles y sirven como fallback del navegador.
 - `GET /api/services` — lista de services de **runtime configurado** (los archivos de
   service bajo `paths.services`): name, `state` (`disabled`, `stopped`,
-  `started`, `starting`, `collecting`, `monitored`, `warning`, `failed`), estado del backend,
+  `started`, `starting`, `collecting`, `monitored`, `restart_required`, `warning`, `failed`), estado del backend,
   `check_health`, `checks_failing`, `observability_ready`,
-  `observability_missing`, locks activos, estado/fuente/marca de tiempo de monitor, backend,
+  `observability_missing`, `state_reason`, locks activos, estado/fuente/marca de tiempo de monitor, backend,
   unidad, cooldown, estado de remediación, próxima acción elegible y último evento. Esto
   no es `sermoctl services`, que lista los perfiles de service del catálogo — consulta
   [cli.md](cli.es.md#inventario-de-catálogo).
@@ -1376,10 +1376,12 @@ El panel y `GET /api/services` / `GET /api/watches` exponen `state`,
 `monitored`, `monitor_source` y `monitor_changed_at` por separado. Un service
 puede mostrar `started` cuando el backend está activo pero la monitorización
 está pausada, `collecting` mientras la monitorización está activa pero los
-indicadores de runtime/check/SLA todavía se están llenando, `warning` cuando el
+indicadores de runtime/check/SLA todavía se están llenando, `warning` cuando
+falla un check consultivo de configuración de aplicación o cuando el
 único indicador que falta ya no va a llegar —el unit está activo y sus checks
 pasan, pero un ciclo completo del daemon no le atribuyó ningún proceso, así que
-`observability_missing` informa `service processes`— y `monitored` solo cuando
+`observability_missing` informa `service processes`—, `restart_required` cuando
+está observado y sano pero ejecuta un binario reemplazado, y `monitored` cuando
 esos indicadores están listos. Los host watches no tienen estados
 `started` o `stopped` del gestor de servicios; su `state` es `disabled` cuando
 la configuración o el estado de monitorización los excluye de las comprobaciones
@@ -1414,6 +1416,17 @@ fallan cuando `OK=false`; las comprobaciones de estilo condición (`fds`, `oom`,
 de recursos, etc.) fallan solo cuando se dispara la condición de alerta. Las muestras se
 acumulan en buckets por minuto en la BD de estado (`/var/lib/sermo/sermo.db`); el daemon
 poda los buckets de más de un año al arrancar.
+
+Cuando un service resuelto declara `preflight.config`, Sermo también inyecta un
+check periódico de service llamado `configuration`. Reutiliza exactamente ese
+comando, usuario, timeout y analizador, usa por defecto un intervalo de `15m` y
+tiene `severity: warning`: un service activo cuya configuración fallaría en la
+siguiente operación está degradado, no caído, así que el resultado es visible
+sin reducir el SLA. Un `interval` explícito en `preflight.config` sustituye el
+valor por defecto. El preflight original sigue siendo requerido y bloquea
+start, restart, reload y resume. Un service sin `preflight.config` no afirma que
+su configuración sea válida. Un YAML de Sermo inválido es otra frontera: el
+reload se rechaza y el daemon conserva la generación válida anterior.
 
 Solo cuentan los ciclos **observados**, por lo que estos periodos se **excluyen** del
 SLA en lugar de contarse como downtime:
@@ -3103,8 +3116,8 @@ aparece como `warning` sin causa declarada.
 
 `stale_binary` es diagnóstico, no un fallo de disponibilidad: no reduce la
 salud ni el SLA del servicio. Cuando detecta un ejecutable reemplazado, el
-servicio se muestra como `warning` sin una indicación de reinicio separada en el
-campo State, mientras su regla generada sigue alertando y, cuando está permitido,
+servicio se muestra como `restart_required` con `state_reason: stale_binary`,
+mientras su regla generada sigue alertando y, cuando está permitido,
 reinicia de forma segura.
 
 Pon `restart_on_stale_binary: false` en un servicio para conservar la alerta y

@@ -83,20 +83,21 @@ func (b *WebBackend) viewWithRuntime(ctx context.Context, name string, e *webEnt
 		svc.StatusObservedAt = statusAt.UTC().Format(time.RFC3339)
 	}
 	failing, health := b.serviceCheckHealth(name, e, svc.Monitored)
-	warningReason := b.serviceWarningReason(name, e)
+	baseHealth := health
+	stateReason := b.serviceStateReason(name, e)
 	processActive := b.serviceProcessActive(name, e)
 	backendDegraded := status == string(servicemgr.StatusFailed) && processActive && health == TargetStateOK
 	if backendDegraded {
-		warningReason = warningReasonFailedUnitLiveProcess
+		stateReason = stateReasonFailedUnitLiveProcess
 		health = checkHealthWarning
-	} else if health == TargetStateOK && warningReason != "" {
+	} else if health == TargetStateOK && stateReason == stateReasonStaleBinary {
 		health = checkHealthWarning
 	}
 	svc.CheckHealth = health
 	if failing > 0 {
 		svc.ChecksFailing = failing
 	}
-	svc.WarningReason = warningReason
+	svc.StateReason = stateReason
 	svc.Strays = b.serviceStrayCount(name, e)
 	if !lockView.ready {
 		lockView.active = activeLockNames(b.cfg, name)
@@ -111,6 +112,10 @@ func (b *WebBackend) viewWithRuntime(ctx context.Context, name string, e *webEnt
 	svc.ObservabilityReady, svc.ObservabilityMissing = b.serviceObservability(name, e, svc.Status, svc.CheckHealth, svc.Monitored, observed)
 	svc.State = ServiceState(svc.Enabled, svc.Monitored, svc.Status, svc.CheckHealth, observed, svc.ObservabilityReady,
 		processActive, onlyMissingProcesses(svc.ObservabilityMissing), backendDegraded)
+	if svc.State == TargetStateWarning && stateReason == stateReasonStaleBinary && baseHealth == TargetStateOK &&
+		!onlyMissingProcesses(svc.ObservabilityMissing) {
+		svc.State = TargetStateRestartRequired
+	}
 	if len(e.alsoApply) > 0 {
 		svc.AlsoApply = slices.Clone(e.alsoApply)
 	}
@@ -210,18 +215,22 @@ func (b *WebBackend) serviceObservability(name string, e *webEntry, status, chec
 	return true, nil
 }
 
-// serviceWarningReason returns the machine-readable cause of a service warning
-// for the dashboard to phrase. It reads the stale-binary check's published
-// snapshot rather than discovering processes: like serviceProcessActive below,
-// the web request must not scan /proc — daemon cycles own the runtime evidence
-// and its freshness boundary.
-func (b *WebBackend) serviceWarningReason(name string, e *webEntry) string {
+// serviceStateReason returns the highest-precedence machine-readable cause of
+// an operator-facing service state. It reads only current worker snapshots: a
+// web request must never run a config command or scan /proc.
+func (b *WebBackend) serviceStateReason(name string, e *webEntry) string {
+	if e != nil && b.snapshots != nil && slices.Contains(e.checkNames, config.ConfigurationCheckName) {
+		if cs, ok := b.snapshots.Get(name)[config.ConfigurationCheckName]; ok &&
+			b.serviceCheckSnapshotCurrent(e, config.ConfigurationCheckName, cs) && !cs.healthy() {
+			return stateReasonConfigurationInvalid
+		}
+	}
 	// Any failing one is the warning: a service may declare its own stale_binary
 	// check beside the injected one, and a replaced binary either check found is
 	// still a replaced binary.
 	for _, cs := range b.currentSnapshotsOfType(name, e, checks.CheckTypeStaleBinary) {
 		if !cs.OK {
-			return warningReasonStaleBinary
+			return stateReasonStaleBinary
 		}
 	}
 	return ""
@@ -254,7 +263,7 @@ func (b *WebBackend) currentSnapshotsOfType(name string, e *webEntry, checkType 
 }
 
 // serviceStrayCount returns how many processes the service cannot account for,
-// read from the strays check's published snapshot. Like serviceWarningReason it
+// read from the strays check's published snapshot. Like serviceStateReason it
 // must not discover processes: the list endpoint renders every service on one
 // request, so a /proc walk per row would put the whole fleet's discovery on the
 // browser's critical path. Daemon cycles own that evidence.

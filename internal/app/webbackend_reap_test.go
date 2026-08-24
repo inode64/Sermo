@@ -88,14 +88,14 @@ func TestServiceStrayCountIsDeterministicWithSeveralStraysChecks(t *testing.T) {
 // A service may declare its own stale_binary check beside the injected one. A
 // replaced binary that either check found is still a replaced binary, so the
 // warning must not depend on which one is declared first.
-func TestServiceWarningReasonFiresOnAnyFailingStaleBinaryCheck(t *testing.T) {
+func TestServiceStateReasonFiresOnAnyFailingStaleBinaryCheck(t *testing.T) {
 	for _, tc := range []struct {
 		name              string
 		firstOK, secondOK bool
 		want              string
 	}{
-		{name: "second fails", firstOK: true, secondOK: false, want: warningReasonStaleBinary},
-		{name: "first fails", firstOK: false, secondOK: true, want: warningReasonStaleBinary},
+		{name: "second fails", firstOK: true, secondOK: false, want: stateReasonStaleBinary},
+		{name: "first fails", firstOK: false, secondOK: true, want: stateReasonStaleBinary},
 		{name: "both pass", firstOK: true, secondOK: true, want: ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -112,7 +112,7 @@ func TestServiceWarningReasonFiresOnAnyFailingStaleBinaryCheck(t *testing.T) {
 			publishedAt := time.Now()
 			b.now = func() time.Time { return publishedAt }
 
-			if got := b.serviceWarningReason("web", b.entries["web"]); got != tc.want {
+			if got := b.serviceStateReason("web", b.entries["web"]); got != tc.want {
 				t.Fatalf("warning reason = %q, want %q", got, tc.want)
 			}
 		})

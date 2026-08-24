@@ -226,6 +226,25 @@ func TestStatusUsesDaemonStateWhenAvailable(t *testing.T) {
 	}
 }
 
+func TestStatusShowsDaemonRestartRequiredState(t *testing.T) {
+	var stdout bytes.Buffer
+	app := statusApp(servicemgr.ServiceStatus{
+		Service: "acpid", Backend: servicemgr.BackendSystemd,
+		Unit: "acpid.service", Status: servicemgr.StatusActive,
+	}, nil, &stdout, nil)
+	app.FetchDaemonServiceState = func(context.Context, options, string) (string, bool) {
+		return "restart_required", true
+	}
+
+	code := app.Run(context.Background(), []string{"status", "acpid"})
+	if code != exitSuccess {
+		t.Fatalf("Run() exit = %d, want %d", code, exitSuccess)
+	}
+	if got := strings.TrimSpace(stdout.String()); got != "acpid state=restart_required backend=systemd service=acpid.service" {
+		t.Fatalf("stdout = %q", got)
+	}
+}
+
 func TestStatusUsesRequestedServiceForDaemonState(t *testing.T) {
 	var stdout bytes.Buffer
 	app := statusApp(servicemgr.ServiceStatus{

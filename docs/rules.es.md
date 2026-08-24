@@ -258,6 +258,15 @@ rules:
 
 ### Condiciones de salud del servicio (versión / estado / configuración)
 
+Un service resuelto que tenga `preflight.config` recibe automáticamente el check
+consultivo periódico `checks.configuration` (intervalo por defecto `15m`). Un
+fallo deja un service activo en `warning`, queda fuera del SLA y es visible en
+la Web UI y mediante `sermoctl status`; `sermoctl preflight SERVICE` vuelve a
+ejecutar bajo demanda la forma requerida. El preflight requerido sigue
+bloqueando una operación. El bloque `config.on_change` siguiente es opcional y
+añade detección persistente de cambios y notificaciones; no es necesario para
+la visibilidad de salud.
+
 Un servicio puede habilitar tres monitores de salud estándar con dos bloques
 declarativos cortos — **`version:`** y **`config:`** — que **reutilizan los comandos de versión
 y configuración que el servicio del catálogo ya define** (`commands.version` y
@@ -293,7 +302,7 @@ config:
 
   Cuando la salida de versión no contiene un número parseable, el monitor recurre a
   comparar la línea cruda de modo que nunca se pierda un cambio.
-- **Config inválida / cambiada** — `config.on_change` ejecuta la prueba
+- **Notificación de config inválida / cambiada** — `config.on_change` ejecuta la prueba
   `preflight.config` del servicio del catálogo y alerta cuando **falla** (config inválida); con un
   `path` también alerta cuando un archivo de configuración cambia. Un **`preflight:` personalizado** en
   el servicio reemplaza el `preflight.config` del servicio del catálogo, y el monitor usa entonces
