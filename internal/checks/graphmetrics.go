@@ -52,6 +52,8 @@ var graphMetrics = map[string][]GraphMetric{
 		{Key: fieldWear, Unit: metrics.MetricUnitPercent, Label: "Wear"},
 		{Key: fieldPowerOnHours, Unit: metrics.MetricUnitHours, Label: "Power-on time"},
 	},
+	CheckTypeStorCLI:          hardwareRAIDGraphMetrics,
+	CheckTypeSSACLI:           hardwareRAIDGraphMetrics,
 	CheckTypeEDAC:             {{Key: fieldCE, Unit: metrics.MetricUnitNone, Label: "Correctable"}, {Key: fieldUE, Unit: metrics.MetricUnitNone, Label: "Uncorrectable"}},
 	CheckTypeUsers:            {{Key: DataKeyCount, Unit: metrics.MetricUnitUsers}},
 	CheckTypeSSHIdle:          {{Key: DataKeyCount, Unit: metrics.MetricUnitSessions, Label: "Idle sessions"}, {Key: DataKeyProtectedCount, Unit: metrics.MetricUnitSessions, Label: "Protected sessions"}},
@@ -138,6 +140,15 @@ var graphMetrics = map[string][]GraphMetric{
 		{Key: DataKeyLVMThinDataPct, Unit: metrics.MetricUnitPercent, Label: "Thin data used", Decimals: tenthsDecimals},
 		{Key: DataKeyLVMThinMetadataPct, Unit: metrics.MetricUnitPercent, Label: "Thin metadata used", Decimals: tenthsDecimals},
 	},
+}
+
+var hardwareRAIDGraphMetrics = []GraphMetric{
+	{Key: fieldTemperature, Unit: metrics.MetricUnitCelsius, Label: "Maximum temperature"},
+	{Key: DataKeyRaidProgressPct, Unit: metrics.MetricUnitPercent, Label: "RAID operation progress", Decimals: tenthsDecimals},
+	{Key: DataKeyHardwareRAIDMediaErrors, Unit: metrics.MetricUnitNone, Label: "Media errors"},
+	{Key: DataKeyHardwareRAIDPredictiveFailures, Unit: metrics.MetricUnitNone, Label: "Predictive failures"},
+	{Key: DataKeyHardwareRAIDSMARTAlerts, Unit: metrics.MetricUnitNone, Label: "SMART alerts"},
+	{Key: DataKeyHardwareRAIDUncorrectableErrors, Unit: metrics.MetricUnitNone, Label: "Uncorrectable errors"},
 }
 
 // NumericData coerces one Result.Data value to a float64, reporting whether it

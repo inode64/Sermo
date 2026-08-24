@@ -223,6 +223,28 @@ const (
 	DataKeyZombies            = "zombies"
 )
 
+// Hardware-RAID result keys are kept together because StorCLI and SSA CLI
+// publish the same controller-health model.
+const (
+	DataKeyHardwareRAIDControllers         = "raid_controllers"
+	DataKeyHardwareRAIDVolumes             = "raid_volumes"
+	DataKeyHardwareRAIDDrives              = "raid_drives"
+	DataKeyHardwareRAIDEnclosures          = "raid_enclosures"
+	DataKeyHardwareRAIDCaches              = "raid_caches"
+	DataKeyHardwareRAIDBatteries           = "raid_batteries"
+	DataKeyHardwareRAIDMediaErrors         = "raid_media_errors"
+	DataKeyHardwareRAIDOtherErrors         = "raid_other_errors"
+	DataKeyHardwareRAIDPredictiveFailures  = "raid_predictive_failures"
+	DataKeyHardwareRAIDSMARTAlerts         = "raid_smart_alerts"
+	DataKeyHardwareRAIDCorrectableErrors   = "raid_correctable_errors"
+	DataKeyHardwareRAIDUncorrectableErrors = "raid_uncorrectable_errors"
+	DataKeyHardwareRAIDIssues              = "raid_issues"
+	DataKeyHardwareRAIDControllerDetails   = "raid_controller_details"
+	DataKeyHardwareRAIDCacheDetails        = "raid_cache_details"
+	DataKeyHardwareRAIDVolumeDetails       = "raid_volume_details"
+	DataKeyHardwareRAIDDriveDetails        = "raid_drive_details"
+)
+
 // DataKeyDeviceState is an active, device-reported operation such as a SMART
 // self-test or RAID/LVM recovery. It is distinct from check health.
 const DataKeyDeviceState = "device_state"

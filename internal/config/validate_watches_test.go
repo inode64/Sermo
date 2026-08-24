@@ -96,6 +96,23 @@ func TestValidateWatchesGood(t *testing.T) {
 	})
 }
 
+func TestValidateHardwareRAIDWatches(t *testing.T) {
+	for _, checkType := range []string{checks.CheckTypeStorCLI, checks.CheckTypeSSACLI} {
+		t.Run(checkType+" valid", func(t *testing.T) {
+			assertNoWatchIssues(t, watchConfig("hardware-raid", map[string]any{
+				"type": checkType, "binary": "/usr/bin/" + checkType,
+				"temperature": map[string]any{"op": ">", "value": 70},
+			}))
+		})
+		t.Run(checkType+" invalid", func(t *testing.T) {
+			assertWatchIssues(t, watchConfig("hardware-raid", map[string]any{
+				"type": checkType, "binary": checkType,
+				"temperature": map[string]any{"op": ">", "value": "hot"},
+			}), "binary path", "must be numeric")
+		})
+	}
+}
+
 func TestValidateProcessPolicyWatch(t *testing.T) {
 	valid := map[string]any{
 		"notifiers": map[string]any{"ops": map[string]any{"type": "wall"}},

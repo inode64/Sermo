@@ -69,6 +69,8 @@ const (
 	CheckTypeSensors          = "sensors"
 	CheckTypeSmart            = "smart"
 	CheckTypeRAID             = "raid"
+	CheckTypeStorCLI          = "storcli"
+	CheckTypeSSACLI           = "ssacli"
 	CheckTypeGlusterCluster   = "gluster_cluster"
 	CheckTypeLVM              = "lvm"
 	CheckTypeEDAC             = "edac"

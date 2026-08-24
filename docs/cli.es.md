@@ -237,9 +237,11 @@ monitorización de un watch es independiente del de su servicio, así que
 `unmonitor` sobre un servicio nunca pausa sus watches.
 
 `sermoctl watch probe WATCH` solicita al daemon en ejecución una muestra para
-un host watch `diskio`, `hdparm`, `lvm`, `raid` o `smart` e imprime las lecturas cuando
-están disponibles (en LVM incluye salud, VG, LV, VG libre y razones). Las tres
-primeras son de solo lectura. Una sonda `smart` inicia el autotest SMART corto
+un host watch `diskio`, `hdparm`, `lvm`, `raid`, `smart`, `storcli` o `ssacli` e
+imprime las lecturas cuando están disponibles (para RAID hardware incluye
+una lectura por controladora, caché, volumen virtual y disco físico, con
+identidad/capacidad, RAM de controladora, SMART de la controladora y progreso de
+reconstrucción cuando se informa). Todas salvo `smart` son de solo lectura. Una sonda `smart` inicia el autotest SMART corto
 del dispositivo con `smartctl --test=short DEVICE`; que tenga éxito significa
 que el dispositivo aceptó el test, no que lo haya superado. Los checks SMART
 periódicos siguen siendo lecturas no invasivas de salud y atributos. El comando

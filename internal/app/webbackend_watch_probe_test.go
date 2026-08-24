@@ -84,7 +84,10 @@ func TestProbeDiskIOSamplesTwiceForARateWindow(t *testing.T) {
 // The web dashboard and sermoctl gate the probe command on one list, so neither
 // can offer a probe the other refuses.
 func TestManualProbeCheckTypeCoversDiskIO(t *testing.T) {
-	for _, typ := range []string{checks.CheckTypeDiskIO, checks.CheckTypeHdparm, checks.CheckTypeLVM, checks.CheckTypeRAID, checks.CheckTypeSmart} {
+	for _, typ := range []string{
+		checks.CheckTypeDiskIO, checks.CheckTypeHdparm, checks.CheckTypeLVM, checks.CheckTypeRAID,
+		checks.CheckTypeSmart, checks.CheckTypeStorCLI, checks.CheckTypeSSACLI,
+	} {
 		if !ManualProbeCheckType(typ) {
 			t.Errorf("ManualProbeCheckType(%q) = false, want true", typ)
 		}

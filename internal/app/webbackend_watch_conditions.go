@@ -269,6 +269,8 @@ func watchConditionFields(check map[string]any) []string {
 		return checks.HdparmPredFields
 	case checks.CheckTypeSmart:
 		return checks.SmartPredFields
+	case checks.CheckTypeStorCLI, checks.CheckTypeSSACLI:
+		return checks.HardwareRAIDPredFields
 	case checks.CheckTypeRAID:
 		return checks.RaidPredFields
 	case checks.CheckTypeLVM:

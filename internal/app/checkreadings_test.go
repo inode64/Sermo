@@ -49,6 +49,65 @@ func TestMeterChecksDoNotRepeatTheirGaugeAsReadings(t *testing.T) {
 	}
 }
 
+func TestHardwareRAIDCheckReadingsExposeControllerHealth(t *testing.T) {
+	readings := checkReadings(checks.CheckTypeStorCLI, map[string]any{
+		checks.DataKeyHealth:                         "error",
+		checks.DataKeyHardwareRAIDControllers:        1,
+		checks.DataKeyHardwareRAIDVolumes:            2,
+		checks.DataKeyHardwareRAIDDrives:             8,
+		checks.DataKeyHardwareRAIDCaches:             1,
+		checks.DataKeyHardwareRAIDBatteries:          1,
+		checks.SmartFieldTemperature:                 56.0,
+		checks.DataKeyHardwareRAIDMediaErrors:        545,
+		checks.DataKeyHardwareRAIDPredictiveFailures: 0,
+		checks.DataKeyHardwareRAIDIssues:             []string{"drive c0/e252/s3 media errors 545"},
+		checks.DataKeyRaidOperation:                  "rebuild",
+		checks.DataKeyRaidProgressPct:                37.5,
+		checks.DataKeyHardwareRAIDControllerDetails: []checks.HardwareRAIDControllerStatus{{
+			ID: "c0", Model: "MegaRAID 3108", State: "Optimal", MemoryBytes: 2 << 30, CacheBytes: 1698 << 20,
+		}},
+		checks.DataKeyHardwareRAIDCacheDetails: []checks.HardwareRAIDCacheStatus{{
+			ID: "c0/firmware", State: "Optimal", SizeBytes: 1698 << 20, Protection: "cachevault",
+		}},
+		checks.DataKeyHardwareRAIDVolumeDetails: []checks.HardwareRAIDVolumeStatus{{
+			ID: "c0/v0", State: "Optl", RAIDLevel: "RAID5", OSDevice: "/dev/sda", SizeBytes: 3 << 40,
+		}},
+		checks.DataKeyHardwareRAIDDriveDetails: []checks.HardwareRAIDDriveStatus{{
+			ID: "c0/e252/s3", State: "Onln", MediaType: "SSD", Interface: "SAS", Model: "MODEL-1",
+			SerialNumber: "DISK-1", SizeBytes: 894 << 30, Temperature: 36, MediaErrors: 545,
+			Operation: "rebuild", ProgressPct: 37.5, HasProgress: true,
+		}},
+	})
+	for field, want := range map[string]string{
+		checks.DataKeyHealth:                  "error",
+		checks.DataKeyHardwareRAIDDrives:      "8",
+		checks.SmartFieldTemperature:          "56 °C",
+		checks.DataKeyHardwareRAIDMediaErrors: "545",
+		checks.DataKeyHardwareRAIDIssues:      "drive c0/e252/s3 media errors 545",
+		checks.DataKeyRaidProgressPct:         "37.5%",
+		"raid_controller_c0":                  "Optimal · MegaRAID 3108 · memory 2 GiB · cache 1.66 GiB",
+		"raid_cache_c0_firmware":              "Optimal · size 1.66 GiB · cachevault",
+		"raid_volume_c0_v0":                   "Optl · RAID5 · size 3 TiB · device /dev/sda",
+		"raid_drive_c0_e252_s3":               "Onln · SSD · SAS · size 894 GiB · MODEL-1 · serial DISK-1 · 36 °C · controller SMART OK · media errors 545 · other errors 0 · predictive failures 0 · rebuild 37.5%",
+	} {
+		if got := readingByField(readings, field).Value; got != want {
+			t.Errorf("reading %s = %q, want %q (%+v)", field, got, want, readings)
+		}
+	}
+}
+
+func TestHardwareRAIDDetailsSurviveSnapshotJSONHydration(t *testing.T) {
+	readings := checkReadings(checks.CheckTypeSSACLI, map[string]any{
+		checks.DataKeyHardwareRAIDVolumeDetails: []any{map[string]any{
+			"ID": "1", "State": "Recovering", "RAIDLevel": "RAID1", "OSDevice": "/dev/sda",
+			"Operation": "rebuild", "ProgressPct": 42.5, "HasProgress": true,
+		}},
+	})
+	if got := readingByField(readings, "raid_volume_1").Value; got != "Recovering · RAID1 · device /dev/sda · rebuild 42.5%" {
+		t.Fatalf("hydrated volume reading = %q (%+v)", got, readings)
+	}
+}
+
 func TestCheckReadingsForAllTypes(t *testing.T) {
 	cases := []struct {
 		name     string

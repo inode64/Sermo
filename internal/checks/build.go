@@ -311,6 +311,12 @@ var builtinCheckSpecs = []checkSpec{
 		return buildSmartCheck(in.base, in.entry, in.runner, in.deps)
 	}},
 	{info: conditionTypeInfo(CheckTypeRAID), build: func(in checkBuildInput) (Check, string) { return buildRaidCheck(in.base, in.entry, in.deps) }},
+	{info: healthTypeInfo(CheckTypeStorCLI), build: func(in checkBuildInput) (Check, string) {
+		return buildHardwareRAIDCheck(in.base, in.entry, in.runner, CheckTypeStorCLI)
+	}},
+	{info: healthTypeInfo(CheckTypeSSACLI), build: func(in checkBuildInput) (Check, string) {
+		return buildHardwareRAIDCheck(in.base, in.entry, in.runner, CheckTypeSSACLI)
+	}},
 	{info: healthTypeInfo(CheckTypeGlusterCluster), build: func(in checkBuildInput) (Check, string) {
 		return buildGlusterClusterCheck(in.base, in.entry, in.runner)
 	}},

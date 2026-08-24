@@ -78,6 +78,8 @@ Connection-protocol checks (MySQL, PostgreSQL, Redis, Docker, libvirt, etc.) are
 | `hdparm`      | condition | a disk's `hdparm` read throughput crosses a threshold (`read`/`cached` MB/s) (see Disk throughput)|
 | `sensors`     | condition | hwmon hardware sensors cross a threshold (`temp` °C / `fan` RPM / `voltage` V) (see Hardware sensors)|
 | `smart`       | condition | a drive's SMART health/attributes and identity (failed verdict, `reallocated`, `pending_sectors`, `crc_errors`, `media_errors`, `wear`, `temperature`) (see Hardware sensors)|
+| `storcli`     | health | MegaRAID controller, enclosure, virtual/physical drive, cache protection, SMART/error and temperature health from StorCLI (see Hardware sensors)|
+| `ssacli`      | health | HPE Smart Array controller, logical/physical drive, cache, battery/capacitor, SMART/media-error and temperature health from SSA CLI (see Hardware sensors)|
 | `raid`        | condition | a Linux md software-RAID array is degraded/recovering (`degraded`/`recovering`/`arrays`) (see Hardware sensors)|
 | `lvm`         | health | every LVM volume group and logical volume reports healthy (see Hardware sensors) |
 | `stale_binary` | condition | no attributed process runs a binary replaced on disk since it started (service-injected; also available explicitly) |
@@ -2532,6 +2534,43 @@ detail so gradual degradation is visible.
       crc_errors: { op: ">", value: 0 }        # link errors: suspect the cable
       wear: { op: ">", value: 90 }             # SSD/NVMe nearly worn out
   ```
+
+- **`storcli` / `ssacli`** — read-only hardware-RAID health. These are host
+  watches, not service-process checks: the utilities do not run as daemons and
+  the controller hardware belongs to the host. `binary` must be an absolute
+  executable path. StorCLI reads controller/enclosure, physical-drive and
+  virtual-drive JSON reports; SSA CLI reads `ctrl all show config detail`.
+  Sermo alerts on unhealthy controllers, arrays/volumes, drives, enclosures,
+  cache or battery/capacitor protection; preserved offline cache, safe mode,
+  shutdown requirements; unrecoverable media, memory, other or predictive
+  errors; SMART alerts/wearout; inconsistent or inaccessible volumes; and
+  incomplete parity/rebuild work. Each controller, cache, virtual volume and
+  physical drive is exposed as its own reading. Controller readings include
+  model, firmware and on-board RAM/cache; volume readings include RAID level,
+  capacity, Linux device, cache policy and active operation; drive readings
+  include bay, state, capacity, media/interface, model, serial, firmware,
+  temperature, error counters and the controller's physical-drive SMART
+  verdict. Rebuild/reconstruct progress is attached to the affected volume or
+  drive and also exposed as `raid_progress_pct`. `temperature` optionally alerts on the
+  hottest controller, cache-protection module or drive. Counts, reasons and the
+  maximum temperature are exposed as readings, and temperature/error/progress
+  history is graphed. Do not add a `smart` watch for an OS device that is one of
+  these virtual volumes: smartctl sees the logical volume, while this controller
+  watch is the source of truth for the member drives.
+
+  ```yaml
+  checks:
+    controller:
+      type: storcli                 # use ssacli for HPE Smart Array
+      binary: /usr/bin/storcli64
+      timeout: 2m
+      temperature: { op: ">", value: 70 }
+  ```
+
+  Sermo never invokes configuration, rebuild, patrol-read or write commands.
+  Fleet generation creates a watch only after the installed utility answers a
+  read-only controller query, so a vendor CLI package with no matching
+  controller does not create a permanently unavailable watch.
 
 - **`raid`** — Linux **md software-RAID** from `/proc/mdstat` and read-only
   `/sys/block/md*/md` data (native). With no predicate it alerts when any

@@ -227,9 +227,11 @@ state is independent of its service's, so `unmonitor` on a service never pauses
 its watches.
 
 `sermoctl watch probe WATCH` asks the running daemon to run one fresh sample for
-a host `diskio`, `hdparm`, `lvm`, `raid` or `smart` watch and prints the resulting
-readings when available (for LVM this includes health, VG, LV, VG free and
-reasons). The first three are read-only samples. A `smart` probe starts the
+a host `diskio`, `hdparm`, `lvm`, `raid`, `smart`, `storcli` or `ssacli` watch
+and prints the resulting readings when available (for hardware RAID this
+includes one reading per controller, cache, virtual volume and physical drive,
+with identity/capacity, controller RAM, controller SMART and rebuild progress
+where reported). Every probe except `smart` is read-only. A `smart` probe starts the
 device's short SMART self-test with `smartctl --test=short DEVICE`; success means
 the device accepted the test, not that it has passed it. Normal scheduled SMART
 checks remain read-only health/attribute reads. The command records a `probe`

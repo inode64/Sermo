@@ -1,0 +1,9 @@
+name: raid-storcli
+display_name: MegaRAID hardware
+category: storage
+interval: 10m
+check:
+  type: storcli
+  binary: /usr/bin/storcli64
+  timeout: 2m
+  temperature: { op: ">", value: 70 }

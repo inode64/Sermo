@@ -1,0 +1,9 @@
+name: raid-ssacli
+display_name: HPE Smart Array hardware
+category: storage
+interval: 10m
+check:
+  type: ssacli
+  binary: /usr/bin/ssacli
+  timeout: 2m
+  temperature: { op: ">", value: 70 }

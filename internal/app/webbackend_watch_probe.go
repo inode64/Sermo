@@ -227,7 +227,8 @@ func (b *WebBackend) ProbeWatch(ctx context.Context, name string) web.ActionResu
 // unsupported by one and rejected by the other.
 func ManualProbeCheckType(checkType string) bool {
 	switch checkType {
-	case checks.CheckTypeHdparm, checks.CheckTypeLVM, checks.CheckTypeRAID, checks.CheckTypeSmart, checks.CheckTypeDiskIO:
+	case checks.CheckTypeHdparm, checks.CheckTypeLVM, checks.CheckTypeRAID, checks.CheckTypeSmart,
+		checks.CheckTypeStorCLI, checks.CheckTypeSSACLI, checks.CheckTypeDiskIO:
 		return true
 	default:
 		return false

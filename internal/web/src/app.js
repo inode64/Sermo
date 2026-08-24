@@ -4906,7 +4906,9 @@ function renderWatchReadings(readings) {
   if (!list.length) return nothing;
   const cells = list.map((r) => {
     const label = r.label || r.field || "Sample";
-    const longValue = ["issuer", "dns_names"].includes(r.field || "");
+	const field = r.field || "";
+	const longValue = ["issuer", "dns_names"].includes(field) ||
+	  ["raid_controller_", "raid_cache_", "raid_volume_", "raid_drive_"].some((prefix) => field.startsWith(prefix));
     // An advisory reading uses the same amber the SMART/LVM health cell and the
     // preflight "warn" row use, so one colour means one thing across the panel.
     const value = r.error
@@ -4921,7 +4923,7 @@ function renderWatchReadings(readings) {
   return tpl`<div class="watch-grid">${cells}</div>`;
 }
 
-const storageWatchTypes = new Set(["diskio", "hdparm", "lvm", "raid", "smart", "storage"]);
+const storageWatchTypes = new Set(["diskio", "hdparm", "lvm", "raid", "smart", "ssacli", "storcli", "storage"]);
 const networkWatchTypes = new Set(["conntrack", "firewall", "icmp", "net"]);
 const securityWatchTypes = new Set(["cert", "file"]);
 const summaryFileWatchType = "file-summary";
@@ -5157,6 +5159,8 @@ function watchPrimaryMetricText(w) {
     lvm: "health",
     raid: "degraded",
     smart: "health",
+    ssacli: "health",
+    storcli: "health",
   };
   const field = fields[type];
   if (field) return readingRaw(w, field);
@@ -5308,6 +5312,30 @@ const watchTypeProfiles = {
       // the count is the earliest number that moves before a verdict flips.
       numericReadingColumn("reallocated", "Reallocated"),
       numericReadingColumn("power_on_hours", "Power-on time"),
+    ],
+  },
+  storcli: {
+    label: "MegaRAID hardware",
+    columns: [
+      { key: "health", label: "Health", cell: watchHealthCell, sort: (w) => readingRaw(w, "health").toLowerCase() },
+      numericReadingColumn("raid_volumes", "Volumes"),
+      numericReadingColumn("raid_drives", "Drives"),
+	  numericReadingColumn("raid_progress_pct", "RAID progress"),
+      numericReadingColumn("temperature", "Max temperature"),
+      numericReadingColumn("raid_media_errors", "Media errors"),
+      numericReadingColumn("raid_smart_alerts", "SMART alerts"),
+    ],
+  },
+  ssacli: {
+    label: "HPE Smart Array hardware",
+    columns: [
+      { key: "health", label: "Health", cell: watchHealthCell, sort: (w) => readingRaw(w, "health").toLowerCase() },
+      numericReadingColumn("raid_volumes", "Volumes"),
+      numericReadingColumn("raid_drives", "Drives"),
+	  numericReadingColumn("raid_progress_pct", "RAID progress"),
+      numericReadingColumn("temperature", "Max temperature"),
+      numericReadingColumn("raid_media_errors", "Media errors"),
+      numericReadingColumn("raid_smart_alerts", "SMART alerts"),
     ],
   },
   diskio: {
