@@ -506,6 +506,10 @@ y luego como mucho una operación.
   `max_actions`, backoff). La ejecución de checks comparte un pool global
   (`engine.max_parallel_checks`). Un check que no consigue un slot espera — no
   se omite.
+- **Salud de configuración**: el `preflight.config` de un service se copia al
+  check `configuration` con gravedad warning y se ejecuta en ese mismo pool
+  acotado, cada `15m` por defecto. El preflight requerido original permanece en
+  la ruta de operación y puede bloquear una acción antes de mutar el service.
 - **Apagado** (SIGTERM/SIGINT): dejar de iniciar ciclos, cancelar los contextos de los workers;
   una operación en curso observa la cancelación, su limpieza diferida libera
   el lock y emite el evento, y un servicio parcialmente detenido se deja como está —

@@ -44,7 +44,7 @@ func TestFailingStraysCheckDoesNotDegradeTheService(t *testing.T) {
 		t.Fatalf("check health = %q, want %q", health, TargetStateOK)
 	}
 	// And it raises no warning either: the warning reason is stale-binary's alone.
-	if reason := b.serviceWarningReason("web", b.entries["web"]); reason != "" {
+	if reason := b.serviceStateReason("web", b.entries["web"]); reason != "" {
 		t.Fatalf("warning reason = %q, want none", reason)
 	}
 }

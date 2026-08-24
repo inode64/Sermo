@@ -176,7 +176,7 @@
   .state-disabled, .state-stopped, .state-starting { color: var(--text-2); }
   .state-running, .state-started { color: var(--info); }
   .state-paused { color: var(--warn); }
-  .state-warning, .state-stale { color: var(--warn); }
+  .state-warning, .state-restart-required, .state-stale { color: var(--warn); }
   .state-collecting { color: var(--warn); }
   .state-testing { color: var(--warn); }
   .state-recovering, .state-rebuilding, .state-repairing, .state-moving, .state-merging { color: var(--info); }

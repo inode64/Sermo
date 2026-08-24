@@ -503,6 +503,10 @@ then at most one operation.
   backoff). Check execution shares a global pool
   (`engine.max_parallel_checks`). A check that cannot get a slot waits — it is
   not skipped.
+- **Configuration health**: a service's `preflight.config` is copied into the
+  warning-grade `configuration` check and runs through that same bounded pool,
+  every `15m` by default. The original required preflight remains in the
+  operation path and can block an action before any service mutation.
 - **Shutdown** (SIGTERM/SIGINT): stop starting cycles, cancel worker contexts;
   an in-flight operation observes cancellation, its deferred cleanup releases
   the lock and emits the event, and a partially stopped service is left as-is —

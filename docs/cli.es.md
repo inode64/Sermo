@@ -187,10 +187,11 @@ metadatos locales de monitorización, como antes. Los estados de servicio son:
 `disabled`, `stopped`, `started` (backend activo pero no monitorizado),
 `starting` (asentamiento de arranque/operación), `collecting` (activo y
 monitorizado, pero las gráficas/indicadores aún no están completos), `warning`
-(activo y monitorizado con checks correctos, pero el daemon no le atribuye
-ningún proceso, así que sus indicadores de runtime nunca se completan, o una
-unidad de init está fallida mientras un proceso exacto y sus comprobaciones
-funcionales siguen sanos), `monitored` (activo, monitorizado y con
+(activo con un problema consultivo, como configuración de aplicación inválida,
+un árbol de procesos no atribuible o una unidad de init fallida mientras un
+proceso exacto y sus comprobaciones funcionales siguen sanos),
+`restart_required` (activo y observado, pero ejecutando un binario reemplazado
+en disco), `monitored` (activo, monitorizado y con
 observabilidad lista) y `failed`. Sin la vista del
 daemon, un servicio configurado activo y monitorizado cae a `collecting`; un
 servicio activo que no consta como monitorizado cae a `started`.
@@ -199,6 +200,11 @@ En el segundo caso de `warning`, la API conserva `status: failed`: las
 operaciones siguen el backend de init y mantienen sus locks, guards y preflight
 habituales. La advertencia solo evita presentar como caída de la aplicación una
 carga que continúa funcionando.
+
+`sermoctl status SERVICE` expone directamente `warning` y `restart_required`.
+Ante un aviso de configuración, `sermoctl preflight SERVICE` vuelve a ejecutar
+el mismo comando acotado `preflight.config` y muestra su salida actual.
+`is-active` sigue informando solo el veredicto activo/inactivo del backend de init.
 
 Un estado de backend `unknown` no es un veredicto de «caído» —un estado
 transitorio de systemd como `activating`/`deactivating`, un script de init que

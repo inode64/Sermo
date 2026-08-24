@@ -179,9 +179,10 @@ unreachable it falls back to the init backend plus local monitor metadata, as
 before. Service states are: `disabled`, `stopped`, `started` (backend active but
 not monitored), `starting` (startup/operation settling), `collecting` (active
 and monitored, but graphs/indicators are not complete yet), `warning` (active
-and monitored with passing checks, but the daemon attributes no process to it,
-so its runtime indicators never complete, or an init unit is failed while an
-exact process and its functional checks remain healthy), `monitored` (active,
+with an advisory problem such as an invalid application configuration, an
+unattributed process tree, or an init unit failed while an exact process and its
+functional checks remain healthy), `restart_required` (active and observed but
+running a binary that was replaced on disk), `monitored` (active,
 monitored and observability-ready) and `failed`. Without the daemon view, a
 configured active monitored service falls back to `collecting`; an active
 service that is not known to be monitored falls back to `started`.
@@ -190,6 +191,11 @@ For the second warning case, `status` remains `failed` in the API: operations
 still follow the init backend and retain their normal locks, guards and
 preflight gates. The warning only prevents a working workload from being
 presented as an application outage.
+
+`sermoctl status SERVICE` exposes `warning` and `restart_required` directly.
+For a configuration warning, `sermoctl preflight SERVICE` reruns the same
+bounded `preflight.config` command and prints its current output. `is-active`
+continues to report only the init backend's active/inactive verdict.
 
 A backend status of `unknown` is not a verdict of "down" — a transitional
 systemd state such as `activating`/`deactivating`, an init script that replaces

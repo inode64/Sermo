@@ -725,6 +725,21 @@ func TestListServices(t *testing.T) {
 	}
 }
 
+func TestListServicesExposesCanonicalStateReason(t *testing.T) {
+	b := &fakeBackend{services: []Service{{
+		Name: "acpid", State: "restart_required", StateReason: "stale_binary",
+	}}}
+	rec := httptest.NewRecorder()
+	newServer(b).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, apiPathServices, nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, `"state_reason":"stale_binary"`) || strings.Contains(body, "warning_reason") {
+		t.Fatalf("service JSON = %s", body)
+	}
+}
+
 func TestListApplications(t *testing.T) {
 	b := &fakeBackend{applications: []Application{{
 		Name: "nginx", DisplayName: "Nginx", Category: "web", Binary: "/usr/bin/nginx",

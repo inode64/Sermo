@@ -257,6 +257,14 @@ rules:
 
 ### Service health conditions (version / state / config)
 
+A resolved service that has `preflight.config` automatically receives the
+periodic advisory check `checks.configuration` (default interval `15m`). A
+failure makes an active service `warning`, remains outside SLA, and is visible
+in the Web UI and through `sermoctl status`; `sermoctl preflight SERVICE`
+reruns the required form on demand. The required preflight still blocks an
+operation. The `config.on_change` block below is optional and adds persistent
+change detection plus notifications; it is not required for health visibility.
+
 A service can enable three standard health monitors with two short
 declarative blocks — **`version:`** and **`config:`** — that **reuse the version
 and config commands the catalog service already defines** (`commands.version` and
@@ -292,7 +300,7 @@ config:
 
   When the version output carries no parseable number, the monitor falls back to
   comparing the raw line so a change is never missed.
-- **Config invalid / changed** — `config.on_change` runs the catalog service's
+- **Config invalid / changed notification** — `config.on_change` runs the catalog service's
   `preflight.config` test and alerts when it **fails** (invalid config); with a
   `path` it also alerts when a config file changes. A **custom `preflight:`** on
   the service replaces the catalog service's `preflight.config`, and the monitor then uses

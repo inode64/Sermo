@@ -109,10 +109,12 @@ const targetStateActive = "active";
 const targetStatePaused = "paused";
 const targetStateStopped = "stopped";
 const targetStateWarning = "warning";
+const targetStateRestartRequired = "restart_required";
 const targetStateStale = "stale";
-// Mirrors warningReason* in internal/app/metric_constants.go.
-const warningReasonStaleBinary = "stale_binary";
-const warningReasonFailedUnitLiveProcess = "failed_unit_live_process";
+// Mirrors stateReason* in internal/app/metric_constants.go.
+const stateReasonConfigurationInvalid = "configuration_invalid";
+const stateReasonStaleBinary = "stale_binary";
+const stateReasonFailedUnitLiveProcess = "failed_unit_live_process";
 const watchSampleStateFresh = "fresh";
 const targetStateOK = "ok";
 const targetStateMonitored = "monitored";
@@ -225,6 +227,7 @@ const serviceStatusFilterStates = [
   targetStateStarting,
   targetStateCollecting,
   targetStateMonitored,
+  targetStateRestartRequired,
   targetStateWarning,
   targetStateFailed,
 ];
@@ -286,7 +289,7 @@ const slaBarCount = 90;
 // A warning service is running without a hard health failure but needs operator
 // attention (a process-tree observability gap or a replaced binary), so it
 // counts as active like a collecting one.
-const overviewActiveServiceStates = [targetStateStarted, targetStateActive, targetStateCollecting, targetStateWarning, targetStateMonitored];
+const overviewActiveServiceStates = [targetStateStarted, targetStateActive, targetStateCollecting, targetStateWarning, targetStateRestartRequired, targetStateMonitored];
 const mountStateClasses = {
   [mountStateActive]: "state-running",
   [mountStateInactive]: "state-stopped",
@@ -309,6 +312,7 @@ const targetStateClasses = {
   [targetStatePaused]: "state-paused",
   [targetStateStopped]: "state-stopped",
   [targetStateWarning]: "state-warning",
+  [targetStateRestartRequired]: "state-restart-required",
   [targetStateStale]: "state-stale",
   [targetStateOK]: "state-ok",
   [targetStateMonitored]: "state-monitored",
@@ -342,6 +346,7 @@ const targetStateRanks = {
   [targetStateStarted]: 4,
   [targetStateActive]: 4,
   [targetStateMonitored]: 5,
+  [targetStateRestartRequired]: 6,
   [targetStateFailed]: 7,
   [targetStateMissing]: 7,
   [targetStateRunning]: 2,
@@ -1612,32 +1617,45 @@ function serviceStateBadge(s) {
     ? s.observability_missing.join(", ")
     : "";
   const missing = (st === targetStateCollecting && indicators) ? `Collecting ${indicators}` : "";
-  const staleBinary = st === targetStateWarning && s && s.warning_reason === warningReasonStaleBinary;
-  const failedUnitLiveProcess = st === targetStateWarning && s && s.warning_reason === warningReasonFailedUnitLiveProcess;
+  const staleBinary = st === targetStateRestartRequired && s && s.state_reason === stateReasonStaleBinary;
+  const configurationInvalid = st === targetStateWarning && s && s.state_reason === stateReasonConfigurationInvalid;
+  const failedUnitLiveProcess = st === targetStateWarning && s && s.state_reason === stateReasonFailedUnitLiveProcess;
   const blind = (st === targetStateWarning && indicators && !staleBinary && !failedUnitLiveProcess)
     ? `The unit is active and its checks pass, but the daemon attributes no process to it, so ${indicators} stay unavailable`
     : "";
   const degraded = failedUnitLiveProcess
     ? "The init unit is failed, but the verified service process and its functional checks are healthy"
     : "";
+  const invalidConfiguration = configurationInvalid
+    ? "The service is active, but its configuration preflight currently fails"
+    : "";
+  const restartRequired = staleBinary
+    ? "The running binary was replaced on disk; restart the service to run the installed version"
+    : "";
   const active = st === targetStateActive
     ? "Process confirmed; checks and runtime metrics are not available yet"
     : "";
-  const title = missing || blind || degraded || active;
-  // Except for the stale-binary diagnostic, a warning carries a reason the
-  // operator must act on. A tooltip is invisible until hovered — and never
-  // reachable on a touch screen — so show that reason next to the badge.
-  const reason = st === targetStateWarning && !staleBinary
-    ? tpl` <span class="muted state-reason" title="${title}">${serviceWarningReason(s)}</span>`
+  const title = missing || blind || degraded || invalidConfiguration || restartRequired || active;
+  // An actionable state carries visible text beyond its colour. A tooltip is
+  // invisible until hovered and unreachable on a touch screen.
+  const reason = (st === targetStateWarning || st === targetStateRestartRequired)
+    ? tpl` <span class="muted state-reason" title="${title}">${serviceStateReason(s)}</span>`
     : nothing;
-  const badge = title ? tpl`<span title="${title}">${stateBadge(st)}</span>` : stateBadge(st);
+  const label = st === targetStateRestartRequired ? "restart required" : st;
+  const badge = title ? tpl`<span title="${title}">${stateBadgeLabel(st, label)}</span>` : stateBadgeLabel(st, label);
   return reason ? tpl`${badge}${reason}` : badge;
 }
 
-// serviceWarningReason phrases a warning cause the dashboard needs to expose.
+// serviceStateReason phrases a state cause the dashboard needs to expose.
 // The wording lives here, so the backend never has to agree on a sentence.
-function serviceWarningReason(s) {
-  if (s && s.warning_reason === warningReasonFailedUnitLiveProcess) {
+function serviceStateReason(s) {
+  if (s && s.state_reason === stateReasonConfigurationInvalid) {
+    return "configuration invalid";
+  }
+  if (s && s.state_reason === stateReasonStaleBinary) {
+    return "binary replaced on disk";
+  }
+  if (s && s.state_reason === stateReasonFailedUnitLiveProcess) {
     return "init unit failed; workload healthy";
   }
   return "no process attributed";
@@ -1760,6 +1778,10 @@ function openPanelTarget(target) {
   }
   if (target === "warning-services") {
     openServiceStatusTarget(targetStateWarning);
+    return;
+  }
+  if (target === "restart-required-services") {
+    openServiceStatusTarget(targetStateRestartRequired);
     return;
   }
   if (target === "monitored-services") {
@@ -2783,7 +2805,7 @@ function serviceRowParts(s, opts = {}) {
   const name = tpl`<button type="button" class="name row-toggle" data-service-expand="${s.name}" aria-expanded="${open}" aria-controls="${open ? "exp-" + key : nothing}" aria-label="${expandToggleAriaLabel(label, open, "service details")}">${label}</button>`;
   const pinned = svcPinned.has(s.name);
   const pin = tpl`<button type="button" class="icon-btn pin-btn${pinned ? " pinned" : ""}" data-service-pin="${s.name}" aria-pressed="${pinned ? domBoolTrue : domBoolFalse}" title="${pinned ? "Unpin from top" : "Pin to top"}" aria-label="${(pinned ? "Unpin " : "Pin ") + label + (pinned ? " from the top of the list" : " to the top of the list")}">${pinned ? "★" : "☆"}</button>`;
-  const rowClass = state === targetStateFailed ? "row-failing" : (state === targetStateWarning ? "row-warning" : "");
+  const rowClass = state === targetStateFailed ? "row-failing" : ([targetStateWarning, targetStateRestartRequired].includes(state) ? "row-warning" : "");
   const main = tpl`<tr id="svc-row-${s.name}" class="clickable ${rowClass}" data-exp-key="${key}">
     <td><div class="svc-main">${chev}${name}${pin}</div>${busyText}</td>
     <td>${categoryBadge(category)}</td>
@@ -6542,6 +6564,7 @@ function panelTargetLabel(target) {
     case "starting-services": return "service targets panel, starting filter";
     case "collecting-services": return "service targets panel, collecting filter";
     case "warning-services": return "service targets panel, warning filter";
+    case "restart-required-services": return "service targets panel, restart required filter";
     case "monitored-services": return "service targets panel, monitored filter";
     case "failed-watches": return "watches panel, failed filter";
     case "starting-watches": return "watches panel, starting filter";
@@ -6617,8 +6640,9 @@ function overviewInventory(ctx) {
   // Warning services need operator attention: either a process-attribution gap
   // or a failed init unit whose verified workload remains healthy.
   const warningSvcs = svcs.filter((s) => serviceDisplayState(s) === targetStateWarning);
+  const restartRequiredSvcs = svcs.filter((s) => serviceDisplayState(s) === targetStateRestartRequired);
   const activeSvcs = enabled.filter((s) => overviewActiveServiceStates.includes(serviceDisplayState(s)));
-  const monitoredSvcs = enabled.filter((s) => serviceDisplayState(s) === targetStateMonitored);
+  const monitoredSvcs = enabled.filter((s) => [targetStateMonitored, targetStateRestartRequired].includes(serviceDisplayState(s)));
   const watches = allWatches || [];
   const enabledWatches = watches.filter((w) => w && w.enabled);
   const failedWatches = watches.filter((w) => watchStateText(w) === targetStateFailed);
@@ -6631,14 +6655,14 @@ function overviewInventory(ctx) {
   const failedApps = (allApps || []).filter((a) => appStateText(a) === targetStateFailed);
   return {
     ready, live, mon, hostMetrics, enabled, failedSvcs, startingSvcs, collectingSvcs,
-    warningSvcs, activeSvcs, monitoredSvcs, watches, enabledWatches, failedWatches,
+    warningSvcs, restartRequiredSvcs, activeSvcs, monitoredSvcs, watches, enabledWatches, failedWatches,
     warningWatches, staleWatches, startingWatches, startingApps, daemonStarting, activeLocks, failedApps,
   };
 }
 
 function overviewServiceTileOptions(data, defaultServiceTarget) {
   const {
-    mon, enabled, failedSvcs, startingSvcs, collectingSvcs, warningSvcs, activeSvcs,
+    mon, enabled, failedSvcs, startingSvcs, collectingSvcs, warningSvcs, restartRequiredSvcs, activeSvcs,
     monitoredSvcs, watches, enabledWatches, failedWatches, warningWatches, staleWatches,
     startingWatches, startingApps, daemonStarting, activeLocks, failedApps,
   } = data;
@@ -6659,6 +6683,7 @@ function overviewServiceTileOptions(data, defaultServiceTarget) {
     [startingSvcs.length || daemonStarting, "starting-services"],
     [collectingSvcs.length, "collecting-services"],
     [warningSvcs.length, "warning-services"],
+    [restartRequiredSvcs.length, "restart-required-services"],
     [startingWatches.length, "starting-watches"],
     [startingApps.length, "starting-apps"],
   ], defaultServiceTarget);
@@ -6677,6 +6702,7 @@ function overviewServiceTileOptions(data, defaultServiceTarget) {
     [servicesSettlingText, servicesSettlingText],
     [collectingSvcs.length, `${collectingSvcs.length} collecting`],
     [warningSvcs.length, `${warningSvcs.length} need attention`],
+    [restartRequiredSvcs.length, `${restartRequiredSvcs.length} restart required`],
     [enabled.length === 0, "none enabled"],
   ], "all active");
   tiles.push({
@@ -6684,7 +6710,7 @@ function overviewServiceTileOptions(data, defaultServiceTarget) {
     value: tpl`${activeSvcs.length}<small> / ${enabled.length}</small>`,
     cls: firstMatch([
       [failedSvcs.length, "t-crit"],
-      [collectingSvcs.length || warningSvcs.length, "t-warn"],
+      [collectingSvcs.length || warningSvcs.length || restartRequiredSvcs.length, "t-warn"],
       [settling, ""],
       [enabled.length, "t-ok"],
     ], ""),
@@ -6735,19 +6761,21 @@ function overviewServiceTileOptions(data, defaultServiceTarget) {
     [collectingSvcs.length && !failedSvcs.length, "collecting-services"],
     [settling && !failedSvcs.length, servicesTarget],
     [warningSvcs.length && !failedSvcs.length, "warning-services"],
+    [restartRequiredSvcs.length && !failedSvcs.length, "restart-required-services"],
     [monitoredSvcs.length, "monitored-services"],
   ], defaultServiceTarget);
   const monitoredSub = firstMatch([
     [collectingSvcs.length, `${collectingSvcs.length} collecting`],
     [settling && !failedSvcs.length, servicesSettlingText || "settling"],
     [warningSvcs.length, `${warningSvcs.length} need attention`],
+    [restartRequiredSvcs.length, `${restartRequiredSvcs.length} restart required`],
   ], "");
   if (enabled.length || (mon && mon.total != null)) {
     tiles.push({
       label: "Monitored",
       value: tpl`${monitoredSvcs.length}<small> / ${enabled.length}</small>`,
       cls: firstMatch([
-        [collectingSvcs.length || warningSvcs.length, "t-warn"],
+        [collectingSvcs.length || warningSvcs.length || restartRequiredSvcs.length, "t-warn"],
         [settling && !failedSvcs.length, ""],
         [enabled.length && monitoredSvcs.length === enabled.length, "t-ok"],
       ], ""),
