@@ -31,6 +31,17 @@ func TestParseKeepsOnlyUserProcesses(t *testing.T) {
 	}
 }
 
+func TestDefaultPaths(t *testing.T) {
+	got := DefaultPaths()
+	if len(got) != 2 || got[0] != utmpRunPath || got[1] != utmpLegacyRunPath {
+		t.Fatalf("DefaultPaths() = %v, want [%s %s]", got, utmpRunPath, utmpLegacyRunPath)
+	}
+	got[0] = "mutated"
+	if DefaultPaths()[0] != utmpRunPath {
+		t.Fatal("DefaultPaths returned a shared backing array")
+	}
+}
+
 func TestSessionsFromFallsBackAndReads(t *testing.T) {
 	dir := t.TempDir()
 	missing := filepath.Join(dir, "absent")
@@ -50,5 +61,27 @@ func TestSessionsFromFallsBackAndReads(t *testing.T) {
 
 	if _, err := SessionsFrom([]string{missing}); err == nil {
 		t.Fatal("SessionsFrom with no readable file must error")
+	}
+}
+
+func TestSessionsReadsDefaultPaths(t *testing.T) {
+	dir := t.TempDir()
+	missing := filepath.Join(dir, "absent")
+	present := filepath.Join(dir, "utmp")
+	data := record(userProcess, 42, "pts/0", "fran", "192.0.2.10")
+	if err := os.WriteFile(present, data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	orig := defaultPaths
+	defaultPaths = []string{missing, present}
+	t.Cleanup(func() { defaultPaths = orig })
+
+	got, err := Sessions()
+	if err != nil {
+		t.Fatalf("Sessions: %v", err)
+	}
+	if DistinctUsers(got) != 1 {
+		t.Fatalf("Sessions = %+v, want one distinct user", got)
 	}
 }
