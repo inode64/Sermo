@@ -46,3 +46,14 @@ func DistinctUserCount() (int, error) {
 	}
 	return DistinctUsers(sessions), nil
 }
+
+// Sessions returns the active login sessions from the default utmp locations.
+func Sessions() ([]Session, error) {
+	return SessionsFrom(nil)
+}
+
+// DefaultPaths returns the usual utmp locations in lookup order. The returned
+// slice is a copy; off Linux it is nil.
+func DefaultPaths() []string {
+	return append([]string(nil), defaultPaths...)
+}

@@ -37,16 +37,6 @@ var nativeEndian = binary.NativeEndian
 // legacy /var/run/utmp kept as a fallback.
 var defaultPaths = []string{utmpRunPath, utmpLegacyRunPath}
 
-// Sessions returns the active login sessions from the default utmp file.
-func Sessions() ([]Session, error) {
-	return SessionsFrom(defaultPaths)
-}
-
-// DefaultPaths returns the usual utmp locations in lookup order.
-func DefaultPaths() []string {
-	return append([]string(nil), defaultPaths...)
-}
-
 // SessionsFrom reads the first readable utmp file in paths (default paths when
 // empty) and returns its USER_PROCESS sessions. It errors only when no file is
 // found or a present file cannot be read.
