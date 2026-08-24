@@ -101,8 +101,9 @@ FUZZ_TIME ?= 15s
 # gocognit, gocyclo, dupl and perfsprint are blocking linters. Keep a focused
 # cyclomatic-complexity report available for direct inspection.
 QUALITY_REPORT_LINTERS = gocyclo
-SCRIPT_SH = scripts/*.sh scripts/remote-deploy/*.sh
-SCRIPT_PY = scripts/*.py scripts/remote-deploy/*.py
+SCRIPT_SH = scripts/*.sh
+SCRIPT_PY = scripts/*.py
+PRIVATE_SCRIPT_PATHS = scripts/remote-deploy scripts/open_sermo_dashboards.py scripts/test_open_sermo_dashboards.py
 
 yaml-fmt:
 	@$(LINT_PATH) $(YAMLFMT) -conf .yamlfmt
@@ -166,9 +167,16 @@ scripts-lint:
 	@$(LINT_PATH) $(RUFF) check $(SCRIPT_PY)
 
 scripts-test:
-	@echo "remote deployment tests"
-	@python3 -m unittest discover -s scripts/remote-deploy -p 'test_*.py'
-	@python3 scripts/test_check_commit_message.py
+	@echo "script unit tests"
+	@python3 -m unittest discover -s scripts -p 'test_*.py'
+
+privacy-check:
+	@tracked="$$(git ls-files -- $(PRIVATE_SCRIPT_PATHS))"; \
+	if [ -n "$$tracked" ]; then \
+		echo "operator-owned scripts must remain untracked:"; \
+		echo "$$tracked"; \
+		exit 1; \
+	fi
 
 # Documentation that describes the code must keep describing the code: cited
 # source paths, identifiers named by skills, the linter roll-call, operator
@@ -179,7 +187,7 @@ docs-sync:
 	@$(LINT_PATH) python3 scripts/docs_sync_check.py
 
 # Formatting and static analysis gates; make test and make check run this first.
-validate: modules-check lint actions-lint scripts-lint scripts-test npm-audit yaml-validate markdown-check docs-sync web-e2e
+validate: modules-check lint actions-lint scripts-lint scripts-test privacy-check npm-audit yaml-validate markdown-check docs-sync web-e2e
 
 # GO_TEST_FLAGS defaults to -shuffle=on so order-dependent tests surface
 # locally and in CI. Override for a stable order when debugging:

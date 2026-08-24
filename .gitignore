@@ -32,8 +32,16 @@ test-results/
 go.work
 go.work.sum
 
-# env file
+# Environment and host inventory files
+/.env.ssh
 .env*
+
+# Operator-owned fleet tooling. These files are intentionally local and must
+# never be published with the project source.
+/scripts/remote-deploy/
+/scripts/open_sermo_dashboards.py
+/scripts/open_sermo_dashboards.py.old
+/scripts/test_open_sermo_dashboards.py
 
 # Editor/IDE
 .idea/

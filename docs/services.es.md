@@ -1948,10 +1948,9 @@ sesiones ajenas: el agregado se queda entonces en `0` y los watches de lag no
 disparan nunca, en silencio. `pg_replication_slots` es legible por cualquier rol,
 así que los watches de slots no se ven afectados.
 
-Estos watches solo tienen sentido donde hay replicación de verdad.
-`scripts/remote-deploy/generate_install_config.py` desactiva los que un host no
-puede satisfacer a partir de la evidencia de inventario `postgres_clusters` —
-ver [el README de remote-deploy](../scripts/remote-deploy/README.md).
+Estos watches solo tienen sentido donde hay replicación de verdad. Activa solo
+los watches que correspondan al rol de PostgreSQL y a las funciones de
+replicación presentes en ese host.
 
 ## Comandos auxiliares
 

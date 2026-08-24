@@ -9,7 +9,7 @@ description: >-
   deployments, storage under 5 percent free with 5G expand, fstab-backed local/network/USB
   mount units, Docker containers, libvirt/QEMU virtual machines, SMART daily,
   hdparm every 6h, Web UI on 0.0.0.0:9797 with startup/readiness/access timing,
-  reusable scripts under scripts/remote-deploy, and safe alert/notification
+  operator-owned deployment tooling kept outside Git, and safe alert/notification
   checks that must not execute hooks or alter server behavior.
 ---
 
@@ -220,9 +220,9 @@ partial test run.
 Use this section for explicit remote installation or persistent configuration
 requests. It overrides the validation-only `/tmp` restrictions above.
 
-- Keep reusable install/generation scripts in `scripts/remote-deploy/`. Extend
-  those scripts instead of rewriting one-off shell snippets when future installs
-  need the same behavior.
+- Keep reusable install/generation tooling outside Git or in a locally ignored
+  path. Never commit fleet-specific scripts, targets, credentials, IP addresses
+  or server names to this repository.
 - Build locally with `GOAMD64=v1` and `SERMO_DATADIR=/usr/share/sermo`, package
   `sermoctl`, `sermod`, units and catalog locally, then copy the payload to the
   host. Do not build on the host. Payload/config tarballs must be root-owned

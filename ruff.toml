@@ -35,8 +35,3 @@ ignore = [
   "RUF001",
   "RUF002",
 ]
-
-[lint.per-file-ignores]
-# Fixtures need literal credentials to exercise the config generator; they are
-# test data, and no other file may hardcode one.
-"scripts/remote-deploy/test_*.py" = ["S106"]
