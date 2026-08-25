@@ -1,0 +1,31 @@
+name: ksmtuned
+display_name: KSM tuning daemon
+category: virtualization
+description: Adaptive Kernel Samepage Merging tuning daemon.
+service:
+  systemd:
+    - ksmtuned
+apps:
+  - ksmtuned
+variables:
+  user: root
+processes:
+  main:
+    exe: /usr/bin/bash
+    cmd: (^|/)bash .*${ksmtuned_binary}( |$)
+    user: ${user}
+watches:
+  service:
+    check:
+      type: service
+      expect: active
+      verify: true
+  process:
+    check:
+      type: process
+      exe: /usr/bin/bash
+      cmd: (^|/)bash .*${ksmtuned_binary}( |$)
+      user: ${user}
+      state: running
+      requires:
+        - service

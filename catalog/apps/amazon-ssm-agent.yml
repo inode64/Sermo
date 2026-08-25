@@ -1,0 +1,9 @@
+name: amazon-ssm-agent
+display_name: "AWS Systems Manager Agent"
+category: remote-management
+description: "Amazon SSM host management agent"
+variables:
+  binary: ${bindir}/amazon-ssm-agent
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}", "--version"], timeout: 10s }

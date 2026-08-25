@@ -1,0 +1,43 @@
+name: pveproxy
+aliases:
+  - pveproxy worker
+display_name: Proxmox API proxy
+category: virtualization
+description: Proxmox VE HTTPS API proxy.
+service:
+  systemd:
+    - pveproxy
+apps:
+  - pveproxy
+variables:
+  host: 127.0.0.1
+  port: 8006
+  user: www-data
+processes:
+  main:
+    exe: /usr/bin/perl
+    cmd: ^pveproxy( |$)
+    user: ${user}
+watches:
+  service:
+    check:
+      type: service
+      expect: active
+      verify: true
+  process:
+    check:
+      type: process
+      exe: /usr/bin/perl
+      cmd: ^pveproxy( |$)
+      user: ${user}
+      state: running
+      requires:
+        - service
+  port:
+    check:
+      type: tcp
+      host: ${host}
+      port: ${port}
+      timeout: 3s
+      requires:
+        - service

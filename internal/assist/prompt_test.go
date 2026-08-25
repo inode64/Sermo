@@ -204,6 +204,33 @@ func TestPromptDefaultsSurviveEOF(t *testing.T) {
 	}
 }
 
+func TestPromptPositiveDuration(t *testing.T) {
+	tests := []struct {
+		name       string
+		input      string
+		allowBlank bool
+		want       string
+	}{
+		{name: "required rejects non-positive", input: "0s\n45m\n", want: "45m"},
+		{name: "optional accepts blank", input: "\n", allowBlank: true},
+		{name: "optional rejects invalid", input: "soon\n5m\n", allowBlank: true, want: "5m"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p, out := newTestPrompt(tt.input)
+			got := p.askPositiveDuration("Duration", "", "enter a positive duration", tt.allowBlank)
+			if got != tt.want {
+				t.Fatalf("duration = %q, want %q", got, tt.want)
+			}
+			if strings.Contains(tt.input, "soon") || strings.Contains(tt.input, "0s") {
+				if !strings.Contains(out.String(), "enter a positive duration") {
+					t.Fatalf("invalid hint missing from %q", out.String())
+				}
+			}
+		})
+	}
+}
+
 func TestPromptAnswerWithoutTrailingNewline(t *testing.T) {
 	// A last line without \n is a valid answer even though it sets EOF.
 	p, _ := newTestPrompt("2")

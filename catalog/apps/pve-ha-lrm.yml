@@ -1,0 +1,9 @@
+name: pve-ha-lrm
+display_name: "Proxmox HA LRM"
+category: high-availability
+description: "Proxmox VE local HA resource manager"
+version_from: proxmox-ve
+variables:
+  binary: ${bindir}/pve-ha-lrm
+preflight:
+  binary: { type: binary, path: "${binary}" }

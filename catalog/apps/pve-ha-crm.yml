@@ -1,0 +1,9 @@
+name: pve-ha-crm
+display_name: "Proxmox HA CRM"
+category: high-availability
+description: "Proxmox VE cluster HA resource manager"
+version_from: proxmox-ve
+variables:
+  binary: ${bindir}/pve-ha-crm
+preflight:
+  binary: { type: binary, path: "${binary}" }

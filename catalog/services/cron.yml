@@ -1,0 +1,33 @@
+name: cron
+display_name: Cron
+category: scheduler
+description: Periodic command scheduler daemon.
+service:
+  systemd:
+    - cron
+    - crond
+  openrc:
+    - crond
+    - cron
+apps:
+  - cron
+variables:
+  user: root
+processes:
+  main:
+    exe: ${cron_binary}
+    user: ${user}
+watches:
+  service:
+    check:
+      type: service
+      expect: active
+      verify: true
+  process:
+    check:
+      type: process
+      exe: ${cron_binary}
+      user: ${user}
+      state: running
+      requires:
+        - service

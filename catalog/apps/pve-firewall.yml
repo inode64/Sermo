@@ -1,0 +1,9 @@
+name: pve-firewall
+display_name: "Proxmox legacy firewall"
+category: security
+description: "Proxmox VE iptables firewall daemon"
+version_from: proxmox-ve
+variables:
+  binary: ${bindir}/pve-firewall
+preflight:
+  binary: { type: binary, path: "${binary}" }

@@ -1,0 +1,9 @@
+name: ipmi_exporter
+display_name: "Prometheus IPMI Exporter"
+category: observability
+description: "Prometheus exporter for IPMI metrics"
+variables:
+  binary: ${bindir}/ipmi_exporter
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}", "--version"], timeout: 10s }

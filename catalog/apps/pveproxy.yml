@@ -1,0 +1,9 @@
+name: pveproxy
+display_name: "Proxmox API proxy"
+category: virtualization
+description: "Proxmox VE HTTPS API proxy"
+version_from: proxmox-ve
+variables:
+  binary: ${bindir}/pveproxy
+preflight:
+  binary: { type: binary, path: "${binary}" }

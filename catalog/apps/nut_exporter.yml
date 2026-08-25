@@ -1,0 +1,9 @@
+name: nut_exporter
+display_name: "Prometheus NUT Exporter"
+category: observability
+description: "Prometheus exporter for Network UPS Tools metrics"
+variables:
+  binary: ${bindir}/nut_exporter
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}", "--version"], timeout: 10s }

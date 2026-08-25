@@ -1,0 +1,9 @@
+name: pvestatd
+display_name: "Proxmox status daemon"
+category: observability
+description: "Proxmox VE status collection daemon"
+version_from: proxmox-ve
+variables:
+  binary: ${bindir}/pvestatd
+preflight:
+  binary: { type: binary, path: "${binary}" }

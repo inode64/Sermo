@@ -1,0 +1,31 @@
+name: lxcfs
+display_name: LXCFS
+category: virtualization
+description: Container-aware FUSE view of proc and cgroup data.
+service:
+  systemd:
+    - lxcfs
+  openrc:
+    - lxcfs
+apps:
+  - lxcfs
+variables:
+  user: root
+processes:
+  main:
+    exe: ${lxcfs_binary}
+    user: ${user}
+watches:
+  service:
+    check:
+      type: service
+      expect: active
+      verify: true
+  process:
+    check:
+      type: process
+      exe: ${lxcfs_binary}
+      user: ${user}
+      state: running
+      requires:
+        - service

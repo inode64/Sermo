@@ -6,6 +6,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -436,6 +437,63 @@ func TestParseRules(t *testing.T) {
 	}
 }
 
+func TestRuleAndActionTypesValid(t *testing.T) {
+	for _, ruleType := range []RuleType{RuleRemediation, RuleGuard, RuleAlert} {
+		if !ruleType.Valid() {
+			t.Errorf("RuleType(%q).Valid() = false", ruleType)
+		}
+	}
+	if RuleType("repair").Valid() || RuleType("").Valid() {
+		t.Fatal("unknown and empty rule types must be invalid")
+	}
+
+	for _, actionType := range []ActionType{ActionRestart, ActionStart, ActionStop, ActionReload, ActionResume, ActionAlert, ActionBlock} {
+		if !actionType.Valid() {
+			t.Errorf("ActionType(%q).Valid() = false", actionType)
+		}
+	}
+	if ActionType("repair").Valid() || ActionType("").Valid() {
+		t.Fatal("unknown and empty rule actions must be invalid")
+	}
+}
+
+func TestParseActions(t *testing.T) {
+	tests := []struct {
+		name string
+		then map[string]any
+		want []Action
+	}{
+		{
+			name: "single",
+			then: map[string]any{RuleFieldAction: "alert", RuleFieldMessage: "down"},
+			want: []Action{{Type: ActionAlert, Message: "down"}},
+		},
+		{
+			name: "multiple",
+			then: map[string]any{RuleFieldActions: []any{
+				map[string]any{RuleFieldType: "alert", RuleFieldMessage: "down"},
+				map[string]any{RuleFieldType: "restart"},
+			}},
+			want: []Action{{Type: ActionAlert, Message: "down"}, {Type: ActionRestart}},
+		},
+		{
+			name: "malformed list item skipped",
+			then: map[string]any{RuleFieldActions: []any{
+				"alert",
+				map[string]any{RuleFieldType: "restart"},
+			}},
+			want: []Action{{Type: ActionRestart}},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := ParseActions(tt.then); !slices.Equal(got, tt.want) {
+				t.Fatalf("ParseActions() = %+v, want %+v", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestParseRulesStoresEmissionPolicy(t *testing.T) {
 	tree := map[string]any{
 		"rules": map[string]any{
@@ -668,5 +726,17 @@ func TestRulePrimaryAction(t *testing.T) {
 	// A lifecycle action is the primary one.
 	if got := (Rule{Actions: []Action{{Type: ActionRestart}}}).Primary(); got.Type != ActionRestart {
 		t.Fatalf("Primary = %+v, want restart", got)
+	}
+	// The operation is shared by Primary and OperationAction even when an alert
+	// appears first in a multi-action rule.
+	rule := Rule{Actions: []Action{{Type: ActionAlert, Message: "down"}, {Type: ActionRestart}}}
+	if got, ok := rule.Operation(); !ok || got.Type != ActionRestart {
+		t.Fatalf("Operation = %+v, %v, want restart, true", got, ok)
+	}
+	if got := rule.Primary(); got.Type != ActionRestart {
+		t.Fatalf("Primary = %+v, want restart", got)
+	}
+	if got, ok := rule.OperationAction(); !ok || got != ActionRestart {
+		t.Fatalf("OperationAction = %q, %v, want restart, true", got, ok)
 	}
 }

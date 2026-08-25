@@ -1611,7 +1611,7 @@ function serviceDisplayState(s) {
   return serviceState(s);
 }
 
-function serviceStateBadge(s) {
+function serviceStateParts(s) {
   const st = serviceDisplayState(s);
   const indicators = (s && Array.isArray(s.observability_missing) && s.observability_missing.length)
     ? s.observability_missing.join(", ")
@@ -1638,12 +1638,20 @@ function serviceStateBadge(s) {
   const title = missing || blind || degraded || invalidConfiguration || restartRequired || active;
   // An actionable state carries visible text beyond its colour. A tooltip is
   // invisible until hovered and unreachable on a touch screen.
-  const reason = (st === targetStateWarning || st === targetStateRestartRequired)
-    ? tpl` <span class="muted state-reason" title="${title}">${serviceStateReason(s)}</span>`
+  const reasonText = (st === targetStateWarning || st === targetStateRestartRequired)
+    ? serviceStateReason(s)
+    : "";
+  const reason = reasonText
+    ? tpl`<span class="muted state-reason" title="${title}">${reasonText}</span>`
     : nothing;
   const label = st === targetStateRestartRequired ? "restart required" : st;
   const badge = title ? tpl`<span title="${title}">${stateBadgeLabel(st, label)}</span>` : stateBadgeLabel(st, label);
-  return reason ? tpl`${badge}${reason}` : badge;
+  return { badge, reason, hasReason: !!reasonText };
+}
+
+function serviceStateBadge(s) {
+  const state = serviceStateParts(s);
+  return state.hasReason ? tpl`${state.badge} ${state.reason}` : state.badge;
 }
 
 // serviceStateReason phrases a state cause the dashboard needs to expose.
@@ -2766,6 +2774,7 @@ function serviceRowParts(s, opts = {}) {
   const label = displayName(s);
   const op = liveOps.get(s.name);
   const busy = serviceBusy(s);
+  const stateParts = serviceStateParts(s);
   const showResume = !!opts.showResume;
   // With a liveOps entry the note names the action and its elapsed time. Without
   // one, operation_active still tells us the engine holds the lock, so the row
@@ -2807,9 +2816,9 @@ function serviceRowParts(s, opts = {}) {
   const pin = tpl`<button type="button" class="icon-btn pin-btn${pinned ? " pinned" : ""}" data-service-pin="${s.name}" aria-pressed="${pinned ? domBoolTrue : domBoolFalse}" title="${pinned ? "Unpin from top" : "Pin to top"}" aria-label="${(pinned ? "Unpin " : "Pin ") + label + (pinned ? " from the top of the list" : " to the top of the list")}">${pinned ? "★" : "☆"}</button>`;
   const rowClass = state === targetStateFailed ? "row-failing" : ([targetStateWarning, targetStateRestartRequired].includes(state) ? "row-warning" : "");
   const main = tpl`<tr id="svc-row-${s.name}" class="clickable ${rowClass}" data-exp-key="${key}">
-    <td><div class="svc-main">${chev}${name}${pin}</div>${busyText}</td>
+    <td><div class="svc-main">${chev}${name}${pin}</div>${stateParts.hasReason ? tpl`<div class="svc-state-note">${stateParts.reason}</div>` : nothing}${busyText}</td>
     <td>${categoryBadge(category)}</td>
-    <td>${serviceStateCell(s)}</td>
+    <td>${stateParts.badge}</td>
     <td>${serviceUptimeCell(s)}</td>
     <td>${serviceCpuCell(s)}</td>
     <td>${serviceMemCell(s)}</td>

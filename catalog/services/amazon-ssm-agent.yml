@@ -1,0 +1,31 @@
+name: amazon-ssm-agent
+display_name: AWS Systems Manager Agent
+category: remote-management
+description: Amazon SSM agent for managed host access and automation.
+service:
+  systemd:
+    - amazon-ssm-agent
+  openrc:
+    - amazon-ssm-agent
+apps:
+  - amazon-ssm-agent
+variables:
+  user: root
+processes:
+  main:
+    exe: ${amazon_ssm_agent_binary}
+    user: ${user}
+watches:
+  service:
+    check:
+      type: service
+      expect: active
+      verify: true
+  process:
+    check:
+      type: process
+      exe: ${amazon_ssm_agent_binary}
+      user: ${user}
+      state: running
+      requires:
+        - service

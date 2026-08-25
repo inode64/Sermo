@@ -1,0 +1,43 @@
+name: pvedaemon
+aliases:
+  - pvedaemon worke
+display_name: Proxmox API daemon
+category: virtualization
+description: Proxmox VE privileged local API daemon.
+service:
+  systemd:
+    - pvedaemon
+apps:
+  - pvedaemon
+variables:
+  host: 127.0.0.1
+  port: 85
+  user: root
+processes:
+  main:
+    exe: /usr/bin/perl
+    cmd: ^pvedaemon( |$)
+    user: ${user}
+watches:
+  service:
+    check:
+      type: service
+      expect: active
+      verify: true
+  process:
+    check:
+      type: process
+      exe: /usr/bin/perl
+      cmd: ^pvedaemon( |$)
+      user: ${user}
+      state: running
+      requires:
+        - service
+  port:
+    check:
+      type: tcp
+      host: ${host}
+      port: ${port}
+      timeout: 3s
+      requires:
+        - service

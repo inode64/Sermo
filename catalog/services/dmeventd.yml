@@ -1,7 +1,12 @@
 name: dmeventd
 display_name: Device-mapper event daemon
 category: system
-service: dmeventd
+service:
+  systemd:
+    - dmeventd
+    - dm-event
+  openrc:
+    - dmeventd
 apps:
   - dmeventd
 restart_on_change:

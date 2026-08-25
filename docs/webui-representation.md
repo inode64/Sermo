@@ -290,9 +290,9 @@ Columns:
 
 | Column | Meaning |
 | --- | --- |
-| Service | display name, falling back to name, capitalized |
+| Service | display name, falling back to name, capitalized; a warning's operator-facing reason appears on a separate line below the identity so the State column stays compact |
 | Category | YAML category or fallback |
-| State | single normalized service state: `disabled`, `stopped`, `started`, `starting`, `collecting`, `monitored`, `restart_required`, `warning` or `failed`; `restart_required` means the observed service is available but runs a binary replaced on disk; `warning` covers an invalid application configuration, a healthy service without an attributable process tree, or a workload with a failed init unit but a verified live process and passing functional checks; visible inline text and `state_reason` distinguish the cases |
+| State | compact normalized service-state badge: `disabled`, `stopped`, `started`, `starting`, `collecting`, `monitored`, `restart_required`, `warning` or `failed`; `restart_required` means the observed service is available but runs a binary replaced on disk; `warning` covers an invalid application configuration, a healthy service without an attributable process tree, or a workload with a failed init unit but a verified live process and passing functional checks; the visible reason below the service identity and `state_reason` distinguish the cases |
 | Uptime | age of the oldest discovered service process, when available |
 | CPU total | latest whole process-tree CPU usage; blank for `no_resident_process` services |
 | Memory | latest process-tree resident memory; blank for `no_resident_process` services |

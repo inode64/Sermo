@@ -1,0 +1,9 @@
+name: proxmox-ve
+display_name: "Proxmox VE"
+category: virtualization
+description: "Proxmox Virtual Environment platform"
+variables:
+  binary: ${bindir}/pveversion
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}", "--verbose"], timeout: 15s }

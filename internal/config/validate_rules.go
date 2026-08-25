@@ -125,15 +125,6 @@ var serviceStates = set(
 	string(servicemgr.StatusUnknown),
 )
 var processStates = set(process.StateRunning, process.StateZombie, process.StateAbsent)
-var validActions = set(
-	string(rules.ActionRestart),
-	string(rules.ActionStart),
-	string(rules.ActionStop),
-	string(rules.ActionReload),
-	string(rules.ActionResume),
-	string(rules.ActionAlert),
-	string(rules.ActionBlock),
-)
 var metricCatalog = map[string]map[string]struct{}{
 	checks.MetricScopeService: set(metrics.MetricMemory, metrics.MetricSwap, metrics.MetricCPU, metrics.MetricCPUThread,
 		metrics.MetricProcessCount, metrics.MetricIO, metrics.MetricIORead, metrics.MetricIOWrite,
@@ -239,7 +230,7 @@ func validateRule(path string, entry map[string]any, notifiers, checkNames, syst
 	if !hasThen {
 		add("%s has no then action", path)
 	}
-	actions := ruleActions(then)
+	actions := rules.ParseActions(then)
 	validateRuleActions(path, entry, ruleType, actions, hasThen, add)
 	validateWindow(path, entry, add)
 	// A clear window holds the episode firing while the condition is false; a
@@ -254,15 +245,13 @@ func validateRule(path string, entry map[string]any, notifiers, checkNames, syst
 
 func validateRuleType(path string, entry map[string]any, add addFunc) string {
 	ruleType := cfgval.String(entry[rules.RuleFieldType])
-	switch ruleType {
-	case string(rules.RuleRemediation), string(rules.RuleGuard), string(rules.RuleAlert):
-	default:
+	if !rules.RuleType(ruleType).Valid() {
 		add("%s type %q is not one of %s", path, ruleType, rules.RuleTypeSummary)
 	}
 	return ruleType
 }
 
-func validateRuleActions(path string, entry map[string]any, ruleType string, actions []valAction, hasThen bool, add addFunc) {
+func validateRuleActions(path string, entry map[string]any, ruleType string, actions []rules.Action, hasThen bool, add addFunc) {
 	isGuard := ruleType == string(rules.RuleGuard)
 	blocks, blocksErr := cfgval.StrictStringList(entry[rules.RuleFieldBlocks])
 	if _, present := entry[rules.RuleFieldBlocks]; present && blocksErr != nil {
@@ -281,32 +270,28 @@ func validateRuleActions(path string, entry map[string]any, ruleType string, act
 // remediation. Sugars that emit an optional operation action derive the type
 // from the actions rather than restating the rule.
 func generatedRuleType(then map[string]any) rules.RuleType {
-	actions, _ := then[rules.RuleFieldActions].([]any)
-	for _, raw := range actions {
-		action, _ := raw.(map[string]any)
-		if rules.ActionType(cfgval.String(action[rules.RuleFieldType])).IsOperation() {
+	for _, action := range rules.ParseActions(then) {
+		if action.Type.IsOperation() {
 			return rules.RuleRemediation
 		}
 	}
 	return rules.RuleAlert
 }
 
-func validateRuleActionForms(path string, actions []valAction, isGuard bool, add addFunc) bool {
+func validateRuleActionForms(path string, actions []rules.Action, isGuard bool, add addFunc) bool {
 	hasBlock := false
 	for _, action := range actions {
-		if action.typ != "" {
-			if _, ok := validActions[action.typ]; !ok {
-				add("%s then.action %q is not one of %s", path, action.typ, rules.RuleActionSummary)
-			}
+		if action.Type != "" && !action.Type.Valid() {
+			add("%s then.action %q is not one of %s", path, action.Type, rules.RuleActionSummary)
 		}
-		if action.typ == string(rules.ActionBlock) {
+		if action.Type == rules.ActionBlock {
 			hasBlock = true
 			if !isGuard {
 				add("%s only guard rules may use action block", path)
 			}
 		}
-		if (action.typ == string(rules.ActionBlock) || action.typ == string(rules.ActionAlert)) && action.message == "" {
-			add("%s action %s requires a non-empty message", path, action.typ)
+		if (action.Type == rules.ActionBlock || action.Type == rules.ActionAlert) && action.Message == "" {
+			add("%s action %s requires a non-empty message", path, action.Type)
 		}
 	}
 	return hasBlock
@@ -333,15 +318,15 @@ func validateRuleGuardActions(path string, entry map[string]any, isGuard bool, b
 	}
 }
 
-func validateRuleOperationActions(path, ruleType string, actions []valAction, add addFunc) bool {
+func validateRuleOperationActions(path, ruleType string, actions []rules.Action, add addFunc) bool {
 	hasOperation := false
 	for _, action := range actions {
-		if !rules.ActionType(action.typ).IsOperation() {
+		if !action.Type.IsOperation() {
 			continue
 		}
 		hasOperation = true
 		if ruleType != string(rules.RuleRemediation) {
-			add("%s only remediation rules may use action %s", path, action.typ)
+			add("%s only remediation rules may use action %s", path, action.Type)
 		}
 	}
 	return hasOperation
@@ -585,26 +570,6 @@ func validateMetric(entry map[string]any, path string, allowSystem bool, add add
 	if scope == checks.MetricScopeSystem && !allowSystem {
 		add("%s scope: system metric is only allowed in alert rules", path)
 	}
-}
-
-type valAction struct {
-	typ     string
-	message string
-}
-
-// ruleActions returns a rule's actions, supporting both the single
-// `then: {action, message}` and the multi `then: {actions: [...]}` forms.
-func ruleActions(then map[string]any) []valAction {
-	if list, ok := then[rules.RuleFieldActions].([]any); ok {
-		out := make([]valAction, 0, len(list))
-		for _, item := range list {
-			if m, ok := item.(map[string]any); ok {
-				out = append(out, valAction{typ: cfgval.String(m[rules.RuleFieldType]), message: cfgval.String(m[rules.RuleFieldMessage])})
-			}
-		}
-		return out
-	}
-	return []valAction{{typ: cfgval.String(then[rules.RuleFieldAction]), message: cfgval.String(then[rules.RuleFieldMessage])}}
 }
 
 func collectCheckNames(tree map[string]any) map[string]struct{} {

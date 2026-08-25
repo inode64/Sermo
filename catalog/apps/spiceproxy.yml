@@ -1,0 +1,9 @@
+name: spiceproxy
+display_name: "Proxmox SPICE proxy"
+category: virtualization
+description: "Proxmox VE SPICE console proxy"
+version_from: proxmox-ve
+variables:
+  binary: ${bindir}/spiceproxy
+preflight:
+  binary: { type: binary, path: "${binary}" }

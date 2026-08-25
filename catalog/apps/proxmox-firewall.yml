@@ -1,0 +1,9 @@
+name: proxmox-firewall
+display_name: "Proxmox nftables firewall"
+category: security
+description: "Proxmox VE nftables firewall daemon"
+version_from: proxmox-ve
+variables:
+  binary: /usr/libexec/proxmox/proxmox-firewall
+preflight:
+  binary: { type: binary, path: "${binary}" }

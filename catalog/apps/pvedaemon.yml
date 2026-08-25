@@ -1,0 +1,9 @@
+name: pvedaemon
+display_name: "Proxmox API daemon"
+category: virtualization
+description: "Proxmox VE privileged local API daemon"
+version_from: proxmox-ve
+variables:
+  binary: ${bindir}/pvedaemon
+preflight:
+  binary: { type: binary, path: "${binary}" }

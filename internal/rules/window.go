@@ -202,40 +202,52 @@ func (s *WindowState) counters() (consecutive int, history []bool, trueSince tim
 // otherwise the entry window's counters decide. at is the read time for
 // duration windows.
 func (s *WindowState) IsFiringAt(r Rule, at time.Time) bool {
-	if s.Firing() {
-		return true
-	}
+	return s.statusAt(r, at).firing
+}
+
+type windowStatus struct {
+	firing   bool
+	progress string
+}
+
+// statusAt computes the read-only firing state and operator progress together,
+// so duration histories are filtered and counted only once per report.
+func (s *WindowState) statusAt(r Rule, at time.Time) windowStatus {
+	episodeFiring := s.Firing()
 	consecutive, history, trueSince, timedHistory := s.counters()
-	if _, duration, minMatches, ok := r.withinWindow(); ok {
+	if cycles, duration, minMatches, ok := r.withinWindow(); ok {
 		if duration > 0 {
-			return countTimedTrue(recentSamples(timedHistory, at, duration)) >= minMatches
+			matches := countTimedTrue(recentSamples(timedHistory, at, duration))
+			return windowStatus{
+				firing:   episodeFiring || matches >= minMatches,
+				progress: fmt.Sprintf("%d/%d in %s", matches, minMatches, formatWindowDuration(duration)),
+			}
 		}
-		return countTrue(history) >= minMatches
+		matches := countTrue(history)
+		return windowStatus{
+			firing:   episodeFiring || matches >= minMatches,
+			progress: fmt.Sprintf("%d/%d in %d cycles", matches, minMatches, cycles),
+		}
 	}
 	cycles, duration := r.forWindow()
 	if duration > 0 {
-		return durationElapsed(trueSince, at) >= duration
+		elapsed := durationElapsed(trueSince, at)
+		return windowStatus{
+			firing:   episodeFiring || elapsed >= duration,
+			progress: fmt.Sprintf("%s/%s", formatWindowDuration(min(elapsed, duration)), formatWindowDuration(duration)),
+		}
 	}
-	return consecutive >= cycles
+	return windowStatus{
+		firing:   episodeFiring || consecutive >= cycles,
+		progress: fmt.Sprintf("%d/%d", consecutive, cycles),
+	}
 }
 
 // ProgressAt returns an operator-facing window counter such as "2/3" for
 // consecutive windows, "2m/6m" for duration windows, or "2/3 in 15 cycles" for
 // within windows. Nil-safe. at is the read time for duration windows.
 func (s *WindowState) ProgressAt(r Rule, at time.Time) string {
-	consecutive, history, trueSince, timedHistory := s.counters()
-	if cycles, duration, minMatches, ok := r.withinWindow(); ok {
-		if duration > 0 {
-			return fmt.Sprintf("%d/%d in %s", countTimedTrue(recentSamples(timedHistory, at, duration)), minMatches, formatWindowDuration(duration))
-		}
-		return fmt.Sprintf("%d/%d in %d cycles", countTrue(history), minMatches, cycles)
-	}
-	cycles, duration := r.forWindow()
-	if duration > 0 {
-		elapsed := min(durationElapsed(trueSince, at), duration)
-		return fmt.Sprintf("%s/%s", formatWindowDuration(elapsed), formatWindowDuration(duration))
-	}
-	return fmt.Sprintf("%d/%d", consecutive, cycles)
+	return s.statusAt(r, at).progress
 }
 
 // Clone returns a deep copy of the window state for config reload.
@@ -394,12 +406,11 @@ func formatWindowDuration(d time.Duration) string {
 // ParseForWindow parses a `for` window ({cycles}) from a config node, or nil when
 // absent. Shared by the rules parser and the host-watch builder.
 func ParseForWindow(v any) *ForWindow {
-	m, ok := v.(map[string]any)
+	_, cycles, duration, ok := parseWindowValues(v)
 	if !ok {
 		return nil
 	}
-	cycles, _ := cfgval.Int(m[WindowKeyCycles])
-	return &ForWindow{Cycles: cycles, Duration: cfgval.Duration(m[WindowKeyDuration])}
+	return &ForWindow{Cycles: cycles, Duration: duration}
 }
 
 // ParseWithinWindow parses a `within` window ({cycles, min_matches}) from a config
@@ -407,12 +418,11 @@ func ParseForWindow(v any) *ForWindow {
 // the window) — the same default ParseRuleWindow applies, so every `within` form
 // reads identically. Shared by the rules parser and the host-watch builder.
 func ParseWithinWindow(v any) *WithinWindow {
-	m, ok := v.(map[string]any)
+	m, cycles, duration, ok := parseWindowValues(v)
 	if !ok {
 		return nil
 	}
-	cycles, _ := cfgval.Int(m[WindowKeyCycles])
-	return &WithinWindow{Cycles: cycles, Duration: cfgval.Duration(m[WindowKeyDuration]), MinMatches: minMatches(m)}
+	return &WithinWindow{Cycles: cycles, Duration: duration, MinMatches: minMatches(m)}
 }
 
 // DefaultClearWindow is the built-in recovery hysteresis: when neither the
@@ -464,12 +474,10 @@ func ParseWindowRule(entry map[string]any) Rule {
 // resolves to it (consecutive with cycles <= 1) returns nil/nil: it leaves rules
 // at the immediate default rather than wrapping them in a redundant window.
 func ParseRuleWindow(v any) (*ForWindow, *WithinWindow) {
-	m, ok := v.(map[string]any)
+	m, cycles, duration, ok := parseWindowValues(v)
 	if !ok {
 		return nil, nil
 	}
-	cycles, _ := cfgval.Int(m[WindowKeyCycles])
-	duration := cfgval.Duration(m[WindowKeyDuration])
 	if cycles <= 0 && duration <= 0 {
 		return nil, nil
 	}
@@ -485,6 +493,15 @@ func ParseRuleWindow(v any) (*ForWindow, *WithinWindow) {
 		}
 		return &ForWindow{Cycles: cycles}, nil
 	}
+}
+
+func parseWindowValues(v any) (m map[string]any, cycles int, duration time.Duration, ok bool) {
+	m, ok = v.(map[string]any)
+	if !ok {
+		return nil, 0, 0, false
+	}
+	cycles, _ = cfgval.Int(m[WindowKeyCycles])
+	return m, cycles, cfgval.Duration(m[WindowKeyDuration]), true
 }
 
 func minMatches(m map[string]any) int {
