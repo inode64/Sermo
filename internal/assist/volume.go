@@ -144,9 +144,8 @@ func buildVolWatch(v Volume, s volSettings) map[string]any {
 		then[config.WatchThenKeyExpand] = map[string]any{config.WatchExpandKeyBy: s.expandBy}
 	}
 	entry := map[string]any{
-		config.EntryKeyCategory: config.WatchCategoryStorage,
-		config.WatchKeyCheck:    check,
-		config.WatchKeyThen:     then,
+		config.WatchKeyCheck: check,
+		config.WatchKeyThen:  then,
 	}
 	if s.forCycles > 0 {
 		entry[rules.RuleFieldFor] = map[string]any{rules.WindowKeyCycles: s.forCycles}
@@ -154,8 +153,7 @@ func buildVolWatch(v Volume, s volSettings) map[string]any {
 	if s.expand && s.cooldown != "" {
 		entry[rules.SectionPolicy] = map[string]any{rules.PolicyKeyCooldown: s.cooldown}
 	}
-	s.Monitoring.apply(entry)
-	applyDryRun(entry, s.dryRun)
+	applyWatchSettings(entry, config.WatchCategoryStorage, s.Monitoring, s.dryRun)
 	return entry
 }
 

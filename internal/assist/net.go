@@ -179,14 +179,12 @@ func buildNetWatch(iface Iface, s netSettings) map[string]any {
 		}
 	}
 	entry := map[string]any{
-		config.EntryKeyCategory: config.WatchCategoryNetwork,
 		config.WatchKeyCheck: map[string]any{
 			checks.CheckKeyType:      checks.CheckTypeNet,
 			checks.CheckKeyInterface: iface.Name,
 		},
 		config.SectionMetrics: metrics,
 	}
-	s.Monitoring.apply(entry)
-	applyDryRun(entry, s.dryRun)
+	applyWatchSettings(entry, config.WatchCategoryNetwork, s.Monitoring, s.dryRun)
 	return entry
 }

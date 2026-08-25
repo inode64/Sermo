@@ -123,10 +123,7 @@ func askServiceSettings(p *Prompt, label string) serviceSettings {
 }
 
 func (s serviceSettings) apply(body map[string]any) {
-	s.Monitoring.apply(body)
-	if s.DryRun {
-		body[config.EntryKeyDryRun] = true
-	}
+	applyMonitoredSettings(body, s.Monitoring, s.DryRun)
 }
 
 func splitServiceCandidates(cands []ServiceCandidate) (activeCatalog, generic []ServiceCandidate) {
