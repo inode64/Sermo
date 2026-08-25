@@ -176,14 +176,6 @@ func candidatesByIndexes[T any](cands []T, indexes []int) []T {
 	return out
 }
 
-func candidateNames[T any](cands []T, name func(T) string) []string {
-	out := make([]string, len(cands))
-	for i, c := range cands {
-		out[i] = name(c)
-	}
-	return out
-}
-
 const (
 	labelDetailSeparator = " · "
 	labelFieldSeparator  = ": "

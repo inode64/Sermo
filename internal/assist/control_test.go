@@ -25,8 +25,7 @@ func TestDockerAssistant(t *testing.T) {
 	}
 	script := strings.Join([]string{
 		config.SelectionKeywordAll, // select both; redis is already configured and will be skipped
-		"y",                        // shared settings
-		"1",                        // monitor enabled
+		"1",                        // monitor enabled for the one pending service
 		"",                         // interval inherit
 		"n",                        // no dry-run
 	}, "\n") + "\n"
@@ -54,6 +53,27 @@ func TestDockerAssistant(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), `"docker-redis" is already configured`) {
 		t.Fatalf("skip message missing from output:\n%s", out.String())
+	}
+}
+
+func TestDockerAssistantSkipsConfiguredTargetsBeforeSettings(t *testing.T) {
+	env := Env{
+		ServiceNames: map[string]struct{}{"docker-web": {}},
+		DockerContainers: func() ([]DockerCandidate, error) {
+			return []DockerCandidate{{Name: "docker-web", Container: "web"}}, nil
+		},
+	}
+	var out strings.Builder
+	p := NewPrompt(strings.NewReader("1\n"), &out)
+	res, err := dockerAssistant{}.Run(p, env)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if len(res.Services) != 0 {
+		t.Fatalf("services = %v, want none", res.Services)
+	}
+	if strings.Contains(out.String(), "How should") {
+		t.Fatalf("settings were requested for an already configured target:\n%s", out.String())
 	}
 }
 
