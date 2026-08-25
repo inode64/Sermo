@@ -1875,7 +1875,6 @@ func (a App) applyDaemonWebAuth(req *http.Request, cfg *config.Config) {
 //     daemon on this host: the token of a local sermod means nothing to a remote
 //     one. It is what makes hashed credentials usable, since a hash cannot be
 //     turned back into the password the API expects.
-//  3. A cleartext password in the configuration, which the daemon accepts as-is.
 //
 // An empty result means no credential was found. The request is still sent: the
 // dashboard may have no authentication at all, and a 401 is reported by the
@@ -1889,8 +1888,7 @@ func (a App) daemonWebPassword(cfg *config.Config) string {
 			return token
 		}
 	}
-	pw, _ := cfg.Global.WebCredentials().Plaintext()
-	return pw
+	return ""
 }
 
 // daemonIsLocal reports whether web.address names this host. A runtime token is

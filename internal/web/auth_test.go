@@ -468,15 +468,20 @@ func TestLoginChallengesThenRedirects(t *testing.T) {
 // Every credential configured for a role grants that role, which is what lets an
 // operator rotate a password or give each person their own without a cut.
 func TestRoleFromAnyCredential(t *testing.T) {
-	adminHash, err := webcred.HashBcrypt("hashed-admin", webcred.MinBcryptCost)
+	hashes := make(map[string]string)
+	for _, password := range []string{"first", "second", "hashed-admin", "guest-one", "guest-two"} {
+		hash, err := webcred.HashBcrypt(password, webcred.MinBcryptCost)
+		if err != nil {
+			t.Fatal(err)
+		}
+		hashes[password] = hash
+	}
+	adminHash := hashes["hashed-admin"]
+	admin, err := webcred.Parse(hashes["first"] + "\n" + hashes["second"] + "\n" + adminHash + "   # ana\n")
 	if err != nil {
 		t.Fatal(err)
 	}
-	admin, err := webcred.Parse("first\nsecond\n" + adminHash + "   # ana\n")
-	if err != nil {
-		t.Fatal(err)
-	}
-	guest, err := webcred.Parse("guest-one\nguest-two\n")
+	guest, err := webcred.Parse(hashes["guest-one"] + "\n" + hashes["guest-two"] + "\n")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -40,32 +40,25 @@ func TestParse(t *testing.T) {
 		rejects []string
 	}{
 		{
-			name:    "single cleartext line, trailing newline trimmed",
-			data:    "s3cret\n",
+			name:    "single bcrypt line, trailing newline trimmed",
+			data:    bcryptLine + "\n",
 			wantLen: 1,
-			accepts: []string{"s3cret"},
-			rejects: []string{"s3cret\n", " s3cret", "other", ""},
+			accepts: []string{"typed"},
+			rejects: []string{"typed\n", " typed", "other", ""},
 		},
 		{
 			name:    "blank lines and comments are skipped",
-			data:    "\n# admins\n\n  # indented comment\nfirst\n",
+			data:    "\n# admins\n\n  # indented comment\n" + bcryptLine + "\n",
 			wantLen: 1,
-			accepts: []string{"first"},
+			accepts: []string{"typed"},
 			rejects: []string{"# admins", ""},
 		},
 		{
 			name:    "every line is a credential",
-			data:    "first\nsecond\nthird\n",
-			wantLen: 3,
-			accepts: []string{"first", "second", "third"},
-			rejects: []string{"first\nsecond", "fourth"},
-		},
-		{
-			name:    "a cleartext credential keeps its # and spaces",
-			data:    "pass # word\n",
-			wantLen: 1,
-			accepts: []string{"pass # word"},
-			rejects: []string{"pass"},
+			data:    bcryptLine + "\n" + sha256Line + "\n",
+			wantLen: 2,
+			accepts: []string{"typed", "generated"},
+			rejects: []string{"other"},
 		},
 		{
 			name:    "hashed lines take a trailing comment",
@@ -75,18 +68,11 @@ func TestParse(t *testing.T) {
 			rejects: []string{"ana", bcryptLine, "wrong"},
 		},
 		{
-			name:    "cleartext and hashed credentials mix",
-			data:    "plain\n" + bcryptLine + "\n",
-			wantLen: 2,
-			accepts: []string{"plain", "typed"},
-			rejects: []string{"other"},
-		},
-		{
 			name:    "carriage returns are stripped",
-			data:    "first\r\nsecond\r\n",
+			data:    bcryptLine + "\r\n" + sha256Line + "\r\n",
 			wantLen: 2,
-			accepts: []string{"first", "second"},
-			rejects: []string{"first\r"},
+			accepts: []string{"typed", "generated"},
+			rejects: []string{"typed\r"},
 		},
 	}
 
@@ -145,7 +131,7 @@ func TestParseErrors(t *testing.T) {
 		},
 		{
 			name:    "malformed bcrypt is rejected with its line",
-			data:    "ok\n$2a$12$tooshort\n",
+			data:    hashOrFail(t, "ok") + "\n$2a$12$tooshort\n",
 			wantErr: "line 2: malformed bcrypt credential",
 		},
 		{
@@ -160,7 +146,7 @@ func TestParseErrors(t *testing.T) {
 		},
 		{
 			name:    "more credentials than the limit",
-			data:    strings.Repeat("pw\n", MaxCredentials+1),
+			data:    strings.Repeat(hashOrFail(t, "pw")+"\n", MaxCredentials+1),
 			wantErr: "more than 64 credentials",
 		},
 	}
@@ -179,44 +165,12 @@ func TestParseErrors(t *testing.T) {
 }
 
 func TestMaxCredentialsIsAccepted(t *testing.T) {
-	list, err := Parse(strings.Repeat("pw\n", MaxCredentials))
+	list, err := Parse(strings.Repeat(hashOrFail(t, "pw")+"\n", MaxCredentials))
 	if err != nil {
 		t.Fatalf("Parse() error = %v", err)
 	}
 	if list.Len() != MaxCredentials {
 		t.Fatalf("Parse() len = %d, want %d", list.Len(), MaxCredentials)
-	}
-}
-
-func TestParseInline(t *testing.T) {
-	tests := []struct {
-		name    string
-		secret  string
-		accepts string
-		wantErr string
-	}{
-		{name: "cleartext", secret: "s3cret", accepts: "s3cret"},
-		{name: "a leading # is part of the password", secret: "#hash", accepts: "#hash"},
-		{name: "hashed", secret: hashOrFail(t, "typed"), accepts: "typed"},
-		{name: "empty", secret: "  ", wantErr: "holds no credential"},
-		{name: "unknown format", secret: "$md5$deadbeef", wantErr: "unsupported hash format"},
-	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			list, err := ParseInline(tc.secret)
-			if tc.wantErr != "" {
-				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
-					t.Fatalf("ParseInline() error = %v, want it to contain %q", err, tc.wantErr)
-				}
-				return
-			}
-			if err != nil {
-				t.Fatalf("ParseInline() error = %v", err)
-			}
-			if !list.Verify(t.Context(), tc.accepts) {
-				t.Errorf("Verify(%q) = false, want true", tc.accepts)
-			}
-		})
 	}
 }
 
@@ -230,35 +184,11 @@ func TestZeroListGrantsNothing(t *testing.T) {
 	}
 }
 
-func TestPlaintext(t *testing.T) {
-	tests := []struct {
-		name  string
-		list  List
-		want  string
-		wants bool
-	}{
-		{name: "single cleartext", list: Plain("s3cret"), want: "s3cret", wants: true},
-		{name: "several cleartext", list: Plain("a", "b")},
-		{name: "empty"},
-	}
-	hashed, err := Parse(hashOrFail(t, "typed"))
-	if err != nil {
-		t.Fatalf("Parse() error = %v", err)
-	}
-	tests = append(tests, struct {
-		name  string
-		list  List
-		want  string
-		wants bool
-	}{name: "hashed", list: hashed})
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			got, ok := tc.list.Plaintext()
-			if ok != tc.wants || got != tc.want {
-				t.Errorf("Plaintext() = %q, %v; want %q, %v", got, ok, tc.want, tc.wants)
-			}
-		})
+func TestParseRejectsPlaintext(t *testing.T) {
+	for _, input := range []string{"s3cret", "first\nsecond\n", "name=s3cret"} {
+		if _, err := Parse(input); err == nil || !strings.Contains(err.Error(), "plaintext credential") {
+			t.Errorf("Parse(%q) error = %v, want plaintext rejection", input, err)
+		}
 	}
 }
 
@@ -290,17 +220,16 @@ func TestVerifyCachesBothVerdicts(t *testing.T) {
 	}
 }
 
-// A cleartext or sha256 list has nothing expensive to cache, so it keeps no
-// record of the passwords it was offered.
-func TestFastListsHaveNoCache(t *testing.T) {
-	for _, data := range []string{"s3cret\n", sha256OrFail(t, "generated") + "\n"} {
-		list, err := Parse(data)
-		if err != nil {
-			t.Fatalf("Parse() error = %v", err)
-		}
-		if list.cache != nil || list.slots != nil {
-			t.Errorf("Parse(%q) allocated a cache for a fast list", data)
-		}
+// A sha256 list has nothing expensive to cache, so it keeps no record of the
+// passwords it was offered.
+func TestSHA256ListHasNoCache(t *testing.T) {
+	data := sha256OrFail(t, "generated") + "\n"
+	list, err := Parse(data)
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+	if list.cache != nil || list.slots != nil {
+		t.Errorf("Parse(%q) allocated a cache for a fast list", data)
 	}
 }
 
@@ -390,9 +319,6 @@ func TestHashRoundTrip(t *testing.T) {
 			if list.Verify(t.Context(), secret+"x") {
 				t.Error("Verify() with a wrong secret = true, want false")
 			}
-			if _, ok := list.Plaintext(); ok {
-				t.Error("Plaintext() returned a password for a hashed credential")
-			}
 		})
 	}
 }
@@ -425,7 +351,9 @@ func TestSecureEqual(t *testing.T) {
 // Formatting a List (or the struct that carries it) must never print a
 // password: a single %v in a log line would undo the whole point of hashing.
 func TestListStringRedactsCredentials(t *testing.T) {
-	list, err := Parse("s3cret\nsecond\n")
+	first := hashOrFail(t, "s3cret")
+	second := hashOrFail(t, "second")
+	list, err := Parse(first + "\n" + second + "\n")
 	if err != nil {
 		t.Fatalf("Parse() error = %v", err)
 	}
@@ -438,7 +366,7 @@ func TestListStringRedactsCredentials(t *testing.T) {
 			Guest List
 		}{list, list}),
 	} {
-		if strings.Contains(rendered, "s3cret") || strings.Contains(rendered, "second") {
+		if strings.Contains(rendered, first) || strings.Contains(rendered, second) {
 			t.Errorf("rendered List = %q, want the credentials redacted", rendered)
 		}
 	}

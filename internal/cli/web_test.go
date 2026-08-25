@@ -212,25 +212,14 @@ func TestDaemonWebPasswordPrecedence(t *testing.T) {
 	}
 	tokenPath := filepath.Join(runtimeDir, config.DaemonWebTokenFilename)
 
-	plainCfg := &config.Config{Global: config.Global{
+	localCfg := &config.Config{Global: config.Global{
 		Runtime: runtimeDir,
-		Raw:     map[string]any{config.SectionWeb: map[string]any{config.WebKeyPassword: "from-config"}},
+		Raw:     map[string]any{config.SectionWeb: map[string]any{}},
 	}}
 	// A daemon on another host never knows this host's runtime token.
 	remoteCfg := &config.Config{Global: config.Global{
 		Runtime: runtimeDir,
-		Raw: map[string]any{config.SectionWeb: map[string]any{
-			config.WebKeyPassword: "from-config",
-			config.WebKeyAddress:  "10.0.0.9",
-		}},
-	}}
-	hashed, err := webcred.HashBcrypt("typed", webcred.MinBcryptCost)
-	if err != nil {
-		t.Fatal(err)
-	}
-	hashedCfg := &config.Config{Global: config.Global{
-		Runtime: runtimeDir,
-		Raw:     map[string]any{config.SectionWeb: map[string]any{config.WebKeyPassword: hashed}},
+		Raw:     map[string]any{config.SectionWeb: map[string]any{config.WebKeyAddress: "10.0.0.9"}},
 	}}
 
 	tests := []struct {
@@ -240,12 +229,10 @@ func TestDaemonWebPasswordPrecedence(t *testing.T) {
 		token string
 		want  string
 	}{
-		{name: "environment wins", cfg: plainCfg, env: "from-env", token: "from-token", want: "from-env"},
-		{name: "token beats the config", cfg: plainCfg, token: "from-token", want: "from-token"},
-		{name: "cleartext config is the fallback", cfg: plainCfg, want: "from-config"},
-		{name: "hashed config with a token", cfg: hashedCfg, token: "from-token", want: "from-token"},
-		{name: "hashed config with nothing else", cfg: hashedCfg, want: ""},
-		{name: "a remote daemon never gets the local token", cfg: remoteCfg, token: "from-token", want: "from-config"},
+		{name: "environment wins", cfg: localCfg, env: "from-env", token: "from-token", want: "from-env"},
+		{name: "local token", cfg: localCfg, token: "from-token", want: "from-token"},
+		{name: "no credential available", cfg: localCfg, want: ""},
+		{name: "a remote daemon never gets the local token", cfg: remoteCfg, token: "from-token", want: ""},
 		{name: "the environment still reaches a remote daemon", cfg: remoteCfg, env: "from-env", token: "from-token", want: "from-env"},
 	}
 	for _, tc := range tests {

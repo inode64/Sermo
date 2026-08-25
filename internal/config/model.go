@@ -181,15 +181,11 @@ const (
 	WebKeyAllowedHosts = "allowed_hosts"
 	// WebKeyGuest is web.guest.
 	WebKeyGuest = "guest"
-	// WebKeyGuestPassword is web.guest_password.
-	WebKeyGuestPassword = "guest_password"
-	// WebKeyGuestPasswordFile is web.guest_password_file: a file holding the
-	// guest password, used instead of web.guest_password.
+	// WebKeyGuestPasswordFile is web.guest_password_file: a file holding hashed
+	// guest credentials.
 	WebKeyGuestPasswordFile = "guest_password_file"
-	// WebKeyPassword is web.password.
-	WebKeyPassword = "password"
-	// WebKeyPasswordFile is web.password_file: a file holding the admin
-	// password, used instead of web.password.
+	// WebKeyPasswordFile is web.password_file: a file holding hashed admin
+	// credentials.
 	WebKeyPasswordFile = "password_file"
 	// WebKeyPort is web.port.
 	WebKeyPort = "port"
@@ -762,9 +758,9 @@ type Global struct {
 	State         string
 	Templates     string
 
-	// Dashboard credentials parsed at load time from web.password_file /
-	// web.guest_password_file, or from the inline keys. Read them through
-	// WebCredentials and WebGuestCredentials.
+	// Dashboard credentials parsed at load time from web.password_file and
+	// web.guest_password_file. Read them through WebCredentials and
+	// WebGuestCredentials.
 	webCredentials      webcred.List
 	webGuestCredentials webcred.List
 	// issues collects load-time findings (an unreadable password file) for
