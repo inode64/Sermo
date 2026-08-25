@@ -1317,37 +1317,29 @@ func (c *Config) resolveChangedLibraries(tree map[string]any) []string {
 // not) and rewrites its changed-library leaf, collecting resolution errors.
 func (c *Config) fillChangedLibraryPaths(node map[string]any, scope string) []string {
 	var errs []string
-	for _, key := range []string{rules.ConditionAnd, rules.ConditionOr} {
-		items, ok := node[key].([]any)
+	rules.WalkConditionLeaves(node, func(operator string, operand any) bool {
+		if operator != rules.ConditionChanged {
+			return false
+		}
+		changed, ok := operand.(map[string]any)
 		if !ok {
-			continue
+			return false
 		}
-		for _, item := range items {
-			if child, ok := item.(map[string]any); ok {
-				errs = append(errs, c.fillChangedLibraryPaths(child, scope)...)
-			}
+		lib := cfgval.String(changed[rules.FieldLibrary])
+		if lib == "" || cfgval.String(changed[rules.FieldPath]) != "" {
+			return false
 		}
-	}
-	if child, ok := node[rules.ConditionNot].(map[string]any); ok {
-		errs = append(errs, c.fillChangedLibraryPaths(child, scope)...)
-	}
-	ch, ok := node[rules.ConditionChanged].(map[string]any)
-	if !ok {
-		return errs
-	}
-	lib := cfgval.String(ch[rules.FieldLibrary])
-	if lib == "" || cfgval.String(ch[rules.FieldPath]) != "" {
-		return errs
-	}
-	path, known := c.libraryPath(lib)
-	switch {
-	case !known:
-		errs = append(errs, fmt.Sprintf("%s: changed references %q, which is not a library", scope, lib))
-	case path == "":
-		errs = append(errs, fmt.Sprintf("%s: library %q has no binary to watch", scope, lib))
-	default:
-		ch[rules.FieldPath] = path
-	}
+		path, known := c.libraryPath(lib)
+		switch {
+		case !known:
+			errs = append(errs, fmt.Sprintf("%s: changed references %q, which is not a library", scope, lib))
+		case path == "":
+			errs = append(errs, fmt.Sprintf("%s: library %q has no binary to watch", scope, lib))
+		default:
+			changed[rules.FieldPath] = path
+		}
+		return false
+	})
 	return errs
 }
 

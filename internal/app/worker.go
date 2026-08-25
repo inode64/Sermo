@@ -1458,38 +1458,25 @@ func singleRuleCheckCandidate(node map[string]any) (ruleCheckCandidate, bool) {
 }
 
 func collectRuleCheckCandidates(node map[string]any, candidates *[]ruleCheckCandidate) {
-	for op, v := range node {
-		switch op {
-		case rules.ConditionAnd, rules.ConditionOr:
-			items, ok := v.([]any)
-			if !ok {
-				continue
-			}
-			for _, item := range items {
-				if child, ok := item.(map[string]any); ok {
-					collectRuleCheckCandidates(child, candidates)
-				}
-			}
-		case rules.ConditionNot:
-			if child, ok := v.(map[string]any); ok {
-				collectRuleCheckCandidates(child, candidates)
-			}
+	rules.WalkConditionLeaves(node, func(operator string, operand any) bool {
+		switch operator {
 		case rules.ConditionFailed, rules.ConditionActive:
-			m, ok := v.(map[string]any)
+			m, ok := operand.(map[string]any)
 			if !ok {
-				continue
+				return false
 			}
 			if ref := cfgval.AsString(m[rules.FieldCheck]); ref != "" {
 				*candidates = append(*candidates, ruleCheckCandidate{ref: ref})
-				continue
+				return false
 			}
 			if metric, ok := m[rules.ConditionMetric].(map[string]any); ok {
 				*candidates = append(*candidates, ruleCheckCandidate{inlineMetric: metric})
 			}
 		case rules.ConditionMetric:
-			if metric, ok := v.(map[string]any); ok {
+			if metric, ok := operand.(map[string]any); ok {
 				*candidates = append(*candidates, ruleCheckCandidate{inlineMetric: metric})
 			}
 		}
-	}
+		return false
+	})
 }
