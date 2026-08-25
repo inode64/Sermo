@@ -243,6 +243,24 @@ func TestPolicyCooldownExactBoundary(t *testing.T) {
 	}
 }
 
+func TestRecentActionsExactCutoffExpires(t *testing.T) {
+	policy := Policy{MaxActions: 1, MaxActionsWindow: time.Hour}
+	now := t0.Add(time.Hour)
+	state := &RemediationState{RecentActions: []time.Time{t0}}
+
+	if allowed, reason := policy.Allow(state, now); !allowed || reason != "" {
+		t.Fatalf("Allow() = (%v, %q), want allowed at exact cutoff", allowed, reason)
+	}
+	if report := policy.Report(state, now); !report.Allowed || report.RecentActions != 0 {
+		t.Fatalf("Report() = %+v, want allowed with no recent actions", report)
+	}
+
+	state.Record(now, policy)
+	if len(state.RecentActions) != 1 || !state.RecentActions[0].Equal(now) {
+		t.Fatalf("RecentActions = %v, want only the newly recorded action", state.RecentActions)
+	}
+}
+
 func TestRateLimitUntilDisabledGuards(t *testing.T) {
 	// MaxActions <= 0 disables rate limiting entirely.
 	st := &RemediationState{RecentActions: []time.Time{t0, t0.Add(time.Minute)}}

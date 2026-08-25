@@ -7,6 +7,8 @@ import (
 	"sermo/internal/cfgval"
 )
 
+const defaultBackoffFactor = 2
+
 // Backoff grows the effective cooldown after consecutive remediations.
 type Backoff struct {
 	Initial time.Duration
@@ -192,7 +194,7 @@ func (s *RemediationState) growBackoff(b *Backoff) {
 	} else {
 		factor := b.Factor
 		if factor <= 0 {
-			factor = 2
+			factor = defaultBackoffFactor
 		}
 		s.CurrentBackoff = time.Duration(float64(s.CurrentBackoff) * factor)
 	}
@@ -240,7 +242,7 @@ func ParsePolicy(tree map[string]any) Policy {
 			Max:     cfgval.Duration(bo[BackoffKeyMax]),
 		}
 		if b.Factor <= 0 {
-			b.Factor = 2
+			b.Factor = defaultBackoffFactor
 		}
 		p.Backoff = b
 	}
