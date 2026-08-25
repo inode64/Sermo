@@ -2,7 +2,6 @@ package assist
 
 import (
 	"errors"
-	"fmt"
 
 	"sermo/internal/cfgval"
 	"sermo/internal/checks"
@@ -68,12 +67,9 @@ type controlledAssistantSpec[T any] struct {
 }
 
 func runControlledAssistant[T any](p *Prompt, env Env, spec controlledAssistantSpec[T]) (Result, error) {
-	if spec.detect == nil {
-		return Result{}, errors.New(spec.unavailable)
-	}
-	candidates, err := spec.detect()
+	candidates, err := detectCandidates(spec.detect, spec.unavailable, spec.detectLabel)
 	if err != nil {
-		return Result{}, fmt.Errorf("%s: %w", spec.detectLabel, err)
+		return Result{}, err
 	}
 	if len(candidates) == 0 {
 		return Result{}, errors.New(spec.noneFound)

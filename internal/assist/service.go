@@ -37,12 +37,9 @@ func (serviceAssistant) Run(p *Prompt, env Env) (res Result, err error) {
 	// Translate an input-closed re-prompt abort into ErrInputClosed even when
 	// Run is driven directly (the CLI also recovers at its own boundary).
 	defer Recover(&err)
-	if env.CatalogServices == nil {
-		return Result{}, errors.New("service detection is unavailable")
-	}
-	cands, err := env.CatalogServices()
+	cands, err := detectCandidates(env.CatalogServices, "service detection is unavailable", "detect installed services")
 	if err != nil {
-		return Result{}, fmt.Errorf("detect installed services: %w", err)
+		return Result{}, err
 	}
 	if env.Backend != "" {
 		p.printf("Detected init system: %s\n\n", env.Backend)
@@ -145,25 +142,14 @@ func serviceCandidateActive(c ServiceCandidate) bool {
 }
 
 func chooseServices(p *Prompt, question string, cands []ServiceCandidate, allowNone bool) []ServiceCandidate {
-	labels := make([]string, len(cands))
-	for i, c := range cands {
-		labels[i] = serviceLabel(c)
+	if !allowNone {
+		return chooseCandidates(p, question, cands, serviceLabel)
 	}
-	var sel []int
-	if allowNone {
-		var keyword string
-		sel, keyword = p.MultiChooseKeyword(question, labels, config.SelectionKeywordNone)
-		if keyword == config.SelectionKeywordNone {
-			return nil
-		}
-	} else {
-		sel = p.MultiChoose(question, labels)
+	selected, keyword := chooseCandidatesKeyword(p, question, cands, serviceLabel, config.SelectionKeywordNone)
+	if keyword == config.SelectionKeywordNone {
+		return nil
 	}
-	out := make([]ServiceCandidate, 0, len(sel))
-	for _, idx := range sel {
-		out = append(out, cands[idx])
-	}
-	return out
+	return selected
 }
 
 func groupHasPortDefaults(cands []ServiceCandidate) bool {

@@ -1,6 +1,7 @@
 package assist
 
 import (
+	"errors"
 	"fmt"
 	"maps"
 	"slices"
@@ -10,6 +11,17 @@ import (
 	"sermo/internal/config"
 	"sermo/internal/rules"
 )
+
+func detectCandidates[T any](detect func() ([]T, error), unavailable, action string) ([]T, error) {
+	if detect == nil {
+		return nil, errors.New(unavailable)
+	}
+	candidates, err := detect()
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", action, err)
+	}
+	return candidates, nil
+}
 
 const (
 	monitorStateChoiceDisabled = 1
@@ -135,12 +147,17 @@ func resultSummary(noun string, entries map[string]any) string {
 }
 
 func chooseCandidates[T any](p *Prompt, question string, cands []T, label func(T) string) []T {
+	selected, _ := chooseCandidatesKeyword(p, question, cands, label)
+	return selected
+}
+
+func chooseCandidatesKeyword[T any](p *Prompt, question string, cands []T, label func(T) string, keywords ...string) ([]T, string) {
 	labels := make([]string, len(cands))
 	for i, c := range cands {
 		labels[i] = label(c)
 	}
-	sel := p.MultiChoose(question, labels)
-	return candidatesByIndexes(cands, sel)
+	selected, keyword := p.MultiChooseKeyword(question, labels, keywords...)
+	return candidatesByIndexes(cands, selected), keyword
 }
 
 // chooseSharedSettings runs the prologue shared by the mount and volume

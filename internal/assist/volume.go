@@ -43,9 +43,9 @@ func (volumeAssistant) Run(p *Prompt, env Env) (res Result, err error) {
 	// Translate an input-closed re-prompt abort into ErrInputClosed even when
 	// Run is driven directly (the CLI also recovers at its own boundary).
 	defer Recover(&err)
-	vols, err := env.Volumes()
+	vols, err := detectCandidates(env.Volumes, "volume detection is unavailable", "list volumes")
 	if err != nil {
-		return Result{}, fmt.Errorf("list volumes: %w", err)
+		return Result{}, err
 	}
 	vols = storageVolumeCandidates(vols)
 	if len(vols) == 0 {

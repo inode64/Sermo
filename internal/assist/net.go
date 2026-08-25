@@ -27,9 +27,9 @@ func (netAssistant) Run(p *Prompt, env Env) (res Result, err error) {
 	// Translate an input-closed re-prompt abort into ErrInputClosed even when
 	// Run is driven directly (the CLI also recovers at its own boundary).
 	defer Recover(&err)
-	ifaces, err := env.Ifaces()
+	ifaces, err := detectCandidates(env.Ifaces, "interface detection is unavailable", "list interfaces")
 	if err != nil {
-		return Result{}, fmt.Errorf("list interfaces: %w", err)
+		return Result{}, err
 	}
 	cands := nonLoopbackIfaces(ifaces)
 	if len(cands) == 0 {
@@ -59,11 +59,9 @@ func nonLoopbackIfaces(ifaces []Iface) []Iface {
 
 func chooseIfaces(p *Prompt, question string, cands []Iface, defaultIfaces []string, allowDefault bool) []Iface {
 	defaults := strutil.Set(defaultIfaces)
-	labels := make([]string, len(cands))
 	var hasActive, hasDefault bool
-	for i, c := range cands {
+	for _, c := range cands {
 		_, isDefault := defaults[c.Name]
-		labels[i] = ifaceLabel(c, isDefault)
 		hasActive = hasActive || c.Up
 		hasDefault = hasDefault || isDefault
 	}
@@ -74,14 +72,17 @@ func chooseIfaces(p *Prompt, question string, cands []Iface, defaultIfaces []str
 	if allowDefault && hasDefault {
 		keywords = append(keywords, config.SelectionKeywordDefault)
 	}
-	sel, keyword := p.MultiChooseKeyword(question, labels, keywords...)
+	selected, keyword := chooseCandidatesKeyword(p, question, cands, func(c Iface) string {
+		_, isDefault := defaults[c.Name]
+		return ifaceLabel(c, isDefault)
+	}, keywords...)
 	switch keyword {
 	case netKeywordActive:
 		return filterIfaces(cands, func(c Iface) bool { return c.Up })
 	case config.SelectionKeywordDefault:
 		return filterIfaces(cands, func(c Iface) bool { _, ok := defaults[c.Name]; return ok })
 	default:
-		return candidatesByIndexes(cands, sel)
+		return selected
 	}
 }
 
