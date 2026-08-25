@@ -33,8 +33,7 @@ type ttyNotifier struct {
 }
 
 const (
-	defaultTTYDevRoot = "/dev"
-	defaultTTYHost    = "localhost"
+	defaultTTYHost = "localhost"
 )
 
 func defaultUTMPPaths() []string {
@@ -47,7 +46,7 @@ func buildTTY(name string, entry map[string]any) (Notifier, error) {
 		typ:       TypeTTY,
 		users:     strutil.Set(cfgval.StringList(entry[KeyUsers])),
 		utmpPaths: defaultUTMPPaths(),
-		devRoot:   defaultTTYDevRoot,
+		devRoot:   utmp.DevRoot,
 		writeTTY:  writeTTYLinux,
 		hostname:  os.Hostname,
 		now:       time.Now,
@@ -59,7 +58,7 @@ func buildWall(name string, _ map[string]any) (Notifier, error) {
 		name:      name,
 		typ:       TypeWall,
 		utmpPaths: defaultUTMPPaths(),
-		devRoot:   defaultTTYDevRoot,
+		devRoot:   utmp.DevRoot,
 		writeTTY:  writeTTYLinux,
 		hostname:  os.Hostname,
 		now:       time.Now,
@@ -126,7 +125,7 @@ func (n *ttyNotifier) sendToTargets(ctx context.Context, targets []string, msg M
 func (n *ttyNotifier) targetTTYs(sessions []ttySession) []string {
 	devRoot := n.devRoot
 	if devRoot == "" {
-		devRoot = defaultTTYDevRoot
+		devRoot = utmp.DevRoot
 	}
 	seen := map[string]struct{}{}
 	var out []string

@@ -221,7 +221,7 @@ func attachTerminalSessionIdle(snapshot sessionProcessSnapshot, session *web.Ter
 		if !identity.TTYOK || identity.TTY == 0 {
 			continue
 		}
-		if at, ok := utmp.TerminalAccessedAt("/dev", identity.TTY); ok && at.After(latest) {
+		if at, ok := utmp.TerminalAccessedAt(utmp.DevRoot, identity.TTY); ok && at.After(latest) {
 			latest = at
 		}
 	}

@@ -6,9 +6,9 @@ import "sermo/internal/utmp"
 // session, read from utmp. It returns 0 when utmp is unreadable or empty (and on
 // non-Linux platforms), so it is safe to call as a best-effort header stat.
 func ActiveUserCount() int {
-	sessions, err := utmp.Sessions()
+	count, err := utmp.DistinctUserCount()
 	if err != nil {
 		return 0
 	}
-	return utmp.DistinctUsers(sessions)
+	return count
 }
