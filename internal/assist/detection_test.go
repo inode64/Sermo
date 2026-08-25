@@ -2,6 +2,7 @@ package assist
 
 import (
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -15,6 +16,7 @@ func TestDetectCandidates(t *testing.T) {
 	}{
 		{name: "unavailable", wantErr: "target detection is unavailable"},
 		{name: "failure", detect: func() ([]string, error) { return nil, errors.New("probe failed") }, wantErr: "detect targets: probe failed"},
+		{name: "empty", detect: func() ([]string, error) { return []string{}, nil }, want: []string{}},
 		{name: "success", detect: func() ([]string, error) { return []string{"one"}, nil }, want: []string{"one"}},
 	}
 	for _, tt := range tests {
@@ -29,8 +31,32 @@ func TestDetectCandidates(t *testing.T) {
 			if err != nil {
 				t.Fatalf("detectCandidates: %v", err)
 			}
-			if len(got) != len(tt.want) || got[0] != tt.want[0] {
+			if !slices.Equal(got, tt.want) {
 				t.Fatalf("candidates = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestHostAssistantsReportNoCandidates(t *testing.T) {
+	tests := []struct {
+		name string
+		run  func(*Prompt, Env) (Result, error)
+		env  Env
+		want string
+	}{
+		{name: "volume", run: volumeAssistant{}.Run, env: Env{Volumes: func() ([]Volume, error) { return nil, nil }}, want: "no storage volumes found to monitor"},
+		{name: "mount", run: mountAssistant{}.Run, env: Env{Mounts: func() ([]MountCandidate, error) { return nil, nil }}, want: "no fstab mount points were detected on this host"},
+		{name: "net", run: netAssistant{}.Run, env: Env{Ifaces: func() ([]Iface, error) { return nil, nil }}, want: "no non-loopback network interfaces found"},
+		{name: "uplink", run: uplinkAssistant{}.Run, env: Env{Ifaces: func() ([]Iface, error) { return nil, nil }}, want: "no candidate interfaces found"},
+		{name: "service", run: serviceAssistant{}.Run, env: Env{CatalogServices: func() ([]ServiceCandidate, error) { return nil, nil }}, want: "no active services were detected on this host"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := NewPrompt(strings.NewReader(""), &strings.Builder{})
+			_, err := tt.run(p, tt.env)
+			if err == nil || err.Error() != tt.want {
+				t.Fatalf("error = %v, want %q", err, tt.want)
 			}
 		})
 	}

@@ -69,11 +69,3 @@ func TestMountAssistantBatchSettings(t *testing.T) {
 		}
 	}
 }
-
-func TestMountAssistantNoCandidates(t *testing.T) {
-	env := Env{Mounts: func() ([]MountCandidate, error) { return nil, nil }}
-	p := NewPrompt(strings.NewReader(""), &strings.Builder{})
-	if _, err := (mountAssistant{}).Run(p, env); err == nil || !strings.Contains(err.Error(), "no fstab mount points") {
-		t.Fatalf("Run error = %v, want no candidates", err)
-	}
-}
