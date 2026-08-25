@@ -549,6 +549,39 @@ test("stale binary keeps its warning state without a restart hint", async ({ pag
   await expect(detail).not.toContainText("binary replaced on disk");
 });
 
+test("service warning reason sits below the service instead of widening State", async ({ page }) => {
+  await page.route("**/api/dashboard**", async (route) => {
+    const body = JSON.parse(JSON.stringify(dashboard));
+    body.services.push({
+      name: "degraded", display_name: "Degraded workload", category: "service", enabled: true,
+      monitored: true, status: "failed", state: "warning", warning_reason: "failed_unit_live_process",
+      uptime_seconds: 1800, status_observed_at: "2026-07-10T12:00:00Z",
+    });
+    await route.fulfill({ json: body });
+  });
+  await page.reload();
+
+  const row = page.locator("#svc-row-degraded");
+  const serviceCell = row.locator("td").nth(0);
+  const stateCell = row.locator("td").nth(2);
+  const note = serviceCell.locator(".svc-state-note");
+  await expect(page.locator("#svc-row-web .svc-state-note")).toHaveCount(0);
+  await expect(stateCell.locator(".target-state")).toHaveText("warning");
+  await expect(stateCell.locator(".state-reason")).toHaveCount(0);
+  await expect(note).toHaveText("init unit failed; workload healthy");
+
+  const positions = await serviceCell.evaluate((cell) => {
+    const main = cell.querySelector(".svc-main").getBoundingClientRect();
+    const message = cell.querySelector(".svc-state-note").getBoundingClientRect();
+    return { mainBottom: main.bottom, messageTop: message.top };
+  });
+  expect(positions.messageTop).toBeGreaterThanOrEqual(positions.mainBottom);
+
+  await page.setViewportSize({ width: 412, height: 915 });
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  expect(overflow).toBe(0);
+});
+
 test("paused monitoring is distinct from disabled configuration", async ({ page }) => {
   const paused = page.locator("#wat-row-firewall-paused");
   await expect(paused.locator(".target-state")).toHaveText("monitoring paused");

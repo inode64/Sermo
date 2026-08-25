@@ -1606,7 +1606,7 @@ function serviceDisplayState(s) {
   return serviceState(s);
 }
 
-function serviceStateBadge(s) {
+function serviceStateParts(s) {
   const st = serviceDisplayState(s);
   const indicators = (s && Array.isArray(s.observability_missing) && s.observability_missing.length)
     ? s.observability_missing.join(", ")
@@ -1626,12 +1626,18 @@ function serviceStateBadge(s) {
   const title = missing || blind || degraded || active;
   // Except for the stale-binary diagnostic, a warning carries a reason the
   // operator must act on. A tooltip is invisible until hovered — and never
-  // reachable on a touch screen — so show that reason next to the badge.
-  const reason = st === targetStateWarning && !staleBinary
-    ? tpl` <span class="muted state-reason" title="${title}">${serviceWarningReason(s)}</span>`
+  // reachable on a touch screen — so expose that reason as visible text.
+  const reasonText = st === targetStateWarning && !staleBinary ? serviceWarningReason(s) : "";
+  const reason = reasonText
+    ? tpl`<span class="muted state-reason" title="${title}">${reasonText}</span>`
     : nothing;
   const badge = title ? tpl`<span title="${title}">${stateBadge(st)}</span>` : stateBadge(st);
-  return reason ? tpl`${badge}${reason}` : badge;
+  return { badge, reason, hasReason: !!reasonText };
+}
+
+function serviceStateBadge(s) {
+  const state = serviceStateParts(s);
+  return state.hasReason ? tpl`${state.badge} ${state.reason}` : state.badge;
 }
 
 // serviceWarningReason phrases a warning cause the dashboard needs to expose.
@@ -2744,6 +2750,7 @@ function serviceRowParts(s, opts = {}) {
   const label = displayName(s);
   const op = liveOps.get(s.name);
   const busy = serviceBusy(s);
+  const stateParts = serviceStateParts(s);
   const showResume = !!opts.showResume;
   // With a liveOps entry the note names the action and its elapsed time. Without
   // one, operation_active still tells us the engine holds the lock, so the row
@@ -2785,9 +2792,9 @@ function serviceRowParts(s, opts = {}) {
   const pin = tpl`<button type="button" class="icon-btn pin-btn${pinned ? " pinned" : ""}" data-service-pin="${s.name}" aria-pressed="${pinned ? domBoolTrue : domBoolFalse}" title="${pinned ? "Unpin from top" : "Pin to top"}" aria-label="${(pinned ? "Unpin " : "Pin ") + label + (pinned ? " from the top of the list" : " to the top of the list")}">${pinned ? "★" : "☆"}</button>`;
   const rowClass = state === targetStateFailed ? "row-failing" : (state === targetStateWarning ? "row-warning" : "");
   const main = tpl`<tr id="svc-row-${s.name}" class="clickable ${rowClass}" data-exp-key="${key}">
-    <td><div class="svc-main">${chev}${name}${pin}</div>${busyText}</td>
+    <td><div class="svc-main">${chev}${name}${pin}</div>${stateParts.hasReason ? tpl`<div class="svc-state-note">${stateParts.reason}</div>` : nothing}${busyText}</td>
     <td>${categoryBadge(category)}</td>
-    <td>${serviceStateCell(s)}</td>
+    <td>${stateParts.badge}</td>
     <td>${serviceUptimeCell(s)}</td>
     <td>${serviceCpuCell(s)}</td>
     <td>${serviceMemCell(s)}</td>
