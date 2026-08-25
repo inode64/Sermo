@@ -5628,7 +5628,8 @@ rules:
     type: alert
     if:
       or:
-        - changed: { library: glibc }
+        - not:
+            changed: { library: glibc }
         - changed: { path: /etc/web.conf }
     then: { action: alert, message: "glibc changed" }
 `,
@@ -5637,7 +5638,7 @@ rules:
 	if !ok || len(or) != 2 {
 		t.Fatalf("if.or = %v", or)
 	}
-	changed := nested(t, or[0].(map[string]any), "changed")
+	changed := nested(t, or[0].(map[string]any), "not", "changed")
 	if cfgval.String(changed["path"]) != "/lib64/libc.so.6" {
 		t.Errorf("changed.path = %v, want /lib64/libc.so.6", changed["path"])
 	}

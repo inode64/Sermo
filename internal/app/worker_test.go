@@ -39,6 +39,26 @@ func TestEffectiveNotify(t *testing.T) {
 	}
 }
 
+func TestChecksReportedByRulesWalksNestedConditions(t *testing.T) {
+	w := &Worker{Rules: []rules.Rule{
+		{If: map[string]any{
+			rules.ConditionAnd: []any{
+				map[string]any{rules.ConditionFailed: map[string]any{rules.FieldCheck: "http"}},
+				map[string]any{rules.ConditionNot: map[string]any{
+					rules.ConditionActive: map[string]any{rules.FieldCheck: "backup"},
+				}},
+				map[string]any{rules.ConditionMetric: map[string]any{rules.FieldName: "memory"}},
+				"malformed child",
+			},
+		}},
+	}}
+
+	got := w.checksReportedByRules()
+	if !got["http"] || !got["backup"] || len(got) != 2 {
+		t.Fatalf("checksReportedByRules() = %v, want http and backup only", got)
+	}
+}
+
 func alertRuleTree(notifierValue any) map[string]any {
 	rule := map[string]any{
 		"type": "alert",
