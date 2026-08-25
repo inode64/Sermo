@@ -3,9 +3,7 @@ display_name: "S-nail"
 category: messaging
 description: "Mailx compatible client"
 variables:
-  binary:
-    - ${bindir}/s-nail
-    - ${bindir}/mailx
+  binary: ${bindir}/s-nail
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}", "--version"], timeout: 10s }

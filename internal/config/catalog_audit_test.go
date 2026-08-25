@@ -1314,6 +1314,38 @@ func TestCatalogAppsUseSharedVersionProviders(t *testing.T) {
 	}
 }
 
+func TestCatalogMailAppsUseOwnedVersionCommands(t *testing.T) {
+	root := repoRoot(t)
+	tests := []struct {
+		name        string
+		wantBinary  any
+		wantVersion []string
+	}{
+		{
+			name:        "postfix",
+			wantBinary:  "${bindir}/postfix",
+			wantVersion: []string{"${version_binary}", "-h", "mail_version"},
+		},
+		{
+			name:        "s-nail",
+			wantBinary:  "${bindir}/s-nail",
+			wantVersion: []string{"${binary}", "--version"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			doc := catalogDocByName(t, root, "apps", tt.name)
+			if got := nested(t, doc, "variables")["binary"]; got != tt.wantBinary {
+				t.Fatalf("binary = %v, want %v", got, tt.wantBinary)
+			}
+			got := cfgval.StringList(nested(t, doc, "preflight", "version")["command"])
+			if !slices.Equal(got, tt.wantVersion) {
+				t.Fatalf("version command = %v, want %v", got, tt.wantVersion)
+			}
+		})
+	}
+}
+
 func TestCatalogCupsUsesSingleCupsdApp(t *testing.T) {
 	cfg := loadRepoCatalog(t)
 
