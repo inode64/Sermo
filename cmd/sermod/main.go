@@ -90,6 +90,17 @@ func drainOrTimeout(done <-chan struct{}, timeout time.Duration) bool {
 	}
 }
 
+// goTracked runs fn in a goroutine and reports its completion on the returned
+// channel, so shutdown can drain it before the store closes.
+func goTracked(fn func()) <-chan struct{} {
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		fn()
+	}()
+	return done
+}
+
 const (
 	logFieldAddress               = "address"
 	logFieldAffected              = "affected"
@@ -114,7 +125,6 @@ const (
 	logFieldRows                  = "rows"
 	logFieldScope                 = "scope"
 	logFieldServices              = "services"
-	logFieldWarning               = "warning"
 	logFieldWatches               = "watches"
 
 	logValueAuthEnabled = "enabled"
@@ -228,9 +238,7 @@ func run(args []string) int {
 	defer func() { _ = store.Close() }()
 
 	notifiers, notifyWarnings := notify.Build(cfg.Notifiers(), notify.WithTemplateDir(cfg.Global.TemplateDir()))
-	for _, w := range notifyWarnings {
-		logger.Warn("build notifiers", logFieldWarning, w)
-	}
+	app.LogBuildNotices(logger, "build notifiers", notifyWarnings)
 
 	eventLog, err := app.NewPersistentEventLog(daemonEventLogLimit, store, func(err error) {
 		logger.Warn("persist event failed", logFieldError, err)
@@ -349,9 +357,7 @@ func run(args []string) int {
 	app.LogBuildNotices(logger, "build workers", warnings)
 
 	watches, watchWarnings := app.BuildWatches(cfg, deps, interval)
-	for _, w := range watchWarnings {
-		logger.Warn("build watches", logFieldWarning, w)
-	}
+	app.LogBuildNotices(logger, "build watches", watchWarnings)
 	hostWatches := len(watches)
 	// Service-embedded watches (a service's `watches:` section) run the host-watch
 	// runtime with per-service scoped check deps; they share the scheduler and
@@ -409,7 +415,7 @@ func run(args []string) int {
 		app.LogBuildNotices(logger, "build web backend", webWarnings)
 	}
 
-	var webDone chan struct{}
+	var webDone <-chan struct{}
 	if addr != "" {
 		auth := webAuth(cfg)
 		warnWorldReadableSecret(logger, cfg)
@@ -436,13 +442,11 @@ func run(args []string) int {
 			},
 		}
 		logger.Debug("starting web ui server", logFieldAddress, addr, logFieldAuth, auth.Enabled())
-		webDone = make(chan struct{})
-		go func() {
-			defer close(webDone)
+		webDone = goTracked(func() {
 			if err := server.Run(ctx); err != nil {
 				logger.Error("web server", logFieldError, err)
 			}
-		}()
+		})
 		if auth.Enabled() {
 			logger.Info("sermod web ui listening", logFieldAddress, addr, logFieldAuth, logValueAuthEnabled)
 		} else {
@@ -455,15 +459,11 @@ func run(args []string) int {
 	// Interactive read-only report bot (long polling; no inbound socket). It
 	// reads the same web backend the dashboard serves and replies to commands
 	// from allow-listed chats only.
-	var botDone chan struct{}
+	var botDone <-chan struct{}
 	if botCfg.Enabled {
 		bot := telegrambot.New(app.NewTelegramReporter(webHolder, store, time.Now), botCfg, logger)
 		deps.TelegramBot = bot
-		botDone = make(chan struct{})
-		go func() {
-			defer close(botDone)
-			bot.Run(ctx)
-		}()
+		botDone = goTracked(func() { bot.Run(ctx) })
 		logger.Info("telegram report bot enabled", "allowed_chats", len(botCfg.AllowedChats))
 	}
 
@@ -607,7 +607,7 @@ func parseArgs(args []string) (cliArgs, error) {
 // reason when disabled) so `--verbose` can surface why no port was opened.
 // Address defaults to loopback.
 func webListenAddr(cfg *config.Config) (addr, reason string) {
-	m, _ := cfg.Global.Raw[config.SectionWeb].(map[string]any)
+	m := cfg.Global.WebSection()
 	if m == nil {
 		return "", "no [web] section in config"
 	}
@@ -644,7 +644,7 @@ func countArtifactWatches(watches []*app.Watch, category string) int {
 // credentials, optional guest credentials, optional anonymous guest read
 // access).
 func webAuth(cfg *config.Config) web.Auth {
-	m, _ := cfg.Global.Raw[config.SectionWeb].(map[string]any)
+	m := cfg.Global.WebSection()
 	if m == nil {
 		return web.Auth{}
 	}
@@ -719,7 +719,7 @@ func warnWorldReadableSecret(logger *slog.Logger, cfg *config.Config) {
 // webAllowedHosts reads web.allowed_hosts: extra Host header names the open
 // (auth-less) UI accepts besides localhost, IP literals and the bind host.
 func webAllowedHosts(cfg *config.Config) []string {
-	m, _ := cfg.Global.Raw[config.SectionWeb].(map[string]any)
+	m := cfg.Global.WebSection()
 	if m == nil {
 		return nil
 	}
@@ -755,12 +755,7 @@ type stateMaintainer interface {
 // between statements: main waits for this goroutine before the deferred
 // store.Close(), so continuing would only delay exit.
 func startStateMaintenance(ctx context.Context, logger *slog.Logger, store stateMaintainer, interval time.Duration) <-chan struct{} {
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		runStateMaintenance(ctx, logger, store, interval)
-	}()
-	return done
+	return goTracked(func() { runStateMaintenance(ctx, logger, store, interval) })
 }
 
 func runStateMaintenance(ctx context.Context, logger *slog.Logger, store stateMaintainer, interval time.Duration) {
