@@ -1,5 +1,24 @@
 package rules
 
+import "errors"
+
+// conditionOperator decodes the single operator and operand that form one
+// condition node. Callers retain their own policy for recognized operators and
+// for presenting malformed nodes.
+func conditionOperator(node map[string]any) (string, any, error) {
+	switch len(node) {
+	case 0:
+		return "", nil, errors.New("empty condition")
+	case 1:
+		for operator, operand := range node {
+			return operator, operand, nil
+		}
+		return "", nil, errors.New("empty condition")
+	default:
+		return "", nil, errors.New("condition must contain exactly one operator")
+	}
+}
+
 // WalkConditionLeaves visits every leaf in a generic condition tree. The
 // visitor returns true to stop the walk; WalkConditionLeaves reports whether it
 // stopped early. Logical branches are traversed structurally, while malformed

@@ -23,24 +23,14 @@ type RuleWindowReport struct {
 
 // FormatCondition renders a rule's if-tree as a compact one-line summary.
 func FormatCondition(node map[string]any) string {
-	op, body, ok := conditionOperator(node)
-	if !ok {
+	op, body, err := conditionOperator(node)
+	if err != nil {
 		return invalidCondition(node)
 	}
 	if formatted := formatConditionLeaf(op, body); formatted != "" {
 		return formatted
 	}
 	return formatConditionBranch(op, body)
-}
-
-func conditionOperator(node map[string]any) (string, any, bool) {
-	if len(node) != 1 {
-		return "", nil, false
-	}
-	for op, body := range node {
-		return op, body, true
-	}
-	return "", nil, false
 }
 
 func invalidCondition(node map[string]any) string {

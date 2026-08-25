@@ -64,6 +64,18 @@ func TestEvalAndOrNot(t *testing.T) {
 	}
 }
 
+func TestEvalRejectsMultipleOperators(t *testing.T) {
+	ev := &Evaluator{Cache: cache(map[string]bool{"probe": true})}
+	node := map[string]any{
+		ConditionFailed: map[string]any{FieldCheck: "probe"},
+		ConditionActive: map[string]any{FieldCheck: "probe"},
+	}
+
+	if _, err := ev.Eval(context.Background(), node); err == nil || !strings.Contains(err.Error(), "exactly one operator") {
+		t.Fatalf("Eval() error = %v, want exactly-one-operator error", err)
+	}
+}
+
 func TestEvalUnknownCheckIsError(t *testing.T) {
 	ev := &Evaluator{Cache: cache(nil)}
 	if _, err := ev.Eval(context.Background(), map[string]any{"failed": map[string]any{"check": "nope"}}); err == nil {

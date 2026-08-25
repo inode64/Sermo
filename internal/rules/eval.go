@@ -95,51 +95,44 @@ func NewCheckResolver(built []checks.Built, maxParallel int) RefResolver {
 // reference or an unsupported condition is an error, not a silent false, so the
 // caller (guard/remediation) can treat it conservatively.
 func (e *Evaluator) Eval(ctx context.Context, node map[string]any) (bool, error) {
-	if len(node) == 0 {
-		return false, errors.New("empty condition")
+	operator, operand, err := conditionOperator(node)
+	if err != nil {
+		return false, err
 	}
 
-	if v, ok := node[ConditionAnd]; ok {
-		return e.evalList(ctx, v, true)
-	}
-	if v, ok := node[ConditionOr]; ok {
-		return e.evalList(ctx, v, false)
-	}
-	if v, ok := node[ConditionNot]; ok {
-		child, ok := v.(map[string]any)
+	switch operator {
+	case ConditionAnd:
+		return e.evalList(ctx, operand, true)
+	case ConditionOr:
+		return e.evalList(ctx, operand, false)
+	case ConditionNot:
+		child, ok := operand.(map[string]any)
 		if !ok {
 			return false, errors.New("not: must be a condition mapping")
 		}
-		r, err := e.Eval(ctx, child)
-		return !r, err
-	}
-	if v, ok := node[ConditionFailed]; ok {
-		res, err := e.probe(ctx, v)
+		result, err := e.Eval(ctx, child)
+		return !result, err
+	case ConditionFailed:
+		res, err := e.probe(ctx, operand)
 		return !res.OK, err
-	}
-	if v, ok := node[ConditionActive]; ok {
-		res, err := e.probe(ctx, v)
+	case ConditionActive:
+		res, err := e.probe(ctx, operand)
 		return res.OK, err
+	case ConditionFile:
+		return e.evalFile(ctx, operand)
+	case ConditionCommand:
+		return e.evalInline(ctx, checks.CheckTypeCommand, operand)
+	case ConditionService:
+		return e.evalService(ctx, operand)
+	case ConditionProcess:
+		return e.evalProcess(operand)
+	case ConditionMetric:
+		return e.evalMetric(operand)
+	case ConditionChanged:
+		return e.evalChanged(ctx, operand)
+	default:
+		return false, errors.New("condition has no recognized operator")
 	}
-	if v, ok := node[ConditionFile]; ok {
-		return e.evalFile(ctx, v)
-	}
-	if v, ok := node[ConditionCommand]; ok {
-		return e.evalInline(ctx, checks.CheckTypeCommand, v)
-	}
-	if v, ok := node[ConditionService]; ok {
-		return e.evalService(ctx, v)
-	}
-	if v, ok := node[ConditionProcess]; ok {
-		return e.evalProcess(v)
-	}
-	if v, ok := node[ConditionMetric]; ok {
-		return e.evalMetric(v)
-	}
-	if v, ok := node[ConditionChanged]; ok {
-		return e.evalChanged(ctx, v)
-	}
-	return false, errors.New("condition has no recognized operator")
 }
 
 // condMap asserts a condition operand is a mapping, returning a "<label> must be
