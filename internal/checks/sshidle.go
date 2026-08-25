@@ -14,8 +14,6 @@ import (
 	"sermo/internal/utmp"
 )
 
-const sshIdleDevRoot = "/dev"
-
 // SSHProtectedProcessFieldSummary is the user-facing list of fields accepted
 // by one protected_processes entry.
 const SSHProtectedProcessFieldSummary = "exe, user and group"
@@ -199,7 +197,7 @@ func terminalSessionDeps(reader process.Reader, lookup *process.UserLookup) (pro
 }
 
 func sshSessionTerminal(line string) (utmp.Terminal, error) {
-	terminal, err := utmp.TerminalInfo(sshIdleDevRoot, line)
+	terminal, err := utmp.TerminalInfo(utmp.DevRoot, line)
 	if err != nil {
 		return utmp.Terminal{}, fmt.Errorf("read terminal %s: %w", line, err)
 	}
