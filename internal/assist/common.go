@@ -104,10 +104,21 @@ func watchHasSideEffect(env Env, notifiers []string, hasNativeAction bool) bool 
 	return config.HasNotifyAction(notifiers)
 }
 
-func applyDryRun(entry map[string]any, dryRun bool) {
+// applyMonitoredSettings writes the settings shared by every monitored service
+// or host watch. Mount units intentionally do not use it because they are
+// operated explicitly rather than monitored by the daemon.
+func applyMonitoredSettings(entry map[string]any, monitoring Monitoring, dryRun bool) {
+	monitoring.apply(entry)
 	if dryRun {
 		entry[config.EntryKeyDryRun] = true
 	}
+}
+
+// applyWatchSettings adds the target-family metadata required by host watches
+// and then applies their common monitoring settings.
+func applyWatchSettings(entry map[string]any, category string, monitoring Monitoring, dryRun bool) {
+	entry[config.EntryKeyCategory] = category
+	applyMonitoredSettings(entry, monitoring, dryRun)
 }
 
 func watchThen(notifiers []string) map[string]any {
