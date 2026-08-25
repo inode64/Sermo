@@ -93,25 +93,26 @@ func pendingServiceItems(p *Prompt, env Env, selected []ServiceCandidate) []pend
 }
 
 func applyPendingServiceSettings(p *Prompt, items []pendingService, services map[string]any) {
-	names := make([]string, len(items))
-	for i, item := range items {
-		names[i] = item.name
-	}
-	applyControlledSettings(p, names, func(name string, settings serviceSettings) {
-		for _, item := range items {
-			if item.name != name {
-				continue
-			}
-			settings.apply(item.body)
-			services[name] = item.body
-			return
-		}
+	applyServiceSettings(p, items, func(item pendingService) string { return item.name }, func(item pendingService, settings serviceSettings) {
+		settings.apply(item.body)
+		services[item.name] = item.body
 	})
 }
 
 type serviceSettings struct {
 	Monitoring
 	DryRun bool
+}
+
+func applyServiceSettings[T any](p *Prompt, items []T, label func(T) string, apply func(T, serviceSettings)) {
+	if len(items) == 0 {
+		return
+	}
+	shared := sharedSettingsFor(p, items, "Apply the same monitor state, interval and dry-run mode to all selected services?",
+		"all selected services", func(label string) serviceSettings { return askServiceSettings(p, label) })
+	forEachWithSettings(items, shared,
+		func(item T) serviceSettings { return askServiceSettings(p, label(item)) },
+		apply)
 }
 
 func askServiceSettings(p *Prompt, label string) serviceSettings {
