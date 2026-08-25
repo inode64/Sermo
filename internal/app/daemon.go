@@ -1380,34 +1380,23 @@ func usesMetrics(tree map[string]any) (service, system bool) {
 }
 
 func scanMetricScopes(node map[string]any, mark func(string)) {
-	for k, v := range node {
-		switch k {
+	rules.WalkConditionLeaves(node, func(operator string, operand any) bool {
+		switch operator {
 		case rules.ConditionMetric:
-			if m, ok := v.(map[string]any); ok {
+			if m, ok := operand.(map[string]any); ok {
 				mark(ruleMetricScopeOf(m))
 			}
 		case rules.ConditionFailed, rules.ConditionActive:
-			m, ok := v.(map[string]any)
+			m, ok := operand.(map[string]any)
 			if !ok || cfgval.AsString(m[rules.FieldCheck]) != "" {
-				continue
+				return false
 			}
 			if metric, ok := m[rules.FieldMetric].(map[string]any); ok {
 				mark(ruleMetricScopeOf(metric))
 			}
-		case rules.ConditionAnd, rules.ConditionOr:
-			if list, ok := v.([]any); ok {
-				for _, item := range list {
-					if m, ok := item.(map[string]any); ok {
-						scanMetricScopes(m, mark)
-					}
-				}
-			}
-		case rules.ConditionNot:
-			if m, ok := v.(map[string]any); ok {
-				scanMetricScopes(m, mark)
-			}
 		}
-	}
+		return false
+	})
 }
 
 func checkMetricScopeOf(m map[string]any) string {

@@ -27,6 +27,16 @@ const (
 	RuleTypeSummary = string(RuleRemediation) + ", " + string(RuleGuard) + ", " + string(RuleAlert)
 )
 
+// Valid reports whether t is a supported rule type.
+func (t RuleType) Valid() bool {
+	switch t {
+	case RuleRemediation, RuleGuard, RuleAlert:
+		return true
+	default:
+		return false
+	}
+}
+
 const (
 	referencedChecksSectionChecks    = "checks"
 	referencedChecksSectionPreflight = "preflight"
@@ -112,6 +122,11 @@ func (t ActionType) IsOperation() bool {
 	}
 }
 
+// Valid reports whether t is a supported rule action.
+func (t ActionType) Valid() bool {
+	return t.IsOperation() || t == ActionAlert || t == ActionBlock
+}
+
 // SettlesAfter reports whether a successful operation leaves the service in a
 // settling window that observation should confirm (every operation but stop).
 func (t ActionType) SettlesAfter() bool {
@@ -137,10 +152,8 @@ func (t ActionType) CanRemainActiveAfterPostflightFailure() bool {
 // Primary is the action other code treats as the rule's main one: the operation
 // (restart/start/stop/reload/resume) if present, else the first.
 func (r Rule) Primary() Action {
-	for _, a := range r.Actions {
-		if a.Type.IsOperation() {
-			return a
-		}
+	if action, ok := r.Operation(); ok {
+		return action
 	}
 	if len(r.Actions) > 0 {
 		return r.Actions[0]
@@ -148,14 +161,23 @@ func (r Rule) Primary() Action {
 	return Action{}
 }
 
-// OperationAction returns the rule's restart/start/stop/reload/resume action, if any.
-func (r Rule) OperationAction() (ActionType, bool) {
-	for _, a := range r.Actions {
-		if a.Type.IsOperation() {
-			return a.Type, true
+// Operation returns the rule's restart/start/stop/reload/resume action, if any.
+func (r Rule) Operation() (Action, bool) {
+	for _, action := range r.Actions {
+		if action.Type.IsOperation() {
+			return action, true
 		}
 	}
-	return "", false
+	return Action{}, false
+}
+
+// OperationAction returns the rule's restart/start/stop/reload/resume action, if any.
+func (r Rule) OperationAction() (ActionType, bool) {
+	action, ok := r.Operation()
+	if !ok {
+		return "", false
+	}
+	return action.Type, true
 }
 
 // AlertMessages returns the messages of the rule's alert actions, in order.
@@ -169,10 +191,10 @@ func (r Rule) AlertMessages() []string {
 	return out
 }
 
-// parseActions parses a `then` block into one or more actions. The single form
+// ParseActions parses a `then` block into one or more actions. The single form
 // `then: {action, message}` and the multi form `then: {actions: [...]}` are both
 // accepted.
-func parseActions(then map[string]any) []Action {
+func ParseActions(then map[string]any) []Action {
 	if list, ok := then[RuleFieldActions].([]any); ok {
 		var out []Action
 		for _, item := range list {
@@ -192,44 +214,16 @@ func parseActions(then map[string]any) []Action {
 // only drive alert rules, never remediation, even if a rule slips past static
 // validation (catalog bug, partial reload, hand-built Rule).
 func ConditionUsesSystemMetric(node, refChecks map[string]any) bool {
-	for key, value := range node {
-		if conditionEntryUsesSystemMetric(key, value, refChecks) {
-			return true
+	return WalkConditionLeaves(node, func(operator string, operand any) bool {
+		switch operator {
+		case ConditionMetric:
+			return metricNodeUsesSystemScope(operand)
+		case ConditionFailed, ConditionActive:
+			return conditionReferenceUsesSystemMetric(operand, refChecks)
+		default:
+			return false
 		}
-	}
-	return false
-}
-
-func conditionEntryUsesSystemMetric(key string, value any, refChecks map[string]any) bool {
-	switch key {
-	case ConditionAnd, ConditionOr:
-		return conditionListUsesSystemMetric(value, refChecks)
-	case ConditionNot:
-		return conditionNodeUsesSystemMetric(value, refChecks)
-	case ConditionMetric:
-		return metricNodeUsesSystemScope(value)
-	case ConditionFailed, ConditionActive:
-		return conditionReferenceUsesSystemMetric(value, refChecks)
-	}
-	return false
-}
-
-func conditionListUsesSystemMetric(value any, refChecks map[string]any) bool {
-	list, ok := value.([]any)
-	if !ok {
-		return false
-	}
-	for _, child := range list {
-		if conditionNodeUsesSystemMetric(child, refChecks) {
-			return true
-		}
-	}
-	return false
-}
-
-func conditionNodeUsesSystemMetric(value any, refChecks map[string]any) bool {
-	node, ok := value.(map[string]any)
-	return ok && ConditionUsesSystemMetric(node, refChecks)
+	})
 }
 
 func metricNodeUsesSystemScope(value any) bool {
@@ -319,7 +313,7 @@ func ParseRules(tree map[string]any) ([]Rule, []string) {
 			warnings = append(warnings, ruleSubjectPrefix+name+": a scope: system metric may only drive alert rules; rule dropped (safety invariant)")
 			continue
 		}
-		actions := parseActions(thenNode)
+		actions := ParseActions(thenNode)
 		forWin, withinWin := ParseWindow(entry)
 		if _, hasFor := entry[RuleFieldFor]; !hasFor {
 			if _, hasWithin := entry[RuleFieldWithin]; !hasWithin {

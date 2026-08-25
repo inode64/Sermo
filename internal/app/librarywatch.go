@@ -362,29 +362,21 @@ func changedRuleValues(tree map[string]any, field string) []string {
 	seen := map[string]struct{}{}
 	for _, entry := range raw {
 		rule, _ := entry.(map[string]any)
-		collectChangedRuleValues(rule[rules.RuleFieldIf], field, seen)
+		rules.WalkConditionLeaves(rule[rules.RuleFieldIf], func(operator string, operand any) bool {
+			if operator != rules.ConditionChanged {
+				return false
+			}
+			changed, ok := operand.(map[string]any)
+			if !ok {
+				return false
+			}
+			if value := cfgval.String(changed[field]); value != "" {
+				seen[value] = struct{}{}
+			}
+			return false
+		})
 	}
 	return slices.Sorted(maps.Keys(seen))
-}
-
-func collectChangedRuleValues(node any, field string, seen map[string]struct{}) {
-	m, ok := node.(map[string]any)
-	if !ok {
-		return
-	}
-	if changed, ok := m[rules.ConditionChanged].(map[string]any); ok {
-		if value := cfgval.String(changed[field]); value != "" {
-			seen[value] = struct{}{}
-		}
-	}
-	for _, key := range []string{rules.ConditionAnd, rules.ConditionOr} {
-		if children, ok := m[key].([]any); ok {
-			for _, child := range children {
-				collectChangedRuleValues(child, field, seen)
-			}
-		}
-	}
-	collectChangedRuleValues(m[rules.ConditionNot], field, seen)
 }
 
 func serviceArtifactInterval(cfg *config.Config, tree map[string]any) time.Duration {
