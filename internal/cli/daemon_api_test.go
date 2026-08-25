@@ -16,6 +16,7 @@ import (
 )
 
 func TestFetchDaemonServiceStateHTTP(t *testing.T) {
+	t.Setenv(config.EnvWebPassword, "secret")
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/services/mysql" {
 			http.NotFound(w, r)
@@ -33,7 +34,6 @@ func TestFetchDaemonServiceStateHTTP(t *testing.T) {
 web:
   address: HOST
   port: PORT
-  password: secret
 paths:
   services: [SERVICES]
 defaults:
@@ -107,6 +107,7 @@ func TestFetchEventsHTTP(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv(config.EnvWebPassword, "secret")
 			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				if r.URL.Path != tc.path {
 					http.NotFound(w, r)
@@ -128,7 +129,6 @@ func TestFetchEventsHTTP(t *testing.T) {
 web:
   address: HOST
   port: PORT
-  password: secret
 paths:
 `)
 			app := App{LoadConfig: func(string, ...config.Option) (*config.Config, error) { return cfg, nil }}
@@ -145,6 +145,7 @@ paths:
 }
 
 func TestProbeDaemonWatchHTTP(t *testing.T) {
+	t.Setenv(config.EnvWebPassword, "secret")
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost || r.URL.Path != "/api/watches/disk-speed/probe" {
 			http.NotFound(w, r)
@@ -166,7 +167,6 @@ func TestProbeDaemonWatchHTTP(t *testing.T) {
 web:
   address: HOST
   port: PORT
-  password: secret
 paths:
   watches: [WATCHES]
 `)

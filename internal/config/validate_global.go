@@ -11,6 +11,11 @@ import (
 	"sermo/internal/telegrambot"
 )
 
+const (
+	retiredWebKeyPassword      = "password"
+	retiredWebKeyGuestPassword = "guest_password"
+)
+
 // validateWatches checks each host-watch entry: a known check type with valid
 // thresholds and a local action or inherited global notify default.
 // validateWeb checks the global `web` block. The UI is enabled only when `port`
@@ -29,9 +34,7 @@ func validateWeb(webCfg map[string]any, add func(string, ...any)) {
 		}
 	}
 	for _, pathAndKey := range [][2]string{
-		{webPathPassword, WebKeyPassword},
 		{webPathPasswordFile, WebKeyPasswordFile},
-		{webPathGuestPassword, WebKeyGuestPassword},
 		{webPathGuestPasswordFile, WebKeyGuestPasswordFile},
 	} {
 		path, key := pathAndKey[0], pathAndKey[1]
@@ -41,7 +44,16 @@ func validateWeb(webCfg map[string]any, add func(string, ...any)) {
 			}
 		}
 	}
-	validateWebPasswordFiles(webCfg, add)
+	validateWebCredentialFiles(webCfg, add)
+	for _, fields := range [][2]string{
+		{retiredWebKeyPassword, webPathPasswordFile},
+		{retiredWebKeyGuestPassword, webPathGuestPasswordFile},
+	} {
+		retired, replacement := fields[0], fields[1]
+		if _, present := webCfg[retired]; present {
+			add("%s.%s is no longer supported; use %s with hashed credentials", SectionWeb, retired, replacement)
+		}
+	}
 	if v, present := webCfg[WebKeyGuest]; present {
 		if _, isBool := v.(bool); !isBool {
 			add("%s must be a boolean (allow anonymous read-only access)", webPathGuest)
@@ -54,26 +66,20 @@ func validateWeb(webCfg map[string]any, add func(string, ...any)) {
 	}
 }
 
-// validateWebPasswordFiles checks each password / `*_file` pair. The two
-// spellings are mutually exclusive — accepting both would leave which one wins
-// up to the reader — and the file variant needs an actual path. Whether the
-// source can be read and parsed is settled at load time, in
-// resolveWebCredentials.
-func validateWebPasswordFiles(webCfg map[string]any, add addFunc) {
-	for _, pair := range [][4]string{
-		{WebKeyPassword, WebKeyPasswordFile, webPathPassword, webPathPasswordFile},
-		{WebKeyGuestPassword, WebKeyGuestPasswordFile, webPathGuestPassword, webPathGuestPasswordFile},
+// validateWebCredentialFiles requires a non-empty path for every configured
+// hashed-credential source. Loading and parsing happen in resolveWebCredentials.
+func validateWebCredentialFiles(webCfg map[string]any, add addFunc) {
+	for _, pair := range [][2]string{
+		{WebKeyPasswordFile, webPathPasswordFile},
+		{WebKeyGuestPasswordFile, webPathGuestPasswordFile},
 	} {
-		inlineKey, fileKey, inlinePath, filePath := pair[0], pair[1], pair[2], pair[3]
+		fileKey, filePath := pair[0], pair[1]
 		raw, present := webCfg[fileKey]
 		if !present {
 			continue
 		}
-		if _, inlinePresent := webCfg[inlineKey]; inlinePresent {
-			add("%s and %s are mutually exclusive", inlinePath, filePath)
-		}
 		if s, isStr := raw.(string); isStr && strings.TrimSpace(s) == "" {
-			add("%s must name a file holding the password", filePath)
+			add("%s must name a file holding hashed credentials", filePath)
 		}
 	}
 }

@@ -232,13 +232,32 @@ func repoRoot(t *testing.T) string {
 }
 
 func TestWebAuthFromConfig(t *testing.T) {
-	cfg := &config.Config{Global: config.Global{Raw: map[string]any{
-		"web": map[string]any{
-			"password":       "admin-pw",
-			"guest_password": "guest-pw",
-			"guest":          true,
-		},
-	}}}
+	dir := t.TempDir()
+	adminHash, err := webcred.HashBcrypt("admin-pw", webcred.MinBcryptCost)
+	if err != nil {
+		t.Fatal(err)
+	}
+	guestHash, err := webcred.HashBcrypt("guest-pw", webcred.MinBcryptCost)
+	if err != nil {
+		t.Fatal(err)
+	}
+	adminFile := filepath.Join(dir, "admin.credentials")
+	guestFile := filepath.Join(dir, "guest.credentials")
+	if err := os.WriteFile(adminFile, []byte(adminHash+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(guestFile, []byte(guestHash+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	global := filepath.Join(dir, "sermo.yml")
+	content := fmt.Sprintf("web:\n  password_file: %s\n  guest_password_file: %s\n  guest: true\n", adminFile, guestFile)
+	if err := os.WriteFile(global, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.Load(global)
+	if err != nil {
+		t.Fatal(err)
+	}
 	auth := webAuth(cfg)
 	if !auth.AdminCredentials.Verify(t.Context(), "admin-pw") ||
 		!auth.GuestCredentials.Verify(t.Context(), "guest-pw") || !auth.AnonymousGuest {

@@ -1,17 +1,15 @@
 // Package webcred parses and verifies the dashboard credentials configured in
-// `web.password` / `web.password_file` (and their guest counterparts).
+// `web.password_file` and `web.guest_password_file`.
 //
-// A credential source holds one credential per line, in cleartext or hashed:
+// A credential source holds one hashed credential per line:
 //
 //	$2b$12$K3JqR7uH...          # bcrypt, for a password a person types
 //	$sha256$c2FsdA$9b74c9bd...  # salted SHA-256, for a generated secret
-//	s3cret-en-claro             # cleartext
 //
 // Hashing keeps the dashboard password out of the filesystem in readable form
-// without any decryption key to provision: unlike an encrypted file, a hash is
-// verifiable on its own. bcrypt resists a dictionary attack on a human-chosen
-// password; `$sha256$` costs ~1µs to verify and is meant for a generated secret,
-// where the entropy — not the hashing cost — is what makes guessing hopeless.
+// without any decryption key to provision. bcrypt resists a dictionary attack
+// on a human-chosen password; `$sha256$` costs ~1µs to verify and is meant for a
+// generated secret, where entropy makes guessing infeasible.
 package webcred
 
 import (
@@ -38,11 +36,10 @@ const (
 	// `$sha256$<salt>$<digest>`, both fields base64 (raw, unpadded).
 	PrefixSHA256 = "$sha256$"
 
-	// hashPrefix marks a hashed credential. A cleartext password may contain a
-	// `$` but cannot start with one; that is the whole detection rule.
+	// hashPrefix marks a hashed credential. Every persisted credential must
+	// start with it; recognized formats are validated below.
 	hashPrefix = "$"
-	// commentPrefix starts a whole-line comment. It only applies to whole
-	// lines: a cleartext credential may legitimately contain a `#`.
+	// commentPrefix starts a whole-line comment.
 	commentPrefix = "#"
 	// fieldSeparator separates the fields of a `$sha256$` credential.
 	fieldSeparator = "$"
@@ -97,8 +94,8 @@ type credential struct {
 type List struct {
 	credentials []credential
 	// cache and slots are only allocated when the list holds a bcrypt entry:
-	// they exist to bound the cost of the expensive path, and a cleartext or
-	// `$sha256$` list has none to bound. Pointers, so a copied List (Auth is
+	// they exist to bound the cost of the expensive path, and a transient plain
+	// or `$sha256$` list has none to bound. Pointers, so a copied List (Auth is
 	// passed by value) shares one cache instead of silently losing it.
 	cache *verifyCache
 	slots chan struct{}
@@ -131,24 +128,9 @@ func Parse(data string) (List, error) {
 	return list, nil
 }
 
-// ParseInline reads a single credential written directly in sermo.yml. It is
-// not a file, so there are no comments or blank lines to skip: the value is the
-// credential, hashed or not.
-func ParseInline(secret string) (List, error) {
-	if strings.TrimSpace(secret) == "" {
-		return List{}, errNoCredentials
-	}
-	cred, err := parseCredential(secret)
-	if err != nil {
-		return List{}, err
-	}
-	var list List
-	return list.add(cred)
-}
-
-// Plain builds a cleartext list. It is the programmatic equivalent of an inline
-// password and keeps callers that already hold a secret (tests, fixtures) off
-// the parsing path.
+// Plain builds an in-memory cleartext list for callers that already hold a
+// transient secret. Configuration parsing never calls it and rejects cleartext
+// credentials on disk.
 func Plain(secrets ...string) List {
 	var list List
 	for _, secret := range secrets {
@@ -183,7 +165,7 @@ func (l List) add(cred credential) (List, error) {
 // parseCredential classifies one already-trimmed line.
 func parseCredential(text string) (credential, error) {
 	if !strings.HasPrefix(text, hashPrefix) {
-		return credential{kind: kindPlain, plain: text}, nil
+		return credential{}, errors.New("plaintext credential is not supported; run sermoctl web hash-password")
 	}
 	// Whitespace cannot occur inside a hash, so the remainder is a comment.
 	hash := strings.Fields(text)[0]
@@ -241,9 +223,8 @@ func hashFormatName(hash string) string {
 	return hashPrefix
 }
 
-// String redacts the credentials. A List holds cleartext passwords, so it must
-// never render them into a log line, an error or a test failure message just
-// because someone formatted the struct that carries it.
+// String redacts credentials so neither parsed hashes nor transient cleartext
+// values render into logs or test failures.
 func (l List) String() string {
 	return fmt.Sprintf("webcred.List(%d credentials)", len(l.credentials))
 }
@@ -253,16 +234,6 @@ func (l List) Empty() bool { return len(l.credentials) == 0 }
 
 // Len returns how many credentials the list holds.
 func (l List) Len() int { return len(l.credentials) }
-
-// Plaintext returns the single cleartext credential of the list, if that is all
-// it holds. sermoctl needs an actual password to authenticate against the daemon
-// API, which a hashed list cannot supply.
-func (l List) Plaintext() (string, bool) {
-	if len(l.credentials) != 1 || l.credentials[0].kind != kindPlain {
-		return "", false
-	}
-	return l.credentials[0].plain, true
-}
 
 // Verify reports whether password matches any credential in the list. ctx must
 // be non-nil; it is honored while queueing for an expensive verification, so a

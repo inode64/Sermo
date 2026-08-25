@@ -236,11 +236,11 @@ func TestReloadConfigCompatibilityRejectsProcessLifetimeChanges(t *testing.T) {
 	}
 }
 
-func reloadCompatibilityConfig(runtime, stateDir, password string) *config.Config {
+func reloadCompatibilityConfig(runtime, stateDir, credentialFile string) *config.Config {
 	return &config.Config{Global: config.Global{
 		Runtime: runtime, State: stateDir,
 		Raw: map[string]any{
-			config.SectionWeb: map[string]any{config.WebKeyPort: 9797, config.WebKeyPassword: password},
+			config.SectionWeb: map[string]any{config.WebKeyPort: 9797, config.WebKeyPasswordFile: credentialFile},
 		},
 	}}
 }
