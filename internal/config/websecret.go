@@ -22,8 +22,8 @@ var webCredentialFileKeys = [...]string{WebKeyPasswordFile, WebKeyGuestPasswordF
 // operator running `config validate` without access to a root-owned secret file
 // gets a clear message instead of a loader that refuses to start.
 func resolveWebCredentials(g *Global) {
-	web, ok := g.Raw[SectionWeb].(map[string]any)
-	if !ok {
+	web := g.WebSection()
+	if web == nil {
 		return
 	}
 	base := configBaseDir(g.Path)
@@ -66,8 +66,8 @@ func loadWebCredentials(web map[string]any, base, fileKey string) (webcred.List,
 // themselves — sermod warns about lax permissions — must use these, not the raw
 // values, which may be relative to a directory no longer current.
 func (g Global) WebCredentialFiles() []string {
-	web, ok := g.Raw[SectionWeb].(map[string]any)
-	if !ok {
+	web := g.WebSection()
+	if web == nil {
 		return nil
 	}
 	base := configBaseDir(g.Path)
@@ -89,4 +89,11 @@ func (g Global) WebCredentials() webcred.List {
 // WebGuestCredentials returns the credentials that grant read-only access.
 func (g Global) WebGuestCredentials() webcred.List {
 	return g.webGuestCredentials
+}
+
+// WebSection returns the raw [web] section, or nil when the config does not
+// configure one.
+func (g Global) WebSection() map[string]any {
+	m, _ := g.Raw[SectionWeb].(map[string]any)
+	return m
 }

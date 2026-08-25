@@ -1895,7 +1895,7 @@ func (a App) daemonWebPassword(cfg *config.Config) string {
 // only a credential for the daemon that wrote it, so sending it to a remote
 // sermod would replace a working password with a guaranteed 401.
 func daemonIsLocal(cfg *config.Config) bool {
-	wraw, _ := cfg.Global.Raw[config.SectionWeb].(map[string]any)
+	wraw := cfg.Global.WebSection()
 	addr := cfgval.String(wraw[config.WebKeyAddress])
 	if addr == "" {
 		return true // the default bind address is loopback
@@ -2057,7 +2057,7 @@ func (a App) fetchDaemonApplicationStates(ctx context.Context, opts options) map
 }
 
 func webAPIBase(cfg *config.Config) (string, error) {
-	wraw, _ := cfg.Global.Raw[config.SectionWeb].(map[string]any)
+	wraw := cfg.Global.WebSection()
 	if wraw == nil {
 		return "", errors.New("web UI is not enabled in config (no web: block or no port); the event API is exposed by the running daemon")
 	}

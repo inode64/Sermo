@@ -367,6 +367,21 @@ func TestDrainOrTimeout(t *testing.T) {
 	}
 }
 
+func TestGoTrackedClosesDoneWhenFnReturns(t *testing.T) {
+	ran := make(chan struct{})
+	done := goTracked(func() { close(ran) })
+	select {
+	case <-ran:
+	case <-time.After(time.Second):
+		t.Fatal("goTracked did not run fn")
+	}
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("goTracked done channel not closed after fn returned")
+	}
+}
+
 // blockingStateMaintainer holds the first maintenance pass open until release is
 // closed, so a test can observe startup and shutdown while one is in flight.
 type blockingStateMaintainer struct {
