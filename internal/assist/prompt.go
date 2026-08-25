@@ -11,6 +11,7 @@ import (
 	"io"
 	"strconv"
 	"strings"
+	"time"
 
 	"sermo/internal/config"
 )
@@ -218,6 +219,19 @@ func (p *Prompt) AskInt(question string, def int) int {
 			return n
 		}
 		p.printf("  enter a whole number\n")
+	}
+}
+
+func (p *Prompt) askPositiveDuration(question, def, invalidHint string, allowBlank bool) string {
+	for {
+		value := strings.TrimSpace(p.Ask(question, def))
+		if value == "" && allowBlank {
+			return ""
+		}
+		if duration, err := time.ParseDuration(value); err == nil && duration > 0 {
+			return value
+		}
+		p.printf("  %s\n", invalidHint)
 	}
 }
 

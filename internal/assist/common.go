@@ -6,7 +6,6 @@ import (
 	"maps"
 	"slices"
 	"strings"
-	"time"
 
 	"sermo/internal/config"
 	"sermo/internal/rules"
@@ -68,16 +67,10 @@ func (p *Prompt) AskMonitorState(label string) string {
 // global engine interval. It re-prompts on a value config validation would
 // reject (mirrors askDuration but allows the blank "inherit" answer).
 func (p *Prompt) AskInterval(def string) string {
-	for {
-		v := strings.TrimSpace(p.Ask("Check interval (blank = inherit the global interval)", def))
-		if v == "" {
-			return ""
-		}
-		if d, err := time.ParseDuration(v); err == nil && d > 0 {
-			return v
-		}
-		p.printf("  use a positive duration like 30s or 5m, or leave blank to inherit\n")
-	}
+	return p.askPositiveDuration(
+		"Check interval (blank = inherit the global interval)", def,
+		"use a positive duration like 30s or 5m, or leave blank to inherit", true,
+	)
 }
 
 // apply writes the monitoring answer onto a generated entry map (watch entry or
