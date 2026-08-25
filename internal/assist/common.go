@@ -1,15 +1,26 @@
 package assist
 
 import (
+	"errors"
 	"fmt"
 	"maps"
 	"slices"
 	"strings"
-	"time"
 
 	"sermo/internal/config"
 	"sermo/internal/rules"
 )
+
+func detectCandidates[T any](detect func() ([]T, error), unavailable, action string) ([]T, error) {
+	if detect == nil {
+		return nil, errors.New(unavailable)
+	}
+	candidates, err := detect()
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", action, err)
+	}
+	return candidates, nil
+}
 
 const (
 	monitorStateChoiceDisabled = 1
@@ -56,16 +67,10 @@ func (p *Prompt) AskMonitorState(label string) string {
 // global engine interval. It re-prompts on a value config validation would
 // reject (mirrors askDuration but allows the blank "inherit" answer).
 func (p *Prompt) AskInterval(def string) string {
-	for {
-		v := strings.TrimSpace(p.Ask("Check interval (blank = inherit the global interval)", def))
-		if v == "" {
-			return ""
-		}
-		if d, err := time.ParseDuration(v); err == nil && d > 0 {
-			return v
-		}
-		p.printf("  use a positive duration like 30s or 5m, or leave blank to inherit\n")
-	}
+	return p.askPositiveDuration(
+		"Check interval (blank = inherit the global interval)", def,
+		"use a positive duration like 30s or 5m, or leave blank to inherit", true,
+	)
 }
 
 // apply writes the monitoring answer onto a generated entry map (watch entry or
@@ -104,10 +109,21 @@ func watchHasSideEffect(env Env, notifiers []string, hasNativeAction bool) bool 
 	return config.HasNotifyAction(notifiers)
 }
 
-func applyDryRun(entry map[string]any, dryRun bool) {
+// applyMonitoredSettings writes the settings shared by every monitored service
+// or host watch. Mount units intentionally do not use it because they are
+// operated explicitly rather than monitored by the daemon.
+func applyMonitoredSettings(entry map[string]any, monitoring Monitoring, dryRun bool) {
+	monitoring.apply(entry)
 	if dryRun {
 		entry[config.EntryKeyDryRun] = true
 	}
+}
+
+// applyWatchSettings adds the target-family metadata required by host watches
+// and then applies their common monitoring settings.
+func applyWatchSettings(entry map[string]any, category string, monitoring Monitoring, dryRun bool) {
+	entry[config.EntryKeyCategory] = category
+	applyMonitoredSettings(entry, monitoring, dryRun)
 }
 
 func watchThen(notifiers []string) map[string]any {
@@ -124,12 +140,17 @@ func resultSummary(noun string, entries map[string]any) string {
 }
 
 func chooseCandidates[T any](p *Prompt, question string, cands []T, label func(T) string) []T {
+	selected, _ := chooseCandidatesKeyword(p, question, cands, label)
+	return selected
+}
+
+func chooseCandidatesKeyword[T any](p *Prompt, question string, cands []T, label func(T) string, keywords ...string) ([]T, string) {
 	labels := make([]string, len(cands))
 	for i, c := range cands {
 		labels[i] = label(c)
 	}
-	sel := p.MultiChoose(question, labels)
-	return candidatesByIndexes(cands, sel)
+	selected, keyword := p.MultiChooseKeyword(question, labels, keywords...)
+	return candidatesByIndexes(cands, selected), keyword
 }
 
 // chooseSharedSettings runs the prologue shared by the mount and volume
@@ -172,14 +193,6 @@ func candidatesByIndexes[T any](cands []T, indexes []int) []T {
 	out := make([]T, 0, len(indexes))
 	for _, idx := range indexes {
 		out = append(out, cands[idx])
-	}
-	return out
-}
-
-func candidateNames[T any](cands []T, name func(T) string) []string {
-	out := make([]string, len(cands))
-	for i, c := range cands {
-		out[i] = name(c)
 	}
 	return out
 }

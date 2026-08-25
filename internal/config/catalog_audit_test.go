@@ -1225,7 +1225,9 @@ func TestCatalogAppsDeclareVersionSource(t *testing.T) {
 
 	noLocalVersion := map[string]string{
 		"colord":           "colord has no version option; its D-Bus service exposes DaemonVersion",
+		"cron":             "Debian cron has no side-effect-free version command",
 		"iio-sensor-proxy": "iio-sensor-proxy has no version option or version property",
+		"ksmtuned":         "ksmtuned ignores help/version arguments and starts its tuning loop",
 		"libvirt-dbus":     "upstream documents no version option for libvirt-dbus",
 		"udisks2":          "upstream documents no version option for udisksd or udisksctl",
 	}
@@ -1250,8 +1252,24 @@ func TestCatalogAppsDeclareHealthOrVersionSource(t *testing.T) {
 	cfg := loadRepoCatalog(t)
 
 	noSafeHealth := map[string]string{
-		"nfsdcld": "upstream documents no help/version option; version comes from rpc-mountd",
-		"rpcbind": "upstream documents version output but no separate help/health option; version comes from rpc-mountd",
+		"lxc-monitord":     "it requires runtime monitor arguments; version comes from lxc",
+		"nfs-blkmap":       "blkmapd has no side-effect-free health command; version comes from rpc-mountd",
+		"nfsdcld":          "upstream documents no help/version option; version comes from rpc-mountd",
+		"proxmox-firewall": "daemon invocation is not a health probe; version comes from proxmox-ve",
+		"pve-cluster":      "pmxcfs invocation is not a health probe; version comes from proxmox-ve",
+		"pve-firewall":     "daemon invocation is not a health probe; version comes from proxmox-ve",
+		"pve-ha-crm":       "daemon invocation is not a health probe; version comes from proxmox-ve",
+		"pve-ha-lrm":       "daemon invocation is not a health probe; version comes from proxmox-ve",
+		"pve-lxc-syscalld": "daemon invocation is not a health probe; version comes from proxmox-ve",
+		"pvedaemon":        "daemon invocation is not a health probe; version comes from proxmox-ve",
+		"pvefw-logger":     "daemon invocation is not a health probe; version comes from proxmox-ve",
+		"pveproxy":         "daemon invocation is not a health probe; version comes from proxmox-ve",
+		"pvescheduler":     "daemon invocation is not a health probe; version comes from proxmox-ve",
+		"pvestatd":         "daemon invocation is not a health probe; version comes from proxmox-ve",
+		"qmeventd":         "daemon invocation is not a health probe; version comes from proxmox-ve",
+		"rpcbind":          "upstream documents version output but no separate help/health option; version comes from rpc-mountd",
+		"spiceproxy":       "daemon invocation is not a health probe; version comes from proxmox-ve",
+		"watchdog-mux":     "daemon invocation is not a health probe; version comes from proxmox-ve",
 	}
 	for _, name := range cfg.CatalogNamesInCategory(CategoryApp) {
 		doc := cfg.Apps[name]
@@ -1311,6 +1329,38 @@ func TestCatalogAppsUseSharedVersionProviders(t *testing.T) {
 		if !hasVersionProbe(providerDoc.Body) {
 			t.Fatalf("version provider %q for %s has no version probe", provider, app)
 		}
+	}
+}
+
+func TestCatalogMailAppsUseOwnedVersionCommands(t *testing.T) {
+	root := repoRoot(t)
+	tests := []struct {
+		name        string
+		wantBinary  any
+		wantVersion []string
+	}{
+		{
+			name:        "postfix",
+			wantBinary:  "${bindir}/postfix",
+			wantVersion: []string{"${version_binary}", "-h", "mail_version"},
+		},
+		{
+			name:        "s-nail",
+			wantBinary:  "${bindir}/s-nail",
+			wantVersion: []string{"${binary}", "--version"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			doc := catalogDocByName(t, root, "apps", tt.name)
+			if got := nested(t, doc, "variables")["binary"]; got != tt.wantBinary {
+				t.Fatalf("binary = %v, want %v", got, tt.wantBinary)
+			}
+			got := cfgval.StringList(nested(t, doc, "preflight", "version")["command"])
+			if !slices.Equal(got, tt.wantVersion) {
+				t.Fatalf("version command = %v, want %v", got, tt.wantVersion)
+			}
+		})
 	}
 }
 
@@ -1588,6 +1638,82 @@ func TestRequestedHostProfilesExist(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			assertRequestedHostProfile(t, cfg, tc.name, tc.app, tc.binaryVar, tc.processRole, tc.wantProcess)
 		})
+	}
+}
+
+func TestProxmoxHostCatalogProfiles(t *testing.T) {
+	cfg := loadRepoCatalog(t)
+
+	tests := []struct {
+		name      string
+		app       string
+		binaryVar string
+	}{
+		{name: "amazon-ssm-agent", app: "amazon-ssm-agent", binaryVar: "${amazon_ssm_agent_binary}"},
+		{name: "cron", app: "cron", binaryVar: "${cron_binary}"},
+		{name: "ipmi_exporter", app: "ipmi_exporter", binaryVar: "${ipmi_exporter_binary}"},
+		{name: "ksmtuned", app: "ksmtuned", binaryVar: "/usr/bin/bash"},
+		{name: "lxc-monitord", app: "lxc-monitord", binaryVar: "${lxc_monitord_binary}"},
+		{name: "lxcfs", app: "lxcfs", binaryVar: "${lxcfs_binary}"},
+		{name: "nfs-blkmap", app: "nfs-blkmap", binaryVar: "${nfs_blkmap_binary}"},
+		{name: "nut_exporter", app: "nut_exporter", binaryVar: "${nut_exporter_binary}"},
+		{name: "proxmox-firewall", app: "proxmox-firewall", binaryVar: "${proxmox_firewall_binary}"},
+		{name: "pve-cluster", app: "pve-cluster", binaryVar: "${pve_cluster_binary}"},
+		{name: "pve-firewall", app: "pve-firewall", binaryVar: "/usr/bin/perl"},
+		{name: "pve-ha-crm", app: "pve-ha-crm", binaryVar: "/usr/bin/perl"},
+		{name: "pve-ha-lrm", app: "pve-ha-lrm", binaryVar: "/usr/bin/perl"},
+		{name: "pve-lxc-syscalld", app: "pve-lxc-syscalld", binaryVar: "${pve_lxc_syscalld_binary}"},
+		{name: "pvedaemon", app: "pvedaemon", binaryVar: "/usr/bin/perl"},
+		{name: "pvefw-logger", app: "pvefw-logger", binaryVar: "${pvefw_logger_binary}"},
+		{name: "pveproxy", app: "pveproxy", binaryVar: "/usr/bin/perl"},
+		{name: "pvescheduler", app: "pvescheduler", binaryVar: "/usr/bin/perl"},
+		{name: "pvestatd", app: "pvestatd", binaryVar: "/usr/bin/perl"},
+		{name: "qmeventd", app: "qmeventd", binaryVar: "${qmeventd_binary}"},
+		{name: "spiceproxy", app: "spiceproxy", binaryVar: "/usr/bin/perl"},
+		{name: "watchdog-mux", app: "watchdog-mux", binaryVar: "${watchdog_mux_binary}"},
+		{name: "zfs-zed", app: "zfs-zed", binaryVar: "${zfs_zed_binary}"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			assertRequestedHostProfile(t, cfg, tc.name, tc.app, tc.binaryVar, "", true)
+		})
+	}
+}
+
+func TestProxmoxContainerCatalogTemplateUsesNumericSystemdInstance(t *testing.T) {
+	root := repoRoot(t)
+	body := catalogDocByName(t, root, "services", "pve-container-%n")
+	candidates, trust := ServiceCandidates(body, "systemd", "pve-container")
+	if trust {
+		t.Fatal("pve-container service candidates trust fallback name, want explicit systemd template")
+	}
+	want := []string{"pve-container@${n}"}
+	if !slices.Equal(candidates, want) {
+		t.Fatalf("pve-container systemd candidates = %v, want %v", candidates, want)
+	}
+	process := nested(t, body, "processes", "main")
+	if got := cfgval.String(process["exe"]); got != "${lxc_binary}" {
+		t.Fatalf("pve-container process exe = %q, want ${lxc_binary}", got)
+	}
+	for _, field := range []string{"exe", "cmd", "user"} {
+		if cfgval.String(process[field]) == "" {
+			t.Fatalf("pve-container process selector missing %s: %v", field, process)
+		}
+	}
+}
+
+func TestDebianDaemonUnitAliasesAreCatalogued(t *testing.T) {
+	root := repoRoot(t)
+	dmeventd := catalogDocByName(t, root, "services", "dmeventd")
+	candidates, _ := ServiceCandidates(dmeventd, "systemd", "dmeventd")
+	if !slices.Contains(candidates, "dm-event") {
+		t.Fatalf("dmeventd systemd candidates = %v, want Debian dm-event alias", candidates)
+	}
+
+	smartd := catalogDocByName(t, root, "services", "smartd")
+	debian := nested(t, smartd, "os", "debian", "service")
+	if got := cfgval.StringList(debian["systemd"]); !slices.Equal(got, []string{"smartmontools"}) {
+		t.Fatalf("smartd Debian systemd candidates = %v, want [smartmontools]", got)
 	}
 }
 

@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"time"
 
 	"sermo/internal/cfgval"
 	"sermo/internal/checks"
@@ -43,9 +42,9 @@ func (volumeAssistant) Run(p *Prompt, env Env) (res Result, err error) {
 	// Translate an input-closed re-prompt abort into ErrInputClosed even when
 	// Run is driven directly (the CLI also recovers at its own boundary).
 	defer Recover(&err)
-	vols, err := env.Volumes()
+	vols, err := detectCandidates(env.Volumes, "volume detection is unavailable", "list volumes")
 	if err != nil {
-		return Result{}, fmt.Errorf("list volumes: %w", err)
+		return Result{}, err
 	}
 	vols = storageVolumeCandidates(vols)
 	if len(vols) == 0 {
@@ -124,7 +123,10 @@ func askVolSettings(p *Prompt, env Env, label string) volSettings {
 	if p.Confirm("Auto-expand this volume when low? (requires an LVM volume)", false) {
 		s.expand = true
 		s.expandBy = askSize(p, "Grow by how much each time (e.g. 5G)", volumeDefaultExpandBy)
-		s.cooldown = askDuration(p, "Minimum time between expansions (cooldown)", volumeDefaultExpandCooldown)
+		s.cooldown = p.askPositiveDuration(
+			"Minimum time between expansions (cooldown)", volumeDefaultExpandCooldown,
+			"use a positive duration like 30m or 1h", false,
+		)
 	}
 	s.dryRun = p.AskWatchDryRun(label, env, s.notifiers, s.expand)
 	return s
@@ -144,9 +146,8 @@ func buildVolWatch(v Volume, s volSettings) map[string]any {
 		then[config.WatchThenKeyExpand] = map[string]any{config.WatchExpandKeyBy: s.expandBy}
 	}
 	entry := map[string]any{
-		config.EntryKeyCategory: config.WatchCategoryStorage,
-		config.WatchKeyCheck:    check,
-		config.WatchKeyThen:     then,
+		config.WatchKeyCheck: check,
+		config.WatchKeyThen:  then,
 	}
 	if s.forCycles > 0 {
 		entry[rules.RuleFieldFor] = map[string]any{rules.WindowKeyCycles: s.forCycles}
@@ -154,8 +155,7 @@ func buildVolWatch(v Volume, s volSettings) map[string]any {
 	if s.expand && s.cooldown != "" {
 		entry[rules.SectionPolicy] = map[string]any{rules.PolicyKeyCooldown: s.cooldown}
 	}
-	s.Monitoring.apply(entry)
-	applyDryRun(entry, s.dryRun)
+	applyWatchSettings(entry, config.WatchCategoryStorage, s.Monitoring, s.dryRun)
 	return entry
 }
 
@@ -177,18 +177,6 @@ func askPercent(p *Prompt, question string, def int) any {
 			}
 		}
 		p.printf("  use a percentage in %s, like 10 or 10%%\n", cfgval.PercentRange())
-	}
-}
-
-// askDuration reads a positive duration (e.g. 30m), re-prompting on a value
-// config validation would reject.
-func askDuration(p *Prompt, question, def string) string {
-	for {
-		v := strings.TrimSpace(p.Ask(question, def))
-		if d, err := time.ParseDuration(v); err == nil && d > 0 {
-			return v
-		}
-		p.printf("  use a positive duration like 30m or 1h\n")
 	}
 }
 

@@ -1,0 +1,41 @@
+name: nut_exporter
+display_name: Prometheus NUT Exporter
+category: observability
+description: Prometheus HTTP exporter for Network UPS Tools metrics.
+service:
+  systemd:
+    - nut_exporter
+  openrc:
+    - nut_exporter
+apps:
+  - nut_exporter
+variables:
+  host: 127.0.0.1
+  port: 9199
+  user: root
+processes:
+  main:
+    exe: ${nut_exporter_binary}
+    user: ${user}
+watches:
+  service:
+    check:
+      type: service
+      expect: active
+      verify: true
+  process:
+    check:
+      type: process
+      exe: ${nut_exporter_binary}
+      user: ${user}
+      state: running
+      requires:
+        - service
+  metrics:
+    check:
+      type: http
+      url: http://${host}:${port}/metrics
+      expect_status: 200
+      timeout: 5s
+      requires:
+        - service

@@ -1,0 +1,29 @@
+name: pvefw-logger
+display_name: Proxmox firewall logger
+category: security
+description: Proxmox VE firewall log daemon.
+service:
+  systemd:
+    - pvefw-logger
+apps:
+  - pvefw-logger
+variables:
+  user: root
+processes:
+  main:
+    exe: ${pvefw_logger_binary}
+    user: ${user}
+watches:
+  service:
+    check:
+      type: service
+      expect: active
+      verify: true
+  process:
+    check:
+      type: process
+      exe: ${pvefw_logger_binary}
+      user: ${user}
+      state: running
+      requires:
+        - service

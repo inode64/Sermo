@@ -1,0 +1,9 @@
+name: pve-cluster
+display_name: "Proxmox cluster filesystem"
+category: virtualization
+description: "Proxmox VE cluster configuration filesystem daemon"
+version_from: proxmox-ve
+variables:
+  binary: ${bindir}/pmxcfs
+preflight:
+  binary: { type: binary, path: "${binary}" }

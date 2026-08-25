@@ -1,0 +1,9 @@
+name: lxc
+display_name: "LXC"
+category: virtualization
+description: "Linux Containers runtime"
+variables:
+  binary: ${bindir}/lxc-start
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}", "--version"], timeout: 10s }

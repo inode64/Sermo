@@ -1,0 +1,9 @@
+name: zfs-zed
+display_name: "ZFS Event Daemon"
+category: storage
+description: "ZFS event notification daemon"
+variables:
+  binary: ${bindir}/zed
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}", "-V"], timeout: 10s }

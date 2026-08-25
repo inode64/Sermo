@@ -55,23 +55,29 @@ func formatConditionLeaf(op string, body any) string {
 	case ConditionFailed, ConditionActive:
 		return formatConditionField(op, body, FieldCheck)
 	case ConditionMetric:
-		if name := formatConditionField(op, body, FieldName); name != "" {
-			return name
-		}
-		return formatConditionField(op, body, FieldMetric)
-	case ConditionService:
-		return formatConditionField(op, body, ConditionService)
-	case ConditionProcess:
 		return formatConditionField(op, body, FieldName)
+	case ConditionService:
+		return formatConditionField(op, body, FieldState)
+	case ConditionProcess:
+		return formatConditionFirstField(op, body, FieldExe, FieldUser, FieldState)
 	case ConditionFile:
 		return formatConditionField(op, body, FieldPath)
 	case ConditionCommand:
 		return ConditionCommand
 	case ConditionChanged:
-		return formatConditionField(op, body, FieldPath)
+		return formatConditionFirstField(op, body, FieldPath, FieldApp)
 	default:
 		return ""
 	}
+}
+
+func formatConditionFirstField(label string, body any, fields ...string) string {
+	for _, field := range fields {
+		if formatted := formatConditionField(label, body, field); formatted != "" {
+			return formatted
+		}
+	}
+	return ""
 }
 
 func formatConditionField(label string, body any, field string) string {
@@ -131,6 +137,7 @@ func BuildRuleWindowReportsAt(ctx context.Context, ruleSet []Rule, windows map[s
 				cond = false
 			}
 		}
+		status := ws.statusAt(ruleSet[i], at)
 		// Primary is the operation if any, else the first action; its type is the
 		// reported action.
 		out = append(out, RuleWindowReport{
@@ -140,8 +147,8 @@ func BuildRuleWindowReportsAt(ctx context.Context, ruleSet []Rule, windows map[s
 			Condition:     FormatCondition(ruleSet[i].If),
 			ConditionTrue: cond,
 			Window:        WindowDescription(ruleSet[i]),
-			Progress:      ws.ProgressAt(ruleSet[i], at), // ProgressAt/IsFiringAt are nil-safe
-			Firing:        ws.IsFiringAt(ruleSet[i], at),
+			Progress:      status.progress,
+			Firing:        status.firing,
 		})
 	}
 	return out

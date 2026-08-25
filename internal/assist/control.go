@@ -2,7 +2,6 @@ package assist
 
 import (
 	"errors"
-	"fmt"
 
 	"sermo/internal/cfgval"
 	"sermo/internal/checks"
@@ -68,12 +67,9 @@ type controlledAssistantSpec[T any] struct {
 }
 
 func runControlledAssistant[T any](p *Prompt, env Env, spec controlledAssistantSpec[T]) (Result, error) {
-	if spec.detect == nil {
-		return Result{}, errors.New(spec.unavailable)
-	}
-	candidates, err := spec.detect()
+	candidates, err := detectCandidates(spec.detect, spec.unavailable, spec.detectLabel)
 	if err != nil {
-		return Result{}, fmt.Errorf("%s: %w", spec.detectLabel, err)
+		return Result{}, err
 	}
 	if len(candidates) == 0 {
 		return Result{}, errors.New(spec.noneFound)
@@ -84,44 +80,32 @@ func runControlledAssistant[T any](p *Prompt, env Env, spec controlledAssistantS
 
 func buildControlledServices[T any](p *Prompt, env Env, selected []T, name func(T) string, build func(T) map[string]any) map[string]any {
 	services := map[string]any{}
-	names := candidateNames(selected, name)
-	applyControlledSettings(p, names, func(target string, settings serviceSettings) {
-		for _, candidate := range selected {
-			candidateName := name(candidate)
-			if candidateName != target {
-				continue
-			}
-			if addControlledService(p, env, services, candidateName, build(candidate), settings) {
-				break
-			}
-		}
+	selected = pendingControlledCandidates(p, env, selected, name)
+	applyServiceSettings(p, selected, name, func(candidate T, settings serviceSettings) {
+		body := build(candidate)
+		settings.apply(body)
+		services[name(candidate)] = body
 	})
 	return services
 }
 
-func applyControlledSettings(p *Prompt, names []string, apply func(string, serviceSettings)) {
-	if len(names) == 0 {
-		return
+func pendingControlledCandidates[T any](p *Prompt, env Env, selected []T, name func(T) string) []T {
+	seen := map[string]struct{}{}
+	pending := make([]T, 0, len(selected))
+	for _, candidate := range selected {
+		candidateName := name(candidate)
+		if _, exists := env.ServiceNames[candidateName]; exists {
+			p.printf("  %q is already configured; skipping.\n", candidateName)
+			continue
+		}
+		if _, exists := seen[candidateName]; exists {
+			p.printf("  %q was already selected; skipping duplicate.\n", candidateName)
+			continue
+		}
+		seen[candidateName] = struct{}{}
+		pending = append(pending, candidate)
 	}
-	shared := sharedSettingsFor(p, names, "Apply the same monitor state, interval and dry-run mode to all selected services?",
-		"all selected services", func(label string) serviceSettings { return askServiceSettings(p, label) })
-	forEachWithSettings(names, shared,
-		func(name string) serviceSettings { return askServiceSettings(p, name) },
-		apply)
-}
-
-func addControlledService(p *Prompt, env Env, services map[string]any, name string, body map[string]any, settings serviceSettings) bool {
-	if _, exists := env.ServiceNames[name]; exists {
-		p.printf("  %q is already configured; skipping.\n", name)
-		return false
-	}
-	if _, exists := services[name]; exists {
-		p.printf("  %q was already selected; skipping duplicate.\n", name)
-		return false
-	}
-	settings.apply(body)
-	services[name] = body
-	return true
+	return pending
 }
 
 func controlledResult(services map[string]any) Result {

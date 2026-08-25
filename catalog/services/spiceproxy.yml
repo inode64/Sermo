@@ -1,0 +1,43 @@
+name: spiceproxy
+aliases:
+  - spiceproxy work
+display_name: Proxmox SPICE proxy
+category: virtualization
+description: Proxmox VE SPICE console proxy.
+service:
+  systemd:
+    - spiceproxy
+apps:
+  - spiceproxy
+variables:
+  host: 127.0.0.1
+  port: 3128
+  user: www-data
+processes:
+  main:
+    exe: /usr/bin/perl
+    cmd: ^spiceproxy( |$)
+    user: ${user}
+watches:
+  service:
+    check:
+      type: service
+      expect: active
+      verify: true
+  process:
+    check:
+      type: process
+      exe: /usr/bin/perl
+      cmd: ^spiceproxy( |$)
+      user: ${user}
+      state: running
+      requires:
+        - service
+  port:
+    check:
+      type: tcp
+      host: ${host}
+      port: ${port}
+      timeout: 3s
+      requires:
+        - service

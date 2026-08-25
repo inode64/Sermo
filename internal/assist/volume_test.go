@@ -10,43 +10,6 @@ import (
 	"sermo/internal/rules"
 )
 
-func testEnv() Env {
-	return Env{
-		Notifiers: []string{"ops-email", "team-slack"},
-		Volumes: func() ([]Volume, error) {
-			return []Volume{
-				{Mountpoint: "/mnt/backup", FSType: "ext4", Device: "/dev/mapper/vg0-data"},
-				{Mountpoint: "/", FSType: "xfs", Device: "/dev/sda1"},
-			}, nil
-		},
-		Ifaces: func() ([]Iface, error) {
-			return []Iface{
-				{Name: "eth0", Up: true},
-				{Name: "lo", Up: true, Loopback: true},
-			}, nil
-		},
-	}
-}
-
-func testEnvWithDefaultNotify() Env {
-	env := testEnv()
-	env.DefaultNotify = []string{"ops-email"}
-	return env
-}
-
-// runAssistant drives assistant a with the newline-joined script steps against
-// env and returns the result plus captured output.
-func runAssistant(t *testing.T, a Assistant, env Env, steps ...string) (Result, string) {
-	t.Helper()
-	var out strings.Builder
-	p := NewPrompt(strings.NewReader(strings.Join(steps, "\n")+"\n"), &out)
-	res, err := a.Run(p, env)
-	if err != nil {
-		t.Fatalf("Run: %v", err)
-	}
-	return res, out.String()
-}
-
 // runVolumeAssistant drives the volume wizard with the newline-joined script
 // steps against env and returns the produced watch entry.
 func runVolumeAssistant(t *testing.T, env Env, watch string, steps ...string) map[string]any {

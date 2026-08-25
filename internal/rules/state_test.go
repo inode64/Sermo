@@ -141,6 +141,46 @@ func TestPolicyReportRateLimitNextEligibleAfterEnoughActionsExpire(t *testing.T)
 	}
 }
 
+func TestPolicyReportRateLimitSortsRestoredHistory(t *testing.T) {
+	p := Policy{MaxActions: 2, MaxActionsWindow: time.Hour}
+	st := &RemediationState{RecentActions: []time.Time{
+		t0.Add(2 * time.Minute),
+		t0,
+		t0.Add(time.Minute),
+	}}
+	rep := p.Report(st, t0.Add(3*time.Minute))
+	wantUntil := t0.Add(time.Hour + time.Minute)
+	if rep.Allowed || rep.Reason != "rate limit" || !rep.NextEligibleAt.Equal(wantUntil) {
+		t.Fatalf("Report = %+v, want rate limit until %v", rep, wantUntil)
+	}
+	if !st.RecentActions[0].Equal(t0.Add(2 * time.Minute)) {
+		t.Fatalf("Report reordered persisted history: %v", st.RecentActions)
+	}
+}
+
+func TestPolicyReportMatchesAllow(t *testing.T) {
+	tests := []struct {
+		name   string
+		policy Policy
+		state  RemediationState
+		now    time.Time
+	}{
+		{name: "allowed", policy: Policy{Cooldown: time.Minute}, now: t0},
+		{name: "cooldown", policy: Policy{Cooldown: time.Minute}, state: RemediationState{LastActionAt: t0}, now: t0.Add(time.Second)},
+		{name: "windowed rate limit", policy: Policy{MaxActions: 2, MaxActionsWindow: time.Hour}, state: RemediationState{RecentActions: []time.Time{t0, t0.Add(time.Minute)}}, now: t0.Add(2 * time.Minute)},
+		{name: "unbounded rate limit", policy: Policy{MaxActions: 1}, state: RemediationState{RecentActions: []time.Time{t0}}, now: t0.Add(time.Hour)},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			allowed, reason := tt.policy.Allow(&tt.state, tt.now)
+			report := tt.policy.Report(&tt.state, tt.now)
+			if report.Allowed != allowed || report.Reason != reason {
+				t.Fatalf("Report = (%v, %q), Allow = (%v, %q)", report.Allowed, report.Reason, allowed, reason)
+			}
+		})
+	}
+}
+
 func TestRecoverResetsBackoff(t *testing.T) {
 	st := &RemediationState{CurrentBackoff: 8 * time.Minute}
 	st.Recover()

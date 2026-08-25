@@ -51,22 +51,21 @@ func (p Policy) Report(state *RemediationState, now time.Time) RemediationReport
 	if state == nil {
 		state = &RemediationState{}
 	}
-	allowed, reason := p.Allow(state, now)
-	effective := p.effectiveCooldown(state)
-	var until time.Time
-	if effective > 0 && !state.LastActionAt.IsZero() {
-		until = state.LastActionAt.Add(effective)
-		if !now.Before(until) {
-			until = time.Time{}
-		}
+	effective, until := p.cooldownStatus(state, now)
+	recentActions, rateUntil := p.actionHistoryStatus(state, now)
+	reason := ""
+	switch {
+	case !until.IsZero():
+		reason = "cooldown"
+	case p.MaxActions > 0 && recentActions >= p.MaxActions:
+		reason = "rate limit"
 	}
-	rateUntil := p.rateLimitUntil(state, now)
 	next := maxTime(until, rateUntil)
-	if allowed {
+	if reason == "" {
 		next = time.Time{}
 	}
 	return RemediationReport{
-		Allowed:           allowed,
+		Allowed:           reason == "",
 		Reason:            reason,
 		Cooldown:          p.Cooldown,
 		EffectiveCooldown: effective,
@@ -76,7 +75,7 @@ func (p Policy) Report(state *RemediationState, now time.Time) RemediationReport
 		NextEligibleAt:    next,
 		MaxActions:        p.MaxActions,
 		MaxActionsWindow:  p.MaxActionsWindow,
-		RecentActions:     state.countWithin(now, p.MaxActionsWindow),
+		RecentActions:     recentActions,
 	}
 }
 
@@ -86,26 +85,48 @@ func (p Policy) effectiveCooldown(state *RemediationState) time.Duration {
 	return max(state.CurrentBackoff, p.Cooldown)
 }
 
+func (p Policy) cooldownStatus(state *RemediationState, now time.Time) (effective time.Duration, until time.Time) {
+	effective = p.effectiveCooldown(state)
+	if effective <= 0 || state.LastActionAt.IsZero() {
+		return effective, time.Time{}
+	}
+	if now.Sub(state.LastActionAt) < effective {
+		return effective, state.LastActionAt.Add(effective)
+	}
+	return effective, time.Time{}
+}
+
 func (p Policy) rateLimitUntil(state *RemediationState, now time.Time) time.Time {
-	if p.MaxActions <= 0 || p.MaxActionsWindow <= 0 {
-		return time.Time{}
+	_, until := p.actionHistoryStatus(state, now)
+	return until
+}
+
+// actionHistoryStatus counts recent remediations and, when rate limiting is
+// enabled, calculates when enough actions have expired. Report uses this once
+// for both fields; Allow retains its allocation-free count-only hot path.
+func (p Policy) actionHistoryStatus(state *RemediationState, now time.Time) (count int, until time.Time) {
+	windowed := p.MaxActionsWindow > 0
+	if p.MaxActions <= 0 || !windowed {
+		return state.countWithin(now, p.MaxActionsWindow), time.Time{}
 	}
 	cutoff := now.Add(-p.MaxActionsWindow)
 	relevant := make([]time.Time, 0, len(state.RecentActions))
-	for _, t := range state.RecentActions {
-		if t.After(cutoff) {
-			relevant = append(relevant, t)
+	for _, actionAt := range state.RecentActions {
+		if !actionAt.After(cutoff) {
+			continue
 		}
+		relevant = append(relevant, actionAt)
 	}
-	if len(relevant) < p.MaxActions {
-		return time.Time{}
+	count = len(relevant)
+	if count < p.MaxActions {
+		return count, time.Time{}
 	}
 	slices.SortFunc(relevant, func(a, b time.Time) int { return a.Compare(b) })
-	until := relevant[len(relevant)-p.MaxActions].Add(p.MaxActionsWindow)
+	until = relevant[len(relevant)-p.MaxActions].Add(p.MaxActionsWindow)
 	if !now.Before(until) {
-		return time.Time{}
+		until = time.Time{}
 	}
-	return until
+	return count, until
 }
 
 func maxTime(a, b time.Time) time.Time {
@@ -128,8 +149,7 @@ func maxTime(a, b time.Time) time.Time {
 //  2. else max_actions reached inside the window -> suppress;
 //  3. else allow.
 func (p Policy) Allow(state *RemediationState, now time.Time) (bool, string) {
-	effective := p.effectiveCooldown(state)
-	if effective > 0 && !state.LastActionAt.IsZero() && now.Sub(state.LastActionAt) < effective {
+	if _, until := p.cooldownStatus(state, now); !until.IsZero() {
 		return false, "cooldown"
 	}
 	if p.MaxActions > 0 {
