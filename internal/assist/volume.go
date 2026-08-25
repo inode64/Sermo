@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"time"
 
 	"sermo/internal/cfgval"
 	"sermo/internal/checks"
@@ -124,7 +123,10 @@ func askVolSettings(p *Prompt, env Env, label string) volSettings {
 	if p.Confirm("Auto-expand this volume when low? (requires an LVM volume)", false) {
 		s.expand = true
 		s.expandBy = askSize(p, "Grow by how much each time (e.g. 5G)", volumeDefaultExpandBy)
-		s.cooldown = askDuration(p, "Minimum time between expansions (cooldown)", volumeDefaultExpandCooldown)
+		s.cooldown = p.askPositiveDuration(
+			"Minimum time between expansions (cooldown)", volumeDefaultExpandCooldown,
+			"use a positive duration like 30m or 1h", false,
+		)
 	}
 	s.dryRun = p.AskWatchDryRun(label, env, s.notifiers, s.expand)
 	return s
@@ -175,18 +177,6 @@ func askPercent(p *Prompt, question string, def int) any {
 			}
 		}
 		p.printf("  use a percentage in %s, like 10 or 10%%\n", cfgval.PercentRange())
-	}
-}
-
-// askDuration reads a positive duration (e.g. 30m), re-prompting on a value
-// config validation would reject.
-func askDuration(p *Prompt, question, def string) string {
-	for {
-		v := strings.TrimSpace(p.Ask(question, def))
-		if d, err := time.ParseDuration(v); err == nil && d > 0 {
-			return v
-		}
-		p.printf("  use a positive duration like 30m or 1h\n")
 	}
 }
 
