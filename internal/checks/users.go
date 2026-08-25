@@ -39,9 +39,5 @@ func (c usersCheck) Run(_ context.Context) Result {
 // defaultUsersSampler counts distinct users from the system utmp (returns an
 // error off Linux, where there is no utmp).
 func defaultUsersSampler() (int, error) {
-	sessions, err := utmp.Sessions()
-	if err != nil {
-		return 0, err
-	}
-	return utmp.DistinctUsers(sessions), nil
+	return utmp.DistinctUserCount()
 }

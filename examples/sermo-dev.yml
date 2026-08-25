@@ -54,6 +54,7 @@ defaults:
 web:
   address: 127.0.0.1
   port: 19797
-  # password: "change-me"
-  # guest_password: "read-only"
+  # Credential files contain bcrypt or $sha256$ hashes, never plaintext.
+  # password_file: /etc/sermo/credentials.env
+  # guest_password_file: /etc/sermo/guest-credentials.env
   # guest: false

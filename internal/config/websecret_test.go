@@ -80,7 +80,7 @@ web:
   port: 9797
   password_file: @ROOT@/secrets/web.pass
 `,
-			secrets: map[string]string{"secrets/web.pass": "s3cret\n"},
+			secrets: map[string]string{"secrets/web.pass": mustHashLines(t, "s3cret") + "\n"},
 			want:    []string{"s3cret"},
 		},
 		{
@@ -90,7 +90,7 @@ web:
   port: 9797
   password_file: secrets/web.pass
 `,
-			secrets: map[string]string{"secrets/web.pass": "s3cret"},
+			secrets: map[string]string{"secrets/web.pass": mustHashLines(t, "s3cret")},
 			want:    []string{"s3cret"},
 		},
 		{
@@ -100,7 +100,7 @@ web:
   port: 9797
   password_file: secrets/web.pass
 `,
-			secrets: map[string]string{"secrets/web.pass": "  s3cret  \r\n"},
+			secrets: map[string]string{"secrets/web.pass": "  " + mustHashLines(t, "s3cret") + "  \r\n"},
 			want:    []string{"s3cret"},
 		},
 		{
@@ -112,32 +112,9 @@ web:
   guest_password_file: secrets/guest.pass
 `,
 			secrets: map[string]string{
-				"secrets/web.pass":   "s3cret\n",
-				"secrets/guest.pass": "lookonly\n",
+				"secrets/web.pass":   mustHashLines(t, "s3cret") + "\n",
+				"secrets/guest.pass": mustHashLines(t, "lookonly") + "\n",
 			},
-			want:      []string{"s3cret"},
-			wantGuest: []string{"lookonly"},
-		},
-		{
-			name: "inline password still works",
-			sermo: `
-web:
-  port: 9797
-  password: "s3cret"
-  guest_password: "lookonly"
-`,
-			want:      []string{"s3cret"},
-			wantGuest: []string{"lookonly"},
-		},
-		{
-			name: "file for admin, inline for guest",
-			sermo: `
-web:
-  port: 9797
-  password_file: secrets/web.pass
-  guest_password: "lookonly"
-`,
-			secrets:   map[string]string{"secrets/web.pass": "s3cret\n"},
 			want:      []string{"s3cret"},
 			wantGuest: []string{"lookonly"},
 		},
@@ -148,7 +125,7 @@ web:
   port: 9797
   password_file: "${env:SERMO_TEST_SECRET_DIR}/web.pass"
 `,
-			secrets: map[string]string{"secrets/web.pass": "s3cret\n"},
+			secrets: map[string]string{"secrets/web.pass": mustHashLines(t, "s3cret") + "\n"},
 			want:    []string{"s3cret"},
 		},
 		{
@@ -158,7 +135,7 @@ web:
   port: 9797
   password_file: secrets/web.pass
 `,
-			secrets: map[string]string{"secrets/web.pass": "# admins\nfirst\n\nsecond\nthird\n"},
+			secrets: map[string]string{"secrets/web.pass": "# admins\n" + mustHashLines(t, "first") + "\n\n" + mustHashLines(t, "second") + "\n" + mustHashLines(t, "third") + "\n"},
 			want:    []string{"first", "second", "third"},
 		},
 		{
@@ -200,26 +177,22 @@ func TestWebPasswordFileIssues(t *testing.T) {
 		want    string
 	}{
 		{
-			name: "password and password_file are mutually exclusive",
+			name: "inline password is retired",
 			sermo: `
 web:
   port: 9797
   password: "s3cret"
-  password_file: secrets/web.pass
 `,
-			secrets: map[string]string{"secrets/web.pass": "other\n"},
-			want:    "web.password and web.password_file are mutually exclusive",
+			want: "web.password is no longer supported; use web.password_file with hashed credentials",
 		},
 		{
-			name: "guest_password and guest_password_file are mutually exclusive",
+			name: "inline guest password is retired",
 			sermo: `
 web:
   port: 9797
   guest_password: "lookonly"
-  guest_password_file: secrets/guest.pass
 `,
-			secrets: map[string]string{"secrets/guest.pass": "other\n"},
-			want:    "web.guest_password and web.guest_password_file are mutually exclusive",
+			want: "web.guest_password is no longer supported; use web.guest_password_file with hashed credentials",
 		},
 		{
 			name: "empty path",
@@ -228,7 +201,7 @@ web:
   port: 9797
   password_file: "   "
 `,
-			want: "web.password_file must name a file holding the password",
+			want: "web.password_file must name a file holding hashed credentials",
 		},
 		{
 			name: "not a string",
@@ -275,7 +248,7 @@ web:
   port: 9797
   password_file: secrets/web.pass
 `,
-			secrets: map[string]string{"secrets/web.pass": "good\n$md5$deadbeef\n"},
+			secrets: map[string]string{"secrets/web.pass": mustHashLines(t, "good") + "\n$md5$deadbeef\n"},
 			want:    `web.password_file line 2: unsupported hash format "$md5$"`,
 		},
 		{
@@ -295,17 +268,17 @@ web:
   port: 9797
   password_file: secrets/web.pass
 `,
-			secrets: map[string]string{"secrets/web.pass": strings.Repeat("pw\n", webcred.MaxCredentials+1)},
+			secrets: map[string]string{"secrets/web.pass": strings.Repeat(mustHashLines(t, "pw")+"\n", webcred.MaxCredentials+1)},
 			want:    "more than 64 credentials",
 		},
 		{
-			name: "inline hash is validated too",
+			name: "inline hash is retired too",
 			sermo: `
 web:
   port: 9797
   password: "$md5$deadbeef"
 `,
-			want: `web.password is invalid: unsupported hash format "$md5$"`,
+			want: `web.password is no longer supported; use web.password_file with hashed credentials`,
 		},
 	}
 	for _, tc := range tests {
@@ -327,7 +300,7 @@ web:
   port: 9797
   password_file: secrets/web.pass
 `,
-		"secrets/web.pass": "s3cret\n",
+		"secrets/web.pass": mustHashLines(t, "s3cret") + "\n",
 	})
 	secret := filepath.Join(filepath.Dir(global), "secrets", "web.pass")
 	if err := os.Chmod(secret, 0o000); err != nil {
@@ -352,8 +325,8 @@ web:
   password_file: secrets/web.pass
   guest_password_file: @ROOT@/secrets/guest.pass
 `,
-		"secrets/web.pass":   "s3cret\n",
-		"secrets/guest.pass": "lookonly\n",
+		"secrets/web.pass":   mustHashLines(t, "s3cret") + "\n",
+		"secrets/guest.pass": mustHashLines(t, "lookonly") + "\n",
 	})
 	cfg, err := loadConfig(t, global)
 	if err != nil {
@@ -375,12 +348,11 @@ web:
 	}
 
 	// No file keys, nothing to inspect.
-	inline := loadWebGlobal(t, `
+	withoutFiles := loadWebGlobal(t, `
 web:
   port: 9797
-  password: "s3cret"
 `, nil)
-	if got := inline.Global.WebCredentialFiles(); len(got) != 0 {
-		t.Errorf("WebCredentialFiles() with inline passwords = %v, want none", got)
+	if got := withoutFiles.Global.WebCredentialFiles(); len(got) != 0 {
+		t.Errorf("WebCredentialFiles() without file fields = %v, want none", got)
 	}
 }

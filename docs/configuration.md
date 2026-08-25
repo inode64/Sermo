@@ -663,7 +663,7 @@ name — a native scan of `/proc`, no external `pidof`/`pgrep` needed.
 While the dashboard requires authentication, the daemon also writes
 `<paths.runtime>/web.token` (mode `0600`, removed when it stops): the admin
 credential `sermoctl` uses to reach the web API, which hashed passwords cannot
-supply. See [Hashed credentials](#hashed-credentials).
+supply. See [Hash formats](#hash-formats).
 
 `sermoctl daemon reload` reloads `sermod`'s own configuration (as above).
 `sermoctl reload <service>` is a different operation — it reloads *that service*
@@ -827,35 +827,35 @@ web:
 
 ### Authentication
 
-Set passwords on the `web` block for HTTP Basic auth with two roles:
+Set hashed credential files on the `web` block for HTTP Basic auth with two
+roles:
 
 ```yaml
 web:
   port: 9797
-  password: "s3cret"           # admin: read + actions (start/stop/restart/reload/resume/repair, monitor/unmonitor)
-  guest_password: "lookonly"   # optional: a read-only login
+  password_file: /etc/sermo/credentials.env        # admin: read + actions
+  guest_password_file: /etc/sermo/guest-credentials.env # optional: read-only login
   guest: true                  # optional: allow anonymous read-only access
 ```
 
-- **admin** — full access. Granted by `password`.
+- **admin** — full access. Granted by a hash in `password_file`.
 - **guest** — **read-only**: can view everything but every action (a `POST`) is
-  refused with `403`. Granted by `guest_password`, and/or to anyone when
+  refused with `403`. Granted by a hash in `guest_password_file`, and/or to anyone when
   `guest: true` (anonymous read-only). Process **command lines are redacted to
   the executable** for guests (service process trees and mount blockers):
   arguments can carry secrets that only admins should see.
 
-#### Passwords from a file
+#### Credential files
 
-Either password can come from a **file** instead, through its `_file` companion
-key — for a secret provisioned by another tool (systemd `LoadCredential`, a
-secrets manager, an Ansible template) that must never be written into
-`sermo.yml`:
+Credentials come only from **files**, so neither `sermo.yml` nor the credential
+file contains a readable password. A secrets manager or configuration tool can
+provision the hashed file:
 
 ```yaml
 web:
   port: 9797
-  password_file: /etc/sermo/secrets/web.pass          # instead of `password`
-  guest_password_file: /etc/sermo/secrets/guest.pass  # instead of `guest_password`
+  password_file: /etc/sermo/credentials.env
+  guest_password_file: /etc/sermo/guest-credentials.env
 ```
 
 - The file holds **one credential per line**. Blank lines and lines starting
@@ -866,15 +866,14 @@ web:
   rotates without a cut, and how each operator gets their own.
 - A **relative** path resolves against the directory holding `sermo.yml`, like
   the `paths.*` directories. `${env:...}` works in the path as anywhere else.
-- `password` and `password_file` are **mutually exclusive**, as are
-  `guest_password` and `guest_password_file`. Setting both is a configuration
-  error — which of the two wins should never be left to the reader.
+- The retired `password` and `guest_password` keys are rejected. This prevents
+  a readable password from being reintroduced into `sermo.yml` by mistake.
 - If the file cannot be read, `sermod` **refuses to start** (exit `78`, the
   standard configuration-error code) and logs the reason. It never falls back to
   an open dashboard. `sermoctl` still runs, and `config validate` reports the
   same message.
-- Keep the file readable by the daemon user only (`chmod 0600`). It is a secret
-  in the filesystem, not in the config, and it should be treated as one. `sermod`
+- Keep the file readable by the daemon user only (`chmod 0600`). Hashes remain
+  sensitive authentication data and should be treated as such. `sermod`
   logs a warning at startup when the file is readable beyond its owner.
 
 #### The browser password prompt
@@ -906,7 +905,7 @@ A client that sets neither `Sec-Fetch-Mode` nor `Accept` is treated as an API
 caller, except on `/` and `/login`, which always challenge so a first login
 works from anything.
 
-#### Hashed credentials
+#### Hash formats
 
 A credential may be stored **hashed**, so the file never holds a password anyone
 can read — the `/etc/shadow` model, with no decryption key to provision:
@@ -915,7 +914,6 @@ can read — the `/etc/shadow` model, with no decryption key to provision:
 # /etc/sermo/secrets/web.pass
 $2a$12$K3JqR7uH...                          # ana
 $sha256$c2FsdA$9b74c9bd...                  # provisioning
-still-cleartext-if-you-want-it
 ```
 
 `sermoctl web hash-password` writes the line for you:
@@ -942,11 +940,9 @@ $ printf '%s' "$PASS" | sermoctl web hash-password --stdin
 - A line starting with `$` is always read as a hash. An **unrecognized** `$...$`
   format is a configuration error, never a literal password — a mistyped hash
   must not silently become the password itself.
-- A line that does not start with `$` is a cleartext credential and may contain
-  `#` and spaces. On a hashed line, anything after the hash is a comment.
-- Consequently a **cleartext password cannot start with `$`** — in a file or in
-  `web.password`. `sermod` refuses to start rather than guess (exit `78`); hash
-  such a password instead.
+- A non-comment line that does not contain a supported hash is a configuration
+  error. Plaintext credentials are never accepted. On a hashed line, anything
+  after the hash is a comment.
 - A single source holds at most **64** credentials: every failed attempt is
   checked against all of them.
 - Verification results are cached briefly, so the bcrypt cost is paid once per
@@ -964,7 +960,6 @@ socket. `sermoctl` resolves its credential in this order:
 1. `$SERMO_WEB_PASSWORD` — needed for a remote daemon, or when running as a user
    that cannot read the token.
 2. `<paths.runtime>/web.token`.
-3. A cleartext password in the configuration.
 
 The **password**, not the username, selects the role — at the browser prompt enter
 any username and the admin or guest password; passwords are compared in constant
@@ -1002,7 +997,7 @@ public interface. Keep Sermo on `127.0.0.1` and let the proxy be the only client
 web:
   address: 127.0.0.1   # leave on loopback
   port: 9797
-  password: "${env:SERMO_WEB_PASSWORD}"
+  password_file: /etc/sermo/credentials.env
 ```
 
 **nginx** (TLS in front, proxy to loopback):

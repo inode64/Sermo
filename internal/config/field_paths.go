@@ -26,9 +26,7 @@ const (
 	webPathAddress           = SectionWeb + "." + WebKeyAddress
 	webPathAllowedHosts      = SectionWeb + "." + WebKeyAllowedHosts
 	webPathGuest             = SectionWeb + "." + WebKeyGuest
-	webPathGuestPassword     = SectionWeb + "." + WebKeyGuestPassword
 	webPathGuestPasswordFile = SectionWeb + "." + WebKeyGuestPasswordFile
-	webPathPassword          = SectionWeb + "." + WebKeyPassword
 	webPathPasswordFile      = SectionWeb + "." + WebKeyPasswordFile
 	webPathPort              = SectionWeb + "." + WebKeyPort
 
