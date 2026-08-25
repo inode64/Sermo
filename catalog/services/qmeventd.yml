@@ -1,0 +1,29 @@
+name: qmeventd
+display_name: Proxmox QEMU event daemon
+category: virtualization
+description: Proxmox VE QEMU lifecycle event daemon.
+service:
+  systemd:
+    - qmeventd
+apps:
+  - qmeventd
+variables:
+  user: root
+processes:
+  main:
+    exe: ${qmeventd_binary}
+    user: ${user}
+watches:
+  service:
+    check:
+      type: service
+      expect: active
+      verify: true
+  process:
+    check:
+      type: process
+      exe: ${qmeventd_binary}
+      user: ${user}
+      state: running
+      requires:
+        - service

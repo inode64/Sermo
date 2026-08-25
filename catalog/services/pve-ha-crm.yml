@@ -1,0 +1,31 @@
+name: pve-ha-crm
+display_name: Proxmox HA CRM
+category: high-availability
+description: Proxmox VE cluster HA resource manager.
+service:
+  systemd:
+    - pve-ha-crm
+apps:
+  - pve-ha-crm
+variables:
+  user: root
+processes:
+  main:
+    exe: /usr/bin/perl
+    cmd: ^pve-ha-crm( |$)
+    user: ${user}
+watches:
+  service:
+    check:
+      type: service
+      expect: active
+      verify: true
+  process:
+    check:
+      type: process
+      exe: /usr/bin/perl
+      cmd: ^pve-ha-crm( |$)
+      user: ${user}
+      state: running
+      requires:
+        - service

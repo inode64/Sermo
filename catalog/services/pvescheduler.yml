@@ -1,0 +1,31 @@
+name: pvescheduler
+display_name: Proxmox scheduler
+category: scheduler
+description: Proxmox VE scheduled task daemon.
+service:
+  systemd:
+    - pvescheduler
+apps:
+  - pvescheduler
+variables:
+  user: root
+processes:
+  main:
+    exe: /usr/bin/perl
+    cmd: ^pvescheduler( |$)
+    user: ${user}
+watches:
+  service:
+    check:
+      type: service
+      expect: active
+      verify: true
+  process:
+    check:
+      type: process
+      exe: /usr/bin/perl
+      cmd: ^pvescheduler( |$)
+      user: ${user}
+      state: running
+      requires:
+        - service

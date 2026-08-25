@@ -1,0 +1,31 @@
+name: pvestatd
+display_name: Proxmox status daemon
+category: observability
+description: Proxmox VE status collection daemon.
+service:
+  systemd:
+    - pvestatd
+apps:
+  - pvestatd
+variables:
+  user: root
+processes:
+  main:
+    exe: /usr/bin/perl
+    cmd: ^pvestatd( |$)
+    user: ${user}
+watches:
+  service:
+    check:
+      type: service
+      expect: active
+      verify: true
+  process:
+    check:
+      type: process
+      exe: /usr/bin/perl
+      cmd: ^pvestatd( |$)
+      user: ${user}
+      state: running
+      requires:
+        - service

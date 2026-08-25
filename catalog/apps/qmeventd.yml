@@ -1,0 +1,9 @@
+name: qmeventd
+display_name: "Proxmox QEMU event daemon"
+category: virtualization
+description: "Proxmox VE QEMU lifecycle event daemon"
+version_from: proxmox-ve
+variables:
+  binary: ${bindir}/qmeventd
+preflight:
+  binary: { type: binary, path: "${binary}" }

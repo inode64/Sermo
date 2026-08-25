@@ -1,0 +1,41 @@
+name: ipmi_exporter
+display_name: Prometheus IPMI Exporter
+category: observability
+description: Prometheus HTTP exporter for IPMI metrics.
+service:
+  systemd:
+    - ipmi_exporter
+  openrc:
+    - ipmi_exporter
+apps:
+  - ipmi_exporter
+variables:
+  host: 127.0.0.1
+  port: 9290
+  user: root
+processes:
+  main:
+    exe: ${ipmi_exporter_binary}
+    user: ${user}
+watches:
+  service:
+    check:
+      type: service
+      expect: active
+      verify: true
+  process:
+    check:
+      type: process
+      exe: ${ipmi_exporter_binary}
+      user: ${user}
+      state: running
+      requires:
+        - service
+  metrics:
+    check:
+      type: http
+      url: http://${host}:${port}/metrics
+      expect_status: 200
+      timeout: 5s
+      requires:
+        - service

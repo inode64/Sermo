@@ -1,0 +1,33 @@
+name: watchdog-mux
+display_name: Proxmox watchdog multiplexer
+category: high-availability
+description: Proxmox VE hardware watchdog multiplexer.
+service:
+  systemd:
+    - watchdog-mux
+apps:
+  - watchdog-mux
+variables:
+  user: root
+processes:
+  main:
+    exe: ${watchdog_mux_binary}
+    user: ${user}
+watches:
+  service:
+    check:
+      type: service
+      expect: active
+      verify: true
+  process:
+    check:
+      # A package upgrade may leave the running image marked deleted until the
+      # daemon is restarted. Keep systemd authoritative and surface that process
+      # gap without weakening exact-executable matching.
+      type: process
+      exe: ${watchdog_mux_binary}
+      user: ${user}
+      state: running
+      optional: true
+      requires:
+        - service

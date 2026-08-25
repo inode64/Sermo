@@ -1,0 +1,9 @@
+name: pvescheduler
+display_name: "Proxmox scheduler"
+category: scheduler
+description: "Proxmox VE scheduled task daemon"
+version_from: proxmox-ve
+variables:
+  binary: ${bindir}/pvescheduler
+preflight:
+  binary: { type: binary, path: "${binary}" }

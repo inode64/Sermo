@@ -1,0 +1,9 @@
+name: lxcfs
+display_name: "LXCFS"
+category: virtualization
+description: "FUSE filesystem providing container-aware proc and cgroup data"
+variables:
+  binary: ${bindir}/lxcfs
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}", "--version"], timeout: 10s }

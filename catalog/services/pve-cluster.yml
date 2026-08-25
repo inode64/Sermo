@@ -1,0 +1,29 @@
+name: pve-cluster
+display_name: Proxmox cluster filesystem
+category: virtualization
+description: Proxmox VE cluster configuration filesystem daemon.
+service:
+  systemd:
+    - pve-cluster
+apps:
+  - pve-cluster
+variables:
+  user: root
+processes:
+  main:
+    exe: ${pve_cluster_binary}
+    user: ${user}
+watches:
+  service:
+    check:
+      type: service
+      expect: active
+      verify: true
+  process:
+    check:
+      type: process
+      exe: ${pve_cluster_binary}
+      user: ${user}
+      state: running
+      requires:
+        - service

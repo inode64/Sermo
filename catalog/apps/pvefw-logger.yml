@@ -1,0 +1,9 @@
+name: pvefw-logger
+display_name: "Proxmox firewall logger"
+category: security
+description: "Proxmox VE firewall log daemon"
+version_from: proxmox-ve
+variables:
+  binary: ${bindir}/pvefw-logger
+preflight:
+  binary: { type: binary, path: "${binary}" }

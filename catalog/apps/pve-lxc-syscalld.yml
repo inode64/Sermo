@@ -1,0 +1,9 @@
+name: pve-lxc-syscalld
+display_name: "Proxmox LXC syscall daemon"
+category: virtualization
+description: "Proxmox VE privileged LXC syscall broker"
+version_from: proxmox-ve
+variables:
+  binary: /usr/lib/${arch}-linux-gnu/pve-lxc-syscalld/pve-lxc-syscalld
+preflight:
+  binary: { type: binary, path: "${binary}" }

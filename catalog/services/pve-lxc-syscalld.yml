@@ -1,0 +1,29 @@
+name: pve-lxc-syscalld
+display_name: Proxmox LXC syscall daemon
+category: virtualization
+description: Proxmox VE privileged LXC syscall broker.
+service:
+  systemd:
+    - pve-lxc-syscalld
+apps:
+  - pve-lxc-syscalld
+variables:
+  user: root
+processes:
+  main:
+    exe: ${pve_lxc_syscalld_binary}
+    user: ${user}
+watches:
+  service:
+    check:
+      type: service
+      expect: active
+      verify: true
+  process:
+    check:
+      type: process
+      exe: ${pve_lxc_syscalld_binary}
+      user: ${user}
+      state: running
+      requires:
+        - service

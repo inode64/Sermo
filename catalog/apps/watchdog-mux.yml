@@ -1,0 +1,9 @@
+name: watchdog-mux
+display_name: "Proxmox watchdog multiplexer"
+category: high-availability
+description: "Proxmox VE hardware watchdog multiplexer"
+version_from: proxmox-ve
+variables:
+  binary: ${bindir}/watchdog-mux
+preflight:
+  binary: { type: binary, path: "${binary}" }

@@ -1259,6 +1259,30 @@ arbitrary method calls. Adding a check-only watch does not add remediation;
 attach a `then:` action only when that action has been reviewed independently.
 See [the D-Bus check reference](rules.md#database-protocols).
 
+### Proxmox VE and supporting host daemons
+
+The packaged catalog includes the resident Proxmox VE control-plane daemons,
+LXC/LXCFS, the Proxmox firewall variants, HA managers, API/SPICE proxies,
+QEMU event handling and ZFS ZED. It also includes commonly adjacent host
+daemons discovered on Proxmox nodes: Amazon SSM Agent, Cron, KSM tuning, the
+pNFS block mapper, and Prometheus IPMI/NUT exporters.
+
+`pve-container-%n` is an instanced systemd profile. An active unit such as
+`pve-container@101.service` materializes `pve-container-101`; inactive container
+units are not inferred. Proxmox Perl daemons match the exact resolved Perl
+executable and configured user before their narrow process title is considered.
+The command line never authorizes signaling by itself. Exporter profiles verify
+their local `/metrics` endpoint, while `pvedaemon`, `pveproxy` and `spiceproxy`
+use TCP reachability because their HTTP endpoints intentionally require a
+protocol-specific request or authentication.
+
+These profiles add monitoring and normal init-backed operator controls only.
+They do not ship automatic restart rules or enable `SIGKILL`. Boot setup units,
+systemd infrastructure, filesystem mount helpers and hardware state belong to
+their existing host watches rather than duplicate catalog services. Debian's
+`dm-event` and `smartmontools` unit names are aliases of the existing `dmeventd`
+and `smartd` profiles.
+
 ## Versioned services
 
 Some applications ship one binary per version and several can be installed at

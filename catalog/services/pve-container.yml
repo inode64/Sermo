@@ -1,0 +1,32 @@
+name: pve-container-%n
+display_name: Proxmox LXC container ${n}
+category: container
+description: Proxmox VE managed LXC container instance.
+service:
+  systemd:
+    - pve-container@${n}
+apps:
+  - lxc
+  - proxmox-ve
+variables:
+  user: root
+processes:
+  main:
+    exe: ${lxc_binary}
+    cmd: (^|[[:space:]])-n[[:space:]]+${n}([[:space:]]|$)
+    user: ${user}
+watches:
+  service:
+    check:
+      type: service
+      expect: active
+      verify: true
+  process:
+    check:
+      type: process
+      exe: ${lxc_binary}
+      cmd: (^|[[:space:]])-n[[:space:]]+${n}([[:space:]]|$)
+      user: ${user}
+      state: running
+      requires:
+        - service

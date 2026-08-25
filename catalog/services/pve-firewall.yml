@@ -1,0 +1,31 @@
+name: pve-firewall
+display_name: Proxmox legacy firewall
+category: security
+description: Proxmox VE iptables firewall daemon.
+service:
+  systemd:
+    - pve-firewall
+apps:
+  - pve-firewall
+variables:
+  user: root
+processes:
+  main:
+    exe: /usr/bin/perl
+    cmd: ^pve-firewall( |$)
+    user: ${user}
+watches:
+  service:
+    check:
+      type: service
+      expect: active
+      verify: true
+  process:
+    check:
+      type: process
+      exe: /usr/bin/perl
+      cmd: ^pve-firewall( |$)
+      user: ${user}
+      state: running
+      requires:
+        - service
