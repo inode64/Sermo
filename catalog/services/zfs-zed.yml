@@ -1,0 +1,32 @@
+name: zfs-zed
+display_name: ZFS Event Daemon
+category: storage
+description: ZFS event notification daemon; pool health belongs in host watches.
+service:
+  systemd:
+    - zfs-zed
+  openrc:
+    - zfs-zed
+    - zed
+apps:
+  - zfs-zed
+variables:
+  user: root
+processes:
+  main:
+    exe: ${zfs_zed_binary}
+    user: ${user}
+watches:
+  service:
+    check:
+      type: service
+      expect: active
+      verify: true
+  process:
+    check:
+      type: process
+      exe: ${zfs_zed_binary}
+      user: ${user}
+      state: running
+      requires:
+        - service

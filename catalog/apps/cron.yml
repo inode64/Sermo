@@ -1,0 +1,11 @@
+name: cron
+display_name: "Cron"
+category: scheduler
+description: "Periodic command scheduler"
+variables:
+  binary:
+    - ${bindir}/cron
+    - ${bindir}/crond
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  health: { type: libraries, binary: "${binary}" }

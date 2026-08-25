@@ -1282,6 +1282,33 @@ métodos arbitrarios. Añadir un watch solo-check no añade remediación; adjunt
 una acción `then:` únicamente cuando esa acción se haya revisado de forma
 independiente. Consulta [la referencia de la comprobación D-Bus](rules.es.md#protocolos-de-base-de-datos).
 
+### Proxmox VE y daemons auxiliares del host
+
+El catálogo empaquetado incluye los daemons residentes del plano de control de
+Proxmox VE, LXC/LXCFS, las variantes del firewall de Proxmox, los gestores HA,
+los proxies API/SPICE, el manejo de eventos QEMU y ZFS ZED. También incluye
+daemons del host que aparecen habitualmente junto a ellos en nodos Proxmox:
+Amazon SSM Agent, Cron, el ajuste KSM, el mapeador de bloques pNFS y los
+exporters Prometheus de IPMI/NUT.
+
+`pve-container-%n` es un perfil systemd instanciado. Una unidad activa como
+`pve-container@101.service` materializa `pve-container-101`; no se infieren
+unidades de contenedores inactivos. Los daemons Perl de Proxmox comprueban el
+ejecutable Perl resuelto exacto y el usuario configurado antes de considerar su
+título de proceso restringido. La línea de órdenes nunca autoriza por sí sola
+el envío de señales. Los perfiles de exporters verifican su endpoint local
+`/metrics`, mientras que `pvedaemon`, `pveproxy` y `spiceproxy` usan
+alcanzabilidad TCP porque sus endpoints HTTP exigen intencionadamente una
+petición específica del protocolo o autenticación.
+
+Estos perfiles solo añaden monitorización y controles normales del operador
+respaldados por init. No incluyen reglas de reinicio automático ni habilitan
+`SIGKILL`. Las unidades de preparación del arranque, la infraestructura de
+systemd, los auxiliares de montaje y el estado del hardware pertenecen a sus
+watches de host existentes, no a servicios de catálogo duplicados. Los nombres
+de unidad Debian `dm-event` y `smartmontools` son alias de los perfiles
+existentes `dmeventd` y `smartd`.
+
 ## Servicios versionados
 
 Algunas aplicaciones envían un binary por versión y varias pueden estar instaladas a la

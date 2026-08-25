@@ -1,0 +1,29 @@
+name: proxmox-firewall
+display_name: Proxmox nftables firewall
+category: security
+description: Proxmox VE nftables firewall daemon.
+service:
+  systemd:
+    - proxmox-firewall
+apps:
+  - proxmox-firewall
+variables:
+  user: root
+processes:
+  main:
+    exe: ${proxmox_firewall_binary}
+    user: ${user}
+watches:
+  service:
+    check:
+      type: service
+      expect: active
+      verify: true
+  process:
+    check:
+      type: process
+      exe: ${proxmox_firewall_binary}
+      user: ${user}
+      state: running
+      requires:
+        - service

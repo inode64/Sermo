@@ -1,0 +1,9 @@
+name: nfs-blkmap
+display_name: "NFS block layout mapper"
+category: storage
+description: "pNFS block-layout device mapper daemon"
+version_from: rpc-mountd
+variables:
+  binary: ${bindir}/blkmapd
+preflight:
+  binary: { type: binary, path: "${binary}" }

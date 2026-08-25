@@ -1,0 +1,11 @@
+name: ksmtuned
+display_name: "KSM tuning daemon"
+category: virtualization
+description: "Adaptive Kernel Samepage Merging tuning daemon"
+variables:
+  binary: ${bindir}/ksmtuned
+  shell: ${bindir}/bash
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  shell: { type: binary, path: "${shell}" }
+  health: { type: command, command: ["${shell}", "-n", "${binary}"], timeout: 10s }

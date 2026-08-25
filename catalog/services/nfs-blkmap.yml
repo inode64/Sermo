@@ -1,0 +1,29 @@
+name: nfs-blkmap
+display_name: NFS block layout mapper
+category: storage
+description: pNFS block-layout device mapper daemon.
+service:
+  systemd:
+    - nfs-blkmap
+apps:
+  - nfs-blkmap
+variables:
+  user: root
+processes:
+  main:
+    exe: ${nfs_blkmap_binary}
+    user: ${user}
+watches:
+  service:
+    check:
+      type: service
+      expect: active
+      verify: true
+  process:
+    check:
+      type: process
+      exe: ${nfs_blkmap_binary}
+      user: ${user}
+      state: running
+      requires:
+        - service

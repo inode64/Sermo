@@ -1,0 +1,29 @@
+name: lxc-monitord
+display_name: LXC monitor daemon
+category: virtualization
+description: LXC container state monitor daemon.
+service:
+  systemd:
+    - lxc-monitord
+apps:
+  - lxc-monitord
+variables:
+  user: root
+processes:
+  main:
+    exe: ${lxc_monitord_binary}
+    user: ${user}
+watches:
+  service:
+    check:
+      type: service
+      expect: active
+      verify: true
+  process:
+    check:
+      type: process
+      exe: ${lxc_monitord_binary}
+      user: ${user}
+      state: running
+      requires:
+        - service
