@@ -40,6 +40,13 @@ Run targeted checks while developing. Finish with the smallest complete gate:
 
 `make check` is the single full gate; the `Makefile` owns its current phases.
 Do not duplicate it with a second `go build`, `make lint` or `go test` pass.
+Run it once inside the project sandbox: the repository configuration grants
+only the package and vulnerability registry access it needs plus exact loopback
+for Playwright, and the target routes tool caches to `/tmp`. If a managed policy
+overrides that configuration or exact loopback support has not already been
+verified for the active sandbox implementation, request the required elevation
+before starting the gate; do not use a first full run as the probe and then
+repeat it elevated.
 After editing `internal/web/src/`, run `make web` before the finish gate and keep
 the regenerated `internal/web/index.html` in the patch.
 

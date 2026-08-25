@@ -56,10 +56,14 @@ WEB_BUILD_DIR := internal/web/build
 
 # Developer tools: Go binaries in ~/go/bin; pip/pipx user scripts in ~/.local/bin.
 LINT_PATH = PATH="$(HOME)/go/bin:$(HOME)/.local/bin:$(PATH)"
-# staticcheck/golangci-lint write analyzer caches. Keep the default outside
-# ~/.cache for restricted shells, but scope it to the checkout path so agent
+# Go, npm, staticcheck and golangci-lint write caches. Keep the defaults outside
+# ~/.cache for restricted shells, but scope them to the checkout path so agent
 # worktrees do not reuse stale absolute paths after a worktree is removed.
 LINT_CACHE_DIR ?= /tmp/sermo-lint-cache-$(shell pwd | sed 's#[^A-Za-z0-9_.-]#_#g')
+GOCACHE ?= $(LINT_CACHE_DIR)/go-build
+GOMODCACHE ?= $(LINT_CACHE_DIR)/go-mod
+npm_config_cache ?= $(LINT_CACHE_DIR)/npm
+export GOCACHE GOMODCACHE npm_config_cache
 LINT_CACHE_ENV = $(LINT_PATH) XDG_CACHE_HOME="$${XDG_CACHE_HOME:-$(LINT_CACHE_DIR)}" GOCACHE="$${GOCACHE:-$(LINT_CACHE_DIR)/go-build}"
 
 # Render the init/unit files for the chosen paths: rewrite the binary and config
@@ -131,7 +135,7 @@ web:
 # Fail if the committed internal/web/index.html is out of date with its sources.
 # Modeled on fmt-check; runs in CI via validate so a stale bundle can't land.
 web-check:
-	@tmp="$$(mktemp)"; \
+	@set -e; tmp="$$(mktemp)"; \
 	go run -C $(WEB_BUILD_DIR) . -src ../src -out "$$tmp"; \
 	if ! cmp -s "$$tmp" internal/web/index.html; then \
 		rm -f "$$tmp"; \
