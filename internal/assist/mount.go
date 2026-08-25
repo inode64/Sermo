@@ -2,7 +2,6 @@ package assist
 
 import (
 	"errors"
-	"fmt"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -26,12 +25,9 @@ func (mountAssistant) Title() string {
 
 func (mountAssistant) Run(p *Prompt, env Env) (res Result, err error) {
 	defer Recover(&err)
-	if env.Mounts == nil {
-		return Result{}, errors.New("mount detection is unavailable")
-	}
-	cands, err := env.Mounts()
+	cands, err := detectCandidates(env.Mounts, "mount detection is unavailable", "detect fstab mounts")
 	if err != nil {
-		return Result{}, fmt.Errorf("detect fstab mounts: %w", err)
+		return Result{}, err
 	}
 	cands = sortedMountCandidates(cands)
 	if len(cands) == 0 {

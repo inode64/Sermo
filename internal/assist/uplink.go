@@ -43,9 +43,9 @@ func (uplinkAssistant) Run(p *Prompt, env Env) (res Result, err error) {
 	// Translate an input-closed re-prompt abort into ErrInputClosed even when
 	// Run is driven directly (the CLI also recovers at its own boundary).
 	defer Recover(&err)
-	ifaces, err := env.Ifaces()
+	ifaces, err := detectCandidates(env.Ifaces, "interface detection is unavailable", "list interfaces")
 	if err != nil {
-		return Result{}, fmt.Errorf("list interfaces: %w", err)
+		return Result{}, err
 	}
 	cands := nonLoopbackIfaces(ifaces)
 	if len(cands) == 0 {
