@@ -68,6 +68,7 @@ func versionIdentity(res conn.Result) string {
 
 func trimConnResult(res conn.Result) conn.Result {
 	res.Version = output.Trim(res.Version)
+	res.Failure = output.Trim(res.Failure)
 	if len(res.Extra) == 0 {
 		return res
 	}
@@ -127,22 +128,38 @@ func (c connCheck) probeResult(ctx context.Context) (conn.Result, time.Duration,
 	}
 	var res conn.Result
 	var elapsed time.Duration
+	var hasProtocolFailure bool
 	_, perIface, err := tryInterfaces(c.ifaces, c.ifaceAll, func(iface string) error {
 		cfg := c.cfg
 		cfg.Interface = iface
 		t0 := time.Now()
 		r, e := probe(ctx, cfg)
-		if e == nil {
-			took := time.Since(t0)
-			// any-match returns on the first success, so there is only one. all-match
-			// runs every interface; report the worst (slowest) path, mirroring the
-			// icmp check's "report the worst path" so latency reflects the bottleneck.
-			if !c.ifaceAll || took >= elapsed {
-				res, elapsed = trimConnResult(r), took
-			}
+		if e != nil {
+			return e
 		}
-		return e
+		took := time.Since(t0)
+		r = trimConnResult(r)
+		if r.Failure != "" {
+			// A protocol verdict is a failed interface match, but it is not a
+			// transport error: retain its structured evidence so Run can report a
+			// normal negative result instead of marking the observation unavailable.
+			res, elapsed, hasProtocolFailure = r, took, true
+			return errors.New(r.Failure)
+		}
+		// any-match returns on the first success, so there is only one. all-match
+		// runs every interface; report the worst (slowest) path, mirroring the
+		// icmp check's "report the worst path" so latency reflects the bottleneck.
+		if !c.ifaceAll || took >= elapsed {
+			res, elapsed = r, took
+		}
+		return nil
 	})
+	if err != nil && hasProtocolFailure {
+		// With any-match, an authoritative negative verdict is more informative
+		// than a later transport error when no interface succeeds. Returning nil
+		// here lets evaluateResponse preserve Failure and Extra as that verdict.
+		err = nil
+	}
 	return res, elapsed, perIface, err
 }
 
@@ -188,7 +205,9 @@ func (c connCheck) evaluateResponse(res conn.Result, elapsed time.Duration, addr
 	}
 	ok := true
 	unavailable := false
-	if fail, missing := c.evalExpect(res); fail != "" {
+	if res.Failure != "" {
+		ok, msg = false, fmt.Sprintf("%s %s: %s", c.proto.Name(), addr, res.Failure)
+	} else if fail, missing := c.evalExpect(res); fail != "" {
 		ok, msg = false, fmt.Sprintf("%s %s: %s", c.proto.Name(), addr, fail)
 		unavailable = missing
 	}
@@ -341,6 +360,8 @@ func configureConnProtocol(cfg *conn.Config, protoName string, entry map[string]
 		return configureOpenVPN(cfg, entry)
 	case conn.ProtocolNameMongoDB:
 		setConnParam(cfg, conn.ParamKeyAuthSource, cfgval.AsString(entry[CheckKeyAuthSource]))
+	case conn.ProtocolNameSMTPAcceptance:
+		return configureSMTPAcceptance(cfg, entry)
 	case conn.ProtocolNameFPM:
 		setConnQuery(cfg, entry, CheckKeyStatusPath)
 	case conn.ProtocolNameNUT:
@@ -364,6 +385,41 @@ func configureConnProtocol(cfg *conn.Config, protoName string, entry map[string]
 		cfg.Socket = conn.DBusAddress(cfgval.AsString(entry[CheckKeySocket]), cfgval.AsString(entry[CheckKeyQuery]))
 	}
 	return nil
+}
+
+func configureSMTPAcceptance(cfg *conn.Config, entry map[string]any) error {
+	for _, field := range SMTPAcceptanceUnsupportedFields() {
+		if _, present := entry[field]; present {
+			return fmt.Errorf("%s check does not support %s", conn.ProtocolNameSMTPAcceptance, field)
+		}
+	}
+
+	envelope, err := conn.ParseSMTPAcceptanceEnvelope(
+		cfgval.AsString(entry[CheckKeyHelo]),
+		cfgval.AsString(entry[CheckKeyMailFrom]),
+		cfgval.AsString(entry[CheckKeyRecipient]),
+		cfgval.AsString(entry[CheckKeyStartTLS]),
+	)
+	if err != nil {
+		return fmt.Errorf("%s check: %w", conn.ProtocolNameSMTPAcceptance, err)
+	}
+
+	cfg.Host = envelope.RecipientDomain
+	setConnParam(cfg, conn.ParamKeySMTPHelo, envelope.Helo)
+	setConnParam(cfg, conn.ParamKeySMTPMailFrom, envelope.MailFrom)
+	setConnParam(cfg, conn.ParamKeySMTPRecipient, envelope.Recipient)
+	setConnParam(cfg, conn.ParamKeySMTPStartTLS, envelope.StartTLS)
+	return nil
+}
+
+// SMTPAcceptanceUnsupportedFields returns fields whose ordinary connection
+// meaning would conflict with the recipient-derived MX target and STARTTLS
+// policy of an SMTP acceptance check.
+func SMTPAcceptanceUnsupportedFields() [7]string {
+	return [7]string{
+		CheckKeyHost, CheckKeySocket, CheckKeyUser, CheckKeyPassword,
+		CheckKeyDatabase, CheckKeyQuery, CheckKeyTLS,
+	}
 }
 
 // DBusTargetStringFields returns the string-valued YAML fields that define a

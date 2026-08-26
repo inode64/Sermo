@@ -984,17 +984,20 @@ type MetricSeries struct {
 	Points  []MetricPoint `json:"points"`
 }
 
-// CheckMetric is a graphable named metric a check publishes (for the detail UI to
-// know which series to fetch and draw, with its unit).
+// CheckMetric is a graphable named metric a check publishes, including the
+// metadata needed to summarize its latest sample and fetch its history.
 type CheckMetric struct {
-	Name string `json:"name"`
-	Unit string `json:"unit"`
+	Name  string `json:"name"`
+	Unit  string `json:"unit"`
+	Label string `json:"label,omitempty"`
+	// Value is the latest fresh numeric sample. A pointer preserves the
+	// difference between a measured zero and an absent/stale observation.
+	Value *float64 `json:"value,omitempty"`
 	// Band marks a state metric: drawn as an availability-style band from
 	// /api/.../sla?metric=NAME, never as a line chart. Severity grades its
 	// failing colour (error red, warning amber) and Label titles the panel.
 	Band     bool   `json:"band,omitempty"`
 	Severity string `json:"severity,omitempty"`
-	Label    string `json:"label,omitempty"`
 }
 
 // ReadyReport is the /readyz readiness probe payload.

@@ -75,12 +75,12 @@ overflow and axe WCAG 2.2 AA rules against deterministic API fixtures.
 | Readiness | `GET /readyz?verbose` | daemon `status:` in the top bar (`starting` / `ok` / …) |
 | Services | `GET /api/services` | configured runtime services loaded by sermod (not `sermoctl services` catalog inventory); `status_observed_at` identifies the real init-status sample behind a cached row; `operation_active` is true while the engine holds the service's operation lock, so an action started from any client, `sermoctl` or automatic remediation shows as in progress and its action buttons stay disabled |
 | Sessions | `GET /api/sessions` | dashboard-wide SSH, tmux and screen inventory; each present configured source reports `available`, `partial`, `collecting` or `unavailable`; a partial SSH source includes verified sessions plus unavailable issue rows for terminals that could not be attributed safely; on systemd, a remote issue with a live utmp leader may expose a login1-managed close; an available tmux server with zero sessions is `empty`, while an absent tmux/screen namespace is omitted; SSH uses the shared short-lived sampler cache, while tmux/screen rows come only from daemon-published `terminal_sessions` samples |
-| Service expansion | `GET /api/services/{name}` | checks, process info, rules |
+| Service expansion | `GET /api/services/{name}` | checks, process info and rules; each graphable check metric carries its latest fresh numeric `value` when available, with measured zero distinct from an absent or stale sample |
 | Service check metrics | `GET /api/services/{name}/metrics?check=NAME[&metric=KEY]` | the detail renders latency when `metric` is omitted and one graph for every named numeric metric published by a check |
 | Service runtime metrics | `GET /api/services/{name}/runtime` | read-only persisted service CPU/memory/IO history sampled exclusively by worker cycles; `current` is the latest published sample and dashboard reads never repeat process discovery |
 | Service SLA | `GET /api/services/{name}/sla[?check=NAME][&metric=NAME]` | availability history for the service detail SLA timeline, for the expansion of an application that maps to this service, and for API clients, at the resolution that window is stored at; `check` scopes it to one of the service's checks, which is where the checks table reads its strip from, so both scopes share one series path and one window selector; a check that reports no verdict serves no points; observed-SLA ratios count only monitored minutes, so unmeasured time is a gap, not downtime; each point also carries `down_buckets`, the one-minute buckets inside it that saw a failure |
 | Service events | `GET /api/services/{name}/events` | per-service event feed |
-| Watches | `GET /api/watches` | host-level and service-scoped watches; `scope` distinguishes them and service watch names use `service:watch` |
+| Watches | `GET /api/watches` | host-level and service-scoped watches; `scope` distinguishes them and service watch names use `service:watch`; each graphable metric carries its latest fresh numeric `value` when available so a service expansion can show it without probing again |
 | Watch metrics | `GET /api/watches/{name}/metrics?metric=NAME` | one numeric series a host watch's check publishes, in the shape the service metrics route serves, so both are drawn by the same panel; a watch has exactly one check, so `metric` alone names the series and there is no `check` parameter; an unpublished metric answers 404 rather than an empty series that would read as a measured flat line |
 | Watch SLA | `GET /api/watches/{name}/sla[?metric=NAME]` | the same availability history the service SLA route serves, for a host watch whose check asserts availability; the two share one series path so a watch's uptime is computed exactly as a service's; a watch that keeps none answers 404 rather than an empty series that would read as measured uptime; `metric` selects one of the check's state bands instead — served even on a watch with no availability at all, and a 404 for a band the check does not declare |
 | Applications | `GET /api/applications` | installed catalog apps; `observed_at` remains fixed while the version/status inventory is served from cache |
@@ -324,8 +324,8 @@ Shared by the Services, Containers and Virtual machines panels.
 
 | Area | Content |
 | --- | --- |
-| General data | an unheaded grid, first area of the expansion: name, state, category, unit/backend, uptime, interval, policy, locks, last event, next remediation, remediation state and process totals; while the row badge is `starting`, expansion may still show the raw init backend (`inactive`) and in-flight check samples from the observe-only cycle |
-| Graphs | full-width SLA timeline followed by latency, CPU, memory and IO charts; each service persists its own time window and latency check; `no_resident_process` services show only SLA because they have no process runtime to chart |
+| General data | an unheaded grid, first area of the expansion: name, state, category, unit/backend, uptime, interval, policy, locks, last event, next remediation, remediation state, process totals and the latest fresh values of graphable service checks and service-scoped watches; absent or stale metric samples are omitted rather than displayed as zero; while the row badge is `starting`, expansion may still show the raw init backend (`inactive`) and in-flight check samples from the observe-only cycle |
+| Graphs | full-width SLA timeline followed by latency, numeric service-check and service-scoped-watch metrics, CPU, memory and IO charts; every panel follows the service's persisted time window and reuses the series owned by its check/watch; `no_resident_process` services omit process runtime charts but retain SLA and configured check/watch metrics |
 | Processes | full-width detected process tree table, with child processes marked in CMD and kept under their parent; **Max core** follows CPU and reports the most a single core was used by that process — its busiest thread — whose tooltip says whether the daemon measured it per thread or bounded it by the process rate; the **Role** cell reads `stray` for a control-group member no selector claims, in place of the backend seed's misleading `main`; discovery warnings are listed above it, one per line; omitted when `no_resident_process` is true |
 | Checks | configured checks and current result; the SLA column carries the same availability band the Graphs SLA timeline draws, on the window that section's selector is on, so an unobserved stretch reads as a hatched gap in both instead of a flat percentage in one |
 | Named locks | runtime lock state |
@@ -343,6 +343,12 @@ loses nothing. Name and State stay at every width as the expansion's anchor, and
 count. The busiest-thread figure is not restated in the grid: it belongs to a
 process, so the process table carries it per row (see **Processes** below) instead of
 floating as a total that hides which process it came from.
+
+Current graphable check/watch values are the narrow deliberate exception to the
+no-repetition rule: they stay in the General grid for a fast operational scan
+while their historical series remains in Graphs and full diagnostics remain in
+Checks or the Watches panel. Only fresh daemon-published samples appear, and a
+measured zero is shown as zero rather than confused with missing data.
 
 ## Sessions panel
 

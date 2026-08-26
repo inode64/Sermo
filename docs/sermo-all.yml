@@ -202,6 +202,22 @@ watches:
       expect_latency: { op: "<", value: 500 }
     then: { notify: [ops-email] }
 
+  mail-egress-gmail:
+    display_name: "Gmail outbound acceptance"
+    category: messaging
+    monitor: disabled
+    interval: 15m
+    check:
+      type: smtp_acceptance
+      helo: mail.sender.example
+      mail_from: probe@sender.example
+      recipient: your-owned-canary@gmail.com
+      starttls: required
+      timeout: 15s
+    for: { cycles: 2 }
+    then:
+      notify: [none]  # replace with an operator-owned notifier to send alerts
+
   api-websocket:
     monitor: disabled
     check:
@@ -1017,7 +1033,8 @@ watches:
         # nebula/nebula-vpn, nfs/nfs-server/nfsd, nntp/nntps, ntp, nut/ups/upsd,
         # openvpn/ovpn, openvswitch/ovs/ovsdb/ovsdb-server, pop/pop3, postgres/postgresql,
         # prometheus/prom, rdp/ms-wbt-server, redis/valkey, rpcbind/portmap/portmapper,
-        # rsync/rsyncd, rspamd, sieve/managesieve, smb/samba/cifs, smtp, snmp,
+        # rsync/rsyncd, rspamd, sieve/managesieve, smb/samba/cifs, smtp,
+        # smtp_acceptance, snmp,
         # spamd/spamassassin, ssh, statd/rpc.statd/nsm/nfs-statd, syncthing, tftp,
         # unifi/unifi-controller/unifi-network, varnish/varnishadm.
 

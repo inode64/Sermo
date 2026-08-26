@@ -685,6 +685,17 @@ func TestSourceLoadsEveryGraphPanelThroughOneProtocol(t *testing.T) {
 	}
 }
 
+func TestSourceComposesServiceScopedWatchMetricsIntoServiceDetail(t *testing.T) {
+	appJSMustContain(t, "service-scoped watch metrics in service detail",
+		"function serviceScopedWatchMetricEntries(service) {",
+		"w.scope === watchScopeService && w.name.startsWith(prefix)",
+		"function serviceCurrentMetricCells(d) {",
+		"${serviceCurrentMetricCells(d)}",
+		"serviceScopedWatchMetricEntries(d.name)",
+		"(win) => watchMetricsAPI(entry.watch.name, entry.metric.name, win)",
+	)
+}
+
 func TestSourceKeepsMetricSelectionPerService(t *testing.T) {
 	src, err := os.ReadFile("src/app.js")
 	if err != nil {

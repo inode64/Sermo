@@ -3707,10 +3707,10 @@ function renderWatchMetricsSection(w) {
     <div class="metric-grid">${panels}</div>`;
 }
 
-// watchMetricLabel titles a watch metric panel. The check publishes the field
-// name; the unit rides in the chart and the summary, so the title stays the name.
+// watchMetricLabel titles a watch metric panel from its declared human label,
+// falling back to the published field name. Units stay in the chart and summary.
 function watchMetricLabel(metric) {
-  return String(metric.name || "").replace(/_/g, " ");
+  return metric.label || String(metric.name || "").replace(/_/g, " ");
 }
 
 // loadWatchMetrics fills every panel of a watch's Graphs section through the one
@@ -3902,10 +3902,47 @@ function serviceCheckMetrics(d) {
     check: check.name,
     name: metric.name,
     unit: metric.unit,
+    value: metric.value,
     band: !!metric.band,
     severity: metric.severity || "",
     label: metric.label || "",
   })));
+}
+
+// serviceScopedWatchMetricEntries returns the graphable values produced by
+// watches declared inside one service. Their canonical names are
+// "service:watch" and their scope is explicit, so no catalog-specific names or
+// second probe are needed to attach them to the service detail.
+function serviceScopedWatchMetricEntries(service) {
+  const prefix = `${service}:`;
+  return (allWatches || [])
+    .filter((w) => w && w.scope === watchScopeService && w.name.startsWith(prefix))
+    .flatMap((watch) => (watch.metrics || [])
+      .filter((metric) => !metric.band)
+      .map((metric) => ({ watch, metric })));
+}
+
+function metricHasCurrentValue(metric) {
+  return metric && metric.value !== null && metric.value !== undefined && Number.isFinite(Number(metric.value));
+}
+
+function serviceScopedWatchMetricLabel(entry) {
+  const name = displayName(entry.watch);
+  const lineMetrics = (entry.watch.metrics || []).filter((metric) => !metric.band);
+  if (lineMetrics.length === 1 && entry.metric.name === "value") return name;
+  return `${name} · ${watchMetricLabel(entry.metric)}`;
+}
+
+function serviceCurrentMetricCells(d) {
+  const checks = serviceCheckMetrics(d)
+    .filter(metricHasCurrentValue)
+    .map((metric) => ({ label: serviceCheckMetricLabel(metric), metric }));
+  const watches = serviceScopedWatchMetricEntries(d.name)
+    .filter((entry) => metricHasCurrentValue(entry.metric))
+    .map((entry) => ({ label: serviceScopedWatchMetricLabel(entry), metric: entry.metric }));
+  return [...checks, ...watches].map(({ label, metric }) => tpl`<div>
+    <span class="muted">${label}</span><br><b>${fmtMetricValue(metric.value, metric.unit)}</b>
+  </div>`);
 }
 
 function serviceCheckMetricDomID(service, check, metric, suffix) {
@@ -3917,7 +3954,9 @@ function serviceLatencyDomID(service, check, suffix) {
 }
 
 function serviceCheckMetricLabel(metric) {
-  return `${metric.check} · ${metric.name}`;
+  const check = String(metric.check || "").replace(/[-_]/g, " ");
+  if (metric.name === "value") return check;
+  return `${check} · ${metric.label || watchMetricLabel(metric)}`;
 }
 
 function serviceMetricState(name) {
@@ -4341,6 +4380,10 @@ function serviceRuntimeMetricDomID(service, key, suffix) {
   return detailDomId(service, `runtime-${key}-${suffix}`);
 }
 
+function serviceScopedWatchMetricDomID(service, watch, metric, suffix) {
+  return detailDomId(service, `watch-metric-${detailDomKey(watch + ":" + metric)}-${suffix}`);
+}
+
 // daemonMetricDomID names one daemon process-metric panel's summary or chart.
 function daemonMetricDomID(key, suffix) {
   return `daemon-${key}-${suffix}`;
@@ -4350,6 +4393,7 @@ function serviceGraphDetail(d) {
   const noResidentProcess = !!d.no_resident_process;
   const measured = serviceMeasuredChecks(d);
   const checkMetrics = serviceCheckMetrics(d);
+  const scopedWatchMetrics = serviceScopedWatchMetricEntries(d.name);
   // One latency graph per measured check (health, port, service, …) instead of a
   // single chart switched by buttons; these lead the graph grid.
   const latencyPanels = noResidentProcess
@@ -4373,12 +4417,19 @@ function serviceGraphDetail(d) {
     ${metricPanelBody(serviceCheckMetricDomID(d.name, metric.check, metric.name, "summary"),
       serviceCheckMetricDomID(d.name, metric.check, metric.name, "chart"), serviceCheckMetricLabel(metric))}
   </div>`);
+  const scopedWatchMetricPanels = scopedWatchMetrics.map((entry) => tpl`<div class="metric-panel"
+      data-service-watch-metric="${entry.watch.name}" data-service-metric-name="${entry.metric.name}">
+    ${metricPanelBody(serviceScopedWatchMetricDomID(d.name, entry.watch.name, entry.metric.name, "summary"),
+      serviceScopedWatchMetricDomID(d.name, entry.watch.name, entry.metric.name, "chart"),
+      serviceScopedWatchMetricLabel(entry))}
+  </div>`);
   const win = serviceMetricState(d.name).window;
   return tpl`<h2>Graphs <span class="muted">${winButtons(metricWins, win, "setMetricWin", "Graph time window", d.name)}</span></h2>
     <div class="metric-grid">
       ${slaChartPanel(d.name)}
       ${latencyPanels}
       ${checkMetricPanels}
+      ${scopedWatchMetricPanels}
       ${runtimeGraphPanels}
     </div>`;
 }
@@ -4403,6 +4454,7 @@ function serviceGeneralDetail(d, processGeneral) {
       <div class="${colDupPhone}"><span class="muted">Strays</span><br>${serviceStraysCell(d)}</div>
       <div><span class="muted">Next remediation</span><br>${nextRemediationCell(d)}</div>
       <div><span class="muted">Remediation</span><br>${renderRemediation(d.remediation)}</div>
+      ${serviceCurrentMetricCells(d)}
       ${processGeneral}
     </div>`;
 }
@@ -4456,6 +4508,13 @@ async function refreshServiceGraphs(d, generation = dashboardGeneration) {
     ? loadSLAPanel(svcBandKey(d.name, metric.check, metric.name), generation,
       { windowKey: d.name, warn: metric.severity === targetStateWarning })
     : loadCheckMetric(d.name, metric, generation)));
+  pending.push(...serviceScopedWatchMetricEntries(d.name).map((entry) => loadMetricPanel(d.name,
+    serviceScopedWatchMetricDomID(d.name, entry.watch.name, entry.metric.name, "summary"),
+    serviceScopedWatchMetricDomID(d.name, entry.watch.name, entry.metric.name, "chart"),
+    generation,
+    (win) => watchMetricsAPI(entry.watch.name, entry.metric.name, win),
+    (body, win) => metricPanelContent(body, entry.metric.unit, win, `${serviceScopedWatchMetricLabel(entry)} chart`),
+    serviceScopedWatchMetricLabel(entry))));
   if (!d.no_resident_process) {
     if (measured.length) pending.push(loadMetrics(d.name, measured, generation));
     pending.push(loadServiceRuntimeMetrics(d.name, generation));

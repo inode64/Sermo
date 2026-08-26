@@ -138,6 +138,42 @@ checks:
 	}
 }
 
+func TestValidateSMTPAcceptanceCheck(t *testing.T) {
+	valid := validateService(t, `
+name: mail-egress
+service: exim
+checks:
+  gmail:
+    type: smtp_acceptance
+    helo: mail.sender.example
+    mail_from: probe@sender.example
+    recipient: canary@gmail.example
+    starttls: required
+    interface: eth0
+    timeout: 15s
+`)
+	mustNotHave(t, valid, "checks.gmail")
+
+	tests := []struct {
+		name  string
+		entry string
+		want  string
+	}{
+		{name: "missing fields", entry: "type: smtp_acceptance", want: "helo is required"},
+		{name: "helo not fqdn", entry: "type: smtp_acceptance, helo: localhost, mail_from: probe@sender.example, recipient: canary@gmail.example", want: "helo must be a fully-qualified"},
+		{name: "display-name sender", entry: `type: smtp_acceptance, helo: mail.sender.example, mail_from: "Probe <probe@sender.example>", recipient: canary@gmail.example`, want: "mail_from must be a bare"},
+		{name: "invalid recipient domain", entry: "type: smtp_acceptance, helo: mail.sender.example, mail_from: probe@sender.example, recipient: canary@localhost", want: "recipient domain must be"},
+		{name: "invalid starttls", entry: "type: smtp_acceptance, helo: mail.sender.example, mail_from: probe@sender.example, recipient: canary@gmail.example, starttls: disabled", want: "starttls must be required or opportunistic"},
+		{name: "explicit host", entry: "type: smtp_acceptance, host: mx.example, helo: mail.sender.example, mail_from: probe@sender.example, recipient: canary@gmail.example", want: "host is not supported"},
+		{name: "implicit tls", entry: "type: smtp_acceptance, tls: true, helo: mail.sender.example, mail_from: probe@sender.example, recipient: canary@gmail.example", want: "tls is not supported"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			mustHave(t, validateService(t, "name: mail-egress\nservice: exim\nchecks:\n  gmail: {"+test.entry+"}\n"), test.want)
+		})
+	}
+}
+
 func TestValidateConnExpectErrors(t *testing.T) {
 	mustHave(t, validateService(t, `
 name: dns

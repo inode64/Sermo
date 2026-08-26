@@ -70,6 +70,7 @@ se requiera disponibilidad del protocolo.
 - [Flag de monitorización](#flag-de-monitorización)
 - [Bloquear operaciones mientras hay clientes conectados](#bloquear-operaciones-mientras-hay-clientes-conectados)
 - [Watches de replicación de PostgreSQL](#watches-de-replicación-de-postgresql)
+- [Mantenimiento de bases hints de Exim](#mantenimiento-de-bases-hints-de-exim)
 - [Comandos auxiliares](#comandos-auxiliares)
 
 ## Categorías
@@ -1978,6 +1979,23 @@ así que los watches de slots no se ven afectados.
 Estos watches solo tienen sentido donde hay replicación de verdad. Activa solo
 los watches que correspondan al rol de PostgreSQL y a las funciones de
 replicación presentes en ese host.
+
+## Mantenimiento de bases hints de Exim
+
+El servicio de catálogo `exim` expone botones de operador separados y con
+confirmación para ejecutar `exim_tidydb` sobre las bases hints `callout` y
+`retry`. Sus watches de servicio asociados cuentan los registros, publican
+series métricas en `records` y pueden ejecutar el mismo comando acotado de
+limpieza cuando se supera el límite configurado.
+
+Exim 4.99 y posteriores llaman `tblblob` a la tabla de registros SQLite; las
+versiones anteriores compatibles usan `tbl`. El catálogo asigna por defecto
+`tblblob` a `callout_db_table` y `retry_db_table`. La instalación de flota
+descubre el esquema de cada base en modo de solo lectura y sustituye por `tbl`
+la variable que corresponda. Una base no SQLite, un fichero ausente o un
+esquema no soportado solo desactiva el watch de registros afectado; los botones
+`exim_tidydb` siguen disponibles porque esa utilidad admite el backend hints
+nativo de Exim con independencia de la consulta de la gráfica.
 
 ## Comandos auxiliares
 

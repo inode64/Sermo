@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"sermo/internal/conn"
 )
 
 // Every built-in spec must be unique and handled by buildCheck. A bare
@@ -77,7 +79,8 @@ func TestTypeInfosReturnsSortedCopy(t *testing.T) {
 
 func TestGraphMetricRegistryInvariants(t *testing.T) {
 	for checkType, declared := range graphMetrics {
-		if !IsSingleShotType(checkType) {
+		_, isProtocol := conn.Lookup(checkType)
+		if !IsSingleShotType(checkType) && !isProtocol {
 			t.Errorf("graph metrics reference unknown check type %q", checkType)
 		}
 		seen := make(map[string]struct{}, len(declared))
