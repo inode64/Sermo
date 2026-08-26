@@ -3,6 +3,61 @@
 Trabajo futuro movido fuera de `AGENTS.md` para que las instrucciones describan solo lo que
 existe. Nada de lo que hay aquí es alcance comprometido; elige los elementos deliberadamente.
 
+## Gate de lanzamiento de la versión 1.0
+
+El alcance soportado de 1.0 es un supervisor Linux de host único: daemon, CLI y
+Web UI; systemd y OpenRC; servicios configurados y watches de host; configuración
+respaldada por el catálogo; histórico persistente; notificaciones; y operaciones
+de servicio seguras y auditables. La coordinación distribuida, los agentes
+remotos, el RBAC multi-tenant, una ABI de plugins y la orquestación de
+dependencias entre targets son trabajo post-1.0. «Completamente funcional para
+1.0» significa que toda ruta dentro de ese límite pasa el gate de lanzamiento,
+no que se haya implementado cada integración futura de este archivo.
+
+- [x] Base funcional del producto: carga y validación de configuración,
+      resolución del catálogo, monitorización de servicios/watches, persistencia
+      y SLA, representación CLI/Web, notificaciones, control systemd/OpenRC y el
+      motor de operaciones con guards están implementados y cubiertos por los
+      tests del repositorio.
+- [x] Base de calidad automatizada: `make check` posee el formato, análisis
+      estático y de seguridad, validación de dependencias/YAML/Markdown, tests
+      unitarios/de integración, Web UI y checks WCAG, y el suelo de cobertura de
+      paquetes de seguridad; CI también ejecuta el detector de carreras, fuzzing
+      acotado y CodeQL.
+- [ ] Congelar y documentar el contrato público de 1.0: distribuciones, sistemas
+      init y arquitecturas soportados; modelo de privilegios y Web remoto/TLS;
+      estabilidad de configuración, CLI y Web API; migración de la base de datos
+      de estado; política de obsolescencia; y límites explícitamente no soportados.
+- [ ] Construir una ruta de release reproducible desde un tag limpio y firmado:
+      generar los binarios de las plataformas elegidas junto al catálogo,
+      ejemplos y assets systemd/OpenRC; hacer que ambos binarios informen el tag;
+      publicar notas de release, checksums, un SBOM y firma/procedencia; y
+      verificar la instalación desde los artefactos publicados, no desde el checkout.
+- [ ] Pasar la matriz de aceptación de instalación/actualización/rollback:
+      empaquetado por etapas con `DESTDIR`, instalación nueva, actualización con
+      configuración y estado reales, fallo de validación del candidato, rollback
+      por fallo de readiness, reinicio del host y desinstalación no destructiva
+      en hosts representativos systemd y OpenRC. Preservar credenciales, estado
+      persistente y cada override `.local` del operador en todas las rutas aplicables.
+- [ ] Pasar una campaña de flota con un release candidate usando el flujo por
+      hosts en etapas: primero piloto y después cada host alcanzable; validar
+      juntos el binario candidato y el catálogo; ejercitar solo ciclos de vida de
+      servicios autorizados explícitamente; verificar CLI, liveness/readiness/
+      autenticación Web y notificaciones sin ejecutar hooks; completar después
+      un soak de reinicio del daemon/host sin fallos sin explicar, tormentas de
+      alertas ni reparaciones inseguras.
+- [ ] Cerrar la entrega de operaciones y seguridad: documentar backup y restore
+      de configuración/estado, rotación del host para logs append-only opcionales,
+      despliegue TLS con proxy inverso, contacto para reportes de seguridad,
+      procedimiento de actualización y rollback, diagnóstico y limitaciones
+      conocidas en ambos idiomas; verificar propietarios, modos y directorios
+      runtime/estado instalados.
+- [ ] Publicar 1.0 solo desde un commit exacto cuyo `make check` local, GitHub CI,
+      CodeQL y jobs de race y fuzz estén verdes, cuyos issues bloqueantes del
+      release estén cerrados y cuyos hashes de artefactos con árbol limpio y
+      evidencias de flota estén archivados. Cuando se escribió este gate, `main`
+      estaba verde pero el repositorio no tenía tag de release ni release publicada.
+
 ## Funcionalidades principales
 
 - [ ] Modo de clúster distribuido
@@ -94,18 +149,64 @@ una CLI configtest, `mosquitto`, `supervisord`, `udisks2`, `pm2`, etc. (`redis` 
 
 ## Engine y configuración
 
-- [ ] Stop manual frente a unidades con activación: tras `sermoctl stop`, una
-      unidad activada por socket/D-Bus/path (rpcbind, node_exporter detrás de un
-      scraper de Prometheus, polkit, avahi/acpid en Ubuntu) es rearrancada por su
-      disparador en segundos; la monitorización queda pausada y el panel muestra
-      `stopped` con la unidad corriendo hasta que un operador la reanuda.
-      Opciones: reanudar la monitorización automáticamente cuando el backend
-      vuelva a reportar la unidad activa tras un stop manual, y/o que el perfil
-      de catálogo declare las unidades de activación (`also_service: foo.socket`)
-      para que el stop tumbe también el disparador. Observado en toda la flota en
-      la campaña de ciclo de vida del 2026-08-23; cada resultado de Sermo fue
-      honesto (stop rc 1 / repair rechazado "service is active"), así que es UX,
-      no corrección.
+### Semántica post-1.0 de dependencias y mantenimiento
+
+Esta iniciativa queda deliberadamente fuera del gate de 1.0. Debe modelar por
+qué no se puede observar un target sin ocultar el fallo real del proveedor ni
+permitir que una declaración de dependencia controle otro target implícitamente.
+
+- [ ] Añadir un único grafo canónico de dependencias entre targets para servicios
+      configurados y watches de host. Resolverlo una vez al cargar la
+      configuración, rechazar targets desconocidos, autorreferencias y ciclos, y
+      mantener el grafo resuelto inmutable y barato de consultar durante los
+      ciclos del daemon. No sobrecargar con este contrato distinto el orden
+      `requires` interno de los checks ni la propagación de ciclo de vida
+      `also_apply`.
+- [ ] Definir la disponibilidad de dependencias por separado de la salud del
+      target. Cuando un proveedor requerido no esté disponible intencionadamente
+      o no pueda aportar evidencia, exponer el dependiente como `blocked` con
+      motivo y vínculo al proveedor, publicar resultados sintéticos de checks
+      omitidos, crear un hueco de SLA y suprimir alertas y remediación del
+      dependiente. `blocked` nunca debe significar sano; el proveedor upstream
+      sigue siendo el único fallo raíz y la única notificación.
+- [ ] Añadir adaptadores de proveedor para las familias conocidas y auditar las
+      equivalentes: Docker/containerd hacia contenedores; daemons monolíticos o
+      modulares de libvirt hacia máquinas y redes virtuales; D-Bus de sistema o
+      sesión hacia sondas de bus con nombre; proveedores de red, ruta, DNS o VPN
+      hacia checks de endpoint; y cadenas de almacenamiento como iSCSI,
+      multipath, crypt, LVM y montajes remotos. La resolución de montajes debe
+      seguir la dependencia real de fstab/unidad/protocolo: un cliente NFSv4 no
+      necesita rpcbind y un montaje NFS remoto no implica depender de un servidor
+      NFS local.
+- [ ] Representar explícitamente el mantenimiento manual planificado. Las acciones
+      hechas mediante Sermo reutilizan el settling de operaciones y el estado de
+      monitorización persistido. Las acciones externas de `systemctl`,
+      `rc-service` o del hipervisor/runtime no se pueden adivinar con seguridad,
+      así que hay que proporcionar un lease/lock de mantenimiento acotado con
+      propietario, motivo, alcance, vencimiento y auditoría. Un lease vencido o
+      ambiguo falla cerrado hacia la observación normal en vez de silenciar una
+      caída real.
+- [ ] Reconciliar unidades con activación y stop manual. Los servicios activados
+      por socket, D-Bus o path pueden volver a estar activos mientras Sermo aún
+      registra la pausa del operador. Modelar explícitamente las unidades de
+      activación donde sea seguro y/o reanudar la observación cuando evidencia
+      autoritativa del backend pruebe la reactivación; nunca detener un disparador
+      o proveedor solo porque lo nombre un dependiente. Esto incluye rpcbind,
+      polkit, avahi/acpid y servicios tipo exporter.
+- [ ] Hacer conservadora la recuperación: cuando un proveedor o lease de
+      mantenimiento vuelva a estar disponible, ejecutar un ciclo solo de
+      observación antes de permitir alertas o remediación automática. Preservar
+      cooldowns, guards, locks de operación y resultados de auditoría; la
+      incertidumbre de dependencias debe bloquear la mutación.
+- [ ] Cubrir configuración, resolver, daemon, CLI y Web con tests focalizados para
+      systemd/OpenRC, Docker, libvirt, D-Bus, montajes remotos, fan-out de
+      dependencias, ciclos, vencimiento de mantenimiento y recuperación.
+      Documentar la semántica de estado/SLA/alertas y añadir una campaña de flota
+      que demuestre que perder un proveedor produce una alerta raíz y ninguna
+      tormenta de reparación en los dependientes.
+
+### Otros trabajos de engine y configuración
+
 - [ ] Prioridades de servicio: `priority` configurable por servicio (entero o nivel
       con nombre), validación y valores por defecto; usar en el orden de remediación
       cuando varios servicios encolan acciones en el mismo ciclo; exponer en `sermoctl

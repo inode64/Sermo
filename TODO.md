@@ -3,6 +3,56 @@
 Future work moved out of `AGENTS.md` so the instructions describe only what
 exists. Nothing here is committed scope; pick items deliberately.
 
+## Version 1.0 release gate
+
+The supported 1.0 scope is a single-host Linux supervisor: daemon, CLI and Web
+UI; systemd and OpenRC; configured services and host watches; catalog-backed
+configuration; persistent history; notifications; and safe, auditable service
+operations. Distributed coordination, remote agents, multi-tenant RBAC, a
+plugin ABI and cross-target dependency orchestration are post-1.0 work.
+"Fully functional for 1.0" means every path inside that boundary passes the
+release gate, not that every future integration in this file has landed.
+
+- [x] Core product baseline: configuration loading and validation, catalog
+      resolution, service/watch monitoring, persistence and SLA, CLI/Web
+      representation, notifications, systemd/OpenRC control and the guarded
+      operation engine are implemented and covered by repository tests.
+- [x] Automated quality baseline: `make check` owns formatting, static and
+      security analysis, dependency/YAML/Markdown validation, unit/integration
+      tests, Web UI and WCAG checks, and the safety-package coverage floor; CI
+      also runs the race detector, bounded fuzzing and CodeQL.
+- [ ] Freeze and document the public 1.0 contract: supported distributions,
+      init systems and architectures; privilege and remote-Web/TLS model;
+      configuration, CLI and Web API stability; state-database migration;
+      deprecation policy; and explicitly unsupported boundaries.
+- [ ] Build a reproducible release path from a clean signed tag: generate the
+      selected-platform binaries plus catalog, examples and systemd/OpenRC
+      assets; make both binaries report the tag; publish release notes,
+      checksums, an SBOM and signature/provenance; and verify installation from
+      the published artifacts rather than from the checkout.
+- [ ] Pass the install/upgrade/rollback acceptance matrix: staged `DESTDIR`
+      packaging, fresh install, upgrade with real configuration and state,
+      candidate-validation failure, readiness-failure rollback, reboot and
+      non-destructive uninstall on representative systemd and OpenRC hosts.
+      Preserve credentials, persistent state and every operator-owned `.local`
+      override in all applicable paths.
+- [ ] Pass a release-candidate fleet campaign using the staged-host workflow:
+      pilot first, then every reachable host; validate candidate binary and
+      catalog together; exercise only explicitly authorized service lifecycles;
+      verify CLI, Web liveness/readiness/authentication and notifications
+      without executing hooks; then complete a daemon restart/reboot soak with
+      no unexplained failure, alert storm or unsafe repair.
+- [ ] Close the operations and security handoff: document configuration/state
+      backup and restore, host log rotation for optional append-only logs,
+      reverse-proxy TLS deployment, security-reporting contact, upgrade and
+      rollback procedure, troubleshooting and known limitations in both
+      languages; verify installed owners, modes and runtime/state directories.
+- [ ] Publish 1.0 only from an exact commit whose local `make check`, GitHub CI,
+      CodeQL, race and fuzz jobs are green, whose release-blocking issues are
+      closed, and whose clean-tree artifact hashes and fleet evidence are
+      archived. At the time this gate was written, `main` was green but the
+      repository had no release tag or published release.
+
 ## Major features
 
 - [ ] Distributed cluster mode
@@ -93,17 +143,56 @@ a configtest CLI, `mosquitto`, `supervisord`, `udisks2`, `pm2`, etc. (`redis` /
 
 ## Engine and config
 
-- [ ] Manual stop vs. activation-driven units: after `sermoctl stop`, a
-      socket/D-Bus/path-activated unit (rpcbind, node_exporter behind a
-      Prometheus scraper, polkit, Ubuntu's avahi/acpid) is restarted by its
-      trigger within seconds; monitoring stays paused, so the dashboard shows
-      `stopped` while the unit runs until an operator resumes it. Options:
-      resume monitoring automatically when the backend reports the unit active
-      again after a manual stop, and/or let a catalog profile declare the
-      activation units (`also_service: foo.socket`) so stop takes the trigger
-      down with the service. Observed fleet-wide in the 2026-08-23 lifecycle
-      campaign; every Sermo result was honest (stop rc 1 / repair refused
-      "service is active"), so this is UX, not correctness.
+### Post-1.0 dependency and maintenance semantics
+
+This initiative is deliberately outside the 1.0 gate. It must model why a
+target cannot be observed without hiding the provider's real failure or
+allowing a dependency declaration to control another target implicitly.
+
+- [ ] Add one canonical cross-target dependency graph for configured services
+      and host watches. Resolve it once when loading configuration, reject
+      unknown targets, self-references and cycles, and keep the resolved graph
+      immutable and cheap to consult during daemon cycles. Do not overload a
+      check's existing intra-target `requires` ordering or lifecycle
+      `also_apply` propagation with this different contract.
+- [ ] Define dependency availability independently from target health. When a
+      required provider is intentionally unavailable or cannot supply evidence,
+      expose the dependent as `blocked` with a reason and provider link, publish
+      synthetic skipped check results, create an SLA gap, and suppress the
+      dependent's alerts and remediation. `blocked` must never mean healthy;
+      the upstream provider remains the single root failure and notification.
+- [ ] Add provider adapters for the known families and audit equivalent ones:
+      Docker/containerd to containers; libvirt's monolithic or modular daemons
+      to virtual machines and virtual networks; system/session D-Bus to named
+      bus probes; network, route, DNS or VPN providers to endpoint checks; and
+      storage chains such as iSCSI, multipath, crypt, LVM and remote mounts.
+      Mount resolution must follow the actual fstab/unit/protocol dependency:
+      an NFSv4 client does not require rpcbind, and a remote NFS mount does not
+      imply a dependency on a local NFS server.
+- [ ] Represent planned manual maintenance explicitly. Actions made through
+      Sermo reuse operation settling and persisted monitor state. External
+      `systemctl`, `rc-service` or hypervisor/runtime actions cannot be guessed
+      safely, so provide a bounded maintenance lease/lock with owner, reason,
+      scope, expiry and audit trail. An expired or ambiguous lease fails closed
+      to normal observation rather than silently muting a real outage.
+- [ ] Reconcile activation-driven units with manual stop. Socket-, D-Bus- or
+      path-activated services may become active again while Sermo still records
+      the operator pause. Model activation units explicitly where safe and/or
+      resume observation when authoritative backend evidence proves reactivation;
+      never stop a trigger or provider merely because a dependent names it.
+      This includes rpcbind, polkit, avahi/acpid and exporter-style services.
+- [ ] Make recovery conservative: when a provider or maintenance lease returns
+      to available, run one observation-only cycle before alerts or automatic
+      remediation become eligible. Preserve cooldowns, guards, operation locks
+      and audit outcomes; dependency uncertainty must block mutation.
+- [ ] Cover configuration, resolver, daemon, CLI and Web behavior with focused
+      tests for systemd/OpenRC, Docker, libvirt, D-Bus, remote mounts, dependency
+      fan-out, cycles, maintenance expiry and recovery. Document the state/SLA/
+      alert semantics and add a fleet campaign that proves loss of a provider
+      produces one root alert and no dependent repair storm.
+
+### Other engine and config work
+
 - [ ] Service priorities: configurable per-service `priority` (integer or named
       tier), validation and defaults; use in remediation ordering when multiple
       services queue actions in the same cycle; expose in `sermoctl services`
