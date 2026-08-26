@@ -110,6 +110,7 @@ Las comprobaciones de protocolo de conexión (MySQL, PostgreSQL, Redis, Docker, 
 | `imap`        | salud | un servidor IMAP saluda con OK (anónimo) y, con credenciales, LOGIN tiene éxito (ver Base de datos) |
 | `pop` / `pop3` | salud | un servidor POP3 saluda con +OK (anónimo) y, con credenciales, USER/PASS tiene éxito (ver Base de datos) |
 | `smtp`        | salud | un servidor SMTP saluda con 220 + EHLO (anónimo) y, con credenciales, AUTH PLAIN tiene éxito (ver Base de datos) |
+| `smtp_acceptance` | salud | el MX de destino acepta el sobre SMTP de este host hasta `RCPT TO`; la sonda nunca envía `DATA` (ver Base de datos) |
 | `nntp` / `nntps` | salud | un servidor NNTP saluda con 200/201 (anónimo) y, con credenciales, AUTHINFO USER/PASS tiene éxito (ver Base de datos) |
 | `ftp`         | salud | un servidor FTP saluda con 220 (anónimo) y, con credenciales, el login USER/PASS tiene éxito (ver Base de datos) |
 | `ssh`         | salud | un servidor SSH completa el intercambio de claves (anónimo: clave de host + banner); con credenciales, el login tiene éxito; `on_change` alerta sobre cambios de la clave de host (ver Base de datos) |
@@ -375,7 +376,7 @@ checks:
 - **Dónde aplica.** `tcp`, `ports`, `icmp`, `websocket`, y toda
   comprobación de protocolo de conexión que marque TCP/UDP — sondas nativas y sondas
   respaldadas por driver con un dialer personalizado como `mysql`, `postgres`, `mongodb`, `ldap`,
-  `libvirt`, `redis`, `smtp`, `dns`, `ntp`, `chrony`, `nfs`, `dhcp`, `openvpn`,
+  `libvirt`, `redis`, `smtp`, `smtp_acceptance`, `dns`, `ntp`, `chrony`, `nfs`, `dhcp`, `openvpn`,
   `nebula`, `tftp`, …, más sondas de protocolo basadas en HTTP como
   `influxdb`/`prometheus`/`cloudflared`/`syncthing`/`unifi`/`rspamd`/`ipp` —
   honra la **lista completa + `interface_match`**. La comprobación `http` independiente
@@ -1104,6 +1105,24 @@ Protocolos, en el orden de la tabla de arriba:
 - `smtp` — puerto por defecto 25; `tls` soportado (SMTPS — usa puerto 465; submission
   587). `user` es **opcional**: anónimo comprueba el saludo `220` + `EHLO`; con
   un usuario/contraseña realiza `AUTH PLAIN`. RFC 5321.
+- `smtp_acceptance` — puerto por defecto 25. Resuelve los registros MX de
+  `recipient`, conecta por la `interface` seleccionada, envía `EHLO`, negocia
+  STARTTLS y prueba `MAIL FROM` y `RCPT TO`. Si el destinatario se acepta, envía
+  `RSET` y `QUIT`; no existe una ruta que envíe `DATA`, por lo que nunca
+  transfiere ni encola un mensaje. `helo`, `mail_from` y `recipient` son
+  identidades simples obligatorias; el destinatario debe ser un buzón canario
+  controlado por el operador. `starttls` vale `required` por defecto o puede ser
+  `opportunistic`. Los datos incluyen `mx_host`, `recipient_domain`, `starttls`,
+  `accepted`, `smtp_stage` y `smtp_status` (`accepted`, `temporary`,
+  `permanent`, `policy` o `protocol`); ante un rechazo SMTP también incluyen
+  `smtp_code`, el `smtp_reply` acotado y el estado extendido cuando se recibe.
+  Se prueban hasta tres MX por orden de preferencia: un fallo de transporte
+  avanza al siguiente, mientras que se conserva el primer veredicto SMTP o de
+  política local para que un MX de menor prioridad no pueda ocultarlo. Un MX
+  nulo se informa como fallo `policy`. Una aceptación previa a DATA detecta
+  conectividad, TLS y bloqueos tempranos de reputación o política; no demuestra
+  la aceptación del contenido, la llegada a la bandeja de entrada, la firma
+  DKIM ni la clasificación antispam.
 - `nntp` (alias `nntps`) — puerto por defecto 119; `tls` soportado (NNTPS — usa puerto
   563). `user` es **opcional**: anónimo comprueba el saludo (`200` posting
   permitido / `201` prohibido — reportado como `posting_allowed`); con un usuario/contraseña
@@ -2082,6 +2101,32 @@ watches:
 
 Se añaden más protocolos de la misma forma — el tipo de comprobación, el despacho y la validación
 son agnósticos al protocolo, así que un nuevo protocolo solo se registra a sí mismo.
+
+En un servidor de correo saliente, declara un watch de host por proveedor. El
+dominio se deriva del destinatario canario y sus MX se resuelven en cada
+ejecución; no fijes el hostname MX actual del proveedor. Dos fallos consecutivos
+filtran un throttle remoto aislado. El ejemplo seguro registra el estado sin
+notificar una vez configurado y habilitado; sustituye `none` por un notifier
+controlado por el operador para recibir alertas. No remedia porque reiniciar el
+MTA local no corrige una decisión remota de reputación.
+
+```yaml
+name: mail-egress-gmail
+display_name: Aceptación saliente de Gmail
+category: messaging
+monitor: disabled # Sustituye las tres identidades antes de habilitarlo.
+interval: 15m
+check:
+  type: smtp_acceptance
+  helo: mail.sender.example
+  mail_from: probe@sender.example
+  recipient: your-owned-canary@gmail.com
+  starttls: required
+  timeout: 15s
+for: { cycles: 2 }
+then:
+  notify: [none] # Sustituye por un notifier propio para enviar alertas.
+```
 
 ### Deriva de reloj (`clock`)
 

@@ -68,6 +68,7 @@ var builtinProtocolRegistrations = []protocolRegistration{
 	{protocol: sieveProtocol{}, aliases: []string{protocolAliasManageSieve}},
 	{protocol: smbProtocol{}, aliases: []string{protocolAliasSamba, protocolAliasCIFS}},
 	{protocol: smtpProtocol{}},
+	{protocol: smtpAcceptanceProtocol{}},
 	{protocol: snmpProtocol{}},
 	{protocol: spamdProtocol{}, aliases: []string{protocolAliasSpamAssassin}},
 	{protocol: sshProtocol{}},

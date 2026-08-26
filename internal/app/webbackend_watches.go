@@ -104,6 +104,7 @@ func (b *WebBackend) applyWatchRuntimeView(view *web.Watch, w *webWatch, activit
 	// device-dependent check to the attributes this device actually publishes.
 	if !w.disabled {
 		view.Metrics = webCheckMetricsForReadings(w.checkType, w.graphs, w.bands, view.Readings)
+		b.setWatchCurrentMetricValues(view, w)
 	}
 	observed := b.settling == nil || b.settling.Observed(SettlingWatchKey(w.name))
 	failed, warning := watchViewState(*view)
@@ -118,6 +119,21 @@ func (b *WebBackend) applyWatchRuntimeView(view *web.Watch, w *webWatch, activit
 	}
 	if deviceState := watchDeviceState(view.Readings); deviceState != "" && view.Enabled && view.Monitored && observed {
 		view.State = deviceState
+	}
+}
+
+// setWatchCurrentMetricValues projects the same fresh daemon snapshots the
+// watch row just rendered into its metric declarations. It reads only the
+// in-memory snapshot registry: the web request never starts a second probe.
+func (b *WebBackend) setWatchCurrentMetricValues(view *web.Watch, w *webWatch) {
+	if view == nil || w == nil || len(view.Metrics) == 0 {
+		return
+	}
+	for _, snap := range b.watchSnapshots.Get(w.name, w.checkType) {
+		if !b.watchSnapshotCurrent(w, snap) || !watchSnapshotMetricConfigured(w, snap) {
+			continue
+		}
+		setCurrentMetricValues(view.Metrics, snap.Data)
 	}
 }
 

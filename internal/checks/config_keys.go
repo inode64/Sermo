@@ -73,6 +73,7 @@ const (
 	CheckKeyGrowBy                = "grow_by"
 	CheckKeyGroup                 = "group"
 	CheckKeyHeaders               = "headers"
+	CheckKeyHelo                  = conn.ParamKeySMTPHelo
 	CheckKeyHost                  = "host"
 	CheckKeyHTTP3                 = "http3"
 	CheckKeyID                    = "id"
@@ -85,6 +86,7 @@ const (
 	CheckKeyLanguage              = "language"
 	CheckKeyLeaseFile             = "lease_file"
 	CheckKeyMAC                   = "mac"
+	CheckKeyMailFrom              = conn.ParamKeySMTPMailFrom
 	CheckKeyMatch                 = "match"
 	CheckKeyMax                   = "max"
 	CheckKeyMaxIncrease           = "max_increase"
@@ -128,6 +130,7 @@ const (
 	CheckKeyQuery                 = "query"
 	CheckKeyQuick                 = "quick"
 	CheckKeyRecursive             = "recursive"
+	CheckKeyRecipient             = conn.ParamKeySMTPRecipient
 	CheckKeyRegex                 = "regex"
 	CheckKeyReports               = "reports"
 	CheckKeyResolvconf            = "resolvconf"
@@ -148,6 +151,7 @@ const (
 	CheckKeyState                 = "state"
 	CheckKeySysfsChanges          = "sysfs_changes"
 	CheckKeyStatusPath            = "status_path"
+	CheckKeyStartTLS              = conn.ParamKeySMTPStartTLS
 	CheckKeyStream                = "stream"
 	CheckKeySummary               = "summary"
 	CheckKeySelfHeal              = "self_heal"

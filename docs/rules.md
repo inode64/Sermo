@@ -110,6 +110,7 @@ Connection-protocol checks (MySQL, PostgreSQL, Redis, Docker, libvirt, etc.) are
 | `imap`        | health | an IMAP server greets OK (anonymous) and, with credentials, LOGIN succeeds (see Database) |
 | `pop` / `pop3` | health | a POP3 server greets +OK (anonymous) and, with credentials, USER/PASS succeeds (see Database) |
 | `smtp`        | health | an SMTP server greets 220 + EHLO (anonymous) and, with credentials, AUTH PLAIN succeeds (see Database) |
+| `smtp_acceptance` | health | a destination MX accepts this host's SMTP envelope through `RCPT TO`; the probe never sends `DATA` (see Database) |
 | `nntp` / `nntps` | health | an NNTP server greets 200/201 (anonymous) and, with credentials, AUTHINFO USER/PASS succeeds (see Database) |
 | `ftp`         | health | an FTP server greets 220 (anonymous) and, with credentials, USER/PASS login succeeds (see Database) |
 | `ssh`         | health | an SSH server completes key exchange (anonymous: host key + banner); with credentials, login succeeds; `on_change` alerts on host-key change (see Database) |
@@ -373,7 +374,7 @@ checks:
 - **Where it applies.** `tcp`, `ports`, `icmp`, `websocket`, and every
   connection-protocol check that dials TCP/UDP — native probes and driver-backed
   probes with a custom dialer such as `mysql`, `postgres`, `mongodb`, `ldap`,
-  `libvirt`, `redis`, `smtp`, `dns`, `ntp`, `chrony`, `nfs`, `dhcp`, `openvpn`,
+  `libvirt`, `redis`, `smtp`, `smtp_acceptance`, `dns`, `ntp`, `chrony`, `nfs`, `dhcp`, `openvpn`,
   `nebula`, `tftp`, …, plus HTTP-based protocol probes such as
   `influxdb`/`prometheus`/`cloudflared`/`syncthing`/`unifi`/`rspamd`/`ipp` —
   honors the **full list + `interface_match`**. The standalone `http` check
@@ -1087,6 +1088,23 @@ Protocols, in the order of the table above:
 - `smtp` — default port 25; `tls` supported (SMTPS — use port 465; submission
   587). `user` is **optional**: anonymous checks the `220` greeting + `EHLO`; with
   a user/password it performs `AUTH PLAIN`. RFC 5321.
+- `smtp_acceptance` — default port 25. Resolves the MX records of `recipient`,
+  connects through the selected `interface`, sends `EHLO`, upgrades with
+  STARTTLS, then tests `MAIL FROM` and `RCPT TO`. On acceptance it sends `RSET`
+  and `QUIT`; it has no code path that sends `DATA`, so it never transfers or
+  queues a message. `helo`, `mail_from`, and `recipient` are required bare
+  identities; the recipient must be a canary mailbox controlled by the
+  operator. `starttls` is `required` by default or may be `opportunistic`.
+  Result data includes `mx_host`, `recipient_domain`, `starttls`, `accepted`,
+  `smtp_stage`, and `smtp_status` (`accepted`, `temporary`, `permanent`,
+  `policy`, or `protocol`); an SMTP rejection also includes `smtp_code`, the
+  bounded `smtp_reply`, and the enhanced status when supplied. MX targets are
+  tried in preference order, up to three: a transport failure advances to the
+  next target, while the first SMTP or local-policy verdict is retained so a
+  lower-priority MX cannot mask it. A null MX is reported as a `policy`
+  failure. A pre-DATA acceptance detects connection, TLS and early
+  reputation/policy blocks; it cannot prove content acceptance, inbox
+  placement, DKIM signing or spam classification.
 - `nntp` (alias `nntps`) — default port 119; `tls` supported (NNTPS — use port
   563). `user` is **optional**: anonymous checks the greeting (`200` posting
   allowed / `201` prohibited — reported as `posting_allowed`); with a user/password
@@ -2051,6 +2069,32 @@ watches:
 
 More protocols are added the same way — the check type, dispatch and validation
 are protocol-agnostic, so a new protocol only registers itself.
+
+For an outbound mail host, declare one host watch per provider. The domain is
+derived from the canary recipient and resolved through MX on every run; do not
+hard-code a provider's current MX hostname. Two consecutive failures debounce a
+single remote throttle. The safe example records state without sending a
+notification after it is configured and enabled; replace `none` with an
+operator-owned notifier to alert. It does not remediate because restarting the
+local MTA cannot repair a remote reputation decision:
+
+```yaml
+name: mail-egress-gmail
+display_name: Gmail outbound acceptance
+category: messaging
+monitor: disabled # Replace all three identities below before enabling.
+interval: 15m
+check:
+  type: smtp_acceptance
+  helo: mail.sender.example
+  mail_from: probe@sender.example
+  recipient: your-owned-canary@gmail.com
+  starttls: required
+  timeout: 15s
+for: { cycles: 2 }
+then:
+  notify: [none] # Replace with an operator-owned notifier to send alerts.
+```
 
 ### Clock drift (`clock`)
 

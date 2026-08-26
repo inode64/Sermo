@@ -419,6 +419,52 @@ func TestWebBackendServiceWatchShowsSnapshotMeterAndReadings(t *testing.T) {
 	}
 }
 
+func TestWebBackendServiceWatchGraphMetricCarriesOnlyFreshCurrentValue(t *testing.T) {
+	now := time.Date(2026, 8, 26, 12, 0, 0, 0, time.UTC)
+	for _, tc := range []struct {
+		name      string
+		sampleAt  time.Time
+		wantValue bool
+	}{
+		{name: "fresh zero", sampleAt: now, wantValue: true},
+		{name: "stale", sampleAt: now.Add(-3 * time.Minute)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			snapshots := NewWatchSnapshots()
+			snapshots.now = func() time.Time { return tc.sampleAt }
+			snapshots.Publish("exim:tidy-retry-db-if-large", checks.CheckTypeSQL, checks.Result{
+				Check: "exim:tidy-retry-db-if-large", OK: true,
+				Data: map[string]any{checks.DataKeyResult: "0", checks.DataKeyValue: 0.0},
+			})
+			graph := checks.ResolvedGraphMetrics(checks.CheckTypeSQL, "records", map[string]any{})
+			b := &WebBackend{
+				watchOrder: []string{"exim:tidy-retry-db-if-large"},
+				watches: map[string]*webWatch{
+					"exim:tidy-retry-db-if-large": {
+						name: "exim:tidy-retry-db-if-large", displayName: "Retry DB records",
+						checkType: checks.CheckTypeSQL, interval: time.Minute, serviceScoped: true, graphs: graph,
+					},
+				},
+				watchSnapshots: snapshots,
+				now:            func() time.Time { return now },
+			}
+
+			watches := b.Watches(context.Background())
+			if len(watches) != 1 || len(watches[0].Metrics) != 1 {
+				t.Fatalf("watch metrics = %+v", watches)
+			}
+			metric := watches[0].Metrics[0]
+			if tc.wantValue {
+				if metric.Value == nil || *metric.Value != 0 {
+					t.Fatalf("fresh zero metric value = %v, want pointer to 0", metric.Value)
+				}
+			} else if metric.Value != nil {
+				t.Fatalf("stale metric value = %v, want omitted", *metric.Value)
+			}
+		})
+	}
+}
+
 // TestServiceWatchFiresHookViaRunCycle drives a built service watch through its
 // real Watch.RunCycle and asserts the hook fires with the service-qualified name
 // in the environment — the end-to-end runtime, not just Check.Run.

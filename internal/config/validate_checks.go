@@ -1043,6 +1043,9 @@ func validateSingleShotCheckFields(path, typ string, entry map[string]any, locks
 		if proto, isProto := conn.Lookup(typ); isProto {
 			validateConnFields(path, entry, proto.RequiresUser(), add)
 			validateInterfaceFields(path, entry, add)
+			if proto.Name() == conn.ProtocolNameSMTPAcceptance {
+				validateSMTPAcceptanceFields(path, entry, add)
+			}
 			if proto.Name() == conn.ProtocolNameDBus {
 				validateDBusFields(path, entry, add)
 			} else {
@@ -1069,6 +1072,46 @@ func validateSingleShotCheckFields(path, typ string, entry map[string]any, locks
 	}
 	validate(path, entry, locksDir, add)
 	return true
+}
+
+func validateSMTPAcceptanceFields(path string, entry map[string]any, add addFunc) {
+	for _, field := range checks.SMTPAcceptanceUnsupportedFields() {
+		if _, present := entry[field]; present {
+			add("%s.%s is not supported for an %s check", path, field, conn.ProtocolNameSMTPAcceptance)
+		}
+	}
+
+	helo := validateSMTPAcceptanceString(path, entry, checks.CheckKeyHelo, add)
+	if helo != "" && !conn.ValidSMTPHelo(helo) {
+		add("%s.%s must be a fully-qualified DNS name", path, checks.CheckKeyHelo)
+	}
+	mailFrom := validateSMTPAcceptanceString(path, entry, checks.CheckKeyMailFrom, add)
+	if mailFrom != "" {
+		if _, _, err := conn.ParseSMTPMailbox(mailFrom); err != nil {
+			add("%s.%s %v", path, checks.CheckKeyMailFrom, err)
+		}
+	}
+	recipient := validateSMTPAcceptanceString(path, entry, checks.CheckKeyRecipient, add)
+	if recipient != "" {
+		if _, _, err := conn.ParseSMTPMailbox(recipient); err != nil {
+			add("%s.%s %v", path, checks.CheckKeyRecipient, err)
+		}
+	}
+	if value, present := entry[checks.CheckKeyStartTLS]; present {
+		startTLS, ok := value.(string)
+		if !ok || !conn.ValidSMTPStartTLS(startTLS) {
+			add("%s.%s must be %s", path, checks.CheckKeyStartTLS, conn.SMTPStartTLSValueSummary)
+		}
+	}
+}
+
+func validateSMTPAcceptanceString(path string, entry map[string]any, field string, add addFunc) string {
+	value, ok := entry[field].(string)
+	if !ok || value == "" {
+		add("%s.%s is required and must be a non-empty string", path, field)
+		return ""
+	}
+	return value
 }
 
 func validateTCPCheck(path string, entry map[string]any, _ string, add addFunc) {

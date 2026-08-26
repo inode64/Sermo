@@ -1,0 +1,16 @@
+name: mail-egress-gmail
+display_name: Gmail outbound acceptance
+description: Tests an operator-owned Gmail canary through RCPT TO without sending DATA.
+category: messaging
+monitor: disabled
+interval: 15m
+check:
+  type: smtp_acceptance
+  helo: mail.sender.example
+  mail_from: probe@sender.example
+  recipient: your-owned-canary@gmail.com
+  starttls: required
+  timeout: 15s
+for: { cycles: 2 }
+then:
+  notify: [none]  # Replace with an operator-owned notifier to send alerts.

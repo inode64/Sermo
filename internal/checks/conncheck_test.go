@@ -355,6 +355,57 @@ func TestBuildSMTPCheck(t *testing.T) {
 		func(cc connCheck) bool { return cc.cfg.Port == 587 })
 }
 
+func TestBuildSMTPAcceptanceCheck(t *testing.T) {
+	cc := buildConnCheckForTest(t, "gmail", map[string]any{
+		"type":      conn.ProtocolNameSMTPAcceptance,
+		"helo":      "mail.sender.example",
+		"mail_from": "probe@sender.example",
+		"recipient": "canary@Gmail.Example",
+		"starttls":  "opportunistic",
+		"port":      2525,
+		"interface": "eth1",
+	})
+	if cc.proto.Name() != conn.ProtocolNameSMTPAcceptance || cc.cfg.Host != "gmail.example" || cc.cfg.Port != 2525 {
+		t.Fatalf("cfg = %+v, proto = %s", cc.cfg, cc.proto.Name())
+	}
+	want := map[string]string{
+		conn.ParamKeySMTPHelo:      "mail.sender.example",
+		conn.ParamKeySMTPMailFrom:  "probe@sender.example",
+		conn.ParamKeySMTPRecipient: "canary@Gmail.Example",
+		conn.ParamKeySMTPStartTLS:  conn.SMTPStartTLSOpportunistic,
+	}
+	for key, value := range want {
+		if cc.cfg.Params[key] != value {
+			t.Errorf("params[%s] = %q, want %q", key, cc.cfg.Params[key], value)
+		}
+	}
+	if len(cc.ifaces) != 1 || cc.ifaces[0] != "eth1" {
+		t.Fatalf("interfaces = %v", cc.ifaces)
+	}
+}
+
+func TestBuildSMTPAcceptanceRejectsAmbiguousTarget(t *testing.T) {
+	_, warns := Build(map[string]any{
+		"gmail": map[string]any{
+			"type": conn.ProtocolNameSMTPAcceptance, "host": "mx.example",
+			"helo": "mail.sender.example", "mail_from": "probe@sender.example", "recipient": "canary@gmail.example",
+		},
+	}, Deps{DefaultTimeout: time.Second})
+	if len(warns) != 1 || !strings.Contains(warns[0], "does not support host") {
+		t.Fatalf("warnings = %v", warns)
+	}
+}
+
+func TestSMTPAcceptanceUnsupportedFields(t *testing.T) {
+	want := [7]string{
+		CheckKeyHost, CheckKeySocket, CheckKeyUser, CheckKeyPassword,
+		CheckKeyDatabase, CheckKeyQuery, CheckKeyTLS,
+	}
+	if got := SMTPAcceptanceUnsupportedFields(); got != want {
+		t.Fatalf("SMTPAcceptanceUnsupportedFields() = %v, want %v", got, want)
+	}
+}
+
 func TestBuildFPMCheck(t *testing.T) {
 	assertBuildConnCheckVariants(t, "php",
 		// Unix socket form: no user; socket carried into the config.

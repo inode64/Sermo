@@ -4,6 +4,7 @@ import (
 	"slices"
 
 	"sermo/internal/cfgval"
+	"sermo/internal/conn"
 	"sermo/internal/metrics"
 )
 
@@ -41,8 +42,9 @@ const (
 // Result.Data under Key — the recorder, store and web graph it generically, so
 // this is reusable by any check (and service).
 var graphMetrics = map[string][]GraphMetric{
-	CheckTypeHdparm:  {{Key: fieldRead, Unit: metrics.MetricUnitMegabytesPerSecond, Decimals: tenthsDecimals}, {Key: fieldCached, Unit: metrics.MetricUnitMegabytesPerSecond, Decimals: tenthsDecimals}},
-	CheckTypeSensors: {{Key: sensorTemp, Unit: metrics.MetricUnitCelsius, Label: "Hottest temp", Decimals: tenthsDecimals}, {Key: sensorFan, Unit: metrics.MetricUnitRPM, Label: "Slowest fan"}, {Key: sensorVoltage, Unit: metrics.MetricUnitVolt, Label: "Lowest voltage", Decimals: voltageReadingDecimals}},
+	conn.ProtocolNameSMTPAcceptance: {{Key: DataKeyLatencyMS, Unit: metrics.MetricUnitMilliseconds, Label: "Latency", Decimals: hundredthsDecimals}},
+	CheckTypeHdparm:                 {{Key: fieldRead, Unit: metrics.MetricUnitMegabytesPerSecond, Decimals: tenthsDecimals}, {Key: fieldCached, Unit: metrics.MetricUnitMegabytesPerSecond, Decimals: tenthsDecimals}},
+	CheckTypeSensors:                {{Key: sensorTemp, Unit: metrics.MetricUnitCelsius, Label: "Hottest temp", Decimals: tenthsDecimals}, {Key: sensorFan, Unit: metrics.MetricUnitRPM, Label: "Slowest fan"}, {Key: sensorVoltage, Unit: metrics.MetricUnitVolt, Label: "Lowest voltage", Decimals: voltageReadingDecimals}},
 	CheckTypeSmart: {
 		{Key: fieldTemperature, Unit: metrics.MetricUnitCelsius, Label: "Temperature"},
 		{Key: fieldReallocated, Unit: metrics.MetricUnitNone, Label: "Reallocated sectors"},

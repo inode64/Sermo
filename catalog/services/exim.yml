@@ -25,6 +25,11 @@ variables:
   user: mail
   spool_dir: /var/spool/exim
   db_dir: /var/spool/exim/db
+  # Exim 4.99+ names the SQLite hints table tblblob. Older supported Exim
+  # releases use tbl; fleet discovery overrides each table independently from
+  # read-only sqlite_schema evidence.
+  callout_db_table: tblblob
+  retry_db_table: tblblob
   db_cleanup_record_limit: "100"
   db_cleanup_age: 10d
   db_cleanup_interval: 6h
@@ -43,7 +48,9 @@ preflight:
 pidfile: /run/exim.pid
 # Operator buttons: explicit admin commands the dashboard offers for this
 # service. `exim -qff` forces an immediate delivery attempt for every queued
-# message, frozen ones included — the manual "flush the queue now".
+# message, frozen ones included — the manual "flush the queue now". Each
+# exim_tidydb invocation maintains one hints database and may lock it until the
+# bounded command completes, so callout and retry stay separate actions.
 buttons:
   flush-queue:
     label: "Flush queue"
@@ -51,6 +58,24 @@ buttons:
       - ${exim_binary}
       - -qff
     timeout: 5m
+  tidy-callout-db:
+    label: "Tidy callout DB"
+    command:
+      - ${exim_tidydb}
+      - -t
+      - ${db_cleanup_age}
+      - ${spool_dir}
+      - callout
+    timeout: ${db_cleanup_timeout}
+  tidy-retry-db:
+    label: "Tidy retry DB"
+    command:
+      - ${exim_tidydb}
+      - -t
+      - ${db_cleanup_age}
+      - ${spool_dir}
+      - retry
+    timeout: ${db_cleanup_timeout}
 processes:
   main:
     exe: ${exim_binary}
@@ -131,14 +156,16 @@ watches:
       message: >-
         During ${rule.duration}, ${display_name} msglog backlog grew by more than ${msglog_growth_limit} files in ${msglog_growth_window} (current growth ${check.value})
   tidy-callout-db-if-large:
+    display_name: "Callout DB records"
     interval: ${db_cleanup_interval}
     check:
       type: sql
       engine: sqlite
       path: ${db_dir}/callout
-      query: "SELECT count(*) FROM tblblob"
+      query: "SELECT count(*) FROM ${callout_db_table}"
       op: '>'
       value: ${db_cleanup_record_limit}
+      unit: records
       summary: "Exim callout DB has ${value} records (limit ${check.value}); cleanup age ${db_cleanup_age}"
       optional: true
     then:
@@ -152,14 +179,16 @@ watches:
         timeout: ${db_cleanup_timeout}
         expect_exit: 0
   tidy-retry-db-if-large:
+    display_name: "Retry DB records"
     interval: ${db_cleanup_interval}
     check:
       type: sql
       engine: sqlite
       path: ${db_dir}/retry
-      query: "SELECT count(*) FROM tblblob"
+      query: "SELECT count(*) FROM ${retry_db_table}"
       op: '>'
       value: ${db_cleanup_record_limit}
+      unit: records
       summary: "Exim retry DB has ${value} records (limit ${check.value}); cleanup age ${db_cleanup_age}"
       optional: true
     then:

@@ -317,6 +317,9 @@ func (b *WebBackend) checkView(cn string, e *webEntry, snap map[string]CheckSnap
 		ch.At = cs.At.UTC().Format(time.RFC3339)
 	}
 	ch.Metrics = webCheckMetricsForReadings(ch.Type, e.checkGraphs[cn], e.checkBands[cn], ch.Readings)
+	if current {
+		setCurrentMetricValues(ch.Metrics, cs.Data)
+	}
 	return ch
 }
 
@@ -356,12 +359,29 @@ func webCheckMetrics(graphs []checks.GraphMetric, bands []checks.BandMetric) []w
 	}
 	out := make([]web.CheckMetric, 0, len(graphs)+len(bands))
 	for _, m := range graphs {
-		out = append(out, web.CheckMetric{Name: m.Key, Unit: m.Unit})
+		out = append(out, web.CheckMetric{Name: m.Key, Unit: m.Unit, Label: m.Label})
 	}
 	for _, b := range bands {
 		out = append(out, web.CheckMetric{Name: b.Key, Band: true, Severity: b.Severity, Label: b.Label})
 	}
 	return out
+}
+
+// setCurrentMetricValues attaches one current snapshot's numeric values to the
+// graph declarations already exposed by the payload. The recorder selects
+// samples through the same NumericData contract, so the current number and its
+// historical series cannot disagree about which result fields are numeric.
+func setCurrentMetricValues(metrics []web.CheckMetric, data map[string]any) {
+	for i := range metrics {
+		if metrics[i].Band {
+			continue
+		}
+		value, ok := checks.NumericData(data[metrics[i].Name])
+		if !ok {
+			continue
+		}
+		metrics[i].Value = &value
+	}
 }
 
 func (b *WebBackend) serviceCheckHealth(name string, e *webEntry, monitored bool) (int, string) {

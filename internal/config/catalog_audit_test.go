@@ -2066,6 +2066,61 @@ func TestCatalogEximCertGatedOnImplicitTLS(t *testing.T) {
 	}
 }
 
+// TestCatalogEximDatabaseMaintenanceKeepsOneCommandPerDatabase pins the
+// operator and automatic paths to the same bounded exim_tidydb invocation.
+// exim_tidydb accepts one hints database per run, so combining callout and retry
+// through a shell would both violate the argv invariant and hide which database
+// failed. The units are the contract that makes all three current counts
+// graphable in the dashboard.
+func TestCatalogEximDatabaseMaintenanceKeepsOneCommandPerDatabase(t *testing.T) {
+	exim := catalogDocByName(t, repoRoot(t), "services", "exim")
+	buttons := nested(t, exim, "buttons")
+	variables := nested(t, exim, "variables")
+	if got := cfgval.String(catalogWatchCheck(t, exim, "queue")[checks.CheckKeyUnit]); got != "messages" {
+		t.Fatalf("exim queue unit = %q, want messages", got)
+	}
+
+	for _, database := range []string{"callout", "retry"} {
+		t.Run(database, func(t *testing.T) {
+			watchName := "tidy-" + database + "-db-if-large"
+			buttonName := "tidy-" + database + "-db"
+			watch, _ := nested(t, exim, "watches")[watchName].(map[string]any)
+			check := nested(t, watch, "check")
+			if got := cfgval.String(check[checks.CheckKeyUnit]); got != "records" {
+				t.Fatalf("%s unit = %q, want records", watchName, got)
+			}
+			tableVariable := database + "_db_table"
+			if got := cfgval.String(variables[tableVariable]); got != "tblblob" {
+				t.Fatalf("%s = %q, want tblblob", tableVariable, got)
+			}
+			wantQuery := "SELECT count(*) FROM ${" + tableVariable + "}"
+			if got := cfgval.String(check[checks.CheckKeyQuery]); got != wantQuery {
+				t.Fatalf("%s query = %q, want %q", watchName, got, wantQuery)
+			}
+			if got := cfgval.String(watch["display_name"]); got == "" {
+				t.Fatalf("%s display_name is empty", watchName)
+			}
+
+			button, _ := buttons[buttonName].(map[string]any)
+			wantCommand := []string{"${exim_tidydb}", "-t", "${db_cleanup_age}", "${spool_dir}", database}
+			if got := cfgval.StringArray(button[ButtonKeyCommand]); !slices.Equal(got, wantCommand) {
+				t.Fatalf("%s command = %v, want %v", buttonName, got, wantCommand)
+			}
+			if got := cfgval.String(button[ButtonKeyTimeout]); got != "${db_cleanup_timeout}" {
+				t.Fatalf("%s timeout = %q, want ${db_cleanup_timeout}", buttonName, got)
+			}
+
+			hook := nested(t, watch, "then", "hook")
+			if got := cfgval.StringArray(hook[WatchHookKeyCommand]); !slices.Equal(got, wantCommand) {
+				t.Fatalf("%s hook command = %v, want %v", watchName, got, wantCommand)
+			}
+			if got := cfgval.String(hook[WatchHookKeyTimeout]); got != "${db_cleanup_timeout}" {
+				t.Fatalf("%s hook timeout = %q, want ${db_cleanup_timeout}", watchName, got)
+			}
+		})
+	}
+}
+
 // TestCatalogServiceIOAlertsShareOneCeiling stops the sampled-telemetry
 // thresholds coming back. They were one host's live readings — 451 B/s for ssh
 // against 32 MB/s for ceph-osd — so nearly every service alerted on normal work.

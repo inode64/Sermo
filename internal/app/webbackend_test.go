@@ -503,6 +503,49 @@ func TestWebBackendDetailCheckReadings(t *testing.T) {
 	}
 }
 
+func TestWebBackendDetailGraphMetricCarriesOnlyFreshCurrentValue(t *testing.T) {
+	now := time.Date(2026, 8, 26, 12, 0, 0, 0, time.UTC)
+	for _, tc := range []struct {
+		name      string
+		sampleAt  time.Time
+		wantValue bool
+	}{
+		{name: "fresh zero", sampleAt: now, wantValue: true},
+		{name: "stale", sampleAt: now.Add(-3 * time.Minute)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			snaps := NewSnapshots()
+			snaps.now = func() time.Time { return tc.sampleAt }
+			snaps.PublishWithCheckTypes("web", map[string]checks.Result{
+				"queue": {Check: "queue", OK: true, Data: map[string]any{checks.DataKeyValue: 0.0}},
+			}, map[string]bool{"queue": true}, map[string]string{"queue": checks.CheckTypeCommand})
+			b := webBackendWithEntry(snaps, []string{"queue"}, map[string]string{"queue": checks.CheckTypeCommand})
+			b.now = func() time.Time { return now }
+			b.entries["web"].interval = time.Minute
+			b.entries["web"].checkIntervals = map[string]time.Duration{"queue": time.Minute}
+			b.entries["web"].checkGraphs = map[string][]checks.GraphMetric{
+				"queue": checks.ResolvedGraphMetrics(checks.CheckTypeCommand, "messages", map[string]any{}),
+			}
+
+			detail, ok := b.Detail(context.Background(), "web")
+			if !ok || len(detail.Checks) != 1 || len(detail.Checks[0].Metrics) != 1 {
+				t.Fatalf("detail metrics = %+v, ok=%v", detail.Checks, ok)
+			}
+			metric := detail.Checks[0].Metrics[0]
+			if metric.Label != "Value" {
+				t.Fatalf("metric label = %q, want Value", metric.Label)
+			}
+			if tc.wantValue {
+				if metric.Value == nil || *metric.Value != 0 {
+					t.Fatalf("fresh zero metric value = %v, want pointer to 0", metric.Value)
+				}
+			} else if metric.Value != nil {
+				t.Fatalf("stale metric value = %v, want omitted", *metric.Value)
+			}
+		})
+	}
+}
+
 // TestWebBackendSeriesScopesToServiceOrCheck pins the one path both SLA scopes
 // share. A check's availability is no longer embedded in the detail payload; it
 // is read from the same series endpoint the service timeline uses, so the two

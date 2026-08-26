@@ -2,6 +2,8 @@ package checks
 
 import (
 	"context"
+	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -11,6 +13,103 @@ import (
 // probeReturning is an injected probe that always returns res.
 func probeReturning(res conn.Result) func(context.Context, conn.Config) (conn.Result, error) {
 	return func(context.Context, conn.Config) (conn.Result, error) { return res, nil }
+}
+
+func TestConnCheckPreservesProtocolFailureAsVerdict(t *testing.T) {
+	c := connCheckWithExpect(nil, conn.Result{
+		Failure: "rcpt_to rejected: 550 blocked",
+		Extra:   map[string]string{"smtp_code": "550"},
+	})
+	res := c.Run(context.Background())
+	if res.OK || res.Unavailable || !strings.Contains(res.Message, "550 blocked") {
+		t.Fatalf("result = %+v", res)
+	}
+	if res.Data["smtp_code"] != "550" {
+		t.Fatalf("structured rejection data = %+v", res.Data)
+	}
+}
+
+func TestConnCheckAnyMatchContinuesAfterProtocolFailure(t *testing.T) {
+	var calls []string
+	c := connCheckWithExpect(nil, conn.Result{})
+	c.ifaces = []string{"blocked", "accepted"}
+	c.probe = func(_ context.Context, cfg conn.Config) (conn.Result, error) {
+		calls = append(calls, cfg.Interface)
+		if cfg.Interface == "blocked" {
+			return conn.Result{
+				Failure: "rcpt_to rejected: 550 blocked",
+				Extra:   map[string]string{"smtp_code": "550"},
+			}, nil
+		}
+		return conn.Result{Extra: map[string]string{"accepted": "true"}}, nil
+	}
+
+	res := c.Run(context.Background())
+	if !res.OK || len(calls) != 2 {
+		t.Fatalf("result = %+v, calls = %v", res, calls)
+	}
+	if res.Data["accepted"] != "true" {
+		t.Fatalf("accepted result data = %+v", res.Data)
+	}
+	interfaces := res.Data[DataKeyInterfaces].(map[string]any)
+	if interfaces["blocked"] != "rcpt_to rejected: 550 blocked" || interfaces["accepted"] != interfaceResultOK {
+		t.Fatalf("interface results = %+v", interfaces)
+	}
+}
+
+func TestConnCheckAllMatchStopsOnProtocolFailure(t *testing.T) {
+	var calls []string
+	c := connCheckWithExpect(nil, conn.Result{})
+	c.ifaces = []string{"blocked", "accepted"}
+	c.ifaceAll = true
+	c.probe = func(_ context.Context, cfg conn.Config) (conn.Result, error) {
+		calls = append(calls, cfg.Interface)
+		if cfg.Interface == "blocked" {
+			return conn.Result{
+				Failure: "rcpt_to rejected: 550 blocked",
+				Extra:   map[string]string{"smtp_code": "550"},
+			}, nil
+		}
+		return conn.Result{Extra: map[string]string{"accepted": "true"}}, nil
+	}
+
+	res := c.Run(context.Background())
+	if res.OK || res.Unavailable || len(calls) != 1 || calls[0] != "blocked" {
+		t.Fatalf("result = %+v, calls = %v", res, calls)
+	}
+	if res.Data["smtp_code"] != "550" {
+		t.Fatalf("rejection data = %+v", res.Data)
+	}
+	interfaces := res.Data[DataKeyInterfaces].(map[string]any)
+	if interfaces["blocked"] != "rcpt_to rejected: 550 blocked" {
+		t.Fatalf("interface results = %+v", interfaces)
+	}
+}
+
+func TestConnCheckAnyMatchPrefersProtocolFailureOverTransportError(t *testing.T) {
+	c := connCheckWithExpect(nil, conn.Result{})
+	c.ifaces = []string{"blocked", "offline"}
+	c.probe = func(_ context.Context, cfg conn.Config) (conn.Result, error) {
+		if cfg.Interface == "blocked" {
+			return conn.Result{
+				Failure: "rcpt_to rejected: 451 throttled",
+				Extra:   map[string]string{"smtp_code": "451"},
+			}, nil
+		}
+		return conn.Result{}, errors.New("network unreachable")
+	}
+
+	res := c.Run(context.Background())
+	if res.OK || res.Unavailable || !strings.Contains(res.Message, "451 throttled") {
+		t.Fatalf("result = %+v", res)
+	}
+	if res.Data["smtp_code"] != "451" {
+		t.Fatalf("rejection data = %+v", res.Data)
+	}
+	interfaces := res.Data[DataKeyInterfaces].(map[string]any)
+	if interfaces["blocked"] != "rcpt_to rejected: 451 throttled" || interfaces["offline"] != "network unreachable" {
+		t.Fatalf("interface results = %+v", interfaces)
+	}
 }
 
 func connCheckWithExpect(expect []jsonAssertion, res conn.Result) connCheck {

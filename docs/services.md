@@ -70,6 +70,7 @@ required.
 - [Monitoring flag](#monitoring-flag)
 - [Blocking operations while clients are connected](#blocking-operations-while-clients-are-connected)
 - [PostgreSQL replication watches](#postgresql-replication-watches)
+- [Exim hints database maintenance](#exim-hints-database-maintenance)
 - [Auxiliary commands](#auxiliary-commands)
 
 ## Categories
@@ -1957,6 +1958,21 @@ are unaffected.
 These watches only make sense where replication actually happens. Enable only
 the watches that match the PostgreSQL role and replication features on that
 host.
+
+## Exim hints database maintenance
+
+The `exim` catalog service exposes separate confirmed operator buttons for
+`exim_tidydb` on the `callout` and `retry` hints databases. Its matching
+service watches count the records, publish `records` metric series and can run
+the same bounded cleanup command when the configured limit is exceeded.
+
+Exim 4.99 and newer name the SQLite record table `tblblob`; older supported
+releases use `tbl`. The catalog defaults `callout_db_table` and
+`retry_db_table` to `tblblob`. Fleet installation discovers each database's
+schema read-only and overrides either variable with `tbl` when required. A
+non-SQLite database, absent file or unsupported schema disables only the
+affected record watch; `exim_tidydb` buttons remain available because that
+utility supports Exim's native hints backend independently of the graph query.
 
 ## Auxiliary commands
 
