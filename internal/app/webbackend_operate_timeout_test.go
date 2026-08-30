@@ -13,7 +13,8 @@ import (
 )
 
 // hangingManager blocks Start until the operation context is cancelled, so the
-// test can pin that Operate is bounded by the service's effective timeout.
+// test can pin that the operation engine bounds Operate by the service's
+// effective timeout.
 type hangingManager struct{ fakeManager }
 
 func (hangingManager) Start(ctx context.Context, _ string) error {
@@ -43,9 +44,8 @@ func (delayedStartManager) Status(context.Context, string) (servicemgr.ServiceSt
 }
 
 // TestWebBackendOperateBoundsBackendHang pins that a web Operate cannot hang on
-// a stuck backend operation: the handler bounds the whole call by the resolved
-// per-service timeout and returns a non-OK result. Before the fix the handler
-// used an unbounded context, so the goroutine could block until daemon shutdown.
+// a stuck backend operation: the engine bounds the action by the resolved
+// per-service timeout and returns a non-OK result.
 func TestWebBackendOperateBoundsBackendHang(t *testing.T) {
 	dir := t.TempDir()
 	locker := locks.NewOperationLocker(locks.RuntimeOpsDir(dir))
