@@ -393,6 +393,7 @@ func TestDuration(t *testing.T) {
 	}{
 		{"30s", 30 * time.Second},
 		{"1h30m", 90 * time.Minute},
+		{"0s", 0},
 		{"bad", 0},
 		{"", 0},
 		{nil, 0},
@@ -412,6 +413,7 @@ func TestDurationOr(t *testing.T) {
 		want time.Duration
 	}{
 		{"30s", 30 * time.Second},
+		{"0s", 0},
 		{"", fb},
 		{nil, fb},
 		{"bad", fb},
