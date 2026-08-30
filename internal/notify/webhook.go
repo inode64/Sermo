@@ -33,6 +33,11 @@ const (
 )
 
 const (
+	pushPayloadTitleKey   = "title"
+	pushPayloadMessageKey = "message"
+)
+
+const (
 	webhookURLSchemeHTTP  = netutil.URLSchemeHTTP
 	webhookURLSchemeHTTPS = netutil.URLSchemeHTTPS
 	webhookURLSchemeSep   = netutil.URLSchemeSeparator
@@ -54,6 +59,17 @@ func webhookPayload(v any) []byte {
 	return b
 }
 
+// pushMessageFields renders the title/message fields shared by Gotify and
+// ntfy. A subject-only notification travels as the message without a title.
+func pushMessageFields(msg Message) map[string]string {
+	fields := map[string]string{pushPayloadMessageKey: msg.Subject}
+	if msg.Body != "" {
+		fields[pushPayloadTitleKey] = msg.Subject
+		fields[pushPayloadMessageKey] = msg.Body
+	}
+	return fields
+}
+
 func sendWebhook(ctx context.Context, post webhookPoster, label, webhook string, headers map[string]string, payload []byte) error {
 	if post == nil {
 		post = postWebhook
@@ -61,9 +77,9 @@ func sendWebhook(ctx context.Context, post webhookPoster, label, webhook string,
 	return post(ctx, label, webhook, headers, payload)
 }
 
-// webhookNotifier is the shared shape of the webhook-posting notifiers (Slack,
-// Teams): a named webhook plus the payload renderer that gives each service its
-// body format. Uses only net/http (no external dependency).
+// webhookNotifier is the shared shape of the webhook-posting notifiers: a named
+// webhook plus the payload renderer that gives each service its body format.
+// Uses only net/http (no external dependency).
 type webhookNotifier struct {
 	name    string
 	typ     string

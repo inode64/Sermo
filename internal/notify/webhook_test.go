@@ -3,11 +3,38 @@ package notify
 import (
 	"context"
 	"io"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 )
+
+func TestPushMessageFields(t *testing.T) {
+	tests := []struct {
+		name string
+		msg  Message
+		want map[string]string
+	}{
+		{
+			name: "subject only",
+			msg:  Message{Subject: "recovered"},
+			want: map[string]string{pushPayloadMessageKey: "recovered"},
+		},
+		{
+			name: "subject and body",
+			msg:  Message{Subject: "disk full", Body: "SERMO_PATH=/"},
+			want: map[string]string{pushPayloadTitleKey: "disk full", pushPayloadMessageKey: "SERMO_PATH=/"},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := pushMessageFields(test.msg); !maps.Equal(got, test.want) {
+				t.Fatalf("pushMessageFields() = %v, want %v", got, test.want)
+			}
+		})
+	}
+}
 
 func TestPostWebhookDeliversJSON(t *testing.T) {
 	var gotBody []byte

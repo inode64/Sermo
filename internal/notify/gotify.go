@@ -9,8 +9,6 @@ import (
 
 const (
 	gotifyMessagePath = "/message"
-	gotifyTitleKey    = "title"
-	gotifyMessageKey  = "message"
 	gotifyKeyHeader   = "X-Gotify-Key"
 )
 
@@ -40,10 +38,5 @@ func buildGotify(name string, entry map[string]any) (Notifier, error) {
 // the detail (the SERMO_* fields) as the message. A subject-only notification
 // travels as the message alone.
 func gotifyPayload(msg Message) []byte {
-	body := map[string]string{gotifyMessageKey: msg.Subject}
-	if msg.Body != "" {
-		body[gotifyTitleKey] = msg.Subject
-		body[gotifyMessageKey] = msg.Body
-	}
-	return webhookPayload(body)
+	return webhookPayload(pushMessageFields(msg))
 }
