@@ -326,7 +326,7 @@ func (b *WebBackend) CloseTerminalSession(ctx context.Context, name string, sess
 	r := e.engine.CloseTerminalSession(ctx, operation.TerminalSessionTarget{
 		Check: session.Check, Multiplexer: session.Multiplexer, Name: session.Name, User: session.User, Identity: session.Identity,
 	})
-	return webActionResultFrom(r, name, "close terminal session")
+	return webActionResultFrom(r)
 }
 
 // CloseEmptyTerminalSession closes one configured empty tmux server through
@@ -343,7 +343,7 @@ func (b *WebBackend) CloseEmptyTerminalSession(ctx context.Context, name, check 
 	if r.OK() {
 		b.rememberClosedTerminalSource(name, check)
 	}
-	return webActionResultFrom(r, name, "close empty terminal session")
+	return webActionResultFrom(r)
 }
 
 func compareWebSSHSessions(a, b web.SSHSession) int {

@@ -32,5 +32,5 @@ func (b *WebBackend) ReapStrays(ctx context.Context, name string) web.ActionResu
 	if e.disabled {
 		return b.operateError(name, reapActionLabel, serviceSubjectPrefix+name+" is disabled in configuration")
 	}
-	return webActionResultFrom(e.engine.Reap(ctx, true), name, reapActionLabel)
+	return webActionResultFrom(e.engine.Reap(ctx, true))
 }
