@@ -150,7 +150,7 @@ func (c *Config) loadWatchOverrideDir(dir string, recursive bool) error {
 		if err := c.claimLocalOverride(pathKeyWatches, doc); err != nil {
 			return err
 		}
-		dst := c.watchRegistry()
+		dst := c.registry(pathKeyWatches)
 		if existing, ok := dst[doc.Name].(map[string]any); ok {
 			dst[doc.Name] = mergeMaps(existing, entry)
 			return nil
@@ -184,7 +184,7 @@ func (c *Config) loadNotifierOverrideDir(dir string, recursive bool) error {
 		if len(entries) != 1 {
 			return fmt.Errorf("%s: %s fragments must contain exactly one entry", doc.Path, pathKeyNotifiers)
 		}
-		dst := c.notifierRegistry()
+		dst := c.registry(pathKeyNotifiers)
 		for name, entry := range entries {
 			doc.Name = name
 			if err := c.claimLocalOverride(pathKeyNotifiers, doc); err != nil {
