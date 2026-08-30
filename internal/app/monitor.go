@@ -219,8 +219,8 @@ func (m *Monitor) applyConfig(cfg *config.Config) {
 	m.cfg = cfg
 	m.deps.Runtime = cfg.Global.RuntimeDir()
 	m.deps.Interval = config.EngineInterval(cfg, config.DefaultEngineInterval)
-	m.deps.DefaultTimeout = EngineDuration(cfg, config.EngineKeyDefaultTimeout, DefaultEngineCheckTimeout)
-	m.deps.OperationTimeout = EngineDuration(cfg, config.EngineKeyOperationTimeout, DefaultEngineOperationTimeout)
+	m.deps.DefaultTimeout = config.EngineDuration(cfg, config.EngineKeyDefaultTimeout, DefaultEngineCheckTimeout)
+	m.deps.OperationTimeout = config.EngineDuration(cfg, config.EngineKeyOperationTimeout, DefaultEngineOperationTimeout)
 	m.deps.MaxParallel = EngineInt(cfg, config.EngineKeyMaxParallelChecks, DefaultEngineMaxParallelChecks)
 	m.scheduler.Interval = m.deps.Interval
 	m.deps.UserLookup = EngineUserLookup(cfg, m.deps.ExecxRunner)

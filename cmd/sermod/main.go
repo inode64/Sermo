@@ -287,8 +287,8 @@ func run(args []string) int {
 		Manager:          manager,
 		Runtime:          cfg.Global.RuntimeDir(),
 		Interval:         interval,
-		DefaultTimeout:   app.EngineDuration(cfg, config.EngineKeyDefaultTimeout, app.DefaultEngineCheckTimeout),
-		OperationTimeout: app.EngineDuration(cfg, config.EngineKeyOperationTimeout, app.DefaultEngineOperationTimeout),
+		DefaultTimeout:   config.EngineDuration(cfg, config.EngineKeyDefaultTimeout, app.DefaultEngineCheckTimeout),
+		OperationTimeout: config.EngineDuration(cfg, config.EngineKeyOperationTimeout, app.DefaultEngineOperationTimeout),
 		MaxParallel:      app.EngineInt(cfg, config.EngineKeyMaxParallelChecks, app.DefaultEngineMaxParallelChecks),
 		//nolint:forbidigo // the engine's injectable Sleep seam; production wires the real clock, tests stub it.
 		Sleep: time.Sleep,
@@ -383,7 +383,7 @@ func run(args []string) int {
 		logger.Warn("all services and watches are disabled; starting with nothing to monitor")
 	}
 
-	startupDelay := app.EngineDuration(cfg, config.EngineKeyStartupDelay, 0)
+	startupDelay := config.EngineDuration(cfg, config.EngineKeyStartupDelay, 0)
 	if startupDelay > 0 {
 		logger.Info("sermod waiting before first checks", config.EngineKeyStartupDelay, startupDelay)
 	}
