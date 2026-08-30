@@ -15,6 +15,7 @@ import (
 	"sermo/internal/cfgval"
 	"sermo/internal/execx"
 	"sermo/internal/output"
+	"sermo/internal/strutil"
 )
 
 const (
@@ -526,12 +527,5 @@ func IsGlusterVolumeName(name string) bool {
 }
 
 func uniqueGlusterStrings(values []string) []string {
-	seen := make(map[string]struct{}, len(values))
-	for _, value := range values {
-		value = strings.TrimSpace(value)
-		if value != "" {
-			seen[value] = struct{}{}
-		}
-	}
-	return slices.Sorted(maps.Keys(seen))
+	return slices.Sorted(maps.Keys(strutil.Set(values)))
 }

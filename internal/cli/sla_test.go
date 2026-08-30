@@ -11,8 +11,25 @@ import (
 	"testing"
 	"time"
 
+	"sermo/internal/config"
 	"sermo/internal/state"
 )
+
+func TestSLATargetsSortServicesAndSkipEmptyName(t *testing.T) {
+	cfg := &config.Config{Services: map[string]*config.Document{
+		"zeta":  {},
+		"":      {},
+		"alpha": {},
+	}}
+
+	targets, code := (App{}).slaTargets(options{}, cfg)
+	if code != exitSuccess {
+		t.Fatalf("slaTargets() exit = %d, want %d", code, exitSuccess)
+	}
+	if len(targets) != 2 || targets[0].name != "alpha" || targets[1].name != "zeta" {
+		t.Fatalf("slaTargets() = %+v, want alpha then zeta", targets)
+	}
+}
 
 func TestSLACommandReportsWindows(t *testing.T) {
 	root, global := writeCatalogServiceConfig(t)

@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"sermo/internal/execx"
+	"sermo/internal/strutil"
 )
 
 const (
@@ -73,7 +74,7 @@ func (c librariesCheck) Run(ctx context.Context) Result {
 				dirs = append([]string{expandOrigin(p, c.binary)}, dirs...)
 			}
 		}
-		dirs = dedupPreserveOrder(dirs)
+		dirs = strutil.MergeUnique(nil, dirs...)
 	}
 
 	missing := resolveNeeded(ctx, needed, dirs, make(map[string]bool))
@@ -175,7 +176,7 @@ func collectLibrarySearchDirs(binary string, ef *elf.File) []string {
 		}
 	}
 
-	return dedupPreserveOrder(dirs)
+	return strutil.MergeUnique(nil, dirs...)
 }
 
 func expandOrigin(p, binary string) string {
@@ -219,20 +220,6 @@ func parseLdSoConf(path string) []string {
 			continue // we handle .d explicitly
 		}
 		out = append(out, line)
-	}
-	return out
-}
-
-// dedupPreserveOrder removes duplicate directories while keeping the first
-// occurrence (used after prepending LD_LIBRARY_PATH).
-func dedupPreserveOrder(dirs []string) []string {
-	seen := make(map[string]bool)
-	out := make([]string, 0, len(dirs))
-	for _, d := range dirs {
-		if d != "" && !seen[d] {
-			seen[d] = true
-			out = append(out, d)
-		}
 	}
 	return out
 }

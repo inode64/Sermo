@@ -7,8 +7,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -765,7 +767,7 @@ func pidUsesMounts(ctx context.Context, pid int, mountPaths []string) ([]string,
 			}
 		}
 	}
-	return sortedMountMatches(matches), nil
+	return slices.Sorted(maps.Keys(matches)), nil
 }
 
 func linkMountMatches(ctx context.Context, link string, mountPaths []string, matches map[string]struct{}) error {
@@ -783,13 +785,4 @@ func linkMountMatches(ctx context.Context, link string, mountPaths []string, mat
 		}
 	}
 	return nil
-}
-
-func sortedMountMatches(matches map[string]struct{}) []string {
-	out := make([]string, 0, len(matches))
-	for mountPath := range matches {
-		out = append(out, mountPath)
-	}
-	sort.Strings(out)
-	return out
 }

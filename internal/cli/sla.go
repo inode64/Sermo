@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 	"time"
@@ -106,7 +107,8 @@ func (a App) slaTargets(opts options, cfg *config.Config) ([]slaTarget, int) {
 		}
 		return nil, a.fail(opts, fmt.Sprintf(cliUnknownSLATargetFormat, name))
 	}
-	services := sortedUnique(cfg.Services)
+	services := slices.Sorted(maps.Keys(cfg.Services))
+	services = slices.DeleteFunc(services, func(name string) bool { return name == "" })
 	targets := make([]slaTarget, 0, len(services))
 	for _, service := range services {
 		targets = append(targets, slaTarget{name: service, key: service})
