@@ -174,7 +174,7 @@ func (a App) runWatchRAIDControl(ctx context.Context, opts options, action strin
 	if action == "pause" && opts.confirm != array {
 		return a.commandUsageError(commandWatch, "watch pause requires --confirm "+array)
 	}
-	timeout := app.EngineDuration(cfg, config.EngineKeyOperationTimeout, app.DefaultEngineOperationTimeout)
+	timeout := config.EngineDuration(cfg, config.EngineKeyOperationTimeout, app.DefaultEngineOperationTimeout)
 	if opts.timeout > 0 {
 		timeout = opts.timeout
 	}

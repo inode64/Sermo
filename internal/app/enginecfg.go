@@ -35,11 +35,6 @@ func engineValue(cfg *config.Config, key string) any {
 	return engineMap(cfg)[key]
 }
 
-// EngineDuration reads a duration field from the engine block.
-func EngineDuration(cfg *config.Config, key string, fallback time.Duration) time.Duration {
-	return config.EngineDuration(cfg, key, fallback)
-}
-
 // EngineInt reads an int field from the engine block.
 func EngineInt(cfg *config.Config, key string, fallback int) int {
 	return engineInt(cfg, key, fallback)
@@ -72,12 +67,12 @@ func EngineByteSize(cfg *config.Config, key string, fallback int64) int64 {
 func EngineRetention(cfg *config.Config) state.Retention {
 	defaults := state.DefaultRetention()
 	return state.Retention{
-		Minute:      EngineDuration(cfg, config.EngineKeyRetention1m, defaults.Minute),
-		FiveMinutes: EngineDuration(cfg, config.EngineKeyRetention5m, defaults.FiveMinutes),
-		Hour:        EngineDuration(cfg, config.EngineKeyRetention1h, defaults.Hour),
-		SixHours:    EngineDuration(cfg, config.EngineKeyRetention6h, defaults.SixHours),
-		Day:         EngineDuration(cfg, config.EngineKeyRetention1d, defaults.Day),
-		Events:      EngineDuration(cfg, config.EngineKeyRetentionEvents, defaults.Events),
+		Minute:      config.EngineDuration(cfg, config.EngineKeyRetention1m, defaults.Minute),
+		FiveMinutes: config.EngineDuration(cfg, config.EngineKeyRetention5m, defaults.FiveMinutes),
+		Hour:        config.EngineDuration(cfg, config.EngineKeyRetention1h, defaults.Hour),
+		SixHours:    config.EngineDuration(cfg, config.EngineKeyRetention6h, defaults.SixHours),
+		Day:         config.EngineDuration(cfg, config.EngineKeyRetention1d, defaults.Day),
+		Events:      config.EngineDuration(cfg, config.EngineKeyRetentionEvents, defaults.Events),
 	}
 }
 
@@ -86,7 +81,7 @@ func EngineRetention(cfg *config.Config) state.Retention {
 // the source every coarser one reads, and its prune is floored at the
 // consolidation watermark, so a slower cadence delays reclaiming space.
 func EngineRollupInterval(cfg *config.Config) time.Duration {
-	return EngineDuration(cfg, config.EngineKeyRollupInterval, state.DefaultRollupInterval)
+	return config.EngineDuration(cfg, config.EngineKeyRollupInterval, state.DefaultRollupInterval)
 }
 
 // EngineStateOptions builds the state store options from the engine block, so
@@ -102,7 +97,7 @@ func EngineStateOptions(cfg *config.Config) state.Options {
 func EngineUserLookup(cfg *config.Config, runner execx.Runner) *process.UserLookup {
 	return process.NewUserLookup(process.UserLookupConfig{
 		Mode:    EngineString(cfg, config.EngineKeyUserLookup),
-		Timeout: EngineDuration(cfg, config.EngineKeyUserLookupTimeout, process.DefaultUserLookupTimeout),
+		Timeout: config.EngineDuration(cfg, config.EngineKeyUserLookupTimeout, process.DefaultUserLookupTimeout),
 		Runner:  runner,
 	})
 }

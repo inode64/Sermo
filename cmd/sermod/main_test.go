@@ -438,10 +438,10 @@ func TestEngineAndNotifierAccessors(t *testing.T) {
 	if got := app.EngineInt(cfg3, config.EngineKeyMaxParallelChecks, app.DefaultEngineMaxParallelChecks); got != 4 {
 		t.Fatalf("EngineInt bare-int = %d, want 4", got)
 	}
-	if got := app.EngineDuration(cfg2, config.EngineKeyDefaultTimeout, app.DefaultEngineCheckTimeout); got != 45*time.Second {
+	if got := config.EngineDuration(cfg2, config.EngineKeyDefaultTimeout, app.DefaultEngineCheckTimeout); got != 45*time.Second {
 		t.Fatalf("EngineDuration = %v, want 45s", got)
 	}
-	if got := app.EngineDuration(cfg2, "missing_dur", 99*time.Second); got != 99*time.Second {
+	if got := config.EngineDuration(cfg2, "missing_dur", 99*time.Second); got != 99*time.Second {
 		t.Fatalf("EngineDuration missing fallback failed")
 	}
 	var nilCfg *config.Config

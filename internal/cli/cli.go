@@ -1222,7 +1222,7 @@ func (a App) statusFunc(opts options, tree map[string]any, base string) func(con
 }
 
 func engineDefaultTimeout(cfg *config.Config) time.Duration {
-	return app.EngineDuration(cfg, config.EngineKeyDefaultTimeout, app.DefaultEngineCheckTimeout)
+	return config.EngineDuration(cfg, config.EngineKeyDefaultTimeout, app.DefaultEngineCheckTimeout)
 }
 
 // runLocks reports the named runtime locks for a service (active, expired and
