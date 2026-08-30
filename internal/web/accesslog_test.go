@@ -11,7 +11,6 @@ import (
 
 	"sermo/internal/logfile"
 	"sermo/internal/mountctl"
-	"sermo/internal/webcred"
 )
 
 func TestParseAPIAccessTarget(t *testing.T) {
@@ -132,7 +131,7 @@ func TestAccessLogRecordsAuthDeniedPost(t *testing.T) {
 
 	s := &Server{
 		Backend:   &fakeBackend{services: []Service{{Name: "web"}}},
-		Auth:      Auth{AdminCredentials: webcred.Plain("secret"), GuestCredentials: webcred.Plain("guestpw")},
+		Auth:      Auth{AdminCredentials: testCredentials(t, "secret"), GuestCredentials: testCredentials(t, "guestpw")},
 		AccessLog: log,
 	}
 	h := s.Handler()
@@ -172,7 +171,7 @@ func TestAccessLogRecordsUnsafeDeniedMethods(t *testing.T) {
 
 	s := &Server{
 		Backend:   &fakeBackend{services: []Service{{Name: "web"}}},
-		Auth:      Auth{AdminCredentials: webcred.Plain("secret")},
+		Auth:      Auth{AdminCredentials: testCredentials(t, "secret")},
 		AccessLog: log,
 	}
 	h := s.Handler()

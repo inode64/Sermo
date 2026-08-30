@@ -556,7 +556,7 @@ func TestWriteWebToken(t *testing.T) {
 	path := filepath.Join(runtimeDir, config.DaemonWebTokenFilename)
 	logger := slog.New(slog.DiscardHandler)
 
-	token, remove := writeWebToken(logger, runtimeDir, web.Auth{AdminCredentials: webcred.Plain("secret")})
+	token, remove := writeWebToken(logger, runtimeDir, web.Auth{AdminCredentials: testWebCredentials(t, "secret")})
 	if token == "" {
 		t.Fatal("writeWebToken() = empty token, want one")
 	}
@@ -575,7 +575,7 @@ func TestWriteWebToken(t *testing.T) {
 		t.Errorf("token file holds %q, want %q", got, token)
 	}
 	// The token authenticates as admin, and nothing else does.
-	auth := web.Auth{AdminCredentials: webcred.Plain("secret"), RuntimeToken: token}
+	auth := web.Auth{AdminCredentials: testWebCredentials(t, "secret"), RuntimeToken: token}
 	if !webcred.SecureEqual(auth.RuntimeToken, token) {
 		t.Error("the written token is not the one returned")
 	}
@@ -602,7 +602,7 @@ func TestWriteWebToken(t *testing.T) {
 	if err := os.Chmod(path+tmpFileExt, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	_, remove = writeWebToken(logger, runtimeDir, web.Auth{AdminCredentials: webcred.Plain("secret")})
+	_, remove = writeWebToken(logger, runtimeDir, web.Auth{AdminCredentials: testWebCredentials(t, "secret")})
 	defer remove()
 	info, err = os.Stat(path)
 	if err != nil {

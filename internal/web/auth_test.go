@@ -31,7 +31,7 @@ func (f fakeReadiness) Report(_ context.Context) ReadyReport { return f.rep }
 
 func TestLivezPublicEvenWithAuth(t *testing.T) {
 	// auth required for everything else, but /livez must answer without credentials
-	h := authServer(Auth{AdminCredentials: webcred.Plain("secret")})
+	h := authServer(Auth{AdminCredentials: testCredentials(t, "secret")})
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, routePathLivez, nil))
 	if rec.Code != http.StatusOK {
@@ -51,7 +51,7 @@ func TestLivezPublicEvenWithAuth(t *testing.T) {
 func TestReadyzPublicEvenWithAuth(t *testing.T) {
 	h := (&Server{
 		Backend:   &fakeBackend{services: []Service{{Name: "web"}}},
-		Auth:      Auth{AdminCredentials: webcred.Plain("secret")},
+		Auth:      Auth{AdminCredentials: testCredentials(t, "secret")},
 		Readiness: fakeReadiness{rep: ReadyReport{Ready: true, Status: apiStatusOK, Services: 1}},
 	}).Handler()
 	rec := httptest.NewRecorder()
@@ -67,7 +67,7 @@ func TestReadyzPublicEvenWithAuth(t *testing.T) {
 func TestVerboseHealthRequiresAuth(t *testing.T) {
 	h := (&Server{
 		Backend:   &fakeBackend{services: []Service{{Name: "web"}}},
-		Auth:      Auth{AdminCredentials: webcred.Plain("secret")},
+		Auth:      Auth{AdminCredentials: testCredentials(t, "secret")},
 		Readiness: fakeReadiness{rep: ReadyReport{Ready: true, Status: apiStatusOK, Services: 1}},
 	}).Handler()
 	for _, path := range []string{
@@ -159,7 +159,7 @@ func TestCSRFGuardOnUnsafeMethods(t *testing.T) {
 // to reconnect every 5s, and a reconnect arriving without the cached credential
 // used to be answered with WWW-Authenticate. Every request here is still 401.
 func TestAuthChallengesDocumentsOnly(t *testing.T) {
-	h := authServer(Auth{AdminCredentials: webcred.Plain("secret")})
+	h := authServer(Auth{AdminCredentials: testCredentials(t, "secret")})
 	tests := []struct {
 		name      string
 		path      string
@@ -218,7 +218,7 @@ func TestAuthRealmIncludesHostname(t *testing.T) {
 			}
 			h := (&Server{
 				Backend:  &fakeBackend{services: []Service{{Name: "web"}}},
-				Auth:     Auth{AdminCredentials: webcred.Plain("secret")},
+				Auth:     Auth{AdminCredentials: testCredentials(t, "secret")},
 				Hostname: tc.hostname,
 			}).Handler()
 			rec := httptest.NewRecorder()
@@ -234,7 +234,7 @@ func TestAuthRealmIncludesHostname(t *testing.T) {
 }
 
 func TestAdminFullAccess(t *testing.T) {
-	h := authServer(Auth{AdminCredentials: webcred.Plain("secret"), GuestCredentials: webcred.Plain("guestpw")})
+	h := authServer(Auth{AdminCredentials: testCredentials(t, "secret"), GuestCredentials: testCredentials(t, "guestpw")})
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req(http.MethodPost, testServicePath("web", apiActionRestart), "admin", "secret"))
 	if rec.Code != http.StatusOK {
@@ -246,7 +246,7 @@ func TestAdminFullAccess(t *testing.T) {
 // mutation: the CSRF header and the admin role. Both are enforced before any
 // handler runs, so reap needs no gate of its own.
 func TestReapStraysNeedsAdminAndCSRF(t *testing.T) {
-	h := authServer(Auth{AdminCredentials: webcred.Plain("secret"), GuestCredentials: webcred.Plain("guestpw")})
+	h := authServer(Auth{AdminCredentials: testCredentials(t, "secret"), GuestCredentials: testCredentials(t, "guestpw")})
 	path := testServicePath("web", apiActionReap)
 
 	rec := httptest.NewRecorder()
@@ -271,7 +271,7 @@ func TestReapStraysNeedsAdminAndCSRF(t *testing.T) {
 }
 
 func TestGuestIsReadOnly(t *testing.T) {
-	h := authServer(Auth{AdminCredentials: webcred.Plain("secret"), GuestCredentials: webcred.Plain("guestpw")})
+	h := authServer(Auth{AdminCredentials: testCredentials(t, "secret"), GuestCredentials: testCredentials(t, "guestpw")})
 	// guest can read
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req(http.MethodGet, apiPathServices, "guest", "guestpw"))
@@ -292,7 +292,7 @@ func TestGuestIsReadOnly(t *testing.T) {
 }
 
 func TestAnonymousGuestReadOnly(t *testing.T) {
-	h := authServer(Auth{AdminCredentials: webcred.Plain("secret"), AnonymousGuest: true})
+	h := authServer(Auth{AdminCredentials: testCredentials(t, "secret"), AnonymousGuest: true})
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req(http.MethodGet, apiPathServices, "", ""))
 	if rec.Code != http.StatusOK {
@@ -306,7 +306,7 @@ func TestAnonymousGuestReadOnly(t *testing.T) {
 }
 
 func TestWhoami(t *testing.T) {
-	h := authServer(Auth{AdminCredentials: webcred.Plain("secret"), AnonymousGuest: true})
+	h := authServer(Auth{AdminCredentials: testCredentials(t, "secret"), AnonymousGuest: true})
 	check := func(user, pass, role string, canAct bool) {
 		rec := httptest.NewRecorder()
 		h.ServeHTTP(rec, req(http.MethodGet, apiPathWhoami, user, pass))
@@ -370,7 +370,7 @@ func TestOpenModeAllowsConfiguredHosts(t *testing.T) {
 func TestAuthedModeServesAnyHost(t *testing.T) {
 	// With Basic auth on, a rebound origin cannot attach credentials, so the
 	// Host check is not applied and reverse proxies keep working.
-	h := authServer(Auth{AdminCredentials: webcred.Plain("secret")})
+	h := authServer(Auth{AdminCredentials: testCredentials(t, "secret")})
 	r := req(http.MethodGet, apiPathServices, "admin", "secret")
 	r.Host = "public.example.com"
 	rec := httptest.NewRecorder()
@@ -386,7 +386,7 @@ func TestGuestSeesRedactedCmdlines(t *testing.T) {
 		mounts:        []Mount{{Name: "data", Blockers: []MountBlocker{{PID: 9, Cmdline: []string{"rsync", "--password=hunter2", "/data"}}}}},
 		mountBlockers: MountBlockersResult{OK: true, Name: "data", Blockers: []MountBlocker{{PID: 9, Cmdline: []string{"rsync", "--password=hunter2", "/data"}}}},
 	}
-	h := (&Server{Backend: b, Auth: Auth{AdminCredentials: webcred.Plain("secret"), GuestCredentials: webcred.Plain("guest")}}).Handler()
+	h := (&Server{Backend: b, Auth: Auth{AdminCredentials: testCredentials(t, "secret"), GuestCredentials: testCredentials(t, "guest")}}).Handler()
 
 	fetch := func(path, pass string, into any) {
 		t.Helper()
@@ -450,7 +450,7 @@ func TestWhoamiWithoutResolvedRoleFailsClosed(t *testing.T) {
 }
 
 func TestLoginChallengesThenRedirects(t *testing.T) {
-	h := authServer(Auth{AdminCredentials: webcred.Plain("secret"), AnonymousGuest: true})
+	h := authServer(Auth{AdminCredentials: testCredentials(t, "secret"), AnonymousGuest: true})
 	// a guest hitting /login gets a Basic challenge (to escalate)
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req(http.MethodGet, routePathLogin, "", ""))
@@ -526,7 +526,7 @@ func TestRuntimeTokenDoesNotEnableAuth(t *testing.T) {
 	if open.Enabled() {
 		t.Error("Auth with only a runtime token reports auth enabled")
 	}
-	h := authServer(Auth{GuestCredentials: webcred.Plain("guestpw"), RuntimeToken: "run-token"})
+	h := authServer(Auth{GuestCredentials: testCredentials(t, "guestpw"), RuntimeToken: "run-token"})
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req(http.MethodPost, testServicePath("web", apiActionRestart), "sermoctl", "run-token"))
 	if rec.Code != http.StatusOK {
