@@ -104,13 +104,11 @@ func (c *websocketCheck) handshake(ctx context.Context, iface string, start time
 		return c.unavailableResult(fmt.Sprintf("websocket %s: %v", netutil.RedactURL(c.rawURL), netutil.URLErrorCause(err)), start)
 	}
 	defer func() { _ = nc.Close() }()
-	if dl, ok := ctx.Deadline(); ok {
-		_ = nc.SetDeadline(dl)
-	}
+	conn.ApplyDeadline(ctx, nc)
 
 	if websocketSecure(c.scheme) {
 		tc := netutil.TLSClientConfig(c.host)
-		if wsSkipVerify(c.tls) {
+		if netutil.NormalizeTLS(c.tls) == netutil.TLSModeSkipVerify {
 			tc.InsecureSkipVerify = true // operator chose tls: skip-verify
 		}
 		tlsConn := tls.Client(nc, tc)
@@ -245,14 +243,4 @@ func wsAccept(key string) string {
 	h := sha1.New() //nolint:gosec // G401: RFC 6455 mandates SHA-1 for the Sec-WebSocket-Accept digest.
 	_, _ = h.Write([]byte(key + wsGUID))
 	return base64.StdEncoding.EncodeToString(h.Sum(nil))
-}
-
-// wsSkipVerify reports whether the tls value requests skipping verification.
-func wsSkipVerify(tlsVal string) bool {
-	switch strings.ToLower(strings.TrimSpace(tlsVal)) {
-	case conn.TLSModeSkipVerify:
-		return true
-	default:
-		return false
-	}
 }
