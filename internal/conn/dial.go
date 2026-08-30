@@ -9,6 +9,8 @@ import (
 	"net"
 	"net/textproto"
 	"time"
+
+	"sermo/internal/netutil"
 )
 
 // probeTarget is the resolved transport target of one connection probe. It
@@ -63,11 +65,11 @@ func (t probeTarget) dialTLS(ctx context.Context) (net.Conn, error) {
 	case "":
 		c, err = d.DialContext(ctx, networkTCP, addr)
 	case tlsSkipVerify:
-		tc := tlsClientConfig(host)
+		tc := netutil.TLSClientConfig(host)
 		tc.InsecureSkipVerify = true // operator chose tls: skip-verify
 		c, err = (&tls.Dialer{NetDialer: d, Config: tc}).DialContext(ctx, networkTCP, addr)
 	default:
-		c, err = (&tls.Dialer{NetDialer: d, Config: tlsClientConfig(host)}).DialContext(ctx, networkTCP, addr)
+		c, err = (&tls.Dialer{NetDialer: d, Config: netutil.TLSClientConfig(host)}).DialContext(ctx, networkTCP, addr)
 	}
 	if err != nil {
 		return nil, wrapDialError(networkTCP, addr, err)
@@ -125,14 +127,6 @@ func probeBanner(ctx context.Context, cfg Config, defaultPort int, handshake fun
 	}
 	defer func() { _ = c.Close() }()
 	return handshake(c, cfg)
-}
-
-// tlsClientConfig is the TLS client config the conn probes share for an upgrade
-// to host: SNI set and TLS 1.2 the floor. Centralizing it keeps the minimum
-// version (and any future policy) in one place across every probe; callers that
-// need to skip verification set InsecureSkipVerify on the returned config.
-func tlsClientConfig(host string) *tls.Config {
-	return &tls.Config{ServerName: host, MinVersion: tls.VersionTLS12}
 }
 
 // applyDeadline sets the context deadline on a connection (net.Conn or

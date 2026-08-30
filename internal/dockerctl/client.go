@@ -3,7 +3,6 @@ package dockerctl
 
 import (
 	"context"
-	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -213,7 +212,7 @@ func NewClient(spec Spec) *Client {
 	scheme := dockerSchemeHTTP
 	if mode := netutil.NormalizeTLS(spec.TLS); mode != "" {
 		scheme = dockerSchemeHTTPS
-		tc := &tls.Config{ServerName: host, MinVersion: tls.VersionTLS12}
+		tc := netutil.TLSClientConfig(host)
 		if mode == tlsModeSkipVerify {
 			tc.InsecureSkipVerify = true // operator chose tls: skip-verify
 		}

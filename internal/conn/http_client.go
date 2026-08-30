@@ -8,6 +8,7 @@ import (
 	"net/http"
 
 	"sermo/internal/httpx"
+	"sermo/internal/netutil"
 )
 
 // httpProbeClient returns an HTTP client for connection probes. When iface is
@@ -51,7 +52,7 @@ func httpProbeBaseWithTLSMode(ctx context.Context, cfg Config, defaultPort int, 
 	client := httpProbeClient(target.cfg.Interface, nil)
 	if tlsMode != "" {
 		scheme = schemeHTTPS
-		tlsConfig := tlsClientConfig(host)
+		tlsConfig := netutil.TLSClientConfig(host)
 		if tlsMode == tlsSkipVerify {
 			tlsConfig.InsecureSkipVerify = true // operator chose tls: skip-verify
 		}

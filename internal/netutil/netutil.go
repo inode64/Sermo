@@ -1,8 +1,9 @@
-// Package netutil names shared network constants.
+// Package netutil provides shared network helpers and transport policy.
 package netutil
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"net"
 	"net/url"
@@ -82,6 +83,13 @@ func TimeoutFromContext(ctx context.Context, fallback time.Duration) time.Durati
 		return d
 	}
 	return time.Nanosecond
+}
+
+// TLSClientConfig returns a fresh TLS client configuration for host with SNI
+// set and TLS 1.2 as the minimum version. Callers that explicitly support an
+// unverified mode may set InsecureSkipVerify on their private result.
+func TLSClientConfig(host string) *tls.Config {
+	return &tls.Config{ServerName: host, MinVersion: tls.VersionTLS12}
 }
 
 // TLS mode tokens shared by the transports that accept a friendly tls value.
