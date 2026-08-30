@@ -2,6 +2,10 @@ package conn
 
 import "testing"
 
+func libvirtTransport(cfg Config) (mode, addr, uri string) {
+	return libvirtTransportWithTarget(cfg, newProbeTarget(cfg, defaultPortLibvirt))
+}
+
 func TestFormatLibvirtVersion(t *testing.T) {
 	cases := map[uint64]string{
 		9000000: "9.0.0",

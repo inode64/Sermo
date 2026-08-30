@@ -136,10 +136,6 @@ func (s *DaemonMetricSampler) Run(ctx context.Context, interval time.Duration) {
 	}
 }
 
-func (s *DaemonMetricSampler) sample() {
-	s.sampleWithContext(context.Background())
-}
-
 func (s *DaemonMetricSampler) sampleWithContext(ctx context.Context) {
 	if s == nil {
 		return

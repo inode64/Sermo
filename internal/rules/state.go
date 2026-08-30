@@ -98,11 +98,6 @@ func (p Policy) cooldownStatus(state *RemediationState, now time.Time) (effectiv
 	return effective, time.Time{}
 }
 
-func (p Policy) rateLimitUntil(state *RemediationState, now time.Time) time.Time {
-	_, until := p.actionHistoryStatus(state, now)
-	return until
-}
-
 // actionHistoryStatus counts recent remediations and, when rate limiting is
 // enabled, calculates when enough actions have expired. Report uses this once
 // for both fields; Allow retains its allocation-free count-only hot path.

@@ -49,6 +49,24 @@ func loadConfig(t *testing.T, global string, opts ...Option) (*Config, error) {
 	return Load(global, opts...)
 }
 
+func withPathDirs(kind string) Option {
+	return func(o *loadOptions) {
+		if o.pathDirs == nil {
+			o.pathDirs = map[string][]string{}
+		}
+		o.pathDirs[kind] = nil
+	}
+}
+
+func withServiceUnits(backend string, units []string) Option {
+	return func(o *loadOptions) {
+		if o.serviceUnits == nil {
+			o.serviceUnits = map[string][]string{}
+		}
+		o.serviceUnits[backend] = normalizeServiceUnits(units)
+	}
+}
+
 // loadCatalog loads a config from files, failing on any load error.
 func loadCatalog(t *testing.T, files map[string]string) *Config {
 	t.Helper()
