@@ -24,8 +24,6 @@ import (
 	"sermo/internal/procnet"
 	"sermo/internal/servicemgr"
 	"sermo/internal/virt"
-
-	"github.com/goccy/go-yaml"
 )
 
 // listInstalledCatalogServices returns active service targets for the wizard:
@@ -548,12 +546,8 @@ func serviceStaleFile(path string, detected map[string]bool) staleFile {
 // "docker:<container>", and libvirt VM services use "vm:<domain>". "" when
 // unreadable or not targetable.
 func serviceFileTarget(path string) string {
-	data, err := os.ReadFile(path) //nolint:gosec // G304: catalog/service YAML path under controlled dirs
-	if err != nil {
-		return ""
-	}
-	var doc map[string]any
-	if err := yaml.Unmarshal(data, &doc); err != nil {
+	doc := readYAMLMap(path)
+	if doc == nil {
 		return ""
 	}
 	if control, ok := doc[config.SectionControl].(map[string]any); ok {

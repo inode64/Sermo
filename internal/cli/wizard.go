@@ -685,12 +685,8 @@ func wizardWatchStaleFile(path string, detected map[string]bool) staleFile {
 // net/route/icmp/dns watches — keys that match detectedTargetKeys). nil/nil
 // on any read or parse error.
 func parseWatchFile(path string) (names, targets []string) {
-	data, err := os.ReadFile(path) //nolint:gosec // G304: operator/catalog YAML path under paths.watches
-	if err != nil {
-		return nil, nil
-	}
-	var root map[string]any
-	if err := yaml.Unmarshal(data, &root); err != nil {
+	root := readYAMLMap(path)
+	if root == nil {
 		return nil, nil
 	}
 	if name, _ := root[wizardFieldName].(string); name != "" {

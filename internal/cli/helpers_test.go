@@ -10,6 +10,47 @@ import (
 	"sermo/internal/notify"
 )
 
+func TestReadYAMLMap(t *testing.T) {
+	dir := t.TempDir()
+	valid := filepath.Join(dir, "valid.yml")
+	if err := os.WriteFile(valid, []byte("name: web\ncheck: {type: http}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	invalid := filepath.Join(dir, "invalid.yml")
+	if err := os.WriteFile(invalid, []byte("name: [\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	empty := filepath.Join(dir, "empty.yml")
+	if err := os.WriteFile(empty, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	tests := []struct {
+		name string
+		path string
+		want string
+	}{
+		{name: "valid map", path: valid, want: "web"},
+		{name: "invalid yaml", path: invalid},
+		{name: "empty document", path: empty},
+		{name: "missing file", path: filepath.Join(dir, "missing.yml")},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			doc := readYAMLMap(test.path)
+			if test.want == "" {
+				if doc != nil {
+					t.Fatalf("readYAMLMap() = %v, want nil", doc)
+				}
+				return
+			}
+			if got, _ := doc["name"].(string); got != test.want {
+				t.Fatalf("readYAMLMap()[name] = %q, want %q", got, test.want)
+			}
+		})
+	}
+}
+
 func TestIssueHelpers(t *testing.T) {
 	scoped := scopedIssues("svc", []string{"a", "b"})
 	if len(scoped) != 2 || scoped[0].Scope != "svc" || scoped[1].Msg != "b" {
