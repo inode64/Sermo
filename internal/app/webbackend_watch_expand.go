@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"sermo/internal/cfgval"
 	"sermo/internal/checks"
-	"sermo/internal/operation"
 	"sermo/internal/web"
 )
 
@@ -45,11 +44,7 @@ func (b *WebBackend) ExpandWatch(ctx context.Context, name string) web.ActionRes
 		return web.ActionResult{OK: false, Message: msg}
 	}
 
-	timeout := b.operationTimeout
-	if timeout <= 0 {
-		timeout = operation.DefaultOperationTimeout
-	}
-	opCtx, cancel := context.WithTimeout(ctx, timeout)
+	opCtx, cancel := b.operationContext(ctx, 0)
 	defer cancel()
 	res, err := expander.ExpandPath(opCtx, path, w.expand.By)
 	if err != nil {
