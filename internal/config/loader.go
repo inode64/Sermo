@@ -50,35 +50,10 @@ func WithCatalogDirs(dirs ...string) Option {
 	return func(o *loadOptions) { o.catalogDirs = dirs }
 }
 
-// withPathDirs clears a paths.<kind> list for catalog-audit loads that exercise
-// only the compiled catalog. Test-only inject seam.
-func withPathDirs(kind string) Option {
-	return func(o *loadOptions) {
-		if o.pathDirs == nil {
-			o.pathDirs = map[string][]string{}
-		}
-		o.pathDirs[kind] = nil
-	}
-}
-
 // WithLoadContext binds service-unit discovery during lazy catalog resolution to
 // the caller's context. Production callers pass the daemon lifetime context.
 func WithLoadContext(ctx context.Context) Option {
 	return func(o *loadOptions) { o.loadCtx = ctx }
-}
-
-// withServiceUnits provides active backend units for service-derived catalog
-// service template materialization. Production loads query the active init
-// backend lazily; this option is the inject seam so tests can pin units without
-// probing the host. Unexported like withPathDirs because only this package's
-// own tests use it — WithCatalogDirs stays exported for the other packages'.
-func withServiceUnits(backend string, units []string) Option {
-	return func(o *loadOptions) {
-		if o.serviceUnits == nil {
-			o.serviceUnits = map[string][]string{}
-		}
-		o.serviceUnits[backend] = normalizeServiceUnits(units)
-	}
 }
 
 // Load reads the global configuration at globalPath and every catalog service and

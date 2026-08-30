@@ -170,10 +170,6 @@ func libvirtDomainState(s int32) string {
 // libvirtTransport decides the transport, dial address and connect URI from the
 // config: an explicit socket path, otherwise plain TCP to host:port. The connect
 // URI defaults to qemu:///system.
-func libvirtTransport(cfg Config) (mode, addr, uri string) {
-	return libvirtTransportWithTarget(cfg, newProbeTarget(cfg, defaultPortLibvirt))
-}
-
 func libvirtTransportWithTarget(cfg Config, target probeTarget) (mode, addr, uri string) {
 	uri = cfg.Query
 	if uri == "" {

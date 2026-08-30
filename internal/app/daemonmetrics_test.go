@@ -30,6 +30,10 @@ type metricSeriesTestSample struct {
 	ok    bool
 }
 
+func (s *DaemonMetricSampler) sample() {
+	s.sampleWithContext(context.Background())
+}
+
 func TestUintToInt64ClampsUnsignedOverflow(t *testing.T) {
 	tests := []struct {
 		name string
