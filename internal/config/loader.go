@@ -566,13 +566,14 @@ func watchEntryFromDocument(doc *Document) (map[string]any, error) {
 	return entry, nil
 }
 
-// watchRegistry returns the mutable watches map under Global.Raw, creating it on
-// first use.
-func (c *Config) watchRegistry() map[string]any {
-	dst, _ := c.Global.Raw[pathKeyWatches].(map[string]any)
+// registry returns the mutable map at key under Global.Raw, creating it on first
+// use. Watch documents and notifier fragments share this storage contract while
+// retaining their own validation and merge rules.
+func (c *Config) registry(key string) map[string]any {
+	dst, _ := c.Global.Raw[key].(map[string]any)
 	if dst == nil {
 		dst = map[string]any{}
-		c.Global.Raw[pathKeyWatches] = dst
+		c.Global.Raw[key] = dst
 	}
 	return dst
 }
@@ -582,7 +583,7 @@ func (c *Config) mergeWatchDocument(doc *Document) error {
 	if err != nil {
 		return err
 	}
-	dst := c.watchRegistry()
+	dst := c.registry(pathKeyWatches)
 	if _, exists := dst[doc.Name]; exists {
 		return fmt.Errorf("%s: watch %q is already defined", doc.Path, doc.Name)
 	}
@@ -612,7 +613,7 @@ func (c *Config) mergeNotifierMap(doc *Document) (bool, error) {
 	if len(entries) != 1 {
 		return true, fmt.Errorf("%s: %s fragments must contain exactly one entry", doc.Path, pathKeyNotifiers)
 	}
-	dst := c.notifierRegistry()
+	dst := c.registry(pathKeyNotifiers)
 	for name, entry := range entries {
 		if _, exists := dst[name]; exists {
 			return true, fmt.Errorf("%s: notifier %q is already defined", doc.Path, name)
@@ -621,17 +622,6 @@ func (c *Config) mergeNotifierMap(doc *Document) (bool, error) {
 	}
 	c.Global.Raw[pathKeyNotifiers] = dst
 	return true, nil
-}
-
-// notifierRegistry returns the mutable notifiers map under Global.Raw, creating
-// it on first use.
-func (c *Config) notifierRegistry() map[string]any {
-	dst, _ := c.Global.Raw[pathKeyNotifiers].(map[string]any)
-	if dst == nil {
-		dst = map[string]any{}
-		c.Global.Raw[pathKeyNotifiers] = dst
-	}
-	return dst
 }
 
 func loadDocument(path string) (*Document, error) {
