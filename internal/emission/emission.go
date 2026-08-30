@@ -56,7 +56,7 @@ func Merge(raw any, fallback Policy) Policy {
 	if mode := cfgval.String(m[KeyNotify]); ValidMode(mode) {
 		p.Notify = mode
 	}
-	return Resolve(p, fallback)
+	return p
 }
 
 // ValidMode reports whether mode is a supported emission mode.
