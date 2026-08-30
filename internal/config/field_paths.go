@@ -18,10 +18,8 @@ const (
 	enginePathUserLookup          = SectionEngine + "." + EngineKeyUserLookup
 	enginePathUserLookupTimeout   = SectionEngine + "." + EngineKeyUserLookupTimeout
 
-	pathsPathLocks     = SectionPaths + "." + pathKeyLocks
-	pathsPathRuntime   = SectionPaths + "." + pathKeyRuntime
-	pathsPathState     = SectionPaths + "." + pathKeyState
-	pathsPathTemplates = SectionPaths + "." + pathKeyTemplates
+	pathsPathLocks   = SectionPaths + "." + pathKeyLocks
+	pathsPathRuntime = SectionPaths + "." + pathKeyRuntime
 
 	webPathAddress           = SectionWeb + "." + WebKeyAddress
 	webPathAllowedHosts      = SectionWeb + "." + WebKeyAllowedHosts

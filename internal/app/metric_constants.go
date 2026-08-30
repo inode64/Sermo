@@ -37,8 +37,4 @@ const (
 	watchDefaultLockName         = "(default)"
 	watchFallbackFilesystem      = "filesystem"
 	watchFirewallDefaultMinRules = uint64(1)
-	watchMissingDeviceMessage    = "missing device"
-	watchMissingInterfaceMessage = "missing interface"
-	watchMissingNameMessage      = "missing name"
-	watchMissingPathMessage      = "missing path"
 )

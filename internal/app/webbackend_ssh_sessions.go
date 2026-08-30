@@ -20,7 +20,6 @@ import (
 const (
 	sshCatalogApp                  = "ssh"
 	interactiveSessionCacheTTL     = 5 * time.Second
-	sshSessionUnavailablePrefix    = "SSH session attribution unavailable: "
 	sshSessionUnsupportedMessage   = "does not define a safely identifiable SSH session boundary"
 	sshSessionSamplerFailedMessage = "load SSH sessions: "
 )
