@@ -208,6 +208,18 @@ func defaultSSHIdleSampler() SSHIdleSamplerFunc {
 	return NewSSHIdleSampler(nil, nil)
 }
 
+func terminalSessionInputs(reader process.Reader, sessions func() ([]utmp.Session, error)) ([]utmp.Session, map[int]process.Identity, error) {
+	loggedIn, err := sessions()
+	if err != nil {
+		return nil, nil, fmt.Errorf("load terminal sessions: %w", err)
+	}
+	snapshot, err := process.Snapshot(reader)
+	if err != nil {
+		return nil, nil, fmt.Errorf("read terminal processes: %w", err)
+	}
+	return loggedIn, snapshot, nil
+}
+
 func newSSHIdleSampler(reader process.Reader, lookup *process.UserLookup, sessions func() ([]utmp.Session, error), terminal func(string) (utmp.Terminal, error), now func() time.Time) SSHIdleSamplerFunc {
 	return func(config SSHIdleConfig) (SSHIdleSample, error) {
 		if config.IdleFor <= 0 {
@@ -217,15 +229,11 @@ func newSSHIdleSampler(reader process.Reader, lookup *process.UserLookup, sessio
 		if err != nil {
 			return SSHIdleSample{}, err
 		}
-		sessions, err := sessions()
+		loggedIn, snapshot, err := terminalSessionInputs(reader, sessions)
 		if err != nil {
-			return SSHIdleSample{}, fmt.Errorf("load terminal sessions: %w", err)
+			return SSHIdleSample{}, err
 		}
-		snapshot, err := process.Snapshot(reader)
-		if err != nil {
-			return SSHIdleSample{}, fmt.Errorf("read terminal processes: %w", err)
-		}
-		return sampleSSHIdle(sessions, snapshot, lookup, terminal, now(), config, sshdFilters)
+		return sampleSSHIdle(loggedIn, snapshot, lookup, terminal, now(), config, sshdFilters)
 	}
 }
 
@@ -235,13 +243,9 @@ func newSSHSessionSampler(reader process.Reader, lookup *process.UserLookup, ses
 		if err != nil {
 			return SSHSessionSample{}, err
 		}
-		loggedIn, err := sessions()
+		loggedIn, snapshot, err := terminalSessionInputs(reader, sessions)
 		if err != nil {
-			return SSHSessionSample{}, fmt.Errorf("load terminal sessions: %w", err)
-		}
-		snapshot, err := process.Snapshot(reader)
-		if err != nil {
-			return SSHSessionSample{}, fmt.Errorf("read terminal processes: %w", err)
+			return SSHSessionSample{}, err
 		}
 		return sampleSSHSessions(loggedIn, snapshot, terminal, now(), sshdFilters, lookup.ResolveUser)
 	}
