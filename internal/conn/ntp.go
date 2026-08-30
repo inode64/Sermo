@@ -7,7 +7,6 @@ import (
 	"net"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/beevik/ntp"
 
@@ -37,7 +36,8 @@ func (ntpProtocol) RequiresUser() bool { return false }
 func (ntpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	target := probeTargetFor(ctx, cfg, defaultPortNTP)
 	opt := ntp.QueryOptions{
-		Timeout: ntpTimeout(ctx),
+		// Zero falls back to beevik's own default when ctx has no deadline.
+		Timeout: netutil.TimeoutFromContext(ctx, 0),
 		// Route the UDP query through the shared dialer so interface binding works
 		// identically to the other probes; beevik would otherwise dial directly.
 		Dialer: func(_, remote string) (net.Conn, error) {
@@ -69,12 +69,6 @@ func (ntpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	extra[extraStratum] = strconv.Itoa(stratum)
 	extra[extraOffsetSeconds] = secondsString(resp.ClockOffset.Seconds())
 	return Result{Extra: extra}, nil
-}
-
-// ntpTimeout derives the query timeout from the context deadline, falling back to
-// beevik's own default (0 means "use the library default") when none is set.
-func ntpTimeout(ctx context.Context) time.Duration {
-	return netutil.TimeoutFromContext(ctx, 0)
 }
 
 // ntpKissCode returns the kiss code of a stratum-0 response. RFC 5905 §7.4

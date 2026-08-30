@@ -23,8 +23,6 @@ import (
 // dead or stalled mail server cannot hang a watch cycle.
 const dialTimeout = 15 * time.Second
 
-const minSMTPTimeout = time.Nanosecond
-
 // Email DSN constants are the supported SMTP URL schemes and their URL prefixes.
 const (
 	EmailDSNSchemeSMTP  = "smtp"
@@ -148,7 +146,7 @@ func smtpSendWithTLSConfig(ctx context.Context, d emailDSN, from string, to []st
 	if err != nil {
 		return err
 	}
-	client, err := newSMTPClient(d, tlsCfg, smtpTimeout(ctx))
+	client, err := newSMTPClient(d, tlsCfg, netutil.TimeoutFromContext(ctx, dialTimeout))
 	if err != nil {
 		return err
 	}
@@ -156,17 +154,6 @@ func smtpSendWithTLSConfig(ctx context.Context, d emailDSN, from string, to []st
 		return fmt.Errorf("send email via %s: %w", d.addr(), err)
 	}
 	return nil
-}
-
-func smtpTimeout(ctx context.Context) time.Duration {
-	if deadline, ok := ctx.Deadline(); ok {
-		remaining := time.Until(deadline)
-		if remaining <= 0 {
-			return minSMTPTimeout
-		}
-		return remaining
-	}
-	return dialTimeout
 }
 
 func smtpTLSConfig(host string) *tls.Config {
