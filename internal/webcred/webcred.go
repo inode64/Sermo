@@ -72,16 +72,13 @@ var bcryptPrefixes = [...]string{"$2a$", "$2b$", "$2y$"}
 type kind uint8
 
 const (
-	kindPlain kind = iota
-	kindBcrypt
+	kindBcrypt kind = iota
 	kindSHA256
 )
 
 // credential is one parsed entry of a source.
 type credential struct {
 	kind kind
-	// plain holds a cleartext credential (kindPlain).
-	plain string
 	// hash holds the bcrypt modular-crypt string (kindBcrypt).
 	hash []byte
 	// salt and digest hold the two `$sha256$` fields (kindSHA256).
@@ -94,8 +91,8 @@ type credential struct {
 type List struct {
 	credentials []credential
 	// cache and slots are only allocated when the list holds a bcrypt entry:
-	// they exist to bound the cost of the expensive path, and a transient plain
-	// or `$sha256$` list has none to bound. Pointers, so a copied List (Auth is
+	// they exist to bound the cost of the expensive path, and a `$sha256$` list
+	// has none to bound. Pointers, so a copied List (Auth is
 	// passed by value) shares one cache instead of silently losing it.
 	cache *verifyCache
 	slots chan struct{}
@@ -126,20 +123,6 @@ func Parse(data string) (List, error) {
 		return List{}, errNoCredentials
 	}
 	return list, nil
-}
-
-// Plain builds an in-memory cleartext list for callers that already hold a
-// transient secret. Configuration parsing never calls it and rejects cleartext
-// credentials on disk.
-func Plain(secrets ...string) List {
-	var list List
-	for _, secret := range secrets {
-		if secret == "" {
-			continue
-		}
-		list.credentials = append(list.credentials, credential{kind: kindPlain, plain: secret})
-	}
-	return list
 }
 
 // errNoCredentials is returned for a source with nothing usable in it — an empty
@@ -223,8 +206,8 @@ func hashFormatName(hash string) string {
 	return hashPrefix
 }
 
-// String redacts credentials so neither parsed hashes nor transient cleartext
-// values render into logs or test failures.
+// String redacts parsed credentials so hashes never render into logs or test
+// failures.
 func (l List) String() string {
 	return fmt.Sprintf("webcred.List(%d credentials)", len(l.credentials))
 }
@@ -280,8 +263,6 @@ func (l List) check(password string) bool {
 
 func (c credential) verify(password string) bool {
 	switch c.kind {
-	case kindPlain:
-		return SecureEqual(c.plain, password)
 	case kindSHA256:
 		digest := saltedDigest(c.salt, password)
 		return subtle.ConstantTimeCompare(digest[:], c.digest) == 1
