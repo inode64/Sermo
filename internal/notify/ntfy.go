@@ -9,9 +9,7 @@ import (
 )
 
 const (
-	ntfyTopicKey   = "topic"
-	ntfyTitleKey   = "title"
-	ntfyMessageKey = "message"
+	ntfyTopicKey = "topic"
 
 	ntfyAuthorizationHeader = "Authorization"
 	ntfyBearerPrefix        = "Bearer "
@@ -68,10 +66,7 @@ func buildNtfy(name string, entry map[string]any) (Notifier, error) {
 // notification title and the detail (the SERMO_* fields) as the message. A
 // subject-only notification travels as the message alone.
 func ntfyPayload(topic string, msg Message) []byte {
-	body := map[string]string{ntfyTopicKey: topic, ntfyMessageKey: msg.Subject}
-	if msg.Body != "" {
-		body[ntfyTitleKey] = msg.Subject
-		body[ntfyMessageKey] = msg.Body
-	}
+	body := pushMessageFields(msg)
+	body[ntfyTopicKey] = topic
 	return webhookPayload(body)
 }
