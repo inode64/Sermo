@@ -92,7 +92,7 @@ func (t probeTarget) openStream(ctx context.Context) (net.Conn, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open probe connection: %w", err)
 	}
-	applyDeadline(ctx, c)
+	ApplyDeadline(ctx, c)
 	return c, nil
 }
 
@@ -104,7 +104,7 @@ func (t probeTarget) openNetwork(ctx context.Context, network string) (net.Conn,
 	if err != nil {
 		return nil, wrapDialError(network, addr, err)
 	}
-	applyDeadline(ctx, c)
+	ApplyDeadline(ctx, c)
 	return c, nil
 }
 
@@ -129,11 +129,11 @@ func probeBanner(ctx context.Context, cfg Config, defaultPort int, handshake fun
 	return handshake(c, cfg)
 }
 
-// applyDeadline sets the context deadline on a connection (net.Conn or
+// ApplyDeadline sets the context deadline on a connection (net.Conn or
 // net.PacketConn — both satisfy the SetDeadline interface) when the context
 // carries one. A context without a deadline is a no-op. It centralizes the
 // "propagate the probe timeout to the socket" step every protocol repeats.
-func applyDeadline(ctx context.Context, c interface {
+func ApplyDeadline(ctx context.Context, c interface {
 	SetDeadline(deadline time.Time) error
 }) {
 	if dl, ok := ctx.Deadline(); ok {

@@ -44,3 +44,24 @@ func TestTLSClientConfig(t *testing.T) {
 		t.Fatal("mutating one TLSClientConfig result changed another")
 	}
 }
+
+func TestNormalizeTLS(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{name: "empty", in: ""},
+		{name: "disabled", in: "off"},
+		{name: "verified", in: "yes", want: TLSModeTrue},
+		{name: "skip verify", in: "  SKIP-VERIFY  ", want: TLSModeSkipVerify},
+		{name: "typo stays custom", in: "skipverify", want: "skipverify"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := NormalizeTLS(test.in); got != test.want {
+				t.Fatalf("NormalizeTLS(%q) = %q, want %q", test.in, got, test.want)
+			}
+		})
+	}
+}

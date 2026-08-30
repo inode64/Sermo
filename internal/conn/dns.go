@@ -115,7 +115,7 @@ func (dnsProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 		return Result{}, probeErr(ProtocolNameDNS, stepDial, err)
 	}
 	defer func() { _ = c.Close() }()
-	applyDeadline(ctx, c)
+	ApplyDeadline(ctx, c)
 
 	if _, err := c.Write(query); err != nil {
 		return Result{}, probeErr(ProtocolNameDNS, stepQuery, err)

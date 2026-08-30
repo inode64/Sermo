@@ -379,7 +379,7 @@ func chronyDialUnix(ctx context.Context, socket string) (net.Conn, error) {
 		_ = os.Remove(local)
 		return nil, probeErr(ProtocolNameChrony, stepChronyClientSocketMode, err)
 	}
-	applyDeadline(ctx, c)
+	ApplyDeadline(ctx, c)
 	return &unlinkOnCloseConn{Conn: c, path: local}, nil
 }
 

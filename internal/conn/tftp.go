@@ -64,7 +64,7 @@ func (tftpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 		return Result{}, probeErr(ProtocolNameTFTP, stepListen, err)
 	}
 	defer func() { _ = pc.Close() }()
-	applyDeadline(ctx, pc)
+	ApplyDeadline(ctx, pc)
 
 	filename := cfg.Query
 	if filename == "" {

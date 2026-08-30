@@ -4,7 +4,35 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 )
+
+type deadlineRecorder struct {
+	calls int
+	value time.Time
+}
+
+func (r *deadlineRecorder) SetDeadline(value time.Time) error {
+	r.calls++
+	r.value = value
+	return errors.New("ignored by contract")
+}
+
+func TestApplyDeadline(t *testing.T) {
+	recorder := &deadlineRecorder{}
+	ApplyDeadline(context.Background(), recorder)
+	if recorder.calls != 0 {
+		t.Fatalf("ApplyDeadline() without deadline made %d calls, want none", recorder.calls)
+	}
+
+	deadline := time.Now().Add(time.Minute)
+	ctx, cancel := context.WithDeadline(context.Background(), deadline)
+	defer cancel()
+	ApplyDeadline(ctx, recorder)
+	if recorder.calls != 1 || !recorder.value.Equal(deadline) {
+		t.Fatalf("ApplyDeadline() recorded %d calls at %v, want one at %v", recorder.calls, recorder.value, deadline)
+	}
+}
 
 func TestProbeWithDeadline(t *testing.T) {
 	tests := []struct {
