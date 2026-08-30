@@ -1138,12 +1138,12 @@ func versionCommandEntry(tree map[string]any) map[string]any {
 	return nil
 }
 
-// configTestCommandEntry returns a copy of preflight.config (the daemon's, or
-// the service's custom preflight that replaced it), or nil.
+// configTestCommandEntry returns preflight.config (the daemon's, or the
+// service's custom preflight that replaced it), or nil. Callers only read it.
 func configTestCommandEntry(tree map[string]any) map[string]any {
 	if pf, ok := tree[config.SectionPreflight].(map[string]any); ok {
 		if entry, ok := pf[config.ServiceMonitorKeyConfig].(map[string]any); ok {
-			return maps.Clone(entry)
+			return entry
 		}
 	}
 	return nil
