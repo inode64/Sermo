@@ -59,7 +59,6 @@ const (
 	meminfoValueIndex             = 1
 	procDecimalBase               = 10
 	procUintBits                  = 64
-	procIntBits                   = 64
 	procFloatBits                 = 64
 )
 

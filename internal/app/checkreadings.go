@@ -26,7 +26,6 @@ const (
 
 	watchReadingLabelAddresses                = "Addresses"
 	watchReadingLabelAddressCount             = "Address count"
-	watchReadingLabelAllocated                = "Allocated"
 	watchReadingLabelAge                      = "Age"
 	watchReadingLabelArrays                   = "Arrays"
 	watchReadingLabelAddress                  = "Address"
@@ -41,21 +40,17 @@ const (
 	watchReadingLabelDBusProbe                = "D-Bus probe"
 	watchReadingLabelDBusActivatable          = "Activatable"
 	watchReadingLabelChipFilter               = "Chip filter"
-	watchReadingLabelConfiguredPath           = "Configured path"
 	watchReadingLabelCount                    = "Count"
 	watchReadingLabelConnections              = "Connections"
 	watchReadingLabelCPUTicks                 = "CPU ticks"
 	watchReadingLabelCapacity                 = "Capacity"
 	watchReadingLabelCurrentSize              = "Current size"
 	watchReadingLabelDaysLeft                 = "Days left"
-	watchReadingLabelDefaultRoutes            = "Default routes"
 	watchReadingLabelDegraded                 = "Degraded"
 	watchReadingLabelDetached                 = "Detached"
 	watchReadingLabelDegradedArrays           = "Degraded arrays"
 	watchReadingLabelDevice                   = "Device"
 	watchReadingLabelDNSNames                 = "DNS names"
-	watchReadingLabelEDAC                     = "EDAC"
-	watchReadingLabelEgress                   = "Egress"
 	watchReadingLabelEntries                  = "Entries"
 	watchReadingLabelError                    = "Error"
 	watchReadingLabelErrorsTotal              = "Errors total"
@@ -66,7 +61,6 @@ const (
 	watchReadingLabelExpires                  = "Expires"
 	watchReadingLabelFamily                   = "Family"
 	watchReadingLabelFirmware                 = "Firmware"
-	watchReadingLabelFree                     = "Free"
 	watchReadingLabelFreeBytes                = "Free bytes"
 	watchReadingLabelFullAvg10                = "Full avg10"
 	watchReadingLabelFullAvg60                = "Full avg60"
@@ -85,13 +79,11 @@ const (
 	watchReadingLabelGlusterVolumesExpected   = "Gluster volumes expected"
 	watchReadingLabelGlusterVolumesStarted    = "Gluster volumes started"
 	watchReadingLabelGrowth                   = "Growth"
-	watchReadingLabelGrowthLimit              = "Growth limit"
 	watchReadingLabelHealth                   = "Health"
 	watchReadingLabelHost                     = "Host"
 	watchReadingLabelInputs                   = "Inputs"
 	watchReadingLabelInterface                = "Interface"
 	watchReadingLabelIO                       = "IO total"
-	watchReadingLabelInUse                    = "In use"
 	watchReadingLabelIssuer                   = "Issuer"
 	watchReadingLabelKeyBits                  = "Key bits"
 	watchReadingLabelKeyType                  = "Key type"
@@ -110,14 +102,11 @@ const (
 	watchReadingLabelMinRules                 = "Min rules"
 	watchReadingLabelMode                     = "Mode"
 	watchReadingLabelModel                    = "Model"
-	watchReadingLabelMountpoints              = "Mountpoints"
-	watchReadingLabelOOMKills                 = "OOM kills"
 	watchReadingLabelObjectPath               = "Object path"
 	watchReadingLabelOldestIdle               = "Oldest idle"
 	watchReadingLabelOf                       = "Of"
 	watchReadingLabelOwner                    = "Owner"
 	watchReadingLabelPath                     = "Path"
-	watchReadingLabelPaths                    = "Paths"
 	watchReadingLabelPIDs                     = "PIDs"
 	watchReadingLabelPort                     = "Port"
 	watchReadingLabelPowerCycles              = "Power cycles"
@@ -128,13 +117,11 @@ const (
 	watchReadingLabelProtocol                 = "Protocol"
 	watchReadingLabelRead                     = "Read"
 	watchReadingLabelRecovering               = "Recovering"
-	watchReadingLabelRequiredInterface        = "Required interface"
 	watchReadingLabelResource                 = "Resource"
 	watchReadingLabelResult                   = "Result"
 	watchReadingLabelReasons                  = "Reasons"
 	watchReadingLabelRSS                      = "RSS total"
 	watchReadingLabelRotation                 = "Medium"
-	watchReadingLabelRTT                      = "RTT"
 	watchReadingLabelRules                    = "Rules"
 	watchReadingLabelSample                   = "Sample"
 	watchReadingLabelSelfTest                 = "Last self-test"
@@ -176,7 +163,6 @@ const (
 	watchReadingLabelWWN                      = "WWN"
 	watchReadingLabelWindow                   = "Window"
 	watchReadingLabelWrite                    = "Write"
-	watchReadingLabelZombies                  = "Zombies"
 	watchReadingLabelLeap                     = "Leap"
 	watchReadingLabelOffset                   = "Offset"
 	watchReadingLabelOffsetAbs                = "Offset abs"
@@ -194,7 +180,6 @@ const (
 )
 
 const (
-	watchReadingUnitBits              = metrics.MetricUnitBits
 	watchReadingUnitMegabitsPerSecond = metrics.MetricUnitMegabitsPerSecond
 	watchReadingUnitSeconds           = "s"
 	// watchReadingUnitPPM is the frequency-error unit chrony reports its
@@ -472,9 +457,9 @@ func checkReadings(checkType string, data map[string]any) []web.WatchReading {
 // so the gateway is as far as "where does it go" can honestly reach.
 func routeCheckReadings(data map[string]any) []web.WatchReading {
 	return readingsFrom(data).
-		addString(checks.DataKeyFamily, "Family").
+		addString(checks.DataKeyFamily, watchReadingLabelFamily).
 		addString(checks.DataKeyInterface, "Interface").
-		addString(checks.DataKeyGateway, "Gateway").
+		addString(checks.DataKeyGateway, watchReadingLabelGateway).
 		addInt(checks.DataKeyRoutes, "Routes in table").
 		addInt(checks.DataKeyValue, "Matched").
 		readings()

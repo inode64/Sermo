@@ -249,8 +249,6 @@ const (
 	StopPolicyKeyTermTimeout = keyTermTimeout
 	// StopPolicyKeyKillTimeout is stop_policy.kill_timeout.
 	StopPolicyKeyKillTimeout = keyKillTimeout
-	// StopPolicyKeyForceKill is stop_policy.force_kill.
-	StopPolicyKeyForceKill = keyForceKill
 	// StopPolicyKeyKillOnlyIf is stop_policy.kill_only_if.
 	StopPolicyKeyKillOnlyIf = keyKillOnlyIf
 	// StopPolicyKeyUsers is stop_policy.kill_only_if.users.

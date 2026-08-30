@@ -194,7 +194,6 @@ func unexpectedGreeting(code int, greeting string) error {
 // method or frame ("GetId" is the D-Bus method, "cping" the AJP one), where the
 // wording is fixed by the wire protocol rather than chosen by us.
 const (
-	stepAuth           = "auth"
 	stepBanner         = "banner"
 	stepClose          = "close"
 	stepConnect        = "connect"
