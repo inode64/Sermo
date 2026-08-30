@@ -142,6 +142,7 @@ func New(c Config) Engine {
 		Sleep:       sleep,
 	}
 
+	operationTimeout := ResolveTimeout(c.OperationTimeout, tree)
 	ttl := c.LockTTL
 	if ttl <= 0 {
 		// The operation lock must outlive the operation it guards. A long
@@ -150,7 +151,7 @@ func New(c Config) Engine {
 		// service (whose SIGKILL could then hit the freshly restarted PID).
 		// Derive the TTL from the effective operation timeout — which already
 		// accounts for stop_policy escalation — plus a margin.
-		ttl = max(ResolveTimeout(c.OperationTimeout, c.Tree)+lockTTLMargin, defaultLockTTL)
+		ttl = max(operationTimeout+lockTTLMargin, defaultLockTTL)
 	}
 
 	return Engine{
@@ -190,7 +191,7 @@ func New(c Config) Engine {
 		KillPolicy:          killPolicy,
 		ReapSelector:        reapSelector,
 		Sleep:               sleep,
-		OperationTimeout:    ResolveTimeout(c.OperationTimeout, tree),
+		OperationTimeout:    operationTimeout,
 		Emit:                c.Emit,
 	}
 }

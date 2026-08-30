@@ -903,7 +903,7 @@ func (a App) defaultOperate(ctx context.Context, opts options, cfg *config.Confi
 		},
 		MetricSample:     metricSample,
 		Changed:          app.ArtifactChangedFunc(libBaseline),
-		OperationTimeout: operation.ResolveTimeout(opts.timeout, resolved.Tree),
+		OperationTimeout: opts.timeout,
 		Emit: func(result operation.Result) {
 			if err := recordResult(result); err != nil {
 				eventErr = err
@@ -911,11 +911,7 @@ func (a App) defaultOperate(ctx context.Context, opts options, cfg *config.Confi
 		},
 	})
 
-	opTimeout := operation.ResolveTimeout(opts.timeout, resolved.Tree)
-	opCtx, cancel := context.WithTimeout(ctx, opTimeout)
-	defer cancel()
-
-	result := runEngineAction(opCtx, engine, opts, action)
+	result := runEngineAction(ctx, engine, opts, action)
 	if eventErr != nil {
 		// The action already ran (or was blocked); losing its audit record is
 		// still a failure, but the outcome must not be masked by it.
