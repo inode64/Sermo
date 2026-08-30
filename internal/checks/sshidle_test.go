@@ -3,6 +3,7 @@ package checks
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -44,6 +45,50 @@ func testSSHTerminal(now time.Time) func(string) (utmp.Terminal, error) {
 
 func testSSHLookup() *process.UserLookup {
 	return process.NewUserLookup(process.UserLookupConfig{Mode: process.UserLookupNumeric})
+}
+
+type failingSSHSnapshotReader struct{}
+
+func (failingSSHSnapshotReader) PIDs() ([]int, error) { return nil, nil }
+func (failingSSHSnapshotReader) Identity(int) (process.Identity, bool) {
+	return process.Identity{}, false
+}
+func (failingSSHSnapshotReader) SnapshotWithError() (map[int]process.Identity, error) {
+	return nil, errors.New("snapshot unavailable")
+}
+
+func TestSSHIdleSamplerReportsTerminalInputErrors(t *testing.T) {
+	now := time.Date(2026, time.August, 5, 12, 0, 0, 0, time.UTC)
+	tests := []struct {
+		name     string
+		reader   process.Reader
+		sessions func() ([]utmp.Session, error)
+		want     string
+	}{
+		{
+			name: "sessions",
+			sessions: func() ([]utmp.Session, error) {
+				return nil, errors.New("sessions unavailable")
+			},
+			want: "load terminal sessions: sessions unavailable",
+		},
+		{
+			name:   "snapshot",
+			reader: failingSSHSnapshotReader{},
+			sessions: func() ([]utmp.Session, error) {
+				return nil, nil
+			},
+			want: "read terminal processes: read snapshot: snapshot unavailable",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			sampler := newSSHIdleSampler(test.reader, testSSHLookup(), test.sessions, testSSHTerminal(now), func() time.Time { return now })
+			if _, err := sampler(testSSHConfig()); err == nil || !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("sample error = %v, want %q", err, test.want)
+			}
+		})
+	}
 }
 
 func TestSampleSSHIdle(t *testing.T) {
