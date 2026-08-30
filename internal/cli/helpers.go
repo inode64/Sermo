@@ -2,7 +2,6 @@ package cli
 
 import (
 	"fmt"
-	"sort"
 
 	"sermo/internal/config"
 )
@@ -43,15 +42,4 @@ func (a App) loadConfig(opts options) (*config.Config, int) {
 		return nil, exitRuntimeError
 	}
 	return cfg, exitSuccess
-}
-
-func sortedUnique[V any](m map[string]V) []string {
-	names := make([]string, 0, len(m))
-	for name := range m {
-		if name != "" {
-			names = append(names, name)
-		}
-	}
-	sort.Strings(names)
-	return names
 }
