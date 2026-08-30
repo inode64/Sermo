@@ -137,9 +137,10 @@ func TypeInfoFor(typ string) (TypeInfo, bool) {
 	return spec.info, ok
 }
 
-// TypeInfos returns every built-in single-shot check type in name order. The
-// copy lets validators and tests verify registry parity without exposing the
-// mutable constructor registry.
+// TypeInfos returns every built-in single-shot check type in name order. It is
+// the inspection seam cross-package contract tests use to keep config field
+// validators in parity with the private constructor registry; the copy avoids
+// exposing that mutable registry.
 func TypeInfos() []TypeInfo {
 	names := slices.Sorted(maps.Keys(checkSpecByName))
 	infos := make([]TypeInfo, 0, len(names))
