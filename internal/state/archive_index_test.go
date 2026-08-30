@@ -16,7 +16,7 @@ import (
 // The fleet-shaped sizes are logged for inspection with `go test -v`.
 func TestArchiveMaintenancePlansWithoutSecondaryIndexes(t *testing.T) {
 	dir := t.TempDir()
-	s, err := OpenContext(context.Background(), filepath.Join(dir, Filename))
+	s, err := OpenContextWith(context.Background(), filepath.Join(dir, Filename), Options{})
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}

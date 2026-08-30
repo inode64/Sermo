@@ -27,7 +27,7 @@ func TestMonitorUnmonitorCommand(t *testing.T) {
 	}
 
 	paused := func(service string) bool {
-		store, err := state.OpenContext(context.Background(), filepath.Join(stateDir, state.Filename))
+		store, err := state.OpenContextWith(context.Background(), filepath.Join(stateDir, state.Filename), state.Options{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -59,7 +59,7 @@ func TestMonitorUnmonitorCommand(t *testing.T) {
 }
 
 func TestUpdateMonitorState(t *testing.T) {
-	store, err := state.OpenContext(context.Background(), filepath.Join(t.TempDir(), state.Filename))
+	store, err := state.OpenContextWith(context.Background(), filepath.Join(t.TempDir(), state.Filename), state.Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -138,7 +138,7 @@ defaults: { policy: { cooldown: 5m } }
 		return app.Run(context.Background(), append([]string{"--config", global}, args...))
 	}
 	watchPaused := func(name string) bool {
-		store, err := state.OpenContext(context.Background(), filepath.Join(stateDir, state.Filename))
+		store, err := state.OpenContextWith(context.Background(), filepath.Join(stateDir, state.Filename), state.Options{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -170,7 +170,7 @@ defaults: { policy: { cooldown: 5m } }
 		t.Fatalf("watch unmonitor exit = %d", code)
 	}
 	// The service key is the bare name, independent of the watch key.
-	store, err := state.OpenContext(context.Background(), filepath.Join(stateDir, state.Filename))
+	store, err := state.OpenContextWith(context.Background(), filepath.Join(stateDir, state.Filename), state.Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
