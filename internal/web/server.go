@@ -78,20 +78,19 @@ const (
 )
 
 const (
-	cspSeparator                   = "; "
-	cspSourceSelf                  = "'self'"
-	cspSourceNone                  = "'none'"
-	cspSourceUnsafeInline          = "'unsafe-inline'"
-	cspSourceData                  = "data:"
-	cspNonceSourceSuffix           = "'"
-	cspDirectiveDefaultSrc         = "default-src " + cspSourceSelf
-	cspDirectiveScriptSrcPrefix    = "script-src " + cspSourceSelf + " 'nonce-"
-	cspDirectiveScriptUnsafeInline = "script-src " + cspSourceSelf + " " + cspSourceUnsafeInline
-	cspDirectiveStyleSrc           = "style-src " + cspSourceSelf + " " + cspSourceUnsafeInline
-	cspDirectiveImgSrc             = "img-src " + cspSourceSelf + " " + cspSourceData
-	cspDirectiveBaseURI            = "base-uri " + cspSourceNone
-	cspDirectiveFormAction         = "form-action " + cspSourceSelf
-	cspDirectiveFrameAncestors     = "frame-ancestors " + cspSourceNone
+	cspSeparator                = "; "
+	cspSourceSelf               = "'self'"
+	cspSourceNone               = "'none'"
+	cspSourceUnsafeInline       = "'unsafe-inline'"
+	cspSourceData               = "data:"
+	cspNonceSourceSuffix        = "'"
+	cspDirectiveDefaultSrc      = "default-src " + cspSourceSelf
+	cspDirectiveScriptSrcPrefix = "script-src " + cspSourceSelf + " 'nonce-"
+	cspDirectiveStyleSrc        = "style-src " + cspSourceSelf + " " + cspSourceUnsafeInline
+	cspDirectiveImgSrc          = "img-src " + cspSourceSelf + " " + cspSourceData
+	cspDirectiveBaseURI         = "base-uri " + cspSourceNone
+	cspDirectiveFormAction      = "form-action " + cspSourceSelf
+	cspDirectiveFrameAncestors  = "frame-ancestors " + cspSourceNone
 )
 
 const (
@@ -135,12 +134,8 @@ const (
 
 // HTTP action names accepted by the dashboard API.
 const (
-	apiActionStart     = string(rules.ActionStart)
-	apiActionStop      = string(rules.ActionStop)
-	apiActionRestart   = string(rules.ActionRestart)
 	apiActionReload    = string(rules.ActionReload)
 	apiActionResume    = string(rules.ActionResume)
-	apiActionRepair    = operation.ActionRepair
 	apiActionMonitor   = "monitor"
 	apiActionUnmonitor = "unmonitor"
 	// apiActionReap is deliberately not a service operation: it does not change
@@ -1089,15 +1084,9 @@ type EventPage struct {
 }
 
 const (
-	eventKindAction         = "action"
-	eventKindAlert          = string(rules.ActionAlert)
 	eventKindError          = "error"
-	eventKindHook           = "hook"
 	eventKindFailedFragment = string(operation.ResultFailed)
-	eventKindHookFailed     = eventKindHook + "-" + eventKindFailedFragment
-	eventStatusOK           = apiStatusOK
 	eventStatusError        = "error"
-	eventStatusFailed       = string(operation.ResultFailed)
 )
 
 // defaultMaxSeriesWindow bounds the history a single request may ask for when the
