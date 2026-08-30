@@ -3,10 +3,7 @@ package cli
 import (
 	"fmt"
 	"maps"
-	"os"
 	"path/filepath"
-
-	"github.com/goccy/go-yaml"
 
 	"sermo/internal/assist"
 	"sermo/internal/cfgval"
@@ -135,12 +132,8 @@ func mountStaleFile(path string, detected map[string]bool) staleFile {
 }
 
 func mountFileTarget(path string) string {
-	data, err := os.ReadFile(path) //nolint:gosec // G304: catalog/service YAML path under controlled dirs
-	if err != nil {
-		return ""
-	}
-	var doc map[string]any
-	if err := yaml.Unmarshal(data, &doc); err != nil {
+	doc := readYAMLMap(path)
+	if doc == nil {
 		return ""
 	}
 	if kind, _ := doc[wizardFieldKind].(string); kind != "" && kind != wizardNounWatch {
