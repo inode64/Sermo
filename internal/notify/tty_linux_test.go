@@ -5,15 +5,17 @@ package notify
 import (
 	"context"
 	"errors"
-	"sermo/internal/strutil"
 	"strings"
 	"testing"
 	"time"
+
+	"sermo/internal/strutil"
+	"sermo/internal/utmp"
 )
 
 func TestTTYNotifierTargetsFilterUsersAndUnsafeLines(t *testing.T) {
 	n := &ttyNotifier{users: strutil.Set([]string{"root"}), devRoot: "/dev"}
-	got := n.targetTTYs([]ttySession{
+	got := n.targetTTYs([]utmp.Session{
 		{User: "root", Line: "pts/0"},
 		{User: "root", Line: "../pts/1"},
 		{User: "fran", Line: "pts/2"},
@@ -30,7 +32,7 @@ func TestWallNotifierTargetsAllUsers(t *testing.T) {
 		t.Fatal(err)
 	}
 	wn := n.(*ttyNotifier)
-	got := wn.targetTTYs([]ttySession{
+	got := wn.targetTTYs([]utmp.Session{
 		{User: "root", Line: "pts/0"},
 		{User: "fran", Line: "pts/1"},
 	})
@@ -86,7 +88,7 @@ func TestTTYNotifierPartialFailureReportsError(t *testing.T) {
 		hostname: func() (string, error) { return "host", nil },
 		now:      func() time.Time { return time.Unix(0, 0).UTC() },
 	}
-	targets := n.targetTTYs([]ttySession{{User: "root", Line: "pts/0"}, {User: "root", Line: "pts/1"}})
+	targets := n.targetTTYs([]utmp.Session{{User: "root", Line: "pts/0"}, {User: "root", Line: "pts/1"}})
 	if len(targets) != 2 {
 		t.Fatalf("targets = %v", targets)
 	}
