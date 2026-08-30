@@ -251,6 +251,20 @@ func (b *WebBackend) maxOperationTimeout() time.Duration {
 	return MaxOperationTimeout(b.cfg, b.operationTimeout)
 }
 
+// operationContext bounds one WebBackend operation. secondaryFallback keeps
+// each action's established precedence explicit; the engine operation default
+// is the final fallback for every caller.
+func (b *WebBackend) operationContext(parent context.Context, secondaryFallback time.Duration) (context.Context, context.CancelFunc) {
+	timeout := b.operationTimeout
+	if timeout <= 0 {
+		timeout = secondaryFallback
+	}
+	if timeout <= 0 {
+		timeout = DefaultEngineOperationTimeout
+	}
+	return context.WithTimeout(parent, timeout)
+}
+
 // NewWebBackend resolves services for the web UI. All services present in the
 // loaded configuration are included in the listing (even those with `enabled: false`)
 // so that the dashboard can show the full fleet and let operators see what can be

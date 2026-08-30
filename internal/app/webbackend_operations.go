@@ -156,14 +156,7 @@ func (b *WebBackend) CompactState(ctx context.Context, before time.Time) web.Sta
 		return web.StateCompactResult{OK: false, Message: "state store unavailable"}
 	}
 	now := b.webNow()
-	timeout := b.operationTimeout
-	if timeout <= 0 {
-		timeout = b.defaultTimeout
-	}
-	if timeout <= 0 {
-		timeout = operation.DefaultOperationTimeout
-	}
-	ctx, cancel := context.WithTimeout(ctx, timeout)
+	ctx, cancel := b.operationContext(ctx, b.defaultTimeout)
 	defer cancel()
 
 	// The store owns the sequence (consolidate, prune, optional cutoff, vacuum) so
