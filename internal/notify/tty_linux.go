@@ -17,10 +17,6 @@ import (
 	"sermo/internal/utmp"
 )
 
-// ttySession aliases utmp.Session so the notifier's terminal-targeting helpers
-// keep their names while the binary utmp parsing lives in internal/utmp.
-type ttySession = utmp.Session
-
 type ttyNotifier struct {
 	name      string
 	typ       string
@@ -36,16 +32,12 @@ const (
 	defaultTTYHost = "localhost"
 )
 
-func defaultUTMPPaths() []string {
-	return utmp.DefaultPaths()
-}
-
 func buildTTY(name string, entry map[string]any) (Notifier, error) {
 	return &ttyNotifier{
 		name:      name,
 		typ:       TypeTTY,
 		users:     strutil.Set(cfgval.StringList(entry[KeyUsers])),
-		utmpPaths: defaultUTMPPaths(),
+		utmpPaths: utmp.DefaultPaths(),
 		devRoot:   utmp.DevRoot,
 		writeTTY:  writeTTYLinux,
 		hostname:  os.Hostname,
@@ -57,7 +49,7 @@ func buildWall(name string, _ map[string]any) (Notifier, error) {
 	return &ttyNotifier{
 		name:      name,
 		typ:       TypeWall,
-		utmpPaths: defaultUTMPPaths(),
+		utmpPaths: utmp.DefaultPaths(),
 		devRoot:   utmp.DevRoot,
 		writeTTY:  writeTTYLinux,
 		hostname:  os.Hostname,
@@ -122,7 +114,7 @@ func (n *ttyNotifier) sendToTargets(ctx context.Context, targets []string, msg M
 	return nil
 }
 
-func (n *ttyNotifier) targetTTYs(sessions []ttySession) []string {
+func (n *ttyNotifier) targetTTYs(sessions []utmp.Session) []string {
 	devRoot := n.devRoot
 	if devRoot == "" {
 		devRoot = utmp.DevRoot
