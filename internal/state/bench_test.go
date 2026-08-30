@@ -17,7 +17,7 @@ const (
 // benchmarks pay the real WAL/synchronous=NORMAL write cost.
 func benchStore(b *testing.B) *Store {
 	b.Helper()
-	s, err := OpenContext(context.Background(), filepath.Join(b.TempDir(), Filename))
+	s, err := OpenContextWith(context.Background(), filepath.Join(b.TempDir(), Filename), Options{})
 	if err != nil {
 		b.Fatal(err)
 	}

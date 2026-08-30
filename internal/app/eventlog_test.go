@@ -178,7 +178,7 @@ func TestEventLogConcurrentAddRecent(t *testing.T) {
 
 func TestPersistentEventLogHydratesServiceEvents(t *testing.T) {
 	path := filepath.Join(t.TempDir(), state.Filename)
-	first, err := state.OpenContext(context.Background(), path)
+	first, err := state.OpenContextWith(context.Background(), path, state.Options{})
 	if err != nil {
 		t.Fatalf("open first store: %v", err)
 	}
@@ -195,7 +195,7 @@ func TestPersistentEventLogHydratesServiceEvents(t *testing.T) {
 		t.Fatalf("close first store: %v", err)
 	}
 
-	second, err := state.OpenContext(context.Background(), path)
+	second, err := state.OpenContextWith(context.Background(), path, state.Options{})
 	if err != nil {
 		t.Fatalf("open second store: %v", err)
 	}
@@ -230,7 +230,7 @@ func TestPersistentEventLogHydratesServiceEvents(t *testing.T) {
 
 func TestWebBackendLastServiceEventReadsExternalPersistentWrite(t *testing.T) {
 	path := filepath.Join(t.TempDir(), state.Filename)
-	store, err := state.OpenContext(context.Background(), path)
+	store, err := state.OpenContextWith(context.Background(), path, state.Options{})
 	if err != nil {
 		t.Fatalf("open store: %v", err)
 	}

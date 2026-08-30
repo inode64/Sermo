@@ -131,7 +131,7 @@ func loadRuleStateForTest(t *testing.T, store *state.Store, tree map[string]any)
 
 func openRuleStateStore(t *testing.T) *state.Store {
 	t.Helper()
-	store, err := state.OpenContext(context.Background(), filepath.Join(t.TempDir(), state.Filename))
+	store, err := state.OpenContextWith(context.Background(), filepath.Join(t.TempDir(), state.Filename), state.Options{})
 	if err != nil {
 		t.Fatalf("open state: %v", err)
 	}

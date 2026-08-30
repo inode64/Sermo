@@ -38,7 +38,7 @@ func TestSnapshotColumnMigrationsHealAnOldDatabase(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	s, err := OpenContext(context.Background(), path)
+	s, err := OpenContextWith(context.Background(), path, Options{})
 	if err != nil {
 		t.Fatalf("open over an old schema: %v", err)
 	}

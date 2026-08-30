@@ -416,14 +416,6 @@ const (
 // its `since` window.
 const DefaultSeriesWindow = hoursPerDay * time.Hour
 
-// OpenContext opens (creating if needed) the database at path, creating the
-// parent directory and initializing the current schema. WAL mode plus a busy
-// timeout let the daemon (long-lived reader/writer) and sermoctl (short-lived
-// writer) coexist across processes.
-func OpenContext(ctx context.Context, path string) (*Store, error) {
-	return OpenContextWith(ctx, path, Options{})
-}
-
 // DefaultCacheBytes is the SQLite page-cache size used when the caller does not
 // override it. The archive tables and their indexes grow into the tens of MB;
 // 64 MiB keeps the hot index pages resident so a per-cycle upsert burst does not
