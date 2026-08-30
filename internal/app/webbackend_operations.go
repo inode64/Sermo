@@ -93,16 +93,10 @@ func (b *WebBackend) Operate(ctx context.Context, name, action string, opts web.
 		}
 		r = c.run(ctx, name, action)
 	}
-	return webActionResultFrom(r, name, action)
+	return webActionResultFrom(r)
 }
 
-func webActionResultFrom(r operation.Result, name, action string) web.ActionResult {
-	if r.Action == "" && action != "" {
-		r.Action = action
-	}
-	if r.Service == "" {
-		r.Service = name
-	}
+func webActionResultFrom(r operation.Result) web.ActionResult {
 	msg := r.Message
 	if msg == "" {
 		msg = string(r.Status)

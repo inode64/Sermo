@@ -250,5 +250,5 @@ func (b *WebBackend) CloseSSHSession(ctx context.Context, name string, session w
 		Terminal:        session.Terminal,
 		ManagedByLogind: session.ManagedByLogind,
 	})
-	return webActionResultFrom(r, name, "close SSH session")
+	return webActionResultFrom(r)
 }
