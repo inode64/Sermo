@@ -45,7 +45,6 @@ const (
 const (
 	dhcpPacketMinBytes            = 240
 	dhcpDiscoverOptionsBytes      = 10
-	dhcpOfferOptionsBytes         = 22
 	dhcpOpOffset                  = 0
 	dhcpHardwareTypeOffset        = 1
 	dhcpHardwareLengthOffset      = 2

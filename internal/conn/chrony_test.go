@@ -17,6 +17,11 @@ import (
 	"time"
 )
 
+const (
+	chronyRequestHeaderBytes = 20
+	chronyRepOffVersion      = 0
+)
+
 // bk1Tracking is a byte-exact RPY_Tracking payload captured from a live chronyd
 // 4.8. The `chronyc tracking` it printed for the same state was:
 //

@@ -7,6 +7,8 @@ import (
 	"testing"
 )
 
+const dhcpOfferOptionsBytes = 22
+
 func TestDHCPClientMAC(t *testing.T) {
 	// Empty input yields a random locally-administered unicast MAC.
 	mac, err := dhcpClientMAC("")

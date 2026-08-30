@@ -10,11 +10,27 @@ import (
 	"time"
 
 	"sermo/internal/mountctl"
+	"sermo/internal/operation"
+	"sermo/internal/rules"
 )
 
 // testSeriesCheck is the only check name fakeBackend serves an SLA series for,
 // so an unknown one still resolves to a 404.
 const testSeriesCheck = "http"
+
+const (
+	cspDirectiveScriptUnsafeInline = "script-src " + cspSourceSelf + " " + cspSourceUnsafeInline
+	apiActionStart                 = string(rules.ActionStart)
+	apiActionStop                  = string(rules.ActionStop)
+	apiActionRestart               = string(rules.ActionRestart)
+	apiActionRepair                = operation.ActionRepair
+	eventKindAction                = "action"
+	eventKindAlert                 = string(rules.ActionAlert)
+	eventKindHook                  = "hook"
+	eventKindHookFailed            = eventKindHook + "-" + eventKindFailedFragment
+	eventStatusOK                  = apiStatusOK
+	eventStatusFailed              = string(operation.ResultFailed)
+)
 
 type fakeBackend struct {
 	services                    []Service

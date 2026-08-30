@@ -20,12 +20,11 @@ const DefaultChronySocket = "/run/chrony/chronyd.sock"
 
 // candm wire framing (chrony's candm.h). All fields are big-endian.
 const (
-	chronyProtoVersion       = 6
-	chronyPktTypeRequest     = 1
-	chronyPktTypeReply       = 2
-	chronyRequestHeaderBytes = 20
-	chronyReplyHeaderBytes   = 28
-	chronyStatusSuccess      = 0
+	chronyProtoVersion     = 6
+	chronyPktTypeRequest   = 1
+	chronyPktTypeReply     = 2
+	chronyReplyHeaderBytes = 28
+	chronyStatusSuccess    = 0
 	// chronyStatusFailed is STT_FAILED: the command was recognised and authorized
 	// but the daemon could not carry it out — what a chronyd started with -x
 	// reports for a step, having had control of the system clock disabled.
@@ -57,7 +56,6 @@ const (
 
 // Reply header field offsets.
 const (
-	chronyRepOffVersion  = 0
 	chronyRepOffPktType  = 1
 	chronyRepOffCommand  = 4
 	chronyRepOffReply    = 6
@@ -117,26 +115,26 @@ func (c chronyCommand) requestBytes() int { return chronyReplyHeaderBytes + c.pa
 
 // candm status codes (chrony's candm.h STT_*).
 var chronyStatusNames = map[uint16]string{
-	0:  "success",
-	1:  "failed",
-	2:  "unauthorized",
-	3:  "invalid",
-	4:  "no-such-source",
-	5:  "invalid-timestamp",
-	6:  "not-enabled",
-	7:  "bad-subnet",
-	8:  "access-allowed",
-	9:  "access-denied",
-	10: "no-host-access",
-	11: "source-already-known",
-	12: "too-many-sources",
-	13: "no-rtc",
-	14: "bad-rtc-file",
-	15: "inactive",
-	16: "bad-sample",
-	17: "invalid-af",
-	18: "bad-pkt-version",
-	19: "bad-pkt-length",
+	chronyStatusSuccess: "success",
+	chronyStatusFailed:  "failed",
+	2:                   "unauthorized",
+	3:                   "invalid",
+	4:                   "no-such-source",
+	5:                   "invalid-timestamp",
+	6:                   "not-enabled",
+	7:                   "bad-subnet",
+	8:                   "access-allowed",
+	9:                   "access-denied",
+	10:                  "no-host-access",
+	11:                  "source-already-known",
+	12:                  "too-many-sources",
+	13:                  "no-rtc",
+	14:                  "bad-rtc-file",
+	15:                  "inactive",
+	16:                  "bad-sample",
+	17:                  "invalid-af",
+	18:                  "bad-pkt-version",
+	19:                  "bad-pkt-length",
 }
 
 // RPY_Tracking payload field offsets.
