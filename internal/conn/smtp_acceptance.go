@@ -13,6 +13,8 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+
+	"sermo/internal/netutil"
 )
 
 // smtpAcceptanceProtocol verifies that a destination MX accepts this host's
@@ -99,7 +101,7 @@ func (p smtpAcceptanceProtocol) Probe(ctx context.Context, cfg Config) (Result, 
 	}
 	tlsConfig := p.tlsConfig
 	if tlsConfig == nil {
-		tlsConfig = tlsClientConfig
+		tlsConfig = netutil.TLSClientConfig
 	}
 	mxs, err := lookupMX(ctx, envelope.RecipientDomain, cfg.Interface)
 	if err != nil {

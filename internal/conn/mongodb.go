@@ -9,6 +9,8 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 	"go.mongodb.org/mongo-driver/v2/mongo/readpref"
+
+	"sermo/internal/netutil"
 )
 
 // mongoDisconnectTimeout bounds teardown after the operation context expires.
@@ -114,7 +116,7 @@ func MongoConnect(ctx context.Context, cfg Config) (*mongo.Client, error) {
 		opts.SetAuth(options.Credential{Username: cfg.User, Password: cfg.Password, AuthSource: authSource})
 	}
 	if mode := NormalizeTLS(cfg.TLS); mode != "" {
-		tc := tlsClientConfig(host)
+		tc := netutil.TLSClientConfig(host)
 		if mode == tlsSkipVerify {
 			tc.InsecureSkipVerify = true // operator chose tls: skip-verify
 		}

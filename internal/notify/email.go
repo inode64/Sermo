@@ -138,7 +138,7 @@ func (d emailDSN) defaultPort() string {
 // authenticates when credentials are present (refusing PLAIN over cleartext),
 // and delivers the message.
 func smtpSend(ctx context.Context, d emailDSN, from string, to []string, msg Message) error {
-	return smtpSendWithTLSConfig(ctx, d, from, to, msg, smtpTLSConfig(d.host))
+	return smtpSendWithTLSConfig(ctx, d, from, to, msg, netutil.TLSClientConfig(d.host))
 }
 
 func smtpSendWithTLSConfig(ctx context.Context, d emailDSN, from string, to []string, msg Message, tlsCfg *tls.Config) error {
@@ -154,10 +154,6 @@ func smtpSendWithTLSConfig(ctx context.Context, d emailDSN, from string, to []st
 		return fmt.Errorf("send email via %s: %w", d.addr(), err)
 	}
 	return nil
-}
-
-func smtpTLSConfig(host string) *tls.Config {
-	return &tls.Config{ServerName: host, MinVersion: tls.VersionTLS12}
 }
 
 func newSMTPClient(d emailDSN, tlsCfg *tls.Config, timeout time.Duration) (*gomail.Client, error) {

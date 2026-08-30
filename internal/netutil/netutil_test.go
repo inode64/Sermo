@@ -2,6 +2,7 @@ package netutil
 
 import (
 	"context"
+	"crypto/tls"
 	"testing"
 	"time"
 )
@@ -23,5 +24,23 @@ func TestTimeoutFromContext(t *testing.T) {
 	defer cancel2()
 	if got := TimeoutFromContext(past, 10*time.Second); got != time.Nanosecond {
 		t.Errorf("past deadline = %v, want 1ns fail-fast", got)
+	}
+}
+
+func TestTLSClientConfig(t *testing.T) {
+	first := TLSClientConfig("service.example")
+	second := TLSClientConfig("service.example")
+	if first == second {
+		t.Fatal("TLSClientConfig reused mutable configuration")
+	}
+	if first.ServerName != "service.example" || first.MinVersion != tls.VersionTLS12 {
+		t.Fatalf("TLSClientConfig() = server %q min %x, want service.example and TLS 1.2", first.ServerName, first.MinVersion)
+	}
+	if first.InsecureSkipVerify {
+		t.Fatal("TLSClientConfig disabled certificate verification by default")
+	}
+	first.InsecureSkipVerify = true
+	if second.InsecureSkipVerify {
+		t.Fatal("mutating one TLSClientConfig result changed another")
 	}
 }

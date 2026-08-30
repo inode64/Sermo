@@ -2,6 +2,7 @@ package dockerctl
 
 import (
 	"context"
+	"crypto/tls"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -28,6 +29,32 @@ func TestEnsureDeadline(t *testing.T) {
 	}
 	if d := time.Until(dl); d <= 0 || d > defaultTimeout+time.Second {
 		t.Fatalf("fallback deadline = %v; want ~%v", d, defaultTimeout)
+	}
+}
+
+func TestNewClientTLSConfig(t *testing.T) {
+	for _, test := range []struct {
+		name       string
+		mode       string
+		skipVerify bool
+	}{
+		{name: "verified", mode: "true"},
+		{name: "explicit skip verify", mode: "skip-verify", skipVerify: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			client := NewClient(Spec{Host: "docker.example", TLS: test.mode})
+			transport, ok := client.HTTP.Transport.(*http.Transport)
+			if !ok || transport.TLSClientConfig == nil {
+				t.Fatalf("NewClient() transport = %#v, want TLS config", client.HTTP.Transport)
+			}
+			cfg := transport.TLSClientConfig
+			if cfg.ServerName != "docker.example" || cfg.MinVersion != tls.VersionTLS12 {
+				t.Fatalf("TLS config = server %q min %x, want docker.example and TLS 1.2", cfg.ServerName, cfg.MinVersion)
+			}
+			if cfg.InsecureSkipVerify != test.skipVerify {
+				t.Fatalf("InsecureSkipVerify = %t, want %t", cfg.InsecureSkipVerify, test.skipVerify)
+			}
+		})
 	}
 }
 
