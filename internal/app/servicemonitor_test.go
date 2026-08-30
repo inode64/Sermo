@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"reflect"
 	"testing"
 	"time"
 
@@ -194,10 +195,15 @@ func TestConfigMonitor(t *testing.T) {
 }
 
 func TestConfigMonitorPreservesCommandUser(t *testing.T) {
+	configEntry := map[string]any{"type": "command", "command": []any{"postgres", "--check"}, "user": "postgres"}
+	wantEntry := map[string]any{"type": "command", "command": []any{"postgres", "--check"}, "user": "postgres"}
 	assertMonitorPreservesCommandUser(t, map[string]any{
-		"preflight": map[string]any{"config": map[string]any{"type": "command", "command": []any{"postgres", "--check"}, "user": "postgres"}},
+		"preflight": map[string]any{"config": configEntry},
 		"config":    map[string]any{"on_change": map[string]any{"notify": []any{"ops"}}},
 	}, configMonitor, "--check")
+	if !reflect.DeepEqual(configEntry, wantEntry) {
+		t.Fatalf("config monitor mutated preflight.config: got %#v, want %#v", configEntry, wantEntry)
+	}
 }
 
 func TestServiceChangeMonitorsInheritDryRun(t *testing.T) {
