@@ -107,24 +107,24 @@ func BenchmarkSLAReportYearSeeded(b *testing.B) {
 	}
 }
 
-// BenchmarkSLATimelinesYearSeeded measures the segmented timeline strips the
-// web service detail requests (5 windows × segments, grouped aggregation).
-func BenchmarkSLATimelinesYearSeeded(b *testing.B) {
+// BenchmarkSLASeriesYearSeeded measures the year series requested by the web
+// service detail graph.
+func BenchmarkSLASeriesYearSeeded(b *testing.B) {
 	s := benchStore(b)
 	now := time.Date(2026, 7, 16, 12, 0, 0, 0, time.UTC)
 	seedSLAYear(b, s, "web", now)
 	b.ResetTimer()
 	for b.Loop() {
-		if _, err := s.SLATimelines("web", now); err != nil {
+		if _, err := s.SLASeries("web", now.Add(-slaSpanYear), now); err != nil {
 			b.Fatal(err)
 		}
 	}
 }
 
-// BenchmarkRecordDuringYearTimeline measures write latency while a cold
-// year-window timeline read holds the store's single connection — the
+// BenchmarkRecordDuringYearSeries measures write latency while a cold
+// year-window series read holds the store's single connection — the
 // contention a detail-view refresh can impose on the daemon's cycle writes.
-func BenchmarkRecordDuringYearTimeline(b *testing.B) {
+func BenchmarkRecordDuringYearSeries(b *testing.B) {
 	s := benchStore(b)
 	now := time.Date(2026, 7, 16, 12, 0, 0, 0, time.UTC)
 	seedSLAYear(b, s, "web", now)
@@ -137,7 +137,7 @@ func BenchmarkRecordDuringYearTimeline(b *testing.B) {
 			case <-stop:
 				return
 			default:
-				_, _ = s.SLATimelines("web", now)
+				_, _ = s.SLASeries("web", now.Add(-slaSpanYear), now)
 			}
 		}
 	}()
