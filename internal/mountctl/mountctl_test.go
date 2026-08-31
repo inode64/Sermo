@@ -192,7 +192,7 @@ func TestFstabEntriesParsesEscapedMountpoints(t *testing.T) {
 	if len(entries) != 2 {
 		t.Fatalf("entries = %+v, want two", entries)
 	}
-	if entries[0].Path != "/mnt/backup" || entries[0].FSType != "ext4" || entries[0].Options != "defaults,noauto" {
+	if entries[0].Path != "/mnt/backup" || entries[0].FSType != "ext4" {
 		t.Fatalf("first entry = %+v", entries[0])
 	}
 	if entries[1].Path != "/srv/My Data" || entries[1].Source != "/dev/sdb1" {

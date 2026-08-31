@@ -75,15 +75,13 @@ const (
 	mountMessageUnmounted             = "unmounted"
 	mountMessageUnmountedAfterSignal  = "unmounted after signalling blockers"
 
-	fstabCommentPrefix    = "#"
-	fstabLineSeparator    = "\n"
-	fstabMinFields        = 2
-	fstabSourceIndex      = 0
-	fstabPathIndex        = 1
-	fstabFSTypeIndex      = 2
-	fstabOptionsIndex     = 3
-	fstabFSTypeMinFields  = fstabFSTypeIndex + 1
-	fstabOptionsMinFields = fstabOptionsIndex + 1
+	fstabCommentPrefix   = "#"
+	fstabLineSeparator   = "\n"
+	fstabMinFields       = 2
+	fstabSourceIndex     = 0
+	fstabPathIndex       = 1
+	fstabFSTypeIndex     = 2
+	fstabFSTypeMinFields = fstabFSTypeIndex + 1
 )
 
 // UmountSpec controls timeouts used when an unmount action signals blockers.
@@ -144,10 +142,9 @@ type Status struct {
 
 // FstabEntry is one mount target declared in an fstab file.
 type FstabEntry struct {
-	Source  string
-	Path    string
-	FSType  string
-	Options string
+	Source string
+	Path   string
+	FSType string
 }
 
 // Controller executes mount operations. All host access is injectable for tests.
@@ -690,9 +687,6 @@ func FstabEntries(fstabPath string) ([]FstabEntry, error) {
 		}
 		if len(fields) >= fstabFSTypeMinFields {
 			entry.FSType = fields[fstabFSTypeIndex]
-		}
-		if len(fields) >= fstabOptionsMinFields {
-			entry.Options = fields[fstabOptionsIndex]
 		}
 		entries = append(entries, entry)
 	}

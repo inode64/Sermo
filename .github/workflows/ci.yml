@@ -76,13 +76,13 @@ jobs:
             while IFS= read -r line; do
               echo "$line"
               case $line in
-                "go vet"*|"go fix"*|staticcheck*|custom-gcl*|govulncheck*|semgrep*|shellcheck*|cover-gate*|"ok "*|FAIL*|"--- FAIL"*)
+                "go vet"*|"go fix"*|staticcheck*|custom-gcl*|govulncheck*|unusedglobals*|semgrep*|shellcheck*|cover-gate*|"ok "*|FAIL*|"--- FAIL"*)
                   echo "::notice title=phase::$line" ;;
               esac
             done
           )
           if ! make check 2>&1 | tee /tmp/check.log | phase_stream; then
-            grep -E "FAIL|Error [0-9]|error:" /tmp/check.log | tail -n 5 | while IFS= read -r line; do
+            grep -E "FAIL|Error [0-9]|error:|no production references|written but never read" /tmp/check.log | tail -n 5 | while IFS= read -r line; do
               echo "::error title=make check::$line"
             done
             echo "::error title=make check (tail)::$(tail -c 700 /tmp/check.log | tr '\n' ' ')"

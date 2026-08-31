@@ -45,7 +45,7 @@ func TestNetStateExpect(t *testing.T) {
 }
 
 func TestNetStateOnChange(t *testing.T) {
-	c := &netCheck{base: base{name: "n"}, iface: "eth0", metric: NetMetricState, onChange: true,
+	c := &netCheck{base: base{name: "n"}, iface: "eth0", metric: NetMetricState,
 		sampler: sampler(NetSample{State: NetStateUp}, NetSample{State: NetStateDown})}
 	if c.Run(context.Background()).OK {
 		t.Fatal("first cycle must prime, not fire")
@@ -60,7 +60,7 @@ func TestNetStateOnChange(t *testing.T) {
 }
 
 func TestNetSpeedOnChange(t *testing.T) {
-	c := &netCheck{base: base{name: "n"}, iface: "eth0", metric: NetMetricSpeed, onChange: true,
+	c := &netCheck{base: base{name: "n"}, iface: "eth0", metric: NetMetricSpeed,
 		sampler: sampler(
 			NetSample{SpeedMbps: 1000, SpeedKnown: true},
 			NetSample{SpeedMbps: 100, SpeedKnown: true},
@@ -74,7 +74,7 @@ func TestNetSpeedOnChange(t *testing.T) {
 }
 
 func TestNetSpeedUnknownDoesNotFire(t *testing.T) {
-	c := &netCheck{base: base{name: "n"}, iface: "eth0", metric: NetMetricSpeed, onChange: true,
+	c := &netCheck{base: base{name: "n"}, iface: "eth0", metric: NetMetricSpeed,
 		sampler: sampler(NetSample{SpeedKnown: false})}
 	if c.Run(context.Background()).OK {
 		t.Fatal("unknown speed must not fire")

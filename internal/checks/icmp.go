@@ -53,11 +53,9 @@ type icmpCheck struct {
 	count        int
 	metric       string
 	expect       string // state: "up"|"down"; "" means on-change
-	onChange     bool
 	hasThreshold bool
 	op           string
 	value        float64
-	hasChange    bool
 	delta        float64
 	sampler      PingSamplerFunc
 

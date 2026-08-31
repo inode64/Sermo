@@ -292,7 +292,6 @@ func listWizardMounts() ([]assist.MountCandidate, error) {
 			Path:    path,
 			Source:  entry.Source,
 			FSType:  entry.FSType,
-			Options: entry.Options,
 			Mounted: mounted[path],
 		})
 	}

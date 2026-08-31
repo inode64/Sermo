@@ -187,8 +187,8 @@ const (
 //
 // These are on-disk schema values owned by this package. Do not conflate them with
 // the identically spelled checks.MetricScopeService (a metric check's `scope:`
-// selector) or state.SourceDaemon (who changed a monitoring row): renaming those
-// must not touch these, or stored rows would be orphaned.
+// selector): renaming that must not touch these, or stored rows would be
+// orphaned.
 const (
 	metricScopeLatency     = "latency" // a check's measured latency; metric is ''
 	metricScopeCheckMetric = "metric"  // a check's declared numeric metric

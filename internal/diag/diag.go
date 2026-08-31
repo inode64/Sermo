@@ -23,7 +23,6 @@ type Level string
 const (
 	LevelError   Level = "error"
 	LevelWarning Level = "warning"
-	LevelInfo    Level = "info"
 )
 
 const (

@@ -98,6 +98,17 @@ func TestSmartCheck(t *testing.T) {
 	if res := smartWith(smartATA, levelPred{"temperature", ">", 50}).Run(context.Background()); res.OK {
 		t.Error("temperature 38 is not > 50")
 	}
+	if res := smartWith(smartATA,
+		levelPred{"reallocated", ">", 0},
+		levelPred{"temperature", ">", 100},
+	).Run(context.Background()); !res.OK {
+		t.Error("each SMART predicate is an independent early-warning condition")
+	}
+	// Predicates add early-warning conditions; they must not replace the drive's
+	// own FAILED verdict.
+	if res := smartWith(smartNVMeFailing, levelPred{"temperature", ">", 100}).Run(context.Background()); !res.OK {
+		t.Error("a FAILED SMART verdict should still alert when predicates do not hold")
+	}
 }
 
 func TestSmartCheckError(t *testing.T) {

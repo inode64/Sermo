@@ -2,7 +2,9 @@ BIN := bin
 CGO_ENABLED ?= 0
 GOAMD64 ?= v1
 GO_BUILD_ENV := CGO_ENABLED=$(CGO_ENABLED) GOAMD64=$(GOAMD64)
-GO_PACKAGES := ./cmd/... ./internal/...
+PRODUCT_GO_PACKAGES := ./cmd/... ./internal/...
+TOOL_GO_PACKAGES := ./tools/...
+GO_PACKAGES := $(PRODUCT_GO_PACKAGES) $(TOOL_GO_PACKAGES)
 
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 # Go linker flags for -ldflags. Named GO_LDFLAGS (not LDFLAGS) so Gentoo and
@@ -74,7 +76,7 @@ config_subst = sed -e 's|/usr/share/sermo|$(SERMO_DATADIR)|g' -e 's|/etc/sermo|$
 # Rewrite runtime/state dirs in the tmpfiles config.
 tmpfiles_subst = sed -e 's|/run/sermo|$(SERMO_RUNDIR)|g' -e 's|/var/lib/sermo|$(SERMO_STATEDIR)|g'
 
-.PHONY: all build build-candidate-sermoctl test vet fmt fmt-check lint modules-check actions-lint race fuzz deadcode quality-report cover-gate custom-gcl scripts-lint scripts-test semgrep yaml-fmt yaml-fmt-check yaml-lint yaml-validate markdown-check web web-check web-lint web-e2e validate check cover tidy clean \
+.PHONY: all build build-candidate-sermoctl test vet fmt fmt-check lint production-staticcheck unused-globals modules-check actions-lint race fuzz deadcode quality-report cover-gate custom-gcl scripts-lint scripts-test semgrep yaml-fmt yaml-fmt-check yaml-lint yaml-validate markdown-check web web-check web-lint web-e2e validate check cover tidy clean \
         install install-bin install-catalog install-examples install-config install-templates install-tmpfiles install-systemd install-openrc \
         uninstall
 
@@ -99,7 +101,8 @@ PLAYWRIGHT ?= ./node_modules/.bin/playwright
 SHELLCHECK ?= shellcheck
 RUFF ?= ruff
 SEMGREP ?= semgrep
-SEMGREP_TARGETS = cmd internal
+SEMGREP_TARGETS = cmd internal tools
+DEADCODE_PRODUCTION_ALLOWLIST := tools/deadcode-production.allow
 ACTIONLINT ?= actionlint
 FUZZ_TIME ?= 15s
 # gocognit, gocyclo, dupl and perfsprint are blocking linters. Keep a focused
@@ -207,13 +210,13 @@ vet:
 	go vet -C $(WEB_BUILD_DIR) .
 
 fmt:
-	gofmt -w internal cmd
-	$(LINT_PATH) goimports -w internal cmd
+	gofmt -w internal cmd tools
+	$(LINT_PATH) goimports -w internal cmd tools
 
 fmt-check:
-	@out="$$(gofmt -l internal cmd)"; \
+	@out="$$(gofmt -l internal cmd tools)"; \
 	if [ -n "$$out" ]; then echo "gofmt needed:"; echo "$$out"; exit 1; fi
-	@out="$$( $(LINT_PATH) goimports -l internal cmd)"; \
+	@out="$$( $(LINT_PATH) goimports -l internal cmd tools)"; \
 	if [ -n "$$out" ]; then echo "goimports needed:"; echo "$$out"; exit 1; fi
 
 # Safety packages for NilAway and cover-gate. Operation/process own start/stop/
@@ -235,7 +238,7 @@ custom-gcl: $(CUSTOM_GCL)
 
 # Static analysis. Finds Go-installed tools in ~/go/bin: staticcheck,
 # custom-gcl (gosec, NilAway, revive and focused bug analyzers, all configured
-# in .golangci.yml), govulncheck and deadcode.
+# in .golangci.yml), govulncheck and deadcode; unusedglobals is repository code.
 lint: fmt-check $(CUSTOM_GCL)
 	@echo "go fix -diff $(GO_PACKAGES)"
 	@go fix -diff $(GO_PACKAGES)
@@ -247,11 +250,36 @@ lint: fmt-check $(CUSTOM_GCL)
 	@$(LINT_CACHE_ENV) govulncheck $(GO_PACKAGES)
 	@echo "deadcode -test $(GO_PACKAGES)"
 	@$(LINT_PATH) deadcode -test $(GO_PACKAGES)
+	@$(MAKE) --no-print-directory production-staticcheck
+	@$(MAKE) --no-print-directory unused-globals
 	@echo "web-build nested module (vet, staticcheck, custom-gcl, govulncheck)"
 	@go vet -C $(WEB_BUILD_DIR) .
 	@go fix -C $(WEB_BUILD_DIR) -diff .
 	@$(LINT_CACHE_ENV) sh -c 'cd $(WEB_BUILD_DIR) && staticcheck -checks=all . && govulncheck . && "$(CURDIR)/$(CUSTOM_GCL)" run --disable=gomodguard_v2 .'
 	@$(MAKE) --no-print-directory semgrep
+
+# The ordinary Staticcheck pass includes tests, so a private production symbol
+# referenced only by a test appears live. Cover both shipped Linux build
+# variants: build-tag drift must not hide dead code in either CGO implementation.
+production-staticcheck:
+	@for cgo in 0 1; do \
+		echo "CGO_ENABLED=$$cgo staticcheck -tests=false -checks=U1000 $(PRODUCT_GO_PACKAGES)"; \
+		CGO_ENABLED=$$cgo $(LINT_CACHE_ENV) staticcheck -tests=false -checks=U1000 $(PRODUCT_GO_PACKAGES); \
+	done
+	@echo "web-build staticcheck -tests=false -checks=U1000 ."
+	@$(LINT_CACHE_ENV) sh -c 'cd $(WEB_BUILD_DIR) && staticcheck -tests=false -checks=U1000 .'
+
+# Package-level constants and variables are legal even with no readers, and
+# exported objects are intentionally outside Staticcheck U1000. Resolve all
+# production references across package boundaries, and distinguish struct-field
+# writes from reads, while excluding _test.go and loading both Linux CGO variants.
+unused-globals:
+	@for cgo in 0 1; do \
+		echo "CGO_ENABLED=$$cgo unusedglobals $(PRODUCT_GO_PACKAGES)"; \
+		CGO_ENABLED=$$cgo go run ./tools/unusedglobals $(PRODUCT_GO_PACKAGES); \
+	done
+	@echo "unusedglobals -dir $(WEB_BUILD_DIR) ."
+	@go run ./tools/unusedglobals -dir $(WEB_BUILD_DIR) .
 
 # Repository invariants that no generic Go linter can express: depguard bounds
 # imports, these bound what may be *called* once an import is allowed. Each rule
@@ -302,7 +330,18 @@ fuzz:
 # golang.org/x/tools/cmd/deadcode. Reflection and build tags cause false
 # positives, so findings need human triage before acting on them.
 deadcode:
+	@echo "deadcode -test $(GO_PACKAGES)"
 	@$(LINT_PATH) deadcode -test $(GO_PACKAGES)
+	@echo "deadcode production-only $(PRODUCT_GO_PACKAGES)"
+	@set -e; tmp="$$(mktemp)"; trap 'rm -f "$$tmp"' EXIT; \
+		$(LINT_PATH) deadcode -f='{{range .Funcs}}{{printf "%s\t%s\t%v\n" $$.Path .Name .Position}}{{end}}' $(PRODUCT_GO_PACKAGES) >"$$tmp"; \
+		awk -F '\t' ' \
+			NR == FNR { if ($$0 !~ /^#/ && NF >= 2) allowed[$$1 FS $$2] = 1; next } \
+			{ key = $$1 FS $$2; if (key in allowed) { seen[key] = 1; permitted++; next } unexpected++; print $$3 ": unreachable func: " $$2 } \
+			END { \
+				for (key in allowed) if (!(key in seen)) { stale++; print "stale deadcode allowlist entry: " key } \
+				print "deadcode production-only summary: " (permitted + 0) " permitted, " (unexpected + 0) " unexpected, " (stale + 0) " stale" \
+			}' $(DEADCODE_PRODUCTION_ALLOWLIST) "$$tmp"
 
 # Advisory only (not part of lint/check): keep the remaining cyclomatic
 # complexity baseline visible while it is reduced in focused refactors.

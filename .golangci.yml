@@ -1,7 +1,8 @@
 # golangci-lint v2 configuration for Sermo.
 #
 # This file is the single source of truth for every analyzer except gofmt,
-# staticcheck, govulncheck and deadcode, which stay standalone in `make lint`.
+# staticcheck, govulncheck, deadcode and the repository's unusedglobals tool,
+# which stay standalone in `make lint` or its advisory reports.
 # revive and NilAway both run from here — there is no revive.toml.
 #
 # Run with:  make lint
@@ -273,8 +274,9 @@ linters:
       tool-forbidden: true
       toolchain-forbidden: true
     gomodguard_v2:
-      # The allowlist covers the direct production dependencies in go.mod. A
-      # new direct dependency therefore gets an explicit quality-policy review.
+      # The allowlist covers every direct production or repository-tool
+      # dependency in go.mod. A new direct dependency therefore gets an
+      # explicit quality-policy review.
       local-replace-directives: true
       allowed:
         - module: github.com/OpenPrinting/goipp
@@ -296,6 +298,9 @@ linters:
         - module: golang.org/x/crypto
         - module: golang.org/x/net
         - module: golang.org/x/sys
+        # Official loader/type graph for tools/unusedglobals; never linked into
+        # sermod or sermoctl.
+        - module: golang.org/x/tools
         - module: modernc.org/sqlite
     loggercheck:
       # Every log entry remains machine-queryable and avoids printf semantics.

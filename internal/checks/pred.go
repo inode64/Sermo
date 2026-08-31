@@ -377,6 +377,19 @@ func levelPredsHold(preds []levelPred, values map[string]float64) bool {
 	return true
 }
 
+// anyLevelPredHolds reports whether at least one known reading satisfies its
+// predicate. SMART uses this OR because each drive-health indicator is an
+// independent early-warning signal; an ATA drive, for example, publishes no
+// NVMe media_errors field and must still alert on pending sectors.
+func anyLevelPredHolds(preds []levelPred, values map[string]float64) bool {
+	for _, p := range preds {
+		if v, known := values[p.field]; known && compareFloat(v, p.op, p.value) {
+			return true
+		}
+	}
+	return false
+}
+
 // firstPredValue returns the first predicate's reading — the breaching number a
 // hook sees as SERMO_VALUE — or fallback when no predicate (or no reading)
 // applies.

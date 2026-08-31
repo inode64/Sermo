@@ -2604,7 +2604,11 @@ servicio de modo que la degradación gradual es visible.
   culpan al cable o al backplane y no al medio), `media_errors` (el equivalente
   NVMe de `reallocated`: las unidades NVMe no publican tabla de atributos),
   `wear` (porcentaje usado de SSD/NVMe) y `power_on_hours`. Complementa `hdparm`
-  (rendimiento) con predicción de fallos.
+  (rendimiento) con predicción de fallos. El veredicto **FAILED** de la unidad y
+  cada predicado configurado son condiciones de alerta independientes: basta
+  cualquiera. La ausencia de un campo propio de otro transporte nunca suprime
+  los demás; una unidad ATA puede alertar por `pending_sectors` aunque omita el
+  campo `media_errors`, exclusivo de NVMe.
 
   Cada muestra lleva además **qué es** la unidad — `model`, `serial_number`,
   `firmware`, `wwn`, `capacity_bytes` y `rotation_rate` —, más `power_cycles` y

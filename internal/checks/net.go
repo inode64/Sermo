@@ -146,7 +146,6 @@ type netCheck struct {
 	iface    string
 	metric   string
 	expect   string // state: "up"|"down"; address: "present"|"absent"; "" means on-change
-	onChange bool   // state/speed/address change detection
 	counters []string
 	op       string
 	value    float64
