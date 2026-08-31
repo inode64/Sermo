@@ -71,12 +71,6 @@ func NewServiceMetricSampler(stores ...ServiceMetricStore) *ServiceMetricSampler
 	}
 }
 
-// Record appends one process-tree runtime sample for a service, computing rate
-// fields (currently IO) before retaining and persisting it.
-func (s *ServiceMetricSampler) Record(name string, cur web.ServiceRuntime) {
-	s.record(context.Background(), name, cur)
-}
-
 func (s *ServiceMetricSampler) record(ctx context.Context, name string, cur web.ServiceRuntime) {
 	if s == nil {
 		return
