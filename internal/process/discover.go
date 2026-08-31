@@ -575,7 +575,7 @@ func (d Discoverer) StrictMatchPID(pid int, selectors []Selector) (Process, bool
 	}
 	resolve := d.resolveUser()
 	for i := range selectors {
-		if !strictIdentity(&selectors[i]) {
+		if !selectors[i].HasStrictIdentity() {
 			continue
 		}
 		if d.matches(&selectors[i], id, resolve) {
@@ -616,13 +616,13 @@ func selectorExePath(sel *Selector) string {
 	return canonicalizePath(sel.Exe)
 }
 
-// strictIdentity reports whether a selector carries an identity strong enough to
+// HasStrictIdentity reports whether a selector carries an identity strong enough to
 // authorize signalling: a command selector with both an exact executable and a
 // real user. Safety invariants 5 and 7 are stated in exactly those terms, so the
-// derived kill authority and the strict PID match share one definition of it
-// rather than restating the predicate apart from each other.
-func strictIdentity(sel *Selector) bool {
-	return sel.Type == SelectorCommandMatch && sel.Exe != "" && sel.User != ""
+// derived kill authority, strict PID match, and restart identity guard share one
+// definition of it rather than restating the predicate apart from each other.
+func (s Selector) HasStrictIdentity() bool {
+	return s.Type == SelectorCommandMatch && s.Exe != "" && s.User != ""
 }
 
 // selectorCmdRegexp returns the selector's compiled cmd regex, compiling lazily
