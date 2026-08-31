@@ -2199,7 +2199,8 @@ original pause. `dry_run: true` reports the intended operation without writing.
 
 For an `lvm` watch, `then.notify_on: [on_change]` notifies only when its
 effective health changes between `ok` and `error`, including recovery. It cannot
-be combined with `then.notify_interval`.
+be combined with `then.notify_interval`. Panic mode suppresses that delivery and
+records the state transition as a `panic-suppressed` event.
 
 **Checks and watches share the same check types.** Any single-shot check —
 host-resource and service checks alike, the full set is the type table in

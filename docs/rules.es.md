@@ -2718,6 +2718,8 @@ servicio de modo que la degradación gradual es visible.
   `on_change` es exclusivo de LVM y envía una notificación al cambiar la salud
   efectiva `ok → error` o `error → ok`; no repite mientras el error persiste.
   Las plantillas reciben VG/LV, estados actual/anterior y causas actuales o resueltas.
+  El modo pánico suprime esa entrega y registra la transición de estado como un
+  evento `panic-suppressed`.
 
 - **`edac`** — **errores de memoria ECC** del subsistema EDAC del kernel (nativo,
   `/sys/devices/system/edac`). `ce` es el recuento acumulado de corregibles y `ue`

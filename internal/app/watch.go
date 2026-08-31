@@ -381,6 +381,7 @@ func (w *Watch) dispatchLVMTransition(ctx context.Context, res checks.Result) {
 		return
 	}
 	if w.InPanic != nil && w.InPanic() {
+		w.emit(Event{Watch: w.Name, Kind: eventKindPanicSuppressed, Message: "panic mode: LVM notification suppressed: " + changed.Message})
 		return
 	}
 	dispatchNotify(ctx, w.Notifiers, watchMessage(w.Name, changed.Message, hookEnv(w.Name, w.CheckType, changed)), w.Name, w.emit)
