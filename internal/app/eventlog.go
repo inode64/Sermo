@@ -37,19 +37,18 @@ type EventStore interface {
 // event is appended to the store. It is safe for concurrent use; workers and
 // watches add, the web reads.
 type EventLog struct {
-	mu            sync.Mutex
-	now           func() time.Time
-	store         EventStore
-	file          *logfile.Writer
-	onStoreError  func(error)
-	buf           []LoggedEvent
-	size          int
-	next          int // write index
-	count         int
-	lastByService map[string]LoggedEvent
-	lastByWatch   map[string]LoggedEvent
-	lastByApp     map[string]LoggedEvent
-	localID       int64
+	mu           sync.Mutex
+	now          func() time.Time
+	store        EventStore
+	file         *logfile.Writer
+	onStoreError func(error)
+	buf          []LoggedEvent
+	size         int
+	next         int // write index
+	count        int
+	lastByWatch  map[string]LoggedEvent
+	lastByApp    map[string]LoggedEvent
+	localID      int64
 }
 
 // NewEventLog returns a log retaining the last size events (min 1).
@@ -58,11 +57,10 @@ func NewEventLog(size int) *EventLog {
 		size = 1
 	}
 	return &EventLog{
-		now:           time.Now,
-		size:          size,
-		buf:           make([]LoggedEvent, size),
-		lastByService: map[string]LoggedEvent{},
-		lastByWatch:   map[string]LoggedEvent{},
+		now:         time.Now,
+		size:        size,
+		buf:         make([]LoggedEvent, size),
+		lastByWatch: map[string]LoggedEvent{},
 	}
 }
 
@@ -257,14 +255,6 @@ func (l *EventLog) RecentApp(app string, limit int) []LoggedEvent {
 		func(e LoggedEvent) bool { return e.App == app })
 }
 
-// LastService returns the newest retained event for service, if any.
-func (l *EventLog) LastService(service string) (LoggedEvent, bool) {
-	if l == nil {
-		return LoggedEvent{}, false
-	}
-	return l.lastBy(l.lastByService, service)
-}
-
 // LastWatchActivity returns the newest retained watch-activity event for watch.
 func (l *EventLog) LastWatchActivity(watch string) (LoggedEvent, bool) {
 	if l == nil {
@@ -313,12 +303,6 @@ func (l *EventLog) addLocked(e LoggedEvent) {
 }
 
 func (l *EventLog) indexLocked(e LoggedEvent) {
-	if e.Service != "" {
-		if l.lastByService == nil {
-			l.lastByService = map[string]LoggedEvent{}
-		}
-		l.lastByService[e.Service] = e
-	}
 	if e.Watch != "" && isWatchActivityKind(e.Kind) {
 		if l.lastByWatch == nil {
 			l.lastByWatch = map[string]LoggedEvent{}
@@ -334,7 +318,6 @@ func (l *EventLog) indexLocked(e LoggedEvent) {
 }
 
 func (l *EventLog) rebuildIndexesLocked() {
-	l.lastByService = map[string]LoggedEvent{}
 	l.lastByWatch = map[string]LoggedEvent{}
 	l.lastByApp = map[string]LoggedEvent{}
 	ordered := l.orderedLocked()

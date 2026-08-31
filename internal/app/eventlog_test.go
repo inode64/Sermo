@@ -255,6 +255,36 @@ func TestWebBackendLastServiceEventReadsExternalPersistentWrite(t *testing.T) {
 	}
 }
 
+func TestWebBackendLastServiceEventIsNotBoundedByGlobalScan(t *testing.T) {
+	path := filepath.Join(t.TempDir(), state.Filename)
+	store, err := state.OpenContextWith(context.Background(), path, state.Options{})
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	defer store.Close()
+	log, err := NewPersistentEventLog(10, store, nil)
+	if err != nil {
+		t.Fatalf("NewPersistentEventLog: %v", err)
+	}
+	wanted, err := store.RecordEvent(state.EventRecord{
+		Service: "web", Kind: eventKindAction, Action: string(rules.ActionStop), Status: eventStatusOK,
+	})
+	if err != nil {
+		t.Fatalf("record service event: %v", err)
+	}
+	for range activitySummaryEventScanLimit + 1 {
+		if _, err := store.RecordEvent(state.EventRecord{Service: "other", Kind: eventKindAction}); err != nil {
+			t.Fatalf("record unrelated event: %v", err)
+		}
+	}
+
+	b := &WebBackend{entries: map[string]*webEntry{"web": {}}, events: log}
+	last := b.lastServiceEvent("web")
+	if last == nil || last.ID != wanted {
+		t.Fatalf("last service event = %+v, want persisted ID %d beyond the global scan", last, wanted)
+	}
+}
+
 // stubEventStore records what Append writes and can also hold rows that were
 // never appended through this log — the shape sermoctl produces when it runs an
 // operation in its own process and writes the audit row straight to the state
