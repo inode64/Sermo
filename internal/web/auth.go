@@ -149,6 +149,8 @@ func (s *Server) withAuth(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
+		role := s.Auth.role(r)
+		publishAccessActor(r.Context(), role)
 
 		// Open mode has no credential boundary, so a DNS-rebound page could
 		// drive the API from a hostile origin; only Hosts that name this server
@@ -158,8 +160,6 @@ func (s *Server) withAuth(next http.Handler) http.Handler {
 			writeJSON(w, http.StatusMisdirectedRequest, ActionResult{OK: false, Message: authMessageForeignHost})
 			return
 		}
-
-		role := s.Auth.role(r)
 
 		if r.URL.Path == routePathLogin {
 			if role == roleAdmin {

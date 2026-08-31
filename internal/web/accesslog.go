@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"net/http"
 	"strings"
 	"time"
@@ -35,6 +36,22 @@ type accessStatusRecorder struct {
 	status int
 }
 
+type accessActorCtxKey struct{}
+
+// accessActorState carries the role already resolved by withAuth back to the
+// outer access-log middleware. The pointer is request-local and written before
+// the authorized handler runs, so logging never needs to authenticate again.
+type accessActorState struct {
+	role string
+}
+
+func publishAccessActor(ctx context.Context, role string) {
+	actor, _ := ctx.Value(accessActorCtxKey{}).(*accessActorState)
+	if actor != nil {
+		actor.role = role
+	}
+}
+
 func (r *accessStatusRecorder) WriteHeader(code int) {
 	r.status = code
 	r.ResponseWriter.WriteHeader(code)
@@ -53,21 +70,19 @@ func (s *Server) withAccessLog(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
+		actor := &accessActorState{}
+		r = r.WithContext(context.WithValue(r.Context(), accessActorCtxKey{}, actor))
 		rec := accessStatusRecorder{ResponseWriter: w, status: http.StatusOK}
 		next.ServeHTTP(&rec, r)
-		s.recordWebAccess(r, rec.status)
+		s.recordWebAccess(r, rec.status, actor.role)
 	})
 }
 
-func (s *Server) recordWebAccess(r *http.Request, status int) {
+func (s *Server) recordWebAccess(r *http.Request, status int, actor string) {
 	if s == nil || s.AccessLog == nil || r == nil {
 		return
 	}
 	target, action := parseAPIAccessTarget(r.URL.Path)
-	actor := roleFrom(r.Context())
-	if actor == "" {
-		actor = s.Auth.role(r)
-	}
 	if actor == "" {
 		actor = accessActorAnonymous
 	}

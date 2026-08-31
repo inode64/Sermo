@@ -86,7 +86,7 @@ func TestRecordWebAccessLogsMountActionAndQuery(t *testing.T) {
 		testPathQuery(testMountPath("backup", mountctl.ActionUmount), testQueryParam(apiQueryKill, queryBoolOne)),
 		nil,
 	)
-	s.recordWebAccess(r, http.StatusOK)
+	s.recordWebAccess(r, http.StatusOK, "")
 
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -107,7 +107,7 @@ func TestRecordWebAccessLogsMountActionAndQuery(t *testing.T) {
 	if err := os.Truncate(path, 0); err != nil {
 		t.Fatalf("truncate: %v", err)
 	}
-	s.recordWebAccess(httptest.NewRequest(http.MethodPost, testServicePath("web", apiActionRestart), nil), http.StatusOK)
+	s.recordWebAccess(httptest.NewRequest(http.MethodPost, testServicePath("web", apiActionRestart), nil), http.StatusOK, "")
 	data, err = os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("read access log: %v", err)
@@ -158,6 +158,111 @@ func TestAccessLogRecordsAuthDeniedPost(t *testing.T) {
 	}
 	if entry[accessFieldTarget] != "web" || entry[accessFieldAction] != apiActionRestart {
 		t.Fatalf("access entry = %v, want target=web action=restart", entry)
+	}
+}
+
+func TestAccessLogKeepsActorResolvedByAuth(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "access.log")
+	log, err := logfile.Open(path)
+	if err != nil {
+		t.Fatalf("logfile.Open: %v", err)
+	}
+	defer log.Close()
+
+	s := &Server{
+		Auth: Auth{
+			AnonymousGuest: true,
+			RuntimeToken:   "run-token",
+		},
+		AccessLog: log,
+	}
+	h := s.withAccessLog(s.withAuth(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		// Simulate a credential reload after authorization but before the outer
+		// access-log middleware records the completed request.
+		s.Auth.RuntimeToken = ""
+		w.WriteHeader(http.StatusNoContent)
+	})))
+	req := httptest.NewRequest(http.MethodPost, apiPathReload, nil)
+	req.Header.Set(headerSermoCSRF, "1")
+	req.SetBasicAuth("sermoctl", "run-token")
+	rec := httptest.NewRecorder()
+
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("request status = %d, want 204", rec.Code)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read access log: %v", err)
+	}
+	var entry map[string]any
+	if err := json.Unmarshal(data, &entry); err != nil {
+		t.Fatalf("access log line = %q: %v", data, err)
+	}
+	if entry[accessFieldActor] != roleAdmin {
+		t.Fatalf("access entry actor = %v, want the authorized role %q", entry[accessFieldActor], roleAdmin)
+	}
+}
+
+func TestAccessLogRecordsResolvedActorOnEarlyAuthDenial(t *testing.T) {
+	adminCredentials := testCredentials(t, "secret")
+	tests := []struct {
+		name       string
+		auth       Auth
+		addr       string
+		host       string
+		password   string
+		wantStatus int
+	}{
+		{
+			name:       "admin missing CSRF",
+			auth:       Auth{AdminCredentials: adminCredentials},
+			password:   "secret",
+			wantStatus: http.StatusForbidden,
+		},
+		{
+			name:       "open mode foreign host",
+			addr:       "127.0.0.1:9797",
+			host:       "evil.example.com",
+			wantStatus: http.StatusMisdirectedRequest,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "access.log")
+			log, err := logfile.Open(path)
+			if err != nil {
+				t.Fatalf("logfile.Open: %v", err)
+			}
+			defer log.Close()
+			s := &Server{Auth: tt.auth, Addr: tt.addr, AccessLog: log}
+			req := httptest.NewRequest(http.MethodPost, apiPathReload, nil)
+			if tt.host != "" {
+				req.Host = tt.host
+			}
+			if tt.password != "" {
+				req.SetBasicAuth("admin", tt.password)
+			}
+			rec := httptest.NewRecorder()
+
+			s.Handler().ServeHTTP(rec, req)
+
+			if rec.Code != tt.wantStatus {
+				t.Fatalf("request status = %d, want %d", rec.Code, tt.wantStatus)
+			}
+			data, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatalf("read access log: %v", err)
+			}
+			var entry map[string]any
+			if err := json.Unmarshal(data, &entry); err != nil {
+				t.Fatalf("access log line = %q: %v", data, err)
+			}
+			if entry[accessFieldActor] != roleAdmin {
+				t.Fatalf("access entry actor = %v, want %q", entry[accessFieldActor], roleAdmin)
+			}
+		})
 	}
 }
 
