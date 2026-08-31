@@ -61,7 +61,7 @@ type fakeMountAlerter struct {
 func (a *fakeMountAlerter) AlertMountUsers(_ context.Context, _ mountctl.Spec, blockers []process.Process) (MountAlertDelivery, error) {
 	a.called = true
 	users := uniqueBlockerUsers(blockers)
-	return MountAlertDelivery{Users: users, Delivered: len(users)}, nil
+	return MountAlertDelivery{Users: users}, nil
 }
 
 type blockingMountRunner struct {

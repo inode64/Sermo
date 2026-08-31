@@ -31,8 +31,7 @@ const (
 // MountAlertDelivery reports which mount-blocking users were targeted by a
 // console alert.
 type MountAlertDelivery struct {
-	Users     []string
-	Delivered int
+	Users []string
 }
 
 // MountUserAlerter sends an operator-generated alert to users blocking a mount.
@@ -75,7 +74,7 @@ func (ttyMountUserAlerter) AlertMountUsers(ctx context.Context, spec mountctl.Sp
 	if err := notifier.Send(ctx, msg); err != nil {
 		return MountAlertDelivery{Users: users}, fmt.Errorf("send mount alert for %s: %w", spec.Name, err)
 	}
-	return MountAlertDelivery{Users: users, Delivered: len(users)}, nil
+	return MountAlertDelivery{Users: users}, nil
 }
 
 func (b *WebBackend) mountController() mountctl.Controller {

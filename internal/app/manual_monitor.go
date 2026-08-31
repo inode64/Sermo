@@ -17,10 +17,9 @@ type ManualOperationSources struct {
 // ManualMonitorChange describes an automatic monitoring-state adjustment caused
 // by a successful manual service start or stop.
 type ManualMonitorChange struct {
-	Changed   bool
-	Monitored bool
-	Action    string
-	Message   string
+	Changed bool
+	Action  string
+	Message string
 }
 
 // SyncManualActionMonitoring pauses monitoring after a successful
@@ -77,10 +76,9 @@ func syncMonitorPause(store MonitorStore, key, subject, source, message string) 
 		return ManualMonitorChange{}, fmt.Errorf("pause monitoring for %s: %w", subject, err)
 	}
 	return ManualMonitorChange{
-		Changed:   true,
-		Monitored: false,
-		Action:    eventActionUnmonitor,
-		Message:   message,
+		Changed: true,
+		Action:  eventActionUnmonitor,
+		Message: message,
 	}, nil
 }
 
@@ -99,9 +97,8 @@ func syncMonitorRestore(store MonitorStore, key, subject, source, message string
 		return ManualMonitorChange{}, fmt.Errorf("resume monitoring for %s: %w", subject, err)
 	}
 	return ManualMonitorChange{
-		Changed:   true,
-		Monitored: true,
-		Action:    eventActionMonitor,
-		Message:   message,
+		Changed: true,
+		Action:  eventActionMonitor,
+		Message: message,
 	}, nil
 }

@@ -256,9 +256,7 @@ func serviceSnapshotsFromRecords(records map[string]state.CheckSnapshotRecord) m
 func serviceSnapshotRecords(snaps map[string]CheckSnapshot) map[string]state.CheckSnapshotRecord {
 	out := make(map[string]state.CheckSnapshotRecord, len(snaps))
 	for name, snap := range snaps {
-		rec := snapshotRecord(snap)
-		rec.Name = name
-		out[name] = rec
+		out[name] = snapshotRecord(snap)
 	}
 	return out
 }

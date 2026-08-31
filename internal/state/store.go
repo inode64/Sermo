@@ -618,11 +618,10 @@ type ServiceRestartNoticeRecord struct {
 	StartedAt time.Time
 }
 
-// CheckSnapshotRecord is one persisted latest check result. Name is the service
-// check name or host-watch slot; CheckType identifies the check that produced
-// the data so callers never decode a prior result as a new check type.
+// CheckSnapshotRecord is one persisted latest check result. CheckType identifies
+// the check that produced the data so callers never decode a prior result as a
+// new check type; the enclosing map owns the service check name or watch slot.
 type CheckSnapshotRecord struct {
-	Name        string
 	CheckType   string
 	Observation checks.ObservationState
 	OK          bool
@@ -914,17 +913,17 @@ func scanCheckSnapshotRow(rows *sql.Rows, label string) (string, string, CheckSn
 	return group, slot, record, err
 }
 
-func newCheckSnapshotRecord(name, checkType, observation string, ok, condition, optional, skipped, unavailable int, message, rawData string, ran int, at int64) (CheckSnapshotRecord, error) {
+func newCheckSnapshotRecord(slot, checkType, observation string, ok, condition, optional, skipped, unavailable int, message, rawData string, ran int, at int64) (CheckSnapshotRecord, error) {
 	observationState := checks.ObservationState(observation)
 	if err := validateCheckSnapshotObservation(observationState); err != nil {
-		return CheckSnapshotRecord{}, fmt.Errorf("decode check snapshot %s: %w", name, err)
+		return CheckSnapshotRecord{}, fmt.Errorf("decode check snapshot %s: %w", slot, err)
 	}
 	data, err := decodeSnapshotData(rawData)
 	if err != nil {
 		return CheckSnapshotRecord{}, err
 	}
 	return CheckSnapshotRecord{
-		Name: name, CheckType: checkType, Observation: observationState, OK: intBool(ok), Condition: intBool(condition), Optional: intBool(optional),
+		CheckType: checkType, Observation: observationState, OK: intBool(ok), Condition: intBool(condition), Optional: intBool(optional),
 		Skipped: intBool(skipped), Unavailable: intBool(unavailable), Message: message, Data: data, Ran: intBool(ran), At: unixNanoTime(at),
 	}, nil
 }

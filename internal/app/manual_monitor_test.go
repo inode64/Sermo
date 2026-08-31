@@ -16,7 +16,7 @@ func TestSyncManualActionMonitoringPausesAndRestores(t *testing.T) {
 	if err != nil {
 		t.Fatalf("stop sync: %v", err)
 	}
-	if !change.Changed || change.Action != eventActionUnmonitor || change.Monitored {
+	if !change.Changed || change.Action != eventActionUnmonitor {
 		t.Fatalf("stop change = %+v", change)
 	}
 	if store.active["web"] || store.source["web"] != state.SourceCLIManualStop {
@@ -28,7 +28,7 @@ func TestSyncManualActionMonitoringPausesAndRestores(t *testing.T) {
 	if err != nil {
 		t.Fatalf("start sync: %v", err)
 	}
-	if !change.Changed || change.Action != eventActionMonitor || !change.Monitored {
+	if !change.Changed || change.Action != eventActionMonitor {
 		t.Fatalf("start change = %+v", change)
 	}
 	if !store.active["web"] || store.source["web"] != state.SourceWeb {
@@ -47,7 +47,7 @@ func TestSyncManualActionMonitoringRestoresAfterRepair(t *testing.T) {
 	if err != nil {
 		t.Fatalf("repair sync: %v", err)
 	}
-	if !change.Changed || !change.Monitored || change.Action != eventActionMonitor {
+	if !change.Changed || change.Action != eventActionMonitor {
 		t.Fatalf("repair change = %+v", change)
 	}
 }
@@ -105,7 +105,7 @@ func TestSyncManualActionMonitoringRestoresPostflightFailedActiveStart(t *testin
 	if err != nil {
 		t.Fatalf("active postflight sync: %v", err)
 	}
-	if !change.Changed || !change.Monitored || change.Action != eventActionMonitor {
+	if !change.Changed || change.Action != eventActionMonitor {
 		t.Fatalf("active postflight change = %+v", change)
 	}
 	if !store.active["web"] || store.source["web"] != state.SourceCLI {
