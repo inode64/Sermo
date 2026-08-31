@@ -11,7 +11,7 @@ import (
 
 // ManualOperationSources identifies the caller that owns a manual operation.
 type ManualOperationSources struct {
-	Stop, Restore, Settling string
+	Stop, Restore string
 }
 
 // ManualMonitorChange describes an automatic monitoring-state adjustment caused
@@ -58,7 +58,7 @@ func CompleteManualOperation(monitor MonitorStore, settling OperationSettlingSto
 	if opErr == nil {
 		change, monitorErr = SyncManualActionMonitoring(monitor, service, action, result, sources.Stop, sources.Restore, activeAfterPostflightFailure)
 	}
-	settlingErr := finishOperationSettling(settling, service, action, sources.Settling, result, opErr, activeAfterPostflightFailure)
+	settlingErr := finishOperationSettling(settling, service, action, result, opErr, activeAfterPostflightFailure)
 	return change, errors.Join(monitorErr, settlingErr)
 }
 

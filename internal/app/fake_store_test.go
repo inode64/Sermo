@@ -87,7 +87,7 @@ func (f *fakeStore) MonitorState(service string) (state.MonitorRecord, bool, err
 	}, true, nil
 }
 
-func (f *fakeStore) SetOperationSettling(service, action, phase, source string) error {
+func (f *fakeStore) SetOperationSettling(service, phase string) error {
 	if f == nil {
 		return nil
 	}
@@ -95,9 +95,7 @@ func (f *fakeStore) SetOperationSettling(service, action, phase, source string) 
 		return errors.New("set operation settling failed")
 	}
 	f.settling[service] = state.OperationSettlingRecord{
-		Action:    action,
 		Phase:     phase,
-		Source:    source,
 		UpdatedAt: f.now(),
 	}
 	return nil

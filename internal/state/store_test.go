@@ -124,26 +124,26 @@ func TestStoreOperationSettlingRoundTrip(t *testing.T) {
 	s := openTemp(t)
 	s.now = func() time.Time { return time.Date(2026, 6, 7, 9, 0, 0, 0, time.UTC) }
 
-	if err := s.SetOperationSettling("web", "restart", OperationSettlingRunning, SourceCLI); err != nil {
+	if err := s.SetOperationSettling("web", OperationSettlingRunning); err != nil {
 		t.Fatalf("SetOperationSettling: %v", err)
 	}
 	rec, found, err := s.OperationSettling("web")
 	if err != nil || !found {
 		t.Fatalf("OperationSettling: found=%v err=%v", found, err)
 	}
-	if rec.Action != "restart" || rec.Phase != OperationSettlingRunning || rec.Source != SourceCLI || !rec.UpdatedAt.Equal(s.now()) {
+	if rec.Phase != OperationSettlingRunning || !rec.UpdatedAt.Equal(s.now()) {
 		t.Fatalf("record = %+v", rec)
 	}
 
 	s.now = func() time.Time { return time.Date(2026, 6, 7, 9, 1, 0, 0, time.UTC) }
-	if err := s.SetOperationSettling("web", "restart", OperationSettlingSettling, SourceWeb); err != nil {
+	if err := s.SetOperationSettling("web", OperationSettlingSettling); err != nil {
 		t.Fatalf("SetOperationSettling update: %v", err)
 	}
 	rec, found, err = s.OperationSettling("web")
 	if err != nil || !found {
 		t.Fatalf("OperationSettling after update: found=%v err=%v", found, err)
 	}
-	if rec.Phase != OperationSettlingSettling || rec.Source != SourceWeb || !rec.UpdatedAt.Equal(s.now()) {
+	if rec.Phase != OperationSettlingSettling || !rec.UpdatedAt.Equal(s.now()) {
 		t.Fatalf("updated record = %+v", rec)
 	}
 
@@ -415,7 +415,7 @@ func writePersistentStoreState(t *testing.T, store *Store, at time.Time) {
 	}); err != nil {
 		t.Fatalf("SetWatchRuntimeState: %v", err)
 	}
-	if err := store.SetOperationSettling("db", "restart", OperationSettlingSettling, SourceDaemon); err != nil {
+	if err := store.SetOperationSettling("db", OperationSettlingSettling); err != nil {
 		t.Fatalf("SetOperationSettling: %v", err)
 	}
 	if err := store.SetServiceRestartNotice("db", ServiceRestartNoticeRecord{PID: 4242, StartedAt: at.Add(-time.Minute)}); err != nil {
@@ -490,7 +490,7 @@ func assertPersistedOperationSettling(t *testing.T, store *Store) {
 	if err != nil || !found {
 		t.Fatalf("OperationSettling after reopen: found=%v err=%v", found, err)
 	}
-	if op.Action != "restart" || op.Phase != OperationSettlingSettling || op.Source != SourceDaemon {
+	if op.Phase != OperationSettlingSettling {
 		t.Fatalf("operation settling state = %+v", op)
 	}
 }

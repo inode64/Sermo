@@ -607,9 +607,7 @@ const (
 
 // OperationSettlingRecord is one persisted service-operation settling row.
 type OperationSettlingRecord struct {
-	Action    string
 	Phase     string
-	Source    string
 	UpdatedAt time.Time
 }
 
@@ -708,16 +706,14 @@ func (s *Store) SetActive(service string, active bool, source string) error {
 
 // SetOperationSettling records that a service operation is running or awaiting
 // its first post-operation observation cycle.
-func (s *Store) SetOperationSettling(service, action, phase, source string) error {
+func (s *Store) SetOperationSettling(service, phase string) error {
 	_, err := s.exec(s.sqlCtx(),
 		`INSERT INTO operation_settling (service, action, phase, source, updated_at)
-		 VALUES (?, ?, ?, ?, ?)
+		 VALUES (?, '', ?, '', ?)
 		 ON CONFLICT(service) DO UPDATE SET
-		   action     = excluded.action,
 		   phase      = excluded.phase,
-		   source     = excluded.source,
 		   updated_at = excluded.updated_at;`,
-		service, action, phase, source, s.now().UTC().Format(time.RFC3339),
+		service, phase, s.now().UTC().Format(time.RFC3339),
 	)
 	if err != nil {
 		return fmt.Errorf("set operation settling for %s: %w", service, err)
@@ -727,11 +723,11 @@ func (s *Store) SetOperationSettling(service, action, phase, source string) erro
 
 // OperationSettling returns a service's current operation-settling row.
 func (s *Store) OperationSettling(service string) (OperationSettlingRecord, bool, error) {
-	var action, phase, source, updated string
+	var phase, updated string
 	err := s.reads().QueryRowContext(s.sqlCtx(),
-		`SELECT action, phase, source, updated_at FROM operation_settling WHERE service = ?;`,
+		`SELECT phase, updated_at FROM operation_settling WHERE service = ?;`,
 		service,
-	).Scan(&action, &phase, &source, &updated)
+	).Scan(&phase, &updated)
 	switch {
 	case err == sql.ErrNoRows:
 		return OperationSettlingRecord{}, false, nil
@@ -739,7 +735,7 @@ func (s *Store) OperationSettling(service string) (OperationSettlingRecord, bool
 		return OperationSettlingRecord{}, false, fmt.Errorf("load operation settling for %s: %w", service, err)
 	default:
 		at, _ := time.Parse(time.RFC3339, updated)
-		return OperationSettlingRecord{Action: action, Phase: phase, Source: source, UpdatedAt: at}, true, nil
+		return OperationSettlingRecord{Phase: phase, UpdatedAt: at}, true, nil
 	}
 }
 

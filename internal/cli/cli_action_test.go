@@ -167,7 +167,7 @@ func TestRestartOKThroughEngine(t *testing.T) {
 		t.Fatalf("stdout = %q", got)
 	}
 	rec, found := readOperationSettling(t, global, "web")
-	if !found || rec.Action != "restart" || rec.Phase != state.OperationSettlingSettling || rec.Source != state.SourceCLI {
+	if !found || rec.Phase != state.OperationSettlingSettling {
 		t.Fatalf("restart settling = %+v found=%v", rec, found)
 	}
 }
@@ -319,7 +319,7 @@ func TestStopPausesMonitoringAndStartRestores(t *testing.T) {
 		t.Fatalf("record after start = %+v", rec)
 	}
 	op, found := readOperationSettling(t, global, "web")
-	if !found || op.Action != "start" || op.Phase != state.OperationSettlingSettling || op.Source != state.SourceCLI {
+	if !found || op.Phase != state.OperationSettlingSettling {
 		t.Fatalf("start settling = %+v found=%v", op, found)
 	}
 }

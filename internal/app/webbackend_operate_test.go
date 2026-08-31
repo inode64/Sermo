@@ -131,7 +131,7 @@ func TestWebBackendOperateStopStartSyncsMonitoring(t *testing.T) {
 	if err != nil || !found {
 		t.Fatalf("start should leave post-operation settling: found=%v err=%v", found, err)
 	}
-	if rec.Action != string(rules.ActionStart) || rec.Phase != state.OperationSettlingSettling || rec.Source != state.SourceWeb {
+	if rec.Phase != state.OperationSettlingSettling {
 		t.Fatalf("start settling = %+v", rec)
 	}
 	if len(events) != 2 || events[1].Action != eventActionMonitor || events[1].Message != eventMessageMonitoringResumedAfterManualStart {
