@@ -130,24 +130,11 @@ type Deps struct {
 	Samplers
 }
 
-// BuildIssueKind identifies why an unusable check entry could not be built.
-type BuildIssueKind string
-
-// Supported build issue kinds.
-const (
-	BuildIssueInvalidEntry         BuildIssueKind = "invalid_entry"
-	BuildIssueInvalidConfiguration BuildIssueKind = "invalid_configuration"
-	BuildIssueUnsupportedType      BuildIssueKind = "unsupported_type"
-	BuildIssueBuilderInvariant     BuildIssueKind = "builder_invariant"
-)
-
 // BuildIssue is an unusable check entry reported during construction. Required
 // issues block the outcome; optional issues remain warnings.
 type BuildIssue struct {
 	Service  string
 	Check    string
-	Type     string
-	Kind     BuildIssueKind
 	Detail   string
 	Optional bool
 }
@@ -219,7 +206,7 @@ func BuildWithIssues(section map[string]any, deps Deps) ([]Built, []BuildIssue) 
 		entry, ok := section[name].(map[string]any)
 		if !ok {
 			issues = append(issues, BuildIssue{
-				Service: deps.Service, Check: name, Kind: BuildIssueInvalidEntry,
+				Service: deps.Service, Check: name,
 				Detail: "entry is not a mapping",
 			})
 			continue
@@ -248,7 +235,7 @@ func buildOne(name string, entry map[string]any, deps Deps, runner execx.Runner,
 		}
 	}
 	return Built{}, &BuildIssue{
-		Service: deps.Service, Check: name, Type: typ, Kind: failure.kind,
+		Service: deps.Service, Check: name,
 		Detail: failure.detail, Optional: cfgval.Bool(entry[CheckKeyOptional]),
 	}
 }
@@ -264,7 +251,6 @@ type checkBuildInput struct {
 type checkBuilder func(checkBuildInput) (Check, string)
 
 type buildFailure struct {
-	kind   BuildIssueKind
 	detail string
 }
 
@@ -357,7 +343,7 @@ var builtinCheckSpecs = []checkSpec{
 
 func buildCheck(typ string, b base, entry map[string]any, runner execx.Runner, client *http.Client, deps Deps) (Check, *buildFailure) {
 	if typ == "" {
-		return nil, &buildFailure{kind: BuildIssueInvalidConfiguration, detail: "missing type"}
+		return nil, &buildFailure{detail: "missing type"}
 	}
 	if spec, ok := checkSpecByName[typ]; ok {
 		check, warn := spec.build(checkBuildInput{base: b, entry: entry, runner: runner, client: client, deps: deps})
@@ -369,19 +355,18 @@ func buildCheck(typ string, b base, entry map[string]any, runner execx.Runner, c
 		check, warn := buildConnCheck(b, proto, entry)
 		return checkBuildResult(typ, check, warn)
 	}
-	return nil, &buildFailure{kind: BuildIssueUnsupportedType, detail: fmt.Sprintf("unsupported type %q", typ)}
+	return nil, &buildFailure{detail: fmt.Sprintf("unsupported type %q", typ)}
 }
 
 func checkBuildResult(typ string, check Check, warning string) (Check, *buildFailure) {
 	switch {
 	case warning != "":
-		return nil, &buildFailure{kind: BuildIssueInvalidConfiguration, detail: warning}
+		return nil, &buildFailure{detail: warning}
 	case check == nil:
 		// Every builder must return either a check or a warning. Keeping this
 		// invariant after both built-in and connection-protocol construction
 		// makes "no issue" mean a usable check for every caller.
 		return nil, &buildFailure{
-			kind:   BuildIssueBuilderInvariant,
 			detail: fmt.Sprintf("check type %q produced no check", typ),
 		}
 	default:
@@ -472,14 +457,13 @@ func buildCheckBase(name string, entry map[string]any, deps Deps) (string, base,
 		timeout = cfgval.Duration(raw)
 		if timeout <= 0 {
 			return typ, base{}, &buildFailure{
-				kind: BuildIssueInvalidConfiguration, detail: positiveDurationMessage(CheckKeyTimeout),
+				detail: positiveDurationMessage(CheckKeyTimeout),
 			}
 		}
 	}
 	reports := cfgval.AsString(entry[CheckKeyReports])
 	if _, present := entry[CheckKeyReports]; present && !IsReportingMode(reports) {
 		return typ, base{}, &buildFailure{
-			kind: BuildIssueInvalidConfiguration,
 			detail: fmt.Sprintf("%s %q must be one of %s", CheckKeyReports, reports,
 				strings.Join(ReportingModes(), ", ")),
 		}
@@ -487,7 +471,6 @@ func buildCheckBase(name string, entry map[string]any, deps Deps) (string, base,
 	severity := cfgval.AsString(entry[CheckKeySeverity])
 	if _, present := entry[CheckKeySeverity]; present && !IsCheckSeverity(severity) {
 		return typ, base{}, &buildFailure{
-			kind: BuildIssueInvalidConfiguration,
 			detail: fmt.Sprintf("%s %q must be one of %s", CheckKeySeverity, severity,
 				strings.Join(CheckSeverities(), ", ")),
 		}

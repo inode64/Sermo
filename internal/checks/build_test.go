@@ -87,9 +87,6 @@ func TestBuildWithIssuesReturnsOutcomeResults(t *testing.T) {
 	if results[1].Check != "process" || !results[1].Optional {
 		t.Fatalf("optional issue result = %+v, want optional process issue", results[1])
 	}
-	if issues[0].Type != CheckTypeMetric || issues[0].Kind != BuildIssueInvalidConfiguration {
-		t.Fatalf("metric issue = %+v, want typed invalid configuration", issues[0])
-	}
 }
 
 func TestBuildTimeoutPerCheck(t *testing.T) {
@@ -127,44 +124,43 @@ func TestBuildAndInlineShareStructuredIssue(t *testing.T) {
 		t.Fatalf("issues = %v, want one issue", issues)
 	}
 	want := checkBuildMessage("bad", positiveDurationMessage(CheckKeyTimeout))
-	if issues[0].String() != want || issues[0].Kind != BuildIssueInvalidConfiguration || issues[0].Type != CheckTypeBinary {
-		t.Errorf("build issue = %+v, want typed %q", issues[0], want)
+	if issues[0].String() != want {
+		t.Errorf("build issue = %+v, want %q", issues[0], want)
 	}
 	_, err := BuildInline("bad", entry, Deps{})
 	if err == nil || err.Error() != want {
 		t.Errorf("inline error = %v, want %q", err, want)
 	}
 	var buildErr *BuildError
-	if !errors.As(err, &buildErr) || buildErr.Issue.Kind != issues[0].Kind || buildErr.Issue.Type != issues[0].Type {
-		t.Errorf("inline issue = %+v, want same structured kind/type as section issue", buildErr)
+	if !errors.As(err, &buildErr) || buildErr.Issue != issues[0] {
+		t.Errorf("inline issue = %+v, want same structured issue as section build", buildErr)
 	}
 }
 
 func TestBuildAndInlineRejectInvalidReportingMode(t *testing.T) {
 	entry := map[string]any{"type": CheckTypeBinary, "path": "/x", "reports": "invalid"}
 	_, issues := BuildWithIssues(map[string]any{"bad": entry}, Deps{})
-	if len(issues) != 1 || issues[0].Kind != BuildIssueInvalidConfiguration || !strings.Contains(issues[0].Detail, "reports") {
+	if len(issues) != 1 || !strings.Contains(issues[0].Detail, "reports") {
 		t.Fatalf("issues = %+v, want invalid reporting configuration", issues)
 	}
 
 	_, err := BuildInline("bad", entry, Deps{})
 	var buildErr *BuildError
-	if !errors.As(err, &buildErr) || buildErr.Issue.Kind != BuildIssueInvalidConfiguration || buildErr.Issue.Detail != issues[0].Detail {
+	if !errors.As(err, &buildErr) || buildErr.Issue.Detail != issues[0].Detail {
 		t.Fatalf("inline error = %+v, want same reporting issue as section build", buildErr)
 	}
 }
 
-func TestBuildIssueKinds(t *testing.T) {
+func TestBuildIssueMetadata(t *testing.T) {
 	tests := []struct {
 		name         string
 		entry        any
-		wantKind     BuildIssueKind
-		wantType     string
+		wantDetail   string
 		wantOptional bool
 	}{
-		{name: "invalid entry", entry: "not-a-map", wantKind: BuildIssueInvalidEntry},
-		{name: "invalid configuration", entry: map[string]any{"type": CheckTypeBinary}, wantKind: BuildIssueInvalidConfiguration, wantType: CheckTypeBinary},
-		{name: "unsupported type", entry: map[string]any{"type": "unknown-probe", "optional": true}, wantKind: BuildIssueUnsupportedType, wantType: "unknown-probe", wantOptional: true},
+		{name: "invalid entry", entry: "not-a-map", wantDetail: "entry is not a mapping"},
+		{name: "invalid configuration", entry: map[string]any{"type": CheckTypeBinary}, wantDetail: "binary check requires a path"},
+		{name: "unsupported type", entry: map[string]any{"type": "unknown-probe", "optional": true}, wantDetail: `unsupported type "unknown-probe"`, wantOptional: true},
 	}
 
 	for _, tc := range tests {
@@ -174,8 +170,8 @@ func TestBuildIssueKinds(t *testing.T) {
 				t.Fatalf("issues = %v, want one", issues)
 			}
 			issue := issues[0]
-			if issue.Service != "web" || issue.Check != "probe" || issue.Type != tc.wantType || issue.Kind != tc.wantKind || issue.Optional != tc.wantOptional {
-				t.Fatalf("issue = %+v, want kind=%q type=%q optional=%t", issue, tc.wantKind, tc.wantType, tc.wantOptional)
+			if issue.Service != "web" || issue.Check != "probe" || issue.Detail != tc.wantDetail || issue.Optional != tc.wantOptional {
+				t.Fatalf("issue = %+v, want detail=%q optional=%t", issue, tc.wantDetail, tc.wantOptional)
 			}
 			if result := issue.Result(); !result.Unavailable || result.Message != issue.String() {
 				t.Fatalf("issue result = %+v, want unavailable structured message", result)
@@ -195,7 +191,7 @@ func TestBuildIssueDetectsSilentNilBuilder(t *testing.T) {
 	defer delete(checkSpecByName, checkType)
 
 	_, issues := BuildWithIssues(map[string]any{"probe": map[string]any{"type": checkType}}, Deps{})
-	if len(issues) != 1 || issues[0].Kind != BuildIssueBuilderInvariant {
+	if len(issues) != 1 || issues[0].Detail != `check type "test-silent-nil-builder" produced no check` {
 		t.Fatalf("issues = %+v, want builder invariant", issues)
 	}
 }
