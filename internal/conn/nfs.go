@@ -28,14 +28,11 @@ const (
 // reply — proof the server is up and speaking RPC. A version-mismatch reply
 // (e.g. an NFSv4-only server answering a v3 NULL) still passes. No auth. Reuses
 // the RPC helpers of the rpcbind probe.
-type nfsProtocol struct{}
-
-func (nfsProtocol) Name() string       { return ProtocolNameNFS }
-func (nfsProtocol) DefaultPort() int   { return defaultPortNFS }
-func (nfsProtocol) RequiresUser() bool { return false }
-
-func (nfsProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	return probeRPCNull(ctx, cfg, ProtocolNameNFS, defaultPortNFS, nfsProg, nfsVers, strconv.Itoa(nfsProg))
+var nfsProtocol = rpcNullProtocol{
+	name:        ProtocolNameNFS,
+	defaultPort: defaultPortNFS,
+	program:     nfsProg,
+	version:     nfsVers,
 }
 
 // rpcNullProtocol describes daemons whose entire safe liveness exchange is an

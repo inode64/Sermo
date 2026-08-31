@@ -51,7 +51,7 @@ var builtinProtocolRegistrations = []protocolRegistration{
 	{protocol: mqttProtocol{}},
 	{protocol: mysqlProtocol{}, aliases: []string{protocolAliasMariaDB}},
 	{protocol: nebulaProtocol{}, aliases: []string{protocolAliasNebulaVPN}},
-	{protocol: nfsProtocol{}, aliases: []string{protocolAliasNFSServer, protocolAliasNFSD}},
+	{protocol: nfsProtocol, aliases: []string{protocolAliasNFSServer, protocolAliasNFSD}},
 	{protocol: nntpProtocol{}, aliases: []string{protocolAliasNNTPs}},
 	{protocol: ntpProtocol{}},
 	{protocol: nutProtocol{}, aliases: []string{protocolAliasUPS, protocolAliasUPSD}},
