@@ -173,6 +173,55 @@ check: { type: storage, path: /var, used_pct: { op: ">=", value: "80%" } }
 	}
 }
 
+func TestLocalNotifierOverrideMergesBaseEntry(t *testing.T) {
+	files := localOverrideFiles()
+	files["notifiers/ops.yml"] = `
+notifiers:
+  ops:
+    type: email
+    enabled: true
+`
+	files["notifiers.local/ops.yml"] = `
+notifiers:
+  ops:
+    enabled: false
+`
+	cfg := loadCatalog(t, files)
+	entry, ok := cfg.Notifiers()["ops"].(map[string]any)
+	if !ok {
+		t.Fatalf("notifier ops = %#v, want mapping", cfg.Notifiers()["ops"])
+	}
+	if got := cfgval.String(entry["type"]); got != "email" {
+		t.Errorf("type = %q, want inherited email", got)
+	}
+	if got := cfgval.Bool(entry["enabled"]); got {
+		t.Error("enabled = true, want override false")
+	}
+}
+
+func TestLocalNotifierOverrideUsesFragmentValidation(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+		want string
+	}{
+		{name: "not mapping", body: "notifiers: [ops]\n", want: "notifiers must be a mapping"},
+		{name: "extra top-level key", body: "notifiers: { ops: { type: email } }\nnotify: [ops]\n", want: `notifiers fragments only support top-level notifiers, got "notify"`},
+		{name: "multiple entries", body: "notifiers: { ops: {}, dev: {} }\n", want: "notifiers fragments must contain exactly one entry"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			files := localOverrideFiles()
+			files["notifiers.local/ops.yml"] = tt.body
+			_, err := loadConfig(t, writeConfig(t, files))
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("Load() error = %v, want containing %q", err, tt.want)
+			}
+		})
+	}
+}
+
 // TestLocalOverrideDoesNotCountAsDuplicate guards the merge path against the
 // duplicate-name diagnostic that a second same-named document would otherwise
 // produce.
