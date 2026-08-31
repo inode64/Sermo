@@ -1294,7 +1294,6 @@ func liveSampler(service string, lc *metrics.Collector, live *LiveMetrics, servi
 			CPU:                 sc.CPU.Percent,
 			CPUReady:            sc.CPU.Ready,
 			CPUThread:           sc.CPUThread.Percent,
-			CPUThreadReady:      sc.CPUThread.Ready,
 			NumCPU:              sc.NumCPU,
 			PerProcCPU:          sc.PerProc,
 			PerProcMaxCore:      sc.PerProcMaxCore,

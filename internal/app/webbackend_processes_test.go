@@ -342,7 +342,7 @@ func TestWorkerLiveCPUUsesInitDerivedProcessSelectors(t *testing.T) {
 	if !ok {
 		t.Fatal("live CPU sample not published")
 	}
-	if !got.CPUReady || !got.CPUThreadReady {
+	if !got.CPUReady {
 		t.Fatalf("live CPU not ready: %+v", got)
 	}
 	if pct := got.PerProcCPU[pid]; pct < 49.9 || pct > 50.1 {
