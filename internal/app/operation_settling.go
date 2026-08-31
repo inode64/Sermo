@@ -10,28 +10,28 @@ import (
 
 const operationSettlingMaxAge = 15 * time.Minute
 
-func beginOperationSettling(store OperationSettlingStore, service, action, source string) error {
+func beginOperationSettling(store OperationSettlingStore, service, action string) error {
 	if store == nil || !operation.IsServiceAction(action) {
 		return nil
 	}
-	if err := store.SetOperationSettling(service, action, state.OperationSettlingRunning, source); err != nil {
+	if err := store.SetOperationSettling(service, state.OperationSettlingRunning); err != nil {
 		return fmt.Errorf("mark operation settling for %s: %w", service, err)
 	}
 	return nil
 }
 
 // BeginOperationSettling marks a service operation as running for its caller.
-func BeginOperationSettling(store OperationSettlingStore, service, action, source string) error {
-	return beginOperationSettling(store, service, action, source)
+func BeginOperationSettling(store OperationSettlingStore, service, action string) error {
+	return beginOperationSettling(store, service, action)
 }
 
-func finishOperationSettling(store OperationSettlingStore, service, action, source string, result operation.Result, opErr error, activeAfterPostflightFailure bool) error {
+func finishOperationSettling(store OperationSettlingStore, service, action string, result operation.Result, opErr error, activeAfterPostflightFailure bool) error {
 	if store == nil || !operation.IsServiceAction(action) {
 		return nil
 	}
 	settleAfter := result.OK() || (activeAfterPostflightFailure && result.Status == operation.ResultPostflightFailed && operation.CanRemainActiveAfterPostflightFailure(action))
 	if opErr == nil && settleAfter && operation.SettlesAfter(action) {
-		if err := store.SetOperationSettling(service, action, state.OperationSettlingSettling, source); err != nil {
+		if err := store.SetOperationSettling(service, state.OperationSettlingSettling); err != nil {
 			return fmt.Errorf("mark post-operation settling for %s: %w", service, err)
 		}
 		return nil

@@ -145,7 +145,7 @@ func TestWorkerMarksObservabilityReadyAfterNormalStartupCycle(t *testing.T) {
 // host filesystem is full.
 type failingSettlingStore struct{ err error }
 
-func (s failingSettlingStore) SetOperationSettling(_, _, _, _ string) error { return s.err }
+func (s failingSettlingStore) SetOperationSettling(_, _ string) error { return s.err }
 
 func (s failingSettlingStore) OperationSettling(string) (state.OperationSettlingRecord, bool, error) {
 	return state.OperationSettlingRecord{}, false, s.err
@@ -204,7 +204,7 @@ func TestWorkerRuleEvalErrorMessageIsNotDoublyPrefixed(t *testing.T) {
 func TestWorkerOperationRunningSkipsChecksAndAlerts(t *testing.T) {
 	store := newFakeStore()
 	store.now = func() time.Time { return t0 }
-	if err := store.SetOperationSettling("web", "restart", state.OperationSettlingRunning, state.SourceCLI); err != nil {
+	if err := store.SetOperationSettling("web", state.OperationSettlingRunning); err != nil {
 		t.Fatalf("SetOperationSettling: %v", err)
 	}
 	h := &workerHarness{cache: failedCache("http")}
@@ -231,7 +231,7 @@ func TestWorkerOperationRunningSkipsChecksAndAlerts(t *testing.T) {
 func TestWorkerOperationSettlingObserveOnlySuppressesSideEffects(t *testing.T) {
 	store := newFakeStore()
 	store.now = func() time.Time { return t0 }
-	if err := store.SetOperationSettling("web", "restart", state.OperationSettlingSettling, state.SourceCLI); err != nil {
+	if err := store.SetOperationSettling("web", state.OperationSettlingSettling); err != nil {
 		t.Fatalf("SetOperationSettling: %v", err)
 	}
 	h := &workerHarness{cache: failedCache("http")}
@@ -264,7 +264,7 @@ func TestWorkerOperationSettlingObserveOnlySuppressesSideEffects(t *testing.T) {
 func TestWorkerOperationSettlingConsumesInactiveObservation(t *testing.T) {
 	store := newFakeStore()
 	store.now = func() time.Time { return t0 }
-	if err := store.SetOperationSettling("web", "start", state.OperationSettlingSettling, state.SourceCLI); err != nil {
+	if err := store.SetOperationSettling("web", state.OperationSettlingSettling); err != nil {
 		t.Fatalf("SetOperationSettling: %v", err)
 	}
 	h := &workerHarness{cache: failedCache("http")}

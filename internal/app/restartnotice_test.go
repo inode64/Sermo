@@ -85,7 +85,7 @@ func TestWorkerServiceRestartNoticeIsOneShotAcrossWorkers(t *testing.T) {
 func TestWorkerServiceRestartNoticeSuppressesSermoOperation(t *testing.T) {
 	store := newFakeStore()
 	store.now = func() time.Time { return t0 }
-	if err := store.SetOperationSettling("web", "restart", state.OperationSettlingSettling, state.SourceWeb); err != nil {
+	if err := store.SetOperationSettling("web", state.OperationSettlingSettling); err != nil {
 		t.Fatalf("SetOperationSettling: %v", err)
 	}
 	n := &fakeNotifier{name: "ops"}

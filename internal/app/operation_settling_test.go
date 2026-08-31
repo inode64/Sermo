@@ -12,19 +12,19 @@ import (
 func TestOperationSettlingLifecycle(t *testing.T) {
 	store := newFakeStore()
 
-	if err := beginOperationSettling(store, "web", string(rules.ActionRestart), state.SourceCLI); err != nil {
+	if err := beginOperationSettling(store, "web", string(rules.ActionRestart)); err != nil {
 		t.Fatalf("begin restart: %v", err)
 	}
 	rec, found, err := store.OperationSettling("web")
 	if err != nil || !found {
 		t.Fatalf("operation settling after begin: found=%v err=%v", found, err)
 	}
-	if rec.Action != string(rules.ActionRestart) || rec.Phase != state.OperationSettlingRunning || rec.Source != state.SourceCLI {
+	if rec.Phase != state.OperationSettlingRunning {
 		t.Fatalf("begin record = %+v", rec)
 	}
 
 	result := operation.Result{Service: "web", Action: string(rules.ActionRestart), Status: operation.ResultOK}
-	if err := finishOperationSettling(store, "web", string(rules.ActionRestart), state.SourceCLI, result, nil, false); err != nil {
+	if err := finishOperationSettling(store, "web", string(rules.ActionRestart), result, nil, false); err != nil {
 		t.Fatalf("finish restart: %v", err)
 	}
 	rec, found, err = store.OperationSettling("web")
@@ -35,44 +35,44 @@ func TestOperationSettlingLifecycle(t *testing.T) {
 		t.Fatalf("restart should wait for observation, got %+v", rec)
 	}
 
-	if err := beginOperationSettling(store, "web", string(rules.ActionStop), state.SourceWeb); err != nil {
+	if err := beginOperationSettling(store, "web", string(rules.ActionStop)); err != nil {
 		t.Fatalf("begin stop: %v", err)
 	}
 	result = operation.Result{Service: "web", Action: string(rules.ActionStop), Status: operation.ResultOK}
-	if err := finishOperationSettling(store, "web", string(rules.ActionStop), state.SourceWeb, result, nil, false); err != nil {
+	if err := finishOperationSettling(store, "web", string(rules.ActionStop), result, nil, false); err != nil {
 		t.Fatalf("finish stop: %v", err)
 	}
 	if _, found, _ = store.OperationSettling("web"); found {
 		t.Fatal("successful stop should clear operation settling")
 	}
 
-	if err := beginOperationSettling(store, "web", string(rules.ActionStart), state.SourceCLI); err != nil {
+	if err := beginOperationSettling(store, "web", string(rules.ActionStart)); err != nil {
 		t.Fatalf("begin failed start: %v", err)
 	}
 	result = operation.Result{Service: "web", Action: string(rules.ActionStart), Status: operation.ResultFailed}
-	if err := finishOperationSettling(store, "web", string(rules.ActionStart), state.SourceCLI, result, errors.New("failed"), false); err != nil {
+	if err := finishOperationSettling(store, "web", string(rules.ActionStart), result, errors.New("failed"), false); err != nil {
 		t.Fatalf("finish failed start: %v", err)
 	}
 	if _, found, _ = store.OperationSettling("web"); found {
 		t.Fatal("failed operation should clear operation settling")
 	}
 
-	if err := beginOperationSettling(store, "web", string(rules.ActionRestart), state.SourceWeb); err != nil {
+	if err := beginOperationSettling(store, "web", string(rules.ActionRestart)); err != nil {
 		t.Fatalf("begin active postflight restart: %v", err)
 	}
 	result = operation.Result{Service: "web", Action: string(rules.ActionRestart), Status: operation.ResultPostflightFailed}
-	if err := finishOperationSettling(store, "web", string(rules.ActionRestart), state.SourceWeb, result, nil, true); err != nil {
+	if err := finishOperationSettling(store, "web", string(rules.ActionRestart), result, nil, true); err != nil {
 		t.Fatalf("finish active postflight restart: %v", err)
 	}
 	rec, found, err = store.OperationSettling("web")
 	if err != nil || !found {
 		t.Fatalf("active postflight restart should keep settling: found=%v err=%v", found, err)
 	}
-	if rec.Phase != state.OperationSettlingSettling || rec.Source != state.SourceWeb {
+	if rec.Phase != state.OperationSettlingSettling {
 		t.Fatalf("active postflight restart record = %+v", rec)
 	}
 
-	if err := finishOperationSettling(store, "web", string(rules.ActionRestart), state.SourceWeb, result, nil, false); err != nil {
+	if err := finishOperationSettling(store, "web", string(rules.ActionRestart), result, nil, false); err != nil {
 		t.Fatalf("finish inactive postflight restart: %v", err)
 	}
 	if _, found, _ = store.OperationSettling("web"); found {
@@ -84,18 +84,18 @@ func TestRepairOperationSettlesLikeStart(t *testing.T) {
 	store := newFakeStore()
 	result := operation.Result{Service: "web", Action: operation.ActionRepair, Status: operation.ResultOK}
 
-	if err := beginOperationSettling(store, "web", operation.ActionRepair, state.SourceWeb); err != nil {
+	if err := beginOperationSettling(store, "web", operation.ActionRepair); err != nil {
 		t.Fatalf("begin repair: %v", err)
 	}
 	rec, found, err := store.OperationSettling("web")
-	if err != nil || !found || rec.Phase != state.OperationSettlingRunning || rec.Action != operation.ActionRepair {
+	if err != nil || !found || rec.Phase != state.OperationSettlingRunning {
 		t.Fatalf("running repair settling = %+v found=%v err=%v", rec, found, err)
 	}
-	if err := finishOperationSettling(store, "web", operation.ActionRepair, state.SourceWeb, result, nil, false); err != nil {
+	if err := finishOperationSettling(store, "web", operation.ActionRepair, result, nil, false); err != nil {
 		t.Fatalf("finish repair: %v", err)
 	}
 	rec, found, err = store.OperationSettling("web")
-	if err != nil || !found || rec.Phase != state.OperationSettlingSettling || rec.Action != operation.ActionRepair {
+	if err != nil || !found || rec.Phase != state.OperationSettlingSettling {
 		t.Fatalf("settled repair = %+v found=%v err=%v", rec, found, err)
 	}
 }

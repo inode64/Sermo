@@ -45,7 +45,7 @@ type MonitorStore interface {
 // OperationSettlingStore persists short-lived service operation transitions so
 // workers suppress alerts/remediation until one post-operation cycle has data.
 type OperationSettlingStore interface {
-	SetOperationSettling(service, action, phase, source string) error
+	SetOperationSettling(service, phase string) error
 	OperationSettling(service string) (state.OperationSettlingRecord, bool, error)
 	ClearOperationSettling(service string) error
 }
