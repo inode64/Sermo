@@ -47,13 +47,6 @@ func ReservedCommandEntry(tree map[string]any, key string) map[string]any {
 	return nil
 }
 
-// VersionCommandEntry keeps the older version-specific name for callers that
-// consume the version monitor. New reserved command lookups should use
-// ReservedCommandEntry.
-func VersionCommandEntry(tree map[string]any, key string) map[string]any {
-	return ReservedCommandEntry(tree, key)
-}
-
 // shortVersionRE captures the first dotted numeric version in a raw version
 // line: a `major.minor` with an optional `.patch`. The first capture group is
 // the normalized value; the surrounding match may include a non-version prefix

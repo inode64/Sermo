@@ -1127,7 +1127,7 @@ func onChangeVersionLevel(v any) (int, string) {
 // versionCommandEntry returns a copy of the resolved version-command entry
 // (preflight.version then commands.version, via the shared resolver), or nil.
 func versionCommandEntry(tree map[string]any) map[string]any {
-	if entry := checks.VersionCommandEntry(tree, checks.DataKeyVersion); entry != nil {
+	if entry := checks.ReservedCommandEntry(tree, checks.DataKeyVersion); entry != nil {
 		return maps.Clone(entry)
 	}
 	return nil
