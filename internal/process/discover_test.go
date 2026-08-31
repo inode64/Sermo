@@ -488,6 +488,29 @@ func TestStrictMatchPIDRequiresExactExeAndUser(t *testing.T) {
 	}
 }
 
+func TestSelectorHasStrictIdentity(t *testing.T) {
+	tests := []struct {
+		name     string
+		selector Selector
+		want     bool
+	}{
+		{name: "exact exe and user", selector: Selector{Type: SelectorCommandMatch, Exe: testExe, User: "mysql"}, want: true},
+		{name: "cmd narrows exact identity", selector: Selector{Type: SelectorCommandMatch, Exe: testExe, User: "mysql", Cmd: "mysqld"}, want: true},
+		{name: "command only", selector: Selector{Type: SelectorCommandMatch, Cmd: "mysqld"}},
+		{name: "exe only", selector: Selector{Type: SelectorCommandMatch, Exe: testExe}},
+		{name: "user only", selector: Selector{Type: SelectorCommandMatch, User: "mysql"}},
+		{name: "pidfile with exe and user", selector: Selector{Type: SelectorPidfile, Exe: testExe, User: "mysql"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.selector.HasStrictIdentity(); got != tt.want {
+				t.Errorf("HasStrictIdentity() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestParseSelectors(t *testing.T) {
 	tree := map[string]any{
 		"pidfile": "/run/x.pid",

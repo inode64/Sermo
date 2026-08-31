@@ -466,7 +466,7 @@ func hasCommandMatchSelector(selectors []process.Selector) bool {
 
 func hasExactProcessIdentitySelector(selectors []process.Selector) bool {
 	for i := range selectors {
-		if selectors[i].Type == process.SelectorCommandMatch && selectors[i].Exe != "" && selectors[i].User != "" {
+		if selectors[i].HasStrictIdentity() {
 			return true
 		}
 	}

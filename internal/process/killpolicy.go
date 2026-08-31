@@ -75,7 +75,7 @@ func EnableAutomaticReaping(policy KillPolicy, selectors []Selector) KillPolicy 
 	pairs := make([]killIdentity, 0, len(selectors))
 	seen := map[killIdentityKey]bool{}
 	for _, selector := range selectors {
-		if !strictIdentity(&selector) {
+		if !selector.HasStrictIdentity() {
 			continue
 		}
 		// A delegated selector names processes the service owns but Sermo must
