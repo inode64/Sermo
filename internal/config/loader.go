@@ -79,14 +79,12 @@ func Load(globalPath string, opts ...Option) (*Config, error) {
 	servicePaths := global.ServicePaths
 	if len(servicePaths) == 0 && !servicePathsOverridden {
 		servicePaths = pathSpecsFromPaths(defaultConfigDirs(globalPath, defaultServiceDirs))
-		global.Services = pathsFromSpecs(servicePaths)
 		global.ServicePaths = append([]PathSpec(nil), servicePaths...)
 	}
 	_, appPathsOverridden := o.pathDirs[pathKeyApps]
 	appPaths := global.AppPaths
 	if len(appPaths) == 0 && !appPathsOverridden {
 		appPaths = pathSpecsFromPaths(defaultConfigDirs(globalPath, defaultAppDirs))
-		global.Apps = pathsFromSpecs(appPaths)
 		global.AppPaths = append([]PathSpec(nil), appPaths...)
 	}
 	notifierPaths := global.NotifierPaths
@@ -182,10 +180,6 @@ func loadGlobal(path string) (Global, error) {
 		if g.WatchPaths, err = pathSpecList(paths[pathKeyWatches], pathsLabelWatches); err != nil {
 			return Global{}, parseGlobalConfigError(path, err)
 		}
-		g.Services = pathsFromSpecs(g.ServicePaths)
-		g.Apps = pathsFromSpecs(g.AppPaths)
-		g.Notifiers = pathsFromSpecs(g.NotifierPaths)
-		g.Watches = pathsFromSpecs(g.WatchPaths)
 		g.Runtime = cfgval.String(paths[pathKeyRuntime])
 		g.State = cfgval.String(paths[pathKeyState])
 		g.Templates = cfgval.String(paths[pathKeyTemplates])
@@ -203,18 +197,17 @@ func applyPathDirOverride(g *Global, overrides map[string][]string) {
 	if len(overrides) == 0 {
 		return
 	}
-	apply := func(kind string, paths *[]string, specs *[]PathSpec) {
+	apply := func(kind string, specs *[]PathSpec) {
 		dirs, ok := overrides[kind]
 		if !ok {
 			return
 		}
-		*paths = absOverrideDirs(dirs)
-		*specs = pathSpecsFromPaths(*paths)
+		*specs = pathSpecsFromPaths(absOverrideDirs(dirs))
 	}
-	apply(pathKeyServices, &g.Services, &g.ServicePaths)
-	apply(pathKeyApps, &g.Apps, &g.AppPaths)
-	apply(pathKeyNotifiers, &g.Notifiers, &g.NotifierPaths)
-	apply(pathKeyWatches, &g.Watches, &g.WatchPaths)
+	apply(pathKeyServices, &g.ServicePaths)
+	apply(pathKeyApps, &g.AppPaths)
+	apply(pathKeyNotifiers, &g.NotifierPaths)
+	apply(pathKeyWatches, &g.WatchPaths)
 }
 
 // absOverrideDirs cleans an override list, making relative entries absolute
@@ -240,10 +233,6 @@ func absOverrideDirs(dirs []string) []string {
 // examples/services when run from the repository.
 func resolveConfigPaths(globalPath string, g *Global) {
 	base := configBaseDir(globalPath)
-	g.Services = resolvePathList(base, g.Services)
-	g.Apps = resolvePathList(base, g.Apps)
-	g.Notifiers = resolvePathList(base, g.Notifiers)
-	g.Watches = resolvePathList(base, g.Watches)
 	g.ServicePaths = resolvePathSpecs(base, g.ServicePaths)
 	g.AppPaths = resolvePathSpecs(base, g.AppPaths)
 	g.NotifierPaths = resolvePathSpecs(base, g.NotifierPaths)
@@ -363,16 +352,6 @@ func pathSpecsFromPaths(paths []string) []PathSpec {
 	for _, path := range paths {
 		if path != "" {
 			out = append(out, PathSpec{Path: path})
-		}
-	}
-	return out
-}
-
-func pathsFromSpecs(specs []PathSpec) []string {
-	out := make([]string, 0, len(specs))
-	for _, spec := range specs {
-		if spec.Path != "" {
-			out = append(out, spec.Path)
 		}
 	}
 	return out
