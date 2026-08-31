@@ -464,6 +464,19 @@ type checkWatchSpec struct {
 	stateSlot string
 }
 
+// newWatchRuntime wires the daemon-wide runtime shared by every watch. Panic is
+// deliberately a field on the watch rather than a cycle gate: checks and custom
+// samplers keep running while Watch suppresses only their configured effects.
+func newWatchRuntime(name, checkType string, deps Deps, interval time.Duration) *Watch {
+	return &Watch{
+		Name:      name,
+		CheckType: checkType,
+		Interval:  interval,
+		InPanic:   deps.Panic.Active,
+		Settling:  deps.Settling,
+	}
+}
+
 // newCheckWatch wires the shared runtime for one check-backed watch. Metric
 // expansions supply a stateSlot, while ordinary watches leave it empty. A watch
 // without its own clear: inherits the global fallback recovery window.
@@ -471,35 +484,30 @@ func newCheckWatch(spec checkWatchSpec, deps Deps) *Watch {
 	if spec.window.Clear == nil {
 		spec.window.Clear = deps.GlobalClear
 	}
-	return &Watch{
-		Name:               spec.name,
-		CheckType:          spec.checkType,
-		Check:              spec.check,
-		Window:             spec.window,
-		Hook:               spec.actions.hook,
-		RecoverHook:        spec.actions.recoverHook,
-		Notifiers:          resolveNotifiers(spec.actions.effectiveNames, deps.Notifiers),
-		RaidNotifyEvents:   spec.actions.raidNotifyEvents,
-		LVMNotifyOnChange:  spec.actions.lvmNotifyOnChange,
-		NotifyInterval:     spec.actions.notifyInterval,
-		Emission:           spec.emission,
-		DryRun:             spec.dryRun,
-		Severity:           spec.severity,
-		Runner:             OSHookRunner{Runner: deps.ExecxRunner},
-		Interval:           spec.interval,
-		IsPaused:           monitorPaused(deps.Monitor, watchMonitorKey(spec.name)),
-		InPanic:            deps.Panic.Active,
-		Settling:           deps.Settling,
-		FireOnFail:         checks.IsHealthType(spec.checkType),
-		Now:                deps.Now,
-		Emit:               deps.Emit,
-		Publish:            publishWatchSnapshots(deps.WatchSnapshots),
-		ForceSLA:           spec.forceSLA,
-		RecordAvailability: watchSLARecorder(deps, spec),
-		RecordMetrics:      watchMetricRecorder(deps, spec.name, spec.checkType, spec.graphs, spec.bands),
-		StateStore:         deps.WatchState,
-		StateSlot:          spec.stateSlot,
-	}
+	watch := newWatchRuntime(spec.name, spec.checkType, deps, spec.interval)
+	watch.Check = spec.check
+	watch.Window = spec.window
+	watch.Hook = spec.actions.hook
+	watch.RecoverHook = spec.actions.recoverHook
+	watch.Notifiers = resolveNotifiers(spec.actions.effectiveNames, deps.Notifiers)
+	watch.RaidNotifyEvents = spec.actions.raidNotifyEvents
+	watch.LVMNotifyOnChange = spec.actions.lvmNotifyOnChange
+	watch.NotifyInterval = spec.actions.notifyInterval
+	watch.Emission = spec.emission
+	watch.DryRun = spec.dryRun
+	watch.Severity = spec.severity
+	watch.Runner = OSHookRunner{Runner: deps.ExecxRunner}
+	watch.IsPaused = monitorPaused(deps.Monitor, watchMonitorKey(spec.name))
+	watch.FireOnFail = checks.IsHealthType(spec.checkType)
+	watch.Now = deps.Now
+	watch.Emit = deps.Emit
+	watch.Publish = publishWatchSnapshots(deps.WatchSnapshots)
+	watch.ForceSLA = spec.forceSLA
+	watch.RecordAvailability = watchSLARecorder(deps, spec)
+	watch.RecordMetrics = watchMetricRecorder(deps, spec.name, spec.checkType, spec.graphs, spec.bands)
+	watch.StateStore = deps.WatchState
+	watch.StateSlot = spec.stateSlot
+	return watch
 }
 
 // buildFileWatch builds a stateful file watch: a fileWatcher (its own per-path
@@ -598,19 +606,14 @@ func buildProcWatch(name string, entry, checkEntry map[string]any, deps Deps, in
 // newStatefulWatch wires a stateful watcher's cycle into the shared Watch
 // runtime fields used by file and process watches.
 func newStatefulWatch(name, checkType string, entry map[string]any, deps Deps, interval time.Duration, cycle func(context.Context)) *Watch {
-	return &Watch{
-		Name:      name,
-		CheckType: checkType,
-		Interval:  interval,
-		IsPaused:  monitorPaused(deps.Monitor, watchMonitorKey(name)),
-		InPanic:   deps.Panic.Active,
-		Settling:  deps.Settling,
-		DryRun:    config.DryRun(entry),
-		Severity:  watchSeverity(entry),
-		Now:       deps.Now,
-		Emit:      deps.Emit,
-		Cycle:     cycle,
-	}
+	watch := newWatchRuntime(name, checkType, deps, interval)
+	watch.IsPaused = monitorPaused(deps.Monitor, watchMonitorKey(name))
+	watch.DryRun = config.DryRun(entry)
+	watch.Severity = watchSeverity(entry)
+	watch.Now = deps.Now
+	watch.Emit = deps.Emit
+	watch.Cycle = cycle
+	return watch
 }
 
 func processWatchKillSelector(match ProcMatch) (process.KillSelector, error) {
@@ -1170,23 +1173,19 @@ func monitorDeps(deps Deps) checks.Deps {
 
 // monitorWatch assembles a notify-only watch around a synthesized check.
 func monitorWatch(name, checkType string, check checks.Check, notifierNames []string, dryRun bool, deps Deps, interval time.Duration) *Watch {
-	return &Watch{
-		Name:       name,
-		CheckType:  checkType,
-		Check:      check,
-		Notifiers:  resolveNotifiers(effectiveNotify(notifierNames, deps.GlobalNotify), deps.Notifiers),
-		Emission:   deps.GlobalEmission,
-		DryRun:     dryRun,
-		Runner:     OSHookRunner{Runner: deps.ExecxRunner},
-		Interval:   interval,
-		IsPaused:   monitorPaused(deps.Monitor, watchMonitorKey(name)),
-		Settling:   deps.Settling,
-		FireOnFail: true, // command/config are health-style: alert (notify) on failure/change
-		Now:        deps.Now,
-		Emit:       deps.Emit,
-		Publish:    publishWatchSnapshots(deps.WatchSnapshots),
-		StateStore: deps.WatchState,
-	}
+	watch := newWatchRuntime(name, checkType, deps, interval)
+	watch.Check = check
+	watch.Notifiers = resolveNotifiers(effectiveNotify(notifierNames, deps.GlobalNotify), deps.Notifiers)
+	watch.Emission = deps.GlobalEmission
+	watch.DryRun = dryRun
+	watch.Runner = OSHookRunner{Runner: deps.ExecxRunner}
+	watch.IsPaused = monitorPaused(deps.Monitor, watchMonitorKey(name))
+	watch.FireOnFail = true // command/config are health-style: alert (notify) on failure/change
+	watch.Now = deps.Now
+	watch.Emit = deps.Emit
+	watch.Publish = publishWatchSnapshots(deps.WatchSnapshots)
+	watch.StateStore = deps.WatchState
+	return watch
 }
 
 // slaForced and slaSilenced split a check's `sla:` boolean into its two

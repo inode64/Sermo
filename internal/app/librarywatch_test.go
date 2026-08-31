@@ -12,6 +12,7 @@ import (
 	"sermo/internal/appinspect"
 	"sermo/internal/checks"
 	"sermo/internal/config"
+	"sermo/internal/notify"
 	"sermo/internal/rules"
 )
 
@@ -295,7 +296,13 @@ func TestBuildArtifactWatchesSamplesChangedMissingApp(t *testing.T) {
 		},
 	}
 	samples := NewArtifactSamples()
-	watches := BuildArtifactWatches(t.Context(), cfg, Deps{ArtifactSamples: samples})
+	store := newFakeStore()
+	store.panicFound = true
+	store.panicOn = true
+	watches := BuildArtifactWatches(t.Context(), cfg, Deps{
+		ArtifactSamples: samples,
+		Panic:           NewPanicGate(store),
+	})
 	var sampler *Watch
 	for _, watch := range watches {
 		if watch.Name == artifactWatchNamePrefix+"demo" {
@@ -310,10 +317,60 @@ func TestBuildArtifactWatchesSamplesChangedMissingApp(t *testing.T) {
 		t.Fatalf("sampler interval = %s, want 7m", sampler.Interval)
 	}
 
-	sampler.Cycle(context.Background())
+	if sampler.InPanic == nil || !sampler.InPanic() {
+		t.Fatal("artifact app sampler must carry the active daemon panic gate")
+	}
+	sampler.RunCycle(context.Background())
 	_, status, sampled := samples.AppVersion("demo")
 	if !sampled || status != appinspect.StatusNotInstalled {
 		t.Fatalf("missing app sample = sampled:%t status:%q, want true %q", sampled, status, appinspect.StatusNotInstalled)
+	}
+}
+
+func TestBuildAppWatchesKeepsCheckingButSuppressesNotifyInPanic(t *testing.T) {
+	binary := filepath.Join(t.TempDir(), "demo")
+	if err := os.WriteFile(binary, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cfg := &config.Config{
+		AppNames: []string{"demo"},
+		Apps: map[string]*config.Document{
+			"demo": {Name: "demo", Kind: config.CategoryApp, Body: map[string]any{
+				"variables": map[string]any{"binary": binary},
+			}},
+		},
+	}
+	store := newFakeStore()
+	store.panicFound = true
+	store.panicOn = true
+	notifier := &fakeNotifier{name: "ops"}
+	samples := NewArtifactSamples()
+	var events []Event
+	watches := BuildAppWatches(t.Context(), cfg, Deps{
+		ArtifactSamples: samples,
+		GlobalNotify:    []string{"ops"},
+		Notifiers:       map[string]notify.Notifier{"ops": notifier},
+		Panic:           NewPanicGate(store),
+		Emit:            func(event Event) { events = append(events, event) },
+	})
+	if len(watches) != 1 {
+		t.Fatalf("app watches = %d, want 1", len(watches))
+	}
+	if err := os.Remove(binary); err != nil {
+		t.Fatal(err)
+	}
+
+	watches[0].RunCycle(t.Context())
+
+	_, status, sampled := samples.AppVersion("demo")
+	if !sampled || status != appinspect.StatusNotInstalled {
+		t.Fatalf("app sample = sampled:%t status:%q, want true %q", sampled, status, appinspect.StatusNotInstalled)
+	}
+	if len(notifier.msgs) != 0 {
+		t.Fatalf("panic mode must suppress catalog app notifications, sent=%d", len(notifier.msgs))
+	}
+	if !hasEvent(events, eventKindFiring) || !hasEvent(events, eventKindPanicSuppressed) {
+		t.Fatalf("panic mode must preserve app firing visibility and report suppression, events=%v", events)
 	}
 }
 
@@ -422,9 +479,13 @@ func TestBuildArtifactPathWatchesSampleSilently(t *testing.T) {
 		},
 	}
 	samples := NewArtifactSamples()
+	store := newFakeStore()
+	store.panicFound = true
+	store.panicOn = true
 	var events []Event
 	watches := BuildArtifactWatches(t.Context(), cfg, Deps{
 		ArtifactSamples: samples,
+		Panic:           NewPanicGate(store),
 		Emit:            func(event Event) { events = append(events, event) },
 	})
 	name := artifactWatchNamePrefix + path
@@ -437,6 +498,9 @@ func TestBuildArtifactPathWatchesSampleSilently(t *testing.T) {
 	}
 	if sampler == nil || sampler.Cycle == nil || sampler.Check != nil {
 		t.Fatalf("artifact path sampler = %+v, want a custom sampling cycle", sampler)
+	}
+	if sampler.InPanic == nil || !sampler.InPanic() {
+		t.Fatal("artifact path sampler must carry the active daemon panic gate")
 	}
 
 	sampler.RunCycle(context.Background())

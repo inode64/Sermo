@@ -91,6 +91,41 @@ func TestVersionMonitor(t *testing.T) {
 	}
 }
 
+func TestVersionMonitorKeepsCheckingButSuppressesNotifyInPanic(t *testing.T) {
+	store := newFakeStore()
+	store.panicFound = true
+	store.panicOn = true
+	notifier := &fakeNotifier{name: "ops"}
+	runner := &sequenceRunner{stdout: []string{"app 1.0.0", "app 1.0.1"}}
+	var events []Event
+	deps := monitorTestDeps()
+	deps.Notifiers["ops"] = notifier
+	deps.ExecxRunner = runner
+	deps.Panic = NewPanicGate(store)
+	deps.Emit = func(event Event) { events = append(events, event) }
+	tree := map[string]any{
+		"commands": map[string]any{"version": map[string]any{"command": []any{"app", "--version"}}},
+		"version":  map[string]any{"on_change": map[string]any{"notify": []any{"ops"}}},
+	}
+
+	w, warn := versionMonitor("app", tree, deps, time.Minute)
+	if warn != "" || w == nil {
+		t.Fatalf("version monitor warn=%q watch=%v", warn, w)
+	}
+	w.RunCycle(t.Context())
+	w.RunCycle(t.Context())
+
+	if runner.calls != 2 {
+		t.Fatalf("panic mode must keep version checks running, calls=%d", runner.calls)
+	}
+	if len(notifier.msgs) != 0 {
+		t.Fatalf("panic mode must suppress version notifications, sent=%d", len(notifier.msgs))
+	}
+	if !hasEvent(events, eventKindFiring) || !hasEvent(events, eventKindPanicSuppressed) {
+		t.Fatalf("panic mode must preserve firing visibility and report suppression, events=%v", events)
+	}
+}
+
 // assertMonitorPreservesCommandUser builds a change monitor from tree via build
 // and asserts the underlying command check ran as user postgres with wantArg.
 func assertMonitorPreservesCommandUser(t *testing.T, tree map[string]any, build func(string, map[string]any, Deps, time.Duration) (*Watch, string), wantArg string) {
@@ -179,6 +214,9 @@ func TestConfigMonitor(t *testing.T) {
 	}
 	if w.Name != "apache:config" || w.CheckType != "config" {
 		t.Errorf("watch = %+v", w)
+	}
+	if w.InPanic == nil {
+		t.Fatal("config monitor must carry the daemon panic gate")
 	}
 
 	// config.on_change but neither preflight.config nor a path -> warning.
