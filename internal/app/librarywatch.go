@@ -200,24 +200,20 @@ func buildCatalogArtifactWatches(ctx context.Context, cfg *config.Config, deps D
 		report := reports[i]
 		name := report.Name
 		spec.register(samples, report)
-		out = append(out, &Watch{
-			Name:      spec.watchName(name),
-			App:       spec.appName(name),
-			CheckType: spec.category,
-			Check: artifactCheck{
-				name: name, samples: samples, store: spec.store,
-				inspect: func(ctx context.Context) appinspect.Report {
-					return spec.inspect(ctx, runner, cfg, name, lookup)
-				},
+		watch := newWatchRuntime(spec.watchName(name), spec.category, deps, artifactWatchInterval(cfg, spec.category, name))
+		watch.App = spec.appName(name)
+		watch.Check = artifactCheck{
+			name: name, samples: samples, store: spec.store,
+			inspect: func(ctx context.Context) appinspect.Report {
+				return spec.inspect(ctx, runner, cfg, name, lookup)
 			},
-			FireOnFail: true,
-			Interval:   artifactWatchInterval(cfg, spec.category, name),
-			Notifiers:  notifiers,
-			Settling:   deps.Settling,
-			Now:        deps.Now,
-			Emit:       deps.Emit,
-			StateStore: deps.WatchState,
-		})
+		}
+		watch.FireOnFail = true
+		watch.Notifiers = notifiers
+		watch.Now = deps.Now
+		watch.Emit = deps.Emit
+		watch.StateStore = deps.WatchState
+		out = append(out, watch)
 	}
 	return out
 }
@@ -305,20 +301,17 @@ func buildArtifactAppWatches(cfg *config.Config, deps Deps, samples *ArtifactSam
 			continue // The regular installed-app watch already samples it.
 		}
 		appName := name
-		out = append(out, &Watch{
-			Name:      artifactWatchNamePrefix + appName,
-			CheckType: artifactWatchCheckType,
-			Cycle: func(ctx context.Context) {
-				report := appinspect.InspectOne(ctx, runner, cfg, appName,
-					appinspect.WithUserLookup(deps.UserLookup))
-				storeAppSample(samples, appName, report)
-			},
-			Interval:   artifactWatchInterval(cfg, config.CategoryApp, appName),
-			Settling:   deps.Settling,
-			Now:        deps.Now,
-			Emit:       deps.Emit,
-			StateStore: deps.WatchState,
-		})
+		watch := newWatchRuntime(artifactWatchNamePrefix+appName, artifactWatchCheckType, deps,
+			artifactWatchInterval(cfg, config.CategoryApp, appName))
+		watch.Cycle = func(ctx context.Context) {
+			report := appinspect.InspectOne(ctx, runner, cfg, appName,
+				appinspect.WithUserLookup(deps.UserLookup))
+			storeAppSample(samples, appName, report)
+		}
+		watch.Now = deps.Now
+		watch.Emit = deps.Emit
+		watch.StateStore = deps.WatchState
+		out = append(out, watch)
 	}
 	return out
 }
@@ -335,13 +328,9 @@ func buildArtifactPathWatches(deps Deps, samples *ArtifactSamples, paths map[str
 		samples.RegisterFile(path)
 		name := artifactWatchNamePrefix + path
 		artifactPath := path
-		out = append(out, &Watch{
-			Name:      name,
-			CheckType: artifactWatchCheckType,
-			Cycle:     func(context.Context) { samples.StoreFile(artifactPath) },
-			Interval:  paths[path],
-			Settling:  deps.Settling,
-		})
+		watch := newWatchRuntime(name, artifactWatchCheckType, deps, paths[path])
+		watch.Cycle = func(context.Context) { samples.StoreFile(artifactPath) }
+		out = append(out, watch)
 	}
 	return out
 }
