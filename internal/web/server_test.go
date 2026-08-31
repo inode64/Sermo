@@ -813,9 +813,9 @@ func TestListMounts(t *testing.T) {
 func TestMountAction(t *testing.T) {
 	b := &fakeBackend{}
 	rec := httptest.NewRecorder()
-	q := testQueryParam(apiQueryKill, queryBoolOne)
-	q += "&" + apiQueryForce + "=" + queryBoolOne
-	q += "&" + apiQueryLazy + "=" + queryBoolOne
+	q := testQueryParam(apiQueryKill, queryBoolOn)
+	q += "&" + apiQueryForce + "=" + queryBoolOn
+	q += "&" + apiQueryLazy + "=" + queryBoolOn
 	newServer(b).ServeHTTP(rec, postReq(
 		testPathQuery(testMountPath("mount-backup", mountctl.ActionUmount), q),
 	))
@@ -1171,6 +1171,7 @@ func TestGlobalEventsForwardsFilters(t *testing.T) {
 		{name: "watch kind", query: testQueryParams(apiQueryWatch, "storage-root", apiQueryKind, eventKindHookFailed), want: EventQuery{Limit: defaultEventLimit, Watch: "storage-root", Kind: eventKindHookFailed}},
 		{name: "status", query: testQueryParam(apiQueryStatus, eventStatusFailed), want: EventQuery{Limit: defaultEventLimit, Status: eventStatusFailed}},
 		{name: "only errors", query: testQueryParam(apiQueryOnlyErrors, queryBoolOne), want: EventQuery{Limit: defaultEventLimit, OnlyErrors: true}},
+		{name: "only errors on", query: testQueryParam(apiQueryOnlyErrors, queryBoolOn), want: EventQuery{Limit: defaultEventLimit, OnlyErrors: true}},
 		{name: "filtered limit", query: testQueryParams(apiQueryOnlyErrors, queryBoolTrue, apiQueryLimit, queryBoolOne), want: EventQuery{Limit: 1, OnlyErrors: true}},
 	}
 	for _, tt := range tests {
@@ -1190,6 +1191,33 @@ func TestGlobalEventsForwardsFilters(t *testing.T) {
 			}
 			if len(got.Events) == 0 {
 				t.Fatal("event page is empty")
+			}
+		})
+	}
+}
+
+func TestQueryBoolVocabulary(t *testing.T) {
+	tests := []struct {
+		value string
+		want  bool
+	}{
+		{value: queryBoolOne, want: true},
+		{value: queryBoolTrue, want: true},
+		{value: queryBoolYes, want: true},
+		{value: queryBoolOn, want: true},
+		{value: " ON ", want: true},
+		{value: "off"},
+		{value: ""},
+		{value: "invalid"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.value, func(t *testing.T) {
+			r := httptest.NewRequest(http.MethodGet, apiPathEvents, nil)
+			query := r.URL.Query()
+			query.Set(apiQueryOnlyErrors, tt.value)
+			r.URL.RawQuery = query.Encode()
+			if got := queryBool(r, apiQueryOnlyErrors); got != tt.want {
+				t.Fatalf("queryBool(%q) = %t, want %t", tt.value, got, tt.want)
 			}
 		})
 	}
@@ -1375,7 +1403,7 @@ func TestOperateNoCascadeQuery(t *testing.T) {
 	b := &fakeBackend{}
 	rec := httptest.NewRecorder()
 	newServer(b).ServeHTTP(rec, postReq(
-		testPathQuery(testServicePath("web", apiActionRestart), testQueryParam(apiQueryNoCascade, queryBoolOne)),
+		testPathQuery(testServicePath("web", apiActionRestart), testQueryParam(apiQueryNoCascade, queryBoolOn)),
 	))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("restart no_cascade = %d", rec.Code)
