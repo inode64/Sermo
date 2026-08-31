@@ -59,7 +59,8 @@ const smartSelfTestRunningNibble = 0x0f
 // no predicate it alerts when the overall SMART health verdict is FAILED;
 // predicates on `temperature` (°C), `reallocated`, `pending_sectors`,
 // `crc_errors` and `media_errors` (counts), `wear` (SSD/NVMe percentage used)
-// and `power_on_hours` override/augment that. The numeric attributes are
+// and `power_on_hours` are independent early-warning conditions that augment
+// that verdict. The numeric attributes are
 // recorded over time, so a rising reallocated-sector or wear count (a failing/
 // aging drive) is visible on the graph. Each report also carries what the drive
 // *is* — model, serial number, firmware, capacity — so the dashboard names the
@@ -113,7 +114,7 @@ func (c *smartCheck) Run(ctx context.Context) Result {
 
 	ok := data.healthKnown && !data.passed // default alert condition: health FAILED
 	if len(c.preds) > 0 {
-		ok = levelPredsHold(c.preds, data.values)
+		ok = ok || anyLevelPredHolds(c.preds, data.values)
 	}
 
 	health := smartHealthUnknown

@@ -2562,7 +2562,10 @@ detail so gradual degradation is visible.
   backplane rather than the media), `media_errors` (the NVMe counterpart of
   `reallocated`: NVMe drives publish no attribute table), `wear` (SSD/NVMe
   percentage used) and `power_on_hours`. Complements `hdparm` (throughput) with
-  failure prediction.
+  failure prediction. The drive's **FAILED** verdict and every configured
+  predicate are independent alert conditions: any one is enough. A missing
+  transport-specific field never suppresses another field, so an ATA drive can
+  alert on `pending_sectors` while omitting NVMe-only `media_errors`.
 
   Every sample also carries what the drive **is** — `model`, `serial_number`,
   `firmware`, `wwn`, `capacity_bytes` and `rotation_rate` — plus `power_cycles`

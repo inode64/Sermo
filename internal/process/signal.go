@@ -50,9 +50,8 @@ func (r ReapResult) OK() bool { return len(r.Remaining) == 0 }
 
 // SignalFailure records a signal delivery error for a PID.
 type SignalFailure struct {
-	PID    int            // process ID that could not be signalled
-	Signal syscall.Signal // signal attempted
-	Err    error          // delivery error
+	PID int   // process ID that could not be signalled
+	Err error // delivery error
 }
 
 // Reaper applies the stop/kill signal escalation policy to residual
@@ -202,7 +201,7 @@ func signalRound(set []Process, selector KillSelector, resolve UserResolver, sig
 			if err := signaler.Signal(set[i].PID, sig); err == nil {
 				signalled[set[i].PID] = true
 			} else {
-				failed = append(failed, SignalFailure{PID: set[i].PID, Signal: sig, Err: err})
+				failed = append(failed, SignalFailure{PID: set[i].PID, Err: err})
 			}
 		}
 	}

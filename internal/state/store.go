@@ -46,7 +46,6 @@ const (
 const (
 	SourceConfig         = "config"           // daemon applied an entry's `monitor` flag
 	SourceCLI            = "cli"              // operator ran monitor/unmonitor
-	SourceDaemon         = "daemon"           // daemon changed it autonomously
 	SourceWeb            = "web"              // operator used the web UI
 	SourceCLIManualStop  = "cli-manual-stop"  // CLI stop paused monitoring for later restore
 	SourceWebManualStop  = "web-manual-stop"  // Web UI stop paused monitoring for later restore
@@ -518,7 +517,7 @@ func (s *Store) initializeSchema(ctx context.Context) error {
 			return fmt.Errorf("create state schema: %w", err)
 		}
 	}
-	if err := ensureSnapshotColumns(ctx, tx); err != nil {
+	if err := ensureStateColumns(ctx, tx); err != nil {
 		_ = tx.Rollback()
 		return err
 	}
@@ -528,16 +527,12 @@ func (s *Store) initializeSchema(ctx context.Context) error {
 	return nil
 }
 
-// snapshotColumnMigrations are the additive columns the snapshot cache tables
-// have grown since their first shipped shape. CREATE TABLE IF NOT EXISTS never
-// alters an existing table, so a database created before a column existed keeps
-// failing every insert forever unless the column is added here — which is
-// exactly what happened when `observation` shipped without this list: every
-// snapshot persist on a pre-existing database logged "has no column named
-// observation" until the daemon was pointed at a fresh file. The defaults make
-// old rows readable; they are overwritten on the next cycle anyway, because
-// these tables cache current state, not history.
-var snapshotColumnMigrations = []struct {
+// stateColumnMigrations are additive columns introduced after their tables'
+// first shipped shapes. CREATE TABLE IF NOT EXISTS never alters an existing
+// table, so a pre-existing database otherwise keeps failing every write that
+// names a new column. Defaults make old cache/control rows readable until the
+// next cycle overwrites them.
+var stateColumnMigrations = []struct {
 	table  string
 	column string
 	decl   string
@@ -548,12 +543,13 @@ var snapshotColumnMigrations = []struct {
 	{"watch_check_snapshot", "check_type", "check_type TEXT NOT NULL DEFAULT ''"},
 	{"watch_check_snapshot", "unavailable", "unavailable INTEGER NOT NULL DEFAULT 0"},
 	{"watch_check_snapshot", "observation", "observation TEXT NOT NULL DEFAULT ''"},
+	{"watch_runtime_state", "unavailable", "unavailable INTEGER NOT NULL DEFAULT 0"},
 }
 
-// ensureSnapshotColumns adds any missing cache-table columns to a database
+// ensureStateColumns adds any missing cache/control-table columns to a database
 // created under an older schema.
-func ensureSnapshotColumns(ctx context.Context, tx *sql.Tx) error {
-	for _, m := range snapshotColumnMigrations {
+func ensureStateColumns(ctx context.Context, tx *sql.Tx) error {
+	for _, m := range stateColumnMigrations {
 		present, err := columnExists(ctx, tx, m.table, m.column)
 		if err != nil {
 			return err
@@ -691,7 +687,7 @@ func (s *Store) Active(service string) (active, found bool, err error) {
 }
 
 // SetActive records an entry's monitoring state, upserting the row. source notes
-// who set it (SourceConfig, SourceCLI, SourceDaemon, SourceWeb) for inspection.
+// who set it (SourceConfig, SourceCLI, SourceWeb) for inspection.
 func (s *Store) SetActive(service string, active bool, source string) error {
 	return s.upsertFlagRow(
 		`INSERT INTO monitor_state (service, active, source, updated_at)

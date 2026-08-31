@@ -74,7 +74,7 @@ func TestResolveLVM(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Resolve: %v", err)
 	}
-	if tgt.Mountpoint != "/mnt/backup" || tgt.FSType != "ext4" || tgt.Device != "/dev/mapper/vg0-data" {
+	if tgt.Mountpoint != "/mnt/backup" || tgt.FSType != "ext4" {
 		t.Fatalf("mount fields wrong: %+v", tgt)
 	}
 	if tgt.VG != "vg0" || tgt.LV != "data" {
@@ -130,7 +130,7 @@ func TestExpandExt4CapsToFreeAndGrows(t *testing.T) {
 		"vgs": {Stdout: "  2147483648\n"}, // 2 GiB free
 	}}
 	e := Expander{Runner: r}
-	tgt := Target{Mountpoint: "/mnt/backup", FSType: "ext4", Device: "/dev/mapper/vg0-data", VG: "vg0", LV: "data"}
+	tgt := Target{Mountpoint: "/mnt/backup", FSType: "ext4", VG: "vg0", LV: "data"}
 
 	// Request 5 GiB but only 2 GiB free -> cap to 2 GiB.
 	res, err := e.Expand(context.Background(), tgt, 5<<30)
@@ -158,7 +158,7 @@ func TestExpandXFSAndBtrfsUseMountpoint(t *testing.T) {
 	} {
 		r := &fakeRunner{out: map[string]execx.Result{"vgs": {Stdout: "1073741824"}}}
 		e := Expander{Runner: r}
-		tgt := Target{Mountpoint: "/mnt/backup", FSType: tc.fs, Device: "/dev/vg0/data", VG: "vg0", LV: "data"}
+		tgt := Target{Mountpoint: "/mnt/backup", FSType: tc.fs, VG: "vg0", LV: "data"}
 		if _, err := e.Expand(context.Background(), tgt, 512<<20); err != nil {
 			t.Fatalf("%s Expand: %v", tc.fs, err)
 		}
@@ -172,7 +172,7 @@ func TestExpandRejectsNonPositiveSize(t *testing.T) {
 	for _, by := range []int64{0, -1 << 20} {
 		r := &fakeRunner{out: map[string]execx.Result{"vgs": {Stdout: "2147483648"}}}
 		e := Expander{Runner: r}
-		tgt := Target{Mountpoint: "/mnt/backup", FSType: "ext4", Device: "/dev/vg0/data", VG: "vg0", LV: "data"}
+		tgt := Target{Mountpoint: "/mnt/backup", FSType: "ext4", VG: "vg0", LV: "data"}
 		if _, err := e.Expand(context.Background(), tgt, by); err == nil {
 			t.Fatalf("Expand(by=%d) must error, not run lvextend", by)
 		}
@@ -187,7 +187,7 @@ func TestExpandRejectsNonPositiveSize(t *testing.T) {
 func TestExpandNoFreeSpaceErrors(t *testing.T) {
 	r := &fakeRunner{out: map[string]execx.Result{"vgs": {Stdout: "0"}}}
 	e := Expander{Runner: r}
-	tgt := Target{Mountpoint: "/mnt/backup", FSType: "ext4", Device: "/dev/vg0/data", VG: "vg0", LV: "data"}
+	tgt := Target{Mountpoint: "/mnt/backup", FSType: "ext4", VG: "vg0", LV: "data"}
 	if _, err := e.Expand(context.Background(), tgt, 1<<30); err == nil {
 		t.Fatal("expand with zero VG free must error")
 	}
@@ -201,7 +201,7 @@ func TestExpandNoFreeSpaceErrors(t *testing.T) {
 func TestExpandUnknownFSErrors(t *testing.T) {
 	r := &fakeRunner{out: map[string]execx.Result{"vgs": {Stdout: "1073741824"}}}
 	e := Expander{Runner: r}
-	tgt := Target{Mountpoint: "/x", FSType: "reiserfs", Device: "/dev/vg0/data", VG: "vg0", LV: "data"}
+	tgt := Target{Mountpoint: "/x", FSType: "reiserfs", VG: "vg0", LV: "data"}
 	if _, err := e.Expand(context.Background(), tgt, 1<<20); err == nil {
 		t.Fatal("unknown fstype must error")
 	}

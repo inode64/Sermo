@@ -49,7 +49,7 @@ func TestICMPStateExpect(t *testing.T) {
 }
 
 func TestICMPStateOnChange(t *testing.T) {
-	c := &icmpCheck{base: base{name: "p"}, host: "h", metric: "state", onChange: true,
+	c := &icmpCheck{base: base{name: "p"}, host: "h", metric: "state",
 		sampler: pinger(PingSample{Reachable: true}, PingSample{Reachable: false})}
 	if c.Run(context.Background()).OK {
 		t.Fatal("first cycle primes")
@@ -82,7 +82,7 @@ func TestICMPLatencyThresholdUnreachable(t *testing.T) {
 }
 
 func TestICMPLatencyChange(t *testing.T) {
-	c := &icmpCheck{base: base{name: "p"}, host: "h", metric: "latency", hasChange: true, delta: 50,
+	c := &icmpCheck{base: base{name: "p"}, host: "h", metric: "latency", delta: 50,
 		sampler: pinger(
 			PingSample{Reachable: true, RTTms: 20, RTTKnown: true},
 			PingSample{Reachable: true, RTTms: 100, RTTKnown: true}, // |100-20|=80 > 50
@@ -96,7 +96,7 @@ func TestICMPLatencyChange(t *testing.T) {
 }
 
 func TestICMPLatencyChangeUnreachableNoCorrupt(t *testing.T) {
-	c := &icmpCheck{base: base{name: "p"}, host: "h", metric: "latency", hasChange: true, delta: 50,
+	c := &icmpCheck{base: base{name: "p"}, host: "h", metric: "latency", delta: 50,
 		sampler: pinger(
 			PingSample{Reachable: true, RTTms: 20, RTTKnown: true}, // prime baseline 20
 			PingSample{Reachable: false, RTTKnown: false},          // no fire, no baseline update
@@ -122,7 +122,7 @@ func TestICMPSamplerError(t *testing.T) {
 func TestICMPLatencyChangeBoundaries(t *testing.T) {
 	// A 40ms decrease is |Δ|=40 < 50: measured as a difference (not a sum) and
 	// strictly below the delta, so it must not fire.
-	dec := &icmpCheck{base: base{name: "p"}, host: "h", metric: "latency", hasChange: true, delta: 50,
+	dec := &icmpCheck{base: base{name: "p"}, host: "h", metric: "latency", delta: 50,
 		sampler: pinger(
 			PingSample{Reachable: true, RTTms: 100, RTTKnown: true},
 			PingSample{Reachable: true, RTTms: 60, RTTKnown: true},
@@ -132,7 +132,7 @@ func TestICMPLatencyChangeBoundaries(t *testing.T) {
 		t.Fatal("a 40ms decrease must not fire a 50ms-delta change")
 	}
 	// A jump of exactly the delta does not fire (strict >).
-	eq := &icmpCheck{base: base{name: "p"}, host: "h", metric: "latency", hasChange: true, delta: 50,
+	eq := &icmpCheck{base: base{name: "p"}, host: "h", metric: "latency", delta: 50,
 		sampler: pinger(
 			PingSample{Reachable: true, RTTms: 100, RTTKnown: true},
 			PingSample{Reachable: true, RTTms: 150, RTTKnown: true},

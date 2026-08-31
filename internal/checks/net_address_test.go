@@ -7,15 +7,14 @@ import (
 	"time"
 )
 
-func addrNetCheck(t *testing.T, expect string, onChange bool, samples ...[]string) *netCheck {
+func addrNetCheck(t *testing.T, expect string, samples ...[]string) *netCheck {
 	t.Helper()
 	i := 0
 	return &netCheck{
-		base:     base{name: "net", timeout: time.Second},
-		iface:    "ppp0",
-		metric:   "address",
-		expect:   expect,
-		onChange: onChange,
+		base:   base{name: "net", timeout: time.Second},
+		iface:  "ppp0",
+		metric: "address",
+		expect: expect,
 		sampler: func(iface string) (NetSample, error) {
 			s := NetSample{State: "up", Addrs: samples[min(i, len(samples)-1)]}
 			i++
@@ -25,22 +24,22 @@ func addrNetCheck(t *testing.T, expect string, onChange bool, samples ...[]strin
 }
 
 func TestNetAddressExpect(t *testing.T) {
-	c := addrNetCheck(t, "present", false, []string{"203.0.113.7"})
+	c := addrNetCheck(t, "present", []string{"203.0.113.7"})
 	if r := c.Run(context.Background()); !r.OK || !strings.Contains(r.Message, "203.0.113.7") {
 		t.Fatalf("present with address: %+v", r)
 	}
-	c = addrNetCheck(t, "present", false, nil)
+	c = addrNetCheck(t, "present", nil)
 	if r := c.Run(context.Background()); r.OK || !strings.Contains(r.Message, "none (want present)") {
 		t.Fatalf("present without address must not hold: %+v", r)
 	}
-	c = addrNetCheck(t, "absent", false, nil)
+	c = addrNetCheck(t, "absent", nil)
 	if r := c.Run(context.Background()); !r.OK {
 		t.Fatalf("absent without address must hold: %+v", r)
 	}
 }
 
 func TestNetAddressOnChange(t *testing.T) {
-	c := addrNetCheck(t, "", true, []string{"203.0.113.7"}, []string{"203.0.113.7"}, []string{"198.51.100.9"})
+	c := addrNetCheck(t, "", []string{"203.0.113.7"}, []string{"203.0.113.7"}, []string{"198.51.100.9"})
 	if r := c.Run(context.Background()); r.OK || !strings.Contains(r.Message, "baseline") {
 		t.Fatalf("first run must prime, not fire: %+v", r)
 	}

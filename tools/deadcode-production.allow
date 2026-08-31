@@ -1,0 +1,4 @@
+# Package, symbol and reason. The first two tab-separated columns are the key.
+sermo/internal/checks	TypeInfos	Cross-package registry parity tests inspect private check constructors.
+sermo/internal/config	WithCatalogDirs	Tests and staged packaging checks inject isolated catalog roots.
+sermo/internal/web	Auth.String	Redaction contract prevents future formatted Auth values exposing RuntimeToken.

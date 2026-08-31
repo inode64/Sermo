@@ -7,11 +7,10 @@ import (
 	"testing"
 )
 
-// TestSnapshotColumnMigrationsHealAnOldDatabase pins the additive migration: a
-// database whose snapshot tables predate the observation column opens cleanly
-// and accepts inserts, instead of failing every persist forever — which is what
-// production did when the column shipped behind CREATE TABLE IF NOT EXISTS.
-func TestSnapshotColumnMigrationsHealAnOldDatabase(t *testing.T) {
+// TestStateColumnMigrationsHealAnOldDatabase pins the additive migrations: a
+// database whose cache/control tables predate their newest columns opens
+// cleanly and accepts writes, instead of failing every persist forever.
+func TestStateColumnMigrationsHealAnOldDatabase(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "old.db")
 
@@ -29,6 +28,20 @@ func TestSnapshotColumnMigrationsHealAnOldDatabase(t *testing.T) {
 			ran INTEGER NOT NULL, at INTEGER NOT NULL,
 			PRIMARY KEY (service, check_name));`,
 		`INSERT INTO service_check_snapshot VALUES ('web','http',1,0,0,0,'ok','{}',1,0);`,
+		`CREATE TABLE watch_runtime_state (
+			watch TEXT NOT NULL, slot TEXT NOT NULL,
+			firing INTEGER NOT NULL DEFAULT 0,
+			last_notify_at INTEGER NOT NULL DEFAULT 0,
+			consecutive INTEGER NOT NULL DEFAULT 0,
+			history TEXT NOT NULL DEFAULT '[]',
+			true_since INTEGER NOT NULL DEFAULT 0,
+			timed_history TEXT NOT NULL DEFAULT '[]',
+			last_action_at INTEGER NOT NULL DEFAULT 0,
+			recent_actions TEXT NOT NULL DEFAULT '[]',
+			current_backoff_ns INTEGER NOT NULL DEFAULT 0,
+			clear_since INTEGER NOT NULL DEFAULT 0,
+			clear_consecutive INTEGER NOT NULL DEFAULT 0,
+			PRIMARY KEY (watch, slot));`,
 	} {
 		if _, err := db.Exec(stmt); err != nil {
 			t.Fatal(err)
@@ -49,5 +62,10 @@ func TestSnapshotColumnMigrationsHealAnOldDatabase(t *testing.T) {
 			Message: "ok", Ran: true},
 	}); err != nil {
 		t.Fatalf("persist into the migrated table: %v", err)
+	}
+	if err := s.SetWatchRuntimeState("storage-root", "result", WatchRuntimeRecord{
+		Unavailable: true,
+	}); err != nil {
+		t.Fatalf("persist into the migrated watch runtime table: %v", err)
 	}
 }

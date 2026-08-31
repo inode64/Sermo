@@ -10,18 +10,20 @@ import (
 // scope. Pin the exact order so a flipped comparison (sort by scope first, or
 // reversed severity/scope) is caught.
 func TestBuilderSort(t *testing.T) {
+	const testLevelOther Level = "info"
+
 	b := &builder{}
-	b.addf(LevelWarning, "alpha", "w") // rank 1
-	b.addf(LevelError, "zeta", "e1")   // rank 0
-	b.addf(LevelError, "beta", "e2")   // rank 0
-	b.addf(LevelInfo, "gamma", "i")    // rank 2
+	b.addf(LevelWarning, "alpha", "w")   // rank 1
+	b.addf(LevelError, "zeta", "e1")     // rank 0
+	b.addf(LevelError, "beta", "e2")     // rank 0
+	b.addf(testLevelOther, "gamma", "i") // rank 2
 	b.sort()
 
 	want := []Finding{
 		{Level: LevelError, Scope: "beta"},
 		{Level: LevelError, Scope: "zeta"},
 		{Level: LevelWarning, Scope: "alpha"},
-		{Level: LevelInfo, Scope: "gamma"},
+		{Level: testLevelOther, Scope: "gamma"},
 	}
 	if len(b.findings) != len(want) {
 		t.Fatalf("findings len = %d, want %d", len(b.findings), len(want))

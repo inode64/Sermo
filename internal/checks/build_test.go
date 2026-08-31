@@ -592,7 +592,7 @@ func TestBuildICMPCheckConfiguresMetrics(t *testing.T) {
 		{
 			name:  "state on change",
 			entry: map[string]any{"host": "127.0.0.1", "metric": "state", "on": "change"},
-			check: func(c *icmpCheck) bool { return c.onChange && c.expect == "" },
+			check: func(c *icmpCheck) bool { return c.expect == "" },
 		},
 		{
 			name:  "latency threshold",
@@ -602,7 +602,7 @@ func TestBuildICMPCheckConfiguresMetrics(t *testing.T) {
 		{
 			name:  "latency change",
 			entry: map[string]any{"host": "127.0.0.1", "metric": "latency", "change": map[string]any{"delta": 5}},
-			check: func(c *icmpCheck) bool { return c.hasChange && c.delta == 5 },
+			check: func(c *icmpCheck) bool { return c.delta == 5 },
 		},
 	}
 	for _, tc := range tests {

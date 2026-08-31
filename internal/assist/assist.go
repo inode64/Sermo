@@ -13,7 +13,6 @@ type MountCandidate struct {
 	Path    string
 	Source  string
 	FSType  string
-	Options string
 	Mounted bool
 }
 

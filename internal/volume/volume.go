@@ -66,13 +66,11 @@ type Mount struct {
 // reads /proc/mounts.
 type MountSource func() ([]Mount, error)
 
-// Target is a resolved expansion target: a path, the filesystem mounted at its
-// containing mount point, and the LVM logical volume backing it.
+// Target is a resolved expansion target: the containing mounted filesystem and
+// the LVM logical volume backing it.
 type Target struct {
-	Path       string
 	Mountpoint string
 	FSType     string
-	Device     string
 	VG         string
 	LV         string
 }
@@ -81,7 +79,6 @@ type Target struct {
 type Result struct {
 	VG        string
 	LV        string
-	FSType    string
 	GrewBytes int64
 }
 
@@ -127,7 +124,7 @@ func (e Expander) Resolve(ctx context.Context, path string) (Target, error) {
 	if !ok {
 		return Target{}, fmt.Errorf("no mounted filesystem contains %q", path)
 	}
-	t := Target{Path: path, Mountpoint: m.Mountpoint, FSType: m.FSType, Device: m.Device}
+	t := Target{Mountpoint: m.Mountpoint, FSType: m.FSType}
 
 	to := e.timeout()
 	res, err := execx.Run(ctx, e.Runner, to, cmdLVS, lvmFlagNoHeadings, lvmFlagOutput, lvmLVFields, lvmFlagSeparator, lvmCSVSeparator, m.Device)
@@ -187,7 +184,7 @@ func (e Expander) Expand(ctx context.Context, t Target, by int64) (Result, error
 	if err := e.growFS(ctx, t); err != nil {
 		return Result{}, err
 	}
-	return Result{VG: t.VG, LV: t.LV, FSType: t.FSType, GrewBytes: grow}, nil
+	return Result{VG: t.VG, LV: t.LV, GrewBytes: grow}, nil
 }
 
 // Filesystem types Expand can grow.

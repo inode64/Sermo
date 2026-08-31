@@ -17,16 +17,15 @@ func buildNetCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 	c := &netCheck{base: b, iface: iface, metric: metric, sampler: deps.NetSampler}
 	switch metric {
 	case NetMetricState:
-		expect, onChange, warn := parseExpectedMetric(entry, "net state", NetStateSummary, NetStateUp, NetStateDown)
+		expect, warn := parseExpectedMetric(entry, "net state", NetStateSummary, NetStateUp, NetStateDown)
 		if warn != "" {
 			return nil, warn
 		}
-		c.expect, c.onChange = expect, onChange
+		c.expect = expect
 	case NetMetricSpeed:
 		if cfgval.AsString(entry[CheckKeyOn]) != OnModeChange {
 			return nil, "net speed requires on: change"
 		}
-		c.onChange = true
 	case NetMetricErrors:
 		c.counters = cfgval.StringArray(entry[CheckKeyCounters])
 		if len(c.counters) == 0 {
@@ -38,11 +37,11 @@ func buildNetCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 		}
 		c.op, c.value = op, v
 	case NetMetricAddress:
-		expect, onChange, warn := parseExpectedMetric(entry, "net address", NetAddrSummary, NetAddrPresent, NetAddrAbsent)
+		expect, warn := parseExpectedMetric(entry, "net address", NetAddrSummary, NetAddrPresent, NetAddrAbsent)
 		if warn != "" {
 			return nil, warn
 		}
-		c.expect, c.onChange = expect, onChange
+		c.expect = expect
 	default:
 		return nil, "net check metric must be " + NetMetricSummary
 	}
@@ -86,21 +85,21 @@ func configureICMPMetric(check *icmpCheck, entry map[string]any) string {
 }
 
 func configureICMPState(check *icmpCheck, entry map[string]any) string {
-	expect, onChange, warn := parseExpectedMetric(entry, "icmp state", NetStateSummary, NetStateUp, NetStateDown)
-	check.expect, check.onChange = expect, onChange
+	expect, warn := parseExpectedMetric(entry, "icmp state", NetStateSummary, NetStateUp, NetStateDown)
+	check.expect = expect
 	return warn
 }
 
-func parseExpectedMetric(entry map[string]any, metric, summary string, allowed ...string) (expect string, onChange bool, warn string) {
+func parseExpectedMetric(entry map[string]any, metric, summary string, allowed ...string) (expect, warn string) {
 	expect = cfgval.AsString(entry[CheckKeyExpect])
-	onChange = cfgval.AsString(entry[CheckKeyOn]) == OnModeChange
+	onChange := cfgval.AsString(entry[CheckKeyOn]) == OnModeChange
 	if expect == "" && !onChange {
-		return "", false, metric + " requires expect: " + strings.Join(allowed, "|") + " or on: change"
+		return "", metric + " requires expect: " + strings.Join(allowed, "|") + " or on: change"
 	}
 	if expect != "" && !slices.Contains(allowed, expect) {
-		return "", false, metric + " expect must be " + summary
+		return "", metric + " expect must be " + summary
 	}
-	return expect, onChange, ""
+	return expect, ""
 }
 
 func configureICMPLatency(check *icmpCheck, entry map[string]any) string {
@@ -125,7 +124,7 @@ func configureICMPLatency(check *icmpCheck, entry map[string]any) string {
 	if err != nil {
 		return "icmp latency change delta " + err.Error()
 	}
-	check.hasChange, check.delta = true, delta
+	check.delta = delta
 	return ""
 }
 
