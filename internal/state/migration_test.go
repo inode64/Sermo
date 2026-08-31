@@ -45,7 +45,7 @@ func TestSnapshotColumnMigrationsHealAnOldDatabase(t *testing.T) {
 	defer func() { _ = s.Close() }()
 
 	if err := s.SetServiceCheckSnapshots("web", map[string]CheckSnapshotRecord{
-		"http": {Name: "http", CheckType: "http", Observation: "healthy", OK: true,
+		"http": {CheckType: "http", Observation: "healthy", OK: true,
 			Message: "ok", Ran: true},
 	}); err != nil {
 		t.Fatalf("persist into the migrated table: %v", err)
