@@ -282,6 +282,8 @@ func TestRunWizardMountWritesStorageMountUnit(t *testing.T) {
 		"check:",
 		"type: storage",
 		"path: /mnt/backup",
+		"free_pct:",
+		"value: 5",
 		"mount:",
 		"refcount: true",
 	} {
