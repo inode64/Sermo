@@ -13,32 +13,26 @@ import (
 	"time"
 )
 
-// slaSegmentSpan* is the sub-span each SLA window reports per timeline cell.
-// They are the spans SLAWindows already implies; naming them lets the archive
-// ladder be derived from what the UI draws rather than guessed.
+// SLA archive resolutions preserve a useful investigation granularity for each
+// report span without retaining per-minute history for the whole year.
 const (
-	slaHourSegmentSpan  = time.Hour / slaSegmentsHour
-	slaDaySegmentSpan   = slaSpanDay / slaSegmentsDay
-	slaWeekSegmentSpan  = slaSpanWeek / slaSegmentsWeek
-	slaMonthSegmentSpan = slaSpanMonth / slaSegmentsMonth
+	slaHourArchiveSpan  = 5 * time.Minute
+	slaDayArchiveSpan   = time.Hour
+	slaWeekArchiveSpan  = 6 * time.Hour
+	slaMonthArchiveSpan = 24 * time.Hour
 )
 
-// The stored bucket spans, in seconds. Every archive but the finest steps at the
-// segment span of the next shorter window, which is what makes that window's
-// timeline segments a whole number of buckets — no bucket straddles two cells.
-// resMinute is the collection floor: a monitoring cycle is recorded into its UTC
-// minute, so nothing finer exists to store.
-//
-// The ladder shifts by one rung, so the exception is the coarsest window: the year
-// window's segment is 365/12 days, which is not a whole number of daily buckets.
-// A bucket there lands in whichever segment its start falls in, an error bounded by
-// one day out of thirty. TestArchiveLadderIsConsolidatable pins both properties.
+// The stored bucket spans, in seconds. Each coarser archive advances to the
+// useful resolution of the next shorter SLA report span. resMinute is the
+// collection floor: a monitoring cycle is recorded into its UTC minute, so
+// nothing finer exists to store. TestArchiveLadderIsConsolidatable pins that
+// every rung consolidates exactly into the next one.
 const (
 	resMinute   int64 = secondsPerMinute
-	res5Minutes int64 = int64(slaHourSegmentSpan / time.Second)
-	resHour     int64 = int64(slaDaySegmentSpan / time.Second)
-	res6Hours   int64 = int64(slaWeekSegmentSpan / time.Second)
-	resDay      int64 = int64(slaMonthSegmentSpan / time.Second)
+	res5Minutes int64 = int64(slaHourArchiveSpan / time.Second)
+	resHour     int64 = int64(slaDayArchiveSpan / time.Second)
+	res6Hours   int64 = int64(slaWeekArchiveSpan / time.Second)
+	resDay      int64 = int64(slaMonthArchiveSpan / time.Second)
 )
 
 // archiveCount is the length of the resolution ladder.

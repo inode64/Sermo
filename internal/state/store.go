@@ -1593,12 +1593,10 @@ func (s *Store) PruneEvents(ctx context.Context, before time.Time) (int64, error
 
 // SLAWindow names a rolling availability window and its length. The windows are
 // rolling (ending "now"), so week/month/year use fixed 7/30/365-day spans rather
-// than calendar boundaries. Segments is how many equal sub-spans the window is
-// split into for the web timeline strip (a status-page style availability band).
+// than calendar boundaries.
 type SLAWindow struct {
-	Name     string
-	Span     time.Duration
-	Segments int
+	Name string
+	Span time.Duration
 }
 
 const (
@@ -1616,23 +1614,15 @@ const (
 	slaSpanWeek  = slaRollingWeekDays * slaSpanDay
 	slaSpanMonth = slaRollingMonthDays * slaSpanDay
 	slaSpanYear  = slaRollingYearDays * slaSpanDay
-
-	slaSegmentsHour  = 12
-	slaSegmentsDay   = 24
-	slaSegmentsWeek  = 28
-	slaSegmentsMonth = 30
-	slaSegmentsYear  = 12
 )
 
-// SLAWindows are the reported rolling windows, shortest first. Segment counts
-// pick a natural human sub-span per window (5-minute, hourly, 6-hourly, daily,
-// monthly) so each timeline cell reads as a meaningful slice of time.
+// SLAWindows are the reported rolling windows, shortest first.
 var SLAWindows = []SLAWindow{
-	{slaWindowHour, time.Hour, slaSegmentsHour},
-	{slaWindowDay, slaSpanDay, slaSegmentsDay},
-	{slaWindowWeek, slaSpanWeek, slaSegmentsWeek},
-	{slaWindowMonth, slaSpanMonth, slaSegmentsMonth},
-	{slaWindowYear, slaSpanYear, slaSegmentsYear},
+	{Name: slaWindowHour, Span: time.Hour},
+	{Name: slaWindowDay, Span: slaSpanDay},
+	{Name: slaWindowWeek, Span: slaSpanWeek},
+	{Name: slaWindowMonth, Span: slaSpanMonth},
+	{Name: slaWindowYear, Span: slaSpanYear},
 }
 
 // SLAValue is the availability of one service over one window: the up and total
