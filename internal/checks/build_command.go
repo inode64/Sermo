@@ -130,7 +130,6 @@ func defaultCommandExport(name string) commandExport {
 }
 
 var commandShortVersionRE = regexp.MustCompile(`\d+\.\d+(?:\.\d+)?`)
-var commandShortIntegerVersionRE = regexp.MustCompile(`(?i)\b(?:version|v)\s*:?\s*(\d+)\b`)
 
 const (
 	commandRegexFullMatchGroup     = 0
@@ -142,7 +141,7 @@ func commandShortVersion(s string) string {
 	if dotted := commandShortVersionRE.FindString(s); dotted != "" {
 		return dotted
 	}
-	if match := commandShortIntegerVersionRE.FindStringSubmatch(s); len(match) >= commandRegexMinCapturedMatches {
+	if match := shortIntegerVersionRE.FindStringSubmatch(s); len(match) >= commandRegexMinCapturedMatches {
 		return match[commandRegexFirstCaptureGroup]
 	}
 	return ""
