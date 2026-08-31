@@ -115,6 +115,27 @@ func TestShortVersionNoVersion(t *testing.T) {
 	}
 }
 
+func TestCommandShortVersionSharesIntegerFallback(t *testing.T) {
+	tests := []struct {
+		raw  string
+		want string
+	}{
+		{raw: "pkexec version 126", want: "126"},
+		{raw: "daemon V: 7", want: "7"},
+		{raw: "release 42"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.raw, func(t *testing.T) {
+			if got := commandShortVersion(tt.raw); got != tt.want {
+				t.Fatalf("commandShortVersion(%q) = %q, want %q", tt.raw, got, tt.want)
+			}
+			if got := ShortVersion(tt.raw); got != tt.want {
+				t.Fatalf("ShortVersion(%q) = %q, want shared integer fallback %q", tt.raw, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestVersionLevel(t *testing.T) {
 	cases := []struct {
 		name  string
