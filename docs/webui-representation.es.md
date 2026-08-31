@@ -174,6 +174,9 @@ posterior. Los demás códigos de estado estables son `401` (desafío de
 autenticación), `403` (falta la cabecera CSRF o un invitado intenta escribir),
 `421` (`Host` rechazado en modo abierto), `404` (objetivo desconocido) y `200`
 con un cuerpo `{"ok": bool, "message": string}` para una acción atendida.
+Los flags booleanos de query aceptan `1`, `true`, `yes` u `on` sin distinguir
+mayúsculas; los ejemplos de endpoints siguientes usan la forma compacta
+canónica `1`.
 
 | Área | Endpoint | Notas |
 | --- | --- | --- |

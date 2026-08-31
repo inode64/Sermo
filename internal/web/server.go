@@ -1458,17 +1458,8 @@ func parseEventQuery(r *http.Request) (EventQuery, error) {
 		Watch:      q.Get(apiQueryWatch),
 		Kind:       q.Get(apiQueryKind),
 		Status:     q.Get(apiQueryStatus),
-		OnlyErrors: truthy(q.Get(apiQueryOnlyErrors)),
+		OnlyErrors: queryBool(r, apiQueryOnlyErrors),
 	}, nil
-}
-
-func truthy(v string) bool {
-	switch strings.ToLower(strings.TrimSpace(v)) {
-	case queryBoolOne, queryBoolTrue, queryBoolYes, queryBoolOn:
-		return true
-	default:
-		return false
-	}
 }
 
 // IsErrorEvent reports whether an event counts as an error for the
@@ -1964,11 +1955,15 @@ func eventBeforeID(r *http.Request) (int64, error) {
 	return id, nil
 }
 
-// queryBool reports whether the query parameter key is set to a truthy value
-// ("1", "true" or "yes", case-insensitive).
+// queryBool reports whether the query parameter key is set to the shared truthy
+// vocabulary ("1", "true", "yes" or "on", case-insensitive).
 func queryBool(r *http.Request, key string) bool {
-	v := strings.ToLower(strings.TrimSpace(r.URL.Query().Get(key)))
-	return v == queryBoolOne || v == queryBoolTrue || v == queryBoolYes
+	switch strings.ToLower(strings.TrimSpace(r.URL.Query().Get(key))) {
+	case queryBoolOne, queryBoolTrue, queryBoolYes, queryBoolOn:
+		return true
+	default:
+		return false
+	}
 }
 
 // parseBeforeQuery reads the ?before= retention cutoff through its owner in the

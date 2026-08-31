@@ -162,6 +162,8 @@ reload (`412`). The UI refreshes before a later retry. Other stable status codes
 are `401` (auth challenge), `403` (missing CSRF header or guest attempting a
 write), `421` (rejected `Host` in open mode), `404` (unknown target), and `200`
 with an `{"ok": bool, "message": string}` body for a handled action.
+Boolean query flags accept `1`, `true`, `yes` or `on`, case-insensitively; the
+endpoint examples below use the canonical compact spelling `1`.
 
 | Area | Endpoint | Notes |
 | --- | --- | --- |
