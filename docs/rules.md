@@ -2672,7 +2672,8 @@ detail so gradual degradation is visible.
   `on_change` is LVM-only and sends one notification when the effective health
   changes `ok → error` or `error → ok`; it does not notify repeatedly while an
   error persists. Templates receive VG/LV, current and previous states, current
-  reasons and recovered reasons.
+  reasons and recovered reasons. Panic mode suppresses that delivery and records
+  the state transition as a `panic-suppressed` event.
 
 - **`edac`** — **ECC memory errors** from the kernel EDAC subsystem (native,
   `/sys/devices/system/edac`). `ce` is the cumulative correctable count and `ue`

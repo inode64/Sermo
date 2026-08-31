@@ -110,6 +110,66 @@ func TestWatchDispatchesLVMHealthChange(t *testing.T) {
 	}
 }
 
+func TestWatchReportsSuppressedLVMHealthChangeInPanic(t *testing.T) {
+	tests := []struct {
+		name       string
+		resultOK   bool
+		transition checks.LVMTransition
+		want       string
+	}{
+		{
+			name:       "degraded",
+			resultOK:   false,
+			transition: checks.LVMTransition{OldState: checks.LVMHealthOK, NewState: checks.LVMHealthError, Reasons: "partial"},
+			want:       "panic mode: LVM notification suppressed: lvm state ok -> error",
+		},
+		{
+			name:       "recovered",
+			resultOK:   true,
+			transition: checks.LVMTransition{OldState: checks.LVMHealthError, NewState: checks.LVMHealthOK, PreviousReasons: "partial"},
+			want:       "panic mode: LVM notification suppressed: lvm state error -> ok",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			n := &fakeNotifier{name: "ops"}
+			var events []Event
+			w := &Watch{
+				Name:              "lvm-vg0-root",
+				CheckType:         checks.CheckTypeLVM,
+				LVMNotifyOnChange: true,
+				FireOnFail:        true,
+				Notifiers:         []notify.Notifier{n},
+				InPanic:           func() bool { return true },
+				Emit:              func(event Event) { events = append(events, event) },
+				Check: &scriptedCheck{results: []checks.Result{{
+					Check: "lvm",
+					OK:    tc.resultOK,
+					Data:  map[string]any{"lvm_transition": tc.transition},
+				}}},
+			}
+
+			w.RunCycle(t.Context())
+
+			if len(n.msgs) != 0 {
+				t.Fatalf("panic mode delivered %d LVM notifications, want none", len(n.msgs))
+			}
+			matches := 0
+			for _, event := range events {
+				if event.Kind == eventKindPanicSuppressed && event.Message == tc.want {
+					matches++
+					if event.Watch != w.Name {
+						t.Errorf("suppression event watch = %q, want %q", event.Watch, w.Name)
+					}
+				}
+			}
+			if matches != 1 {
+				t.Fatalf("matching suppression events = %d, want 1; events=%+v", matches, events)
+			}
+		})
+	}
+}
+
 func TestWatchPanicSuppressesNotify(t *testing.T) {
 	n := &fakeNotifier{name: "ops-email"}
 	var events []Event

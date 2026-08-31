@@ -2278,7 +2278,8 @@ array configurado pausado, aunque Sermo no hubiera originado la pausa.
 
 En un watch `lvm`, `then.notify_on: [on_change]` notifica sólo cuando la salud
 efectiva cambia entre `ok` y `error`, incluida la recuperación. No puede
-combinarse con `then.notify_interval`.
+combinarse con `then.notify_interval`. El modo pánico suprime esa entrega y
+registra la transición de estado como un evento `panic-suppressed`.
 
 **Las checks y los watches comparten los mismos tipos de comprobación.**
 Cualquier comprobación de un solo disparo — de recursos de host o de servicio
