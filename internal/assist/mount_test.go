@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"sermo/internal/cfgval"
 	"sermo/internal/checks"
 	"sermo/internal/config"
 )
@@ -38,6 +39,10 @@ func TestMountAssistantGeneratesMountUnit(t *testing.T) {
 	}
 	if check[checks.CheckKeyPath] != "/mnt/backup" || check[checks.CheckKeyType] != checks.CheckTypeStorage || check[checks.CheckKeyMounted] != true || mount[config.MountKeyRefcount] != true {
 		t.Fatalf("mount body = %+v, want storage check/refcount", body)
+	}
+	freePct, ok := check[checks.LevelFieldFreePct].(map[string]any)
+	if !ok || freePct[checks.CheckKeyOp] != cfgval.CompareOpLess || freePct[checks.CheckKeyValue] != mountDefaultFreePct {
+		t.Fatalf("free_pct = %+v, want op< value%d", freePct, mountDefaultFreePct)
 	}
 	if _, ok := mount[config.MountKeyUmount]; ok {
 		t.Fatalf("mount body = %+v, want no persistent umount escalation policy", body)

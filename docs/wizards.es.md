@@ -41,7 +41,9 @@ y a los invariantes de abajo, y actualiza este fichero en el mismo cambio.
    las respuestas compartidas siguientes a todos (`Prompt.Confirm`).
 5. **Estado de monitor.** `Prompt.AskMonitorState` → `monitor: enabled | disabled |
    previous`. Las entradas de montaje que genera `sermoctl wizard mount` incluyen un
-   check de storage con `mounted: true`, pero las opera
+   check de storage con `mounted: true` y
+   `free_pct: { op: "<", value: 5 }`, de modo que la misma unidad informa tanto
+   de un montaje ausente como de espacio libre críticamente bajo. Las opera
    `sermoctl mount|umount`; no preguntan ni escriben `monitor:`.
 6. **Intervalo.** `Prompt.AskInterval` → `interval:` (en blanco hereda el intervalo
    global del engine). Los pasos 5–6 son `Prompt.AskMonitoring`; las unidades de montaje se lo saltan
@@ -51,8 +53,9 @@ y a los invariantes de abajo, y actualiza este fichero en el mismo cambio.
    y el flag opcional de nivel de target `dry_run` cuando el watch generado tiene una
    acción automática real que omitir. En servicios: pregunta si las acciones automáticas
    deben arrancar en dry-run tras las respuestas compartidas de monitor/intervalo. En
-  montajes: pregunta solo opciones de seguridad propias del mount, como si Sermo debe
-  usar recuento de referencias; las elecciones de umount force/lazy/kill se hacen por acción de CLI/Web.
+  montajes: usa el umbral fijo del 5% de espacio libre y pregunta solo opciones
+  de seguridad propias del mount, como si Sermo debe usar recuento de
+  referencias; las elecciones de umount force/lazy/kill se hacen por acción de CLI/Web.
 8. **Vista previa y aceptación.** Renderiza el YAML que se escribirá y confirma.
 9. **Limpieza.** Ofrece borrar ficheros gestionados cuyo target **ya no se
    detecta** en el host (`planWizardWatchDeletes` / `planStaleServiceDeletes`
