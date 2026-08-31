@@ -1754,9 +1754,8 @@ func (s *Store) CheckSLASeries(service, check string, from, to time.Time) ([]SLA
 }
 
 // sumSLA totals one series over the rolling window ending at now. The archive is
-// chosen from the requested span, and every read of the same window resolves to
-// the same one, which is what keeps a window total and its segment breakdown in
-// agreement.
+// chosen from the requested span, so a report window and a series for the same
+// range resolve to the same stored buckets.
 func (s *Store) sumSLA(service, check string, span time.Duration, now time.Time) (SLAValue, error) {
 	from := now.Add(-span)
 	stored := s.retention.archiveFor(from, now)
@@ -1840,106 +1839,6 @@ func reportWindows(sum func(span time.Duration) (SLAValue, error)) ([]SLAValue, 
 		out = append(out, value)
 	}
 	return out, nil
-}
-
-// SLASegment is one equal sub-span of a windowed SLA timeline: the up and total
-// observed cycles within it, plus how many of its one-minute sub-buckets saw a
-// failure. Total==0 marks a gap (an unmonitored sub-span), which renders
-// distinctly from downtime — the same gap convention as SLASeries.
-//
-// DownBuckets is what keeps a short outage visible after consolidation: a
-// 40-second failure inside a day-long segment barely moves Up/Total, but it
-// leaves DownBuckets at 1, so the renderer can colour the whole segment as
-// affected instead of rounding it to healthy.
-type SLASegment struct {
-	Up          int64 `json:"up"`
-	Total       int64 `json:"total"`
-	DownBuckets int64 `json:"down_buckets"`
-}
-
-// SLAWindowTimeline is a service's availability over one rolling window plus the
-// window divided into equal sub-spans (oldest first) for the web timeline strip.
-// Up/Total are the window totals (the sum of the segments), so a caller rendering
-// the strip needs no separate SLAReport query.
-type SLAWindowTimeline struct {
-	Window      string
-	Up          int64
-	Total       int64
-	DownBuckets int64
-	Segments    []SLASegment
-}
-
-// SLATimelines returns a service's availability for every SLAWindow split into
-// equal sub-spans for the web timeline strip, ordered as SLAWindows (hour..year).
-func (s *Store) SLATimelines(service string, now time.Time) ([]SLAWindowTimeline, error) {
-	return s.slaTimelines(service, "", now)
-}
-
-// CheckSLATimelines returns one check's windowed availability split into sub-spans
-// for the web timeline strip, ordered as SLAWindows (hour..year).
-func (s *Store) CheckSLATimelines(service, check string, now time.Time) ([]SLAWindowTimeline, error) {
-	return s.slaTimelines(service, check, now)
-}
-
-// slaTimelines reports every SLAWindow for one series. An empty check is the
-// service-level series.
-func (s *Store) slaTimelines(service, check string, now time.Time) ([]SLAWindowTimeline, error) {
-	out := make([]SLAWindowTimeline, 0, len(SLAWindows))
-	for _, w := range SLAWindows {
-		timeline, err := s.slaTimeline(service, check, w, now)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, timeline)
-	}
-	return out, nil
-}
-
-// slaTimeline divides one window into Segments equal sub-spans ending at now and
-// aggregates the stored buckets with a single grouped query — the same indexed
-// range scan sumSLA does, returning the per-segment breakdown as well.
-//
-// The archive is picked exactly as sumSLA picks it, so the window totals here and
-// SLAReport's for the same window are aggregated from the same rows and agree.
-// Each window's segment span is a whole number of buckets in that archive (see
-// the resolution ladder), so no bucket contributes to two segments.
-func (s *Store) slaTimeline(service, check string, w SLAWindow, now time.Time) (SLAWindowTimeline, error) {
-	segCount := max(w.Segments, 1)
-	from := now.Add(-w.Span)
-	stored := s.retention.archiveFor(from, now)
-	startBucket := alignBucket(from, stored.Res)
-	// Include the current (partial) bucket so the window total matches sumSLA,
-	// which lower-bounds on the same start bucket but has no upper bound. Stopping
-	// at startBucket+span would exclude it and make Up/Total disagree with
-	// SLAReport for the same window. That bucket clamps into the last segment.
-	endBucket := alignBucket(now, stored.Res) + stored.Res
-	segSpan := max(int64(w.Span/time.Second)/int64(segCount), 1)
-
-	rows, err := s.reads().QueryContext(s.sqlCtx(), slaTimelineStmt,
-		startBucket, segSpan, stored.Res, service, check, startBucket, endBucket)
-	if err != nil {
-		return SLAWindowTimeline{}, fmt.Errorf("load SLA timeline for %s: %w", w.Name, err)
-	}
-	defer func() { _ = rows.Close() }()
-
-	timeline := SLAWindowTimeline{Window: w.Name, Segments: make([]SLASegment, segCount)}
-	for rows.Next() {
-		var seg, up, total, down int64
-		if err := rows.Scan(&seg, &up, &total, &down); err != nil {
-			return SLAWindowTimeline{}, fmt.Errorf("scan SLA timeline row for %s: %w", w.Name, err)
-		}
-		seg = min(max(seg, 0), int64(segCount)-1)
-		timeline.Segments[seg].Up += up
-		timeline.Segments[seg].Total += total
-		timeline.Segments[seg].DownBuckets += down
-		timeline.Up += up
-		timeline.Total += total
-		timeline.DownBuckets += down
-	}
-	if err := rows.Err(); err != nil {
-		return SLAWindowTimeline{}, fmt.Errorf("iterate SLA timeline for %s: %w", w.Name, err)
-	}
-	return timeline, nil
 }
 
 // MeasurementPoint is one time bucket of a check's measurement series: the sample

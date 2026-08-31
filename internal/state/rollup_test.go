@@ -359,30 +359,6 @@ func TestArchiveLadderIsConsolidatable(t *testing.T) {
 	}
 }
 
-// TestSLAWindowSegmentsAreWholeBuckets pins the other half of the derivation: each
-// window's timeline segment must be a whole number of buckets in the archive that
-// window resolves to, or a bucket would contribute to two cells. The year window is
-// the documented exception — its segment is 365/12 days, not a whole day count.
-func TestSLAWindowSegmentsAreWholeBuckets(t *testing.T) {
-	retention := DefaultRetention()
-	now := time.Date(2026, 6, 7, 12, 0, 0, 0, time.UTC)
-	for _, w := range SLAWindows {
-		segSpan := int64(w.Span/time.Duration(w.Segments)) / int64(time.Second)
-		res := retention.archiveFor(now.Add(-w.Span), now).Res
-		remainder := segSpan % res
-		if w.Name == slaWindowYear {
-			if remainder == 0 {
-				t.Fatalf("year window segment %ds is a whole number of %ds buckets; "+
-					"the documented exception no longer applies", segSpan, res)
-			}
-			continue
-		}
-		if remainder != 0 {
-			t.Fatalf("window %s segment %ds is not a whole number of %ds buckets", w.Name, segSpan, res)
-		}
-	}
-}
-
 func TestArchiveForPicksTheFinestCoveringResolution(t *testing.T) {
 	retention := DefaultRetention()
 	now := time.Date(2026, 6, 7, 12, 0, 0, 0, time.UTC)
@@ -409,10 +385,9 @@ func TestArchiveForPicksTheFinestCoveringResolution(t *testing.T) {
 	}
 }
 
-// TestSLAWindowTotalsMatchTheirTimelines pins the invariant that a window's
-// reported availability and its timeline strip are aggregated from the same rows.
-// They resolve to the same archive, so the two must agree exactly.
-func TestSLAWindowTotalsMatchTheirTimelines(t *testing.T) {
+// TestSLAWindowTotalsMatchTheirSeries pins that a report window and the series
+// drawn for the same range resolve to and aggregate the same archive rows.
+func TestSLAWindowTotalsMatchTheirSeries(t *testing.T) {
 	s := openTemp(t)
 	now := time.Date(2026, 6, 7, 12, 0, 0, 0, time.UTC)
 
@@ -425,33 +400,25 @@ func TestSLAWindowTotalsMatchTheirTimelines(t *testing.T) {
 	}
 	mustRollup(t, s, now)
 
-	timelines, err := s.SLATimelines(slaTestService, now)
-	if err != nil {
-		t.Fatalf("SLATimelines: %v", err)
-	}
 	report, err := s.SLAReport(slaTestService, now)
 	if err != nil {
 		t.Fatalf("SLAReport: %v", err)
 	}
 	for i, w := range SLAWindows {
-		if timelines[i].Up != report[i].Up || timelines[i].Total != report[i].Total {
-			t.Fatalf("window %s: timeline %d/%d disagrees with report %d/%d",
-				w.Name, timelines[i].Up, timelines[i].Total, report[i].Up, report[i].Total)
+		points, seriesErr := s.SLASeries(slaTestService, now.Add(-w.Span), now)
+		if seriesErr != nil {
+			t.Fatalf("SLASeries(%s): %v", w.Name, seriesErr)
 		}
-		if timelines[i].DownBuckets != report[i].DownBuckets {
-			t.Fatalf("window %s: timeline down_buckets=%d disagrees with report %d",
-				w.Name, timelines[i].DownBuckets, report[i].DownBuckets)
+		var seriesUp, seriesTotal, seriesDown int64
+		for _, point := range points {
+			seriesUp += point.Up
+			seriesTotal += point.Total
+			seriesDown += point.DownBuckets
 		}
-		var segUp, segTotal, segDown int64
-		for _, seg := range timelines[i].Segments {
-			segUp += seg.Up
-			segTotal += seg.Total
-			segDown += seg.DownBuckets
-		}
-		if segUp != timelines[i].Up || segTotal != timelines[i].Total || segDown != timelines[i].DownBuckets {
-			t.Fatalf("window %s segments sum to %d/%d/%d, want the window totals %d/%d/%d",
-				w.Name, segUp, segTotal, segDown,
-				timelines[i].Up, timelines[i].Total, timelines[i].DownBuckets)
+		if seriesUp != report[i].Up || seriesTotal != report[i].Total || seriesDown != report[i].DownBuckets {
+			t.Fatalf("window %s: series totals %d/%d/%d disagree with report %d/%d/%d",
+				w.Name, seriesUp, seriesTotal, seriesDown,
+				report[i].Up, report[i].Total, report[i].DownBuckets)
 		}
 	}
 }

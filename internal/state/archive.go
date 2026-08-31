@@ -227,13 +227,6 @@ const (
 		  WHERE res = ? AND service = ? AND check_name = ?
 		    AND bucket >= ? AND bucket < ?
 		  ORDER BY bucket;`
-
-	slaTimelineStmt = `SELECT (bucket - ?)/? AS seg, COALESCE(SUM(up_count), 0),
-			   COALESCE(SUM(total_count), 0), COALESCE(SUM(down_buckets), 0)
-		   FROM sla_archive
-		  WHERE res = ? AND service = ? AND check_name = ?
-		    AND bucket >= ? AND bucket < ?
-		  GROUP BY seg ORDER BY seg;`
 )
 
 // Metric archive statements. One statement per shape covers check latency, a
