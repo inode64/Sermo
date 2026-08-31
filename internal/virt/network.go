@@ -31,10 +31,6 @@ const (
 
 const controlPathNetwork = sectionControl + "." + ControlKeyNetwork
 
-// DefaultNetworkSocket is the modular libvirt network daemon's local socket.
-// Monolithic libvirtd answers network RPC on DefaultSocket instead.
-const DefaultNetworkSocket = "/run/libvirt/virtnetworkd-sock"
-
 // DefaultNetworkURI is the network driver connect URI; monolithic libvirtd
 // and virtproxyd accept it too, so it is correct on every socket layout.
 const DefaultNetworkURI = "network:///system"

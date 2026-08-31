@@ -14,7 +14,8 @@ import (
 )
 
 const (
-	testNetXML = `<network><name>default</name><bridge name='virbr0' stp='on'/><ip address='192.168.122.1' netmask='255.255.255.0'/></network>`
+	testNetworkSocket = "/run/libvirt/virtnetworkd-sock"
+	testNetXML        = `<network><name>default</name><bridge name='virbr0' stp='on'/><ip address='192.168.122.1' netmask='255.255.255.0'/></network>`
 
 	domOnNetworkXML = `<domain><devices><interface type='network'><source network='default'/></interface></devices></domain>`
 	domOnBridgeXML  = `<domain><devices><interface type='bridge'><source bridge='virbr0'/></interface></devices></domain>`
@@ -94,7 +95,7 @@ func networkManagerWith(client *fakeNetworkClient) NetworkManager {
 	m := NewNetworkManager(NetworkSpec{
 		URI:         DefaultNetworkURI,
 		Network:     "default",
-		Socket:      DefaultNetworkSocket,
+		Socket:      testNetworkSocket,
 		GuardSocket: DefaultQEMUSocket,
 		GuardURI:    DefaultURI,
 	})
