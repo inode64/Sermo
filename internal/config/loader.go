@@ -596,32 +596,42 @@ func (c *Config) mergeNotifierFragment(doc *Document) (bool, error) {
 	if _, present := doc.Body[pathKeyNotifiers]; !present {
 		return false, nil
 	}
-	for key := range doc.Body {
-		if key != pathKeyNotifiers {
-			return true, fmt.Errorf("%s: %s fragments only support top-level %s, got %q", doc.Path, pathKeyNotifiers, pathKeyNotifiers, key)
-		}
+	name, entry, err := notifierEntryFromDocument(doc)
+	if err != nil {
+		return true, err
 	}
-	return c.mergeNotifierMap(doc)
+	dst := c.registry(pathKeyNotifiers)
+	if _, exists := dst[name]; exists {
+		return true, fmt.Errorf("%s: notifier %q is already defined", doc.Path, name)
+	}
+	dst[name] = entry
+	c.Global.Raw[pathKeyNotifiers] = dst
+	return true, nil
 }
 
-func (c *Config) mergeNotifierMap(doc *Document) (bool, error) {
+// notifierEntryFromDocument validates and expands the single notifier entry
+// shape shared by base fragments and per-host overrides. Callers retain
+// ownership of duplicate handling and merge precedence.
+func notifierEntryFromDocument(doc *Document) (string, any, error) {
+	for key := range doc.Body {
+		if key != pathKeyNotifiers {
+			return "", nil, fmt.Errorf("%s: %s fragments only support top-level %s, got %q", doc.Path, pathKeyNotifiers, pathKeyNotifiers, key)
+		}
+	}
 	raw := expandEnvTree(doc.Body[pathKeyNotifiers])
 	entries, ok := raw.(map[string]any)
 	if !ok {
-		return true, fmt.Errorf("%s: %s must be a mapping", doc.Path, pathKeyNotifiers)
+		return "", nil, fmt.Errorf("%s: %s must be a mapping", doc.Path, pathKeyNotifiers)
 	}
 	if len(entries) != 1 {
-		return true, fmt.Errorf("%s: %s fragments must contain exactly one entry", doc.Path, pathKeyNotifiers)
+		return "", nil, fmt.Errorf("%s: %s fragments must contain exactly one entry", doc.Path, pathKeyNotifiers)
 	}
-	dst := c.registry(pathKeyNotifiers)
-	for name, entry := range entries {
-		if _, exists := dst[name]; exists {
-			return true, fmt.Errorf("%s: notifier %q is already defined", doc.Path, name)
-		}
-		dst[name] = entry
+	var name string
+	var entry any
+	for name, entry = range entries {
+		break
 	}
-	c.Global.Raw[pathKeyNotifiers] = dst
-	return true, nil
+	return name, entry, nil
 }
 
 func loadDocument(path string) (*Document, error) {

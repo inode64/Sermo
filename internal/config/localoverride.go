@@ -171,33 +171,22 @@ func (c *Config) loadNotifierOverrideDir(dir string, recursive bool) error {
 		if _, present := doc.Body[pathKeyNotifiers]; !present {
 			return fmt.Errorf("%s: %s override directories only support top-level %s", doc.Path, pathKeyNotifiers, pathKeyNotifiers)
 		}
-		for key := range doc.Body {
-			if key != pathKeyNotifiers {
-				return fmt.Errorf("%s: %s fragments only support top-level %s, got %q", doc.Path, pathKeyNotifiers, pathKeyNotifiers, key)
-			}
-		}
-		raw := expandEnvTree(doc.Body[pathKeyNotifiers])
-		entries, ok := raw.(map[string]any)
-		if !ok {
-			return fmt.Errorf("%s: %s must be a mapping", doc.Path, pathKeyNotifiers)
-		}
-		if len(entries) != 1 {
-			return fmt.Errorf("%s: %s fragments must contain exactly one entry", doc.Path, pathKeyNotifiers)
+		name, entry, err := notifierEntryFromDocument(doc)
+		if err != nil {
+			return err
 		}
 		dst := c.registry(pathKeyNotifiers)
-		for name, entry := range entries {
-			doc.Name = name
-			if err := c.claimLocalOverride(pathKeyNotifiers, doc); err != nil {
-				return err
-			}
-			existing, isMap := dst[name].(map[string]any)
-			entryMap, entryIsMap := entry.(map[string]any)
-			if isMap && entryIsMap {
-				dst[name] = mergeMaps(existing, entryMap)
-				continue
-			}
-			dst[name] = entry
+		doc.Name = name
+		if err := c.claimLocalOverride(pathKeyNotifiers, doc); err != nil {
+			return err
 		}
+		existing, isMap := dst[name].(map[string]any)
+		entryMap, entryIsMap := entry.(map[string]any)
+		if isMap && entryIsMap {
+			dst[name] = mergeMaps(existing, entryMap)
+			return nil
+		}
+		dst[name] = entry
 		return nil
 	})
 }
