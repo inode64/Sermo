@@ -166,6 +166,62 @@ func TestWatchFiresHookWhenConditionTrue(t *testing.T) {
 	}
 }
 
+func TestWatchHookFailureMessage(t *testing.T) {
+	tests := []struct {
+		name    string
+		message string
+		want    string
+	}{
+		{name: "includes watch message", message: "storage / is 92% used", want: "storage / is 92% used: run hook: context deadline exceeded"},
+		{name: "empty watch message", want: "run hook: context deadline exceeded"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var events []Event
+			w := &Watch{
+				Name:      "storage-root",
+				CheckType: checks.CheckTypeStorage,
+				Check: &scriptedCheck{results: []checks.Result{{
+					Check: checks.CheckTypeStorage, OK: true, Message: tt.message,
+				}}},
+				Hook: HookSpec{Command: []string{"/bin/false"}},
+				Runner: HookRunnerFunc(func(context.Context, []string, map[string]string, time.Duration) error {
+					return context.DeadlineExceeded
+				}),
+				Emit: func(event Event) { events = append(events, event) },
+			}
+
+			w.RunCycle(context.Background())
+
+			var got string
+			for _, event := range events {
+				if event.Kind == eventKindHookFail {
+					got = event.Message
+				}
+			}
+			if got != tt.want {
+				t.Fatalf("hook failure = %q, want %q; events = %+v", got, tt.want, events)
+			}
+		})
+	}
+}
+
+func TestWatchWithoutHookEmitsNoHookCompletion(t *testing.T) {
+	var events []Event
+	w := &Watch{
+		Name:  "storage-root",
+		Check: stubCheck{name: checks.CheckTypeStorage, ok: true},
+		Emit:  func(event Event) { events = append(events, event) },
+	}
+
+	w.RunCycle(context.Background())
+
+	if hasEventKind(events, eventKindHook) || hasEventKind(events, eventKindHookFail) {
+		t.Fatalf("events = %+v, want no hook completion without a command", events)
+	}
+}
+
 func TestWatchPanicSuppressesHookButStillFires(t *testing.T) {
 	var calls int
 	var events []Event

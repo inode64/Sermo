@@ -352,20 +352,9 @@ func (w *Watch) dispatchFiringActions(ctx context.Context, res checks.Result, wa
 	if w.MakeStep != nil && w.Stepper != nil {
 		w.runMakeStep(ctx, res, emitFiring)
 	}
-	w.runHook(ctx, res, env)
+	runWatchHook(ctx, w.Hook, w.Runner, w.emit, w.Name, res.Message, env)
 	if len(w.RaidNotifyEvents) == 0 && !w.LVMNotifyOnChange && w.shouldNotify(wasFiring) {
 		dispatchNotify(ctx, w.Notifiers, watchMessage(w.Name, res.Message, env), w.Name, w.emit)
-	}
-}
-
-func (w *Watch) runHook(ctx context.Context, res checks.Result, env map[string]string) {
-	if len(w.Hook.Command) > 0 {
-		runner := defaultHookRunner(w.Runner)
-		if err := w.Hook.Run(ctx, runner, env); err != nil {
-			w.emit(Event{Watch: w.Name, Kind: eventKindHookFail, Message: err.Error()})
-		} else {
-			w.emit(Event{Watch: w.Name, Kind: eventKindHook, Message: res.Message})
-		}
 	}
 }
 
@@ -743,8 +732,15 @@ type watchFireSpec struct {
 // runWatchHook runs a watch hook and emits its hook/hook-failed completion
 // event; the shape every watcher shares.
 func runWatchHook(ctx context.Context, hook HookSpec, runner HookRunner, emit func(Event), watch, msg string, env map[string]string) {
+	if len(hook.Command) == 0 {
+		return
+	}
 	if err := hook.Run(ctx, defaultHookRunner(runner), env); err != nil {
-		emit(Event{Watch: watch, Kind: eventKindHookFail, Message: msg + ": " + err.Error()})
+		failure := err.Error()
+		if msg != "" {
+			failure = msg + ": " + failure
+		}
+		emit(Event{Watch: watch, Kind: eventKindHookFail, Message: failure})
 		return
 	}
 	emit(Event{Watch: watch, Kind: eventKindHook, Message: msg})
@@ -762,9 +758,7 @@ func dispatchWatchFire(ctx context.Context, spec watchFireSpec, msg string, env 
 		spec.emit(Event{Watch: spec.name, Kind: eventKindPanicSuppressed, Message: spec.panicLabel + ": " + msg})
 		return
 	}
-	if len(spec.hook.Command) > 0 {
-		runWatchHook(ctx, spec.hook, spec.runner, spec.emit, spec.name, msg, env)
-	}
+	runWatchHook(ctx, spec.hook, spec.runner, spec.emit, spec.name, msg, env)
 	if spec.action != nil {
 		spec.action()
 	}
