@@ -162,16 +162,6 @@ func (c *Config) StorageMountNames() []string {
 	return out
 }
 
-// StorageWatchNames returns configured host watches backed by a storage check.
-func (c *Config) StorageWatchNames() []string {
-	storages, _ := c.ResolveStorages()
-	out := make([]string, 0, len(storages))
-	for _, resolved := range storages {
-		out = append(out, resolved.Name)
-	}
-	return out
-}
-
 // AvailabilityWatchNames returns configured host watches whose check asserts
 // availability, so an availability series is a meaningful thing to keep for
 // them. It is the watch counterpart of the configured service list.
