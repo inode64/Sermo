@@ -12,7 +12,6 @@ import (
 )
 
 const (
-	defaultLDAPPort         = defaultPortLDAP
 	defaultLDAPProbeTimeout = 5 * time.Second
 	ldapBindAnonymous       = "anonymous"
 	ldapBindSimple          = "simple"
@@ -25,11 +24,11 @@ const (
 type ldapProtocol struct{}
 
 func (ldapProtocol) Name() string       { return ProtocolNameLDAP }
-func (ldapProtocol) DefaultPort() int   { return defaultLDAPPort }
+func (ldapProtocol) DefaultPort() int   { return defaultPortLDAP }
 func (ldapProtocol) RequiresUser() bool { return false }
 
 func (ldapProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	target := probeTargetFor(ctx, cfg, defaultLDAPPort)
+	target := probeTargetFor(ctx, cfg, defaultPortLDAP)
 	host, port := target.hostPort()
 	timeout := netutil.TimeoutFromContext(ctx, defaultLDAPProbeTimeout)
 

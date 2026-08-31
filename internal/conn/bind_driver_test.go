@@ -42,7 +42,7 @@ func testExternalModuleInterfaceBinding(t *testing.T) {
 		}},
 		{"ldap-probe-dialer", func(t *testing.T) {
 			t.Helper()
-			d := newProbeTarget(Config{Interface: "eth0"}, defaultLDAPPort).dialerWithTimeout(time.Second)
+			d := newProbeTarget(Config{Interface: "eth0"}, defaultPortLDAP).dialerWithTimeout(time.Second)
 			if d.Control == nil {
 				t.Fatal("LDAP probe dialer must use BindDialer when interface is set")
 			}
