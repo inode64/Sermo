@@ -81,7 +81,6 @@ type webEntry struct {
 	checkNames        []string                        // sorted
 	checkTypes        map[string]string               // check name -> type
 	checkReports      map[string]string               // check name -> `reports:` mode, when declared
-	checkUnits        map[string]string               // check name -> `unit:` for its scalar result, when declared
 	checkBands        map[string][]checks.BandMetric  // check name -> resolved state bands
 	checkGraphs       map[string][]checks.GraphMetric // check name -> resolved line metrics
 	checkSeverities   map[string]string               // check name -> `severity:`, when declared
@@ -108,9 +107,6 @@ type webWatch struct {
 	displayName string
 	category    string
 	checkType   string
-	// checkUnit is the check block's `unit:`, the unit of the scalar it publishes
-	// under `value`. It names that series exactly as a service check's does.
-	checkUnit string
 	// bands and graphs are the check's resolved state and line metrics, the
 	// same resolution the recorder persists from.
 	bands         []checks.BandMetric
@@ -424,7 +420,6 @@ func attachServiceRuntime(ctx context.Context, entry *webEntry, name string, tre
 	entry.checkNames = names
 	entry.checkTypes = types
 	entry.checkReports = checkReportingModes(tree)
-	entry.checkUnits = checkDeclaredUnits(tree)
 	entry.checkBands = bandCheckMetrics(tree)
 	entry.checkGraphs = graphableCheckMetrics(tree)
 	entry.checkSeverities = checkDeclaredSeverities(tree)
@@ -556,7 +551,6 @@ func newWebWatch(name string, entry map[string]any, globalNotify []string, defau
 		displayName:        config.DisplayName(entry, name),
 		category:           config.CategoryLabel(entry, watchCategoryFallback),
 		checkType:          ctype,
-		checkUnit:          cfgval.AsString(checkMap(entry)[checks.CheckKeyUnit]),
 		bands:              checks.DeclaredBandMetrics(ctype, checkMap(entry)),
 		graphs:             resolveWatchGraphs(ctype, checkMap(entry), metricsMap(entry)),
 		interval:           iv,
@@ -633,10 +627,6 @@ func checkCatalog(tree map[string]any, defaultInterval time.Duration) ([]string,
 // reads configuration rather than the published result because the mode is
 // static: sourcing it here keeps it correct on the first cycle and across a
 // daemon restart, without widening the persisted snapshot record.
-func checkDeclaredUnits(tree map[string]any) map[string]string {
-	return checkStringField(tree, checks.CheckKeyUnit)
-}
-
 func checkReportingModes(tree map[string]any) map[string]string {
 	return checkStringField(tree, checks.CheckKeyReports)
 }
