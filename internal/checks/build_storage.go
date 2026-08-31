@@ -1,7 +1,6 @@
 package checks
 
 import (
-	"strconv"
 	"time"
 
 	"sermo/internal/cfgval"
@@ -63,9 +62,9 @@ func buildCountCheck(b base, entry map[string]any) (Check, string) {
 	if !cfgval.IsCompareOp(op) {
 		return nil, "count check requires a valid op (>=, >, <=, <, ==, !=)"
 	}
-	val, err := strconv.ParseFloat(cfgval.String(threshold[CheckKeyValue]), numericBits64)
+	val, err := parseFiniteThreshold(threshold[CheckKeyValue])
 	if err != nil {
-		return nil, "count check value must be numeric"
+		return nil, "count check value " + err.Error()
 	}
 	return countCheck{base: b, path: path, kind: kind, recursive: cfgval.Bool(entry[CheckKeyRecursive]), includeHidden: cfgval.Bool(entry[CheckKeyIncludeHidden]), op: op, value: val}, ""
 }

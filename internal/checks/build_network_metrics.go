@@ -2,7 +2,6 @@ package checks
 
 import (
 	"slices"
-	"strconv"
 	"strings"
 
 	"sermo/internal/cfgval"
@@ -115,16 +114,16 @@ func configureICMPLatency(check *icmpCheck, entry map[string]any) string {
 		if !cfgval.IsCompareOp(op) {
 			return "icmp latency threshold has an invalid op"
 		}
-		value, err := strconv.ParseFloat(cfgval.String(threshold[CheckKeyValue]), numericBits64)
+		value, err := parseFiniteThreshold(threshold[CheckKeyValue])
 		if err != nil {
-			return "icmp latency threshold value must be numeric"
+			return "icmp latency threshold value " + err.Error()
 		}
 		check.hasThreshold, check.op, check.value = true, op, value
 		return ""
 	}
-	delta, err := strconv.ParseFloat(cfgval.String(change[CheckKeyDelta]), numericBits64)
+	delta, err := parseFiniteThreshold(change[CheckKeyDelta])
 	if err != nil {
-		return "icmp latency change delta must be numeric"
+		return "icmp latency change delta " + err.Error()
 	}
 	check.hasChange, check.delta = true, delta
 	return ""

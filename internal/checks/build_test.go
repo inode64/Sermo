@@ -3,6 +3,7 @@ package checks
 import (
 	"context"
 	"errors"
+	"math"
 	"net/http"
 	"regexp"
 	"strings"
@@ -617,6 +618,74 @@ func TestBuildICMPCheckConfiguresMetrics(t *testing.T) {
 			check := built.(*icmpCheck)
 			if !tc.check(check) {
 				t.Fatalf("icmp check = %+v", check)
+			}
+		})
+	}
+}
+
+func TestThresholdBuildersRejectNonFiniteValues(t *testing.T) {
+	builders := []struct {
+		name  string
+		build func(any) (Check, string)
+	}{
+		{
+			name: "count top level",
+			build: func(value any) (Check, string) {
+				return buildCountCheck(base{}, map[string]any{"path": "/tmp", "op": ">", "value": value})
+			},
+		},
+		{
+			name: "count named predicate",
+			build: func(value any) (Check, string) {
+				return buildCountCheck(base{}, map[string]any{"path": "/tmp", "count": map[string]any{"op": ">", "value": value}})
+			},
+		},
+		{
+			name: "icmp latency threshold",
+			build: func(value any) (Check, string) {
+				return buildICMPCheck(base{}, map[string]any{
+					"host": "127.0.0.1", "metric": "latency",
+					"threshold": map[string]any{"op": ">", "value": value},
+				}, Deps{})
+			},
+		},
+		{
+			name: "icmp latency change",
+			build: func(value any) (Check, string) {
+				return buildICMPCheck(base{}, map[string]any{
+					"host": "127.0.0.1", "metric": "latency",
+					"change": map[string]any{"delta": value},
+				}, Deps{})
+			},
+		},
+		{
+			name: "replication behind",
+			build: func(value any) (Check, string) {
+				return buildReplicationCheck(base{}, map[string]any{
+					"user": "monitor", "behind": map[string]any{"op": "<", "value": value},
+				})
+			},
+		},
+	}
+	values := []struct {
+		name  string
+		value any
+	}{
+		{name: "NaN string", value: "NaN"},
+		{name: "positive infinity string", value: "+Inf"},
+		{name: "negative infinity string", value: "-Inf"},
+		{name: "NaN number", value: math.NaN()},
+		{name: "infinity number", value: math.Inf(1)},
+	}
+	for _, builder := range builders {
+		t.Run(builder.name, func(t *testing.T) {
+			for _, value := range values {
+				t.Run(value.name, func(t *testing.T) {
+					check, warning := builder.build(value.value)
+					if check != nil || !strings.Contains(warning, "finite number") {
+						t.Fatalf("build(%v) = check:%T warning:%q, want rejection as a finite number", value.value, check, warning)
+					}
+				})
 			}
 		})
 	}
