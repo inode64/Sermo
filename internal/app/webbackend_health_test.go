@@ -103,7 +103,7 @@ func TestWebBackendFailedUnitWithHealthyLiveProcessWarns(t *testing.T) {
 		"management": {Check: "management", OK: true},
 	}, map[string]bool{"management": true})
 	metrics := NewServiceMetricSampler()
-	metrics.Record("glusterd", web.ServiceRuntime{
+	metrics.record(t.Context(), "glusterd", web.ServiceRuntime{
 		At:        at.UTC().Format(time.RFC3339),
 		StartedAt: at.Add(-time.Minute).UTC().Format(time.RFC3339),
 		ProcessTotals: web.ProcessTotals{
@@ -319,7 +319,7 @@ func TestWebBackendServiceStateEmptyProcessTreeWarnsInsteadOfCollectingForever(t
 	}
 
 	// A completed cycle that attributed no process is a definite answer.
-	metrics.Record("rpcbind", web.ServiceRuntime{At: now.UTC().Format(time.RFC3339)})
+	metrics.record(t.Context(), "rpcbind", web.ServiceRuntime{At: now.UTC().Format(time.RFC3339)})
 	svc = b.view(context.Background(), "rpcbind", b.entries["rpcbind"])
 	if svc.State != TargetStateWarning {
 		t.Fatalf("service with an empty process tree = %+v, want %q", svc, TargetStateWarning)
@@ -333,7 +333,7 @@ func TestWebBackendServiceStateEmptyProcessTreeWarnsInsteadOfCollectingForever(t
 
 	// Once processes show up again it goes back to waiting for the derived
 	// CPU/IO rates rather than warning.
-	metrics.Record("rpcbind", web.ServiceRuntime{
+	metrics.record(t.Context(), "rpcbind", web.ServiceRuntime{
 		At:            now.UTC().Format(time.RFC3339),
 		ProcessTotals: web.ProcessTotals{Count: 1, HasCPU: true},
 	})

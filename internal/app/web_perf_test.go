@@ -14,7 +14,7 @@ import (
 func TestServiceMetricSamplerLatestWithAt(t *testing.T) {
 	s := NewServiceMetricSampler()
 	t0 := time.Date(2026, 6, 16, 12, 0, 0, 0, time.UTC)
-	s.Record("web", web.ServiceRuntime{
+	s.record(t.Context(), "web", web.ServiceRuntime{
 		At:            t0.UTC().Format(time.RFC3339),
 		ProcessTotals: web.ProcessTotals{Count: 2, RSS: 4096},
 	})
@@ -33,7 +33,7 @@ func TestWebBackendListRuntimeUsesPublishedSample(t *testing.T) {
 	t0 := time.Date(2026, 6, 16, 12, 0, 0, 0, time.UTC)
 	now := t0.Add(5 * time.Second)
 	metrics := NewServiceMetricSampler()
-	metrics.Record("web", web.ServiceRuntime{
+	metrics.record(t.Context(), "web", web.ServiceRuntime{
 		At:            t0.UTC().Format(time.RFC3339),
 		StartedAt:     t0.Add(-time.Hour).UTC().Format(time.RFC3339),
 		Uptime:        "1h",
@@ -95,7 +95,7 @@ func TestWebBackendRuntimeSeriesNeverDiscoversProcesses(t *testing.T) {
 			var sampler *ServiceMetricSampler
 			if tt.published {
 				sampler = NewServiceMetricSampler()
-				sampler.Record("web", web.ServiceRuntime{
+				sampler.record(t.Context(), "web", web.ServiceRuntime{
 					At:            t0.Format(time.RFC3339),
 					ProcessTotals: web.ProcessTotals{Count: 1, RSS: tt.wantRSS},
 				})
@@ -132,7 +132,7 @@ func TestWebBackendListRuntimeHiddenWhenServiceStopped(t *testing.T) {
 	t0 := time.Date(2026, 6, 16, 12, 0, 0, 0, time.UTC)
 	now := t0.Add(5 * time.Second)
 	metrics := NewServiceMetricSampler()
-	metrics.Record("lldpd", web.ServiceRuntime{
+	metrics.record(t.Context(), "lldpd", web.ServiceRuntime{
 		At:            t0.UTC().Format(time.RFC3339),
 		StartedAt:     t0.Add(-time.Hour).UTC().Format(time.RFC3339),
 		Uptime:        "1h",

@@ -19,11 +19,11 @@ func TestServiceMetricSamplerReadsPersistedHistory(t *testing.T) {
 
 	base := time.Date(2026, 6, 15, 10, 0, 0, 0, time.UTC)
 	first := NewServiceMetricSampler(store)
-	first.Record("web", web.ServiceRuntime{
+	first.record(t.Context(), "web", web.ServiceRuntime{
 		At:            base.UTC().Format(time.RFC3339),
 		ProcessTotals: web.ProcessTotals{Count: 1, RSS: 1024, IORead: 1000, IOWrite: 2000, CPU: 10, HasCPU: true},
 	})
-	first.Record("web", web.ServiceRuntime{
+	first.record(t.Context(), "web", web.ServiceRuntime{
 		At:            base.Add(time.Minute).UTC().Format(time.RFC3339),
 		ProcessTotals: web.ProcessTotals{Count: 1, RSS: 2048, IORead: 7000, IOWrite: 5000, CPU: 20, HasCPU: true},
 	})
@@ -51,7 +51,7 @@ func TestServiceMetricSamplerReadsPersistedHistory(t *testing.T) {
 func TestServiceMetricSamplerSeriesDoesNotRecordDashboardReads(t *testing.T) {
 	base := time.Date(2026, 6, 15, 10, 0, 0, 0, time.UTC)
 	sampler := NewServiceMetricSampler()
-	sampler.Record("web", web.ServiceRuntime{
+	sampler.record(t.Context(), "web", web.ServiceRuntime{
 		At:            base.UTC().Format(time.RFC3339),
 		ProcessTotals: web.ProcessTotals{Count: 1, RSS: 1024, CPU: 10, HasCPU: true},
 	})
