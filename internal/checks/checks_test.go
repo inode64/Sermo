@@ -3,6 +3,7 @@ package checks
 import (
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"debug/elf"
 	"errors"
 	"fmt"
@@ -15,6 +16,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -209,6 +211,33 @@ func TestHTTPCheckCertVerifyDisabledPasses(t *testing.T) {
 func TestHTTPCheckCertVerifyFails(t *testing.T) {
 	if runHTTPCertCheck(t, certOptions{verify: true}).OK {
 		t.Fatal("verify=true against a self-signed test server must fail")
+	}
+}
+
+func TestHTTPCheckConsumesCertificateVerificationOnce(t *testing.T) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	check, warn := buildHTTP(t, srv, map[string]any{
+		"type": "http", "url": srv.URL, "cert_verify": true,
+	})
+	if warn != "" {
+		t.Fatalf("buildHTTP() warning = %q", warn)
+	}
+	hc := check.(*httpCheck)
+	var calls atomic.Int32
+	hc.certVerification.verify = func(*x509.Certificate, []*x509.Certificate, string) string {
+		calls.Add(1)
+		return ""
+	}
+
+	if result := hc.Run(t.Context()); !result.OK {
+		t.Fatalf("HTTP certificate result = %+v, want success from injected verifier", result)
+	}
+	if got := calls.Load(); got != 1 {
+		t.Fatalf("chain verification calls = %d, want 1", got)
 	}
 }
 

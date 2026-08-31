@@ -44,6 +44,9 @@ type httpCheck struct {
 	certClient *http.Client
 	certOpts   certOptions
 	certEval   certEvaluator
+	// certVerification consumes the observe-only verdict produced by the TLS
+	// callback, avoiding a second chain build for the same handshake.
+	certVerification *certVerification
 }
 
 // jsonAssertion is one response-JSON check: the value at a dotted path compared to
@@ -90,6 +93,7 @@ func (c *httpCheck) Run(ctx context.Context) Result {
 		return c.unavailableResult(fmt.Sprintf("%s %s: %v", c.method, netutil.RedactURL(c.url), netutil.URLErrorCause(err)), start)
 	}
 	defer func() { _ = resp.Body.Close() }()
+	verifyError := c.consumeCertificateVerification(resp)
 
 	if !c.expect.matches(resp.StatusCode) {
 		return c.result(false, fmt.Sprintf("status %d (want %s)", resp.StatusCode, c.expect), start)
@@ -105,7 +109,7 @@ func (c *httpCheck) Run(ctx context.Context) Result {
 		}
 	}
 	if c.bodyOp == "" && len(c.expectJSON) == 0 {
-		return c.success(resp, elapsed, fmt.Sprintf("status %d", resp.StatusCode), start)
+		return c.success(resp, elapsed, fmt.Sprintf("status %d", resp.StatusCode), verifyError, start)
 	}
 
 	data, _ := io.ReadAll(io.LimitReader(resp.Body, maxHTTPBody))
@@ -133,14 +137,24 @@ func (c *httpCheck) Run(ctx context.Context) Result {
 			}
 		}
 	}
-	return c.success(resp, elapsed, fmt.Sprintf("status %d", resp.StatusCode), start)
+	return c.success(resp, elapsed, fmt.Sprintf("status %d", resp.StatusCode), verifyError, start)
+}
+
+func (c *httpCheck) consumeCertificateVerification(resp *http.Response) string {
+	if c.certHost == "" || !c.certOpts.verify || resp.TLS == nil || len(resp.TLS.PeerCertificates) == 0 {
+		return ""
+	}
+	if c.certVerification != nil {
+		return c.certVerification.consume(*resp.TLS)
+	}
+	return verifyCertChain(resp.TLS.PeerCertificates[0], resp.TLS.PeerCertificates[1:], c.certHost)
 }
 
 // success builds the result for a request whose HTTP assertions all passed,
 // folding in certificate inspection when configured (https only). A certificate
 // problem turns the otherwise-passing check into a failure, keeping the http
 // check's pass/fail semantics (OK==true means healthy).
-func (c *httpCheck) success(resp *http.Response, elapsed time.Duration, statusMsg string, start time.Time) Result {
+func (c *httpCheck) success(resp *http.Response, elapsed time.Duration, statusMsg, verifyError string, start time.Time) Result {
 	if c.certHost == "" || resp.TLS == nil || len(resp.TLS.PeerCertificates) == 0 {
 		res := c.result(true, statusMsg, start)
 		res.Data = map[string]any{DataKeyStatus: resp.StatusCode, DataKeyLatencyMS: elapsed.Milliseconds(), DataKeyProtocol: resp.Proto}
@@ -148,9 +162,7 @@ func (c *httpCheck) success(resp *http.Response, elapsed time.Duration, statusMs
 	}
 	leaf := resp.TLS.PeerCertificates[0]
 	s := certSampleFromCert(leaf)
-	if c.certOpts.verify {
-		s.VerifyError = verifyCertChain(leaf, resp.TLS.PeerCertificates[1:], c.certHost)
-	}
+	s.VerifyError = verifyError
 	problems, daysLeft, hasExpiry := c.certEval.evaluate(s, c.certOpts, time.Now())
 	ok := len(problems) == 0
 	msg := statusMsg

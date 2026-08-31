@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -61,6 +62,30 @@ func TestHTTP3RoundTrip(t *testing.T) {
 	}
 	if res.Data["protocol"] != "HTTP/3.0" {
 		t.Fatalf("protocol = %v, want HTTP/3.0", res.Data["protocol"])
+	}
+}
+
+func TestHTTP3CertificateVerificationRunsOnce(t *testing.T) {
+	built, warns := Build(map[string]any{
+		"h3": map[string]any{
+			"type": "http", "url": startHTTP3TestServer(t), "http3": true, "cert_verify": true,
+		},
+	}, Deps{DefaultTimeout: 5 * time.Second})
+	if len(warns) != 0 || len(built) != 1 {
+		t.Fatalf("Build() = %d checks, warnings %v", len(built), warns)
+	}
+	hc := built[0].Check.(*httpCheck)
+	var calls atomic.Int32
+	hc.certVerification.verify = func(*x509.Certificate, []*x509.Certificate, string) string {
+		calls.Add(1)
+		return ""
+	}
+
+	if result := hc.Run(t.Context()); !result.OK {
+		t.Fatalf("HTTP/3 certificate result = %+v, want success from injected verifier", result)
+	}
+	if got := calls.Load(); got != 1 {
+		t.Fatalf("chain verification calls = %d, want 1", got)
 	}
 }
 
