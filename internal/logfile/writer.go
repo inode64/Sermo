@@ -10,7 +10,6 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
-	"time"
 )
 
 const (
@@ -23,7 +22,6 @@ type Writer struct {
 	path string
 	f    *os.File
 	mu   sync.Mutex
-	now  func() time.Time
 }
 
 // Open creates parent directories as needed and opens path for append.
@@ -41,7 +39,7 @@ func Open(path string) (*Writer, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open log %q: %w", path, err)
 	}
-	return &Writer{path: path, f: f, now: time.Now}, nil
+	return &Writer{path: path, f: f}, nil
 }
 
 // Write marshals v as one JSON line and appends it to the log.

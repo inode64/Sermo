@@ -19,8 +19,6 @@ const (
 	MetricUnitBytes = "bytes"
 	// MetricUnitBytesPerSecond is the canonical UI/API unit for byte-rate metrics.
 	MetricUnitBytesPerSecond = "B/s"
-	// MetricUnitBits is the canonical UI/API unit for bit counts.
-	MetricUnitBits = "bits"
 	// MetricUnitMilliseconds is the canonical UI/API unit for latency/duration metrics.
 	MetricUnitMilliseconds = "ms"
 

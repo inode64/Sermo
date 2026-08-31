@@ -592,10 +592,9 @@ Estado ejecutado:
 
 Estado ejecutado:
 
-- `metrics.MetricUnitBits`, `MetricUnitMegabitsPerSecond` y `MetricUnitVolt`
-  nombran unidades existentes.
-- `internal/app/checkreadings.go` reutiliza esas constantes para entropia, red y
-  voltaje.
+- `metrics.MetricUnitMegabitsPerSecond` y `MetricUnitVolt` nombran unidades
+  existentes.
+- `internal/app/checkreadings.go` reutiliza esas constantes para red y voltaje.
 - `watchReadingUnitCelsius = "C"` sigue local porque no equivale al simbolo
   canonico `metrics.MetricUnitCelsius`.
 - Validacion ejecutada: `go test ./internal/metrics ./internal/app` y

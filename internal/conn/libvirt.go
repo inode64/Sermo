@@ -17,10 +17,8 @@ import (
 // DefaultLibvirtSocket is libvirt's local daemon socket.
 const DefaultLibvirtSocket = "/run/libvirt/libvirt-sock"
 
-const defaultLibvirtTimeout = 10 * time.Second
-
 // DefaultLibvirtTimeout is the fallback timeout for libvirt connections.
-const DefaultLibvirtTimeout = defaultLibvirtTimeout
+const DefaultLibvirtTimeout = 10 * time.Second
 
 const (
 	libvirtTransportSocket        = "socket"
