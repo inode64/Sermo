@@ -290,7 +290,6 @@ func buildSingleWatch(name string, entry, checkEntry map[string]any, deps Deps, 
 	w := newCheckWatch(checkWatchSpec{
 		name:      name,
 		checkType: typ,
-		unit:      cfgval.AsString(checkEntry[checks.CheckKeyUnit]),
 		bands:     checks.DeclaredBandMetrics(typ, checkEntry),
 		graphs:    checks.ResolvedGraphMetrics(typ, cfgval.AsString(checkEntry[checks.CheckKeyUnit]), checkEntry),
 		forceSLA:  slaForced(checkEntry),
@@ -394,7 +393,6 @@ func buildMetricWatches(name string, entry, checkEntry map[string]any, deps Deps
 		out = append(out, newCheckWatch(checkWatchSpec{
 			name:      name,
 			checkType: cfgval.AsString(checkEntry[checks.CheckKeyType]),
-			unit:      cfgval.AsString(ce[checks.CheckKeyUnit]),
 			bands:     checks.DeclaredBandMetrics(cfgval.AsString(ce[checks.CheckKeyType]), ce),
 			graphs:    checks.ResolvedGraphMetrics(cfgval.AsString(ce[checks.CheckKeyType]), cfgval.AsString(ce[checks.CheckKeyUnit]), ce),
 			forceSLA:  slaForced(ce),
@@ -439,9 +437,6 @@ func withSeverity(entry map[string]any, severity string) map[string]any {
 type checkWatchSpec struct {
 	name      string
 	checkType string
-	// unit is the check block's `unit:`, which names the scalar the check
-	// publishes under `value` — the one metric whose unit cannot be static.
-	unit string
 	// bands are the check's state metrics, resolved from the registry and the
 	// check's own `bands:` block. They record as per-cycle OK samples rather
 	// than values, and their keys leave the line-metric set.
@@ -1021,11 +1016,8 @@ func serviceMonitorWatches(cfg *config.Config, deps Deps, _ time.Duration) ([]*W
 		}
 		tree := resolved.Tree
 		interval := serviceArtifactInterval(cfg, tree)
-		for _, m := range []struct {
-			suffix string
-			build  func(string, map[string]any, Deps, time.Duration) (*Watch, string)
-		}{{config.ServiceMonitorKeyVersion, versionMonitor}, {config.ServiceMonitorKeyConfig, configMonitor}} {
-			w, warn := m.build(name, tree, deps, interval)
+		for _, build := range []func(string, map[string]any, Deps, time.Duration) (*Watch, string){versionMonitor, configMonitor} {
+			w, warn := build(name, tree, deps, interval)
 			if warn != "" {
 				warnings = append(warnings, warn)
 			} else if w != nil {
