@@ -125,6 +125,57 @@ func TestAcquireRefcountMountsOnlyOnFirstUse(t *testing.T) {
 	}
 }
 
+func TestReadStatusesSamplesMountTableOnce(t *testing.T) {
+	calls := 0
+	c := Controller{
+		Runtime: t.TempDir(),
+		Mounts: func() ([]checks.Mount, error) {
+			calls++
+			return []checks.Mount{{MountPoint: "/mnt/backup"}}, nil
+		},
+	}
+	specs := []Spec{
+		{Name: "backup", Path: "/mnt/backup"},
+		{Name: "archive", Path: "/mnt/archive"},
+	}
+
+	statuses, errs := c.ReadStatuses(specs)
+	if calls != 1 {
+		t.Fatalf("mount sampler calls = %d, want 1", calls)
+	}
+	if len(statuses) != len(specs) || len(errs) != len(specs) {
+		t.Fatalf("ReadStatuses() returned %d statuses and %d errors, want %d each", len(statuses), len(errs), len(specs))
+	}
+	if errs[0] != nil || errs[1] != nil {
+		t.Fatalf("ReadStatuses() errors = %v", errs)
+	}
+	if !statuses[0].Mounted || statuses[0].State != mountStateActive {
+		t.Fatalf("backup status = %+v, want active", statuses[0])
+	}
+	if statuses[1].Mounted || statuses[1].State != mountStateInactive {
+		t.Fatalf("archive status = %+v, want inactive", statuses[1])
+	}
+}
+
+func TestReadStatusesReturnsSamplerErrorForEverySpec(t *testing.T) {
+	wantErr := errors.New("read mount table")
+	c := Controller{
+		Runtime: t.TempDir(),
+		Mounts:  func() ([]checks.Mount, error) { return nil, wantErr },
+	}
+	specs := []Spec{{Name: "backup", Path: "/mnt/backup"}, {Name: "archive", Path: "/mnt/archive"}}
+
+	statuses, errs := c.ReadStatuses(specs)
+	if len(statuses) != len(specs) || len(errs) != len(specs) {
+		t.Fatalf("ReadStatuses() returned %d statuses and %d errors, want %d each", len(statuses), len(errs), len(specs))
+	}
+	for i, err := range errs {
+		if !errors.Is(err, wantErr) {
+			t.Fatalf("error[%d] = %v, want %v", i, err, wantErr)
+		}
+	}
+}
+
 func TestFstabEntriesParsesEscapedMountpoints(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "fstab")

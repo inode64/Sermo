@@ -174,34 +174,40 @@ func (b *WebBackend) mountSpec(name string) (mountctl.Spec, bool, string) {
 	return mountctl.SpecFromStorageTree(name, resolved.Tree), true, ""
 }
 
+func configuredMountSpecs(cfg *config.Config) []mountctl.Spec {
+	storages, errs := cfg.ResolveStorages()
+	if len(errs) > 0 {
+		return nil
+	}
+	specs := make([]mountctl.Spec, 0, len(storages))
+	for _, storage := range storages {
+		if _, ok := storage.Tree[config.StorageKeyMount].(map[string]any); !ok {
+			continue
+		}
+		specs = append(specs, mountctl.SpecFromStorageTree(storage.Name, storage.Tree))
+	}
+	return specs
+}
+
 // Mounts returns configured fstab-backed mount units with live mount/refcount status.
 func (b *WebBackend) Mounts(ctx context.Context) []web.Mount {
-	if b.cfg == nil {
+	if len(b.mountSpecs) == 0 {
 		return nil
 	}
 	ctrl := b.mountController()
-	names := b.cfg.StorageMountNames()
-	if len(names) == 0 {
-		return nil
-	}
-	sort.Strings(names)
 	type mountRow struct {
-		name   string
 		spec   mountctl.Spec
 		status mountctl.Status
 		err    error
 	}
-	rows := make([]mountRow, 0, len(names))
-	specs := make([]mountctl.Spec, 0, len(names))
+	statuses, statusErrs := ctrl.ReadStatuses(b.mountSpecs)
+	rows := make([]mountRow, 0, len(b.mountSpecs))
+	specs := make([]mountctl.Spec, 0, len(b.mountSpecs))
 	mounted := map[string]bool{}
-	for _, name := range names {
-		resolved, errs := b.cfg.ResolveStorage(name)
-		if len(errs) > 0 {
-			continue
-		}
-		spec := mountctl.SpecFromStorageTree(name, resolved.Tree)
-		status, err := ctrl.ReadStatus(spec)
-		rows = append(rows, mountRow{name: name, spec: spec, status: status, err: err})
+	for i, spec := range b.mountSpecs {
+		status := statuses[i]
+		err := statusErrs[i]
+		rows = append(rows, mountRow{spec: spec, status: status, err: err})
 		if err != nil {
 			continue
 		}
@@ -217,12 +223,12 @@ func (b *WebBackend) Mounts(ctx context.Context) []web.Mount {
 		if row.err != nil {
 			umountReason := mountctl.UmountDisabledReason(row.spec.Path)
 			out = append(out, web.Mount{
-				Name:         row.name,
+				Name:         row.spec.Name,
 				DisplayName:  row.spec.DisplayName,
 				Category:     row.spec.Category,
 				Path:         row.spec.Path,
 				State:        backendStatusError,
-				Operation:    b.mountOperation(row.name),
+				Operation:    b.mountOperation(row.spec.Name),
 				Refcounted:   row.spec.Refcount,
 				CanUmount:    umountReason == "",
 				UmountReason: umountReason,

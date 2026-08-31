@@ -1,6 +1,10 @@
 package config
 
-import "testing"
+import (
+	"testing"
+
+	"sermo/internal/cfgval"
+)
 
 const mountGlobal = `
 engine:
@@ -39,6 +43,50 @@ mount:
 	}
 	if issues := Validate(cfg); len(issues) != 0 {
 		t.Fatalf("Validate issues: %v", issues)
+	}
+}
+
+func TestResolveStoragesReturnsResolvedStorageWatchesInNameOrder(t *testing.T) {
+	global := writeConfig(t, map[string]string{
+		"sermo.yml": mountGlobal + `
+  variables:
+    mount_root: /mnt
+`,
+		"mounts/z-data.yml": `
+name: z-data
+check: { type: storage, path: "${mount_root}/data", mounted: true }
+`,
+		"mounts/a-backup.yml": `
+name: a-backup
+display_name: Backup mount
+check: { type: storage, path: "${mount_root}/backup", mounted: true }
+mount: {}
+`,
+		"mounts/load.yml": `
+name: load
+check: { type: load, load5: { op: ">", value: 3 } }
+`,
+	})
+	cfg, err := loadConfig(t, global)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	storages, errs := cfg.ResolveStorages()
+	if len(errs) != 0 {
+		t.Fatalf("ResolveStorages() errors = %v", errs)
+	}
+	if len(storages) != 2 {
+		t.Fatalf("ResolveStorages() = %+v, want two entries", storages)
+	}
+	if storages[0].Name != "a-backup" || storages[1].Name != "z-data" {
+		t.Fatalf("ResolveStorages() names = %q, %q, want a-backup, z-data", storages[0].Name, storages[1].Name)
+	}
+	if got := cfgval.String(storages[0].Tree[EntryKeyPath]); got != "/mnt/backup" {
+		t.Fatalf("a-backup path = %q, want /mnt/backup", got)
+	}
+	if _, ok := storages[0].Tree[StorageKeyMount].(map[string]any); !ok {
+		t.Fatalf("a-backup tree = %+v, want resolved mount block", storages[0].Tree)
 	}
 }
 

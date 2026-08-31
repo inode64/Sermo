@@ -343,15 +343,50 @@ func (c Controller) ReadStatus(spec Spec) (Status, error) {
 	if err != nil {
 		return Status{}, err
 	}
-	mounted, err := c.isMounted(spec.Path)
+	entries, err := c.sampleMounts()
 	if err != nil {
 		return Status{}, err
 	}
+	return statusFromMounts(spec, state, entries), nil
+}
+
+// ReadStatuses reports several mount statuses from one mount-table sample.
+// Results and errors remain aligned with specs so callers can retain per-mount
+// failures without resampling the host for every configured mount.
+func (c Controller) ReadStatuses(specs []Spec) ([]Status, []error) {
+	if len(specs) == 0 {
+		return []Status{}, []error{}
+	}
+	statuses := make([]Status, len(specs))
+	errs := make([]error, len(specs))
+	entries, err := c.sampleMounts()
+	if err != nil {
+		for i := range errs {
+			errs[i] = err
+		}
+		return statuses, errs
+	}
+	for i, spec := range specs {
+		statuses[i], errs[i] = c.readStatusFromMounts(spec, entries)
+	}
+	return statuses, errs
+}
+
+func (c Controller) readStatusFromMounts(spec Spec, entries []checks.Mount) (Status, error) {
+	state, err := c.readState(spec)
+	if err != nil {
+		return Status{}, err
+	}
+	return statusFromMounts(spec, state, entries), nil
+}
+
+func statusFromMounts(spec Spec, state State, entries []checks.Mount) Status {
+	mounted := pathMatchesAny(spec.Path, entries, func(m checks.Mount) string { return m.MountPoint })
 	st := mountStateInactive
 	if mounted {
 		st = mountStateActive
 	}
-	return Status{Name: spec.Name, Path: spec.Path, Mounted: mounted, Refcount: state.Refcount, State: st}, nil
+	return Status{Name: spec.Name, Path: spec.Path, Mounted: mounted, Refcount: state.Refcount, State: st}
 }
 
 // Blockers reports processes currently using the mount path. An unmounted path
@@ -565,15 +600,19 @@ func pathMatchesAny[T any](path string, entries []T, mountpoint func(T) string) 
 }
 
 func (c Controller) isMounted(path string) (bool, error) {
-	mountSampler := c.Mounts
-	if mountSampler == nil {
-		mountSampler = checks.DefaultMounts
-	}
-	entries, err := mountSampler()
+	entries, err := c.sampleMounts()
 	if err != nil {
 		return false, err
 	}
 	return pathMatchesAny(path, entries, func(m checks.Mount) string { return m.MountPoint }), nil
+}
+
+func (c Controller) sampleMounts() ([]checks.Mount, error) {
+	mountSampler := c.Mounts
+	if mountSampler == nil {
+		mountSampler = checks.DefaultMounts
+	}
+	return mountSampler()
 }
 
 func (c Controller) inFstab(path string) (bool, error) {

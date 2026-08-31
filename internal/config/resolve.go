@@ -102,17 +102,39 @@ func (c *Config) ResolveStorage(name string) (Resolved, []string) {
 	return Resolved{Name: name, Tree: tree}, errs
 }
 
+// ResolveStorages returns every resolved storage watch in stable name order.
+// The watch tree is resolved once so consumers that need the complete storage
+// inventory do not repeatedly copy, default and expand the same configuration.
+func (c *Config) ResolveStorages() ([]Resolved, []string) {
+	if c == nil {
+		return nil, nil
+	}
+	watches, errs := c.ResolveWatches()
+	out := make([]Resolved, 0, len(watches))
+	for _, name := range slices.Sorted(maps.Keys(watches)) {
+		entry, _ := watches[name].(map[string]any)
+		check, _ := entry[WatchKeyCheck].(map[string]any)
+		if cfgval.String(check[checks.CheckKeyType]) != checks.CheckTypeStorage {
+			continue
+		}
+		tree, storageErrs := storageTreeFromWatch(name, entry)
+		errs = append(errs, storageErrs...)
+		out = append(out, Resolved{Name: name, Tree: tree})
+	}
+	return out, errs
+}
+
 // StorageNameByPath returns the configured storage watch name whose resolved path
 // matches path. Empty means no configured storage watch currently owns that path.
 func (c *Config) StorageNameByPath(path string) string {
 	cleanPath := cleanMountPath(path)
-	for _, name := range c.StorageWatchNames() {
-		resolved, errs := c.ResolveStorage(name)
-		if len(errs) > 0 {
-			continue
-		}
+	storages, errs := c.ResolveStorages()
+	if len(errs) > 0 {
+		return ""
+	}
+	for _, resolved := range storages {
 		if cleanMountPath(cfgval.String(resolved.Tree[keyPath])) == cleanPath {
-			return name
+			return resolved.Name
 		}
 	}
 	return ""
@@ -127,18 +149,14 @@ func cleanMountPath(path string) string {
 
 // StorageMountNames returns the storage watches that expose mount operations.
 func (c *Config) StorageMountNames() []string {
-	if c == nil {
+	storages, errs := c.ResolveStorages()
+	if len(errs) > 0 {
 		return nil
 	}
-	names := c.StorageWatchNames()
-	out := make([]string, 0, len(names))
-	for _, name := range names {
-		resolved, errs := c.ResolveStorage(name)
-		if len(errs) > 0 {
-			continue
-		}
+	out := make([]string, 0, len(storages))
+	for _, resolved := range storages {
 		if _, ok := resolved.Tree[keyMount].(map[string]any); ok {
-			out = append(out, name)
+			out = append(out, resolved.Name)
 		}
 	}
 	return out
@@ -146,17 +164,10 @@ func (c *Config) StorageMountNames() []string {
 
 // StorageWatchNames returns configured host watches backed by a storage check.
 func (c *Config) StorageWatchNames() []string {
-	if c == nil {
-		return nil
-	}
-	watches, _ := c.ResolveWatches()
-	out := make([]string, 0, len(watches))
-	for _, name := range slices.Sorted(maps.Keys(watches)) {
-		entry, _ := watches[name].(map[string]any)
-		check, _ := entry[WatchKeyCheck].(map[string]any)
-		if cfgval.String(check[checks.CheckKeyType]) == checks.CheckTypeStorage {
-			out = append(out, name)
-		}
+	storages, _ := c.ResolveStorages()
+	out := make([]string, 0, len(storages))
+	for _, resolved := range storages {
+		out = append(out, resolved.Name)
 	}
 	return out
 }

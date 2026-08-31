@@ -14,6 +14,7 @@ import (
 	"sermo/internal/control"
 	"sermo/internal/execx"
 	"sermo/internal/metrics"
+	"sermo/internal/mountctl"
 	"sermo/internal/notify"
 	"sermo/internal/operation"
 	"sermo/internal/process"
@@ -183,6 +184,7 @@ type WebBackend struct {
 	serviceMetrics         *ServiceMetricSampler
 	live                   *LiveMetrics
 	mountSampler           checks.MountSamplerFunc
+	mountSpecs             []mountctl.Spec
 	raidSampler            checks.RaidSamplerFunc
 	execRunner             execx.Runner
 	expander               VolumeExpander
@@ -311,6 +313,7 @@ func NewWebBackend(ctx context.Context, cfg *config.Config, deps Deps) (*WebBack
 		serviceMetrics:        deps.ServiceMetrics,
 		live:                  deps.Live,
 		mountSampler:          deps.MountSampler,
+		mountSpecs:            configuredMountSpecs(cfg),
 		raidSampler:           deps.RaidSampler,
 		execRunner:            deps.ExecxRunner,
 		expander:              configuredVolumeExpander(deps),

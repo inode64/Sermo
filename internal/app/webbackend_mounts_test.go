@@ -127,6 +127,51 @@ func TestWebBackendMounts(t *testing.T) {
 	}
 }
 
+func TestWebBackendMountsUsesGenerationSpecsAndOneMountSample(t *testing.T) {
+	runtime := t.TempDir()
+	cfg := &config.Config{
+		Global: config.Global{Runtime: runtime, Raw: map[string]any{
+			"paths": map[string]any{"runtime": runtime},
+			"watches": map[string]any{
+				"mount-archive": map[string]any{
+					"check": map[string]any{"type": "storage", "path": "/mnt/archive", "mounted": true},
+					"mount": map[string]any{},
+				},
+				"mount-backup": map[string]any{
+					"check": map[string]any{"type": "storage", "path": "/mnt/backup", "mounted": true},
+					"mount": map[string]any{},
+				},
+			},
+		}},
+	}
+	mountSamples := 0
+	b, warns := NewWebBackend(t.Context(), cfg, Deps{
+		Samplers: checks.Samplers{MountSampler: func() ([]checks.Mount, error) {
+			mountSamples++
+			return []checks.Mount{
+				{MountPoint: "/mnt/archive", Device: "/dev/sdb1"},
+				{MountPoint: "/mnt/backup", Device: "/dev/sdc1"},
+			}, nil
+		}},
+		MountDiscoverUsers: func(string) ([]process.Process, error) { return nil, nil },
+	})
+	if len(warns) != 0 {
+		t.Fatalf("unexpected warnings: %v", warns)
+	}
+	delete(cfg.Global.Raw, "watches")
+
+	mounts := b.Mounts(t.Context())
+	if mountSamples != 1 {
+		t.Fatalf("mount sampler calls = %d, want 1", mountSamples)
+	}
+	if len(mounts) != 2 {
+		t.Fatalf("mounts = %+v, want specs materialized with backend generation", mounts)
+	}
+	if mounts[0].Name != "mount-archive" || mounts[1].Name != "mount-backup" {
+		t.Fatalf("mount names = %q, %q, want mount-archive, mount-backup", mounts[0].Name, mounts[1].Name)
+	}
+}
+
 func TestWebBackendMountTimeoutDoesNotUseCheckTimeout(t *testing.T) {
 	b := &WebBackend{
 		defaultTimeout:   10 * time.Second,
