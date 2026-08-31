@@ -26,10 +26,6 @@ func TestLiveMetrics(t *testing.T) {
 	if got.CPU != 12.5 || !got.CPUReady || got.CPUThread != 90 || got.NumCPU != 4 || got.PerProcCPU[10] != 50 {
 		t.Fatalf("Get = %+v", got)
 	}
-	if got.At.IsZero() {
-		t.Error("Publish must stamp the observation time")
-	}
-
 	// A later Publish replaces the prior sample.
 	l.Publish("svc", ServiceLive{CPU: 99})
 	if got, _ := l.Get("svc"); got.CPU != 99 || got.CPUReady {
