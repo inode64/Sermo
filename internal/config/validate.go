@@ -280,11 +280,12 @@ func validateGlobalPaths(cfg *Config, raw map[string]any, add addFunc) {
 			add("%s %q must be an absolute directory", pathsFieldPath(path.key), path.value)
 		}
 	}
-	for name, dirs := range map[string][]string{
-		pathKeyApps: cfg.Global.Apps, pathKeyNotifiers: cfg.Global.Notifiers,
-		pathKeyServices: cfg.Global.Services, pathKeyWatches: cfg.Global.Watches,
+	for name, specs := range map[string][]PathSpec{
+		pathKeyApps: cfg.Global.AppPaths, pathKeyNotifiers: cfg.Global.NotifierPaths,
+		pathKeyServices: cfg.Global.ServicePaths, pathKeyWatches: cfg.Global.WatchPaths,
 	} {
-		for _, dir := range dirs {
+		for _, spec := range specs {
+			dir := spec.Path
 			if dir == "" {
 				continue
 			}

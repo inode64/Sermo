@@ -1095,8 +1095,8 @@ watches:
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	if got := cfg.Global.Services[0]; got != serviceDir {
-		t.Fatalf("Services[0] = %q, want %q", got, serviceDir)
+	if got := cfg.Global.ServicePaths[0].Path; got != serviceDir {
+		t.Fatalf("ServicePaths[0].Path = %q, want %q", got, serviceDir)
 	}
 	if len(cfg.Services) != 1 {
 		t.Fatalf("Services = %d, want 1", len(cfg.Services))
@@ -1137,8 +1137,8 @@ name: web
 	}
 	root := filepath.Dir(global)
 	wantServices := []string{filepath.Join(root, "services")}
-	if got := strings.Join(cfg.Global.Services, "\n"); got != strings.Join(wantServices, "\n") {
-		t.Fatalf("Global.Services = %v, want %v", cfg.Global.Services, wantServices)
+	if got, want := cfg.Global.ServicePaths, pathSpecsFromPaths(wantServices); !slices.Equal(got, want) {
+		t.Fatalf("Global.ServicePaths = %v, want %v", got, want)
 	}
 	if _, ok := cfg.Services["web"]; !ok {
 		t.Fatalf("service from default services include was not loaded")
@@ -1411,8 +1411,8 @@ service: web
 		t.Fatalf("Load() error = %v", err)
 	}
 	want := filepath.Join(root, "conf", "services")
-	if got := cfg.Global.Services; len(got) != 1 || got[0] != want {
-		t.Fatalf("Global.Services = %v, want [%s]", got, want)
+	if got := cfg.Global.ServicePaths; len(got) != 1 || got[0].Path != want {
+		t.Fatalf("Global.ServicePaths = %v, want path %s", got, want)
 	}
 	if _, ok := cfg.Services["web"]; !ok {
 		t.Fatalf("relative service directory was not loaded: %v", cfg.ServiceNames)

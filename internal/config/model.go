@@ -744,10 +744,6 @@ type Global struct {
 	Path          string
 	Raw           map[string]any
 	Defaults      map[string]any
-	Services      []string
-	Apps          []string
-	Notifiers     []string
-	Watches       []string
 	ServicePaths  []PathSpec
 	AppPaths      []PathSpec
 	NotifierPaths []PathSpec
