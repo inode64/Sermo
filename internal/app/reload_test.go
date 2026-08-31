@@ -38,9 +38,8 @@ func TestCaptureAndApplyWorkerState(t *testing.T) {
 	if !fresh.State.LastActionAt.Equal(t0) || fresh.State.CurrentBackoff != 2*time.Minute {
 		t.Fatalf("remediation state = %+v", fresh.State)
 	}
-	r := rules.Rule{For: &rules.ForWindow{Cycles: 3}}
-	if fresh.windows["restart-if-down"].ProgressAt(r, time.Now()) != "2/3" {
-		t.Fatalf("windows = %+v", fresh.windows["restart-if-down"].ProgressAt(r, time.Now()))
+	if got := fresh.windows["restart-if-down"].Snapshot().Consecutive; got != 2 {
+		t.Fatalf("window consecutive = %d, want 2", got)
 	}
 	if fresh.libBaseline["/etc/app.conf"] != "1:2" {
 		t.Fatalf("baseline = %+v", fresh.libBaseline)
@@ -75,8 +74,8 @@ func TestCaptureAndApplyWatchState(t *testing.T) {
 	if !fresh.unavailable {
 		t.Fatal("unavailable state was not preserved")
 	}
-	if fresh.state.ProgressAt(r, time.Now()) != "2/3" {
-		t.Fatalf("window progress = %q, want 2/3", fresh.state.ProgressAt(r, time.Now()))
+	if got := fresh.state.Snapshot().Consecutive; got != 2 {
+		t.Fatalf("window consecutive = %d, want 2", got)
 	}
 }
 
@@ -93,10 +92,10 @@ func TestCaptureAndApplyWatchStateKeepsMetricSlotsSeparate(t *testing.T) {
 	freshRX := &Watch{Name: "uplink", StateSlot: "metric:rx", Window: r}
 	applyWatchState([]*Watch{freshTX, freshRX}, saved)
 
-	if got := freshRX.state.ProgressAt(r, time.Now()); got != "1/4" {
-		t.Fatalf("rx progress = %q, want 1/4", got)
+	if got := freshRX.state.Snapshot().Consecutive; got != 1 {
+		t.Fatalf("rx consecutive = %d, want 1", got)
 	}
-	if got := freshTX.state.ProgressAt(r, time.Now()); got != "2/4" {
-		t.Fatalf("tx progress = %q, want 2/4", got)
+	if got := freshTX.state.Snapshot().Consecutive; got != 2 {
+		t.Fatalf("tx consecutive = %d, want 2", got)
 	}
 }

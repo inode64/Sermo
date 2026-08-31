@@ -27,7 +27,7 @@ type WindowState struct {
 	// firing is the current episode: it rises when the entry window matures and
 	// falls when the entry window stops firing (immediately, or after the clear
 	// window when one is configured). Reading it before FiresAt is the only
-	// race-free way to observe the rising/falling edge: recomputing IsFiringAt
+	// race-free way to observe the rising/falling edge: recomputing the status
 	// with the same timestamp reads a duration window as already elapsed.
 	firing           bool
 	clearConsecutive int
@@ -47,7 +47,7 @@ type WindowStateSnapshot struct {
 
 // withinWindow returns a within-window's cycle count and effective minimum
 // matches (defaulting to 1), and whether a within window is configured. It is the
-// single source of the within defaults shared by FiresAt/IsFiringAt/ProgressAt.
+// single source of the within defaults shared by evaluation and reporting.
 func (r Rule) withinWindow() (cycles int, duration time.Duration, minMatches int, ok bool) {
 	if r.Within != nil && (r.Within.Cycles > 0 || r.Within.Duration > 0) {
 		mm := r.Within.MinMatches
@@ -196,15 +196,6 @@ func (s *WindowState) counters() (consecutive int, history []bool, trueSince tim
 	return s.consecutive, s.history, s.trueSince, s.timedHistory
 }
 
-// IsFiringAt reports whether the rule is firing from the current window state
-// without advancing it (read-only, nil-safe; use FiresAt during evaluation).
-// An open episode — including one held by a clear window — reads as firing;
-// otherwise the entry window's counters decide. at is the read time for
-// duration windows.
-func (s *WindowState) IsFiringAt(r Rule, at time.Time) bool {
-	return s.statusAt(r, at).firing
-}
-
 type windowStatus struct {
 	firing   bool
 	progress string
@@ -241,13 +232,6 @@ func (s *WindowState) statusAt(r Rule, at time.Time) windowStatus {
 		firing:   episodeFiring || consecutive >= cycles,
 		progress: fmt.Sprintf("%d/%d", consecutive, cycles),
 	}
-}
-
-// ProgressAt returns an operator-facing window counter such as "2/3" for
-// consecutive windows, "2m/6m" for duration windows, or "2/3 in 15 cycles" for
-// within windows. Nil-safe. at is the read time for duration windows.
-func (s *WindowState) ProgressAt(r Rule, at time.Time) string {
-	return s.statusAt(r, at).progress
 }
 
 // Clone returns a deep copy of the window state for config reload.
@@ -383,7 +367,7 @@ func durationElapsed(since, at time.Time) time.Duration {
 }
 
 // formatWindowDuration echoes the operator's configured window back in its own
-// spelling ("6m", "30m"), so ProgressAt keeps the config↔display match. It
+// spelling ("6m", "30m"), so window reports keep the config↔display match. It
 // deliberately does NOT use units.HumanizeDuration: the hysteresis ladder is
 // for measured/elapsed durations and would render a configured 6m window as
 // "360s".

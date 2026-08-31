@@ -885,7 +885,7 @@ func (w *Worker) fires(ctx context.Context, ev *rules.Evaluator, r rules.Rule, a
 	}
 	window := w.windowState(r.Name)
 	// The previous cycle's episode state is the only reliable edge reference:
-	// recomputing IsFiringAt with this cycle's timestamp reads a for:{duration}
+	// recomputing the window status with this cycle's timestamp reads a for:{duration}
 	// window as already elapsed, which made rising unobservable (alerts were
 	// silently never emitted while recovered fired on every episode end).
 	wasFiring := window.Firing()
