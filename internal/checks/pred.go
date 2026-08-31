@@ -1,11 +1,17 @@
 package checks
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"strings"
 
 	"sermo/internal/cfgval"
+)
+
+var (
+	errThresholdNotNumeric = errors.New("must be numeric")
+	errThresholdNotFinite  = errors.New("must be a finite number")
 )
 
 // levelPred is one {op, value} threshold predicate on a named field of a level
@@ -336,14 +342,25 @@ func parseDeltaThreshold(raw any, label string) (op string, value float64, errs 
 	if !cfgval.IsCompareOp(op) {
 		return "", 0, label + " delta has an invalid op"
 	}
-	value, ok = cfgval.Float(m[CheckKeyValue])
-	if !ok {
-		return "", 0, label + " delta value must be numeric"
-	}
-	if math.IsInf(value, 0) || math.IsNaN(value) {
-		return "", 0, label + " delta value must be a finite number"
+	value, err := parseFiniteThreshold(m[CheckKeyValue])
+	if err != nil {
+		return "", 0, label + " delta value " + err.Error()
 	}
 	return op, value, ""
+}
+
+// parseFiniteThreshold is the numeric grammar shared by plain scalar
+// thresholds. NaN and infinities parse as float64 values, but are not usable
+// thresholds and must be rejected before a check reaches runtime comparison.
+func parseFiniteThreshold(raw any) (float64, error) {
+	value, ok := cfgval.Float(raw)
+	if !ok {
+		return 0, errThresholdNotNumeric
+	}
+	if math.IsInf(value, 0) || math.IsNaN(value) {
+		return 0, errThresholdNotFinite
+	}
+	return value, nil
 }
 
 // levelPredsHold reports whether every predicate holds against values — the

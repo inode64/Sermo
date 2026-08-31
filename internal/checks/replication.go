@@ -260,9 +260,9 @@ func buildReplicationCheck(b base, entry map[string]any) (Check, string) {
 		if !cfgval.IsCompareOp(op) {
 			return nil, "replication check behind has an invalid op (" + cfgval.CompareOpSummary + ")"
 		}
-		v, err := strconv.ParseFloat(cfgval.String(m[CheckKeyValue]), numericBits64)
+		v, err := parseFiniteThreshold(m[CheckKeyValue])
 		if err != nil {
-			return nil, "replication check behind value must be numeric"
+			return nil, "replication check behind value " + err.Error()
 		}
 		check.behindOp, check.behindValue, check.hasBehind = op, v, true
 	}
