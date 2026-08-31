@@ -7,7 +7,7 @@ import (
 )
 
 func TestNFSProbeAgainstFakeServer(t *testing.T) {
-	assertProbeExtras(t, nfsProtocol{}, rpcAcceptedTCPTestPort(t, 0),
+	assertProbeExtras(t, nfsProtocol, rpcAcceptedTCPTestPort(t, 0),
 		map[string]string{"rpc_status": "success", "program": "100003"})
 }
 
@@ -17,7 +17,7 @@ func TestRPCNullProbesRejectUnavailableProgram(t *testing.T) {
 		protocol  Protocol
 		wantError string
 	}{
-		{name: "nfs", protocol: nfsProtocol{}, wantError: "nfs RPC reply: expected program 100003, got prog_unavail"},
+		{name: "nfs", protocol: nfsProtocol, wantError: "nfs RPC reply: expected program 100003, got prog_unavail"},
 		{name: "mountd", protocol: mountdProtocol, wantError: "mountd RPC reply: expected program 100005, got prog_unavail"},
 		{name: "statd", protocol: statdProtocol, wantError: "statd RPC reply: expected program 100024, got prog_unavail"},
 	}
