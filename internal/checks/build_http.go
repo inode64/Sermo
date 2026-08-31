@@ -320,14 +320,15 @@ func configureHTTPCert(hc *httpCheck, entry map[string]any, rawURL string) strin
 		onIssuerChange: cfgval.Bool(entry[CheckKeyCertOnIssuerChange]),
 		onChange:       cfgval.Bool(entry[CheckKeyCertOnChange]),
 	}
+	hc.certVerification = newCertVerification(verify, hc.certHost)
 	if cfgval.Bool(entry[CheckKeyHTTP3]) {
 		// Read the leaf over QUIC too; http3 populates resp.TLS so the same
 		// certificate logic applies. TLS 1.3 is enforced by QUIC.
-		hc.certClient = http3Client(firstHTTPInterface(entry), inspectionTLSConfig("", tls.VersionTLS13))
+		hc.certClient = http3Client(firstHTTPInterface(entry), inspectionTLSConfig("", tls.VersionTLS13, hc.certVerification))
 		return ""
 	}
 	tr := httpx.CloneDefaultTransport()
-	tr.TLSClientConfig = inspectionTLSConfig("", 0)
+	tr.TLSClientConfig = inspectionTLSConfig("", 0, hc.certVerification)
 	if pu, _ := parseProxyURL(entry); pu != nil {
 		tr.Proxy = http.ProxyURL(pu) // cert inspection also goes through the proxy (CONNECT for https)
 	}

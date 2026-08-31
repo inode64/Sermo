@@ -4,11 +4,14 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
+	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"errors"
 	"math/big"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -71,6 +74,81 @@ func TestVerifyCertChainSelfSigned(t *testing.T) {
 	leaf := mustSelfSigned(t, time.Now().Add(-time.Hour), time.Now().Add(time.Hour))
 	if got := verifyCertChain(leaf, nil, leaf.Subject.CommonName); got == "" {
 		t.Fatal("a self-signed cert must produce a verify error")
+	}
+}
+
+func TestCertVerificationConsumesHandshakeVerdict(t *testing.T) {
+	leaf := mustSelfSigned(t, time.Now().Add(-time.Hour), time.Now().Add(time.Hour))
+	verification := newCertVerification(true, "test.local")
+	var calls atomic.Int32
+	verification.verify = func(*x509.Certificate, []*x509.Certificate, string) string {
+		calls.Add(1)
+		return "observed verdict"
+	}
+	tlsConfig := inspectionTLSConfig("test.local", 0, verification)
+	state := tls.ConnectionState{ServerName: "test.local", PeerCertificates: []*x509.Certificate{leaf}}
+
+	if err := tlsConfig.VerifyConnection(state); err != nil {
+		t.Fatalf("VerifyConnection() error = %v", err)
+	}
+	if got := verification.consume(state); got != "observed verdict" {
+		t.Fatalf("consume() = %q, want observed verdict", got)
+	}
+	if got := calls.Load(); got != 1 {
+		t.Fatalf("chain verification calls = %d, want 1", got)
+	}
+
+	if got := verification.consume(state); got != "observed verdict" {
+		t.Fatalf("fallback consume() = %q, want observed verdict", got)
+	}
+	if got := calls.Load(); got != 2 {
+		t.Fatalf("chain verification calls after missing observation = %d, want 2", got)
+	}
+}
+
+func TestCertVerificationDisabledDoesNoChainWork(t *testing.T) {
+	leaf := mustSelfSigned(t, time.Now().Add(-time.Hour), time.Now().Add(time.Hour))
+	verification := newCertVerification(false, "test.local")
+	verification.verify = func(*x509.Certificate, []*x509.Certificate, string) string {
+		t.Fatal("disabled verification called the chain verifier")
+		return ""
+	}
+	state := tls.ConnectionState{ServerName: "test.local", PeerCertificates: []*x509.Certificate{leaf}}
+
+	if err := inspectionTLSConfig("test.local", 0, verification).VerifyConnection(state); err != nil {
+		t.Fatalf("VerifyConnection() error = %v", err)
+	}
+	if got := verification.consume(state); got != "" {
+		t.Fatalf("consume() = %q, want empty verdict", got)
+	}
+}
+
+func TestCertVerificationIsSafeForConcurrentHandshakes(t *testing.T) {
+	leaf := mustSelfSigned(t, time.Now().Add(-time.Hour), time.Now().Add(time.Hour))
+	verification := newCertVerification(true, "test.local")
+	var calls atomic.Int32
+	verification.verify = func(*x509.Certificate, []*x509.Certificate, string) string {
+		calls.Add(1)
+		return "observed verdict"
+	}
+	tlsConfig := inspectionTLSConfig("test.local", 0, verification)
+	state := tls.ConnectionState{ServerName: "test.local", PeerCertificates: []*x509.Certificate{leaf}}
+
+	var wg sync.WaitGroup
+	for range certVerificationPendingLimit {
+		wg.Go(func() {
+			if err := tlsConfig.VerifyConnection(state); err != nil {
+				t.Errorf("VerifyConnection() error = %v", err)
+				return
+			}
+			if got := verification.consume(state); got != "observed verdict" {
+				t.Errorf("consume() = %q, want observed verdict", got)
+			}
+		})
+	}
+	wg.Wait()
+	if got := calls.Load(); got != certVerificationPendingLimit {
+		t.Fatalf("chain verification calls = %d, want %d", got, certVerificationPendingLimit)
 	}
 }
 

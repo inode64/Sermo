@@ -15,6 +15,7 @@ import (
 	"net"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"golang.org/x/crypto/ssh"
@@ -427,28 +428,116 @@ func verifyCertChain(leaf *x509.Certificate, peers []*x509.Certificate, serverNa
 	return ""
 }
 
+const certVerificationPendingLimit = 16
+
+type certChainVerifier func(*x509.Certificate, []*x509.Certificate, string) string
+
+type certVerificationResult struct {
+	chain   [sha256.Size]byte
+	verdict string
+}
+
+// certVerification transfers observe-only chain verdicts from the TLS
+// handshake to the check that reports them. A small bounded queue handles
+// concurrent handshakes without retaining verdicts indefinitely when a
+// completed handshake does not yield a response to the caller.
+type certVerification struct {
+	enabled    bool
+	serverName string
+	verify     certChainVerifier
+
+	mu      sync.Mutex
+	pending []certVerificationResult
+}
+
+func newCertVerification(enabled bool, serverName string) *certVerification {
+	return &certVerification{enabled: enabled, serverName: serverName, verify: verifyCertChain}
+}
+
+func (v *certVerification) observe(cs tls.ConnectionState) error {
+	if v == nil || !v.enabled || len(cs.PeerCertificates) == 0 {
+		return nil
+	}
+	verdict := v.verifier()(cs.PeerCertificates[0], cs.PeerCertificates[1:], v.verificationName(cs))
+	result := certVerificationResult{chain: certVerificationChain(cs, v.verificationName(cs)), verdict: verdict}
+
+	v.mu.Lock()
+	if len(v.pending) == certVerificationPendingLimit {
+		copy(v.pending, v.pending[1:])
+		v.pending = v.pending[:len(v.pending)-1]
+	}
+	v.pending = append(v.pending, result)
+	v.mu.Unlock()
+	return nil
+}
+
+func (v *certVerification) consume(cs tls.ConnectionState) string {
+	if v == nil || !v.enabled || len(cs.PeerCertificates) == 0 {
+		return ""
+	}
+	name := v.verificationName(cs)
+	chain := certVerificationChain(cs, name)
+	v.mu.Lock()
+	for i, result := range v.pending {
+		if result.chain != chain {
+			continue
+		}
+		copy(v.pending[i:], v.pending[i+1:])
+		v.pending[len(v.pending)-1] = certVerificationResult{}
+		v.pending = v.pending[:len(v.pending)-1]
+		v.mu.Unlock()
+		return result.verdict
+	}
+	v.mu.Unlock()
+
+	// A reused HTTP connection has no new handshake callback. Verify once here
+	// so every reported sample still carries a current chain verdict.
+	return v.verifier()(cs.PeerCertificates[0], cs.PeerCertificates[1:], name)
+}
+
+func (v *certVerification) verifier() certChainVerifier {
+	if v.verify != nil {
+		return v.verify
+	}
+	return verifyCertChain
+}
+
+func (v *certVerification) verificationName(cs tls.ConnectionState) string {
+	if v.serverName != "" {
+		return v.serverName
+	}
+	return cs.ServerName
+}
+
+func certVerificationChain(cs tls.ConnectionState, serverName string) [sha256.Size]byte {
+	hash := sha256.New()
+	_, _ = hash.Write([]byte(serverName))
+	for _, cert := range cs.PeerCertificates {
+		if cert == nil {
+			continue
+		}
+		sum := sha256.Sum256(cert.Raw)
+		_, _ = hash.Write(sum[:])
+	}
+	var chain [sha256.Size]byte
+	copy(chain[:], hash.Sum(nil))
+	return chain
+}
+
 // inspectionTLSConfig is the TLS config every certificate probe dials with.
 // Transport-level verification is disabled on purpose: reporting WHY a
 // certificate fails is the probe's whole job, and an aborted handshake would
 // reduce every expired or mis-issued chain to an opaque dial error. The
 // verification itself is not skipped — VerifyConnection runs the real chain
-// verification on every handshake, in observe mode: its verdict never aborts
-// the connection, because the caller grades the same chain explicitly with
-// the check's own options (verify:, expires_in_days:). Attaching the verifier
-// to the config keeps that contract structural instead of a promise kept at
-// each call site. minVersion 0 keeps the library default.
-func inspectionTLSConfig(serverName string, minVersion uint16) *tls.Config {
+// verification when requested and records its verdict for the caller. The
+// verdict never aborts the connection because reporting invalid chains is the
+// check's job. minVersion 0 keeps the library default.
+func inspectionTLSConfig(serverName string, minVersion uint16, verification *certVerification) *tls.Config {
 	return &tls.Config{
 		InsecureSkipVerify: true, //nolint:gosec // G402: deliberate — see the function comment; VerifyConnection below runs the real verification without aborting.
 		ServerName:         serverName,
 		MinVersion:         minVersion,
-		VerifyConnection: func(cs tls.ConnectionState) error {
-			if len(cs.PeerCertificates) > 0 {
-				// Observe-only: the caller reports this verdict with context.
-				_ = verifyCertChain(cs.PeerCertificates[0], cs.PeerCertificates[1:], cs.ServerName)
-			}
-			return nil
-		},
+		VerifyConnection:   verification.observe,
 	}
 }
 
@@ -456,7 +545,8 @@ func inspectionTLSConfig(serverName string, minVersion uint16) *tls.Config {
 // certificate, so it can be inspected) and reads the leaf certificate, optionally
 // verifying the chain and hostname against the system roots.
 func defaultCertSampler(ctx context.Context, host, port, serverName string, verify bool) (CertSample, error) {
-	cfg := inspectionTLSConfig(serverName, 0)
+	verification := newCertVerification(verify, serverName)
+	cfg := inspectionTLSConfig(serverName, 0, verification)
 	nc, err := (&tls.Dialer{Config: cfg}).DialContext(ctx, conn.TransportTCP, net.JoinHostPort(host, port))
 	if err != nil {
 		return CertSample{}, fmt.Errorf("dial TLS endpoint %s: %w", net.JoinHostPort(host, port), err)
@@ -474,7 +564,7 @@ func defaultCertSampler(ctx context.Context, host, port, serverName string, veri
 
 	s := certSampleFromCert(leaf)
 	if verify {
-		s.VerifyError = verifyCertChain(leaf, state.PeerCertificates[1:], serverName)
+		s.VerifyError = verification.consume(state)
 	}
 	return s, nil
 }
