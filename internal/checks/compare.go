@@ -31,12 +31,12 @@ func compareValue(result, op, value string) (bool, error) {
 		if err != nil {
 			return false, err
 		}
-		return compareFloat(rf, op, vf), nil
+		return cfgval.CompareFloat(rf, op, vf), nil
 	case cfgval.CompareOpEqual, cfgval.CompareOpNotEqual:
 		rf, rerr := parseNumericString(CheckKeyResult, result)
 		vf, verr := parseNumericString(CheckKeyValue, value)
 		if rerr == nil && verr == nil {
-			return compareFloat(rf, op, vf), nil
+			return cfgval.CompareFloat(rf, op, vf), nil
 		}
 		if op == cfgval.CompareOpEqual {
 			return result == value, nil
@@ -59,7 +59,7 @@ func compareValue(result, op, value string) (bool, error) {
 // (e.g. "influxdb-query", "mongodb-query"); errMsg is empty on success.
 func assertOpValue(entry map[string]any, noun string) (op, value, errMsg string) {
 	op = cfgval.AsString(entry[CheckKeyOp])
-	if !validCompareOp(op) {
+	if !cfgval.IsAssertOp(op) {
 		return "", "", noun + " check op must be one of " + cfgval.AssertOpSummary
 	}
 	value = cfgval.String(entry[CheckKeyValue])
@@ -99,12 +99,6 @@ func parseNumericString(label, value string) (float64, error) {
 	return f, nil
 }
 
-// validCompareOp reports whether op is a supported comparison operator (the
-// shared assertion set in cfgval).
-func validCompareOp(op string) bool {
-	return cfgval.IsAssertOp(op)
-}
-
 // OutputMatcher matches captured command/hook output (stdout or stderr) against
 // an expectation declared in YAML: a plain string is a substring requirement; an
 // {op, value} mapping is an operator comparison (==, !=, >, >=, <, <=, contains,
@@ -128,7 +122,7 @@ func ParseOutputMatcher(v any) (OutputMatcher, string) {
 		return OutputMatcher{Substring: t}, ""
 	case map[string]any:
 		op := cfgval.AsString(t[CheckKeyOp])
-		if !validCompareOp(op) {
+		if !cfgval.IsAssertOp(op) {
 			return OutputMatcher{}, "op must be one of " + cfgval.AssertOpSummary
 		}
 		value := cfgval.String(t[CheckKeyValue])
@@ -278,7 +272,7 @@ func parseExpectLatency(entry map[string]any) (op, value, warn string) {
 		return "", "", ""
 	}
 	op = cfgval.AsString(lat[CheckKeyOp])
-	if !validCompareOp(op) {
+	if !cfgval.IsAssertOp(op) {
 		return "", "", "expect_latency op must be one of " + cfgval.AssertOpSummary
 	}
 	value = cfgval.String(lat[CheckKeyValue])
@@ -333,7 +327,7 @@ func parseAssertionMap(v any, field string) ([]jsonAssertion, string) {
 			if op == "" {
 				op = cfgval.CompareOpEqual
 			}
-			if !validCompareOp(op) {
+			if !cfgval.IsAssertOp(op) {
 				return nil, fmt.Sprintf("%s.%s op must be one of %s", field, path, cfgval.AssertOpSummary)
 			}
 			value := cfgval.String(cond[CheckKeyValue])

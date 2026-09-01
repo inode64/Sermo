@@ -4,8 +4,10 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"sermo/internal/metrics"
 	"time"
+
+	"sermo/internal/cfgval"
+	"sermo/internal/metrics"
 )
 
 const oomVMStatKillPrefix = "oom_kill "
@@ -44,7 +46,7 @@ func (c *oomCheck) Run(_ context.Context) Result {
 	}
 	delta := deltaOrZero(count, c.lastCount)
 	c.lastCount = count
-	met := compareFloat(float64(delta), c.op, c.value)
+	met := cfgval.CompareFloat(float64(delta), c.op, c.value)
 	res := c.result(met, fmt.Sprintf("oom kills +%d (total %d)", delta, count), start)
 	res.Data = map[string]any{DataKeyValue: delta, DataKeyKills: delta, DataKeyTotal: count}
 	return res

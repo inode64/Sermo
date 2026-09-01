@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"sermo/internal/cfgval"
 )
 
 // Link-state values reported and expected by net/icmp state checks. Exported so
@@ -243,7 +245,7 @@ func (c *netCheck) runErrors(sample NetSample, data map[string]any, start time.T
 	delta := deltaOrZero(total, c.lastErrTotal)
 	c.lastErrTotal = total
 	data[DataKeyValue], data[DataKeyTotal] = delta, total
-	met := compareFloat(float64(delta), c.op, c.value)
+	met := cfgval.CompareFloat(float64(delta), c.op, c.value)
 	return c.netResult(met, fmt.Sprintf("%s errors +%d (total %d)", c.iface, delta, total), data, start)
 }
 

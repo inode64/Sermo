@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"sermo/internal/cfgval"
 	"sermo/internal/execx"
 )
 
@@ -41,7 +42,7 @@ func (c countCheck) Run(ctx context.Context) Result {
 		return c.runDelta(n, start)
 	}
 
-	ok := compareFloat(float64(n), c.op, c.value)
+	ok := cfgval.CompareFloat(float64(n), c.op, c.value)
 	scope := "in"
 	if c.recursive {
 		scope = "under"
@@ -66,7 +67,7 @@ func (c countCheck) runDelta(n int, start time.Time) Result {
 		state = &counterWindow{}
 	}
 	growth, span := state.advance(windowClock(c.clock)(), n, c.window)
-	ok := growth > 0 && compareFloat(float64(growth), c.deltaOp, c.deltaValue)
+	ok := growth > 0 && cfgval.CompareFloat(float64(growth), c.deltaOp, c.deltaValue)
 
 	scope := "in"
 	if c.recursive {
