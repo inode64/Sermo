@@ -198,6 +198,79 @@ func TestWebHashPasswordGenerateRejectsStdin(t *testing.T) {
 	}
 }
 
+func TestWebAPIBase(t *testing.T) {
+	tests := []struct {
+		name    string
+		web     any
+		want    string
+		wantErr string
+	}{
+		{name: "no web section", wantErr: "web UI is not enabled in config (no web: block or no port); the event API is exposed by the running daemon"},
+		{name: "port missing", web: map[string]any{}, wantErr: "web.port is not set in config"},
+		{name: "default address", web: map[string]any{config.WebKeyPort: 9797}, want: "http://127.0.0.1:9797"},
+		{name: "IPv6 loopback", web: map[string]any{config.WebKeyAddress: "::1", config.WebKeyPort: 9797}, want: "http://[::1]:9797"},
+		{name: "quoted port accepted", web: map[string]any{config.WebKeyPort: "8080"}, want: "http://127.0.0.1:8080"},
+		{name: "port zero", web: map[string]any{config.WebKeyPort: 0}, wantErr: "web.port must be in 1..65535 (got 0)"},
+		{name: "port above range", web: map[string]any{config.WebKeyPort: 65536}, wantErr: "web.port must be in 1..65535 (got 65536)"},
+		{name: "port not a number", web: map[string]any{config.WebKeyPort: "abc"}, wantErr: "web.port is not a number (string)"},
+		{name: "address not a string", web: map[string]any{config.WebKeyAddress: 7, config.WebKeyPort: 9797}, wantErr: "web.address must be a string (got int)"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			raw := map[string]any{}
+			if tc.web != nil {
+				raw[config.SectionWeb] = tc.web
+			}
+			got, err := webAPIBase(&config.Config{Global: config.Global{Raw: raw}})
+			if tc.wantErr != "" {
+				if err == nil || err.Error() != tc.wantErr {
+					t.Fatalf("webAPIBase() error = %v, want %q", err, tc.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("webAPIBase() error = %v", err)
+			}
+			if got != tc.want {
+				t.Errorf("webAPIBase() = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestDaemonIsLocal(t *testing.T) {
+	tests := []struct {
+		name string
+		web  any
+		want bool
+	}{
+		{name: "no web section", want: false},
+		{name: "missing port", web: map[string]any{}, want: false},
+		{name: "default loopback", web: map[string]any{config.WebKeyPort: 9797}, want: true},
+		{name: "localhost", web: map[string]any{config.WebKeyAddress: "localhost", config.WebKeyPort: 9797}, want: true},
+		{name: "localhost subdomain", web: map[string]any{config.WebKeyAddress: "api.localhost", config.WebKeyPort: 9797}, want: true},
+		{name: "IPv4 loopback", web: map[string]any{config.WebKeyAddress: "127.0.0.2", config.WebKeyPort: 9797}, want: true},
+		{name: "IPv6 loopback", web: map[string]any{config.WebKeyAddress: "::1", config.WebKeyPort: 9797}, want: true},
+		{name: "IPv4 wildcard", web: map[string]any{config.WebKeyAddress: "0.0.0.0", config.WebKeyPort: 9797}, want: true},
+		{name: "IPv6 wildcard", web: map[string]any{config.WebKeyAddress: "::", config.WebKeyPort: 9797}, want: true},
+		{name: "remote IP", web: map[string]any{config.WebKeyAddress: "10.0.0.9", config.WebKeyPort: 9797}, want: false},
+		{name: "remote hostname", web: map[string]any{config.WebKeyAddress: "sermo.example", config.WebKeyPort: 9797}, want: false},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			raw := map[string]any{}
+			if tc.web != nil {
+				raw[config.SectionWeb] = tc.web
+			}
+			if got := daemonIsLocal(&config.Config{Global: config.Global{Raw: raw}}); got != tc.want {
+				t.Errorf("daemonIsLocal() = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
 // The credential sermoctl sends follows a fixed precedence, because a hashed
 // password file leaves nothing for it to send.
 func TestDaemonWebPasswordPrecedence(t *testing.T) {
@@ -210,12 +283,17 @@ func TestDaemonWebPasswordPrecedence(t *testing.T) {
 
 	localCfg := &config.Config{Global: config.Global{
 		Runtime: runtimeDir,
-		Raw:     map[string]any{config.SectionWeb: map[string]any{}},
+		Raw: map[string]any{config.SectionWeb: map[string]any{
+			config.WebKeyPort: 9797,
+		}},
 	}}
 	// A daemon on another host never knows this host's runtime token.
 	remoteCfg := &config.Config{Global: config.Global{
 		Runtime: runtimeDir,
-		Raw:     map[string]any{config.SectionWeb: map[string]any{config.WebKeyAddress: "10.0.0.9"}},
+		Raw: map[string]any{config.SectionWeb: map[string]any{
+			config.WebKeyAddress: "10.0.0.9",
+			config.WebKeyPort:    9797,
+		}},
 	}}
 
 	tests := []struct {

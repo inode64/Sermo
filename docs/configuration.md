@@ -816,6 +816,10 @@ web:
   port: 9797                # REQUIRED to activate the web UI (9797 recommended)
 ```
 
+`address` accepts a hostname or an IPv4/IPv6 literal. Write IPv6 literals
+without URL brackets (for example, `address: "::1"`); Sermo adds the brackets
+when it builds the listener and API endpoints.
+
 - **Activation rule:** the web UI ("servicio web") is **not started** unless
   `web.port` is present and valid. Omitting the key (or the whole `web:` block)
   leaves the dashboard disabled; `sermod` logs the exact reason at startup.

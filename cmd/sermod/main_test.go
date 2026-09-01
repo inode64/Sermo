@@ -185,15 +185,16 @@ func TestWebListenAddr(t *testing.T) {
 		name       string
 		web        any
 		wantAddr   string
-		wantReason bool // expect a non-empty disabled reason
+		wantReason string
 	}{
-		{"no web section", nil, "", true},
-		{"port missing", map[string]any{}, "", true},
-		{"port zero", map[string]any{"port": 0}, "", true},
-		{"port not a number", map[string]any{"port": "abc"}, "", true},
-		{"quoted port accepted", map[string]any{"port": "8080"}, "127.0.0.1:8080", false},
-		{"default address", map[string]any{"port": 8080}, "127.0.0.1:8080", false},
-		{"explicit address", map[string]any{"port": 9000, "address": "0.0.0.0"}, "0.0.0.0:9000", false},
+		{"no web section", nil, "", "no [web] section in config"},
+		{"port missing", map[string]any{}, "", "web.port is not set"},
+		{"port zero", map[string]any{"port": 0}, "", "web.port must be in 1..65535 (got 0)"},
+		{"port not a number", map[string]any{"port": "abc"}, "", "web.port is not a number (string)"},
+		{"quoted port accepted", map[string]any{"port": "8080"}, "127.0.0.1:8080", ""},
+		{"default address", map[string]any{"port": 8080}, "127.0.0.1:8080", ""},
+		{"explicit address", map[string]any{"port": 9000, "address": "0.0.0.0"}, "0.0.0.0:9000", ""},
+		{"IPv6 loopback", map[string]any{"port": 9797, "address": "::1"}, "[::1]:9797", ""},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -206,8 +207,8 @@ func TestWebListenAddr(t *testing.T) {
 			if addr != tc.wantAddr {
 				t.Fatalf("addr = %q, want %q", addr, tc.wantAddr)
 			}
-			if (reason != "") != tc.wantReason {
-				t.Fatalf("reason = %q, wantReason = %v", reason, tc.wantReason)
+			if reason != tc.wantReason {
+				t.Fatalf("reason = %q, want %q", reason, tc.wantReason)
 			}
 		})
 	}

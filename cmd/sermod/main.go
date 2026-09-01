@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"net"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -28,7 +27,6 @@ import (
 	"sermo/internal/execx"
 	"sermo/internal/logfile"
 	"sermo/internal/metrics"
-	"sermo/internal/netutil"
 	"sermo/internal/notify"
 	"sermo/internal/process"
 	"sermo/internal/rules"
@@ -58,7 +56,6 @@ const (
 
 const (
 	defaultRuntimeDir    = config.DefaultRuntime
-	defaultWebAddress    = netutil.LoopbackIPv4
 	daemonPIDFilename    = config.DaemonPIDFilename
 	instanceLockFilename = "sermod.lock"
 	daemonEventLogLimit  = 1000
@@ -607,27 +604,11 @@ func parseArgs(args []string) (cliArgs, error) {
 // reason when disabled) so `--verbose` can surface why no port was opened.
 // Address defaults to loopback.
 func webListenAddr(cfg *config.Config) (addr, reason string) {
-	m := cfg.Global.WebSection()
-	if m == nil {
-		return "", "no [web] section in config"
+	bind, err := cfg.Global.WebBind()
+	if err != nil {
+		return "", err.Error()
 	}
-	if _, present := m[config.WebKeyPort]; !present {
-		return "", "web.port is not set"
-	}
-	// cfgval.Int accepts the same shapes config validation does (including a
-	// quoted "9797"), so a config that validates never silently disables the UI.
-	port, ok := cfgval.Int(m[config.WebKeyPort])
-	if !ok {
-		return "", fmt.Sprintf("web.port is not a number (%T)", m[config.WebKeyPort])
-	}
-	if !cfgval.ValidTCPPort(port) {
-		return "", fmt.Sprintf("web.port must be in %s (got %d)", cfgval.TCPPortRange(), port)
-	}
-	address, _ := m[config.WebKeyAddress].(string)
-	if address == "" {
-		address = defaultWebAddress
-	}
-	return net.JoinHostPort(address, strconv.Itoa(port)), ""
+	return bind.HostPort(), ""
 }
 
 func countArtifactWatches(watches []*app.Watch, category string) int {

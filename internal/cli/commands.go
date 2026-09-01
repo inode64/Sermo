@@ -3,7 +3,6 @@ package cli
 import (
 	"sermo/internal/config"
 	"sermo/internal/mountctl"
-	"sermo/internal/netutil"
 	"sermo/internal/servicemgr"
 )
 
@@ -73,10 +72,7 @@ const (
 	monitorStatusNotPaused = "not-paused"
 )
 
-const (
-	defaultWebAPIAddress = netutil.LoopbackIPv4
-	daemonPIDFilename    = config.DaemonPIDFilename
-)
+const daemonPIDFilename = config.DaemonPIDFilename
 
 const (
 	cliFieldSermoService = "SERMO_SERVICE"
