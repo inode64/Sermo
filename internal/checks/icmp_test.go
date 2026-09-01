@@ -42,14 +42,14 @@ func pinger(samples ...PingSample) PingSamplerFunc {
 
 func TestICMPStateExpect(t *testing.T) {
 	mk := func(reachable bool) Check {
-		return &icmpCheck{base: base{name: "p"}, host: "h", metric: "state", expect: "up",
+		return &icmpCheck{name: "p", host: "h", metric: "state", expect: "up",
 			sampler: pinger(PingSample{Reachable: reachable})}
 	}
 	assertStateExpect(t, mk(true), mk(false), "value", "up", "host", "h")
 }
 
 func TestICMPStateOnChange(t *testing.T) {
-	c := &icmpCheck{base: base{name: "p"}, host: "h", metric: "state",
+	c := &icmpCheck{name: "p", host: "h", metric: "state",
 		sampler: pinger(PingSample{Reachable: true}, PingSample{Reachable: false})}
 	if c.Run(context.Background()).OK {
 		t.Fatal("first cycle primes")
@@ -61,12 +61,12 @@ func TestICMPStateOnChange(t *testing.T) {
 }
 
 func TestICMPLatencyThreshold(t *testing.T) {
-	c := &icmpCheck{base: base{name: "p"}, host: "h", metric: "latency", hasThreshold: true, op: ">", value: 100,
+	c := &icmpCheck{name: "p", host: "h", metric: "latency", hasThreshold: true, op: ">", value: 100,
 		sampler: pinger(PingSample{Reachable: true, RTTms: 150, RTTKnown: true})}
 	if !c.Run(context.Background()).OK {
 		t.Fatal("rtt 150 > 100 should fire")
 	}
-	c2 := &icmpCheck{base: base{name: "p"}, host: "h", metric: "latency", hasThreshold: true, op: ">", value: 100,
+	c2 := &icmpCheck{name: "p", host: "h", metric: "latency", hasThreshold: true, op: ">", value: 100,
 		sampler: pinger(PingSample{Reachable: true, RTTms: 50, RTTKnown: true})}
 	if c2.Run(context.Background()).OK {
 		t.Fatal("rtt 50 should not fire")
@@ -74,7 +74,7 @@ func TestICMPLatencyThreshold(t *testing.T) {
 }
 
 func TestICMPLatencyThresholdUnreachable(t *testing.T) {
-	c := &icmpCheck{base: base{name: "p"}, host: "h", metric: "latency", hasThreshold: true, op: ">", value: 0,
+	c := &icmpCheck{name: "p", host: "h", metric: "latency", hasThreshold: true, op: ">", value: 0,
 		sampler: pinger(PingSample{Reachable: false, RTTKnown: false})}
 	if c.Run(context.Background()).OK {
 		t.Fatal("unreachable must not fire latency")
@@ -82,7 +82,7 @@ func TestICMPLatencyThresholdUnreachable(t *testing.T) {
 }
 
 func TestICMPLatencyChange(t *testing.T) {
-	c := &icmpCheck{base: base{name: "p"}, host: "h", metric: "latency", delta: 50,
+	c := &icmpCheck{name: "p", host: "h", metric: "latency", delta: 50,
 		sampler: pinger(
 			PingSample{Reachable: true, RTTms: 20, RTTKnown: true},
 			PingSample{Reachable: true, RTTms: 100, RTTKnown: true}, // |100-20|=80 > 50
@@ -96,7 +96,7 @@ func TestICMPLatencyChange(t *testing.T) {
 }
 
 func TestICMPLatencyChangeUnreachableNoCorrupt(t *testing.T) {
-	c := &icmpCheck{base: base{name: "p"}, host: "h", metric: "latency", delta: 50,
+	c := &icmpCheck{name: "p", host: "h", metric: "latency", delta: 50,
 		sampler: pinger(
 			PingSample{Reachable: true, RTTms: 20, RTTKnown: true}, // prime baseline 20
 			PingSample{Reachable: false, RTTKnown: false},          // no fire, no baseline update
@@ -112,7 +112,7 @@ func TestICMPLatencyChangeUnreachableNoCorrupt(t *testing.T) {
 }
 
 func TestICMPSamplerError(t *testing.T) {
-	c := &icmpCheck{base: base{name: "p"}, host: "h", metric: "state", expect: "up",
+	c := &icmpCheck{name: "p", host: "h", metric: "state", expect: "up",
 		sampler: func(string, string, int, time.Duration) (PingSample, error) { return PingSample{}, errors.New("boom") }}
 	if c.Run(context.Background()).OK {
 		t.Fatal("sampler error must not fire")
@@ -122,7 +122,7 @@ func TestICMPSamplerError(t *testing.T) {
 func TestICMPLatencyChangeBoundaries(t *testing.T) {
 	// A 40ms decrease is |Δ|=40 < 50: measured as a difference (not a sum) and
 	// strictly below the delta, so it must not fire.
-	dec := &icmpCheck{base: base{name: "p"}, host: "h", metric: "latency", delta: 50,
+	dec := &icmpCheck{name: "p", host: "h", metric: "latency", delta: 50,
 		sampler: pinger(
 			PingSample{Reachable: true, RTTms: 100, RTTKnown: true},
 			PingSample{Reachable: true, RTTms: 60, RTTKnown: true},
@@ -132,7 +132,7 @@ func TestICMPLatencyChangeBoundaries(t *testing.T) {
 		t.Fatal("a 40ms decrease must not fire a 50ms-delta change")
 	}
 	// A jump of exactly the delta does not fire (strict >).
-	eq := &icmpCheck{base: base{name: "p"}, host: "h", metric: "latency", delta: 50,
+	eq := &icmpCheck{name: "p", host: "h", metric: "latency", delta: 50,
 		sampler: pinger(
 			PingSample{Reachable: true, RTTms: 100, RTTKnown: true},
 			PingSample{Reachable: true, RTTms: 150, RTTKnown: true},

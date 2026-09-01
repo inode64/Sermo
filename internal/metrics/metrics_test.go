@@ -302,10 +302,8 @@ func TestServiceSwapAggregatesOverTree(t *testing.T) {
 	// Per-service swap must sum the parent and all children (like RSS), and report
 	// its share of total swap. swapReader supplies the optional TotalSwap.
 	reader := swapReader{
-		fakeReader: fakeReader{
-			swap: map[int]uint64{10: 100, 11: 200, 12: 50}, // parent + two children
-			hz:   100, ncpu: 1,
-		},
+		swap: map[int]uint64{10: 100, 11: 200, 12: 50}, // parent + two children
+		hz:   100, ncpu: 1,
 		swapTotal: 1000, swapOK: true,
 	}
 	c := New(reader)
@@ -333,12 +331,10 @@ func TestServiceSwapAbsentWithoutReaderSupport(t *testing.T) {
 
 func TestSampleServiceUsesCombinedMemoryTotals(t *testing.T) {
 	reader := &combinedMemoryReader{
-		fakeReader: fakeReader{
-			rss:  map[int]uint64{10: 100},
-			swap: map[int]uint64{10: 50},
-			hz:   100,
-			ncpu: 1,
-		},
+		rss:         map[int]uint64{10: 100},
+		swap:        map[int]uint64{10: 50},
+		hz:          100,
+		ncpu:        1,
 		memoryTotal: 1000,
 		memoryOK:    true,
 		swapTotal:   200,
@@ -528,7 +524,7 @@ func TestCountCPULines(t *testing.T) {
 
 func TestSampleSystemUsesCombinedMemoryTotals(t *testing.T) {
 	reader := &combinedMemoryReader{
-		fakeReader:  fakeReader{hz: 100, ncpu: 1},
+		hz: 100, ncpu: 1,
 		memoryTotal: 1000,
 		memoryUsed:  250,
 		memoryOK:    true,
@@ -683,8 +679,8 @@ func TestServiceSwapNoPercentWhenZeroTotal(t *testing.T) {
 	// A host with a swap device reporting 0 total (swapOK true, swapTotal 0) must
 	// not compute a percentage (no divide by zero).
 	reader := swapReader{
-		fakeReader: fakeReader{swap: map[int]uint64{10: 50}, hz: 100, ncpu: 1},
-		swapTotal:  0, swapOK: true,
+		swap: map[int]uint64{10: 50}, hz: 100, ncpu: 1,
+		swapTotal: 0, swapOK: true,
 	}
 	sw := New(reader).SampleService("svc", []int{10})["swap"]
 	if sw.Absolute != 50 {

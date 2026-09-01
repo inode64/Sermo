@@ -106,9 +106,7 @@ func TestWebBackendFailedUnitWithHealthyLiveProcessWarns(t *testing.T) {
 	metrics.record(t.Context(), "glusterd", web.ServiceRuntime{
 		At:        at.UTC().Format(time.RFC3339),
 		StartedAt: at.Add(-time.Minute).UTC().Format(time.RFC3339),
-		ProcessTotals: web.ProcessTotals{
-			Count: 1,
-		},
+		Count:     1,
 	})
 	entry := &webEntry{
 		checkNames: []string{"management"},
@@ -334,8 +332,8 @@ func TestWebBackendServiceStateEmptyProcessTreeWarnsInsteadOfCollectingForever(t
 	// Once processes show up again it goes back to waiting for the derived
 	// CPU/IO rates rather than warning.
 	metrics.record(t.Context(), "rpcbind", web.ServiceRuntime{
-		At:            now.UTC().Format(time.RFC3339),
-		ProcessTotals: web.ProcessTotals{Count: 1, HasCPU: true},
+		At:    now.UTC().Format(time.RFC3339),
+		Count: 1, HasCPU: true,
 	})
 	svc = b.view(context.Background(), "rpcbind", b.entries["rpcbind"])
 	if svc.State == TargetStateWarning || !slices.Contains(svc.ObservabilityMissing, observabilityMissingRuntime) {

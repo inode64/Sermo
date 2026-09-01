@@ -169,8 +169,8 @@ func (r swapReader) TotalSwap() (uint64, uint64, bool) {
 
 func TestSampleSystemSwap(t *testing.T) {
 	r := swapReader{
-		fakeReader: fakeReader{memTotal: 1000, memUsed: 250, hz: 100, ncpu: 1},
-		swapTotal:  2000, swapUsed: 500, swapOK: true,
+		memTotal: 1000, memUsed: 250, hz: 100, ncpu: 1,
+		swapTotal: 2000, swapUsed: 500, swapOK: true,
 	}
 	snap := New(r).SampleSystem()
 	sw, ok := snap["total_swap"]
@@ -188,8 +188,8 @@ func TestSampleSystemSwap(t *testing.T) {
 func TestSampleSystemNoSwapDevice(t *testing.T) {
 	// total == 0 means no swap device: the metric must be omitted entirely.
 	r := swapReader{
-		fakeReader: fakeReader{memTotal: 1000, hz: 100, ncpu: 1},
-		swapOK:     true, // reader works, but reports zero total
+		memTotal: 1000, hz: 100, ncpu: 1,
+		swapOK: true, // reader works, but reports zero total
 	}
 	snap := New(r).SampleSystem()
 	if _, ok := snap["total_swap"]; ok {

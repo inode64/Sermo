@@ -10,7 +10,7 @@ func fakeFds(s FdsSample) FdsSamplerFunc {
 
 func fdsWith(allocated, limit uint64) func(preds []levelPred) Check {
 	return func(preds []levelPred) Check {
-		return fdsCheck{base: base{name: "f"}, preds: preds, sampler: fakeFds(FdsSample{Allocated: allocated, Max: limit})}
+		return fdsCheck{name: "f", preds: preds, sampler: fakeFds(FdsSample{Allocated: allocated, Max: limit})}
 	}
 }
 
@@ -35,5 +35,5 @@ func TestFdsFreeClampsWhenAllocatedExceedsMax(t *testing.T) {
 
 func TestBuildFdsCheck(t *testing.T) {
 	assertBuildLimitCheck(t, "fds",
-		Deps{Samplers: Samplers{FdsSampler: fakeFds(FdsSample{Allocated: 8500, Max: 10000})}})
+		Deps{FdsSampler: fakeFds(FdsSample{Allocated: 8500, Max: 10000})})
 }

@@ -19,7 +19,7 @@ func (r unitCheckRunner) Run(context.Context, string, ...string) (execx.Result, 
 // sample (never a failure) when the output has no leading number.
 func TestCommandCheckUnitPublishesNumericValue(t *testing.T) {
 	c := commandCheck{
-		base:       base{name: "queue"},
+		name:       "queue",
 		runner:     unitCheckRunner{res: execx.Result{ExitCode: 0, Stdout: "17\nnoise line two\n"}},
 		argv:       []string{"/bin/exim", "-bpc"},
 		expectExit: []int{0},

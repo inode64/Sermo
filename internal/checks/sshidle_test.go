@@ -293,7 +293,7 @@ func mustSSHDFilters(t *testing.T) []process.IdentityFilter {
 
 func TestSSHIdleCheckReportsDataAndFailsClosed(t *testing.T) {
 	check := sshIdleCheck{
-		base:  base{name: "idle", timeout: time.Second},
+		name: "idle", timeout: time.Second,
 		preds: []levelPred{{field: DataKeyCount, op: ">", value: 0}},
 		sampler: func(SSHIdleConfig) (SSHIdleSample, error) {
 			return SSHIdleSample{Count: 1, ProtectedCount: 2, OldestIdle: 31 * time.Minute}, nil

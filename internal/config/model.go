@@ -205,10 +205,8 @@ func SectionMap(raw map[string]any, section string) map[string]any {
 
 // stop_policy timeout and kill-guard field keys.
 const (
-	keyGracefulTimeout = process.StopPolicyKeyGracefulTimeout
 	keyTermTimeout     = process.StopPolicyKeyTermTimeout
 	keyKillTimeout     = process.StopPolicyKeyKillTimeout
-	keyForceKill       = process.StopPolicyKeyForceKill
 	keyKillOnlyIf      = process.StopPolicyKeyKillOnlyIf
 	keyUsers           = process.StopPolicyKeyUsers
 	keyExeAny          = process.StopPolicyKeyExeAny

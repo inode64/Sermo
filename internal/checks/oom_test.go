@@ -18,7 +18,7 @@ func scriptedOom(counts ...uint64) OomSamplerFunc {
 }
 
 func TestOomDeltaPrimesThenFires(t *testing.T) {
-	c := &oomCheck{base: base{name: "o"}, op: ">", value: 0, sampler: scriptedOom(5, 5, 7)}
+	c := &oomCheck{name: "o", op: ">", value: 0, sampler: scriptedOom(5, 5, 7)}
 
 	if res := c.Run(context.Background()); res.OK {
 		t.Fatal("first cycle must prime the baseline and not fire")
@@ -37,7 +37,7 @@ func TestOomDeltaPrimesThenFires(t *testing.T) {
 
 func TestOomThresholdAboveOne(t *testing.T) {
 	// delta > 3: a single kill does not fire, a burst does.
-	c := &oomCheck{base: base{name: "o"}, op: ">", value: 3, sampler: scriptedOom(0, 1, 10)}
+	c := &oomCheck{name: "o", op: ">", value: 3, sampler: scriptedOom(0, 1, 10)}
 	c.Run(context.Background()) // prime at 0
 	if c.Run(context.Background()).OK {
 		t.Fatal("delta 1 should not fire > 3")
@@ -48,7 +48,7 @@ func TestOomThresholdAboveOne(t *testing.T) {
 }
 
 func TestOomCounterUnavailable(t *testing.T) {
-	c := &oomCheck{base: base{name: "o"}, op: ">", value: 0, sampler: func() (uint64, bool) { return 0, false }}
+	c := &oomCheck{name: "o", op: ">", value: 0, sampler: func() (uint64, bool) { return 0, false }}
 	if c.Run(context.Background()).OK {
 		t.Fatal("an unavailable oom_kill counter must never fire")
 	}
@@ -56,7 +56,7 @@ func TestOomCounterUnavailable(t *testing.T) {
 
 func TestBuildOomCheckDefaultsToAnyKill(t *testing.T) {
 	// `check: {type: oom}` with no delta must build and default to > 0.
-	built, warns := Build(map[string]any{"o": map[string]any{"type": "oom"}}, Deps{Samplers: Samplers{OomSampler: scriptedOom(0, 1)}})
+	built, warns := Build(map[string]any{"o": map[string]any{"type": "oom"}}, Deps{OomSampler: scriptedOom(0, 1)})
 	if len(warns) != 0 {
 		t.Fatalf("unexpected warnings: %v", warns)
 	}
@@ -81,7 +81,7 @@ func TestBuildOomCheckDefaultsToAnyKill(t *testing.T) {
 // true while the pressure lasts and for which a window is meaningful.
 func TestOomConditionHoldsForOneCycleOnly(t *testing.T) {
 	// A single kill (7 -> 8), then the counter sits still as it does between events.
-	c := &oomCheck{base: base{name: "o"}, op: ">", value: 0, sampler: scriptedOom(7, 8, 8, 8)}
+	c := &oomCheck{name: "o", op: ">", value: 0, sampler: scriptedOom(7, 8, 8, 8)}
 	c.Run(context.Background()) // prime the baseline
 
 	streak, longest := 0, 0

@@ -30,7 +30,7 @@ func writeTemp(t *testing.T, name string, data []byte) string {
 }
 
 func certForPath(path string) *certCheck {
-	return &certCheck{base: base{name: "c"}, path: path}
+	return &certCheck{name: "c", path: path}
 }
 
 func makeCertPEM(t *testing.T) []byte {

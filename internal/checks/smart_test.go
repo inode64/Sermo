@@ -75,7 +75,7 @@ func TestSmartCheckSurfacesSelfTestState(t *testing.T) {
 
 func smartWith(out string, preds ...levelPred) *smartCheck {
 	return &smartCheck{
-		base:   base{name: "sm", timeout: time.Second},
+		name: "sm", timeout: time.Second,
 		runner: fakeRunner{execx.Result{Stdout: out}},
 		device: "/dev/sda", preds: preds,
 		deviceIdentity: testDeviceIdentity,
@@ -113,7 +113,7 @@ func TestSmartCheck(t *testing.T) {
 
 func TestSmartCheckError(t *testing.T) {
 	c := &smartCheck{
-		base:   base{name: "sm", timeout: time.Second},
+		name: "sm", timeout: time.Second,
 		runner: fakeRunner{execx.Result{Stderr: "/dev/sda: Unable to detect device type\n", ExitCode: 2}},
 		device: "/dev/sda", deviceIdentity: testDeviceIdentity, last: &lastSample{},
 	}
@@ -323,7 +323,7 @@ func TestSmartctlArgsRequestIdentityAndSelfTestLog(t *testing.T) {
 func TestSmartCheckReportsLastKnownReadingsWhenDeviceGone(t *testing.T) {
 	runner := &scriptedRunner{results: []execx.Result{{Stdout: smartATAFull}, {Stdout: smartDeviceGone}}}
 	c := &smartCheck{
-		base:   base{name: "sm", timeout: time.Second},
+		name: "sm", timeout: time.Second,
 		runner: runner, device: "/dev/sda",
 		deviceIdentity: testDeviceIdentity,
 		last:           &lastSample{},
@@ -361,7 +361,7 @@ func TestSmartCheckIdentifiesAMissingDeviceFromSysfs(t *testing.T) {
 
 func TestSmartCheckIdentifiesADriveSmartctlCouldNotRead(t *testing.T) {
 	c := &smartCheck{
-		base:   base{name: "sm", timeout: time.Second},
+		name: "sm", timeout: time.Second,
 		runner: fakeRunner{execx.Result{Stderr: "/dev/sda: Unable to detect device type\n", ExitCode: 2}},
 		device: "/dev/sda", deviceIdentity: testDeviceIdentity, last: &lastSample{},
 	}

@@ -17,7 +17,7 @@ func (b *WebBackend) watchCheckDeps() checks.Deps {
 	return watchInlineDeps(Deps{
 		DefaultTimeout: b.defaultTimeout,
 		ExecxRunner:    b.execRunner,
-		Samplers:       checks.Samplers{RaidSampler: b.raidSampler},
+		RaidSampler:    b.raidSampler,
 	})
 }
 

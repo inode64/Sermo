@@ -139,7 +139,7 @@ func TestCountInTree(t *testing.T) {
 }
 
 func TestDiscoverEmptyInputsAvoidSnapshot(t *testing.T) {
-	reader := &countingReader{fakeReader: fakeReader{ids: map[int]Identity{100: {PID: 100}}}}
+	reader := &countingReader{ids: map[int]Identity{100: {PID: 100}}}
 	d := Discoverer{Reader: reader}
 
 	procs, warns := d.Discover(nil)
@@ -152,7 +152,7 @@ func TestDiscoverEmptyInputsAvoidSnapshot(t *testing.T) {
 }
 
 func TestDiscoverEmptyBackendPIDsAvoidSnapshot(t *testing.T) {
-	reader := &countingReader{fakeReader: fakeReader{ids: map[int]Identity{100: {PID: 100}}}}
+	reader := &countingReader{ids: map[int]Identity{100: {PID: 100}}}
 	d := Discoverer{
 		Reader:      reader,
 		BackendPIDs: func() []int { return []int{0, -1, 0} },

@@ -116,7 +116,7 @@ func assertUnixSocketCheck(t *testing.T, name, protocol, socket string) {
 func TestConnCheckRunOKWithVersion(t *testing.T) {
 	var gotCfg conn.Config
 	c := connCheck{
-		base:  base{name: "db", timeout: time.Second},
+		name: "db", timeout: time.Second,
 		proto: fakeProto{},
 		cfg:   conn.Config{Host: "127.0.0.1", Port: 3306, User: "monitor"},
 		probe: func(_ context.Context, cfg conn.Config) (conn.Result, error) {
@@ -144,7 +144,7 @@ func TestConnCheckAllMatchReportsWorstPath(t *testing.T) {
 	// latency/version should reflect the worst (slowest) path, not whichever
 	// interface happened to be probed last.
 	c := connCheck{
-		base:  base{name: "db", timeout: time.Second},
+		name: "db", timeout: time.Second,
 		proto: fakeProto{},
 		cfg:   conn.Config{Host: "127.0.0.1", Port: 3306, User: "monitor"},
 		probe: func(_ context.Context, cfg conn.Config) (conn.Result, error) {
@@ -168,7 +168,7 @@ func TestConnCheckAllMatchReportsWorstPath(t *testing.T) {
 
 func TestConnCheckTrimsCapturedText(t *testing.T) {
 	c := connCheck{
-		base:  base{name: "db", timeout: time.Second},
+		name: "db", timeout: time.Second,
 		proto: fakeProto{},
 		cfg:   conn.Config{Host: "127.0.0.1", Port: 3306, User: "monitor"},
 		probe: func(context.Context, conn.Config) (conn.Result, error) {
@@ -195,7 +195,7 @@ func TestConnCheckTrimsCapturedText(t *testing.T) {
 func TestConnCheckOnChangeFingerprint(t *testing.T) {
 	fp := "SHA256:aaa"
 	c := connCheck{
-		base:  base{name: "ssh", timeout: time.Second},
+		name: "ssh", timeout: time.Second,
 		proto: fakeProto{},
 		cfg:   conn.Config{Host: "h", Port: 22},
 		probe: func(context.Context, conn.Config) (conn.Result, error) {
@@ -229,7 +229,7 @@ func TestConnCheckOnChangeFingerprint(t *testing.T) {
 
 func TestConnCheckRunFailure(t *testing.T) {
 	c := connCheck{
-		base:  base{name: "db", timeout: time.Second},
+		name: "db", timeout: time.Second,
 		proto: fakeProto{},
 		cfg:   conn.Config{Host: "db", Port: 3306, User: "u"},
 		probe: func(context.Context, conn.Config) (conn.Result, error) {
@@ -250,7 +250,7 @@ func TestConnCheckRunFailure(t *testing.T) {
 
 func TestConnCheckMissingExpectedFieldIsUnavailable(t *testing.T) {
 	c := connCheck{
-		base:   base{name: "cache", timeout: time.Second},
+		name: "cache", timeout: time.Second,
 		proto:  fakeProto{},
 		cfg:    conn.Config{Host: "cache", Port: 6379},
 		expect: []jsonAssertion{{path: DataKeyConnectedClients, op: ">", value: "50"}},
@@ -952,7 +952,7 @@ func TestBuildUnknownTypeStillWarns(t *testing.T) {
 func TestConnCheckOnChangeIgnoresAnIdentitylessObservation(t *testing.T) {
 	fp := ""
 	c := connCheck{
-		base:  base{name: "dbus", timeout: time.Second},
+		name: "dbus", timeout: time.Second,
 		proto: fakeProto{},
 		cfg:   conn.Config{Host: "h", Port: 0},
 		probe: func(context.Context, conn.Config) (conn.Result, error) {

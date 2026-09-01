@@ -28,7 +28,7 @@ func (f *fakeSizer) clock() time.Time { return f.now }
 
 func newSizeCheck(fz *fakeSizer) *sizeCheck {
 	return &sizeCheck{
-		base:    base{name: "s", timeout: time.Second},
+		name: "s", timeout: time.Second,
 		path:    "/x",
 		growBy:  gib,
 		window:  time.Hour,
@@ -143,7 +143,7 @@ func TestSizeCheckHonorsCanceledContext(t *testing.T) {
 		t.Fatal(err)
 	}
 	c := &sizeCheck{
-		base:   base{name: "s", timeout: time.Second},
+		name: "s", timeout: time.Second,
 		path:   root,
 		growBy: 1,
 		window: time.Hour,

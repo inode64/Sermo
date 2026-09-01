@@ -248,7 +248,7 @@ func buildDNSQuery(id uint16, name string, qtype uint16) ([]byte, error) {
 		return nil, probeErr(ProtocolNameDNS, stepDNSBuildQuery, err)
 	}
 	msg := dnsmessage.Message{
-		Header: dnsmessage.Header{ID: id, RecursionDesired: true},
+		ID: id, RecursionDesired: true,
 		Questions: []dnsmessage.Question{{
 			Name:  qname,
 			Type:  dnsmessage.Type(qtype),

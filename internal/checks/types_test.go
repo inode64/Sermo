@@ -78,14 +78,14 @@ func TestLockfileCheckFailureVsMissing(t *testing.T) {
 	// A path that exists but is not a regular file is a failure, reported
 	// distinctly from a path that is simply missing.
 	assertPathCheckFailureVsMissing(t,
-		func(paths []string) Check { return lockfileCheck{base: base{name: "l"}, paths: paths} },
+		func(paths []string) Check { return lockfileCheck{name: "l", paths: paths} },
 		func(dir string) (string, string) { return dir, "not a regular file" })
 }
 
 func TestSocketCheckFailureVsMissing(t *testing.T) {
 	// A regular file where a socket is expected is a failure, distinct from missing.
 	assertPathCheckFailureVsMissing(t,
-		func(paths []string) Check { return socketCheck{base: base{name: "s"}, paths: paths} },
+		func(paths []string) Check { return socketCheck{name: "s", paths: paths} },
 		func(dir string) (string, string) {
 			regular := filepath.Join(dir, "not.sock")
 			writeFile(t, regular, "x")

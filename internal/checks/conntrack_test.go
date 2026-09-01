@@ -10,7 +10,7 @@ func fakeConntrack(s ConntrackSample) ConntrackSamplerFunc {
 
 func conntrackWith(count, limit uint64) func(preds []levelPred) Check {
 	return func(preds []levelPred) Check {
-		return conntrackCheck{base: base{name: "c"}, preds: preds, sampler: fakeConntrack(ConntrackSample{Count: count, Max: limit})}
+		return conntrackCheck{name: "c", preds: preds, sampler: fakeConntrack(ConntrackSample{Count: count, Max: limit})}
 	}
 }
 
@@ -34,5 +34,5 @@ func TestConntrackUnknownMaxNeverFires(t *testing.T) {
 
 func TestBuildConntrackCheck(t *testing.T) {
 	assertBuildLimitCheck(t, "conntrack",
-		Deps{Samplers: Samplers{ConntrackSampler: fakeConntrack(ConntrackSample{Count: 85000, Max: 100000})}})
+		Deps{ConntrackSampler: fakeConntrack(ConntrackSample{Count: 85000, Max: 100000})})
 }

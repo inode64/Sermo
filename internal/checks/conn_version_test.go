@@ -24,7 +24,7 @@ func probeSeq(results ...conn.Result) func(context.Context, conn.Config) (conn.R
 func TestConnVersionChange(t *testing.T) {
 	// A protocol that reports a version (e.g. redis/mysql).
 	c := connCheck{
-		base:            base{name: "db", timeout: time.Second},
+		name: "db", timeout: time.Second,
 		proto:           fakeProto{},
 		cfg:             conn.Config{Host: "h", Port: 1},
 		onVersionChange: true,
@@ -58,7 +58,7 @@ func TestConnVersionChangeFromGreeting(t *testing.T) {
 	// identity falls back to that banner.
 	greet := func(b string) conn.Result { return conn.Result{Extra: map[string]string{"greeting": b}} }
 	c := connCheck{
-		base:            base{name: "mail", timeout: time.Second},
+		name: "mail", timeout: time.Second,
 		proto:           fakeProto{},
 		cfg:             conn.Config{Host: "h", Port: 25},
 		onVersionChange: true,
@@ -80,7 +80,7 @@ func TestConnVersionChangeFromGreeting(t *testing.T) {
 func TestConnChangeAndVersionTogether(t *testing.T) {
 	// on_change (fingerprint) and on_version_change can both be active.
 	c := connCheck{
-		base:            base{name: "ssh", timeout: time.Second},
+		name: "ssh", timeout: time.Second,
 		proto:           fakeProto{},
 		cfg:             conn.Config{Host: "h", Port: 22},
 		onChange:        true,

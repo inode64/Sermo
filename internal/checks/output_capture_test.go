@@ -11,7 +11,7 @@ import (
 
 func TestCommandCheckCapturesOutputOnFailure(t *testing.T) {
 	c := commandCheck{
-		base:       base{name: "c", timeout: time.Second},
+		name: "c", timeout: time.Second,
 		runner:     fakeRunner{execx.Result{ExitCode: 1, Stdout: "starting\n", Stderr: "Traceback\nImportError: x\n"}},
 		argv:       []string{"x"},
 		expectExit: []int{0},
@@ -26,7 +26,7 @@ func TestCommandCheckCapturesOutputOnFailure(t *testing.T) {
 	}
 
 	ok := commandCheck{
-		base:       base{name: "c", timeout: time.Second},
+		name: "c", timeout: time.Second,
 		runner:     fakeRunner{execx.Result{ExitCode: 0, Stdout: "fine\n"}},
 		argv:       []string{"x"},
 		expectExit: []int{0},

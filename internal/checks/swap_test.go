@@ -14,14 +14,14 @@ func fakeSwap(s SwapSample) SwapSamplerFunc {
 func TestSwapUsageThreshold(t *testing.T) {
 	// 800/1000 used = 80%.
 	sample := SwapSample{TotalBytes: 1000, FreeBytes: 200}
-	breached := &swapCheck{base: base{name: "s"}, metric: "usage",
+	breached := &swapCheck{name: "s", metric: "usage",
 		preds: []levelPred{{field: "used_pct", op: ">=", value: 80}}, sampler: fakeSwap(sample)}
 	if res := breached.Run(context.Background()); !res.OK {
 		t.Fatalf("80%% used should breach >= 80, got %q", res.Message)
 	} else if res.Data["free_pct"].(float64) != 20 {
 		t.Fatalf("free_pct = %v, want 20 (200 free of 1000)", res.Data["free_pct"])
 	}
-	ok := &swapCheck{base: base{name: "s"}, metric: "usage",
+	ok := &swapCheck{name: "s", metric: "usage",
 		preds: []levelPred{{field: "used_pct", op: ">=", value: 90}}, sampler: fakeSwap(sample)}
 	if ok.Run(context.Background()).OK {
 		t.Fatal("80%% used should not breach >= 90")
@@ -29,7 +29,7 @@ func TestSwapUsageThreshold(t *testing.T) {
 }
 
 func TestSwapUsageFreeBytes(t *testing.T) {
-	c := &swapCheck{base: base{name: "s"}, metric: "usage",
+	c := &swapCheck{name: "s", metric: "usage",
 		preds: []levelPred{{field: "free_bytes", op: "<", value: 500}}, sampler: fakeSwap(SwapSample{TotalBytes: 1000, FreeBytes: 200})}
 	res := c.Run(context.Background())
 	if !res.OK {
@@ -41,7 +41,7 @@ func TestSwapUsageFreeBytes(t *testing.T) {
 }
 
 func TestSwapUsageNoSwapNeverFires(t *testing.T) {
-	c := &swapCheck{base: base{name: "s"}, metric: "usage",
+	c := &swapCheck{name: "s", metric: "usage",
 		preds: []levelPred{{field: "free_bytes", op: "<", value: 500}}, sampler: fakeSwap(SwapSample{TotalBytes: 0, FreeBytes: 0})}
 	if c.Run(context.Background()).OK {
 		t.Fatal("a swapless host must never fire the usage check")
@@ -49,13 +49,13 @@ func TestSwapUsageNoSwapNeverFires(t *testing.T) {
 }
 
 func TestSwapUsageRejectsFreeAboveTotal(t *testing.T) {
-	c := &swapCheck{base: base{name: "s"}, metric: "usage",
+	c := &swapCheck{name: "s", metric: "usage",
 		preds: []levelPred{{field: "used_pct", op: ">", value: 90}}, sampler: fakeSwap(SwapSample{TotalBytes: 1000, FreeBytes: 1200})}
 	if res := c.Run(context.Background()); res.OK {
 		t.Fatalf("invalid free > total sample must not underflow and fire: %+v", res)
 	}
 	// free == total is a legitimate 0%-used host, not the rejected free > total.
-	exact := &swapCheck{base: base{name: "s"}, metric: "usage",
+	exact := &swapCheck{name: "s", metric: "usage",
 		preds: []levelPred{{field: "free_pct", op: ">=", value: 100}}, sampler: fakeSwap(SwapSample{TotalBytes: 1000, FreeBytes: 1000})}
 	if res := exact.Run(context.Background()); !res.OK {
 		t.Fatalf("free == total (0%% used) must be valid, got %q", res.Message)
@@ -69,7 +69,7 @@ func TestSwapIODeltaPrimes(t *testing.T) {
 		{PagesIn: 150, PagesOut: 210}, // total 360 -> delta 10
 	}
 	i := 0
-	c := &swapCheck{base: base{name: "s"}, metric: "io", op: ">", value: 100,
+	c := &swapCheck{name: "s", metric: "io", op: ">", value: 100,
 		sampler: func() (SwapSample, error) { s := samples[i]; i++; return s, nil }}
 
 	if res := c.Run(context.Background()); res.OK {

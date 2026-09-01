@@ -45,12 +45,11 @@ func TestRunRecoversPerCheckPanic(t *testing.T) {
 }
 
 func TestExecutePreservesPanickingCheckMetadata(t *testing.T) {
-	check := withSummary(panicCheck{base: base{
+	check := withSummary(panicCheck{
 		name:      "boom",
 		service:   "database",
 		condition: true,
-		reports:   ReportsCondition,
-	}}, map[string]any{CheckKeySummary: "custom ${value}"})
+		reports:   ReportsCondition}, map[string]any{CheckKeySummary: "custom ${value}"})
 
 	result := Execute(context.Background(), check)
 	if result.Check != "boom" || result.Service != "database" {

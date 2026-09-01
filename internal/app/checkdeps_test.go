@@ -12,14 +12,12 @@ import (
 func TestCheckDepsFromAppDepsPreservesSamplerBundle(t *testing.T) {
 	wantErr := errors.New("sampled")
 	deps := Deps{
-		Samplers: checks.Samplers{
-			MemorySampler: func() (checks.MemorySample, error) { return checks.MemorySample{}, wantErr },
-			UsersSampler:  func() (int, error) { return 7, wantErr },
-			CertSampler: func(context.Context, string, string, string, bool) (checks.CertSample, error) {
-				return checks.CertSample{Fingerprint: "shared"}, wantErr
-			},
-			SizeSampler: func(context.Context, string, bool) (int64, error) { return 42, wantErr },
+		MemorySampler: func() (checks.MemorySample, error) { return checks.MemorySample{}, wantErr },
+		UsersSampler:  func() (int, error) { return 7, wantErr },
+		CertSampler: func(context.Context, string, string, string, bool) (checks.CertSample, error) {
+			return checks.CertSample{Fingerprint: "shared"}, wantErr
 		},
+		SizeSampler: func(context.Context, string, bool) (int64, error) { return 42, wantErr },
 	}
 	got := checkDepsFromAppDeps(deps, checks.Deps{Service: "web", DefaultTimeout: time.Second})
 	if got.Service != "web" || got.DefaultTimeout != time.Second {

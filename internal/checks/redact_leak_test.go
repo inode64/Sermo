@@ -13,7 +13,7 @@ import (
 func TestHTTPCheckRedactsCredentialsOnFailure(t *testing.T) {
 	// A connection-refused target on a URL with basic-auth and a query token.
 	c := httpCheck{
-		base:   base{name: "h", timeout: 200 * time.Millisecond},
+		name: "h", timeout: 200 * time.Millisecond,
 		client: &http.Client{Timeout: 200 * time.Millisecond},
 		url:    "https://monitor:s3cret@127.0.0.1:1/health?access_token=TOKENVALUE",
 		method: "GET",

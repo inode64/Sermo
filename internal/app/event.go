@@ -168,25 +168,23 @@ func operationEventEmitter(emit func(Event)) func(operation.Result) {
 // OperationEventRecord converts one completed service operation into the
 // canonical persistent event shape shared by sermod, the Web UI and sermoctl.
 func OperationEventRecord(r operation.Result) state.EventRecord {
-	return eventRecordFromLogged(LoggedEvent{Event: Event{
+	return eventRecordFromLogged(LoggedEvent{
 		Service: r.Service,
 		Kind:    eventKindForResult(r),
 		Action:  r.Action,
 		Status:  string(r.Status),
-		Message: r.Message,
-	}})
+		Message: r.Message})
 }
 
 // CascadeEventRecord converts an additional target's final cascade outcome into
 // the same relationship event emitted by daemon and web operations.
 func CascadeEventRecord(root string, r operation.Result) state.EventRecord {
-	return eventRecordFromLogged(LoggedEvent{Event: Event{
+	return eventRecordFromLogged(LoggedEvent{
 		Service: r.Service,
 		Kind:    eventKindCascade,
 		Action:  r.Action,
 		Status:  string(r.Status),
-		Message: "cascade from " + root,
-	}})
+		Message: "cascade from " + root})
 }
 
 // eventKindForResult maps an operation result to the event-log kind. Successful

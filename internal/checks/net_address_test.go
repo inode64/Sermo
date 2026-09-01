@@ -11,7 +11,7 @@ func addrNetCheck(t *testing.T, expect string, samples ...[]string) *netCheck {
 	t.Helper()
 	i := 0
 	return &netCheck{
-		base:   base{name: "net", timeout: time.Second},
+		name: "net", timeout: time.Second,
 		iface:  "ppp0",
 		metric: "address",
 		expect: expect,

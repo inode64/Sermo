@@ -106,7 +106,7 @@ func storCLIResults(controller, drives, volumes string) map[string]execx.Result 
 func TestStorCLICheckHealthy(t *testing.T) {
 	runner := &hardwareRAIDRunner{results: storCLIResults(healthyStorCLIController, healthyStorCLIDrives, healthyStorCLIVolumes)}
 	check := hardwareRAIDCheck{
-		base: base{name: CheckTypeStorCLI, timeout: time.Second}, runner: runner,
+		name: CheckTypeStorCLI, timeout: time.Second, runner: runner,
 		binary: "/usr/bin/storcli64", tool: CheckTypeStorCLI,
 		preds: []levelPred{{field: SmartFieldTemperature, op: ">", value: 70}},
 	}
@@ -168,7 +168,7 @@ func TestStorCLIRebuildProgressIsAttachedToItsDrive(t *testing.T) {
 	  }]
 	}`}
 	result := (hardwareRAIDCheck{
-		base: base{name: CheckTypeStorCLI, timeout: time.Second}, runner: &hardwareRAIDRunner{results: results},
+		name: CheckTypeStorCLI, timeout: time.Second, runner: &hardwareRAIDRunner{results: results},
 		binary: "/usr/bin/storcli64", tool: CheckTypeStorCLI,
 	}).Run(context.Background())
 	if result.OK || result.Unavailable {
@@ -204,7 +204,7 @@ func TestStorCLICheckReportsControllerVolumeDriveCacheSMARTAndTemperatureFailure
 	).Replace(healthyStorCLIVolumes)
 	runner := &hardwareRAIDRunner{results: storCLIResults(controller, drives, volumes)}
 	check := hardwareRAIDCheck{
-		base: base{name: CheckTypeStorCLI, timeout: time.Second}, runner: runner,
+		name: CheckTypeStorCLI, timeout: time.Second, runner: runner,
 		binary: "/usr/bin/storcli64", tool: CheckTypeStorCLI,
 		preds: []levelPred{{field: SmartFieldTemperature, op: ">", value: 70}},
 	}
@@ -273,7 +273,7 @@ func TestSSACLICheckHealthy(t *testing.T) {
 		"/usr/bin/ssacli ctrl all show config detail": {Stdout: healthySSACLI},
 	}}
 	check := hardwareRAIDCheck{
-		base: base{name: CheckTypeSSACLI, timeout: time.Second}, runner: runner,
+		name: CheckTypeSSACLI, timeout: time.Second, runner: runner,
 		binary: "/usr/bin/ssacli", tool: CheckTypeSSACLI,
 		preds: []levelPred{{field: SmartFieldTemperature, op: ">", value: 70}},
 	}
@@ -336,7 +336,7 @@ func TestSSACLICheckReportsMediaCacheBatteryDriveSMARTAndTemperatureFailures(t *
 		"/usr/bin/ssacli ctrl all show config detail": {Stdout: output},
 	}}
 	check := hardwareRAIDCheck{
-		base: base{name: CheckTypeSSACLI, timeout: time.Second}, runner: runner,
+		name: CheckTypeSSACLI, timeout: time.Second, runner: runner,
 		binary: "/usr/bin/ssacli", tool: CheckTypeSSACLI,
 		preds: []levelPred{{field: SmartFieldTemperature, op: ">", value: 70}},
 	}
@@ -378,7 +378,7 @@ func TestHardwareRAIDCheckMakesCommandAndParseFailuresUnavailable(t *testing.T) 
 		t.Run(test.name, func(t *testing.T) {
 			runner := &hardwareRAIDRunner{results: test.results, err: test.err}
 			result := (hardwareRAIDCheck{
-				base: base{name: test.tool, timeout: time.Second}, runner: runner,
+				name: test.tool, timeout: time.Second, runner: runner,
 				binary: test.binary, tool: test.tool,
 			}).Run(context.Background())
 			if result.OK || !result.Unavailable {
@@ -419,7 +419,7 @@ func TestBuildHardwareRAIDCheckValidation(t *testing.T) {
 func TestHardwareRAIDRunnerErrorIsReported(t *testing.T) {
 	runner := &hardwareRAIDRunner{err: errors.New("permission denied")}
 	result := (hardwareRAIDCheck{
-		base: base{name: CheckTypeSSACLI, timeout: time.Second}, runner: runner,
+		name: CheckTypeSSACLI, timeout: time.Second, runner: runner,
 		binary: "/usr/bin/ssacli", tool: CheckTypeSSACLI,
 	}).Run(context.Background())
 	if !result.Unavailable || !strings.Contains(result.Message, "permission denied") {

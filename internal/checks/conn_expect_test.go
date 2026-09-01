@@ -114,7 +114,7 @@ func TestConnCheckAnyMatchPrefersProtocolFailureOverTransportError(t *testing.T)
 
 func connCheckWithExpect(expect []jsonAssertion, res conn.Result) connCheck {
 	return connCheck{
-		base:   base{name: "c", timeout: time.Second},
+		name: "c", timeout: time.Second,
 		proto:  fakeProto{},
 		cfg:    conn.Config{Host: "h", Port: 1},
 		probe:  probeReturning(res),

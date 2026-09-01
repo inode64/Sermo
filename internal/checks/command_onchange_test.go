@@ -14,7 +14,7 @@ import (
 // version monitor's major(1)/minor(2)/patch(3) granularity; 0 compares raw.
 func runVersionCycle(state *cmdState, changeLevel int, out string) Result {
 	c := commandCheck{
-		base:        base{name: "svc:version", timeout: time.Second},
+		name: "svc:version", timeout: time.Second,
 		runner:      fakeRunner{execx.Result{ExitCode: 0, Stdout: out + "\n"}},
 		argv:        []string{"app", "--version"},
 		expectExit:  []int{0},

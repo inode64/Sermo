@@ -75,9 +75,9 @@ func TestPersistentMetricSamplersUseBatch(t *testing.T) {
 			name: "service runtime metrics",
 			record: func(store *batchPersistentMetricStore) {
 				NewServiceMetricSampler(store).recordPersistent(context.Background(), "web", web.ServiceRuntime{
-					ProcessTotals: web.ProcessTotals{Count: 1, RSS: 1024, CPU: 20, HasCPU: true},
-					IORate:        300,
-					IOReady:       true,
+					Count: 1, RSS: 1024, CPU: 20, HasCPU: true,
+					IORate:  300,
+					IOReady: true,
 				}, at)
 			},
 			wantService: strings.Join([]string{"web:" + metrics.MetricCPU, "web:" + metrics.MetricMemory, "web:" + metrics.MetricIO}, ","),

@@ -30,7 +30,7 @@ func TestSQLiteCheckHealthy(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "ok.db")
 	makeSQLiteDB(t, path)
 
-	c := sqliteCheck{base: base{name: "db", timeout: 5 * time.Second}, path: path}
+	c := sqliteCheck{name: "db", timeout: 5 * time.Second, path: path}
 	res := c.Run(context.Background())
 	if !res.OK {
 		t.Fatalf("a healthy db should pass: %q", res.Message)
@@ -43,14 +43,14 @@ func TestSQLiteCheckHealthy(t *testing.T) {
 func TestSQLiteCheckQuick(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "ok.db")
 	makeSQLiteDB(t, path)
-	c := sqliteCheck{base: base{name: "db", timeout: 5 * time.Second}, path: path, quick: true}
+	c := sqliteCheck{name: "db", timeout: 5 * time.Second, path: path, quick: true}
 	if !c.Run(context.Background()).OK {
 		t.Fatal("quick_check on a healthy db should pass")
 	}
 }
 
 func TestSQLiteCheckMissing(t *testing.T) {
-	c := sqliteCheck{base: base{name: "db", timeout: time.Second}, path: filepath.Join(t.TempDir(), "nope.db")}
+	c := sqliteCheck{name: "db", timeout: time.Second, path: filepath.Join(t.TempDir(), "nope.db")}
 	if c.Run(context.Background()).OK {
 		t.Fatal("a missing file must fail")
 	}
@@ -61,7 +61,7 @@ func TestSQLiteCheckNotADatabase(t *testing.T) {
 	if err := os.WriteFile(path, []byte("this is not a sqlite database, just text"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	c := sqliteCheck{base: base{name: "db", timeout: time.Second}, path: path}
+	c := sqliteCheck{name: "db", timeout: time.Second, path: path}
 	if c.Run(context.Background()).OK {
 		t.Fatal("a non-sqlite file must fail")
 	}

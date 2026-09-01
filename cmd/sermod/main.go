@@ -629,9 +629,9 @@ func webAuth(cfg *config.Config) web.Auth {
 	if m == nil {
 		return web.Auth{}
 	}
-	auth := web.Auth{}
-	auth.AdminCredentials = cfg.Global.WebCredentials()
-	auth.GuestCredentials = cfg.Global.WebGuestCredentials()
+	auth := web.Auth{
+		AdminCredentials: cfg.Global.WebCredentials(),
+		GuestCredentials: cfg.Global.WebGuestCredentials()}
 	auth.AnonymousGuest, _ = m[config.WebKeyGuest].(bool)
 	return auth
 }

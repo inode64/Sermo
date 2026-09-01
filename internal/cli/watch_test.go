@@ -53,9 +53,9 @@ func TestWatchStatus(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var stdout bytes.Buffer
-			app := App{Env: func(string) string { return "" }, Stdout: &stdout, Stderr: &bytes.Buffer{}}
-			app.FetchDaemonWatchState = func(context.Context, options, string) (string, bool) { return tc.state, tc.stateOK }
-			app.FetchDaemonWatchDetail = func(context.Context, options, string) (daemonWatchDetail, bool) { return tc.detail, tc.detailOK }
+			app := App{Env: func(string) string { return "" }, Stdout: &stdout, Stderr: &bytes.Buffer{},
+				FetchDaemonWatchState:  func(context.Context, options, string) (string, bool) { return tc.state, tc.stateOK },
+				FetchDaemonWatchDetail: func(context.Context, options, string) (daemonWatchDetail, bool) { return tc.detail, tc.detailOK }}
 
 			code := app.Run(context.Background(), tc.args)
 			if code != exitSuccess {
@@ -83,14 +83,14 @@ func TestWatchProbeRendersAnAdvisoryAsAWarning(t *testing.T) {
 		"name: hdparm-sdd\nseverity: warning\ncheck:\n  type: hdparm\n  device: /dev/sdd\n  read: { op: \"<\", value: 20 }\n")
 
 	var stdout bytes.Buffer
-	app := App{Env: func(string) string { return "" }, Stdout: &stdout, Stderr: &bytes.Buffer{}}
-	app.ProbeDaemonWatch = func(context.Context, options, string) (daemonWatchProbe, error) {
-		return daemonWatchProbe{
-			Message:  "hdparm /dev/sdd read=0.4 MB/s",
-			Severity: checks.SeverityWarning,
-			Readings: []daemonWatchReading{{Field: "warning", Label: "Warning", Warning: "hdparm /dev/sdd read=0.4 MB/s"}},
-		}, errors.New("probe failed (409): hdparm /dev/sdd read=0.4 MB/s")
-	}
+	app := App{Env: func(string) string { return "" }, Stdout: &stdout, Stderr: &bytes.Buffer{},
+		ProbeDaemonWatch: func(context.Context, options, string) (daemonWatchProbe, error) {
+			return daemonWatchProbe{
+				Message:  "hdparm /dev/sdd read=0.4 MB/s",
+				Severity: checks.SeverityWarning,
+				Readings: []daemonWatchReading{{Field: "warning", Label: "Warning", Warning: "hdparm /dev/sdd read=0.4 MB/s"}},
+			}, errors.New("probe failed (409): hdparm /dev/sdd read=0.4 MB/s")
+		}}
 	app.Run(context.Background(), []string{"--config", global, "watch", "probe", "hdparm-sdd"})
 	out := stdout.String()
 	if !strings.HasPrefix(out, cliTextWarn+" watch hdparm-sdd:") {
@@ -116,11 +116,11 @@ func TestWatchProbeUsesDaemonAndSupportsHdparm(t *testing.T) {
 
 	var stdout bytes.Buffer
 	called := false
-	app := App{Env: func(string) string { return "" }, Stdout: &stdout, Stderr: &bytes.Buffer{}}
-	app.ProbeDaemonWatch = func(_ context.Context, _ options, watch string) (daemonWatchProbe, error) {
-		called = watch == "disk-speed"
-		return daemonWatchProbe{OK: true, Message: "hdparm /dev/sda read=166.67 MB/s", Readings: []daemonWatchReading{{Field: "read", Label: "Read", Value: "167 MB/s"}}}, nil
-	}
+	app := App{Env: func(string) string { return "" }, Stdout: &stdout, Stderr: &bytes.Buffer{},
+		ProbeDaemonWatch: func(_ context.Context, _ options, watch string) (daemonWatchProbe, error) {
+			called = watch == "disk-speed"
+			return daemonWatchProbe{OK: true, Message: "hdparm /dev/sda read=166.67 MB/s", Readings: []daemonWatchReading{{Field: "read", Label: "Read", Value: "167 MB/s"}}}, nil
+		}}
 	if code := app.Run(context.Background(), []string{"--config", global, "watch", "probe", "disk-speed"}); code != exitSuccess {
 		t.Fatalf("watch probe exit = %d, stderr=%q", code, app.Stderr)
 	}

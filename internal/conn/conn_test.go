@@ -51,7 +51,7 @@ func TestRegistryLookupAndAlias(t *testing.T) {
 }
 
 func TestRegisteredProtocolUsesCommonExecutor(t *testing.T) {
-	implementation := &recordingProto{fakeProto: fakeProto{name: "demo"}}
+	implementation := &recordingProto{name: "demo"}
 	reg, err := newRegistry([]protocolRegistration{{
 		protocol:      implementation,
 		aliases:       []string{"demo-alias"},

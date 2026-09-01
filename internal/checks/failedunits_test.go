@@ -42,7 +42,7 @@ func TestFailedUnitsCheckRun(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			c := failedUnitsCheck{
-				base:    base{name: "watch-failed-units", timeout: time.Second},
+				name: "watch-failed-units", timeout: time.Second,
 				backend: servicemgr.BackendAuto,
 				op:      ">",
 				value:   0,

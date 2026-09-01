@@ -165,7 +165,7 @@ func TestTerminalSessionsTreatsKnownEmptyClientOutputAsZero(t *testing.T) {
 
 func TestTerminalSessionsCommandFailureCannotMasqueradeAsEmpty(t *testing.T) {
 	check := terminalSessionsCheck{
-		base:   base{name: "sessions", timeout: time.Second},
+		name: "sessions", timeout: time.Second,
 		preds:  []levelPred{{field: DataKeyCount, op: ">", value: 0}},
 		config: TerminalSessionConfig{Multiplexer: TerminalMultiplexerScreen, Binary: "/usr/bin/screen", User: "deploy"},
 		runner: &recordingUserRunner{

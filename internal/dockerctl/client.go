@@ -52,9 +52,6 @@ const (
 // spellings live in netutil (NormalizeTLS / ValidTLSValue).
 const tlsModeSkipVerify = netutil.TLSModeSkipVerify
 
-// TLSValueSummary is the compact user-facing list of Docker TLS modes.
-const TLSValueSummary = "true, false, required, skip-verify"
-
 // ensureDeadline returns ctx unchanged when it already carries a deadline,
 // otherwise a child bounded by defaultTimeout. The returned cancel must be
 // called.

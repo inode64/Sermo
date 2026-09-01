@@ -50,7 +50,7 @@ func TestHTTP3RoundTrip(t *testing.T) {
 	defer func() { _ = tr.Close() }()
 
 	c := &httpCheck{
-		base:   base{name: "h3", timeout: 5 * time.Second},
+		name: "h3", timeout: 5 * time.Second,
 		client: &http.Client{Transport: tr},
 		url:    serverURL,
 		method: "GET",

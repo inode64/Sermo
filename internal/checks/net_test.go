@@ -38,14 +38,14 @@ func assertStateExpect(t *testing.T, match, nonMatch Check, valueKey, wantValue,
 
 func TestNetStateExpect(t *testing.T) {
 	mk := func(state string) Check {
-		return &netCheck{base: base{name: "n"}, iface: "eth0", metric: NetMetricState, expect: NetStateDown,
+		return &netCheck{name: "n", iface: "eth0", metric: NetMetricState, expect: NetStateDown,
 			sampler: sampler(NetSample{State: state})}
 	}
 	assertStateExpect(t, mk(NetStateDown), mk(NetStateUp), DataKeyValue, NetStateDown, DataKeyInterface, "eth0")
 }
 
 func TestNetStateOnChange(t *testing.T) {
-	c := &netCheck{base: base{name: "n"}, iface: "eth0", metric: NetMetricState,
+	c := &netCheck{name: "n", iface: "eth0", metric: NetMetricState,
 		sampler: sampler(NetSample{State: NetStateUp}, NetSample{State: NetStateDown})}
 	if c.Run(context.Background()).OK {
 		t.Fatal("first cycle must prime, not fire")
@@ -60,7 +60,7 @@ func TestNetStateOnChange(t *testing.T) {
 }
 
 func TestNetSpeedOnChange(t *testing.T) {
-	c := &netCheck{base: base{name: "n"}, iface: "eth0", metric: NetMetricSpeed,
+	c := &netCheck{name: "n", iface: "eth0", metric: NetMetricSpeed,
 		sampler: sampler(
 			NetSample{SpeedMbps: 1000, SpeedKnown: true},
 			NetSample{SpeedMbps: 100, SpeedKnown: true},
@@ -74,7 +74,7 @@ func TestNetSpeedOnChange(t *testing.T) {
 }
 
 func TestNetSpeedUnknownDoesNotFire(t *testing.T) {
-	c := &netCheck{base: base{name: "n"}, iface: "eth0", metric: NetMetricSpeed,
+	c := &netCheck{name: "n", iface: "eth0", metric: NetMetricSpeed,
 		sampler: sampler(NetSample{SpeedKnown: false})}
 	if c.Run(context.Background()).OK {
 		t.Fatal("unknown speed must not fire")
@@ -82,7 +82,7 @@ func TestNetSpeedUnknownDoesNotFire(t *testing.T) {
 }
 
 func TestNetErrorsDelta(t *testing.T) {
-	c := &netCheck{base: base{name: "n"}, iface: "eth0", metric: NetMetricErrors,
+	c := &netCheck{name: "n", iface: "eth0", metric: NetMetricErrors,
 		counters: []string{NetCounterRXErrors, NetCounterTXErrors}, op: ">", value: 100,
 		sampler: sampler(
 			NetSample{Counters: map[string]uint64{NetCounterRXErrors: 10, NetCounterTXErrors: 0}},
@@ -98,7 +98,7 @@ func TestNetErrorsDelta(t *testing.T) {
 }
 
 func TestNetErrorsCounterResetNoFire(t *testing.T) {
-	c := &netCheck{base: base{name: "n"}, iface: "eth0", metric: NetMetricErrors,
+	c := &netCheck{name: "n", iface: "eth0", metric: NetMetricErrors,
 		counters: []string{NetCounterRXErrors}, op: ">", value: 0,
 		sampler: sampler(
 			NetSample{Counters: map[string]uint64{NetCounterRXErrors: 500}},
@@ -111,7 +111,7 @@ func TestNetErrorsCounterResetNoFire(t *testing.T) {
 }
 
 func TestNetSamplerError(t *testing.T) {
-	c := &netCheck{base: base{name: "n"}, iface: "eth0", metric: NetMetricState, expect: NetStateUp,
+	c := &netCheck{name: "n", iface: "eth0", metric: NetMetricState, expect: NetStateUp,
 		sampler: func(string) (NetSample, error) { return NetSample{}, errors.New("boom") }}
 	if c.Run(context.Background()).OK {
 		t.Fatal("sampler error must not fire")
@@ -304,7 +304,7 @@ func TestNetIdentityFromSysfsAbsentInterface(t *testing.T) {
 func TestNetCheckPublishesIdentityAndFlaps(t *testing.T) {
 	identity := NetIdentity{MAC: "34:5a:60:00:1c:92", Driver: "ice", Bus: "0000:0a:00.0", MTU: 1500, Duplex: "full"}
 	c := &netCheck{
-		base: base{name: "net-eth0"}, iface: "eth0", metric: NetMetricState, expect: NetStateUp,
+		name: "net-eth0", iface: "eth0", metric: NetMetricState, expect: NetStateUp,
 		sampler: func(string) (NetSample, error) {
 			return NetSample{State: NetStateUp, Identity: identity, CarrierChanges: 7, CarrierChangesKnown: true}, nil
 		},
@@ -334,7 +334,7 @@ func TestNetCheckNamesAVanishedInterface(t *testing.T) {
 	identity := NetIdentity{MAC: "34:5a:60:00:1c:93", Driver: "ice", Bus: "0000:0a:00.1", MTU: 1500}
 	present := true
 	c := &netCheck{
-		base: base{name: "net-eth1"}, iface: "eth1", metric: NetMetricState, expect: NetStateUp,
+		name: "net-eth1", iface: "eth1", metric: NetMetricState, expect: NetStateUp,
 		sampler: func(string) (NetSample, error) {
 			if !present {
 				return NetSample{}, errors.New("no such network interface")
@@ -364,7 +364,7 @@ func TestNetCheckNamesAVanishedInterface(t *testing.T) {
 // daemon restart leaves behind.
 func TestNetCheckInventsNoIdentityBeforeItObservedOne(t *testing.T) {
 	c := &netCheck{
-		base: base{name: "net-eth9"}, iface: "eth9", metric: NetMetricState, expect: NetStateUp,
+		name: "net-eth9", iface: "eth9", metric: NetMetricState, expect: NetStateUp,
 		sampler:  func(string) (NetSample, error) { return NetSample{}, errors.New("no such network interface") },
 		identity: func(string) NetIdentity { return NetIdentity{} },
 	}

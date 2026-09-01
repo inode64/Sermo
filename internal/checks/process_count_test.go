@@ -8,7 +8,7 @@ import (
 
 func TestProcessCountThreshold(t *testing.T) {
 	counter := func(user, exe, exeDir string) int { return 5 }
-	over := processCountCheck{base: base{name: "p"}, preds: []levelPred{{"count", ">", 2}}, count: counter}
+	over := processCountCheck{name: "p", preds: []levelPred{{"count", ">", 2}}, count: counter}
 	res := over.Run(context.Background())
 	if !res.OK {
 		t.Fatalf("5 processes should breach > 2, got %q", res.Message)
@@ -17,7 +17,7 @@ func TestProcessCountThreshold(t *testing.T) {
 		t.Fatalf("unexpected data: %+v", res.Data)
 	}
 
-	under := processCountCheck{base: base{name: "p"}, preds: []levelPred{{"count", ">", 9}}, count: counter}
+	under := processCountCheck{name: "p", preds: []levelPred{{"count", ">", 9}}, count: counter}
 	if under.Run(context.Background()).OK {
 		t.Fatal("5 processes should not breach > 9")
 	}
@@ -30,7 +30,7 @@ func TestProcessCountPassesFilterAndScopeMessage(t *testing.T) {
 		return 1
 	}
 	c := processCountCheck{
-		base:   base{name: "p"},
+		name:   "p",
 		preds:  []levelPred{{"count", ">", 0}},
 		user:   "www-data",
 		exeDir: "/usr/sbin",

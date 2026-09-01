@@ -71,7 +71,7 @@ func TestGlusterClusterCheckHealthy(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	check := glusterClusterCheck{base: base{name: "cluster", timeout: time.Second}, runner: runner, peers: peers, volumes: volumes}
+	check := glusterClusterCheck{name: "cluster", timeout: time.Second, runner: runner, peers: peers, volumes: volumes}
 	result := check.Run(context.Background())
 	if !result.OK || result.Unavailable {
 		t.Fatalf("healthy result = %+v", result)
@@ -126,7 +126,7 @@ func TestGlusterClusterCheckReportsTopologyFailures(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	result := (glusterClusterCheck{base: base{name: "cluster", timeout: time.Second}, runner: runner, peers: peers, volumes: volumes}).Run(context.Background())
+	result := (glusterClusterCheck{name: "cluster", timeout: time.Second, runner: runner, peers: peers, volumes: volumes}).Run(context.Background())
 	if result.OK || result.Unavailable {
 		t.Fatalf("topology result = %+v, want healthy failure", result)
 	}
@@ -157,7 +157,7 @@ func TestGlusterClusterCheckReportsBrickWithoutHealCount(t *testing.T) {
 		t.Fatal(err)
 	}
 	check := glusterClusterCheck{
-		base:    base{name: "cluster", timeout: time.Second},
+		name: "cluster", timeout: time.Second,
 		runner:  &glusterClusterRunner{results: results},
 		peers:   peers,
 		volumes: volumes,
@@ -181,7 +181,7 @@ func TestGlusterClusterCheckReportsBrickWithoutHealCount(t *testing.T) {
 
 func TestGlusterClusterCheckCommandFailureIsUnavailable(t *testing.T) {
 	runner := &glusterClusterRunner{results: map[string]execx.Result{}, err: errors.New("gluster binary not found")}
-	result := (glusterClusterCheck{base: base{name: "cluster", timeout: time.Second}, runner: runner, peers: []string{"zeus"}}).Run(context.Background())
+	result := (glusterClusterCheck{name: "cluster", timeout: time.Second, runner: runner, peers: []string{"zeus"}}).Run(context.Background())
 	if result.OK || !result.Unavailable || !strings.Contains(result.Message, "gluster binary not found") {
 		t.Fatalf("command failure = %+v", result)
 	}
