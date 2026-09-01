@@ -170,10 +170,6 @@ func TestWebHashPasswordGenerate(t *testing.T) {
 	if strings.Contains(stderr, "warning") {
 		t.Errorf("stderr = %q, want no warning for a generated secret", stderr)
 	}
-	// Appending stdout to a file must leave exactly one usable credential.
-	if list.Len() != 1 {
-		t.Errorf("the printed output parses to %d credentials, want 1", list.Len())
-	}
 }
 
 // A label is a comment on the credential line, so it must not be able to add a

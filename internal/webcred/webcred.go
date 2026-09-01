@@ -215,9 +215,6 @@ func (l List) String() string {
 // Empty reports whether the list grants nothing.
 func (l List) Empty() bool { return len(l.credentials) == 0 }
 
-// Len returns how many credentials the list holds.
-func (l List) Len() int { return len(l.credentials) }
-
 // Verify reports whether password matches any credential in the list. ctx must
 // be non-nil; it is honored while queueing for an expensive verification, so a
 // client that disconnects stops costing CPU.

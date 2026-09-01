@@ -40,16 +40,27 @@ func assertAccepts(t *testing.T, list webcred.List, label string, want ...string
 	want = slices.DeleteFunc(slices.Clone(want), func(s string) bool { return s == "" })
 	if len(want) == 0 {
 		if !list.Empty() {
-			t.Errorf("%s holds %d credentials, want none", label, list.Len())
+			t.Errorf("%s is not empty, want no credentials", label)
 		}
 		return
 	}
-	if list.Len() != len(want) {
-		t.Errorf("%s holds %d credentials, want %d", label, list.Len(), len(want))
+	if list.Empty() {
+		t.Errorf("%s is empty, want configured credentials", label)
 	}
 	for _, password := range want {
 		if !list.Verify(t.Context(), password) {
 			t.Errorf("%s does not accept %q", label, password)
+		}
+	}
+}
+
+// assertRejects checks that credentials assigned to another role do not grant
+// access through list.
+func assertRejects(t *testing.T, list webcred.List, label string, passwords ...string) {
+	t.Helper()
+	for _, password := range passwords {
+		if password != "" && list.Verify(t.Context(), password) {
+			t.Errorf("%s accepts %q, want it rejected", label, password)
 		}
 	}
 }
@@ -163,8 +174,12 @@ web:
 			if issues := Validate(cfg); len(issues) != 0 {
 				t.Fatalf("Validate() = %v, want none", issues)
 			}
-			assertAccepts(t, cfg.Global.WebCredentials(), "WebCredentials()", tc.want...)
-			assertAccepts(t, cfg.Global.WebGuestCredentials(), "WebGuestCredentials()", tc.wantGuest...)
+			admin := cfg.Global.WebCredentials()
+			guest := cfg.Global.WebGuestCredentials()
+			assertAccepts(t, admin, "WebCredentials()", tc.want...)
+			assertAccepts(t, guest, "WebGuestCredentials()", tc.wantGuest...)
+			assertRejects(t, admin, "WebCredentials()", tc.wantGuest...)
+			assertRejects(t, guest, "WebGuestCredentials()", tc.want...)
 		})
 	}
 }
