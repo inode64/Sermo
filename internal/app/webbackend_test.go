@@ -1555,6 +1555,34 @@ func TestFailedUnitsWatchConditions(t *testing.T) {
 	}
 }
 
+func TestWatchConditionsUseCheckPredicateRegistry(t *testing.T) {
+	tests := []struct {
+		name      string
+		checkType string
+		field     string
+	}{
+		{name: "users", checkType: checks.CheckTypeUsers, field: checks.DataKeyCount},
+		{name: "ssh idle", checkType: checks.CheckTypeSSHIdle, field: checks.DataKeyProtectedCount},
+		{name: "terminal sessions", checkType: checks.CheckTypeTerminalSessions, field: checks.DataKeyAttached},
+		{name: "process count", checkType: checks.CheckTypeProcessCount, field: checks.DataKeyCount},
+		{name: "tcp connections", checkType: checks.CheckTypeTCPConnections, field: checks.DataKeyCount},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			condition := map[string]any{checks.CheckKeyOp: ">", checks.CheckKeyValue: 2}
+			got := watchConditions(map[string]any{
+				checks.CheckKeyType: tt.checkType,
+				tt.field:            condition,
+			}, nil)
+			want := []web.WatchCondition{{Field: tt.field, Op: ">", Value: "2"}}
+			if !slices.Equal(got, want) {
+				t.Fatalf("conditions = %+v, want %+v", got, want)
+			}
+		})
+	}
+}
+
 func TestWatchMetricConditionsComparisons(t *testing.T) {
 	conditions := watchMetricConditions(map[string]any{
 		"errors": map[string]any{

@@ -637,11 +637,16 @@ func parseProcCond(check map[string]any) (procCond, error) {
 		op  *string
 		val *float64
 	}
-	for _, t := range []thr{
-		{metrics.MetricCPU, &c.cpuOp, &c.cpuValue},
-		{metrics.MetricMemory, &c.memOp, &c.memValue},
-		{metrics.MetricIO, &c.ioOp, &c.ioValue},
-	} {
+	thresholds := map[string]thr{
+		metrics.MetricCPU:    {metrics.MetricCPU, &c.cpuOp, &c.cpuValue},
+		metrics.MetricMemory: {metrics.MetricMemory, &c.memOp, &c.memValue},
+		metrics.MetricIO:     {metrics.MetricIO, &c.ioOp, &c.ioValue},
+	}
+	for _, key := range checks.ProcessWatchPredFields {
+		t, known := thresholds[key]
+		if !known {
+			return c, fmt.Errorf("process check has unsupported predicate field %q", key)
+		}
 		m, ok := check[t.key].(map[string]any)
 		if !ok {
 			continue
