@@ -672,6 +672,46 @@ func (d slowDetector) Detect(ctx context.Context, _ servicemgr.Backend) (service
 	}
 }
 
+type countingDetector struct {
+	calls     *int
+	detection servicemgr.Detection
+}
+
+func (d countingDetector) Detect(context.Context, servicemgr.Backend) (servicemgr.Detection, error) {
+	*d.calls++
+	return d.detection, nil
+}
+
+func TestReloadPreparesBackendOnce(t *testing.T) {
+	global := writeActionConfig(t)
+	detectCalls := 0
+	managerCalls := 0
+	var actions []string
+	app := App{
+		Detector: countingDetector{calls: &detectCalls, detection: servicemgr.Detection{Backend: servicemgr.BackendSystemd}},
+		NewManager: func(servicemgr.Backend) (servicemgr.Manager, error) {
+			managerCalls++
+			return fakeManager{
+				actions: &actions,
+				status:  servicemgr.ServiceStatus{Status: servicemgr.StatusActive},
+			}, nil
+		},
+		Runner: statusUnitRunner{known: "web.service"},
+		Stdout: &bytes.Buffer{},
+		Stderr: &bytes.Buffer{},
+	}
+
+	if code := app.Run(t.Context(), []string{"--config", global, "reload", "web"}); code != exitSuccess {
+		t.Fatalf("Run() exit = %d, want %d", code, exitSuccess)
+	}
+	if detectCalls != 1 || managerCalls != 1 {
+		t.Fatalf("Detect calls = %d, NewManager calls = %d; want one prepared backend", detectCalls, managerCalls)
+	}
+	if len(actions) != 1 || actions[0] != "reload web.service" {
+		t.Fatalf("actions = %v, want reload web.service", actions)
+	}
+}
+
 type deadlineManager struct {
 	fakeManager
 	remaining *time.Duration
@@ -682,6 +722,71 @@ func (m deadlineManager) Start(ctx context.Context, service string) error {
 		*m.remaining = time.Until(d)
 	}
 	return m.fakeManager.Start(ctx, service)
+}
+
+type deadlineStatusManager struct {
+	fakeManager
+	hadDeadline *bool
+}
+
+func (m deadlineStatusManager) Status(ctx context.Context, service string) (servicemgr.ServiceStatus, error) {
+	_, ok := ctx.Deadline()
+	*m.hadDeadline = ok
+	return m.fakeManager.Status(ctx, service)
+}
+
+func TestOperationSessionPostflightStatusReusesPreparedTarget(t *testing.T) {
+	global := writeActionConfig(t)
+	cfg, err := config.Load(global)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resolved, errs := cfg.Resolve("web")
+	if len(errs) > 0 {
+		t.Fatalf("resolve: %v", errs)
+	}
+	detectCalls := 0
+	managerCalls := 0
+	hadDeadline := false
+	app := App{
+		Detector: countingDetector{calls: &detectCalls, detection: servicemgr.Detection{Backend: servicemgr.BackendSystemd}},
+		NewManager: func(servicemgr.Backend) (servicemgr.Manager, error) {
+			managerCalls++
+			return deadlineStatusManager{
+				fakeManager: fakeManager{status: servicemgr.ServiceStatus{Status: servicemgr.StatusActive}},
+				hadDeadline: &hadDeadline,
+			}, nil
+		},
+		Runner: statusUnitRunner{known: "web.service"},
+		Stdout: &bytes.Buffer{},
+		Stderr: &bytes.Buffer{},
+	}
+	session, err := app.newOperationSession(t.Context(), options{config: global}, cfg, nil)
+	if err != nil {
+		t.Fatalf("newOperationSession: %v", err)
+	}
+	first, err := session.prepare(t.Context(), "web", resolved)
+	if err != nil {
+		t.Fatalf("prepare: %v", err)
+	}
+	second, err := session.prepare(t.Context(), "web", resolved)
+	if err != nil {
+		t.Fatalf("prepare again: %v", err)
+	}
+	if first != second {
+		t.Fatal("prepare returned two runtimes for one service")
+	}
+	active := session.activeAfterPostflightFailure(t.Context(), options{}, cfg, resolved, "web", "start",
+		operation.Result{Status: operation.ResultPostflightFailed}, nil)
+	if !active {
+		t.Fatal("activeAfterPostflightFailure = false, want true")
+	}
+	if detectCalls != 1 || managerCalls != 1 {
+		t.Fatalf("Detect calls = %d, NewManager calls = %d; want prepared target reuse", detectCalls, managerCalls)
+	}
+	if !hadDeadline {
+		t.Fatal("postflight status query had no deadline")
+	}
 }
 
 func TestActionTimeoutNotConsumedByDetection(t *testing.T) {
@@ -816,6 +921,50 @@ preflight:
 			}
 			if len(actions) != 1 || actions[0] != "start web.service" {
 				t.Fatalf("actions = %v, want start web.service", actions)
+			}
+		})
+	}
+}
+
+func TestPreflightUsesCanonicalServiceCheckDependencies(t *testing.T) {
+	tests := []struct {
+		name      string
+		checkType string
+	}{
+		{name: "stale binaries", checkType: "stale_binary"},
+		{name: "strays", checkType: "strays"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			global := writeServiceConfig(t, `
+paths:
+  services: [ @ROOT@/services ]
+  runtime: @ROOT@/run
+  state: @ROOT@/state
+defaults:
+  policy:
+    cooldown: 5m
+`, map[string]string{
+				"services/web.yml": `
+name: web
+service: web
+preflight:
+  process-safety:
+    type: ` + tc.checkType + `
+`,
+			})
+			var stdout bytes.Buffer
+			app := App{
+				Detector: fakeBackendDetector{detection: servicemgr.Detection{Backend: servicemgr.BackendSystemd}},
+				NewManager: func(servicemgr.Backend) (servicemgr.Manager, error) {
+					return fakeManager{status: servicemgr.ServiceStatus{Status: servicemgr.StatusActive}}, nil
+				},
+				Runner: statusUnitRunner{known: "web.service"},
+				Stdout: &stdout,
+				Stderr: &bytes.Buffer{},
+			}
+			if code := app.Run(t.Context(), []string{"--config", global, "preflight", "web"}); code != exitSuccess {
+				t.Fatalf("Run() exit = %d, want %d; output=%s", code, exitSuccess, stdout.String())
 			}
 		})
 	}

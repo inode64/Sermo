@@ -19,7 +19,14 @@ func TestServiceScopedProcessCountNeverCountsTheHost(t *testing.T) {
 			"main": map[string]any{"exe": "/nonexistent/uninstalled-daemon", "user": "root"},
 		},
 	}
-	scoped := ServiceScopedProcessCount(t.Context(), tree, execx.CommandRunner{}, servicemgr.BackendOpenRC, "gone", process.NewDiscovererWithUserLookup(nil))
+	runtime := BuildServiceRuntime(t.Context(), ServiceRuntimeConfig{
+		Service: "gone", Unit: "gone", Tree: tree,
+		Deps: Deps{
+			Backend: servicemgr.BackendOpenRC, Manager: fakeManager{}, Runtime: t.TempDir(),
+			ExecxRunner: execx.CommandRunner{},
+		},
+	})
+	scoped := runtime.CheckDeps.ProcessCount
 	if got := scoped("", "", ""); got != 0 {
 		t.Fatalf("scoped filterless count = %d, want 0 (selectors match nothing)", got)
 	}

@@ -59,6 +59,14 @@ Every start/stop/restart/reload/resume — manual (`sermoctl`) or automatic (`se
 runs through the same engine. The manual-only `repair` action uses that engine
 too, but is never eligible for automatic remediation:
 
+The daemon worker, Web UI and CLI build that engine from the same resolved
+service runtime: control target, backend process roots, process selectors, check
+dependencies, metric source and operation locks. `sermoctl preflight` uses the
+same prepared target and check dependencies. A CLI command prepares each target
+once and reuses it for reload capability, the action and the bounded status
+query after a failed postflight, so changing the caller cannot change a safety
+decision.
+
 1. Acquire the internal operation lock (`<runtime>/ops/<service>.lock`); a live
    holder fails fast with exit `75` ("operation in progress").
 2. Block on any active named runtime lock.

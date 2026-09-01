@@ -142,7 +142,7 @@ runs. On any exit path the event is emitted.
 
 ```mermaid
 flowchart TD
-  REQ["Action: start / stop / restart / reload / resume<br/>(sermoctl or Web UI → defaultOperate)"] --> DO["Engine.Do → Engine.run(plan)"]
+  REQ["Action: start / stop / restart / reload / resume<br/>(sermoctl or Web UI → prepared service runtime)"] --> DO["Engine.Do → Engine.run(plan)"]
   DO --> CE{"ConfigError?"}
   CE -- "yes" --> RF1["ResultFailed"]
   CE -- "no" --> L1["2 · AcquireLock (oplock, per service)"]
