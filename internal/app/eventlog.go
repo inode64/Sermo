@@ -95,10 +95,7 @@ func (l *EventLog) Add(e Event) {
 	if l == nil {
 		return
 	}
-	now := l.now
-	if now == nil {
-		now = time.Now
-	}
+	now := clockOrNow(l.now)
 	logged := LoggedEvent{Time: now(), Event: e}
 	if l.store != nil {
 		id, err := l.store.RecordEvent(eventRecordFromLogged(logged))

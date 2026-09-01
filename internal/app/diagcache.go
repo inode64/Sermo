@@ -32,9 +32,7 @@ const (
 
 // NewDiagnosticLog builds a scheduled diagnostics exporter. file must be set.
 func NewDiagnosticLog(cfg *config.Config, host diag.Host, file *logfile.Writer, now func() time.Time) *DiagnosticLog {
-	if now == nil {
-		now = time.Now
-	}
+	now = clockOrNow(now)
 	if host == nil {
 		host = diag.OSHost{}
 	}

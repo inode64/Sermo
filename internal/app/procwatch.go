@@ -196,10 +196,7 @@ func (w *procWatcher) runCycle(ctx context.Context) {
 	if w.state == nil {
 		w.state = map[int]*procState{}
 	}
-	now := w.now
-	if now == nil {
-		now = time.Now
-	}
+	now := clockOrNow(w.now)
 	sampler := w.sampler
 	if sampler == nil {
 		sampler = osProcSampler{}

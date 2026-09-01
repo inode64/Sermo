@@ -42,9 +42,7 @@ type telegramReporter struct {
 //
 //nolint:ireturn // returns the narrow read-only port by design; see above.
 func NewTelegramReporter(webHolder *WebBackendHolder, sla telegramSLAReader, now func() time.Time) telegrambot.Reporter {
-	if now == nil {
-		now = time.Now
-	}
+	now = clockOrNow(now)
 	return &telegramReporter{web: webHolder, sla: sla, now: now}
 }
 

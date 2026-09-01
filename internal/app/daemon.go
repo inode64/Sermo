@@ -903,10 +903,7 @@ func newCycleWriter(deps Deps, name string, tree map[string]any) *cycleWriter {
 	if deps.SLA == nil {
 		return nil
 	}
-	now := deps.Now
-	if now == nil {
-		now = time.Now
-	}
+	now := clockOrNow(deps.Now)
 	w := &cycleWriter{name: name, now: now, emit: deps.Emit, sla: deps.SLA}
 	if measurements, ok := deps.SLA.(MeasurementRecorder); ok && measurements != nil {
 		w.measurements = measurements
@@ -1286,9 +1283,7 @@ func liveSampler(service string, lc *metrics.Collector, live *LiveMetrics, servi
 	if procs == nil {
 		procs = func() []process.Process { return nil }
 	}
-	if now == nil {
-		now = time.Now
-	}
+	now = clockOrNow(now)
 	return func(ctx context.Context) {
 		at := now()
 		procList := procs()

@@ -224,10 +224,7 @@ func (w *processPolicyWatcher) runCycle(ctx context.Context) {
 }
 
 func (w *processPolicyWatcher) clock() time.Time {
-	if w.now != nil {
-		return w.now()
-	}
-	return time.Now()
+	return clockOrNow(w.now)()
 }
 
 func (w *processPolicyWatcher) shouldRemind(state processPolicyState, now time.Time) bool {

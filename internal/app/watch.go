@@ -529,10 +529,7 @@ func (w *Watch) markSettled() {
 
 // clock returns the current time, honoring an injected w.Now for tests.
 func (w *Watch) clock() time.Time {
-	if w.Now != nil {
-		return w.Now()
-	}
-	return time.Now()
+	return clockOrNow(w.Now)()
 }
 
 // shouldNotify reports whether the watch should dispatch a notification this
