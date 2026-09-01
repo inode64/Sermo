@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"sermo/internal/checks"
+	"sermo/internal/config"
 	"sermo/internal/execx"
 	"sermo/internal/process"
 )
@@ -49,8 +50,16 @@ func (r *scriptedRunner) ran(name string) bool {
 
 func depsWith(runner execx.Runner) checks.Deps { return checks.Deps{Runner: runner} }
 
+func parsedReloadSpec(tree map[string]any) config.ReloadSpec {
+	spec, err := config.ParseReload(tree)
+	if err != nil {
+		panic(err)
+	}
+	return spec
+}
+
 func reloadClosureForTest(tree map[string]any, deps checks.Deps, mgr Manager, unit string) func(context.Context) error {
-	return reloadClosure(tree, deps, mgr, "systemd", unit, process.Discoverer{}, nil)
+	return reloadClosure(parsedReloadSpec(tree), tree, deps, mgr, "systemd", unit, process.Discoverer{}, nil)
 }
 
 type reloadProcessReader struct {
@@ -163,13 +172,6 @@ func TestReloadClosureCommandWithoutRunnerReturnsError(t *testing.T) {
 	}
 }
 
-func TestParseReloadSpecIgnoresEmptyCommand(t *testing.T) {
-	tree := map[string]any{"reload": map[string]any{"command": []any{}}}
-	if spec := parseReloadSpec(tree); spec != nil {
-		t.Fatalf("parseReloadSpec(empty command) = %+v, want nil", spec)
-	}
-}
-
 func TestReloadClosureCommandDidNotStartWithoutRunnerError(t *testing.T) {
 	mgr := &fakeManager{canReload: false}
 	runner := &scriptedRunner{results: map[string]execx.Result{
@@ -266,7 +268,7 @@ func TestReloadClosureSignalUsesPidfileWhenNoMainPID(t *testing.T) {
 	discoverer := reloadDiscoverer(map[int]process.Identity{
 		pid: {PID: pid, UID: 1001, Exe: "/usr/sbin/svc", ExeOK: true},
 	})
-	reload := reloadClosure(tree, depsWith(&scriptedRunner{}), mgr, "openrc", "svc", discoverer, selectors)
+	reload := reloadClosure(parsedReloadSpec(tree), tree, depsWith(&scriptedRunner{}), mgr, "openrc", "svc", discoverer, selectors)
 	if err := reload(context.Background()); err != nil {
 		t.Fatalf("reload: %v", err)
 	}
@@ -289,7 +291,7 @@ func TestReloadClosureSignalPidfileRequiresStrictIdentity(t *testing.T) {
 		"reload":  map[string]any{"signal": "HUP"},
 	}
 	selectors := []process.Selector{{Name: "main", Type: process.SelectorPidfile, Paths: []string{pidfile}}}
-	reload := reloadClosure(tree, depsWith(&scriptedRunner{}), mgr, "openrc", "svc", reloadDiscoverer(nil), selectors)
+	reload := reloadClosure(parsedReloadSpec(tree), tree, depsWith(&scriptedRunner{}), mgr, "openrc", "svc", reloadDiscoverer(nil), selectors)
 
 	err := reload(context.Background())
 	if err == nil || !strings.Contains(err.Error(), "does not match any process selector with exact exe and user") {
@@ -307,7 +309,7 @@ func TestReloadClosureSignalMainPIDRequiresStrictIdentity(t *testing.T) {
 	selectors := []process.Selector{{
 		Name: "main", Type: process.SelectorCommandMatch, Exe: "/usr/sbin/svc", User: "svcuser",
 	}}
-	reload := reloadClosure(tree, depsWith(runner), mgr, "systemd", "svc", reloadDiscoverer(nil), selectors)
+	reload := reloadClosure(parsedReloadSpec(tree), tree, depsWith(runner), mgr, "systemd", "svc", reloadDiscoverer(nil), selectors)
 
 	err := reload(context.Background())
 	if err == nil || !strings.Contains(err.Error(), "MainPID 424242 does not match any process selector") {

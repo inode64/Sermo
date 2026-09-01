@@ -508,43 +508,20 @@ func validateDockerControl(control map[string]any, add addFunc) {
 // process selector with exact exe and user so the signal target can be verified
 // before signaling.
 func validateReload(tree map[string]any, backend string, add addFunc) {
-	raw, present := tree[SectionReload]
-	if !present {
+	spec, err := ParseReload(tree)
+	if err != nil {
+		add("%s", err)
 		return
 	}
-	r, ok := raw.(map[string]any)
-	if !ok {
-		add("reload must be a mapping with a signal or command")
+	if !spec.HasSignal || !reloadSignalNeedsPidfileIdentity(tree, backend) {
 		return
 	}
-	if when := cfgval.AsString(r[ReloadKeyWhen]); when != "" && when != ReloadWhenAuto && when != ReloadWhenAlways {
-		add("%s %q must be %s", reloadPathWhen, when, ReloadWhenSummary)
+	pidfile, identity := reloadSignalPidfileIdentity(tree)
+	if !pidfile {
+		add("%s requires top-level pidfile: when the service runs on OpenRC (no MainPID)", reloadPathSignal)
 	}
-	sig := cfgval.AsString(r[ReloadKeySignal])
-	_, hasCmd := r[ReloadKeyCommand]
-	switch {
-	case sig != "" && hasCmd:
-		add("reload sets both signal and command; use exactly one")
-	case sig != "":
-		if _, err := process.ParseSignal(sig); err != nil {
-			add("%s %q is not a known signal name (%s)", reloadPathSignal, sig, strings.Join(process.SignalNames(), ", "))
-		} else if reloadSignalNeedsPidfileIdentity(tree, backend) {
-			pidfile, identity := reloadSignalPidfileIdentity(tree)
-			if !pidfile {
-				add("%s requires top-level pidfile: when the service runs on OpenRC (no MainPID)", reloadPathSignal)
-			}
-			if !identity {
-				add("%s requires a processes selector with both exe and user so the pidfile PID can be verified before signaling", reloadPathSignal)
-			}
-		}
-	case hasCmd:
-		if !cfgval.IsNonEmptyStringArray(r[ReloadKeyCommand]) {
-			add("%s must be an array, not a shell string", reloadPathCommand)
-		} else if len(cfgval.StringArray(r[ReloadKeyCommand])) == 0 {
-			add("%s must not be empty", reloadPathCommand)
-		}
-	default:
-		add("reload must set either signal or command")
+	if !identity {
+		add("%s requires a processes selector with both exe and user so the pidfile PID can be verified before signaling", reloadPathSignal)
 	}
 }
 

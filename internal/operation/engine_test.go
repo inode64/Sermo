@@ -859,18 +859,31 @@ func TestRestartRediscoveryErrorDoesNotStart(t *testing.T) {
 }
 
 func TestNewInvalidReloadBlocksRestart(t *testing.T) {
-	engine, mgr := newInvalidTreeEngine(t, "web", "nginx",
-		map[string]any{"reload": map[string]any{"signal": "NOTASIGNAL"}})
-
-	res := engine.Restart(context.Background())
-	if res.Status != ResultFailed {
-		t.Fatalf("status = %q, want failed", res.Status)
+	tests := []struct {
+		name   string
+		reload any
+		want   string
+	}{
+		{name: "not a map", reload: "HUP", want: "reload must be a mapping"},
+		{name: "both", reload: map[string]any{"signal": "HUP", "command": []any{"reloadctl"}}, want: "use exactly one"},
+		{name: "bad when", reload: map[string]any{"signal": "HUP", "when": "sometimes"}, want: "reload.when"},
+		{name: "invalid signal", reload: map[string]any{"signal": "NOTASIGNAL"}, want: "reload.signal"},
+		{name: "empty command", reload: map[string]any{"command": []any{}}, want: "non-empty argv array"},
 	}
-	if !strings.Contains(res.Message, "reload.signal") {
-		t.Fatalf("message = %q, want reload config error", res.Message)
-	}
-	if mgr.did("start nginx") {
-		t.Error("must NOT start when reload config is invalid")
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			engine, mgr := newInvalidTreeEngine(t, "web", "nginx", map[string]any{"reload": tc.reload})
+			res := engine.Restart(context.Background())
+			if res.Status != ResultFailed {
+				t.Fatalf("status = %q, want failed", res.Status)
+			}
+			if !strings.Contains(res.Message, tc.want) {
+				t.Fatalf("message = %q, want %q", res.Message, tc.want)
+			}
+			if mgr.did("start nginx") {
+				t.Error("must NOT start when reload config is invalid")
+			}
+		})
 	}
 }
 

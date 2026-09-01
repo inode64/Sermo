@@ -96,6 +96,7 @@ func New(c Config) Engine {
 	stopArtifacts := stopArtifactsFromTree(tree)
 	killPolicy, stopPolicyWarnings := process.ParseStopPolicy(tree)
 	selectors, selectorWarnings := process.ParseSelectors(tree)
+	reloadSpec, reloadErr := config.ParseReload(tree)
 	killPolicy = process.EnableAutomaticReaping(killPolicy, selectors)
 	// A malformed `reap:` block is a config error like a malformed stop_policy:
 	// the block's only purpose is to authorize signalling, so running the service
@@ -107,7 +108,7 @@ func New(c Config) Engine {
 		warningError(selectorWarningPrefix, selectorWarnings),
 		warningError(process.SectionReap, reapWarnings),
 		lifecycleErr,
-		reloadConfigError(tree),
+		reloadErr,
 	)
 
 	// This closure is the Engine's residual discovery and the reaper's
@@ -183,7 +184,7 @@ func New(c Config) Engine {
 		Preflight:           sectionRunner(tree, deps, c.MetricSample),
 		Postflight:          verifyRunner(tree, deps, c.MetricSample),
 		RestartIdentity:     restartIdentityClosure(c.Manager, c.Unit, discover, c.Discoverer, selectors),
-		ReloadFunc:          reloadClosure(tree, deps, c.Manager, c.Backend, c.Unit, c.Discoverer, selectors),
+		ReloadFunc:          reloadClosure(reloadSpec, tree, deps, c.Manager, c.Backend, c.Unit, c.Discoverer, selectors),
 		ResumeFunc:          resumeClosure(c.Manager, c.Unit),
 		RepairStalePIDFiles: repairStalePIDFiles(c.Manager, c.Unit, selectors, c.Discoverer.Reader, runtimeDirectory),
 		Discover:            discover,
@@ -224,7 +225,7 @@ func stopArtifactsFromTree(tree map[string]any) StopArtifacts {
 // the main process or a command — that either overrides the backend reload
 // (`when: always`) or stands in for it only when the init backend cannot reload
 // the unit itself (`when: auto`, the default).
-func reloadClosure(tree map[string]any, deps checks.Deps, mgr Manager, backend, unit string, discoverer process.Discoverer, selectors []process.Selector) func(context.Context) error {
+func reloadClosure(spec config.ReloadSpec, tree map[string]any, deps checks.Deps, mgr Manager, backend, unit string, discoverer process.Discoverer, selectors []process.Selector) func(context.Context) error {
 	backendReload := func(ctx context.Context) error { return mgr.Reload(ctx, unit) }
 	initReload := func(ctx context.Context) error {
 		ok, err := mgr.SupportsReload(ctx, unit)
@@ -237,12 +238,11 @@ func reloadClosure(tree map[string]any, deps checks.Deps, mgr Manager, backend, 
 		return backendReload(ctx)
 	}
 
-	spec := parseReloadSpec(tree)
-	if spec == nil {
+	if !spec.Configured {
 		return initReload
 	}
 	native := nativeReloadFunc(spec, deps, backend, unit, tree, discoverer, selectors)
-	if spec.always {
+	if spec.Always {
 		return native
 	}
 	// `when: auto` — prefer the backend reload, fall back to the native reload only
@@ -268,10 +268,11 @@ func UnsupportedReloadError(unit string) error {
 // ReloadSupported reports whether the resolved service can perform a reload
 // action without waiting for the operation to fail at execution time.
 func ReloadSupported(ctx context.Context, tree map[string]any, mgr Manager, unit string) (bool, error) {
-	if err := reloadConfigError(tree); err != nil {
-		return false, err
+	spec, err := config.ParseReload(tree)
+	if err != nil {
+		return false, fmt.Errorf("parse reload support: %w", err)
 	}
-	if parseReloadSpec(tree) != nil {
+	if spec.Configured {
 		return true, nil
 	}
 	if mgr == nil {
@@ -287,65 +288,13 @@ func ReloadSupported(ctx context.Context, tree map[string]any, mgr Manager, unit
 	return supported, nil
 }
 
-// reloadSpec is the parsed native-reload declaration: exactly one of command or
-// signal, plus whether it always replaces the backend reload (`when: always`) or
-// only fills in when the init cannot.
-type reloadSpec struct {
-	command []string
-	signal  syscall.Signal
-	hasSig  bool
-	always  bool
-}
-
-// reloadConfigError reports an invalid native reload declaration that validation
-// should have rejected but must not be silently ignored at runtime.
-func reloadConfigError(tree map[string]any) error {
-	r, ok := tree[config.SectionReload].(map[string]any)
-	if !ok {
-		return nil
-	}
-	if name := cfgval.AsString(r[config.ReloadKeySignal]); name != "" {
-		if _, err := process.ParseSignal(name); err != nil {
-			return fmt.Errorf("%s: %w", reloadSignalPath, err)
-		}
-		return nil
-	}
-	if argv := cfgval.StringArray(r[config.ReloadKeyCommand]); len(argv) > 0 {
-		return nil
-	}
-	return fmt.Errorf("%s: block declares no %s or %s", config.SectionReload, config.ReloadKeyCommand, config.ReloadKeySignal)
-}
-
-// parseReloadSpec reads the native reload from the `reload:` block. It returns
-// nil when the block is absent or empty/invalid; the engine then uses the plain
-// backend reload.
-func parseReloadSpec(tree map[string]any) *reloadSpec {
-	if r, ok := tree[config.SectionReload].(map[string]any); ok {
-		spec := &reloadSpec{always: cfgval.AsString(r[config.ReloadKeyWhen]) == config.ReloadWhenAlways}
-		if name := cfgval.AsString(r[config.ReloadKeySignal]); name != "" {
-			sig, err := process.ParseSignal(name)
-			if err != nil {
-				return nil
-			}
-			spec.signal, spec.hasSig = sig, true
-			return spec
-		}
-		if argv := cfgval.StringArray(r[config.ReloadKeyCommand]); len(argv) > 0 {
-			spec.command = argv
-			return spec
-		}
-		return nil
-	}
-	return nil
-}
-
-// nativeReloadFunc turns a reloadSpec into the closure that performs the reload:
+// nativeReloadFunc turns a ReloadSpec into the closure that performs the reload:
 // running its command, or sending its signal to the service's main process.
-func nativeReloadFunc(spec *reloadSpec, deps checks.Deps, backend, unit string, tree map[string]any, discoverer process.Discoverer, selectors []process.Selector) func(context.Context) error {
-	if spec.hasSig {
-		return nativeSignalReloadFunc(spec.signal, deps.Runner, backend, unit, reloadPidfile(tree), discoverer, selectors)
+func nativeReloadFunc(spec config.ReloadSpec, deps checks.Deps, backend, unit string, tree map[string]any, discoverer process.Discoverer, selectors []process.Selector) func(context.Context) error {
+	if spec.HasSignal {
+		return nativeSignalReloadFunc(spec.Signal, deps.Runner, backend, unit, reloadPidfile(tree), discoverer, selectors)
 	}
-	return nativeCommandReloadFunc(spec.command, deps.Runner)
+	return nativeCommandReloadFunc(spec.Command, deps.Runner)
 }
 
 func nativeSignalReloadFunc(signal syscall.Signal, runner execx.Runner, backend, unit, pidfile string, discoverer process.Discoverer, selectors []process.Selector) func(context.Context) error {
