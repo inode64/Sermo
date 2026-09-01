@@ -168,12 +168,9 @@ type App struct {
 	// resolved service. Injectable for testing; the error covers backend/wiring
 	// failures (the Result carries operational outcomes).
 	Operate func(ctx context.Context, opts options, cfg *config.Config, resolved config.Resolved, service, action string) (operation.Result, error)
-	// defaultOperation is set only when withDefaults installs the production
-	// operation session. Injected Operate functions keep their existing test seam.
-	defaultOperation bool
-	Env              func(string) string
-	Stdout           io.Writer
-	Stderr           io.Writer
+	Env     func(string) string
+	Stdout  io.Writer
+	Stderr  io.Writer
 	// Stdin is the interactive input source, used by `wizard`. Injectable for
 	// testing; defaults to os.Stdin.
 	Stdin io.Reader
@@ -353,10 +350,6 @@ func (a App) withDefaults() App {
 	}
 	if a.LoadConfig == nil {
 		a.LoadConfig = config.Load
-	}
-	if a.Operate == nil {
-		a.Operate = a.defaultOperate
-		a.defaultOperation = true
 	}
 	if a.FetchEvents == nil {
 		a.FetchEvents = a.fetchEvents
@@ -803,21 +796,6 @@ func (a App) finishManualOperationSettling(cfg *config.Config, store *state.Stor
 	if change.Changed {
 		a.recordAccess(cfg, change.Action, service, accessStatusOK, change.Message)
 	}
-}
-
-// defaultOperate wires the real operation engine from a resolved service and
-// runs the requested action.
-func (a App) defaultOperate(ctx context.Context, opts options, cfg *config.Config, resolved config.Resolved, service, action string) (operation.Result, error) {
-	eventStore, err := openStateStore(ctx, cfg)
-	if err != nil {
-		return operation.Result{}, fmt.Errorf("operation event store unavailable: %w", err)
-	}
-	defer func() { _ = eventStore.Close() }()
-	session, err := a.newOperationSession(ctx, opts, cfg, eventStore)
-	if err != nil {
-		return operation.Result{}, err
-	}
-	return session.operate(ctx, opts, cfg, resolved, service, action)
 }
 
 // Manual operations share the state database with a running sermod; on a

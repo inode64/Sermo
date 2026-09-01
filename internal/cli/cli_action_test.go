@@ -817,9 +817,9 @@ func TestActionTimeoutNotConsumedByDetection(t *testing.T) {
 		Stderr: &bytes.Buffer{},
 	}
 
-	_, err = app.defaultOperate(context.Background(), options{timeout: opTimeout, config: global}, cfg, resolved, "web", "start")
+	_, err = runProductionOperation(context.Background(), app, options{timeout: opTimeout, config: global}, cfg, resolved, "web", "start")
 	if err != nil {
-		t.Fatalf("defaultOperate: %v", err)
+		t.Fatalf("production operation: %v", err)
 	}
 
 	// The engine must receive the full operation budget, not detectDelay less.
@@ -828,7 +828,14 @@ func TestActionTimeoutNotConsumedByDetection(t *testing.T) {
 	}
 }
 
-func TestDefaultOperateFallsBackToConfiguredServiceUnit(t *testing.T) {
+func TestWithDefaultsLeavesProductionOperationToSession(t *testing.T) {
+	app := (App{}).withDefaults()
+	if app.Operate != nil {
+		t.Fatal("withDefaults installed a second production operation path")
+	}
+}
+
+func TestOperationSessionFallsBackToConfiguredServiceUnit(t *testing.T) {
 	global := writeFallbackUnitConfig(t)
 	cfg, err := config.Load(global)
 	if err != nil {
@@ -852,9 +859,9 @@ func TestDefaultOperateFallsBackToConfiguredServiceUnit(t *testing.T) {
 		Stderr: &stderr,
 	}
 
-	result, err := app.defaultOperate(context.Background(), options{config: global}, cfg, resolved, "legacy", "start")
+	result, err := runProductionOperation(context.Background(), app, options{config: global}, cfg, resolved, "legacy", "start")
 	if err != nil {
-		t.Fatalf("defaultOperate: %v", err)
+		t.Fatalf("production operation: %v", err)
 	}
 	if result.Status != operation.ResultOK {
 		t.Fatalf("result = %+v, want ok", result)
@@ -867,7 +874,7 @@ func TestDefaultOperateFallsBackToConfiguredServiceUnit(t *testing.T) {
 	}
 }
 
-func TestDefaultOperateUsesCanonicalServiceCheckDependencies(t *testing.T) {
+func TestOperationSessionUsesCanonicalServiceCheckDependencies(t *testing.T) {
 	tests := []struct {
 		name      string
 		checkType string
@@ -912,9 +919,9 @@ preflight:
 				Stdout: &bytes.Buffer{},
 				Stderr: &bytes.Buffer{},
 			}
-			result, err := app.defaultOperate(t.Context(), options{config: global}, cfg, resolved, "web", "start")
+			result, err := runProductionOperation(t.Context(), app, options{config: global}, cfg, resolved, "web", "start")
 			if err != nil {
-				t.Fatalf("defaultOperate: %v", err)
+				t.Fatalf("production operation: %v", err)
 			}
 			if result.Status != operation.ResultOK {
 				t.Fatalf("result = %+v, want ok with an empty %s preflight", result, tc.checkType)
@@ -970,7 +977,7 @@ preflight:
 	}
 }
 
-func TestDefaultOperatePersistsOneOperationEvent(t *testing.T) {
+func TestOperationSessionPersistsOneOperationEvent(t *testing.T) {
 	global := writeActionConfig(t)
 	cfg, err := config.Load(global)
 	if err != nil {
@@ -990,9 +997,9 @@ func TestDefaultOperatePersistsOneOperationEvent(t *testing.T) {
 		Stdout: &bytes.Buffer{},
 		Stderr: &bytes.Buffer{},
 	}
-	result, err := app.defaultOperate(context.Background(), options{config: global}, cfg, resolved, "web", "restart")
+	result, err := runProductionOperation(context.Background(), app, options{config: global}, cfg, resolved, "web", "restart")
 	if err != nil {
-		t.Fatalf("defaultOperate: %v", err)
+		t.Fatalf("production operation: %v", err)
 	}
 	if result.Status != operation.ResultOK {
 		t.Fatalf("result = %+v, want ok", result)
@@ -1013,7 +1020,7 @@ func TestDefaultOperatePersistsOneOperationEvent(t *testing.T) {
 	}
 }
 
-func TestDefaultOperateDoesNotActWithoutEventStore(t *testing.T) {
+func TestOperationSessionDoesNotActWithoutEventStore(t *testing.T) {
 	global := writeActionConfig(t)
 	cfg, err := config.Load(global)
 	if err != nil {
@@ -1036,13 +1043,22 @@ func TestDefaultOperateDoesNotActWithoutEventStore(t *testing.T) {
 		Stdout: &bytes.Buffer{},
 		Stderr: &bytes.Buffer{},
 	}
-	_, err = app.defaultOperate(context.Background(), options{config: global}, cfg, resolved, "web", "restart")
+	_, err = runProductionOperation(context.Background(), app, options{config: global}, cfg, resolved, "web", "restart")
 	if err == nil || !strings.Contains(err.Error(), "operation event store unavailable") {
-		t.Fatalf("defaultOperate error = %v", err)
+		t.Fatalf("production operation error = %v", err)
 	}
 	if len(actions) != 0 {
 		t.Fatalf("actions = %v, want none", actions)
 	}
+}
+
+func runProductionOperation(ctx context.Context, app App, opts options, cfg *config.Config, resolved config.Resolved, service, action string) (operation.Result, error) {
+	runner, closeRunner, err := app.prepareManualOperationRunner(ctx, opts, cfg, resolved, service, action, nil)
+	if err != nil {
+		return operation.Result{}, err
+	}
+	defer closeRunner()
+	return runner.operate(ctx, opts, cfg, resolved, service, action)
 }
 
 type flakyRecorder struct {
