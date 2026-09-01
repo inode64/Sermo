@@ -3,8 +3,10 @@ package web
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"sermo/internal/webcred"
@@ -23,6 +25,26 @@ func req(method, path, user, pass string) *http.Request {
 		r.SetBasicAuth(user, pass)
 	}
 	return r
+}
+
+func TestAuthStringRedactsRuntimeToken(t *testing.T) {
+	const token = "runtime-admin-secret"
+	auth := Auth{
+		AdminCredentials: testCredentials(t, "configured-admin-secret"),
+		RuntimeToken:     token,
+	}
+	for _, rendered := range []string{
+		auth.String(),
+		fmt.Sprintf("%v", auth),
+		fmt.Sprintf("%+v", auth),
+	} {
+		if strings.Contains(rendered, token) {
+			t.Errorf("rendered Auth = %q, want the runtime token redacted", rendered)
+		}
+		if !strings.Contains(rendered, "runtime_token: true") {
+			t.Errorf("rendered Auth = %q, want token presence without its value", rendered)
+		}
+	}
 }
 
 type fakeReadiness struct{ rep ReadyReport }

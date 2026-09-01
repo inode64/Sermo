@@ -82,8 +82,8 @@ func TestParse(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Parse() error = %v", err)
 			}
-			if list.Len() != tc.wantLen {
-				t.Errorf("Parse() len = %d, want %d", list.Len(), tc.wantLen)
+			if got := len(list.credentials); got != tc.wantLen {
+				t.Errorf("Parse() len = %d, want %d", got, tc.wantLen)
 			}
 			assertVerdicts(t, list, tc.accepts, tc.rejects)
 		})
@@ -158,7 +158,7 @@ func TestParseErrors(t *testing.T) {
 				t.Fatalf("Parse() error = %v, want it to contain %q", err, tc.wantErr)
 			}
 			if !list.Empty() {
-				t.Errorf("Parse() returned %d credentials with an error", list.Len())
+				t.Errorf("Parse() returned %d credentials with an error", len(list.credentials))
 			}
 		})
 	}
@@ -169,14 +169,14 @@ func TestMaxCredentialsIsAccepted(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Parse() error = %v", err)
 	}
-	if list.Len() != MaxCredentials {
-		t.Fatalf("Parse() len = %d, want %d", list.Len(), MaxCredentials)
+	if got := len(list.credentials); got != MaxCredentials {
+		t.Fatalf("Parse() len = %d, want %d", got, MaxCredentials)
 	}
 }
 
 func TestZeroListGrantsNothing(t *testing.T) {
 	var list List
-	if !list.Empty() || list.Len() != 0 {
+	if !list.Empty() {
 		t.Fatalf("zero List is not empty")
 	}
 	if list.Verify(t.Context(), "anything") {
