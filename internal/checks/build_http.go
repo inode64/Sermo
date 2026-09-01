@@ -30,6 +30,8 @@ const (
 	httpStatusClassWildcard     = 'x'
 	httpStatusClassWildcardCaps = 'X'
 	httpStatusClassDigitBase    = '0'
+	httpStatusMinCode           = 100
+	httpStatusMaxCode           = 599
 )
 
 // buildHTTPCheck builds an http(s) check, configuring proxy, http3 and interface
@@ -365,18 +367,34 @@ func parseStatusMatcher(v any) (statusMatcher, error) {
 		items = []any{v}
 	}
 	for _, item := range items {
-		if n, ok := cfgval.Int(item); ok {
-			m.codes = append(m.codes, n)
+		s := strings.TrimSpace(cfgval.String(item))
+		code, class, ok := parseHTTPStatus(s)
+		if !ok {
+			return statusMatcher{}, fmt.Errorf("invalid expect_status %q", s)
+		}
+		if class != 0 {
+			m.classes = append(m.classes, class)
 			continue
 		}
-		s := strings.TrimSpace(cfgval.AsString(item))
-		if isHTTPStatusClassPattern(s) {
-			m.classes = append(m.classes, int(s[httpStatusClassDigitIndex]-httpStatusClassDigitBase))
-			continue
-		}
-		return statusMatcher{}, fmt.Errorf("invalid expect_status %q", s)
+		m.codes = append(m.codes, code)
 	}
 	return m, nil
+}
+
+// ValidHTTPStatus reports whether value is a status code or class accepted by
+// the HTTP check's expect_status matcher. Lists are validated element by
+// element by configuration traversal and by parseStatusMatcher at runtime.
+func ValidHTTPStatus(value string) bool {
+	_, _, ok := parseHTTPStatus(strings.TrimSpace(value))
+	return ok
+}
+
+func parseHTTPStatus(value string) (int, int, bool) {
+	if isHTTPStatusClassPattern(value) {
+		return 0, int(value[httpStatusClassDigitIndex] - httpStatusClassDigitBase), true
+	}
+	code, err := strconv.Atoi(value)
+	return code, 0, err == nil && code >= httpStatusMinCode && code <= httpStatusMaxCode
 }
 
 func isHTTPStatusClassPattern(s string) bool {

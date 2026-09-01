@@ -3,23 +3,9 @@ package config
 import (
 	"fmt"
 	"path/filepath"
-	"strconv"
 	"strings"
 
 	"sermo/internal/cfgval"
-)
-
-const (
-	expectStatusClassLen       = 3
-	expectStatusClassDigit     = 0
-	expectStatusClassWildcard1 = 1
-	expectStatusClassWildcard2 = 2
-	expectStatusClassMinDigit  = '1'
-	expectStatusClassMaxDigit  = '5'
-	expectStatusWildcardLower  = 'x'
-	expectStatusWildcardUpper  = 'X'
-	expectStatusMinCode        = 100
-	expectStatusMaxCode        = 599
 )
 
 func underDir(path, dir string) bool {
@@ -61,19 +47,6 @@ func walkScalarValue(path, key string, v any, visit func(path, key, value string
 	default:
 		visit(path, key, cfgval.String(t))
 	}
-}
-
-// validExpectStatus accepts a single status (100..599) or a class like "2xx".
-// A list is validated element-by-element by walkScalars.
-func validExpectStatus(value string) bool {
-	if len(value) == expectStatusClassLen &&
-		(value[expectStatusClassWildcard1] == expectStatusWildcardLower || value[expectStatusClassWildcard1] == expectStatusWildcardUpper) &&
-		(value[expectStatusClassWildcard2] == expectStatusWildcardLower || value[expectStatusClassWildcard2] == expectStatusWildcardUpper) &&
-		value[expectStatusClassDigit] >= expectStatusClassMinDigit && value[expectStatusClassDigit] <= expectStatusClassMaxDigit {
-		return true
-	}
-	n, err := strconv.Atoi(value)
-	return err == nil && n >= expectStatusMinCode && n <= expectStatusMaxCode
 }
 
 func validTCPPort(n int) bool {
