@@ -387,6 +387,72 @@ func TestCascadeTargetErrorDowngradesPrimary(t *testing.T) {
 	}
 }
 
+func TestCascadeRetriesBlockedTarget(t *testing.T) {
+	global := writeCascadeConfig(t)
+	app := actionApp(operation.Result{}, nil, nil, nil)
+	calls := map[string]int{}
+	app.Operate = func(_ context.Context, _ options, _ *config.Config, _ config.Resolved, service, action string) (operation.Result, error) {
+		calls[service]++
+		status := operation.ResultOK
+		if service == "db" && calls[service] == 1 {
+			status = operation.ResultBlocked
+		}
+		return operation.Result{Service: service, Action: action, Status: status}, nil
+	}
+
+	code := app.Run(t.Context(), []string{"--config", global, "restart", "web"})
+	if code != exitSuccess {
+		t.Fatalf("Run() exit = %d, want %d", code, exitSuccess)
+	}
+	if calls["web"] != 1 || calls["db"] != 2 {
+		t.Fatalf("calls = %v, want web once and blocked db twice", calls)
+	}
+}
+
+func TestCascadeResolveErrorDowngradesPrimary(t *testing.T) {
+	global := writeServiceConfig(t, `
+paths:
+  services: [ @ROOT@/services ]
+  runtime: @ROOT@/run
+  state: @ROOT@/state
+defaults:
+  policy:
+    cooldown: 5m
+`, map[string]string{
+		"services/web.yml": `
+name: web
+service: web
+also_apply: [db]
+`,
+		"services/db.yml": `
+name: db
+service: db
+checks:
+  unresolved: { type: tcp, host: "${missing}", port: 5432 }
+`,
+	})
+	var stderr bytes.Buffer
+	app := actionApp(operation.Result{}, nil, nil, &stderr)
+	app.Operate = okOperate
+
+	code := app.Run(t.Context(), []string{"--config", global, "restart", "web"})
+	if code != exitRuntimeError {
+		t.Fatalf("Run() exit = %d, want %d for unresolved cascade target", code, exitRuntimeError)
+	}
+	if got := stderr.String(); !strings.Contains(got, "cascade db:") || strings.Contains(got, "skipped") {
+		t.Fatalf("stderr = %q, want failed cascade target without skipped", got)
+	}
+	store := openTestStateStore(t, global)
+	defer func() { _ = store.Close() }()
+	events, err := store.RecentEvents(10)
+	if err != nil {
+		t.Fatalf("recent events: %v", err)
+	}
+	if len(events) != 1 || events[0].Service != "db" || events[0].Kind != "cascade" || events[0].Status != string(operation.ResultFailed) {
+		t.Fatalf("events = %+v, want failed cascade relationship for db", events)
+	}
+}
+
 func TestRepairDoesNotCascadeAlsoApply(t *testing.T) {
 	global := writeCascadeConfig(t)
 	app := actionApp(operation.Result{}, nil, nil, nil)

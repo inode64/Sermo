@@ -689,48 +689,62 @@ func (a App) operateWithCascade(ctx context.Context, opts options, cfg *config.C
 	if opts.noCascade || !operation.CascadesAlsoApply(action) || len(targets) == 0 {
 		return a.operateWithManualState(ctx, opts, cfg, resolved, service, action, actionStore)
 	}
-	lookup := func(svc string) []string {
-		r, errs := cfg.Resolve(svc)
+	resolvedByService := map[string]config.Resolved{service: resolved}
+	resolveErrors := map[string]error{}
+	resolve := func(svc string) (config.Resolved, error) {
+		if res, ok := resolvedByService[svc]; ok {
+			return res, nil
+		}
+		if err, ok := resolveErrors[svc]; ok {
+			return config.Resolved{}, err
+		}
+		res, errs := cfg.Resolve(svc)
 		if len(errs) > 0 {
+			err := fmt.Errorf("resolve cascade target %s: %s", svc, errs[0])
+			resolveErrors[svc] = err
+			return config.Resolved{}, err
+		}
+		resolvedByService[svc] = res
+		return res, nil
+	}
+	lookup := func(svc string) []string {
+		res, err := resolve(svc)
+		if err != nil {
 			return nil
 		}
-		return config.CascadeTargets(r.Tree)
+		return config.CascadeTargets(res.Tree)
 	}
-	seq := app.OrderedGroup(service, action, lookup, map[string]bool{}, 0)
-	var primary operation.Result
-	var primaryErr error
-	var cascadeFailed bool
-	for _, svc := range seq {
-		res := resolved
-		if svc != service {
-			r, errs := cfg.Resolve(svc)
-			if len(errs) > 0 {
-				fmt.Fprintf(a.Stderr, "cascade %s: skipped (%s)\n", svc, errs[0])
-				continue
+	var cascadeEventErr error
+	cascadeCfg := app.CascadeConfig{
+		Lookup: lookup,
+		Operate: func(ctx context.Context, svc, action string) (operation.Result, error) {
+			res, err := resolve(svc)
+			if err != nil {
+				return operation.Result{}, err
 			}
-			res = r
-		}
-		out, err := a.operateWithManualState(ctx, opts, cfg, res, svc, action, actionStore)
-		if svc == service {
-			primary, primaryErr = out, err
-			continue
-		}
-		// A cascade target counts as failed both when its operation returns an
-		// error and when it completes with a failed result; either way the
-		// primary must be downgraded so the exit code reflects the failure.
-		if err != nil || app.CascadeTargetFailed(out) {
-			cascadeFailed = true
-		}
-		if err != nil {
-			fmt.Fprintf(a.Stderr, "cascade %s: %v\n", svc, err)
-		} else if !opts.quiet {
-			fmt.Fprintf(a.Stdout, "cascade %s: %s %s\n", svc, action, out.Status)
-		}
-		if err == nil {
-			a.notifyInteractiveBlockedAction(ctx, out)
-		}
+			return a.operateWithManualState(ctx, opts, cfg, res, svc, action, actionStore)
+		},
+		Target: func(svc string, out operation.Result, err error) {
+			if actionStore != nil {
+				if recordErr := recordManualActionEvent(ctx, actionStore, app.CascadeEventRecord(service, out)); recordErr != nil && cascadeEventErr == nil {
+					cascadeEventErr = fmt.Errorf("record cascade event for %s: %w", svc, recordErr)
+				}
+			}
+			if err != nil {
+				fmt.Fprintf(a.Stderr, "cascade %s: %v\n", svc, err)
+			} else if !opts.quiet {
+				fmt.Fprintf(a.Stdout, "cascade %s: %s %s\n", svc, action, out.Status)
+			}
+			if err == nil {
+				a.notifyInteractiveBlockedAction(ctx, out)
+			}
+		},
 	}
-	return app.DowngradePrimaryOnCascadeFailure(primary, cascadeFailed), primaryErr
+	primary, primaryErr := app.RunCascade(ctx, service, action, cascadeCfg)
+	if primaryErr == nil && cascadeEventErr != nil {
+		primaryErr = cascadeEventErr
+	}
+	return primary, primaryErr
 }
 
 // operateWithManualState runs one manual service action and records its

@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"sermo/internal/ctxutil"
@@ -16,10 +17,15 @@ const (
 	cascadeBlockedRetryDelay = time.Second
 )
 
-// operateFn runs one service's guarded operation for an action, returning its
-// Result. The daemon supplies the monitor's per-service Operate; the CLI builds a
-// target engine on demand.
-type operateFn func(ctx context.Context, service, action string) operation.Result
+// CascadeConfig supplies the service graph and the one guarded operation used by
+// every cascade caller. Target observes each additional target after its final
+// attempt; Emit records the canonical cascade relationship event.
+type CascadeConfig struct {
+	Operate func(ctx context.Context, service, action string) (operation.Result, error)
+	Lookup  func(service string) []string
+	Target  func(service string, result operation.Result, err error)
+	Emit    func(Event)
+}
 
 // cascader orchestrates an action across a service and the services it lists in
 // also_apply. It owns the ordering so it can place the primary correctly for the
@@ -27,12 +33,16 @@ type operateFn func(ctx context.Context, service, action string) operation.Resul
 // that service's own operation lock and releases it before the next step, so a
 // serial walk never self-deadlocks even when a target repeats).
 type cascader struct {
-	op     operateFn
-	lookup func(service string) []string // a service's also_apply targets
-	emit   func(Event)
+	config CascadeConfig
 	// sleep, when non-nil, replaces the production ctxutil.Sleep backoff (tests
 	// inject a no-op). Production call sites leave it nil.
 	sleep func(time.Duration)
+}
+
+// RunCascade operates root plus its also_apply graph through the canonical
+// ordering, retry, failure and event semantics shared by daemon, web and CLI.
+func RunCascade(ctx context.Context, root, action string, cfg CascadeConfig) (operation.Result, error) {
+	return (cascader{config: cfg}).run(ctx, root, action)
 }
 
 // run operates root plus its also_apply graph for action, in dependency order
@@ -41,38 +51,51 @@ type cascader struct {
 // drives the caller's bookkeeping; additionals are reported as `cascade` events.
 // When an additional target fails, a successful primary is downgraded to failed
 // so callers do not treat the cascade as fully successful.
-func (c cascader) run(ctx context.Context, root, action string) operation.Result {
+func (c cascader) run(ctx context.Context, root, action string) (operation.Result, error) {
 	visited := map[string]bool{}
-	seq := OrderedGroup(root, action, c.lookup, visited, 0)
+	seq := OrderedGroup(root, action, c.config.Lookup, visited, 0)
 	var primary operation.Result
+	var primaryErr error
 	var cascadeFailed bool
 	for _, svc := range seq {
-		res := c.operate(ctx, svc, action)
+		res, err := c.operate(ctx, svc, action)
+		res = cascadeResult(svc, action, res, err)
 		if svc == root {
 			primary = res
+			primaryErr = err
 			continue
 		}
-		if cascadeTargetFailed(res) {
+		if err != nil || cascadeTargetFailed(res) {
 			cascadeFailed = true
 		}
-		if c.emit != nil {
-			c.emit(Event{Service: svc, Kind: eventKindCascade, Action: action,
+		if c.config.Target != nil {
+			c.config.Target(svc, res, err)
+		}
+		if c.config.Emit != nil {
+			c.config.Emit(Event{Service: svc, Kind: eventKindCascade, Action: action,
 				Status: string(res.Status), Message: "cascade from " + root})
 		}
 	}
-	return downgradePrimaryOnCascadeFailure(primary, cascadeFailed)
+	return downgradePrimaryOnCascadeFailure(primary, cascadeFailed), primaryErr
 }
 
-// CascadeTargetFailed reports whether an also_apply target's operation failed
-// (blocked targets are retried and still treated as non-fatal).
-func CascadeTargetFailed(res operation.Result) bool {
-	return cascadeTargetFailed(res)
-}
-
-// DowngradePrimaryOnCascadeFailure marks a successful primary as failed when an
-// additional cascade target failed.
-func DowngradePrimaryOnCascadeFailure(primary operation.Result, cascadeFailed bool) operation.Result {
-	return downgradePrimaryOnCascadeFailure(primary, cascadeFailed)
+func cascadeResult(service, action string, result operation.Result, err error) operation.Result {
+	if result.Service == "" {
+		result.Service = service
+	}
+	if result.Action == "" {
+		result.Action = action
+	}
+	if err == nil {
+		return result
+	}
+	result.Status = operation.ResultFailed
+	if result.Message == "" {
+		result.Message = err.Error()
+	} else {
+		result.Message += "; " + err.Error()
+	}
+	return result
 }
 
 func cascadeTargetFailed(res operation.Result) bool {
@@ -94,24 +117,32 @@ func downgradePrimaryOnCascadeFailure(primary operation.Result, cascadeFailed bo
 
 // operate runs one service, retrying once after a short backoff when it is
 // blocked (a target concurrently mid-operation holds its per-service lock).
-func (c cascader) operate(ctx context.Context, svc, action string) operation.Result {
-	res := c.op(ctx, svc, action)
-	if res.Status == operation.ResultBlocked {
-		c.backoff(ctx)
-		res = c.op(ctx, svc, action)
+func (c cascader) operate(ctx context.Context, svc, action string) (operation.Result, error) {
+	res, err := c.config.Operate(ctx, svc, action)
+	if err == nil && res.Status == operation.ResultBlocked {
+		if err := c.backoff(ctx); err != nil {
+			return res, err
+		}
+		res, err = c.config.Operate(ctx, svc, action)
 	}
-	return res
+	return res, err
 }
 
 // backoff waits cascadeBlockedRetryDelay before a single blocked-lock retry.
 // Tests inject sleep as a no-op; production leaves it nil and uses ctxutil.Sleep so
 // the wait is cancellable and never touches bare time.Sleep (forbidigo).
-func (c cascader) backoff(ctx context.Context) {
+func (c cascader) backoff(ctx context.Context) error {
 	if c.sleep != nil {
 		c.sleep(cascadeBlockedRetryDelay)
-		return
+		if err := ctx.Err(); err != nil {
+			return fmt.Errorf("cascade retry wait: %w", err)
+		}
+		return nil
 	}
-	_ = ctxutil.Sleep(ctx, cascadeBlockedRetryDelay)
+	if !ctxutil.Sleep(ctx, cascadeBlockedRetryDelay) {
+		return fmt.Errorf("cascade retry wait: %w", ctx.Err())
+	}
+	return nil
 }
 
 // OrderedGroup returns the services to operate, in dependency order. For stop the

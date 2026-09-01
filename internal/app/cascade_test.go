@@ -37,21 +37,24 @@ func TestOrderedGroupCutsCycle(t *testing.T) {
 
 func TestCascaderRunReportsTargetsReturnsPrimary(t *testing.T) {
 	var ops []string
-	op := func(_ context.Context, svc, action string) operation.Result {
+	op := func(_ context.Context, svc, action string) (operation.Result, error) {
 		ops = append(ops, action+" "+svc)
 		st := operation.ResultOK
 		if svc == "primary" {
-			return operation.Result{Service: svc, Status: st, Message: "primary-msg"}
+			return operation.Result{Service: svc, Status: st, Message: "primary-msg"}, nil
 		}
-		return operation.Result{Service: svc, Status: st}
+		return operation.Result{Service: svc, Status: st}, nil
 	}
 	var events []Event
-	c := cascader{
-		op:     op,
-		lookup: func(s string) []string { return map[string][]string{"primary": {"dep"}}[s] },
-		emit:   func(e Event) { events = append(events, e) },
+	c := cascader{config: CascadeConfig{
+		Operate: op,
+		Lookup:  func(s string) []string { return map[string][]string{"primary": {"dep"}}[s] },
+		Emit:    func(e Event) { events = append(events, e) },
+	}}
+	res, err := c.run(context.Background(), "primary", "restart")
+	if err != nil {
+		t.Fatalf("run error = %v", err)
 	}
-	res := c.run(context.Background(), "primary", "restart")
 	if res.Message != "primary-msg" {
 		t.Fatalf("run must return the primary's result, got %+v", res)
 	}
@@ -64,18 +67,18 @@ func TestCascaderRunReportsTargetsReturnsPrimary(t *testing.T) {
 }
 
 func TestCascaderDowngradesPrimaryWhenAdditionalFails(t *testing.T) {
-	op := func(_ context.Context, svc, action string) operation.Result {
+	op := func(_ context.Context, svc, action string) (operation.Result, error) {
 		if svc == "dep" {
-			return operation.Result{Service: svc, Status: operation.ResultFailed, Message: "stop failed"}
+			return operation.Result{Service: svc, Status: operation.ResultFailed, Message: "stop failed"}, nil
 		}
-		return operation.Result{Service: svc, Status: operation.ResultOK, Message: "restart ok"}
+		return operation.Result{Service: svc, Status: operation.ResultOK, Message: "restart ok"}, nil
 	}
-	c := cascader{
-		op:     op,
-		lookup: func(s string) []string { return map[string][]string{"primary": {"dep"}}[s] },
-		emit:   func(Event) {},
-	}
-	res := c.run(context.Background(), "primary", "restart")
+	c := cascader{config: CascadeConfig{
+		Operate: op,
+		Lookup:  func(s string) []string { return map[string][]string{"primary": {"dep"}}[s] },
+		Emit:    func(Event) {},
+	}}
+	res, _ := c.run(context.Background(), "primary", "restart")
 	if res.Status != operation.ResultFailed {
 		t.Fatalf("status = %s, want failed when cascade target fails", res.Status)
 	}
@@ -86,24 +89,46 @@ func TestCascaderDowngradesPrimaryWhenAdditionalFails(t *testing.T) {
 
 func TestCascaderRetriesBlockedTarget(t *testing.T) {
 	calls := 0
-	op := func(_ context.Context, svc, action string) operation.Result {
+	op := func(_ context.Context, svc, action string) (operation.Result, error) {
 		if svc == "dep" {
 			calls++
 			if calls == 1 {
-				return operation.Result{Service: svc, Status: operation.ResultBlocked}
+				return operation.Result{Service: svc, Status: operation.ResultBlocked}, nil
 			}
 		}
-		return operation.Result{Service: svc, Status: operation.ResultOK}
+		return operation.Result{Service: svc, Status: operation.ResultOK}, nil
 	}
 	c := cascader{
-		op:     op,
-		lookup: func(s string) []string { return map[string][]string{"primary": {"dep"}}[s] },
-		emit:   func(Event) {},
-		sleep:  func(time.Duration) {}, // no-op backoff in tests
+		config: CascadeConfig{
+			Operate: op,
+			Lookup:  func(s string) []string { return map[string][]string{"primary": {"dep"}}[s] },
+			Emit:    func(Event) {},
+		},
+		sleep: func(time.Duration) {}, // no-op backoff in tests
 	}
-	c.run(context.Background(), "primary", "restart")
+	_, _ = c.run(context.Background(), "primary", "restart")
 	if calls != 2 {
 		t.Fatalf("a blocked target must be retried once, got %d calls", calls)
+	}
+}
+
+func TestCascaderDoesNotRetryAfterCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	calls := 0
+	c := cascader{config: CascadeConfig{
+		Operate: func(_ context.Context, svc, _ string) (operation.Result, error) {
+			if svc == "dep" {
+				calls++
+				cancel()
+				return operation.Result{Service: svc, Status: operation.ResultBlocked}, nil
+			}
+			return operation.Result{Service: svc, Status: operation.ResultOK}, nil
+		},
+		Lookup: func(s string) []string { return map[string][]string{"primary": {"dep"}}[s] },
+	}}
+	_, _ = c.run(ctx, "primary", "restart")
+	if calls != 1 {
+		t.Fatalf("cancelled blocked target calls = %d, want 1", calls)
 	}
 }
 

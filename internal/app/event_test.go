@@ -61,6 +61,16 @@ func TestOperationEventRecordUsesCanonicalResultMapping(t *testing.T) {
 	}
 }
 
+func TestCascadeEventRecordUsesCanonicalRelationshipMapping(t *testing.T) {
+	record := CascadeEventRecord("web", operation.Result{
+		Service: "db", Action: string(rules.ActionRestart), Status: operation.ResultFailed,
+	})
+	if record.Service != "db" || record.Kind != eventKindCascade || record.Action != string(rules.ActionRestart) ||
+		record.Status != string(operation.ResultFailed) || record.Message != "cascade from web" {
+		t.Fatalf("record = %+v", record)
+	}
+}
+
 func TestSlogEmitterLogsHookAtInfo(t *testing.T) {
 	var buf bytes.Buffer
 	logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelInfo}))

@@ -408,21 +408,22 @@ func wireCascade(workers []*Worker, cascadeMap map[string][]string, deps Deps) {
 	for _, w := range workers {
 		byName[w.Service] = w
 	}
-	op := func(ctx context.Context, svc, action string) operation.Result {
+	op := func(ctx context.Context, svc, action string) (operation.Result, error) {
 		if tw := byName[svc]; tw != nil {
-			return tw.operateForRemediation(ctx, action)
+			return tw.operateForRemediation(ctx, action), nil
 		}
-		return operation.Result{Service: svc, Action: action, Status: operation.ResultFailed, Message: "cascade target not configured"}
+		return operation.Result{Service: svc, Action: action, Status: operation.ResultFailed, Message: "cascade target not configured"}, nil
 	}
 	lookup := func(svc string) []string { return cascadeMap[svc] }
 	for _, w := range workers {
 		if len(cascadeMap[w.Service]) == 0 {
 			continue
 		}
-		c := cascader{op: op, lookup: lookup, emit: deps.Emit}
+		cfg := CascadeConfig{Operate: op, Lookup: lookup, Emit: deps.Emit}
 		service := w.Service
 		w.Cascade = func(ctx context.Context, action string) operation.Result {
-			return c.run(ctx, service, action)
+			result, _ := RunCascade(ctx, service, action, cfg)
+			return result
 		}
 	}
 }

@@ -924,7 +924,7 @@ deja activas estas unidades auxiliares, como se describe arriba.
 
 Donde `also_service` actúa sobre *unidades init de este servicio*, `also_apply` actúa sobre
 **otros servicios de Sermo**: cuando este servicio se arranca/para/reinicia (por una
-regla de remediación o un `sermoctl` manual), la misma acción corre sobre cada servicio
+regla de remediación, `sermoctl` o la Web UI), la misma acción corre sobre cada servicio
 listado a través de **su propia** operación con guards.
 
 ```yaml
@@ -937,9 +937,12 @@ also_apply: [nginx, varnish]
 - **Cada target conserva sus propios guards/locks/preflight** (corre su operación
   real). El cooldown de remediación de un target y su estado pausado/`unmonitor`
   *no* se consultan — `also_apply` es una relación explícita.
-- **Best-effort y a prueba de bucles**: un target fallido/bloqueado se reporta (un evento
-  `cascade`; un target bloqueado se reintenta una vez) pero no hace fallar la principal; los ciclos
-  se cortan con un conjunto de visitados.
+- **Best-effort y a prueba de bucles**: un target bloqueado se reintenta una vez;
+  si continúa bloqueado, se reporta con un evento `cascade` no fatal. Un target
+  fallido o que no puede resolverse también se reporta y hace fallar el resultado
+  global de la cascada, aunque se siguen intentando los demás targets. El orden,
+  el reintento y el resultado son idénticos para remediación, CLI y Web UI. Los
+  ciclos se cortan con un conjunto de visitados.
 - Las entradas deben ser servicios configurados y no deben incluir el propio servicio.
 - `sermoctl start|stop|restart <svc> --no-cascade` actúa sobre exactamente un servicio.
 - `sermoctl reload <svc>` y `sermoctl resume <svc>` actúan solo sobre la principal
