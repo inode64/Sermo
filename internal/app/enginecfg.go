@@ -37,7 +37,10 @@ func engineValue(cfg *config.Config, key string) any {
 
 // EngineInt reads an int field from the engine block.
 func EngineInt(cfg *config.Config, key string, fallback int) int {
-	return engineInt(cfg, key, fallback)
+	if v, ok := cfgval.Int(engineValue(cfg, key)); ok {
+		return v
+	}
+	return fallback
 }
 
 // EngineBoolDefaultTrue reads a boolean field from the engine block that is on
@@ -100,11 +103,4 @@ func EngineUserLookup(cfg *config.Config, runner execx.Runner) *process.UserLook
 		Timeout: config.EngineDuration(cfg, config.EngineKeyUserLookupTimeout, process.DefaultUserLookupTimeout),
 		Runner:  runner,
 	})
-}
-
-func engineInt(cfg *config.Config, key string, fallback int) int {
-	if v, ok := cfgval.Int(engineValue(cfg, key)); ok {
-		return v
-	}
-	return fallback
 }

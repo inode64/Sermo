@@ -422,8 +422,7 @@ func TestEngineAndNotifierAccessors(t *testing.T) {
 		t.Fatalf("empty config notifiers = %v, want builtin terminal notifiers", raw)
 	}
 
-	// Exercise improved coercion (now via cfgval): string forms for ints and durations are accepted
-	// (previously engineInt only accepted bare numeric types; durations already string-only).
+	// Exercise the shared cfgval coercion: string forms for ints and durations are accepted.
 	cfg2 := &config.Config{Global: config.Global{Raw: map[string]any{
 		config.SectionEngine: map[string]any{
 			config.EngineKeyMaxParallelChecks: "16", // string form (e.g. from some expansions)
