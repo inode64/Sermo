@@ -6,6 +6,15 @@ import (
 	"testing"
 )
 
+type typedTestNotifier struct {
+	name string
+	typ  string
+}
+
+func (n typedTestNotifier) Name() string                      { return n.name }
+func (n typedTestNotifier) Type() string                      { return n.typ }
+func (typedTestNotifier) Send(context.Context, Message) error { return nil }
+
 // assertBuildWebhookNotifier builds a webhook notifier with a valid URL and
 // asserts its identity, then asserts build rejects a missing and a non-http(s)
 // webhook.
@@ -73,6 +82,21 @@ func TestBuildEmptyIsNoop(t *testing.T) {
 	notifiers, warns := Build(nil)
 	if len(notifiers) != 0 || len(warns) != 0 {
 		t.Fatalf("empty config should yield nothing: %v %v", notifiers, warns)
+	}
+}
+
+func TestPreferWallSuppressesOnlyTTY(t *testing.T) {
+	email := typedTestNotifier{name: "email", typ: TypeEmail}
+	tty := typedTestNotifier{name: "tty", typ: TypeTTY}
+	wall := typedTestNotifier{name: "wall", typ: TypeWall}
+
+	withoutWall := []Notifier{tty, email}
+	if got := PreferWall(withoutWall); !slices.EqualFunc(got, withoutWall, func(a, b Notifier) bool { return a.Name() == b.Name() }) {
+		t.Fatalf("PreferWall without wall = %v, want original delivery set", got)
+	}
+	got := PreferWall([]Notifier{tty, email, wall, tty})
+	if len(got) != 2 || got[0].Name() != "email" || got[1].Name() != "wall" {
+		t.Fatalf("PreferWall = %v, want email and wall in input order", got)
 	}
 }
 

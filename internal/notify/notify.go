@@ -167,6 +167,29 @@ func Build(raw map[string]any, opts ...Option) (map[string]Notifier, []string) {
 	return out, warnings
 }
 
+// PreferWall removes TTY notifiers when the same delivery set contains a wall
+// notifier. Wall already targets every active terminal, so sending through both
+// transports would duplicate the local-console message.
+func PreferWall(notifiers []Notifier) []Notifier {
+	hasWall := false
+	for _, notifier := range notifiers {
+		if notifier.Type() == TypeWall {
+			hasWall = true
+			break
+		}
+	}
+	if !hasWall {
+		return notifiers
+	}
+	selected := make([]Notifier, 0, len(notifiers))
+	for _, notifier := range notifiers {
+		if notifier.Type() != TypeTTY {
+			selected = append(selected, notifier)
+		}
+	}
+	return selected
+}
+
 // SupportedTypes lists the registered notifier types, for validation and docs.
 func SupportedTypes() []string {
 	return slices.Sorted(maps.Keys(builders))

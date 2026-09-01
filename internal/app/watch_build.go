@@ -984,22 +984,12 @@ func isStorageCheckType(typ string) bool {
 // notifier itself failed to build, already warned by notify.Build).
 func resolveNotifiers(names []string, reg map[string]notify.Notifier) []notify.Notifier {
 	out := make([]notify.Notifier, 0, len(names))
-	hasWall := false
-	for _, n := range names {
-		if nt, ok := reg[n]; ok && nt.Type() == notify.TypeWall {
-			hasWall = true
-			break
-		}
-	}
 	for _, n := range names {
 		if nt, ok := reg[n]; ok {
-			if hasWall && nt.Type() == notify.TypeTTY {
-				continue
-			}
 			out = append(out, nt)
 		}
 	}
-	return out
+	return notify.PreferWall(out)
 }
 
 // serviceMonitorWatches synthesizes the per-service version/config monitors from
