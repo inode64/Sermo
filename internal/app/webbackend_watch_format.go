@@ -90,30 +90,48 @@ func watchMeter(checkType string, system metrics.Snapshot) *web.WatchMeter {
 	switch checkType {
 	case metrics.MetricMemory:
 		r := system[metrics.MetricTotalMemory]
-		used, total, free, ok := byteUsage(r)
+		_, total, available, ok := byteUsage(r)
 		if !ok {
 			return nil
 		}
-		return &web.WatchMeter{
-			Kind:       metrics.MetricMemory,
-			UsedPct:    r.Percent,
-			TotalBytes: total,
-			UsedBytes:  used,
-			FreeBytes:  free,
-		}
+		return memoryWatchMeter(total, available, r.Percent)
 	case checks.CheckTypeLoad:
 		r, ok := system[metrics.MetricLoad1]
 		if !ok || !r.HasAbsolute {
 			return nil
 		}
-		ncpu := runtime.NumCPU()
-		pct := 0.0
-		if ncpu > 0 {
-			pct = r.Absolute / float64(ncpu) * metrics.PercentScale
-		}
-		return &web.WatchMeter{Kind: checks.CheckTypeLoad, UsedPct: pct, Load: r.Absolute, NumCPU: ncpu}
+		return loadWatchMeter(r.Absolute, runtime.NumCPU())
 	}
 	return nil
+}
+
+// memoryWatchMeter is the canonical projection of one memory observation onto
+// the web gauge. Callers retain ownership of translating their source into
+// total and available bytes; this helper normalizes the presentation contract.
+func memoryWatchMeter(total, available uint64, usedPct float64) *web.WatchMeter {
+	available = min(available, total)
+	return &web.WatchMeter{
+		Kind:       metrics.MetricMemory,
+		UsedPct:    usedPct,
+		TotalBytes: total,
+		UsedBytes:  total - available,
+		FreeBytes:  available,
+	}
+}
+
+// loadWatchMeter is the single load-to-capacity projection used by collector
+// and daemon-published snapshots. A non-positive CPU count carries no capacity
+// and therefore cannot produce a meaningful gauge.
+func loadWatchMeter(load float64, numCPU int) *web.WatchMeter {
+	if numCPU <= 0 {
+		return nil
+	}
+	return &web.WatchMeter{
+		Kind:    checks.CheckTypeLoad,
+		UsedPct: load / float64(numCPU) * metrics.PercentScale,
+		Load:    load,
+		NumCPU:  numCPU,
+	}
 }
 
 // storageWatchInfo returns the latest storage result published by the daemon.
