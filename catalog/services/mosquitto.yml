@@ -35,15 +35,9 @@ processes:
   main:
     exe: ${mosquitto_binary}
     user: ${user}
-preflight:
-  config:
-    type: command
-    command:
-      - ${mosquitto_binary}
-      - --test-config
-      - -c
-      - ${config}
-    timeout: 15s
+# Mosquitto gained --test-config in 2.1. Keep 2.0 installations operable:
+# there is no safe offline config validator in that supported release, and
+# starting a second broker merely to parse the file would mutate runtime state.
 reload:
   signal: HUP
 reload_on_change:

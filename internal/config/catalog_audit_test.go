@@ -2589,7 +2589,7 @@ func TestCatalogConfigInvalidHandledByPreflight(t *testing.T) {
 	for _, name := range []string{
 		"mysql", "mariadb", "postgres-%v", "dnsmasq", "monit", "nebula-%i",
 		"named", "nginx", "cloudflared", "influxdb", "mongod", "slapd",
-		"mosquitto", "supervisord",
+		"supervisord",
 	} {
 		t.Run(name, func(t *testing.T) {
 			body := catalogDocByName(t, root, "services", name)
@@ -2606,6 +2606,16 @@ func TestCatalogConfigInvalidHandledByPreflight(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// Mosquitto only gained --test-config in 2.1. The catalog supports 2.0, where
+// launching the broker is not a safe substitute for an offline parser.
+func TestCatalogMosquittoSupportsVersion20WithoutConfigPreflight(t *testing.T) {
+	body := catalogDocByName(t, repoRoot(t), "services", "mosquitto")
+	preflight, _ := body["preflight"].(map[string]any)
+	if _, found := preflight["config"]; found {
+		t.Fatal("mosquitto config preflight requires --test-config, which is unavailable before 2.1")
 	}
 }
 
