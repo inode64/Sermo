@@ -515,7 +515,7 @@ func (b *WebBackend) registerNotifiers(cfg *config.Config) {
 	for _, name := range slices.Sorted(maps.Keys(cfg.Notifiers())) {
 		entry, _ := cfg.Notifiers()[name].(map[string]any)
 		typ := cfgval.AsString(entry[notify.KeyType])
-		b.notifiers[name] = &webNotifier{name: name, typ: typ, enabled: notify.Enabled(entry), summary: notify.ConfigSummary(typ, entry)}
+		b.notifiers[name] = &webNotifier{name: name, typ: typ, enabled: !cfgval.Disabled(entry), summary: notify.ConfigSummary(typ, entry)}
 		b.notifierOrder = append(b.notifierOrder, name)
 	}
 }
