@@ -6,7 +6,6 @@ import (
 	"regexp"
 	"slices"
 	"strings"
-	"time"
 
 	"sermo/internal/cfgval"
 	"sermo/internal/checks"
@@ -376,23 +375,21 @@ func validatePolicyExtras(tree map[string]any, add addFunc) {
 	}
 	validatePositiveDurationField(policy, rules.PolicyKeyMaxActionsWindow, policyPathMaxActionsWindow, add)
 	if bo, ok := policy[rules.PolicyKeyBackoff].(map[string]any); ok {
-		initial := cfgval.String(bo[rules.BackoffKeyInitial])
-		maxStr := cfgval.String(bo[rules.BackoffKeyMax])
-		initialOK := isPositiveDuration(initial)
-		maxOK := isPositiveDuration(maxStr)
+		initial, initialOK := cfgval.ParseDuration(bo[rules.BackoffKeyInitial])
+		limit, limitOK := cfgval.ParseDuration(bo[rules.BackoffKeyMax])
+		initialOK = initialOK && initial > 0
+		limitOK = limitOK && limit > 0
 		if !initialOK {
 			add("%s must be a valid positive duration", policyPathBackoffInitial)
 		}
-		if !maxOK {
+		if !limitOK {
 			add("%s must be a valid positive duration", policyPathBackoffMax)
 		}
 		// Only compare once both parse cleanly: otherwise a garbage initial
-		// (di defaulting to 0) would let any max pass, and an omitted max would
+		// defaulting to 0 would let any max pass, and an omitted max would
 		// report the misleading ">= initial" instead of its own parse error.
-		if initialOK && maxOK {
-			di, _ := time.ParseDuration(initial)
-			dm, _ := time.ParseDuration(maxStr)
-			if dm < di {
+		if initialOK && limitOK {
+			if limit < initial {
 				add("%s must be >= initial", policyPathBackoffMax)
 			}
 		}

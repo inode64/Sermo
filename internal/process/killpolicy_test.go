@@ -1,6 +1,8 @@
 package process
 
 import (
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 )
@@ -135,13 +137,17 @@ func TestEnableAutomaticReapingWithoutStrictSelectorStaysDisabled(t *testing.T) 
 }
 
 func TestParseStopPolicyBadDurationWarns(t *testing.T) {
-	tree := map[string]any{"stop_policy": map[string]any{"graceful_timeout": "notaduration"}}
-	policy, warnings := ParseStopPolicy(tree)
-	if len(warnings) != 1 {
-		t.Fatalf("warnings = %v, want 1", warnings)
-	}
-	if policy.GracefulTimeout != 0 {
-		t.Errorf("bad duration should yield 0, got %v", policy.GracefulTimeout)
+	for _, value := range []any{"notaduration", "0s", "-1s", "", 10} {
+		t.Run(fmt.Sprint(value), func(t *testing.T) {
+			tree := map[string]any{"stop_policy": map[string]any{"graceful_timeout": value}}
+			policy, warnings := ParseStopPolicy(tree)
+			if len(warnings) != 1 || !strings.Contains(warnings[0], "valid positive duration") {
+				t.Fatalf("warnings = %v, want one positive-duration warning", warnings)
+			}
+			if policy.GracefulTimeout != 0 {
+				t.Errorf("bad duration should yield 0, got %v", policy.GracefulTimeout)
+			}
+		})
 	}
 }
 

@@ -5,7 +5,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"time"
 
 	"sermo/internal/cfgval"
 )
@@ -92,8 +91,8 @@ func isNonNegativeDuration(s string) bool {
 // isDuration reports whether s parses as a duration that is either >0 (when
 // !allowZero) or >=0. Centralizes the repeated Parse+check to remove dupe.
 func isDuration(s string, allowZero bool) bool {
-	d, err := time.ParseDuration(s)
-	if err != nil {
+	d, ok := cfgval.ParseDuration(s)
+	if !ok {
 		return false
 	}
 	if allowZero {

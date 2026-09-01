@@ -481,21 +481,30 @@ func Bool(v any) bool {
 	return b
 }
 
+// ParseDuration parses a Go duration string and reports whether v was a
+// non-empty, valid duration. It preserves the distinction between an invalid
+// value and a valid zero duration for callers that validate bounds.
+func ParseDuration(v any) (time.Duration, bool) {
+	s := AsString(v)
+	if s == "" {
+		return 0, false
+	}
+	d, err := time.ParseDuration(s)
+	return d, err == nil
+}
+
 // Duration parses a Go duration string (e.g. "30s"), returning 0 when v is not a
 // string or not a valid duration. For a non-zero fallback, use DurationOr.
 func Duration(v any) time.Duration {
-	return DurationOr(v, 0)
+	d, _ := ParseDuration(v)
+	return d
 }
 
 // DurationOr parses a Go duration string, returning fallback when v is absent,
 // not a string, or not a valid duration.
 func DurationOr(v any, fallback time.Duration) time.Duration {
-	s := AsString(v)
-	if s == "" {
-		return fallback
-	}
-	d, err := time.ParseDuration(s)
-	if err != nil {
+	d, ok := ParseDuration(v)
+	if !ok {
 		return fallback
 	}
 	return d

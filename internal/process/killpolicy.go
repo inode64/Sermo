@@ -1,6 +1,7 @@
 package process
 
 import (
+	"fmt"
 	"maps"
 	"regexp"
 	"slices"
@@ -181,9 +182,9 @@ func ParseStopPolicy(tree map[string]any) (KillPolicy, []string) {
 	}
 
 	var warnings []string
-	policy.GracefulTimeout = parseDuration(sp[StopPolicyKeyGracefulTimeout], SectionStopPolicy+"."+StopPolicyKeyGracefulTimeout, &warnings)
-	policy.TermTimeout = parseDuration(sp[StopPolicyKeyTermTimeout], SectionStopPolicy+"."+StopPolicyKeyTermTimeout, &warnings)
-	policy.KillTimeout = parseDuration(sp[StopPolicyKeyKillTimeout], SectionStopPolicy+"."+StopPolicyKeyKillTimeout, &warnings)
+	policy.GracefulTimeout = stopPolicyDuration(sp, StopPolicyKeyGracefulTimeout, &warnings)
+	policy.TermTimeout = stopPolicyDuration(sp, StopPolicyKeyTermTimeout, &warnings)
+	policy.KillTimeout = stopPolicyDuration(sp, StopPolicyKeyKillTimeout, &warnings)
 	if value, present := sp[StopPolicyKeyForceKill]; present {
 		switch v := value.(type) {
 		case bool:
@@ -249,14 +250,15 @@ func ParseReapPolicy(tree map[string]any) (KillSelector, []string) {
 	return selector, warnings
 }
 
-func parseDuration(v any, field string, warnings *[]string) time.Duration {
-	s := cfgval.AsString(v)
-	if s == "" {
+func stopPolicyDuration(stopPolicy map[string]any, key string, warnings *[]string) time.Duration {
+	v, present := stopPolicy[key]
+	if !present {
 		return 0
 	}
-	d, err := time.ParseDuration(s)
-	if err != nil {
-		*warnings = append(*warnings, field+": invalid duration "+s)
+	d, ok := cfgval.ParseDuration(v)
+	if !ok || d <= 0 {
+		field := SectionStopPolicy + "." + key
+		*warnings = append(*warnings, fmt.Sprintf("%s %q must be a valid positive duration", field, cfgval.String(v)))
 		return 0
 	}
 	return d
