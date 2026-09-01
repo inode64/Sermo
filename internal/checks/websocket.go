@@ -199,7 +199,7 @@ func buildWebsocketCheck(b base, entry map[string]any) (Check, string) {
 		rawURL:      raw,
 		scheme:      u.Scheme,
 		host:        u.Hostname(),
-		ifaces:      parseInterfaces(entry[CheckKeyInterface]),
+		ifaces:      cfgval.StringList(entry[CheckKeyInterface]),
 		ifaceAll:    wsAll,
 		port:        port,
 		path:        websocketPath(u),

@@ -6,24 +6,6 @@ import (
 	"time"
 )
 
-func TestParseInterfaces(t *testing.T) {
-	if got := parseInterfaces("eth0"); len(got) != 1 || got[0] != "eth0" {
-		t.Fatalf("string = %v", got)
-	}
-	if got := parseInterfaces([]any{"eth0", "192.168.1.2"}); len(got) != 2 || got[1] != "192.168.1.2" {
-		t.Fatalf("list = %v", got)
-	}
-	if got := parseInterfaces([]any{"eth0", "", 7, true}); len(got) != 1 || got[0] != "eth0" {
-		t.Fatalf("mixed list = %v, want [eth0]", got)
-	}
-	if got := parseInterfaces(""); got != nil {
-		t.Fatalf("empty = %v, want nil", got)
-	}
-	if got := parseInterfaces(nil); got != nil {
-		t.Fatalf("nil = %v, want nil", got)
-	}
-}
-
 func TestParseInterfaceMatch(t *testing.T) {
 	for in, want := range map[string]bool{"": false, "any": false, "all": true} {
 		if all, warn := parseInterfaceMatch(map[string]any{"interface_match": in}); warn != "" || all != want {

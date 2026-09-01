@@ -6,6 +6,7 @@ import (
 	"math"
 	"net/http"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -304,6 +305,33 @@ func TestBuildTCPCheckHostDefault(t *testing.T) {
 	c2, _ := buildTCPCheck(base{}, map[string]any{"port": 80, "host": "example.test"})
 	if got := c2.(tcpCheck).host; got != "example.test" {
 		t.Fatalf("explicit host = %q, want example.test", got)
+	}
+}
+
+func TestBuildTCPCheckInterfaces(t *testing.T) {
+	tests := []struct {
+		name  string
+		value any
+		want  []string
+	}{
+		{name: "absent"},
+		{name: "scalar", value: "eth0", want: []string{"eth0"}},
+		{name: "ordered list skips blanks", value: []any{"eth0", "", "192.168.1.2"}, want: []string{"eth0", "192.168.1.2"}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			entry := map[string]any{"port": 80}
+			if test.value != nil {
+				entry[CheckKeyInterface] = test.value
+			}
+			check, warning := buildTCPCheck(base{}, entry)
+			if warning != "" {
+				t.Fatalf("buildTCPCheck() warning = %q", warning)
+			}
+			if got := check.(tcpCheck).ifaces; !slices.Equal(got, test.want) || (got == nil) != (test.want == nil) {
+				t.Fatalf("interfaces = %#v, want %#v", got, test.want)
+			}
+		})
 	}
 }
 

@@ -135,7 +135,7 @@ func httpRequestClient(rawURL string, entry map[string]any, client *http.Client)
 }
 
 func firstHTTPInterface(entry map[string]any) string {
-	if ifaces := parseInterfaces(entry[CheckKeyInterface]); len(ifaces) > 0 {
+	if ifaces := cfgval.StringList(entry[CheckKeyInterface]); len(ifaces) > 0 {
 		return ifaces[0]
 	}
 	return ""
