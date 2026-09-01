@@ -68,7 +68,7 @@ func validateOpByteSize(label string, m map[string]any, add addFunc) {
 
 func validateOpPercent(label string, m map[string]any, add addFunc) {
 	validateCompareOp(label, m, add)
-	if !isPercentValue(cfgval.String(m[checks.CheckKeyValue])) {
+	if _, ok := cfgval.Percent(cfgval.String(m[checks.CheckKeyValue])); !ok {
 		add("%s value %q must be a percentage in %s (e.g. 90 or 90%%)", label, cfgval.String(m[checks.CheckKeyValue]), cfgval.PercentRange())
 	}
 }
@@ -80,11 +80,6 @@ func validateCompareOp(label string, m map[string]any, add addFunc) {
 	if op := cfgval.String(m[checks.CheckKeyOp]); !cfgval.IsCompareOp(op) {
 		add("%s has an invalid op %q", label, op)
 	}
-}
-
-func isPercentValue(s string) bool {
-	_, ok := cfgval.Percent(s)
-	return ok
 }
 
 // validatePresentThresholds validates the present {op, value} predicates among
