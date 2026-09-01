@@ -41,13 +41,13 @@ type preparedOperation struct {
 
 func (a App) prepareManualOperationRunner(ctx context.Context, opts options, cfg *config.Config, resolved config.Resolved, service, action string, actionStore *state.Store) (manualOperationRunner, func(), error) {
 	closeRunner := func() {}
-	runner := manualOperationRunner{
-		operate: a.Operate,
-		activeAfter: func(context.Context, options, *config.Config, config.Resolved, string, string, operation.Result, error) bool {
-			return false
-		},
-	}
-	if !a.defaultOperation {
+	if a.Operate != nil {
+		runner := manualOperationRunner{
+			operate: a.Operate,
+			activeAfter: func(context.Context, options, *config.Config, config.Resolved, string, string, operation.Result, error) bool {
+				return false
+			},
+		}
 		if action != actionReload {
 			return runner, closeRunner, nil
 		}
