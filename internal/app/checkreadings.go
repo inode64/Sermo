@@ -403,17 +403,6 @@ var checkReadingsByType = map[string]func(map[string]any) []web.WatchReading{
 	checks.CheckTypeMetric:           metricValueCheckReadings,
 }
 
-// countMeterCheckTypes are the count-vs-limit checks the watch panel presents as
-// a usage gauge when the kernel gives them a ceiling to gauge against.
-//
-// memory and load are deliberately absent: they render a meter too, but reach
-// resourceCheckReadings above, whose rows say more than their gauge does.
-var countMeterCheckTypes = map[string]bool{
-	checks.CheckTypeFDS:       true,
-	checks.CheckTypePIDs:      true,
-	checks.CheckTypeConntrack: true,
-}
-
 // gaugedCountSample reports whether this sample is one the panel draws as a
 // gauge. When it is, the meter already states the count, the ceiling and the
 // utilisation, so metric rows below would repeat it word for word — their graph
@@ -422,7 +411,7 @@ var countMeterCheckTypes = map[string]bool{
 // percentage, there is no gauge, and the count has to read out as a value or it
 // appears nowhere at all.
 func gaugedCountSample(checkType string, data map[string]any) bool {
-	if !countMeterCheckTypes[checkType] {
+	if _, ok := countMeterDataKey(checkType); !ok {
 		return false
 	}
 	_, gauged := data[checks.DataKeyUsedPct]

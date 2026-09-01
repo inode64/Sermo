@@ -66,6 +66,25 @@ func TestWatchCountMeter(t *testing.T) {
 	}
 }
 
+func TestCountMeterDataKey(t *testing.T) {
+	for _, tc := range []struct {
+		checkType string
+		wantKey   string
+	}{
+		{checks.CheckTypeFDS, checks.DataKeyAllocated},
+		{checks.CheckTypePIDs, checks.DataKeyCount},
+		{checks.CheckTypeConntrack, checks.DataKeyCount},
+	} {
+		key, ok := countMeterDataKey(tc.checkType)
+		if !ok || key != tc.wantKey {
+			t.Errorf("countMeterDataKey(%q) = %q, %t; want %q, true", tc.checkType, key, ok, tc.wantKey)
+		}
+	}
+	if key, ok := countMeterDataKey(checks.CheckTypeMemory); ok || key != "" {
+		t.Fatalf("countMeterDataKey(memory) = %q, %t; want empty, false", key, ok)
+	}
+}
+
 func TestWatchMeterSourcesShareProjection(t *testing.T) {
 	numCPU := runtime.NumCPU()
 	tests := []struct {
