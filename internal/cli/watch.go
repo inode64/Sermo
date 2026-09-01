@@ -257,11 +257,6 @@ func (a App) runWatchStatus(ctx context.Context, opts options) int {
 			}
 		}
 	}
-	if a.FetchDaemonWatchState != nil {
-		if st, ok := a.FetchDaemonWatchState(ctx, opts, name); ok && st != "" {
-			watchState = st
-		}
-	}
 	if opts.json {
 		out := map[string]any{cliJSONKeyWatch: name, cliJSONKeyState: watchState}
 		if detail.LastCheckedAt != "" {
