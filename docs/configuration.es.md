@@ -850,6 +850,10 @@ web:
   port: 9797                # REQUIRED to activate the web UI (9797 recommended)
 ```
 
+`address` acepta un nombre de host o un literal IPv4/IPv6. Escribe los
+literales IPv6 sin corchetes de URL (por ejemplo, `address: "::1"`); Sermo añade
+los corchetes al construir los endpoints del listener y de la API.
+
 - **Regla de activación:** la interfaz web ("servicio web") **no se inicia** a menos que
   `web.port` esté presente y sea válido. Omitir la clave (o todo el bloque `web:`)
   deja el panel deshabilitado; `sermod` registra el motivo exacto al arrancar.

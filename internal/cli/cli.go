@@ -23,7 +23,6 @@ import (
 	"sermo/internal/app"
 	"sermo/internal/assist"
 	"sermo/internal/buildinfo"
-	"sermo/internal/cfgval"
 	"sermo/internal/checks"
 	"sermo/internal/cliutil"
 	"sermo/internal/config"
@@ -32,6 +31,7 @@ import (
 	"sermo/internal/httpx"
 	"sermo/internal/locks"
 	"sermo/internal/mountctl"
+	"sermo/internal/netutil"
 	"sermo/internal/notify"
 	"sermo/internal/operation"
 	"sermo/internal/process"
@@ -1748,11 +1748,11 @@ func (a App) daemonWebPassword(cfg *config.Config) string {
 // only a credential for the daemon that wrote it, so sending it to a remote
 // sermod would replace a working password with a guaranteed 401.
 func daemonIsLocal(cfg *config.Config) bool {
-	wraw := cfg.Global.WebSection()
-	addr := cfgval.String(wraw[config.WebKeyAddress])
-	if addr == "" {
-		return true // the default bind address is loopback
+	bind, err := cfg.Global.WebBind()
+	if err != nil {
+		return false
 	}
+	addr := bind.Host
 	if addr == daemonWebLocalhostName || strings.HasSuffix(addr, "."+daemonWebLocalhostName) {
 		return true
 	}
@@ -1910,20 +1910,18 @@ func (a App) fetchDaemonApplicationStates(ctx context.Context, opts options) map
 }
 
 func webAPIBase(cfg *config.Config) (string, error) {
-	wraw := cfg.Global.WebSection()
-	if wraw == nil {
-		return "", errors.New("web UI is not enabled in config (no web: block or no port); the event API is exposed by the running daemon")
+	bind, err := cfg.Global.WebBind()
+	if err != nil {
+		switch {
+		case errors.Is(err, config.ErrWebNotConfigured):
+			return "", errors.New("web UI is not enabled in config (no web: block or no port); the event API is exposed by the running daemon")
+		case errors.Is(err, config.ErrWebPortUnset):
+			return "", errors.New("web.port is not set in config")
+		default:
+			return "", fmt.Errorf("%w", err)
+		}
 	}
-	addr := cfgval.String(wraw[config.WebKeyAddress])
-	if addr == "" {
-		addr = defaultWebAPIAddress
-	}
-	p, ok := cfgval.Int(wraw[config.WebKeyPort])
-	if !ok || p <= 0 {
-		return "", errors.New("web.port is not set in config")
-	}
-	port := p
-	return fmt.Sprintf("%s://%s:%d", daemonWebSchemeHTTP, addr, port), nil
+	return daemonWebSchemeHTTP + netutil.URLSchemeSeparator + bind.HostPort(), nil
 }
 
 // defaultReloadPidfileFallbacks are the absolute pidfiles `daemon reload` checks
