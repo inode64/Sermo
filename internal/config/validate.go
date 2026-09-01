@@ -964,7 +964,7 @@ func validateResolved(name string, tree map[string]any, runtime string, notifier
 				add("%s = %q must resolve to a port in %s", path, value, cfgval.TCPPortRange())
 			}
 		case checks.CheckKeyExpectStatus:
-			if !validExpectStatus(value) {
+			if !checks.ValidHTTPStatus(value) {
 				add("%s = %q must resolve to a valid HTTP status, class (2xx) or list", path, value)
 			}
 		}

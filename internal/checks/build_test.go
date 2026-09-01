@@ -500,6 +500,14 @@ func TestParseStatusMatcherClassUpperBoundary(t *testing.T) {
 	}
 }
 
+func TestParseStatusMatcherRejectsCodesOutsideHTTPRange(t *testing.T) {
+	for _, code := range []any{99, 600, "99", "600"} {
+		if _, err := parseStatusMatcher(code); err == nil {
+			t.Fatalf("parseStatusMatcher(%v) accepted an invalid HTTP status", code)
+		}
+	}
+}
+
 func TestParseStatusMatcherRejectsInvalidOperatorValues(t *testing.T) {
 	if _, err := parseStatusMatcher(map[string]any{"op": "<", "value": "abc"}); err == nil {
 		t.Fatal("non-numeric ordering value must be rejected")
