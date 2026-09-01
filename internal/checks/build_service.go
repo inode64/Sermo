@@ -2,6 +2,7 @@ package checks
 
 import (
 	"sermo/internal/cfgval"
+	"sermo/internal/metrics"
 	"sermo/internal/process"
 )
 
@@ -20,8 +21,8 @@ func buildServiceCheck(b base, entry map[string]any, deps Deps) (Check, string) 
 // Metric-check scopes (the `scope:` selector of a metric check). Exported so
 // config validation checks the same scope vocabulary the builder accepts.
 const (
-	MetricScopeService = "service"
-	MetricScopeSystem  = "system"
+	MetricScopeService = string(metrics.ScopeService)
+	MetricScopeSystem  = string(metrics.ScopeSystem)
 )
 
 // buildMetricCheck builds a check comparing a sampled metric to a threshold.
