@@ -121,6 +121,33 @@ func TestResolveConfiguredSpecRequiresMountBlock(t *testing.T) {
 	}
 }
 
+func TestEphemeralSpecNormalizesPathAndID(t *testing.T) {
+	tests := []struct {
+		name     string
+		path     string
+		wantPath string
+		wantID   string
+	}{
+		{name: "parent and duplicate separators", path: "/mnt//backup/../Daily Data/", wantPath: "/mnt/Daily Data", wantID: "mnt_Daily_Data"},
+		{name: "root", path: "/./", wantPath: "/", wantID: rootMountID},
+		{name: "identifier characters", path: "/srv/app.v1_data-2", wantPath: "/srv/app.v1_data-2", wantID: "srv_app.v1_data-2"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			spec := EphemeralSpec(test.path)
+			if spec.Path != test.wantPath || spec.Name != test.wantID {
+				t.Fatalf("EphemeralSpec(%q) = path %q name %q; want path %q name %q", test.path, spec.Path, spec.Name, test.wantPath, test.wantID)
+			}
+			if got := IDForPath(test.path); got != test.wantID {
+				t.Fatalf("IDForPath(%q) = %q, want %q", test.path, got, test.wantID)
+			}
+			if !spec.Refcount || spec.Umount != defaultUmountSpec() {
+				t.Fatalf("EphemeralSpec(%q) defaults = refcount %t umount %+v", test.path, spec.Refcount, spec.Umount)
+			}
+		})
+	}
+}
+
 func TestUsersWithLookupStopsOnCancelledContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // already cancelled before the scan begins
