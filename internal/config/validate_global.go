@@ -363,8 +363,3 @@ func validateDefaultsVariables(defaults map[string]any, add addFunc) {
 		}
 	}
 }
-
-func isValidBackend(b string) bool {
-	_, ok := validBackends[b]
-	return ok
-}

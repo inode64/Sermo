@@ -12,6 +12,7 @@ import (
 	"sermo/internal/emission"
 	"sermo/internal/process"
 	"sermo/internal/rules"
+	"sermo/internal/servicemgr"
 )
 
 // Issue is a single validation finding, scoped to a document or "global".
@@ -23,10 +24,7 @@ type Issue struct {
 // globalScope is the Issue scope for findings in sermo.yml itself.
 const globalScope = "global"
 
-var validBackends = map[string]struct{}{"": {}, backendAuto: {}, backendSystemd: {}, backendOpenRC: {}}
-
 const (
-	backendSummary        = backendAuto + ", " + backendSystemd + ", " + backendOpenRC
 	initBackendSummary    = backendSystemd + ", " + backendOpenRC
 	userLookupModeSummary = process.UserLookupAuto + ", " +
 		process.UserLookupNative + ", " +
@@ -152,8 +150,9 @@ func validateGlobalEngine(cfg *Config, raw map[string]any, add addFunc) {
 			add(validationNotSupportedFormat, engineFieldPath(key))
 		}
 	}
-	if backend := cfgval.String(engine[EngineKeyBackend]); !isValidBackend(backend) {
-		add(validationNotOneOfFormat, enginePathBackend, backend, backendSummary)
+	backend := cfgval.String(engine[EngineKeyBackend])
+	if _, err := servicemgr.ParseBackend(backend); err != nil {
+		add(validationNotOneOfFormat, enginePathBackend, backend, servicemgr.BackendInitSummary)
 	}
 	for _, field := range []string{
 		keyInterval, EngineKeyArtifactInterval, EngineKeyDefaultTimeout, EngineKeyOperationTimeout,
