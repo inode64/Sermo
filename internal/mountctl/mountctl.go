@@ -212,7 +212,7 @@ func SpecFromStorageTree(name string, tree map[string]any) Spec {
 func EphemeralSpec(path string) Spec {
 	clean := filepath.Clean(path)
 	return Spec{
-		Name:     IDForPath(clean),
+		Name:     idForCleanPath(clean),
 		Path:     clean,
 		Refcount: true,
 		Umount:   defaultUmountSpec(),
@@ -241,12 +241,16 @@ func UmountDisabledReason(path string) string {
 
 // IDForPath derives a simple stable identifier from a mount path.
 func IDForPath(path string) string {
-	clean := strings.Trim(filepath.Clean(path), "/")
-	if clean == "" || clean == "." {
+	return idForCleanPath(filepath.Clean(path))
+}
+
+func idForCleanPath(cleanPath string) string {
+	trimmed := strings.Trim(cleanPath, "/")
+	if trimmed == "" || trimmed == "." {
 		return rootMountID
 	}
 	var b strings.Builder
-	for _, r := range clean {
+	for _, r := range trimmed {
 		switch {
 		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
 			b.WriteRune(r)
