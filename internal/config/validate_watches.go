@@ -821,7 +821,7 @@ func validateICMPMetricCondition(prefix, metric string, m map[string]any, add ad
 			validateOpNumeric(prefix+".threshold", th, add)
 		}
 		if hasC {
-			if !isNumeric(cfgval.String(ch[checks.CheckKeyDelta])) {
+			if _, ok := cfgval.Float(cfgval.String(ch[checks.CheckKeyDelta])); !ok {
 				add("%s.change delta %q must be numeric", prefix, cfgval.String(ch[checks.CheckKeyDelta]))
 			}
 		}
@@ -858,7 +858,8 @@ func validateFileCheck(name string, check, entry map[string]any, defaultNotify [
 	if sz, ok := check[checks.CheckKeySize].(map[string]any); ok {
 		conds++
 		if cfgval.String(sz[checks.CheckKeyOn]) != checks.OnModeChange {
-			if !isValidCompareOp(cfgval.String(sz[checks.CheckKeyOp])) || !isNumeric(cfgval.String(sz[checks.CheckKeyValue])) {
+			_, numeric := cfgval.Float(cfgval.String(sz[checks.CheckKeyValue]))
+			if !cfgval.IsCompareOp(cfgval.String(sz[checks.CheckKeyOp])) || !numeric {
 				add("%s requires on: change or {op, value} with a numeric value", watchCheckFieldPath(name, checks.CheckKeySize))
 			}
 		}
@@ -911,7 +912,8 @@ func validateProcessWatch(name string, check, entry map[string]any, defaultNotif
 			continue
 		}
 		conds++
-		if !isValidCompareOp(cfgval.String(m[checks.CheckKeyOp])) || !isNumeric(cfgval.String(m[checks.CheckKeyValue])) {
+		_, numeric := cfgval.Float(cfgval.String(m[checks.CheckKeyValue]))
+		if !cfgval.IsCompareOp(cfgval.String(m[checks.CheckKeyOp])) || !numeric {
 			add("%s requires {op, value} with a numeric value", watchCheckFieldPath(name, attr))
 		}
 	}

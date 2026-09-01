@@ -54,7 +54,7 @@ func validateMountConditions(prefix string, fields map[string]any, add addFunc) 
 // shared core of every delta/threshold/predicate check.
 func validateOpNumeric(label string, m map[string]any, add addFunc) {
 	validateCompareOp(label, m, add)
-	if !isNumeric(cfgval.String(m[checks.CheckKeyValue])) {
+	if _, ok := cfgval.Float(cfgval.String(m[checks.CheckKeyValue])); !ok {
 		add("%s value %q must be numeric", label, cfgval.String(m[checks.CheckKeyValue]))
 	}
 }
@@ -77,7 +77,7 @@ func validateOpPercent(label string, m map[string]any, add addFunc) {
 // map is not one of the comparison operators the storage-style checks share. It is
 // the op-validation prologue every validateOp* helper repeats.
 func validateCompareOp(label string, m map[string]any, add addFunc) {
-	if op := cfgval.String(m[checks.CheckKeyOp]); !isValidCompareOp(op) {
+	if op := cfgval.String(m[checks.CheckKeyOp]); !cfgval.IsCompareOp(op) {
 		add("%s has an invalid op %q", label, op)
 	}
 }
@@ -467,18 +467,6 @@ func validateSmartFields(prefix string, fields map[string]any, add addFunc) {
 	validatePresentThresholds(prefix, fields, checks.SmartPredFields, add)
 }
 
-// isValidCompareOp reports whether op is one of the comparison operators shared by
-// every {op, value} threshold — the single set in cfgval, shared with the
-// runtime builders so the two grammars cannot drift apart.
-func isValidCompareOp(op string) bool {
-	return cfgval.IsCompareOp(op)
-}
-
-func isNumeric(s string) bool {
-	_, ok := cfgval.Float(s)
-	return ok
-}
-
 // validateConnFields validates a connection-protocol check (mysql, …): a user
 // is required (password is optional and may come from the environment), the
 // port must be numeric when present, and tls must be a boolean or one of the
@@ -536,7 +524,7 @@ func validateConnPort(prefix string, fields map[string]any, add addFunc) {
 // connection and clock-check grammar.
 func validateOptionalTCPPort(prefix string, fields map[string]any, add addFunc) {
 	if v, present := fields[checks.CheckKeyPort]; present {
-		if n, ok := cfgval.Int(v); !ok || !validTCPPort(n) {
+		if n, ok := cfgval.Int(v); !ok || !cfgval.ValidTCPPort(n) {
 			add("%s.port %q must be an integer in %s", prefix, cfgval.String(v), cfgval.TCPPortRange())
 		}
 	}
@@ -1115,13 +1103,13 @@ func validateSMTPAcceptanceString(path string, entry map[string]any, field strin
 }
 
 func validateTCPCheck(path string, entry map[string]any, _ string, add addFunc) {
-	if n, ok := cfgval.Int(entry[checks.CheckKeyPort]); !ok || !validTCPPort(n) {
+	if n, ok := cfgval.Int(entry[checks.CheckKeyPort]); !ok || !cfgval.ValidTCPPort(n) {
 		add("%s.port is required and must be a port in %s for a tcp check", path, cfgval.TCPPortRange())
 	}
 }
 
 func validateTCPConnectionsCheck(path string, entry map[string]any, _ string, add addFunc) {
-	if n, ok := cfgval.Int(entry[checks.CheckKeyPort]); !ok || !validTCPPort(n) {
+	if n, ok := cfgval.Int(entry[checks.CheckKeyPort]); !ok || !cfgval.ValidTCPPort(n) {
 		add("%s.port is required and must be a port in %s for a tcp_connections check", path, cfgval.TCPPortRange())
 	}
 	validateThresholdPreds(path, entry, checks.TCPConnectionsPredFields, add)
@@ -1700,7 +1688,7 @@ func validateReplicationFields(prefix string, fields map[string]any, add addFunc
 	if op := cfgval.String(behind[checks.CheckKeyOp]); !cfgval.IsCompareOp(op) {
 		add("%s.behind.op %q is not one of %s", prefix, op, cfgval.CompareOpSummary)
 	}
-	if !isNumeric(cfgval.String(behind[checks.CheckKeyValue])) {
+	if _, ok := cfgval.Float(cfgval.String(behind[checks.CheckKeyValue])); !ok {
 		add("%s.behind.value must be numeric", prefix)
 	}
 }
@@ -1744,7 +1732,7 @@ func validateCertFields(prefix string, fields map[string]any, add addFunc) {
 		add("%s.host and %s.path are mutually exclusive", prefix, prefix)
 	}
 	if v, present := fields[checks.CheckKeyPort]; present {
-		if n, ok := cfgval.Int(v); !ok || !validTCPPort(n) {
+		if n, ok := cfgval.Int(v); !ok || !cfgval.ValidTCPPort(n) {
 			add(validationTCPPortRangeFormat, prefix+"."+checks.CheckKeyPort, cfgval.TCPPortRange())
 		}
 	}
@@ -1851,10 +1839,10 @@ func validateCount(entry map[string]any, path string, add addFunc) {
 		}
 		threshold = m
 	}
-	if op := cfgval.String(threshold[checks.CheckKeyOp]); !isValidCompareOp(op) {
+	if op := cfgval.String(threshold[checks.CheckKeyOp]); !cfgval.IsCompareOp(op) {
 		add("%s count check requires a valid op (%s)", path, cfgval.CompareOpSummary)
 	}
-	if !isNumeric(cfgval.String(threshold[checks.CheckKeyValue])) {
+	if _, ok := cfgval.Float(cfgval.String(threshold[checks.CheckKeyValue])); !ok {
 		add("%s count check value %q must be numeric", path, cfgval.String(threshold[checks.CheckKeyValue]))
 	}
 }

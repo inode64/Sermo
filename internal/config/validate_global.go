@@ -24,7 +24,7 @@ const (
 func validateWeb(webCfg map[string]any, add func(string, ...any)) {
 	if portRaw, present := webCfg[WebKeyPort]; present {
 		port, ok := cfgval.Int(portRaw)
-		if !ok || !validTCPPort(port) {
+		if !ok || !cfgval.ValidTCPPort(port) {
 			add(validationTCPPortRangeFormat, webPathPort, cfgval.TCPPortRange())
 		}
 	}
