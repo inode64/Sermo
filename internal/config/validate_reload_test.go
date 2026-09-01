@@ -2,7 +2,9 @@ package config
 
 import (
 	"fmt"
+	"slices"
 	"strings"
+	"syscall"
 	"testing"
 )
 
@@ -32,6 +34,33 @@ func TestValidateReloadValid(t *testing.T) {
 	}
 }
 
+func TestParseReload(t *testing.T) {
+	tests := []struct {
+		name       string
+		tree       map[string]any
+		configured bool
+		hasSignal  bool
+		signal     syscall.Signal
+		command    []string
+		always     bool
+	}{
+		{name: "absent", tree: map[string]any{}},
+		{name: "signal", tree: map[string]any{"reload": map[string]any{"signal": "HUP"}}, configured: true, hasSignal: true, signal: syscall.SIGHUP},
+		{name: "command always", tree: map[string]any{"reload": map[string]any{"command": []any{"nginx", "-s", "reload"}, "when": "always"}}, configured: true, command: []string{"nginx", "-s", "reload"}, always: true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			spec, err := ParseReload(tc.tree)
+			if err != nil {
+				t.Fatalf("ParseReload: %v", err)
+			}
+			if spec.Configured != tc.configured || spec.HasSignal != tc.hasSignal || spec.Signal != tc.signal || spec.Always != tc.always || !slices.Equal(spec.Command, tc.command) {
+				t.Fatalf("ParseReload = %+v, want configured=%t signal=%d/%t command=%v always=%t", spec, tc.configured, tc.signal, tc.hasSignal, tc.command, tc.always)
+			}
+		})
+	}
+}
+
 func TestValidateReloadRejectsBadShapes(t *testing.T) {
 	cases := []struct {
 		name   string
@@ -43,7 +72,8 @@ func TestValidateReloadRejectsBadShapes(t *testing.T) {
 		{"neither", map[string]any{"when": "auto"}, "must set either signal or command"},
 		{"unknown signal", map[string]any{"signal": "BOGUS"}, "not a known signal name"},
 		{"bad when", map[string]any{"signal": "HUP", "when": "sometimes"}, "must be \"auto\" or \"always\""},
-		{"shell string command", map[string]any{"command": "nginx -s reload"}, "must be an array"},
+		{"shell string command", map[string]any{"command": "nginx -s reload"}, "non-empty argv array"},
+		{"empty command", map[string]any{"command": []any{}}, "non-empty argv array"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
