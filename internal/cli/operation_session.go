@@ -114,7 +114,11 @@ func (s *operationSession) prepare(ctx context.Context, service string, resolved
 		return nil, err
 	}
 	prepared := &preparedOperation{target: target}
-	prepared.runtime = app.BuildServiceRuntime(ctx, app.ServiceRuntimeConfig{
+	buildRuntime := s.app.buildServiceRuntime
+	if buildRuntime == nil {
+		buildRuntime = app.BuildServiceRuntime
+	}
+	prepared.runtime = buildRuntime(ctx, app.ServiceRuntimeConfig{
 		Service: service,
 		Unit:    target.Unit,
 		Tree:    resolved.Tree,
