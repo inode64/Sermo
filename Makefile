@@ -76,7 +76,7 @@ config_subst = sed -e 's|/usr/share/sermo|$(SERMO_DATADIR)|g' -e 's|/etc/sermo|$
 # Rewrite runtime/state dirs in the tmpfiles config.
 tmpfiles_subst = sed -e 's|/run/sermo|$(SERMO_RUNDIR)|g' -e 's|/var/lib/sermo|$(SERMO_STATEDIR)|g'
 
-.PHONY: all build build-candidate-sermoctl test vet fmt fmt-check lint production-staticcheck unused-globals modules-check actions-lint race fuzz deadcode quality-report cover-gate custom-gcl scripts-lint scripts-test semgrep yaml-fmt yaml-fmt-check yaml-lint yaml-validate markdown-check web web-check web-lint web-e2e validate check cover tidy clean \
+.PHONY: all build build-candidate-sermoctl test vet fmt fmt-check lint production-staticcheck unused-globals modules-check actions-lint analyzer-pins-check race fuzz deadcode quality-report cover-gate custom-gcl scripts-lint scripts-test semgrep yaml-fmt yaml-fmt-check yaml-lint yaml-validate markdown-check web web-check web-lint web-e2e validate check cover tidy clean \
         install install-bin install-catalog install-examples install-config install-templates install-tmpfiles install-systemd install-openrc \
         uninstall
 
@@ -177,6 +177,11 @@ scripts-test:
 	@echo "script unit tests"
 	@python3 -m unittest discover -s scripts -p 'test_*.py'
 
+# The custom golangci-lint binary and x/tools commands have multiple install
+# surfaces. Keep their shared versions synchronized and every CI pin immutable.
+analyzer-pins-check:
+	@$(LINT_PATH) python3 scripts/check_analyzer_pins.py
+
 privacy-check:
 	@tracked="$$(git ls-files -- $(PRIVATE_SCRIPT_PATHS))"; \
 	if [ -n "$$tracked" ]; then \
@@ -194,7 +199,7 @@ docs-sync:
 	@$(LINT_PATH) python3 scripts/docs_sync_check.py
 
 # Formatting and static analysis gates; make test and make check run this first.
-validate: modules-check lint actions-lint scripts-lint scripts-test privacy-check npm-audit yaml-validate markdown-check docs-sync web-e2e
+validate: modules-check analyzer-pins-check lint actions-lint scripts-lint scripts-test privacy-check npm-audit yaml-validate markdown-check docs-sync web-e2e
 
 # GO_TEST_FLAGS defaults to -shuffle=on so order-dependent tests surface
 # locally and in CI. Override for a stable order when debugging:
