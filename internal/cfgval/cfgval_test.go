@@ -406,6 +406,31 @@ func TestDuration(t *testing.T) {
 	}
 }
 
+func TestParseDurationReportsValidity(t *testing.T) {
+	tests := []struct {
+		name string
+		in   any
+		want time.Duration
+		ok   bool
+	}{
+		{name: "positive", in: "30s", want: 30 * time.Second, ok: true},
+		{name: "zero is valid", in: "0s", ok: true},
+		{name: "negative is valid syntax", in: "-1s", want: -time.Second, ok: true},
+		{name: "invalid", in: "bad"},
+		{name: "empty", in: ""},
+		{name: "non string", in: 30},
+		{name: "absent", in: nil},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, ok := ParseDuration(tc.in)
+			if got != tc.want || ok != tc.ok {
+				t.Fatalf("ParseDuration(%#v) = %v, %t; want %v, %t", tc.in, got, ok, tc.want, tc.ok)
+			}
+		})
+	}
+}
+
 func TestDurationOr(t *testing.T) {
 	fb := 5 * time.Second
 	cases := []struct {
