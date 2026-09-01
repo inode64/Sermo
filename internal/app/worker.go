@@ -226,6 +226,9 @@ func (w *Worker) RunCycle(ctx context.Context) {
 
 	w.observeServiceRestart(ctx, mode)
 	deps, cache := w.runChecks(ctx)
+	if ctx.Err() != nil {
+		return
+	}
 	w.publishCycle(ctx, cache, mode.observeOnly)
 	if mode.observeOnly {
 		w.completeObserveCycle(settleKey, mode)

@@ -190,6 +190,9 @@ func (w *Watch) RunCycle(ctx context.Context) {
 	w.loadRuntimeState()
 	defer w.persistRuntimeState()
 	res := checks.Execute(ctx, w.Check)
+	if ctx.Err() != nil {
+		return
+	}
 	w.publish(res)
 	w.runCheckCycle(ctx, res, observeOnly)
 }

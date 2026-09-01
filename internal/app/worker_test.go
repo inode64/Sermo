@@ -93,6 +93,28 @@ func TestWorkerStartupSkipsChecksUntilBackendActive(t *testing.T) {
 	}
 }
 
+func TestWorkerCancelledCyclePublishesNothing(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	var published, recorded int
+	var events []Event
+	w := &Worker{
+		Service: "web",
+		Checks: func(context.Context, checks.Deps) map[string]checks.Result {
+			cancel()
+			return failedCache("http")
+		},
+		Publish:     func(map[string]checks.Result, map[string]bool) { published++ },
+		RecordCycle: func(context.Context, cycleRecord) { recorded++ },
+		Emit:        func(event Event) { events = append(events, event) },
+	}
+
+	w.RunCycle(ctx)
+
+	if published != 0 || recorded != 0 || len(events) != 0 {
+		t.Fatalf("cancelled cycle published=%d recorded=%d events=%+v", published, recorded, events)
+	}
+}
+
 func TestWorkerStartupObserveOnlySuppressesAlerts(t *testing.T) {
 	h := &workerHarness{cache: failedCache("http")}
 	w := h.worker(alertRuleTree(nil), rules.Policy{}, nil)
