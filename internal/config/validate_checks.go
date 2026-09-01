@@ -324,17 +324,12 @@ func validateCommandFields(path string, entry map[string]any, validateAnalyzeFie
 
 func validateCommandExpectations(path string, entry map[string]any, add addFunc) {
 	if v, present := entry[checks.CheckKeyExpectExit]; present {
-		if !isExpectExit(v) {
+		if _, ok := cfgval.IntList(v); !ok {
 			add("%s expect_exit must be an integer or a non-empty list of integers", path)
 		}
 	}
 	validateOutputExpectation(path, checks.CheckKeyExpectStdout, entry[checks.CheckKeyExpectStdout], add)
 	validateOutputExpectation(path, checks.CheckKeyExpectStderr, entry[checks.CheckKeyExpectStderr], add)
-}
-
-func isExpectExit(raw any) bool {
-	_, ok := cfgval.IntList(raw)
-	return ok
 }
 
 // validateOpValue validates an {op, value} comparison mapping (shared by the
