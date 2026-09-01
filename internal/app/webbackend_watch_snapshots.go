@@ -13,15 +13,8 @@ import (
 // readingSummarySeparator joins the parts of a watch's one-line reading summary.
 const readingSummarySeparator = " · "
 
-// watchDashboardView returns the latest result published by the daemon watch
+// watchSnapshotView returns the latest result published by the daemon watch
 // cycle. The web handler never samples watches itself.
-func (b *WebBackend) watchDashboardView(w *webWatch, system metrics.Snapshot) (*web.WatchMeter, []web.WatchReading, string) {
-	if w == nil {
-		return nil, nil, ""
-	}
-	return b.watchSnapshotView(w, system)
-}
-
 func (b *WebBackend) watchSnapshotView(w *webWatch, system metrics.Snapshot) (*web.WatchMeter, []web.WatchReading, string) {
 	snaps := b.watchSnapshots.Get(w.name, w.checkType)
 	if len(snaps) == 0 {
