@@ -86,7 +86,7 @@ func buildLDAPURL(host string, port int, tlsMode string) (url string, useTLS boo
 	if useTLS {
 		scheme = "ldaps"
 	}
-	return scheme + urlSchemeSeparator + hostPort(host, port), useTLS
+	return scheme + urlSchemeSeparator + netutil.JoinHostPort(host, port), useTLS
 }
 
 // ldapSucceeds decides the outcome: an anonymous check passes if the server

@@ -585,10 +585,6 @@ func randXID32() uint32 {
 	return binary.BigEndian.Uint32(b[:])
 }
 
-func hostPort(host string, port int) string {
-	return netutil.JoinHostPort(host, port)
-}
-
 // fixedString renders v in fixed-point notation with prec decimals. The probes
 // that publish measurements as Extra strings share it so the same field renders
 // identically whichever probe produced it.
