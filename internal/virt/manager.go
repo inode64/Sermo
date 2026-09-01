@@ -51,7 +51,11 @@ const (
 
 const (
 	controlPathDomain = sectionControl + "." + ControlKeyDomain
+	controlPathHost   = sectionControl + "." + ControlKeyHost
+	controlPathPort   = sectionControl + "." + ControlKeyPort
+	controlPathSocket = sectionControl + "." + ControlKeySocket
 	controlPathType   = sectionControl + "." + ControlKeyType
+	controlPathURI    = sectionControl + "." + ControlKeyURI
 	controlPathUUID   = sectionControl + "." + ControlKeyUUID
 )
 
@@ -92,14 +96,21 @@ func SpecFromTree(tree map[string]any) (Spec, bool, error) {
 		Socket: cfgval.String(m[ControlKeySocket]),
 		Host:   cfgval.String(m[ControlKeyHost]),
 	}
+	if err := validateEndpointFields(spec.URI, spec.Socket, spec.Host); err != nil {
+		return Spec{}, true, err
+	}
 	if spec.URI == "" {
 		spec.URI = DefaultURI
 	}
 	if spec.Host == "" && spec.Socket == "" {
 		spec.Socket = DefaultSocket
 	}
-	if p, ok := cfgval.Int(m[ControlKeyPort]); ok {
-		spec.Port = p
+	if _, present := m[ControlKeyPort]; present {
+		port, ok := cfgval.Int(m[ControlKeyPort])
+		if !ok || !ValidHostPort(spec.Host, port) {
+			return Spec{}, true, fmt.Errorf("%s must be an integer in %s", controlPathPort, cfgval.TCPPortRange())
+		}
+		spec.Port = port
 	}
 	if spec.Port == 0 {
 		spec.Port = DefaultPort
@@ -113,6 +124,22 @@ func SpecFromTree(tree map[string]any) (Spec, bool, error) {
 		}
 	}
 	return spec, true, nil
+}
+
+func validateEndpointFields(uri, socket, host string) error {
+	if uri != "" && strings.TrimSpace(uri) == "" {
+		return fmt.Errorf("%s must not be blank", controlPathURI)
+	}
+	if socket != "" && !ValidSocketPath(socket) {
+		return fmt.Errorf("%s %q must be an absolute path", controlPathSocket, socket)
+	}
+	if host != "" && strings.TrimSpace(host) == "" {
+		return fmt.Errorf("%s must not be blank", controlPathHost)
+	}
+	if socket != "" && host != "" {
+		return errors.New("control must not set both socket and host")
+	}
+	return nil
 }
 
 // Manager implements service management over libvirt domains.
@@ -386,11 +413,14 @@ func ValidSocketPath(path string) bool {
 
 // ValidHostPort reports whether the remote host and port pair is structurally valid.
 func ValidHostPort(host string, port int) bool {
+	if !cfgval.ValidTCPPort(port) {
+		return false
+	}
 	if host == "" {
 		return true
 	}
 	_, _, err := net.SplitHostPort(netutil.JoinHostPort(host, port))
-	return err == nil && cfgval.ValidTCPPort(port)
+	return err == nil
 }
 
 // LocalSocketCandidates returns local libvirt sockets in preferred order.

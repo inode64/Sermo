@@ -38,8 +38,7 @@ const (
 		virt.ControlKeyGuardURI + ", " +
 		virt.ControlKeyHost + ", " +
 		virt.ControlKeyPort
-	controlSocketHostConflictMessage = "control must not set both socket and host"
-	processSelectorKeySummary        = process.SelectorKeyExe + ", " +
+	processSelectorKeySummary = process.SelectorKeyExe + ", " +
 		process.SelectorKeyCmd + ", " +
 		process.SelectorKeyUser + ", " +
 		process.SelectorKeyGroup + ", " +
@@ -410,13 +409,19 @@ func validateControl(tree map[string]any, add addFunc) {
 	switch typ {
 	case virt.ControlType:
 		validateControlKeys(control, set(virt.ControlKeyType, virt.ControlKeyURI, virt.ControlKeyDomain, virt.ControlKeyUUID, virt.ControlKeySocket, virt.ControlKeyHost, virt.ControlKeyPort), libvirtControlKeySummary, add)
-		validateLibvirtControl(control, add)
+		if _, _, err := virt.SpecFromTree(tree); err != nil {
+			add("%s", err)
+		}
 	case virt.NetworkControlType:
 		validateControlKeys(control, set(virt.ControlKeyType, virt.ControlKeyURI, virt.ControlKeyNetwork, virt.ControlKeySocket, virt.ControlKeyGuardSocket, virt.ControlKeyGuardURI, virt.ControlKeyHost, virt.ControlKeyPort), libvirtNetworkControlKeySummary, add)
-		validateLibvirtNetworkControl(control, add)
+		if _, _, err := virt.NetworkSpecFromTree(tree); err != nil {
+			add("%s", err)
+		}
 	case dockerctl.ControlType:
 		validateControlKeys(control, set(dockerctl.ControlKeyType, dockerctl.ControlKeySocket, dockerctl.ControlKeyHost, dockerctl.ControlKeyPort, dockerctl.ControlKeyTLS, dockerctl.ControlKeyContainer), dockerControlKeySummary, add)
-		validateDockerControl(control, add)
+		if _, _, err := dockerctl.SpecFromTree(tree); err != nil {
+			add("%s", err)
+		}
 	default:
 		add(validationNotOneOfFormat, controlPathType, typ, controlTypeSummary)
 	}
@@ -427,73 +432,6 @@ func validateControlKeys(control map[string]any, allowed map[string]struct{}, la
 		if _, ok := allowed[key]; !ok {
 			add("control key %q is not one of %s", key, labels)
 		}
-	}
-}
-
-// validateControlSocketHostPort checks the socket/host/port trio shared by the
-// external control backends: absolute socket path, non-blank host, the
-// socket+host conflict, and the port range. validPort receives the host so
-// libvirt can require one for remote ports.
-func validateControlSocketHostPort(control map[string]any, socketKey, hostKey, portKey string, validSocket func(string) bool, validPort func(host string, port int) bool, add addFunc) {
-	if socket := cfgval.String(control[socketKey]); socket != "" && !validSocket(socket) {
-		add("%s %q must be an absolute path", controlPathSocket, socket)
-	}
-	host := cfgval.String(control[hostKey])
-	if host != "" && strings.TrimSpace(host) == "" {
-		add("%s must not be blank", controlPathHost)
-	}
-	if host != "" && cfgval.String(control[socketKey]) != "" {
-		add(controlSocketHostConflictMessage)
-	}
-	if _, present := control[portKey]; present {
-		port, ok := cfgval.Int(control[portKey])
-		if !ok || !validPort(host, port) {
-			add(validationTCPPortRangeFormat, controlPathPort, cfgval.TCPPortRange())
-		}
-	}
-}
-
-func validateLibvirtControl(control map[string]any, add addFunc) {
-	if domain := cfgval.String(control[virt.ControlKeyDomain]); domain == "" {
-		add("%s is required for libvirt", controlPathDomain)
-	}
-	if uri := cfgval.String(control[virt.ControlKeyURI]); uri != "" && strings.TrimSpace(uri) == "" {
-		add("%s must not be blank", controlPathURI)
-	}
-	if uuid := cfgval.String(control[virt.ControlKeyUUID]); uuid != "" {
-		if _, err := virt.ParseUUID(uuid); err != nil {
-			add("%s %q must be a canonical UUID or 32 hex digits", controlPathUUID, uuid)
-		}
-	}
-	validateControlSocketHostPort(control, virt.ControlKeySocket, virt.ControlKeyHost, virt.ControlKeyPort,
-		virt.ValidSocketPath, virt.ValidHostPort, add)
-}
-
-func validateLibvirtNetworkControl(control map[string]any, add addFunc) {
-	if network := cfgval.String(control[virt.ControlKeyNetwork]); network == "" {
-		add("%s is required for %s", controlPathNetwork, virt.NetworkControlType)
-	}
-	if uri := cfgval.String(control[virt.ControlKeyURI]); uri != "" && strings.TrimSpace(uri) == "" {
-		add("%s must not be blank", controlPathURI)
-	}
-	if socket := cfgval.String(control[virt.ControlKeyGuardSocket]); !virt.ValidSocketPath(socket) {
-		add("%s %q must be an absolute path", SectionControl+"."+virt.ControlKeyGuardSocket, socket)
-	}
-	if cfgval.String(control[virt.ControlKeyGuardSocket]) != "" && cfgval.String(control[virt.ControlKeyHost]) != "" {
-		add(controlSocketHostConflictMessage)
-	}
-	validateControlSocketHostPort(control, virt.ControlKeySocket, virt.ControlKeyHost, virt.ControlKeyPort,
-		virt.ValidSocketPath, virt.ValidHostPort, add)
-}
-
-func validateDockerControl(control map[string]any, add addFunc) {
-	if container := cfgval.String(control[dockerctl.ControlKeyContainer]); container == "" {
-		add("%s is required for docker", controlPathContainer)
-	}
-	validateControlSocketHostPort(control, dockerctl.ControlKeySocket, dockerctl.ControlKeyHost, dockerctl.ControlKeyPort,
-		filepath.IsAbs, func(_ string, port int) bool { return validTCPPort(port) }, add)
-	if !dockerctl.ValidTLSValue(control[dockerctl.ControlKeyTLS]) {
-		add(validationNotOneOfFormat, controlPathTLS, cfgval.String(control[dockerctl.ControlKeyTLS]), dockerctl.TLSValueSummary)
 	}
 }
 

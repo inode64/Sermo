@@ -3,9 +3,7 @@ package config
 import (
 	"fmt"
 
-	"sermo/internal/dockerctl"
 	"sermo/internal/rules"
-	"sermo/internal/virt"
 )
 
 const (
@@ -46,16 +44,7 @@ const (
 	mountPathStopPolicy = mountPath + "." + MountKeyStopPolicy
 	mountPathUmount     = mountPath + "." + MountKeyUmount
 
-	controlPathContainer = SectionControl + "." + dockerctl.ControlKeyContainer
-	controlPathDomain    = SectionControl + "." + virt.ControlKeyDomain
-	controlPathNetwork   = SectionControl + "." + virt.ControlKeyNetwork
-	controlPathHost      = SectionControl + "." + virt.ControlKeyHost
-	controlPathPort      = SectionControl + "." + virt.ControlKeyPort
-	controlPathSocket    = SectionControl + "." + virt.ControlKeySocket
-	controlPathTLS       = SectionControl + "." + dockerctl.ControlKeyTLS
-	controlPathType      = SectionControl + "." + keyType
-	controlPathURI       = SectionControl + "." + virt.ControlKeyURI
-	controlPathUUID      = SectionControl + "." + virt.ControlKeyUUID
+	controlPathType = SectionControl + "." + keyType
 
 	reloadPathCommand     = SectionReload + "." + ReloadKeyCommand
 	reloadPathSignal      = SectionReload + "." + ReloadKeySignal

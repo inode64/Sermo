@@ -76,6 +76,15 @@ func NetworkSpecFromTree(tree map[string]any) (NetworkSpec, bool, error) {
 		GuardURI:    cfgval.String(m[ControlKeyGuardURI]),
 		Host:        cfgval.String(m[ControlKeyHost]),
 	}
+	if err := validateEndpointFields(spec.URI, spec.Socket, spec.Host); err != nil {
+		return NetworkSpec{}, true, err
+	}
+	if !ValidSocketPath(spec.GuardSocket) {
+		return NetworkSpec{}, true, fmt.Errorf("%s.%s %q must be an absolute path", sectionControl, ControlKeyGuardSocket, spec.GuardSocket)
+	}
+	if spec.GuardSocket != "" && spec.Host != "" {
+		return NetworkSpec{}, true, errors.New("control must not set both socket and host")
+	}
 	if spec.URI == "" {
 		spec.URI = DefaultNetworkURI
 	}
@@ -88,8 +97,12 @@ func NetworkSpecFromTree(tree map[string]any) (NetworkSpec, bool, error) {
 	if spec.Host == "" && spec.GuardSocket == "" {
 		spec.GuardSocket = spec.Socket
 	}
-	if p, ok := cfgval.Int(m[ControlKeyPort]); ok {
-		spec.Port = p
+	if _, present := m[ControlKeyPort]; present {
+		port, ok := cfgval.Int(m[ControlKeyPort])
+		if !ok || !ValidHostPort(spec.Host, port) {
+			return NetworkSpec{}, true, fmt.Errorf("%s must be an integer in %s", controlPathPort, cfgval.TCPPortRange())
+		}
+		spec.Port = port
 	}
 	if spec.Port == 0 {
 		spec.Port = DefaultPort
