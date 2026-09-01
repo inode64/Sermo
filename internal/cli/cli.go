@@ -1592,15 +1592,22 @@ func parseBefore(value string, now func() time.Time) (time.Time, error) {
 // to prune its event log. It reads the web: address/port and any
 // admin password from the shared config so local sermoctl can authenticate
 // the same way the operator would via the UI.
-// daemonWebRequest runs the shared prologue of a daemon web API call: load
-// config, resolve the API base, build the request via buildURL, attach the
-// CSRF header when asked plus configured Basic auth, and perform the request.
-// The caller owns the response body and its own status/decode handling.
+// daemonWebRequest loads config through the operator-facing path, then delegates
+// the HTTP exchange to daemonWebDo. The caller owns the response body and its
+// own status/decode handling.
 func (a App) daemonWebRequest(ctx context.Context, opts options, method, what string, csrf bool, buildURL func(base string) string) (*http.Response, error) {
 	cfg, code := a.loadConfig(opts)
 	if code != exitSuccess || cfg == nil {
 		return nil, errors.New("failed to load config")
 	}
+	return a.daemonWebDo(ctx, cfg, method, what, csrf, buildURL)
+}
+
+// daemonWebDo is the transport owner for requests from sermoctl to sermod's web
+// API. It resolves the endpoint, builds and authenticates the request, attaches
+// mutation headers, and performs the bounded exchange. The caller owns the
+// response body.
+func (a App) daemonWebDo(ctx context.Context, cfg *config.Config, method, what string, csrf bool, buildURL func(base string) string) (*http.Response, error) {
 	base, err := webAPIBase(cfg)
 	if err != nil {
 		return nil, err
@@ -1614,7 +1621,7 @@ func (a App) daemonWebRequest(ctx context.Context, opts options, method, what st
 		// A mutation must name the generation it was aimed at, so a reload cannot
 		// swap the target's identity underneath it. Read it first: without the
 		// header the daemon answers 428 and the mutation never runs.
-		if generation := a.daemonWebGeneration(ctx, cfg, base); generation != "" {
+		if generation := a.daemonWebGeneration(ctx, cfg); generation != "" {
 			req.Header.Set(daemonWebGenerationHeader, generation)
 		}
 	}
@@ -1633,14 +1640,12 @@ func (a App) daemonWebRequest(ctx context.Context, opts options, method, what st
 // response carries. An empty answer means the daemon is not tracking generations
 // (or could not be reached), and the caller sends no header — which is exactly
 // what the daemon expects in that case.
-func (a App) daemonWebGeneration(ctx context.Context, cfg *config.Config, base string) string {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+daemonAPIPathWatches, http.NoBody)
-	if err != nil {
-		return ""
-	}
-	a.applyDaemonWebAuth(req, cfg)
-	client := &http.Client{Timeout: daemonWebClientTimeout}
-	resp, err := httpx.Do(client, req)
+func (a App) daemonWebGeneration(ctx context.Context, cfg *config.Config) string {
+	// csrf=false is the recursion boundary: generation lookup uses the shared
+	// transport but never asks for another generation lookup itself.
+	resp, err := a.daemonWebDo(ctx, cfg, http.MethodGet, "daemon generation", false, func(base string) string {
+		return base + daemonAPIPathWatches
+	})
 	if err != nil {
 		return ""
 	}
@@ -1794,23 +1799,22 @@ func daemonWebBasicAuth(password string) string {
 	return daemonWebBasicAuthPrefix + cred
 }
 
-// daemonAPIGet performs an authenticated GET against the running sermod web API.
+// daemonAPIGet silently loads config for best-effort status enrichment, then
+// performs an authenticated GET against the running sermod web API.
 func (a App) daemonAPIGet(ctx context.Context, opts options, path string) ([]byte, int, error) {
 	cfg, err := a.LoadConfig(opts.globalPath())
 	if err != nil || cfg == nil {
 		return nil, 0, err
 	}
-	base, err := webAPIBase(cfg)
-	if err != nil {
-		return nil, 0, err
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+path, http.NoBody)
-	if err != nil {
-		return nil, 0, fmt.Errorf("build daemon API request for %s: %w", path, err)
-	}
-	a.applyDaemonWebAuth(req, cfg)
-	client := &http.Client{Timeout: daemonWebClientTimeout}
-	resp, err := httpx.Do(client, req)
+	return a.daemonAPIGetWithConfig(ctx, cfg, path)
+}
+
+// daemonAPIGetWithConfig is the no-reload form for callers that already need
+// config, such as service-name canonicalization.
+func (a App) daemonAPIGetWithConfig(ctx context.Context, cfg *config.Config, path string) ([]byte, int, error) {
+	resp, err := a.daemonWebDo(ctx, cfg, http.MethodGet, "daemon API", false, func(base string) string {
+		return base + path
+	})
 	if err != nil {
 		return nil, 0, fmt.Errorf("daemon API GET %s: %w", path, err)
 	}
@@ -1835,7 +1839,7 @@ func (a App) fetchDaemonServiceState(ctx context.Context, opts options, service 
 	} else if len(cfg.Services) > 0 {
 		return "", false
 	}
-	body, status, err := a.daemonAPIGet(ctx, opts, daemonAPIPathServices+"/"+url.PathEscape(name))
+	body, status, err := a.daemonAPIGetWithConfig(ctx, cfg, daemonAPIPathServices+"/"+url.PathEscape(name))
 	if err != nil || status != http.StatusOK {
 		return "", false
 	}

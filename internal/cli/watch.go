@@ -3,7 +3,6 @@ package cli
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -13,7 +12,6 @@ import (
 	"sermo/internal/app"
 	"sermo/internal/checks"
 	"sermo/internal/config"
-	"sermo/internal/httpx"
 	"sermo/internal/state"
 )
 
@@ -112,29 +110,12 @@ func (a App) runWatchProbe(ctx context.Context, opts options) int {
 }
 
 func (a App) probeDaemonWatch(ctx context.Context, opts options, watch string) (daemonWatchProbe, error) {
-	cfg, code := a.loadConfig(opts)
-	if code != exitSuccess || cfg == nil {
-		return daemonWatchProbe{}, errors.New("failed to load config")
-	}
-	base, err := webAPIBase(cfg)
+	path := daemonAPIPathWatches + "/" + url.PathEscape(watch) + "/probe"
+	resp, err := a.daemonWebRequest(ctx, opts, http.MethodPost, "probe", true, func(base string) string {
+		return base + path
+	})
 	if err != nil {
 		return daemonWatchProbe{}, err
-	}
-	path := daemonAPIPathWatches + "/" + url.PathEscape(watch) + "/probe"
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, base+path, http.NoBody)
-	if err != nil {
-		return daemonWatchProbe{}, fmt.Errorf("build probe request: %w", err)
-	}
-	req.Header.Set(daemonWebCSRFHeader, daemonWebCSRFValue)
-	// A probe is a mutation, so it must name the generation it was aimed at.
-	if generation := a.daemonWebGeneration(ctx, cfg, base); generation != "" {
-		req.Header.Set(daemonWebGenerationHeader, generation)
-	}
-	a.applyDaemonWebAuth(req, cfg)
-	client := &http.Client{Timeout: daemonWebClientTimeout}
-	resp, err := httpx.Do(client, req)
-	if err != nil {
-		return daemonWatchProbe{}, fmt.Errorf("talking to daemon web UI: %w (is sermod running with web.port set?)", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	var result daemonWatchProbe
