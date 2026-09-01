@@ -226,10 +226,11 @@ type WebBackend struct {
 }
 
 func (b *WebBackend) webNow() time.Time {
-	if b != nil && b.now != nil {
-		return b.now()
+	var clock func() time.Time
+	if b != nil {
+		clock = b.now
 	}
-	return time.Now()
+	return clockOrNow(clock)()
 }
 
 // DashboardSnapshot collects every reload-sensitive dashboard section from one

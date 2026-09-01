@@ -109,9 +109,7 @@ func NewDaemonMetricSampler(collector *metrics.Collector, now func() time.Time, 
 	if collector != nil && collector.Reader != nil {
 		reader = collector.Reader
 	}
-	if now == nil {
-		now = time.Now
-	}
+	now = clockOrNow(now)
 	return &DaemonMetricSampler{reader: reader, store: store, now: now, pid: os.Getpid()}
 }
 

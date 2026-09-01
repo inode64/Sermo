@@ -218,10 +218,7 @@ func (w *Worker) RunCycle(ctx context.Context) {
 	w.cycle++
 	defer w.publishRemediation()
 	settleKey := SettlingServiceKey(w.Service)
-	now := w.Now
-	if now == nil {
-		now = time.Now
-	}
+	now := clockOrNow(w.Now)
 	mode, skip := w.prepareCycle(ctx, settleKey, now)
 	if skip {
 		return
@@ -1179,10 +1176,7 @@ func (w *Worker) publishRemediation() {
 	if w.Remediation == nil {
 		return
 	}
-	now := w.Now
-	if now == nil {
-		now = time.Now
-	}
+	now := clockOrNow(w.Now)
 	w.Remediation.Publish(w.Service, w.Policy, w.State, now())
 }
 
@@ -1300,10 +1294,7 @@ func (w *Worker) expandRuntimeWithContext(msg string, e Event, rc ruleRuntimeCon
 	if !strings.Contains(msg, "${") {
 		return msg
 	}
-	now := w.Now
-	if now == nil {
-		now = time.Now
-	}
+	now := clockOrNow(w.Now)
 	service := e.Service
 	if service == "" {
 		service = w.Service

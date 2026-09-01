@@ -466,10 +466,7 @@ func (w *fileWatcher) panicking() bool {
 }
 
 func (w *fileWatcher) clock() time.Time {
-	if w.now != nil {
-		return w.now()
-	}
-	return time.Now()
+	return clockOrNow(w.now)()
 }
 
 func firstFileWatchRoot(paths []string, current map[string]fileState) fileState {

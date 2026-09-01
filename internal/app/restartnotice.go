@@ -49,9 +49,7 @@ type servicePrimaryProcess struct {
 // service without a backend MainPID, pidfile, or explicit main selector simply
 // has no restart-notice candidate.
 func primaryProcessForCycle(procs func() []process.Process, starts processStartReader, now func() time.Time) func() (servicePrimaryProcess, bool) {
-	if now == nil {
-		now = time.Now
-	}
+	now = clockOrNow(now)
 	return func() (servicePrimaryProcess, bool) {
 		if procs == nil || starts == nil {
 			return servicePrimaryProcess{}, false
@@ -116,10 +114,7 @@ func (w *Worker) observeServiceRestart(ctx context.Context, mode workerCycleMode
 	if !ok {
 		return
 	}
-	now := w.Now
-	if now == nil {
-		now = time.Now
-	}
+	now := clockOrNow(w.Now)
 	at := now()
 	uptime := at.Sub(principal.startedAt)
 	if uptime < 0 || uptime >= notice.UptimeBelow {

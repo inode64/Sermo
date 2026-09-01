@@ -85,10 +85,7 @@ func (s *Snapshots) PublishWithCheckTypes(service string, cache map[string]check
 	if s == nil {
 		return
 	}
-	now := s.now
-	if now == nil {
-		now = time.Now
-	}
+	now := clockOrNow(s.now)
 	at := now()
 	s.mu.Lock()
 	prior := s.byService[service]
@@ -185,10 +182,7 @@ func (s *WatchSnapshots) Publish(watch, checkType string, r checks.Result) {
 	if s == nil {
 		return
 	}
-	now := s.now
-	if now == nil {
-		now = time.Now
-	}
+	now := clockOrNow(s.now)
 	slot := watchResultSlot(r)
 	snap := CheckSnapshot{
 		Observation: r.Observation(),
