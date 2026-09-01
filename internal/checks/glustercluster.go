@@ -300,7 +300,7 @@ func glusterHealBrickLabel(brick glusterHealBrickXML) string {
 }
 
 func (c glusterClusterCheck) resultFor(observation glusterClusterObservation, start time.Time) Result {
-	issues := uniqueGlusterStrings(observation.issues)
+	issues := strutil.SortedUnique(observation.issues)
 	r := c.result(len(issues) == 0, "gluster cluster healthy", start)
 	if len(issues) > 0 {
 		r.Message = "gluster cluster: " + strings.Join(issues, "; ")
@@ -318,7 +318,7 @@ func (c glusterClusterCheck) resultFor(observation glusterClusterObservation, st
 		DataKeyGlusterSplitBrainEntries: observation.splitBrainEntries,
 	}
 	if len(observation.disconnectedPeers) > 0 {
-		r.Data[DataKeyGlusterPeersDisconnected] = uniqueGlusterStrings(observation.disconnectedPeers)
+		r.Data[DataKeyGlusterPeersDisconnected] = strutil.SortedUnique(observation.disconnectedPeers)
 	}
 	if len(issues) > 0 {
 		r.Data[DataKeyGlusterIssues] = issues
@@ -373,7 +373,7 @@ func (peer glusterPeerXML) healthy() bool {
 }
 
 func (peer glusterPeerXML) names() []string {
-	return uniqueGlusterStrings(append([]string{peer.Hostname}, peer.Hostnames...))
+	return strutil.SortedUnique(append([]string{peer.Hostname}, peer.Hostnames...))
 }
 
 func (peer glusterPeerXML) label() string {
@@ -428,7 +428,7 @@ func parseGlusterPeers(raw any) ([]string, error) {
 			return nil, errors.New("peers must not contain empty names")
 		}
 	}
-	normalized := uniqueGlusterStrings(peers)
+	normalized := strutil.SortedUnique(peers)
 	if len(normalized) != len(peers) {
 		return nil, errors.New("peers must not contain duplicate names")
 	}
@@ -524,8 +524,4 @@ func IsGlusterVolumeName(name string) bool {
 		return false
 	}
 	return true
-}
-
-func uniqueGlusterStrings(values []string) []string {
-	return slices.Sorted(maps.Keys(strutil.Set(values)))
 }

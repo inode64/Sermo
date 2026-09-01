@@ -13,6 +13,7 @@ import (
 	"sermo/internal/notify"
 	"sermo/internal/process"
 	"sermo/internal/state"
+	"sermo/internal/strutil"
 	"sermo/internal/web"
 )
 
@@ -590,18 +591,9 @@ func mountCanKill(blockers []web.MountBlocker) bool {
 }
 
 func uniqueBlockerUsers(blockers []process.Process) []string {
-	seen := map[string]struct{}{}
+	users := make([]string, len(blockers))
 	for i := range blockers {
-		user := strings.TrimSpace(blockers[i].User)
-		if user == "" {
-			continue
-		}
-		seen[user] = struct{}{}
+		users[i] = blockers[i].User
 	}
-	users := make([]string, 0, len(seen))
-	for user := range seen {
-		users = append(users, user)
-	}
-	sort.Strings(users)
-	return users
+	return strutil.SortedUnique(users)
 }

@@ -58,6 +58,20 @@ type fakeMountAlerter struct {
 	called bool
 }
 
+func TestUniqueBlockerUsers(t *testing.T) {
+	blockers := []process.Process{
+		{User: " zed "},
+		{User: ""},
+		{User: "ana"},
+		{User: "zed"},
+		{User: "  "},
+		{User: "bob"},
+	}
+	if got, want := uniqueBlockerUsers(blockers), []string{"ana", "bob", "zed"}; !slices.Equal(got, want) {
+		t.Fatalf("uniqueBlockerUsers() = %v, want %v", got, want)
+	}
+}
+
 func (a *fakeMountAlerter) AlertMountUsers(_ context.Context, _ mountctl.Spec, blockers []process.Process) (MountAlertDelivery, error) {
 	a.called = true
 	users := uniqueBlockerUsers(blockers)
