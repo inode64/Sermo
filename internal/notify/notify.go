@@ -98,13 +98,6 @@ func WithoutTemplates() Option {
 	}
 }
 
-// Enabled reports whether a notifier config entry should be active — the
-// inverse of the shared cfgval.Disabled opt-out reading (omitted `enabled`
-// defaults to true; schema validation reports non-boolean values).
-func Enabled(entry map[string]any) bool {
-	return !cfgval.Disabled(entry)
-}
-
 // transports maps each notifier type to its constructor and field validator.
 // Register new transports here (e.g. a future "discord").
 type transport struct {
@@ -147,7 +140,7 @@ func Build(raw map[string]any, opts ...Option) (map[string]Notifier, []string) {
 			warnings = append(warnings, notifierWarning(name, "not a mapping"))
 			continue
 		}
-		if !Enabled(entry) {
+		if cfgval.Disabled(entry) {
 			continue
 		}
 		issues := ValidateEntry(entry)
