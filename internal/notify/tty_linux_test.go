@@ -26,6 +26,41 @@ func TestTTYNotifierTargetsFilterUsersAndUnsafeLines(t *testing.T) {
 	}
 }
 
+func TestNewTargetedTTYRequiresAndNormalizesUsers(t *testing.T) {
+	notifier, err := NewTargetedTTY(" operator ", []string{" root ", "root", "", "fran"})
+	if err != nil {
+		t.Fatalf("NewTargetedTTY: %v", err)
+	}
+	n, ok := notifier.(*ttyNotifier)
+	if !ok {
+		t.Fatalf("NewTargetedTTY type = %T, want *ttyNotifier", notifier)
+	}
+	if n.Name() != "operator" || n.Type() != TypeTTY {
+		t.Fatalf("NewTargetedTTY identity = %q/%q", n.Name(), n.Type())
+	}
+	got := n.targetTTYs([]utmp.Session{
+		{User: "root", Line: "pts/0"},
+		{User: "fran", Line: "pts/1"},
+		{User: "other", Line: "pts/2"},
+	})
+	if len(got) != 2 || got[0] != "/dev/pts/0" || got[1] != "/dev/pts/1" {
+		t.Fatalf("targetTTYs = %v, want only configured users", got)
+	}
+
+	for _, tc := range []struct {
+		name  string
+		users []string
+	}{
+		{name: "", users: []string{"root"}},
+		{name: "operator", users: nil},
+		{name: "operator", users: []string{"", "  "}},
+	} {
+		if _, err := NewTargetedTTY(tc.name, tc.users); err == nil {
+			t.Fatalf("NewTargetedTTY(%q, %v) error = nil", tc.name, tc.users)
+		}
+	}
+}
+
 func TestWallNotifierTargetsAllUsers(t *testing.T) {
 	n, err := buildWall("wall", map[string]any{})
 	if err != nil {

@@ -2,7 +2,6 @@ package app
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -46,22 +45,9 @@ func (ttyMountUserAlerter) AlertMountUsers(ctx context.Context, spec mountctl.Sp
 	if len(users) == 0 {
 		return MountAlertDelivery{}, nil
 	}
-	userValues := make([]any, 0, len(users))
-	for _, user := range users {
-		userValues = append(userValues, user)
-	}
-	registry, warnings := notify.Build(map[string]any{
-		mountBlockersNotifierName: map[string]any{
-			notify.KeyType:  notify.TypeTTY,
-			notify.KeyUsers: userValues,
-		},
-	}, notify.WithoutTemplates())
-	if len(warnings) > 0 {
-		return MountAlertDelivery{Users: users}, errors.New(strings.Join(warnings, "; "))
-	}
-	notifier := registry[mountBlockersNotifierName]
-	if notifier == nil {
-		return MountAlertDelivery{Users: users}, errors.New("tty notifier unavailable")
+	notifier, err := notify.NewTargetedTTY(mountBlockersNotifierName, users)
+	if err != nil {
+		return MountAlertDelivery{Users: users}, fmt.Errorf("build mount blocker notifier: %w", err)
 	}
 	msg := notify.Message{
 		Subject: "Sermo mount unit is blocked",

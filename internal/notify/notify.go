@@ -11,10 +11,12 @@ package notify
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"maps"
 	"sermo/internal/cfgval"
 	"slices"
+	"strings"
 )
 
 // Message is a notification to deliver. Subject/Body are the human-facing text;
@@ -188,6 +190,37 @@ func PreferWall(notifiers []Notifier) []Notifier {
 		}
 	}
 	return selected
+}
+
+// NewTargetedTTY constructs an ad-hoc TTY notifier for an explicit set of
+// users. An empty effective user set is rejected because an unfiltered TTY
+// notifier targets every active terminal session.
+func NewTargetedTTY(name string, users []string) (Notifier, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return nil, errors.New("targeted tty notifier requires a name")
+	}
+	seen := make(map[string]struct{}, len(users))
+	values := make([]any, 0, len(users))
+	for _, user := range users {
+		user = strings.TrimSpace(user)
+		if user == "" {
+			continue
+		}
+		if _, ok := seen[user]; ok {
+			continue
+		}
+		seen[user] = struct{}{}
+		values = append(values, user)
+	}
+	if len(values) == 0 {
+		return nil, fmt.Errorf("targeted tty notifier %s requires at least one user", name)
+	}
+	notifier, err := buildTTY(name, map[string]any{KeyUsers: values})
+	if err != nil {
+		return nil, fmt.Errorf("build targeted tty notifier %s: %w", name, err)
+	}
+	return notifier, nil
 }
 
 // SupportedTypes lists the registered notifier types, for validation and docs.
