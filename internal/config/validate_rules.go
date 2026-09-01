@@ -125,36 +125,6 @@ var serviceStates = set(
 	string(servicemgr.StatusUnknown),
 )
 var processStates = set(process.StateRunning, process.StateZombie, process.StateAbsent)
-var metricCatalog = map[string]map[string]struct{}{
-	checks.MetricScopeService: set(metrics.MetricMemory, metrics.MetricSwap, metrics.MetricCPU, metrics.MetricCPUThread,
-		metrics.MetricProcessCount, metrics.MetricIO, metrics.MetricIORead, metrics.MetricIOWrite,
-		metrics.MetricFds, metrics.MetricThreads),
-	checks.MetricScopeSystem: set(metrics.MetricTotalMemory, metrics.MetricTotalSwap, metrics.MetricTotalCPU,
-		metrics.MetricLoad1, metrics.MetricLoad5, metrics.MetricLoad15),
-}
-
-// metricForms records which value forms each metric exposes, so
-// a threshold's form can be checked against the metric.
-type metricForm struct{ absolute, percent bool }
-
-var metricForms = map[string]metricForm{
-	metrics.MetricMemory:       {absolute: true, percent: true},
-	metrics.MetricSwap:         {absolute: true, percent: true},
-	metrics.MetricCPU:          {percent: true},
-	metrics.MetricCPUThread:    {percent: true},
-	metrics.MetricProcessCount: {absolute: true},
-	metrics.MetricIO:           {absolute: true},
-	metrics.MetricIORead:       {absolute: true},
-	metrics.MetricIOWrite:      {absolute: true},
-	metrics.MetricFds:          {absolute: true},
-	metrics.MetricThreads:      {absolute: true},
-	metrics.MetricTotalMemory:  {absolute: true, percent: true},
-	metrics.MetricTotalSwap:    {absolute: true, percent: true},
-	metrics.MetricTotalCPU:     {percent: true},
-	metrics.MetricLoad1:        {absolute: true},
-	metrics.MetricLoad5:        {absolute: true},
-	metrics.MetricLoad15:       {absolute: true},
-}
 
 // validateRuleWindow checks the merged `rule_window` fallback block: a positive
 // cycles or duration window, a known mode, and — for the within mode — an
@@ -533,19 +503,18 @@ func validateMetric(entry map[string]any, path string, allowSystem bool, add add
 	if scope == "" {
 		scope = checks.MetricScopeService
 	}
-	catalog, ok := metricCatalog[scope]
-	if !ok {
+	if !metrics.ValidScope(scope) {
 		add("%s scope %q is not service or system", path, scope)
 		return
 	}
 	name := cfgval.String(entry[rules.FieldName])
-	known := false
+	var descriptor metrics.Descriptor
 	if name == "" {
 		add("%s requires a metric name", path)
-	} else if _, ok := catalog[name]; !ok {
+	} else if found, ok := metrics.LookupDescriptor(scope, name); !ok {
 		add("%s metric %q is not in the %s catalog", path, name, scope)
 	} else {
-		known = true
+		descriptor = found
 	}
 	if op := cfgval.String(entry[rules.FieldOp]); op != "" {
 		if !cfgval.IsCompareOp(op) {
@@ -555,15 +524,14 @@ func validateMetric(entry map[string]any, path string, allowSystem bool, add add
 	value := cfgval.String(entry[rules.FieldValue])
 	if !parseMetricValue(value) {
 		add("%s value %q must be a number with an optional trailing %%", path, value)
-	} else if known {
+	} else if descriptor.Name != "" {
 		// Form must match: a "%" threshold needs a percentage form, a bare number
 		// an absolute form.
-		form := metricForms[name]
 		if strings.HasSuffix(strings.TrimSpace(value), cfgval.PercentSuffix) {
-			if !form.percent {
+			if !descriptor.Percentage {
 				add("%s uses a %% threshold but metric %q has no percentage form", path, name)
 			}
-		} else if !form.absolute {
+		} else if !descriptor.Absolute {
 			add("%s uses an absolute threshold but metric %q has no absolute form", path, name)
 		}
 	}
