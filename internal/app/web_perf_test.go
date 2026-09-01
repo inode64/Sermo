@@ -197,6 +197,29 @@ func TestWebBackendBackendStatusCacheTTL(t *testing.T) {
 	}
 }
 
+func TestWebBackendReloadSupportCacheTTL(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 6, 16, 12, 0, 0, 0, time.UTC)
+	supported := false
+	var calls atomic.Int32
+	e := &webEntry{
+		reloadSupported: func(context.Context) (bool, error) {
+			calls.Add(1)
+			return supported, nil
+		},
+	}
+	if e.cachedReloadSupported(context.Background(), now) || calls.Load() != 1 {
+		t.Fatalf("first capability = %v calls=%d, want false/1", e.canReload, calls.Load())
+	}
+	supported = true
+	if e.cachedReloadSupported(context.Background(), now.Add(time.Second)) || calls.Load() != 1 {
+		t.Fatalf("cached capability = %v calls=%d, want false/1", e.canReload, calls.Load())
+	}
+	if !e.cachedReloadSupported(context.Background(), now.Add(reloadSupportCacheTTL)) || calls.Load() != 2 {
+		t.Fatalf("refreshed capability = %v calls=%d, want true/2", e.canReload, calls.Load())
+	}
+}
+
 func TestEventLogLastWatchActivityIndex(t *testing.T) {
 	l := NewEventLog(10)
 	t0 := time.Date(2026, 6, 16, 12, 0, 0, 0, time.UTC)

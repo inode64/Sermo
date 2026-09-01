@@ -72,7 +72,7 @@ func (b *WebBackend) Operate(ctx context.Context, name, action string, opts web.
 		return b.operateError(name, action, serviceSubjectPrefix+name+" is disabled in configuration")
 	}
 	if action == string(rules.ActionReload) {
-		canReload, err := e.currentReloadSupported(ctx)
+		canReload, err := e.currentReloadSupported(ctx, b.webNow())
 		if err != nil {
 			return b.operateError(name, action, serviceSubjectPrefix+name+": reload support unavailable: "+err.Error())
 		}
@@ -135,11 +135,45 @@ func (b *WebBackend) activeAfterPostflightFailure(ctx context.Context, name, act
 	return ServiceActiveAfterPostflightFailure(ctx, action, result, nil, e.status)
 }
 
-func (e *webEntry) currentReloadSupported(ctx context.Context) (bool, error) {
+func (e *webEntry) currentReloadSupported(ctx context.Context, now time.Time) (bool, error) {
+	return e.reloadSupportSnapshot(ctx, now, true)
+}
+
+func (e *webEntry) cachedReloadSupported(ctx context.Context, now time.Time) bool {
+	supported, err := e.reloadSupportSnapshot(ctx, now, false)
+	if err == nil {
+		return supported
+	}
+	e.reloadMu.Lock()
+	defer e.reloadMu.Unlock()
+	return e.canReload
+}
+
+func (e *webEntry) reloadSupportSnapshot(ctx context.Context, now time.Time, refresh bool) (bool, error) {
+	e.reloadMu.Lock()
+	defer e.reloadMu.Unlock()
 	if e.reloadSupported == nil {
 		return e.canReload, nil
 	}
-	return e.reloadSupported(ctx)
+	if !refresh && !e.reloadCheckedAt.IsZero() {
+		age := now.Sub(e.reloadCheckedAt)
+		if age >= 0 && age < reloadSupportCacheTTL {
+			return e.canReload, nil
+		}
+	}
+	queryCtx := ctx
+	if !refresh {
+		var cancel context.CancelFunc
+		queryCtx, cancel = context.WithTimeout(ctx, serviceInitQueryTimeout)
+		defer cancel()
+	}
+	supported, err := e.reloadSupported(queryCtx)
+	if err != nil {
+		return e.canReload, err
+	}
+	e.canReload = supported
+	e.reloadCheckedAt = now
+	return supported, nil
 }
 
 func (b *WebBackend) operationResult(ctx context.Context, name, action string) operation.Result {
