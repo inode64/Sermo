@@ -197,13 +197,6 @@ func (b *WebBackend) lastWatchActivities() map[string]watchActivity {
 	return out
 }
 
-// backendStatus returns the init-system status for a service, reusing a short TTL
-// cache so the service list does not invoke systemctl/rc-status on every poll.
-func (e *webEntry) backendStatus(ctx context.Context, now time.Time) string {
-	status, _ := e.backendStatusSnapshot(ctx, now)
-	return status
-}
-
 func (e *webEntry) backendStatusSnapshot(ctx context.Context, now time.Time) (string, time.Time) {
 	if e == nil || e.status == nil {
 		return string(servicemgr.StatusUnknown), time.Time{}

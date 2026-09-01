@@ -95,6 +95,7 @@ type webEntry struct {
 	noResidentProcess bool
 	alsoApply         []string
 	canReload         bool
+	reloadSupported   func(context.Context) (bool, error)
 	disabled          bool // true when the service had `enabled: false` (still listed for visibility)
 
 	statusMu     sync.Mutex
@@ -447,9 +448,10 @@ func attachServiceRuntime(ctx context.Context, entry *webEntry, name string, tre
 		engine.EmptyTerminalSessionCloser = freshEmptyTerminalSessionCloser(deps.ExecxRunner, entry.terminalSessions)
 		entry.engine = engine
 	}
-	reloadCtx, cancel := context.WithTimeout(ctx, serviceInitQueryTimeout)
-	canReload, reloadErr := operation.ReloadSupported(reloadCtx, tree, target.Manager, target.Unit)
-	cancel()
+	entry.reloadSupported = func(ctx context.Context) (bool, error) {
+		return ServiceReloadSupported(ctx, tree, target.Manager, target.Unit)
+	}
+	canReload, reloadErr := entry.reloadSupported(ctx)
 	entry.canReload = canReload
 	if reloadErr != nil {
 		return []string{serviceSubjectPrefix + name + ": reload support unavailable: " + reloadErr.Error()}

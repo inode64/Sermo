@@ -1,9 +1,12 @@
 package app
 
 import (
+	"context"
 	"testing"
+	"time"
 
 	"sermo/internal/execx"
+	"sermo/internal/operation"
 	"sermo/internal/process"
 	"sermo/internal/servicemgr"
 )
@@ -70,5 +73,53 @@ func TestServiceBackendPIDsUsesOnlyResolvedProviders(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestServiceActiveAfterPostflightFailureUsesBoundedFreshStatus(t *testing.T) {
+	statusCalls := 0
+	active := ServiceActiveAfterPostflightFailure(t.Context(), "start", operation.Result{
+		Status: operation.ResultPostflightFailed,
+	}, nil, func(ctx context.Context) (servicemgr.Status, error) {
+		statusCalls++
+		deadline, ok := ctx.Deadline()
+		if !ok || time.Until(deadline) > serviceOperationQueryTimeout {
+			t.Fatal("status query is not bounded by the canonical timeout")
+		}
+		return servicemgr.StatusActive, nil
+	})
+	if !active || statusCalls != 1 {
+		t.Fatalf("active = %t, status calls = %d; want true and one fresh query", active, statusCalls)
+	}
+
+	active = ServiceActiveAfterPostflightFailure(t.Context(), "stop", operation.Result{
+		Status: operation.ResultPostflightFailed,
+	}, nil, func(context.Context) (servicemgr.Status, error) {
+		statusCalls++
+		return servicemgr.StatusActive, nil
+	})
+	if active || statusCalls != 1 {
+		t.Fatalf("stop active = %t, status calls = %d; want false without another query", active, statusCalls)
+	}
+}
+
+type reloadDeadlineManager struct {
+	fakeManager
+	hadDeadline bool
+}
+
+func (m *reloadDeadlineManager) SupportsReload(ctx context.Context, _ string) (bool, error) {
+	_, m.hadDeadline = ctx.Deadline()
+	return true, nil
+}
+
+func TestServiceReloadSupportedUsesBoundedQuery(t *testing.T) {
+	manager := &reloadDeadlineManager{}
+	supported, err := ServiceReloadSupported(t.Context(), nil, manager, "web.service")
+	if err != nil || !supported {
+		t.Fatalf("ServiceReloadSupported() = %t, %v; want true, nil", supported, err)
+	}
+	if !manager.hadDeadline {
+		t.Fatal("reload capability query had no deadline")
 	}
 }

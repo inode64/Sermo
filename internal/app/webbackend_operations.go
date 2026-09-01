@@ -3,14 +3,14 @@ package app
 import (
 	"context"
 	"fmt"
+	"time"
+
 	"sermo/internal/cfgval"
 	"sermo/internal/checks"
 	"sermo/internal/operation"
 	"sermo/internal/rules"
-	"sermo/internal/servicemgr"
 	"sermo/internal/state"
 	"sermo/internal/web"
-	"time"
 )
 
 // SetPanic enables or disables the daemon-wide panic mode, persisting the flag
@@ -71,8 +71,14 @@ func (b *WebBackend) Operate(ctx context.Context, name, action string, opts web.
 	if e.disabled {
 		return b.operateError(name, action, serviceSubjectPrefix+name+" is disabled in configuration")
 	}
-	if action == string(rules.ActionReload) && !e.canReload {
-		return b.operateError(name, action, serviceSubjectPrefix+name+" does not support reload")
+	if action == string(rules.ActionReload) {
+		canReload, err := e.currentReloadSupported(ctx)
+		if err != nil {
+			return b.operateError(name, action, serviceSubjectPrefix+name+": reload support unavailable: "+err.Error())
+		}
+		if !canReload {
+			return b.operateError(name, action, serviceSubjectPrefix+name+" does not support reload")
+		}
 	}
 
 	var r operation.Result
@@ -122,14 +128,18 @@ func (b *WebBackend) operationResultWithMonitor(ctx context.Context, name, actio
 }
 
 func (b *WebBackend) activeAfterPostflightFailure(ctx context.Context, name, action string, result operation.Result) bool {
-	if result.Status != operation.ResultPostflightFailed || !operation.CanRemainActiveAfterPostflightFailure(action) {
-		return false
-	}
 	e := b.entries[name]
 	if e == nil {
 		return false
 	}
-	return e.backendStatus(ctx, b.webNow()) == string(servicemgr.StatusActive)
+	return ServiceActiveAfterPostflightFailure(ctx, action, result, nil, e.status)
+}
+
+func (e *webEntry) currentReloadSupported(ctx context.Context) (bool, error) {
+	if e.reloadSupported == nil {
+		return e.canReload, nil
+	}
+	return e.reloadSupported(ctx)
 }
 
 func (b *WebBackend) operationResult(ctx context.Context, name, action string) operation.Result {

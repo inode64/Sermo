@@ -65,8 +65,6 @@ const (
 )
 
 const (
-	reloadCapabilityTimeout    = 3 * time.Second
-	operationStatusTimeout     = 3 * time.Second
 	defaultProbeCommandTimeout = 2 * time.Second
 	defaultListCommandTimeout  = 30 * time.Second
 	daemonWebClientTimeout     = 10 * time.Second
