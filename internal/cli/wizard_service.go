@@ -23,6 +23,7 @@ import (
 	"sermo/internal/execx"
 	"sermo/internal/procnet"
 	"sermo/internal/servicemgr"
+	"sermo/internal/strutil"
 	"sermo/internal/virt"
 )
 
@@ -416,7 +417,7 @@ func parseProcSocketTableHosts(r io.Reader, port int, states map[string]bool, ip
 		}
 		return true
 	})
-	return appendUniqueStrings(nil, hosts...), err
+	return strutil.MergeUnique(nil, hosts...), err
 }
 
 func procSocketHost(hexAddr string, ipv6 bool) (string, bool) {
@@ -458,7 +459,7 @@ func procIPv6Host(hexAddr string) (string, bool) {
 
 func specificListenerHost(hosts []string) (string, bool) {
 	var specific []string
-	for _, host := range appendUniqueStrings(nil, hosts...) {
+	for _, host := range strutil.MergeUnique(nil, hosts...) {
 		ip := net.ParseIP(host)
 		if ip == nil || ip.IsUnspecified() || ip.IsLoopback() {
 			continue
