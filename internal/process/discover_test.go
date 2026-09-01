@@ -546,6 +546,10 @@ func TestParseSelectorsRejectsNonBooleanDelegated(t *testing.T) {
 	if len(warnings) != 1 || !strings.Contains(warnings[0], "delegated must be a boolean") {
 		t.Fatalf("warnings = %v, want delegated boolean warning", warnings)
 	}
+	diagnostics := ValidateSelectors(tree)
+	if len(diagnostics) != 1 || diagnostics[0].String() != warnings[0] {
+		t.Fatalf("ValidateSelectors() = %v, want runtime warning %q", diagnostics, warnings[0])
+	}
 }
 
 func TestParseSelectorsPidfilesByRole(t *testing.T) {

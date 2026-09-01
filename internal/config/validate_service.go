@@ -289,7 +289,6 @@ func validateProcesses(tree map[string]any, add addFunc) {
 		path := processEntryPath(name)
 		entry, ok := processes[name].(map[string]any)
 		if !ok {
-			add(validationMappingFormat, path)
 			continue
 		}
 		for _, key := range slices.Sorted(maps.Keys(entry)) {
@@ -297,23 +296,9 @@ func validateProcesses(tree map[string]any, add addFunc) {
 				add("%s.%s is not supported; processes entries accept %s", path, key, processSelectorKeySummary)
 			}
 		}
-		// delegated bars a process from every kill decision, so a value that is
-		// not a boolean must fail loudly: read leniently it would come back false
-		// and silently re-expose the workload it was meant to protect.
-		if raw, present := entry[process.SelectorKeyDelegated]; present {
-			if _, ok := raw.(bool); !ok {
-				add(validationBooleanFormat, processFieldPath(name, process.SelectorKeyDelegated))
-			}
-		}
-		exe, cmd := cfgval.String(entry[process.SelectorKeyExe]), cfgval.String(entry[process.SelectorKeyCmd])
-		if exe == "" && cmd == "" {
-			add("%s requires exe or cmd", path)
-		}
-		if cmd != "" {
-			if _, err := regexp.Compile(cmd); err != nil {
-				add("%s.cmd is not a valid regex: %v", path, err)
-			}
-		}
+	}
+	for _, diagnostic := range process.ValidateSelectors(tree) {
+		add("%s", diagnostic.String())
 	}
 }
 

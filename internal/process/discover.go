@@ -888,24 +888,44 @@ func ParseSelectors(tree map[string]any) ([]Selector, []string) {
 		}
 	}
 
+	commandSelectors, diagnostics := parseCommandSelectors(tree, true)
+	selectors = append(selectors, commandSelectors...)
+	warnings := make([]string, 0, len(diagnostics))
+	for _, diagnostic := range diagnostics {
+		warnings = append(warnings, diagnostic.String())
+	}
+	return selectors, warnings
+}
+
+// ValidateSelectors returns the same selector diagnostics ParseSelectors emits
+// without resolving executable symlinks or constructing runtime selectors.
+func ValidateSelectors(tree map[string]any) []SelectorDiagnostic {
+	_, diagnostics := parseCommandSelectors(tree, false)
+	return diagnostics
+}
+
+func parseCommandSelectors(tree map[string]any, build bool) ([]Selector, []SelectorDiagnostic) {
 	raw, ok := tree[SectionProcesses].(map[string]any)
 	if !ok {
-		return selectors, nil
+		return nil, nil
 	}
-
-	var warnings []string
+	var selectors []Selector
+	var diagnostics []SelectorDiagnostic
 	for _, name := range slices.Sorted(maps.Keys(raw)) {
+		path := SectionProcesses + "." + name
 		entry, ok := raw[name].(map[string]any)
 		if !ok {
-			warnings = append(warnings, fmt.Sprintf("process selector %q is not a mapping", name))
+			diagnostics = append(diagnostics, SelectorDiagnostic{Path: path, Problem: "must be a mapping"})
 			continue
 		}
 		delegated := false
+		// A malformed delegated flag must drop the selector. Reading it as false
+		// would silently re-authorize a workload the operator meant to protect.
 		if value, present := entry[SelectorKeyDelegated]; present {
 			var valid bool
 			delegated, valid = value.(bool)
 			if !valid {
-				warnings = append(warnings, fmt.Sprintf("process selector %q delegated must be a boolean", name))
+				diagnostics = append(diagnostics, SelectorDiagnostic{Path: path + "." + SelectorKeyDelegated, Problem: "must be a boolean"})
 				continue
 			}
 		}
@@ -919,21 +939,27 @@ func ParseSelectors(tree map[string]any) ([]Selector, []string) {
 			Delegated: delegated,
 		}
 		if sel.Exe != "" {
-			sel.exePath = canonicalizePath(sel.Exe)
+			if build {
+				sel.exePath = canonicalizePath(sel.Exe)
+			}
 		}
 		if sel.Exe == "" && sel.Cmd == "" {
-			warnings = append(warnings, fmt.Sprintf("process selector %q requires exe or cmd", name))
+			diagnostics = append(diagnostics, SelectorDiagnostic{Path: path, Problem: "requires exe or cmd"})
 			continue
 		}
 		if sel.Cmd != "" {
 			re, err := regexp.Compile(sel.Cmd)
 			if err != nil {
-				warnings = append(warnings, fmt.Sprintf("process selector %q has an invalid cmd regex: %v", name, err))
+				diagnostics = append(diagnostics, SelectorDiagnostic{Path: path + "." + SelectorKeyCmd, Problem: "is not a valid regex: " + err.Error()})
 				continue
 			}
-			sel.cmdRe = re
+			if build {
+				sel.cmdRe = re
+			}
 		}
-		selectors = append(selectors, sel)
+		if build {
+			selectors = append(selectors, sel)
+		}
 	}
-	return selectors, warnings
+	return selectors, diagnostics
 }

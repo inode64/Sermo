@@ -80,6 +80,17 @@ const (
 	SelectorCommandMatch = "command_match"
 )
 
+// SelectorDiagnostic describes one invalid process selector field. Path uses
+// the public processes.<name>[.<field>] vocabulary shared by config and runtime
+// diagnostics.
+type SelectorDiagnostic struct {
+	Path    string
+	Problem string
+}
+
+// String renders the complete selector diagnostic.
+func (d SelectorDiagnostic) String() string { return d.Path + " " + d.Problem }
+
 // Resolved service-tree process discovery keys.
 const (
 	// ServiceKeyPidfile is the top-level pidfile field parsed into a pidfile selector.
