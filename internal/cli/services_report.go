@@ -89,10 +89,8 @@ func selectServicesReportNotifiers(selection []string, registry map[string]notif
 		return nil, nil, nil
 	}
 	names := servicesReportNotifierNames(selection, registry)
-	hasWall := servicesReportHasNotifierType(names, registry, notify.TypeWall)
 	seen := map[string]struct{}{}
 	selected := make([]notify.Notifier, 0, len(names))
-	outNames := make([]string, 0, len(names))
 	for _, name := range names {
 		if name == "" {
 			continue
@@ -104,12 +102,13 @@ func selectServicesReportNotifiers(selection []string, registry map[string]notif
 		if !ok {
 			return nil, nil, fmt.Errorf("services --notify references unknown or disabled notifier %q", name)
 		}
-		if hasWall && n.Type() == notify.TypeTTY {
-			continue
-		}
 		seen[name] = struct{}{}
 		selected = append(selected, n)
-		outNames = append(outNames, name)
+	}
+	selected = notify.PreferWall(selected)
+	outNames := make([]string, 0, len(selected))
+	for _, notifier := range selected {
+		outNames = append(outNames, notifier.Name())
 	}
 	return selected, outNames, nil
 }
@@ -119,15 +118,6 @@ func servicesReportNotifierNames(selection []string, registry map[string]notify.
 		return slices.Sorted(maps.Keys(registry))
 	}
 	return selection
-}
-
-func servicesReportHasNotifierType(names []string, registry map[string]notify.Notifier, typ string) bool {
-	for _, name := range names {
-		if n, ok := registry[name]; ok && n.Type() == typ {
-			return true
-		}
-	}
-	return false
 }
 
 func servicesReportMessage(reports []appinspect.Report, includeMissing bool, now time.Time) notify.Message {
