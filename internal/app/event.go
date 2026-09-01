@@ -177,6 +177,18 @@ func OperationEventRecord(r operation.Result) state.EventRecord {
 	}})
 }
 
+// CascadeEventRecord converts an additional target's final cascade outcome into
+// the same relationship event emitted by daemon and web operations.
+func CascadeEventRecord(root string, r operation.Result) state.EventRecord {
+	return eventRecordFromLogged(LoggedEvent{Event: Event{
+		Service: r.Service,
+		Kind:    eventKindCascade,
+		Action:  r.Action,
+		Status:  string(r.Status),
+		Message: "cascade from " + root,
+	}})
+}
+
 // eventKindForResult maps an operation result to the event-log kind. Successful
 // operations are action; blocked ones are suppressed (guard/lock/cooldown); every
 // other outcome (preflight/postflight failure, backend error, orphan processes)

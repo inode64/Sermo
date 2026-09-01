@@ -86,12 +86,14 @@ func (b *WebBackend) Operate(ctx context.Context, name, action string, opts web.
 			}
 			return ent.alsoApply
 		}
-		c := cascader{
-			op:     b.operationResultWithMonitor,
-			lookup: lookup,
-			emit:   b.emit,
+		cfg := CascadeConfig{
+			Operate: func(ctx context.Context, service, action string) (operation.Result, error) {
+				return b.operationResultWithMonitor(ctx, service, action), nil
+			},
+			Lookup: lookup,
+			Emit:   b.emit,
 		}
-		r = c.run(ctx, name, action)
+		r, _ = RunCascade(ctx, name, action, cfg)
 	}
 	return webActionResultFrom(r)
 }
