@@ -38,6 +38,7 @@ import (
 	"sermo/internal/rules"
 	"sermo/internal/servicemgr"
 	"sermo/internal/state"
+	"sermo/internal/strutil"
 )
 
 const (
@@ -1911,6 +1912,11 @@ func defaultReloadPidfileFallbacks() []string {
 	return []string{filepath.Join(config.DefaultRuntime, daemonPIDFilename)}
 }
 
+func daemonReloadPidfileCandidates(primary string, fallbacks []string) []string {
+	candidates := strutil.MergeUnique(nil, primary)
+	return strutil.MergeUnique(candidates, fallbacks...)
+}
+
 // runReload asks the running sermod to reload its configuration (SIGHUP
 // equivalent). It prefers a pidfile written by the daemon under the configured
 // runtime dir. If no pidfile is found it falls back to a native /proc scan for
@@ -1930,7 +1936,7 @@ func (a App) runReload(_ context.Context, opts options) int {
 	if fallbacks == nil {
 		fallbacks = defaultReloadPidfileFallbacks()
 	}
-	candidates := append([]string{filepath.Join(runtimeDir, daemonPIDFilename)}, fallbacks...)
+	candidates := daemonReloadPidfileCandidates(filepath.Join(runtimeDir, daemonPIDFilename), fallbacks)
 
 	var pid int
 	for _, p := range candidates {

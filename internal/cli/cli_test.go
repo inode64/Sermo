@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -621,6 +622,16 @@ func TestDaemonReloadNoPid(t *testing.T) {
 	out := stderr.String()
 	if !strings.Contains(out, "could not find") {
 		t.Fatalf("stderr did not report pid lookup failure: %q", out)
+	}
+}
+
+func TestDaemonReloadPidfileCandidatesPreserveOrderWithoutDuplicates(t *testing.T) {
+	primary := "/run/sermo/sermod.pid"
+	fallback := "/run/sermo-alt/sermod.pid"
+	want := []string{primary, fallback}
+	got := daemonReloadPidfileCandidates(primary, []string{primary, fallback, primary})
+	if !slices.Equal(got, want) {
+		t.Fatalf("daemonReloadPidfileCandidates() = %v, want %v", got, want)
 	}
 }
 
