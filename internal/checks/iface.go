@@ -7,28 +7,6 @@ import (
 
 const interfaceResultOK = "ok"
 
-// parseInterfaces reads the optional `interface` field: a single identifier
-// (name/IP/MAC) or a list of them. An empty/absent value means default routing.
-func parseInterfaces(v any) []string {
-	switch t := v.(type) {
-	case string:
-		if t == "" {
-			return nil
-		}
-		return []string{t}
-	case []any:
-		out := make([]string, 0, len(t))
-		for _, e := range t {
-			if s := cfgval.AsString(e); s != "" {
-				out = append(out, s)
-			}
-		}
-		return out
-	default:
-		return nil
-	}
-}
-
 // parseInterfaceMatch reads `interface_match` (any|all, default any → false).
 // The bool reports whether ALL listed interfaces must succeed.
 func parseInterfaceMatch(entry map[string]any) (all bool, warn string) {

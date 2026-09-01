@@ -21,7 +21,7 @@ func buildTCPCheck(b base, entry map[string]any) (Check, string) {
 	if warning != "" {
 		return nil, "tcp check: " + warning
 	}
-	return tcpCheck{base: b, host: host, ifaces: parseInterfaces(entry[CheckKeyInterface]), ifaceAll: all, port: port}, ""
+	return tcpCheck{base: b, host: host, ifaces: cfgval.StringList(entry[CheckKeyInterface]), ifaceAll: all, port: port}, ""
 }
 
 // buildTCPConnectionsCheck builds a local established-TCP-connection counter.
@@ -72,5 +72,5 @@ func buildPortsCheck(b base, entry map[string]any) (Check, string) {
 	if warning != "" {
 		return nil, "ports check: " + warning
 	}
-	return &portsCheck{base: b, host: host, ifaces: parseInterfaces(entry[CheckKeyInterface]), ifaceAll: allIf, ports: ports, expect: expect, match: match, onChange: cfgval.Bool(entry[CheckKeyOnChange]), connectTimeout: connectTimeout}, ""
+	return &portsCheck{base: b, host: host, ifaces: cfgval.StringList(entry[CheckKeyInterface]), ifaceAll: allIf, ports: ports, expect: expect, match: match, onChange: cfgval.Bool(entry[CheckKeyOnChange]), connectTimeout: connectTimeout}, ""
 }

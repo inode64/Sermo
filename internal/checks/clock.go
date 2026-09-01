@@ -191,7 +191,7 @@ func buildClockCheck(b base, entry map[string]any) (Check, string) {
 		maxOffset:         maxOffset,
 		maxStratum:        maxStratum,
 		maxRootDispersion: maxRootDispersion,
-		ifaces:            parseInterfaces(entry[CheckKeyInterface]),
+		ifaces:            cfgval.StringList(entry[CheckKeyInterface]),
 		ifaceAll:          all,
 		probe:             proto.Probe,
 	}, ""

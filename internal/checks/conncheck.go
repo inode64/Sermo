@@ -316,7 +316,7 @@ func buildConnCheck(b base, proto conn.Protocol, entry map[string]any) (Check, s
 	if c.onChange || c.onVersionChange {
 		c.state = &connState{}
 	}
-	c.ifaces = parseInterfaces(entry[CheckKeyInterface])
+	c.ifaces = cfgval.StringList(entry[CheckKeyInterface])
 	all, iwarn := parseInterfaceMatch(entry)
 	if iwarn != "" {
 		return nil, protoName + " check: " + iwarn

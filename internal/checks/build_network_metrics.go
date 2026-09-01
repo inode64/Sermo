@@ -66,7 +66,7 @@ func buildICMPCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 	if iwarn != "" {
 		return nil, "icmp check: " + iwarn
 	}
-	c := &icmpCheck{base: b, host: host, ifaces: parseInterfaces(entry[CheckKeyInterface]), ifaceAll: allIf, count: count, metric: metric, sampler: deps.PingSampler}
+	c := &icmpCheck{base: b, host: host, ifaces: cfgval.StringList(entry[CheckKeyInterface]), ifaceAll: allIf, count: count, metric: metric, sampler: deps.PingSampler}
 	if warn := configureICMPMetric(c, entry); warn != "" {
 		return nil, warn
 	}
