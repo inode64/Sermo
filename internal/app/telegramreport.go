@@ -68,19 +68,9 @@ func (r *telegramReporter) Status(ctx context.Context) (telegrambot.StatusReport
 	return rep, nil
 }
 
-// mapLines projects a web listing onto the bot's own line type. Both listings
-// are the same shape — read all, convert each — and only the projection differs.
-func mapLines[S, D any](src []S, to func(S) D) []D {
-	out := make([]D, 0, len(src))
-	for _, item := range src {
-		out = append(out, to(item))
-	}
-	return out
-}
-
 //nolint:dupl // parallel projections of two unrelated web types; merging them would need reflection.
 func (r *telegramReporter) Services(ctx context.Context) ([]telegrambot.ServiceLine, error) {
-	return mapLines(r.web.Services(ctx), func(s web.Service) telegrambot.ServiceLine {
+	return mapSlice(r.web.Services(ctx), func(s web.Service) telegrambot.ServiceLine {
 		return telegrambot.ServiceLine{
 			Name:      s.Name,
 			State:     s.State,
@@ -92,7 +82,7 @@ func (r *telegramReporter) Services(ctx context.Context) ([]telegrambot.ServiceL
 
 //nolint:dupl // parallel projections of two unrelated web types; merging them would need reflection.
 func (r *telegramReporter) Watches(ctx context.Context) ([]telegrambot.WatchLine, error) {
-	return mapLines(r.web.Watches(ctx), func(w web.Watch) telegrambot.WatchLine {
+	return mapSlice(r.web.Watches(ctx), func(w web.Watch) telegrambot.WatchLine {
 		return telegrambot.WatchLine{
 			Name:      w.Name,
 			Scope:     w.Scope,
