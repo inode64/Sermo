@@ -13,16 +13,6 @@ func TestLockID(t *testing.T) {
 	}
 }
 
-// orDefault returns the fallback only for an empty value.
-func TestOrDefault(t *testing.T) {
-	if got := orDefault("", "fb"); got != "fb" {
-		t.Errorf("orDefault(\"\", fb) = %q, want \"fb\"", got)
-	}
-	if got := orDefault("value", "fb"); got != "value" {
-		t.Errorf("orDefault(value, fb) = %q, want \"value\"", got)
-	}
-}
-
 func TestValidateIdentifier(t *testing.T) {
 	cases := []struct {
 		name       string

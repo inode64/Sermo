@@ -1,6 +1,7 @@
 package servicemgr
 
 import (
+	"cmp"
 	"context"
 	"maps"
 	"os"
@@ -172,9 +173,9 @@ func detectOpenRCProc(readFile func(string) ([]byte, error), unit string) ProcIn
 	text := blob.String()
 	vars := openRCAssignments(text, unit)
 	info := ProcInfo{
-		Pidfile: cleanProcPath(firstNonEmpty(vars[openRCVarPidfile], vars[openRCVarPidfileUpper], suffixVar(vars, openRCVarPidfileSuffix))),
+		Pidfile: cleanProcPath(cmp.Or(vars[openRCVarPidfile], vars[openRCVarPidfileUpper], suffixVar(vars, openRCVarPidfileSuffix))),
 		Exe:     cleanProcPath(vars[openRCVarCommand]),
-		User:    serviceUser(firstNonEmpty(vars[openRCVarCommandUser], userFromArgs(vars[openRCVarStartStopDaemonArgs]), userFromArgs(text))),
+		User:    serviceUser(cmp.Or(vars[openRCVarCommandUser], userFromArgs(vars[openRCVarStartStopDaemonArgs]), userFromArgs(text))),
 	}
 	if info.Pidfile == "" {
 		info.Pidfile = cleanProcPath(firstResolvedArg(text, vars, openrcPidfileArg, openrcWritePIDArg))
@@ -206,7 +207,7 @@ func detectOpenRCRuntimeProc(readFile func(string) ([]byte, error), unit string)
 	vars := openRCAssignments(string(data), unit)
 	info := ProcInfo{
 		Pidfile: cleanProcPath(vars[openRCVarPidfile]),
-		Exe:     cleanProcPath(firstNonEmpty(vars[openRCVarExec], vars[openRCVarArgv0])),
+		Exe:     cleanProcPath(cmp.Or(vars[openRCVarExec], vars[openRCVarArgv0])),
 	}
 	if command := cleanProcPath(vars[openRCVarArgv0]); command != "" {
 		info.Cmd = commandRegex(command)
@@ -513,15 +514,6 @@ func cleanProcPath(s string) string {
 			return runtimeRunDir + "/" + after
 		}
 		return clean
-	}
-	return ""
-}
-
-func firstNonEmpty(values ...string) string {
-	for _, value := range values {
-		if value != "" {
-			return value
-		}
 	}
 	return ""
 }
