@@ -517,17 +517,29 @@ func openrcStatus(result execx.Result) Status {
 
 func openrcStatusLine(out, service string) (Status, bool) {
 	for line := range strings.SplitSeq(out, serviceOutputLineSeparator) {
-		open := strings.Index(line, "[")
-		closeIdx := strings.Index(line, "]")
-		if open < 0 || closeIdx < open {
+		beforeState, _, _ := strings.Cut(line, "[")
+		if strings.TrimSpace(beforeState) != service {
 			continue
 		}
-		if strings.TrimSpace(line[:open]) != service {
-			continue
+		if status, ok := openRCLineStatus(line); ok {
+			return status, true
 		}
-		return openrcStateTextStatus(line[open+1:closeIdx], true), true
 	}
 	return StatusUnknown, false
+}
+
+// openRCLineStatus classifies only the bracketed rc-status state. Service names
+// and descriptions may contain state words and must never affect the result.
+func openRCLineStatus(line string) (Status, bool) {
+	_, state, found := strings.Cut(line, "[")
+	if !found {
+		return StatusUnknown, false
+	}
+	state, _, found = strings.Cut(state, "]")
+	if !found {
+		return StatusUnknown, false
+	}
+	return openrcStateTextStatus(state, true), true
 }
 
 func openrcStateTextStatus(text string, includeInactive bool) Status {
