@@ -39,7 +39,7 @@ func TestSMTPHandshakeAuthPlain(t *testing.T) {
 	if !ok {
 		t.Fatalf("AUTH PLAIN not sent: %q", sent)
 	}
-	arg := strings.SplitN(after, "\r\n", 2)[0]
+	arg, _, _ := strings.Cut(after, "\r\n")
 	raw, err := base64.StdEncoding.DecodeString(arg)
 	if err != nil {
 		t.Fatalf("auth arg not base64: %q", arg)

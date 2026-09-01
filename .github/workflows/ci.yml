@@ -31,10 +31,12 @@ jobs:
       - name: Install analyzers
         run: |
           go install honnef.co/go/tools/cmd/staticcheck@v0.8.1
-          go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.13.1
+          go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.13.2
           go install golang.org/x/vuln/cmd/govulncheck@v1.7.0
-          go install golang.org/x/tools/cmd/goimports@v0.49.0
-          go install golang.org/x/tools/cmd/deadcode@v0.49.0
+          # x/tools v0.49.0 deadcode panics on Go 1.27 generic methods;
+          # 2e922938d07f is the upstream fix for go.dev/issue/80973.
+          go install golang.org/x/tools/cmd/goimports@v0.49.1-0.20260828025639-2e922938d07f
+          go install golang.org/x/tools/cmd/deadcode@v0.49.1-0.20260828025639-2e922938d07f
           go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
           go install github.com/google/yamlfmt/cmd/yamlfmt@v0.21.0
           npm ci

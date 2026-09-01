@@ -27,7 +27,7 @@ func mariadbRow(conn, host, io, sqlThread, behind, lastSQLErr string) replicatio
 
 func replicationCheckWith(rows []replicationRow, err error) replicationCheck {
 	return replicationCheck{
-		base:   base{name: "repl"},
+		name:   "repl",
 		engine: SQLEngineMariaDB,
 		sample: func(context.Context) ([]replicationRow, error) { return rows, err },
 	}

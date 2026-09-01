@@ -42,7 +42,7 @@ func TestReadHwmon(t *testing.T) {
 
 func sensorsWith(readings []SensorReading, chip string, preds ...levelPred) sensorsCheck {
 	return sensorsCheck{
-		base:    base{name: "s", timeout: time.Second},
+		name: "s", timeout: time.Second,
 		sampler: func() ([]SensorReading, error) { return readings, nil },
 		chip:    chip, preds: preds,
 	}

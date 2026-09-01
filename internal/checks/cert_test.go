@@ -167,7 +167,7 @@ func healthyCert() CertSample {
 }
 
 func certWith(s CertSample) *certCheck {
-	return &certCheck{base: base{name: "c"}, host: "x", port: "443", serverName: "x", verify: true, sampler: fakeCert(s)}
+	return &certCheck{name: "c", host: "x", port: "443", serverName: "x", verify: true, sampler: fakeCert(s)}
 }
 
 func TestCertHealthyNoAlert(t *testing.T) {
@@ -255,7 +255,7 @@ func TestCertVerifyError(t *testing.T) {
 
 func TestCertAlgorithmChangeEdge(t *testing.T) {
 	cur := healthyCert()
-	c := &certCheck{base: base{name: "c"}, host: "x", port: "443", serverName: "x", verify: false, onAlgoChange: true,
+	c := &certCheck{name: "c", host: "x", port: "443", serverName: "x", verify: false, onAlgoChange: true,
 		sampler: func(context.Context, string, string, string, bool) (CertSample, error) { return cur, nil }}
 
 	if !c.Run(context.Background()).OK {
@@ -271,7 +271,7 @@ func TestCertAlgorithmChangeEdge(t *testing.T) {
 }
 
 func TestCertSamplerErrorIsNotAlert(t *testing.T) {
-	c := &certCheck{base: base{name: "c"}, host: "x", port: "443", serverName: "x", verify: true,
+	c := &certCheck{name: "c", host: "x", port: "443", serverName: "x", verify: true,
 		sampler: func(context.Context, string, string, string, bool) (CertSample, error) {
 			return CertSample{}, context.DeadlineExceeded
 		}}
@@ -284,7 +284,7 @@ func TestBuildCertCheck(t *testing.T) {
 	// A healthy cert passes; a cert check without a host warns.
 	assertBuildThresholdFires(t, "cert",
 		map[string]any{"host": "api.example.com", "expires_in_days": 14, "on_algorithm_change": true},
-		Deps{Samplers: Samplers{CertSampler: fakeCert(healthyCert())}})
+		Deps{CertSampler: fakeCert(healthyCert())})
 }
 
 func TestCertCheckSource(t *testing.T) {
@@ -334,7 +334,7 @@ func TestCertIssuerChangeAlone(t *testing.T) {
 	// Only onIssuerChange is enabled, so the alert must come solely from the
 	// issuer comparison (not a fingerprint change masking it).
 	cur := healthyCert()
-	c := &certCheck{base: base{name: "c"}, host: "x", port: "443", serverName: "x", verify: false,
+	c := &certCheck{name: "c", host: "x", port: "443", serverName: "x", verify: false,
 		onIssuerChange: true,
 		sampler:        func(context.Context, string, string, string, bool) (CertSample, error) { return cur, nil }}
 	c.Run(context.Background()) // prime

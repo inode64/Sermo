@@ -277,9 +277,9 @@ func defaultInotifySampler(ctx context.Context, countWatches bool) (InotifySampl
 // — one streamed fdinfo read per descriptor already known to be an inotify one,
 // so the watch count is proportional to inotify fds and not to all fds.
 func readInotifyUsage(ctx context.Context, root string, countWatches bool) (InotifySample, error) {
-	sample := InotifySample{WatchesRead: countWatches}
-	sample.MaxInstances = readInotifyLimit(root, "max_user_instances")
-	sample.MaxWatches = readInotifyLimit(root, "max_user_watches")
+	sample := InotifySample{WatchesRead: countWatches,
+		MaxInstances: readInotifyLimit(root, "max_user_instances"),
+		MaxWatches:   readInotifyLimit(root, "max_user_watches")}
 
 	entries, err := os.ReadDir(root)
 	if err != nil {

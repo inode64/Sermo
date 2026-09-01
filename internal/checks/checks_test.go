@@ -50,21 +50,21 @@ func TestTCPCheck(t *testing.T) {
 	_, portStr, _ := net.SplitHostPort(ln.Addr().String())
 	port := atoi(t, portStr)
 
-	open := tcpCheck{base: base{name: "open", timeout: time.Second}, host: "127.0.0.1", port: port}
+	open := tcpCheck{name: "open", timeout: time.Second, host: "127.0.0.1", port: port}
 	if res := open.Run(context.Background()); !res.OK {
 		t.Errorf("open port should pass: %s", res.Message)
 	}
 
 	// A bound, non-existent interface must fail the dial (never silently use the
 	// default route).
-	bound := tcpCheck{base: base{name: "bound", timeout: time.Second}, host: "127.0.0.1", ifaces: []string{"sermo-nonexistent0"}, port: port}
+	bound := tcpCheck{name: "bound", timeout: time.Second, host: "127.0.0.1", ifaces: []string{"sermo-nonexistent0"}, port: port}
 	if res := bound.Run(context.Background()); res.OK {
 		t.Errorf("tcp check bound to a bogus interface should fail")
 	}
 
 	// A port with no listener should fail fast.
 	ln.Close()
-	closed := tcpCheck{base: base{name: "closed", timeout: time.Second}, host: "127.0.0.1", port: port}
+	closed := tcpCheck{name: "closed", timeout: time.Second, host: "127.0.0.1", port: port}
 	if res := closed.Run(context.Background()); res.OK {
 		t.Errorf("closed port should fail")
 	}
@@ -80,22 +80,22 @@ func TestHTTPCheck(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	ok := httpCheck{base: base{name: "h", timeout: time.Second}, client: srv.Client(), url: srv.URL + "/health", method: "GET", expect: statusMatcher{codes: []int{200}}}
+	ok := httpCheck{name: "h", timeout: time.Second, client: srv.Client(), url: srv.URL + "/health", method: "GET", expect: statusMatcher{codes: []int{200}}}
 	if res := ok.Run(context.Background()); !res.OK {
 		t.Errorf("200 should pass: %s", res.Message)
 	}
 
-	bad := httpCheck{base: base{name: "h", timeout: time.Second}, client: srv.Client(), url: srv.URL + "/down", method: "GET", expect: statusMatcher{codes: []int{200}}}
+	bad := httpCheck{name: "h", timeout: time.Second, client: srv.Client(), url: srv.URL + "/down", method: "GET", expect: statusMatcher{codes: []int{200}}}
 	if res := bad.Run(context.Background()); res.OK {
 		t.Errorf("503 should fail when expecting 200")
 	}
 
 	// A 2xx class accepts 200; a list accepts 200 or 204.
-	class := httpCheck{base: base{name: "h", timeout: time.Second}, client: srv.Client(), url: srv.URL + "/health", method: "GET", expect: statusMatcher{classes: []int{2}}}
+	class := httpCheck{name: "h", timeout: time.Second, client: srv.Client(), url: srv.URL + "/health", method: "GET", expect: statusMatcher{classes: []int{2}}}
 	if res := class.Run(context.Background()); !res.OK {
 		t.Errorf("2xx class should accept 200: %s", res.Message)
 	}
-	classBad := httpCheck{base: base{name: "h", timeout: time.Second}, client: srv.Client(), url: srv.URL + "/down", method: "GET", expect: statusMatcher{classes: []int{2}}}
+	classBad := httpCheck{name: "h", timeout: time.Second, client: srv.Client(), url: srv.URL + "/down", method: "GET", expect: statusMatcher{classes: []int{2}}}
 	if res := classBad.Run(context.Background()); res.OK {
 		t.Errorf("2xx class should reject 503")
 	}
@@ -180,7 +180,7 @@ func runHTTPCertCheck(t *testing.T, opts certOptions) Result {
 	t.Cleanup(srv.Close)
 	insecure := &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}}
 	c := &httpCheck{
-		base: base{name: "h", timeout: time.Second}, client: insecure, certClient: insecure,
+		name: "h", timeout: time.Second, client: insecure, certClient: insecure,
 		url: srv.URL, method: "GET", expect: statusMatcher{codes: []int{200}},
 		certHost: hostOf(t, srv.URL), certOpts: opts,
 	}
@@ -456,7 +456,7 @@ func TestCheckTimeoutMessage(t *testing.T) {
 		{
 			name: "smart",
 			check: &smartCheck{
-				base:           base{name: "sm", timeout: time.Millisecond},
+				name: "sm", timeout: time.Millisecond,
 				runner:         slowRunner{},
 				device:         "/dev/sda",
 				deviceIdentity: testDeviceIdentity,
@@ -466,7 +466,7 @@ func TestCheckTimeoutMessage(t *testing.T) {
 		{
 			name: "hdparm",
 			check: &hdparmCheck{
-				base:   base{name: "hd", timeout: time.Millisecond},
+				name: "hd", timeout: time.Millisecond,
 				runner: slowRunner{},
 				device: "/dev/sda",
 				preds:  []levelPred{{field: "cached", op: "<", value: 100}},
@@ -506,11 +506,11 @@ func TestCheckTimeoutMessage(t *testing.T) {
 }
 
 func TestCommandCheck(t *testing.T) {
-	ok := commandCheck{base: base{name: "c", timeout: time.Second}, runner: fakeRunner{execx.Result{ExitCode: 0}}, argv: []string{"true"}, expectExit: []int{0}}
+	ok := commandCheck{name: "c", timeout: time.Second, runner: fakeRunner{execx.Result{ExitCode: 0}}, argv: []string{"true"}, expectExit: []int{0}}
 	if res := ok.Run(context.Background()); !res.OK {
 		t.Errorf("exit 0 should pass: %s", res.Message)
 	}
-	bad := commandCheck{base: base{name: "c", timeout: time.Second}, runner: fakeRunner{execx.Result{ExitCode: 1, Stderr: "boom\n"}}, argv: []string{"false"}, expectExit: []int{0}}
+	bad := commandCheck{name: "c", timeout: time.Second, runner: fakeRunner{execx.Result{ExitCode: 1, Stderr: "boom\n"}}, argv: []string{"false"}, expectExit: []int{0}}
 	res := bad.Run(context.Background())
 	if res.OK {
 		t.Errorf("exit 1 should fail")
@@ -535,7 +535,7 @@ func assertRunsAsUser(t *testing.T, runner *recordingUserRunner, check Check, wa
 func TestCommandCheckUser(t *testing.T) {
 	runner := &recordingUserRunner{result: execx.Result{ExitCode: 0}}
 	check := commandCheck{
-		base:       base{name: "c", timeout: time.Second},
+		name: "c", timeout: time.Second,
 		runner:     runner,
 		argv:       []string{"/usr/bin/postgres", "--check"},
 		user:       "postgres",
@@ -546,7 +546,7 @@ func TestCommandCheckUser(t *testing.T) {
 
 func TestCommandCheckUserRequiresUserRunner(t *testing.T) {
 	check := commandCheck{
-		base:       base{name: "c", timeout: time.Second},
+		name: "c", timeout: time.Second,
 		runner:     fakeRunner{execx.Result{ExitCode: 0}},
 		argv:       []string{"/usr/bin/postgres", "--check"},
 		user:       "postgres",
@@ -648,13 +648,13 @@ func TestCommandCheckExportsData(t *testing.T) {
 
 func TestServiceCheck(t *testing.T) {
 	status := func(context.Context) (servicemgr.Status, error) { return servicemgr.StatusActive, nil }
-	ok := serviceCheck{base: base{name: "s", timeout: time.Second}, expect: "active", status: status}
+	ok := serviceCheck{name: "s", timeout: time.Second, expect: "active", status: status}
 	if res := ok.Run(context.Background()); !res.OK {
 		t.Errorf("active==active should pass: %s", res.Message)
 	} else if got := res.Data[DataKeyStatus]; got != string(servicemgr.StatusActive) {
 		t.Errorf("status data = %#v, want %q", got, servicemgr.StatusActive)
 	}
-	bad := serviceCheck{base: base{name: "s", timeout: time.Second}, expect: "inactive", status: status}
+	bad := serviceCheck{name: "s", timeout: time.Second, expect: "inactive", status: status}
 	if res := bad.Run(context.Background()); res.OK {
 		t.Errorf("active!=inactive should fail")
 	}
@@ -671,45 +671,45 @@ func TestFileExistsAndBinaryChecks(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if res := (fileExistsCheck{base: base{name: "f"}, path: flag}).Run(context.Background()); !res.OK {
+	if res := (fileExistsCheck{name: "f", path: flag}).Run(context.Background()); !res.OK {
 		t.Errorf("existing file should pass")
 	}
 	absent := filepath.Join(dir, "absent")
-	if res := (fileExistsCheck{base: base{name: "f"}, path: absent}).Run(context.Background()); res.OK {
+	if res := (fileExistsCheck{name: "f", path: absent}).Run(context.Background()); res.OK {
 		t.Errorf("absent file should fail")
 	} else if res.Data[DataKeyPath] != absent {
 		t.Errorf("absent file_exists data path = %v, want %s", res.Data[DataKeyPath], absent)
 	}
-	if res := (fileCheck{base: base{name: "file"}, path: absent}).Run(context.Background()); res.OK {
+	if res := (fileCheck{name: "file", path: absent}).Run(context.Background()); res.OK {
 		t.Errorf("absent file should fail a file check")
 	} else if res.Data[DataKeyPath] != absent {
 		t.Errorf("absent file data path = %v, want %s", res.Data[DataKeyPath], absent)
 	}
-	if res := (fileCheck{base: base{name: "file"}, path: flag}).Run(context.Background()); !res.OK {
+	if res := (fileCheck{name: "file", path: flag}).Run(context.Background()); !res.OK {
 		t.Errorf("regular file should pass")
 	}
 	empty := filepath.Join(dir, "empty")
 	if err := os.WriteFile(empty, nil, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if res := (fileCheck{base: base{name: "file"}, path: empty, nonEmpty: true}).Run(context.Background()); res.OK {
+	if res := (fileCheck{name: "file", path: empty, nonEmpty: true}).Run(context.Background()); res.OK {
 		t.Errorf("empty file should fail a non-empty file check")
 	}
-	if res := (fileCheck{base: base{name: "file"}, path: dir}).Run(context.Background()); res.OK {
+	if res := (fileCheck{name: "file", path: dir}).Run(context.Background()); res.OK {
 		t.Errorf("directory should fail a regular file check")
 	}
-	if res := (lockfileCheck{base: base{name: "lock"}, paths: []string{filepath.Join(dir, "absent.lock"), flag}}).Run(context.Background()); !res.OK {
+	if res := (lockfileCheck{name: "lock", paths: []string{filepath.Join(dir, "absent.lock"), flag}}).Run(context.Background()); !res.OK {
 		t.Fatalf("lockfile candidate should pass: %s", res.Message)
 	} else if res.Data["path"] != flag {
 		t.Fatalf("lockfile data path = %v, want %s", res.Data["path"], flag)
 	}
-	if res := (lockfileCheck{base: base{name: "lock"}, paths: []string{dir}}).Run(context.Background()); res.OK {
+	if res := (lockfileCheck{name: "lock", paths: []string{dir}}).Run(context.Background()); res.OK {
 		t.Errorf("directory should fail a lockfile check")
 	}
-	if res := (binaryCheck{base: base{name: "b"}, path: bin}).Run(context.Background()); !res.OK {
+	if res := (binaryCheck{name: "b", path: bin}).Run(context.Background()); !res.OK {
 		t.Errorf("executable should pass")
 	}
-	if res := (binaryCheck{base: base{name: "b"}, path: flag}).Run(context.Background()); res.OK {
+	if res := (binaryCheck{name: "b", path: flag}).Run(context.Background()); res.OK {
 		t.Errorf("non-executable file should fail")
 	}
 
@@ -719,12 +719,12 @@ func TestFileExistsAndBinaryChecks(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer ln.Close()
-	if res := (socketCheck{base: base{name: "sock"}, paths: []string{filepath.Join(dir, "absent.sock"), sock}}).Run(context.Background()); !res.OK {
+	if res := (socketCheck{name: "sock", paths: []string{filepath.Join(dir, "absent.sock"), sock}}).Run(context.Background()); !res.OK {
 		t.Fatalf("socket candidate should pass: %s", res.Message)
 	} else if res.Data["path"] != sock {
 		t.Fatalf("socket data path = %v, want %s", res.Data["path"], sock)
 	}
-	if res := (socketCheck{base: base{name: "sock"}, paths: []string{flag}}).Run(context.Background()); res.OK {
+	if res := (socketCheck{name: "sock", paths: []string{flag}}).Run(context.Background()); res.OK {
 		t.Errorf("regular file should fail a socket check")
 	}
 }
@@ -752,13 +752,13 @@ func TestBuildFileAndSocketChecksNeedPath(t *testing.T) {
 
 func TestLibrariesCheck(t *testing.T) {
 	// Non-existent binary should fail (open error).
-	c := librariesCheck{base: base{name: "lib"}, binary: "/non/existent/binary/that/does/not/exist"}
+	c := librariesCheck{name: "lib", binary: "/non/existent/binary/that/does/not/exist"}
 	if res := c.Run(context.Background()); res.OK {
 		t.Fatalf("non-existent binary should fail, got OK with %q", res.Message)
 	}
 
 	// A real dynamically-linked binary on the test host must resolve (now with transitive).
-	c = librariesCheck{base: base{name: "lib", timeout: time.Second}, binary: "/bin/sh"}
+	c = librariesCheck{name: "lib", timeout: time.Second, binary: "/bin/sh"}
 	if res := c.Run(context.Background()); !res.OK {
 		t.Fatalf("/bin/sh libraries should resolve: %s", res.Message)
 	}
@@ -767,7 +767,7 @@ func TestLibrariesCheck(t *testing.T) {
 func TestLibrariesCheckHonorsCanceledContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	c := librariesCheck{base: base{name: "lib", timeout: time.Second}, binary: "/bin/sh"}
+	c := librariesCheck{name: "lib", timeout: time.Second, binary: "/bin/sh"}
 	res := c.Run(ctx)
 	if res.OK {
 		t.Fatal("libraries check must fail when the context is already cancelled")
@@ -833,11 +833,11 @@ func TestProcessCheck(t *testing.T) {
 		}
 		return "absent"
 	}
-	ok := processCheck{base: base{name: "p"}, exes: []string{"/usr/bin/mariadb-backup"}, expect: "running", observe: observe}
+	ok := processCheck{name: "p", exes: []string{"/usr/bin/mariadb-backup"}, expect: "running", observe: observe}
 	if res := ok.Run(context.Background()); !res.OK {
 		t.Errorf("running==running should pass: %s", res.Message)
 	}
-	absent := processCheck{base: base{name: "p"}, exes: []string{"/usr/bin/mariadb-backup"}, expect: "absent", observe: observe}
+	absent := processCheck{name: "p", exes: []string{"/usr/bin/mariadb-backup"}, expect: "absent", observe: observe}
 	if res := absent.Run(context.Background()); res.OK {
 		t.Errorf("running!=absent should fail")
 	}

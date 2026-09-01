@@ -172,9 +172,9 @@ func TestInotifyCheckRun(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			check, errs := buildInotifyCheck(base{name: "watch-inotify", timeout: time.Second}, tc.entry, Deps{
-				Samplers: Samplers{InotifySampler: func(context.Context, bool) (InotifySample, error) {
+				InotifySampler: func(context.Context, bool) (InotifySample, error) {
 					return tc.sample, tc.err
-				}},
+				},
 			})
 			if errs != "" {
 				t.Fatalf("build failed: %s", errs)
@@ -210,10 +210,10 @@ func TestInotifyWatchCountingIsPredicateGated(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			var got bool
 			check, errs := buildInotifyCheck(base{name: "w", timeout: time.Second}, tc.entry, Deps{
-				Samplers: Samplers{InotifySampler: func(_ context.Context, countWatches bool) (InotifySample, error) {
+				InotifySampler: func(_ context.Context, countWatches bool) (InotifySample, error) {
 					got = countWatches
 					return InotifySample{MaxInstances: 1024, WatchesRead: countWatches}, nil
-				}},
+				},
 			})
 			if errs != "" {
 				t.Fatalf("build failed: %s", errs)

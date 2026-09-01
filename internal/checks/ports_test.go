@@ -41,7 +41,7 @@ func listenTCP(t *testing.T) (int, net.Listener) {
 
 func portsCheckFor(ports []int, expect, match string) *portsCheck {
 	return &portsCheck{
-		base:           base{name: "p", timeout: time.Second},
+		name: "p", timeout: time.Second,
 		host:           "127.0.0.1",
 		ports:          ports,
 		expect:         expect,
@@ -82,7 +82,7 @@ func TestPortsMatchAllAnyNone(t *testing.T) {
 func TestPortsOnChange(t *testing.T) {
 	port, ln := listenTCP(t)
 	c := &portsCheck{
-		base:           base{name: "p", timeout: time.Second},
+		name: "p", timeout: time.Second,
 		host:           "127.0.0.1",
 		ports:          []int{port},
 		expect:         "any", // ignore state expectation; only change matters
@@ -112,7 +112,7 @@ func TestPortsCheckRespectsTimeout(t *testing.T) {
 		ports[i] = 10000 + i
 	}
 	c := &portsCheck{
-		base:           base{name: "p", timeout: 50 * time.Millisecond},
+		name: "p", timeout: 50 * time.Millisecond,
 		host:           "192.0.2.1",
 		ports:          ports,
 		expect:         "closed",

@@ -15,7 +15,7 @@ import (
 // previous version. The verdict stays a failure; the message has to say why.
 func TestProcessCheckExplainsAReplacedBinaryInsteadOfBareAbsent(t *testing.T) {
 	c := processCheck{
-		base:    base{name: "process"},
+		name:    "process",
 		exes:    []string{"/usr/bin/dmeventd"},
 		user:    "root",
 		expect:  process.StateRunning,
@@ -40,7 +40,7 @@ func TestProcessCheckExplainsAReplacedBinaryInsteadOfBareAbsent(t *testing.T) {
 // appear when a replaced binary actually accounts for the miss.
 func TestProcessCheckKeepsPlainAbsentWhenNothingWasReplaced(t *testing.T) {
 	c := processCheck{
-		base:    base{name: "process"},
+		name:    "process",
 		exes:    []string{"/usr/sbin/nope"},
 		expect:  process.StateRunning,
 		observe: func(string, string) string { return process.StateAbsent },
@@ -60,7 +60,7 @@ func TestProcessCheckKeepsPlainAbsentWhenNothingWasReplaced(t *testing.T) {
 // path.
 func TestProcessCheckRunningIsUnaffected(t *testing.T) {
 	c := processCheck{
-		base:    base{name: "process"},
+		name:    "process",
 		exes:    []string{"/usr/bin/dmeventd"},
 		expect:  process.StateRunning,
 		observe: func(string, string) string { return process.StateRunning },

@@ -15,7 +15,7 @@ var dataMount = Mount{Device: "/dev/sdb1", MountPoint: "/data", FSType: "ext4", 
 // storageMount builds a storage check with a mount condition for the integrated
 // mount tests.
 func storageMount(m mountCond, sampler MountSamplerFunc) storageCheck {
-	return storageCheck{base: base{name: "fs"}, path: "/data", mount: m, mountSampler: sampler}
+	return storageCheck{name: "fs", path: "/data", mount: m, mountSampler: sampler}
 }
 
 func TestStorageMountedOK(t *testing.T) {
@@ -31,7 +31,7 @@ func TestStorageMountedOK(t *testing.T) {
 
 func TestStorageMountedPrefersRealMountOverAutofsPlaceholder(t *testing.T) {
 	c := storageCheck{
-		base:  base{name: "fs"},
+		name:  "fs",
 		path:  "/var/lib/libvirt/images",
 		mount: mountCond{active: true, expectMount: true},
 		mountSampler: fakeMounts(
@@ -88,7 +88,7 @@ func TestStorageMountTakesPrecedenceOverSpace(t *testing.T) {
 	// parent fs); the check alerts on the mount problem, and usage is never called.
 	usageCalled := false
 	c := storageCheck{
-		base:         base{name: "fs"},
+		name:         "fs",
 		path:         "/data",
 		preds:        []levelPred{{"used_pct", ">=", 90}},
 		mount:        mountCond{active: true, expectMount: true},
@@ -108,7 +108,7 @@ func TestBuildStorageMountCheck(t *testing.T) {
 	// Mount-only storage check (no space predicate) builds and runs.
 	built, warns := Build(map[string]any{
 		"data": map[string]any{"type": "storage", "path": "/data", "mounted": true},
-	}, Deps{Samplers: Samplers{MountSampler: fakeMounts(dataMount)}})
+	}, Deps{MountSampler: fakeMounts(dataMount)})
 	if len(warns) != 0 {
 		t.Fatalf("unexpected warnings: %v", warns)
 	}

@@ -401,9 +401,9 @@ func (c *Collector) SampleSystem() Snapshot {
 	snap := Snapshot{}
 	totals := readerMemoryTotals(c.Reader, true)
 	if totals.memoryOK {
-		r := Reading{Absolute: float64(totals.memoryUsed), Unit: MetricUnitBytes, HasAbsolute: true, Ready: true}
-		r.Percent = float64(totals.memoryUsed) / float64(totals.memoryTotal) * PercentScale
-		r.HasPercent = true
+		r := Reading{Absolute: float64(totals.memoryUsed), Unit: MetricUnitBytes, HasAbsolute: true, Ready: true,
+			Percent:    float64(totals.memoryUsed) / float64(totals.memoryTotal) * PercentScale,
+			HasPercent: true}
 		r.Total, r.HasTotal = float64(totals.memoryTotal), true
 		snap[MetricTotalMemory] = r
 	}

@@ -26,7 +26,7 @@ func buildDiskIO(t *testing.T, entry map[string]any, samples []DiskIOSample) *di
 	}
 	built, warns := Build(map[string]any{"io": entry}, Deps{
 		DefaultTimeout: time.Second,
-		Samplers:       Samplers{DiskIOSampler: sampler, BlockDeviceSizer: livingDeviceSize},
+		DiskIOSampler:  sampler, BlockDeviceSizer: livingDeviceSize,
 	})
 	if len(warns) != 0 || len(built) != 1 {
 		t.Fatalf("diskio check should build: warns=%v", warns)
@@ -201,7 +201,7 @@ const livingDeviceSectors = 3907029168
 func diskIOWithSize(sampler DiskIOSamplerFunc, sectors uint64, sampleErr error) *diskIOCheck {
 	now := time.Unix(1_000_000, 0)
 	return &diskIOCheck{
-		base:    base{name: "io", timeout: time.Second},
+		name: "io", timeout: time.Second,
 		device:  "sda",
 		sampler: sampler,
 		probe: deviceProbe{

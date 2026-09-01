@@ -40,7 +40,7 @@ func countTree(t *testing.T) string {
 
 func countOf(root, kind string, recursive bool, op string, value float64) countCheck {
 	return countCheck{
-		base:      base{name: "c"},
+		name:      "c",
 		path:      root,
 		kind:      kind,
 		recursive: recursive,
@@ -70,7 +70,7 @@ func removeCountFiles(t *testing.T, root, prefix string, n int) {
 
 func deltaCountOf(root string, now *time.Time, op string, value float64, window time.Duration) countCheck {
 	return countCheck{
-		base:       base{name: "c"},
+		name:       "c",
 		path:       root,
 		kind:       CountKindFile,
 		deltaOp:    op,

@@ -339,8 +339,8 @@ func parseSmart(out string) (smartData, error) {
 		return smartData{}, fmt.Errorf("invalid smartctl JSON: %w", err)
 	}
 
-	d := smartData{failure: smartctlErrorMessage(j.Smartctl.Messages)}
-	d.values = map[string]float64{}
+	d := smartData{failure: smartctlErrorMessage(j.Smartctl.Messages),
+		values: map[string]float64{}}
 	if status := j.Smartctl.ExitStatus; status != nil {
 		d.deviceUnreadable = *status&smartExitDeviceOpen != 0
 		d.usageError = *status&smartExitCommandLine != 0

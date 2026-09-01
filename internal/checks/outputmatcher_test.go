@@ -170,7 +170,7 @@ func TestVersionOutput(t *testing.T) {
 func TestCommandCheckOutputExpectations(t *testing.T) {
 	mk := func(res execx.Result, expectExit []int, stdout, stderr OutputMatcher) commandCheck {
 		return commandCheck{
-			base:       base{name: "c", timeout: time.Second},
+			name: "c", timeout: time.Second,
 			runner:     fakeRunner{res},
 			argv:       []string{"x"},
 			expectExit: expectExit,

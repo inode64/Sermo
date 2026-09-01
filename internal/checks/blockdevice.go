@@ -351,12 +351,12 @@ func sysDeviceAttr(dir, file string) string {
 // stays worth publishing — when the drive stops answering.
 func (id BlockDeviceIdentity) identityData() ([]identityField, []identityNumber) {
 	return []identityField{
-			{DataKeyModel, id.Model},
-			{DataKeySerialNumber, id.Serial},
-			{DataKeyFirmware, id.Firmware},
-			{DataKeyWWN, id.WWN},
-			{DataKeyRotationRate, id.Rotation},
-		}, []identityNumber{
-			{DataKeyCapacityBytes, id.CapacityBytes},
-		}
+		{DataKeyModel, id.Model},
+		{DataKeySerialNumber, id.Serial},
+		{DataKeyFirmware, id.Firmware},
+		{DataKeyWWN, id.WWN},
+		{DataKeyRotationRate, id.Rotation},
+	}, []identityNumber{
+		{DataKeyCapacityBytes, id.CapacityBytes},
+	}
 }

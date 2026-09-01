@@ -435,7 +435,7 @@ func TestSessionsEndpoint(t *testing.T) {
 		Sources: []SessionSource{{Kind: SessionKindSSH, Service: "ssh", State: SessionSourceAvailable}},
 		SSH: []SSHSession{{
 			Service: "ssh", User: "deploy", Terminal: "pts/4", PID: 42,
-			SessionUsage: SessionUsage{RSS: 4096, MemoryReady: true, CPU: 1.5, CPUReady: true},
+			RSS: 4096, MemoryReady: true, CPU: 1.5, CPUReady: true,
 		}},
 	}}
 	rec := httptest.NewRecorder()
@@ -495,7 +495,7 @@ func (b *dashboardSourceBackend) DashboardSnapshot(context.Context, time.Duratio
 
 func TestDashboardSnapshotUsesAtomicSource(t *testing.T) {
 	b := &dashboardSourceBackend{
-		fakeBackend: fakeBackend{services: []Service{{Name: "fallback"}}},
+		services: []Service{{Name: "fallback"}},
 		snapshot: DashboardSnapshot{
 			Services:  []Service{{Name: "one-generation"}},
 			Notifiers: []Notifier{{Name: "same-generation"}},

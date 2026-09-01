@@ -38,9 +38,8 @@ func TestRaidBandsReplaceItsLineCharts(t *testing.T) {
 // actually carries, because that field is the only thing the recorder samples.
 func TestBandsAreWrittenIntoResultData(t *testing.T) {
 	res := buildOneCheck(t, "c", CheckTypeRAID, map[string]any{"degraded": pred(">", 0)},
-		Deps{DefaultTimeout: time.Second, Samplers: Samplers{
-			RaidSampler: func() (RaidStatus, error) { return RaidStatus{Arrays: 2, Degraded: 1, Recovering: 1}, nil },
-		}}).Run(context.Background())
+		Deps{DefaultTimeout: time.Second,
+			RaidSampler: func() (RaidStatus, error) { return RaidStatus{Arrays: 2, Degraded: 1, Recovering: 1}, nil }}).Run(context.Background())
 	for _, band := range DeclaredBandMetrics(CheckTypeRAID, map[string]any{}) {
 		v, ok := NumericData(res.Data[band.Key])
 		if !ok {

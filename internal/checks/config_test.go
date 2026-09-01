@@ -18,7 +18,7 @@ func (r *seqRunner) Run(context.Context, string, ...string) (execx.Result, error
 
 func TestCommandCheckOnChange(t *testing.T) {
 	rr := &seqRunner{res: execx.Result{Stdout: "apache 2.4.57\n"}}
-	c := commandCheck{base: base{name: "v", timeout: time.Second}, runner: rr, argv: []string{"apachectl", "-v"}, onChange: true, state: &cmdState{}}
+	c := commandCheck{name: "v", timeout: time.Second, runner: rr, argv: []string{"apachectl", "-v"}, onChange: true, state: &cmdState{}}
 
 	if res := c.Run(context.Background()); !res.OK {
 		t.Fatalf("first cycle primes, should be ok: %s", res.Message)
@@ -37,19 +37,19 @@ func TestCommandCheckOnChange(t *testing.T) {
 }
 
 func TestConfigCheckValidity(t *testing.T) {
-	bad := configCheck{base: base{name: "c", timeout: time.Second}, runner: fakeRunner{execx.Result{ExitCode: 1, Stderr: "syntax error on line 7\n"}}, argv: []string{"nginx", "-t"}}
+	bad := configCheck{name: "c", timeout: time.Second, runner: fakeRunner{execx.Result{ExitCode: 1, Stderr: "syntax error on line 7\n"}}, argv: []string{"nginx", "-t"}}
 	if res := bad.Run(context.Background()); res.OK {
 		t.Error("a failing config test must alert")
 	} else if !strings.Contains(res.Message, "syntax error on line 7") {
 		t.Errorf("invalid-config message = %q, want the first stderr line included", res.Message)
 	}
-	good := configCheck{base: base{name: "c", timeout: time.Second}, runner: fakeRunner{execx.Result{ExitCode: 0}}, argv: []string{"nginx", "-t"}}
+	good := configCheck{name: "c", timeout: time.Second, runner: fakeRunner{execx.Result{ExitCode: 0}}, argv: []string{"nginx", "-t"}}
 	if res := good.Run(context.Background()); !res.OK {
 		t.Errorf("a passing config test should be ok: %s", res.Message)
 	}
 	// ExitCode -1 means the command never started: a distinct did-not-start
 	// failure, not an ordinary non-zero exit.
-	notStarted := configCheck{base: base{name: "c", timeout: time.Second}, runner: fakeRunner{execx.Result{ExitCode: -1}}, argv: []string{"nginx", "-t"}}
+	notStarted := configCheck{name: "c", timeout: time.Second, runner: fakeRunner{execx.Result{ExitCode: -1}}, argv: []string{"nginx", "-t"}}
 	if res := notStarted.Run(context.Background()); res.OK || !strings.Contains(res.Message, execx.CommandDidNotStart) {
 		t.Errorf("did-not-start message = %q, want it to contain %q", res.Message, execx.CommandDidNotStart)
 	}
@@ -58,7 +58,7 @@ func TestConfigCheckValidity(t *testing.T) {
 func TestConfigCheckCommandUser(t *testing.T) {
 	runner := &recordingUserRunner{result: execx.Result{ExitCode: 0}}
 	check := configCheck{
-		base:   base{name: "c", timeout: time.Second},
+		name: "c", timeout: time.Second,
 		runner: runner,
 		argv:   []string{"postgres", "--check"},
 		user:   "postgres",
@@ -70,7 +70,7 @@ func TestConfigCheckChange(t *testing.T) {
 	dir := t.TempDir()
 	f := filepath.Join(dir, "nginx.conf")
 	writeFile(t, f, "a\n")
-	c := configCheck{base: base{name: "c", timeout: time.Second}, paths: []string{f}, onChange: true, state: &cmdState{}}
+	c := configCheck{name: "c", timeout: time.Second, paths: []string{f}, onChange: true, state: &cmdState{}}
 
 	if res := c.Run(context.Background()); !res.OK {
 		t.Fatalf("first cycle primes, should be ok: %s", res.Message)

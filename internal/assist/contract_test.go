@@ -20,20 +20,20 @@ import (
 // Every builder/threshold form the wizard can emit is exercised here.
 func TestGeneratedWatchesPassConfigValidation(t *testing.T) {
 	volPct := buildVolWatch(Volume{Mountpoint: "/data"}, volSettings{
-		Monitoring: Monitoring{Monitor: config.MonitorPrevious, Interval: "1m"},
-		metric:     checks.LevelFieldFreePct, op: cfgval.CompareOpLess, value: "10%",
+		Monitor: config.MonitorPrevious, Interval: "1m",
+		metric: checks.LevelFieldFreePct, op: cfgval.CompareOpLess, value: "10%",
 		forCycles: volumeDefaultForCycles, notifiers: []string{"ops"},
 		dryRun: true, expand: true, expandBy: volumeDefaultExpandBy, cooldown: volumeDefaultExpandCooldown,
 	})
 	volBytes := buildVolWatch(Volume{Mountpoint: "/srv"}, volSettings{
-		Monitoring: Monitoring{Monitor: config.MonitorDisabled},
-		metric:     checks.LevelFieldUsedBytes, op: cfgval.CompareOpGreaterEqual, value: volumeDefaultUsedSize,
+		Monitor: config.MonitorDisabled,
+		metric:  checks.LevelFieldUsedBytes, op: cfgval.CompareOpGreaterEqual, value: volumeDefaultUsedSize,
 		notifiers: []string{config.NotifyNone}, // monitor-only watch must also validate
 	})
 	netAll := buildNetWatch(Iface{Name: "eth0"}, netSettings{
-		Monitoring: Monitoring{Monitor: config.MonitorEnabled, Interval: "15s"},
-		metrics:    []string{checks.NetMetricState, checks.NetMetricErrors, checks.NetMetricSpeed, checks.NetMetricAddress},
-		errorsAt:   netDefaultErrorDelta, stateDown: true,
+		Monitor: config.MonitorEnabled, Interval: "15s",
+		metrics:  []string{checks.NetMetricState, checks.NetMetricErrors, checks.NetMetricSpeed, checks.NetMetricAddress},
+		errorsAt: netDefaultErrorDelta, stateDown: true,
 		notifiers: []string{"ops"},
 	})
 	uplink := buildUplinkWatches("ppp0", uplinkSettings{

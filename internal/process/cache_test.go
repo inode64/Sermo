@@ -7,10 +7,10 @@ import (
 )
 
 func TestCachingReaderReusesSnapshotWithinFreshness(t *testing.T) {
-	inner := &countingReader{fakeReader: fakeReader{ids: map[int]Identity{
+	inner := &countingReader{ids: map[int]Identity{
 		100: {PID: 100, PPID: 1},
 		200: {PID: 200, PPID: 1},
-	}}}
+	}}
 	now := time.Unix(0, 0)
 	cr := NewCachingReader(inner, 5*time.Second)
 	cr.now = func() time.Time { return now }
@@ -32,7 +32,7 @@ func TestCachingReaderReusesSnapshotWithinFreshness(t *testing.T) {
 }
 
 func TestCachingReaderInvalidateForcesRebuild(t *testing.T) {
-	inner := &countingReader{fakeReader: fakeReader{ids: map[int]Identity{100: {PID: 100, PPID: 1}}}}
+	inner := &countingReader{ids: map[int]Identity{100: {PID: 100, PPID: 1}}}
 	now := time.Unix(0, 0)
 	cr := NewCachingReader(inner, 5*time.Second)
 	cr.now = func() time.Time { return now }
@@ -54,7 +54,7 @@ func TestCachingReaderInvalidateForcesRebuild(t *testing.T) {
 }
 
 func TestCachingReaderZeroFreshnessAlwaysRebuilds(t *testing.T) {
-	inner := &countingReader{fakeReader: fakeReader{ids: map[int]Identity{100: {PID: 100}}}}
+	inner := &countingReader{ids: map[int]Identity{100: {PID: 100}}}
 	cr := NewCachingReader(inner, 0)
 	snapshotIdentities(cr)
 	snapshotIdentities(cr)

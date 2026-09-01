@@ -122,9 +122,9 @@ func TestWebBackendMounts(t *testing.T) {
 		}},
 	}
 	b, warns := NewWebBackend(t.Context(), cfg, Deps{
-		Samplers: checks.Samplers{MountSampler: func() ([]checks.Mount, error) {
+		MountSampler: func() ([]checks.Mount, error) {
 			return []checks.Mount{{MountPoint: "/mnt/backup", Device: "/dev/sdb1"}}, nil
-		}},
+		},
 	})
 	if len(warns) != 0 {
 		t.Fatalf("unexpected warnings: %v", warns)
@@ -178,13 +178,13 @@ func TestWebBackendMountsUsesGenerationSpecsAndOneMountSample(t *testing.T) {
 	}
 	mountSamples := 0
 	b, warns := NewWebBackend(t.Context(), cfg, Deps{
-		Samplers: checks.Samplers{MountSampler: func() ([]checks.Mount, error) {
+		MountSampler: func() ([]checks.Mount, error) {
 			mountSamples++
 			return []checks.Mount{
 				{MountPoint: "/mnt/archive", Device: "/dev/sdb1"},
 				{MountPoint: "/mnt/backup", Device: "/dev/sdc1"},
 			}, nil
-		}},
+		},
 		MountDiscoverUsers: func(string) ([]process.Process, error) { return nil, nil },
 	})
 	if len(warns) != 0 {
@@ -225,9 +225,9 @@ func TestWebBackendMountsIncludesUsageAndCaches(t *testing.T) {
 	cfg := mountTestConfig(t)
 	b, warns := NewWebBackend(t.Context(), cfg, Deps{
 		Now: func() time.Time { return now },
-		Samplers: checks.Samplers{MountSampler: func() ([]checks.Mount, error) {
+		MountSampler: func() ([]checks.Mount, error) {
 			return []checks.Mount{{MountPoint: "/mnt/backup", Device: "/dev/sdb1"}}, nil
-		}},
+		},
 		MountDiscoverUsers: func(path string) ([]process.Process, error) {
 			calls++
 			if path != "/mnt/backup" {
@@ -270,9 +270,9 @@ func TestWebBackendMountUsageCacheIgnoresCancelledRequests(t *testing.T) {
 	cfg := mountTestConfig(t)
 	b, warns := NewWebBackend(t.Context(), cfg, Deps{
 		Now: func() time.Time { return now },
-		Samplers: checks.Samplers{MountSampler: func() ([]checks.Mount, error) {
+		MountSampler: func() ([]checks.Mount, error) {
 			return []checks.Mount{{MountPoint: "/mnt/backup", Device: "/dev/sdb1"}}, nil
-		}},
+		},
 		MountDiscoverUsers: func(string) ([]process.Process, error) {
 			calls++
 			return []process.Process{{
@@ -311,9 +311,9 @@ func TestWebBackendMountUsageCacheIgnoresCancelledRequests(t *testing.T) {
 func TestWebBackendMountsReportsUsageError(t *testing.T) {
 	cfg := mountTestConfig(t)
 	b, warns := NewWebBackend(t.Context(), cfg, Deps{
-		Samplers: checks.Samplers{MountSampler: func() ([]checks.Mount, error) {
+		MountSampler: func() ([]checks.Mount, error) {
 			return []checks.Mount{{MountPoint: "/mnt/backup", Device: "/dev/sdb1"}}, nil
-		}},
+		},
 		MountDiscoverUsers: func(string) ([]process.Process, error) {
 			return nil, errors.New("proc scan failed")
 		},
@@ -339,9 +339,9 @@ func TestWebBackendRootMountCannotUnmountOrScanBlockers(t *testing.T) {
 	cfg := rootMountTestConfig(t)
 	b, warns := NewWebBackend(t.Context(), cfg, Deps{
 		ExecxRunner: runner,
-		Samplers: checks.Samplers{MountSampler: func() ([]checks.Mount, error) {
+		MountSampler: func() ([]checks.Mount, error) {
 			return []checks.Mount{{MountPoint: "/", Device: "/dev/sda1"}}, nil
-		}},
+		},
 		MountDiscoverUsers: func(string) ([]process.Process, error) {
 			scans++
 			return []process.Process{{
@@ -388,9 +388,9 @@ func TestWebBackendRootMountCannotUnmountOrScanBlockers(t *testing.T) {
 func mountBlockersBackend(t *testing.T, cfg *config.Config) *WebBackend {
 	t.Helper()
 	b, warns := NewWebBackend(t.Context(), cfg, Deps{
-		Samplers: checks.Samplers{MountSampler: func() ([]checks.Mount, error) {
+		MountSampler: func() ([]checks.Mount, error) {
 			return []checks.Mount{{MountPoint: "/mnt/backup", Device: "/dev/sdb1"}}, nil
-		}},
+		},
 		MountDiscoverUsers: func(string) ([]process.Process, error) {
 			return []process.Process{{
 				PID: 123, User: "backup", UID: 1000, Group: "backup", GID: 1000, Exe: "/usr/bin/rsync", ExeOK: true, Source: "mount",
@@ -438,12 +438,12 @@ func TestWebBackendUnmountDoesNotSignalUnlessRequested(t *testing.T) {
 	cfg := mountTestConfig(t)
 	b, warns := NewWebBackend(t.Context(), cfg, Deps{
 		ExecxRunner: runner,
-		Samplers: checks.Samplers{MountSampler: func() ([]checks.Mount, error) {
+		MountSampler: func() ([]checks.Mount, error) {
 			if mounted {
 				return []checks.Mount{{MountPoint: "/mnt/backup", Device: "/dev/sdb1"}}, nil
 			}
 			return nil, nil
-		}},
+		},
 		MountDiscoverUsers: func(string) ([]process.Process, error) {
 			if signalled > 0 {
 				return nil, nil
@@ -478,12 +478,12 @@ func TestWebBackendMountActionSyncsStorageWatchMonitoring(t *testing.T) {
 	b, warns := NewWebBackend(t.Context(), cfg, Deps{
 		Monitor:     store,
 		ExecxRunner: &webMountRunner{mounted: &mounted},
-		Samplers: checks.Samplers{MountSampler: func() ([]checks.Mount, error) {
+		MountSampler: func() ([]checks.Mount, error) {
 			if mounted {
 				return []checks.Mount{{MountPoint: "/mnt/backup", Device: "/dev/sdb1"}}, nil
 			}
 			return nil, nil
-		}},
+		},
 		Emit: func(e Event) { events = append(events, e) },
 	})
 	if len(warns) != 0 {
@@ -523,8 +523,8 @@ func TestWebBackendMountActionPublishesOperationWhileRunning(t *testing.T) {
 	}
 	cfg := mountTestConfig(t)
 	b, warns := NewWebBackend(t.Context(), cfg, Deps{
-		ExecxRunner: runner,
-		Samplers:    checks.Samplers{MountSampler: runner.Mounts},
+		ExecxRunner:  runner,
+		MountSampler: runner.Mounts,
 	})
 	if len(warns) != 0 {
 		t.Fatalf("unexpected warnings: %v", warns)
@@ -578,9 +578,9 @@ func TestWebBackendMountActionPreservesManualUnmonitor(t *testing.T) {
 	b, warns := NewWebBackend(t.Context(), cfg, Deps{
 		Monitor:     store,
 		ExecxRunner: &webMountRunner{mounted: &mounted},
-		Samplers: checks.Samplers{MountSampler: func() ([]checks.Mount, error) {
+		MountSampler: func() ([]checks.Mount, error) {
 			return []checks.Mount{{MountPoint: "/mnt/backup", Device: "/dev/sdb1"}}, nil
-		}},
+		},
 	})
 	if len(warns) != 0 {
 		t.Fatalf("unexpected warnings: %v", warns)
@@ -604,12 +604,12 @@ func TestWebBackendMountActionIgnoresDryRunForManualCommands(t *testing.T) {
 	b, warns := NewWebBackend(t.Context(), cfg, Deps{
 		Monitor:     store,
 		ExecxRunner: runner,
-		Samplers: checks.Samplers{MountSampler: func() ([]checks.Mount, error) {
+		MountSampler: func() ([]checks.Mount, error) {
 			if mounted {
 				return []checks.Mount{{MountPoint: "/mnt/backup", Device: "/dev/sdb1"}}, nil
 			}
 			return nil, nil
-		}},
+		},
 	})
 	if len(warns) != 0 {
 		t.Fatalf("unexpected warnings: %v", warns)
@@ -643,9 +643,9 @@ func TestWebBackendAlertMountUsers(t *testing.T) {
 			alerter := &fakeMountAlerter{}
 			scans := 0
 			b, warns := NewWebBackend(t.Context(), tc.cfg, Deps{
-				Samplers: checks.Samplers{MountSampler: func() ([]checks.Mount, error) {
+				MountSampler: func() ([]checks.Mount, error) {
 					return []checks.Mount{{MountPoint: "/mnt/backup", Device: "/dev/sdb1"}}, nil
-				}},
+				},
 				MountDiscoverUsers: func(string) ([]process.Process, error) {
 					scans++
 					return []process.Process{{PID: 123, User: "backup", UID: 1000}}, nil

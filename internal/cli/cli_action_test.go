@@ -753,7 +753,7 @@ func TestOperationSessionPostflightStatusReusesPreparedTarget(t *testing.T) {
 		NewManager: func(servicemgr.Backend) (servicemgr.Manager, error) {
 			managerCalls++
 			return deadlineStatusManager{
-				fakeManager: fakeManager{status: servicemgr.ServiceStatus{Status: servicemgr.StatusActive}},
+				status:      servicemgr.ServiceStatus{Status: servicemgr.StatusActive},
 				hadDeadline: &hadDeadline,
 			}, nil
 		},

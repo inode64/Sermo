@@ -443,12 +443,12 @@ func resolveNetIdentity(fn NetIdentityFunc, iface string) NetIdentity {
 // identityData maps an interface's identity onto its result keys.
 func (id NetIdentity) identityData() ([]identityField, []identityNumber) {
 	return []identityField{
-			{DataKeyMAC, id.MAC},
-			{DataKeyDriver, id.Driver},
-			{DataKeyBus, id.Bus},
-			{DataKeyKind, id.Kind},
-			{DataKeyDuplex, id.Duplex},
-		}, []identityNumber{
-			{DataKeyMTU, uint64(max(id.MTU, 0))},
-		}
+		{DataKeyMAC, id.MAC},
+		{DataKeyDriver, id.Driver},
+		{DataKeyBus, id.Bus},
+		{DataKeyKind, id.Kind},
+		{DataKeyDuplex, id.Duplex},
+	}, []identityNumber{
+		{DataKeyMTU, uint64(max(id.MTU, 0))},
+	}
 }

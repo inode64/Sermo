@@ -447,18 +447,16 @@ func eventRecordFromLogged(e LoggedEvent) state.EventRecord {
 
 func loggedEventFromRecord(e state.EventRecord) LoggedEvent {
 	return LoggedEvent{
-		ID:   e.ID,
-		Time: e.At,
-		Event: Event{
-			Service: e.Service,
-			Watch:   e.Watch,
-			App:     e.App,
-			Kind:    e.Kind,
-			Rule:    e.Rule,
-			Action:  e.Action,
-			Status:  e.Status,
-			Message: e.Message,
-			Output:  e.Output,
-		},
+		ID:      e.ID,
+		Time:    e.At,
+		Service: e.Service,
+		Watch:   e.Watch,
+		App:     e.App,
+		Kind:    e.Kind,
+		Rule:    e.Rule,
+		Action:  e.Action,
+		Status:  e.Status,
+		Message: e.Message,
+		Output:  e.Output,
 	}
 }

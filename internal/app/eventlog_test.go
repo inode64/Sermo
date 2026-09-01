@@ -7,6 +7,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 	"time"
 
@@ -330,11 +331,11 @@ func (s *stubEventStore) RecentEventsForColumn(column, name string, limit int) (
 
 func (s *stubEventStore) newest(match func(state.EventRecord) bool, limit int) []state.EventRecord {
 	var out []state.EventRecord
-	for i := len(s.rows) - 1; i >= 0; i-- {
-		if !match(s.rows[i]) {
+	for _, v := range slices.Backward(s.rows) {
+		if !match(v) {
 			continue
 		}
-		out = append(out, s.rows[i])
+		out = append(out, v)
 		if limit > 0 && len(out) >= limit {
 			break
 		}

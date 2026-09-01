@@ -14,7 +14,7 @@ func TestMetricCheckRun(t *testing.T) {
 		}
 	}
 	mk := func(s MetricReader) metricCheck {
-		return metricCheck{base: base{name: "m"}, scope: "service", metric: "cpu", op: ">", value: "50", source: s}
+		return metricCheck{name: "m", scope: "service", metric: "cpu", op: ">", value: "50", source: s}
 	}
 
 	if res := mk(nil).Run(context.Background()); res.OK || !res.Unavailable {

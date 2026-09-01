@@ -24,7 +24,7 @@ func TestTCPConnectionsCheck(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			check := tcpConnectionsCheck{
-				base:  base{name: "clients", timeout: time.Second},
+				name: "clients", timeout: time.Second,
 				port:  21,
 				preds: []levelPred{{field: DataKeyCount, op: ">=", value: 8}},
 				count: func(int) (int, error) { return tt.count, tt.err },

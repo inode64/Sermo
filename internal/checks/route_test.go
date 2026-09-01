@@ -67,7 +67,7 @@ func TestNetlinkFamily(t *testing.T) {
 func TestRouteCheckRun(t *testing.T) {
 	mk := func(routes []DefaultRoute, err error, iface string) routeCheck {
 		return routeCheck{
-			base:   base{name: "route", timeout: time.Second},
+			name: "route", timeout: time.Second,
 			family: "ipv4",
 			iface:  iface,
 			sampler: func(family string) ([]DefaultRoute, error) {

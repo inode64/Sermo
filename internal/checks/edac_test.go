@@ -46,7 +46,7 @@ func TestReadEDACRejectsMalformedCounter(t *testing.T) {
 }
 
 func edacWith(st EdacCounts, preds ...levelPred) edacCheck {
-	return edacCheck{base: base{name: "e", timeout: time.Second}, sampler: func() (EdacCounts, error) { return st, nil }, preds: preds}
+	return edacCheck{name: "e", timeout: time.Second, sampler: func() (EdacCounts, error) { return st, nil }, preds: preds}
 }
 
 func TestEdacCheck(t *testing.T) {

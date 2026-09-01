@@ -63,7 +63,7 @@ func TestEnrichRaidSysfsReadsArraySize(t *testing.T) {
 }
 
 func raidWith(st RaidStatus, preds ...levelPred) *raidCheck {
-	return &raidCheck{base: base{name: "r", timeout: time.Second}, sampler: func() (RaidStatus, error) { return st, nil }, preds: preds}
+	return &raidCheck{name: "r", timeout: time.Second, sampler: func() (RaidStatus, error) { return st, nil }, preds: preds}
 }
 
 func TestRaidCheck(t *testing.T) {
@@ -148,7 +148,7 @@ func TestRaidCheckIndividualArrayAndTransitions(t *testing.T) {
 	}
 	index := 0
 	c := &raidCheck{
-		base: base{name: "r", timeout: time.Second}, array: "md0",
+		name: "r", timeout: time.Second, array: "md0",
 		sampler: func() (RaidStatus, error) {
 			st := samples[index]
 			index++
@@ -174,7 +174,7 @@ func TestRaidCheckSysfsTransitionsAndMissingArray(t *testing.T) {
 	current := RaidArrayStatus{Name: "md0", MismatchCount: "1", Members: []RaidMemberStatus{{Name: "sda1", State: "faulty", Errors: "2", BadBlocks: "8"}}}
 	samples := []RaidStatus{{Arrays: 1, Details: []RaidArrayStatus{old}}, {Arrays: 1, Details: []RaidArrayStatus{current}}}
 	index := 0
-	c := &raidCheck{base: base{name: "r", timeout: time.Second}, array: "md0", sysfsChanges: true, sampler: func() (RaidStatus, error) {
+	c := &raidCheck{name: "r", timeout: time.Second, array: "md0", sysfsChanges: true, sampler: func() (RaidStatus, error) {
 		st := samples[index]
 		index++
 		return st, nil

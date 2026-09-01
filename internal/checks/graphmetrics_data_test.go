@@ -23,55 +23,43 @@ func TestGraphMetricsAreWrittenIntoResultData(t *testing.T) {
 		entry map[string]any
 		deps  Deps
 	}{
-		{CheckTypeStorage, map[string]any{"path": "/data", "used_pct": pred(">", "90%")}, Deps{DefaultTimeout: second, Samplers: Samplers{
+		{CheckTypeStorage, map[string]any{"path": "/data", "used_pct": pred(">", "90%")}, Deps{DefaultTimeout: second,
 			StorageUsage: func(string) (StorageStats, error) {
 				return StorageStats{UsedPct: 42, FreePct: 58, UsedBytes: 42 << 30, FreeBytes: 58 << 30, TotalBytes: 100 << 30,
 					InodesUsedPct: 7, InodesFreePct: 93, InodesFree: 930, InodesTotal: 1000}, nil
 			},
 			MountSampler: func() ([]Mount, error) {
 				return []Mount{{MountPoint: "/data", Device: "/dev/sda1", FSType: "ext4"}}, nil
-			},
-		}}},
-		{CheckTypeSwap, map[string]any{"metric": SwapMetricUsage, "used_pct": pred(">", "90%")}, Deps{DefaultTimeout: second, Samplers: Samplers{
-			SwapSampler: func() (SwapSample, error) { return SwapSample{TotalBytes: 8 << 30, FreeBytes: 6 << 30}, nil },
-		}}},
-		{CheckTypeMemory, map[string]any{"used_pct": pred(">", "90%")}, Deps{DefaultTimeout: second, Samplers: Samplers{
-			MemorySampler: func() (MemorySample, error) { return MemorySample{TotalBytes: 8 << 30, AvailableBytes: 2 << 30}, nil },
-		}}},
-		{CheckTypeLoad, map[string]any{"load1": pred(">", 4)}, Deps{DefaultTimeout: second, Samplers: Samplers{
-			LoadSampler: func() (LoadSample, error) { return LoadSample{Load1: 1.5, Load5: 1.2, Load15: 0.9, NumCPU: 4}, nil },
-		}}},
-		{CheckTypePressure, map[string]any{"resource": "cpu", "some_avg10": pred(">", 10)}, Deps{DefaultTimeout: second, Samplers: Samplers{
+			}}},
+		{CheckTypeSwap, map[string]any{"metric": SwapMetricUsage, "used_pct": pred(">", "90%")}, Deps{DefaultTimeout: second,
+			SwapSampler: func() (SwapSample, error) { return SwapSample{TotalBytes: 8 << 30, FreeBytes: 6 << 30}, nil }}},
+		{CheckTypeMemory, map[string]any{"used_pct": pred(">", "90%")}, Deps{DefaultTimeout: second,
+			MemorySampler: func() (MemorySample, error) { return MemorySample{TotalBytes: 8 << 30, AvailableBytes: 2 << 30}, nil }}},
+		{CheckTypeLoad, map[string]any{"load1": pred(">", 4)}, Deps{DefaultTimeout: second,
+			LoadSampler: func() (LoadSample, error) { return LoadSample{Load1: 1.5, Load5: 1.2, Load15: 0.9, NumCPU: 4}, nil }}},
+		{CheckTypePressure, map[string]any{"resource": "cpu", "some_avg10": pred(">", 10)}, Deps{DefaultTimeout: second,
 			PressureSampler: func(string) (PressureSample, error) {
 				return PressureSample{Some: PressureAverages{Avg10: 1.5, Avg60: 1.2, Avg300: 0.8}, Full: PressureAverages{Avg10: 0.3}}, nil
-			},
-		}}},
-		{CheckTypeFDS, map[string]any{"used_pct": pred(">", "90%")}, Deps{DefaultTimeout: second, Samplers: Samplers{
-			FdsSampler: func() (FdsSample, error) { return FdsSample{Allocated: 2048, Max: 65536}, nil },
-		}}},
-		{CheckTypePIDs, map[string]any{"used_pct": pred(">", "90%")}, Deps{DefaultTimeout: second, Samplers: Samplers{
-			PidsSampler: func() (PidsSample, error) { return PidsSample{Threads: 900, Max: 32768}, nil },
-		}}},
-		{CheckTypeConntrack, map[string]any{"used_pct": pred(">", "90%")}, Deps{DefaultTimeout: second, Samplers: Samplers{
-			ConntrackSampler: func() (ConntrackSample, error) { return ConntrackSample{Count: 1200, Max: 262144}, nil },
-		}}},
-		{CheckTypeZombies, map[string]any{"count": pred(">", 5)}, Deps{DefaultTimeout: second, Samplers: Samplers{
-			ZombieSampler: func() (uint64, bool) { return 2, true },
-		}}},
-		{CheckTypeFirewallRules, map[string]any{"backend": "nft", "min_rules": 2}, Deps{DefaultTimeout: second, Samplers: Samplers{
+			}}},
+		{CheckTypeFDS, map[string]any{"used_pct": pred(">", "90%")}, Deps{DefaultTimeout: second,
+			FdsSampler: func() (FdsSample, error) { return FdsSample{Allocated: 2048, Max: 65536}, nil }}},
+		{CheckTypePIDs, map[string]any{"used_pct": pred(">", "90%")}, Deps{DefaultTimeout: second,
+			PidsSampler: func() (PidsSample, error) { return PidsSample{Threads: 900, Max: 32768}, nil }}},
+		{CheckTypeConntrack, map[string]any{"used_pct": pred(">", "90%")}, Deps{DefaultTimeout: second,
+			ConntrackSampler: func() (ConntrackSample, error) { return ConntrackSample{Count: 1200, Max: 262144}, nil }}},
+		{CheckTypeZombies, map[string]any{"count": pred(">", 5)}, Deps{DefaultTimeout: second,
+			ZombieSampler: func() (uint64, bool) { return 2, true }}},
+		{CheckTypeFirewallRules, map[string]any{"backend": "nft", "min_rules": 2}, Deps{DefaultTimeout: second,
 			FirewallRulesSampler: func(context.Context, string, execx.Runner) (FirewallRulesSample, error) {
 				return FirewallRulesSample{Backend: FirewallBackendNftables, Rules: 17}, nil
-			},
-		}}},
-		{CheckTypeInotify, map[string]any{"used_pct": pred(">", "90%")}, Deps{DefaultTimeout: second, Samplers: Samplers{
+			}}},
+		{CheckTypeInotify, map[string]any{"used_pct": pred(">", "90%")}, Deps{DefaultTimeout: second,
 			InotifySampler: func(context.Context, bool) (InotifySample, error) {
 				return InotifySample{MaxInstances: 1024, MaxWatches: 524288, WatchesRead: true,
 					Users: []InotifyUserUsage{{UID: 0, Instances: 36, Watches: 400}}}, nil
-			},
-		}}},
-		{CheckTypeSize, map[string]any{"path": "/var/log", "grow_by": "10M", "within": "1h"}, Deps{DefaultTimeout: second, Samplers: Samplers{
-			SizeSampler: func(context.Context, string, bool) (int64, error) { return 4 << 20, nil },
-		}}},
+			}}},
+		{CheckTypeSize, map[string]any{"path": "/var/log", "grow_by": "10M", "within": "1h"}, Deps{DefaultTimeout: second,
+			SizeSampler: func(context.Context, string, bool) (int64, error) { return 4 << 20, nil }}},
 	}
 
 	for _, tc := range cases {

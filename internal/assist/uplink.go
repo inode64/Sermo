@@ -53,11 +53,11 @@ func (uplinkAssistant) Run(p *Prompt, env Env) (res Result, err error) {
 	}
 	selected := chooseIfaces(p, "Which uplink interfaces do you want to monitor?", cands, env.DefaultIfaces, true)
 
-	s := uplinkSettings{Monitoring: p.AskMonitoring("the uplink watches")}
-	s.probeHost = p.Ask("Probe host to ping through the uplink", uplinkDefaultProbeHost)
-	s.probeName = p.Ask("Public DNS name to resolve through the uplink", uplinkDefaultProbeName)
-	s.forCycles = p.AskInt("Require probe failures for how many cycles first?", uplinkDefaultForCycles)
-	s.notifiers = chooseNotifiers(p, env)
+	s := uplinkSettings{Monitoring: p.AskMonitoring("the uplink watches"),
+		probeHost: p.Ask("Probe host to ping through the uplink", uplinkDefaultProbeHost),
+		probeName: p.Ask("Public DNS name to resolve through the uplink", uplinkDefaultProbeName),
+		forCycles: p.AskInt("Require probe failures for how many cycles first?", uplinkDefaultForCycles),
+		notifiers: chooseNotifiers(p, env)}
 	s.dryRun = p.AskWatchDryRun("the uplink watches", env, s.notifiers, false)
 
 	watches := map[string]any{}

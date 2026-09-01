@@ -206,7 +206,7 @@ func TestClockCheckRun(t *testing.T) {
 
 func testClockCheck(servers []string, results map[string]conn.Result, errs map[string]error) clockCheck {
 	return clockCheck{
-		base:              base{name: "clock", timeout: time.Second},
+		name: "clock", timeout: time.Second,
 		source:            ClockSourceNTP,
 		servers:           servers,
 		port:              123,
@@ -281,7 +281,7 @@ func testChronyResult() conn.Result {
 // socket selects the command socket instead of host:port.
 func testChronyClockCheck(socket string, results map[string]conn.Result) clockCheck {
 	return clockCheck{
-		base:              base{name: "clock", timeout: time.Second},
+		name: "clock", timeout: time.Second,
 		source:            ClockSourceChrony,
 		servers:           []string{conn.DefaultHost},
 		port:              323,
