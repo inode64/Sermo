@@ -28,3 +28,40 @@ func TestServiceScopedProcessCountNeverCountsTheHost(t *testing.T) {
 		t.Fatal("sanity: host has processes")
 	}
 }
+
+func TestServiceBackendPIDsUsesOnlyResolvedProviders(t *testing.T) {
+	explicit := func() []int { return []int{42} }
+	tests := []struct {
+		name       string
+		backend    servicemgr.Backend
+		configured func() []int
+		wantNil    bool
+		wantPID    int
+	}{
+		{name: "systemd derives", backend: servicemgr.BackendSystemd},
+		{name: "openrc derives", backend: servicemgr.BackendOpenRC},
+		{name: "docker without provider", backend: servicemgr.BackendDocker, wantNil: true},
+		{name: "libvirt without provider", backend: servicemgr.BackendLibvirt, wantNil: true},
+		{name: "explicit controlled provider wins", backend: servicemgr.BackendDocker, configured: explicit, wantPID: 42},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := ServiceBackendPIDs(t.Context(), tc.backend, "svc", tc.configured, execx.CommandRunner{})
+			if tc.wantNil {
+				if got != nil {
+					t.Fatal("ServiceBackendPIDs() is non-nil")
+				}
+				return
+			}
+			if got == nil {
+				t.Fatal("ServiceBackendPIDs() is nil")
+			}
+			if tc.wantPID > 0 {
+				pids := got()
+				if len(pids) != 1 || pids[0] != tc.wantPID {
+					t.Fatalf("ServiceBackendPIDs() = %v, want [%d]", pids, tc.wantPID)
+				}
+			}
+		})
+	}
+}

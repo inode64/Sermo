@@ -696,6 +696,65 @@ func TestDefaultOperateFallsBackToConfiguredServiceUnit(t *testing.T) {
 	}
 }
 
+func TestDefaultOperateUsesCanonicalServiceCheckDependencies(t *testing.T) {
+	tests := []struct {
+		name      string
+		checkType string
+	}{
+		{name: "stale binaries", checkType: "stale_binary"},
+		{name: "strays", checkType: "strays"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			global := writeServiceConfig(t, `
+paths:
+  services: [ @ROOT@/services ]
+  runtime: @ROOT@/run
+  state: @ROOT@/state
+defaults:
+  policy:
+    cooldown: 5m
+`, map[string]string{
+				"services/web.yml": `
+name: web
+service: web
+preflight:
+  process-safety:
+    type: ` + tc.checkType + `
+`,
+			})
+			cfg, err := config.Load(global)
+			if err != nil {
+				t.Fatal(err)
+			}
+			resolved, errs := cfg.Resolve("web")
+			if len(errs) > 0 {
+				t.Fatalf("resolve: %v", errs)
+			}
+
+			var actions []string
+			app := App{
+				Detector: fakeBackendDetector{detection: servicemgr.Detection{Backend: servicemgr.BackendSystemd}},
+				NewManager: func(servicemgr.Backend) (servicemgr.Manager, error) {
+					return fakeManager{actions: &actions, status: servicemgr.ServiceStatus{Status: servicemgr.StatusActive}}, nil
+				},
+				Stdout: &bytes.Buffer{},
+				Stderr: &bytes.Buffer{},
+			}
+			result, err := app.defaultOperate(t.Context(), options{config: global}, cfg, resolved, "web", "start")
+			if err != nil {
+				t.Fatalf("defaultOperate: %v", err)
+			}
+			if result.Status != operation.ResultOK {
+				t.Fatalf("result = %+v, want ok with an empty %s preflight", result, tc.checkType)
+			}
+			if len(actions) != 1 || actions[0] != "start web.service" {
+				t.Fatalf("actions = %v, want start web.service", actions)
+			}
+		})
+	}
+}
+
 func TestDefaultOperatePersistsOneOperationEvent(t *testing.T) {
 	global := writeActionConfig(t)
 	cfg, err := config.Load(global)

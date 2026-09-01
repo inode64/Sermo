@@ -864,19 +864,6 @@ func (a App) defaultOperate(ctx context.Context, opts options, cfg *config.Confi
 		return operation.Result{}, err
 	}
 
-	runtime := cfg.Global.RuntimeDir()
-	locker := locks.NewOperationLocker(locks.RuntimeOpsDir(runtime))
-	locker.OnReclaim = func(service, reason string) {
-		fmt.Fprintf(a.Stderr, "reclaimed stale operation lock for %s (%s)\n", service, reason)
-	}
-	discoverer := process.NewDiscovererWithUserLookup(app.EngineUserLookup(cfg, a.Runner))
-	if backendPIDs := backendPIDsForTarget(ctx, target, a.Runner); backendPIDs != nil {
-		discoverer.BackendPIDs = backendPIDs
-	}
-	collector := metrics.New(metrics.OSReader{})
-	selectors, _ := process.ParseSelectors(resolved.Tree)
-	metricSample := app.MetricSampleForOperation(service, resolved.Tree, collector, discoverer, selectors)
-	libBaseline := map[string]string{}
 	eventStore, err := openStateStore(ctx, cfg)
 	if err != nil {
 		return operation.Result{}, fmt.Errorf("operation event store unavailable: %w", err)
@@ -886,32 +873,33 @@ func (a App) defaultOperate(ctx context.Context, opts options, cfg *config.Confi
 	recordResult := func(result operation.Result) error {
 		return recordManualActionEvent(ctx, eventStore, app.OperationEventRecord(result))
 	}
-	engine := operation.New(operation.Config{
-		Service:     service,
-		Unit:        target.Unit,
-		Backend:     string(target.Backend),
-		Tree:        resolved.Tree,
-		Manager:     target.Manager,
-		Locker:      &locker,
-		Scanner:     locks.NewScanner(locks.RuntimeLocksDir(runtime)),
-		Discoverer:  discoverer,
-		ResolveUser: discoverer.ResolveUser,
-		CheckDeps: checks.Deps{
-			DefaultTimeout: engineDefaultTimeout(cfg), Runner: a.Runner,
-			Processes: discoverer.ObserveState, ProcessesAny: discoverer.ObserveAnyState,
-			ProcessCount: app.ServiceScopedProcessCount(ctx, resolved.Tree, a.Runner, target.Backend, target.Unit, discoverer),
+	runtime := app.BuildServiceRuntime(ctx, app.ServiceRuntimeConfig{
+		Service: service,
+		Unit:    target.Unit,
+		Tree:    resolved.Tree,
+		Deps: app.Deps{
+			Backend:          target.Backend,
+			Manager:          target.Manager,
+			BackendPIDs:      target.BackendPIDs,
+			Runtime:          cfg.Global.RuntimeDir(),
+			DefaultTimeout:   engineDefaultTimeout(cfg),
+			OperationTimeout: opts.timeout,
+			Collector:        metrics.New(metrics.OSReader{}),
+			ExecxRunner:      a.Runner,
+			UserLookup:       app.EngineUserLookup(cfg, a.Runner),
 		},
-		MetricSample:     metricSample,
-		Changed:          app.ArtifactChangedFunc(libBaseline),
-		OperationTimeout: opts.timeout,
-		Emit: func(result operation.Result) {
+		LibraryBaseline: map[string]string{},
+		LockReclaimed: func(service, reason string) {
+			fmt.Fprintf(a.Stderr, "reclaimed stale operation lock for %s (%s)\n", service, reason)
+		},
+		RecordOperation: func(result operation.Result) {
 			if err := recordResult(result); err != nil {
 				eventErr = err
 			}
 		},
 	})
 
-	result := runEngineAction(ctx, engine, opts, action)
+	result := runEngineAction(ctx, runtime.Engine, opts, action)
 	if eventErr != nil {
 		// The action already ran (or was blocked); losing its audit record is
 		// still a failure, but the outcome must not be masked by it.
@@ -1361,22 +1349,10 @@ func (a App) discoverProcesses(ctx context.Context, opts options, cfg *config.Co
 	if err != nil {
 		return discoverer.Discover(selectors)
 	}
-	if backendPIDs := backendPIDsForTarget(ctx, target, a.Runner); backendPIDs != nil {
+	if backendPIDs := app.ServiceBackendPIDs(ctx, target.Backend, target.Unit, target.BackendPIDs, a.Runner); backendPIDs != nil {
 		discoverer.BackendPIDs = backendPIDs
 	}
 	return discoverer.Discover(selectors)
-}
-
-func backendPIDsForTarget(ctx context.Context, target control.Target, runner execx.Runner) func() []int {
-	if target.BackendPIDs != nil {
-		return target.BackendPIDs
-	}
-	switch target.Backend {
-	case servicemgr.BackendSystemd, servicemgr.BackendOpenRC:
-		return servicemgr.BackendPIDsFuncWithRunner(ctx, target.Backend, target.Unit, runner, nil)
-	default:
-		return nil
-	}
 }
 
 func formatProcess(p process.Process) string {

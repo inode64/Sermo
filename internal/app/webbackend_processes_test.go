@@ -210,7 +210,8 @@ func TestServiceNoResidentProcessInfersInitServiceWithoutPIDs(t *testing.T) {
 	if len(selectors) != 0 {
 		t.Fatalf("selectors = %+v, want none", selectors)
 	}
-	if !serviceNoResidentProcess(tree, selectors, serviceBackendPIDs(t.Context(), deps, "wait-online.service")) {
+	if !serviceNoResidentProcess(tree, selectors,
+		ServiceBackendPIDs(t.Context(), deps.Backend, "wait-online.service", deps.BackendPIDs, deps.ExecxRunner)) {
 		t.Fatal("service without selectors or backend PIDs must be treated as no resident process")
 	}
 }
@@ -221,7 +222,8 @@ func TestServiceNoResidentProcessKeepsBackendPIDServiceResident(t *testing.T) {
 		ExecxRunner: systemdPIDRunner{pid: os.Getpid()},
 	}
 
-	if serviceNoResidentProcess(map[string]any{}, nil, serviceBackendPIDs(t.Context(), deps, "web.service")) {
+	if serviceNoResidentProcess(map[string]any{}, nil,
+		ServiceBackendPIDs(t.Context(), deps.Backend, "web.service", deps.BackendPIDs, deps.ExecxRunner)) {
 		t.Fatal("service with backend PIDs must not be treated as no resident process")
 	}
 }
@@ -420,15 +422,19 @@ func TestWorkerRecordsServiceRuntimeMetricsForWebHistory(t *testing.T) {
 }
 
 func TestServiceRuntimePidfileCheckUsesBackendFallbackWhenSystemdHasNoPIDFile(t *testing.T) {
-	_, checkDeps, _ := serviceRuntime(t.Context(), "node_exporter", "node_exporter.service", map[string]any{}, Deps{
-		Backend:          servicemgr.BackendSystemd,
-		Manager:          fakeManager{},
-		Runtime:          t.TempDir(),
-		DefaultTimeout:   time.Second,
-		OperationTimeout: time.Second,
-		ExecxRunner:      systemdPIDRunner{pid: os.Getpid()},
-		Emit:             func(Event) {},
-	}, nil, nil)
+	runtime := BuildServiceRuntime(t.Context(), ServiceRuntimeConfig{
+		Service: "node_exporter", Unit: "node_exporter.service", Tree: map[string]any{},
+		Deps: Deps{
+			Backend:          servicemgr.BackendSystemd,
+			Manager:          fakeManager{},
+			Runtime:          t.TempDir(),
+			DefaultTimeout:   time.Second,
+			OperationTimeout: time.Second,
+			ExecxRunner:      systemdPIDRunner{pid: os.Getpid()},
+			Emit:             func(Event) {},
+		},
+	})
+	checkDeps := runtime.CheckDeps
 	built, warnings := checks.Build(map[string]any{
 		"pidfile": map[string]any{"type": "pidfile", "path": filepath.Join(t.TempDir(), "missing.pid")},
 	}, checkDeps)

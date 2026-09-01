@@ -464,12 +464,15 @@ func appVersionCmds(tree map[string]any) map[string]appVersionCmd {
 
 func buildWorker(ctx context.Context, name, unit string, tree map[string]any, deps Deps, collector *metrics.Collector) (*Worker, []*Watch, []string) {
 	libBaseline := map[string]string{}
-	engine, checkDeps, discoverer := serviceRuntime(ctx, name, unit, tree, deps, libBaseline, nil)
+	runtime := BuildServiceRuntime(ctx, ServiceRuntimeConfig{
+		Service: name, Unit: unit, Tree: tree, Deps: deps, LibraryBaseline: libBaseline,
+	})
+	engine, checkDeps, discoverer := runtime.Engine, runtime.CheckDeps, runtime.Discoverer
 
 	maxParallel := deps.MaxParallel
 	ruleSet, _ := rules.ParseRules(tree)
-	selectors, _ := serviceProcessSelectors(ctx, tree, deps, unit)
-	noResident := serviceNoResidentProcess(tree, selectors, serviceBackendPIDs(ctx, deps, unit))
+	selectors := runtime.Selectors
+	noResident := runtime.NoResidentProcess
 	var worker *Worker
 	processesForCycle := cycleProcessSource(func() []process.Process {
 		if noResident {

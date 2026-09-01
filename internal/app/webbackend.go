@@ -414,10 +414,14 @@ func attachServiceRuntime(ctx context.Context, entry *webEntry, name string, tre
 	serviceDeps.Backend = target.Backend
 	serviceDeps.Manager = target.Manager
 	serviceDeps.BackendPIDs = target.BackendPIDs
-	engine, checkDeps, discoverer := serviceRuntime(ctx, name, target.Unit, tree, serviceDeps, map[string]string{}, operationEventEmitter(deps.Emit))
-	selectors, processWarnings := serviceProcessSelectors(ctx, tree, serviceDeps, target.Unit)
+	runtime := BuildServiceRuntime(ctx, ServiceRuntimeConfig{
+		Service: name, Unit: target.Unit, Tree: tree, Deps: serviceDeps,
+		LibraryBaseline: map[string]string{}, RecordOperation: operationEventEmitter(deps.Emit),
+	})
+	engine, checkDeps, discoverer := runtime.Engine, runtime.CheckDeps, runtime.Discoverer
+	selectors, processWarnings := runtime.Selectors, runtime.ProcessWarnings
 	names, types, intervals := checkCatalog(tree, entry.interval)
-	entry.noResidentProcess = serviceNoResidentProcess(tree, selectors, serviceBackendPIDs(ctx, serviceDeps, target.Unit))
+	entry.noResidentProcess = runtime.NoResidentProcess
 	entry.engine = engine
 	entry.status = checkDeps.Status
 	entry.checkNames = names
