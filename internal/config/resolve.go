@@ -188,16 +188,8 @@ func watchRecordsAvailability(raw any) bool {
 	entry, _ := raw.(map[string]any)
 	check, _ := entry[WatchKeyCheck].(map[string]any)
 	checkType := cfgval.String(check[checks.CheckKeyType])
-	if checks.RecordsAvailability(checkType, check) {
-		return true
-	}
 	metrics, _ := entry[SectionMetrics].(map[string]any)
-	for metric := range metrics {
-		if checks.RecordsAvailability(checkType, map[string]any{checks.DataKeyMetric: metric}) {
-			return true
-		}
-	}
-	return false
+	return checks.ConfiguredRecordsAvailability(checkType, check, metrics)
 }
 
 func storageTreeFromWatch(name string, entry map[string]any) (map[string]any, []string) {

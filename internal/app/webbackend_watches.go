@@ -369,18 +369,5 @@ func watchSummary(w *webWatch, storage *web.StorageWatchInfo, liveSummary string
 // daemon expands it into one watch per metric, so it counts when any of them is
 // the availability metric.
 func watchRecordsAvailability(w *webWatch) bool {
-	// The operator's `sla:` boolean outranks the type default in both
-	// directions: it is the same override the recorder honours.
-	if value, declared := checks.SLAOverride(w.check); declared {
-		return value
-	}
-	if checks.RecordsAvailability(w.checkType, w.check) {
-		return true
-	}
-	for metric := range w.metrics {
-		if checks.RecordsAvailability(w.checkType, map[string]any{checks.DataKeyMetric: metric}) {
-			return true
-		}
-	}
-	return false
+	return checks.ConfiguredRecordsAvailability(w.checkType, w.check, w.metrics)
 }
