@@ -9,7 +9,6 @@ import (
 	"sermo/internal/cfgval"
 	"sermo/internal/checks"
 	"sermo/internal/config"
-	"sermo/internal/metrics"
 	"sermo/internal/servicemgr"
 	"sermo/internal/web"
 )
@@ -236,50 +235,12 @@ func watchCommonConditions(check map[string]any) []web.WatchCondition {
 
 func watchConditionFields(check map[string]any) []string {
 	checkType := cfgval.AsString(check[checks.CheckKeyType])
-	switch checkType {
-	case checks.CheckTypeStorage:
-		return checks.StoragePredFields
-	case checks.CheckTypeMemory:
-		return checks.MemoryPredFields
-	case checks.CheckTypePressure:
-		return checks.PressurePredFields
-	case checks.CheckTypeLoad:
-		return checks.LoadPredFields
-	case checks.CheckTypeFDS:
-		return checks.FdsPredFields
-	case checks.CheckTypePIDs:
-		return checks.PidsPredFields
-	case checks.CheckTypeConntrack:
-		return checks.ConntrackPredFields
-	case checks.CheckTypeZombies:
-		return checks.ZombiePredFields
-	case checks.CheckTypeFailedUnits:
-		return checks.FailedUnitsPredFields
-	case checks.CheckTypeInotify:
-		return checks.InotifyPredFields
-	case checks.CheckTypeOOM:
-		return []string{checks.CheckKeyDelta}
-	case checks.CheckTypeProcess:
-		return []string{metrics.MetricCPU, metrics.MetricMemory, metrics.MetricIO}
-	case checks.CheckTypeDiskIO:
-		return checks.DiskIOPredFields
-	case checks.CheckTypeSensors:
-		return checks.SensorPredFields
-	case checks.CheckTypeHdparm:
-		return checks.HdparmPredFields
-	case checks.CheckTypeSmart:
-		return checks.SmartPredFields
-	case checks.CheckTypeStorCLI, checks.CheckTypeSSACLI:
-		return checks.HardwareRAIDPredFields
-	case checks.CheckTypeRAID:
-		return checks.RaidPredFields
-	case checks.CheckTypeLVM:
-		return checks.LVMPredFields
-	case checks.CheckTypeEDAC:
-		return checks.EdacPredFields
-	default:
-		return nil
+	if checkType == checks.CheckTypeProcess {
+		// The stateful host process watch is built by internal/app rather than the
+		// service-scoped single-shot process check in checks' registry.
+		return checks.ProcessWatchPredFields
 	}
+	return checks.PredicateFieldsFor(checkType)
 }
 
 func fileWatchConditions(check map[string]any) []web.WatchCondition {

@@ -77,6 +77,20 @@ func TestTypeInfosReturnsSortedCopy(t *testing.T) {
 	}
 }
 
+func TestPredicateFieldsForReturnsRegistryCopy(t *testing.T) {
+	fields := PredicateFieldsFor(CheckTypeMemory)
+	if !slices.Equal(fields, MemoryPredFields) {
+		t.Fatalf("memory predicate fields = %v, want %v", fields, MemoryPredFields)
+	}
+	fields[0] = "mutated"
+	if got := PredicateFieldsFor(CheckTypeMemory); len(got) == 0 || got[0] == "mutated" {
+		t.Fatalf("PredicateFieldsFor exposed mutable registry state: %v", got)
+	}
+	if fields := PredicateFieldsFor("unknown"); fields != nil {
+		t.Fatalf("unknown predicate fields = %v, want nil", fields)
+	}
+}
+
 func TestGraphMetricRegistryInvariants(t *testing.T) {
 	for checkType, declared := range graphMetrics {
 		_, isProtocol := conn.Lookup(checkType)

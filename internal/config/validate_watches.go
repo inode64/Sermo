@@ -12,7 +12,6 @@ import (
 	"sermo/internal/checks"
 	"sermo/internal/conn"
 	"sermo/internal/emission"
-	"sermo/internal/metrics"
 	"sermo/internal/process"
 	"sermo/internal/rules"
 )
@@ -906,7 +905,7 @@ func validateProcessWatch(name string, check, entry map[string]any, defaultNotif
 			add(validationPositiveDurationFormat, watchCheckFieldPath(name, checks.CheckKeyFor), cfgval.String(v))
 		}
 	}
-	for _, attr := range []string{metrics.MetricCPU, metrics.MetricMemory, metrics.MetricIO} {
+	for _, attr := range checks.ProcessWatchPredFields {
 		m, ok := check[attr].(map[string]any)
 		if !ok {
 			continue

@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"sermo/internal/cfgval"
+	"sermo/internal/metrics"
 )
 
 var (
@@ -239,6 +240,10 @@ var (
 	ProcessCountPredFields = []string{DataKeyCount}
 	// TCPConnectionsPredFields is the single required predicate of a tcp_connections check.
 	TCPConnectionsPredFields = []string{DataKeyCount}
+	// ProcessWatchPredFields are the resource predicates of the stateful host
+	// process watch. Its builder lives in internal/app, but checks owns the
+	// public predicate vocabulary shared with config validation and presentation.
+	ProcessWatchPredFields = []string{metrics.MetricCPU, metrics.MetricMemory, metrics.MetricIO}
 	// SensorPredFields are the predicates of a sensors check.
 	SensorPredFields = []string{sensorTemp, sensorFan, sensorVoltage}
 	// HdparmPredFields are the predicates of an hdparm check.
@@ -262,6 +267,9 @@ var (
 	// FailedUnitsPredFields is the single optional predicate of a failed_units
 	// check; absent, it defaults to firing on any failed unit.
 	FailedUnitsPredFields = []string{DataKeyCount}
+	// OOMPredFields is the optional OOM-kill delta predicate. Absent, the check
+	// defaults to firing on any observed kill.
+	OOMPredFields = []string{CheckKeyDelta}
 	// InotifyPredFields are the predicates of an inotify check: the headline
 	// used_pct (the worse of both limits) plus each dimension on its own.
 	InotifyPredFields = []string{

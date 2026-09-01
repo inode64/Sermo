@@ -259,7 +259,7 @@ type buildFailure struct {
 // remain in conn's own registry because conn owns their catalog and aliases.
 var builtinCheckSpecs = []checkSpec{
 	{info: healthTypeInfo(CheckTypeTCP), build: func(in checkBuildInput) (Check, string) { return buildTCPCheck(in.base, in.entry) }},
-	{info: conditionTypeInfo(CheckTypeTCPConnections), build: func(in checkBuildInput) (Check, string) { return buildTCPConnectionsCheck(in.base, in.entry) }},
+	{info: conditionTypeInfo(CheckTypeTCPConnections), predicateFields: TCPConnectionsPredFields, build: func(in checkBuildInput) (Check, string) { return buildTCPConnectionsCheck(in.base, in.entry) }},
 	{info: healthTypeInfo(CheckTypePorts), build: func(in checkBuildInput) (Check, string) { return buildPortsCheck(in.base, in.entry) }},
 	{info: healthTypeInfo(CheckTypeHTTP), build: func(in checkBuildInput) (Check, string) { return buildHTTPCheck(in.base, in.entry, in.client) }},
 	{info: healthTypeInfo(CheckTypeCommand), build: func(in checkBuildInput) (Check, string) { return buildCommandCheck(in.base, in.entry, in.runner) }},
@@ -281,42 +281,42 @@ var builtinCheckSpecs = []checkSpec{
 	{info: serviceConditionTypeInfo(CheckTypeMetric), build: func(in checkBuildInput) (Check, string) { return buildMetricCheck(in.base, in.entry, in.deps) }},
 	{info: healthTypeInfo(CheckTypeLibraries), build: func(in checkBuildInput) (Check, string) { return buildLibrariesCheck(in.base, in.entry) }},
 	{info: conditionTypeInfo(CheckTypeCount), build: func(in checkBuildInput) (Check, string) { return buildCountCheck(in.base, in.entry) }},
-	{info: conditionTypeInfo(CheckTypeStorage), build: func(in checkBuildInput) (Check, string) { return buildStorageCheck(in.base, in.entry, in.deps) }},
-	{info: conditionTypeInfo(CheckTypeLoad), build: func(in checkBuildInput) (Check, string) { return buildLoadCheck(in.base, in.entry, in.deps) }},
-	{info: conditionTypeInfo(CheckTypeUsers), build: func(in checkBuildInput) (Check, string) { return buildUsersCheck(in.base, in.entry, in.deps) }},
-	{info: conditionTypeInfo(CheckTypeSSHIdle), build: func(in checkBuildInput) (Check, string) { return buildSSHIdleCheck(in.base, in.entry, in.deps) }},
-	{info: conditionTypeInfo(CheckTypeTerminalSessions), build: func(in checkBuildInput) (Check, string) {
+	{info: conditionTypeInfo(CheckTypeStorage), predicateFields: StoragePredFields, build: func(in checkBuildInput) (Check, string) { return buildStorageCheck(in.base, in.entry, in.deps) }},
+	{info: conditionTypeInfo(CheckTypeLoad), predicateFields: LoadPredFields, build: func(in checkBuildInput) (Check, string) { return buildLoadCheck(in.base, in.entry, in.deps) }},
+	{info: conditionTypeInfo(CheckTypeUsers), predicateFields: UsersPredFields, build: func(in checkBuildInput) (Check, string) { return buildUsersCheck(in.base, in.entry, in.deps) }},
+	{info: conditionTypeInfo(CheckTypeSSHIdle), predicateFields: SSHIdlePredFields, build: func(in checkBuildInput) (Check, string) { return buildSSHIdleCheck(in.base, in.entry, in.deps) }},
+	{info: conditionTypeInfo(CheckTypeTerminalSessions), predicateFields: TerminalSessionPredFields, build: func(in checkBuildInput) (Check, string) {
 		return buildTerminalSessionsCheck(in.base, in.entry, in.runner)
 	}},
-	{info: conditionTypeInfo(CheckTypeProcessCount), build: func(in checkBuildInput) (Check, string) { return buildProcessCountCheck(in.base, in.entry, in.deps) }},
-	{info: conditionTypeInfo(CheckTypeHdparm), build: func(in checkBuildInput) (Check, string) {
+	{info: conditionTypeInfo(CheckTypeProcessCount), predicateFields: ProcessCountPredFields, build: func(in checkBuildInput) (Check, string) { return buildProcessCountCheck(in.base, in.entry, in.deps) }},
+	{info: conditionTypeInfo(CheckTypeHdparm), predicateFields: HdparmPredFields, build: func(in checkBuildInput) (Check, string) {
 		return buildHdparmCheck(in.base, in.entry, in.runner, in.deps)
 	}},
-	{info: conditionTypeInfo(CheckTypeSensors), build: func(in checkBuildInput) (Check, string) { return buildSensorsCheck(in.base, in.entry, in.deps) }},
-	{info: conditionTypeInfo(CheckTypeSmart), build: func(in checkBuildInput) (Check, string) {
+	{info: conditionTypeInfo(CheckTypeSensors), predicateFields: SensorPredFields, build: func(in checkBuildInput) (Check, string) { return buildSensorsCheck(in.base, in.entry, in.deps) }},
+	{info: conditionTypeInfo(CheckTypeSmart), predicateFields: SmartPredFields, build: func(in checkBuildInput) (Check, string) {
 		return buildSmartCheck(in.base, in.entry, in.runner, in.deps)
 	}},
-	{info: conditionTypeInfo(CheckTypeRAID), build: func(in checkBuildInput) (Check, string) { return buildRaidCheck(in.base, in.entry, in.deps) }},
-	{info: healthTypeInfo(CheckTypeStorCLI), build: func(in checkBuildInput) (Check, string) {
+	{info: conditionTypeInfo(CheckTypeRAID), predicateFields: RaidPredFields, build: func(in checkBuildInput) (Check, string) { return buildRaidCheck(in.base, in.entry, in.deps) }},
+	{info: healthTypeInfo(CheckTypeStorCLI), predicateFields: HardwareRAIDPredFields, build: func(in checkBuildInput) (Check, string) {
 		return buildHardwareRAIDCheck(in.base, in.entry, in.runner, CheckTypeStorCLI)
 	}},
-	{info: healthTypeInfo(CheckTypeSSACLI), build: func(in checkBuildInput) (Check, string) {
+	{info: healthTypeInfo(CheckTypeSSACLI), predicateFields: HardwareRAIDPredFields, build: func(in checkBuildInput) (Check, string) {
 		return buildHardwareRAIDCheck(in.base, in.entry, in.runner, CheckTypeSSACLI)
 	}},
 	{info: healthTypeInfo(CheckTypeGlusterCluster), build: func(in checkBuildInput) (Check, string) {
 		return buildGlusterClusterCheck(in.base, in.entry, in.runner)
 	}},
-	{info: healthTypeInfo(CheckTypeLVM), build: func(in checkBuildInput) (Check, string) { return buildLVMCheck(in.base, in.entry, in.runner) }},
-	{info: conditionTypeInfo(CheckTypeEDAC), build: func(in checkBuildInput) (Check, string) { return buildEdacCheck(in.base, in.entry, in.deps) }},
+	{info: healthTypeInfo(CheckTypeLVM), predicateFields: LVMPredFields, build: func(in checkBuildInput) (Check, string) { return buildLVMCheck(in.base, in.entry, in.runner) }},
+	{info: conditionTypeInfo(CheckTypeEDAC), predicateFields: EdacPredFields, build: func(in checkBuildInput) (Check, string) { return buildEdacCheck(in.base, in.entry, in.deps) }},
 	{info: healthTypeInfo(CheckTypeConfig), build: func(in checkBuildInput) (Check, string) { return buildConfigCheck(in.base, in.entry, in.runner) }},
-	{info: conditionTypeInfo(CheckTypeFDS), build: func(in checkBuildInput) (Check, string) { return buildFdsCheck(in.base, in.entry, in.deps) }},
-	{info: conditionTypeInfo(CheckTypeMemory), build: func(in checkBuildInput) (Check, string) { return buildMemoryCheck(in.base, in.entry, in.deps) }},
-	{info: conditionTypeInfo(CheckTypePressure), build: func(in checkBuildInput) (Check, string) { return buildPressureCheck(in.base, in.entry, in.deps) }},
-	{info: conditionTypeInfo(CheckTypePIDs), build: func(in checkBuildInput) (Check, string) { return buildPidsCheck(in.base, in.entry, in.deps) }},
-	{info: conditionTypeInfo(CheckTypeDiskIO), build: func(in checkBuildInput) (Check, string) { return buildDiskIOCheck(in.base, in.entry, in.deps) }},
-	{info: conditionTypeInfo(CheckTypeConntrack), build: func(in checkBuildInput) (Check, string) { return buildConntrackCheck(in.base, in.entry, in.deps) }},
-	{info: conditionTypeInfo(CheckTypeZombies), build: func(in checkBuildInput) (Check, string) { return buildZombieCheck(in.base, in.entry, in.deps) }},
-	{info: conditionTypeInfo(CheckTypeOOM), build: func(in checkBuildInput) (Check, string) { return buildOomCheck(in.base, in.entry, in.deps) }},
+	{info: conditionTypeInfo(CheckTypeFDS), predicateFields: FdsPredFields, build: func(in checkBuildInput) (Check, string) { return buildFdsCheck(in.base, in.entry, in.deps) }},
+	{info: conditionTypeInfo(CheckTypeMemory), predicateFields: MemoryPredFields, build: func(in checkBuildInput) (Check, string) { return buildMemoryCheck(in.base, in.entry, in.deps) }},
+	{info: conditionTypeInfo(CheckTypePressure), predicateFields: PressurePredFields, build: func(in checkBuildInput) (Check, string) { return buildPressureCheck(in.base, in.entry, in.deps) }},
+	{info: conditionTypeInfo(CheckTypePIDs), predicateFields: PidsPredFields, build: func(in checkBuildInput) (Check, string) { return buildPidsCheck(in.base, in.entry, in.deps) }},
+	{info: conditionTypeInfo(CheckTypeDiskIO), predicateFields: DiskIOPredFields, build: func(in checkBuildInput) (Check, string) { return buildDiskIOCheck(in.base, in.entry, in.deps) }},
+	{info: conditionTypeInfo(CheckTypeConntrack), predicateFields: ConntrackPredFields, build: func(in checkBuildInput) (Check, string) { return buildConntrackCheck(in.base, in.entry, in.deps) }},
+	{info: conditionTypeInfo(CheckTypeZombies), predicateFields: ZombiePredFields, build: func(in checkBuildInput) (Check, string) { return buildZombieCheck(in.base, in.entry, in.deps) }},
+	{info: conditionTypeInfo(CheckTypeOOM), predicateFields: OOMPredFields, build: func(in checkBuildInput) (Check, string) { return buildOomCheck(in.base, in.entry, in.deps) }},
 	{info: healthTypeInfo(CheckTypeCert), build: func(in checkBuildInput) (Check, string) { return buildCertCheck(in.base, in.entry, in.deps) }},
 	{info: healthTypeInfo(CheckTypeSQLite), build: func(in checkBuildInput) (Check, string) { return buildSqliteCheck(in.base, in.entry) }},
 	{info: healthTypeInfo(CheckTypeSQLite3), build: func(in checkBuildInput) (Check, string) { return buildSqliteCheck(in.base, in.entry) }},
@@ -333,10 +333,10 @@ var builtinCheckSpecs = []checkSpec{
 	{info: healthTypeInfo(CheckTypeFirewallRules), build: func(in checkBuildInput) (Check, string) {
 		return buildFirewallRulesCheck(in.base, in.entry, in.runner, in.deps)
 	}},
-	{info: conditionTypeInfo(CheckTypeFailedUnits), build: func(in checkBuildInput) (Check, string) {
+	{info: conditionTypeInfo(CheckTypeFailedUnits), predicateFields: FailedUnitsPredFields, build: func(in checkBuildInput) (Check, string) {
 		return buildFailedUnitsCheck(in.base, in.entry, in.runner, in.deps)
 	}},
-	{info: conditionTypeInfo(CheckTypeInotify), build: func(in checkBuildInput) (Check, string) {
+	{info: conditionTypeInfo(CheckTypeInotify), predicateFields: InotifyPredFields, build: func(in checkBuildInput) (Check, string) {
 		return buildInotifyCheck(in.base, in.entry, in.deps)
 	}},
 }

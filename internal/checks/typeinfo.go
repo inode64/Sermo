@@ -33,8 +33,9 @@ func serviceConditionTypeInfo(name string) TypeInfo {
 // capabilities and constructor. Field validation remains in internal/config so
 // it can report configuration paths and error details without an import cycle.
 type checkSpec struct {
-	info  TypeInfo
-	build checkBuilder
+	info            TypeInfo
+	predicateFields []string
+	build           checkBuilder
 }
 
 // Built-in check type names (the `type:` selector of a check). This is the
@@ -135,6 +136,13 @@ func mustIndexCheckSpecs(specs []checkSpec) map[string]checkSpec {
 func TypeInfoFor(typ string) (TypeInfo, bool) {
 	spec, ok := checkSpecByName[typ]
 	return spec.info, ok
+}
+
+// PredicateFieldsFor returns the threshold predicate fields accepted by a
+// built-in check type. The returned slice is a copy so registry metadata cannot
+// be mutated by presentation or validation callers.
+func PredicateFieldsFor(typ string) []string {
+	return slices.Clone(checkSpecByName[typ].predicateFields)
 }
 
 // TypeInfos returns every built-in single-shot check type in name order. It is
