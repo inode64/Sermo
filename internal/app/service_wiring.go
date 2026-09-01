@@ -26,11 +26,35 @@ func MetricSampleForOperation(name string, tree map[string]any, collector *metri
 	})
 }
 
-// serviceRuntime builds the per-service runtime pieces shared by a worker and the
-// web backend: a process discoverer, the check deps (with a backend-status
-// closure), and the safe operation engine. The engine's per-service operation
-// lock serializes start/stop/restart/reload/resume across the worker and the web.
-func serviceRuntime(ctx context.Context, name, unit string, tree map[string]any, deps Deps, libBaseline map[string]string, recordOperation func(operation.Result)) (operation.Engine, checks.Deps, process.Discoverer) {
+// ServiceRuntimeConfig describes one resolved service runtime. Callers supply
+// presentation-specific callbacks, while BuildServiceRuntime owns every safety
+// dependency used to judge and execute the operation.
+type ServiceRuntimeConfig struct {
+	Service         string
+	Unit            string
+	Tree            map[string]any
+	Deps            Deps
+	LibraryBaseline map[string]string
+	LockReclaimed   func(service, reason string)
+	RecordOperation func(operation.Result)
+}
+
+// ServiceRuntime is the canonical per-service runtime shared by sermod,
+// sermoctl and the web backend.
+type ServiceRuntime struct {
+	Engine            operation.Engine
+	CheckDeps         checks.Deps
+	Discoverer        process.Discoverer
+	Selectors         []process.Selector
+	ProcessWarnings   []string
+	NoResidentProcess bool
+}
+
+// BuildServiceRuntime builds the process discoverer, check dependencies and safe
+// operation engine for one resolved service. The engine's per-service operation
+// lock serializes start/stop/restart/reload/resume across every caller.
+func BuildServiceRuntime(ctx context.Context, cfg ServiceRuntimeConfig) ServiceRuntime {
+	deps := cfg.Deps
 	lookup := deps.UserLookup
 	if lookup == nil {
 		lookup = process.DefaultUserLookup()
@@ -39,24 +63,24 @@ func serviceRuntime(ctx context.Context, name, unit string, tree map[string]any,
 	if deps.ProcReader != nil {
 		discoverer.Reader = deps.ProcReader
 	}
-	backendPIDs := serviceBackendPIDs(ctx, deps, unit)
+	backendPIDs := ServiceBackendPIDs(ctx, deps.Backend, cfg.Unit, deps.BackendPIDs, deps.ExecxRunner)
 	if backendPIDs != nil {
 		discoverer.BackendPIDs = backendPIDs
 	}
-	selectors, _ := serviceProcessSelectors(ctx, tree, deps, unit)
-	noResident := serviceNoResidentProcess(tree, selectors, backendPIDs)
-	metricSample := MetricSampleForOperation(name, tree, deps.Collector, discoverer, selectors)
+	selectors, processWarnings := serviceProcessSelectors(ctx, cfg.Tree, deps, cfg.Unit)
+	noResident := serviceNoResidentProcess(cfg.Tree, selectors, backendPIDs)
+	metricSample := MetricSampleForOperation(cfg.Service, cfg.Tree, deps.Collector, discoverer, selectors)
 	if noResident {
 		metricSample = nil
 	}
 	checkDeps := checkDepsFromAppDeps(deps, checks.Deps{
-		Service:        name,
+		Service:        cfg.Service,
 		DefaultTimeout: deps.DefaultTimeout,
 		Runner:         deps.ExecxRunner,
 		Status: func(ctx context.Context) (servicemgr.Status, error) {
-			st, err := deps.Manager.Status(ctx, unit)
+			st, err := deps.Manager.Status(ctx, cfg.Unit)
 			if err != nil {
-				return "", fmt.Errorf("status %s: %w", unit, err)
+				return "", fmt.Errorf("status %s: %w", cfg.Unit, err)
 			}
 			return st.Status, nil
 		},
@@ -69,19 +93,23 @@ func serviceRuntime(ctx context.Context, name, unit string, tree map[string]any,
 		// jobs" for a crashed fcron — which latched its own block action and made
 		// the service unrepairable through Sermo.
 		ProcessCount:        func(user, exe, exeDir string) int { return discoverer.CountInTree(selectors, user, exe, exeDir) },
-		PidfileFallbackPIDs: pidfileFallbackPIDs(ctx, deps, unit, backendPIDs),
+		PidfileFallbackPIDs: pidfileFallbackPIDs(ctx, deps, cfg.Unit, backendPIDs),
 		StaleBinaries:       func() []process.StaleBinary { return discoverer.StaleBinaries(selectors) },
 		Strays: func() []process.Process {
 			procs, _ := discoverer.Discover(selectors)
 			return process.Strays(procs)
 		},
 	})
-	locker := configureOperationLocker(deps.Runtime, operationLockReclaimEvent(deps.Emit))
+	lockReclaimed := cfg.LockReclaimed
+	if lockReclaimed == nil {
+		lockReclaimed = operationLockReclaimEvent(deps.Emit)
+	}
+	locker := configureOperationLocker(deps.Runtime, lockReclaimed)
 	engine := operation.New(operation.Config{
-		Service:          name,
-		Unit:             unit,
+		Service:          cfg.Service,
+		Unit:             cfg.Unit,
 		Backend:          string(deps.Backend),
-		Tree:             tree,
+		Tree:             cfg.Tree,
 		Manager:          deps.Manager,
 		Locker:           &locker,
 		Scanner:          locks.NewScanner(locks.RuntimeLocksDir(deps.Runtime)),
@@ -89,12 +117,19 @@ func serviceRuntime(ctx context.Context, name, unit string, tree map[string]any,
 		ResolveUser:      discoverer.ResolveUser,
 		CheckDeps:        checkDeps,
 		MetricSample:     metricSample,
-		Changed:          ArtifactChangedFunc(libBaseline, deps.ArtifactSamples),
+		Changed:          ArtifactChangedFunc(cfg.LibraryBaseline, deps.ArtifactSamples),
 		Sleep:            deps.Sleep,
 		OperationTimeout: deps.OperationTimeout,
-		Emit:             recordOperation,
+		Emit:             cfg.RecordOperation,
 	})
-	return engine, checkDeps, discoverer
+	return ServiceRuntime{
+		Engine:            engine,
+		CheckDeps:         checkDeps,
+		Discoverer:        discoverer,
+		Selectors:         selectors,
+		ProcessWarnings:   processWarnings,
+		NoResidentProcess: noResident,
+	}
 }
 
 func pidfileFallbackPIDs(ctx context.Context, deps Deps, unit string, backendPIDs func() []int) func() []int {
@@ -108,14 +143,17 @@ func pidfileFallbackPIDs(ctx context.Context, deps Deps, unit string, backendPID
 	return backendPIDs
 }
 
-func serviceBackendPIDs(ctx context.Context, deps Deps, unit string) func() []int {
-	if deps.BackendPIDs != nil {
-		return deps.BackendPIDs
+// ServiceBackendPIDs returns the backend-owned process roots for one resolved
+// service. A control target's explicit provider wins; only init backends derive
+// their process set from the unit.
+func ServiceBackendPIDs(ctx context.Context, backend servicemgr.Backend, unit string, configured func() []int, runner execx.Runner) func() []int {
+	if configured != nil {
+		return configured
 	}
-	if deps.Backend == servicemgr.BackendLibvirt || deps.Backend == servicemgr.BackendLibvirtNetwork || deps.Backend == servicemgr.BackendDocker {
+	if backend != servicemgr.BackendSystemd && backend != servicemgr.BackendOpenRC {
 		return nil
 	}
-	return servicemgr.BackendPIDsFuncWithRunner(ctx, deps.Backend, unit, deps.ExecxRunner, nil)
+	return servicemgr.BackendPIDsFuncWithRunner(ctx, backend, unit, runner, nil)
 }
 
 // ServiceScopedProcessCount returns the process_count dependency for one
