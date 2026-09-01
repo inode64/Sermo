@@ -151,6 +151,38 @@ func TestParseStopPolicyBadDurationWarns(t *testing.T) {
 	}
 }
 
+func TestParseStopPolicyOwnsSignalAuthorizationDiagnostics(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name string
+		tree map[string]any
+		want string
+	}{
+		{
+			name: "invalid force mode",
+			tree: map[string]any{SectionStopPolicy: map[string]any{StopPolicyKeyForceKill: "eventually"}},
+			want: `stop_policy.force_kill must be a boolean or "auto"`,
+		},
+		{
+			name: "force without selector",
+			tree: map[string]any{SectionStopPolicy: map[string]any{StopPolicyKeyForceKill: true}},
+			want: "stop_policy.force_kill=true requires kill_only_if",
+		},
+		{
+			name: "partial selector",
+			tree: map[string]any{SectionStopPolicy: map[string]any{
+				StopPolicyKeyKillOnlyIf: map[string]any{StopPolicyKeyUsers: []any{"root"}},
+			}},
+			want: "stop_policy.kill_only_if must define both users and exe_any",
+		},
+	} {
+		_, warnings := ParseStopPolicy(test.tree)
+		if !strings.Contains(strings.Join(warnings, "\n"), test.want) {
+			t.Errorf("%s: warnings = %v, want %q", test.name, warnings, test.want)
+		}
+	}
+}
+
 // A daemon whose workload children re-exec the same binary as the daemon itself
 // (GlusterFS bricks, for one) is separable only by cmdline. The identity derived
 // from force_kill: auto has to inherit that narrowing, or stopping the daemon

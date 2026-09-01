@@ -125,30 +125,9 @@ func validateStopPolicy(tree map[string]any, add addFunc) {
 	if !ok {
 		return
 	}
-	for _, field := range []string{keyGracefulTimeout, keyTermTimeout, keyKillTimeout} {
-		validatePositiveDurationField(sp, field, stopPolicyFieldPath(field), add)
-	}
-	force := false
-	if value, present := sp[keyForceKill]; present {
-		switch v := value.(type) {
-		case bool:
-			force = v
-		case string:
-			if v != process.StopPolicyForceKillAuto {
-				add("%s must be a boolean or %q", stopPolicyPathForceKill, process.StopPolicyForceKillAuto)
-			}
-		default:
-			add("%s must be a boolean or %q", stopPolicyPathForceKill, process.StopPolicyForceKillAuto)
-		}
-	}
-	koi, hasKoi := sp[keyKillOnlyIf].(map[string]any)
-	if force && !hasKoi {
-		add("%s=true requires %s", stopPolicyPathForceKill, keyKillOnlyIf)
-	}
-	if hasKoi {
-		if !cfgval.IsNonEmptyStringList(koi[keyUsers]) || !cfgval.IsNonEmptyStringList(koi[keyExeAny]) {
-			add("%s must define both %s and %s, each non-empty", stopPolicyPathKillOnlyIf, keyUsers, keyExeAny)
-		}
+	_, warnings := process.ParseStopPolicy(tree)
+	for _, warning := range warnings {
+		add("%s", warning)
 	}
 	// Stopped-state invariants (verified after a clean stop). clean_after_stop is
 	// the master opt-in that enables deleting stale leftovers and the clean_on_stop
@@ -178,31 +157,11 @@ func validateStopPolicy(tree map[string]any, add addFunc) {
 // on the resolved /proc/<pid>/exe — a relative path could never match, so it can
 // only be a mistake.
 func validateReapPolicy(tree map[string]any, add addFunc) {
-	raw, present := tree[sectionReap]
-	if !present {
-		return
+	selector, warnings := process.ParseReapPolicy(tree)
+	for _, warning := range warnings {
+		add("%s", warning)
 	}
-	block, ok := raw.(map[string]any)
-	if !ok {
-		add("%s must be a mapping with %s", sectionReap, keyKillOnlyIf)
-		return
-	}
-	for _, err := range unknownBlockKeys(sectionReap, block, set(keyKillOnlyIf)) {
-		add("%s", err)
-	}
-	koi, ok := block[keyKillOnlyIf].(map[string]any)
-	if !ok {
-		add("%s must be a mapping defining both %s and %s", reapPathKillOnlyIf, keyUsers, keyExeAny)
-		return
-	}
-	for _, err := range unknownBlockKeys(reapPathKillOnlyIf, koi, set(keyUsers, keyExeAny)) {
-		add("%s", err)
-	}
-	if !cfgval.IsNonEmptyStringList(koi[keyUsers]) || !cfgval.IsNonEmptyStringList(koi[keyExeAny]) {
-		add("%s must define both %s and %s, each non-empty", reapPathKillOnlyIf, keyUsers, keyExeAny)
-		return
-	}
-	for _, exe := range cfgval.StringList(koi[keyExeAny]) {
+	for _, exe := range selector.ExeAny {
 		if !filepath.IsAbs(exe) {
 			add(validationPathAbsoluteFormat, reapPathKillOnlyIf+"."+keyExeAny, exe)
 		}
