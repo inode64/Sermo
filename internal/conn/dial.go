@@ -35,7 +35,7 @@ func (t probeTarget) hostPort() (string, int) {
 
 func (t probeTarget) address() string {
 	host, port := t.hostPort()
-	return hostPort(host, port)
+	return netutil.JoinHostPort(host, port)
 }
 
 func (t probeTarget) dialer() *net.Dialer {

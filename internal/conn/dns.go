@@ -14,6 +14,8 @@ import (
 	"time"
 
 	"golang.org/x/net/dns/dnsmessage"
+
+	"sermo/internal/netutil"
 )
 
 // dnsProtocol probes a DNS server natively: it sends an A query (over UDP) for a
@@ -75,7 +77,7 @@ const (
 var dnsRouteAddrs = func(host string) (net.Addr, net.Addr, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), dnsLocalRouteTimeout)
 	defer cancel()
-	c, err := (&net.Dialer{}).DialContext(ctx, networkUDP, hostPort(host, dnsDefaultPort))
+	c, err := (&net.Dialer{}).DialContext(ctx, networkUDP, netutil.JoinHostPort(host, dnsDefaultPort))
 	if err != nil {
 		return nil, nil, probeErr(ProtocolNameDNS, stepDNSLocalRoute, err)
 	}
@@ -110,7 +112,7 @@ func (dnsProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 		return Result{}, err
 	}
 
-	c, err := BindDialer(dnsProbeInterface(host, cfg.Interface)).DialContext(ctx, networkUDP, hostPort(host, port))
+	c, err := BindDialer(dnsProbeInterface(host, cfg.Interface)).DialContext(ctx, networkUDP, netutil.JoinHostPort(host, port))
 	if err != nil {
 		return Result{}, probeErr(ProtocolNameDNS, stepDial, err)
 	}

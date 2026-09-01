@@ -3,16 +3,26 @@ package conn
 import "testing"
 
 func TestBuildLDAPURL(t *testing.T) {
-	url, useTLS := buildLDAPURL("dir.example", 389, "")
-	if url != "ldap://dir.example:389" || useTLS {
-		t.Fatalf("plain = %q tls=%v", url, useTLS)
+	tests := []struct {
+		name    string
+		host    string
+		port    int
+		tlsMode string
+		wantURL string
+		wantTLS bool
+	}{
+		{name: "plain", host: "dir.example", port: 389, wantURL: "ldap://dir.example:389"},
+		{name: "TLS", host: "dir.example", port: 636, tlsMode: "true", wantURL: "ldaps://dir.example:636", wantTLS: true},
+		{name: "skip verify", host: "d", port: 636, tlsMode: "skip-verify", wantURL: "ldaps://d:636", wantTLS: true},
+		{name: "IPv6", host: "2001:db8::1", port: 636, tlsMode: "true", wantURL: "ldaps://[2001:db8::1]:636", wantTLS: true},
 	}
-	url, useTLS = buildLDAPURL("dir.example", 636, "true")
-	if url != "ldaps://dir.example:636" || !useTLS {
-		t.Fatalf("ldaps = %q tls=%v", url, useTLS)
-	}
-	if u, tls := buildLDAPURL("d", 636, "skip-verify"); !tls || u != "ldaps://d:636" {
-		t.Fatalf("skip-verify should be ldaps: %q %v", u, tls)
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			gotURL, gotTLS := buildLDAPURL(test.host, test.port, test.tlsMode)
+			if gotURL != test.wantURL || gotTLS != test.wantTLS {
+				t.Fatalf("buildLDAPURL() = %q, %v; want %q, %v", gotURL, gotTLS, test.wantURL, test.wantTLS)
+			}
+		})
 	}
 }
 
