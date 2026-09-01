@@ -43,6 +43,16 @@ type scriptedCheck struct {
 
 type panickingWatchCheck struct{}
 
+type cancellingWatchCheck struct {
+	cancel context.CancelFunc
+}
+
+func (c cancellingWatchCheck) Name() string { return "cancelled" }
+func (c cancellingWatchCheck) Run(context.Context) checks.Result {
+	c.cancel()
+	return checks.Result{Check: "cancelled", Message: "error: cancelled"}
+}
+
 func (panickingWatchCheck) Name() string { return "panic-probe" }
 func (panickingWatchCheck) Run(context.Context) checks.Result {
 	panic("bad probe response")
@@ -69,6 +79,26 @@ func TestWatchPausedSkipsCheck(t *testing.T) {
 	w.RunCycle(context.Background())
 	if check.calls != 0 {
 		t.Fatalf("paused watch ran check %d times", check.calls)
+	}
+}
+
+func TestWatchCancelledCyclePublishesNothing(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	var published int
+	var events []Event
+	w := &Watch{
+		Name:       "app-monitor",
+		App:        "salt-minion",
+		Check:      cancellingWatchCheck{cancel: cancel},
+		FireOnFail: true,
+		Publish:    func(string, string, checks.Result) { published++ },
+		Emit:       func(event Event) { events = append(events, event) },
+	}
+
+	w.RunCycle(ctx)
+
+	if published != 0 || len(events) != 0 {
+		t.Fatalf("cancelled cycle published %d snapshot(s) and events %+v", published, events)
 	}
 }
 
