@@ -10,6 +10,8 @@ import (
 	"strings"
 
 	"github.com/go-sql-driver/mysql"
+
+	"sermo/internal/netutil"
 )
 
 // mysqlProtocol probes a MySQL or MariaDB server. With no credentials it reads
@@ -147,7 +149,7 @@ func buildMySQLConfigWithTarget(cfg Config, target probeTarget) *mysql.Config {
 	if cfg.Interface != "" {
 		c.DialFunc = target.dialer().DialContext
 	}
-	if tls := NormalizeTLS(cfg.TLS); tls != "" {
+	if tls := netutil.NormalizeTLS(cfg.TLS); tls != "" {
 		c.TLSConfig = tls
 	}
 	if len(cfg.Params) > 0 {

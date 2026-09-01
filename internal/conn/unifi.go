@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+
+	"sermo/internal/netutil"
 )
 
 const (
@@ -29,7 +31,7 @@ func (unifiProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	// UniFi controllers ship a self-signed certificate; skip verification unless
 	// the operator explicitly opts into it with tls: true.
 	tlsMode := tlsSkipVerify
-	if NormalizeTLS(cfg.TLS) == ParamValueTrue {
+	if netutil.NormalizeTLS(cfg.TLS) == ParamValueTrue {
 		tlsMode = ParamValueTrue
 	}
 	client, base := httpProbeBaseWithTLSMode(ctx, cfg, defaultPortUniFi, tlsMode)

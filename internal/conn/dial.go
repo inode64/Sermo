@@ -61,7 +61,7 @@ func (t probeTarget) dialTLS(ctx context.Context) (net.Conn, error) {
 		c   net.Conn
 		err error
 	)
-	switch NormalizeTLS(t.cfg.TLS) {
+	switch netutil.NormalizeTLS(t.cfg.TLS) {
 	case "":
 		c, err = d.DialContext(ctx, networkTCP, addr)
 	case tlsSkipVerify:

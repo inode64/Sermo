@@ -94,12 +94,3 @@ func TestBuildDSNDefaultsAndPlaintext(t *testing.T) {
 		t.Fatalf("tls = %q, want empty (plaintext) by default", c.TLSConfig)
 	}
 }
-
-func TestNormalizeTLS(t *testing.T) {
-	runMapCases(t, "NormalizeTLS", NormalizeTLS, map[string]string{
-		"": "", "false": "", "no": "",
-		"true": "true", "yes": "true",
-		"skip-verify": "skip-verify",
-		"custom":      "custom",
-	})
-}

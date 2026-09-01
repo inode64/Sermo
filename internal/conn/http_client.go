@@ -38,7 +38,7 @@ func httpProbeClient(iface string, tlsConfig *tls.Config) *http.Client {
 // TLS follows the normal probe policy (plaintext by default, or HTTPS with an
 // optional operator-selected skip-verify mode).
 func httpProbeBase(ctx context.Context, cfg Config, defaultPort int) (*http.Client, string) {
-	return httpProbeBaseWithTLSMode(ctx, cfg, defaultPort, NormalizeTLS(cfg.TLS))
+	return httpProbeBaseWithTLSMode(ctx, cfg, defaultPort, netutil.NormalizeTLS(cfg.TLS))
 }
 
 // httpProbeBaseWithTLSMode builds an HTTP probe target with an explicit TLS
