@@ -163,6 +163,21 @@ type Controller struct {
 	LockTTL        time.Duration
 }
 
+// ResolveConfiguredSpec resolves one storage watch and requires it to expose a
+// mount block before projecting it onto the mount controller contract. Issues
+// come directly from config resolution. When issues is empty, hasMount reports
+// whether the storage watch authorizes mount operations.
+func ResolveConfiguredSpec(cfg *config.Config, name string) (spec Spec, issues []string, hasMount bool) {
+	resolved, issues := cfg.ResolveStorage(name)
+	if len(issues) > 0 {
+		return Spec{}, issues, false
+	}
+	if _, ok := resolved.Tree[config.StorageKeyMount].(map[string]any); !ok {
+		return Spec{}, nil, false
+	}
+	return SpecFromStorageTree(name, resolved.Tree), nil, true
+}
+
 // SpecFromStorageTree reads a resolved storage watch tree with a mount block.
 func SpecFromStorageTree(name string, tree map[string]any) Spec {
 	mount, _ := tree[config.StorageKeyMount].(map[string]any)

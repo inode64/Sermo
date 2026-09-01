@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"sermo/internal/checks"
+	"sermo/internal/config"
 	"sermo/internal/execx"
 	"sermo/internal/process"
 )
@@ -72,6 +73,51 @@ func testController(t *testing.T, mounted *bool, runner *fakeRunner) Controller 
 		},
 		InFstab: func(path string) (bool, error) { return path == "/mnt/backup", nil },
 		Sleep:   func(time.Duration) {},
+	}
+}
+
+func TestResolveConfiguredSpecRequiresMountBlock(t *testing.T) {
+	cfg := &config.Config{Global: config.Global{Raw: map[string]any{
+		"watches": map[string]any{
+			"mount-backup": map[string]any{
+				"display_name": "Backup",
+				"check":        map[string]any{"type": "storage", "path": "/mnt/backup"},
+				"mount": map[string]any{
+					"refcount": false,
+					"umount": map[string]any{
+						"term_timeout": "3s",
+						"kill_timeout": "1s",
+					},
+					"stop_policy": map[string]any{
+						"kill_only_if": map[string]any{"users": []any{"backup"}, "exe_any": []any{"/usr/bin/rsync"}},
+					},
+				},
+			},
+			"observed-only": map[string]any{
+				"check": map[string]any{"type": "storage", "path": "/mnt/observed"},
+			},
+		},
+	}}}
+
+	spec, issues, hasMount := ResolveConfiguredSpec(cfg, "mount-backup")
+	if len(issues) > 0 || !hasMount {
+		t.Fatalf("ResolveConfiguredSpec valid issues=%v hasMount=%t", issues, hasMount)
+	}
+	if spec.Name != "mount-backup" || spec.DisplayName != "Backup" || spec.Path != "/mnt/backup" || spec.Refcount {
+		t.Fatalf("resolved spec = %+v", spec)
+	}
+	if !spec.KillOnlyIf.Configured() {
+		t.Fatalf("resolved kill policy = %+v, want configured", spec.KillOnlyIf)
+	}
+	if spec.Umount.TermTimeout != 3*time.Second || spec.Umount.KillTimeout != time.Second {
+		t.Fatalf("resolved unmount timeouts = %+v", spec.Umount)
+	}
+
+	if spec, issues, hasMount := ResolveConfiguredSpec(cfg, "observed-only"); len(issues) > 0 || hasMount || spec.Name != "" || spec.Path != "" {
+		t.Fatalf("storage without mount = %+v issues=%v hasMount=%t", spec, issues, hasMount)
+	}
+	if spec, issues, hasMount := ResolveConfiguredSpec(cfg, "unknown"); len(issues) == 0 || hasMount || spec.Name != "" || spec.Path != "" {
+		t.Fatalf("unknown storage = %+v issues=%v hasMount=%t", spec, issues, hasMount)
 	}
 }
 

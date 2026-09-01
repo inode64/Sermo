@@ -113,6 +113,30 @@ func TestMountControllerUsesMountDefaultTimeoutUnlessFlagSet(t *testing.T) {
 	}
 }
 
+func TestConfiguredMountSpecPreservesFailureExitCodes(t *testing.T) {
+	cfg := &config.Config{Global: config.Global{Raw: map[string]any{
+		"watches": map[string]any{
+			"observed-only": map[string]any{
+				"check": map[string]any{"type": "storage", "path": "/mnt/observed"},
+			},
+		},
+	}}}
+	var stdout, stderr bytes.Buffer
+	app := App{Stdout: &stdout, Stderr: &stderr}
+
+	if _, code := app.configuredMountSpec(options{}, cfg, "observed-only"); code != exitRuntimeError {
+		t.Fatalf("storage without mount exit = %d, want %d", code, exitRuntimeError)
+	}
+	if got := stderr.String(); !strings.Contains(got, `storage watch "observed-only" has no mount block`) {
+		t.Fatalf("storage without mount stderr = %q", got)
+	}
+
+	stderr.Reset()
+	if _, code := app.configuredMountSpec(options{}, cfg, "unknown"); code != exitConfigInvalid {
+		t.Fatalf("unknown storage exit = %d, want %d", code, exitConfigInvalid)
+	}
+}
+
 func TestMountStatusByPathUsesConfiguredMount(t *testing.T) {
 	global := writeMountConfig(t)
 	mounted := true
