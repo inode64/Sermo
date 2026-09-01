@@ -551,7 +551,7 @@ func (a App) runStatus(ctx context.Context, opts options) int {
 	}
 
 	fmt.Fprintf(a.Stdout, "%s state=%s backend=%s service=%s%s\n",
-		status.Service, displayState, status.Backend, status.Unit, formatStateMetadata(mon))
+		status.Service, displayState, status.Backend, status.Unit, metaSuffix(mon.Source, mon.ChangedAt))
 	return exitSuccess
 }
 

@@ -82,10 +82,6 @@ func (a App) serviceMonitorState(ctx context.Context, opts options) monitorView 
 	return view
 }
 
-func formatStateMetadata(mon monitorView) string {
-	return metaSuffix(mon.Source, mon.ChangedAt)
-}
-
 // metaSuffix renders the optional " source=… changed=…" trailer shared by the
 // status line and the monitor pause/resume messages. Empty fields are omitted;
 // an all-empty result is the empty string (no leading space).
