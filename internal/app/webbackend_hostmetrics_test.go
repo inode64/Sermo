@@ -1,6 +1,7 @@
 package app
 
 import (
+	"reflect"
 	"runtime"
 	"testing"
 
@@ -62,6 +63,62 @@ func TestWatchCountMeter(t *testing.T) {
 		checks.DataKeyUsedPct: 0.0,
 	}, checks.DataKeyCount); meter != nil {
 		t.Fatal("missing max must produce no meter")
+	}
+}
+
+func TestWatchMeterSourcesShareProjection(t *testing.T) {
+	numCPU := runtime.NumCPU()
+	tests := []struct {
+		name      string
+		checkType string
+		system    metrics.Snapshot
+		data      map[string]any
+	}{
+		{
+			name:      "memory",
+			checkType: checks.CheckTypeMemory,
+			system: metrics.Snapshot{metrics.MetricTotalMemory: {
+				Absolute: 3, Total: 8, Percent: 37.5, HasTotal: true,
+			}},
+			data: map[string]any{
+				checks.DataKeyTotalBytes:     uint64(8),
+				checks.DataKeyAvailableBytes: uint64(5),
+				checks.DataKeyUsedPct:        37.5,
+			},
+		},
+		{
+			name:      "load",
+			checkType: checks.CheckTypeLoad,
+			system: metrics.Snapshot{metrics.MetricLoad1: {
+				Absolute: float64(numCPU), HasAbsolute: true,
+			}},
+			data: map[string]any{
+				metrics.MetricLoad1:  float64(numCPU),
+				checks.DataKeyNumCPU: numCPU,
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fromCollector := watchMeter(tt.checkType, tt.system)
+			fromSnapshot := watchMeterFromSnapshot(tt.checkType, tt.data)
+			if !reflect.DeepEqual(fromCollector, fromSnapshot) {
+				t.Fatalf("meter projections differ: collector=%+v snapshot=%+v", fromCollector, fromSnapshot)
+			}
+		})
+	}
+}
+
+func TestWatchMeterProjectionRejectsMissingCapacity(t *testing.T) {
+	if meter := loadWatchMeter(1, 0); meter != nil {
+		t.Fatalf("load meter with no CPUs = %+v, want nil", meter)
+	}
+	if meter := watchMeterFromSnapshot(checks.CheckTypeMemory, map[string]any{
+		checks.DataKeyTotalBytes:     uint64(8),
+		checks.DataKeyAvailableBytes: uint64(5),
+	}); meter != nil {
+		t.Fatalf("memory meter without used percentage = %+v, want nil", meter)
 	}
 }
 

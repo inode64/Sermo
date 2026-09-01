@@ -180,20 +180,14 @@ func watchMeterFromSnapshot(checkType string, data map[string]any) *web.WatchMet
 			return nil
 		}
 		available = min(available, total)
-		return &web.WatchMeter{
-			Kind:       metrics.MetricMemory,
-			UsedPct:    usedPct,
-			TotalBytes: total,
-			UsedBytes:  total - available,
-			FreeBytes:  available,
-		}
+		return memoryWatchMeter(total, available, usedPct)
 	case checks.CheckTypeLoad:
 		load, loadOK := cfgval.Float(data[metrics.MetricLoad1])
 		numCPU, cpuOK := cfgval.Int(data[checks.DataKeyNumCPU])
-		if !loadOK || !cpuOK || numCPU <= 0 {
+		if !loadOK || !cpuOK {
 			return nil
 		}
-		return &web.WatchMeter{Kind: checks.CheckTypeLoad, UsedPct: load / float64(numCPU) * metrics.PercentScale, Load: load, NumCPU: numCPU}
+		return loadWatchMeter(load, numCPU)
 	case checks.CheckTypeFDS:
 		return watchCountMeter(checks.CheckTypeFDS, data, checks.DataKeyAllocated)
 	case checks.CheckTypePIDs:
