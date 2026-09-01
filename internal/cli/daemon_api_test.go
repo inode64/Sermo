@@ -1,8 +1,10 @@
 package cli
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -10,6 +12,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"sermo/internal/config"
@@ -17,9 +20,19 @@ import (
 
 func TestFetchDaemonServiceStateHTTP(t *testing.T) {
 	t.Setenv(config.EnvWebPassword, "secret")
+	var requestCount atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestCount.Add(1)
+		if r.Method != http.MethodGet {
+			http.Error(w, "unexpected method", http.StatusMethodNotAllowed)
+			return
+		}
 		if r.URL.Path != "/api/services/mysql" {
 			http.NotFound(w, r)
+			return
+		}
+		if csrf := r.Header.Get(daemonWebCSRFHeader); csrf != "" {
+			http.Error(w, "unexpected csrf", http.StatusBadRequest)
 			return
 		}
 		if auth := r.Header.Get("Authorization"); auth != "Basic YWRtaW46c2VjcmV0" {
@@ -53,7 +66,11 @@ service: mysql.service
 		t.Fatal(err)
 	}
 
-	app := App{LoadConfig: func(string, ...config.Option) (*config.Config, error) { return cfg, nil }}
+	loadCalls := 0
+	app := App{LoadConfig: func(string, ...config.Option) (*config.Config, error) {
+		loadCalls++
+		return cfg, nil
+	}}
 	opts := options{config: global}
 
 	st, ok := app.fetchDaemonServiceState(context.Background(), opts, "mysql")
@@ -62,6 +79,47 @@ service: mysql.service
 	}
 	if st != "starting" {
 		t.Fatalf("state = %q, want starting", st)
+	}
+	if loadCalls != 1 {
+		t.Fatalf("LoadConfig calls = %d, want 1", loadCalls)
+	}
+	if got := requestCount.Load(); got != 1 {
+		t.Fatalf("daemon requests = %d, want 1 GET without a generation lookup", got)
+	}
+}
+
+func TestFetchDaemonServiceStateConfigFailureIsSilent(t *testing.T) {
+	var stderr bytes.Buffer
+	app := App{LoadConfig: config.Load, Stderr: &stderr}
+	opts := options{config: filepath.Join(t.TempDir(), "missing.yml")}
+
+	if state, ok := app.fetchDaemonServiceState(context.Background(), opts, "mysql"); ok || state != "" {
+		t.Fatalf("fetchDaemonServiceState() = (%q, %v), want (\"\", false)", state, ok)
+	}
+	if stderr.Len() != 0 {
+		t.Errorf("stderr = %q, want no best-effort diagnostic", stderr.String())
+	}
+}
+
+func TestDaemonAPIGetConfigFailureIsSilent(t *testing.T) {
+	wantErr := errors.New("unreadable config")
+	var stderr bytes.Buffer
+	app := App{
+		LoadConfig: func(string, ...config.Option) (*config.Config, error) {
+			return nil, wantErr
+		},
+		Stderr: &stderr,
+	}
+
+	body, status, err := app.daemonAPIGet(context.Background(), options{}, daemonAPIPathWatches)
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("daemonAPIGet() error = %v, want %v", err, wantErr)
+	}
+	if body != nil || status != 0 {
+		t.Errorf("daemonAPIGet() = (%v, %d), want (nil, 0)", body, status)
+	}
+	if stderr.Len() != 0 {
+		t.Errorf("stderr = %q, want no best-effort diagnostic", stderr.String())
 	}
 }
 
@@ -182,9 +240,13 @@ paths:
 // must read the generation before it writes.
 func TestProbeDaemonWatchSendsTheBackendGeneration(t *testing.T) {
 	const generation = "7"
+	t.Setenv(config.EnvWebPassword, "secret")
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set(daemonWebGenerationHeader, generation)
 		if r.Method == http.MethodGet && r.URL.Path == "/api/watches" {
+			if auth := r.Header.Get("Authorization"); auth != "Basic YWRtaW46c2VjcmV0" {
+				t.Errorf("generation Authorization = %q, want configured Basic auth", auth)
+			}
 			writeDaemonAPITestJSON(w, []daemonWatchDetail{})
 			return
 		}
