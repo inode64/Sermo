@@ -258,13 +258,13 @@ type buildFailure struct {
 // construction and static type capabilities together. Connection protocols
 // remain in conn's own registry because conn owns their catalog and aliases.
 var builtinCheckSpecs = []checkSpec{
-	{info: healthTypeInfo(CheckTypeTCP), build: func(in checkBuildInput) (Check, string) { return buildTCPCheck(in.base, in.entry) }},
+	{info: latencyTypeInfo(healthTypeInfo(CheckTypeTCP)), build: func(in checkBuildInput) (Check, string) { return buildTCPCheck(in.base, in.entry) }},
 	{info: conditionTypeInfo(CheckTypeTCPConnections), predicateFields: TCPConnectionsPredFields, build: func(in checkBuildInput) (Check, string) { return buildTCPConnectionsCheck(in.base, in.entry) }},
-	{info: healthTypeInfo(CheckTypePorts), build: func(in checkBuildInput) (Check, string) { return buildPortsCheck(in.base, in.entry) }},
-	{info: healthTypeInfo(CheckTypeHTTP), build: func(in checkBuildInput) (Check, string) { return buildHTTPCheck(in.base, in.entry, in.client) }},
+	{info: latencyTypeInfo(healthTypeInfo(CheckTypePorts)), build: func(in checkBuildInput) (Check, string) { return buildPortsCheck(in.base, in.entry) }},
+	{info: latencyTypeInfo(healthTypeInfo(CheckTypeHTTP)), build: func(in checkBuildInput) (Check, string) { return buildHTTPCheck(in.base, in.entry, in.client) }},
 	{info: healthTypeInfo(CheckTypeCommand), build: func(in checkBuildInput) (Check, string) { return buildCommandCheck(in.base, in.entry, in.runner) }},
 	{info: healthTypeInfo(CheckTypeClock), build: func(in checkBuildInput) (Check, string) { return buildClockCheck(in.base, in.entry) }},
-	{info: serviceHealthTypeInfo(CheckTypeService), build: func(in checkBuildInput) (Check, string) { return buildServiceCheck(in.base, in.entry, in.deps) }},
+	{info: latencyTypeInfo(serviceHealthTypeInfo(CheckTypeService)), build: func(in checkBuildInput) (Check, string) { return buildServiceCheck(in.base, in.entry, in.deps) }},
 	{info: healthTypeInfo(CheckTypeFileExists), build: func(in checkBuildInput) (Check, string) { return buildFileExistsCheck(in.base, in.entry) }},
 	{info: healthTypeInfo(CheckTypeFile), build: func(in checkBuildInput) (Check, string) { return buildFileCheck(in.base, in.entry) }},
 	{info: healthTypeInfo(CheckTypeLockfile), build: func(in checkBuildInput) (Check, string) { return buildLockfileCheck(in.base, in.entry) }},

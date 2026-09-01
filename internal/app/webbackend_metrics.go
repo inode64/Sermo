@@ -147,7 +147,7 @@ func (b *WebBackend) Metrics(_ context.Context, name, check, metric string, sinc
 	now := b.webNow()
 
 	if metric == "" {
-		if !measuredCheckTypes[checkType] {
+		if !checks.RecordsLatency(checkType) {
 			return web.MetricSeries{}, false
 		}
 		out := web.MetricSeries{Check: check, Since: since.String(), Unit: metrics.MetricUnitMilliseconds}
