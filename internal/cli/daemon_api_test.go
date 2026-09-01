@@ -123,8 +123,23 @@ func TestDaemonAPIGetConfigFailureIsSilent(t *testing.T) {
 	}
 }
 
-func TestFetchDaemonWatchStateHTTP(t *testing.T) {
-	srv := daemonAPIStub("/api/watches", []map[string]string{{"name": "storage-root", "state": "starting"}})
+func TestWatchStatusFetchesOneDaemonSnapshot(t *testing.T) {
+	var requestCount atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestCount.Add(1)
+		if r.Method != http.MethodGet || r.URL.Path != daemonAPIPathWatches {
+			http.NotFound(w, r)
+			return
+		}
+		writeDaemonAPITestJSON(w, []daemonWatchDetail{{
+			Name:          "storage-root",
+			State:         "warning",
+			LastCheckedAt: "2026-09-01T12:34:56Z",
+			Readings: []daemonWatchReading{{
+				Field: "free_pct", Label: "Free", Value: "4.2%",
+			}},
+		}})
+	}))
 	defer srv.Close()
 
 	_, global, cfg := daemonAPITestConfig(t, srv.URL, `
@@ -134,12 +149,31 @@ web:
 paths:
   watches: [WATCHES]
 `)
-	app := App{LoadConfig: func(string, ...config.Option) (*config.Config, error) { return cfg, nil }}
-	opts := options{config: global}
+	var stdout bytes.Buffer
+	loadCalls := 0
+	app := App{
+		LoadConfig: func(string, ...config.Option) (*config.Config, error) {
+			loadCalls++
+			return cfg, nil
+		},
+		Stdout: &stdout,
+	}
 
-	st, ok := app.fetchDaemonWatchState(context.Background(), opts, "storage-root")
-	if !ok || st != "starting" {
-		t.Fatalf("fetchDaemonWatchState() = (%q, %v), want (starting, true)", st, ok)
+	code := app.Run(context.Background(), []string{
+		"--config", global, "--json", "watch", "status", "storage-root",
+	})
+	if code != exitSuccess {
+		t.Fatalf("Run() exit = %d, want %d", code, exitSuccess)
+	}
+	if loadCalls != 1 {
+		t.Errorf("LoadConfig calls = %d, want 1", loadCalls)
+	}
+	if got := requestCount.Load(); got != 1 {
+		t.Errorf("daemon requests = %d, want one snapshot GET", got)
+	}
+	want := `{"last_checked_at":"2026-09-01T12:34:56Z","readings":[{"field":"free_pct","label":"Free","value":"4.2%","error":"","warning":""}],"state":"warning","watch":"storage-root"}`
+	if got := strings.TrimSpace(stdout.String()); got != want {
+		t.Fatalf("stdout = %q, want %q", got, want)
 	}
 }
 

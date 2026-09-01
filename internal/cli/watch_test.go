@@ -15,22 +15,25 @@ import (
 func TestWatchStatus(t *testing.T) {
 	for _, tc := range []struct {
 		name     string
-		state    string
-		stateOK  bool
 		detail   daemonWatchDetail
 		detailOK bool
 		args     []string
 		want     string
 	}{
 		{
-			name: "daemon state", state: "starting", stateOK: true,
+			name: "daemon state", detail: daemonWatchDetail{State: "starting"}, detailOK: true,
 			args: []string{"watch", "status", "storage-root"},
 			want: "storage-root state=starting",
 		},
 		{
-			name: "json", state: "failed", stateOK: true,
+			name: "json", detail: daemonWatchDetail{State: "failed"}, detailOK: true,
 			args: []string{"--json", "watch", "status", "load"},
 			want: `{"state":"failed","watch":"load"}`,
+		},
+		{
+			name: "daemon unavailable",
+			args: []string{"watch", "status", "load"},
+			want: "load state=ok",
 		},
 		{
 			name:     "raid readings",
@@ -54,7 +57,6 @@ func TestWatchStatus(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			var stdout bytes.Buffer
 			app := App{Env: func(string) string { return "" }, Stdout: &stdout, Stderr: &bytes.Buffer{},
-				FetchDaemonWatchState:  func(context.Context, options, string) (string, bool) { return tc.state, tc.stateOK },
 				FetchDaemonWatchDetail: func(context.Context, options, string) (daemonWatchDetail, bool) { return tc.detail, tc.detailOK }}
 
 			code := app.Run(context.Background(), tc.args)

@@ -195,11 +195,8 @@ type App struct {
 	// FetchDaemonServiceState returns the daemon-computed service state when
 	// sermod is running and the web API is reachable. ok is false when unavailable.
 	FetchDaemonServiceState func(ctx context.Context, opts options, service string) (string, bool)
-	// FetchDaemonWatchState returns the daemon-computed watch state when sermod is
-	// running and the web API is reachable. ok is false when unavailable.
-	FetchDaemonWatchState func(ctx context.Context, opts options, watch string) (string, bool)
-	// FetchDaemonWatchDetail returns current daemon-published readings for one
-	// watch. It is optional so status retains its state-only fallback.
+	// FetchDaemonWatchDetail returns the current daemon-published snapshot for
+	// one watch. ok is false when sermod or its web API is unavailable.
 	FetchDaemonWatchDetail func(ctx context.Context, opts options, watch string) (daemonWatchDetail, bool)
 	// ProbeDaemonWatch asks the active daemon to run and record one safe manual
 	// host-watch sample through the authenticated Web API.
@@ -355,9 +352,6 @@ func (a App) withDefaults() App {
 	}
 	if a.FetchDaemonServiceState == nil {
 		a.FetchDaemonServiceState = a.fetchDaemonServiceState
-	}
-	if a.FetchDaemonWatchState == nil {
-		a.FetchDaemonWatchState = a.fetchDaemonWatchState
 	}
 	if a.FetchDaemonWatchDetail == nil {
 		a.FetchDaemonWatchDetail = a.fetchDaemonWatchDetail
@@ -1827,26 +1821,6 @@ func (a App) fetchDaemonServiceState(ctx context.Context, opts options, service 
 		return "", false
 	}
 	return detail.State, true
-}
-
-func (a App) fetchDaemonWatchState(ctx context.Context, opts options, watch string) (string, bool) {
-	body, status, err := a.daemonAPIGet(ctx, opts, daemonAPIPathWatches)
-	if err != nil || status != http.StatusOK {
-		return "", false
-	}
-	var watches []struct {
-		Name  string `json:"name"`
-		State string `json:"state"`
-	}
-	if err := json.Unmarshal(body, &watches); err != nil {
-		return "", false
-	}
-	for _, w := range watches {
-		if w.Name == watch && w.State != "" {
-			return w.State, true
-		}
-	}
-	return "", false
 }
 
 func (a App) fetchDaemonWatchDetail(ctx context.Context, opts options, watch string) (daemonWatchDetail, bool) {
