@@ -19,6 +19,7 @@ import (
 	"sync"
 	"time"
 
+	"sermo/internal/cfgval"
 	"sermo/internal/conn"
 )
 
@@ -509,7 +510,7 @@ func runThresholdCheck(b base, op string, value float64, sample func() (uint64, 
 	if !ok {
 		return b.unavailableResult(unavailableMsg, start)
 	}
-	met := compareFloat(float64(v), op, value)
+	met := cfgval.CompareFloat(float64(v), op, value)
 	res := b.result(met, message(v), start)
 	res.Data = map[string]any{dataKey: v, DataKeyValue: v}
 	return res

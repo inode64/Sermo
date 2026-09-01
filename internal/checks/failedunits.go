@@ -64,7 +64,7 @@ func (c failedUnitsCheck) Run(ctx context.Context) Result {
 	if count > 0 {
 		message = fmt.Sprintf("%d failed unit(s): %s", count, named)
 	}
-	res := c.result(compareFloat(float64(count), c.op, c.value), message, start)
+	res := c.result(cfgval.CompareFloat(float64(count), c.op, c.value), message, start)
 	res.Data = map[string]any{
 		DataKeyBackend: string(sample.Backend),
 		DataKeyCount:   count,

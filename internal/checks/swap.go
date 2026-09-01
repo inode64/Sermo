@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"sermo/internal/cfgval"
 )
 
 const (
@@ -100,7 +102,7 @@ func (c *swapCheck) Run(_ context.Context) Result {
 		delta := deltaOrZero(total, c.lastIO)
 		c.lastIO = total
 		data[DataKeyValue], data[DataKeyPages] = delta, total
-		met := compareFloat(float64(delta), c.op, c.value)
+		met := cfgval.CompareFloat(float64(delta), c.op, c.value)
 		res := c.result(met, fmt.Sprintf("swap io +%d pages/cycle (total %d)", delta, total), start)
 		res.Data = data
 		return res

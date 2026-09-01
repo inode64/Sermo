@@ -378,7 +378,7 @@ func parseFiniteThreshold(raw any) (float64, error) {
 func levelPredsHold(preds []levelPred, values map[string]float64) bool {
 	for _, p := range preds {
 		v, known := values[p.field]
-		if !known || !compareFloat(v, p.op, p.value) {
+		if !known || !cfgval.CompareFloat(v, p.op, p.value) {
 			return false
 		}
 	}
@@ -391,7 +391,7 @@ func levelPredsHold(preds []levelPred, values map[string]float64) bool {
 // NVMe media_errors field and must still alert on pending sectors.
 func anyLevelPredHolds(preds []levelPred, values map[string]float64) bool {
 	for _, p := range preds {
-		if v, known := values[p.field]; known && compareFloat(v, p.op, p.value) {
+		if v, known := values[p.field]; known && cfgval.CompareFloat(v, p.op, p.value) {
 			return true
 		}
 	}
@@ -445,9 +445,4 @@ func parseLevelPredValue(field string, raw any) (float64, error) {
 		return 0, fmt.Errorf("%s value %q must be a finite number", field, value)
 	}
 	return val, nil
-}
-
-// compareFloat evaluates one comparison via the shared cfgval vocabulary.
-func compareFloat(a float64, op string, b float64) bool {
-	return cfgval.CompareFloat(a, op, b)
 }
