@@ -849,22 +849,6 @@ func ensureConfigPathList(root map[string]any, base, pathKey, relDir, targetDir 
 	return true, nil
 }
 
-func appendUniqueStrings(list []string, values ...string) []string {
-	seen := map[string]struct{}{}
-	out := make([]string, 0, len(list)+len(values))
-	for _, item := range append(list, values...) {
-		if item == "" {
-			continue
-		}
-		if _, ok := seen[item]; ok {
-			continue
-		}
-		seen[item] = struct{}{}
-		out = append(out, item)
-	}
-	return out
-}
-
 func sameConfigPath(base, item, target string) bool {
 	if item == "" {
 		return false

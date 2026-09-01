@@ -64,9 +64,11 @@ func assertParseHosts(t *testing.T, table string, ipv6 bool, want ...string) {
 func TestParseProcSocketTableHostsIPv4(t *testing.T) {
 	const table = `  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode
    0: 160200C0:2390 00000000:0000 0A 00000000:00000000 00:00000000 00000000     0        0 12345 1 0000000000000000 100 0 0 10 0
-   1: 0100007F:2390 00000000:0000 01 00000000:00000000 00:00000000 00000000     0        0 12346 1 0000000000000000 100 0 0 10 0
+	1: 160200C0:2390 00000000:0000 0A 00000000:00000000 00:00000000 00000000     0        0 12346 1 0000000000000000 100 0 0 10 0
+	2: 176433C6:2390 00000000:0000 0A 00000000:00000000 00:00000000 00000000     0        0 12347 1 0000000000000000 100 0 0 10 0
+	3: 0100007F:2390 00000000:0000 01 00000000:00000000 00:00000000 00000000     0        0 12348 1 0000000000000000 100 0 0 10 0
 `
-	assertParseHosts(t, table, false, "192.0.2.22")
+	assertParseHosts(t, table, false, "192.0.2.22", "198.51.100.23")
 }
 
 func TestParseProcSocketTableHostsIPv6(t *testing.T) {
@@ -84,6 +86,7 @@ func TestSpecificListenerHostRequiresOneNonLoopbackAddress(t *testing.T) {
 		ok    bool
 	}{
 		{name: "specific", hosts: []string{"192.0.2.22"}, want: "192.0.2.22", ok: true},
+		{name: "repeated specific", hosts: []string{"192.0.2.22", "192.0.2.22"}, want: "192.0.2.22", ok: true},
 		{name: "loopback", hosts: []string{"127.0.0.1", "::1"}},
 		{name: "wildcard", hosts: []string{"0.0.0.0", "::"}},
 		{name: "ambiguous", hosts: []string{"192.0.2.22", "198.51.100.22"}},
