@@ -2,7 +2,6 @@ package cli
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os/user"
 	"strings"
@@ -62,20 +61,11 @@ func loginUser(env func(string) string) string {
 }
 
 func notifyBlockedActionTTY(ctx context.Context, result operation.Result, userName string) error {
-	registry, warnings := notify.Build(map[string]any{
-		blockedActionTTYNotifierName: map[string]any{
-			notify.KeyType:  notify.TypeTTY,
-			notify.KeyUsers: []any{userName},
-		},
-	}, notify.WithoutTemplates())
-	if len(warnings) > 0 {
-		return errors.New(strings.Join(warnings, "; "))
+	notifier, err := notify.NewTargetedTTY(blockedActionTTYNotifierName, []string{userName})
+	if err != nil {
+		return fmt.Errorf("build blocked-action notifier: %w", err)
 	}
-	notifier := registry[blockedActionTTYNotifierName]
-	if notifier == nil {
-		return fmt.Errorf("%s notifier unavailable", blockedActionTTYNotifierName)
-	}
-	if err := notifier.Send(ctx, notify.Message{
+	if err = notifier.Send(ctx, notify.Message{
 		Subject: fmt.Sprintf("Sermo denied %s restart", result.Service),
 		Body:    fmt.Sprintf("A restart request for %s was denied: %s.", result.Service, result.Message),
 		Fields: map[string]string{
