@@ -116,9 +116,13 @@ func TestTypeInfoCapabilities(t *testing.T) {
 		wantKnown     bool
 		wantHealth    bool
 		wantScoped    bool
+		wantLatency   bool
 		wantWatchable bool
 	}{
-		{typ: "tcp", wantKnown: true, wantHealth: true, wantWatchable: true},
+		{typ: "tcp", wantKnown: true, wantHealth: true, wantLatency: true, wantWatchable: true},
+		{typ: "ports", wantKnown: true, wantHealth: true, wantLatency: true, wantWatchable: true},
+		{typ: "http", wantKnown: true, wantHealth: true, wantLatency: true, wantWatchable: true},
+		{typ: "service", wantKnown: true, wantHealth: true, wantScoped: true, wantLatency: true},
 		{typ: "tcp_connections", wantKnown: true, wantWatchable: true},
 		{typ: "ssh_idle", wantKnown: true, wantWatchable: true},
 		{typ: "terminal_sessions", wantKnown: true, wantWatchable: true},
@@ -141,6 +145,9 @@ func TestTypeInfoCapabilities(t *testing.T) {
 			}
 			if got := IsServiceScopedType(tt.typ); got != tt.wantScoped {
 				t.Fatalf("IsServiceScopedType(%q) = %v, want %v", tt.typ, got, tt.wantScoped)
+			}
+			if got := RecordsLatency(tt.typ); got != tt.wantLatency {
+				t.Fatalf("RecordsLatency(%q) = %v, want %v", tt.typ, got, tt.wantLatency)
 			}
 			if tt.wantWatchable && IsServiceScopedType(tt.typ) {
 				t.Fatalf("%q should be watchable but is marked service-scoped", tt.typ)

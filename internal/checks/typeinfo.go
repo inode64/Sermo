@@ -11,6 +11,7 @@ type TypeInfo struct {
 	Name           string
 	DefaultReports string
 	ServiceScoped  bool
+	RecordsLatency bool
 }
 
 func healthTypeInfo(name string) TypeInfo {
@@ -23,6 +24,11 @@ func conditionTypeInfo(name string) TypeInfo {
 
 func serviceHealthTypeInfo(name string) TypeInfo {
 	return TypeInfo{Name: name, DefaultReports: ReportsHealth, ServiceScoped: true}
+}
+
+func latencyTypeInfo(info TypeInfo) TypeInfo {
+	info.RecordsLatency = true
+	return info
 }
 
 func serviceConditionTypeInfo(name string) TypeInfo {
@@ -169,4 +175,11 @@ func IsSingleShotType(typ string) bool {
 func IsServiceScopedType(typ string) bool {
 	info, ok := TypeInfoFor(typ)
 	return ok && info.ServiceScoped
+}
+
+// RecordsLatency reports whether typ publishes its elapsed check duration as a
+// measurement series.
+func RecordsLatency(typ string) bool {
+	info, ok := TypeInfoFor(typ)
+	return ok && info.RecordsLatency
 }

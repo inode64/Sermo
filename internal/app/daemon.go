@@ -126,15 +126,6 @@ type WatchStateStore interface {
 	SetWatchRuntimeState(watch, slot string, record state.WatchRuntimeRecord) error
 }
 
-// measuredCheckTypes are the check types whose latency is recorded as a time
-// series (and graphed in the web), mirroring icmp's latency metric.
-var measuredCheckTypes = map[string]bool{
-	checks.CheckTypeTCP:     true,
-	checks.CheckTypePorts:   true,
-	checks.CheckTypeHTTP:    true,
-	checks.CheckTypeService: true,
-}
-
 // Deps are the host capabilities the daemon wires into each worker.
 type Deps struct {
 	Backend servicemgr.Backend
@@ -1113,14 +1104,14 @@ func parseCheckGates(tree map[string]any) map[string]CheckGate {
 	return gates
 }
 
-// measuredCheckNames returns the names of a service's checks whose type is graphed
-// (measuredCheckTypes).
+// measuredCheckNames returns the names of a service's checks whose type records
+// elapsed latency according to the central check registry.
 func measuredCheckNames(tree map[string]any) map[string]bool {
 	section, _ := tree[config.SectionChecks].(map[string]any)
 	out := map[string]bool{}
 	for cn, raw := range section {
 		if m, ok := raw.(map[string]any); ok {
-			if t, _ := m[checks.CheckKeyType].(string); measuredCheckTypes[t] {
+			if t, _ := m[checks.CheckKeyType].(string); checks.RecordsLatency(t) {
 				out[cn] = true
 			}
 		}
