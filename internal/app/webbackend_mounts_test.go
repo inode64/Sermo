@@ -127,6 +127,24 @@ func TestWebBackendMounts(t *testing.T) {
 	}
 }
 
+func TestWebBackendMountSpecRejectsStorageWithoutMount(t *testing.T) {
+	cfg := &config.Config{Global: config.Global{Raw: map[string]any{
+		"watches": map[string]any{
+			"observed-only": map[string]any{
+				"check": map[string]any{"type": "storage", "path": "/mnt/observed"},
+			},
+		},
+	}}}
+	b := &WebBackend{cfg: cfg}
+
+	if spec, ok, msg := b.mountSpec("observed-only"); ok || spec.Name != "" || spec.Path != "" || msg != "storage watch observed-only has no mount block" {
+		t.Fatalf("storage without mount spec=%+v ok=%t msg=%q", spec, ok, msg)
+	}
+	if spec, ok, msg := b.mountSpec("unknown"); ok || spec.Name != "" || spec.Path != "" || !strings.Contains(msg, "unknown storage watch") {
+		t.Fatalf("unknown storage spec=%+v ok=%t msg=%q", spec, ok, msg)
+	}
+}
+
 func TestWebBackendMountsUsesGenerationSpecsAndOneMountSample(t *testing.T) {
 	runtime := t.TempDir()
 	cfg := &config.Config{

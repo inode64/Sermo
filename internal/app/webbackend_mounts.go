@@ -149,14 +149,14 @@ func (b *WebBackend) mountSpec(name string) (mountctl.Spec, bool, string) {
 	if b.cfg == nil {
 		return mountctl.Spec{}, false, "no configuration loaded"
 	}
-	resolved, errs := b.cfg.ResolveStorage(name)
+	spec, errs, hasMount := mountctl.ResolveConfiguredSpec(b.cfg, name)
 	if len(errs) > 0 {
 		return mountctl.Spec{}, false, errs[0]
 	}
-	if _, ok := resolved.Tree[config.StorageKeyMount].(map[string]any); !ok {
+	if !hasMount {
 		return mountctl.Spec{}, false, "storage watch " + name + " has no mount block"
 	}
-	return mountctl.SpecFromStorageTree(name, resolved.Tree), true, ""
+	return spec, true, ""
 }
 
 func configuredMountSpecs(cfg *config.Config) []mountctl.Spec {

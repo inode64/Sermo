@@ -153,16 +153,16 @@ func (a App) mountSpec(opts options, cfg *config.Config, target string) (mountct
 }
 
 func (a App) configuredMountSpec(opts options, cfg *config.Config, name string) (mountctl.Spec, int) {
-	resolved, errs := cfg.ResolveStorage(name)
+	spec, errs, hasMount := mountctl.ResolveConfiguredSpec(cfg, name)
 	if len(errs) > 0 {
 		a.printIssues(opts, scopedIssues("watch "+name, errs))
 		return mountctl.Spec{}, exitConfigInvalid
 	}
-	if _, ok := resolved.Tree[config.StorageKeyMount].(map[string]any); !ok {
+	if !hasMount {
 		a.reportError(opts, fmt.Sprintf("storage watch %q has no mount block", name))
 		return mountctl.Spec{}, exitRuntimeError
 	}
-	return mountctl.SpecFromStorageTree(name, resolved.Tree), exitSuccess
+	return spec, exitSuccess
 }
 
 func (a App) mountController(cfg *config.Config, opts options) mountctl.Controller {
