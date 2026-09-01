@@ -547,14 +547,6 @@ func ValidTLSValue(value string) bool {
 	}
 }
 
-// NormalizeTLS maps a friendly tls value to the canonical mode ("" plaintext,
-// "true" verified TLS, "skip-verify", or a custom registered config name); the
-// shared normalization lives in netutil. Used across the connection probes
-// (dial, http, ldap, mongodb, mysql, unifi).
-func NormalizeTLS(s string) string {
-	return netutil.NormalizeTLS(s)
-}
-
 // readCRLFLine reads one CRLF/LF-terminated line, trimmed — the line shape
 // every text protocol probe (redis RESP, imap, nut, …) reads.
 func readCRLFLine(br *bufio.Reader) (string, error) {
