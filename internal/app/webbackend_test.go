@@ -749,6 +749,11 @@ func TestWebBackendMonitoringStatusAvoidsServiceViewWork(t *testing.T) {
 	}
 }
 
+func cachedBackendStatus(entry *webEntry, ctx context.Context, now time.Time) string {
+	status, _ := entry.backendStatusSnapshot(ctx, now)
+	return status
+}
+
 func TestWebBackendStatusCacheIgnoresCancelledRequests(t *testing.T) {
 	now := time.Date(2026, 6, 13, 12, 0, 0, 0, time.UTC)
 	calls := 0
@@ -763,24 +768,24 @@ func TestWebBackendStatusCacheIgnoresCancelledRequests(t *testing.T) {
 	cancelled, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	if got := e.backendStatus(cancelled, now); got != string(servicemgr.StatusUnknown) {
+	if got := cachedBackendStatus(e, cancelled, now); got != string(servicemgr.StatusUnknown) {
 		t.Fatalf("cold cancelled status = %q, want unknown", got)
 	}
 	if !e.statusAt.IsZero() {
 		t.Fatalf("cancelled request populated statusAt = %v, want zero", e.statusAt)
 	}
 
-	if got := e.backendStatus(context.Background(), now); got != string(servicemgr.StatusActive) {
+	if got := cachedBackendStatus(e, context.Background(), now); got != string(servicemgr.StatusActive) {
 		t.Fatalf("status = %q, want active", got)
 	}
 
 	// A cancelled probe after TTL expiry must serve the previous entry instead
 	// of caching "error" for every other viewer.
 	later := now.Add(serviceStatusCacheTTL + time.Second)
-	if got := e.backendStatus(cancelled, later); got != string(servicemgr.StatusActive) {
+	if got := cachedBackendStatus(e, cancelled, later); got != string(servicemgr.StatusActive) {
 		t.Fatalf("cancelled status after expiry = %q, want cached active", got)
 	}
-	if got := e.backendStatus(context.Background(), later); got != string(servicemgr.StatusActive) {
+	if got := cachedBackendStatus(e, context.Background(), later); got != string(servicemgr.StatusActive) {
 		t.Fatalf("status after cancelled probe = %q, want active from a fresh probe", got)
 	}
 	if calls != 4 {
@@ -847,7 +852,7 @@ func TestWebBackendStatusProbeHasInitQueryDeadline(t *testing.T) {
 		return "", context.DeadlineExceeded
 	}}
 
-	if got := e.backendStatus(context.Background(), time.Now()); got != backendStatusError {
+	if got := cachedBackendStatus(e, context.Background(), time.Now()); got != backendStatusError {
 		t.Fatalf("status after bounded query failure = %q, want %q", got, backendStatusError)
 	}
 	if !called {
@@ -2238,6 +2243,52 @@ func TestWebBackendReloadSupportedByInitBackend(t *testing.T) {
 	}
 	if svcs[0].Name != "nginx" || !svcs[0].CanReload {
 		t.Fatalf("service reload support = %+v, want nginx CanReload=true from init backend", svcs[0])
+	}
+}
+
+type mutableReloadManager struct {
+	fakeManager
+	supported *bool
+	reloads   *int
+}
+
+func (m mutableReloadManager) Reload(context.Context, string) error {
+	(*m.reloads)++
+	return nil
+}
+
+func (m mutableReloadManager) SupportsReload(context.Context, string) (bool, error) {
+	return *m.supported, nil
+}
+
+func TestWebBackendReloadRechecksLiveCapability(t *testing.T) {
+	supported := false
+	reloads := 0
+	cfg := &config.Config{
+		ServiceNames: []string{"nginx"},
+		Services: map[string]*config.Document{
+			"nginx": {Name: "nginx", Body: map[string]any{
+				"name":    "nginx",
+				"service": "nginx",
+			}},
+		},
+	}
+	b, warns := NewWebBackend(t.Context(), cfg, Deps{
+		Backend: servicemgr.BackendOpenRC,
+		Manager: mutableReloadManager{supported: &supported, reloads: &reloads},
+		Runtime: t.TempDir(),
+	})
+	if len(warns) != 0 {
+		t.Fatalf("NewWebBackend warnings = %v, want none", warns)
+	}
+	if b.Services(t.Context())[0].CanReload {
+		t.Fatal("CanReload = true before backend capability appeared")
+	}
+
+	supported = true
+	result := b.Operate(t.Context(), "nginx", string(rules.ActionReload), web.OperateOpts{})
+	if !result.OK || reloads != 1 {
+		t.Fatalf("reload result = %+v, reloads = %d; want live capability to permit one reload", result, reloads)
 	}
 }
 

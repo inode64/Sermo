@@ -175,24 +175,24 @@ func TestWebBackendBackendStatusCacheTTL(t *testing.T) {
 			return servicemgr.StatusActive, nil
 		},
 	}
-	if got := e.backendStatus(context.Background(), now); got != "active" || calls.Load() != 1 {
+	if got := cachedBackendStatus(e, context.Background(), now); got != "active" || calls.Load() != 1 {
 		t.Fatalf("first status = %q calls=%d", got, calls.Load())
 	}
-	if got := e.backendStatus(context.Background(), now.Add(5*time.Second)); got != "active" || calls.Load() != 1 {
+	if got := cachedBackendStatus(e, context.Background(), now.Add(5*time.Second)); got != "active" || calls.Load() != 1 {
 		t.Fatalf("cached status = %q calls=%d", got, calls.Load())
 	}
 	if status, observedAt := e.backendStatusSnapshot(context.Background(), now.Add(5*time.Second)); status != "active" || !observedAt.Equal(now) {
 		t.Fatalf("cached status snapshot = %q at %v, want active at %v", status, observedAt, now)
 	}
 	refreshedAt := now.Add(serviceStatusCacheTTL)
-	if got := e.backendStatus(context.Background(), refreshedAt); got != "active" || calls.Load() != 2 {
+	if got := cachedBackendStatus(e, context.Background(), refreshedAt); got != "active" || calls.Load() != 2 {
 		t.Fatalf("expired status = %q calls=%d", got, calls.Load())
 	}
 	if _, observedAt := e.backendStatusSnapshot(context.Background(), refreshedAt); !observedAt.Equal(refreshedAt) {
 		t.Fatalf("refreshed status observed at %v, want %v", observedAt, refreshedAt)
 	}
 	e.invalidateStatusCache()
-	if got := e.backendStatus(context.Background(), now.Add(serviceStatusCacheTTL)); got != "active" || calls.Load() != 3 {
+	if got := cachedBackendStatus(e, context.Background(), now.Add(serviceStatusCacheTTL)); got != "active" || calls.Load() != 3 {
 		t.Fatalf("after invalidate = %q calls=%d", got, calls.Load())
 	}
 }

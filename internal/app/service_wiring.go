@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"sermo/internal/cfgval"
 	"sermo/internal/checks"
@@ -14,6 +15,10 @@ import (
 	"sermo/internal/process"
 	"sermo/internal/servicemgr"
 )
+
+// serviceOperationQueryTimeout bounds the read-only backend queries used to
+// decide reload capability and postflight monitoring state on every surface.
+const serviceOperationQueryTimeout = 3 * time.Second
 
 // MetricSampleForOperation builds a per-operation metric reader for preflight,
 // postflight and guard evaluation when the resolved service references metrics.
@@ -48,6 +53,31 @@ type ServiceRuntime struct {
 	Selectors         []process.Selector
 	ProcessWarnings   []string
 	NoResidentProcess bool
+}
+
+// ServiceReloadSupported reports current reload capability through the same
+// bounded query for daemon, web and CLI callers.
+func ServiceReloadSupported(ctx context.Context, tree map[string]any, manager servicemgr.Manager, unit string) (bool, error) {
+	queryCtx, cancel := context.WithTimeout(ctx, serviceOperationQueryTimeout)
+	defer cancel()
+	supported, err := operation.ReloadSupported(queryCtx, tree, manager, unit)
+	if err != nil {
+		return false, fmt.Errorf("query service reload support: %w", err)
+	}
+	return supported, nil
+}
+
+// ServiceActiveAfterPostflightFailure reports whether a failed postflight left
+// the service active and therefore still needing monitoring. The status query
+// is fresh, bounded and shared by web and CLI completion paths.
+func ServiceActiveAfterPostflightFailure(ctx context.Context, action string, result operation.Result, opErr error, status func(context.Context) (servicemgr.Status, error)) bool {
+	if opErr != nil || result.Status != operation.ResultPostflightFailed || !operation.CanRemainActiveAfterPostflightFailure(action) || status == nil {
+		return false
+	}
+	queryCtx, cancel := context.WithTimeout(ctx, serviceOperationQueryTimeout)
+	defer cancel()
+	current, err := status(queryCtx)
+	return err == nil && current == servicemgr.StatusActive
 }
 
 // BuildServiceRuntime builds the process discoverer, check dependencies and safe

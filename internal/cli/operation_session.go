@@ -172,9 +172,7 @@ func (s *operationSession) reloadSupported(ctx context.Context, service string, 
 	if err != nil {
 		return fmt.Errorf("control target failed: %w", err)
 	}
-	reloadCtx, cancel := context.WithTimeout(ctx, reloadCapabilityTimeout)
-	defer cancel()
-	canReload, err := operation.ReloadSupported(reloadCtx, resolved.Tree, prepared.target.Manager, prepared.target.Unit)
+	canReload, err := app.ServiceReloadSupported(ctx, resolved.Tree, prepared.target.Manager, prepared.target.Unit)
 	if err != nil {
 		return fmt.Errorf("reload support unavailable: %w", err)
 	}
@@ -185,15 +183,11 @@ func (s *operationSession) reloadSupported(ctx context.Context, service string, 
 }
 
 func (s *operationSession) activeAfterPostflightFailure(ctx context.Context, _ options, _ *config.Config, resolved config.Resolved, service, action string, result operation.Result, opErr error) bool {
-	if opErr != nil || result.Status != operation.ResultPostflightFailed || !operation.CanRemainActiveAfterPostflightFailure(action) {
-		return false
-	}
-	prepared, err := s.prepare(ctx, service, resolved)
-	if err != nil {
-		return false
-	}
-	statusCtx, cancel := context.WithTimeout(ctx, operationStatusTimeout)
-	defer cancel()
-	status, err := prepared.target.Manager.Status(statusCtx, prepared.target.Unit)
-	return err == nil && status.Status == servicemgr.StatusActive
+	return app.ServiceActiveAfterPostflightFailure(ctx, action, result, opErr, func(statusCtx context.Context) (servicemgr.Status, error) {
+		prepared, err := s.prepare(statusCtx, service, resolved)
+		if err != nil {
+			return servicemgr.StatusUnknown, err
+		}
+		return prepared.runtime.CheckDeps.Status(statusCtx)
+	})
 }
