@@ -63,6 +63,25 @@ func SLAOverride(entry map[string]any) (value, declared bool) {
 	return b && ok, ok
 }
 
+// ConfiguredRecordsAvailability reports whether a configured check keeps an
+// availability series. An explicit `sla:` value overrides the type's default
+// in both directions. metrics contains sibling multi-metric watch entries;
+// result-time callers without configuration should use RecordsAvailability.
+func ConfiguredRecordsAvailability(checkType string, entry, metrics map[string]any) bool {
+	if value, declared := SLAOverride(entry); declared {
+		return value
+	}
+	if RecordsAvailability(checkType, entry) {
+		return true
+	}
+	for metric := range metrics {
+		if RecordsAvailability(checkType, map[string]any{DataKeyMetric: metric}) {
+			return true
+		}
+	}
+	return false
+}
+
 // RecordsAvailability reports whether one result should contribute to an
 // availability series. data is the result's own data map — or, for the callers
 // deciding whether a *configured* check keeps a series at all, its check entry,
