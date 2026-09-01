@@ -39,6 +39,7 @@ func TestParseSystemdActiveUnitsStaysServiceOnly(t *testing.T) {
 func TestParseOpenRCFailedUnits(t *testing.T) {
 	stdout := "Runlevel: default\n" +
 		" sshd                    [  started  ]\n" +
+		" crashed-reporter        [  started  ]\n" +
 		" backup                  [  crashed  ]\n" +
 		" nfs                     [  stopped  ]\n" +
 		"Dynamic Runlevel: manual\n" +
@@ -49,7 +50,7 @@ func TestParseOpenRCFailedUnits(t *testing.T) {
 	if got := ParseOpenRCFailedUnits(stdout); !slices.Equal(got, want) {
 		t.Fatalf("ParseOpenRCFailedUnits() = %v, want %v", got, want)
 	}
-	if got := ParseOpenRCActiveUnits(stdout); !slices.Equal(got, []string{"sshd"}) {
-		t.Fatalf("ParseOpenRCActiveUnits() = %v, want [sshd]", got)
+	if got := ParseOpenRCActiveUnits(stdout); !slices.Equal(got, []string{"sshd", "crashed-reporter"}) {
+		t.Fatalf("ParseOpenRCActiveUnits() = %v, want [sshd crashed-reporter]", got)
 	}
 }

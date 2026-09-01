@@ -181,20 +181,16 @@ func openRCServiceRunlevel(name string) bool {
 }
 
 func openRCStartedService(line string) string {
-	lower := strings.ToLower(line)
-	if !strings.Contains(lower, openRCStateStarted) {
-		return ""
-	}
-	if strings.Contains(lower, openRCStateNotStarted) ||
-		strings.Contains(lower, openRCStateStopped) ||
-		strings.Contains(lower, openRCStateCrashed) {
+	status, ok := openRCLineStatus(line)
+	if !ok || status != StatusActive {
 		return ""
 	}
 	return openRCServiceName(line)
 }
 
 func openRCCrashedService(line string) string {
-	if !strings.Contains(strings.ToLower(line), openRCStateCrashed) {
+	status, ok := openRCLineStatus(line)
+	if !ok || status != StatusFailed {
 		return ""
 	}
 	return openRCServiceName(line)
