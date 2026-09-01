@@ -32,6 +32,9 @@ const (
 	// The dashboard refreshes every 30s by default, so keep status warm across
 	// ordinary refreshes instead of running one init status probe per service.
 	serviceStatusCacheTTL = 2 * time.Minute
+	// reloadSupportCacheTTL keeps capability presentation current without adding
+	// an init query per service to every browser poll.
+	reloadSupportCacheTTL = serviceStatusCacheTTL
 	// serviceInitQueryTimeout bounds every init-system query from the web
 	// backend, including status polling and reload-capability detection.
 	serviceInitQueryTimeout = 2 * time.Second
@@ -96,6 +99,8 @@ type webEntry struct {
 	alsoApply         []string
 	canReload         bool
 	reloadSupported   func(context.Context) (bool, error)
+	reloadMu          sync.Mutex
+	reloadCheckedAt   time.Time
 	disabled          bool // true when the service had `enabled: false` (still listed for visibility)
 
 	statusMu     sync.Mutex
@@ -451,8 +456,7 @@ func attachServiceRuntime(ctx context.Context, entry *webEntry, name string, tre
 	entry.reloadSupported = func(ctx context.Context) (bool, error) {
 		return ServiceReloadSupported(ctx, tree, target.Manager, target.Unit)
 	}
-	canReload, reloadErr := entry.reloadSupported(ctx)
-	entry.canReload = canReload
+	_, reloadErr := entry.reloadSupportSnapshot(ctx, clockOrNow(deps.Now)(), true)
 	if reloadErr != nil {
 		return []string{serviceSubjectPrefix + name + ": reload support unavailable: " + reloadErr.Error()}
 	}

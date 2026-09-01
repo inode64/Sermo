@@ -42,7 +42,7 @@ func (b *WebBackend) viewWithRuntime(ctx context.Context, name string, e *webEnt
 		Enabled:           !e.disabled,
 		DryRun:            e.dryRun,
 		Monitored:         true, // no recorded state defaults to monitored
-		CanReload:         e.canReload,
+		CanReload:         e.cachedReloadSupported(ctx, b.webNow()),
 		NoResidentProcess: e.noResidentProcess,
 		Buttons:           serviceButtonViews(e.buttons),
 	}

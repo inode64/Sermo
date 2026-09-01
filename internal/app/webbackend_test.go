@@ -2290,6 +2290,9 @@ func TestWebBackendReloadRechecksLiveCapability(t *testing.T) {
 	if !result.OK || reloads != 1 {
 		t.Fatalf("reload result = %+v, reloads = %d; want live capability to permit one reload", result, reloads)
 	}
+	if !b.Services(t.Context())[0].CanReload {
+		t.Fatal("CanReload stayed stale after the live capability check succeeded")
+	}
 }
 
 func TestWebBackendApplicationsStartingUnsettled(t *testing.T) {
