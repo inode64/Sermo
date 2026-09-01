@@ -3,6 +3,7 @@ package notify
 import (
 	"context"
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -137,6 +138,50 @@ func TestSupportedTypes(t *testing.T) {
 	want := []string{TypeEmail, TypeGotify, TypeNtfy, TypeSlack, TypeTeams, TypeTelegram, TypeTTY, TypeWall}
 	if !slices.Equal(got, want) {
 		t.Fatalf("SupportedTypes = %v, want %v", got, want)
+	}
+}
+
+func TestValidateEntryUsesTransportRegistry(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name    string
+		entry   map[string]any
+		wantSub string
+	}{
+		{"valid email", map[string]any{KeyType: TypeEmail, KeyDSN: "smtp://mail", KeyFrom: "sermo@example.com", KeyTo: "ops@example.com"}, ""},
+		{"missing type", map[string]any{}, "type is required"},
+		{"unknown type", map[string]any{KeyType: "pigeon"}, `type "pigeon" is not supported`},
+		{"email recipients", map[string]any{KeyType: TypeEmail, KeyDSN: "smtp://mail", KeyFrom: "sermo@example.com"}, "to must list at least one address"},
+		{"gotify token", map[string]any{KeyType: TypeGotify, KeyWebhook: "https://push.example"}, "token is required for a gotify notifier"},
+		{"telegram parse mode", map[string]any{KeyType: TypeTelegram, KeyToken: "token", KeyChatID: "1", KeyParseMode: "rtf"}, "parse_mode must be one of"},
+		{"tty users", map[string]any{KeyType: TypeTTY, KeyUsers: []any{"root", 7}}, "users must be a string or list of strings"},
+		{"wall users", map[string]any{KeyType: TypeWall, KeyUsers: "root"}, "users is not supported for a wall notifier"},
+	}
+	for _, test := range tests {
+		issues := ValidateEntry(test.entry)
+		if test.wantSub == "" {
+			if len(issues) != 0 {
+				t.Errorf("%s: issues = %v", test.name, issues)
+			}
+			continue
+		}
+		var messages []string
+		for _, issue := range issues {
+			messages = append(messages, issue.Field+issue.Suffix)
+		}
+		if !strings.Contains(strings.Join(messages, "\n"), test.wantSub) {
+			t.Errorf("%s: issues = %v, want %q", test.name, issues, test.wantSub)
+		}
+	}
+}
+
+func TestBuildRejectsTransportValidationIssue(t *testing.T) {
+	t.Parallel()
+	notifiers, warnings := Build(map[string]any{
+		"unsafe-wall": map[string]any{KeyType: TypeWall, KeyUsers: "root"},
+	})
+	if len(notifiers) != 0 || len(warnings) != 1 || !strings.Contains(warnings[0], "users is not supported") {
+		t.Fatalf("Build() = %v, %v", notifiers, warnings)
 	}
 }
 
