@@ -1,6 +1,7 @@
 package locks
 
 import (
+	"cmp"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -104,8 +105,8 @@ func reportsForServices(services []string) map[string]Report {
 
 func scannedLock(lf lockFile, path string, match lockServiceMatch, state State, staleReason string) Lock {
 	return Lock{
-		Service:         orDefault(lf.Service, match.service),
-		Name:            orDefault(lf.Name, match.lockName),
+		Service:         cmp.Or(lf.Service, match.service),
+		Name:            cmp.Or(lf.Name, match.lockName),
 		Reason:          lf.Reason,
 		OwnerPID:        lf.OwnerPID,
 		OwnerStartTicks: lf.OwnerStartTicks,
@@ -214,11 +215,4 @@ func isRetryableLockRead(err error) bool {
 	}
 	_, ok := errors.AsType[*json.SyntaxError](err)
 	return ok
-}
-
-func orDefault(value, fallback string) string {
-	if value == "" {
-		return fallback
-	}
-	return value
 }

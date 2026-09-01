@@ -43,6 +43,22 @@ func scannerFor(dir string, proc ProcessProber) Scanner {
 	return Scanner{Dir: dir, Proc: proc, Now: func() time.Time { return fixedNow }}
 }
 
+func TestScanDerivesMissingIdentityFromFilename(t *testing.T) {
+	dir := t.TempDir()
+	writeLock(t, dir, "mysql\\backup.lock", lockFile{})
+
+	report, err := scannerFor(dir, fakeProc{}).Scan("mysql")
+	if err != nil {
+		t.Fatalf("Scan() error = %v", err)
+	}
+	if len(report.Locks) != 1 {
+		t.Fatalf("Scan() locks = %d, want 1", len(report.Locks))
+	}
+	if got := report.Locks[0]; got.Service != "mysql" || got.Name != "backup" {
+		t.Fatalf("Scan() lock identity = %q/%q, want mysql/backup", got.Service, got.Name)
+	}
+}
+
 func TestScanClassifiesStates(t *testing.T) {
 	dir := t.TempDir()
 	future := fixedNow.Add(time.Hour)
