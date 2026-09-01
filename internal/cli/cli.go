@@ -163,6 +163,9 @@ type App struct {
 	NewManager func(servicemgr.Backend) (servicemgr.Manager, error)
 	LoadConfig func(globalPath string, opts ...config.Option) (*config.Config, error)
 	Discover   func(selectors []process.Selector) ([]process.Process, []string)
+	// buildServiceRuntime is the hermetic test seam for the canonical runtime
+	// builder. nil uses app.BuildServiceRuntime in production.
+	buildServiceRuntime func(context.Context, app.ServiceRuntimeConfig) app.ServiceRuntime
 	// Operate runs a start/stop/restart/reload/resume through the operation engine for a
 	// resolved service. Injectable for testing; the error covers backend/wiring
 	// failures (the Result carries operational outcomes).
@@ -997,15 +1000,14 @@ func issuesJSON(issues []config.Issue) []map[string]string {
 	return out
 }
 
-// runPreflight resolves a service, builds its preflight checks and runs them
-// under engine.default_timeout. A required check failure exits 1.
+// runPreflight resolves a service and runs the prepared operation engine's
+// canonical preflight pipeline. A required check failure exits 1.
 func (a App) runPreflight(ctx context.Context, opts options) int {
 	cfg, service, resolved, code := a.resolveServiceCommand(opts, commandPreflight)
 	if code != exitSuccess {
 		return code
 	}
 
-	section, _ := resolved.Tree[config.SectionPreflight].(map[string]any)
 	session, err := a.newOperationSession(ctx, opts, cfg, nil)
 	if err != nil {
 		return a.fail(opts, err.Error())
@@ -1014,21 +1016,13 @@ func (a App) runPreflight(ctx context.Context, opts options) int {
 	if err != nil {
 		return a.fail(opts, fmt.Sprintf("control target failed: %v", err))
 	}
-	deps := prepared.runtime.CheckDeps
-	built, buildIssues := checks.BuildWithIssues(section, deps)
-	warnings := checks.BuildIssueStrings(buildIssues)
-	for _, w := range warnings {
-		fmt.Fprintf(a.Stderr, cliWarningFormat, w)
-	}
 
-	ctx, cancel := context.WithTimeout(ctx, app.PreflightDeadline(deps.DefaultTimeout))
+	ctx, cancel := context.WithTimeout(ctx, app.PreflightDeadline(prepared.runtime.CheckDeps.DefaultTimeout))
 	defer cancel()
-	results := checks.BuildIssueResults(buildIssues)
-	results = append(results, checks.Run(ctx, built, 0)...)
-	outcome := checks.Evaluate(results)
+	outcome := prepared.runtime.Engine.Preflight(ctx)
 
 	if opts.json {
-		writeJSON(a.Stdout, map[string]any{cliJSONKeyService: service, cliJSONKeyOK: outcome.OK, cliJSONKeyChecks: results})
+		writeJSON(a.Stdout, map[string]any{cliJSONKeyService: service, cliJSONKeyOK: outcome.OK, cliJSONKeyChecks: outcome.Results})
 	} else {
 		a.printPreflight(service, outcome)
 	}
