@@ -2,7 +2,11 @@
 // packages.
 package strutil
 
-import "strings"
+import (
+	"maps"
+	"slices"
+	"strings"
+)
 
 // Set builds a membership set from values, trimming whitespace and skipping
 // blank entries. It returns nil when values is empty.
@@ -18,6 +22,12 @@ func Set(values []string) map[string]struct{} {
 		}
 	}
 	return out
+}
+
+// SortedUnique returns the trimmed, non-empty values once in lexical order.
+// An empty result is nil.
+func SortedUnique(values []string) []string {
+	return slices.Sorted(maps.Keys(Set(values)))
 }
 
 // MergeUnique appends each non-empty value not already present in list,
