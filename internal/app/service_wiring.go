@@ -156,19 +156,6 @@ func ServiceBackendPIDs(ctx context.Context, backend servicemgr.Backend, unit st
 	return servicemgr.BackendPIDsFuncWithRunner(ctx, backend, unit, runner, nil)
 }
 
-// ServiceScopedProcessCount returns the process_count dependency for one
-// service's own checks, shared by the daemon and the CLI so both paths judge
-// the same set: what discovery attributes to the service (selector matches plus
-// descendants), never the whole host. The distinction is load-bearing for the
-// catalog's filterless block checks — host scope turned "fcron has active
-// jobs" into a count of every process on the host once the service died.
-func ServiceScopedProcessCount(ctx context.Context, tree map[string]any, runner execx.Runner, backend servicemgr.Backend, unit string, discoverer process.Discoverer) func(user, exe, exeDir string) int {
-	selectors, _ := serviceProcessSelectors(ctx, tree, Deps{ExecxRunner: runner, Backend: backend}, unit)
-	return func(user, exe, exeDir string) int {
-		return discoverer.CountInTree(selectors, user, exe, exeDir)
-	}
-}
-
 // serviceProcessSelectors returns the process selectors a service should use
 // for both monitoring workers and web detail. Explicit `processes:` entries win;
 // otherwise we derive the safest init-provided identity we can detect.

@@ -143,7 +143,7 @@ cualquier salida se emite el evento.
 
 ```mermaid
 flowchart TD
-  REQ["Acción: start / stop / restart / reload / resume<br/>(sermoctl o Web UI → defaultOperate)"] --> DO["Engine.Do → Engine.run(plan)"]
+  REQ["Acción: start / stop / restart / reload / resume<br/>(sermoctl o Web UI → runtime de servicio preparado)"] --> DO["Engine.Do → Engine.run(plan)"]
   DO --> CE{"ConfigError?"}
   CE -- "sí" --> RF1["ResultFailed"]
   CE -- "no" --> L1["2 · AcquireLock (oplock, por servicio)"]

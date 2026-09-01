@@ -31,7 +31,6 @@ import (
 	"sermo/internal/execx"
 	"sermo/internal/httpx"
 	"sermo/internal/locks"
-	"sermo/internal/metrics"
 	"sermo/internal/mountctl"
 	"sermo/internal/notify"
 	"sermo/internal/operation"
@@ -67,6 +66,7 @@ const (
 
 const (
 	reloadCapabilityTimeout    = 3 * time.Second
+	operationStatusTimeout     = 3 * time.Second
 	defaultProbeCommandTimeout = 2 * time.Second
 	defaultListCommandTimeout  = 30 * time.Second
 	daemonWebClientTimeout     = 10 * time.Second
@@ -168,9 +168,12 @@ type App struct {
 	// resolved service. Injectable for testing; the error covers backend/wiring
 	// failures (the Result carries operational outcomes).
 	Operate func(ctx context.Context, opts options, cfg *config.Config, resolved config.Resolved, service, action string) (operation.Result, error)
-	Env     func(string) string
-	Stdout  io.Writer
-	Stderr  io.Writer
+	// defaultOperation is set only when withDefaults installs the production
+	// operation session. Injected Operate functions keep their existing test seam.
+	defaultOperation bool
+	Env              func(string) string
+	Stdout           io.Writer
+	Stderr           io.Writer
 	// Stdin is the interactive input source, used by `wizard`. Injectable for
 	// testing; defaults to os.Stdin.
 	Stdin io.Reader
@@ -319,7 +322,6 @@ func Main(ctx context.Context, args []string) int {
 		Stderr:     os.Stderr,
 		Stdin:      os.Stdin,
 	}
-	cliApp.Operate = cliApp.defaultOperate
 	return cliApp.Run(ctx, args)
 }
 
@@ -354,6 +356,7 @@ func (a App) withDefaults() App {
 	}
 	if a.Operate == nil {
 		a.Operate = a.defaultOperate
+		a.defaultOperation = true
 	}
 	if a.FetchEvents == nil {
 		a.FetchEvents = a.fetchEvents
@@ -616,17 +619,26 @@ func (a App) runAction(ctx context.Context, opts options, action string) int {
 	if code != exitSuccess {
 		return code
 	}
-	if action == actionReload {
-		if code := a.requireReloadSupported(ctx, opts, resolved, service); code != exitSuccess {
-			return code
+	var (
+		actionStore *state.Store
+		err         error
+	)
+	if operation.IsServiceAction(action) {
+		actionStore, err = openStateStore(ctx, cfg)
+		if err != nil {
+			a.recordAccess(cfg, action, service, accessStatusError, err.Error())
+			return a.fail(opts, fmt.Sprintf("operation state unavailable: %v", err))
 		}
 	}
-
-	actionStore := a.openManualActionStore(ctx, cfg, action)
 	if actionStore != nil {
 		defer func() { _ = actionStore.Close() }()
 	}
-	result, err := a.operateWithCascade(ctx, opts, cfg, resolved, service, action, actionStore)
+	runner, closeRunner, err := a.prepareManualOperationRunner(ctx, opts, cfg, resolved, service, action, actionStore)
+	if err != nil {
+		return a.fail(opts, err.Error())
+	}
+	defer closeRunner()
+	result, err := a.operateWithCascade(ctx, opts, cfg, resolved, service, action, actionStore, runner)
 	if err != nil {
 		a.recordAccess(cfg, action, service, accessStatusError, err.Error())
 		return a.fail(opts, err.Error())
@@ -647,47 +659,17 @@ func (a App) runAction(ctx context.Context, opts options, action string) int {
 	return operationExit(result.Status)
 }
 
-func (a App) requireReloadSupported(ctx context.Context, opts options, resolved config.Resolved, service string) int {
-	detection, err := a.Detector.Detect(ctx, opts.backend)
-	if err != nil {
-		return a.fail(opts, fmt.Sprintf("backend detection failed: %v", err))
-	}
-	manager, err := a.NewManager(detection.Backend)
-	if err != nil {
-		return a.fail(opts, fmt.Sprintf("service manager unavailable: %v", err))
-	}
-	resolver := servicemgr.NewUnitResolver()
-	resolver.Runner = a.Runner
-	resolver.Manager = manager
-	supportOpts := opts
-	supportOpts.quiet = true
-	target, err := a.resolveControlTarget(ctx, supportOpts, service, resolved.Tree, detection.Backend, manager, resolver)
-	if err != nil {
-		return a.fail(opts, fmt.Sprintf("control target failed: %v", err))
-	}
-	reloadCtx, cancel := context.WithTimeout(ctx, reloadCapabilityTimeout)
-	defer cancel()
-	canReload, err := operation.ReloadSupported(reloadCtx, resolved.Tree, target.Manager, target.Unit)
-	if err != nil {
-		return a.fail(opts, fmt.Sprintf("reload support unavailable: %v", err))
-	}
-	if !canReload {
-		return a.fail(opts, operation.UnsupportedReloadError(target.Unit).Error())
-	}
-	return exitSuccess
-}
-
 // operateWithCascade runs the action on the primary service, and — unless
 // --no-cascade — on the services it lists in also_apply, in dependency order
 // (start/restart: primary first; stop: additionals first). Targets run through
 // their own guarded operation; each target's result is printed. The primary's
 // result is returned and drives the exit code.
-func (a App) operateWithCascade(ctx context.Context, opts options, cfg *config.Config, resolved config.Resolved, service, action string, actionStore *state.Store) (operation.Result, error) {
+func (a App) operateWithCascade(ctx context.Context, opts options, cfg *config.Config, resolved config.Resolved, service, action string, actionStore *state.Store, runner manualOperationRunner) (operation.Result, error) {
 	targets := config.CascadeTargets(resolved.Tree)
 	// also_apply cascades only lifecycle actions that change running state. Manual
 	// repair and reap always act on the one service the operator named.
 	if opts.noCascade || !operation.CascadesAlsoApply(action) || len(targets) == 0 {
-		return a.operateWithManualState(ctx, opts, cfg, resolved, service, action, actionStore)
+		return a.operateWithManualState(ctx, opts, cfg, resolved, service, action, actionStore, runner)
 	}
 	resolvedByService := map[string]config.Resolved{service: resolved}
 	resolveErrors := map[string]error{}
@@ -722,7 +704,7 @@ func (a App) operateWithCascade(ctx context.Context, opts options, cfg *config.C
 			if err != nil {
 				return operation.Result{}, err
 			}
-			return a.operateWithManualState(ctx, opts, cfg, res, svc, action, actionStore)
+			return a.operateWithManualState(ctx, opts, cfg, res, svc, action, actionStore, runner)
 		},
 		Target: func(svc string, out operation.Result, err error) {
 			if actionStore != nil {
@@ -751,10 +733,10 @@ func (a App) operateWithCascade(ctx context.Context, opts options, cfg *config.C
 // monitoring and settling transition. The direct and cascade paths share it so
 // every action, including manual-only repair, has identical post-operation
 // state handling.
-func (a App) operateWithManualState(ctx context.Context, opts options, cfg *config.Config, resolved config.Resolved, service, action string, actionStore *state.Store) (operation.Result, error) {
+func (a App) operateWithManualState(ctx context.Context, opts options, cfg *config.Config, resolved config.Resolved, service, action string, actionStore *state.Store, runner manualOperationRunner) (operation.Result, error) {
 	a.beginManualOperationSettling(cfg, actionStore, service, action)
-	result, err := a.Operate(ctx, opts, cfg, resolved, service, action)
-	activeAfterPostflightFailure := a.activeAfterPostflightFailure(ctx, opts, cfg, resolved, service, action, result, err)
+	result, err := runner.operate(ctx, opts, cfg, resolved, service, action)
+	activeAfterPostflightFailure := runner.activeAfter(ctx, opts, cfg, resolved, service, action, result, err)
 	a.finishManualOperationSettling(cfg, actionStore, service, action, result, err, activeAfterPostflightFailure)
 	return result, err
 }
@@ -796,17 +778,6 @@ func withStateStoreErr(ctx context.Context, cfg *config.Config, fn func(*state.S
 	return nil
 }
 
-func (a App) openManualActionStore(ctx context.Context, cfg *config.Config, action string) *state.Store {
-	if !operation.IsServiceAction(action) {
-		return nil
-	}
-	store, err := openStateStore(ctx, cfg)
-	if err != nil {
-		fmt.Fprintf(a.Stderr, "warning: operation state unavailable: %v\n", err)
-		return nil
-	}
-	return store
-}
 func (a App) beginManualOperationSettling(cfg *config.Config, store *state.Store, service, action string) {
 	if store == nil {
 		return
@@ -834,96 +805,19 @@ func (a App) finishManualOperationSettling(cfg *config.Config, store *state.Stor
 	}
 }
 
-func (a App) activeAfterPostflightFailure(ctx context.Context, opts options, _ *config.Config, resolved config.Resolved, service, action string, result operation.Result, opErr error) bool {
-	if opErr != nil || result.Status != operation.ResultPostflightFailed || !operation.CanRemainActiveAfterPostflightFailure(action) {
-		return false
-	}
-	if a.Detector == nil || a.NewManager == nil {
-		return false
-	}
-	detection, err := a.Detector.Detect(ctx, opts.backend)
-	if err != nil {
-		return false
-	}
-	manager, err := a.NewManager(detection.Backend)
-	if err != nil {
-		return false
-	}
-	resolver := servicemgr.NewUnitResolver()
-	resolver.Manager = manager
-	target, err := a.resolveControlTarget(ctx, options{quiet: true, backend: opts.backend}, service, resolved.Tree, detection.Backend, manager, resolver)
-	if err != nil {
-		return false
-	}
-	st, err := target.Manager.Status(ctx, target.Unit)
-	return err == nil && st.Status == servicemgr.StatusActive
-}
-
 // defaultOperate wires the real operation engine from a resolved service and
 // runs the requested action.
 func (a App) defaultOperate(ctx context.Context, opts options, cfg *config.Config, resolved config.Resolved, service, action string) (operation.Result, error) {
-	detection, err := a.Detector.Detect(ctx, opts.backend)
-	if err != nil {
-		return operation.Result{}, fmt.Errorf("backend detection failed: %w", err)
-	}
-	manager, err := a.NewManager(detection.Backend)
-	if err != nil {
-		return operation.Result{}, fmt.Errorf("service manager unavailable: %w", err)
-	}
-
-	resolver := servicemgr.NewUnitResolver()
-	resolver.Manager = manager
-	target, err := a.resolveControlTarget(ctx, opts, service, resolved.Tree, detection.Backend, manager, resolver)
-	if err != nil {
-		return operation.Result{}, err
-	}
-
 	eventStore, err := openStateStore(ctx, cfg)
 	if err != nil {
 		return operation.Result{}, fmt.Errorf("operation event store unavailable: %w", err)
 	}
 	defer func() { _ = eventStore.Close() }()
-	var eventErr error
-	recordResult := func(result operation.Result) error {
-		return recordManualActionEvent(ctx, eventStore, app.OperationEventRecord(result))
+	session, err := a.newOperationSession(ctx, opts, cfg, eventStore)
+	if err != nil {
+		return operation.Result{}, err
 	}
-	runtime := app.BuildServiceRuntime(ctx, app.ServiceRuntimeConfig{
-		Service: service,
-		Unit:    target.Unit,
-		Tree:    resolved.Tree,
-		Deps: app.Deps{
-			Backend:          target.Backend,
-			Manager:          target.Manager,
-			BackendPIDs:      target.BackendPIDs,
-			Runtime:          cfg.Global.RuntimeDir(),
-			DefaultTimeout:   engineDefaultTimeout(cfg),
-			OperationTimeout: opts.timeout,
-			Collector:        metrics.New(metrics.OSReader{}),
-			ExecxRunner:      a.Runner,
-			UserLookup:       app.EngineUserLookup(cfg, a.Runner),
-		},
-		LibraryBaseline: map[string]string{},
-		LockReclaimed: func(service, reason string) {
-			fmt.Fprintf(a.Stderr, "reclaimed stale operation lock for %s (%s)\n", service, reason)
-		},
-		RecordOperation: func(result operation.Result) {
-			if err := recordResult(result); err != nil {
-				eventErr = err
-			}
-		},
-	})
-
-	result := runEngineAction(ctx, runtime.Engine, opts, action)
-	if eventErr != nil {
-		// The action already ran (or was blocked); losing its audit record is
-		// still a failure, but the outcome must not be masked by it.
-		return result, fmt.Errorf("%s applied with result %q, but its audit event could not be recorded: %w",
-			action, result.Status, eventErr)
-	}
-	if result.Message == "unknown action" && result.Status == operation.ResultFailed {
-		return operation.Result{}, fmt.Errorf("unknown action %q", action)
-	}
-	return result, nil
+	return session.operate(ctx, opts, cfg, resolved, service, action)
 }
 
 // Manual operations share the state database with a running sermod; on a
@@ -1141,15 +1035,15 @@ func (a App) runPreflight(ctx context.Context, opts options) int {
 	}
 
 	section, _ := resolved.Tree[config.SectionPreflight].(map[string]any)
-	discoverer := process.NewDiscovererWithUserLookup(app.EngineUserLookup(cfg, a.Runner))
-	unit := config.ServiceUnit(resolved.Tree, service)
-	deps := checks.Deps{
-		Service:        service,
-		DefaultTimeout: engineDefaultTimeout(cfg),
-		Status:         a.statusFunc(opts, resolved.Tree, unit),
-		Processes:      discoverer.ObserveState,
-		ProcessCount:   app.ServiceScopedProcessCount(ctx, resolved.Tree, a.Runner, opts.backend, unit, discoverer),
+	session, err := a.newOperationSession(ctx, opts, cfg, nil)
+	if err != nil {
+		return a.fail(opts, err.Error())
 	}
+	prepared, err := session.prepare(ctx, service, resolved)
+	if err != nil {
+		return a.fail(opts, fmt.Sprintf("control target failed: %v", err))
+	}
+	deps := prepared.runtime.CheckDeps
 	built, buildIssues := checks.BuildWithIssues(section, deps)
 	warnings := checks.BuildIssueStrings(buildIssues)
 	for _, w := range warnings {
@@ -1193,33 +1087,6 @@ func (a App) printPreflight(service string, outcome checks.Outcome) {
 			}
 		}
 		fmt.Fprintf(a.Stdout, "  %-4s %s: %s\n", tag, r.Check, r.Message)
-	}
-}
-
-// statusFunc builds a lazy backend status query for `service` checks; it only
-// detects the backend and resolves the unit (service candidates) when a service
-// check actually runs.
-func (a App) statusFunc(opts options, tree map[string]any, base string) func(context.Context) (servicemgr.Status, error) {
-	return func(ctx context.Context) (servicemgr.Status, error) {
-		detection, err := a.Detector.Detect(ctx, opts.backend)
-		if err != nil {
-			return "", fmt.Errorf("detect service backend: %w", err)
-		}
-		manager, err := a.NewManager(detection.Backend)
-		if err != nil {
-			return "", err
-		}
-		resolver := servicemgr.NewUnitResolver()
-		resolver.Manager = manager
-		target, err := a.resolveControlTarget(ctx, opts, base, tree, detection.Backend, manager, resolver)
-		if err != nil {
-			return "", err
-		}
-		status, err := target.Manager.Status(ctx, target.Unit)
-		if err != nil {
-			return "", fmt.Errorf("status %s: %w", target.Unit, err)
-		}
-		return status.Status, nil
 	}
 }
 

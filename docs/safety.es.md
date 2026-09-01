@@ -60,6 +60,15 @@ Cada start/stop/restart/reload/resume — manual (`sermoctl`) o automático (`se
 pasa por el mismo motor. La acción solo manual `repair` también usa ese motor,
 pero nunca puede ser una remediación automática:
 
+El worker del daemon, la Web UI y el CLI construyen ese motor desde el mismo
+runtime de servicio resuelto: target de control, raíces de procesos del backend,
+selectores de proceso, dependencias de checks, fuente de métricas y locks de
+operación. `sermoctl preflight` usa el mismo target preparado y las mismas
+dependencias de checks. Un comando CLI prepara cada target una vez y lo reutiliza
+para la capacidad de reload, la acción y la consulta acotada de estado tras un
+postflight fallido, de modo que cambiar el caller no cambia una decisión de
+seguridad.
+
 1. Adquirir el lock interno de operación (`<runtime>/ops/<service>.lock`); un titular
    vivo falla rápido con código de salida `75` ("operation in progress").
 2. Bloquear ante cualquier lock de runtime nombrado activo.
