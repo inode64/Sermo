@@ -105,17 +105,22 @@ func Enabled(entry map[string]any) bool {
 	return !cfgval.Disabled(entry)
 }
 
-// builders maps a notifier `type` to its constructor. Register new transports
-// here (e.g. a future "discord").
-var builders = map[string]func(name string, entry map[string]any) (Notifier, error){
-	TypeEmail:    buildEmail,
-	TypeGotify:   buildGotify,
-	TypeNtfy:     buildNtfy,
-	TypeSlack:    buildSlack,
-	TypeTeams:    buildTeams,
-	TypeTelegram: buildTelegram,
-	TypeTTY:      buildTTY,
-	TypeWall:     buildWall,
+// transports maps each notifier type to its constructor and field validator.
+// Register new transports here (e.g. a future "discord").
+type transport struct {
+	build    func(name string, entry map[string]any) (Notifier, error)
+	validate func(entry map[string]any) []ValidationIssue
+}
+
+var transports = map[string]transport{
+	TypeEmail:    {build: buildEmail, validate: validateEmailConfig},
+	TypeGotify:   {build: buildGotify, validate: validateGotifyConfig},
+	TypeNtfy:     {build: buildNtfy, validate: validateNtfyConfig},
+	TypeSlack:    {build: buildSlack, validate: validateWebhookConfig(TypeSlack)},
+	TypeTeams:    {build: buildTeams, validate: validateWebhookConfig(TypeTeams)},
+	TypeTelegram: {build: buildTelegram, validate: validateTelegramConfig},
+	TypeTTY:      {build: buildTTY, validate: validateTTYConfig},
+	TypeWall:     {build: buildWall, validate: validateWallConfig},
 }
 
 // notifierWarning renders one build warning as "notifier <name>: <problem>", so
@@ -145,13 +150,18 @@ func Build(raw map[string]any, opts ...Option) (map[string]Notifier, []string) {
 		if !Enabled(entry) {
 			continue
 		}
-		typ, _ := entry[KeyType].(string)
-		build, ok := builders[typ]
+		issues := ValidateEntry(entry)
+		if len(issues) > 0 {
+			warnings = append(warnings, notifierWarning(name, issues[0].Field+issues[0].Suffix))
+			continue
+		}
+		typ := cfgval.String(entry[KeyType])
+		registered, ok := transports[typ]
 		if !ok {
 			warnings = append(warnings, notifierWarning(name, fmt.Sprintf("unsupported type %q", typ)))
 			continue
 		}
-		n, err := build(name, entry)
+		n, err := registered.build(name, entry)
 		if err != nil {
 			warnings = append(warnings, notifierWarning(name, err.Error()))
 			continue
@@ -225,5 +235,5 @@ func NewTargetedTTY(name string, users []string) (Notifier, error) {
 
 // SupportedTypes lists the registered notifier types, for validation and docs.
 func SupportedTypes() []string {
-	return slices.Sorted(maps.Keys(builders))
+	return slices.Sorted(maps.Keys(transports))
 }
