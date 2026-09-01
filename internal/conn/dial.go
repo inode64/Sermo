@@ -54,8 +54,8 @@ func (t probeTarget) dialerWithTimeout(timeout time.Duration) *net.Dialer {
 // openStream so callers that require TCP (for example binary protocols) cannot
 // accidentally use a configured Unix socket.
 func (t probeTarget) dialTLS(ctx context.Context) (net.Conn, error) {
-	host, _ := t.hostPort()
-	addr := t.address()
+	host, port := t.hostPort()
+	addr := netutil.JoinHostPort(host, port)
 	d := t.dialer()
 	var (
 		c   net.Conn
