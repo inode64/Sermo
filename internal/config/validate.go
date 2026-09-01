@@ -959,7 +959,7 @@ func validateResolved(name string, tree map[string]any, runtime string, notifier
 	walkScalars(tree, func(path, key, value string) {
 		switch key {
 		case checks.CheckKeyPort:
-			if n, ok := cfgval.Int(value); !ok || !validTCPPort(n) {
+			if n, ok := cfgval.Int(value); !ok || !cfgval.ValidTCPPort(n) {
 				add("%s = %q must resolve to a port in %s", path, value, cfgval.TCPPortRange())
 			}
 		case checks.CheckKeyExpectStatus:

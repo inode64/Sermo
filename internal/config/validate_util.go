@@ -49,10 +49,6 @@ func walkScalarValue(path, key string, v any, visit func(path, key, value string
 	}
 }
 
-func validTCPPort(n int) bool {
-	return cfgval.ValidTCPPort(n)
-}
-
 func isPositiveDuration(s string) bool {
 	return isDuration(s, false)
 }
