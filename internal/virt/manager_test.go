@@ -198,6 +198,21 @@ func TestSpecFromTreeRequiresDomain(t *testing.T) {
 	}
 }
 
+func TestSpecFromTreeRejectsInvalidEndpoint(t *testing.T) {
+	t.Parallel()
+	for _, fields := range []map[string]any{
+		{ControlKeyDomain: "vm01", ControlKeySocket: "relative.sock"},
+		{ControlKeyDomain: "vm01", ControlKeyHost: "   "},
+		{ControlKeyDomain: "vm01", ControlKeySocket: DefaultSocket, ControlKeyHost: "127.0.0.1"},
+		{ControlKeyDomain: "vm01", ControlKeyPort: 70000},
+	} {
+		fields[ControlKeyType] = ControlType
+		if _, controlled, err := SpecFromTree(map[string]any{sectionControl: fields}); !controlled || err == nil {
+			t.Errorf("SpecFromTree(%v) = controlled %v, error %v", fields, controlled, err)
+		}
+	}
+}
+
 func TestFirstExistingLocalSocket(t *testing.T) {
 	probeErr := errors.New("probe failed")
 	tests := []struct {

@@ -280,6 +280,22 @@ func TestNetworkSpecFromTree(t *testing.T) {
 	}
 }
 
+func TestNetworkSpecFromTreeRejectsInvalidEndpoint(t *testing.T) {
+	t.Parallel()
+	for _, fields := range []map[string]any{
+		{ControlKeyNetwork: "default", ControlKeySocket: "relative.sock"},
+		{ControlKeyNetwork: "default", ControlKeyGuardSocket: "relative.sock"},
+		{ControlKeyNetwork: "default", ControlKeyHost: "   "},
+		{ControlKeyNetwork: "default", ControlKeySocket: DefaultSocket, ControlKeyHost: "127.0.0.1"},
+		{ControlKeyNetwork: "default", ControlKeyPort: 70000},
+	} {
+		fields[ControlKeyType] = NetworkControlType
+		if _, controlled, err := NetworkSpecFromTree(map[string]any{sectionControl: fields}); !controlled || err == nil {
+			t.Errorf("NetworkSpecFromTree(%v) = controlled %v, error %v", fields, controlled, err)
+		}
+	}
+}
+
 func slicesContains(calls []string, want string) bool {
 	return slices.Contains(calls, want)
 }
