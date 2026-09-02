@@ -32,7 +32,7 @@ func buildCountCheck(b base, entry map[string]any) (Check, string) {
 		if errs != "" {
 			return nil, errs
 		}
-		window := cfgval.DurationOr(entry[CheckKeyWithin], 0)
+		window := cfgval.Duration(entry[CheckKeyWithin])
 		if window <= 0 {
 			return nil, "count check delta requires a positive within (e.g. 2m)"
 		}
@@ -98,7 +98,7 @@ func buildSizeCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 	if err != nil {
 		return nil, "size check requires a positive grow_by with a K/M/G/T suffix (e.g. 1G)"
 	}
-	window := cfgval.DurationOr(entry[CheckKeyWithin], 0)
+	window := cfgval.Duration(entry[CheckKeyWithin])
 	if window <= 0 {
 		return nil, "size check requires a positive within (e.g. 1h)"
 	}
