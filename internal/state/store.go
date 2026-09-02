@@ -271,7 +271,7 @@ type Store struct {
 	// it. Nil (tests constructing Store directly) falls back to db.
 	reader *sql.DB
 	now    func() time.Time
-	ctx    context.Context
+	ctx    context.Context //nolint:containedctx // store Open cancel; SQL methods use this instead of a per-query argument.
 
 	// retention is the resolution ladder every read consults to pick the archive
 	// answering a window, and the maintenance pass consults to prune it.
@@ -305,7 +305,7 @@ type Batch interface {
 
 type batch struct {
 	tx    *sql.Tx
-	ctx   context.Context
+	ctx   context.Context //nolint:containedctx // transaction-scoped cancel derived from Store.ctx for one WithBatch callback.
 	stmts map[string]*sql.Stmt
 }
 

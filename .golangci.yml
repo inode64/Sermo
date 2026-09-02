@@ -21,6 +21,7 @@ linters:
     - bidichk  # dangerous bidi unicode in source
     - bodyclose
     - canonicalheader  # HTTP header spelling must use net/http's canonical form
+    - containedctx  # context.Context in a struct is the daemon-lifetime exceptions below, not request scope
     - contextcheck  # context must flow into blocking I/O (not net/http dial — see noctx)
     - copyloopvar
     - depguard  # architecture import boundaries (see settings.depguard.rules)
@@ -127,6 +128,11 @@ linters:
       # survives either linter being dropped. check-blank stays off: it reports
       # 203 deliberate `_ =` discards.
       check-type-assertions: true
+    fatcontext:
+      # Loop and function-literal nesting are already on by default (clean).
+      # Struct-pointer nesting is off by default; turning it on catches a
+      # second copy of the same daemon-lifetime contexts containedctx names.
+      check-struct-pointers: true
     gocognit:
       # Pin the current clean complexity budget instead of inheriting a tool
       # default that can change on upgrade. Lower only alongside a refactor.
@@ -442,8 +448,6 @@ linters:
       check-exported: true
   # Considered and deliberately NOT enabled. Counts are measured on production
   # files only (run.tests: false); re-measure before reopening any of these.
-  #   containedctx (5) — daemon-lifetime contexts are intentionally held by
-  #                  monitor, loader, state and web server owners.
   #   embeddedstructfieldcheck (64) — field-ordering/whitespace findings; the
   #                  existing compact embedded check types are intentionally uniform.
   #   err113 (469) — operator-facing configuration errors need their concrete
@@ -503,6 +507,7 @@ linters:
           - bidichk
           - bodyclose
           - canonicalheader
+          - containedctx
           - contextcheck
           - copyloopvar
           - depguard

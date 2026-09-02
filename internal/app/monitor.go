@@ -36,7 +36,7 @@ type Monitor struct {
 	collector *metrics.Collector
 	web       *WebBackendHolder
 
-	parent context.Context
+	parent context.Context //nolint:containedctx // daemon Run cancel, reused across worker generations; not request-scoped.
 
 	mu        sync.Mutex
 	workers   []*Worker
@@ -75,7 +75,7 @@ func (m *Monitor) Init(workers []*Worker, watches []*Watch) {
 // Run starts the first generation and blocks until ctx is cancelled, then stops
 // workers and marks readiness shutting down.
 func (m *Monitor) Run(ctx context.Context) {
-	m.parent = ctx
+	m.parent = ctx //nolint:fatcontext // stores the daemon lifetime context for later generations, not nested per-request values.
 	m.mu.Lock()
 	m.startGenerationLocked(ctx, true)
 	m.mu.Unlock()
