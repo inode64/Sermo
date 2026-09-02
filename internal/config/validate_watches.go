@@ -4,9 +4,7 @@ import (
 	"fmt"
 	"maps"
 	"path/filepath"
-	"regexp"
 	"slices"
-	"strings"
 
 	"sermo/internal/cfgval"
 	"sermo/internal/checks"
@@ -959,51 +957,19 @@ func validateProcessPolicyWatch(name string, check, entry map[string]any, defaul
 	if cfgval.String(check[checks.CheckKeyUser]) == "" {
 		add("%s is required for a process_policy check", watchCheckFieldPath(name, checks.CheckKeyUser))
 	}
-	allows, ok := check[checks.CheckKeyAllow].(map[string]any)
-	if !ok || len(allows) == 0 {
-		add("%s is required and must be a non-empty mapping for a process_policy check", watchCheckFieldPath(name, checks.CheckKeyAllow))
-	} else {
-		for _, allowName := range slices.Sorted(maps.Keys(allows)) {
-			validateProcessPolicyAllow(name, allowName, allows[allowName], add)
+	_, allowIssues := ParseProcessPolicyAllows(check[checks.CheckKeyAllow])
+	allowPath := watchCheckFieldPath(name, checks.CheckKeyAllow)
+	for _, issue := range allowIssues {
+		problem := issue.Problem
+		if issue.PathSuffix == "" {
+			problem += " for a process_policy check"
 		}
+		add("%s %s", allowPath+issue.PathSuffix, problem)
 	}
 	if _, present := entry[sectionPolicy]; present {
 		add("%s is not valid on an alert-only process_policy watch", watchFieldPath(name, sectionPolicy))
 	}
 	validateAlertOnlyWatchThen(name, entry, defaultNotify, add)
-}
-
-func validateProcessPolicyAllow(name, allowName string, raw any, add func(string, ...any)) {
-	prefix := watchCheckFieldPath(name, checks.CheckKeyAllow) + "." + allowName
-	allow, ok := raw.(map[string]any)
-	if !ok {
-		add(validationMappingFormat, prefix)
-		return
-	}
-	for _, key := range slices.Sorted(maps.Keys(allow)) {
-		if key != checks.CheckKeyExe && key != process.SelectorKeyCmd {
-			add(validationNotSupportedFormat, prefix+"."+key)
-		}
-	}
-	exe := cfgval.String(allow[checks.CheckKeyExe])
-	if exe == "" {
-		add("%s.%s is required", prefix, checks.CheckKeyExe)
-	} else if !filepath.IsAbs(exe) || filepath.Clean(exe) != exe {
-		add("%s.%s must be a clean absolute resolved executable path", prefix, checks.CheckKeyExe)
-	}
-	if rawCmd, present := allow[process.SelectorKeyCmd]; present {
-		cmd, ok := rawCmd.(string)
-		if !ok || cmd == "" {
-			add("%s.%s must be a non-empty anchored RE2 expression", prefix, process.SelectorKeyCmd)
-			return
-		}
-		if !strings.HasPrefix(cmd, "^") || !strings.HasSuffix(cmd, "$") {
-			add("%s.%s must be anchored with ^ and $", prefix, process.SelectorKeyCmd)
-		}
-		if _, err := regexp.Compile(cmd); err != nil {
-			add("%s.%s is invalid: %v", prefix, process.SelectorKeyCmd, err)
-		}
-	}
 }
 
 // validateAlertOnlyWatchThen permits only notification delivery on an

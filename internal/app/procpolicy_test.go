@@ -200,6 +200,25 @@ func TestBuildProcessPolicyWatchRejectsActions(t *testing.T) {
 	}
 }
 
+func TestBuildProcessPolicyWatchRejectsUnknownAllowField(t *testing.T) {
+	entry := map[string]any{
+		"check": map[string]any{
+			"type": checks.CheckTypeProcessPolicy,
+			"user": "postgres",
+			"allow": map[string]any{
+				"postgres": map[string]any{
+					"exe":   "/usr/lib64/postgresql-18/bin/postgres",
+					"extra": true,
+				},
+			},
+		},
+	}
+	watches, warnings := BuildWatches(cfgWithWatches(map[string]any{"postgres-policy": entry}), Deps{}, time.Minute)
+	if len(watches) != 0 || len(warnings) != 1 || !strings.Contains(warnings[0], "extra is not supported") {
+		t.Fatalf("BuildWatches() = watches:%+v warnings:%v", watches, warnings)
+	}
+}
+
 func TestProcessPolicyWatchIsHostScoped(t *testing.T) {
 	entry := map[string]any{"check": map[string]any{"type": checks.CheckTypeProcessPolicy}}
 	if got := unsupportedServiceWatchType(entry); got == "" {
