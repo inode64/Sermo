@@ -121,7 +121,7 @@ func sustainableCycles(checkEntry map[string]any, interval time.Duration) int {
 		if _, hasDelta := checkEntry[checks.CheckKeyDelta]; !hasDelta {
 			return 0
 		}
-		within := cfgval.DurationOr(checkEntry[checks.CheckKeyWithin], 0)
+		within := cfgval.Duration(checkEntry[checks.CheckKeyWithin])
 		if within <= 0 || interval <= 0 {
 			return 0
 		}
