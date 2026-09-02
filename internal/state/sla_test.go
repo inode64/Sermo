@@ -79,6 +79,33 @@ func TestSLAReportRatioAndNoData(t *testing.T) {
 	}
 }
 
+func TestSLAPercentText(t *testing.T) {
+	tests := []struct {
+		name  string
+		up    int64
+		total int64
+		want  string
+	}{
+		{name: "rounded percentage", up: 2, total: 3, want: "66.67%"},
+		{name: "no observations", up: 0, total: 0, want: SLAUnavailable},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := (SLAValue{Up: tt.up, Total: tt.total}).PercentText(); got != tt.want {
+				t.Errorf("SLAValue.PercentText() = %q, want %q", got, tt.want)
+			}
+			point := SLAPoint{Up: tt.up, Total: tt.total}
+			if got := point.PercentText(); got != tt.want {
+				t.Errorf("SLAPoint.PercentText() = %q, want %q", got, tt.want)
+			}
+			_, ok := point.Ratio()
+			if ok != (tt.total > 0) {
+				t.Errorf("SLAPoint.Ratio() data = %v, want %v", ok, tt.total > 0)
+			}
+		})
+	}
+}
+
 func TestCheckSLAReportAndSeries(t *testing.T) {
 	s := openTemp(t)
 	now := time.Date(2026, 6, 7, 12, 0, 0, 0, time.UTC)

@@ -6,7 +6,6 @@ import (
 	"strings"
 	"time"
 
-	"sermo/internal/metrics"
 	"sermo/internal/state"
 	"sermo/internal/telegrambot"
 	"sermo/internal/web"
@@ -113,7 +112,7 @@ func (r *telegramReporter) Events(ctx context.Context, limit int) ([]telegrambot
 	for _, e := range events {
 		lines = append(lines, telegrambot.EventLine{
 			Time:    e.Time,
-			Target:  eventTarget(e),
+			Target:  e.Target(),
 			Kind:    e.Kind,
 			Message: e.Message,
 		})
@@ -135,26 +134,9 @@ func (r *telegramReporter) serviceExists(ctx context.Context, name string) bool 
 // when there were any. A window can round to 100.00% and still have had an
 // incident, so the percentage alone would hide it.
 func formatSLARatio(v state.SLAValue) string {
-	ratio, ok := v.Ratio()
-	if !ok {
-		return "n/a"
-	}
-	pct := fmt.Sprintf("%.2f%%", ratio*metrics.PercentScale)
+	pct := v.PercentText()
 	if v.DownBuckets <= 0 {
 		return pct
 	}
 	return fmt.Sprintf("%s (%d min affected)", pct, v.DownBuckets)
-}
-
-func eventTarget(e web.Event) string {
-	switch {
-	case e.Service != "":
-		return e.Service
-	case e.Watch != "":
-		return e.Watch
-	case e.App != "":
-		return e.App
-	default:
-		return ""
-	}
 }

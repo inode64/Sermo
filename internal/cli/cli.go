@@ -254,28 +254,10 @@ type options struct {
 	cost     int    // --cost: bcrypt work factor (0 means the default)
 }
 
-// event is a minimal struct for unmarshaling an event returned by the daemon's
-// global or per-service event endpoint. Matches web.Event / LoggedEvent.
-type event struct {
-	Time    string `json:"time"`
-	Service string `json:"service"`
-	Watch   string `json:"watch"`
-	App     string `json:"app"`
-	Kind    string `json:"kind"`
-	Rule    string `json:"rule"`
-	Action  string `json:"action"`
-	Status  string `json:"status"`
-	Message string `json:"message"`
-	// Output carries the failing command's bounded stdout/stderr. The table view
-	// stays one line per event; `--json` is where the detail is available.
-	Output string `json:"output,omitempty"`
-}
-
-// eventPage is the cursor response returned by the global /api/events endpoint.
-// Per-service event endpoints return the event array directly.
-type eventPage struct {
-	Events []event `json:"events"`
-}
+// event and eventPage preserve the local CLI names while sharing the daemon's
+// JSON model and event-target semantics.
+type event = web.Event
+type eventPage = web.EventPage
 
 // globalPath returns the --config path, or the packaged default.
 func (o options) globalPath() string {
@@ -1438,15 +1420,8 @@ func eventTableFields(e event) eventTableRow {
 		timestamp = timestamp[:eventsTableTimestampWidth]
 	}
 
-	// The event's identity dimension: service rules/watches, host watches, or
-	// catalog app probes. App events used to fall through to "-".
-	target := e.Service
-	if target == "" {
-		target = e.Watch
-	}
-	if target == "" {
-		target = e.App
-	}
+	// The event's identity dimension is owned by the daemon's event model.
+	target := e.Target()
 	if target == "" {
 		target = "-"
 	}

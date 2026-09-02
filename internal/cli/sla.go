@@ -10,14 +10,11 @@ import (
 
 	"sermo/internal/app"
 	"sermo/internal/config"
-	"sermo/internal/metrics"
 	"sermo/internal/state"
 )
 
 // defaultSLASeriesWindow is the series lookback used when --since is omitted.
 const defaultSLASeriesWindow = state.DefaultSeriesWindow
-
-const cliTextNotAvailable = "n/a"
 
 // cliUnknownSLATargetFormat names both places an availability series can come
 // from, so a typo does not read as "this service does not exist" when the
@@ -199,7 +196,7 @@ func slaValueJSON(v state.SLAValue) map[string]any {
 }
 
 func (a App) writeSLATable(reports []serviceWindows[state.SLAValue]) {
-	writeSLAWindowTable(a, reports, formatSLA)
+	writeSLAWindowTable(a, reports, state.SLAValue.PercentText)
 }
 
 // writeSLAWindowTable renders one TARGET + per-SLA-window availability table.
@@ -225,15 +222,6 @@ func writeSLAWindowTable[V any](a App, reports []serviceWindows[V], format func(
 	}
 }
 
-// formatSLA renders one window as a percentage, or "n/a" when it has no data.
-func formatSLA(v state.SLAValue) string {
-	ratio, ok := v.Ratio()
-	if !ok {
-		return cliTextNotAvailable
-	}
-	return fmt.Sprintf("%.2f%%", ratio*metrics.PercentScale)
-}
-
 func (a App) writeSLASeriesTable(service string, points []state.SLAPoint, step time.Duration) {
 	if len(points) == 0 {
 		fmt.Fprintf(a.Stdout, "no samples for %s in range (service unmonitored or Sermo not running)\n", service)
@@ -244,12 +232,8 @@ func (a App) writeSLASeriesTable(service string, points []state.SLAPoint, step t
 	fmt.Fprintf(a.Stdout, "resolution: %s per row\n", step)
 	fmt.Fprintln(a.Stdout, "TIME\tUP\tTOTAL\tSLA\tAFFECTED_MIN")
 	for _, p := range points {
-		sla := cliTextNotAvailable
-		if ratio, ok := slaPointRatio(p); ok {
-			sla = fmt.Sprintf("%.2f%%", ratio*metrics.PercentScale)
-		}
 		fmt.Fprintf(a.Stdout, "%s\t%d\t%d\t%s\t%d\n",
-			p.Start.Format(time.RFC3339), p.Up, p.Total, sla, p.DownBuckets)
+			p.Start.Format(time.RFC3339), p.Up, p.Total, p.PercentText(), p.DownBuckets)
 	}
 }
 
@@ -273,15 +257,8 @@ func slaPointJSON(p state.SLAPoint) map[string]any {
 		cliJSONKeyDownBuckets: p.DownBuckets,
 		cliJSONKeyRatio:       nil,
 	}
-	if ratio, ok := slaPointRatio(p); ok {
+	if ratio, ok := p.Ratio(); ok {
 		entry[cliJSONKeyRatio] = ratio
 	}
 	return entry
-}
-
-func slaPointRatio(p state.SLAPoint) (float64, bool) {
-	if p.Total <= 0 {
-		return 0, false
-	}
-	return float64(p.Up) / float64(p.Total), true
 }

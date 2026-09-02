@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"sermo/internal/checks"
+	"sermo/internal/metrics"
 	"sermo/internal/units"
 
 	_ "modernc.org/sqlite" // registers the "sqlite" database/sql driver
@@ -1633,6 +1634,10 @@ type SLAValue struct {
 	DownBuckets int64  `json:"down_buckets"`
 }
 
+// SLAUnavailable is the text representation for an SLA window with no observed
+// cycles. Missing observations are unknown, not zero availability.
+const SLAUnavailable = "n/a"
+
 // Ratio returns the availability fraction in [0,1] and whether the window has any
 // observed cycles. With no data (total==0) availability is unknown, not 0%.
 func (v SLAValue) Ratio() (float64, bool) {
@@ -1640,6 +1645,12 @@ func (v SLAValue) Ratio() (float64, bool) {
 		return 0, false
 	}
 	return float64(v.Up) / float64(v.Total), true
+}
+
+// PercentText renders the availability as a percentage, or SLAUnavailable when
+// the window has no observations.
+func (v SLAValue) PercentText() string {
+	return slaPercentText(v.Up, v.Total)
 }
 
 // RecordSLA accumulates one observed monitoring cycle into a service's current
@@ -1718,6 +1729,28 @@ type SLAPoint struct {
 	Up          int64     `json:"up"`
 	Total       int64     `json:"total"`
 	DownBuckets int64     `json:"down_buckets"`
+}
+
+// Ratio returns the availability fraction in this series bucket and whether the
+// bucket has any observed cycles.
+func (p SLAPoint) Ratio() (float64, bool) {
+	if p.Total <= 0 {
+		return 0, false
+	}
+	return float64(p.Up) / float64(p.Total), true
+}
+
+// PercentText renders the bucket availability as a percentage, or
+// SLAUnavailable when it has no observations.
+func (p SLAPoint) PercentText() string {
+	return slaPercentText(p.Up, p.Total)
+}
+
+func slaPercentText(up, total int64) string {
+	if total <= 0 {
+		return SLAUnavailable
+	}
+	return fmt.Sprintf("%.2f%%", float64(up)/float64(total)*metrics.PercentScale)
 }
 
 // SLASeries returns a service's availability points in [from, to), oldest first,
