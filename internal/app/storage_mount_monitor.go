@@ -13,7 +13,7 @@ func SyncStorageMountMonitoring(store MonitorStore, storage, action string, resu
 	if store == nil || disabled || monitorMode == config.MonitorDisabled || !resultOK {
 		return ManualMonitorChange{}, nil
 	}
-	key := watchMonitorKey(storage)
+	key := WatchMonitorKey(storage)
 	subject := watchSubjectPrefix + storage
 	switch action {
 	case mountctl.ActionUmount:

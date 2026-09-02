@@ -318,7 +318,7 @@ func TestBuildWatchesAppliesWatchMonitorMode(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			store := newFakeStore()
 			if tt.initialFound {
-				store.active[watchMonitorKey("storage-root")] = tt.initialActive
+				store.active[WatchMonitorKey("storage-root")] = tt.initialActive
 			}
 			entry := map[string]any{
 				"check": map[string]any{
@@ -336,7 +336,7 @@ func TestBuildWatchesAppliesWatchMonitorMode(t *testing.T) {
 			if len(warns) != 0 || len(watches) != 1 {
 				t.Fatalf("watches=%d warnings=%v", len(watches), warns)
 			}
-			if got := store.active[watchMonitorKey("storage-root")]; got != tt.wantActive {
+			if got := store.active[WatchMonitorKey("storage-root")]; got != tt.wantActive {
 				t.Fatalf("stored active = %v, want %v", got, tt.wantActive)
 			}
 			if got := watches[0].IsPaused != nil && watches[0].IsPaused(); got != tt.wantPaused {

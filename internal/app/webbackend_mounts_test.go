@@ -472,7 +472,7 @@ func TestWebBackendUnmountDoesNotSignalUnlessRequested(t *testing.T) {
 func TestWebBackendMountActionSyncsStorageWatchMonitoring(t *testing.T) {
 	mounted := true
 	store := newFakeStore()
-	store.active[watchMonitorKey("mount-backup")] = true
+	store.active[WatchMonitorKey("mount-backup")] = true
 	var events []Event
 	cfg := mountTestConfig(t)
 	b, warns := NewWebBackend(t.Context(), cfg, Deps{
@@ -494,8 +494,8 @@ func TestWebBackendMountActionSyncsStorageWatchMonitoring(t *testing.T) {
 	if !res.OK || mounted {
 		t.Fatalf("umount = %+v mounted=%t", res, mounted)
 	}
-	if store.active[watchMonitorKey("mount-backup")] || store.source[watchMonitorKey("mount-backup")] != state.SourceWebMountUmount {
-		t.Fatalf("watch after umount active=%v source=%q", store.active[watchMonitorKey("mount-backup")], store.source[watchMonitorKey("mount-backup")])
+	if store.active[WatchMonitorKey("mount-backup")] || store.source[WatchMonitorKey("mount-backup")] != state.SourceWebMountUmount {
+		t.Fatalf("watch after umount active=%v source=%q", store.active[WatchMonitorKey("mount-backup")], store.source[WatchMonitorKey("mount-backup")])
 	}
 	watches := b.Watches(context.Background())
 	if len(watches) != 1 || watches[0].State != TargetStateDisabled || watches[0].Storage != nil {
@@ -507,8 +507,8 @@ func TestWebBackendMountActionSyncsStorageWatchMonitoring(t *testing.T) {
 	if !res.OK {
 		t.Fatalf("mount = %+v", res)
 	}
-	if !store.active[watchMonitorKey("mount-backup")] || store.source[watchMonitorKey("mount-backup")] != state.SourceWeb {
-		t.Fatalf("watch after mount active=%v source=%q", store.active[watchMonitorKey("mount-backup")], store.source[watchMonitorKey("mount-backup")])
+	if !store.active[WatchMonitorKey("mount-backup")] || store.source[WatchMonitorKey("mount-backup")] != state.SourceWeb {
+		t.Fatalf("watch after mount active=%v source=%q", store.active[WatchMonitorKey("mount-backup")], store.source[WatchMonitorKey("mount-backup")])
 	}
 	if len(events) != 2 || events[0].Action != "unmonitor" || events[1].Action != "monitor" {
 		t.Fatalf("monitor events = %+v", events)
@@ -572,8 +572,8 @@ func TestWebBackendMountActionPublishesOperationWhileRunning(t *testing.T) {
 func TestWebBackendMountActionPreservesManualUnmonitor(t *testing.T) {
 	mounted := true
 	store := newFakeStore()
-	store.active[watchMonitorKey("mount-backup")] = false
-	store.source[watchMonitorKey("mount-backup")] = state.SourceWeb
+	store.active[WatchMonitorKey("mount-backup")] = false
+	store.source[WatchMonitorKey("mount-backup")] = state.SourceWeb
 	cfg := mountTestConfig(t)
 	b, warns := NewWebBackend(t.Context(), cfg, Deps{
 		Monitor:     store,
@@ -590,15 +590,15 @@ func TestWebBackendMountActionPreservesManualUnmonitor(t *testing.T) {
 	if !res.OK {
 		t.Fatalf("mount = %+v", res)
 	}
-	if store.active[watchMonitorKey("mount-backup")] || store.source[watchMonitorKey("mount-backup")] != state.SourceWeb {
-		t.Fatalf("manual unmonitor was not preserved: active=%v source=%q", store.active[watchMonitorKey("mount-backup")], store.source[watchMonitorKey("mount-backup")])
+	if store.active[WatchMonitorKey("mount-backup")] || store.source[WatchMonitorKey("mount-backup")] != state.SourceWeb {
+		t.Fatalf("manual unmonitor was not preserved: active=%v source=%q", store.active[WatchMonitorKey("mount-backup")], store.source[WatchMonitorKey("mount-backup")])
 	}
 }
 
 func TestWebBackendMountActionIgnoresDryRunForManualCommands(t *testing.T) {
 	mounted := true
 	store := newFakeStore()
-	store.active[watchMonitorKey("mount-backup")] = true
+	store.active[WatchMonitorKey("mount-backup")] = true
 	runner := &webMountRunner{mounted: &mounted}
 	cfg := dryRunMountTestConfig(t)
 	b, warns := NewWebBackend(t.Context(), cfg, Deps{
@@ -622,8 +622,8 @@ func TestWebBackendMountActionIgnoresDryRunForManualCommands(t *testing.T) {
 	if !slices.Equal(runner.calls, []string{"umount /mnt/backup"}) {
 		t.Fatalf("manual dry-run umount calls = %v", runner.calls)
 	}
-	if store.active[watchMonitorKey("mount-backup")] || store.source[watchMonitorKey("mount-backup")] != state.SourceWebMountUmount {
-		t.Fatalf("manual dry-run umount monitoring active=%v source=%q, want disabled by web mount action", store.active[watchMonitorKey("mount-backup")], store.source[watchMonitorKey("mount-backup")])
+	if store.active[WatchMonitorKey("mount-backup")] || store.source[WatchMonitorKey("mount-backup")] != state.SourceWebMountUmount {
+		t.Fatalf("manual dry-run umount monitoring active=%v source=%q, want disabled by web mount action", store.active[WatchMonitorKey("mount-backup")], store.source[WatchMonitorKey("mount-backup")])
 	}
 
 	if !slices.Equal(runner.calls, []string{"umount /mnt/backup"}) {

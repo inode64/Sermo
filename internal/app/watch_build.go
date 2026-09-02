@@ -492,7 +492,7 @@ func newCheckWatch(spec checkWatchSpec, deps Deps) *Watch {
 	watch.DryRun = spec.dryRun
 	watch.Severity = spec.severity
 	watch.Runner = OSHookRunner{Runner: deps.ExecxRunner}
-	watch.IsPaused = monitorPaused(deps.Monitor, watchMonitorKey(spec.name))
+	watch.IsPaused = monitorPaused(deps.Monitor, WatchMonitorKey(spec.name))
 	watch.FireOnFail = checks.IsHealthType(spec.checkType)
 	watch.Now = deps.Now
 	watch.Emit = deps.Emit
@@ -602,7 +602,7 @@ func buildProcWatch(name string, entry, checkEntry map[string]any, deps Deps, in
 // runtime fields used by file and process watches.
 func newStatefulWatch(name, checkType string, entry map[string]any, deps Deps, interval time.Duration, cycle func(context.Context)) *Watch {
 	watch := newWatchRuntime(name, checkType, deps, interval)
-	watch.IsPaused = monitorPaused(deps.Monitor, watchMonitorKey(name))
+	watch.IsPaused = monitorPaused(deps.Monitor, WatchMonitorKey(name))
 	watch.DryRun = config.DryRun(entry)
 	watch.Severity = watchSeverity(entry)
 	watch.Now = deps.Now
@@ -1166,7 +1166,7 @@ func monitorWatch(name, checkType string, check checks.Check, notifierNames []st
 	watch.Emission = deps.GlobalEmission
 	watch.DryRun = dryRun
 	watch.Runner = OSHookRunner{Runner: deps.ExecxRunner}
-	watch.IsPaused = monitorPaused(deps.Monitor, watchMonitorKey(name))
+	watch.IsPaused = monitorPaused(deps.Monitor, WatchMonitorKey(name))
 	watch.FireOnFail = true // command/config are health-style: alert (notify) on failure/change
 	watch.Now = deps.Now
 	watch.Emit = deps.Emit
