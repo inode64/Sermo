@@ -28,25 +28,14 @@ const (
 )
 
 const (
-	webhookHeaderContentType = httpx.HeaderContentType
-	webhookContentTypeJSON   = httpx.ContentTypeJSON
-)
-
-const (
 	pushPayloadTitleKey   = "title"
 	pushPayloadMessageKey = "message"
 )
 
-const (
-	webhookURLSchemeHTTP  = netutil.URLSchemeHTTP
-	webhookURLSchemeHTTPS = netutil.URLSchemeHTTPS
-	webhookURLSchemeSep   = netutil.URLSchemeSeparator
-)
-
 // Webhook URL prefix constants are the supported webhook transport URL schemes.
 const (
-	WebhookURLPrefixHTTP  = webhookURLSchemeHTTP + webhookURLSchemeSep
-	WebhookURLPrefixHTTPS = webhookURLSchemeHTTPS + webhookURLSchemeSep
+	WebhookURLPrefixHTTP  = netutil.URLSchemeHTTP + netutil.URLSchemeSeparator
+	WebhookURLPrefixHTTPS = netutil.URLSchemeHTTPS + netutil.URLSchemeSeparator
 )
 
 // webhookPoster delivers a JSON payload to a webhook; injected so tests do not
@@ -118,7 +107,7 @@ func postWebhook(ctx context.Context, label, webhook string, headers map[string]
 		// when a token carries a control char), so scrub this path too.
 		return fmt.Errorf("build %s webhook request: %w", label, netutil.URLErrorCause(err))
 	}
-	req.Header.Set(webhookHeaderContentType, webhookContentTypeJSON)
+	req.Header.Set(httpx.HeaderContentType, httpx.ContentTypeJSON)
 	for name, value := range headers {
 		req.Header.Set(name, value)
 	}
