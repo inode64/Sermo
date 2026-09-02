@@ -97,13 +97,11 @@ func NetworkSpecFromTree(tree map[string]any) (NetworkSpec, bool, error) {
 	if spec.Host == "" && spec.GuardSocket == "" {
 		spec.GuardSocket = spec.Socket
 	}
-	if _, present := m[ControlKeyPort]; present {
-		port, ok := cfgval.Int(m[ControlKeyPort])
-		if !ok || !ValidHostPort(spec.Host, port) {
-			return NetworkSpec{}, true, fmt.Errorf("%s must be an integer in %s", controlPathPort, cfgval.TCPPortRange())
-		}
-		spec.Port = port
+	port, err := controlPort(m, spec.Host)
+	if err != nil {
+		return NetworkSpec{}, true, err
 	}
+	spec.Port = port
 	if spec.Port == 0 {
 		spec.Port = DefaultPort
 	}
