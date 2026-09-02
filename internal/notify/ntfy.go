@@ -6,13 +6,13 @@ import (
 	"strings"
 
 	"sermo/internal/cfgval"
+	"sermo/internal/httpx"
 )
 
 const (
 	ntfyTopicKey = "topic"
 
-	ntfyAuthorizationHeader = "Authorization"
-	ntfyBearerPrefix        = "Bearer "
+	ntfyBearerPrefix = "Bearer "
 )
 
 // ParseNtfyWebhook splits an ntfy topic URL into the publish base URL and the
@@ -51,7 +51,7 @@ func buildNtfy(name string, entry map[string]any) (Notifier, error) {
 	}
 	var headers map[string]string
 	if token := cfgval.String(entry[KeyToken]); token != "" {
-		headers = map[string]string{ntfyAuthorizationHeader: ntfyBearerPrefix + token}
+		headers = map[string]string{httpx.HeaderAuthorization: ntfyBearerPrefix + token}
 	}
 	return &webhookNotifier{
 		name:    name,
