@@ -84,7 +84,7 @@ func (a App) applyMonitorTransition(
 func updateMonitorState(store *state.Store, key string, pause bool) (string, error) {
 	transition, err := sermoapp.ApplyMonitorTransition(store, key, !pause, state.SourceCLI)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("apply monitor transition: %w", err)
 	}
 	if transition.Changed {
 		if pause {

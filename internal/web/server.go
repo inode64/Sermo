@@ -105,7 +105,6 @@ const (
 const (
 	apiSegmentRoot             = "api"
 	apiSegmentActivity         = "activity"
-	apiSegmentApplications     = "applications"
 	apiSegmentBlockers         = "blockers"
 	apiSegmentDashboard        = "dashboard"
 	apiSegmentDaemon           = "daemon"
