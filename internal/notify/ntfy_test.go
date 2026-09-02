@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
+
+	"sermo/internal/httpx"
 )
 
 func TestBuildNtfyRequiresWebhook(t *testing.T) {
@@ -54,8 +56,8 @@ func TestNtfySendPublishesTopicJSON(t *testing.T) {
 	if gotURL != "https://ntfy.example.net" {
 		t.Fatalf("posted to %q, want the server root", gotURL)
 	}
-	if gotHeaders[ntfyAuthorizationHeader] != "Bearer tk_secret" {
-		t.Fatalf("authorization header = %q", gotHeaders[ntfyAuthorizationHeader])
+	if gotHeaders[httpx.HeaderAuthorization] != "Bearer tk_secret" {
+		t.Fatalf("authorization header = %q", gotHeaders[httpx.HeaderAuthorization])
 	}
 	var body struct {
 		Topic   string `json:"topic"`
