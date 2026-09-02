@@ -76,7 +76,7 @@ config_subst = sed -e 's|/usr/share/sermo|$(SERMO_DATADIR)|g' -e 's|/etc/sermo|$
 # Rewrite runtime/state dirs in the tmpfiles config.
 tmpfiles_subst = sed -e 's|/run/sermo|$(SERMO_RUNDIR)|g' -e 's|/var/lib/sermo|$(SERMO_STATEDIR)|g'
 
-.PHONY: all build build-candidate-sermoctl test vet fmt fmt-check lint production-staticcheck unused-globals modules-check actions-lint analyzer-pins-check race fuzz deadcode quality-report cover-gate custom-gcl scripts-lint scripts-test semgrep yaml-fmt yaml-fmt-check yaml-lint yaml-validate markdown-check web web-check web-lint web-e2e validate check cover tidy clean \
+.PHONY: all build build-candidate-sermoctl test vet fmt fmt-check lint production-staticcheck production-deadcode unused-globals modules-check actions-lint analyzer-pins-check race fuzz deadcode quality-report cover-gate custom-gcl scripts-lint scripts-test semgrep yaml-fmt yaml-fmt-check yaml-lint yaml-validate markdown-check web web-check web-lint web-e2e validate check cover tidy clean \
         install install-bin install-catalog install-examples install-config install-templates install-tmpfiles install-systemd install-openrc \
         uninstall
 
@@ -255,6 +255,7 @@ lint: fmt-check $(CUSTOM_GCL)
 	@$(LINT_CACHE_ENV) govulncheck $(GO_PACKAGES)
 	@echo "deadcode -test $(GO_PACKAGES)"
 	@$(LINT_PATH) deadcode -test $(GO_PACKAGES)
+	@$(MAKE) --no-print-directory production-deadcode
 	@$(MAKE) --no-print-directory production-staticcheck
 	@$(MAKE) --no-print-directory unused-globals
 	@echo "web-build nested module (vet, staticcheck, custom-gcl, govulncheck)"
@@ -331,12 +332,19 @@ fuzz:
 	@echo "fuzz rules (ParseRules) $(FUZZ_TIME)"
 	go test -run '^$$' -fuzz '^FuzzParseRules$$' -fuzztime=$(FUZZ_TIME) ./internal/rules
 
-# Advisory only (not part of lint/check): unreachable-function report from
-# golang.org/x/tools/cmd/deadcode. Reflection and build tags cause false
-# positives, so findings need human triage before acting on them.
+# Unreachable-function report from golang.org/x/tools/cmd/deadcode.
+# `deadcode -test` is already in lint; this target re-runs it plus the
+# production-only allowlist check so a focused invocation matches the gate.
 deadcode:
 	@echo "deadcode -test $(GO_PACKAGES)"
 	@$(LINT_PATH) deadcode -test $(GO_PACKAGES)
+	@$(MAKE) --no-print-directory production-deadcode
+
+# Production-only: functions reachable solely from tests look live to
+# `deadcode -test`. Reflection and build tags can still false-positive, so
+# tools/deadcode-production.allow is the reviewed exception list. Unexpected
+# or stale entries fail the gate.
+production-deadcode:
 	@echo "deadcode production-only $(PRODUCT_GO_PACKAGES)"
 	@set -e; tmp="$$(mktemp)"; trap 'rm -f "$$tmp"' EXIT; \
 		$(LINT_PATH) deadcode -f='{{range .Funcs}}{{printf "%s\t%s\t%v\n" $$.Path .Name .Position}}{{end}}' $(PRODUCT_GO_PACKAGES) >"$$tmp"; \
@@ -345,7 +353,8 @@ deadcode:
 			{ key = $$1 FS $$2; if (key in allowed) { seen[key] = 1; permitted++; next } unexpected++; print $$3 ": unreachable func: " $$2 } \
 			END { \
 				for (key in allowed) if (!(key in seen)) { stale++; print "stale deadcode allowlist entry: " key } \
-				print "deadcode production-only summary: " (permitted + 0) " permitted, " (unexpected + 0) " unexpected, " (stale + 0) " stale" \
+				print "deadcode production-only summary: " (permitted + 0) " permitted, " (unexpected + 0) " unexpected, " (stale + 0) " stale"; \
+				if ((unexpected + stale) > 0) exit 1 \
 			}' $(DEADCODE_PRODUCTION_ALLOWLIST) "$$tmp"
 
 # Advisory only (not part of lint/check): keep the remaining cyclomatic
