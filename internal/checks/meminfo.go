@@ -1,7 +1,9 @@
 package checks
 
 import (
+	"fmt"
 	"os"
+
 	"sermo/internal/metrics"
 )
 
@@ -15,7 +17,7 @@ type meminfoSample struct {
 func readMeminfo() (meminfoSample, error) {
 	data, err := os.ReadFile(procMeminfoPath)
 	if err != nil {
-		return meminfoSample{}, err
+		return meminfoSample{}, fmt.Errorf("read %s: %w", procMeminfoPath, err)
 	}
 	return parseMeminfo(string(data)), nil
 }

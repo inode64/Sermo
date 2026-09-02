@@ -275,7 +275,7 @@ func defaultRaidSampler() (RaidStatus, error) {
 		if os.IsNotExist(err) {
 			return RaidStatus{}, nil
 		}
-		return RaidStatus{}, err
+		return RaidStatus{}, fmt.Errorf("read %s: %w", procMDStatPath, err)
 	}
 	st := parseMdstat(string(b))
 	enrichRaidSysfs(&st, raidSysBlockPath)
@@ -420,7 +420,7 @@ func setRaidRebuildState(ctx context.Context, array string, resume bool, root st
 		return RaidArrayStatus{}, fmt.Errorf("invalid RAID array %q", array)
 	}
 	if err := ctx.Err(); err != nil {
-		return RaidArrayStatus{}, err
+		return RaidArrayStatus{}, fmt.Errorf("set RAID rebuild: %w", err)
 	}
 	if sample == nil {
 		sample = SampleRaid
@@ -450,7 +450,7 @@ func setRaidRebuildState(ctx context.Context, array string, resume bool, root st
 		return RaidArrayStatus{}, fmt.Errorf("set RAID %s sync_action=%s: %w", array, action, err)
 	}
 	if err := ctx.Err(); err != nil {
-		return RaidArrayStatus{}, err
+		return RaidArrayStatus{}, fmt.Errorf("set RAID rebuild: %w", err)
 	}
 	verified, err := sample()
 	if err != nil {

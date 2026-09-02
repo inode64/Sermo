@@ -43,7 +43,7 @@ func (c pidsCheck) Run(_ context.Context) Result {
 func defaultPidsSampler() (PidsSample, error) {
 	data, err := os.ReadFile(procLoadavgPath)
 	if err != nil {
-		return PidsSample{}, err
+		return PidsSample{}, fmt.Errorf("read %s: %w", procLoadavgPath, err)
 	}
 	fields := strings.Fields(string(data))
 	if len(fields) < procLoadavgMinFields {

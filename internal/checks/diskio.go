@@ -179,7 +179,7 @@ func CalculateDiskIORates(prev, cur DiskIOSample, elapsed time.Duration) (DiskIO
 func defaultDiskIOSampler(device string) (DiskIOSample, error) {
 	data, err := os.ReadFile(procDiskstatsPath)
 	if err != nil {
-		return DiskIOSample{}, err
+		return DiskIOSample{}, fmt.Errorf("read %s: %w", procDiskstatsPath, err)
 	}
 	for line := range strings.SplitSeq(string(data), checkLineSeparator) {
 		fields := strings.Fields(line)

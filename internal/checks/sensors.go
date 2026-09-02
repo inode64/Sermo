@@ -173,7 +173,7 @@ func defaultSensorSampler() ([]SensorReading, error) { return readHwmon(sysHwmon
 func readHwmon(root string) ([]SensorReading, error) {
 	dirs, err := filepath.Glob(filepath.Join(root, "hwmon*"))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("list hwmon sensors: %w", err)
 	}
 	var out []SensorReading
 	for _, d := range dirs {

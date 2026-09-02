@@ -104,11 +104,11 @@ func defaultRouteSampler(family string) ([]DefaultRoute, error) {
 
 	links, err := netlink.LinkList()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("list network links: %w", err)
 	}
 	routes, err := netlink.RouteList(nil, nlFamily)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("list routes: %w", err)
 	}
 	return defaultRoutesFromNetlink(family, routes, netlinkLinkNames(links)), nil
 }

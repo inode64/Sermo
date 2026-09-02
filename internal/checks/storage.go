@@ -149,7 +149,7 @@ func storageUsedBytes(st StorageStats) uint64 {
 func statfsUsage(path string) (StorageStats, error) {
 	var s syscall.Statfs_t
 	if err := syscall.Statfs(path, &s); err != nil {
-		return StorageStats{}, err
+		return StorageStats{}, fmt.Errorf("statfs %s: %w", path, err)
 	}
 	if s.Bsize <= 0 {
 		return StorageStats{}, fmt.Errorf("statfs %q returned invalid block size %d", path, s.Bsize)

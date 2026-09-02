@@ -84,7 +84,7 @@ func (c influxCheck) influxqlScalar(ctx context.Context, client *http.Client, ba
 	q := url.Values{"db": {c.database}, "q": {c.query}}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+influxQLQueryPath+"?"+q.Encode(), http.NoBody)
 	if err != nil {
-		return "", false, err
+		return "", false, fmt.Errorf("build influxdb request: %w", err)
 	}
 	switch {
 	case c.token != "":
@@ -95,7 +95,7 @@ func (c influxCheck) influxqlScalar(ctx context.Context, client *http.Client, ba
 
 	resp, err := httpx.Do(client, req)
 	if err != nil {
-		return "", false, err
+		return "", false, fmt.Errorf("influxdb request: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, maxHTTPBody))
@@ -153,7 +153,7 @@ func (c influxCheck) fluxScalar(ctx context.Context, client *http.Client, base s
 	u := base + influxFluxQueryPath + "?org=" + url.QueryEscape(c.org)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u, strings.NewReader(c.query))
 	if err != nil {
-		return "", false, err
+		return "", false, fmt.Errorf("build influxdb request: %w", err)
 	}
 	req.Header.Set(influxAuthHeader, influxAuthTokenPrefix+c.token)
 	req.Header.Set(httpHeaderContentType, influxFluxContentType)
@@ -161,7 +161,7 @@ func (c influxCheck) fluxScalar(ctx context.Context, client *http.Client, base s
 
 	resp, err := httpx.Do(client, req)
 	if err != nil {
-		return "", false, err
+		return "", false, fmt.Errorf("influxdb request: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, maxHTTPBody))

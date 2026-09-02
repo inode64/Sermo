@@ -52,7 +52,11 @@ func (c sqlCheck) openDB(ctx context.Context) (*sql.DB, error) {
 	if c.open != nil {
 		return c.open(ctx)
 	}
-	return sql.Open(c.driver, c.dsn)
+	db, err := sql.Open(c.driver, c.dsn)
+	if err != nil {
+		return nil, fmt.Errorf("open %s: %w", c.engine, err)
+	}
+	return db, nil
 }
 
 // sqlScalarDB runs query and returns the first column of the first row as a
@@ -60,7 +64,7 @@ func (c sqlCheck) openDB(ctx context.Context) (*sql.DB, error) {
 func sqlScalarDB(ctx context.Context, db *sql.DB, query string) (string, bool, error) {
 	var raw any
 	if err := db.QueryRowContext(ctx, query).Scan(&raw); err != nil {
-		return "", false, err
+		return "", false, fmt.Errorf("sql query: %w", err)
 	}
 	if raw == nil {
 		return "", true, nil

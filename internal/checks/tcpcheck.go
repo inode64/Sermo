@@ -28,11 +28,12 @@ func (c tcpCheck) Run(ctx context.Context) Result {
 		nc, e := conn.BindDialer(iface).DialContext(ctx, conn.TransportTCP, addr)
 		if e == nil {
 			_ = nc.Close()
+			return nil
 		}
-		return e
+		return fmt.Errorf("dial %s: %w", addr, e)
 	})
 	if err != nil {
-		r := c.unavailableResult(fmt.Sprintf("dial %s: %v", addr, err), start)
+		r := c.unavailableResult(err.Error(), start)
 		r.Data = ifaceData(perIface)
 		return r
 	}
