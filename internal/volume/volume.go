@@ -55,16 +55,12 @@ const (
 	lvExtendSizeArgFormat = "-L+%db"
 )
 
-// Mount is one entry of the mount table.
-type Mount struct {
-	Device     string
-	Mountpoint string
-	FSType     string
-}
+// Mount is one entry of the shared mount table.
+type Mount = checks.Mount
 
 // MountSource returns the current mount table. Injected for tests; the default
 // reads /proc/mounts.
-type MountSource func() ([]Mount, error)
+type MountSource = checks.MountSamplerFunc
 
 // Target is a resolved expansion target: the containing mounted filesystem and
 // the LVM logical volume backing it.
@@ -124,7 +120,7 @@ func (e Expander) Resolve(ctx context.Context, path string) (Target, error) {
 	if !ok {
 		return Target{}, fmt.Errorf("no mounted filesystem contains %q", path)
 	}
-	t := Target{Mountpoint: m.Mountpoint, FSType: m.FSType}
+	t := Target{Mountpoint: m.MountPoint, FSType: m.FSType}
 
 	to := e.timeout()
 	res, err := execx.Run(ctx, e.Runner, to, cmdLVS, lvmFlagNoHeadings, lvmFlagOutput, lvmLVFields, lvmFlagSeparator, lvmCSVSeparator, m.Device)
@@ -250,7 +246,7 @@ func containingMount(mounts []Mount, path string) (Mount, bool) {
 	var best Mount
 	bestLen := -1 // every mount point normalizes to at least "/" (len 1), so -1 means "none yet"
 	for _, m := range mounts {
-		mp := cleanMountpoint(m.Mountpoint)
+		mp := cleanMountpoint(m.MountPoint)
 		if mp == path || mp == "/" || strings.HasPrefix(path, mp+"/") {
 			if len(mp) > bestLen {
 				best, bestLen = m, len(mp)
@@ -275,10 +271,10 @@ func List(mounts MountSource) ([]Mount, error) {
 	seen := map[string]bool{}
 	var out []Mount
 	for _, m := range all {
-		if !IsStorageMount(m) || seen[m.Mountpoint] {
+		if !IsStorageMount(m) || seen[m.MountPoint] {
 			continue
 		}
-		seen[m.Mountpoint] = true
+		seen[m.MountPoint] = true
 		out = append(out, m)
 	}
 	return pruneNestedSameDeviceMounts(out), nil
@@ -287,7 +283,7 @@ func List(mounts MountSource) ([]Mount, error) {
 // IsStorageMount reports whether a mount table entry is a real storage
 // filesystem candidate for generated storage watches.
 func IsStorageMount(m Mount) bool {
-	if m.Mountpoint == "" || m.FSType == "" {
+	if m.MountPoint == "" || m.FSType == "" {
 		return false
 	}
 	if pseudoFilesystem(m.FSType) {
@@ -331,7 +327,7 @@ func storageFilesystem(fstype string) bool {
 
 func pruneNestedSameDeviceMounts(mounts []Mount) []Mount {
 	sort.SliceStable(mounts, func(i, j int) bool {
-		return len(cleanMountpoint(mounts[i].Mountpoint)) < len(cleanMountpoint(mounts[j].Mountpoint))
+		return len(cleanMountpoint(mounts[i].MountPoint)) < len(cleanMountpoint(mounts[j].MountPoint))
 	})
 	out := make([]Mount, 0, len(mounts))
 	for _, m := range mounts {
@@ -345,7 +341,7 @@ func pruneNestedSameDeviceMounts(mounts []Mount) []Mount {
 
 func hasParentMountOnSameDevice(existing []Mount, child Mount) bool {
 	for _, parent := range existing {
-		if parent.Device == child.Device && nestedMountpoint(parent.Mountpoint, child.Mountpoint) {
+		if parent.Device == child.Device && nestedMountpoint(parent.MountPoint, child.MountPoint) {
 			return true
 		}
 	}
@@ -381,7 +377,7 @@ func procMounts() ([]Mount, error) {
 	}
 	out := make([]Mount, 0, len(entries))
 	for _, m := range entries {
-		out = append(out, Mount{Device: m.Device, Mountpoint: m.MountPoint, FSType: m.FSType})
+		out = append(out, Mount{Device: m.Device, MountPoint: m.MountPoint, FSType: m.FSType})
 	}
 	return out, nil
 }

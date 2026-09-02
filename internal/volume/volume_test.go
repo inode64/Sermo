@@ -32,9 +32,9 @@ func staticMounts(ms ...Mount) MountSource {
 
 func TestContainingMountLongestPrefixWins(t *testing.T) {
 	mounts := []Mount{
-		{Mountpoint: "/"},
-		{Mountpoint: "/data"},
-		{Mountpoint: "/data/db/"}, // trailing slash must normalize
+		{MountPoint: "/"},
+		{MountPoint: "/data"},
+		{MountPoint: "/data/db/"}, // trailing slash must normalize
 	}
 	cases := []struct {
 		path string
@@ -51,8 +51,8 @@ func TestContainingMountLongestPrefixWins(t *testing.T) {
 		// the order mounts are scanned in.
 		for _, ms := range [][]Mount{mounts, {mounts[2], mounts[1], mounts[0]}} {
 			got, ok := containingMount(ms, tc.path)
-			if ok != tc.ok || got.Mountpoint != tc.want {
-				t.Fatalf("containingMount(%q) = %q/%v, want %q/%v", tc.path, got.Mountpoint, ok, tc.want, tc.ok)
+			if ok != tc.ok || got.MountPoint != tc.want {
+				t.Fatalf("containingMount(%q) = %q/%v, want %q/%v", tc.path, got.MountPoint, ok, tc.want, tc.ok)
 			}
 		}
 	}
@@ -65,8 +65,8 @@ func TestResolveLVM(t *testing.T) {
 	e := Expander{
 		Runner: r,
 		Mounts: staticMounts(
-			Mount{Device: "/dev/mapper/vg0-data", Mountpoint: "/mnt/backup", FSType: "ext4"},
-			Mount{Device: "/dev/sda1", Mountpoint: "/", FSType: "ext4"},
+			Mount{Device: "/dev/mapper/vg0-data", MountPoint: "/mnt/backup", FSType: "ext4"},
+			Mount{Device: "/dev/sda1", MountPoint: "/", FSType: "ext4"},
 		),
 	}
 	// A path *under* the mountpoint resolves to the containing mount.
@@ -84,15 +84,15 @@ func TestResolveLVM(t *testing.T) {
 
 func TestListFiltersPseudoFilesystems(t *testing.T) {
 	src := staticMounts(
-		Mount{Device: "proc", Mountpoint: "/proc", FSType: "proc"},
-		Mount{Device: "tmpfs", Mountpoint: "/run", FSType: "tmpfs"},
-		Mount{Device: "systemd-1", Mountpoint: "/var/lib/libvirt/images", FSType: "autofs"},
-		Mount{Device: "/dev/sda1", Mountpoint: "/", FSType: "ext4"},
-		Mount{Device: "/dev/mapper/vg0-data", Mountpoint: "/mnt/backup", FSType: "ext4"},
-		Mount{Device: "192.0.2.102:/srv/backup", Mountpoint: "/srv/backup", FSType: "nfs4"},
-		Mount{Device: "192.0.2.100:/", Mountpoint: "/var/lib/libvirt/images", FSType: "ceph"},
-		Mount{Device: "/dev/sda1", Mountpoint: "/", FSType: "ext4"}, // dup mountpoint
-		Mount{Device: "/dev/sda1", Mountpoint: "/srv/workspace", FSType: "ext4"},
+		Mount{Device: "proc", MountPoint: "/proc", FSType: "proc"},
+		Mount{Device: "tmpfs", MountPoint: "/run", FSType: "tmpfs"},
+		Mount{Device: "systemd-1", MountPoint: "/var/lib/libvirt/images", FSType: "autofs"},
+		Mount{Device: "/dev/sda1", MountPoint: "/", FSType: "ext4"},
+		Mount{Device: "/dev/mapper/vg0-data", MountPoint: "/mnt/backup", FSType: "ext4"},
+		Mount{Device: "192.0.2.102:/srv/backup", MountPoint: "/srv/backup", FSType: "nfs4"},
+		Mount{Device: "192.0.2.100:/", MountPoint: "/var/lib/libvirt/images", FSType: "ceph"},
+		Mount{Device: "/dev/sda1", MountPoint: "/", FSType: "ext4"}, // dup mountpoint
+		Mount{Device: "/dev/sda1", MountPoint: "/srv/workspace", FSType: "ext4"},
 	)
 	got, err := List(src)
 	if err != nil {
@@ -103,18 +103,18 @@ func TestListFiltersPseudoFilesystems(t *testing.T) {
 	}
 	want := []string{"/", "/mnt/backup", "/srv/backup", "/var/lib/libvirt/images"}
 	for i := range want {
-		if got[i].Mountpoint != want[i] {
-			t.Fatalf("mount[%d] = %q, want %q; got %+v", i, got[i].Mountpoint, want[i], got)
+		if got[i].MountPoint != want[i] {
+			t.Fatalf("mount[%d] = %q, want %q; got %+v", i, got[i].MountPoint, want[i], got)
 		}
 	}
 }
 
 func TestListRejectsNonStorageMounts(t *testing.T) {
 	src := staticMounts(
-		Mount{Device: "none", Mountpoint: "/run/credentials/x.service", FSType: "tmpfs"},
-		Mount{Device: "systemd-1", Mountpoint: "/proc/sys/fs/binfmt_misc", FSType: "autofs"},
-		Mount{Device: "systemd-1", Mountpoint: "/mnt/placeholder", FSType: "autofs"},
-		Mount{Device: "rpc_pipefs", Mountpoint: "/run/rpc_pipefs", FSType: "rpc_pipefs"},
+		Mount{Device: "none", MountPoint: "/run/credentials/x.service", FSType: "tmpfs"},
+		Mount{Device: "systemd-1", MountPoint: "/proc/sys/fs/binfmt_misc", FSType: "autofs"},
+		Mount{Device: "systemd-1", MountPoint: "/mnt/placeholder", FSType: "autofs"},
+		Mount{Device: "rpc_pipefs", MountPoint: "/run/rpc_pipefs", FSType: "rpc_pipefs"},
 	)
 	got, err := List(src)
 	if err != nil {
@@ -226,7 +226,7 @@ func TestResolveNotLVM(t *testing.T) {
 	}
 	e := Expander{
 		Runner: r,
-		Mounts: staticMounts(Mount{Device: "/dev/sda1", Mountpoint: "/data", FSType: "xfs"}),
+		Mounts: staticMounts(Mount{Device: "/dev/sda1", MountPoint: "/data", FSType: "xfs"}),
 	}
 	if _, err := e.Resolve(context.Background(), "/data"); err == nil {
 		t.Fatal("a non-LVM device must error")
@@ -234,10 +234,10 @@ func TestResolveNotLVM(t *testing.T) {
 }
 
 func TestResolveUnknownPath(t *testing.T) {
-	e := Expander{Runner: &fakeRunner{}, Mounts: staticMounts(Mount{Device: "/dev/sda1", Mountpoint: "/", FSType: "ext4"})}
+	e := Expander{Runner: &fakeRunner{}, Mounts: staticMounts(Mount{Device: "/dev/sda1", MountPoint: "/", FSType: "ext4"})}
 	// "/" matches as a fallback containing mount, so use a path that cannot match
 	// when there is no root mount.
-	e2 := Expander{Runner: &fakeRunner{}, Mounts: staticMounts(Mount{Device: "/dev/sdb1", Mountpoint: "/srv", FSType: "ext4"})}
+	e2 := Expander{Runner: &fakeRunner{}, Mounts: staticMounts(Mount{Device: "/dev/sdb1", MountPoint: "/srv", FSType: "ext4"})}
 	if _, err := e2.Resolve(context.Background(), "/mnt/x"); err == nil {
 		t.Fatal("a path with no containing mount must error")
 	}
@@ -256,7 +256,7 @@ func TestResolveLVSTimeoutMessage(t *testing.T) {
 		Runner:  slowVolumeRunner{},
 		Timeout: time.Millisecond,
 		Mounts: staticMounts(
-			Mount{Device: "/dev/mapper/vg0-data", Mountpoint: "/data", FSType: "ext4"},
+			Mount{Device: "/dev/mapper/vg0-data", MountPoint: "/data", FSType: "ext4"},
 		),
 	}
 	_, err := e.Resolve(context.Background(), "/data/sub")
