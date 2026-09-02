@@ -13,6 +13,7 @@ import (
 	"sermo/internal/checks"
 	"sermo/internal/config"
 	"sermo/internal/state"
+	"sermo/internal/web"
 )
 
 type daemonWatchReading struct {
@@ -110,7 +111,7 @@ func (a App) runWatchProbe(ctx context.Context, opts options) int {
 }
 
 func (a App) probeDaemonWatch(ctx context.Context, opts options, watch string) (daemonWatchProbe, error) {
-	path := daemonAPIPathWatches + "/" + url.PathEscape(watch) + "/probe"
+	path := web.APIPathWatches + "/" + url.PathEscape(watch) + "/probe"
 	resp, err := a.daemonWebRequest(ctx, opts, http.MethodPost, "probe", true, func(base string) string {
 		return base + path
 	})
