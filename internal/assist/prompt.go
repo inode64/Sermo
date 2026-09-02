@@ -11,8 +11,8 @@ import (
 	"io"
 	"strconv"
 	"strings"
-	"time"
 
+	"sermo/internal/cfgval"
 	"sermo/internal/config"
 )
 
@@ -228,7 +228,7 @@ func (p *Prompt) askPositiveDuration(question, def, invalidHint string, allowBla
 		if value == "" && allowBlank {
 			return ""
 		}
-		if duration, err := time.ParseDuration(value); err == nil && duration > 0 {
+		if duration, ok := cfgval.ParseDuration(value); ok && duration > 0 {
 			return value
 		}
 		p.printf("  %s\n", invalidHint)
