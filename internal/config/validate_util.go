@@ -2,17 +2,9 @@ package config
 
 import (
 	"fmt"
-	"path/filepath"
-	"strings"
 
 	"sermo/internal/cfgval"
 )
-
-func underDir(path, dir string) bool {
-	clean := filepath.Clean(path)
-	dir = filepath.Clean(dir)
-	return clean == dir || strings.HasPrefix(clean, dir+string(filepath.Separator))
-}
 
 func set(values ...string) map[string]struct{} {
 	out := make(map[string]struct{}, len(values))

@@ -19,6 +19,7 @@ import (
 
 	"sermo/internal/checks"
 	"sermo/internal/execx"
+	"sermo/internal/mounts"
 )
 
 // DefaultCommandTimeout bounds each LVM/filesystem command the expander runs.
@@ -324,23 +325,11 @@ func pruneNestedSameDeviceMounts(mounts []Mount) []Mount {
 
 func hasParentMountOnSameDevice(existing []Mount, child Mount) bool {
 	for _, parent := range existing {
-		if parent.Device == child.Device && nestedMountpoint(parent.MountPoint, child.MountPoint) {
+		if parent.Device == child.Device && mounts.PathStrictlyUnder(child.MountPoint, parent.MountPoint) {
 			return true
 		}
 	}
 	return false
-}
-
-func nestedMountpoint(parent, child string) bool {
-	parent = cleanMountpoint(parent)
-	child = cleanMountpoint(child)
-	if parent == child {
-		return false
-	}
-	if parent == "/" {
-		return strings.HasPrefix(child, "/")
-	}
-	return strings.HasPrefix(child, parent+"/")
 }
 
 func cleanMountpoint(path string) string {

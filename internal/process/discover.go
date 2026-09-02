@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sermo/internal/cfgval"
+	"sermo/internal/mounts"
 	"slices"
 	"sort"
 	"strconv"
@@ -511,7 +512,7 @@ func (f processFilter) match(uid uint32, exeOK bool, exe string) bool {
 	if f.exePath != "" && (!exeOK || exe != f.exePath) {
 		return false
 	}
-	if f.dir != "" && (!exeOK || !pathUnder(exe, f.dir)) {
+	if f.dir != "" && (!exeOK || !mounts.PathStrictlyUnder(exe, f.dir)) {
 		return false
 	}
 	return true
@@ -523,12 +524,6 @@ func (f processFilter) matchesIdentity(id Identity) bool {
 
 func (f processFilter) matchesProcess(p *Process) bool {
 	return f.match(p.UID, p.ExeOK, p.Exe)
-}
-
-// pathUnder reports whether p lies under directory dir (a strict descendant), so
-// "/opt/app" matches "/opt/app/bin/x" but not "/opt/application/x".
-func pathUnder(p, dir string) bool {
-	return strings.HasPrefix(p, strings.TrimRight(dir, string(os.PathSeparator))+string(os.PathSeparator))
 }
 
 func (d Discoverer) matchesAny(selectors []Selector, id Identity, resolve UserResolver) bool {
