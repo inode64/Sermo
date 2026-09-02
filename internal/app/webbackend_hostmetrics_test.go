@@ -34,6 +34,22 @@ func TestHostMetricLoad1NoReading(t *testing.T) {
 	}
 }
 
+func TestHostMetricAndLoadWatchShareLoadProjection(t *testing.T) {
+	numCPU := runtime.NumCPU()
+	load := float64(numCPU) / 2
+	host := hostMetric(metrics.MetricLoad1, metrics.Reading{Absolute: load, HasAbsolute: true})
+	meter := loadWatchMeter(load, numCPU)
+	if meter == nil {
+		t.Fatal("loadWatchMeter() = nil, want meter")
+	}
+	if host.Percent != meter.UsedPct {
+		t.Errorf("host load percent = %v, watch load percent = %v", host.Percent, meter.UsedPct)
+	}
+	if host.Total != float64(meter.NumCPU) {
+		t.Errorf("host load capacity = %v, watch CPU count = %d", host.Total, meter.NumCPU)
+	}
+}
+
 func TestByteUsage(t *testing.T) {
 	used, total, free, ok := byteUsage(metrics.Reading{Absolute: 3, Total: 8, HasTotal: true})
 	if !ok || used != 3 || total != 8 || free != 5 {

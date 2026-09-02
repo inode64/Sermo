@@ -132,9 +132,10 @@ func hostMetric(name string, r metrics.Reading) web.HostMetric {
 		// HasAbsolute (as watchMeter does) avoids fabricating Total/Percent when
 		// load1 has no absolute value.
 		if r.HasAbsolute {
-			if ncpu := runtime.NumCPU(); ncpu > 0 {
+			ncpu := runtime.NumCPU()
+			if usedPct, ok := loadUsedPercent(r.Absolute, ncpu); ok {
 				m.Total = float64(ncpu)
-				m.Percent = r.Absolute / float64(ncpu) * metrics.PercentScale
+				m.Percent = usedPct
 			}
 		}
 	}
