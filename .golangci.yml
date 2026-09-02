@@ -275,7 +275,7 @@ linters:
       # supply-chain changes and must not appear as incidental go.mod edits.
       exclude-forbidden: true
       go-debug-forbidden: true
-      go-version-pattern: '^1\.27\.0$'
+      go-version-pattern: '^1\.27\.1$'
       ignore-forbidden: true
       tool-forbidden: true
       toolchain-forbidden: true
