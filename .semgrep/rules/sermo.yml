@@ -95,3 +95,81 @@ rules:
       - pattern-either:
           - pattern: $ITEMS[$I].$FIELD = $V
           - pattern: $ITEMS[$I] = $V
+
+  - id: service-lifecycle-must-use-operation
+    languages: [go]
+    severity: ERROR
+    message: >-
+      Service start/stop/restart/reload/reset-state must go through
+      internal/operation. Primitive backends (servicemgr, dockerctl, virt)
+      implement Manager; CLI, daemon and web must not call those methods
+      directly.
+    paths:
+      exclude:
+        - internal/operation/**
+        - internal/servicemgr/**
+        - internal/dockerctl/**
+        - internal/virt/**
+        - '**/*_test.go'
+    patterns:
+      - pattern-either:
+          - pattern: $M.Start($CTX, $SVC)
+          - pattern: $M.Stop($CTX, $SVC)
+          - pattern: $M.Restart($CTX, $SVC)
+          - pattern: $M.Reload($CTX, $SVC)
+          - pattern: $M.ResetState($CTX, $SVC)
+      - metavariable-type:
+          metavariable: $M
+          type: servicemgr.Manager
+
+  - id: syscall-kill-must-use-process-signaler
+    languages: [go]
+    severity: ERROR
+    message: >-
+      kill(2) with a real signal must go through process.Signaler so identity
+      and PID-reuse guards stay in one place. Signal 0 is a liveness probe and
+      is allowed. process and execx are the primitive owners (execx kills its
+      own process group on timeout).
+    paths:
+      exclude:
+        - internal/process/**
+        - internal/execx/**
+        - '**/*_test.go'
+    patterns:
+      - pattern: syscall.Kill($PID, $SIG)
+      - pattern-not: syscall.Kill($PID, 0)
+
+  - id: yaml-duration-must-use-cfgval
+    languages: [go]
+    severity: ERROR
+    message: >-
+      YAML and config durations parse through cfgval.ParseDuration so invalid
+      vs zero cannot drift. Named exceptions: state.ParseCutoff (operator
+      cutoff), the web query parser, and checks/summary display of already
+      formatted values.
+    paths:
+      exclude:
+        - internal/cfgval/**
+        - internal/state/cutoff.go
+        - internal/web/server.go
+        - internal/checks/summary.go
+        - '**/*_test.go'
+    patterns:
+      - pattern: time.ParseDuration(...)
+
+  - id: daemon-http-contract-literals
+    languages: [go]
+    severity: ERROR
+    message: >-
+      Daemon HTTP header names live in internal/web/api_contract.go. A second
+      literal can silently desync sermoctl from sermod. Reference web.HeaderCSRF,
+      web.HeaderGeneration or web.HeaderConfirm.
+    paths:
+      exclude:
+        - internal/web/api_contract.go
+        - '**/*_test.go'
+    patterns:
+      - pattern-either:
+          - pattern: '"X-Sermo-Csrf"'
+          - pattern: '"X-Sermo-Generation"'
+          - pattern: '"X-Sermo-Confirm"'

@@ -12,6 +12,10 @@
 package tests
 
 import (
+	"context"
+	"syscall"
+	"time"
+
 	"sermo/internal/process"
 	"sermo/internal/servicemgr"
 )
@@ -64,3 +68,38 @@ func redactViaHelper(items []Blocker) []Blocker {
 }
 
 func redactCloned[T any](items []T, redact func(*T)) []T { return items }
+
+func bypassServiceStart(m servicemgr.Manager, ctx context.Context) error {
+	// ruleid: service-lifecycle-must-use-operation
+	return m.Start(ctx, "nginx")
+}
+
+func serviceStatusIsReadOnly(m servicemgr.Manager, ctx context.Context) (servicemgr.ServiceStatus, error) {
+	// ok: service-lifecycle-must-use-operation
+	return m.Status(ctx, "nginx")
+}
+
+func bypassKill(pid int) error {
+	// ruleid: syscall-kill-must-use-process-signaler
+	return syscall.Kill(pid, syscall.SIGTERM)
+}
+
+func pidLivenessProbe(pid int) error {
+	// ok: syscall-kill-must-use-process-signaler
+	return syscall.Kill(pid, 0)
+}
+
+func parseYAMLDuration(raw string) (time.Duration, error) {
+	// ruleid: yaml-duration-must-use-cfgval
+	return time.ParseDuration(raw)
+}
+
+func csrfHeaderLiteral() string {
+	// ruleid: daemon-http-contract-literals
+	return "X-Sermo-Csrf"
+}
+
+func generationHeaderName() string {
+	// ok: daemon-http-contract-literals
+	return "invalid X-Sermo-Generation header"
+}
