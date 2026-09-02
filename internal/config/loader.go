@@ -40,7 +40,7 @@ type loadOptions struct {
 	catalogDirs  []string
 	pathDirs     map[string][]string
 	serviceUnits map[string][]string
-	loadCtx      context.Context
+	loadCtx      context.Context //nolint:containedctx // optional daemon-lifetime cancel for lazy catalog I/O; absent means Background.
 }
 
 // WithCatalogDirs overrides the compiled catalog search directory. Production
@@ -53,7 +53,7 @@ func WithCatalogDirs(dirs ...string) Option {
 // WithLoadContext binds service-unit discovery during lazy catalog resolution to
 // the caller's context. Production callers pass the daemon lifetime context.
 func WithLoadContext(ctx context.Context) Option {
-	return func(o *loadOptions) { o.loadCtx = ctx }
+	return func(o *loadOptions) { o.loadCtx = ctx } //nolint:fatcontext // option copies the caller's lifetime context onto loadOptions; not a nested request context.
 }
 
 // Load reads the global configuration at globalPath and every catalog service and

@@ -1301,7 +1301,7 @@ type Server struct {
 	Changes *Broadcaster
 
 	started  time.Time       // when the server began serving; for /livez uptime
-	shutdown context.Context // daemon lifetime; set in Run
+	shutdown context.Context //nolint:containedctx // daemon lifetime; set in Run. Not a per-request context.
 }
 
 // dashboardSnapshotSource is an optional atomic aggregate source. The normal
@@ -1542,7 +1542,7 @@ func (s *Server) operateContext(_ *http.Request) context.Context {
 // Run serves until ctx is cancelled, then shuts down gracefully. Timeouts bound
 // slow clients (the server runs as root, so it is hardened by default).
 func (s *Server) Run(ctx context.Context) error {
-	s.shutdown = ctx
+	s.shutdown = ctx //nolint:fatcontext // stores the daemon Run cancel for /readyz and in-flight mutations; not nested per request.
 	srv := &http.Server{
 		Addr:              s.Addr,
 		Handler:           s.Handler(),
