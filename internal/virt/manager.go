@@ -105,13 +105,11 @@ func SpecFromTree(tree map[string]any) (Spec, bool, error) {
 	if spec.Host == "" && spec.Socket == "" {
 		spec.Socket = DefaultSocket
 	}
-	if _, present := m[ControlKeyPort]; present {
-		port, ok := cfgval.Int(m[ControlKeyPort])
-		if !ok || !ValidHostPort(spec.Host, port) {
-			return Spec{}, true, fmt.Errorf("%s must be an integer in %s", controlPathPort, cfgval.TCPPortRange())
-		}
-		spec.Port = port
+	port, err := controlPort(m, spec.Host)
+	if err != nil {
+		return Spec{}, true, err
 	}
+	spec.Port = port
 	if spec.Port == 0 {
 		spec.Port = DefaultPort
 	}
@@ -124,6 +122,20 @@ func SpecFromTree(tree map[string]any) (Spec, bool, error) {
 		}
 	}
 	return spec, true, nil
+}
+
+// controlPort reads and validates the optional control.port shared by libvirt
+// domain and network controls.
+func controlPort(fields map[string]any, host string) (int, error) {
+	value, present := fields[ControlKeyPort]
+	if !present {
+		return 0, nil
+	}
+	port, ok := cfgval.Int(value)
+	if !ok || !ValidHostPort(host, port) {
+		return 0, fmt.Errorf("%s must be an integer in %s", controlPathPort, cfgval.TCPPortRange())
+	}
+	return port, nil
 }
 
 func validateEndpointFields(uri, socket, host string) error {
