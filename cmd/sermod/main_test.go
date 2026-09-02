@@ -404,10 +404,10 @@ func TestEngineAndNotifierAccessors(t *testing.T) {
 		config.SectionEngine: map[string]any{config.EngineKeyBackend: "openrc", "interval": "30s"},
 		"notifiers":          map[string]any{"ops": map[string]any{"type": "slack"}},
 	}}}
-	if got := app.EngineString(cfg, config.EngineKeyBackend); got != "openrc" {
+	if got := config.EngineString(cfg, config.EngineKeyBackend); got != "openrc" {
 		t.Fatalf("engineString(backend) = %q, want openrc", got)
 	}
-	if got := app.EngineString(cfg, "missing"); got != "" {
+	if got := config.EngineString(cfg, "missing"); got != "" {
 		t.Fatalf("engineString(missing) = %q, want empty", got)
 	}
 	if raw := cfg.Notifiers(); len(raw) != 3 || raw["ops"] == nil || raw["tty"] == nil || raw["wall"] == nil {
@@ -415,7 +415,7 @@ func TestEngineAndNotifierAccessors(t *testing.T) {
 	}
 
 	bare := &config.Config{Global: config.Global{Raw: map[string]any{}}}
-	if app.EngineString(bare, config.EngineKeyBackend) != "" {
+	if config.EngineString(bare, config.EngineKeyBackend) != "" {
 		t.Fatal("engine accessor on an empty config must return zero value")
 	}
 	if raw := bare.Notifiers(); len(raw) != 2 || raw["tty"] == nil || raw["wall"] == nil {
@@ -429,13 +429,13 @@ func TestEngineAndNotifierAccessors(t *testing.T) {
 			config.EngineKeyDefaultTimeout:    "45s",
 		},
 	}}}
-	if got := app.EngineInt(cfg2, config.EngineKeyMaxParallelChecks, app.DefaultEngineMaxParallelChecks); got != 16 {
+	if got := config.EngineInt(cfg2, config.EngineKeyMaxParallelChecks, app.DefaultEngineMaxParallelChecks); got != 16 {
 		t.Fatalf("EngineInt string-num = %d, want 16", got)
 	}
 	cfg3 := &config.Config{Global: config.Global{Raw: map[string]any{
 		config.SectionEngine: map[string]any{config.EngineKeyMaxParallelChecks: 4}, // int form
 	}}}
-	if got := app.EngineInt(cfg3, config.EngineKeyMaxParallelChecks, app.DefaultEngineMaxParallelChecks); got != 4 {
+	if got := config.EngineInt(cfg3, config.EngineKeyMaxParallelChecks, app.DefaultEngineMaxParallelChecks); got != 4 {
 		t.Fatalf("EngineInt bare-int = %d, want 4", got)
 	}
 	if got := config.EngineDuration(cfg2, config.EngineKeyDefaultTimeout, app.DefaultEngineCheckTimeout); got != 45*time.Second {

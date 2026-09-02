@@ -915,10 +915,8 @@ func effectiveBackend(cfg *Config) string {
 	if backend := strings.ToLower(envOverride(EnvBackendOverride)); backend == backendSystemd || backend == backendOpenRC {
 		return backend
 	}
-	if engine, ok := cfg.Global.Raw[SectionEngine].(map[string]any); ok {
-		if backend := cfgval.String(engine[EngineKeyBackend]); backend != "" && backend != backendAuto {
-			return backend
-		}
+	if backend := cfgval.String(EngineSection(cfg)[EngineKeyBackend]); backend != "" && backend != backendAuto {
+		return backend
 	}
 	return detectedInit
 }

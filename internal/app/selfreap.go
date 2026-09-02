@@ -56,7 +56,7 @@ type SelfStrayHygiene struct {
 // ReapOwnStraysEnabled reports whether startup hygiene should run for this
 // configuration. It is on unless `engine.reap_own_strays` is explicitly false.
 func ReapOwnStraysEnabled(cfg *config.Config) bool {
-	return EngineBoolDefaultTrue(cfg, config.EngineKeyReapOwnStrays)
+	return config.EngineBoolDefaultTrue(cfg, config.EngineKeyReapOwnStrays)
 }
 
 // Run signals every process in the daemon's own control group except the daemon
