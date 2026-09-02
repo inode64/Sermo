@@ -7,13 +7,6 @@ import (
 	"sermo/internal/telegramapi"
 )
 
-// TelegramParseModes returns the accepted `parse_mode` values, for validation
-// and docs.
-func TelegramParseModes() []string { return telegramapi.ParseModes() }
-
-// ValidTelegramParseMode reports whether s is an accepted `parse_mode`.
-func ValidTelegramParseMode(s string) bool { return telegramapi.ValidParseMode(s) }
-
 // telegramOptions carries the optional sendMessage tuning read from config.
 type telegramOptions struct {
 	parseMode string // Bot API parse_mode; empty means plain text
