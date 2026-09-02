@@ -240,7 +240,9 @@ lecturas en un array `readings`.
 persistido bajo `paths.state` y leído en vivo por el daemon. `WATCH` es el nombre
 de un host watch o de un watch de servicio `"<servicio>:<watch>"`; el estado de
 monitorización de un watch es independiente del de su servicio, así que
-`unmonitor` sobre un servicio nunca pausa sus watches.
+`unmonitor` sobre un servicio nunca pausa sus watches. Repetir cualquiera de
+los comandos cuando ese estado ya está vigente es un no-op correcto y conserva
+la fuente y la hora del cambio de monitor originales.
 
 `sermoctl watch probe WATCH` solicita al daemon en ejecución una muestra para
 un host watch `diskio`, `hdparm`, `lvm`, `raid`, `smart`, `storcli` o `ssacli` e

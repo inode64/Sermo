@@ -1365,7 +1365,9 @@ archivos que cualquier otra serie almacenada. Los services que declaran un mapa 
 procesos y los gráficos de latencia/CPU/memoria/IO.
 
 Los cambios de monitor disparados desde la web se registran con la fuente `web`
-en el almacén de estado; los stops manuales desde la web UI o la CLI usan
+en el almacén de estado. Una petición web o CLI repetida para el estado de
+monitor ya vigente es un no-op correcto y conserva la fuente y el timestamp
+anteriores; los stops manuales desde la web UI o la CLI usan
 `web-manual-stop` / `cli-manual-stop` hasta que un start correcto posterior
 restaura el estado monitorizado anterior. Un `umount` correcto de storage pausa
 la watch de capacidad de ese storage con `web-mount-umount` o

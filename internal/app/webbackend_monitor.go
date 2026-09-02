@@ -95,18 +95,13 @@ func (b *WebBackend) setMonitoringState(key string, monitored bool, emit monitor
 		emit(action, eventKindError, "", msg)
 		return fmt.Errorf("%s", msg)
 	}
-	priorActive, found, err := b.store.Active(key)
+	transition, err := ApplyMonitorTransition(b.store, key, monitored, state.SourceWeb)
 	if err != nil {
 		msg := fmt.Sprintf("%s failed: %v", action, err)
 		emit(action, eventKindError, "", msg)
 		return fmt.Errorf("%s", msg)
 	}
-	if err := b.store.SetActive(key, monitored, state.SourceWeb); err != nil {
-		msg := fmt.Sprintf("%s failed: %v", action, err)
-		emit(action, eventKindError, "", msg)
-		return fmt.Errorf("%s", msg)
-	}
-	if found && priorActive == monitored {
+	if !transition.Changed {
 		emit(action, eventKindSuppressed, "", monitorMessage(monitored, eventMessageAlreadyMonitored, eventMessageAlreadyPaused))
 		return nil
 	}

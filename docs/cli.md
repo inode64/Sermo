@@ -230,7 +230,8 @@ last-check timestamp; `--json` exposes the same readings in a `readings` array.
 persisted under `paths.state` and read live by the daemon. `WATCH` is a host
 watch name or a service-embedded watch `"<service>:<watch>"`; a watch's monitor
 state is independent of its service's, so `unmonitor` on a service never pauses
-its watches.
+its watches. Repeating either command after that state is already effective is
+a successful no-op and preserves the original monitor source and change time.
 
 `sermoctl watch probe WATCH` asks the running daemon to run one fresh sample for
 a host `diskio`, `hdparm`, `lvm`, `raid`, `smart`, `storcli` or `ssacli` watch
