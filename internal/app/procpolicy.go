@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"maps"
-	"path/filepath"
 	"regexp"
 	"slices"
 	"sort"
@@ -144,33 +143,17 @@ func rejectProcessPolicyActions(entry map[string]any) error {
 }
 
 func parseProcessPolicyAllows(user string, check map[string]any) ([]processPolicyAllow, error) {
-	rawAllows, ok := check[checks.CheckKeyAllow].(map[string]any)
-	if !ok || len(rawAllows) == 0 {
-		return nil, fmt.Errorf("process_policy check requires a non-empty %s mapping", checks.CheckKeyAllow)
+	parsed, issues := config.ParseProcessPolicyAllows(check[checks.CheckKeyAllow])
+	if len(issues) > 0 {
+		return nil, issues[0]
 	}
-	allows := make([]processPolicyAllow, 0, len(rawAllows))
-	for _, name := range slices.Sorted(maps.Keys(rawAllows)) {
-		raw, ok := rawAllows[name].(map[string]any)
-		if !ok {
-			return nil, fmt.Errorf("process_policy allow %q must be a mapping", name)
+	allows := make([]processPolicyAllow, 0, len(parsed))
+	for _, entry := range parsed {
+		filter, err := process.NewIdentityFilter(entry.Exe, user, "")
+		if err != nil {
+			return nil, fmt.Errorf("prepare process_policy allow %q: %w", entry.Name, err)
 		}
-		exe := cfgval.String(raw[checks.CheckKeyExe])
-		filter, err := process.NewIdentityFilter(exe, user, "")
-		if err != nil || exe == "" || !filepath.IsAbs(exe) || filepath.Clean(exe) != exe {
-			return nil, fmt.Errorf("process_policy allow %q requires a clean absolute executable path", name)
-		}
-		allow := processPolicyAllow{filter: filter}
-		if rawCmd, present := raw[process.SelectorKeyCmd]; present {
-			cmd, ok := rawCmd.(string)
-			if !ok || cmd == "" || !strings.HasPrefix(cmd, "^") || !strings.HasSuffix(cmd, "$") {
-				return nil, fmt.Errorf("process_policy allow %q cmd must be a non-empty expression anchored with ^ and $", name)
-			}
-			allow.cmd, err = regexp.Compile(cmd)
-			if err != nil {
-				return nil, fmt.Errorf("process_policy allow %q cmd is invalid: %w", name, err)
-			}
-		}
-		allows = append(allows, allow)
+		allows = append(allows, processPolicyAllow{filter: filter, cmd: entry.Cmd})
 	}
 	return allows, nil
 }
