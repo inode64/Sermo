@@ -368,18 +368,13 @@ func cleanMountpoint(path string) string {
 	return path
 }
 
-// procMounts reads the mount table via the shared /proc/mounts parser
-// (internal/checks owns the escaping rules), mapped to this package's shape.
+// procMounts reads the mount table via the shared /proc/mounts parser.
 func procMounts() ([]Mount, error) {
 	entries, err := checks.DefaultMounts()
 	if err != nil {
 		return nil, fmt.Errorf("read /proc/mounts: %w", err)
 	}
-	out := make([]Mount, 0, len(entries))
-	for _, m := range entries {
-		out = append(out, Mount{Device: m.Device, MountPoint: m.MountPoint, FSType: m.FSType})
-	}
-	return out, nil
+	return entries, nil
 }
 
 // parseInt trims and parses a decimal integer from command output.
