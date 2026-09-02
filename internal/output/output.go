@@ -14,15 +14,9 @@ const (
 	truncatedFirstLineOffset = 1
 )
 
-// Trim removes surrounding whitespace from captured command, SQL, protocol and
-// hook text while preserving meaningful internal line breaks.
-func Trim(s string) string {
-	return strings.TrimSpace(s)
-}
-
 // FirstNonEmptyLine returns the first non-empty line of s, trimmed.
 func FirstNonEmptyLine(s string) string {
-	clean := Trim(s)
+	clean := strings.TrimSpace(s)
 	for line := range strings.SplitSeq(clean, outputLineSeparator) {
 		if t := strings.TrimSpace(line); t != "" {
 			return t
@@ -61,7 +55,7 @@ func Bounded(stdout, stderr string) string {
 }
 
 func streamSection(label, text string) string {
-	if s := Trim(text); s != "" {
+	if s := strings.TrimSpace(text); s != "" {
 		return label + streamLabelSeparator + s
 	}
 	return ""

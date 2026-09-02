@@ -13,7 +13,6 @@ import (
 	"sermo/internal/cfgval"
 	"sermo/internal/conn"
 	"sermo/internal/netutil"
-	"sermo/internal/output"
 )
 
 // connCheck probes a server over a connection protocol (mysql, …): it connects,
@@ -67,14 +66,14 @@ func versionIdentity(res conn.Result) string {
 }
 
 func trimConnResult(res conn.Result) conn.Result {
-	res.Version = output.Trim(res.Version)
-	res.Failure = output.Trim(res.Failure)
+	res.Version = strings.TrimSpace(res.Version)
+	res.Failure = strings.TrimSpace(res.Failure)
 	if len(res.Extra) == 0 {
 		return res
 	}
 	extra := make(map[string]string, len(res.Extra))
 	for k, v := range res.Extra {
-		extra[k] = output.Trim(v)
+		extra[k] = strings.TrimSpace(v)
 	}
 	res.Extra = extra
 	return res

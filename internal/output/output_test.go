@@ -47,33 +47,6 @@ func TestBoundTailBoundaries(t *testing.T) {
 	}
 }
 
-func TestTrim(t *testing.T) {
-	tests := []struct {
-		name string
-		in   string
-		want string
-	}{
-		{"empty", "", ""},
-		{"only ws", "   \t\n  ", ""},
-		{"single line", " hello world \n", "hello world"},
-		{"leading blank lines", "\n\n\nline1\nline2", "line1\nline2"},
-		{"trailing blank lines", "line1\nline2\n\n\n", "line1\nline2"},
-		{"both ends + internal blank", "\n\n  \nfirst\n\nmiddle\n\nlast\n\n  ", "first\n\nmiddle\n\nlast"},
-		{"all blank lines", "\n\n\t\n  \n", ""},
-		{"mixed whitespace lines", "  \r\n\t\nreal\n   \n  ", "real"},
-		{"version banner typical", "\n\nPostgreSQL 15.3\n\n", "PostgreSQL 15.3"},
-		{"sql with trailing", "col1\nval1\n\n", "col1\nval1"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := Trim(tt.in); got != tt.want {
-				t.Fatalf("Trim(%q) = %q, want %q", tt.in, got, tt.want)
-			}
-		})
-	}
-}
-
 func TestFirstNonEmptyLineUsesTrim(t *testing.T) {
 	if got := FirstNonEmptyLine("\n\n  \nreal line\n\n  \n"); got != "real line" {
 		t.Fatalf("FirstNonEmptyLine after trim gave %q", got)
