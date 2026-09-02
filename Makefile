@@ -76,7 +76,7 @@ config_subst = sed -e 's|/usr/share/sermo|$(SERMO_DATADIR)|g' -e 's|/etc/sermo|$
 # Rewrite runtime/state dirs in the tmpfiles config.
 tmpfiles_subst = sed -e 's|/run/sermo|$(SERMO_RUNDIR)|g' -e 's|/var/lib/sermo|$(SERMO_STATEDIR)|g'
 
-.PHONY: all build build-candidate-sermoctl test vet fmt fmt-check lint production-staticcheck production-deadcode unused-globals modules-check actions-lint analyzer-pins-check race fuzz deadcode quality-report cover-gate custom-gcl scripts-lint scripts-test semgrep yaml-fmt yaml-fmt-check yaml-lint yaml-validate markdown-check web web-check web-lint web-e2e validate check cover tidy clean \
+.PHONY: all build build-candidate-sermoctl test vet fmt fmt-check lint production-staticcheck production-deadcode unused-globals modules-check actions-lint analyzer-pins-check race fuzz deadcode capslock quality-report cover-gate custom-gcl scripts-lint scripts-test semgrep yaml-fmt yaml-fmt-check yaml-lint yaml-validate markdown-check web web-check web-lint web-e2e validate check cover tidy clean \
         install install-bin install-catalog install-examples install-config install-templates install-tmpfiles install-systemd install-openrc \
         uninstall
 
@@ -103,6 +103,8 @@ RUFF ?= ruff
 SEMGREP ?= semgrep
 SEMGREP_TARGETS = cmd internal tools
 DEADCODE_PRODUCTION_ALLOWLIST := tools/deadcode-production.allow
+CAPSLOCK_MODULE := github.com/google/capslock/cmd/capslock
+CAPSLOCK_VERSION := v0.3.3
 ACTIONLINT ?= actionlint
 FUZZ_TIME ?= 15s
 # gocognit, gocyclo, dupl and perfsprint are blocking linters. Keep a focused
@@ -356,6 +358,14 @@ production-deadcode:
 				print "deadcode production-only summary: " (permitted + 0) " permitted, " (unexpected + 0) " unexpected, " (stale + 0) " stale"; \
 				if ((unexpected + stale) > 0) exit 1 \
 			}' $(DEADCODE_PRODUCTION_ALLOWLIST) "$$tmp"
+
+# Advisory only (not part of lint/check): capability report for cmd and
+# internal packages. It classifies privileged stdlib reachability (network,
+# exec, filesystem, unsafe) so a new dependency's extra powers are visible
+# without failing the PR gate.
+capslock:
+	@echo "capslock -packages ./cmd/...,./internal/..."
+	@$(LINT_CACHE_ENV) go run $(CAPSLOCK_MODULE)@$(CAPSLOCK_VERSION) -packages ./cmd/...,./internal/...
 
 # Advisory only (not part of lint/check): keep the remaining cyclomatic
 # complexity baseline visible while it is reduced in focused refactors.
