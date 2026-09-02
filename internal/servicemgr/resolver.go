@@ -39,7 +39,7 @@ func (r UnitResolver) Resolve(ctx context.Context, backend Backend, candidates [
 		probe = OSProbe{}
 	}
 
-	candidates = strutil.MergeUnique(nil, candidates...)
+	candidates = strutil.Unique(candidates)
 	var tried []string
 	var known []string
 	seenUnits := map[string]struct{}{}

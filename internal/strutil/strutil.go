@@ -30,6 +30,12 @@ func SortedUnique(values []string) []string {
 	return slices.Sorted(maps.Keys(Set(values)))
 }
 
+// Unique returns the non-empty values once, preserving first-seen order.
+// Unlike SortedUnique it does not trim or sort. An empty result is nil.
+func Unique(values []string) []string {
+	return MergeUnique(nil, values...)
+}
+
 // MergeUnique appends each non-empty value not already present in list,
 // preserving order. Empty strings in either input are skipped.
 func MergeUnique(list []string, values ...string) []string {

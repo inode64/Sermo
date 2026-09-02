@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -18,14 +17,6 @@ import (
 // webhookTimeout bounds a webhook POST so a slow endpoint cannot stall a watch
 // cycle.
 const webhookTimeout = 15 * time.Second
-
-// webhookErrorSnippetLimit bounds the non-2xx response body included in errors.
-const webhookErrorSnippetLimit = 256
-
-const (
-	httpStatusClassDivisor = 100
-	httpStatusClassSuccess = 2
-)
 
 const (
 	pushPayloadTitleKey   = "title"
@@ -123,9 +114,8 @@ func postWebhook(ctx context.Context, label, webhook string, headers map[string]
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	if resp.StatusCode/httpStatusClassDivisor != httpStatusClassSuccess {
-		snippet, _ := io.ReadAll(io.LimitReader(resp.Body, webhookErrorSnippetLimit))
-		return fmt.Errorf("%s webhook returned %s: %s", label, resp.Status, strings.TrimSpace(string(snippet)))
+	if !httpx.SuccessStatus(resp.StatusCode) {
+		return fmt.Errorf("%s webhook returned %s: %s", label, resp.Status, httpx.ErrorBody(resp, httpx.ErrorBodyLimit))
 	}
 	return nil
 }

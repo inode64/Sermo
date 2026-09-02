@@ -3,7 +3,9 @@ package httpx
 
 import (
 	"errors"
+	"io"
 	"net/http"
+	"strings"
 )
 
 const (
@@ -21,6 +23,28 @@ const (
 	// ContentTypeJSON is the JSON media type used by Sermo HTTP clients and APIs.
 	ContentTypeJSON = "application/json"
 )
+
+const (
+	statusClassDivisor = 100
+	statusClassSuccess = 2
+	// ErrorBodyLimit bounds a non-2xx response body captured into an error.
+	ErrorBodyLimit = 256
+)
+
+// SuccessStatus reports whether code is a 2xx HTTP status.
+func SuccessStatus(code int) bool {
+	return code/statusClassDivisor == statusClassSuccess
+}
+
+// ErrorBody reads at most limit bytes of resp's body, trimmed. Callers use it
+// after a non-success status so the operator sees the remote error text.
+func ErrorBody(resp *http.Response, limit int64) string {
+	if resp == nil || resp.Body == nil {
+		return ""
+	}
+	snippet, _ := io.ReadAll(io.LimitReader(resp.Body, limit))
+	return strings.TrimSpace(string(snippet))
+}
 
 // ErrNilResponse reports a transport that broke net/http's contract by
 // returning neither a response nor an error.

@@ -74,7 +74,7 @@ func (c librariesCheck) Run(ctx context.Context) Result {
 				dirs = append([]string{expandOrigin(p, c.binary)}, dirs...)
 			}
 		}
-		dirs = strutil.MergeUnique(nil, dirs...)
+		dirs = strutil.Unique(dirs)
 	}
 
 	missing := resolveNeeded(ctx, needed, dirs, make(map[string]bool))
@@ -176,7 +176,7 @@ func collectLibrarySearchDirs(binary string, ef *elf.File) []string {
 		}
 	}
 
-	return strutil.MergeUnique(nil, dirs...)
+	return strutil.Unique(dirs)
 }
 
 func expandOrigin(p, binary string) string {

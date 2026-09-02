@@ -63,7 +63,7 @@ func (c processCheck) replacedBinaries() string {
 	if len(matched) == 0 {
 		return ""
 	}
-	return strings.Join(strutil.MergeUnique(nil, matched...), ", ")
+	return strings.Join(strutil.Unique(matched), ", ")
 }
 
 func (c processCheck) observedState() string {
