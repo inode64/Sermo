@@ -749,7 +749,7 @@ func (w *Worker) firingRemediationRules(ctx context.Context, ev *rules.Evaluator
 }
 
 func (w *Worker) operateForRemediation(ctx context.Context, action string) operation.Result {
-	if err := beginOperationSettling(w.OperationSettling, w.Service, action); err != nil {
+	if err := BeginOperationSettling(w.OperationSettling, w.Service, action); err != nil {
 		w.emit(Event{Kind: eventKindError, Action: action, Message: err.Error()})
 	}
 	result := w.Operate(ctx, action)

@@ -113,7 +113,7 @@ func webActionResultFrom(r operation.Result) web.ActionResult {
 }
 
 func (b *WebBackend) operationResultWithMonitor(ctx context.Context, name, action string) operation.Result {
-	if err := beginOperationSettling(b.operationSettling, name, action); err != nil {
+	if err := BeginOperationSettling(b.operationSettling, name, action); err != nil {
 		b.emitMonitorEvent(name, action, eventKindError, "", err.Error())
 	}
 	r := b.operationResult(ctx, name, action)
