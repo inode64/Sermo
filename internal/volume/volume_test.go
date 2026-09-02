@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"sermo/internal/checks"
 	"sermo/internal/execx"
 )
 
@@ -30,34 +31,6 @@ func staticMounts(ms ...Mount) MountSource {
 	return func() ([]Mount, error) { return ms, nil }
 }
 
-func TestContainingMountLongestPrefixWins(t *testing.T) {
-	mounts := []Mount{
-		{MountPoint: "/"},
-		{MountPoint: "/data"},
-		{MountPoint: "/data/db/"}, // trailing slash must normalize
-	}
-	cases := []struct {
-		path string
-		want string
-		ok   bool
-	}{
-		{"/data/db/x", "/data/db/", true}, // most specific mount
-		{"/data/other", "/data", true},
-		{"/etc", "/", true},      // falls back to root
-		{"/data", "/data", true}, // exact match
-	}
-	for _, tc := range cases {
-		// Order independence: the longest matching prefix must win regardless of
-		// the order mounts are scanned in.
-		for _, ms := range [][]Mount{mounts, {mounts[2], mounts[1], mounts[0]}} {
-			got, ok := containingMount(ms, tc.path)
-			if ok != tc.ok || got.MountPoint != tc.want {
-				t.Fatalf("containingMount(%q) = %q/%v, want %q/%v", tc.path, got.MountPoint, ok, tc.want, tc.ok)
-			}
-		}
-	}
-}
-
 func TestResolveLVM(t *testing.T) {
 	r := &fakeRunner{out: map[string]execx.Result{
 		"lvs": {Stdout: "  vg0,data\n"},
@@ -79,6 +52,90 @@ func TestResolveLVM(t *testing.T) {
 	}
 	if tgt.VG != "vg0" || tgt.LV != "data" {
 		t.Fatalf("VG/LV = %q/%q, want vg0/data", tgt.VG, tgt.LV)
+	}
+}
+
+func TestResolveUsesSharedMountSelection(t *testing.T) {
+	tests := []struct {
+		name       string
+		path       string
+		mounts     []Mount
+		wantMount  string
+		wantFSType string
+		wantDevice string
+	}{
+		{
+			name: "deepest cleaned mount",
+			path: "/data//db/./records",
+			mounts: []Mount{
+				{Device: "/dev/mapper/vg0-root", MountPoint: "/", FSType: "ext4"},
+				{Device: "/dev/mapper/vg0-data", MountPoint: "/data", FSType: "ext4"},
+				{Device: "/dev/mapper/vg0-db", MountPoint: "/data/db/", FSType: "xfs"},
+			},
+			wantMount:  "/data/db/",
+			wantFSType: "xfs",
+			wantDevice: "/dev/mapper/vg0-db",
+		},
+		{
+			name: "parent segment",
+			path: "/data/../srv/records",
+			mounts: []Mount{
+				{Device: "/dev/mapper/vg0-root", MountPoint: "/", FSType: "ext4"},
+				{Device: "/dev/mapper/vg0-data", MountPoint: "/data", FSType: "ext4"},
+				{Device: "/dev/mapper/vg0-srv", MountPoint: "/srv", FSType: "xfs"},
+			},
+			wantMount:  "/srv",
+			wantFSType: "xfs",
+			wantDevice: "/dev/mapper/vg0-srv",
+		},
+		{
+			name: "real filesystem after autofs",
+			path: "/mnt/archive/records",
+			mounts: []Mount{
+				{Device: "systemd-1", MountPoint: "/mnt/archive", FSType: checks.FSTypeAutofs},
+				{Device: "/dev/mapper/vg0-archive", MountPoint: "/mnt/archive", FSType: "ext4"},
+			},
+			wantMount:  "/mnt/archive",
+			wantFSType: "ext4",
+			wantDevice: "/dev/mapper/vg0-archive",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := &fakeRunner{out: map[string]execx.Result{
+				cmdLVS: {Stdout: "vg0,data\n"},
+			}}
+			target, err := (Expander{Runner: r, Mounts: staticMounts(tt.mounts...)}).Resolve(context.Background(), tt.path)
+			if err != nil {
+				t.Fatalf("Resolve(%q): %v", tt.path, err)
+			}
+			if target.Mountpoint != tt.wantMount || target.FSType != tt.wantFSType {
+				t.Fatalf("Resolve(%q) target = %+v, want mount %q and filesystem %q", tt.path, target, tt.wantMount, tt.wantFSType)
+			}
+			if len(r.calls) != 1 || !strings.HasSuffix(r.calls[0], " "+tt.wantDevice) {
+				t.Fatalf("Resolve(%q) calls = %v, want lvs for %q", tt.path, r.calls, tt.wantDevice)
+			}
+		})
+	}
+}
+
+func TestResolveRejectsInvalidPathBeforeLVS(t *testing.T) {
+	for _, path := range []string{"", "data/records"} {
+		t.Run(fmt.Sprintf("path=%q", path), func(t *testing.T) {
+			r := &fakeRunner{out: map[string]execx.Result{
+				cmdLVS: {Stdout: "vg0,root\n"},
+			}}
+			e := Expander{
+				Runner: r,
+				Mounts: staticMounts(Mount{Device: "/dev/mapper/vg0-root", MountPoint: "/", FSType: "ext4"}),
+			}
+			if _, err := e.Resolve(context.Background(), path); err == nil {
+				t.Fatalf("Resolve(%q) succeeded, want no containing mount", path)
+			}
+			if len(r.calls) != 0 {
+				t.Fatalf("Resolve(%q) calls = %v, want no lvs command", path, r.calls)
+			}
+		})
 	}
 }
 
@@ -234,14 +291,10 @@ func TestResolveNotLVM(t *testing.T) {
 }
 
 func TestResolveUnknownPath(t *testing.T) {
-	e := Expander{Runner: &fakeRunner{}, Mounts: staticMounts(Mount{Device: "/dev/sda1", MountPoint: "/", FSType: "ext4"})}
-	// "/" matches as a fallback containing mount, so use a path that cannot match
-	// when there is no root mount.
 	e2 := Expander{Runner: &fakeRunner{}, Mounts: staticMounts(Mount{Device: "/dev/sdb1", MountPoint: "/srv", FSType: "ext4"})}
 	if _, err := e2.Resolve(context.Background(), "/mnt/x"); err == nil {
 		t.Fatal("a path with no containing mount must error")
 	}
-	_ = e
 }
 
 type slowVolumeRunner struct{}
