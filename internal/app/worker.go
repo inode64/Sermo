@@ -1102,7 +1102,7 @@ func (w *Worker) sampleVersion(ctx context.Context, vc appVersionCmd) (string, e
 		}
 		return "", fmt.Errorf("version command exit %d", res.ExitCode)
 	}
-	return output.Trim(res.Stdout), nil
+	return strings.TrimSpace(res.Stdout), nil
 }
 
 // fileFingerprint summarizes a file's identity for change detection: its size and

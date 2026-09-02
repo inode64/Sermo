@@ -101,7 +101,7 @@ func (c commandCheck) Run(ctx context.Context) Result {
 		}
 	}
 	if c.onChange && c.state != nil {
-		raw := output.Trim(res.Stdout)
+		raw := strings.TrimSpace(res.Stdout)
 		key := c.changeKey(raw)
 		if c.state.primed && key != c.state.last {
 			r := c.result(false, fmt.Sprintf("output changed (%s -> %s)", output.FirstNonEmptyLine(c.state.lastRaw), output.FirstNonEmptyLine(raw)), start)

@@ -14,7 +14,6 @@ import (
 	"sermo/internal/config"
 	"sermo/internal/emission"
 	"sermo/internal/notify"
-	"sermo/internal/output"
 	"sermo/internal/rules"
 	"sermo/internal/state"
 	"sermo/internal/volume"
@@ -803,11 +802,11 @@ func hookEnv(name, checkType string, res checks.Result) map[string]string {
 	env := map[string]string{
 		sermoEnvWatch:     name,
 		sermoEnvCheckType: checkType,
-		sermoEnvMessage:   output.Trim(res.Message),
+		sermoEnvMessage:   strings.TrimSpace(res.Message),
 		sermoEnvSeverity:  checks.ResolveSeverity(res.Severity, ""),
 	}
 	for k, v := range res.Data {
-		env[sermoEnvPrefix+envKey(k)] = output.Trim(cfgval.String(v))
+		env[sermoEnvPrefix+envKey(k)] = strings.TrimSpace(cfgval.String(v))
 	}
 	return env
 }
