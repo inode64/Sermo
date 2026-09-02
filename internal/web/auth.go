@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 
+	"sermo/internal/httpx"
 	"sermo/internal/webcred"
 )
 
@@ -268,7 +269,7 @@ func wantsAuthDialog(r *http.Request) bool {
 	if mode := r.Header.Get(headerSecFetchMode); mode != "" {
 		return mode == secFetchModeNavigate
 	}
-	return strings.Contains(r.Header.Get(headerAccept), contentTypeHTML)
+	return strings.Contains(r.Header.Get(httpx.HeaderAccept), contentTypeHTML)
 }
 
 func (s *Server) handleWhoami(w http.ResponseWriter, r *http.Request) {
