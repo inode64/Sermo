@@ -53,7 +53,6 @@ const (
 	headerSermoCSRF             = HeaderCSRF
 	headerSermoGeneration       = HeaderGeneration
 	headerSecFetchMode          = "Sec-Fetch-Mode"
-	headerAccept                = "Accept"
 	secFetchModeNavigate        = "navigate"
 	contentTypeHTML             = "text/html"
 	headerWWWAuthenticate       = "WWW-Authenticate"

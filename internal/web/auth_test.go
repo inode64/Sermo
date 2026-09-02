@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"sermo/internal/httpx"
 	"sermo/internal/webcred"
 )
 
@@ -205,7 +206,7 @@ func TestAuthChallengesDocumentsOnly(t *testing.T) {
 				r.Header.Set(headerSecFetchMode, tc.fetchMode)
 			}
 			if tc.accept != "" {
-				r.Header.Set(headerAccept, tc.accept)
+				r.Header.Set(httpx.HeaderAccept, tc.accept)
 			}
 			rec := httptest.NewRecorder()
 			h.ServeHTTP(rec, r)
