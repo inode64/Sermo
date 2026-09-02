@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"sermo/internal/cfgval"
+	"sermo/internal/telegramapi"
 )
 
 // ValidationIssue describes one invalid field in a notifier entry. Suffix is
@@ -80,10 +81,10 @@ func validateTelegramConfig(entry map[string]any) []ValidationIssue {
 	}
 	if value, present := entry[KeyParseMode]; present {
 		mode, ok := value.(string)
-		if !ok || !ValidTelegramParseMode(mode) {
+		if !ok || !telegramapi.ValidParseMode(mode) {
 			issues = append(issues, ValidationIssue{
 				Field:  KeyParseMode,
-				Suffix: " must be one of " + strings.Join(TelegramParseModes(), ", "),
+				Suffix: " must be one of " + strings.Join(telegramapi.ParseModes(), ", "),
 			})
 		}
 	}
