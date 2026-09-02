@@ -116,8 +116,8 @@ func (e Expander) Resolve(ctx context.Context, path string) (Target, error) {
 	if err != nil {
 		return Target{}, fmt.Errorf("read mounts: %w", err)
 	}
-	m, ok := containingMount(mounts, path)
-	if !ok {
+	m := checks.MountForPath(mounts, path)
+	if m == nil {
 		return Target{}, fmt.Errorf("no mounted filesystem contains %q", path)
 	}
 	t := Target{Mountpoint: m.MountPoint, FSType: m.FSType}
@@ -237,23 +237,6 @@ func (e Expander) vgFreeBytes(ctx context.Context, vg string) (int64, error) {
 		return 0, fmt.Errorf("parse vg_free for %q: %w", vg, err)
 	}
 	return free, nil
-}
-
-// containingMount returns the mount whose mount point is the longest prefix of
-// path (an exact match, a parent directory, or "/" as the fallback).
-func containingMount(mounts []Mount, path string) (Mount, bool) {
-	path = cleanMountpoint(path)
-	var best Mount
-	bestLen := -1 // every mount point normalizes to at least "/" (len 1), so -1 means "none yet"
-	for _, m := range mounts {
-		mp := cleanMountpoint(m.MountPoint)
-		if mp == path || mp == "/" || strings.HasPrefix(path, mp+"/") {
-			if len(mp) > bestLen {
-				best, bestLen = m, len(mp)
-			}
-		}
-	}
-	return best, bestLen >= 0
 }
 
 // List returns real storage mounts, skipping pseudo filesystems (tmpfs, proc,
