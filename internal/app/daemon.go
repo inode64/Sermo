@@ -1135,7 +1135,7 @@ func applyMonitorMode(store MonitorStore, name, mode string) string {
 }
 
 func applyWatchMonitorMode(store MonitorStore, name, mode string) string {
-	return applyMonitorModeFor(store, watchSubjectPrefix+name, watchMonitorKey(name), mode)
+	return applyMonitorModeFor(store, watchSubjectPrefix+name, WatchMonitorKey(name), mode)
 }
 
 func applyMonitorModeFor(store MonitorStore, label, key, mode string) string {
@@ -1176,10 +1176,6 @@ func monitorPaused(store MonitorStore, name string) func() bool {
 		}
 		return !active
 	}
-}
-
-func watchMonitorKey(name string) string {
-	return WatchMonitorKey(name)
 }
 
 // WatchMonitorKey is the persistent monitor-state key for a watch (host or

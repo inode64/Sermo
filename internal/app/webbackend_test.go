@@ -1279,7 +1279,7 @@ func TestWebBackendWatchPolarityUsesSharedHealthTypes(t *testing.T) {
 
 func TestWebBackendWatchesExposeMonitorMode(t *testing.T) {
 	store := newFakeStore()
-	if err := store.SetActive(watchMonitorKey("storage-root"), false, state.SourceConfig); err != nil {
+	if err := store.SetActive(WatchMonitorKey("storage-root"), false, state.SourceConfig); err != nil {
 		t.Fatalf("SetActive: %v", err)
 	}
 	cfg := cfgWithWatches(map[string]any{

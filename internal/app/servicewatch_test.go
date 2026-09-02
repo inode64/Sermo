@@ -382,7 +382,7 @@ func TestWebBackendListsAndControlsServiceWatches(t *testing.T) {
 	if err := b.SetWatchMonitored(context.Background(), "svc:backlog", false); err != nil {
 		t.Fatalf("SetWatchMonitored(svc:backlog): %v", err)
 	}
-	active, found2, err := store.Active(watchMonitorKey("svc:backlog"))
+	active, found2, err := store.Active(WatchMonitorKey("svc:backlog"))
 	if err != nil || !found2 || active {
 		t.Fatalf("after unmonitor: active=%v found=%v err=%v; want active=false", active, found2, err)
 	}

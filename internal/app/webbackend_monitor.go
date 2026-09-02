@@ -72,7 +72,7 @@ func (b *WebBackend) SetWatchMonitored(_ context.Context, name string, monitored
 		b.emitWatchMonitorEvent(name, action, kind, status, message)
 	}
 	_, known := b.watches[name]
-	return b.setMonitoredTarget(known, watchMonitorKey(name), fmt.Sprintf(unknownWatchMessageFmt, name), monitored, emit)
+	return b.setMonitoredTarget(known, WatchMonitorKey(name), fmt.Sprintf(unknownWatchMessageFmt, name), monitored, emit)
 }
 
 // setMonitoredTarget rejects an unknown target with the emitted error and

@@ -159,7 +159,7 @@ func TestWebBackendSetMonitoredAppearsInEventLog(t *testing.T) {
 
 func TestWebBackendSetWatchMonitoredEmitsEvent(t *testing.T) {
 	store := newFakeStore()
-	store.active[watchMonitorKey("storage-root")] = true
+	store.active[WatchMonitorKey("storage-root")] = true
 
 	var events []Event
 	b := &WebBackend{
@@ -178,7 +178,7 @@ func TestWebBackendSetWatchMonitoredEmitsEvent(t *testing.T) {
 		events[0].Message != eventMessageMonitoringPaused || events[0].Watch != "storage-root" || events[0].Service != "" {
 		t.Fatalf("unmonitor watch event = %+v", events[0])
 	}
-	if store.active[watchMonitorKey("storage-root")] {
+	if store.active[WatchMonitorKey("storage-root")] {
 		t.Fatal("store should record watch paused")
 	}
 
@@ -206,7 +206,7 @@ func TestWebBackendWatchesIncludeMonitoringState(t *testing.T) {
 	store := newFakeStore()
 	at := time.Date(2026, 6, 10, 11, 12, 13, 0, time.UTC)
 	store.now = func() time.Time { return at }
-	if err := store.SetActive(watchMonitorKey("storage-root"), false, "web"); err != nil {
+	if err := store.SetActive(WatchMonitorKey("storage-root"), false, "web"); err != nil {
 		t.Fatalf("SetActive: %v", err)
 	}
 	b := &WebBackend{
