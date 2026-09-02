@@ -69,7 +69,7 @@ func storageVolumeCandidates(vols []Volume) []Volume {
 	for _, v := range vols {
 		if volumeinfo.IsStorageMount(volumeinfo.Mount{
 			Device:     v.Device,
-			Mountpoint: v.Mountpoint,
+			MountPoint: v.Mountpoint,
 			FSType:     v.FSType,
 		}) {
 			out = append(out, v)

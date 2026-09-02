@@ -261,7 +261,7 @@ func listVolumes() ([]assist.Volume, error) {
 	}
 	out := make([]assist.Volume, len(mounts))
 	for i, m := range mounts {
-		out[i] = assist.Volume{Mountpoint: m.Mountpoint, FSType: m.FSType, Device: m.Device}
+		out[i] = assist.Volume{Mountpoint: m.MountPoint, FSType: m.FSType, Device: m.Device}
 	}
 	return out, nil
 }
