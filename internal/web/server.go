@@ -1063,6 +1063,22 @@ type Event struct {
 	Output string `json:"output,omitempty"`
 }
 
+// Target returns the event subject in the public precedence order: service,
+// host watch, then catalog application. An event without a subject returns an
+// empty string so each presenter can choose its own placeholder.
+func (e Event) Target() string {
+	switch {
+	case e.Service != "":
+		return e.Service
+	case e.Watch != "":
+		return e.Watch
+	case e.App != "":
+		return e.App
+	default:
+		return ""
+	}
+}
+
 // EventQuery selects one cursor page from the global event feed.
 type EventQuery struct {
 	BeforeID   int64

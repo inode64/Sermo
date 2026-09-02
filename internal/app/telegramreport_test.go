@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"sermo/internal/config"
+	"sermo/internal/state"
 	"sermo/internal/telegrambot"
 	"sermo/internal/web"
 )
@@ -53,5 +54,14 @@ func TestTelegramReporterEmptyListings(t *testing.T) {
 	}
 	if len(services) != 0 || len(watches) != 0 {
 		t.Fatalf("empty listings = (%+v, %+v), want no entries", services, watches)
+	}
+}
+
+func TestTelegramSLAFormatKeepsAffectedMinutes(t *testing.T) {
+	if got, want := formatSLARatio(state.SLAValue{Up: 2, Total: 3, DownBuckets: 1}), "66.67% (1 min affected)"; got != want {
+		t.Errorf("formatSLARatio() = %q, want %q", got, want)
+	}
+	if got, want := formatSLARatio(state.SLAValue{}), state.SLAUnavailable; got != want {
+		t.Errorf("formatSLARatio() = %q, want %q", got, want)
 	}
 }
