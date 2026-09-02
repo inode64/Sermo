@@ -113,11 +113,11 @@ func (e Expander) mountTable() ([]Mount, error) {
 // the device→VG/LV mapping uses `lvs` (LVM has no Go API). A device that is not
 // an LVM logical volume is an error.
 func (e Expander) Resolve(ctx context.Context, path string) (Target, error) {
-	mounts, err := e.mountTable()
+	mountTable, err := e.mountTable()
 	if err != nil {
 		return Target{}, fmt.Errorf("read mounts: %w", err)
 	}
-	m := checks.MountForPath(mounts, path)
+	m := checks.MountForPath(mountTable, path)
 	if m == nil {
 		return Target{}, fmt.Errorf("no mounted filesystem contains %q", path)
 	}
@@ -242,13 +242,13 @@ func (e Expander) vgFreeBytes(ctx context.Context, vg string) (int64, error) {
 
 // List returns real storage mounts, skipping pseudo filesystems (tmpfs, proc,
 // sysfs, cgroup, ...), autofs placeholders and duplicate mount points. It is
-// the candidate list the volume wizard offers. mounts is injectable for tests;
+// the candidate list the volume wizard offers. source is injectable for tests;
 // nil reads /proc/mounts.
-func List(mounts MountSource) ([]Mount, error) {
-	if mounts == nil {
-		mounts = procMounts
+func List(source MountSource) ([]Mount, error) {
+	if source == nil {
+		source = procMounts
 	}
-	all, err := mounts()
+	all, err := source()
 	if err != nil {
 		return nil, err
 	}
@@ -309,12 +309,12 @@ func storageFilesystem(fstype string) bool {
 	}
 }
 
-func pruneNestedSameDeviceMounts(mounts []Mount) []Mount {
-	sort.SliceStable(mounts, func(i, j int) bool {
-		return len(cleanMountpoint(mounts[i].MountPoint)) < len(cleanMountpoint(mounts[j].MountPoint))
+func pruneNestedSameDeviceMounts(table []Mount) []Mount {
+	sort.SliceStable(table, func(i, j int) bool {
+		return len(cleanMountpoint(table[i].MountPoint)) < len(cleanMountpoint(table[j].MountPoint))
 	})
-	out := make([]Mount, 0, len(mounts))
-	for _, m := range mounts {
+	out := make([]Mount, 0, len(table))
+	for _, m := range table {
 		if hasParentMountOnSameDevice(out, m) {
 			continue
 		}
