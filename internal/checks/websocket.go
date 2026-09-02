@@ -233,7 +233,7 @@ func websocketPath(u *url.URL) string {
 func wsKey() (string, error) {
 	var b [wsKeySize]byte
 	if _, err := rand.Read(b[:]); err != nil {
-		return "", err
+		return "", fmt.Errorf("generate websocket key: %w", err)
 	}
 	return base64.StdEncoding.EncodeToString(b[:]), nil
 }

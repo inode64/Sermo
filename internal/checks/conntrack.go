@@ -58,7 +58,7 @@ func defaultConntrackSampler() (ConntrackSample, error) {
 func readProcUint(path string) (uint64, error) {
 	data, err := os.ReadFile(path) //nolint:gosec // G304: path is a fixed sysctl/proc counter file
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("read %s: %w", path, err)
 	}
 	n, err := strconv.ParseUint(strings.TrimSpace(string(data)), numericBaseDecimal, numericBits64)
 	if err != nil {

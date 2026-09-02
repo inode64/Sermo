@@ -95,9 +95,10 @@ func PressureResultData(resource string, s PressureSample) map[string]any {
 
 // defaultPressureSampler reads and parses /proc/pressure/<resource>.
 func defaultPressureSampler(resource string) (PressureSample, error) {
-	data, err := os.ReadFile(filepath.Join(procPressureRootPath, resource)) //nolint:gosec // G304: path under /proc/pressure with validated resource name
+	path := filepath.Join(procPressureRootPath, resource)
+	data, err := os.ReadFile(path) //nolint:gosec // G304: path under /proc/pressure with validated resource name
 	if err != nil {
-		return PressureSample{}, err
+		return PressureSample{}, fmt.Errorf("read %s: %w", path, err)
 	}
 	return parsePressure(string(data))
 }

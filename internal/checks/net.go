@@ -354,7 +354,7 @@ func sampleNetFromSysfs(iface, root string) (NetSample, error) {
 	dir := sysfsIfaceDir(root, iface)
 	if err != nil {
 		if _, statErr := os.Stat(dir); statErr != nil {
-			return NetSample{}, err
+			return NetSample{}, fmt.Errorf("interface %s: %w", iface, err)
 		}
 	}
 	state := NetStateDown

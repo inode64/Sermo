@@ -96,7 +96,7 @@ linters:
     - usetesting  # prefer testing.T cleanup-aware helpers
     - wastedassign
     - whitespace  # leading/trailing blank lines inside a block
-    - wrapcheck  # ON in core and conn/; OFF only in listed checks/ files (see exclusions)
+    - wrapcheck  # require wrapping errors from external packages
   settings:
     custom:
       # NilAway runs as a module plugin because golangci-lint does not ship it
@@ -614,16 +614,6 @@ linters:
       - linters:
           - contextcheck
         path: '^internal/cli/(monitor|panic|sla|cli_monitor_state)\.go$'
-
-      # wrapcheck zone policy (same idea as ireturn):
-      #   ON  — operation, rules, config, state, app, cli, process, web, locks,
-      #         managers, notify, assist, cmd, conn/, and probes whose errors
-      #         already carry context.
-      #   OFF — only the listed internal/checks/* sources that still turn raw
-      #         transport I/O into Result/check messages. Expand those with %w.
-      - linters:
-          - wrapcheck
-        path: '^internal/checks/(commandcheck|conntrack|diskio|edac|fds|firewall_nftables|firewall_nftables_other|icmp|influxdb|meminfo|mongodb|mount|net|pids|pressure|raid|route|route_family_other|sensors|sql|storage|tcpcheck|users|websocket)\.go$'
 
       # ireturn zone policy:
       #   ON  — every package except central builders, manager factories and

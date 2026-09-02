@@ -72,18 +72,18 @@ func (c mongoCheck) scalar(ctx context.Context, client *mongo.Client) (string, e
 	case mongoModeCount:
 		n, err := db.Collection(c.collection).CountDocuments(ctx, c.filter)
 		if err != nil {
-			return "", err
+			return "", fmt.Errorf("mongodb count: %w", err)
 		}
 		return strconv.FormatInt(n, numericBaseDecimal), nil
 	case mongoModeAggregate:
 		cur, err := db.Collection(c.collection).Aggregate(ctx, c.pipeline)
 		if err != nil {
-			return "", err
+			return "", fmt.Errorf("mongodb aggregate: %w", err)
 		}
 		defer func() { _ = cur.Close(ctx) }()
 		if !cur.Next(ctx) {
 			if err := cur.Err(); err != nil {
-				return "", err
+				return "", fmt.Errorf("mongodb aggregate: %w", err)
 			}
 			return "", errors.New("aggregation returned no documents")
 		}
@@ -91,7 +91,7 @@ func (c mongoCheck) scalar(ctx context.Context, client *mongo.Client) (string, e
 	default: // mongoModeCommand
 		raw, err := db.RunCommand(ctx, c.command).Raw()
 		if err != nil {
-			return "", err
+			return "", fmt.Errorf("mongodb command: %w", err)
 		}
 		return mongoLookup(raw, c.resultPath)
 	}
@@ -208,7 +208,7 @@ func mongoConnConfig(entry map[string]any) conn.Config {
 func parseMongoDoc(s string) (bson.D, error) {
 	var d bson.D
 	if err := bson.UnmarshalExtJSON([]byte(s), false, &d); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("parse mongodb document: %w", err)
 	}
 	return d, nil
 }
@@ -222,7 +222,7 @@ func parseMongoPipeline(s string) (any, error) {
 	}
 	var wrap bson.D
 	if err := bson.UnmarshalExtJSON([]byte(`{"p":`+s+`}`), false, &wrap); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("parse mongodb pipeline: %w", err)
 	}
 	for _, e := range wrap {
 		if e.Key == "p" {

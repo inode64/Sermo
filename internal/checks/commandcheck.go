@@ -162,9 +162,17 @@ func (c commandCheck) changeKey(raw string) string {
 // runCheckCommand runs a check's argv, switching to user when configured.
 func runCheckCommand(ctx context.Context, runner execx.Runner, user string, argv []string) (execx.Result, error) {
 	if user != "" {
-		return execx.RunUser(ctx, runner, execx.NoTimeout, user, argv[0], argv[1:]...)
+		res, err := execx.RunUser(ctx, runner, execx.NoTimeout, user, argv[0], argv[1:]...)
+		if err != nil {
+			return res, fmt.Errorf("run command: %w", err)
+		}
+		return res, nil
 	}
-	return runner.Run(ctx, argv[0], argv[1:]...)
+	res, err := runner.Run(ctx, argv[0], argv[1:]...)
+	if err != nil {
+		return res, fmt.Errorf("run command: %w", err)
+	}
+	return res, nil
 }
 
 // ExitCodeExpected reports whether got matches one of the expected command exit

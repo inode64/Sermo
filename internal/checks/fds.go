@@ -44,7 +44,7 @@ func (c fdsCheck) Run(_ context.Context) Result {
 func defaultFdsSampler() (FdsSample, error) {
 	data, err := os.ReadFile(procFileNRPath)
 	if err != nil {
-		return FdsSample{}, err
+		return FdsSample{}, fmt.Errorf("read %s: %w", procFileNRPath, err)
 	}
 	fields := strings.Fields(string(data))
 	if len(fields) < fileNRMinFields {

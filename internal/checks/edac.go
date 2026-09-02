@@ -65,7 +65,7 @@ func defaultEdacSampler() (EdacCounts, error) { return readEDAC(sysEDACPath) }
 func readEDAC(root string) (EdacCounts, error) {
 	mcs, err := filepath.Glob(filepath.Join(root, "mc", "mc*"))
 	if err != nil {
-		return EdacCounts{}, err
+		return EdacCounts{}, fmt.Errorf("list EDAC controllers: %w", err)
 	}
 	if len(mcs) == 0 {
 		return EdacCounts{}, nil

@@ -19,7 +19,7 @@ var nftablesRuleCounter = countLoadedNftablesRules
 // caller's context bounds the netlink walk; cancellation stops between chains.
 func countLoadedNftablesRules(ctx context.Context) (uint64, error) {
 	if err := ctx.Err(); err != nil {
-		return 0, execx.ContextError(err)
+		return 0, fmt.Errorf("nftables: %w", execx.ContextError(err))
 	}
 	type out struct {
 		n   uint64
@@ -32,7 +32,7 @@ func countLoadedNftablesRules(ctx context.Context) (uint64, error) {
 	}()
 	select {
 	case <-ctx.Done():
-		return 0, execx.ContextError(ctx.Err())
+		return 0, fmt.Errorf("nftables: %w", execx.ContextError(ctx.Err()))
 	case r := <-ch:
 		return r.n, r.err
 	}
@@ -41,13 +41,13 @@ func countLoadedNftablesRules(ctx context.Context) (uint64, error) {
 func listNftablesRules() (uint64, error) {
 	conn, err := nftables.New(nftables.AsLasting())
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("open nftables: %w", err)
 	}
 	defer func() { _ = conn.CloseLasting() }()
 
 	chains, err := conn.ListChains()
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("list nftables chains: %w", err)
 	}
 	var total uint64
 	for _, chain := range chains {

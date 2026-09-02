@@ -1,6 +1,7 @@
 package checks
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -74,7 +75,7 @@ func (m mountCond) evaluate(table []Mount, path string) (mounted, problem bool, 
 func defaultMountSampler() ([]Mount, error) {
 	data, err := os.ReadFile(procMountsPath)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("read %s: %w", procMountsPath, err)
 	}
 	var out []Mount
 	for line := range strings.SplitSeq(string(data), checkLineSeparator) {

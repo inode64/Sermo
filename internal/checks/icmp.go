@@ -187,19 +187,19 @@ func defaultPingSampler(host, iface string, count int, timeout time.Duration) (P
 	}
 	addr, err := net.ResolveIPAddr(networkIP4, host)
 	if err != nil {
-		return PingSample{}, err
+		return PingSample{}, fmt.Errorf("resolve %s: %w", host, err)
 	}
 	listen := icmpListenAnyIPv4
 	if iface != "" {
 		ip, err := conn.ResolveInterfaceIPv4(iface)
 		if err != nil {
-			return PingSample{}, err
+			return PingSample{}, fmt.Errorf("resolve interface %s: %w", iface, err)
 		}
 		listen = ip
 	}
 	icmpConn, err := icmp.ListenPacket(networkIP4ICMP, listen)
 	if err != nil {
-		return PingSample{}, err
+		return PingSample{}, fmt.Errorf("listen icmp: %w", err)
 	}
 	defer func() { _ = icmpConn.Close() }()
 
