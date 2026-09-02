@@ -54,6 +54,87 @@ func TestEngineDuration(t *testing.T) {
 	}
 }
 
+func TestEngineSection(t *testing.T) {
+	if EngineSection(nil) != nil {
+		t.Fatal("EngineSection(nil) must be nil")
+	}
+	if EngineSection(&Config{}) != nil {
+		t.Fatal("EngineSection without engine block must be nil")
+	}
+	engine := map[string]any{EngineKeyBackend: "openrc"}
+	cfg := &Config{Global: Global{Raw: map[string]any{SectionEngine: engine}}}
+	got := EngineSection(cfg)
+	if got[EngineKeyBackend] != "openrc" {
+		t.Fatalf("EngineSection = %#v", got)
+	}
+}
+
+func TestEngineStringAndInt(t *testing.T) {
+	cfg := &Config{Global: Global{Raw: map[string]any{
+		SectionEngine: map[string]any{
+			EngineKeyBackend:           "openrc",
+			EngineKeyMaxParallelChecks: "16",
+		},
+	}}}
+	if got := EngineString(cfg, EngineKeyBackend); got != "openrc" {
+		t.Fatalf("EngineString = %q", got)
+	}
+	if got := EngineString(cfg, "missing"); got != "" {
+		t.Fatalf("EngineString missing = %q", got)
+	}
+	if got := EngineInt(cfg, EngineKeyMaxParallelChecks, 8); got != 16 {
+		t.Fatalf("EngineInt string = %d", got)
+	}
+	if got := EngineInt(&Config{}, EngineKeyMaxParallelChecks, 8); got != 8 {
+		t.Fatalf("EngineInt fallback = %d", got)
+	}
+	if got := EngineLogPath(cfg, EngineKeyBackend); got != "openrc" {
+		t.Fatalf("EngineLogPath shares EngineString: %q", got)
+	}
+}
+
+func TestEngineBoolDefaultTrue(t *testing.T) {
+	tests := []struct {
+		name  string
+		value any
+		want  bool
+	}{
+		{name: "absent", want: true},
+		{name: "true", value: true, want: true},
+		{name: "false", value: false, want: false},
+		{name: "non-boolean", value: "no", want: true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := &Config{Global: Global{Raw: map[string]any{}}}
+			if tc.value != nil {
+				cfg.Global.Raw[SectionEngine] = map[string]any{EngineKeyReapOwnStrays: tc.value}
+			}
+			if got := EngineBoolDefaultTrue(cfg, EngineKeyReapOwnStrays); got != tc.want {
+				t.Fatalf("EngineBoolDefaultTrue = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestEngineByteSize(t *testing.T) {
+	cfg := &Config{Global: Global{Raw: map[string]any{
+		SectionEngine: map[string]any{EngineKeyStateCacheSize: "32M"},
+	}}}
+	if got := EngineByteSize(cfg, EngineKeyStateCacheSize, 64<<20); got != 32<<20 {
+		t.Fatalf("EngineByteSize = %d, want %d", got, 32<<20)
+	}
+	if got := EngineByteSize(cfg, "missing", 64<<20); got != 64<<20 {
+		t.Fatalf("EngineByteSize(missing) = %d, want fallback %d", got, 64<<20)
+	}
+	bad := &Config{Global: Global{Raw: map[string]any{
+		SectionEngine: map[string]any{EngineKeyStateCacheSize: "lots"},
+	}}}
+	if got := EngineByteSize(bad, EngineKeyStateCacheSize, 64<<20); got != 64<<20 {
+		t.Fatalf("EngineByteSize(bad) = %d, want fallback %d", got, 64<<20)
+	}
+}
+
 func TestEngineServiceRestartNotice(t *testing.T) {
 	cfg := &Config{Global: Global{Raw: map[string]any{
 		SectionEngine: map[string]any{

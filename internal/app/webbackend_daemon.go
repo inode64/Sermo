@@ -40,15 +40,13 @@ func (b *WebBackend) DaemonInfo(_ context.Context) web.DaemonInfo {
 
 		// Engine block (effective values with documented fallbacks)
 		info.Interval = units.HumanizeDuration(config.EngineInterval(b.cfg, config.DefaultEngineInterval))
-		info.MaxParallelChecks = EngineInt(b.cfg, config.EngineKeyMaxParallelChecks, DefaultEngineMaxParallelChecks)
+		info.MaxParallelChecks = config.EngineInt(b.cfg, config.EngineKeyMaxParallelChecks, DefaultEngineMaxParallelChecks)
 		info.DefaultTimeout = units.HumanizeDuration(config.EngineDuration(b.cfg, config.EngineKeyDefaultTimeout, DefaultEngineCheckTimeout))
 		info.OperationTimeout = units.HumanizeDuration(config.EngineDuration(b.cfg, config.EngineKeyOperationTimeout, DefaultEngineOperationTimeout))
 		info.StartupDelay = units.HumanizeDuration(config.EngineDuration(b.cfg, config.EngineKeyStartupDelay, 0))
 
-		if em := engineMap(b.cfg); em != nil {
-			if be, ok := em[config.EngineKeyBackend].(string); ok && be != "" {
-				info.Backend = be
-			}
+		if be := config.EngineString(b.cfg, config.EngineKeyBackend); be != "" {
+			info.Backend = be
 		}
 		if info.Backend == "" {
 			info.Backend = string(servicemgr.BackendAuto)

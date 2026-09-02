@@ -286,7 +286,7 @@ func run(args []string) int {
 		Interval:         interval,
 		DefaultTimeout:   config.EngineDuration(cfg, config.EngineKeyDefaultTimeout, app.DefaultEngineCheckTimeout),
 		OperationTimeout: config.EngineDuration(cfg, config.EngineKeyOperationTimeout, app.DefaultEngineOperationTimeout),
-		MaxParallel:      app.EngineInt(cfg, config.EngineKeyMaxParallelChecks, app.DefaultEngineMaxParallelChecks),
+		MaxParallel:      config.EngineInt(cfg, config.EngineKeyMaxParallelChecks, app.DefaultEngineMaxParallelChecks),
 		//nolint:forbidigo // the engine's injectable Sleep seam; production wires the real clock, tests stub it.
 		Sleep: time.Sleep,
 		Now:   time.Now,
@@ -555,7 +555,7 @@ func acquireDaemonRuntimeLock(cfg *config.Config, logger *slog.Logger) (string, 
 }
 
 func detectServiceManager(ctx context.Context, cfg *config.Config, logger *slog.Logger) (servicemgr.Detection, int) {
-	backend, err := servicemgr.ParseBackend(app.EngineString(cfg, config.EngineKeyBackend))
+	backend, err := servicemgr.ParseBackend(config.EngineString(cfg, config.EngineKeyBackend))
 	if err != nil {
 		logger.Error("backend", logFieldError, err)
 		return servicemgr.Detection{}, exitFailure
