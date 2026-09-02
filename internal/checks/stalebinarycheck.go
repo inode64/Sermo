@@ -75,7 +75,7 @@ func staleBinaryPaths(stale []process.StaleBinary) []string {
 	for _, s := range stale {
 		values = append(values, s.Path)
 	}
-	paths := strutil.MergeUnique(nil, values...)
+	paths := strutil.Unique(values)
 	slices.Sort(paths)
 	return paths
 }

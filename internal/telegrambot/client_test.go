@@ -14,7 +14,7 @@ import (
 	"time"
 )
 
-// doerFunc adapts a function to httpDoer.
+// doerFunc adapts a function to httpx.Doer.
 type doerFunc func(*http.Request) (*http.Response, error)
 
 func (f doerFunc) Do(r *http.Request) (*http.Response, error) { return f(r) }

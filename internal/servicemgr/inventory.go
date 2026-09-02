@@ -123,7 +123,7 @@ func parseSystemdUnitNames(stdout string, keep func(name string) bool) []string 
 			out = append(out, name)
 		}
 	}
-	return strutil.MergeUnique(nil, out...)
+	return strutil.Unique(out)
 }
 
 // ParseOpenRCActiveUnits extracts started services from rc-status output.
@@ -157,7 +157,7 @@ func parseOpenRCUnits(stdout string, service func(line string) string) []string 
 	}
 	// A service can appear in more than one matched runlevel, and duplicates are
 	// not guaranteed to be adjacent.
-	return strutil.MergeUnique(nil, out...)
+	return strutil.Unique(out)
 }
 
 func openRCRunlevel(line string) (string, bool) {

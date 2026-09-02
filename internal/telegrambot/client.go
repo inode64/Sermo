@@ -5,9 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
-	"strings"
 	"time"
 
 	"sermo/internal/httpx"
@@ -19,24 +17,14 @@ const (
 	// pollClientMargin extends the HTTP timeout past the long-poll timeout so a
 	// legitimately held-open getUpdates is not cut off by the client.
 	pollClientMargin = 10 * time.Second
-	// errorBodySnippetLimit bounds the API error body captured into an error.
-	errorBodySnippetLimit  = 256
-	httpStatusClassDivisor = 100
-	httpStatusClassSuccess = 2
 )
-
-// httpDoer performs an HTTP request; *http.Client satisfies it. Injected so
-// tests exercise the client without real network I/O.
-type httpDoer interface {
-	Do(req *http.Request) (*http.Response, error)
-}
 
 // client talks to the Telegram Bot API for one bot token. The token lives only
 // inside the request URL and is scrubbed from any surfaced error.
 type client struct {
 	base  string // API base, up to but excluding the token; overridable in tests
 	token string
-	http  httpDoer
+	http  httpx.Doer
 }
 
 func newClient(token string, timeout time.Duration) *client {
@@ -131,9 +119,8 @@ func (c *client) call(ctx context.Context, method string, body map[string]any, o
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	if resp.StatusCode/httpStatusClassDivisor != httpStatusClassSuccess {
-		snippet, _ := io.ReadAll(io.LimitReader(resp.Body, errorBodySnippetLimit))
-		return fmt.Errorf("telegram %s returned %s: %s", method, resp.Status, strings.TrimSpace(string(snippet)))
+	if !httpx.SuccessStatus(resp.StatusCode) {
+		return fmt.Errorf("telegram %s returned %s: %s", method, resp.Status, httpx.ErrorBody(resp, httpx.ErrorBodyLimit))
 	}
 	if out == nil {
 		return nil

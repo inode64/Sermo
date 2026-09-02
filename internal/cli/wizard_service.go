@@ -417,7 +417,7 @@ func parseProcSocketTableHosts(r io.Reader, port int, states map[string]bool, ip
 		}
 		return true
 	})
-	return strutil.MergeUnique(nil, hosts...), err
+	return strutil.Unique(hosts), err
 }
 
 func procSocketHost(hexAddr string, ipv6 bool) (string, bool) {
@@ -459,7 +459,7 @@ func procIPv6Host(hexAddr string) (string, bool) {
 
 func specificListenerHost(hosts []string) (string, bool) {
 	var specific []string
-	for _, host := range strutil.MergeUnique(nil, hosts...) {
+	for _, host := range strutil.Unique(hosts) {
 		ip := net.ParseIP(host)
 		if ip == nil || ip.IsUnspecified() || ip.IsLoopback() {
 			continue

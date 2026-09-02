@@ -52,6 +52,25 @@ func TestSortedUnique(t *testing.T) {
 	}
 }
 
+func TestUnique(t *testing.T) {
+	tests := []struct {
+		name   string
+		values []string
+		want   []string
+	}{
+		{name: "nil"},
+		{name: "empty strings skipped", values: []string{"", "a", ""}, want: []string{"a"}},
+		{name: "first-seen order", values: []string{"b", "a", "b", "c"}, want: []string{"b", "a", "c"}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := Unique(tc.values); !slices.Equal(got, tc.want) {
+				t.Fatalf("Unique(%v) = %v, want %v", tc.values, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestMergeUnique(t *testing.T) {
 	cases := []struct {
 		name   string

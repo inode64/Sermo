@@ -146,7 +146,7 @@ func strayExecutables(strays []process.Process) []string {
 	for _, stray := range strays {
 		values = append(values, strayExecutable(stray))
 	}
-	exes := strutil.MergeUnique(nil, values...)
+	exes := strutil.Unique(values)
 	slices.Sort(exes)
 	return exes
 }
