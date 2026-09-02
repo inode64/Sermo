@@ -39,6 +39,7 @@ import (
 	"sermo/internal/servicemgr"
 	"sermo/internal/state"
 	"sermo/internal/strutil"
+	"sermo/internal/web"
 )
 
 const (
@@ -74,31 +75,16 @@ const (
 )
 
 const (
-	daemonProcessName       = "sermod"
-	daemonWebSchemeHTTP     = checks.URLSchemeHTTP
-	daemonWebAuthUserPrefix = "admin:"
-	daemonWebCSRFHeader     = "X-Sermo-Csrf"
-	daemonWebCSRFValue      = "1"
-	// daemonWebGenerationHeader names the backend generation a mutation is aimed
-	// at. The daemon rejects a mutation that does not name one, so a client must
-	// read the current generation before it writes.
-	daemonWebGenerationHeader    = "X-Sermo-Generation"
+	daemonProcessName            = "sermod"
+	daemonWebSchemeHTTP          = checks.URLSchemeHTTP
+	daemonWebAuthUserPrefix      = "admin:"
 	daemonWebHeaderAuthorization = httpx.HeaderAuthorization
 	daemonWebBasicAuthPrefix     = "Basic "
 	// daemonWebLocalhostName is the hostname that always resolves to loopback
 	// (RFC 6761), so a web.address spelled that way names a local daemon.
-	daemonWebLocalhostName     = "localhost"
-	daemonAPIPathRoot          = "/api"
-	daemonAPIPathApplications  = daemonAPIPathRoot + "/applications"
-	daemonAPIPathEvents        = daemonAPIPathRoot + "/events"
-	daemonAPIPathEventsClear   = daemonAPIPathEvents + "/clear"
-	daemonAPIPathServices      = daemonAPIPathRoot + "/services"
-	daemonAPIPathWatches       = daemonAPIPathRoot + "/watches"
-	daemonAPIPathServiceEvents = "/events"
-	daemonAPIQueryBefore       = "before"
-	daemonAPIQueryLimit        = "limit"
+	daemonWebLocalhostName = "localhost"
 	// beforeFlagLabel names the --before flag in cutoff parse errors.
-	beforeFlagLabel         = "--" + daemonAPIQueryBefore
+	beforeFlagLabel         = "--" + web.APIQueryBefore
 	cliUnknownServiceFormat = "unknown service %q"
 	cliWarningFormat        = "warning: %s\n"
 )
@@ -107,7 +93,7 @@ const (
 	cliFlagSetName   = "sermoctl"
 	cliFlagApply     = "apply"
 	cliFlagBackend   = commandBackend
-	cliFlagBefore    = daemonAPIQueryBefore
+	cliFlagBefore    = web.APIQueryBefore
 	cliFlagConfig    = commandConfig
 	cliFlagConfirm   = "confirm"
 	cliFlagCost      = "cost"
@@ -118,7 +104,7 @@ const (
 	cliFlagJSON      = "json"
 	cliFlagKill      = "kill-blockers"
 	cliFlagLazy      = "lazy"
-	cliFlagLimit     = daemonAPIQueryLimit
+	cliFlagLimit     = web.APIQueryLimit
 	cliFlagLong      = "long"
 	cliFlagName      = config.EntryKeyName
 	cliFlagNoCascade = "no-cascade"
@@ -1582,12 +1568,12 @@ func (a App) daemonWebDo(ctx context.Context, cfg *config.Config, method, what s
 		return nil, fmt.Errorf("build %s request: %w", what, err)
 	}
 	if csrf {
-		req.Header.Set(daemonWebCSRFHeader, daemonWebCSRFValue)
+		req.Header.Set(web.HeaderCSRF, web.CSRFHeaderValue)
 		// A mutation must name the generation it was aimed at, so a reload cannot
 		// swap the target's identity underneath it. Read it first: without the
 		// header the daemon answers 428 and the mutation never runs.
 		if generation := a.daemonWebGeneration(ctx, cfg); generation != "" {
-			req.Header.Set(daemonWebGenerationHeader, generation)
+			req.Header.Set(web.HeaderGeneration, generation)
 		}
 	}
 	// If the config declares an admin password, send Basic auth (any user + pw).
@@ -1609,21 +1595,21 @@ func (a App) daemonWebGeneration(ctx context.Context, cfg *config.Config) string
 	// csrf=false is the recursion boundary: generation lookup uses the shared
 	// transport but never asks for another generation lookup itself.
 	resp, err := a.daemonWebDo(ctx, cfg, http.MethodGet, "daemon generation", false, func(base string) string {
-		return base + daemonAPIPathWatches
+		return base + web.APIPathWatches
 	})
 	if err != nil {
 		return ""
 	}
 	defer func() { _ = resp.Body.Close() }()
 	_, _ = io.Copy(io.Discard, resp.Body)
-	return strings.TrimSpace(resp.Header.Get(daemonWebGenerationHeader))
+	return strings.TrimSpace(resp.Header.Get(web.HeaderGeneration))
 }
 
 func (a App) pruneDaemonEvents(ctx context.Context, opts options, before time.Time) (int, error) {
 	resp, err := a.daemonWebRequest(ctx, opts, http.MethodPost, "clear events", true, func(base string) string {
-		u := base + daemonAPIPathEventsClear
+		u := base + web.APIPathEventsClear
 		if !before.IsZero() {
-			u += "?" + daemonAPIQueryBefore + "=" + before.Format(time.RFC3339)
+			u += "?" + web.APIQueryBefore + "=" + before.Format(time.RFC3339)
 		}
 		return u
 	})
@@ -1654,9 +1640,9 @@ func (a App) fetchEvents(ctx context.Context, opts options, service string, limi
 	// no CSRF needed for GET; auth is attached when configured
 	resp, err := a.daemonWebRequest(ctx, opts, http.MethodGet, "events", false, func(base string) string {
 		if service != "" {
-			return fmt.Sprintf("%s%s/%s%s?%s=%d", base, daemonAPIPathServices, service, daemonAPIPathServiceEvents, daemonAPIQueryLimit, limit)
+			return fmt.Sprintf("%s%s/%s%s?%s=%d", base, web.APIPathServices, service, web.APIPathServiceEvents, web.APIQueryLimit, limit)
 		}
-		return fmt.Sprintf("%s%s?%s=%d", base, daemonAPIPathEvents, daemonAPIQueryLimit, limit)
+		return fmt.Sprintf("%s%s?%s=%d", base, web.APIPathEvents, web.APIQueryLimit, limit)
 	})
 	if err != nil {
 		return nil, err
@@ -1804,7 +1790,7 @@ func (a App) fetchDaemonServiceState(ctx context.Context, opts options, service 
 	} else if len(cfg.Services) > 0 {
 		return "", false
 	}
-	body, status, err := a.daemonAPIGetWithConfig(ctx, cfg, daemonAPIPathServices+"/"+url.PathEscape(name))
+	body, status, err := a.daemonAPIGetWithConfig(ctx, cfg, web.APIPathServices+"/"+url.PathEscape(name))
 	if err != nil || status != http.StatusOK {
 		return "", false
 	}
@@ -1818,7 +1804,7 @@ func (a App) fetchDaemonServiceState(ctx context.Context, opts options, service 
 }
 
 func (a App) fetchDaemonWatchDetail(ctx context.Context, opts options, watch string) (daemonWatchDetail, bool) {
-	body, status, err := a.daemonAPIGet(ctx, opts, daemonAPIPathWatches)
+	body, status, err := a.daemonAPIGet(ctx, opts, web.APIPathWatches)
 	if err != nil || status != http.StatusOK {
 		return daemonWatchDetail{}, false
 	}
@@ -1835,7 +1821,7 @@ func (a App) fetchDaemonWatchDetail(ctx context.Context, opts options, watch str
 }
 
 func (a App) fetchDaemonApplicationStates(ctx context.Context, opts options) map[string]string {
-	body, status, err := a.daemonAPIGet(ctx, opts, daemonAPIPathApplications)
+	body, status, err := a.daemonAPIGet(ctx, opts, web.APIPathApplications)
 	if err != nil || status != http.StatusOK {
 		return nil
 	}

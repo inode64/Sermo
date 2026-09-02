@@ -273,6 +273,34 @@ func TestSourceUsesStableEventCursorPagination(t *testing.T) {
 	}
 }
 
+// TestSourceAPIUsesSharedContractValues keeps the browser client aligned with
+// the Go API contract that sermoctl imports. The browser uses paths without a
+// leading slash so it can work below a reverse-proxy path prefix.
+func TestSourceAPIUsesSharedContractValues(t *testing.T) {
+	api, err := os.ReadFile("src/api.js")
+	if err != nil {
+		t.Fatalf("read src/api.js: %v", err)
+	}
+	text := string(api)
+	for _, marker := range []string{
+		`const csrfHeader = "` + HeaderCSRF + `";`,
+		`const csrfHeaderValue = "` + CSRFHeaderValue + `";`,
+		`export const apiHeaderGeneration = "` + HeaderGeneration + `";`,
+		`export const apiHeaderConfirm = "` + HeaderConfirm + `";`,
+		`export const apiApplicationsPath = "` + strings.TrimPrefix(APIPathApplications, "/") + `";`,
+		`const apiEventsPath = "` + strings.TrimPrefix(APIPathEvents, "/") + `";`,
+		`const apiEventsClearPath = "` + strings.TrimPrefix(APIPathEventsClear, "/") + `";`,
+		`export const apiServicesPath = "` + strings.TrimPrefix(APIPathServices, "/") + `";`,
+		`export const apiWatchesPath = "` + strings.TrimPrefix(APIPathWatches, "/") + `";`,
+		`export const apiQueryBefore = "` + APIQueryBefore + `";`,
+		`export const apiQueryLimit = "` + APIQueryLimit + `";`,
+	} {
+		if !strings.Contains(text, marker) {
+			t.Errorf("API module missing shared contract value %q", marker)
+		}
+	}
+}
+
 func TestSourceSeparatesAPIAndFormattingModules(t *testing.T) {
 	app, err := os.ReadFile("src/app.js")
 	if err != nil {

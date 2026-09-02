@@ -16,6 +16,7 @@ import (
 	"testing"
 
 	"sermo/internal/config"
+	"sermo/internal/web"
 )
 
 func TestFetchDaemonServiceStateHTTP(t *testing.T) {
@@ -31,7 +32,7 @@ func TestFetchDaemonServiceStateHTTP(t *testing.T) {
 			http.NotFound(w, r)
 			return
 		}
-		if csrf := r.Header.Get(daemonWebCSRFHeader); csrf != "" {
+		if csrf := r.Header.Get(web.HeaderCSRF); csrf != "" {
 			http.Error(w, "unexpected csrf", http.StatusBadRequest)
 			return
 		}
@@ -111,7 +112,7 @@ func TestDaemonAPIGetConfigFailureIsSilent(t *testing.T) {
 		Stderr: &stderr,
 	}
 
-	body, status, err := app.daemonAPIGet(context.Background(), options{}, daemonAPIPathWatches)
+	body, status, err := app.daemonAPIGet(context.Background(), options{}, web.APIPathWatches)
 	if !errors.Is(err, wantErr) {
 		t.Fatalf("daemonAPIGet() error = %v, want %v", err, wantErr)
 	}
@@ -127,7 +128,7 @@ func TestWatchStatusFetchesOneDaemonSnapshot(t *testing.T) {
 	var requestCount atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requestCount.Add(1)
-		if r.Method != http.MethodGet || r.URL.Path != daemonAPIPathWatches {
+		if r.Method != http.MethodGet || r.URL.Path != web.APIPathWatches {
 			http.NotFound(w, r)
 			return
 		}
@@ -205,7 +206,7 @@ func TestFetchEventsHTTP(t *testing.T) {
 					http.NotFound(w, r)
 					return
 				}
-				if r.URL.Query().Get(daemonAPIQueryLimit) != "7" {
+				if r.URL.Query().Get(web.APIQueryLimit) != "7" {
 					http.Error(w, "unexpected limit", http.StatusBadRequest)
 					return
 				}
@@ -243,7 +244,7 @@ func TestProbeDaemonWatchHTTP(t *testing.T) {
 			http.NotFound(w, r)
 			return
 		}
-		if r.Header.Get(daemonWebCSRFHeader) != daemonWebCSRFValue {
+		if r.Header.Get(web.HeaderCSRF) != web.CSRFHeaderValue {
 			http.Error(w, "missing csrf", http.StatusForbidden)
 			return
 		}
@@ -276,7 +277,7 @@ func TestProbeDaemonWatchSendsTheBackendGeneration(t *testing.T) {
 	const generation = "7"
 	t.Setenv(config.EnvWebPassword, "secret")
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set(daemonWebGenerationHeader, generation)
+		w.Header().Set(web.HeaderGeneration, generation)
 		if r.Method == http.MethodGet && r.URL.Path == "/api/watches" {
 			if auth := r.Header.Get("Authorization"); auth != "Basic YWRtaW46c2VjcmV0" {
 				t.Errorf("generation Authorization = %q, want configured Basic auth", auth)
@@ -288,7 +289,7 @@ func TestProbeDaemonWatchSendsTheBackendGeneration(t *testing.T) {
 			http.NotFound(w, r)
 			return
 		}
-		if got := r.Header.Get(daemonWebGenerationHeader); got != generation {
+		if got := r.Header.Get(web.HeaderGeneration); got != generation {
 			http.Error(w, "X-Sermo-Generation header is required", http.StatusPreconditionRequired)
 			return
 		}

@@ -49,9 +49,9 @@ const (
 	headerContentSecurityPolicy = "Content-Security-Policy"
 	headerContentType           = httpx.HeaderContentType
 	headerReferrerPolicy        = "Referrer-Policy"
-	headerSermoConfirm          = "X-Sermo-Confirm"
-	headerSermoCSRF             = "X-Sermo-Csrf"
-	headerSermoGeneration       = "X-Sermo-Generation"
+	headerSermoConfirm          = HeaderConfirm
+	headerSermoCSRF             = HeaderCSRF
+	headerSermoGeneration       = HeaderGeneration
 	headerSecFetchMode          = "Sec-Fetch-Mode"
 	headerAccept                = "Accept"
 	secFetchModeNavigate        = "navigate"
@@ -98,7 +98,7 @@ const (
 	routePathLivez  = "/livez"
 	routePathReadyz = "/readyz"
 	routePathLogin  = "/login"
-	routePathAPI    = "/" + apiSegmentRoot
+	routePathAPI    = APIPathRoot
 	apiPathPrefix   = routePathAPI + "/"
 )
 
@@ -192,14 +192,14 @@ const (
 	apiParamName        = "name"
 	apiParamPID         = "pid"
 	apiParamService     = "service"
-	apiQueryBefore      = "before"
+	apiQueryBefore      = APIQueryBefore
 	apiQueryBeforeID    = "before_id"
 	apiQueryCheck       = "check"
 	apiQueryForce       = "force"
 	apiQueryKind        = "kind"
 	apiQueryKill        = "kill"
 	apiQueryLazy        = "lazy"
-	apiQueryLimit       = "limit"
+	apiQueryLimit       = APIQueryLimit
 	apiQueryMetric      = "metric"
 	apiQueryNoCascade   = "no_cascade"
 	apiQueryOnlyErrors  = "only_errors"
@@ -225,10 +225,10 @@ const (
 
 const (
 	apiPathActivity     = apiPathPrefix + apiSegmentActivity
-	apiPathApplications = apiPathPrefix + apiSegmentApplications
+	apiPathApplications = APIPathApplications
 	apiPathDashboard    = apiPathPrefix + apiSegmentDashboard
 	apiPathDaemon       = apiPathPrefix + apiSegmentDaemon
-	apiPathEvents       = apiPathPrefix + apiSegmentEvents
+	apiPathEvents       = APIPathEvents
 	apiPathHost         = apiPathPrefix + apiSegmentHost
 	apiPathLibraries    = apiPathPrefix + apiSegmentLibraries
 	apiPathLocks        = apiPathPrefix + apiSegmentLocks
@@ -237,11 +237,11 @@ const (
 	apiPathNotifiers    = apiPathPrefix + apiSegmentNotifiers
 	apiPathPanic        = apiPathPrefix + apiSegmentPanic
 	apiPathReload       = apiPathPrefix + apiSegmentReload
-	apiPathServices     = apiPathPrefix + apiSegmentServices
+	apiPathServices     = APIPathServices
 	apiPathSessions     = apiPathPrefix + apiSegmentSessions
 	apiPathState        = apiPathPrefix + apiSegmentState
 	apiPathStream       = apiPathPrefix + apiSegmentStream
-	apiPathWatches      = apiPathPrefix + apiSegmentWatches
+	apiPathWatches      = APIPathWatches
 	apiPathWhoami       = apiPathPrefix + apiSegmentWhoami
 )
 
@@ -280,7 +280,7 @@ const (
 	routeAPIAppEvents                 = routeMethodGet + apiPathApplications + "/" + routeVarName + "/" + apiSegmentEvents
 	routeAPIEvents                    = routeMethodGet + apiPathEvents
 	routeAPIStream                    = routeMethodGet + apiPathStream
-	routeAPIEventsClear               = routeMethodPost + apiPathEvents + "/" + apiActionClear
+	routeAPIEventsClear               = routeMethodPost + APIPathEventsClear
 	routeAPIStateCompact              = routeMethodPost + apiPathState + "/" + apiActionCompact
 	routeAPIPanic                     = routeMethodPost + apiPathPanic + "/" + routeVarAction
 	routeAPIPreflight                 = routeMethodPost + apiPathServices + "/" + routeVarName + "/" + apiSegmentPreflight
