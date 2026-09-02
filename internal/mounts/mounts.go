@@ -1,7 +1,10 @@
 // Package mounts contains shared helpers for Linux mount table and fstab data.
 package mounts
 
-import "strings"
+import (
+	"path/filepath"
+	"strings"
+)
 
 const (
 	mountFieldEscapeSpace     = `\040`
@@ -34,14 +37,26 @@ func UnescapeField(s string) string {
 	return escapedFieldReplacer.Replace(s)
 }
 
-// PathUnder reports whether path is the mount point itself or a child of it.
-// Callers pass cleaned paths; under "/" requires an absolute path.
+// PathUnder reports whether the absolute path is the mount point itself or a
+// child of it. The comparison is lexical: both paths are cleaned, but symlinks
+// are not resolved.
 func PathUnder(path, mountPoint string) bool {
-	if mountPoint == "." || path == "." {
+	path = filepath.Clean(path)
+	mountPoint = filepath.Clean(mountPoint)
+	if !filepath.IsAbs(path) || !filepath.IsAbs(mountPoint) {
 		return false
 	}
 	if mountPoint == "/" {
-		return strings.HasPrefix(path, "/")
+		return true
 	}
 	return path == mountPoint || strings.HasPrefix(path, mountPoint+"/")
+}
+
+// PathStrictlyUnder reports whether the absolute path is a child of the mount
+// point, excluding the mount point itself. It has the same lexical semantics as
+// PathUnder.
+func PathStrictlyUnder(path, mountPoint string) bool {
+	path = filepath.Clean(path)
+	mountPoint = filepath.Clean(mountPoint)
+	return path != mountPoint && PathUnder(path, mountPoint)
 }

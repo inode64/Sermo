@@ -12,6 +12,7 @@ import (
 	"sermo/internal/cfgval"
 	"sermo/internal/checks"
 	"sermo/internal/conn"
+	"sermo/internal/mounts"
 	"sermo/internal/process"
 	"sermo/internal/servicemgr"
 )
@@ -1278,7 +1279,7 @@ func validateFileExistsCheck(path string, entry map[string]any, locksDir string,
 	filePath := cfgval.String(entry[checks.CheckKeyPath])
 	if filePath == "" {
 		add("%s.path is required for a file_exists check", path)
-	} else if underDir(filePath, locksDir) {
+	} else if mounts.PathUnder(filePath, locksDir) {
 		add("%s file_exists must not point under the runtime lock dir %s", path, locksDir)
 	}
 }
@@ -1298,7 +1299,7 @@ func validateLockfileCheck(path string, entry map[string]any, locksDir string, a
 		return
 	}
 	for _, lockfile := range cfgval.StringList(entry[checks.CheckKeyPath]) {
-		if underDir(lockfile, locksDir) {
+		if mounts.PathUnder(lockfile, locksDir) {
 			add("%s lockfile must not point under the runtime lock dir %s", path, locksDir)
 			return
 		}
