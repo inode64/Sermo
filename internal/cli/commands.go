@@ -67,9 +67,10 @@ const (
 )
 
 const (
-	monitorStatusPaused    = "paused"
-	monitorStatusResumed   = "resumed"
-	monitorStatusNotPaused = "not-paused"
+	monitorStatusPaused        = "paused"
+	monitorStatusResumed       = "resumed"
+	monitorStatusNotPaused     = "not-paused"
+	monitorStatusAlreadyPaused = "already-paused"
 )
 
 const daemonPIDFilename = config.DaemonPIDFilename

@@ -27,14 +27,20 @@ import (
 	"sermo/internal/web"
 )
 
+// MonitorStateStore is the minimal persistent store used to apply an explicit
+// monitor or unmonitor transition.
+type MonitorStateStore interface {
+	SetActive(service string, active bool, source string) error
+	MonitorState(service string) (state.MonitorRecord, bool, error)
+}
+
 // MonitorStore is the persistent monitoring-state store the daemon consults to
 // decide whether a service or watch is actively monitored. It is implemented by
 // internal/state.Store; kept as an interface so workers can be tested without a
 // database. A nil store means "always monitor" (no persistence).
 type MonitorStore interface {
+	MonitorStateStore
 	Active(service string) (active, found bool, err error)
-	SetActive(service string, active bool, source string) error
-	MonitorState(service string) (state.MonitorRecord, bool, error)
 	// Panic / SetPanic back the daemon-wide "panic mode" flag (a single global
 	// row, not keyed by service). Panic mode suppresses hooks, alerts and
 	// automatic remediation while keeping monitoring/status running.

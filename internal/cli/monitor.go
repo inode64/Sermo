@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	sermoapp "sermo/internal/app"
 	"sermo/internal/config"
 	"sermo/internal/state"
 )
@@ -81,24 +82,20 @@ func (a App) applyMonitorTransition(
 // it paused an entry, resumed a paused entry, or found monitoring already on.
 // Service and watch commands use independent keys but share these semantics.
 func updateMonitorState(store *state.Store, key string, pause bool) (string, error) {
-	if pause {
-		if err := store.SetActive(key, false, state.SourceCLI); err != nil {
-			return "", fmt.Errorf("pause monitoring: %w", err)
-		}
-		return monitorStatusPaused, nil
-	}
-
-	active, found, err := store.Active(key)
+	transition, err := sermoapp.ApplyMonitorTransition(store, key, !pause, state.SourceCLI)
 	if err != nil {
-		return "", fmt.Errorf("read monitoring state: %w", err)
+		return "", err
 	}
-	if err := store.SetActive(key, true, state.SourceCLI); err != nil {
-		return "", fmt.Errorf("resume monitoring: %w", err)
+	if transition.Changed {
+		if pause {
+			return monitorStatusPaused, nil
+		}
+		return monitorStatusResumed, nil
 	}
-	if !found || active {
-		return monitorStatusNotPaused, nil
+	if pause {
+		return monitorStatusAlreadyPaused, nil
 	}
-	return monitorStatusResumed, nil
+	return monitorStatusNotPaused, nil
 }
 
 func (a App) reportMonitor(opts options, store *state.Store, service, status string) {
@@ -127,6 +124,8 @@ func (a App) printMonitorStatus(subject, status, suffix string) {
 		fmt.Fprintf(a.Stdout, "monitoring paused for %s%s\n", subject, suffix)
 	case monitorStatusResumed:
 		fmt.Fprintf(a.Stdout, "monitoring resumed for %s%s\n", subject, suffix)
+	case monitorStatusAlreadyPaused:
+		fmt.Fprintf(a.Stdout, "monitoring already paused for %s%s\n", subject, suffix)
 	default:
 		fmt.Fprintf(a.Stdout, "%s was not paused\n", subject)
 	}

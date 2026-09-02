@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"sermo/internal/state"
 	"sermo/internal/web"
 )
 
@@ -55,6 +56,49 @@ func TestWebBackendSetMonitoredEmitsEvent(t *testing.T) {
 	if len(events) != 4 || events[3].Kind != eventKindSuppressed || events[3].Action != eventActionMonitor ||
 		events[3].Message != eventMessageAlreadyMonitored {
 		t.Fatalf("repeat monitor event = %+v", events[3])
+	}
+}
+
+func TestWebBackendSetMonitoredNoOpPreservesRecord(t *testing.T) {
+	store := newFakeStore()
+	store.active["web"] = false
+	store.source["web"] = state.SourceCLI
+	changedAt := time.Date(2026, 9, 2, 8, 0, 0, 0, time.UTC)
+	store.updated["web"] = changedAt
+
+	var events []Event
+	b := &WebBackend{
+		entries: map[string]*webEntry{"web": {}},
+		store:   store,
+		emit:    func(e Event) { events = append(events, e) },
+	}
+	if err := b.SetMonitored(context.Background(), "web", false); err != nil {
+		t.Fatal(err)
+	}
+	if store.source["web"] != state.SourceCLI || !store.updated["web"].Equal(changedAt) {
+		t.Fatalf("no-op record = source:%q updated:%v", store.source["web"], store.updated["web"])
+	}
+	if len(events) != 1 || events[0].Kind != eventKindSuppressed || events[0].Message != eventMessageAlreadyPaused {
+		t.Fatalf("events = %+v", events)
+	}
+}
+
+func TestWebBackendSetMonitoredUsesActiveDefault(t *testing.T) {
+	store := newFakeStore()
+	var events []Event
+	b := &WebBackend{
+		entries: map[string]*webEntry{"web": {}},
+		store:   store,
+		emit:    func(e Event) { events = append(events, e) },
+	}
+	if err := b.SetMonitored(context.Background(), "web", true); err != nil {
+		t.Fatal(err)
+	}
+	if _, found := store.active["web"]; found {
+		t.Fatal("default monitored state must not create a record")
+	}
+	if len(events) != 1 || events[0].Kind != eventKindSuppressed || events[0].Message != eventMessageAlreadyMonitored {
+		t.Fatalf("events = %+v", events)
 	}
 }
 

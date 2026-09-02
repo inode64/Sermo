@@ -1307,7 +1307,9 @@ same archive ladder as every other stored series. Services that declare an
 empty `processes: { }` map have no resident process tree; the dashboard omits
 their process table and latency/CPU/memory/IO charts.
 
-Web-triggered monitor changes are recorded with source `web` in the state store;
+Web-triggered monitor changes are recorded with source `web` in the state store.
+A repeated web or CLI request for the already-effective monitor state is a
+successful no-op and preserves the previous source and timestamp;
 manual stops from the web UI or CLI use `web-manual-stop` / `cli-manual-stop`
 until a later successful start restores the previous monitored state. A
 successful storage `umount` pauses that storage watch with `web-mount-umount` or

@@ -72,11 +72,13 @@ func TestUpdateMonitorState(t *testing.T) {
 		setup      *bool
 		wantStatus string
 		wantActive bool
+		wantFound  bool
 	}{
-		{name: "pause new entry", pause: true, wantStatus: monitorStatusPaused, wantActive: false},
-		{name: "resume paused entry", setup: boolPointer(false), wantStatus: monitorStatusResumed, wantActive: true},
-		{name: "resume active entry", setup: boolPointer(true), wantStatus: monitorStatusNotPaused, wantActive: true},
-		{name: "resume unrecorded entry", wantStatus: monitorStatusNotPaused, wantActive: true},
+		{name: "pause new entry", pause: true, wantStatus: monitorStatusPaused, wantActive: false, wantFound: true},
+		{name: "pause paused entry", pause: true, setup: boolPointer(false), wantStatus: monitorStatusAlreadyPaused, wantActive: false, wantFound: true},
+		{name: "resume paused entry", setup: boolPointer(false), wantStatus: monitorStatusResumed, wantActive: true, wantFound: true},
+		{name: "resume active entry", setup: boolPointer(true), wantStatus: monitorStatusNotPaused, wantActive: true, wantFound: true},
+		{name: "resume unrecorded entry", wantStatus: monitorStatusNotPaused, wantActive: false, wantFound: false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -98,10 +100,19 @@ func TestUpdateMonitorState(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if !found || active != tt.wantActive {
-				t.Errorf("state = active:%t found:%t, want active:%t found:true", active, found, tt.wantActive)
+			if found != tt.wantFound || active != tt.wantActive {
+				t.Errorf("state = active:%t found:%t, want active:%t found:%t", active, found, tt.wantActive, tt.wantFound)
 			}
 		})
+	}
+}
+
+func TestPrintMonitorStatusAlreadyPaused(t *testing.T) {
+	var out bytes.Buffer
+	app := App{Stdout: &out}
+	app.printMonitorStatus("watch storage-root", monitorStatusAlreadyPaused, "")
+	if got := out.String(); got != "monitoring already paused for watch storage-root\n" {
+		t.Fatalf("output = %q", got)
 	}
 }
 
