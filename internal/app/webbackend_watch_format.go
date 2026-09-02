@@ -123,15 +123,26 @@ func memoryWatchMeter(total, available uint64, usedPct float64) *web.WatchMeter 
 // and daemon-published snapshots. A non-positive CPU count carries no capacity
 // and therefore cannot produce a meaningful gauge.
 func loadWatchMeter(load float64, numCPU int) *web.WatchMeter {
-	if numCPU <= 0 {
+	usedPct, ok := loadUsedPercent(load, numCPU)
+	if !ok {
 		return nil
 	}
 	return &web.WatchMeter{
 		Kind:    checks.CheckTypeLoad,
-		UsedPct: load / float64(numCPU) * metrics.PercentScale,
+		UsedPct: usedPct,
 		Load:    load,
 		NumCPU:  numCPU,
 	}
+}
+
+// loadUsedPercent is the canonical load-to-CPU-capacity conversion shared by
+// host overview metrics and load watches. A non-positive CPU count has no
+// meaningful capacity.
+func loadUsedPercent(load float64, numCPU int) (float64, bool) {
+	if numCPU <= 0 {
+		return 0, false
+	}
+	return load / float64(numCPU) * metrics.PercentScale, true
 }
 
 // storageWatchInfo returns the latest storage result published by the daemon.
