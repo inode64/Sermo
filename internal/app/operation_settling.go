@@ -10,7 +10,8 @@ import (
 
 const operationSettlingMaxAge = 15 * time.Minute
 
-func beginOperationSettling(store OperationSettlingStore, service, action string) error {
+// BeginOperationSettling marks a service operation as running for its caller.
+func BeginOperationSettling(store OperationSettlingStore, service, action string) error {
 	if store == nil || !operation.IsServiceAction(action) {
 		return nil
 	}
@@ -18,11 +19,6 @@ func beginOperationSettling(store OperationSettlingStore, service, action string
 		return fmt.Errorf("mark operation settling for %s: %w", service, err)
 	}
 	return nil
-}
-
-// BeginOperationSettling marks a service operation as running for its caller.
-func BeginOperationSettling(store OperationSettlingStore, service, action string) error {
-	return beginOperationSettling(store, service, action)
 }
 
 func finishOperationSettling(store OperationSettlingStore, service, action string, result operation.Result, opErr error, activeAfterPostflightFailure bool) error {

@@ -12,7 +12,7 @@ import (
 func TestOperationSettlingLifecycle(t *testing.T) {
 	store := newFakeStore()
 
-	if err := beginOperationSettling(store, "web", string(rules.ActionRestart)); err != nil {
+	if err := BeginOperationSettling(store, "web", string(rules.ActionRestart)); err != nil {
 		t.Fatalf("begin restart: %v", err)
 	}
 	rec, found, err := store.OperationSettling("web")
@@ -35,7 +35,7 @@ func TestOperationSettlingLifecycle(t *testing.T) {
 		t.Fatalf("restart should wait for observation, got %+v", rec)
 	}
 
-	if err := beginOperationSettling(store, "web", string(rules.ActionStop)); err != nil {
+	if err := BeginOperationSettling(store, "web", string(rules.ActionStop)); err != nil {
 		t.Fatalf("begin stop: %v", err)
 	}
 	result = operation.Result{Service: "web", Action: string(rules.ActionStop), Status: operation.ResultOK}
@@ -46,7 +46,7 @@ func TestOperationSettlingLifecycle(t *testing.T) {
 		t.Fatal("successful stop should clear operation settling")
 	}
 
-	if err := beginOperationSettling(store, "web", string(rules.ActionStart)); err != nil {
+	if err := BeginOperationSettling(store, "web", string(rules.ActionStart)); err != nil {
 		t.Fatalf("begin failed start: %v", err)
 	}
 	result = operation.Result{Service: "web", Action: string(rules.ActionStart), Status: operation.ResultFailed}
@@ -57,7 +57,7 @@ func TestOperationSettlingLifecycle(t *testing.T) {
 		t.Fatal("failed operation should clear operation settling")
 	}
 
-	if err := beginOperationSettling(store, "web", string(rules.ActionRestart)); err != nil {
+	if err := BeginOperationSettling(store, "web", string(rules.ActionRestart)); err != nil {
 		t.Fatalf("begin active postflight restart: %v", err)
 	}
 	result = operation.Result{Service: "web", Action: string(rules.ActionRestart), Status: operation.ResultPostflightFailed}
@@ -84,7 +84,7 @@ func TestRepairOperationSettlesLikeStart(t *testing.T) {
 	store := newFakeStore()
 	result := operation.Result{Service: "web", Action: operation.ActionRepair, Status: operation.ResultOK}
 
-	if err := beginOperationSettling(store, "web", operation.ActionRepair); err != nil {
+	if err := BeginOperationSettling(store, "web", operation.ActionRepair); err != nil {
 		t.Fatalf("begin repair: %v", err)
 	}
 	rec, found, err := store.OperationSettling("web")
