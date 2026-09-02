@@ -128,49 +128,51 @@ func TestMountForPathReturnsDeepestContainingMount(t *testing.T) {
 		{Device: "/dev/data", MountPoint: "/var/lib/sermo", FSType: "xfs"},
 		{Device: "/dev/other", MountPoint: "/var/lib-other", FSType: "xfs"},
 	}
-
-	got := MountForPath(mounts, "/var/lib/sermo/db/state")
-	if got == nil || got.MountPoint != "/var/lib/sermo" {
-		t.Fatalf("MountForPath deep path = %+v, want /var/lib/sermo", got)
+	tests := []struct {
+		name string
+		path string
+		want string
+	}{
+		{name: "deepest", path: "/var/lib/sermo/db/state", want: "/var/lib/sermo"},
+		{name: "boundary", path: "/var/lib-other/cache", want: "/var/lib-other"},
+		{name: "clean separators and dot", path: "/var//lib/sermo/db/./state", want: "/var/lib/sermo"},
+		{name: "clean parent", path: "/var/lib/sermo/../other", want: "/var"},
+		{name: "sibling prefix", path: "/varnish/cache", want: "/"},
+		{name: "relative", path: "var/lib/sermo"},
+		{name: "empty", path: ""},
 	}
-
-	got = MountForPath(mounts, "/var/lib-other/cache")
-	if got == nil || got.MountPoint != "/var/lib-other" {
-		t.Fatalf("MountForPath boundary path = %+v, want /var/lib-other", got)
-	}
-
-	if got = MountForPath(mounts, "var/lib/sermo"); got != nil {
-		t.Fatalf("MountForPath(relative path) = %+v, want nil", got)
-	}
-
-	got = MountForPath([]Mount{{Device: "/dev/var", MountPoint: "/var", FSType: "ext4"}}, "/varnish/cache")
-	if got != nil {
-		t.Fatalf("MountForPath(sibling prefix) = %+v, want nil", got)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := MountForPath(mounts, tt.path)
+			if tt.want == "" {
+				if got != nil {
+					t.Fatalf("MountForPath(%q) = %+v, want nil", tt.path, got)
+				}
+				return
+			}
+			if got == nil || got.MountPoint != tt.want {
+				t.Fatalf("MountForPath(%q) = %+v, want %q", tt.path, got, tt.want)
+			}
+		})
 	}
 }
 
 func TestMountForPathPrefersRealMountOverAutofsPlaceholder(t *testing.T) {
-	mounts := []Mount{
-		{Device: "systemd-1", MountPoint: "/var/lib/libvirt/images", FSType: "autofs"},
-		{Device: "192.0.2.100:/", MountPoint: "/var/lib/libvirt/images", FSType: "ceph"},
-	}
-	got := MountForPath(mounts, "/var/lib/libvirt/images/base.qcow2")
-	if got == nil || got.FSType != "ceph" {
-		t.Fatalf("MountForPath = %+v, want ceph mount", got)
-	}
-}
-
-func TestMountForPathEqualLengthPrefersBetterMount(t *testing.T) {
-	// Two mounts share the same mountpoint length; the longest-prefix tie is
-	// broken by betterMount, which keeps the real (non-autofs) mount already
-	// chosen rather than overwriting it with the equal-length autofs entry.
-	mounts := []Mount{
-		{Device: "/dev/sda1", MountPoint: "/mnt", FSType: "ext4"},
-		{Device: "systemd-1", MountPoint: "/mnt", FSType: "autofs"},
-	}
-	got := MountForPath(mounts, "/mnt/data")
-	if got == nil || got.FSType != "ext4" {
-		t.Fatalf("MountForPath = %+v, want the ext4 mount (betterMount tie-break)", got)
+	realMount := Mount{Device: "192.0.2.100:/", MountPoint: "/var/lib/libvirt/images", FSType: "ceph"}
+	autofsMount := Mount{Device: "systemd-1", MountPoint: realMount.MountPoint, FSType: FSTypeAutofs}
+	for _, tt := range []struct {
+		name   string
+		mounts []Mount
+	}{
+		{name: "autofs first", mounts: []Mount{autofsMount, realMount}},
+		{name: "real first", mounts: []Mount{realMount, autofsMount}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			got := MountForPath(tt.mounts, "/var/lib/libvirt/images/base.qcow2")
+			if got == nil || got.FSType != "ceph" {
+				t.Fatalf("MountForPath = %+v, want ceph mount", got)
+			}
+		})
 	}
 }
 
