@@ -9,7 +9,7 @@ import (
 )
 
 func TestJSONAssertNumericBoundaries(t *testing.T) {
-	// got == want exercises each operator's boundary exactly.
+	// got == want exercises each operator's boundary exactly through compareValue.
 	cases := []struct {
 		op   string
 		want bool
@@ -20,9 +20,51 @@ func TestJSONAssertNumericBoundaries(t *testing.T) {
 		{"<=", true}, // 5 <= 5
 	}
 	for _, c := range cases {
-		if got := jsonAssert(5.0, c.op, "5"); got != c.want {
+		got, err := jsonAssert(5.0, c.op, "5")
+		if err != nil {
+			t.Errorf("jsonAssert(5, %q, 5): %v", c.op, err)
+			continue
+		}
+		if got != c.want {
 			t.Errorf("jsonAssert(5, %q, 5) = %v, want %v", c.op, got, c.want)
 		}
+	}
+}
+
+func TestJSONAssertUsesCompareValue(t *testing.T) {
+	cases := []struct {
+		name    string
+		got     any
+		op      string
+		want    string
+		hold    bool
+		wantErr bool
+	}{
+		{name: "json number equals integer spelling", got: 7.0, op: "==", want: "7", hold: true},
+		{name: "json number equals float spelling", got: 7.0, op: "==", want: "7.0", hold: true},
+		{name: "json number not equal", got: 7.0, op: "!=", want: "8", hold: true},
+		{name: "json string equality", got: "ok", op: "==", want: "ok", hold: true},
+		{name: "json string contains", got: "role:master", op: "contains", want: "master", hold: true},
+		{name: "non-numeric ordering", got: "ready", op: ">", want: "1", wantErr: true},
+		{name: "invalid regex", got: "v1", op: "=~", want: "[", wantErr: true},
+		{name: "unsupported op", got: 1.0, op: "><", want: "1", wantErr: true},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			hold, err := jsonAssert(c.got, c.op, c.want)
+			if c.wantErr {
+				if err == nil {
+					t.Fatalf("jsonAssert(%v, %q, %q): expected error", c.got, c.op, c.want)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("jsonAssert(%v, %q, %q): %v", c.got, c.op, c.want, err)
+			}
+			if hold != c.hold {
+				t.Fatalf("jsonAssert(%v, %q, %q) = %v, want %v", c.got, c.op, c.want, hold, c.hold)
+			}
+		})
 	}
 }
 

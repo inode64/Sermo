@@ -12,12 +12,12 @@ import (
 )
 
 // compareValue evaluates "result op value" and is shared by the sql, http and
-// connection checks. Ordering ops (> >= < <=) parse both sides as floats; == and
-// != compare numerically when both parse as numbers, otherwise as strings
-// (equal/different); contains requires value to be a substring of result; =~
-// matches result against value as a Go (RE2) regular expression. The set
-// matches expect_json (jsonAssert) so every {op, value} comparison shares one
-// vocabulary.
+// connection checks, including HTTP expect_json after jsonValueString. Ordering
+// ops (> >= < <=) parse both sides as floats; == and != compare numerically when
+// both parse as numbers, otherwise as strings (equal/different); contains
+// requires value to be a substring of result; =~ matches result against value as
+// a Go (RE2) regular expression. Parse and regex failures return an error so
+// every {op, value} comparison shares one vocabulary and one diagnostic.
 func compareValue(result, op, value string) (bool, error) {
 	switch op {
 	case cfgval.AssertOpContains:

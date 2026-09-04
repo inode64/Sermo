@@ -866,9 +866,11 @@ forwards correctly and that the target is reachable through it; for an
 `json:` marshals the value and sets `Content-Type: application/json` (override
 it via `headers`); `body:` sends a raw string. The response is only read when
 `expect_body`/`expect_json` is set (capped at 1 MiB). `expect_json` looks up
-**dotted paths** into nested objects. A scalar value is an equality check
-(compared as a string); a `{op, value}` mapping uses an operator — `>`, `>=`,
-`<`, `<=` (numeric), `==`, `!=`, `contains` (string), or `=~` (regex).
+**dotted paths** into nested objects. A scalar value is equality (`==`); a
+`{op, value}` mapping uses an operator. Both use the same comparison as
+`expect_body`: numeric when both sides parse as numbers (`>`, `<`, `==`, `!=`,
+…), otherwise string equality, `contains` substring matching, or a regex with
+`=~`.
 
 By default the check follows HTTP redirects using Go's standard client policy.
 Set `follow_redirects: false` when the redirect itself is the health signal, for
