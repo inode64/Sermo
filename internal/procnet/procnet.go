@@ -1,4 +1,5 @@
-// Package procnet names the Linux /proc/net socket-table vocabulary.
+// Package procnet names the Linux /proc/net socket-table vocabulary and decodes
+// the hex addresses those tables use.
 package procnet
 
 // Linux /proc/net socket table paths.
