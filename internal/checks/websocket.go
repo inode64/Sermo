@@ -107,11 +107,7 @@ func (c *websocketCheck) handshake(ctx context.Context, iface string, start time
 	conn.ApplyDeadline(ctx, nc)
 
 	if websocketSecure(c.scheme) {
-		tc := netutil.TLSClientConfig(c.host)
-		if netutil.NormalizeTLS(c.tls) == netutil.TLSModeSkipVerify {
-			tc.InsecureSkipVerify = true // operator chose tls: skip-verify
-		}
-		tlsConn := tls.Client(nc, tc)
+		tlsConn := tls.Client(nc, netutil.TLSClientConfigForMode(c.host, c.tls))
 		if err := tlsConn.HandshakeContext(ctx); err != nil {
 			return c.unavailableResult(fmt.Sprintf("websocket %s: TLS: %v", netutil.RedactURL(c.rawURL), netutil.URLErrorCause(err)), start)
 		}

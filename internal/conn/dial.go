@@ -61,15 +61,10 @@ func (t probeTarget) dialTLS(ctx context.Context) (net.Conn, error) {
 		c   net.Conn
 		err error
 	)
-	switch netutil.NormalizeTLS(t.cfg.TLS) {
-	case "":
+	if mode := netutil.NormalizeTLS(t.cfg.TLS); mode == "" {
 		c, err = d.DialContext(ctx, networkTCP, addr)
-	case tlsSkipVerify:
-		tc := netutil.TLSClientConfig(host)
-		tc.InsecureSkipVerify = true // operator chose tls: skip-verify
-		c, err = (&tls.Dialer{NetDialer: d, Config: tc}).DialContext(ctx, networkTCP, addr)
-	default:
-		c, err = (&tls.Dialer{NetDialer: d, Config: netutil.TLSClientConfig(host)}).DialContext(ctx, networkTCP, addr)
+	} else {
+		c, err = (&tls.Dialer{NetDialer: d, Config: netutil.TLSClientConfigForMode(host, mode)}).DialContext(ctx, networkTCP, addr)
 	}
 	if err != nil {
 		return nil, wrapDialError(networkTCP, addr, err)

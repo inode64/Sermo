@@ -116,11 +116,7 @@ func MongoConnect(ctx context.Context, cfg Config) (*mongo.Client, error) {
 		opts.SetAuth(options.Credential{Username: cfg.User, Password: cfg.Password, AuthSource: authSource})
 	}
 	if mode := netutil.NormalizeTLS(cfg.TLS); mode != "" {
-		tc := netutil.TLSClientConfig(host)
-		if mode == tlsSkipVerify {
-			tc.InsecureSkipVerify = true // operator chose tls: skip-verify
-		}
-		opts.SetTLSConfig(tc)
+		opts.SetTLSConfig(netutil.TLSClientConfigForMode(host, mode))
 	}
 	client, err := mongo.Connect(opts)
 	if err != nil {
