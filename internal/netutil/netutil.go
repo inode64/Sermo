@@ -86,10 +86,23 @@ func TimeoutFromContext(ctx context.Context, fallback time.Duration) time.Durati
 }
 
 // TLSClientConfig returns a fresh TLS client configuration for host with SNI
-// set and TLS 1.2 as the minimum version. Callers that explicitly support an
-// unverified mode may set InsecureSkipVerify on their private result.
+// set and TLS 1.2 as the minimum version. Certificate verification is on.
+// Callers that accept a friendly tls mode should use TLSClientConfigForMode.
 func TLSClientConfig(host string) *tls.Config {
 	return &tls.Config{ServerName: host, MinVersion: tls.VersionTLS12}
+}
+
+// TLSClientConfigForMode returns a fresh TLS client configuration for host.
+// TLSModeSkipVerify (and its friendly spellings) sets InsecureSkipVerify;
+// every other mode, including empty and TLSModeTrue, is verified TLS.
+// Callers that want plaintext must not call this: an empty mode is not
+// "disable TLS".
+func TLSClientConfigForMode(host, mode string) *tls.Config {
+	tc := TLSClientConfig(host)
+	if NormalizeTLS(mode) == TLSModeSkipVerify {
+		tc.InsecureSkipVerify = true
+	}
+	return tc
 }
 
 // TLS mode tokens shared by the transports that accept a friendly tls value.

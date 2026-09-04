@@ -52,11 +52,7 @@ func httpProbeBaseWithTLSMode(ctx context.Context, cfg Config, defaultPort int, 
 	client := httpProbeClient(target.cfg.Interface, nil)
 	if tlsMode != "" {
 		scheme = schemeHTTPS
-		tlsConfig := netutil.TLSClientConfig(host)
-		if tlsMode == tlsSkipVerify {
-			tlsConfig.InsecureSkipVerify = true // operator chose tls: skip-verify
-		}
-		client = httpProbeClient(target.cfg.Interface, tlsConfig)
+		client = httpProbeClient(target.cfg.Interface, netutil.TLSClientConfigForMode(host, tlsMode))
 	}
 	return client, scheme + urlSchemeSeparator + target.address()
 }

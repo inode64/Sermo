@@ -48,10 +48,6 @@ const (
 	dockerContainerPathPrefix = "/containers/"
 )
 
-// tlsModeSkipVerify is the canonical unverified-TLS mode; the accepted input
-// spellings live in netutil (NormalizeTLS / ValidTLSValue).
-const tlsModeSkipVerify = netutil.TLSModeSkipVerify
-
 // ensureDeadline returns ctx unchanged when it already carries a deadline,
 // otherwise a child bounded by defaultTimeout. The returned cancel must be
 // called.
@@ -209,11 +205,7 @@ func NewClient(spec Spec) *Client {
 	scheme := dockerSchemeHTTP
 	if mode := netutil.NormalizeTLS(spec.TLS); mode != "" {
 		scheme = dockerSchemeHTTPS
-		tc := netutil.TLSClientConfig(host)
-		if mode == tlsModeSkipVerify {
-			tc.InsecureSkipVerify = true // operator chose tls: skip-verify
-		}
-		tr.TLSClientConfig = tc
+		tr.TLSClientConfig = netutil.TLSClientConfigForMode(host, mode)
 	}
 	return &Client{HTTP: &http.Client{Transport: tr}, Base: scheme + netutil.URLSchemeSeparator + netutil.JoinHostPort(host, port)}
 }

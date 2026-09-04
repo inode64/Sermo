@@ -45,6 +45,37 @@ func TestTLSClientConfig(t *testing.T) {
 	}
 }
 
+func TestTLSClientConfigForMode(t *testing.T) {
+	tests := []struct {
+		name       string
+		mode       string
+		skipVerify bool
+	}{
+		{name: "empty is verified", mode: ""},
+		{name: "true is verified", mode: TLSModeTrue},
+		{name: "yes is verified", mode: "yes"},
+		{name: "skip-verify", mode: TLSModeSkipVerify, skipVerify: true},
+		{name: "skip-verify spelling", mode: "  SKIP-VERIFY  ", skipVerify: true},
+		{name: "custom stays verified", mode: "verify-full"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			cfg := TLSClientConfigForMode("service.example", test.mode)
+			if cfg.ServerName != "service.example" || cfg.MinVersion != tls.VersionTLS12 {
+				t.Fatalf("TLSClientConfigForMode() = server %q min %x", cfg.ServerName, cfg.MinVersion)
+			}
+			if cfg.InsecureSkipVerify != test.skipVerify {
+				t.Fatalf("InsecureSkipVerify = %t, want %t", cfg.InsecureSkipVerify, test.skipVerify)
+			}
+		})
+	}
+	first := TLSClientConfigForMode("service.example", TLSModeSkipVerify)
+	second := TLSClientConfigForMode("service.example", TLSModeSkipVerify)
+	if first == second {
+		t.Fatal("TLSClientConfigForMode reused mutable configuration")
+	}
+}
+
 func TestNormalizeTLS(t *testing.T) {
 	tests := []struct {
 		name string
