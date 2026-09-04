@@ -882,9 +882,10 @@ certificado del destino.
 (sobreescríbelo vía `headers`); `body:` envía una cadena cruda. La respuesta
 solo se lee cuando `expect_body`/`expect_json` está establecido (limitado a 1
 MiB). `expect_json` busca **rutas con puntos** en objetos anidados. Un valor
-escalar es una comprobación de igualdad (comparado como cadena); un mapeo `{op,
-value}` usa un operador — `>`, `>=`, `<`, `<=` (numérico), `==`, `!=`,
-`contains` (cadena), o `=~` (regex).
+escalar es igualdad (`==`); un mapeo `{op, value}` usa un operador. Ambos usan
+la misma comparación que `expect_body`: numérica cuando ambos lados parsean
+como números (`>`, `<`, `==`, `!=`, …), si no igualdad de cadenas, coincidencia
+de subcadena `contains`, o una regex con `=~`.
 
 Por defecto la comprobación sigue redirecciones HTTP usando la política estándar
 del cliente Go. Configura `follow_redirects: false` cuando la redirección sea la

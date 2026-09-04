@@ -12,7 +12,6 @@ import (
 	"strings"
 	"time"
 
-	"sermo/internal/cfgval"
 	"sermo/internal/httpx"
 	"sermo/internal/netutil"
 	"sermo/internal/units"
@@ -132,7 +131,11 @@ func (c *httpCheck) Run(ctx context.Context) Result {
 			if !ok {
 				return c.result(false, fmt.Sprintf("status %d; json %q missing", resp.StatusCode, a.path), start)
 			}
-			if !jsonAssert(got, a.op, a.value) {
+			ok, err := jsonAssert(got, a.op, a.value)
+			if err != nil {
+				return c.result(false, fmt.Sprintf("status %d; json %q: %v", resp.StatusCode, a.path, err), start)
+			}
+			if !ok {
 				return c.result(false, fmt.Sprintf("status %d; json %q %s %q (got %q)", resp.StatusCode, a.path, a.op, a.value, jsonValueString(got)), start)
 			}
 		}
@@ -176,40 +179,13 @@ func (c *httpCheck) success(resp *http.Response, elapsed time.Duration, statusMs
 	return res
 }
 
-// jsonAssert compares a decoded JSON value against want under op. Numeric
-// comparisons require both sides to parse as numbers; ==/!=/contains compare the
-// stringified value.
-func jsonAssert(got any, op, want string) bool {
-	gotStr := jsonValueString(got)
-	switch op {
-	case "", cfgval.CompareOpEqual:
-		return gotStr == want
-	case cfgval.CompareOpNotEqual:
-		return gotStr != want
-	case cfgval.AssertOpContains:
-		return strings.Contains(gotStr, want)
-	case cfgval.AssertOpRegex:
-		ok, _ := compareValue(gotStr, cfgval.AssertOpRegex, want)
-		return ok
-	case cfgval.CompareOpGreater, cfgval.CompareOpGreaterEqual, cfgval.CompareOpLess, cfgval.CompareOpLessEqual:
-		gf, err1 := strconv.ParseFloat(gotStr, numericBits64)
-		wf, err2 := strconv.ParseFloat(want, numericBits64)
-		if err1 != nil || err2 != nil {
-			return false
-		}
-		switch op {
-		case cfgval.CompareOpGreater:
-			return gf > wf
-		case cfgval.CompareOpGreaterEqual:
-			return gf >= wf
-		case cfgval.CompareOpLess:
-			return gf < wf
-		default:
-			return gf <= wf
-		}
-	default:
-		return false
-	}
+// jsonAssert compares a decoded JSON value against want under op using the
+// shared compareValue vocabulary. A JSON number stringifies first; == and !=
+// then compare numerically when both sides parse as numbers. Parse and regex
+// errors are returned so the HTTP check can fail with the same diagnostic as
+// expect_body, instead of silently treating them as a mismatch.
+func jsonAssert(got any, op, want string) (bool, error) {
+	return compareValue(jsonValueString(got), op, want)
 }
 
 // jsonPath looks up a dotted path (e.g. "data.status") in a decoded JSON document

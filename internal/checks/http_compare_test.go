@@ -202,6 +202,12 @@ func TestHTTPJSONRegex(t *testing.T) {
 	if _, warn := buildHTTP(t, srv, map[string]any{"type": "http", "url": srv.URL + "/json", "expect_json": map[string]any{"count": map[string]any{"op": ">", "value": "abc"}}}); !strings.Contains(warn, "must be numeric") {
 		t.Fatalf("invalid json numeric warning = %q", warn)
 	}
+	if res := runHTTP(t, srv, map[string]any{
+		"url":         srv.URL + "/json",
+		"expect_json": map[string]any{"count": map[string]any{"op": "==", "value": "7.0"}},
+	}); !res.OK {
+		t.Fatalf("json number 7 == 7.0 should pass: %s", res.Message)
+	}
 	// Sanity: the JSON document really is what we expect.
 	var doc map[string]any
 	resp, _ := srv.Client().Get(srv.URL + "/json")
