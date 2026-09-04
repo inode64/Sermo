@@ -3,10 +3,8 @@ package conn
 import (
 	"bufio"
 	"context"
-	"encoding/binary"
 	"fmt"
 	"io"
-	"net"
 	"os"
 	"strconv"
 	"strings"
@@ -131,22 +129,11 @@ func parseUDP4SocketTable(r io.Reader, host string, port int) (udpSocket, bool, 
 }
 
 func parseProcUDP4Address(s string) (string, int, error) {
-	addrHex, portHex, ok := strings.Cut(s, procnet.AddressSeparator)
-	if !ok {
-		return "", 0, fmt.Errorf("dhclient: malformed UDP address %q", s)
-	}
-	addr, err := strconv.ParseUint(addrHex, procnet.HexBase, procnet.IPv4Bits)
+	addr, port, err := procnet.ParseIPv4Socket(s)
 	if err != nil {
-		return "", 0, fmt.Errorf("dhclient: malformed UDP address %q: %w", s, err)
+		return "", 0, fmt.Errorf("dhclient: %w", err)
 	}
-	port, err := strconv.ParseUint(portHex, procnet.HexBase, procnet.PortBits)
-	if err != nil {
-		return "", 0, fmt.Errorf("dhclient: malformed UDP port %q: %w", s, err)
-	}
-	var b [net.IPv4len]byte
-	binary.LittleEndian.PutUint32(b[:], uint32(addr))
-	ip := net.IPv4(b[procnet.IPv4Byte0], b[procnet.IPv4Byte1], b[procnet.IPv4Byte2], b[procnet.IPv4Byte3])
-	return ip.String(), int(port), nil
+	return addr, port, nil
 }
 
 type dhclientLease struct {

@@ -2,7 +2,6 @@ package cli
 
 import (
 	"context"
-	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -412,49 +411,12 @@ func parseProcSocketTable(r io.Reader, port int, states map[string]bool) (bool, 
 func parseProcSocketTableHosts(r io.Reader, port int, states map[string]bool, ipv6 bool) ([]string, error) {
 	var hosts []string
 	err := scanProcSocketRows(r, port, states, func(hostHex string) bool {
-		if host, ok := procSocketHost(hostHex, ipv6); ok {
+		if host, ok := procnet.ParseHost(hostHex, ipv6); ok {
 			hosts = append(hosts, host)
 		}
 		return true
 	})
 	return strutil.Unique(hosts), err
-}
-
-func procSocketHost(hexAddr string, ipv6 bool) (string, bool) {
-	if ipv6 {
-		return procIPv6Host(hexAddr)
-	}
-	return procIPv4Host(hexAddr)
-}
-
-func procIPv4Host(hexAddr string) (string, bool) {
-	if len(hexAddr) != procnet.IPv4HexChars {
-		return "", false
-	}
-	raw, err := strconv.ParseUint(hexAddr, procnet.HexBase, procnet.IPv4Bits)
-	if err != nil {
-		return "", false
-	}
-	var b [net.IPv4len]byte
-	binary.LittleEndian.PutUint32(b[:], uint32(raw))
-	ip := net.IPv4(b[procnet.IPv4Byte0], b[procnet.IPv4Byte1], b[procnet.IPv4Byte2], b[procnet.IPv4Byte3])
-	return ip.String(), true
-}
-
-func procIPv6Host(hexAddr string) (string, bool) {
-	if len(hexAddr) != procnet.IPv6HexChars {
-		return "", false
-	}
-	var b [net.IPv6len]byte
-	for i := range procnet.IPv6Words {
-		start := i * procnet.IPv6WordHexChars
-		raw, err := strconv.ParseUint(hexAddr[start:start+procnet.IPv6WordHexChars], procnet.HexBase, procnet.IPv6WordBits)
-		if err != nil {
-			return "", false
-		}
-		binary.LittleEndian.PutUint32(b[i*net.IPv4len:], uint32(raw))
-	}
-	return net.IP(b[:]).String(), true
 }
 
 func specificListenerHost(hosts []string) (string, bool) {
