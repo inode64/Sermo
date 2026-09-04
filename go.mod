@@ -8,7 +8,7 @@ require (
 	github.com/cloudsoda/go-smb2 v0.0.0-20260803221621-0b399b9d036c
 	github.com/digitalocean/go-libvirt v0.0.0-20260814190004-1a83157e1858
 	github.com/go-ldap/ldap/v3 v3.4.14
-	github.com/go-sql-driver/mysql v1.10.0
+	github.com/go-sql-driver/mysql v1.10.1
 	github.com/goccy/go-yaml v1.19.2
 	github.com/godbus/dbus/v5 v5.2.2
 	github.com/google/nftables v0.3.0
@@ -19,11 +19,11 @@ require (
 	github.com/vishvananda/netlink v1.3.1
 	github.com/wneessen/go-mail v0.8.1
 	go.mongodb.org/mongo-driver/v2 v2.8.2
-	golang.org/x/crypto v0.55.0
+	golang.org/x/crypto v0.56.0
 	golang.org/x/net v0.58.0
 	golang.org/x/sys v0.47.0
 	golang.org/x/tools v0.49.0
-	modernc.org/sqlite v1.57.0
+	modernc.org/sqlite v1.58.0
 )
 
 require (
@@ -45,7 +45,7 @@ require (
 	github.com/jcmturner/goidentity/v6 v6.0.1 // indirect
 	github.com/jcmturner/gokrb5/v8 v8.4.4 // indirect
 	github.com/jcmturner/rpc/v2 v2.0.3 // indirect
-	github.com/klauspost/compress v1.19.2 // indirect
+	github.com/klauspost/compress v1.20.0 // indirect
 	github.com/mattn/go-isatty v0.0.24 // indirect
 	github.com/mdlayher/netlink v1.11.2 // indirect
 	github.com/mdlayher/socket v0.6.1 // indirect
@@ -60,7 +60,7 @@ require (
 	golang.org/x/mod v0.40.0 // indirect
 	golang.org/x/sync v0.22.0 // indirect
 	golang.org/x/text v0.41.0 // indirect
-	modernc.org/libc v1.75.6 // indirect
+	modernc.org/libc v1.75.7 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.12.1 // indirect
 )
