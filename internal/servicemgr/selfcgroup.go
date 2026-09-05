@@ -13,10 +13,6 @@ const (
 	// ("0::/system.slice/sermod.service"). A v1 hierarchy writes one line per
 	// controller instead, with no such entry.
 	unifiedCgroupPrefix = "0::"
-	// serviceUnitSuffix ends the cgroup path of a systemd service unit. A session
-	// or machine scope ends in ".scope" and a slice in ".slice"; neither is a unit
-	// that owns its whole control group.
-	serviceUnitSuffix = ".service"
 )
 
 // SelfUnitCgroupPIDs returns every PID in the caller's own control group, plus
@@ -40,7 +36,9 @@ func SelfUnitCgroupPIDs(readFile func(string) ([]byte, error)) (pids []int, unit
 		return nil, "", false
 	}
 	path := unifiedCgroupPath(string(data))
-	if path == "" || !strings.HasSuffix(path, serviceUnitSuffix) {
+	// A session or machine scope ends in ".scope" and a slice in ".slice";
+	// neither is a unit that owns its whole control group.
+	if path == "" || !strings.HasSuffix(path, systemdServiceSuffix) {
 		return nil, "", false
 	}
 	procs, err := readFile(filepath.Join(cgroupRoot, path, "cgroup.procs"))
