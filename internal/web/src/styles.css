@@ -743,9 +743,31 @@
     .runtime-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: .8rem; }
     /* Expanded service tables must contribute no wide intrinsic minimum to the
        outer services table: process, check and lock headings would otherwise
-       stretch its colspan row and move actions/dialogs outside the viewport. */
-    .service-detail table { table-layout: fixed; }
+       stretch its colspan row and move actions/dialogs outside the viewport.
+       Breaking anywhere makes every cell's minimum one character wide, which
+       is enough; a fixed layout is not used because Chromium keeps reserving
+       width for the columns hidden below, leaving the visible ones a few
+       characters wide. */
     .service-detail th, .service-detail td { white-space: normal; overflow-wrap: anywhere; }
+    /* Fixed columns split the phone width evenly, so five or eight columns leave
+       each cell a few characters wide and chop "latency" and "users" letter by
+       letter. Keep the columns an operator acts on: checks -> Check · State ·
+       Message (Type and the SLA sentence stay in the wider layouts); named
+       locks -> Name · State · Owner · Reason · Actions. */
+    .detail-checks-table th:nth-child(2), .detail-checks-table td:nth-child(2),
+    .detail-checks-table th:nth-child(4), .detail-checks-table td:nth-child(4) { display: none; }
+    /* A long message (a URL, a command line) would otherwise claim almost the
+       whole row and leave the check name a few characters wide. */
+    .detail-checks-table th:nth-child(1) { width: 30%; }
+    .detail-checks-table th:nth-child(3) { width: 24%; }
+    .detail-locks-table th:nth-child(3), .detail-locks-table td:nth-child(3),
+    .detail-locks-table th:nth-child(5), .detail-locks-table td:nth-child(5),
+    .detail-locks-table th:nth-child(6), .detail-locks-table td:nth-child(6) { display: none; }
+    /* An empty locks table would give its Actions heading no room at all; the
+       shares keep every heading on one line at the narrowest phone width. */
+    .detail-locks-table th:nth-child(1), .detail-locks-table th:nth-child(4) { width: 21%; }
+    .detail-locks-table th:nth-child(2), .detail-locks-table th:nth-child(7) { width: 18%; }
+    .detail-locks-table th:nth-child(8) { width: 22%; }
     .ssh-session-table th:nth-child(3), .ssh-session-table td:nth-child(3) { display: none; }
     .terminal-session-table th:nth-child(5), .terminal-session-table td:nth-child(5) { display: none; }
     #app-footer .footer-version {
