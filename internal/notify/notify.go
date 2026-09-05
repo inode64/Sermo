@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"maps"
 	"sermo/internal/cfgval"
+	"sermo/internal/strutil"
 	"slices"
 	"strings"
 )
@@ -203,18 +204,14 @@ func NewTargetedTTY(name string, users []string) (Notifier, error) {
 	if name == "" {
 		return nil, errors.New("targeted tty notifier requires a name")
 	}
-	seen := make(map[string]struct{}, len(users))
-	values := make([]any, 0, len(users))
-	for _, user := range users {
-		user = strings.TrimSpace(user)
-		if user == "" {
-			continue
-		}
-		if _, ok := seen[user]; ok {
-			continue
-		}
-		seen[user] = struct{}{}
-		values = append(values, user)
+	trimmed := make([]string, len(users))
+	for i, user := range users {
+		trimmed[i] = strings.TrimSpace(user)
+	}
+	unique := strutil.Unique(trimmed)
+	values := make([]any, len(unique))
+	for i, user := range unique {
+		values[i] = user
 	}
 	if len(values) == 0 {
 		return nil, fmt.Errorf("targeted tty notifier %s requires at least one user", name)
