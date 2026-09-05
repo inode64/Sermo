@@ -688,10 +688,10 @@ func parseWatchFile(path string) (names, targets []string) {
 		}
 		check, _ := root[wizardFieldCheck].(map[string]any)
 		if s, _ := check[wizardFieldPath].(string); s != "" {
-			targets = append(targets, s)
+			targets = append(targets, filepath.Clean(s))
 		}
 		if s, _ := check[wizardFieldInterface].(string); s != "" {
-			targets = append(targets, s)
+			targets = append(targets, filepath.Clean(s))
 		}
 	}
 	return names, targets
