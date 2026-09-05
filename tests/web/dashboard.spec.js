@@ -669,6 +669,13 @@ test("a device that stopped answering reads as missing, not as a blank health ce
   await expect(row).toHaveClass(/row-failing/);
 });
 
+test("failed watch filter includes missing devices", async ({ page }) => {
+  await page.locator('#watch-filters [data-wf="failed"]').click();
+  await expect(page.locator('#watch-filters [data-wf="failed"]')).toHaveClass(/f-active/);
+  await expect(page.locator("#wat-row-smart-sdz")).toBeVisible();
+  await expect(page.locator("#wat-row-storage-data")).toBeHidden();
+});
+
 test("global search opens a service and exposes individual actions", async ({ page }) => {
   await page.locator("#target-search").fill("service: db");
   await page.locator("#target-search").press("Enter");
