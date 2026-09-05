@@ -100,8 +100,9 @@ func (h *WebBackendHolder) BeginBackendRead() (web.Backend, uint64) {
 	return b, generation
 }
 
-// MaxOperationTimeout reports the longest current operation timeout, including
-// per-service stop policies, from the active reloadable backend.
+// MaxOperationTimeout reports the longest current action timeout, including
+// per-service stop policies and watch probe budgets, from the active reloadable
+// backend.
 func (h *WebBackendHolder) MaxOperationTimeout() time.Duration {
 	return webCall(h, time.Duration(0), func(b *WebBackend) time.Duration {
 		return b.maxOperationTimeout()

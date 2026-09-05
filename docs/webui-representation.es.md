@@ -612,7 +612,9 @@ inicio y el resultado final con su duración. La UI sólo muestra porcentaje cua
 la comprobación aporta progreso real; una sonda sin esa fuente usa el contador de tiempo
 en vez de un porcentaje inventado. La sonda se acota con el `timeout:` del propio
 check, el mismo presupuesto que usa su ciclo programado, y sólo recurre a
-`engine.default_timeout` para una comprobación que no declare ninguno.
+`engine.default_timeout` para una comprobación que no declare ninguno. El plazo
+de escritura HTTP se eleva a ese mismo presupuesto para que el panel reciba el
+resultado.
 
 Interval, polaridad (dispara en fallo / en umbral), hook y notifiers no son
 columnas de la tabla; viven en la rejilla de config de la expansión de fila y

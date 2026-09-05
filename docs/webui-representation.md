@@ -593,7 +593,8 @@ and the final result with its elapsed time. The UI shows a percentage only where
 the underlying check reports real progress; a probe without such a source uses
 the elapsed timer rather than a synthetic percentage. The probe is bounded by the
 check's own `timeout:`, the same budget its scheduled cycle uses, falling back to
-`engine.default_timeout` only for a check that declares none.
+`engine.default_timeout` only for a check that declares none. The HTTP write
+deadline is raised to that same budget so the panel receives the result.
 
 Interval, polarity (fires on fail / on threshold), hook and notifiers are not
 table columns; they live in the row expansion's config grid and remain
