@@ -647,6 +647,30 @@ func TestGuardBlocksMatchingAction(t *testing.T) {
 	}
 }
 
+func TestGuardReasonUsesBlockMessage(t *testing.T) {
+	ruleSet := []Rule{{
+		Name:   "block-during-backup",
+		Type:   RuleGuard,
+		Blocks: []string{string(ActionRestart)},
+		If:     map[string]any{ConditionActive: map[string]any{FieldCheck: "backup-flag"}},
+		Actions: []Action{
+			{Type: ActionAlert, Message: "notifying ops"},
+			{Type: ActionBlock, Message: "backup running"},
+		},
+	}}
+	ev := &Evaluator{Cache: cache(map[string]bool{"backup-flag": true})}
+	blocked, reason, err := Guard(context.Background(), ruleSet, string(ActionRestart), ev)
+	if err != nil {
+		t.Fatalf("Guard error = %v", err)
+	}
+	if !blocked {
+		t.Fatal("restart should be blocked")
+	}
+	if reason != "backup running" {
+		t.Fatalf("reason = %q, want the block action message, not the preceding alert", reason)
+	}
+}
+
 func TestGuardIgnoresNonGuardRules(t *testing.T) {
 	tree := map[string]any{
 		"rules": map[string]any{
