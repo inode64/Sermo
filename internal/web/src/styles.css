@@ -751,6 +751,11 @@
        the desktop width plus the truncated command exceed the expansion, so
        the bars give up width first (their label still fits). */
     .detail-compact-table .usagebar.usagebar-sm { width: 4rem; }
+    /* The command label keeps its ellipsis but yields sooner: with the tree
+       indent of a grandchild and a seven-digit PID beside it, the desktop cap
+       of 34vw still spilled past the expansion. The full command stays in the
+       cell's title. */
+    .detail-compact-table .truncate { max-width: 24vw; }
     /* The desktop expansion indents its content under the row's name; on a
        phone that indent is a fifth of the row, so it shrinks with the cell
        padding above and hands the width back to the expansion's own tables. */
