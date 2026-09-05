@@ -164,7 +164,7 @@ func (a App) runEventsClear(ctx context.Context, opts options, noun string) int 
 	if cfg == nil {
 		return code
 	}
-	before, err := parseBefore(opts.before, time.Now)
+	before, err := state.ParseCutoff(beforeFlagLabel, opts.before, time.Now())
 	if err != nil {
 		return a.fail(opts, err.Error())
 	}
@@ -187,13 +187,6 @@ func (a App) runEventsClear(ctx context.Context, opts options, noun string) int 
 	}
 	a.recordAccess(cfg, accessCommandEventsClear, "", accessStatusOK, fmt.Sprintf("pruned %d %s", n, noun))
 	return exitSuccess
-}
-
-// parseBefore reads the shared --before cutoff through its owner in the state
-// package, which also consumes it in PruneEvents and CompactHistory.
-func parseBefore(value string, now func() time.Time) (time.Time, error) {
-	//nolint:wrapcheck // ParseCutoff already names --before and states the accepted forms; the message is printed verbatim as the usage error.
-	return state.ParseCutoff(beforeFlagLabel, value, now())
 }
 
 func (a App) pruneDaemonEvents(ctx context.Context, opts options, before time.Time) (int, error) {

@@ -27,7 +27,7 @@ func (a App) runStateCompact(ctx context.Context, opts options) int {
 		return code
 	}
 
-	before, err := parseBefore(opts.before, time.Now)
+	before, err := state.ParseCutoff(beforeFlagLabel, opts.before, time.Now())
 	if err != nil {
 		return a.fail(opts, err.Error())
 	}
