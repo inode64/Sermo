@@ -9,6 +9,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"sermo/internal/hostfs"
 	"slices"
 	"sort"
 	"strconv"
@@ -334,7 +335,7 @@ func readInotifyUsage(ctx context.Context, root string, countWatches bool) (Inot
 }
 
 func readInotifyLimit(root, name string) uint64 {
-	data, err := os.ReadFile(filepath.Join(root, "sys", "fs", "inotify", name)) //nolint:gosec // G304: a path under the configured procfs root
+	data, err := hostfs.ReadFile(filepath.Join(root, "sys", "fs", "inotify", name))
 	if err != nil {
 		return 0
 	}
@@ -366,7 +367,7 @@ func readPIDInotify(pidPath string, countWatches bool) (instances, watches, unre
 		if !countWatches {
 			continue
 		}
-		file, err := os.Open(filepath.Join(pidPath, "fdinfo", entry.Name())) //nolint:gosec // G304: a path under the configured procfs root
+		file, err := hostfs.Open(filepath.Join(pidPath, "fdinfo", entry.Name()))
 		if err != nil {
 			continue
 		}
@@ -384,7 +385,7 @@ func errorIsPermission(err error) bool {
 }
 
 func readPIDUID(pidPath string) (uint32, bool) {
-	data, err := os.ReadFile(filepath.Join(pidPath, "status")) //nolint:gosec // G304: a path under the configured procfs root
+	data, err := hostfs.ReadFile(filepath.Join(pidPath, "status"))
 	if err != nil {
 		return 0, false
 	}
@@ -414,7 +415,7 @@ func parseStatusEffectiveUID(status string) (uint32, bool) {
 }
 
 func readPIDCommand(pidPath string) string {
-	data, err := os.ReadFile(filepath.Join(pidPath, "comm")) //nolint:gosec // G304: a path under the configured procfs root
+	data, err := hostfs.ReadFile(filepath.Join(pidPath, "comm"))
 	if err != nil {
 		return unnamedProcess
 	}

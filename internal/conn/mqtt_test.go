@@ -9,7 +9,10 @@ import (
 )
 
 func TestBuildMQTTConnect(t *testing.T) {
-	pkt := buildMQTTConnect("sermo-check", "", "")
+	pkt, err := buildMQTTConnect("sermo-check", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
 	if pkt[0] != 0x10 {
 		t.Fatalf("control packet = 0x%02x, want 0x10 (CONNECT)", pkt[0])
 	}
@@ -21,7 +24,10 @@ func TestBuildMQTTConnect(t *testing.T) {
 	}
 
 	// With credentials, the username/password flags are set.
-	auth := buildMQTTConnect("c", "user", "pass")
+	auth, err := buildMQTTConnect("c", "user", "pass")
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !bytes.Contains(auth, []byte("user")) || !bytes.Contains(auth, []byte("pass")) {
 		t.Fatal("authenticated CONNECT must carry user and pass")
 	}

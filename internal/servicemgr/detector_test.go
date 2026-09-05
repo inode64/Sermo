@@ -3,10 +3,10 @@ package servicemgr
 import (
 	"context"
 	"errors"
-	"strings"
 	"testing"
 
 	"sermo/internal/execx"
+	"sermo/internal/execx/execxtest"
 )
 
 func TestDetectSystemdRunning(t *testing.T) {
@@ -119,27 +119,9 @@ func fakeDetector(commands, paths map[string]bool, results map[string]execx.Resu
 
 func fakeDetectorWithErrors(commands, paths map[string]bool, results map[string]execx.Result, runnerErrors map[string]error, files map[string]string) Detector {
 	return Detector{
-		Runner: fakeRunner{results: results, errors: runnerErrors},
+		Runner: &execxtest.Runner{ByLine: results, Errs: runnerErrors},
 		Probe:  fakeProbe{commands: commands, paths: paths, files: files},
 	}
-}
-
-type fakeRunner struct {
-	results map[string]execx.Result
-	errors  map[string]error
-}
-
-func (r fakeRunner) Run(_ context.Context, name string, args ...string) (execx.Result, error) {
-	var key strings.Builder
-	key.WriteString(name)
-	for _, arg := range args {
-		key.WriteString(" " + arg)
-	}
-	result := r.results[key.String()]
-	if err := r.errors[key.String()]; err != nil {
-		return result, err
-	}
-	return result, nil
 }
 
 type fakeProbe struct {

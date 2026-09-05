@@ -4,7 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"io"
-	"os"
+	"sermo/internal/hostfs"
 	"strconv"
 	"strings"
 )
@@ -22,7 +22,7 @@ func CountTCPConnections(port int) (int, error) {
 func countTCPConnections(port int, paths []string) (int, error) {
 	count := 0
 	for _, path := range paths {
-		f, err := os.Open(path) //nolint:gosec // G304: fixed Linux procfs socket-table path
+		f, err := hostfs.Open(path)
 		if err != nil {
 			return 0, fmt.Errorf("open TCP socket table %s: %w", path, err)
 		}

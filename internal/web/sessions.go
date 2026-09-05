@@ -151,14 +151,15 @@ func (s *Server) handleSSHSessionClose(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	s.extendActionWriteDeadline(w)
-	//nolint:contextcheck // see operateContext
-	res := backend.CloseSSHSession(s.operateContext(r), r.PathValue(apiParamName), SSHSession{
-		PID:             pid,
-		StartTicks:      startTicks,
-		Terminal:        terminal,
-		ManagedByLogind: managedByLogind,
+	s.operate(w, r, backend, func(ctx context.Context, backend Backend) (bool, any) {
+		res := backend.CloseSSHSession(ctx, r.PathValue(apiParamName), SSHSession{
+			PID:             pid,
+			StartTicks:      startTicks,
+			Terminal:        terminal,
+			ManagedByLogind: managedByLogind,
+		})
+		return res.OK, res
 	})
-	writeActionResult(w, res.OK, res)
 }
 
 // handleTerminalSessionClose accepts the opaque generation marker displayed
@@ -180,9 +181,10 @@ func (s *Server) handleTerminalSessionClose(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	s.extendActionWriteDeadline(w)
-	//nolint:contextcheck // see operateContext
-	res := backend.CloseTerminalSession(s.operateContext(r), r.PathValue(apiParamName), session)
-	writeActionResult(w, res.OK, res)
+	s.operate(w, r, backend, func(ctx context.Context, backend Backend) (bool, any) {
+		res := backend.CloseTerminalSession(ctx, r.PathValue(apiParamName), session)
+		return res.OK, res
+	})
 }
 
 // handleEmptyTerminalSessionClose closes one configured tmux server only after
@@ -198,7 +200,8 @@ func (s *Server) handleEmptyTerminalSessionClose(w http.ResponseWriter, r *http.
 		return
 	}
 	s.extendActionWriteDeadline(w)
-	//nolint:contextcheck // see operateContext
-	res := backend.CloseEmptyTerminalSession(s.operateContext(r), r.PathValue(apiParamName), check)
-	writeActionResult(w, res.OK, res)
+	s.operate(w, r, backend, func(ctx context.Context, backend Backend) (bool, any) {
+		res := backend.CloseEmptyTerminalSession(ctx, r.PathValue(apiParamName), check)
+		return res.OK, res
+	})
 }

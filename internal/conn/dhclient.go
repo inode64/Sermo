@@ -5,7 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"os"
+	"sermo/internal/hostfs"
 	"strconv"
 	"strings"
 	"time"
@@ -89,7 +89,7 @@ type udpSocket struct {
 }
 
 func findUDP4Socket(path, host string, port int) (udpSocket, error) {
-	f, err := os.Open(path) //nolint:gosec // G304: /proc/net/udp for socket identity
+	f, err := hostfs.Open(path)
 	if err != nil {
 		return udpSocket{}, fmt.Errorf("dhclient: read %s: %w", path, err)
 	}
@@ -143,7 +143,7 @@ type dhclientLease struct {
 }
 
 func readDHClientLease(path, iface string, now time.Time) (dhclientLease, error) {
-	f, err := os.Open(path) //nolint:gosec // G304: dhclient lease path from fixed host locations
+	f, err := hostfs.Open(path)
 	if err != nil {
 		return dhclientLease{}, fmt.Errorf("dhclient: read lease file %s: %w", path, err)
 	}

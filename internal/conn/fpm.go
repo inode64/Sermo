@@ -3,10 +3,10 @@ package conn
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"io"
-	"math"
 	"net/http"
 	"strconv"
 	"strings"
@@ -68,23 +68,21 @@ const (
 	fcgiBeginRequestFlagsClose        = 0
 	fcgiBeginRequestRoleHigh          = 0
 	fcgiContentLengthHighShift        = 8
-	fcgiContentLengthMax              = math.MaxUint16
 	fcgiHeaderBytes                   = 8
 	fcgiHeaderContentLengthHighOffset = 4
 	fcgiHeaderContentLengthLowOffset  = 5
 	fcgiHeaderPaddingLengthOffset     = 6
 	fcgiHeaderTypeOffset              = 1
-	fcgiLongParamLenFlag              = 0x80
-	fcgiLongParamLenByte3Shift        = 24
-	fcgiLongParamLenByte2Shift        = 16
-	fcgiLongParamLenByte1Shift        = 8
-	fcgiPaddingLengthNone             = 0
-	fcgiParamNameIndex                = 0
-	fcgiParamPairFields               = 2
-	fcgiParamValueIndex               = 1
-	fcgiRequestIDHigh                 = 0
-	fcgiReservedByte                  = 0
-	fcgiShortParamLenMax              = 128
+	// fcgiLongParamLenFlagMask sets the high bit that marks the four-byte
+	// length form; a length with that bit set cannot be encoded.
+	fcgiLongParamLenFlagMask uint32 = 1 << 31
+	fcgiPaddingLengthNone           = 0
+	fcgiParamNameIndex              = 0
+	fcgiParamPairFields             = 2
+	fcgiParamValueIndex             = 1
+	fcgiRequestIDHigh               = 0
+	fcgiReservedByte                = 0
+	fcgiShortParamLenMax            = 128
 )
 
 type fcgiParam [fcgiParamPairFields]string
@@ -164,7 +162,7 @@ func fpmRequest(rw io.ReadWriter, script, query string) (stdout, stderr string, 
 	if query != "" {
 		uri += fpmQuerySeparator + query
 	}
-	params := encodeFCGIParams([]fcgiParam{
+	params, err := encodeFCGIParams([]fcgiParam{
 		{fpmParamScriptName, script},
 		{fpmParamScriptFilename, script},
 		{fpmParamRequestMethod, fpmRequestMethodGET},
@@ -174,6 +172,9 @@ func fpmRequest(rw io.ReadWriter, script, query string) (stdout, stderr string, 
 		{fpmParamGatewayInterface, fpmGatewayInterfaceCGI11},
 		{fpmParamServerSoftware, fpmServerSoftware},
 	})
+	if err != nil {
+		return "", "", err
+	}
 	if err := writeFCGIRecord(rw, fcgiParams, params); err != nil {
 		return "", "", err
 	}
@@ -236,16 +237,16 @@ func mergeFPMStatus(extra map[string]string, stdout string) {
 // must fit FastCGI's 16-bit content-length field.
 func writeFCGIRecord(w io.Writer, recType byte, content []byte) error {
 	n := len(content)
-	if n > fcgiContentLengthMax {
-		return fmt.Errorf("fastcgi content length %d exceeds the %d-byte record limit", n, fcgiContentLengthMax)
+	contentLength, err := wireUint16(ProtocolNameFPM, "record content length", n)
+	if err != nil {
+		return err
 	}
 	header := []byte{
 		fcgiVersion1, recType,
 		fcgiRequestIDHigh, fcgiRequestID,
-		//nolint:gosec // G115: n is rejected above when it exceeds fcgiContentLengthMax; these two bytes are its 16-bit big-endian split.
-		byte(n >> fcgiContentLengthHighShift), byte(n),
-		fcgiPaddingLengthNone, fcgiReservedByte,
 	}
+	header = binary.BigEndian.AppendUint16(header, contentLength)
+	header = append(header, fcgiPaddingLengthNone, fcgiReservedByte)
 	if _, err := w.Write(header); err != nil {
 		return probeErr(ProtocolNameFPM, stepFPMRecordHeader, err)
 	}
@@ -259,27 +260,38 @@ func writeFCGIRecord(w io.Writer, recType byte, content []byte) error {
 
 // encodeFCGIParams encodes name/value pairs as a FCGI_PARAMS body. Lengths < 128
 // use one byte; longer use the 4-byte form (high bit set).
-func encodeFCGIParams(pairs []fcgiParam) []byte {
+func encodeFCGIParams(pairs []fcgiParam) ([]byte, error) {
 	var b bytes.Buffer
-	writeLen := func(n int) {
+	writeLen := func(n int) error {
 		if n < fcgiShortParamLenMax {
-			b.WriteByte(byte(n)) //nolint:gosec // G115: the branch guarantees n < 128, the FastCGI one-byte length form.
-			return
+			short, err := wireByte(ProtocolNameFPM, "param length", n)
+			if err != nil {
+				return err
+			}
+			b.WriteByte(short)
+			return nil
 		}
-		// G115 below: the FastCGI four-byte length form defines each octet as a
-		// shift of n, so truncating to a byte is the encoding, not a loss.
-		b.WriteByte(byte(n>>fcgiLongParamLenByte3Shift) | fcgiLongParamLenFlag) //nolint:gosec // G115: see above.
-		b.WriteByte(byte(n >> fcgiLongParamLenByte2Shift))                      //nolint:gosec // G115: see above.
-		b.WriteByte(byte(n >> fcgiLongParamLenByte1Shift))                      //nolint:gosec // G115: see above.
-		b.WriteByte(byte(n))                                                    //nolint:gosec // G115: see above.
+		long, err := wireUint32(ProtocolNameFPM, "param length", n)
+		if err != nil {
+			return err
+		}
+		if long&fcgiLongParamLenFlagMask != 0 {
+			return wireFieldError(ProtocolNameFPM, "param length", n, uint64(fcgiLongParamLenFlagMask-1))
+		}
+		b.Write(binary.BigEndian.AppendUint32(nil, long|fcgiLongParamLenFlagMask))
+		return nil
 	}
 	for _, kv := range pairs {
-		writeLen(len(kv[fcgiParamNameIndex]))
-		writeLen(len(kv[fcgiParamValueIndex]))
+		if err := writeLen(len(kv[fcgiParamNameIndex])); err != nil {
+			return nil, err
+		}
+		if err := writeLen(len(kv[fcgiParamValueIndex])); err != nil {
+			return nil, err
+		}
 		b.WriteString(kv[fcgiParamNameIndex])
 		b.WriteString(kv[fcgiParamValueIndex])
 	}
-	return b.Bytes()
+	return b.Bytes(), nil
 }
 
 // readFCGIResponse reads records until FCGI_END_REQUEST, returning the

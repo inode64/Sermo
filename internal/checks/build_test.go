@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"sermo/internal/execx/execxtest"
 	"sermo/internal/metrics"
 	"sermo/internal/servicemgr"
 )
@@ -22,8 +23,8 @@ func TestBuildDependencies(t *testing.T) {
 	}
 
 	customClient := &http.Client{}
-	runner, client = buildDependencies(Deps{Runner: fakeRunner{}, HTTPClient: customClient})
-	if _, ok := runner.(fakeRunner); !ok || client != customClient {
+	runner, client = buildDependencies(Deps{Runner: &execxtest.Runner{}, HTTPClient: customClient})
+	if _, ok := runner.(*execxtest.Runner); !ok || client != customClient {
 		t.Fatalf("custom dependencies = %T, %v; want fake runner and supplied client", runner, client)
 	}
 }

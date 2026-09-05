@@ -1,18 +1,12 @@
 package checks
 
 import (
-	"context"
 	"strings"
 	"testing"
 
 	"sermo/internal/execx"
+	"sermo/internal/execx/execxtest"
 )
-
-type unitCheckRunner struct{ res execx.Result }
-
-func (r unitCheckRunner) Run(context.Context, string, ...string) (execx.Result, error) {
-	return r.res, nil
-}
 
 // A command check with a unit publishes its first numeric token as the value
 // series, quotes only the first stdout line in the message, and records no
@@ -20,7 +14,7 @@ func (r unitCheckRunner) Run(context.Context, string, ...string) (execx.Result, 
 func TestCommandCheckUnitPublishesNumericValue(t *testing.T) {
 	c := commandCheck{
 		name:       "queue",
-		runner:     unitCheckRunner{res: execx.Result{ExitCode: 0, Stdout: "17\nnoise line two\n"}},
+		runner:     execxtest.Fixed(execx.Result{ExitCode: 0, Stdout: "17\nnoise line two\n"}, nil),
 		argv:       []string{"/bin/exim", "-bpc"},
 		expectExit: []int{0},
 		numeric:    true,
@@ -36,7 +30,7 @@ func TestCommandCheckUnitPublishesNumericValue(t *testing.T) {
 		t.Fatalf("message must quote only the first line: %q", res.Message)
 	}
 
-	c.runner = unitCheckRunner{res: execx.Result{ExitCode: 0, Stdout: "not a number"}}
+	c.runner = execxtest.Fixed(execx.Result{ExitCode: 0, Stdout: "not a number"}, nil)
 	res = c.Run(t.Context())
 	if !res.OK {
 		t.Fatalf("non-numeric output must not fail the check: %s", res.Message)

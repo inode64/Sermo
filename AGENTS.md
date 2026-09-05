@@ -94,6 +94,9 @@ Volatile paths go under `/run`. Normalize host-reported `/var/run/...` to
 - Add checks, watches, notifiers and rule actions through
   `internal/checks/build.go`, `internal/app/watch_build.go`, `internal/notify`
   or the rule builders. Notifier call sites use configured names only.
+- Files Sermo locates on the host (procfs, sysfs, catalog, pidfiles, runtime
+  locks and logs) are read through `internal/hostfs`, which accepts only
+  absolute, clean paths. Operator-supplied paths are resolved by the CLI first.
 - Every blocking command, network, database or file operation has a timeout
   from engine configuration or a named constant. Tests may use short literals
   to bound the test.
@@ -121,7 +124,9 @@ the exact analyzer and the design reason. Never weaken a gate or broaden an
 exclusion to land a change. How to add a `.semgrep/` call-boundary rule is in
 [`.semgrep/README.md`](.semgrep/README.md).
 
-Match the owning package's test style. Tests must not operate real services,
+Match the owning package's test style. Command execution is scripted with
+`internal/execx/execxtest`; add another `execx.Runner` fake only for stateful
+or timing behavior. Tests must not operate real services,
 signal host processes, or depend on ambient `/etc`, `/proc`, network or init
 state. Cover the success, invalid/unsafe, blocked and timeout/error paths the
 change actually has.

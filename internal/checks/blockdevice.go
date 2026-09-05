@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"sermo/internal/hostfs"
 	"strconv"
 	"strings"
 	"time"
@@ -151,7 +152,7 @@ func defaultBlockDeviceSize(device string) (uint64, error) {
 		return 0, fmt.Errorf("block device %q: not a kernel device name", device)
 	}
 	path := filepath.Join(sysBlockPath, name, sysBlockSizeFile)
-	data, err := os.ReadFile(path) //nolint:gosec // G304: path is sysBlockPath joined with a validated kernel device name
+	data, err := hostfs.ReadFile(path)
 	if err != nil {
 		// Wrapped, not replaced: blockDeviceMissing tells an absent device from
 		// an unreadable one through errors.Is(err, fs.ErrNotExist).
@@ -339,7 +340,7 @@ func sysDeviceRotation(queueDir string) string {
 // unreadable. Absence is the normal case: each transport publishes its own
 // subset, so a missing file is never an error worth reporting.
 func sysDeviceAttr(dir, file string) string {
-	data, err := os.ReadFile(filepath.Join(dir, file)) //nolint:gosec // G304: sysBlockPath joined with a validated kernel device name
+	data, err := hostfs.ReadFile(filepath.Join(dir, file))
 	if err != nil {
 		return ""
 	}

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"sermo/internal/execx"
+	"sermo/internal/execx/execxtest"
 )
 
 func TestSystemdUnitNormalization(t *testing.T) {
@@ -41,7 +42,7 @@ func TestSystemdManagerStatus(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			m := systemdManager{runner: stubRunner{result: tc.result, err: tc.runErr}}
+			m := systemdManager{runner: &execxtest.Runner{Default: tc.result, Err: tc.runErr}}
 			got, err := m.Status(context.Background(), "nginx")
 			if err != nil {
 				t.Fatalf("Status() error = %v", err)
@@ -79,7 +80,7 @@ func TestSystemdManagerStatusSeparatesMissingUnitFromStopped(t *testing.T) {
 		{"unreadable load state", runnerResult{result: execx.Result{ExitCode: -1}, err: errors.New("boom")}, StatusInactive},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			runner := &multiResultRunner{results: map[string]runnerResult{isActive: inactive, loadState: tc.loadState}}
+			runner := multiResultRunner(map[string]runnerResult{isActive: inactive, loadState: tc.loadState})
 			got, err := systemdManager{runner: runner}.Status(context.Background(), "nginx")
 			if err != nil {
 				t.Fatalf("Status() error = %v", err)
@@ -94,19 +95,19 @@ func TestSystemdManagerStatusSeparatesMissingUnitFromStopped(t *testing.T) {
 // An active reading must not pay for the LoadState confirmation: the daemon
 // queries every service every cycle and most services are running.
 func TestSystemdManagerStatusSkipsLoadStateWhenActive(t *testing.T) {
-	runner := &multiResultRunner{results: map[string]runnerResult{
+	runner := multiResultRunner(map[string]runnerResult{
 		"systemctl is-active -- nginx.service": {result: execx.Result{Stdout: "active\n"}},
-	}}
+	})
 	if _, err := (systemdManager{runner: runner}).Status(context.Background(), "nginx"); err != nil {
 		t.Fatalf("Status() error = %v", err)
 	}
-	if len(runner.calls) != 1 {
-		t.Fatalf("calls = %v, want only the is-active query", runner.calls)
+	if len(runner.Lines()) != 1 {
+		t.Fatalf("calls = %v, want only the is-active query", runner.Lines())
 	}
 }
 
 func TestSystemdManagerStatusLaunchFailure(t *testing.T) {
-	m := systemdManager{runner: stubRunner{result: execx.Result{ExitCode: -1}, err: errors.New("not found")}}
+	m := systemdManager{runner: &execxtest.Runner{Default: execx.Result{ExitCode: -1}, Err: errors.New("not found")}}
 	if _, err := m.Status(context.Background(), "nginx"); err == nil {
 		t.Fatal("Status() error = nil, want launch failure")
 	}
@@ -127,7 +128,7 @@ func TestOpenRCManagerStatus(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			m := openrcManager{runner: stubRunner{result: tc.result}}
+			m := openrcManager{runner: &execxtest.Runner{Default: tc.result}}
 			got, err := m.Status(context.Background(), "nginx")
 			if err != nil {
 				t.Fatalf("Status() error = %v", err)
@@ -143,7 +144,7 @@ func TestOpenRCManagerStatus(t *testing.T) {
 }
 
 func TestOpenRCManagerStatusFallsBackToRCStatus(t *testing.T) {
-	runner := &multiResultRunner{results: map[string]runnerResult{
+	runner := multiResultRunner(map[string]runnerResult{
 		"rc-service firehol status": {
 			result: execx.Result{
 				Stdout:   " * Showing FireHOL status ...\n'unknown': I need something more specific.\n",
@@ -154,7 +155,7 @@ func TestOpenRCManagerStatusFallsBackToRCStatus(t *testing.T) {
 		"rc-status -a": {
 			result: execx.Result{Stdout: " sshd [  started  ]\n firehol [  started  ]\n"},
 		},
-	}}
+	})
 
 	m := openrcManager{runner: runner}
 	got, err := m.Status(context.Background(), "firehol")
@@ -164,8 +165,8 @@ func TestOpenRCManagerStatusFallsBackToRCStatus(t *testing.T) {
 	if got.Status != StatusActive {
 		t.Fatalf("Status = %q, want %q", got.Status, StatusActive)
 	}
-	if calls := strings.Join(runner.calls, ","); calls != "rc-service firehol status,rc-status -a" {
-		t.Fatalf("calls = %v", runner.calls)
+	if calls := strings.Join(runner.Lines(), ","); calls != "rc-service firehol status,rc-status -a" {
+		t.Fatalf("calls = %v", runner.Lines())
 	}
 }
 
@@ -181,7 +182,7 @@ func TestOpenRCStatusLineMatchesExactService(t *testing.T) {
 }
 
 func TestSystemdManagerActionsUseRunner(t *testing.T) {
-	rec := &recordRunner{}
+	rec := &execxtest.Runner{}
 	m := systemdManager{runner: rec}
 	ctx := context.Background()
 
@@ -202,20 +203,20 @@ func TestSystemdManagerActionsUseRunner(t *testing.T) {
 		"systemctl stop --job-mode=ignore-dependencies -- nginx.service",
 		"systemctl restart --job-mode=ignore-dependencies -- nginx.service",
 	}
-	if len(rec.calls) != len(want) {
-		t.Fatalf("calls = %v, want %v", rec.calls, want)
+	if len(rec.Lines()) != len(want) {
+		t.Fatalf("calls = %v, want %v", rec.Lines(), want)
 	}
 	for i := range want {
-		if rec.calls[i] != want[i] {
-			t.Errorf("call[%d] = %q, want %q", i, rec.calls[i], want[i])
+		if rec.Lines()[i] != want[i] {
+			t.Errorf("call[%d] = %q, want %q", i, rec.Lines()[i], want[i])
 		}
 	}
 }
 
 func TestSystemdManagerActionFailureUsesStderr(t *testing.T) {
-	m := systemdManager{runner: stubRunner{
-		result: execx.Result{Stderr: "Unit nginx.service not found.\n", ExitCode: 5},
-		err:    errors.New("exit 5"),
+	m := systemdManager{runner: &execxtest.Runner{
+		Default: execx.Result{Stderr: "Unit nginx.service not found.\n", ExitCode: 5},
+		Err:     errors.New("exit 5"),
 	}}
 	err := m.Start(context.Background(), "nginx")
 	if err == nil {
@@ -227,9 +228,9 @@ func TestSystemdManagerActionFailureUsesStderr(t *testing.T) {
 }
 
 func TestSystemdManagerActionTimeoutMessage(t *testing.T) {
-	m := systemdManager{runner: stubRunner{
-		result: execx.Result{ExitCode: -1, Duration: 2 * time.Second},
-		err:    fmt.Errorf("run systemctl: timeout after 2s: %w", context.DeadlineExceeded),
+	m := systemdManager{runner: &execxtest.Runner{
+		Default: execx.Result{ExitCode: -1, Duration: 2 * time.Second},
+		Err:     fmt.Errorf("run systemctl: timeout after 2s: %w", context.DeadlineExceeded),
 	}}
 	err := m.Start(context.Background(), "nginx")
 	if err == nil {
@@ -244,14 +245,14 @@ func TestSystemdManagerActionTimeoutMessage(t *testing.T) {
 }
 
 func TestOpenRCManagerActionUsesRunner(t *testing.T) {
-	rec := &recordRunner{}
+	rec := &execxtest.Runner{}
 	m := openrcManager{runner: rec}
 	if err := m.Restart(context.Background(), "nginx"); err != nil {
 		t.Fatalf("Restart() error = %v", err)
 	}
 	// Isolated by default; rc-service takes its options before the service name.
-	if len(rec.calls) != 1 || rec.calls[0] != "rc-service --nodeps nginx restart" {
-		t.Fatalf("calls = %v, want [rc-service --nodeps nginx restart]", rec.calls)
+	if len(rec.Lines()) != 1 || rec.Lines()[0] != "rc-service --nodeps nginx restart" {
+		t.Fatalf("calls = %v, want [rc-service --nodeps nginx restart]", rec.Lines())
 	}
 }
 
@@ -260,22 +261,22 @@ func TestOpenRCManagerActionUsesRunner(t *testing.T) {
 func TestManagerActionsAllowDependenciesWhenOptedIn(t *testing.T) {
 	ctx := context.Background()
 
-	sysRec := &recordRunner{}
+	sysRec := &execxtest.Runner{}
 	sysMgr := systemdManager{runner: sysRec, opts: Options{AllowDependencies: true}}
 	if err := sysMgr.Restart(ctx, "nginx"); err != nil {
 		t.Fatalf("Restart() error = %v", err)
 	}
-	if len(sysRec.calls) != 1 || sysRec.calls[0] != "systemctl restart -- nginx.service" {
-		t.Fatalf("systemd calls = %v, want the plain restart", sysRec.calls)
+	if len(sysRec.Lines()) != 1 || sysRec.Lines()[0] != "systemctl restart -- nginx.service" {
+		t.Fatalf("systemd calls = %v, want the plain restart", sysRec.Lines())
 	}
 
-	rcRec := &recordRunner{}
+	rcRec := &execxtest.Runner{}
 	rcMgr := openrcManager{runner: rcRec, opts: Options{AllowDependencies: true}}
 	if err := rcMgr.Restart(ctx, "nginx"); err != nil {
 		t.Fatalf("Restart() error = %v", err)
 	}
-	if len(rcRec.calls) != 1 || rcRec.calls[0] != "rc-service nginx restart" {
-		t.Fatalf("openrc calls = %v, want the plain restart", rcRec.calls)
+	if len(rcRec.Lines()) != 1 || rcRec.Lines()[0] != "rc-service nginx restart" {
+		t.Fatalf("openrc calls = %v, want the plain restart", rcRec.Lines())
 	}
 }
 
@@ -284,7 +285,7 @@ func TestManagerActionsAllowDependenciesWhenOptedIn(t *testing.T) {
 func TestManagerNonStateVerbsCarryNoIsolationFlag(t *testing.T) {
 	ctx := context.Background()
 
-	sysRec := &recordRunner{}
+	sysRec := &execxtest.Runner{}
 	sysMgr := systemdManager{runner: sysRec}
 	if err := sysMgr.Reload(ctx, "nginx"); err != nil {
 		t.Fatalf("Reload() error = %v", err)
@@ -297,32 +298,32 @@ func TestManagerNonStateVerbsCarryNoIsolationFlag(t *testing.T) {
 		"systemctl reset-failed -- nginx.service",
 	}
 	for i := range want {
-		if sysRec.calls[i] != want[i] {
-			t.Errorf("call[%d] = %q, want %q", i, sysRec.calls[i], want[i])
+		if sysRec.Lines()[i] != want[i] {
+			t.Errorf("call[%d] = %q, want %q", i, sysRec.Lines()[i], want[i])
 		}
 	}
 }
 
 func TestResetStateReconcilesInitState(t *testing.T) {
-	sysRec := &recordRunner{}
+	sysRec := &execxtest.Runner{}
 	if err := (systemdManager{runner: sysRec}).ResetState(context.Background(), "nginx"); err != nil {
 		t.Fatalf("systemd ResetState() error = %v", err)
 	}
-	if len(sysRec.calls) != 1 || sysRec.calls[0] != "systemctl reset-failed -- nginx.service" {
-		t.Fatalf("systemd calls = %v, want [systemctl reset-failed -- nginx.service]", sysRec.calls)
+	if len(sysRec.Lines()) != 1 || sysRec.Lines()[0] != "systemctl reset-failed -- nginx.service" {
+		t.Fatalf("systemd calls = %v, want [systemctl reset-failed -- nginx.service]", sysRec.Lines())
 	}
 
-	rcRec := &recordRunner{}
+	rcRec := &execxtest.Runner{}
 	if err := (openrcManager{runner: rcRec}).ResetState(context.Background(), "nginx"); err != nil {
 		t.Fatalf("openrc ResetState() error = %v", err)
 	}
-	if len(rcRec.calls) != 1 || rcRec.calls[0] != "rc-service nginx zap" {
-		t.Fatalf("openrc calls = %v, want [rc-service nginx zap]", rcRec.calls)
+	if len(rcRec.Lines()) != 1 || rcRec.Lines()[0] != "rc-service nginx zap" {
+		t.Fatalf("openrc calls = %v, want [rc-service nginx zap]", rcRec.Lines())
 	}
 }
 
 func TestNewManagerUnsupportedBackend(t *testing.T) {
-	if _, err := newManager(BackendAuto, stubRunner{}, Options{}); err == nil {
+	if _, err := newManager(BackendAuto, &execxtest.Runner{}, Options{}); err == nil {
 		t.Fatal("newManager(auto) error = nil, want unsupported error")
 	}
 }
@@ -337,7 +338,7 @@ func TestSystemdManagerSupportsReload(t *testing.T) {
 		{"", false},
 	}
 	for _, tc := range cases {
-		m := systemdManager{runner: stubRunner{result: execx.Result{Stdout: tc.stdout}}}
+		m := systemdManager{runner: &execxtest.Runner{Default: execx.Result{Stdout: tc.stdout}}}
 		got, err := m.SupportsReload(context.Background(), "nginx")
 		if err != nil {
 			t.Fatalf("SupportsReload(%q): %v", tc.stdout, err)
@@ -388,48 +389,9 @@ func TestOpenrcManagerSupportsReloadUnreadableScript(t *testing.T) {
 	}
 }
 
-type stubRunner struct {
-	result execx.Result
-	err    error
-}
-
-func (r stubRunner) Run(context.Context, string, ...string) (execx.Result, error) {
-	return r.result, r.err
-}
-
-type recordRunner struct {
-	calls []string
-}
-
-func (r *recordRunner) Run(_ context.Context, name string, args ...string) (execx.Result, error) {
-	var call strings.Builder
-	call.WriteString(name)
-	for _, arg := range args {
-		call.WriteString(" " + arg)
-	}
-	r.calls = append(r.calls, call.String())
-	return execx.Result{}, nil
-}
-
 type runnerResult struct {
 	result execx.Result
 	err    error
-}
-
-type multiResultRunner struct {
-	results map[string]runnerResult
-	calls   []string
-}
-
-func (r *multiResultRunner) Run(_ context.Context, name string, args ...string) (execx.Result, error) {
-	var call strings.Builder
-	call.WriteString(name)
-	for _, arg := range args {
-		call.WriteString(" " + arg)
-	}
-	r.calls = append(r.calls, call.String())
-	res := r.results[call.String()]
-	return res.result, res.err
 }
 
 func TestActionErrorPrefersRunErrorOnLaunchFailure(t *testing.T) {
@@ -444,8 +406,8 @@ func TestActionErrorPrefersRunErrorOnLaunchFailure(t *testing.T) {
 // Empty stdout with a zero exit is not a launch failure (only ExitCode < 0 is),
 // so Status/SupportsReload must not return a query error across managers.
 func TestManagerEmptyZeroExitNotError(t *testing.T) {
-	systemd := systemdManager{runner: stubRunner{result: execx.Result{Stdout: "", ExitCode: 0}}}
-	openrc := openrcManager{runner: stubRunner{result: execx.Result{Stdout: "", ExitCode: 0}}}
+	systemd := systemdManager{runner: &execxtest.Runner{Default: execx.Result{Stdout: "", ExitCode: 0}}}
+	openrc := openrcManager{runner: &execxtest.Runner{Default: execx.Result{Stdout: "", ExitCode: 0}}}
 	cases := []struct {
 		name string
 		call func() error
@@ -468,20 +430,34 @@ func TestManagerEmptyZeroExitNotError(t *testing.T) {
 // daemon, not a failure: the action succeeds and status verification owns
 // convergence. Any other non-zero start still errors.
 func TestOpenrcStartAcceptsStartedButInactive(t *testing.T) {
-	inactive := stubRunner{
-		result: execx.Result{ExitCode: 1, Stderr: " * WARNING: openvpn.tun1 has started, but is inactive"},
-		err:    errors.New("exit status 1"),
+	inactive := &execxtest.Runner{
+		Default: execx.Result{ExitCode: 1, Stderr: " * WARNING: openvpn.tun1 has started, but is inactive"},
+		Err:     errors.New("exit status 1"),
 	}
 	m := openrcManager{runner: inactive}
 	if err := m.Start(context.Background(), "openvpn.tun1"); err != nil {
 		t.Fatalf("started-but-inactive must be a successful submission, got %v", err)
 	}
-	failed := stubRunner{
-		result: execx.Result{ExitCode: 1, Stderr: " * ERROR: openvpn.tun1 failed to start"},
-		err:    errors.New("exit status 1"),
+	failed := &execxtest.Runner{
+		Default: execx.Result{ExitCode: 1, Stderr: " * ERROR: openvpn.tun1 failed to start"},
+		Err:     errors.New("exit status 1"),
 	}
 	m = openrcManager{runner: failed}
 	if err := m.Start(context.Background(), "openvpn.tun1"); err == nil {
 		t.Fatal("a genuinely failed start must still error")
 	}
+}
+
+// multiResultRunner answers exact command lines with the scripted result and
+// error; unknown commands succeed with no output.
+func multiResultRunner(results map[string]runnerResult) *execxtest.Runner {
+	byLine := make(map[string]execx.Result, len(results))
+	errs := make(map[string]error, len(results))
+	for line, res := range results {
+		byLine[line] = res.result
+		if res.err != nil {
+			errs[line] = res.err
+		}
+	}
+	return &execxtest.Runner{ByLine: byLine, Errs: errs}
 }

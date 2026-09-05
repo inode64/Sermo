@@ -7,26 +7,10 @@ import (
 	"time"
 
 	"sermo/internal/execx"
+	"sermo/internal/execx/execxtest"
 	"sermo/internal/notify"
 	"sermo/internal/servicemgr"
 )
-
-type monitorUserRunner struct {
-	user string
-	name string
-	args []string
-}
-
-func (r *monitorUserRunner) Run(context.Context, string, ...string) (execx.Result, error) {
-	return execx.Result{ExitCode: -1}, nil
-}
-
-func (r *monitorUserRunner) RunUser(_ context.Context, user, name string, args ...string) (execx.Result, error) {
-	r.user = user
-	r.name = name
-	r.args = append([]string(nil), args...)
-	return execx.Result{ExitCode: 0, Stdout: "ok\n"}, nil
-}
 
 func monitorTestDeps() Deps {
 	return Deps{
@@ -96,7 +80,7 @@ func TestVersionMonitorKeepsCheckingButSuppressesNotifyInPanic(t *testing.T) {
 	store.panicFound = true
 	store.panicOn = true
 	notifier := &fakeNotifier{name: "ops"}
-	runner := &sequenceRunner{stdout: []string{"app 1.0.0", "app 1.0.1"}}
+	runner := execxtest.Outputs("app 1.0.0", "app 1.0.1")
 	var events []Event
 	deps := monitorTestDeps()
 	deps.Notifiers["ops"] = notifier
@@ -115,8 +99,8 @@ func TestVersionMonitorKeepsCheckingButSuppressesNotifyInPanic(t *testing.T) {
 	w.RunCycle(t.Context())
 	w.RunCycle(t.Context())
 
-	if runner.calls != 2 {
-		t.Fatalf("panic mode must keep version checks running, calls=%d", runner.calls)
+	if len(runner.Calls()) != 2 {
+		t.Fatalf("panic mode must keep version checks running, calls=%d", len(runner.Calls()))
 	}
 	if len(notifier.msgs) != 0 {
 		t.Fatalf("panic mode must suppress version notifications, sent=%d", len(notifier.msgs))
@@ -130,7 +114,7 @@ func TestVersionMonitorKeepsCheckingButSuppressesNotifyInPanic(t *testing.T) {
 // and asserts the underlying command check ran as user postgres with wantArg.
 func assertMonitorPreservesCommandUser(t *testing.T, tree map[string]any, build func(string, map[string]any, Deps, time.Duration) (*Watch, string), wantArg string) {
 	t.Helper()
-	runner := &monitorUserRunner{}
+	runner := execxtest.Fixed(execx.Result{ExitCode: 0, Stdout: "ok\n"}, nil)
 	deps := monitorTestDeps()
 	deps.ExecxRunner = runner
 
@@ -141,8 +125,10 @@ func assertMonitorPreservesCommandUser(t *testing.T, tree map[string]any, build 
 	if res := w.Check.Run(context.Background()); !res.OK {
 		t.Fatalf("monitor check should pass: %s", res.Message)
 	}
-	if runner.user != "postgres" || runner.name != "postgres" || len(runner.args) != 1 || runner.args[0] != wantArg {
-		t.Fatalf("RunUser call = user=%q name=%q args=%v", runner.user, runner.name, runner.args)
+	// A recorded User proves the monitor went through RunUser, not Run.
+	calls := runner.Calls()
+	if len(calls) != 1 || calls[0].User != "postgres" || calls[0].Line() != "postgres "+wantArg {
+		t.Fatalf("RunUser call = %+v", calls)
 	}
 }
 
@@ -165,7 +151,7 @@ func TestVersionMonitorLevel(t *testing.T) {
 			"version":  map[string]any{"on_change": on},
 		}
 		deps := monitorTestDeps()
-		deps.ExecxRunner = &sequenceRunner{stdout: outs}
+		deps.ExecxRunner = execxtest.Outputs(outs...)
 		w, warn := versionMonitor("app", tree, deps, time.Minute)
 		if warn != "" || w == nil {
 			t.Fatalf("warn=%q w=%v", warn, w)

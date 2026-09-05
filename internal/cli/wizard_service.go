@@ -9,6 +9,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"sermo/internal/hostfs"
 	"slices"
 	"sort"
 	"strconv"
@@ -357,7 +358,7 @@ func procSocketTables() []procSocketTable {
 }
 
 func procPortListening(path string, port int, states map[string]bool) bool {
-	f, err := os.Open(path) //nolint:gosec // G304: /proc/net/tcp{,6} for local port discovery
+	f, err := hostfs.Open(path)
 	if err != nil {
 		return false
 	}
@@ -376,7 +377,7 @@ func portListenerHost(port int) (string, bool) {
 }
 
 func procPortListenerHosts(path string, port int, states map[string]bool, ipv6 bool) []string {
-	f, err := os.Open(path) //nolint:gosec // G304: /proc/net/tcp{,6} for local port discovery
+	f, err := hostfs.Open(path)
 	if err != nil {
 		return nil
 	}

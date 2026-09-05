@@ -5,6 +5,7 @@ import (
 	"debug/elf"
 	"os"
 	"path/filepath"
+	"sermo/internal/hostfs"
 	"strings"
 
 	"sermo/internal/execx"
@@ -206,7 +207,7 @@ func findLibrary(soname string, dirs []string) string {
 // It ignores comments and basic "include" lines (we separately scan the
 // common /etc/ld.so.conf.d directory).
 func parseLdSoConf(path string) []string {
-	data, err := os.ReadFile(path) //nolint:gosec // G304: path is /etc/ld.so.conf or conf.d fragment from fixed roots
+	data, err := hostfs.ReadFile(path)
 	if err != nil {
 		return nil
 	}

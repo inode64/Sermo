@@ -9,30 +9,15 @@ import (
 
 	"sermo/internal/checks"
 	"sermo/internal/execx"
+	"sermo/internal/execx/execxtest"
 )
-
-// fakeRunner returns canned output per command name and records the argv.
-type fakeRunner struct {
-	out   map[string]execx.Result
-	err   map[string]error
-	calls []string
-}
-
-func (r *fakeRunner) Run(_ context.Context, name string, args ...string) (execx.Result, error) {
-	call := name
-	if len(args) > 0 {
-		call += " " + strings.Join(args, " ")
-	}
-	r.calls = append(r.calls, call)
-	return r.out[name], r.err[name]
-}
 
 func staticMounts(ms ...Mount) MountSource {
 	return func() ([]Mount, error) { return ms, nil }
 }
 
 func TestResolveLVM(t *testing.T) {
-	r := &fakeRunner{out: map[string]execx.Result{
+	r := &execxtest.Runner{ByName: map[string]execx.Result{
 		"lvs": {Stdout: "  vg0,data\n"},
 	}}
 	e := Expander{
@@ -102,7 +87,7 @@ func TestResolveUsesSharedMountSelection(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			r := &fakeRunner{out: map[string]execx.Result{
+			r := &execxtest.Runner{ByName: map[string]execx.Result{
 				cmdLVS: {Stdout: "vg0,data\n"},
 			}}
 			target, err := (Expander{Runner: r, Mounts: staticMounts(tt.mounts...)}).Resolve(context.Background(), tt.path)
@@ -112,8 +97,8 @@ func TestResolveUsesSharedMountSelection(t *testing.T) {
 			if target.Mountpoint != tt.wantMount || target.FSType != tt.wantFSType {
 				t.Fatalf("Resolve(%q) target = %+v, want mount %q and filesystem %q", tt.path, target, tt.wantMount, tt.wantFSType)
 			}
-			if len(r.calls) != 1 || !strings.HasSuffix(r.calls[0], " "+tt.wantDevice) {
-				t.Fatalf("Resolve(%q) calls = %v, want lvs for %q", tt.path, r.calls, tt.wantDevice)
+			if len(r.Lines()) != 1 || !strings.HasSuffix(r.Lines()[0], " "+tt.wantDevice) {
+				t.Fatalf("Resolve(%q) calls = %v, want lvs for %q", tt.path, r.Lines(), tt.wantDevice)
 			}
 		})
 	}
@@ -122,7 +107,7 @@ func TestResolveUsesSharedMountSelection(t *testing.T) {
 func TestResolveRejectsInvalidPathBeforeLVS(t *testing.T) {
 	for _, path := range []string{"", "data/records"} {
 		t.Run(fmt.Sprintf("path=%q", path), func(t *testing.T) {
-			r := &fakeRunner{out: map[string]execx.Result{
+			r := &execxtest.Runner{ByName: map[string]execx.Result{
 				cmdLVS: {Stdout: "vg0,root\n"},
 			}}
 			e := Expander{
@@ -132,8 +117,8 @@ func TestResolveRejectsInvalidPathBeforeLVS(t *testing.T) {
 			if _, err := e.Resolve(context.Background(), path); err == nil {
 				t.Fatalf("Resolve(%q) succeeded, want no containing mount", path)
 			}
-			if len(r.calls) != 0 {
-				t.Fatalf("Resolve(%q) calls = %v, want no lvs command", path, r.calls)
+			if len(r.Lines()) != 0 {
+				t.Fatalf("Resolve(%q) calls = %v, want no lvs command", path, r.Lines())
 			}
 		})
 	}
@@ -183,7 +168,7 @@ func TestListRejectsNonStorageMounts(t *testing.T) {
 }
 
 func TestExpandExt4CapsToFreeAndGrows(t *testing.T) {
-	r := &fakeRunner{out: map[string]execx.Result{
+	r := &execxtest.Runner{ByName: map[string]execx.Result{
 		"vgs": {Stdout: "  2147483648\n"}, // 2 GiB free
 	}}
 	e := Expander{Runner: r}
@@ -202,7 +187,7 @@ func TestExpandExt4CapsToFreeAndGrows(t *testing.T) {
 		"lvextend -L+2147483648b /dev/vg0/data",
 		"resize2fs /dev/vg0/data",
 	}
-	assertCalls(t, r.calls, want)
+	assertCalls(t, r.Lines(), want)
 }
 
 func TestExpandXFSAndBtrfsUseMountpoint(t *testing.T) {
@@ -213,13 +198,13 @@ func TestExpandXFSAndBtrfsUseMountpoint(t *testing.T) {
 		{"xfs", "xfs_growfs /mnt/backup"},
 		{"btrfs", "btrfs filesystem resize max /mnt/backup"},
 	} {
-		r := &fakeRunner{out: map[string]execx.Result{"vgs": {Stdout: "1073741824"}}}
+		r := &execxtest.Runner{ByName: map[string]execx.Result{"vgs": {Stdout: "1073741824"}}}
 		e := Expander{Runner: r}
 		tgt := Target{Mountpoint: "/mnt/backup", FSType: tc.fs, VG: "vg0", LV: "data"}
 		if _, err := e.Expand(context.Background(), tgt, 512<<20); err != nil {
 			t.Fatalf("%s Expand: %v", tc.fs, err)
 		}
-		if got := r.calls[len(r.calls)-1]; got != tc.grow {
+		if got := r.Lines()[len(r.Lines())-1]; got != tc.grow {
 			t.Fatalf("%s last call = %q, want %q", tc.fs, got, tc.grow)
 		}
 	}
@@ -227,13 +212,13 @@ func TestExpandXFSAndBtrfsUseMountpoint(t *testing.T) {
 
 func TestExpandRejectsNonPositiveSize(t *testing.T) {
 	for _, by := range []int64{0, -1 << 20} {
-		r := &fakeRunner{out: map[string]execx.Result{"vgs": {Stdout: "2147483648"}}}
+		r := &execxtest.Runner{ByName: map[string]execx.Result{"vgs": {Stdout: "2147483648"}}}
 		e := Expander{Runner: r}
 		tgt := Target{Mountpoint: "/mnt/backup", FSType: "ext4", VG: "vg0", LV: "data"}
 		if _, err := e.Expand(context.Background(), tgt, by); err == nil {
 			t.Fatalf("Expand(by=%d) must error, not run lvextend", by)
 		}
-		for _, call := range r.calls {
+		for _, call := range r.Lines() {
 			if strings.HasPrefix(call, "lvextend") {
 				t.Fatalf("Expand(by=%d) ran %q; lvextend must not run for a non-positive size", by, call)
 			}
@@ -242,21 +227,21 @@ func TestExpandRejectsNonPositiveSize(t *testing.T) {
 }
 
 func TestExpandNoFreeSpaceErrors(t *testing.T) {
-	r := &fakeRunner{out: map[string]execx.Result{"vgs": {Stdout: "0"}}}
+	r := &execxtest.Runner{ByName: map[string]execx.Result{"vgs": {Stdout: "0"}}}
 	e := Expander{Runner: r}
 	tgt := Target{Mountpoint: "/mnt/backup", FSType: "ext4", VG: "vg0", LV: "data"}
 	if _, err := e.Expand(context.Background(), tgt, 1<<30); err == nil {
 		t.Fatal("expand with zero VG free must error")
 	}
-	for _, c := range r.calls {
+	for _, c := range r.Lines() {
 		if strings.HasPrefix(c, "lvextend") {
-			t.Fatalf("must not lvextend when the VG is full: %v", r.calls)
+			t.Fatalf("must not lvextend when the VG is full: %v", r.Lines())
 		}
 	}
 }
 
 func TestExpandUnknownFSErrors(t *testing.T) {
-	r := &fakeRunner{out: map[string]execx.Result{"vgs": {Stdout: "1073741824"}}}
+	r := &execxtest.Runner{ByName: map[string]execx.Result{"vgs": {Stdout: "1073741824"}}}
 	e := Expander{Runner: r}
 	tgt := Target{Mountpoint: "/x", FSType: "reiserfs", VG: "vg0", LV: "data"}
 	if _, err := e.Expand(context.Background(), tgt, 1<<20); err == nil {
@@ -277,9 +262,9 @@ func assertCalls(t *testing.T, got, want []string) {
 }
 
 func TestResolveNotLVM(t *testing.T) {
-	r := &fakeRunner{
-		out: map[string]execx.Result{"lvs": {ExitCode: 5}},
-		err: map[string]error{"lvs": context.DeadlineExceeded},
+	r := &execxtest.Runner{
+		ByName: map[string]execx.Result{"lvs": {ExitCode: 5}},
+		Errs:   map[string]error{"lvs": context.DeadlineExceeded},
 	}
 	e := Expander{
 		Runner: r,
@@ -291,7 +276,7 @@ func TestResolveNotLVM(t *testing.T) {
 }
 
 func TestResolveUnknownPath(t *testing.T) {
-	e2 := Expander{Runner: &fakeRunner{}, Mounts: staticMounts(Mount{Device: "/dev/sdb1", MountPoint: "/srv", FSType: "ext4"})}
+	e2 := Expander{Runner: &execxtest.Runner{}, Mounts: staticMounts(Mount{Device: "/dev/sdb1", MountPoint: "/srv", FSType: "ext4"})}
 	if _, err := e2.Resolve(context.Background(), "/mnt/x"); err == nil {
 		t.Fatal("a path with no containing mount must error")
 	}

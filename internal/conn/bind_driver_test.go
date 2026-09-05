@@ -86,7 +86,10 @@ func testExternalModuleInterfaceBinding(t *testing.T) {
 		}},
 		{"snmp-params", func(t *testing.T) {
 			t.Helper()
-			params := buildSNMPParams(context.Background(), Config{Host: "dev", Interface: "eth0"}, time.Second)
+			params, err := buildSNMPParams(context.Background(), Config{Host: "dev", Interface: "eth0"}, time.Second)
+			if err != nil {
+				t.Fatal(err)
+			}
 			if params.Control == nil {
 				t.Fatal("SNMP params must use BindDialer control hook when interface is set")
 			}

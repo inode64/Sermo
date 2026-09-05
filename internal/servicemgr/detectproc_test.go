@@ -5,13 +5,14 @@ import (
 	"testing"
 
 	"sermo/internal/execx"
+	"sermo/internal/execx/execxtest"
 )
 
-// assertDetectSystemd builds a fakeRunner from results, runs the systemd detector
+// assertDetectSystemd builds a scripted runner from results, runs the systemd detector
 // for unit and asserts the exact pidfile/exe pair.
 func assertDetectSystemd(t *testing.T, results map[string]execx.Result, unit, wantPidfile, wantExe string) {
 	t.Helper()
-	runner := fakeRunner{results: results}
+	runner := &execxtest.Runner{ByLine: results}
 	pidfile, exe := detectProcPidfileExe(context.Background(), runner, nil, BackendSystemd, unit)
 	if pidfile != wantPidfile {
 		t.Fatalf("pidfile = %q, want %q", pidfile, wantPidfile)

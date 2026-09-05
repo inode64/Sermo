@@ -61,3 +61,26 @@ func (a App) loadConfig(opts options) (*config.Config, int) {
 	}
 	return cfg, exitSuccess
 }
+
+// renderServiceList prints the shared tail of the per-service list commands
+// (locks, processes): warnings to stderr, JSON on --json, an empty notice
+// unless --quiet, else one formatted line per item.
+func renderServiceList[T any](a App, opts options, service, jsonKey string, items []T, warnings []string, emptyFormat string, format func(T) string) int {
+	for _, w := range warnings {
+		fmt.Fprintf(a.Stderr, cliWarningFormat, w)
+	}
+	if opts.json {
+		writeJSON(a.Stdout, map[string]any{cliJSONKeyService: service, jsonKey: items})
+		return exitSuccess
+	}
+	if len(items) == 0 {
+		if !opts.quiet {
+			fmt.Fprintf(a.Stdout, emptyFormat, service)
+		}
+		return exitSuccess
+	}
+	for _, item := range items {
+		fmt.Fprintln(a.Stdout, format(item))
+	}
+	return exitSuccess
+}

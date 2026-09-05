@@ -3,9 +3,9 @@ package config
 import (
 	"errors"
 	"fmt"
-	"os"
 	"regexp"
 	"sermo/internal/cfgval"
+	"sermo/internal/hostfs"
 	"strings"
 )
 
@@ -63,7 +63,7 @@ func extractFileValue(path string, spec map[string]any) (string, bool, error) {
 }
 
 func readOptionalFile(path string) ([]byte, bool) {
-	data, err := os.ReadFile(path) //nolint:gosec // G304: optional host file from catalog/os-select paths
+	data, err := hostfs.ReadFile(path)
 	return data, err == nil
 }
 
@@ -94,7 +94,7 @@ var configAssignSeps = []string{confdAssignSep, yamlAssignSep}
 // `equals:` on a file that writes them. ok=false when the file is unreadable or
 // the key is absent.
 func configKeyValue(path, key string) (string, bool) {
-	data, err := os.ReadFile(path) //nolint:gosec // G304: OpenRC conf.d path from catalog service unit
+	data, err := hostfs.ReadFile(path)
 	if err != nil {
 		return "", false
 	}

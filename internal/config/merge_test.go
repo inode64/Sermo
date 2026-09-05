@@ -1,6 +1,8 @@
 package config
 
-import "testing"
+import (
+	"testing"
+)
 
 func TestMergeMaps(t *testing.T) {
 	dst := map[string]any{
@@ -36,5 +38,22 @@ func TestMergeMaps(t *testing.T) {
 	}
 	if src["list"].([]any)[0] != "a" {
 		t.Fatalf("src slice mutated: %v", src["list"])
+	}
+}
+
+func TestApplyDeletesRemovesEntry(t *testing.T) {
+	tree := map[string]any{
+		"checks": map[string]any{
+			"http": map[string]any{"delete": true},
+			"tcp":  map[string]any{"type": "tcp"},
+		},
+	}
+	applyDeletes(tree)
+	checkEntries := tree["checks"].(map[string]any)
+	if _, ok := checkEntries["http"]; ok {
+		t.Errorf("http should be deleted")
+	}
+	if _, ok := checkEntries["tcp"]; !ok {
+		t.Errorf("tcp should remain")
 	}
 }

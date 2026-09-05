@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"sermo/internal/execx"
+	"sermo/internal/execx/execxtest"
 )
 
 // runVersionCycle drives one on_change command-check cycle whose `version`
@@ -15,7 +16,7 @@ import (
 func runVersionCycle(state *cmdState, changeLevel int, out string) Result {
 	c := commandCheck{
 		name: "svc:version", timeout: time.Second,
-		runner:      fakeRunner{execx.Result{ExitCode: 0, Stdout: out + "\n"}},
+		runner:      execxtest.Fixed(execx.Result{ExitCode: 0, Stdout: out + "\n"}, nil),
 		argv:        []string{"app", "--version"},
 		expectExit:  []int{0},
 		onChange:    true,

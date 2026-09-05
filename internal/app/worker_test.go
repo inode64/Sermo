@@ -13,6 +13,7 @@ import (
 	"sermo/internal/checks"
 	"sermo/internal/emission"
 	"sermo/internal/execx"
+	"sermo/internal/execx/execxtest"
 	"sermo/internal/metrics"
 	"sermo/internal/notify"
 	"sermo/internal/operation"
@@ -834,9 +835,9 @@ func TestCycleRestartsOnLibraryChange(t *testing.T) {
 	}
 }
 
-// appVersionWorker wires a changed:{app} remediation worker over a sequenceRunner
+// appVersionWorker wires a changed:{app} remediation worker over a scripted runner
 // that returns the given version lines, one per cycle.
-func appVersionWorker(h *workerHarness, runner *sequenceRunner, level string) *Worker {
+func appVersionWorker(h *workerHarness, runner *execxtest.Runner, level string) *Worker {
 	changed := map[string]any{"app": "containerd"}
 	if level != "" {
 		changed["level"] = level
@@ -857,11 +858,11 @@ func appVersionWorker(h *workerHarness, runner *sequenceRunner, level string) *W
 }
 
 func TestCycleRestartsOnAppVersionChange(t *testing.T) {
-	runner := &sequenceRunner{stdout: []string{
+	runner := execxtest.Outputs(
 		"containerd v1.7.0",
 		"containerd v1.7.1", // patch bump
 		"containerd v1.7.1", // unchanged after the restart
-	}}
+	)
 	h := &workerHarness{opResult: operation.Result{Status: operation.ResultOK}}
 	w := appVersionWorker(h, runner, "patch")
 
@@ -885,7 +886,7 @@ func TestCycleRestartsOnAppVersionChange(t *testing.T) {
 }
 
 func TestCycleAppVersionChangeUsesArtifactSample(t *testing.T) {
-	runner := &sequenceRunner{stdout: []string{"containerd v9.9.9"}}
+	runner := execxtest.Outputs("containerd v9.9.9")
 	h := &workerHarness{opResult: operation.Result{Status: operation.ResultOK}}
 	w := appVersionWorker(h, runner, "patch")
 	samples := NewArtifactSamples()
@@ -900,13 +901,13 @@ func TestCycleAppVersionChangeUsesArtifactSample(t *testing.T) {
 	if len(h.ops) != 1 || h.ops[0] != string(rules.ActionRestart) {
 		t.Fatalf("cached app change should restart once, ops=%v", h.ops)
 	}
-	if runner.calls != 0 {
-		t.Fatalf("worker must not re-run cached app version command, calls=%d", runner.calls)
+	if len(runner.Calls()) != 0 {
+		t.Fatalf("worker must not re-run cached app version command, calls=%d", len(runner.Calls()))
 	}
 }
 
 func TestCycleUnsampledArtifactAppDefersChangedRule(t *testing.T) {
-	runner := &sequenceRunner{stdout: []string{"containerd v9.9.9"}}
+	runner := execxtest.Outputs("containerd v9.9.9")
 	h := &workerHarness{opResult: operation.Result{Status: operation.ResultOK}}
 	w := appVersionWorker(h, runner, "patch")
 	samples := NewArtifactSamples()
@@ -921,8 +922,8 @@ func TestCycleUnsampledArtifactAppDefersChangedRule(t *testing.T) {
 	if _, ok := h.eventOf(eventKindError); ok {
 		t.Fatalf("unsampled app must not emit a rule evaluation error, events=%+v", h.events)
 	}
-	if runner.calls != 0 {
-		t.Fatalf("worker must wait for the artifact sample, calls=%d", runner.calls)
+	if len(runner.Calls()) != 0 {
+		t.Fatalf("worker must wait for the artifact sample, calls=%d", len(runner.Calls()))
 	}
 }
 
@@ -931,7 +932,7 @@ func TestCycleUnsampledArtifactAppDefersChangedRule(t *testing.T) {
 // last):" for a broken Python entry point — while the captured output that
 // explained the failure was dropped on the way out of rule evaluation.
 func TestCycleEvaluationErrorCarriesAppProbeOutput(t *testing.T) {
-	runner := &sequenceRunner{stdout: []string{"containerd v9.9.9"}}
+	runner := execxtest.Outputs("containerd v9.9.9")
 	h := &workerHarness{opResult: operation.Result{Status: operation.ResultOK}}
 	w := appVersionWorker(h, runner, "patch")
 	samples := NewArtifactSamples()
@@ -952,7 +953,7 @@ func TestCycleEvaluationErrorCarriesAppProbeOutput(t *testing.T) {
 }
 
 func TestCycleMissingArtifactAppSkipsChangedRule(t *testing.T) {
-	runner := &sequenceRunner{stdout: []string{"containerd v9.9.9"}}
+	runner := execxtest.Outputs("containerd v9.9.9")
 	h := &workerHarness{opResult: operation.Result{Status: operation.ResultOK}}
 	w := appVersionWorker(h, runner, "patch")
 	samples := NewArtifactSamples()
@@ -968,8 +969,8 @@ func TestCycleMissingArtifactAppSkipsChangedRule(t *testing.T) {
 	if _, ok := h.eventOf(eventKindError); ok {
 		t.Fatalf("missing app must not emit a rule evaluation error, events=%+v", h.events)
 	}
-	if runner.calls != 0 {
-		t.Fatalf("worker must not re-run a cached missing app probe, calls=%d", runner.calls)
+	if len(runner.Calls()) != 0 {
+		t.Fatalf("worker must not re-run a cached missing app probe, calls=%d", len(runner.Calls()))
 	}
 
 	samples.StoreAppVersion("containerd", "containerd v1.7.0", appinspect.StatusOK, "")
@@ -987,11 +988,11 @@ func TestCycleMissingArtifactAppSkipsChangedRule(t *testing.T) {
 
 func TestCycleAppVersionChangeRespectsLevel(t *testing.T) {
 	// At minor level a patch bump is ignored; only a minor bump fires.
-	runner := &sequenceRunner{stdout: []string{
+	runner := execxtest.Outputs(
 		"containerd v1.7.0",
 		"containerd v1.7.5", // patch bump — ignored at minor level
 		"containerd v1.8.0", // minor bump — fires
-	}}
+	)
 	h := &workerHarness{opResult: operation.Result{Status: operation.ResultOK}}
 	w := appVersionWorker(h, runner, "minor")
 
@@ -1006,30 +1007,13 @@ func TestCycleAppVersionChangeRespectsLevel(t *testing.T) {
 	}
 }
 
-type resultSequenceRunner struct {
-	results []execx.Result
-	calls   int
-}
-
-func (r *resultSequenceRunner) Run(context.Context, string, ...string) (execx.Result, error) {
-	if len(r.results) == 0 {
-		return execx.Result{ExitCode: execx.ExitCodeSuccess}, nil
-	}
-	idx := r.calls
-	if idx >= len(r.results) {
-		idx = len(r.results) - 1
-	}
-	r.calls++
-	return r.results[idx], nil
-}
-
 func TestCycleAppVersionCommandFailureDoesNotRestartOrAcknowledge(t *testing.T) {
-	runner := &resultSequenceRunner{results: []execx.Result{
+	runner := execxtest.Queued([]execx.Result{
 		{Stdout: "containerd v1.7.0", ExitCode: execx.ExitCodeSuccess},
 		{Stderr: "missing shared library", ExitCode: 127},
 		{Stdout: "containerd v1.7.1", ExitCode: execx.ExitCodeSuccess},
 		{Stdout: "containerd v1.7.1", ExitCode: execx.ExitCodeSuccess},
-	}}
+	}...)
 	h := &workerHarness{opResult: operation.Result{Status: operation.ResultOK}}
 	w := appVersionWorker(h, nil, "patch")
 	w.CheckDeps = checks.Deps{Runner: runner}
@@ -1255,10 +1239,10 @@ func TestRuleMessageRuntimeContextForChangedPath(t *testing.T) {
 }
 
 func TestRuleMessageRuntimeContextForChangedAppVersion(t *testing.T) {
-	runner := &sequenceRunner{stdout: []string{
+	runner := execxtest.Outputs(
 		"containerd v1.7.0",
 		"containerd v1.7.1",
-	}}
+	)
 	h := &workerHarness{opResult: operation.Result{Status: operation.ResultOK}}
 	tree := map[string]any{"rules": map[string]any{
 		"restart-on-version-change": map[string]any{

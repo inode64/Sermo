@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"sermo/internal/execx"
+	"sermo/internal/execx/execxtest"
 )
 
 func TestParseOutputMatcher(t *testing.T) {
@@ -171,7 +172,7 @@ func TestCommandCheckOutputExpectations(t *testing.T) {
 	mk := func(res execx.Result, expectExit []int, stdout, stderr OutputMatcher) commandCheck {
 		return commandCheck{
 			name: "c", timeout: time.Second,
-			runner:     fakeRunner{res},
+			runner:     execxtest.Fixed(res, nil),
 			argv:       []string{"x"},
 			expectExit: expectExit,
 			stdout:     stdout,

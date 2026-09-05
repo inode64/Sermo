@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sermo/internal/hostfs"
 	"strconv"
 	"strings"
 )
@@ -88,7 +89,7 @@ func ThreadStatFields(pid, tid int) ([]string, bool) {
 // statFieldsAt is the shared decoder behind StatFields and ThreadStatFields: the
 // comm-splitting subtlety must not be reimplemented per caller.
 func statFieldsAt(path string) ([]string, bool) {
-	data, err := os.ReadFile(path) //nolint:gosec // G304: /proc/<pid>/stat path built from integer PID
+	data, err := hostfs.ReadFile(path)
 	if err != nil {
 		return nil, false
 	}

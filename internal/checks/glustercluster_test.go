@@ -9,24 +9,8 @@ import (
 	"time"
 
 	"sermo/internal/execx"
+	"sermo/internal/execx/execxtest"
 )
-
-type glusterClusterRunner struct {
-	results     map[string]execx.Result
-	err         error
-	calls       []string
-	hasDeadline bool
-}
-
-func (r *glusterClusterRunner) Run(ctx context.Context, name string, args ...string) (execx.Result, error) {
-	_, r.hasDeadline = ctx.Deadline()
-	call := name + " " + strings.Join(args, " ")
-	r.calls = append(r.calls, call)
-	if result, ok := r.results[call]; ok {
-		return result, nil
-	}
-	return execx.Result{ExitCode: execx.ExitCodeRunFailure}, r.err
-}
 
 func glusterXML(body string) execx.Result {
 	return execx.Result{ExitCode: glusterCLIExitSuccess, Stdout: "<cliOutput><opRet>0</opRet>" + body + "</cliOutput>"}
@@ -66,7 +50,7 @@ func glusterClusterExpectation() map[string]any {
 }
 
 func TestGlusterClusterCheckHealthy(t *testing.T) {
-	runner := &glusterClusterRunner{results: glusterClusterResults()}
+	runner := cliRunner(glusterClusterResults(), nil)
 	peers, volumes, err := parseGlusterClusterConfig(glusterClusterExpectation())
 	if err != nil {
 		t.Fatal(err)
@@ -76,11 +60,11 @@ func TestGlusterClusterCheckHealthy(t *testing.T) {
 	if !result.OK || result.Unavailable {
 		t.Fatalf("healthy result = %+v", result)
 	}
-	if !runner.hasDeadline {
+	if !runner.SawDeadline() {
 		t.Fatal("gluster CLI commands did not receive the check deadline")
 	}
-	if got, want := len(runner.calls), 5; got != want {
-		t.Fatalf("gluster CLI calls = %d, want %d: %v", got, want, runner.calls)
+	if got, want := len(runner.Lines()), 5; got != want {
+		t.Fatalf("gluster CLI calls = %d, want %d: %v", got, want, runner.Lines())
 	}
 	for _, want := range []string{
 		"gluster --mode=script --xml peer status",
@@ -89,8 +73,8 @@ func TestGlusterClusterCheckHealthy(t *testing.T) {
 		"gluster --mode=script --xml volume heal images info",
 		"gluster --mode=script --xml volume heal images info split-brain",
 	} {
-		if !strings.Contains(strings.Join(runner.calls, "\n"), want) {
-			t.Errorf("missing fixed read-only call %q in %v", want, runner.calls)
+		if !strings.Contains(strings.Join(runner.Lines(), "\n"), want) {
+			t.Errorf("missing fixed read-only call %q in %v", want, runner.Lines())
 		}
 	}
 	for key, want := range map[string]int{
@@ -121,7 +105,7 @@ func TestGlusterClusterCheckReportsTopologyFailures(t *testing.T) {
 <volStatus><volumes><volume><volName>images</volName>
   <node><hostname>sirio</hostname><path>/bricks/images0</path><status>0</status></node>
 </volume></volumes></volStatus>`)
-	runner := &glusterClusterRunner{results: results}
+	runner := cliRunner(results, nil)
 	peers, volumes, err := parseGlusterClusterConfig(glusterClusterExpectation())
 	if err != nil {
 		t.Fatal(err)
@@ -158,7 +142,7 @@ func TestGlusterClusterCheckReportsBrickWithoutHealCount(t *testing.T) {
 	}
 	check := glusterClusterCheck{
 		name: "cluster", timeout: time.Second,
-		runner:  &glusterClusterRunner{results: results},
+		runner:  cliRunner(results, nil),
 		peers:   peers,
 		volumes: volumes,
 	}
@@ -180,7 +164,7 @@ func TestGlusterClusterCheckReportsBrickWithoutHealCount(t *testing.T) {
 }
 
 func TestGlusterClusterCheckCommandFailureIsUnavailable(t *testing.T) {
-	runner := &glusterClusterRunner{results: map[string]execx.Result{}, err: errors.New("gluster binary not found")}
+	runner := cliRunner(map[string]execx.Result{}, errors.New("gluster binary not found"))
 	result := (glusterClusterCheck{name: "cluster", timeout: time.Second, runner: runner, peers: []string{"zeus"}}).Run(context.Background())
 	if result.OK || !result.Unavailable || !strings.Contains(result.Message, "gluster binary not found") {
 		t.Fatalf("command failure = %+v", result)
@@ -199,7 +183,7 @@ func TestBuildGlusterClusterCheckRejectsInvalidConfiguration(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			_, warning := buildGlusterClusterCheck(base{name: "cluster", timeout: time.Second}, test.entry, fakeRunner{})
+			_, warning := buildGlusterClusterCheck(base{name: "cluster", timeout: time.Second}, test.entry, &execxtest.Runner{})
 			if !strings.Contains(warning, test.want) {
 				t.Fatalf("warning = %q, want %q", warning, test.want)
 			}

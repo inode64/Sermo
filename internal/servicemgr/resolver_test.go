@@ -7,11 +7,12 @@ import (
 	"testing"
 
 	"sermo/internal/execx"
+	"sermo/internal/execx/execxtest"
 )
 
 func resolver(commands map[string]execxResultErr, paths map[string]bool) UnitResolver {
 	return UnitResolver{
-		Runner: scriptRunner{results: commands, calls: map[string]int{}},
+		Runner: scriptRunner(commands),
 		Probe:  fakeProbe{paths: paths},
 	}
 }
@@ -19,24 +20,6 @@ func resolver(commands map[string]execxResultErr, paths map[string]bool) UnitRes
 type execxResultErr struct {
 	exit int
 	err  error
-}
-
-type scriptRunner struct {
-	results map[string]execxResultErr
-	calls   map[string]int
-}
-
-func (r scriptRunner) Run(_ context.Context, name string, args ...string) (execx.Result, error) {
-	var key strings.Builder
-	key.WriteString(name)
-	for _, a := range args {
-		key.WriteString(" " + a)
-	}
-	if r.calls != nil {
-		r.calls[key.String()]++
-	}
-	res := r.results[key.String()]
-	return execx.Result{ExitCode: res.exit}, res.err
 }
 
 func TestResolveSystemdPicksFirstKnownCandidate(t *testing.T) {
@@ -120,26 +103,20 @@ func TestResolvePrefersActiveKnownUnit(t *testing.T) {
 	}
 }
 
-type stdoutRunner struct{ out string }
-
-func (r stdoutRunner) Run(_ context.Context, _ string, _ ...string) (execx.Result, error) {
-	return execx.Result{Stdout: r.out}, nil
-}
-
 func TestMainPID(t *testing.T) {
-	if pid, ok := MainPIDContext(context.Background(), stdoutRunner{out: "4242\n"}, BackendSystemd, "nginx.service"); !ok || pid != 4242 {
+	if pid, ok := MainPIDContext(context.Background(), execxtest.Fixed(execx.Result{Stdout: "4242\n"}, nil), BackendSystemd, "nginx.service"); !ok || pid != 4242 {
 		t.Fatalf("MainPID = %d/%v, want 4242/true", pid, ok)
 	}
-	if _, ok := MainPIDContext(context.Background(), stdoutRunner{out: "0\n"}, BackendSystemd, "nginx.service"); ok {
+	if _, ok := MainPIDContext(context.Background(), execxtest.Fixed(execx.Result{Stdout: "0\n"}, nil), BackendSystemd, "nginx.service"); ok {
 		t.Error("MainPID 0 should report not found")
 	}
-	if _, ok := MainPIDContext(context.Background(), stdoutRunner{out: "4242\n"}, BackendOpenRC, "nginx"); ok {
+	if _, ok := MainPIDContext(context.Background(), execxtest.Fixed(execx.Result{Stdout: "4242\n"}, nil), BackendOpenRC, "nginx"); ok {
 		t.Error("OpenRC must report no MainPID")
 	}
 }
 
 func TestCgroupPIDs(t *testing.T) {
-	runner := stdoutRunner{out: "/system.slice/nginx.service\n"}
+	runner := execxtest.Fixed(execx.Result{Stdout: "/system.slice/nginx.service\n"}, nil)
 	files := map[string]string{
 		"/sys/fs/cgroup/system.slice/nginx.service/cgroup.procs": "1508\n1600\n1602\n",
 	}
@@ -165,7 +142,7 @@ func TestCgroupPIDs(t *testing.T) {
 	}
 
 	// Empty control group -> not found.
-	if _, ok := CgroupPIDsContext(context.Background(), stdoutRunner{out: "/\n"}, readFile, BackendSystemd, "x"); ok {
+	if _, ok := CgroupPIDsContext(context.Background(), execxtest.Fixed(execx.Result{Stdout: "/\n"}, nil), readFile, BackendSystemd, "x"); ok {
 		t.Error("root/empty control group should report no cgroup PIDs")
 	}
 	// OpenRC has no cgroup query.
@@ -209,13 +186,13 @@ func TestBackendPIDsKeepsMainPIDFirst(t *testing.T) {
 
 func TestResolveDeduplicatesCandidates(t *testing.T) {
 	// A unit name repeated in candidates is probed once.
-	rr := scriptRunner{results: map[string]execxResultErr{"systemctl cat -- mysql.service": {exit: 0}}, calls: map[string]int{}}
+	rr := scriptRunner(map[string]execxResultErr{"systemctl cat -- mysql.service": {exit: 0}})
 	r := UnitResolver{Runner: rr, Probe: fakeProbe{}}
 	if _, err := r.Resolve(context.Background(), BackendSystemd, []string{"mysql", "mysql.service", "mysql"}, false); err != nil {
 		t.Fatalf("Resolve() error = %v", err)
 	}
-	if rr.calls["systemctl cat -- mysql.service"] != 1 {
-		t.Fatalf("mysql.service probed %d times, want 1 (deduped)", rr.calls["systemctl cat -- mysql.service"])
+	if rr.Count("systemctl", "cat", "--", "mysql.service") != 1 {
+		t.Fatalf("mysql.service probed %d times, want 1 (deduped)", rr.Count("systemctl", "cat", "--", "mysql.service"))
 	}
 }
 
@@ -238,7 +215,7 @@ func (m resolverManager) SupportsReload(context.Context, string) (bool, error) {
 func (m resolverManager) ResetState(context.Context, string) error             { return nil }
 
 func TestCgroupPIDsFiltersZeroAndEmpty(t *testing.T) {
-	runner := stdoutRunner{out: "/system.slice/x.service\n"}
+	runner := execxtest.Fixed(execx.Result{Stdout: "/system.slice/x.service\n"}, nil)
 	base := "/sys/fs/cgroup/system.slice/x.service/cgroup.procs"
 	rf := func(content string) func(string) ([]byte, error) {
 		return func(p string) ([]byte, error) {
@@ -269,4 +246,18 @@ func TestResolveEmptyCandidates(t *testing.T) {
 	if _, err := r.Resolve(context.Background(), BackendSystemd, nil, false); err == nil || !strings.Contains(err.Error(), "not available") {
 		t.Fatalf("empty candidates error = %v, want 'not available'", err)
 	}
+}
+
+// scriptRunner answers exact command lines with the scripted exit code and
+// error; unknown commands succeed with no output.
+func scriptRunner(results map[string]execxResultErr) *execxtest.Runner {
+	byLine := make(map[string]execx.Result, len(results))
+	errs := make(map[string]error, len(results))
+	for line, res := range results {
+		byLine[line] = execx.Result{ExitCode: res.exit}
+		if res.err != nil {
+			errs[line] = res.err
+		}
+	}
+	return &execxtest.Runner{ByLine: byLine, Errs: errs}
 }

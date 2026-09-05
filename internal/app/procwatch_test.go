@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"sermo/internal/checks"
-	"sermo/internal/execx"
+	"sermo/internal/execx/execxtest"
 	"sermo/internal/metrics"
 	"sermo/internal/notify"
 )
@@ -516,29 +516,8 @@ func TestProcWatchWithRealOSHookRunner(t *testing.T) {
 	}
 }
 
-// fakeEnvRunnerForProc is a minimal test double for verifying custom runner injection + env in proc context.
-type fakeEnvRunnerForProc struct {
-	calls []struct {
-		env  []string
-		name string
-		args []string
-	}
-}
-
-func (f *fakeEnvRunnerForProc) Run(ctx context.Context, name string, args ...string) (execx.Result, error) {
-	return execx.Result{}, nil
-}
-func (f *fakeEnvRunnerForProc) RunEnv(ctx context.Context, env []string, name string, args ...string) (execx.Result, error) {
-	f.calls = append(f.calls, struct {
-		env  []string
-		name string
-		args []string
-	}{env, name, args})
-	return execx.Result{ExitCode: 0}, nil
-}
-
 func TestProcWatchWithCustomInjectedRunnerVerifiesEnv(t *testing.T) {
-	fake := &fakeEnvRunnerForProc{}
+	fake := &execxtest.Runner{}
 	h := &procHarness{clock: time.Unix(1_000_000, 0)}
 	s := &fakeProcSampler{cycles: [][]ProcInfo{
 		{{PID: 99, RSS: 1000}},
@@ -555,16 +534,16 @@ func TestProcWatchWithCustomInjectedRunnerVerifiesEnv(t *testing.T) {
 	}
 	h.tick(w, time.Second)
 
-	if len(fake.calls) != 1 {
-		t.Fatalf("expected 1 execx call, got %d", len(fake.calls))
+	if len(fake.Calls()) != 1 {
+		t.Fatalf("expected 1 execx call, got %d", len(fake.Calls()))
 	}
-	call := fake.calls[0]
-	if call.name != "/usr/bin/notify" || len(call.args) != 1 || call.args[0] != "alert" {
-		t.Fatalf("wrong argv to custom runner: %s %v", call.name, call.args)
+	call := fake.Calls()[0]
+	if call.Name != "/usr/bin/notify" || len(call.Args) != 1 || call.Args[0] != "alert" {
+		t.Fatalf("wrong argv to custom runner: %s %v", call.Name, call.Args)
 	}
 	hasMem := false
 	hasUser := false
-	for _, e := range call.env {
+	for _, e := range call.Env {
 		if e == "SERMO_MEMORY=1000" {
 			hasMem = true
 		}
@@ -573,6 +552,6 @@ func TestProcWatchWithCustomInjectedRunnerVerifiesEnv(t *testing.T) {
 		}
 	}
 	if !hasMem || !hasUser {
-		t.Fatalf("custom runner did not receive expected SERMO_ env from proc data + match: %v", call.env)
+		t.Fatalf("custom runner did not receive expected SERMO_ env from proc data + match: %v", call.Env)
 	}
 }

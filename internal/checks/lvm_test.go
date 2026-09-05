@@ -2,27 +2,15 @@ package checks
 
 import (
 	"context"
+	"sermo/internal/execx/execxtest"
 	"testing"
 	"time"
-
-	"sermo/internal/execx"
 )
-
-type lvmRunner struct {
-	outputs []string
-	calls   int
-}
-
-func (r *lvmRunner) Run(context.Context, string, ...string) (execx.Result, error) {
-	output := r.outputs[min(r.calls, len(r.outputs)-1)]
-	r.calls++
-	return execx.Result{Stdout: output}, nil
-}
 
 func TestLVMCheckHealthTransition(t *testing.T) {
 	healthy := `{"report":[{"lv":[{"vg_name":"vg0","lv_name":"root","lv_attr":"-wi-a-----","lv_health_status":"healthy","vg_free":"100","vg_size":"1000"}]}]}`
 	partial := `{"report":[{"lv":[{"vg_name":"vg0","lv_name":"root","lv_attr":"-wi-a---p-","lv_health_status":"healthy","vg_free":"100","vg_size":"1000"}]}]}`
-	runner := &lvmRunner{outputs: []string{healthy, partial, healthy}}
+	runner := execxtest.Outputs(healthy, partial, healthy)
 	check := &lvmCheck{name: "lvm", timeout: time.Second, runner: runner, volumeGroup: "vg0", logicalVolume: "root"}
 	if result := check.Run(context.Background()); !result.OK {
 		t.Fatalf("healthy result = %+v", result)
@@ -55,7 +43,7 @@ func TestLVMDeviceState(t *testing.T) {
 
 func TestLVMCheckCapacityPredicate(t *testing.T) {
 	data := `{"report":[{"lv":[{"vg_name":"vg0","lv_name":"root","lv_attr":"-wi-a-----","lv_health_status":"healthy","vg_free":"50","vg_size":"1000","data_percent":"85.5","metadata_percent":"81"}]}]}`
-	check := &lvmCheck{name: "lvm", timeout: time.Second, runner: &lvmRunner{outputs: []string{data}}, volumeGroup: "vg0", logicalVolume: "root", preds: []levelPred{{field: DataKeyLVMFreePct, op: "<", value: 10}}}
+	check := &lvmCheck{name: "lvm", timeout: time.Second, runner: execxtest.Outputs(data), volumeGroup: "vg0", logicalVolume: "root", preds: []levelPred{{field: DataKeyLVMFreePct, op: "<", value: 10}}}
 	result := check.Run(context.Background())
 	if result.OK || result.Data[DataKeyHealth] != LVMHealthError {
 		t.Fatalf("capacity result = %+v", result)
@@ -82,7 +70,7 @@ func TestLVMCheckCapacityPredicate(t *testing.T) {
 
 func TestLVMVolumeGroupCapacityWatchKeepsLogicalVolumeEmpty(t *testing.T) {
 	data := `{"report":[{"lv":[{"vg_name":"vg0","lv_name":"root","lv_attr":"-wi-a-----","lv_health_status":"healthy","vg_free":"50","vg_size":"1000"}]}]}`
-	check := &lvmCheck{name: "lvm", timeout: time.Second, runner: &lvmRunner{outputs: []string{data}}, volumeGroup: "vg0"}
+	check := &lvmCheck{name: "lvm", timeout: time.Second, runner: execxtest.Outputs(data), volumeGroup: "vg0"}
 	result := check.Run(context.Background())
 	if !result.OK {
 		t.Fatalf("result = %+v", result)

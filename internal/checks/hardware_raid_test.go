@@ -10,23 +10,6 @@ import (
 	"sermo/internal/execx"
 )
 
-type hardwareRAIDRunner struct {
-	results     map[string]execx.Result
-	err         error
-	calls       []string
-	hasDeadline bool
-}
-
-func (r *hardwareRAIDRunner) Run(ctx context.Context, name string, args ...string) (execx.Result, error) {
-	_, r.hasDeadline = ctx.Deadline()
-	call := name + " " + strings.Join(args, " ")
-	r.calls = append(r.calls, call)
-	if result, ok := r.results[call]; ok {
-		return result, nil
-	}
-	return execx.Result{ExitCode: execx.ExitCodeRunFailure}, r.err
-}
-
 const healthyStorCLIController = `{
   "Controllers": [{
     "Command Status": {"Controller": 0, "Status": "Success", "Description": "None"},
@@ -104,7 +87,7 @@ func storCLIResults(controller, drives, volumes string) map[string]execx.Result 
 }
 
 func TestStorCLICheckHealthy(t *testing.T) {
-	runner := &hardwareRAIDRunner{results: storCLIResults(healthyStorCLIController, healthyStorCLIDrives, healthyStorCLIVolumes)}
+	runner := cliRunner(storCLIResults(healthyStorCLIController, healthyStorCLIDrives, healthyStorCLIVolumes), nil)
 	check := hardwareRAIDCheck{
 		name: CheckTypeStorCLI, timeout: time.Second, runner: runner,
 		binary: "/usr/bin/storcli64", tool: CheckTypeStorCLI,
@@ -115,11 +98,11 @@ func TestStorCLICheckHealthy(t *testing.T) {
 	if !result.OK || result.Unavailable {
 		t.Fatalf("healthy result = %+v", result)
 	}
-	if !runner.hasDeadline {
+	if !runner.SawDeadline() {
 		t.Fatal("StorCLI commands did not inherit the check deadline")
 	}
-	if got, want := len(runner.calls), 4; got != want {
-		t.Fatalf("StorCLI calls = %d, want %d: %v", got, want, runner.calls)
+	if got, want := len(runner.Lines()), 4; got != want {
+		t.Fatalf("StorCLI calls = %d, want %d: %v", got, want, runner.Lines())
 	}
 	for key, want := range map[string]int{
 		DataKeyHardwareRAIDControllers: 1,
@@ -168,7 +151,7 @@ func TestStorCLIRebuildProgressIsAttachedToItsDrive(t *testing.T) {
 	  }]
 	}`}
 	result := (hardwareRAIDCheck{
-		name: CheckTypeStorCLI, timeout: time.Second, runner: &hardwareRAIDRunner{results: results},
+		name: CheckTypeStorCLI, timeout: time.Second, runner: cliRunner(results, nil),
 		binary: "/usr/bin/storcli64", tool: CheckTypeStorCLI,
 	}).Run(context.Background())
 	if result.OK || result.Unavailable {
@@ -202,7 +185,7 @@ func TestStorCLICheckReportsControllerVolumeDriveCacheSMARTAndTemperatureFailure
 		`"Access": "RW"`, `"Access": "Blocked"`,
 		`"Consist": "Yes"`, `"Consist": "No"`,
 	).Replace(healthyStorCLIVolumes)
-	runner := &hardwareRAIDRunner{results: storCLIResults(controller, drives, volumes)}
+	runner := cliRunner(storCLIResults(controller, drives, volumes), nil)
 	check := hardwareRAIDCheck{
 		name: CheckTypeStorCLI, timeout: time.Second, runner: runner,
 		binary: "/usr/bin/storcli64", tool: CheckTypeStorCLI,
@@ -269,9 +252,9 @@ HPE Smart Array P816i-a SR Gen10 in Slot 0 (Embedded)
 `
 
 func TestSSACLICheckHealthy(t *testing.T) {
-	runner := &hardwareRAIDRunner{results: map[string]execx.Result{
+	runner := cliRunner(map[string]execx.Result{
 		"/usr/bin/ssacli ctrl all show config detail": {Stdout: healthySSACLI},
-	}}
+	}, nil)
 	check := hardwareRAIDCheck{
 		name: CheckTypeSSACLI, timeout: time.Second, runner: runner,
 		binary: "/usr/bin/ssacli", tool: CheckTypeSSACLI,
@@ -332,9 +315,9 @@ func TestSSACLICheckReportsMediaCacheBatteryDriveSMARTAndTemperatureFailures(t *
 		"SSD Smart Trip Wearout: False", "SSD Smart Trip Wearout: True",
 		"Drive Authentication Status: OK", "Drive Authentication Status: Failed",
 	).Replace(healthySSACLI)
-	runner := &hardwareRAIDRunner{results: map[string]execx.Result{
+	runner := cliRunner(map[string]execx.Result{
 		"/usr/bin/ssacli ctrl all show config detail": {Stdout: output},
-	}}
+	}, nil)
 	check := hardwareRAIDCheck{
 		name: CheckTypeSSACLI, timeout: time.Second, runner: runner,
 		binary: "/usr/bin/ssacli", tool: CheckTypeSSACLI,
@@ -376,7 +359,7 @@ func TestHardwareRAIDCheckMakesCommandAndParseFailuresUnavailable(t *testing.T) 
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			runner := &hardwareRAIDRunner{results: test.results, err: test.err}
+			runner := cliRunner(test.results, test.err)
 			result := (hardwareRAIDCheck{
 				name: test.tool, timeout: time.Second, runner: runner,
 				binary: test.binary, tool: test.tool,
@@ -410,14 +393,14 @@ func TestBuildHardwareRAIDCheckValidation(t *testing.T) {
 	check, warning := buildHardwareRAIDCheck(base{}, map[string]any{
 		CheckKeyBinary:        "/usr/bin/storcli64",
 		SmartFieldTemperature: map[string]any{CheckKeyOp: ">", CheckKeyValue: 70},
-	}, &hardwareRAIDRunner{}, CheckTypeStorCLI)
+	}, cliRunner(nil, nil), CheckTypeStorCLI)
 	if warning != "" || check == nil {
 		t.Fatalf("valid check = %T warning=%q", check, warning)
 	}
 }
 
 func TestHardwareRAIDRunnerErrorIsReported(t *testing.T) {
-	runner := &hardwareRAIDRunner{err: errors.New("permission denied")}
+	runner := cliRunner(nil, errors.New("permission denied"))
 	result := (hardwareRAIDCheck{
 		name: CheckTypeSSACLI, timeout: time.Second, runner: runner,
 		binary: "/usr/bin/ssacli", tool: CheckTypeSSACLI,

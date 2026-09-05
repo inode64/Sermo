@@ -8,6 +8,7 @@ import (
 	"sermo/internal/config"
 	"sermo/internal/dockerctl"
 	"sermo/internal/execx"
+	"sermo/internal/execx/execxtest"
 	"sermo/internal/servicemgr"
 	"sermo/internal/virt"
 )
@@ -49,7 +50,7 @@ func TestResolveWithFallbackUsesConfiguredInitUnit(t *testing.T) {
 		config.ServiceKeyService: map[string]any{
 			string(servicemgr.BackendSystemd): []any{"legacy-svc"},
 		},
-	}, servicemgr.BackendSystemd, nil, servicemgr.UnitResolver{Runner: noKnownUnitsRunner{}})
+	}, servicemgr.BackendSystemd, nil, servicemgr.UnitResolver{Runner: execxtest.Fixed(execx.Result{ExitCode: 1}, nil)})
 	if target.Unit != "legacy-svc" || target.Backend != servicemgr.BackendSystemd {
 		t.Fatalf("ResolveWithFallback() target = %+v, want legacy-svc/systemd", target)
 	}
@@ -183,12 +184,6 @@ func (p *countingProbe) PathExists(string) bool {
 }
 
 func (*countingProbe) ReadFile(string) ([]byte, error) { return nil, errors.New("not found") }
-
-type noKnownUnitsRunner struct{}
-
-func (noKnownUnitsRunner) Run(context.Context, string, ...string) (execx.Result, error) {
-	return execx.Result{ExitCode: 1}, nil
-}
 
 type noKnownUnitsProbe struct{}
 

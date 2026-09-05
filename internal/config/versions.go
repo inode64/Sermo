@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sermo/internal/cfgval"
+	"sermo/internal/hostfs"
 	"sermo/internal/servicemgr"
 	"sort"
 	"strconv"
@@ -815,7 +816,7 @@ func refineJavaReleaseVersion(values map[string]string, realPath string) map[str
 		return values
 	}
 	releasePath := filepath.Join(filepath.Dir(filepath.Dir(realPath)), "release")
-	data, err := os.ReadFile(releasePath) //nolint:gosec // G304: Gentoo package release file beside resolved binary
+	data, err := hostfs.ReadFile(releasePath)
 	if err != nil {
 		return values
 	}

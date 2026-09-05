@@ -47,7 +47,10 @@ var errNoSNMPResponse = errors.New("no response packet")
 
 func (snmpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	timeout := netutil.TimeoutFromContext(ctx, defaultSNMPProbeTimeout)
-	params := buildSNMPParams(ctx, cfg, timeout)
+	params, err := buildSNMPParams(ctx, cfg, timeout)
+	if err != nil {
+		return Result{}, probeErr(ProtocolNameSNMP, stepConnect, err)
+	}
 	if err := params.Connect(); err != nil {
 		return Result{}, probeErr(ProtocolNameSNMP, stepConnect, err)
 	}
@@ -98,13 +101,16 @@ func snmpVersionName(cfg Config) string {
 // buildSNMPParams maps the connection config to a gosnmp client: v2c (community)
 // when no user is set, otherwise v3 USM (authNoPriv with SHA when a password is
 // present, else noAuthNoPriv).
-func buildSNMPParams(ctx context.Context, cfg Config, timeout time.Duration) *g.GoSNMP {
+func buildSNMPParams(ctx context.Context, cfg Config, timeout time.Duration) (*g.GoSNMP, error) {
 	target := probeTargetFor(ctx, cfg, defaultSNMPPort)
 	host, port := target.hostPort()
+	udpPort, err := wireUint16(ProtocolNameSNMP, "port", port)
+	if err != nil {
+		return nil, err
+	}
 	p := &g.GoSNMP{
-		Target: host,
-		//nolint:gosec // G115: config validation rejects any port outside cfgval.ValidTCPPort before it reaches a probe.
-		Port:      uint16(port),
+		Target:    host,
+		Port:      udpPort,
 		Transport: networkUDP,
 		Context:   ctx,
 		Timeout:   timeout,
@@ -120,7 +126,7 @@ func buildSNMPParams(ctx context.Context, cfg Config, timeout time.Duration) *g.
 		if p.Community == "" {
 			p.Community = defaultSNMPCommunity
 		}
-		return p
+		return p, nil
 	}
 	p.Version = g.Version3
 	p.SecurityModel = g.UserSecurityModel
@@ -133,7 +139,7 @@ func buildSNMPParams(ctx context.Context, cfg Config, timeout time.Duration) *g.
 		p.MsgFlags = g.NoAuthNoPriv
 	}
 	p.SecurityParameters = usm
-	return p
+	return p, nil
 }
 
 // snmpByOID indexes the returned varbinds by their OID, normalized to a leading

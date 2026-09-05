@@ -3,7 +3,7 @@ package config
 import (
 	"errors"
 	"fmt"
-	"os"
+	"sermo/internal/hostfs"
 	"strings"
 )
 
@@ -42,7 +42,7 @@ func OSReleasePaths() []string {
 // osReleaseID returns the lowercased ID= field of os-release, or "".
 func osReleaseID() string {
 	for _, path := range OSReleasePaths() {
-		data, err := os.ReadFile(path) //nolint:gosec // G304: fixed OSReleasePaths candidates (/etc/os-release)
+		data, err := hostfs.ReadFile(path)
 		if err != nil {
 			continue
 		}
