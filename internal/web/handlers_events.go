@@ -107,11 +107,18 @@ func eventSince(r *http.Request) (time.Duration, error) {
 	if raw == "" {
 		return 0, nil
 	}
-	since, err := time.ParseDuration(raw)
-	if err != nil || since <= 0 {
+	since, ok := positiveDuration(raw)
+	if !ok {
 		return 0, fmt.Errorf("bad %s: must be a positive duration", apiQuerySince)
 	}
 	return since, nil
+}
+
+// positiveDuration parses a query duration, accepting only positive values;
+// the one place the web API turns query text into a duration.
+func positiveDuration(q string) (time.Duration, bool) {
+	d, err := time.ParseDuration(q)
+	return d, err == nil && d > 0
 }
 
 func eventBeforeID(r *http.Request) (int64, error) {
