@@ -676,6 +676,14 @@ test("failed watch filter includes missing devices", async ({ page }) => {
   await expect(page.locator("#wat-row-storage-data")).toBeHidden();
 });
 
+test("active service filter isolates the active state", async ({ page }) => {
+  await page.locator('#svc-filters [data-f="active"]').click();
+  await expect(page.locator('#svc-filters [data-f="active"]')).toHaveClass(/f-active/);
+  await expect(page.locator("#svc-row-web")).toBeVisible();
+  await expect(page.locator("#svc-row-db")).toBeHidden();
+  await expect(page.locator("#svc-row-stale")).toBeHidden();
+});
+
 test("global search opens a service and exposes individual actions", async ({ page }) => {
   await page.locator("#target-search").fill("service: db");
   await page.locator("#target-search").press("Enter");
