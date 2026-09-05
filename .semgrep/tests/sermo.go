@@ -155,6 +155,13 @@ func skipDisabledOwner(entry map[string]any) {
 	}
 }
 
+func skipDisabledTelegramKey(entry map[string]any) {
+	// ruleid: enabled-must-use-cfgval-disabled
+	if v, ok := entry[telegrambot.KeyEnabled].(bool); ok && !v {
+		return
+	}
+}
+
 func skipVerifyLiteral() *tls.Config {
 	// ruleid: tls-skip-verify-must-use-netutil
 	return &tls.Config{InsecureSkipVerify: true}
