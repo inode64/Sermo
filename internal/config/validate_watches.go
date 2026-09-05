@@ -27,7 +27,7 @@ func validateWatches(watches map[string]any, locksDir string, notifiers map[stri
 		if mode, present := entry[keyMonitor]; present {
 			validateMonitorMode(watchFieldPath(name, keyMonitor), mode, add)
 		}
-		if v, ok := entry[keyEnabled].(bool); ok && !v {
+		if cfgval.Disabled(entry) {
 			continue
 		}
 
@@ -209,7 +209,7 @@ func validateServiceWatch(name string, entry map[string]any, locksDir string, no
 		add("%s name is reserved for the version/config monitor; rename it", prefix)
 		return
 	}
-	if v, ok := entry[keyEnabled].(bool); ok && !v {
+	if cfgval.Disabled(entry) {
 		return
 	}
 	validateServiceWatchEntry(name, entry, notifiers, add)
