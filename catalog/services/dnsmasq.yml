@@ -82,7 +82,10 @@ watches:
       host: ${dhcp_host}
       port: ${dhcp_port}
       interface: ${dhcp_interface}
-      timeout: 3s
+      # dnsmasq pings a candidate address and waits about three seconds for a
+      # reply before offering it (the probe's anonymous client never has a
+      # lease to reuse), so the offer lands after a 3s timeout every cycle.
+      timeout: 10s
   tftp:
     enable_if:
       file: /etc/dnsmasq.conf

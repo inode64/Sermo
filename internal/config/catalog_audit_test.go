@@ -2054,6 +2054,12 @@ func TestCatalogDnsmasqDHCPProbeBroadcastsOnAServedLink(t *testing.T) {
 	if got := cfgval.String(check["interface"]); got != "${dhcp_interface}" {
 		t.Fatalf("dnsmasq dhcp check interface = %q, want ${dhcp_interface}", got)
 	}
+	// dnsmasq pings a candidate address for about three seconds before
+	// offering it, so a 3s probe timed out one cycle after another while the
+	// server logged an offer every time.
+	if timeout, err := time.ParseDuration(cfgval.String(check["timeout"])); err != nil || timeout < 10*time.Second {
+		t.Fatalf("dnsmasq dhcp check timeout = %v, want at least 10s for the server's address ping", check["timeout"])
+	}
 	iface := nested(t, dnsmasq, "variables", "dhcp_interface")
 	if got := cfgval.String(iface["from_file"]); got != "${config}" {
 		t.Fatalf("dhcp_interface from_file = %q, want ${config}", got)
