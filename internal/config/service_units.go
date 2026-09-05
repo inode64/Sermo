@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"sermo/internal/servicemgr"
+	"sermo/internal/strutil"
 )
 
 const serviceUnitDiscoveryTimeout = 2 * time.Second
@@ -41,22 +42,9 @@ func (c *Config) activeServiceUnits(ctx context.Context, backend string) []strin
 }
 
 func normalizeServiceUnits(units []string) []string {
-	seen := map[string]struct{}{}
-	out := make([]string, 0, len(units))
-	for _, unit := range units {
-		out = appendServiceUnit(out, seen, unit)
+	trimmed := make([]string, len(units))
+	for i, unit := range units {
+		trimmed[i] = strings.TrimSpace(unit)
 	}
-	return out
-}
-
-func appendServiceUnit(out []string, seen map[string]struct{}, unit string) []string {
-	unit = strings.TrimSpace(unit)
-	if unit == "" {
-		return out
-	}
-	if _, ok := seen[unit]; ok {
-		return out
-	}
-	seen[unit] = struct{}{}
-	return append(out, unit)
+	return strutil.Unique(trimmed)
 }
