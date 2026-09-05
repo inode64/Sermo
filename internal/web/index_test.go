@@ -221,6 +221,15 @@ func assertIndexShellTable(t *testing.T, headers map[string]bool, dialogs int) {
 	}
 }
 
+func TestIndexShellHasActiveServiceFilter(t *testing.T) {
+	_, raw := parsedIndex(t)
+	for _, marker := range []string{`data-f="active"`, `data-cf="active"`, `data-vf="active"`} {
+		if !strings.Contains(raw, marker) {
+			t.Errorf("shell missing active status filter %q", marker)
+		}
+	}
+}
+
 func TestSourceProvidesGlobalTargetSearch(t *testing.T) {
 	appJSMustContain(t, "global target search",
 		`function globalTargetRecords()`,

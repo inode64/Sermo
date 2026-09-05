@@ -233,7 +233,7 @@ Renderizadas por `renderOverview` a partir del estado ya cargado, sin solicitude
 
 | Tipo de tarjeta | Contenido actual |
 | --- | --- |
-| Servicios activos | recuento / total para servicios en `started`, `collecting`, `warning`, `restart_required` o `monitored`; crítico cuando algún servicio está `failed`, aviso mientras algún servicio está `collecting`, `warning` o `restart_required`, neutral mientras algún objetivo se está asentando, en caso contrario activo; al hacer clic abre el filtro de servicio correspondiente |
+| Servicios activos | recuento / total para servicios en `started`, `active`, `collecting`, `warning`, `restart_required` o `monitored`; crítico cuando algún servicio está `failed`, aviso mientras algún servicio está `collecting`, `warning` o `restart_required`, neutral mientras algún objetivo se está asentando, en caso contrario activo; al hacer clic abre el filtro de servicio correspondiente |
 | Watches | recuento / total; crítico cuando algún watch está `failed` o `missing`, neutral mientras algún objetivo se está asentando (el subtítulo nombra los watches, servicios o aplicaciones que están iniciando), en caso contrario silencioso; al hacer clic abre el filtro `starting`/`failed` correspondiente |
 | Alertas | recuento de servicios en fallo, watches disparados, aplicaciones instaladas en fallo y locks activos, con un desglose por tipo; al hacer clic dirige a `failed-services`, `failed-watches`, `failed-apps` o `locks-section` por orden de prioridad |
 | Monitorizado | servicios en estado `monitored` o `restart_required` frente a servicios habilitados; aviso mientras haya servicios en `collecting`, `warning` o `restart_required` (el subtítulo nombra los que requieren atención), neutral con subtítulo de asentamiento durante el arranque, al hacer clic abre el filtro de servicio relevante |
@@ -291,7 +291,7 @@ bajo `catalog/services`. Consulta [cli.md](cli.es.md#inventario-de-catálogo).
 | Título | `Services` más el recuento total |
 | Iconos del título | agrupar por categoría, contraer/expandir todos los grupos |
 | Controles | búsqueda, selector de categoría, filtros de estado, recuento mostrado |
-| Filtros de estado | all, disabled, stopped, started, starting, collecting, monitored, restart required, warning, failed |
+| Filtros de estado | all, disabled, stopped, started, active, starting, collecting, monitored, restart required, warning, failed |
 | Ordenación | Service, Category, State |
 | Agrupación | filas de grupo por categoría, contraíbles |
 
@@ -301,7 +301,7 @@ Columnas:
 | --- | --- |
 | Service | nombre para mostrar, con fallback al nombre, capitalizado |
 | Category | categoría YAML o fallback |
-| State | estado de servicio normalizado único: `disabled`, `stopped`, `started`, `starting`, `collecting`, `monitored`, `restart_required`, `warning` o `failed`; `restart_required` significa que el service observado está disponible pero ejecuta un binario reemplazado en disco; `warning` cubre configuración de aplicación inválida, un service sano sin árbol de procesos atribuible o una carga con unidad de init fallida pero proceso vivo verificado y comprobaciones funcionales correctas; el texto visible y `state_reason` distinguen los casos |
+| State | estado de servicio normalizado único: `disabled`, `stopped`, `started`, `active`, `starting`, `collecting`, `monitored`, `restart_required`, `warning` o `failed`; `active` significa que hay un proceso de confianza confirmado mientras checks y métricas de runtime aún no están listos; `restart_required` significa que el service observado está disponible pero ejecuta un binario reemplazado en disco; `warning` cubre configuración de aplicación inválida, un service sano sin árbol de procesos atribuible o una carga con unidad de init fallida pero proceso vivo verificado y comprobaciones funcionales correctas; el texto visible y `state_reason` distinguen los casos |
 | Uptime | antigüedad del proceso de servicio más antiguo descubierto, cuando está disponible |
 | CPU total | último uso de CPU de todo el árbol de procesos; vacío para servicios `no_resident_process` |
 | Memory | última memoria residente del árbol de procesos; vacío para servicios `no_resident_process` |
