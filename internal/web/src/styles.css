@@ -758,16 +758,10 @@
        of 34vw still spilled past the expansion. The full command stays in the
        cell's title. */
     .detail-compact-table .truncate { max-width: 24vw; }
-    /* Rules -> Name · Action · Condition · State: seven columns split
-       "remediation" and "restart" letter by letter on a phone. The type
-       follows from the action (an operation is remediation, alert is alert),
-       and window and progress are the rule's for-window bookkeeping; the kept
-       cells wrap only between words and at the hyphens of a rule name, never
-       inside a word. */
-    .detail-rules-table th:nth-child(2), .detail-rules-table td:nth-child(2),
-    .detail-rules-table th:nth-child(5), .detail-rules-table td:nth-child(5),
-    .detail-rules-table th:nth-child(6), .detail-rules-table td:nth-child(6) { display: none; }
-    .services-table .detail-rules-table td { overflow-wrap: normal; }
+    /* A phone reads a service's state and acts on it; the per-check and
+       per-rule tables are desk work and stay on wider viewports (the state
+       reason and the checks-failing count in the row still say what is wrong). */
+    .service-detail [data-detail-section="checks"], .service-detail [data-detail-section="rules"] { display: none; }
     /* The desktop expansion indents its content under the row's name; on a
        phone that indent is a fifth of the row, so it shrinks with the cell
        padding above and hands the width back to the expansion's own tables. */

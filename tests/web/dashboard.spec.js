@@ -740,25 +740,27 @@ test("expanded detail tables keep their headers in flow", async ({ page }) => {
   expect(clipped).toEqual([]);
 });
 
-test("expanded check and lock tables keep readable columns on a phone", async ({ page }) => {
+// A phone reads a service's state and acts on it: the per-check and per-rule
+// tables are desk work, so the expansion hides them there and keeps the lock
+// table readable.
+test("expanded checks and rules hide on a phone and the lock table stays readable", async ({ page }) => {
   await page.setViewportSize({ width: 412, height: 915 });
   await page.locator("#svc-row-web .row-toggle").click();
   const detail = page.locator("#services-section .service-detail");
   await expect(detail).toBeVisible();
+  await expect(detail.locator('[data-detail-section="checks"]')).toBeHidden();
+  await expect(detail.locator('[data-detail-section="rules"]')).toBeHidden();
+  await expect(detail.locator("h2", { hasText: "Named locks" })).toBeVisible();
   const visibleHeadings = (table) => detail.locator(`${table} thead th`).evaluateAll((cells) =>
     cells.filter((th) => th.getClientRects().length > 0).map((th) => th.textContent.trim()));
-  expect(await visibleHeadings(".detail-checks-table")).toEqual(["Check", "State", "Message"]);
-  expect(await splitWordsIn(page, "#services-section .detail-checks-table")).toEqual([]);
   expect(await visibleHeadings(".detail-locks-table")).toEqual(["Name", "State", "Owner", "Reason", "Actions"]);
-  // With three columns the check name has room: a one-word name stays on one line.
-  const split = await detail.locator(".detail-checks-table tbody td:first-child").evaluateAll((cells) => cells.filter((td) => {
-    const range = document.createRange();
-    range.selectNodeContents(td);
-    return range.getClientRects().length > 1 && td.textContent.trim().split(/\s+/).length === 1;
-  }).map((td) => td.textContent.trim()));
-  expect(split).toEqual([]);
-  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
-  expect(overflow).toBe(0);
+  const scrollWidth = await page.evaluate(() => document.documentElement.scrollWidth);
+  expect(scrollWidth).toBeLessThanOrEqual(page.viewportSize().width);
+
+  // Back on a desktop width both sections return with their tables.
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await expect(detail.locator('[data-detail-section="checks"] .detail-checks-table')).toBeVisible();
+  await expect(detail.getByRole("table", { name: "Remediation rules" })).toBeVisible();
 });
 
 test("invalid application configuration stays a visible warning", async ({ page }) => {
@@ -1878,14 +1880,7 @@ test("expanding a service on a phone keeps its action buttons inside the table",
   // the wrapper's own scroll stays a last resort rather than the normal case.
   expect(box.expansionOverflow).toBeLessThanOrEqual(0);
 
-  // The rules table drops its type, window and progress columns on a phone
-  // and keeps every remaining word whole ("restart", not "res|tart"); a rule
-  // name may still wrap at its hyphens.
-  const rules = detail.getByRole("table", { name: "Remediation rules" });
-  await expect(rules).toBeVisible();
-  await expect(rules.locator("thead th", { hasText: "Type" })).toBeHidden();
-  await expect(rules.locator("thead th", { hasText: "Window" })).toBeHidden();
-  await expect(rules.locator("thead th", { hasText: "Progress" })).toBeHidden();
-  const splitRuleWords = await splitWordsIn(page, '[data-service-detail="web"] .detail-rules-table');
-  expect(splitRuleWords.filter((token) => !token.includes("-"))).toEqual([]);
+  // The checks and rules tables are desk work: a phone hides both sections.
+  await expect(detail.locator('[data-detail-section="checks"]')).toBeHidden();
+  await expect(detail.locator('[data-detail-section="rules"]')).toBeHidden();
 });
