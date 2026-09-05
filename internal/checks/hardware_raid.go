@@ -1096,32 +1096,29 @@ func (p *ssaCLIParser) parseOperation(key, value string) {
 	p.observation.noteOperation(operation, progress, hasProgress)
 }
 
-func (p *ssaCLIParser) currentController() *HardwareRAIDControllerStatus {
-	if p.controllerIndex < 0 || p.controllerIndex >= len(p.observation.ControllerDetails) {
+// elementAt returns a pointer into items at index, or nil when the parser has
+// not opened that section yet or the index ran past it.
+func elementAt[T any](items []T, index int) *T {
+	if index < 0 || index >= len(items) {
 		return nil
 	}
-	return &p.observation.ControllerDetails[p.controllerIndex]
+	return &items[index]
+}
+
+func (p *ssaCLIParser) currentController() *HardwareRAIDControllerStatus {
+	return elementAt(p.observation.ControllerDetails, p.controllerIndex)
 }
 
 func (p *ssaCLIParser) currentCache() *HardwareRAIDCacheStatus {
-	if p.cacheIndex < 0 || p.cacheIndex >= len(p.observation.CacheDetails) {
-		return nil
-	}
-	return &p.observation.CacheDetails[p.cacheIndex]
+	return elementAt(p.observation.CacheDetails, p.cacheIndex)
 }
 
 func (p *ssaCLIParser) currentVolume() *HardwareRAIDVolumeStatus {
-	if p.volumeIndex < 0 || p.volumeIndex >= len(p.observation.VolumeDetails) {
-		return nil
-	}
-	return &p.observation.VolumeDetails[p.volumeIndex]
+	return elementAt(p.observation.VolumeDetails, p.volumeIndex)
 }
 
 func (p *ssaCLIParser) currentDrive() *HardwareRAIDDriveStatus {
-	if p.driveIndex < 0 || p.driveIndex >= len(p.observation.DriveDetails) {
-		return nil
-	}
-	return &p.observation.DriveDetails[p.driveIndex]
+	return elementAt(p.observation.DriveDetails, p.driveIndex)
 }
 
 func ssaCLIControllerLabel(line string, index int) string {
