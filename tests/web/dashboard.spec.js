@@ -141,9 +141,9 @@ const watches = [{
   enabled: true, monitored: true, state: "stale", sample_state: "stale", check_type: "dns",
   summary: "", interval: "1m", last_checked_at: "2026-07-10T11:57:00Z",
 }, {
-  name: "firewall-paused", display_name: "Firewall", category: "network",
+  name: "firewall-paused", display_name: "Firewall", category: "watch",
   enabled: true, monitored: false, state: "disabled", monitor: "previous", monitor_source: "web",
-  monitor_changed_at: "2026-07-10T11:55:00Z", check_type: "firewall", interval: "1m",
+  monitor_changed_at: "2026-07-10T11:55:00Z", check_type: "firewall_rules", interval: "1m",
   last_checked_at: "2026-07-10T11:54:00Z",
 }, {
   name: "legacy-watch", display_name: "Legacy watch", category: "watch",
@@ -487,6 +487,7 @@ test("inventory panels group by their meaningful type", async ({ page }) => {
   await expect(page.locator("#mount-rows .group-row")).toHaveCount(2);
   await page.locator('#watch-rows [data-group-name="Network"]').click();
   await expect(page.locator("#wat-row-icmp-gateway")).toBeHidden();
+  await expect(page.locator("#wat-row-firewall-paused")).toBeHidden();
 });
 
 test("a running manual probe keeps health visible and disables a duplicate", async ({ page }) => {

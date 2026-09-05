@@ -944,6 +944,12 @@ func TestSourceFailedWatchFilterIncludesMissing(t *testing.T) {
 	)
 }
 
+func TestSourceNetworkWatchTypesUseCanonicalCheckNames(t *testing.T) {
+	appJSMustContain(t, "canonical network watch types",
+		`const networkWatchTypes = new Set(["conntrack", "firewall_rules", "icmp", "net", "route", "tcp_connections"]);`,
+	)
+}
+
 // TestIndexAccessibilitySectionHeadings pins the per-section <h2> headings that
 // let screen-reader users navigate the dashboard by heading. The <details>
 // summaries cannot carry heading semantics (a summary's implicit button role

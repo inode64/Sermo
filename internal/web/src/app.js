@@ -5030,7 +5030,7 @@ function renderWatchReadings(readings) {
 }
 
 const storageWatchTypes = new Set(["diskio", "hdparm", "lvm", "raid", "smart", "ssacli", "storcli", "storage"]);
-const networkWatchTypes = new Set(["conntrack", "firewall", "icmp", "net"]);
+const networkWatchTypes = new Set(["conntrack", "firewall_rules", "icmp", "net", "route", "tcp_connections"]);
 const securityWatchTypes = new Set(["cert", "file"]);
 const summaryFileWatchType = "file-summary";
 

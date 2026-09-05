@@ -526,7 +526,7 @@ aparecen en el detalle del servicio.
 | Iconos del título | agrupar por tipo del panel, contraer/expandir todos los grupos de tipo (ocultos cuando solo hay un grupo) |
 | Controles | búsqueda, filtro de tipo (por panel, ver abajo), filtros de estado, recuento mostrado |
 | Filtro de tipo | `all ... types` específico del panel más los valores distintos presentes actualmente en ese panel; Storage filtra por tipo de sistema de archivos (todos sus watches comparten un mismo tipo de check), Certificate watches por algoritmo de clave pública; el selector se oculta cuando solo hay un valor |
-| Agrupación | filas plegables por el mismo tipo específico del panel usado por el filtro de tipo |
+| Agrupación | filas plegables por el mismo tipo específico del panel usado por el filtro de tipo; Network es `conntrack`, `firewall_rules`, `icmp`, `net`, `route` y `tcp_connections`, o YAML `category: network` |
 | Filtros de estado | all, disabled, ok, starting, warning, failed |
 | Búsqueda | display name, nombre crudo, categoría, tipo, resumen, intervalo, polaridad, estado/comando del hook, nombres de notifiers, estado de expand/dry-run/monitorización y condiciones |
 | Ordenación | cada columna de datos salvo Actions es ordenable de forma independiente dentro de su tabla de tipo; cada tabla empieza por Name ascendente |

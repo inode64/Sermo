@@ -511,7 +511,7 @@ service detail.
 | Title icons | group by panel type, collapse/expand all type groups (hidden when only one group exists) |
 | Controls | search, type filter (per panel, see below), state filters, showing count |
 | Type filter | panel-specific `all ... types` plus the distinct values currently present in that panel; Storage filters by filesystem type (all its watches share one check type), Certificate watches by public-key algorithm; the selector is hidden when only one value exists |
-| Grouping | collapsible rows by the same panel-specific type used by the type filter |
+| Grouping | collapsible rows by the same panel-specific type used by the type filter; Network is `conntrack`, `firewall_rules`, `icmp`, `net`, `route` and `tcp_connections`, or YAML `category: network` |
 | State filters | all, disabled, ok, starting, warning, failed |
 | Search | display name, raw name, category, type, summary, interval, polarity, hook state/command, notifier names, expand/dry-run/monitoring state and conditions |
 | Sorting | every data column except Actions is sortable independently inside its check-type table; each table defaults to Name ascending |
