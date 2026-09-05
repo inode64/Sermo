@@ -80,7 +80,7 @@ func TestMergeUnique(t *testing.T) {
 	}{
 		{name: "dedupe onto nil list", list: nil, values: []string{"a", "b", "a"}, want: []string{"a", "b"}},
 		{name: "order preserved", list: []string{"b"}, values: []string{"a", "b", "c"}, want: []string{"b", "a", "c"}},
-		{name: "empties skipped", list: []string{"a", ""}, values: []string{"", "d"}, want: []string{"a", "", "d"}},
+		{name: "list empties kept extra empties skipped", list: []string{"a", ""}, values: []string{"", "d"}, want: []string{"a", "", "d"}},
 		{name: "no values keeps list", list: []string{"x"}, values: nil, want: []string{"x"}},
 	}
 	for _, tc := range cases {
