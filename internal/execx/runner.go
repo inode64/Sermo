@@ -310,6 +310,16 @@ func deadline(ctx context.Context, timeout time.Duration) (context.Context, cont
 	return ctx, func() {}
 }
 
+// bounded applies timeout to ctx and runs call under it. Every Run* variant
+// passes through here, so the deadline and the error contract live once: the
+// runner's error is returned verbatim, because CommandRunner already names
+// the command and an injected runner's error must reach its caller unchanged.
+func bounded(ctx context.Context, timeout time.Duration, call func(context.Context) (Result, error)) (Result, error) {
+	ctx, cancel := deadline(ctx, timeout)
+	defer cancel()
+	return call(ctx)
+}
+
 // Run is a fortified wrapper that ensures the command runs under a deadline
 // and then delegates to r.Run.
 //
@@ -321,23 +331,17 @@ func deadline(ctx context.Context, timeout time.Duration) (context.Context, cont
 // still encouraged to pass a positive per-command timeout for fast-failing
 // probes and queries.
 func Run(ctx context.Context, r Runner, timeout time.Duration, name string, args ...string) (Result, error) {
-	ctx, cancel := deadline(ctx, timeout)
-	defer cancel()
-	//nolint:wrapcheck // CommandRunner already attaches the canonical command context; preserve injected runner errors for callers.
-	return r.Run(ctx, name, args...)
+	return bounded(ctx, timeout, func(ctx context.Context) (Result, error) { return r.Run(ctx, name, args...) })
 }
 
 // RunUser is the fortified equivalent of Run for a command that must execute as
 // a specific OS user. If the runner cannot change users, it fails closed.
 func RunUser(ctx context.Context, r Runner, timeout time.Duration, user, name string, args ...string) (Result, error) {
-	ctx, cancel := deadline(ctx, timeout)
-	defer cancel()
-
-	if ur, ok := r.(UserRunner); ok {
-		//nolint:wrapcheck // CommandRunner already attaches the canonical command context; preserve injected runner errors for callers.
-		return ur.RunUser(ctx, user, name, args...)
+	ur, ok := r.(UserRunner)
+	if !ok {
+		return Result{ExitCode: ExitCodeRunFailure}, fmt.Errorf("execx: runner does not support user %q", user)
 	}
-	return Result{ExitCode: ExitCodeRunFailure}, fmt.Errorf("execx: runner does not support user %q", user)
+	return bounded(ctx, timeout, func(ctx context.Context) (Result, error) { return ur.RunUser(ctx, user, name, args...) })
 }
 
 // EnvRunner is an optional interface implemented by runners that can execute
@@ -349,21 +353,15 @@ type EnvRunner interface {
 }
 
 // RunEnv is the fortified equivalent of Run for cases that need a custom
-// environment (e.g. hooks that inject SERMO_* variables).
-//
-// It applies the timeout (if > 0) and then delegates to an EnvRunner if the
-// provided runner implements it. If the runner does not implement EnvRunner,
-// it returns an error (in normal Sermo usage we always pass CommandRunner
-// for hooks).
+// environment (e.g. hooks that inject SERMO_* variables). A runner that cannot
+// take an environment fails closed (in normal Sermo usage hooks always get
+// CommandRunner).
 func RunEnv(ctx context.Context, r Runner, env []string, timeout time.Duration, name string, args ...string) (Result, error) {
-	ctx, cancel := deadline(ctx, timeout)
-	defer cancel()
-
-	if er, ok := r.(EnvRunner); ok {
-		//nolint:wrapcheck // CommandRunner already attaches the canonical command context; preserve injected runner errors for callers.
-		return er.RunEnv(ctx, env, name, args...)
+	er, ok := r.(EnvRunner)
+	if !ok {
+		return Result{}, fmt.Errorf("execx: runner does not support custom environment (got %T)", r)
 	}
-	return Result{}, fmt.Errorf("execx: runner does not support custom environment (got %T)", r)
+	return bounded(ctx, timeout, func(ctx context.Context) (Result, error) { return er.RunEnv(ctx, env, name, args...) })
 }
 
 // ProbeRunner is an optional interface implemented by runners that collect a
@@ -380,33 +378,20 @@ type ProbeRunner interface {
 // the collection is hardening, not a capability the caller's result depends on,
 // so a test fake stays usable.
 func RunProbe(ctx context.Context, r Runner, timeout time.Duration, name string, args ...string) (Result, error) {
-	ctx, cancel := deadline(ctx, timeout)
-	defer cancel()
-
 	if pr, ok := r.(ProbeRunner); ok {
-		//nolint:wrapcheck // CommandRunner already attaches the canonical command context; preserve injected runner errors for callers.
-		return pr.RunProbe(ctx, name, args...)
+		return bounded(ctx, timeout, func(ctx context.Context) (Result, error) { return pr.RunProbe(ctx, name, args...) })
 	}
-	//nolint:wrapcheck // CommandRunner already attaches the canonical command context; preserve injected runner errors for callers.
-	return r.Run(ctx, name, args...)
+	return Run(ctx, r, timeout, name, args...)
 }
 
 // RunProbeUser is RunProbe for a probe that must execute as a specific OS user.
 // It falls back to the plain user run when the runner cannot collect process
 // groups, and fails closed when it cannot change users at all.
 func RunProbeUser(ctx context.Context, r Runner, timeout time.Duration, user, name string, args ...string) (Result, error) {
-	ctx, cancel := deadline(ctx, timeout)
-	defer cancel()
-
 	if pr, ok := r.(ProbeRunner); ok {
-		//nolint:wrapcheck // CommandRunner already attaches the canonical command context; preserve injected runner errors for callers.
-		return pr.RunProbeUser(ctx, user, name, args...)
+		return bounded(ctx, timeout, func(ctx context.Context) (Result, error) { return pr.RunProbeUser(ctx, user, name, args...) })
 	}
-	if ur, ok := r.(UserRunner); ok {
-		//nolint:wrapcheck // CommandRunner already attaches the canonical command context; preserve injected runner errors for callers.
-		return ur.RunUser(ctx, user, name, args...)
-	}
-	return Result{ExitCode: ExitCodeRunFailure}, fmt.Errorf("execx: runner does not support user %q", user)
+	return RunUser(ctx, r, timeout, user, name, args...)
 }
 
 // IsContextErr reports whether err is a context cancellation or deadline.
