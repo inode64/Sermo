@@ -149,6 +149,18 @@ func (t ActionType) CanRemainActiveAfterPostflightFailure() bool {
 	}
 }
 
+// blockReason is the operator-facing explanation when this guard matches: the
+// block action's message, even if an alert is listed first. An empty message
+// falls back to naming the rule.
+func (r Rule) blockReason() string {
+	for _, action := range r.Actions {
+		if action.Type == ActionBlock && action.Message != "" {
+			return action.Message
+		}
+	}
+	return "blocked by guard " + r.Name
+}
+
 // Primary is the action other code treats as the rule's main one: the operation
 // (restart/start/stop/reload/resume) if present, else the first.
 func (r Rule) Primary() Action {
