@@ -311,10 +311,14 @@ func (b *WebBackend) checkView(cn string, e *webEntry, snap map[string]CheckSnap
 		// when its threshold is crossed, so passing it through unchanged would
 		// render a healthy sensor as "fail" next to a 100% SLA column. A
 		// verdictless check has no availability to report, so it carries the
-		// sensed state itself — that is what active/inactive renders.
+		// sensed state itself — that is what active/inactive renders. A check
+		// may also publish a verdictless reading on its own (a process check
+		// that found its binary replaced), and that reading is a state too:
+		// rendering it as "ok" would contradict the message beside it.
 		ch.OK = cs.healthy()
-		if checks.VerdictlessMode(ch.Reports) {
+		if checks.VerdictlessMode(ch.Reports) || cs.Observation == checks.ObservationNeutral {
 			ch.OK = cs.OK
+			ch.Reports = checks.ReportsState
 		}
 		ch.Optional = cs.Optional
 		ch.Skipped = cs.Skipped
