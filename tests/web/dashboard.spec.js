@@ -716,6 +716,15 @@ test("failed services prioritize restart and keep repair as a manual fallback", 
   await page.keyboard.press("Escape");
 });
 
+test("stop confirms without offering engine preflight", async ({ page }) => {
+  await page.locator('#svc-row-web [data-service-action="stop"]').click();
+  await expect(page.locator("#action-confirm")).toBeVisible();
+  await expect(page.locator("#confirm-body")).toContainText("will not start the service again");
+  await expect(page.locator("#confirm-preflight-btn")).toBeDisabled();
+  await expect(page.locator("#confirm-preflight-hint")).toHaveText("preflight not available for this action");
+  await page.keyboard.press("Escape");
+});
+
 test("service SLA renders a status-page bar strip with incidents", async ({ page }) => {
   await page.locator("#svc-row-web .row-toggle").click();
   const detail = page.locator('[data-service-detail="web"]');

@@ -919,6 +919,14 @@ func TestSourceCompactsRowActionsWithoutChangingDispatch(t *testing.T) {
 		`act(el.dataset.service || "", el.dataset.serviceAction || "")`)
 }
 
+func TestSourceStopConfirmsWithoutEnginePreflight(t *testing.T) {
+	appJSMustContain(t, "stop confirm without engine preflight",
+		`const serviceConfirmActions = [actionStart, actionStop, actionRestart, actionRepair];`,
+		`const servicePreflightActions = [actionStart, actionRestart, actionRepair];`,
+		`if (isServiceConfirmAction(action) && !(await confirmAction(name, action))) return;`,
+	)
+}
+
 // TestIndexAccessibilitySectionHeadings pins the per-section <h2> headings that
 // let screen-reader users navigate the dashboard by heading. The <details>
 // summaries cannot carry heading semantics (a summary's implicit button role

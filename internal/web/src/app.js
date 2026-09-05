@@ -206,7 +206,10 @@ const eventKindWarning = "warning";
 const eventStatusPreflightFailed = "preflight_failed";
 const eventStatusPostflightFailed = "postflight_failed";
 const eventStatusOrphanProcesses = "orphan_processes";
-const servicePreflightActions = [actionStart, actionStop, actionRestart, actionRepair];
+// Stop still opens the confirmation dialog; the engine does not run preflight
+// on stop, so the dialog's preflight runner stays disabled for that action.
+const serviceConfirmActions = [actionStart, actionStop, actionRestart, actionRepair];
+const servicePreflightActions = [actionStart, actionRestart, actionRepair];
 // Only lifecycle actions that change the unit's running state propagate to
 // also_apply targets. Repair remains a deliberately one-service recovery.
 const serviceCascadeActions = [actionStart, actionStop, actionRestart];
@@ -386,6 +389,7 @@ function isWatchExpansionKey(key) { return key.startsWith(expansionPrefixWatch);
 function isShareableExpansionKey(key) {
   return isServiceExpansionKey(key) || isWatchExpansionKey(key) || isAppExpansionKey(key) || isLibraryExpansionKey(key);
 }
+function isServiceConfirmAction(action) { return serviceConfirmActions.includes(action); }
 function isServicePreflightAction(action) { return servicePreflightActions.includes(action); }
 function isServiceCascadeAction(action) { return serviceCascadeActions.includes(action); }
 function isDangerServiceAction(action) { return action === actionStop || action === actionRestart || action === actionRepair; }
@@ -7151,7 +7155,7 @@ function renderStatus(ctx) {
 
 async function act(name, action) {
   let noCascade = false;
-  if (isServicePreflightAction(action) && !(await confirmAction(name, action))) return;
+  if (isServiceConfirmAction(action) && !(await confirmAction(name, action))) return;
   if (isServiceCascadeAction(action)) {
     noCascade = confirmNoCascade;
   }

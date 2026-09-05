@@ -750,10 +750,12 @@ Dialog id: `action-confirm`
 | --- | --- |
 | Cabecera | título de la acción y servicio |
 | Cuerpo | advertencias de la acción, salida de preflight, contexto de lock/remediación |
-| Pie | cancelar, ejecutar preflight, confirmar |
+| Pie | cancelar, ejecutar preflight (solo start/restart/repair), confirmar |
 
 Nota de seguridad: este diálogo no debe eludir locks, guards, preflight ni los timeouts de
 operación. Solo confirma acciones que siguen pasando por el motor de operaciones del backend.
+Stop usa el mismo diálogo para que el operador siga viendo locks y contexto, pero su ejecutor
+de preflight está desactivado: el motor no ejecuta preflight en un stop.
 
 ## Plantilla de cambio
 
