@@ -104,16 +104,18 @@ func DefaultMounts() ([]Mount, error) {
 func MountForPath(table []Mount, path string) *Mount {
 	cleanPath := filepath.Clean(path)
 	var best *Mount
+	bestLen := 0
 	for i := range table {
 		mp := filepath.Clean(table[i].MountPoint)
 		if !mounts.PathUnder(cleanPath, mp) {
 			continue
 		}
-		if best == nil || len(mp) > len(filepath.Clean(best.MountPoint)) {
+		if best == nil || len(mp) > bestLen {
 			best = &table[i]
+			bestLen = len(mp)
 			continue
 		}
-		if len(mp) == len(filepath.Clean(best.MountPoint)) {
+		if len(mp) == bestLen {
 			best = betterMount(best, &table[i])
 		}
 	}

@@ -62,6 +62,7 @@ func TestPathStrictlyUnder(t *testing.T) {
 		{name: "root excludes itself", path: "/", mountPoint: "/", want: false},
 		{name: "root contains child", path: "/anything", mountPoint: "/", want: true},
 		{name: "exact mountpoint", path: "/mnt", mountPoint: "/mnt", want: false},
+		{name: "trailing slash is still the mountpoint", path: "/mnt/", mountPoint: "/mnt", want: false},
 		{name: "clean equality", path: "/mnt/data/..", mountPoint: "/mnt", want: false},
 		{name: "direct child", path: "/mnt/data", mountPoint: "/mnt", want: true},
 		{name: "nested child", path: "/mnt/data/x", mountPoint: "/mnt", want: true},
