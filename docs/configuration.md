@@ -499,9 +499,10 @@ start/stop/restart/reload/resume/repair. The engine may raise it per service whe
 `stop_policy` needs longer (graceful stop plus signal escalation). The same
 limit applies to automatic remediation, `sermoctl` actions and web-initiated
 operations. When the web UI is enabled, `sermod` also sets the HTTP server's
-initial write timeout from the longest resolved deadline and extends each long
-action response from the active configuration after a reload, so an operation is
-not cut off mid-request. The default is `90s`.
+initial write timeout from the longest resolved deadline — including a watch
+probe's check `timeout:` — and extends each long action response from the
+active configuration after a reload, so an operation or a manual probe is not
+cut off mid-request. The default is `90s`.
 
 `engine.startup_delay` is a non-negative duration that holds the daemon before
 it starts its first check cycle, giving the host time to finish booting so

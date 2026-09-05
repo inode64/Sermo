@@ -110,14 +110,7 @@ func watchErrorReadings(message string) []web.WatchReading {
 // failed at ten seconds claiming thirty — and every manual probe of a spinning
 // disk failed while its scheduled cycle succeeded.
 func (b *WebBackend) probeTimeout(check map[string]any) time.Duration {
-	if timeout := cfgval.Duration(check[checks.CheckKeyTimeout]); timeout > 0 {
-		return timeout
-	}
-	timeout := b.defaultTimeout
-	if timeout <= 0 {
-		timeout = b.operationTimeout
-	}
-	return timeout
+	return checkProbeTimeout(check, b.defaultTimeout, b.operationTimeout)
 }
 
 func (b *WebBackend) probeContext(parent context.Context, check map[string]any) (context.Context, context.CancelFunc) {

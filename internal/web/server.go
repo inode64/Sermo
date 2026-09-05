@@ -1255,7 +1255,7 @@ const minWriteTimeout = 30 * time.Second
 // Server is the HTTP dashboard. Addr is a host:port; Backend is required. Auth is
 // optional (zero value = open). OperationTimeout bounds how long start/stop/restart/reload/resume
 // may run and sizes the initial HTTP write deadline; it should be the maximum
-// per-service deadline (app.MaxOperationTimeout).
+// per-service and watch-probe deadline (app.MaxOperationTimeout).
 type Server struct {
 	Addr    string
 	Backend Backend
@@ -1282,7 +1282,8 @@ type Server struct {
 
 	OperationTimeout time.Duration
 	// OperationTimeoutSource supplies the active maximum timeout after a daemon
-	// reload. It is optional; OperationTimeout remains the fallback.
+	// reload, including watch probe budgets. It is optional; OperationTimeout
+	// remains the fallback.
 	OperationTimeoutSource func() time.Duration
 	// Readiness is optional; nil makes /readyz report ready (tests).
 	Readiness ReadinessChecker

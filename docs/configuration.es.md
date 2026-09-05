@@ -514,9 +514,10 @@ seguro. El motor puede aumentarlo por service cuando el `stop_policy` resuelto n
 más tiempo (parada elegante más escalado de señales). El mismo límite se aplica a la
 remediación automática, las acciones de `sermoctl` y las operaciones iniciadas desde la
 web. Cuando la interfaz web está habilitada, `sermod` también establece el timeout de
-escritura inicial del servidor HTTP a partir del plazo resuelto más largo y extiende
-cada respuesta de acción larga desde la configuración activa tras una recarga, de modo
-que una operación no se corte a mitad de la petición. El valor por defecto es `90s`.
+escritura inicial del servidor HTTP a partir del plazo resuelto más largo — incluido
+el `timeout:` de una prueba manual de watch — y extiende cada respuesta de acción
+larga desde la configuración activa tras una recarga, de modo que una operación o
+una prueba manual no se corte a mitad de la petición. El valor por defecto es `90s`.
 
 `engine.startup_delay` es una duración no negativa que retiene el daemon antes de
 iniciar su primer ciclo de comprobación, dando al host tiempo para terminar de arrancar
