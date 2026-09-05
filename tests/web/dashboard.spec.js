@@ -551,6 +551,32 @@ test("stale binary has a distinct restart-required state and visible reason", as
   await expect(detail.locator(".runtime-grid .state-reason")).toHaveText("binary replaced on disk");
 });
 
+test("expanded detail tables keep their headers in flow", async ({ page }) => {
+  await page.locator("#svc-row-web .row-toggle").click();
+  const detail = page.locator("#services-section .service-detail");
+  await expect(detail).toBeVisible();
+  // The section table's own header is sticky; a nested table's header scrolls
+  // away with its row and never pins itself under the top bar.
+  await expect(page.locator("#services-section .services-table > thead > tr > th").first()).toHaveCSS("position", "sticky");
+  const nested = await detail.locator("table thead th").evaluateAll((cells) =>
+    cells.map((th) => getComputedStyle(th).position));
+  expect(nested.length).toBeGreaterThan(0);
+  expect(nested.every((position) => position === "static")).toBe(true);
+
+  await page.setViewportSize({ width: 412, height: 915 });
+  // Fixed phone columns hold every nested heading inside its own cell instead
+  // of clipping it against the next one ("NAMI STAT TTL ..."). Screen-reader
+  // tables are visually collapsed on purpose and stay out of the measurement.
+  const clipped = await detail.locator("table:not(.visually-hidden) thead th").evaluateAll((cells) => cells.filter((th) => {
+    const range = document.createRange();
+    range.selectNodeContents(th);
+    const text = range.getBoundingClientRect();
+    const cell = th.getBoundingClientRect();
+    return text.right > cell.right + 1;
+  }).map((th) => th.textContent));
+  expect(clipped).toEqual([]);
+});
+
 test("invalid application configuration stays a visible warning", async ({ page }) => {
   const body = JSON.parse(JSON.stringify(dashboard));
   const service = body.services.find((item) => item.name === "db");
@@ -1623,3 +1649,7 @@ test("a 401 from the API navigates to the login route", async ({ page }) => {
   await page.waitForURL(/\/login$/, { timeout: 15000 });
   expect(new URL(page.url()).pathname).toBe("/login");
 });
+
+
+
+
