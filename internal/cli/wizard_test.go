@@ -647,6 +647,13 @@ func TestParseWatchFile(t *testing.T) {
 	if len(targets) != 1 || targets[0] != "/data" {
 		t.Fatalf("targets = %v, want /data", targets)
 	}
+	slashPath := filepath.Join(dir, "storage-slash.yml")
+	if err := os.WriteFile(slashPath, []byte("name: storage-slash\ncheck: { type: storage, path: /data/ }\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, targets := parseWatchFile(slashPath); len(targets) != 1 || targets[0] != "/data" {
+		t.Fatalf("trailing-slash path = %v, want /data", targets)
+	}
 
 	netPath := filepath.Join(dir, "net.yml")
 	netBody := "name: net-eth0\ncheck: { type: net, interface: eth0 }\n"
