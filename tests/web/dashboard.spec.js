@@ -625,6 +625,16 @@ test("application rows keep their last activity inside a cell", async ({ page })
   expect(widths.expansion).toBe(widths.row);
 });
 
+test("row expansions use one heading size", async ({ page }) => {
+  await page.locator("#apps-section .row-toggle").first().click();
+  const sizes = await page.locator("#apps-section .exp-row").evaluate((row) => {
+    const size = (el) => el && parseFloat(getComputedStyle(el).fontSize);
+    const headings = [...row.querySelectorAll("h2, h3")];
+    return { availability: size(headings.find((h) => h.textContent.startsWith("Availability"))), events: size(headings.find((h) => h.textContent.startsWith("Recent events"))) };
+  });
+  expect(sizes.availability).toBe(sizes.events);
+});
+
 test("expanded detail tables keep their headers in flow", async ({ page }) => {
   await page.locator("#svc-row-web .row-toggle").click();
   const detail = page.locator("#services-section .service-detail");
