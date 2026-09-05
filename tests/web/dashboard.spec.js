@@ -604,6 +604,12 @@ test("phone watch rows keep device, path and address tokens whole", async ({ pag
   expect(overflow).toBe(0);
 });
 
+test("expanded check rows keep their identifiers whole on a desktop", async ({ page }) => {
+  await page.locator("#svc-row-web .row-toggle").click();
+  await expect(page.locator("#services-section .service-detail")).toBeVisible();
+  expect(await splitWordsIn(page, "#services-section .detail-checks-table")).toEqual([]);
+});
+
 test("expanded detail tables keep their headers in flow", async ({ page }) => {
   await page.locator("#svc-row-web .row-toggle").click();
   const detail = page.locator("#services-section .service-detail");
@@ -638,6 +644,7 @@ test("expanded check and lock tables keep readable columns on a phone", async ({
   const visibleHeadings = (table) => detail.locator(`${table} thead th`).evaluateAll((cells) =>
     cells.filter((th) => th.getClientRects().length > 0).map((th) => th.textContent.trim()));
   expect(await visibleHeadings(".detail-checks-table")).toEqual(["Check", "State", "Message"]);
+  expect(await splitWordsIn(page, "#services-section .detail-checks-table")).toEqual([]);
   expect(await visibleHeadings(".detail-locks-table")).toEqual(["Name", "State", "Owner", "Reason", "Actions"]);
   // With three columns the check name has room: a one-word name stays on one line.
   const split = await detail.locator(".detail-checks-table tbody td:first-child").evaluateAll((cells) => cells.filter((td) => {

@@ -416,6 +416,12 @@
      ends up first. */
   .service-detail > :first-child { margin-top: 0; }
   .service-detail table { width: 100%; margin-bottom: .6rem; }
+  /* A check's message can be a URL or a command line, which the automatic
+     layout would let claim the row and squeeze the check name, type and state
+     into a few characters ("latenc|y"). Minimum widths keep those short
+     identifiers whole at every viewport; the message column absorbs the rest. */
+  .detail-checks-table td:nth-child(1) { min-width: 6.5rem; }
+  .detail-checks-table td:nth-child(2), .detail-checks-table td:nth-child(3) { min-width: 4.5rem; }
   .detail-compact-table { font-size: .85rem; }
   .expansion-heading { font-size: .95rem; margin: .8rem 0 .3rem; }
   .events-compact-table { width: auto; font-size: .85rem; }
