@@ -28,13 +28,18 @@ watches:
       type: service
       expect: active
   port:
+    # snmpd answers a v1/v2c query only from the sources its community grants,
+    # so an agent that names remote manager networks (or only SNMPv3 users)
+    # never answers this local probe. Keep it only when the first rocommunity
+    # line grants localhost: no source, or a default/loopback one, with or
+    # without a view. The init-service check still covers the daemon itself.
+    enable_if:
+      file: /etc/snmp/snmpd.conf
+      key: rocommunity
+      matches: '^\S+(\s+(default|localhost|127\.0\.0\.1(/\d+)?|::1)(\s.*)?|\s+-V\s.*)?$'
     check:
       type: snmp
       port: ${port}
-      # The daemon can intentionally restrict SNMP queries to authenticated
-      # managers. Keep the probe visible, but do not misreport a healthy init
-      # service as failed when no monitoring credentials were configured.
-      optional: true
   restart-if-worker-thread-hot:
     check:
       type: metric
