@@ -150,14 +150,16 @@ func http3Client(iface string, tlsConfig *tls.Config) *http.Client {
 }
 
 func httpClientWithTransport(proxyURL *url.URL, iface string) *http.Client {
-	tr := httpx.CloneDefaultTransport()
-	if proxyURL != nil {
-		tr.Proxy = http.ProxyURL(proxyURL)
+	return httpx.NewClient(httpx.ClientOptions{Proxy: proxyFunc(proxyURL), DialContext: conn.BindDialContext(iface)})
+}
+
+// proxyFunc turns an optional proxy URL into the transport hook, nil keeping
+// the environment proxy selection.
+func proxyFunc(proxyURL *url.URL) func(*http.Request) (*url.URL, error) {
+	if proxyURL == nil {
+		return nil
 	}
-	if iface != "" {
-		tr.DialContext = conn.BindDialer(iface).DialContext
-	}
-	return &http.Client{Transport: tr}
+	return http.ProxyURL(proxyURL)
 }
 
 func configureHTTPBodyAssertion(check *httpCheck, entry map[string]any) string {
@@ -205,7 +207,7 @@ func httpClientWithRedirectPolicy(client *http.Client, follow bool) *http.Client
 		return client
 	}
 	if client == nil {
-		client = &http.Client{}
+		client = httpx.NewClient(httpx.ClientOptions{})
 	}
 	copied := *client
 	copied.CheckRedirect = func(*http.Request, []*http.Request) error {
@@ -329,15 +331,13 @@ func configureHTTPCert(hc *httpCheck, entry map[string]any, rawURL string) strin
 		hc.certClient = http3Client(firstHTTPInterface(entry), inspectionTLSConfig("", tls.VersionTLS13, hc.certVerification))
 		return ""
 	}
-	tr := httpx.CloneDefaultTransport()
-	tr.TLSClientConfig = inspectionTLSConfig("", 0, hc.certVerification)
-	if pu, _ := parseProxyURL(entry); pu != nil {
-		tr.Proxy = http.ProxyURL(pu) // cert inspection also goes through the proxy (CONNECT for https)
-	}
-	if iface := firstHTTPInterface(entry); iface != "" {
-		tr.DialContext = conn.BindDialer(iface).DialContext
-	}
-	hc.certClient = &http.Client{Transport: tr}
+	// Cert inspection also goes through the proxy (CONNECT for https).
+	proxyURL, _ := parseProxyURL(entry)
+	hc.certClient = httpx.NewClient(httpx.ClientOptions{
+		TLS:         inspectionTLSConfig("", 0, hc.certVerification),
+		Proxy:       proxyFunc(proxyURL),
+		DialContext: conn.BindDialContext(firstHTTPInterface(entry)),
+	})
 	return ""
 }
 

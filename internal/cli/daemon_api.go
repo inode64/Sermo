@@ -60,7 +60,7 @@ func (a App) daemonWebDo(ctx context.Context, cfg *config.Config, method, what s
 	// If the config declares an admin password, send Basic auth (any user + pw).
 	a.applyDaemonWebAuth(req, cfg)
 
-	client := &http.Client{Timeout: daemonWebClientTimeout}
+	client := httpx.NewClient(httpx.ClientOptions{Timeout: daemonWebClientTimeout})
 	resp, err := httpx.Do(client, req)
 	if err != nil {
 		return nil, fmt.Errorf("talking to daemon web UI: %w (is sermod running with web.port set?)", err)

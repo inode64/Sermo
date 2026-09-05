@@ -1,11 +1,16 @@
 package httpx
 
 import (
+	"context"
+	"crypto/tls"
 	"errors"
 	"io"
+	"net"
 	"net/http"
+	"net/url"
 	"strings"
 	"testing"
+	"time"
 )
 
 type roundTripperFunc func(*http.Request) (*http.Response, error)
@@ -57,5 +62,35 @@ func TestCloneDefaultTransportFallsBackForCustomRoundTripper(t *testing.T) {
 
 	if transport := CloneDefaultTransport(); transport == nil {
 		t.Fatal("CloneDefaultTransport() = nil")
+	}
+}
+
+func TestNewClientSharesDefaultTransportUnlessAsked(t *testing.T) {
+	plain := NewClient(ClientOptions{Timeout: time.Second})
+	if plain.Transport != nil || plain.Timeout != time.Second {
+		t.Fatalf("plain client = %+v, want default transport with timeout", plain)
+	}
+	dialed := false
+	bound := NewClient(ClientOptions{
+		DialContext: func(context.Context, string, string) (net.Conn, error) {
+			dialed = true
+			return nil, errors.New("no dial in test")
+		},
+		TLS:               &tls.Config{ServerName: "probe", MinVersion: tls.VersionTLS12},
+		Proxy:             http.ProxyURL(&url.URL{Scheme: "http", Host: "proxy:3128"}),
+		DisableKeepAlives: true,
+	})
+	tr, ok := bound.Transport.(*http.Transport)
+	if !ok {
+		t.Fatalf("bound client transport = %T, want *http.Transport", bound.Transport)
+	}
+	if tr.TLSClientConfig == nil || tr.TLSClientConfig.ServerName != "probe" || !tr.DisableKeepAlives || tr.Proxy == nil {
+		t.Fatalf("bound transport = %+v, want TLS, proxy and no keep-alives", tr)
+	}
+	if _, err := tr.DialContext(context.Background(), "tcp", "host:1"); err == nil || !dialed {
+		t.Fatal("bound transport must dial through the given DialContext")
+	}
+	if def, isDefault := http.DefaultTransport.(*http.Transport); isDefault && def.DisableKeepAlives {
+		t.Fatal("NewClient must not mutate the shared default transport")
 	}
 }

@@ -13,6 +13,7 @@ import (
 	"sermo/internal/cfgval"
 	"sermo/internal/conn"
 	"sermo/internal/execx"
+	"sermo/internal/httpx"
 	"sermo/internal/metrics"
 	"sermo/internal/servicemgr"
 )
@@ -494,7 +495,7 @@ func buildDependencies(deps Deps) (execx.Runner, *http.Client) {
 	runner = execx.RunnerOrDefault(runner)
 	client := deps.HTTPClient
 	if client == nil {
-		client = &http.Client{}
+		client = httpx.NewClient(httpx.ClientOptions{})
 	}
 	return runner, client
 }
