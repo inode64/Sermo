@@ -31,12 +31,14 @@ watches:
     # snmpd answers a v1/v2c query only from the sources its community grants,
     # so an agent that names remote manager networks (or only SNMPv3 users)
     # never answers this local probe. Keep it only when the first rocommunity
-    # line grants localhost: no source, or a default/loopback one, with or
-    # without a view. The init-service check still covers the daemon itself.
+    # line grants the probe's community, public, to localhost: no source, or a
+    # default/loopback one, with or without a view. A site probing with
+    # another community sets the check's password and this gate together. The
+    # init-service check still covers the daemon itself.
     enable_if:
       file: /etc/snmp/snmpd.conf
       key: rocommunity
-      matches: '^\S+(\s+(default|localhost|127\.0\.0\.1(/\d+)?|::1)(\s.*)?|\s+-V\s.*)?$'
+      matches: '^public(\s+(default|localhost|127\.0\.0\.1(/\d+)?|::1)(\s.*)?|\s+-V\s.*)?$'
     check:
       type: snmp
       port: ${port}

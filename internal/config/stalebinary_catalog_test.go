@@ -86,6 +86,10 @@ func TestCatalogSNMPDProtocolProbeGatedOnLocalCommunity(t *testing.T) {
 		{"public default -V systemonly", true},
 		{"public 172.31.25.0/24", false},
 		{"public 10.0.0.0/8 -V systemonly", false},
+		// The probe sends "public": another community answers it no better
+		// than a remote-only source does.
+		{"secret", false},
+		{"secret localhost", false},
 	}
 	for _, tt := range tests {
 		if got := enableIfPredicateMatches(gate, tt.value); got != tt.want {
