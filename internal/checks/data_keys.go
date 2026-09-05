@@ -158,6 +158,7 @@ const (
 	DataKeyReferenceAgeSecs   = "reference_age_seconds"
 	DataKeyReferenceID        = "reference_id"
 	DataKeyReferenceTime      = "reference_time"
+	DataKeyReplacedBinaries   = "replaced_binaries"
 	DataKeyResidualFreqPPM    = "residual_frequency_ppm"
 	DataKeyResult             = CheckKeyResult
 	DataKeyResource           = CheckKeyResource

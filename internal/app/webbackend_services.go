@@ -233,6 +233,14 @@ func (b *WebBackend) serviceStateReason(name string, e *webEntry) string {
 			return stateReasonStaleBinary
 		}
 	}
+	// A service that declares no process selectors gets no injected check; its
+	// exact-exe process check is then what notices the replaced binary, and it
+	// publishes the same condition.
+	for _, cs := range b.currentSnapshotsOfType(name, e, checks.CheckTypeProcess) {
+		if !cs.OK && cs.Data[checks.DataKeyReplacedBinaries] != nil {
+			return stateReasonStaleBinary
+		}
+	}
 	return ""
 }
 

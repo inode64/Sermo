@@ -105,6 +105,39 @@ func TestWebBackendStaleBinaryRequiresRestartWithoutFailingHealth(t *testing.T) 
 	}
 }
 
+// dmeventd declares no process selectors, so it gets no injected stale-binary
+// check; its exact-exe process check is what notices the replaced binary. The
+// service must then read restart_required like any other stale binary instead
+// of failed, which sent operators after a daemon that was serving all along.
+func TestWebBackendProcessCheckReplacedBinaryRequiresRestart(t *testing.T) {
+	at := time.Date(2026, 8, 3, 21, 0, 0, 0, time.UTC)
+	types := map[string]string{"process": checks.CheckTypeProcess}
+	snaps := NewSnapshots()
+	snaps.now = func() time.Time { return at }
+	snaps.PublishWithCheckTypes("dmeventd", map[string]checks.Result{
+		"process": {Check: "process", OK: false, Reports: checks.ReportsState,
+			Data: map[string]any{checks.DataKeyReplacedBinaries: "/usr/bin/dmeventd"}},
+	}, map[string]bool{"process": true}, types)
+	entry := &webEntry{
+		checkNames:     []string{"process"},
+		checkTypes:     types,
+		checkIntervals: map[string]time.Duration{"process": time.Minute},
+		interval:       time.Minute,
+		status:         func(context.Context) (servicemgr.Status, error) { return servicemgr.StatusActive, nil },
+	}
+	b := &WebBackend{
+		order:     []string{"dmeventd"},
+		entries:   map[string]*webEntry{"dmeventd": entry},
+		snapshots: snaps,
+		now:       func() time.Time { return at },
+	}
+
+	svc := b.view(context.Background(), "dmeventd", entry)
+	if svc.State != TargetStateRestartRequired || svc.StateReason != stateReasonStaleBinary || svc.ChecksFailing != 0 {
+		t.Fatalf("replaced binary seen by the process check = %+v, want restart required", svc)
+	}
+}
+
 func TestWebBackendConfigurationWarningOutranksRestartRequired(t *testing.T) {
 	at := time.Date(2026, 8, 3, 21, 0, 0, 0, time.UTC)
 	names := []string{config.ConfigurationCheckName, "stale-binary"}

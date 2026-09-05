@@ -12,7 +12,9 @@ import (
 // replaced on disk. Its exe link resolves to a deleted inode, so the exact-exe
 // selector stops matching and the check read "state absent (want running)" —
 // sending the operator after a dead daemon that was in fact serving the
-// previous version. The verdict stays a failure; the message has to say why.
+// previous version. The message has to say why, and the reading is the same
+// verdictless state the stale-binary check reports: the service is serving,
+// it needs a restart, and health must not book an outage.
 func TestProcessCheckExplainsAReplacedBinaryInsteadOfBareAbsent(t *testing.T) {
 	c := processCheck{
 		name:    "process",
@@ -33,6 +35,31 @@ func TestProcessCheckExplainsAReplacedBinaryInsteadOfBareAbsent(t *testing.T) {
 	}
 	if !strings.Contains(res.Message, "/usr/bin/dmeventd was replaced on disk") {
 		t.Fatalf("message = %q, want the replaced binary named", res.Message)
+	}
+	if got := res.Observation(); got != ObservationNeutral {
+		t.Fatalf("observation = %q, want a verdictless state reading for a running replaced binary", got)
+	}
+	if got := res.Data[DataKeyReplacedBinaries]; got != "/usr/bin/dmeventd" {
+		t.Fatalf("data[%s] = %v, want the replaced binary for the state reason", DataKeyReplacedBinaries, got)
+	}
+}
+
+// A genuinely absent process is an outage, verdict included: the verdictless
+// reading is reserved for the replaced-binary case.
+func TestProcessCheckKeepsTheVerdictWhenNothingWasReplaced(t *testing.T) {
+	c := processCheck{
+		name:    "process",
+		exes:    []string{"/usr/sbin/nope"},
+		expect:  process.StateRunning,
+		observe: func(string, string) string { return process.StateAbsent },
+		stale:   func() []process.StaleBinary { return nil },
+	}
+	res := c.Run(context.Background())
+	if got := res.Observation(); got != ObservationFailing {
+		t.Fatalf("observation = %q, want a failing verdict for a missing process", got)
+	}
+	if res.Data != nil {
+		t.Fatalf("data = %v, want none without a replaced binary", res.Data)
 	}
 }
 

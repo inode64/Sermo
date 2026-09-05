@@ -36,13 +36,21 @@ func (c processCheck) Run(_ context.Context) Result {
 	message := fmt.Sprintf("state %s (want %s)", state, c.expect)
 	// A process whose executable was replaced on disk resolves no exe, so an
 	// exact-exe selector stops matching it and the service merely *looks* like
-	// it has no process. Saying "absent" then sends the operator looking for a
-	// dead daemon that is in fact running the previous version — the reading
-	// stays a failure, but it has to say why.
+	// it has no process. The stale list only names processes that are still
+	// running, so the daemon is in fact present — on the previous version. That
+	// is the condition the stale-binary check reports, and it gets the same
+	// treatment: a verdictless state reading that says why, keeps rules keyed on
+	// this check firing, and does not book an outage in health or SLA accounting
+	// for a service that is serving. A bare failure read as a dead daemon and
+	// sent the operator after a process that was there all along.
 	if !ok && state == process.StateAbsent {
 		if replaced := c.replacedBinaries(); replaced != "" {
 			message += fmt.Sprintf("; %s was replaced on disk, so no process matches this executable; %s",
 				replaced, StaleBinaryRestartHint)
+			res := c.result(ok, message, start)
+			res.Reports = ReportsState
+			res.Data = map[string]any{DataKeyReplacedBinaries: replaced}
+			return res
 		}
 	}
 	return c.result(ok, message, start)
