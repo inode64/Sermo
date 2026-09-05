@@ -15,7 +15,7 @@ import sys
 from pathlib import Path
 
 # Package path suffix (as printed by `go tool cover -func`) → minimum %.
-# Keep AGENTS.md / AGENTS.es.md in step when these floors change.
+# Keep AGENTS.md in step when these floors change.
 THRESHOLDS: dict[str, float] = {
     "sermo/internal/operation": 88.0,
     "sermo/internal/process": 75.0,

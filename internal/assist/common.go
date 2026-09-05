@@ -30,7 +30,7 @@ const (
 // Monitoring is the shared monitor-state + interval answer every wizard asks
 // once the targets are chosen. It is injected verbatim into each generated
 // entry (a watch entry or a service body) by the assistants, so the question
-// flow stays identical across wizards. See docs/wizards.md.
+// flow stays identical across wizards.
 type Monitoring struct {
 	Monitor  string // config `monitor:` value: enabled | disabled | previous
 	Interval string // config `interval:` value; "" inherits the global engine interval

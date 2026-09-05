@@ -1,19 +1,12 @@
 ---
 name: sermo-remote-testing
-description: >-
-  Use when running safe Sermo validation or exploratory tests on remote Linux
-  servers over SSH, using .env.ssh as the source of truth, local GOAMD64=v1
-  builds, staged all-host runs, temporary /tmp validation, or explicit remote
-  installations under /etc/sermo. Covers active-services-only config, unsupported
-  active-service reports, all safely discoverable host watches, dry-run
-  deployments, storage under 5 percent free with 5G expand, fstab-backed local/network/USB
-  mount units, Docker containers, libvirt/QEMU virtual machines, SMART daily,
-  hdparm every 6h, Web UI on 0.0.0.0:9797 with startup/readiness/access timing,
-  operator-owned deployment tooling kept outside Git, and safe alert/notification
-  checks that must not execute hooks or alter server behavior.
+description: Use when running Sermo validation or exploratory tests on remote Linux servers over SSH, using .env.ssh, local GOAMD64=v1 builds, staged all-host runs, temporary /tmp validation, or explicit remote installation under /etc/sermo.
 ---
 
 # Sermo Remote Testing
+
+This is a fleet runbook, not product schema. Do not copy its storage, cert,
+Docker, SMART or Web UI thresholds into catalog, docs or production defaults.
 
 ## Core Rules
 

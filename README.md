@@ -255,7 +255,7 @@ Daemon flags (`--verbose`) are in
 - [Safety](docs/safety.md) — the invariants that cannot be disabled: no
   unguarded actions, no SIGKILL by default, never kill by name (exact
   resolved-exe + UID match only).
-- [Web dashboard](docs/webui-representation.md) — what every panel, badge and
-  graph on the dashboard means.
+- [Web dashboard](docs/configuration.md#web-ui) — enabling the dashboard, its
+  access model and what it shows.
 - [Architecture](docs/architecture.md) — end-to-end diagrams of the daemon,
   the operation pipeline, lock states and the monitoring cycle.

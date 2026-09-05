@@ -84,7 +84,7 @@ func volumeLabel(v Volume) string {
 
 // volSettings are the answers gathered for one (or all) volume(s).
 type volSettings struct {
-	Monitoring        // shared monitor-state + interval (asked first, see docs/wizards.md)
+	Monitoring        // shared monitor-state + interval (asked first)
 	metric     string // checks.LevelFieldFreePct/UsedPct/FreeBytes/UsedBytes
 	op         string
 	value      any
