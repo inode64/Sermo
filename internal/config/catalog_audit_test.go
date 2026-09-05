@@ -2040,6 +2040,50 @@ func TestCatalogDaemonProcessChecksAreAuxiliary(t *testing.T) {
 // named one packaged layout and the host used another. A resolved tree collapses
 // a candidate list to whichever path exists there, which is host-dependent, so
 // the invariant is asserted on the raw documents.
+// TestCatalogDnsmasqDHCPProbeBroadcastsOnAServedLink pins the probe mode that
+// kept every dnsmasq DHCP server failing: a local server never answers a
+// unicast aimed at 127.0.0.1 (the packet reaches it over lo, where it has no
+// address pool), so the catalog broadcasts on the first served link that is
+// not the loopback and falls back to the unicast only when the config names no
+// interface. Asserted on the raw document because resolution reads the host's
+// own /etc/dnsmasq.conf.
+func TestCatalogDnsmasqDHCPProbeBroadcastsOnAServedLink(t *testing.T) {
+	root := repoRoot(t)
+	dnsmasq := catalogDocByName(t, root, "services", "dnsmasq")
+	check := nested(t, dnsmasq, "watches", "dhcp", "check")
+	if got := cfgval.String(check["interface"]); got != "${dhcp_interface}" {
+		t.Fatalf("dnsmasq dhcp check interface = %q, want ${dhcp_interface}", got)
+	}
+	iface := nested(t, dnsmasq, "variables", "dhcp_interface")
+	if got := cfgval.String(iface["from_file"]); got != "${config}" {
+		t.Fatalf("dhcp_interface from_file = %q, want ${config}", got)
+	}
+	if v, has := iface["default"]; !has || cfgval.String(v) != "" {
+		t.Fatalf("dhcp_interface default = %v, want an empty unicast fallback", v)
+	}
+	re := regexp.MustCompile(cfgval.String(iface["pattern"]))
+	tests := []struct {
+		conf string
+		want string
+	}{
+		{"interface=lo\ninterface=eth0\ninterface=eth1\nno-dhcp-interface=lo\n", "eth0"},
+		{"interface=eth1\ninterface=br0\nbind-interfaces\n", "eth1"},
+		{"interface = lan0\n", "lan0"},
+		{"interface=lo0\n", "lo0"},
+		{"interface=lo\n", ""},
+		{"dhcp-range=192.0.2.10,192.0.2.99,12h\n", ""},
+	}
+	for _, tt := range tests {
+		got := ""
+		if m := re.FindStringSubmatch(tt.conf); m != nil {
+			got = m[1]
+		}
+		if got != tt.want {
+			t.Errorf("dhcp_interface for %q = %q, want %q", tt.conf, got, tt.want)
+		}
+	}
+}
+
 // TestCatalogEximCertGatedOnImplicitTLS pins the gate that stopped a healthy
 // Exim reading warning forever. Asserted on the raw document because a resolved
 // tree prunes the gate on any host without /etc/exim/exim.conf, this one
