@@ -37,7 +37,7 @@ func Unique(values []string) []string {
 }
 
 // MergeUnique appends each non-empty value not already present in list,
-// preserving order. Empty strings in either input are skipped.
+// preserving order. Empty strings already in list stay; empty extras are skipped.
 func MergeUnique(list []string, values ...string) []string {
 	seen := make(map[string]struct{}, len(list)+len(values))
 	for _, value := range list {
