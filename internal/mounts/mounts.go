@@ -41,15 +41,7 @@ func UnescapeField(s string) string {
 // child of it. The comparison is lexical: both paths are cleaned, but symlinks
 // are not resolved.
 func PathUnder(path, mountPoint string) bool {
-	path = filepath.Clean(path)
-	mountPoint = filepath.Clean(mountPoint)
-	if !filepath.IsAbs(path) || !filepath.IsAbs(mountPoint) {
-		return false
-	}
-	if mountPoint == "/" {
-		return true
-	}
-	return path == mountPoint || strings.HasPrefix(path, mountPoint+"/")
+	return pathUnderCleaned(filepath.Clean(path), filepath.Clean(mountPoint))
 }
 
 // PathStrictlyUnder reports whether the absolute path is a child of the mount
@@ -58,5 +50,15 @@ func PathUnder(path, mountPoint string) bool {
 func PathStrictlyUnder(path, mountPoint string) bool {
 	path = filepath.Clean(path)
 	mountPoint = filepath.Clean(mountPoint)
-	return path != mountPoint && PathUnder(path, mountPoint)
+	return path != mountPoint && pathUnderCleaned(path, mountPoint)
+}
+
+func pathUnderCleaned(path, mountPoint string) bool {
+	if !filepath.IsAbs(path) || !filepath.IsAbs(mountPoint) {
+		return false
+	}
+	if mountPoint == "/" {
+		return true
+	}
+	return path == mountPoint || strings.HasPrefix(path, mountPoint+"/")
 }
