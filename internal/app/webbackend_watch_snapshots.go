@@ -184,25 +184,11 @@ func watchMeterFromSnapshot(checkType string, data map[string]any) *web.WatchMet
 		}
 		return loadWatchMeter(load, numCPU)
 	default:
-		countKey, ok := countMeterDataKey(checkType)
+		countKey, ok := checks.MeterCountKey(checkType)
 		if !ok {
 			return nil
 		}
 		return watchCountMeter(checkType, data, countKey)
-	}
-}
-
-// countMeterDataKey is the single inventory of count-vs-limit checks rendered
-// as a gauge. The same descriptor also suppresses a duplicate current-value row
-// when the gauge has usable capacity.
-func countMeterDataKey(checkType string) (string, bool) {
-	switch checkType {
-	case checks.CheckTypeFDS:
-		return checks.DataKeyAllocated, true
-	case checks.CheckTypePIDs, checks.CheckTypeConntrack:
-		return checks.DataKeyCount, true
-	default:
-		return "", false
 	}
 }
 

@@ -411,7 +411,7 @@ var checkReadingsByType = map[string]func(map[string]any) []web.WatchReading{
 // percentage, there is no gauge, and the count has to read out as a value or it
 // appears nowhere at all.
 func gaugedCountSample(checkType string, data map[string]any) bool {
-	if _, ok := countMeterDataKey(checkType); !ok {
+	if _, ok := checks.MeterCountKey(checkType); !ok {
 		return false
 	}
 	_, gauged := data[checks.DataKeyUsedPct]

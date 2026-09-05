@@ -91,13 +91,13 @@ func TestCountMeterDataKey(t *testing.T) {
 		{checks.CheckTypePIDs, checks.DataKeyCount},
 		{checks.CheckTypeConntrack, checks.DataKeyCount},
 	} {
-		key, ok := countMeterDataKey(tc.checkType)
+		key, ok := checks.MeterCountKey(tc.checkType)
 		if !ok || key != tc.wantKey {
-			t.Errorf("countMeterDataKey(%q) = %q, %t; want %q, true", tc.checkType, key, ok, tc.wantKey)
+			t.Errorf("checks.MeterCountKey(%q) = %q, %t; want %q, true", tc.checkType, key, ok, tc.wantKey)
 		}
 	}
-	if key, ok := countMeterDataKey(checks.CheckTypeMemory); ok || key != "" {
-		t.Fatalf("countMeterDataKey(memory) = %q, %t; want empty, false", key, ok)
+	if key, ok := checks.MeterCountKey(checks.CheckTypeMemory); ok || key != "" {
+		t.Fatalf("checks.MeterCountKey(memory) = %q, %t; want empty, false", key, ok)
 	}
 }
 
