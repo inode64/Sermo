@@ -53,9 +53,11 @@ func sshSessionFilters(apps []string, selectors []process.Selector) []process.Id
 			filters = append(filters, filter)
 		}
 	}
-	return uniqueSSHDFilters(filters)
+	return filters
 }
 
+// uniqueSSHDFilters is the sample-time owner: callers may pass overlapping
+// per-service filters; the sampler sees each exe+user identity once, sorted.
 func uniqueSSHDFilters(filters []process.IdentityFilter) []process.IdentityFilter {
 	seen := make(map[string]bool, len(filters))
 	out := make([]process.IdentityFilter, 0, len(filters))
@@ -83,7 +85,7 @@ func (b *WebBackend) allSSHSessionFilters() []process.IdentityFilter {
 			filters = append(filters, entry.sshSessionFilters...)
 		}
 	}
-	return uniqueSSHDFilters(filters)
+	return filters
 }
 
 func cloneSSHSessionSample(sample checks.SSHSessionSample) checks.SSHSessionSample {

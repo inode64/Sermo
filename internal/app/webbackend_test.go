@@ -195,6 +195,26 @@ func TestWebBackendShowsAttributedSSHSessionsAndHeaderSummary(t *testing.T) {
 	}
 }
 
+func TestSSHSessionsDeduplicatesFilters(t *testing.T) {
+	filter := mustWebIdentityFilter(t, "/usr/sbin/sshd", "root")
+	calls := 0
+	b := &WebBackend{
+		sshSessionSampler: func(config checks.SSHSessionConfig) (checks.SSHSessionSample, error) {
+			calls++
+			if len(config.SSHDFilters) != 1 || config.SSHDFilters[0].Exe != filter.Exe || config.SSHDFilters[0].User != filter.User {
+				t.Fatalf("SSHDFilters = %+v, want one unique sshd/root identity", config.SSHDFilters)
+			}
+			return checks.SSHSessionSample{}, nil
+		},
+	}
+	if _, err := b.sshSessions([]process.IdentityFilter{filter, filter}); err != nil {
+		t.Fatalf("sshSessions: %v", err)
+	}
+	if calls != 1 {
+		t.Fatalf("sampler calls = %d, want 1", calls)
+	}
+}
+
 func TestSSHSessionFiltersUseResolvedAppsMetadata(t *testing.T) {
 	selectors := []process.Selector{
 		{Exe: "/usr/sbin/sshd", User: "root"},
