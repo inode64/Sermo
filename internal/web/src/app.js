@@ -38,6 +38,7 @@ const hostMetricLoad1 = "load1";
 const eventLogLimit = "500";
 const httpStatusServiceUnavailable = 503;
 const httpStatusUnauthorized = 401;
+const httpStatusPreconditionFailed = 412;
 const loginPath = "/login";
 const expansionPrefixApp = "app:";
 const expansionPrefixLibrary = "lib:";
@@ -445,9 +446,9 @@ let connOK = true;
 let lastLoadOk = Date.now();
 let loadSeq = 0;
 let dashboardGeneration = 0;
-function targetPostOptions(headers = {}) {
-  const generation = dashboardGeneration > 0
-    ? { [apiHeaderGeneration]: String(dashboardGeneration) }
+function targetPostOptions(headers = {}, expectedGeneration = dashboardGeneration) {
+  const generation = expectedGeneration > 0
+    ? { [apiHeaderGeneration]: String(expectedGeneration) }
     : {};
   return csrfPostOptions({ ...generation, ...headers });
 }
@@ -720,6 +721,7 @@ function redirectToLogin(res) {
 async function actionResult(res) {
   if (redirectToLogin(res)) throw new Error("authentication required");
   const body = await res.json().catch(() => ({}));
+  if (res.status === httpStatusPreconditionFailed) load();
   return { body, failed: !res.ok || body.ok === false, status: res.status };
 }
 
@@ -2742,6 +2744,7 @@ function serviceCustomButtons(s, busy) {
 }
 
 async function pressServiceButton(name, button) {
+  const generation = dashboardGeneration;
   const s = (allServices || []).find((item) => item && item.name === name) || {};
   const meta = (s.buttons || []).find((b) => b && b.name === button) || {};
   const label = meta.label || button;
@@ -2753,7 +2756,7 @@ async function pressServiceButton(name, button) {
   }))) return;
   setStatus("");
   try {
-    const body = await jsonOrThrow(await fetch(serviceButtonAPI(name, button), targetPostOptions()));
+    const body = await jsonOrThrow(await fetch(serviceButtonAPI(name, button), targetPostOptions({}, generation)));
     setStatus(body.message || `${label}: ok`, feedbackStatusOK);
   } catch (err) {
     setStatus(`${label}: ${err.message || err}`, feedbackStatusErr);
@@ -6577,6 +6580,7 @@ function lockServiceLink(l) {
 }
 
 async function releaseLock(service, name) {
+  const generation = dashboardGeneration;
   const label = name ? `${service}.${name}` : service;
   if (!(await promptConfirm({
     title: `Release lock ${label}?`,
@@ -6587,7 +6591,7 @@ async function releaseLock(service, name) {
   setStatus("");
   const qs = name ? `?${apiQueryName}=${encodeURIComponent(name)}` : "";
   try {
-    const res = await fetch(lockReleaseAPI(service, qs), targetPostOptions());
+    const res = await fetch(lockReleaseAPI(service, qs), targetPostOptions({}, generation));
     await jsonOrThrow(res);
     setStatus(`released lock ${label}`, feedbackStatusOK);
     await load();
@@ -7166,6 +7170,7 @@ function renderStatus(ctx) {
 }
 
 async function act(name, action) {
+  const generation = dashboardGeneration;
   let noCascade = false;
   if (isServiceConfirmAction(action) && !(await confirmAction(name, action))) return;
   if (isServiceCascadeAction(action)) {
@@ -7182,7 +7187,7 @@ async function act(name, action) {
     setStatus("");
     if (tracked) beginOperation(name, action);
     const q = noCascade ? `?${apiQueryNoCascade}=${queryBoolOne}` : "";
-    const res = await fetch(serviceAPI(name, apiActionSuffix(action, q)), targetPostOptions());
+    const res = await fetch(serviceAPI(name, apiActionSuffix(action, q)), targetPostOptions({}, generation));
     const body = await jsonOrThrow(res);
     if (tracked) finishOperation(name, true, body.message || "operation completed");
   } catch (e) {
@@ -7194,6 +7199,7 @@ async function act(name, action) {
 }
 
 async function closeSSHSession(name, pid, startTicks, terminal, user, managedByLogind) {
+  const generation = dashboardGeneration;
   const sessionPID = Number(pid);
   const sessionStartTicks = Number(startTicks);
   if (!name || !terminal || !Number.isSafeInteger(sessionPID) || sessionPID <= 0 || !Number.isSafeInteger(sessionStartTicks) || sessionStartTicks <= 0) {
@@ -7209,13 +7215,13 @@ async function closeSSHSession(name, pid, startTicks, terminal, user, managedByL
     okLabel: "close session",
     danger: true,
   }))) return;
-  await postSessionClose(`close SSH session ${label}`, sshSessionCloseAPI(name, sessionPID, sessionStartTicks, terminal, managedByLogind));
+  await postSessionClose(`close SSH session ${label}`, sshSessionCloseAPI(name, sessionPID, sessionStartTicks, terminal, managedByLogind), generation);
 }
 
-async function postSessionClose(statusLabel, endpoint) {
+async function postSessionClose(statusLabel, endpoint, generation) {
   setStatus("");
   try {
-    const res = await fetch(endpoint, targetPostOptions());
+    const res = await fetch(endpoint, targetPostOptions({}, generation));
     const body = await jsonOrThrow(res);
     setStatus(`${statusLabel}: ${body.message || feedbackStatusOK}`, feedbackStatusOK);
     load();
@@ -7229,6 +7235,7 @@ async function postSessionClose(statusLabel, endpoint) {
 // ones, from the service's own reap.kill_only_if, so with none declared the reply
 // says nothing was authorized and nothing died.
 async function reapStrays(name) {
+  const generation = dashboardGeneration;
   const svc = (allServices || []).find((s) => s && s.name === name);
   const n = svc ? serviceStrayCount(svc) : 0;
   if (!n) return;
@@ -7245,7 +7252,7 @@ async function reapStrays(name) {
   try {
     renderServices();
     setStatus("");
-    const res = await fetch(serviceAPI(name, apiActionSuffix(actionReap)), targetPostOptions());
+    const res = await fetch(serviceAPI(name, apiActionSuffix(actionReap)), targetPostOptions({}, generation));
     const body = await jsonOrThrow(res);
     setStatus(`reap ${name}: ${body.message || feedbackStatusOK}`, feedbackStatusOK);
   } catch (e) {
@@ -7262,6 +7269,7 @@ async function reapStrays(name) {
 }
 
 async function closeTerminalSession(service, check, multiplexer, session, user, identity) {
+  const generation = dashboardGeneration;
   if (!service || !check || !session || !user || !identity || !terminalSessionKinds.includes(multiplexer)) {
     setStatus("close terminal session: invalid session identity; refresh and try again", feedbackStatusErr);
     return;
@@ -7273,10 +7281,11 @@ async function closeTerminalSession(service, check, multiplexer, session, user, 
     okLabel: "close session",
     danger: true,
   }))) return;
-  await postSessionClose(`close ${label}`, terminalSessionCloseAPI(service, check, multiplexer, session, user, identity));
+  await postSessionClose(`close ${label}`, terminalSessionCloseAPI(service, check, multiplexer, session, user, identity), generation);
 }
 
 async function closeEmptySessionSource(service, check) {
+  const generation = dashboardGeneration;
   const source = (latestSessionInventory.sources || []).find((candidate) =>
     candidate.service === service && (candidate.check || "") === check);
   if (!source || source.state !== sessionSourceAvailable || !source.can_close_empty || sourceHasSession(source, latestSessionInventory)) {
@@ -7290,10 +7299,11 @@ async function closeEmptySessionSource(service, check) {
     okLabel: "close empty server",
     danger: true,
   }))) return;
-  await postSessionClose(`close empty ${label}`, emptyTerminalSessionCloseAPI(service, check));
+  await postSessionClose(`close empty ${label}`, emptyTerminalSessionCloseAPI(service, check), generation);
 }
 
 async function actWatch(name, action) {
+  const generation = dashboardGeneration;
   let headers = {};
   if (action === actionExpand && !(await confirmWatchExpand(name))) return;
   if (action === actionPause) {
@@ -7311,7 +7321,7 @@ async function actWatch(name, action) {
     if (toggleKey) renderWatches();
     setStatus("");
     if (action === actionProbe) beginWatchProbe(name);
-    const res = await fetch(watchAPI(name, apiActionSuffix(action)), targetPostOptions(headers));
+    const res = await fetch(watchAPI(name, apiActionSuffix(action)), targetPostOptions(headers, generation));
     const { body, failed, status } = await actionResult(res);
     if (action === actionProbe) {
       applyWatchProbeResult(name, body, failed);
@@ -7384,6 +7394,7 @@ function confirmWatchRAIDResume(name) {
 }
 
 async function testNotifier(name) {
+  const generation = dashboardGeneration;
   if (!name) return;
   if (!(await promptConfirm({
     title: `Test notifier ${name}?`,
@@ -7393,7 +7404,7 @@ async function testNotifier(name) {
   }))) return;
   setStatus("");
   try {
-    const res = await fetch(notifierTestAPI(name), targetPostOptions());
+    const res = await fetch(notifierTestAPI(name), targetPostOptions({}, generation));
     const body = await jsonOrThrow(res);
     setStatus(body.message || `test notification sent to ${name}`, feedbackStatusOK);
   } catch (e) {
@@ -7402,8 +7413,9 @@ async function testNotifier(name) {
   load();
 }
 
-async function fetchMountBlockers(name) {
-  const res = await fetch(mountBlockersAPI(name));
+async function fetchMountBlockers(name, generation) {
+  const { stale, res } = await fetchPinned(mountBlockersAPI(name), generation);
+  if (stale) throw new Error("configuration changed; refresh and try again");
   return jsonOrThrow(res);
 }
 
@@ -7516,8 +7528,8 @@ function closeMountUnmountConfirm(ok) {
   if (resolve) resolve(result);
 }
 
-async function confirmMountUnmount(name) {
-  const info = await fetchMountBlockers(name);
+async function confirmMountUnmount(name, generation) {
+  const info = await fetchMountBlockers(name, generation);
   if (info.can_umount === false) {
     setStatus(`umount ${name}: ${info.umount_disabled_reason || info.message || "unmount is disabled"}`, feedbackStatusWarn);
     return null;
@@ -7525,8 +7537,8 @@ async function confirmMountUnmount(name) {
   return promptMountUnmount(name, info);
 }
 
-async function confirmMountAlert(name) {
-  const info = await fetchMountBlockers(name);
+async function confirmMountAlert(name, generation) {
+  const info = await fetchMountBlockers(name, generation);
   if (info.can_umount === false) {
     setStatus(`alert ${name}: ${info.umount_disabled_reason || info.message || "unmount is disabled"}`, feedbackStatusWarn);
     return false;
@@ -7549,13 +7561,14 @@ async function confirmMountAlert(name) {
 }
 
 async function actMount(name, action) {
+  const generation = dashboardGeneration;
   if (!name) return;
   let postAction = action;
   let query = "";
   const tracked = action === actionMount || action === actionUmount;
   try {
     if (action === actionUmount) {
-      const opts = await confirmMountUnmount(name);
+      const opts = await confirmMountUnmount(name, generation);
       if (!opts) return;
       const params = new URLSearchParams();
       if (opts.force) params.set(apiQueryForce, queryBoolOne);
@@ -7564,7 +7577,7 @@ async function actMount(name, action) {
       const encoded = params.toString();
       query = encoded ? `?${encoded}` : "";
     }
-    if (action === actionAlert && !(await confirmMountAlert(name))) return;
+    if (action === actionAlert && !(await confirmMountAlert(name, generation))) return;
   } catch (e) {
     setStatus(`${action} ${name}: ${e.message}`, feedbackStatusErr);
     return;
@@ -7573,7 +7586,7 @@ async function actMount(name, action) {
   setStatus("");
   if (tracked) startMountOperation(name, action);
   try {
-    const res = await fetch(mountAPI(name, apiActionSuffix(postAction, query)), targetPostOptions());
+    const res = await fetch(mountAPI(name, apiActionSuffix(postAction, query)), targetPostOptions({}, generation));
     const { body, failed, status } = await actionResult(res);
     if (failed) {
       const blockers = body.blockers && body.blockers.length ? `; blockers: ${mountBlockerSummary(body.blockers)}` : "";
@@ -7694,7 +7707,7 @@ function servicePreflightButton(d) {
   return tpl`${hint}<button ?disabled=${disabled} data-preflight-service="${d.name}" aria-label="Run preflight checks for ${svcName}" aria-describedby="${describedBy}">run</button>`;
 }
 
-async function confirmAction(name, action) {
+async function confirmAction(name, action, generation = dashboardGeneration) {
   const dlg = $("#action-confirm");
   if (!dlg || typeof dlg.showModal !== "function") {
     return promptConfirm({
@@ -7704,13 +7717,14 @@ async function confirmAction(name, action) {
       danger: isDangerServiceAction(action),
     });
   }
-  confirmCtx = { name, action, detail: null, lastEvent: null, preflight: null };
+  confirmCtx = { name, action, generation, detail: null, lastEvent: null, preflight: null };
   confirmNoCascade = false;
   $("#confirm-title").textContent = `${action.toUpperCase()} ${name}`;
   $("#confirm-subtitle").textContent = "Review the current service context before sending the operation.";
   litRender(tpl`<span class="muted">loading…</span>`, $("#confirm-body"));
   const actionBtn = $("#confirm-action-btn");
   if (actionBtn) {
+    actionBtn.disabled = true;
     actionBtn.textContent = `${action} ${name}`;
     actionBtn.setAttribute("aria-label", `Confirm: ${action} ${name}`);
   }
@@ -7721,7 +7735,6 @@ async function confirmAction(name, action) {
   if (cascadeBox) cascadeBox.checked = false;
 
   try {
-    const generation = dashboardGeneration;
     const [detailRes, eventRes] = await Promise.all([
       fetch(serviceAPI(name)),
       fetch(serviceEventsAPI(name, eventContextLimit)),
@@ -7741,6 +7754,7 @@ async function confirmAction(name, action) {
     const showCascade = alsoApply.length > 0 && isServiceCascadeAction(action);
     if (cascadeWrap) cascadeWrap.classList.toggle("is-hidden", !showCascade);
     renderActionConfirm();
+    if (actionBtn) actionBtn.disabled = false;
   } catch (e) {
     litRender(tpl`<span class="bad">Failed to load context: ${e.message}</span>`, $("#confirm-body"));
   }
@@ -7831,7 +7845,7 @@ async function runConfirmPreflight() {
   syncConfirmPreflightButton(ctx.action, { running: true });
   $("#confirm-preflight-btn").textContent = "running…";
   try {
-    const res = await fetch(servicePreflightAPI(ctx.name), targetPostOptions());
+    const res = await fetch(servicePreflightAPI(ctx.name), targetPostOptions({}, ctx.generation));
     if (!res.ok) throw new Error("HTTP " + res.status);
     ctx.preflight = await res.json();
   } catch (e) {

@@ -169,8 +169,11 @@ autenticación web habilitada, estos endpoints son además solo para
 administradores. Las acciones con un objetivo concreto también llevan la
 `X-Sermo-Generation` actual; el servidor mantiene esa generación del backend
 durante la acción y no ejecuta nada si falta la cabecera (`428`) o quedó
-obsoleta tras una recarga (`412`). La UI se refresca antes de un reintento
-posterior. Los demás códigos de estado estables son `401` (desafío de
+obsoleta tras una recarga (`412`). Las confirmaciones y sus peticiones de
+preflight conservan la generación mostrada al abrir el diálogo, aunque el panel
+se refresque detrás. Un cambio de configuración exige una nueva confirmación;
+la UI se refresca tras un `412` y nunca reintenta la acción automáticamente.
+Los demás códigos de estado estables son `401` (desafío de
 autenticación), `403` (falta la cabecera CSRF o un invitado intenta escribir),
 `421` (`Host` rechazado en modo abierto), `404` (objetivo desconocido) y `200`
 con un cuerpo `{"ok": bool, "message": string}` para una acción atendida.
