@@ -104,18 +104,41 @@ func TestStaleBinaryFalseLeavesOtherRemediationIntact(t *testing.T) {
 	}
 }
 
-// Nothing to discover means nothing can be stale; injecting a check there would
-// report a permanent, meaningless OK.
-func TestStaleBinarySkippedWithoutProcessSelectors(t *testing.T) {
-	tree := map[string]any{keyName: "kernel-thing"}
-	if errs := expandStaleBinary(tree); len(errs) > 0 {
-		t.Fatalf("expandStaleBinary: %v", errs)
+// A service that declares no selectors still has processes: the worker derives
+// them from the init backend, and a replaced binary there went unreported for
+// months (dmeventd showed restart_required and never alerted). Only an explicit
+// empty process set and an external control backend have nothing to check.
+func TestStaleBinaryAppliesUnlessNothingCanBeAttributed(t *testing.T) {
+	tests := []struct {
+		name string
+		tree map[string]any
+		want bool
+	}{
+		{"init-attributed", map[string]any{keyName: "kernel-thing"}, true},
+		{"explicit no processes", map[string]any{keyName: "nfs", SectionProcesses: map[string]any{}}, false},
+		{"external control", map[string]any{keyName: "n8n", SectionControl: map[string]any{"type": "docker", "container": "n8n"}}, false},
 	}
-	if _, ok := tree[rules.SectionRules]; ok {
-		t.Fatal("no rule should be generated without process selectors")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if errs := expandStaleBinary(tt.tree); len(errs) > 0 {
+				t.Fatalf("expandStaleBinary: %v", errs)
+			}
+			_, hasRule := tt.tree[rules.SectionRules]
+			_, hasCheck := tt.tree[sectionChecks]
+			if hasRule != tt.want || hasCheck != tt.want {
+				t.Fatalf("rule=%v check=%v, want both %v", hasRule, hasCheck, tt.want)
+			}
+		})
 	}
-	if _, ok := tree[sectionChecks]; ok {
-		t.Fatal("no check should be generated without process selectors")
+}
+
+// The opt-out reaches the init-attributed services too: the flag was parsed and
+// discarded there before.
+func TestStaleBinaryFalseAppliesToInitAttributedService(t *testing.T) {
+	tree := map[string]any{keyName: "kernel-thing", keyRestartOnStaleBinary: false}
+	rule := staleBinaryGeneratedRule(t, tree)
+	if got := rule[rules.RuleFieldType]; got != string(rules.RuleAlert) {
+		t.Fatalf("rule type = %v, want alert", got)
 	}
 }
 

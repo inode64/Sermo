@@ -2994,9 +2994,13 @@ removed on disk — the normal result of upgrading a package without restarting
 the service, which keeps serving the previous version indefinitely.
 
 You do not write this check: Sermo injects it, named `stale-binary`, into every
-service that declares `processes:` or `pidfile:`, together with a rule that
-alerts and then restarts. It takes no fields; the selectors it inspects are the
-service's own.
+service whose processes discovery can attribute — the ones it declares with
+`processes:`, `pidfile:` or `pidfiles:`, and, for a service that declares none,
+the ones the init backend names for its unit — together with a rule
+(`restart-on-stale-binary`) that alerts and then restarts. Only a service with
+an explicitly empty `processes: {}` and a service driven by an external
+`control:` backend (a container or a virtual machine) get neither. It takes no
+fields; the selectors it inspects are the service's own.
 
 When the init backend supplies a live process set (for example, a systemd
 cgroup), that attribution is authoritative: deleted processes elsewhere on the
@@ -3015,17 +3019,22 @@ reduce service health or SLA. When it finds a replaced executable, the service
 is shown as `restart_required` with `state_reason: stale_binary`, while
 its generated rule continues to alert and, where allowed, restart safely.
 
-Set `restart_on_stale_binary: false` on a service to keep the alert and the
-notification but drop the restart:
+Restarting is the default. Set `restart_on_stale_binary: false` on a service
+to keep the alert and the notification but drop the restart, and `true` to
+turn the restart back on for a service whose catalog profile vetoes it:
 
 ```yaml
+# /etc/sermo/services/ovs-vswitchd.yml
 name: ovs-vswitchd
 restart_on_stale_binary: false   # restarting the dataplane cuts the host off
 ```
 
-The flag governs this trigger only. A manual `sermoctl restart`, and remediation
-that restarts the service after a real failure, are unaffected. It inherits from
-`defaults:` like `dry_run`, so a whole host can opt out at once.
+The packaged profiles that veto the restart are `ovs-vswitchd`, `ovsdb-server`
+and `ovsdb-client`; every other profile restarts. The flag governs this trigger
+only. A manual `sermoctl restart`, and remediation that restarts the service
+after a real failure, are unaffected. It inherits from `defaults:` like
+`dry_run`, so a whole host can opt out at once, and the host's per-service file
+beats both the default and the catalog.
 
 A process whose executable was replaced still resolves no exe, so it matches no
 `exe` selector and is never signalled — see [safety.md](safety.md). This check
