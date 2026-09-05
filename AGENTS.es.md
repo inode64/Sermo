@@ -296,10 +296,11 @@ analizadores y `.golangci.yml` es la fuente completa de linters y exclusiones.
 No copies su lista ni sus umbrales actuales en la prosa.
 
 Usa `.custom-gcl.yml` para el build personalizado de golangci-lint y `.semgrep/`
-para reglas de fronteras de llamada del repositorio. Una regla Semgrep se entrega
-con fixtures positivos y negativos. Un `//nolint` necesario nombra el analizador
-exacto y explica la razón de diseño; nunca debilites un gate ni amplíes una
-exclusión para aterrizar un cambio.
+para reglas de fronteras de llamada del repositorio. Cómo añadir una regla,
+incluidos los fixtures positivo y negativo, está en
+[.semgrep/README.md](.semgrep/README.md). Un `//nolint` necesario nombra el
+analizador exacto y explica la razón de diseño; nunca debilites un gate ni
+amplíes una exclusión para aterrizar un cambio.
 
 El `Makefile` posee las fases YAML, Markdown, scripts, dependencias, web,
 vulnerabilidades y cobertura. Corrige los hallazgos en su fuente; no sustituyas

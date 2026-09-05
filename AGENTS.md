@@ -284,8 +284,9 @@ and `.golangci.yml` is the complete linter and exclusion source of truth. Do not
 copy its roll-call or current thresholds into prose.
 
 Use `.custom-gcl.yml` for the custom golangci-lint build and `.semgrep/` for
-repository call-boundary rules. A Semgrep rule ships with positive and negative
-fixtures. A necessary `//nolint` names the exact analyzer and explains the
+repository call-boundary rules. How to add a rule, including the required
+positive and negative fixtures, is in [.semgrep/README.md](.semgrep/README.md).
+A necessary `//nolint` names the exact analyzer and explains the
 design reason; never weaken a gate or broaden an exclusion to land a change.
 
 The `Makefile` owns YAML, Markdown, script, dependency, web, vulnerability and
