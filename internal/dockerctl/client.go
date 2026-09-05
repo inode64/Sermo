@@ -198,16 +198,13 @@ func NewClient(spec Spec) *Client {
 	if port == 0 {
 		port = DefaultPort
 	}
-	tr := httpx.CloneDefaultTransport()
-	if spec.DialContext != nil {
-		tr.DialContext = spec.DialContext
-	}
+	opts := httpx.ClientOptions{DialContext: spec.DialContext}
 	scheme := dockerSchemeHTTP
 	if mode := netutil.NormalizeTLS(spec.TLS); mode != "" {
 		scheme = dockerSchemeHTTPS
-		tr.TLSClientConfig = netutil.TLSClientConfigForMode(host, mode)
+		opts.TLS = netutil.TLSClientConfigForMode(host, mode)
 	}
-	return &Client{HTTP: &http.Client{Transport: tr}, Base: scheme + netutil.URLSchemeSeparator + netutil.JoinHostPort(host, port)}
+	return &Client{HTTP: httpx.NewClient(opts), Base: scheme + netutil.URLSchemeSeparator + netutil.JoinHostPort(host, port)}
 }
 
 // CloseIdleConnections closes idle HTTP transport connections.

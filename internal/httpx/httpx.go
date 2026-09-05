@@ -2,10 +2,15 @@
 package httpx
 
 import (
+	"context"
+	"crypto/tls"
 	"errors"
 	"io"
+	"net"
 	"net/http"
+	"net/url"
 	"strings"
+	"time"
 )
 
 const (
@@ -83,4 +88,48 @@ func CloneDefaultTransport() *http.Transport {
 		return transport.Clone()
 	}
 	return &http.Transport{}
+}
+
+// DialFunc dials one connection for an HTTP transport; conn.BindDialer
+// provides the interface-bound form.
+type DialFunc func(ctx context.Context, network, addr string) (net.Conn, error)
+
+// ClientOptions selects what a Sermo HTTP client needs beyond the default
+// transport. The zero value asks for a plain client on the shared default
+// transport.
+type ClientOptions struct {
+	// Timeout bounds the whole exchange; zero relies on the request context.
+	Timeout time.Duration
+	// DialContext replaces the transport dialer (an interface-bound dialer).
+	DialContext DialFunc
+	// TLS replaces the transport's TLS client configuration.
+	TLS *tls.Config
+	// Proxy replaces the environment proxy selection.
+	Proxy func(*http.Request) (*url.URL, error)
+	// DisableKeepAlives closes each connection after its exchange, for probes
+	// that must not leave sockets open on the target.
+	DisableKeepAlives bool
+}
+
+// NewClient is the single constructor for Sermo's HTTP clients. Options that
+// touch the transport get their own clone of the default transport; a client
+// that only sets a timeout shares the default transport and its pool.
+func NewClient(opts ClientOptions) *http.Client {
+	client := &http.Client{Timeout: opts.Timeout}
+	if opts.DialContext == nil && opts.TLS == nil && opts.Proxy == nil && !opts.DisableKeepAlives {
+		return client
+	}
+	tr := CloneDefaultTransport()
+	if opts.DialContext != nil {
+		tr.DialContext = opts.DialContext
+	}
+	if opts.TLS != nil {
+		tr.TLSClientConfig = opts.TLS
+	}
+	if opts.Proxy != nil {
+		tr.Proxy = opts.Proxy
+	}
+	tr.DisableKeepAlives = opts.DisableKeepAlives
+	client.Transport = tr
+	return client
 }

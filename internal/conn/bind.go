@@ -3,6 +3,7 @@ package conn
 import (
 	"fmt"
 	"net"
+	"sermo/internal/httpx"
 )
 
 // resolveInterface maps an identifier — an interface name (eth0), an IP address
@@ -91,6 +92,15 @@ func BindDialer(iface string) *net.Dialer {
 		d.Control = bindControl(iface)
 	}
 	return d
+}
+
+// BindDialContext returns the interface-bound dialer as a transport hook, or
+// nil for an empty interface so the transport keeps its default dialer.
+func BindDialContext(iface string) httpx.DialFunc {
+	if iface == "" {
+		return nil
+	}
+	return BindDialer(iface).DialContext
 }
 
 // BindListenConfig is the net.ListenConfig equivalent of BindDialer, for packet

@@ -103,7 +103,7 @@ func postWebhook(ctx context.Context, label, webhook string, headers map[string]
 		req.Header.Set(name, value)
 	}
 
-	client := &http.Client{Timeout: webhookTimeout}
+	client := httpx.NewClient(httpx.ClientOptions{Timeout: webhookTimeout})
 	resp, err := httpx.Do(client, req)
 	if err != nil {
 		// A transport error is a *url.Error whose text embeds the full request
