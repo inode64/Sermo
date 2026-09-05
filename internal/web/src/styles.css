@@ -776,6 +776,11 @@
     .sessions-table td:nth-child(2) { min-width: 3.5rem; }
     .sessions-table td:nth-child(3) { min-width: 7rem; }
     .sessions-table td:nth-child(4), .sessions-table td:nth-child(6) { min-width: 3rem; }
+    /* mount units -> Name · Path · State · Actions: the Mounted flag is already
+       implied by State and the eject button, and its heading was the widest
+       cell of a row that split "Backup" and "/backup" letter by letter. */
+    .mount-table th:nth-child(4), .mount-table td:nth-child(4) { display: none; }
+    .mount-table td:nth-child(1), .mount-table td:nth-child(3) { min-width: 5.5rem; }
     .ssh-session-table th:nth-child(3), .ssh-session-table td:nth-child(3) { display: none; }
     .terminal-session-table th:nth-child(5), .terminal-session-table td:nth-child(5) { display: none; }
     #app-footer .footer-version {
