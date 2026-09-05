@@ -106,13 +106,22 @@ func String(v any) string {
 	}
 }
 
-// StringList coerces a scalar-or-list YAML field into a slice of non-empty
-// strings: a []any yields its string elements and a bare string yields a
+// StringList coerces a scalar-or-list field into a slice of non-empty
+// strings: a []any yields its string elements, a []string (a live check result
+// before JSON hydration) its non-empty entries, and a bare string a
 // single-element slice. Non-string elements and empty strings are skipped.
 func StringList(v any) []string {
 	switch t := v.(type) {
 	case []any:
 		return nonEmptyStrings(t)
+	case []string:
+		out := make([]string, 0, len(t))
+		for _, s := range t {
+			if s != "" {
+				out = append(out, s)
+			}
+		}
+		return out
 	case string:
 		if t != "" {
 			return []string{t}

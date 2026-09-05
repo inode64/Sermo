@@ -571,3 +571,13 @@ func TestInvertCompareOp(t *testing.T) {
 		t.Fatalf("InvertCompareOp(unknown) = %q, want empty", got)
 	}
 }
+
+func TestStringListAcceptsLiveStringSlice(t *testing.T) {
+	got := StringList([]string{"a", "", "b"})
+	if len(got) != 2 || got[0] != "a" || got[1] != "b" {
+		t.Fatalf("StringList([]string) = %v, want [a b]", got)
+	}
+	if got := StringList([]string{}); len(got) != 0 {
+		t.Fatalf("StringList(empty []string) = %v, want empty", got)
+	}
+}

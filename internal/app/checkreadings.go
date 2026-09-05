@@ -470,20 +470,13 @@ func glusterClusterCheckReadings(data map[string]any) []web.WatchReading {
 	} {
 		rb.addInt(reading.field, reading.label)
 	}
-	if peers := readingStringList(data[checks.DataKeyGlusterPeersDisconnected]); len(peers) > 0 {
+	if peers := cfgval.StringList(data[checks.DataKeyGlusterPeersDisconnected]); len(peers) > 0 {
 		rb.add(checks.DataKeyGlusterPeersDisconnected, watchReadingLabelGlusterPeersDisconnected, strings.Join(peers, readingSummarySeparator))
 	}
-	if issues := readingStringList(data[checks.DataKeyGlusterIssues]); len(issues) > 0 {
+	if issues := cfgval.StringList(data[checks.DataKeyGlusterIssues]); len(issues) > 0 {
 		rb.add(checks.DataKeyGlusterIssues, watchReadingLabelGlusterIssues, strings.Join(issues, readingSummarySeparator))
 	}
 	return rb.readings()
-}
-
-func readingStringList(value any) []string {
-	if list, ok := value.([]string); ok {
-		return list
-	}
-	return cfgval.StringList(value)
 }
 
 // netCheckReadings keeps the metric value that the net check compared visible
@@ -495,7 +488,7 @@ func netCheckReadings(data map[string]any) []web.WatchReading {
 		out = append(out, web.WatchReading{Field: checks.DataKeyInterface, Label: watchReadingLabelInterface, Value: iface})
 	}
 	out = append(out, netIdentityReadings(data)...)
-	if addresses := readingStringList(data[checks.DataKeyAddresses]); len(addresses) > 0 {
+	if addresses := cfgval.StringList(data[checks.DataKeyAddresses]); len(addresses) > 0 {
 		out = append(out, web.WatchReading{
 			Field: checks.DataKeyAddresses,
 			Label: watchReadingLabelAddresses,
@@ -705,25 +698,6 @@ func raidMemberDetails(v any) []checks.RaidArrayStatus {
 	}
 }
 
-// coerceStringSlice reads a string list from Result.Data, tolerating both the
-// live []string and the []any that JSON hydration produces after a restart.
-func coerceStringSlice(v any) []string {
-	switch t := v.(type) {
-	case []string:
-		return t
-	case []any:
-		out := make([]string, 0, len(t))
-		for _, e := range t {
-			if s := cfgval.String(e); s != "" {
-				out = append(out, s)
-			}
-		}
-		return out
-	default:
-		return nil
-	}
-}
-
 func certCheckReadings(data map[string]any) []web.WatchReading {
 	rb := readingsFrom(data).
 		addString(checks.DataKeySource, watchReadingLabelSource).
@@ -731,7 +705,7 @@ func certCheckReadings(data map[string]any) []web.WatchReading {
 		addString(checks.DataKeyNotAfter, watchReadingLabelExpires).
 		addString(checks.DataKeyPublicKeyAlgorithm, watchReadingLabelKeyType).
 		addInt(checks.DataKeyKeyBits, watchReadingLabelKeyBits)
-	if names := coerceStringSlice(data[checks.DataKeyDNSNames]); len(names) > 0 {
+	if names := cfgval.StringList(data[checks.DataKeyDNSNames]); len(names) > 0 {
 		rb.add(checks.DataKeyDNSNames, watchReadingLabelDNSNames, strings.Join(names, displayListSeparator))
 	}
 	return rb.addString(checks.DataKeyIssuer, watchReadingLabelIssuer).readings()
@@ -1039,7 +1013,7 @@ func hardwareRAIDCheckReadings(data map[string]any) []web.WatchReading {
 		rb.add(checks.DataKeyRaidOperation, "RAID operation", operation)
 	}
 	rb.addMetric(checks.DataKeyRaidProgressPct, "RAID progress", watchReadingProgressDecimals, metrics.MetricUnitPercent)
-	if issues := readingStringList(data[checks.DataKeyHardwareRAIDIssues]); len(issues) > 0 {
+	if issues := cfgval.StringList(data[checks.DataKeyHardwareRAIDIssues]); len(issues) > 0 {
 		rb.add(checks.DataKeyHardwareRAIDIssues, "Issues", strings.Join(issues, readingSummarySeparator))
 	}
 	readings := rb.readings()
