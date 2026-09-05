@@ -606,8 +606,35 @@ test("phone watch rows keep device, path and address tokens whole", async ({ pag
   // the room a phone can spare (a long path) may still break inside.
   const split = await splitWordsIn(page, "#watches-section");
   expect(split.filter((token) => token.length <= 12)).toEqual([]);
-  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
-  expect(overflow).toBe(0);
+  // Against the device width, not clientWidth: under mobile emulation the
+  // layout viewport grows with an overflowing document and hides it.
+  const scrollWidth = await page.evaluate(() => document.documentElement.scrollWidth);
+  expect(scrollWidth).toBeLessThanOrEqual(page.viewportSize().width);
+});
+
+// Typed watch tables sit in groups inside one cell of the watches table, so
+// their minimum width used to become the page's: a storage usage bar or a long
+// state pill widened the document a few seconds after load, once the watches
+// rendered, and every panel shifted sideways on a phone.
+test("phone watch groups never widen the page", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "mobile", "phone layout only");
+  await page.locator("#watches-section").scrollIntoViewIfNeeded();
+  const box = await page.evaluate(() => {
+    const section = document.querySelector("#watches-section").getBoundingClientRect();
+    const groups = [...document.querySelectorAll("#watches-section .watch-type-group")];
+    return {
+      scrollWidth: document.documentElement.scrollWidth,
+      tablesPastSection: [...document.querySelectorAll("#watches-section table")].filter((t) => t.getBoundingClientRect().right > section.right + 1).length,
+      groupsScrolling: groups.filter((g) => g.scrollWidth > g.clientWidth + 1).length,
+      groups: groups.length,
+    };
+  });
+  expect(box.groups).toBeGreaterThan(0);
+  expect(box.scrollWidth).toBeLessThanOrEqual(page.viewportSize().width);
+  expect(box.tablesPastSection).toBe(0);
+  // The phone rules make every fixture table fit outright; the group's own
+  // scroll stays a last resort.
+  expect(box.groupsScrolling).toBe(0);
 });
 
 test("expanded check rows keep their identifiers whole on a desktop", async ({ page }) => {

@@ -642,6 +642,15 @@
     .watch-table th:not(:first-child):not(:nth-last-child(-n+3)),
     .watch-table td:not(:first-child):not(:nth-last-child(-n+3)) { display: none; }
     .watch-table.watch-type-table th:nth-child(2), .watch-table.watch-type-table td:nth-child(2) { display: table-cell; }
+    /* A typed watch table sits in a group inside one cell of the watches table,
+       so its minimum width used to become the page's: one usage bar or one
+       long state pill widened the whole document a few seconds after load, when
+       the watches rendered, and every panel shifted. Contain the group the way
+       a row expansion is contained. No scroll container here: the typed
+       table's header is sticky against the page, and a scrolling group would
+       pin it over the rows instead. A table still wider than a phone hangs
+       past its group rather than widening every other panel. */
+    .watch-type-group { contain: inline-size; }
     /* mount units: hide Refcount first; usage remains visible on tablet widths. */
     .mount-table th:nth-child(5), .mount-table td:nth-child(5) { display: none; }
     /* The processes/users columns carry long nowrap paths behind fixed
@@ -811,6 +820,12 @@
        the name wraps instead. 7rem is the most the narrowest supported phone
        fits without a sideways scroll; a longer path still breaks inside. */
     .watch-table.watch-type-table td:nth-child(2) { min-width: 7rem; }
+    /* The storage usage bar is a desktop 10.5rem; on a phone it takes the width
+       its column gets (never below a legible 4rem) so the Usage column stops
+       deciding the table's width. The probe note beside a checking pill wraps
+       for the same reason. */
+    .watch-table .usagebar { width: 100%; max-width: 10.5rem; min-width: 4rem; }
+    .watch-table .watch-probe { white-space: normal; }
     .ssh-session-table th:nth-child(3), .ssh-session-table td:nth-child(3) { display: none; }
     .terminal-session-table th:nth-child(5), .terminal-session-table td:nth-child(5) { display: none; }
     #app-footer .footer-version {
