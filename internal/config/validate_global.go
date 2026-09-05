@@ -147,7 +147,7 @@ func validateTelegramBot(raw map[string]any, add func(string, ...any)) {
 			add(validationBooleanFormat, field(telegrambot.KeyEnabled))
 		}
 	}
-	if enabled, ok := section[telegrambot.KeyEnabled].(bool); ok && !enabled {
+	if cfgval.Disabled(section) {
 		return
 	}
 	// An empty token (typically an unset ${env:...} secret) leaves the bot

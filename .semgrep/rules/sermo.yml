@@ -249,6 +249,14 @@ rules:
               if $V, $OK := $E[entryKeyEnabled].(bool); $OK && !$V {
                 ...
               }
+          - pattern: |
+              if $V, $OK := $E[telegrambot.KeyEnabled].(bool); $OK && !$V {
+                ...
+              }
+          - pattern: |
+              if $V, $OK := $E[KeyEnabled].(bool); $OK && !$V {
+                ...
+              }
 
   - id: tls-skip-verify-must-use-netutil
     languages: [go]
