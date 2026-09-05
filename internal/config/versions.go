@@ -1167,13 +1167,12 @@ func unversionedVersionPath(discoverPath string, tok tmplToken) (string, bool) {
 // intact for instantiateVersion to bind.
 func (c *Config) templateBody(tmpl *Document, kind string) map[string]any {
 	body := stripMeta(tmpl.Body)
-	body[keyKind] = kind
 	if base := cfgval.String(tmpl.Body[ServiceKeyUses]); base != "" {
 		if src, ok := c.CatalogServices[base]; ok {
 			body = mergeMaps(stripMeta(src.Body), body)
-			body[keyKind] = kind
 		}
 	}
+	body[keyKind] = kind
 	return body
 }
 
