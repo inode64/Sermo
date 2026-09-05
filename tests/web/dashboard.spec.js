@@ -551,6 +551,37 @@ test("stale binary has a distinct restart-required state and visible reason", as
   await expect(detail.locator(".runtime-grid .state-reason")).toHaveText("binary replaced on disk");
 });
 
+// splitWordsIn lists the words (4+ characters) inside selector that a narrow
+// column broke across two line boxes. Truncated cells, headings, buttons and
+// screen-reader tables are excluded: they are clipped or hidden on purpose.
+async function splitWordsIn(page, selector) {
+  return page.locator(selector).evaluate((root) => {
+    const out = [];
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      const el = node.parentElement;
+      if (!el || el.getClientRects().length === 0 || el.closest(".truncate, .visually-hidden, thead, button")) continue;
+      const words = /[A-Za-z0-9./-]{4,}/g;
+      let match;
+      while ((match = words.exec(node.textContent))) {
+        const range = document.createRange();
+        range.setStart(node, match.index);
+        range.setEnd(node, match.index + match[0].length);
+        if (range.getClientRects().length > 1) out.push(match[0]);
+      }
+    }
+    return out;
+  });
+}
+
+test("phone session rows keep their words whole", async ({ page }) => {
+  await page.setViewportSize({ width: 412, height: 915 });
+  await page.locator("#sessions-section").scrollIntoViewIfNeeded();
+  expect(await splitWordsIn(page, "#sessions-section .sessions-table")).toEqual([]);
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  expect(overflow).toBe(0);
+});
+
 test("expanded detail tables keep their headers in flow", async ({ page }) => {
   await page.locator("#svc-row-web .row-toggle").click();
   const detail = page.locator("#services-section .service-detail");
