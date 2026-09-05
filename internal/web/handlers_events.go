@@ -137,18 +137,11 @@ func queryBool(r *http.Request, key string) bool {
 	}
 }
 
-// parseBeforeQuery reads the ?before= retention cutoff through its owner in the
-// state package, which also consumes it in PruneEvents and CompactHistory.
-func parseBeforeQuery(beforeStr string) (time.Time, error) {
-	//nolint:wrapcheck // ParseCutoff already names the before parameter and states the accepted forms; the message is returned verbatim in the 400 body.
-	return state.ParseCutoff(apiQueryBefore, beforeStr, time.Now())
-}
-
 // handleEventsClear supports `sermoctl events clear [--before TIME]`.
 // TIME may be a non-future RFC3339 timestamp or a positive duration (e.g. "2h"
 // means "before now-2h").
 func (s *Server) handleEventsClear(w http.ResponseWriter, r *http.Request) {
-	before, err := parseBeforeQuery(r.URL.Query().Get(apiQueryBefore))
+	before, err := state.ParseCutoff(apiQueryBefore, r.URL.Query().Get(apiQueryBefore), time.Now())
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, ActionResult{OK: false, Message: err.Error()})
 		return
@@ -165,7 +158,7 @@ func (s *Server) handleEventsClear(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleStateCompact(w http.ResponseWriter, r *http.Request) {
-	before, err := parseBeforeQuery(r.URL.Query().Get(apiQueryBefore))
+	before, err := state.ParseCutoff(apiQueryBefore, r.URL.Query().Get(apiQueryBefore), time.Now())
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, StateCompactResult{OK: false, Message: err.Error()})
 		return

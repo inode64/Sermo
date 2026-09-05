@@ -1769,33 +1769,6 @@ func TestGetOnActionRouteNotAllowed(t *testing.T) {
 	}
 }
 
-func TestParseBeforeQueryDurationIsPast(t *testing.T) {
-	got, err := parseBeforeQuery("1h")
-	if err != nil {
-		t.Fatalf("parseBeforeQuery: %v", err)
-	}
-	// A bare duration means "1h ago": the result is in the past.
-	if !got.Before(time.Now()) {
-		t.Fatalf("parseBeforeQuery(1h) = %v, want a past time", got)
-	}
-	if d := time.Since(got); d < 50*time.Minute || d > 70*time.Minute {
-		t.Fatalf("parseBeforeQuery(1h) is %v ago, want ~1h", d)
-	}
-}
-
-func TestParseBeforeQueryRejectsUnsafeCutoffs(t *testing.T) {
-	tests := []string{
-		"0",
-		"-1h",
-		time.Now().Add(time.Hour).Format(time.RFC3339),
-	}
-	for _, input := range tests {
-		if got, err := parseBeforeQuery(input); err == nil {
-			t.Fatalf("parseBeforeQuery(%q) = %v, want error", input, got)
-		}
-	}
-}
-
 // assertQueryParse feeds in as query param on path and checks parse returns want.
 func assertQueryParse[T comparable](t *testing.T, path, param, in string, parse func(*http.Request) T, want T) {
 	t.Helper()
