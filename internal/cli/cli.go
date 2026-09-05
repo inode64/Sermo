@@ -1828,7 +1828,9 @@ func webAPIBase(cfg *config.Config) (string, error) {
 		case errors.Is(err, config.ErrWebPortUnset):
 			return "", errors.New("web.port is not set in config")
 		default:
-			return "", fmt.Errorf("%w", err)
+			// WebBind already returns an operator-facing message; wrapcheck
+			// still requires wrapping the external error, so the wrap is identity.
+			return "", fmt.Errorf("%w", err) // nosemgrep: error-wrap-must-add-context
 		}
 	}
 	return daemonWebSchemeHTTP + netutil.URLSchemeSeparator + bind.HostPort(), nil

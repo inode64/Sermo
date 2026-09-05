@@ -97,50 +97,68 @@ func (c *httpCheck) Run(ctx context.Context) Result {
 	if !c.expect.matches(resp.StatusCode) {
 		return c.result(false, fmt.Sprintf("status %d (want %s)", resp.StatusCode, c.expect), start)
 	}
-	if c.latencyOp != "" {
-		ms := strconv.FormatInt(elapsed.Milliseconds(), numericBaseDecimal)
-		ok, err := compareValue(ms, c.latencyOp, c.latencyValue)
-		if err != nil {
-			return c.result(false, fmt.Sprintf("latency: %v", err), start)
-		}
-		if !ok {
-			return c.result(false, fmt.Sprintf("status %d; latency %sms not %s %s", resp.StatusCode, ms, c.latencyOp, c.latencyValue), start)
-		}
+	if msg := c.latencyFailure(resp.StatusCode, elapsed); msg != "" {
+		return c.result(false, msg, start)
 	}
 	if c.bodyOp == "" && len(c.expectJSON) == 0 {
 		return c.success(resp, elapsed, fmt.Sprintf("status %d", resp.StatusCode), verifyError, start)
 	}
 
 	data, _ := io.ReadAll(io.LimitReader(resp.Body, maxHTTPBody))
+	if msg := c.payloadFailure(resp.StatusCode, data); msg != "" {
+		return c.result(false, msg, start)
+	}
+	return c.success(resp, elapsed, fmt.Sprintf("status %d", resp.StatusCode), verifyError, start)
+}
+
+// latencyFailure reports why the optional latency assertion failed.
+func (c *httpCheck) latencyFailure(status int, elapsed time.Duration) string {
+	if c.latencyOp == "" {
+		return ""
+	}
+	ms := strconv.FormatInt(elapsed.Milliseconds(), numericBaseDecimal)
+	ok, err := compareValue(ms, c.latencyOp, c.latencyValue)
+	if err != nil {
+		return fmt.Sprintf("latency: %v", err)
+	}
+	if !ok {
+		return fmt.Sprintf("status %d; latency %sms not %s %s", status, ms, c.latencyOp, c.latencyValue)
+	}
+	return ""
+}
+
+// payloadFailure reports why an optional body or JSON assertion failed.
+func (c *httpCheck) payloadFailure(status int, data []byte) string {
 	if c.bodyOp != "" {
 		ok, err := compareValue(strings.TrimSpace(string(data)), c.bodyOp, c.bodyValue)
 		if err != nil {
-			return c.result(false, fmt.Sprintf("status %d; body: %v", resp.StatusCode, err), start)
+			return fmt.Sprintf("status %d; body: %v", status, err)
 		}
 		if !ok {
-			return c.result(false, fmt.Sprintf("status %d; body %s %q not satisfied", resp.StatusCode, c.bodyOp, c.bodyValue), start)
+			return fmt.Sprintf("status %d; body %s %q not satisfied", status, c.bodyOp, c.bodyValue)
 		}
 	}
-	if len(c.expectJSON) > 0 {
-		var doc any
-		if err := json.Unmarshal(data, &doc); err != nil {
-			return c.result(false, fmt.Sprintf("status %d; response is not JSON", resp.StatusCode), start)
+	if len(c.expectJSON) == 0 {
+		return ""
+	}
+	var doc any
+	if err := json.Unmarshal(data, &doc); err != nil {
+		return fmt.Sprintf("status %d; response is not JSON", status)
+	}
+	for _, a := range c.expectJSON {
+		got, ok := jsonPath(doc, a.path)
+		if !ok {
+			return fmt.Sprintf("status %d; json %q missing", status, a.path)
 		}
-		for _, a := range c.expectJSON {
-			got, ok := jsonPath(doc, a.path)
-			if !ok {
-				return c.result(false, fmt.Sprintf("status %d; json %q missing", resp.StatusCode, a.path), start)
-			}
-			ok, err := jsonAssert(got, a.op, a.value)
-			if err != nil {
-				return c.result(false, fmt.Sprintf("status %d; json %q: %v", resp.StatusCode, a.path, err), start)
-			}
-			if !ok {
-				return c.result(false, fmt.Sprintf("status %d; json %q %s %q (got %q)", resp.StatusCode, a.path, a.op, a.value, jsonValueString(got)), start)
-			}
+		ok, err := jsonAssert(got, a.op, a.value)
+		if err != nil {
+			return fmt.Sprintf("status %d; json %q: %v", status, a.path, err)
+		}
+		if !ok {
+			return fmt.Sprintf("status %d; json %q %s %q (got %q)", status, a.path, a.op, a.value, jsonValueString(got))
 		}
 	}
-	return c.success(resp, elapsed, fmt.Sprintf("status %d", resp.StatusCode), verifyError, start)
+	return ""
 }
 
 func (c *httpCheck) consumeCertificateVerification(resp *http.Response) string {
