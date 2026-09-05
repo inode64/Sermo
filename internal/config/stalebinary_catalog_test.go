@@ -55,14 +55,42 @@ func ruleActionTypes(t *testing.T, rule map[string]any) []string {
 	return out
 }
 
-func TestCatalogSNMPDProtocolProbeIsOptional(t *testing.T) {
-	resolved := resolveCatalogService(t, "snmpd", "systemd")
-	port := nested(t, resolved.Tree, "checks", "port")
-	if got := cfgval.String(port["type"]); got != "snmp" {
+// TestCatalogSNMPDProtocolProbeGatedOnLocalCommunity pins the gate that kept
+// agents amber forever: snmpd answers a v1/v2c query only from the sources its
+// community grants, so the local probe runs only when the first rocommunity
+// line grants localhost. Asserted on the raw document because a resolved tree
+// prunes the gate on any host without /etc/snmp/snmpd.conf, this one included.
+func TestCatalogSNMPDProtocolProbeGatedOnLocalCommunity(t *testing.T) {
+	root := repoRoot(t)
+	snmpd := catalogDocByName(t, root, "services", "snmpd")
+	port := nested(t, snmpd, "watches", "port")
+	if got := cfgval.String(nested(t, port, "check")["type"]); got != "snmp" {
 		t.Fatalf("snmpd port check type = %q, want snmp", got)
 	}
-	if !cfgval.Bool(port["optional"]) {
-		t.Fatal("snmpd protocol probe must be optional without configured SNMP credentials")
+	gate := nested(t, port, "enable_if")
+	if got := cfgval.String(gate["file"]); got != "/etc/snmp/snmpd.conf" {
+		t.Fatalf("snmpd probe gate file = %q, want /etc/snmp/snmpd.conf", got)
+	}
+	if got := cfgval.String(gate["key"]); got != "rocommunity" {
+		t.Fatalf("snmpd probe gate key = %q, want rocommunity", got)
+	}
+	tests := []struct {
+		value string
+		want  bool
+	}{
+		{"public", true},
+		{"public default", true},
+		{"public localhost", true},
+		{"public 127.0.0.1/8", true},
+		{"public -V systemonly", true},
+		{"public default -V systemonly", true},
+		{"public 172.31.25.0/24", false},
+		{"public 10.0.0.0/8 -V systemonly", false},
+	}
+	for _, tt := range tests {
+		if got := enableIfPredicateMatches(gate, tt.value); got != tt.want {
+			t.Errorf("rocommunity %q keeps the local probe = %v, want %v", tt.value, got, tt.want)
+		}
 	}
 }
 
