@@ -385,17 +385,20 @@ func levelPredsHold(preds []levelPred, values map[string]float64) bool {
 	return true
 }
 
-// anyLevelPredHolds reports whether at least one known reading satisfies its
-// predicate. SMART uses this OR because each drive-health indicator is an
-// independent early-warning signal; an ATA drive, for example, publishes no
-// NVMe media_errors field and must still alert on pending sectors.
-func anyLevelPredHolds(preds []levelPred, values map[string]float64) bool {
+// holdingLevelPreds names every known reading that satisfies its predicate, as
+// "field value op threshold". SMART ORs its predicates because each
+// drive-health indicator is an independent early-warning signal (an ATA drive
+// publishes no NVMe media_errors field and must still alert on pending
+// sectors), so a firing result has to say which indicator tripped: a bare
+// "health=PASSED" sends the operator back to smartctl to find out.
+func holdingLevelPreds(preds []levelPred, values map[string]float64) []string {
+	var held []string
 	for _, p := range preds {
 		if v, known := values[p.field]; known && cfgval.CompareFloat(v, p.op, p.value) {
-			return true
+			held = append(held, p.field+" "+formatThreshold(v)+" "+p.op+" "+formatThreshold(p.value))
 		}
 	}
-	return false
+	return held
 }
 
 // firstPredValue returns the first predicate's reading — the breaching number a

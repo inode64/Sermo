@@ -112,6 +112,26 @@ func TestSmartCheck(t *testing.T) {
 	}
 }
 
+// The predicates are ORed, so a firing result must name the indicator that
+// tripped: "health=PASSED" alone said nothing about whether it was pending
+// sectors, reallocations or temperature, and a quiet predicate must not be
+// listed beside the one that fired.
+func TestSmartCheckNamesTheFiringPredicate(t *testing.T) {
+	res := smartWith(smartATA,
+		levelPred{"reallocated", ">", 0},
+		levelPred{"temperature", ">", 100},
+	).Run(context.Background())
+	if !res.OK {
+		t.Fatalf("reallocated 4 > 0 should alert, got %+v", res)
+	}
+	if want := "health=PASSED; reallocated 4 > 0"; !strings.HasSuffix(res.Message, want) {
+		t.Fatalf("message = %q, want it to end with %q", res.Message, want)
+	}
+	if res := smartWith(smartATA, levelPred{"temperature", ">", 100}).Run(context.Background()); strings.Contains(res.Message, ";") {
+		t.Fatalf("message = %q, want no predicate annotation while none holds", res.Message)
+	}
+}
+
 func TestSmartCheckError(t *testing.T) {
 	c := &smartCheck{
 		name: "sm", timeout: time.Second,

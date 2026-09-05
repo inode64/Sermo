@@ -113,9 +113,8 @@ func (c *smartCheck) Run(ctx context.Context) Result {
 	}
 
 	ok := data.healthKnown && !data.passed // default alert condition: health FAILED
-	if len(c.preds) > 0 {
-		ok = ok || anyLevelPredHolds(c.preds, data.values)
-	}
+	fired := holdingLevelPreds(c.preds, data.values)
+	ok = ok || len(fired) > 0
 
 	health := smartHealthUnknown
 	if data.healthKnown {
@@ -127,7 +126,11 @@ func (c *smartCheck) Run(ctx context.Context) Result {
 	}
 	c.last.record(health, data.values, start)
 	data.identity.Rotation = cmp.Or(data.identity.Rotation, c.sysfsRotation())
-	r := c.result(ok, prefix+" health="+health, start)
+	message := prefix + " health=" + health
+	if len(fired) > 0 {
+		message += "; " + strings.Join(fired, ", ")
+	}
+	r := c.result(ok, message, start)
 	r.Data = withDeviceBus(SmartResultData(c.device, health, data.SmartSample), c.deviceBus, c.device)
 	return r
 }
