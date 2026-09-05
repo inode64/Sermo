@@ -76,42 +76,10 @@ func (v SLAValue) PercentText() string {
 	return slaPercentText(v.Up, v.Total)
 }
 
-// RecordSLA accumulates one observed monitoring cycle into a service's current
-// UTC-minute bucket: total_count +1, and up_count +1 when up. Paused or
-// unobserved cycles are simply never recorded, so they do not count as downtime.
-func (s *Store) RecordSLA(service string, up bool, at time.Time) error {
-	return s.recordSLABucket(service, "", up, at)
-}
-
-// RecordSLA accumulates one observed monitoring cycle in this batch.
-func (b *batch) RecordSLA(service string, up bool, at time.Time) error {
-	return b.recordSLABucket(service, "", up, at)
-}
-
-// RecordCheckSLA accumulates one observed check execution into its current
-// UTC-minute bucket. Interval-deferred checks are not recorded by callers, so
-// the per-check SLA reflects only real check runs.
-func (s *Store) RecordCheckSLA(service, check string, up bool, at time.Time) error {
-	return s.recordSLABucket(service, check, up, at)
-}
-
-// RecordCheckSLA accumulates one observed check execution in this batch.
-func (b *batch) RecordCheckSLA(service, check string, up bool, at time.Time) error {
-	return b.recordSLABucket(service, check, up, at)
-}
-
 // recordSLABucket writes one observed cycle into the per-minute archive. An empty
 // check is the service-level series. down_buckets is recomputed rather than
 // accumulated: at this resolution the bucket is the unit it counts, so it is 1 as
 // soon as any cycle in the minute failed.
-func (s *Store) recordSLABucket(service, check string, up bool, at time.Time) error {
-	return recordSLABucket(s.sqlCtx(), s.exec, service, check, up, at)
-}
-
-func (b *batch) recordSLABucket(service, check string, up bool, at time.Time) error {
-	return recordSLABucket(b.ctx, b.exec, service, check, up, at)
-}
-
 func recordSLABucket(ctx context.Context, exec statementExecutor, service, check string, up bool, at time.Time) error {
 	if _, err := exec(ctx, slaRecordStmt,
 		resMinute, service, check, alignBucket(at, resMinute), boolInt(up), boolInt(!up),

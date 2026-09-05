@@ -88,16 +88,6 @@ func (m metricSeries) target() string {
 	return strings.Join(parts, "/")
 }
 
-// record accumulates one observation into the series' current per-minute bucket:
-// n+1, sum+value and the running min/max.
-func (s *Store) record(m metricSeries, value float64, at time.Time) error {
-	return recordMetric(s.sqlCtx(), s.exec, m, value, at)
-}
-
-func (b *batch) record(m metricSeries, value float64, at time.Time) error {
-	return recordMetric(b.ctx, b.exec, m, value, at)
-}
-
 func recordMetric(ctx context.Context, exec statementExecutor, m metricSeries, value float64, at time.Time) error {
 	if _, err := exec(ctx, metricRecordStmt,
 		resMinute, m.scope, m.service, m.check, m.metric, alignBucket(at, resMinute),
@@ -136,17 +126,6 @@ func (s *Store) series(m metricSeries, from, to time.Time) ([]MeasurementPoint, 
 	return measurementPointsFromRows(rows, kind+" series row for "+target, description)
 }
 
-// RecordMeasurement accumulates one numeric observation (milliseconds) for a
-// service+check into its current UTC-minute bucket.
-func (s *Store) RecordMeasurement(service, check string, valueMs float64, at time.Time) error {
-	return s.record(checkLatencySeries(service, check), valueMs, at)
-}
-
-// RecordMeasurement accumulates one latency observation in this batch.
-func (b *batch) RecordMeasurement(service, check string, valueMs float64, at time.Time) error {
-	return b.record(checkLatencySeries(service, check), valueMs, at)
-}
-
 // MeasurementSummary returns the average/min/max and sample count for a check over
 // the rolling window ending at now.
 func (s *Store) MeasurementSummary(service, check string, span time.Duration, now time.Time) (MeasurementStat, error) {
@@ -156,18 +135,6 @@ func (s *Store) MeasurementSummary(service, check string, span time.Duration, no
 // MeasurementSeries returns a check's latency points in [from, to), oldest first.
 func (s *Store) MeasurementSeries(service, check string, from, to time.Time) ([]MeasurementPoint, error) {
 	return s.series(checkLatencySeries(service, check), from, to)
-}
-
-// RecordMetric accumulates one observation of a named per-check metric (e.g.
-// hdparm "read" MB/s) into its current UTC-minute bucket. It is the generic
-// counterpart of RecordMeasurement (latency).
-func (s *Store) RecordMetric(service, check, metric string, value float64, at time.Time) error {
-	return s.record(checkMetricSeries(service, check, metric), value, at)
-}
-
-// RecordMetric accumulates one named check metric in this batch.
-func (b *batch) RecordMetric(service, check, metric string, value float64, at time.Time) error {
-	return b.record(checkMetricSeries(service, check, metric), value, at)
 }
 
 // MetricSummary returns a named metric's average/min/max and sample count over the
@@ -181,17 +148,6 @@ func (s *Store) MetricSeries(service, check, metric string, from, to time.Time) 
 	return s.series(checkMetricSeries(service, check, metric), from, to)
 }
 
-// RecordDaemonMetric accumulates one sermod process metric observation into its
-// current UTC-minute bucket.
-func (s *Store) RecordDaemonMetric(metric string, value float64, at time.Time) error {
-	return s.record(daemonRuntimeSeries(metric), value, at)
-}
-
-// RecordDaemonMetric accumulates one daemon metric in this batch.
-func (b *batch) RecordDaemonMetric(metric string, value float64, at time.Time) error {
-	return b.record(daemonRuntimeSeries(metric), value, at)
-}
-
 // DaemonMetricSummary returns a daemon metric's average/min/max and sample count
 // over the rolling window ending at now.
 func (s *Store) DaemonMetricSummary(metric string, span time.Duration, now time.Time) (MeasurementStat, error) {
@@ -201,17 +157,6 @@ func (s *Store) DaemonMetricSummary(metric string, span time.Duration, now time.
 // DaemonMetricSeries returns a daemon metric's points in [from, to), oldest first.
 func (s *Store) DaemonMetricSeries(metric string, from, to time.Time) ([]MeasurementPoint, error) {
 	return s.series(daemonRuntimeSeries(metric), from, to)
-}
-
-// RecordServiceMetric accumulates one service process-tree metric observation
-// into its current UTC-minute bucket.
-func (s *Store) RecordServiceMetric(service, metric string, value float64, at time.Time) error {
-	return s.record(serviceRuntimeSeries(service, metric), value, at)
-}
-
-// RecordServiceMetric accumulates one service runtime metric in this batch.
-func (b *batch) RecordServiceMetric(service, metric string, value float64, at time.Time) error {
-	return b.record(serviceRuntimeSeries(service, metric), value, at)
 }
 
 // ServiceMetricSummary returns a service runtime metric's average/min/max and

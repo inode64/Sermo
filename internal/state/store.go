@@ -76,6 +76,7 @@ func IsMountUmountSource(source string) bool {
 // use; access is serialized onto a single connection (the store is low-traffic
 // and this avoids cross-process "database is locked" surprises).
 type Store struct {
+	recorder
 	db *sql.DB
 	// reader is a separate read-only connection. Under WAL a reader runs
 	// concurrently with the single writer connection, so a cold rolling-year
@@ -116,8 +117,8 @@ type Batch interface {
 }
 
 type batch struct {
+	recorder
 	tx    *sql.Tx
-	ctx   context.Context //nolint:containedctx // transaction-scoped cancel derived from Store.ctx for one WithBatch callback.
 	stmts map[string]*sql.Stmt
 }
 
@@ -167,7 +168,8 @@ func (s *Store) WithBatch(ctx context.Context, record func(Batch) error) error {
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	txBatch := &batch{tx: tx, ctx: ctx}
+	txBatch := &batch{tx: tx}
+	txBatch.recorder = recorder{ctx: func() context.Context { return ctx }, exec: txBatch.exec}
 	defer txBatch.close()
 	if err := record(txBatch); err != nil {
 		return fmt.Errorf("record state batch: %w", err)
@@ -283,6 +285,7 @@ func OpenContextWith(ctx context.Context, path string, opts Options) (*Store, er
 	db.SetMaxOpenConns(1)
 
 	s := &Store{db: db, now: time.Now, ctx: ctx, retention: opts.Retention.normalized()}
+	s.recorder = recorder{ctx: s.sqlCtx, exec: s.exec}
 	if err := s.initializeSchema(ctx); err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("initialize state db %s: %w", path, err)
