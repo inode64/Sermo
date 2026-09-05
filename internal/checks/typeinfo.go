@@ -12,6 +12,15 @@ type TypeInfo struct {
 	DefaultReports string
 	ServiceScoped  bool
 	RecordsLatency bool
+	// MultiMetric marks a host-scoped type that expands into one watch per
+	// metric (net, icmp, swap) and therefore cannot back a service watch.
+	MultiMetric bool
+	// MeterCountKey names the Result.Data field holding the current count of a
+	// count-versus-limit type the dashboard draws as a gauge; empty otherwise.
+	MeterCountKey string
+	// ResourcePath marks a preflight type whose `path` names a host resource
+	// (binary, file, socket, pidfile, lockfile) that variables may select.
+	ResourcePath bool
 }
 
 func healthTypeInfo(name string) TypeInfo {
@@ -33,6 +42,21 @@ func latencyTypeInfo(info TypeInfo) TypeInfo {
 
 func serviceConditionTypeInfo(name string) TypeInfo {
 	return TypeInfo{Name: name, DefaultReports: ReportsCondition, ServiceScoped: true}
+}
+
+func multiMetricTypeInfo(info TypeInfo) TypeInfo {
+	info.MultiMetric = true
+	return info
+}
+
+func meteredTypeInfo(info TypeInfo, countKey string) TypeInfo {
+	info.MeterCountKey = countKey
+	return info
+}
+
+func resourcePathTypeInfo(info TypeInfo) TypeInfo {
+	info.ResourcePath = true
+	return info
 }
 
 // checkSpec is the private source of truth for a built-in check's static
@@ -182,4 +206,28 @@ func IsServiceScopedType(typ string) bool {
 func RecordsLatency(typ string) bool {
 	info, ok := TypeInfoFor(typ)
 	return ok && info.RecordsLatency
+}
+
+// IsMultiMetricType reports whether typ is a host-scoped type that expands into
+// one watch per metric and so cannot back a service watch.
+func IsMultiMetricType(typ string) bool {
+	info, ok := TypeInfoFor(typ)
+	return ok && info.MultiMetric
+}
+
+// MeterCountKey returns the Result.Data field carrying the current count of a
+// count-versus-limit type drawn as a gauge, and whether typ is one.
+func MeterCountKey(typ string) (string, bool) {
+	info, ok := TypeInfoFor(typ)
+	if !ok || info.MeterCountKey == "" {
+		return "", false
+	}
+	return info.MeterCountKey, true
+}
+
+// IsResourcePathType reports whether typ is a preflight type whose `path`
+// names a host resource that variables may select.
+func IsResourcePathType(typ string) bool {
+	info, ok := TypeInfoFor(typ)
+	return ok && info.ResourcePath
 }

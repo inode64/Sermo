@@ -87,10 +87,12 @@ func buildWatchEntry(name string, entry map[string]any, deps Deps, defaultInterv
 	if w := warnEventCounterWindow(name, entry, checkEntry, interval); w != "" {
 		warnings = append(warnings, w)
 	}
-	switch cfgval.AsString(checkEntry[checks.CheckKeyType]) {
-	case checks.CheckTypeNet, checks.CheckTypeICMP, checks.CheckTypeSwap:
+	typ := cfgval.AsString(checkEntry[checks.CheckKeyType])
+	if checks.IsMultiMetricType(typ) {
 		expanded, warns := buildMetricWatches(name, entry, checkEntry, deps, interval)
 		return expanded, append(warnings, warns...)
+	}
+	switch typ {
 	case checks.CheckTypeFile:
 		return watchOrWarn(buildFileWatch(name, entry, checkEntry, deps, interval))(warnings)
 	case checks.CheckTypeProcess:
@@ -256,9 +258,11 @@ func serviceMonitorWatchName(service, monitor string) string {
 // collector scoped to the service PID tree.)
 func unsupportedServiceWatchType(entry map[string]any) string {
 	checkEntry, _ := entry[config.WatchKeyCheck].(map[string]any)
-	switch cfgval.AsString(checkEntry[checks.CheckKeyType]) {
-	case checks.CheckTypeNet, checks.CheckTypeICMP, checks.CheckTypeSwap:
-		return "net/icmp/swap watches are host-scoped; declare them under the global watches: section"
+	typ := cfgval.AsString(checkEntry[checks.CheckKeyType])
+	if checks.IsMultiMetricType(typ) {
+		return typ + " watches are host-scoped; declare them under the global watches: section"
+	}
+	switch typ {
 	case checks.CheckTypeProcess:
 		return "the process watch matches host-wide (and can kill); use process_count or metric for service-scoped process monitoring, or declare a host watch"
 	case checks.CheckTypeProcessPolicy:

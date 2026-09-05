@@ -38,7 +38,7 @@ func resolvePreflightResourceVariables(tree map[string]any) []string {
 			continue
 		}
 		typ := cfgval.String(entry[checks.CheckKeyType])
-		if !isResourcePreflightType(typ) {
+		if !checks.IsResourcePathType(typ) {
 			continue
 		}
 		selected, ok := selectResourcePath(typ, entry[checks.CheckKeyPath])
@@ -72,15 +72,6 @@ func ensureVariables(tree map[string]any) map[string]any {
 		tree[sectionVariables] = vars
 	}
 	return vars
-}
-
-func isResourcePreflightType(typ string) bool {
-	switch typ {
-	case checks.CheckTypeBinary, checks.CheckTypeFile, checks.CheckTypeSocket, checks.CheckTypePidfile, checks.CheckTypeLockfile:
-		return true
-	default:
-		return false
-	}
 }
 
 func variablePathRef(raw any) (string, bool) {
