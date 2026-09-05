@@ -173,3 +173,131 @@ rules:
           - pattern: '"X-Sermo-Csrf"'
           - pattern: '"X-Sermo-Generation"'
           - pattern: '"X-Sermo-Confirm"'
+
+  - id: strutil-must-not-merge-unique-of-unique
+    languages: [go]
+    severity: ERROR
+    message: >-
+      Unique is already MergeUnique(nil, values...). Nesting Unique inside
+      MergeUnique double-walks the same strings. Deduplicate the combined
+      inputs once: Unique(append(list, extra...)).
+    paths:
+      exclude:
+        - internal/strutil/strutil.go
+        - '**/*_test.go'
+    patterns:
+      - pattern-either:
+          - pattern: strutil.MergeUnique(strutil.Unique(...), ...)
+          - pattern: MergeUnique(Unique(...), ...)
+
+  - id: strutil-must-not-merge-composite-list
+    languages: [go]
+    severity: ERROR
+    message: >-
+      MergeUnique keeps empty strings already in its list argument; only the
+      variadic extras are skipped. A composite []string{...} seed therefore
+      preserves blanks. Build the full set and call Unique once.
+    paths:
+      exclude:
+        - internal/strutil/strutil.go
+        - '**/*_test.go'
+    patterns:
+      - pattern-either:
+          - pattern: strutil.MergeUnique([]string{...}, ...)
+          - pattern: MergeUnique([]string{...}, ...)
+
+  - id: error-wrap-must-add-context
+    languages: [go]
+    severity: ERROR
+    message: >-
+      fmt.Errorf("%w", err) is an identity wrap: wrapcheck is satisfied but
+      the operator sees the same message. Add a prefix that names the failed
+      step (fmt.Errorf("reload pidfile: %w", err)). Identity wrap is only
+      for an error that is already operator-facing; annotate that site.
+    paths:
+      exclude:
+        - '**/*_test.go'
+    patterns:
+      - pattern: fmt.Errorf("%w", $ERR)
+
+  - id: enabled-must-use-cfgval-disabled
+    languages: [go]
+    severity: ERROR
+    message: >-
+      enabled: false is cfgval.Disabled. An absent or non-boolean enabled
+      means the entry stays on; inlining the type-assert drifts from that
+      contract. Call cfgval.Disabled(entry).
+    paths:
+      exclude:
+        - internal/cfgval/**
+        - '**/*_test.go'
+    patterns:
+      - pattern-either:
+          - pattern: |
+              if $V, $OK := $E["enabled"].(bool); $OK && !$V {
+                ...
+              }
+          - pattern: |
+              if $V, $OK := $E[keyEnabled].(bool); $OK && !$V {
+                ...
+              }
+          - pattern: |
+              if $V, $OK := $E[EntryKeyEnabled].(bool); $OK && !$V {
+                ...
+              }
+          - pattern: |
+              if $V, $OK := $E[entryKeyEnabled].(bool); $OK && !$V {
+                ...
+              }
+
+  - id: tls-skip-verify-must-use-netutil
+    languages: [go]
+    severity: ERROR
+    message: >-
+      Skip-verify TLS is netutil.TLSClientConfigForMode so SNI, TLS 1.2 and
+      the skip-verify spelling cannot drift between dial, HTTP, LDAP, MongoDB,
+      Docker and WebSocket. Certificate inspection is the named exception: it
+      sets InsecureSkipVerify so VerifyConnection can report an invalid chain
+      instead of aborting the handshake.
+    paths:
+      exclude:
+        - internal/netutil/**
+        - internal/checks/cert.go
+        - '**/*_test.go'
+    patterns:
+      - pattern-either:
+          - pattern: 'InsecureSkipVerify: true'
+          - pattern: $CFG.InsecureSkipVerify = true
+
+  - id: http-client-do-must-use-httpx
+    languages: [go]
+    severity: ERROR
+    message: >-
+      HTTP Do goes through httpx.Do so a transport that returns a nil
+      response without an error cannot skip the caller. Wrap the client in
+      httpx.Doer and call httpx.Do.
+    paths:
+      exclude:
+        - internal/httpx/**
+        - '**/*_test.go'
+    patterns:
+      - pattern: $CLIENT.Do($REQ)
+      - metavariable-type:
+          metavariable: $CLIENT
+          type: "*http.Client"
+
+  - id: http-2xx-must-use-httpx
+    languages: [go]
+    severity: ERROR
+    message: >-
+      2xx status checks are httpx.SuccessStatus. A second divisor or class
+      comparison can disagree with webhook and Telegram handling. Matching
+      an arbitrary status class (1xx/2xx/3xx/...) is a different job.
+    paths:
+      exclude:
+        - internal/httpx/**
+        - '**/*_test.go'
+    patterns:
+      - pattern-either:
+          - pattern: $CODE / 100 == 2
+          - pattern: $CODE / $DIV == 2
