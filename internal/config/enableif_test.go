@@ -130,6 +130,11 @@ func TestEnableIfReadsSpacedAssignment(t *testing.T) {
 		{name: "commented", configBody: "# tls_on_connect_ports = 465\n", wantGated: false},
 		{name: "absent", configBody: "daemon_smtp_ports = 25\n", wantGated: false},
 		{name: "prefix collision", configBody: "tls_on_connect_ports_extra = 465\n", wantGated: false},
+		// snmpd.conf, sshd_config and named.conf-style files separate key and
+		// value with whitespace alone.
+		{name: "whitespace form", configBody: "tls_on_connect_ports 465\n", wantGated: true},
+		{name: "whitespace quoted", configBody: "tls_on_connect_ports\t\"465\"\n", wantGated: true},
+		{name: "whitespace prefix collision", configBody: "tls_on_connect_ports_extra 465\n", wantGated: false},
 	}
 	for _, tt := range tests {
 		configPath := filepath.Join(root, strings.ReplaceAll(tt.name, " ", "-")+".conf")
