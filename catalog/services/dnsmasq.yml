@@ -16,6 +16,16 @@ variables:
   query: localhost
   dhcp_host: 127.0.0.1
   dhcp_port: 67
+  # The first served link that is not the loopback. dnsmasq answers DHCP only
+  # on the links it serves and never on lo, where it has no address pool, so a
+  # unicast to dhcp_host from this host times out every cycle: the probe has
+  # to broadcast on a served link instead. Empty (no interface= line) keeps
+  # the unicast to dhcp_host; set it by hand for a server that serves every
+  # link, or when the first listed link is a no-dhcp-interface.
+  dhcp_interface:
+    from_file: ${config}
+    pattern: (?m)^\s*interface\s*=\s*((?:[^l\s]|l[^o\s]|lo\S)\S*)\s*$
+    default: ""
   tftp_host: 127.0.0.1
   tftp_port: 69
   tftp_query: sermo-tftp-check
@@ -71,6 +81,7 @@ watches:
       type: dhcp
       host: ${dhcp_host}
       port: ${dhcp_port}
+      interface: ${dhcp_interface}
       timeout: 3s
   tftp:
     enable_if:
