@@ -88,9 +88,6 @@ func TestEngineStringAndInt(t *testing.T) {
 	if got := EngineInt(&Config{}, EngineKeyMaxParallelChecks, 8); got != 8 {
 		t.Fatalf("EngineInt fallback = %d", got)
 	}
-	if got := EngineLogPath(cfg, EngineKeyBackend); got != "openrc" {
-		t.Fatalf("EngineLogPath shares EngineString: %q", got)
-	}
 }
 
 func TestEngineBoolDefaultTrue(t *testing.T) {

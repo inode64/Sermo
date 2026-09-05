@@ -28,7 +28,7 @@ func (App) recordAccess(cfg *config.Config, command, target, status, message str
 	if cfg == nil {
 		return
 	}
-	path := config.EngineLogPath(cfg, "access")
+	path := config.EngineString(cfg, config.EngineKeyAccess)
 	if path == "" {
 		return
 	}

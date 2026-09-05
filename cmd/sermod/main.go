@@ -708,7 +708,7 @@ func webAllowedHosts(cfg *config.Config) []string {
 }
 
 func openEngineLog(logger *slog.Logger, cfg *config.Config, key string) *logfile.Writer {
-	path := config.EngineLogPath(cfg, key)
+	path := config.EngineString(cfg, key)
 	if path == "" {
 		return nil
 	}

@@ -60,12 +60,6 @@ const (
 	DefaultEngineDiagnosticsInterval = time.Hour
 )
 
-// EngineLogPath returns an engine log file path (access, events, diagnostics).
-// An empty string means that log channel is disabled.
-func EngineLogPath(cfg *Config, key string) string {
-	return EngineString(cfg, key)
-}
-
 // EngineString reads a string field from the engine block ("" when unset).
 func EngineString(cfg *Config, key string) string {
 	return cfgval.AsString(engineValue(cfg, key))
