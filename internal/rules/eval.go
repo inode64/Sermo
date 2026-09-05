@@ -111,13 +111,22 @@ func (e *Evaluator) Eval(ctx context.Context, node map[string]any) (bool, error)
 			return false, errors.New("not: must be a condition mapping")
 		}
 		result, err := e.Eval(ctx, child)
-		return !result, err
+		if err != nil {
+			return false, err
+		}
+		return !result, nil
 	case ConditionFailed:
 		res, err := e.probe(ctx, operand)
-		return !res.OK, err
+		if err != nil {
+			return false, err
+		}
+		return !res.OK, nil
 	case ConditionActive:
 		res, err := e.probe(ctx, operand)
-		return res.OK, err
+		if err != nil {
+			return false, err
+		}
+		return res.OK, nil
 	case ConditionFile:
 		return e.evalFile(ctx, operand)
 	case ConditionCommand:
@@ -317,10 +326,13 @@ func (e *Evaluator) evalChanged(ctx context.Context, v any) (bool, error) {
 			return e.unavailableSignal(fmt.Errorf("changed condition for app %q has no version source", app))
 		}
 		changed, err := e.ChangedVersion(ctx, app, level)
+		if err != nil {
+			return false, err
+		}
 		if changed {
 			e.Change = ChangeContext{App: app, Level: levelName, LevelValue: level}
 		}
-		return changed, err
+		return changed, nil
 	}
 	path := cfgval.AsString(m[FieldPath])
 	if path == "" {
@@ -330,10 +342,13 @@ func (e *Evaluator) evalChanged(ctx context.Context, v any) (bool, error) {
 		return e.unavailableSignal(fmt.Errorf("changed condition for %s has no file source", path))
 	}
 	changed, err := e.Changed(path)
+	if err != nil {
+		return false, err
+	}
 	if changed {
 		e.Change = ChangeContext{Path: path, Library: cfgval.AsString(m[FieldLibrary])}
 	}
-	return changed, err
+	return changed, nil
 }
 
 // evalInline builds and runs a leaf check whose truth is the check's OK.

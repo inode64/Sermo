@@ -83,6 +83,31 @@ func TestEvalUnknownCheckIsError(t *testing.T) {
 	}
 }
 
+func TestEvalReturnsFalseOnError(t *testing.T) {
+	ev := &Evaluator{Cache: cache(nil)}
+	got, err := ev.Eval(context.Background(), map[string]any{ConditionFailed: map[string]any{FieldCheck: "nope"}})
+	if err == nil {
+		t.Fatal("unknown check reference should error")
+	}
+	if got {
+		t.Fatal("failed: must return false with the error, not treat an empty result as a match")
+	}
+
+	got, err = ev.Eval(context.Background(), map[string]any{ConditionNot: map[string]any{ConditionFailed: map[string]any{FieldCheck: "nope"}}})
+	if err == nil || got {
+		t.Fatalf("not(error) = %v, %v; want false with error", got, err)
+	}
+
+	ev = &Evaluator{Changed: func(string) (bool, error) { return true, errors.New("stat /etc/app.conf: permission denied") }}
+	got, err = ev.Eval(context.Background(), map[string]any{ConditionChanged: map[string]any{FieldPath: "/etc/app.conf"}})
+	if err == nil || got {
+		t.Fatalf("changed error = %v, %v; want false with error", got, err)
+	}
+	if ev.Change != (ChangeContext{}) {
+		t.Fatalf("Change = %+v, want empty after an error", ev.Change)
+	}
+}
+
 func TestGuardFailsSafeOnUnavailableCheck(t *testing.T) {
 	ev := &Evaluator{Cache: map[string]checks.Result{
 		"clients": {Check: "clients", Unavailable: true, Message: "read /proc/net/tcp: permission denied"},
