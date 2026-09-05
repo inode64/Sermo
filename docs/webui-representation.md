@@ -581,7 +581,7 @@ Shared columns:
 | Column | Meaning |
 | --- | --- |
 | Name | display name, falling back to name, capitalized |
-| Last checked | latest completed daemon-cycle or manual sample |
+| Last checked | latest completed daemon-cycle or manual sample of the current check configuration; changing the target (device, path, interface) leaves this empty until the next cycle |
 | Last activity | latest watch event, such as a manual probe, notification or remediation |
 | State | normalized watch state: `disabled` when config/monitor state excludes it from active checks, `starting` before the first monitored sample, `failed` for an active failure, `warning` for a failure the watch declared an advisory with `severity: warning` (amber row, kept out of the alert count), otherwise `ok`; active device work takes precedence as `testing`, `recovering`, `rebuilding`, `repairing`, `moving` or `merging`, and a device that stopped answering as `missing`, which reads as a failure and is included in the `failed` filter |
 | Actions | supported primary action plus an overflow menu for monitor/unmonitor |

@@ -118,7 +118,7 @@ func buildProcessPolicyWatch(name string, entry, checkEntry map[string]any, deps
 		emit:           deps.Emit,
 		sampler:        procSamplerFromDeps(deps),
 		resolve:        resolve,
-		publish:        publishWatchSnapshots(deps.WatchSnapshots),
+		publish:        publishWatchSnapshots(deps.WatchSnapshots, deps.watchConfigID),
 	}
 	return newStatefulWatch(name, checks.CheckTypeProcessPolicy, entry, deps, interval, pw.runCycle), ""
 }

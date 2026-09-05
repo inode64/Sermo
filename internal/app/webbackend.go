@@ -82,8 +82,9 @@ type webEntry struct {
 	policyCooldown    time.Duration
 	engine            operation.Engine
 	status            func(context.Context) (servicemgr.Status, error)
-	checkNames        []string                        // sorted
-	checkTypes        map[string]string               // check name -> type
+	checkNames        []string          // sorted
+	checkTypes        map[string]string // check name -> type
+	configID          string
 	checkReports      map[string]string               // check name -> `reports:` mode, when declared
 	checkBands        map[string][]checks.BandMetric  // check name -> resolved state bands
 	checkGraphs       map[string][]checks.GraphMetric // check name -> resolved line metrics
@@ -114,6 +115,7 @@ type webWatch struct {
 	displayName string
 	category    string
 	checkType   string
+	configID    string
 	// bands and graphs are the check's resolved state and line metrics, the
 	// same resolution the recorder persists from.
 	bands         []checks.BandMetric
@@ -433,6 +435,7 @@ func attachServiceRuntime(ctx context.Context, entry *webEntry, name string, tre
 	entry.status = checkDeps.Status
 	entry.checkNames = names
 	entry.checkTypes = types
+	entry.configID = serviceSnapshotConfigID(tree)
 	entry.checkReports = checkReportingModes(tree)
 	entry.checkBands = bandCheckMetrics(tree)
 	entry.checkGraphs = graphableCheckMetrics(tree)
@@ -565,6 +568,7 @@ func newWebWatch(name string, entry map[string]any, globalNotify []string, defau
 		displayName:        config.DisplayName(entry, name),
 		category:           config.CategoryLabel(entry, watchCategoryFallback),
 		checkType:          ctype,
+		configID:           watchSnapshotConfigID(entry),
 		bands:              checks.DeclaredBandMetrics(ctype, checkMap(entry)),
 		graphs:             resolveWatchGraphs(ctype, checkMap(entry), metricsMap(entry)),
 		interval:           iv,

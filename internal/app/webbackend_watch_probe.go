@@ -191,7 +191,7 @@ func (b *WebBackend) ProbeWatch(ctx context.Context, name string) web.ActionResu
 		return web.ActionResult{Message: summary, Readings: watchErrorReadings(err.Error())}
 	}
 	if b.watchSnapshots != nil {
-		b.watchSnapshots.Publish(name, w.checkType, result)
+		b.watchSnapshots.publishConfigured(name, w.checkType, result, w.configID)
 	}
 	snap := CheckSnapshot{
 		Observation: result.Observation(), OK: result.OK, Condition: result.Condition,
@@ -235,13 +235,16 @@ func ManualProbeCheckType(checkType string) bool {
 	}
 }
 
+// watchLastCheckedAt is the newest sample produced by this watch's current
+// check configuration. Samples from a previous target are ignored even if
+// they are still within the freshness window.
 func (b *WebBackend) watchLastCheckedAt(w *webWatch) time.Time {
 	if b.watchSnapshots == nil || w == nil {
 		return time.Time{}
 	}
 	var latest time.Time
 	for _, snap := range b.watchSnapshots.Get(w.name, w.checkType) {
-		if snap.Ran && watchSnapshotMetricConfigured(w, snap) && snap.At.After(latest) {
+		if snap.Ran && snapshotConfigMatches(w.configID, snap.ConfigID) && watchSnapshotMetricConfigured(w, snap) && snap.At.After(latest) {
 			latest = snap.At
 		}
 	}

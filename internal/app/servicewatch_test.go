@@ -333,14 +333,20 @@ func TestWebBackendListsAndControlsServiceWatches(t *testing.T) {
 	now := time.Date(2026, 7, 16, 18, 0, 0, 0, time.UTC)
 	snapshots := NewWatchSnapshots()
 	snapshots.now = func() time.Time { return now }
-	snapshots.Publish("svc:backlog", checks.CheckTypeCount, checks.Result{
+	resolved, errs := cfg.Resolve("svc")
+	if len(errs) > 0 {
+		t.Fatal(errs)
+	}
+	watchEntries := resolved.Tree[config.SectionWatches].(map[string]any)
+	watchEntry := watchEntries["backlog"].(map[string]any)
+	snapshots.publishConfigured("svc:backlog", checks.CheckTypeCount, checks.Result{
 		Check: "svc:backlog", OK: true, Condition: true, Message: "4 files",
 		Data: map[string]any{
 			checks.DataKeyPath:  "/tmp",
 			checks.DataKeyOf:    "file",
 			checks.DataKeyCount: 4,
 		},
-	})
+	}, watchSnapshotConfigID(watchEntry))
 	store := newFakeStore()
 	b, warns := NewWebBackend(t.Context(), cfg, Deps{
 		Backend: servicemgr.BackendSystemd, Manager: fakeManager{}, ExecxRunner: execx.CommandRunner{},
@@ -392,7 +398,8 @@ func TestWebBackendServiceWatchShowsSnapshotMeterAndReadings(t *testing.T) {
 	now := time.Date(2026, 7, 16, 18, 0, 0, 0, time.UTC)
 	snapshots := NewWatchSnapshots()
 	snapshots.now = func() time.Time { return now }
-	snapshots.Publish("svc:memory", checks.CheckTypeMemory, checks.Result{
+	w := &webWatch{name: "svc:memory", checkType: checks.CheckTypeMemory, interval: time.Minute, serviceScoped: true}
+	publishWatchFor(snapshots, w, checks.Result{
 		Check: "svc:memory", OK: true,
 		Data: map[string]any{
 			checks.DataKeyTotalBytes:     uint64(100),
@@ -402,7 +409,7 @@ func TestWebBackendServiceWatchShowsSnapshotMeterAndReadings(t *testing.T) {
 	})
 	b := &WebBackend{
 		watchOrder:     []string{"svc:memory"},
-		watches:        map[string]*webWatch{"svc:memory": {name: "svc:memory", checkType: checks.CheckTypeMemory, interval: time.Minute, serviceScoped: true}},
+		watches:        map[string]*webWatch{"svc:memory": w},
 		watchSnapshots: snapshots,
 		now:            func() time.Time { return now },
 	}
@@ -432,18 +439,19 @@ func TestWebBackendServiceWatchGraphMetricCarriesOnlyFreshCurrentValue(t *testin
 		t.Run(tc.name, func(t *testing.T) {
 			snapshots := NewWatchSnapshots()
 			snapshots.now = func() time.Time { return tc.sampleAt }
-			snapshots.Publish("exim:tidy-retry-db-if-large", checks.CheckTypeSQL, checks.Result{
+			graph := checks.ResolvedGraphMetrics(checks.CheckTypeSQL, "records", map[string]any{})
+			w := &webWatch{
+				name: "exim:tidy-retry-db-if-large", displayName: "Retry DB records",
+				checkType: checks.CheckTypeSQL, interval: time.Minute, serviceScoped: true, graphs: graph,
+			}
+			publishWatchFor(snapshots, w, checks.Result{
 				Check: "exim:tidy-retry-db-if-large", OK: true,
 				Data: map[string]any{checks.DataKeyResult: "0", checks.DataKeyValue: 0.0},
 			})
-			graph := checks.ResolvedGraphMetrics(checks.CheckTypeSQL, "records", map[string]any{})
 			b := &WebBackend{
 				watchOrder: []string{"exim:tidy-retry-db-if-large"},
 				watches: map[string]*webWatch{
-					"exim:tidy-retry-db-if-large": {
-						name: "exim:tidy-retry-db-if-large", displayName: "Retry DB records",
-						checkType: checks.CheckTypeSQL, interval: time.Minute, serviceScoped: true, graphs: graph,
-					},
+					"exim:tidy-retry-db-if-large": w,
 				},
 				watchSnapshots: snapshots,
 				now:            func() time.Time { return now },
