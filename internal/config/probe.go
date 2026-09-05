@@ -86,13 +86,14 @@ func directiveValue(data []byte, key string) (string, bool) {
 // bare feature flag and is handled before these.
 var configAssignSeps = []string{confdAssignSep, yamlAssignSep}
 
-// configKeyValue returns the value of a KEY="val", `key: val` or `key = val`
-// assignment, or an empty value for a bare KEY feature flag (which a YAML `key:`
-// opening a nested block also is). Optional spaces or tabs may sit between the
-// key and its separator, which is how exim.conf writes its options. Surrounding
-// quotes are stripped; a trailing comment is not, so prefer `matches:` over
-// `equals:` on a file that writes them. ok=false when the file is unreadable or
-// the key is absent.
+// configKeyValue returns the value of a KEY="val", `key: val`, `key = val` or
+// `key val` assignment, or an empty value for a bare KEY feature flag (which a
+// YAML `key:` opening a nested block also is). Optional spaces or tabs may sit
+// between the key and its separator, which is how exim.conf writes its options;
+// the separator-less `key val` form is how snmpd.conf, sshd_config and
+// named.conf-style files write theirs. Surrounding quotes are stripped; a
+// trailing comment is not, so prefer `matches:` over `equals:` on a file that
+// writes them. ok=false when the file is unreadable or the key is absent.
 func configKeyValue(path, key string) (string, bool) {
 	data, err := hostfs.ReadFile(path)
 	if err != nil {
@@ -110,11 +111,17 @@ func configKeyValue(path, key string) (string, bool) {
 		// Skip padding only after the key matched at line start, so a longer key
 		// that merely shares a prefix (`portable=1` against `port`) still needs a
 		// separator right where the key ends and cannot match.
-		rest = strings.TrimLeft(rest, confdAssignPadding)
+		padded := strings.TrimLeft(rest, confdAssignPadding)
 		for _, sep := range configAssignSeps {
-			if value, ok := strings.CutPrefix(rest, sep); ok {
+			if value, ok := strings.CutPrefix(padded, sep); ok {
 				return strings.Trim(strings.TrimSpace(value), confdQuoteTrimSet), true
 			}
+		}
+		// `key value`: the padding itself is the separator, so the key still has
+		// to end exactly where the whitespace starts (`portable 1` cannot answer
+		// for `port`).
+		if len(padded) < len(rest) {
+			return strings.Trim(strings.TrimSpace(padded), confdQuoteTrimSet), true
 		}
 	}
 	return "", false
