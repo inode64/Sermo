@@ -273,9 +273,14 @@ function serviceDetail(name) {
       pid: 3089414, ppid: 101, exe: "/usr/sbin/webserverd", exe_resolved: true, user: "www", role: "worker",
       cmdline: ["/usr/sbin/webserverd", "--config", "/etc/webserverd/webserverd.conf", "--foreground"],
       rss: 2097152, has_cpu: true, cpu: 3.5, threads: 2, max_core: 3.5, max_core_exact: true,
+    }, {
+      // A grandchild: the tree indent is part of the command column's width.
+      pid: 3089420, ppid: 3089414, exe: "/usr/sbin/webserverd", exe_resolved: true, user: "www", role: "worker",
+      cmdline: ["/usr/sbin/webserverd", "--config", "/etc/webserverd/webserverd.conf", "--foreground", "--worker"],
+      rss: 1048576, has_cpu: true, cpu: 1.5, threads: 1, max_core: 1.5, max_core_exact: true,
     }] : [])],
     process_totals: {
-      count: name === "web" ? 2 : 1, rss: 1048576, io_read: 0, io_write: 0, fds: 5, threads: 1,
+      count: name === "web" ? 3 : 1, rss: 1048576, io_read: 0, io_write: 0, fds: 5, threads: 1,
       has_cpu: true, cpu: 12.5, cpu_thread: 96.25, num_cpu: 4,
     },
     locks: [], rules: [], sla: [],
