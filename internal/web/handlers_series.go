@@ -22,10 +22,7 @@ func (s *Server) seriesSince(r *http.Request) time.Duration {
 	if limit <= 0 {
 		limit = defaultMaxSeriesWindow
 	}
-	return queryCapped(r, apiQuerySince, defaultSeriesWindow, limit, func(q string) (time.Duration, bool) {
-		d, err := time.ParseDuration(q)
-		return d, err == nil && d > 0
-	})
+	return queryCapped(r, apiQuerySince, defaultSeriesWindow, limit, positiveDuration)
 }
 
 func (s *Server) handleSeries(w http.ResponseWriter, r *http.Request) {
