@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"slices"
 	"strings"
 	"syscall"
 	"time"
@@ -119,8 +118,7 @@ func (n *ttyNotifier) targetTTYs(sessions []utmp.Session) []string {
 	if devRoot == "" {
 		devRoot = utmp.DevRoot
 	}
-	seen := map[string]struct{}{}
-	var out []string
+	var paths []string
 	for _, s := range sessions {
 		if len(n.users) > 0 {
 			if _, ok := n.users[s.User]; !ok {
@@ -131,14 +129,9 @@ func (n *ttyNotifier) targetTTYs(sessions []utmp.Session) []string {
 		if !ok {
 			continue
 		}
-		if _, ok := seen[path]; ok {
-			continue
-		}
-		seen[path] = struct{}{}
-		out = append(out, path)
+		paths = append(paths, path)
 	}
-	slices.Sort(out)
-	return out
+	return strutil.SortedUnique(paths)
 }
 
 func ttyPayload(msg Message, host string, at time.Time) []byte {
