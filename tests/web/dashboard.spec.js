@@ -577,6 +577,26 @@ test("expanded detail tables keep their headers in flow", async ({ page }) => {
   expect(clipped).toEqual([]);
 });
 
+test("expanded check and lock tables keep readable columns on a phone", async ({ page }) => {
+  await page.setViewportSize({ width: 412, height: 915 });
+  await page.locator("#svc-row-web .row-toggle").click();
+  const detail = page.locator("#services-section .service-detail");
+  await expect(detail).toBeVisible();
+  const visibleHeadings = (table) => detail.locator(`${table} thead th`).evaluateAll((cells) =>
+    cells.filter((th) => th.getClientRects().length > 0).map((th) => th.textContent.trim()));
+  expect(await visibleHeadings(".detail-checks-table")).toEqual(["Check", "State", "Message"]);
+  expect(await visibleHeadings(".detail-locks-table")).toEqual(["Name", "State", "Owner", "Reason", "Actions"]);
+  // With three columns the check name has room: a one-word name stays on one line.
+  const split = await detail.locator(".detail-checks-table tbody td:first-child").evaluateAll((cells) => cells.filter((td) => {
+    const range = document.createRange();
+    range.selectNodeContents(td);
+    return range.getClientRects().length > 1 && td.textContent.trim().split(/\s+/).length === 1;
+  }).map((td) => td.textContent.trim()));
+  expect(split).toEqual([]);
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  expect(overflow).toBe(0);
+});
+
 test("invalid application configuration stays a visible warning", async ({ page }) => {
   const body = JSON.parse(JSON.stringify(dashboard));
   const service = body.services.find((item) => item.name === "db");
