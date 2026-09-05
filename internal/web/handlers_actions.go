@@ -25,7 +25,11 @@ func (s *Server) handlePanic(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, ActionResult{OK: false, Message: apiErrorPanicAction})
 		return
 	}
-	s.operate(w, r, s.Backend, func(ctx context.Context, backend Backend) (bool, any) {
+	backend, _, ok := s.backendRead(w)
+	if !ok {
+		return
+	}
+	s.operate(w, r, backend, func(ctx context.Context, backend Backend) (bool, any) {
 		res := backend.SetPanic(ctx, on)
 		return res.OK, res
 	})

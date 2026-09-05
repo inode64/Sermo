@@ -156,6 +156,7 @@ const (
 	apiErrorCheckQueryRequired       = "check query parameter is required"
 	apiErrorMetricQueryRequired      = "metric query parameter is required"
 	apiErrorEncodeResponse           = "failed to encode response"
+	apiErrorBackendUnavailable       = "web backend unavailable"
 	apiErrorGenerationInvalid        = "invalid X-Sermo-Generation header"
 	apiErrorGenerationMissing        = "X-Sermo-Generation header is required"
 	apiErrorGenerationStale          = "configuration changed; refresh and try again"
@@ -322,7 +323,7 @@ const minWriteTimeout = 30 * time.Second
 // per-service and watch-probe deadline (app.MaxOperationTimeout).
 type Server struct {
 	Addr    string
-	Backend Backend
+	Backend BackendSource
 	Auth    Auth
 	Logger  *slog.Logger
 
@@ -380,19 +381,23 @@ type sessionInventorySource interface {
 	Sessions(ctx context.Context) SessionInventory
 }
 
-// backendGenerationSource exposes the active daemon configuration generation.
-// It is optional so standalone Backend implementations remain simple.
-type backendGenerationSource interface {
-	BackendGeneration() uint64
-}
-
-// backendReadSource pins a backend generation for one request. Reloadable
-// holders implement it so a response's generation identifies the exact backend
-// that produced its body. The pin is the returned instance, so holding it costs
-// nothing and never delays a reload.
-type backendReadSource interface {
+// BackendSource hands the server the Backend a request runs against and the
+// configuration generation it belongs to; 0 means generations are not tracked.
+// The daemon's reloadable holder swaps generations atomically; a fixed backend
+// wraps itself in StaticBackend.
+type BackendSource interface {
 	BeginBackendRead() (Backend, uint64)
 }
+
+// StaticBackend serves one fixed Backend without generation tracking.
+type StaticBackend struct {
+	Backend Backend
+}
+
+// BeginBackendRead implements BackendSource.
+//
+//nolint:ireturn // StaticBackend exists to hand out the Backend it was given.
+func (b StaticBackend) BeginBackendRead() (Backend, uint64) { return b.Backend, 0 }
 
 // Handler returns the router behind the auth middleware: the dashboard at /, the
 // service list at /api/services, and POST /api/services/{name}/{action} for
@@ -589,21 +594,19 @@ func writeActionResult(w http.ResponseWriter, ok bool, res any) {
 	writeJSON(w, status, res)
 }
 
-// backendRead pins one reloadable backend generation for the duration of a
-// read. Ordinary Backend implementations retain their existing behavior.
+// backendRead pins one backend generation for the duration of a request. When
+// the daemon has no backend yet it answers 503 and reports false, so a handler
+// never touches a nil Backend.
 //
 //nolint:ireturn // The server must return the Backend implementation held by its reloadable seam.
-func (s *Server) backendRead() (Backend, uint64) {
-	if source, ok := s.Backend.(backendReadSource); ok {
-		if backend, generation := source.BeginBackendRead(); backend != nil {
-			return backend, generation
+func (s *Server) backendRead(w http.ResponseWriter) (Backend, uint64, bool) {
+	if s.Backend != nil {
+		if backend, generation := s.Backend.BeginBackendRead(); backend != nil {
+			return backend, generation, true
 		}
 	}
-	generation := uint64(0)
-	if source, ok := s.Backend.(backendGenerationSource); ok {
-		generation = source.BackendGeneration()
-	}
-	return s.Backend, generation
+	writeError(w, http.StatusServiceUnavailable, apiErrorBackendUnavailable)
+	return nil, 0, false
 }
 
 // mutationBackend pins the active backend for one target-scoped mutation and
@@ -614,7 +617,10 @@ func (s *Server) backendRead() (Backend, uint64) {
 //
 //nolint:ireturn // The mutation must use the selected Backend implementation for its whole lifetime.
 func (s *Server) mutationBackend(w http.ResponseWriter, r *http.Request) (Backend, bool) {
-	backend, generation := s.backendRead()
+	backend, generation, ok := s.backendRead(w)
+	if !ok {
+		return nil, false
+	}
 	if generation == 0 {
 		return backend, true
 	}
@@ -640,7 +646,10 @@ func (s *Server) mutationBackend(w http.ResponseWriter, r *http.Request) (Backen
 // encoded result with that same generation. Reads always answer 200: a backend
 // read cannot fail, only observe the current snapshot.
 func (s *Server) readJSON(w http.ResponseWriter, r *http.Request, read func(context.Context, Backend) any) {
-	backend, generation := s.backendRead()
+	backend, generation, ok := s.backendRead(w)
+	if !ok {
+		return
+	}
 	s.writeBackendJSON(w, http.StatusOK, read(r.Context(), backend), generation)
 }
 

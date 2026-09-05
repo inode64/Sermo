@@ -403,8 +403,14 @@ func (f *fakeBackend) Preflight(_ context.Context, name string) (PreflightResult
 	return PreflightResult{}, false
 }
 
+// newServer serves b; a fake that tracks generations (implements
+// BackendSource itself) is used directly, any other Backend is served as is.
 func newServer(b Backend) http.Handler {
-	return (&Server{Backend: b}).Handler()
+	source, ok := b.(BackendSource)
+	if !ok {
+		source = StaticBackend{Backend: b}
+	}
+	return (&Server{Backend: source}).Handler()
 }
 
 func TestDashboardSnapshotEndpoint(t *testing.T) {
@@ -464,8 +470,8 @@ type generationBackend struct {
 	generation uint64
 }
 
-func (b *generationBackend) BackendGeneration() uint64 {
-	return b.generation
+func (b *generationBackend) BeginBackendRead() (Backend, uint64) {
+	return b, b.generation
 }
 
 type pinnedGenerationBackend struct {
@@ -1714,7 +1720,7 @@ func (b *ctxCapturingBackend) Operate(ctx context.Context, name, action string, 
 func TestOperateContextIgnoresRequestCancel(t *testing.T) {
 	b := &ctxCapturingBackend{delay: 40 * time.Millisecond}
 	srv := &Server{
-		Backend:          b,
+		Backend:          StaticBackend{Backend: b},
 		OperationTimeout: 200 * time.Millisecond,
 	}
 	srv.shutdown = context.Background()
@@ -1742,7 +1748,7 @@ func TestOperateContextCancelsOnDaemonShutdown(t *testing.T) {
 	shutdown, cancel := context.WithCancel(context.Background())
 	cancel()
 	b := &ctxCapturingBackend{delay: time.Hour}
-	srv := &Server{Backend: b, shutdown: shutdown}
+	srv := &Server{Backend: StaticBackend{Backend: b}, shutdown: shutdown}
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, postReq(testServicePath("web", apiActionRestart)))
 	if rec.Code != http.StatusConflict {

@@ -2,3 +2,4 @@
 sermo/internal/checks	TypeInfos	Cross-package registry parity tests inspect private check constructors.
 sermo/internal/config	WithCatalogDirs	Tests and staged packaging checks inject isolated catalog roots.
 sermo/internal/web	Auth.String	Redaction contract prevents future formatted Auth values exposing RuntimeToken.
+sermo/internal/web	StaticBackend.BeginBackendRead	Tests and embedders serve one fixed Backend; the daemon always installs its reloadable holder.

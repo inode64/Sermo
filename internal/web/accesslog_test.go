@@ -58,7 +58,7 @@ func TestAccessLogPreservesActionWriteDeadline(t *testing.T) {
 	defer log.Close()
 
 	s := &Server{
-		Backend:          &fakeBackend{},
+		Backend:          StaticBackend{Backend: &fakeBackend{}},
 		AccessLog:        log,
 		OperationTimeout: time.Minute,
 	}
@@ -130,7 +130,7 @@ func TestAccessLogRecordsAuthDeniedPost(t *testing.T) {
 	defer log.Close()
 
 	s := &Server{
-		Backend:   &fakeBackend{services: []Service{{Name: "web"}}},
+		Backend:   StaticBackend{Backend: &fakeBackend{services: []Service{{Name: "web"}}}},
 		Auth:      Auth{AdminCredentials: testCredentials(t, "secret"), GuestCredentials: testCredentials(t, "guestpw")},
 		AccessLog: log,
 	}
@@ -275,7 +275,7 @@ func TestAccessLogRecordsUnsafeDeniedMethods(t *testing.T) {
 	defer log.Close()
 
 	s := &Server{
-		Backend:   &fakeBackend{services: []Service{{Name: "web"}}},
+		Backend:   StaticBackend{Backend: &fakeBackend{services: []Service{{Name: "web"}}}},
 		Auth:      Auth{AdminCredentials: testCredentials(t, "secret")},
 		AccessLog: log,
 	}

@@ -95,7 +95,10 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	backend, generation := s.backendRead()
+	backend, generation, ok := s.backendRead(w)
+	if !ok {
+		return
+	}
 	s.writeBackendJSON(w, http.StatusOK, backend.EventPage(r.Context(), query), generation)
 }
 
@@ -150,7 +153,11 @@ func (s *Server) handleEventsClear(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, ActionResult{OK: false, Message: err.Error()})
 		return
 	}
-	n := s.Backend.PruneEvents(r.Context(), before)
+	backend, _, ok := s.backendRead(w)
+	if !ok {
+		return
+	}
+	n := backend.PruneEvents(r.Context(), before)
 	writeJSON(w, http.StatusOK, map[string]any{
 		apiJSONKeyOK:     true,
 		apiJSONKeyPruned: n,
@@ -164,7 +171,11 @@ func (s *Server) handleStateCompact(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.extendActionWriteDeadline(w)
-	s.operate(w, r, s.Backend, func(ctx context.Context, backend Backend) (bool, any) {
+	backend, _, ok := s.backendRead(w)
+	if !ok {
+		return
+	}
+	s.operate(w, r, backend, func(ctx context.Context, backend Backend) (bool, any) {
 		res := backend.CompactState(ctx, before)
 		return res.OK, res
 	})

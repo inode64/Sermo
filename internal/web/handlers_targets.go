@@ -54,7 +54,10 @@ func (s *Server) handleLockRelease(w http.ResponseWriter, r *http.Request) {
 // handleNamed answers a lookup keyed by the request's name path parameter:
 // 404 with notFoundMsg when fn reports no match, the JSON result otherwise.
 func handleNamed[T any](s *Server, w http.ResponseWriter, r *http.Request, notFoundMsg string, fn func(Backend, context.Context, string) (T, bool)) {
-	backend, generation := s.backendRead()
+	backend, generation, ok := s.backendRead(w)
+	if !ok {
+		return
+	}
 	res, ok := fn(backend, r.Context(), r.PathValue(apiParamName))
 	if !ok {
 		writeError(w, http.StatusNotFound, notFoundMsg)

@@ -45,6 +45,17 @@ func NewTelegramReporter(webHolder *WebBackendHolder, sla telegramSLAReader, now
 	return &telegramReporter{web: webHolder, sla: sla, now: now}
 }
 
+// backend pins the active web backend generation for one report. A holder
+// without a backend yields an empty *WebBackend, whose readers answer with
+// empty listings, so the bot degrades to "nothing to report" instead of failing.
+func (r *telegramReporter) backend() *WebBackend {
+	b, _ := r.web.backendAndGeneration()
+	if b == nil {
+		return &WebBackend{}
+	}
+	return b
+}
+
 func (r *telegramReporter) Status(ctx context.Context) (telegrambot.StatusReport, error) {
 	snap := r.web.DashboardSnapshot(ctx, 0)
 	rep := telegrambot.StatusReport{
@@ -69,7 +80,7 @@ func (r *telegramReporter) Status(ctx context.Context) (telegrambot.StatusReport
 
 //nolint:dupl // parallel projections of two unrelated web types; merging them would need reflection.
 func (r *telegramReporter) Services(ctx context.Context) ([]telegrambot.ServiceLine, error) {
-	return mapSlice(r.web.Services(ctx), func(s web.Service) telegrambot.ServiceLine {
+	return mapSlice(r.backend().Services(ctx), func(s web.Service) telegrambot.ServiceLine {
 		return telegrambot.ServiceLine{
 			Name:      s.Name,
 			State:     s.State,
@@ -81,7 +92,7 @@ func (r *telegramReporter) Services(ctx context.Context) ([]telegrambot.ServiceL
 
 //nolint:dupl // parallel projections of two unrelated web types; merging them would need reflection.
 func (r *telegramReporter) Watches(ctx context.Context) ([]telegrambot.WatchLine, error) {
-	return mapSlice(r.web.Watches(ctx), func(w web.Watch) telegrambot.WatchLine {
+	return mapSlice(r.backend().Watches(ctx), func(w web.Watch) telegrambot.WatchLine {
 		return telegrambot.WatchLine{
 			Name:      w.Name,
 			Scope:     w.Scope,
@@ -107,7 +118,7 @@ func (r *telegramReporter) SLA(ctx context.Context, service string) ([]telegramb
 }
 
 func (r *telegramReporter) Events(ctx context.Context, limit int) ([]telegrambot.EventLine, error) {
-	events := r.web.Events(ctx, limit)
+	events := r.backend().Events(ctx, limit)
 	lines := make([]telegrambot.EventLine, 0, len(events))
 	for _, e := range events {
 		lines = append(lines, telegrambot.EventLine{
@@ -121,7 +132,7 @@ func (r *telegramReporter) Events(ctx context.Context, limit int) ([]telegrambot
 }
 
 func (r *telegramReporter) serviceExists(ctx context.Context, name string) bool {
-	services := r.web.Services(ctx)
+	services := r.backend().Services(ctx)
 	for i := range services {
 		if strings.EqualFold(services[i].Name, name) {
 			return true

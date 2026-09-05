@@ -90,7 +90,7 @@ func TestWebBackendHolderReloadIgnoresPinnedReads(t *testing.T) {
 	if _, current := holder.BeginBackendRead(); current != initialWebBackendGeneration+1 {
 		t.Fatalf("generation after reload = %d, want %d", current, initialWebBackendGeneration+1)
 	}
-	if got := watchNames(holder.Watches(context.Background())); got != "after-reload" {
+	if got := watchNames(pinnedBackend(t, holder).Watches(context.Background())); got != "after-reload" {
 		t.Fatalf("holder watches = %q, want the reloaded generation", got)
 	}
 	// The pin is the instance: an action that passed its precondition keeps the
@@ -120,4 +120,15 @@ func dashboardSnapshotBackend(service, notifier string) *WebBackend {
 		notifierOrder: []string{notifier},
 		notifiers:     map[string]*webNotifier{notifier: {name: notifier}},
 	}
+}
+
+// pinnedBackend returns the holder's active backend the way the web server
+// reads it, failing the test when none is installed.
+func pinnedBackend(t *testing.T, holder *WebBackendHolder) web.Backend {
+	t.Helper()
+	backend, _ := holder.BeginBackendRead()
+	if backend == nil {
+		t.Fatal("holder has no active backend")
+	}
+	return backend
 }

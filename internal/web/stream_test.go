@@ -20,7 +20,7 @@ func TestStreamDisabledWithoutBroadcaster(t *testing.T) {
 
 func TestStreamPushesChangeSignal(t *testing.T) {
 	changes := NewBroadcaster()
-	srv := httptest.NewServer((&Server{Backend: &fakeBackend{}, Changes: changes}).Handler())
+	srv := httptest.NewServer((&Server{Backend: StaticBackend{Backend: &fakeBackend{}}, Changes: changes}).Handler())
 	defer srv.Close()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
