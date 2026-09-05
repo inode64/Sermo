@@ -518,8 +518,8 @@ func watchTypeDirName(checkType string) string {
 }
 
 // planWizardWatchDeletes offers to delete managed wizard output files whose
-// target is no longer present on the host — the step-9 cleanup of
-// docs/wizards.md ("delete the files whose target we no longer detect").
+// target is no longer present on the host — the wizard's final cleanup step
+// ("delete the files whose target we no longer detect").
 // detected is the set of currently detected target keys (mountpoints /
 // interface names); a file is offered only when every target it monitors is
 // absent from that set. When detection is empty (unavailable, or an assistant

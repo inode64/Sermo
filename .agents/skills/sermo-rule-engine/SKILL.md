@@ -3,213 +3,64 @@ name: sermo-rule-engine
 description: Use when designing or implementing Sermo rules, condition trees, and/or/not logic, for cycles, within cycles, remediation actions, alerts, or guard rules.
 ---
 
-You are the rule engine designer for Sermo.
+Rule-engine design for Sermo. The public YAML surface is in `docs/rules.md`;
+the types are `RuleType`, `ActionType` and `Action` in
+`internal/rules/model.go`; policy state lives in `internal/rules/state.go`.
 
-## Rule model
+## Model
 
-`rules` is a map keyed by rule name (like `checks`/`preflight`/`processes`), not
-a list. The key is the rule name; there is no inner `name` field. This lets a
-service override or disable a single inherited rule. An entry has:
+- `rules` is a map keyed by rule name so a service can override or disable one
+  inherited rule. Types: `remediation`, `guard`, `alert`.
+- `then` is one action (`then: { action: restart }`) or
+  `then: { actions: [...] }`. `block` and `alert` require a `message`; only
+  guards use `block`, and a guard must list `blocks`.
+- Condition leaves: `and`, `or`, `not`, `failed`, `active`, `metric`,
+  `service`, `process`, `file`, `command`, `changed`.
+- `for: { cycles }` counts consecutive matches; `within: { cycles,
+  min_matches }` is a rolling window. A rule declares at most one of them.
+  `mode` belongs only to `defaults.rule_window`.
 
-```text
-type           remediation | guard | alert        (RuleType)
-if             condition tree
-for / within   optional window
-then           one action { action, message, ... } or actions: [{ type, message, ... }]
-blocks         list of actions a guard blocks (guard rules only)
-```
+## Invariants
 
-Example:
-
-```yaml
-rules:
-  restart-if-port-failed:
-    type: remediation
-    if:
-      failed:
-        check: tcp-783
-    for:
-      cycles: 3
-    then:
-      action: restart
-```
-
-`RuleType`/`ActionType` constants and the resolved `Action` struct live in
-`internal/rules/model.go`; the public YAML surface is documented in
-`docs/rules.md`. A `then` block resolves to one or more actions. The single form
-is `then: { action: restart }`; the multi-action form is
-`then: { actions: [ { type: alert, message: "..." }, { type: restart } ] }`.
-`block` and `alert` actions require a `message`; only guard rules use
-`action: block`, and a guard must list `blocks`.
-
-## Condition tree
-
-Support:
-
-```text
-and
-or
-not
-failed
-active
-metric
-service
-process
-file
-command
-changed
-```
-
-Example:
-
-```yaml
-if:
-  and:
-    - failed:
-        check: http
-    - not:
-        active:
-          check: backup-running
-```
-
-`metric` leaves carry a `scope` (`service` default, or `system`). Remediation
-rules may only trigger on `scope: service` metrics; a `scope: system` metric may
-drive `alert` only — never an operation action
-(`restart`/`start`/`stop`/`reload`/`resume`) for a single service.
-
-Conditions are read-only predicates. The evaluator runs every distinct probe (a
-declared check or an inline condition) at most once per cycle and caches the
-result, so a probe shared by several rules never executes twice in a cycle, and a
-condition must never change system state. Inline `command` conditions must be
-side-effect-free, array form, with a timeout. See `AGENTS.md`.
-
-## Windows
-
-`for` means consecutive matches:
-
-```yaml
-for:
-  cycles: 3
-```
-
-`within` means rolling window:
-
-```yaml
-within:
-  cycles: 15
-  min_matches: 3
-```
-
-`mode` belongs only to the `defaults.rule_window` fallback block, not to a
-rule's `for` block. Do not allow ambiguous windows. A rule cannot define both
-`for` and `within`; validation must reject it.
-
-## Rule types
-
-Support these concepts:
-
-```text
-remediation: may start/stop/restart/reload/resume
-guard: blocks actions
-alert: records or notifies
-```
-
-Guards must run before remediation.
-
-Example guard:
-
-```yaml
-rules:
-  block-restart-during-backup:
-    type: guard
-    blocks:
-      - restart
-      - stop
-    if:
-      active:
-        check: mariadb-backup
-    then:
-      action: block
-      message: "${display_name} backup is running"
-```
+- Conditions are read-only predicates. Every distinct probe (declared check or
+  inline condition) runs at most once per cycle and its result is cached;
+  inline `command` conditions are side-effect-free argv arrays with a timeout.
+- A remediation rule triggers only on `scope: service` metrics. A
+  `scope: system` metric may drive `alert` only.
+- Guards run before remediation; a blocked action logs the guard's block
+  message and records one event.
+- Cooldown, `max_actions`, `max_actions_window` and backoff are the per-service
+  `policy`, not per-rule. The daemon consults the policy before the operation
+  engine; a rule may keep firing while the policy suppresses execution.
+- A resolved policy needs a positive `cooldown`; a missing or zero value is a
+  validation error. Manual actions skip cooldown only.
+- An unavailable or erroring guard leaf fails closed.
 
 ## Evaluation order
 
-Use this order:
-
 ```text
-1. Run all declared checks and any inline rule probes once; cache the results for
-   this cycle (each distinct probe runs at most once).
-2. Evaluate guard rules.
-3. Evaluate remediation/alert rules.
-4. If remediation requests an action, evaluate blocking guards for that action.
-5. If not blocked, consult the service remediation policy (cooldown, max_actions);
-   if suppressed, log and skip the action.
-6. Execute the safe operation through the shared engine if allowed.
-7. Update remediation state and record the event.
+1. run declared checks and inline probes once; cache per cycle
+2. evaluate guard rules
+3. evaluate remediation and alert rules
+4. for a requested action, evaluate the guards that block it
+5. apply the service policy (cooldown, max_actions); log and skip if suppressed
+6. execute through internal/operation
+7. update window and policy state; record the event
 ```
 
-Step 5 applies to automatic remediation only. Manual `sermoctl` actions are
-exempt from cooldown but still pass guards, locks and preflight.
+Two kinds of state exist and must not be conflated: per-rule window history
+(consecutive count or rolling matches) and per-service policy state
+(`LastActionAt`, `RecentActions`, `CurrentBackoff`).
 
-## State
-
-There are two distinct kinds of state; do not conflate them.
-
-Per-rule window state (for evaluating `for`/`within`):
+## Tests a rule change needs
 
 ```text
-service
-rule name
-cycle results history (consecutive count, or rolling window of matches)
-```
-
-Per-service remediation policy state (for cooldown/rate-limit), in
-`internal/rules/state.go`:
-
-```text
-LastActionAt    time of the last executed remediation action
-RecentActions   timestamps still inside max_actions_window
-CurrentBackoff  current backoff duration (0 when disabled)
-```
-
-Cooldown and rate limiting are a per-service `policy` block (mandatory positive
-cooldown, optional max_actions/max_actions_window/backoff), NOT per-rule. The
-daemon checks this resolved policy before invoking the operation engine
-(evaluation order step 5). A rule may keep firing every cycle while the cooldown
-suppresses repeated execution. See `docs/rules.md`.
-
-## Testing
-
-Add tests for:
-
-```text
-and true/false
-or true/false
-not true/false
-nested conditions
-failed check
-active check
-metric comparisons
-for cycles
-within cycles
-guard before remediation
-metric scope (service vs system); system metric rejected in remediation
-a probe shared by several rules runs at most once per cycle
-cooldown suppresses repeated remediation; zero/missing resolved cooldown is invalid
-max_actions rate limits within window
-manual action is exempt from cooldown but still passes guards/locks/preflight
-invalid rule rejected
-```
-
-## Output format
-
-When designing or reviewing rules, return:
-
-```text
-- YAML shape
-- Evaluation semantics
-- State required
-- Edge cases
-- Tests
+and/or/not truth tables and nesting
+failed, active, metric comparisons and the % suffix
+for and within windows; both declared is rejected
+guard evaluated before remediation; guard leaf error fails closed
+system-scope metric rejected in remediation
+shared probe runs once per cycle
+cooldown suppresses; zero or missing cooldown invalid; max_actions within window
+manual action exempt from cooldown but not from guards, locks or preflight
 ```

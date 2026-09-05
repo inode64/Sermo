@@ -3,170 +3,73 @@ name: sermo-go-implementation
 description: Use when implementing Go code for Sermo, especially CLI commands, internal packages, interfaces, command runners, config loading, checks, rules, locks, or operations.
 ---
 
-You are implementing Go code for Sermo.
+AGENTS.md owns repository invariants (ownership, operation path, execx,
+timeouts, builders, docs, gates). This skill is the coding habits that keep
+those cheap to follow.
 
-## Coding rules
+## Habits
 
-1. Write idiomatic Go.
-2. Keep functions small and readable.
-3. Use `context.Context` for all blocking operations.
-4. Every external command must have a timeout.
-5. Do not call `os/exec` directly from many packages. Use an injectable command runner.
-6. Wrap errors with context.
-7. Prefer table-driven tests.
-8. Do not use package-level mutable state unless unavoidable.
-9. Keep exported APIs minimal.
-10. Keep Linux-specific behavior behind interfaces where possible.
-11. Use exactly the same name for a concept in variables, parameters, comments
-    and struct fields. Look at the model structs first; prefer the public field
-    name as the canonical term (see AGENTS.md "Naming and terminology").
-12. Prefer the Go standard library or a Go-module alternative over external
-    commands. When one is genuinely required, never call `os/exec` directly:
-    route it through the `execx` runner (context + timeout). See AGENTS.md
-    "Native by default".
-13. All service start/stop/restart/reload/resume/signals must go through the
-    `internal/operation` package. Do not bypass it. See AGENTS.md "Service
-    operations".
-14. Keep documentation, catalog examples and `docs/configuration.md` / `docs/rules.md`
-    in step with any config, check, notifier or behavior change. See AGENTS.md
-    "Documentation lockstep".
-15. Treat examples, failing tests and bug reports as use-case signals. After
-    adding or changing a function, type, helper, parser, builder or logic for
-    one sample, search for equivalent call sites and surfaces; apply the shared
-    behavior through the existing owner or document why it is intentionally
-    scoped. See AGENTS.md "Reuse and shared behavior".
-16. Introduce new check types, watches, notifiers and rule actions only through
-    the central builder functions. Do not scatter construction logic. See
-    AGENTS.md "Central builders".
-17. Bound every blocking operation with a timeout from configuration or a named
-    constant. No magic durations in application logic. See AGENTS.md "Timeout
-    discipline".
+- Find the owner first: `rg` for the concept, the model struct and the central
+  builder. Put new behavior there, or extract/move if that owner cannot hold
+  it. A new helper sits beside the owner, not in a new package, until ownership
+  actually crosses a boundary.
+- Use the public model field name for the concept everywhere: variables,
+  parameters, struct fields, comments, JSON, YAML.
+- Split functions by responsibility. Do not extract a private helper just to
+  shrink a function that the complexity analyzers already accept.
+- Pass `context.Context` into every blocking call and bound it with a timeout
+  from configuration or a named constant.
+- Wrap errors with what was attempted, for a sysadmin reader:
 
-## External command pattern
+  ```text
+  restart mysql via openrc: rc-service mysql restart failed: exit code 1: service not found
+  ```
 
-Service commands, config checks and app checks must use a runner abstraction, for example:
+- Keep exported APIs small. Do not add new package-level mutable state;
+  registration belongs in the existing registry. Linux-specific behavior stays
+  behind an interface with a fake for tests.
+- External commands go through `execx`:
 
-```go
-type Runner interface {
-    Run(ctx context.Context, name string, args ...string) (Result, error)
-}
-```
+  ```go
+  ctx, cancel := context.WithTimeout(parent, timeout)
+  defer cancel()
+  res, err := runner.Run(ctx, "systemctl", "restart", service)
+  ```
 
-The result should include:
+  The `Result` carries stdout, stderr, exit code and duration.
+- HTTP uses `internal/httpx`, never `http.DefaultClient`.
+- Fix analyzer findings at the source. A `//nolint` names the analyzer and the
+  design reason.
 
-```text
-stdout
-stderr
-exit code
-duration
-```
+## Protocol probes
 
-Tests should use a fake runner.
+Every `internal/conn` probe honors `cfg.Interface`. Built-ins and aliases are
+registered in `internal/conn/registry.go`; registered probes enter the shared
+executor once and obtain the prepared target through the existing helpers. Do
+not add package-init registration or duplicate endpoint defaults.
 
-## Context and timeout
+Stream probes dial through `BindDialer`; packet listeners use
+`BindListenConfig`. A library is acceptable only if it is codec-only or
+accepts Sermo's dialer/connection. Reject libraries that perform unhookable
+internal I/O.
 
-Do not write this:
+Keep documented transport exceptions local: chronyd's Unix datagram client and
+DHCP's per-datagram `IP_PKTINFO` path. A protocol may rebuild an endpoint only
+when its wire format genuinely selects a different target, with the reason
+documented at that call.
 
-```go
-exec.Command("systemctl", "restart", service).Run()
-```
+## Wizards
 
-Prefer:
+`internal/assist` owns the assistant flow. Use its shared `Prompt` helpers,
+detected targets and the canonical monitor/interval flow. Do not invent a
+separate prompt parser or ask for a target name that detection can provide.
+`none` and `default` remain selectable with no configured notifier; an empty
+inherited default degrades to monitor-only. Preview and confirm generated
+files; offer cleanup only for targets proven absent by detection.
 
-```go
-ctx, cancel := context.WithTimeout(parent, timeout)
-defer cancel()
-runner.Run(ctx, "systemctl", "restart", service)
-```
+## Tests that accompany code
 
-## Error messages
-
-Errors must help a sysadmin.
-
-Good:
-
-```text
-restart mysql via openrc: rc-service mysql restart failed: exit code 1: service not found
-```
-
-Bad:
-
-```text
-error
-failed
-```
-
-## Package guidance
-
-Use these packages. This is the current full `internal/` layout; it must match
-the repository — do not invent or drop packages:
-
-```text
-internal/app          sermod daemon, scheduler, in-memory state, event log and web preflight
-internal/appinspect   catalog app/library inspection and installed-version discovery
-internal/assist       wizard prompt helpers and assistant flow primitives
-internal/buildinfo    build/version metadata
-internal/cfgval       typed config value parsing and validation helpers
-internal/checks       check implementations and central check builders
-internal/cli          sermoctl command implementations
-internal/cliutil      pflag/CLI error normalisation shared by commands
-internal/config       YAML model, catalog loading, services/watches/clones, merge, render, variables, validation
-internal/conn         protocol probes used by connection checks
-internal/control      daemon control socket/client helpers
-internal/ctxutil      small context helpers
-internal/diag         diagnostics assembly
-internal/dockerctl    Docker control helpers
-internal/emission     shared emission/formatting helpers
-internal/execx        command runner
-internal/httpx        HTTP client with timeout (never http.DefaultClient)
-internal/locks        runtime locks and external lock checks
-internal/logfile      append-only log file writer
-internal/metrics      CPU/memory/process collectors and time-series helpers
-internal/mountctl     mount/umount operation helpers
-internal/mounts       mount table parsing
-internal/netutil      network address helpers
-internal/notify       notifier implementations
-internal/operation    safe start/stop/restart/reload/resume workflows shared by sermod and sermoctl
-internal/output       operator-facing CLI output helpers
-internal/process      process discovery, identity matching and signaling
-internal/procnet      /proc/net socket table parsing
-internal/rules        rule engine, windows and remediation state
-internal/servicemgr   systemd/OpenRC abstraction
-internal/state        persisted daemon state and migrations
-internal/strutil      small string helpers
-internal/telegramapi  Telegram Bot API types and parse_mode
-internal/telegrambot  inbound Telegram command dispatch
-internal/units        duration/byte humanization shared with the web UI
-internal/utmp         Linux utmp/wtmp session parsing
-internal/virt         virtualization control helpers
-internal/volume       volume/storage expansion helpers
-internal/web          web API contracts and embedded UI server
-internal/webcred      web credential loading
-```
-
-## Test requirements
-
-When adding code, add tests for:
-
-```text
-success path
-failure path
-timeout path
-invalid input
-unsafe input
-edge cases
-```
-
-Use fake runners and temporary directories. Do not run real service commands in unit tests.
-
-## Output expectation
-
-When modifying code, summarize:
-
-```text
-- packages changed
-- new behavior
-- safety checks preserved
-- tests added
-- commands run
-```
+Cover the success, failure, timeout, invalid-input and unsafe-input paths the
+change actually has, with table-driven subtests, fake runners and temporary
+directories. Do not invent a blocked or timeout case for a pure formatter.
+Never run real service commands or signal host processes from a test.

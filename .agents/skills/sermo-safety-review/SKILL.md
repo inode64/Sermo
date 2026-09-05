@@ -1,110 +1,87 @@
 ---
 name: sermo-safety-review
-description: Use for any Sermo change involving start, stop, restart, reload, resume, kill, signal, process matching, locks, preflight, guards, remediation rules, or automatic actions.
+description: Use for any Sermo change involving start, stop, restart, reload, resume, kill, signal, process discovery or matching, pidfiles, /proc, cgroups, residual processes, locks, preflight, guards, remediation rules, or automatic actions.
 ---
 
-You are the safety reviewer for Sermo.
+Safety review for Sermo. Assume production servers and control of databases,
+web servers, caches and mail. Operator policy: `docs/safety.md`. AGENTS.md
+lists the hard boundaries. This skill is the review checklist for code that
+touches them.
 
-Assume Sermo may run on production servers and may control databases, web servers, caches and mail services.
+## Operation path
 
-## Mandatory safety checks
+1. Every service action runs through `internal/operation` with a timeout, the
+   operation lock, guards and required preflight. CLI, daemon and web never
+   call a backend or signal a process directly.
+2. Start/restart/reload/resume is blocked by a failed required preflight; an
+   optional preflight warns. A `verify: true` check failing after the operation
+   returns `postflight_failed`.
+3. Automatic remediation uses the same path as manual actions, requires a
+   positive resolved `policy.cooldown`, honors `max_actions` and never triggers
+   from a `scope: system` metric. Manual actions skip cooldown only; they still
+   pass guards, locks and preflight.
+4. The operation lock is released on every exit path. Named runtime locks live
+   under `<paths.runtime>/locks`, operation locks under `<paths.runtime>/ops`;
+   they never share a directory and are never loaded from `/etc/sermo`.
+5. Locks are created with `O_CREAT|O_EXCL` and are TTL-bounded. A stale lock
+   (expired or dead owner) is reclaimed through a logged path, never silently
+   overwritten.
+6. Every executed or blocked action records exactly one auditable event.
+7. One slow service never blocks monitoring of another; shared check
+   concurrency stays bounded.
 
-Always verify:
+## Process identity and signaling
 
-1. No service action runs without a timeout.
-2. Start/restart/reload/resume is blocked when required preflight fails.
-3. Start/stop/restart/reload/resume is blocked when a matching guard blocks it.
-4. Start/stop/restart/reload/resume is blocked when a relevant operational lock is active.
-5. Auto-remediation uses the same safe operation path as manual CLI actions.
-6. `SIGKILL` is never used unless explicitly allowed.
-7. Any `SIGKILL` allowance has a restrictive `kill_only_if` clause.
-8. Processes are never killed by name only, and cmdline never authorizes a kill.
-9. Process matching validates `exe` and `user`: `exe` is the resolved
-   `/proc/<pid>/exe` path matched exactly (an unresolvable exe never matches);
-   prefer `pidfile` or `cgroup` as extra evidence.
-10. Restart loops are prevented by the resolved per-service `policy` cooldown
-    (mandatory and positive), optionally `max_actions` rate limiting and backoff.
-    Manual actions are exempt from cooldown but still honor locks, guards and
-    preflight.
-11. Residual processes after stop are handled conservatively: only residuals that
-    exactly match `kill_only_if` are signaled; any remaining residual yields
-    `orphan_processes` and no auto-start.
-12. Every executed or blocked action records exactly one auditable event.
-13. Database catalog services default to `force_kill: false`.
-14. Commands do not interpolate untrusted strings through a shell.
-15. External command arguments are passed as argv arrays, not shell strings.
-16. Remediation triggers only on service-scope metrics; a system-scope metric
-    (total_memory, total_cpu, load) may drive an alert but never
-    start/stop/restart/reload/resume.
-17. Locks are atomic (O_CREAT|O_EXCL) and TTL-bounded; a stale lock (expired or
-    dead owner via owner_start_ticks) is reclaimed through a logged path, never
-    silently overwritten. The internal operation lock is released on every exit
-    path (defer), so a blocked/failed operation never leaks it. Named runtime
-    locks live under `<paths.runtime>/locks`; internal operation locks live under
-    `<paths.runtime>/ops`; active locks are never loaded from `/etc/sermo`.
-
+- A process matches only on the exact resolved `/proc/<pid>/exe` path and the
+  real UID. Name, basename, substring, argv[0] and cmdline never authorize
+  anything; `processes.<name>.cmd` only narrows a match the operator declared.
+- An unreadable or `(deleted)` exe never matches. Leaving an unidentified
+  process alive beats killing the wrong one.
+- Prefer extra evidence: pidfile, systemd cgroup or MainPID, parent tree,
+  OpenRC supervise metadata, a listening port owned by the PID.
+- `SIGKILL` requires `force_kill: true` plus a `kill_only_if` clause with both
+  `exe_any` and `users`. Database catalog services keep `force_kill: false`.
+- Residuals after stop: only processes matching every `kill_only_if` field get
+  SIGTERM, then SIGKILL after the term timeout. Any other residual yields
+  `orphan_processes`, and a start never follows a stop that left orphans.
+- External commands are argv arrays through the `execx` runner with a context
+  and timeout; no shell, no interpolated user input, no ignored errors or
+  cancellation.
 
 ## Red flags
 
-Flag any code or config that:
-
 ```text
-matches killable processes by substring, basename, or argv[0]/cmdline
-runs shell commands with unescaped user input
-ignores command errors
-ignores context cancellation
-does not log blocked actions
-has no tests for guard/preflight failure
-restarts after failed stop with residual processes
-lets remediation bypass locks
+matches killable processes by name, basename, substring, argv[0] or cmdline
+runs a shell or ignores command errors or context cancellation
+executes a service action outside internal/operation
+lets remediation bypass locks, guards, preflight or cooldown
 triggers remediation from a system-scope metric
-serializes all services through one loop (a long op blocks other services)
-leaks the operation lock on an early-return path
-exposes config toggles that disable hard safety invariants
-allows automatic remediation with missing or zero policy.cooldown
-loads active locks from /etc/sermo/locks.d or supports ambiguous paths.locks
-lets named runtime locks and operation locks share a directory
+restarts after a stop that left residual processes
+leaks the operation lock on an early return
+does not log a blocked action
+adds a config toggle that disables a hard invariant
+lets named locks and operation locks share a directory or load from /etc
+serializes every service through one loop
 ```
 
 ## Required tests
 
-Safety-sensitive changes should include tests for:
+A safety-sensitive change covers the relevant rows:
 
 ```text
-guard blocks restart
-guard blocks start
-guard blocks reload/resume
-preflight failure blocks restart
-preflight failure blocks start
-preflight failure blocks reload/resume
-lock blocks start/stop/restart/reload/resume
-paths.locks rejected; named and operation lock dirs derive separately from paths.runtime
-force_kill false does not send SIGKILL
-force_kill true requires kill_only_if
-process name-only matching is rejected; exe matched by resolved /proc/<pid>/exe
-restart cooldown prevents loops; manual actions are exempt
-missing or zero resolved policy.cooldown is rejected
-residual not matching kill_only_if yields orphan_processes; no start after orphans
-system-scope metric in a remediation rule is rejected
-operation lock released on every early-return path
+guard blocks start/stop/restart/reload/resume
+required preflight failure blocks; optional preflight warns
+lock blocks every action; paths.locks rejected; lock dirs derive from paths.runtime
+force_kill false never sends SIGKILL; force_kill true requires kill_only_if
+exe matched by resolved /proc/<pid>/exe; substring/basename/name-only rejected
+unresolvable or (deleted) exe never matches
+residual not matching kill_only_if is never signalled and yields orphan_processes
+no start after orphans
+cooldown prevents loops; manual action exempt; missing or zero cooldown rejected
+system-scope metric in a remediation rule rejected
+operation lock released on every early-return path; exactly one event recorded
+stale pidfile, wrong exe or wrong user for a pidfile, child process tree
 ```
 
-## Output format
-
-Return:
-
-```text
-Risk level: low / medium / high / critical
-
-Findings:
-- ...
-
-Required changes:
-- ...
-
-Suggested tests:
-- ...
-
-Approval:
-approved / approved with changes / blocked
-```
+Tests use fake runners and a fake process table or procfs fixture. They never
+run `systemctl`, `rc-service`, `kill`, `pkill`, `sudo` or `doas`.

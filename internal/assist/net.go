@@ -109,7 +109,7 @@ func filterIfaces(ifaces []Iface, keep func(Iface) bool) []Iface {
 }
 
 type netSettings struct {
-	Monitoring          // shared monitor-state + interval (asked first, see docs/wizards.md)
+	Monitoring          // shared monitor-state + interval (asked first)
 	metrics    []string // any of checks.NetMetricState/Errors/Speed/Address
 	stateDown  bool     // expect:down instead of on:change
 	addrAbsent bool     // expect:absent instead of on:change

@@ -471,7 +471,7 @@ func (a App) writeWizardServices(p *assist.Prompt, opts options, globalPath stri
 	}
 
 	// Step-9 cleanup: offer to delete managed service files whose catalog service
-	// is no longer detected on this host (docs/wizards.md).
+	// is no longer detected on this host.
 	var deletes []string
 	for _, dir := range serviceCleanupDirs(globalPath, cfg) {
 		more, err := planStaleServiceDeletes(p, dir, detectedTargetKeys(env, wizardAssistantService))

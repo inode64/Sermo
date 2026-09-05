@@ -31,28 +31,19 @@ comportamiento publico ni relajar las garantias de seguridad.
 
 ## Skills disponibles y uso propuesto
 
-Las skills locales cubren el refactor por dominio:
+Las skills del proyecto viven en `.agents/skills/` y cubren el refactor por
+dominio:
 
 - `sermo-go-implementation`: cambios Go en CLI, daemon, config, checks, locks,
   rules y operaciones.
-- `golang-patterns`: refactors Go idiomaticos, simplificacion y organizacion.
-- `golang-testing` y `sermo-test-engineer`: pruebas table-driven, resolucion de
-  config, backends, rules, locks, guards, process discovery y operaciones seguras.
+- `sermo-test-engineer`: pruebas table-driven, fakes y fixtures.
 - `sermo-config-schema`: cambios de YAML/config, catalogo, services, watches,
   checks, guards, locks, rules y stop policies.
 - `sermo-safety-review`: cualquier cambio que toque start/stop/restart/reload,
-  signals, process matching, locks, preflight, guards o remediation.
+  signals, process discovery y matching, locks, preflight, guards o remediation.
 - `sermo-rule-engine`: reglas, condition trees, windows, remediation y guards.
-- `sermo-process-discovery`: pidfiles, `/proc`, cgroups, arboles de procesos,
-  residuales y politicas de senales.
-- `sermo-linux-service`: systemd/OpenRC, deteccion de backend, status y comandos
-  de init.
-- `sermo-docs-writer`: README, guias, ejemplos YAML, reglas, seguridad y runbooks.
-- `sermo-project-architect`: cambios de arquitectura, boundaries, flujo de
-  config, daemon/CLI y secuenciacion mayor.
-- `sermo-packaging`, `sermo-profile-author`, `sermo-remote-testing` y
-  `accessibility`: usar solo cuando el refactor toque packaging, perfiles de
-  servicios, pruebas remotas o UI accesible.
+- `sermo-profile-author` y `sermo-remote-testing`: usar solo cuando el refactor
+  toque perfiles de servicios o pruebas remotas.
 
 ## Estado actual del refactor
 

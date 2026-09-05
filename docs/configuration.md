@@ -580,7 +580,7 @@ What consolidation does give up is *when*: past `retention_1m` an incident is
 located to its bucket, not to its minute. The count survives — each bucket records
 how many one-minute buckets inside it saw a failure — so a window reports "3
 affected minutes" however coarse it has become, and the SLA strip colours those
-buckets accordingly (see [Web UI](webui-representation.md#sla-timeline-strip)).
+buckets accordingly (see [Web UI](#web-ui)).
 For the exact timestamp of an old incident, use the event/activity feed, retained
 separately by `engine.retention_events` (default `720h`, 30 days).
 
@@ -803,8 +803,7 @@ from `sermoctl apps`, `sermoctl libs`, `GET /api/applications` and `GET
 /api/libraries`. The dashboard caches each inventory for up to 5 minutes, so
 auto-refreshes do not rerun every version probe. Each row shows when those
 version/status probes actually ran; serving a cached response does not advance
-that sample time. For an editable panel-by-panel map, see
-[webui-representation.md](webui-representation.md).
+that sample time.
 
 **The web UI is only activated when `web.port` is explicitly defined.** If the
 `web:` block is omitted, or if a `web:` block is present without a `port` key
@@ -1782,8 +1781,7 @@ document never merges into a service. (A service can also declare its own
 > (`notify: [none]`) with a one-line note — it never re-asks or aborts. The
 > wizard asks monitored entries for monitor state (`enabled`/`disabled`/
 > `previous`) and an optional check interval; mount watch files generated only
-> for mount operations are not monitored entries, so the mount assistant skips those questions. See
-> [wizards](wizards.md) for the full flow.
+> for mount operations are not monitored entries, so the mount assistant skips those questions.
 
 A watch's `then` block (when present) declares the actions taken when it
 fires — a `hook`, a `notify` list, an `expand` (storage only), a `kill`

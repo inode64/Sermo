@@ -19,7 +19,7 @@ import (
 //     (returns nil), and otherwise — there is nothing to inherit — falls back to
 //     monitor-only with a one-line note, instead of erroring or re-asking.
 //
-// This is the general rule (see docs/wizards.md): the wizard never blocks on the
+// This is the general rule: the wizard never blocks on the
 // notifier question; an unresolved "default" simply degrades to monitor-only.
 func chooseNotifiers(p *Prompt, env Env) []string {
 	question := "Notify which targets? ('default' inherits global notify; not configured)"

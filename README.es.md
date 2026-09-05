@@ -114,7 +114,7 @@ clientes ── sermoctl (CLI) ─┐                    ┌── operation.Eng
       config + catálogo empaquetado ─┘                       └── web.Server (dashboard + /api)
 ```
 
-Ver [docs/architecture.es.md](docs/architecture.es.md) para los diagramas fieles
+Ver [docs/architecture.md](docs/architecture.md) para los diagramas fieles
 al código (pipeline de operación, estados de locks, ciclo de monitorización).
 
 ## Los dos binarios
@@ -130,12 +130,12 @@ al código (pipeline de operación, estados de locks, ciclo de monitorización).
   webhooks), y puede servir el **dashboard web** (configura `web.port`,
   recomendado `9797`) — HTTP en loopback con auth opcional; expónlo solo detrás
   de un reverse proxy TLS
-  ([cómo](docs/configuration.es.md#detrás-de-un-proxy-inverso-requerido-para-exponerlo)).
+  ([cómo](docs/configuration.md#behind-a-reverse-proxy-required-to-expose-it)).
 
 ## Invariantes de seguridad
 
 No se pueden desactivar en YAML — la validación rechaza cualquier toggle
-`security:` que lo intente. Completos en [docs/safety.es.md](docs/safety.es.md):
+`security:` que lo intente. Completos en [docs/safety.md](docs/safety.md):
 
 1. **Ninguna acción con un preflight requerido fallido** — bloqueada con
    `preflight_failed`.
@@ -169,7 +169,7 @@ inspección de `/proc` entre usuarios incluyendo IO por proceso, sockets ICMP ra
 unidades empaquetadas lo ejecutan como root; avisa al arrancar si no lo es. Por tanto la config es
 entrada confiable, propiedad de root — los checks `command` y los `hook`s se ejecutan como root
 (nunca a través de un shell), así que mantén `/etc/sermo` solo para root y pon los secretos en el
-entorno (`${env:NAME}`). Ver [safety](docs/safety.es.md#privilegios-el-daemon-se-ejecuta-como-root).
+entorno (`${env:NAME}`). Ver [safety](docs/safety.md#privileges-the-daemon-runs-as-root).
 Los comandos de `sermoctl` de solo lectura (status, config, etc.) no necesitan root.
 
 ## Install
@@ -250,24 +250,24 @@ sermod run --config /etc/sermo/sermo.yml
 Las definiciones empaquetadas viven en [`catalog/`](catalog/), las configs de ejemplo en
 [`examples/`](examples/), las unidades de empaquetado en [`packaging/`](packaging/). El
 layout de archivos en el host está en
-[configuration → layout](docs/configuration.es.md#disposición).
+[configuration → layout](docs/configuration.md#layout).
 Los flags del daemon (`--verbose`) están en
-[CLI → sermod daemon flags](docs/cli.es.md#flags-del-daemon-sermod).
+[CLI → sermod daemon flags](docs/cli.md#sermod-daemon-flags).
 
 ## Documentation
 
-- [Configuration](docs/configuration.es.md) — config global, catalog services, servicios,
+- [Configuration](docs/configuration.md) — config global, catalog services, servicios,
   merge y variables; [`docs/sermo-all.yml`](docs/sermo-all.yml) es el
   ejemplo anotado completo.
-- [Rules](docs/rules.es.md) — checks, condiciones, ventanas, guards, política de
+- [Rules](docs/rules.md) — checks, condiciones, ventanas, guards, política de
   remediación.
-- [Services](docs/services.es.md) — escritura y override de servicios.
-- [CLI](docs/cli.es.md) — comandos, flags y códigos de salida.
-- [Safety](docs/safety.es.md) — los invariantes que no se pueden desactivar: sin
+- [Services](docs/services.md) — escritura y override de servicios.
+- [CLI](docs/cli.md) — comandos, flags y códigos de salida.
+- [Safety](docs/safety.md) — los invariantes que no se pueden desactivar: sin
   acciones sin salvaguarda, sin SIGKILL por defecto, nunca matar por nombre (solo
   coincidencia exacta de exe-resuelto + UID).
-- [Web dashboard](docs/webui-representation.es.md) — qué significa cada panel,
+- [Web dashboard](docs/configuration.md#web-ui) — qué significa cada panel,
   badge y gráfica del dashboard.
-- [Architecture](docs/architecture.es.md) — diagramas de extremo a extremo del
+- [Architecture](docs/architecture.md) — diagramas de extremo a extremo del
   daemon, el pipeline de operación, los estados de locks y el ciclo de
   monitorización.

@@ -122,8 +122,8 @@ type openRCBranch struct {
 }
 
 // DetectProcInfo inspects a service's init definition to derive a stable
-// pidfile path and main executable, for the wizard's PID question (see
-// docs/wizards.md). It is best-effort: a field it cannot determine comes back
+// pidfile path and main executable, for the wizard's PID question. It is
+// best-effort: a field it cannot determine comes back
 // "". For systemd it reads `systemctl show` PIDFile and ExecStart; for OpenRC
 // it scans the init script and its conf.d override for `pidfile=`, a
 // `start-stop-daemon --pidfile`, and `command=`. It also reports a cmdline

@@ -5,8 +5,8 @@ Every check here was written to catch a drift that actually reached the
 repository, and that no other tool in the gate can see: a document naming a
 source file that was deleted, a skill naming a Go identifier that does not
 exist, agent guidance losing its executable quality sources, a validated
-configuration key documented nowhere, and the two language versions disagreeing
-on a number.
+configuration key documented nowhere, and the two README language versions
+disagreeing on a number.
 """
 
 from __future__ import annotations
@@ -40,19 +40,10 @@ NUMBER = re.compile(r"\b(\d+(?:\.\d+)?(?:ms|s|m|h|d|%|KiB|MiB|GiB|KB|MB|GB)?)\b"
 # are deliberately absent from the documentation.
 INTERNAL_CONFIG_KEYS = {"change_level"}
 
+# The README is the only translated document; docs/ and agent guidance are
+# English-only so a behavior change touches one file.
 LANG_PAIRS = [
-    ("docs/architecture.md", "docs/architecture.es.md"),
-    ("docs/cli.md", "docs/cli.es.md"),
-    ("docs/configuration.md", "docs/configuration.es.md"),
-    ("docs/rules.md", "docs/rules.es.md"),
-    ("docs/safety.md", "docs/safety.es.md"),
-    ("docs/services.md", "docs/services.es.md"),
-    ("docs/webui-representation.md", "docs/webui-representation.es.md"),
-    ("docs/wizards.md", "docs/wizards.es.md"),
-    ("AGENTS.md", "AGENTS.es.md"),
     ("README.md", "README.es.md"),
-    ("TODO.md", "TODO.es.md"),
-    ("CLAUDE.md", "CLAUDE.es.md"),
 ]
 
 
@@ -107,15 +98,12 @@ def check_skill_identifiers() -> list[str]:
 def check_agent_quality_sources() -> list[str]:
     """Agent guidance must point to executable quality sources instead of copying them."""
     required = ("`Makefile`", "`.golangci.yml`", "`make check`")
-    problems = []
-    for doc in ("AGENTS.md", "AGENTS.es.md"):
-        text = read(doc)
-        problems.extend(
-            f"{doc}: does not point to executable quality source {source}"
-            for source in required
-            if source not in text
-        )
-    return problems
+    text = read("AGENTS.md")
+    return [
+        f"AGENTS.md: does not point to executable quality source {source}"
+        for source in required
+        if source not in text
+    ]
 
 
 def check_config_keys() -> list[str]:
@@ -138,23 +126,19 @@ def check_config_keys() -> list[str]:
 
 
 def check_language_pairs_complete() -> list[str]:
-    """Every user/agent document with an EN/ES twin must be in LANG_PAIRS, and the twin must exist."""
-    documented = dict(LANG_PAIRS)
-    expected = [
-        (f"docs/{path.name}", f"docs/{path.stem}.es.md")
-        for path in sorted(ROOT.glob("docs/*.md"))
-        if not path.name.endswith(".es.md")
+    """Every Spanish twin in the tree is listed in LANG_PAIRS, and every listed file exists."""
+    listed = {es for _, es in LANG_PAIRS}
+    problems = [
+        f"{path.relative_to(ROOT)}: Spanish twin missing from LANG_PAIRS"
+        for path in sorted(ROOT.glob("*.es.md")) + sorted(ROOT.glob("docs/*.es.md"))
+        if str(path.relative_to(ROOT)) not in listed
     ]
-    expected.extend(
-        (name, name.replace(".md", ".es.md"))
-        for name in ("AGENTS.md", "README.md", "TODO.md", "CLAUDE.md")
+    problems.extend(
+        f"{en}/{es}: paired file {name} does not exist"
+        for en, es in LANG_PAIRS
+        for name in (en, es)
+        if not (ROOT / name).is_file()
     )
-    problems = []
-    for en, es in expected:
-        if documented.get(en) != es:
-            problems.append(f"{en}: missing from LANG_PAIRS (expected {es})")
-        elif not (ROOT / es).is_file():
-            problems.append(f"{en}: paired file {es} does not exist")
     return problems
 
 
