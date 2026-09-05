@@ -624,41 +624,31 @@ func residualsRemain(remaining []process.Process, phase string) string {
 }
 
 func (e Engine) closeSession(ctx context.Context, target SessionTarget, result *Result) bool {
+	const prefix = "close SSH session: "
 	if target.ManagedByLogind {
 		var closer func(context.Context) error
 		if e.ManagedSessionCloser != nil {
 			closer = func(ctx context.Context) error { return e.ManagedSessionCloser(ctx, target) }
 		}
-		return runSessionCloser(ctx, result, closer, "managed SSH session close is unavailable for this service", "close SSH session: ")
+		return runSessionCloser(ctx, result, closer, "managed SSH session close is unavailable for this service", prefix)
 	}
-	if e.SessionVerifier == nil {
-		result.Status = ResultFailed
-		result.Message = "SSH session close is unavailable for this service"
+	var verify func(context.Context) error
+	if e.SessionVerifier != nil {
+		verify = func(ctx context.Context) error { return e.SessionVerifier(ctx, target) }
+	}
+	if !runSessionCloser(ctx, result, verify, "SSH session close is unavailable for this service", prefix) {
 		return false
 	}
+	// The verifier may not honor ctx; never signal after cancellation.
 	if err := ctx.Err(); err != nil {
-		result.Status = ResultFailed
-		result.Message = "close SSH session: " + err.Error()
-		return false
-	}
-	if err := e.SessionVerifier(ctx, target); err != nil {
-		result.Status = ResultFailed
-		result.Message = "close SSH session: " + err.Error()
-		return false
-	}
-	if err := ctx.Err(); err != nil {
-		result.Status = ResultFailed
-		result.Message = "close SSH session: " + err.Error()
-		return false
+		return failSession(result, prefix, err)
 	}
 	signaler := e.SessionSignaler
 	if signaler == nil {
 		signaler = process.OSSignaler{}
 	}
 	if err := signaler.Signal(target.PID, syscall.SIGTERM); err != nil {
-		result.Status = ResultFailed
-		result.Message = "close SSH session: " + err.Error()
-		return false
+		return failSession(result, prefix, err)
 	}
 	return true
 }
@@ -671,47 +661,47 @@ func (e Engine) closeTerminalSession(ctx context.Context, target TerminalSession
 	return runSessionCloser(ctx, result, closer, "terminal session close is unavailable for this service", "close terminal session: ")
 }
 
+// runSessionCloser runs one session-close step: a nil closer reports the
+// unavailable message, a cancelled context or a closer error reports
+// errorPrefix plus the cause.
 func runSessionCloser(ctx context.Context, result *Result, closer func(context.Context) error, unavailable, errorPrefix string) bool {
 	if closer == nil {
-		result.Status = ResultFailed
-		result.Message = unavailable
-		return false
+		return failUnavailable(result, unavailable)
 	}
 	if err := ctx.Err(); err != nil {
-		result.Status = ResultFailed
-		result.Message = errorPrefix + err.Error()
-		return false
+		return failSession(result, errorPrefix, err)
 	}
 	if err := closer(ctx); err != nil {
-		result.Status = ResultFailed
-		result.Message = errorPrefix + err.Error()
-		return false
+		return failSession(result, errorPrefix, err)
 	}
 	return true
 }
 
 func (e Engine) closeTerminalSource(ctx context.Context, target TerminalSessionSourceTarget, result *Result) bool {
+	const prefix = "close empty terminal session source: "
 	if e.EmptyTerminalSessionCloser == nil {
-		result.Status = ResultFailed
-		result.Message = "empty terminal session source close is unavailable for this service"
-		return false
+		return failUnavailable(result, "empty terminal session source close is unavailable for this service")
 	}
 	if target.Check == "" {
-		result.Status = ResultFailed
-		result.Message = "close empty terminal session source: invalid terminal session source"
-		return false
+		return failUnavailable(result, prefix+"invalid terminal session source")
 	}
-	if err := ctx.Err(); err != nil {
-		result.Status = ResultFailed
-		result.Message = "close empty terminal session source: " + err.Error()
-		return false
-	}
-	if err := e.EmptyTerminalSessionCloser(ctx, target); err != nil {
-		result.Status = ResultFailed
-		result.Message = "close empty terminal session source: " + err.Error()
-		return false
-	}
-	return true
+	closer := func(ctx context.Context) error { return e.EmptyTerminalSessionCloser(ctx, target) }
+	return runSessionCloser(ctx, result, closer, "", prefix)
+}
+
+// failSession marks result failed with prefix plus err and returns false, the
+// shape every session-close step reports through.
+func failSession(result *Result, prefix string, err error) bool {
+	result.Status = ResultFailed
+	result.Message = prefix + err.Error()
+	return false
+}
+
+// failUnavailable marks result failed with a fixed message and returns false.
+func failUnavailable(result *Result, message string) bool {
+	result.Status = ResultFailed
+	result.Message = message
+	return false
 }
 
 // failPhase marks result failed with the phase's timeout message when the
