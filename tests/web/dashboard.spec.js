@@ -741,6 +741,64 @@ test("stop confirms without offering engine preflight", async ({ page }) => {
   await page.keyboard.press("Escape");
 });
 
+async function reloadBehindConfirmation(page) {
+  await page.route("**/api/dashboard**", (route) => route.fulfill({ json: {
+    ...dashboard, generation: 8, daemon: { ...dashboard.daemon, hostname: "reloaded" },
+  } }));
+  // The real timer can refresh while a modal is open; trigger that same load
+  // through the existing refresh command without interacting through the modal.
+  await page.evaluate(() => document.getElementById("refresh-now").click());
+  await expect(page).toHaveTitle(/Sermo - reloaded/);
+}
+
+const generationConfirmationCases = [
+  { name: "service", button: '#svc-row-web [data-service-action="restart"]', dialog: "#action-confirm", confirm: "#confirm-action-btn", path: "/api/services/web/restart" },
+  { name: "operator button", button: '[data-service="web"][data-service-button="flush-queue"]', dialog: "#simple-confirm", confirm: "#simple-confirm-ok", path: "/api/services/web/button/flush-queue" },
+  { name: "watch", button: '#wat-row-db-replication [data-watch-action="replication-start"]', dialog: "#simple-confirm", confirm: "#simple-confirm-ok", path: "/api/watches/db-replication/replication-start" },
+  { name: "notifier", section: "#notifiers-section", button: '[data-notifier-test="ops"]', dialog: "#simple-confirm", confirm: "#simple-confirm-ok", path: "/api/notifiers/ops/test" },
+  { name: "SSH session", section: "#sessions-section", button: '[data-ssh-session-pid="96"]', dialog: "#simple-confirm", confirm: "#simple-confirm-ok", path: "/api/services/web/sessions/96/close" },
+  { name: "mount", section: "#mounts-section", button: '[data-mount="data.mount"][data-mount-action="umount"]', dialog: "#mount-umount-confirm", confirm: '[data-mount-umount-result="true"]', path: "/api/mounts/data.mount/umount" },
+];
+
+for (const scenario of generationConfirmationCases) {
+  test(`${scenario.name} confirmation keeps its generation across reload`, async ({ page }) => {
+    if (scenario.section && await page.locator(scenario.section).getAttribute("open") === null) {
+      await page.locator(`${scenario.section} > summary`).click();
+    }
+    await page.locator(scenario.button).click();
+    await expect(page.locator(scenario.dialog)).toBeVisible();
+    await reloadBehindConfirmation(page);
+    await page.route(`**${scenario.path}**`, (route) => route.fulfill({
+      status: 412, json: { ok: false, message: "configuration changed; refresh and try again" },
+    }));
+    const request = page.waitForRequest((req) => req.method() === "POST" && new URL(req.url()).pathname === scenario.path);
+    await page.locator(scenario.confirm).click();
+    expect((await request).headers()["x-sermo-generation"]).toBe("7");
+    await expect(page.locator("#err")).toContainText("configuration changed");
+  });
+}
+
+test("confirmation preflight keeps the reviewed generation", async ({ page }) => {
+  await page.locator('#svc-row-web [data-service-action="restart"]').click();
+  await expect(page.locator("#action-confirm")).toBeVisible();
+  await reloadBehindConfirmation(page);
+  const request = page.waitForRequest((req) => req.method() === "POST" && new URL(req.url()).pathname === "/api/services/web/preflight");
+  await page.locator("#confirm-preflight-btn").click();
+  expect((await request).headers()["x-sermo-generation"]).toBe("7");
+  await page.keyboard.press("Escape");
+});
+
+test("a failed confirmation context cannot authorize an action", async ({ page }) => {
+  await page.route("**/api/services/web", (route) => route.fulfill({
+    headers: { "X-Sermo-Generation": "8" }, json: serviceDetail("web"),
+  }));
+  await page.locator('#svc-row-web [data-service-action="restart"]').click();
+  await expect(page.locator("#action-confirm")).toBeVisible();
+  await expect(page.locator("#confirm-body")).toContainText("configuration changed");
+  await expect(page.locator("#confirm-action-btn")).toBeDisabled();
+  await page.keyboard.press("Escape");
+});
+
 test("service SLA renders a status-page bar strip with incidents", async ({ page }) => {
   await page.locator("#svc-row-web .row-toggle").click();
   const detail = page.locator('[data-service-detail="web"]');
