@@ -244,6 +244,9 @@ type Deps struct {
 	// for the web watch list. The daemon and web backend share this registry so
 	// HTTP reads never run watches themselves.
 	WatchSnapshots *WatchSnapshots
+	// watchConfigID is the identity of the watch entry currently being built.
+	// Mutated only on a by-value Deps copy inside buildWatchEntry.
+	watchConfigID string
 	// Remediation collects each service's remediation policy view for the web
 	// detail. Optional: nil disables publishing.
 	Remediation *RemediationRegistry
@@ -532,6 +535,7 @@ func buildWorker(ctx context.Context, name, unit string, tree map[string]any, de
 	remediationState, windowStates, stateWarnings := loadRuleState(deps.RuleState, name, ruleSet)
 	warnings = append(warnings, stateWarnings...)
 
+	configID := serviceSnapshotConfigID(tree)
 	worker = &Worker{
 		Service:              name,
 		Unit:                 unit,
@@ -561,13 +565,13 @@ func buildWorker(ctx context.Context, name, unit string, tree map[string]any, de
 		DryRun:               config.DryRun(tree),
 		ResolveRefs:          func() rules.RefResolver { return rules.NewCheckResolver(preflightBuilt, maxParallel) },
 		RecordCycle:          recordCycle,
-		Publish:              publishSnapshots(deps.Snapshots, name, checkTypes),
+		Publish:              publishSnapshots(deps.Snapshots, name, checkTypes, configID),
 		PersistState:         ruleStatePersister(deps.RuleState, deps.Emit, name, ruleSet),
 		Now:                  deps.Now,
 		Emit:                 deps.Emit,
 		windows:              windowStates,
 		libBaseline:          libBaseline,
-		checkFailing:         checkFailingFromSnapshots(deps.Snapshots, name, checkTypes),
+		checkFailing:         checkFailingFromSnapshots(deps.Snapshots, name, checkTypes, configID),
 		artifactSamples:      deps.ArtifactSamples,
 
 		appVersionCmd:   appVersionCmds(tree),
@@ -585,9 +589,12 @@ func buildWorker(ctx context.Context, name, unit string, tree map[string]any, de
 // checkFailingFromSnapshots restores the last check-health edge after a daemon
 // restart. Snapshot type metadata ensures a same-named check from a changed
 // configuration does not inherit an unrelated state.
-func checkFailingFromSnapshots(snapshots *Snapshots, service string, checkTypes map[string]string) map[string]bool {
+func checkFailingFromSnapshots(snapshots *Snapshots, service string, checkTypes map[string]string, configID string) map[string]bool {
 	restored := map[string]bool{}
 	for name, snapshot := range snapshots.Get(service) {
+		if !snapshotConfigMatches(configID, snapshot.ConfigID) {
+			continue
+		}
 		checkType, configured := checkTypes[name]
 		if !configured || snapshot.CheckType != checkType || snapshot.Optional || !snapshot.Observation.AffectsHealth() {
 			continue
@@ -702,12 +709,12 @@ func buildWorkerCheckSet(section map[string]any, deps checks.Deps, dynamicMetric
 
 // publishSnapshots returns the worker's per-cycle check-cache publisher, or nil
 // when no snapshot registry is wired.
-func publishSnapshots(s *Snapshots, name string, checkTypes map[string]string) func(map[string]checks.Result, map[string]bool) {
+func publishSnapshots(s *Snapshots, name string, checkTypes map[string]string, configID string) func(map[string]checks.Result, map[string]bool) {
 	if s == nil {
 		return nil
 	}
 	return func(cache map[string]checks.Result, ran map[string]bool) {
-		s.PublishWithCheckTypes(name, cache, ran, checkTypes)
+		s.publishConfigured(name, cache, ran, checkTypes, configID)
 	}
 }
 

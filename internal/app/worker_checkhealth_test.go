@@ -64,15 +64,15 @@ func TestRequiredCheckFailureIsReportedOnceAndRecovers(t *testing.T) {
 // a duplicate event while preserving the eventual recovery transition.
 func TestRestoredCheckFailureDoesNotRepeatFiringAndRecovers(t *testing.T) {
 	snapshots := NewSnapshots()
-	snapshots.PublishWithCheckTypes("web", map[string]checks.Result{
+	snapshots.publishConfigured("web", map[string]checks.Result{
 		"service": {Check: "service", OK: false, Message: "status failed (want active)"},
-	}, map[string]bool{"service": true}, map[string]string{"service": "service"})
+	}, map[string]bool{"service": true}, map[string]string{"service": "service"}, testServiceSnapshotConfigID)
 
 	var events []Event
 	cycle := 0
 	w := &Worker{
 		Service:      "web",
-		checkFailing: checkFailingFromSnapshots(snapshots, "web", map[string]string{"service": "service"}),
+		checkFailing: checkFailingFromSnapshots(snapshots, "web", map[string]string{"service": "service"}, testServiceSnapshotConfigID),
 		Checks: func(context.Context, checks.Deps) map[string]checks.Result {
 			cycle++
 			return map[string]checks.Result{
@@ -131,9 +131,9 @@ func TestCheckFailureRestoreRejectsStaleSnapshots(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			snapshots := NewSnapshots()
-			snapshots.PublishWithCheckTypes("web", map[string]checks.Result{"service": tt.result},
-				map[string]bool{"service": true}, map[string]string{"service": tt.storedType})
-			got := checkFailingFromSnapshots(snapshots, "web", tt.current)
+			snapshots.publishConfigured("web", map[string]checks.Result{"service": tt.result},
+				map[string]bool{"service": true}, map[string]string{"service": tt.storedType}, testServiceSnapshotConfigID)
+			got := checkFailingFromSnapshots(snapshots, "web", tt.current, testServiceSnapshotConfigID)
 			if len(got) != len(tt.want) || got["service"] != tt.want["service"] {
 				t.Fatalf("restored = %+v, want %+v", got, tt.want)
 			}

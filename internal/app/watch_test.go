@@ -111,7 +111,7 @@ func TestWatchPublishesResultSnapshot(t *testing.T) {
 			checks.DataKeyDevice:   "/dev/sda",
 			checks.HdparmFieldRead: 500.0,
 		}},
-		Publish: publishWatchSnapshots(snapshots),
+		Publish: publishWatchSnapshots(snapshots, ""),
 	}
 
 	w.RunCycle(context.Background())

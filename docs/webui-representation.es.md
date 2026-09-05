@@ -600,7 +600,7 @@ Columnas compartidas:
 | Columna | Significado |
 | --- | --- |
 | Name | nombre para mostrar, con fallback al nombre, capitalizado |
-| Last checked | última muestra completada por el ciclo del daemon o manual |
+| Last checked | última muestra completada por el ciclo del daemon o manual de la configuración actual del check; cambiar el destino (dispositivo, ruta, interfaz) deja esto vacío hasta el siguiente ciclo |
 | Last activity | último evento del watch, como un probe manual, notificación o remediación |
 | State | estado normalizado del watch: `disabled` cuando config/monitor state lo excluye de comprobaciones activas, `starting` antes de la primera muestra monitorizada, `failed` para un fallo activo, `warning` para un fallo que el watch declaró aviso con `severity: warning` (fila ámbar, fuera del recuento de alertas) y `ok` en el resto; el trabajo activo del dispositivo tiene prioridad como `testing`, `recovering`, `rebuilding`, `repairing`, `moving` o `merging`, y un dispositivo que dejó de responder como `missing`, que se lee como fallo y entra en el filtro `failed` |
 | Actions | acción principal admitida y menú adicional para monitor/unmonitor |

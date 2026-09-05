@@ -1,6 +1,8 @@
 package app
 
 import (
+	"crypto/sha256"
+	"encoding/json"
 	"fmt"
 	"maps"
 	"slices"
@@ -9,12 +11,14 @@ import (
 
 	"sermo/internal/cfgval"
 	"sermo/internal/checks"
+	"sermo/internal/config"
 	"sermo/internal/state"
 )
 
 // CheckSnapshot is the last observed result of one check, for the web detail view.
 type CheckSnapshot struct {
 	CheckType   string
+	ConfigID    string
 	Observation checks.ObservationState
 	OK          bool
 	Condition   bool
@@ -82,6 +86,10 @@ func (s *Snapshots) Publish(service string, cache map[string]checks.Result, ran 
 // cache and check types. Type metadata prevents a same-named check from an old
 // configuration from being decoded under a newly configured check type.
 func (s *Snapshots) PublishWithCheckTypes(service string, cache map[string]checks.Result, ran map[string]bool, checkTypes map[string]string) {
+	s.publishConfigured(service, cache, ran, checkTypes, "")
+}
+
+func (s *Snapshots) publishConfigured(service string, cache map[string]checks.Result, ran map[string]bool, checkTypes map[string]string, configID string) {
 	if s == nil {
 		return
 	}
@@ -92,7 +100,7 @@ func (s *Snapshots) PublishWithCheckTypes(service string, cache map[string]check
 	m := make(map[string]CheckSnapshot, len(cache))
 	for name, r := range cache {
 		cs := CheckSnapshot{
-			CheckType: checkTypes[name], Observation: r.Observation(),
+			CheckType: checkTypes[name], ConfigID: configID, Observation: r.Observation(),
 			OK: r.OK, Condition: r.Condition, Optional: r.Optional, Skipped: r.Skipped, Unavailable: r.Unavailable, Message: r.Message,
 			Data: maps.Clone(r.Data), Ran: ran[name],
 		}
@@ -179,12 +187,17 @@ func NewPersistentWatchSnapshots(store watchSnapshotStore, reportError func(erro
 // Publish records one daemon-cycle result for a watch. Multi-metric watches
 // share a visible watch name, so each metric gets its own slot under that name.
 func (s *WatchSnapshots) Publish(watch, checkType string, r checks.Result) {
+	s.publishConfigured(watch, checkType, r, "")
+}
+
+func (s *WatchSnapshots) publishConfigured(watch, checkType string, r checks.Result, configID string) {
 	if s == nil {
 		return
 	}
 	now := clockOrNow(s.now)
 	slot := watchResultSlot(r)
 	snap := CheckSnapshot{
+		ConfigID:    configID,
 		Observation: r.Observation(),
 		OK:          r.OK, Condition: r.Condition, Optional: r.Optional, Skipped: r.Skipped, Unavailable: r.Unavailable, Message: r.Message,
 		Data: maps.Clone(r.Data), Ran: true, At: now(),
@@ -257,7 +270,7 @@ func serviceSnapshotRecords(snaps map[string]CheckSnapshot) map[string]state.Che
 
 func snapshotFromRecord(rec state.CheckSnapshotRecord) CheckSnapshot {
 	return CheckSnapshot{
-		CheckType: rec.CheckType, Observation: rec.Observation,
+		CheckType: rec.CheckType, ConfigID: rec.ConfigID, Observation: rec.Observation,
 		OK: rec.OK, Condition: rec.Condition, Optional: rec.Optional, Skipped: rec.Skipped, Unavailable: rec.Unavailable,
 		Message: rec.Message, Data: maps.Clone(rec.Data), Ran: rec.Ran, At: rec.At,
 	}
@@ -265,7 +278,7 @@ func snapshotFromRecord(rec state.CheckSnapshotRecord) CheckSnapshot {
 
 func snapshotRecord(snap CheckSnapshot) state.CheckSnapshotRecord {
 	return state.CheckSnapshotRecord{
-		CheckType: snap.CheckType, Observation: snap.Observation,
+		CheckType: snap.CheckType, ConfigID: snap.ConfigID, Observation: snap.Observation,
 		OK: snap.OK, Condition: snap.Condition, Optional: snap.Optional, Skipped: snap.Skipped, Unavailable: snap.Unavailable,
 		Message: snap.Message, Data: maps.Clone(snap.Data), Ran: snap.Ran, At: snap.At,
 	}
@@ -274,3 +287,32 @@ func snapshotRecord(snap CheckSnapshot) state.CheckSnapshotRecord {
 func (s *Snapshots) reportStoreError(err error) { reportCallbackError(s.reportError, err) }
 
 func (s *WatchSnapshots) reportStoreError(err error) { reportCallbackError(s.reportError, err) }
+
+const invalidSnapshotConfigID = "invalid"
+
+// snapshotConfigID is a stable identity of one check-producing configuration
+// tree. Callers compute it once when building a producer or reader, never
+// during a cycle. encoding/json sorts map keys, so independent resolutions of
+// the same tree agree.
+func snapshotConfigID(tree map[string]any) string {
+	data, err := json.Marshal(tree)
+	if err != nil {
+		return invalidSnapshotConfigID
+	}
+	return fmt.Sprintf("%x", sha256.Sum256(data))
+}
+
+func watchSnapshotConfigID(entry map[string]any) string {
+	return snapshotConfigID(map[string]any{
+		config.WatchKeyCheck:  entry[config.WatchKeyCheck],
+		config.SectionMetrics: entry[config.SectionMetrics],
+	})
+}
+
+func serviceSnapshotConfigID(tree map[string]any) string {
+	return snapshotConfigID(map[string]any{config.SectionChecks: tree[config.SectionChecks]})
+}
+
+func snapshotConfigMatches(expected, actual string) bool {
+	return expected != invalidSnapshotConfigID && expected == actual
+}

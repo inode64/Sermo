@@ -72,7 +72,9 @@ func dedupeWatchReadings(readings []web.WatchReading) []web.WatchReading {
 }
 
 func (b *WebBackend) watchSnapshotCurrent(w *webWatch, snap CheckSnapshot) bool {
-	return b.watchSampleCurrent(w, snap.At)
+	// Name, type and age are not enough: a reload that keeps the watch name
+	// while pointing it at another device must not show the previous target.
+	return w != nil && snapshotConfigMatches(w.configID, snap.ConfigID) && b.watchSampleCurrent(w, snap.At)
 }
 
 func (b *WebBackend) watchSampleCurrent(w *webWatch, at time.Time) bool {

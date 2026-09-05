@@ -172,6 +172,7 @@ var storageSchema = []string{
 		ran        INTEGER NOT NULL,
 		at         INTEGER NOT NULL,
 		check_type TEXT NOT NULL,
+		config_id  TEXT NOT NULL,
 		PRIMARY KEY (service, check_name)
 	);`,
 	// watch_check_snapshot stores the latest host-watch result per visible slot
@@ -181,6 +182,7 @@ var storageSchema = []string{
 		watch      TEXT NOT NULL,
 		slot       TEXT NOT NULL,
 		check_type TEXT NOT NULL,
+		config_id  TEXT NOT NULL,
 		ok         INTEGER NOT NULL,
 		condition  INTEGER NOT NULL,
 		optional   INTEGER NOT NULL,
@@ -410,6 +412,8 @@ const (
 	hoursPerDay          = units.HoursPerDay
 	historyRetentionDays = 366
 	eventQueryMaxArgs    = 2
+	tableServiceSnapshot = "service_check_snapshot"
+	tableWatchSnapshot   = "watch_check_snapshot"
 )
 
 // DefaultSeriesWindow is the normal lookback used when a series request omits
@@ -538,12 +542,14 @@ var stateColumnMigrations = []struct {
 	column string
 	decl   string
 }{
-	{"service_check_snapshot", "check_type", "check_type TEXT NOT NULL DEFAULT ''"},
-	{"service_check_snapshot", "unavailable", "unavailable INTEGER NOT NULL DEFAULT 0"},
-	{"service_check_snapshot", "observation", "observation TEXT NOT NULL DEFAULT ''"},
-	{"watch_check_snapshot", "check_type", "check_type TEXT NOT NULL DEFAULT ''"},
-	{"watch_check_snapshot", "unavailable", "unavailable INTEGER NOT NULL DEFAULT 0"},
-	{"watch_check_snapshot", "observation", "observation TEXT NOT NULL DEFAULT ''"},
+	{tableServiceSnapshot, "check_type", "check_type TEXT NOT NULL DEFAULT ''"},
+	{tableServiceSnapshot, "unavailable", "unavailable INTEGER NOT NULL DEFAULT 0"},
+	{tableServiceSnapshot, "observation", "observation TEXT NOT NULL DEFAULT ''"},
+	{tableServiceSnapshot, "config_id", "config_id TEXT NOT NULL DEFAULT ''"},
+	{tableWatchSnapshot, "check_type", "check_type TEXT NOT NULL DEFAULT ''"},
+	{tableWatchSnapshot, "unavailable", "unavailable INTEGER NOT NULL DEFAULT 0"},
+	{tableWatchSnapshot, "observation", "observation TEXT NOT NULL DEFAULT ''"},
+	{tableWatchSnapshot, "config_id", "config_id TEXT NOT NULL DEFAULT ''"},
 	{"watch_runtime_state", "unavailable", "unavailable INTEGER NOT NULL DEFAULT 0"},
 }
 
@@ -620,6 +626,7 @@ type ServiceRestartNoticeRecord struct {
 // new check type; the enclosing map owns the service check name or watch slot.
 type CheckSnapshotRecord struct {
 	CheckType   string
+	ConfigID    string
 	Observation checks.ObservationState
 	OK          bool
 	Condition   bool
@@ -789,7 +796,7 @@ func (s *Store) SetServiceRestartNotice(service string, record ServiceRestartNot
 // by service name and keyed by check name.
 func (s *Store) ServiceCheckSnapshots() (map[string]map[string]CheckSnapshotRecord, error) {
 	return s.groupedCheckSnapshots(
-		`SELECT service, check_name, check_type, observation, ok, condition, optional, skipped, unavailable, message, data, ran, at
+		`SELECT service, check_name, check_type, observation, ok, condition, optional, skipped, unavailable, message, data, ran, at, config_id
 		   FROM service_check_snapshot ORDER BY service, check_name;`,
 		"service check snapshots",
 	)
@@ -808,8 +815,8 @@ func (s *Store) SetServiceCheckSnapshots(service string, records map[string]Chec
 			}
 			if _, err := tx.ExecContext(s.sqlCtx(),
 				`INSERT INTO service_check_snapshot
-				   (service, check_name, check_type, observation, ok, condition, optional, skipped, unavailable, message, data, ran, at)
-				 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
+				   (service, check_name, check_type, observation, ok, condition, optional, skipped, unavailable, message, data, ran, at, config_id)
+				 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
 				checkSnapshotArgs(rec, data, service, name)...,
 			); err != nil {
 				return fmt.Errorf("insert service check snapshot %s/%s: %w", service, name, err)
@@ -853,7 +860,7 @@ func replaceServiceRows[T any](s *Store, service, deleteSQL, what string, record
 // watch name and keyed by the stable result slot.
 func (s *Store) WatchCheckSnapshots() (map[string]map[string]CheckSnapshotRecord, error) {
 	return s.groupedCheckSnapshots(
-		`SELECT watch, slot, check_type, observation, ok, condition, optional, skipped, unavailable, message, data, ran, at
+		`SELECT watch, slot, check_type, observation, ok, condition, optional, skipped, unavailable, message, data, ran, at, config_id
 		   FROM watch_check_snapshot ORDER BY watch, slot;`,
 		"watch check snapshots",
 	)
@@ -902,11 +909,13 @@ func scanCheckSnapshotRow(rows *sql.Rows, label string) (string, string, CheckSn
 		rawData     string
 		ran         int
 		at          int64
+		configID    string
 	)
-	if err := rows.Scan(&group, &slot, &checkType, &observation, &ok, &cond, &optional, &skipped, &unavailable, &message, &rawData, &ran, &at); err != nil {
+	if err := rows.Scan(&group, &slot, &checkType, &observation, &ok, &cond, &optional, &skipped, &unavailable, &message, &rawData, &ran, &at, &configID); err != nil {
 		return "", "", CheckSnapshotRecord{}, fmt.Errorf("scan %s: %w", label, err)
 	}
 	record, err := newCheckSnapshotRecord(slot, checkType, observation, ok, cond, optional, skipped, unavailable, message, rawData, ran, at)
+	record.ConfigID = configID
 	return group, slot, record, err
 }
 
@@ -936,10 +945,11 @@ func (s *Store) SetWatchCheckSnapshot(watch, slot string, rec CheckSnapshotRecor
 	}
 	_, err = s.exec(s.sqlCtx(),
 		`INSERT INTO watch_check_snapshot
-		   (watch, slot, check_type, observation, ok, condition, optional, skipped, unavailable, message, data, ran, at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		   (watch, slot, check_type, observation, ok, condition, optional, skipped, unavailable, message, data, ran, at, config_id)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		 ON CONFLICT(watch, slot) DO UPDATE SET
 		   check_type = excluded.check_type,
+		   config_id  = excluded.config_id,
 		   observation = excluded.observation,
 		   ok         = excluded.ok,
 		   condition  = excluded.condition,
@@ -965,7 +975,7 @@ func (s *Store) SetWatchCheckSnapshot(watch, slot string, rec CheckSnapshotRecor
 func checkSnapshotArgs(rec CheckSnapshotRecord, data string, keys ...any) []any {
 	return append(keys,
 		rec.CheckType, string(rec.Observation), boolInt(rec.OK), boolInt(rec.Condition), boolInt(rec.Optional), boolInt(rec.Skipped),
-		boolInt(rec.Unavailable), rec.Message, data, boolInt(rec.Ran), timeUnixNano(rec.At),
+		boolInt(rec.Unavailable), rec.Message, data, boolInt(rec.Ran), timeUnixNano(rec.At), rec.ConfigID,
 	)
 }
 

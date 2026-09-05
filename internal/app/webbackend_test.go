@@ -1464,7 +1464,7 @@ func TestWebBackendProbeSmartStartsShortSelfTest(t *testing.T) {
 // diskSpeedWatch builds an hdparm webWatch on /dev/sda whose read speed must
 // exceed threshold MB/s.
 func diskSpeedWatch(threshold int) *webWatch {
-	return &webWatch{
+	w := &webWatch{
 		name:      "disk-speed",
 		checkType: checks.CheckTypeHdparm,
 		check: map[string]any{
@@ -1476,21 +1476,23 @@ func diskSpeedWatch(threshold int) *webWatch {
 			},
 		},
 	}
+	assignWatchConfigID(w)
+	return w
 }
 
 // webBackendWithEntry builds a WebBackend holding one active "web" entry that
 // exposes the given check names and types backed by snaps.
 func webBackendWithEntry(snaps *Snapshots, checkNames []string, checkTypes map[string]string) *WebBackend {
+	entry := &webEntry{
+		displayName: "web",
+		checkNames:  checkNames,
+		checkTypes:  checkTypes,
+		status:      func(context.Context) (servicemgr.Status, error) { return servicemgr.StatusActive, nil },
+	}
+	bindServiceSnapshots(entry, snaps, "web")
 	return &WebBackend{
-		order: []string{"web"},
-		entries: map[string]*webEntry{
-			"web": {
-				displayName: "web",
-				checkNames:  checkNames,
-				checkTypes:  checkTypes,
-				status:      func(context.Context) (servicemgr.Status, error) { return servicemgr.StatusActive, nil },
-			},
-		},
+		order:     []string{"web"},
+		entries:   map[string]*webEntry{"web": entry},
 		snapshots: snaps,
 	}
 }
@@ -1734,6 +1736,18 @@ func TestWebBackendWatchesShareSystemSnapshot(t *testing.T) {
 // published watch snapshots: any statfs or mount-table sampling fails the test.
 func snapshotOnlyBackend(t *testing.T, cfg *config.Config, snapshots *WatchSnapshots, now time.Time) *WebBackend {
 	t.Helper()
+	// These fixtures describe cfg; supply the same provenance as its producers.
+	raw, errs := cfg.ResolveWatches()
+	if len(errs) > 0 {
+		t.Fatal(errs)
+	}
+	for name, slots := range snapshots.byWatch {
+		entry, _ := raw[name].(map[string]any)
+		for slot, snapshot := range slots {
+			snapshot.result.ConfigID = watchSnapshotConfigID(entry)
+			slots[slot] = snapshot
+		}
+	}
 	b, warns := NewWebBackend(t.Context(), cfg, Deps{
 		WatchSnapshots: snapshots,
 		Now:            func() time.Time { return now },
@@ -2426,7 +2440,7 @@ func TestWatchSnapshotsFeedHeavyProbeView(t *testing.T) {
 		t.Fatalf("cold heavy probe ran %d commands, want 0", runner.calls)
 	}
 
-	snapshots.Publish("disk", checks.CheckTypeHdparm, checks.Result{
+	publishWatchFor(snapshots, b.watches["disk"], checks.Result{
 		Check:     "disk",
 		Condition: true,
 		Message:   "hdparm /dev/sda read=500.0 MB/s",
@@ -2446,18 +2460,29 @@ func TestWatchSnapshotsFeedHeavyProbeView(t *testing.T) {
 
 func TestWebBackendWatchSampleState(t *testing.T) {
 	now := time.Unix(1_700_000_000, 0)
+	result := checks.Result{
+		Check:   "firewall",
+		OK:      true,
+		Message: "firewall nft has 3 rules",
+		Data: map[string]any{
+			checks.DataKeyBackend: checks.FirewallBackendNftables,
+			checks.DataKeyRules:   3,
+		},
+	}
 	tests := []struct {
-		name        string
-		age         time.Duration
-		publish     bool
-		monitorMode string
-		wantState   string
-		wantSample  string
-		wantReading bool
+		name           string
+		age            time.Duration
+		publish        bool
+		previousTarget bool
+		monitorMode    string
+		wantState      string
+		wantSample     string
+		wantReading    bool
 	}{
 		{name: "awaiting first sample", wantState: TargetStateCollecting, wantSample: web.WatchSampleStateCollecting},
 		{name: "fresh sample", age: time.Minute, publish: true, wantState: TargetStateOK, wantSample: web.WatchSampleStateFresh, wantReading: true},
 		{name: "stale sample", age: 2*time.Minute + time.Nanosecond, publish: true, wantState: TargetStateStale, wantSample: web.WatchSampleStateStale},
+		{name: "previous target", age: time.Minute, publish: true, previousTarget: true, wantState: TargetStateCollecting, wantSample: web.WatchSampleStateCollecting},
 		{name: "paused watch", age: 2*time.Minute + time.Nanosecond, publish: true, monitorMode: config.MonitorDisabled, wantState: TargetStateDisabled},
 	}
 
@@ -2465,26 +2490,22 @@ func TestWebBackendWatchSampleState(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			snapshots := NewWatchSnapshots()
 			snapshots.now = func() time.Time { return now.Add(-tt.age) }
+			w := &webWatch{
+				name: "firewall", checkType: checks.CheckTypeFirewallRules, interval: time.Minute,
+				monitorMode: tt.monitorMode,
+				check:       map[string]any{checks.CheckKeyType: checks.CheckTypeFirewallRules},
+			}
 			if tt.publish {
-				snapshots.Publish("firewall", checks.CheckTypeFirewallRules, checks.Result{
-					Check:   "firewall",
-					OK:      true,
-					Message: "firewall nft has 3 rules",
-					Data: map[string]any{
-						checks.DataKeyBackend: checks.FirewallBackendNftables,
-						checks.DataKeyRules:   3,
-					},
-				})
+				if tt.previousTarget {
+					w.configID = "new-device"
+					snapshots.publishConfigured(w.name, w.checkType, result, "old-device")
+				} else {
+					publishWatchFor(snapshots, w, result)
+				}
 			}
 			b := &WebBackend{
-				watchOrder: []string{"firewall"},
-				watches: map[string]*webWatch{
-					"firewall": {
-						name: "firewall", checkType: checks.CheckTypeFirewallRules, interval: time.Minute,
-						monitorMode: tt.monitorMode,
-						check:       map[string]any{checks.CheckKeyType: checks.CheckTypeFirewallRules},
-					},
-				},
+				watchOrder:     []string{"firewall"},
+				watches:        map[string]*webWatch{"firewall": w},
 				watchSnapshots: snapshots,
 				now:            func() time.Time { return now },
 			}
@@ -2500,7 +2521,11 @@ func TestWebBackendWatchSampleState(t *testing.T) {
 			if (len(got.Readings) > 0) != tt.wantReading {
 				t.Fatalf("watch readings = %+v, want present=%v", got.Readings, tt.wantReading)
 			}
-			if tt.publish && got.LastCheckedAt != now.Add(-tt.age).Format(time.RFC3339) {
+			if tt.previousTarget {
+				if got.LastCheckedAt != "" {
+					t.Fatalf("previous target last checked = %q, want empty", got.LastCheckedAt)
+				}
+			} else if tt.publish && got.LastCheckedAt != now.Add(-tt.age).Format(time.RFC3339) {
 				t.Fatalf("last checked = %q, want %q", got.LastCheckedAt, now.Add(-tt.age).Format(time.RFC3339))
 			}
 		})
@@ -2567,7 +2592,7 @@ func TestWatchDashboardViewNeverRunsLiveFallback(t *testing.T) {
 	}
 
 	b.watchSnapshots = snapshots
-	snapshots.Publish("fw", checks.CheckTypeFirewallRules, checks.Result{
+	publishWatchFor(snapshots, b.watches["fw"], checks.Result{
 		Check:     "fw",
 		OK:        true,
 		Condition: false,
@@ -2613,7 +2638,7 @@ func TestWatchSnapshotsFeedProcessView(t *testing.T) {
 	if len(ws) != 1 || ws[0].Summary != "" || len(ws[0].Readings) != 0 {
 		t.Fatalf("cold process Watches() = %+v, want no live process summary", ws)
 	}
-	snapshots.Publish("hot-workers", checks.CheckTypeProcess, checks.Result{
+	publishWatchFor(snapshots, b.watches["hot-workers"], checks.Result{
 		Check:   "hot-workers",
 		OK:      true,
 		Message: "process apache2 user apache: 2 matching processes, rss 300 B",
@@ -2658,7 +2683,7 @@ func TestWatchSnapshotsFeedProcessPolicyView(t *testing.T) {
 		now:            func() time.Time { return now },
 	}
 
-	snapshots.Publish("postgres-policy", checks.CheckTypeProcessPolicy, checks.Result{
+	publishWatchFor(snapshots, b.watches["postgres-policy"], checks.Result{
 		Check:   "postgres-policy",
 		OK:      false,
 		Message: "process policy user postgres: pid 42 executable is not allowlisted (/usr/bin/bash)",

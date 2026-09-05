@@ -395,10 +395,11 @@ func (b *WebBackend) serviceCheckHealth(name string, e *webEntry, monitored bool
 }
 
 // serviceCheckSnapshotCurrent accepts only a result produced by the configured
-// check type and no older than two effective check intervals. A reload may keep
-// a check name while changing either its type or cadence.
+// check type, the current check configuration, and no older than two effective
+// check intervals. A reload may keep a check name while changing its type,
+// cadence or target.
 func (b *WebBackend) serviceCheckSnapshotCurrent(e *webEntry, name string, snap CheckSnapshot) bool {
-	if e == nil || snap.At.IsZero() || snap.CheckType != e.checkTypes[name] {
+	if e == nil || snap.At.IsZero() || snap.CheckType != e.checkTypes[name] || !snapshotConfigMatches(e.configID, snap.ConfigID) {
 		return false
 	}
 	interval := e.checkIntervals[name]

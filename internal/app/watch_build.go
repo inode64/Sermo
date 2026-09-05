@@ -68,6 +68,7 @@ func BuildWatches(cfg *config.Config, deps Deps, defaultInterval time.Duration) 
 // stateful watchers, and everything else is a single check-backed Watch. The
 // inline check is scoped by deps.WatchCheckDeps when set (service watches).
 func buildWatchEntry(name string, entry map[string]any, deps Deps, defaultInterval time.Duration) ([]*Watch, []string) {
+	deps.watchConfigID = watchSnapshotConfigID(entry)
 	if cfgval.Disabled(entry) {
 		return nil, nil
 	}
@@ -496,7 +497,7 @@ func newCheckWatch(spec checkWatchSpec, deps Deps) *Watch {
 	watch.FireOnFail = checks.IsHealthType(spec.checkType)
 	watch.Now = deps.Now
 	watch.Emit = deps.Emit
-	watch.Publish = publishWatchSnapshots(deps.WatchSnapshots)
+	watch.Publish = publishWatchSnapshots(deps.WatchSnapshots, deps.watchConfigID)
 	watch.ForceSLA = spec.forceSLA
 	watch.RecordAvailability = watchSLARecorder(deps, spec)
 	watch.RecordMetrics = watchMetricRecorder(deps, spec.name, spec.checkType, spec.graphs, spec.bands)
@@ -538,7 +539,7 @@ func buildFileWatch(name string, entry, checkEntry map[string]any, deps Deps, in
 		inPanic:       deps.Panic.Active,
 		runner:        OSHookRunner{Runner: deps.ExecxRunner},
 		emit:          deps.Emit,
-		publish:       publishWatchSnapshots(deps.WatchSnapshots),
+		publish:       publishWatchSnapshots(deps.WatchSnapshots, deps.watchConfigID),
 		recordBand:    fileBandRecorder(deps, name, checkEntry),
 		now:           deps.Now,
 	}
@@ -593,7 +594,7 @@ func buildProcWatch(name string, entry, checkEntry map[string]any, deps Deps, in
 		now:       deps.Now,
 		emit:      deps.Emit,
 		sampler:   procSamplerFromDeps(deps),
-		publish:   publishWatchSnapshots(deps.WatchSnapshots),
+		publish:   publishWatchSnapshots(deps.WatchSnapshots, deps.watchConfigID),
 	}
 	return newStatefulWatch(name, checks.CheckTypeProcess, entry, deps, interval, pw.runCycle), ""
 }
@@ -1170,7 +1171,7 @@ func monitorWatch(name, checkType string, check checks.Check, notifierNames []st
 	watch.FireOnFail = true // command/config are health-style: alert (notify) on failure/change
 	watch.Now = deps.Now
 	watch.Emit = deps.Emit
-	watch.Publish = publishWatchSnapshots(deps.WatchSnapshots)
+	watch.Publish = publishWatchSnapshots(deps.WatchSnapshots, deps.watchConfigID)
 	watch.StateStore = deps.WatchState
 	return watch
 }
@@ -1266,11 +1267,13 @@ func watchMetricRecorder(deps Deps, name, checkType string, graphs []checks.Grap
 	}
 }
 
-func publishWatchSnapshots(s *WatchSnapshots) func(string, string, checks.Result) {
+func publishWatchSnapshots(s *WatchSnapshots, configID string) func(string, string, checks.Result) {
 	if s == nil {
 		return nil
 	}
-	return s.Publish
+	return func(name, checkType string, result checks.Result) {
+		s.publishConfigured(name, checkType, result, configID)
+	}
 }
 
 // effectiveNotify applies notify precedence (per-site over global): an explicit
