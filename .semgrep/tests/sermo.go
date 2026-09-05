@@ -15,7 +15,9 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"io"
 	"net/http"
+	"strings"
 	"syscall"
 	"time"
 
@@ -190,4 +192,15 @@ func raw2xx(code int) bool {
 func successStatus(code int) bool {
 	// ok: http-2xx-must-use-httpx
 	return httpx.SuccessStatus(code)
+}
+
+func rawErrorBody(resp *http.Response) string {
+	// ruleid: http-error-body-must-use-httpx
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 256))
+	return strings.TrimSpace(string(body))
+}
+
+func useErrorBody(resp *http.Response) string {
+	// ok: http-error-body-must-use-httpx
+	return httpx.ErrorBody(resp, httpx.ErrorBodyLimit)
 }
