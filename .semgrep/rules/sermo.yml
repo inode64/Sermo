@@ -309,3 +309,19 @@ rules:
       - pattern-either:
           - pattern: $CODE / 100 == 2
           - pattern: $CODE / $DIV == 2
+
+  - id: http-error-body-must-use-httpx
+    languages: [go]
+    severity: ERROR
+    message: >-
+      Non-success HTTP bodies are httpx.ErrorBody so the trim and byte limit
+      stay in one place. Pass the caller's limit.
+    paths:
+      exclude:
+        - internal/httpx/**
+        - '**/*_test.go'
+    patterns:
+      - pattern: |
+          $BODY, $_ := io.ReadAll(io.LimitReader($RESP.Body, $LIMIT))
+          ...
+          strings.TrimSpace(string($BODY))

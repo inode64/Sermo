@@ -365,8 +365,7 @@ func (c *Client) post(ctx context.Context, path string, body io.Reader, ok ...in
 }
 
 func dockerStatusError(resp *http.Response) error {
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, dockerErrorBodyLimit))
-	return fmt.Errorf("docker: HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+	return fmt.Errorf("docker: HTTP %d: %s", resp.StatusCode, httpx.ErrorBody(resp, dockerErrorBodyLimit))
 }
 
 func containerPath(container, suffix string) string {
