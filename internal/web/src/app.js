@@ -4487,18 +4487,22 @@ function renderServiceDetail(d) {
     ${serviceGeneralDetail(d, processes.general)}
     ${serviceGraphDetail(d)}
     ${processes.section}
+    <section data-detail-section="checks">
     <h2>Checks</h2>
     <table class="detail-checks-table">
       <caption class="visually-hidden">Service checks</caption>
       <thead><tr><th scope="col">Check</th><th scope="col">Type</th><th scope="col">State</th><th scope="col">SLA</th><th scope="col">Message</th></tr></thead>
       <tbody>${checks}</tbody></table>
+    </section>
     <h2>Named locks</h2>
     <table class="detail-locks-table">
       <caption class="visually-hidden">Service named locks</caption>
       <thead><tr><th scope="col">Name</th><th scope="col">State</th><th scope="col">TTL</th><th scope="col">Owner</th><th scope="col">Created</th><th scope="col">Blocks</th><th scope="col">Reason</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr></thead>
       <tbody>${locks.rows}</tbody></table>${locks.warnings}
+    <section data-detail-section="rules">
     <h2>Rules</h2>
     ${renderRules(d.rules)}
+    </section>
     <h2>Preflight ${servicePreflightButton(d)}</h2>
     <div id="${detailDomId(d.name, "preflight")}" class="muted">not run yet</div>
     <h2>Recent events</h2>
