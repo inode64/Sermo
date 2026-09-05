@@ -571,7 +571,9 @@ test("service warning reason sits below the service instead of widening State", 
   await page.route("**/api/dashboard**", async (route) => {
     const body = JSON.parse(JSON.stringify(dashboard));
     body.services.push({
-      name: "degraded", display_name: "Degraded workload", category: "service", enabled: true,
+      // A long identity squeezes the State column on a phone, which is where a
+      // pill or a reason used to split inside a word.
+      name: "degraded", display_name: "Degraded workload with a fairly long display name", category: "service", enabled: true,
       monitored: true, status: "failed", state: "warning", state_reason: "failed_unit_live_process",
       uptime_seconds: 1800, status_observed_at: "2026-07-10T12:00:00Z",
     });
@@ -598,6 +600,29 @@ test("service warning reason sits below the service instead of widening State", 
   await page.setViewportSize({ width: 412, height: 915 });
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   expect(overflow).toBe(0);
+  // Narrow cells wrap the reason and the state pill between words: no word is
+  // split across two line boxes.
+  const wordsIntact = await page.evaluate(() => {
+    const intact = (el) => {
+      const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+      for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+        const words = /\S+/g;
+        let match;
+        while ((match = words.exec(node.textContent))) {
+          const range = document.createRange();
+          range.setStart(node, match.index);
+          range.setEnd(node, match.index + match[0].length);
+          if (range.getClientRects().length > 1) return false;
+        }
+      }
+      return true;
+    };
+    return {
+      note: intact(document.querySelector("#svc-row-degraded .svc-state-note")),
+      badge: intact(document.querySelector("#svc-row-stale .target-state")),
+    };
+  });
+  expect(wordsIntact).toEqual({ note: true, badge: true });
 });
 
 test("paused monitoring is distinct from disabled configuration", async ({ page }) => {

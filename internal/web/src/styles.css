@@ -171,6 +171,10 @@
     padding: .1rem .55rem .1rem .45rem; border-radius: 999px;
     font-size: .76em; font-weight: 650; letter-spacing: .01em; line-height: 1.5;
     background: color-mix(in srgb, currentColor 11%, transparent);
+    /* The pill's label is one or two short words: wrap between them when the
+       State column is narrow, never inside one ("warnin|g"). The cells around
+       it opt into anywhere-breaking for long values; the pill opts back out. */
+    overflow-wrap: normal;
   }
   .target-state::before { content: ""; width: .52em; height: .52em; border-radius: 50%; background: currentColor; flex: none; }
   .state-disabled, .state-stopped, .state-starting { color: var(--text-2); }
@@ -419,7 +423,11 @@
   .confirm-cascade-line { margin-top: .5rem; }
   .detail-warn { margin-top: .25rem; }
   .svc-busy, .svc-state-note { margin-left: 1.15rem; }
-  .svc-state-note { display: block; margin-top: .1rem; font-weight: 400; }
+  /* A state reason is a sentence: it wraps between words and only breaks inside
+     one when a word alone is wider than the cell, so a narrow first column grows
+     downwards by whole words instead of shattering the text letter by letter. */
+  .svc-state-note { display: block; margin-top: .1rem; font-weight: 400; overflow-wrap: break-word; }
+  .state-reason { overflow-wrap: break-word; }
   .admin-before-input { max-width: 11rem; }
   .proc-tree { display: inline-flex; align-items: center; gap: .28rem; min-width: 0; padding-left: calc(var(--proc-depth, 0) * .9rem); }
   .proc-branch { flex: 0 0 auto; color: var(--text-2); font-family: var(--mono); font-size: .9em; letter-spacing: 0; }
