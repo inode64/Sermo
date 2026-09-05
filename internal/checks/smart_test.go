@@ -239,7 +239,7 @@ func TestParseSmartReadsDriveIdentity(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := smartIdentity{
+	want := BlockDeviceIdentity{
 		Model:         "WDC WD20EFRX-68EUZN0",
 		Serial:        "WD-WCC4M4SZ375K",
 		Firmware:      "82.00A82",
@@ -268,7 +268,7 @@ func TestParseSmartReadsNVMeIdentityAndCounters(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := smartIdentity{
+	want := BlockDeviceIdentity{
 		Model:         "Samsung SSD 980 500GB",
 		Serial:        "S64DNL0T923705D",
 		Firmware:      "2B4QFXO7",
