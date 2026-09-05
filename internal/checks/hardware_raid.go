@@ -1296,39 +1296,27 @@ func stateOrUnknown(state string) string {
 	return strings.TrimSpace(state)
 }
 
+// stringValue reads a scalar the RAID tools emit (a string, a JSON number or
+// a decoded float) as trimmed text; anything else is absent.
 func stringValue(value any) string {
-	switch typed := value.(type) {
-	case string:
-		return strings.TrimSpace(typed)
-	case float64:
-		return strconv.FormatFloat(typed, 'f', -1, 64)
-	case json.Number:
-		return typed.String()
+	switch value.(type) {
+	case string, float64, json.Number:
+		return strings.TrimSpace(cfgval.String(value))
 	default:
 		return ""
 	}
 }
 
+// hardwareRAIDNumber reads a numeric tool value, accepting the "62C"
+// temperature form on top of the scalars cfgval.Float understands.
 func hardwareRAIDNumber(value any) (float64, bool) {
-	switch typed := value.(type) {
-	case float64:
-		return typed, true
-	case int:
-		return float64(typed), true
-	case json.Number:
-		number, err := typed.Float64()
-		return number, err == nil
-	case string:
-		match := temperatureCPattern.FindStringSubmatch(strings.TrimSpace(typed))
-		if len(match) == regexpCaptureMatchLen {
+	if text, ok := value.(string); ok {
+		if match := temperatureCPattern.FindStringSubmatch(strings.TrimSpace(text)); len(match) == regexpCaptureMatchLen {
 			number, err := strconv.ParseFloat(match[1], 64)
 			return number, err == nil
 		}
-		number, err := strconv.ParseFloat(strings.TrimSpace(typed), 64)
-		return number, err == nil
-	default:
-		return 0, false
 	}
+	return cfgval.Float(value)
 }
 
 func integerValue(value any) int {

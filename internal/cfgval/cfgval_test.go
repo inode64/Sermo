@@ -1,6 +1,7 @@
 package cfgval
 
 import (
+	"encoding/json"
 	"slices"
 	"testing"
 	"time"
@@ -579,5 +580,27 @@ func TestStringListAcceptsLiveStringSlice(t *testing.T) {
 	}
 	if got := StringList([]string{}); len(got) != 0 {
 		t.Fatalf("StringList(empty []string) = %v, want empty", got)
+	}
+}
+
+func TestUintAndFloatAcceptEveryNumericShape(t *testing.T) {
+	uints := map[string]any{"uint64": uint64(7), "uint32": uint32(7), "int": 7, "int64": int64(7), "float64": 7.0, "string": " 7 ", "json": json.Number("7")}
+	for name, v := range uints {
+		if got, ok := Uint(v); !ok || got != 7 {
+			t.Errorf("Uint(%s %v) = %d/%v, want 7", name, v, got, ok)
+		}
+	}
+	for name, v := range map[string]any{"negative int": -1, "negative float": -0.5, "text": "seven", "nil": nil, "bool": true} {
+		if _, ok := Uint(v); ok {
+			t.Errorf("Uint(%s) must fail", name)
+		}
+	}
+	for name, v := range map[string]any{"int8": int8(3), "uint16": uint16(3), "float32": float32(3), "json": json.Number("3")} {
+		if got, ok := Float(v); !ok || got != 3 {
+			t.Errorf("Float(%s) = %v/%v, want 3", name, got, ok)
+		}
+	}
+	if got := String(json.Number("1.5")); got != "1.5" {
+		t.Fatalf("String(json.Number) = %q", got)
 	}
 }
