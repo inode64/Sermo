@@ -169,16 +169,27 @@ func daemonWebBasicAuth(password string) string {
 
 // daemonAPIGet silently loads config for best-effort status enrichment, then
 // performs an authenticated GET against the running sermod web API.
-func (a App) daemonAPIGet(ctx context.Context, opts options, path string) ([]byte, int, error) {
+// daemonAPIJSON loads the config, GETs one daemon API path and decodes a 200
+// body into out. Any transport, status or decode problem reports false: these
+// reads only enrich CLI output and must never turn into a failure.
+func (a App) daemonAPIJSON(ctx context.Context, opts options, path string, out any) bool {
 	cfg, err := a.LoadConfig(opts.globalPath())
 	if err != nil || cfg == nil {
-		return nil, 0, err
+		return false
 	}
-	return a.daemonAPIGetWithConfig(ctx, cfg, path)
+	return a.daemonAPIJSONWithConfig(ctx, cfg, path, out)
 }
 
-// daemonAPIGetWithConfig is the no-reload form for callers that already need
+// daemonAPIJSONWithConfig is daemonAPIJSON for callers that already loaded the
 // config, such as service-name canonicalization.
+func (a App) daemonAPIJSONWithConfig(ctx context.Context, cfg *config.Config, path string, out any) bool {
+	body, status, err := a.daemonAPIGetWithConfig(ctx, cfg, path)
+	if err != nil || status != http.StatusOK {
+		return false
+	}
+	return json.Unmarshal(body, out) == nil
+}
+
 func (a App) daemonAPIGetWithConfig(ctx context.Context, cfg *config.Config, path string) ([]byte, int, error) {
 	resp, err := a.daemonWebDo(ctx, cfg, http.MethodGet, "daemon API", false, func(base string) string {
 		return base + path
@@ -207,26 +218,18 @@ func (a App) fetchDaemonServiceState(ctx context.Context, opts options, service 
 	} else if len(cfg.Services) > 0 {
 		return "", false
 	}
-	body, status, err := a.daemonAPIGetWithConfig(ctx, cfg, web.APIPathServices+"/"+url.PathEscape(name))
-	if err != nil || status != http.StatusOK {
-		return "", false
-	}
 	var detail struct {
 		State string `json:"state"`
 	}
-	if err := json.Unmarshal(body, &detail); err != nil || detail.State == "" {
+	if !a.daemonAPIJSONWithConfig(ctx, cfg, web.APIPathServices+"/"+url.PathEscape(name), &detail) || detail.State == "" {
 		return "", false
 	}
 	return detail.State, true
 }
 
 func (a App) fetchDaemonWatchDetail(ctx context.Context, opts options, watch string) (daemonWatchDetail, bool) {
-	body, status, err := a.daemonAPIGet(ctx, opts, web.APIPathWatches)
-	if err != nil || status != http.StatusOK {
-		return daemonWatchDetail{}, false
-	}
 	var watches []daemonWatchDetail
-	if err := json.Unmarshal(body, &watches); err != nil {
+	if !a.daemonAPIJSON(ctx, opts, web.APIPathWatches, &watches) {
 		return daemonWatchDetail{}, false
 	}
 	for _, detail := range watches {
@@ -238,15 +241,11 @@ func (a App) fetchDaemonWatchDetail(ctx context.Context, opts options, watch str
 }
 
 func (a App) fetchDaemonApplicationStates(ctx context.Context, opts options) map[string]string {
-	body, status, err := a.daemonAPIGet(ctx, opts, web.APIPathApplications)
-	if err != nil || status != http.StatusOK {
-		return nil
-	}
 	var apps []struct {
 		Name  string `json:"name"`
 		State string `json:"state"`
 	}
-	if err := json.Unmarshal(body, &apps); err != nil {
+	if !a.daemonAPIJSON(ctx, opts, web.APIPathApplications, &apps) {
 		return nil
 	}
 	out := make(map[string]string, len(apps))

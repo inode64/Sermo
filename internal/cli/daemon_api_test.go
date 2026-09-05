@@ -112,12 +112,9 @@ func TestDaemonAPIGetConfigFailureIsSilent(t *testing.T) {
 		Stderr: &stderr,
 	}
 
-	body, status, err := app.daemonAPIGet(context.Background(), options{}, web.APIPathWatches)
-	if !errors.Is(err, wantErr) {
-		t.Fatalf("daemonAPIGet() error = %v, want %v", err, wantErr)
-	}
-	if body != nil || status != 0 {
-		t.Errorf("daemonAPIGet() = (%v, %d), want (nil, 0)", body, status)
+	var watches []daemonWatchDetail
+	if ok := app.daemonAPIJSON(context.Background(), options{}, web.APIPathWatches, &watches); ok || watches != nil {
+		t.Fatalf("daemonAPIJSON() = (%v, %t), want (nil, false) when the config cannot be read", watches, ok)
 	}
 	if stderr.Len() != 0 {
 		t.Errorf("stderr = %q, want no best-effort diagnostic", stderr.String())
