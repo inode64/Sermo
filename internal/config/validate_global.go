@@ -122,7 +122,7 @@ func validateNotifier(name string, raw any, templateDir string, add func(string,
 			add(validationBooleanFormat, notifierFieldPath(name, keyEnabled))
 		}
 	}
-	if enabled, ok := entry[keyEnabled].(bool); ok && !enabled {
+	if cfgval.Disabled(entry) {
 		return
 	}
 	validateNotifierTemplate(name, entry, templateDir, add)

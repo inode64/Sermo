@@ -13,11 +13,18 @@ package tests
 
 import (
 	"context"
+	"crypto/tls"
+	"fmt"
+	"net/http"
 	"syscall"
 	"time"
 
+	"sermo/internal/cfgval"
+	"sermo/internal/httpx"
+	"sermo/internal/netutil"
 	"sermo/internal/process"
 	"sermo/internal/servicemgr"
+	"sermo/internal/strutil"
 )
 
 func compareManagers(a, b servicemgr.Manager) bool {
@@ -102,4 +109,78 @@ func csrfHeaderLiteral() string {
 func generationHeaderName() string {
 	// ok: daemon-http-contract-literals
 	return "invalid X-Sermo-Generation header"
+}
+
+func nestedUniqueThenMerge(primary string, fallbacks []string) []string {
+	// ruleid: strutil-must-not-merge-unique-of-unique
+	return strutil.MergeUnique(strutil.Unique([]string{primary}), fallbacks...)
+}
+
+func uniqueCombinedPidfiles(primary string, fallbacks []string) []string {
+	// ok: strutil-must-not-merge-unique-of-unique
+	return strutil.Unique(append([]string{primary}, fallbacks...))
+}
+
+func mergeCompositeSeed(primary string, fallbacks []string) []string {
+	// ruleid: strutil-must-not-merge-composite-list
+	return strutil.MergeUnique([]string{primary}, fallbacks...)
+}
+
+func mergeExistingList(list, extra []string) []string {
+	// ok: strutil-must-not-merge-composite-list
+	return strutil.MergeUnique(list, extra...)
+}
+
+func identityWrap(err error) error {
+	// ruleid: error-wrap-must-add-context
+	return fmt.Errorf("%w", err)
+}
+
+func wrapWithStep(err error) error {
+	// ok: error-wrap-must-add-context
+	return fmt.Errorf("web bind: %w", err)
+}
+
+func skipDisabledInline(entry map[string]any) {
+	// ruleid: enabled-must-use-cfgval-disabled
+	if v, ok := entry["enabled"].(bool); ok && !v {
+		return
+	}
+}
+
+func skipDisabledOwner(entry map[string]any) {
+	// ok: enabled-must-use-cfgval-disabled
+	if cfgval.Disabled(entry) {
+		return
+	}
+}
+
+func skipVerifyLiteral() *tls.Config {
+	// ruleid: tls-skip-verify-must-use-netutil
+	return &tls.Config{InsecureSkipVerify: true}
+}
+
+func skipVerifyOwner(host string) *tls.Config {
+	// ok: tls-skip-verify-must-use-netutil
+	return netutil.TLSClientConfigForMode(host, netutil.TLSModeSkipVerify)
+}
+
+func rawClientDo(c *http.Client, req *http.Request) (*http.Response, error) {
+	// ruleid: http-client-do-must-use-httpx
+	return c.Do(req)
+}
+
+func httpxDo(c httpx.Doer, req *http.Request) (*http.Response, error) {
+	// ok: http-client-do-must-use-httpx
+	return httpx.Do(c, req)
+}
+
+func raw2xx(code int) bool {
+	// ruleid: http-2xx-must-use-httpx
+	return code/100 == 2
+}
+
+func successStatus(code int) bool {
+	// ok: http-2xx-must-use-httpx
+	return httpx.SuccessStatus(code)
 }
