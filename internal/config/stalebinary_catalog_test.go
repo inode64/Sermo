@@ -135,28 +135,28 @@ func TestCatalogFcronBlocksStopAndRestartWithActiveJobs(t *testing.T) {
 // operator can schedule the restart by hand.
 func TestCatalogOVSNeverAutoRestartsOnStaleBinary(t *testing.T) {
 	for _, service := range []string{"ovs-vswitchd", "ovsdb-server"} {
-		t.Run(service, func(t *testing.T) {
-			rule := staleBinaryRuleOf(t, resolveCatalogService(t, service, "openrc"))
-			if got := rule[rules.RuleFieldType]; got != string(rules.RuleAlert) {
-				t.Fatalf("want an alert rule, got %v", got)
-			}
-			for _, action := range ruleActionTypes(t, rule) {
-				if action == string(rules.ActionRestart) {
-					t.Fatal("OVS must not carry an automatic restart for a replaced binary")
+		for _, backend := range []string{"openrc", "systemd"} {
+			t.Run(service+"/"+backend, func(t *testing.T) {
+				rule := staleBinaryRuleOf(t, resolveCatalogService(t, service, backend))
+				if got := rule[rules.RuleFieldType]; got != string(rules.RuleAlert) {
+					t.Fatalf("want an alert rule, got %v", got)
 				}
-			}
-		})
+				for _, action := range ruleActionTypes(t, rule) {
+					if action == string(rules.ActionRestart) {
+						t.Fatalf("%s must not carry an automatic restart for a replaced binary", service)
+					}
+				}
+			})
+		}
 	}
 }
 
-// ovsdb-client declares no process selectors, so there is nothing to find
-// stale and no rule is generated. Its restart_on_stale_binary: false is
-// deliberate anyway: it pre-arms the veto for the day selectors are added.
-func TestCatalogOVSClientHasNothingToCheck(t *testing.T) {
-	resolved := resolveCatalogService(t, "ovsdb-client", "openrc")
-	ruleMap, _ := resolved.Tree[rules.SectionRules].(map[string]any)
-	if _, generated := ruleMap[staleBinaryRuleName]; generated {
-		t.Fatal("ovsdb-client declares no processes; a stale-binary rule must not appear")
+// ovsdb-client declares no process selectors, so its processes come from the
+// init backend; the veto it carries applies to those just the same.
+func TestCatalogOVSClientAlertsOnly(t *testing.T) {
+	rule := staleBinaryRuleOf(t, resolveCatalogService(t, "ovsdb-client", "openrc"))
+	if got := rule[rules.RuleFieldType]; got != string(rules.RuleAlert) {
+		t.Fatalf("want an alert rule, got %v", got)
 	}
 }
 
@@ -205,10 +205,11 @@ func TestDefaultsRestartOnStaleBinaryOptsOutWholeHost(t *testing.T) {
 	}
 }
 
-// Everything else keeps the restart, which is what was asked for: the veto is
-// OVS-only.
+// Everything else keeps the restart, which is what was asked for, including the
+// services that declare no selectors and are attributed by their init unit
+// (dmeventd, systemd-networkd).
 func TestCatalogOtherServicesRestartOnStaleBinary(t *testing.T) {
-	for _, service := range []string{"nginx", "rpc-mountd", "mariadb"} {
+	for _, service := range []string{"nginx", "rpc-mountd", "mariadb", "dmeventd", "systemd-networkd"} {
 		t.Run(service, func(t *testing.T) {
 			rule := staleBinaryRuleOf(t, resolveCatalogService(t, service, "systemd"))
 			if got := rule[rules.RuleFieldType]; got != string(rules.RuleRemediation) {

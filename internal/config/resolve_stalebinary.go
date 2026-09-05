@@ -22,10 +22,11 @@ const (
 )
 
 // expandStaleBinary injects the stale-binary check and its rule into every
-// service that declares processes to discover. The condition can hit any
-// service — it is the ordinary result of upgrading a package without
-// restarting — so this is not opt-in; what is configurable is whether the rule
-// may restart.
+// service whose processes discovery can attribute: the ones it declares, or
+// the ones the init backend names for the unit when the service declares none.
+// The condition can hit any service — it is the ordinary result of upgrading a
+// package without restarting — so this is not opt-in; what is configurable is
+// whether the rule may restart.
 //
 // `restart_on_stale_binary: false` keeps the alert and the notification and
 // drops only the restart action, which also downgrades the rule from
@@ -38,8 +39,16 @@ func expandStaleBinary(tree map[string]any) []string {
 		return flagErrs
 	}
 	delete(tree, keyRestartOnStaleBinary)
-	if !serviceDeclaresProcesses(tree) {
+	if !staleBinaryApplies(tree) {
 		return nil
+	}
+	// A checks section in any shape but a mapping is the operator's to have
+	// validated; the check cannot be added to it, and a rule without its check
+	// would only add a second error on top of theirs.
+	if raw, present := tree[sectionChecks]; present && raw != nil {
+		if _, isMap := raw.(map[string]any); !isMap {
+			return nil
+		}
 	}
 
 	// A replaced executable needs operator attention (and may trigger the
@@ -67,7 +76,12 @@ func expandStaleBinary(tree map[string]any) []string {
 // to say what is claiming them — the operator never asked for this entry, so
 // feature names which sugar is responsible.
 func injectGenerated(tree map[string]any, section, name, noun, feature string, value any) string {
-	entries, _ := tree[section].(map[string]any)
+	entries, isMap := tree[section].(map[string]any)
+	if raw, present := tree[section]; present && raw != nil && !isMap {
+		// A section in any other shape is the operator's to have validated;
+		// replacing it with a fresh map would silently drop what they wrote.
+		return ""
+	}
 	if entries == nil {
 		entries = map[string]any{}
 	}
@@ -119,11 +133,28 @@ func staleBinaryRestartAllowed(tree map[string]any) (bool, []string) {
 	return allowed, nil
 }
 
-// serviceDeclaresProcesses reports whether the service gives discovery anything
-// to attribute. Without selectors there is no process to find stale, so the
-// check would report a permanent, meaningless OK. It asks the parser discovery
-// itself uses, so this cannot drift into accepting a declaration that yields no
-// selector (an empty pidfiles map, or a path list that resolves to nothing).
+// staleBinaryApplies reports whether discovery can attribute a process to the
+// service at all, which is what the stale-binary check needs. Declared
+// selectors qualify; so does declaring none, because the worker then derives
+// the unit's own processes from the init backend and finds a replaced binary
+// there just the same — a service left out on that account showed
+// restart_required without ever alerting or restarting. Only an explicit
+// `processes: {}` (nothing resident to attribute) and an external control
+// backend (a container's or domain's PID set is not a host binary Sermo
+// restarts) are left out. This mirrors the lifecycle's process mode so the
+// two cannot drift apart.
+func staleBinaryApplies(tree map[string]any) bool {
+	if _, external := tree[SectionControl]; external {
+		return false
+	}
+	return resolvedProcessMode(tree) != ServiceProcessNone
+}
+
+// serviceDeclaresProcesses reports whether the service gives discovery
+// selectors of its own. The strays sensor needs that: it asks the parser
+// discovery itself uses, so this cannot drift into accepting a declaration
+// that yields no selector (an empty pidfiles map, or a path list that resolves
+// to nothing).
 func serviceDeclaresProcesses(tree map[string]any) bool {
 	selectors, _ := process.ParseSelectors(tree)
 	return len(selectors) > 0
