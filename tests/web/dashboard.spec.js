@@ -283,7 +283,14 @@ function serviceDetail(name) {
       count: name === "web" ? 3 : 1, rss: 1048576, io_read: 0, io_write: 0, fds: 5, threads: 1,
       has_cpu: true, cpu: 12.5, cpu_thread: 96.25, num_cpu: 4,
     },
-    locks: [], rules: [], sla: [],
+    locks: [], sla: [],
+    // The rule names and conditions a real host shows: seven columns of these
+    // used to split their words letter by letter on a phone.
+    rules: name === "web" ? [
+      { name: "restart-if-worker-thread-hot", type: "remediation", action: "restart", condition: "active:restart-if-worker-thread-hot", window: "for 6m", progress: "0s/6m" },
+      { name: "restart-on-stale-binary", type: "remediation", action: "restart", condition: "failed:stale-binary", window: "immediate", progress: "0/1" },
+      { name: "alert-if-msglog-backlog-high", type: "alert", action: "alert", condition: "active:alert-if-msglog-backlog-high", window: "immediate", progress: "0/1", condition_true: true },
+    ] : [],
   };
 }
 
@@ -1836,4 +1843,15 @@ test("expanding a service on a phone keeps its action buttons inside the table",
   // The phone-width bars let the process table fit the expansion outright, so
   // the wrapper's own scroll stays a last resort rather than the normal case.
   expect(box.expansionOverflow).toBeLessThanOrEqual(0);
+
+  // The rules table drops its type, window and progress columns on a phone
+  // and keeps every remaining word whole ("restart", not "res|tart"); a rule
+  // name may still wrap at its hyphens.
+  const rules = detail.getByRole("table", { name: "Remediation rules" });
+  await expect(rules).toBeVisible();
+  await expect(rules.locator("thead th", { hasText: "Type" })).toBeHidden();
+  await expect(rules.locator("thead th", { hasText: "Window" })).toBeHidden();
+  await expect(rules.locator("thead th", { hasText: "Progress" })).toBeHidden();
+  const splitRuleWords = await splitWordsIn(page, '[data-service-detail="web"] .detail-rules-table');
+  expect(splitRuleWords.filter((token) => !token.includes("-"))).toEqual([]);
 });
