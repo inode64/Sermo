@@ -3710,7 +3710,7 @@ function renderWatchMetricsSection(w) {
       watchMetricLabel(metric))}
   </div>`);
   const win = serviceMetricState(watchMetricsWindowKey(w.name)).window;
-  return tpl`<h2>Graphs <span class="muted">${winButtons(metricWins, win, "setWatchMetricWin", "Graph time window", w.name)}</span></h2>
+  return tpl`<h2 class="expansion-heading">Graphs <span class="muted">${winButtons(metricWins, win, "setWatchMetricWin", "Graph time window", w.name)}</span></h2>
     <div class="metric-grid">${panels}</div>`;
 }
 
@@ -3750,7 +3750,7 @@ function setWatchMetricWin(win, watch) {
 
 function renderSLASection(key) {
   const win = serviceMetricState(key).window;
-  return tpl`<h2>Availability <span class="muted">${winButtons(metricWins, win, "setSLAWin", "Availability time window", key)}</span></h2>
+  return tpl`<h2 class="expansion-heading">Availability <span class="muted">${winButtons(metricWins, win, "setSLAWin", "Availability time window", key)}</span></h2>
     <div class="metric-grid">${slaChartPanel(key)}</div>`;
 }
 

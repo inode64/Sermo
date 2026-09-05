@@ -423,6 +423,8 @@
   .detail-checks-table td:nth-child(1) { min-width: 6.5rem; }
   .detail-checks-table td:nth-child(2), .detail-checks-table td:nth-child(3) { min-width: 4.5rem; }
   .detail-compact-table { font-size: .85rem; }
+  /* Every heading inside a row expansion shares this size; the service detail
+     restyles its own h2 (below) and wins by specificity. */
   .expansion-heading { font-size: .95rem; margin: .8rem 0 .3rem; }
   .events-compact-table { width: auto; font-size: .85rem; }
   .condition-empty { margin: .2rem 0 .6rem; }
