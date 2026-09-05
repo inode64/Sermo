@@ -6,6 +6,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"sermo/internal/hostfs"
 	"slices"
 	"strconv"
 	"strings"
@@ -366,7 +367,7 @@ func sampleNetFromSysfs(iface, root string) (NetSample, error) {
 	}
 	sample := NetSample{State: state, Counters: map[string]uint64{}}
 
-	if raw, err := os.ReadFile(filepath.Join(dir, sysfsIfaceSpeedFile)); err == nil { //nolint:gosec // G304: path under /sys/class/net for interface speed
+	if raw, err := hostfs.ReadFile(filepath.Join(dir, sysfsIfaceSpeedFile)); err == nil {
 		if v, err := strconv.ParseInt(strings.TrimSpace(string(raw)), numericBaseDecimal, numericBits64); err == nil && v >= 0 {
 			sample.SpeedMbps, sample.SpeedKnown = v, true
 		}

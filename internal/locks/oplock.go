@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sermo/internal/hostfs"
 	"time"
 
 	"golang.org/x/sys/unix"
@@ -228,7 +229,7 @@ func reclaimStale(path string, expected lockFile, proc ProcessProber, now func()
 // behavior) rather than failing the acquire.
 func lockReclaimDir(path string) (func(), error) {
 	dir := filepath.Dir(path)
-	d, err := os.Open(dir) //nolint:gosec // G304: lock directory under paths.runtime/ops
+	d, err := hostfs.Open(dir)
 	if err != nil {
 		return nil, fmt.Errorf("open lock directory %s: %w", dir, err)
 	}
@@ -246,7 +247,7 @@ func lockReclaimDir(path string) (func(), error) {
 // and fsyncs the file and its directory so a lock that exists is always complete
 // after a crash. An existing file yields os.ErrExist.
 func writeLockFileExclusive(path string, lf lockFile) error {
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, lockFileMode) //nolint:gosec // G304: lock file path under paths.runtime/ops
+	f, err := hostfs.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, lockFileMode)
 	if err != nil {
 		return fmt.Errorf("create lock %s: %w", path, err)
 	}
@@ -272,7 +273,7 @@ func writeLockFileExclusive(path string, lf lockFile) error {
 
 // syncDir best-effort fsyncs a directory so a newly created lock is durable.
 func syncDir(dir string) {
-	d, err := os.Open(dir) //nolint:gosec // G304: lock directory under paths.runtime/ops
+	d, err := hostfs.Open(dir)
 	if err != nil {
 		return
 	}

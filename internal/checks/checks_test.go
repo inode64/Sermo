@@ -5,7 +5,6 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"debug/elf"
-	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -22,6 +21,7 @@ import (
 
 	"sermo/internal/cfgval"
 	"sermo/internal/execx"
+	"sermo/internal/execx/execxtest"
 	"sermo/internal/servicemgr"
 )
 
@@ -397,35 +397,6 @@ func livingDeviceProbe() deviceProbe {
 	return deviceProbe{size: livingDeviceSize, identity: testDeviceIdentity}
 }
 
-type fakeRunner struct {
-	result execx.Result
-}
-
-func (r fakeRunner) Run(context.Context, string, ...string) (execx.Result, error) {
-	return r.result, nil
-}
-
-type recordingUserRunner struct {
-	result      execx.Result
-	err         error
-	user        string
-	name        string
-	args        []string
-	hasDeadline bool
-}
-
-func (r *recordingUserRunner) Run(context.Context, string, ...string) (execx.Result, error) {
-	return execx.Result{ExitCode: execx.ExitCodeRunFailure}, errors.New("Run must not be used")
-}
-
-func (r *recordingUserRunner) RunUser(ctx context.Context, user, name string, args ...string) (execx.Result, error) {
-	_, r.hasDeadline = ctx.Deadline()
-	r.user = user
-	r.name = name
-	r.args = append([]string(nil), args...)
-	return r.result, r.err
-}
-
 // slowRunner never returns until its context is cancelled, so a check running
 // under it can only finish by hitting its own timeout. Shared by every
 // shell-out check's timeout case: the runner's error text is not part of any
@@ -506,11 +477,11 @@ func TestCheckTimeoutMessage(t *testing.T) {
 }
 
 func TestCommandCheck(t *testing.T) {
-	ok := commandCheck{name: "c", timeout: time.Second, runner: fakeRunner{execx.Result{ExitCode: 0}}, argv: []string{"true"}, expectExit: []int{0}}
+	ok := commandCheck{name: "c", timeout: time.Second, runner: execxtest.Fixed(execx.Result{ExitCode: 0}, nil), argv: []string{"true"}, expectExit: []int{0}}
 	if res := ok.Run(context.Background()); !res.OK {
 		t.Errorf("exit 0 should pass: %s", res.Message)
 	}
-	bad := commandCheck{name: "c", timeout: time.Second, runner: fakeRunner{execx.Result{ExitCode: 1, Stderr: "boom\n"}}, argv: []string{"false"}, expectExit: []int{0}}
+	bad := commandCheck{name: "c", timeout: time.Second, runner: execxtest.Fixed(execx.Result{ExitCode: 1, Stderr: "boom\n"}, nil), argv: []string{"false"}, expectExit: []int{0}}
 	res := bad.Run(context.Background())
 	if res.OK {
 		t.Errorf("exit 1 should fail")
@@ -522,18 +493,20 @@ func TestCommandCheck(t *testing.T) {
 
 // assertRunsAsUser runs check (which must embed runner) and asserts it passes and
 // invoked RunUser as postgres with wantName and a single "--check" argument.
-func assertRunsAsUser(t *testing.T, runner *recordingUserRunner, check Check, wantName string) {
+func assertRunsAsUser(t *testing.T, runner *execxtest.Runner, check Check, wantName string) {
 	t.Helper()
 	if res := check.Run(context.Background()); !res.OK {
 		t.Fatalf("check with user should pass: %s", res.Message)
 	}
-	if runner.user != "postgres" || runner.name != wantName || len(runner.args) != 1 || runner.args[0] != "--check" {
-		t.Fatalf("RunUser call = user=%q name=%q args=%v", runner.user, runner.name, runner.args)
+	// A recorded User proves the check went through RunUser, not Run.
+	calls := runner.Calls()
+	if len(calls) != 1 || calls[0].User != "postgres" || calls[0].Line() != wantName+" --check" {
+		t.Fatalf("RunUser call = %+v", calls)
 	}
 }
 
 func TestCommandCheckUser(t *testing.T) {
-	runner := &recordingUserRunner{result: execx.Result{ExitCode: 0}}
+	runner := execxtest.Fixed(execx.Result{ExitCode: 0}, nil)
 	check := commandCheck{
 		name: "c", timeout: time.Second,
 		runner:     runner,
@@ -547,7 +520,7 @@ func TestCommandCheckUser(t *testing.T) {
 func TestCommandCheckUserRequiresUserRunner(t *testing.T) {
 	check := commandCheck{
 		name: "c", timeout: time.Second,
-		runner:     fakeRunner{execx.Result{ExitCode: 0}},
+		runner:     execxtest.RunOnly{Runner: execxtest.Fixed(execx.Result{ExitCode: 0}, nil)},
 		argv:       []string{"/usr/bin/postgres", "--check"},
 		user:       "postgres",
 		expectExit: []int{0},
@@ -575,10 +548,10 @@ func TestCommandCheckExportsData(t *testing.T) {
 		},
 	}, Deps{
 		DefaultTimeout: time.Second,
-		Runner: fakeRunner{execx.Result{
+		Runner: execxtest.Fixed(execx.Result{
 			Stdout: "8.3\nAPI 12\n",
 			Stderr: " warn \n",
-		}},
+		}, nil),
 	})
 	if len(warns) != 0 || len(built) != 1 {
 		t.Fatalf("Build warns=%v built=%d", warns, len(built))
@@ -601,7 +574,7 @@ func TestCommandCheckExportsData(t *testing.T) {
 		},
 	}, Deps{
 		DefaultTimeout: time.Second,
-		Runner:         fakeRunner{execx.Result{Stdout: "PHP 8.3.6 (fpm-fcgi)\n"}},
+		Runner:         execxtest.Fixed(execx.Result{Stdout: "PHP 8.3.6 (fpm-fcgi)\n"}, nil),
 	})
 	if len(warns) != 0 || len(built) != 1 {
 		t.Fatalf("Build version warns=%v built=%d", warns, len(built))
@@ -618,7 +591,7 @@ func TestCommandCheckExportsData(t *testing.T) {
 		},
 	}, Deps{
 		DefaultTimeout: time.Second,
-		Runner:         fakeRunner{execx.Result{Stdout: "pkexec version 126\n"}},
+		Runner:         execxtest.Fixed(execx.Result{Stdout: "pkexec version 126\n"}, nil),
 	})
 	if len(warns) != 0 || len(built) != 1 {
 		t.Fatalf("Build integer version warns=%v built=%d", warns, len(built))
@@ -635,7 +608,7 @@ func TestCommandCheckExportsData(t *testing.T) {
 		},
 	}, Deps{
 		DefaultTimeout: time.Second,
-		Runner:         fakeRunner{execx.Result{Stdout: "/usr/bin/numad version: 20150602: compiled Sep 12 2024\n"}},
+		Runner:         execxtest.Fixed(execx.Result{Stdout: "/usr/bin/numad version: 20150602: compiled Sep 12 2024\n"}, nil),
 	})
 	if len(warns) != 0 || len(built) != 1 {
 		t.Fatalf("Build numad version warns=%v built=%d", warns, len(built))
@@ -992,7 +965,7 @@ func buildAnalyzeCmd(t *testing.T, out, sev string) Result {
 				map[string]any{"id": "r", "match": "(?i)deprecated|BACK UP DATA NOW", "severity": sev},
 			}},
 		},
-	}, Deps{DefaultTimeout: time.Second, Runner: fakeRunner{execx.Result{Stdout: out}}})
+	}, Deps{DefaultTimeout: time.Second, Runner: execxtest.Fixed(execx.Result{Stdout: out}, nil)})
 	if len(warns) != 0 {
 		t.Fatalf("build warns=%v", warns)
 	}
@@ -1147,4 +1120,10 @@ func TestDeclaredGraphMetrics(t *testing.T) {
 			t.Error("GraphMetrics exposed mutable registry state")
 		}
 	}
+}
+
+// cliRunner scripts a CLI-backed check: results answer exact command lines and
+// any other command fails to start with err, as a missing binary would.
+func cliRunner(results map[string]execx.Result, err error) *execxtest.Runner {
+	return &execxtest.Runner{ByLine: results, Default: execx.Result{ExitCode: execx.ExitCodeRunFailure}, Err: err}
 }

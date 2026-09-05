@@ -10,7 +10,10 @@ the safety rows.
 ## Style
 
 - Table-driven subtests with `name`, inputs, `want` and `wantErr`.
-- Existing fakes and injectable seams over new mocking frameworks.
+- Existing fakes and injectable seams over new mocking frameworks. Command
+  execution is scripted with `execxtest.Runner` (`internal/execx/execxtest`):
+  answers by command line, by name, queued or fixed, with recorded calls,
+  `RunEnv`/`RunUser` support and `RunOnly` for fail-closed tests.
 - Temporary directories; no dependency on ambient `/etc`, `/proc`, network or
   init state. Tests run with `-shuffle=on`, so order must not matter.
 - Preserve contract distinctions such as nil versus empty.

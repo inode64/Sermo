@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	"sermo/internal/config"
+	"sermo/internal/execx"
+	"sermo/internal/execx/execxtest"
 	"sermo/internal/servicemgr"
 )
 
@@ -21,7 +23,7 @@ func resolveInitTarget(t *testing.T, tree map[string]any, shared servicemgr.Mana
 	// ResolveWithFallback takes the same manager path as Resolve but tolerates
 	// a host where the unit cannot be probed, which is every test machine.
 	target, warning := ResolveWithFallback(context.Background(), "svc", tree,
-		servicemgr.BackendSystemd, shared, servicemgr.UnitResolver{Runner: noKnownUnitsRunner{}})
+		servicemgr.BackendSystemd, shared, servicemgr.UnitResolver{Runner: execxtest.Fixed(execx.Result{ExitCode: 1}, nil)})
 	if target.Unit == "" {
 		t.Fatalf("ResolveWithFallback() resolved no unit (warning=%q)", warning)
 	}

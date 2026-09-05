@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"sermo/internal/checks"
-	"sermo/internal/execx"
+	"sermo/internal/execx/execxtest"
 	"sermo/internal/servicemgr"
 )
 
@@ -237,29 +237,8 @@ func TestSchedulerRunsWatches(t *testing.T) {
 	}
 }
 
-// fakeEnvRunnerForScheduler verifies custom runner injection from scheduler -> watch -> hook.
-type fakeEnvRunnerForScheduler struct {
-	calls []struct {
-		env  []string
-		name string
-		args []string
-	}
-}
-
-func (f *fakeEnvRunnerForScheduler) Run(ctx context.Context, name string, args ...string) (execx.Result, error) {
-	return execx.Result{}, nil
-}
-func (f *fakeEnvRunnerForScheduler) RunEnv(ctx context.Context, env []string, name string, args ...string) (execx.Result, error) {
-	f.calls = append(f.calls, struct {
-		env  []string
-		name string
-		args []string
-	}{env, name, args})
-	return execx.Result{ExitCode: 0}, nil
-}
-
 func TestSchedulerRunsWatchWithCustomInjectedRunnerVerifiesEnv(t *testing.T) {
-	fake := &fakeEnvRunnerForScheduler{}
+	fake := &execxtest.Runner{}
 	w := &Watch{
 		Name:       "storage-root",
 		Check:      stubCheck{name: "storage", ok: true},
@@ -284,17 +263,17 @@ func TestSchedulerRunsWatchWithCustomInjectedRunnerVerifiesEnv(t *testing.T) {
 		t.Fatal("scheduler did not stop in time")
 	}
 
-	if len(fake.calls) == 0 {
+	if len(fake.Calls()) == 0 {
 		t.Fatal("expected at least one call to custom execx runner from watch hook")
 	}
-	call := fake.calls[0]
-	if call.name != "/bin/custom-hook" || len(call.args) != 1 || call.args[0] != "--alert" {
-		t.Fatalf("bad argv: %s %v", call.name, call.args)
+	call := fake.Calls()[0]
+	if call.Name != "/bin/custom-hook" || len(call.Args) != 1 || call.Args[0] != "--alert" {
+		t.Fatalf("bad argv: %s %v", call.Name, call.Args)
 	}
 	// Verify specific env from the stub check data
-	found := slices.Contains(call.env, "SERMO_WATCH=storage-root")
+	found := slices.Contains(call.Env, "SERMO_WATCH=storage-root")
 	if !found {
-		t.Fatalf("custom runner did not receive expected SERMO_WATCH env: %v", call.env)
+		t.Fatalf("custom runner did not receive expected SERMO_WATCH env: %v", call.Env)
 	}
 }
 

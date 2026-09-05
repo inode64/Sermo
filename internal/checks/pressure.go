@@ -4,8 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"path/filepath"
+	"sermo/internal/hostfs"
 	"strconv"
 	"strings"
 	"time"
@@ -96,7 +96,7 @@ func PressureResultData(resource string, s PressureSample) map[string]any {
 // defaultPressureSampler reads and parses /proc/pressure/<resource>.
 func defaultPressureSampler(resource string) (PressureSample, error) {
 	path := filepath.Join(procPressureRootPath, resource)
-	data, err := os.ReadFile(path) //nolint:gosec // G304: path under /proc/pressure with validated resource name
+	data, err := hostfs.ReadFile(path)
 	if err != nil {
 		return PressureSample{}, fmt.Errorf("read %s: %w", path, err)
 	}

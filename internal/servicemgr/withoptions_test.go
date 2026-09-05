@@ -2,6 +2,7 @@ package servicemgr
 
 import (
 	"context"
+	"sermo/internal/execx/execxtest"
 	"testing"
 )
 
@@ -12,19 +13,19 @@ func TestWithOptionsChangesTheArgvNotJustTheStruct(t *testing.T) {
 
 	for _, tc := range []struct {
 		name     string
-		build    func(r *recordRunner) Manager
+		build    func(r *execxtest.Runner) Manager
 		isolated string
 		allowed  string
 	}{
-		{"systemd", func(r *recordRunner) Manager { return systemdManager{runner: r} },
+		{"systemd", func(r *execxtest.Runner) Manager { return systemdManager{runner: r} },
 			"systemctl restart --job-mode=ignore-dependencies -- nginx.service",
 			"systemctl restart -- nginx.service"},
-		{"openrc", func(r *recordRunner) Manager { return openrcManager{runner: r} },
+		{"openrc", func(r *execxtest.Runner) Manager { return openrcManager{runner: r} },
 			"rc-service --nodeps nginx restart",
 			"rc-service nginx restart"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			rec := &recordRunner{}
+			rec := &execxtest.Runner{}
 			shared := tc.build(rec)
 			if err := shared.Restart(ctx, "nginx"); err != nil {
 				t.Fatalf("shared Restart: %v", err)
@@ -33,14 +34,14 @@ func TestWithOptionsChangesTheArgvNotJustTheStruct(t *testing.T) {
 			if err := derived.Restart(ctx, "nginx"); err != nil {
 				t.Fatalf("derived Restart: %v", err)
 			}
-			if len(rec.calls) != 2 {
-				t.Fatalf("calls = %v", rec.calls)
+			if len(rec.Lines()) != 2 {
+				t.Fatalf("calls = %v", rec.Lines())
 			}
-			if rec.calls[0] != tc.isolated {
-				t.Errorf("shared ran %q, want %q", rec.calls[0], tc.isolated)
+			if rec.Lines()[0] != tc.isolated {
+				t.Errorf("shared ran %q, want %q", rec.Lines()[0], tc.isolated)
 			}
-			if rec.calls[1] != tc.allowed {
-				t.Errorf("derived ran %q, want %q", rec.calls[1], tc.allowed)
+			if rec.Lines()[1] != tc.allowed {
+				t.Errorf("derived ran %q, want %q", rec.Lines()[1], tc.allowed)
 			}
 		})
 	}
@@ -49,13 +50,13 @@ func TestWithOptionsChangesTheArgvNotJustTheStruct(t *testing.T) {
 // Deriving must not mutate the manager it derives from: the shared instance is
 // reused by every other service in the generation.
 func TestWithOptionsLeavesTheSharedManagerAlone(t *testing.T) {
-	rec := &recordRunner{}
+	rec := &execxtest.Runner{}
 	shared := systemdManager{runner: rec}
 	_ = WithOptions(shared, Options{AllowDependencies: true})
 	if err := shared.Restart(context.Background(), "nginx"); err != nil {
 		t.Fatal(err)
 	}
-	if got := rec.calls[0]; got != "systemctl restart --job-mode=ignore-dependencies -- nginx.service" {
+	if got := rec.Lines()[0]; got != "systemctl restart --job-mode=ignore-dependencies -- nginx.service" {
 		t.Fatalf("deriving mutated the shared manager: %q", got)
 	}
 }
@@ -63,13 +64,13 @@ func TestWithOptionsLeavesTheSharedManagerAlone(t *testing.T) {
 // The runner must survive derivation — the whole point of deriving rather than
 // constructing is that the injected runner is preserved.
 func TestWithOptionsPreservesTheRunner(t *testing.T) {
-	rec := &recordRunner{}
+	rec := &execxtest.Runner{}
 	derived := WithOptions(openrcManager{runner: rec}, Options{AllowDependencies: true})
 	if err := derived.Restart(context.Background(), "nginx"); err != nil {
 		t.Fatal(err)
 	}
-	if len(rec.calls) != 1 {
-		t.Fatalf("the injected runner was discarded; calls = %v", rec.calls)
+	if len(rec.Lines()) != 1 {
+		t.Fatalf("the injected runner was discarded; calls = %v", rec.Lines())
 	}
 }
 

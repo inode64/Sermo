@@ -7,12 +7,13 @@ import (
 	"time"
 
 	"sermo/internal/execx"
+	"sermo/internal/execx/execxtest"
 )
 
 func TestCommandCheckCapturesOutputOnFailure(t *testing.T) {
 	c := commandCheck{
 		name: "c", timeout: time.Second,
-		runner:     fakeRunner{execx.Result{ExitCode: 1, Stdout: "starting\n", Stderr: "Traceback\nImportError: x\n"}},
+		runner:     execxtest.Fixed(execx.Result{ExitCode: 1, Stdout: "starting\n", Stderr: "Traceback\nImportError: x\n"}, nil),
 		argv:       []string{"x"},
 		expectExit: []int{0},
 	}
@@ -27,7 +28,7 @@ func TestCommandCheckCapturesOutputOnFailure(t *testing.T) {
 
 	ok := commandCheck{
 		name: "c", timeout: time.Second,
-		runner:     fakeRunner{execx.Result{ExitCode: 0, Stdout: "fine\n"}},
+		runner:     execxtest.Fixed(execx.Result{ExitCode: 0, Stdout: "fine\n"}, nil),
 		argv:       []string{"x"},
 		expectExit: []int{0},
 	}

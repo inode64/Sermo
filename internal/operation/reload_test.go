@@ -14,39 +14,9 @@ import (
 	"sermo/internal/checks"
 	"sermo/internal/config"
 	"sermo/internal/execx"
+	"sermo/internal/execx/execxtest"
 	"sermo/internal/process"
 )
-
-// scriptedRunner is a fake execx.Runner: it records argv and returns a canned
-// result keyed by the command name (the first argv element).
-type scriptedRunner struct {
-	calls          [][]string
-	results        map[string]execx.Result
-	errs           map[string]error
-	respectContext bool
-}
-
-func (r *scriptedRunner) Run(ctx context.Context, name string, args ...string) (execx.Result, error) {
-	r.calls = append(r.calls, append([]string{name}, args...))
-	if r.respectContext {
-		if err := ctx.Err(); err != nil {
-			return execx.Result{}, err
-		}
-	}
-	if res, ok := r.results[name]; ok {
-		return res, r.errs[name]
-	}
-	return execx.Result{}, r.errs[name]
-}
-
-func (r *scriptedRunner) ran(name string) bool {
-	for _, c := range r.calls {
-		if c[0] == name {
-			return true
-		}
-	}
-	return false
-}
 
 func depsWith(runner execx.Runner) checks.Deps { return checks.Deps{Runner: runner} }
 
@@ -93,7 +63,7 @@ func reloadDiscoverer(ids map[int]process.Identity) process.Discoverer {
 
 func TestReloadClosureNoSpecUsesBackendReload(t *testing.T) {
 	mgr := &fakeManager{canReload: true}
-	reload := reloadClosureForTest(map[string]any{}, depsWith(&scriptedRunner{}), mgr, "mysqld")
+	reload := reloadClosureForTest(map[string]any{}, depsWith(&execxtest.Runner{}), mgr, "mysqld")
 	if err := reload(context.Background()); err != nil {
 		t.Fatalf("reload: %v", err)
 	}
@@ -104,7 +74,7 @@ func TestReloadClosureNoSpecUsesBackendReload(t *testing.T) {
 
 func TestReloadClosureNoSpecRejectsUnsupportedBackendReload(t *testing.T) {
 	mgr := &fakeManager{canReload: false}
-	reload := reloadClosureForTest(map[string]any{}, depsWith(&scriptedRunner{}), mgr, "mysqld")
+	reload := reloadClosureForTest(map[string]any{}, depsWith(&execxtest.Runner{}), mgr, "mysqld")
 
 	err := reload(context.Background())
 	if err == nil || !strings.Contains(err.Error(), "does not support reload") {
@@ -124,7 +94,7 @@ func TestReloadClosureNoSpecRejectsUnsupportedBackendReload(t *testing.T) {
 func assertReloadAutoBackend(t *testing.T, canReload bool, tree map[string]any) {
 	t.Helper()
 	mgr := &fakeManager{canReload: canReload}
-	runner := &scriptedRunner{}
+	runner := &execxtest.Runner{}
 	reload := reloadClosureForTest(tree, depsWith(runner), mgr, "nginx")
 	if err := reload(context.Background()); err != nil {
 		t.Fatalf("reload: %v", err)
@@ -132,8 +102,8 @@ func assertReloadAutoBackend(t *testing.T, canReload bool, tree map[string]any) 
 	if mgr.did("reload nginx") != canReload {
 		t.Errorf("Manager.Reload called=%t, want %t; calls=%v", mgr.did("reload nginx"), canReload, mgr.calls)
 	}
-	if runner.ran("nginx") == canReload {
-		t.Errorf("native command ran=%t, want %t; calls=%v", runner.ran("nginx"), !canReload, runner.calls)
+	if runner.Ran("nginx") == canReload {
+		t.Errorf("native command ran=%t, want %t; calls=%v", runner.Ran("nginx"), !canReload, runner.Lines())
 	}
 }
 
@@ -149,7 +119,7 @@ func TestReloadClosureAutoCommandFallsBackWhenUnsupported(t *testing.T) {
 
 func TestReloadClosureAutoCommandReportsBackendSupportError(t *testing.T) {
 	mgr := &fakeManager{reloadSupportErr: errors.New("systemctl unavailable")}
-	runner := &scriptedRunner{}
+	runner := &execxtest.Runner{}
 	tree := map[string]any{"reload": map[string]any{"command": []any{"nginx", "-s", "reload"}}}
 	reload := reloadClosureForTest(tree, depsWith(runner), mgr, "nginx")
 
@@ -157,8 +127,8 @@ func TestReloadClosureAutoCommandReportsBackendSupportError(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "reload support: systemctl unavailable") {
 		t.Fatalf("reload err = %v, want backend support error", err)
 	}
-	if runner.ran("nginx") {
-		t.Fatalf("reload fell back after support error; calls=%v", runner.calls)
+	if runner.Ran("nginx") {
+		t.Fatalf("reload fell back after support error; calls=%v", runner.Lines())
 	}
 }
 
@@ -174,7 +144,7 @@ func TestReloadClosureCommandWithoutRunnerReturnsError(t *testing.T) {
 
 func TestReloadClosureCommandDidNotStartWithoutRunnerError(t *testing.T) {
 	mgr := &fakeManager{canReload: false}
-	runner := &scriptedRunner{results: map[string]execx.Result{
+	runner := &execxtest.Runner{ByName: map[string]execx.Result{
 		"reloadctl": {ExitCode: -1},
 	}}
 	tree := map[string]any{"reload": map[string]any{"command": []any{"reloadctl"}, "when": "always"}}
@@ -188,9 +158,9 @@ func TestReloadClosureCommandDidNotStartWithoutRunnerError(t *testing.T) {
 
 func TestReloadClosureCommandStartErrorUsesOperatorMessage(t *testing.T) {
 	mgr := &fakeManager{canReload: false}
-	runner := &scriptedRunner{
-		results: map[string]execx.Result{"reloadctl": {ExitCode: -1}},
-		errs:    map[string]error{"reloadctl": errors.New("run reloadctl: executable file not found")},
+	runner := &execxtest.Runner{
+		ByName: map[string]execx.Result{"reloadctl": {ExitCode: -1}},
+		Errs:   map[string]error{"reloadctl": errors.New("run reloadctl: executable file not found")},
 	}
 	tree := map[string]any{"reload": map[string]any{"command": []any{"reloadctl"}, "when": "always"}}
 	reload := reloadClosureForTest(tree, depsWith(runner), mgr, "svc")
@@ -205,7 +175,7 @@ func TestReloadClosureSignalSentToMainPID(t *testing.T) {
 	// MainPID resolves to this test process; the native reload sends USR1 to it.
 	pid := os.Getpid()
 	mgr := &fakeManager{canReload: false}
-	runner := &scriptedRunner{results: map[string]execx.Result{
+	runner := &execxtest.Runner{ByName: map[string]execx.Result{
 		"systemctl": {Stdout: strconv.Itoa(pid) + "\n"},
 	}}
 	got := make(chan os.Signal, 1)
@@ -226,9 +196,9 @@ func TestReloadClosureSignalSentToMainPID(t *testing.T) {
 
 func TestReloadClosureSignalHonorsCanceledContext(t *testing.T) {
 	mgr := &fakeManager{canReload: false}
-	runner := &scriptedRunner{
-		results:        map[string]execx.Result{"systemctl": {Stdout: strconv.Itoa(os.Getpid()) + "\n"}},
-		respectContext: true,
+	runner := &execxtest.Runner{
+		ByName:         map[string]execx.Result{"systemctl": {Stdout: strconv.Itoa(os.Getpid()) + "\n"}},
+		RespectContext: true,
 	}
 	tree := map[string]any{"reload": map[string]any{"signal": "USR1", "when": "always"}}
 	reload := reloadClosureForTest(tree, depsWith(runner), mgr, "myd")
@@ -239,8 +209,8 @@ func TestReloadClosureSignalHonorsCanceledContext(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "cancelled") {
 		t.Fatalf("reload err = %v, want cancelled", err)
 	}
-	if runner.ran("systemctl") {
-		t.Fatalf("reload tried MainPID resolution after cancellation; calls=%v", runner.calls)
+	if runner.Ran("systemctl") {
+		t.Fatalf("reload tried MainPID resolution after cancellation; calls=%v", runner.Lines())
 	}
 }
 
@@ -268,7 +238,7 @@ func TestReloadClosureSignalUsesPidfileWhenNoMainPID(t *testing.T) {
 	discoverer := reloadDiscoverer(map[int]process.Identity{
 		pid: {PID: pid, UID: 1001, Exe: "/usr/sbin/svc", ExeOK: true},
 	})
-	reload := reloadClosure(parsedReloadSpec(tree), tree, depsWith(&scriptedRunner{}), mgr, "openrc", "svc", discoverer, selectors)
+	reload := reloadClosure(parsedReloadSpec(tree), tree, depsWith(&execxtest.Runner{}), mgr, "openrc", "svc", discoverer, selectors)
 	if err := reload(context.Background()); err != nil {
 		t.Fatalf("reload: %v", err)
 	}
@@ -291,7 +261,7 @@ func TestReloadClosureSignalPidfileRequiresStrictIdentity(t *testing.T) {
 		"reload":  map[string]any{"signal": "HUP"},
 	}
 	selectors := []process.Selector{{Name: "main", Type: process.SelectorPidfile, Paths: []string{pidfile}}}
-	reload := reloadClosure(parsedReloadSpec(tree), tree, depsWith(&scriptedRunner{}), mgr, "openrc", "svc", reloadDiscoverer(nil), selectors)
+	reload := reloadClosure(parsedReloadSpec(tree), tree, depsWith(&execxtest.Runner{}), mgr, "openrc", "svc", reloadDiscoverer(nil), selectors)
 
 	err := reload(context.Background())
 	if err == nil || !strings.Contains(err.Error(), "does not match any process selector with exact exe and user") {
@@ -302,7 +272,7 @@ func TestReloadClosureSignalPidfileRequiresStrictIdentity(t *testing.T) {
 func TestReloadClosureSignalMainPIDRequiresStrictIdentity(t *testing.T) {
 	wrongPID := 424242
 	mgr := &fakeManager{canReload: false}
-	runner := &scriptedRunner{results: map[string]execx.Result{
+	runner := &execxtest.Runner{ByName: map[string]execx.Result{
 		"systemctl": {Stdout: strconv.Itoa(wrongPID) + "\n"},
 	}}
 	tree := map[string]any{"reload": map[string]any{"signal": "HUP", "when": "always"}}

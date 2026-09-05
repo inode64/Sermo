@@ -3,12 +3,12 @@ package checks
 import (
 	"context"
 	"errors"
-	"fmt"
 	"strings"
 	"testing"
 	"time"
 
 	"sermo/internal/execx"
+	"sermo/internal/execx/execxtest"
 )
 
 func TestCountLoadedNftablesRulesHonorsCancelledContext(t *testing.T) {
@@ -93,7 +93,7 @@ func TestDefaultFirewallRulesSampler(t *testing.T) {
 		name    string
 		backend string
 		nft     func(context.Context) (uint64, error)
-		runner  firewallRunner
+		runner  firewallRuns
 		want    FirewallRulesSample
 		wantErr string
 	}{
@@ -107,7 +107,7 @@ func TestDefaultFirewallRulesSampler(t *testing.T) {
 			name:    "auto falls back to iptables when nftables has no rules",
 			backend: FirewallBackendAuto,
 			nft:     func(context.Context) (uint64, error) { return 0, nil },
-			runner: firewallRunner{
+			runner: firewallRuns{
 				"iptables-save":  {result: execx.Result{Stdout: "-A INPUT -j ACCEPT\n-A OUTPUT -j ACCEPT\n"}},
 				"ip6tables-save": {result: execx.Result{Stdout: "-A INPUT -j ACCEPT\n"}},
 			},
@@ -135,7 +135,7 @@ func TestDefaultFirewallRulesSampler(t *testing.T) {
 			nftablesRuleCounter = tc.nft
 			defer func() { nftablesRuleCounter = prev }()
 
-			got, err := defaultFirewallRulesSampler(context.Background(), tc.backend, tc.runner)
+			got, err := defaultFirewallRulesSampler(context.Background(), tc.backend, firewallRunner(tc.runner))
 			if tc.wantErr != "" {
 				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
 					t.Fatalf("error = %v, want substring %q", err, tc.wantErr)
@@ -205,12 +205,18 @@ func TestFirewallRulesCheckCanceledSampler(t *testing.T) {
 	}
 }
 
-type firewallRunner map[string]firewallRun
+type firewallRuns map[string]firewallRun
 
-func (r firewallRunner) Run(_ context.Context, name string, args ...string) (execx.Result, error) {
-	key := strings.TrimSpace(name + " " + strings.Join(args, " "))
-	if run, ok := r[key]; ok {
-		return run.result, run.err
+// firewallRunner scripts the legacy iptables tools: runs answer exact command
+// lines and any other tool fails to start, as an absent binary would.
+func firewallRunner(runs firewallRuns) *execxtest.Runner {
+	byLine := make(map[string]execx.Result, len(runs))
+	errs := make(map[string]error, len(runs))
+	for line, run := range runs {
+		byLine[line] = run.result
+		if run.err != nil {
+			errs[line] = run.err
+		}
 	}
-	return execx.Result{ExitCode: -1}, fmt.Errorf("%s unavailable", key)
+	return &execxtest.Runner{ByLine: byLine, Errs: errs, Default: execx.Result{ExitCode: execx.ExitCodeRunFailure}, Err: errors.New("legacy firewall tool unavailable")}
 }

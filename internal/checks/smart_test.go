@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"sermo/internal/execx"
+	"sermo/internal/execx/execxtest"
 )
 
 const smartATA = `{
@@ -76,7 +77,7 @@ func TestSmartCheckSurfacesSelfTestState(t *testing.T) {
 func smartWith(out string, preds ...levelPred) *smartCheck {
 	return &smartCheck{
 		name: "sm", timeout: time.Second,
-		runner: fakeRunner{execx.Result{Stdout: out}},
+		runner: execxtest.Fixed(execx.Result{Stdout: out}, nil),
 		device: "/dev/sda", preds: preds,
 		deviceIdentity: testDeviceIdentity,
 		last:           &lastSample{},
@@ -114,7 +115,7 @@ func TestSmartCheck(t *testing.T) {
 func TestSmartCheckError(t *testing.T) {
 	c := &smartCheck{
 		name: "sm", timeout: time.Second,
-		runner: fakeRunner{execx.Result{Stderr: "/dev/sda: Unable to detect device type\n", ExitCode: 2}},
+		runner: execxtest.Fixed(execx.Result{Stderr: "/dev/sda: Unable to detect device type\n", ExitCode: 2}, nil),
 		device: "/dev/sda", deviceIdentity: testDeviceIdentity, last: &lastSample{},
 	}
 	if res := c.Run(context.Background()); res.OK {
@@ -123,33 +124,22 @@ func TestSmartCheckError(t *testing.T) {
 }
 
 func TestStartSmartShortTest(t *testing.T) {
-	runner := &recordingSmartRunner{result: execx.Result{ExitCode: execx.ExitCodeSuccess}}
+	runner := execxtest.Fixed(execx.Result{ExitCode: execx.ExitCodeSuccess}, nil)
 	if err := StartSmartShortTest(context.Background(), runner, "/dev/sda", time.Second); err != nil {
 		t.Fatalf("StartSmartShortTest() error = %v", err)
 	}
-	if runner.name != smartctlCommand || len(runner.args) != 2 || runner.args[0] != smartctlShortTest || runner.args[1] != "/dev/sda" {
-		t.Fatalf("smartctl invocation = %q %v, want %q [%q %q]", runner.name, runner.args, smartctlCommand, smartctlShortTest, "/dev/sda")
+	want := execxtest.Line(smartctlCommand, smartctlShortTest, "/dev/sda")
+	if lines := runner.Lines(); len(lines) != 1 || lines[0] != want {
+		t.Fatalf("smartctl invocation = %v, want %q", lines, want)
 	}
 }
 
 func TestStartSmartShortTestFailure(t *testing.T) {
-	runner := recordingSmartRunner{result: execx.Result{ExitCode: 2, Stderr: "short self-test is already running\n"}}
-	err := StartSmartShortTest(context.Background(), &runner, "/dev/sda", time.Second)
+	runner := execxtest.Fixed(execx.Result{ExitCode: 2, Stderr: "short self-test is already running\n"}, nil)
+	err := StartSmartShortTest(context.Background(), runner, "/dev/sda", time.Second)
 	if err == nil || !strings.Contains(err.Error(), "already running") {
 		t.Fatalf("StartSmartShortTest() error = %v, want smartctl diagnostic", err)
 	}
-}
-
-type recordingSmartRunner struct {
-	result execx.Result
-	name   string
-	args   []string
-}
-
-func (r *recordingSmartRunner) Run(_ context.Context, name string, args ...string) (execx.Result, error) {
-	r.name = name
-	r.args = append([]string(nil), args...)
-	return r.result, nil
 }
 
 // smartDeviceGone is smartctl's JSON envelope for a drive that fell off its bus:
@@ -321,7 +311,7 @@ func TestSmartctlArgsRequestIdentityAndSelfTestLog(t *testing.T) {
 }
 
 func TestSmartCheckReportsLastKnownReadingsWhenDeviceGone(t *testing.T) {
-	runner := &scriptedRunner{results: []execx.Result{{Stdout: smartATAFull}, {Stdout: smartDeviceGone}}}
+	runner := execxtest.Queued([]execx.Result{{Stdout: smartATAFull}, {Stdout: smartDeviceGone}}...)
 	c := &smartCheck{
 		name: "sm", timeout: time.Second,
 		runner: runner, device: "/dev/sda",
@@ -362,7 +352,7 @@ func TestSmartCheckIdentifiesAMissingDeviceFromSysfs(t *testing.T) {
 func TestSmartCheckIdentifiesADriveSmartctlCouldNotRead(t *testing.T) {
 	c := &smartCheck{
 		name: "sm", timeout: time.Second,
-		runner: fakeRunner{execx.Result{Stderr: "/dev/sda: Unable to detect device type\n", ExitCode: 2}},
+		runner: execxtest.Fixed(execx.Result{Stderr: "/dev/sda: Unable to detect device type\n", ExitCode: 2}, nil),
 		device: "/dev/sda", deviceIdentity: testDeviceIdentity, last: &lastSample{},
 	}
 	res := c.Run(context.Background())
@@ -372,19 +362,6 @@ func TestSmartCheckIdentifiesADriveSmartctlCouldNotRead(t *testing.T) {
 	if res.Data[DataKeyDevice] != "/dev/sda" || res.Data[DataKeySerialNumber] != "SN0" {
 		t.Errorf("Data = %v, want the device and the identity sysfs holds for it", res.Data)
 	}
-}
-
-// scriptedRunner answers each Run with the next prepared result, so one check
-// instance can be walked through a sequence of cycles.
-type scriptedRunner struct {
-	results []execx.Result
-	calls   int
-}
-
-func (r *scriptedRunner) Run(context.Context, string, ...string) (execx.Result, error) {
-	res := r.results[min(r.calls, len(r.results)-1)]
-	r.calls++
-	return res, nil
 }
 
 // An NVMe drive publishes no rotation rate at all, so the medium has to come

@@ -15,6 +15,7 @@ import (
 	"sermo/internal/checks"
 	"sermo/internal/config"
 	"sermo/internal/execx"
+	"sermo/internal/execx/execxtest"
 	"sermo/internal/metrics"
 	"sermo/internal/notify"
 	"sermo/internal/operation"
@@ -1333,9 +1334,9 @@ func TestWebBackendProbeWatchRecordsSnapshotAndEvent(t *testing.T) {
 		watchOrder:     []string{"disk-speed"},
 		watches:        map[string]*webWatch{"disk-speed": diskSpeedWatch(200)},
 		watchSnapshots: snapshots,
-		execRunner: webBackendTestRunner{byCommand: map[string]execx.Result{
+		execRunner: &execxtest.Runner{ByName: map[string]execx.Result{
 			checks.CheckTypeHdparm: {ExitCode: 0, Stdout: " Timing buffered disk reads: 500 MB in 3.00 seconds = 166.67 MB/sec\n"},
-		}},
+		}, Default: execx.Result{ExitCode: 127}},
 		emit: func(event Event) { events = append(events, event) },
 	}
 
@@ -1400,9 +1401,9 @@ func TestWebBackendProbeWatchFailureEventIncludesDuration(t *testing.T) {
 	var events []Event
 	b := &WebBackend{
 		watches: map[string]*webWatch{"disk-speed": diskSpeedWatch(100)},
-		execRunner: webBackendTestRunner{byCommand: map[string]execx.Result{
+		execRunner: &execxtest.Runner{ByName: map[string]execx.Result{
 			checks.CheckTypeHdparm: {ExitCode: 0, Stdout: " Timing buffered disk reads: 500 MB in 3.00 seconds = 166.67 MB/sec\n"},
-		}},
+		}, Default: execx.Result{ExitCode: 127}},
 		now: func() time.Time {
 			nowCalls++
 			if nowCalls == 1 {
@@ -1423,7 +1424,7 @@ func TestWebBackendProbeSmartStartsShortSelfTest(t *testing.T) {
 	now := time.Date(2026, 7, 13, 10, 0, 0, 0, time.UTC)
 	snapshots := NewWatchSnapshots()
 	snapshots.now = func() time.Time { return now }
-	runner := &recordingWebRunner{result: execx.Result{ExitCode: execx.ExitCodeSuccess}}
+	runner := execxtest.Fixed(execx.Result{ExitCode: execx.ExitCodeSuccess}, nil)
 	var events []Event
 	b := &WebBackend{
 		watchOrder: []string{"smart-sda"},
@@ -1447,8 +1448,8 @@ func TestWebBackendProbeSmartStartsShortSelfTest(t *testing.T) {
 	if !result.OK || result.Message != "smart /dev/sda short self-test started" || readingByField(result.Readings, checks.DataKeyResult).Value != "short self-test started" {
 		t.Fatalf("SMART short test result = %+v", result)
 	}
-	if runner.name != "smartctl" || len(runner.args) != 2 || runner.args[0] != "--test=short" || runner.args[1] != "/dev/sda" {
-		t.Fatalf("smartctl invocation = %q %v", runner.name, runner.args)
+	if lines := runner.Lines(); len(lines) != 1 || lines[0] != "smartctl --test=short /dev/sda" {
+		t.Fatalf("smartctl invocation = %v", lines)
 	}
 	if got := snapshots.Get("smart-sda", checks.CheckTypeSmart); len(got) != 1 || got[0].Message != result.Message || got[0].At != now {
 		t.Fatalf("SMART short test snapshot = %+v", got)
@@ -1497,36 +1498,9 @@ func webBackendWithEntry(snaps *Snapshots, checkNames []string, checkTypes map[s
 	}
 }
 
-type webBackendTestRunner struct {
-	byCommand map[string]execx.Result
-}
-
-func (r webBackendTestRunner) Run(_ context.Context, name string, _ ...string) (execx.Result, error) {
-	if res, ok := r.byCommand[name]; ok {
-		return res, nil
-	}
-	return execx.Result{ExitCode: 127}, nil
-}
-
-type countingWebRunner struct {
-	calls int
-}
-
 type blockingProbeRunner struct {
 	started chan struct{}
 	release chan struct{}
-}
-
-type recordingWebRunner struct {
-	result execx.Result
-	name   string
-	args   []string
-}
-
-func (r *recordingWebRunner) Run(_ context.Context, name string, args ...string) (execx.Result, error) {
-	r.name = name
-	r.args = append([]string(nil), args...)
-	return r.result, nil
 }
 
 func (r *blockingProbeRunner) Run(ctx context.Context, _ string, _ ...string) (execx.Result, error) {
@@ -1540,11 +1514,6 @@ func (r *blockingProbeRunner) Run(ctx context.Context, _ string, _ ...string) (e
 	case <-ctx.Done():
 		return execx.Result{}, ctx.Err()
 	}
-}
-
-func (r *countingWebRunner) Run(_ context.Context, _ string, _ ...string) (execx.Result, error) {
-	r.calls++
-	return execx.Result{ExitCode: 0}, nil
 }
 
 func readingByField(readings []web.WatchReading, field string) web.WatchReading {
@@ -2406,7 +2375,7 @@ func TestWebBackendStartingStateUnsettled(t *testing.T) {
 // from the web handler.
 func TestWatchSnapshotsFeedHeavyProbeView(t *testing.T) {
 	now := time.Unix(1_700_000_000, 0)
-	runner := &countingWebRunner{}
+	runner := &execxtest.Runner{}
 	snapshots := NewWatchSnapshots()
 	snapshots.now = func() time.Time { return now }
 	b := &WebBackend{
@@ -2436,8 +2405,8 @@ func TestWatchSnapshotsFeedHeavyProbeView(t *testing.T) {
 	if len(ws) != 1 || strings.Contains(ws[0].Summary, "hdparm") {
 		t.Fatalf("cold Watches() = %+v, want no hdparm summary", ws)
 	}
-	if runner.calls != 0 {
-		t.Fatalf("cold heavy probe ran %d commands, want 0", runner.calls)
+	if len(runner.Calls()) != 0 {
+		t.Fatalf("cold heavy probe ran %d commands, want 0", len(runner.Calls()))
 	}
 
 	publishWatchFor(snapshots, b.watches["disk"], checks.Result{
@@ -2453,8 +2422,8 @@ func TestWatchSnapshotsFeedHeavyProbeView(t *testing.T) {
 	if len(ws) != 1 || !strings.Contains(ws[0].Summary, "hdparm") || readingByField(ws[0].Readings, checks.HdparmFieldRead).Value == "" {
 		t.Fatalf("snapshot Watches() = %+v, want hdparm summary/readings", ws)
 	}
-	if runner.calls != 0 {
-		t.Fatalf("snapshot heavy probe ran %d commands, want 0", runner.calls)
+	if len(runner.Calls()) != 0 {
+		t.Fatalf("snapshot heavy probe ran %d commands, want 0", len(runner.Calls()))
 	}
 }
 
@@ -2563,7 +2532,7 @@ func TestWebBackendWatchIgnoresRemovedMetricSnapshot(t *testing.T) {
 
 func TestWatchDashboardViewNeverRunsLiveFallback(t *testing.T) {
 	now := time.Unix(1_700_000_000, 0)
-	runner := &countingWebRunner{}
+	runner := &execxtest.Runner{}
 	snapshots := NewWatchSnapshots()
 	snapshots.now = func() time.Time { return now }
 	b := &WebBackend{
@@ -2587,8 +2556,8 @@ func TestWatchDashboardViewNeverRunsLiveFallback(t *testing.T) {
 	if len(ws) != 1 || strings.Contains(ws[0].Summary, "firewall") {
 		t.Fatalf("cold Watches() = %+v, want no live firewall summary", ws)
 	}
-	if runner.calls != 0 {
-		t.Fatalf("web watch view ran %d commands without snapshots, want 0", runner.calls)
+	if len(runner.Calls()) != 0 {
+		t.Fatalf("web watch view ran %d commands without snapshots, want 0", len(runner.Calls()))
 	}
 
 	b.watchSnapshots = snapshots
@@ -2607,8 +2576,8 @@ func TestWatchDashboardViewNeverRunsLiveFallback(t *testing.T) {
 	if len(ws) != 1 || !strings.Contains(ws[0].Summary, "firewall") || len(ws[0].Readings) != 3 {
 		t.Fatalf("snapshot Watches() = %+v, want firewall summary/readings", ws)
 	}
-	if runner.calls != 0 {
-		t.Fatalf("snapshot web watch view ran %d commands, want 0", runner.calls)
+	if len(runner.Calls()) != 0 {
+		t.Fatalf("snapshot web watch view ran %d commands, want 0", len(runner.Calls()))
 	}
 }
 
@@ -2708,28 +2677,6 @@ func TestWatchSnapshotsFeedProcessPolicyView(t *testing.T) {
 	}
 }
 
-// fakeEnvRunnerForWeb is used to inject a custom execx runner via Deps.ExecxRunner
-// and verify that hooks in watches built for the web backend receive the expected env.
-type fakeEnvRunnerForWeb struct {
-	calls []struct {
-		env  []string
-		name string
-		args []string
-	}
-}
-
-func (f *fakeEnvRunnerForWeb) Run(ctx context.Context, name string, args ...string) (execx.Result, error) {
-	return execx.Result{}, nil
-}
-func (f *fakeEnvRunnerForWeb) RunEnv(ctx context.Context, env []string, name string, args ...string) (execx.Result, error) {
-	f.calls = append(f.calls, struct {
-		env  []string
-		name string
-		args []string
-	}{env, name, args})
-	return execx.Result{ExitCode: 0}, nil
-}
-
 func TestWebBackendPropagatesCustomExecxRunnerToWatchHooks(t *testing.T) {
 	// Minimal config with a watch that has a hook. The check is a simple command that always succeeds.
 	cfgContent := `
@@ -2757,7 +2704,7 @@ watches:
 		t.Fatalf("load config: %v", err)
 	}
 
-	fake := &fakeEnvRunnerForWeb{}
+	fake := &execxtest.Runner{}
 	deps := Deps{
 		Backend:        servicemgr.BackendSystemd,
 		Manager:        fakeManager{},
@@ -2787,17 +2734,19 @@ watches:
 	w.FireOnFail = false
 	w.RunCycle(context.Background())
 
-	if len(fake.calls) != 1 {
-		t.Fatalf("expected 1 call to custom execx runner from web backend watch hook, got %d", len(fake.calls))
+	// The command check itself runs through Run; the hook is the only RunEnv call.
+	hookCalls := slices.DeleteFunc(fake.Calls(), func(c execxtest.Call) bool { return c.Env == nil })
+	if len(hookCalls) != 1 {
+		t.Fatalf("expected 1 call to custom execx runner from web backend watch hook, got %d", len(hookCalls))
 	}
-	call := fake.calls[0]
-	if call.name != "/bin/custom-web-hook" || len(call.args) != 1 || call.args[0] != "web-alert" {
-		t.Fatalf("wrong argv to custom runner: %s %v", call.name, call.args)
+	call := hookCalls[0]
+	if call.Name != "/bin/custom-web-hook" || len(call.Args) != 1 || call.Args[0] != "web-alert" {
+		t.Fatalf("wrong argv to custom runner: %s %v", call.Name, call.Args)
 	}
 	// Verify specific env from the watch (SERMO_WATCH and data from the command check result if any, plus type)
 	hasWatch := false
 	hasType := false
-	for _, e := range call.env {
+	for _, e := range call.Env {
 		if e == "SERMO_WATCH=test-hook-watch" {
 			hasWatch = true
 		}
@@ -2806,7 +2755,7 @@ watches:
 		}
 	}
 	if !hasWatch || !hasType {
-		t.Fatalf("custom runner via webbackend Deps did not receive expected SERMO_ env: %v", call.env)
+		t.Fatalf("custom runner via webbackend Deps did not receive expected SERMO_ env: %v", call.Env)
 	}
 }
 

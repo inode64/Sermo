@@ -1,40 +1,22 @@
 package process
 
 import (
-	"context"
 	"errors"
-	"strings"
 	"testing"
 	"time"
 
 	"sermo/internal/execx"
+	"sermo/internal/execx/execxtest"
 )
 
-type fakeGetentRunner struct {
-	outputs map[string]string
-	calls   map[string]int
-}
-
-func (f *fakeGetentRunner) Run(_ context.Context, name string, args ...string) (execx.Result, error) {
-	if f.calls == nil {
-		f.calls = map[string]int{}
-	}
-	key := strings.Join(append([]string{name}, args...), "\x00")
-	f.calls[key]++
-	if out, ok := f.outputs[key]; ok {
-		return execx.Result{Stdout: out}, nil
-	}
-	return execx.Result{ExitCode: 2}, errors.New("not found")
-}
-
 func TestUserLookupGetentResolvesAndCaches(t *testing.T) {
-	runner := &fakeGetentRunner{outputs: map[string]string{
-		"getent\x00passwd\x00ldap-user":  "ldap-user:x:4242:4243:LDAP User:/home/ldap-user:/bin/bash\n",
-		"getent\x00passwd\x004242":       "ldap-user:x:4242:4243:LDAP User:/home/ldap-user:/bin/bash\n",
-		"getent\x00group\x00ldap-group":  "ldap-group:x:4243:ldap-user\n",
-		"getent\x00group\x004243":        "ldap-group:x:4243:ldap-user\n",
-		"getent\x00passwd\x00bad-format": "bad-format:x:not-a-number\n",
-	}}
+	runner := getentRunner(map[string]string{
+		"getent passwd ldap-user":  "ldap-user:x:4242:4243:LDAP User:/home/ldap-user:/bin/bash\n",
+		"getent passwd 4242":       "ldap-user:x:4242:4243:LDAP User:/home/ldap-user:/bin/bash\n",
+		"getent group ldap-group":  "ldap-group:x:4243:ldap-user\n",
+		"getent group 4243":        "ldap-group:x:4243:ldap-user\n",
+		"getent passwd bad-format": "bad-format:x:not-a-number\n",
+	})
 	lookup := NewUserLookup(UserLookupConfig{Mode: UserLookupGetent, Timeout: time.Second, Runner: runner})
 
 	uid, ok := lookup.ResolveUser("ldap-user")
@@ -45,7 +27,7 @@ func TestUserLookupGetentResolvesAndCaches(t *testing.T) {
 	if !ok || uid != 4242 {
 		t.Fatalf("cached ResolveUser = %d/%v, want 4242/true", uid, ok)
 	}
-	if got := runner.calls["getent\x00passwd\x00ldap-user"]; got != 1 {
+	if got := runner.Count("getent", "passwd", "ldap-user"); got != 1 {
 		t.Fatalf("getent passwd ldap-user calls = %d, want 1", got)
 	}
 
@@ -65,7 +47,7 @@ func TestUserLookupGetentResolvesAndCaches(t *testing.T) {
 }
 
 func TestUserLookupNumericMode(t *testing.T) {
-	runner := &fakeGetentRunner{outputs: map[string]string{}}
+	runner := getentRunner(map[string]string{})
 	lookup := NewUserLookup(UserLookupConfig{Mode: UserLookupNumeric, Timeout: time.Second, Runner: runner})
 
 	uid, ok := lookup.ResolveUser("1001")
@@ -78,8 +60,8 @@ func TestUserLookupNumericMode(t *testing.T) {
 	if got := lookup.Username(1001); got != "" {
 		t.Fatalf("Username in numeric mode = %q, want empty", got)
 	}
-	if len(runner.calls) != 0 {
-		t.Fatalf("numeric mode ran commands: %v", runner.calls)
+	if len(runner.Calls()) != 0 {
+		t.Fatalf("numeric mode ran commands: %v", runner.Lines())
 	}
 }
 
@@ -148,4 +130,14 @@ func boolToInt(v bool) int {
 		return 1
 	}
 	return 0
+}
+
+// getentRunner answers getent lookups from outputs keyed by command line and
+// reports any other lookup as not found.
+func getentRunner(outputs map[string]string) *execxtest.Runner {
+	byLine := make(map[string]execx.Result, len(outputs))
+	for line, out := range outputs {
+		byLine[line] = execx.Result{Stdout: out}
+	}
+	return &execxtest.Runner{ByLine: byLine, Default: execx.Result{ExitCode: 2}, Err: errors.New("not found")}
 }

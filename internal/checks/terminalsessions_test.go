@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"sermo/internal/execx"
+	"sermo/internal/execx/execxtest"
 )
 
 type waitingTerminalSessionRunner struct{}
@@ -97,7 +98,7 @@ func TestTerminalMultiplexerAdapterParsesSessions(t *testing.T) {
 }
 
 func TestTerminalSessionsCheckRunsReadOnlyClientAsConfiguredUser(t *testing.T) {
-	runner := &recordingUserRunner{result: execx.Result{ExitCode: execx.ExitCodeSuccess, Stdout: "ops\t1\t3\t100\t$1\t90\t201\t/dev/pts/1\nbuild\t0\t1\t200\t$2\t180\t202\t/dev/pts/2\n"}}
+	runner := execxtest.Fixed(execx.Result{ExitCode: execx.ExitCodeSuccess, Stdout: "ops\t1\t3\t100\t$1\t90\t201\t/dev/pts/1\nbuild\t0\t1\t200\t$2\t180\t202\t/dev/pts/2\n"}, nil)
 	built, warnings := Build(map[string]any{
 		"sessions": map[string]any{
 			CheckKeyType:        CheckTypeTerminalSessions,
@@ -115,8 +116,9 @@ func TestTerminalSessionsCheckRunsReadOnlyClientAsConfiguredUser(t *testing.T) {
 	if !result.OK || result.Unavailable || !result.Condition {
 		t.Fatalf("result = %+v, want available firing condition", result)
 	}
-	if runner.user != "deploy" || runner.name != "/usr/bin/tmux" || !reflect.DeepEqual(runner.args, []string{"list-sessions", "-F", tmuxSessionFormat}) || !runner.hasDeadline {
-		t.Fatalf("RunUser(user=%q, name=%q, args=%v, deadline=%v), want configured tmux query", runner.user, runner.name, runner.args, runner.hasDeadline)
+	calls := runner.Calls()
+	if len(calls) != 1 || calls[0].User != "deploy" || calls[0].Name != "/usr/bin/tmux" || !reflect.DeepEqual(calls[0].Args, []string{"list-sessions", "-F", tmuxSessionFormat}) || !runner.SawDeadline() {
+		t.Fatalf("RunUser calls = %+v (deadline=%v), want configured tmux query", calls, runner.SawDeadline())
 	}
 	if result.Data[DataKeyCount] != 2 || result.Data[DataKeyAttached] != 1 || result.Data[DataKeyDetached] != 1 || result.Data[DataKeyPresent] != true {
 		t.Fatalf("result data = %#v", result.Data)
@@ -155,7 +157,7 @@ func TestTerminalSessionsTreatsKnownEmptyClientOutputAsZero(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			sample, err := sampleTerminalSessions(context.Background(), &recordingUserRunner{result: tt.result}, tt.config)
+			sample, err := sampleTerminalSessions(context.Background(), execxtest.Fixed(tt.result, nil), tt.config)
 			if err != nil || len(sample.Sessions) != 0 || sample.Present != tt.wantPresent {
 				t.Fatalf("sampleTerminalSessions() = %#v, %v; want empty success", sample, err)
 			}
@@ -168,10 +170,10 @@ func TestTerminalSessionsCommandFailureCannotMasqueradeAsEmpty(t *testing.T) {
 		name: "sessions", timeout: time.Second,
 		preds:  []levelPred{{field: DataKeyCount, op: ">", value: 0}},
 		config: TerminalSessionConfig{Multiplexer: TerminalMultiplexerScreen, Binary: "/usr/bin/screen", User: "deploy"},
-		runner: &recordingUserRunner{
-			result: execx.Result{ExitCode: execx.ExitCodeRunFailure, Stderr: "No Sockets found in /run/screen/S-deploy."},
-			err:    errors.New("switch user failed"),
-		},
+		runner: execxtest.Fixed(
+			execx.Result{ExitCode: execx.ExitCodeRunFailure, Stderr: "No Sockets found in /run/screen/S-deploy."},
+			errors.New("switch user failed"),
+		),
 	}
 	result := check.Run(context.Background())
 	if !result.Unavailable {

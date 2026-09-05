@@ -107,8 +107,11 @@ func openvpnClientReset(sid []byte) []byte {
 func openvpnExchange(c net.Conn, transport string, packet []byte) ([]byte, error) {
 	if transport == networkTCP {
 		frame := make([]byte, openvpnTCPFrameHeaderBytes+len(packet))
-		//nolint:gosec // G115: OpenVPN's TCP framing prefixes each packet with a 16-bit length; packet is the fixed reset control packet.
-		binary.BigEndian.PutUint16(frame[:openvpnTCPFrameHeaderBytes], uint16(len(packet)))
+		size, err := wireUint16(ProtocolNameOpenVPN, "packet length", len(packet))
+		if err != nil {
+			return nil, err
+		}
+		binary.BigEndian.PutUint16(frame[:openvpnTCPFrameHeaderBytes], size)
 		copy(frame[openvpnTCPFrameHeaderBytes:], packet)
 		if _, err := c.Write(frame); err != nil {
 			return nil, probeErr(ProtocolNameOpenVPN, stepOpenVPNControlFrame, err)

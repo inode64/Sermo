@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"time"
 
 	"sermo/internal/config"
 	"sermo/internal/locks"
@@ -126,4 +127,45 @@ func (a App) reportLockError(opts options, err error) int {
 		return exitBlocked
 	}
 	return a.fail(opts, fmt.Sprintf("lock failed: %v", err))
+}
+
+// runLocks reports the named runtime locks for a service (active, expired and
+// stale), reading the runtime root from the loaded config.
+func (a App) runLocks(opts options) int {
+	if code := a.requireSingleServiceName(opts.service() != "", len(opts.args), commandLocks, commandLocks); code != exitSuccess {
+		return code
+	}
+
+	cfg, code := a.loadConfig(opts)
+	if cfg == nil {
+		return code
+	}
+	service := canonicalServiceIfKnown(cfg, opts.service())
+
+	dir := locks.RuntimeLocksDir(cfg.Global.RuntimeDir())
+	report, err := locks.NewScanner(dir).Scan(service)
+	if err != nil {
+		return a.fail(opts, fmt.Sprintf("scan locks failed: %v", err))
+	}
+
+	return renderServiceList(a, opts, report.Service, cliJSONKeyLocks, report.Locks,
+		report.Warnings, "no named runtime locks for %s\n", formatLock)
+}
+
+func formatLock(lock locks.Lock) string {
+	id := lock.Service
+	if lock.Name != "" {
+		id += "." + lock.Name
+	}
+	line := fmt.Sprintf("%s %s owner_pid=%d", id, lock.State, lock.OwnerPID)
+	if !lock.ExpiresAt.IsZero() {
+		line += " expires_at=" + lock.ExpiresAt.UTC().Format(time.RFC3339)
+	}
+	if lock.StaleReason != "" {
+		line += " (" + lock.StaleReason + ")"
+	}
+	if lock.Reason != "" {
+		line += fmt.Sprintf(" reason=%q", lock.Reason)
+	}
+	return line
 }

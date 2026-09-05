@@ -151,7 +151,8 @@ rules:
       exclude:
         - internal/cfgval/**
         - internal/state/cutoff.go
-        - internal/web/server.go
+        - internal/web/handlers_events.go
+        - internal/web/handlers_series.go
         - internal/checks/summary.go
         - '**/*_test.go'
     patterns:

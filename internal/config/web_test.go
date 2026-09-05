@@ -55,3 +55,29 @@ func TestWebBind(t *testing.T) {
 		})
 	}
 }
+
+func TestValidateWebBlock(t *testing.T) {
+	mustNotHave(t, validateGlobalDoc(t, `
+web: { address: 127.0.0.1, port: 9797 }
+paths: { services: [ @ROOT@/services ] }
+defaults: { policy: { cooldown: 5m } }
+`), "web.")
+
+	issues := validateGlobalDoc(t, `
+web: { port: 70000, address: 5 }
+paths: { services: [ @ROOT@/services ] }
+defaults: { policy: { cooldown: 5m } }
+`)
+	if !hasIssue(issues, "web.port must be an integer in 1..65535") {
+		t.Fatalf("missing web.port issue in %v", issues)
+	}
+	if !hasIssue(issues, "web.address must be a string") {
+		t.Fatalf("missing web.address issue in %v", issues)
+	}
+
+	mustNotHave(t, validateGlobalDoc(t, `
+web: { address: 127.0.0.1 }
+paths: { services: [ @ROOT@/services ] }
+defaults: { policy: { cooldown: 5m } }
+`), "web.")
+}

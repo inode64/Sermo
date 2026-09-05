@@ -12,6 +12,7 @@ import (
 	"sermo/internal/appinspect"
 	"sermo/internal/checks"
 	"sermo/internal/config"
+	"sermo/internal/execx/execxtest"
 	"sermo/internal/notify"
 	"sermo/internal/rules"
 )
@@ -246,7 +247,7 @@ func TestArtifactSamplesCacheAppStatus(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			samples := NewArtifactSamples()
 			samples.RegisterApp("demo")
-			runner := &sequenceRunner{stdout: []string{"demo v1.2.3"}}
+			runner := execxtest.Outputs("demo v1.2.3")
 			w := &Worker{
 				artifactSamples: samples,
 				appVersionCmd:   map[string]appVersionCmd{"demo": {argv: []string{"demo", "--version"}}},
@@ -260,8 +261,8 @@ func TestArtifactSamplesCacheAppStatus(t *testing.T) {
 			if changed || (err != nil) != tt.wantErr {
 				t.Fatalf("cached app status %q = changed:%t err:%v, want false error:%t", tt.status, changed, err, tt.wantErr)
 			}
-			if runner.calls != 0 {
-				t.Fatalf("worker must not re-run a cached app probe, calls=%d", runner.calls)
+			if len(runner.Calls()) != 0 {
+				t.Fatalf("worker must not re-run a cached app probe, calls=%d", len(runner.Calls()))
 			}
 		})
 	}

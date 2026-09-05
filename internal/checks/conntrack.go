@@ -3,7 +3,7 @@ package checks
 import (
 	"context"
 	"fmt"
-	"os"
+	"sermo/internal/hostfs"
 	"strconv"
 	"strings"
 )
@@ -56,7 +56,7 @@ func defaultConntrackSampler() (ConntrackSample, error) {
 
 // readProcUint reads a sysctl-style file holding a single unsigned integer.
 func readProcUint(path string) (uint64, error) {
-	data, err := os.ReadFile(path) //nolint:gosec // G304: path is a fixed sysctl/proc counter file
+	data, err := hostfs.ReadFile(path)
 	if err != nil {
 		return 0, fmt.Errorf("read %s: %w", path, err)
 	}

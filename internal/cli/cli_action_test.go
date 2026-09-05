@@ -14,7 +14,7 @@ import (
 	sqlite3 "modernc.org/sqlite/lib"
 
 	"sermo/internal/config"
-	"sermo/internal/execx"
+	"sermo/internal/execx/execxtest"
 	"sermo/internal/operation"
 	"sermo/internal/servicemgr"
 	"sermo/internal/state"
@@ -608,27 +608,9 @@ func TestActionUnknownService(t *testing.T) {
 	}
 }
 
-type reloadRecordingRunner struct {
-	calls [][]string
-}
-
-func (r *reloadRecordingRunner) Run(_ context.Context, name string, args ...string) (execx.Result, error) {
-	r.calls = append(r.calls, append([]string{name}, args...))
-	return execx.Result{}, nil
-}
-
-func (r *reloadRecordingRunner) ran(name string) bool {
-	for _, call := range r.calls {
-		if len(call) > 0 && call[0] == name {
-			return true
-		}
-	}
-	return false
-}
-
 func TestReloadNativeCommandUsesAppRunner(t *testing.T) {
 	global := writeReloadCommandConfig(t)
-	runner := &reloadRecordingRunner{}
+	runner := &execxtest.Runner{}
 	var actions []string
 	var stdout bytes.Buffer
 	noReload := false
@@ -648,8 +630,8 @@ func TestReloadNativeCommandUsesAppRunner(t *testing.T) {
 	if code != exitSuccess {
 		t.Fatalf("Run() exit = %d, want %d; stdout=%q", code, exitSuccess, stdout.String())
 	}
-	if !runner.ran("reload-web") {
-		t.Fatalf("native reload command did not use App.Runner; calls=%v", runner.calls)
+	if !runner.Ran("reload-web") {
+		t.Fatalf("native reload command did not use App.Runner; calls=%v", runner.Lines())
 	}
 	if len(actions) != 0 {
 		t.Fatalf("reload command with when=always should not call backend manager; actions=%v", actions)

@@ -3,6 +3,7 @@ package conn
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
@@ -63,7 +64,11 @@ func (mqttProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	}
 	defer func() { _ = c.Close() }()
 
-	if _, err := c.Write(buildMQTTConnect(mqttClientID, cfg.User, cfg.Password)); err != nil {
+	connect, err := buildMQTTConnect(mqttClientID, cfg.User, cfg.Password)
+	if err != nil {
+		return Result{}, err
+	}
+	if _, err := c.Write(connect); err != nil {
 		return Result{}, probeErr(ProtocolNameMQTT, stepMQTTConnect, err)
 	}
 	var ack [mqttConnackMinBytes]byte
@@ -86,9 +91,11 @@ func (mqttProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 
 // buildMQTTConnect builds an MQTT 3.1.1 CONNECT packet with a clean session and
 // optional username/password.
-func buildMQTTConnect(clientID, user, pass string) []byte {
+func buildMQTTConnect(clientID, user, pass string) ([]byte, error) {
 	var vh bytes.Buffer
-	writeMQTTString(&vh, mqttProtocolName)
+	if err := writeMQTTString(&vh, mqttProtocolName); err != nil {
+		return nil, err
+	}
 	vh.WriteByte(mqttProtocolLevel311)
 	flags := mqttConnectCleanSession
 	if user != "" {
@@ -100,42 +107,49 @@ func buildMQTTConnect(clientID, user, pass string) []byte {
 	vh.WriteByte(flags)
 	vh.WriteByte(byte(mqttKeepAliveSeconds >> mqttStringLengthShift))
 	vh.WriteByte(byte(mqttKeepAliveSeconds))
-	writeMQTTString(&vh, clientID)
-	if user != "" {
-		writeMQTTString(&vh, user)
-	}
-	if pass != "" {
-		writeMQTTString(&vh, pass)
+	for _, field := range []string{clientID, user, pass} {
+		if field == "" {
+			continue
+		}
+		if err := writeMQTTString(&vh, field); err != nil {
+			return nil, err
+		}
 	}
 
 	var pkt bytes.Buffer
 	pkt.WriteByte(mqttConnectPacketType)
-	writeMQTTRemainingLength(&pkt, vh.Len())
+	if err := writeMQTTRemainingLength(&pkt, vh.Len()); err != nil {
+		return nil, err
+	}
 	pkt.Write(vh.Bytes())
-	return pkt.Bytes()
+	return pkt.Bytes(), nil
 }
 
 // writeMQTTString writes a 2-byte big-endian length-prefixed UTF-8 string.
-func writeMQTTString(b *bytes.Buffer, s string) {
-	n := len(s)
-	// G115 twice below: MQTT length-prefixes every string with a 16-bit field, so
-	// these two bytes are that field's big-endian halves.
-	b.WriteByte(byte(n >> mqttStringLengthShift)) //nolint:gosec // G115: see above.
-	b.WriteByte(byte(n))                          //nolint:gosec // G115: see above.
+func writeMQTTString(b *bytes.Buffer, s string) error {
+	length, err := wireUint16(ProtocolNameMQTT, "string length", len(s))
+	if err != nil {
+		return err
+	}
+	b.Write(binary.BigEndian.AppendUint16(nil, length))
 	b.WriteString(s)
+	return nil
 }
 
 // writeMQTTRemainingLength writes the MQTT variable-length "remaining length".
-func writeMQTTRemainingLength(b *bytes.Buffer, n int) {
+func writeMQTTRemainingLength(b *bytes.Buffer, n int) error {
 	for {
-		d := byte(n % mqttRemainingLengthBase) //nolint:gosec // G115: the modulo keeps this below 128, one digit of MQTT's variable-length encoding.
+		d, err := wireByte(ProtocolNameMQTT, "remaining length digit", n%mqttRemainingLengthBase)
+		if err != nil {
+			return err
+		}
 		n /= mqttRemainingLengthBase
 		if n > 0 {
 			d |= mqttRemainingLengthMoreFlag
 		}
 		b.WriteByte(d)
 		if n == 0 {
-			break
+			return nil
 		}
 	}
 }

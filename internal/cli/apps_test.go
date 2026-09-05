@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -10,6 +11,7 @@ import (
 	"testing"
 
 	"sermo/internal/execx"
+	"sermo/internal/execx/execxtest"
 )
 
 // TestAppsVersionShortCommand checks how version_short is sourced: a catalog service that
@@ -91,7 +93,7 @@ defaults: { policy: { cooldown: 5m } }
 		t.Fatal(err)
 	}
 
-	runner := fakeRunner{byPath: map[string]execx.Result{
+	runner := appRunner(map[string]execx.Result{
 		// Raw version lines whose regex-short would differ from the command,
 		// so the assertions distinguish the two sources.
 		native:         {Stdout: "NativeApp 4.5.6-7-extra\n", ExitCode: 0},
@@ -99,7 +101,7 @@ defaults: { policy: { cooldown: 5m } }
 		fallback:       {Stdout: "FallbackApp 9.8.7.6\n", ExitCode: 0},
 		empty:          {Stdout: "EmptyApp 3.2.1.0\n", ExitCode: 0},
 		empty + "-vs":  {Stdout: "", ExitCode: 0}, // prints nothing -> fall back
-	}}
+	})
 
 	var jstdout bytes.Buffer
 	app := App{Env: func(string) string { return "" }, Stdout: &jstdout, Stderr: &bytes.Buffer{}, Runner: runner, LoadConfig: testLoadConfigWithCatalog(catalogDir)}
@@ -122,16 +124,6 @@ defaults: { policy: { cooldown: 5m } }
 	if !strings.Contains(js, `"version_short":"3.2.1"`) {
 		t.Errorf("emptyapp should fall back to regex 3.2.1:\n%s", js)
 	}
-}
-
-// fakeRunner answers version-command invocations keyed by the binary path.
-type fakeRunner struct{ byPath map[string]execx.Result }
-
-func (f fakeRunner) Run(_ context.Context, name string, _ ...string) (execx.Result, error) {
-	if r, ok := f.byPath[name]; ok {
-		return r, nil
-	}
-	return execx.Result{ExitCode: 127}, fmt.Errorf("%s: not found", name)
 }
 
 func TestAppsCommand(t *testing.T) {
@@ -184,10 +176,10 @@ defaults: { policy: { cooldown: 5m } }
 		t.Fatal(err)
 	}
 
-	runner := fakeRunner{byPath: map[string]execx.Result{
+	runner := appRunner(map[string]execx.Result{
 		good: {Stdout: "GoodApp 1.2.3\n", ExitCode: 0},
 		bad:  {Stderr: "boom\n", ExitCode: 3},
-	}}
+	})
 
 	run := func(args ...string) string {
 		var stdout bytes.Buffer
@@ -241,4 +233,9 @@ defaults: { policy: { cooldown: 5m } }
 	if !strings.Contains(js, `"version":"GoodApp 1.2.3"`) || !strings.Contains(js, `"version_short":"1.2.3"`) || !strings.Contains(js, `"permissions":"-rwxr-xr-x (0755)"`) || !strings.Contains(js, `"installed":true`) || !strings.Contains(js, `"ok":false`) {
 		t.Errorf("apps --json unexpected:\n%s", js)
 	}
+}
+
+// appRunner answers by binary path; unknown binaries fail as not found.
+func appRunner(byPath map[string]execx.Result) *execxtest.Runner {
+	return &execxtest.Runner{ByName: byPath, Default: execx.Result{ExitCode: 127}, Err: errors.New("not found")}
 }

@@ -7,7 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"os"
+	"sermo/internal/hostfs"
 	"slices"
 	"strconv"
 	"strings"
@@ -149,7 +149,7 @@ func (dnsProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 // file — the server the system resolver would ask first (with pppd's
 // usepeerdns, the provider's resolver).
 func firstNameserver(path string) (string, error) {
-	data, err := os.ReadFile(path) //nolint:gosec // G304: /etc/resolv.conf or fixed nameserver path
+	data, err := hostfs.ReadFile(path)
 	if err != nil {
 		return "", probeErr(ProtocolNameDNS, stepDNSReadResolvConf, err)
 	}

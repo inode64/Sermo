@@ -4,6 +4,11 @@ GOAMD64 ?= v1
 GO_BUILD_ENV := CGO_ENABLED=$(CGO_ENABLED) GOAMD64=$(GOAMD64)
 PRODUCT_GO_PACKAGES := ./cmd/... ./internal/...
 TOOL_GO_PACKAGES := ./tools/...
+# Test-support packages are imported only from _test files, so no product
+# entrypoint reaches them; production-deadcode and unused-globals skip them and
+# every other gate still analyzes them.
+TEST_SUPPORT_GO_PACKAGES := sermo/internal/execx/execxtest
+PRODUCT_ANALYSIS_PACKAGES = $(filter-out $(TEST_SUPPORT_GO_PACKAGES),$(shell go list $(PRODUCT_GO_PACKAGES)))
 GO_PACKAGES := $(PRODUCT_GO_PACKAGES) $(TOOL_GO_PACKAGES)
 
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
@@ -283,8 +288,8 @@ production-staticcheck:
 # writes from reads, while excluding _test.go and loading both Linux CGO variants.
 unused-globals:
 	@for cgo in 0 1; do \
-		echo "CGO_ENABLED=$$cgo unusedglobals $(PRODUCT_GO_PACKAGES)"; \
-		CGO_ENABLED=$$cgo go run ./tools/unusedglobals $(PRODUCT_GO_PACKAGES); \
+		echo "CGO_ENABLED=$$cgo unusedglobals $(PRODUCT_GO_PACKAGES) minus $(TEST_SUPPORT_GO_PACKAGES)"; \
+		CGO_ENABLED=$$cgo go run ./tools/unusedglobals $(PRODUCT_ANALYSIS_PACKAGES); \
 	done
 	@echo "unusedglobals -dir $(WEB_BUILD_DIR) ."
 	@go run ./tools/unusedglobals -dir $(WEB_BUILD_DIR) .
@@ -347,9 +352,9 @@ deadcode:
 # tools/deadcode-production.allow is the reviewed exception list. Unexpected
 # or stale entries fail the gate.
 production-deadcode:
-	@echo "deadcode production-only $(PRODUCT_GO_PACKAGES)"
+	@echo "deadcode production-only $(PRODUCT_GO_PACKAGES) minus $(TEST_SUPPORT_GO_PACKAGES)"
 	@set -e; tmp="$$(mktemp)"; trap 'rm -f "$$tmp"' EXIT; \
-		$(LINT_PATH) deadcode -f='{{range .Funcs}}{{printf "%s\t%s\t%v\n" $$.Path .Name .Position}}{{end}}' $(PRODUCT_GO_PACKAGES) >"$$tmp"; \
+		$(LINT_PATH) deadcode -f='{{range .Funcs}}{{printf "%s\t%s\t%v\n" $$.Path .Name .Position}}{{end}}' $(PRODUCT_ANALYSIS_PACKAGES) >"$$tmp"; \
 		awk -F '\t' ' \
 			NR == FNR { if ($$0 !~ /^#/ && NF >= 2) allowed[$$1 FS $$2] = 1; next } \
 			{ key = $$1 FS $$2; if (key in allowed) { seen[key] = 1; permitted++; next } unexpected++; print $$3 ": unreachable func: " $$2 } \

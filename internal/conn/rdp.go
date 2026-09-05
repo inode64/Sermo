@@ -71,7 +71,11 @@ func (rdpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	}
 	defer func() { _ = c.Close() }()
 
-	if _, err := c.Write(buildRDPNegRequest(rdpRequestedProtocols)); err != nil {
+	request, err := buildRDPNegRequest(rdpRequestedProtocols)
+	if err != nil {
+		return Result{}, probeErr(ProtocolNameRDP, stepRDPNegotiationRequest, err)
+	}
+	if _, err := c.Write(request); err != nil {
 		return Result{}, probeErr(ProtocolNameRDP, stepRDPNegotiationRequest, err)
 	}
 	buf := make([]byte, rdpReadBufferBytes)
@@ -88,7 +92,7 @@ func (rdpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 
 // buildRDPNegRequest builds a TPKT + X.224 Connection Request enclosing an RDP
 // Negotiation Request that advertises protocols.
-func buildRDPNegRequest(protocols uint32) []byte {
+func buildRDPNegRequest(protocols uint32) ([]byte, error) {
 	neg := make([]byte, rdpNegRequestBytes)
 	neg[rdpNegPacketTypeOffset] = rdpNegRequestType
 	binary.LittleEndian.PutUint16(neg[rdpProtocolLengthOffset:], rdpNegRequestBytes)
@@ -96,8 +100,11 @@ func buildRDPNegRequest(protocols uint32) []byte {
 
 	// X.224 Connection Request: LI, CR(0xE0), DST-REF, SRC-REF, class.
 	x224 := make([]byte, x224HeaderBytes, x224HeaderBytes+len(neg))
-	//nolint:gosec // G115: X.224's length indicator is a single byte; neg is the fixed negotiation request built above.
-	x224[x224LengthIndicatorOffset] = byte(x224RequestVariableLenBase + len(neg))
+	lengthIndicator, err := wireByte(ProtocolNameRDP, "X.224 length indicator", x224RequestVariableLenBase+len(neg))
+	if err != nil {
+		return nil, err
+	}
+	x224[x224LengthIndicatorOffset] = lengthIndicator
 	x224[x224RequestPDUTypeOffset] = x224ConnectionRequest
 	x224[len(x224)-1] = x224ClassByte
 	x224 = append(x224, neg...)
@@ -105,9 +112,12 @@ func buildRDPNegRequest(protocols uint32) []byte {
 	// TPKT header (version 3).
 	pkt := make([]byte, tpktHeaderBytes, tpktHeaderBytes+len(x224))
 	pkt[tpktVersionOffset] = tpktVersion
-	//nolint:gosec // G115: TPKT carries a 16-bit total length; x224 is the fixed-size PDU assembled just above.
-	binary.BigEndian.PutUint16(pkt[tpktLengthOffset:], uint16(tpktHeaderBytes+len(x224)))
-	return append(pkt, x224...)
+	total, err := wireUint16(ProtocolNameRDP, "TPKT length", tpktHeaderBytes+len(x224))
+	if err != nil {
+		return nil, err
+	}
+	binary.BigEndian.PutUint16(pkt[tpktLengthOffset:], total)
+	return append(pkt, x224...), nil
 }
 
 // parseRDPConfirm validates a TPKT + X.224 Connection Confirm and returns the

@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"sermo/internal/checks"
-	"sermo/internal/execx"
+	"sermo/internal/execx/execxtest"
 	"sermo/internal/metrics"
 )
 
@@ -146,7 +146,7 @@ func TestPausedCyclesAdvanceCheckInterval(t *testing.T) {
 }
 
 func TestWorkerChecksPreserveStateAcrossCycles(t *testing.T) {
-	runner := &sequenceRunner{stdout: []string{"v1\n", "v1\n", "v2\n"}}
+	runner := execxtest.Outputs("v1\n", "v1\n", "v2\n")
 	tree := map[string]any{
 		"processes": map[string]any{},
 		"checks": map[string]any{
@@ -175,8 +175,8 @@ func TestWorkerChecksPreserveStateAcrossCycles(t *testing.T) {
 		w.RunCycle(context.Background())
 	}
 
-	if runner.calls != 3 {
-		t.Fatalf("runner calls = %d, want 3", runner.calls)
+	if len(runner.Calls()) != 3 {
+		t.Fatalf("runner calls = %d, want 3", len(runner.Calls()))
 	}
 	if latest.OK {
 		t.Fatalf("third cycle should detect changed output, got %+v", latest)
@@ -226,21 +226,4 @@ func TestWorkerCheckSetUsesCurrentCycleMetrics(t *testing.T) {
 	if res := built[0].Check.Run(context.Background()); res.OK {
 		t.Fatalf("nil cycle metrics should not fire: %+v", res)
 	}
-}
-
-type sequenceRunner struct {
-	stdout []string
-	calls  int
-}
-
-func (r *sequenceRunner) Run(context.Context, string, ...string) (execx.Result, error) {
-	if len(r.stdout) == 0 {
-		return execx.Result{ExitCode: 0}, nil
-	}
-	idx := r.calls
-	if idx >= len(r.stdout) {
-		idx = len(r.stdout) - 1
-	}
-	r.calls++
-	return execx.Result{Stdout: r.stdout[idx], ExitCode: 0}, nil
 }

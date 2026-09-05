@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"sermo/internal/execx"
+	"sermo/internal/execx/execxtest"
 )
 
 const hdparmSample = "/dev/sda:\n" +
@@ -49,18 +50,6 @@ func TestParseHdparmKilobyteRate(t *testing.T) {
 	}
 }
 
-// recordingRunner captures the argv it was asked to run and returns a fixed
-// stdout, so a test can assert which hdparm flags were used.
-type recordingRunner struct {
-	out  string
-	args []string
-}
-
-func (r *recordingRunner) Run(_ context.Context, name string, args ...string) (execx.Result, error) {
-	r.args = append([]string{name}, args...)
-	return execx.Result{Stdout: r.out}, nil
-}
-
 func TestHdparmRunsOnlyNeededTimings(t *testing.T) {
 	cases := []struct {
 		name      string
@@ -74,21 +63,23 @@ func TestHdparmRunsOnlyNeededTimings(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			rr := &recordingRunner{out: hdparmSample}
+			rr := execxtest.Fixed(execx.Result{Stdout: hdparmSample}, nil)
 			chk := hdparmCheck{name: "d", timeout: time.Second, runner: rr, device: "/dev/sda", preds: c.preds}
 			chk.Run(context.Background())
+			calls := rr.Calls()
+			args := calls[len(calls)-1].Args
 			for _, f := range c.wantFlags {
-				if !slices.Contains(rr.args, f) {
-					t.Errorf("flag %q missing in %v", f, rr.args)
+				if !slices.Contains(args, f) {
+					t.Errorf("flag %q missing in %v", f, args)
 				}
 			}
 			for _, f := range c.noFlags {
-				if slices.Contains(rr.args, f) {
-					t.Errorf("flag %q must not be run in %v", f, rr.args)
+				if slices.Contains(args, f) {
+					t.Errorf("flag %q must not be run in %v", f, args)
 				}
 			}
-			if !slices.Contains(rr.args, "/dev/sda") {
-				t.Errorf("device missing in %v", rr.args)
+			if !slices.Contains(args, "/dev/sda") {
+				t.Errorf("device missing in %v", args)
 			}
 		})
 	}
@@ -100,7 +91,7 @@ func TestHdparmThresholds(t *testing.T) {
 	pred := []levelPred{{"read", "<", 100}} // alert condition: read below 100 MB/s
 
 	// Degraded: read=50 < 100 -> the alert condition holds -> OK (fires as a watch).
-	c := &hdparmCheck{name: "d", timeout: time.Second, runner: fakeRunner{execx.Result{Stdout: degraded}}, device: "/dev/sda", preds: pred, last: &lastSample{}}
+	c := &hdparmCheck{name: "d", timeout: time.Second, runner: execxtest.Fixed(execx.Result{Stdout: degraded}, nil), device: "/dev/sda", preds: pred, last: &lastSample{}}
 	if res := c.Run(context.Background()); !res.OK {
 		t.Errorf("read 50 < 100 should meet the alert condition: %s", res.Message)
 	} else if res.Data["read"] != 50.0 {
@@ -108,7 +99,7 @@ func TestHdparmThresholds(t *testing.T) {
 	}
 
 	// Healthy: read=200, not below 100 -> condition not met.
-	c = &hdparmCheck{name: "d", timeout: time.Second, runner: fakeRunner{execx.Result{Stdout: healthy}}, device: "/dev/sda", preds: pred, last: &lastSample{}}
+	c = &hdparmCheck{name: "d", timeout: time.Second, runner: execxtest.Fixed(execx.Result{Stdout: healthy}, nil), device: "/dev/sda", preds: pred, last: &lastSample{}}
 	if res := c.Run(context.Background()); res.OK {
 		t.Error("read 200 must not meet the read<100 alert condition")
 	}
@@ -117,7 +108,7 @@ func TestHdparmThresholds(t *testing.T) {
 func TestHdparmCheckError(t *testing.T) {
 	c := &hdparmCheck{
 		name: "d", timeout: time.Second,
-		runner: fakeRunner{execx.Result{Stderr: "/dev/sda: Permission denied\n", ExitCode: 1}},
+		runner: execxtest.Fixed(execx.Result{Stderr: "/dev/sda: Permission denied\n", ExitCode: 1}, nil),
 		device: "/dev/sda",
 		preds:  []levelPred{{"read", "<", 100}},
 		probe:  livingDeviceProbe(),
@@ -152,7 +143,7 @@ const hdparmDeviceGone = "/dev/sda:\n Timing buffered disk reads: read() hit EOF
 func TestHdparmCheckReportsMissingDevice(t *testing.T) {
 	c := &hdparmCheck{
 		name: "d", timeout: time.Second,
-		runner: fakeRunner{execx.Result{Stdout: hdparmDeviceGone, ExitCode: 5}},
+		runner: execxtest.Fixed(execx.Result{Stdout: hdparmDeviceGone, ExitCode: 5}, nil),
 		device: "/dev/sda",
 		preds:  []levelPred{{fieldRead, "<", 20}},
 		probe:  deviceProbe{size: func(string) (uint64, error) { return 0, nil }, identity: testDeviceIdentity},
@@ -173,7 +164,7 @@ func TestHdparmCheckReportsMissingDevice(t *testing.T) {
 func TestHdparmCheckKeepsToolErrorWhenDevicePresent(t *testing.T) {
 	c := &hdparmCheck{
 		name: "d", timeout: time.Second,
-		runner: fakeRunner{execx.Result{Stdout: hdparmDeviceGone, ExitCode: 5}},
+		runner: execxtest.Fixed(execx.Result{Stdout: hdparmDeviceGone, ExitCode: 5}, nil),
 		device: "/dev/sda",
 		preds:  []levelPred{{fieldRead, "<", 20}},
 		probe:  livingDeviceProbe(),
@@ -189,10 +180,10 @@ func TestHdparmCheckKeepsToolErrorWhenDevicePresent(t *testing.T) {
 }
 
 func TestHdparmCheckKeepsLastKnownRatesOfAMissingDevice(t *testing.T) {
-	runner := &scriptedRunner{results: []execx.Result{
+	runner := execxtest.Queued([]execx.Result{
 		{Stdout: " Timing buffered disk reads: 500 MB in 3.00 seconds = 200.00 MB/sec\n"},
 		{Stdout: hdparmDeviceGone, ExitCode: 5},
-	}}
+	}...)
 	c := &hdparmCheck{
 		name: "d", timeout: time.Second,
 		runner: runner,

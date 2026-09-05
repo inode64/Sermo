@@ -75,7 +75,10 @@ func TestFPMMergeStatus(t *testing.T) {
 
 func TestFCGIParamsRoundTrip(t *testing.T) {
 	// A short name/value encodes as 1-byte lengths and round-trips.
-	enc := encodeFCGIParams([]fcgiParam{{"SCRIPT_NAME", "/ping"}})
+	enc, err := encodeFCGIParams([]fcgiParam{{"SCRIPT_NAME", "/ping"}})
+	if err != nil {
+		t.Fatal(err)
+	}
 	if enc[0] != byte(len("SCRIPT_NAME")) || enc[1] != byte(len("/ping")) {
 		t.Fatalf("length prefixes wrong: %v", enc[:2])
 	}
@@ -86,7 +89,7 @@ func TestFCGIParamsRoundTrip(t *testing.T) {
 
 func TestWriteFCGIRecordRejectsOversizeContent(t *testing.T) {
 	var out bytes.Buffer
-	err := writeFCGIRecord(&out, fcgiStdout, make([]byte, fcgiContentLengthMax+1))
+	err := writeFCGIRecord(&out, fcgiStdout, make([]byte, wireUint16Max+1))
 	if err == nil {
 		t.Fatal("an oversized FastCGI record must fail")
 	}

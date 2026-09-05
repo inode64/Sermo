@@ -10,6 +10,7 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
+	"sermo/internal/hostfs"
 	"slices"
 	"sort"
 	"strings"
@@ -523,7 +524,7 @@ func disabledUmountResult(spec Spec, message string) Result {
 
 func (c Controller) readState(spec Spec) (State, error) {
 	path := c.statePath(spec)
-	data, err := os.ReadFile(path) //nolint:gosec // G304: mount state file under paths.runtime
+	data, err := hostfs.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return State{Name: spec.Name, Path: spec.Path}, nil
@@ -686,7 +687,7 @@ func FstabEntries(fstabPath string) ([]FstabEntry, error) {
 	if fstabPath == "" {
 		fstabPath = DefaultFstabPath
 	}
-	data, err := os.ReadFile(fstabPath) //nolint:gosec // G304: fstab path defaults to /etc/fstab
+	data, err := hostfs.ReadFile(fstabPath)
 	if err != nil {
 		return nil, fmt.Errorf("read fstab %s: %w", fstabPath, err)
 	}
