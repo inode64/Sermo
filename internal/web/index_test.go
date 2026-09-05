@@ -927,6 +927,14 @@ func TestSourceStopConfirmsWithoutEnginePreflight(t *testing.T) {
 	)
 }
 
+func TestSourceFailedWatchFilterIncludesMissing(t *testing.T) {
+	appJSMustContain(t, "failed watch filter includes missing",
+		`if (status === targetStateFailed) return isWatchAttention(w);`,
+		`counts[targetStateFailed] = (watches || []).filter(isWatchAttention).length;`,
+		`const failedWatches = watches.filter(isWatchAttention);`,
+	)
+}
+
 // TestIndexAccessibilitySectionHeadings pins the per-section <h2> headings that
 // let screen-reader users navigate the dashboard by heading. The <details>
 // summaries cannot carry heading semantics (a summary's implicit button role

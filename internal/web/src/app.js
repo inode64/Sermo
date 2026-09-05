@@ -4766,7 +4766,19 @@ function watchMatches(w, panelKey) {
   const panel = getWatchPanel(panelKey);
   if (panel.query && !watchSearchText(w).includes(panel.query)) return false;
   if (panel.type !== filterAll && watchTypeValue(panel, w) !== panel.type) return false;
-  return watchStatusFilterStates.includes(panel.status) ? watchStateText(w) === panel.status : true;
+  return watchMatchesStatus(w, panel.status);
+}
+
+function watchMatchesStatus(w, status) {
+  if (!watchStatusFilterStates.includes(status)) return true;
+  if (status === targetStateFailed) return isWatchAttention(w);
+  return watchStateText(w) === status;
+}
+
+function watchFilterCounts(watches) {
+  const counts = stateCounts(watches, watchStateText, watchStatusFilterStates);
+  counts[targetStateFailed] = (watches || []).filter(isWatchAttention).length;
+  return counts;
 }
 
 function syncWatchFilterActive(panelKey) {
@@ -4855,7 +4867,7 @@ function syncWatchTypeSelect(panelKey, watches) {
 
 function renderWatchFilterCounts(panelKey, watches) {
   const w = watches || allWatches || [];
-  renderFilterButtonCounts(getWatchPanel(panelKey).filters, stateCounts(w, watchStateText, watchStatusFilterStates));
+  renderFilterButtonCounts(getWatchPanel(panelKey).filters, watchFilterCounts(w));
 }
 
 function watchPanelFilterActive(panel) {
@@ -6717,7 +6729,7 @@ function overviewInventory(ctx) {
   const monitoredSvcs = enabled.filter((s) => [targetStateMonitored, targetStateRestartRequired].includes(serviceDisplayState(s)));
   const watches = allWatches || [];
   const enabledWatches = watches.filter((w) => w && w.enabled);
-  const failedWatches = watches.filter((w) => watchStateText(w) === targetStateFailed);
+  const failedWatches = watches.filter(isWatchAttention);
   const warningWatches = watches.filter(isWatchWarning);
   const staleWatches = watches.filter(isWatchSampleStale);
   const startingWatches = watches.filter((w) => watchStateText(w) === targetStateStarting);
@@ -6799,7 +6811,7 @@ function overviewServiceTileOptions(data, defaultServiceTarget) {
     ], "quiet");
     // A single predicate over the enabled set: subtracting the failed/warning/stale
     // list lengths (which span all watches and can overlap) could go negative.
-    const watchesUp = enabledWatches.filter((w) => watchStateText(w) !== targetStateFailed && !isWatchWarning(w) && !isWatchSampleStale(w)).length;
+    const watchesUp = enabledWatches.filter((w) => !isWatchAttention(w) && !isWatchWarning(w) && !isWatchSampleStale(w)).length;
     tiles.push({
       label: "Watches",
       value: tpl`${watchesUp}<small> / ${enabledWatches.length}</small>`,

@@ -234,7 +234,7 @@ Renderizadas por `renderOverview` a partir del estado ya cargado, sin solicitude
 | Tipo de tarjeta | Contenido actual |
 | --- | --- |
 | Servicios activos | recuento / total para servicios en `started`, `collecting`, `warning`, `restart_required` o `monitored`; crítico cuando algún servicio está `failed`, aviso mientras algún servicio está `collecting`, `warning` o `restart_required`, neutral mientras algún objetivo se está asentando, en caso contrario activo; al hacer clic abre el filtro de servicio correspondiente |
-| Watches | recuento / total; crítico cuando algún watch está `failed`, neutral mientras algún objetivo se está asentando (el subtítulo nombra los watches, servicios o aplicaciones que están iniciando), en caso contrario silencioso; al hacer clic abre el filtro `starting`/`failed` correspondiente |
+| Watches | recuento / total; crítico cuando algún watch está `failed` o `missing`, neutral mientras algún objetivo se está asentando (el subtítulo nombra los watches, servicios o aplicaciones que están iniciando), en caso contrario silencioso; al hacer clic abre el filtro `starting`/`failed` correspondiente |
 | Alertas | recuento de servicios en fallo, watches disparados, aplicaciones instaladas en fallo y locks activos, con un desglose por tipo; al hacer clic dirige a `failed-services`, `failed-watches`, `failed-apps` o `locks-section` por orden de prioridad |
 | Monitorizado | servicios en estado `monitored` o `restart_required` frente a servicios habilitados; aviso mientras haya servicios en `collecting`, `warning` o `restart_required` (el subtítulo nombra los que requieren atención), neutral con subtítulo de asentamiento durante el arranque, al hacer clic abre el filtro de servicio relevante |
 | Indicadores de host | memoria, carga, fds, pids, conntrack, etc. cuando están presentes |
@@ -262,7 +262,8 @@ Las señales incluyen servicios en fallo, watches disparados, aplicaciones insta
 en fallo, errores recientes y problemas de disponibilidad (incluido
 `shutting_down`). Un elemento de servicios en fallo abre el panel de Servicios con el
 filtro `failed`; un elemento de watches disparados abre Watches con el filtro
-`failed` (objetivo `failed-watches`); un elemento de aplicaciones en fallo abre Aplicaciones
+`failed` (objetivo `failed-watches`), que también incluye watches cuyo dispositivo
+dejó de responder (`missing`); un elemento de aplicaciones en fallo abre Aplicaciones
 instaladas con el filtro `failed` (objetivo `failed-apps`). El progreso de arranque del daemon
 permanece en la línea `status: starting` de la barra superior, no en este recuadro.
 
@@ -598,7 +599,7 @@ Columnas compartidas:
 | Name | nombre para mostrar, con fallback al nombre, capitalizado |
 | Last checked | última muestra completada por el ciclo del daemon o manual |
 | Last activity | último evento del watch, como un probe manual, notificación o remediación |
-| State | estado normalizado del watch: `disabled` cuando config/monitor state lo excluye de comprobaciones activas, `starting` antes de la primera muestra monitorizada, `failed` para un fallo activo, `warning` para un fallo que el watch declaró aviso con `severity: warning` (fila ámbar, fuera del recuento de alertas) y `ok` en el resto; el trabajo activo del dispositivo tiene prioridad como `testing`, `recovering`, `rebuilding`, `repairing`, `moving` o `merging`, y un dispositivo que dejó de responder como `missing`, que se lee como fallo |
+| State | estado normalizado del watch: `disabled` cuando config/monitor state lo excluye de comprobaciones activas, `starting` antes de la primera muestra monitorizada, `failed` para un fallo activo, `warning` para un fallo que el watch declaró aviso con `severity: warning` (fila ámbar, fuera del recuento de alertas) y `ok` en el resto; el trabajo activo del dispositivo tiene prioridad como `testing`, `recovering`, `rebuilding`, `repairing`, `moving` o `merging`, y un dispositivo que dejó de responder como `missing`, que se lee como fallo y entra en el filtro `failed` |
 | Actions | acción principal admitida y menú adicional para monitor/unmonitor |
 
 Mientras se ejecuta una muestra manual de `diskio`, `hdparm`, `lvm`, `raid` o `smart`,

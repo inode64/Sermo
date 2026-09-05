@@ -228,7 +228,7 @@ Rendered by `renderOverview` from already-loaded state, without extra requests.
 | Tile kind | Current content |
 | --- | --- |
 | Services active | count / total for services in `started`, `collecting`, `warning`, `restart_required` or `monitored`; critical when any service is `failed`, warning while any service is `collecting`, `warning` or `restart_required`, neutral while any target is settling, otherwise active; click opens the matching service filter when applicable |
-| Watches | count / total; critical when any watch is `failed`, neutral while any target is settling (subtitle names starting watches, services or apps), otherwise quiet; click opens the matching `starting`/`failed` filter |
+| Watches | count / total; critical when any watch is `failed` or `missing`, neutral while any target is settling (subtitle names starting watches, services or apps), otherwise quiet; click opens the matching `starting`/`failed` filter |
 | Alerts | count of failing services, firing watches, failed installed apps and active locks, with a per-kind breakdown; click routes to `failed-services`, `failed-watches`, `failed-apps` or `locks-section` in priority order |
 | Monitored | services in state `monitored` or `restart_required` vs enabled services; warning while services are `collecting`, `warning` or `restart_required` (subtitle names those needing attention), neutral with settling subtitle during startup, click opens the relevant service filter |
 | Host gauges | memory, load, fds, pids, conntrack, etc. when present |
@@ -256,7 +256,8 @@ Signals include failing services, firing watches, failed installed
 applications, recent errors and readiness issues (including
 `shutting_down`). A failing-services item opens the Services panel with the
 `failed` filter; a firing-watches item opens Watches with the `failed`
-filter (`failed-watches` target); a failing-apps item opens Installed
+filter (`failed-watches` target), which also includes watches whose device
+stopped answering (`missing`); a failing-apps item opens Installed
 applications with the `failed` filter (`failed-apps` target). Daemon startup
 progress stays in the top-bar `status: starting` line, not in this box.
 
@@ -579,7 +580,7 @@ Shared columns:
 | Name | display name, falling back to name, capitalized |
 | Last checked | latest completed daemon-cycle or manual sample |
 | Last activity | latest watch event, such as a manual probe, notification or remediation |
-| State | normalized watch state: `disabled` when config/monitor state excludes it from active checks, `starting` before the first monitored sample, `failed` for an active failure, `warning` for a failure the watch declared an advisory with `severity: warning` (amber row, kept out of the alert count), otherwise `ok`; active device work takes precedence as `testing`, `recovering`, `rebuilding`, `repairing`, `moving` or `merging`, and a device that stopped answering as `missing`, which reads as a failure |
+| State | normalized watch state: `disabled` when config/monitor state excludes it from active checks, `starting` before the first monitored sample, `failed` for an active failure, `warning` for a failure the watch declared an advisory with `severity: warning` (amber row, kept out of the alert count), otherwise `ok`; active device work takes precedence as `testing`, `recovering`, `rebuilding`, `repairing`, `moving` or `merging`, and a device that stopped answering as `missing`, which reads as a failure and is included in the `failed` filter |
 | Actions | supported primary action plus an overflow menu for monitor/unmonitor |
 
 While a manual `diskio`, `hdparm`, `lvm`, `raid` or `smart` sample is running, State shows
