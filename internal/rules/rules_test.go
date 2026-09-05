@@ -157,6 +157,60 @@ func TestGuardFailsSafeOnInlineSamplerFailure(t *testing.T) {
 	}
 }
 
+func TestGuardFailsSafeOnUnavailableLeaf(t *testing.T) {
+	restartGuard := func(ifNode map[string]any) []Rule {
+		return []Rule{{
+			Name:   "block-restart",
+			Type:   RuleGuard,
+			Blocks: []string{string(ActionRestart)},
+			If:     ifNode,
+		}}
+	}
+	processLeaf := map[string]any{ConditionProcess: map[string]any{FieldExe: "/usr/bin/mariadb-backup", FieldUser: "mysql"}}
+	metricLeaf := map[string]any{ConditionMetric: map[string]any{FieldName: "cpu", FieldOp: ">", FieldValue: "90%"}}
+	changedFile := map[string]any{ConditionChanged: map[string]any{FieldPath: "/etc/app.conf"}}
+	changedApp := map[string]any{ConditionChanged: map[string]any{FieldApp: "containerd"}}
+
+	tests := []struct {
+		name string
+		ev   *Evaluator
+		leaf map[string]any
+	}{
+		{name: "missing process source", ev: &Evaluator{}, leaf: processLeaf},
+		{name: "missing metric source", ev: &Evaluator{}, leaf: metricLeaf},
+		{
+			name: "missing metric reading",
+			ev: &Evaluator{Deps: checks.Deps{Metrics: func(string, string) (metrics.Reading, bool) {
+				return metrics.Reading{}, false
+			}}},
+			leaf: metricLeaf,
+		},
+		{
+			name: "not-ready metric",
+			ev: &Evaluator{Deps: checks.Deps{Metrics: func(string, string) (metrics.Reading, bool) {
+				return metrics.Reading{Percent: 99, HasPercent: true, Ready: false}, true
+			}}},
+			leaf: metricLeaf,
+		},
+		{name: "missing changed file source", ev: &Evaluator{}, leaf: changedFile},
+		{name: "missing changed version source", ev: &Evaluator{}, leaf: changedApp},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if match, err := tt.ev.Eval(context.Background(), tt.leaf); err != nil || match {
+				t.Fatalf("remediation Eval() = %v, %v; want false without error", match, err)
+			}
+			blocked, _, err := Guard(context.Background(), restartGuard(tt.leaf), string(ActionRestart), tt.ev)
+			if err == nil {
+				t.Fatal("unavailable guard leaf must fail safe")
+			}
+			if blocked {
+				t.Fatal("unavailable leaf is an evaluation error, not a matched guard")
+			}
+		})
+	}
+}
+
 func TestEvalResolvesLazyCheckReference(t *testing.T) {
 	runs := 0
 	ev := &Evaluator{

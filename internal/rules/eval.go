@@ -248,14 +248,14 @@ func (e *Evaluator) evalService(ctx context.Context, v any) (bool, error) {
 
 // evalProcess is true when the observed state of processes matching the
 // exe/user selector equals the requested state (default running).
-// With no process source it is false.
+// With no process source it is false for remediation and an error for guards.
 func (e *Evaluator) evalProcess(v any) (bool, error) {
 	m, err := condMap(v, "process condition")
 	if err != nil {
 		return false, err
 	}
 	if e.Deps.Processes == nil {
-		return false, nil
+		return e.unavailableSignal(errors.New("process condition has no process source"))
 	}
 	want := cfgval.AsString(m[FieldState])
 	if want == "" {
@@ -265,24 +265,25 @@ func (e *Evaluator) evalProcess(v any) (bool, error) {
 }
 
 // evalMetric reads a sampled metric and compares it to the threshold.
-// With no metric source, or a not-ready rate metric, it is false
-// so a remediation never fires on an unavailable value.
+// With no metric source, a missing reading or a not-ready rate metric it is
+// false for remediation and an error for guards, so an automatic action never
+// fires on an unobserved value and a guard never treats that gap as false.
 func (e *Evaluator) evalMetric(v any) (bool, error) {
 	m, err := condMap(v, "metric condition")
 	if err != nil {
 		return false, err
 	}
+	name := cfgval.AsString(m[FieldName])
 	if e.Deps.Metrics == nil {
-		return false, nil
+		return e.unavailableSignal(fmt.Errorf("metric %q has no metric source", name))
 	}
 	scope := cfgval.AsString(m[FieldScope])
 	if scope == "" {
 		scope = checks.MetricScopeService
 	}
-	name := cfgval.AsString(m[FieldName])
 	reading, ok := e.Deps.Metrics(scope, name)
-	if !ok {
-		return false, nil
+	if !ok || !reading.Ready {
+		return e.unavailableSignal(fmt.Errorf("metric %q is unavailable", name))
 	}
 	match, err := metrics.Compare(reading, cfgval.AsString(m[FieldOp]), cfgval.String(m[FieldValue]))
 	if err != nil {
@@ -294,8 +295,8 @@ func (e *Evaluator) evalMetric(v any) (bool, error) {
 // evalChanged is true when the watched signal differs from the baseline tracked
 // across cycles. With `app` it compares the app's version (truncated to an
 // optional major/minor/patch level, default patch); otherwise it compares the
-// file fingerprint at `path`. With no corresponding source it is false, so a
-// remediation never fires on an unavailable signal.
+// file fingerprint at `path`. With no corresponding source it is false for
+// remediation and an error for guards.
 func (e *Evaluator) evalChanged(ctx context.Context, v any) (bool, error) {
 	m, err := condMap(v, "changed condition")
 	if err != nil {
@@ -313,7 +314,7 @@ func (e *Evaluator) evalChanged(ctx context.Context, v any) (bool, error) {
 			levelName = name
 		}
 		if e.ChangedVersion == nil {
-			return false, nil
+			return e.unavailableSignal(fmt.Errorf("changed condition for app %q has no version source", app))
 		}
 		changed, err := e.ChangedVersion(ctx, app, level)
 		if changed {
@@ -326,7 +327,7 @@ func (e *Evaluator) evalChanged(ctx context.Context, v any) (bool, error) {
 		return false, errors.New("changed condition requires a path or app")
 	}
 	if e.Changed == nil {
-		return false, nil
+		return e.unavailableSignal(fmt.Errorf("changed condition for %s has no file source", path))
 	}
 	changed, err := e.Changed(path)
 	if changed {
@@ -386,6 +387,17 @@ func (e *Evaluator) unavailableCheckError(name string, res checks.Result) error 
 		return nil
 	}
 	return fmt.Errorf("check %q is unavailable: %s", name, res.Message)
+}
+
+// unavailableSignal is how a missing or unusable leaf reading is reported.
+// Remediation treats it as false so an automatic action never fires on an
+// unobserved value. Guards set FailOnUnavailable so the same gap is an
+// evaluation error and the operation is denied.
+func (e *Evaluator) unavailableSignal(err error) (bool, error) {
+	if e.FailOnUnavailable {
+		return false, err
+	}
+	return false, nil
 }
 
 // inlineEntry converts an inline {<type>: params} operand into a check entry.

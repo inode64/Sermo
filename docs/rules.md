@@ -3012,9 +3012,10 @@ The operation engine evaluates this guard immediately before both manual and
 automatic actions. An unavailable connection check denies the action rather than
 treating an observation failure as an empty connection set.
 
-This fail-closed rule applies to every check: a timeout, unreadable source,
-malformed sample or missing metric source is an unavailable observation, not a
-valid false condition. A valid sample that simply does not satisfy its predicate
+This fail-closed rule applies to every check and to `metric:`, `process:` and
+`changed:` condition leaves: a timeout, unreadable source, malformed sample,
+missing source or not-ready metric is an unavailable observation, not a valid
+false condition. A valid sample that simply does not satisfy its predicate
 remains an ordinary false result.
 
 For MySQL/MariaDB and PostgreSQL, use a read-only `sql` check that counts the
