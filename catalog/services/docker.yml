@@ -12,6 +12,11 @@ also_service:
     - docker.socket
 restart_policy:
   mode: native
+# A replaced dockerd binary is alerted, never restarted on its own: restarting
+# the daemon stops every container that runs without live-restore. The
+# operator schedules that restart; `restart_on_stale_binary: true` in the
+# host's service file turns the automatic restart back on.
+restart_on_stale_binary: false
 apps:
   - docker
 restart_on_change:
