@@ -612,8 +612,10 @@
       overflow-wrap: anywhere;
     }
     /* sessions: retain identity, state, idle and action at tablet widths; the
-       resource columns remain available on desktop and through sorting there. */
-    .sessions-table { min-width: 0; table-layout: fixed; }
+       resource columns remain available on desktop and through sorting there.
+       The layout stays automatic: with a fixed one Chromium keeps reserving
+       width for the hidden columns and squeezes the visible ones. */
+    .sessions-table { min-width: 0; }
     /* Preserve identity (session + PID) while hiding expensive metrics. */
     .sessions-table th:nth-child(7), .sessions-table td:nth-child(7),
     .sessions-table th:nth-child(8), .sessions-table td:nth-child(8),
@@ -768,6 +770,12 @@
     .detail-locks-table th:nth-child(1), .detail-locks-table th:nth-child(4) { width: 21%; }
     .detail-locks-table th:nth-child(2), .detail-locks-table th:nth-child(7) { width: 18%; }
     .detail-locks-table th:nth-child(8) { width: 22%; }
+    /* With an automatic layout the session note (window count, an attribution
+       issue) would claim the row and squeeze user, PID and idle to one letter;
+       minimum widths keep every visible column readable. */
+    .sessions-table td:nth-child(2) { min-width: 3.5rem; }
+    .sessions-table td:nth-child(3) { min-width: 7rem; }
+    .sessions-table td:nth-child(4), .sessions-table td:nth-child(6) { min-width: 3rem; }
     .ssh-session-table th:nth-child(3), .ssh-session-table td:nth-child(3) { display: none; }
     .terminal-session-table th:nth-child(5), .terminal-session-table td:nth-child(5) { display: none; }
     #app-footer .footer-version {
