@@ -8151,7 +8151,7 @@ function renderRules(rules) {
       <td>${cond}</td><td class="muted">${r.window || ""}</td>
       <td>${r.progress || ""}</td><td>${ruleState(r)}</td></tr>`;
   });
-  return tpl`<table>
+  return tpl`<table class="detail-rules-table">
     <caption class="visually-hidden">Remediation rules</caption>
     <thead><tr>
     <th scope="col">Name</th><th scope="col">Type</th><th scope="col">Action</th><th scope="col">Condition</th><th scope="col">Window</th><th scope="col">Progress</th><th scope="col">State</th>
