@@ -85,8 +85,8 @@ func TestMergeUnique(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := MergeUnique(tc.list, tc.values...); !slices.Equal(got, tc.want) {
-				t.Fatalf("MergeUnique(%v, %v) = %v, want %v", tc.list, tc.values, got, tc.want)
+			if got := mergeUnique(tc.list, tc.values...); !slices.Equal(got, tc.want) {
+				t.Fatalf("mergeUnique(%v, %v) = %v, want %v", tc.list, tc.values, got, tc.want)
 			}
 		})
 	}
