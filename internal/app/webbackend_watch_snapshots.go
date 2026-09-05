@@ -168,8 +168,8 @@ func watchSnapshotSummary(snap CheckSnapshot, readings []web.WatchReading) strin
 func watchMeterFromSnapshot(checkType string, data map[string]any) *web.WatchMeter {
 	switch checkType {
 	case checks.CheckTypeMemory:
-		total, totalOK := uintField(data[checks.DataKeyTotalBytes])
-		available, availableOK := uintField(data[checks.DataKeyAvailableBytes])
+		total, totalOK := cfgval.Uint(data[checks.DataKeyTotalBytes])
+		available, availableOK := cfgval.Uint(data[checks.DataKeyAvailableBytes])
 		usedPct, pctOK := cfgval.Float(data[checks.DataKeyUsedPct])
 		if !totalOK || !availableOK || !pctOK {
 			return nil
@@ -193,8 +193,8 @@ func watchMeterFromSnapshot(checkType string, data map[string]any) *web.WatchMet
 }
 
 func watchCountMeter(kind string, data map[string]any, countKey string) *web.WatchMeter {
-	count, countOK := uintField(data[countKey])
-	limit, limitOK := uintField(data[checks.DataKeyMax])
+	count, countOK := cfgval.Uint(data[countKey])
+	limit, limitOK := cfgval.Uint(data[checks.DataKeyMax])
 	usedPct, pctOK := cfgval.Float(data[checks.DataKeyUsedPct])
 	if !countOK || !limitOK || !pctOK || limit == 0 {
 		return nil

@@ -205,7 +205,7 @@ func storageWatchInfoFromSnapshot(path string, snap CheckSnapshot) *web.StorageW
 }
 
 func snapshotUint(data map[string]any, key string) uint64 {
-	v, _ := uintField(data[key])
+	v, _ := cfgval.Uint(data[key])
 	return v
 }
 
@@ -226,28 +226,6 @@ func storageUsagePredicatesConfigured(check map[string]any) bool {
 		}
 	}
 	return false
-}
-
-// uintField reads a non-negative numeric value from persisted check data,
-// which may arrive as any of the numeric types the state layer round-trips.
-func uintField(v any) (uint64, bool) {
-	switch n := v.(type) {
-	case uint64:
-		return n, true
-	case int:
-		if n >= 0 {
-			return uint64(n), true
-		}
-	case int64:
-		if n >= 0 {
-			return uint64(n), true
-		}
-	case float64:
-		if n >= 0 {
-			return uint64(n), true
-		}
-	}
-	return 0, false
 }
 
 // watchReadingIntMetricValue renders an integer reading through the canonical

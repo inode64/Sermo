@@ -6,6 +6,7 @@
 package cfgval
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
@@ -99,6 +100,8 @@ func String(v any) string {
 		return strconv.FormatFloat(t, floatFormatFixed, floatPrecisionAuto, numericBits64)
 	case bool:
 		return strconv.FormatBool(t)
+	case json.Number:
+		return t.String()
 	case nil:
 		return ""
 	default:
@@ -383,24 +386,70 @@ func Percent(v any) (float64, bool) {
 	return n, true
 }
 
-// Float reads a numeric config value that may decode as a YAML int, float or
-// string, reporting whether it parsed.
+// Float reads a numeric value that may arrive as any Go integer or float type
+// (YAML decoding, a live check result, a JSON number) or as a decimal string,
+// reporting whether it parsed.
 func Float(v any) (float64, bool) {
 	switch t := v.(type) {
 	case int:
 		return float64(t), true
+	case int8:
+		return float64(t), true
+	case int16:
+		return float64(t), true
+	case int32:
+		return float64(t), true
 	case int64:
+		return float64(t), true
+	case uint:
+		return float64(t), true
+	case uint8:
+		return float64(t), true
+	case uint16:
+		return float64(t), true
+	case uint32:
 		return float64(t), true
 	case uint64:
 		return float64(t), true
+	case float32:
+		return float64(t), true
 	case float64:
 		return t, true
+	case json.Number:
+		f, err := t.Float64()
+		return f, err == nil
 	case string:
 		f, err := strconv.ParseFloat(strings.TrimSpace(t), numericBits64)
 		return f, err == nil
 	default:
 		return 0, false
 	}
+}
+
+// Uint reads a non-negative count that may arrive as any Go integer or float
+// type (persisted check data round-trips through several) or as a decimal
+// string. A negative or fractional-only value reports false.
+func Uint(v any) (uint64, bool) {
+	switch t := v.(type) {
+	case uint64:
+		return t, true
+	case uint:
+		return uint64(t), true
+	case uint8:
+		return uint64(t), true
+	case uint16:
+		return uint64(t), true
+	case uint32:
+		return uint64(t), true
+	case string:
+		n, err := strconv.ParseUint(strings.TrimSpace(t), numericBaseDecimal, numericBits64)
+		return n, err == nil
+	}
+	f, ok := Float(v)
+	if !ok || f < 0 || f > math.MaxUint64 {
+		return 0, false
+	}
+	return uint64(f), true
 }
 
 // CompareFloat evaluates one `a op b` comparison using the IsCompareOp

@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"sermo/internal/cfgval"
 	"sermo/internal/metrics"
 	"sermo/internal/units"
 )
@@ -17,7 +18,6 @@ import (
 const (
 	summaryNumberBase      = 10
 	summaryNumberPrecision = 2
-	summaryFloatBits       = 64
 	summaryByteBase        = 1024
 	summaryByteRateBase    = 1000 // sizes are IEC binary (KiB…), rates are SI decimal (KB/s…)
 	summaryNumberGroupSize = 3
@@ -165,7 +165,7 @@ func FormatDisplayValue(name string, value any) string {
 // It keeps summaries, rule events and notifications consistent for percentage,
 // byte and byte-rate values.
 func FormatDisplayValueWithUnit(name string, value any, unit string) string {
-	if number, ok := displayNumber(value); ok {
+	if number, ok := cfgval.Float(value); ok {
 		switch unit {
 		case metrics.MetricUnitBytes:
 			return formatSummaryBytes(number)
@@ -182,40 +182,6 @@ func FormatDisplayValueWithUnit(name string, value any, unit string) string {
 		return rendered + unit
 	}
 	return rendered + " " + unit
-}
-
-func displayNumber(value any) (float64, bool) {
-	switch v := value.(type) {
-	case int:
-		return float64(v), true
-	case int8:
-		return float64(v), true
-	case int16:
-		return float64(v), true
-	case int32:
-		return float64(v), true
-	case int64:
-		return float64(v), true
-	case uint:
-		return float64(v), true
-	case uint8:
-		return float64(v), true
-	case uint16:
-		return float64(v), true
-	case uint32:
-		return float64(v), true
-	case uint64:
-		return float64(v), true
-	case float32:
-		return float64(v), true
-	case float64:
-		return v, true
-	case string:
-		number, err := strconv.ParseFloat(v, summaryFloatBits)
-		return number, err == nil
-	default:
-		return 0, false
-	}
 }
 
 // formatUnitLadder renders number through a unit ladder, dividing by base
