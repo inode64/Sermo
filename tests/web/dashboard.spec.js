@@ -593,6 +593,17 @@ test("phone mount rows keep their words whole", async ({ page }) => {
   expect(overflow).toBe(0);
 });
 
+test("phone watch rows keep device, path and address tokens whole", async ({ page }) => {
+  await page.setViewportSize({ width: 412, height: 915 });
+  await page.locator("#watches-section").scrollIntoViewIfNeeded();
+  // Devices, addresses and short values stay whole; only a token longer than
+  // the room a phone can spare (a long path) may still break inside.
+  const split = await splitWordsIn(page, "#watches-section");
+  expect(split.filter((token) => token.length <= 12)).toEqual([]);
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  expect(overflow).toBe(0);
+});
+
 test("expanded detail tables keep their headers in flow", async ({ page }) => {
   await page.locator("#svc-row-web .row-toggle").click();
   const detail = page.locator("#services-section .service-detail");
