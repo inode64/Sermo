@@ -6118,7 +6118,7 @@ function renderArtifactRow(item, panel) {
     <td>${categoryBadge(category)}</td>
     ${appStatusCell(item)}
     <td>${version}</td>
-    ${panel.extraCell ? panel.extraCell(item) : nothing}
+    ${panel.extraCell ? tpl`<td>${panel.extraCell(item)}</td>` : nothing}
   </tr>`;
   const expansion = open
     ? tpl`<tr class="exp-row" id="exp-${key}" data-exp="${key}"><td colspan="${panel.cols}">${panel.renderExpansion(item)}</td></tr>`

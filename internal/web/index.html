@@ -841,7 +841,7 @@ ${e}`:""}`;return i`<span class="truncate process-cmd inactive" title="${n}">${t
     <td>${pr(n)}</td>
     ${V$(t)}
     <td>${d}</td>
-    ${e.extraCell?e.extraCell(t):h}
+    ${e.extraCell?i`<td>${e.extraCell(t)}</td>`:h}
   </tr>`,p=c?i`<tr class="exp-row" id="exp-${o}" data-exp="${o}"><td colspan="${e.cols}">${e.renderExpansion(t)}</td></tr>`:null;return p?[f,p]:[f]}function hb(t,e){t=t||{};let n=Id(t),s=t.fire_on_fail?"on fail":"on threshold",a=sr(t),r=a.length?a.map((m,y)=>y?[" ",i`<code>${m}</code>`]:i`<code>${m}</code>`):i`<span class="muted">none</span>`,o=(t.hook_command||[]).length?i`<code>${(t.hook_command||[]).join(" ")}</code>`:t.has_hook?i`<span class="muted">configured</span>`:i`<span class="muted">none</span>`,c=F(t,la),l=i`<div class="watch-grid">
     <div><span class="muted">Scope</span><br><b>${ki(t)}</b></div>
     <div><span class="muted">Type</span><br><b>${t.check_type||""}</b></div>

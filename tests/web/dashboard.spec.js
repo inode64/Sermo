@@ -610,6 +610,21 @@ test("expanded check rows keep their identifiers whole on a desktop", async ({ p
   expect(await splitWordsIn(page, "#services-section .detail-checks-table")).toEqual([]);
 });
 
+test("application rows keep their last activity inside a cell", async ({ page }) => {
+  // The activity value used to land directly in the <tr>, so the browser
+  // rendered it in an anonymous cell outside the row's highlight and beyond
+  // the expansion's colspan.
+  const tags = await page.locator("#app-row-nginx > *").evaluateAll((cells) => cells.map((cell) => cell.tagName));
+  expect(tags).toEqual(["TD", "TD", "TD", "TD", "TD"]);
+  await page.locator("#apps-section .row-toggle").first().click();
+  const widths = await page.evaluate(() => {
+    const row = document.querySelector("#app-row-nginx").getBoundingClientRect();
+    const expansion = document.querySelector("#apps-section .exp-row > td").getBoundingClientRect();
+    return { row: Math.round(row.width), expansion: Math.round(expansion.width) };
+  });
+  expect(widths.expansion).toBe(widths.row);
+});
+
 test("expanded detail tables keep their headers in flow", async ({ page }) => {
   await page.locator("#svc-row-web .row-toggle").click();
   const detail = page.locator("#services-section .service-detail");
