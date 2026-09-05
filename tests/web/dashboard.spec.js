@@ -595,9 +595,43 @@ async function splitWordsIn(page, selector) {
 test("phone session rows keep their words whole", async ({ page }) => {
   await page.setViewportSize({ width: 412, height: 915 });
   await page.locator("#sessions-section").scrollIntoViewIfNeeded();
-  expect(await splitWordsIn(page, "#sessions-section .sessions-table")).toEqual([]);
-  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
-  expect(overflow).toBe(0);
+  // A path in a note may wrap after one of its slashes, which is a normal line
+  // break, not a split word.
+  const split = await splitWordsIn(page, "#sessions-section .sessions-table");
+  expect(split.filter((token) => !token.includes("/"))).toEqual([]);
+  const scrollWidth = await page.evaluate(() => document.documentElement.scrollWidth);
+  expect(scrollWidth).toBeLessThanOrEqual(page.viewportSize().width);
+});
+
+// A PID is not something a phone acts on, and the close button names the
+// session it closes, so the column goes and the table still fits the device.
+test("phone session rows hide the PID column", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "mobile", "phone layout only");
+  const sessions = page.getByRole("table", { name: "Current SSH, tmux and screen sessions" });
+  await expect(sessions.locator("thead th", { hasText: "PID" })).toBeHidden();
+  await expect(sessions.locator("thead th", { hasText: "Session" })).toBeVisible();
+  const scrollWidth = await page.evaluate(() => document.documentElement.scrollWidth);
+  expect(scrollWidth).toBeLessThanOrEqual(page.viewportSize().width);
+});
+
+// Every session close button is one icon on every device; what it closes is
+// its accessible name and its tooltip, so the column stays narrow without
+// losing the words a screen reader or a hover needs.
+test("session close buttons are labelled icons", async ({ page }) => {
+  const sessions = page.getByRole("table", { name: "Current SSH, tmux and screen sessions" });
+  const closers = sessions.locator("[data-ssh-session-close], [data-terminal-session-close], [data-empty-session-close]");
+  await expect(closers.first()).toBeVisible();
+  const buttons = await closers.evaluateAll((els) => els.map((el) => ({
+    icon: el.classList.contains("icon-btn"), text: el.textContent.trim(), label: el.getAttribute("aria-label"), title: el.getAttribute("title"),
+  })));
+  expect(buttons.length).toBeGreaterThan(1);
+  for (const b of buttons) {
+    expect(b.icon).toBe(true);
+    expect(b.text).toBe("✕");
+    expect(b.label).toMatch(/^Close /);
+    expect(b.title).toBe(b.label);
+  }
+  await expect(sessions.getByRole("button", { name: "Close SSH session pts/11 of root" })).toBeVisible();
 });
 
 test("phone mount rows keep their words whole", async ({ page }) => {
@@ -1399,7 +1433,7 @@ test("empty tmux sources use a red state and close the server through the API", 
   // nothing to say, so it renders no row at all.
   await expect(page.locator("#session-rows tr", { hasText: "screen-root" })).toHaveCount(0);
 
-  await emptySource.getByRole("button", { name: "close" }).click();
+  await emptySource.getByRole("button", { name: /^Close the empty tmux server/ }).click();
   await expect(page.locator("#simple-confirm-message")).toContainText("stops only the empty tmux server");
   await page.locator("#simple-confirm-ok").click();
   await expect.poll(() => emptyCloseRequest && emptyCloseRequest.pathname).toBe("/api/services/web/terminal-sessions/tmux-empty/close-empty");

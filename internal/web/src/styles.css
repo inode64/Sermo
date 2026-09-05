@@ -743,8 +743,10 @@
     .services-table > thead > tr > th:nth-child(10), .services-table > tbody > tr > td:nth-child(10) { display: none; }
     .services-table td { white-space: normal; }
     /* sessions -> User · Session · Idle · Actions. Type remains available in
-       the filter controls, while attached/detached stays searchable. */
+       the filter controls, attached/detached stays searchable, and the PID is
+       not something a phone acts on: the close button names the session. */
     .sessions-table th:nth-child(1), .sessions-table td:nth-child(1),
+    .sessions-table th:nth-child(4), .sessions-table td:nth-child(4),
     .sessions-table th:nth-child(5), .sessions-table td:nth-child(5) { display: none; }
     .services-table .unit-cell, .services-table .event-cell, .apps-table .event-cell { max-width: 60vw; }
     /* Process rows keep PID, command, CPU and memory on a phone; two bars at
@@ -824,7 +826,7 @@
        minimum widths keep every visible column readable. */
     .sessions-table td:nth-child(2) { min-width: 3.5rem; }
     .sessions-table td:nth-child(3) { min-width: 7rem; }
-    .sessions-table td:nth-child(4), .sessions-table td:nth-child(6) { min-width: 3rem; }
+    .sessions-table td:nth-child(6) { min-width: 3rem; }
     /* mount units -> Name · Path · State · Actions: the Mounted flag is already
        implied by State and the eject button, and its heading was the widest
        cell of a row that split "Backup" and "/backup" letter by letter. */

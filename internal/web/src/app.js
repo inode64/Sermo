@@ -4019,16 +4019,22 @@ function checkSLAHTML(service, c) {
 function sshSessionCloseButton(service, session) {
   if (!me.can_act) return tpl`<span class="muted">read-only</span>`;
   if (!session.can_close) return tpl`<span class="muted">unavailable</span>`;
-  return tpl`<button class="danger-btn" data-ssh-session-close="1" data-ssh-service="${service}" data-ssh-session-pid="${session.pid}" data-ssh-session-start-ticks="${session.start_ticks}" data-ssh-session-terminal="${session.terminal}" data-ssh-session-user="${session.user || ""}" data-ssh-session-managed="${!!session.managed_by_logind}">close</button>`;
+  const label = `Close SSH session ${session.terminal || ""} of ${session.user || "unknown user"}`;
+  return tpl`<button class="icon-btn danger-btn" data-ssh-session-close="1" data-ssh-service="${service}" data-ssh-session-pid="${session.pid}" data-ssh-session-start-ticks="${session.start_ticks}" data-ssh-session-terminal="${session.terminal}" data-ssh-session-user="${session.user || ""}" data-ssh-session-managed="${!!session.managed_by_logind}" aria-label="${label}" title="${label}">${closeGlyph}</button>`;
 }
+
+// closeGlyph is the one mark every session close button shows; the button's
+// aria-label and title carry what it closes.
+const closeGlyph = tpl`<span aria-hidden="true">✕</span>`;
 
 function terminalSessionCloseButton(session) {
   if (!me.can_act) return tpl`<span class="muted">read-only</span>`;
   if (!session.can_close) return tpl`<span class="muted">unavailable</span>`;
-  return tpl`<button class="danger-btn" data-terminal-session-close="1"
+  const label = `Close ${session.multiplexer || "terminal"} session ${session.name || ""} of ${session.user || "unknown user"}`;
+  return tpl`<button class="icon-btn danger-btn" data-terminal-session-close="1"
     data-terminal-service="${session.service || ""}" data-terminal-check="${session.check || ""}"
     data-terminal-multiplexer="${session.multiplexer || ""}" data-terminal-session="${session.name || ""}"
-    data-terminal-user="${session.user || ""}" data-terminal-identity="${session.identity || ""}">close</button>`;
+    data-terminal-user="${session.user || ""}" data-terminal-identity="${session.identity || ""}" aria-label="${label}" title="${label}">${closeGlyph}</button>`;
 }
 
 function sessionStateCell(state) {
@@ -4039,9 +4045,10 @@ function sessionStateCell(state) {
 function emptySessionCloseButton(source) {
   if (source.state !== sessionSourceAvailable || !source.can_close_empty) return nothing;
   if (!me.can_act) return tpl`<span class="muted">read-only</span>`;
-  return tpl`<button class="danger-btn" data-empty-session-close="1"
+  const label = `Close the empty ${source.kind || "terminal"} server of ${source.user || "unknown user"}`;
+  return tpl`<button class="icon-btn danger-btn" data-empty-session-close="1"
     data-empty-session-service="${source.service || ""}"
-    data-empty-session-check="${source.check || ""}">close</button>`;
+    data-empty-session-check="${source.check || ""}" aria-label="${label}" title="${label}">${closeGlyph}</button>`;
 }
 
 function sourceHasSession(source, inventory) {
