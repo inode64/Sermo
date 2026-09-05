@@ -4,14 +4,12 @@ import (
 	"fmt"
 
 	"sermo/internal/cfgval"
+	"sermo/internal/strutil"
 )
 
+// set builds a membership set of the given keys through the shared helper.
 func set(values ...string) map[string]struct{} {
-	out := make(map[string]struct{}, len(values))
-	for _, v := range values {
-		out[v] = struct{}{}
-	}
-	return out
+	return strutil.Set(values)
 }
 
 // walkScalars visits every scalar leaf in the tree (skipping the `variables`
