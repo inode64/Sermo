@@ -3060,8 +3060,9 @@ El motor de operaciones evalúa este guard inmediatamente antes de las acciones
 manuales y automáticas. Un check de conexiones no disponible deniega la acción
 en vez de tratar un error de observación como un conjunto vacío de conexiones.
 
-Esta regla de fallo en cerrado se aplica a todas las comprobaciones: un timeout, una
-fuente ilegible, una muestra malformada o una fuente de métricas ausente es una
+Esta regla de fallo en cerrado se aplica a todas las comprobaciones y a las
+hojas `metric:`, `process:` y `changed:`: un timeout, una fuente ilegible, una
+muestra malformada, una fuente ausente o una métrica aún no lista es una
 observación no disponible, no una condición falsa válida. Una muestra válida
 que simplemente no cumple su predicado sigue siendo un resultado falso normal.
 
