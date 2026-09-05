@@ -36,6 +36,14 @@ func TestPolicyFirstActionAllowed(t *testing.T) {
 	}
 }
 
+func TestPolicyAllowNilState(t *testing.T) {
+	p := Policy{Cooldown: time.Minute, MaxActions: 2, MaxActionsWindow: time.Hour}
+	ok, reason := p.Allow(nil, t0)
+	if !ok || reason != "" {
+		t.Fatalf("Allow(nil) = %v, %q; want allowed like Report(nil)", ok, reason)
+	}
+}
+
 func TestPolicyMaxActions(t *testing.T) {
 	p := Policy{MaxActions: 2, MaxActionsWindow: time.Hour}
 	st := recordActions(time.Hour, t0, t0.Add(time.Minute))

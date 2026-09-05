@@ -146,6 +146,9 @@ func maxTime(a, b time.Time) time.Time {
 //  2. else max_actions reached inside the window -> suppress;
 //  3. else allow.
 func (p Policy) Allow(state *RemediationState, now time.Time) (bool, string) {
+	if state == nil {
+		state = &RemediationState{}
+	}
 	if _, until := p.cooldownStatus(state, now); !until.IsZero() {
 		return false, "cooldown"
 	}
