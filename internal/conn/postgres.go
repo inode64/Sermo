@@ -85,15 +85,13 @@ func buildPGDSNWithTarget(cfg Config, target probeTarget) string {
 }
 
 // sslMode maps the generic tls field to a PostgreSQL sslmode. Default disable
-// (plaintext). "true"/"skip-verify" encrypt without strict verification
-// ("require"); the verify-* / prefer modes pass through.
+// (plaintext). "true" and "skip-verify" both encrypt without strict
+// verification ("require"); the verify-* / prefer modes pass through.
 func sslMode(tls string) string {
 	switch strings.ToLower(strings.TrimSpace(tls)) {
 	case "", tlsModeFalse, tlsModeNo, tlsModeOff, tlsDisable:
 		return tlsDisable
-	case ParamValueTrue, tlsModeYes, tlsModeOn, tlsRequire:
-		return tlsRequire
-	case tlsSkipVerify:
+	case ParamValueTrue, tlsModeYes, tlsModeOn, tlsRequire, tlsSkipVerify:
 		return tlsRequire
 	case tlsPrefer:
 		return tlsPrefer
