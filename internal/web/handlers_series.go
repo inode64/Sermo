@@ -32,7 +32,10 @@ func (s *Server) handleSeries(w http.ResponseWriter, r *http.Request) {
 	since := s.seriesSince(r)
 	check := r.URL.Query().Get(apiQueryCheck)
 	metric := r.URL.Query().Get(apiQueryMetric)
-	backend, generation := s.backendRead()
+	backend, generation, ok := s.backendRead(w)
+	if !ok {
+		return
+	}
 	points, ok := backend.Series(r.Context(), r.PathValue(apiParamName), check, metric, since)
 	if !ok {
 		notFound := apiErrorUnknownService
@@ -54,7 +57,10 @@ func (s *Server) handleSeries(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleWatchSeries(w http.ResponseWriter, r *http.Request) {
 	since := s.seriesSince(r)
 	metric := r.URL.Query().Get(apiQueryMetric)
-	backend, generation := s.backendRead()
+	backend, generation, ok := s.backendRead(w)
+	if !ok {
+		return
+	}
 	points, ok := backend.WatchSeries(r.Context(), r.PathValue(apiParamName), metric, since)
 	if !ok {
 		notFound := apiErrorUnknownAvailWatch
@@ -77,7 +83,10 @@ func (s *Server) handleWatchMetrics(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, apiErrorMetricQueryRequired)
 		return
 	}
-	backend, generation := s.backendRead()
+	backend, generation, ok := s.backendRead(w)
+	if !ok {
+		return
+	}
 	res, ok := backend.WatchMetrics(r.Context(), r.PathValue(apiParamName), metric, s.seriesSince(r))
 	if !ok {
 		writeError(w, http.StatusNotFound, apiErrorUnknownWatchMetric)
@@ -92,7 +101,10 @@ func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, apiErrorCheckQueryRequired)
 		return
 	}
-	backend, generation := s.backendRead()
+	backend, generation, ok := s.backendRead(w)
+	if !ok {
+		return
+	}
 	res, ok := backend.Metrics(r.Context(), r.PathValue(apiParamName), check, r.URL.Query().Get(apiQueryMetric), s.seriesSince(r))
 	if !ok {
 		writeError(w, http.StatusNotFound, apiErrorUnknownServiceOrCheck)

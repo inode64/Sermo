@@ -14,7 +14,7 @@ import (
 )
 
 func authServer(a Auth) http.Handler {
-	return (&Server{Backend: &fakeBackend{services: []Service{{Name: "web"}}}, Auth: a}).Handler()
+	return (&Server{Backend: StaticBackend{Backend: &fakeBackend{services: []Service{{Name: "web"}}}}, Auth: a}).Handler()
 }
 
 func req(method, path, user, pass string) *http.Request {
@@ -73,7 +73,7 @@ func TestLivezPublicEvenWithAuth(t *testing.T) {
 
 func TestReadyzPublicEvenWithAuth(t *testing.T) {
 	h := (&Server{
-		Backend:   &fakeBackend{services: []Service{{Name: "web"}}},
+		Backend:   StaticBackend{Backend: &fakeBackend{services: []Service{{Name: "web"}}}},
 		Auth:      Auth{AdminCredentials: testCredentials(t, "secret")},
 		Readiness: fakeReadiness{rep: ReadyReport{Ready: true, Status: apiStatusOK, Services: 1}},
 	}).Handler()
@@ -89,7 +89,7 @@ func TestReadyzPublicEvenWithAuth(t *testing.T) {
 
 func TestVerboseHealthRequiresAuth(t *testing.T) {
 	h := (&Server{
-		Backend:   &fakeBackend{services: []Service{{Name: "web"}}},
+		Backend:   StaticBackend{Backend: &fakeBackend{services: []Service{{Name: "web"}}}},
 		Auth:      Auth{AdminCredentials: testCredentials(t, "secret")},
 		Readiness: fakeReadiness{rep: ReadyReport{Ready: true, Status: apiStatusOK, Services: 1}},
 	}).Handler()
@@ -113,7 +113,7 @@ func TestVerboseHealthRequiresAuth(t *testing.T) {
 
 func TestReadyzStartingReturns503(t *testing.T) {
 	h := (&Server{
-		Backend: &fakeBackend{services: []Service{{Name: "web"}}},
+		Backend: StaticBackend{Backend: &fakeBackend{services: []Service{{Name: "web"}}}},
 		Readiness: fakeReadiness{rep: ReadyReport{
 			Status: "starting", Message: "monitoring has not started yet", Services: 1,
 		}},
@@ -240,7 +240,7 @@ func TestAuthRealmIncludesHostname(t *testing.T) {
 				t.Fatalf("basicAuthChallenge(%q) = %q, want %q", tc.hostname, got, tc.want)
 			}
 			h := (&Server{
-				Backend:  &fakeBackend{services: []Service{{Name: "web"}}},
+				Backend:  StaticBackend{Backend: &fakeBackend{services: []Service{{Name: "web"}}}},
 				Auth:     Auth{AdminCredentials: testCredentials(t, "secret")},
 				Hostname: tc.hostname,
 			}).Handler()
@@ -350,7 +350,7 @@ func TestWhoami(t *testing.T) {
 }
 
 func TestOpenModeRejectsForeignHosts(t *testing.T) {
-	h := (&Server{Backend: &fakeBackend{services: []Service{{Name: "web"}}}, Addr: "127.0.0.1:9797"}).Handler()
+	h := (&Server{Backend: StaticBackend{Backend: &fakeBackend{services: []Service{{Name: "web"}}}}, Addr: "127.0.0.1:9797"}).Handler()
 	serve := func(host, path string) int {
 		r := req(http.MethodGet, path, "", "")
 		r.Host = host
@@ -377,7 +377,7 @@ func TestOpenModeRejectsForeignHosts(t *testing.T) {
 
 func TestOpenModeAllowsConfiguredHosts(t *testing.T) {
 	h := (&Server{
-		Backend:      &fakeBackend{services: []Service{{Name: "web"}}},
+		Backend:      StaticBackend{Backend: &fakeBackend{services: []Service{{Name: "web"}}}},
 		Addr:         "127.0.0.1:9797",
 		AllowedHosts: []string{"sermo.internal"},
 	}).Handler()
@@ -409,7 +409,7 @@ func TestGuestSeesRedactedCmdlines(t *testing.T) {
 		mounts:        []Mount{{Name: "data", Blockers: []MountBlocker{{PID: 9, Cmdline: []string{"rsync", "--password=hunter2", "/data"}}}}},
 		mountBlockers: MountBlockersResult{OK: true, Name: "data", Blockers: []MountBlocker{{PID: 9, Cmdline: []string{"rsync", "--password=hunter2", "/data"}}}},
 	}
-	h := (&Server{Backend: b, Auth: Auth{AdminCredentials: testCredentials(t, "secret"), GuestCredentials: testCredentials(t, "guest")}}).Handler()
+	h := (&Server{Backend: StaticBackend{Backend: b}, Auth: Auth{AdminCredentials: testCredentials(t, "secret"), GuestCredentials: testCredentials(t, "guest")}}).Handler()
 
 	fetch := func(path, pass string, into any) {
 		t.Helper()

@@ -36,7 +36,10 @@ func (*Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
-	backend, generation := s.backendRead()
+	backend, generation, ok := s.backendRead(w)
+	if !ok {
+		return
+	}
 	snapshot := s.dashboardSnapshot(r.Context(), backend, s.seriesSince(r))
 	if roleFrom(r.Context()) == roleGuest {
 		snapshot.Mounts = redactMountCmdlines(snapshot.Mounts)
@@ -151,7 +154,10 @@ func (s *Server) readyReportFromBackend(ctx context.Context, backend Backend) Re
 }
 
 func (s *Server) handleReadyz(w http.ResponseWriter, r *http.Request) {
-	backend, generation := s.backendRead()
+	backend, generation, ok := s.backendRead(w)
+	if !ok {
+		return
+	}
 	rep := s.readyReportFromBackend(r.Context(), backend)
 	status := http.StatusOK
 	if !rep.Ready {
@@ -182,7 +188,10 @@ func (s *Server) handleLivez(w http.ResponseWriter, r *http.Request) {
 	}
 	now := time.Now()
 	uptime := now.Sub(s.started)
-	backend, generation := s.backendRead()
+	backend, generation, ok := s.backendRead(w)
+	if !ok {
+		return
+	}
 	s.writeBackendJSON(w, http.StatusOK, map[string]any{
 		apiJSONKeyStatus:        apiStatusOK,
 		apiJSONKeyStartedAt:     s.started.Format(time.RFC3339),

@@ -116,7 +116,7 @@ func testName(restart bool, device string) string {
 
 func assertSnapshotWatch(t *testing.T, holder *WebBackendHolder, fresh bool) {
 	t.Helper()
-	ws := holder.Watches(t.Context())
+	ws := pinnedBackend(t, holder).Watches(t.Context())
 	if len(ws) != 1 {
 		t.Fatalf("watches=%+v", ws)
 	}
