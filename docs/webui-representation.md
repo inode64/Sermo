@@ -729,11 +729,12 @@ Dialog id: `action-confirm`
 | --- | --- |
 | Header | action title and service |
 | Body | action warnings, preflight output, lock/remediation context |
-| Footer | cancel, run preflight, confirm |
+| Footer | cancel, run preflight (start/restart/repair only), confirm |
 
 Safety note: this dialog must not bypass locks, guards, preflight or operation
 timeouts. It only confirms actions that still go through the backend operation
-engine.
+engine. Stop uses the same dialog so the operator still sees locks and context,
+but its preflight runner is disabled: the engine does not run preflight on stop.
 
 ## Change template
 
