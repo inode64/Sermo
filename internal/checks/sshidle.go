@@ -175,7 +175,7 @@ func sshIdleMessage(sample SSHIdleSample) string {
 // checks share one complete terminal-aware process snapshot per daemon cycle.
 func NewSSHIdleSampler(reader process.Reader, lookup *process.UserLookup) SSHIdleSamplerFunc {
 	reader, lookup = terminalSessionDeps(reader, lookup)
-	return newSSHIdleSampler(reader, lookup, utmp.Sessions, sshSessionTerminal, time.Now)
+	return newSSHIdleSampler(reader, lookup, defaultUTMPSessions, sshSessionTerminal, time.Now)
 }
 
 // NewSSHSessionSampler builds a native interactive-session sampler. reader
@@ -183,7 +183,7 @@ func NewSSHIdleSampler(reader process.Reader, lookup *process.UserLookup) SSHIdl
 // NewSSHIdleSampler, keeping dashboard refreshes from rescanning procfs.
 func NewSSHSessionSampler(reader process.Reader, lookup *process.UserLookup) SSHSessionSamplerFunc {
 	reader, lookup = terminalSessionDeps(reader, lookup)
-	return newSSHSessionSampler(reader, lookup, utmp.Sessions, sshSessionTerminal, time.Now)
+	return newSSHSessionSampler(reader, lookup, defaultUTMPSessions, sshSessionTerminal, time.Now)
 }
 
 func terminalSessionDeps(reader process.Reader, lookup *process.UserLookup) (process.Reader, *process.UserLookup) {
@@ -194,6 +194,14 @@ func terminalSessionDeps(reader process.Reader, lookup *process.UserLookup) (pro
 		lookup = process.DefaultUserLookup()
 	}
 	return reader, lookup
+}
+
+func defaultUTMPSessions() ([]utmp.Session, error) {
+	sessions, err := utmp.SessionsFrom(nil)
+	if err != nil {
+		return nil, fmt.Errorf("read login sessions: %w", err)
+	}
+	return sessions, nil
 }
 
 func sshSessionTerminal(line string) (utmp.Terminal, error) {

@@ -26,7 +26,7 @@ type Terminal struct {
 }
 
 // DistinctUsers counts the unique, non-empty user names across sessions. It is
-// platform-independent (the slice already comes from Sessions/SessionsFrom).
+// platform-independent (the slice already comes from SessionsFrom).
 func DistinctUsers(sessions []Session) int {
 	users := make(map[string]struct{}, len(sessions))
 	for _, s := range sessions {
@@ -40,16 +40,11 @@ func DistinctUsers(sessions []Session) int {
 // DistinctUserCount reports the number of distinct users with an active login
 // session in the system utmp database.
 func DistinctUserCount() (int, error) {
-	sessions, err := Sessions()
+	sessions, err := SessionsFrom(nil)
 	if err != nil {
 		return 0, err
 	}
 	return DistinctUsers(sessions), nil
-}
-
-// Sessions returns the active login sessions from the default utmp locations.
-func Sessions() ([]Session, error) {
-	return SessionsFrom(nil)
 }
 
 // DefaultPaths returns the usual utmp locations in lookup order. The returned

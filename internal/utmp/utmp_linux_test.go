@@ -77,11 +77,11 @@ func TestSessionsReadsDefaultPaths(t *testing.T) {
 	defaultPaths = []string{missing, present}
 	t.Cleanup(func() { defaultPaths = orig })
 
-	got, err := Sessions()
+	got, err := SessionsFrom(nil)
 	if err != nil {
-		t.Fatalf("Sessions: %v", err)
+		t.Fatalf("SessionsFrom(nil): %v", err)
 	}
 	if DistinctUsers(got) != 1 {
-		t.Fatalf("Sessions = %+v, want one distinct user", got)
+		t.Fatalf("SessionsFrom(nil) = %+v, want one distinct user", got)
 	}
 }
