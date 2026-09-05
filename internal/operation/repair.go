@@ -10,6 +10,7 @@ import (
 
 	"sermo/internal/process"
 	"sermo/internal/servicemgr"
+	"sermo/internal/strutil"
 )
 
 const runtimeDirectory = "/run"
@@ -94,21 +95,14 @@ func removeStalePIDFile(ctx context.Context, path string, reader process.Reader,
 }
 
 func repairPIDFilePaths(selectors []process.Selector) []string {
-	paths := make([]string, 0)
-	seen := make(map[string]struct{})
+	var paths []string
 	for _, selector := range selectors {
 		if selector.Type != process.SelectorPidfile {
 			continue
 		}
-		for _, path := range selector.Paths {
-			if _, found := seen[path]; found {
-				continue
-			}
-			seen[path] = struct{}{}
-			paths = append(paths, path)
-		}
+		paths = append(paths, selector.Paths...)
 	}
-	return paths
+	return strutil.Unique(paths)
 }
 
 func repairableRuntimePIDFile(path, runtimeDir string) (bool, error) {
