@@ -633,6 +633,9 @@ func TestDaemonReloadPidfileCandidatesPreserveOrderWithoutDuplicates(t *testing.
 	if !slices.Equal(got, want) {
 		t.Fatalf("daemonReloadPidfileCandidates() = %v, want %v", got, want)
 	}
+	if got := daemonReloadPidfileCandidates("", []string{primary, ""}); !slices.Equal(got, []string{primary}) {
+		t.Fatalf("empty primary/fallback entries = %v, want %v", got, []string{primary})
+	}
 }
 
 func TestEventsList(t *testing.T) {

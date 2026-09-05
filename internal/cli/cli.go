@@ -1842,7 +1842,7 @@ func defaultReloadPidfileFallbacks() []string {
 }
 
 func daemonReloadPidfileCandidates(primary string, fallbacks []string) []string {
-	return strutil.MergeUnique(strutil.Unique([]string{primary}), fallbacks...)
+	return strutil.Unique(append([]string{primary}, fallbacks...))
 }
 
 // runReload asks the running sermod to reload its configuration (SIGHUP
