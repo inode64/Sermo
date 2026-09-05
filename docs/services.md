@@ -243,8 +243,9 @@ the gate in `defaults:` folds into the catalog's block instead of replacing it,
 so the `paths`, `apps` and `messages` the catalog ships survive. Precedence is
 `defaults:` < catalog < the host's per-service file — see
 [Resolution order](configuration.md#resolution-order). A scalar the catalog sets
-explicitly (as the OVS services do for `restart_on_stale_binary`) therefore beats
-a host-wide default; override it in the per-service file instead.
+explicitly (as the `docker` and OVS profiles do for `restart_on_stale_binary`)
+therefore beats a host-wide default; override it in the per-service file
+instead.
 
 Global `defaults:` accepts **only the gates**, never `paths`/`apps`/`libraries`/
 `messages`: a host decides *whether* these restarts happen, the catalog decides

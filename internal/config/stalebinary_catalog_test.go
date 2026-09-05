@@ -131,10 +131,11 @@ func TestCatalogFcronBlocksStopAndRestartWithActiveJobs(t *testing.T) {
 }
 
 // The OVS services must never restart themselves over a replaced binary:
-// restarting the dataplane cuts the host off. They must still alert, so the
-// operator can schedule the restart by hand.
-func TestCatalogOVSNeverAutoRestartsOnStaleBinary(t *testing.T) {
-	for _, service := range []string{"ovs-vswitchd", "ovsdb-server"} {
+// restarting the dataplane cuts the host off. Neither must the docker daemon:
+// restarting it stops every container without live-restore. They must still
+// alert, so the operator can schedule the restart by hand.
+func TestCatalogOVSAndDockerNeverAutoRestartOnStaleBinary(t *testing.T) {
+	for _, service := range []string{"ovs-vswitchd", "ovsdb-server", "docker"} {
 		for _, backend := range []string{"openrc", "systemd"} {
 			t.Run(service+"/"+backend, func(t *testing.T) {
 				rule := staleBinaryRuleOf(t, resolveCatalogService(t, service, backend))
