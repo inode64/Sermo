@@ -212,7 +212,7 @@ func smartctlShortTestArgs(device string) []string {
 // SmartSample is the parsed subset of `smartctl -j` output that describes the
 // drive: its identity, its readings and the state of its self-test.
 type SmartSample struct {
-	identity        smartIdentity
+	identity        BlockDeviceIdentity
 	values          map[string]float64
 	selfTest        string
 	selfTestRunning bool
@@ -220,10 +220,6 @@ type SmartSample struct {
 	// drive reports how much of it remains.
 	selfTestProgressPct float64
 }
-
-// smartIdentity aliases the shared block-device identity so a SMART report and
-// sysfs describe a drive with one vocabulary.
-type smartIdentity = BlockDeviceIdentity
 
 // smartData is one parsed report: a sample plus the envelope that says whether
 // the sample means anything.
@@ -358,8 +354,8 @@ func parseSmart(out string) (smartData, error) {
 // identity names the physical drive the report came from. NVMe spells its
 // capacity twice, so the namespace total stands in when the user-capacity block
 // is absent.
-func (j smartReport) identity() smartIdentity {
-	id := smartIdentity{
+func (j smartReport) identity() BlockDeviceIdentity {
+	id := BlockDeviceIdentity{
 		Model:    j.ModelName,
 		Serial:   j.SerialNumber,
 		Firmware: j.FirmwareVersion,
