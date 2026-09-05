@@ -66,19 +66,20 @@ func (a App) serviceMonitorState(ctx context.Context, opts options) monitorView 
 			}
 		}
 	}
-	if err := withStateStoreErr(ctx, cfg, func(store *state.Store) {
+	// The persisted monitor state only enriches the view; an unreadable store
+	// leaves the configured view as it is.
+	withStateStore(ctx, cfg, func(error) int { return exitSuccess }, func(store *state.Store) int {
 		record, found, err := store.MonitorState(service)
 		if err != nil || !found {
-			return
+			return exitSuccess
 		}
 		view.Paused = !record.Active
 		view.Source = record.Source
 		if !record.UpdatedAt.IsZero() {
 			view.ChangedAt = record.UpdatedAt.UTC().Format(time.RFC3339)
 		}
-	}); err != nil {
-		return view
-	}
+		return exitSuccess
+	})
 	return view
 }
 

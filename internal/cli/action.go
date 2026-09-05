@@ -188,19 +188,6 @@ func withStateStore(ctx context.Context, cfg *config.Config, onOpenErr func(erro
 	return fn(store)
 }
 
-// withStateStoreErr opens the store for call sites that do not return an exit
-// code (e.g. best-effort status helpers). Returns the open error unchanged when
-// the store cannot be opened; otherwise runs fn and closes the store.
-func withStateStoreErr(ctx context.Context, cfg *config.Config, fn func(*state.Store)) error {
-	store, err := openStateStore(ctx, cfg)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = store.Close() }()
-	fn(store)
-	return nil
-}
-
 func (a App) beginManualOperationSettling(cfg *config.Config, store *state.Store, service, action string) {
 	if store == nil {
 		return
