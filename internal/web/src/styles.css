@@ -781,6 +781,11 @@
        cell of a row that split "Backup" and "/backup" letter by letter. */
     .mount-table th:nth-child(4), .mount-table td:nth-child(4) { display: none; }
     .mount-table td:nth-child(1), .mount-table td:nth-child(3) { min-width: 5.5rem; }
+    /* A typed watch's leading metric is one token (a device, an address, a
+       short value): give it the room a phone can spare so it stays whole and
+       the name wraps instead. 7rem is the most the narrowest supported phone
+       fits without a sideways scroll; a longer path still breaks inside. */
+    .watch-table.watch-type-table td:nth-child(2) { min-width: 7rem; }
     .ssh-session-table th:nth-child(3), .ssh-session-table td:nth-child(3) { display: none; }
     .terminal-session-table th:nth-child(5), .terminal-session-table td:nth-child(5) { display: none; }
     #app-footer .footer-version {
