@@ -582,6 +582,17 @@ test("phone session rows keep their words whole", async ({ page }) => {
   expect(overflow).toBe(0);
 });
 
+test("phone mount rows keep their words whole", async ({ page }) => {
+  await page.setViewportSize({ width: 412, height: 915 });
+  await page.locator("#mounts-section").scrollIntoViewIfNeeded();
+  const headings = await page.locator("#mounts-section .mount-table thead th").evaluateAll((cells) =>
+    cells.filter((th) => th.getClientRects().length > 0).map((th) => th.textContent.trim()).filter(Boolean));
+  expect(headings).toEqual(["Name", "Path", "State", "Actions"]);
+  expect(await splitWordsIn(page, "#mounts-section .mount-table")).toEqual([]);
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  expect(overflow).toBe(0);
+});
+
 test("expanded detail tables keep their headers in flow", async ({ page }) => {
   await page.locator("#svc-row-web .row-toggle").click();
   const detail = page.locator("#services-section .service-detail");
