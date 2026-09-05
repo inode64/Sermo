@@ -267,9 +267,15 @@ function serviceDetail(name) {
       // 96.25% spread over threads, of which the busiest held 61.5% of one core:
       // max_core must be readable as its own figure, not confused with cpu.
       has_cpu: true, cpu: 96.25, threads: 4, max_core: 61.5, max_core_exact: true,
-    }],
+    }, ...(name === "web" ? [{
+      // A resolved worker with a real path renders the truncated command label
+      // the phone layout has to fit beside two usage bars.
+      pid: 3089414, ppid: 101, exe: "/usr/sbin/webserverd", exe_resolved: true, user: "www", role: "worker",
+      cmdline: ["/usr/sbin/webserverd", "--config", "/etc/webserverd/webserverd.conf", "--foreground"],
+      rss: 2097152, has_cpu: true, cpu: 3.5, threads: 2, max_core: 3.5, max_core_exact: true,
+    }] : [])],
     process_totals: {
-      count: 1, rss: 1048576, io_read: 0, io_write: 0, fds: 5, threads: 1,
+      count: name === "web" ? 2 : 1, rss: 1048576, io_read: 0, io_write: 0, fds: 5, threads: 1,
       has_cpu: true, cpu: 12.5, cpu_thread: 96.25, num_cpu: 4,
     },
     locks: [], rules: [], sla: [],
@@ -1758,3 +1764,44 @@ test("a 401 from the API navigates to the login route", async ({ page }) => {
 
 
 
+
+
+// A row expansion spans every column of an auto-layout table, so its content's
+// minimum width used to become the table's: on a phone the process table (a
+// truncated command beside two usage bars) was wider than the viewport, the
+// services table grew past its panel and the expanded row's action buttons hung
+// off its right edge. An expansion must never widen the table it sits in.
+test("expanding a service on a phone keeps its action buttons inside the table", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "mobile", "phone layout only");
+  // With the host's memory known, each process row renders a memory bar next
+  // to its CPU bar, the shape of a real host's process table.
+  const body = JSON.parse(JSON.stringify(dashboard));
+  body.host_metrics = [{ name: "total_memory", absolute: 536870912, total: 1073741824, percent: 50 }];
+  await page.route("**/api/dashboard**", (route) => route.fulfill({ json: body }));
+  await page.locator("#refresh-now").click();
+  await expect(page.locator("#overview .tile", { hasText: "Host memory" })).toContainText("50%");
+  const row = page.locator("#svc-row-web");
+  await row.locator(".row-toggle").click();
+  const detail = page.locator('[data-service-detail="web"]');
+  await expect(detail.getByRole("table", { name: "Service processes" })).toBeVisible();
+
+  const box = await page.evaluate(() => {
+    const table = document.querySelector(".services-table");
+    const cell = document.querySelector("#svc-row-web td.actions");
+    const buttons = [...cell.querySelectorAll("button")];
+    return {
+      tableRight: table.getBoundingClientRect().right,
+      panelRight: table.parentElement.getBoundingClientRect().right,
+      cellRight: cell.getBoundingClientRect().right,
+      buttonRight: Math.max(...buttons.map((b) => b.getBoundingClientRect().right)),
+      scrollWidth: document.documentElement.scrollWidth,
+      expansionOverflow: (() => { const b = document.querySelector('tr.exp-row[data-exp="svc:web"] > td > .exp-body'); return b.scrollWidth - b.clientWidth; })(),
+    };
+  });
+  expect(box.tableRight).toBeLessThanOrEqual(box.panelRight + 1);
+  expect(box.buttonRight).toBeLessThanOrEqual(box.cellRight + 1);
+  expect(box.scrollWidth).toBeLessThanOrEqual(page.viewportSize().width + 1);
+  // The phone-width bars let the process table fit the expansion outright, so
+  // the wrapper's own scroll stays a last resort rather than the normal case.
+  expect(box.expansionOverflow).toBeLessThanOrEqual(0);
+});

@@ -154,6 +154,15 @@
   .group-toggle { font-weight: 650; }
   tr.group-row .muted { font-weight: 500; margin-left: .35rem; }
   tr.exp-row > td { background: color-mix(in srgb, var(--text) 3.5%, transparent); padding: .7rem 1rem .85rem 1.7rem; }
+  /* The expansion cell spans every column of an auto-layout table, so its
+     content's minimum width would become the table's: on a phone a process
+     table (a truncated command beside two usage bars) was wider than the
+     viewport, the services table grew past its panel and the expanded row's
+     action buttons hung off its right edge. Inline-size containment keeps the
+     expansion's contribution at zero, so the table stays as wide as its
+     columns, and whatever is still wider than the row scrolls inside the
+     expansion instead of the page. */
+  tr.exp-row > td > .exp-body { contain: inline-size; overflow-x: auto; }
 
   /* ---- status language ------------------------------------------------------
      Pills carry a colored dot via ::before and a tint of the same color, so
@@ -729,6 +738,14 @@
     .sessions-table th:nth-child(1), .sessions-table td:nth-child(1),
     .sessions-table th:nth-child(5), .sessions-table td:nth-child(5) { display: none; }
     .services-table .unit-cell, .services-table .event-cell, .apps-table .event-cell { max-width: 60vw; }
+    /* Process rows keep PID, command, CPU and memory on a phone; two bars at
+       the desktop width plus the truncated command exceed the expansion, so
+       the bars give up width first (their label still fits). */
+    .detail-compact-table .usagebar.usagebar-sm { width: 4rem; }
+    /* The desktop expansion indents its content under the row's name; on a
+       phone that indent is a fifth of the row, so it shrinks with the cell
+       padding above and hands the width back to the expansion's own tables. */
+    tr.exp-row > td { padding: .6rem .5rem .75rem .7rem; }
     /* watches -> Name · State · Actions; typed tables keep their leading live
        metric (its column stays sortable). Wide values wrap rather than scroll,
        so Actions is never pushed off-screen. */

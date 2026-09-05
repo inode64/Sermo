@@ -2836,7 +2836,7 @@ function serviceRowParts(s, opts = {}) {
     <td class="actions">${actions}</td>
   </tr>`;
   const exp = open
-    ? tpl`<tr class="exp-row" id="exp-${key}" data-exp="${key}"><td colspan="11"></td></tr>`
+    ? tpl`<tr class="exp-row" id="exp-${key}" data-exp="${key}"><td colspan="11"><div class="exp-body"></div></td></tr>`
     : null;
   return { main, exp };
 }
@@ -3178,7 +3178,9 @@ function rowClick(event, key) {
 // the outer #rows/watch render and these loaders never fight over the same cell.
 function expansionCell(key) {
   const tr = [...document.querySelectorAll("tr.exp-row")].find((r) => r.dataset.exp === key);
-  return tr ? tr.querySelector("td") : null;
+  // The content lives in the cell's .exp-body wrapper, never in the <td>
+  // itself: the wrapper is what keeps a wide expansion from widening the table.
+  return tr ? tr.querySelector(":scope > td > .exp-body") : null;
 }
 
 // renderWatchExpansionInto renders one watch expansion cell from an
@@ -5201,7 +5203,7 @@ function watchRowClass(state) {
 // Certificate panel passes 10 for its extra Key type column.
 function watchExpansionRow(key, open, cols = 9) {
   return open
-    ? tpl`<tr class="exp-row" id="exp-${key}" data-exp="${key}"><td colspan="${cols}"></td></tr>`
+    ? tpl`<tr class="exp-row" id="exp-${key}" data-exp="${key}"><td colspan="${cols}"><div class="exp-body"></div></td></tr>`
     : null;
 }
 
@@ -6121,7 +6123,7 @@ function renderArtifactRow(item, panel) {
     ${panel.extraCell ? tpl`<td>${panel.extraCell(item)}</td>` : nothing}
   </tr>`;
   const expansion = open
-    ? tpl`<tr class="exp-row" id="exp-${key}" data-exp="${key}"><td colspan="${panel.cols}">${panel.renderExpansion(item)}</td></tr>`
+    ? tpl`<tr class="exp-row" id="exp-${key}" data-exp="${key}"><td colspan="${panel.cols}"><div class="exp-body">${panel.renderExpansion(item)}</div></td></tr>`
     : null;
   return expansion ? [row, expansion] : [row];
 }
