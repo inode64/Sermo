@@ -133,7 +133,7 @@ func (a App) runWizardSession(ctx context.Context, opts options) (code int, err 
 	}
 	var deletes []string
 	detected := detectedTargetKeys(env, as.Name())
-	noun := wizardOutputNoun(as.Name())
+	noun := wizardNounWatch
 	for _, dir := range wizardCleanupDirs(globalPath, as.Name(), res.Watches) {
 		more, err := planWizardWatchDeletes(p, dir, detected, noun)
 		if err != nil {
@@ -423,7 +423,7 @@ func ensureNoWatchCollisions(cfg *config.Config, entries map[string]any) error {
 // directory loaded from paths.watches.
 func mergeWizardWatches(path, wizard string, entries map[string]any) (wizardMergeResult, error) {
 	relDir, targetDir := wizardTargetDir(path, wizard, entries)
-	pathKey := wizardPathKey(wizard, entries)
+	pathKey := watchesConfigDir
 	docs, err := watchDocsFromEntries(entries)
 	if err != nil {
 		return wizardMergeResult{}, err
@@ -458,18 +458,10 @@ func watchDocFromEntry(name string, raw any) (map[string]any, error) {
 	return doc, nil
 }
 
-func wizardOutputNoun(string) string {
-	return wizardNounWatch
-}
-
 func wizardTargetDir(path, wizard string, entries map[string]any) (string, string) {
 	dirName := wizardConfigDirName(wizard, entries)
 	base := filepath.Dir(filepath.Clean(path))
 	return dirName, filepath.Join(base, dirName)
-}
-
-func wizardPathKey(_ string, _ map[string]any) string {
-	return watchesConfigDir
 }
 
 func wizardCleanupDirs(path, wizard string, entries map[string]any) []string {
