@@ -821,6 +821,9 @@
     .sessions-table td:nth-child(2) { min-width: 3.5rem; }
     .sessions-table td:nth-child(3) { min-width: 7rem; }
     .sessions-table td:nth-child(6) { min-width: 3rem; }
+    /* The action cell holds one icon or one word (read-only, unavailable):
+       a long session name beside it wraps instead of splitting that word. */
+    .sessions-table td:nth-child(10) { overflow-wrap: normal; }
     /* mount units -> Name · Path · State · Actions: the Mounted flag is already
        implied by State and the eject button, and its heading was the widest
        cell of a row that split "Backup" and "/backup" letter by letter. */

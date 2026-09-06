@@ -43,6 +43,8 @@ const dashboard = {
     ssh: [{ service: "web", user: "root", terminal: "pts/11", pid: 96, start_ticks: 1234, idle_seconds: 120, can_close: true, memory_ready: true, rss: 1048576, cpu_ready: true, cpu: 1.5, io_ready: true, io_read: 1000, io_write: 250 }],
     terminal: [
       { service: "web", check: "tmux-root", multiplexer: "tmux", user: "root", name: "ops", pids: [201], state: "attached", windows: 2, idle_seconds: 300, has_idle: true, memory_ready: true, rss: 2097152, cpu_ready: true, cpu: 2.5, io_ready: true, io_read: 2000, io_write: 500, identity: "$7:90", can_close: true },
+      // screen reports no window count: the row shows the name alone.
+      { service: "web", check: "screen-root", multiplexer: "screen", user: "root", name: "16128.pts-0.fixture", pids: [301], state: "attached", idle_seconds: 30, has_idle: true },
       { service: "web", check: "tmux-root", multiplexer: "tmux", user: "root", name: "build", pids: [202, 203], state: "detached", windows: 1, idle_seconds: 60, has_idle: true, memory_ready: true, rss: 524288, cpu_ready: true, cpu: 0, io_ready: true, io_read: 0, io_write: 0, identity: "$8:91", can_close: true },
     ],
   },
@@ -617,6 +619,17 @@ test("phone session rows hide the PID column", async ({ page }, testInfo) => {
 // Every session close button is one icon on every device; what it closes is
 // its accessible name and its tooltip, so the column stays narrow without
 // losing the words a screen reader or a hover needs.
+// A tmux session lists its window count under its name; screen reports none,
+// and the cell used to fill the gap with a dash that read as a value.
+test("a screen session shows its name without a placeholder dash", async ({ page }) => {
+  const sessions = page.getByRole("table", { name: "Current SSH, tmux and screen sessions" });
+  const screenRow = sessions.locator("tr", { hasText: "16128.pts-0.fixture" });
+  await expect(screenRow.locator("td").nth(2)).toHaveText("16128.pts-0.fixture");
+  await expect(screenRow.locator("td").nth(2).locator(".muted")).toHaveCount(0);
+  const tmuxRow = sessions.locator("tr", { hasText: "ops" }).first();
+  await expect(tmuxRow.locator("td").nth(2)).toContainText("2 windows");
+});
+
 test("session close buttons are labelled icons", async ({ page }) => {
   const sessions = page.getByRole("table", { name: "Current SSH, tmux and screen sessions" });
   const closers = sessions.locator("[data-ssh-session-close], [data-terminal-session-close], [data-empty-session-close]");
@@ -1420,10 +1433,10 @@ test("empty tmux sources use a red state and close the server through the API", 
     await route.fulfill({ json: { ok: true, message: "close empty terminal session source ok" } });
   });
 
-  await expect(page.locator('[data-sf="all"]')).toContainText("all 5");
+  await expect(page.locator('[data-sf="all"]')).toContainText("all 6");
   await expect(page.locator('[data-sf="ssh"]')).toContainText("ssh 1");
   await expect(page.locator('[data-sf="tmux"]')).toContainText("tmux 2");
-  await expect(page.locator('[data-sf="screen"]')).toBeHidden();
+  await expect(page.locator('[data-sf="screen"]')).toContainText("screen 1");
   await expect(page.locator("#session-rows")).toContainText("No active sessions");
   const emptySource = page.locator("#session-rows tr", { hasText: "tmux-empty" });
   const emptySourceCells = emptySource.locator("td");
