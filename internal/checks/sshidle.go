@@ -1,11 +1,14 @@
 package checks
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
 	"maps"
+	"path/filepath"
 	"slices"
+	"strings"
 	"time"
 
 	"sermo/internal/cfgval"
@@ -365,6 +368,14 @@ func sampleSSHSessions(sessions []utmp.Session, snapshot map[int]process.Identit
 			addSSHSessionIssue(&sample, session, snapshot, "terminal has no visible processes")
 			continue
 		}
+		// A window of a screen or tmux server is a terminal too, and screen
+		// records it in utmp with a remote-looking host ("<origin>:S.<n>"), so
+		// it read as an SSH session that could never be attributed to sshd and
+		// sat in the panel as unavailable. It belongs to the multiplexer
+		// session, which the terminal-session sources list and close.
+		if terminalMultiplexed(processes, snapshot) {
+			continue
+		}
 		ssh, target, unknown, err := terminalSSH(processes, snapshot, sshdFilters, resolveUser)
 		if err != nil {
 			addSSHSessionIssue(&sample, session, snapshot, fmt.Sprintf("sshd identity verification failed: %v", err))
@@ -402,6 +413,43 @@ func addSSHSessionIssue(s *SSHSessionSample, session utmp.Session, snapshot map[
 		}
 	}
 	s.Issues = append(s.Issues, issue)
+}
+
+// multiplexerExePrefixes are the executable basenames of the terminal
+// multiplexer servers whose windows carry their own terminals: a versioned
+// GNU screen install names its binary screen-<version>.
+var multiplexerExePrefixes = []string{TerminalMultiplexerScreen, TerminalMultiplexerTmux}
+
+// terminalMultiplexed reports whether the terminal's processes hang off a
+// screen or tmux server: an ancestor, never the process itself, so a shell that
+// merely runs a tmux client inside an SSH session is still that SSH session.
+// A replaced server binary still names the multiplexer through ExePrev.
+func terminalMultiplexed(processes []process.Identity, snapshot map[int]process.Identity) bool {
+	seen := make(map[int]bool)
+	for _, id := range processes {
+		for ppid := id.PPID; ppid > 1 && !seen[ppid]; {
+			seen[ppid] = true
+			parent, ok := snapshot[ppid]
+			if !ok {
+				break
+			}
+			if multiplexerServer(parent) {
+				return true
+			}
+			ppid = parent.PPID
+		}
+	}
+	return false
+}
+
+func multiplexerServer(id process.Identity) bool {
+	base := filepath.Base(cmp.Or(id.Exe, id.ExePrev))
+	for _, prefix := range multiplexerExePrefixes {
+		if strings.HasPrefix(base, prefix) {
+			return true
+		}
+	}
+	return false
 }
 
 func sshSessionIssueMessage(processes []process.Identity, snapshot map[int]process.Identity) string {

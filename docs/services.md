@@ -1914,6 +1914,10 @@ configured users' terminal sessions in the Web UI Sessions panel. It does
 not create a systemd/OpenRC service. Administrators may close one exact
 displayed session; Sermo freshly revalidates its multiplexer-owned generation
 and uses the configured client as that user, without signalling a guessed PID.
+The windows inside a screen or tmux server are terminals of that session, not
+SSH sessions: the SSH source leaves them out even though screen records them
+in utmp with a remote-looking host, and closing the multiplexer session closes
+them.
 The remote deployment generator creates these checks for active multiplexer
 namespaces that its read-only inventory can attribute to a local user; named
 `tmux` sockets are kept separate, while inactive or unattributable namespaces

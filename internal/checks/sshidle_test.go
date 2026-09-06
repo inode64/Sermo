@@ -265,6 +265,66 @@ func TestSampleSSHSessionsKeepsVerifiedSessionBesideReplacedBinary(t *testing.T)
 	}
 }
 
+// GNU screen writes each window into utmp with the origin host and a window
+// tag ("192.0.2.10:S.0"), so six windows on a fleet host read as six SSH
+// sessions that could never be attributed to sshd and sat in the panel as
+// unavailable. A window belongs to the multiplexer session the terminal-session
+// sources list; it is neither an SSH session nor an issue, whether its shell
+// runs a live or a replaced bash.
+func TestSampleSSHSessionsSkipsMultiplexerWindows(t *testing.T) {
+	now := time.Date(2026, time.September, 6, 12, 0, 0, 0, time.UTC)
+	const (
+		screenPID   = 16128
+		windowTTY   = testTTY + 20
+		staleTTY    = testTTY + 21
+		windowShell = 16129
+		staleShell  = 17490
+	)
+	snapshot := map[int]process.Identity{
+		screenPID:   {PID: screenPID, PPID: 1, UID: 0, Exe: "/usr/bin/screen-4.9.1", ExeOK: true},
+		windowShell: {PID: windowShell, PPID: screenPID, UID: 0, Exe: "/usr/bin/bash", ExeOK: true, TTY: windowTTY, TTYOK: true},
+		staleShell:  {PID: staleShell, PPID: screenPID, UID: 0, ExeOK: false, ExePrev: "/usr/bin/bash", TTY: staleTTY, TTYOK: true},
+	}
+	terminal := func(line string) (utmp.Terminal, error) {
+		switch line {
+		case "pts/1":
+			return utmp.Terminal{Device: windowTTY, AccessedAt: now.Add(-time.Minute)}, nil
+		case "pts/2":
+			return utmp.Terminal{Device: staleTTY, AccessedAt: now.Add(-time.Hour)}, nil
+		default:
+			return utmp.Terminal{}, errors.New("unknown terminal")
+		}
+	}
+	sample, err := sampleSSHSessions([]utmp.Session{
+		{PID: windowShell, User: "root", Line: "pts/1", Host: "192.0.2.10:S.0"},
+		{PID: staleShell, User: "root", Line: "pts/2", Host: "192.0.2.10:S.1"},
+	}, snapshot, terminal, now, mustSSHDFilters(t), testSSHLookup().ResolveUser)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(sample.SSH) != 0 || len(sample.Issues) != 0 || sample.Console != 0 {
+		t.Fatalf("sample = %+v, want screen windows left to the terminal-session source", sample)
+	}
+}
+
+// A tmux client run from an SSH shell is still that SSH session: only an
+// ancestor that is a multiplexer server makes a terminal a window.
+func TestSampleSSHSessionsKeepsSSHSessionRunningAMultiplexerClient(t *testing.T) {
+	now := time.Date(2026, time.August, 5, 12, 0, 0, 0, time.UTC)
+	snapshot := sshSnapshot()
+	snapshot[sshShellPID+1] = process.Identity{PID: sshShellPID + 1, PPID: sshShellPID, UID: testUserID, Exe: "/usr/bin/tmux", ExeOK: true, TTY: testTTY, TTYOK: true}
+	sample, err := sampleSSHSessions(
+		[]utmp.Session{{User: "root", Line: "pts/0", Host: "192.0.2.10"}}, snapshot,
+		testSSHTerminal(now), now, mustSSHDFilters(t), testSSHLookup().ResolveUser,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(sample.SSH) != 1 || len(sample.Issues) != 0 {
+		t.Fatalf("sample = %+v, want the SSH session kept", sample)
+	}
+}
+
 func TestSampleSSHSessionsDoesNotCountPreservedRemoteTerminalAsConsole(t *testing.T) {
 	now := time.Date(2026, time.August, 5, 12, 0, 0, 0, time.UTC)
 	snapshot := map[int]process.Identity{
