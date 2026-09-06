@@ -550,3 +550,50 @@ func runnerWithErr(byPath map[string]execx.Result, err error) *execxtest.Runner 
 	}
 	return r
 }
+
+// The daemon registers its app watches from presence alone: a slow version
+// command (salt-minion starts a Python interpreter) held a loaded host's start
+// for minutes. Without probes an installed app reports ok with no version, a
+// missing one still reads not installed, and no command runs at all.
+func TestListWithoutProbesRunsNoCommand(t *testing.T) {
+	root := t.TempDir()
+	present := filepath.Join(root, "present")
+	if err := os.WriteFile(present, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cfg := &config.Config{AppNames: []string{"missing", "present"}, Apps: map[string]*config.Document{}}
+	for name, bin := range map[string]string{"present": present, "missing": filepath.Join(root, "missing")} {
+		cfg.Apps[name] = &config.Document{Name: name, Body: map[string]any{
+			"name": name,
+			"preflight": map[string]any{
+				"binary":  map[string]any{"type": "binary", "path": bin},
+				"version": map[string]any{"type": "command", "command": []any{bin, "--version"}},
+				"health":  map[string]any{"type": "command", "command": []any{bin, "--health"}},
+			},
+		}}
+	}
+	reports := List(t.Context(), refusingRunner{t}, cfg, config.CategoryApp, true, WithoutProbes())
+	if len(reports) != 2 {
+		t.Fatalf("reports = %d, want 2", len(reports))
+	}
+	byName := map[string]Report{}
+	for _, r := range reports {
+		byName[r.Name] = r
+	}
+	if r := byName["present"]; !r.Installed || !r.OK || r.Status != StatusOK || r.Version != "" || r.Binary != present {
+		t.Fatalf("present = %+v, want installed and ok with no version", r)
+	}
+	if r := byName["missing"]; r.Installed || r.Status != StatusNotInstalled {
+		t.Fatalf("missing = %+v, want not installed", r)
+	}
+}
+
+// refusingRunner fails the test on any command: presence must be decided from
+// the filesystem alone.
+type refusingRunner struct{ t *testing.T }
+
+func (r refusingRunner) Run(_ context.Context, name string, args ...string) (execx.Result, error) {
+	r.t.Helper()
+	r.t.Fatalf("command run without probes: %s %v", name, args)
+	return execx.Result{}, nil
+}

@@ -190,7 +190,10 @@ func buildCatalogArtifactWatches(ctx context.Context, cfg *config.Config, deps D
 	}
 	runner := deps.ExecxRunner
 	lookup := appinspect.WithUserLookup(deps.UserLookup)
-	reports := appinspect.List(ctx, runner, cfg, spec.category, false, lookup)
+	// Presence decides which entries get a watch; the version and health
+	// probes belong to the watch cycles. Running them here held a loaded host's
+	// start for minutes on one slow version command.
+	reports := appinspect.List(ctx, runner, cfg, spec.category, false, lookup, appinspect.WithoutProbes())
 	if len(reports) == 0 {
 		return nil
 	}

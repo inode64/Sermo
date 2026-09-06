@@ -77,6 +77,7 @@ type Report struct {
 type options struct {
 	userLookup      *process.UserLookup
 	versionOptional bool
+	withoutProbes   bool
 }
 
 // Option customizes application inspection.
@@ -93,6 +94,16 @@ func WithUserLookup(lookup *process.UserLookup) Option {
 // more than a distro-specific version flag.
 func WithOptionalVersion() Option {
 	return func(o *options) { o.versionOptional = true }
+}
+
+// WithoutProbes reports whether a catalog entry's binary is present, and who
+// owns it, without running its version or health command. The daemon registers
+// its app and library watches from that presence alone: their cycles run the
+// probes, so a version command that takes seconds (salt-minion starts a Python
+// interpreter) no longer holds the whole start — a loaded VM host spent
+// minutes there before it opened its web listener.
+func WithoutProbes() Option {
+	return func(o *options) { o.withoutProbes = true }
 }
 
 // List inspects every catalog entry in category. When includeMissing is false,
@@ -260,6 +271,11 @@ func inspectResolved(
 	r.Installed = true
 
 	setReportOwner(&r, info, lookup)
+	if options.withoutProbes {
+		r.OK = true
+		r.Status = StatusOK
+		return r
+	}
 
 	health := probeCommandFor(resolved.Tree, checks.DataKeyHealth)
 	version := probeCommandFor(resolved.Tree, checks.DataKeyVersion)
