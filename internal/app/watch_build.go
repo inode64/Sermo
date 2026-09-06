@@ -278,7 +278,7 @@ func unsupportedServiceWatchType(entry map[string]any) string {
 func buildSingleWatch(name string, entry, checkEntry map[string]any, deps Deps, interval time.Duration) (*Watch, string) {
 	typ := cfgval.AsString(checkEntry[checks.CheckKeyType])
 	severity := watchSeverity(entry, checkEntry)
-	check, err := checks.BuildInline(name, withSeverity(checkEntry, severity), watchInlineDeps(deps))
+	check, err := checks.BuildInline(name, withSeverity(checkEntry, declaredSeverity(entry, checkEntry)), watchInlineDeps(deps))
 	if err != nil {
 		return nil, watchSubjectPrefix + name + ": " + err.Error()
 	}
@@ -380,7 +380,7 @@ func buildMetricWatches(name string, entry, checkEntry map[string]any, deps Deps
 		// Severity is the one key the base check must not win: the point of
 		// declaring it per metric is to overrule the watch for this metric alone.
 		severity := watchSeverity(entry, checkEntry, mEntry)
-		ce[checks.CheckKeySeverity] = severity
+		ce = withSeverity(ce, declaredSeverity(entry, checkEntry, mEntry))
 
 		check, err := checks.BuildInline(name, ce, watchInlineDeps(deps))
 		if err != nil {
@@ -421,21 +421,33 @@ func buildMetricWatches(name string, entry, checkEntry map[string]any, deps Deps
 // its link state stays an outage. A chain that declares nothing is an error, which
 // leaves every existing watch exactly as it is.
 func watchSeverity(trees ...map[string]any) string {
+	return checks.ResolveSeverity(declaredSeverity(trees...), "")
+}
+
+// declaredSeverity is the narrowest severity the trees declare, or "" when none
+// does. The distinction matters to the check: one that receives no declaration
+// may grade its own finding (a SMART predicate under a PASSED verdict is an
+// advisory), while a declaration always wins.
+func declaredSeverity(trees ...map[string]any) string {
 	declared := ""
 	for _, tree := range trees {
 		if s := cfgval.AsString(tree[checks.CheckKeySeverity]); checks.IsCheckSeverity(s) {
 			declared = s
 		}
 	}
-	return checks.ResolveSeverity(declared, "")
+	return declared
 }
 
-// withSeverity copies entry with the resolved severity written in, so the check
-// builder reads one already-layered value and the shared config tree is never
-// mutated.
-func withSeverity(entry map[string]any, severity string) map[string]any {
+// withSeverity copies entry with the layered declared severity written in — or
+// the key removed when nothing is declared — so the check builder reads one
+// already-layered declaration and the shared config tree is never mutated.
+func withSeverity(entry map[string]any, declared string) map[string]any {
 	out := maps.Clone(entry)
-	out[checks.CheckKeySeverity] = severity
+	if checks.IsCheckSeverity(declared) {
+		out[checks.CheckKeySeverity] = declared
+	} else {
+		delete(out, checks.CheckKeySeverity)
+	}
 	return out
 }
 

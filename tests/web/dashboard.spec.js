@@ -263,7 +263,12 @@ function serviceDetail(name) {
     checks: [{
       name: "latency", type: "http", ran: true, ok: true,
       message: "status 200 from https://internal-gateway.example.intranet:8443/healthz/deep?include=downstream,queue,storage&trace=verbose-diagnostic-identifier-0123456789",
-    }, ...namedMetrics],
+    }, ...namedMetrics, ...(name === "web" ? [{
+      // A failure the check itself graded an advisory: a SMART predicate holding
+      // under a PASSED verdict reads warn, not fail, and blocks no action.
+      name: "smart-sda", type: "smart", ran: true, ok: false, severity: "warning",
+      message: "smart /dev/sda health=PASSED; reallocated 4 > 0",
+    }] : [])],
     processes: [{
       pid: name === "web" ? 101 : 202, cmdline: [name], user: "root", role: "main", rss: 1048576,
       // 96.25% spread over threads, of which the busiest held 61.5% of one core:
@@ -854,10 +859,13 @@ test("paused monitoring is distinct from disabled configuration", async ({ page 
   const paused = page.locator("#wat-row-firewall-paused");
   await expect(paused.locator(".target-state")).toHaveText("monitoring paused");
   await expect(paused).toContainText("via web UI");
+  // Badge, source and time each take their own line.
+  expect(await paused.innerHTML()).toMatch(/<br><span class="muted">(<!--[^>]*-->)?via web UI<br>/);
 
   await paused.locator(".row-toggle").click();
   const detail = page.locator('[id="exp-wat:firewall-paused"]');
   await expect(detail).toContainText("Monitoring");
+  expect(await detail.innerHTML()).toMatch(/<br><span class="muted">(<!--[^>]*-->)?via web UI<br>/);
   await expect(detail).toContainText("Configured monitor");
   await expect(detail).toContainText("previous");
   await expect(detail).toContainText("Last checked");
@@ -1896,4 +1904,15 @@ test("expanding a service on a phone keeps its action buttons inside the table",
   // The checks and rules tables are desk work: a phone hides both sections.
   await expect(detail.locator('[data-detail-section="checks"]')).toBeHidden();
   await expect(detail.locator('[data-detail-section="rules"]')).toBeHidden();
+});
+
+test("a check that graded its own failure a warning reads warn, not fail", async ({ page }) => {
+  // The checks table is a desktop section; a phone hides it.
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.locator("#svc-row-web .row-toggle").click();
+  const table = page.locator("#services-section .detail-checks-table");
+  await expect(table).toBeVisible();
+  const row = table.locator("tr", { hasText: "smart-sda" });
+  await expect(row.locator(".inactive")).toHaveText("warn");
+  await expect(row.locator(".bad")).toHaveCount(0);
 });

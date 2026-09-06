@@ -507,9 +507,12 @@ type Check struct {
 	// Reports is the check's declared reporting mode ("state" for a state
 	// sensor); empty means the default health semantics. It tells the dashboard
 	// whether to label the check ok/fail or active/inactive.
-	Reports  string         `json:"reports,omitempty"`
-	Stale    bool           `json:"stale,omitempty"`
-	Optional bool           `json:"optional"`
+	Reports  string `json:"reports,omitempty"`
+	Stale    bool   `json:"stale,omitempty"`
+	Optional bool   `json:"optional"`
+	// Severity grades a failing check for the row that renders it: "warning"
+	// reads amber like an optional check, "error" (the default) reads red.
+	Severity string         `json:"severity,omitempty"`
 	Skipped  bool           `json:"skipped,omitempty"` // gated off (requires/skip_when_changed)
 	Message  string         `json:"message,omitempty"`
 	Readings []WatchReading `json:"readings,omitempty"`

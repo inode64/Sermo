@@ -676,18 +676,18 @@ func checkReportingModes(tree map[string]any) map[string]string {
 	return checkStringField(tree, checks.CheckKeyReports)
 }
 
-// checkDeclaredSeverities maps each check that declares `severity:` to its value,
-// read from configuration for the same reason the reporting mode is: it is a
-// static declaration, so sourcing it here keeps a restored snapshot graded
-// correctly on the first cycle instead of red until the check next runs.
+// checkDeclaredSeverities maps each check that declares `severity:` to its value.
+// The published snapshot carries the grade the check gave its result, which
+// wins; the declaration read here is the fallback for a snapshot that carries
+// none — one persisted before the grade was stored — so a restored snapshot is
+// graded on the first cycle instead of red until the check next runs.
 func checkDeclaredSeverities(tree map[string]any) map[string]string {
 	return checkStringField(tree, checks.CheckKeySeverity)
 }
 
 // checkStringField collects one string field per configured check. Both callers
-// read configuration rather than the published result because these are static
-// declarations: sourcing them here keeps them correct on the first cycle and
-// across a daemon restart, without widening the persisted snapshot record.
+// read configuration because these are static declarations: sourcing them here
+// keeps them correct on the first cycle and across a daemon restart.
 func checkStringField(tree map[string]any, key string) map[string]string {
 	section, ok := tree[config.SectionChecks].(map[string]any)
 	if !ok {

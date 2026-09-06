@@ -191,13 +191,14 @@ func TestStoreCheckSnapshotsPersistAcrossReopen(t *testing.T) {
 	if err := first.SetServiceCheckSnapshots("web", map[string]CheckSnapshotRecord{
 		"http": {
 			CheckType: "http", ConfigID: "service-config", Observation: checks.ObservationHealthy, OK: true, Message: "status 200", Data: map[string]any{"status": float64(200)}, Ran: true, At: at,
+			Severity: checks.SeverityWarning,
 		},
 	}); err != nil {
 		t.Fatalf("SetServiceCheckSnapshots replace: %v", err)
 	}
 	if err := first.SetWatchCheckSnapshot("clock", "result", CheckSnapshotRecord{
 		CheckType: "clock", ConfigID: "watch-config", Observation: checks.ObservationUnavailable, OK: false, Unavailable: true, Message: "offset 1200ms",
-		Data: map[string]any{"offset_ms": float64(1200)}, Ran: true, At: at,
+		Data: map[string]any{"offset_ms": float64(1200)}, Ran: true, At: at, Severity: checks.SeverityWarning,
 	}); err != nil {
 		t.Fatalf("SetWatchCheckSnapshot: %v", err)
 	}
@@ -219,7 +220,7 @@ func TestStoreCheckSnapshotsPersistAcrossReopen(t *testing.T) {
 	if len(service) != 1 {
 		t.Fatalf("service snapshots = %+v, want only current row", service)
 	}
-	if got := service["http"]; got.CheckType != "http" || got.ConfigID != "service-config" || got.Observation != checks.ObservationHealthy || !got.OK || got.Message != "status 200" || got.Data["status"] != float64(200) || !got.Ran || !got.At.Equal(at) {
+	if got := service["http"]; got.CheckType != "http" || got.ConfigID != "service-config" || got.Observation != checks.ObservationHealthy || !got.OK || got.Message != "status 200" || got.Data["status"] != float64(200) || !got.Ran || !got.At.Equal(at) || got.Severity != checks.SeverityWarning {
 		t.Fatalf("service snapshot did not round-trip: %+v", got)
 	}
 
@@ -228,7 +229,7 @@ func TestStoreCheckSnapshotsPersistAcrossReopen(t *testing.T) {
 		t.Fatalf("WatchCheckSnapshots: %v", err)
 	}
 	got := watchSnapshots["clock"]["result"]
-	if got.CheckType != "clock" || got.ConfigID != "watch-config" || got.Observation != checks.ObservationUnavailable || got.OK || !got.Unavailable || got.Message != "offset 1200ms" || got.Data["offset_ms"] != float64(1200) || !got.At.Equal(at) {
+	if got.CheckType != "clock" || got.ConfigID != "watch-config" || got.Observation != checks.ObservationUnavailable || got.OK || !got.Unavailable || got.Message != "offset 1200ms" || got.Data["offset_ms"] != float64(1200) || !got.At.Equal(at) || got.Severity != checks.SeverityWarning {
 		t.Fatalf("watch snapshot did not round-trip: %+v", got)
 	}
 }

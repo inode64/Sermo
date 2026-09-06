@@ -321,6 +321,7 @@ func (b *WebBackend) checkView(cn string, e *webEntry, snap map[string]CheckSnap
 			ch.Reports = checks.ReportsState
 		}
 		ch.Optional = cs.Optional
+		ch.Severity = checks.ResolveSeverity(cs.Severity, e.checkSeverities[cn])
 		ch.Skipped = cs.Skipped
 		ch.Message = cs.Message
 		ch.Readings = checkReadings(e.checkTypes[cn], cs.Data)
@@ -529,9 +530,11 @@ func (b *WebBackend) operationSettlingPending(name string) bool {
 // `optional: true` that has always meant the same thing — is not counted as
 // failing, but it no longer vanishes either: with no real failure beside it the
 // service reads "warning", which is the difference between a quiet degradation
-// and a clean bill of health. severities maps a check name to its declared
-// `severity:` and is read from live configuration, so a snapshot restored from
-// an earlier run is graded correctly on the first cycle.
+// and a clean bill of health. The snapshot carries the grade the check gave its
+// own result; severities maps a check name to its declared `severity:`, read
+// from live configuration, and decides for a snapshot that carries none — one
+// persisted before the grade was stored — so it is graded correctly on the
+// first cycle.
 func checkHealthSummaryCurrent(snap map[string]CheckSnapshot, checkNames []string, severities map[string]string, monitored bool, current func(string, CheckSnapshot) bool) (failing int, health string) {
 	if !monitored {
 		return 0, TargetStatePaused
@@ -553,7 +556,7 @@ func checkHealthSummaryCurrent(snap map[string]CheckSnapshot, checkNames []strin
 		if cs.healthy() {
 			continue
 		}
-		if cs.Optional || checks.IsWarning(severities[name]) {
+		if cs.Optional || checks.IsWarning(checks.ResolveSeverity(cs.Severity, severities[name])) {
 			warning++
 			continue
 		}

@@ -28,13 +28,17 @@ type CheckSnapshotRecord struct {
 	Data        map[string]any
 	Ran         bool
 	At          time.Time
+	// Severity is the grade the check gave its own result ("" means the
+	// declaration decides, and is what rows persisted before the column existed
+	// carry).
+	Severity string
 }
 
 // ServiceCheckSnapshots returns every persisted service check snapshot, grouped
 // by service name and keyed by check name.
 func (s *Store) ServiceCheckSnapshots() (map[string]map[string]CheckSnapshotRecord, error) {
 	return s.groupedCheckSnapshots(
-		`SELECT service, check_name, check_type, observation, ok, condition, optional, skipped, unavailable, message, data, ran, at, config_id
+		`SELECT service, check_name, check_type, observation, ok, condition, optional, skipped, unavailable, message, data, ran, at, config_id, severity
 		   FROM service_check_snapshot ORDER BY service, check_name;`,
 		"service check snapshots",
 	)
@@ -53,8 +57,8 @@ func (s *Store) SetServiceCheckSnapshots(service string, records map[string]Chec
 			}
 			if _, err := tx.ExecContext(s.sqlCtx(),
 				`INSERT INTO service_check_snapshot
-				   (service, check_name, check_type, observation, ok, condition, optional, skipped, unavailable, message, data, ran, at, config_id)
-				 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
+				   (service, check_name, check_type, observation, ok, condition, optional, skipped, unavailable, message, data, ran, at, config_id, severity)
+				 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
 				checkSnapshotArgs(rec, data, service, name)...,
 			); err != nil {
 				return fmt.Errorf("insert service check snapshot %s/%s: %w", service, name, err)
@@ -98,7 +102,7 @@ func replaceServiceRows[T any](s *Store, service, deleteSQL, what string, record
 // watch name and keyed by the stable result slot.
 func (s *Store) WatchCheckSnapshots() (map[string]map[string]CheckSnapshotRecord, error) {
 	return s.groupedCheckSnapshots(
-		`SELECT watch, slot, check_type, observation, ok, condition, optional, skipped, unavailable, message, data, ran, at, config_id
+		`SELECT watch, slot, check_type, observation, ok, condition, optional, skipped, unavailable, message, data, ran, at, config_id, severity
 		   FROM watch_check_snapshot ORDER BY watch, slot;`,
 		"watch check snapshots",
 	)
@@ -148,12 +152,14 @@ func scanCheckSnapshotRow(rows *sql.Rows, label string) (string, string, CheckSn
 		ran         int
 		at          int64
 		configID    string
+		severity    string
 	)
-	if err := rows.Scan(&group, &slot, &checkType, &observation, &ok, &cond, &optional, &skipped, &unavailable, &message, &rawData, &ran, &at, &configID); err != nil {
+	if err := rows.Scan(&group, &slot, &checkType, &observation, &ok, &cond, &optional, &skipped, &unavailable, &message, &rawData, &ran, &at, &configID, &severity); err != nil {
 		return "", "", CheckSnapshotRecord{}, fmt.Errorf("scan %s: %w", label, err)
 	}
 	record, err := newCheckSnapshotRecord(slot, checkType, observation, ok, cond, optional, skipped, unavailable, message, rawData, ran, at)
 	record.ConfigID = configID
+	record.Severity = severity
 	return group, slot, record, err
 }
 
@@ -183,8 +189,8 @@ func (s *Store) SetWatchCheckSnapshot(watch, slot string, rec CheckSnapshotRecor
 	}
 	_, err = s.exec(s.sqlCtx(),
 		`INSERT INTO watch_check_snapshot
-		   (watch, slot, check_type, observation, ok, condition, optional, skipped, unavailable, message, data, ran, at, config_id)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		   (watch, slot, check_type, observation, ok, condition, optional, skipped, unavailable, message, data, ran, at, config_id, severity)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		 ON CONFLICT(watch, slot) DO UPDATE SET
 		   check_type = excluded.check_type,
 		   config_id  = excluded.config_id,
@@ -197,7 +203,8 @@ func (s *Store) SetWatchCheckSnapshot(watch, slot string, rec CheckSnapshotRecor
 		   message    = excluded.message,
 		   data       = excluded.data,
 		   ran        = excluded.ran,
-		   at         = excluded.at;`,
+		   at         = excluded.at,
+		   severity   = excluded.severity;`,
 		checkSnapshotArgs(rec, data, watch, slot)...,
 	)
 	if err != nil {
@@ -213,7 +220,7 @@ func (s *Store) SetWatchCheckSnapshot(watch, slot string, rec CheckSnapshotRecor
 func checkSnapshotArgs(rec CheckSnapshotRecord, data string, keys ...any) []any {
 	return append(keys,
 		rec.CheckType, string(rec.Observation), boolInt(rec.OK), boolInt(rec.Condition), boolInt(rec.Optional), boolInt(rec.Skipped),
-		boolInt(rec.Unavailable), rec.Message, data, boolInt(rec.Ran), timeUnixNano(rec.At), rec.ConfigID,
+		boolInt(rec.Unavailable), rec.Message, data, boolInt(rec.Ran), timeUnixNano(rec.At), rec.ConfigID, rec.Severity,
 	)
 }
 

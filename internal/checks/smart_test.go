@@ -422,3 +422,39 @@ func TestParseSmartRejectsZeroWWN(t *testing.T) {
 		t.Errorf("WWN = %q, want no name for an all-zero one", d.identity.WWN)
 	}
 }
+
+// A predicate that holds while the drive's own verdict passes is an early
+// warning, not an outage: the check grades it an advisory unless the operator
+// declared a severity, and the FAILED verdict or an unreadable drive stays grave.
+func TestSmartCheckGradesPredicatesAsWarningWhileHealthPasses(t *testing.T) {
+	reallocated := levelPred{"reallocated", ">", 0}
+
+	res := smartWith(smartATA, reallocated).Run(context.Background())
+	if !res.OK || !IsWarning(res.Severity) {
+		t.Fatalf("PASSED + reallocated 4 > 0 = %+v, want the condition fired and graded warning", res)
+	}
+	if res := smartWith(smartATA).Run(context.Background()); res.OK || IsWarning(res.Severity) {
+		t.Fatalf("PASSED with no predicate = %+v, want healthy and ungraded", res)
+	}
+	if res := smartWith(smartNVMeFailing).Run(context.Background()); !res.OK || IsWarning(res.Severity) {
+		t.Fatalf("FAILED verdict = %+v, want an outage", res)
+	}
+	if res := smartWith(smartNVMeFailing, levelPred{"temperature", ">", 0}).Run(context.Background()); !res.OK || IsWarning(res.Severity) {
+		t.Fatalf("FAILED verdict beside a holding predicate = %+v, want the outage to win", res)
+	}
+	if res := smartWith(smartDeviceGone, reallocated).Run(context.Background()); !res.Unavailable || IsWarning(res.Severity) {
+		t.Fatalf("missing device = %+v, want unavailable and ungraded", res)
+	}
+
+	// A declaration always wins, in either direction.
+	declaredError := smartWith(smartATA, reallocated)
+	declaredError.severity = SeverityError
+	if res := declaredError.Run(context.Background()); !res.OK || IsWarning(res.Severity) {
+		t.Fatalf("declared error + predicate = %+v, want the declared outage", res)
+	}
+	declaredWarning := smartWith(smartNVMeFailing)
+	declaredWarning.severity = SeverityWarning
+	if res := declaredWarning.Run(context.Background()); !res.OK || !IsWarning(res.Severity) {
+		t.Fatalf("declared warning + FAILED verdict = %+v, want the declared advisory", res)
+	}
+}

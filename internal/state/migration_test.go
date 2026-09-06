@@ -59,9 +59,16 @@ func TestStateColumnMigrationsHealAnOldDatabase(t *testing.T) {
 
 	if err := s.SetServiceCheckSnapshots("web", map[string]CheckSnapshotRecord{
 		"http": {CheckType: "http", Observation: "healthy", OK: true,
-			Message: "ok", Ran: true},
+			Message: "ok", Ran: true, Severity: "warning"},
 	}); err != nil {
 		t.Fatalf("persist into the migrated table: %v", err)
+	}
+	snapshots, err := s.ServiceCheckSnapshots()
+	if err != nil {
+		t.Fatalf("read the migrated table: %v", err)
+	}
+	if got := snapshots["web"]["http"].Severity; got != "warning" {
+		t.Fatalf("severity after migration = %q, want warning", got)
 	}
 	if err := s.SetWatchRuntimeState("storage-root", "result", WatchRuntimeRecord{
 		Unavailable: true,

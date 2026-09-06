@@ -12,14 +12,17 @@ import (
 	"sermo/internal/web"
 )
 
-// severityOf runs a built watch's check and reports the severity it stamps on
-// every result, which is what the whole feature reduces to at runtime.
+// severityOf runs a built watch's check and reports the resolved severity it
+// stamps on every result, which is what the whole feature reduces to at
+// runtime. The check itself receives only the declaration — none when nothing
+// is declared, so it may grade its own finding — which is why the result is
+// resolved here the way the watch runtime resolves it.
 func severityOf(t *testing.T, w *Watch) string {
 	t.Helper()
 	if w.Check == nil {
 		return w.Severity
 	}
-	return w.Check.Run(context.Background()).Severity
+	return checks.ResolveSeverity(w.Check.Run(context.Background()).Severity, "")
 }
 
 func watchesByStateSlot(watches []*Watch) map[string]*Watch {
@@ -303,5 +306,68 @@ func TestWatchViewStateFromAdvisoryActivity(t *testing.T) {
 	failed, warning = watchViewState(web.Watch{LastActivityKind: eventKindFiring, LastActivity: at})
 	if !failed || warning {
 		t.Errorf("firing activity = (%v, %v), want (true, false)", failed, warning)
+	}
+
+	// An episode announced as firing may since have been regraded an advisory
+	// by the check itself: the newest snapshot then carries a warning row and no
+	// error row, and that outranks the kind that opened the episode.
+	advisory := []web.WatchReading{{Field: watchReadingFieldWarning, Warning: "smart /dev/sda health=PASSED; reallocated 4 > 0"}}
+	failed, warning = watchViewState(web.Watch{LastActivityKind: eventKindFiring, LastActivity: at, Readings: advisory})
+	if failed || !warning {
+		t.Errorf("firing activity + advisory readings = (%v, %v), want (false, true)", failed, warning)
+	}
+	mixed := append([]web.WatchReading{{Field: watchReadingFieldError, Error: "link down"}}, advisory...)
+	if failed, _ = watchViewState(web.Watch{LastActivityKind: eventKindFiring, LastActivity: at, Readings: mixed}); !failed {
+		t.Error("firing activity + an error reading graded warning, want failed")
+	}
+	if failed, _ = watchViewState(web.Watch{LastActivityKind: eventKindHookFail, LastActivity: at, Readings: advisory}); !failed {
+		t.Error("a failed hook beside advisory readings graded warning, want failed: the hook failure is an outage of its own")
+	}
+}
+
+// A check that received no declaration grades its own result, and the watch
+// announces that grade: the result's severity decides the event kind, not the
+// watch's static declaration.
+func TestWatchGradesEventKindFromResultSeverity(t *testing.T) {
+	check := &scriptedCheck{results: []checks.Result{
+		{Check: "smart", OK: true, Condition: true, Message: "health=PASSED; reallocated 4 > 0", Severity: checks.SeverityWarning},
+	}}
+	var events []Event
+	w := &Watch{
+		Name: "smart-sda", CheckType: checks.CheckTypeSmart, Check: check,
+		Emit: func(e Event) { events = append(events, e) },
+	}
+	w.RunCycle(context.Background())
+	if len(events) != 1 || events[0].Kind != eventKindWarning {
+		t.Fatalf("events = %+v, want one %q from a result the check graded warning", events, eventKindWarning)
+	}
+	if w.IsWarning() {
+		t.Error("Watch.IsWarning() = true, want false: the watch itself declares nothing")
+	}
+}
+
+// An open episode that changes grade — the drive's verdict flips to FAILED under
+// the same reallocated sectors, or a RAID member's state recovers while its
+// counters remain — is announced again with the new kind, once per change,
+// while an unchanged grade stays quiet.
+func TestWatchAnnouncesGradeChangeWithinEpisode(t *testing.T) {
+	advisory := checks.Result{Check: "smart", OK: true, Condition: true, Message: "health=PASSED; reallocated 4 > 0", Severity: checks.SeverityWarning}
+	outage := checks.Result{Check: "smart", OK: true, Condition: true, Message: "health=FAILED; reallocated 4 > 0"}
+	check := &scriptedCheck{results: []checks.Result{advisory, advisory, outage, outage, advisory}}
+	var events []Event
+	w := &Watch{
+		Name: "smart-sda", CheckType: checks.CheckTypeSmart, Check: check,
+		Emit: func(e Event) { events = append(events, e) },
+	}
+	for range 5 {
+		w.RunCycle(context.Background())
+	}
+	got := make([]string, 0, len(events))
+	for _, e := range events {
+		got = append(got, e.Kind)
+	}
+	want := []string{eventKindWarning, eventKindFiring, eventKindWarning}
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Fatalf("event kinds = %v, want %v: one announcement per grade change", got, want)
 	}
 }

@@ -189,9 +189,9 @@ func (b *WebBackend) ProbeWatch(ctx context.Context, name string) web.ActionResu
 	snap := CheckSnapshot{
 		Observation: result.Observation(), OK: result.OK, Condition: result.Condition,
 		Optional: result.Optional, Skipped: result.Skipped, Unavailable: result.Unavailable,
-		Message: result.Message, Data: result.Data,
+		Message: result.Message, Data: result.Data, Severity: result.Severity,
 	}
-	severity := w.severityFor(cfgval.String(result.Data[checks.DataKeyMetric]))
+	severity := checks.ResolveSeverity(result.Severity, w.severityFor(cfgval.String(result.Data[checks.DataKeyMetric])))
 	// A manual probe reports through an event message, not through a panel with a
 	// gauge beside it, so the result line is the whole answer here.
 	readings := watchSnapshotReadings(w.checkType, severity, snap, false)

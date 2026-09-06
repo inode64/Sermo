@@ -29,6 +29,10 @@ type CheckSnapshot struct {
 	Data        map[string]any
 	Ran         bool // true when the check actually executed this cycle (not interval cache)
 	At          time.Time
+	// Severity is the grade the check gave this result; "" leaves the declared
+	// severity to decide, which is what a record persisted before the grade was
+	// stored carries.
+	Severity string
 }
 
 func (c CheckSnapshot) healthy() bool {
@@ -102,7 +106,7 @@ func (s *Snapshots) publishConfigured(service string, cache map[string]checks.Re
 		cs := CheckSnapshot{
 			CheckType: checkTypes[name], ConfigID: configID, Observation: r.Observation(),
 			OK: r.OK, Condition: r.Condition, Optional: r.Optional, Skipped: r.Skipped, Unavailable: r.Unavailable, Message: r.Message,
-			Data: maps.Clone(r.Data), Ran: ran[name],
+			Data: maps.Clone(r.Data), Ran: ran[name], Severity: r.Severity,
 		}
 		if ran[name] {
 			cs.At = at
@@ -200,7 +204,7 @@ func (s *WatchSnapshots) publishConfigured(watch, checkType string, r checks.Res
 		ConfigID:    configID,
 		Observation: r.Observation(),
 		OK:          r.OK, Condition: r.Condition, Optional: r.Optional, Skipped: r.Skipped, Unavailable: r.Unavailable, Message: r.Message,
-		Data: maps.Clone(r.Data), Ran: true, At: now(),
+		Data: maps.Clone(r.Data), Ran: true, At: now(), Severity: r.Severity,
 	}
 	s.mu.Lock()
 	if s.byWatch[watch] == nil {
@@ -272,7 +276,7 @@ func snapshotFromRecord(rec state.CheckSnapshotRecord) CheckSnapshot {
 	return CheckSnapshot{
 		CheckType: rec.CheckType, ConfigID: rec.ConfigID, Observation: rec.Observation,
 		OK: rec.OK, Condition: rec.Condition, Optional: rec.Optional, Skipped: rec.Skipped, Unavailable: rec.Unavailable,
-		Message: rec.Message, Data: maps.Clone(rec.Data), Ran: rec.Ran, At: rec.At,
+		Message: rec.Message, Data: maps.Clone(rec.Data), Ran: rec.Ran, At: rec.At, Severity: rec.Severity,
 	}
 }
 
@@ -280,7 +284,7 @@ func snapshotRecord(snap CheckSnapshot) state.CheckSnapshotRecord {
 	return state.CheckSnapshotRecord{
 		CheckType: snap.CheckType, ConfigID: snap.ConfigID, Observation: snap.Observation,
 		OK: snap.OK, Condition: snap.Condition, Optional: snap.Optional, Skipped: snap.Skipped, Unavailable: snap.Unavailable,
-		Message: snap.Message, Data: maps.Clone(snap.Data), Ran: snap.Ran, At: snap.At,
+		Message: snap.Message, Data: maps.Clone(snap.Data), Ran: snap.Ran, At: snap.At, Severity: snap.Severity,
 	}
 }
 

@@ -162,6 +162,7 @@ type Watch struct {
 	state          rules.WindowState
 	policyState    rules.RemediationState
 	firing         bool
+	lastGrade      string    // severity the open firing episode was last announced with
 	lastNotifyAt   time.Time // when a notification was last dispatched this firing episode
 	settled        bool      // true after the startup observation cycle completed
 	stateLoaded    bool
@@ -224,6 +225,11 @@ func (w *Watch) runCheckCycle(ctx context.Context, res checks.Result, observeOnl
 	w.recordMetricSamples(res)
 	if observeOnly {
 		w.reconcileRestoredEpisode(res)
+		if w.firing {
+			// A restored episode was announced by the previous process; seed the
+			// grade silently so an unchanged episode is not announced twice.
+			w.lastGrade = w.resultSeverity(res)
+		}
 		w.markSettled()
 		return
 	}
@@ -245,7 +251,7 @@ func (w *Watch) updateAvailability(res checks.Result) bool {
 	if observation == checks.ObservationUnavailable {
 		if !w.unavailable {
 			w.unavailable = true
-			w.emit(Event{Watch: w.Name, Kind: w.eventKind(eventKindError), Message: "check unavailable: " + res.Message})
+			w.emit(Event{Watch: w.Name, Kind: w.eventKind(eventKindError, res), Message: "check unavailable: " + res.Message})
 		}
 		return true
 	}
@@ -265,11 +271,32 @@ func (w *Watch) updateAvailability(res checks.Result) bool {
 // event log stores, and it is per metric, because each metric of a net/icmp watch
 // is its own Watch with its own severity. So a sleeping disk that cannot be timed
 // and a link's error counter stop looking like a dead disk and a dead link.
-func (w *Watch) eventKind(grave string) string {
-	if w.IsWarning() {
+//
+// The grade is the result's: a check that received no declaration may call its
+// own finding an advisory, and a declared severity already travels in the result.
+func (w *Watch) eventKind(grave string, res checks.Result) string {
+	if checks.IsWarning(w.resultSeverity(res)) {
 		return eventKindWarning
 	}
 	return grave
+}
+
+// resultSeverity is how grave this result is: the grade the check gave it, or
+// the watch's resolved declaration when the result carries none.
+func (w *Watch) resultSeverity(res checks.Result) string {
+	return checks.ResolveSeverity(res.Severity, w.Severity)
+}
+
+// gradeChanged reports whether an open episode has just been regraded — an
+// outage that became an advisory or the reverse — which is worth announcing
+// even though the episode itself was announced when it opened. It records the
+// grade for the next cycle; a fresh episode always records without announcing
+// a change.
+func (w *Watch) gradeChanged(wasFiring bool, res checks.Result) bool {
+	grade := w.resultSeverity(res)
+	changed := wasFiring && w.lastGrade != "" && w.lastGrade != grade
+	w.lastGrade = grade
+	return changed
 }
 
 func (w *Watch) evaluateFiring(ctx context.Context, res checks.Result) (wasFiring, emitFiring, firing bool) {
@@ -291,7 +318,8 @@ func (w *Watch) evaluateFiring(ctx context.Context, res checks.Result) (wasFirin
 		// this cycle, so hooks/notify/expand must not run on it.
 		return wasFiring, false, false
 	}
-	return wasFiring, w.shouldEmitFiring(wasFiring), true
+	regraded := w.gradeChanged(wasFiring, res)
+	return wasFiring, w.shouldEmitFiring(wasFiring) || regraded, true
 }
 
 func (w *Watch) recover(ctx context.Context, res checks.Result) {
@@ -299,6 +327,7 @@ func (w *Watch) recover(ctx context.Context, res checks.Result) {
 		return
 	}
 	w.firing = false
+	w.lastGrade = ""
 	w.lastNotifyAt = time.Time{}
 	w.emit(Event{Watch: w.Name, Kind: eventKindRecovered, Message: res.Message})
 	w.runRecoverHook(ctx, res)
@@ -329,7 +358,7 @@ func (w *Watch) runRecoverHook(ctx context.Context, res checks.Result) {
 
 func (w *Watch) dispatchFiringActions(ctx context.Context, res checks.Result, wasFiring, emitFiring bool) {
 	if emitFiring {
-		w.emit(Event{Watch: w.Name, Kind: w.eventKind(eventKindFiring), Message: res.Message, Output: resultOutput(res)})
+		w.emit(Event{Watch: w.Name, Kind: w.eventKind(eventKindFiring, res), Message: res.Message, Output: resultOutput(res)})
 	}
 	env := hookEnv(w.Name, w.CheckType, res)
 	if w.DryRun {

@@ -240,6 +240,7 @@ const (
 	DataKeyHardwareRAIDCorrectableErrors   = "raid_correctable_errors"
 	DataKeyHardwareRAIDUncorrectableErrors = "raid_uncorrectable_errors"
 	DataKeyHardwareRAIDIssues              = "raid_issues"
+	DataKeyHardwareRAIDAdvisories          = "raid_advisories"
 	DataKeyHardwareRAIDControllerDetails   = "raid_controller_details"
 	DataKeyHardwareRAIDCacheDetails        = "raid_cache_details"
 	DataKeyHardwareRAIDVolumeDetails       = "raid_volume_details"

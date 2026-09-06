@@ -661,6 +661,28 @@ counters. A disk answering from standby is the clearest case — `hdparm -t` wak
 it and times its spin-up, so it honestly reports a fraction of a MB/s for a disk
 that is perfectly healthy.
 
+Two check types grade their own findings when nothing declares `severity:`,
+because they mix a verdict with early-warning counters:
+
+- **`smart`** — a predicate that holds (`reallocated`, `pending_sectors`,
+  `media_errors`, `crc_errors`, `temperature`, `wear`, `power_on_hours`) while
+  the drive's own verdict is **PASSED** or unknown is a `warning`: the disk
+  works, it is starting to go. The **FAILED** verdict and a drive `smartctl`
+  cannot read stay `error`.
+- **`storcli` / `ssacli`** — error counters on members whose state is still OK
+  (media, other and predictive error counts, a volume's unrecoverable media
+  errors) and the `temperature` predicate are `warning`; any state finding — a
+  degraded controller, cache, battery, volume or drive, an inaccessible or
+  inconsistent volume, unfinished parity or rebuild work, a drive's own SMART
+  alert — is `error`, and outranks the advisories beside it.
+
+A declared `severity:` on the watch, check or metric always wins over that
+grade: `severity: warning` keeps every finding an advisory, `severity: error`
+makes the counters outages again. The grade travels with the result, so the
+row, the event kind, the daemon log level, the notification subject and the SLA
+follow it; an open episode that changes grade — the verdict flips to FAILED
+under the same reallocated sectors — is announced again with the new kind.
+
 ### TCP connections (`tcp_connections`)
 
 `tcp_connections` is a local, condition-style check: it counts IPv4 and IPv6
@@ -2565,7 +2587,13 @@ detail so gradual degradation is visible.
   `reallocated`: NVMe drives publish no attribute table), `wear` (SSD/NVMe
   percentage used) and `power_on_hours`. Complements `hdparm` (throughput) with
   failure prediction. The drive's **FAILED** verdict and every configured
-  predicate are independent alert conditions: any one is enough. A missing
+  predicate are independent alert conditions: any one is enough. They are not
+  graded alike: a predicate holding under a **PASSED** (or unknown) verdict is
+  a `warning` — amber, out of aggregate health and the SLA, notified as
+  `[sermo][warning]` — while the **FAILED** verdict and an unreadable drive are
+  `error`, unless the check declares `severity:` (see
+  [Severity](#severity-severity)). The `health` reading keeps saying `PASSED`
+  beside the amber row, which is exactly the situation it describes. A missing
   transport-specific field never suppresses another field, so an ATA drive can
   alert on `pending_sectors` while omitting NVMe-only `media_errors`.
 
@@ -2601,7 +2629,14 @@ detail so gradual degradation is visible.
   cache or battery/capacitor protection; preserved offline cache, safe mode,
   shutdown requirements; unrecoverable media, memory, other or predictive
   errors; SMART alerts/wearout; inconsistent or inaccessible volumes; and
-  incomplete parity/rebuild work. Each controller, cache, virtual volume and
+  incomplete parity/rebuild work. The findings are graded: a **state** finding
+  (any of those components not OK, memory errors, a drive's SMART alert or
+  wearout, unfinished parity or rebuild work) is an `error`, while a **counter**
+  finding on members whose state is still OK — media, other or predictive error
+  counts, a volume reporting unrecoverable media errors, the `temperature`
+  predicate — is a `warning` unless the check declares `severity:`. The
+  `health` reading says `ok`, `warning` or `error` accordingly, `raid_issues`
+  lists every finding and `raid_advisories` the counter subset. Each controller, cache, virtual volume and
   physical drive is exposed as its own reading. Controller readings include
   model, firmware and on-board RAM/cache; volume readings include RAID level,
   capacity, Linux device, cache policy and active operation; drive readings

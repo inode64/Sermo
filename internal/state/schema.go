@@ -104,6 +104,7 @@ var storageSchema = []string{
 		at         INTEGER NOT NULL,
 		check_type TEXT NOT NULL,
 		config_id  TEXT NOT NULL,
+		severity   TEXT NOT NULL DEFAULT '',
 		PRIMARY KEY (service, check_name)
 	);`,
 	// watch_check_snapshot stores the latest host-watch result per visible slot
@@ -124,6 +125,7 @@ var storageSchema = []string{
 		data       TEXT NOT NULL,
 		ran        INTEGER NOT NULL,
 		at         INTEGER NOT NULL,
+		severity   TEXT NOT NULL DEFAULT '',
 		PRIMARY KEY (watch, slot)
 	);`,
 	// watch_runtime_state persists one watch slot's firing episode, notification
@@ -228,10 +230,12 @@ var stateColumnMigrations = []struct {
 	{tableServiceSnapshot, "unavailable", "unavailable INTEGER NOT NULL DEFAULT 0"},
 	{tableServiceSnapshot, "observation", "observation TEXT NOT NULL DEFAULT ''"},
 	{tableServiceSnapshot, "config_id", "config_id TEXT NOT NULL DEFAULT ''"},
+	{tableServiceSnapshot, "severity", "severity TEXT NOT NULL DEFAULT ''"},
 	{tableWatchSnapshot, "check_type", "check_type TEXT NOT NULL DEFAULT ''"},
 	{tableWatchSnapshot, "unavailable", "unavailable INTEGER NOT NULL DEFAULT 0"},
 	{tableWatchSnapshot, "observation", "observation TEXT NOT NULL DEFAULT ''"},
 	{tableWatchSnapshot, "config_id", "config_id TEXT NOT NULL DEFAULT ''"},
+	{tableWatchSnapshot, "severity", "severity TEXT NOT NULL DEFAULT ''"},
 	{"watch_runtime_state", "unavailable", "unavailable INTEGER NOT NULL DEFAULT 0"},
 }
 

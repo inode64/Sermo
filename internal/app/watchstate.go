@@ -78,6 +78,7 @@ func (w *Watch) reconcileRestoredEpisode(res checks.Result) {
 		return
 	}
 	w.firing = false
+	w.lastGrade = ""
 	w.state.EndEpisode()
 	w.lastNotifyAt = time.Time{}
 	w.emit(Event{Watch: w.Name, Kind: eventKindRecovered, Message: res.Message})
