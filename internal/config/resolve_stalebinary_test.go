@@ -117,6 +117,10 @@ func TestStaleBinaryAppliesUnlessNothingCanBeAttributed(t *testing.T) {
 		{"init-attributed", map[string]any{keyName: "kernel-thing"}, true},
 		{"explicit no processes", map[string]any{keyName: "nfs", SectionProcesses: map[string]any{}}, false},
 		{"external control", map[string]any{keyName: "n8n", SectionControl: map[string]any{"type": "docker", "container": "n8n"}}, false},
+		// A domain whose profile names its qemu process kept the check before
+		// the widening and keeps it now: a replaced qemu is a restart to plan.
+		{"external control with processes", map[string]any{keyName: "vm-a", SectionControl: map[string]any{"type": "libvirt", "domain": "a"},
+			SectionProcesses: map[string]any{"qemu": map[string]any{"exe": "/usr/bin/qemu-system-x86_64"}}}, true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
