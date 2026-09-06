@@ -4091,7 +4091,9 @@ function sessionRows(inventory) {
     kind: session.multiplexer || "", service: session.service || "", user: session.user || "",
     name: session.name || "", pid: (session.pids || []).join(", "), pidSort: (session.pids || [0])[0] || 0,
     state: session.state || sessionStateUnknown,
-    detail: Number.isInteger(session.windows) ? `${fmtNum(session.windows, 0)} window${session.windows === 1 ? "" : "s"}` : "—",
+    // Only tmux reports a window count; a screen session says nothing under
+    // its name rather than a placeholder dash.
+    detail: Number.isInteger(session.windows) ? `${fmtNum(session.windows, 0)} window${session.windows === 1 ? "" : "s"}` : "",
     ...sessionUsageRow(session, session.has_idle),
     action: terminalSessionCloseButton(session),
   }));
