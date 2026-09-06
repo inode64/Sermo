@@ -2998,9 +2998,10 @@ service whose processes discovery can attribute — the ones it declares with
 `processes:`, `pidfile:` or `pidfiles:`, and, for a service that declares none,
 the ones the init backend names for its unit — together with a rule
 (`restart-on-stale-binary`) that alerts and then restarts. Only a service with
-an explicitly empty `processes: {}` and a service driven by an external
-`control:` backend (a container or a virtual machine) get neither. It takes no
-fields; the selectors it inspects are the service's own.
+an explicitly empty `processes: {}`, and a service driven by an external
+`control:` backend (a container or a virtual machine) that declares no
+processes of its own, get neither. It takes no fields; the selectors it
+inspects are the service's own.
 
 When the init backend supplies a live process set (for example, a systemd
 cgroup), that attribution is authoritative: deleted processes elsewhere on the

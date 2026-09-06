@@ -140,14 +140,20 @@ func staleBinaryRestartAllowed(tree map[string]any) (bool, []string) {
 // there just the same — a service left out on that account showed
 // restart_required without ever alerting or restarting. Only an explicit
 // `processes: {}` (nothing resident to attribute) and an external control
-// backend (a container's or domain's PID set is not a host binary Sermo
-// restarts) are left out. This mirrors the lifecycle's process mode so the
-// two cannot drift apart.
+// backend that declares no processes (a container's or domain's PID set is
+// not something the init unit names) are left out; a domain or container
+// whose profile names its host processes (a VM's qemu) keeps the check, as it
+// always had. This mirrors the lifecycle's process mode so the two cannot
+// drift apart.
 func staleBinaryApplies(tree map[string]any) bool {
-	if _, external := tree[SectionControl]; external {
+	mode := resolvedProcessMode(tree)
+	if mode == ServiceProcessNone {
 		return false
 	}
-	return resolvedProcessMode(tree) != ServiceProcessNone
+	if _, external := tree[SectionControl]; external && mode == ServiceProcessInit {
+		return false
+	}
+	return true
 }
 
 // serviceDeclaresProcesses reports whether the service gives discovery
