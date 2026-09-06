@@ -354,10 +354,23 @@ func NewWebBackend(ctx context.Context, cfg *config.Config, deps Deps) (*WebBack
 	resolver := servicemgr.NewUnitResolver()
 	resolver.Manager = deps.Manager
 
+	// Preparing a service means resolving it and querying the init backend
+	// for its unit, processes and reload support; wired one after another,
+	// that stretched a loaded host's start into minutes. Services are prepared
+	// side by side and registered in name order, since registration is what
+	// touches the backend's own maps.
 	names := cfg.SortedServiceNames()
+	prepared := make([]preparedService, len(names))
+	forEachParallel(len(names), deps.MaxParallel, func(i int) {
+		prepared[i] = prepareWebService(ctx, cfg, names[i], resolver, deps)
+	})
 	warnings := make([]string, 0, len(names))
-	for _, name := range names {
-		warnings = append(warnings, wb.registerService(ctx, cfg, name, resolver, deps)...)
+	for i, name := range names {
+		p := prepared[i]
+		warnings = append(warnings, p.warnings...)
+		if p.entry != nil {
+			wb.registerService(name, p, deps)
+		}
 	}
 
 	warnings = append(warnings, wb.registerHostWatches(cfg, deps)...)
@@ -369,51 +382,65 @@ func NewWebBackend(ctx context.Context, cfg *config.Config, deps Deps) (*WebBack
 // registerService resolves one configured service and adds its entry (and any
 // service-scoped watches) to the backend. Disabled services are still listed,
 // but only enabled ones get a runtime engine.
-func (b *WebBackend) registerService(ctx context.Context, cfg *config.Config, name string, resolver servicemgr.UnitResolver, deps Deps) []string {
+// preparedService is one service's web entry before registration: the
+// resolved tree's facts the registration needs, plus the warnings preparing
+// it raised, kept per index so NewWebBackend registers in name order.
+type preparedService struct {
+	entry    *webEntry
+	tree     map[string]any
+	interval time.Duration
+	disabled bool
+	warnings []string
+}
+
+func prepareWebService(ctx context.Context, cfg *config.Config, name string, resolver servicemgr.UnitResolver, deps Deps) preparedService {
 	doc := cfg.Services[name]
 	if doc == nil {
-		return nil
+		return preparedService{}
 	}
 	resolved, errs := cfg.Resolve(name)
 	if len(errs) > 0 {
-		return []string{"skip service " + name + ": " + errs[0]}
+		return preparedService{warnings: []string{"skip service " + name + ": " + errs[0]}}
 	}
-	var warnings []string
-	disabled := cfgval.Disabled(doc.Body)
+	p := preparedService{tree: resolved.Tree, disabled: cfgval.Disabled(doc.Body)}
 	target, warn := resolveServiceTarget(ctx, deps, name, resolved.Tree, resolver)
 	if warn != "" {
-		warnings = append(warnings, serviceResolutionNotice(name, warn, resolved.Tree, deps.Backend))
+		p.warnings = append(p.warnings, serviceResolutionNotice(name, warn, resolved.Tree, deps.Backend))
 	}
 	if target.Unit == "" {
-		return warnings
+		return p
 	}
-	iv := cfgval.Duration(resolved.Tree[config.EntryKeyInterval])
-	if iv <= 0 {
-		iv = config.EngineInterval(cfg, config.DefaultEngineInterval)
+	p.interval = cfgval.Duration(resolved.Tree[config.EntryKeyInterval])
+	if p.interval <= 0 {
+		p.interval = config.EngineInterval(cfg, config.DefaultEngineInterval)
 	}
-	entry := &webEntry{
+	p.entry = &webEntry{
 		displayName:      config.DisplayName(resolved.Tree, name),
 		category:         config.CategoryLabel(resolved.Tree, config.CategoryService),
 		unit:             target.Unit,
 		backend:          string(target.Backend),
-		interval:         iv,
+		interval:         p.interval,
 		dryRun:           config.DryRun(resolved.Tree),
 		policyCooldown:   rules.ParsePolicy(resolved.Tree).Cooldown,
 		alsoApply:        config.CascadeTargets(resolved.Tree),
 		terminalSessions: terminalSessionSources(resolved.Tree),
 		buttons:          serviceButtons(resolved.Tree),
 	}
-	if disabled {
-		entry.disabled = true
-		entry.noResidentProcess = noResidentProcess(resolved.Tree)
+	if p.disabled {
+		p.entry.disabled = true
+		p.entry.noResidentProcess = noResidentProcess(resolved.Tree)
 	} else {
-		warnings = append(warnings, attachServiceRuntime(ctx, entry, name, resolved.Tree, resolved.Apps, target, deps)...)
+		p.warnings = append(p.warnings, attachServiceRuntime(ctx, p.entry, name, resolved.Tree, resolved.Apps, target, deps)...)
 	}
-	b.entries[name] = entry
-	b.order = append(b.order, name)
+	return p
+}
 
-	b.registerServiceWatches(name, resolved.Tree, deps.GlobalNotify, iv, disabled)
-	return warnings
+// registerService files a prepared service in the backend's maps; it runs on
+// one goroutine, in name order, after every service was prepared.
+func (b *WebBackend) registerService(name string, p preparedService, deps Deps) {
+	b.entries[name] = p.entry
+	b.order = append(b.order, name)
+	b.registerServiceWatches(name, p.tree, deps.GlobalNotify, p.interval, p.disabled)
 }
 
 // attachServiceRuntime wires an enabled service's entry with its operation
