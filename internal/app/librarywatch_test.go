@@ -4,8 +4,10 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"sermo/internal/execx"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -526,4 +528,55 @@ func TestBuildArtifactPathWatchesSampleSilently(t *testing.T) {
 	if len(events) != 0 {
 		t.Fatalf("artifact path sampler must remain silent after a change, got %+v", events)
 	}
+}
+
+// A hundred installed apps probed one after another held a loaded VM host's
+// daemon start for minutes on one slow version command. Building the app
+// watches decides presence from the filesystem and runs no command; the
+// first cycle is what probes.
+func TestBuildAppWatchesProbesOnlyInTheCycle(t *testing.T) {
+	root := t.TempDir()
+	binary := filepath.Join(root, "demo")
+	if err := os.WriteFile(binary, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cfg := &config.Config{
+		AppNames: []string{"demo"},
+		Apps: map[string]*config.Document{
+			"demo": {Name: "demo", Kind: config.CategoryApp, Body: map[string]any{
+				"name": "demo",
+				"preflight": map[string]any{
+					"binary":  map[string]any{"type": "binary", "path": binary},
+					"version": map[string]any{"type": "command", "command": []any{binary, "--version"}},
+				},
+			}},
+		},
+	}
+	runner := &countingRunner{result: execx.Result{Stdout: "demo 1.2\n"}}
+	samples := NewArtifactSamples()
+	watches := BuildAppWatches(t.Context(), cfg, Deps{ArtifactSamples: samples, ExecxRunner: runner, Emit: func(Event) {}})
+	if len(watches) != 1 {
+		t.Fatalf("app watches = %d, want 1", len(watches))
+	}
+	if n := runner.calls.Load(); n != 0 {
+		t.Fatalf("building the app watches ran %d commands, want none", n)
+	}
+	watches[0].RunCycle(t.Context())
+	if n := runner.calls.Load(); n == 0 {
+		t.Fatal("the watch cycle must run the version probe")
+	}
+	if version, status, sampled := samples.AppVersion("demo"); !sampled || status != appinspect.StatusOK || version == "" {
+		t.Fatalf("app sample = version:%q status:%q sampled:%t, want the cycle's version", version, status, sampled)
+	}
+}
+
+// countingRunner answers every command with one result and counts the calls.
+type countingRunner struct {
+	result execx.Result
+	calls  atomic.Int32
+}
+
+func (r *countingRunner) Run(context.Context, string, ...string) (execx.Result, error) {
+	r.calls.Add(1)
+	return r.result, nil
 }
