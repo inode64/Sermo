@@ -111,6 +111,8 @@ const (
 	logFieldEnabledServiceWatches = "enabled_service_watches"
 	logFieldEnabledWatches        = "enabled_watches"
 	logFieldError                 = "error"
+	logFieldPhase                 = "phase"
+	logFieldTook                  = "took"
 	logFieldEUID                  = "euid"
 	logFieldKey                   = "key"
 	logFieldMessage               = "message"
@@ -202,6 +204,7 @@ func run(args []string) int {
 			logFieldAffected, "service control, signalling other users' processes, icmp checks, per-process IO, cross-user /proc inspection")
 	}
 
+	phases := newStartupPhases(logger)
 	cfg, exitCode := loadDaemonConfig(logger, globalPath)
 	if cfg == nil {
 		return exitCode
@@ -228,10 +231,12 @@ func run(args []string) int {
 	}
 	defer func() { _ = instanceLock.Close() }()
 
+	phases.mark("load config and detect backend")
 	store, exitCode := openDaemonStore(cfg, logger)
 	if exitCode != 0 {
 		return exitCode
 	}
+	phases.mark("open state store")
 	defer func() { _ = store.Close() }()
 
 	notifiers, notifyWarnings := notify.Build(cfg.Notifiers(), notify.WithTemplateDir(cfg.Global.TemplateDir()))
@@ -255,6 +260,7 @@ func run(args []string) int {
 	if err != nil {
 		logger.Warn("load persisted watch snapshots failed", logFieldError, err)
 	}
+	phases.mark("load persisted state")
 
 	accessLog := openEngineLog(logger, cfg, config.EngineKeyAccess)
 	eventFile := openEngineLog(logger, cfg, config.EngineKeyEvents)
@@ -352,9 +358,11 @@ func run(args []string) int {
 
 	workers, svcWatches, warnings := app.BuildWorkers(ctx, cfg, deps, collector)
 	app.LogBuildNotices(logger, "build workers", warnings)
+	phases.mark("build workers")
 
 	watches, watchWarnings := app.BuildWatches(cfg, deps, interval)
 	app.LogBuildNotices(logger, "build watches", watchWarnings)
+	phases.mark("build host watches")
 	hostWatches := len(watches)
 	// Service-embedded watches (a service's `watches:` section) run the host-watch
 	// runtime with per-service scoped check deps; they share the scheduler and
@@ -364,6 +372,7 @@ func run(args []string) int {
 	// and changed service files.
 	artifactWatches := app.BuildArtifactWatches(ctx, cfg, deps)
 	watches = append(watches, artifactWatches...)
+	phases.mark("build app and library watches")
 	logger.Debug("built monitor targets",
 		logFieldEnabledServices, len(workers),
 		logFieldEnabledWatches, hostWatches,
@@ -410,6 +419,7 @@ func run(args []string) int {
 		var webWarnings []string
 		webHolder, webWarnings = app.NewWebBackendHolder(ctx, cfg, deps)
 		app.LogBuildNotices(logger, "build web backend", webWarnings)
+		phases.mark("build web backend")
 	}
 
 	var webDone <-chan struct{}
@@ -466,6 +476,7 @@ func run(args []string) int {
 
 	maintenanceDone := startStateMaintenance(ctx, logger, store, app.EngineRollupInterval(cfg))
 
+	phases.done()
 	logger.Info("sermod starting", logFieldBackend, detection.Backend, logFieldServices, len(workers), logFieldWatches, len(watches))
 
 	monitor := app.NewMonitor(cfg, deps, app.Scheduler{
@@ -768,4 +779,29 @@ func maintainStateOnce(ctx context.Context, logger *slog.Logger, store stateMain
 		logger.Info("consolidated stored history",
 			"rolled", result.Rolled, logFieldRows, result.Pruned())
 	}
+}
+
+// startupPhases logs how long each stage of the daemon start took, so a host
+// that reaches its web listener late says where it stalled — the init-backend
+// queries of the service wiring, or the state store on a busy disk — instead
+// of leaving only the gap between "Started" and "listening" in the journal.
+type startupPhases struct {
+	logger *slog.Logger
+	start  time.Time
+	last   time.Time
+}
+
+func newStartupPhases(logger *slog.Logger) *startupPhases {
+	now := time.Now()
+	return &startupPhases{logger: logger, start: now, last: now}
+}
+
+func (p *startupPhases) mark(name string) {
+	now := time.Now()
+	p.logger.Info("startup phase", logFieldPhase, name, logFieldTook, now.Sub(p.last).Round(time.Millisecond))
+	p.last = now
+}
+
+func (p *startupPhases) done() {
+	p.logger.Info("startup phase", logFieldPhase, "total", logFieldTook, time.Since(p.start).Round(time.Millisecond))
 }

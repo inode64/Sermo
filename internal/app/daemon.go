@@ -319,10 +319,7 @@ type Deps struct {
 // cache producer and an operation-engine Operate closure. Services
 // that are disabled or fail to resolve are skipped with a warning.
 func BuildWorkers(ctx context.Context, cfg *config.Config, deps Deps, collector *metrics.Collector) ([]*Worker, []*Watch, []string) {
-	var workers []*Worker
-	var serviceWatchList []*Watch
 	var warnings []string
-	cascadeMap := map[string][]string{}
 	if collector == nil {
 		collector = metrics.New(metrics.OSReader{})
 		if deps.SystemFreshness > 0 {
@@ -333,47 +330,95 @@ func BuildWorkers(ctx context.Context, cfg *config.Config, deps Deps, collector 
 	resolver.Manager = deps.Manager
 	restartNotice, restartNoticeConfigured := config.EngineServiceRestartNotice(cfg)
 
-	for _, name := range cfg.SortedServiceNames() {
-		doc := cfg.Services[name]
-		if doc == nil || cfgval.Disabled(doc.Body) {
-			continue
-		}
-		resolved, errs := cfg.Resolve(name)
-		if len(errs) > 0 {
-			warnings = append(warnings, "skip service "+name+": "+errs[0])
-			continue
-		}
+	// Every service is wired independently of the others (the cascade below
+	// only needs the finished workers), so they are wired side by side and
+	// assembled in name order afterwards; the shared registries and caches
+	// they touch are the same ones the running workers share.
+	names := cfg.SortedServiceNames()
+	built := make([]builtService, len(names))
+	forEachParallel(len(names), deps.MaxParallel, func(i int) {
+		built[i] = buildServiceWorker(ctx, cfg, deps, collector, resolver, &restartNotice, restartNoticeConfigured, names[i])
+	})
 
-		if w := applyMonitorMode(deps.Monitor, name, config.MonitorMode(resolved.Tree)); w != "" {
-			warnings = append(warnings, w)
-		}
-
-		target, warn := resolveServiceTarget(ctx, deps, name, resolved.Tree, resolver)
-		if warn != "" {
-			warnings = append(warnings, serviceResolutionNotice(name, warn, resolved.Tree, deps.Backend))
-		}
-		if target.Unit == "" {
+	var workers []*Worker
+	var serviceWatchList []*Watch
+	cascadeMap := map[string][]string{}
+	for i, name := range names {
+		b := built[i]
+		warnings = append(warnings, b.warnings...)
+		if b.worker == nil {
 			continue
 		}
-		serviceDeps := deps
-		serviceDeps.Backend = target.Backend
-		serviceDeps.Manager = target.Manager
-		serviceDeps.BackendPIDs = target.BackendPIDs
-		if restartNoticeConfigured {
-			serviceDeps.RestartNotice = &restartNotice
+		if len(b.cascade) > 0 {
+			cascadeMap[name] = b.cascade
 		}
-		w, svcWatches, warns := buildWorker(ctx, name, target.Unit, resolved.Tree, serviceDeps, collector)
-		for _, x := range warns {
-			warnings = append(warnings, serviceSubjectPrefix+name+": "+x)
-		}
-		if t := config.CascadeTargets(resolved.Tree); len(t) > 0 {
-			cascadeMap[name] = t
-		}
-		workers = append(workers, w)
-		serviceWatchList = append(serviceWatchList, svcWatches...)
+		workers = append(workers, b.worker)
+		serviceWatchList = append(serviceWatchList, b.watches...)
 	}
 	wireCascade(workers, cascadeMap, deps)
 	return workers, serviceWatchList, warnings
+}
+
+// builtService is one service's wiring outcome, kept per index so BuildWorkers
+// can assemble the parallel results in the deterministic name order.
+type builtService struct {
+	worker   *Worker
+	watches  []*Watch
+	warnings []string
+	cascade  []string
+}
+
+// slowServiceWiring is how long one service may take to wire before the
+// startup names it: a service past it is what stretches a daemon start into
+// minutes on a loaded host, and the name says where the init backend stalls.
+const slowServiceWiring = 10 * time.Second
+
+func buildServiceWorker(ctx context.Context, cfg *config.Config, deps Deps, collector *metrics.Collector, resolver servicemgr.UnitResolver, restartNotice *config.ServiceRestartNotice, restartNoticeConfigured bool, name string) builtService {
+	started := deps.Now
+	if started == nil {
+		started = time.Now
+	}
+	from := started()
+	var b builtService
+	doc := cfg.Services[name]
+	if doc == nil || cfgval.Disabled(doc.Body) {
+		return b
+	}
+	resolved, errs := cfg.Resolve(name)
+	if len(errs) > 0 {
+		b.warnings = append(b.warnings, "skip service "+name+": "+errs[0])
+		return b
+	}
+
+	if w := applyMonitorMode(deps.Monitor, name, config.MonitorMode(resolved.Tree)); w != "" {
+		b.warnings = append(b.warnings, w)
+	}
+
+	target, warn := resolveServiceTarget(ctx, deps, name, resolved.Tree, resolver)
+	if warn != "" {
+		b.warnings = append(b.warnings, serviceResolutionNotice(name, warn, resolved.Tree, deps.Backend))
+	}
+	if target.Unit == "" {
+		return b
+	}
+	serviceDeps := deps
+	serviceDeps.Backend = target.Backend
+	serviceDeps.Manager = target.Manager
+	serviceDeps.BackendPIDs = target.BackendPIDs
+	if restartNoticeConfigured {
+		serviceDeps.RestartNotice = restartNotice
+	}
+	w, svcWatches, warns := buildWorker(ctx, name, target.Unit, resolved.Tree, serviceDeps, collector)
+	for _, x := range warns {
+		b.warnings = append(b.warnings, serviceSubjectPrefix+name+": "+x)
+	}
+	b.cascade = config.CascadeTargets(resolved.Tree)
+	b.worker = w
+	b.watches = svcWatches
+	if took := started().Sub(from); took > slowServiceWiring {
+		b.warnings = append(b.warnings, infoNotice(fmt.Sprintf("%s%s: wiring took %s (init backend queries)", serviceSubjectPrefix, name, took.Round(time.Second))))
+	}
+	return b
 }
 
 // resolveServiceTarget resolves one service's control target, through the
