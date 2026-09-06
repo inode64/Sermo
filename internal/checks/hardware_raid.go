@@ -17,6 +17,7 @@ import (
 
 const (
 	hardwareRAIDHealthOK         = "ok"
+	hardwareRAIDHealthWarning    = "warning"
 	hardwareRAIDHealthError      = "error"
 	hardwareRAIDOperationRebuild = "rebuild"
 	hardwareRAIDDetailDrive      = "drive"
@@ -110,6 +111,15 @@ type HardwareRAIDDriveStatus struct {
 // hardwareRAIDCheck runs one vendor CLI in its read-only reporting mode. It
 // represents controller hardware as a host watch: neither utility is a daemon,
 // and no command in this check changes controller configuration or state.
+//
+// Findings come in two grades. A state finding — a degraded controller, cache,
+// battery, volume or drive, an inaccessible or inconsistent volume, unfinished
+// parity or rebuild work, a drive's own SMART alert — is an outage. A counter
+// finding — media, other or predictive error counts, unrecoverable media
+// errors on a volume whose status is still OK, the operator's temperature
+// predicate — is an advisory: the array still serves, a member is wearing.
+// Advisories alone read health "warning" and grade the result a warning unless
+// the check declares `severity:`; any outage reads "error".
 type hardwareRAIDCheck struct {
 	base
 	runner execx.Runner
@@ -142,8 +152,9 @@ type hardwareRAIDObservation struct {
 	VolumeDetails     []HardwareRAIDVolumeStatus
 	DriveDetails      []HardwareRAIDDriveStatus
 
-	Issues []string
-	seen   map[string]struct{}
+	Issues     []string // every finding, outages first come as they were parsed
+	Advisories []string // the subset of Issues that are counters, not states
+	seen       map[string]struct{}
 }
 
 func (c hardwareRAIDCheck) Run(ctx context.Context) Result {
@@ -167,15 +178,15 @@ func (c hardwareRAIDCheck) Run(ctx context.Context) Result {
 		observation.addIssue("no controller found")
 	}
 	if len(c.preds) > 0 && levelPredsHold(c.preds, map[string]float64{fieldTemperature: observation.MaxTemperature}) {
-		observation.addIssue(fmt.Sprintf("maximum temperature %s exceeds configured threshold", formatCelsius(observation.MaxTemperature)))
+		observation.addAdvisory(fmt.Sprintf("maximum temperature %s exceeds configured threshold", formatCelsius(observation.MaxTemperature)))
 	}
 
-	health := hardwareRAIDHealthOK
-	if len(observation.Issues) > 0 {
-		health = hardwareRAIDHealthError
-	}
+	health := observation.health()
 	message := observation.message(c.tool, health)
 	result := c.result(health == hardwareRAIDHealthOK, message, run.start)
+	if c.severity == "" && health == hardwareRAIDHealthWarning {
+		result.Severity = SeverityWarning
+	}
 	result.Data = observation.data(health)
 	return result
 }
@@ -227,19 +238,46 @@ func runHardwareRAIDCommand(ctx context.Context, runner execx.Runner, binary str
 	return result.Stdout, nil
 }
 
-func (o *hardwareRAIDObservation) addIssue(issue string) {
+// addIssue records an outage finding: a component whose state is not OK.
+func (o *hardwareRAIDObservation) addIssue(issue string) { o.note(issue) }
+
+// addAdvisory records a counter finding on a component whose state is still
+// OK. It is listed among the issues, so the message and the issues reading stay
+// complete, and remembered as an advisory so it grades the sample a warning.
+func (o *hardwareRAIDObservation) addAdvisory(issue string) {
+	if o.note(issue) {
+		o.Advisories = append(o.Advisories, strings.TrimSpace(issue))
+	}
+}
+
+// note appends one deduplicated finding and reports whether it was new.
+func (o *hardwareRAIDObservation) note(issue string) bool {
 	issue = strings.TrimSpace(issue)
 	if issue == "" {
-		return
+		return false
 	}
 	if o.seen == nil {
 		o.seen = make(map[string]struct{})
 	}
 	if _, exists := o.seen[issue]; exists {
-		return
+		return false
 	}
 	o.seen[issue] = struct{}{}
 	o.Issues = append(o.Issues, issue)
+	return true
+}
+
+// health folds the findings: any outage is an error, advisories alone are a
+// warning, and nothing at all is ok.
+func (o *hardwareRAIDObservation) health() string {
+	switch {
+	case len(o.Issues) > len(o.Advisories):
+		return hardwareRAIDHealthError
+	case len(o.Advisories) > 0:
+		return hardwareRAIDHealthWarning
+	default:
+		return hardwareRAIDHealthOK
+	}
 }
 
 func (o *hardwareRAIDObservation) addTemperature(value any) {
@@ -295,6 +333,7 @@ func (o *hardwareRAIDObservation) data(health string) map[string]any {
 		DataKeyHardwareRAIDUncorrectableErrors: o.UncorrectableErrors,
 		SmartFieldTemperature:                  o.MaxTemperature,
 		DataKeyHardwareRAIDIssues:              slices.Clone(o.Issues),
+		DataKeyHardwareRAIDAdvisories:          slices.Clone(o.Advisories),
 		DataKeyHardwareRAIDControllerDetails:   slices.Clone(o.ControllerDetails),
 		DataKeyHardwareRAIDCacheDetails:        slices.Clone(o.CacheDetails),
 		DataKeyHardwareRAIDVolumeDetails:       slices.Clone(o.VolumeDetails),
@@ -540,13 +579,13 @@ func parseStorCLIDriveDetail(raw json.RawMessage, observation *hardwareRAIDObser
 		observation.OtherErrors += otherErrors
 		observation.PredictiveFailures += predictiveFailures
 		if mediaErrors > 0 {
-			observation.addIssue(fmt.Sprintf("drive %s media errors %d", driveID, mediaErrors))
+			observation.addAdvisory(fmt.Sprintf("drive %s media errors %d", driveID, mediaErrors))
 		}
 		if otherErrors > 0 {
-			observation.addIssue(fmt.Sprintf("drive %s other errors %d", driveID, otherErrors))
+			observation.addAdvisory(fmt.Sprintf("drive %s other errors %d", driveID, otherErrors))
 		}
 		if predictiveFailures > 0 {
-			observation.addIssue(fmt.Sprintf("drive %s predictive failures %d", driveID, predictiveFailures))
+			observation.addAdvisory(fmt.Sprintf("drive %s predictive failures %d", driveID, predictiveFailures))
 		}
 		detail.SMARTAlert = yesValue(section["S.M.A.R.T alert flagged by drive"])
 		if detail.SMARTAlert {
@@ -980,7 +1019,7 @@ func (p *ssaCLIParser) parseHealthField(key, originalKey, value string) {
 	case "unrecoverable media errors":
 		if !hardwareRAIDStateOK(value, "none", "no", "0") {
 			p.observation.MediaErrors++
-			p.observation.addIssue(fmt.Sprintf("volume %s has unrecoverable media errors: %s", valueOrUnknown(p.volume), value))
+			p.observation.addAdvisory(fmt.Sprintf("volume %s has unrecoverable media errors: %s", valueOrUnknown(p.volume), value))
 		}
 	case "ssd smart trip wearout":
 		if drive := p.currentDrive(); drive != nil {

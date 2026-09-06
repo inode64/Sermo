@@ -60,7 +60,10 @@ const smartSelfTestRunningNibble = 0x0f
 // predicates on `temperature` (°C), `reallocated`, `pending_sectors`,
 // `crc_errors` and `media_errors` (counts), `wear` (SSD/NVMe percentage used)
 // and `power_on_hours` are independent early-warning conditions that augment
-// that verdict. The numeric attributes are
+// that verdict. A predicate that holds while the verdict is PASSED (or
+// unknown) is graded an advisory — the drive still works, it is starting to
+// go — so it reads warning unless the check declares `severity:`; the FAILED
+// verdict and an unreadable device stay outages. The numeric attributes are
 // recorded over time, so a rising reallocated-sector or wear count (a failing/
 // aging drive) is visible on the graph. Each report also carries what the drive
 // *is* — model, serial number, firmware, capacity — so the dashboard names the
@@ -112,9 +115,9 @@ func (c *smartCheck) Run(ctx context.Context) Result {
 		return c.unreadableResult(prefix+": "+smartctlFailure(data.failure, res.Stderr), start)
 	}
 
-	ok := data.healthKnown && !data.passed // default alert condition: health FAILED
+	verdictFailed := data.healthKnown && !data.passed // default alert condition: health FAILED
 	fired := holdingLevelPreds(c.preds, data.values)
-	ok = ok || len(fired) > 0
+	ok := verdictFailed || len(fired) > 0
 
 	health := smartHealthUnknown
 	if data.healthKnown {
@@ -131,6 +134,12 @@ func (c *smartCheck) Run(ctx context.Context) Result {
 		message += "; " + strings.Join(fired, ", ")
 	}
 	r := c.result(ok, message, start)
+	if c.severity == "" && !verdictFailed && len(fired) > 0 {
+		// Early-warning predicates grade themselves: the drive answers and its
+		// own verdict passes, so a rising counter is an advisory to plan a swap
+		// around, not an outage. A declared severity always wins.
+		r.Severity = SeverityWarning
+	}
 	r.Data = withDeviceBus(SmartResultData(c.device, health, data.SmartSample), c.deviceBus, c.device)
 	return r
 }

@@ -364,6 +364,9 @@ func (w *Worker) reportCheckHealthChanges(cache map[string]checks.Result) {
 		kind := eventKindRecovered
 		if failing {
 			kind = eventKindFiring
+			if result.Warning() {
+				kind = eventKindWarning
+			}
 		}
 		w.emit(Event{Kind: kind, Message: checkHealthChangeMessage(name, result)})
 	}

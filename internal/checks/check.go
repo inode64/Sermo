@@ -104,7 +104,9 @@ type Result struct {
 	// Severity is how grave a failure of this check is; empty means
 	// SeverityError. It never changes the verdict — Observation() owns that — only
 	// how loudly the verdict is reported, so a guard can never read a warning as
-	// healthy.
+	// healthy. It is the declared severity, except that a check whose
+	// configuration declares none may grade its own finding (a SMART predicate
+	// holding under a PASSED verdict is an advisory); a declaration always wins.
 	Severity string `json:"-"`
 	Optional bool   `json:"optional,omitempty"`
 	Skipped  bool   `json:"skipped,omitempty"` // gated off this cycle (requires/skip_when_changed)

@@ -31,7 +31,11 @@ func (b *WebBackend) watchSnapshotView(w *webWatch, system metrics.Snapshot) (*w
 			continue
 		}
 		snapMeter := watchMeterFromSnapshot(w.checkType, snap.Data)
-		rs := watchSnapshotReadings(w.checkType, w.severityFor(cfgval.String(snap.Data[checks.DataKeyMetric])), snap, snapMeter != nil)
+		// The result's own grade wins over the declaration: a check may call its
+		// finding an advisory (a SMART predicate under a PASSED verdict). Records
+		// persisted before the grade was stored carry none and fall back.
+		severity := checks.ResolveSeverity(snap.Severity, w.severityFor(cfgval.String(snap.Data[checks.DataKeyMetric])))
+		rs := watchSnapshotReadings(w.checkType, severity, snap, snapMeter != nil)
 		readings = append(readings, rs...)
 		if meter == nil {
 			meter = snapMeter

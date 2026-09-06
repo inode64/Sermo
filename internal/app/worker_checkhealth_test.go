@@ -298,3 +298,17 @@ func TestNestedRuleConditionSuppressesCheckHealthEvent(t *testing.T) {
 		}
 	}
 }
+
+// A check that graded its own failure an advisory reaches the event log as a
+// warning, so the transition logs at warn level like every other advisory.
+func TestWarningGradedCheckFailureRaisesWarningKind(t *testing.T) {
+	events := runCycles(t, func(c int) map[string]checks.Result {
+		if c == 1 {
+			return map[string]checks.Result{"smart": {Check: "smart", OK: true, Condition: true, Message: "health=PASSED; reallocated 4 > 0", Severity: checks.SeverityWarning}}
+		}
+		return map[string]checks.Result{"smart": {Check: "smart", OK: false, Condition: true, Message: "health=PASSED"}}
+	}, 2)
+	if got := kinds(events); len(got) != 2 || got[0] != eventKindWarning || got[1] != eventKindRecovered {
+		t.Fatalf("kinds = %v, want exactly [warning recovered]", got)
+	}
+}

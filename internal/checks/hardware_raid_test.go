@@ -409,3 +409,85 @@ func TestHardwareRAIDRunnerErrorIsReported(t *testing.T) {
 		t.Fatalf("result = %+v", result)
 	}
 }
+
+// Error counters on members whose state is still OK are advisories: the array
+// serves, a drive is wearing. They read health "warning" and grade the result a
+// warning unless the check declares a severity; any state finding stays grave.
+func TestHardwareRAIDCountersAloneAreAdvisories(t *testing.T) {
+	drives := strings.NewReplacer(
+		`"Media Error Count": 0`, `"Media Error Count": 12`,
+		`"Other Error Count": 0`, `"Other Error Count": 3`,
+		`"Predictive Failure Count": 0`, `"Predictive Failure Count": 1`,
+	).Replace(healthyStorCLIDrives)
+	storcli := hardwareRAIDCheck{
+		name: CheckTypeStorCLI, timeout: time.Second,
+		runner: cliRunner(storCLIResults(healthyStorCLIController, drives, healthyStorCLIVolumes), nil),
+		binary: "/usr/bin/storcli64", tool: CheckTypeStorCLI,
+	}
+	result := storcli.Run(context.Background())
+	if result.OK || result.Unavailable || !IsWarning(result.Severity) {
+		t.Fatalf("storcli counters = %+v, want failing and graded warning", result)
+	}
+	if got := result.Data[DataKeyHealth]; got != hardwareRAIDHealthWarning {
+		t.Fatalf("health = %v, want %q", got, hardwareRAIDHealthWarning)
+	}
+	advisories := strings.Join(result.Data[DataKeyHardwareRAIDAdvisories].([]string), "\n")
+	issues := strings.Join(result.Data[DataKeyHardwareRAIDIssues].([]string), "\n")
+	for _, want := range []string{"media errors 12", "other errors 3", "predictive failures 1"} {
+		if !strings.Contains(advisories, want) || !strings.Contains(issues, want) || !strings.Contains(result.Message, want) {
+			t.Errorf("counter %q missing from advisories %q, issues %q or message %q", want, advisories, issues, result.Message)
+		}
+	}
+
+	ssacli := hardwareRAIDCheck{
+		name: CheckTypeSSACLI, timeout: time.Second,
+		runner: cliRunner(map[string]execx.Result{
+			"/usr/bin/ssacli ctrl all show config detail": {Stdout: strings.ReplaceAll(healthySSACLI, "Unrecoverable Media Errors: None", "Unrecoverable Media Errors: Detected")},
+		}, nil),
+		binary: "/usr/bin/ssacli", tool: CheckTypeSSACLI,
+	}
+	result = ssacli.Run(context.Background())
+	if result.OK || !IsWarning(result.Severity) || result.Data[DataKeyHealth] != hardwareRAIDHealthWarning {
+		t.Fatalf("ssacli unrecoverable media errors = %+v, want failing and graded warning", result)
+	}
+	if !strings.Contains(result.Message, "volume 1 has unrecoverable media errors: Detected") {
+		t.Fatalf("message = %q, want the volume named", result.Message)
+	}
+
+	// The operator's temperature predicate is an early warning of the same kind.
+	hot := hardwareRAIDCheck{
+		name: CheckTypeSSACLI, timeout: time.Second,
+		runner: cliRunner(map[string]execx.Result{"/usr/bin/ssacli ctrl all show config detail": {Stdout: healthySSACLI}}, nil),
+		binary: "/usr/bin/ssacli", tool: CheckTypeSSACLI,
+		preds: []levelPred{{field: SmartFieldTemperature, op: ">", value: 40}},
+	}
+	if result := hot.Run(context.Background()); result.OK || !IsWarning(result.Severity) {
+		t.Fatalf("temperature predicate = %+v, want failing and graded warning", result)
+	}
+
+	// A declared severity wins over the grade.
+	declared := storcli
+	declared.severity = SeverityError
+	if result := declared.Run(context.Background()); result.OK || IsWarning(result.Severity) || result.Data[DataKeyHealth] != hardwareRAIDHealthWarning {
+		t.Fatalf("declared error = %+v, want the counters reported as an outage while health still reads warning", result)
+	}
+}
+
+func TestHardwareRAIDStateFindingOutranksAdvisories(t *testing.T) {
+	drives := strings.NewReplacer(
+		`"State": "Onln"`, `"State": "Offln"`,
+		`"Media Error Count": 0`, `"Media Error Count": 12`,
+	).Replace(healthyStorCLIDrives)
+	check := hardwareRAIDCheck{
+		name: CheckTypeStorCLI, timeout: time.Second,
+		runner: cliRunner(storCLIResults(healthyStorCLIController, drives, healthyStorCLIVolumes), nil),
+		binary: "/usr/bin/storcli64", tool: CheckTypeStorCLI,
+	}
+	result := check.Run(context.Background())
+	if result.OK || IsWarning(result.Severity) || result.Data[DataKeyHealth] != hardwareRAIDHealthError {
+		t.Fatalf("offline drive beside media errors = %+v, want an ungraded outage with health error", result)
+	}
+	if got := result.Data[DataKeyHardwareRAIDAdvisories].([]string); len(got) != 1 || got[0] != "drive c0/e252/s0 media errors 12" {
+		t.Fatalf("advisories = %v, want only the counter", got)
+	}
+}

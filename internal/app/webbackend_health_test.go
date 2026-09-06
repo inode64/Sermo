@@ -42,6 +42,14 @@ func TestCheckHealthSummary(t *testing.T) {
 		t.Fatalf("undeclared severity: failing=%d health=%q, want failing", failing, health)
 	}
 
+	// The grade the check gave its own result travels with the snapshot and
+	// wins; the declaration decides only for a snapshot that carries none.
+	graded := map[string]CheckSnapshot{"smart": {Observation: checks.ObservationFailing, OK: true, Condition: true, Severity: checks.SeverityWarning}}
+	failing, health = checkHealthSummaryCurrent(graded, []string{"smart"}, nil, true, nil)
+	if failing != 0 || health != checkHealthWarning {
+		t.Fatalf("result graded warning: failing=%d health=%q, want warning", failing, health)
+	}
+
 	snap = map[string]CheckSnapshot{
 		"cert": {Observation: checks.ObservationHealthy, OK: false, Condition: true},
 	}

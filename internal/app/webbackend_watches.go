@@ -240,10 +240,20 @@ func (e *webEntry) invalidateStatusCache() {
 // signals are the last activity kind — an advisory watch records its own kind, so
 // this stays right per metric and across a restart — and the published readings,
 // where an advisory reports through Warning instead of Error.
+//
+// The readings are the newer signal. A firing episode announces itself once, so
+// when the check has since regraded the same episode an advisory — a RAID
+// member whose state recovered while its error counters remain, or a daemon
+// upgraded to a build that grades SMART predicates — the newest snapshot carries
+// a warning row and no error row, and that outranks the firing kind that opened
+// the episode. A failed hook or notification stays an outage regardless.
 func watchViewState(w web.Watch) (failed, warning bool) {
 	current := watchActivityCurrent(w.LastActivity, w.MonitorChangedAt)
 	if WatchActivityFailed(w.LastActivityKind) && current {
-		return true, false
+		regraded := w.LastActivityKind == eventKindFiring && watchReadingsWarning(w.Readings) && !watchReadingsFailed(w.Readings)
+		if !regraded {
+			return true, false
+		}
 	}
 	if watchStorageMountFailed(w) {
 		return true, false

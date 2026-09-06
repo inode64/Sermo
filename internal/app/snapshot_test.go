@@ -91,7 +91,7 @@ func TestPersistentSnapshotsHydrateAndStore(t *testing.T) {
 	store := &snapshotStoreFake{
 		service: map[string]map[string]state.CheckSnapshotRecord{
 			"web": {
-				"http": {CheckType: checks.CheckTypeHTTP, Observation: checks.ObservationUnavailable, OK: true, Unavailable: true, Message: "status unavailable", Data: map[string]any{"status": float64(200)}, Ran: true, At: t0},
+				"http": {CheckType: checks.CheckTypeHTTP, Observation: checks.ObservationUnavailable, OK: true, Unavailable: true, Message: "status unavailable", Data: map[string]any{"status": float64(200)}, Ran: true, At: t0, Severity: checks.SeverityWarning},
 			},
 		},
 	}
@@ -99,21 +99,21 @@ func TestPersistentSnapshotsHydrateAndStore(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewPersistentSnapshots: %v", err)
 	}
-	if got := s.Get("web")["http"]; got.CheckType != checks.CheckTypeHTTP || got.Observation != checks.ObservationUnavailable || !got.OK || !got.Unavailable || got.Message != "status unavailable" || got.Data["status"] != float64(200) || !got.At.Equal(t0) {
+	if got := s.Get("web")["http"]; got.CheckType != checks.CheckTypeHTTP || got.Observation != checks.ObservationUnavailable || !got.OK || !got.Unavailable || got.Message != "status unavailable" || got.Data["status"] != float64(200) || !got.At.Equal(t0) || got.Severity != checks.SeverityWarning {
 		t.Fatalf("hydrated snapshot = %+v", got)
 	}
 
 	t1 := t0.Add(time.Minute)
 	s.now = func() time.Time { return t1 }
 	s.Publish("web", map[string]checks.Result{
-		"tcp": {Check: "tcp", OK: false, Unavailable: true, Message: "connection refused", Data: map[string]any{"port": float64(443)}},
+		"tcp": {Check: "tcp", OK: false, Unavailable: true, Message: "connection refused", Data: map[string]any{"port": float64(443)}, Severity: checks.SeverityWarning},
 	}, map[string]bool{"tcp": true})
 
 	service := store.service["web"]
 	if len(service) != 1 {
 		t.Fatalf("stored service snapshots = %+v, want replaced current rows", service)
 	}
-	if got := service["tcp"]; got.Observation != checks.ObservationUnavailable || got.OK || !got.Unavailable || got.Message != "connection refused" || got.Data["port"] != float64(443) || !got.At.Equal(t1) {
+	if got := service["tcp"]; got.Observation != checks.ObservationUnavailable || got.OK || !got.Unavailable || got.Message != "connection refused" || got.Data["port"] != float64(443) || !got.At.Equal(t1) || got.Severity != checks.SeverityWarning {
 		t.Fatalf("stored snapshot = %+v", got)
 	}
 }
@@ -151,7 +151,7 @@ func TestPersistentWatchSnapshotsHydrateAndStore(t *testing.T) {
 			"clock": {
 				checks.DataKeyResult: {
 					CheckType: "clock", Observation: checks.ObservationFailing, OK: false, Message: "offset 1200ms",
-					Data: map[string]any{"offset_ms": float64(1200)}, Ran: true, At: t0,
+					Data: map[string]any{"offset_ms": float64(1200)}, Ran: true, At: t0, Severity: checks.SeverityWarning,
 				},
 			},
 		},
@@ -160,7 +160,7 @@ func TestPersistentWatchSnapshotsHydrateAndStore(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewPersistentWatchSnapshots: %v", err)
 	}
-	if got := s.Get("clock", "clock"); len(got) != 1 || got[0].Message != "offset 1200ms" || got[0].Data["offset_ms"] != float64(1200) {
+	if got := s.Get("clock", "clock"); len(got) != 1 || got[0].Message != "offset 1200ms" || got[0].Data["offset_ms"] != float64(1200) || got[0].Severity != checks.SeverityWarning {
 		t.Fatalf("hydrated watch snapshots = %+v", got)
 	}
 
@@ -172,10 +172,11 @@ func TestPersistentWatchSnapshotsHydrateAndStore(t *testing.T) {
 		Unavailable: true,
 		Message:     "offset 4ms",
 		Data:        map[string]any{"offset_ms": float64(4)},
+		Severity:    checks.SeverityWarning,
 	})
 
 	got := store.watch["clock"]["clock"]
-	if got.CheckType != "clock" || !got.OK || !got.Unavailable || got.Message != "offset 4ms" || got.Data["offset_ms"] != float64(4) || !got.At.Equal(t1) {
+	if got.CheckType != "clock" || !got.OK || !got.Unavailable || got.Message != "offset 4ms" || got.Data["offset_ms"] != float64(4) || !got.At.Equal(t1) || got.Severity != checks.SeverityWarning {
 		t.Fatalf("stored watch snapshot = %+v", got)
 	}
 }

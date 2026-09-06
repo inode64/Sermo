@@ -1016,6 +1016,9 @@ func hardwareRAIDCheckReadings(data map[string]any) []web.WatchReading {
 	if issues := cfgval.StringList(data[checks.DataKeyHardwareRAIDIssues]); len(issues) > 0 {
 		rb.add(checks.DataKeyHardwareRAIDIssues, "Issues", strings.Join(issues, readingSummarySeparator))
 	}
+	if advisories := cfgval.StringList(data[checks.DataKeyHardwareRAIDAdvisories]); len(advisories) > 0 {
+		rb.add(checks.DataKeyHardwareRAIDAdvisories, "Advisories", strings.Join(advisories, readingSummarySeparator))
+	}
 	readings := rb.readings()
 	for _, detail := range hardwareRAIDControllerDetails(data[checks.DataKeyHardwareRAIDControllerDetails]) {
 		readings = append(readings, web.WatchReading{

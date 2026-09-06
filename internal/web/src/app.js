@@ -1186,12 +1186,19 @@ function renderEventsLoading(target, cols = 3) {
   }
 }
 
+// fmtMonitorSource names who last changed a target's monitoring state. The
+// values mirror the daemon's state store: config at startup, an operator through
+// sermoctl or the web UI, and the two paused-for-later-restore paths a manual
+// stop and a storage umount take.
 function fmtMonitorSource(src) {
   switch (src) {
     case "cli": return "via sermoctl";
     case "web": return "via web UI";
     case "config": return "via config";
-    case "daemon": return "via daemon";
+    case "cli-manual-stop": return "via sermoctl stop";
+    case "web-manual-stop": return "via web UI stop";
+    case "cli-mount-umount": return "via sermoctl umount";
+    case "web-mount-umount": return "via web UI umount";
     default: return src ? "via " + src : "";
   }
 }
@@ -4005,7 +4012,11 @@ function checkStateHTML(c, age) {
       : tpl`<span class="state-off">inactive</span>${age}`;
   }
   if (c.reports === REPORTS_VALUE) return tpl`<span class="state-on">measured</span>${age}`;
-  return c.ok ? tpl`<span class="ok">ok</span>${age}` : tpl`<span class="bad">fail</span>${age}`;
+  if (c.ok) return tpl`<span class="ok">ok</span>${age}`;
+  // An advisory — declared optional, or a failure the check itself graded a
+  // warning — reads amber: it is worth seeing, not an outage.
+  if (c.optional || c.severity === targetStateWarning) return tpl`<span class="inactive">warn</span>${age}`;
+  return tpl`<span class="bad">fail</span>${age}`;
 }
 
 // checkSLAHTML renders the SLA cell, or an explicit n/a for a check that will
@@ -4655,11 +4666,16 @@ function readingText(reading) {
   return bad ? `${label}: ${bad}` : `${label} ${reading.value || ""}`.trim();
 }
 
+// watchMonitorHint says who last changed the monitoring state and when. Each
+// part takes its own line under the badge — "active", then "via config", then
+// the age — so the cell never runs together into one long line.
 function watchMonitorHint(w) {
-  const bits = [];
-  if (w.monitor_source) bits.push(fmtMonitorSource(w.monitor_source));
-  if (w.monitor_changed_at) bits.push(fmtAge(w.monitor_changed_at));
-  return bits.length ? tpl` <span class="muted">${bits.join(" · ")}</span>` : nothing;
+  const source = w.monitor_source ? fmtMonitorSource(w.monitor_source) : "";
+  const age = w.monitor_changed_at ? fmtAge(w.monitor_changed_at) : "";
+  if (!source && !age) return nothing;
+  if (!source) return tpl`<br><span class="muted">${age}</span>`;
+  if (!age) return tpl`<br><span class="muted">${source}</span>`;
+  return tpl`<br><span class="muted">${source}<br>${age}</span>`;
 }
 
 function watchMonitoringCell(w) {
@@ -5271,6 +5287,9 @@ function healthCellClass(health) {
   // A verdict the drive never gave is not a failing verdict: it reads as the
   // same warning an unknown backend status does.
   if (health === healthValueUnknown) return healthValueUnknown;
+  // A controller reporting only advisories — error counters on members whose
+  // state is still OK — is amber, the same grade its row carries.
+  if (health === targetStateWarning) return "inactive";
   return "bad";
 }
 
@@ -7804,7 +7823,7 @@ function renderActionConfirm() {
   const activeLocks = (d.locks || []).filter((l) => l.state === lockStateActive);
   // A verdictless check has no verdict to fail: its ok flag carries the sensed
   // state, so an idle state sensor would otherwise read as a blocker here.
-  const failingChecks = (d.checks || []).filter((c) => c.ran && !c.ok && !c.optional && !verdictlessCheck(c));
+  const failingChecks = (d.checks || []).filter((c) => c.ran && !c.ok && !c.optional && c.severity !== targetStateWarning && !verdictlessCheck(c));
   const procWarnings = d.process_warnings || [];
   const noResidentProcess = !!d.no_resident_process;
   const ev = ctx.lastEvent;
