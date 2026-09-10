@@ -62,7 +62,7 @@ func (libvirtProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 			dialers.WithLocalTimeout(timeout),
 		))
 	default: // tcp
-		l = libvirt.NewWithDialer(libvirtRemoteDialer{addr: addr, target: target, timeout: timeout})
+		l = libvirt.NewWithDialer(libvirtRemoteDialer{target: target, timeout: timeout})
 	}
 
 	// go-libvirt's connect/RPC calls are not context-aware; the dialer timeout
@@ -73,22 +73,16 @@ func (libvirtProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 }
 
 type libvirtRemoteDialer struct {
-	addr    string
 	target  probeTarget
 	timeout time.Duration
 }
 
 func (d libvirtRemoteDialer) Dial() (net.Conn, error) {
-	dialer := libvirtRemoteNetDialer(d.target, d.timeout)
-	c, err := dialer.Dial(networkTCP, d.addr)
+	c, err := d.target.dialerWithTimeout(d.timeout).Dial(networkTCP, d.target.address())
 	if err != nil {
 		return nil, probeErr(ProtocolNameLibvirt, stepDial, err)
 	}
 	return c, nil
-}
-
-func libvirtRemoteNetDialer(target probeTarget, timeout time.Duration) *net.Dialer {
-	return target.dialerWithTimeout(timeout)
 }
 
 // libvirtProbe opens the connection, reads the version (and hostname), domain

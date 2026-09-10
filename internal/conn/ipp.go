@@ -47,7 +47,7 @@ func (ippProtocol) RequiresUser() bool { return false }
 func (ippProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	client, base := httpProbeBase(ctx, cfg, defaultPortIPP)
 	url := base + ippEndpointRoot
-	payload, err := buildIPPRequest(goipp.OpCupsGetDefault, ippRequestIDDefault)
+	payload, err := buildIPPDefaultRequest()
 	if err != nil {
 		return Result{}, probeErr(ProtocolNameIPP, stepRequest, err)
 	}
@@ -79,8 +79,8 @@ func (ippProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 
 // buildIPPRequest uses goipp only as the RFC 8010 codec. HTTP, interface
 // binding, TLS and response bounds remain owned by Sermo's probe transport.
-func buildIPPRequest(op goipp.Op, requestID uint32) ([]byte, error) {
-	message := goipp.NewRequest(goipp.DefaultVersion, op, requestID)
+func buildIPPDefaultRequest() ([]byte, error) {
+	message := goipp.NewRequest(goipp.DefaultVersion, goipp.OpCupsGetDefault, ippRequestIDDefault)
 	message.Operation.Add(goipp.MakeAttr(ippAttrCharset, goipp.TagCharset, goipp.String(ippCharsetUTF8)))
 	message.Operation.Add(goipp.MakeAttr(ippAttrNaturalLanguage, goipp.TagLanguage, goipp.String(ippLanguageEN)))
 	payload, err := message.EncodeBytes()
