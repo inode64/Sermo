@@ -21,7 +21,7 @@ type NamedLocker struct {
 
 // NewNamedLocker returns a locker over dir (<paths.runtime>/locks).
 func NewNamedLocker(dir string) NamedLocker {
-	return NamedLocker{Dir: dir, Proc: OSProcessProber{}, Now: time.Now, Self: selfIdentity}
+	return NamedLocker{Dir: dir, Proc: OSProcessProber{}, Now: time.Now}
 }
 
 // Hold acquires a named lock owned by this process, for the
@@ -63,7 +63,7 @@ func (l NamedLocker) ReleaseInactive(service, name string) (Lock, error) {
 	if err := validateLockIDs(service, name); err != nil {
 		return Lock{}, err
 	}
-	proc, now := l.dependencies()
+	proc, now := procNowDefaults(l.Proc, l.Now)
 	path := l.path(service, name)
 	existing, err := readLockFile(path)
 	if err != nil {
@@ -113,16 +113,12 @@ func (l NamedLocker) identity() (int, uint64) {
 	return selfIdentity()
 }
 
-func (l NamedLocker) dependencies() (ProcessProber, func() time.Time) {
-	return procNowDefaults(l.Proc, l.Now)
-}
-
 func (l NamedLocker) acquire(service, name, reason string, ttl time.Duration, ownerPID int, ownerTicks uint64) (*Handle, error) {
 	if err := validateLockIDs(service, name); err != nil {
 		return nil, err
 	}
 
-	proc, now := l.dependencies()
+	proc, now := procNowDefaults(l.Proc, l.Now)
 	if err := os.MkdirAll(l.Dir, lockDirMode); err != nil {
 		return nil, fmt.Errorf("create locks dir %s: %w", l.Dir, err)
 	}
@@ -134,7 +130,7 @@ func (l NamedLocker) acquire(service, name, reason string, ttl time.Duration, ow
 	if err != nil {
 		return nil, err
 	}
-	return &Handle{ol}, nil
+	return &ol, nil
 }
 
 func validateLockIDs(service, name string) error {

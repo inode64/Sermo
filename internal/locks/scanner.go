@@ -56,7 +56,7 @@ func (s Scanner) Scan(service string) (Report, error) {
 // the locks directory once. Reports are keyed by service and always include every
 // requested service, even when it has no locks.
 func (s Scanner) ScanServices(services []string) (map[string]Report, error) {
-	proc, now := s.dependencies()
+	proc, now := procNowDefaults(s.Proc, s.Now)
 	reports := reportsForServices(services)
 
 	names, err := s.lockFileNames()
@@ -88,10 +88,6 @@ func (s Scanner) ScanServices(services []string) (map[string]Report, error) {
 		}
 	}
 	return reports, nil
-}
-
-func (s Scanner) dependencies() (ProcessProber, func() time.Time) {
-	return procNowDefaults(s.Proc, s.Now)
 }
 
 func reportsForServices(services []string) map[string]Report {

@@ -35,7 +35,12 @@ type ownedLock struct {
 	released        bool
 }
 
-func (h *ownedLock) release() error {
+// Release removes the lock, but only if it is still this owner's lock. Safe on
+// a nil handle, so callers can defer it unconditionally.
+func (h *ownedLock) Release() error {
+	if h == nil {
+		return nil
+	}
 	if h.released {
 		return nil
 	}
@@ -56,19 +61,8 @@ func (h *ownedLock) release() error {
 	return nil
 }
 
-// Handle is an acquired operation lock owned by this process. Release removes it.
-type Handle struct {
-	ownedLock
-}
-
-// Release removes the lock, but only if it is still this owner's lock. Safe on
-// a nil handle, so callers can defer it unconditionally.
-func (h *Handle) Release() error {
-	if h == nil {
-		return nil
-	}
-	return h.release()
-}
+// Handle is an acquired operation lock owned by this process.
+type Handle = ownedLock
 
 // OperationLocker acquires the internal operation lock that serializes
 // start/stop/restart/reload/resume for one service. It lives under
@@ -87,7 +81,7 @@ type OperationLocker struct {
 // NewOperationLocker returns a locker over dir (<paths.runtime>/ops) using the
 // real host for process probing, the wall clock and this process's identity.
 func NewOperationLocker(dir string) OperationLocker {
-	return OperationLocker{Dir: dir, Proc: OSProcessProber{}, Now: time.Now, Self: selfIdentity}
+	return OperationLocker{Dir: dir, Proc: OSProcessProber{}, Now: time.Now}
 }
 
 // Acquire atomically creates the operation lock for service with the given TTL.
@@ -122,12 +116,12 @@ func (l OperationLocker) Acquire(service string, ttl time.Duration) (*Handle, er
 	if err != nil {
 		return nil, err
 	}
-	return &Handle{ol}, nil
+	return &ol, nil
 }
 
 // acquireExclusive is the bounded create/reclaim loop shared by the operation
-// and named lockers. On success it returns the ownedLock the caller wraps in
-// its handle type. It stamps a fresh payload on each attempt, deriving the
+// and named lockers. On success it returns the owned lock. It stamps a fresh
+// payload on each attempt, deriving the
 // expiry from the exact creation timestamp. OnReclaim, when non-nil, is invoked
 // with the stale reason after a stale lock is reclaimed. After a failed reclaim
 // the lock is re-read: if it turned active it is reported as held, otherwise the
