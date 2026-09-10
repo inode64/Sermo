@@ -911,20 +911,13 @@ func (w *Worker) shouldNotifyRule(r rules.Rule, rising bool) bool {
 func (*Worker) evalRule(ctx context.Context, ev *rules.Evaluator, r rules.Rule, evals map[string]ruleEvalResult) (bool, error) {
 	if evals != nil {
 		if res, ok := evals[r.Name]; ok {
-			if ev != nil {
-				ev.Change = res.change
-			}
+			ev.Change = res.change
 			return res.cond, res.err
 		}
 	}
-	if ev != nil {
-		ev.Change = rules.ChangeContext{}
-	}
+	ev.Change = rules.ChangeContext{}
 	cond, err := ev.Eval(ctx, r.If)
-	change := rules.ChangeContext{}
-	if ev != nil {
-		change = ev.Change
-	}
+	change := ev.Change
 	if evals != nil {
 		evals[r.Name] = ruleEvalResult{cond: cond, err: err, change: change}
 	}
