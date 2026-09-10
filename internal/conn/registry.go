@@ -83,8 +83,7 @@ var builtinProtocolRegistrations = []protocolRegistration{
 // registry is an immutable name-to-protocol index. Registrations are complete
 // before the map is published, so lookups need no daemon-hot-path lock.
 type registry struct {
-	byName      map[string]Protocol
-	byCanonical map[string]protocolRegistration
+	byName map[string]Protocol
 }
 
 // registeredProtocol is the runtime view of one immutable registration. It
@@ -106,7 +105,6 @@ func (p registeredProtocol) Probe(ctx context.Context, cfg Config) (Result, erro
 
 func newRegistry(registrations []protocolRegistration) (*registry, error) {
 	byName := make(map[string]Protocol, len(registrations))
-	byCanonical := make(map[string]protocolRegistration, len(registrations))
 	for _, registration := range registrations {
 		if registration.protocol == nil {
 			return nil, errors.New("register connection protocol: nil implementation")
@@ -119,7 +117,6 @@ func newRegistry(registrations []protocolRegistration) (*registry, error) {
 		if err := registerProtocolName(byName, name, registered); err != nil {
 			return nil, err
 		}
-		byCanonical[name] = registration
 		for _, alias := range registration.aliases {
 			if alias == "" {
 				return nil, fmt.Errorf("register connection protocol %q: empty alias", name)
@@ -129,7 +126,7 @@ func newRegistry(registrations []protocolRegistration) (*registry, error) {
 			}
 		}
 	}
-	return &registry{byName: byName, byCanonical: byCanonical}, nil
+	return &registry{byName: byName}, nil
 }
 
 func registerProtocolName(byName map[string]Protocol, name string, protocol Protocol) error {
@@ -172,7 +169,7 @@ func SocketOnly(name string) bool {
 	if !ok {
 		return false
 	}
-	registration, ok := defaultRegistry.byCanonical[protocol.Name()]
+	registration, ok := protocolRegistrationFor(protocol)
 	return ok && registration.socketOnly
 }
 
@@ -196,11 +193,19 @@ func Resolve(protocol Protocol, cfg Config) Config {
 	if protocol == nil {
 		return cfg
 	}
-	registration, registered := defaultRegistry.byCanonical[protocol.Name()]
+	registration, registered := protocolRegistrationFor(protocol)
 	if registered {
 		return resolveRegistration(registration, cfg)
 	}
 	return resolveProtocolTarget(protocol, "", cfg)
+}
+
+func protocolRegistrationFor(protocol Protocol) (protocolRegistration, bool) {
+	registered, ok := protocol.(registeredProtocol)
+	if !ok {
+		return protocolRegistration{}, false
+	}
+	return registered.registration, true
 }
 
 func resolveRegistration(registration protocolRegistration, cfg Config) Config {
