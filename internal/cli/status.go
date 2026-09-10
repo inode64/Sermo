@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 
+	"sermo/internal/config"
 	"sermo/internal/control"
 	"sermo/internal/servicemgr"
 )
@@ -35,13 +36,14 @@ func (a App) runStatus(ctx context.Context, opts options) int {
 		return code
 	}
 
-	status, code := a.serviceStatus(ctx, opts)
+	cfg := a.statusConfig(opts)
+	status, service, configured, code := a.serviceStatus(ctx, opts, cfg)
 	if code != exitSuccess {
 		return code
 	}
 
-	mon := a.serviceMonitorState(ctx, opts)
-	displayState := a.serviceDisplayState(ctx, opts, status, mon)
+	mon := a.serviceMonitorState(ctx, cfg, service, configured)
+	displayState := a.serviceDisplayState(ctx, opts, cfg, service, status, mon)
 	if opts.json {
 		writeJSON(a.Stdout, statusToJSON(status, mon, displayState))
 		return exitSuccess
@@ -57,15 +59,16 @@ func (a App) runIsActive(ctx context.Context, opts options) int {
 		return code
 	}
 
-	status, code := a.serviceStatus(ctx, opts)
+	cfg := a.statusConfig(opts)
+	status, service, configured, code := a.serviceStatus(ctx, opts, cfg)
 	if code != exitSuccess {
 		return code
 	}
 
 	switch {
 	case opts.json:
-		mon := a.serviceMonitorState(ctx, opts)
-		writeJSON(a.Stdout, statusToJSON(status, mon, a.serviceDisplayState(ctx, opts, status, mon)))
+		mon := a.serviceMonitorState(ctx, cfg, service, configured)
+		writeJSON(a.Stdout, statusToJSON(status, mon, a.serviceDisplayState(ctx, opts, cfg, service, status, mon)))
 	case !opts.quiet:
 		fmt.Fprintln(a.Stdout, status.Status)
 	}
@@ -78,7 +81,7 @@ func (a App) runIsActive(ctx context.Context, opts options) int {
 
 // serviceStatus resolves the backend, builds a manager and queries the service.
 // On any failure it reports the error and returns a non-success exit code.
-func (a App) serviceStatus(ctx context.Context, opts options) (servicemgr.ServiceStatus, int) {
+func (a App) serviceStatus(ctx context.Context, opts options, cfg *config.Config) (servicemgr.ServiceStatus, string, bool, int) {
 	ctx, cancel := context.WithTimeout(ctx, opts.timeout)
 	defer cancel()
 
@@ -89,38 +92,50 @@ func (a App) serviceStatus(ctx context.Context, opts options) (servicemgr.Servic
 		} else {
 			a.reportError(opts, fmt.Sprintf("backend detection failed: %v", err))
 		}
-		return servicemgr.ServiceStatus{}, exitRuntimeError
+		return servicemgr.ServiceStatus{}, "", false, exitRuntimeError
 	}
 
 	service := opts.service()
+	configured := false
 	// Only Unit and Manager are read below; the config branch replaces the whole
 	// target when it resolves one, so setting Backend here would never be seen.
 	target := control.Target{Unit: service, Manager: dependencies.manager}
-	if cfg, err := a.LoadConfig(opts.globalPath()); err == nil {
+	if cfg != nil {
 		if canonical, ok := cfg.CanonicalServiceName(service); ok {
+			configured = true
 			service = canonical
 			resolved, errs := cfg.Resolve(service)
 			if len(errs) > 0 {
 				a.reportError(opts, fmt.Sprintf("config resolve failed: %v", errs[0]))
-				return servicemgr.ServiceStatus{}, exitRuntimeError
+				return servicemgr.ServiceStatus{}, "", false, exitRuntimeError
 			}
 			target, err = a.resolveControlTarget(ctx, opts, service, resolved.Tree, dependencies.backend, dependencies.manager, dependencies.resolver)
 			if err != nil {
 				a.reportError(opts, fmt.Sprintf("control target failed: %v", err))
-				return servicemgr.ServiceStatus{}, exitRuntimeError
+				return servicemgr.ServiceStatus{}, "", false, exitRuntimeError
 			}
 		} else if len(cfg.Services) > 0 {
 			a.reportError(opts, fmt.Sprintf(cliUnknownServiceFormat, service))
-			return servicemgr.ServiceStatus{}, exitRuntimeError
+			return servicemgr.ServiceStatus{}, "", false, exitRuntimeError
 		}
 	}
 
 	status, err := target.Manager.Status(ctx, target.Unit)
 	if err != nil {
 		a.reportError(opts, fmt.Sprintf("status query failed: %v", err))
-		return servicemgr.ServiceStatus{}, exitRuntimeError
+		return servicemgr.ServiceStatus{}, "", false, exitRuntimeError
 	}
-	return status, exitSuccess
+	return status, service, configured, exitSuccess
+}
+
+// statusConfig loads the optional config once. Status still works for a direct
+// service unit when the config is absent or invalid.
+func (a App) statusConfig(opts options) *config.Config {
+	cfg, err := a.LoadConfig(opts.globalPath())
+	if err != nil {
+		return nil
+	}
+	return cfg
 }
 
 func (a App) resolveControlTarget(ctx context.Context, opts options, service string, tree map[string]any, backend servicemgr.Backend, manager servicemgr.Manager, resolver servicemgr.UnitResolver) (control.Target, error) {

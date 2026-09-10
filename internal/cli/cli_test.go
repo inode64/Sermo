@@ -328,17 +328,21 @@ uses: rpc-mountd
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 	var statusCalls []string
+	loadCalls := 0
 	app := App{
 		Detector: fakeBackendDetector{detection: servicemgr.Detection{Backend: servicemgr.BackendSystemd}},
 		NewManager: fakeStatusManager(servicemgr.ServiceStatus{
 			Service: "rpc-mountd", Backend: servicemgr.BackendSystemd,
 			Unit: "nfs-mountd.service", Status: servicemgr.StatusActive,
 		}, &statusCalls),
-		LoadConfig: func(string, ...config.Option) (*config.Config, error) { return cfg, nil },
-		Runner:     statusUnitRunner{known: "nfs-mountd.service"},
-		Env:        func(string) string { return "" },
-		Stdout:     &stdout,
-		Stderr:     &stderr,
+		LoadConfig: func(string, ...config.Option) (*config.Config, error) {
+			loadCalls++
+			return cfg, nil
+		},
+		Runner: statusUnitRunner{known: "nfs-mountd.service"},
+		Env:    func(string) string { return "" },
+		Stdout: &stdout,
+		Stderr: &stderr,
 	}
 
 	code := app.Run(context.Background(), []string{"status", "rpc-mountd"})
@@ -355,6 +359,9 @@ uses: rpc-mountd
 	}
 	if got := statusCalls[len(statusCalls)-1]; got != "nfs-mountd.service" {
 		t.Fatalf("last Status call = %q, want nfs-mountd.service; calls=%v", got, statusCalls)
+	}
+	if loadCalls != 1 {
+		t.Fatalf("LoadConfig calls = %d, want 1", loadCalls)
 	}
 }
 

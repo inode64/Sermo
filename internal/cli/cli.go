@@ -171,6 +171,10 @@ type App struct {
 	// FetchDaemonServiceState returns the daemon-computed service state when
 	// sermod is running and the web API is reachable. ok is false when unavailable.
 	FetchDaemonServiceState func(ctx context.Context, opts options, service string) (string, bool)
+	// daemonServiceStateWithConfig is the production path for status, which has
+	// already loaded and canonicalized its configuration. A custom fetch seam
+	// deliberately keeps the public, request-shaped function above.
+	daemonServiceStateWithConfig func(context.Context, *config.Config, string) (string, bool)
 	// FetchDaemonWatchDetail returns the current daemon-published snapshot for
 	// one watch. ok is false when sermod or its web API is unavailable.
 	FetchDaemonWatchDetail func(ctx context.Context, opts options, watch string) (daemonWatchDetail, bool)
@@ -309,8 +313,9 @@ func (a App) withDefaults() App {
 	if a.FetchEvents == nil {
 		a.FetchEvents = a.fetchEvents
 	}
-	if a.FetchDaemonServiceState == nil {
+	if a.FetchDaemonServiceState == nil && a.daemonServiceStateWithConfig == nil {
 		a.FetchDaemonServiceState = a.fetchDaemonServiceState
+		a.daemonServiceStateWithConfig = a.fetchDaemonServiceStateWithConfig
 	}
 	if a.FetchDaemonWatchDetail == nil {
 		a.FetchDaemonWatchDetail = a.fetchDaemonWatchDetail

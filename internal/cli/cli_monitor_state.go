@@ -15,13 +15,17 @@ import (
 // serviceDisplayState returns the operator-facing state for status output.
 // When sermod is up it prefers the daemon's settled view (including starting);
 // otherwise it derives state from the local backend query only.
-func (a App) serviceDisplayState(ctx context.Context, opts options, status servicemgr.ServiceStatus, mon monitorView) string {
-	if a.FetchDaemonServiceState != nil {
-		service := opts.service()
-		if service == "" {
-			service = status.Service
+func (a App) serviceDisplayState(ctx context.Context, opts options, cfg *config.Config, service string, status servicemgr.ServiceStatus, mon monitorView) string {
+	if cfg != nil && a.daemonServiceStateWithConfig != nil {
+		if serviceState, ok := a.daemonServiceStateWithConfig(ctx, cfg, service); ok && serviceState != "" {
+			return serviceState
 		}
-		if serviceState, ok := a.FetchDaemonServiceState(ctx, opts, service); ok && serviceState != "" {
+	} else if a.FetchDaemonServiceState != nil {
+		requested := opts.service()
+		if requested == "" {
+			requested = status.Service
+		}
+		if serviceState, ok := a.FetchDaemonServiceState(ctx, opts, requested); ok && serviceState != "" {
 			return serviceState
 		}
 	}
@@ -43,18 +47,15 @@ func (m monitorView) Monitored() bool {
 	return m.Configured && m.Enabled && !m.Paused
 }
 
-// serviceMonitorState reads a service's monitoring row from the state store. It is
-// best-effort: status works without config, so a missing config or store yields
-// an empty view (not paused).
-func (a App) serviceMonitorState(ctx context.Context, opts options) monitorView {
+// serviceMonitorState reads a service's monitoring row from the state store. It
+// is best-effort: status works without config, so a missing config or store
+// yields an empty view (not paused).
+func (a App) serviceMonitorState(ctx context.Context, cfg *config.Config, service string, configured bool) monitorView {
 	view := monitorView{Enabled: true}
-	cfg, err := a.LoadConfig(opts.globalPath())
-	if err != nil {
+	if cfg == nil {
 		return view
 	}
-	service := opts.service()
-	if canonical, ok := cfg.CanonicalServiceName(service); ok {
-		service = canonical
+	if configured {
 		view.Configured = true
 		if resolved, errs := cfg.Resolve(service); len(errs) == 0 {
 			if cfgval.Disabled(resolved.Tree) {
