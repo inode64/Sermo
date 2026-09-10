@@ -233,17 +233,10 @@ type WebBackend struct {
 }
 
 func (b *WebBackend) webNow() time.Time {
-	var clock func() time.Time
-	if b != nil {
-		clock = b.now
-	}
-	return clockOrNow(clock)()
+	return clockOrNow(b.now)()
 }
 
 func (b *WebBackend) maxOperationTimeout() time.Duration {
-	if b == nil {
-		return 0
-	}
 	if b.cfg == nil {
 		return b.operationTimeout
 	}

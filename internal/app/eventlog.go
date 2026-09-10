@@ -119,9 +119,6 @@ func (l *EventLog) Add(e Event) {
 }
 
 func (l *EventLog) exportEvent(e LoggedEvent) {
-	if l == nil {
-		return
-	}
 	l.mu.Lock()
 	w := l.file
 	l.mu.Unlock()
