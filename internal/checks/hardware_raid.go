@@ -281,14 +281,15 @@ func (o *hardwareRAIDObservation) health() string {
 	}
 }
 
-func (o *hardwareRAIDObservation) addTemperature(value any) {
+func (o *hardwareRAIDObservation) addTemperature(value any) (float64, bool) {
 	temperature, ok := hardwareRAIDNumber(value)
 	if !ok {
-		return
+		return 0, false
 	}
 	if temperature > o.MaxTemperature {
 		o.MaxTemperature = temperature
 	}
+	return temperature, true
 }
 
 func (o *hardwareRAIDObservation) noteOperation(operation string, progress float64, hasProgress bool) {
@@ -482,8 +483,7 @@ func parseStorCLIControllers(envelope storCLIEnvelope, observation *hardwareRAID
 		}
 		for key, value := range hardware {
 			if strings.Contains(strings.ToLower(key), "temperature") {
-				observation.addTemperature(value)
-				if temperature, ok := hardwareRAIDNumber(value); ok && temperature > detail.Temperature {
+				if temperature, ok := observation.addTemperature(value); ok && temperature > detail.Temperature {
 					detail.Temperature = temperature
 				}
 			}
@@ -592,10 +592,9 @@ func parseStorCLIDriveDetail(raw json.RawMessage, observation *hardwareRAIDObser
 			observation.SMARTAlerts++
 			observation.addIssue("drive " + driveID + " SMART alert")
 		}
-		if temperature, ok := hardwareRAIDNumber(section["Drive Temperature"]); ok {
+		if temperature, ok := observation.addTemperature(section["Drive Temperature"]); ok {
 			detail.Temperature = temperature
 		}
-		observation.addTemperature(section["Drive Temperature"])
 	}
 }
 
@@ -773,8 +772,7 @@ func parseStorCLIEnergyStores(controller, kind string, raw json.RawMessage, obse
 		cache.State = state
 		for key, value := range row {
 			if strings.Contains(strings.ToLower(key), "temp") {
-				observation.addTemperature(value)
-				if temperature, ok := hardwareRAIDNumber(value); ok && temperature > cache.Temperature {
+				if temperature, ok := observation.addTemperature(value); ok && temperature > cache.Temperature {
 					cache.Temperature = temperature
 				}
 			}
@@ -1088,8 +1086,7 @@ func (p *ssaCLIParser) parseTemperature(key, value string) {
 		strings.Contains(lower, "controller temperature") ||
 		strings.Contains(lower, "cache module temperature") ||
 		strings.Contains(lower, "capacitor temperature") {
-		p.observation.addTemperature(value)
-		temperature, ok := hardwareRAIDNumber(value)
+		temperature, ok := p.observation.addTemperature(value)
 		if !ok {
 			return
 		}
