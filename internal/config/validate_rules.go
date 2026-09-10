@@ -499,7 +499,7 @@ func validateState(v any, field string, valid map[string]struct{}, list, path st
 }
 
 func validateMetric(entry map[string]any, path string, allowSystem bool, add addFunc) {
-	scope := cfgval.String(entry[rules.FieldScope])
+	scope := cfgval.String(entry[checks.CheckKeyScope])
 	if scope == "" {
 		scope = checks.MetricScopeService
 	}

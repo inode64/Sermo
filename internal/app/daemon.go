@@ -1418,7 +1418,7 @@ func scanMetricScopes(node map[string]any, mark func(string)) {
 		switch operator {
 		case rules.ConditionMetric:
 			if m, ok := operand.(map[string]any); ok {
-				mark(ruleMetricScopeOf(m))
+				mark(checkMetricScopeOf(m))
 			}
 		case rules.ConditionFailed, rules.ConditionActive:
 			m, ok := operand.(map[string]any)
@@ -1426,7 +1426,7 @@ func scanMetricScopes(node map[string]any, mark func(string)) {
 				return false
 			}
 			if metric, ok := m[rules.FieldMetric].(map[string]any); ok {
-				mark(ruleMetricScopeOf(metric))
+				mark(checkMetricScopeOf(metric))
 			}
 		}
 		return false
@@ -1435,13 +1435,6 @@ func scanMetricScopes(node map[string]any, mark func(string)) {
 
 func checkMetricScopeOf(m map[string]any) string {
 	if s, _ := m[checks.CheckKeyScope].(string); s != "" {
-		return s
-	}
-	return checks.MetricScopeService
-}
-
-func ruleMetricScopeOf(m map[string]any) string {
-	if s, _ := m[rules.FieldScope].(string); s != "" {
 		return s
 	}
 	return checks.MetricScopeService

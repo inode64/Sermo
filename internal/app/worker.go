@@ -1409,7 +1409,7 @@ func (rc *ruleRuntimeContext) applyCheckResult(name string, res checks.Result) {
 }
 
 func (rc *ruleRuntimeContext) applyInlineMetric(ev *rules.Evaluator, metric map[string]any) {
-	scope := cfgval.AsString(metric[rules.FieldScope])
+	scope := cfgval.AsString(metric[checks.CheckKeyScope])
 	if scope == "" {
 		scope = checks.MetricScopeService
 	}

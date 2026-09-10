@@ -286,7 +286,7 @@ func (e *Evaluator) evalMetric(v any) (bool, error) {
 	if e.Deps.Metrics == nil {
 		return e.unavailableSignal(fmt.Errorf("metric %q has no metric source", name))
 	}
-	scope := cfgval.AsString(m[FieldScope])
+	scope := cfgval.AsString(m[checks.CheckKeyScope])
 	if scope == "" {
 		scope = checks.MetricScopeService
 	}

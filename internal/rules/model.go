@@ -240,7 +240,7 @@ func ConditionUsesSystemMetric(node, refChecks map[string]any) bool {
 
 func metricNodeUsesSystemScope(value any) bool {
 	metric, ok := value.(map[string]any)
-	return ok && cfgval.AsString(metric[FieldScope]) == checks.MetricScopeSystem
+	return ok && cfgval.AsString(metric[checks.CheckKeyScope]) == checks.MetricScopeSystem
 }
 
 func conditionReferenceUsesSystemMetric(value any, refChecks map[string]any) bool {
@@ -262,7 +262,7 @@ func referencedCheckUsesSystemMetric(name string, refChecks map[string]any) bool
 	if !ok {
 		return false
 	}
-	return cfgval.AsString(check[FieldType]) == checks.CheckTypeMetric && cfgval.AsString(check[FieldScope]) == checks.MetricScopeSystem
+	return cfgval.AsString(check[FieldType]) == checks.CheckTypeMetric && cfgval.AsString(check[checks.CheckKeyScope]) == checks.MetricScopeSystem
 }
 
 // ReferencedChecks merges the sections a rule's failed/active references may

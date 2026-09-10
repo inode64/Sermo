@@ -57,7 +57,6 @@ const (
 	FieldName    = "name"
 	FieldOp      = "op"
 	FieldPath    = "path"
-	FieldScope   = "scope"
 	FieldState   = "state"
 	FieldType    = "type"
 	FieldUser    = "user"
