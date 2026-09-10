@@ -103,12 +103,6 @@ func shortNTPVersion(s string) string {
 	if match := ntpPatchVersionRE.FindStringSubmatch(token); len(match) > shortVersionCaptureGroup {
 		return match[shortVersionCaptureGroup]
 	}
-	if strings.Contains(token, "@") {
-		if match := shortVersionRE.FindStringSubmatch(token); len(match) > shortVersionCaptureGroup {
-			return match[shortVersionCaptureGroup]
-		}
-		return ""
-	}
 	return ""
 }
 
