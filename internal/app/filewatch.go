@@ -470,16 +470,10 @@ func firstFileWatchRoot(paths []string, current map[string]fileState) fileState 
 			return state
 		}
 	}
-	for _, state := range current {
-		return state
-	}
 	return fileState{}
 }
 
 func firstFileWatchPath(paths []string) string {
-	if len(paths) == 0 {
-		return "file"
-	}
 	return paths[0]
 }
 
