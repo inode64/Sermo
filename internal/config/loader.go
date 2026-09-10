@@ -65,7 +65,7 @@ func Load(globalPath string, opts ...Option) (*Config, error) {
 		opt(&o)
 	}
 
-	global, err := loadGlobal(globalPath)
+	global, globalIssues, err := loadGlobal(globalPath)
 	if err != nil {
 		return nil, err
 	}
@@ -103,7 +103,7 @@ func Load(globalPath string, opts ...Option) (*Config, error) {
 		Services:        map[string]*Document{},
 		serviceUnits:    cloneServiceUnits(o.serviceUnits),
 
-		validationIssues: global.issues,
+		validationIssues: globalIssues,
 	}
 
 	for _, spec := range uniquePathSpecs(catalogPaths) {
@@ -145,14 +145,14 @@ func Load(globalPath string, opts ...Option) (*Config, error) {
 	return cfg, nil
 }
 
-func loadGlobal(path string) (Global, error) {
+func loadGlobal(path string) (Global, []Issue, error) {
 	data, err := os.ReadFile(filepath.Clean(path))
 	if err != nil {
-		return Global{}, fmt.Errorf("read global config %s: %w", path, err)
+		return Global{}, nil, fmt.Errorf("read global config %s: %w", path, err)
 	}
 	var raw map[string]any
 	if err := yaml.Unmarshal(data, &raw); err != nil {
-		return Global{}, parseGlobalConfigError(path, err)
+		return Global{}, nil, parseGlobalConfigError(path, err)
 	}
 	if raw == nil {
 		raw = map[string]any{}
@@ -162,31 +162,26 @@ func loadGlobal(path string) (Global, error) {
 	expandEnvTree(raw)
 
 	g := Global{Path: path, Raw: raw}
-	if defaults, ok := raw[sectionDefaults].(map[string]any); ok {
-		g.Defaults = defaults
-	} else {
-		g.Defaults = map[string]any{}
-	}
 	if paths, ok := raw[sectionPaths].(map[string]any); ok {
 		if g.ServicePaths, err = pathSpecList(paths[pathKeyServices], pathsLabelServices); err != nil {
-			return Global{}, parseGlobalConfigError(path, err)
+			return Global{}, nil, parseGlobalConfigError(path, err)
 		}
 		if g.AppPaths, err = pathSpecList(paths[pathKeyApps], pathsLabelApps); err != nil {
-			return Global{}, parseGlobalConfigError(path, err)
+			return Global{}, nil, parseGlobalConfigError(path, err)
 		}
 		if g.NotifierPaths, err = pathSpecList(paths[pathKeyNotifiers], pathsLabelNotifiers); err != nil {
-			return Global{}, parseGlobalConfigError(path, err)
+			return Global{}, nil, parseGlobalConfigError(path, err)
 		}
 		if g.WatchPaths, err = pathSpecList(paths[pathKeyWatches], pathsLabelWatches); err != nil {
-			return Global{}, parseGlobalConfigError(path, err)
+			return Global{}, nil, parseGlobalConfigError(path, err)
 		}
 		g.Runtime = cfgval.String(paths[pathKeyRuntime])
 		g.State = cfgval.String(paths[pathKeyState])
 		g.Templates = cfgval.String(paths[pathKeyTemplates])
 	}
 	resolveConfigPaths(path, &g)
-	resolveWebCredentials(&g)
-	return g, nil
+	issues := resolveWebCredentials(&g)
+	return g, issues, nil
 }
 
 func parseGlobalConfigError(path string, err error) error {

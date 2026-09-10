@@ -18,7 +18,7 @@ func FuzzLoadGlobal(f *testing.F) {
 		if err := os.WriteFile(path, source, 0o600); err != nil {
 			t.Fatal(err)
 		}
-		_, _ = loadGlobal(path)
+		_, _, _ = loadGlobal(path)
 	})
 }
 

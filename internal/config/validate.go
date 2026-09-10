@@ -326,19 +326,20 @@ func validateGlobalDefaults(cfg *Config, raw map[string]any, add addFunc) {
 	if _, present := raw[sectionNotify]; present {
 		validateNotifySelection(sectionNotify, raw[sectionNotify], notifierNames(notifiers), add)
 	}
-	cooldown, present := policyCooldown(cfg.Global.Defaults)
+	defaults := cfg.Global.Defaults()
+	cooldown, present := policyCooldown(defaults)
 	switch {
 	case !present:
 		add("%s is required and must be a positive duration", defaultsPathPolicyCooldown)
 	case !isPositiveDuration(cooldown):
 		add(validationPositiveDurationFormat, defaultsPathPolicyCooldown, cooldown)
 	}
-	validateDefaultsKeys(cfg.Global.Defaults, add)
-	validateDefaultsVariables(cfg.Global.Defaults, add)
-	validateDefaultsRestartOnChange(cfg.Global.Defaults, add)
-	validateDefaultsReloadOnChange(cfg.Global.Defaults, add)
+	validateDefaultsKeys(defaults, add)
+	validateDefaultsVariables(defaults, add)
+	validateDefaultsRestartOnChange(defaults, add)
+	validateDefaultsReloadOnChange(defaults, add)
 	for _, key := range []string{keyDryRun, keyAllowDependencies} {
-		if v, present := cfg.Global.Defaults[key]; present {
+		if v, present := defaults[key]; present {
 			if _, ok := v.(bool); !ok {
 				add(validationBooleanFormat, defaultsFieldPath(key))
 			}

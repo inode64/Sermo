@@ -27,7 +27,7 @@ service: svc
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	vars, _ := cfg.Global.Defaults["variables"].(map[string]any)
+	vars, _ := cfg.Global.Defaults()["variables"].(map[string]any)
 	if got := vars["plugindir"]; got != "/usr/lib/"+detectedArch {
 		t.Fatalf("plugindir = %v, want baked %q", got, "/usr/lib/"+detectedArch)
 	}

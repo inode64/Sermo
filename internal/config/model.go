@@ -753,7 +753,6 @@ func DryRun(tree map[string]any) bool {
 type Global struct {
 	Path          string
 	Raw           map[string]any
-	Defaults      map[string]any
 	ServicePaths  []PathSpec
 	AppPaths      []PathSpec
 	NotifierPaths []PathSpec
@@ -767,9 +766,14 @@ type Global struct {
 	// WebGuestCredentials.
 	webCredentials      webcred.List
 	webGuestCredentials webcred.List
-	// issues collects load-time findings (an unreadable password file) for
-	// Validate to report.
-	issues []Issue
+}
+
+// Defaults returns the defaults block from the canonical global configuration
+// tree. The block is never stored separately, so load-time transformations
+// cannot leave a stale parallel view behind.
+func (g Global) Defaults() map[string]any {
+	defaults, _ := g.Raw[sectionDefaults].(map[string]any)
+	return defaults
 }
 
 // PathSpec is one configured directory under paths.*. Recursive defaults to

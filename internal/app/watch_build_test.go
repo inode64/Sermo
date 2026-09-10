@@ -20,7 +20,7 @@ func cfgWithWatches(raw map[string]any) *config.Config {
 }
 
 func cfgWithWatchDefaults(raw, defaults map[string]any) *config.Config {
-	return &config.Config{Global: config.Global{Raw: map[string]any{"watches": raw}, Defaults: defaults}}
+	return &config.Config{Global: config.Global{Raw: map[string]any{"watches": raw, "defaults": defaults}}}
 }
 
 type typedNotifier struct {

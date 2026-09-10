@@ -14,9 +14,12 @@ import (
 // substring since every issue is Scope "global".
 func validateRawGlobal(t *testing.T, global map[string]any) []Issue {
 	t.Helper()
+	raw := cloneMap(global)
+	if _, present := raw[sectionDefaults]; !present {
+		raw[sectionDefaults] = map[string]any{"policy": map[string]any{"cooldown": "5m"}}
+	}
 	cfg := &Config{Global: Global{
-		Raw:      global,
-		Defaults: map[string]any{"policy": map[string]any{"cooldown": "5m"}},
+		Raw: raw,
 	}}
 	return Validate(cfg) // package function, not a method
 }

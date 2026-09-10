@@ -824,7 +824,7 @@ func injectHostBuiltins(vars map[string]string) {
 // list-first-existing handling as per-service variables. They form the lowest
 // explicit layer (a service's own variables override them; builtins fill gaps).
 func (c *Config) globalVars() map[string]string {
-	return collectVariables(map[string]any{sectionVariables: c.Global.Defaults[sectionVariables]})
+	return collectVariables(map[string]any{sectionVariables: c.Global.Defaults()[sectionVariables]})
 }
 
 func (c *Config) expansionVariables(tree map[string]any, name string, globalVars map[string]string) (map[string]string, []string) {
@@ -1541,8 +1541,9 @@ func (c *Config) mergedService(name string, chain []string) (map[string]any, err
 // services.
 func (c *Config) defaultsPerService() map[string]any {
 	out := map[string]any{}
+	defaults := c.Global.Defaults()
 	for _, key := range perServiceDefaults {
-		if v, ok := c.Global.Defaults[key]; ok {
+		if v, ok := defaults[key]; ok {
 			out[key] = deepCopy(v)
 		}
 	}
@@ -1550,7 +1551,7 @@ func (c *Config) defaultsPerService() map[string]any {
 }
 
 func (c *Config) applyWatchDefaults(raw map[string]any) {
-	v, ok := c.Global.Defaults[keyDryRun]
+	v, ok := c.Global.Defaults()[keyDryRun]
 	if !ok {
 		return
 	}

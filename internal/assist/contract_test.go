@@ -65,8 +65,8 @@ func TestGeneratedWatchesPassConfigValidation(t *testing.T) {
 				"ops": map[string]any{notify.KeyType: notify.TypeSlack, notify.KeyWebhook: "https://hooks.slack.com/services/T0/B0/X"},
 			},
 			config.SectionWatches: watches,
+			"defaults":            map[string]any{rules.SectionPolicy: map[string]any{rules.PolicyKeyCooldown: "5m"}},
 		},
-		Defaults: map[string]any{rules.SectionPolicy: map[string]any{rules.PolicyKeyCooldown: "5m"}},
 	}}
 	for _, issue := range config.Validate(cfg) {
 		if strings.Contains(issue.Msg, "watches.") {
@@ -78,8 +78,9 @@ func TestGeneratedWatchesPassConfigValidation(t *testing.T) {
 func TestGeneratedGenericServicePassesConfigValidation(t *testing.T) {
 	cfg := &config.Config{
 		Global: config.Global{
-			Raw:      map[string]any{},
-			Defaults: map[string]any{rules.SectionPolicy: map[string]any{rules.PolicyKeyCooldown: "5m"}},
+			Raw: map[string]any{
+				"defaults": map[string]any{rules.SectionPolicy: map[string]any{rules.PolicyKeyCooldown: "5m"}},
+			},
 		},
 		Services: map[string]*config.Document{
 			"customd": {
@@ -119,8 +120,9 @@ func TestGeneratedGenericServicePassesConfigValidation(t *testing.T) {
 func TestGeneratedControlledServicesPassConfigValidation(t *testing.T) {
 	cfg := &config.Config{
 		Global: config.Global{
-			Raw:      map[string]any{},
-			Defaults: map[string]any{rules.SectionPolicy: map[string]any{rules.PolicyKeyCooldown: "5m"}},
+			Raw: map[string]any{
+				"defaults": map[string]any{rules.SectionPolicy: map[string]any{rules.PolicyKeyCooldown: "5m"}},
+			},
 		},
 		Services: map[string]*config.Document{
 			"docker-web": {
@@ -160,8 +162,8 @@ func TestGeneratedMountsPassConfigValidation(t *testing.T) {
 				config.SectionWatches: map[string]any{
 					"mount-mnt-backup": body,
 				},
+				"defaults": map[string]any{rules.SectionPolicy: map[string]any{rules.PolicyKeyCooldown: "5m"}},
 			},
-			Defaults: map[string]any{rules.SectionPolicy: map[string]any{rules.PolicyKeyCooldown: "5m"}},
 		},
 	}
 	for _, issue := range config.Validate(cfg) {
