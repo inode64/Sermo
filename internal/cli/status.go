@@ -18,12 +18,7 @@ func (a App) runBackend(ctx context.Context, opts options) int {
 
 	detection, err := a.Detector.Detect(ctx, opts.backend)
 	if err != nil {
-		if opts.json {
-			writeJSON(a.Stdout, map[string]string{cliJSONKeyError: err.Error()})
-		} else {
-			fmt.Fprintf(a.Stderr, "backend detection failed: %v\n", err)
-		}
-		return exitRuntimeError
+		return a.fail(opts, fmt.Sprintf("backend detection failed: %v", err))
 	}
 
 	if opts.json {
