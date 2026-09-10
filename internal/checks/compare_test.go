@@ -47,3 +47,13 @@ func TestCompareValue(t *testing.T) {
 		}
 	}
 }
+
+func TestAssertOpValueRequiresValueBeforeNumericValidation(t *testing.T) {
+	_, _, warn := assertOpValue(map[string]any{
+		CheckKeyOp:    ">",
+		CheckKeyValue: "",
+	}, "postgres-query")
+	if warn != "postgres-query check requires a value" {
+		t.Fatalf("warning = %q", warn)
+	}
+}

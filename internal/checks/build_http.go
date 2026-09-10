@@ -172,12 +172,8 @@ func configureHTTPBodyAssertion(check *httpCheck, entry map[string]any) string {
 	if !ok {
 		return "http expect_body must be an {op, value} mapping"
 	}
-	op := cfgval.AsString(fields[CheckKeyOp])
-	if !cfgval.IsAssertOp(op) {
-		return "http expect_body op must be one of " + cfgval.AssertOpSummary
-	}
-	value := cfgval.String(fields[CheckKeyValue])
-	if err := ValidateAssertionValue(CheckKeyExpectBody, op, value); err != nil {
+	op, value, err := parseAssertionOpValue(fields, CheckKeyExpectBody, "", false)
+	if err != nil {
 		return "http " + err.Error()
 	}
 	check.bodyOp, check.bodyValue = op, value
@@ -349,12 +345,8 @@ func parseStatusMatcher(v any) (statusMatcher, error) {
 	}
 	// Operator form: {op, value} (e.g. status < 500).
 	if cond, ok := v.(map[string]any); ok {
-		op := cfgval.AsString(cond[CheckKeyOp])
-		if !cfgval.IsAssertOp(op) {
-			return statusMatcher{}, fmt.Errorf("expect_status op must be one of %s", cfgval.AssertOpSummary)
-		}
-		value := cfgval.String(cond[CheckKeyValue])
-		if err := ValidateAssertionValue(CheckKeyExpectStatus, op, value); err != nil {
+		op, value, err := parseAssertionOpValue(cond, CheckKeyExpectStatus, "", false)
+		if err != nil {
 			return statusMatcher{}, err
 		}
 		return statusMatcher{op: op, value: value}, nil
