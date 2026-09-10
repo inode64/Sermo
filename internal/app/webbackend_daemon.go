@@ -1,6 +1,7 @@
 package app
 
 import (
+	"cmp"
 	"context"
 	"time"
 
@@ -46,12 +47,7 @@ func (b *WebBackend) DaemonInfo(_ context.Context) web.DaemonInfo {
 		info.OperationTimeout = units.HumanizeDuration(config.EngineDuration(b.cfg, config.EngineKeyOperationTimeout, DefaultEngineOperationTimeout))
 		info.StartupDelay = units.HumanizeDuration(config.EngineDuration(b.cfg, config.EngineKeyStartupDelay, 0))
 
-		if be := config.EngineString(b.cfg, config.EngineKeyBackend); be != "" {
-			info.Backend = be
-		}
-		if info.Backend == "" {
-			info.Backend = string(servicemgr.BackendAuto)
-		}
+		info.Backend = cmp.Or(config.EngineString(b.cfg, config.EngineKeyBackend), string(servicemgr.BackendAuto))
 	}
 
 	return info
