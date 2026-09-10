@@ -1,11 +1,11 @@
 package process
 
 import (
+	"cmp"
 	"fmt"
 	"maps"
 	"regexp"
 	"slices"
-	"sort"
 	"strings"
 	"time"
 
@@ -91,14 +91,14 @@ func EnableAutomaticReaping(policy KillPolicy, selectors []Selector) KillPolicy 
 		seen[key] = true
 		pairs = append(pairs, killIdentity{killIdentityKey: key, cmdRe: selectorCmdRegexp(&selector)})
 	}
-	sort.Slice(pairs, func(i, j int) bool {
-		if pairs[i].user != pairs[j].user {
-			return pairs[i].user < pairs[j].user
+	slices.SortFunc(pairs, func(a, b killIdentity) int {
+		if result := cmp.Compare(a.user, b.user); result != 0 {
+			return result
 		}
-		if pairs[i].exe != pairs[j].exe {
-			return pairs[i].exe < pairs[j].exe
+		if result := cmp.Compare(a.exe, b.exe); result != 0 {
+			return result
 		}
-		return pairs[i].cmd < pairs[j].cmd
+		return cmp.Compare(a.cmd, b.cmd)
 	})
 	policy.KillOnlyIf.pairs = pairs
 	policy.ForceKill = len(pairs) > 0

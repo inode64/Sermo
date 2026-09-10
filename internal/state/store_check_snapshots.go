@@ -4,7 +4,8 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"sort"
+	"maps"
+	"slices"
 	"time"
 
 	_ "modernc.org/sqlite" // registers the "sqlite" database/sql driver
@@ -82,12 +83,7 @@ func replaceServiceRows[T any](s *Store, service, deleteSQL, what string, record
 	if _, err := tx.ExecContext(s.sqlCtx(), deleteSQL, service); err != nil {
 		return fmt.Errorf("clear %ss for %s: %w", what, service, err)
 	}
-	names := make([]string, 0, len(records))
-	for name := range records {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	for _, name := range names {
+	for _, name := range slices.Sorted(maps.Keys(records)) {
 		if err := insert(tx, name, records[name]); err != nil {
 			return err
 		}
