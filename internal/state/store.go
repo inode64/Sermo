@@ -396,6 +396,18 @@ func unixNanoTime(n int64) time.Time {
 	return time.Unix(0, n).UTC()
 }
 
+// scanOne runs a single-row scan and distinguishes an absent row from a query
+// failure. State readers add their own target-specific error context.
+func scanOne(scan func() error) (found bool, err error) {
+	if err := scan(); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
+}
+
 type statementExecutor func(context.Context, string, ...any) (sql.Result, error)
 
 // Compact checkpoints the WAL and vacuums the SQLite state database so space

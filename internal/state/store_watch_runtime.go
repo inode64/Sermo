@@ -1,9 +1,7 @@
 package state
 
 import (
-	"database/sql"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"time"
 
@@ -47,22 +45,24 @@ func (s *Store) WatchRuntimeState(watch, slot string) (WatchRuntimeRecord, bool,
 		clearSince         int64
 		clearConsecutive   int
 	)
-	err := s.reads().QueryRowContext(s.sqlCtx(),
-		`SELECT firing, unavailable, last_notify_at, consecutive, history, true_since,
+	found, err := scanOne(func() error {
+		return s.reads().QueryRowContext(s.sqlCtx(),
+			`SELECT firing, unavailable, last_notify_at, consecutive, history, true_since,
 		        timed_history, last_action_at, recent_actions, current_backoff_ns,
 		        clear_since, clear_consecutive
 		   FROM watch_runtime_state WHERE watch = ? AND slot = ?;`,
-		watch, slot,
-	).Scan(
-		&firing, &unavailable, &lastNotifyAt, &consecutive, &rawHistory, &trueSince,
-		&rawTimed, &lastActionAt, &rawRecentActions, &currentBackoffNano,
-		&clearSince, &clearConsecutive,
-	)
-	switch {
-	case errors.Is(err, sql.ErrNoRows):
-		return WatchRuntimeRecord{}, false, nil
-	case err != nil:
+			watch, slot,
+		).Scan(
+			&firing, &unavailable, &lastNotifyAt, &consecutive, &rawHistory, &trueSince,
+			&rawTimed, &lastActionAt, &rawRecentActions, &currentBackoffNano,
+			&clearSince, &clearConsecutive,
+		)
+	})
+	if err != nil {
 		return WatchRuntimeRecord{}, false, fmt.Errorf("load watch runtime state for %s/%s: %w", watch, slot, err)
+	}
+	if !found {
+		return WatchRuntimeRecord{}, false, nil
 	}
 
 	var history []bool
