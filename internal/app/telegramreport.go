@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -126,12 +127,7 @@ func (r *telegramReporter) Events(ctx context.Context, limit int) ([]telegrambot
 
 func (r *telegramReporter) serviceExists(ctx context.Context, name string) bool {
 	services := r.backend().Services(ctx)
-	for i := range services {
-		if strings.EqualFold(services[i].Name, name) {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc(services, func(service web.Service) bool { return strings.EqualFold(service.Name, name) })
 }
 
 // formatSLARatio renders one window's availability, naming the affected minutes

@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"slices"
 	"time"
 
 	"sermo/internal/checks"
@@ -71,12 +72,7 @@ func (b *WebBackend) WatchSeries(_ context.Context, name, metric string, since t
 // checkBandDeclared reports whether metric is one of the check's declared state
 // bands — the gate that keeps the API from serving a series nothing records.
 func checkBandDeclared(bands []checks.BandMetric, metric string) bool {
-	for _, b := range bands {
-		if b.Key == metric {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc(bands, func(band checks.BandMetric) bool { return band.Key == metric })
 }
 
 // availabilitySeries reads one availability series and renders it as the wire
@@ -175,10 +171,8 @@ func (b *WebBackend) Metrics(_ context.Context, name, check, metric string, sinc
 
 // resolvedGraphUnit looks metric up in a check's resolved line metrics.
 func resolvedGraphUnit(graphs []checks.GraphMetric, metric string) (string, bool) {
-	for _, m := range graphs {
-		if m.Key == metric {
-			return m.Unit, true
-		}
+	if i := slices.IndexFunc(graphs, func(graph checks.GraphMetric) bool { return graphs != nil && graph.Key == metric }); i >= 0 && i < len(graphs) {
+		return graphs[i].Unit, true
 	}
 	return "", false
 }

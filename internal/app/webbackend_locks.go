@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"slices"
 	"time"
 
 	"sermo/internal/config"
@@ -70,12 +71,7 @@ func activeLockNamesFromReport(report locks.Report) []string {
 }
 
 func reportHasActiveLock(report locks.Report) bool {
-	for i := range report.Locks {
-		if report.Locks[i].State == locks.StateActive {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc(report.Locks, func(lock locks.Lock) bool { return lock.State == locks.StateActive })
 }
 
 // operationActive reports whether an engine action is running on service right

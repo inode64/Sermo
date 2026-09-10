@@ -7,6 +7,7 @@ import (
 	"sermo/internal/checks"
 	"sermo/internal/metrics"
 	"sermo/internal/web"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -220,12 +221,10 @@ func storageMountExpectation(check map[string]any) (bool, bool) {
 }
 
 func storageUsagePredicatesConfigured(check map[string]any) bool {
-	for _, field := range checks.StoragePredFields {
-		if _, ok := check[field]; ok {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc(checks.StoragePredFields, func(field string) bool {
+		_, ok := check[field]
+		return ok
+	})
 }
 
 // watchReadingIntMetricValue renders an integer reading through the canonical
