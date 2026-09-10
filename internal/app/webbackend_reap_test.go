@@ -17,7 +17,7 @@ func straysSnapshotBackend(t *testing.T, count int, age time.Duration) *WebBacke
 	t.Helper()
 	snaps := NewSnapshots()
 	data := map[string]any{checks.DataKeyType: checks.CheckTypeStrays, checks.DataKeyCount: count}
-	snaps.PublishWithCheckTypes("web",
+	snaps.publishWithCheckTypes("web",
 		map[string]checks.Result{"strays": {Check: "strays", OK: count == 0, Data: data}},
 		map[string]bool{"strays": true},
 		map[string]string{"strays": checks.CheckTypeStrays},
@@ -68,7 +68,7 @@ func TestServiceStrayCountIsDeterministicWithSeveralStraysChecks(t *testing.T) {
 		ran[name] = true
 		types[name] = checks.CheckTypeStrays
 	}
-	snaps.PublishWithCheckTypes("web", results, ran, types)
+	snaps.publishWithCheckTypes("web", results, ran, types)
 	b := webBackendWithEntry(snaps, names, types)
 	b.entries["web"].interval = time.Minute
 	publishedAt := time.Now()
@@ -102,7 +102,7 @@ func TestServiceStateReasonFiresOnAnyFailingStaleBinaryCheck(t *testing.T) {
 			names := []string{"stale-binary", "zz-extra-stale"}
 			types := map[string]string{names[0]: checks.CheckTypeStaleBinary, names[1]: checks.CheckTypeStaleBinary}
 			snaps := NewSnapshots()
-			snaps.PublishWithCheckTypes("web", map[string]checks.Result{
+			snaps.publishWithCheckTypes("web", map[string]checks.Result{
 				names[0]: {Check: names[0], OK: tc.firstOK},
 				names[1]: {Check: names[1], OK: tc.secondOK},
 			}, map[string]bool{names[0]: true, names[1]: true}, types)

@@ -18,7 +18,7 @@ func staleBinaryBackend(t *testing.T, ok bool) (*WebBackend, *webEntry) {
 	at := time.Date(2026, 8, 3, 21, 0, 0, 0, time.UTC)
 	snaps := NewSnapshots()
 	snaps.now = func() time.Time { return at }
-	snaps.PublishWithCheckTypes("web",
+	snaps.publishWithCheckTypes("web",
 		map[string]checks.Result{"stale-binary": {Check: "stale-binary", OK: ok, Reports: checks.ReportsState}},
 		map[string]bool{"stale-binary": true},
 		map[string]string{"stale-binary": checks.CheckTypeStaleBinary})
@@ -69,7 +69,7 @@ func TestServiceStateReasonEmptyWithoutSnapshot(t *testing.T) {
 // mistaken for one whose check passed.
 func TestServiceStateReasonIgnoresOtherCheckTypes(t *testing.T) {
 	snaps := NewSnapshots()
-	snaps.PublishWithCheckTypes("web",
+	snaps.publishWithCheckTypes("web",
 		map[string]checks.Result{"probe": {Check: "probe", OK: false}},
 		map[string]bool{"probe": true},
 		map[string]string{"probe": checks.CheckTypeTCP})
@@ -114,7 +114,7 @@ func TestWebBackendProcessCheckReplacedBinaryRequiresRestart(t *testing.T) {
 	types := map[string]string{"process": checks.CheckTypeProcess}
 	snaps := NewSnapshots()
 	snaps.now = func() time.Time { return at }
-	snaps.PublishWithCheckTypes("dmeventd", map[string]checks.Result{
+	snaps.publishWithCheckTypes("dmeventd", map[string]checks.Result{
 		"process": {Check: "process", OK: false, Reports: checks.ReportsState,
 			Data: map[string]any{checks.DataKeyReplacedBinaries: "/usr/bin/dmeventd"}},
 	}, map[string]bool{"process": true}, types)
@@ -154,7 +154,7 @@ func TestWebBackendConfigurationWarningOutranksRestartRequired(t *testing.T) {
 	}
 	snaps := NewSnapshots()
 	snaps.now = func() time.Time { return at }
-	snaps.PublishWithCheckTypes("web", map[string]checks.Result{
+	snaps.publishWithCheckTypes("web", map[string]checks.Result{
 		config.ConfigurationCheckName: {Check: config.ConfigurationCheckName, OK: false, Severity: checks.SeverityWarning},
 		"stale-binary":                {Check: "stale-binary", OK: false, Reports: checks.ReportsState},
 	}, map[string]bool{config.ConfigurationCheckName: true, "stale-binary": true}, types)

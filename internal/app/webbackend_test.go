@@ -131,7 +131,7 @@ func TestWebBackendEventPageStopsAtBoundedScan(t *testing.T) {
 
 func TestWebBackendDetailRanFlag(t *testing.T) {
 	snaps := NewSnapshots()
-	snaps.PublishWithCheckTypes("web", map[string]checks.Result{
+	snaps.publishWithCheckTypes("web", map[string]checks.Result{
 		"fast": {Check: "fast", OK: true, Message: "ok"},
 		"slow": {Check: "slow", OK: true, Message: "cached"},
 	}, map[string]bool{"fast": true}, map[string]string{"fast": "tcp", "slow": "http"})
@@ -296,7 +296,7 @@ func TestWebBackendKeepsVerifiedSSHSessionsWithPartialSource(t *testing.T) {
 
 func TestWebBackendShowsTerminalSessionsFromPublishedCheckData(t *testing.T) {
 	snaps := NewSnapshots()
-	snaps.PublishWithCheckTypes("web", map[string]checks.Result{
+	snaps.publishWithCheckTypes("web", map[string]checks.Result{
 		"tmux-sessions": {
 			Check: "tmux-sessions",
 			OK:    true,
@@ -336,7 +336,7 @@ func TestWebBackendShowsTerminalSessionsFromPublishedCheckData(t *testing.T) {
 
 func TestWebBackendTerminalSessionSourcesExposeCollectingAndUnavailable(t *testing.T) {
 	snaps := NewSnapshots()
-	snaps.PublishWithCheckTypes("web", map[string]checks.Result{
+	snaps.publishWithCheckTypes("web", map[string]checks.Result{
 		"screen-sessions": {Check: "screen-sessions", OK: false, Data: map[string]any{checks.DataKeySampleError: "socket denied"}},
 	}, map[string]bool{"screen-sessions": true}, map[string]string{"screen-sessions": checks.CheckTypeTerminalSessions})
 	b := webBackendWithEntry(snaps, []string{"screen-sessions", "tmux-sessions"}, map[string]string{
@@ -358,7 +358,7 @@ func TestWebBackendTerminalSessionSourcesExposeCollectingAndUnavailable(t *testi
 
 func TestWebBackendOmitsAbsentTerminalSessionSource(t *testing.T) {
 	snaps := NewSnapshots()
-	snaps.PublishWithCheckTypes("web", map[string]checks.Result{
+	snaps.publishWithCheckTypes("web", map[string]checks.Result{
 		"tmux-sessions": {
 			Check: "tmux-sessions",
 			OK:    true,
@@ -378,7 +378,7 @@ func TestWebBackendOmitsAbsentTerminalSessionSource(t *testing.T) {
 
 func TestWebBackendMarksOnlyEmptyTmuxSocketsClosable(t *testing.T) {
 	snaps := NewSnapshots()
-	snaps.PublishWithCheckTypes("web", map[string]checks.Result{
+	snaps.publishWithCheckTypes("web", map[string]checks.Result{
 		"tmux-sessions":   {Check: "tmux-sessions", OK: true, Data: map[string]any{checks.DataKeyPresent: true}},
 		"screen-sessions": {Check: "screen-sessions", OK: true, Data: map[string]any{checks.DataKeyPresent: true}},
 	}, map[string]bool{"tmux-sessions": true, "screen-sessions": true}, map[string]string{
@@ -406,7 +406,7 @@ func TestWebBackendHidesClosedTerminalSourceUntilNextSample(t *testing.T) {
 	sampleAt := time.Unix(100, 0)
 	snaps := NewSnapshots()
 	snaps.now = func() time.Time { return sampleAt }
-	snaps.PublishWithCheckTypes("web", map[string]checks.Result{
+	snaps.publishWithCheckTypes("web", map[string]checks.Result{
 		"tmux-sessions": {Check: "tmux-sessions", OK: true, Data: map[string]any{checks.DataKeyPresent: true}},
 	}, map[string]bool{"tmux-sessions": true}, map[string]string{"tmux-sessions": checks.CheckTypeTerminalSessions})
 	b := webBackendWithEntry(snaps, []string{"tmux-sessions"}, map[string]string{"tmux-sessions": checks.CheckTypeTerminalSessions})
@@ -421,7 +421,7 @@ func TestWebBackendHidesClosedTerminalSourceUntilNextSample(t *testing.T) {
 	}
 
 	sampleAt = closedAt.Add(time.Second)
-	snaps.PublishWithCheckTypes("web", map[string]checks.Result{
+	snaps.publishWithCheckTypes("web", map[string]checks.Result{
 		"tmux-sessions": {Check: "tmux-sessions", OK: true, Data: map[string]any{checks.DataKeyPresent: true}},
 	}, map[string]bool{"tmux-sessions": true}, map[string]string{"tmux-sessions": checks.CheckTypeTerminalSessions})
 	if inventory := b.Sessions(context.Background()); len(inventory.Sources) != 1 {
@@ -459,7 +459,7 @@ func TestTerminalSessionMetricKeyKeepsComponentsDistinct(t *testing.T) {
 // sensor is healthy and has to read ok, not fail.
 func TestWebBackendDetailConditionCheckReportsAvailability(t *testing.T) {
 	snaps := NewSnapshots()
-	snaps.PublishWithCheckTypes("web", map[string]checks.Result{
+	snaps.publishWithCheckTypes("web", map[string]checks.Result{
 		"lag-quiet":  {Check: "lag-quiet", OK: false, Condition: true, Message: "16 MiB (limit 1024 MiB)"},
 		"lag-firing": {Check: "lag-firing", OK: true, Condition: true, Message: "2048 MiB (limit 1024 MiB)"},
 		"port-up":    {Check: "port-up", OK: true, Message: "connected"},
@@ -494,7 +494,7 @@ func TestWebBackendDetailConditionCheckReportsAvailability(t *testing.T) {
 
 func TestWebBackendDetailCheckReadings(t *testing.T) {
 	snap := NewSnapshots()
-	snap.PublishWithCheckTypes("web", map[string]checks.Result{
+	snap.publishWithCheckTypes("web", map[string]checks.Result{
 		"tls": {
 			Check: "tls", OK: true, Message: "valid",
 			Data: map[string]any{
@@ -537,7 +537,7 @@ func TestWebBackendDetailGraphMetricCarriesOnlyFreshCurrentValue(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			snaps := NewSnapshots()
 			snaps.now = func() time.Time { return tc.sampleAt }
-			snaps.PublishWithCheckTypes("web", map[string]checks.Result{
+			snaps.publishWithCheckTypes("web", map[string]checks.Result{
 				"queue": {Check: "queue", OK: true, Data: map[string]any{checks.DataKeyValue: 0.0}},
 			}, map[string]bool{"queue": true}, map[string]string{"queue": checks.CheckTypeCommand})
 			b := webBackendWithEntry(snaps, []string{"queue"}, map[string]string{"queue": checks.CheckTypeCommand})
@@ -843,7 +843,7 @@ func TestWebBackendServiceCheckRefreshesOlderStatusCache(t *testing.T) {
 	}
 
 	now = now.Add(5 * time.Second)
-	snaps.PublishWithCheckTypes("web", map[string]checks.Result{
+	snaps.publishWithCheckTypes("web", map[string]checks.Result{
 		"service": {
 			Check: "service", OK: true,
 			Data: map[string]any{checks.DataKeyStatus: string(servicemgr.StatusActive)},
@@ -1749,7 +1749,7 @@ func TestWebBackendStorageWatchUsesSnapshot(t *testing.T) {
 	now := time.Unix(1000, 0)
 	snapshots := NewWatchSnapshots()
 	snapshots.now = func() time.Time { return now }
-	snapshots.Publish("storage-data", checks.CheckTypeStorage, checks.Result{
+	snapshots.publish("storage-data", checks.CheckTypeStorage, checks.Result{
 		Check:     "storage-data",
 		Condition: true,
 		Message:   "/data used 87.5% free 12.5% inodes 80.0% used",
@@ -1795,7 +1795,7 @@ func TestWebBackendStorageMountOnlyUsesSnapshot(t *testing.T) {
 	now := time.Unix(1000, 0)
 	snapshots := NewWatchSnapshots()
 	snapshots.now = func() time.Time { return now }
-	snapshots.Publish("mount-backup", checks.CheckTypeStorage, checks.Result{
+	snapshots.publish("mount-backup", checks.CheckTypeStorage, checks.Result{
 		Check:     "mount-backup",
 		Condition: true,
 		Message:   "/mnt/backup mounted as expected",
@@ -1843,7 +1843,7 @@ func TestWebBackendStorageMountedExpectationProjectsSnapshot(t *testing.T) {
 	now := time.Unix(1000, 0)
 	snapshots := NewWatchSnapshots()
 	snapshots.now = func() time.Time { return now }
-	snapshots.Publish("storage-boot-desktop", checks.CheckTypeStorage, checks.Result{
+	snapshots.publish("storage-boot-desktop", checks.CheckTypeStorage, checks.Result{
 		Check:     "storage-boot-desktop",
 		OK:        true,
 		Condition: true,
@@ -2040,7 +2040,7 @@ func TestWebBackendStorageWatchProjectsSnapshotErrors(t *testing.T) {
 	now := time.Unix(1000, 0)
 	snapshots := NewWatchSnapshots()
 	snapshots.now = func() time.Time { return now }
-	snapshots.Publish("storage-data", checks.CheckTypeStorage, checks.Result{
+	snapshots.publish("storage-data", checks.CheckTypeStorage, checks.Result{
 		Check:     "storage-data",
 		Condition: true,
 		Message:   "statfs /data: statfs failed",
@@ -2069,13 +2069,13 @@ func TestWebBackendDetailAtTimestamp(t *testing.T) {
 	t1 := t0.Add(time.Minute)
 	snaps := NewSnapshots()
 	snaps.now = func() time.Time { return t0 }
-	snaps.PublishWithCheckTypes("web", map[string]checks.Result{
+	snaps.publishWithCheckTypes("web", map[string]checks.Result{
 		"fast": {Check: "fast", OK: true},
 		"slow": {Check: "slow", OK: true},
 	}, map[string]bool{"fast": true, "slow": true}, map[string]string{"fast": "tcp", "slow": "http"})
 
 	snaps.now = func() time.Time { return t1 }
-	snaps.PublishWithCheckTypes("web", map[string]checks.Result{
+	snaps.publishWithCheckTypes("web", map[string]checks.Result{
 		"fast": {Check: "fast", OK: true},
 		"slow": {Check: "slow", OK: true, Message: "cached"},
 	}, map[string]bool{"fast": true}, map[string]string{"fast": "tcp", "slow": "http"})
@@ -2505,7 +2505,7 @@ func TestWebBackendWatchIgnoresRemovedMetricSnapshot(t *testing.T) {
 	now := time.Unix(1_700_000_000, 0)
 	snapshots := NewWatchSnapshots()
 	snapshots.now = func() time.Time { return now }
-	snapshots.Publish("uplink", checks.CheckTypeICMP, checks.Result{
+	snapshots.publish("uplink", checks.CheckTypeICMP, checks.Result{
 		Check: "uplink",
 		Data: map[string]any{
 			checks.DataKeyMetric: checks.NetMetricState,
@@ -2765,7 +2765,7 @@ watches:
 // cycle and after a restart.
 func TestWebBackendDetailCarriesReportingMode(t *testing.T) {
 	snaps := NewSnapshots()
-	snaps.PublishWithCheckTypes("web", map[string]checks.Result{
+	snaps.publishWithCheckTypes("web", map[string]checks.Result{
 		"backup": {Check: "backup", OK: false, Reports: checks.ReportsState, Message: "state absent"},
 		"port":   {Check: "port", OK: true, Message: "connected"},
 	}, map[string]bool{"backup": true, "port": true},
@@ -2795,7 +2795,7 @@ func TestWebBackendDetailCarriesReportingMode(t *testing.T) {
 // over from before the mode was declared would keep implying uptime it never had.
 func TestWebBackendDetailOmitsSLAForVerdictlessChecks(t *testing.T) {
 	snaps := NewSnapshots()
-	snaps.PublishWithCheckTypes("web", map[string]checks.Result{
+	snaps.publishWithCheckTypes("web", map[string]checks.Result{
 		"backup": {Check: "backup", OK: false, Reports: checks.ReportsState},
 		"gauge":  {Check: "gauge", OK: true, Reports: checks.ReportsValue},
 		"port":   {Check: "port", OK: true},
@@ -2849,7 +2849,7 @@ func TestWebBackendMissingDevicePublishesMissingState(t *testing.T) {
 	now := time.Unix(1000, 0)
 	snapshots := NewWatchSnapshots()
 	snapshots.now = func() time.Time { return now }
-	snapshots.Publish("smart-sda", checks.CheckTypeSmart, checks.Result{
+	snapshots.publish("smart-sda", checks.CheckTypeSmart, checks.Result{
 		Check:       "smart-sda",
 		Condition:   true,
 		Unavailable: true,
@@ -2904,7 +2904,7 @@ func TestWebBackendSmartWatchAdvertisesOnlyObservedMetrics(t *testing.T) {
 	now := time.Unix(1000, 0)
 	snapshots := NewWatchSnapshots()
 	snapshots.now = func() time.Time { return now }
-	snapshots.Publish("smart-sda", checks.CheckTypeSmart, checks.Result{
+	snapshots.publish("smart-sda", checks.CheckTypeSmart, checks.Result{
 		Check:   "smart-sda",
 		OK:      true,
 		Message: "smart /dev/sda health=PASSED",
@@ -2927,7 +2927,7 @@ func TestWebBackendSmartServiceCheckAdvertisesOnlyObservedMetrics(t *testing.T) 
 	now := time.Unix(1000, 0)
 	snapshots := NewSnapshots()
 	snapshots.now = func() time.Time { return now }
-	snapshots.PublishWithCheckTypes("web", map[string]checks.Result{
+	snapshots.publishWithCheckTypes("web", map[string]checks.Result{
 		"disk": {
 			Check: "disk",
 			OK:    true,
