@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"sermo/internal/checks"
+	"sermo/internal/rules"
 	"sermo/internal/state"
 )
 
@@ -30,7 +31,7 @@ func (w *Watch) loadRuntimeState() {
 	w.firing = rec.Firing
 	w.unavailable = rec.Unavailable
 	w.lastNotifyAt = rec.LastNotifyAt
-	w.state = *windowStateFromRecord(rec.Window)
+	w.state = *watchWindowStateFromRecord(rec)
 	if policy := remediationFromRecord(rec.Policy); policy != nil {
 		w.policyState = *policy
 	}
@@ -61,9 +62,33 @@ func (w *Watch) runtimeRecord() state.WatchRuntimeRecord {
 		Policy:       remediationToRecord(&w.policyState),
 	}
 	if w.Window.For != nil || w.Window.Within != nil || w.Window.Clear != nil {
-		rec.Window = ruleWindowRecord(&w.state)
+		rec.Window = watchWindowRecord(&w.state)
 	}
 	return rec
+}
+
+func watchWindowStateFromRecord(rec state.WatchRuntimeRecord) *rules.WindowState {
+	return windowStateFromRecord(state.RuleWindowRecord{
+		Consecutive:      rec.Window.Consecutive,
+		History:          rec.Window.History,
+		TrueSince:        rec.Window.TrueSince,
+		TimedHistory:     rec.Window.TimedHistory,
+		Firing:           rec.Firing,
+		ClearConsecutive: rec.Window.ClearConsecutive,
+		ClearSince:       rec.Window.ClearSince,
+	})
+}
+
+func watchWindowRecord(window *rules.WindowState) state.WatchWindowRecord {
+	rec := ruleWindowRecord(window)
+	return state.WatchWindowRecord{
+		Consecutive:      rec.Consecutive,
+		History:          rec.History,
+		TrueSince:        rec.TrueSince,
+		TimedHistory:     rec.TimedHistory,
+		ClearConsecutive: rec.ClearConsecutive,
+		ClearSince:       rec.ClearSince,
+	}
 }
 
 func (w *Watch) reconcileRestoredEpisode(res checks.Result) {
@@ -119,7 +144,6 @@ func watchRuntimeRecordsEqual(a, b state.WatchRuntimeRecord) bool {
 		slices.Equal(a.Window.History, b.Window.History) &&
 		a.Window.TrueSince.Equal(b.Window.TrueSince) &&
 		windowSamplesEqual(a.Window.TimedHistory, b.Window.TimedHistory) &&
-		a.Window.Firing == b.Window.Firing &&
 		a.Window.ClearSince.Equal(b.Window.ClearSince) &&
 		a.Window.ClearConsecutive == b.Window.ClearConsecutive &&
 		a.Policy.LastActionAt.Equal(b.Policy.LastActionAt) &&
