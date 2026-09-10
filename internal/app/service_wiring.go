@@ -20,10 +20,10 @@ import (
 // decide reload capability and postflight monitoring state on every surface.
 const serviceOperationQueryTimeout = 3 * time.Second
 
-// MetricSampleForOperation builds a per-operation metric reader for preflight,
+// metricSampleForOperation builds a per-operation metric reader for preflight,
 // postflight and guard evaluation when the resolved service references metrics.
-func MetricSampleForOperation(name string, tree map[string]any, collector *metrics.Collector, discoverer process.Discoverer, selectors []process.Selector) func(context.Context) checks.MetricReader {
-	if collector == nil || noResidentProcess(tree) {
+func metricSampleForOperation(name string, tree map[string]any, collector *metrics.Collector, discoverer process.Discoverer, selectors []process.Selector, noResident bool) func(context.Context) checks.MetricReader {
+	if collector == nil || noResident {
 		return nil
 	}
 	return metricSampler(name, tree, collector, func() []int {
@@ -100,10 +100,7 @@ func BuildServiceRuntime(ctx context.Context, cfg ServiceRuntimeConfig) ServiceR
 	needPidfileFallback := deps.Backend == servicemgr.BackendSystemd && backendPIDs != nil
 	selectors, processWarnings, procInfo := serviceProcessSelectors(ctx, cfg.Tree, deps, cfg.Unit, needPidfileFallback)
 	noResident := serviceNoResidentProcess(cfg.Tree, selectors, backendPIDs)
-	metricSample := MetricSampleForOperation(cfg.Service, cfg.Tree, deps.Collector, discoverer, selectors)
-	if noResident {
-		metricSample = nil
-	}
+	metricSample := metricSampleForOperation(cfg.Service, cfg.Tree, deps.Collector, discoverer, selectors, noResident)
 	checkDeps := checkDepsFromAppDeps(deps, checks.Deps{
 		Service:        cfg.Service,
 		DefaultTimeout: deps.DefaultTimeout,
