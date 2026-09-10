@@ -27,8 +27,7 @@ func ParseIPv4Host(hexAddr string) (string, bool) {
 	}
 	var b [net.IPv4len]byte
 	binary.LittleEndian.PutUint32(b[:], uint32(raw))
-	ip := net.IPv4(b[IPv4Byte0], b[IPv4Byte1], b[IPv4Byte2], b[IPv4Byte3])
-	return ip.String(), true
+	return net.IP(b[:]).String(), true
 }
 
 // ParseIPv6Host decodes a little-endian IPv6 address from /proc/net hex.

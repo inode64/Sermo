@@ -35,9 +35,4 @@ const (
 	IPv6Words        = 4
 	IPv6WordHexChars = 8
 	IPv6WordBits     = 32
-
-	IPv4Byte0 = 0
-	IPv4Byte1 = 1
-	IPv4Byte2 = 2
-	IPv4Byte3 = 3
 )
