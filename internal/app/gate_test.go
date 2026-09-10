@@ -59,7 +59,7 @@ func TestArtifactChangedFuncSharesWorkerBaseline(t *testing.T) {
 	writeFile(t, path, "v1")
 
 	baseline := map[string]string{}
-	changed := ArtifactChangedFunc(baseline)
+	changed := ArtifactChangedFunc(baseline, nil)
 	w := &Worker{libBaseline: baseline}
 
 	if c, _ := changed(path); c {
