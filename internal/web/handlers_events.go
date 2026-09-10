@@ -170,12 +170,11 @@ func (s *Server) handleStateCompact(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, StateCompactResult{OK: false, Message: err.Error()})
 		return
 	}
-	s.extendActionWriteDeadline(w)
 	backend, _, ok := s.backendRead(w)
 	if !ok {
 		return
 	}
-	s.operate(w, r, backend, func(ctx context.Context, backend Backend) (bool, any) {
+	s.operate(w, backend, func(ctx context.Context, backend Backend) (bool, any) {
 		res := backend.CompactState(ctx, before)
 		return res.OK, res
 	})

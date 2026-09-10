@@ -522,13 +522,15 @@ func (s *Server) extendActionWriteDeadline(w http.ResponseWriter) {
 	}
 }
 
-// operate runs one backend mutation and writes its outcome. do receives
+// operate runs one backend mutation and writes its outcome. It extends the
+// response deadline before every backend mutation. do receives
 // s.shutdown, the daemon lifetime, instead of the request's context on
 // purpose: a start/stop/restart/reload/resume must not be aborted by a client
 // disconnect or the generic write deadline, and the operation engine applies
 // its own timeout. This is the single place that detaches an action from its
 // request.
-func (s *Server) operate(w http.ResponseWriter, _ *http.Request, backend Backend, do func(context.Context, Backend) (bool, any)) {
+func (s *Server) operate(w http.ResponseWriter, backend Backend, do func(context.Context, Backend) (bool, any)) {
+	s.extendActionWriteDeadline(w)
 	ok, res := do(s.shutdown, backend)
 	writeActionResult(w, ok, res)
 }

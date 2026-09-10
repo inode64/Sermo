@@ -29,7 +29,7 @@ func (s *Server) handlePanic(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	s.operate(w, r, backend, func(ctx context.Context, backend Backend) (bool, any) {
+	s.operate(w, backend, func(ctx context.Context, backend Backend) (bool, any) {
 		res := backend.SetPanic(ctx, on)
 		return res.OK, res
 	})
@@ -44,15 +44,13 @@ func (s *Server) handleAction(w http.ResponseWriter, r *http.Request) {
 	action := r.PathValue(apiParamAction)
 	switch {
 	case operation.IsServiceAction(action):
-		s.extendActionWriteDeadline(w)
 		opts := OperateOpts{NoCascade: queryBool(r, apiQueryNoCascade)}
-		s.operate(w, r, backend, func(ctx context.Context, backend Backend) (bool, any) {
+		s.operate(w, backend, func(ctx context.Context, backend Backend) (bool, any) {
 			res := backend.Operate(ctx, name, action, opts)
 			return res.OK, res
 		})
 	case action == apiActionReap:
-		s.extendActionWriteDeadline(w)
-		s.operate(w, r, backend, func(ctx context.Context, backend Backend) (bool, any) {
+		s.operate(w, backend, func(ctx context.Context, backend Backend) (bool, any) {
 			res := backend.ReapStrays(ctx, name)
 			return res.OK, res
 		})
@@ -76,8 +74,7 @@ func (s *Server) handleServiceButton(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	s.extendActionWriteDeadline(w)
-	s.operate(w, r, backend, func(ctx context.Context, backend Backend) (bool, any) {
+	s.operate(w, backend, func(ctx context.Context, backend Backend) (bool, any) {
 		res := backend.ServiceButton(ctx, r.PathValue(apiParamName), r.PathValue(apiParamButton))
 		return res.OK, res
 	})
@@ -91,8 +88,7 @@ func (s *Server) handleWatchAction(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue(apiParamName)
 	action := r.PathValue(apiParamAction)
 	if watchOperateActions[action] {
-		s.extendActionWriteDeadline(w)
-		s.operate(w, r, backend, func(ctx context.Context, backend Backend) (bool, any) {
+		s.operate(w, backend, func(ctx context.Context, backend Backend) (bool, any) {
 			var res ActionResult
 			switch action {
 			case apiActionExpand:
