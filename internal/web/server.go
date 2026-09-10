@@ -360,13 +360,6 @@ type Server struct {
 	shutdown context.Context //nolint:containedctx // daemon lifetime; set in Run. Not a per-request context.
 }
 
-// dashboardSnapshotSource is an optional atomic aggregate source. The normal
-// Backend interface stays granular for simple integrations, while sermod's
-// reloadable holder implements this to keep one response on one generation.
-type dashboardSnapshotSource interface {
-	DashboardSnapshot(ctx context.Context, since time.Duration) DashboardSnapshot
-}
-
 type sessionInventorySource interface {
 	Sessions(ctx context.Context) SessionInventory
 }
