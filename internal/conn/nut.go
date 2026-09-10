@@ -268,27 +268,14 @@ func parseNUTVarLine(line string) (name, value string, ok bool) {
 	if !strings.HasPrefix(line, nutReplyVarPrefix) {
 		return "", "", false
 	}
-	before, _, ok0 := strings.Cut(line, "\"")
-	if !ok0 {
+	firstQuote := strings.IndexByte(line, '"')
+	lastQuote := strings.LastIndexByte(line, '"')
+	if firstQuote < 0 || lastQuote <= firstQuote {
 		return "", "", false
 	}
-	head := strings.Fields(before) // VAR <ups> <var>
+	head := strings.Fields(line[:firstQuote]) // VAR <ups> <var>
 	if len(head) < nutVarHeadMinFields {
 		return "", "", false
 	}
-	v, ok := parseNUTVar(line)
-	if !ok {
-		return "", "", false
-	}
-	return head[nutVarNameIndex], v, true
-}
-
-// parseNUTVar extracts the quoted value from a `VAR …"<value>"` reply.
-func parseNUTVar(line string) (string, bool) {
-	i := strings.IndexByte(line, '"')
-	j := strings.LastIndexByte(line, '"')
-	if i < 0 || j <= i {
-		return "", false
-	}
-	return line[i+1 : j], true
+	return head[nutVarNameIndex], line[firstQuote+1 : lastQuote], true
 }
