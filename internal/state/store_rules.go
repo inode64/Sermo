@@ -193,12 +193,12 @@ type ruleWindowSampleJSON struct {
 
 func encodeRuleWindowSamples(samples []RuleWindowSample) (string, error) {
 	return encodeRows(columnRuleWindowSamples, samples, func(s RuleWindowSample) (ruleWindowSampleJSON, bool) {
-		return ruleWindowSampleJSON{At: s.At.UTC().UnixNano(), Match: s.Match}, !s.At.IsZero()
+		return ruleWindowSampleJSON{At: timeUnixNano(s.At), Match: s.Match}, !s.At.IsZero()
 	})
 }
 
 func decodeRuleWindowSamples(raw string) ([]RuleWindowSample, error) {
 	return decodeRows(columnRuleWindowSamples, raw, func(s ruleWindowSampleJSON) (RuleWindowSample, bool) {
-		return RuleWindowSample{At: time.Unix(0, s.At).UTC(), Match: s.Match}, s.At != 0
+		return RuleWindowSample{At: unixNanoTime(s.At), Match: s.Match}, s.At != 0
 	})
 }
