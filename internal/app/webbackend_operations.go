@@ -185,12 +185,6 @@ func (b *WebBackend) operationResult(ctx context.Context, name, action string) o
 		return operation.Result{Service: name, Action: action, Status: operation.ResultFailed, Message: serviceSubjectPrefix + name + " is disabled in configuration"}
 	}
 	r := e.engine.Do(ctx, action)
-	if r.Action == "" && action != "" {
-		r.Action = action
-	}
-	if r.Service == "" {
-		r.Service = name
-	}
 	e.invalidateStatusCache()
 	return r
 }
