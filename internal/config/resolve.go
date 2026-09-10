@@ -27,6 +27,29 @@ type Resolved struct {
 	Apps []string
 }
 
+// resolutionInputs are invariant for one resolution pass. Keeping them local
+// avoids a stale cache when a later operator request observes a changed
+// from_file source, while avoiding repeated filesystem work as Validate walks
+// every service and its linked apps.
+type resolutionInputs struct {
+	globalVars map[string]string
+	backend    string
+	appDocs    map[string]appResolution
+}
+
+type appResolution struct {
+	resolved Resolved
+	errs     []string
+}
+
+func (c *Config) newResolutionInputs() resolutionInputs {
+	return resolutionInputs{
+		globalVars: c.globalVars(),
+		backend:    effectiveBackend(c),
+		appDocs:    map[string]appResolution{},
+	}
+}
+
 // Resolve flattens a single service: it applies the defaults -> uses/clone ->
 // overrides precedence, then expands ${var} references once. The
 // returned errors include undefined-variable and nested-variable problems; a
@@ -36,6 +59,10 @@ func (c *Config) Resolve(name string) (Resolved, []string) {
 }
 
 func (c *Config) resolveService(name string, pruneOptional bool) (Resolved, []string) {
+	return c.resolveServiceWithInputs(name, pruneOptional, c.newResolutionInputs())
+}
+
+func (c *Config) resolveServiceWithInputs(name string, pruneOptional bool, inputs resolutionInputs) (Resolved, []string) {
 	canonicalName, ok := c.CanonicalServiceName(name)
 	if !ok {
 		return Resolved{Name: name}, []string{fmt.Sprintf(unknownServiceFormat, name)}
@@ -45,10 +72,10 @@ func (c *Config) resolveService(name string, pruneOptional bool) (Resolved, []st
 		return Resolved{Name: name}, []string{err.Error()}
 	}
 	if pruneOptional {
-		merged = pruneEnableIfMap(merged, nil, effectiveBackend(c))
+		merged = pruneEnableIfMap(merged, nil, inputs.backend)
 	}
 
-	expanded, apps, errs := c.resolveExpandedService(merged, canonicalName)
+	expanded, apps, errs := c.resolveExpandedService(merged, canonicalName, inputs)
 
 	return Resolved{Name: canonicalName, Tree: expanded, Apps: apps}, errs
 }
@@ -56,9 +83,9 @@ func (c *Config) resolveService(name string, pruneOptional bool) (Resolved, []st
 // resolveExpandedService applies the one canonical resolution pipeline after a
 // service tree has been merged. Keep post-expansion catalog sugar here so every
 // resolved service has the same normalized shape.
-func (c *Config) resolveExpandedService(merged map[string]any, name string) (map[string]any, []string, []string) {
+func (c *Config) resolveExpandedService(merged map[string]any, name string, inputs resolutionInputs) (map[string]any, []string, []string) {
 	errs := prepareExpansionInputs(merged)
-	vars, varErrs := c.expansionVariables(merged, name)
+	vars, varErrs := c.expansionVariables(merged, name, inputs.globalVars)
 	errs = append(errs, varErrs...)
 	expanded, expErrs := expandTree(merged, vars)
 	errs = append(errs, expErrs...)
@@ -66,7 +93,7 @@ func (c *Config) resolveExpandedService(merged map[string]any, name string) (map
 	errs = append(errs, c.expandRestartOnChange(expanded)...)
 	errs = append(errs, c.resolveChangedLibraries(expanded)...)
 	errs = append(errs, expandReloadOnChange(expanded)...)
-	errs = append(errs, c.expandApps(expanded)...)
+	errs = append(errs, c.expandAppsChain(expanded, nil, inputs)...)
 	errs = append(errs, expandConfigurationCheck(expanded)...)
 	errs = append(errs, expandStaleBinary(expanded)...)
 	errs = append(errs, expandStrays(expanded)...)
@@ -800,8 +827,8 @@ func (c *Config) globalVars() map[string]string {
 	return collectVariables(map[string]any{sectionVariables: c.Global.Defaults[sectionVariables]})
 }
 
-func (c *Config) expansionVariables(tree map[string]any, name string) (map[string]string, []string) {
-	vars := c.globalVars()
+func (c *Config) expansionVariables(tree map[string]any, name string, globalVars map[string]string) (map[string]string, []string) {
+	vars := maps.Clone(globalVars)
 	appVars, errs := c.appVariables(tree)
 	maps.Copy(vars, appVars)
 	maps.Copy(vars, collectVariables(tree)) // service/doc variables override app and global custom ones
@@ -1333,19 +1360,12 @@ func (c *Config) fillChangedLibraryPaths(node map[string]any, scope string) []st
 	return errs
 }
 
-// expandApps adds each app's binary/health/version preflight checks under
-// namespaced keys (`<app>-<check>`). App preflight failures block
-// start/restart/reload/resume. The `apps` key is consumed here.
-func (c *Config) expandApps(tree map[string]any) []string {
-	return c.expandAppsChain(tree, nil)
-}
-
 // expandAppsChain is expandApps with cycle tracking: chain carries the app names
 // already being resolved on this path so a self- or mutually-referential
 // `apps:` linkage (an app document that itself lists `apps:`) fails as a config
 // error instead of recursing until the stack overflows. chain holds app names
 // only — a catalog service/service that links an app of the same name is not a cycle.
-func (c *Config) expandAppsChain(tree map[string]any, chain []string) []string {
+func (c *Config) expandAppsChain(tree map[string]any, chain []string, inputs resolutionInputs) []string {
 	_, present := tree[keyApps]
 	names := cfgval.StringList(tree[keyApps])
 	delete(tree, keyApps)
@@ -1369,7 +1389,7 @@ func (c *Config) expandAppsChain(tree map[string]any, chain []string) []string {
 			errs = append(errs, fmt.Sprintf("apps references %q, which is not an app", name))
 			continue
 		}
-		resolved, rerrs := c.resolveDocBody(doc, name, append(append([]string{}, chain...), name))
+		resolved, rerrs := c.resolveDocBody(doc, name, append(append([]string{}, chain...), name), inputs)
 		if len(rerrs) > 0 {
 			errs = append(errs, rerrs...)
 			continue
@@ -1432,17 +1452,23 @@ func (c *Config) resolveDoc(doc *Document, name string) (Resolved, []string) {
 	// Top level (catalog service / service): its apps: links start a fresh app
 	// chain. The top-level name is a different namespace than apps, so a catalog service
 	// linking an app of the same name is not a cycle.
-	return c.resolveDocBody(doc, name, nil)
+	return c.resolveDocBody(doc, name, nil, c.newResolutionInputs())
 }
 
 // resolveDocBody expands doc's own body and its apps: links, threading appChain
 // (the app names already being resolved on this path) so expandAppsChain can
 // detect a cyclic apps: linkage instead of recursing into a stack overflow.
-func (c *Config) resolveDocBody(doc *Document, name string, appChain []string) (Resolved, []string) {
+func (c *Config) resolveDocBody(doc *Document, name string, appChain []string, inputs resolutionInputs) (Resolved, []string) {
+	cacheKey := strings.Join(appChain, "\x00")
+	if cacheKey != "" {
+		if cached, ok := inputs.appDocs[cacheKey]; ok {
+			return cached.resolved, cached.errs
+		}
+	}
 	body := stripMeta(doc.Body)
-	body = pruneEnableIfMap(body, nil, effectiveBackend(c))
+	body = pruneEnableIfMap(body, nil, inputs.backend)
 	errs := prepareExpansionInputs(body)
-	vars, varErrs := c.expansionVariables(body, name)
+	vars, varErrs := c.expansionVariables(body, name, inputs.globalVars)
 	errs = append(errs, varErrs...)
 	expanded, expErrs := expandTree(body, vars)
 	errs = append(errs, expErrs...)
@@ -1450,9 +1476,13 @@ func (c *Config) resolveDocBody(doc *Document, name string, appChain []string) (
 	if doc.Kind == CategoryService {
 		errs = append(errs, c.expandRestartOnChange(expanded)...)
 	}
-	errs = append(errs, c.expandAppsChain(expanded, appChain)...)
+	errs = append(errs, c.expandAppsChain(expanded, appChain, inputs)...)
 	errs = append(errs, c.expandServiceSugar(expanded)...)
-	return Resolved{Name: name, Tree: expanded, Apps: apps}, errs
+	resolved := Resolved{Name: name, Tree: expanded, Apps: apps}
+	if cacheKey != "" {
+		inputs.appDocs[cacheKey] = appResolution{resolved: resolved, errs: errs}
+	}
+	return resolved, errs
 }
 
 // mergedService returns the merged-but-unexpanded body for a service, following

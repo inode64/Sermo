@@ -569,6 +569,40 @@ func TestResolveWatchesDoesNotMutateLoadedTree(t *testing.T) {
 	}
 }
 
+func TestResolveServicesWithInputsCachesLinkedApps(t *testing.T) {
+	global := writeConfig(t, map[string]string{
+		"sermo.yml": baseGlobal,
+		"catalog/apps/runtime.yml": `
+name: runtime
+variables:
+  binary: /usr/bin/runtime
+preflight:
+  binary: { type: binary, path: "${binary}" }
+`,
+		"services/one.yml": `
+name: one
+apps: [runtime]
+`,
+		"services/two.yml": `
+name: two
+apps: [runtime]
+`,
+	})
+	cfg, err := loadConfig(t, global)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	inputs := cfg.newResolutionInputs()
+	for _, name := range []string{"one", "two"} {
+		if _, errs := cfg.resolveServiceWithInputs(name, false, inputs); len(errs) > 0 {
+			t.Fatalf("resolveServiceWithInputs(%q) errors = %v", name, errs)
+		}
+	}
+	if got := len(inputs.appDocs); got != 1 {
+		t.Fatalf("cached linked app resolutions = %d, want 1", got)
+	}
+}
+
 func TestChangedLibraryConditionResolvesPath(t *testing.T) {
 	// The documented shorthand `changed: {library: X}` resolves the library to
 	// its watched file anywhere in a rule's condition tree, exactly like the
