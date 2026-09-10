@@ -87,6 +87,21 @@ func TestIfaceHasUsableAddress(t *testing.T) {
 	}
 }
 
+func TestListVolumesFiltersNonStorageMounts(t *testing.T) {
+	volumes, err := listVolumesFrom(func() ([]checks.Mount, error) {
+		return []checks.Mount{
+			{MountPoint: "/var/lib/nfs/rpc_pipefs", FSType: "rpc_pipefs", Device: "rpc_pipefs"},
+			{MountPoint: "/srv/data", FSType: "ext4", Device: "/dev/sdb1"},
+		}, nil
+	})
+	if err != nil {
+		t.Fatalf("listVolumesFrom: %v", err)
+	}
+	if len(volumes) != 1 || volumes[0].Mountpoint != "/srv/data" {
+		t.Fatalf("volumes = %+v, want only /srv/data", volumes)
+	}
+}
+
 func TestListIfacesFromSysfs(t *testing.T) {
 	root := t.TempDir()
 	writeIface := func(name, flags, operstate string) {

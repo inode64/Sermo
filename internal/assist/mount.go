@@ -3,7 +3,6 @@ package assist
 import (
 	"errors"
 	"path/filepath"
-	"sort"
 	"strings"
 
 	"sermo/internal/cfgval"
@@ -31,7 +30,6 @@ func (mountAssistant) Run(p *Prompt, env Env) (res Result, err error) {
 	if err != nil {
 		return Result{}, err
 	}
-	cands = sortedMountCandidates(cands)
 	if len(cands) == 0 {
 		return Result{}, errors.New("no fstab mount points were detected on this host")
 	}
@@ -88,14 +86,6 @@ func mountResult(mounts map[string]any) Result {
 
 func mountUnitName(path string) string {
 	return watchName(AssistantNameMount, filepath.Clean(path))
-}
-
-func sortedMountCandidates(cands []MountCandidate) []MountCandidate {
-	out := append([]MountCandidate(nil), cands...)
-	sort.SliceStable(out, func(i, j int) bool {
-		return out[i].Path < out[j].Path
-	})
-	return out
 }
 
 func mountCandidateLabel(c MountCandidate) string {
