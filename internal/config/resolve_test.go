@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"sermo/internal/cfgval"
+	"sermo/internal/checks"
 )
 
 func TestResolveMergesDefaultsServiceOverrides(t *testing.T) {
@@ -524,6 +525,47 @@ watches:
 	got := watches["w"].(map[string]any)["check"].(map[string]any)["path"]
 	if got != "/var/spool/flag" {
 		t.Fatalf("watch custom var not expanded: %v", got)
+	}
+}
+
+func TestResolveWatchesDoesNotMutateLoadedTree(t *testing.T) {
+	configured := map[string]any{
+		"disk": map[string]any{
+			WatchKeyCheck: map[string]any{
+				checks.CheckKeyType: checks.CheckTypeStorage,
+				keyPath:             "/srv/${data}",
+			},
+		},
+	}
+	cfg := &Config{Global: Global{
+		Raw: map[string]any{
+			sectionWatches: configured,
+		},
+		Defaults: map[string]any{
+			keyDryRun:        true,
+			sectionVariables: map[string]any{"data": "data"},
+		},
+	}}
+
+	resolved, errs := cfg.ResolveWatches()
+	if len(errs) > 0 {
+		t.Fatalf("ResolveWatches() errors = %v", errs)
+	}
+	entry := resolved["disk"].(map[string]any)
+	if got := entry[keyDryRun]; got != true {
+		t.Fatalf("resolved dry_run = %v, want true", got)
+	}
+	check := entry[WatchKeyCheck].(map[string]any)
+	if got := check[keyPath]; got != "/srv/data" {
+		t.Fatalf("resolved path = %q, want /srv/data", got)
+	}
+	loaded := configured["disk"].(map[string]any)
+	if _, present := loaded[keyDryRun]; present {
+		t.Fatal("ResolveWatches() added dry_run to the loaded watch")
+	}
+	loadedCheck := loaded[WatchKeyCheck].(map[string]any)
+	if got := loadedCheck[keyPath]; got != "/srv/${data}" {
+		t.Fatalf("ResolveWatches() changed loaded path to %q", got)
 	}
 }
 
