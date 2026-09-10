@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"maps"
+	"math"
 	"os"
 	"slices"
 	"sync"
@@ -14,7 +15,7 @@ import (
 )
 
 const (
-	daemonMetricMaxInt64              = uint64(1<<63 - 1)
+	daemonMetricMaxInt64              = uint64(math.MaxInt64)
 	daemonMetricRetention             = state.DefaultRetention1d
 	metricSeriesBucket                = time.Minute
 	defaultDaemonMetricSampleInterval = 30 * time.Second

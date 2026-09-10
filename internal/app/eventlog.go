@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"math"
 	"slices"
 	"sync"
 	"time"
@@ -400,7 +401,7 @@ func (l *EventLog) pruneStore(ctx context.Context, before time.Time, memoryClear
 		l.reportStoreError(err)
 		return memoryCleared
 	}
-	maxInt := int64(int(^uint(0) >> 1))
+	maxInt := int64(math.MaxInt)
 	if cleared > maxInt {
 		return int(maxInt)
 	}

@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"encoding/json"
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 	"time"
@@ -185,7 +186,7 @@ const (
 	// watchReadingUnitPPM is the frequency-error unit chrony reports its
 	// oscillator correction and skew in.
 	watchReadingUnitPPM     = "ppm"
-	maxWatchReadingDuration = time.Duration(1<<63 - 1)
+	maxWatchReadingDuration = time.Duration(math.MaxInt64)
 
 	// watchReadingLastSuffix marks a row as the newest value the device answered
 	// with rather than a current measurement. A dead disk's last temperature is
