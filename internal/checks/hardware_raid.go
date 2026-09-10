@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"sermo/internal/cfgval"
 	"sermo/internal/execx"
@@ -188,11 +189,11 @@ func (c hardwareRAIDCheck) Run(ctx context.Context) Result {
 }
 
 func (c hardwareRAIDCheck) runStorCLI(ctx context.Context) (hardwareRAIDObservation, error) {
-	controller, err := runHardwareRAIDCommand(ctx, c.runner, c.binary, strings.Fields(storCLIControllerArgs)...)
+	controller, err := runReadOnlyCommand(ctx, c.runner, c.binary, 0, "", strings.Fields(storCLIControllerArgs)...)
 	if err != nil {
 		return hardwareRAIDObservation{}, fmt.Errorf("controller report: %w", err)
 	}
-	drives, err := runHardwareRAIDCommand(ctx, c.runner, c.binary, strings.Fields(storCLIDrivesArgs)...)
+	drives, err := runReadOnlyCommand(ctx, c.runner, c.binary, 0, "", strings.Fields(storCLIDrivesArgs)...)
 	if err != nil {
 		return hardwareRAIDObservation{}, fmt.Errorf("drive report: %w", err)
 	}
@@ -200,8 +201,8 @@ func (c hardwareRAIDCheck) runStorCLI(ctx context.Context) (hardwareRAIDObservat
 	// rebuilding. Rebuild progress enriches the observation but must not make an
 	// otherwise valid controller unavailable, so this fourth read-only report is
 	// deliberately optional.
-	rebuild, _ := runHardwareRAIDCommand(ctx, c.runner, c.binary, strings.Fields(storCLIRebuildArgs)...)
-	volumes, err := runHardwareRAIDCommand(ctx, c.runner, c.binary, strings.Fields(storCLIVolumesArgs)...)
+	rebuild, _ := runReadOnlyCommand(ctx, c.runner, c.binary, 0, "", strings.Fields(storCLIRebuildArgs)...)
+	volumes, err := runReadOnlyCommand(ctx, c.runner, c.binary, 0, "", strings.Fields(storCLIVolumesArgs)...)
 	if err != nil {
 		return hardwareRAIDObservation{}, fmt.Errorf("volume report: %w", err)
 	}
@@ -209,17 +210,20 @@ func (c hardwareRAIDCheck) runStorCLI(ctx context.Context) (hardwareRAIDObservat
 }
 
 func (c hardwareRAIDCheck) runSSACLI(ctx context.Context) (hardwareRAIDObservation, error) {
-	stdout, err := runHardwareRAIDCommand(ctx, c.runner, c.binary, strings.Fields(ssaCLIConfigDetailArgs)...)
+	stdout, err := runReadOnlyCommand(ctx, c.runner, c.binary, 0, "", strings.Fields(ssaCLIConfigDetailArgs)...)
 	if err != nil {
 		return hardwareRAIDObservation{}, fmt.Errorf("configuration detail: %w", err)
 	}
 	return parseSSACLIReport(stdout)
 }
 
-func runHardwareRAIDCommand(ctx context.Context, runner execx.Runner, binary string, args ...string) (string, error) {
+// runReadOnlyCommand runs a status command and normalizes its execution
+// failure without interpreting the tool's successful output. exitPrefix keeps
+// callers that name their subcommand in exit diagnostics compatible.
+func runReadOnlyCommand(ctx context.Context, runner execx.Runner, binary string, timeout time.Duration, exitPrefix string, args ...string) (string, error) {
 	result, runErr := runner.Run(ctx, binary, args...)
 	if result.ExitCode == execx.ExitCodeRunFailure {
-		return "", errors.New(execx.OperatorFailureOr(runErr, result, 0, execx.CommandDidNotStart))
+		return "", errors.New(execx.OperatorFailureOr(runErr, result, timeout, execx.CommandDidNotStart))
 	}
 	if result.ExitCode != execx.ExitCodeSuccess {
 		detail := output.FirstNonEmptyLine(result.Stderr)
@@ -228,6 +232,9 @@ func runHardwareRAIDCommand(ctx context.Context, runner execx.Runner, binary str
 		}
 		if detail == "" {
 			detail = "no diagnostic output"
+		}
+		if exitPrefix != "" {
+			return "", fmt.Errorf("%s: exit %d: %s", exitPrefix, result.ExitCode, detail)
 		}
 		return "", fmt.Errorf("exit %d: %s", result.ExitCode, detail)
 	}
