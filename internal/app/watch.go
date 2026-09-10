@@ -698,9 +698,7 @@ func (w *Watch) emit(e Event) {
 		e.App = w.App
 		e.Watch = ""
 	}
-	if w.Emit != nil {
-		w.Emit(e)
-	}
+	emitSafe(w.Emit, e)
 }
 
 // dispatchNotify delivers msg to each notifier, emitting one event per result. A

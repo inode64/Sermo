@@ -981,8 +981,8 @@ func (w *cycleWriter) RecordCycle(ctx context.Context, cycle cycleRecord) {
 	err := w.batch.WithBatch(ctx, func(records state.Batch) error {
 		return w.writeCycle(records, cycle)
 	})
-	if err != nil && !errors.Is(err, context.Canceled) && w.emit != nil {
-		w.emit(Event{Service: w.name, Kind: eventKindError, Message: "record cycle: " + err.Error()})
+	if err != nil && !errors.Is(err, context.Canceled) {
+		emitSafe(w.emit, Event{Service: w.name, Kind: eventKindError, Message: "record cycle: " + err.Error()})
 	}
 }
 

@@ -1194,9 +1194,7 @@ func (w *Worker) persistRuleState() {
 func (w *Worker) emit(e Event) {
 	e.Service = w.Service
 	e.Message = w.expandRuntime(e.Message, e)
-	if w.Emit != nil {
-		w.Emit(e)
-	}
+	emitSafe(w.Emit, e)
 }
 
 const (
