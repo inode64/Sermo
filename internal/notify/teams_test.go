@@ -8,7 +8,7 @@ import (
 )
 
 func TestBuildTeamsRequiresWebhook(t *testing.T) {
-	assertBuildWebhookNotifier(t, buildTeams, "teams", "ops",
+	assertBuildWebhookNotifier(t, "teams", "ops",
 		"https://prod-01.westeurope.logic.azure.com/workflows/x", "logic.azure.com/x")
 }
 

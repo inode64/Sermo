@@ -4,12 +4,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
-	"strings"
 	"time"
 
+	"sermo/internal/cfgval"
 	"sermo/internal/httpx"
 	"sermo/internal/netutil"
 )
@@ -82,10 +81,7 @@ func (n *webhookNotifier) Send(ctx context.Context, msg Message) error {
 
 // newWebhookNotifier constructs a webhook notifier from a config entry.
 func newWebhookNotifier(typ, name string, entry map[string]any, payload func(Message) []byte) (Notifier, error) {
-	webhook, err := webhookURL(typ, entry)
-	if err != nil {
-		return nil, err
-	}
+	webhook := webhookURL(entry)
 	return &webhookNotifier{name: name, typ: typ, webhook: webhook, payload: payload}, nil
 }
 
@@ -120,15 +116,5 @@ func postWebhook(ctx context.Context, label, webhook string, headers map[string]
 	return nil
 }
 
-// webhookURL reads and validates the `webhook` field shared by the webhook
-// transports: required, and an http(s) URL.
-func webhookURL(typ string, entry map[string]any) (string, error) {
-	webhook, _ := entry[KeyWebhook].(string)
-	if webhook == "" {
-		return "", errors.New(typ + " notifier requires a webhook")
-	}
-	if !strings.HasPrefix(webhook, WebhookURLPrefixHTTPS) && !strings.HasPrefix(webhook, WebhookURLPrefixHTTP) {
-		return "", errors.New(typ + " webhook must be an http(s) URL")
-	}
-	return webhook, nil
-}
+// webhookURL reads the webhook validated for an enabled notifier entry.
+func webhookURL(entry map[string]any) string { return cfgval.String(entry[KeyWebhook]) }

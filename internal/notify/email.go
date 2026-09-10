@@ -74,22 +74,12 @@ func (e *Email) Send(ctx context.Context, msg Message) error {
 
 // buildEmail constructs an Email notifier from a config entry.
 func buildEmail(name string, entry map[string]any) (Notifier, error) {
-	dsnStr, _ := entry[KeyDSN].(string)
-	if dsnStr == "" {
-		return nil, errors.New("email notifier requires a dsn")
-	}
-	dsn, err := parseEmailDSN(dsnStr)
+	dsn, err := parseEmailDSN(cfgval.String(entry[KeyDSN]))
 	if err != nil {
 		return nil, err
 	}
-	from, _ := entry[KeyFrom].(string)
-	if from == "" {
-		return nil, errors.New("email notifier requires a from address")
-	}
+	from := cfgval.String(entry[KeyFrom])
 	to := cfgval.StringList(entry[KeyTo])
-	if len(to) == 0 {
-		return nil, errors.New("email notifier requires at least one to address")
-	}
 	return &Email{name: name, from: from, to: to, dsn: dsn, send: smtpSend}, nil
 }
 

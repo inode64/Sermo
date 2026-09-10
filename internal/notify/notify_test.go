@@ -16,24 +16,24 @@ func (n typedTestNotifier) Name() string                      { return n.name }
 func (n typedTestNotifier) Type() string                      { return n.typ }
 func (typedTestNotifier) Send(context.Context, Message) error { return nil }
 
-// assertBuildWebhookNotifier builds a webhook notifier with a valid URL and
-// asserts its identity, then asserts build rejects a missing and a non-http(s)
-// webhook.
-func assertBuildWebhookNotifier(t *testing.T, build func(name string, entry map[string]any) (Notifier, error), typ, name, goodWebhook, badWebhook string) {
+// assertBuildWebhookNotifier checks webhook validation at the public registry
+// boundary, then verifies a valid entry reaches its transport constructor.
+func assertBuildWebhookNotifier(t *testing.T, typ, name, goodWebhook, badWebhook string) {
 	t.Helper()
-	good, err := build(name, map[string]any{"type": typ, "webhook": goodWebhook})
-	if err != nil {
-		t.Fatalf("valid %s: %v", typ, err)
+	good, warnings := Build(map[string]any{name: map[string]any{KeyType: typ, KeyWebhook: goodWebhook}})
+	if len(warnings) != 0 {
+		t.Fatalf("valid %s warnings = %v", typ, warnings)
 	}
-	if good.Type() != typ || good.Name() != name {
-		t.Fatalf("unexpected %s: %+v", typ, good)
+	if good[name].Type() != typ || good[name].Name() != name {
+		t.Fatalf("unexpected %s: %+v", typ, good[name])
 	}
 	for _, entry := range []map[string]any{
-		{"type": typ},                        // no webhook
-		{"type": typ, "webhook": badWebhook}, // not an http(s) URL
+		{KeyType: typ},                         // no webhook
+		{KeyType: typ, KeyWebhook: badWebhook}, // not an http(s) URL
 	} {
-		if _, err := build("n", entry); err == nil {
-			t.Fatalf("expected error for %v", entry)
+		notifiers, warnings := Build(map[string]any{"n": entry})
+		if len(notifiers) != 0 || len(warnings) == 0 {
+			t.Fatalf("invalid %v: notifiers=%v warnings=%v", entry, notifiers, warnings)
 		}
 	}
 }

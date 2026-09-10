@@ -8,15 +8,18 @@ import (
 	"testing"
 )
 
-func TestBuildTelegramRequiresTokenAndChat(t *testing.T) {
+func TestBuildTelegramRequiresTokenAndValidatedChat(t *testing.T) {
 	for _, entry := range []map[string]any{
 		{"type": "telegram", "chat_id": "12345"},         // no token
-		{"type": "telegram", "token": "123:abc"},         // no chat_id
 		{"type": "telegram", "token": "", "chat_id": ""}, // both empty
 	} {
 		if _, err := buildTelegram("tg", entry); err == nil {
 			t.Fatalf("expected error for %v", entry)
 		}
+	}
+	notifiers, warnings := Build(map[string]any{"tg": map[string]any{KeyType: TypeTelegram, KeyToken: "123:abc"}})
+	if len(notifiers) != 0 || len(warnings) == 0 {
+		t.Fatalf("missing chat: notifiers=%v warnings=%v", notifiers, warnings)
 	}
 }
 

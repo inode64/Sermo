@@ -25,9 +25,6 @@ func buildTelegram(name string, entry map[string]any) (Notifier, error) {
 		return nil, errors.New("telegram notifier requires a token")
 	}
 	chatID := cfgval.String(entry[KeyChatID])
-	if chatID == "" {
-		return nil, errors.New("telegram notifier requires a chat_id")
-	}
 	opts := telegramOptions{
 		parseMode: cfgval.String(entry[KeyParseMode]),
 		silent:    cfgval.Bool(entry[KeySilent]),

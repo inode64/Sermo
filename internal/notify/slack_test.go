@@ -8,7 +8,7 @@ import (
 )
 
 func TestBuildSlackRequiresWebhook(t *testing.T) {
-	assertBuildWebhookNotifier(t, buildSlack, "slack", "team",
+	assertBuildWebhookNotifier(t, "slack", "team",
 		"https://hooks.slack.com/services/x", "slack.com/x")
 }
 

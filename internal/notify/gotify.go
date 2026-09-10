@@ -1,7 +1,6 @@
 package notify
 
 import (
-	"errors"
 	"strings"
 
 	"sermo/internal/cfgval"
@@ -17,14 +16,8 @@ const (
 // X-Gotify-Key header so it stays out of the URL. Self-hosted push with no
 // external dependency.
 func buildGotify(name string, entry map[string]any) (Notifier, error) {
-	webhook, err := webhookURL(TypeGotify, entry)
-	if err != nil {
-		return nil, err
-	}
+	webhook := webhookURL(entry)
 	token := cfgval.String(entry[KeyToken])
-	if token == "" {
-		return nil, errors.New("gotify notifier requires a token")
-	}
 	return &webhookNotifier{
 		name:    name,
 		typ:     TypeGotify,

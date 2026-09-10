@@ -150,11 +150,7 @@ func Build(raw map[string]any, opts ...Option) (map[string]Notifier, []string) {
 			continue
 		}
 		typ := cfgval.String(entry[KeyType])
-		registered, ok := transports[typ]
-		if !ok {
-			warnings = append(warnings, notifierWarning(name, fmt.Sprintf("unsupported type %q", typ)))
-			continue
-		}
+		registered := transports[typ]
 		n, err := registered.build(name, entry)
 		if err != nil {
 			warnings = append(warnings, notifierWarning(name, err.Error()))

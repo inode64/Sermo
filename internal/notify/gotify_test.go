@@ -12,8 +12,9 @@ func TestBuildGotifyRequiresWebhookAndToken(t *testing.T) {
 		{"type": "gotify", "webhook": "https://push.example.net"},        // no token
 		{"type": "gotify", "webhook": "push.example.net", "token": "A."}, // not http(s)
 	} {
-		if _, err := buildGotify("push", entry); err == nil {
-			t.Fatalf("expected error for %v", entry)
+		notifiers, warnings := Build(map[string]any{"push": entry})
+		if len(notifiers) != 0 || len(warnings) == 0 {
+			t.Fatalf("invalid %v: notifiers=%v warnings=%v", entry, notifiers, warnings)
 		}
 	}
 }
