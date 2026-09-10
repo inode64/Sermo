@@ -229,8 +229,6 @@ const (
 	stepDHCPBindSocket             = "bind socket"
 	stepDHCPClientMAC              = "client MAC"
 	stepDHCPLeaseScan              = "lease scan"
-	stepDHCPServerAddress          = "server address"
-	stepDHCPServerPort             = "server port"
 	stepDNSBuildQuery              = "build query"
 	stepDNSLocalRoute              = "local route"
 	stepDNSPackQuery               = "pack query"
