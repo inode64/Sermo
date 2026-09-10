@@ -102,14 +102,14 @@ func TestBuildWatchesSeverityPrecedence(t *testing.T) {
 	if got := severityOf(t, hdparm); got != checks.SeverityWarning {
 		t.Errorf("hdparm-sdd severity = %q, want the watch-level warning", got)
 	}
-	if !hdparm.IsWarning() {
-		t.Error("hdparm-sdd Watch.IsWarning() = false, want true")
+	if !checks.IsWarning(hdparm.Severity) {
+		t.Error("hdparm-sdd severity is not warning")
 	}
 	if got := severityOf(t, storage); got != checks.SeverityError {
 		t.Errorf("storage-root severity = %q, want error", got)
 	}
-	if storage.IsWarning() {
-		t.Error("storage-root Watch.IsWarning() = true, want false for an undeclared watch")
+	if checks.IsWarning(storage.Severity) {
+		t.Error("storage-root severity is warning, want undeclared error")
 	}
 }
 
@@ -341,8 +341,8 @@ func TestWatchGradesEventKindFromResultSeverity(t *testing.T) {
 	if len(events) != 1 || events[0].Kind != eventKindWarning {
 		t.Fatalf("events = %+v, want one %q from a result the check graded warning", events, eventKindWarning)
 	}
-	if w.IsWarning() {
-		t.Error("Watch.IsWarning() = true, want false: the watch itself declares nothing")
+	if checks.IsWarning(w.Severity) {
+		t.Error("watch severity is warning, want undeclared error")
 	}
 }
 

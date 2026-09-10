@@ -522,10 +522,6 @@ func raidTransitionMessage(transition checks.RaidTransition) string {
 	}
 }
 
-// IsWarning reports whether this watch's failures are advisories rather than
-// outages.
-func (w *Watch) IsWarning() bool { return checks.IsWarning(w.Severity) }
-
 func (w *Watch) publish(res checks.Result) {
 	if w.Publish != nil {
 		w.Publish(w.Name, w.CheckType, res)
