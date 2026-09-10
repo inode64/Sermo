@@ -165,9 +165,6 @@ func (s *operationSession) operate(ctx context.Context, opts options, _ *config.
 		return result, fmt.Errorf("%s applied with result %q, but its audit event could not be recorded: %w",
 			action, result.Status, eventErr)
 	}
-	if result.Message == "unknown action" && result.Status == operation.ResultFailed {
-		return operation.Result{}, fmt.Errorf("unknown action %q", action)
-	}
 	return result, nil
 }
 
