@@ -32,28 +32,28 @@ const (
 )
 
 func buildTTY(name string, entry map[string]any) (Notifier, error) {
-	return &ttyNotifier{
-		name:      name,
-		typ:       TypeTTY,
-		users:     strutil.Set(cfgval.StringList(entry[KeyUsers])),
-		utmpPaths: utmp.DefaultPaths(),
-		devRoot:   utmp.DevRoot,
-		writeTTY:  writeTTYLinux,
-		hostname:  os.Hostname,
-		now:       time.Now,
-	}, nil
+	return newTTY(name, TypeTTY, strutil.Set(cfgval.StringList(entry[KeyUsers]))), nil
+}
+
+func buildTargetedTTY(name string, users map[string]struct{}) (Notifier, error) {
+	return newTTY(name, TypeTTY, users), nil
 }
 
 func buildWall(name string, _ map[string]any) (Notifier, error) {
+	return newTTY(name, TypeWall, nil), nil
+}
+
+func newTTY(name, typ string, users map[string]struct{}) *ttyNotifier {
 	return &ttyNotifier{
 		name:      name,
-		typ:       TypeWall,
+		typ:       typ,
+		users:     users,
 		utmpPaths: utmp.DefaultPaths(),
 		devRoot:   utmp.DevRoot,
 		writeTTY:  writeTTYLinux,
 		hostname:  os.Hostname,
 		now:       time.Now,
-	}, nil
+	}
 }
 
 func (n *ttyNotifier) Name() string { return n.name }
