@@ -53,7 +53,7 @@ func buildHTTPCheck(b base, entry map[string]any, client *http.Client) (Check, s
 	if warn != "" {
 		return nil, warn
 	}
-	reqClient, warn := httpRequestClient(rawURL, entry, client)
+	clientOpts, warn := parseHTTPClientOptions(rawURL, entry)
 	if warn != "" {
 		return nil, warn
 	}
@@ -63,7 +63,6 @@ func buildHTTPCheck(b base, entry map[string]any, client *http.Client) (Check, s
 	}
 	hc := &httpCheck{
 		base:        b,
-		client:      httpClientWithRedirectPolicy(reqClient, boolDefaultTrue(entry[CheckKeyFollowRedirects])),
 		url:         rawURL,
 		method:      method,
 		headers:     cfgval.StringMap(entry[CheckKeyHeaders]),
@@ -78,12 +77,18 @@ func buildHTTPCheck(b base, entry map[string]any, client *http.Client) (Check, s
 	if warn := configureHTTPLatency(hc, entry); warn != "" {
 		return nil, warn
 	}
-	if warn := configureHTTPCert(hc, entry, rawURL); warn != "" {
+	if !hasHTTPCertOptions(entry) {
+		hc.client = httpClientWithRedirectPolicy(clientOpts.requestClient(client), boolDefaultTrue(entry[CheckKeyFollowRedirects]))
+		return hc, ""
+	}
+	target, warn := clientOpts.certTarget(rawURL)
+	if warn != "" {
 		return nil, warn
 	}
-	if hc.certClient != nil {
-		hc.certClient = httpClientWithRedirectPolicy(hc.certClient, boolDefaultTrue(entry[CheckKeyFollowRedirects]))
+	if warn := configureHTTPCert(hc, target, clientOpts, entry); warn != "" {
+		return nil, warn
 	}
+	hc.certClient = httpClientWithRedirectPolicy(hc.certClient, boolDefaultTrue(entry[CheckKeyFollowRedirects]))
 	return hc, ""
 }
 
@@ -105,33 +110,60 @@ func httpRequestBody(entry map[string]any) ([]byte, string, string) {
 	return nil, "", ""
 }
 
-// httpRequestClient configures the per-check transport. HTTP/3 uses QUIC;
-// every transport binds its underlying TCP or UDP socket when requested.
-func httpRequestClient(rawURL string, entry map[string]any, client *http.Client) (*http.Client, string) {
+// httpClientOptions describes the transport shared by a normal HTTP request
+// and a certificate-inspection request. HTTP/3 uses QUIC; every transport binds
+// its underlying TCP or UDP socket when requested.
+type httpClientOptions struct {
+	proxyURL *url.URL
+	iface    string
+	http3    bool
+	target   *url.URL
+}
+
+func parseHTTPClientOptions(rawURL string, entry map[string]any) (httpClientOptions, string) {
 	proxyURL, warn := parseProxyURL(entry)
 	if warn != "" {
-		return nil, warn
+		return httpClientOptions{}, warn
 	}
-	http3Enabled := cfgval.Bool(entry[CheckKeyHTTP3])
-	iface := firstHTTPInterface(entry)
-	if http3Enabled {
-		if u, err := url.Parse(rawURL); err != nil || u.Scheme != URLSchemeHTTPS {
-			return nil, "http check: http3 requires an https url"
+	opts := httpClientOptions{proxyURL: proxyURL, iface: firstHTTPInterface(entry), http3: cfgval.Bool(entry[CheckKeyHTTP3])}
+	if opts.http3 {
+		u, err := url.Parse(rawURL)
+		if err != nil || u.Scheme != URLSchemeHTTPS {
+			return httpClientOptions{}, "http check: http3 requires an https url"
 		}
+		opts.target = u
 		if proxyURL != nil {
-			return nil, "http check: http3 and proxy are mutually exclusive"
+			return httpClientOptions{}, "http check: http3 and proxy are mutually exclusive"
 		}
-		client = http3Client(iface, nil)
-	} else if proxyURL != nil {
-		client = httpClientWithTransport(proxyURL, "")
+	}
+	return opts, ""
+}
+
+func (o httpClientOptions) requestClient(client *http.Client) *http.Client {
+	if o.http3 {
+		return http3Client(o.iface, nil)
 	}
 	// interface: egress the HTTP request (and any proxy connection) through a
 	// specific interface by binding the transport's dialer. The http client has
 	// one fixed transport, so it honors a single interface (the first listed).
-	if iface != "" && !http3Enabled {
-		return httpClientWithTransport(proxyURL, iface), ""
+	if o.iface != "" {
+		return httpClientWithTransport(o.proxyURL, o.iface)
 	}
-	return client, ""
+	if o.proxyURL != nil {
+		return httpClientWithTransport(o.proxyURL, "")
+	}
+	return client
+}
+
+func (o httpClientOptions) certTarget(rawURL string) (url.URL, string) {
+	if o.target != nil {
+		return *o.target, ""
+	}
+	target, err := url.Parse(rawURL)
+	if err != nil {
+		return url.URL{}, "http check: invalid url: " + err.Error()
+	}
+	return *target, ""
 }
 
 func firstHTTPInterface(entry map[string]any) string {
@@ -201,9 +233,6 @@ func boolDefaultTrue(v any) bool {
 func httpClientWithRedirectPolicy(client *http.Client, follow bool) *http.Client {
 	if follow {
 		return client
-	}
-	if client == nil {
-		client = httpx.NewClient(httpx.ClientOptions{})
 	}
 	copied := *client
 	copied.CheckRedirect = func(*http.Request, []*http.Request) error {
@@ -289,22 +318,17 @@ var httpCertKeys = []string{
 // configureHTTPCert enables certificate inspection on hc when any cert_* key is
 // present. It requires an https url and returns a warning string on a config
 // error (empty when there is nothing to configure or configuration succeeded).
-func configureHTTPCert(hc *httpCheck, entry map[string]any, rawURL string) string {
-	active := false
+func hasHTTPCertOptions(entry map[string]any) bool {
 	for _, k := range httpCertKeys {
 		if _, ok := entry[k]; ok {
-			active = true
-			break
+			return true
 		}
 	}
-	if !active {
-		return ""
-	}
-	u, err := url.Parse(rawURL)
-	if err != nil {
-		return "http check: invalid url: " + err.Error()
-	}
-	if u.Scheme != URLSchemeHTTPS {
+	return false
+}
+
+func configureHTTPCert(hc *httpCheck, target url.URL, clientOpts httpClientOptions, entry map[string]any) string {
+	if target.Scheme != URLSchemeHTTPS {
 		return "http check: cert_* options require an https url"
 	}
 	verify := boolDefaultTrue(entry[CheckKeyCertVerify])
@@ -312,7 +336,7 @@ func configureHTTPCert(hc *httpCheck, entry map[string]any, rawURL string) strin
 	if v, ok := cfgval.Int(entry[CheckKeyCertExpiresInDays]); ok {
 		days = v
 	}
-	hc.certHost = u.Hostname()
+	hc.certHost = target.Hostname()
 	hc.certOpts = certOptions{
 		expiresInDays:  days,
 		verify:         verify,
@@ -321,18 +345,17 @@ func configureHTTPCert(hc *httpCheck, entry map[string]any, rawURL string) strin
 		onChange:       cfgval.Bool(entry[CheckKeyCertOnChange]),
 	}
 	hc.certVerification = newCertVerification(verify, hc.certHost)
-	if cfgval.Bool(entry[CheckKeyHTTP3]) {
+	if clientOpts.http3 {
 		// Read the leaf over QUIC too; http3 populates resp.TLS so the same
 		// certificate logic applies. TLS 1.3 is enforced by QUIC.
-		hc.certClient = http3Client(firstHTTPInterface(entry), inspectionTLSConfig("", tls.VersionTLS13, hc.certVerification))
+		hc.certClient = http3Client(clientOpts.iface, inspectionTLSConfig("", tls.VersionTLS13, hc.certVerification))
 		return ""
 	}
 	// Cert inspection also goes through the proxy (CONNECT for https).
-	proxyURL, _ := parseProxyURL(entry)
 	hc.certClient = httpx.NewClient(httpx.ClientOptions{
 		TLS:         inspectionTLSConfig("", 0, hc.certVerification),
-		Proxy:       proxyFunc(proxyURL),
-		DialContext: conn.BindDialContext(firstHTTPInterface(entry)),
+		Proxy:       proxyFunc(clientOpts.proxyURL),
+		DialContext: conn.BindDialContext(clientOpts.iface),
 	})
 	return ""
 }

@@ -148,9 +148,8 @@ func TestBuildHTTP3Client(t *testing.T) {
 		t.Fatalf("http3 check with interface should build: warns=%v", warns)
 	}
 	boundHTTP := bound[0].Check.(*httpCheck)
-	requestTransport := boundHTTP.client.Transport.(*http3.Transport)
-	if requestTransport.Dial == nil {
-		t.Fatal("HTTP/3 request transport must use the bound QUIC dialer")
+	if boundHTTP.client != nil {
+		t.Fatal("certificate inspection must not retain an unused request client")
 	}
 	certTransport := boundHTTP.certClient.Transport.(*http3.Transport)
 	if certTransport.Dial == nil {
