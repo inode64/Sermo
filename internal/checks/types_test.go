@@ -20,13 +20,13 @@ func TestJSONAssertNumericBoundaries(t *testing.T) {
 		{"<=", true}, // 5 <= 5
 	}
 	for _, c := range cases {
-		got, err := jsonAssert(5.0, c.op, "5")
+		got, err := compareValue(jsonValueString(5.0), c.op, "5")
 		if err != nil {
-			t.Errorf("jsonAssert(5, %q, 5): %v", c.op, err)
+			t.Errorf("compareValue(jsonValueString(5), %q, 5): %v", c.op, err)
 			continue
 		}
 		if got != c.want {
-			t.Errorf("jsonAssert(5, %q, 5) = %v, want %v", c.op, got, c.want)
+			t.Errorf("compareValue(jsonValueString(5), %q, 5) = %v, want %v", c.op, got, c.want)
 		}
 	}
 }
@@ -51,18 +51,18 @@ func TestJSONAssertUsesCompareValue(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			hold, err := jsonAssert(c.got, c.op, c.want)
+			hold, err := compareValue(jsonValueString(c.got), c.op, c.want)
 			if c.wantErr {
 				if err == nil {
-					t.Fatalf("jsonAssert(%v, %q, %q): expected error", c.got, c.op, c.want)
+					t.Fatalf("compareValue(jsonValueString(%v), %q, %q): expected error", c.got, c.op, c.want)
 				}
 				return
 			}
 			if err != nil {
-				t.Fatalf("jsonAssert(%v, %q, %q): %v", c.got, c.op, c.want, err)
+				t.Fatalf("compareValue(jsonValueString(%v), %q, %q): %v", c.got, c.op, c.want, err)
 			}
 			if hold != c.hold {
-				t.Fatalf("jsonAssert(%v, %q, %q) = %v, want %v", c.got, c.op, c.want, hold, c.hold)
+				t.Fatalf("compareValue(jsonValueString(%v), %q, %q) = %v, want %v", c.got, c.op, c.want, hold, c.hold)
 			}
 		})
 	}

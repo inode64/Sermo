@@ -192,6 +192,7 @@ func runHTTPCertCheck(t *testing.T, opts certOptions) Result {
 		url: srv.URL, method: "GET", expect: statusMatcher{codes: []int{200}},
 		certHost: hostOf(t, srv.URL), certOpts: opts,
 	}
+	c.certVerification = newCertVerification(opts.verify, c.certHost)
 	return c.Run(context.Background())
 }
 
