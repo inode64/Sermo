@@ -3,6 +3,7 @@ package checks
 import (
 	"context"
 	"fmt"
+	"math"
 	"net"
 	"os"
 	"time"
@@ -112,10 +113,7 @@ func (c *icmpCheck) Run(_ context.Context) Result {
 			res.Data = data
 			return res
 		}
-		diff := s.RTTms - c.lastRTT
-		if diff < 0 {
-			diff = -diff
-		}
+		diff := math.Abs(s.RTTms - c.lastRTT)
 		changed := diff > c.delta
 		data[DataKeyOld], data[DataKeyNew], data[DataKeyValue] = c.lastRTT, s.RTTms, s.RTTms
 		msg := fmt.Sprintf("%s rtt %.1f->%.1fms (|Δ|=%.1f > %.1f)", c.host, c.lastRTT, s.RTTms, diff, c.delta)
@@ -179,9 +177,6 @@ func (c *icmpCheck) sample(sampler PingSamplerFunc) (PingSample, error) {
 // set it binds the socket to that interface's IPv4 address (the `ping -I <addr>`
 // mechanism) so the echo requests leave through it on a multi-homed host.
 func defaultPingSampler(host, iface string, count int, timeout time.Duration) (PingSample, error) {
-	if count <= 0 {
-		count = DefaultPingCount
-	}
 	if timeout <= 0 {
 		timeout = defaultPingTimeout
 	}
@@ -266,9 +261,6 @@ func defaultPingSampler(host, iface string, count int, timeout time.Duration) (P
 // expected target IP, so a raw socket's replies for other hosts are not counted
 // as this check's reply.
 func sameIPv4(peer net.Addr, want net.IP) bool {
-	if peer == nil {
-		return false
-	}
 	if ip, ok := peer.(*net.IPAddr); ok {
 		return ip.IP.Equal(want)
 	}
