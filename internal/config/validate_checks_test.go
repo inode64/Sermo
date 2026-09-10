@@ -164,7 +164,7 @@ checks:
 `,
 		"checks.no-host requires a host or a path",
 		"checks.bad-days.expires_in_days must be a positive integer",
-		"checks.bad-port.port must be an integer in 1..65535",
+		`checks.bad-port.port "70000" must be an integer in 1..65535`,
 		"checks.bad-bool.cert_verify must be a boolean")
 }
 

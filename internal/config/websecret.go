@@ -96,6 +96,5 @@ func (g Global) WebGuestCredentials() webcred.List {
 // WebSection returns the raw [web] section, or nil when the config does not
 // configure one.
 func (g Global) WebSection() map[string]any {
-	m, _ := g.Raw[SectionWeb].(map[string]any)
-	return m
+	return SectionMap(g.Raw, SectionWeb)
 }

@@ -243,13 +243,7 @@ func validateHTTPExpectations(prefix string, fields map[string]any, add addFunc)
 	if m, ok := fields[checks.CheckKeyExpectStatus].(map[string]any); ok {
 		validateOpValue(prefix, checks.CheckKeyExpectStatus, m, add)
 	}
-	if v, present := fields[checks.CheckKeyExpectLatency]; present {
-		if m, ok := v.(map[string]any); ok {
-			validateOpValue(prefix, checks.CheckKeyExpectLatency, m, add)
-		} else {
-			add("%s.expect_latency must be an {op, value} mapping", prefix)
-		}
-	}
+	validateExpectLatency(prefix, fields, add)
 	value, present := fields[checks.CheckKeyExpectJSON]
 	validateHTTPJSONExpectations(prefix, value, present, add)
 }
@@ -551,13 +545,19 @@ func validateConnExpectations(prefix string, fields map[string]any, add addFunc)
 			}
 		}
 	}
-	if v, present := fields[checks.CheckKeyExpectLatency]; present {
-		if m, ok := v.(map[string]any); ok {
-			validateOpValue(prefix, checks.CheckKeyExpectLatency, m, add)
-		} else {
-			add("%s.expect_latency must be an {op, value} mapping", prefix)
-		}
+	validateExpectLatency(prefix, fields, add)
+}
+
+func validateExpectLatency(prefix string, fields map[string]any, add addFunc) {
+	v, present := fields[checks.CheckKeyExpectLatency]
+	if !present {
+		return
 	}
+	if m, ok := v.(map[string]any); ok {
+		validateOpValue(prefix, checks.CheckKeyExpectLatency, m, add)
+		return
+	}
+	add("%s.expect_latency must be an {op, value} mapping", prefix)
 }
 
 func validateConnChangeFlags(prefix string, fields map[string]any, add addFunc) {
@@ -1734,11 +1734,7 @@ func validateCertFields(prefix string, fields map[string]any, add addFunc) {
 	case host != "" && path != "":
 		add("%s.host and %s.path are mutually exclusive", prefix, prefix)
 	}
-	if v, present := fields[checks.CheckKeyPort]; present {
-		if n, ok := cfgval.Int(v); !ok || !cfgval.ValidTCPPort(n) {
-			add(validationTCPPortRangeFormat, prefix+"."+checks.CheckKeyPort, cfgval.TCPPortRange())
-		}
-	}
+	validateOptionalTCPPort(prefix, fields, add)
 	if v, present := fields[checks.CheckKeyServerName]; present {
 		if _, ok := v.(string); !ok {
 			add("%s.server_name must be a string (SNI + hostname to verify)", prefix)

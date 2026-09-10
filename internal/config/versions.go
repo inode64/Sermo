@@ -9,6 +9,7 @@ import (
 	"sermo/internal/cfgval"
 	"sermo/internal/hostfs"
 	"sermo/internal/servicemgr"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -774,7 +775,7 @@ func refineMatchValuesFromRealPath(values map[string]string, pattern, realPath s
 		if sub == nil {
 			continue
 		}
-		out := cloneStringMap(values)
+		out := maps.Clone(values)
 		for i, tk := range order {
 			out[tk.variable] = sub[i+templateCaptureOffset]
 		}
@@ -802,7 +803,7 @@ func refineJavaReleaseVersion(values map[string]string, realPath string) map[str
 	if !moreSpecificVersion(version, current) {
 		return values
 	}
-	out := cloneStringMap(values)
+	out := maps.Clone(values)
 	out[varVersion] = version
 	return out
 }
@@ -823,12 +824,6 @@ func moreSpecificVersion(candidate, current string) bool {
 		return false
 	}
 	return strings.HasPrefix(candidate, current+".") || strings.HasPrefix(candidate, current+"_")
-}
-
-func cloneStringMap(in map[string]string) map[string]string {
-	out := make(map[string]string, len(in))
-	maps.Copy(out, in)
-	return out
 }
 
 func dedupeTemplateMatches(matches []templateMatch, toks []tmplToken) []templateMatch {
@@ -1203,7 +1198,7 @@ func bindTokensMap(tree map[string]any, repl *strings.Replacer) map[string]any {
 func (c *Config) dropTemplate(name string, reg map[string]*Document, kind string) {
 	delete(reg, name)
 	names, _ := c.catalogSet(catalogCategoryForKind(kind))
-	*names = withoutString(*names, name)
+	*names = slices.DeleteFunc(*names, func(candidate string) bool { return candidate == name })
 	docs := make([]*Document, 0, len(c.docs))
 	for _, d := range c.docs {
 		if d.Kind == kind && d.Name == name {
@@ -1212,15 +1207,4 @@ func (c *Config) dropTemplate(name string, reg map[string]*Document, kind string
 		docs = append(docs, d)
 	}
 	c.docs = docs
-}
-
-// withoutString returns names with every occurrence of name removed.
-func withoutString(names []string, name string) []string {
-	out := make([]string, 0, len(names))
-	for _, n := range names {
-		if n != name {
-			out = append(out, n)
-		}
-	}
-	return out
 }
