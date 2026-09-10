@@ -63,10 +63,7 @@ func (a App) runUmount(ctx context.Context, opts options) int {
 		KillBlockers: opts.kill,
 	})
 	a.syncStorageMountMonitoring(ctx, opts, cfg, spec.Name, mountctl.ActionUmount, err == nil && res.Status == mountctl.ResultOK)
-	if err != nil {
-		return a.printMountResult(opts, res, err)
-	}
-	return a.printMountResult(opts, res, nil)
+	return a.printMountResult(opts, res, err)
 }
 
 func (a App) runMountAcquire(ctx context.Context, opts options, target string) int {
@@ -81,10 +78,7 @@ func (a App) runMountAcquire(ctx context.Context, opts options, target string) i
 	controller := a.mountController(cfg, opts)
 	res, err := controller.Acquire(ctx, spec)
 	a.syncStorageMountMonitoring(ctx, opts, cfg, spec.Name, mountctl.ActionMount, err == nil && res.Status == mountctl.ResultOK)
-	if err != nil {
-		return a.printMountResult(opts, res, err)
-	}
-	return a.printMountResult(opts, res, nil)
+	return a.printMountResult(opts, res, err)
 }
 
 func (a App) runMountStatus(opts options, target string) int {
