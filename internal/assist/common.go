@@ -42,7 +42,7 @@ type Monitoring struct {
 func (p *Prompt) AskMonitoring(label string) Monitoring {
 	return Monitoring{
 		Monitor:  p.AskMonitorState(label),
-		Interval: p.AskInterval(""),
+		Interval: p.AskInterval(),
 	}
 }
 
@@ -66,9 +66,9 @@ func (p *Prompt) AskMonitorState(label string) string {
 // AskInterval asks for a per-entry check interval, returning "" to inherit the
 // global engine interval. It re-prompts on a value config validation would
 // reject (mirrors askDuration but allows the blank "inherit" answer).
-func (p *Prompt) AskInterval(def string) string {
+func (p *Prompt) AskInterval() string {
 	return p.askPositiveDuration(
-		"Check interval (blank = inherit the global interval)", def,
+		"Check interval (blank = inherit the global interval)", "",
 		"use a positive duration like 30s or 5m, or leave blank to inherit", true,
 	)
 }
