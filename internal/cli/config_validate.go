@@ -14,24 +14,22 @@ func (a App) runConfig(opts options) int {
 
 	sub := opts.args[0]
 	rest := opts.args[1:]
-	globalPath := opts.globalPath()
-
 	switch sub {
 	case commandValidate:
-		return a.runConfigValidate(globalPath, rest, opts)
+		return a.runConfigValidate(rest, opts)
 	default:
 		return a.commandUsageError(commandConfig, fmt.Sprintf("unknown config subcommand %q", sub))
 	}
 }
 
-func (a App) runConfigValidate(globalPath string, rest []string, opts options) int {
+func (a App) runConfigValidate(rest []string, opts options) int {
 	if len(rest) > 0 {
 		return a.commandUsageError(commandConfig, "config validate takes no service name; it validates the whole Sermo configuration")
 	}
 
-	cfg, err := a.LoadConfig(globalPath)
-	if err != nil {
-		return a.fail(opts, fmt.Sprintf("load config failed: %v", err))
+	cfg, code := a.loadConfig(opts)
+	if cfg == nil {
+		return code
 	}
 
 	issues := config.Validate(cfg)
@@ -46,11 +44,7 @@ func (a App) runConfigValidate(globalPath string, rest []string, opts options) i
 		return exitSuccess
 	}
 
-	if opts.json {
-		writeJSON(a.Stdout, map[string]any{cliJSONKeyValid: false, cliJSONKeyErrors: issuesJSON(issues)})
-	} else {
-		a.printIssues(opts, issues)
-	}
+	a.printIssues(opts, issues)
 	return exitConfigInvalid
 }
 
