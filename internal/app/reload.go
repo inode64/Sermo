@@ -135,7 +135,7 @@ func resetRemovedServiceMetrics(collector *metrics.Collector, oldWorkers, newWor
 	newNames := workerServiceNames(newWorkers)
 	for name := range oldNames {
 		if !newNames[name] {
-			collector.Reset(name)
+			collector.ForgetService(name)
 		}
 	}
 }
