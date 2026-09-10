@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"math"
 	"testing"
 	"time"
 
@@ -356,6 +357,18 @@ func TestProcWatchCPURateNotReadyFirstCycle(t *testing.T) {
 	}
 	if _, ok := h.fired[0]["SERMO_CPU"]; !ok {
 		t.Fatalf("SERMO_CPU missing from env: %v", h.fired[0])
+	}
+}
+
+func TestProcWatchCPUPercentUsesHostCPUCount(t *testing.T) {
+	at := time.Unix(1_000_000, 0)
+	got, ready := cpuPercent(0, 100, at, at.Add(time.Second))
+	if !ready {
+		t.Fatal("cpuPercent() not ready")
+	}
+	want := metrics.PercentScale / float64((metrics.OSReader{}).NumCPU())
+	if math.Abs(got-want) > 1e-9 {
+		t.Fatalf("cpuPercent() = %v, want %v from host CPU count", got, want)
 	}
 }
 

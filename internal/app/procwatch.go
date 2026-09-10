@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
-	"runtime"
 	"sort"
 	"strconv"
 	"syscall"
@@ -586,7 +585,9 @@ func cpuPercent(prevTicks, curTicks uint64, prevAt, now time.Time) (float64, boo
 		return 0, false
 	}
 	wall := now.Sub(prevAt).Seconds()
-	n := runtime.NumCPU()
+	// OSReader counts host CPUs from /proc/stat rather than this process's
+	// affinity mask, which keeps a pinned sermod from inflating CPU percentages.
+	n := (metrics.OSReader{}).NumCPU()
 	if wall <= 0 || n <= 0 {
 		return 0, false
 	}
