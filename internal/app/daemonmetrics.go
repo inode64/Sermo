@@ -136,9 +136,6 @@ func (s *DaemonMetricSampler) Run(ctx context.Context, interval time.Duration) {
 }
 
 func (s *DaemonMetricSampler) sampleWithContext(ctx context.Context) {
-	if s == nil {
-		return
-	}
 	s.mu.Lock()
 	sample := s.sampleLocked()
 	s.samples = append(s.samples, sample)
@@ -252,9 +249,6 @@ func (s *DaemonMetricSampler) recordPersistent(ctx context.Context, sample daemo
 }
 
 func (s *DaemonMetricSampler) persistentSeries(sample daemonMetricSample, since time.Duration) (web.DaemonMetrics, bool) {
-	if s.store == nil {
-		return web.DaemonMetrics{}, false
-	}
 	triplet, ok := loadPersistentMetricTriplet(daemonMetricCheck, sample.at, since, persistentMetricReader{
 		summary: s.store.DaemonMetricSummary,
 		series:  s.store.DaemonMetricSeries,

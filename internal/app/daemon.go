@@ -967,9 +967,6 @@ func newCycleWriter(deps Deps, name string, tree map[string]any) *cycleWriter {
 // observation timestamp from completion so batching changes commits, not the
 // archive bucket assigned to a result.
 func (w *cycleWriter) RecordMeasurement(r checks.Result) {
-	if w == nil {
-		return
-	}
 	at := w.now()
 	// Band samples need only the SLA store this writer's existence guarantees;
 	// the measurement store below gates the value series alone.
@@ -1036,9 +1033,6 @@ const bandSeriesSeparator = ":"
 // and because it is the newest event it became the service's last_event and sat
 // on the dashboard for days describing an outage that never happened.
 func (w *cycleWriter) RecordCycle(ctx context.Context, cycle cycleRecord) {
-	if w == nil {
-		return
-	}
 	defer func() { w.records, w.bandSamples = w.records[:0], w.bandSamples[:0] }()
 
 	var err error
