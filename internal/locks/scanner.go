@@ -1,7 +1,6 @@
 package locks
 
 import (
-	"cmp"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -84,7 +83,7 @@ func (s Scanner) ScanServices(services []string) (map[string]Report, error) {
 
 		for _, match := range matches {
 			report := reports[match.service]
-			report.Locks = append(report.Locks, scannedLock(lf, path, match, state, staleReason))
+			report.Locks = append(report.Locks, toLockWithIDs(lf, path, state, staleReason, match.service, match.lockName))
 			reports[match.service] = report
 		}
 	}
@@ -101,21 +100,6 @@ func reportsForServices(services []string) map[string]Report {
 		reports[service] = Report{Service: service}
 	}
 	return reports
-}
-
-func scannedLock(lf lockFile, path string, match lockServiceMatch, state State, staleReason string) Lock {
-	return Lock{
-		Service:         cmp.Or(lf.Service, match.service),
-		Name:            cmp.Or(lf.Name, match.lockName),
-		Reason:          lf.Reason,
-		OwnerPID:        lf.OwnerPID,
-		OwnerStartTicks: lf.OwnerStartTicks,
-		CreatedAt:       lf.CreatedAt,
-		ExpiresAt:       lf.ExpiresAt,
-		Path:            path,
-		State:           state,
-		StaleReason:     staleReason,
-	}
 }
 
 // ScanDir returns a warning for every lock file under Dir that cannot be read or
