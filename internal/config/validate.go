@@ -807,6 +807,7 @@ func validDocumentName(name string) bool {
 func validateServices(cfg *Config) []Issue {
 	var issues []Issue
 	defined := notifierNames(cfg.Notifiers())
+	inputs := cfg.newResolutionInputs()
 	services := map[string]struct{}{}
 	for _, n := range cfg.ServiceNames {
 		services[n] = struct{}{}
@@ -825,14 +826,14 @@ func validateServices(cfg *Config) []Issue {
 			continue
 		}
 		for _, pruneOptional := range []bool{false, true} {
-			resolved, errs := cfg.resolveService(name, pruneOptional)
+			resolved, errs := cfg.resolveServiceWithInputs(name, pruneOptional, inputs)
 			for _, e := range errs {
 				addIssue(Issue{Scope: name, Msg: e})
 			}
 			if resolved.Tree == nil {
 				continue
 			}
-			for _, issue := range validateResolved(name, resolved.Tree, cfg.Global.RuntimeDir(), defined, services, effectiveBackend(cfg)) {
+			for _, issue := range validateResolved(name, resolved.Tree, cfg.Global.RuntimeDir(), defined, services, inputs.backend) {
 				addIssue(issue)
 			}
 		}
