@@ -44,7 +44,7 @@ func TestObservationContractReachesPersistenceEventsAndWeb(t *testing.T) {
 					return map[string]checks.Result{"probe": result}
 				},
 				Publish: func(cache map[string]checks.Result, _ map[string]bool) {
-					snapshots.PublishWithCheckTypes("demo", cache, map[string]bool{"probe": true}, map[string]string{"probe": "service"})
+					snapshots.publishWithCheckTypes("demo", cache, map[string]bool{"probe": true}, map[string]string{"probe": "service"})
 				},
 				Emit: func(event Event) { events = append(events, event) },
 			}

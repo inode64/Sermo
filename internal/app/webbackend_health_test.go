@@ -81,7 +81,7 @@ func TestCheckHealthSummary(t *testing.T) {
 
 func TestWebBackendViewCheckHealth(t *testing.T) {
 	snaps := NewSnapshots()
-	snaps.Publish("web", map[string]checks.Result{
+	snaps.publishForTest("web", map[string]checks.Result{
 		"http": {Check: "http", OK: true},
 		"tcp":  {Check: "tcp", OK: false},
 	}, map[string]bool{"http": true, "tcp": true})
@@ -107,7 +107,7 @@ func TestWebBackendFailedUnitWithHealthyLiveProcessWarns(t *testing.T) {
 	at := time.Date(2026, 8, 10, 11, 20, 0, 0, time.UTC)
 	snaps := NewSnapshots()
 	snaps.now = func() time.Time { return at }
-	snaps.Publish("glusterd", map[string]checks.Result{
+	snaps.publishForTest("glusterd", map[string]checks.Result{
 		"management": {Check: "management", OK: true},
 	}, map[string]bool{"management": true})
 	metrics := NewServiceMetricSampler()
@@ -139,7 +139,7 @@ func TestWebBackendGlusterClusterReadings(t *testing.T) {
 	at := time.Date(2026, 8, 10, 12, 0, 0, 0, time.UTC)
 	snaps := NewSnapshots()
 	snaps.now = func() time.Time { return at }
-	snaps.PublishWithCheckTypes("glusterd", map[string]checks.Result{
+	snaps.publishWithCheckTypes("glusterd", map[string]checks.Result{
 		"cluster": {
 			Check: "cluster", OK: false,
 			Data: map[string]any{
@@ -180,7 +180,7 @@ func TestWebBackendServiceCheckSnapshotRequiresFreshMatchingType(t *testing.T) {
 	at := time.Date(2026, 7, 16, 18, 0, 0, 0, time.UTC)
 	snaps := NewSnapshots()
 	snaps.now = func() time.Time { return at }
-	snaps.PublishWithCheckTypes("web", map[string]checks.Result{
+	snaps.publishWithCheckTypes("web", map[string]checks.Result{
 		"probe": {Check: "probe", OK: false, Message: "connection refused"},
 	}, map[string]bool{"probe": true}, map[string]string{"probe": checks.CheckTypeTCP})
 
@@ -223,7 +223,7 @@ func TestWebBackendViewCheckHealthPaused(t *testing.T) {
 	}
 
 	snaps := NewSnapshots()
-	snaps.Publish("web", map[string]checks.Result{
+	snaps.publishForTest("web", map[string]checks.Result{
 		"http": {Check: "http", OK: false},
 	}, map[string]bool{"http": true})
 
@@ -272,7 +272,7 @@ func TestWebBackendServiceStateStartupCollectingMonitored(t *testing.T) {
 		t.Fatalf("collecting service without snapshots = %+v, want collecting", svc)
 	}
 
-	snaps.Publish("web", map[string]checks.Result{
+	snaps.publishForTest("web", map[string]checks.Result{
 		"http": {Check: "http", OK: true},
 	}, map[string]bool{"http": true})
 	svc = b.view(context.Background(), "web", b.entries["web"])
@@ -298,7 +298,7 @@ func TestWebBackendServiceStateEmptyProcessTreeWarnsInsteadOfCollectingForever(t
 	observability := NewObservabilityRegistry()
 	observability.MarkReady("rpcbind", now)
 	snaps := NewSnapshots()
-	snaps.Publish("rpcbind", map[string]checks.Result{
+	snaps.publishForTest("rpcbind", map[string]checks.Result{
 		"service": {Check: "service", OK: true},
 	}, map[string]bool{"service": true})
 	metrics := NewServiceMetricSampler()

@@ -9,10 +9,10 @@ import (
 	"sermo/internal/state"
 )
 
-// Publish keeps older test setup concise. Production code must provide check
-// types through PublishWithCheckTypes, so web consumers never receive an
+// publishForTest keeps older test setup concise. Production code provides check
+// types through publishWithCheckTypes, so web consumers never receive an
 // untyped snapshot.
-func (s *Snapshots) Publish(service string, cache map[string]checks.Result, ran map[string]bool) {
+func (s *Snapshots) publishForTest(service string, cache map[string]checks.Result, ran map[string]bool) {
 	s.publishConfigured(service, cache, ran, nil, "")
 }
 
@@ -21,7 +21,7 @@ func TestSnapshotsRoundTrip(t *testing.T) {
 	if s.Get("web") != nil {
 		t.Fatal("unobserved service should have no snapshot")
 	}
-	s.Publish("web", map[string]checks.Result{
+	s.publishForTest("web", map[string]checks.Result{
 		"http": {Check: "http", OK: true, Message: "status 200"},
 		"warn": {Check: "warn", OK: false, Optional: true},
 	}, map[string]bool{"http": true, "warn": true})
@@ -39,7 +39,7 @@ func TestSnapshotsRoundTrip(t *testing.T) {
 
 func TestSnapshotsPublishRanFlag(t *testing.T) {
 	s := NewSnapshots()
-	s.Publish("web", map[string]checks.Result{
+	s.publishForTest("web", map[string]checks.Result{
 		"fast": {Check: "fast", OK: true},
 		"slow": {Check: "slow", OK: true, Message: "cached"},
 	}, map[string]bool{"fast": true})
@@ -55,7 +55,7 @@ func TestSnapshotsPublishRanFlag(t *testing.T) {
 
 func TestSnapshotsPublishWithCheckTypes(t *testing.T) {
 	s := NewSnapshots()
-	s.PublishWithCheckTypes("web", map[string]checks.Result{
+	s.publishWithCheckTypes("web", map[string]checks.Result{
 		"http": {Check: "http", OK: true},
 	}, map[string]bool{"http": true}, map[string]string{"http": checks.CheckTypeHTTP})
 
@@ -66,7 +66,7 @@ func TestSnapshotsPublishWithCheckTypes(t *testing.T) {
 
 func TestSnapshotsPublishWithCheckTypesDropsUntypedEntries(t *testing.T) {
 	s := NewSnapshots()
-	s.PublishWithCheckTypes("web", map[string]checks.Result{
+	s.publishWithCheckTypes("web", map[string]checks.Result{
 		"http": {Check: "http", OK: true},
 	}, map[string]bool{"http": true}, nil)
 	if got := s.Get("web"); len(got) != 0 {
@@ -80,13 +80,13 @@ func TestSnapshotsPublishAtOnlyWhenRan(t *testing.T) {
 	s := NewSnapshots()
 	s.now = func() time.Time { return t0 }
 
-	s.Publish("web", map[string]checks.Result{
+	s.publishForTest("web", map[string]checks.Result{
 		"fast": {Check: "fast", OK: true},
 		"slow": {Check: "slow", OK: true},
 	}, map[string]bool{"fast": true, "slow": true})
 
 	s.now = func() time.Time { return t1 }
-	s.Publish("web", map[string]checks.Result{
+	s.publishForTest("web", map[string]checks.Result{
 		"fast": {Check: "fast", OK: true},
 		"slow": {Check: "slow", OK: true, Message: "cached"},
 	}, map[string]bool{"fast": true})
@@ -122,7 +122,7 @@ func TestPersistentSnapshotsHydrateAndStore(t *testing.T) {
 
 	t1 := t0.Add(time.Minute)
 	s.now = func() time.Time { return t1 }
-	s.Publish("web", map[string]checks.Result{
+	s.publishForTest("web", map[string]checks.Result{
 		"tcp": {Check: "tcp", OK: false, Unavailable: true, Message: "connection refused", Data: map[string]any{"port": float64(443)}, Severity: checks.SeverityWarning},
 	}, map[string]bool{"tcp": true})
 
@@ -140,11 +140,11 @@ func TestWatchSnapshotsKeepMetricSlots(t *testing.T) {
 	s := NewWatchSnapshots()
 	s.now = func() time.Time { return t0 }
 
-	s.Publish("uplink", checks.CheckTypeICMP, checks.Result{
+	s.publish("uplink", checks.CheckTypeICMP, checks.Result{
 		Check: "uplink",
 		Data:  map[string]any{checks.DataKeyMetric: checks.NetMetricState, checks.DataKeyValue: checks.NetStateUp},
 	})
-	s.Publish("uplink", checks.CheckTypeICMP, checks.Result{
+	s.publish("uplink", checks.CheckTypeICMP, checks.Result{
 		Check: "uplink",
 		Data:  map[string]any{checks.DataKeyMetric: checks.IcmpMetricLatency, checks.DataKeyValue: 12.5},
 	})
@@ -183,7 +183,7 @@ func TestPersistentWatchSnapshotsHydrateAndStore(t *testing.T) {
 
 	t1 := t0.Add(time.Minute)
 	s.now = func() time.Time { return t1 }
-	s.Publish("clock", "clock", checks.Result{
+	s.publish("clock", "clock", checks.Result{
 		Check:       "clock",
 		OK:          true,
 		Unavailable: true,
