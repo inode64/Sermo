@@ -320,9 +320,6 @@ func (c Controller) Acquire(ctx context.Context, spec Spec) (Result, error) {
 // it reaches 0. opts applies explicit unmount escalation when the real unmount
 // is attempted.
 func (c Controller) ReleaseWithOptions(ctx context.Context, spec Spec, opts ReleaseOptions) (Result, error) {
-	if reason := UmountDisabledReason(spec.Path); reason != "" {
-		return disabledUmountResult(spec, reason), errors.New(reason)
-	}
 	return c.withLock(spec, func() (Result, error) {
 		state, err := c.readState(spec)
 		if err != nil {
