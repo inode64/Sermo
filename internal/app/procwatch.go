@@ -199,7 +199,7 @@ func (w *procWatcher) runCycle(ctx context.Context) {
 		w.state = map[int]*procState{}
 	}
 	now := clockOrNow(w.now)
-	sampler := w.samplerOrDefault()
+	sampler := procSamplerOrDefault(w.sampler, w.userLookup)
 
 	samples, ok := sampler.Sample(w.match)
 	if !ok {
@@ -345,17 +345,14 @@ func processWatchData(name, user string, samples []ProcInfo) map[string]any {
 }
 
 func procSamplerFromDeps(deps Deps) ProcSampler {
-	if deps.ProcSampler != nil {
-		return deps.ProcSampler
-	}
-	return osProcSampler{userLookup: deps.UserLookup}
+	return procSamplerOrDefault(deps.ProcSampler, deps.UserLookup)
 }
 
-func (w *procWatcher) samplerOrDefault() ProcSampler {
-	if w.sampler != nil {
-		return w.sampler
+func procSamplerOrDefault(sampler ProcSampler, userLookup *process.UserLookup) ProcSampler {
+	if sampler != nil {
+		return sampler
 	}
-	return osProcSampler{userLookup: w.userLookup}
+	return osProcSampler{userLookup: userLookup}
 }
 
 // procEnv is the hook environment both firing paths share — a presence threshold
@@ -553,7 +550,7 @@ func (w *procWatcher) emitSignalResult(msg string, sig syscall.Signal, result pr
 // callers acting on the result must also compare the start time (see
 // sameProcessAs). A transient sampling failure fails safe (no kill).
 func (w *procWatcher) matchingProcess(pid int) (ProcInfo, bool) {
-	sampler := w.samplerOrDefault()
+	sampler := procSamplerOrDefault(w.sampler, w.userLookup)
 	samples, ok := sampler.Sample(w.match)
 	if !ok {
 		return ProcInfo{}, false

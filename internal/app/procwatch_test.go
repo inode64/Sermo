@@ -48,9 +48,9 @@ func TestProcWatcherFallbackSamplerKeepsUserLookup(t *testing.T) {
 	lookup := process.DefaultUserLookup()
 	w := &procWatcher{userLookup: lookup}
 
-	sampler, ok := w.samplerOrDefault().(osProcSampler)
+	sampler, ok := procSamplerOrDefault(w.sampler, w.userLookup).(osProcSampler)
 	if !ok {
-		t.Fatalf("fallback sampler = %T, want osProcSampler", w.samplerOrDefault())
+		t.Fatalf("fallback sampler = %T, want osProcSampler", procSamplerOrDefault(w.sampler, w.userLookup))
 	}
 	if sampler.userLookup != lookup {
 		t.Fatal("fallback sampler did not retain the configured user lookup")

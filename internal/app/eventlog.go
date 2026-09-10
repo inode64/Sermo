@@ -61,6 +61,7 @@ func NewEventLog(size int) *EventLog {
 		size:        size,
 		buf:         make([]LoggedEvent, size),
 		lastByWatch: map[string]LoggedEvent{},
+		lastByApp:   map[string]LoggedEvent{},
 	}
 }
 
@@ -301,15 +302,9 @@ func (l *EventLog) addLocked(e LoggedEvent) {
 
 func (l *EventLog) indexLocked(e LoggedEvent) {
 	if e.Watch != "" && isWatchActivityKind(e.Kind) {
-		if l.lastByWatch == nil {
-			l.lastByWatch = map[string]LoggedEvent{}
-		}
 		l.lastByWatch[e.Watch] = e
 	}
 	if e.App != "" {
-		if l.lastByApp == nil {
-			l.lastByApp = map[string]LoggedEvent{}
-		}
 		l.lastByApp[e.App] = e
 	}
 }

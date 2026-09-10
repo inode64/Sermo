@@ -47,6 +47,13 @@ func NewArtifactSamples() *ArtifactSamples {
 	return &ArtifactSamples{files: map[string]artifactFileSample{}, appVersions: map[string]artifactAppSample{}}
 }
 
+func artifactSamplesOrDefault(samples *ArtifactSamples) *ArtifactSamples {
+	if samples == nil {
+		return NewArtifactSamples()
+	}
+	return samples
+}
+
 // RegisterFile marks a file artifact before its first sample.
 func (s *ArtifactSamples) RegisterFile(path string) {
 	if s == nil || path == "" {
@@ -184,10 +191,7 @@ func buildCatalogArtifactWatches(ctx context.Context, cfg *config.Config, deps D
 	if cfg == nil {
 		return nil
 	}
-	samples := deps.ArtifactSamples
-	if samples == nil {
-		samples = NewArtifactSamples()
-	}
+	samples := artifactSamplesOrDefault(deps.ArtifactSamples)
 	runner := deps.ExecxRunner
 	lookup := appinspect.WithUserLookup(deps.UserLookup)
 	// Presence decides which entries get a watch; the version and health
@@ -246,11 +250,8 @@ func BuildArtifactWatches(ctx context.Context, cfg *config.Config, deps Deps) []
 	if cfg == nil {
 		return nil
 	}
-	samples := deps.ArtifactSamples
-	if samples == nil {
-		samples = NewArtifactSamples()
-		deps.ArtifactSamples = samples
-	}
+	samples := artifactSamplesOrDefault(deps.ArtifactSamples)
+	deps.ArtifactSamples = samples
 	out := BuildLibraryWatches(ctx, cfg, deps)
 	out = append(out, BuildAppWatches(ctx, cfg, deps)...)
 	dependencies := collectArtifactDependencies(cfg)
