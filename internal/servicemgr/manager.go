@@ -489,8 +489,6 @@ func systemdStatus(state string) Status {
 		return StatusFailed
 	case string(StatusInactive):
 		return StatusInactive
-	case systemdStateDeactivating:
-		return StatusUnknown
 	default:
 		// Activating, deactivating, reloading, unknown and empty states are
 		// transitional or indeterminate, never a stable inactive state.
