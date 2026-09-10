@@ -82,11 +82,11 @@ func (a App) applyMonitorTransition(
 // it paused an entry, resumed a paused entry, or found monitoring already on.
 // Service and watch commands use independent keys but share these semantics.
 func updateMonitorState(store *state.Store, key string, pause bool) (string, error) {
-	transition, err := sermoapp.ApplyMonitorTransition(store, key, !pause, state.SourceCLI)
+	changed, err := sermoapp.ApplyMonitorTransition(store, key, !pause, state.SourceCLI)
 	if err != nil {
 		return "", fmt.Errorf("apply monitor transition: %w", err)
 	}
-	if transition.Changed {
+	if changed {
 		if pause {
 			return monitorStatusPaused, nil
 		}
