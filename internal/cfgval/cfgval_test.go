@@ -252,6 +252,26 @@ func TestStringMap(t *testing.T) {
 	}
 }
 
+func TestMapAt(t *testing.T) {
+	tests := []struct {
+		name            string
+		tree            map[string]any
+		wantPresent, ok bool
+	}{
+		{name: "missing", tree: map[string]any{}},
+		{name: "mapping", tree: map[string]any{"control": map[string]any{"type": "docker"}}, wantPresent: true, ok: true},
+		{name: "scalar", tree: map[string]any{"control": "docker"}, wantPresent: true},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			mapping, present, ok := MapAt(test.tree, "control")
+			if present != test.wantPresent || ok != test.ok {
+				t.Fatalf("MapAt() = (%v, %v, %v), want present=%v ok=%v", mapping, present, ok, test.wantPresent, test.ok)
+			}
+		})
+	}
+}
+
 func TestInt(t *testing.T) {
 	cases := []struct {
 		in   any

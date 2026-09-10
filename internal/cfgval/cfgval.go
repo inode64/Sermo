@@ -250,6 +250,17 @@ func StringMap(v any) map[string]string {
 	return out
 }
 
+// MapAt reads an optional mapping at key. present distinguishes a missing key
+// from a present value that is not a mapping.
+func MapAt(tree map[string]any, key string) (mapping map[string]any, present, ok bool) {
+	value, present := tree[key]
+	if !present {
+		return nil, false, false
+	}
+	mapping, ok = value.(map[string]any)
+	return mapping, true, ok
+}
+
 // Int coerces a scalar — integer, float or decimal string — to an int, reporting
 // whether the coercion succeeded. Surrounding whitespace in a string is ignored.
 func Int(v any) (int, bool) {
