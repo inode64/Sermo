@@ -52,9 +52,7 @@ func (h *WebBackendHolder) Reload(ctx context.Context, cfg *config.Config, deps 
 		if cur.backend != nil && cur.backend.daemonMetrics != nil {
 			b.daemonMetrics = cur.backend.daemonMetrics
 		}
-		if cur.generation > 0 {
-			generation = cur.generation + 1
-		}
+		generation = cur.generation + 1
 	}
 	h.current.Store(&webGeneration{backend: b, generation: generation})
 	return warnings
