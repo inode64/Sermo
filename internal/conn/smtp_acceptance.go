@@ -285,7 +285,7 @@ func ParseSMTPAcceptanceEnvelope(helo, mailFrom, recipient, startTLS string) (SM
 		return SMTPAcceptanceEnvelope{}, fmt.Errorf("recipient: %w", err)
 	}
 	startTLS = NormalizeSMTPStartTLS(startTLS)
-	if !ValidSMTPStartTLS(startTLS) {
+	if !validNormalizedSMTPStartTLS(startTLS) {
 		return SMTPAcceptanceEnvelope{}, fmt.Errorf("starttls %q must be %s", startTLS, SMTPStartTLSValueSummary)
 	}
 	return SMTPAcceptanceEnvelope{
@@ -312,7 +312,7 @@ func ParseSMTPMailbox(value string) (address, domain string, err error) {
 		return "", "", errors.New("must contain a local part and DNS domain")
 	}
 	domain = strings.ToLower(strings.TrimSuffix(parsed.Address[at+1:], "."))
-	if !validSMTPDomain(domain, true) {
+	if !validSMTPDomain(domain) {
 		return "", "", errors.New("domain must be a fully-qualified DNS name")
 	}
 	return parsed.Address, domain, nil
@@ -321,14 +321,14 @@ func ParseSMTPMailbox(value string) (address, domain string, err error) {
 // ValidSMTPHelo reports whether value is a fully-qualified DNS hostname safe to
 // send verbatim in EHLO/HELO.
 func ValidSMTPHelo(value string) bool {
-	return value == strings.TrimSpace(value) && validSMTPDomain(strings.TrimSuffix(value, "."), true)
+	return value == strings.TrimSpace(value) && validSMTPDomain(strings.TrimSuffix(value, "."))
 }
 
-func validSMTPDomain(domain string, requireDot bool) bool {
+func validSMTPDomain(domain string) bool {
 	if domain == "" || len(domain) > 253 || strings.HasPrefix(domain, ".") || strings.HasSuffix(domain, ".") {
 		return false
 	}
-	if requireDot && !strings.Contains(domain, ".") {
+	if !strings.Contains(domain, ".") {
 		return false
 	}
 	for label := range strings.SplitSeq(domain, ".") {
@@ -359,7 +359,11 @@ func NormalizeSMTPStartTLS(value string) string {
 
 // ValidSMTPStartTLS reports whether value selects a supported STARTTLS policy.
 func ValidSMTPStartTLS(value string) bool {
-	switch NormalizeSMTPStartTLS(value) {
+	return validNormalizedSMTPStartTLS(NormalizeSMTPStartTLS(value))
+}
+
+func validNormalizedSMTPStartTLS(value string) bool {
+	switch value {
 	case SMTPStartTLSRequired, SMTPStartTLSOpportunistic:
 		return true
 	default:
