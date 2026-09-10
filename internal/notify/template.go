@@ -64,9 +64,6 @@ func (d templateData) SortedFields() []TemplateField {
 
 // Name returns the configured template name.
 func (t *Template) Name() string {
-	if t == nil {
-		return ""
-	}
 	return t.name
 }
 
@@ -158,9 +155,6 @@ func parseTemplatePart(name, label, suffix, source string) (*template.Template, 
 // Render applies the template. Missing subject or body fields keep the original
 // message value, which lets a template override only the part it needs.
 func (t *Template) Render(msg Message) (Message, error) {
-	if t == nil {
-		return msg, nil
-	}
 	data := templateData{Subject: msg.Subject, Body: msg.Body, fields: msg.Fields}
 	out := msg
 	if t.subject != nil {
