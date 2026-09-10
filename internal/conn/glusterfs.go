@@ -19,7 +19,7 @@ func (glusterfsProtocol) DefaultPort() int   { return defaultPortGlusterFS }
 func (glusterfsProtocol) RequiresUser() bool { return false }
 
 func (glusterfsProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	c, err := probeTargetFor(ctx, cfg, defaultPortGlusterFS).openTCP(ctx)
+	c, err := newProbeTarget(cfg, defaultPortGlusterFS).openTCP(ctx)
 	if err != nil {
 		return Result{}, err
 	}

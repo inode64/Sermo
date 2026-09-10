@@ -343,9 +343,8 @@ func dialDBus(ctx context.Context, cfg Config, addr string) (*dbus.Conn, error) 
 		}
 		return conn, nil
 	}
-	// This target is intentionally rebuilt instead of reusing probeTargetFor:
 	// tcpCfg is parsed from the full D-Bus address and may name a different
-	// host/port than the generic connection fields prepared by the executor.
+	// host/port than the generic connection fields.
 	c, err := newProbeTarget(tcpCfg, defaultPortNone).openTCP(ctx)
 	if err != nil {
 		return nil, err

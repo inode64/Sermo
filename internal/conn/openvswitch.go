@@ -49,7 +49,7 @@ const (
 )
 
 func (openvswitchProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	c, err := probeTargetFor(ctx, cfg, defaultPortOpenVSwitch).openStream(ctx)
+	c, err := newProbeTarget(cfg, defaultPortOpenVSwitch).openStream(ctx)
 	if err != nil {
 		return Result{}, err
 	}

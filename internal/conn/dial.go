@@ -116,7 +116,7 @@ func (t probeTarget) openUDP(ctx context.Context) (net.Conn, error) {
 // banner protocol's Probe repeats; the protocol supplies only its default port
 // and handshake.
 func probeBanner(ctx context.Context, cfg Config, defaultPort int, handshake func(io.ReadWriter, Config) (Result, error)) (Result, error) {
-	c, err := probeTargetFor(ctx, cfg, defaultPort).openStream(ctx)
+	c, err := newProbeTarget(cfg, defaultPort).openStream(ctx)
 	if err != nil {
 		return Result{}, err
 	}
@@ -156,7 +156,7 @@ func probeUnixSocket(ctx context.Context, cfg Config, defaultSocket string) (Res
 		socket = defaultSocket
 	}
 	cfg.Socket = socket
-	c, err := probeTargetFor(ctx, cfg, defaultPortNone).openStream(ctx)
+	c, err := newProbeTarget(cfg, defaultPortNone).openStream(ctx)
 	if err != nil {
 		return Result{}, err
 	}
@@ -301,7 +301,7 @@ func sendTextCommand(rw io.Writer, tp *textproto.Reader, command string) (int, s
 // (parse ok=false) fails with errFormat applied to the offending line. The
 // command→greeting skeleton shared by clamd, spamd and asterisk.
 func probeLineCommand(ctx context.Context, cfg Config, defaultPort int, command string, parse func(line string) (Result, bool), errFormat string) (Result, error) {
-	c, err := probeTargetFor(ctx, cfg, defaultPort).openStream(ctx)
+	c, err := newProbeTarget(cfg, defaultPort).openStream(ctx)
 	if err != nil {
 		return Result{}, err
 	}
@@ -327,7 +327,7 @@ func probeLineCommand(ctx context.Context, cfg Config, defaultPort int, command 
 // deadline, sends request, and returns the first reply datagram (up to
 // bufBytes). The round-trip shared by the datagram probes (rpcbind, nebula).
 func exchangeUDP(ctx context.Context, cfg Config, defaultPort int, request []byte, bufBytes int) ([]byte, error) {
-	c, err := probeTargetFor(ctx, cfg, defaultPort).openUDP(ctx)
+	c, err := newProbeTarget(cfg, defaultPort).openUDP(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("open UDP exchange: %w", err)
 	}

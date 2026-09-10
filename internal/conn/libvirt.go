@@ -50,7 +50,7 @@ func (libvirtProtocol) DefaultPort() int   { return defaultPortLibvirt }
 func (libvirtProtocol) RequiresUser() bool { return false }
 
 func (libvirtProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	target := probeTargetFor(ctx, cfg, defaultPortLibvirt)
+	target := newProbeTarget(cfg, defaultPortLibvirt)
 	mode, addr, uri := libvirtTransportWithTarget(cfg, target)
 	timeout := netutil.TimeoutFromContext(ctx, DefaultLibvirtTimeout)
 

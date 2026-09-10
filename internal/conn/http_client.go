@@ -38,8 +38,8 @@ func httpProbeBase(ctx context.Context, cfg Config, defaultPort int) (*http.Clie
 // policy. Most protocols use httpProbeBase and inherit cfg.TLS; protocols with
 // a documented policy (such as UniFi's self-signed HTTPS default) pass their
 // resolved mode here without duplicating host/port or interface binding.
-func httpProbeBaseWithTLSMode(ctx context.Context, cfg Config, defaultPort int, tlsMode string) (*http.Client, string) {
-	target := probeTargetFor(ctx, cfg, defaultPort)
+func httpProbeBaseWithTLSMode(_ context.Context, cfg Config, defaultPort int, tlsMode string) (*http.Client, string) {
+	target := newProbeTarget(cfg, defaultPort)
 	host, _ := target.hostPort()
 	scheme := schemeHTTP
 	client := httpProbeClient(target.cfg.Interface, nil)

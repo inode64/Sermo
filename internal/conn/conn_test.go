@@ -23,13 +23,11 @@ type recordingProto struct {
 	fakeProto
 	config        Config
 	targetAddress string
-	commonContext bool
 }
 
 func (p *recordingProto) Probe(ctx context.Context, cfg Config) (Result, error) {
 	p.config = cfg
-	p.targetAddress = probeTargetFor(ctx, cfg, p.DefaultPort()).address()
-	_, p.commonContext = ctx.Value(probeContextKey{}).(probeState)
+	p.targetAddress = newProbeTarget(cfg, p.DefaultPort()).address()
 	return Result{}, nil
 }
 
@@ -69,9 +67,6 @@ func TestRegisteredProtocolUsesCommonExecutor(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if !implementation.commonContext {
-		t.Fatal("registered probe did not receive the common probe context")
-	}
 	wantConfig := Config{Host: DefaultHost, Port: implementation.DefaultPort(), Socket: "/run/demo.sock"}
 	if implementation.config.Host != wantConfig.Host ||
 		implementation.config.Port != wantConfig.Port ||
