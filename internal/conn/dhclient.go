@@ -14,7 +14,6 @@ import (
 )
 
 const (
-	procUDPFormatBase               = 10
 	dhclientAnyInterface            = "any interface"
 	dhclientLeaseBlockStart         = "lease {"
 	dhclientLeaseBlockEnd           = "}"
@@ -70,7 +69,7 @@ func (dhclientProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 		}
 		extra[extraLeaseFile] = cfg.Query
 		extra[extraLeaseExpires] = lease.expires.Format(time.RFC3339)
-		extra[extraLeaseSecondsRemaining] = strconv.FormatInt(int64(lease.expires.Sub(now).Seconds()), procUDPFormatBase)
+		extra[extraLeaseSecondsRemaining] = strconv.FormatInt(int64(lease.expires.Sub(now).Seconds()), numericBaseDecimal)
 		if lease.interfaceName != "" {
 			extra[extraInterface] = lease.interfaceName
 		}

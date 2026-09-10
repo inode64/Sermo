@@ -33,8 +33,6 @@ const (
 	sshBannerSeparator     = "-"
 	sshDefaultProbeUser    = "anonymous"
 	sshExtraHostKeyAlgo    = "host_key_algo"
-	sshLineTerminator      = '\n'
-	sshLineTrimRight       = "\r\n"
 	sshMaxBannerBytes      = 16 * units.BytesPerKiB
 	sshRejectReasonMessage = ""
 )
@@ -141,8 +139,8 @@ func readSSHBanner(c net.Conn) (raw []byte, banner string, err error) {
 		n, rerr := c.Read(one)
 		if n == 1 {
 			raw = append(raw, one[0])
-			if one[0] == sshLineTerminator {
-				s := strings.TrimRight(string(line), sshLineTrimRight)
+			if one[0] == protocolLineBreak {
+				s := strings.TrimRight(string(line), protocolTrimCRLF)
 				line = line[:0]
 				if strings.HasPrefix(s, sshBannerPrefix) {
 					return raw, s, nil
