@@ -415,9 +415,7 @@ func (l *EventLog) reportStoreError(err error) { reportCallbackError(l.onStoreEr
 func MultiEmit(emitters ...func(Event)) func(Event) {
 	return func(e Event) {
 		for _, emit := range emitters {
-			if emit != nil {
-				emit(e)
-			}
+			emitSafe(emit, e)
 		}
 	}
 }

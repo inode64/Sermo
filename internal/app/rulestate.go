@@ -194,7 +194,7 @@ func ruleRecordsFromSamples(samples []rules.WindowSample) []state.RuleWindowSamp
 }
 
 func emitRuleStateError(emit func(Event), service, action string, err error) {
-	if emit != nil && err != nil {
-		emit(Event{Service: service, Kind: eventKindError, Message: fmt.Sprintf("%s: %v", action, err)})
+	if err != nil {
+		emitSafe(emit, Event{Service: service, Kind: eventKindError, Message: fmt.Sprintf("%s: %v", action, err)})
 	}
 }

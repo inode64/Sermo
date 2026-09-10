@@ -71,10 +71,8 @@ func (c cascader) run(ctx context.Context, root, action string) (operation.Resul
 		if c.config.Target != nil {
 			c.config.Target(svc, res, err)
 		}
-		if c.config.Emit != nil {
-			c.config.Emit(Event{Service: svc, Kind: eventKindCascade, Action: action,
-				Status: string(res.Status), Message: "cascade from " + root})
-		}
+		emitSafe(c.config.Emit, Event{Service: svc, Kind: eventKindCascade, Action: action,
+			Status: string(res.Status), Message: "cascade from " + root})
 	}
 	return downgradePrimaryOnCascadeFailure(primary, cascadeFailed), primaryErr
 }

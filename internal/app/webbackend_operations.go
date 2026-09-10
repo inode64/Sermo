@@ -56,9 +56,7 @@ func (b *WebBackend) SetPanic(_ context.Context, on bool) web.ActionResult {
 // operateError emits the error event for a rejected service action and returns
 // the matching failed ActionResult.
 func (b *WebBackend) operateError(name, action, msg string) web.ActionResult {
-	if b.emit != nil {
-		b.emit(Event{Service: name, Kind: eventKindError, Action: action, Message: msg})
-	}
+	emitSafe(b.emit, Event{Service: name, Kind: eventKindError, Action: action, Message: msg})
 	return web.ActionResult{OK: false, Message: msg}
 }
 

@@ -206,12 +206,10 @@ func (m *Monitor) installGenerationLocked(ctx context.Context, newCfg *config.Co
 
 	m.startGenerationLocked(ctx, false)
 
-	if m.deps.Emit != nil {
-		m.deps.Emit(Event{
-			Kind:    eventKindReload,
-			Message: fmt.Sprintf("config reloaded (%d services, %d watches)", len(workers), len(watches)),
-		})
-	}
+	emitSafe(m.deps.Emit, Event{
+		Kind:    eventKindReload,
+		Message: fmt.Sprintf("config reloaded (%d services, %d watches)", len(workers), len(watches)),
+	})
 	m.Logger.Info("config reloaded", monitorLogFieldServices, len(workers), monitorLogFieldWatches, len(watches))
 }
 
@@ -307,9 +305,7 @@ func (m *Monitor) stopGenerationLocked(final bool) {
 
 func (m *Monitor) emitReloadError(msg string) {
 	m.Logger.Warn("config reload rejected", monitorLogFieldError, msg)
-	if m.deps.Emit != nil {
-		m.deps.Emit(Event{Kind: eventKindError, Action: eventActionReload, Message: msg})
-	}
+	emitSafe(m.deps.Emit, Event{Kind: eventKindError, Action: eventActionReload, Message: msg})
 }
 
 // reloadConfigCompatibilityError reports a configuration change that cannot be

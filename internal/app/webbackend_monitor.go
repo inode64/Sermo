@@ -134,12 +134,9 @@ func (b *WebBackend) emitWatchMonitorEvent(watch, action, kind, status, message 
 // emitMonitorSubjectEvent fills the shared monitor-event fields onto an event
 // that already carries its subject (Service or Watch) and emits it.
 func (b *WebBackend) emitMonitorSubjectEvent(ev Event, action, kind, status, message string) {
-	if b.emit == nil {
-		return
-	}
 	ev.Kind = kind
 	ev.Action = action
 	ev.Status = status
 	ev.Message = message
-	b.emit(ev)
+	emitSafe(b.emit, ev)
 }
