@@ -190,11 +190,7 @@ func (s *RemediationState) growBackoff(b *Backoff) {
 	if s.CurrentBackoff <= 0 {
 		s.CurrentBackoff = b.Initial
 	} else {
-		factor := b.Factor
-		if factor <= 0 {
-			factor = defaultBackoffFactor
-		}
-		s.CurrentBackoff = time.Duration(float64(s.CurrentBackoff) * factor)
+		s.CurrentBackoff = time.Duration(float64(s.CurrentBackoff) * b.Factor)
 	}
 	if b.Max > 0 {
 		s.CurrentBackoff = min(s.CurrentBackoff, b.Max)
