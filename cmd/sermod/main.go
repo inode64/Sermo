@@ -272,7 +272,7 @@ func run(args []string) int {
 	runner := execx.CommandRunner{}
 	var diagnosticLog *app.DiagnosticLog
 	if diagFile != nil {
-		diagnosticLog = app.NewDiagnosticLog(cfg, nil, diagFile, time.Now)
+		diagnosticLog = app.NewDiagnosticLog(cfg, diagFile, time.Now)
 		go diagnosticLog.Run(ctx, config.EngineDiagnosticsInterval(cfg, config.DefaultEngineDiagnosticsInterval))
 	}
 	panicGate := app.NewPanicGate(store)

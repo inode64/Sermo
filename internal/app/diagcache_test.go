@@ -17,7 +17,7 @@ func TestDiagnosticLogExport(t *testing.T) {
 	cfg := &config.Config{Global: config.Global{Raw: map[string]any{
 		"engine": map[string]any{"interval": "30s"},
 	}}}
-	log := NewDiagnosticLog(cfg, nil, file, func() time.Time {
+	log := NewDiagnosticLog(cfg, file, func() time.Time {
 		return time.Date(2026, 6, 24, 12, 0, 0, 0, time.UTC)
 	})
 	log.Export()
