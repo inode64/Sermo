@@ -8,7 +8,6 @@ import (
 
 	"sermo/internal/cfgval"
 	"sermo/internal/checks"
-	"sermo/internal/conn"
 	"sermo/internal/emission"
 	"sermo/internal/process"
 	"sermo/internal/rules"
@@ -274,12 +273,12 @@ func validateServiceWatchType(name, typ, checkPath string, check map[string]any,
 	case typ == checks.CheckTypeProcess:
 		add("%s \"process\" matches host-wide (and can kill); use process_count or metric for service-scoped process monitoring, or a host watch", checkTypePath)
 		return false
-	case !serviceWatchableType(typ):
-		add(validationValueNotSupportedFormat, checkTypePath, typ)
-		return false
 	}
-	validateSingleShotCheckFields(checkPath, typ, check, locksDir, add)
-	return true
+	if validateSingleShotCheckFields(checkPath, typ, check, locksDir, add) {
+		return true
+	}
+	add(validationValueNotSupportedFormat, checkTypePath, typ)
+	return false
 }
 
 // isRuleClassAction reports whether a then.action turns a service watch into a
@@ -333,19 +332,6 @@ func validateWatchThenAction(prefix, action string, then map[string]any, add fun
 	} else if _, hasBlocks := then[rules.RuleFieldBlocks]; hasBlocks {
 		add("%s is only valid with action: block", thenFieldPath(prefix, rules.RuleFieldBlocks))
 	}
-}
-
-// serviceWatchableType reports whether typ can back a service-embedded watch: any
-// built-in single-shot type (including the service-scoped service/metric types,
-// which have per-service deps here) or a connection protocol. The host-scoped
-// multi-metric types (net/icmp/swap) and the host-wide `process` watch are
-// rejected by the caller before this is reached.
-func serviceWatchableType(typ string) bool {
-	if checks.IsSingleShotType(typ) {
-		return true
-	}
-	_, ok := conn.Lookup(typ)
-	return ok
 }
 
 func validateWatchMetadata(name string, entry map[string]any, add func(string, ...any)) {
