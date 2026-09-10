@@ -979,7 +979,7 @@ func (c *Config) expandRestartOnChange(tree map[string]any) []string {
 			errs = append(errs, fmt.Sprintf("%s.%s is not supported", keyRestartOnChange, key))
 		}
 	}
-	errs = append(errs, validateRestartOnChangeFlags(keyRestartOnChange, roc, nil)...)
+	errs = append(errs, validateGateFlags(keyRestartOnChange, roc, nil, keyRestartConfig, keyRestartVersion)...)
 	configAllowed := restartOnChangeAllowed(roc, keyRestartConfig)
 	versionAllowed := restartOnChangeAllowed(roc, keyRestartVersion)
 	messages, messageErrs := restartOnChangeMessagesFrom(roc[keyRestartMessages])
@@ -990,7 +990,7 @@ func (c *Config) expandRestartOnChange(tree map[string]any) []string {
 	if rulesMap == nil {
 		rulesMap = map[string]any{}
 	}
-	paths, pathErrs := restartOnChangePaths(roc[keyPaths])
+	paths, pathErrs := restartOnChangeStringList(keyRestartPaths, roc[keyPaths])
 	errs = append(errs, pathErrs...)
 	if configAllowed {
 		errs = append(errs, addRestartOnChangePathRules(rulesMap, paths, messages.pathMessage(displayName))...)
@@ -1103,10 +1103,6 @@ var restartOnChangeKeys = set(
 
 var restartOnChangeMessageKeys = set(rules.FieldApp, rules.FieldLibrary, rules.FieldPath)
 
-func validateRestartOnChangeFlags(prefix string, roc map[string]any, add addFunc) []string {
-	return validateGateFlags(prefix, roc, add, keyRestartConfig, keyRestartVersion)
-}
-
 // validateGateFlags checks that each named permission gate, when present, is a
 // boolean literal. It keeps the dual mode the desugarer and the validation layer
 // both need: add != nil reports through it, otherwise the messages are returned.
@@ -1160,10 +1156,6 @@ func restartOnChangeAllowed(roc map[string]any, key string) bool {
 	}
 	allowed, ok := v.(bool)
 	return ok && allowed
-}
-
-func restartOnChangePaths(raw any) ([]string, []string) {
-	return restartOnChangeStringList(keyRestartPaths, raw)
 }
 
 func restartOnChangeThen(message string) map[string]any {
@@ -1443,16 +1435,10 @@ func (c *Config) ResolveCatalog(category, name string) (Resolved, []string) {
 	if doc == nil {
 		return Resolved{Name: name}, []string{fmt.Sprintf(unknownCatalogFormat, category, name)}
 	}
-	return c.resolveDoc(doc, canonicalName)
-}
-
-// resolveDoc expands a single catalog document's own body (no service merge),
-// shared by ResolveCatalog and the `apps` linkage (which resolves app documents).
-func (c *Config) resolveDoc(doc *Document, name string) (Resolved, []string) {
 	// Top level (catalog service / service): its apps: links start a fresh app
 	// chain. The top-level name is a different namespace than apps, so a catalog service
 	// linking an app of the same name is not a cycle.
-	return c.resolveDocBody(doc, name, nil, c.newResolutionInputs())
+	return c.resolveDocBody(doc, canonicalName, nil, c.newResolutionInputs())
 }
 
 // resolveDocBody expands doc's own body and its apps: links, threading appChain
