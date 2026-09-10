@@ -72,6 +72,21 @@ func TestAccessLogPreservesActionWriteDeadline(t *testing.T) {
 	}
 }
 
+func TestPanicOperationExtendsActionWriteDeadline(t *testing.T) {
+	s := &Server{
+		Backend:          StaticBackend{Backend: &fakeBackend{}},
+		OperationTimeout: time.Minute,
+	}
+	rec := &deadlineResponseRecorder{ResponseRecorder: httptest.NewRecorder()}
+	s.Handler().ServeHTTP(rec, postReq(testAPIPath(apiSegmentPanic, apiActionPanicOn)))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("panic status = %d", rec.Code)
+	}
+	if rec.deadline.IsZero() {
+		t.Fatal("panic operation did not extend the action write deadline")
+	}
+}
+
 func TestRecordWebAccessLogsMountActionAndQuery(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "access.log")
 	log, err := logfile.Open(path)

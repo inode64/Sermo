@@ -150,8 +150,7 @@ func (s *Server) handleSSHSessionClose(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	s.extendActionWriteDeadline(w)
-	s.operate(w, r, backend, func(ctx context.Context, backend Backend) (bool, any) {
+	s.operate(w, backend, func(ctx context.Context, backend Backend) (bool, any) {
 		res := backend.CloseSSHSession(ctx, r.PathValue(apiParamName), SSHSession{
 			PID:             pid,
 			StartTicks:      startTicks,
@@ -180,8 +179,7 @@ func (s *Server) handleTerminalSessionClose(w http.ResponseWriter, r *http.Reque
 		writeError(w, http.StatusBadRequest, "invalid terminal session identity")
 		return
 	}
-	s.extendActionWriteDeadline(w)
-	s.operate(w, r, backend, func(ctx context.Context, backend Backend) (bool, any) {
+	s.operate(w, backend, func(ctx context.Context, backend Backend) (bool, any) {
 		res := backend.CloseTerminalSession(ctx, r.PathValue(apiParamName), session)
 		return res.OK, res
 	})
@@ -199,8 +197,7 @@ func (s *Server) handleEmptyTerminalSessionClose(w http.ResponseWriter, r *http.
 		writeError(w, http.StatusBadRequest, "terminal session check is required")
 		return
 	}
-	s.extendActionWriteDeadline(w)
-	s.operate(w, r, backend, func(ctx context.Context, backend Backend) (bool, any) {
+	s.operate(w, backend, func(ctx context.Context, backend Backend) (bool, any) {
 		res := backend.CloseEmptyTerminalSession(ctx, r.PathValue(apiParamName), check)
 		return res.OK, res
 	})

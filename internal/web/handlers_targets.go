@@ -23,8 +23,7 @@ func (s *Server) handleNotifierTest(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	s.extendActionWriteDeadline(w)
-	s.operate(w, r, backend, func(ctx context.Context, backend Backend) (bool, any) {
+	s.operate(w, backend, func(ctx context.Context, backend Backend) (bool, any) {
 		res := backend.TestNotifier(ctx, r.PathValue(apiParamName))
 		return res.OK, res
 	})

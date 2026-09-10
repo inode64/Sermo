@@ -26,8 +26,7 @@ func (s *Server) handleMountAction(w http.ResponseWriter, r *http.Request) {
 	action := r.PathValue(apiParamAction)
 	switch action {
 	case mountctl.ActionMount, mountctl.ActionUmount:
-		s.extendActionWriteDeadline(w)
-		s.operate(w, r, backend, func(ctx context.Context, backend Backend) (bool, any) {
+		s.operate(w, backend, func(ctx context.Context, backend Backend) (bool, any) {
 			res := backend.MountAction(ctx, name, action, MountActionOptions{
 				AllowForce:   queryBool(r, apiQueryForce),
 				AllowLazy:    queryBool(r, apiQueryLazy),
@@ -36,8 +35,7 @@ func (s *Server) handleMountAction(w http.ResponseWriter, r *http.Request) {
 			return res.OK, res
 		})
 	case apiActionAlert:
-		s.extendActionWriteDeadline(w)
-		s.operate(w, r, backend, func(ctx context.Context, backend Backend) (bool, any) {
+		s.operate(w, backend, func(ctx context.Context, backend Backend) (bool, any) {
 			res := backend.AlertMountUsers(ctx, name)
 			return res.OK, res
 		})
