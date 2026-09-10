@@ -271,10 +271,5 @@ func buildInfluxCheck(b base, entry map[string]any) (Check, string) {
 // influxConnConfig builds a conn.Config for an influxdb-query check, defaulting
 // the port to InfluxDB's standard port (via the conn registry).
 func influxConnConfig(entry map[string]any) conn.Config {
-	cfg := baseConnectionConfig(entry)
-	cfg.Port = connectionPort(entry, 0)
-	if _, resolved, ok := conn.Prepare(conn.ProtocolNameInfluxDB, cfg); ok {
-		cfg = resolved
-	}
-	return cfg
+	return preparedConnectionConfig(conn.ProtocolNameInfluxDB, baseConnectionConfig(entry), entry)
 }

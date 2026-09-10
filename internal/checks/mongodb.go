@@ -194,14 +194,10 @@ func buildMongoCheck(b base, entry map[string]any) (Check, string) {
 // optional auth_source.
 func mongoConnConfig(entry map[string]any) conn.Config {
 	cfg := databaseConnectionConfig(entry)
-	cfg.Port = connectionPort(entry, 0)
 	if as := cfgval.AsString(entry[CheckKeyAuthSource]); as != "" {
 		cfg.Params = map[string]string{conn.ParamKeyAuthSource: as}
 	}
-	if _, resolved, ok := conn.Prepare(conn.ProtocolNameMongoDB, cfg); ok {
-		cfg = resolved
-	}
-	return cfg
+	return preparedConnectionConfig(conn.ProtocolNameMongoDB, cfg, entry)
 }
 
 // parseMongoDoc parses an (extended) JSON object into a BSON document.
