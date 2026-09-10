@@ -48,13 +48,7 @@ func (netAssistant) Run(p *Prompt, env Env) (res Result, err error) {
 }
 
 func nonLoopbackIfaces(ifaces []Iface) []Iface {
-	out := make([]Iface, 0, len(ifaces))
-	for _, iface := range ifaces {
-		if !iface.Loopback {
-			out = append(out, iface)
-		}
-	}
-	return out
+	return filterIfaces(ifaces, func(iface Iface) bool { return !iface.Loopback })
 }
 
 func chooseIfaces(p *Prompt, question string, cands []Iface, defaultIfaces []string, allowDefault bool) []Iface {
