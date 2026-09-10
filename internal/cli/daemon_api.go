@@ -221,10 +221,14 @@ func (a App) fetchDaemonServiceState(ctx context.Context, opts options, service 
 	} else if len(cfg.Services) > 0 {
 		return "", false
 	}
+	return a.fetchDaemonServiceStateWithConfig(ctx, cfg, name)
+}
+
+func (a App) fetchDaemonServiceStateWithConfig(ctx context.Context, cfg *config.Config, service string) (string, bool) {
 	var detail struct {
 		State string `json:"state"`
 	}
-	if !a.daemonAPIJSONWithConfig(ctx, cfg, web.APIPathServices+"/"+url.PathEscape(name), &detail) || detail.State == "" {
+	if !a.daemonAPIJSONWithConfig(ctx, cfg, web.APIPathServices+"/"+url.PathEscape(service), &detail) || detail.State == "" {
 		return "", false
 	}
 	return detail.State, true
