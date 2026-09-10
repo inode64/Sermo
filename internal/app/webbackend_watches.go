@@ -138,10 +138,10 @@ func (b *WebBackend) setWatchCurrentMetricValues(view *web.Watch, w *webWatch) {
 }
 
 func watchDeviceState(readings []web.WatchReading) string {
-	for _, reading := range readings {
-		if reading.Field == checks.DataKeyDeviceState && reading.Error == "" {
-			return reading.Value
-		}
+	if i := slices.IndexFunc(readings, func(reading web.WatchReading) bool {
+		return reading.Field == checks.DataKeyDeviceState && reading.Error == ""
+	}); i >= 0 {
+		return readings[i].Value
 	}
 	return ""
 }
@@ -300,21 +300,11 @@ func watchActivityCurrent(activity, changed string) bool {
 }
 
 func watchReadingsFailed(readings []web.WatchReading) bool {
-	for _, r := range readings {
-		if r.Error != "" {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc(readings, func(reading web.WatchReading) bool { return reading.Error != "" })
 }
 
 func watchReadingsWarning(readings []web.WatchReading) bool {
-	for _, r := range readings {
-		if r.Warning != "" {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc(readings, func(reading web.WatchReading) bool { return reading.Warning != "" })
 }
 
 func isWatchActivityKind(kind string) bool {

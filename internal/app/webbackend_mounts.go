@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -582,12 +583,7 @@ func (b *WebBackend) resolveUser(name string) (uint32, bool) {
 }
 
 func mountCanKill(blockers []web.MountBlocker) bool {
-	for _, blocker := range blockers {
-		if blocker.Killable {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc(blockers, func(blocker web.MountBlocker) bool { return blocker.Killable })
 }
 
 func uniqueBlockerUsers(blockers []process.Process) []string {
