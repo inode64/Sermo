@@ -89,10 +89,10 @@ func TestWatchDispatchesSelectedRaidTransitions(t *testing.T) {
 func TestWatchDispatchesLVMHealthChange(t *testing.T) {
 	n := &fakeNotifier{name: "ops"}
 	w := &Watch{
-		Name:              "lvm-vg0-root",
-		CheckType:         checks.CheckTypeLVM,
-		LVMNotifyOnChange: true,
-		Notifiers:         []notify.Notifier{n},
+		Name:             "lvm-vg0-root",
+		CheckType:        checks.CheckTypeLVM,
+		RaidNotifyEvents: map[string]bool{checks.LVMNotifyOnChange: true},
+		Notifiers:        []notify.Notifier{n},
 		Check: &scriptedCheck{results: []checks.Result{{
 			Check: "lvm", Data: map[string]any{
 				"lvm_transition": checks.LVMTransition{OldState: checks.LVMHealthOK, NewState: checks.LVMHealthError, Reasons: "partial"},
@@ -135,13 +135,13 @@ func TestWatchReportsSuppressedLVMHealthChangeInPanic(t *testing.T) {
 			n := &fakeNotifier{name: "ops"}
 			var events []Event
 			w := &Watch{
-				Name:              "lvm-vg0-root",
-				CheckType:         checks.CheckTypeLVM,
-				LVMNotifyOnChange: true,
-				FireOnFail:        true,
-				Notifiers:         []notify.Notifier{n},
-				InPanic:           func() bool { return true },
-				Emit:              func(event Event) { events = append(events, event) },
+				Name:             "lvm-vg0-root",
+				CheckType:        checks.CheckTypeLVM,
+				RaidNotifyEvents: map[string]bool{checks.LVMNotifyOnChange: true},
+				FireOnFail:       true,
+				Notifiers:        []notify.Notifier{n},
+				InPanic:          func() bool { return true },
+				Emit:             func(event Event) { events = append(events, event) },
 				Check: &scriptedCheck{results: []checks.Result{{
 					Check: "lvm",
 					OK:    tc.resultOK,

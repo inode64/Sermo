@@ -72,11 +72,10 @@ type Watch struct {
 	// Notifiers receive a notification when the watch fires (the resolved
 	// `then.notify` targets, or the inherited global default).
 	Notifiers []notify.Notifier
-	// RaidNotifyEvents filters RAID lifecycle transitions eligible for the
-	// ordinary `then.notify` targets. When set, firing notifications are replaced
-	// by these edge-triggered lifecycle notifications.
-	RaidNotifyEvents  map[string]bool
-	LVMNotifyOnChange bool
+	// RaidNotifyEvents filters RAID and LVM lifecycle transitions eligible for
+	// the ordinary `then.notify` targets. When set, firing notifications are
+	// replaced by these edge-triggered lifecycle notifications.
+	RaidNotifyEvents map[string]bool
 	// NotifyInterval paces re-notification while the watch stays firing. Zero
 	// (the default) means notify once per firing episode, on the rising edge
 	// when the alert starts. A positive value (`then.notify_interval`) re-sends
@@ -365,7 +364,7 @@ func (w *Watch) dispatchFiringActions(ctx context.Context, res checks.Result, wa
 		if emitFiring {
 			w.emit(Event{Watch: w.Name, Kind: eventKindDryRun, Message: w.dryRunMessage()})
 		}
-		if len(w.RaidNotifyEvents) == 0 && !w.LVMNotifyOnChange && w.shouldNotify(wasFiring) {
+		if len(w.RaidNotifyEvents) == 0 && w.shouldNotify(wasFiring) {
 			dispatchDryRunNotify(ctx, w.Notifiers, watchMessage(w.Name, res.Message, env), w.Name, w.emit)
 		}
 		return
@@ -384,13 +383,13 @@ func (w *Watch) dispatchFiringActions(ctx context.Context, res checks.Result, wa
 		w.runMakeStep(ctx, res, emitFiring)
 	}
 	runWatchHook(ctx, w.Hook, w.Runner, w.emit, w.Name, res.Message, env)
-	if len(w.RaidNotifyEvents) == 0 && !w.LVMNotifyOnChange && w.shouldNotify(wasFiring) {
+	if len(w.RaidNotifyEvents) == 0 && w.shouldNotify(wasFiring) {
 		dispatchNotify(ctx, w.Notifiers, watchMessage(w.Name, res.Message, env), w.Name, w.emit)
 	}
 }
 
 func (w *Watch) dispatchLVMTransition(ctx context.Context, res checks.Result) {
-	if !w.LVMNotifyOnChange {
+	if !w.RaidNotifyEvents[checks.LVMNotifyOnChange] {
 		return
 	}
 	transition, ok := checks.LVMTransitionFromResult(res)
