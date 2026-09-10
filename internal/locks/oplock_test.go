@@ -46,6 +46,28 @@ func TestAcquireOnEmptyDir(t *testing.T) {
 	}
 }
 
+func TestAcquireDerivesExpiryFromCreation(t *testing.T) {
+	dir := t.TempDir()
+	created := fixedNow.Add(time.Minute)
+	l := OperationLocker{
+		Dir:  dir,
+		Proc: fakeProc{},
+		Now:  func() time.Time { return created },
+		Self: func() (int, uint64) { return 5000, 7777 },
+	}
+	h, err := l.Acquire("mysql", time.Hour)
+	if err != nil {
+		t.Fatalf("Acquire() error = %v", err)
+	}
+	lf, err := readLockFile(h.path)
+	if err != nil {
+		t.Fatalf("readLockFile: %v", err)
+	}
+	if !lf.ExpiresAt.Equal(lf.CreatedAt.Add(time.Hour)) {
+		t.Fatalf("expires_at = %v, want created_at + 1h (%v)", lf.ExpiresAt, lf.CreatedAt.Add(time.Hour))
+	}
+}
+
 func TestOperationAcquireRejectsPathLikeService(t *testing.T) {
 	root := t.TempDir()
 	l := NewOperationLocker(RuntimeOpsDir(root))
