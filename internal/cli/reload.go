@@ -43,9 +43,6 @@ func (a App) runReload(_ context.Context, opts options) int {
 	}
 
 	runtimeDir := cfg.Global.RuntimeDir()
-	if runtimeDir == "" {
-		runtimeDir = config.DefaultRuntime
-	}
 
 	fallbacks := a.pidfileFallbacks
 	if fallbacks == nil {
