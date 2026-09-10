@@ -258,10 +258,7 @@ func (m systemdManager) Status(ctx context.Context, service string) (ServiceStat
 // fails to run answers false: an unreadable LoadState is not evidence the unit
 // is missing, and keeping the inactive reading preserves the previous behavior.
 func (m systemdManager) unitNotFound(ctx context.Context, unit string) bool {
-	result, err := runSystemctlShow(ctx, m.runner, 0, systemctlPropertyLoadState, unit)
-	if err != nil && strings.TrimSpace(result.Stdout) == "" {
-		return false
-	}
+	result, _ := runSystemctlShow(ctx, m.runner, 0, systemctlPropertyLoadState, unit)
 	return strings.TrimSpace(result.Stdout) == systemdLoadStateNotFound
 }
 
