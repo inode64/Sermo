@@ -54,7 +54,6 @@ type replicationCheck struct {
 	connection  string
 	behindOp    string
 	behindValue float64
-	hasBehind   bool
 	sample      replicationSampler
 }
 
@@ -89,24 +88,26 @@ func (c replicationCheck) Run(ctx context.Context) Result {
 	}
 
 	state := aggregateReplication(rows)
-	res := c.result(c.verdict(state), c.message(state), start)
+	lagging := c.lagExceeded(state)
+	res := c.result(replicationVerdict(state, lagging), c.message(state, lagging), start)
 	res.Data = replicationData(c.engine, state)
 	return res
 }
 
 // verdict is true when every selected connection has both threads running and
 // the lag bound, when configured, holds.
-func (c replicationCheck) verdict(s replicationState) bool {
+func replicationVerdict(s replicationState, lagging bool) bool {
 	if !s.ioRunning || !s.sqlRunning {
 		return false
 	}
-	if c.hasBehind && s.hasBehind && !cfgval.CompareFloat(s.behind, c.behindOp, c.behindValue) {
-		return false
-	}
-	return true
+	return !lagging
 }
 
-func (c replicationCheck) message(s replicationState) string {
+func (c replicationCheck) lagExceeded(s replicationState) bool {
+	return c.behindOp != "" && s.hasBehind && !cfgval.CompareFloat(s.behind, c.behindOp, c.behindValue)
+}
+
+func (c replicationCheck) message(s replicationState, lagging bool) string {
 	scope := "replication"
 	if len(s.connections) > 0 {
 		scope += " " + strings.Join(s.connections, ", ")
@@ -119,7 +120,7 @@ func (c replicationCheck) message(s replicationState) string {
 		behind = fmt.Sprintf("%.0fs behind", s.behind)
 	}
 	msg := fmt.Sprintf("%s ok: io and sql running, %s (source %s)", scope, behind, s.sourceHost)
-	if c.hasBehind && s.hasBehind && !cfgval.CompareFloat(s.behind, c.behindOp, c.behindValue) {
+	if lagging {
 		return fmt.Sprintf("%s lagging: %.0fs behind (limit %s %.0f, source %s)",
 			scope, s.behind, c.behindOp, c.behindValue, s.sourceHost)
 	}
@@ -264,7 +265,7 @@ func buildReplicationCheck(b base, entry map[string]any) (Check, string) {
 		if err != nil {
 			return nil, "replication check behind value " + err.Error()
 		}
-		check.behindOp, check.behindValue, check.hasBehind = op, v, true
+		check.behindOp, check.behindValue = op, v
 	}
 	cfg := sqlConnConfig(SQLEngineMySQL, entry)
 	check.sample = func(ctx context.Context) ([]replicationRow, error) {
