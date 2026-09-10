@@ -458,12 +458,7 @@ func expandEnvString(s string) string {
 }
 
 func varRefName(ref string) string {
-	// Callers pass text varRef already matched, so the submatch is present; treat
-	// a non-match as an unnamed reference rather than indexing a nil slice.
 	groups := varRef.FindStringSubmatch(ref)
-	if len(groups) <= varRefNameGroup {
-		return ""
-	}
 	return strings.TrimSpace(groups[varRefNameGroup])
 }
 

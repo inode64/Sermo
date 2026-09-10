@@ -198,9 +198,6 @@ func enableIfHolds(spec any, backend string) bool {
 		return cfgval.String(want) == backend
 	}
 	file, key := cfgval.String(m[keyEnableIfFile]), cfgval.String(m[keyEnableIfKey])
-	if file == "" || key == "" {
-		return false
-	}
 	val, ok := configKeyValue(file, key)
 	if !ok {
 		return false
@@ -216,8 +213,7 @@ func enableIfPredicateMatches(m map[string]any, val string) bool {
 		return val == cfgval.String(want)
 	}
 	if pat := cfgval.String(m[keyEnableIfMatches]); pat != "" {
-		re, err := regexp.Compile(pat)
-		return err == nil && re.MatchString(val)
+		return regexp.MustCompile(pat).MatchString(val)
 	}
 	return false
 }

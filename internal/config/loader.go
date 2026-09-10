@@ -567,7 +567,6 @@ func (c *Config) mergeWatchDocument(doc *Document) error {
 		return fmt.Errorf("%s: watch %q is already defined", doc.Path, doc.Name)
 	}
 	dst[doc.Name] = entry
-	c.Global.Raw[pathKeyWatches] = dst
 	return nil
 }
 
@@ -584,7 +583,6 @@ func (c *Config) mergeNotifierFragment(doc *Document) (bool, error) {
 		return true, fmt.Errorf("%s: notifier %q is already defined", doc.Path, name)
 	}
 	dst[name] = entry
-	c.Global.Raw[pathKeyNotifiers] = dst
 	return true, nil
 }
 
