@@ -521,14 +521,13 @@ func instantiateMulti(body map[string]any, templateName string, match templateMa
 	return finalizeMaterialized(out, body, name, path, kind, templateName, match)
 }
 
-// finalizeMaterialized bakes the shared tail of instantiateMulti and
-// instantiateVersion: out is the already token-bound body, body the original
-// template body (read for binary resolution and the current-label check). It
-// injects the resolved binary, stamps kind/name, strips discovery metadata and
-// wraps the result in a concrete Document.
+// finalizeMaterialized bakes the shared tail of materialization: out is the
+// already token-bound body, body the original template body (read for binary
+// resolution and the current-label check). It injects the resolved binary,
+// stamps name, strips discovery metadata and wraps the result in a concrete
+// Document.
 func finalizeMaterialized(out, body map[string]any, name, path, kind, templateName string, match templateMatch) *Document {
 	injectMaterializedBinary(out, materializedBinaryFromMatch(body, kind, match))
-	out[keyKind] = kind
 	out[keyName] = name
 	trimMaterializedMetadata(out)
 	delete(out, keyVersions) // discovery metadata, not part of the concrete definition
