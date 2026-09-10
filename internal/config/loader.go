@@ -654,17 +654,11 @@ func (c *Config) add(doc *Document) {
 	// Route by registry namespace, not kind: catalog services and configured
 	// services share kind `service` but live in separate registries, keyed by
 	// catalog category vs configured location.
-	switch doc.registryKey() {
-	case catalogServiceKey:
-		indexDocument(c.CatalogServices, &c.CatalogServiceNames, doc)
-	case kindApp:
-		indexDocument(c.Apps, &c.AppNames, doc)
-	case kindLibrary:
-		indexDocument(c.Libraries, &c.LibraryNames, doc)
-	case kindPatterns:
-		indexDocument(c.Patterns, &c.PatternNames, doc)
-	case kindService:
+	if doc.registryKey() == kindService {
 		indexDocument(c.Services, &c.ServiceNames, doc)
+	} else {
+		names, registry := c.catalogSet(catalogCategoryForKind(doc.Kind))
+		indexDocument(registry, names, doc)
 	}
 	c.docs = append(c.docs, doc)
 }
@@ -683,19 +677,10 @@ func indexDocument(reg map[string]*Document, names *[]string, doc *Document) {
 // (service | app | library), sorted, for category-scoped listings such as
 // `apps` and `libs`.
 func (c *Config) CatalogNamesInCategory(category string) []string {
-	var names []string
-	switch category {
-	case CategoryApp:
-		names = append(names, c.AppNames...)
-	case CategoryLibrary:
-		names = append(names, c.LibraryNames...)
-	case CategoryPatterns:
-		names = append(names, c.PatternNames...)
-	default:
-		names = append(names, c.CatalogServiceNames...)
-	}
-	sort.Strings(names)
-	return slices.Compact(names)
+	names, _ := c.catalogSet(category)
+	namesCopy := append([]string(nil), (*names)...)
+	sort.Strings(namesCopy)
+	return slices.Compact(namesCopy)
 }
 
 // DisplayName returns the human-friendly `display_name` from a document body

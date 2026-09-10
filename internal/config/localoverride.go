@@ -119,19 +119,11 @@ func (c *Config) loadKindOverrideDir(dir, kind string, recursive bool) error {
 
 // registryFor returns the document registry a registry key indexes into.
 func (c *Config) registryFor(key string) map[string]*Document {
-	switch key {
-	case catalogServiceKey:
-		return c.CatalogServices
-	case kindApp:
-		return c.Apps
-	case kindLibrary:
-		return c.Libraries
-	case kindPatterns:
-		return c.Patterns
-	case kindService:
+	if key == kindService {
 		return c.Services
 	}
-	return map[string]*Document{}
+	_, registry := c.catalogSet(catalogCategoryForKind(key))
+	return registry
 }
 
 // loadWatchOverrideDir merges a watch override onto the entry the base
