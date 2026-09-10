@@ -164,10 +164,9 @@ func applyBandOverrides(checkType string, entry map[string]any, byKey map[string
 // must supply one; until it does the seed's empty predicate holds for nothing,
 // which config validation reports rather than letting a band record all-down.
 func graphMetricAsBand(checkType, key string) (BandMetric, bool) {
-	for _, m := range graphMetrics[checkType] {
-		if m.Key == key {
-			return BandMetric{Key: key, Label: m.Label, Severity: SeverityError}, true
-		}
+	m, ok := declaredGraphMetric(checkType, key)
+	if ok {
+		return BandMetric{Key: key, Label: m.Label, Severity: SeverityError}, true
 	}
 	return BandMetric{}, false
 }
