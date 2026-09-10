@@ -78,11 +78,11 @@ func dedupeWatchReadings(readings []web.WatchReading) []web.WatchReading {
 func (b *WebBackend) watchSnapshotCurrent(w *webWatch, snap CheckSnapshot) bool {
 	// Name, type and age are not enough: a reload that keeps the watch name
 	// while pointing it at another device must not show the previous target.
-	return w != nil && snapshotConfigMatches(w.configID, snap.ConfigID) && b.watchSampleCurrent(w, snap.At)
+	return snapshotConfigMatches(w.configID, snap.ConfigID) && b.watchSampleCurrent(w, snap.At)
 }
 
 func (b *WebBackend) watchSampleCurrent(w *webWatch, at time.Time) bool {
-	if w == nil || at.IsZero() {
+	if at.IsZero() {
 		return false
 	}
 	return b.webNow().Sub(at) <= runtimePublishMaxAge(w.interval)
@@ -91,7 +91,7 @@ func (b *WebBackend) watchSampleCurrent(w *webWatch, at time.Time) bool {
 // watchSampleState classifies the newest daemon-published result without
 // exposing stale data or asking the web handler to run the watch itself.
 func (b *WebBackend) watchSampleState(w *webWatch, checkedAt time.Time) string {
-	if b.watchSnapshots == nil || w == nil {
+	if b.watchSnapshots == nil {
 		return ""
 	}
 	if checkedAt.IsZero() {
@@ -116,9 +116,6 @@ func watchSnapshotMetricConfigured(w *webWatch, snap CheckSnapshot) bool {
 // own gravity by the metric block that produced it. A net watch can therefore
 // call its error counter an advisory while its link state stays an outage.
 func (w *webWatch) severityFor(metric string) string {
-	if w == nil {
-		return checks.SeverityError
-	}
 	declared := ""
 	if m, ok := w.metrics[metric].(map[string]any); ok {
 		declared = cfgval.AsString(m[checks.CheckKeySeverity])
