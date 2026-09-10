@@ -97,7 +97,7 @@ func BuildServiceRuntime(ctx context.Context, cfg ServiceRuntimeConfig) ServiceR
 	selectors, processWarnings, procInfo := serviceProcessSelectors(ctx, cfg.Tree, deps, cfg.Unit, needPidfileFallback)
 	noResident := serviceNoResidentProcess(cfg.Tree, selectors, backendPIDs)
 	metricSample := metricSampleForOperation(cfg.Service, cfg.Tree, deps.Collector, discoverer, selectors, noResident)
-	checkDeps := checkDepsFromAppDeps(deps, checks.Deps{
+	checkDeps := checks.Deps{
 		Service:        cfg.Service,
 		DefaultTimeout: deps.DefaultTimeout,
 		Runner:         deps.ExecxRunner,
@@ -123,7 +123,8 @@ func BuildServiceRuntime(ctx context.Context, cfg ServiceRuntimeConfig) ServiceR
 			procs, _ := discoverer.Discover(selectors)
 			return process.Strays(procs)
 		},
-	})
+		Samplers: deps.Samplers,
+	}
 	lockReclaimed := cfg.LockReclaimed
 	if lockReclaimed == nil {
 		lockReclaimed = operationLockReclaimEvent(deps.Emit)

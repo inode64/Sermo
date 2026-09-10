@@ -1136,10 +1136,12 @@ func watchInlineDeps(deps Deps) checks.Deps {
 	if deps.WatchCheckDeps != nil {
 		return *deps.WatchCheckDeps
 	}
-	return checkDepsFromAppDeps(deps, checks.Deps{
+	checkDeps := checks.Deps{
 		DefaultTimeout: deps.DefaultTimeout,
 		Runner:         deps.ExecxRunner,
-	})
+		Samplers:       deps.Samplers,
+	}
+	return checkDeps
 }
 
 // monitorDeps maps the app Deps to the checks.Deps a synthesized monitor needs.
