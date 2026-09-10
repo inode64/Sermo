@@ -310,15 +310,6 @@ func (OSReader) TotalMemory() (total, used uint64, ok bool) {
 	return totals.memoryTotal, totals.memoryUsed, true
 }
 
-// TotalSwap reads SwapTotal and SwapFree from /proc/meminfo. used = total - free.
-func (OSReader) TotalSwap() (total, used uint64, ok bool) {
-	totals := readProcMeminfoTotals()
-	if !totals.swapOK {
-		return 0, 0, false
-	}
-	return totals.swapTotal, totals.swapUsed, true
-}
-
 // TotalMemoryAndSwap reads memory and swap totals from /proc/meminfo with one
 // file read. The collector uses it when available so system and service metric
 // sampling do not reread meminfo for memory and swap separately.

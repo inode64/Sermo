@@ -468,9 +468,6 @@ func readerMemoryTotals(r Reader, needSwap bool) memoryTotals {
 		TotalMemoryAndSwap() (memoryTotal, memoryUsed, swapTotal, swapUsed uint64, memoryOK, swapOK bool)
 	}); has {
 		memoryTotal, memoryUsed, swapTotal, swapUsed, memoryOK, swapOK := mr.TotalMemoryAndSwap()
-		if !needSwap {
-			swapTotal, swapUsed, swapOK = 0, 0, false
-		}
 		return memoryTotals{
 			memoryTotal: memoryTotal,
 			memoryUsed:  memoryUsed,
@@ -492,7 +489,6 @@ func readerMemoryTotals(r Reader, needSwap bool) memoryTotals {
 	}
 	return totals
 }
-
 
 // perProcCPURates returns each PID's CPU rate as a percentage of ONE CPU thread
 // (Δticks / hz / Δwall * 100; 100% = a process pegging a full core, and a
