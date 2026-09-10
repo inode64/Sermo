@@ -194,10 +194,8 @@ const (
 const (
 	chronyPPMPrecision      = 3
 	chronyIntervalPrecision = 3
-	// chronyInt32Bytes and chronyInt32Bits are the width of signed counters in
-	// a reply payload.
+	// chronyInt32Bytes is the width of signed counters in a reply payload.
 	chronyInt32Bytes = 4
-	chronyInt32Bits  = 32
 	// chronySunPathMax is the sockaddr_un sun_path capacity; the bound the client
 	// socket path must respect, leaving room for the terminating NUL.
 	chronySunPathMax = 108
