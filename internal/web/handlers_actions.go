@@ -102,7 +102,7 @@ func (s *Server) handleWatchAction(w http.ResponseWriter, r *http.Request) {
 			case apiActionReplicationStart:
 				res = backend.ControlReplication(ctx, name)
 			default:
-				res = backend.ControlRAID(ctx, name, action, r.Header.Get(headerSermoConfirm))
+				res = backend.ControlRAID(ctx, name, action, r.Header.Get(HeaderConfirm))
 			}
 			return res.OK, res
 		})

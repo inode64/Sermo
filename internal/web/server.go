@@ -40,9 +40,6 @@ const (
 	headerContentSecurityPolicy = "Content-Security-Policy"
 	headerContentType           = httpx.HeaderContentType
 	headerReferrerPolicy        = "Referrer-Policy"
-	headerSermoConfirm          = HeaderConfirm
-	headerSermoCSRF             = HeaderCSRF
-	headerSermoGeneration       = HeaderGeneration
 	headerSecFetchMode          = "Sec-Fetch-Mode"
 	secFetchModeNavigate        = "navigate"
 	contentTypeHTML             = "text/html"
@@ -88,8 +85,7 @@ const (
 	routePathLivez  = "/livez"
 	routePathReadyz = "/readyz"
 	routePathLogin  = "/login"
-	routePathAPI    = APIPathRoot
-	apiPathPrefix   = routePathAPI + "/"
+	apiPathPrefix   = APIPathRoot + "/"
 )
 
 // API path segment names used by routing and access-log classification.
@@ -182,14 +178,12 @@ const (
 	apiParamName        = "name"
 	apiParamPID         = "pid"
 	apiParamService     = "service"
-	apiQueryBefore      = APIQueryBefore
 	apiQueryBeforeID    = "before_id"
 	apiQueryCheck       = "check"
 	apiQueryForce       = "force"
 	apiQueryKind        = "kind"
 	apiQueryKill        = "kill"
 	apiQueryLazy        = "lazy"
-	apiQueryLimit       = APIQueryLimit
 	apiQueryMetric      = "metric"
 	apiQueryNoCascade   = "no_cascade"
 	apiQueryOnlyErrors  = "only_errors"
@@ -214,25 +208,21 @@ const (
 )
 
 const (
-	apiPathActivity     = apiPathPrefix + apiSegmentActivity
-	apiPathApplications = APIPathApplications
-	apiPathDashboard    = apiPathPrefix + apiSegmentDashboard
-	apiPathDaemon       = apiPathPrefix + apiSegmentDaemon
-	apiPathEvents       = APIPathEvents
-	apiPathHost         = apiPathPrefix + apiSegmentHost
-	apiPathLibraries    = apiPathPrefix + apiSegmentLibraries
-	apiPathLocks        = apiPathPrefix + apiSegmentLocks
-	apiPathMonitoring   = apiPathPrefix + apiSegmentMonitoring
-	apiPathMounts       = apiPathPrefix + apiSegmentMounts
-	apiPathNotifiers    = apiPathPrefix + apiSegmentNotifiers
-	apiPathPanic        = apiPathPrefix + apiSegmentPanic
-	apiPathReload       = apiPathPrefix + apiSegmentReload
-	apiPathServices     = APIPathServices
-	apiPathSessions     = apiPathPrefix + apiSegmentSessions
-	apiPathState        = apiPathPrefix + apiSegmentState
-	apiPathStream       = apiPathPrefix + apiSegmentStream
-	apiPathWatches      = APIPathWatches
-	apiPathWhoami       = apiPathPrefix + apiSegmentWhoami
+	apiPathActivity   = apiPathPrefix + apiSegmentActivity
+	apiPathDashboard  = apiPathPrefix + apiSegmentDashboard
+	apiPathDaemon     = apiPathPrefix + apiSegmentDaemon
+	apiPathHost       = apiPathPrefix + apiSegmentHost
+	apiPathLibraries  = apiPathPrefix + apiSegmentLibraries
+	apiPathLocks      = apiPathPrefix + apiSegmentLocks
+	apiPathMonitoring = apiPathPrefix + apiSegmentMonitoring
+	apiPathMounts     = apiPathPrefix + apiSegmentMounts
+	apiPathNotifiers  = apiPathPrefix + apiSegmentNotifiers
+	apiPathPanic      = apiPathPrefix + apiSegmentPanic
+	apiPathReload     = apiPathPrefix + apiSegmentReload
+	apiPathSessions   = apiPathPrefix + apiSegmentSessions
+	apiPathState      = apiPathPrefix + apiSegmentState
+	apiPathStream     = apiPathPrefix + apiSegmentStream
+	apiPathWhoami     = apiPathPrefix + apiSegmentWhoami
 )
 
 const (
@@ -240,15 +230,15 @@ const (
 	routeLivez                        = routeMethodGet + routePathLivez
 	routeReadyz                       = routeMethodGet + routePathReadyz
 	routeAPIWhoami                    = routeMethodGet + apiPathWhoami
-	routeAPIServices                  = routeMethodGet + apiPathServices
+	routeAPIServices                  = routeMethodGet + APIPathServices
 	routeAPISessions                  = routeMethodGet + apiPathSessions
-	routeAPIWatches                   = routeMethodGet + apiPathWatches
-	routeAPIWatchAction               = routeMethodPost + apiPathWatches + "/" + routeVarName + "/" + routeVarAction
-	routeAPIWatchSeries               = routeMethodGet + apiPathWatches + "/" + routeVarName + "/" + apiSegmentSLA
-	routeAPIWatchMetrics              = routeMethodGet + apiPathWatches + "/" + routeVarName + "/" + apiSegmentMetrics
+	routeAPIWatches                   = routeMethodGet + APIPathWatches
+	routeAPIWatchAction               = routeMethodPost + APIPathWatches + "/" + routeVarName + "/" + routeVarAction
+	routeAPIWatchSeries               = routeMethodGet + APIPathWatches + "/" + routeVarName + "/" + apiSegmentSLA
+	routeAPIWatchMetrics              = routeMethodGet + APIPathWatches + "/" + routeVarName + "/" + apiSegmentMetrics
 	routeAPINotifiers                 = routeMethodGet + apiPathNotifiers
 	routeAPINotifierTest              = routeMethodPost + apiPathNotifiers + "/" + routeVarName + "/" + apiActionTest
-	routeAPIApplications              = routeMethodGet + apiPathApplications
+	routeAPIApplications              = routeMethodGet + APIPathApplications
 	routeAPILibraries                 = routeMethodGet + apiPathLibraries
 	routeAPIDashboard                 = routeMethodGet + apiPathDashboard
 	routeAPIMounts                    = routeMethodGet + apiPathMounts
@@ -261,23 +251,23 @@ const (
 	routeAPILockRelease               = routeMethodPost + apiPathLocks + "/" + routeVarService + "/" + apiActionRelease
 	routeAPIActivity                  = routeMethodGet + apiPathActivity
 	routeAPIMonitoring                = routeMethodGet + apiPathMonitoring
-	routeAPIDetail                    = routeMethodGet + apiPathServices + "/" + routeVarName
-	routeAPISeries                    = routeMethodGet + apiPathServices + "/" + routeVarName + "/" + apiSegmentSLA
-	routeAPIMetrics                   = routeMethodGet + apiPathServices + "/" + routeVarName + "/" + apiSegmentMetrics
-	routeAPIServiceButton             = routeMethodPost + apiPathServices + "/" + routeVarName + "/" + apiSegmentButton + "/{" + apiParamButton + "}"
-	routeAPIServiceRuntime            = routeMethodGet + apiPathServices + "/" + routeVarName + "/" + apiSegmentRuntime
-	routeAPIServiceEvents             = routeMethodGet + apiPathServices + "/" + routeVarName + "/" + apiSegmentEvents
-	routeAPIAppEvents                 = routeMethodGet + apiPathApplications + "/" + routeVarName + "/" + apiSegmentEvents
-	routeAPIEvents                    = routeMethodGet + apiPathEvents
+	routeAPIDetail                    = routeMethodGet + APIPathServices + "/" + routeVarName
+	routeAPISeries                    = routeMethodGet + APIPathServices + "/" + routeVarName + "/" + apiSegmentSLA
+	routeAPIMetrics                   = routeMethodGet + APIPathServices + "/" + routeVarName + "/" + apiSegmentMetrics
+	routeAPIServiceButton             = routeMethodPost + APIPathServices + "/" + routeVarName + "/" + apiSegmentButton + "/{" + apiParamButton + "}"
+	routeAPIServiceRuntime            = routeMethodGet + APIPathServices + "/" + routeVarName + "/" + apiSegmentRuntime
+	routeAPIServiceEvents             = routeMethodGet + APIPathServices + "/" + routeVarName + "/" + apiSegmentEvents
+	routeAPIAppEvents                 = routeMethodGet + APIPathApplications + "/" + routeVarName + "/" + apiSegmentEvents
+	routeAPIEvents                    = routeMethodGet + APIPathEvents
 	routeAPIStream                    = routeMethodGet + apiPathStream
 	routeAPIEventsClear               = routeMethodPost + APIPathEventsClear
 	routeAPIStateCompact              = routeMethodPost + apiPathState + "/" + apiActionCompact
 	routeAPIPanic                     = routeMethodPost + apiPathPanic + "/" + routeVarAction
-	routeAPIPreflight                 = routeMethodPost + apiPathServices + "/" + routeVarName + "/" + apiSegmentPreflight
-	routeAPISessionClose              = routeMethodPost + apiPathServices + "/" + routeVarName + "/" + apiSegmentSessions + "/{" + apiParamPID + "}/" + apiActionClose
-	routeAPITerminalSessionClose      = routeMethodPost + apiPathServices + "/" + routeVarName + "/" + apiSegmentTerminalSessions + "/{" + apiQueryCheck + "}/" + apiActionClose
-	routeAPIEmptyTerminalSessionClose = routeMethodPost + apiPathServices + "/" + routeVarName + "/" + apiSegmentTerminalSessions + "/{" + apiQueryCheck + "}/" + apiActionCloseEmpty
-	routeAPIAction                    = routeMethodPost + apiPathServices + "/" + routeVarName + "/" + routeVarAction
+	routeAPIPreflight                 = routeMethodPost + APIPathServices + "/" + routeVarName + "/" + apiSegmentPreflight
+	routeAPISessionClose              = routeMethodPost + APIPathServices + "/" + routeVarName + "/" + apiSegmentSessions + "/{" + apiParamPID + "}/" + apiActionClose
+	routeAPITerminalSessionClose      = routeMethodPost + APIPathServices + "/" + routeVarName + "/" + apiSegmentTerminalSessions + "/{" + apiQueryCheck + "}/" + apiActionClose
+	routeAPIEmptyTerminalSessionClose = routeMethodPost + APIPathServices + "/" + routeVarName + "/" + apiSegmentTerminalSessions + "/{" + apiQueryCheck + "}/" + apiActionCloseEmpty
+	routeAPIAction                    = routeMethodPost + APIPathServices + "/" + routeVarName + "/" + routeVarAction
 	routeAPIReload                    = routeMethodPost + apiPathReload
 )
 
@@ -624,8 +614,8 @@ func (s *Server) mutationBackend(w http.ResponseWriter, r *http.Request) (Backen
 	if generation == 0 {
 		return backend, true
 	}
-	w.Header().Set(headerSermoGeneration, strconv.FormatUint(generation, 10))
-	raw := strings.TrimSpace(r.Header.Get(headerSermoGeneration))
+	w.Header().Set(HeaderGeneration, strconv.FormatUint(generation, 10))
+	raw := strings.TrimSpace(r.Header.Get(HeaderGeneration))
 	if raw == "" {
 		writeError(w, http.StatusPreconditionRequired, apiErrorGenerationMissing)
 		return nil, false
@@ -657,7 +647,7 @@ func (s *Server) readJSON(w http.ResponseWriter, r *http.Request, read func(cont
 // body, so the browser can reject a response from another daemon reload.
 func (*Server) writeBackendJSON(w http.ResponseWriter, status int, v any, generation uint64) {
 	if generation > 0 {
-		w.Header().Set(headerSermoGeneration, strconv.FormatUint(generation, 10))
+		w.Header().Set(HeaderGeneration, strconv.FormatUint(generation, 10))
 	}
 	writeJSON(w, status, v)
 }

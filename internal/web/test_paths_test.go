@@ -4,7 +4,7 @@ import "strings"
 
 func testAPIPath(segments ...string) string {
 	if len(segments) == 0 {
-		return routePathAPI
+		return APIPathRoot
 	}
 	return apiPathPrefix + strings.Join(segments, "/")
 }

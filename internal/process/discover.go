@@ -100,7 +100,7 @@ func (d Discoverer) Discover(selectors []Selector) ([]Process, []string) {
 	principal := 0
 	for _, pid := range backendPIDs {
 		if id, ok := snapshot[pid]; ok {
-			add(id, RoleMain, sourceBackend)
+			add(id, RoleMain, SourceBackend)
 			hasBackendProcess = true
 			if principal == 0 {
 				principal = pid
@@ -116,7 +116,7 @@ func (d Discoverer) Discover(selectors []Selector) ([]Process, []string) {
 		id := snapshot[pid]
 		for i := range selectors {
 			if selectors[i].Type == SelectorCommandMatch && d.matches(&selectors[i], id, resolve) {
-				add(id, selectors[i].Name, sourceCommand)
+				add(id, selectors[i].Name, SelectorCommandMatch)
 				break
 			}
 		}
@@ -124,7 +124,7 @@ func (d Discoverer) Discover(selectors []Selector) ([]Process, []string) {
 
 	// 3. descendants from the process tree.
 	for _, pid := range descendants(idx.children, order) {
-		add(snapshot[pid], RoleChild, sourceChild)
+		add(snapshot[pid], RoleChild, SourceChild)
 	}
 
 	// 4. delegated marking. The helper keeps the common no-delegation case on a
@@ -181,7 +181,7 @@ func addPidfileSelectors(selectors []Selector, snapshot map[int]Identity, add fu
 				lastWarn = fmt.Sprintf("pidfile %q (%s) references pid %d%s", path, sel.Name, pid, pidfileNotRunningSuffix)
 				continue
 			}
-			add(id, sel.Name, sourcePidfile)
+			add(id, sel.Name, SelectorPidfile)
 			claimed[pid] = true
 			matched = true
 			break
@@ -266,7 +266,7 @@ func (d Discoverer) markStrays(selectors []Selector, found map[int]Process, idx 
 		owned[pid] = true
 	}
 	for pid, proc := range found {
-		if proc.Source != sourceBackend || proc.Delegated || owned[pid] || pidfileClaimed[pid] {
+		if proc.Source != SourceBackend || proc.Delegated || owned[pid] || pidfileClaimed[pid] {
 			continue
 		}
 		if d.claimedBy(selectors, idx.byPID[pid], resolve) {
@@ -574,7 +574,7 @@ func (d Discoverer) StrictMatchPID(pid int, selectors []Selector) (Process, bool
 			continue
 		}
 		if d.matches(&selectors[i], id, resolve) {
-			return toProcess(id, selectors[i].Name, sourceCommand), true
+			return toProcess(id, selectors[i].Name, SelectorCommandMatch), true
 		}
 	}
 	return Process{}, false

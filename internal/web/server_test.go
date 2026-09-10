@@ -525,7 +525,7 @@ func TestBackendReadResponsesCarryGeneration(t *testing.T) {
 	b := &generationBackend{generation: 7}
 	rec := httptest.NewRecorder()
 	newServer(b).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, testAPIPath(apiSegmentServices), nil))
-	if got := rec.Header().Get(headerSermoGeneration); got != "7" {
+	if got := rec.Header().Get(HeaderGeneration); got != "7" {
 		t.Fatalf("response generation = %q, want 7", got)
 	}
 }
@@ -534,7 +534,7 @@ func TestBackendReadResponseUsesPinnedGeneration(t *testing.T) {
 	b := &pinnedGenerationBackend{generation: 9}
 	rec := httptest.NewRecorder()
 	newServer(b).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, testAPIPath(apiSegmentDashboard), nil))
-	if got := rec.Header().Get(headerSermoGeneration); got != "9" {
+	if got := rec.Header().Get(HeaderGeneration); got != "9" {
 		t.Fatalf("pinned response generation = %q, want 9", got)
 	}
 	var snapshot DashboardSnapshot
@@ -549,7 +549,7 @@ func TestBackendReadResponseUsesPinnedGeneration(t *testing.T) {
 // postReq is a POST request carrying the CSRF header (as the dashboard sends).
 func postReq(path string) *http.Request {
 	r := httptest.NewRequest(http.MethodPost, path, nil)
-	r.Header.Set(headerSermoCSRF, "1")
+	r.Header.Set(HeaderCSRF, "1")
 	return r
 }
 
@@ -570,7 +570,7 @@ func TestTargetMutationRequiresCurrentGeneration(t *testing.T) {
 			b := &pinnedMutationBackend{generation: 7}
 			req := postReq(testServicePath("web", apiActionRestart))
 			if tt.generation != "" {
-				req.Header.Set(headerSermoGeneration, tt.generation)
+				req.Header.Set(HeaderGeneration, tt.generation)
 			}
 			rec := httptest.NewRecorder()
 			newServer(b).ServeHTTP(rec, req)
@@ -580,7 +580,7 @@ func TestTargetMutationRequiresCurrentGeneration(t *testing.T) {
 			if len(b.operated) != tt.wantCalls {
 				t.Fatalf("operate calls = %v, want %d", b.operated, tt.wantCalls)
 			}
-			if got := rec.Header().Get(headerSermoGeneration); got != "7" {
+			if got := rec.Header().Get(HeaderGeneration); got != "7" {
 				t.Fatalf("response generation = %q, want 7", got)
 			}
 		})
@@ -717,7 +717,7 @@ func TestSecurityHeaders(t *testing.T) {
 func TestAPIResponsesAreNotCached(t *testing.T) {
 	h := newServer(&fakeBackend{})
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, apiPathServices, nil))
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, APIPathServices, nil))
 	if got := rec.Header().Get(headerCacheControl); got != headerValueNoStore {
 		t.Fatalf("Cache-Control = %q, want %q on API responses (they can carry cmdlines and config)", got, headerValueNoStore)
 	}
@@ -741,7 +741,7 @@ func getJSON[T any](t *testing.T, b Backend, path string) T {
 
 func TestListServices(t *testing.T) {
 	b := &fakeBackend{services: []Service{{Name: "web", Category: "frontend", Status: "active", Monitored: true}}}
-	got := getJSON[[]Service](t, b, apiPathServices)
+	got := getJSON[[]Service](t, b, APIPathServices)
 	if len(got) != 1 || got[0].Name != "web" || got[0].Category != "frontend" || !got[0].Monitored {
 		t.Fatalf("unexpected services: %+v", got)
 	}
@@ -752,7 +752,7 @@ func TestListServicesExposesCanonicalStateReason(t *testing.T) {
 		Name: "acpid", State: "restart_required", StateReason: "stale_binary",
 	}}}
 	rec := httptest.NewRecorder()
-	newServer(b).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, apiPathServices, nil))
+	newServer(b).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, APIPathServices, nil))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status %d", rec.Code)
 	}
@@ -769,7 +769,7 @@ func TestListApplications(t *testing.T) {
 		Version:      "nginx version: nginx/1.30.2",
 		VersionShort: "1.30.2", VersionSource: "nginx-bin", Status: apiStatusOK,
 	}}}
-	got := getJSON[[]Application](t, b, apiPathApplications)
+	got := getJSON[[]Application](t, b, APIPathApplications)
 	if len(got) != 1 || got[0].Name != "nginx" || got[0].VersionShort != "1.30.2" ||
 		got[0].Binary != "/usr/bin/nginx" || got[0].Permissions != "-rwxr-xr-x (0755)" ||
 		got[0].User != "root" || got[0].Group != "root" || got[0].Category != "web" ||
@@ -1077,7 +1077,7 @@ func TestGlobalEvents(t *testing.T) {
 	rec := httptest.NewRecorder()
 	newServer(b).ServeHTTP(rec, httptest.NewRequest(
 		http.MethodGet,
-		testPathQuery(apiPathEvents, testQueryParam(apiQueryLimit, "50")),
+		testPathQuery(APIPathEvents, testQueryParam(APIQueryLimit, "50")),
 		nil,
 	))
 	if rec.Code != http.StatusOK {
@@ -1101,8 +1101,8 @@ func TestGlobalEventsCursorPage(t *testing.T) {
 		{ID: 8, Service: "web", Kind: eventKindAction, Status: eventStatusOK},
 	}}
 	rec := httptest.NewRecorder()
-	query := testQueryParams(apiQueryBeforeID, "10", apiParamService, "web", apiQueryOnlyErrors, queryBoolOne, apiQueryLimit, queryBoolOne)
-	newServer(b).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, testPathQuery(apiPathEvents, query), nil))
+	query := testQueryParams(apiQueryBeforeID, "10", apiParamService, "web", apiQueryOnlyErrors, queryBoolOne, APIQueryLimit, queryBoolOne)
+	newServer(b).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, testPathQuery(APIPathEvents, query), nil))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("events page status %d: %s", rec.Code, rec.Body.String())
 	}
@@ -1122,14 +1122,14 @@ func TestGlobalEventsParsesTimeRange(t *testing.T) {
 	b := &fakeBackend{}
 	rec := httptest.NewRecorder()
 	query := testQueryParam(apiQuerySince, "24h")
-	newServer(b).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, testPathQuery(apiPathEvents, query), nil))
+	newServer(b).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, testPathQuery(APIPathEvents, query), nil))
 	if rec.Code != http.StatusOK || b.eventQuery.Since != 24*time.Hour {
 		t.Fatalf("status=%d event query=%+v", rec.Code, b.eventQuery)
 	}
 
 	rec = httptest.NewRecorder()
 	query = testQueryParam(apiQuerySince, "forever")
-	newServer(b).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, testPathQuery(apiPathEvents, query), nil))
+	newServer(b).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, testPathQuery(APIPathEvents, query), nil))
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("invalid since status = %d, want 400", rec.Code)
 	}
@@ -1138,7 +1138,7 @@ func TestGlobalEventsParsesTimeRange(t *testing.T) {
 func TestGlobalEventsRejectsInvalidCursor(t *testing.T) {
 	rec := httptest.NewRecorder()
 	query := testQueryParam(apiQueryBeforeID, "invalid")
-	newServer(&fakeBackend{}).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, testPathQuery(apiPathEvents, query), nil))
+	newServer(&fakeBackend{}).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, testPathQuery(APIPathEvents, query), nil))
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("invalid cursor status = %d, want 400", rec.Code)
 	}
@@ -1147,13 +1147,13 @@ func TestGlobalEventsRejectsInvalidCursor(t *testing.T) {
 func TestEventLimitCapAndDefault(t *testing.T) {
 	b := &fakeBackend{}
 	h := newServer(b)
-	h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, apiPathEvents, nil))
+	h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, APIPathEvents, nil))
 	if b.eventQuery.Limit != defaultEventLimit {
 		t.Fatalf("default limit = %d, want %d", b.eventQuery.Limit, defaultEventLimit)
 	}
 	h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(
 		http.MethodGet,
-		testPathQuery(apiPathEvents, testQueryParam(apiQueryLimit, "99999")),
+		testPathQuery(APIPathEvents, testQueryParam(APIQueryLimit, "99999")),
 		nil,
 	))
 	if b.eventQuery.Limit != maxEventLimit {
@@ -1178,13 +1178,13 @@ func TestGlobalEventsForwardsFilters(t *testing.T) {
 		{name: "status", query: testQueryParam(apiQueryStatus, eventStatusFailed), want: EventQuery{Limit: defaultEventLimit, Status: eventStatusFailed}},
 		{name: "only errors", query: testQueryParam(apiQueryOnlyErrors, queryBoolOne), want: EventQuery{Limit: defaultEventLimit, OnlyErrors: true}},
 		{name: "only errors on", query: testQueryParam(apiQueryOnlyErrors, queryBoolOn), want: EventQuery{Limit: defaultEventLimit, OnlyErrors: true}},
-		{name: "filtered limit", query: testQueryParams(apiQueryOnlyErrors, queryBoolTrue, apiQueryLimit, queryBoolOne), want: EventQuery{Limit: 1, OnlyErrors: true}},
+		{name: "filtered limit", query: testQueryParams(apiQueryOnlyErrors, queryBoolTrue, APIQueryLimit, queryBoolOne), want: EventQuery{Limit: 1, OnlyErrors: true}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			b := &fakeBackend{events: events}
 			rec := httptest.NewRecorder()
-			newServer(b).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, testPathQuery(apiPathEvents, tt.query), nil))
+			newServer(b).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, testPathQuery(APIPathEvents, tt.query), nil))
 			if rec.Code != http.StatusOK {
 				t.Fatalf("status %d", rec.Code)
 			}
@@ -1218,7 +1218,7 @@ func TestQueryBoolVocabulary(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.value, func(t *testing.T) {
-			r := httptest.NewRequest(http.MethodGet, apiPathEvents, nil)
+			r := httptest.NewRequest(http.MethodGet, APIPathEvents, nil)
 			query := r.URL.Query()
 			query.Set(apiQueryOnlyErrors, tt.value)
 			r.URL.RawQuery = query.Encode()
@@ -1422,7 +1422,7 @@ func TestOperateNoCascadeQuery(t *testing.T) {
 func TestStateCompact(t *testing.T) {
 	rec := httptest.NewRecorder()
 	newServer(&fakeBackend{}).ServeHTTP(rec, postReq(
-		testPathQuery(testAPIPath(apiSegmentState, apiActionCompact), testQueryParam(apiQueryBefore, "720h")),
+		testPathQuery(testAPIPath(apiSegmentState, apiActionCompact), testQueryParam(APIQueryBefore, "720h")),
 	))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("state compact = %d body=%s", rec.Code, rec.Body.String())
@@ -1564,7 +1564,7 @@ func TestEventsClear(t *testing.T) {
 	}
 	rec = httptest.NewRecorder()
 	h.ServeHTTP(rec, postReq(
-		testPathQuery(testAPIPath(apiSegmentEvents, apiActionClear), testQueryParam(apiQueryBefore, "2026-06-05T00:00:00Z")),
+		testPathQuery(testAPIPath(apiSegmentEvents, apiActionClear), testQueryParam(APIQueryBefore, "2026-06-05T00:00:00Z")),
 	))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("clear before status %d", rec.Code)
@@ -1780,7 +1780,7 @@ func assertQueryParse[T comparable](t *testing.T, path, param, in string, parse 
 
 func TestEventLimitParsing(t *testing.T) {
 	check := func(in string, want int) {
-		assertQueryParse(t, apiPathEvents, apiQueryLimit, in, eventLimit, want)
+		assertQueryParse(t, APIPathEvents, APIQueryLimit, in, eventLimit, want)
 	}
 	check("5", 5)
 	// A non-positive limit is ignored (n > 0 guard), keeping the default.
