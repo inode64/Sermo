@@ -31,35 +31,29 @@ func (c pidfileCheck) Run(_ context.Context) Result {
 	if alive == nil {
 		alive = pidAlive
 	}
-	if len(c.paths) == 0 {
-		return c.result(false, "pidfile check has no path candidates", start)
-	}
-	var failures []string
-	unavailable := false
-	for _, path := range c.paths {
+	match := firstPathMatch(c.paths, func(path string) pathMatch {
 		pid, err := process.ReadPidfile(path)
 		if err != nil {
 			if errors.Is(err, os.ErrNotExist) {
-				continue
+				return pathMatch{missing: true}
 			}
-			failures = append(failures, fmt.Sprintf("%s: %v", path, err))
-			unavailable = true
-			continue
+			return pathMatch{failure: fmt.Sprintf("%s: %v", path, err), unavailable: true}
 		}
 		if !alive(pid) {
-			failures = append(failures, fmt.Sprintf("%s references pid %d which is not running", path, pid))
-			continue
+			return pathMatch{failure: fmt.Sprintf("%s references pid %d which is not running", path, pid)}
 		}
-		r := c.result(true, fmt.Sprintf("%s -> pid %d running", path, pid), start)
-		r.Data = map[string]any{DataKeyPID: pid, DataKeyPath: path}
-		return r
+		return pathMatch{message: fmt.Sprintf("%s -> pid %d running", path, pid), data: map[string]any{DataKeyPID: pid, DataKeyPath: path}}
+	}, CheckTypePidfile)
+	if match.failure != "" {
+		if match.unavailable {
+			return c.unavailableResult(match.failure, start)
+		}
+		return c.result(false, match.failure, start)
 	}
-	if len(failures) > 0 {
-		message := strings.Join(failures, "; ")
-		if unavailable {
-			return c.unavailableResult(message, start)
-		}
-		return c.result(false, message, start)
+	if !match.missing {
+		result := c.result(true, match.message, start)
+		result.Data = match.data
+		return result
 	}
 	if len(c.paths) == 1 {
 		path := c.paths[0]
