@@ -20,7 +20,7 @@ func authServer(a Auth) http.Handler {
 func req(method, path, user, pass string) *http.Request {
 	r := httptest.NewRequest(method, path, nil)
 	if !isReadMethod(method) {
-		r.Header.Set(headerSermoCSRF, "1")
+		r.Header.Set(HeaderCSRF, "1")
 	}
 	if user != "" || pass != "" {
 		r.SetBasicAuth(user, pass)
@@ -65,7 +65,7 @@ func TestLivezPublicEvenWithAuth(t *testing.T) {
 	}
 	// a normal endpoint still challenges
 	rec = httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, apiPathServices, nil))
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, APIPathServices, nil))
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("/api/services without auth = %d, want 401", rec.Code)
 	}
@@ -193,11 +193,11 @@ func TestAuthChallengesDocumentsOnly(t *testing.T) {
 		{name: "root navigation", path: routePathRoot, fetchMode: secFetchModeNavigate, challenge: true},
 		{name: "root without headers", path: routePathRoot, challenge: true},
 		{name: "login route", path: routePathLogin, fetchMode: "cors", challenge: true},
-		{name: "html navigation", path: apiPathServices, fetchMode: secFetchModeNavigate, challenge: true},
-		{name: "legacy html client", path: apiPathServices, accept: "text/html,*/*", challenge: true},
-		{name: "dashboard poll", path: apiPathServices, fetchMode: "cors", accept: contentTypeJSON},
-		{name: "event stream reconnect", path: apiPathServices, fetchMode: "cors", accept: streamContentType},
-		{name: "bare api client", path: apiPathServices},
+		{name: "html navigation", path: APIPathServices, fetchMode: secFetchModeNavigate, challenge: true},
+		{name: "legacy html client", path: APIPathServices, accept: "text/html,*/*", challenge: true},
+		{name: "dashboard poll", path: APIPathServices, fetchMode: "cors", accept: contentTypeJSON},
+		{name: "event stream reconnect", path: APIPathServices, fetchMode: "cors", accept: streamContentType},
+		{name: "bare api client", path: APIPathServices},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -297,7 +297,7 @@ func TestGuestIsReadOnly(t *testing.T) {
 	h := authServer(Auth{AdminCredentials: testCredentials(t, "secret"), GuestCredentials: testCredentials(t, "guestpw")})
 	// guest can read
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, req(http.MethodGet, apiPathServices, "guest", "guestpw"))
+	h.ServeHTTP(rec, req(http.MethodGet, APIPathServices, "guest", "guestpw"))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("guest read = %d, want 200", rec.Code)
 	}
@@ -317,7 +317,7 @@ func TestGuestIsReadOnly(t *testing.T) {
 func TestAnonymousGuestReadOnly(t *testing.T) {
 	h := authServer(Auth{AdminCredentials: testCredentials(t, "secret"), AnonymousGuest: true})
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, req(http.MethodGet, apiPathServices, "", ""))
+	h.ServeHTTP(rec, req(http.MethodGet, APIPathServices, "", ""))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("anonymous read = %d, want 200", rec.Code)
 	}
@@ -361,11 +361,11 @@ func TestOpenModeRejectsForeignHosts(t *testing.T) {
 
 	// DNS rebinding lands with the attacker's hostname in Host; the open
 	// (auth-less) UI must refuse it.
-	if code := serve("evil.example.com", apiPathServices); code != http.StatusMisdirectedRequest {
+	if code := serve("evil.example.com", APIPathServices); code != http.StatusMisdirectedRequest {
 		t.Fatalf("open mode with foreign Host = %d, want 421", code)
 	}
 	for _, host := range []string{"localhost:9797", "127.0.0.1:9797", "[::1]:9797", "127.0.0.1"} {
-		if code := serve(host, apiPathServices); code != http.StatusOK {
+		if code := serve(host, APIPathServices); code != http.StatusOK {
 			t.Fatalf("open mode with local Host %q = %d, want 200", host, code)
 		}
 	}
@@ -381,7 +381,7 @@ func TestOpenModeAllowsConfiguredHosts(t *testing.T) {
 		Addr:         "127.0.0.1:9797",
 		AllowedHosts: []string{"sermo.internal"},
 	}).Handler()
-	r := req(http.MethodGet, apiPathServices, "", "")
+	r := req(http.MethodGet, APIPathServices, "", "")
 	r.Host = "sermo.internal:8443"
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, r)
@@ -394,7 +394,7 @@ func TestAuthedModeServesAnyHost(t *testing.T) {
 	// With Basic auth on, a rebound origin cannot attach credentials, so the
 	// Host check is not applied and reverse proxies keep working.
 	h := authServer(Auth{AdminCredentials: testCredentials(t, "secret")})
-	r := req(http.MethodGet, apiPathServices, "admin", "secret")
+	r := req(http.MethodGet, APIPathServices, "admin", "secret")
 	r.Host = "public.example.com"
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, r)
@@ -529,7 +529,7 @@ func TestRoleFromAnyCredential(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			rec := httptest.NewRecorder()
-			h.ServeHTTP(rec, req(http.MethodGet, apiPathServices, "anyone", tc.password))
+			h.ServeHTTP(rec, req(http.MethodGet, APIPathServices, "anyone", tc.password))
 			if rec.Code != tc.wantRead {
 				t.Errorf("GET = %d, want %d", rec.Code, tc.wantRead)
 			}

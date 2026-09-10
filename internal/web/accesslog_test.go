@@ -138,7 +138,7 @@ func TestAccessLogRecordsAuthDeniedPost(t *testing.T) {
 
 	rec := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodPost, testServicePath("web", apiActionRestart), nil)
-	r.Header.Set(headerSermoCSRF, "1")
+	r.Header.Set(HeaderCSRF, "1")
 	r.SetBasicAuth("guest", "guestpw")
 	h.ServeHTTP(rec, r)
 	if rec.Code != http.StatusForbidden {
@@ -183,7 +183,7 @@ func TestAccessLogKeepsActorResolvedByAuth(t *testing.T) {
 		w.WriteHeader(http.StatusNoContent)
 	})))
 	req := httptest.NewRequest(http.MethodPost, apiPathReload, nil)
-	req.Header.Set(headerSermoCSRF, "1")
+	req.Header.Set(HeaderCSRF, "1")
 	req.SetBasicAuth("sermoctl", "run-token")
 	rec := httptest.NewRecorder()
 

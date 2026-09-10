@@ -14,14 +14,22 @@ const (
 	procSelf        = "self"
 	procFileCmdline = "cmdline"
 	procFileExe     = "exe"
-	procFileFD      = "fd"
-	procFileCWD     = "cwd"
-	procFileRoot    = "root"
-	procFileIO      = "io"
-	procFileStat    = "stat"
-	procFileStatm   = "statm"
-	procFileStatus  = "status"
-	procFileTask    = "task"
+	// ProcFileFD is the /proc/<pid>/fd directory name.
+	ProcFileFD = "fd"
+	// ProcFileCWD is the /proc/<pid>/cwd symlink name.
+	ProcFileCWD = "cwd"
+	// ProcFileRoot is the /proc/<pid>/root symlink name.
+	ProcFileRoot = "root"
+	// ProcFileIO is the /proc/<pid>/io file name.
+	ProcFileIO = "io"
+	// ProcFileStat is the /proc/<pid>/stat file name.
+	ProcFileStat = "stat"
+	// ProcFileStatm is the /proc/<pid>/statm file name.
+	ProcFileStatm = "statm"
+	// ProcFileStatus is the /proc/<pid>/status file name.
+	ProcFileStatus = "status"
+	// ProcFileTask is the /proc/<pid>/task directory name.
+	ProcFileTask = "task"
 
 	procStatusStatePrefix = "State:"
 	procStatusPPIDPrefix  = "PPid:"
@@ -36,38 +44,6 @@ const (
 	procCmdlineSeparator = "\x00"
 	procDeletedSuffix    = " (deleted)"
 )
-
-func procPIDPath(pid int, name string) string {
-	return filepath.Join(procRoot, strconv.Itoa(pid), name)
-}
-
-func procSelfPath(name string) string {
-	return filepath.Join(procRoot, procSelf, name)
-}
-
-// ProcFileFD is the /proc/<pid>/fd directory name.
-const ProcFileFD = procFileFD
-
-// ProcFileCWD is the /proc/<pid>/cwd symlink name.
-const ProcFileCWD = procFileCWD
-
-// ProcFileRoot is the /proc/<pid>/root symlink name.
-const ProcFileRoot = procFileRoot
-
-// ProcFileIO is the /proc/<pid>/io file name.
-const ProcFileIO = procFileIO
-
-// ProcFileStat is the /proc/<pid>/stat file name.
-const ProcFileStat = procFileStat
-
-// ProcFileStatm is the /proc/<pid>/statm file name.
-const ProcFileStatm = procFileStatm
-
-// ProcFileStatus is the /proc/<pid>/status file name.
-const ProcFileStatus = procFileStatus
-
-// ProcFileTask is the /proc/<pid>/task directory name.
-const ProcFileTask = procFileTask
 
 // StatFields reads /proc/<pid>/stat and returns the fields after the ')' that
 // closes the comm field (so a comm containing spaces or parentheses cannot
@@ -120,12 +96,12 @@ func StartTicks(pid int) (uint64, bool) {
 
 // PIDPath returns a path under /proc/<pid>.
 func PIDPath(pid int, name string) string {
-	return procPIDPath(pid, name)
+	return filepath.Join(procRoot, strconv.Itoa(pid), name)
 }
 
 // SelfPath returns a path under /proc/self.
 func SelfPath(name string) string {
-	return procSelfPath(name)
+	return filepath.Join(procRoot, procSelf, name)
 }
 
 // TrimDeletedSuffix removes the kernel suffix appended to deleted file links.
@@ -244,7 +220,7 @@ func (r OSReader) groupName(gid uint32) string {
 }
 
 func readStatus(pid int) (ppid int, uid, gid uint32, state string, ok bool) {
-	data, err := os.ReadFile(procPIDPath(pid, procFileStatus))
+	data, err := os.ReadFile(PIDPath(pid, ProcFileStatus))
 	if err != nil {
 		return 0, 0, 0, "", false
 	}
@@ -288,7 +264,7 @@ func readStatus(pid int) (ppid int, uid, gid uint32, state string, ok bool) {
 // matches nothing and is never signalled is unchanged. Callers that act on prev
 // must not treat it as an identity.
 func readExe(pid int) (exe string, ok bool, prev string) {
-	target, err := os.Readlink(procPIDPath(pid, procFileExe))
+	target, err := os.Readlink(PIDPath(pid, procFileExe))
 	if err != nil || target == "" {
 		return "", false, ""
 	}
@@ -299,7 +275,7 @@ func readExe(pid int) (exe string, ok bool, prev string) {
 }
 
 func readCmdline(pid int) []string {
-	data, err := os.ReadFile(procPIDPath(pid, procFileCmdline))
+	data, err := os.ReadFile(PIDPath(pid, procFileCmdline))
 	if err != nil || len(data) == 0 {
 		return nil
 	}

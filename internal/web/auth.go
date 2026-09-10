@@ -67,7 +67,7 @@ const (
 )
 
 const (
-	authMessageMissingCSRFHeader = "missing " + headerSermoCSRF + " header (CSRF protection)"
+	authMessageMissingCSRFHeader = "missing " + HeaderCSRF + " header (CSRF protection)"
 	authMessageReadOnly          = "read-only access"
 	authMessageRequired          = "authentication required"
 	authMessageForeignHost       = "request Host does not name this server (DNS-rebinding protection); add it to web.allowed_hosts if legitimate"
@@ -173,7 +173,7 @@ func (s *Server) withAuth(next http.Handler) http.Handler {
 		// CSRF: state-changing requests must carry the custom header (set by the
 		// dashboard's fetch). Checked before auth so a forged cross-site request is
 		// rejected even when the browser would attach cached credentials.
-		if !isReadMethod(r.Method) && r.Header.Get(headerSermoCSRF) == "" {
+		if !isReadMethod(r.Method) && r.Header.Get(HeaderCSRF) == "" {
 			writeJSON(w, http.StatusForbidden, ActionResult{OK: false, Message: authMessageMissingCSRFHeader})
 			return
 		}

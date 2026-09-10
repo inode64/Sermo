@@ -104,7 +104,7 @@ func TestDiscoverCommandMatchExeAndUser(t *testing.T) {
 	if got := pidsOf(procs); len(got) != 1 || got[0] != 100 {
 		t.Fatalf("matched pids = %v, want [100]", got)
 	}
-	if procs[0].Role != "main" || procs[0].Source != sourceCommand {
+	if procs[0].Role != "main" || procs[0].Source != SelectorCommandMatch {
 		t.Errorf("role/source = %q/%q", procs[0].Role, procs[0].Source)
 	}
 }
@@ -215,7 +215,7 @@ func TestDiscoverBuildsProcessTree(t *testing.T) {
 	}
 	// 200 matched directly by exe; 300 only via the tree.
 	for _, p := range procs {
-		if p.PID == 300 && p.Source != sourceChild {
+		if p.PID == 300 && p.Source != SourceChild {
 			t.Errorf("pid 300 source = %q, want child", p.Source)
 		}
 	}
@@ -266,7 +266,7 @@ func TestDiscoverPidfile(t *testing.T) {
 	if got := pidsOf(procs); len(got) != 1 || got[0] != 100 {
 		t.Fatalf("pidfile pids = %v, want [100]", got)
 	}
-	if procs[0].Source != sourcePidfile {
+	if procs[0].Source != SelectorPidfile {
 		t.Errorf("source = %q, want pidfile", procs[0].Source)
 	}
 }
@@ -396,7 +396,7 @@ func TestDiscoverBackendMainPIDSeedsTree(t *testing.T) {
 		t.Fatalf("pids = %v, want [100 200] (MainPID + child)", got)
 	}
 	for _, p := range procs {
-		if p.PID == 100 && p.Source != sourceBackend {
+		if p.PID == 100 && p.Source != SourceBackend {
 			t.Errorf("MainPID source = %q, want backend", p.Source)
 		}
 	}
@@ -414,7 +414,7 @@ func TestDiscoverMainPIDDedupedWithSelector(t *testing.T) {
 	// The same PID is found by MainPID and command_match; it appears once,
 	// keeping the backend source (found first).
 	procs, _ := d.Discover([]Selector{{Name: "m", Type: SelectorCommandMatch, Exe: testExe, User: "mysql"}})
-	if len(procs) != 1 || procs[0].Source != sourceBackend {
+	if len(procs) != 1 || procs[0].Source != SourceBackend {
 		t.Fatalf("procs = %+v, want one process from the backend source", procs)
 	}
 }
@@ -478,7 +478,7 @@ func TestStrictMatchPIDRequiresExactExeAndUser(t *testing.T) {
 	}
 
 	proc, ok := d.StrictMatchPID(100, selectors)
-	if !ok || proc.PID != 100 || proc.Source != sourceCommand {
+	if !ok || proc.PID != 100 || proc.Source != SelectorCommandMatch {
 		t.Fatalf("StrictMatchPID matched = %+v/%v, want command_match pid 100", proc, ok)
 	}
 	for _, pid := range []int{101, 102, 103, 999} {

@@ -168,11 +168,6 @@ const (
 	// SourceChild identifies a descendant added while expanding a discovered
 	// service process tree.
 	SourceChild = RoleChild
-
-	sourceBackend = SourceBackend
-	sourcePidfile = SelectorPidfile
-	sourceCommand = SelectorCommandMatch
-	sourceChild   = SourceChild
 )
 
 // Process Role labels for non-selector members: backend seeds are the service's

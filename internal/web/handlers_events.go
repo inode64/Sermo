@@ -41,7 +41,7 @@ func queryCapped[T cmp.Ordered](r *http.Request, name string, def, maxV T, parse
 
 // eventLimit reads the `limit` query param, defaulting and capping it.
 func eventLimit(r *http.Request) int {
-	return queryCapped(r, apiQueryLimit, defaultEventLimit, maxEventLimit, func(q string) (int, bool) {
+	return queryCapped(r, APIQueryLimit, defaultEventLimit, maxEventLimit, func(q string) (int, bool) {
 		n, err := strconv.Atoi(q)
 		return n, err == nil && n > 0
 	})
@@ -148,7 +148,7 @@ func queryBool(r *http.Request, key string) bool {
 // TIME may be a non-future RFC3339 timestamp or a positive duration (e.g. "2h"
 // means "before now-2h").
 func (s *Server) handleEventsClear(w http.ResponseWriter, r *http.Request) {
-	before, err := state.ParseCutoff(apiQueryBefore, r.URL.Query().Get(apiQueryBefore), time.Now())
+	before, err := state.ParseCutoff(APIQueryBefore, r.URL.Query().Get(APIQueryBefore), time.Now())
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, ActionResult{OK: false, Message: err.Error()})
 		return
@@ -165,7 +165,7 @@ func (s *Server) handleEventsClear(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleStateCompact(w http.ResponseWriter, r *http.Request) {
-	before, err := state.ParseCutoff(apiQueryBefore, r.URL.Query().Get(apiQueryBefore), time.Now())
+	before, err := state.ParseCutoff(APIQueryBefore, r.URL.Query().Get(APIQueryBefore), time.Now())
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, StateCompactResult{OK: false, Message: err.Error()})
 		return
