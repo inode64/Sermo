@@ -160,49 +160,32 @@ func (b dbusSessionBus) Close() error {
 func sessionFromProperties(properties map[string]dbus.Variant) (session, error) {
 	var result session
 	var ok bool
-	if result.ID, ok = stringProperty(properties, "Id"); !ok {
+	if result.ID, ok = property[string](properties, "Id"); !ok {
 		return session{}, errors.New("login session Id property is unavailable")
 	}
-	if result.TTY, ok = stringProperty(properties, "TTY"); !ok {
+	if result.TTY, ok = property[string](properties, "TTY"); !ok {
 		return session{}, errors.New("login session TTY property is unavailable")
 	}
-	if result.Service, ok = stringProperty(properties, "Service"); !ok {
+	if result.Service, ok = property[string](properties, "Service"); !ok {
 		return session{}, errors.New("login session Service property is unavailable")
 	}
-	leader, ok := uint32Property(properties, "Leader")
+	leader, ok := property[uint32](properties, "Leader")
 	if !ok || leader > math.MaxInt32 {
 		return session{}, errors.New("login session Leader property is unavailable")
 	}
 	result.Leader = int(leader)
-	if result.Remote, ok = boolProperty(properties, "Remote"); !ok {
+	if result.Remote, ok = property[bool](properties, "Remote"); !ok {
 		return session{}, errors.New("login session Remote property is unavailable")
 	}
 	return result, nil
 }
 
-func stringProperty(properties map[string]dbus.Variant, name string) (string, bool) {
+func property[T any](properties map[string]dbus.Variant, name string) (T, bool) {
 	variant, ok := properties[name]
 	if !ok {
-		return "", false
+		var zero T
+		return zero, false
 	}
-	value, ok := variant.Value().(string)
-	return value, ok
-}
-
-func uint32Property(properties map[string]dbus.Variant, name string) (uint32, bool) {
-	variant, ok := properties[name]
-	if !ok {
-		return 0, false
-	}
-	value, ok := variant.Value().(uint32)
-	return value, ok
-}
-
-func boolProperty(properties map[string]dbus.Variant, name string) (bool, bool) {
-	variant, ok := properties[name]
-	if !ok {
-		return false, false
-	}
-	value, ok := variant.Value().(bool)
+	value, ok := variant.Value().(T)
 	return value, ok
 }
