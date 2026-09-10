@@ -379,7 +379,7 @@ func TestBuildHardwareRAIDCheckValidation(t *testing.T) {
 	}{
 		{name: "missing binary", entry: map[string]any{}, want: "requires an absolute binary"},
 		{name: "relative binary", entry: map[string]any{CheckKeyBinary: "storcli64"}, want: "requires an absolute binary"},
-		{name: "invalid temperature", entry: map[string]any{CheckKeyBinary: "/usr/bin/storcli64", SmartFieldTemperature: map[string]any{CheckKeyOp: ">", CheckKeyValue: "hot"}}, want: "not numeric"},
+		{name: "invalid temperature", entry: map[string]any{CheckKeyBinary: "/usr/bin/storcli64", SmartFieldTemperature: map[string]any{CheckKeyOp: ">", CheckKeyValue: "hot"}}, want: "must be numeric"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
