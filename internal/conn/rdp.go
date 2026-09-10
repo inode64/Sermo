@@ -35,6 +35,7 @@ const (
 	rdpNegResponseTypeOffset    = 11
 	rdpProtocolLengthOffset     = 2
 	rdpProtocolListOffset       = 4
+	rdpNegotiationRequestBytes  = tpktHeaderBytes + x224HeaderBytes + rdpNegRequestBytes
 )
 
 const (
@@ -71,10 +72,7 @@ func (rdpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	}
 	defer func() { _ = c.Close() }()
 
-	request, err := buildRDPNegRequest(rdpRequestedProtocols)
-	if err != nil {
-		return Result{}, probeErr(ProtocolNameRDP, stepRDPNegotiationRequest, err)
-	}
+	request := buildRDPNegRequest()
 	if _, err := c.Write(request); err != nil {
 		return Result{}, probeErr(ProtocolNameRDP, stepRDPNegotiationRequest, err)
 	}
@@ -92,19 +90,15 @@ func (rdpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 
 // buildRDPNegRequest builds a TPKT + X.224 Connection Request enclosing an RDP
 // Negotiation Request that advertises protocols.
-func buildRDPNegRequest(protocols uint32) ([]byte, error) {
+func buildRDPNegRequest() []byte {
 	neg := make([]byte, rdpNegRequestBytes)
 	neg[rdpNegPacketTypeOffset] = rdpNegRequestType
 	binary.LittleEndian.PutUint16(neg[rdpProtocolLengthOffset:], rdpNegRequestBytes)
-	binary.LittleEndian.PutUint32(neg[rdpProtocolListOffset:], protocols)
+	binary.LittleEndian.PutUint32(neg[rdpProtocolListOffset:], rdpRequestedProtocols)
 
 	// X.224 Connection Request: LI, CR(0xE0), DST-REF, SRC-REF, class.
 	x224 := make([]byte, x224HeaderBytes, x224HeaderBytes+len(neg))
-	lengthIndicator, err := wireByte(ProtocolNameRDP, "X.224 length indicator", x224RequestVariableLenBase+len(neg))
-	if err != nil {
-		return nil, err
-	}
-	x224[x224LengthIndicatorOffset] = lengthIndicator
+	x224[x224LengthIndicatorOffset] = x224RequestVariableLenBase + rdpNegRequestBytes
 	x224[x224RequestPDUTypeOffset] = x224ConnectionRequest
 	x224[len(x224)-1] = x224ClassByte
 	x224 = append(x224, neg...)
@@ -112,12 +106,8 @@ func buildRDPNegRequest(protocols uint32) ([]byte, error) {
 	// TPKT header (version 3).
 	pkt := make([]byte, tpktHeaderBytes, tpktHeaderBytes+len(x224))
 	pkt[tpktVersionOffset] = tpktVersion
-	total, err := wireUint16(ProtocolNameRDP, "TPKT length", tpktHeaderBytes+len(x224))
-	if err != nil {
-		return nil, err
-	}
-	binary.BigEndian.PutUint16(pkt[tpktLengthOffset:], total)
-	return append(pkt, x224...), nil
+	binary.BigEndian.PutUint16(pkt[tpktLengthOffset:], rdpNegotiationRequestBytes)
+	return append(pkt, x224...)
 }
 
 // parseRDPConfirm validates a TPKT + X.224 Connection Confirm and returns the

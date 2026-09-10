@@ -41,18 +41,19 @@ const (
 )
 
 const (
-	kafkaSizePrefixBytes        = 4
-	kafkaCorrelationIDStart     = 0
-	kafkaCorrelationIDEnd       = 4
-	kafkaResponseBodyOffset     = kafkaCorrelationIDEnd
-	kafkaErrorCodeStart         = 0
-	kafkaErrorCodeEnd           = 2
-	kafkaAPICountStart          = 2
-	kafkaAPICountEnd            = 6
-	kafkaAPIVersionsHeaderBytes = kafkaAPICountEnd
-	kafkaAPIVersionEntryBytes   = 6
-	kafkaAPIKeyStart            = 0
-	kafkaAPIKeyEnd              = 2
+	kafkaSizePrefixBytes         = 4
+	kafkaCorrelationIDStart      = 0
+	kafkaCorrelationIDEnd        = 4
+	kafkaResponseBodyOffset      = kafkaCorrelationIDEnd
+	kafkaErrorCodeStart          = 0
+	kafkaErrorCodeEnd            = 2
+	kafkaAPICountStart           = 2
+	kafkaAPICountEnd             = 6
+	kafkaAPIVersionsHeaderBytes  = kafkaAPICountEnd
+	kafkaAPIVersionEntryBytes    = 6
+	kafkaAPIVersionsRequestBytes = 2 + 2 + 4 + 2 + len(kafkaClientID)
+	kafkaAPIKeyStart             = 0
+	kafkaAPIKeyEnd               = 2
 )
 
 // Probe opens the connection (TCP, TLS when configured) and runs the ApiVersions
@@ -64,10 +65,7 @@ func (kafkaProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	}
 	defer func() { _ = c.Close() }()
 
-	request, err := kafkaAPIVersionsRequest()
-	if err != nil {
-		return Result{}, probeErr(ProtocolNameKafka, stepKafkaAPIVersionsRequest, err)
-	}
+	request := kafkaAPIVersionsRequest()
 	if _, err := c.Write(request); err != nil {
 		return Result{}, probeErr(ProtocolNameKafka, stepKafkaAPIVersionsRequest, err)
 	}
@@ -78,18 +76,14 @@ func (kafkaProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 // request header v1 (api_key, api_version, correlation_id, client_id). The
 // ApiVersions v0 body is empty, which keeps the request off the "flexible"
 // (tagged-field) encoding that versions >= 3 require.
-func kafkaAPIVersionsRequest() ([]byte, error) {
+func kafkaAPIVersionsRequest() []byte {
 	var body []byte
 	body = binary.BigEndian.AppendUint16(body, kafkaAPIVersionsKey)        // api_key
 	body = binary.BigEndian.AppendUint16(body, kafkaAPIVersion)            // api_version
 	body = binary.BigEndian.AppendUint32(body, kafkaCorrelationID)         // correlation_id
 	body = binary.BigEndian.AppendUint16(body, uint16(len(kafkaClientID))) // client_id length
 	body = append(body, kafkaClientID...)
-	size, err := wireUint32(ProtocolNameKafka, "request size", len(body))
-	if err != nil {
-		return nil, err
-	}
-	return append(binary.BigEndian.AppendUint32(nil, size), body...), nil
+	return append(binary.BigEndian.AppendUint32(nil, uint32(kafkaAPIVersionsRequestBytes)), body...)
 }
 
 // readKafkaAPIVersions reads the size-prefixed response, verifies the echoed
