@@ -11,7 +11,6 @@ import (
 	"sermo/internal/cfgval"
 	"sermo/internal/mounts"
 	"slices"
-	"sort"
 	"strconv"
 	"strings"
 )
@@ -719,15 +718,12 @@ func buildSnapshotIndex(snapshot map[int]Identity) *snapshotIndex {
 		sorted:   slices.Sorted(maps.Keys(snapshot)),
 		children: map[int][]int{},
 	}
-	for pid, id := range snapshot {
+	for _, pid := range idx.sorted {
+		id := snapshot[pid]
 		idx.children[id.PPID] = append(idx.children[id.PPID], pid)
 		if id.ExePrev != "" {
 			idx.deleted = append(idx.deleted, pid)
 		}
-	}
-	sort.Ints(idx.deleted)
-	for _, kids := range idx.children {
-		sort.Ints(kids)
 	}
 	return idx
 }
