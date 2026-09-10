@@ -48,7 +48,7 @@ func TestApplyMonitorTransition(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			store := &transitionStore{record: state.MonitorRecord{Active: tt.active, Source: "original"}, found: tt.found}
-			result, err := ApplyMonitorTransition(store, "web", tt.monitored, state.SourceCLI)
+			changed, err := ApplyMonitorTransition(store, "web", tt.monitored, state.SourceCLI)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -56,8 +56,8 @@ func TestApplyMonitorTransition(t *testing.T) {
 			if tt.wantWrite {
 				wantWrites = 1
 			}
-			if result.Changed != tt.wantWrite || store.writes != wantWrites {
-				t.Fatalf("result/writes = %+v/%d, want changed/write %t", result, store.writes, tt.wantWrite)
+			if changed != tt.wantWrite || store.writes != wantWrites {
+				t.Fatalf("changed/writes = %t/%d, want changed/write %t", changed, store.writes, tt.wantWrite)
 			}
 			if !tt.wantWrite && store.record.Source != "original" {
 				t.Fatalf("no-op changed source to %q", store.record.Source)
