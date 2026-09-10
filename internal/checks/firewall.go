@@ -118,7 +118,6 @@ func validFirewallBackend(backend string) bool {
 
 // defaultFirewallRulesSampler reads loaded nftables/iptables rules.
 func defaultFirewallRulesSampler(ctx context.Context, backend string, runner execx.Runner) (FirewallRulesSample, error) {
-	runner = execx.RunnerOrDefault(runner)
 	switch backend {
 	case FirewallBackendAuto:
 		var errs []error
