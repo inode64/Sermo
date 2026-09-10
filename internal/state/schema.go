@@ -258,25 +258,11 @@ func ensureStateColumns(ctx context.Context, tx *sql.Tx) error {
 }
 
 func columnExists(ctx context.Context, tx *sql.Tx, table, column string) (bool, error) {
-	rows, err := tx.QueryContext(ctx, "PRAGMA table_info("+table+")")
-	if err != nil {
-		return false, fmt.Errorf("inspect %s: %w", table, err)
+	var count int
+	if err := tx.QueryRowContext(ctx,
+		"SELECT COUNT(*) FROM pragma_table_info(?) WHERE name = ?", table, column,
+	).Scan(&count); err != nil {
+		return false, fmt.Errorf("inspect %s.%s: %w", table, column, err)
 	}
-	defer func() { _ = rows.Close() }()
-	for rows.Next() {
-		var cid int
-		var name, ctype string
-		var notNull, pk int
-		var dflt any
-		if err := rows.Scan(&cid, &name, &ctype, &notNull, &dflt, &pk); err != nil {
-			return false, fmt.Errorf("scan %s columns: %w", table, err)
-		}
-		if name == column {
-			return true, nil
-		}
-	}
-	if err := rows.Err(); err != nil {
-		return false, fmt.Errorf("iterate %s columns: %w", table, err)
-	}
-	return false, nil
+	return count > 0, nil
 }
