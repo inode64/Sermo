@@ -405,17 +405,18 @@ func validateHookBlock(prefix string, block map[string]any, allow watchNativeAct
 		add("%s requires a hook, notify, kill, expand and/or makestep", prefix+"."+rules.RuleFieldThen)
 		return
 	}
-	validateWatchHookAction(prefix, hook, hasHook, add)
-	validateWatchRecoverHookAction(prefix, recoverHook, hasRecoverHook, add)
+	validateWatchHookAction(prefix, WatchThenKeyHook, hook, hasHook, add)
+	validateWatchHookAction(prefix, WatchThenKeyRecoverHook, recoverHook, hasRecoverHook, add)
 }
 
-// validateWatchRecoverHookAction validates then.recover_hook with the same
-// shape rules as then.hook.
-func validateWatchRecoverHookAction(prefix string, hook map[string]any, hasHook bool, add func(string, ...any)) {
+// validateWatchHookAction validates the identical hook and recover_hook command
+// grammar; the caller retains the policy that decides whether recover_hook is
+// available for a watch type.
+func validateWatchHookAction(prefix, field string, hook map[string]any, hasHook bool, add func(string, ...any)) {
 	if !hasHook {
 		return
 	}
-	path := thenFieldPath(prefix, WatchThenKeyRecoverHook)
+	path := thenFieldPath(prefix, field)
 	if !cfgval.IsNonEmptyStringArray(hook[WatchHookKeyCommand]) {
 		add("%s must be a non-empty array", path+"."+WatchHookKeyCommand)
 	}
@@ -492,17 +493,6 @@ func validateWatchKillAction(prefix string, then map[string]any, allowKill bool,
 		validateKillAction(prefix, kill, add)
 	}
 	return hasKill
-}
-
-func validateWatchHookAction(prefix string, hook map[string]any, hasHook bool, add func(string, ...any)) {
-	if !hasHook {
-		return
-	}
-	if !cfgval.IsNonEmptyStringArray(hook[WatchHookKeyCommand]) {
-		add("%s must be a non-empty array", thenHookPath(prefix)+"."+WatchHookKeyCommand)
-	}
-	validatePositiveDurationField(hook, WatchHookKeyTimeout, thenHookPath(prefix)+"."+WatchHookKeyTimeout, add)
-	validateCommandExpectations(thenHookPath(prefix), hook, add)
 }
 
 // validateRaidNotifyOn validates the RAID-only event-specific notification
