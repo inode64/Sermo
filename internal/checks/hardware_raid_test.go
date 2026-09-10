@@ -473,6 +473,20 @@ func TestHardwareRAIDCountersAloneAreAdvisories(t *testing.T) {
 	}
 }
 
+func TestHardwareRAIDMessageSortsTruncatedIssues(t *testing.T) {
+	observation := hardwareRAIDObservation{Issues: []string{
+		"controller c0 requires shutdown",
+		"controller c0 booted into safe mode",
+		"controller c0 has offline virtual-drive cache preserved",
+		"controller c0 state Degraded",
+	}}
+	message := observation.message(CheckTypeStorCLI, hardwareRAIDHealthError)
+	want := "controller c0 booted into safe mode; controller c0 has offline virtual-drive cache preserved; controller c0 requires shutdown; and 1 more"
+	if !strings.Contains(message, want) {
+		t.Fatalf("message = %q, want ordered issues %q", message, want)
+	}
+}
+
 func TestHardwareRAIDStateFindingOutranksAdvisories(t *testing.T) {
 	drives := strings.NewReplacer(
 		`"State": "Onln"`, `"State": "Offln"`,

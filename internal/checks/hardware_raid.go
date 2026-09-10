@@ -308,9 +308,11 @@ func (o *hardwareRAIDObservation) message(tool, health string) string {
 	message := fmt.Sprintf("%s: health=%s controllers=%d volumes=%d drives=%d caches=%d batteries=%d max_temperature=%s",
 		tool, health, o.Controllers, o.Volumes, o.Drives, o.Caches, o.Batteries, formatCelsius(o.MaxTemperature))
 	if len(o.Issues) > 0 {
-		message += "; " + strings.Join(o.Issues[:min(len(o.Issues), hardwareRAIDIssueLimit)], "; ")
-		if len(o.Issues) > hardwareRAIDIssueLimit {
-			message += fmt.Sprintf("; and %d more", len(o.Issues)-hardwareRAIDIssueLimit)
+		issues := slices.Clone(o.Issues)
+		slices.Sort(issues)
+		message += "; " + strings.Join(issues[:min(len(issues), hardwareRAIDIssueLimit)], "; ")
+		if len(issues) > hardwareRAIDIssueLimit {
+			message += fmt.Sprintf("; and %d more", len(issues)-hardwareRAIDIssueLimit)
 		}
 	}
 	return message
@@ -454,13 +456,13 @@ func parseStorCLIControllers(envelope storCLIEnvelope, observation *hardwareRAID
 		if count := integerValue(status["Memory Uncorrectable Errors"]); count > 0 {
 			observation.addIssue(fmt.Sprintf("controller %s uncorrectable memory errors %d", id, count))
 		}
-		for key, message := range map[string]string{
-			"Any Offline VD Cache Preserved":       "has offline virtual-drive cache preserved",
-			"Controller has booted into safe mode": "booted into safe mode",
-			"Controller shutdown required":         "requires shutdown",
+		for _, finding := range []struct{ key, message string }{
+			{"Any Offline VD Cache Preserved", "has offline virtual-drive cache preserved"},
+			{"Controller has booted into safe mode", "booted into safe mode"},
+			{"Controller shutdown required", "requires shutdown"},
 		} {
-			if yesValue(status[key]) {
-				observation.addIssue("controller " + id + " " + message)
+			if yesValue(status[finding.key]) {
+				observation.addIssue("controller " + id + " " + finding.message)
 			}
 		}
 
