@@ -572,8 +572,8 @@ func TestWebBackendDetailGraphMetricCarriesOnlyFreshCurrentValue(t *testing.T) {
 // is read from the same series endpoint the service timeline uses, so the two
 // cannot drift apart in how they report unobserved time.
 func TestWebBackendSeriesScopesToServiceOrCheck(t *testing.T) {
-	servicePoint := state.SLAPoint{Start: t0, Up: 9, Total: 10}
-	checkPoint := state.SLAPoint{Start: t0, Up: 3, Total: 4}
+	servicePoint := state.SLAPoint{Start: t0, SLACounts: state.SLACounts{Up: 9, Total: 10}}
+	checkPoint := state.SLAPoint{Start: t0, SLACounts: state.SLACounts{Up: 3, Total: 4}}
 	b := &WebBackend{
 		order: []string{"web"},
 		entries: map[string]*webEntry{
@@ -2810,7 +2810,7 @@ func TestWebBackendDetailOmitsSLAForVerdictlessChecks(t *testing.T) {
 	}
 	// Every check has a recorded series, so an empty one in the result can only
 	// come from the omission under test.
-	series := []state.SLAPoint{{Start: t0, Up: 10, Total: 10}}
+	series := []state.SLAPoint{{Start: t0, SLACounts: state.SLACounts{Up: 10, Total: 10}}}
 	b.sla = fakeSLAReader{series: map[string][]state.SLAPoint{
 		"web\x00backup": series,
 		"web\x00gauge":  series,
