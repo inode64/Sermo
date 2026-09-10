@@ -97,7 +97,8 @@ func BuildServiceRuntime(ctx context.Context, cfg ServiceRuntimeConfig) ServiceR
 	if backendPIDs != nil {
 		discoverer.BackendPIDs = backendPIDs
 	}
-	selectors, processWarnings := serviceProcessSelectors(ctx, cfg.Tree, deps, cfg.Unit)
+	needPidfileFallback := deps.Backend == servicemgr.BackendSystemd && backendPIDs != nil
+	selectors, processWarnings, procInfo := serviceProcessSelectors(ctx, cfg.Tree, deps, cfg.Unit, needPidfileFallback)
 	noResident := serviceNoResidentProcess(cfg.Tree, selectors, backendPIDs)
 	metricSample := MetricSampleForOperation(cfg.Service, cfg.Tree, deps.Collector, discoverer, selectors)
 	if noResident {
@@ -123,7 +124,7 @@ func BuildServiceRuntime(ctx context.Context, cfg ServiceRuntimeConfig) ServiceR
 		// jobs" for a crashed fcron — which latched its own block action and made
 		// the service unrepairable through Sermo.
 		ProcessCount:        func(user, exe, exeDir string) int { return discoverer.CountInTree(selectors, user, exe, exeDir) },
-		PidfileFallbackPIDs: pidfileFallbackPIDs(ctx, deps, cfg.Unit, backendPIDs),
+		PidfileFallbackPIDs: pidfileFallbackPIDs(deps, backendPIDs, procInfo),
 		StaleBinaries:       func() []process.StaleBinary { return discoverer.StaleBinaries(selectors) },
 		Strays: func() []process.Process {
 			procs, _ := discoverer.Discover(selectors)
@@ -162,11 +163,10 @@ func BuildServiceRuntime(ctx context.Context, cfg ServiceRuntimeConfig) ServiceR
 	}
 }
 
-func pidfileFallbackPIDs(ctx context.Context, deps Deps, unit string, backendPIDs func() []int) func() []int {
+func pidfileFallbackPIDs(deps Deps, backendPIDs func() []int, info servicemgr.ProcInfo) func() []int {
 	if deps.Backend != servicemgr.BackendSystemd || backendPIDs == nil {
 		return nil
 	}
-	info := servicemgr.DetectProcInfo(ctx, deps.ExecxRunner, nil, deps.Backend, unit)
 	if info.Pidfile != "" {
 		return nil
 	}
@@ -189,12 +189,18 @@ func ServiceBackendPIDs(ctx context.Context, backend servicemgr.Backend, unit st
 // serviceProcessSelectors returns the process selectors a service should use
 // for both monitoring workers and web detail. Explicit `processes:` entries win;
 // otherwise we derive the safest init-provided identity we can detect.
-func serviceProcessSelectors(ctx context.Context, tree map[string]any, deps Deps, unit string) ([]process.Selector, []string) {
+func serviceProcessSelectors(ctx context.Context, tree map[string]any, deps Deps, unit string, needPidfileFallback bool) ([]process.Selector, []string, servicemgr.ProcInfo) {
 	selectors, warnings := process.ParseSelectors(tree)
-	if _, configured := tree[config.SectionProcesses]; !configured && len(selectors) == 0 {
-		selectors = initDerivedProcessSelectors(servicemgr.DetectProcInfo(ctx, deps.ExecxRunner, nil, deps.Backend, unit))
+	_, configured := tree[config.SectionProcesses]
+	needSelectors := !configured && len(selectors) == 0
+	var info servicemgr.ProcInfo
+	if needSelectors || needPidfileFallback {
+		info = servicemgr.DetectProcInfo(ctx, deps.ExecxRunner, nil, deps.Backend, unit)
 	}
-	return selectors, warnings
+	if needSelectors {
+		selectors = initDerivedProcessSelectors(info)
+	}
+	return selectors, warnings, info
 }
 
 func noResidentProcess(tree map[string]any) bool {
