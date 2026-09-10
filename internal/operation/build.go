@@ -397,9 +397,6 @@ func reloadPID(ctx context.Context, runner execx.Runner, backend, unit, pidfile 
 // package-local error (wrapcheck requires returned errors to originate here);
 // callers outside such a constraint can use execx.ContextError directly.
 func reloadContextError(err error) error {
-	if err == nil {
-		return nil
-	}
 	return errors.New(execx.ContextFailure(err, execx.NoTimeout))
 }
 

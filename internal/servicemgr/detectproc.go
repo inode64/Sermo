@@ -172,9 +172,10 @@ func detectOpenRCProc(readFile func(string) ([]byte, error), unit string) ProcIn
 	}
 	text := blob.String()
 	vars := openRCAssignments(text, unit)
+	command := cleanProcPath(vars[openRCVarCommand])
 	info := ProcInfo{
 		Pidfile: cleanProcPath(cmp.Or(vars[openRCVarPidfile], vars[openRCVarPidfileUpper], suffixVar(vars, openRCVarPidfileSuffix))),
-		Exe:     cleanProcPath(vars[openRCVarCommand]),
+		Exe:     command,
 		User:    serviceUser(cmp.Or(vars[openRCVarCommandUser], userFromArgs(vars[openRCVarStartStopDaemonArgs]), userFromArgs(text))),
 	}
 	if info.Pidfile == "" {
@@ -183,7 +184,7 @@ func detectOpenRCProc(readFile func(string) ([]byte, error), unit string) ProcIn
 	if info.Exe == "" {
 		info.Exe = cleanProcPath(firstResolvedArg(text, vars, openrcExecArg, openrcCommandAfterDash))
 	}
-	if command := cleanProcPath(vars[openRCVarCommand]); command != "" {
+	if command != "" {
 		info.Cmd = commandRegex(command)
 	}
 	runtime := detectOpenRCRuntimeProc(readFile, unit)
@@ -205,12 +206,13 @@ func detectOpenRCRuntimeProc(readFile func(string) ([]byte, error), unit string)
 		return ProcInfo{}
 	}
 	vars := openRCAssignments(string(data), unit)
+	argv0 := cleanProcPath(vars[openRCVarArgv0])
 	info := ProcInfo{
 		Pidfile: cleanProcPath(vars[openRCVarPidfile]),
-		Exe:     cleanProcPath(cmp.Or(vars[openRCVarExec], vars[openRCVarArgv0])),
+		Exe:     cleanProcPath(cmp.Or(vars[openRCVarExec], argv0)),
 	}
-	if command := cleanProcPath(vars[openRCVarArgv0]); command != "" {
-		info.Cmd = commandRegex(command)
+	if argv0 != "" {
+		info.Cmd = commandRegex(argv0)
 	}
 	return info
 }
@@ -495,7 +497,7 @@ func userFromArgs(s string) string {
 }
 
 func serviceUser(s string) string {
-	s = shellWord(strings.TrimSpace(s))
+	s = shellWord(s)
 	user, _, _ := strings.Cut(s, shellUserGroupSeparator)
 	return strings.TrimSpace(user)
 }

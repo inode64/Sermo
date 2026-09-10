@@ -81,9 +81,6 @@ type uplinkSettings struct {
 // for its check-only service watches. The probe layers (ping, DNS) carry the
 // for-cycles debounce; the local layers (link, address, route) fire immediately.
 func buildUplinkWatches(iface string, s uplinkSettings) map[string]any {
-	newThen := func() map[string]any {
-		return watchThen(s.notifiers)
-	}
 	debounce := func(entry map[string]any) map[string]any {
 		if s.forCycles > 0 {
 			entry[rules.RuleFieldFor] = map[string]any{rules.WindowKeyCycles: s.forCycles}
@@ -98,17 +95,17 @@ func buildUplinkWatches(iface string, s uplinkSettings) map[string]any {
 				// renumbering or reconnect (also the dynamic-DNS trigger).
 				checks.NetMetricState: map[string]any{
 					checks.CheckKeyExpect: checks.NetStateDown,
-					config.WatchKeyThen:   newThen(),
+					config.WatchKeyThen:   watchThen(s.notifiers),
 				},
 				checks.NetMetricAddress: map[string]any{
 					checks.CheckKeyOn:   checks.OnModeChange,
-					config.WatchKeyThen: newThen(),
+					config.WatchKeyThen: watchThen(s.notifiers),
 				},
 			},
 		},
 		uplinkWatchPrefix + iface + uplinkWatchSuffixRoute: map[string]any{
 			config.WatchKeyCheck: map[string]any{checks.CheckKeyType: checks.CheckTypeRoute, checks.CheckKeyInterface: iface},
-			config.WatchKeyThen:  newThen(),
+			config.WatchKeyThen:  watchThen(s.notifiers),
 		},
 		uplinkWatchPrefix + iface + uplinkWatchSuffixPing: map[string]any{
 			config.WatchKeyCheck: map[string]any{
@@ -119,7 +116,7 @@ func buildUplinkWatches(iface string, s uplinkSettings) map[string]any {
 			config.SectionMetrics: map[string]any{
 				checks.NetMetricState: debounce(map[string]any{
 					checks.CheckKeyExpect: checks.NetStateDown,
-					config.WatchKeyThen:   newThen(),
+					config.WatchKeyThen:   watchThen(s.notifiers),
 				}),
 			},
 		},
@@ -134,7 +131,7 @@ func buildUplinkWatches(iface string, s uplinkSettings) map[string]any {
 				},
 				checks.CheckKeyTimeout: uplinkDNSProbeTimeout,
 			},
-			config.WatchKeyThen: newThen(),
+			config.WatchKeyThen: watchThen(s.notifiers),
 		}),
 	}
 	for _, entry := range watches {

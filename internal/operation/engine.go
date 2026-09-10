@@ -1082,7 +1082,7 @@ func firstSymlinkAncestor(path string) (string, error) {
 	var ancestors []string
 	for dir := filepath.Dir(clean); ; dir = filepath.Dir(dir) {
 		ancestors = append(ancestors, dir)
-		if dir == "/" || dir == "." || dir == filepath.Dir(dir) {
+		if dir == filepath.Dir(dir) {
 			break
 		}
 	}

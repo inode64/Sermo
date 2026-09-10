@@ -430,7 +430,7 @@ func (m openrcManager) action(ctx context.Context, verb, service string) error {
 // command's stderr/stdout for a useful message and falling back to the raw
 // runner error (which carries the exit code).
 func actionError(command string, result execx.Result, err error) error {
-	if result.ExitCode == execx.ExitCodeRunFailure && err != nil {
+	if result.ExitCode == execx.ExitCodeRunFailure {
 		return fmt.Errorf("%s: %s", command, execx.OperatorFailure(err, result, execx.NoTimeout))
 	}
 	if msg := strings.TrimSpace(result.Stderr); msg != "" {
