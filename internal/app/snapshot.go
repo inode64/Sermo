@@ -104,11 +104,8 @@ func (s *Snapshots) publishConfigured(service string, cache map[string]checks.Re
 	prior := s.byService[service]
 	m := make(map[string]CheckSnapshot, len(cache))
 	for name, r := range cache {
-		cs := CheckSnapshot{
-			CheckType: checkTypes[name], ConfigID: configID, Observation: r.Observation(),
-			OK: r.OK, Condition: r.Condition, Optional: r.Optional, Skipped: r.Skipped, Unavailable: r.Unavailable, Message: r.Message,
-			Data: maps.Clone(r.Data), Ran: ran[name], Severity: r.Severity,
-		}
+		cs := checkSnapshotFromResult(r)
+		cs.CheckType, cs.ConfigID, cs.Ran = checkTypes[name], configID, ran[name]
 		if ran[name] {
 			cs.At = at
 		} else if prev, ok := prior[name]; ok && !prev.At.IsZero() {
@@ -201,12 +198,8 @@ func (s *WatchSnapshots) publishConfigured(watch, checkType string, r checks.Res
 	}
 	now := clockOrNow(s.now)
 	slot := watchResultSlot(r)
-	snap := CheckSnapshot{
-		ConfigID:    configID,
-		Observation: r.Observation(),
-		OK:          r.OK, Condition: r.Condition, Optional: r.Optional, Skipped: r.Skipped, Unavailable: r.Unavailable, Message: r.Message,
-		Data: maps.Clone(r.Data), Ran: true, At: now(), Severity: r.Severity,
-	}
+	snap := checkSnapshotFromResult(r)
+	snap.ConfigID, snap.Ran, snap.At = configID, true, now()
 	s.mu.Lock()
 	if s.byWatch[watch] == nil {
 		s.byWatch[watch] = map[string]watchResultSnapshot{}
@@ -278,6 +271,14 @@ func snapshotFromRecord(rec state.CheckSnapshotRecord) CheckSnapshot {
 		CheckType: rec.CheckType, ConfigID: rec.ConfigID, Observation: rec.Observation,
 		OK: rec.OK, Condition: rec.Condition, Optional: rec.Optional, Skipped: rec.Skipped, Unavailable: rec.Unavailable,
 		Message: rec.Message, Data: maps.Clone(rec.Data), Ran: rec.Ran, At: rec.At, Severity: rec.Severity,
+	}
+}
+
+func checkSnapshotFromResult(result checks.Result) CheckSnapshot {
+	return CheckSnapshot{
+		Observation: result.Observation(),
+		OK:          result.OK, Condition: result.Condition, Optional: result.Optional, Skipped: result.Skipped,
+		Unavailable: result.Unavailable, Message: result.Message, Data: maps.Clone(result.Data), Severity: result.Severity,
 	}
 }
 
