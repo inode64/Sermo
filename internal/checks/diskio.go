@@ -101,7 +101,7 @@ func (c *diskIOCheck) Run(_ context.Context) Result {
 		return c.result(false, fmt.Sprintf("diskio %s baseline", c.device), start)
 	}
 
-	rates, _ := CalculateDiskIORates(st.last, s, elapsed)
+	rates := calculateDiskIORates(st.last, s, elapsed)
 	st.t, st.last = now, s
 
 	// Only a window that moved nothing at all can be a dead device, so a disk
@@ -153,12 +153,12 @@ func DiskIOResultData(device string, rates DiskIORates, total DiskIOSample) map[
 	}
 }
 
-// CalculateDiskIORates derives the same per-second rates used by the diskio
+// calculateDiskIORates derives the same per-second rates used by the diskio
 // check from two cumulative /proc/diskstats samples.
-func CalculateDiskIORates(prev, cur DiskIOSample, elapsed time.Duration) (DiskIORates, bool) {
+func calculateDiskIORates(prev, cur DiskIOSample, elapsed time.Duration) DiskIORates {
 	elapsedMs := elapsed.Milliseconds()
-	if elapsed <= 0 || elapsedMs <= 0 {
-		return DiskIORates{}, false
+	if elapsedMs <= 0 {
+		return DiskIORates{}
 	}
 	ioTicks := deltaOrZero(cur.IOTicksMs, prev.IOTicksMs)
 	rates := DiskIORates{
@@ -170,7 +170,7 @@ func CalculateDiskIORates(prev, cur DiskIOSample, elapsed time.Duration) (DiskIO
 	if ops > 0 {
 		rates.AwaitMs = float64(deltaOrZero(cur.ReadTicksMs, prev.ReadTicksMs)+deltaOrZero(cur.WriteTicksMs, prev.WriteTicksMs)) / float64(ops)
 	}
-	return rates, true
+	return rates
 }
 
 // defaultDiskIOSampler finds device in /proc/diskstats. Field order after the
@@ -196,9 +196,6 @@ func defaultDiskIOSampler(device string) (DiskIOSample, error) {
 }
 
 func parseDiskIOSample(fields []string) (DiskIOSample, error) {
-	if len(fields) < diskStatsMinFields {
-		return DiskIOSample{}, fmt.Errorf("diskstats line has %d fields, want at least %d", len(fields), diskStatsMinFields)
-	}
 	readsCompleted, err := diskIOUint(fields, diskStatsReadsCompletedIndex, diskStatsReadsCompletedField)
 	if err != nil {
 		return DiskIOSample{}, err
