@@ -134,22 +134,9 @@ func (l NamedLocker) acquire(service, name, reason string, ttl time.Duration, ow
 	}
 
 	path := l.path(service, name)
-	held := func(lf lockFile, state State, staleReason string) error {
-		return &HeldError{Service: service, Lock: toLock(lf, path, state, staleReason)}
-	}
-	exhausted := &HeldError{Service: service, Lock: Lock{Service: service, Name: name, Path: path, State: StateActive}}
-
-	ol, err := acquireExclusive(path, func() lockFile {
-		return lockFile{
-			Service:         service,
-			Name:            name,
-			Reason:          reason,
-			OwnerPID:        ownerPID,
-			OwnerStartTicks: ownerTicks,
-			CreatedAt:       now(),
-			ExpiresAt:       now().Add(ttl),
-		}
-	}, proc, now, held, nil, exhausted)
+	ol, err := acquireExclusive(path, lockFile{
+		Service: service, Name: name, Reason: reason, OwnerPID: ownerPID, OwnerStartTicks: ownerTicks,
+	}, ttl, proc, now, nil)
 	if err != nil {
 		return nil, err
 	}
