@@ -53,6 +53,7 @@ type SSHIdleConfig struct {
 	IdleFor            time.Duration
 	SSHDExes           []string
 	ProtectedProcesses []SSHProtectedProcess
+	sshdFilters        []process.IdentityFilter
 }
 
 // SSHSession is one interactive terminal proven to descend from a configured
@@ -123,6 +124,7 @@ type sshIdleCheck struct {
 	preds   []levelPred
 	config  SSHIdleConfig
 	sampler SSHIdleSamplerFunc
+	filters []process.IdentityFilter
 }
 
 func (c sshIdleCheck) Run(ctx context.Context) Result {
@@ -136,7 +138,9 @@ func (c sshIdleCheck) Run(ctx context.Context) Result {
 	if sampler == nil {
 		sampler = defaultSSHIdleSampler()
 	}
-	sample, err := sampler(c.config)
+	config := c.config
+	config.sshdFilters = c.filters
+	sample, err := sampler(config)
 	if err != nil {
 		return c.unavailableResult(err, start)
 	}
@@ -236,21 +240,25 @@ func newSSHIdleSampler(reader process.Reader, lookup *process.UserLookup, sessio
 		if config.IdleFor <= 0 {
 			return SSHIdleSample{}, errors.New("idle_for must be positive")
 		}
-		sshdFilters, err := sshdFilters(config.SSHDExes)
-		if err != nil {
-			return SSHIdleSample{}, err
+		filters := config.sshdFilters
+		if filters == nil {
+			var err error
+			filters, err = sshdFilters(config.SSHDExes)
+			if err != nil {
+				return SSHIdleSample{}, err
+			}
 		}
 		loggedIn, snapshot, err := terminalSessionInputs(reader, sessions)
 		if err != nil {
 			return SSHIdleSample{}, err
 		}
-		return sampleSSHIdle(loggedIn, snapshot, lookup, terminal, now(), config, sshdFilters)
+		return sampleSSHIdle(loggedIn, snapshot, lookup, terminal, now(), config, filters)
 	}
 }
 
 func newSSHSessionSampler(reader process.Reader, lookup *process.UserLookup, sessions func() ([]utmp.Session, error), terminal func(string) (utmp.Terminal, error), now func() time.Time) SSHSessionSamplerFunc {
 	return func(config SSHSessionConfig) (SSHSessionSample, error) {
-		sshdFilters, err := sshSessionFilters(config.SSHDFilters)
+		sshdFilters, err := validateSSHSessionFilters(config.SSHDFilters)
 		if err != nil {
 			return SSHSessionSample{}, err
 		}
@@ -262,22 +270,16 @@ func newSSHSessionSampler(reader process.Reader, lookup *process.UserLookup, ses
 	}
 }
 
-func sshSessionFilters(filters []process.IdentityFilter) ([]process.IdentityFilter, error) {
+func validateSSHSessionFilters(filters []process.IdentityFilter) ([]process.IdentityFilter, error) {
 	if len(filters) == 0 {
 		return nil, errors.New("sshd process selector is required")
 	}
-	out := make([]process.IdentityFilter, 0, len(filters))
 	for _, raw := range filters {
 		if raw.Exe == "" || raw.User == "" {
 			return nil, errors.New("sshd process selector requires exact exe and user")
 		}
-		filter, err := process.NewIdentityFilter(raw.Exe, raw.User, "")
-		if err != nil {
-			return nil, fmt.Errorf("sshd process selector: %w", err)
-		}
-		out = append(out, filter)
 	}
-	return out, nil
+	return filters, nil
 }
 
 func sshdFilters(exes []string) ([]process.IdentityFilter, error) {
@@ -296,9 +298,6 @@ func sshdFilters(exes []string) ([]process.IdentityFilter, error) {
 }
 
 func sampleSSHIdle(sessions []utmp.Session, snapshot map[int]process.Identity, lookup *process.UserLookup, terminal func(string) (utmp.Terminal, error), now time.Time, config SSHIdleConfig, sshdFilters []process.IdentityFilter) (SSHIdleSample, error) {
-	if lookup == nil {
-		lookup = process.DefaultUserLookup()
-	}
 	seen := map[string]bool{}
 	var sample SSHIdleSample
 	for _, session := range sessions {

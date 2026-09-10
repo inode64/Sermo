@@ -381,8 +381,12 @@ func TestBuildSSHIdleCheckAcceptsOwnerOnlyProtection(t *testing.T) {
 	if len(warnings) != 0 || len(built) != 1 {
 		t.Fatalf("built=%d warnings=%v, want one check", len(built), warnings)
 	}
-	if !built[0].Check.(sshIdleCheck).condition {
+	check := built[0].Check.(sshIdleCheck)
+	if !check.condition {
 		t.Fatal("ssh_idle must default to condition reporting")
+	}
+	if len(check.filters) != 1 || check.filters[0].Exe != "/usr/sbin/sshd" {
+		t.Fatalf("ssh_idle must retain its resolved sshd filter: %+v", check.filters)
 	}
 }
 
