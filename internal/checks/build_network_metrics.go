@@ -76,18 +76,14 @@ func buildICMPCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 func configureICMPMetric(check *icmpCheck, entry map[string]any) string {
 	switch check.metric {
 	case NetMetricState:
-		return configureICMPState(check, entry)
+		expect, warn := parseExpectedMetric(entry, "icmp state", NetStateSummary, NetStateUp, NetStateDown)
+		check.expect = expect
+		return warn
 	case IcmpMetricLatency:
 		return configureICMPLatency(check, entry)
 	default:
 		return "icmp check metric must be " + ICMPMetricSummary
 	}
-}
-
-func configureICMPState(check *icmpCheck, entry map[string]any) string {
-	expect, warn := parseExpectedMetric(entry, "icmp state", NetStateSummary, NetStateUp, NetStateDown)
-	check.expect = expect
-	return warn
 }
 
 func parseExpectedMetric(entry map[string]any, metric, summary string, allowed ...string) (expect, warn string) {
