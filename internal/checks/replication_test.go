@@ -131,7 +131,7 @@ func TestReplicationMultiSourceAggregatesWorst(t *testing.T) {
 
 func TestReplicationBehindBound(t *testing.T) {
 	c := replicationCheckWith([]replicationRow{mariadbRow("", "h", "Yes", "Yes", "120", "")}, nil)
-	c.behindOp, c.behindValue, c.hasBehind = "<", 60, true
+	c.behindOp, c.behindValue = "<", 60
 	res := c.Run(t.Context())
 	if res.OK || !strings.Contains(res.Message, "lagging") {
 		t.Fatalf("lag beyond the bound must fail: ok=%v %q", res.OK, res.Message)
