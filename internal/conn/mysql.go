@@ -38,7 +38,7 @@ func (mysqlProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 		// afterwards), so dial without TLS regardless of cfg.TLS.
 		plain := cfg
 		plain.TLS = ""
-		c, err := probeTargetFor(ctx, plain, defaultPortMySQL).openStream(ctx)
+		c, err := newProbeTarget(plain, defaultPortMySQL).openStream(ctx)
 		if err != nil {
 			return Result{}, err
 		}
@@ -57,8 +57,8 @@ func (mysqlProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 
 // OpenMySQLDB opens a MySQL pool whose connector retains the bound DialFunc;
 // formatting the config back to a DSN would discard that function.
-func OpenMySQLDB(ctx context.Context, cfg Config) (*sql.DB, error) {
-	target := probeTargetFor(ctx, cfg, defaultPortMySQL)
+func OpenMySQLDB(_ context.Context, cfg Config) (*sql.DB, error) {
+	target := newProbeTarget(cfg, defaultPortMySQL)
 	connector, err := mysql.NewConnector(buildMySQLConfigWithTarget(cfg, target))
 	if err != nil {
 		return nil, fmt.Errorf("mysql connector: %w", err)

@@ -515,7 +515,7 @@ type Result struct {
 // by Lookup or Prepare always route Probe through the common executor.
 //
 // Every implementation must honor cfg.Interface (egress binding via
-// SO_BINDTODEVICE) by obtaining the prepared target through probeTargetFor;
+// SO_BINDTODEVICE) by constructing a probeTarget;
 // packet listeners use BindListenConfig. When simplifying a probe with a Go
 // module, preserve interface binding: a codec-only library is ideal (keep the
 // existing dial, e.g. DNS with x/net/dnsmessage); a library that does its own

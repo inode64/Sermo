@@ -104,7 +104,7 @@ func (dhcpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	// No interface -> unicast to a known server/relay; resolve its address now.
 	var server string
 	if iface == "" {
-		server = probeTargetFor(ctx, cfg, dhcpServerPort).address()
+		server = newProbeTarget(cfg, dhcpServerPort).address()
 	}
 
 	reply, err := dhcpExchange(ctx, iface, server, packet, xid)

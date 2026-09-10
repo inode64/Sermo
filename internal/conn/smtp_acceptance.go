@@ -151,7 +151,7 @@ func probeSMTPAcceptanceMX(
 	// configured port, timeout context and mandatory interface binding.
 	targetCfg := cfg
 	targetCfg.Host, targetCfg.Socket, targetCfg.TLS = mxHost, "", ""
-	conn, err := probeTargetFor(ctx, targetCfg, defaultPortSMTP).openTCP(ctx)
+	conn, err := newProbeTarget(targetCfg, defaultPortSMTP).openTCP(ctx)
 	if err != nil {
 		return res, err
 	}

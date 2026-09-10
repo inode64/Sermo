@@ -34,7 +34,7 @@ func (ntpProtocol) DefaultPort() int   { return defaultPortNTP }
 func (ntpProtocol) RequiresUser() bool { return false }
 
 func (ntpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	target := probeTargetFor(ctx, cfg, defaultPortNTP)
+	target := newProbeTarget(cfg, defaultPortNTP)
 	opt := ntp.QueryOptions{
 		// Zero falls back to beevik's own default when ctx has no deadline.
 		Timeout: netutil.TimeoutFromContext(ctx, 0),

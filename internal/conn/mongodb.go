@@ -96,8 +96,8 @@ func mongoRole(primary, secondary, arbiter bool, setName string) string {
 }
 
 // MongoConnect builds a lazy MongoDB client from cfg.
-func MongoConnect(ctx context.Context, cfg Config) (*mongo.Client, error) {
-	target := probeTargetFor(ctx, cfg, defaultPortMongoDB)
+func MongoConnect(_ context.Context, cfg Config) (*mongo.Client, error) {
+	target := newProbeTarget(cfg, defaultPortMongoDB)
 	host, _ := target.hostPort()
 	opts := options.Client().SetHosts([]string{target.address()})
 	if cfg.Interface != "" {

@@ -52,7 +52,7 @@ func (lvmpolldProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 		socket = DefaultLVMPolldSocket
 	}
 	cfg.Socket = socket
-	c, err := probeTargetFor(ctx, cfg, defaultPortNone).openStream(ctx)
+	c, err := newProbeTarget(cfg, defaultPortNone).openStream(ctx)
 	if err != nil {
 		return Result{}, err
 	}
