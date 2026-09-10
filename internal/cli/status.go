@@ -82,22 +82,20 @@ func (a App) serviceStatus(ctx context.Context, opts options) (servicemgr.Servic
 	ctx, cancel := context.WithTimeout(ctx, opts.timeout)
 	defer cancel()
 
-	detection, err := a.Detector.Detect(ctx, opts.backend)
+	dependencies, stage, err := a.controlDependenciesFor(ctx, opts.backend)
 	if err != nil {
-		a.reportError(opts, fmt.Sprintf("backend detection failed: %v", err))
-		return servicemgr.ServiceStatus{}, exitRuntimeError
-	}
-
-	manager, err := a.NewManager(detection.Backend)
-	if err != nil {
-		a.reportError(opts, fmt.Sprintf("service manager unavailable: %v", err))
+		if stage == controlDependencyManager {
+			a.reportError(opts, fmt.Sprintf("service manager unavailable: %v", err))
+		} else {
+			a.reportError(opts, fmt.Sprintf("backend detection failed: %v", err))
+		}
 		return servicemgr.ServiceStatus{}, exitRuntimeError
 	}
 
 	service := opts.service()
 	// Only Unit and Manager are read below; the config branch replaces the whole
 	// target when it resolves one, so setting Backend here would never be seen.
-	target := control.Target{Unit: service, Manager: manager}
+	target := control.Target{Unit: service, Manager: dependencies.manager}
 	if cfg, err := a.LoadConfig(opts.globalPath()); err == nil {
 		if canonical, ok := cfg.CanonicalServiceName(service); ok {
 			service = canonical
@@ -106,10 +104,7 @@ func (a App) serviceStatus(ctx context.Context, opts options) (servicemgr.Servic
 				a.reportError(opts, fmt.Sprintf("config resolve failed: %v", errs[0]))
 				return servicemgr.ServiceStatus{}, exitRuntimeError
 			}
-			resolver := servicemgr.NewUnitResolver()
-			resolver.Runner = a.Runner
-			resolver.Manager = manager
-			target, err = a.resolveControlTarget(ctx, opts, service, resolved.Tree, detection.Backend, manager, resolver)
+			target, err = a.resolveControlTarget(ctx, opts, service, resolved.Tree, dependencies.backend, dependencies.manager, dependencies.resolver)
 			if err != nil {
 				a.reportError(opts, fmt.Sprintf("control target failed: %v", err))
 				return servicemgr.ServiceStatus{}, exitRuntimeError
