@@ -20,7 +20,7 @@ const (
 
 // dhcpExchange sends packet and returns the first DHCP reply matching xid. When
 // iface is set it broadcasts out that link (255.255.255.255:67); otherwise it
-// unicasts to server (host:port). Either way it binds the privileged client port
+// unicasts to serverHost:serverPort. Either way it binds the privileged client port
 // 68 to receive the reply, so it needs CAP_NET_BIND_SERVICE, or root. Replies for
 // other clients arriving on port 68 are skipped until the context deadline.
 //
@@ -35,7 +35,7 @@ const (
 // reply came in on, so the same check is applied in userspace, where the
 // looped-back copy *is* attributed to the link it was sent out of. Verified
 // against dnsmasq serving two of the host's own LANs.
-func dhcpExchange(ctx context.Context, iface, server string, packet []byte, xid uint32) ([]byte, error) {
+func dhcpExchange(ctx context.Context, iface, serverHost string, serverPort int, packet []byte, xid uint32) ([]byte, error) {
 	ifIndex, err := dhcpEgressIndex(iface)
 	if err != nil {
 		return nil, err
@@ -69,7 +69,7 @@ func dhcpExchange(ctx context.Context, iface, server string, packet []byte, xid 
 	}
 	_ = pc.SetDeadline(deadline)
 
-	dst, err := dhcpDestination(iface, server)
+	dst, err := dhcpDestination(iface, serverHost, serverPort)
 	if err != nil {
 		return nil, err
 	}
@@ -126,21 +126,13 @@ func dhcpIngressIndex(cm *ipv4.ControlMessage) int {
 
 // dhcpDestination is the limited broadcast address for a per-interface probe, or
 // the resolved server address for a unicast probe.
-func dhcpDestination(iface, server string) (*net.UDPAddr, error) {
+func dhcpDestination(iface, serverHost string, serverPort int) (*net.UDPAddr, error) {
 	if iface != "" {
 		return &net.UDPAddr{IP: net.IPv4bcast, Port: dhcpServerPort}, nil
 	}
-	host, portStr, err := net.SplitHostPort(server)
-	if err != nil {
-		return nil, probeErr(ProtocolNameDHCP, stepDHCPServerAddress, err)
-	}
-	port, err := strconv.Atoi(portStr)
-	if err != nil {
-		return nil, probeErr(ProtocolNameDHCP, stepDHCPServerPort, err)
-	}
-	ip, err := net.ResolveIPAddr(networkIP4, host)
+	ip, err := net.ResolveIPAddr(networkIP4, serverHost)
 	if err != nil {
 		return nil, probeErr(ProtocolNameDHCP, stepResolveServer, err)
 	}
-	return &net.UDPAddr{IP: ip.IP, Port: port}, nil
+	return &net.UDPAddr{IP: ip.IP, Port: serverPort}, nil
 }

@@ -102,12 +102,13 @@ func (dhcpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	packet := buildDHCPDiscover(xid, mac)
 
 	// No interface -> unicast to a known server/relay; resolve its address now.
-	var server string
+	var serverHost string
+	var serverPort int
 	if iface == "" {
-		server = newProbeTarget(cfg, dhcpServerPort).address()
+		serverHost, serverPort = newProbeTarget(cfg, dhcpServerPort).hostPort()
 	}
 
-	reply, err := dhcpExchange(ctx, iface, server, packet, xid)
+	reply, err := dhcpExchange(ctx, iface, serverHost, serverPort, packet, xid)
 	if err != nil {
 		return Result{}, err
 	}
