@@ -14,7 +14,6 @@ import (
 
 	"sermo/internal/cfgval"
 	"sermo/internal/execx"
-	"sermo/internal/output"
 	"sermo/internal/strutil"
 )
 
@@ -328,22 +327,12 @@ func (c glusterClusterCheck) resultFor(observation glusterClusterObservation, st
 
 func (c glusterClusterCheck) command(ctx context.Context, args ...string) (glusterCLIOutput, error) {
 	argv := append([]string{glusterModeScriptFlag, glusterXMLFlag}, args...)
-	result, runErr := c.runner.Run(ctx, glusterCommand, argv...)
-	if result.ExitCode == execx.ExitCodeRunFailure {
-		return glusterCLIOutput{}, errors.New(execx.OperatorFailureOr(runErr, result, c.timeout, execx.CommandDidNotStart))
-	}
-	if result.ExitCode != glusterCLIExitSuccess {
-		detail := output.FirstNonEmptyLine(result.Stderr)
-		if detail == "" && runErr != nil {
-			detail = runErr.Error()
-		}
-		if detail == "" {
-			detail = "no diagnostic output"
-		}
-		return glusterCLIOutput{}, fmt.Errorf("%s: exit %d: %s", strings.Join(args, " "), result.ExitCode, detail)
+	stdout, err := runReadOnlyCommand(ctx, c.runner, glusterCommand, c.timeout, strings.Join(args, " "), argv...)
+	if err != nil {
+		return glusterCLIOutput{}, err
 	}
 	var response glusterCLIOutput
-	if err := xml.Unmarshal([]byte(result.Stdout), &response); err != nil {
+	if err := xml.Unmarshal([]byte(stdout), &response); err != nil {
 		return glusterCLIOutput{}, fmt.Errorf("%s: parse XML: %w", strings.Join(args, " "), err)
 	}
 	return response, response.validate(args)
