@@ -241,13 +241,6 @@ func (b *WebBackend) webNow() time.Time {
 	return clockOrNow(clock)()
 }
 
-// DashboardSnapshot collects every reload-sensitive dashboard section from one
-// backend generation. The holder calls it after taking one pointer, so a reload
-// cannot combine services from one configuration with daemon data from another.
-func (b *WebBackend) DashboardSnapshot(ctx context.Context, since time.Duration) web.DashboardSnapshot {
-	return web.CollectDashboardSnapshot(ctx, b, since)
-}
-
 func (b *WebBackend) maxOperationTimeout() time.Duration {
 	if b == nil {
 		return 0

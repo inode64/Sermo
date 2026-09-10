@@ -104,7 +104,7 @@ func (h *WebBackendHolder) DashboardSnapshot(ctx context.Context, since time.Dur
 	if b == nil {
 		return web.DashboardSnapshot{}
 	}
-	snapshot := b.DashboardSnapshot(ctx, since)
+	snapshot := web.CollectDashboardSnapshot(ctx, b, since)
 	snapshot.Generation = generation
 	return snapshot
 }

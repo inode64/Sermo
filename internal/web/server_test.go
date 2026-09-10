@@ -459,12 +459,6 @@ func TestSessionsEndpoint(t *testing.T) {
 	}
 }
 
-type dashboardSourceBackend struct {
-	fakeBackend
-	snapshot DashboardSnapshot
-	calls    int
-}
-
 type generationBackend struct {
 	fakeBackend
 	generation uint64
@@ -492,33 +486,6 @@ func (b *pinnedMutationBackend) BeginBackendRead() (Backend, uint64) {
 
 func (b *pinnedGenerationBackend) BeginBackendRead() (Backend, uint64) {
 	return &b.fakeBackend, b.generation
-}
-
-func (b *dashboardSourceBackend) DashboardSnapshot(context.Context, time.Duration) DashboardSnapshot {
-	b.calls++
-	return b.snapshot
-}
-
-func TestDashboardSnapshotUsesAtomicSource(t *testing.T) {
-	b := &dashboardSourceBackend{
-		services: []Service{{Name: "fallback"}},
-		snapshot: DashboardSnapshot{
-			Services:  []Service{{Name: "one-generation"}},
-			Notifiers: []Notifier{{Name: "same-generation"}},
-		},
-	}
-	rec := httptest.NewRecorder()
-	newServer(b).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, testAPIPath(apiSegmentDashboard), nil))
-	if rec.Code != http.StatusOK || b.calls != 1 {
-		t.Fatalf("dashboard status/calls = %d/%d, want 200/1", rec.Code, b.calls)
-	}
-	var got DashboardSnapshot
-	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
-		t.Fatalf("decode dashboard: %v", err)
-	}
-	if len(got.Services) != 1 || got.Services[0].Name != "one-generation" || len(got.Notifiers) != 1 || got.Notifiers[0].Name != "same-generation" {
-		t.Fatalf("dashboard source snapshot = %+v, want atomic source values", got)
-	}
 }
 
 func TestBackendReadResponsesCarryGeneration(t *testing.T) {

@@ -78,11 +78,6 @@ func CollectDashboardSnapshot(ctx context.Context, backend Backend, since time.D
 }
 
 func (s *Server) dashboardSnapshot(ctx context.Context, backend Backend, since time.Duration) DashboardSnapshot {
-	if source, ok := backend.(dashboardSnapshotSource); ok {
-		return s.dashboardSnapshotWithReadiness(ctx, func() DashboardSnapshot {
-			return source.DashboardSnapshot(ctx, since)
-		})
-	}
 	return s.dashboardSnapshotWithReadiness(ctx, func() DashboardSnapshot {
 		return CollectDashboardSnapshot(ctx, backend, since)
 	})
