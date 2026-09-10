@@ -90,7 +90,7 @@ func attachLiveCPU(d *web.Detail, live *LiveMetrics, service string) {
 			}
 		}
 	}
-	attachLiveTotals(d.ProcessTotals, live, service)
+	attachLiveTotalsFromSample(d.ProcessTotals, sample)
 }
 
 func attachLiveTotals(totals *web.ProcessTotals, live *LiveMetrics, service string) {
@@ -101,6 +101,10 @@ func attachLiveTotals(totals *web.ProcessTotals, live *LiveMetrics, service stri
 	if !ok {
 		return
 	}
+	attachLiveTotalsFromSample(totals, sample)
+}
+
+func attachLiveTotalsFromSample(totals *web.ProcessTotals, sample ServiceLive) {
 	totals.NumCPU = sample.NumCPU
 	if sample.CPUReady {
 		totals.CPU = sample.CPU
