@@ -147,7 +147,7 @@ func StrictStringList(v any) ([]string, error) {
 	case []any:
 		return strictStrings(t, false)
 	case []string:
-		return append([]string(nil), t...), nil
+		return StringList(t), nil
 	default:
 		return nil, errors.New("unsupported")
 	}

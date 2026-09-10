@@ -763,7 +763,7 @@ func validateAppLinks(cfg *Config, doc *Document, scope string) []Issue {
 		return append(issues, Issue{Scope: scope, Msg: fmt.Sprintf(validationStringListFormat, keyApps)})
 	}
 	for _, name := range names {
-		if name == "" || strings.Contains(name, "${") {
+		if strings.Contains(name, "${") {
 			continue
 		}
 		if !validDocumentName(name) {

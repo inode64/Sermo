@@ -527,10 +527,6 @@ func validateCascade(name string, tree map[string]any, services map[string]struc
 		return
 	}
 	for _, target := range targets {
-		if target == "" {
-			add("also_apply contains an empty service name")
-			continue
-		}
 		if target == name {
 			add("also_apply lists %q, the service itself", target)
 			continue
