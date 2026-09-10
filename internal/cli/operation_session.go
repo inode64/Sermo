@@ -88,20 +88,16 @@ func (a App) newOperationSession(ctx context.Context, opts options, cfg *config.
 	prepareTimeout := engineDefaultTimeout(cfg)
 	prepareCtx, cancel := context.WithTimeout(ctx, prepareTimeout)
 	defer cancel()
-	detection, err := a.Detector.Detect(prepareCtx, opts.backend)
+	dependencies, stage, err := a.controlDependenciesFor(prepareCtx, opts.backend)
 	if err != nil {
+		if stage == controlDependencyManager {
+			return nil, fmt.Errorf("service manager unavailable: %w", err)
+		}
 		return nil, fmt.Errorf("backend detection failed: %w", err)
 	}
-	manager, err := a.NewManager(detection.Backend)
-	if err != nil {
-		return nil, fmt.Errorf("service manager unavailable: %w", err)
-	}
-	resolver := servicemgr.NewUnitResolver()
-	resolver.Runner = a.Runner
-	resolver.Manager = manager
 	return &operationSession{
-		app: a, opts: opts, cfg: cfg, backend: detection.Backend, manager: manager,
-		resolver: resolver, eventStore: eventStore, prepared: map[string]*preparedOperation{},
+		app: a, opts: opts, cfg: cfg, backend: dependencies.backend, manager: dependencies.manager,
+		resolver: dependencies.resolver, eventStore: eventStore, prepared: map[string]*preparedOperation{},
 	}, nil
 }
 

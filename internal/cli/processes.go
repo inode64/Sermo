@@ -9,7 +9,6 @@ import (
 	"sermo/internal/app"
 	"sermo/internal/config"
 	"sermo/internal/process"
-	"sermo/internal/servicemgr"
 )
 
 func (a App) runProcesses(ctx context.Context, opts options) int {
@@ -31,15 +30,11 @@ func (a App) discoverProcesses(ctx context.Context, opts options, cfg *config.Co
 		return a.Discover(selectors)
 	}
 	discoverer := process.NewDiscovererWithUserLookup(app.EngineUserLookup(cfg, a.Runner))
-	detection, err := a.Detector.Detect(ctx, opts.backend)
+	dependencies, _, err := a.controlDependenciesFor(ctx, opts.backend)
 	if err != nil {
 		return discoverer.Discover(selectors)
 	}
-	manager, err := a.NewManager(detection.Backend)
-	if err != nil {
-		return discoverer.Discover(selectors)
-	}
-	target, err := a.resolveControlTarget(ctx, opts, service, resolved.Tree, detection.Backend, manager, servicemgr.UnitResolver{Runner: a.Runner, Manager: manager})
+	target, err := a.resolveControlTarget(ctx, opts, service, resolved.Tree, dependencies.backend, dependencies.manager, dependencies.resolver)
 	if err != nil {
 		return discoverer.Discover(selectors)
 	}
