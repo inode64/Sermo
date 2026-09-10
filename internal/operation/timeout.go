@@ -49,9 +49,6 @@ func resolveTimeout(configured time.Duration, policy process.KillPolicy) time.Du
 }
 
 func boundContext(parent context.Context, timeout time.Duration) (context.Context, context.CancelFunc) {
-	if timeout <= 0 {
-		timeout = DefaultOperationTimeout
-	}
 	return context.WithTimeout(parent, timeout)
 }
 
