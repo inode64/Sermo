@@ -262,35 +262,13 @@ func validateProcesses(tree map[string]any, add addFunc) {
 }
 
 func validatePidfiles(tree map[string]any, add addFunc) {
-	raw, present := tree[ServiceKeyPidfiles]
-	if _, hasPidfile := tree[ServiceKeyPidfile]; hasPidfile && present {
-		add("pidfile and pidfiles are mutually exclusive")
-	}
-	if !present {
-		return
-	}
-	pidfiles, ok := raw.(map[string]any)
+	pidfiles, ok := tree[ServiceKeyPidfiles].(map[string]any)
 	if !ok {
-		add(validationPidfilesMappingMsg)
 		return
 	}
 	processes, _ := tree[sectionProcesses].(map[string]any)
 	for _, role := range slices.Sorted(maps.Keys(pidfiles)) {
 		path := pidfilesRolePath(role)
-		if !validDocumentName(role) {
-			add("%s role must be a simple name without path separators", path)
-			continue
-		}
-		paths := cfgval.StringList(pidfiles[role])
-		if len(paths) == 0 {
-			add(validationNonEmptyPathListFormat, path)
-			continue
-		}
-		for _, path := range paths {
-			if !filepath.IsAbs(path) {
-				add(validationPathAbsoluteFormat, pidfilesRolePath(role), path)
-			}
-		}
 		entry, ok := processes[role].(map[string]any)
 		if !ok {
 			add("%s requires matching %s", path, processEntryPath(role))
