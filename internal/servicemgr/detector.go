@@ -60,11 +60,6 @@ type Detector struct {
 	Timeout time.Duration
 }
 
-// Detection describes the selected backend.
-type Detection struct {
-	Backend Backend
-}
-
 // BackendProbe contains probe data for one backend.
 type BackendProbe struct {
 	Available bool
@@ -92,25 +87,25 @@ func (d Detector) withDefaults() Detector {
 }
 
 // Detect returns the requested backend or autodetects one when requested is auto.
-func (d Detector) Detect(ctx context.Context, requested Backend) (Detection, error) {
+func (d Detector) Detect(ctx context.Context, requested Backend) (Backend, error) {
 	detector := d.withDefaults()
 
 	switch requested {
 	case BackendSystemd:
 		systemd := detector.probeSystemd(ctx)
 		if !systemd.Available {
-			return Detection{}, errors.New("requested backend systemd is not available")
+			return "", errors.New("requested backend systemd is not available")
 		}
-		return Detection{Backend: BackendSystemd}, nil
+		return BackendSystemd, nil
 	case BackendOpenRC:
 		openrc := detector.probeOpenRC(ctx)
 		if !openrc.Available {
-			return Detection{}, errors.New("requested backend openrc is not available")
+			return "", errors.New("requested backend openrc is not available")
 		}
-		return Detection{Backend: BackendOpenRC}, nil
+		return BackendOpenRC, nil
 	case BackendAuto:
 	default:
-		return Detection{}, fmt.Errorf("unsupported backend %q", requested)
+		return "", fmt.Errorf("unsupported backend %q", requested)
 	}
 
 	systemd := detector.probeSystemd(ctx)
@@ -118,19 +113,19 @@ func (d Detector) Detect(ctx context.Context, requested Backend) (Detection, err
 
 	switch {
 	case systemd.Available && !openrc.Available:
-		return Detection{Backend: BackendSystemd}, nil
+		return BackendSystemd, nil
 	case openrc.Available && !systemd.Available:
-		return Detection{Backend: BackendOpenRC}, nil
+		return BackendOpenRC, nil
 	case systemd.Available && openrc.Available:
 		if systemd.Active {
-			return Detection{Backend: BackendSystemd}, nil
+			return BackendSystemd, nil
 		}
 		if openrc.Active {
-			return Detection{Backend: BackendOpenRC}, nil
+			return BackendOpenRC, nil
 		}
-		return Detection{}, errors.New("ambiguous backend: both systemd and openrc appear available; set --backend, SERMO_BACKEND or engine.backend")
+		return "", errors.New("ambiguous backend: both systemd and openrc appear available; set --backend, SERMO_BACKEND or engine.backend")
 	default:
-		return Detection{}, errors.New("no supported init backend detected: systemd and openrc are unavailable")
+		return "", errors.New("no supported init backend detected: systemd and openrc are unavailable")
 	}
 }
 

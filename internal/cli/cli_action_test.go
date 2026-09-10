@@ -568,7 +568,7 @@ func TestReloadPreconditionDoesNotOperate(t *testing.T) {
 			var stderr bytes.Buffer
 			called := false
 			app := actionApp(operation.Result{Service: "web", Action: "reload", Status: operation.ResultOK}, nil, nil, &stderr)
-			app.Detector = fakeBackendDetector{detection: servicemgr.Detection{Backend: servicemgr.BackendOpenRC}}
+			app.Detector = fakeBackendDetector{detection: servicemgr.BackendOpenRC}
 			app.NewManager = func(servicemgr.Backend) (servicemgr.Manager, error) {
 				return tc.manager, nil
 			}
@@ -616,7 +616,7 @@ func TestReloadNativeCommandUsesAppRunner(t *testing.T) {
 	noReload := false
 	app := App{
 		LoadConfig: config.Load,
-		Detector:   fakeBackendDetector{detection: servicemgr.Detection{Backend: servicemgr.BackendOpenRC}},
+		Detector:   fakeBackendDetector{detection: servicemgr.BackendOpenRC},
 		NewManager: func(servicemgr.Backend) (servicemgr.Manager, error) {
 			return fakeManager{actions: &actions, supportsReload: &noReload}, nil
 		},
@@ -640,26 +640,26 @@ func TestReloadNativeCommandUsesAppRunner(t *testing.T) {
 
 type slowDetector struct {
 	delay     time.Duration
-	detection servicemgr.Detection
+	detection servicemgr.Backend
 }
 
-func (d slowDetector) Detect(ctx context.Context, _ servicemgr.Backend) (servicemgr.Detection, error) {
+func (d slowDetector) Detect(ctx context.Context, _ servicemgr.Backend) (servicemgr.Backend, error) {
 	timer := time.NewTimer(d.delay)
 	defer timer.Stop()
 	select {
 	case <-timer.C:
 		return d.detection, nil
 	case <-ctx.Done():
-		return servicemgr.Detection{}, ctx.Err()
+		return "", ctx.Err()
 	}
 }
 
 type countingDetector struct {
 	calls     *int
-	detection servicemgr.Detection
+	detection servicemgr.Backend
 }
 
-func (d countingDetector) Detect(context.Context, servicemgr.Backend) (servicemgr.Detection, error) {
+func (d countingDetector) Detect(context.Context, servicemgr.Backend) (servicemgr.Backend, error) {
 	*d.calls++
 	return d.detection, nil
 }
@@ -670,7 +670,7 @@ func TestReloadPreparesBackendOnce(t *testing.T) {
 	managerCalls := 0
 	var actions []string
 	app := App{
-		Detector: countingDetector{calls: &detectCalls, detection: servicemgr.Detection{Backend: servicemgr.BackendSystemd}},
+		Detector: countingDetector{calls: &detectCalls, detection: servicemgr.BackendSystemd},
 		NewManager: func(servicemgr.Backend) (servicemgr.Manager, error) {
 			managerCalls++
 			return fakeManager{
@@ -731,7 +731,7 @@ func TestOperationSessionPostflightStatusReusesPreparedTarget(t *testing.T) {
 	managerCalls := 0
 	hadDeadline := false
 	app := App{
-		Detector: countingDetector{calls: &detectCalls, detection: servicemgr.Detection{Backend: servicemgr.BackendSystemd}},
+		Detector: countingDetector{calls: &detectCalls, detection: servicemgr.BackendSystemd},
 		NewManager: func(servicemgr.Backend) (servicemgr.Manager, error) {
 			managerCalls++
 			return deadlineStatusManager{
@@ -790,7 +790,7 @@ func TestActionTimeoutNotConsumedByDetection(t *testing.T) {
 		LoadConfig: config.Load,
 		Detector: slowDetector{
 			delay:     detectDelay,
-			detection: servicemgr.Detection{Backend: servicemgr.BackendSystemd},
+			detection: servicemgr.BackendSystemd,
 		},
 		NewManager: func(servicemgr.Backend) (servicemgr.Manager, error) {
 			return deadlineManager{fakeManager: fakeManager{}, remaining: &remaining}, nil
@@ -832,7 +832,7 @@ func TestOperationSessionFallsBackToConfiguredServiceUnit(t *testing.T) {
 	var stderr bytes.Buffer
 	app := App{
 		LoadConfig: config.Load,
-		Detector:   fakeBackendDetector{detection: servicemgr.Detection{Backend: servicemgr.BackendSystemd}},
+		Detector:   fakeBackendDetector{detection: servicemgr.BackendSystemd},
 		NewManager: func(servicemgr.Backend) (servicemgr.Manager, error) {
 			return fakeManager{actions: &actions, status: servicemgr.ServiceStatus{Status: servicemgr.StatusActive}}, nil
 		},
@@ -894,7 +894,7 @@ preflight:
 
 			var actions []string
 			app := App{
-				Detector: fakeBackendDetector{detection: servicemgr.Detection{Backend: servicemgr.BackendSystemd}},
+				Detector: fakeBackendDetector{detection: servicemgr.BackendSystemd},
 				NewManager: func(servicemgr.Backend) (servicemgr.Manager, error) {
 					return fakeManager{actions: &actions, status: servicemgr.ServiceStatus{Status: servicemgr.StatusActive}}, nil
 				},
@@ -944,7 +944,7 @@ preflight:
 			})
 			var stdout bytes.Buffer
 			app := App{
-				Detector: fakeBackendDetector{detection: servicemgr.Detection{Backend: servicemgr.BackendSystemd}},
+				Detector: fakeBackendDetector{detection: servicemgr.BackendSystemd},
 				NewManager: func(servicemgr.Backend) (servicemgr.Manager, error) {
 					return fakeManager{status: servicemgr.ServiceStatus{Status: servicemgr.StatusActive}}, nil
 				},
@@ -972,7 +972,7 @@ func TestOperationSessionPersistsOneOperationEvent(t *testing.T) {
 
 	var actions []string
 	app := App{
-		Detector: fakeBackendDetector{detection: servicemgr.Detection{Backend: servicemgr.BackendSystemd}},
+		Detector: fakeBackendDetector{detection: servicemgr.BackendSystemd},
 		NewManager: func(servicemgr.Backend) (servicemgr.Manager, error) {
 			return fakeManager{actions: &actions, status: servicemgr.ServiceStatus{Status: servicemgr.StatusActive}}, nil
 		},
@@ -1018,7 +1018,7 @@ func TestOperationSessionDoesNotActWithoutEventStore(t *testing.T) {
 
 	var actions []string
 	app := App{
-		Detector: fakeBackendDetector{detection: servicemgr.Detection{Backend: servicemgr.BackendSystemd}},
+		Detector: fakeBackendDetector{detection: servicemgr.BackendSystemd},
 		NewManager: func(servicemgr.Backend) (servicemgr.Manager, error) {
 			return fakeManager{actions: &actions}, nil
 		},

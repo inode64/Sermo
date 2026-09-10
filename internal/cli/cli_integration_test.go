@@ -38,7 +38,7 @@ func withFakeSystemctl(t *testing.T) string {
 // fake systemctl) but a forced systemd backend, plus the real operation engine.
 func systemdApp(stdout, stderr *bytes.Buffer) App {
 	return App{
-		Detector:   fakeBackendDetector{detection: servicemgr.Detection{Backend: servicemgr.BackendSystemd}},
+		Detector:   fakeBackendDetector{detection: servicemgr.BackendSystemd},
 		NewManager: servicemgr.NewManager,
 		LoadConfig: nil, // defaults to config.Load
 		Env:        func(string) string { return "" },
@@ -77,7 +77,7 @@ func TestIntegrationStatusViaFakeRCService(t *testing.T) {
 
 	var stdout bytes.Buffer
 	app := App{
-		Detector:   fakeBackendDetector{detection: servicemgr.Detection{Backend: servicemgr.BackendOpenRC}},
+		Detector:   fakeBackendDetector{detection: servicemgr.BackendOpenRC},
 		NewManager: servicemgr.NewManager,
 		LoadConfig: func(string, ...config.Option) (*config.Config, error) {
 			return nil, errNoConfigForInvalidTest

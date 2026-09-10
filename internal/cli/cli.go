@@ -127,7 +127,7 @@ const (
 
 // BackendDetector detects the service manager backend.
 type BackendDetector interface {
-	Detect(ctx context.Context, requested servicemgr.Backend) (servicemgr.Detection, error)
+	Detect(ctx context.Context, requested servicemgr.Backend) (servicemgr.Backend, error)
 }
 
 // App contains dependencies for the sermoctl CLI.

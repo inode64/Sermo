@@ -222,8 +222,8 @@ func (a App) wizardEnv(ctx context.Context, opts options, cfg *config.Config) as
 		return a.wizardEnvFunc(cfg)
 	}
 	backend := ""
-	if det, err := a.Detector.Detect(ctx, opts.backend); err == nil {
-		backend = string(det.Backend)
+	if detected, err := a.Detector.Detect(ctx, opts.backend); err == nil {
+		backend = string(detected)
 	}
 	return assist.Env{
 		Notifiers:     notifierNames(cfg),

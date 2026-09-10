@@ -17,17 +17,17 @@ func (a App) runBackend(ctx context.Context, opts options) int {
 	ctx, cancel := context.WithTimeout(ctx, opts.timeout)
 	defer cancel()
 
-	detection, err := a.Detector.Detect(ctx, opts.backend)
+	backend, err := a.Detector.Detect(ctx, opts.backend)
 	if err != nil {
 		return a.fail(opts, fmt.Sprintf("backend detection failed: %v", err))
 	}
 
 	if opts.json {
-		writeJSON(a.Stdout, map[string]string{cliJSONKeyBackend: string(detection.Backend)})
+		writeJSON(a.Stdout, map[string]string{cliJSONKeyBackend: string(backend)})
 		return exitSuccess
 	}
 
-	fmt.Fprintln(a.Stdout, detection.Backend)
+	fmt.Fprintln(a.Stdout, backend)
 	return exitSuccess
 }
 

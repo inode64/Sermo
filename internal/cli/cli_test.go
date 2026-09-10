@@ -132,7 +132,7 @@ func TestBackendCommandPrintsDetectedBackend(t *testing.T) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 	app := App{
-		Detector: fakeBackendDetector{detection: servicemgr.Detection{Backend: servicemgr.BackendSystemd}},
+		Detector: fakeBackendDetector{detection: servicemgr.BackendSystemd},
 		Env:      func(string) string { return "" },
 		Stdout:   &stdout,
 		Stderr:   &stderr,
@@ -150,7 +150,7 @@ func TestBackendCommandPrintsDetectedBackend(t *testing.T) {
 func TestBackendCommandJSON(t *testing.T) {
 	var stdout bytes.Buffer
 	app := App{
-		Detector: fakeBackendDetector{detection: servicemgr.Detection{Backend: servicemgr.BackendSystemd}},
+		Detector: fakeBackendDetector{detection: servicemgr.BackendSystemd},
 		Env:      func(string) string { return "" },
 		Stdout:   &stdout,
 	}
@@ -330,7 +330,7 @@ uses: rpc-mountd
 	var statusCalls []string
 	loadCalls := 0
 	app := App{
-		Detector: fakeBackendDetector{detection: servicemgr.Detection{Backend: servicemgr.BackendSystemd}},
+		Detector: fakeBackendDetector{detection: servicemgr.BackendSystemd},
 		NewManager: fakeStatusManager(servicemgr.ServiceStatus{
 			Service: "rpc-mountd", Backend: servicemgr.BackendSystemd,
 			Unit: "nfs-mountd.service", Status: servicemgr.StatusActive,
@@ -392,7 +392,7 @@ func TestStatusFallsBackToConfiguredServiceUnit(t *testing.T) {
 	var statusCalls []string
 	app := App{
 		LoadConfig: config.Load,
-		Detector:   fakeBackendDetector{detection: servicemgr.Detection{Backend: servicemgr.BackendSystemd}},
+		Detector:   fakeBackendDetector{detection: servicemgr.BackendSystemd},
 		NewManager: fakeStatusManager(servicemgr.ServiceStatus{
 			Service: "legacy", Backend: servicemgr.BackendSystemd,
 			Unit: "legacy-daemon", Status: servicemgr.StatusActive,
@@ -506,7 +506,7 @@ func statusApp(status servicemgr.ServiceStatus, statusErr error, stdout, stderr 
 		stderr = &bytes.Buffer{}
 	}
 	return App{
-		Detector: fakeBackendDetector{detection: servicemgr.Detection{Backend: status.Backend}},
+		Detector: fakeBackendDetector{detection: status.Backend},
 		NewManager: func(servicemgr.Backend) (servicemgr.Manager, error) {
 			return fakeManager{status: status, err: statusErr}, nil
 		},
@@ -531,11 +531,11 @@ func (r statusUnitRunner) Run(_ context.Context, name string, args ...string) (e
 }
 
 type fakeBackendDetector struct {
-	detection servicemgr.Detection
+	detection servicemgr.Backend
 	err       error
 }
 
-func (d fakeBackendDetector) Detect(context.Context, servicemgr.Backend) (servicemgr.Detection, error) {
+func (d fakeBackendDetector) Detect(context.Context, servicemgr.Backend) (servicemgr.Backend, error) {
 	return d.detection, d.err
 }
 
