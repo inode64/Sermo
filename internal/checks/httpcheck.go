@@ -101,14 +101,14 @@ func (c *httpCheck) Run(ctx context.Context) Result {
 		return c.result(false, msg, start)
 	}
 	if c.bodyOp == "" && len(c.expectJSON) == 0 {
-		return c.success(resp, elapsed, fmt.Sprintf("status %d", resp.StatusCode), verifyError, start)
+		return c.success(resp, elapsed, verifyError, start)
 	}
 
 	data, _ := io.ReadAll(io.LimitReader(resp.Body, maxHTTPBody))
 	if msg := c.payloadFailure(resp.StatusCode, data); msg != "" {
 		return c.result(false, msg, start)
 	}
-	return c.success(resp, elapsed, fmt.Sprintf("status %d", resp.StatusCode), verifyError, start)
+	return c.success(resp, elapsed, verifyError, start)
 }
 
 // latencyFailure reports why the optional latency assertion failed.
@@ -150,7 +150,7 @@ func (c *httpCheck) payloadFailure(status int, data []byte) string {
 		if !ok {
 			return fmt.Sprintf("status %d; json %q missing", status, a.path)
 		}
-		ok, err := jsonAssert(got, a.op, a.value)
+		ok, err := compareValue(jsonValueString(got), a.op, a.value)
 		if err != nil {
 			return fmt.Sprintf("status %d; json %q: %v", status, a.path, err)
 		}
@@ -165,17 +165,16 @@ func (c *httpCheck) consumeCertificateVerification(resp *http.Response) string {
 	if c.certHost == "" || !c.certOpts.verify || resp.TLS == nil || len(resp.TLS.PeerCertificates) == 0 {
 		return ""
 	}
-	if c.certVerification != nil {
-		return c.certVerification.consume(*resp.TLS)
-	}
-	return verifyCertChain(resp.TLS.PeerCertificates[0], resp.TLS.PeerCertificates[1:], c.certHost)
+	return c.certVerification.consume(*resp.TLS)
 }
 
 // success builds the result for a request whose HTTP assertions all passed,
 // folding in certificate inspection when configured (https only). A certificate
 // problem turns the otherwise-passing check into a failure, keeping the http
 // check's pass/fail semantics (OK==true means healthy).
-func (c *httpCheck) success(resp *http.Response, elapsed time.Duration, statusMsg, verifyError string, start time.Time) Result {
+
+func (c *httpCheck) success(resp *http.Response, elapsed time.Duration, verifyError string, start time.Time) Result {
+	statusMsg := fmt.Sprintf("status %d", resp.StatusCode)
 	if c.certHost == "" || resp.TLS == nil || len(resp.TLS.PeerCertificates) == 0 {
 		res := c.result(true, statusMsg, start)
 		res.Data = map[string]any{DataKeyStatus: resp.StatusCode, DataKeyLatencyMS: elapsed.Milliseconds(), DataKeyProtocol: resp.Proto}
@@ -195,15 +194,6 @@ func (c *httpCheck) success(resp *http.Response, elapsed time.Duration, statusMs
 	data[DataKeyStatus], data[DataKeyLatencyMS], data[DataKeyProtocol] = resp.StatusCode, elapsed.Milliseconds(), resp.Proto
 	res.Data = data
 	return res
-}
-
-// jsonAssert compares a decoded JSON value against want under op using the
-// shared compareValue vocabulary. A JSON number stringifies first; == and !=
-// then compare numerically when both sides parse as numbers. Parse and regex
-// errors are returned so the HTTP check can fail with the same diagnostic as
-// expect_body, instead of silently treating them as a mismatch.
-func jsonAssert(got any, op, want string) (bool, error) {
-	return compareValue(jsonValueString(got), op, want)
 }
 
 // jsonPath looks up a dotted path (e.g. "data.status") in a decoded JSON document
