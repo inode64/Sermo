@@ -12,26 +12,47 @@ type pathMatch struct {
 	data        map[string]any
 	failure     string
 	unavailable bool
+	missing     bool
 }
 
 func firstMatchingPath(paths []string, predicate func(string, os.FileInfo) pathMatch, kindMsg string) pathMatch {
+	match := firstPathMatch(paths, func(path string) pathMatch {
+		info, err := os.Stat(path)
+		if err != nil {
+			if os.IsNotExist(err) {
+				return pathMatch{missing: true}
+			}
+			return pathMatch{failure: fmt.Sprintf("%s: %v", path, err), unavailable: true}
+		}
+		return predicate(path, info)
+	}, kindMsg)
+	if !match.missing {
+		return match
+	}
+	if len(paths) == 1 {
+		match.failure = paths[0] + " does not exist"
+		return match
+	}
+	match.failure = fmt.Sprintf("none of %s candidates exist (%s)", kindMsg, strings.Join(paths, ", "))
+	return match
+}
+
+// firstPathMatch tries ordered path candidates until predicate accepts one. A
+// missing result is returned separately so callers with a valid fallback can
+// distinguish it from stale or unreadable candidates.
+func firstPathMatch(paths []string, predicate func(string) pathMatch, kindMsg string) pathMatch {
 	if len(paths) == 0 {
 		return pathMatch{failure: kindMsg + " check has no path candidates"}
 	}
 	var failures []string
 	unavailable := false
 	for _, path := range paths {
-		info, err := os.Stat(path)
-		if err != nil {
-			if os.IsNotExist(err) {
-				continue
-			}
-			unavailable = true
-			failures = append(failures, fmt.Sprintf("%s: %v", path, err))
+		match := predicate(path)
+		if match.missing {
 			continue
 		}
-		match := predicate(path, info)
 		if match.failure != "" {
+			unavailable = unavailable || match.unavailable
 			failures = append(failures, match.failure)
 			continue
 		}
@@ -40,10 +61,7 @@ func firstMatchingPath(paths []string, predicate func(string, os.FileInfo) pathM
 	if len(failures) > 0 {
 		return pathMatch{failure: strings.Join(failures, "; "), unavailable: unavailable}
 	}
-	if len(paths) == 1 {
-		return pathMatch{failure: paths[0] + " does not exist"}
-	}
-	return pathMatch{failure: fmt.Sprintf("none of %s candidates exist (%s)", kindMsg, strings.Join(paths, ", "))}
+	return pathMatch{missing: true}
 }
 
 func pathMatchResult(b base, paths []string, predicate func(string, os.FileInfo) pathMatch, kindMsg string) Result {
