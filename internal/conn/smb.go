@@ -58,6 +58,7 @@ const (
 	smb2MinNegotiateResponseBytes     = 70
 	smb2NegotiateCommand              = 1
 	smb2NegotiateContextCount         = 1
+	smb2NegotiateDialectCount         = 5
 	smb2NegotiateContextCountOffset   = 32
 	smb2NegotiateContextOffset        = 112
 	smb2NegotiateContextOffsetOffset  = 28
@@ -76,6 +77,7 @@ const (
 	smb2PreauthIntegrityContext       = 0x0001
 	smb2PreauthSaltBytes              = 32
 	smb2PreauthSaltLengthOffset       = 2
+	smb2NegotiateRequestBytes         = smb2HeaderBytes + smb2NegotiateFixedBytes + smb2NegotiateDialectCount*2 + 2 + smb2PreauthContextBytes + smb2PreauthDataBytes + smb2PreauthSaltBytes
 	smb2ResponseDialectOffset         = 68
 	smb2ResponseSecurityModeOffset    = 66
 	smb2ResponseSecurityModeEndOffset = 68
@@ -202,7 +204,7 @@ func buildSMBNegotiate() ([]byte, error) {
 	if _, err := rand.Read(salt[:]); err != nil {
 		return nil, probeErr(ProtocolNameSMB, stepSMBPreauthSalt, err)
 	}
-	dialects := []uint16{smb2Dialect202, smb2Dialect210, smb2Dialect300, smb2Dialect302, smb2Dialect311}
+	dialects := [smb2NegotiateDialectCount]uint16{smb2Dialect202, smb2Dialect210, smb2Dialect300, smb2Dialect302, smb2Dialect311}
 
 	var b bytes.Buffer
 	// SMB2 header (64 bytes): ProtocolId, StructureSize, Command=NEGOTIATE.
@@ -215,11 +217,7 @@ func buildSMBNegotiate() ([]byte, error) {
 	// NEGOTIATE request body (36 fixed bytes).
 	body := make([]byte, smb2NegotiateFixedBytes)
 	binary.LittleEndian.PutUint16(body[0:], smb2NegotiateFixedBytes)
-	dialectCount, err := wireUint16(ProtocolNameSMB, "dialect count", len(dialects))
-	if err != nil {
-		return nil, err
-	}
-	binary.LittleEndian.PutUint16(body[smb2NegotiateDialectCountOffset:], dialectCount)
+	binary.LittleEndian.PutUint16(body[smb2NegotiateDialectCountOffset:], smb2NegotiateDialectCount)
 	binary.LittleEndian.PutUint16(body[smb2NegotiateSecurityModeOffset:], smb2NegotiateSigningEnabled)
 	copy(body[12:28], guid[:])
 	binary.LittleEndian.PutUint32(body[smb2NegotiateContextOffsetOffset:], smb2NegotiateContextOffset)
@@ -247,13 +245,9 @@ func buildSMBNegotiate() ([]byte, error) {
 	frame := make([]byte, smbDirectTCPHeaderBytes, smbDirectTCPHeaderBytes+len(msg))
 	frame[0] = smbDirectTCPMessageType
 	// SMB's Direct TCP transport prefixes the message with a 24-bit big-endian length.
-	length, err := wireUint24(ProtocolNameSMB, "message length", len(msg))
-	if err != nil {
-		return nil, err
-	}
-	frame[smbDirectTCPLengthHighOffset] = length[0]
-	frame[smbDirectTCPLengthMiddleOffset] = length[1]
-	frame[smbDirectTCPLengthLowOffset] = length[2]
+	frame[smbDirectTCPLengthHighOffset] = byte(smb2NegotiateRequestBytes >> smbLengthHighShift)
+	frame[smbDirectTCPLengthMiddleOffset] = byte(smb2NegotiateRequestBytes >> smbLengthByteShift)
+	frame[smbDirectTCPLengthLowOffset] = byte(smb2NegotiateRequestBytes)
 	return append(frame, msg...), nil
 }
 

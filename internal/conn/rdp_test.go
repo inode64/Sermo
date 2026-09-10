@@ -7,10 +7,7 @@ import (
 )
 
 func TestBuildRDPNegRequest(t *testing.T) {
-	b, err := buildRDPNegRequest(rdpRequestedProtocols)
-	if err != nil {
-		t.Fatal(err)
-	}
+	b := buildRDPNegRequest()
 	if len(b) != 19 {
 		t.Fatalf("len = %d, want 19", len(b))
 	}
