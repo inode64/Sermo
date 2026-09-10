@@ -400,7 +400,7 @@ func enrichRaidSysfs(st *RaidStatus, root string) {
 // reports this block-device value in 512-byte sectors, independently of the
 // hardware's physical sector size.
 func raidArraySizeBytes(path string) uint64 {
-	sectors, err := strconv.ParseUint(readTrim(path), 10, 64)
+	sectors, err := readProcUint(path)
 	if err != nil || sectors > ^uint64(0)/raidSectorBytes {
 		return 0
 	}

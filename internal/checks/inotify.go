@@ -335,11 +335,7 @@ func readInotifyUsage(ctx context.Context, root string, countWatches bool) (Inot
 }
 
 func readInotifyLimit(root, name string) uint64 {
-	data, err := hostfs.ReadFile(filepath.Join(root, "sys", "fs", "inotify", name))
-	if err != nil {
-		return 0
-	}
-	limit, err := strconv.ParseUint(strings.TrimSpace(string(data)), numericBaseDecimal, numericBits64)
+	limit, err := readProcUint(filepath.Join(root, "sys", "fs", "inotify", name))
 	if err != nil {
 		return 0
 	}
