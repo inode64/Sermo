@@ -378,7 +378,7 @@ func sampleNetFromSysfs(iface, root string) (NetSample, error) {
 	}
 
 	sample.Identity = netIdentityFromSysfs(iface, root)
-	if changes, err := strconv.ParseUint(readTrim(filepath.Join(dir, sysfsIfaceCarrierFile)), numericBaseDecimal, numericBits64); err == nil {
+	if changes, err := readProcUint(filepath.Join(dir, sysfsIfaceCarrierFile)); err == nil {
 		sample.CarrierChanges, sample.CarrierChangesKnown = changes, true
 	}
 

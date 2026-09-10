@@ -8,7 +8,6 @@ import (
 	"os"
 	"path/filepath"
 	"sermo/internal/hostfs"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -152,15 +151,11 @@ func defaultBlockDeviceSize(device string) (uint64, error) {
 		return 0, fmt.Errorf("block device %q: not a kernel device name", device)
 	}
 	path := filepath.Join(sysBlockPath, name, sysBlockSizeFile)
-	data, err := hostfs.ReadFile(path)
+	sectors, err := readProcUint(path)
 	if err != nil {
 		// Wrapped, not replaced: blockDeviceMissing tells an absent device from
 		// an unreadable one through errors.Is(err, fs.ErrNotExist).
-		return 0, fmt.Errorf("read %s: %w", path, err)
-	}
-	sectors, err := strconv.ParseUint(strings.TrimSpace(string(data)), 10, 64)
-	if err != nil {
-		return 0, fmt.Errorf(malformedFileFormat, path)
+		return 0, err
 	}
 	return sectors, nil
 }
