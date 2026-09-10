@@ -375,15 +375,11 @@ func (c *Collector) SampleServiceCPU(service string, pids []int) ServiceCPU {
 // total (a counter reset, or a child leaving the process set between cycles)
 // clamps to 0 rather than underflowing.
 func ioRate(prevBytes, curBytes uint64, prevAt, curAt time.Time) Reading {
-	wall := curAt.Sub(prevAt).Seconds()
-	if wall <= 0 {
-		return Reading{Unit: MetricUnitBytesPerSecond, HasAbsolute: true, Ready: false}
+	if curBytes < prevBytes {
+		curBytes = prevBytes
 	}
-	var rate float64
-	if curBytes > prevBytes {
-		rate = float64(curBytes-prevBytes) / wall
-	}
-	return Reading{Absolute: rate, Unit: MetricUnitBytesPerSecond, HasAbsolute: true, Ready: true}
+	rate, ready := BytesPerSecond(prevBytes, curBytes, prevAt, curAt)
+	return Reading{Absolute: rate, Unit: MetricUnitBytesPerSecond, HasAbsolute: true, Ready: ready}
 }
 
 // SampleSystem computes the machine-scope metrics: total_memory (bytes and %),
@@ -632,14 +628,38 @@ func readThreadTicks(reader Reader, pids []int) map[int]map[int]uint64 {
 // rather than underflowing the unsigned subtraction into a bogus huge rate (the
 // same guard ioRate and perProcCPURates apply).
 func cpuRate(prev, cur cpuSample, hz float64, ncpu int) Reading {
-	wall := cur.at.Sub(prev.at).Seconds()
+	if cur.ticks < prev.ticks {
+		cur.ticks = prev.ticks
+	}
+	pct, ready := CPUPercent(prev.ticks, cur.ticks, prev.at, cur.at, hz, ncpu)
+	return Reading{Percent: pct, HasPercent: true, Ready: ready}
+}
+
+// CPUPercent derives a host-normalized CPU percentage from two cumulative
+// process tick readings. A counter decrease cannot yield a valid rate; callers
+// that aggregate a changing process set may clamp it before calling.
+func CPUPercent(prevTicks, curTicks uint64, prevAt, curAt time.Time, hz float64, ncpu int) (float64, bool) {
+	if curTicks < prevTicks {
+		return 0, false
+	}
+	wall := curAt.Sub(prevAt).Seconds()
 	if wall <= 0 || ncpu <= 0 || hz <= 0 {
-		return Reading{HasPercent: true, Ready: false}
+		return 0, false
 	}
-	var cpuSeconds float64
-	if cur.ticks > prev.ticks {
-		cpuSeconds = float64(cur.ticks-prev.ticks) / hz
+	cpuSeconds := float64(curTicks-prevTicks) / hz
+	return cpuSeconds / (wall * float64(ncpu)) * PercentScale, true
+}
+
+// BytesPerSecond derives a rate from two cumulative byte readings. A counter
+// decrease cannot yield a valid rate; callers that aggregate changing sources
+// may clamp it before calling.
+func BytesPerSecond(prevBytes, curBytes uint64, prevAt, curAt time.Time) (float64, bool) {
+	if curBytes < prevBytes {
+		return 0, false
 	}
-	pct := cpuSeconds / (wall * float64(ncpu)) * PercentScale
-	return Reading{Percent: pct, HasPercent: true, Ready: true}
+	wall := curAt.Sub(prevAt).Seconds()
+	if wall <= 0 {
+		return 0, false
+	}
+	return float64(curBytes-prevBytes) / wall, true
 }
