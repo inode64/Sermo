@@ -273,19 +273,12 @@ const (
 
 // Ad-hoc JSON keys used by small HTTP responses without a dedicated struct.
 const (
-	apiJSONKeyGo            = "go"
-	apiJSONKeyNow           = "now"
-	apiJSONKeyOK            = "ok"
-	apiJSONKeyPoints        = "points"
-	apiJSONKeyPruned        = "pruned"
-	apiJSONKeyServices      = "services"
-	apiJSONKeySince         = "since"
-	apiJSONKeyStartedAt     = "started_at"
-	apiJSONKeyStatus        = "status"
-	apiJSONKeyUptime        = "uptime"
-	apiJSONKeyUptimeSeconds = "uptime_seconds"
-	apiStatusOK             = string(operation.ResultOK)
-	apiStatusOKLine         = apiStatusOK + "\n"
+	apiJSONKeyOK     = "ok"
+	apiJSONKeyPoints = "points"
+	apiJSONKeyPruned = "pruned"
+	apiJSONKeySince  = "since"
+	apiStatusOK      = string(operation.ResultOK)
+	apiStatusOKLine  = apiStatusOK + "\n"
 )
 
 // defaultOperationTimeout matches operation.DefaultOperationTimeout when sermod
