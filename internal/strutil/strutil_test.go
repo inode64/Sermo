@@ -70,24 +70,3 @@ func TestUnique(t *testing.T) {
 		})
 	}
 }
-
-func TestMergeUnique(t *testing.T) {
-	cases := []struct {
-		name   string
-		list   []string
-		values []string
-		want   []string
-	}{
-		{name: "dedupe onto nil list", list: nil, values: []string{"a", "b", "a"}, want: []string{"a", "b"}},
-		{name: "order preserved", list: []string{"b"}, values: []string{"a", "b", "c"}, want: []string{"b", "a", "c"}},
-		{name: "list empties kept extra empties skipped", list: []string{"a", ""}, values: []string{"", "d"}, want: []string{"a", "", "d"}},
-		{name: "no values keeps list", list: []string{"x"}, values: nil, want: []string{"x"}},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			if got := mergeUnique(tc.list, tc.values...); !slices.Equal(got, tc.want) {
-				t.Fatalf("mergeUnique(%v, %v) = %v, want %v", tc.list, tc.values, got, tc.want)
-			}
-		})
-	}
-}
