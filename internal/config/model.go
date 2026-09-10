@@ -31,7 +31,6 @@ const (
 	kindService  = "service"
 	kindPatterns = "patterns"
 	kindWatch    = "watch"
-	kindSummary  = kindApp + ", " + kindLibrary + ", " + kindPatterns + " or " + kindService
 )
 
 // sectionStopPolicy is the per-service/mount block declaring the stopped-state
