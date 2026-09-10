@@ -534,7 +534,7 @@ func run(args []string) int {
 }
 
 func openDaemonStore(cfg *config.Config, logger *slog.Logger) (*state.Store, int) {
-	store, err := state.OpenContextWith(context.Background(), filepath.Join(cfg.Global.StateDir(), state.Filename), app.EngineStateOptions(cfg))
+	store, err := app.OpenStateStore(context.Background(), cfg)
 	if err != nil {
 		logger.Error("open state store", logFieldError, err)
 		return nil, exitFailure

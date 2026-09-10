@@ -1,6 +1,8 @@
 package app
 
 import (
+	"context"
+	"path/filepath"
 	"time"
 
 	"sermo/internal/config"
@@ -51,6 +53,12 @@ func EngineStateOptions(cfg *config.Config) state.Options {
 		CacheBytes: config.EngineByteSize(cfg, config.EngineKeyStateCacheSize, state.DefaultCacheBytes),
 		Retention:  EngineRetention(cfg),
 	}
+}
+
+// OpenStateStore opens the persistent store with the engine settings shared by
+// sermod and sermoctl.
+func OpenStateStore(ctx context.Context, cfg *config.Config) (*state.Store, error) {
+	return state.OpenContextWith(ctx, filepath.Join(cfg.Global.StateDir(), state.Filename), EngineStateOptions(cfg))
 }
 
 // EngineUserLookup builds the user/group resolver configured under engine.
