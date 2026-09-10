@@ -2,11 +2,11 @@ package cli
 
 import (
 	"fmt"
-	"slices"
 
 	"sermo/internal/cfgval"
 	"sermo/internal/config"
 	"sermo/internal/rules"
+	"sermo/internal/strutil"
 )
 
 // runPatterns lists the output-analysis pattern sets (catalog/patterns): each
@@ -27,15 +27,9 @@ func (a App) runPatterns(opts options) int {
 		Description string `json:"description,omitempty"`
 	}
 
-	names := slices.Clone(cfg.PatternNames)
-	slices.Sort(names)
+	names := strutil.SortedUnique(cfg.PatternNames)
 	var reports []setReport
-	seen := map[string]bool{}
 	for _, name := range names {
-		if seen[name] {
-			continue
-		}
-		seen[name] = true
 		doc := cfg.Patterns[name]
 		if doc == nil {
 			continue

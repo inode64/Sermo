@@ -97,10 +97,7 @@ type eventTableRow struct {
 }
 
 func eventTableFields(e event) eventTableRow {
-	timestamp := e.Time
-	if len(timestamp) >= eventsTableTimestampWidth {
-		timestamp = timestamp[:eventsTableTimestampWidth]
-	}
+	timestamp := eventTableValue(e.Time, eventsTableTimestampWidth)
 
 	// The event's identity dimension is owned by the daemon's event model.
 	target := e.Target()

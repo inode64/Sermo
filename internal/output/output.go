@@ -16,8 +16,7 @@ const (
 
 // FirstNonEmptyLine returns the first non-empty line of s, trimmed.
 func FirstNonEmptyLine(s string) string {
-	clean := strings.TrimSpace(s)
-	for line := range strings.SplitSeq(clean, outputLineSeparator) {
+	for line := range strings.SplitSeq(s, outputLineSeparator) {
 		if t := strings.TrimSpace(line); t != "" {
 			return t
 		}
