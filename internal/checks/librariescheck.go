@@ -67,16 +67,7 @@ func (c librariesCheck) Run(ctx context.Context) Result {
 
 	dirs := collectLibrarySearchDirs(c.binary, ef)
 
-	// LD_LIBRARY_PATH takes precedence (as the real dynamic linker does).
-	// We prepend it so it is searched first.
-	if lp := os.Getenv(ldLibraryPathEnv); lp != "" {
-		for p := range strings.SplitSeq(lp, ldPathSeparator) {
-			if p != "" {
-				dirs = append([]string{expandOrigin(p, c.binary)}, dirs...)
-			}
-		}
-		dirs = strutil.Unique(dirs)
-	}
+	dirs = prependLibraryPath(dirs, os.Getenv(ldLibraryPathEnv), c.binary)
 
 	missing := resolveNeeded(ctx, needed, dirs, make(map[string]bool))
 	if err := ctx.Err(); err != nil {
@@ -86,6 +77,21 @@ func (c librariesCheck) Run(ctx context.Context) Result {
 		return c.result(false, c.binary+": missing shared libraries", start)
 	}
 	return c.result(true, c.binary+": all shared libraries resolve", start)
+}
+
+// prependLibraryPath prepends LD_LIBRARY_PATH directories in linker order. A
+// single append preserves a:b rather than repeatedly inserting at index zero.
+func prependLibraryPath(dirs []string, libraryPath, binary string) []string {
+	if libraryPath == "" {
+		return dirs
+	}
+	fromEnv := make([]string, 0)
+	for path := range strings.SplitSeq(libraryPath, ldPathSeparator) {
+		if path != "" {
+			fromEnv = append(fromEnv, expandOrigin(path, binary))
+		}
+	}
+	return strutil.Unique(append(fromEnv, dirs...))
 }
 
 // resolveNeeded recursively resolves DT_NEEDED entries (including transitive
