@@ -128,17 +128,17 @@ func parseSystemdUnitNames(stdout string, keep func(name string) bool) []string 
 
 // ParseOpenRCActiveUnits extracts started services from rc-status output.
 func ParseOpenRCActiveUnits(stdout string) []string {
-	return parseOpenRCUnits(stdout, openRCStartedService)
+	return parseOpenRCUnits(stdout, StatusActive)
 }
 
 // ParseOpenRCFailedUnits extracts crashed services from rc-status output.
 // `crashed` is OpenRC's failure state: the service was started and its process
 // is gone.
 func ParseOpenRCFailedUnits(stdout string) []string {
-	return parseOpenRCUnits(stdout, openRCCrashedService)
+	return parseOpenRCUnits(stdout, StatusFailed)
 }
 
-func parseOpenRCUnits(stdout string, service func(line string) string) []string {
+func parseOpenRCUnits(stdout string, wanted Status) []string {
 	var out []string
 	inServiceRunlevel := false
 	sc := bufio.NewScanner(strings.NewReader(stdout))
@@ -151,7 +151,7 @@ func parseOpenRCUnits(stdout string, service func(line string) string) []string 
 		if !inServiceRunlevel {
 			continue
 		}
-		if name := service(line); name != "" {
+		if name := openRCServiceWithStatus(line, wanted); name != "" {
 			out = append(out, name)
 		}
 	}
@@ -180,17 +180,9 @@ func openRCServiceRunlevel(name string) bool {
 	}
 }
 
-func openRCStartedService(line string) string {
+func openRCServiceWithStatus(line string, wanted Status) string {
 	status, ok := openRCLineStatus(line)
-	if !ok || status != StatusActive {
-		return ""
-	}
-	return openRCServiceName(line)
-}
-
-func openRCCrashedService(line string) string {
-	status, ok := openRCLineStatus(line)
-	if !ok || status != StatusFailed {
+	if !ok || status != wanted {
 		return ""
 	}
 	return openRCServiceName(line)
