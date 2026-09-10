@@ -57,11 +57,10 @@ type NetworkSpec struct {
 // NetworkSpecFromTree reads a service's optional
 // `control: {type: libvirt-network, ...}` block.
 func NetworkSpecFromTree(tree map[string]any) (NetworkSpec, bool, error) {
-	raw, present := tree[sectionControl]
+	m, present, ok := cfgval.MapAt(tree, sectionControl)
 	if !present {
 		return NetworkSpec{}, false, nil
 	}
-	m, ok := raw.(map[string]any)
 	if !ok {
 		return NetworkSpec{}, true, errors.New("control must be a mapping")
 	}
