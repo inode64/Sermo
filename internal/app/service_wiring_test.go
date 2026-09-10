@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -37,6 +38,36 @@ func TestServiceScopedProcessCountNeverCountsTheHost(t *testing.T) {
 	if host := process.NewDiscovererWithUserLookup(nil).CountMatching("", "", ""); host == 0 {
 		t.Fatal("sanity: host has processes")
 	}
+}
+
+func TestBuildServiceRuntimeDetectsInitProcInfoOnce(t *testing.T) {
+	runner := &countingDetectRunner{}
+	BuildServiceRuntime(t.Context(), ServiceRuntimeConfig{
+		Service: "web", Unit: "web.service", Tree: map[string]any{},
+		Deps: Deps{
+			Backend: servicemgr.BackendSystemd, Manager: fakeManager{}, Runtime: t.TempDir(),
+			ExecxRunner: runner, BackendPIDs: func() []int { return []int{1} },
+		},
+	})
+	if runner.detectCalls != 2 {
+		t.Fatalf("init definition queries = %d, want one PIDFile and one ExecStart query", runner.detectCalls)
+	}
+}
+
+type countingDetectRunner struct {
+	detectCalls int
+}
+
+func (r *countingDetectRunner) Run(_ context.Context, _ string, args ...string) (execx.Result, error) {
+	joined := strings.Join(args, " ")
+	if strings.Contains(joined, "-p PIDFile") {
+		r.detectCalls++
+		return execx.Result{Stdout: "/run/web.pid\n"}, nil
+	}
+	if strings.Contains(joined, "-p ExecStart") {
+		r.detectCalls++
+	}
+	return execx.Result{}, nil
 }
 
 func TestServiceBackendPIDsUsesOnlyResolvedProviders(t *testing.T) {

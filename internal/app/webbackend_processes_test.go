@@ -165,7 +165,7 @@ func TestServiceProcessSelectorsDerivesInitPidfile(t *testing.T) {
 		ExecxRunner: procInfoRunner{pidfile: pidfile},
 	}
 
-	selectors, warnings := serviceProcessSelectors(context.Background(), map[string]any{}, deps, "web.service")
+	selectors, warnings, _ := serviceProcessSelectors(context.Background(), map[string]any{}, deps, "web.service", false)
 	if len(warnings) != 0 {
 		t.Fatalf("warnings = %v, want none", warnings)
 	}
@@ -184,7 +184,7 @@ func TestServiceProcessSelectorsExplicitEmptySkipsInitDerivation(t *testing.T) {
 		ExecxRunner: procInfoRunner{pidfile: pidfile},
 	}
 
-	selectors, warnings := serviceProcessSelectors(context.Background(), map[string]any{"processes": map[string]any{}}, deps, "web.service")
+	selectors, warnings, _ := serviceProcessSelectors(context.Background(), map[string]any{"processes": map[string]any{}}, deps, "web.service", false)
 	if len(warnings) != 0 {
 		t.Fatalf("warnings = %v, want none", warnings)
 	}
@@ -203,7 +203,7 @@ func TestServiceNoResidentProcessInfersInitServiceWithoutPIDs(t *testing.T) {
 	}
 	tree := map[string]any{}
 
-	selectors, warnings := serviceProcessSelectors(context.Background(), tree, deps, "wait-online.service")
+	selectors, warnings, _ := serviceProcessSelectors(context.Background(), tree, deps, "wait-online.service", false)
 	if len(warnings) != 0 {
 		t.Fatalf("warnings = %v, want none", warnings)
 	}
