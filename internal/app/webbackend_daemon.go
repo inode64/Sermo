@@ -5,16 +5,17 @@ import (
 	"time"
 
 	"sermo/internal/config"
-	"sermo/internal/notify"
 	"sermo/internal/servicemgr"
 	"sermo/internal/units"
+	"sermo/internal/utmp"
 	"sermo/internal/web"
 )
 
 // DaemonInfo returns the daemon's effective configuration and host identity.
 func (b *WebBackend) DaemonInfo(_ context.Context) web.DaemonInfo {
+	activeUsers, _ := utmp.DistinctUserCount()
 	info := web.DaemonInfo{
-		ActiveUsers: notify.ActiveUserCount()}
+		ActiveUsers: activeUsers}
 	if sample, err := b.sshSessions(b.allSSHSessionFilters()); err == nil && len(sample.Issues) == 0 {
 		info.Sessions = &web.SessionSummary{Console: sample.Console, SSH: len(sample.SSH)}
 	}
