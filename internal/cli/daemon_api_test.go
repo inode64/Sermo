@@ -121,6 +121,25 @@ func TestDaemonAPIGetConfigFailureIsSilent(t *testing.T) {
 	}
 }
 
+func TestEventsConfigFailureIsReportedOnce(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	app := App{
+		LoadConfig: func(string, ...config.Option) (*config.Config, error) {
+			return nil, errors.New("unreadable config")
+		},
+		Stdout: &stdout, Stderr: &stderr,
+	}
+	if code := app.Run(context.Background(), []string{"--json", "events"}); code != exitRuntimeError {
+		t.Fatalf("events exit = %d, want %d", code, exitRuntimeError)
+	}
+	if lines := strings.Count(strings.TrimSpace(stdout.String()), "\n") + 1; lines != 1 {
+		t.Fatalf("JSON error output has %d lines, want one: %q", lines, stdout.String())
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("stderr = %q, want JSON error only", stderr.String())
+	}
+}
+
 func TestWatchStatusFetchesOneDaemonSnapshot(t *testing.T) {
 	var requestCount atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
