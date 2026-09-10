@@ -4,8 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"net"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -229,10 +230,5 @@ func ParsePortSpec(spec string) ([]int, error) {
 	if len(seen) == 0 {
 		return nil, errors.New("no ports specified")
 	}
-	out := make([]int, 0, len(seen))
-	for p := range seen {
-		out = append(out, p)
-	}
-	sort.Ints(out)
-	return out, nil
+	return slices.Sorted(maps.Keys(seen)), nil
 }
