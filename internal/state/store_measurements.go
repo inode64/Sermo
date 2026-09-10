@@ -174,14 +174,14 @@ func (s *Store) ServiceMetricSeries(service, metric string, from, to time.Time) 
 // summaryFromRow scans the COALESCE(SUM(n),0), SUM, MIN, MAX aggregate row into a
 // MeasurementStat (avg = sum/count, guarded against an empty bucket set).
 func summaryFromRow(row *sql.Row) (MeasurementStat, error) {
-	var count sql.NullInt64
+	var count int64
 	var sum, minV, maxV sql.NullFloat64
 	if err := row.Scan(&count, &sum, &minV, &maxV); err != nil {
 		return MeasurementStat{}, fmt.Errorf("scan measurement summary: %w", err)
 	}
-	stat := MeasurementStat{Count: count.Int64}
-	if count.Int64 > 0 && sum.Valid {
-		stat.Avg = sum.Float64 / float64(count.Int64)
+	stat := MeasurementStat{Count: count}
+	if count > 0 && sum.Valid {
+		stat.Avg = sum.Float64 / float64(count)
 		stat.Min = minV.Float64
 		stat.Max = maxV.Float64
 	}
