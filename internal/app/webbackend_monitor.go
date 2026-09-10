@@ -8,18 +8,27 @@ import (
 	"time"
 )
 
-// monitorView reads one monitor record and renders the view fields services
-// and watches share: active flag, source, and the RFC3339 change time ("" when
-// unknown). ok is false when there is no store or no record.
-func (b *WebBackend) monitorView(key string) (active bool, source, changedAt string, ok bool) {
-	active, source, changed, ok := b.monitorRecord(key)
+// monitorStateView is the persisted monitor state rendered by services and
+// watches. ok is false when there is no store or no record.
+type monitorStateView struct {
+	active    bool
+	source    string
+	changedAt time.Time
+}
+
+func (v monitorStateView) changedAtText() string {
+	if v.changedAt.IsZero() {
+		return ""
+	}
+	return v.changedAt.UTC().Format(time.RFC3339)
+}
+
+func (b *WebBackend) monitorView(key string) (monitorStateView, bool) {
+	active, source, changedAt, ok := b.monitorRecord(key)
 	if !ok {
-		return false, "", "", false
+		return monitorStateView{}, false
 	}
-	if !changed.IsZero() {
-		changedAt = changed.UTC().Format(time.RFC3339)
-	}
-	return active, source, changedAt, true
+	return monitorStateView{active: active, source: source, changedAt: changedAt}, true
 }
 
 func (b *WebBackend) monitorRecord(key string) (active bool, source string, changedAt time.Time, ok bool) {
@@ -43,8 +52,8 @@ func (b *WebBackend) MonitoringStatus(_ context.Context) web.MonitoringStatus {
 		}
 		total++
 		active := true
-		if monitoredState, _, _, ok := b.monitorView(name); ok {
-			active = monitoredState
+		if monitoredState, ok := b.monitorView(name); ok {
+			active = monitoredState.active
 		}
 		if active {
 			monitored++

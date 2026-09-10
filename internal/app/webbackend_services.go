@@ -62,11 +62,9 @@ func (b *WebBackend) viewWithRuntime(ctx context.Context, name string, e *webEnt
 		return svc
 	}
 	monitorChangedAt := time.Time{}
-	if active, source, changed, ok := b.monitorRecord(name); ok {
-		svc.Monitored, svc.MonitorSource, monitorChangedAt = active, source, changed
-		if !changed.IsZero() {
-			svc.MonitorChangedAt = changed.UTC().Format(time.RFC3339)
-		}
+	if monitoredState, ok := b.monitorView(name); ok {
+		svc.Monitored, svc.MonitorSource = monitoredState.active, monitoredState.source
+		monitorChangedAt, svc.MonitorChangedAt = monitoredState.changedAt, monitoredState.changedAtText()
 	}
 	status, statusAt := e.backendStatusSnapshot(ctx, b.webNow())
 	// A sermoctl action runs in a separate process, so it cannot invalidate this
