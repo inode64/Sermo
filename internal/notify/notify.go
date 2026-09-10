@@ -204,19 +204,11 @@ func NewTargetedTTY(name string, users []string) (Notifier, error) {
 	if name == "" {
 		return nil, errors.New("targeted tty notifier requires a name")
 	}
-	trimmed := make([]string, len(users))
-	for i, user := range users {
-		trimmed[i] = strings.TrimSpace(user)
-	}
-	unique := strutil.Unique(trimmed)
-	values := make([]any, len(unique))
-	for i, user := range unique {
-		values[i] = user
-	}
-	if len(values) == 0 {
+	userSet := strutil.Set(users)
+	if len(userSet) == 0 {
 		return nil, fmt.Errorf("targeted tty notifier %s requires at least one user", name)
 	}
-	notifier, err := buildTTY(name, map[string]any{KeyUsers: values})
+	notifier, err := buildTargetedTTY(name, userSet)
 	if err != nil {
 		return nil, fmt.Errorf("build targeted tty notifier %s: %w", name, err)
 	}

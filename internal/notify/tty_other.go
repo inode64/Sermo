@@ -6,6 +6,10 @@ import (
 	"errors"
 )
 
+func buildTargetedTTY(_ string, _ map[string]struct{}) (Notifier, error) {
+	return nil, errors.New("tty notifier is only supported on Linux")
+}
+
 func buildTTY(name string, entry map[string]any) (Notifier, error) {
 	return nil, errors.New("tty notifier is only supported on Linux")
 }
