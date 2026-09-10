@@ -33,19 +33,8 @@ func SortedUnique(values []string) []string {
 // Unique returns the non-empty values once, preserving first-seen order.
 // Unlike SortedUnique it does not trim or sort. An empty result is nil.
 func Unique(values []string) []string {
-	return mergeUnique(nil, values...)
-}
-
-// mergeUnique appends each non-empty value not already present in list,
-// preserving order. Empty strings already in list stay; empty extras are skipped.
-func mergeUnique(list []string, values ...string) []string {
-	seen := make(map[string]struct{}, len(list)+len(values))
-	for _, value := range list {
-		if value == "" {
-			continue
-		}
-		seen[value] = struct{}{}
-	}
+	seen := make(map[string]struct{}, len(values))
+	var out []string
 	for _, value := range values {
 		if value == "" {
 			continue
@@ -54,7 +43,7 @@ func mergeUnique(list []string, values ...string) []string {
 			continue
 		}
 		seen[value] = struct{}{}
-		list = append(list, value)
+		out = append(out, value)
 	}
-	return list
+	return out
 }
