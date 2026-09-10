@@ -3,7 +3,6 @@ package checks
 import (
 	"context"
 	"fmt"
-	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -75,7 +74,5 @@ func staleBinaryPaths(stale []process.StaleBinary) []string {
 	for _, s := range stale {
 		values = append(values, s.Path)
 	}
-	paths := strutil.Unique(values)
-	slices.Sort(paths)
-	return paths
+	return strutil.SortedUnique(values)
 }

@@ -3,7 +3,6 @@ package checks
 import (
 	"context"
 	"fmt"
-	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -141,9 +140,7 @@ func strayExecutables(strays []process.Process) []string {
 	for _, stray := range strays {
 		values = append(values, strayExecutable(stray))
 	}
-	exes := strutil.Unique(values)
-	slices.Sort(exes)
-	return exes
+	return strutil.SortedUnique(values)
 }
 
 func strayExecutable(stray process.Process) string {
