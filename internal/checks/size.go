@@ -48,10 +48,7 @@ func (c *sizeCheck) Run(ctx context.Context) Result {
 	if sampler == nil {
 		sampler = dirOrFileSize
 	}
-	clock := c.clock
-	if clock == nil {
-		clock = time.Now
-	}
+	clock := windowClock(c.clock)
 
 	size, err := sampler(ctx, c.path, c.includeHidden)
 	if err != nil {

@@ -1,10 +1,6 @@
 package checks
 
-import (
-	"time"
-
-	"sermo/internal/cfgval"
-)
+import "sermo/internal/cfgval"
 
 // buildCountCheck builds a check on the number of entries under a path.
 func buildCountCheck(b base, entry map[string]any) (Check, string) {
@@ -45,7 +41,6 @@ func buildCountCheck(b base, entry map[string]any) (Check, string) {
 			deltaOp:       op,
 			deltaValue:    val,
 			window:        window,
-			clock:         time.Now,
 			state:         &counterWindow{},
 		}, ""
 	}
@@ -102,5 +97,5 @@ func buildSizeCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 	if window <= 0 {
 		return nil, "size check requires a positive within (e.g. 1h)"
 	}
-	return &sizeCheck{base: b, path: path, growBy: growBy, window: window, includeHidden: cfgval.Bool(entry[CheckKeyIncludeHidden]), sampler: deps.SizeSampler, clock: time.Now, state: &sizeState{}}, ""
+	return &sizeCheck{base: b, path: path, growBy: growBy, window: window, includeHidden: cfgval.Bool(entry[CheckKeyIncludeHidden]), sampler: deps.SizeSampler, state: &sizeState{}}, ""
 }
