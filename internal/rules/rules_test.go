@@ -814,16 +814,12 @@ func TestRulePrimaryAction(t *testing.T) {
 	if got := (Rule{Actions: []Action{{Type: ActionRestart}}}).Primary(); got.Type != ActionRestart {
 		t.Fatalf("Primary = %+v, want restart", got)
 	}
-	// The operation is shared by Primary and OperationAction even when an alert
-	// appears first in a multi-action rule.
+	// The operation stays primary even when an alert appears first in a multi-action rule.
 	rule := Rule{Actions: []Action{{Type: ActionAlert, Message: "down"}, {Type: ActionRestart}}}
 	if got, ok := rule.Operation(); !ok || got.Type != ActionRestart {
 		t.Fatalf("Operation = %+v, %v, want restart, true", got, ok)
 	}
 	if got := rule.Primary(); got.Type != ActionRestart {
 		t.Fatalf("Primary = %+v, want restart", got)
-	}
-	if got, ok := rule.OperationAction(); !ok || got != ActionRestart {
-		t.Fatalf("OperationAction = %q, %v, want restart, true", got, ok)
 	}
 }

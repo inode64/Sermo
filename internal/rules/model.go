@@ -183,15 +183,6 @@ func (r Rule) Operation() (Action, bool) {
 	return Action{}, false
 }
 
-// OperationAction returns the rule's restart/start/stop/reload/resume action, if any.
-func (r Rule) OperationAction() (ActionType, bool) {
-	action, ok := r.Operation()
-	if !ok {
-		return "", false
-	}
-	return action.Type, true
-}
-
 // AlertMessages returns the messages of the rule's alert actions, in order.
 func (r Rule) AlertMessages() []string {
 	var out []string
@@ -333,7 +324,7 @@ func ParseRules(tree map[string]any) ([]Rule, []string) {
 			}
 		}
 		ruleType := RuleType(cfgval.AsString(entry[RuleFieldType]))
-		clearWin := ParseClearWindow(entry[RuleFieldClear])
+		clearWin := ParseForWindow(entry[RuleFieldClear])
 		if clearWin != nil && ruleType != RuleAlert {
 			// Safety: a clear window holds the episode firing while the condition
 			// is false; a remediation/guard rule must never act on that hold.
