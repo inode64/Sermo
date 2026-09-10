@@ -49,10 +49,6 @@ func TestOSReaderProcfs(t *testing.T) {
 	if l1, l5, l15, ok := r.LoadAverages(); !ok || l1 < 0 || l5 < 0 || l15 < 0 {
 		t.Errorf("LoadAverages = (%v, %v, %v, %v); want ok with non-negative values", l1, l5, l15, ok)
 	}
-	// Swap may be absent; when reported, used must not exceed total.
-	if total, used, ok := r.TotalSwap(); ok && used > total {
-		t.Errorf("TotalSwap used %d > total %d", used, total)
-	}
 	if total, used, swapTotal, swapUsed, ok, swapOK := r.TotalMemoryAndSwap(); !ok || total == 0 || used > total || (swapOK && swapUsed > swapTotal) {
 		t.Errorf("TotalMemoryAndSwap = (%d, %d, %d, %d, %v, %v); want valid memory and optional valid swap", total, used, swapTotal, swapUsed, ok, swapOK)
 	}
