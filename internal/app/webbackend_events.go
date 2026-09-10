@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"slices"
+	"strings"
 	"time"
 
 	"sermo/internal/config"
@@ -19,13 +20,14 @@ const (
 )
 
 func serviceOperationActionList() []string {
-	return []string{
-		string(rules.ActionStart),
-		string(rules.ActionStop),
-		string(rules.ActionRestart),
-		string(rules.ActionReload),
-		string(rules.ActionResume),
+	actions := strings.Split(rules.RuleActionSummary, ", ")
+	out := make([]string, 0, len(actions))
+	for _, action := range actions {
+		if rules.ActionType(action).IsOperation() {
+			out = append(out, action)
+		}
 	}
+	return out
 }
 
 // ActivitySummary returns a rollup of recent events for the dashboard.
