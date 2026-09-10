@@ -522,7 +522,7 @@ func validateAlsoService(tree map[string]any, add addFunc) {
 // the service itself. Targets receive the same action via their own operation.
 func validateCascade(name string, tree map[string]any, services map[string]struct{}, add addFunc) {
 	targets, err := cfgval.StrictStringList(tree[ServiceKeyAlsoApply])
-	if _, present := tree[ServiceKeyAlsoApply]; present && err != nil {
+	if err != nil {
 		add(validationStringListFormat, ServiceKeyAlsoApply)
 		return
 	}

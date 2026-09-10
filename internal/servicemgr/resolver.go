@@ -32,8 +32,7 @@ func NewUnitResolver() UnitResolver {
 // trust=false (an explicit per-init list) it requires a match and otherwise
 // fails; an empty candidate list means the service is not available on backend.
 func (r UnitResolver) Resolve(ctx context.Context, backend Backend, candidates []string, trust bool) (string, error) {
-	runner := r.Runner
-	runner = execx.RunnerOrDefault(runner)
+	runner := execx.RunnerOrDefault(r.Runner)
 	probe := r.Probe
 	if probe == nil {
 		probe = OSProbe{}

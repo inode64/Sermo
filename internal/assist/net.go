@@ -136,14 +136,11 @@ func askNetSettings(p *Prompt, env Env, label string) netSettings {
 }
 
 func buildNetWatch(iface Iface, s netSettings) map[string]any {
-	newThen := func() map[string]any {
-		return watchThen(s.notifiers)
-	}
 	metrics := map[string]any{}
 	for _, m := range s.metrics {
 		switch m {
 		case checks.NetMetricState:
-			cond := map[string]any{config.WatchKeyThen: newThen()}
+			cond := map[string]any{config.WatchKeyThen: watchThen(s.notifiers)}
 			if s.stateDown {
 				cond[checks.CheckKeyExpect] = checks.NetStateDown
 			} else {
@@ -153,18 +150,18 @@ func buildNetWatch(iface Iface, s netSettings) map[string]any {
 		case checks.NetMetricErrors:
 			metrics[checks.NetMetricErrors] = map[string]any{
 				checks.CheckKeyDelta: map[string]any{checks.CheckKeyOp: cfgval.CompareOpGreater, checks.CheckKeyValue: s.errorsAt},
-				config.WatchKeyThen:  newThen(),
+				config.WatchKeyThen:  watchThen(s.notifiers),
 			}
 		case checks.NetMetricSpeed:
 			metrics[checks.NetMetricSpeed] = map[string]any{
 				checks.CheckKeyOn:   checks.OnModeChange,
-				config.WatchKeyThen: newThen(),
+				config.WatchKeyThen: watchThen(s.notifiers),
 			}
 		case checks.NetMetricAddress:
 			if s.addrAbsent && !iface.HasAddress {
 				continue
 			}
-			cond := map[string]any{config.WatchKeyThen: newThen()}
+			cond := map[string]any{config.WatchKeyThen: watchThen(s.notifiers)}
 			if s.addrAbsent {
 				cond[checks.CheckKeyExpect] = checks.NetAddrAbsent
 			} else {

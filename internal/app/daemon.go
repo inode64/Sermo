@@ -1204,9 +1204,6 @@ func metricSampler(service string, tree map[string]any, collector *metrics.Colle
 // result, while continuity inference retains the source/role evidence needed to
 // decide whether a process can safely explain an unobserved interval.
 func cycleProcessSource(discover func() []process.Process, cycle func() int) func() []process.Process {
-	if discover == nil {
-		discover = func() []process.Process { return nil }
-	}
 	var cached []process.Process
 	var cachedCycle int
 	var ok bool

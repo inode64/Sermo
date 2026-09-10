@@ -140,7 +140,7 @@ func (s *WindowState) advance(r Rule, conditionTrue bool, at time.Time) bool {
 		s.history = s.history[max(len(s.history)-cycles, 0):]
 		return countTrue(s.history) >= minMatches
 	}
-	_, duration := r.forWindow()
+	cycles, duration := r.forWindow()
 	if duration > 0 {
 		if conditionTrue {
 			if s.trueSince.IsZero() {
@@ -151,7 +151,6 @@ func (s *WindowState) advance(r Rule, conditionTrue bool, at time.Time) bool {
 		}
 		return durationElapsed(s.trueSince, at) >= duration
 	}
-	cycles, _ := r.forWindow()
 	if conditionTrue {
 		s.consecutive++
 	} else {

@@ -312,7 +312,8 @@ func ParseRules(tree map[string]any) ([]Rule, []string) {
 			warnings = append(warnings, ruleSubjectPrefix+name+" has no then action")
 			continue
 		}
-		if RuleType(cfgval.AsString(entry[RuleFieldType])) != RuleAlert && ConditionUsesSystemMetric(ifNode, refChecks) {
+		ruleType := RuleType(cfgval.AsString(entry[RuleFieldType]))
+		if ruleType != RuleAlert && ConditionUsesSystemMetric(ifNode, refChecks) {
 			warnings = append(warnings, ruleSubjectPrefix+name+": a scope: system metric may only drive alert rules; rule dropped (safety invariant)")
 			continue
 		}
@@ -323,7 +324,6 @@ func ParseRules(tree map[string]any) ([]Rule, []string) {
 				forWin, withinWin = fbFor, fbWithin
 			}
 		}
-		ruleType := RuleType(cfgval.AsString(entry[RuleFieldType]))
 		clearWin := ParseForWindow(entry[RuleFieldClear])
 		if clearWin != nil && ruleType != RuleAlert {
 			// Safety: a clear window holds the episode firing while the condition
