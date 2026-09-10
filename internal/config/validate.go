@@ -462,9 +462,6 @@ func validateDocument(cfg *Config, doc *Document) ([]Issue, bool) {
 	issues = append(issues, validateAppLinks(cfg, doc, scope)...)
 	issues = append(issues, validateVersionMatch(doc, scope)...)
 	issues = append(issues, validateDocumentInterval(doc, scope)...)
-	if !validDocumentKind(doc.Kind) {
-		return append(issues, invalidDocumentKindIssue(doc, scope)), false
-	}
 	if doc.Name == "" {
 		return append(issues, Issue{Scope: scope, Msg: "document has no name"}), false
 	}
@@ -495,22 +492,6 @@ func validateDocumentInterval(doc *Document, scope string) []Issue {
 		return []Issue{{Scope: scope, Msg: fmt.Sprintf(validationPositiveDurationFormat, keyInterval, cfgval.String(value))}}
 	}
 	return nil
-}
-
-func validDocumentKind(kind string) bool {
-	switch kind {
-	case kindApp, kindLibrary, kindPatterns, kindService:
-		return true
-	default:
-		return false
-	}
-}
-
-func invalidDocumentKindIssue(doc *Document, scope string) Issue {
-	if doc.Kind == "" {
-		return Issue{Scope: scope, Msg: "document has no kind (expected " + kindSummary + ")"}
-	}
-	return Issue{Scope: scope, Msg: fmt.Sprintf("unknown kind %q (expected %s)", doc.Kind, kindSummary)}
 }
 
 func validateDocumentAliases(doc *Document, counts map[string]map[string]int, aliasOwners map[string]map[string]string) []Issue {
