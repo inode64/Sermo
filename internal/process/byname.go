@@ -1,12 +1,10 @@
 package process
 
 import (
-	"fmt"
-	"os"
-	"path/filepath"
 	"slices"
-	"strconv"
 	"strings"
+
+	"sermo/internal/hostfs"
 )
 
 // PIDsByComm scans /proc and returns, in ascending order, the PIDs whose kernel
@@ -20,27 +18,29 @@ import (
 // truncates comm to 15 characters (TASK_COMM_LEN-1), so name must be the
 // (possibly truncated) comm value, not a longer binary path.
 func PIDsByComm(name string) ([]int, error) {
-	entries, err := os.ReadDir(procRoot)
+	return pidsByComm(OSReader{}.PIDs, readProcessComm, name)
+}
+
+func pidsByComm(pids func() ([]int, error), comm func(int) (string, bool), name string) ([]int, error) {
+	visible, err := pids()
 	if err != nil {
-		return nil, fmt.Errorf("read %s: %w", procRoot, err)
+		return nil, err
 	}
-	var pids []int
-	for _, e := range entries {
-		if !e.IsDir() {
-			continue
-		}
-		pid, err := strconv.Atoi(e.Name())
-		if err != nil {
-			continue // not a pid directory (e.g. "self", "net")
-		}
-		data, err := os.ReadFile(filepath.Join(procRoot, e.Name(), "comm"))
-		if err != nil {
-			continue // process gone or comm unreadable
-		}
-		if strings.TrimSpace(string(data)) == name {
-			pids = append(pids, pid)
+	matched := make([]int, 0, len(visible))
+	for _, pid := range visible {
+		value, ok := comm(pid)
+		if ok && value == name {
+			matched = append(matched, pid)
 		}
 	}
-	slices.Sort(pids)
-	return pids, nil
+	slices.Sort(matched)
+	return matched, nil
+}
+
+func readProcessComm(pid int) (string, bool) {
+	data, err := hostfs.ReadFile(PIDPath(pid, procFileComm))
+	if err != nil {
+		return "", false // process gone or comm unreadable
+	}
+	return strings.TrimSpace(string(data)), true
 }

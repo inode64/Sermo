@@ -2,7 +2,6 @@ package process
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
 	"sermo/internal/hostfs"
 	"strconv"
@@ -13,6 +12,7 @@ const (
 	procRoot        = "/proc"
 	procSelf        = "self"
 	procFileCmdline = "cmdline"
+	procFileComm    = "comm"
 	procFileExe     = "exe"
 	// ProcFileFD is the /proc/<pid>/fd directory name.
 	ProcFileFD = "fd"
@@ -137,7 +137,7 @@ type OSReader struct {
 
 // PIDs lists numeric entries under /proc.
 func (OSReader) PIDs() ([]int, error) {
-	entries, err := os.ReadDir(procRoot)
+	entries, err := hostfs.ReadDir(procRoot)
 	if err != nil {
 		return nil, fmt.Errorf("read %s: %w", procRoot, err)
 	}
@@ -220,7 +220,7 @@ func (r OSReader) groupName(gid uint32) string {
 }
 
 func readStatus(pid int) (ppid int, uid, gid uint32, state string, ok bool) {
-	data, err := os.ReadFile(PIDPath(pid, ProcFileStatus))
+	data, err := hostfs.ReadFile(PIDPath(pid, ProcFileStatus))
 	if err != nil {
 		return 0, 0, 0, "", false
 	}
@@ -264,7 +264,7 @@ func readStatus(pid int) (ppid int, uid, gid uint32, state string, ok bool) {
 // matches nothing and is never signalled is unchanged. Callers that act on prev
 // must not treat it as an identity.
 func readExe(pid int) (exe string, ok bool, prev string) {
-	target, err := os.Readlink(PIDPath(pid, procFileExe))
+	target, err := hostfs.Readlink(PIDPath(pid, procFileExe))
 	if err != nil || target == "" {
 		return "", false, ""
 	}
@@ -275,7 +275,7 @@ func readExe(pid int) (exe string, ok bool, prev string) {
 }
 
 func readCmdline(pid int) []string {
-	data, err := os.ReadFile(PIDPath(pid, procFileCmdline))
+	data, err := hostfs.ReadFile(PIDPath(pid, procFileCmdline))
 	if err != nil || len(data) == 0 {
 		return nil
 	}
