@@ -85,11 +85,7 @@ func ServiceActiveAfterPostflightFailure(ctx context.Context, action string, res
 // lock serializes start/stop/restart/reload/resume across every caller.
 func BuildServiceRuntime(ctx context.Context, cfg ServiceRuntimeConfig) ServiceRuntime {
 	deps := cfg.Deps
-	lookup := deps.UserLookup
-	if lookup == nil {
-		lookup = process.DefaultUserLookup()
-	}
-	discoverer := process.NewDiscovererWithUserLookup(lookup)
+	discoverer := process.NewDiscovererWithUserLookup(deps.UserLookup)
 	if deps.ProcReader != nil {
 		discoverer.Reader = deps.ProcReader
 	}
