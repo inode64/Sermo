@@ -110,6 +110,19 @@ func toLock(lf lockFile, path string, state State, staleReason string) Lock {
 	}
 }
 
+// toLockWithIDs fills legacy payloads that omitted their service or lock name
+// from the identity already resolved from the filename or caller.
+func toLockWithIDs(lf lockFile, path string, state State, staleReason, service, name string) Lock {
+	lock := toLock(lf, path, state, staleReason)
+	if lock.Service == "" {
+		lock.Service = service
+	}
+	if lock.Name == "" {
+		lock.Name = name
+	}
+	return lock
+}
+
 // procNowDefaults fills an unset process prober and clock with the real host
 // prober and the wall clock. It is the single source of the nil-guard that every
 // locker applies to its optional Proc/Now dependencies.

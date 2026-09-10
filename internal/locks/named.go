@@ -73,13 +73,7 @@ func (l NamedLocker) ReleaseInactive(service, name string) (Lock, error) {
 		return Lock{}, err
 	}
 	state, reason := classify(existing, now(), proc)
-	lock := toLock(existing, path, state, reason)
-	if lock.Service == "" {
-		lock.Service = service
-	}
-	if lock.Name == "" {
-		lock.Name = name
-	}
+	lock := toLockWithIDs(existing, path, state, reason, service, name)
 	if state == StateActive {
 		return lock, fmt.Errorf("lock %s is active; refusing release", LockID(service, name))
 	}
