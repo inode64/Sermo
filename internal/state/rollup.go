@@ -16,7 +16,6 @@ package state
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"fmt"
 	"slices"
 	"time"
@@ -376,12 +375,14 @@ func (s *Store) oldestBucket(ctx context.Context, table archiveTable, res int64)
 // or 0 when it never has.
 func (s *Store) rollupWatermark(ctx context.Context, res int64) (int64, error) {
 	var watermark int64
-	err := s.reads().QueryRowContext(ctx, rollupWatermarkSelect, res).Scan(&watermark)
-	if errors.Is(err, sql.ErrNoRows) {
-		return 0, nil
-	}
+	found, err := scanOne(func() error {
+		return s.reads().QueryRowContext(ctx, rollupWatermarkSelect, res).Scan(&watermark)
+	})
 	if err != nil {
 		return 0, fmt.Errorf("read %ds rollup watermark: %w", res, err)
+	}
+	if !found {
+		return 0, nil
 	}
 	return watermark, nil
 }

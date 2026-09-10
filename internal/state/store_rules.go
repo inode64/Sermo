@@ -43,27 +43,28 @@ func (s *Store) RemediationState(service string) (RemediationRecord, bool, error
 		recentActions    string
 		currentBackoffNS int64
 	)
-	err := s.reads().QueryRowContext(s.sqlCtx(),
-		`SELECT last_action_at, recent_actions, current_backoff_ns
+	found, err := scanOne(func() error {
+		return s.reads().QueryRowContext(s.sqlCtx(),
+			`SELECT last_action_at, recent_actions, current_backoff_ns
 		   FROM remediation_state WHERE service = ?;`,
-		service,
-	).Scan(&lastActionAt, &recentActions, &currentBackoffNS)
-	switch {
-	case err == sql.ErrNoRows:
-		return RemediationRecord{}, false, nil
-	case err != nil:
+			service,
+		).Scan(&lastActionAt, &recentActions, &currentBackoffNS)
+	})
+	if err != nil {
 		return RemediationRecord{}, false, fmt.Errorf("load remediation state for %s: %w", service, err)
-	default:
-		recent, err := decodeUnixNanos(recentActions)
-		if err != nil {
-			return RemediationRecord{}, false, err
-		}
-		return RemediationRecord{
-			LastActionAt:   unixNanoTime(lastActionAt),
-			RecentActions:  recent,
-			CurrentBackoff: time.Duration(currentBackoffNS),
-		}, true, nil
 	}
+	if !found {
+		return RemediationRecord{}, false, nil
+	}
+	recent, err := decodeUnixNanos(recentActions)
+	if err != nil {
+		return RemediationRecord{}, false, err
+	}
+	return RemediationRecord{
+		LastActionAt:   unixNanoTime(lastActionAt),
+		RecentActions:  recent,
+		CurrentBackoff: time.Duration(currentBackoffNS),
+	}, true, nil
 }
 
 // SetRemediationState upserts a service's automatic-remediation state. An empty

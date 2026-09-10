@@ -1,7 +1,6 @@
 package state
 
 import (
-	"database/sql"
 	"fmt"
 	"time"
 
@@ -52,16 +51,17 @@ func (s *Store) MonitorState(service string) (MonitorRecord, bool, error) {
 func (s *Store) loadFlagRow(query string, key any, errContext string) (on bool, source string, at time.Time, found bool, err error) {
 	var v int
 	var updated string
-	err = s.reads().QueryRowContext(s.sqlCtx(), query, key).Scan(&v, &source, &updated)
-	switch {
-	case err == sql.ErrNoRows:
-		return false, "", time.Time{}, false, nil
-	case err != nil:
+	found, err = scanOne(func() error {
+		return s.reads().QueryRowContext(s.sqlCtx(), query, key).Scan(&v, &source, &updated)
+	})
+	if err != nil {
 		return false, "", time.Time{}, false, fmt.Errorf("%s: %w", errContext, err)
-	default:
-		at, _ = time.Parse(time.RFC3339, updated)
-		return v != 0, source, at, true, nil
 	}
+	if !found {
+		return false, "", time.Time{}, false, nil
+	}
+	at, _ = time.Parse(time.RFC3339, updated)
+	return v != 0, source, at, true, nil
 }
 
 // upsertFlagRow writes an on/off flag row keyed by key with source and the
@@ -114,19 +114,20 @@ func (s *Store) SetOperationSettling(service, phase string) error {
 // OperationSettling returns a service's current operation-settling row.
 func (s *Store) OperationSettling(service string) (OperationSettlingRecord, bool, error) {
 	var phase, updated string
-	err := s.reads().QueryRowContext(s.sqlCtx(),
-		`SELECT phase, updated_at FROM operation_settling WHERE service = ?;`,
-		service,
-	).Scan(&phase, &updated)
-	switch {
-	case err == sql.ErrNoRows:
-		return OperationSettlingRecord{}, false, nil
-	case err != nil:
+	found, err := scanOne(func() error {
+		return s.reads().QueryRowContext(s.sqlCtx(),
+			`SELECT phase, updated_at FROM operation_settling WHERE service = ?;`,
+			service,
+		).Scan(&phase, &updated)
+	})
+	if err != nil {
 		return OperationSettlingRecord{}, false, fmt.Errorf("load operation settling for %s: %w", service, err)
-	default:
-		at, _ := time.Parse(time.RFC3339, updated)
-		return OperationSettlingRecord{Phase: phase, UpdatedAt: at}, true, nil
 	}
+	if !found {
+		return OperationSettlingRecord{}, false, nil
+	}
+	at, _ := time.Parse(time.RFC3339, updated)
+	return OperationSettlingRecord{Phase: phase, UpdatedAt: at}, true, nil
 }
 
 // ClearOperationSettling removes a service's operation-settling row.
@@ -144,21 +145,22 @@ func (s *Store) ClearOperationSettling(service string) error {
 func (s *Store) ServiceRestartNotice(service string) (ServiceRestartNoticeRecord, bool, error) {
 	var pid int
 	var started string
-	err := s.reads().QueryRowContext(s.sqlCtx(),
-		`SELECT pid, started_at FROM service_restart_notice WHERE service = ?;`, service,
-	).Scan(&pid, &started)
-	switch {
-	case err == sql.ErrNoRows:
-		return ServiceRestartNoticeRecord{}, false, nil
-	case err != nil:
+	found, err := scanOne(func() error {
+		return s.reads().QueryRowContext(s.sqlCtx(),
+			`SELECT pid, started_at FROM service_restart_notice WHERE service = ?;`, service,
+		).Scan(&pid, &started)
+	})
+	if err != nil {
 		return ServiceRestartNoticeRecord{}, false, fmt.Errorf("load service restart notice for %s: %w", service, err)
-	default:
-		at, err := time.Parse(time.RFC3339Nano, started)
-		if err != nil {
-			return ServiceRestartNoticeRecord{}, false, fmt.Errorf("parse service restart notice for %s: %w", service, err)
-		}
-		return ServiceRestartNoticeRecord{PID: pid, StartedAt: at}, true, nil
 	}
+	if !found {
+		return ServiceRestartNoticeRecord{}, false, nil
+	}
+	at, err := time.Parse(time.RFC3339Nano, started)
+	if err != nil {
+		return ServiceRestartNoticeRecord{}, false, fmt.Errorf("parse service restart notice for %s: %w", service, err)
+	}
+	return ServiceRestartNoticeRecord{PID: pid, StartedAt: at}, true, nil
 }
 
 // SetServiceRestartNotice persists the principal process identity handled by
