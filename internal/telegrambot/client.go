@@ -122,9 +122,6 @@ func (c *client) call(ctx context.Context, method string, body map[string]any, o
 	if !httpx.SuccessStatus(resp.StatusCode) {
 		return fmt.Errorf("telegram %s returned %s: %s", method, resp.Status, httpx.ErrorBody(resp, httpx.ErrorBodyLimit))
 	}
-	if out == nil {
-		return nil
-	}
 	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
 		return fmt.Errorf("decode %s response: %w", method, err)
 	}
