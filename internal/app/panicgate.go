@@ -29,7 +29,6 @@ type PanicGate struct {
 	mu     sync.Mutex
 	cached bool
 	at     time.Time
-	read   bool
 }
 
 // NewPanicGate returns a gate backed by store. A nil store means panic mode is
@@ -47,7 +46,7 @@ func (g *PanicGate) Active() bool {
 	now := g.now()
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	if g.read && now.Sub(g.at) < g.ttl {
+	if !g.at.IsZero() && now.Sub(g.at) < g.ttl {
 		return g.cached
 	}
 	rec, found, err := g.store.Panic()
@@ -58,6 +57,5 @@ func (g *PanicGate) Active() bool {
 	}
 	g.cached = found && rec.On
 	g.at = now
-	g.read = true
 	return g.cached
 }
