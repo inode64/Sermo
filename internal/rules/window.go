@@ -8,11 +8,10 @@ import (
 	"sermo/internal/cfgval"
 )
 
-// WindowSample is one observed condition result in a duration-based within
-// window.
+// WindowSample is one matching condition observation in a duration-based
+// within window.
 type WindowSample struct {
-	At    time.Time
-	Match bool
+	At time.Time
 }
 
 // WindowState tracks a rule's condition history across cycles and timestamps so
@@ -132,7 +131,7 @@ func (s *WindowState) advance(r Rule, conditionTrue bool, at time.Time) bool {
 	if cycles, duration, minMatches, ok := r.withinWindow(); ok {
 		if duration > 0 {
 			if conditionTrue {
-				s.timedHistory = append(s.timedHistory, WindowSample{At: at, Match: true})
+				s.timedHistory = append(s.timedHistory, WindowSample{At: at})
 			}
 			s.timedHistory = recentSamples(s.timedHistory, at, duration)
 			return countTimedTrue(s.timedHistory) >= minMatches
@@ -350,13 +349,7 @@ func recentSamples(history []WindowSample, at time.Time, duration time.Duration)
 }
 
 func countTimedTrue(history []WindowSample) int {
-	n := 0
-	for _, sample := range history {
-		if sample.Match {
-			n++
-		}
-	}
-	return n
+	return len(history)
 }
 
 func durationElapsed(since, at time.Time) time.Duration {

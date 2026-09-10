@@ -105,7 +105,7 @@ func ruleWindowRecordsEqual(a, b state.RuleWindowRecord) bool {
 		a.TrueSince.Equal(b.TrueSince) && a.ClearSince.Equal(b.ClearSince) &&
 		slices.Equal(a.History, b.History) &&
 		slices.EqualFunc(a.TimedHistory, b.TimedHistory, func(x, y state.RuleWindowSample) bool {
-			return x.Match == y.Match && x.At.Equal(y.At)
+			return x.At.Equal(y.At)
 		})
 }
 
@@ -183,13 +183,13 @@ func ruleWindowRecord(window *rules.WindowState) state.RuleWindowRecord {
 
 func ruleSamplesFromRecords(records []state.RuleWindowSample) []rules.WindowSample {
 	return mapSlice(records, func(rec state.RuleWindowSample) rules.WindowSample {
-		return rules.WindowSample{At: rec.At, Match: rec.Match}
+		return rules.WindowSample{At: rec.At}
 	})
 }
 
 func ruleRecordsFromSamples(samples []rules.WindowSample) []state.RuleWindowSample {
 	return mapSlice(samples, func(sample rules.WindowSample) state.RuleWindowSample {
-		return state.RuleWindowSample{At: sample.At, Match: sample.Match}
+		return state.RuleWindowSample{At: sample.At}
 	})
 }
 

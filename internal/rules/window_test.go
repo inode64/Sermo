@@ -623,7 +623,7 @@ func TestParseRuleWindowZeroIsInert(t *testing.T) {
 
 func TestRecentSamplesZeroDurationKeepsAll(t *testing.T) {
 	now := time.Unix(1000, 0)
-	hist := []WindowSample{{At: now.Add(-time.Hour), Match: true}, {At: now, Match: false}}
+	hist := []WindowSample{{At: now.Add(-time.Hour)}, {At: now}}
 	// duration <= 0 disables the time window, so every sample is kept.
 	if got := recentSamples(hist, now, 0); len(got) != 2 {
 		t.Fatalf("recentSamples(0 duration) = %d, want 2 (no time filtering)", len(got))

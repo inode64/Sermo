@@ -29,10 +29,10 @@ type RuleWindowRecord struct {
 	ClearSince       time.Time
 }
 
-// RuleWindowSample is one persisted sample for a duration-based within window.
+// RuleWindowSample is one persisted matching sample for a duration-based within
+// window.
 type RuleWindowSample struct {
-	At    time.Time
-	Match bool
+	At time.Time
 }
 
 // RemediationState returns a service's persisted automatic-remediation state.
@@ -188,18 +188,17 @@ const (
 )
 
 type ruleWindowSampleJSON struct {
-	At    int64 `json:"at"`
-	Match bool  `json:"match"`
+	At int64 `json:"at"`
 }
 
 func encodeRuleWindowSamples(samples []RuleWindowSample) (string, error) {
 	return encodeRows(columnRuleWindowSamples, samples, func(s RuleWindowSample) (ruleWindowSampleJSON, bool) {
-		return ruleWindowSampleJSON{At: timeUnixNano(s.At), Match: s.Match}, !s.At.IsZero()
+		return ruleWindowSampleJSON{At: timeUnixNano(s.At)}, !s.At.IsZero()
 	})
 }
 
 func decodeRuleWindowSamples(raw string) ([]RuleWindowSample, error) {
 	return decodeRows(columnRuleWindowSamples, raw, func(s ruleWindowSampleJSON) (RuleWindowSample, bool) {
-		return RuleWindowSample{At: unixNanoTime(s.At), Match: s.Match}, s.At != 0
+		return RuleWindowSample{At: unixNanoTime(s.At)}, s.At != 0
 	})
 }
