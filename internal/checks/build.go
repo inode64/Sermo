@@ -407,23 +407,14 @@ func buildCertCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 	if serverName == "" {
 		serverName = host
 	}
-	days := 0
-	if v, ok := cfgval.Int(entry[CheckKeyExpiresInDays]); ok {
-		days = v
-	}
-	verify := boolDefaultTrue(entry[CheckKeyCertVerify])
 	return &certCheck{
-		base:           b,
-		host:           host,
-		port:           port,
-		serverName:     serverName,
-		path:           path,
-		expiresInDays:  days,
-		onAlgoChange:   cfgval.Bool(entry[CheckKeyOnAlgorithmChange]),
-		onIssuerChange: cfgval.Bool(entry[CheckKeyOnIssuerChange]),
-		onChange:       cfgval.Bool(entry[CheckKeyOnChange]),
-		verify:         verify,
-		sampler:        deps.CertSampler,
+		base:        b,
+		host:        host,
+		port:        port,
+		serverName:  serverName,
+		path:        path,
+		certOptions: certOptionsFromEntry(entry, certCheckOptionKeys),
+		sampler:     deps.CertSampler,
 	}, ""
 }
 

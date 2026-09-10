@@ -331,20 +331,9 @@ func configureHTTPCert(hc *httpCheck, target url.URL, clientOpts httpClientOptio
 	if target.Scheme != URLSchemeHTTPS {
 		return "http check: cert_* options require an https url"
 	}
-	verify := boolDefaultTrue(entry[CheckKeyCertVerify])
-	days := 0
-	if v, ok := cfgval.Int(entry[CheckKeyCertExpiresInDays]); ok {
-		days = v
-	}
 	hc.certHost = target.Hostname()
-	hc.certOpts = certOptions{
-		expiresInDays:  days,
-		verify:         verify,
-		onAlgoChange:   cfgval.Bool(entry[CheckKeyCertOnAlgorithmChange]),
-		onIssuerChange: cfgval.Bool(entry[CheckKeyCertOnIssuerChange]),
-		onChange:       cfgval.Bool(entry[CheckKeyCertOnChange]),
-	}
-	hc.certVerification = newCertVerification(verify, hc.certHost)
+	hc.certOpts = certOptionsFromEntry(entry, httpCertOptionKeys)
+	hc.certVerification = newCertVerification(hc.certOpts.verify, hc.certHost)
 	if clientOpts.http3 {
 		// Read the leaf over QUIC too; http3 populates resp.TLS so the same
 		// certificate logic applies. TLS 1.3 is enforced by QUIC.
