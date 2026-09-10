@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"maps"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 	"unicode"
@@ -453,12 +453,7 @@ func (w *Watch) dispatchRaidTransition(ctx context.Context, res checks.Result, t
 }
 
 func sortedRaidArrays(changes map[string][]checks.RaidTransition) []string {
-	arrays := make([]string, 0, len(changes))
-	for array := range changes {
-		arrays = append(arrays, array)
-	}
-	sort.Strings(arrays)
-	return arrays
+	return slices.Sorted(maps.Keys(changes))
 }
 
 func combineRaidArrayChanges(array string, changes []checks.RaidTransition) checks.RaidTransition {
@@ -798,12 +793,7 @@ func watchMessage(name, message string, env map[string]string) notify.Message {
 	var body strings.Builder
 	body.WriteString(message)
 	body.WriteString("\n\n")
-	keys := make([]string, 0, len(env))
-	for k := range env {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	for _, k := range keys {
+	for _, k := range slices.Sorted(maps.Keys(env)) {
 		body.WriteString(k + watchEnvAssignSeparator + env[k] + appLineSeparator)
 	}
 	return notify.Message{

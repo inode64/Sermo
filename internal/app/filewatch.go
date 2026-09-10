@@ -7,7 +7,7 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"syscall"
@@ -114,11 +114,7 @@ func (w *fileWatcher) runCycle(ctx context.Context) {
 	// state series must report the level the scan actually saw.
 	w.recordBandSample(current, now)
 
-	paths := make([]string, 0, len(current))
-	for p := range current {
-		paths = append(paths, p)
-	}
-	sort.Strings(paths) // deterministic event order
+	paths := slices.Sorted(maps.Keys(current)) // deterministic event order
 
 	var stale []staleFile
 	for _, p := range paths {
@@ -161,12 +157,11 @@ func (w *fileWatcher) runCycle(ctx context.Context) {
 
 	// Deletions: paths we tracked that are absent now.
 	gone := make([]string, 0)
-	for p := range w.baseline {
+	for _, p := range slices.Sorted(maps.Keys(w.baseline)) {
 		if _, ok := current[p]; !ok {
 			gone = append(gone, p)
 		}
 	}
-	sort.Strings(gone)
 	for _, p := range gone {
 		if ctx.Err() != nil {
 			return
