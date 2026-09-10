@@ -24,13 +24,16 @@ import (
 // to prune its event log. It reads the web: address/port and any
 // admin password from the shared config so local sermoctl can authenticate
 // the same way the operator would via the UI.
-// daemonWebRequest loads config through the operator-facing path, then delegates
-// the HTTP exchange to daemonWebDo. The caller owns the response body and its
-// own status/decode handling.
+// daemonWebRequest loads config without reporting it, then delegates the HTTP
+// exchange to daemonWebDo. Its command-level caller owns the one user-facing
+// error so a configuration failure is not emitted twice.
 func (a App) daemonWebRequest(ctx context.Context, opts options, method, what string, csrf bool, buildURL func(base string) string) (*http.Response, error) {
-	cfg, code := a.loadConfig(opts)
-	if code != exitSuccess || cfg == nil {
-		return nil, errors.New("failed to load config")
+	cfg, err := a.LoadConfig(opts.globalPath())
+	if err != nil {
+		return nil, fmt.Errorf("load config failed: %w", err)
+	}
+	if cfg == nil {
+		return nil, errors.New("load config returned no configuration")
 	}
 	return a.daemonWebDo(ctx, cfg, method, what, csrf, buildURL)
 }
