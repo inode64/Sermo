@@ -32,21 +32,21 @@ const (
 )
 
 const (
-	smtpDefaultPort  = "587"
-	smtpsDefaultPort = "465"
+	smtpDefaultPort  = 587
+	smtpsDefaultPort = 465
 )
 
 // emailDSN is a parsed SMTP DSN: smtp://[user:pass@]host[:port] (STARTTLS) or
 // smtps://… (implicit TLS, default port 465).
 type emailDSN struct {
 	host        string
-	port        string
+	port        int
 	user        string
 	pass        string
 	implicitTLS bool
 }
 
-func (d emailDSN) addr() string { return net.JoinHostPort(d.host, d.port) }
+func (d emailDSN) addr() string { return net.JoinHostPort(d.host, strconv.Itoa(d.port)) }
 
 // emailSender delivers a built message; injected so tests do not hit the network.
 type emailSender func(ctx context.Context, dsn emailDSN, from string, to []string, msg Message) error
@@ -102,8 +102,13 @@ func parseEmailDSN(s string) (emailDSN, error) {
 	if d.host == "" {
 		return emailDSN{}, errors.New("dsn requires a host")
 	}
-	d.port = u.Port()
-	if d.port == "" {
+	if portText := u.Port(); portText != "" {
+		port, err := strconv.Atoi(portText)
+		if err != nil || !cfgval.ValidTCPPort(port) {
+			return emailDSN{}, fmt.Errorf("invalid SMTP port %q", portText)
+		}
+		d.port = port
+	} else {
 		d.port = d.defaultPort()
 	}
 	if u.User != nil {
@@ -113,7 +118,7 @@ func parseEmailDSN(s string) (emailDSN, error) {
 	return d, nil
 }
 
-func (d emailDSN) defaultPort() string {
+func (d emailDSN) defaultPort() int {
 	if d.implicitTLS {
 		return smtpsDefaultPort
 	}
@@ -143,13 +148,8 @@ func smtpSendWithTLSConfig(ctx context.Context, d emailDSN, from string, to []st
 }
 
 func newSMTPClient(d emailDSN, tlsCfg *tls.Config, timeout time.Duration) (*gomail.Client, error) {
-	port, err := strconv.Atoi(d.port)
-	if err != nil || !cfgval.ValidTCPPort(port) {
-		return nil, fmt.Errorf("invalid SMTP port %q", d.port)
-	}
-
 	opts := []gomail.Option{
-		gomail.WithPort(port),
+		gomail.WithPort(d.port),
 		gomail.WithTimeout(timeout),
 		gomail.WithTLSConfig(tlsCfg),
 		gomail.WithoutNoop(),
