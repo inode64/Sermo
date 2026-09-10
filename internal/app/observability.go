@@ -25,9 +25,6 @@ func (r *ObservabilityRegistry) MarkReady(service string, at time.Time) {
 		return
 	}
 	r.mu.Lock()
-	if r.readyAt == nil {
-		r.readyAt = map[string]time.Time{}
-	}
 	r.readyAt[service] = at
 	r.mu.Unlock()
 }
