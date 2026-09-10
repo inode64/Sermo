@@ -1,7 +1,8 @@
 package checks
 
 import (
-	"sort"
+	"maps"
+	"slices"
 
 	"sermo/internal/cfgval"
 )
@@ -125,12 +126,7 @@ func applyBandOverrides(checkType string, entry map[string]any, byKey map[string
 	if !ok {
 		return
 	}
-	keys := make([]string, 0, len(block))
-	for key := range block {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-	for _, key := range keys {
+	for _, key := range slices.Sorted(maps.Keys(block)) {
 		raw := block[key]
 		if disabled, isBool := raw.(bool); isBool {
 			if !disabled {
