@@ -117,19 +117,17 @@ type webWatch struct {
 	configID    string
 	// bands and graphs are the check's resolved state and line metrics, the
 	// same resolution the recorder persists from.
-	bands         []checks.BandMetric
-	graphs        []checks.GraphMetric
-	interval      time.Duration
-	disabled      bool
-	monitorMode   string
-	fireOnFail    bool
-	hasHook       bool
-	hookCommand   []string
-	notifiers     []string
-	dryRun        bool
-	notifierCount int
-	check         map[string]any
-	metrics       map[string]any
+	bands       []checks.BandMetric
+	graphs      []checks.GraphMetric
+	interval    time.Duration
+	disabled    bool
+	monitorMode string
+	fireOnFail  bool
+	hookCommand []string
+	notifiers   []string
+	dryRun      bool
+	check       map[string]any
+	metrics     map[string]any
 	// severity is the watch entry's own gravity layered with its check block. A
 	// metric block narrows it further; severityFor applies that last step, so the
 	// dashboard resolves the same chain the daemon builder does.
@@ -548,7 +546,6 @@ func newWebWatch(name string, entry map[string]any, globalNotify []string, defau
 	if iv <= 0 {
 		iv = defaultInterval
 	}
-	hasHook := false
 	var hookCommand []string
 	var notifierNames []string
 	var expand *ExpandSpec
@@ -565,7 +562,6 @@ func newWebWatch(name string, entry map[string]any, globalNotify []string, defau
 		if h, ok := then[config.WatchThenKeyHook].(map[string]any); ok && len(h) > 0 {
 			if cmd := h[config.WatchHookKeyCommand]; cmd != nil {
 				hookCommand = cfgval.StringArray(cmd)
-				hasHook = len(hookCommand) > 0
 			}
 		}
 		notifierNames = effectiveNotify(cfgval.StringList(then[rules.RuleFieldNotify]), globalNotify)
@@ -587,11 +583,9 @@ func newWebWatch(name string, entry map[string]any, globalNotify []string, defau
 		disabled:           cfgval.Disabled(entry),
 		monitorMode:        config.MonitorMode(entry),
 		fireOnFail:         checks.IsHealthType(ctype) || ctype == checks.CheckTypeProcessPolicy,
-		hasHook:            hasHook,
 		hookCommand:        hookCommand,
 		notifiers:          notifierNames,
 		dryRun:             config.DryRun(entry),
-		notifierCount:      len(notifierNames),
 		check:              checkMap(entry),
 		metrics:            metricsMap(entry),
 		severity:           watchSeverity(entry, checkMap(entry)),
