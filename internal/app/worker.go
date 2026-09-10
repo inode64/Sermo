@@ -930,13 +930,9 @@ func (*Worker) evalRule(ctx context.Context, ev *rules.Evaluator, r rules.Rule, 
 // ArtifactChangedFunc returns a `changed:` evaluator backed by baseline. The
 // worker and operation engine share the same map so manual actions honor the
 // same acknowledged fingerprints as automatic remediation.
-func ArtifactChangedFunc(baseline map[string]string, samples ...*ArtifactSamples) func(string) (bool, error) {
+func ArtifactChangedFunc(baseline map[string]string, artifactSamples *ArtifactSamples) func(string) (bool, error) {
 	if baseline == nil {
 		return nil
-	}
-	var artifactSamples *ArtifactSamples
-	if len(samples) > 0 {
-		artifactSamples = samples[0]
 	}
 	return func(path string) (bool, error) {
 		return artifactPathChanged(baseline, path, artifactSamples)
