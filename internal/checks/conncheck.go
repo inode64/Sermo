@@ -336,6 +336,14 @@ func connectionPort(entry map[string]any, defaultPort int) int {
 	return defaultPort
 }
 
+func preparedConnectionConfig(protocol string, cfg conn.Config, entry map[string]any) conn.Config {
+	cfg.Port = connectionPort(entry, 0)
+	if _, resolved, ok := conn.Prepare(protocol, cfg); ok {
+		return resolved
+	}
+	return cfg
+}
+
 func configureConnProtocol(cfg *conn.Config, protoName string, entry map[string]any) error {
 	switch protoName {
 	case conn.ProtocolNameDNS:
