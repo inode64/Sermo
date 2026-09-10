@@ -93,7 +93,7 @@ func (c connCheck) Run(ctx context.Context) Result {
 	}
 	if problems, extra, changed := c.changed(res); changed {
 		r := c.result(false, fmt.Sprintf("%s %s: %s", c.proto.Name(), addr, strings.Join(problems, "; ")), start)
-		r.Data = c.changeData(elapsed)
+		r.Data = c.resultData(elapsed, perIface, res)
 		maps.Copy(r.Data, extra)
 		return r
 	}
@@ -242,15 +242,6 @@ func (c connCheck) resultData(elapsed time.Duration, perIface map[string]any, re
 	return data
 }
 
-func (c connCheck) changeData(elapsed time.Duration) map[string]any {
-	return map[string]any{
-		DataKeyProtocol:  c.proto.Name(),
-		DataKeyHost:      c.cfg.Host,
-		DataKeyPort:      c.cfg.Port,
-		DataKeyLatencyMS: elapsed.Milliseconds(),
-	}
-}
-
 // evalExpect checks every configured assertion against the probe result and
 // returns the first failure ("" when all hold or none are configured), plus
 // whether the value needed to evaluate it was unavailable. A field is "version"
@@ -282,14 +273,12 @@ func (c connCheck) evalExpect(res conn.Result) (string, bool) {
 // The password arrives already resolved from ${env:...} by the config loader.
 func buildConnCheck(b base, proto conn.Protocol, entry map[string]any) (Check, string) {
 	protoName := proto.Name()
-	user := cfgval.AsString(entry[CheckKeyUser])
-	if user == "" && proto.RequiresUser() {
+	cfg := databaseConnectionConfig(entry)
+	if cfg.User == "" && proto.RequiresUser() {
 		return nil, protoName + " check requires a user"
 	}
-	cfg := databaseConnectionConfig(entry)
 	cfg.Port = connectionPort(entry, 0)
 	cfg.Socket = cfgval.AsString(entry[CheckKeySocket])
-	cfg.User = user
 	cfg.Query = cfgval.AsString(entry[CheckKeyQuery])
 	// cfg.Interface is set per-attempt by connCheck.Run from the interface set;
 	// it pins the probe's egress (SO_BINDTODEVICE) on multi-homed hosts.

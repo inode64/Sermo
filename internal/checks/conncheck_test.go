@@ -227,6 +227,37 @@ func TestConnCheckOnChangeFingerprint(t *testing.T) {
 	}
 }
 
+func TestConnCheckChangeRetainsProbeData(t *testing.T) {
+	fingerprint := "SHA256:old"
+	version := "v1"
+	c := connCheck{
+		name: "ssh", timeout: time.Second,
+		proto: fakeProto{},
+		cfg:   conn.Config{Socket: "/run/sermo/probe.sock"},
+		probe: func(context.Context, conn.Config) (conn.Result, error) {
+			return conn.Result{Version: version, Extra: map[string]string{conn.ExtraKeyFingerprint: fingerprint}}, nil
+		},
+		onChange: true,
+		state:    &connState{},
+		ifaces:   []string{"lo"},
+	}
+	if res := c.Run(t.Context()); !res.OK {
+		t.Fatalf("first cycle must prime, got %q", res.Message)
+	}
+	fingerprint, version = "SHA256:new", "v2"
+	res := c.Run(t.Context())
+	if res.OK {
+		t.Fatal("changed fingerprint must fail")
+	}
+	if res.Data[DataKeySocket] != "/run/sermo/probe.sock" || res.Data[DataKeyVersion] != "v2" {
+		t.Fatalf("change data lost socket or version: %v", res.Data)
+	}
+	interfaces, ok := res.Data[DataKeyInterfaces].(map[string]any)
+	if !ok || interfaces["lo"] != interfaceResultOK {
+		t.Fatalf("change data lost interface evidence: %v", res.Data)
+	}
+}
+
 func TestConnCheckRunFailure(t *testing.T) {
 	c := connCheck{
 		name: "db", timeout: time.Second,
