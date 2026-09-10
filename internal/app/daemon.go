@@ -374,10 +374,7 @@ type builtService struct {
 const slowServiceWiring = 10 * time.Second
 
 func buildServiceWorker(ctx context.Context, cfg *config.Config, deps Deps, collector *metrics.Collector, resolver servicemgr.UnitResolver, restartNotice *config.ServiceRestartNotice, restartNoticeConfigured bool, name string) builtService {
-	started := deps.Now
-	if started == nil {
-		started = time.Now
-	}
+	started := clockOrNow(deps.Now)
 	from := started()
 	var b builtService
 	doc := cfg.Services[name]
