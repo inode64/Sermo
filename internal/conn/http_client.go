@@ -42,12 +42,12 @@ func httpProbeBaseWithTLSMode(_ context.Context, cfg Config, defaultPort int, tl
 	target := newProbeTarget(cfg, defaultPort)
 	host, _ := target.hostPort()
 	scheme := schemeHTTP
-	client := httpProbeClient(target.cfg.Interface, nil)
+	var tlsConfig *tls.Config
 	if tlsMode != "" {
 		scheme = schemeHTTPS
-		client = httpProbeClient(target.cfg.Interface, netutil.TLSClientConfigForMode(host, tlsMode))
+		tlsConfig = netutil.TLSClientConfigForMode(host, tlsMode)
 	}
-	return client, scheme + urlSchemeSeparator + target.address()
+	return httpProbeClient(target.cfg.Interface, tlsConfig), scheme + urlSchemeSeparator + target.address()
 }
 
 // httpProbeResponse is one bounded HTTP probe exchange: the status code, the
