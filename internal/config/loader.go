@@ -107,7 +107,7 @@ func Load(globalPath string, opts ...Option) (*Config, error) {
 	}
 
 	for _, spec := range uniquePathSpecs(catalogPaths) {
-		if err := cfg.loadDir(spec.Path, spec.Recursive); err != nil {
+		if err := cfg.loadCategoryDir(spec.Path, "", spec.Recursive); err != nil {
 			return nil, err
 		}
 	}
@@ -379,14 +379,6 @@ func uniquePathSpecs(specs []PathSpec) []PathSpec {
 		out = append(out, spec)
 	}
 	return out
-}
-
-// loadDir reads catalog documents from the explicit services/apps/libs/patterns
-// category directories. Recursive controls descent below those base catalog
-// directories. A missing directory is not an error (tests and partial installs
-// may intentionally omit catalog content), but an unreadable one is.
-func (c *Config) loadDir(dir string, recursive bool) error {
-	return c.loadCategoryDir(dir, "", recursive)
 }
 
 func (c *Config) loadServiceDir(dir string, recursive bool) error {

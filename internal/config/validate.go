@@ -336,8 +336,10 @@ func validateGlobalDefaults(cfg *Config, raw map[string]any, add addFunc) {
 	}
 	validateDefaultsKeys(defaults, add)
 	validateDefaultsVariables(defaults, add)
-	validateDefaultsRestartOnChange(defaults, add)
-	validateDefaultsReloadOnChange(defaults, add)
+	validateDefaultsGateBlock(defaults, keyRestartOnChange, add, keyRestartConfig, keyRestartVersion)
+	// reload_on_change carries only the config permission gate: paths are
+	// service data, not host policy.
+	validateDefaultsGateBlock(defaults, keyReloadOnChange, add, keyRestartConfig)
 	for _, key := range []string{keyDryRun, keyAllowDependencies} {
 		if v, present := defaults[key]; present {
 			if _, ok := v.(bool); !ok {
@@ -363,17 +365,6 @@ func validateDefaultsKeys(defaults map[string]any, add func(string, ...any)) {
 			add(validationNotSupportedFormat, defaultsFieldPath(key))
 		}
 	}
-}
-
-func validateDefaultsRestartOnChange(defaults map[string]any, add addFunc) {
-	validateDefaultsGateBlock(defaults, keyRestartOnChange, add, keyRestartConfig, keyRestartVersion)
-}
-
-// validateDefaultsReloadOnChange restricts the global block to the permission
-// gate. `paths:` is service data, not host policy — a host says whether
-// config-driven reloads happen, the catalog says which files drive them.
-func validateDefaultsReloadOnChange(defaults map[string]any, add addFunc) {
-	validateDefaultsGateBlock(defaults, keyReloadOnChange, add, keyRestartConfig)
 }
 
 // validateDefaultsGateBlock checks a global `defaults:` block that carries only

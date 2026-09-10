@@ -460,7 +460,7 @@ func validateConnFields(prefix string, fields map[string]any, requireUser bool, 
 	if requireUser && cfgval.String(fields[checks.CheckKeyUser]) == "" {
 		add("%s.user is required for a connection check", prefix)
 	}
-	validateConnPort(prefix, fields, add)
+	validateOptionalTCPPort(prefix, fields, add)
 	validateConnTLS(prefix, fields, add)
 	validateConnExpectations(prefix, fields, add)
 	validateConnChangeFlags(prefix, fields, add)
@@ -497,12 +497,6 @@ func rejectDBusFields(prefix, typ string, fields map[string]any, add addFunc) {
 	if _, present := fields[checks.CheckKeyDBusRequireOwner]; present {
 		add("%s.%s is only supported for a dbus check, not %s", prefix, checks.CheckKeyDBusRequireOwner, typ)
 	}
-}
-
-func validateConnPort(prefix string, fields map[string]any, add addFunc) {
-	// The same TCP port range walkScalars enforces on resolved services, so a
-	// connection check behaves identically as a host watch.
-	validateOptionalTCPPort(prefix, fields, add)
 }
 
 // validateOptionalTCPPort validates a present port field using the shared
