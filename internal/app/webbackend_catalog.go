@@ -138,28 +138,26 @@ func decorateCatalogItems(items []web.CatalogItem, observedAt time.Time) []web.C
 	if len(items) == 0 || observedAt.IsZero() {
 		return items
 	}
-	out := slices.Clone(items)
-	for i := range out {
-		out[i].ObservedAt = observedAt.UTC().Format(time.RFC3339)
+	for i := range items {
+		items[i].ObservedAt = observedAt.UTC().Format(time.RFC3339)
 	}
-	return out
+	return items
 }
 
 func (b *WebBackend) decorateApplications(apps []web.Application) []web.Application {
 	if len(apps) == 0 {
 		return apps
 	}
-	out := slices.Clone(apps)
-	for i := range out {
+	for i := range apps {
 		if b.events == nil {
 			continue
 		}
-		ev, ok := b.events.LastApp(out[i].Name)
+		ev, ok := b.events.LastApp(apps[i].Name)
 		if !ok {
 			continue
 		}
 		webEv := loggedEventToWeb(ev)
-		out[i].LastEvent = &webEv
+		apps[i].LastEvent = &webEv
 	}
-	return out
+	return apps
 }
