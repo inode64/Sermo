@@ -55,7 +55,6 @@ const (
 )
 
 const (
-	defaultRuntimeDir    = config.DefaultRuntime
 	daemonPIDFilename    = config.DaemonPIDFilename
 	instanceLockFilename = "sermod.lock"
 	daemonEventLogLimit  = 1000
@@ -545,9 +544,6 @@ func openDaemonStore(cfg *config.Config, logger *slog.Logger) (*state.Store, int
 
 func acquireDaemonRuntimeLock(cfg *config.Config, logger *slog.Logger) (string, io.Closer, int) {
 	runtimeDir := cfg.Global.RuntimeDir()
-	if runtimeDir == "" {
-		runtimeDir = defaultRuntimeDir
-	}
 	if err := os.MkdirAll(runtimeDir, daemonRuntimeDirMode); err != nil {
 		logger.Warn("create runtime dir failed", logFieldPath, runtimeDir, logFieldError, err)
 	}

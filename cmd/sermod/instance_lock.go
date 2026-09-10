@@ -29,9 +29,6 @@ func (e *alreadyRunningError) Error() string {
 // <runtime>/sermod.lock. The returned file must stay open for the life of the
 // process; closing it releases the lock.
 func acquireInstanceLock(runtimeDir string) (*os.File, error) {
-	if runtimeDir == "" {
-		runtimeDir = defaultRuntimeDir
-	}
 	path := filepath.Join(runtimeDir, instanceLockFilename)
 	f, err := hostfs.OpenFile(path, os.O_CREATE|os.O_RDWR, instanceLockMode)
 	if err != nil {
