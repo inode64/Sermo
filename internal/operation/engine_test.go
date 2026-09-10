@@ -156,17 +156,19 @@ func (h *harness) engine() Engine {
 			}
 			return func() error { h.released++; return nil }, nil
 		},
-		LockTTL:    time.Minute,
-		NamedLocks: func() ([]locks.Lock, error) { return h.named, nil },
-		Guard:      func(context.Context, string) (bool, string, error) { return h.guardBlocked, h.guardReason, h.guardErr },
-		Preflight:  func(context.Context) checks.Outcome { return h.preflight },
-		Postflight: func(context.Context) checks.Outcome { return h.postflight },
-		ResumeFunc: func(ctx context.Context) error { return h.mgr.Resume(ctx, "mysqld") },
-		Discover:   h.discover,
-		Reaper:     h.reaper,
-		KillPolicy: h.killPolicy,
-		Sleep:      func(time.Duration) {},
-		Emit:       func(r Result) { h.emitted = append(h.emitted, r) },
+		LockTTL:          time.Minute,
+		NamedLocks:       func() ([]locks.Lock, error) { return h.named, nil },
+		Guard:            func(context.Context, string) (bool, string, error) { return h.guardBlocked, h.guardReason, h.guardErr },
+		Preflight:        func(context.Context) checks.Outcome { return h.preflight },
+		Postflight:       func(context.Context) checks.Outcome { return h.postflight },
+		ReloadFunc:       func(ctx context.Context) error { return h.mgr.Reload(ctx, "mysqld") },
+		ResumeFunc:       func(ctx context.Context) error { return h.mgr.Resume(ctx, "mysqld") },
+		Discover:         h.discover,
+		Reaper:           h.reaper,
+		KillPolicy:       h.killPolicy,
+		Sleep:            func(time.Duration) {},
+		OperationTimeout: DefaultOperationTimeout,
+		Emit:             func(r Result) { h.emitted = append(h.emitted, r) },
 	}
 }
 
@@ -507,6 +509,20 @@ func TestReloadRunsPreflightThenReload(t *testing.T) {
 	}
 	if h.mgr.did("stop mysqld") || h.mgr.did("start mysqld") {
 		t.Errorf("reload must not stop/start; calls=%v", h.mgr.calls)
+	}
+}
+
+func TestReloadWithoutConfiguredFunctionFailsClosed(t *testing.T) {
+	h := defaultHarness()
+	engine := h.engine()
+	engine.ReloadFunc = nil
+
+	res := engine.Reload(context.Background())
+	if res.Status != ResultFailed || !strings.Contains(res.Message, "unsupported") {
+		t.Fatalf("reload result = %+v, want unsupported failure", res)
+	}
+	if h.mgr.did("reload mysqld") {
+		t.Fatalf("reload without a configured function called manager directly: %v", h.mgr.calls)
 	}
 }
 

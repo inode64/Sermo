@@ -96,11 +96,10 @@ type Engine struct {
 	// EmptyTerminalSessionCloser revalidates and closes one configured empty
 	// tmux server through its own client. It remains a manual-only operation.
 	EmptyTerminalSessionCloser func(ctx context.Context, target TerminalSessionSourceTarget) error
-	// ReloadFunc reloads the service's config in place. When nil the engine falls
-	// back to Manager.Reload (the backend per-unit reload). A `reload:` block
-	// builds a richer closure: a native signal/command that either overrides the
-	// backend reload (`when: always`) or stands in for it when the init has no
-	// reload of its own (`when: auto`).
+	// ReloadFunc reloads the service's config in place. A `reload:` block builds
+	// a closure: a native signal/command that either overrides the backend reload
+	// (`when: always`) or stands in for it when the init has no reload of its own
+	// (`when: auto`). A nil closure means reload is unavailable.
 	ReloadFunc func(ctx context.Context) error
 	ResumeFunc func(ctx context.Context) error
 	Discover   func() ([]process.Process, error)
@@ -736,11 +735,11 @@ func (e Engine) resumeService(ctx context.Context, result *Result) bool {
 }
 
 func (e Engine) reloadService(ctx context.Context, result *Result) bool {
-	reload := e.ReloadFunc
-	if reload == nil {
-		reload = func(ctx context.Context) error { return e.Manager.Reload(ctx, e.Unit) }
+	if e.ReloadFunc == nil {
+		result.Status, result.Message = ResultFailed, "reload: operation unsupported by service configuration"
+		return false
 	}
-	return e.runBackendAction(ctx, result, actionReload, reload)
+	return e.runBackendAction(ctx, result, actionReload, e.ReloadFunc)
 }
 
 func (e Engine) restartService(ctx context.Context, result *Result) bool {
