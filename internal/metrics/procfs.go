@@ -166,12 +166,26 @@ func (OSReader) ProcessStart(pid int) (uint64, time.Time, bool) {
 // permanently cached value would leave derived ages off by the whole step.
 const bootTimeCacheTTL = 5 * time.Second
 
+// cpuCountCacheTTL bounds reuse of the host CPU count. Process and service
+// sampling ask for it repeatedly in one daemon cycle, while CPU hotplug remains
+// visible within a short bounded interval.
+const cpuCountCacheTTL = 5 * time.Second
+
 // bootTimeCache memoizes the `btime` field of /proc/stat for bootTimeCacheTTL.
 // Only a successful read is cached, so a transient failure does not pin the
 // daemon to a stale reading.
 var bootTimeCache struct {
 	sync.Mutex
 	sec    int64
+	readAt time.Time
+}
+
+// cpuCountCache memoizes successful /proc/stat CPU counts. Like bootTimeCache,
+// it never retains a failed procfs read, so the runtime fallback remains only a
+// transient fallback.
+var cpuCountCache struct {
+	sync.Mutex
+	count  int
 	readAt time.Time
 }
 
@@ -443,11 +457,20 @@ func (OSReader) NumCPU() int {
 // procStatCPUCount counts the per-CPU "cpuN" lines in /proc/stat. Returns 0 when
 // /proc/stat cannot be read.
 func procStatCPUCount() int {
+	cpuCountCache.Lock()
+	defer cpuCountCache.Unlock()
+	if cpuCountCache.count > 0 && !cpuCountCache.readAt.IsZero() && time.Since(cpuCountCache.readAt) < cpuCountCacheTTL {
+		return cpuCountCache.count
+	}
 	data, err := os.ReadFile(procPath(procFileStat))
 	if err != nil {
 		return 0
 	}
-	return countCPULines(data)
+	count := countCPULines(data)
+	if count > 0 {
+		cpuCountCache.count, cpuCountCache.readAt = count, time.Now()
+	}
+	return count
 }
 
 // countCPULines counts the per-CPU "cpuN" lines in /proc/stat content (the
