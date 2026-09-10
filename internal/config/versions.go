@@ -945,15 +945,8 @@ func (c *Config) templateCurrentCandidatePaths(templateName, kind string) []stri
 	if baseName == "" {
 		return nil
 	}
-	var doc *Document
-	switch kind {
-	case kindApp:
-		doc = c.Apps[baseName]
-	case kindLibrary:
-		doc = c.Libraries[baseName]
-	case kindService:
-		doc = c.CatalogServices[baseName]
-	}
+	_, registry := c.catalogSet(catalogCategoryForKind(kind))
+	doc := registry[baseName]
 	if doc == nil || doc.Name == templateName {
 		return nil
 	}
@@ -1308,14 +1301,8 @@ func bindTokensMap(tree map[string]any, repl *strings.Replacer) map[string]any {
 // once its concrete instances are registered.
 func (c *Config) dropTemplate(name string, reg map[string]*Document, kind string) {
 	delete(reg, name)
-	switch kind {
-	case kindService:
-		c.CatalogServiceNames = withoutString(c.CatalogServiceNames, name)
-	case kindApp:
-		c.AppNames = withoutString(c.AppNames, name)
-	case kindLibrary:
-		c.LibraryNames = withoutString(c.LibraryNames, name)
-	}
+	names, _ := c.catalogSet(catalogCategoryForKind(kind))
+	*names = withoutString(*names, name)
 	docs := make([]*Document, 0, len(c.docs))
 	for _, d := range c.docs {
 		if d.Kind == kind && d.Name == name {
