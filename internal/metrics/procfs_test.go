@@ -86,6 +86,22 @@ func TestOSReaderProcfs(t *testing.T) {
 	}
 }
 
+func TestOSReaderNumCPUUsesFreshCache(t *testing.T) {
+	cpuCountCache.Lock()
+	oldCount, oldReadAt := cpuCountCache.count, cpuCountCache.readAt
+	cpuCountCache.count, cpuCountCache.readAt = 3, time.Now()
+	cpuCountCache.Unlock()
+	t.Cleanup(func() {
+		cpuCountCache.Lock()
+		cpuCountCache.count, cpuCountCache.readAt = oldCount, oldReadAt
+		cpuCountCache.Unlock()
+	})
+
+	if got := (OSReader{}).NumCPU(); got != 3 {
+		t.Fatalf("NumCPU() = %d, want cached 3", got)
+	}
+}
+
 func TestParseProcMeminfoTotals(t *testing.T) {
 	data := []byte("MemTotal:       1000 kB\nMemAvailable:    250 kB\nSwapTotal:       2000 kB\nSwapFree:        500 kB\n")
 	totals := parseProcMeminfoTotals(data)
