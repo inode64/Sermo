@@ -159,7 +159,7 @@ func (s *Store) Maintain(ctx context.Context, now time.Time) (MaintainResult, er
 	if out.Archives, err = s.PruneArchives(ctx, now); err != nil {
 		return out, err
 	}
-	if out.Events, err = s.PruneEvents(ctx, now.Add(-s.retention.normalized().Events)); err != nil {
+	if out.Events, err = s.PruneEvents(ctx, now.Add(-s.retention.Events)); err != nil {
 		return out, err
 	}
 	return out, nil
