@@ -13,13 +13,14 @@ type protocolRegistration struct {
 	protocol      Protocol
 	aliases       []string
 	defaultSocket string
+	socketOnly    bool
 }
 
 // builtinProtocolRegistrations is the complete connection-protocol catalog.
 // Protocol implementations own their wire exchange and metadata methods; this
 // table is the single source of truth for membership and aliases.
 var builtinProtocolRegistrations = []protocolRegistration{
-	{protocol: acpidProtocol, defaultSocket: DefaultACPIDSocket},
+	{protocol: acpidProtocol, defaultSocket: DefaultACPIDSocket, socketOnly: true},
 	{protocol: ajpProtocol{}},
 	{protocol: amqpProtocol{}, aliases: []string{protocolAliasRabbitMQ}},
 	{protocol: asteriskProtocol{}, aliases: []string{protocolAliasAMI}},
@@ -33,7 +34,7 @@ var builtinProtocolRegistrations = []protocolRegistration{
 	{protocol: dhcpProtocol{}, aliases: []string{protocolAliasDHCPD}},
 	{protocol: dnsProtocol{}},
 	{protocol: dockerProtocol{}, defaultSocket: DefaultDockerSocket},
-	{protocol: fail2banProtocol, defaultSocket: DefaultFail2banSocket},
+	{protocol: fail2banProtocol, defaultSocket: DefaultFail2banSocket, socketOnly: true},
 	{protocol: fpmProtocol{}, aliases: []string{protocolAliasPHPFPM}},
 	{protocol: ftpProtocol{}},
 	{protocol: glusterfsProtocol{}, aliases: []string{protocolAliasGlusterd, protocolAliasGluster}},
@@ -44,7 +45,7 @@ var builtinProtocolRegistrations = []protocolRegistration{
 	{protocol: kafkaProtocol{}},
 	{protocol: ldapProtocol{}},
 	{protocol: libvirtProtocol{}, aliases: []string{protocolAliasLibvirtd}, defaultSocket: DefaultLibvirtSocket},
-	{protocol: lvmpolldProtocol{}, defaultSocket: DefaultLVMPolldSocket},
+	{protocol: lvmpolldProtocol{}, defaultSocket: DefaultLVMPolldSocket, socketOnly: true},
 	{protocol: memcachedProtocol{}, aliases: []string{protocolAliasMemcache}},
 	{protocol: mongodbProtocol{}, aliases: []string{protocolAliasMongo}},
 	{protocol: mountdProtocol, aliases: []string{protocolAliasRPCMountd, protocolAliasNFSMountd}},
@@ -163,6 +164,17 @@ var defaultRegistry = mustRegistry(builtinProtocolRegistrations)
 //
 //nolint:ireturn // The public registry API returns the protocol interface selected at runtime.
 func Lookup(name string) (Protocol, bool) { return defaultRegistry.lookup(name) }
+
+// SocketOnly reports whether name selects a protocol that can only be reached
+// through a Unix socket. Such a protocol cannot honor host or port settings.
+func SocketOnly(name string) bool {
+	protocol, ok := Lookup(name)
+	if !ok {
+		return false
+	}
+	registration, ok := defaultRegistry.byCanonical[protocol.Name()]
+	return ok && registration.socketOnly
+}
 
 // Prepare returns the registered protocol selected by name together with a
 // config whose target defaults are resolved. The returned protocol always
