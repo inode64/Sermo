@@ -83,7 +83,7 @@ func TestPostWebhookConnectionError(t *testing.T) {
 }
 
 func TestEmailDSNAddr(t *testing.T) {
-	if got := (emailDSN{host: "mail.example.com", port: "587"}).addr(); got != "mail.example.com:587" {
+	if got := (emailDSN{host: "mail.example.com", port: smtpDefaultPort}).addr(); got != "mail.example.com:587" {
 		t.Fatalf("addr = %q", got)
 	}
 }

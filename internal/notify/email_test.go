@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"math/big"
 	"net"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -37,7 +38,7 @@ func TestSMTPSendHonorsContextDeadline(t *testing.T) {
 	}()
 
 	host, port, _ := net.SplitHostPort(ln.Addr().String())
-	dsn := emailDSN{host: host, port: port}
+	dsn := emailDSN{host: host, port: smtpPort(t, port)}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 	defer cancel()
@@ -67,7 +68,7 @@ func TestSMTPSendRequiresSTARTTLSForCredentials(t *testing.T) {
 	go servePlainSMTP(t, ln, commands)
 
 	host, port, _ := net.SplitHostPort(ln.Addr().String())
-	dsn := emailDSN{host: host, port: port, user: "ops", pass: "secret"}
+	dsn := emailDSN{host: host, port: smtpPort(t, port), user: "ops", pass: "secret"}
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
@@ -100,7 +101,7 @@ func TestSMTPSendImplicitTLSAuthenticates(t *testing.T) {
 	go servePlainSMTP(t, ln, commands)
 
 	host, port, _ := net.SplitHostPort(ln.Addr().String())
-	dsn := emailDSN{host: host, port: port, user: "ops", pass: "secret", implicitTLS: true}
+	dsn := emailDSN{host: host, port: smtpPort(t, port), user: "ops", pass: "secret", implicitTLS: true}
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
@@ -207,16 +208,19 @@ func testSMTPServerTLS(t *testing.T) (*tls.Config, *tls.Config) {
 func TestParseEmailDSN(t *testing.T) {
 	cases := []struct {
 		dsn         string
-		host, port  string
+		host        string
+		port        int
 		user, pass  string
 		implicitTLS bool
 		wantErr     bool
 	}{
-		{dsn: "smtp://smtp.example.com", host: "smtp.example.com", port: "587"},
-		{dsn: "smtps://smtp.example.com", host: "smtp.example.com", port: "465", implicitTLS: true},
-		{dsn: "smtp://user:pass@mail.example.com:2525", host: "mail.example.com", port: "2525", user: "user", pass: "pass"},
+		{dsn: "smtp://smtp.example.com", host: "smtp.example.com", port: smtpDefaultPort},
+		{dsn: "smtps://smtp.example.com", host: "smtp.example.com", port: smtpsDefaultPort, implicitTLS: true},
+		{dsn: "smtp://user:pass@mail.example.com:2525", host: "mail.example.com", port: 2525, user: "user", pass: "pass"},
 		{dsn: "ftp://x", wantErr: true},
 		{dsn: "smtp://", wantErr: true},
+		{dsn: "smtp://mail.example.com:0", wantErr: true},
+		{dsn: "smtp://mail.example.com:65536", wantErr: true},
 	}
 	for _, tc := range cases {
 		d, err := parseEmailDSN(tc.dsn)
@@ -265,7 +269,7 @@ func TestEmailSendDispatchesToSender(t *testing.T) {
 	var gotMsg Message
 	e := &Email{
 		name: "ops", from: "Sermo <sermo@x>", to: []string{"a@x", "b@x"},
-		dsn: emailDSN{host: "h", port: "25"},
+		dsn: emailDSN{host: "h", port: 25},
 		send: func(_ context.Context, _ emailDSN, from string, to []string, msg Message) error {
 			gotFrom, gotTo, gotMsg = from, to, msg
 			return nil
@@ -277,6 +281,15 @@ func TestEmailSendDispatchesToSender(t *testing.T) {
 	if gotFrom != "Sermo <sermo@x>" || len(gotTo) != 2 || gotMsg.Subject != "s" {
 		t.Fatalf("sender got from=%q to=%v msg=%+v", gotFrom, gotTo, gotMsg)
 	}
+}
+
+func smtpPort(t *testing.T, text string) int {
+	t.Helper()
+	port, err := strconv.Atoi(text)
+	if err != nil {
+		t.Fatalf("parse SMTP test port %q: %v", text, err)
+	}
+	return port
 }
 
 func TestBuildMailMessageHeadersAndInjectionGuard(t *testing.T) {
