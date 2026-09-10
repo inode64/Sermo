@@ -50,7 +50,7 @@ func (m monitorView) Monitored() bool {
 // serviceMonitorState reads a service's monitoring row from the state store. It
 // is best-effort: status works without config, so a missing config or store
 // yields an empty view (not paused).
-func (a App) serviceMonitorState(ctx context.Context, cfg *config.Config, service string, configured bool) monitorView {
+func serviceMonitorState(ctx context.Context, cfg *config.Config, service string, configured bool) monitorView {
 	view := monitorView{Enabled: true}
 	if cfg == nil {
 		return view

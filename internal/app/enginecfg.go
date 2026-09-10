@@ -58,6 +58,7 @@ func EngineStateOptions(cfg *config.Config) state.Options {
 // OpenStateStore opens the persistent store with the engine settings shared by
 // sermod and sermoctl.
 func OpenStateStore(ctx context.Context, cfg *config.Config) (*state.Store, error) {
+	//nolint:wrapcheck // sermod and sermoctl add their own operation-specific context.
 	return state.OpenContextWith(ctx, filepath.Join(cfg.Global.StateDir(), state.Filename), EngineStateOptions(cfg))
 }
 

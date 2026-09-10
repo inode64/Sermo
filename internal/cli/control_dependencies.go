@@ -24,6 +24,7 @@ const (
 func (a App) controlDependenciesFor(ctx context.Context, requested servicemgr.Backend) (controlDependencies, controlDependencyStage, error) {
 	detection, err := a.Detector.Detect(ctx, requested)
 	if err != nil {
+		//nolint:wrapcheck // the caller preserves the stage-specific diagnostic.
 		return controlDependencies{}, controlDependencyDetection, err
 	}
 	manager, err := a.NewManager(detection.Backend)

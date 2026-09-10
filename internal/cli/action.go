@@ -22,6 +22,9 @@ func (a App) runAction(ctx context.Context, opts options, action string) int {
 	if code != exitSuccess {
 		return code
 	}
+	if cfg == nil {
+		return a.fail(opts, "service command resolved without configuration")
+	}
 	if action == actionReload {
 		if issues := config.Validate(cfg); len(issues) > 0 {
 			a.printIssues(opts, issues)
