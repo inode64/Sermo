@@ -2,7 +2,6 @@ package conn
 
 import (
 	"context"
-	"crypto/rand"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -39,12 +38,10 @@ var resolvConfPath = "/etc/resolv.conf"
 var dnsInterfaceAddrs = net.InterfaceAddrs
 
 const (
-	dnsFallbackID        = 0x1234
 	dnsDefaultPort       = 53
 	dnsDefaultQuery      = "localhost"
 	dnsLocalRouteTimeout = 100 * time.Millisecond
 	dnsUDPBufferBytes    = 1500
-	dnsIDBytes           = 2
 	dnsHeaderBytes       = 12
 	dnsANCountStart      = 6
 	dnsANCountEnd        = 8
@@ -235,11 +232,9 @@ func rcodeName(rcode int) string {
 }
 
 func dnsID() uint16 {
-	var b [dnsIDBytes]byte
-	if _, err := rand.Read(b[:]); err != nil {
-		return dnsFallbackID
-	}
-	return binary.BigEndian.Uint16(b[:])
+	var id [xid32Bytes]byte
+	binary.BigEndian.PutUint32(id[:], randXID32())
+	return binary.BigEndian.Uint16(id[:])
 }
 
 // buildDNSQuery builds a standard recursive query message (header + one question)
@@ -287,7 +282,7 @@ func parseDNSReply(b []byte) (id uint16, rcode, answers int, addrs []string, err
 	if !hdr.Response {
 		return hdr.ID, 0, 0, nil, errors.New("not a DNS response (QR=0)")
 	}
-	if len(b) >= dnsHeaderBytes { // always true after Start; makes the header read bounds-safe
+	if len(b) >= dnsHeaderBytes { // guaranteed by Parser.Start; keeps the slice bound explicit.
 		answers = int(binary.BigEndian.Uint16(b[dnsANCountStart:dnsANCountEnd]))
 	}
 	// Collect A/AAAA answers; a malformed question/answer section still leaves a
