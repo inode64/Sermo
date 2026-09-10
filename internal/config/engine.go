@@ -14,8 +14,7 @@ func EngineSection(cfg *Config) map[string]any {
 	if cfg == nil {
 		return nil
 	}
-	engine, _ := cfg.Global.Raw[SectionEngine].(map[string]any)
-	return engine
+	return SectionMap(cfg.Global.Raw, SectionEngine)
 }
 
 func engineValue(cfg *Config, key string) any {
