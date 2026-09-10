@@ -255,21 +255,13 @@ func sampleTerminalSessions(ctx context.Context, runner execx.Runner, config Ter
 	}
 	runner = execx.RunnerOrDefault(runner)
 	result, err := execx.RunUser(ctx, runner, execx.NoTimeout, config.User, config.Binary, adapter.args(config)...)
-	if result.ExitCode == execx.ExitCodeRunFailure {
-		if err == nil {
-			err = errors.New(execx.CommandDidNotStart)
-		}
-		return TerminalSessionSample{}, fmt.Errorf("list %s sessions for user %q: %w", config.Multiplexer, config.User, err)
-	}
 	output := strings.TrimSpace(result.Stdout + "\n" + result.Stderr)
-	if adapter.sessionsAbsent(output) {
+	absent := adapter.sessionsAbsent(output)
+	if err := terminalUserCommandError(result, err, fmt.Sprintf("list %s sessions for user %q", config.Multiplexer, config.User), absent); err != nil {
+		return TerminalSessionSample{}, err
+	}
+	if absent {
 		return TerminalSessionSample{Present: false}, nil
-	}
-	if err != nil {
-		return TerminalSessionSample{}, fmt.Errorf("list %s sessions for user %q: %w", config.Multiplexer, config.User, err)
-	}
-	if result.ExitCode != execx.ExitCodeSuccess {
-		return TerminalSessionSample{}, fmt.Errorf("list %s sessions for user %q: exit %d", config.Multiplexer, config.User, result.ExitCode)
 	}
 	sessions, err := adapter.parseSessions(config, result.Stdout)
 	if err != nil {
@@ -433,19 +425,7 @@ func CloseTerminalSession(ctx context.Context, runner execx.Runner, config Termi
 	}
 	adapter, _ := terminalMultiplexerAdapterFor(config.Multiplexer)
 	result, err := execx.RunUser(ctx, execx.RunnerOrDefault(runner), execx.NoTimeout, config.User, config.Binary, adapter.closeArgs(config, *current)...)
-	if result.ExitCode == execx.ExitCodeRunFailure {
-		if err == nil {
-			err = errors.New(execx.CommandDidNotStart)
-		}
-		return fmt.Errorf("close %s session %q: %w", config.Multiplexer, want.Name, err)
-	}
-	if err != nil {
-		return fmt.Errorf("close %s session %q: %w", config.Multiplexer, want.Name, err)
-	}
-	if result.ExitCode != execx.ExitCodeSuccess {
-		return fmt.Errorf("close %s session %q: exit %d", config.Multiplexer, want.Name, result.ExitCode)
-	}
-	return nil
+	return terminalUserCommandError(result, err, fmt.Sprintf("close %s session %q", config.Multiplexer, want.Name), false)
 }
 
 // CloseEmptyTmuxServer re-lists one explicitly configured tmux namespace and
@@ -469,17 +449,8 @@ func CloseEmptyTmuxServer(ctx context.Context, runner execx.Runner, config Termi
 		return errors.New("tmux server has active sessions; refresh and try again")
 	}
 	result, err := execx.RunUser(ctx, execx.RunnerOrDefault(runner), execx.NoTimeout, config.User, config.Binary, tmuxServerCloseArgs(config)...)
-	if result.ExitCode == execx.ExitCodeRunFailure {
-		if err == nil {
-			err = errors.New(execx.CommandDidNotStart)
-		}
-		return fmt.Errorf("close empty tmux server: %w", err)
-	}
-	if err != nil {
-		return fmt.Errorf("close empty tmux server: %w", err)
-	}
-	if result.ExitCode != execx.ExitCodeSuccess {
-		return fmt.Errorf("close empty tmux server: exit %d", result.ExitCode)
+	if err := terminalUserCommandError(result, err, "close empty tmux server", false); err != nil {
+		return err
 	}
 	verified, err := sampleTerminalSessions(ctx, runner, config)
 	if err != nil {
@@ -490,6 +461,29 @@ func CloseEmptyTmuxServer(ctx context.Context, runner execx.Runner, config Termi
 	}
 	if err := removeUnchangedUnixSocket(config.Socket, socketBefore); err != nil {
 		return fmt.Errorf("remove stale tmux socket: %w", err)
+	}
+	return nil
+}
+
+// terminalUserCommandError classifies a RunUser result uniformly for session
+// reads and close operations. An absent session server is a successful empty
+// sample only after a command that did start, so startup failures remain
+// unavailable even when their output resembles the client's empty response.
+func terminalUserCommandError(result execx.Result, runErr error, action string, absent bool) error {
+	if result.ExitCode == execx.ExitCodeRunFailure {
+		if runErr == nil {
+			runErr = errors.New(execx.CommandDidNotStart)
+		}
+		return fmt.Errorf("%s: %w", action, runErr)
+	}
+	if absent {
+		return nil
+	}
+	if runErr != nil {
+		return fmt.Errorf("%s: %w", action, runErr)
+	}
+	if result.ExitCode != execx.ExitCodeSuccess {
+		return fmt.Errorf("%s: exit %d", action, result.ExitCode)
 	}
 	return nil
 }
