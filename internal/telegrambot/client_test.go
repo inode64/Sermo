@@ -126,7 +126,8 @@ func TestCallScrubsTokenFromTransportError(t *testing.T) {
 		// request URL — for Telegram that URL carries the bot token.
 		return nil, &url.Error{Op: "Post", URL: r.URL.String(), Err: errors.New("dial tcp: refused")}
 	})
-	err := c.call(context.Background(), telegramapi.MethodGetUpdates, map[string]any{}, nil)
+	var out struct{}
+	err := c.call(context.Background(), telegramapi.MethodGetUpdates, map[string]any{}, &out)
 	if err == nil {
 		t.Fatal("expected an error")
 	}
