@@ -31,7 +31,7 @@ func newClient(token string, timeout time.Duration) *client {
 	return &client{
 		base:  telegramapi.APIBase,
 		token: token,
-		http:  &http.Client{Timeout: timeout, Transport: httpx.CloneDefaultTransport()},
+		http:  httpx.NewClient(httpx.ClientOptions{Timeout: timeout}),
 	}
 }
 

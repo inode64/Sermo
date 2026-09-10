@@ -26,6 +26,17 @@ func testClient(base, token string) *client {
 	return c
 }
 
+func TestNewClientSharesDefaultTransport(t *testing.T) {
+	c := newClient("token", time.Second)
+	httpClient, ok := c.http.(*http.Client)
+	if !ok {
+		t.Fatalf("client doer = %T, want *http.Client", c.http)
+	}
+	if httpClient.Transport != nil {
+		t.Fatalf("transport = %T, want shared default transport", httpClient.Transport)
+	}
+}
+
 func TestGetUpdatesParsesMessages(t *testing.T) {
 	const token = "123:abc"
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
