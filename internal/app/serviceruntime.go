@@ -165,21 +165,13 @@ func (s *ServiceMetricSampler) recordPersistent(ctx context.Context, name string
 	if !hasReadyPersistentMetric(values) {
 		return
 	}
-	if recordPersistentMetricsWithBatch(ctx, s.store, func(records state.Batch) persistentMetricRecorder {
+	recordPersistentMetricsWithBatch(ctx, s.store, func(records state.Batch) persistentMetricRecorder {
 		return func(metric string, value float64, at time.Time) error {
 			if err := records.RecordServiceMetric(name, metric, value, at); err != nil {
 				return fmt.Errorf("record service runtime metric: %w", err)
 			}
 			return nil
 		}
-	}, at, values) {
-		return
-	}
-	_ = recordPersistentMetrics(func(metric string, value float64, at time.Time) error {
-		if err := s.store.RecordServiceMetric(name, metric, value, at); err != nil {
-			return fmt.Errorf("record service runtime metric: %w", err)
-		}
-		return nil
 	}, at, values)
 }
 

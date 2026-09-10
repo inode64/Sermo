@@ -2,7 +2,6 @@ package app
 
 import (
 	"context"
-	"errors"
 	"testing"
 	"time"
 
@@ -33,33 +32,22 @@ func (f *fakeMeasureStore) RecordMetric(service, check, metric string, value flo
 	f.metrics = append(f.metrics, check+"."+metric)
 	return nil
 }
+func (f *fakeMeasureStore) RecordDaemonMetric(string, float64, time.Time) error { return nil }
+func (f *fakeMeasureStore) RecordServiceMetric(string, string, float64, time.Time) error {
+	return nil
+}
+func (f *fakeMeasureStore) WithBatch(_ context.Context, record func(state.Batch) error) error {
+	return record(f)
+}
 
 type batchMeasureStore struct {
 	fakeMeasureStore
 	batches int
 }
 
-type failingMeasureStore struct {
-	fakeMeasureStore
-	err error
-}
-
-func (f *failingMeasureStore) RecordMeasurement(_, check string, _ float64, _ time.Time) error {
-	f.recorded = append(f.recorded, check)
-	if check == "web" {
-		return f.err
-	}
-	return nil
-}
-
 func (f *batchMeasureStore) WithBatch(_ context.Context, record func(state.Batch) error) error {
 	f.batches++
 	return record(f)
-}
-
-func (f *batchMeasureStore) RecordDaemonMetric(string, float64, time.Time) error { return nil }
-func (f *batchMeasureStore) RecordServiceMetric(string, string, float64, time.Time) error {
-	return nil
 }
 
 func TestMeasurementRecorderGraphMetrics(t *testing.T) {
@@ -183,39 +171,5 @@ func TestCycleWriterRecordsMeasurementsDuringObserveOnlyCycle(t *testing.T) {
 
 	if len(store.recorded) != 1 || store.sla != 0 || len(store.checkSLA) != 0 {
 		t.Fatalf("records: SLA=%d checkSLA=%v measurements=%v", store.sla, store.checkSLA, store.recorded)
-	}
-}
-
-func TestCycleWriterDirectFallbackContinuesAfterWriteError(t *testing.T) {
-	store := &failingMeasureStore{err: errors.New("measurement write failed")}
-	tree := map[string]any{"checks": map[string]any{
-		"web": map[string]any{"type": "http"},
-		"api": map[string]any{"type": "http"},
-	}}
-	writer := newCycleWriter(Deps{SLA: store, Now: func() time.Time { return time.Unix(0, 0) }}, "svc", tree)
-	writer.RecordMeasurement(checks.Result{Check: "web", Latency: 12 * time.Millisecond})
-	writer.RecordMeasurement(checks.Result{Check: "api", Latency: 8 * time.Millisecond})
-	writer.RecordCycle(context.Background(), cycleRecord{
-		cache: map[string]checks.Result{
-			"web": {Check: "web", OK: true},
-			"api": {Check: "api", OK: true},
-		},
-		ran:                map[string]bool{"web": true, "api": true},
-		up:                 true,
-		recordAvailability: true,
-	})
-
-	if got, want := store.recorded, []string{"web", "api"}; len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
-		t.Fatalf("measurements = %v, want %v", got, want)
-	}
-	recordedChecks := map[string]bool{}
-	for _, check := range store.checkSLA {
-		recordedChecks[check] = true
-	}
-	if len(recordedChecks) != 2 || !recordedChecks["web"] || !recordedChecks["api"] {
-		t.Fatalf("check SLA = %v, want web and api", store.checkSLA)
-	}
-	if store.sla != 1 {
-		t.Fatalf("service SLA = %d, want 1", store.sla)
 	}
 }

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"sermo/internal/checks"
+	"sermo/internal/state"
 )
 
 // bandSLACapture records what a band recorder persists, keeping the series key
@@ -24,6 +25,17 @@ func (c *bandSLACapture) RecordSLA(string, bool, time.Time) error { return nil }
 func (c *bandSLACapture) RecordCheckSLA(service, check string, up bool, _ time.Time) error {
 	c.records = append(c.records, bandSLARecord{service: service, check: check, up: up})
 	return nil
+}
+func (*bandSLACapture) RecordMeasurement(string, string, float64, time.Time) error { return nil }
+func (*bandSLACapture) RecordMetric(string, string, string, float64, time.Time) error {
+	return nil
+}
+func (*bandSLACapture) RecordDaemonMetric(string, float64, time.Time) error { return nil }
+func (*bandSLACapture) RecordServiceMetric(string, string, float64, time.Time) error {
+	return nil
+}
+func (c *bandSLACapture) WithBatch(_ context.Context, record func(state.Batch) error) error {
+	return record(c)
 }
 
 // TestWatchMetricRecorderRecordsBandsNotValues pins the split for a raid watch:
@@ -124,7 +136,9 @@ func TestCycleWriterRecordsServiceCheckBands(t *testing.T) {
 		checks.DataKeyDegraded:   float64(0),
 		checks.DataKeyRecovering: float64(1),
 	}})
-	if err := w.writeCycle(directCycleRecords{sla: store}, cycleRecord{}); err != nil {
+	if err := w.batch.WithBatch(t.Context(), func(records state.Batch) error {
+		return w.writeCycle(records, cycleRecord{})
+	}); err != nil {
 		t.Fatalf("writeCycle: %v", err)
 	}
 	if len(store.records) != 2 {

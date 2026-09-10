@@ -102,6 +102,7 @@ type MeasurementReader interface {
 // DaemonMetricStore persists sermod's own process metrics so the daemon graphs
 // survive process restarts. Implemented by internal/state.Store.
 type DaemonMetricStore interface {
+	stateBatchStore
 	RecordDaemonMetric(metric string, value float64, at time.Time) error
 	DaemonMetricSummary(metric string, span time.Duration, now time.Time) (state.MeasurementStat, error)
 	DaemonMetricSeries(metric string, from, to time.Time) ([]state.MeasurementPoint, error)
@@ -111,6 +112,7 @@ type DaemonMetricStore interface {
 // service detail graphs survive daemon restarts. Implemented by
 // internal/state.Store.
 type ServiceMetricStore interface {
+	stateBatchStore
 	RecordServiceMetric(service, metric string, value float64, at time.Time) error
 	ServiceMetricSummary(service, metric string, span time.Duration, now time.Time) (state.MeasurementStat, error)
 	ServiceMetricSeries(service, metric string, from, to time.Time) ([]state.MeasurementPoint, error)
@@ -837,78 +839,22 @@ func dueChecks(cycle int, built []checks.Built, every map[string]int, cache map[
 	return due
 }
 
-// stateBatchStore is the optional transaction capability a state store exposes.
+// stateBatchStore provides the transaction capability required for grouped
+// time-series writes.
 type stateBatchStore interface {
 	WithBatch(ctx context.Context, record func(state.Batch) error) error
 }
 
+type cycleBatchStore interface {
+	SLARecorder
+	stateBatchStore
+}
+
 // cycleRecords is the subset of time-series record methods a worker cycle uses.
-// state.Batch and directCycleRecords both implement it, keeping the fallback for
-// test stores that intentionally do not provide transaction support.
+// state.Batch implements it inside the transaction owned by the state store.
 type cycleRecords interface {
 	SLARecorder
 	MeasurementRecorder
-}
-
-type directCycleRecords struct {
-	sla          SLARecorder
-	measurements MeasurementRecorder
-}
-
-// bestEffortCycleRecords remembers direct write errors while letting the cycle
-// continue. It preserves the pre-batch behavior for alternate state stores that
-// do not support transactions.
-type bestEffortCycleRecords struct {
-	cycleRecords
-	err error
-}
-
-func (r *bestEffortCycleRecords) record(err error) error {
-	if err != nil && r.err == nil {
-		r.err = err
-	}
-	return nil
-}
-
-func (r *bestEffortCycleRecords) RecordSLA(service string, up bool, at time.Time) error {
-	return r.record(r.cycleRecords.RecordSLA(service, up, at))
-}
-
-func (r *bestEffortCycleRecords) RecordCheckSLA(service, check string, up bool, at time.Time) error {
-	return r.record(r.cycleRecords.RecordCheckSLA(service, check, up, at))
-}
-
-func (r *bestEffortCycleRecords) RecordMeasurement(service, check string, valueMs float64, at time.Time) error {
-	return r.record(r.cycleRecords.RecordMeasurement(service, check, valueMs, at))
-}
-
-func (r *bestEffortCycleRecords) RecordMetric(service, check, metric string, value float64, at time.Time) error {
-	return r.record(r.cycleRecords.RecordMetric(service, check, metric, value, at))
-}
-
-// wrapRecord names the failed write in the error the cycle reports. The four
-// direct recorders below differ only in the store call and that name.
-func wrapRecord(what string, err error) error {
-	if err != nil {
-		return fmt.Errorf("record %s: %w", what, err)
-	}
-	return nil
-}
-
-func (r directCycleRecords) RecordSLA(service string, up bool, at time.Time) error {
-	return wrapRecord("SLA", r.sla.RecordSLA(service, up, at))
-}
-
-func (r directCycleRecords) RecordCheckSLA(service, check string, up bool, at time.Time) error {
-	return wrapRecord("check SLA", r.sla.RecordCheckSLA(service, check, up, at))
-}
-
-func (r directCycleRecords) RecordMeasurement(service, check string, valueMs float64, at time.Time) error {
-	return wrapRecord("measurement", r.measurements.RecordMeasurement(service, check, valueMs, at))
-}
-
-func (r directCycleRecords) RecordMetric(service, check, metric string, value float64, at time.Time) error {
-	return wrapRecord("metric", r.measurements.RecordMetric(service, check, metric, value, at))
 }
 
 type cycleMeasurement struct {
@@ -926,7 +872,6 @@ type cycleWriter struct {
 	name         string
 	now          func() time.Time
 	emit         func(Event)
-	sla          SLARecorder
 	measurements MeasurementRecorder
 	batch        stateBatchStore
 	measured     map[string]bool
@@ -946,20 +891,18 @@ type cycleBandSample struct {
 }
 
 func newCycleWriter(deps Deps, name string, tree map[string]any) *cycleWriter {
-	if deps.SLA == nil {
+	batch, ok := deps.SLA.(cycleBatchStore)
+	if !ok {
 		return nil
 	}
 	now := clockOrNow(deps.Now)
-	w := &cycleWriter{name: name, now: now, emit: deps.Emit, sla: deps.SLA}
-	if measurements, ok := deps.SLA.(MeasurementRecorder); ok && measurements != nil {
+	w := &cycleWriter{name: name, now: now, emit: deps.Emit, batch: batch}
+	if measurements, ok := batch.(MeasurementRecorder); ok && measurements != nil {
 		w.measurements = measurements
 		w.measured = measuredCheckNames(tree)
 		w.graphable = graphableCheckMetrics(tree)
 	}
 	w.bands = bandCheckMetrics(tree)
-	if batch, ok := deps.SLA.(stateBatchStore); ok {
-		w.batch = batch
-	}
 	return w
 }
 
@@ -1035,16 +978,9 @@ const bandSeriesSeparator = ":"
 func (w *cycleWriter) RecordCycle(ctx context.Context, cycle cycleRecord) {
 	defer func() { w.records, w.bandSamples = w.records[:0], w.bandSamples[:0] }()
 
-	var err error
-	if w.batch != nil {
-		err = w.batch.WithBatch(ctx, func(records state.Batch) error {
-			return w.writeCycle(records, cycle)
-		})
-	} else {
-		direct := &bestEffortCycleRecords{cycleRecords: directCycleRecords{sla: w.sla, measurements: w.measurements}}
-		_ = w.writeCycle(direct, cycle)
-		err = direct.err
-	}
+	err := w.batch.WithBatch(ctx, func(records state.Batch) error {
+		return w.writeCycle(records, cycle)
+	})
 	if err != nil && !errors.Is(err, context.Canceled) && w.emit != nil {
 		w.emit(Event{Service: w.name, Kind: eventKindError, Message: "record cycle: " + err.Error()})
 	}

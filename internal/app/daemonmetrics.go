@@ -241,12 +241,9 @@ func (s *DaemonMetricSampler) recordPersistent(ctx context.Context, sample daemo
 	if !hasReadyPersistentMetric(values) {
 		return
 	}
-	if recordPersistentMetricsWithBatch(ctx, s.store, func(records state.Batch) persistentMetricRecorder {
+	recordPersistentMetricsWithBatch(ctx, s.store, func(records state.Batch) persistentMetricRecorder {
 		return records.RecordDaemonMetric
-	}, sample.at, values) {
-		return
-	}
-	_ = recordPersistentMetrics(s.store.RecordDaemonMetric, sample.at, values)
+	}, sample.at, values)
 }
 
 func (s *DaemonMetricSampler) persistentSeries(sample daemonMetricSample, since time.Duration) (web.DaemonMetrics, bool) {
@@ -278,8 +275,7 @@ func hasReadyPersistentMetric(values [3]persistentMetricValue) bool {
 }
 
 // recordPersistentMetrics records every ready value and returns the first
-// error. Direct callers intentionally ignore it to retain their best-effort
-// behavior; batch callers use it to roll back the complete metric sample.
+// error, so the enclosing transaction can roll back the complete metric sample.
 func recordPersistentMetrics(record persistentMetricRecorder, at time.Time, values [3]persistentMetricValue) error {
 	var firstErr error
 	for _, value := range values {
@@ -293,17 +289,11 @@ func recordPersistentMetrics(record persistentMetricRecorder, at time.Time, valu
 }
 
 // recordPersistentMetricsWithBatch records one daemon or service metric sample
-// atomically when the store supports batches. It reports whether it used that
-// path; callers retain the direct best-effort fallback for test stores.
-func recordPersistentMetricsWithBatch(ctx context.Context, store any, record func(state.Batch) persistentMetricRecorder, at time.Time, values [3]persistentMetricValue) bool {
-	batch, ok := store.(stateBatchStore)
-	if !ok {
-		return false
-	}
+// atomically.
+func recordPersistentMetricsWithBatch(ctx context.Context, batch stateBatchStore, record func(state.Batch) persistentMetricRecorder, at time.Time, values [3]persistentMetricValue) {
 	_ = batch.WithBatch(ctx, func(records state.Batch) error {
 		return recordPersistentMetrics(record(records), at, values)
 	})
-	return true
 }
 
 func loadPersistentMetricTriplet(check string, at time.Time, since time.Duration, reader persistentMetricReader) (persistentMetricTriplet, bool) {

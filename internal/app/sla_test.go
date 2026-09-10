@@ -20,10 +20,34 @@ type checkSLARecord struct {
 	up    bool
 }
 
+type unbatchedSLAStore struct{}
+
+func (unbatchedSLAStore) RecordSLA(string, bool, time.Time) error { return nil }
+func (unbatchedSLAStore) RecordCheckSLA(string, string, bool, time.Time) error {
+	return nil
+}
+
 func (c *checkSLACapture) RecordSLA(string, bool, time.Time) error { return nil }
 func (c *checkSLACapture) RecordCheckSLA(_, check string, up bool, _ time.Time) error {
 	c.records = append(c.records, checkSLARecord{check: check, up: up})
 	return nil
+}
+func (*checkSLACapture) RecordMeasurement(string, string, float64, time.Time) error { return nil }
+func (*checkSLACapture) RecordMetric(string, string, string, float64, time.Time) error {
+	return nil
+}
+func (*checkSLACapture) RecordDaemonMetric(string, float64, time.Time) error { return nil }
+func (*checkSLACapture) RecordServiceMetric(string, string, float64, time.Time) error {
+	return nil
+}
+func (c *checkSLACapture) WithBatch(_ context.Context, record func(state.Batch) error) error {
+	return record(c)
+}
+
+func TestNewCycleWriterRequiresBatchStore(t *testing.T) {
+	if writer := newCycleWriter(Deps{SLA: unbatchedSLAStore{}}, "svc", nil); writer != nil {
+		t.Fatalf("cycle writer = %#v, want nil without transaction support", writer)
+	}
 }
 
 func TestRecordHealthReflectsRequiredChecks(t *testing.T) {
