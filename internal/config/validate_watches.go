@@ -22,27 +22,16 @@ func validateWatches(watches map[string]any, locksDir string, notifiers map[stri
 			add(validationMappingFormat, prefix)
 			continue
 		}
-		validateWatchMetadata(name, entry, add)
-		if mode, present := entry[keyMonitor]; present {
-			validateMonitorMode(watchFieldPath(name, keyMonitor), mode, add)
-		}
+		validateWatchHeader(name, entry, add)
 		if cfgval.Disabled(entry) {
 			continue
 		}
 
 		// Entry-level fields are validated before the check so a watch with a
 		// missing/invalid check still reports every other problem in one pass.
-		validatePositiveDurationField(entry, keyInterval, watchFieldPath(name, keyInterval), add)
-		if v, present := entry[keyDryRun]; present {
-			if _, ok := v.(bool); !ok {
-				add(validationBooleanFormat, watchFieldPath(name, keyDryRun))
-			}
-		}
+		validateWatchRuntimeFields(name, entry, add)
 		validateSeverityField(prefix, entry, add)
-		validateEmission(entry, watchFieldPath(name, emission.Section), add)
 		validateNotifyRefs(name, entry, notifiers, add)
-		validateWindow(prefix, entry, add)
-		validateWatchPolicy(prefix, entry, add)
 
 		check, ok := entry[WatchKeyCheck].(map[string]any)
 		if !ok {
@@ -197,7 +186,9 @@ func validateServiceWatch(name string, entry map[string]any, locksDir string, no
 	if cfgval.Disabled(entry) {
 		return
 	}
-	validateServiceWatchEntry(name, entry, notifiers, add)
+	validateWatchHeader(name, entry, add)
+	validateWatchRuntimeFields(name, entry, add)
+	validateServiceWatchNotify(name, entry, notifiers, add)
 	checkPath := watchCheckPath(name)
 	check, ok := entry[WatchKeyCheck].(map[string]any)
 	if !ok {
@@ -228,12 +219,15 @@ func validateServiceWatch(name string, entry map[string]any, locksDir string, no
 	validateHookBlock(prefix, entry, watchNativeActions{expand: typ == checks.CheckTypeStorage, makeStep: typ == checks.CheckTypeClock, recoverHook: true}, defaultNotify, add)
 }
 
-func validateServiceWatchEntry(name string, entry map[string]any, notifiers map[string]struct{}, add addFunc) {
-	prefix := watchPath(name)
+func validateWatchHeader(name string, entry map[string]any, add addFunc) {
 	validateWatchMetadata(name, entry, add)
 	if mode, present := entry[keyMonitor]; present {
 		validateMonitorMode(watchFieldPath(name, keyMonitor), mode, add)
 	}
+}
+
+func validateWatchRuntimeFields(name string, entry map[string]any, add addFunc) {
+	prefix := watchPath(name)
 	validatePositiveDurationField(entry, keyInterval, watchFieldPath(name, keyInterval), add)
 	if v, present := entry[keyDryRun]; present {
 		if _, ok := v.(bool); !ok {
@@ -241,13 +235,17 @@ func validateServiceWatchEntry(name string, entry map[string]any, notifiers map[
 		}
 	}
 	validateEmission(entry, watchFieldPath(name, emission.Section), add)
+	validateWindow(prefix, entry, add)
+	validateWatchPolicy(prefix, entry, add)
+}
+
+func validateServiceWatchNotify(name string, entry map[string]any, notifiers map[string]struct{}, add addFunc) {
+	prefix := watchPath(name)
 	if then, ok := entry[rules.RuleFieldThen].(map[string]any); ok {
 		if _, present := then[rules.RuleFieldNotify]; present {
 			validateNotifySelection(thenFieldPath(prefix, rules.RuleFieldNotify), then[rules.RuleFieldNotify], notifiers, add)
 		}
 	}
-	validateWindow(prefix, entry, add)
-	validateWatchPolicy(prefix, entry, add)
 }
 
 func validateServiceWatchType(name, typ, checkPath string, check map[string]any, locksDir string, add addFunc) bool {
