@@ -85,13 +85,7 @@ func prependLibraryPath(dirs []string, libraryPath, binary string) []string {
 	if libraryPath == "" {
 		return dirs
 	}
-	fromEnv := make([]string, 0)
-	for path := range strings.SplitSeq(libraryPath, ldPathSeparator) {
-		if path != "" {
-			fromEnv = append(fromEnv, expandOrigin(path, binary))
-		}
-	}
-	return strutil.Unique(append(fromEnv, dirs...))
+	return strutil.Unique(append(expandLibraryPath(libraryPath, binary), dirs...))
 }
 
 // resolveNeeded recursively resolves DT_NEEDED entries (including transitive
@@ -123,10 +117,7 @@ func resolveNeeded(ctx context.Context, needed, dirs []string, seen map[string]b
 		subNeeded, _ := ef.DynString(elf.DT_NEEDED)
 		_ = ef.Close()
 
-		if len(subNeeded) > 0 {
-			subMissing := resolveNeeded(ctx, subNeeded, dirs, seen)
-			missing = append(missing, subMissing...)
-		}
+		missing = append(missing, resolveNeeded(ctx, subNeeded, dirs, seen)...)
 	}
 	return missing
 }
@@ -139,19 +130,7 @@ func collectLibrarySearchDirs(binary string, ef *elf.File) []string {
 	var dirs []string
 
 	// Prefer RUNPATH, fall back to RPATH (older binaries).
-	if rps, _ := ef.DynString(elf.DT_RUNPATH); len(rps) > 0 && rps[0] != "" {
-		for p := range strings.SplitSeq(rps[0], ldPathSeparator) {
-			if p != "" {
-				dirs = append(dirs, expandOrigin(p, binary))
-			}
-		}
-	} else if rps, _ := ef.DynString(elf.DT_RPATH); len(rps) > 0 && rps[0] != "" {
-		for p := range strings.SplitSeq(rps[0], ldPathSeparator) {
-			if p != "" {
-				dirs = append(dirs, expandOrigin(p, binary))
-			}
-		}
-	}
+	dirs = append(dirs, expandLibraryPath(dynamicLibraryPath(ef), binary)...)
 
 	// Directory of the binary itself (some apps ship private libs next to exe).
 	if d := filepath.Dir(binary); d != "" && d != "." {
@@ -169,21 +148,37 @@ func collectLibrarySearchDirs(binary string, ef *elf.File) []string {
 	)
 
 	// Best-effort augmentation from ld.so.conf and fragments.
-	if more := parseLdSoConf(ldSoConfFile); len(more) > 0 {
-		dirs = append(dirs, more...)
-	}
+	dirs = append(dirs, parseLdSoConf(ldSoConfFile)...)
 	// Common drop-in directory even if main conf doesn't include it.
-	if entries, _ := os.ReadDir(ldSoConfDir); len(entries) > 0 {
+	if entries, err := os.ReadDir(ldSoConfDir); err == nil {
 		for _, e := range entries {
 			if strings.HasSuffix(e.Name(), ldSoConfSuffix) {
-				if more := parseLdSoConf(filepath.Join(ldSoConfDir, e.Name())); len(more) > 0 {
-					dirs = append(dirs, more...)
-				}
+				dirs = append(dirs, parseLdSoConf(filepath.Join(ldSoConfDir, e.Name()))...)
 			}
 		}
 	}
 
 	return strutil.Unique(dirs)
+}
+
+func dynamicLibraryPath(ef *elf.File) string {
+	if paths, _ := ef.DynString(elf.DT_RUNPATH); len(paths) > 0 && paths[0] != "" {
+		return paths[0]
+	}
+	if paths, _ := ef.DynString(elf.DT_RPATH); len(paths) > 0 {
+		return paths[0]
+	}
+	return ""
+}
+
+func expandLibraryPath(paths, binary string) []string {
+	dirs := make([]string, 0)
+	for path := range strings.SplitSeq(paths, ldPathSeparator) {
+		if path != "" {
+			dirs = append(dirs, expandOrigin(path, binary))
+		}
+	}
+	return dirs
 }
 
 func expandOrigin(p, binary string) string {
@@ -202,7 +197,7 @@ func findLibrary(soname string, dirs []string) string {
 	}
 	for _, d := range dirs {
 		cand := filepath.Join(d, soname)
-		if _, err := os.Stat(cand); err == nil {
+		if _, err := os.Stat(cand); err == nil { //nolint:gosec // G703: linker paths are only probed read-only; no file is written or executed.
 			return cand
 		}
 	}
