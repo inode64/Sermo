@@ -149,7 +149,7 @@ func TestStrictStringList(t *testing.T) {
 		{"bare string becomes single element", "solo", []string{"solo"}, false},
 		{"empty bare string is nil", "", nil, false},
 		{"nil is nil", nil, nil, false},
-		{"native string slice is copied", []string{"a", "b"}, []string{"a", "b"}, false},
+		{"native string slice skips empties", []string{"a", "", "b"}, []string{"a", "b"}, false},
 		{"rejects non-string item", []any{"a", 7}, nil, true},
 		{"rejects non-list non-string", 42, nil, true},
 	})
