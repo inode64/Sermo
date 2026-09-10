@@ -42,18 +42,12 @@ func (a App) runSLA(ctx context.Context, opts options) int {
 		return a.runSLASeries(ctx, opts, cfg)
 	}
 
-	return runWindowsReport(ctx, a, opts, cfg,
-		func(s *state.Store, name string, now time.Time) ([]state.SLAValue, error) {
-			return s.SLAReport(name, now)
-		},
-		a.writeSLAJSON, a.writeSLATable)
+	return a.runWindowsReport(ctx, opts, cfg)
 }
 
-// runWindowsReport loads each service's per-window values via report and
-// renders them as JSON or a table.
-func runWindowsReport[V any](ctx context.Context, a App, opts options, cfg *config.Config,
-	report func(*state.Store, string, time.Time) ([]V, error),
-	writeJSON, writeTable func([]serviceWindows[V])) int {
+// runWindowsReport loads each target's SLA windows and renders them as JSON or
+// a table.
+func (a App) runWindowsReport(ctx context.Context, opts options, cfg *config.Config) int {
 	targets, code := a.slaTargets(opts, cfg)
 	if code != exitSuccess {
 		return code
@@ -63,19 +57,19 @@ func runWindowsReport[V any](ctx context.Context, a App, opts options, cfg *conf
 		return a.fail(opts, fmt.Sprintf("sla failed: %v", err))
 	}, func(store *state.Store) int {
 		now := time.Now()
-		reports := make([]serviceWindows[V], 0, len(targets))
+		reports := make([]serviceWindows, 0, len(targets))
 		for _, target := range targets {
-			values, err := report(store, target.key, now)
+			values, err := store.SLAReport(target.key, now)
 			if err != nil {
 				return a.fail(opts, fmt.Sprintf("sla %s failed: %v", target.name, err))
 			}
-			reports = append(reports, serviceWindows[V]{Service: target.name, Windows: values})
+			reports = append(reports, serviceWindows{Service: target.name, Windows: values})
 		}
 
 		if opts.json {
-			writeJSON(reports)
+			a.writeSLAJSON(reports)
 		} else {
-			writeTable(reports)
+			a.writeSLATable(reports)
 		}
 		return exitSuccess
 	})
@@ -157,25 +151,23 @@ func (a App) runSLASeries(ctx context.Context, opts options, cfg *config.Config)
 }
 
 // serviceWindows pairs one service with its per-window availability values.
-type serviceWindows[V any] struct {
+type serviceWindows struct {
 	Service string
-	Windows []V
+	Windows []state.SLAValue
 }
 
-func (a App) writeSLAJSON(reports []serviceWindows[state.SLAValue]) {
-	writeSLAWindowJSON(a, cliJSONKeySLA, reports,
-		func(v state.SLAValue) (string, map[string]any) { return v.Window, slaValueJSON(v) })
+func (a App) writeSLAJSON(reports []serviceWindows) {
+	writeSLAWindowJSON(a, cliJSONKeySLA, reports)
 }
 
 // writeSLAWindowJSON renders the {top: [{service, windows}]} JSON envelope,
 // mirroring writeSLAWindowTable for the table form.
-func writeSLAWindowJSON[V any](a App, topKey string, reports []serviceWindows[V], window func(V) (string, map[string]any)) {
+func writeSLAWindowJSON(a App, topKey string, reports []serviceWindows) {
 	out := make([]map[string]any, 0, len(reports))
 	for _, r := range reports {
 		windows := make(map[string]any, len(r.Windows))
 		for _, v := range r.Windows {
-			name, entry := window(v)
-			windows[name] = entry
+			windows[v.Window] = slaValueJSON(v)
 		}
 		out = append(out, map[string]any{cliJSONKeyService: r.Service, cliJSONKeyWindows: windows})
 	}
@@ -195,13 +187,13 @@ func slaValueJSON(v state.SLAValue) map[string]any {
 	return entry
 }
 
-func (a App) writeSLATable(reports []serviceWindows[state.SLAValue]) {
-	writeSLAWindowTable(a, reports, state.SLAValue.PercentText)
+func (a App) writeSLATable(reports []serviceWindows) {
+	writeSLAWindowTable(a, reports)
 }
 
 // writeSLAWindowTable renders one TARGET + per-SLA-window availability table.
 // A target is a configured service or an availability host watch.
-func writeSLAWindowTable[V any](a App, reports []serviceWindows[V], format func(V) string) {
+func writeSLAWindowTable(a App, reports []serviceWindows) {
 	if len(reports) == 0 {
 		fmt.Fprintln(a.Stdout, "no targets")
 		return
@@ -216,7 +208,7 @@ func writeSLAWindowTable[V any](a App, reports []serviceWindows[V], format func(
 		row := make([]string, 0, len(report.Windows)+1)
 		row = append(row, report.Service)
 		for _, window := range report.Windows {
-			row = append(row, format(window))
+			row = append(row, window.PercentText())
 		}
 		fmt.Fprintln(a.Stdout, strings.Join(row, "\t"))
 	}
