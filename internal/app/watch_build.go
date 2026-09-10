@@ -38,7 +38,7 @@ func BuildWatches(cfg *config.Config, deps Deps, defaultInterval time.Duration) 
 	var watches []*Watch
 	var warnings []string
 
-	sw, swarn := serviceMonitorWatches(cfg, deps, defaultInterval)
+	sw, swarn := serviceMonitorWatches(cfg, deps)
 	watches = append(watches, sw...)
 	warnings = append(warnings, swarn...)
 
@@ -342,10 +342,6 @@ func configuredVolumeExpander(deps Deps) VolumeExpander {
 	runner := deps.ExecxRunner
 	runner = execx.RunnerOrDefault(runner)
 	return volume.Expander{Runner: runner}
-}
-
-func hasWatchAction(hook HookSpec, names, effectiveNames []string, expand *ExpandSpec) bool {
-	return len(hook.Command) > 0 || config.HasNotifyAction(effectiveNames) || expand != nil || config.NotifyOptedOut(names)
 }
 
 // buildMetricWatches expands one multi-metric watch entry (net/icmp/swap) into
@@ -748,26 +744,6 @@ func fileOnFlag(check map[string]any, key, mode string) (bool, error) {
 	return true, nil
 }
 
-// parseThenAndExplicit reads the (optional) `then` block and returns the hook +
-// notifier names, plus the raw then-block map (non-nil iff an explicit `then:` key
-// was present and was a valid mapping). Callers use the presence of the then-block
-// to decide whether to allow global notify inheritance or force pure monitor/alert
-// behavior (no actions, no inheritance).
-//
-// This removes the previous need for every call site to re-invoke thenMap just to
-// test presence (the source of the duplicated if/else blocks).
-func parseThenAndExplicit(entry map[string]any) (HookSpec, []string, map[string]any, error) {
-	then, err := thenMap(entry)
-	if err != nil {
-		return HookSpec{}, nil, nil, err
-	}
-	if then == nil {
-		return HookSpec{}, nil, nil, nil
-	}
-	hook, names, err := parseActions(then)
-	return hook, names, then, err
-}
-
 func thenMap(entry map[string]any) (map[string]any, error) {
 	raw, present := entry[rules.RuleFieldThen]
 	if !present {
@@ -845,12 +821,16 @@ type watchActionOptions struct {
 }
 
 func resolveWatchActions(entry map[string]any, deps Deps, opts watchActionOptions) (watchActions, error) {
-	hook, names, thenBlock, err := parseThenAndExplicit(entry)
+	thenBlock, err := thenMap(entry)
 	if err != nil {
 		return watchActions{}, err
 	}
 	if thenBlock == nil {
 		return watchActions{}, nil
+	}
+	hook, names, err := parseActions(thenBlock)
+	if err != nil {
+		return watchActions{}, err
 	}
 	recoverHook, err := parseHookMap(thenBlock, config.WatchThenKeyRecoverHook)
 	if err != nil {
@@ -891,7 +871,7 @@ func resolveWatchActions(entry map[string]any, deps Deps, opts watchActionOption
 			return watchActions{}, err
 		}
 	}
-	if !hasWatchAction(hook, names, effectiveNames, expand) && kill == nil && makeStep == nil && len(recoverHook.Command) == 0 {
+	if len(hook.Command) == 0 && !config.HasNotifyAction(effectiveNames) && expand == nil && !config.NotifyOptedOut(names) && kill == nil && makeStep == nil && len(recoverHook.Command) == 0 {
 		return watchActions{}, errors.New(opts.emptyMessage)
 	}
 	return watchActions{
@@ -1019,7 +999,7 @@ func resolveNotifiers(names []string, reg map[string]notify.Notifier) []notify.N
 // each resolved service's `version:`/`config:` blocks, reusing the daemon's
 // `commands.version` and `preflight.config`. They are built once (like host
 // watches) so their on_change detection persists across cycles.
-func serviceMonitorWatches(cfg *config.Config, deps Deps, _ time.Duration) ([]*Watch, []string) {
+func serviceMonitorWatches(cfg *config.Config, deps Deps) ([]*Watch, []string) {
 	var watches []*Watch
 	var warnings []string
 	for _, name := range cfg.SortedServiceNames() {

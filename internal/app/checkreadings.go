@@ -1020,25 +1020,25 @@ func hardwareRAIDCheckReadings(data map[string]any) []web.WatchReading {
 		rb.add(checks.DataKeyHardwareRAIDAdvisories, "Advisories", strings.Join(advisories, readingSummarySeparator))
 	}
 	readings := rb.readings()
-	for _, detail := range hardwareRAIDControllerDetails(data[checks.DataKeyHardwareRAIDControllerDetails]) {
+	for _, detail := range hardwareRAIDDetails[checks.HardwareRAIDControllerStatus](data[checks.DataKeyHardwareRAIDControllerDetails]) {
 		readings = append(readings, web.WatchReading{
 			Field: hardwareRAIDReadingField("controller", detail.ID), Label: "Controller " + detail.ID,
 			Value: hardwareRAIDControllerReading(detail),
 		})
 	}
-	for _, detail := range hardwareRAIDCacheDetails(data[checks.DataKeyHardwareRAIDCacheDetails]) {
+	for _, detail := range hardwareRAIDDetails[checks.HardwareRAIDCacheStatus](data[checks.DataKeyHardwareRAIDCacheDetails]) {
 		readings = append(readings, web.WatchReading{
 			Field: hardwareRAIDReadingField("cache", detail.ID), Label: "Cache " + detail.ID,
 			Value: hardwareRAIDCacheReading(detail),
 		})
 	}
-	for _, detail := range hardwareRAIDVolumeDetails(data[checks.DataKeyHardwareRAIDVolumeDetails]) {
+	for _, detail := range hardwareRAIDDetails[checks.HardwareRAIDVolumeStatus](data[checks.DataKeyHardwareRAIDVolumeDetails]) {
 		readings = append(readings, web.WatchReading{
 			Field: hardwareRAIDReadingField("volume", detail.ID), Label: "Volume " + detail.ID,
 			Value: hardwareRAIDVolumeReading(detail),
 		})
 	}
-	for _, detail := range hardwareRAIDDriveDetails(data[checks.DataKeyHardwareRAIDDriveDetails]) {
+	for _, detail := range hardwareRAIDDetails[checks.HardwareRAIDDriveStatus](data[checks.DataKeyHardwareRAIDDriveDetails]) {
 		readings = append(readings, web.WatchReading{
 			Field: hardwareRAIDReadingField("drive", detail.ID), Label: "Drive " + detail.ID,
 			Value: hardwareRAIDDriveReading(detail),
@@ -1155,22 +1155,6 @@ func hardwareRAIDReadingField(kind, id string) string {
 		}
 	}
 	return strings.TrimSuffix(field.String(), "_")
-}
-
-func hardwareRAIDControllerDetails(value any) []checks.HardwareRAIDControllerStatus {
-	return hardwareRAIDDetails[checks.HardwareRAIDControllerStatus](value)
-}
-
-func hardwareRAIDCacheDetails(value any) []checks.HardwareRAIDCacheStatus {
-	return hardwareRAIDDetails[checks.HardwareRAIDCacheStatus](value)
-}
-
-func hardwareRAIDVolumeDetails(value any) []checks.HardwareRAIDVolumeStatus {
-	return hardwareRAIDDetails[checks.HardwareRAIDVolumeStatus](value)
-}
-
-func hardwareRAIDDriveDetails(value any) []checks.HardwareRAIDDriveStatus {
-	return hardwareRAIDDetails[checks.HardwareRAIDDriveStatus](value)
 }
 
 // hardwareRAIDDetails accepts both a live typed slice and the []any/map form a
