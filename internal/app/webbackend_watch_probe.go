@@ -25,7 +25,7 @@ func (b *WebBackend) watchCheckDeps() checks.Deps {
 // use the configured Watch instance, so a manual probe cannot alter a
 // stateful check's scheduler baseline or dispatch watch rules/actions.
 func (b *WebBackend) probeWatchResult(ctx context.Context, w *webWatch) (checks.Result, error) {
-	if w == nil || len(w.check) == 0 {
+	if len(w.check) == 0 {
 		return checks.Result{}, errors.New("watch has no check configuration")
 	}
 	if w.checkType == checks.CheckTypeSmart {
@@ -232,7 +232,7 @@ func ManualProbeCheckType(checkType string) bool {
 // check configuration. Samples from a previous target are ignored even if
 // they are still within the freshness window.
 func (b *WebBackend) watchLastCheckedAt(w *webWatch) time.Time {
-	if b.watchSnapshots == nil || w == nil {
+	if b.watchSnapshots == nil {
 		return time.Time{}
 	}
 	var latest time.Time

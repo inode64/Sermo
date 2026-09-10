@@ -148,7 +148,7 @@ func loadUsedPercent(load float64, numCPU int) (float64, bool) {
 // storageWatchInfo returns the latest storage result published by the daemon.
 // It deliberately never samples mounts or filesystems in the web request.
 func (b *WebBackend) storageWatchInfo(w *webWatch) *web.StorageWatchInfo {
-	if w == nil || w.check == nil || b.watchSnapshots == nil {
+	if w.check == nil || b.watchSnapshots == nil {
 		return nil
 	}
 	var latest CheckSnapshot

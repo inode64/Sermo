@@ -126,7 +126,7 @@ func (b *WebBackend) applyWatchRuntimeView(view *web.Watch, w *webWatch, activit
 // watch row just rendered into its metric declarations. It reads only the
 // in-memory snapshot registry: the web request never starts a second probe.
 func (b *WebBackend) setWatchCurrentMetricValues(view *web.Watch, w *webWatch) {
-	if view == nil || w == nil || len(view.Metrics) == 0 {
+	if view == nil || len(view.Metrics) == 0 {
 		return
 	}
 	for _, snap := range b.watchSnapshots.Get(w.name, w.checkType) {
@@ -328,9 +328,6 @@ func isWatchActivityKind(kind string) bool {
 }
 
 func watchSummary(w *webWatch, storage *web.StorageWatchInfo, liveSummary string) string {
-	if w == nil {
-		return ""
-	}
 	if isStorageCheckType(w.checkType) && storage != nil {
 		if storage.SampleError != "" {
 			return storage.Path + ": " + storage.SampleError
