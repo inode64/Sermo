@@ -153,6 +153,6 @@ func watchRuntimeRecordsEqual(a, b state.WatchRuntimeRecord) bool {
 
 func windowSamplesEqual(a, b []state.RuleWindowSample) bool {
 	return slices.EqualFunc(a, b, func(x, y state.RuleWindowSample) bool {
-		return x.Match == y.Match && x.At.Equal(y.At)
+		return x.At.Equal(y.At)
 	})
 }

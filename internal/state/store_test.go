@@ -389,8 +389,8 @@ func writePersistentStoreState(t *testing.T, store *Store, at time.Time) {
 			History:     []bool{true, false, true},
 			TrueSince:   at.Add(-5 * time.Minute),
 			TimedHistory: []RuleWindowSample{
-				{At: at.Add(-4 * time.Minute), Match: true},
-				{At: at.Add(-2 * time.Minute), Match: false},
+				{At: at.Add(-4 * time.Minute)},
+				{At: at.Add(-2 * time.Minute)},
 			},
 		},
 	}); err != nil {
@@ -405,7 +405,7 @@ func writePersistentStoreState(t *testing.T, store *Store, at time.Time) {
 			History:     []bool{true, false, true},
 			TrueSince:   at.Add(-5 * time.Minute),
 			TimedHistory: []RuleWindowSample{
-				{At: at.Add(-4 * time.Minute), Match: true},
+				{At: at.Add(-4 * time.Minute)},
 			},
 		},
 		Policy: RemediationRecord{
@@ -464,7 +464,7 @@ func assertPersistedRuleWindowState(t *testing.T, store *Store, at time.Time) {
 	}
 	if rec, ok := windows["restart-if-down"]; !ok || rec.Consecutive != 2 || len(rec.History) != 3 || !rec.History[2] {
 		t.Fatalf("rule window state = %+v", windows)
-	} else if !rec.TrueSince.Equal(at.Add(-5*time.Minute)) || len(rec.TimedHistory) != 2 || rec.TimedHistory[0].Match != true || !rec.TimedHistory[1].At.Equal(at.Add(-2*time.Minute)) {
+	} else if !rec.TrueSince.Equal(at.Add(-5*time.Minute)) || len(rec.TimedHistory) != 2 || !rec.TimedHistory[1].At.Equal(at.Add(-2*time.Minute)) {
 		t.Fatalf("duration rule window state = %+v", rec)
 	}
 }
