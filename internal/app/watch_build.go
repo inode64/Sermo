@@ -187,14 +187,10 @@ func watchOrWarn(w *Watch, warn string) func([]string) ([]*Watch, []string) {
 // (newMetricSource) scoped to that tree. Watches are named "<service>:<watch>".
 // The host-scoped multi-metric (net/icmp/swap) and kill-capable `process` watch
 // types are rejected here (see unsupportedServiceWatchType).
-func serviceWatches(service string, tree map[string]any, checkDeps checks.Deps, newMetricSource func() checks.MetricReader, deps Deps, defaultInterval time.Duration) ([]*Watch, []string) {
+func serviceWatches(service string, tree map[string]any, checkDeps checks.Deps, newMetricSource func() checks.MetricReader, deps Deps, interval time.Duration) ([]*Watch, []string) {
 	section, ok := tree[config.SectionWatches].(map[string]any)
 	if !ok || len(section) == 0 {
 		return nil, nil
-	}
-	interval := defaultInterval
-	if d := cfgval.Duration(tree[config.EntryKeyInterval]); d > 0 {
-		interval = d
 	}
 	var watches []*Watch
 	var warnings []string
