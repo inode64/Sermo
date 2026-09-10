@@ -107,11 +107,11 @@ func buildFailedUnitsCheck(b base, entry map[string]any, runner execx.Runner, de
 func defaultFailedUnitsSampler(ctx context.Context, backend servicemgr.Backend, runner execx.Runner, timeout time.Duration) (FailedUnitsSample, error) {
 	runner = execx.RunnerOrDefault(runner)
 	if backend == servicemgr.BackendAuto {
-		detection, err := servicemgr.Detector{Runner: runner, Timeout: timeout}.Detect(ctx, servicemgr.BackendAuto)
+		detected, err := servicemgr.Detector{Runner: runner, Timeout: timeout}.Detect(ctx, servicemgr.BackendAuto)
 		if err != nil {
 			return FailedUnitsSample{}, fmt.Errorf("detect backend: %w", err)
 		}
-		backend = detection.Backend
+		backend = detected
 	}
 	units, err := servicemgr.ListFailedUnits(ctx, backend, runner, timeout)
 	if err != nil {

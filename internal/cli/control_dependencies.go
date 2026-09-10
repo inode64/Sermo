@@ -22,17 +22,17 @@ const (
 // controlDependenciesFor builds the backend-specific dependencies shared by
 // status, process discovery and manual operations.
 func (a App) controlDependenciesFor(ctx context.Context, requested servicemgr.Backend) (controlDependencies, controlDependencyStage, error) {
-	detection, err := a.Detector.Detect(ctx, requested)
+	backend, err := a.Detector.Detect(ctx, requested)
 	if err != nil {
 		//nolint:wrapcheck // the caller preserves the stage-specific diagnostic.
 		return controlDependencies{}, controlDependencyDetection, err
 	}
-	manager, err := a.NewManager(detection.Backend)
+	manager, err := a.NewManager(backend)
 	if err != nil {
 		return controlDependencies{}, controlDependencyManager, err
 	}
 	resolver := servicemgr.NewUnitResolver()
 	resolver.Runner = a.Runner
 	resolver.Manager = manager
-	return controlDependencies{backend: detection.Backend, manager: manager, resolver: resolver}, controlDependencyDetection, nil
+	return controlDependencies{backend: backend, manager: manager, resolver: resolver}, controlDependencyDetection, nil
 }

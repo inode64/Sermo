@@ -116,7 +116,7 @@ func TestConfiguredStatusRejectsUnknownService(t *testing.T) {
 	var stderr bytes.Buffer
 	app := App{
 		LoadConfig: config.Load,
-		Detector:   fakeBackendDetector{detection: servicemgr.Detection{Backend: servicemgr.BackendSystemd}},
+		Detector:   fakeBackendDetector{detection: servicemgr.BackendSystemd},
 		NewManager: func(servicemgr.Backend) (servicemgr.Manager, error) {
 			return fakeManager{status: servicemgr.ServiceStatus{
 				Service: "ghost",
@@ -170,7 +170,7 @@ func TestStatusStillAllowsDirectUnitWhenNoConfigLoads(t *testing.T) {
 		LoadConfig: func(string, ...config.Option) (*config.Config, error) {
 			return nil, errNoConfigForInvalidTest
 		},
-		Detector: fakeBackendDetector{detection: servicemgr.Detection{Backend: servicemgr.BackendSystemd}},
+		Detector: fakeBackendDetector{detection: servicemgr.BackendSystemd},
 		NewManager: func(servicemgr.Backend) (servicemgr.Manager, error) {
 			return fakeManager{status: servicemgr.ServiceStatus{
 				Service: "nginx",

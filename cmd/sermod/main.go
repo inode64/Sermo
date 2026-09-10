@@ -213,12 +213,12 @@ func run(args []string) int {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer stop()
 
-	detection, exitCode := detectServiceManager(ctx, cfg, logger)
+	backend, exitCode := detectServiceManager(ctx, cfg, logger)
 	if exitCode != 0 {
 		return exitCode
 	}
-	logger.Debug("service backend detected", logFieldBackend, detection.Backend)
-	manager, err := servicemgr.NewManager(detection.Backend)
+	logger.Debug("service backend detected", logFieldBackend, backend)
+	manager, err := servicemgr.NewManager(backend)
 	if err != nil {
 		logger.Error("service manager", logFieldError, err)
 		return exitFailure
@@ -281,11 +281,11 @@ func run(args []string) int {
 	// a cheap no-op.
 	webChanges := web.NewBroadcaster()
 	userLookup := app.EngineUserLookup(cfg, runner)
-	readiness := app.NewReadiness(string(detection.Backend), 0, 0)
+	readiness := app.NewReadiness(string(backend), 0, 0)
 	readiness.WatchPanic(panicGate.Active)
 	settling := app.NewSettling(readiness)
 	deps := app.Deps{
-		Backend:          detection.Backend,
+		Backend:          backend,
 		Manager:          manager,
 		Runtime:          cfg.Global.RuntimeDir(),
 		Interval:         interval,
@@ -476,7 +476,7 @@ func run(args []string) int {
 	maintenanceDone := startStateMaintenance(ctx, logger, store, app.EngineRollupInterval(cfg))
 
 	phases.done()
-	logger.Info("sermod starting", logFieldBackend, detection.Backend, logFieldServices, len(workers), logFieldWatches, len(watches))
+	logger.Info("sermod starting", logFieldBackend, backend, logFieldServices, len(workers), logFieldWatches, len(watches))
 
 	monitor := app.NewMonitor(cfg, deps, app.Scheduler{
 		Interval:     interval,
@@ -561,18 +561,18 @@ func acquireDaemonRuntimeLock(cfg *config.Config, logger *slog.Logger) (string, 
 	return runtimeDir, nil, exitAlreadyRunning
 }
 
-func detectServiceManager(ctx context.Context, cfg *config.Config, logger *slog.Logger) (servicemgr.Detection, int) {
+func detectServiceManager(ctx context.Context, cfg *config.Config, logger *slog.Logger) (servicemgr.Backend, int) {
 	backend, err := servicemgr.ParseBackend(config.EngineString(cfg, config.EngineKeyBackend))
 	if err != nil {
 		logger.Error("backend", logFieldError, err)
-		return servicemgr.Detection{}, exitFailure
+		return "", exitFailure
 	}
-	detection, err := servicemgr.NewDetector().Detect(ctx, backend)
+	detected, err := servicemgr.NewDetector().Detect(ctx, backend)
 	if err != nil {
 		logger.Error("detect backend", logFieldError, err)
-		return servicemgr.Detection{}, exitFailure
+		return "", exitFailure
 	}
-	return detection, 0
+	return detected, 0
 }
 
 // cliArgs holds the parsed `sermod` command line.

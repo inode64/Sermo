@@ -315,7 +315,7 @@ func monitorTestApp(root string, stdout *bytes.Buffer) App {
 		Unit: "nginx.service", Status: servicemgr.StatusActive,
 	}
 	return App{
-		Detector: fakeBackendDetector{detection: servicemgr.Detection{Backend: servicemgr.BackendSystemd}},
+		Detector: fakeBackendDetector{detection: servicemgr.BackendSystemd},
 		NewManager: func(servicemgr.Backend) (servicemgr.Manager, error) {
 			return fakeManager{status: status}, nil
 		},

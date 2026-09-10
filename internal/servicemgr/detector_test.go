@@ -20,8 +20,8 @@ func TestDetectSystemdRunning(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Detect() error = %v", err)
 	}
-	if detection.Backend != BackendSystemd {
-		t.Fatalf("Detect() backend = %q, want %q", detection.Backend, BackendSystemd)
+	if detection != BackendSystemd {
+		t.Fatalf("Detect() backend = %q, want %q", detection, BackendSystemd)
 	}
 }
 
@@ -36,8 +36,8 @@ func TestDetectSystemdDegradedIsUsable(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Detect() error = %v", err)
 	}
-	if detection.Backend != BackendSystemd {
-		t.Fatalf("Detect() backend = %q, want %q", detection.Backend, BackendSystemd)
+	if detection != BackendSystemd {
+		t.Fatalf("Detect() backend = %q, want %q", detection, BackendSystemd)
 	}
 }
 
@@ -52,8 +52,8 @@ func TestDetectOpenRC(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Detect() error = %v", err)
 	}
-	if detection.Backend != BackendOpenRC {
-		t.Fatalf("Detect() backend = %q, want %q", detection.Backend, BackendOpenRC)
+	if detection != BackendOpenRC {
+		t.Fatalf("Detect() backend = %q, want %q", detection, BackendOpenRC)
 	}
 }
 
@@ -71,8 +71,8 @@ func TestDetectBothPresentPrefersActiveOpenRC(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Detect() error = %v", err)
 	}
-	if detection.Backend != BackendOpenRC {
-		t.Fatalf("Detect() backend = %q, want %q", detection.Backend, BackendOpenRC)
+	if detection != BackendOpenRC {
+		t.Fatalf("Detect() backend = %q, want %q", detection, BackendOpenRC)
 	}
 }
 
@@ -126,7 +126,7 @@ func TestRequestedBackendProbesOnlyThatBackend(t *testing.T) {
 	}
 
 	detection, err := detector.Detect(context.Background(), BackendSystemd)
-	if err != nil || detection.Backend != BackendSystemd {
+	if err != nil || detection != BackendSystemd {
 		t.Fatalf("Detect(systemd) = %+v, %v", detection, err)
 	}
 	if runner.Ran(cmdRcStatus) {
@@ -145,7 +145,7 @@ func TestRequestedOpenRCProbesOnlyThatBackend(t *testing.T) {
 	}
 
 	detection, err := detector.Detect(context.Background(), BackendOpenRC)
-	if err != nil || detection.Backend != BackendOpenRC {
+	if err != nil || detection != BackendOpenRC {
 		t.Fatalf("Detect(openrc) = %+v, %v", detection, err)
 	}
 	if runner.Ran(cmdSystemctl) {

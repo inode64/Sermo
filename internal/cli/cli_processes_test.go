@@ -129,7 +129,7 @@ func TestProcessesUsesSystemdMainPIDWhenPidfileMissing(t *testing.T) {
 	global := writeProcessConfig(t, "/run/missing-node-exporter.pid")
 	var stdout, stderr bytes.Buffer
 	app := App{
-		Detector: fakeBackendDetector{detection: servicemgr.Detection{Backend: servicemgr.BackendSystemd}},
+		Detector: fakeBackendDetector{detection: servicemgr.BackendSystemd},
 		Runner:   processSystemdRunner{pid: os.Getpid()},
 		Env:      func(string) string { return "" },
 		Stdout:   &stdout,
