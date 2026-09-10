@@ -94,11 +94,10 @@ func (c storageCheck) Run(_ context.Context) Result {
 		res.Data = data
 		return res
 	}
-	usedBytes := storageUsedBytes(st)
 	values := map[string]float64{
 		fieldUsedPct:   st.UsedPct,
 		fieldFreePct:   st.FreePct,
-		fieldUsedBytes: float64(usedBytes),
+		fieldUsedBytes: float64(st.UsedBytes),
 		fieldFreeBytes: float64(st.FreeBytes),
 	}
 	// Inode fields are only comparable when the filesystem reports inodes; on a
@@ -113,7 +112,7 @@ func (c storageCheck) Run(_ context.Context) Result {
 	res := c.result(ok, fmt.Sprintf("%s used %.1f%% free %.1f%% inodes %.1f%% used", c.path, st.UsedPct, st.FreePct, st.InodesUsedPct), start)
 	data[DataKeyUsedPct] = st.UsedPct
 	data[DataKeyFreePct] = st.FreePct
-	data[DataKeyUsedBytes] = usedBytes
+	data[DataKeyUsedBytes] = st.UsedBytes
 	data[DataKeyFreeBytes] = st.FreeBytes
 	data[DataKeyTotalBytes] = st.TotalBytes
 	data[DataKeyInodesUsedPct] = st.InodesUsedPct
@@ -133,16 +132,6 @@ func storageMountData(data map[string]any, mounted bool, info *Mount) {
 	data[DataKeyFSType], data[DataKeyDevice] = info.FSType, info.Device
 	data[DataKeyMountPoint] = info.MountPoint
 	data[DataKeyOptions] = strings.Join(info.Options, ",")
-}
-
-func storageUsedBytes(st StorageStats) uint64 {
-	if st.UsedBytes > 0 {
-		return st.UsedBytes
-	}
-	if st.TotalBytes >= st.FreeBytes {
-		return st.TotalBytes - st.FreeBytes
-	}
-	return 0
 }
 
 // statfsUsage is the default StorageUsageFunc backed by statfs(2).

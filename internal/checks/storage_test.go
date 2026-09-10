@@ -238,17 +238,11 @@ func TestStorageCheckDataHasValueKey(t *testing.T) {
 	}
 }
 
-func TestStorageUsedBytes(t *testing.T) {
-	// An explicit UsedBytes wins outright.
-	if got := storageUsedBytes(StorageStats{UsedBytes: 50, TotalBytes: 100, FreeBytes: 30}); got != 50 {
-		t.Errorf("explicit used = %d, want 50", got)
-	}
-	// Otherwise it is derived as total-free.
-	if got := storageUsedBytes(StorageStats{TotalBytes: 100, FreeBytes: 30}); got != 70 {
-		t.Errorf("derived used = %d, want 70", got)
-	}
-	// Implausible free > total clamps to zero rather than underflowing.
-	if got := storageUsedBytes(StorageStats{TotalBytes: 30, FreeBytes: 100}); got != 0 {
-		t.Errorf("free>total used = %d, want 0", got)
+func TestStorageCheckPreservesZeroUsedBytes(t *testing.T) {
+	stats := StorageStats{TotalBytes: 100, FreeBytes: 70}
+	c := storageCheck{name: "storage", path: "/data", preds: []levelPred{{field: fieldUsedBytes, op: "==", value: 0}}, usage: fakeStorageStats(stats)}
+	res := c.Run(context.Background())
+	if !res.OK || res.Data[DataKeyUsedBytes] != uint64(0) {
+		t.Fatalf("storage result = %+v, want zero used bytes", res)
 	}
 }
