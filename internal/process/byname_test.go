@@ -1,39 +1,42 @@
 package process
 
 import (
-	"os"
+	"errors"
 	"slices"
-	"strings"
 	"testing"
 )
 
-func TestPIDsByCommFindsSelf(t *testing.T) {
-	data, err := os.ReadFile("/proc/self/comm")
-	if err != nil {
-		t.Skip("no /proc on this host")
-	}
-	name := strings.TrimSpace(string(data))
-
-	pids, err := PIDsByComm(name)
-	if err != nil {
-		t.Fatalf("PIDsByComm(%q): %v", name, err)
-	}
-	self := os.Getpid()
-	if slices.Contains(pids, self) {
-		return
-	}
-	t.Fatalf("PIDsByComm(%q) = %v, want it to include self pid %d", name, pids, self)
-}
-
-func TestPIDsByCommNoMatch(t *testing.T) {
-	if _, err := os.Stat("/proc"); err != nil {
-		t.Skip("no /proc on this host")
-	}
-	pids, err := PIDsByComm("definitely-not-a-running-process-xyz")
+func TestPIDsByComm(t *testing.T) {
+	pids, err := pidsByComm(
+		func() ([]int, error) { return []int{42, 7, 99, 3}, nil },
+		func(pid int) (string, bool) {
+			switch pid {
+			case 42, 3:
+				return "sermod", true
+			case 7:
+				return "other", true
+			default:
+				return "", false
+			}
+		},
+		"sermod",
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(pids) != 0 {
-		t.Fatalf("expected no matches, got %v", pids)
+	if want := []int{3, 42}; !slices.Equal(pids, want) {
+		t.Fatalf("PIDsByComm = %v, want %v", pids, want)
+	}
+}
+
+func TestPIDsByCommReturnsPIDListError(t *testing.T) {
+	wantErr := errors.New("cannot list PIDs")
+	_, err := pidsByComm(
+		func() ([]int, error) { return nil, wantErr },
+		func(int) (string, bool) { return "", false },
+		"sermod",
+	)
+	if err != wantErr {
+		t.Fatalf("PIDsByComm error = %v, want %v", err, wantErr)
 	}
 }

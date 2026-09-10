@@ -37,6 +37,22 @@ func ReadFile(path string) ([]byte, error) {
 	// wrapcheck: the os error already names the operation and path; callers add their own context.
 }
 
+// ReadDir reads the named host directory entries.
+func ReadDir(path string) ([]os.DirEntry, error) {
+	if err := Check(path); err != nil {
+		return nil, err
+	}
+	return os.ReadDir(path) //nolint:gosec,wrapcheck // G304 and wrapcheck: see ReadFile.
+}
+
+// Readlink reads the target of one host symlink.
+func Readlink(path string) (string, error) {
+	if err := Check(path); err != nil {
+		return "", err
+	}
+	return os.Readlink(path) //nolint:gosec,wrapcheck // G304 and wrapcheck: see ReadFile.
+}
+
 // Open opens the named host file or directory for reading.
 func Open(path string) (*os.File, error) {
 	if err := Check(path); err != nil {

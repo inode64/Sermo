@@ -35,15 +35,26 @@ func TestCheckRejectsUnsafePaths(t *testing.T) {
 	}
 }
 
-func TestReadOpenAndOpenFile(t *testing.T) {
+func TestReadHostFiles(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "file")
 	if err := os.WriteFile(path, []byte("data"), 0o600); err != nil {
 		t.Fatal(err)
 	}
+	link := filepath.Join(dir, "link")
+	if err := os.Symlink(path, link); err != nil {
+		t.Fatal(err)
+	}
 	data, err := ReadFile(path)
 	if err != nil || string(data) != "data" {
 		t.Fatalf("ReadFile = %q, %v", data, err)
+	}
+	entries, err := ReadDir(dir)
+	if err != nil || len(entries) != 2 {
+		t.Fatalf("ReadDir = %v entries, %v", len(entries), err)
+	}
+	if target, err := Readlink(link); err != nil || target != path {
+		t.Fatalf("Readlink = %q, %v", target, err)
 	}
 	f, err := Open(path)
 	if err != nil {
@@ -67,6 +78,12 @@ func TestReadOpenAndOpenFile(t *testing.T) {
 	}
 	if _, err := OpenFile("", os.O_RDONLY, 0); !errors.Is(err, ErrPath) {
 		t.Fatalf("empty OpenFile = %v, want ErrPath", err)
+	}
+	if _, err := ReadDir("relative"); !errors.Is(err, ErrPath) {
+		t.Fatalf("relative ReadDir = %v, want ErrPath", err)
+	}
+	if _, err := Readlink("relative/link"); !errors.Is(err, ErrPath) {
+		t.Fatalf("relative Readlink = %v, want ErrPath", err)
 	}
 	if _, err := ReadFile(filepath.Join(dir, "missing")); err == nil || errors.Is(err, ErrPath) {
 		t.Fatalf("missing file = %v, want the file system error", err)
