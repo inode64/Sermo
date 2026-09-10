@@ -20,6 +20,7 @@ import (
 
 	"golang.org/x/crypto/ssh"
 
+	"sermo/internal/cfgval"
 	"sermo/internal/conn"
 	"sermo/internal/units"
 )
@@ -80,6 +81,44 @@ type certOptions struct {
 	onChange       bool
 }
 
+type certOptionKeys struct {
+	expiresInDays  string
+	verify         string
+	onAlgoChange   string
+	onIssuerChange string
+	onChange       string
+}
+
+var certCheckOptionKeys = certOptionKeys{
+	expiresInDays:  CheckKeyExpiresInDays,
+	verify:         CheckKeyCertVerify,
+	onAlgoChange:   CheckKeyOnAlgorithmChange,
+	onIssuerChange: CheckKeyOnIssuerChange,
+	onChange:       CheckKeyOnChange,
+}
+
+var httpCertOptionKeys = certOptionKeys{
+	expiresInDays:  CheckKeyCertExpiresInDays,
+	verify:         CheckKeyCertVerify,
+	onAlgoChange:   CheckKeyCertOnAlgorithmChange,
+	onIssuerChange: CheckKeyCertOnIssuerChange,
+	onChange:       CheckKeyCertOnChange,
+}
+
+func certOptionsFromEntry(entry map[string]any, keys certOptionKeys) certOptions {
+	days := 0
+	if value, ok := cfgval.Int(entry[keys.expiresInDays]); ok {
+		days = value
+	}
+	return certOptions{
+		expiresInDays:  days,
+		verify:         boolDefaultTrue(entry[keys.verify]),
+		onAlgoChange:   cfgval.Bool(entry[keys.onAlgoChange]),
+		onIssuerChange: cfgval.Bool(entry[keys.onIssuerChange]),
+		onChange:       cfgval.Bool(entry[keys.onChange]),
+	}
+}
+
 // certEvaluator turns a CertSample into the problems it represents under a set
 // of certOptions. It is stateful for change detection — it remembers the
 // previous sample's algorithm, issuer and fingerprint — so a change condition
@@ -133,16 +172,12 @@ func (e *certEvaluator) evaluate(s CertSample, opts certOptions, now time.Time) 
 // reload/worker rebuild creates a fresh baseline.
 type certCheck struct {
 	base
-	host           string
-	port           string
-	serverName     string
-	path           string
-	expiresInDays  int
-	onAlgoChange   bool
-	onIssuerChange bool
-	onChange       bool
-	verify         bool
-	sampler        CertSamplerFunc
+	host       string
+	port       string
+	serverName string
+	path       string
+	certOptions
+	sampler CertSamplerFunc
 
 	eval certEvaluator
 }
@@ -193,13 +228,7 @@ func (c *certCheck) Run(ctx context.Context) Result {
 		s = sampled
 	}
 
-	problems, daysLeft, hasExpiry := c.eval.evaluate(s, certOptions{
-		expiresInDays:  c.expiresInDays,
-		verify:         c.verify,
-		onAlgoChange:   c.onAlgoChange,
-		onIssuerChange: c.onIssuerChange,
-		onChange:       c.onChange,
-	}, time.Now())
+	problems, daysLeft, hasExpiry := c.eval.evaluate(s, c.certOptions, time.Now())
 
 	healthy := len(problems) == 0
 	src := c.source()
@@ -208,7 +237,7 @@ func (c *certCheck) Run(ctx context.Context) Result {
 		msg = src + ": " + strings.Join(problems, "; ")
 	}
 	res := c.result(healthy, msg, start)
-	res.Data = certData(c.source(), c.host, c.path, s, daysLeft, hasExpiry)
+	res.Data = certData(src, c.host, c.path, s, daysLeft, hasExpiry)
 	return res
 }
 
@@ -455,10 +484,10 @@ func newCertVerification(enabled bool, serverName string) *certVerification {
 }
 
 func (v *certVerification) observe(cs tls.ConnectionState) error {
-	if v == nil || !v.enabled || len(cs.PeerCertificates) == 0 {
+	if !v.enabled || len(cs.PeerCertificates) == 0 {
 		return nil
 	}
-	verdict := v.verifier()(cs.PeerCertificates[0], cs.PeerCertificates[1:], v.verificationName(cs))
+	verdict := v.verify(cs.PeerCertificates[0], cs.PeerCertificates[1:], v.verificationName(cs))
 	result := certVerificationResult{chain: certVerificationChain(cs, v.verificationName(cs)), verdict: verdict}
 
 	v.mu.Lock()
@@ -472,7 +501,7 @@ func (v *certVerification) observe(cs tls.ConnectionState) error {
 }
 
 func (v *certVerification) consume(cs tls.ConnectionState) string {
-	if v == nil || !v.enabled || len(cs.PeerCertificates) == 0 {
+	if !v.enabled || len(cs.PeerCertificates) == 0 {
 		return ""
 	}
 	name := v.verificationName(cs)
@@ -492,14 +521,7 @@ func (v *certVerification) consume(cs tls.ConnectionState) string {
 
 	// A reused HTTP connection has no new handshake callback. Verify once here
 	// so every reported sample still carries a current chain verdict.
-	return v.verifier()(cs.PeerCertificates[0], cs.PeerCertificates[1:], name)
-}
-
-func (v *certVerification) verifier() certChainVerifier {
-	if v.verify != nil {
-		return v.verify
-	}
-	return verifyCertChain
+	return v.verify(cs.PeerCertificates[0], cs.PeerCertificates[1:], name)
 }
 
 func (v *certVerification) verificationName(cs tls.ConnectionState) string {
@@ -563,8 +585,6 @@ func defaultCertSampler(ctx context.Context, host, port, serverName string, veri
 	leaf := state.PeerCertificates[0]
 
 	s := certSampleFromCert(leaf)
-	if verify {
-		s.VerifyError = verification.consume(state)
-	}
+	s.VerifyError = verification.consume(state)
 	return s, nil
 }
