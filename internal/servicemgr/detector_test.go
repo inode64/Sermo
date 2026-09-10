@@ -113,6 +113,46 @@ func TestRequestedBackendMustBeAvailable(t *testing.T) {
 	}
 }
 
+func TestRequestedBackendProbesOnlyThatBackend(t *testing.T) {
+	runner := &execxtest.Runner{ByLine: map[string]execx.Result{
+		"systemctl is-system-running": {Stdout: "running\n"},
+	}}
+	detector := Detector{
+		Runner: runner,
+		Probe: fakeProbe{
+			commands: map[string]bool{cmdSystemctl: true, cmdRcService: true, cmdRcStatus: true},
+			paths:    map[string]bool{systemdRuntimeDir: true, openRCRuntimeDir: true},
+		},
+	}
+
+	detection, err := detector.Detect(context.Background(), BackendSystemd)
+	if err != nil || detection.Backend != BackendSystemd {
+		t.Fatalf("Detect(systemd) = %+v, %v", detection, err)
+	}
+	if runner.Ran(cmdRcStatus) {
+		t.Fatal("explicit systemd detection must not probe OpenRC")
+	}
+}
+
+func TestRequestedOpenRCProbesOnlyThatBackend(t *testing.T) {
+	runner := &execxtest.Runner{}
+	detector := Detector{
+		Runner: runner,
+		Probe: fakeProbe{
+			commands: map[string]bool{cmdSystemctl: true, cmdRcService: true, cmdRcStatus: true},
+			paths:    map[string]bool{systemdRuntimeDir: true, openRCRuntimeDir: true},
+		},
+	}
+
+	detection, err := detector.Detect(context.Background(), BackendOpenRC)
+	if err != nil || detection.Backend != BackendOpenRC {
+		t.Fatalf("Detect(openrc) = %+v, %v", detection, err)
+	}
+	if runner.Ran(cmdSystemctl) {
+		t.Fatal("explicit OpenRC detection must not probe systemd")
+	}
+}
+
 func fakeDetector(commands, paths map[string]bool, results map[string]execx.Result) Detector {
 	return fakeDetectorWithErrors(commands, paths, results, nil, nil)
 }

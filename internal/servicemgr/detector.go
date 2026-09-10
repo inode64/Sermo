@@ -95,16 +95,15 @@ func (d Detector) withDefaults() Detector {
 func (d Detector) Detect(ctx context.Context, requested Backend) (Detection, error) {
 	detector := d.withDefaults()
 
-	systemd := detector.probeSystemd(ctx)
-	openrc := detector.probeOpenRC(ctx)
-
 	switch requested {
 	case BackendSystemd:
+		systemd := detector.probeSystemd(ctx)
 		if !systemd.Available {
 			return Detection{}, errors.New("requested backend systemd is not available")
 		}
 		return Detection{Backend: BackendSystemd}, nil
 	case BackendOpenRC:
+		openrc := detector.probeOpenRC(ctx)
 		if !openrc.Available {
 			return Detection{}, errors.New("requested backend openrc is not available")
 		}
@@ -113,6 +112,9 @@ func (d Detector) Detect(ctx context.Context, requested Backend) (Detection, err
 	default:
 		return Detection{}, fmt.Errorf("unsupported backend %q", requested)
 	}
+
+	systemd := detector.probeSystemd(ctx)
+	openrc := detector.probeOpenRC(ctx)
 
 	switch {
 	case systemd.Available && !openrc.Available:
