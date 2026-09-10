@@ -18,16 +18,7 @@ import (
 // handling and postflight. Manual sermoctl actions are not rate limited, but are
 // fully guarded.
 func (a App) runAction(ctx context.Context, opts options, action string) int {
-	if code := a.requireSingleServiceName(opts.service() != "", len(opts.args), action, action); code != exitSuccess {
-		return code
-	}
-	service := opts.service()
-
-	cfg, code := a.loadConfig(opts)
-	if cfg == nil {
-		return code
-	}
-	service, code = a.canonicalService(opts, cfg, service)
+	cfg, service, resolved, code := a.resolveServiceCommand(opts, action)
 	if code != exitSuccess {
 		return code
 	}
@@ -36,10 +27,6 @@ func (a App) runAction(ctx context.Context, opts options, action string) int {
 			a.printIssues(opts, issues)
 			return exitConfigInvalid
 		}
-	}
-	resolved, code := a.resolveService(opts, cfg, service)
-	if code != exitSuccess {
-		return code
 	}
 	var (
 		actionStore *state.Store
