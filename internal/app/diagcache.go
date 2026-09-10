@@ -31,16 +31,12 @@ const (
 )
 
 // NewDiagnosticLog builds a scheduled diagnostics exporter. file must be set.
-func NewDiagnosticLog(cfg *config.Config, host diag.Host, file *logfile.Writer, now func() time.Time) *DiagnosticLog {
-	now = clockOrNow(now)
-	if host == nil {
-		host = diag.OSHost{}
-	}
+func NewDiagnosticLog(cfg *config.Config, file *logfile.Writer, now func() time.Time) *DiagnosticLog {
 	return &DiagnosticLog{
 		cfg:  cfg,
-		host: host,
+		host: diag.OSHost{},
 		file: file,
-		now:  now,
+		now:  clockOrNow(now),
 	}
 }
 
@@ -56,7 +52,7 @@ func (l *DiagnosticLog) UpdateConfig(cfg *config.Config) {
 
 // Export runs diagnostics and appends one JSON line to the log file.
 func (l *DiagnosticLog) Export() {
-	if l == nil || l.file == nil {
+	if l == nil {
 		return
 	}
 	l.mu.Lock()
