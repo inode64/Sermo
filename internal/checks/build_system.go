@@ -56,6 +56,10 @@ func buildSSHIdleCheck(b base, entry map[string]any, deps Deps) (Check, string) 
 	if len(sshdExes) == 0 {
 		return nil, "ssh_idle check requires sshd_exe"
 	}
+	sshdFilters, filterErr := sshdFilters(sshdExes)
+	if filterErr != nil {
+		return nil, "ssh_idle check: " + filterErr.Error()
+	}
 	preds, err := requireLevelPreds(entry, SSHIdlePredFields, "ssh_idle check")
 	if err != "" {
 		return nil, err
@@ -73,6 +77,7 @@ func buildSSHIdleCheck(b base, entry map[string]any, deps Deps) (Check, string) 
 			ProtectedProcesses: protected,
 		},
 		sampler: deps.SSHIdleSampler,
+		filters: sshdFilters,
 	}, ""
 }
 
