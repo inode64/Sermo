@@ -10,6 +10,7 @@ import (
 	"sermo/internal/execx/execxtest"
 	"sermo/internal/metrics"
 	"sermo/internal/notify"
+	"sermo/internal/process"
 )
 
 // fakeProcSampler returns a scripted sequence of samples, one per cycle. An
@@ -41,6 +42,19 @@ type procHarness struct {
 	fired  []map[string]string
 	events []Event
 	clock  time.Time
+}
+
+func TestProcWatcherFallbackSamplerKeepsUserLookup(t *testing.T) {
+	lookup := process.DefaultUserLookup()
+	w := &procWatcher{userLookup: lookup}
+
+	sampler, ok := w.samplerOrDefault().(osProcSampler)
+	if !ok {
+		t.Fatalf("fallback sampler = %T, want osProcSampler", w.samplerOrDefault())
+	}
+	if sampler.userLookup != lookup {
+		t.Fatal("fallback sampler did not retain the configured user lookup")
+	}
 }
 
 func (h *procHarness) watcher(cond procCond, sampler ProcSampler) *procWatcher {

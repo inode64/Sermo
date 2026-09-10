@@ -169,24 +169,25 @@ type killSpec struct {
 // CPU/memory/IO thresholds, firing the hook once per matching PID when its
 // conditions are newly met (edge-triggered) — one event and one hook per PID.
 type procWatcher struct {
-	name      string
-	match     ProcMatch
-	cond      procCond
-	summary   string
-	check     map[string]any
-	hook      HookSpec
-	kill      *killSpec
-	notifiers []notify.Notifier
-	dryRun    bool
-	inPanic   func() bool
-	runner    HookRunner
-	signaler  process.Signaler     // nil -> process.OSSignaler{} (real kill(2))
-	resolve   process.UserResolver // nil -> process.DefaultUserLookup().ResolveUser
-	sleep     func(time.Duration)  // nil -> process.Wait's cancellable timer
-	now       func() time.Time
-	emit      func(Event)
-	sampler   ProcSampler
-	publish   func(string, string, checks.Result)
+	name       string
+	match      ProcMatch
+	cond       procCond
+	summary    string
+	check      map[string]any
+	hook       HookSpec
+	kill       *killSpec
+	notifiers  []notify.Notifier
+	dryRun     bool
+	inPanic    func() bool
+	runner     HookRunner
+	signaler   process.Signaler     // nil -> process.OSSignaler{} (real kill(2))
+	resolve    process.UserResolver // nil -> process.DefaultUserLookup().ResolveUser
+	userLookup *process.UserLookup
+	sleep      func(time.Duration) // nil -> process.Wait's cancellable timer
+	now        func() time.Time
+	emit       func(Event)
+	sampler    ProcSampler
+	publish    func(string, string, checks.Result)
 
 	state map[int]*procState
 }
@@ -196,10 +197,7 @@ func (w *procWatcher) runCycle(ctx context.Context) {
 		w.state = map[int]*procState{}
 	}
 	now := clockOrNow(w.now)
-	sampler := w.sampler
-	if sampler == nil {
-		sampler = osProcSampler{}
-	}
+	sampler := w.samplerOrDefault()
 
 	samples, ok := sampler.Sample(w.match)
 	if !ok {
@@ -350,6 +348,13 @@ func procSamplerFromDeps(deps Deps) ProcSampler {
 		return deps.ProcSampler
 	}
 	return osProcSampler{userLookup: deps.UserLookup}
+}
+
+func (w *procWatcher) samplerOrDefault() ProcSampler {
+	if w.sampler != nil {
+		return w.sampler
+	}
+	return osProcSampler{userLookup: w.userLookup}
 }
 
 // procEnv is the hook environment both firing paths share — a presence threshold
@@ -547,10 +552,7 @@ func (w *procWatcher) emitSignalResult(msg string, sig syscall.Signal, result pr
 // callers acting on the result must also compare the start time (see
 // sameProcessAs). A transient sampling failure fails safe (no kill).
 func (w *procWatcher) matchingProcess(pid int) (ProcInfo, bool) {
-	sampler := w.sampler
-	if sampler == nil {
-		sampler = osProcSampler{}
-	}
+	sampler := w.samplerOrDefault()
 	samples, ok := sampler.Sample(w.match)
 	if !ok {
 		return ProcInfo{}, false
