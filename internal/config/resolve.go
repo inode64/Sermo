@@ -901,19 +901,16 @@ func appVariablePrefix(name string) string {
 // no per-watch builtins (name/port/pidfile).
 // nil when no watches are configured.
 func (c *Config) ResolveWatches() (map[string]any, []string) {
-	raw := map[string]any{}
-	if configured, ok := c.Global.Raw[sectionWatches].(map[string]any); ok {
-		for name, entry := range configured {
-			raw[name] = deepCopy(entry)
-		}
-	}
-	if len(raw) == 0 {
+	configured, ok := c.Global.Raw[sectionWatches].(map[string]any)
+	if !ok || len(configured) == 0 {
 		return nil, nil
 	}
-	c.applyWatchDefaults(raw)
 	vars := c.globalVars()
 	injectHostBuiltins(vars)
-	expanded, expErrs := expandTree(raw, vars)
+	expanded, expErrs := expandTree(configured, vars)
+	// expandTree returns a fresh tree, so defaults can be injected here without
+	// first cloning the complete loaded watches section.
+	c.applyWatchDefaults(expanded)
 	return expanded, expErrs
 }
 
