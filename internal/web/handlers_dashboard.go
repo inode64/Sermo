@@ -105,18 +105,21 @@ func (s *Server) dashboardSnapshotWithReadiness(ctx context.Context, collect fun
 }
 
 func (s *Server) finishDashboardSnapshot(snapshot DashboardSnapshot) DashboardSnapshot {
-	now := time.Now()
+	snapshot.Live = s.liveReport(time.Now(), len(snapshot.Services))
+	return snapshot
+}
+
+func (s *Server) liveReport(now time.Time, services int) LiveReport {
 	uptime := now.Sub(s.started)
-	snapshot.Live = LiveReport{
+	return LiveReport{
 		Status:        apiStatusOK,
 		StartedAt:     s.started.Format(time.RFC3339),
 		Now:           now.Format(time.RFC3339),
 		Uptime:        uptime.Round(time.Second).String(),
 		UptimeSeconds: int64(uptime.Seconds()),
-		Services:      len(snapshot.Services),
+		Services:      services,
 		Go:            runtime.Version(),
 	}
-	return snapshot
 }
 
 func (s *Server) handleDaemon(w http.ResponseWriter, r *http.Request) {
@@ -187,18 +190,9 @@ func (s *Server) handleLivez(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	now := time.Now()
-	uptime := now.Sub(s.started)
 	backend, generation, ok := s.backendRead(w)
 	if !ok {
 		return
 	}
-	s.writeBackendJSON(w, http.StatusOK, map[string]any{
-		apiJSONKeyStatus:        apiStatusOK,
-		apiJSONKeyStartedAt:     s.started.Format(time.RFC3339),
-		apiJSONKeyNow:           now.Format(time.RFC3339),
-		apiJSONKeyUptime:        uptime.Round(time.Second).String(),
-		apiJSONKeyUptimeSeconds: int64(uptime.Seconds()),
-		apiJSONKeyServices:      len(backend.Services(r.Context())),
-		apiJSONKeyGo:            runtime.Version(),
-	}, generation)
+	s.writeBackendJSON(w, http.StatusOK, s.liveReport(now, len(backend.Services(r.Context()))), generation)
 }
