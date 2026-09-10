@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -11,6 +12,7 @@ import (
 	"time"
 
 	"sermo/internal/app"
+	"sermo/internal/cfgval"
 	"sermo/internal/checks"
 	"sermo/internal/config"
 	"sermo/internal/state"
@@ -150,7 +152,7 @@ func (a App) runWatchRAIDControl(ctx context.Context, opts options, action strin
 		return a.fail(opts, fmt.Sprintf("watch %q is not a RAID watch", opts.args[1]))
 	}
 	control, _ := entry[config.WatchKeyRAIDControl].(map[string]any)
-	if !configBool(control, config.RAIDControlKeyPauseResume) {
+	if !cfgval.Bool(control[config.RAIDControlKeyPauseResume]) {
 		return a.fail(opts, fmt.Sprintf("watch %q has no raid_control.pause_resume configured", opts.args[1]))
 	}
 	array := fmt.Sprint(checkEntry[checks.CheckKeyArray])
@@ -185,11 +187,6 @@ func configuredHostWatch(cfg *config.Config, name string) (map[string]any, bool)
 	raw, _ := cfg.ResolveWatches()
 	entry, ok := raw[name].(map[string]any)
 	return entry, ok
-}
-
-func configBool(entry map[string]any, key string) bool {
-	v, _ := entry[key].(bool)
-	return v
 }
 
 // runWatchMonitor pauses (`unmonitor`) or resumes (`monitor`) a single watch by
@@ -295,12 +292,7 @@ func printWatchReading(out io.Writer, reading daemonWatchReading) {
 	}
 	// A reading reports either a value or the reason it has none; an advisory
 	// puts that reason in Warning rather than Error, and both read the same here.
-	value := reading.Value
-	for _, bad := range []string{reading.Error, reading.Warning} {
-		if bad != "" {
-			value = bad
-		}
-	}
+	value := cmp.Or(reading.Warning, reading.Error, reading.Value)
 	if label != "" && value != "" {
 		fmt.Fprintf(out, "  %s: %s\n", label, value)
 	}

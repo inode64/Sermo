@@ -144,16 +144,12 @@ func UnsupportedOnBackend(tree map[string]any, backend servicemgr.Backend, name 
 // to the first resolver so it reaches the log once.
 type TargetCache struct {
 	mu      sync.Mutex
-	entries map[string]cachedTarget
-}
-
-type cachedTarget struct {
-	target Target
+	entries map[string]Target
 }
 
 // NewTargetCache returns an empty per-generation resolution cache.
 func NewTargetCache() *TargetCache {
-	return &TargetCache{entries: map[string]cachedTarget{}}
+	return &TargetCache{entries: map[string]Target{}}
 }
 
 // ResolveWithFallback resolves through the cache: the first call for a service
@@ -164,11 +160,11 @@ func (c *TargetCache) ResolveWithFallback(ctx context.Context, name string, tree
 	cached, ok := c.entries[name]
 	c.mu.Unlock()
 	if ok {
-		return cached.target, ""
+		return cached, ""
 	}
 	target, warn := ResolveWithFallback(ctx, name, tree, backend, manager, resolver)
 	c.mu.Lock()
-	c.entries[name] = cachedTarget{target: target}
+	c.entries[name] = target
 	c.mu.Unlock()
 	return target, warn
 }

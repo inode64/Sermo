@@ -153,10 +153,7 @@ func (a App) runLocks(opts options) int {
 }
 
 func formatLock(lock locks.Lock) string {
-	id := lock.Service
-	if lock.Name != "" {
-		id += "." + lock.Name
-	}
+	id := locks.LockID(lock.Service, lock.Name)
 	line := fmt.Sprintf("%s %s owner_pid=%d", id, lock.State, lock.OwnerPID)
 	if !lock.ExpiresAt.IsZero() {
 		line += " expires_at=" + lock.ExpiresAt.UTC().Format(time.RFC3339)
