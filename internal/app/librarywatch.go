@@ -217,9 +217,6 @@ func buildCatalogArtifactWatches(ctx context.Context, cfg *config.Config, deps D
 		}
 		watch.FireOnFail = true
 		watch.Notifiers = notifiers
-		watch.Now = deps.Now
-		watch.Emit = deps.Emit
-		watch.StateStore = deps.WatchState
 		out = append(out, watch)
 	}
 	return out
@@ -312,9 +309,6 @@ func buildArtifactAppWatches(cfg *config.Config, deps Deps, samples *ArtifactSam
 				appinspect.WithUserLookup(deps.UserLookup))
 			storeAppSample(samples, appName, report)
 		}
-		watch.Now = deps.Now
-		watch.Emit = deps.Emit
-		watch.StateStore = deps.WatchState
 		out = append(out, watch)
 	}
 	return out

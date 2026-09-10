@@ -477,11 +477,14 @@ type checkWatchSpec struct {
 // samplers keep running while Watch suppresses only their configured effects.
 func newWatchRuntime(name, checkType string, deps Deps, interval time.Duration) *Watch {
 	return &Watch{
-		Name:      name,
-		CheckType: checkType,
-		Interval:  interval,
-		InPanic:   deps.Panic.Active,
-		Settling:  deps.Settling,
+		Name:       name,
+		CheckType:  checkType,
+		Interval:   interval,
+		InPanic:    deps.Panic.Active,
+		Settling:   deps.Settling,
+		Now:        deps.Now,
+		Emit:       deps.Emit,
+		StateStore: deps.WatchState,
 	}
 }
 
@@ -507,13 +510,10 @@ func newCheckWatch(spec checkWatchSpec, deps Deps) *Watch {
 	watch.Runner = OSHookRunner{Runner: deps.ExecxRunner}
 	watch.IsPaused = monitorPaused(deps.Monitor, WatchMonitorKey(spec.name))
 	watch.FireOnFail = checks.IsHealthType(spec.checkType)
-	watch.Now = deps.Now
-	watch.Emit = deps.Emit
 	watch.Publish = publishWatchSnapshots(deps.WatchSnapshots, deps.watchConfigID)
 	watch.ForceSLA = spec.forceSLA
 	watch.RecordAvailability = watchSLARecorder(deps, spec)
 	watch.RecordMetrics = watchMetricRecorder(deps, spec.name, spec.checkType, spec.graphs, spec.bands)
-	watch.StateStore = deps.WatchState
 	watch.StateSlot = spec.stateSlot
 	return watch
 }
@@ -619,8 +619,6 @@ func newStatefulWatch(name, checkType string, entry map[string]any, deps Deps, i
 	watch.IsPaused = monitorPaused(deps.Monitor, WatchMonitorKey(name))
 	watch.DryRun = config.DryRun(entry)
 	watch.Severity = watchSeverity(entry)
-	watch.Now = deps.Now
-	watch.Emit = deps.Emit
 	watch.Cycle = cycle
 	return watch
 }
@@ -1166,10 +1164,7 @@ func monitorWatch(name, checkType string, check checks.Check, notifierNames []st
 	watch.Runner = OSHookRunner{Runner: deps.ExecxRunner}
 	watch.IsPaused = monitorPaused(deps.Monitor, WatchMonitorKey(name))
 	watch.FireOnFail = true // command/config are health-style: alert (notify) on failure/change
-	watch.Now = deps.Now
-	watch.Emit = deps.Emit
 	watch.Publish = publishWatchSnapshots(deps.WatchSnapshots, deps.watchConfigID)
-	watch.StateStore = deps.WatchState
 	return watch
 }
 
