@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"sermo/internal/app"
 	"sermo/internal/checks"
@@ -156,10 +157,7 @@ func (a App) runWatchRAIDControl(ctx context.Context, opts options, action strin
 	if action == "pause" && opts.confirm != array {
 		return a.commandUsageError(commandWatch, "watch pause requires --confirm "+array)
 	}
-	timeout := config.EngineDuration(cfg, config.EngineKeyOperationTimeout, app.DefaultEngineOperationTimeout)
-	if opts.timeout > 0 {
-		timeout = opts.timeout
-	}
+	timeout := raidControlTimeout(cfg, opts)
 	result := app.ControlRAID(ctx, cfg.Global.RuntimeDir(), array, action, timeout)
 	if opts.json {
 		writeJSON(a.Stdout, map[string]any{cliJSONKeyWatch: opts.args[1], cliJSONKeyOK: result.OK, cliJSONKeyMessage: result.Message})
@@ -170,6 +168,17 @@ func (a App) runWatchRAIDControl(ctx context.Context, opts options, action strin
 		return exitSuccess
 	}
 	return exitBlocked
+}
+
+// raidControlTimeout keeps manual RAID control on the engine operation budget
+// unless the operator explicitly supplied --timeout. prepareOptions gives every
+// command a CLI default, so opts.timeout alone cannot distinguish that default
+// from an operator override.
+func raidControlTimeout(cfg *config.Config, opts options) time.Duration {
+	if opts.timeoutSet {
+		return opts.timeout
+	}
+	return config.EngineDuration(cfg, config.EngineKeyOperationTimeout, app.DefaultEngineOperationTimeout)
 }
 
 func configuredHostWatch(cfg *config.Config, name string) (map[string]any, bool) {
