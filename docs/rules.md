@@ -1550,17 +1550,20 @@ Protocols, in the order of the table above:
       password: "${env:SMB_PASS}"
       query: "data"                   # optional: verify this share mounts
   ```
-- `acpid` — the ACPI event daemon. **Socket-only** (no TCP port; defaults to
+- `acpid` — the ACPI event daemon. **Socket-only** (no TCP port; `host` and
+  `port` are rejected; defaults to
   `/run/acpid.socket`, override with `socket`). It is an event broadcaster with
   no request/response protocol, so the check is the **connect itself**: a
   successful connection proves acpid is listening (a stale socket left by a dead
   daemon refuses the connection). It reads nothing — reading would block until an
   ACPI event — and there is no version. No auth.
-- `fail2ban` — fail2ban-server. **Socket-only** (defaults to
+- `fail2ban` — fail2ban-server. **Socket-only** (`host` and `port` are
+  rejected; defaults to
   `/run/fail2ban/fail2ban.sock`, override with `socket`). Its Python pickle
   command protocol is not worth reimplementing for a liveness check, so — like
   `acpid` — the check is the **connect itself**; it exchanges no commands. No auth.
-- `lvmpolld` — LVM's poll daemon. **Socket-only** (defaults to
+- `lvmpolld` — LVM's poll daemon. **Socket-only** (`host` and `port` are
+  rejected; defaults to
   `/run/lvm/lvmpolld.socket`, override with `socket`). Unlike acpid/fail2ban it is
   probed by protocol: it speaks LVM's generic daemon framework, so the check sends
   a `hello` request and verifies the daemon replies `OK`, also guarding against a

@@ -1,8 +1,25 @@
 package config
 
 import (
+	"fmt"
 	"testing"
 )
+
+func TestValidateSocketOnlyConnectionRejectsHostAndPort(t *testing.T) {
+	for _, typ := range []string{"acpid", "fail2ban", "lvmpolld"} {
+		t.Run(typ, func(t *testing.T) {
+			issues := validateService(t, fmt.Sprintf(`
+name: svc
+service: svc
+policy: { cooldown: 5m }
+checks:
+  local: { type: %s, host: 192.0.2.1, port: 1234 }
+`, typ))
+			mustHave(t, issues, "local.host is not supported by a socket-only connection check")
+			mustHave(t, issues, "local.port is not supported by a socket-only connection check")
+		})
+	}
+}
 
 // TestValidateExpectStatusShapes documents that scalar and list expect_status
 // values are validated (element-by-element) by the resolved-tree scalar walk,
