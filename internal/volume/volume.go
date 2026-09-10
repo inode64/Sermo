@@ -94,10 +94,7 @@ func (e Expander) timeout() time.Duration {
 }
 
 func commandFailure(prefix string, err error, res execx.Result, timeout time.Duration) error {
-	msg := execx.OperatorFailure(err, res, timeout)
-	if msg == "" {
-		msg = err.Error()
-	}
+	msg := execx.OperatorFailureOr(err, res, timeout, err.Error())
 	return fmt.Errorf("%s: %s", prefix, msg)
 }
 

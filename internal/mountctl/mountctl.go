@@ -594,10 +594,7 @@ func (c Controller) run(ctx context.Context, name string, args ...string) error 
 	}
 	res, err := execx.Run(ctx, runner, timeout, name, args...)
 	if err != nil {
-		msg := execx.OperatorFailure(err, res, timeout)
-		if msg == "" {
-			msg = err.Error()
-		}
+		msg := execx.OperatorFailureOr(err, res, timeout, err.Error())
 		return fmt.Errorf("%s %s: %s", name, strings.Join(args, " "), msg)
 	}
 	return nil

@@ -439,10 +439,7 @@ func actionError(command string, result execx.Result, err error) error {
 	if msg := strings.TrimSpace(result.Stdout); msg != "" {
 		return fmt.Errorf("%s: %s", command, msg)
 	}
-	msg := execx.OperatorFailure(err, result, execx.NoTimeout)
-	if msg == "" {
-		msg = err.Error()
-	}
+	msg := execx.OperatorFailureOr(err, result, execx.NoTimeout, err.Error())
 	return fmt.Errorf("%s: %s", command, msg)
 }
 
