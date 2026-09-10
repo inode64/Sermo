@@ -189,12 +189,14 @@ func GraphMetrics(checkType string) []GraphMetric { return slices.Clone(graphMet
 // declare a unit statically — a sql check's unit depends on its query, so five
 // sensors on one service can report MiB, seconds and a bare count.
 func DeclaredGraphMetrics(checkType, unit string) []GraphMetric {
-	byType := GraphMetrics(checkType)
+	byType := graphMetrics[checkType]
 	if unit == "" {
-		return byType
+		return slices.Clone(byType)
 	}
 	declared := GraphMetric{Key: DataKeyValue, Unit: unit, Label: graphMetricValueLabel, Decimals: tenthsDecimals}
-	return append(append(make([]GraphMetric, 0, len(byType)+1), byType...), declared)
+	declaredMetrics := make([]GraphMetric, len(byType), len(byType)+1)
+	copy(declaredMetrics, byType)
+	return append(declaredMetrics, declared)
 }
 
 // graphMetricValueLabel names the scalar a check publishes under `unit:`.
@@ -238,10 +240,15 @@ func ResolvedGraphMetrics(checkType, unit string, entry map[string]any) []GraphM
 // DeclaredGraphMetricKey reports whether key is a graph metric the check type
 // declares statically — the set a `bands:` block may convert to a state band.
 func DeclaredGraphMetricKey(checkType, key string) bool {
+	_, ok := declaredGraphMetric(checkType, key)
+	return ok
+}
+
+func declaredGraphMetric(checkType, key string) (GraphMetric, bool) {
 	for _, m := range graphMetrics[checkType] {
 		if m.Key == key {
-			return true
+			return m, true
 		}
 	}
-	return false
+	return GraphMetric{}, false
 }
