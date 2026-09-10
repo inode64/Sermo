@@ -243,7 +243,7 @@ func (m *Monitor) applyConfig(cfg *config.Config) {
 	m.deps.Notifiers = notifiers
 	m.deps.GlobalNotify = config.NotifyDefault(cfg.Global.Raw)
 	m.deps.GlobalEmission = emission.Merge(cfg.Global.Raw[emission.Section], emission.Default())
-	m.deps.GlobalClear = rules.ClearWindowOrDefault(cfg.Global.Defaults[rules.SectionClearWindow])
+	m.deps.GlobalClear = rules.ClearWindowOrDefault(cfg.Global.Defaults()[rules.SectionClearWindow])
 	for _, w := range warns {
 		m.Logger.Warn("reload notifiers", monitorLogFieldWarning, w)
 	}

@@ -540,10 +540,10 @@ func TestResolveWatchesDoesNotMutateLoadedTree(t *testing.T) {
 	cfg := &Config{Global: Global{
 		Raw: map[string]any{
 			sectionWatches: configured,
-		},
-		Defaults: map[string]any{
-			keyDryRun:        true,
-			sectionVariables: map[string]any{"data": "data"},
+			sectionDefaults: map[string]any{
+				keyDryRun:        true,
+				sectionVariables: map[string]any{"data": "data"},
+			},
 		},
 	}}
 

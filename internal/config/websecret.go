@@ -21,17 +21,18 @@ var webCredentialFileKeys = [...]string{WebKeyPasswordFile, WebKeyGuestPasswordF
 // A bad source is recorded as a validation issue rather than a load error: an
 // operator running `config validate` without access to a root-owned secret file
 // gets a clear message instead of a loader that refuses to start.
-func resolveWebCredentials(g *Global) {
+func resolveWebCredentials(g *Global) []Issue {
 	web := g.WebSection()
 	if web == nil {
-		return
+		return nil
 	}
+	var issues []Issue
 	base := configBaseDir(g.Path)
 	targets := []*webcred.List{&g.webCredentials, &g.webGuestCredentials}
 	for i, key := range webCredentialFileKeys {
 		list, err := loadWebCredentials(web, base, key)
 		if err != nil {
-			g.issues = append(g.issues, Issue{
+			issues = append(issues, Issue{
 				Scope: globalScope,
 				Msg:   fmt.Sprintf("%s.%s %v", SectionWeb, key, err),
 			})
@@ -39,6 +40,7 @@ func resolveWebCredentials(g *Global) {
 		}
 		*targets[i] = list
 	}
+	return issues
 }
 
 // loadWebCredentials reads one role's hashed credentials from its file key.

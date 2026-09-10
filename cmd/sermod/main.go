@@ -310,7 +310,7 @@ func run(args []string) int {
 		Notifiers:            notifiers,
 		GlobalNotify:         config.NotifyDefault(cfg.Global.Raw),
 		GlobalEmission:       emission.Merge(cfg.Global.Raw[emission.Section], emission.Default()),
-		GlobalClear:          rules.ClearWindowOrDefault(cfg.Global.Defaults[rules.SectionClearWindow]),
+		GlobalClear:          rules.ClearWindowOrDefault(cfg.Global.Defaults()[rules.SectionClearWindow]),
 		Snapshots:            snapshots,
 		WatchSnapshots:       watchSnapshots,
 		Live:                 app.NewLiveMetrics(),
