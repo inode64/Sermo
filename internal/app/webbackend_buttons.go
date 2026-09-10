@@ -1,8 +1,10 @@
 package app
 
 import (
+	"cmp"
 	"context"
 	"fmt"
+	"slices"
 	"time"
 
 	"sermo/internal/cfgval"
@@ -52,16 +54,8 @@ func serviceButtons(tree map[string]any) []serviceButton {
 			timeout: cfgval.Duration(entry[config.ButtonKeyTimeout]),
 		})
 	}
-	sortButtons(out)
+	slices.SortFunc(out, func(a, b serviceButton) int { return cmp.Compare(a.name, b.name) })
 	return out
-}
-
-func sortButtons(buttons []serviceButton) {
-	for i := 1; i < len(buttons); i++ {
-		for j := i; j > 0 && buttons[j].name < buttons[j-1].name; j-- {
-			buttons[j], buttons[j-1] = buttons[j-1], buttons[j]
-		}
-	}
 }
 
 // serviceButtonViews projects the configured buttons into the payload: name
