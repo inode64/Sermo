@@ -165,10 +165,6 @@ func thenFieldPath(prefix, field string) string {
 	return prefix + "." + rules.RuleFieldThen + "." + field
 }
 
-func thenHookPath(prefix string) string {
-	return thenFieldPath(prefix, WatchThenKeyHook)
-}
-
 func thenKillPath(prefix string) string {
 	return thenFieldPath(prefix, WatchThenKeyKill)
 }
