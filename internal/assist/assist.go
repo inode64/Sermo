@@ -72,8 +72,8 @@ type Env struct {
 	Notifiers        []string                           // names from the config's `notifiers:` section
 	DefaultNotify    []string                           // top-level `notify` default; nil = no inherited notification
 	Backend          string                             // active init system: "systemd" | "openrc"
-	Volumes          func() ([]Volume, error)           // candidate disk volumes
-	Mounts           func() ([]MountCandidate, error)   // candidate fstab-backed mount units
+	Volumes          func() ([]Volume, error)           // storage-volume candidates, filtered by the producer
+	Mounts           func() ([]MountCandidate, error)   // sorted, candidate fstab-backed mount units
 	Ifaces           func() ([]Iface, error)            // host network interfaces
 	DefaultIfaces    []string                           // interfaces with an up default route
 	CatalogServices  func() ([]ServiceCandidate, error) // catalog services detected as installed

@@ -9,7 +9,6 @@ import (
 	"sermo/internal/checks"
 	"sermo/internal/config"
 	"sermo/internal/rules"
-	volumeinfo "sermo/internal/volume"
 )
 
 const (
@@ -46,7 +45,6 @@ func (volumeAssistant) Run(p *Prompt, env Env) (res Result, err error) {
 	if err != nil {
 		return Result{}, err
 	}
-	vols = storageVolumeCandidates(vols)
 	if len(vols) == 0 {
 		return Result{}, errors.New("no storage volumes found to monitor")
 	}
@@ -62,20 +60,6 @@ func (volumeAssistant) Run(p *Prompt, env Env) (res Result, err error) {
 			watches[watchName(config.WatchCategoryStorage, v.Mountpoint)] = buildVolWatch(v, s)
 		})
 	return Result{Watches: watches, Summary: fmt.Sprintf("%d storage watch(es)", len(watches))}, nil
-}
-
-func storageVolumeCandidates(vols []Volume) []Volume {
-	out := make([]Volume, 0, len(vols))
-	for _, v := range vols {
-		if volumeinfo.IsStorageMount(volumeinfo.Mount{
-			Device:     v.Device,
-			MountPoint: v.Mountpoint,
-			FSType:     v.FSType,
-		}) {
-			out = append(out, v)
-		}
-	}
-	return out
 }
 
 func volumeLabel(v Volume) string {
