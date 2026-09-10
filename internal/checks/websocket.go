@@ -80,10 +80,8 @@ func (c *websocketCheck) Run(ctx context.Context) Result {
 		return nil
 	})
 	if perr != nil {
-		r := c.result(false, chosenRes.Message, start)
-		r.Unavailable = chosenRes.Unavailable
-		r.Data = ifaceData(perIface)
-		return r
+		chosenRes.Data = ifaceData(perIface)
+		return chosenRes
 	}
 	chosenRes.Message += ifaceSuffix(chosen)
 	if perIface != nil {

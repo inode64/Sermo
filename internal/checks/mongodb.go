@@ -216,14 +216,11 @@ func parseMongoPipeline(s string) (any, error) {
 	if !strings.HasPrefix(strings.TrimSpace(s), "[") {
 		return nil, errors.New("pipeline must be a JSON array")
 	}
-	var wrap bson.D
+	var wrap struct {
+		Pipeline any `bson:"p"`
+	}
 	if err := bson.UnmarshalExtJSON([]byte(`{"p":`+s+`}`), false, &wrap); err != nil {
 		return nil, fmt.Errorf("parse mongodb pipeline: %w", err)
 	}
-	for _, e := range wrap {
-		if e.Key == "p" {
-			return e.Value, nil
-		}
-	}
-	return nil, errors.New("empty pipeline")
+	return wrap.Pipeline, nil
 }

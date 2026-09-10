@@ -102,9 +102,6 @@ func (c countCheck) tally(ctx context.Context) (int, error) {
 	}
 	n := 0
 	for _, e := range entries {
-		if err := ctx.Err(); err != nil {
-			return 0, fmt.Errorf("count entries in %q: %w", c.path, err)
-		}
 		if c.matches(e.Type()) {
 			n++
 		}

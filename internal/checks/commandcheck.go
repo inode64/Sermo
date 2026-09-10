@@ -161,14 +161,15 @@ func (c commandCheck) changeKey(raw string) string {
 
 // runCheckCommand runs a check's argv, switching to user when configured.
 func runCheckCommand(ctx context.Context, runner execx.Runner, user string, argv []string) (execx.Result, error) {
+	var (
+		res execx.Result
+		err error
+	)
 	if user != "" {
-		res, err := execx.RunUser(ctx, runner, execx.NoTimeout, user, argv[0], argv[1:]...)
-		if err != nil {
-			return res, fmt.Errorf("run command: %w", err)
-		}
-		return res, nil
+		res, err = execx.RunUser(ctx, runner, execx.NoTimeout, user, argv[0], argv[1:]...)
+	} else {
+		res, err = runner.Run(ctx, argv[0], argv[1:]...)
 	}
-	res, err := runner.Run(ctx, argv[0], argv[1:]...)
 	if err != nil {
 		return res, fmt.Errorf("run command: %w", err)
 	}

@@ -64,7 +64,7 @@ func ApplySummary(template string, entry map[string]any, result Result) Result {
 		return result
 	}
 	result.Message = summaryReference.ReplaceAllStringFunc(template, func(match string) string {
-		name := strings.TrimSpace(summaryReference.FindStringSubmatch(match)[1])
+		name := strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(match, "${"), "}"))
 		value, ok := summaryValue(name, entry, result.Data)
 		if !ok {
 			return match
@@ -223,7 +223,7 @@ func formatSummaryString(name, value string) string {
 }
 
 func summaryDurationName(name string) bool {
-	return name == DataKeyValue || strings.HasSuffix(name, "age") || strings.HasSuffix(name, "_age") || strings.HasSuffix(name, "_than") || strings.HasSuffix(name, "_duration") || strings.HasSuffix(name, "_timeout") || strings.HasSuffix(name, ".for")
+	return name == DataKeyValue || strings.HasSuffix(name, "age") || strings.HasSuffix(name, "_than") || strings.HasSuffix(name, "_duration") || strings.HasSuffix(name, "_timeout") || strings.HasSuffix(name, ".for")
 }
 
 func summaryTimestampName(name string) bool {

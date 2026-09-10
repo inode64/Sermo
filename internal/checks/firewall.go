@@ -121,7 +121,7 @@ func defaultFirewallRulesSampler(ctx context.Context, backend string, runner exe
 	switch backend {
 	case FirewallBackendAuto:
 		var errs []error
-		nft, err := sampleNftablesRules(ctx, runner)
+		nft, err := sampleNftablesRules(ctx)
 		nftOK := err == nil
 		if err == nil && nft.Rules > 0 {
 			return nft, nil
@@ -139,7 +139,7 @@ func defaultFirewallRulesSampler(ctx context.Context, backend string, runner exe
 		}
 		return FirewallRulesSample{}, joinFirewallErrors(errs)
 	case FirewallBackendNftables:
-		return sampleNftablesRules(ctx, runner)
+		return sampleNftablesRules(ctx)
 	case FirewallBackendIptables:
 		return sampleIptablesRules(ctx, runner)
 	default:
@@ -147,7 +147,7 @@ func defaultFirewallRulesSampler(ctx context.Context, backend string, runner exe
 	}
 }
 
-func sampleNftablesRules(ctx context.Context, _ execx.Runner) (FirewallRulesSample, error) {
+func sampleNftablesRules(ctx context.Context) (FirewallRulesSample, error) {
 	rules, err := nftablesRuleCounter(ctx)
 	if err != nil {
 		return FirewallRulesSample{}, fmt.Errorf("nftables: %w", err)
@@ -175,12 +175,7 @@ func sampleIptablesRules(ctx context.Context, runner execx.Runner) (FirewallRule
 func joinFirewallErrors(errs []error) error {
 	parts := make([]string, 0, len(errs))
 	for _, err := range errs {
-		if err != nil {
-			parts = append(parts, err.Error())
-		}
-	}
-	if len(parts) == 0 {
-		return nil
+		parts = append(parts, err.Error())
 	}
 	return errors.New(strings.Join(parts, "; "))
 }

@@ -3,6 +3,7 @@ package checks
 import (
 	"context"
 	"fmt"
+	"math"
 	"path/filepath"
 	"time"
 )
@@ -87,14 +88,12 @@ func readEDAC(root string) (EdacCounts, error) {
 	return st, nil
 }
 
-const maxEdacCounter = uint64(1<<63 - 1)
-
 func readEdacCounter(path string) (int64, error) {
 	n, err := readProcUint(path)
 	if err != nil {
 		return 0, err
 	}
-	if n > maxEdacCounter {
+	if n > math.MaxInt64 {
 		return 0, fmt.Errorf("counter %s overflows int64", path)
 	}
 	return int64(n), nil
