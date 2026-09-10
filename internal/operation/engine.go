@@ -51,22 +51,11 @@ const (
 	postflightRetryInterval = time.Second
 )
 
-// Manager is the subset of servicemgr.Manager the engine uses. Staged restart
-// uses Stop+Start so residual processes can be handled between the phases;
-// services explicitly configured for native restart use Restart atomically.
-type Manager interface {
-	Start(ctx context.Context, service string) error
-	Stop(ctx context.Context, service string) error
-	Restart(ctx context.Context, service string) error
-	Reload(ctx context.Context, service string) error
-	// SupportsReload reports whether the init backend can reload the unit in place,
-	// so the reload step can fall back to a native signal/command when it cannot.
-	SupportsReload(ctx context.Context, service string) (bool, error)
-	Status(ctx context.Context, service string) (servicemgr.ServiceStatus, error)
-	// ResetState reconciles the init's recorded state with reality after a clean
-	// stop (systemd reset-failed, OpenRC zap).
-	ResetState(ctx context.Context, service string) error
-}
+// Manager is the service-manager contract used by the operation engine.
+// Staged restart uses Stop+Start so residual processes can be handled between
+// the phases; services explicitly configured for native restart use Restart
+// atomically.
+type Manager = servicemgr.Manager
 
 // Engine performs the section-18 flow for one service over injected capability
 // closures. A nil closure means that capability is absent (e.g. no preflight
