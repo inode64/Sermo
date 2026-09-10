@@ -732,8 +732,8 @@ func TestParseRulesDropsSystemMetricRemediation(t *testing.T) {
 }
 
 func TestConditionUsesSystemMetric(t *testing.T) {
-	systemMetric := map[string]any{FieldScope: checks.MetricScopeSystem}
-	systemMetricCheck := map[string]any{FieldType: checks.CheckTypeMetric, FieldScope: checks.MetricScopeSystem}
+	systemMetric := map[string]any{checks.CheckKeyScope: checks.MetricScopeSystem}
+	systemMetricCheck := map[string]any{FieldType: checks.CheckTypeMetric, checks.CheckKeyScope: checks.MetricScopeSystem}
 	tests := []struct {
 		name      string
 		node      map[string]any
@@ -751,7 +751,7 @@ func TestConditionUsesSystemMetric(t *testing.T) {
 			name: "nested condition",
 			node: map[string]any{
 				ConditionAnd: []any{
-					map[string]any{ConditionMetric: map[string]any{FieldScope: checks.MetricScopeService}},
+					map[string]any{ConditionMetric: map[string]any{checks.CheckKeyScope: checks.MetricScopeService}},
 					map[string]any{ConditionNot: map[string]any{ConditionMetric: systemMetric}},
 				},
 			},
