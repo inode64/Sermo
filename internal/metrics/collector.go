@@ -493,14 +493,6 @@ func readerMemoryTotals(r Reader, needSwap bool) memoryTotals {
 	return totals
 }
 
-// Reset clears a service's CPU history.
-func (c *Collector) Reset(service string) {
-	c.mu.Lock()
-	delete(c.prevService, service)
-	delete(c.prevServiceProcs, service)
-	delete(c.prevServiceIO, service)
-	c.mu.Unlock()
-}
 
 // perProcCPURates returns each PID's CPU rate as a percentage of ONE CPU thread
 // (Δticks / hz / Δwall * 100; 100% = a process pegging a full core, and a
