@@ -10,10 +10,7 @@ import "sync"
 // engine's check parallelism already says how many external probes the host
 // should carry at once, so startup borrows it.
 func startupParallelism(maxParallel int) int {
-	if maxParallel < 1 {
-		return 1
-	}
-	return maxParallel
+	return max(maxParallel, 1)
 }
 
 // forEachParallel runs fn for every index below n with at most limit calls in
