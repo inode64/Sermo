@@ -14,7 +14,7 @@ import (
 )
 
 func TestTTYNotifierTargetsFilterUsersAndUnsafeLines(t *testing.T) {
-	n := &ttyNotifier{users: strutil.Set([]string{"root"}), devRoot: "/dev"}
+	n := &ttyNotifier{typ: TypeTTY, users: strutil.Set([]string{"root"}), devRoot: "/dev"}
 	got := n.targetTTYs([]utmp.Session{
 		{User: "root", Line: "pts/0"},
 		{User: "root", Line: "../pts/1"},
@@ -82,7 +82,9 @@ func TestWallNotifierTargetsAllUsers(t *testing.T) {
 func TestTTYNotifierSendToTargetsWritesEachTarget(t *testing.T) {
 	var paths []string
 	n := &ttyNotifier{
-		name: "tty",
+		name:    "tty",
+		typ:     TypeTTY,
+		devRoot: utmp.DevRoot,
 		writeTTY: func(_ context.Context, path string, payload []byte) error {
 			paths = append(paths, path)
 			if !strings.Contains(string(payload), "Subject") || strings.Contains(string(payload), "\x1b") {
@@ -113,7 +115,9 @@ func TestTTYPayloadSanitizesControlSequences(t *testing.T) {
 
 func TestTTYNotifierPartialFailureReportsError(t *testing.T) {
 	n := &ttyNotifier{
-		name: "tty",
+		name:    "tty",
+		typ:     TypeTTY,
+		devRoot: utmp.DevRoot,
 		writeTTY: func(_ context.Context, path string, _ []byte) error {
 			if path == "/dev/pts/1" {
 				return errors.New("denied")
