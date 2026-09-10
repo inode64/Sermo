@@ -20,16 +20,6 @@ func buildLevelCheck(entry map[string]any, fields []string, label string, build 
 	return build(preds), ""
 }
 
-// buildSingleLevelCheck is buildLevelCheck for the checks whose field list holds
-// exactly one predicate (zombies).
-func buildSingleLevelCheck(entry map[string]any, fields []string, label string, build func(levelPred) Check) (Check, string) {
-	pred, errs := requireSingleLevelPred(entry, fields, label)
-	if errs != "" {
-		return nil, errs
-	}
-	return build(pred), ""
-}
-
 // buildLoadCheck builds a system load-average check.
 func buildLoadCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 	preds, errs := requireLevelPreds(entry, LoadPredFields, "load check")
@@ -282,9 +272,11 @@ func buildConntrackCheck(b base, entry map[string]any, deps Deps) (Check, string
 
 // buildZombieCheck builds a zombie-process count check.
 func buildZombieCheck(b base, entry map[string]any, deps Deps) (Check, string) {
-	return buildSingleLevelCheck(entry, ZombiePredFields, "zombies check", func(pred levelPred) Check {
-		return zombieCheck{base: b, op: pred.op, value: pred.value, sampler: deps.ZombieSampler}
-	})
+	pred, errs := requireSingleLevelPred(entry, ZombiePredFields, "zombies check")
+	if errs != "" {
+		return nil, errs
+	}
+	return zombieCheck{base: b, op: pred.op, value: pred.value, sampler: deps.ZombieSampler}, ""
 }
 
 // buildOomCheck builds an OOM-kill delta check (defaults to firing on any kill).

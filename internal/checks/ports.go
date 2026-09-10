@@ -79,14 +79,13 @@ func (c *portsCheck) Run(ctx context.Context) Result {
 		c.last = states
 	}
 
-	open, closed := 0, 0
+	open := 0
 	for _, p := range c.ports {
 		if states[p] {
 			open++
-		} else {
-			closed++
 		}
 	}
+	closed := len(c.ports) - open
 
 	ok := matchHolds && len(changes) == 0
 	var msg string

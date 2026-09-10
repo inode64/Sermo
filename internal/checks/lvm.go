@@ -232,7 +232,7 @@ func lvmProgressState(state string, row lvmRow) (string, float64, bool) {
 }
 
 func lvmAttributeAt(attr string, index int) byte {
-	if index < 0 || index >= len(attr) {
+	if index >= len(attr) {
 		return 0
 	}
 	return attr[index]

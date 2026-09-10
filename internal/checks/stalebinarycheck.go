@@ -3,7 +3,6 @@ package checks
 import (
 	"context"
 	"fmt"
-	"strconv"
 	"strings"
 	"time"
 
@@ -57,11 +56,7 @@ func (c staleBinaryCheck) Run(_ context.Context) Result {
 		DataKeyValue: float64(len(stale)),
 	}
 	if len(stale) > 0 {
-		pids := make([]string, 0, len(stale))
-		for _, s := range stale {
-			pids = append(pids, strconv.Itoa(s.PID))
-		}
-		res.Data[DataKeyPIDs] = strings.Join(pids, ",")
+		res.Data[DataKeyPIDs] = joinedPIDs(stale, func(stale process.StaleBinary) int { return stale.PID })
 		res.Data[DataKeyPath] = strings.Join(paths, ",")
 	}
 	return res

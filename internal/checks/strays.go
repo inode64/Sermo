@@ -120,14 +120,18 @@ func straysData(strays []process.Process, exes []string, threshold float64) map[
 		DataKeyThreshold: threshold,
 	}
 	if len(strays) > 0 {
-		pids := make([]string, 0, len(strays))
-		for _, stray := range strays {
-			pids = append(pids, strconv.Itoa(stray.PID))
-		}
-		data[DataKeyPIDs] = strings.Join(pids, ",")
+		data[DataKeyPIDs] = joinedPIDs(strays, func(stray process.Process) int { return stray.PID })
 		data[DataKeyPath] = strings.Join(exes, ",")
 	}
 	return data
+}
+
+func joinedPIDs[T any](items []T, pid func(T) int) string {
+	pids := make([]string, 0, len(items))
+	for _, item := range items {
+		pids = append(pids, strconv.Itoa(pid(item)))
+	}
+	return strings.Join(pids, ",")
 }
 
 // strayExecutables lists each stray's executable once, in a stable order, so the
