@@ -2,8 +2,9 @@ package app
 
 import (
 	"context"
+	"maps"
 	"os"
-	"sort"
+	"slices"
 	"sync"
 	"time"
 
@@ -395,11 +396,7 @@ func metricSeries[T any](check, metric, unit string, since time.Duration, sample
 		byMinute[minute] = addDaemonMetric(byMinute[minute], v)
 	}
 
-	keys := make([]time.Time, 0, len(byMinute))
-	for k := range byMinute {
-		keys = append(keys, k)
-	}
-	sort.Slice(keys, func(i, j int) bool { return keys[i].Before(keys[j]) })
+	keys := slices.SortedFunc(maps.Keys(byMinute), func(a, b time.Time) int { return a.Compare(b) })
 
 	points := make([]web.MetricPoint, 0, len(keys))
 	for _, k := range keys {

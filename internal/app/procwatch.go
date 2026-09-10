@@ -3,7 +3,9 @@ package app
 import (
 	"context"
 	"fmt"
+	"maps"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"syscall"
@@ -254,12 +256,11 @@ func (w *procWatcher) runCycle(ctx context.Context) {
 	// Processes that vanished: fire `gone` (if configured) once per PID, then drop
 	// their state — which also re-arms a reused PID.
 	var gone []int
-	for pid := range w.state {
+	for _, pid := range slices.Sorted(maps.Keys(w.state)) {
 		if !seen[pid] {
 			gone = append(gone, pid)
 		}
 	}
-	sort.Ints(gone)
 	for _, pid := range gone {
 		if ctx.Err() != nil {
 			return

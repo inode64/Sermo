@@ -4,7 +4,6 @@ import (
 	"context"
 	"maps"
 	"slices"
-	"sort"
 	"sync"
 	"time"
 
@@ -645,8 +644,9 @@ func checkCatalog(tree map[string]any, defaultInterval time.Duration) ([]string,
 	}
 	types := make(map[string]string, len(section))
 	intervals := make(map[string]time.Duration, len(section))
-	names := make([]string, 0, len(section))
-	for name, raw := range section {
+	names := slices.Sorted(maps.Keys(section))
+	for _, name := range names {
+		raw := section[name]
 		typ := ""
 		if m, ok := raw.(map[string]any); ok {
 			typ, _ = m[checks.CheckKeyType].(string)
@@ -655,9 +655,7 @@ func checkCatalog(tree map[string]any, defaultInterval time.Duration) ([]string,
 			intervals[name] = defaultInterval
 		}
 		types[name] = typ
-		names = append(names, name)
 	}
-	sort.Strings(names)
 	return names, types, intervals
 }
 
