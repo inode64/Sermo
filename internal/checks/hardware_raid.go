@@ -165,8 +165,6 @@ func (c hardwareRAIDCheck) Run(ctx context.Context) Result {
 		observation, err = c.runStorCLI(ctx)
 	case CheckTypeSSACLI:
 		observation, err = c.runSSACLI(ctx)
-	default:
-		err = fmt.Errorf("unsupported hardware RAID tool %q", c.tool)
 	}
 	if err != nil {
 		return c.unavailableResult(c.tool+": "+err.Error(), run.start)
@@ -448,7 +446,7 @@ func parseStorCLIControllers(envelope storCLIEnvelope, observation *hardwareRAID
 		status := storCLIMap(controller.ResponseData["Status"])
 		state := stringValue(status["Controller Status"])
 		if !hardwareRAIDStateOK(state, "optimal", "ok") {
-			observation.addIssue(fmt.Sprintf("controller %s state %s", id, stateOrUnknown(state)))
+			observation.addIssue(fmt.Sprintf("controller %s state %s", id, orUnknown(state)))
 		}
 		observation.CorrectableErrors += integerValue(status["Memory Correctable Errors"])
 		observation.UncorrectableErrors += integerValue(status["Memory Uncorrectable Errors"])
@@ -535,10 +533,9 @@ func parseStorCLIDrives(envelope storCLIEnvelope, observation *hardwareRAIDObser
 func parseStorCLIDriveRow(controller, drive string, row map[string]any, observation *hardwareRAIDObservation) {
 	state := stringValue(row["State"])
 	if !hardwareRAIDStateOK(state, "onln", "ugood", "ghs", "dhs", "jbod") {
-		observation.addIssue(fmt.Sprintf("drive %s state %s", drive, stateOrUnknown(state)))
+		observation.addIssue(fmt.Sprintf("drive %s state %s", drive, orUnknown(state)))
 	}
-	detail := observation.storCLIDrive(drive)
-	detail.Controller = controller
+	detail := observation.storCLIDrive(controller, drive)
 	detail.State = state
 	detail.MediaType = firstHardwareRAIDValue(row, "Med", "Media Type")
 	detail.Interface = firstHardwareRAIDValue(row, "Intf", "Interface")
@@ -557,7 +554,7 @@ func parseStorCLIDriveDetail(raw json.RawMessage, observation *hardwareRAIDObser
 			continue
 		}
 		driveID := strings.TrimSuffix(strings.TrimPrefix(key, "Drive /"), suffix)
-		detail := observation.storCLIDrive(driveID)
+		detail := observation.storCLIDrive(hardwareRAIDParentID(driveID), driveID)
 		section := storCLIMap(sectionRaw)
 		if suffix == " Device attributes" {
 			detail.SerialNumber = firstHardwareRAIDValue(section, "SN", "Serial Number")
@@ -635,8 +632,7 @@ func parseStorCLIVolumeRows(controller, key string, raw json.RawMessage, observa
 		consistent := stringValue(row["Consist"])
 		checkStorCLIVolumeState(volumeID, state, access, consistent, observation)
 		array, _, _ := strings.Cut(stringValue(row["DG/VD"]), "/")
-		detail := observation.storCLIVolume(volumeID)
-		detail.Controller = controller
+		detail := observation.storCLIVolume(controller, volumeID)
 		detail.Array = array
 		detail.Name = stringValue(row["Name"])
 		detail.State = state
@@ -649,7 +645,7 @@ func parseStorCLIVolumeRows(controller, key string, raw json.RawMessage, observa
 
 func checkStorCLIVolumeState(volume, state, access, consistent string, observation *hardwareRAIDObservation) {
 	if !hardwareRAIDStateOK(state, "optl", "optimal", "ok") {
-		observation.addIssue(fmt.Sprintf("volume %s state %s", volume, stateOrUnknown(state)))
+		observation.addIssue(fmt.Sprintf("volume %s state %s", volume, orUnknown(state)))
 	}
 	if access != "" && !hardwareRAIDStateOK(access, "rw") {
 		observation.addIssue(fmt.Sprintf("volume %s access %s", volume, access))
@@ -661,7 +657,7 @@ func checkStorCLIVolumeState(volume, state, access, consistent string, observati
 
 func parseStorCLIVolumeProperties(controller, key string, raw json.RawMessage, observation *hardwareRAIDObservation) {
 	volumeNumber := strings.TrimSuffix(strings.TrimPrefix(key, "VD"), " Properties")
-	detail := observation.storCLIVolume(controller + "/v" + volumeNumber)
+	detail := observation.storCLIVolume(controller, controller+"/v"+volumeNumber)
 	properties := storCLIMap(raw)
 	detail.OSDevice = stringValue(properties["OS Drive Name"])
 	if cache := firstHardwareRAIDValue(properties, "Write Cache(initial setting)", "Disk Cache Policy"); cache != "" {
@@ -708,7 +704,7 @@ func parseStorCLIRebuildRows(controller storCLIController, rows []map[string]any
 		if hardwareRAIDStateOK(status, "", "not in progress", "none", "n/a") && !hasProgress {
 			continue
 		}
-		detail := observation.storCLIDrive(driveID)
+		detail := observation.storCLIDrive(hardwareRAIDParentID(driveID), driveID)
 		detail.Operation = hardwareRAIDOperationRebuild
 		detail.ProgressPct, detail.HasProgress = progress, hasProgress
 		observation.noteOperation(detail.Operation, progress, hasProgress)
@@ -724,7 +720,7 @@ func checkStorCLICommandStatus(controller, state, description string, observatio
 	if hardwareRAIDStateOK(state, "success") {
 		return
 	}
-	issue := fmt.Sprintf("controller %s command state %s", controller, stateOrUnknown(state))
+	issue := fmt.Sprintf("controller %s command state %s", controller, orUnknown(state))
 	if description != "" && !strings.EqualFold(description, "none") {
 		issue += ": " + description
 	}
@@ -744,7 +740,7 @@ func parseStorCLIStateList(controller, kind string, raw json.RawMessage, healthy
 		}
 		state := stringValue(row["State"])
 		if !hardwareRAIDStateOK(state, healthy...) {
-			observation.addIssue(fmt.Sprintf("%s %s/%s state %s", kind, controller, label, stateOrUnknown(state)))
+			observation.addIssue(fmt.Sprintf("%s %s/%s state %s", kind, controller, label, orUnknown(state)))
 		}
 	}
 }
@@ -766,7 +762,7 @@ func parseStorCLIEnergyStores(controller, kind string, raw json.RawMessage, obse
 			state = stringValue(row["Battery State"])
 		}
 		if !hardwareRAIDStateOK(state, "optimal", "ok", "ready", "operational") {
-			observation.addIssue(fmt.Sprintf("%s %s/%s state %s", kind, controller, label, stateOrUnknown(state)))
+			observation.addIssue(fmt.Sprintf("%s %s/%s state %s", kind, controller, label, orUnknown(state)))
 		}
 		cache := observation.ensureStorCLICache(controller)
 		if cache == nil {
@@ -890,7 +886,7 @@ func (p *ssaCLIParser) parseControllerField(key, value string) bool {
 			controller.State = value
 		}
 		if !hardwareRAIDStateOK(value, "ok", "optimal") {
-			p.observation.addIssue(fmt.Sprintf("controller %s state %s", controllerOrUnknown(p.controller), stateOrUnknown(value)))
+			p.observation.addIssue(fmt.Sprintf("controller %s state %s", orUnknown(p.controller), orUnknown(value)))
 		}
 	case "cache status":
 		cache := p.ensureSSACache()
@@ -898,7 +894,7 @@ func (p *ssaCLIParser) parseControllerField(key, value string) bool {
 			cache.State = value
 		}
 		if !hardwareRAIDStateOK(value, "ok", "optimal", "not configured", "not present") {
-			p.observation.addIssue(fmt.Sprintf("cache %s state %s", controllerOrUnknown(p.controller), stateOrUnknown(value)))
+			p.observation.addIssue(fmt.Sprintf("cache %s state %s", orUnknown(p.controller), orUnknown(value)))
 		}
 	case "battery/capacitor status":
 		p.observation.Batteries++
@@ -906,7 +902,7 @@ func (p *ssaCLIParser) parseControllerField(key, value string) bool {
 			cache.Protection = "battery/capacitor " + value
 		}
 		if !hardwareRAIDStateOK(value, "ok", "optimal", "not configured", "not present") {
-			p.observation.addIssue(fmt.Sprintf("battery %s state %s", controllerOrUnknown(p.controller), stateOrUnknown(value)))
+			p.observation.addIssue(fmt.Sprintf("battery %s state %s", orUnknown(p.controller), orUnknown(value)))
 		}
 	case "total cache size":
 		size := hardwareRAIDBytesWithUnit(value, "GB")
@@ -1016,30 +1012,31 @@ func (p *ssaCLIParser) parseHealthField(key, originalKey, value string) {
 	case "unrecoverable media errors":
 		if !hardwareRAIDStateOK(value, "none", "no", "0") {
 			p.observation.MediaErrors++
-			p.observation.addAdvisory(fmt.Sprintf("volume %s has unrecoverable media errors: %s", valueOrUnknown(p.volume), value))
+			p.observation.addAdvisory(fmt.Sprintf("volume %s has unrecoverable media errors: %s", orUnknown(p.volume), value))
 		}
 	case "ssd smart trip wearout":
+		smartAlert := yesValue(value)
 		if drive := p.currentDrive(); drive != nil {
-			drive.SMARTAlert = yesValue(value) || strings.EqualFold(value, "true")
+			drive.SMARTAlert = smartAlert
 		}
-		if yesValue(value) || strings.EqualFold(value, "true") {
+		if smartAlert {
 			p.observation.SMARTAlerts++
-			p.observation.addIssue("drive " + valueOrUnknown(p.drive) + " SMART wearout")
+			p.observation.addIssue("drive " + orUnknown(p.drive) + " SMART wearout")
 		}
 	case "drive authentication status":
 		if !hardwareRAIDStateOK(value, "ok", "not supported") {
-			p.observation.addIssue(fmt.Sprintf("drive %s authentication state %s", valueOrUnknown(p.drive), stateOrUnknown(value)))
+			p.observation.addIssue(fmt.Sprintf("drive %s authentication state %s", orUnknown(p.drive), orUnknown(value)))
 		}
 	case "cache write policy status", "lu cache state":
 		if !hardwareRAIDStateOK(value, "ok", "good", "not configured", "not supported") {
-			p.observation.addIssue(fmt.Sprintf("volume %s %s %s", valueOrUnknown(p.volume), key, value))
+			p.observation.addIssue(fmt.Sprintf("volume %s %s %s", orUnknown(p.volume), key, value))
 		}
 	case "parity initialization status", "rebuild status", "transform status":
 		p.parseOperation(originalKey, value)
 		if !hardwareRAIDStateOK(value, "initialization completed", "completed", "none", "not required") {
-			kind, id := "volume", valueOrUnknown(p.volume)
+			kind, id := "volume", orUnknown(p.volume)
 			if p.currentDrive() != nil {
-				kind, id = "drive", valueOrUnknown(p.drive)
+				kind, id = "drive", orUnknown(p.drive)
 			}
 			p.observation.addIssue(fmt.Sprintf("%s %s %s %s", kind, id, key, value))
 		}
@@ -1077,11 +1074,11 @@ func (p *ssaCLIParser) parseStatus(value string) {
 	}
 	switch {
 	case p.drive != "":
-		p.observation.addIssue(fmt.Sprintf("drive %s state %s", p.drive, stateOrUnknown(value)))
+		p.observation.addIssue(fmt.Sprintf("drive %s state %s", p.drive, orUnknown(value)))
 	case p.volume != "":
-		p.observation.addIssue(fmt.Sprintf("volume %s state %s", p.volume, stateOrUnknown(value)))
+		p.observation.addIssue(fmt.Sprintf("volume %s state %s", p.volume, orUnknown(value)))
 	case p.array != "":
-		p.observation.addIssue(fmt.Sprintf("array %s state %s", p.array, stateOrUnknown(value)))
+		p.observation.addIssue(fmt.Sprintf("array %s state %s", p.array, orUnknown(value)))
 	}
 }
 
@@ -1163,20 +1160,6 @@ func ssaCLIControllerLabel(line string, index int) string {
 	return "controller " + strconv.Itoa(index)
 }
 
-func controllerOrUnknown(controller string) string {
-	if controller == "" {
-		return smartHealthUnknown
-	}
-	return controller
-}
-
-func valueOrUnknown(value string) string {
-	if value == "" {
-		return smartHealthUnknown
-	}
-	return value
-}
-
 func afterPrefixFold(value, prefix string) (string, bool) {
 	if len(value) < len(prefix) || !strings.EqualFold(value[:len(prefix)], prefix) {
 		return "", false
@@ -1193,19 +1176,18 @@ func storCLIDriveSectionSuffix(key string) (string, bool) {
 	return "", false
 }
 
-func (o *hardwareRAIDObservation) storCLIDrive(id string) *HardwareRAIDDriveStatus {
-	index := o.ensureStorCLIDetail(hardwareRAIDDetailDrive, id)
+func (o *hardwareRAIDObservation) storCLIDrive(controller, id string) *HardwareRAIDDriveStatus {
+	index := o.ensureStorCLIDetail(hardwareRAIDDetailDrive, controller, id)
 	return &o.DriveDetails[index]
 }
 
-func (o *hardwareRAIDObservation) storCLIVolume(id string) *HardwareRAIDVolumeStatus {
-	index := o.ensureStorCLIDetail(hardwareRAIDDetailVolume, id)
+func (o *hardwareRAIDObservation) storCLIVolume(controller, id string) *HardwareRAIDVolumeStatus {
+	index := o.ensureStorCLIDetail(hardwareRAIDDetailVolume, controller, id)
 	return &o.VolumeDetails[index]
 }
 
-func (o *hardwareRAIDObservation) ensureStorCLIDetail(kind, id string) int {
+func (o *hardwareRAIDObservation) ensureStorCLIDetail(kind, controller, id string) int {
 	id = strings.TrimPrefix(strings.TrimSpace(id), "/")
-	controller := hardwareRAIDParentID(id)
 	if kind == hardwareRAIDDetailDrive {
 		for index := range o.DriveDetails {
 			if o.DriveDetails[index].ID == id {
@@ -1282,11 +1264,8 @@ func hardwareRAIDBytesWithUnit(value any, unit string) uint64 {
 }
 
 func hardwareRAIDPercentage(value any) (float64, bool) {
-	switch typed := value.(type) {
-	case float64:
+	if typed, ok := value.(float64); ok {
 		return typed, typed >= 0 && typed <= 100
-	case int:
-		return float64(typed), typed >= 0 && typed <= 100
 	}
 	match := percentagePattern.FindStringSubmatch(stringValue(value))
 	if len(match) != regexpCaptureMatchLen {
@@ -1319,11 +1298,11 @@ func hardwareRAIDStateOK(state string, healthy ...string) bool {
 	return slices.ContainsFunc(healthy, func(candidate string) bool { return strings.EqualFold(state, candidate) })
 }
 
-func stateOrUnknown(state string) string {
-	if strings.TrimSpace(state) == "" {
+func orUnknown(value string) string {
+	if strings.TrimSpace(value) == "" {
 		return smartHealthUnknown
 	}
-	return strings.TrimSpace(state)
+	return strings.TrimSpace(value)
 }
 
 // stringValue reads a scalar the RAID tools emit (a string, a JSON number or
