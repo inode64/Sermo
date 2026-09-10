@@ -47,11 +47,6 @@ func (lvmpolldProtocol) DefaultPort() int   { return defaultPortNone }
 func (lvmpolldProtocol) RequiresUser() bool { return false }
 
 func (lvmpolldProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	socket := cfg.Socket
-	if socket == "" {
-		socket = DefaultLVMPolldSocket
-	}
-	cfg.Socket = socket
 	c, err := newProbeTarget(cfg, defaultPortNone).openStream(ctx)
 	if err != nil {
 		return Result{}, err
@@ -75,7 +70,7 @@ func (lvmpolldProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	if p := fields[lvmDaemonFieldProtocol]; p != "" && p != ProtocolNameLVMPolld {
 		return Result{}, fmt.Errorf("lvmpolld hello: protocol = %q, not lvmpolld", p)
 	}
-	extra := map[string]string{extraSocket: socket}
+	extra := map[string]string{extraSocket: cfg.Socket}
 	if p := fields[lvmDaemonFieldProtocol]; p != "" {
 		extra[extraProtocol] = p
 	}

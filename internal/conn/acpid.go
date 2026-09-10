@@ -10,4 +10,4 @@ const DefaultACPIDSocket = "/run/acpid.socket"
 // stale socket with no daemon refuses the connection). It reads nothing (that
 // would block until an event) and there is no version. Socket-only (no TCP port),
 // no auth.
-var acpidProtocol = socketOnlyProtocol{name: ProtocolNameACPID, socket: DefaultACPIDSocket}
+var acpidProtocol = socketOnlyProtocol{name: ProtocolNameACPID}
