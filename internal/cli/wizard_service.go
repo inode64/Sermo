@@ -188,11 +188,7 @@ func resolveWizardServiceUnit(ctx context.Context, resolver servicemgr.UnitResol
 	if firstUnit != "" {
 		return firstUnit, firstStatus, nil
 	}
-	unit, err := resolver.Resolve(ctx, backend, candidates, false)
-	if err != nil {
-		return "", servicemgr.StatusUnknown, fmt.Errorf("resolve service unit: %w", err)
-	}
-	return unit, serviceUnitStatus(ctx, manager, unit), nil
+	return "", servicemgr.StatusUnknown, fmt.Errorf("resolve service unit: no candidate is installed")
 }
 
 func serviceUnitStatus(ctx context.Context, manager servicemgr.Manager, unit string) servicemgr.Status {
