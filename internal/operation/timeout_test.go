@@ -72,24 +72,30 @@ func TestCancelledOperationIsNotReportedAsATimeout(t *testing.T) {
 	}
 }
 
-func TestResolveTimeoutHonorsStopPolicy(t *testing.T) {
+func timeoutFromTree(configured time.Duration, tree map[string]any) time.Duration {
+	policy, _ := process.ParseStopPolicy(tree)
+	selectors, _ := process.ParseSelectors(tree)
+	return resolveTimeout(configured, process.EnableAutomaticReaping(policy, selectors))
+}
+
+func TestResolvedTimeoutHonorsStopPolicy(t *testing.T) {
 	tree := map[string]any{"stop_policy": map[string]any{"graceful_timeout": "120s"}}
-	got := ResolveTimeout(90*time.Second, tree)
+	got := timeoutFromTree(90*time.Second, tree)
 	want := 120*time.Second + backendMargin
 	if got != want {
-		t.Fatalf("ResolveTimeout = %v, want %v", got, want)
+		t.Fatalf("resolved timeout = %v, want %v", got, want)
 	}
 }
 
-func TestResolveTimeoutKeepsLargerConfigured(t *testing.T) {
+func TestResolvedTimeoutKeepsLargerConfigured(t *testing.T) {
 	tree := map[string]any{"stop_policy": map[string]any{"graceful_timeout": "120s"}}
-	got := ResolveTimeout(5*time.Minute, tree)
+	got := timeoutFromTree(5*time.Minute, tree)
 	if got != 5*time.Minute {
 		t.Fatalf("configured override = %v, want 5m", got)
 	}
 }
 
-func TestResolveTimeoutForceKillEscalation(t *testing.T) {
+func TestResolvedTimeoutForceKillEscalation(t *testing.T) {
 	tree := map[string]any{"stop_policy": map[string]any{
 		"graceful_timeout": "10s",
 		"term_timeout":     "20s",
@@ -97,14 +103,14 @@ func TestResolveTimeoutForceKillEscalation(t *testing.T) {
 		"force_kill":       true,
 		"kill_only_if":     map[string]any{"users": []any{"mysql"}},
 	}}
-	got := ResolveTimeout(30*time.Second, tree)
+	got := timeoutFromTree(30*time.Second, tree)
 	want := 10*time.Second + 20*time.Second + 5*time.Second + backendMargin
 	if got != want {
-		t.Fatalf("ResolveTimeout = %v, want %v", got, want)
+		t.Fatalf("resolved timeout = %v, want %v", got, want)
 	}
 }
 
-func TestResolveTimeoutAutomaticEscalation(t *testing.T) {
+func TestResolvedTimeoutAutomaticEscalation(t *testing.T) {
 	tree := map[string]any{"stop_policy": map[string]any{
 		"graceful_timeout": "10s",
 		"term_timeout":     "20s",
@@ -113,10 +119,10 @@ func TestResolveTimeoutAutomaticEscalation(t *testing.T) {
 	}, "processes": map[string]any{
 		"main": map[string]any{"exe": "/usr/sbin/svc", "user": "svc"},
 	}}
-	got := ResolveTimeout(30*time.Second, tree)
+	got := timeoutFromTree(30*time.Second, tree)
 	want := 10*time.Second + 20*time.Second + 5*time.Second + backendMargin
 	if got != want {
-		t.Fatalf("ResolveTimeout = %v, want %v", got, want)
+		t.Fatalf("resolved timeout = %v, want %v", got, want)
 	}
 }
 

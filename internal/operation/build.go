@@ -143,7 +143,7 @@ func New(c Config) Engine {
 		Sleep:       sleep,
 	}
 
-	operationTimeout := ResolveTimeout(c.OperationTimeout, tree)
+	operationTimeout := resolveTimeout(c.OperationTimeout, killPolicy)
 	ttl := c.LockTTL
 	if ttl <= 0 {
 		// The operation lock must outlive the operation it guards. A long
