@@ -9,14 +9,15 @@ import (
 )
 
 func TestBuildNtfyRequiresWebhook(t *testing.T) {
-	assertBuildWebhookNotifier(t, buildNtfy, "ntfy", "push",
+	assertBuildWebhookNotifier(t, "ntfy", "push",
 		"https://ntfy.sh/sermo-alerts", "ntfy.sh/sermo-alerts")
 }
 
 func TestBuildNtfyRequiresTopic(t *testing.T) {
 	for _, webhook := range []string{"https://ntfy.sh", "https://ntfy.sh/"} {
-		if _, err := buildNtfy("push", map[string]any{"type": "ntfy", "webhook": webhook}); err == nil {
-			t.Fatalf("webhook %q should be rejected (no topic)", webhook)
+		notifiers, warnings := Build(map[string]any{"push": map[string]any{KeyType: TypeNtfy, KeyWebhook: webhook}})
+		if len(notifiers) != 0 || len(warnings) == 0 {
+			t.Fatalf("webhook %q: notifiers=%v warnings=%v", webhook, notifiers, warnings)
 		}
 	}
 }

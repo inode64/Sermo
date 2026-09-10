@@ -252,8 +252,9 @@ func TestBuildEmailRequiresFields(t *testing.T) {
 		{"type": "email", "dsn": "smtp://x", "from": "x@y"},                             // no to
 		{"type": "email", "dsn": "carrier-pigeon://x", "from": "x", "to": []any{"a@b"}}, // bad dsn
 	} {
-		if _, err := buildEmail("n", entry); err == nil {
-			t.Fatalf("expected error for %v", entry)
+		notifiers, warnings := Build(map[string]any{"n": entry})
+		if len(notifiers) != 0 || len(warnings) == 0 {
+			t.Fatalf("invalid %v: notifiers=%v warnings=%v", entry, notifiers, warnings)
 		}
 	}
 }

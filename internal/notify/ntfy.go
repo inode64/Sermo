@@ -41,10 +41,7 @@ func ParseNtfyWebhook(webhook string) (base, topic string, err error) {
 // topic URL and the optional `token` authenticates against a protected topic
 // via the Authorization header. Self-hosted push with no external dependency.
 func buildNtfy(name string, entry map[string]any) (Notifier, error) {
-	webhook, err := webhookURL(TypeNtfy, entry)
-	if err != nil {
-		return nil, err
-	}
+	webhook := webhookURL(entry)
 	server, topic, err := ParseNtfyWebhook(webhook)
 	if err != nil {
 		return nil, err
