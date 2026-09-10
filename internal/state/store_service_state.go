@@ -77,16 +77,8 @@ func (s *Store) upsertFlagRow(query string, key any, on bool, source, errContext
 // false when the entry has no recorded state yet (the caller decides the
 // default — typically "monitor on").
 func (s *Store) Active(service string) (active, found bool, err error) {
-	var v int
-	err = s.reads().QueryRowContext(s.sqlCtx(), "SELECT active FROM monitor_state WHERE service = ?;", service).Scan(&v)
-	switch {
-	case err == sql.ErrNoRows:
-		return false, false, nil
-	case err != nil:
-		return false, false, fmt.Errorf("load active monitor flag for %s: %w", service, err)
-	default:
-		return v != 0, true, nil
-	}
+	rec, found, err := s.MonitorState(service)
+	return rec.Active, found, err
 }
 
 // SetActive records an entry's monitoring state, upserting the row. source notes
