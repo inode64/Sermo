@@ -11,13 +11,6 @@ import (
 	"sermo/internal/web"
 )
 
-// Service check-health values surfaced by the web backend that the status
-// rollup counts.
-const (
-	webCheckHealthOK      = "ok"
-	webCheckHealthFailing = "failing"
-)
-
 // telegramSLAReader is the slice of the state store the bot needs for /sla.
 type telegramSLAReader interface {
 	SLAReport(service string, now time.Time) ([]state.SLAValue, error)
@@ -69,9 +62,9 @@ func (r *telegramReporter) Status(ctx context.Context) (telegrambot.StatusReport
 	}
 	for i := range snap.Services {
 		switch snap.Services[i].CheckHealth {
-		case webCheckHealthOK:
+		case TargetStateOK:
 			rep.OK++
-		case webCheckHealthFailing:
+		case checkHealthFailing:
 			rep.Failing++
 		}
 	}
