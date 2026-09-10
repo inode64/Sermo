@@ -627,15 +627,14 @@ type Lock struct {
 // Detail is a single service's view: its summary plus its checks.
 type Detail struct {
 	Service
-	Checks            []Check        `json:"checks"`
-	Locks             []Lock         `json:"locks,omitempty"`
-	LockWarnings      []string       `json:"lock_warnings,omitempty"`
-	NoResidentProcess bool           `json:"no_resident_process,omitempty"`
-	ProcessWarnings   []string       `json:"process_warnings,omitempty"`
-	Processes         []Process      `json:"processes,omitempty"`
-	ProcessTotals     *ProcessTotals `json:"process_totals,omitempty"`
-	Remediation       *Remediation   `json:"remediation,omitempty"`
-	Rules             []RuleWindow   `json:"rules,omitempty"`
+	Checks          []Check        `json:"checks"`
+	Locks           []Lock         `json:"locks,omitempty"`
+	LockWarnings    []string       `json:"lock_warnings,omitempty"`
+	ProcessWarnings []string       `json:"process_warnings,omitempty"`
+	Processes       []Process      `json:"processes,omitempty"`
+	ProcessTotals   *ProcessTotals `json:"process_totals,omitempty"`
+	Remediation     *Remediation   `json:"remediation,omitempty"`
+	Rules           []RuleWindow   `json:"rules,omitempty"`
 }
 
 // SeriesPoint is one availability bucket of the SLA history. Ratio is nil for a

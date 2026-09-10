@@ -601,9 +601,9 @@ func (b *WebBackend) Detail(ctx context.Context, name string) (web.Detail, bool)
 		return web.Detail{}, false
 	}
 	if e.disabled {
-		return web.Detail{Service: b.view(ctx, name, e), NoResidentProcess: e.noResidentProcess}, true
+		return web.Detail{Service: b.view(ctx, name, e)}, true
 	}
-	d := web.Detail{Service: b.view(ctx, name, e), NoResidentProcess: e.noResidentProcess}
+	d := web.Detail{Service: b.view(ctx, name, e)}
 	now := b.webNow()
 
 	snap := b.snapshots.Get(name)
