@@ -1014,6 +1014,23 @@ variables:
 	}
 }
 
+func TestVersionTemplateFallsBackToBinaryWhenVersionsFromHasNoMarker(t *testing.T) {
+	bin := makeBinDir(t, "runtime8.4")
+	cfg := loadCatalog(t, map[string]string{
+		"sermo.yml": baseGlobal,
+		"catalog/apps/runtime.yml": fmt.Sprintf(`
+name: runtime%%v
+versions:
+  from: /etc/runtime.conf
+variables:
+  binary: "%s/runtime${version}"
+`, bin),
+	})
+	if _, ok := cfg.Apps["runtime8.4"]; !ok {
+		t.Fatalf("marker-less versions.from prevented binary discovery: %v", cfg.AppNames)
+	}
+}
+
 func TestVersionTemplateUnversionedCanBeDisabled(t *testing.T) {
 	bin := makeBinDir(t, "php", "php8.4")
 	cfg := loadCatalog(t, map[string]string{

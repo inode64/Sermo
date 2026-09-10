@@ -1362,7 +1362,10 @@ preflight:
 ```
 
 `versions.from` is discovery-only metadata; it never appears in materialized apps
-or services. Matches are de-duplicated by their materialized token tuple.
+or services. Its path must contain every value marker in the template name
+(`${version}`, `${n}` and/or `${instance}`; `${sep}` is optional); otherwise it is
+ignored and apps/libraries fall back to `variables.binary`. Matches are de-duplicated
+by their materialized token tuple.
 
 A discovered version must start with a digit, so siblings of an unbounded
 trailing placeholder (a bare `php-fpm` symlink, a `php-fpm.conf`) are not mistaken

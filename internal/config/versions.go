@@ -141,31 +141,11 @@ func (c *Config) materializeRegistry(ctx context.Context, names []string, reg ma
 	for _, tmpl := range templates {
 		c.recordTemplateValidationIssues(tmpl)
 		body := c.templateBody(tmpl, kind)
-		var instances []*Document
 		toks := tokensFor(tmpl.Name)
 		if len(toks) == 0 {
 			continue
 		}
-		if len(toks) > 1 {
-			instances = c.materializeMultiToken(ctx, tmpl, body, toks, kind)
-		} else {
-			tok := toks[0]
-			source := c.versionDiscoverySource(ctx, body, tok, kind)
-			matches := source.templateMatches(toks)
-			matches = append(matches, c.configuredServiceTemplateMatches(tmpl.Name, body, toks, kind)...)
-			matches = dedupeTemplateMatches(matches, toks)
-			sortTemplateMatches(matches)
-			matches = c.withCurrentMatches(matches, tmpl.Name, toks, kind)
-			require := versionsRequire(body)
-			for _, match := range matches {
-				if !requireSatisfied(require, match.values, toks) {
-					continue
-				}
-				instances = append(instances, instantiateVersion(
-					body, tmpl.Name, match, tok, tmpl.Path, kind,
-				))
-			}
-		}
+		instances := c.materializeTemplate(ctx, tmpl, body, toks, kind)
 		for _, inst := range instances {
 			if existing, ok := reg[inst.Name]; ok && existing.Name == inst.Name {
 				c.recordMaterializedNameCollision(kind, tmpl, inst, existing)
@@ -194,12 +174,11 @@ func (c *Config) recordMaterializedNameCollision(kind string, tmpl, inst, existi
 	})
 }
 
-// materializeMultiToken materializes a template whose name carries more than one
-// token (e.g. tomcat-%v%s%i). All markers are discovered together from a single
-// glob whose matches yield one value per token; each present combination becomes
-// a concrete document with every token bound in the name and body at once.
-func (c *Config) materializeMultiToken(ctx context.Context, tmpl *Document, body map[string]any, toks []tmplToken, kind string) []*Document {
-	source := c.multiTokenDiscoverySource(ctx, body, toks, kind)
+// materializeTemplate materializes a template's tokens together from one
+// discovery source. A one-token template deliberately uses the same pipeline as
+// a composite name, so versions.from and optional-token edge cases cannot drift.
+func (c *Config) materializeTemplate(ctx context.Context, tmpl *Document, body map[string]any, toks []tmplToken, kind string) []*Document {
+	source := c.templateDiscoverySource(ctx, body, toks, kind)
 	demanded := c.configuredServiceTemplateMatches(tmpl.Name, body, toks, kind)
 	if len(source.paths) == 0 && len(source.matches) == 0 && len(demanded) == 0 && len(versionsCurrentFromCandidates(body)) == 0 {
 		return nil
@@ -250,11 +229,11 @@ func requireSatisfied(require []string, vals map[string]string, toks []tmplToken
 	return false
 }
 
-// multiTokenDiscoverySource returns the active-unit matches or globs (carrying
-// all markers) that enumerate a multi-token template's instances. CatalogServices prefer
+// templateDiscoverySource returns the active-unit matches or globs (carrying
+// all markers) that enumerate a template's instances. Catalog services prefer
 // token-bearing service candidates; apps and libraries can discover from
-// `versions.from` or their own `variables.binary` candidates.
-func (c *Config) multiTokenDiscoverySource(ctx context.Context, body map[string]any, toks []tmplToken, kind string) versionDiscovery {
+// versions.from or their own variables.binary candidates.
+func (c *Config) templateDiscoverySource(ctx context.Context, body map[string]any, toks []tmplToken, kind string) versionDiscovery {
 	if kind == kindService {
 		if matches := c.serviceTemplateMatches(ctx, body, toks); len(matches) > 0 {
 			return versionDiscovery{matches: matches, options: body}
@@ -1031,56 +1010,6 @@ func (d versionDiscovery) templateMatches(toks []tmplToken) []templateMatch {
 	return materializedTemplateMatches(d.paths, d.binary, d.options, toks)
 }
 
-// versionDiscoverySource returns the active service-unit matches or
-// placeholder-bearing filesystem path Sermo uses to find installed values, plus
-// the document whose `versions.unversioned` option controls active-slot
-// behavior. Apps and libraries own their discovery path directly. CatalogServices prefer
-// their active `service:` units; their binary remains owned by linked apps.
-func (c *Config) versionDiscoverySource(ctx context.Context, body map[string]any, tok tmplToken, kind string) versionDiscovery {
-	if kind != kindService {
-		if paths := c.versionsFromPaths(body); len(paths) > 0 {
-			return versionDiscovery{paths: paths, options: body}
-		}
-		return versionDiscovery{paths: documentBinaryCandidates(body), options: body, binary: true}
-	}
-	if matches := c.serviceTemplateMatches(ctx, body, []tmplToken{tok}); len(matches) > 0 {
-		return versionDiscovery{matches: matches, options: body}
-	}
-	// A catalog service may own its discovery via an explicit token-bearing
-	// `versions.from`: instance metadata can live on the catalog service, not on the
-	// version binary the linked app knows about (e.g. tomcat@${version}${sep}
-	// ${instance}.service). Prefer it when present. A catalog service still never
-	// discovers from its own *binary* — that remains the linked app's job — so
-	// only an explicit versions.from qualifies, not documentBinaryCandidates.
-	if paths := pathsContainingMarker(c.versionsFromPaths(body), tok.marker()); len(paths) > 0 {
-		return versionDiscovery{paths: paths, options: body}
-	}
-	for _, name := range cfgval.StringList(body[keyApps]) {
-		doc, ok := c.Apps[linkedAppTemplateName(name, tok)]
-		if !ok {
-			continue
-		}
-		appBody := stripMeta(doc.Body)
-		if paths := c.versionsFromPaths(appBody); anyContains(paths, tok.marker()) {
-			return versionDiscovery{paths: paths, options: appBody}
-		}
-		if paths := documentBinaryCandidates(appBody); anyContains(paths, tok.marker()) {
-			return versionDiscovery{paths: paths, options: appBody, binary: true}
-		}
-	}
-	return versionDiscovery{options: body}
-}
-
-func pathsContainingMarker(paths []string, marker string) []string {
-	var out []string
-	for _, path := range paths {
-		if strings.Contains(path, marker) {
-			out = append(out, path)
-		}
-	}
-	return out
-}
-
 // versionsFromPaths returns the explicit `versions.from` discovery globs for the
 // configured init backend. A plain string/list is backend-neutral. A map selects
 // only the active backend branch (`systemd` or `openrc`) so stray unit files from
@@ -1109,19 +1038,6 @@ func versionsCurrentFromCandidates(body map[string]any) []string {
 		return nil
 	}
 	return cfgval.StringList(v[keyVersionsCurrentFrom])
-}
-
-func anyContains(values []string, marker string) bool {
-	for _, value := range values {
-		if strings.Contains(value, marker) {
-			return true
-		}
-	}
-	return false
-}
-
-func linkedAppTemplateName(name string, tok tmplToken) string {
-	return strings.ReplaceAll(name, tok.marker(), tok.placeholder)
 }
 
 func versionUnversionedEnabled(body map[string]any, tok tmplToken) bool {
@@ -1168,20 +1084,6 @@ func (c *Config) templateBody(tmpl *Document, kind string) map[string]any {
 	}
 	body[keyKind] = kind
 	return body
-}
-
-// instantiateVersion bakes a concrete value into a copy of the template body: the
-// token placeholder in the name becomes the value, and every `${...}` reference
-// for that token in the body (variables.binary, display_name, service, ...) is
-// substituted. Other `${var}` references are left for normal resolution.
-func instantiateVersion(body map[string]any, templateName string, match templateMatch, tok tmplToken, path, kind string) *Document {
-	value := match.values[tok.variable]
-	name := materializedTemplateName(templateName, match, []tmplToken{tok})
-	out := bindTokensMap(cloneMap(body), strings.NewReplacer(tok.marker(), value, templateCurrentMarker, templateCurrentValue(match.current)))
-	if value == "" {
-		applyUnversionedOverrides(out)
-	}
-	return finalizeMaterialized(out, body, name, path, kind, templateName, match)
 }
 
 func templateUsesCurrentLabel(body map[string]any) bool {
