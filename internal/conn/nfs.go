@@ -105,7 +105,7 @@ func rpcCallTCP(c net.Conn, protocol string, payload []byte) ([]byte, error) {
 		}
 		marker := binary.BigEndian.Uint32(m[:])
 		n := int(marker &^ rpcFragmentLastMask)
-		if n < 0 || n > rpcTCPMaxFragmentBytes {
+		if n > rpcTCPMaxFragmentBytes {
 			return nil, errors.New("nfs: RPC fragment too large")
 		}
 		frag := make([]byte, n)

@@ -525,11 +525,8 @@ func chronyActivityFields(b []byte, extra map[string]string) {
 
 // chronyCount reads a signed 32-bit counter from the head of b.
 func chronyCount(b []byte) string {
-	n := int64(binary.BigEndian.Uint32(b))
-	if n > math.MaxInt32 {
-		n -= 1 << chronyInt32Bits
-	}
-	return strconv.FormatInt(n, 10)
+	//nolint:gosec // G115: chrony encodes this counter as a two's-complement int32.
+	return strconv.FormatInt(int64(int32(binary.BigEndian.Uint32(b))), numericBaseDecimal)
 }
 
 // chronyFloat decodes chrony's 32-bit on-wire float at offset off.
