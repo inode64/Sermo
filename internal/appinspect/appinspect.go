@@ -239,34 +239,28 @@ func inspectResolved(
 		Binary:      catalogPath(resolved.Tree, category),
 	}
 
-	var info os.FileInfo
-	switch fi, err := os.Stat(r.Binary); {
-	case r.Binary == "":
+	if r.Binary == "" {
 		r.Status = StatusNoBinaryConfigured
 		return r
-	case err != nil:
+	}
+	info, err := os.Stat(r.Binary)
+	if err != nil {
 		r.Status = StatusNotInstalled
 		return r
-	case fi.IsDir():
-		info = fi
-		r.Permissions = modeString(info)
+	}
+	r.Permissions = modeString(info)
+	switch {
+	case info.IsDir():
 		r.Status = statusErrorPrefix + r.Binary + " is a directory"
 		return r
-	case category == config.CategoryLibrary && fi.Size() == 0:
-		info = fi
-		r.Permissions = modeString(info)
+	case category == config.CategoryLibrary && info.Size() == 0:
 		r.Installed = true
 		r.Status = statusErrorPrefix + r.Binary + " is empty"
 		return r
-	case category != config.CategoryLibrary && fi.Mode().Perm()&binaryExecutableModeMask == 0:
-		info = fi
-		r.Permissions = modeString(info)
+	case category != config.CategoryLibrary && info.Mode().Perm()&binaryExecutableModeMask == 0:
 		r.Installed = true
 		r.Status = statusErrorPrefix + r.Binary + " is not executable"
 		return r
-	default:
-		info = fi
-		r.Permissions = modeString(info)
 	}
 	r.Installed = true
 
