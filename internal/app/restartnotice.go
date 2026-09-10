@@ -44,6 +44,27 @@ type servicePrimaryProcess struct {
 	startedAt time.Time
 }
 
+// serviceRestartRuntime holds the one sampled restart identity in every form a
+// notification needs: template expansion, event metadata and notifier fields.
+type serviceRestartRuntime struct {
+	service       string
+	unit          string
+	process       string
+	pid           string
+	uptime        string
+	uptimeSeconds string
+	startedAt     string
+	threshold     string
+}
+
+func newServiceRestartRuntime(service, unit string, notice config.ServiceRestartNotice, principal servicePrimaryProcess, uptime time.Duration) serviceRestartRuntime {
+	startedAt, uptimeText, uptimeSeconds := serviceRuntimeUptime(principal.startedAt, principal.startedAt.Add(uptime))
+	return serviceRestartRuntime{
+		service: service, unit: unit, process: primaryProcessName(principal.process), pid: strconv.Itoa(principal.process.PID),
+		uptime: uptimeText, uptimeSeconds: strconv.FormatInt(uptimeSeconds, 10), startedAt: startedAt, threshold: notice.UptimeBelow.String(),
+	}
+}
+
 // primaryProcessForCycle combines shared per-cycle discovery with one precise
 // principal-process start-time read. It never broadens process attribution: a
 // service without a backend MainPID, pidfile, or explicit main selector simply
@@ -150,8 +171,9 @@ func sameServiceRestartNotice(a, b state.ServiceRestartNoticeRecord) bool {
 }
 
 func (w *Worker) emitServiceRestartNotice(ctx context.Context, notice config.ServiceRestartNotice, principal servicePrimaryProcess, uptime time.Duration) {
-	message := w.expandServiceRestartNotice(notice.Message, notice, principal, uptime)
-	subject := w.expandServiceRestartNotice(notice.Subject, notice, principal, uptime)
+	runtime := newServiceRestartRuntime(w.Service, w.Unit, notice, principal, uptime)
+	message := w.expandServiceRestartNotice(notice.Message, runtime)
+	subject := w.expandServiceRestartNotice(notice.Subject, runtime)
 	w.emit(Event{Kind: eventKindAlert, Rule: restartNoticeRule, Message: message})
 	if w.InPanic != nil && w.InPanic() {
 		w.emit(Event{Kind: eventKindNotifySuppressed, Rule: restartNoticeRule, Message: "panic mode: service restart notification suppressed"})
@@ -165,7 +187,7 @@ func (w *Worker) emitServiceRestartNotice(ctx context.Context, notice config.Ser
 		if !allow(n) {
 			continue
 		}
-		if err := n.Send(ctx, serviceRestartMessage(w.Service, w.Unit, subject, message, notice, principal, uptime)); err != nil {
+		if err := n.Send(ctx, runtime.message(subject, message)); err != nil {
 			w.emit(Event{Kind: eventKindNotifyFail, Rule: restartNoticeRule, Message: n.Name() + ": " + err.Error()})
 		} else {
 			w.emit(Event{Kind: eventKindNotify, Rule: restartNoticeRule, Message: "notified " + n.Name()})
@@ -173,20 +195,18 @@ func (w *Worker) emitServiceRestartNotice(ctx context.Context, notice config.Ser
 	}
 }
 
-func (w *Worker) expandServiceRestartNotice(text string, notice config.ServiceRestartNotice, principal servicePrimaryProcess, uptime time.Duration) string {
-	startedAt, uptimeText, uptimeSeconds := serviceRuntimeUptime(principal.startedAt, principal.startedAt.Add(uptime))
-	processName := primaryProcessName(principal.process)
+func (w *Worker) expandServiceRestartNotice(text string, runtime serviceRestartRuntime) string {
 	text = strings.NewReplacer(
-		restartNoticeRuntimeService, w.Service,
-		restartNoticeRuntimeUnit, w.Unit,
-		restartNoticeRuntimeProcess, processName,
-		restartNoticeRuntimePID, strconv.Itoa(principal.process.PID),
-		restartNoticeRuntimeUptime, uptimeText,
-		restartNoticeRuntimeUptimeSecs, strconv.FormatInt(uptimeSeconds, 10),
-		restartNoticeRuntimeStartedAt, startedAt,
-		restartNoticeRuntimeThreshold, notice.UptimeBelow.String(),
+		restartNoticeRuntimeService, runtime.service,
+		restartNoticeRuntimeUnit, runtime.unit,
+		restartNoticeRuntimeProcess, runtime.process,
+		restartNoticeRuntimePID, runtime.pid,
+		restartNoticeRuntimeUptime, runtime.uptime,
+		restartNoticeRuntimeUptimeSecs, runtime.uptimeSeconds,
+		restartNoticeRuntimeStartedAt, runtime.startedAt,
+		restartNoticeRuntimeThreshold, runtime.threshold,
 	).Replace(text)
-	return w.expandRuntime(text, Event{Service: w.Service, Rule: restartNoticeRule})
+	return w.expandRuntime(text, Event{Service: runtime.service, Rule: restartNoticeRule})
 }
 
 func primaryProcessName(p process.Process) string {
@@ -202,24 +222,22 @@ func primaryProcessName(p process.Process) string {
 	return fmt.Sprintf("pid %d", p.PID)
 }
 
-func serviceRestartMessage(service, unit, subject, body string, notice config.ServiceRestartNotice, principal servicePrimaryProcess, uptime time.Duration) notify.Message {
-	startedAt, uptimeText, uptimeSeconds := serviceRuntimeUptime(principal.startedAt, principal.startedAt.Add(uptime))
-	processName := primaryProcessName(principal.process)
+func (runtime serviceRestartRuntime) message(subject, body string) notify.Message {
 	return notify.Message{
 		Subject: subject,
 		Body:    body,
 		Fields: map[string]string{
-			sermoEnvService:            service,
+			sermoEnvService:            runtime.service,
 			sermoEnvRule:               restartNoticeRule,
 			sermoEnvEvent:              restartNoticeRule,
-			sermoEnvRestartService:     service,
-			sermoEnvRestartUnit:        unit,
-			sermoEnvRestartProcess:     processName,
-			sermoEnvRestartPID:         strconv.Itoa(principal.process.PID),
-			sermoEnvRestartUptime:      uptimeText,
-			sermoEnvRestartUptimeSecs:  strconv.FormatInt(uptimeSeconds, 10),
-			sermoEnvRestartStartedAt:   startedAt,
-			sermoEnvRestartUptimeBelow: notice.UptimeBelow.String(),
+			sermoEnvRestartService:     runtime.service,
+			sermoEnvRestartUnit:        runtime.unit,
+			sermoEnvRestartProcess:     runtime.process,
+			sermoEnvRestartPID:         runtime.pid,
+			sermoEnvRestartUptime:      runtime.uptime,
+			sermoEnvRestartUptimeSecs:  runtime.uptimeSeconds,
+			sermoEnvRestartStartedAt:   runtime.startedAt,
+			sermoEnvRestartUptimeBelow: runtime.threshold,
 		},
 	}
 }
