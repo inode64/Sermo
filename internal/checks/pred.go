@@ -327,12 +327,10 @@ func requireLevelPreds(entry map[string]any, fields []string, label string) ([]l
 // field list contains exactly one entry.
 func requireSingleLevelPred(entry map[string]any, fields []string, label string) (levelPred, string) {
 	preds, errs := requireLevelPreds(entry, fields, label)
-	switch {
-	case errs != "":
+	if errs != "" {
 		return levelPred{}, errs
-	case len(preds) == 0:
-		// requireLevelPreds already rejects an empty set, so this only keeps the
-		// indexing below safe if that ever changes.
+	}
+	if len(preds) == 0 {
 		return levelPred{}, label + ": requires at least one of " + strings.Join(fields, "/")
 	}
 	return preds[0], ""
@@ -440,12 +438,9 @@ func parseLevelPredValue(field string, raw any) (float64, error) {
 		}
 		return val, nil
 	}
-	val, ok := cfgval.Float(raw)
-	if !ok {
-		return 0, fmt.Errorf("%s value %q is not numeric", field, value)
-	}
-	if math.IsInf(val, 0) || math.IsNaN(val) {
-		return 0, fmt.Errorf("%s value %q must be a finite number", field, value)
+	val, err := parseFiniteThreshold(raw)
+	if err != nil {
+		return 0, fmt.Errorf("%s value %q %w", field, value, err)
 	}
 	return val, nil
 }
