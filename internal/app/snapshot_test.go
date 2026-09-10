@@ -9,6 +9,13 @@ import (
 	"sermo/internal/state"
 )
 
+// Publish keeps older test setup concise. Production code must provide check
+// types through PublishWithCheckTypes, so web consumers never receive an
+// untyped snapshot.
+func (s *Snapshots) Publish(service string, cache map[string]checks.Result, ran map[string]bool) {
+	s.publishConfigured(service, cache, ran, nil, "")
+}
+
 func TestSnapshotsRoundTrip(t *testing.T) {
 	s := NewSnapshots()
 	if s.Get("web") != nil {
@@ -54,6 +61,16 @@ func TestSnapshotsPublishWithCheckTypes(t *testing.T) {
 
 	if got := s.Get("web")["http"].CheckType; got != checks.CheckTypeHTTP {
 		t.Fatalf("snapshot CheckType = %q, want %q", got, checks.CheckTypeHTTP)
+	}
+}
+
+func TestSnapshotsPublishWithCheckTypesDropsUntypedEntries(t *testing.T) {
+	s := NewSnapshots()
+	s.PublishWithCheckTypes("web", map[string]checks.Result{
+		"http": {Check: "http", OK: true},
+	}, map[string]bool{"http": true}, nil)
+	if got := s.Get("web"); len(got) != 0 {
+		t.Fatalf("untyped snapshots = %+v, want none", got)
 	}
 }
 

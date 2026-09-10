@@ -79,18 +79,19 @@ func NewPersistentSnapshots(store serviceSnapshotStore, reportError func(error))
 	return s, nil
 }
 
-// Publish replaces a service's snapshot with the given cycle's check cache. ran
-// lists the checks that actually executed this cycle (from the worker's cycleRan
-// map); interval-deferred checks keep their cached result with Ran false.
-func (s *Snapshots) Publish(service string, cache map[string]checks.Result, ran map[string]bool) {
-	s.PublishWithCheckTypes(service, cache, ran, nil)
-}
-
 // PublishWithCheckTypes replaces a service snapshot with the given cycle's
 // cache and check types. Type metadata prevents a same-named check from an old
 // configuration from being decoded under a newly configured check type.
 func (s *Snapshots) PublishWithCheckTypes(service string, cache map[string]checks.Result, ran map[string]bool, checkTypes map[string]string) {
-	s.publishConfigured(service, cache, ran, checkTypes, "")
+	typedCache := make(map[string]checks.Result, len(cache))
+	typedRan := make(map[string]bool, len(ran))
+	for name, result := range cache {
+		if checkTypes[name] == "" {
+			continue
+		}
+		typedCache[name], typedRan[name] = result, ran[name]
+	}
+	s.publishConfigured(service, typedCache, typedRan, checkTypes, "")
 }
 
 func (s *Snapshots) publishConfigured(service string, cache map[string]checks.Result, ran map[string]bool, checkTypes map[string]string, configID string) {
