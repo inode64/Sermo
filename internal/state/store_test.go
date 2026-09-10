@@ -400,7 +400,7 @@ func writePersistentStoreState(t *testing.T, store *Store, at time.Time) {
 		Firing:       true,
 		Unavailable:  true,
 		LastNotifyAt: at.Add(-time.Minute),
-		Window: RuleWindowRecord{
+		Window: WatchWindowRecord{
 			Consecutive: 2,
 			History:     []bool{true, false, true},
 			TrueSince:   at.Add(-5 * time.Minute),

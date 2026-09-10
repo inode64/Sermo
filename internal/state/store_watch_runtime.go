@@ -15,8 +15,20 @@ type WatchRuntimeRecord struct {
 	Firing       bool
 	Unavailable  bool
 	LastNotifyAt time.Time
-	Window       RuleWindowRecord
+	Window       WatchWindowRecord
 	Policy       RemediationRecord
+}
+
+// WatchWindowRecord is the persisted for/within progress for a watch. The
+// firing episode belongs to WatchRuntimeRecord.Firing, which is the sole owner
+// of the watch_runtime_state firing column.
+type WatchWindowRecord struct {
+	Consecutive      int
+	History          []bool
+	TrueSince        time.Time
+	TimedHistory     []RuleWindowSample
+	ClearConsecutive int
+	ClearSince       time.Time
 }
 
 // WatchRuntimeState returns one watch slot's persisted episode and pacing state.
@@ -69,14 +81,11 @@ func (s *Store) WatchRuntimeState(watch, slot string) (WatchRuntimeRecord, bool,
 		Firing:       firing != 0,
 		Unavailable:  unavailable != 0,
 		LastNotifyAt: unixNanoTime(lastNotifyAt),
-		Window: RuleWindowRecord{
-			Consecutive:  consecutive,
-			History:      history,
-			TrueSince:    unixNanoTime(trueSince),
-			TimedHistory: timed,
-			// The watch's episode column doubles as the window's: both track the
-			// same firing episode, kept in sync by Watch.evaluateFiring.
-			Firing:           firing != 0,
+		Window: WatchWindowRecord{
+			Consecutive:      consecutive,
+			History:          history,
+			TrueSince:        unixNanoTime(trueSince),
+			TimedHistory:     timed,
 			ClearSince:       unixNanoTime(clearSince),
 			ClearConsecutive: clearConsecutive,
 		},
@@ -145,7 +154,7 @@ func watchRuntimeRecordEmpty(rec WatchRuntimeRecord) bool {
 	return !rec.Firing && !rec.Unavailable && rec.LastNotifyAt.IsZero() &&
 		rec.Window.Consecutive == 0 && len(rec.Window.History) == 0 &&
 		rec.Window.TrueSince.IsZero() && len(rec.Window.TimedHistory) == 0 &&
-		!rec.Window.Firing && rec.Window.ClearSince.IsZero() && rec.Window.ClearConsecutive == 0 &&
+		rec.Window.ClearSince.IsZero() && rec.Window.ClearConsecutive == 0 &&
 		rec.Policy.LastActionAt.IsZero() && len(rec.Policy.RecentActions) == 0 &&
 		rec.Policy.CurrentBackoff == 0
 }
