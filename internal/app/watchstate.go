@@ -140,19 +140,17 @@ func watchRuntimeRecordsEqual(a, b state.WatchRuntimeRecord) bool {
 	return a.Firing == b.Firing &&
 		a.Unavailable == b.Unavailable &&
 		a.LastNotifyAt.Equal(b.LastNotifyAt) &&
-		a.Window.Consecutive == b.Window.Consecutive &&
-		slices.Equal(a.Window.History, b.Window.History) &&
-		a.Window.TrueSince.Equal(b.Window.TrueSince) &&
-		windowSamplesEqual(a.Window.TimedHistory, b.Window.TimedHistory) &&
-		a.Window.ClearSince.Equal(b.Window.ClearSince) &&
-		a.Window.ClearConsecutive == b.Window.ClearConsecutive &&
-		a.Policy.LastActionAt.Equal(b.Policy.LastActionAt) &&
-		slices.EqualFunc(a.Policy.RecentActions, b.Policy.RecentActions, func(x, y time.Time) bool { return x.Equal(y) }) &&
-		a.Policy.CurrentBackoff == b.Policy.CurrentBackoff
+		ruleWindowRecordsEqual(watchWindowAsRuleRecord(a.Window), watchWindowAsRuleRecord(b.Window)) &&
+		remediationRecordsEqual(a.Policy, b.Policy)
 }
 
-func windowSamplesEqual(a, b []state.RuleWindowSample) bool {
-	return slices.EqualFunc(a, b, func(x, y state.RuleWindowSample) bool {
-		return x.At.Equal(y.At)
-	})
+func watchWindowAsRuleRecord(rec state.WatchWindowRecord) state.RuleWindowRecord {
+	return state.RuleWindowRecord{
+		Consecutive:      rec.Consecutive,
+		History:          rec.History,
+		TrueSince:        rec.TrueSince,
+		TimedHistory:     rec.TimedHistory,
+		ClearConsecutive: rec.ClearConsecutive,
+		ClearSince:       rec.ClearSince,
+	}
 }
