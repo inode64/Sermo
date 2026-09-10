@@ -8,9 +8,31 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"sermo/internal/checks"
+	"sermo/internal/config"
 )
+
+func TestRAIDControlTimeout(t *testing.T) {
+	cfg := &config.Config{Global: config.Global{Raw: map[string]any{
+		config.SectionEngine: map[string]any{config.EngineKeyOperationTimeout: "19s"},
+	}}}
+	for _, tc := range []struct {
+		name string
+		opts options
+		want time.Duration
+	}{
+		{name: "engine timeout", want: 19 * time.Second},
+		{name: "explicit CLI override", opts: options{timeout: 7 * time.Second, timeoutSet: true}, want: 7 * time.Second},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := raidControlTimeout(cfg, tc.opts); got != tc.want {
+				t.Fatalf("raidControlTimeout() = %s, want %s", got, tc.want)
+			}
+		})
+	}
+}
 
 func TestWatchStatus(t *testing.T) {
 	for _, tc := range []struct {
