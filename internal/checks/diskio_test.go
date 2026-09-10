@@ -181,14 +181,14 @@ func firstNonZeroDiskstatDevice(t *testing.T) string {
 func TestCalculateDiskIORatesSubMillisecondWindow(t *testing.T) {
 	prev := DiskIOSample{SectorsRead: 10}
 	cur := DiskIOSample{SectorsRead: 20}
-	// elapsed > 0 but under a millisecond rounds elapsedMs to 0; rates are not
-	// computable (elapsedMs <= 0), so the second return must be false.
-	if _, ok := CalculateDiskIORates(prev, cur, 500*time.Microsecond); ok {
-		t.Fatal("a sub-millisecond window must yield ok=false (no divide by zero ms)")
+	// elapsed > 0 but under a millisecond rounds elapsedMs to 0, so no rate is
+	// computable without a millisecond denominator.
+	if rates := calculateDiskIORates(prev, cur, 500*time.Microsecond); rates != (DiskIORates{}) {
+		t.Fatalf("sub-millisecond rates = %+v, want zeroes", rates)
 	}
 	// A full second is fine.
-	if _, ok := CalculateDiskIORates(prev, cur, time.Second); !ok {
-		t.Fatal("a one-second window must yield ok=true")
+	if rates := calculateDiskIORates(prev, cur, time.Second); rates.ReadBytes == 0 {
+		t.Fatalf("one-second rates = %+v, want a read rate", rates)
 	}
 }
 
