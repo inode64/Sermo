@@ -42,7 +42,7 @@ func ReadDir(path string) ([]os.DirEntry, error) {
 	if err := Check(path); err != nil {
 		return nil, err
 	}
-	return os.ReadDir(path) //nolint:gosec,wrapcheck // G304 and wrapcheck: see ReadFile.
+	return os.ReadDir(path) //nolint:wrapcheck // see ReadFile.
 }
 
 // Readlink reads the target of one host symlink.
@@ -50,7 +50,7 @@ func Readlink(path string) (string, error) {
 	if err := Check(path); err != nil {
 		return "", err
 	}
-	return os.Readlink(path) //nolint:gosec,wrapcheck // G304 and wrapcheck: see ReadFile.
+	return os.Readlink(path) //nolint:wrapcheck // see ReadFile.
 }
 
 // Open opens the named host file or directory for reading.

@@ -180,6 +180,7 @@ func sessionFromProperties(properties map[string]dbus.Variant) (session, error) 
 	return result, nil
 }
 
+//nolint:ireturn // T is the concrete property type selected by the caller.
 func property[T any](properties map[string]dbus.Variant, name string) (T, bool) {
 	variant, ok := properties[name]
 	if !ok {
