@@ -228,9 +228,9 @@ func stopArtifactsFromTree(tree map[string]any) StopArtifacts {
 func reloadClosure(spec config.ReloadSpec, tree map[string]any, deps checks.Deps, mgr Manager, backend, unit string, discoverer process.Discoverer, selectors []process.Selector) func(context.Context) error {
 	backendReload := func(ctx context.Context) error { return mgr.Reload(ctx, unit) }
 	initReload := func(ctx context.Context) error {
-		ok, err := mgr.SupportsReload(ctx, unit)
+		ok, err := backendReloadSupported(ctx, mgr, unit)
 		if err != nil {
-			return fmt.Errorf("%s: %w", reloadSupportLabel, err)
+			return err
 		}
 		if !ok {
 			return UnsupportedReloadError(unit)
@@ -248,15 +248,23 @@ func reloadClosure(spec config.ReloadSpec, tree map[string]any, deps checks.Deps
 	// `when: auto` — prefer the backend reload, fall back to the native reload only
 	// when the unit/script exposes no reload of its own.
 	return func(ctx context.Context) error {
-		ok, err := mgr.SupportsReload(ctx, unit)
+		ok, err := backendReloadSupported(ctx, mgr, unit)
 		if err != nil {
-			return fmt.Errorf("%s: %w", reloadSupportLabel, err)
+			return err
 		}
 		if ok {
 			return backendReload(ctx)
 		}
 		return native(ctx)
 	}
+}
+
+func backendReloadSupported(ctx context.Context, mgr Manager, unit string) (bool, error) {
+	supported, err := mgr.SupportsReload(ctx, unit)
+	if err != nil {
+		return false, fmt.Errorf("%s: %w", reloadSupportLabel, err)
+	}
+	return supported, nil
 }
 
 // UnsupportedReloadError reports a reload action rejected before execution
