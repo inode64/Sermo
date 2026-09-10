@@ -75,12 +75,7 @@ func (c straysCheck) Run(_ context.Context) Result {
 // sample still inside the window, so a count that rose and settled stops failing
 // once the window has moved past the rise.
 func (c straysCheck) growthResult(strays []process.Process, exes []string, start time.Time) Result {
-	state := c.state
-	if state == nil {
-		// Defensive only: a growth bound is always built with a shared state.
-		state = &counterWindow{}
-	}
-	rise, covered := state.advance(windowClock(c.clock)(), len(strays), c.window)
+	rise, covered := c.state.advance(windowClock(c.clock)(), len(strays), c.window)
 	// A count can legitimately fall — an operator reaped, or the init cleaned the
 	// cgroup — so only a rise is a growth.
 	growth := max(rise, 0)

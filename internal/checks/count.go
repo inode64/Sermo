@@ -61,12 +61,7 @@ func (c countCheck) Run(ctx context.Context) Result {
 }
 
 func (c countCheck) runDelta(n int, start time.Time) Result {
-	state := c.state
-	if state == nil {
-		// Defensive only: delta checks are always built with a shared state.
-		state = &counterWindow{}
-	}
-	growth, span := state.advance(windowClock(c.clock)(), n, c.window)
+	growth, span := c.state.advance(windowClock(c.clock)(), n, c.window)
 	ok := growth > 0 && cfgval.CompareFloat(float64(growth), c.deltaOp, c.deltaValue)
 
 	scope := "in"
