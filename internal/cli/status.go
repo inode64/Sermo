@@ -42,7 +42,7 @@ func (a App) runStatus(ctx context.Context, opts options) int {
 		return code
 	}
 
-	mon := a.serviceMonitorState(ctx, cfg, service, configured)
+	mon := serviceMonitorState(ctx, cfg, service, configured)
 	displayState := a.serviceDisplayState(ctx, opts, cfg, service, status, mon)
 	if opts.json {
 		writeJSON(a.Stdout, statusToJSON(status, mon, displayState))
@@ -67,7 +67,7 @@ func (a App) runIsActive(ctx context.Context, opts options) int {
 
 	switch {
 	case opts.json:
-		mon := a.serviceMonitorState(ctx, cfg, service, configured)
+		mon := serviceMonitorState(ctx, cfg, service, configured)
 		writeJSON(a.Stdout, statusToJSON(status, mon, a.serviceDisplayState(ctx, opts, cfg, service, status, mon)))
 	case !opts.quiet:
 		fmt.Fprintln(a.Stdout, status.Status)
