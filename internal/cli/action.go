@@ -3,7 +3,6 @@ package cli
 import (
 	"context"
 	"fmt"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -169,11 +168,7 @@ func (a App) operateWithManualState(ctx context.Context, opts options, cfg *conf
 // same resolution ladder the daemon writes it with.
 func openStateStore(ctx context.Context, cfg *config.Config) (*state.Store, error) {
 	//nolint:wrapcheck // each command prefixes its own "<verb> failed:" context.
-	return state.OpenContextWith(
-		ctx,
-		filepath.Join(cfg.Global.StateDir(), state.Filename),
-		app.EngineStateOptions(cfg),
-	)
+	return app.OpenStateStore(ctx, cfg)
 }
 
 // withStateStore opens the store, runs fn, and always closes the store. onOpenErr
