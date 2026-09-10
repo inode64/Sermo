@@ -69,11 +69,7 @@ func (*Email) Type() string { return TypeEmail }
 
 // Send delivers the message over SMTP.
 func (e *Email) Send(ctx context.Context, msg Message) error {
-	send := e.send
-	if send == nil {
-		send = smtpSend
-	}
-	return send(ctx, e.dsn, e.from, e.to, msg)
+	return e.send(ctx, e.dsn, e.from, e.to, msg)
 }
 
 // buildEmail constructs an Email notifier from a config entry.

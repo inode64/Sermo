@@ -58,12 +58,7 @@ func newTTY(name, typ string, users map[string]struct{}) *ttyNotifier {
 
 func (n *ttyNotifier) Name() string { return n.name }
 
-func (n *ttyNotifier) Type() string {
-	if n.typ == "" {
-		return TypeTTY
-	}
-	return n.typ
-}
+func (n *ttyNotifier) Type() string { return n.typ }
 
 func (n *ttyNotifier) Send(ctx context.Context, msg Message) error {
 	sessions, err := utmp.SessionsFrom(n.utmpPaths)
@@ -82,22 +77,14 @@ func (n *ttyNotifier) sendToTargets(ctx context.Context, targets []string, msg M
 	if err != nil || strings.TrimSpace(host) == "" {
 		host = defaultTTYHost
 	}
-	now := time.Now
-	if n.now != nil {
-		now = n.now
-	}
-	payload := ttyPayload(msg, host, now())
-	writeTTY := n.writeTTY
-	if writeTTY == nil {
-		writeTTY = writeTTYLinux
-	}
+	payload := ttyPayload(msg, host, n.now())
 	var errs []error
 	delivered := 0
 	for _, target := range targets {
 		if err := ctx.Err(); err != nil {
 			return fmt.Errorf("check terminal delivery context: %w", err)
 		}
-		if err := writeTTY(ctx, target, payload); err != nil {
+		if err := n.writeTTY(ctx, target, payload); err != nil {
 			errs = append(errs, fmt.Errorf("%s: %w", target, err))
 			continue
 		}
@@ -114,10 +101,6 @@ func (n *ttyNotifier) sendToTargets(ctx context.Context, targets []string, msg M
 }
 
 func (n *ttyNotifier) targetTTYs(sessions []utmp.Session) []string {
-	devRoot := n.devRoot
-	if devRoot == "" {
-		devRoot = utmp.DevRoot
-	}
 	var paths []string
 	for _, s := range sessions {
 		if len(n.users) > 0 {
@@ -125,7 +108,7 @@ func (n *ttyNotifier) targetTTYs(sessions []utmp.Session) []string {
 				continue
 			}
 		}
-		path, ok := utmp.TTYPath(devRoot, s.Line)
+		path, ok := utmp.TTYPath(n.devRoot, s.Line)
 		if !ok {
 			continue
 		}
