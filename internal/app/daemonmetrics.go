@@ -201,25 +201,19 @@ func (s *DaemonMetricSampler) sampleLocked() daemonMetricSample {
 	if ticks, ok := s.reader.ProcessCPU(pid); ok {
 		counters.cpuTicks = ticks
 		counters.cpuOK = true
-		if s.prev.cpuOK && ticks >= s.prev.cpuTicks {
-			wall := at.Sub(s.prev.at).Seconds()
-			hz := s.reader.ClockTicks()
-			ncpu := cur.numCPU
-			if wall > 0 && hz > 0 && ncpu > 0 {
-				cur.cpu = float64(ticks-s.prev.cpuTicks) / hz / wall / float64(ncpu) * metrics.PercentScale
-				cur.cpuReady = true
-			}
+		if s.prev.cpuOK {
+			cur.cpu, cur.cpuReady = metrics.CPUPercent(s.prev.cpuTicks, ticks, s.prev.at, at, s.reader.ClockTicks(), cur.numCPU)
 		}
 	}
 	if rd, wr, ok := s.reader.ProcessIO(pid); ok {
 		counters.ioRead = rd
 		counters.ioWrite = wr
 		counters.ioOK = true
-		if s.prev.ioOK && rd >= s.prev.ioRead && wr >= s.prev.ioWrite {
-			wall := at.Sub(s.prev.at).Seconds()
-			if wall > 0 {
-				cur.ioRead = float64(rd-s.prev.ioRead) / wall
-				cur.ioWrite = float64(wr-s.prev.ioWrite) / wall
+		if s.prev.ioOK {
+			readRate, readReady := metrics.BytesPerSecond(s.prev.ioRead, rd, s.prev.at, at)
+			writeRate, writeReady := metrics.BytesPerSecond(s.prev.ioWrite, wr, s.prev.at, at)
+			if readReady && writeReady {
+				cur.ioRead, cur.ioWrite = readRate, writeRate
 				cur.io = cur.ioRead + cur.ioWrite
 				cur.ioReady = true
 			}

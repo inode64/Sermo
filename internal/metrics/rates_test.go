@@ -63,6 +63,17 @@ func TestCPURate(t *testing.T) {
 	}
 }
 
+func TestCounterRateHelpersRejectCounterDecreases(t *testing.T) {
+	t0 := time.Unix(1000, 0)
+	t1 := t0.Add(time.Second)
+	if pct, ok := CPUPercent(100, 50, t0, t1, 100, 1); ok || pct != 0 {
+		t.Errorf("CPUPercent reset = (%v, %v), want (0, false)", pct, ok)
+	}
+	if rate, ok := BytesPerSecond(100, 50, t0, t1); ok || rate != 0 {
+		t.Errorf("BytesPerSecond reset = (%v, %v), want (0, false)", rate, ok)
+	}
+}
+
 func TestPerProcCPURates(t *testing.T) {
 	t0 := time.Unix(1000, 0)
 	t2 := t0.Add(2 * time.Second)

@@ -581,30 +581,21 @@ func (w *procWatcher) emitEvent(e Event) { emitSafe(w.emit, e) }
 // elapsed wall time across all CPUs. Not ready without a previous sample, and a
 // counter that went backwards (exec/PID reuse) is treated as not ready.
 func cpuPercent(prevTicks, curTicks uint64, prevAt, now time.Time) (float64, bool) {
-	if prevAt.IsZero() || curTicks < prevTicks {
+	if prevAt.IsZero() {
 		return 0, false
 	}
-	wall := now.Sub(prevAt).Seconds()
 	// OSReader counts host CPUs from /proc/stat rather than this process's
 	// affinity mask, which keeps a pinned sermod from inflating CPU percentages.
 	n := (metrics.OSReader{}).NumCPU()
-	if wall <= 0 || n <= 0 {
-		return 0, false
-	}
-	secs := float64(curTicks-prevTicks) / metrics.LinuxClockTicks
-	return secs / (wall * float64(n)) * metrics.PercentScale, true
+	return metrics.CPUPercent(prevTicks, curTicks, prevAt, now, metrics.LinuxClockTicks, n)
 }
 
 // ioBytesPerSec derives a process's IO rate from two cumulative byte samples.
 func ioBytesPerSec(prevIO, curIO uint64, hadIO, hasIO bool, prevAt, now time.Time) (float64, bool) {
-	if !hadIO || !hasIO || prevAt.IsZero() || curIO < prevIO {
+	if !hadIO || !hasIO || prevAt.IsZero() {
 		return 0, false
 	}
-	wall := now.Sub(prevAt).Seconds()
-	if wall <= 0 {
-		return 0, false
-	}
-	return float64(curIO-prevIO) / wall, true
+	return metrics.BytesPerSecond(prevIO, curIO, prevAt, now)
 }
 
 // osProcSampler reads matching processes and their counters from the host /proc.
