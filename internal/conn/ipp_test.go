@@ -12,9 +12,9 @@ import (
 )
 
 func TestBuildIPPRequest(t *testing.T) {
-	payload, err := buildIPPRequest(goipp.OpCupsGetDefault, ippRequestIDDefault)
+	payload, err := buildIPPDefaultRequest()
 	if err != nil {
-		t.Fatalf("buildIPPRequest(): %v", err)
+		t.Fatalf("buildIPPDefaultRequest(): %v", err)
 	}
 	var request goipp.Message
 	if err := request.DecodeBytes(payload); err != nil {

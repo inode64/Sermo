@@ -49,7 +49,7 @@ func testExternalModuleInterfaceBinding(t *testing.T) {
 		}},
 		{"libvirt-remote-dialer", func(t *testing.T) {
 			t.Helper()
-			d := libvirtRemoteNetDialer(newProbeTarget(Config{Interface: "eth0"}, defaultPortLibvirt), time.Second)
+			d := newProbeTarget(Config{Interface: "eth0"}, defaultPortLibvirt).dialerWithTimeout(time.Second)
 			if d.Control == nil {
 				t.Fatal("libvirt remote dialer must use BindDialer when interface is set")
 			}
