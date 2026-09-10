@@ -129,12 +129,8 @@ type hardwareRAIDCheck struct {
 }
 
 type hardwareRAIDObservation struct {
-	Controllers int
-	Volumes     int
-	Drives      int
-	Enclosures  int
-	Caches      int
-	Batteries   int
+	Enclosures int
+	Batteries  int
 
 	MediaErrors         int
 	OtherErrors         int
@@ -174,7 +170,7 @@ func (c hardwareRAIDCheck) Run(ctx context.Context) Result {
 	if err != nil {
 		return c.unavailableResult(c.tool+": "+err.Error(), run.start)
 	}
-	if observation.Controllers == 0 {
+	if len(observation.ControllerDetails) == 0 {
 		observation.addIssue("no controller found")
 	}
 	if len(c.preds) > 0 && levelPredsHold(c.preds, map[string]float64{fieldTemperature: observation.MaxTemperature}) {
@@ -306,7 +302,7 @@ func (o *hardwareRAIDObservation) noteOperation(operation string, progress float
 
 func (o *hardwareRAIDObservation) message(tool, health string) string {
 	message := fmt.Sprintf("%s: health=%s controllers=%d volumes=%d drives=%d caches=%d batteries=%d max_temperature=%s",
-		tool, health, o.Controllers, o.Volumes, o.Drives, o.Caches, o.Batteries, formatCelsius(o.MaxTemperature))
+		tool, health, len(o.ControllerDetails), len(o.VolumeDetails), len(o.DriveDetails), len(o.CacheDetails), o.Batteries, formatCelsius(o.MaxTemperature))
 	if len(o.Issues) > 0 {
 		issues := slices.Clone(o.Issues)
 		slices.Sort(issues)
@@ -321,11 +317,11 @@ func (o *hardwareRAIDObservation) message(tool, health string) string {
 func (o *hardwareRAIDObservation) data(health string) map[string]any {
 	data := map[string]any{
 		DataKeyHealth:                          health,
-		DataKeyHardwareRAIDControllers:         o.Controllers,
-		DataKeyHardwareRAIDVolumes:             o.Volumes,
-		DataKeyHardwareRAIDDrives:              o.Drives,
+		DataKeyHardwareRAIDControllers:         len(o.ControllerDetails),
+		DataKeyHardwareRAIDVolumes:             len(o.VolumeDetails),
+		DataKeyHardwareRAIDDrives:              len(o.DriveDetails),
 		DataKeyHardwareRAIDEnclosures:          o.Enclosures,
-		DataKeyHardwareRAIDCaches:              o.Caches,
+		DataKeyHardwareRAIDCaches:              len(o.CacheDetails),
 		DataKeyHardwareRAIDBatteries:           o.Batteries,
 		DataKeyHardwareRAIDMediaErrors:         o.MediaErrors,
 		DataKeyHardwareRAIDOtherErrors:         o.OtherErrors,
@@ -438,7 +434,6 @@ func parseStorCLIEnvelope(label, raw string) (storCLIEnvelope, error) {
 }
 
 func parseStorCLIControllers(envelope storCLIEnvelope, observation *hardwareRAIDObservation) {
-	observation.Controllers = len(envelope.Controllers)
 	for _, controller := range envelope.Controllers {
 		id := fmt.Sprintf("c%d", controller.CommandStatus.Controller)
 		checkStorCLICommandStatus(id, controller.CommandStatus.Status, controller.CommandStatus.Description, observation)
@@ -490,7 +485,6 @@ func parseStorCLIControllers(envelope storCLIEnvelope, observation *hardwareRAID
 		}
 		observation.ControllerDetails = append(observation.ControllerDetails, detail)
 		if detail.CacheBytes > 0 {
-			observation.Caches++
 			observation.CacheDetails = append(observation.CacheDetails, HardwareRAIDCacheStatus{
 				ID:         id + "/firmware",
 				Controller: id,
@@ -767,12 +761,9 @@ func parseStorCLIEnergyStores(controller, kind string, raw json.RawMessage, obse
 		if !hardwareRAIDStateOK(state, "optimal", "ok", "ready", "operational") {
 			observation.addIssue(fmt.Sprintf("%s %s/%s state %s", kind, controller, label, stateOrUnknown(state)))
 		}
-		cache, created := observation.ensureStorCLICache(controller)
+		cache := observation.ensureStorCLICache(controller)
 		if cache == nil {
 			continue
-		}
-		if created {
-			observation.Caches++
 		}
 		cache.Model = label
 		cache.Protection = kind
@@ -814,7 +805,7 @@ func parseSSACLIReport(raw string) (hardwareRAIDObservation, error) {
 	for line := range strings.SplitSeq(raw, "\n") {
 		parser.parseLine(strings.TrimSpace(line))
 	}
-	if parser.observation.Controllers == 0 {
+	if len(parser.observation.ControllerDetails) == 0 {
 		return parser.observation, errors.New("no Smart Array controller in output")
 	}
 	return parser.observation, nil
@@ -826,14 +817,13 @@ func (p *ssaCLIParser) parseLine(line string) {
 	}
 	lower := strings.ToLower(line)
 	if strings.Contains(lower, "smart array") && !strings.Contains(line, ":") {
-		p.controller = ssaCLIControllerLabel(line, p.observation.Controllers)
+		p.controller = ssaCLIControllerLabel(line, len(p.observation.ControllerDetails))
 		model := line
 		if before, _, found := strings.Cut(line, " in Slot"); found {
 			model = strings.TrimSpace(before)
 		}
 		p.observation.ControllerDetails = append(p.observation.ControllerDetails, HardwareRAIDControllerStatus{ID: p.controller, Model: model})
 		p.controllerIndex = len(p.observation.ControllerDetails) - 1
-		p.observation.Controllers++
 		p.array, p.volume, p.drive = "", "", ""
 		p.cacheIndex, p.volumeIndex, p.driveIndex = -1, -1, -1
 		return
@@ -853,7 +843,6 @@ func (p *ssaCLIParser) parseLine(line string) {
 		})
 		p.volumeIndex = len(p.observation.VolumeDetails) - 1
 		p.driveIndex = -1
-		p.observation.Volumes++
 		return
 	}
 	if strings.HasPrefix(lower, "physicaldrive ") && !strings.Contains(line, "(") {
@@ -862,7 +851,6 @@ func (p *ssaCLIParser) parseLine(line string) {
 			ID: p.drive, Controller: p.controller,
 		})
 		p.driveIndex = len(p.observation.DriveDetails) - 1
-		p.observation.Drives++
 		return
 	}
 	key, value, found := strings.Cut(line, ":")
@@ -1059,7 +1047,6 @@ func (p *ssaCLIParser) ensureSSACache() *HardwareRAIDCacheStatus {
 		ID: p.controller + "/cache", Controller: p.controller,
 	})
 	p.cacheIndex = len(p.observation.CacheDetails) - 1
-	p.observation.Caches++
 	return p.currentCache()
 }
 
@@ -1219,7 +1206,6 @@ func (o *hardwareRAIDObservation) ensureStorCLIDetail(kind, id string) int {
 			}
 		}
 		o.DriveDetails = append(o.DriveDetails, HardwareRAIDDriveStatus{ID: id, Controller: controller})
-		o.Drives++
 		return len(o.DriveDetails) - 1
 	}
 	for index := range o.VolumeDetails {
@@ -1228,7 +1214,6 @@ func (o *hardwareRAIDObservation) ensureStorCLIDetail(kind, id string) int {
 		}
 	}
 	o.VolumeDetails = append(o.VolumeDetails, HardwareRAIDVolumeStatus{ID: id, Controller: controller})
-	o.Volumes++
 	return len(o.VolumeDetails) - 1
 }
 
@@ -1237,16 +1222,16 @@ func hardwareRAIDParentID(id string) string {
 	return parent
 }
 
-func (o *hardwareRAIDObservation) ensureStorCLICache(controller string) (*HardwareRAIDCacheStatus, bool) {
+func (o *hardwareRAIDObservation) ensureStorCLICache(controller string) *HardwareRAIDCacheStatus {
 	for index := range o.CacheDetails {
 		if o.CacheDetails[index].Controller == controller {
-			return &o.CacheDetails[index], false
+			return &o.CacheDetails[index]
 		}
 	}
 	o.CacheDetails = append(o.CacheDetails, HardwareRAIDCacheStatus{
 		ID: controller + "/firmware", Controller: controller,
 	})
-	return &o.CacheDetails[len(o.CacheDetails)-1], true
+	return &o.CacheDetails[len(o.CacheDetails)-1]
 }
 
 func firstHardwareRAIDAny(values map[string]any, keys ...string) any {
