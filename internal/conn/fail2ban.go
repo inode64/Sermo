@@ -9,4 +9,4 @@ const DefaultFail2banSocket = "/run/fail2ban/fail2ban.sock"
 // creates and listens on the socket, so a successful connection proves it is
 // running (a stale socket left by a dead server refuses the connection). It
 // exchanges no commands. Socket-only (no TCP port), no auth.
-var fail2banProtocol = socketOnlyProtocol{name: ProtocolNameFail2ban, socket: DefaultFail2banSocket}
+var fail2banProtocol = socketOnlyProtocol{name: ProtocolNameFail2ban}

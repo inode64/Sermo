@@ -150,18 +150,13 @@ func dialUnix(ctx context.Context, socket string) (net.Conn, error) {
 // probeUnixSocket verifies that a socket-only daemon is listening. A successful
 // connection proves liveness; socket-only protocols that have no safe request
 // or reply exchange can use this without blocking for daemon activity.
-func probeUnixSocket(ctx context.Context, cfg Config, defaultSocket string) (Result, error) {
-	socket := cfg.Socket
-	if socket == "" {
-		socket = defaultSocket
-	}
-	cfg.Socket = socket
+func probeUnixSocket(ctx context.Context, cfg Config) (Result, error) {
 	c, err := newProbeTarget(cfg, defaultPortNone).openStream(ctx)
 	if err != nil {
 		return Result{}, err
 	}
 	_ = c.Close()
-	return Result{Extra: map[string]string{extraSocket: socket}}, nil
+	return Result{Extra: map[string]string{extraSocket: cfg.Socket}}, nil
 }
 
 // readTextGreeting reads a server's 3-digit greeting through net/textproto —
@@ -350,16 +345,15 @@ func wrapDialError(network, address string, err error) error {
 // fail2ban) register instances with their well-known socket; the per-daemon
 // rationale lives at each registration site.
 type socketOnlyProtocol struct {
-	name   string
-	socket string
+	name string
 }
 
 func (p socketOnlyProtocol) Name() string     { return p.name }
 func (socketOnlyProtocol) DefaultPort() int   { return defaultPortNone }
 func (socketOnlyProtocol) RequiresUser() bool { return false }
 
-func (p socketOnlyProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	return probeUnixSocket(ctx, cfg, p.socket)
+func (socketOnlyProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
+	return probeUnixSocket(ctx, cfg)
 }
 
 // codeName returns the protocol-specific name for code from names, falling
